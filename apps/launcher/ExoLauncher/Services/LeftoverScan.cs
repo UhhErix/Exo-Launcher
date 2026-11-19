@@ -6,7 +6,7 @@ using Microsoft.Win32.SafeHandles;
 
 namespace ExoLauncher.Services;
 
-internal enum LeftoverKind { Folder, File, Shortcut, Registry, Service, Task }
+internal enum LeftoverKind { Folder, File, Shortcut, Registry, Service, Task, Driver }
 
 /// <summary>
 /// One thing an app left: a file, folder or shortcut, a registry key (<see cref="Value"/> null) or value, a service (its
@@ -211,8 +211,12 @@ internal sealed partial class LeftoverScan
                     ids.Any(id => name.Contains(id, StringComparison.OrdinalIgnoreCase) || text.Contains(id, StringComparison.OrdinalIgnoreCase)))
                     list.Add(new(key, true, name, machine));
             foreach (var (key, text, machine, kind) in sources.Keys)
+            {
+                // A driver whose file is in the app's folder: shown, never taken by one press (a device may still need it).
+                if (kind == KeySource.Driver) { if (Ours(text)) list.Add(new(key, true, null, true, false, LeftoverKind.Driver) { Held = DriverHeld }); continue; }
                 if (Ours(text) || kind == KeySource.AppId && ids.Any(id => text.StartsWith(id, StringComparison.OrdinalIgnoreCase)))
                     list.Add(new(key, true, null, machine, false, kind == KeySource.Service ? LeftoverKind.Service : null));
+            }
             // A shortcut by where it points; an internet shortcut (a store's game: steam://rungameid/730) also by its link.
             foreach (var (path, target, machine) in sources.Shortcuts)
                 if (Ours(target) || ids.Any(id => target.StartsWith(id + '|', StringComparison.OrdinalIgnoreCase)))
@@ -296,6 +300,7 @@ internal sealed partial class LeftoverScan
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { return false; }
     }
 
+    internal const string DriverHeld = "A driver: only take it if no device needs it";
     internal const string StillShared = "Another program shares a file in it";
     internal const string StillRunning = "A running program uses it";
 
@@ -331,7 +336,7 @@ internal sealed partial class LeftoverScan
     private List<string> LivePointers(List<string> theirs)
     {
         var sources = _sources ??= ReadSources(deep: false);
-        return sources.Keys.Where(key => key.Kind != KeySource.AppId).Select(key => key.Text)
+        return sources.Keys.Where(key => key.Kind is not (KeySource.AppId or KeySource.Driver)).Select(key => key.Text)
             .Concat(sources.Shortcuts.Select(link => link.Target)).Concat(sources.Tasks.Select(task => task.Exe))
             .Select(CommandTarget).OfType<string>().Where(path => File.Exists(path) && !PointsInto(path, theirs)).ToList();
     }
@@ -364,7 +369,7 @@ internal sealed partial class LeftoverScan
                 { list.Add(new(path, false, null, machine)); Dead(exe); }
         foreach (var (key, text, machine, kind) in sources.Keys)
         {
-            if (kind == KeySource.AppId || kind == KeySource.Path && !AppPaths.Any(root => key.StartsWith(root.Path + '\\', StringComparison.OrdinalIgnoreCase))) continue;
+            if (kind is KeySource.AppId or KeySource.Driver || kind == KeySource.Path && !AppPaths.Any(root => key.StartsWith(root.Path + '\\', StringComparison.OrdinalIgnoreCase))) continue;
             if (Gone(text, out var exe)) { list.Add(new(key, true, null, machine, false, kind == KeySource.Service ? LeftoverKind.Service : null)); Dead(exe); }
         }
         foreach (var (path, exe) in sources.Tasks)
@@ -610,7 +615,7 @@ internal sealed partial class LeftoverScan
 
     internal static LeftoverSummary Summarize(IReadOnlyCollection<Leftover> items, IReadOnlyDictionary<Leftover, long> sizes) => new(
         items.Count(item => item.Kind == LeftoverKind.Folder), items.Count(item => item.Kind == LeftoverKind.File),
-        items.Count(item => item.Kind is LeftoverKind.Registry or LeftoverKind.Service or LeftoverKind.Task), items.Count(item => item.Kind == LeftoverKind.Shortcut),
+        items.Count(item => item.Kind is LeftoverKind.Registry or LeftoverKind.Service or LeftoverKind.Task or LeftoverKind.Driver), items.Count(item => item.Kind == LeftoverKind.Shortcut),
         items.Sum(item => sizes.GetValueOrDefault(item)));
 
     internal static long Size(string path)
@@ -743,7 +748,7 @@ internal sealed partial class LeftoverScan
             return null;
         }
         if (item.Kind == LeftoverKind.Task) return $"schtasks /delete /tn \"{item.Path}\" /f";
-        if (item.Kind == LeftoverKind.Service) return $"sc stop \"{item.Path.Split('\\')[^1]}\" & sc delete \"{item.Path.Split('\\')[^1]}\"";
+        if (item.Kind is LeftoverKind.Service or LeftoverKind.Driver) return $"sc stop \"{item.Path.Split('\\')[^1]}\" & sc delete \"{item.Path.Split('\\')[^1]}\"";
         if (!item.IsKey)
             return Directory.Exists(item.Path) ? $"rd /s /q \"{item.Path}\""
                 : File.Exists(item.Path) ? $"(if not exist \"{item.Path}\\*\" del /f /q \"{item.Path}\")" : null;
@@ -759,17 +764,31 @@ internal sealed partial class LeftoverScan
     /// </summary>
     internal List<string> RecycleAsAdmin(IEnumerable<Leftover> items)
     {
-        var scripts = new List<List<string>> { new() };
+        var paths = new List<string>();
         foreach (var item in items)
         {
             var why = item.Path.Any(char.IsControl) ? Unquotable : Recheck(item) ?? (_isTest ? null : RecycleBinRefuses(item.Path));
             if (why is not null) { Stay(item, why); continue; }
             if (!Directory.Exists(item.Path) && !File.Exists(item.Path)) continue;
-            if (scripts[^1].Sum(path => path.Length + 3) + item.Path.Length > 2000) scripts.Add([]);
-            scripts[^1].Add("'" + item.Path.Replace("'", "''") + "'");
+            paths.Add(item.Path);
         }
-        return scripts.Where(paths => paths.Count > 0).Select(paths => $"{PowerShell} -NoProfile -NonInteractive -WindowStyle Hidden -EncodedCommand " +
-            Convert.ToBase64String(Encoding.Unicode.GetBytes(RecycleScript.Replace("{0}", string.Join(",", paths), StringComparison.Ordinal)))).ToList();
+        return RecycleSteps(paths);
+    }
+
+    /// <summary>
+    /// The elevated steps that send these, already checked by the caller, to the Recycle Bin: the paths travel encoded, as
+    /// literals, several to a step, each step under cmd's line limit once encoded. A path with a control character is left out.
+    /// </summary>
+    internal static List<string> RecycleSteps(IEnumerable<string> paths)
+    {
+        var scripts = new List<List<string>> { new() };
+        foreach (var path in paths.Where(path => !path.Any(char.IsControl)))
+        {
+            if (scripts[^1].Sum(literal => literal.Length + 3) + path.Length > 2000) scripts.Add([]);
+            scripts[^1].Add("'" + path.Replace("'", "''") + "'");
+        }
+        return scripts.Where(literals => literals.Count > 0).Select(literals => $"{PowerShell} -NoProfile -NonInteractive -WindowStyle Hidden -EncodedCommand " +
+            Convert.ToBase64String(Encoding.Unicode.GetBytes(RecycleScript.Replace("{0}", string.Join(",", literals), StringComparison.Ordinal)))).ToList();
     }
 
     private const string RecycleScript =
@@ -818,6 +837,25 @@ internal sealed partial class LeftoverScan
         }
     }
 
+    /// <summary>Where a scheduled task's definition is written down before it goes: Exo's cleanup folder; tests set their own, else none.</summary>
+    internal string? TaskBackupFolder { get; init; }
+
+    /// <summary>The program a found scheduled task runs, as Task Scheduler said when it was read; null when it wasn't read this scan.</summary>
+    internal string? TaskExe(string path) => _sources?.Tasks.FirstOrDefault(task => string.Equals(task.Path, path, StringComparison.OrdinalIgnoreCase)).Exe;
+
+    /// <summary>A new file for one task's XML, named for the app, the time and the task; null in a disposable host, or in a test that set no folder.</summary>
+    internal string? TaskBackupFile(string app, string path)
+    {
+        if (HostMode.IsDisposable) return null;
+        var folder = TaskBackupFolder ?? (_isTest ? null : Path.Combine(PathHelper.AppDataDir, "cleanup"));
+        if (folder is null) return null;
+        try { Directory.CreateDirectory(folder); }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { return null; }
+        static string Safe(string text) => new string(text.Select(c => char.IsLetterOrDigit(c) || c is ' ' or '-' ? c : '_').ToArray()).Trim();
+        var name = $"{DateTime.Now:yyyyMMdd-HHmmss} {Safe(app)} {Safe(path.TrimStart('\\'))}";
+        return Path.Combine(folder, (name.Length > 120 ? name[..120] : name) + $" {Guid.NewGuid():N}"[..9] + ".xml");
+    }
+
     /// <summary>A .reg in Exo's cleanup folder, named for the app and the time; the newest 100 are kept. Null in tests or when it can't be written.</summary>
     internal string? SaveReg(string app, string text)
     {
@@ -830,6 +868,7 @@ internal sealed partial class LeftoverScan
             var file = Path.Combine(folder, $"{DateTime.Now:yyyyMMdd-HHmmss} {safe}.reg");
             File.WriteAllText(file, text, Encoding.Unicode);
             foreach (var old in new DirectoryInfo(folder).GetFiles("*.reg").OrderByDescending(f => f.CreationTimeUtc).Skip(100)) DeletionGate.DeleteFile(old.FullName);
+            foreach (var old in new DirectoryInfo(folder).GetFiles("*.xml").OrderByDescending(f => f.CreationTimeUtc).Skip(200)) DeletionGate.DeleteFile(old.FullName);
             return file;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
@@ -922,7 +961,7 @@ internal sealed partial class LeftoverScan
     /// Why Windows would delete it for good rather than keep it: its drive's Recycle Bin as Windows keeps it (Recycle Bin ›
     /// Properties, per drive). A drive Windows never used the bin on has no size saved yet: 1% of the drive, a cautious guess.
     /// </summary>
-    private static string? RecycleBinRefuses(string path)
+    internal static string? RecycleBinRefuses(string path)
     {
         try
         {

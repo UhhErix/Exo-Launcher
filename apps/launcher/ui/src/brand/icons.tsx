@@ -9,11 +9,11 @@ export type IconProps = { size?: number; className?: string; filled?: boolean; c
 type Glyph = keyof typeof GLYPHS
 
 /*
- * Tabler (tabler.io/icons, MIT), one family everywhere: Exo, Exo Mouse, setup and first run, the drawn-in checks too. Brand
- * marks (stores, Discord, Spotify, Apple Music, YouTube Music) stay their own. scripts/tabler-map.mjs names the Tabler icon
+ * Lucide (lucide.dev, ISC), one family everywhere: Exo, Exo Mouse, setup and first run, the drawn-in checks too. Brand
+ * marks (stores, Discord, Spotify, Apple Music, YouTube Music) stay their own. scripts/lucide-map.mjs names the Lucide icon
  * for each name here; scripts/icons.mjs writes them into glyphs.ts.
- * - Outline icons on the 24 grid with round ends and joins, a line that follows its size (lineAt).
- * - A toggle that is on (liked, starred, pinned) and the current room show Tabler's -filled form where it has one.
+ * - Lucide's outline icons on the 24 grid with round ends and joins, a line that follows its size (lineAt).
+ * - A toggle that is on (liked, starred, pinned) and the transport are the outline filled; the current room keeps its outline.
  * - One glyph per meaning: two things that mean different things never share an icon, anywhere in Exo (scripts/icons.mjs
  *   stops on two that do).
  */
@@ -29,7 +29,7 @@ const solid = (glyph: Glyph) => (`${glyph}-on` in GLYPHS ? `${glyph}-on` : glyph
 function Svg({ glyph, size, className, style = block }: { glyph: Glyph; size: number; className?: string; style?: CSSProperties }) {
   const [markup, solid] = GLYPHS[glyph]
   return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill={solid ? 'currentColor' : 'none'} stroke={solid ? 'none' : 'currentColor'}
+    <svg width={size} height={size} viewBox="0 0 24 24" fill={solid ? 'currentColor' : 'none'} stroke="currentColor"
       strokeWidth={lineAt(size)} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" className={className} style={style}
       dangerouslySetInnerHTML={{ __html: markup }} />
   )

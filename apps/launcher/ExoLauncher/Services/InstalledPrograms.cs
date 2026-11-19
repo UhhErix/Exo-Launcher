@@ -11,11 +11,13 @@ namespace ExoLauncher.Services;
 /// uninstall key, or its Store package family) and is how the page asks for it again. <paramref name="Uninstall"/> is its
 /// own uninstaller (null when that is gone: only its leftovers can go), <paramref name="Care"/> why Exo is careful with it
 /// (<see cref="InstalledPrograms.Cares"/>), <paramref name="Replaces"/> the replaced app it is (ReplacedApps), if any.
+/// <paramref name="Quiet"/> is the entry's QuietUninstallString and <paramref name="Bundle"/> whether a WiX Burn bundle wrote it
+/// (<see cref="QuietUninstall"/>).
 /// </summary>
 internal sealed record InstalledProgram(
     string Id, string Name, string? Publisher, string? Version, string? InstalledOn, long? Bytes, string? Location, string? Icon,
     bool Store, bool Machine, string? Uninstall, string? ProductCode, string? PackageFullName, bool Removable, string? Care, string? Replaces,
-    string? Key);
+    string? Key, string? Quiet = null, bool Bundle = false);
 
 /// <summary>
 /// Every program Apps &amp; features lists, read as it reads them: the uninstall keys of HKLM (64- and 32-bit) and HKCU,
@@ -112,7 +114,8 @@ internal static class InstalledPrograms
             $"{tag}:{keyName}", name, publisher, Text(entry, "DisplayVersion"), Date(Text(entry, "InstallDate")), bytes, location,
             IconPath(Text(entry, "DisplayIcon")), Store: false, Machine: tag.StartsWith("HKLM", StringComparison.Ordinal),
             command, msi ? keyName : null, null, Removable(name, command, noRemove, care), care,
-            ReplacedFor(name, null), $@"{(tag == "HKCU" ? "HKCU" : "HKLM")}\{(tag == "HKLM32" ? @"Software\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall" : UninstallPath)}\{keyName}");
+            ReplacedFor(name, null), $@"{(tag == "HKCU" ? "HKCU" : "HKLM")}\{(tag == "HKLM32" ? @"Software\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall" : UninstallPath)}\{keyName}",
+            Text(entry, "QuietUninstallString"), entry.GetValue("BundleCachePath") is string || entry.GetValue("BundleProviderKey") is string);
     }
 
     // Edge says NoRemove but goes from here with WebView2 kept (EdgeRemoval); WebView2 is what Exo runs on, so it stays.

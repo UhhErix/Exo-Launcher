@@ -1,16 +1,15 @@
 import { createElement, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { host } from '../../lib/host'
 import { answerRailTip, emptyRailTip, endRailTip, railTipRooms, startRailTip, type RailTipState } from '../../lib/railTip'
-import { ChevronLeft, ChevronRight, Controller, Home, Plus, Volume } from '../../brand/icons'
+import { ChevronLeft, ChevronRight, Home, Plus, Shop, Volume } from '../../brand/icons'
 import { cdnSized, type DiscordChannel, type DiscordGuild, type DiscordHome, type DiscordRailItem } from '../../lib/discord'
-import { useDiscordPrefs } from '../../lib/discordPrefs'
 import { initials } from '../ui/artInitial'
 import { channelGlyph } from './icons'
 import { GuildMenu } from './ServerMenu'
 import { Picture } from './presence'
 
-/** Which of the room's places you are in: Home (your conversations, friends and what is happening), a server, and Play once it is turned on (Discord's settings › Chat). */
-export type PlaceTab = 'home' | 'servers' | 'play'
+/** Which of the room's places you are in: Home (your conversations, friends and what is happening), the Shop, or a server. */
+export type PlaceTab = 'home' | 'shop' | 'servers'
 
 /** The server list as it shows: a drop shows at once and stays while Discord saves it; the host moved its own list too, so home has it after. */
 function useServerOrder(home: DiscordHome | null) {
@@ -28,7 +27,7 @@ export const mentionsSaid = (n: number) => `${n} mention${n === 1 ? '' : 's'}`
 
 /**
  * The band across the room's top (DESIGN.md › Rooms › Discord): Home, then your servers in the order Discord keeps them
- * (folders flattened), Play when it is on, and Add a server. The place you are in is a white pill with its name; the rest
+ * (folders flattened), and Add a server. The Shop stands beside Home. The place you are in is a white pill with its name; the rest
  * are faces with what is new on them. It scrolls sideways when the servers don't fit, with a step button at each end
  * that shows only while there is more that way, so no server is ever cut off unreachable. The Inbox stands at its end.
  */
@@ -57,7 +56,6 @@ export function Band({ home, tab, place, open, inbox, onTab, onServer, onAdd, on
     window.addEventListener('exo-dc-guild-menu', ask)
     return () => window.removeEventListener('exo-dc-guild-menu', ask)
   }, [askedGuilds])
-  const { playRooms } = useDiscordPrefs()
   const guilds = useMemo(() => {
     const byId = new Map((home?.guilds ?? []).map(g => [g.id, g]))
     const ordered = rail.flatMap(item => item.guildIds).map(id => byId.get(id)).filter((g): g is DiscordGuild => !!g)
@@ -72,13 +70,11 @@ export function Band({ home, tab, place, open, inbox, onTab, onServer, onAdd, on
       <button type="button" className="exo-dc-band-step is-back" aria-label="Scroll servers back" hidden={!strip.back} onClick={() => strip.step(-1)}><ChevronLeft size={18} /></button>
       <div ref={strip.box} className={`exo-dc-band-strip${strip.back ? ' has-back' : ''}${strip.next ? ' has-next' : ''}`} onScroll={strip.measure}>
         <HomeTile home={home} chosen={tab === 'home'} onGo={() => go('home')} onPeek={onPeek} />
-        {playRooms ? (
-          <button type="button" className={`exo-dc-band-place${tab === 'play' ? ' is-chosen' : ''}`} aria-current={tab === 'play' ? 'true' : undefined} aria-label="Play"
-            onClick={() => go('play')}>
-            <span className="exo-dc-band-face is-glyph"><Controller size={20} /></span>
-            {tab === 'play' ? <span className="exo-dc-band-name">Play</span> : null}
-          </button>
-        ) : null}
+        <button type="button" className={`exo-dc-band-place${tab === 'shop' ? ' is-chosen' : ''}`} aria-current={tab === 'shop' ? 'true' : undefined} aria-label="Shop"
+          onClick={() => go('shop')}>
+          <span className="exo-dc-band-face is-glyph"><Shop size={20} /></span>
+          {tab === 'shop' ? <span className="exo-dc-band-name">Shop</span> : null}
+        </button>
         <span className="exo-dc-band-rule" aria-hidden="true" />
         {guilds.map(guild => (
           <BandServer key={guild.id} guild={guild} current={guild.id === place}

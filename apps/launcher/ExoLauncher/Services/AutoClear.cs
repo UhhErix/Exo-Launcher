@@ -13,8 +13,8 @@ internal sealed record Uninstalled(bool Gone, string? Problem)
 /// <summary>
 /// Pressing Uninstall is the consent for everything after it: once the program's own uninstaller has finished, what the scan
 /// says is that program's goes by itself, to the Recycle Bin and a saved copy of its registry entries, so Put back undoes it.
-/// Only ever <see cref="Leftover.Selected"/>: what's matched by name alone, shared, in use, a store's own folder, and what the
-/// scan never lists at all (anti-cheat, drivers, Windows' own) aren't its leftovers. What programs already gone left has no
+/// Only ever <see cref="Leftover.Selected"/>: what's matched by name alone, shared, in use, a store's own folder, a driver (held
+/// for a press of its own), and what the scan never lists at all (anti-cheat, boot drivers, Windows' own) aren't its leftovers. What programs already gone left has no
 /// press behind it: it goes with the junk while the PC is idle (<see cref="JunkAutoClean"/>), only where the evidence says
 /// truly gone (<see cref="AppsOrphans"/>), and only what needs no administrator; the rest waits for the next uninstall's prompt.
 /// </summary>
@@ -68,14 +68,31 @@ internal static class AutoClear
         var removed = chosen.Where(item => !item.Machine).Where(scan.Delete).ToList();
         var machine = chosen.Where(item => item.Machine).ToList();
         var declined = false;
+        var tasks = new List<RemovedTask>();
         if (admin is not null)
         {
-            // Files first, to the bin; then entries, services and tasks by name.
+            // Files first, to the bin; then entries, services and tasks by name, each task written down just before it goes.
             var files = machine.Where(item => item.Kind is LeftoverKind.Folder or LeftoverKind.File or LeftoverKind.Shortcut).ToList();
-            var commands = scan.RecycleAsAdmin(files).Concat(machine.Except(files).Select(scan.AdminCommand).OfType<string>()).ToList();
+            var saving = new List<(Leftover Item, RemovedTask Task)>();
+            var commands = scan.RecycleAsAdmin(files).ToList();
+            foreach (var item in machine.Except(files))
+            {
+                if (scan.AdminCommand(item) is not { } command) continue;
+                if (item.Kind == LeftoverKind.Task && scan.TaskExe(item.Path) is { } exe && scan.TaskBackupFile(name, item.Path) is { } file &&
+                    LeftoverScan.TaskExportStep(item.Path, file) is { } export)
+                {
+                    commands.Add(export);
+                    saving.Add((item, new RemovedTask(item.Path, exe, file)));
+                }
+                commands.Add(command);
+            }
             if (commands.Count > 0)
             {
-                if (await admin(commands).ConfigureAwait(false)) removed.AddRange(machine.Where(item => !scan.Exists(item)));
+                if (await admin(commands).ConfigureAwait(false))
+                {
+                    removed.AddRange(machine.Where(item => !scan.Exists(item)));
+                    tasks.AddRange(saving.Where(pair => removed.Contains(pair.Item) && File.Exists(pair.Task.File)).Select(pair => pair.Task));
+                }
                 else declined = true;
             }
         }
@@ -83,7 +100,7 @@ internal static class AutoClear
         var what = LeftoverScan.Summarize(removed, sizes);
         var undo = what.Count == 0 ? null : history.Add(name, what,
             removed.Where(item => !item.IsKey && item.Kind is LeftoverKind.Folder or LeftoverKind.File or LeftoverKind.Shortcut).Select(item => new RemovedPath(item.Path, item.Machine)),
-            backup, removed.Where(item => item.IsKey).Select(item => item.Path).Distinct(StringComparer.OrdinalIgnoreCase), now, automatic);
+            backup, removed.Where(item => item.IsKey).Select(item => item.Path).Distinct(StringComparer.OrdinalIgnoreCase), now, automatic, tasks);
         return new(removed, left, declined, scan.Why(left), undo, what);
     }
 }
