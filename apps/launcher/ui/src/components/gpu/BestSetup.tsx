@@ -7,6 +7,7 @@ import { ErrorNote } from '../ui/ErrorNote'
 import { Spinner } from '../ui/Spinner'
 import { ActionButton } from '../ui/ConfirmButton'
 import { SectionActions } from './SectionHead'
+import { systemTuningNeedsRestart } from './systemGroupModel'
 
 export type BestKey = 'power' | 'profile' | 'network' | 'system' | 'drives' | 'hdr' | 'frameGen'
 export type BestStep = { key: BestKey; what: string; done: boolean; run: () => Promise<string | null> }
@@ -65,7 +66,7 @@ export function bestSteps(
 function tuningStep(tuning: Tuning | null): BestStep | null {
   const items = tuning?.items.filter(item => !item.optIn && !item.off && !item.blocked) ?? []
   if (items.length === 0) return null
-  const restart = items.some(item => !item.on || item.restart)
+  const restart = systemTuningNeedsRestart(items)
   return { key: 'system', what: `Windows’ own defaults for games${restart ? ', after a restart' : ''}`, done: items.every(item => item.on), run: async () => {
     const next = await host.systemTuning('apply')
     return next.ok ? null : trimStop(next.message) || 'Not changed'

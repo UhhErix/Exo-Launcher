@@ -59,6 +59,13 @@ public sealed class SystemTuningTests : IDisposable
         public bool Closes { get; set; }
         public string PointWord { get; set; } = "made";
         public bool Standing { get; set; }
+        public bool SupportsUserHardwareToggles { get; set; }
+        public string? DirectXUser { get; set; }
+        public int[] Mouse { get; set; } = [6, 10, 1];
+        public string? UserDirectXSettings() => DirectXUser;
+        public bool SetUserDirectXSettings(string? value) { DirectXUser = value; return true; }
+        public int[]? MouseParams() => [.. Mouse];
+        public bool SetMouseParams(int[] values) { Mouse = [.. values]; return true; }
 
         private readonly List<string> _issued = [];
         private readonly Dictionary<string, string> _answers = [];
@@ -212,8 +219,12 @@ public sealed class SystemTuningTests : IDisposable
         Assert.DoesNotContain(lines, l => l.Contains("HypervisorEnforcedCodeIntegrity", StringComparison.Ordinal));
         var state = Make().Read();
         Assert.True(state.Applied);
-        Assert.All(state.Items.Where(i => !i.OptIn), i => Assert.True(i.On && i.CanUndo && i.Restart));
-        Assert.Equal("Restart to finish.", state.Items.Single(i => i.Key == SchedulingKey).Detail);
+        Assert.All(state.Items.Where(i => !i.OptIn), i => Assert.True(i.On && i.CanUndo));
+        Assert.All(state.Items.Where(i => !i.OptIn && i.NeedsRestart), i => Assert.True(i.Restart));
+        var sched = state.Items.Single(i => i.Key == SchedulingKey);
+        Assert.False(sched.NeedsRestart);
+        Assert.False(sched.Restart);
+        Assert.Equal("The game in front gets the longer turn on the processor.", sched.Detail);
         Assert.False(state.Items.Single(i => i.Key == ServicesKey).On);
         Assert.False(state.Items.Single(i => i.Key == IntegrityKey).On);
     }
@@ -538,5 +549,53 @@ public sealed class SystemTuningTests : IDisposable
             Assert.False(native.Exists(Hvci));
         }
         finally { Registry.CurrentUser.DeleteSubKeyTree(prefix, throwOnMissingSubKey: false); }
+    }
+
+    [Fact]
+    public async Task Disabled_capture_service_restores_to_manual_and_is_reversible()
+    {
+        _system.Services[CaptureServiceName] = (4, false);
+        var before = Make().Read();
+        var item = Assert.Single(before.Items, i => i.Key == CaptureServiceKey);
+        Assert.False(item.On);
+        Assert.False(item.OptIn);
+        Assert.False(item.NeedsRestart);
+
+        _system.OnRun = lines => _system.Take(lines);
+        Assert.Null(await Make().ApplyAsync());
+        Assert.Contains(_system.Runs[0], l => l.Contains("sc.exe config CaptureService start= demand", StringComparison.OrdinalIgnoreCase));
+        var applied = Make().Read().Items.Single(i => i.Key == CaptureServiceKey);
+        Assert.True(applied.On);
+        Assert.True(applied.CanUndo);
+        Assert.False(applied.Restart);
+
+        Assert.Null(await Make().TurnOffAsync(CaptureServiceKey));
+        Assert.Equal(4, _system.Services[CaptureServiceName].Start);
+    }
+
+    [Fact]
+    public async Task Vrr_and_mouse_accel_run_without_admin_and_put_back_exactly()
+    {
+        _system.SupportsUserHardwareToggles = true;
+        _system.DirectXUser = "SwapEffectUpgradeEnable=1;";
+        _system.Mouse = [6, 10, 1];
+
+        var tuning = Make();
+        Assert.Null(await tuning.ApplyAsync([VrrKey, MouseAccelKey]));
+        Assert.Empty(_system.Runs);
+        Assert.Equal("SwapEffectUpgradeEnable=1;VRROptimizeEnable=1;", _system.DirectXUser);
+        Assert.Equal([0, 0, 0], _system.Mouse);
+
+        var items = Make().Read().Items;
+        var vrr = items.Single(i => i.Key == VrrKey);
+        var mouse = items.Single(i => i.Key == MouseAccelKey);
+        Assert.True(vrr.On && vrr.CanUndo && !vrr.Restart && !vrr.NeedsRestart);
+        Assert.True(mouse.On && mouse.CanUndo && !mouse.Restart && !mouse.NeedsRestart);
+
+        Assert.Null(await tuning.TurnOffAsync(VrrKey));
+        Assert.Equal("SwapEffectUpgradeEnable=1;", _system.DirectXUser);
+        Assert.Null(await tuning.TurnOffAsync(MouseAccelKey));
+        Assert.Equal([6, 10, 1], _system.Mouse);
+        Assert.Empty(_system.Runs);
     }
 }

@@ -27,7 +27,7 @@ public sealed partial class WebHostBridge
             message,
             applied = state.Applied,
             restart = state.Restart,
-            items = state.Items.Select(i => new { key = i.Key, label = i.Label, detail = i.Detail, on = i.On, canUndo = i.CanUndo, off = i.Off, optIn = i.OptIn, restart = i.Restart, blocked = i.Blocked }).ToList(),
+            items = state.Items.Select(i => new { key = i.Key, label = i.Label, detail = i.Detail, on = i.On, canUndo = i.CanUndo, off = i.Off, optIn = i.OptIn, restart = i.Restart, needsRestart = i.NeedsRestart, blocked = i.Blocked }).ToList(),
         };
     }
 }

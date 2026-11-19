@@ -402,18 +402,21 @@ const mockTuning = (p?: { action?: unknown; item?: unknown }) => {
     if (p.action === 'on') { mockTuningOn.add(p.item); mockTuningOff.delete(p.item) }
     if (p.action === 'off') { mockTuningOn.delete(p.item); if (defaults.includes(p.item)) mockTuningOff.add(p.item) }
   }
-  const words: Record<string, [string, string, boolean]> = {
-    timer: ["Windows' own timer", 'A tweak forced the platform clock (HPET), so every clock read a game makes waits on it. Takes a restart.', false],
-    pagefile: ['A page file, managed by Windows', "There's no page file, so a game that needs more memory than your RAM crashes instead of slowing down.", false],
-    services: ['Services set to Manual', 'Downloaded Maps Manager and Program Compatibility Assistant Service start with Windows; Manual starts them only when something needs them. Takes a restart.', true],
-    integrity: ['Memory Integrity off', blocked ?? 'Less secure: Windows stops checking that every driver is signed and safe, which is what keeps malicious drivers out. Only for a PC you keep clean. Up to about 5-10% more frames in some games. Takes a restart.', true],
+  const words: Record<string, [string, string, boolean, boolean]> = {
+    timer: ["Windows' own timer", 'A tweak forced the platform clock (HPET), so every clock read a game makes waits on it. Takes a restart.', false, true],
+    pagefile: ['A page file, managed by Windows', "There's no page file, so a game that needs more memory than your RAM crashes instead of slowing down.", false, true],
+    services: ['Services set to Manual', 'Downloaded Maps Manager and Program Compatibility Assistant Service start with Windows; Manual starts them only when something needs them. Takes a restart.', true, true],
+    integrity: ['Memory Integrity off', blocked ?? 'Less secure: Windows stops checking that every driver is signed and safe, which is what keeps malicious drivers out. Only for a PC you keep clean. Up to about 5-10% more frames in some games. Takes a restart.', true, true],
+    vrr: ['Windows variable refresh rate', 'Lets DirectX games run with variable refresh rate in borderless and windowed modes (no admin prompt).', true, false],
+    mouseAccel: ['Disable mouse acceleration', "Turns off Windows' Enhance pointer precision so pointer distance matches physical movement (no admin prompt).", true, false],
   }
-  const items = Object.entries(words).map(([key, [label, detail, optIn]]) => {
+  const items = Object.entries(words).map(([key, [label, detail, optIn, needsRestart]]) => {
     const on = mockTuningOn.has(key)
-    return { key, label, detail: on ? 'Restart to finish.' : detail, on, canUndo: on, off: mockTuningOff.has(key), optIn, restart: on, blocked: key === 'integrity' ? blocked : null }
+    const restart = on && needsRestart
+    return { key, label, detail: restart ? 'Restart to finish.' : detail, on, canUndo: on, off: mockTuningOff.has(key), optIn, restart, needsRestart, blocked: key === 'integrity' ? blocked : null }
   })
   const message = p?.item === 'integrity' && p.action === 'on' && blocked ? blocked : null
-  return { ok: !message, message, applied: defaults.every(key => mockTuningOn.has(key) || mockTuningOff.has(key)), restart: mockTuningOn.size > 0, items }
+  return { ok: !message, message, applied: defaults.every(key => mockTuningOn.has(key) || mockTuningOff.has(key)), restart: items.some(i => i.restart), items }
 }
 
 /**

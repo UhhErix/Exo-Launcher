@@ -34,15 +34,21 @@ namespace ExoLauncher.Services;
 /// </summary>
 internal sealed partial class SystemTuning(SystemTuning.ISystem system, string path, Func<DateTimeOffset> now)
 {
-    internal const string TimerKey = "timer", SchedulingKey = "scheduling", PagefileKey = "pagefile", CacheKey = "cache", ServicesKey = "services", IntegrityKey = "integrity";
+    internal const string TimerKey = "timer", SchedulingKey = "scheduling", PagefileKey = "pagefile", CacheKey = "cache",
+        CaptureServiceKey = "captureService", ServicesKey = "services", IntegrityKey = "integrity", VrrKey = "vrr", MouseAccelKey = "mouseAccel";
 
     /// <summary>The items Use best settings sets: each only puts back a Windows default a tweak changed.</summary>
-    internal static readonly string[] Defaults = [TimerKey, SchedulingKey, PagefileKey, CacheKey];
+    internal static readonly string[] Defaults = [TimerKey, SchedulingKey, PagefileKey, CacheKey, CaptureServiceKey];
 
     /// <summary>The items only their own switch sets.</summary>
-    internal static readonly string[] OptIn = [ServicesKey, IntegrityKey];
+    internal static readonly string[] OptIn = [ServicesKey, IntegrityKey, VrrKey, MouseAccelKey];
 
     internal static readonly string[] Keys = [.. Defaults, .. OptIn];
+
+    internal const string DirectXUserPrefs = @"Software\Microsoft\DirectX\UserGpuPreferences";
+    internal const string DirectXGlobalSettings = "DirectXUserGlobalSettings";
+    internal const string VrrToken = "VRROptimizeEnable";
+    internal const string CaptureServiceName = "CaptureService";
 
     internal const string PriorityControl = @"SYSTEM\CurrentControlSet\Control\PriorityControl";
     internal const string Separation = "Win32PrioritySeparation";
@@ -101,6 +107,12 @@ internal sealed partial class SystemTuning(SystemTuning.ISystem system, string p
         /// <summary>A restore point made in the last day stands for a new one (Windows keeps one a day).</summary>
         bool PointStanding { get; }
         void PointMade(RestorePoint.Outcome outcome);
+        /// <summary>True when non-admin user-scope Windows toggles (VRR, mouse acceleration) can be read and written.</summary>
+        bool SupportsUserHardwareToggles => false;
+        string? UserDirectXSettings() => null;
+        bool SetUserDirectXSettings(string? value) => false;
+        int[]? MouseParams() => null;
+        bool SetMouseParams(int[] values) => false;
     }
 
     /// <summary>What a service was before Exo set it to Manual.</summary>
@@ -122,9 +134,10 @@ internal sealed partial class SystemTuning(SystemTuning.ISystem system, string p
 
     /// <summary>
     /// One item: <paramref name="On"/> Exo's setting is in place; <paramref name="Restart"/> it was changed (or put back) since
-    /// Windows started, so a restart finishes it; <paramref name="Blocked"/> why Exo won't change it here.
+    /// Windows started, so a restart finishes it; <paramref name="Blocked"/> why Exo won't change it here;
+    /// <paramref name="NeedsRestart"/> whether applying this item requires a Windows restart.
     /// </summary>
-    internal sealed record Item(string Key, string Label, string Detail, bool On, bool CanUndo, bool Off, bool OptIn, bool Restart, string? Blocked = null);
+    internal sealed record Item(string Key, string Label, string Detail, bool On, bool CanUndo, bool Off, bool OptIn, bool Restart, string? Blocked = null, bool NeedsRestart = true);
 
     internal sealed record State(IReadOnlyList<Item> Items)
     {
@@ -160,12 +173,12 @@ internal sealed partial class SystemTuning(SystemTuning.ISystem system, string p
         else if (hpet && !saved.Native.Contains(TimerKey))
             items.Add(new(TimerKey, "Windows' own timer", "A tweak forced the platform clock (HPET), so every clock read a game makes waits on it. Takes a restart.", false, false, off.Contains(TimerKey), false, false));
 
-        // Scheduling: Programs, or anything that gives the foreground a longer, boosted turn.
+        // Scheduling: Programs, or anything that gives the foreground a longer, boosted turn (takes effect immediately, no restart).
         var separation = system.Dword(PriorityControl, Separation);
         var programs = separation is not { } v || ForegroundFirst(v);
-        if (!programs || saved.Kept.ContainsKey(SchedulingKey) || Pending(SchedulingKey))
-            items.Add(new(SchedulingKey, "Windows' scheduling for programs", Tell(SchedulingKey, programs ? "The game in front gets the longer turn on the processor." : "Set to favor background work, so the game in front gets no longer turn than anything behind it."),
-                programs, saved.Kept.ContainsKey(SchedulingKey), off.Contains(SchedulingKey), false, Pending(SchedulingKey)));
+        if (!programs || saved.Kept.ContainsKey(SchedulingKey))
+            items.Add(new(SchedulingKey, "Windows' scheduling for programs", programs ? "The game in front gets the longer turn on the processor." : "Set to favor background work, so the game in front gets no longer turn than anything behind it.",
+                programs, saved.Kept.ContainsKey(SchedulingKey), off.Contains(SchedulingKey), false, false, null, NeedsRestart: false));
 
         // The page file.
         var none = NoPageFile(system.Strings(MemoryManagement, PagingFiles));
@@ -194,6 +207,15 @@ internal sealed partial class SystemTuning(SystemTuning.ISystem system, string p
             items.Add(new(ServicesKey, "Services set to Manual", Tell(ServicesKey, detail), servicesKept, servicesKept, false, true, Pending(ServicesKey)));
         }
 
+        // CaptureService: restore from Disabled (4) back to Manual (3) when a tweak disabled Windows screen capture.
+        var captureSvc = system.Service(CaptureServiceName);
+        var captureDisabled = captureSvc is { Start: 4 };
+        var captureKept = saved.Kept.ContainsKey(CaptureServiceKey);
+        if (captureDisabled || captureKept)
+            items.Add(new(CaptureServiceKey, "Screen Capture Service",
+                captureDisabled ? "Disabled by a tweak, which breaks Windows screen capture and Game Bar. Sets it back to Manual." : "Set to Manual so Windows starts it when needed.",
+                !captureDisabled, captureKept, off.Contains(CaptureServiceKey), false, false, null, NeedsRestart: false));
+
         // Memory Integrity: shown while it's on (or Exo turned it off).
         var enabled = system.Dword(Hvci, "Enabled");
         var running = system.IntegrityRunning();
@@ -206,7 +228,46 @@ internal sealed partial class SystemTuning(SystemTuning.ISystem system, string p
                 : Pending(IntegrityKey) ? "Goes back on after a restart." : blocked ?? IntegrityWarning;
             items.Add(new(IntegrityKey, "Memory Integrity off", detail, isOff, saved.Kept.ContainsKey(IntegrityKey), false, true, restart, blocked));
         }
+
+        // Non-admin user toggles: Windows Variable Refresh Rate (VRROptimizeEnable=1) and Mouse Acceleration (SPI_SETMOUSE).
+        if (system.SupportsUserHardwareToggles)
+        {
+            var vrrOn = HasToken(system.UserDirectXSettings(), VrrToken, "1");
+            items.Add(new(VrrKey, "Windows variable refresh rate",
+                vrrOn ? "Windows lets windowed games use variable refresh rate (no restart needed)." : "Lets DirectX games run with variable refresh rate in borderless and windowed modes (no admin prompt).",
+                vrrOn, saved.Kept.ContainsKey(VrrKey), false, true, false, null, NeedsRestart: false));
+
+            if (system.MouseParams() is { Length: 3 } mp)
+            {
+                var accelOff = mp[2] == 0;
+                items.Add(new(MouseAccelKey, "Disable mouse acceleration",
+                    accelOff ? "Enhance pointer precision is off for 1:1 mouse movement (no restart needed)." : "Turns off Windows' Enhance pointer precision so pointer distance matches physical movement (no admin prompt).",
+                    accelOff, saved.Kept.ContainsKey(MouseAccelKey), false, true, false, null, NeedsRestart: false));
+            }
+        }
         return new State(items);
+    }
+
+    internal static bool HasToken(string? data, string name, string expectedValue) =>
+        (data ?? "").Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Any(part => part.Equals($"{name}={expectedValue}", StringComparison.OrdinalIgnoreCase));
+
+    internal static string WithToken(string? data, string name, string value)
+    {
+        var parts = (data ?? "").Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Where(part => !part.StartsWith(name + "=", StringComparison.OrdinalIgnoreCase))
+            .ToList();
+        parts.Add($"{name}={value}");
+        return string.Join(';', parts) + ";";
+    }
+
+    internal static string? WithoutToken(string? data, string name)
+    {
+        if (string.IsNullOrWhiteSpace(data)) return null;
+        var parts = data.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Where(part => !part.StartsWith(name + "=", StringComparison.OrdinalIgnoreCase))
+            .ToList();
+        return parts.Count == 0 ? null : string.Join(';', parts) + ";";
     }
 
     /// <summary>Why Memory Integrity stays on here: an anti-cheat that can require it, a policy, or the firmware lock. Null when Exo may turn it off.</summary>
@@ -324,6 +385,15 @@ internal sealed partial class SystemTuning(SystemTuning.ISystem system, string p
                     lines.Add(RegDword(MemoryManagement, LargeSystemCache, 0));
                     break;
                 }
+                case CaptureServiceKey:
+                {
+                    if (system.Service(CaptureServiceName) is { Start: 4 } svc)
+                    {
+                        kept.TryAdd(key, new Was(Services: [new ServiceWas(CaptureServiceName, svc.Start, svc.Delayed)]));
+                        lines.Add(Sc(CaptureServiceName, "demand"));
+                    }
+                    break;
+                }
                 case ServicesKey:
                 {
                     var now = Trimmed.Select(s => (s.Name, Start: system.Service(s.Name))).Where(s => s.Start is { Start: 2 })
@@ -340,36 +410,74 @@ internal sealed partial class SystemTuning(SystemTuning.ISystem system, string p
                     lines.Add(RegDword(Hvci, "Enabled", 0));
                     break;
                 }
+                case VrrKey:
+                {
+                    var raw = system.UserDirectXSettings();
+                    kept.TryAdd(key, new Was(Strings: raw is null ? null : [raw], Absent: raw is null));
+                    break;
+                }
+                case MouseAccelKey:
+                {
+                    if (system.MouseParams() is { Length: 3 } mp)
+                        kept.TryAdd(key, new Was(Strings: [mp[0].ToString(), mp[1].ToString(), mp[2].ToString()]));
+                    break;
+                }
             }
         }
-        if (lines.Count == 0) return Said(said);
+        var nonAdminKeys = wanted.Where(k => k is VrrKey or MouseAccelKey).ToList();
+        if (lines.Count == 0 && nonAdminKeys.Count == 0) return Said(said);
 
         // Recorded before anything changes, so a crash or a step cut short still has the way back.
         var changed = new Dictionary<string, DateTimeOffset>(saved.Changed);
-        foreach (var key in wanted.Where(k => k != TimerKey && kept.ContainsKey(k))) changed[key] = now();
+        foreach (var key in wanted.Where(k => k is not (TimerKey or SchedulingKey or CaptureServiceKey or VrrKey or MouseAccelKey) && kept.ContainsKey(k))) changed[key] = now();
         if (!Save(saved with { Kept = kept, Changed = changed })) return "Your current settings couldn't be saved for Undo, so nothing changed.";
 
-        // A restore point in the same step, first (one Windows keeps from the last day stands for it). Exo's own record is the
-        // way back for each item, so a PC with System Restore off still gets the change, and is told there's no point.
-        var point = system.PointStanding ? null : system.Answer();
-        var steps = point is null ? lines : [RestorePoint.Step(point, "Exo Launcher: before system settings", "MODIFY_SETTINGS"), .. lines];
-        if (!await system.Admin(steps).ConfigureAwait(false))
+        if (lines.Count > 0)
         {
-            if (clockWas is not null) { system.ReadAnswer(clockWas); system.ReadAnswer(clockAfter!); }
-            if (point is not null) system.ReadAnswer(point);
-            Save(prior);
-            return "Windows' permission was declined, so nothing changed.";
+            // A restore point in the same step, first (one Windows keeps from the last day stands for it). Exo's own record is the
+            // way back for each item, so a PC with System Restore off still gets the change, and is told there's no point.
+            var point = system.PointStanding ? null : system.Answer();
+            var steps = point is null ? lines : [RestorePoint.Step(point, "Exo Launcher: before system settings", "MODIFY_SETTINGS"), .. lines];
+            if (!await system.Admin(steps).ConfigureAwait(false))
+            {
+                if (clockWas is not null) { system.ReadAnswer(clockWas); system.ReadAnswer(clockAfter!); }
+                if (point is not null) system.ReadAnswer(point);
+                Save(prior);
+                return "Windows' permission was declined, so nothing changed.";
+            }
+            if (point is not null)
+            {
+                var outcome = RestorePoint.Read(system.ReadAnswer(point));
+                system.PointMade(outcome);
+                if (outcome is RestorePoint.Outcome.Off or RestorePoint.Outcome.Failed)
+                    said.Add(outcome == RestorePoint.Outcome.Off ? "System Restore is off on this PC, so there's no restore point; each switch still puts its setting back." : "Windows didn't make a restore point; each switch still puts its setting back.");
+            }
         }
-        if (point is not null)
+
+        // Non-admin user toggles apply directly without UAC elevation.
+        var after = saved with { Kept = kept, Changed = changed };
+        foreach (var key in nonAdminKeys)
         {
-            var outcome = RestorePoint.Read(system.ReadAnswer(point));
-            system.PointMade(outcome);
-            if (outcome is RestorePoint.Outcome.Off or RestorePoint.Outcome.Failed)
-                said.Add(outcome == RestorePoint.Outcome.Off ? "System Restore is off on this PC, so there's no restore point; each switch still puts its setting back." : "Windows didn't make a restore point; each switch still puts its setting back.");
+            if (key == VrrKey)
+            {
+                var next = WithToken(system.UserDirectXSettings(), VrrToken, "1");
+                if (!system.SetUserDirectXSettings(next) || !HasToken(system.UserDirectXSettings(), VrrToken, "1"))
+                {
+                    after = Drop(after, prior, key);
+                    said.Add("Windows didn't turn variable refresh rate on.");
+                }
+            }
+            else if (key == MouseAccelKey)
+            {
+                if (!system.SetMouseParams([0, 0, 0]) || system.MouseParams() is not { Length: 3 } mpAfter || mpAfter[2] != 0)
+                {
+                    after = Drop(after, prior, key);
+                    said.Add("Windows didn't turn mouse acceleration off.");
+                }
+            }
         }
 
         // Read back: what didn't take keeps no record, so Off never "puts back" a change that never happened.
-        var after = saved with { Kept = kept, Changed = changed };
         foreach (var key in wanted)
         {
             switch (key)
@@ -397,6 +505,10 @@ internal sealed partial class SystemTuning(SystemTuning.ISystem system, string p
                 case CacheKey when system.Dword(MemoryManagement, LargeSystemCache) == 1:
                     after = Drop(after, prior, key);
                     said.Add("Windows didn't take its memory setting.");
+                    break;
+                case CaptureServiceKey when system.Service(CaptureServiceName) is { Start: 4 }:
+                    after = Drop(after, prior, key);
+                    said.Add("Windows didn't restore Screen Capture Service.");
                     break;
                 case ServicesKey:
                 {
@@ -438,6 +550,30 @@ internal sealed partial class SystemTuning(SystemTuning.ISystem system, string p
         var saved = Settled();
         if (saved.Kept.TryGetValue(key, out var was))
         {
+            if (key == VrrKey)
+            {
+                var beforeRaw = was.Absent ? null : was.Strings?.FirstOrDefault();
+                var nowRaw = system.UserDirectXSettings();
+                var targetRaw = beforeRaw is not null && HasToken(beforeRaw, VrrToken, "1")
+                    ? WithToken(nowRaw, VrrToken, "1")
+                    : WithoutToken(nowRaw, VrrToken);
+                if (!system.SetUserDirectXSettings(targetRaw)) return "Windows didn't put it back. Try again.";
+                var keptVrr = new Dictionary<string, Was>(saved.Kept);
+                keptVrr.Remove(key);
+                saved = saved with { Kept = keptVrr };
+                return Save(saved) ? null : "Exo couldn't save your choice.";
+            }
+            if (key == MouseAccelKey)
+            {
+                if (was.Strings is not { Length: 3 } parts ||
+                    !int.TryParse(parts[0], out var p0) || !int.TryParse(parts[1], out var p1) || !int.TryParse(parts[2], out var p2))
+                    return "Exo's record of this setting couldn't be read, so nothing changed.";
+                if (!system.SetMouseParams([p0, p1, p2])) return "Windows didn't put it back. Try again.";
+                var keptMouse = new Dictionary<string, Was>(saved.Kept);
+                keptMouse.Remove(key);
+                saved = saved with { Kept = keptMouse };
+                return Save(saved) ? null : "Exo couldn't save your choice.";
+            }
             if (Revert(key, was) is not { } lines) return "Exo's record of this setting couldn't be read, so nothing changed.";
             // The timer's BCD value can't be read without administrator rights: the same step reads it back after setting it.
             var check = key == TimerKey ? system.Answer() : null;
@@ -452,6 +588,7 @@ internal sealed partial class SystemTuning(SystemTuning.ISystem system, string p
                 SchedulingKey => system.Dword(PriorityControl, Separation) == was.Value,
                 PagefileKey => SameStrings(system.Strings(MemoryManagement, PagingFiles), was.Strings),
                 CacheKey => system.Dword(MemoryManagement, LargeSystemCache) == was.Value,
+                CaptureServiceKey => was.Services is [var cs] && system.Service(cs.Name) is { } nowCs && nowCs.Start == cs.Start,
                 ServicesKey => was.Services!.All(s => system.Service(s.Name) is { } now && now.Start == s.Start && now.Delayed == s.Delayed),
                 IntegrityKey => system.Dword(Hvci, "Enabled") == was.Value,
                 _ => Forced(system.ReadAnswer(check!)) == true,
@@ -459,9 +596,11 @@ internal sealed partial class SystemTuning(SystemTuning.ISystem system, string p
             if (!back) return "Windows didn't put it back. Try again.";
             var kept = new Dictionary<string, Was>(saved.Kept);
             kept.Remove(key);
-            saved = saved with { Kept = kept, Changed = new(saved.Changed) { [key] = now() } };
+            var changed = new Dictionary<string, DateTimeOffset>(saved.Changed);
+            if (key is not (SchedulingKey or CaptureServiceKey)) changed[key] = now();
+            saved = saved with { Kept = kept, Changed = changed };
         }
-        else if (key is IntegrityKey or ServicesKey) return "Exo didn't change this, so there's nothing to put back.";
+        else if (key is IntegrityKey or ServicesKey or VrrKey or MouseAccelKey) return "Exo didn't change this, so there's nothing to put back.";
         if (Defaults.Contains(key) && !saved.Off.Contains(key)) saved = saved with { Off = [.. saved.Off, key] };
         return Save(saved) ? null : "Exo couldn't save your choice.";
     }
@@ -475,6 +614,9 @@ internal sealed partial class SystemTuning(SystemTuning.ISystem system, string p
         SchedulingKey => [was.Absent ? RegDelete(PriorityControl, Separation) : RegDword(PriorityControl, Separation, was.Value ?? Programs)],
         PagefileKey => was.Absent ? [RegDelete(MemoryManagement, PagingFiles)] : was.Strings is { } s && s.All(SafeText().IsMatch) ? [RegStrings(MemoryManagement, PagingFiles, s)] : null,
         CacheKey => [was.Absent ? RegDelete(MemoryManagement, LargeSystemCache) : RegDword(MemoryManagement, LargeSystemCache, was.Value ?? 0)],
+        CaptureServiceKey => was.Services is [var cs] && cs.Name == CaptureServiceName
+            ? [Sc(cs.Name, cs.Start switch { 2 => cs.Delayed ? "delayed-auto" : "auto", 3 => "demand", 4 => "disabled", _ => "demand" })]
+            : null,
         ServicesKey => was.Services is { } list && list.All(s => Trimmed.Any(t => t.Name == s.Name))
             ? list.Select(s => Sc(s.Name, s.Start switch { 2 => s.Delayed ? "delayed-auto" : "auto", 3 => "demand", 4 => "disabled", _ => "auto" })).ToList()
             : null,

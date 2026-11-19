@@ -49,7 +49,8 @@ internal static partial class PcHealth
         bool FastGpuForGames = false,
         NetworkBest.State? Network = null,
         DriverAdvisories.Advisory? ChipsetSkipped = null,
-        DriverAdvisories.Advisory? ChipsetAdvised = null);
+        DriverAdvisories.Advisory? ChipsetAdvised = null,
+        bool? CpuHybridProbe = null);
 
     private const byte DimmFormFactor = 0x09; // SMBIOS: a desktop DIMM (SODIMMs are laptops and mini PCs, which seldom offer EXPO/XMP)
 
@@ -59,8 +60,8 @@ internal static partial class PcHealth
     internal static IReadOnlyList<Item> Decide(Reading r)
     {
         var items = new List<Item>();
-        var x3d = ClassOf(r.Cpu, null) == PowerProfiles.CpuClass.AmdDualCcdX3d;
-        var parked = x3d || ClassOf(r.Cpu, null) == PowerProfiles.CpuClass.AmdDualCcdZen5;
+        var x3d = ClassOf(r.Cpu, r.CpuHybridProbe) == PowerProfiles.CpuClass.AmdDualCcdX3d;
+        var parked = x3d || ClassOf(r.Cpu, r.CpuHybridProbe) == PowerProfiles.CpuClass.AmdDualCcdZen5;
         if (SlowRam(r.Dimms) is { } ram)
             items.Add(new("ram", "Memory speed", $"Your RAM runs at {ram.Runs} MT/s; it's rated for {ram.Rated}. Turn on EXPO/XMP in the BIOS."));
         if (ReBarOff(r.Gpu))
@@ -367,7 +368,7 @@ internal static partial class PcHealth
         var subject = chipset is null ? null : DriverAdvisories.Chipset(chipset.Vendor, cpu);
         var skipped = subject is null || latest is null || VersionNumber.Same(latest, installed) ? null : DriverAdvisories.Shared.Against(subject, latest);
         var advised = subject is null ? null : DriverAdvisories.Shared.Against(subject, installed);
-        var reading = new Reading(Memory.Value, Gpu.Value, cpu, power.Read(), installed, latest, update, chipsetAuto && installed is not null && !chipset!.WindowsAsks(), HagsOff(scheduling), Hybrid.Value, fastGpuForGames, NetworkBest.Shared.Read(), skipped, advised);
+        var reading = new Reading(Memory.Value, Gpu.Value, cpu, power.Read(), installed, latest, update, chipsetAuto && installed is not null && !chipset!.WindowsAsks(), HagsOff(scheduling), Hybrid.Value, fastGpuForGames, NetworkBest.Shared.Read(), skipped, advised, CpuHybrid());
         if (Interlocked.Exchange(ref _logged, 1) == 0) AppLog.Info("PC health: " + Describe(reading));
         return reading;
     }
@@ -379,7 +380,7 @@ internal static partial class PcHealth
             : $"RAM {string.Join(", ", r.Dimms.Select(d => $"{d.Configured}/{d.Speed} MT/s{(RatedFromPart(d.Part) is { } p ? $" (part {p})" : "")}"))}";
         var bar = r.Gpu is null ? "GPU not read" : $"{r.Gpu.Name}: {(r.Gpu.Uma ? "shared memory" : r.Gpu.UploadHeap switch { true => "Resizable BAR on", false => "Resizable BAR off", null => "Resizable BAR unknown" })}";
         var plan = r.Power is null ? "plan not read"
-            : $"plan {r.Power.Active} overlay {r.Power.Overlay}{(r.Power.Exo ? " (Exo's)" : "")} class {PowerProfiles.Keys[ClassOf(r.Cpu, null)]} max {r.Power.Cpu?.MaxState?.ToString() ?? "-"}% boost {r.Power.Cpu?.BoostMode?.ToString() ?? "-"} min cores {r.Power.Cpu?.MinCores?.ToString() ?? "-"}%";
+            : $"plan {r.Power.Active} overlay {r.Power.Overlay}{(r.Power.Exo ? " (Exo's)" : "")} class {PowerProfiles.Keys[ClassOf(r.Cpu, r.CpuHybridProbe)]} max {r.Power.Cpu?.MaxState?.ToString() ?? "-"}% boost {r.Power.Cpu?.BoostMode?.ToString() ?? "-"} min cores {r.Power.Cpu?.MinCores?.ToString() ?? "-"}%";
         return $"{ram}; {bar}; {plan}; chipset {r.ChipsetInstalled ?? "-"} (newest {r.ChipsetLatest ?? "-"}{(r.ChipsetUpdate is { } u ? $", update {u.Phase} {u.Version}" : "")}); GPU scheduling {(r.HagsOff ? "off" : "on or left to Windows")}; {(r.Hybrid is { } two ? $"two graphics chips ({two.PowerSaving} and {two.HighPerformance}), games on {(r.FastGpuForGames ? "the fast one by Exo" : "Windows' pick")}" : "one graphics chip")}; network {(r.Network is { } n ? $"{string.Join(", ", n.Items.Select(i => $"{i.Key} {(i.Off ? "off" : i.On ? "on" : "to set")}"))}{(n.Tune.SlowLink is { } s ? $", slow link {NetworkTune.Speed(s.Adapter.LinkBps)}" : "")}" : "not read")}.";
     }
 
@@ -427,8 +428,8 @@ internal static partial class PcHealth
     [GeneratedRegex(@"\bRTX\s*[3-9]0[5-9]0|\bRX\s*[6-9]\d{3}|\bArc\b", RegexOptions.IgnoreCase)]
     private static partial Regex ReBarCard();
 
-    // The cards frame generation runs on: GeForce RTX 40 and 50 (4050 to 5090; not the workstation "RTX 4000 Ada") and Radeon RX 7000 and newer (a laptop's 7600S too).
-    [GeneratedRegex(@"\bRTX\s*[45]0[5-9]0\b|\bRX\s*[79]\d{3}(?!\d)", RegexOptions.IgnoreCase)]
+    // Hardware-accelerated GPU scheduling: GeForce RTX 30, 40 and 50 (3050 to 5090; not workstation RTX 4000 Ada) and Radeon RX 7000 and newer (including laptop 7600S).
+    [GeneratedRegex(@"\bRTX\s*[3-5]0[5-9]0\b|\bRX\s*[79]\d{3}(?!\d)", RegexOptions.IgnoreCase)]
     private static partial Regex FrameGenCard();
 
     [GeneratedRegex(@"Arc", RegexOptions.IgnoreCase)]

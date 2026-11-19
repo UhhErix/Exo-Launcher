@@ -462,4 +462,13 @@ public sealed class NetworkBestTests : IDisposable
         Assert.Equal(2, lines.Count(l => l.Contains("-Value 1 -Force")));
         Assert.Contains(CloudflareDns.Revert(CloudflareDns.Snapshot(a))!, l => l.Contains(@"\Doh\1.1.1.1'") && l.Contains("-Value 5 -Force"));
     }
+
+    [Fact]
+    public void Prelude_ChecksRedundantDnsTargets()
+    {
+        Assert.Contains("getexo.app", Prelude);
+        Assert.Contains("one.one.one.one", Prelude);
+        Assert.Contains("dns.msftncsi.com", Prelude);
+        Assert.Contains("1.1.1.1", Prelude);
+    }
 }

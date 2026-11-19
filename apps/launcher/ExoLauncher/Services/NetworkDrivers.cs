@@ -551,9 +551,45 @@ internal sealed partial class NetworkDrivers(NetworkDrivers.IHost host, string f
     [GeneratedRegex(@"^[a-z0-9_]{1,40}\.inf$", RegexOptions.IgnoreCase)]
     private static partial Regex InboxInf();
 
+    internal const int MaxRedirects = 5;
+
+    internal static async Task<HttpResponseMessage> SendWithRedirectsAsync(
+        Func<HttpRequestMessage, CancellationToken, Task<HttpResponseMessage>> send,
+        string url,
+        Func<HttpRequestMessage>? buildRequest,
+        CancellationToken ct)
+    {
+        var current = new Uri(url, UriKind.Absolute);
+        var visited = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { current.AbsoluteUri };
+        for (var hop = 0; hop <= MaxRedirects; hop++)
+        {
+            using var request = buildRequest?.Invoke() ?? NativeHost.Request(current.AbsoluteUri);
+            request.RequestUri = current;
+            var response = await send(request, ct).ConfigureAwait(false);
+            var code = (int)response.StatusCode;
+            if (code is 301 or 302 or 303 or 307 or 308 && response.Headers.Location is { } loc)
+            {
+                var next = loc.IsAbsoluteUri ? loc : new Uri(current, loc);
+                response.Dispose();
+                if (next.Scheme.Equals(Uri.UriSchemeHttp, StringComparison.OrdinalIgnoreCase) &&
+                    next.Host.EndsWith(".intel.com", StringComparison.OrdinalIgnoreCase))
+                {
+                    next = new UriBuilder(next) { Scheme = Uri.UriSchemeHttps, Port = -1 }.Uri;
+                }
+                if (!visited.Add(next.AbsoluteUri))
+                    throw new HttpRequestException($"Intel redirect loop detected at {next.AbsoluteUri}.");
+                current = next;
+                continue;
+            }
+            return response;
+        }
+        throw new HttpRequestException($"Too many redirects reading {url}.");
+    }
+
     private sealed class NativeHost : IHost
     {
-        private static readonly HttpClient Http = ExoHttp.Create(TimeSpan.FromMinutes(10));
+        private static readonly HttpClient Http = ExoHttp.Create(TimeSpan.FromMinutes(10),
+            new SocketsHttpHandler { AllowAutoRedirect = false, UseCookies = false, AutomaticDecompression = System.Net.DecompressionMethods.All });
 
         /// <summary>Every PCI or USB Ethernet or Wi-Fi adapter Windows lists now (connected or not), from the network class keys.</summary>
         public IReadOnlyList<Adapter> Adapters()
@@ -594,17 +630,19 @@ internal sealed partial class NetworkDrivers(NetworkDrivers.IHost host, string f
 
         public async Task<string> GetTextAsync(string url, CancellationToken ct)
         {
-            using var request = Request(url);
-            using var response = await Http.SendAsync(request, ct).ConfigureAwait(false);
+            using var response = await SendWithRedirectsAsync((req, c) => Http.SendAsync(req, c), url, null, ct).ConfigureAwait(false);
             response.EnsureSuccessStatusCode();
             return await response.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
         }
 
         public async Task<(byte[] Bytes, long Total)> GetRangeAsync(string url, long from, int length, CancellationToken ct)
         {
-            using var request = Request(url);
-            request.Headers.Range = from < 0 ? new RangeHeaderValue(null, -from) : new RangeHeaderValue(from, from + length - 1);
-            using var response = await Http.SendAsync(request, ct).ConfigureAwait(false);
+            using var response = await SendWithRedirectsAsync((req, c) => Http.SendAsync(req, c), url, () =>
+            {
+                var request = Request(url);
+                request.Headers.Range = from < 0 ? new RangeHeaderValue(null, -from) : new RangeHeaderValue(from, from + length - 1);
+                return request;
+            }, ct).ConfigureAwait(false);
             response.EnsureSuccessStatusCode();
             if (response.RequestMessage?.RequestUri?.Host != IntelHost) throw new InvalidDataException("The package didn't come from Intel.");
             if (response.StatusCode != System.Net.HttpStatusCode.PartialContent || response.Content.Headers.ContentRange?.Length is not { } total)
@@ -616,8 +654,7 @@ internal sealed partial class NetworkDrivers(NetworkDrivers.IHost host, string f
         public async Task DownloadAsync(string url, string path, IProgress<int>? progress, CancellationToken ct)
         {
             var partial = path + ".part";
-            using var request = Request(url);
-            using var response = await Http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, ct).ConfigureAwait(false);
+            using var response = await SendWithRedirectsAsync((req, c) => Http.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, c), url, null, ct).ConfigureAwait(false);
             response.EnsureSuccessStatusCode();
             if (response.RequestMessage?.RequestUri?.Host != IntelHost) throw new InvalidDataException("The download didn't come from Intel.");
             var total = response.Content.Headers.ContentLength ?? 0;
@@ -651,7 +688,7 @@ internal sealed partial class NetworkDrivers(NetworkDrivers.IHost host, string f
         public string? Elevated(IReadOnlyList<string> commands) => ElevatedCommands.Run(commands, "Network driver");
         public string? Advised(string subject, string version) => DriverAdvisories.Shared.Refuse(subject, version);
 
-        private static HttpRequestMessage Request(string url)
+        internal static HttpRequestMessage Request(string url)
         {
             var request = new HttpRequestMessage(HttpMethod.Get, url);
             // Intel's site turns browser-style and bare agents away and lets one through that names itself with a link (GpuDriverUpdate.Request).

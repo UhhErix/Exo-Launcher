@@ -230,7 +230,7 @@ internal static class ExoEq
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { AppLog.Warn("Uninstall: Exo EQ's file stayed: " + ex.GetType().Name); }
     }
 
-    /// <summary>Windows' Night light schedule (bytes 23, 24, 27 and 28 of its settings blob); null when it has none.</summary>
+    /// <summary>Windows' Night light schedule read from CloudStore protobuf tags (<c>CA 14 0E</c> start, <c>CA 1E 0E</c> end); null when it has none.</summary>
     internal static (TimeSpan Start, TimeSpan End)? WindowsNightLight()
     {
         try
@@ -241,8 +241,37 @@ internal static class ExoEq
         catch (Exception ex) when (ex is System.Security.SecurityException or UnauthorizedAccessException or IOException) { return null; }
     }
 
-    internal static (TimeSpan Start, TimeSpan End)? NightLightSchedule(byte[] data) =>
-        data.Length > 28 && data[23] < 24 && data[24] < 60 && data[27] < 24 && data[28] < 60
-            ? (new TimeSpan(data[23], data[24], 0), new TimeSpan(data[27], data[28], 0))
-            : null;
+    internal static (TimeSpan Start, TimeSpan End)? NightLightSchedule(byte[] data)
+    {
+        if (data.Length < 10) return null;
+        var from = FindLastMarker(data, [0x43, 0x42, 0x01, 0x00]);
+        if (from < 0) from = 0;
+        if (TryReadTagTime(data, from, [0xCA, 0x14, 0x0E], out var start) &&
+            TryReadTagTime(data, from, [0xCA, 0x1E, 0x0E], out var end))
+            return (start, end);
+        return null;
+    }
+
+    private static int FindLastMarker(byte[] data, ReadOnlySpan<byte> marker)
+    {
+        for (var i = data.Length - marker.Length; i >= 0; i--)
+            if (data.AsSpan(i, marker.Length).SequenceEqual(marker)) return i;
+        return -1;
+    }
+
+    private static bool TryReadTagTime(byte[] data, int from, ReadOnlySpan<byte> tag, out TimeSpan time)
+    {
+        time = default;
+        for (var i = from; i <= data.Length - tag.Length - 1; i++)
+        {
+            if (!data.AsSpan(i, tag.Length).SequenceEqual(tag)) continue;
+            var pos = i + tag.Length;
+            var hour = data[pos];
+            if (hour >= 24) continue;
+            var min = pos + 1 < data.Length && data[pos + 1] < 60 ? data[pos + 1] : 0;
+            time = new TimeSpan(hour, min, 0);
+            return true;
+        }
+        return false;
+    }
 }

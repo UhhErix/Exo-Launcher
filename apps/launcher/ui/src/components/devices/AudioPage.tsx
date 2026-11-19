@@ -31,7 +31,7 @@ export function AudioPage({ name, status, art, output, mic, wearing, onWearing, 
   visible: boolean
 }) {
   const { details, patch } = useAudioDetails(output?.id ?? null, mic?.id ?? null, visible)
-  const eq = useEq(output?.id)
+  const eq = useEq(output?.id, visible)
   const worn = !!output && output.model !== 'speakers' && output.model !== 'monitor'
   const ready = eq.state?.apo.installed === true
   return (

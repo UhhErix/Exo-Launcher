@@ -700,12 +700,12 @@ export type NetCheck = { before: NetSample | null; after: NetSample; said: strin
 export type PcHealth = { ok: boolean; message?: string | null; items: PcHealthItem[]; check?: NetCheck | null }
 
 /** Best settings › System's items (SystemTuning.cs): Windows defaults a tweak changed (Best settings) and two opt-ins (their own switch only). */
-export type TuningKey = 'timer' | 'scheduling' | 'pagefile' | 'cache' | 'services' | 'integrity'
+export type TuningKey = 'timer' | 'scheduling' | 'pagefile' | 'cache' | 'captureService' | 'services' | 'integrity' | 'vrr' | 'mouseAccel'
 /**
  * One item: on, Exo's setting is in place; off, the player turned a Best settings item off; optIn, only its own switch sets it;
- * restart, a change (either way) waits on a restart; blocked, why Exo won't change it here (an anti-cheat, a policy).
+ * restart, a change (either way) waits on a restart; needsRestart, whether changing it requires a restart; blocked, why Exo won't change it here (an anti-cheat, a policy).
  */
-export type TuningItem = { key: TuningKey; label: string; detail: string; on: boolean; canUndo: boolean; off: boolean; optIn: boolean; restart: boolean; blocked: string | null }
+export type TuningItem = { key: TuningKey; label: string; detail: string; on: boolean; canUndo: boolean; off: boolean; optIn: boolean; restart: boolean; needsRestart?: boolean; blocked: string | null }
 export type Tuning = { ok: boolean; message?: string | null; applied: boolean; restart: boolean; items: TuningItem[] }
 
 /**

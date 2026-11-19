@@ -1,3 +1,4 @@
+using ExoLauncher.Services;
 using ExoLauncher.Services.DiscordClient.Voice;
 using Xunit;
 
@@ -93,5 +94,23 @@ public sealed class EqualizerApoTests
         Assert.True(VoiceTune.LucidVoiceOn(null));
         Assert.True(VoiceTune.LucidVoiceOn("{ not json"));
         Assert.True(VoiceTune.LucidVoiceOn("[]"));
+    }
+
+    [Fact]
+    public void Apo_restart_accounts_for_audiosrv_start_grace_fast_startup_and_settled_endpoints()
+    {
+        var bootStale = new DateTime(2026, 11, 10, 8, 0, 0, DateTimeKind.Utc);
+        var audioStart = new DateTime(2026, 11, 19, 12, 0, 0, DateTimeKind.Utc);
+
+        // Written yesterday before Fast Startup shutdown, Audiosrv started today: no false restart banner.
+        Assert.False(EqualizerApo.NeedsRestart(apo: true, audioStart.AddHours(-12), bootStale, audioStart));
+        // Written within 15s of Audiosrv initialization: no false restart banner.
+        Assert.False(EqualizerApo.NeedsRestart(apo: true, audioStart.AddSeconds(10), bootStale, audioStart));
+        // Already settled earlier in this session and Windows changed sample rate / spatial audio: no false restart banner.
+        Assert.False(EqualizerApo.NeedsRestart(apo: true, audioStart.AddMinutes(30), bootStale, audioStart, alreadySettled: true));
+        // Genuine post-Audiosrv APO installation on an unsettled endpoint: shows restart banner.
+        Assert.True(EqualizerApo.NeedsRestart(apo: true, audioStart.AddMinutes(5), bootStale, audioStart, alreadySettled: false));
+        // Without APO on endpoint, never asks to restart.
+        Assert.False(EqualizerApo.NeedsRestart(apo: false, audioStart.AddMinutes(5), bootStale, audioStart));
     }
 }
