@@ -1,5 +1,7 @@
 /**
- * The update address's tests: the real worker.js with R2 (the mirror) stood in for. Nothing reaches GitHub.
+ * The update address's tests: the real worker.js with R2 (the mirror) stood in for. Every request out fails, so these are
+ * also the answers when GitHub is down: Exo Launcher's newest release then comes from the mirror alone (github.test.mjs
+ * covers the GitHub side).
  *
  * How it could fail: it hands out a tag or a file that isn't in the mirror, serves a file that isn't one of an app's
  * three, answers a manifest whose checks are malformed, loses a download's byte range, keeps a stale newest-version
@@ -61,7 +63,7 @@ beforeEach(() => {
   globalThis.fetch = async (url) => { fetched.push(String(url)); throw new Error('network is not allowed in these tests') }
 })
 afterEach(() => { globalThis.fetch = realFetch })
-test('latest answers from the manifest, with each file\'s size and SHA-256, and never asks GitHub', async () => {
+test('with GitHub down, latest answers from the mirror\'s manifest, with each file\'s size and SHA-256', async () => {
   const env = { MIRROR: standInMirror({ 'launcher/latest.json': JSON.stringify(manifest('launcher', 'v3.24.1', 'ExoLauncher-Setup.exe')) }) }
   const response = await ask('/v1/launcher/latest', env)
   assert.equal(response.status, 200)
@@ -75,7 +77,8 @@ test('latest answers from the manifest, with each file\'s size and SHA-256, and 
   assert.equal(body.checks.setup.sha256, SHA)
   assert.equal(body.checks.setup.size, 10)
   assert.equal(response.headers.get('cache-control'), 'public, max-age=60')
-  assert.deepEqual(fetched, [])
+  // At most GitHub's API was tried (this stand-in R2 takes no writes, so no request holds the lease to ask), nothing else.
+  assert.ok(fetched.every((url) => new URL(url).hostname === 'api.github.com'), fetched.join(', '))
 })
 test('an answer the old Worker cached under the plain latest URL is never served after a deploy', async () => {
   // The edge cache is shared by every Worker version: an entry under the plain URL is what an older Worker wrote.
@@ -223,7 +226,7 @@ test("the stored content type never overrides the changelog's markdown type", as
 
 
 // No update signing (no keys, owner's rule): a release is the three files. A stray .sig in a manifest or the bucket is never served.
-test('a release answers with its three files only, and the edge key names schema 3', async (t) => {
+test('a release answers with its three files only, and the edge key names schema 4', async (t) => {
   const stored = new Map()
   const puts = []
   globalThis.caches = { default: {
@@ -237,7 +240,7 @@ test('a release answers with its three files only, and the edge key names schema
   const body = await (await ask('/v1/cinema/latest', env)).json()
   assert.deepEqual(Object.keys(body.files), ['setup', 'sha256', 'whatsNew'])
   assert.deepEqual(Object.keys(body.checks), ['setup', 'sha256', 'whatsNew'])
-  assert.deepEqual(puts, [`${ORIGIN}/v1/cinema/latest?schema=3`])
+  assert.deepEqual(puts, [`${ORIGIN}/v1/cinema/latest?schema=4`])
 })
 test('a .sig in the bucket is not served: 404, and nothing is asked of it', async () => {
   const mirror = standInMirror({ 'cinema/v1.4.7/ExoCinema-Setup.exe.sig': '{}' })
