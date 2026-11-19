@@ -303,7 +303,7 @@ function AngleRow({ section, angle }: { section: Section; angle: number }) {
                   : null}
             </span>
           </span>
-          <button type="button" className="m-button is-compact" disabled={busy || angle === 0} onClick={() => void set(0)}>Reset</button>
+          <button type="button" className="m-button is-compact" disabled={busy || (angle === 0 && !unread)} onClick={() => void set(0)}>Reset</button>
         </AngleControl>
       </Row>
       {state === 'failed' ? <p className="cx-angle-error" role="alert">Your mouse didn't take the new angle. Try again.</p> : null}

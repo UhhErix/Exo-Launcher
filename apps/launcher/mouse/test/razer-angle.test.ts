@@ -135,3 +135,13 @@ test('a set the mouse refuses fails, and the angle shown stays', async () => {
   await assert.rejects(client.setAngleTuning!(9))
   assert.equal((await client.readStatus()).angleTuning, 3)
 })
+
+test("an angle the mouse never reported and Exo never set is marked unknown, so Measure won't correct from it", async () => {
+  const { client } = fakeClient(0x00c0, c => (c.commandId === 0x94 ? unsupported() : Uint8Array.of(0x01, 0x01, c.args![2])))
+  attachRazerAngle(client)
+  assert.equal((await client.readStatus()).razerAngleUnknown, true)
+  await client.setAngleTuning!(0)
+  const after = await client.readStatus()
+  assert.equal(after.razerAngleUnknown, undefined)
+  assert.equal(after.razerAngleUnread, true)
+})

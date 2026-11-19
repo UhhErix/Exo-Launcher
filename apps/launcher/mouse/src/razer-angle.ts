@@ -29,7 +29,8 @@ import type { MouseStatus } from '@openmouse/protocol/drivers/mouse-types'
  * with 0x0b/0x85), so Exo asks 0x0b/0x94 with the same two arguments once per connection; the mouse answers a get it
  * doesn't know with status 0x05 and nothing changes. That read is not in the capture: when it is not answered, or
  * after a set answers with another angle, the row says the angle wasn't read and shows what Exo last set on this
- * connection (0 before that). A set counts as taken on its status 0x02 reply, as in the capture.
+ * connection (0 before that, a placeholder Measure never corrects from). A set counts as taken on its status 0x02
+ * reply, as in the capture.
  *
  * The transaction id is the driver's for the model (0x1f on both of the V3 Pro's ids), which every other verified V3
  * Pro command uses; OpenRazer, razer-macos and librazermacos have no sensor angle command to compare with.
@@ -76,8 +77,12 @@ type RazerClient = {
   setAngleTuning?: (degrees: number) => Promise<number>
 }
 
-/** What the angle row reads besides `angleTuning`: the mouse did not answer the read. */
-export type RazerAngleStatus = MouseStatus & { razerAngleUnread?: boolean }
+/**
+ * What the angle row reads besides `angleTuning`: the mouse did not answer the read (`razerAngleUnread`), and nor has
+ * Exo set an angle on this connection, so the 0 shown is a placeholder, not the mouse's angle (`razerAngleUnknown`):
+ * Measure never corrects from it.
+ */
+export type RazerAngleStatus = MouseStatus & { razerAngleUnread?: boolean; razerAngleUnknown?: boolean }
 
 export function hasRazerAngle(device: Pick<HIDDevice, 'vendorId' | 'productId'>): boolean {
   return device.vendorId === RAZER && RAZER_ANGLE_PRODUCTS.has(device.productId)
@@ -101,7 +106,12 @@ export function attachRazerAngle(client: unknown): void {
   razer.readStatus = async () => {
     const status = await read()
     if (known === undefined) known = await ask()
-    return { ...status, angleTuning: known ?? written ?? 0, ...(known === null ? { razerAngleUnread: true } : {}) } as RazerAngleStatus
+    return {
+      ...status,
+      angleTuning: known ?? written ?? 0,
+      ...(known === null ? { razerAngleUnread: true } : {}),
+      ...(known === null && written === null ? { razerAngleUnknown: true } : {}),
+    } as RazerAngleStatus
   }
   razer.setAngleTuning = async (degrees: number) => {
     // The request throws unless the mouse answers status 0x02, the one confirmation the capture shows.
