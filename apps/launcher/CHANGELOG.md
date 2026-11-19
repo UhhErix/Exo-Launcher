@@ -1,6 +1,7 @@
 # Changelog
 
 ## 3.26.0 — November 14, 2026
+- **Things line up.** In Discord the panes' titles share one line and every list starts at the same edge (channels, categories, messages, friends); in the PC room the This PC, Updates and Shaders titles sit on one line. _Checked in code only._
 - **Downloads, in one place.** Library › More › Downloads lists what's downloading, what's next and what's paused: pause or stop what runs, move what's next up or down or take it out, resume what's paused, and Pause all until you Resume all. Each game has its own Update automatically switch. _Checked in code only._
 - **Goeist, Exo's new type.** Exo and Exo Mouse use Goeist, a rounded take on Geist: the same proportions, every corner softened. _Checked in code only._
 - **Shop beside Home.** Discord's Shop is its own place at the top of the Discord room, next to Home, and opens in one press. _Checked in code only._
