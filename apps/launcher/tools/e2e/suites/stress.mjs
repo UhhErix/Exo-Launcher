@@ -3,7 +3,7 @@
 // last room asked for, nothing stuck half way, no errors, and no memory left behind.
 import { sleep } from '../cdp.mjs'
 import { layoutScan } from '../lib/page.mjs'
-import { ROOMS } from '../lib/kit.mjs'
+import { BAR_ROOMS } from '../lib/kit.mjs'
 import { screenMatchesPage } from './shell.mjs'
 
 async function whole(t, c, label, room) {
@@ -27,7 +27,7 @@ export async function run(t) {
 
   await run.check('stress', 'rooms', 'rooms clicked faster than they open end in the last one asked for', async (c) => {
     const tabs = await t.shell.eval(`Object.fromEntries([...document.querySelectorAll('.exo-titlebar button')].map(b => [(b.getAttribute('aria-label') || b.textContent || '').trim().replace(/\\s*\\d+$/, ''), (() => { const r = b.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 } })()]))`)
-    const order = Array.from({ length: Math.round(120 * n) }, (_, i) => ROOMS[(i * 7 + 3) % ROOMS.length])
+    const order = Array.from({ length: Math.round(120 * n) }, (_, i) => BAR_ROOMS[(i * 7 + 3) % BAR_ROOMS.length])
     for (const room of order) { await t.shell.clickAt(tabs[room].x, tabs[room].y); await sleep(25) }
     return whole(t, c, 'rooms', order[order.length - 1])
   })
