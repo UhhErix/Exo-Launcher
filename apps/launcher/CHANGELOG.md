@@ -1,6 +1,7 @@
 # Changelog
 
 ## 3.26.0 — November 14, 2026
+- **Goeist, Exo's new type.** Exo and Exo Mouse use Goeist, a rounded take on Geist: the same proportions, every corner softened. _Checked in code only._
 - **Glass edges, not grey outlines.** Panels, menus and controls are lit at their edge like glass, brightest along the top, instead of a grey line all the way round, and lines inside a panel are faint enough that they never stack into a grey band. _Checked in code only._
 - **Old frame generation installs come out.** A game that got Exo Bridge from an earlier test build (Hell Is Us) had it left behind for good; Exo now takes it out by its record and puts today's frame generation in. _Checked in code only._
 - **Five rooms, in the middle.** The top bar has Library, Store, Discord, Music and PC, centered in the window. Devices moved into the PC room: its button sits on the This PC line beside Apps, and nothing in it changed. The mouse's capsule left the top bar; its battery shows in the FPS counter. _Checked in code only._

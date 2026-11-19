@@ -185,7 +185,7 @@ export async function run(t) {
     const overlay = await openPage(t.port, 'overlay.exo-launcher.local', 10000)
     const seen = await overlay.waitFor(() => {
       const art = document.querySelector('.card .art'), card = document.querySelector('.card.in')
-      return art?.complete && art.naturalWidth >= 64 && card ? { src: art.src.slice(0, 11), width: art.naturalWidth, name: card.querySelector('.name').textContent, moves: card.getAnimations().length, font: document.fonts.check('600 16px Exoline') } : null
+      return art?.complete && art.naturalWidth >= 64 && card ? { src: art.src.slice(0, 11), width: art.naturalWidth, name: card.querySelector('.name').textContent, moves: card.getAnimations().length, font: document.fonts.check('600 16px Goeist') } : null
     }, { timeoutMs: 8000 })
     overlay.close()
     c.evidence.banner = seen
@@ -193,7 +193,7 @@ export async function run(t) {
     const failures = []
     if (seen.src !== 'data:image/') failures.push(`picture from ${seen.src}`)
     if (!seen.name) failures.push('no name')
-    if (!seen.font) failures.push('Exoline not loaded')
+    if (!seen.font) failures.push('Goeist not loaded')
     return failures
   })
 
