@@ -332,8 +332,8 @@ export const ReplaceIcon = icon('replace')
 export const ArrowUp = icon('arrow-up')
 export const ArrowDown = icon('arrow-down')
 
-/** A check that draws itself in (tokens.css › .exo-motion-check): the check glyph, as a line to animate. */
-export const CHECK_PATH = 'M5 12.5L10 17.5L19.5 8'
+/** A check that draws itself in (tokens.css › .exo-motion-check): Lucide's check, drawn left to right, as a line to animate. */
+export const CHECK_PATH = 'M4 12l5 5L20 6'
 
 // ── Brand marks ─────────────────────────────────────────────────────────────────────────
 export const Spotify = brand('spotify')
