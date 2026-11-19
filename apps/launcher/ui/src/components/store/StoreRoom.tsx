@@ -616,7 +616,7 @@ function StoreTools({ view, query, wished, refreshing, onTab, onQuery, onRefresh
       <label className="exo-store-search">
         <Search size={16} />
         <input ref={searchField} type="search" placeholder="Search the store" value={query} onChange={e => onQuery(e.target.value)} aria-label="Search the store" />
-        <button type="button" aria-label="Clear search" tabIndex={query ? 0 : -1} className={query ? undefined : 'is-hidden'} onClick={() => onQuery('')}><Close size={13} /></button>
+        <button type="button" aria-label="Clear search" tabIndex={query ? 0 : -1} className={query ? undefined : 'is-hidden'} onClick={() => onQuery('')}><Close size={14} /></button>
       </label>
       <button
         type="button"

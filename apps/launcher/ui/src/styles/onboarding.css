@@ -152,7 +152,8 @@
    step lands (tokens.css › .exo-motion-check.is-held), simply there for one that was already set. Here, not in
    pc-room.css, since first run shows it before the PC room's code has loaded. */
 .exo-motion-check.exo-best-check {
-  stroke-width: 1.91;
+  /* The icons' line at 14px (lineAt), as the Check glyph beside it. */
+  stroke-width: 1.5;
   position: static;
   display: inline-block;
   flex: none;
@@ -466,7 +467,8 @@
 }
 .exo-ob-check-path {
   stroke: currentColor;
-  stroke-width: 3;
+  /* The icons' line from 24px (lineAt): Lucide's check at 48px. */
+  stroke-width: 1.75;
   stroke-linecap: round;
   stroke-linejoin: round;
   stroke-dasharray: 1;

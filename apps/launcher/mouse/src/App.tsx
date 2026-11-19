@@ -250,7 +250,7 @@ function Device({ status, brand, readAt, busy, error, children }: { status: Mous
         ) : <span className="m-hero-image is-empty" />}
         {landed ? (
           <span key={landed} className="m-done" aria-hidden="true">
-            <svg className="m-done-check" viewBox="0 0 24 24"><path d="M4 12l5 5L20 6" pathLength="1" /></svg>
+            <svg className="m-done-check" viewBox="0 0 24 24"><path d="M4 12L9 17L20 6" pathLength="1" /></svg>
           </span>
         ) : null}
         {error ? <p className="m-error" role="alert">{error}</p> : null}

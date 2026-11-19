@@ -1,6 +1,7 @@
 # Changelog
 
 ## 3.26.0 — November 14, 2026
+- **Every glyph is a vector now.** Replaced the remaining CSS-border icons (checkmarks, spinner, close, and chevron arrows) and gave anti-cheat, compression, frame generation, and store badges distinct Lucide icons. _Checked in code only._
 - **Goeist on every surface, not just the page.** The FPS counter, the achievement banner, Exo Capture's windows, Exo's own dialogs and menus, Setup's screens and the installer's pages now draw Goeist like the rest of Exo, and Exoline is gone. The FPS counter's pill and the banner take the same glass edge as the app (lit along the top) instead of a gray outline, and Exo's native colors match the app's pure black. _Checked in code only._
 - **First run keeps up with Exo.** Best settings for this PC now shows Update DLSS, FSR and XeSS automatically (on, as it is by default) beside frame generation, its tiles and the summary on Done take the glass line instead of a gray border, and Done draws Exo's own check. _Checked in code only._
 - **Exo Mouse's checks, menu arrow and heart are Lucide's.** The last glyphs Exo Mouse drew itself match the Lucide icons the rest of Exo uses, and the check that draws itself in across Exo is Lucide's check. _Checked in code only._
