@@ -1099,7 +1099,8 @@ export interface StartupState {
 /** One thing an app left, as the deep clean found it; likely: matched by its name alone. */
 export interface AppLeftover {
   id: number
-  kind: 'folder' | 'file' | 'shortcut' | 'registry' | 'service' | 'task'
+  /** A driver is only ever shown, never selected: a device may still need it. */
+  kind: 'folder' | 'file' | 'shortcut' | 'registry' | 'service' | 'task' | 'driver'
   /** Where it is, by the place's name ("AppData\\Local\\Acme"): never a user's own folder. */
   path: string
   bytes: number
@@ -2431,9 +2432,19 @@ export const host = {
   telemetryDelete: () => rawCall<{ ok: boolean; message?: string | null }>('telemetry.delete', {}, 30_000),
   /** The room the page shows (room.opened). */
   telemetryRoom: (room: string) => rawCall<{ ok: true }>('telemetry.track', { room }),
-  /** One uninstalled with its own uninstaller (asked in Exo's window, unless apps.confirm's pass covers it), then what it left cleared by itself. */
-  appsUninstall: (id: string) =>
-    rawCall<AppFind | { ok: false; still?: boolean; message?: string | null }>('apps.uninstall', { id }, 65 * 60_000),
+  /**
+   * One uninstalled with its own uninstaller, then what it left cleared by itself. quiet: one of a run apps.confirm passed,
+   * with its installer's quiet switches where it has them (Windows' prompt still asks for rights).
+   */
+  appsUninstall: (id: string, quiet = false) =>
+    rawCall<AppFind | { ok: false; still?: boolean; message?: string | null }>('apps.uninstall', quiet ? { id, quiet } : { id }, 65 * 60_000),
+  /** A System Restore point before a run, under Windows' prompt; ok only when there is one to go back to. */
+  appsRestorePoint: () => rawCall<{ ok: boolean; made: boolean; message?: string | null }>('apps.restorePoint', {}, 10 * 60_000),
+  /** How many of Windows Installer's cached copies no product or patch needs, and how big (only reads). */
+  appsInstallerCache: () => rawCall<{ ok: true; files: number; bytes: number }>('apps.installerCache', {}, 2 * 60_000),
+  /** Those, found again, to the Recycle Bin under one Windows prompt; undo is the Put back record. */
+  appsInstallerCacheClean: () =>
+    rawCall<{ ok: boolean; files: number; bytes: number; undo?: string | null; message?: string | null }>('apps.installerCacheClean', {}, 10 * 60_000),
   /** What is left of a program whose uninstaller is gone. */
   appsScan: (id: string) => rawCall<AppFind | { ok: false; message?: string | null }>('apps.scan', { id }, 5 * 60_000),
   /** The chosen items of a find deleted (asked in Exo's window). */
