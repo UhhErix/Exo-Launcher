@@ -90,10 +90,14 @@ internal static class Setups
     internal static Parts PartsOf(string setup, IReadOnlyList<App> inTheWay) =>
         setup == Competitive ? new(true, inTheWay) : new(false, []);
 
-    /// <summary>A game's Setup: Competitive with anti-cheat or as a competitive game, else Everyday.</summary>
+    /// <summary>A game's Setup: Competitive with anti-cheat (except PvE-only Anti-Cheat Expert games) or as a competitive game, else Everyday.</summary>
     internal static string For(GameEntry game) =>
-        AntiCheatCheck.KeptOrQuick(game).Kind == AntiCheatCheck.Kind.Found
+        IsCompetitiveAntiCheat(AntiCheatCheck.KeptOrQuick(game))
         || FluidMotionFrames.IsCompetitive(new FluidMotionFrames.Game(game.Title ?? "")) ? Competitive : Everyday;
+
+    private static bool IsCompetitiveAntiCheat(AntiCheatCheck.Answer answer) =>
+        answer.Kind == AntiCheatCheck.Kind.Found
+        && !(answer.Names.Count > 0 && answer.Names.All(name => name == AntiCheatCheck.Ace));
 
     /// <summary>Whether a startup app is a running game: its process is the game's program, or its program is in the game's folder.</summary>
     internal static bool PartOfGame(string? program, string process, IEnumerable<(string? Exe, string? Folder)> games) =>

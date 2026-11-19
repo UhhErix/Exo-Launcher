@@ -363,7 +363,7 @@ function GeneralSection({ props, locked, busy, run, apply, line }: Rows) {
         </PropRow>
       )}
       {props.steamOverlay != null && (
-        <PropRow label="Steam overlay" line={line('steamOverlay')}>
+        <PropRow label="Steam overlay" detail={props.steamOverlayNote ?? undefined} line={line('steamOverlay')}>
           <Working on={busy === 'steamOverlay'} label="Changing the Steam overlay" />
           <Switch checked={props.steamOverlay} label="Steam overlay" disabled={busy !== null} onChange={on => void apply('steamOverlay', on ? 'on' : 'off')} />
         </PropRow>

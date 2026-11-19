@@ -490,12 +490,11 @@ public sealed class SettingsService
         });
     }
 
-    /// <summary>Compress games' switches and its CPU budget (one of <see cref="GameCompression.Speeds"/>).</summary>
-    internal void ApplyCompressPatch(bool? whileIdle, bool? afterUpdates, string? speed) => CommitMutation(settings =>
+    /// <summary>Compress games' automatic switches.</summary>
+    internal void ApplyCompressPatch(bool? whileIdle, bool? afterUpdates) => CommitMutation(settings =>
     {
         if (whileIdle is { } idle) settings.CompressWhileIdle = idle;
         if (afterUpdates is { } again) settings.RecompressAfterUpdates = again;
-        if (speed is not null && GameCompression.Speeds.Contains(speed)) settings.CompressSpeed = speed;
     });
 
     /// <summary>Settings: the store clients stay quiet (on) or are put back as they were (off).</summary>
@@ -743,6 +742,26 @@ public sealed class SettingsService
         {
             var rest = settings.FrameGenKeptOff.Where(id => !string.Equals(id, gameId, StringComparison.OrdinalIgnoreCase));
             settings.FrameGenKeptOff = NormalizeHiddenGames(keptOff ? rest.Append(gameId) : rest);
+        });
+    }
+
+    /// <summary>Game sheet › Smooth Motion: opt-in driver Smooth Motion per game on RTX 40/50.</summary>
+    public bool SmoothMotionEnabled(string gameId)
+    {
+        lock (_stateGate)
+            return _current.SmoothMotion.TryGetValue(gameId, out var on) && on;
+    }
+
+    /// <summary>Sets or clears per-game opt-in driver Smooth Motion.</summary>
+    public void SetSmoothMotion(string gameId, bool on)
+    {
+        if (!ValidId(gameId, 512)) throw new InvalidDataException("Invalid game id.");
+        CommitMutation(settings =>
+        {
+            var next = CopyBools(settings.SmoothMotion);
+            if (on) next[gameId] = true;
+            else next.Remove(gameId);
+            settings.SmoothMotion = next;
         });
     }
 
@@ -1051,7 +1070,6 @@ public sealed class SettingsService
         AutoUpdateChipset = source.AutoUpdateChipset,
         CompressWhileIdle = source.CompressWhileIdle,
         RecompressAfterUpdates = source.RecompressAfterUpdates,
-        CompressSpeed = GameCompression.Speeds.Contains(source.CompressSpeed) ? source.CompressSpeed : "balanced",
         AutoUpdateUpscalers = source.AutoUpdateUpscalers,
         UpscalerAntiCheatEverywhere = source.UpscalerAntiCheatEverywhere,
         UpscalerAutoUpdateDefaulted = source.UpscalerAutoUpdateDefaulted,
@@ -1069,6 +1087,8 @@ public sealed class SettingsService
         SteamWithoutAntiCheat = NormalizeHiddenGames(source.SteamWithoutAntiCheat),
         AutoUpdateOff = NormalizeHiddenGames(source.AutoUpdateOff),
         SteamOverlay = CopyStrings(source.SteamOverlay),
+        SteamOverlayPrior = CopyStrings(source.SteamOverlayPrior),
+        SmoothMotion = CopyBools(source.SmoothMotion),
         ControllerSound = source.ControllerSound,
         SteamInput = CopyStrings(source.SteamInput),
         ThroughSteam = [.. (source.ThroughSteam ?? []).Where(id => !string.IsNullOrWhiteSpace(id)).Distinct(StringComparer.OrdinalIgnoreCase)],
@@ -1088,6 +1108,15 @@ public sealed class SettingsService
         if (source is null) return copy;
         foreach (var pair in source)
             if (pair.Key is not null && pair.Value is not null) copy[pair.Key] = pair.Value;
+        return copy;
+    }
+
+    private static Dictionary<string, bool> CopyBools(IDictionary<string, bool>? source)
+    {
+        var copy = new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase);
+        if (source is null) return copy;
+        foreach (var pair in source)
+            if (pair.Key is not null) copy[pair.Key] = pair.Value;
         return copy;
     }
 

@@ -1340,7 +1340,7 @@ public sealed class SteamAdapter : IStoreAdapter, IInstalledSteamManifestSource,
             if (options.MinimizeStoreUi && !HiddenStoreRuntime.IsSuspended(StoreKind.Steam))
                 MinimizeSteamUi();
         }
-        void RevealSteam()
+        async Task RevealSteamAsync()
         {
             // Ends when Steam closes, with the next launch through Steam, or in 30 minutes.
             HiddenStoreRuntime.HoldUntilNextLaunch(StoreKind.Steam, "steam launch needs the player", TimeSpan.FromMinutes(30));
@@ -1349,9 +1349,10 @@ public sealed class SteamAdapter : IStoreAdapter, IInstalledSteamManifestSource,
             try
             {
                 // Steam may be closed here: what waited goes in before it starts and reads its settings.
-                _ = SteamPendingSettings.BeforeStartAsync(CancellationToken.None);
+                await SteamPendingSettings.BeforeStartAsync(ct).ConfigureAwait(false);
                 ProcessHelper.StartHidden(steamExe, [SteamProtocol.OpenMainUri()]);
             }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
             catch { }
         }
 
@@ -1416,7 +1417,7 @@ public sealed class SteamAdapter : IStoreAdapter, IInstalledSteamManifestSource,
                 // Steam never finished signing in because its servers are down: Play offers its offline mode, Steam stays hidden.
                 if (Path.GetDirectoryName(steamExe) is { } steamRoot && SteamOutage.ForPlay(steamRoot, launchStalled: true) is { } outage)
                     return SteamOutage.PlayAnswer(outage.Cause, outage.Offer);
-                RevealSteam();
+                await RevealSteamAsync().ConfigureAwait(false);
                 return new LaunchResult
                 {
                     Ok = false,

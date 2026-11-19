@@ -775,23 +775,12 @@ internal static partial class Program
         Note(message);
     }
 
-    /// <summary>EXO_STEAMIPC_DEBUG=1 also prints notes and raw counters to stderr.</summary>
+    /// <summary>EXO_STEAMIPC_DEBUG=1 also prints notes and raw counters to stderr; diagnostics always go to stderr for the host to log.</summary>
     private static readonly bool DebugOutput = Environment.GetEnvironmentVariable("EXO_STEAMIPC_DEBUG") == "1";
 
     private static void Note(string message)
     {
-        if (DebugOutput) Console.Error.WriteLine(message);
-        try
-        {
-            var log = Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                "ExoLauncher", "logs", "app.log");
-            Directory.CreateDirectory(Path.GetDirectoryName(log)!);
-            File.AppendAllText(log, $"[{DateTime.UtcNow:O}] INFO {message}{Environment.NewLine}");
-        }
-        catch
-        {
-            /* best-effort */
-        }
+        try { Console.Error.WriteLine(message); }
+        catch { /* stderr unavailable */ }
     }
 }

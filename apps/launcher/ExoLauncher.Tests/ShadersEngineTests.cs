@@ -99,4 +99,27 @@ public sealed partial class ShadersEngineTests
             }
         }
     }
+
+    [Fact]
+    public async Task Stopping_race_on_non_start_methods_returns_at_rest_without_failing()
+    {
+        var restNode = JsonNode.Parse("""{"rev":0}""");
+        var (usedRest, result) = await ShadersAddon.InvokeWithStoppingFallbackAsync(
+            "ui.visible",
+            starts: false,
+            () => true,
+            () => throw new InvalidOperationException("the service is stopping"),
+            () => restNode);
+
+        Assert.True(usedRest);
+        Assert.Same(restNode, result);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            ShadersAddon.InvokeWithStoppingFallbackAsync(
+                "scan",
+                starts: true,
+                () => false,
+                () => throw new InvalidOperationException("start failed"),
+                () => restNode));
+    }
 }

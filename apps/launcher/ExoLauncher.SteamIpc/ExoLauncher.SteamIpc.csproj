@@ -19,6 +19,7 @@
     <EnableWindowsTargeting>true</EnableWindowsTargeting>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="..\ExoLauncher\Adapters\SteamIpcStubResolver.cs" Link="SteamIpcStubResolver.cs" />
     <Compile Include="..\ExoLauncher\Adapters\SteamProgressCounters.cs" Link="SteamProgressCounters.cs" />
     <Compile Include="..\ExoLauncher\Adapters\SteamStateFlags.cs" Link="SteamStateFlags.cs" />
   </ItemGroup>

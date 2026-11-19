@@ -1083,14 +1083,7 @@ public sealed class LibraryService
 
     private static StoreBackendStatus MicrosoftStoreStatus(DateTimeOffset checkedAtUtc)
     {
-        var present = false;
-        try
-        {
-            using var packages = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(
-                @"Software\Classes\Local Settings\Software\Microsoft\Windows\CurrentVersion\AppModel\Repository\Packages");
-            present = packages?.GetSubKeyNames().Any(name => name.StartsWith("Microsoft.WindowsStore_", StringComparison.OrdinalIgnoreCase)) == true;
-        }
-        catch { }
+        var present = ExoLauncher.Ui.ExoUrlLaunch.IsMicrosoftStoreInstalled();
         return new StoreBackendStatus("microsoft-store", "Microsoft Store", present, present, false,
             false, false, present ? "Client present" : "Not installed", "checked", checkedAtUtc);
     }

@@ -54,6 +54,7 @@ internal sealed partial class Host
 
     private async Task<object?> Dispatch(string method, Params p)
     {
+        if (Quitting && method == "ui.visible") return Ok;
         if (Quitting && method != "shutdown" && method != "snapshot") throw new ServiceError("the service is stopping");
         if (PolicyOwned.Contains(method)) throw new ServiceError("Exo Shaders sets this itself: there is no option for it");
         // the Exo build is local-only (ExoBuild): no sharing or upload to SCSKiller's servers, and nothing offered for it
