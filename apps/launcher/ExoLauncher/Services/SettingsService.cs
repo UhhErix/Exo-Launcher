@@ -191,6 +191,7 @@ public sealed class SettingsService
         loaded.DiscordReadyShared = NormalizeHiddenGames(loaded.DiscordReadyShared);
         loaded.DiscordBandPins = NormalizeDiscordBandPins(loaded.DiscordBandPins);
         loaded.FrameGenKeptOff = NormalizeHiddenGames(loaded.FrameGenKeptOff);
+        loaded.AutoUpdateOff = NormalizeHiddenGames(loaded.AutoUpdateOff);
         if (string.IsNullOrWhiteSpace(loaded.SortMode) || !IsLibrarySortMode(loaded.SortMode))
             loaded.SortMode = "name";
     }
@@ -739,6 +740,24 @@ public sealed class SettingsService
         });
     }
 
+    /// <summary>Whether the player keeps this game out of automatic updates.</summary>
+    public bool AutoUpdateOff(string gameId)
+    {
+        lock (_stateGate)
+            return _current.AutoUpdateOff.Contains(gameId, StringComparer.OrdinalIgnoreCase);
+    }
+
+    /// <summary>A game's Update automatically switch: off keeps it out of the idle update sweep (DownloadPolicy), on lets it back in.</summary>
+    public void SetAutoUpdateOff(string gameId, bool off)
+    {
+        if (!ValidId(gameId, 512)) throw new InvalidDataException("Invalid game id.");
+        CommitMutation(settings =>
+        {
+            var rest = settings.AutoUpdateOff.Where(id => !string.Equals(id, gameId, StringComparison.OrdinalIgnoreCase));
+            settings.AutoUpdateOff = NormalizeHiddenGames(off ? rest.Append(gameId) : rest);
+        });
+    }
+
     /// <summary>A copy that holds up to 5,000 game ids (512 characters at most), each once.</summary>
     internal static List<string> NormalizeHiddenGames(IEnumerable<string?>? gameIds) =>
         [.. (gameIds ?? []).Where(id => ValidId(id, 512)).Select(id => id!).Distinct(StringComparer.OrdinalIgnoreCase).Take(5_000)];
@@ -1053,6 +1072,7 @@ public sealed class SettingsService
         HiddenGames = NormalizeHiddenGames(source.HiddenGames),
         FrameGenEverywhere = source.FrameGenEverywhere,
         FrameGenKeptOff = NormalizeHiddenGames(source.FrameGenKeptOff),
+        AutoUpdateOff = NormalizeHiddenGames(source.AutoUpdateOff),
         SteamOverlay = CopyStrings(source.SteamOverlay),
         ControllerSound = source.ControllerSound,
         SteamInput = CopyStrings(source.SteamInput),

@@ -541,6 +541,8 @@ public sealed class AppSettings
     public bool FrameGenEverywhere { get; set; }
     /// <summary>Games the player turned Exo's frame generation off in (card ids), which <see cref="FrameGenEverywhere"/> leaves alone.</summary>
     public List<string> FrameGenKeptOff { get; set; } = [];
+    /// <summary>Games the player keeps out of Update games automatically (game ids): they update only when the player presses Update.</summary>
+    public List<string> AutoUpdateOff { get; set; } = [];
     /// <summary>
     /// Each installed Steam game's overlay switch as Exo set it, by app id: "on" or "off", with "?" until
     /// Steam has it and "!" once the player changed it in Steam (<see cref="ExoLauncher.Adapters.SteamOverlayConfig.Plan"/>).

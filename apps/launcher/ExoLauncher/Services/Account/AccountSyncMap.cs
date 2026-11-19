@@ -42,7 +42,7 @@ internal static class AccountSyncMap
         "DiscordPushToTalk", "DiscordQuietWhilePlaying", "DiscordReadyShared", "DiscordSelectedChannelSound",
         "DiscordSensitivity", "DiscordSoundVolume", "DiscordSoundboardMuted", "DiscordSoundboardVolume",
         "DiscordTaskbarFlash", "DiscordUnreadBadge", "DiscordVoiceFocus", "DiscordBandPins", "DiscordVoiceTunes",
-        "FastGpuForGames", "FpsCounterPosition", "FrameGenEverywhere", "FrameGenKeptOff", "FramelessMode",
+        "AutoUpdateOff", "FastGpuForGames", "FpsCounterPosition", "FrameGenEverywhere", "FrameGenKeptOff", "FramelessMode",
         "FramelessPinSide", "FramelessPinTop", "HdrForGames", "HdrGameModes", "HdrGameScreens", "HdrSdrGamma",
         "HdrSwitchedOn", "HdrSwitchedRamp", "LastPlayed", "LaunchOverrides", "LibraryFolders", "LucidPath",
         "MouseBridge", "MouseBridgeAppAutostart", "MouseBridgeAppPath", "NvidiaColor", "NvidiaDriverBranch",

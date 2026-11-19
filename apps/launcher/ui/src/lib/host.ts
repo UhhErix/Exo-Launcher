@@ -1505,6 +1505,11 @@ export interface InstallResponse {
   missingDependencies?: MissingDependency[]
 }
 
+/** One line of the download manager (LaunchOrchestrator.Queue.cs). */
+export type DownloadLine = { gameId: string; title: string; store: string; state: 'running' | 'queued' | 'paused'; canPause: boolean; autoUpdate: boolean }
+
+export type DownloadsList = { ok: boolean; held?: string | null; pausedByPlayer?: boolean; autoUpdateGames?: boolean; lines?: DownloadLine[]; message?: string }
+
 export interface PausedDownload {
   gameId: string
   title: string
@@ -2179,6 +2184,15 @@ export const host = {
   dequeue: (id: string) =>
     rawCall<{ ok: boolean; message?: string; queuedGameIds?: string[]; pausedDownloads?: PausedDownload[] }>('game.dequeue', { id }),
   resumeDownload: (id: string) => rawCall<InstallResponse>('game.resumeDownload', { id }),
+  /** The download manager's list: what runs, the queue in order, what is paused, and why downloads wait. */
+  downloadsList: () => rawCall<DownloadsList>('downloads.list', {}),
+  /** Moves a queued game `by` places (negative is sooner). */
+  downloadsMove: (id: string, by: number) => rawCall<{ ok: boolean; message?: string }>('downloads.move', { id, by }),
+  /** The player's Pause all / Resume all: holds every download Exo runs until resumed. */
+  downloadsPauseAll: () => rawCall<{ ok: boolean; message?: string }>('downloads.pauseAll', {}),
+  downloadsResumeAll: () => rawCall<{ ok: boolean; message?: string }>('downloads.resumeAll', {}),
+  /** A game's Update automatically switch: read without `on`, set with it. */
+  gameAutoUpdate: (id: string, on?: boolean) => rawCall<{ ok: boolean; on?: boolean; message?: string }>('game.autoUpdate', on === undefined ? { id } : { id, on }),
   progress: (id?: string) =>
     rawCall<InstallProgress>('game.progress', id ? { id } : {}),
   /** `handoff`: the store signs in inside its own app, which is now open. Nothing is connected yet. */
