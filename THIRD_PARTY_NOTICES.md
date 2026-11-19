@@ -12,7 +12,7 @@ The [upstream source index](https://getexo.app/source) identifies corresponding 
 | --- | --- |
 | Nile, Legendary, gogdl, OptiScaler | GPL-3.0 |
 | Exo Mouse | AGPL-3.0-or-later |
-| Exo Shaders | GPL-3.0-or-later with the exception in its source archive |
+| Exo Shaders | GPL-3.0-or-later with the section 7 exception in `apps/launcher/shaders/LICENSE-EXCEPTION.txt` |
 | Exo Shield, Exo Frames, Exo Bridge | GPL-3.0 |
 | OBS Studio game capture hook, OpenRGB fork | GPL-2.0-or-later |
 | HeadsetControl fork | GPL-3.0-or-later |

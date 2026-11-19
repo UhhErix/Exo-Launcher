@@ -10,7 +10,8 @@ jobs:
   announce:
     if: ${{ github.repository == 'UhhErix/Exo-Launcher' && !github.event.release.prerelease && !github.event.release.draft }}
     runs-on: ubuntu-latest
-    timeout-minutes: 3
+    # launcher-release-mirror.yml publishes the same tag to the mirror on the same event; this waits for it.
+    timeout-minutes: 25
     steps:
       - name: Request an announcement from Cloudflare
         env:
@@ -20,6 +21,7 @@ jobs:
           import json
           import os
           import re
+          import time
           from urllib.error import HTTPError
           from urllib.request import Request, urlopen
 
@@ -27,23 +29,32 @@ jobs:
           if not re.fullmatch(r'v[0-9]{1,4}\.[0-9]{1,4}\.[0-9]{1,4}', tag):
               raise SystemExit('Release tag must use vMAJOR.MINOR.PATCH.')
 
-          request = Request(
-              'https://updates.getexo.app/v1/launcher/announce',
-              data=json.dumps({'tag': tag}).encode('utf-8'),
-              headers={'Content-Type': 'application/json', 'User-Agent': 'ExoReleaseAnnouncer/1.0 (+https://github.com/UhhErix/Exo-Launcher)'},
-              method='POST',
-          )
-          try:
-              response = urlopen(request, timeout=20)
-          except HTTPError as error:
-              response = error
-
-          with response:
-              code = response.code
+          def ask():
+              request = Request(
+                  'https://updates.getexo.app/v1/launcher/announce',
+                  data=json.dumps({'tag': tag}).encode('utf-8'),
+                  headers={'Content-Type': 'application/json', 'User-Agent': 'ExoReleaseAnnouncer/1.0 (+https://github.com/UhhErix/Exo-Launcher)'},
+                  method='POST',
+              )
               try:
-                  result = json.load(response)
-              except (UnicodeError, ValueError):
-                  raise SystemExit(f'Cloudflare returned HTTP {code} without a valid announcement response.')
+                  response = urlopen(request, timeout=20)
+              except HTTPError as error:
+                  response = error
+
+              with response:
+                  code = response.code
+                  try:
+                      return code, json.load(response)
+                  except (UnicodeError, ValueError):
+                      raise SystemExit(f'Cloudflare returned HTTP {code} without a valid announcement response.')
+
+          # Until the mirror serves the tag the Worker answers 409 not-live: ask again, for up to 20 minutes.
+          for attempt in range(40):
+              code, result = ask()
+              if not (code == 409 and isinstance(result, dict) and result.get('status') == 'not-live'):
+                  break
+              print(f'The mirror does not serve {tag} yet (try {attempt + 1} of 40); asking again in 30 seconds.')
+              time.sleep(30)
 
           status = result.get('status') if isinstance(result, dict) else None
           if code == 200 and status in ('posted', 'already'):
