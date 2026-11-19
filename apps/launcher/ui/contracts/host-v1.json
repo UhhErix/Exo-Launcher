@@ -334,6 +334,7 @@
     "system.interrupts": "Interrupts",
     "system.mouseCore": "MouseCore",
     "system.tune": "AutoTune",
+    "system.tuning": "Tuning",
     "telemetry.delete": "{ ok: boolean; message?: string | null }",
     "telemetry.sent": "{ ok: true; payloads: string[] }",
     "telemetry.track": "{ ok: true }",
