@@ -1252,9 +1252,11 @@ const MOCK_HANDLERS: Record<string, MockHandler> = {
   'deps.list': mockDepsList,
   'replaced.scan': () => ({ ok: true, cleared: 2, apps: MOCK_REPLACED }),
   'apps.list': () => ({ ok: true, programs: MOCK_PROGRAMS }),
-  'apps.tidy': () => ({ ok: true, token: 'mock-tidy', name: 'Programs that are gone', autoCleared: [{ id: 'mock-3', name: 'Old leftovers', cleared: { folders: 1, files: 0, registry: 2, shortcuts: 3, bytes: 310_000_000 } }], items: [
-    { id: 0, kind: 'service', path: 'HKLM\\SYSTEM\\CurrentControlSet\\Services\\OldToolUpdate', bytes: 0, selected: true, note: null, machine: true, from: 'Old Tool' },
-    { id: 1, kind: 'folder', path: 'Program Files\\Old Tool', bytes: 1_204_000_000, selected: false, note: 'Only its name matches', machine: true, from: 'Old Tool' },
+  'apps.tidy': () => ({ ok: true, token: 'mock-tidy', name: 'Programs that are gone', defaults: ['.oldproj', '.oldtool'], autoCleared: [{ id: 'mock-3', name: 'Old leftovers', cleared: { folders: 1, files: 0, registry: 2, shortcuts: 3, bytes: 310_000_000 } }], items: [
+    { id: 0, kind: 'service', path: 'HKLM\\SYSTEM\\CurrentControlSet\\Services\\OldToolUpdate', bytes: 0, selected: true, note: null, certainty: 'certain', because: 'Certain: points into the app’s folder', machine: true, from: 'Old Tool' },
+    { id: 2, kind: 'driver', path: 'HKLM\\SYSTEM\\CurrentControlSet\\Services\\OldToolFilter', bytes: 0, selected: false, note: 'A driver: only take it if no device needs it', certainty: 'certain', because: 'Certain: points into the app’s folder', store: true, machine: true, from: 'Old Tool' },
+    { id: 3, kind: 'registry', path: 'HKLM\\SYSTEM\\CurrentControlSet\\Services\\SharedAccess\\Parameters\\FirewallPolicy\\FirewallRules › {OLD-TOOL-PORT}', bytes: 0, selected: false, note: null, certainty: 'possible', because: 'Possible: in a firewall group with its rules', machine: true, from: 'Old Tool' },
+    { id: 1, kind: 'folder', path: 'Program Files\\Old Tool', bytes: 1_204_000_000, selected: false, note: null, certainty: 'likely', because: 'Likely: named after it', machine: true, from: 'Old Tool' },
   ] }),
   'apps.leave': () => ({ ok: true }),
   'apps.history': () => ({ ok: true, items: [
@@ -1275,7 +1277,7 @@ const MOCK_HANDLERS: Record<string, MockHandler> = {
     return {
       ok: true, token: 'mock', name,
       items: [
-        { id: 0, kind: 'folder', path: `AppData\\Roaming\\${name}`, bytes: 820_000, selected: false, note: 'Only its name matches', machine: false, from: name },
+        { id: 0, kind: 'folder', path: `AppData\\Roaming\\${name}`, bytes: 820_000, selected: false, note: null, certainty: 'likely', because: 'Likely: named after it', machine: false, from: name },
       ],
       auto: true, cleared: { folders: 1, files: 0, registry: 1, shortcuts: 1, bytes: 4_101_200 }, undo: 'mock-1', declined: false,
     }
@@ -1286,6 +1288,27 @@ const MOCK_HANDLERS: Record<string, MockHandler> = {
   'apps.scan': () => ({ ok: false, message: 'Mock: nothing to scan.' }),
   'apps.clean': () => ({ ok: true, cleared: { folders: 1, files: 0, registry: 1, shortcuts: 1, bytes: 4_101_200 }, undo: 'mock-1', left: 0 }),
   'apps.allowEdge': () => ({ ok: true }),
+  'apps.openDefaults': () => ({ ok: true, message: null }),
+  'apps.packages': () => ({
+    ok: true, hidden: 41, items: [
+      { id: 'Microsoft.BingNews_8wekyb3d8bbwe', name: 'Microsoft News', publisher: 'Microsoft Corporation', forMe: true, others: 1, provisioned: true, bloat: 'Comes with Windows; nothing needs it', addBack: false },
+      { id: 'king.com.CandyCrushSaga_kgqvnymyfvs32', name: 'Candy Crush Saga', publisher: 'king.com', forMe: true, others: 0, provisioned: false, bloat: 'Windows installed it as an ad', addBack: false },
+      { id: 'Microsoft.WindowsMaps_8wekyb3d8bbwe', name: 'Windows Maps', publisher: null, forMe: false, others: 0, provisioned: true, bloat: 'Comes with Windows; nothing needs it', addBack: true },
+      { id: 'Microsoft.WindowsCalculator_8wekyb3d8bbwe', name: 'Windows Calculator', publisher: 'Microsoft Corporation', forMe: true, others: 2, provisioned: true, bloat: null, addBack: false },
+    ],
+  }),
+  'apps.packagesPlan': (p) => {
+    const params = (p ?? {}) as { ids?: string[]; everyone?: boolean }
+    return {
+    ok: true, token: 'mock-plan', admin: Boolean(params.everyone),
+    lines: (params.ids ?? []).map(id => params.everyone
+      ? { id, name: id.split('_')[0], does: 'Removed for every account, and new accounts won’t get it, with their data', back: 'Can’t be undone here: only the Microsoft Store brings it back, if it has it', undoable: false }
+      : { id, name: id.split('_')[0], does: 'Removed for you, with its data; new accounts still get it', back: 'Add back puts it back here (its files stay on this PC); its data doesn’t come back', undoable: true }),
+    message: null,
+    }
+  },
+  'apps.packagesRemove': () => ({ ok: true, removed: 1, left: 0, message: null }),
+  'apps.packageAddBack': () => ({ ok: true, store: false, message: null }),
   'replaced.remove': (p) => {
     const id = (p as { id?: string } | undefined)?.id
     MOCK_REPLACED = MOCK_REPLACED.map(app => app.id === id ? { ...app, installed: false, leftovers: 0, bytes: 0, needsAdmin: false, found: NONE_LEFT, cleared: { ...app.found, registry: app.found.registry + 7 } } : app)
