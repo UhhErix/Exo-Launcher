@@ -3,6 +3,26 @@
     "version": "3.26.0",
     "items": [
       {
+        "icon": "Controller",
+        "title": "Riot hours like Steam",
+        "detail": "A VALORANT or League page shows the hours you played, the same way a Steam game does."
+      },
+      {
+        "icon": "Library",
+        "title": "tracker.gg, said plainly",
+        "detail": "When tracker.gg won't let Exo import your Riot hours, Exo says so and keeps counting every session you play."
+      },
+      {
+        "icon": "Performance",
+        "title": "Upscalers say if they're up to date",
+        "detail": "A game's Upscalers line shows the version you have or how many updates wait."
+      },
+      {
+        "icon": "Library",
+        "title": "The same lines on every game",
+        "detail": "Upscalers, Shaders, Frame generation, HDR and Optimize are on every game's page, and say so when the game or screen can't use them."
+      },
+      {
         "icon": "Mouse",
         "title": "Sensor angle on the Razer Viper V3 Pro",
         "detail": "Turn your Viper V3 Pro's sensor angle a degree at a time in Devices, so a natural swipe runs straight across the screen."

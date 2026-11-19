@@ -658,8 +658,7 @@ public sealed partial class DlssSwapService
             break;
         }
         var rows = scan?.Files ?? [];
-        bool Own(DetectedDll dll, params string[] names) => dll.Mod is null && names.Contains(dll.FileName, StringComparer.OrdinalIgnoreCase);
-        var dlssg = rows.Where(dll => Own(dll, "nvngx_dlssg.dll")).ToList();
+        var dlssg = rows.Where(dll => OwnFile(dll, "nvngx_dlssg.dll")).ToList();
         var exe = installed is not null ? Path.Combine(installedFolder!, installed.Exe) : GameProgram(found.Exes, dlssg.Select(dll => Path.GetDirectoryName(dll.Path)!));
         var programFolder = installedFolder ?? (exe is null ? null : Path.GetDirectoryName(exe));
         var vulkan = exe is not null && ReadPeImportNames(exe) is { } imports && imports.Contains("vulkan-1.dll") && !imports.Contains("d3d12.dll");
@@ -683,7 +682,7 @@ public sealed partial class DlssSwapService
             exe,
             dlssg.Count > 0,
             dlssg.Select(dll => TryParseVersion(dll.CurrentVersion)?.Major).Max(),
-            rows.Any(dll => Own(dll, "amd_fidelityfx_framegeneration_dx12.dll", "libxess_fg.dll")),
+            rows.Any(dll => OwnFile(dll, OwnFrameGenFiles)),
             found.Interposers.Select(path => TryParseVersion(FileVersion(path))?.Major).Max(),
             vulkan,
             other,
@@ -692,6 +691,19 @@ public sealed partial class DlssSwapService
             noDlssg,
             found.Dlssgs.Any(path => !InExos(path)));
     }
+
+    /// <summary>The game's own file of one of these names, not a mod's copy.</summary>
+    private static bool OwnFile(DetectedDll dll, params string[] names) => dll.Mod is null && names.Contains(dll.FileName, StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>FSR's and XeSS's frame generation, shipped by the game itself.</summary>
+    private static readonly string[] OwnFrameGenFiles = ["amd_fidelityfx_framegeneration_dx12.dll", "libxess_fg.dll"];
+
+    /// <summary>
+    /// The game ships frame generation of its own that an RTX 40 or newer runs: NVIDIA's (nvngx_dlssg.dll), FSR's or
+    /// XeSS's, not a mod's copy. Read from the upscaler scan alone, so an RTX 50 is never walked for it.
+    /// </summary>
+    internal static bool ShipsFrameGen(IReadOnlyList<DetectedDll> rows) =>
+        rows.Any(dll => OwnFile(dll, "nvngx_dlssg.dll") || OwnFile(dll, OwnFrameGenFiles));
 
     /// <summary>What a mod writes beside its loader as it runs, there now.</summary>
     private static IEnumerable<string> FrameGenLeftovers(string folder, FrameGenMod mod)
@@ -859,21 +871,27 @@ public sealed partial class DlssSwapService
     internal FrameGenVerdict FrameGenRead(GameEntry game, string? gpu, CancellationToken ct)
     {
         var root = ResolveInstallRoot(game.Path);
-        if (root is null || IsWindowsAppsPath(root)) return FrameGenDecide(new(Readable: false));
+        if (root is null || IsWindowsAppsPath(root)) return FrameGenDecide(new(Readable: false, Unread: "unread"));
         // A game set to "without anti-cheat" between its sessions: Exo holds its mod, which goes in only as Exo starts it.
         if (AntiCheatCheck.ChoseWithoutAntiCheat(game) && SessionHeldFrameGen(game.Id) is { } held)
             return new(new("on", Path: held.Mod == OptiScaler.Name ? "fsr" : "dlss", Version: $"{held.Mod} {held.Release}",
                 Note: $"{held.Mod} {held.Release}, in the game only while you play it from Exo"));
         var card = FrameGenCardFor(gpu);
         FrameGenNotes.TryRemove(game.Id, out var note);
-        // A card no mod adds to reads nothing unless Exo's install is there to take out.
-        if (card is not { MultiFrame: false } && FrameGenFolderFor(game.Id) is null) return FrameGenDecide(new(Readable: false, Note: note));
+        // A card no mod adds to reads nothing unless Exo's install is there to take out. An RTX 50 reads only whether the
+        // game ships frame generation of its own, from the upscaler scan, so the line can say it is the game's.
+        if (card is not { MultiFrame: false } && FrameGenFolderFor(game.Id) is null)
+        {
+            if (card is null) return FrameGenDecide(new(Readable: false, Note: note, Unread: "card"));
+            try { return FrameGenDecide(new(Readable: true, Note: note, Native: ShipsFrameGen(CachedScan(game, ct).Files))); }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { return FrameGenDecide(new(Readable: false, Note: note, Unread: "unread")); }
+        }
         // An Off that reports done but leaves Exo's record (a file Exo couldn't delete) is read at most twice more, not for ever.
         for (var pass = 0; ; pass++)
         {
             FrameGenGame layout;
             try { layout = ReadFrameGenGame(game, root, CachedScan(game, ct), ct); }
-            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { return FrameGenDecide(new(Readable: false, Note: note)); }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { return FrameGenDecide(new(Readable: false, Note: note, Unread: "unread")); }
             var facts = FrameGenFactsFor(game, card, layout, note);
             var verdict = FrameGenDecide(facts);
             switch (verdict.Next)
@@ -913,7 +931,8 @@ public sealed partial class DlssSwapService
     private FrameGenFacts FrameGenFactsFor(GameEntry game, FrameGenCard? card, FrameGenGame layout, string? note)
     {
         var wanted = FrameGenPath(card, layout);
-        var facts = new FrameGenFacts(true, wanted, Note: note);
+        // An RTX 40 or 50 has no mod route; the game's own frame generation still runs on it.
+        var facts = new FrameGenFacts(true, wanted, Note: note, Native: card is { DlssFrameGen: true } && (layout.DlssFrameGen || layout.OwnFrameGen));
         if (layout.Installed is { } install && FrameGenModNamed(install.Mod) is { } mod)
         {
             var damage = FrameGenDamage(layout.Folder!, install)?.Reason;
@@ -970,10 +989,13 @@ public sealed partial class DlssSwapService
     /// <param name="Unoffered">Why the route's mod can't be offered (<see cref="Unoffered(FrameGenMod)"/>).</param>
     /// <param name="Note">What Exo did by itself, shown once.</param>
     /// <param name="Pending">Exo's Off for this record couldn't run or didn't finish (the game is running, a file stayed): it comes out next time.</param>
+    /// <param name="Native">No mod route, but the game ships frame generation this card runs (an RTX 40 or 50 with the game's DLSS, FSR or XeSS frame generation).</param>
+    /// <param name="Unread">Why the game wasn't read: <c>unread</c> (no install, a Store app, a folder Exo can't read) or <c>card</c> (a card no mod adds to).</param>
     internal sealed record FrameGenFacts(
         bool Readable, string? Wanted = null, string? Record = null, bool Out = false, string? Damage = null, string? TakeOut = null,
         bool DlssgGone = false, bool Folder = true, string? OtherMod = null, string? AntiCheat = null, bool NeverAllowed = false,
-        string? KeptOff = null, string? Unoffered = null, string? Note = null, bool Pending = false, string? AntiCheatSentence = null);
+        string? KeptOff = null, string? Unoffered = null, string? Note = null, bool Pending = false, string? AntiCheatSentence = null,
+        bool Native = false, string? Unread = null);
 
     /// <summary>The line (its words are ui/src/components/game/frameGenWord.ts's, from State and Reason) and what happens next.</summary>
     internal sealed record FrameGenVerdict(FrameGenStatus Status, FrameGenNext Next = FrameGenNext.Nothing);
@@ -983,7 +1005,7 @@ public sealed partial class DlssSwapService
     /// and what happens next. First row that matches wins.
     /// <code>
     ///  #  facts                                          state   reason    next
-    ///  1  not readable                                   hidden (note, if Exo just did something)
+    ///  1  not readable                                   hidden, reason why (note, if Exo just did something)
     ///  2  record, Off couldn't run or finish             note    "Coming out: why"  Nothing (no put-back, no verdict)
     ///  3  record Out, other mod's file still over it     broken  replaced  Nothing
     ///  4  record Out, that file went                     broken  replaced  FinishOff (then read again)
@@ -993,7 +1015,8 @@ public sealed partial class DlssSwapService
     ///  8  record, Exo's files went                       broken  removed   PutBack
     ///  9  record, the game lost DLSS Frame Generation    broken  gone      Nothing
     /// 10  record, whole                                  on                Forget
-    /// 11  no route (RTX 40/50, nothing to hook)          hidden (note)
+    /// 11  no route, the game's own runs (RTX 40/50)      native (note, if Exo just did something)
+    ///     no route (nothing to hook)                     hidden (note)
     /// 12  route native                                   native
     /// 13  no program folder                              hidden (note)
     /// 14  another mod in the game                        mod (its name)
@@ -1007,7 +1030,7 @@ public sealed partial class DlssSwapService
     internal static FrameGenVerdict FrameGenDecide(FrameGenFacts f)
     {
         var hidden = new FrameGenVerdict(new(f.Note is null ? "hidden" : "note", Note: f.Note));
-        if (!f.Readable) return hidden;
+        if (!f.Readable) return f.Note is null ? new(new("hidden", Reason: f.Unread)) : hidden;
         if (f.Record is { } record)
         {
             var path = record == OptiScaler.Name ? "fsr" : "dlss";
@@ -1019,7 +1042,7 @@ public sealed partial class DlssSwapService
             var next = reason switch { "replaced" => FrameGenNext.KeepOff, "removed" => FrameGenNext.PutBack, null => FrameGenNext.Forget, _ => FrameGenNext.Nothing };
             return new(new(reason is null ? "on" : "broken", Path: path, Note: f.Note, Reason: reason), next);
         }
-        if (f.Wanted is null) return hidden;
+        if (f.Wanted is null) return f.Native && f.Note is null ? new(new("native")) : hidden;
         if (f.Wanted == "native") return new(new("native"));
         if (!f.Folder) return hidden;
         if (f.OtherMod is { } other) return new(new("mod", Mod: NamedMod(other)));

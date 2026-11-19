@@ -43,11 +43,11 @@ internal static class TrackerGgPlaytime
         string Message,
         /// <summary>Games whose figure is tracker.gg's lifetime total (its overview), which replaces an earlier reading; the rest are only ever raised.</summary>
         IReadOnlySet<string>? Lifetime = null,
-        /// <summary>Per game: its figure with the per-mode split and the profile stats tracker.gg showed (the one-time seed).</summary>
+        /// <summary>Per game: its figure with the per-mode split tracker.gg showed (the one-time seed).</summary>
         IReadOnlyDictionary<string, RiotGameSeedReading>? Readings = null);
 
-    /// <summary>What one game's profile read gave: the figure, its per-mode split and stats, and whether the figure is lifetime.</summary>
-    internal sealed record RiotGameSeedReading(int Minutes, bool Lifetime, IReadOnlyDictionary<string, int>? Modes, RiotStats? Stats);
+    /// <summary>What one game's profile read gave: the figure, its per-mode split, and whether the figure is lifetime.</summary>
+    internal sealed record RiotGameSeedReading(int Minutes, bool Lifetime, IReadOnlyDictionary<string, int>? Modes);
 
     internal static string ProfilePageUrl(string riotId) =>
         "https://tracker.gg/valorant/profile/riot/" + EncodeRiotId(riotId) + "/overview";
@@ -105,7 +105,7 @@ internal static class TrackerGgPlaytime
     {
         var seeds = new Dictionary<string, GameSeed>(StringComparer.OrdinalIgnoreCase);
         foreach (var (game, reading) in readings)
-            seeds[game] = new GameSeed(reading.Minutes, reading.Modes, reading.Stats, Partial: !reading.Lifetime);
+            seeds[game] = new GameSeed(reading.Minutes, reading.Modes, Partial: !reading.Lifetime);
         return seeds;
     }
 
@@ -150,38 +150,6 @@ internal static class TrackerGgPlaytime
         return modes;
     }
 
-    /// <summary>
-    /// The profile stats tracker.gg shows beyond hours: matches, wins, K/D, current and peak rank from the overview, and the
-    /// three most played agents (Valorant) or champions (League) by matches. Each is absent when the profile does not give it.
-    /// </summary>
-    internal static RiotStats? ParseStats(string? json, string gameId)
-    {
-        var segments = Segments(json);
-        if (segments is null) return null;
-        var overview = segments.FirstOrDefault(segment =>
-            ReadString(segment, "type") is { } type &&
-            (type.Equals("overview", StringComparison.OrdinalIgnoreCase) || type.Equals("profile", StringComparison.OrdinalIgnoreCase)));
-        JsonElement stats = default;
-        var hasStats = overview.ValueKind == JsonValueKind.Object && overview.TryGetProperty("stats", out stats);
-        var pickType = gameId.Equals("riot:league_of_legends", StringComparison.OrdinalIgnoreCase) ? "champion" : "agent";
-        var picks = segments
-            .Where(segment => ReadString(segment, "type")?.Equals(pickType, StringComparison.OrdinalIgnoreCase) == true)
-            .Select(segment => (Name: SegmentName(segment), Matches: segment.TryGetProperty("stats", out var s) ? StatNumber(s, "matchesPlayed") ?? 0 : 0))
-            .Where(pick => pick.Name is not null)
-            .OrderByDescending(pick => pick.Matches)
-            .Take(3)
-            .Select(pick => pick.Name!)
-            .ToList();
-        var stat = new RiotStats(
-            hasStats ? StatNumber(stats, "matchesPlayed") is { } matches ? (int)matches : null : null,
-            hasStats ? (StatNumber(stats, "matchesWon") ?? StatNumber(stats, "wins")) is { } wins ? (int)wins : null : null,
-            hasStats ? StatNumber(stats, "kd") : null,
-            hasStats ? StatText(stats, "rank") : null,
-            hasStats ? StatText(stats, "peakRank") : null,
-            picks.Count > 0 ? picks : null);
-        return stat is { Matches: null, Wins: null, KillDeath: null, CurrentRank: null, PeakRank: null, TopPicks: null } ? null : stat;
-    }
-
     private static List<JsonElement>? Segments(string? json)
     {
         if (string.IsNullOrWhiteSpace(json) || IsPrivateProfile(json)) return null;
@@ -199,20 +167,6 @@ internal static class TrackerGgPlaytime
             return null;
         }
     }
-
-    private static double? StatNumber(JsonElement stats, string name) =>
-        stats.ValueKind == JsonValueKind.Object && stats.TryGetProperty(name, out var stat) &&
-        stat.ValueKind == JsonValueKind.Object && stat.TryGetProperty("value", out var value) &&
-        value.ValueKind == JsonValueKind.Number && value.TryGetDouble(out var number)
-            ? number
-            : null;
-
-    private static string? StatText(JsonElement stats, string name) =>
-        stats.ValueKind == JsonValueKind.Object && stats.TryGetProperty(name, out var stat) &&
-        stat.ValueKind == JsonValueKind.Object && stat.TryGetProperty("displayValue", out var text) &&
-        text.ValueKind == JsonValueKind.String
-            ? text.GetString()
-            : null;
 
     /// <summary>The best figure in a profile, and whether it is tracker.gg's lifetime total (overview) rather than a sum of queues or one season.</summary>
     internal static (int Minutes, bool Lifetime)? ParseReading(string? json, string? gameId = null)
@@ -282,7 +236,8 @@ internal static class TrackerGgPlaytime
         var lifetime = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var readings = new Dictionary<string, RiotGameSeedReading>(StringComparer.OrdinalIgnoreCase);
         var anyPrivate = false;
-        var anyBlocked = false;
+        var anyUnanswered = false;
+        Answer? blockedBy = null;
         var encoded = EncodeRiotId(id);
         foreach (var (urls, gameId) in new[]
                  {
@@ -298,15 +253,23 @@ internal static class TrackerGgPlaytime
                      }, "riot:league_of_legends"),
                  })
         {
+            // A block answers every request alike: one is enough to know, and Exo asks no more.
+            if (blockedBy is not null) break;
             string? json = null;
-            var blocked = false;
+            var unanswered = false;
             var priv = false;
             foreach (var url in urls)
             {
-                var body = await HttpGetJsonAsync(url, handler, ct).ConfigureAwait(false);
-                if (!IsJsonBody(body))
+                var answer = await HttpGetJsonAsync(url, handler, ct).ConfigureAwait(false);
+                if (answer.Kind == AnswerKind.Blocked)
                 {
-                    blocked = true;
+                    blockedBy = answer;
+                    break;
+                }
+                var body = answer.Body;
+                if (answer.Kind != AnswerKind.Json || body is null)
+                {
+                    unanswered = true;
                     continue;
                 }
 
@@ -326,7 +289,7 @@ internal static class TrackerGgPlaytime
             if (json is null)
             {
                 if (priv) anyPrivate = true;
-                else if (blocked) anyBlocked = true;
+                else if (unanswered) anyUnanswered = true;
                 continue;
             }
 
@@ -339,28 +302,74 @@ internal static class TrackerGgPlaytime
             if (ParseReading(json, gameId) is { } reading)
             {
                 if (reading.Lifetime) lifetime.Add(gameId);
-                readings[gameId] = new RiotGameSeedReading(reading.Minutes, reading.Lifetime, ParseModes(json, gameId), ParseStats(json, gameId));
+                readings[gameId] = new RiotGameSeedReading(reading.Minutes, reading.Lifetime, ParseModes(json, gameId));
             }
         }
 
         if (minutes.Count > 0)
+        {
+            AppLog.Info("tracker.gg import: hours read for " + minutes.Count + " game(s).");
             return new Result(true, false, minutes, "Imported hours from tracker.gg.", lifetime, readings);
+        }
+        if (blockedBy is { } block)
+        {
+            // Exo does not get past a block (no browser, no spoofed headers, no challenge solved): the seed stays empty.
+            AppLog.Info("tracker.gg import: refused by tracker.gg (HTTP " + block.Status + (block.Challenge ? ", browser check" : "") + "); no hours imported.");
+            return new Result(false, false, minutes, BlockedMessage);
+        }
         if (anyPrivate)
+        {
+            AppLog.Info("tracker.gg import: the profile is private.");
             return new Result(
                 false,
                 true,
                 minutes,
                 "This tracker.gg profile is private. Sign in with Riot on tracker.gg once so the profile is public.");
-        if (anyBlocked)
-            // Exo does not get past a block (no fallback client, no spoofed headers beyond the request): the seed stays empty.
-            return new Result(false, false, minutes, "tracker.gg isn't answering right now. Try Re-import later.");
+        }
+        if (anyUnanswered)
+        {
+            AppLog.Info("tracker.gg import: no answer from tracker.gg.");
+            return new Result(false, false, minutes, UnansweredMessage);
+        }
+        AppLog.Info("tracker.gg import: the profile had no hours.");
         return new Result(false, false, minutes, "tracker.gg did not return hours for that Riot ID.");
+    }
+
+    /// <summary>
+    /// tracker.gg's API now answers apps with a browser check (Cloudflare's "Just a moment…") or its "You've been blocked"
+    /// page, HTTP 403, whatever the request says it is (seen November 2026). Exo will not pretend to be a browser or solve
+    /// the check, so it says so plainly.
+    /// </summary>
+    internal const string BlockedMessage =
+        "tracker.gg now blocks apps from reading its profiles, so Exo can't import your Riot hours from it. Exo still counts every session you play.";
+
+    internal const string UnansweredMessage = "tracker.gg isn't answering right now. Try again later.";
+
+    internal enum AnswerKind { Json, Blocked, Unanswered }
+
+    /// <summary>One request's answer: JSON to read, a block (its status, and whether it was a browser check), or nothing usable.</summary>
+    internal sealed record Answer(AnswerKind Kind, int Status, string? Body = null, bool Challenge = false);
+
+    /// <summary>
+    /// What one answer is. A refusal status (401, 403, 429, 503) or a page that is a challenge or a block page is tracker.gg
+    /// refusing the request; JSON is a profile (or its error); anything else is no answer.
+    /// </summary>
+    internal static Answer Classify(int status, string? body)
+    {
+        var challenge = body is not null && (
+            body.Contains("Just a moment", StringComparison.OrdinalIgnoreCase) ||
+            body.Contains("_cf_chl_opt", StringComparison.Ordinal) ||
+            body.Contains("challenge-platform", StringComparison.OrdinalIgnoreCase));
+        var blockPage = body is not null && body.Contains("You've Been Blocked", StringComparison.OrdinalIgnoreCase);
+        if (challenge || blockPage || (status is 401 or 403 or 429 or 503 && !IsJsonBody(body)))
+            return new Answer(AnswerKind.Blocked, status, Challenge: challenge);
+        return IsJsonBody(body) ? new Answer(AnswerKind.Json, status, body) : new Answer(AnswerKind.Unanswered, status);
     }
 
     internal static Task<Result> LoadAsync(string riotId, CancellationToken ct) =>
         LoadAsync(riotId, SharedHandler, ct);
 
-    private static async Task<string?> HttpGetJsonAsync(string url, HttpMessageHandler handler, CancellationToken ct)
+    private static async Task<Answer> HttpGetJsonAsync(string url, HttpMessageHandler handler, CancellationToken ct)
     {
         using var http = ExoHttp.Create(TimeSpan.FromSeconds(20), handler, disposeHandler: false);
         http.DefaultRequestVersion = HttpVersion.Version11;
@@ -376,8 +385,9 @@ internal static class TrackerGgPlaytime
         try
         {
             using var response = await http.SendAsync(request, ct).ConfigureAwait(false);
-            // A profile over the cap is refused like a block: no seed, and the reason is the same.
-            return await ExoHttp.ReadBodyLimitedAsync(response.Content, MaxBodyBytes, ct).ConfigureAwait(false);
+            // A profile over the cap is no answer: no seed.
+            var body = await ExoHttp.ReadBodyLimitedAsync(response.Content, MaxBodyBytes, ct).ConfigureAwait(false);
+            return Classify((int)response.StatusCode, body);
         }
         catch (OperationCanceledException)
         {
@@ -385,8 +395,8 @@ internal static class TrackerGgPlaytime
         }
         catch (Exception ex)
         {
-            AppLog.Debug("tracker.gg playtime query unavailable: " + ex.GetType().Name);
-            return null;
+            AppLog.Info("tracker.gg playtime query unavailable: " + ex.GetType().Name);
+            return new Answer(AnswerKind.Unanswered, 0);
         }
     }
 

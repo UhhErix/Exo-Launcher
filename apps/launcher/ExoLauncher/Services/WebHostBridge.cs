@@ -627,7 +627,6 @@ public sealed partial class WebHostBridge
                 "steam.signInGuard" => await SteamSignInGuardAsync(paramsEl, hasParams, requestToken).ConfigureAwait(true),
                 "steam.signOut" => await SteamSignOutAsync(requestToken).ConfigureAwait(true),
                 "playtime.riotRefresh" => await RiotHoursRefreshAsync(paramsEl, hasParams).ConfigureAwait(true),
-                "playtime.riotLifetime" => RiotLifetime(paramsEl, hasParams),
                 "web.preferences.get" => WebClientPreferences.Reload(),
 
                 "web.preferences.set" => await SaveWebPreferencesAsync(paramsEl),
@@ -1892,7 +1891,7 @@ public sealed partial class WebHostBridge
 
     /// <summary>
     /// Riot hours from tracker.gg, asked for only by hand. A Riot ID saved in Settings imports its lifetime total once (one
-    /// that already has a total keeps it); the manual "Re-import from tracker.gg" (no ID) reads the saved one again. After
+    /// that already has a total keeps it); Settings › Stores › Riot ID › Import hours (no ID) reads the saved one again. After
     /// that Exo's own session log is the only source.
     /// </summary>
     private Task<object> RiotHoursRefreshAsync(JsonElement p, bool hasParams)
@@ -1904,40 +1903,6 @@ public sealed partial class WebHostBridge
             ? id.GetString()
             : null;
         return ImportRiotHoursAsync(typed, CancellationToken.None);
-    }
-
-    /// <summary>A Riot game's lifetime for its game page, from the saved Riot ID's ledger: minutes per mode and the seed's stats.</summary>
-    private object RiotLifetime(JsonElement p, bool hasParams)
-    {
-        var game = hasParams && p.ValueKind == JsonValueKind.Object && p.TryGetProperty("game", out var id) && id.ValueKind == JsonValueKind.String
-            ? id.GetString()
-            : null;
-        if (game is null || !game.StartsWith("riot:", StringComparison.OrdinalIgnoreCase) ||
-            RiotLedger.AccountKey(RiotIdStore.TryRead()) is not { } account)
-            return new { ok = false, minutes = 0, modes = Array.Empty<object>(), stats = (object?)null };
-        var modes = RiotLedger.ModeTotals(account, game)
-            .Where(pair => pair.Value > 0)
-            .OrderByDescending(pair => pair.Value)
-            .Select(pair => new { mode = pair.Key, minutes = pair.Value })
-            .ToList();
-        var stats = RiotLedger.Stats(account, game);
-        return new
-        {
-            ok = true,
-            minutes = modes.Sum(mode => mode.minutes),
-            // Only tracker.gg's playlist sum, not its lifetime total: the page says so beside the hours.
-            partial = RiotLedger.IsPartial(account, game),
-            modes,
-            stats = stats is null ? null : new
-            {
-                matches = stats.Matches,
-                wins = stats.Wins,
-                killDeath = stats.KillDeath,
-                currentRank = stats.CurrentRank,
-                peakRank = stats.PeakRank,
-                topPicks = stats.TopPicks,
-            },
-        };
     }
 
     private async Task<object> ImportRiotHoursAsync(string? typedId, CancellationToken ct)

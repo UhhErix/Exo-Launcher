@@ -124,9 +124,10 @@ export type FrameGenMod = {
   /**
    * Why it is broken. replaced: another mod's file is where Exo's loader was (Exo leaves it and keeps the game off);
    * changed: another of Exo's files has other bytes (Exo leaves it); removed: Exo's files went (they go back once);
-   * gone: the game no longer ships DLSS Frame Generation.
+   * gone: the game no longer ships DLSS Frame Generation. With hidden: unread (Exo couldn't read the game: no install,
+   * a Store app, a folder it can't open), card (no mod adds to this card; the line hides).
    */
-  reason?: 'replaced' | 'changed' | 'removed' | 'gone' | null
+  reason?: 'replaced' | 'changed' | 'removed' | 'gone' | 'unread' | 'card' | null
 }
 
 /**
@@ -1471,23 +1472,6 @@ export interface ClientsStatus {
   steam: { channel: 'none' | 'stable' | 'beta' | 'unknown' }
 }
 
-/** A Riot game's lifetime from the Riot ID's ledger: its minutes per mode (largest first) and tracker.gg's profile stats. */
-export type RiotLifetime = {
-  ok: boolean
-  minutes: number
-  /** The seed is tracker.gg's playlist sum, not its lifetime total. */
-  partial: boolean
-  modes: { mode: string; minutes: number }[]
-  stats: {
-    matches?: number | null
-    wins?: number | null
-    killDeath?: number | null
-    currentRank?: string | null
-    peakRank?: string | null
-    topPicks?: string[] | null
-  } | null
-}
-
 export interface StoreStatus {
   store: string
   displayName: string
@@ -2639,8 +2623,6 @@ export const host = {
       'playtime.riotRefresh',
       riotId ? { riotId } : {},
     ),
-  /** A Riot game's lifetime for its game page: minutes per mode and the seed's profile stats. */
-  riotLifetime: (game: string) => rawCall<RiotLifetime>('playtime.riotLifetime', { game }),
   minimize: () => rawCall<{ ok: boolean }>('shell.minimize'),
   maximize: () => rawCall<{ ok: boolean; maximized?: boolean }>('shell.maximize'),
   windowState: () => rawCall<{ ok: boolean; maximized?: boolean }>('shell.windowState'),
