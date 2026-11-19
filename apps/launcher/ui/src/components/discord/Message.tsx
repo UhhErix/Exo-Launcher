@@ -998,7 +998,7 @@ function SpeakItem({ message, ctx, onClose }: { message: DiscordMessage; ctx: Ma
   if (!message.content || !('speechSynthesis' in window)) return null
   return (
     <button type="button" role="menuitem" onClick={() => { onClose(); speakMessage(message, ctx) }}>
-      <Icons.Speak size={16} />{speaking === message.id ? 'Stop speaking message' : 'Speak message'}
+      {speaking === message.id ? <Icons.StopSpeaking size={16} /> : <Icons.Speak size={16} />}{speaking === message.id ? 'Stop speaking message' : 'Speak message'}
     </button>
   )
 }
