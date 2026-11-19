@@ -1,6 +1,6 @@
 # Exo's crash reports (`cloud/reports`)
 
-A Worker that takes crash and freeze reports from Exo Launcher, Cinema and Browser and stores them in R2, and the help page's contact form. Exo Launcher sends crash reports from every install from 3.26.0 (the owner's decision, 2026-11-09: essential, no switch; 3.24.4 and 3.25.0 asked first, and Cinema and Browser still do until they follow). Each app sends only the five fields below, stripped of anything personal, at most a few a day and the same error once. It runs on this PC with `npx wrangler@4.158.0 dev`; deployed at `reports.getexo.app` since November 5, 2026 (the owner's OK), redeployed 7 November 2026 with the contact endpoint (version `5dc2d4e3-4a6d-43c1-8f1a-dc2c27aceee0`).
+A Worker that takes crash and freeze reports from Exo Launcher, Cinema and Browser and stores them in R2, and the help page's contact form. Exo Launcher sends crash reports from every install from 3.26.0 (the owner's decision, 2026-11-09: essential, no switch; 3.24.4 and 3.25.0 asked first, and Cinema and Browser still do until they follow). Each app sends only the five fields below, stripped of anything personal, at most a few a day and the same error once. It runs on this PC with `npx wrangler@4.165.0 dev`; deployed at `reports.getexo.app` since November 5, 2026 (the owner's OK), redeployed 7 November 2026 with the contact endpoint (version `5dc2d4e3-4a6d-43c1-8f1a-dc2c27aceee0`).
 
 ## What it takes
 
@@ -53,8 +53,8 @@ Reports expire 30 days after they are stored. R2 lifecycle rules are set on the 
 bucket, after it exists (done for both):
 
 ```
-npx wrangler@4.158.0 r2 bucket lifecycle add exo-crash-reports reports-30-days reports/ --expire-days 30
-npx wrangler@4.158.0 r2 bucket lifecycle add exo-crash-reports-dev reports-30-days reports/ --expire-days 30
+npx wrangler@4.165.0 r2 bucket lifecycle add exo-crash-reports reports-30-days reports/ --expire-days 30
+npx wrangler@4.165.0 r2 bucket lifecycle add exo-crash-reports-dev reports-30-days reports/ --expire-days 30
 ```
 
 `wrangler r2 bucket lifecycle add --help` lists the flags. Check the rule with `wrangler r2 bucket lifecycle list`.
@@ -68,11 +68,11 @@ So an error is worked on the day it happens (owner, 2026-11-09: "auto sent to us
 - **Told at once.** The first report of an error type in a version, and its 10th, 100th and 1000th, mail the team: the
   contact form's own binding and address (`CONTACT_MAIL` to `CONTACT_TO`), subject `Exo Launcher 3.26.0: UiError (new error)`,
   body the Windows build and the end of the scrubbed excerpt. With the secret `DISCORD_WEBHOOK_REPORTS` (a webhook of a
-  private channel; `npx wrangler@4.158.0 secret put DISCORD_WEBHOOK_REPORTS`) the same message is posted there. It runs
+  private channel; `npx wrangler@4.165.0 secret put DISCORD_WEBHOOK_REPORTS`) the same message is posted there. It runs
   after the answer and never fails a report: the dev copy (no D1), a failed count and a failed send still store it. At most
   50 alerts go out a UTC day (`alert_days`, `migrations/0005_alert_days.sql`), so invented error types cannot mail without
   end; past that the digest still lists every group. Apply 0005 before deploying this code
-  (`npx wrangler@4.158.0 d1 migrations apply exo-telemetry --remote`).
+  (`npx wrangler@4.165.0 d1 migrations apply exo-telemetry --remote`).
 - **Digest.** The daily job mails yesterday's groups, most reports first, new ones marked, and removes counts older than 90 days.
 - **From this PC.** `node triage.mjs [--days 7] [--app launcher] [--version 3.26.0] [--show 3]` lists the groups and prints
   the newest sample of the top ones, through wrangler's own login. Read only.
@@ -145,7 +145,7 @@ is stopped), and that no IP address, cookie or client id reaches R2, and the add
    the account, change it in `wrangler.toml`.
 3. `reports.getexo.app` is a custom domain on the `getexo.app` zone: its DNS record is created on deploy. The updates
    address (`updates.getexo.app`) and the account service use the same zone.
-4. Deploy with `npx wrangler@4.158.0 deploy` from this folder (the dev copy with `--env dev`), after the owner's OK.
+4. Deploy with `npx wrangler@4.165.0 deploy` from this folder (the dev copy with `--env dev`), after the owner's OK.
 5. Then `PRIVACY.md` and `NetworkDestinations.cs` already name `reports.getexo.app`; a host change must update both.
 
 Cost on the paid Workers plan: one Worker request and one R2 write per report that passes; nothing is read back.

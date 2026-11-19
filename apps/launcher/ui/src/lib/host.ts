@@ -720,6 +720,15 @@ export type NetSample = { ping: number | null; jitter: number | null; router: nu
 export type NetCheck = { before: NetSample | null; after: NetSample; said: string }
 export type PcHealth = { ok: boolean; message?: string | null; items: PcHealthItem[]; check?: NetCheck | null }
 
+/** Best settings › System's items (SystemTuning.cs): Windows defaults a tweak changed (Best settings) and two opt-ins (their own switch only). */
+export type TuningKey = 'timer' | 'scheduling' | 'pagefile' | 'cache' | 'services' | 'integrity'
+/**
+ * One item: on, Exo's setting is in place; off, the player turned a Best settings item off; optIn, only its own switch sets it;
+ * restart, a change (either way) waits on a restart; blocked, why Exo won't change it here (an anti-cheat, a policy).
+ */
+export type TuningItem = { key: TuningKey; label: string; detail: string; on: boolean; canUndo: boolean; off: boolean; optIn: boolean; restart: boolean; blocked: string | null }
+export type Tuning = { ok: boolean; message?: string | null; applied: boolean; restart: boolean; items: TuningItem[] }
+
 /**
  * PC › Drives (Drives.cs): one physical drive. link: the PCIe generation and lanes negotiated against the drive's own
  * (NVMe only); temperature in °C against the drive's warning and critical points; health as the drive reports it
@@ -3013,6 +3022,9 @@ export const host = {
   systemTune: (action?: 'start' | 'stop' | 'undo', part?: TunePart['id'], mode?: AutoTuneMode) =>
     rawCall<AutoTune>('system.tune', action ? { action, part, mode } : {}, 45_000),
   /** System > This PC > Interrupts: the devices; apply switches every one that can to MSI mode, undo puts all back, revert one. Waits on Windows' permission prompt. */
+  /** Best settings › System: the items; apply sets every Best settings item that's on, on and off one item. Waits on Windows' permission prompt and a restore point. */
+  systemTuning: (action?: 'apply' | 'on' | 'off', item?: TuningKey) =>
+    rawCall<Tuning>('system.tuning', action ? { action, ...(item ? { item } : {}) } : {}, 240_000),
   systemInterrupts: (action?: 'apply' | 'undo' | 'revert' | 'reapply', device?: string) =>
     rawCall<Interrupts>('system.interrupts', action ? { action, ...(device ? { device } : {}) } : {}, 120_000),
   /**
