@@ -1,7 +1,7 @@
-# Exo's update address (README.md). Deployed by `npx wrangler@4.158.0 deploy` from this folder.
+# Exo's update address (README.md). Deployed by `npx wrangler@4.165.0 deploy` from this folder.
 name = "exo-updates"
 main = "src/worker.js"
-compatibility_date = "2026-10-01"
+compatibility_date = "2026-11-18"
 workers_dev = true
 # The address the apps name. exo-updates.exo-erix.workers.dev stays as a second name for copies that shipped with it.
 routes = []

@@ -122,7 +122,7 @@ pwsh -File cloud\updates\release.ps1 -App cinema -Repo C:\Users\Erix\Code\Exo\Ex
    in and must hold the entry.
 4. `publish-release.ps1 -WhatIf` must pass; then `publish-release.ps1` uploads, verifies `/v1/<app>/latest` and asks the
    Worker for the release card (`POST /v1/<app>/announce`).
-5. `exo-site`: `npm run build` (it reads the version the mirror now serves) and `npx wrangler@4.158.0 deploy`.
+5. `exo-site`: `npm run build` (it reads the version the mirror now serves) and `npx wrangler@4.165.0 deploy`.
 6. Live check: `updates.getexo.app/v1/<app>/latest` names the tag, `getexo.app/download/` shows the version, and
    `getexo.app/<app>/changelog` has the entry.
 
@@ -145,9 +145,9 @@ in R2 (`announce/<app>/<tag>.json`) before posting, so a re-upload of a live tag
 Each app has its webhook and an optional role, as Worker secrets (set once, from `cloud/updates`):
 
 ```powershell
-npx wrangler@4.158.0 secret put DISCORD_WEBHOOK_LAUNCHER     # the launcher releases channel's webhook URL
-npx wrangler@4.158.0 secret put DISCORD_WEBHOOK_CINEMA       # the cinema releases channel's webhook URL
-npx wrangler@4.158.0 secret put DISCORD_ROLE_LAUNCHER        # optional: a role id to ping once per release
+npx wrangler@4.165.0 secret put DISCORD_WEBHOOK_LAUNCHER     # the launcher releases channel's webhook URL
+npx wrangler@4.165.0 secret put DISCORD_WEBHOOK_CINEMA       # the cinema releases channel's webhook URL
+npx wrangler@4.165.0 secret put DISCORD_ROLE_LAUNCHER        # optional: a role id to ping once per release
 ```
 
 A missing webhook is logged and the card is skipped; a webhook that isn't `https://discord.com/api/webhooks/` (or
@@ -275,7 +275,7 @@ GitHub down, byte ranges, the file-level update and the card, with GitHub, R2 an
 
 ## Deploying
 
-Deploy with `npx wrangler@4.158.0 deploy`, with the owner's OK. `wrangler.toml` here keeps placeholders (no bucket name, routes or
+Deploy with `npx wrangler@4.165.0 deploy` from this folder, with the owner's OK. `wrangler.toml` here keeps placeholders (no bucket name, routes or
 cron), so deploy from a local copy with the live settings: bucket `exo-releases`, the custom domain `updates.getexo.app`,
 `workers_dev = true`, cron `*/15 * * * *`. The Discord secrets stay on the Worker across deploys. Exo Cinema's releases and its
 `CHANGELOG.md` must be in the bucket before a Worker that serves them is deployed; Exo Launcher's come from GitHub.
@@ -337,5 +337,5 @@ V8.
 Tests: `node --test test` (the scheduled handler in workerd against a fake upstream; the security fixes in `test/watch-security.test.mjs`; the
 floor and the vendor file names checked against the Launcher's sources).
 
-**Deploy (not done; the owner approves):** `npx wrangler@4.158.0 deploy` from this folder, on the free plan. Check the first runs through
+**Deploy (not done; the owner approves):** `npx wrangler@4.165.0 deploy` from this folder, on the free plan. Check the first runs through
 `_watch/state.json` in the bucket: the Worker's logs are off (`[observability]`).

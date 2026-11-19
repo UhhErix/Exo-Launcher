@@ -69,7 +69,7 @@ test('-WhatIf prints every step for launcher and changes nothing', (t) => {
     'WHATIF would run: pwsh -NoProfile -File tools\\Build-Release.ps1',
     'publish-release.ps1 -App launcher -Tag v9.9.9',
     'WHATIF would run: npm.cmd run build',
-    'WHATIF would run: npx.cmd -y wrangler@4.158.0 deploy',
+    'WHATIF would run: npx.cmd -y wrangler@4.165.0 deploy',
     'WHATIF would check https://updates.getexo.app/v1/launcher/latest names v9.9.9',
     'WHATIF PASS',
   ]) assert.ok(out.includes(step), `missing: ${step}\n${out}`)
