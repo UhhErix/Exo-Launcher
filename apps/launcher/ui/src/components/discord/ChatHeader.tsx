@@ -250,7 +250,7 @@ function Pins({ channel, ctx, onClose }: { channel: DiscordChannel; ctx: Markdow
   const shown = { ...found, error: error ?? found.error, messages: found.messages.filter(m => !gone.has(m.id)) }
   const canPin = !ctx.guildId || channel.canPin === true
   return (
-    <Results title="Pinned messages" found={shown} ctx={ctx} here={channel.id} empty="This channel doesn't have any pinned messages yet." box={box} onClose={onClose}
+    <Results title="Pinned messages" found={shown} ctx={ctx} here={channel.id} empty={channel.dm ? `This ${channel.dm.group ? 'group' : 'conversation'} doesn't have any pinned messages yet.` : "This channel doesn't have any pinned messages yet."} box={box} onClose={onClose}
       onRemove={canPin ? unpin : undefined} />
   )
 }

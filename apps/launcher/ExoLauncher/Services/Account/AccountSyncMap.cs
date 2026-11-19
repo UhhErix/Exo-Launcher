@@ -33,22 +33,22 @@ internal static class AccountSyncMap
     /// <summary>Stays on this PC: paths, window and display, GPU, Discord and voice, consents, and first-run flags.</summary>
     internal static readonly string[] DeviceSettings =
     [
-        "AllowResize", "AppVersion", "AutoUpdateChipset", "AutoUpdateUpscalers", "CheckForUpdates", "CopyPortableIntoLibrary", "DefaultInstallRoot",
+        "AllowResize", "AppVersion", "AutoUpdateChipset", "CompressSpeed", "CompressWhileIdle", "RecompressAfterUpdates", "AutoUpdateUpscalers", "CheckForUpdates", "CopyPortableIntoLibrary", "DefaultInstallRoot",
         "DiscordAttenuateOthers", "DiscordAttenuateSelf", "DiscordAttenuation", "DiscordAutoSensitivity",
         "DiscordDesktopNotifications", "DiscordDisableAllSounds", "DiscordDisabledSounds", "DiscordEchoCancellation",
-        "DiscordEvenVoices", "DiscordGamesShared", "DiscordInputDevice", "DiscordInputProfile", "DiscordInputVolume",
+        "DiscordEvenVoices", "DiscordInputDevice", "DiscordInputProfile", "DiscordInputVolume",
         "DiscordKeybinds", "DiscordNoiseSuppression", "DiscordNoiseSuppressionKind", "DiscordOnlyMyVoice",
         "DiscordOthersNoiseSuppression", "DiscordOutputDevice", "DiscordOutputVolume", "DiscordPttDelay",
-        "DiscordPushToTalk", "DiscordQuietWhilePlaying", "DiscordReadyShared", "DiscordSelectedChannelSound",
+        "DiscordPushToTalk", "DiscordQuietWhilePlaying", "DiscordSelectedChannelSound",
         "DiscordSensitivity", "DiscordSoundVolume", "DiscordSoundboardMuted", "DiscordSoundboardVolume",
         "DiscordTaskbarFlash", "DiscordUnreadBadge", "DiscordVoiceFocus", "DiscordBandPins", "DiscordVoiceTunes",
-        "FastGpuForGames", "FpsCounterPosition", "FrameGenEverywhere", "FrameGenKeptOff", "FramelessMode",
+        "AutoUpdateOff", "FastGpuForGames", "FpsCounterPosition", "FrameGenEverywhere", "FrameGenKeptOff", "FramelessMode",
         "FramelessPinSide", "FramelessPinTop", "HdrForGames", "HdrGameModes", "HdrGameScreens", "HdrSdrGamma",
         "HdrSwitchedOn", "HdrSwitchedRamp", "LastPlayed", "LaunchOverrides", "LibraryFolders", "LucidPath",
         "MouseBridge", "MouseBridgeAppAutostart", "MouseBridgeAppPath", "NvidiaColor", "NvidiaDriverBranch",
         "AccountAsked", "OnboardingComplete", "PlayStationPadSeen", "PreferredGameSources", "Recent", "RtxVideoDriver", "RtxVideoHdr",
         "RtxVideoSuperResolution", "SdrGammaBefore", "StartMaximized", "StartupHandedToExo", "SteamBetaJoined",
-        "SteamInput", "SteamOverlay", "SteamShortcuts", "ThroughSteam", "UpscalerAntiCheatConsent", "CustomCoverImages",
+        "SteamInput", "SteamOverlay", "SteamShortcuts", "ThroughSteam", "UpscalerAntiCheatConsent", "UpscalerAntiCheatEverywhere", "UpscalerAutoUpdateDefaulted", "CustomCoverImages",
         "WhatsNewSeen", "UiPrefsMoved",
     ];
 

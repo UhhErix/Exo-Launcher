@@ -117,6 +117,9 @@ public sealed class SettingsService
                     loaded = DeserializeSalvaging(json, settingsRoot)
                         ?? throw new JsonException("settings.json deserialized to null");
                     NormalizeLoaded(loaded);
+                    // 3.26 and earlier kept upscaler updates off by default and wrote that false into every settings file: a file
+                    // from before the flag existed has them turned on once; from then on the user's switch decides.
+                    if (!settingsRoot.TryGetProperty("upscalerAutoUpdateDefaulted", out _)) { loaded.AutoUpdateUpscalers = true; loaded.UpscalerAutoUpdateDefaulted = true; }
                 }
                 else
                 {
@@ -184,10 +187,9 @@ public sealed class SettingsService
         loaded.DiscordVoiceTunes = CopyStrings(loaded.DiscordVoiceTunes);
         loaded.LibraryFolders = NormalizeLibraryFolders(loaded.LibraryFolders);
         loaded.HiddenGames = NormalizeHiddenGames(loaded.HiddenGames);
-        loaded.DiscordGamesShared = NormalizeHiddenGames(loaded.DiscordGamesShared);
-        loaded.DiscordReadyShared = NormalizeHiddenGames(loaded.DiscordReadyShared);
         loaded.DiscordBandPins = NormalizeDiscordBandPins(loaded.DiscordBandPins);
         loaded.FrameGenKeptOff = NormalizeHiddenGames(loaded.FrameGenKeptOff);
+        loaded.AutoUpdateOff = NormalizeHiddenGames(loaded.AutoUpdateOff);
         if (string.IsNullOrWhiteSpace(loaded.SortMode) || !IsLibrarySortMode(loaded.SortMode))
             loaded.SortMode = "name";
     }
@@ -472,7 +474,7 @@ public sealed class SettingsService
     /// their AppSettings properties stay so older settings.json files load.
     /// </remarks>
     /// <summary>Settings > Downloads. Hours: both 0-23, or <paramref name="anyTime"/> to clear them.</summary>
-    public void ApplyDownloadPatch(bool? pauseWhilePlaying, int? hoursStart, int? hoursEnd, bool anyTime, bool? autoUpdate, bool? autoUpdateChipset = null, bool? keepAwake = null, bool? autoUpdateUpscalers = null)
+    public void ApplyDownloadPatch(bool? pauseWhilePlaying, int? hoursStart, int? hoursEnd, bool anyTime, bool? autoUpdate, bool? autoUpdateChipset = null, bool? keepAwake = null, bool? autoUpdateUpscalers = null, bool? upscalerAntiCheatEverywhere = null)
     {
         CommitMutation(settings =>
         {
@@ -484,8 +486,17 @@ public sealed class SettingsService
             if (autoUpdateChipset is { } chipset) settings.AutoUpdateChipset = chipset;
             if (keepAwake is { } awake) settings.KeepAwakeDownloads = awake;
             if (autoUpdateUpscalers is { } upscalers) settings.AutoUpdateUpscalers = upscalers;
+            if (upscalerAntiCheatEverywhere is { } everywhere) settings.UpscalerAntiCheatEverywhere = everywhere;
         });
     }
+
+    /// <summary>Compress games' switches and its CPU budget (one of <see cref="GameCompression.Speeds"/>).</summary>
+    internal void ApplyCompressPatch(bool? whileIdle, bool? afterUpdates, string? speed) => CommitMutation(settings =>
+    {
+        if (whileIdle is { } idle) settings.CompressWhileIdle = idle;
+        if (afterUpdates is { } again) settings.RecompressAfterUpdates = again;
+        if (speed is not null && GameCompression.Speeds.Contains(speed)) settings.CompressSpeed = speed;
+    });
 
     /// <summary>Settings: the store clients stay quiet (on) or are put back as they were (off).</summary>
     public void ApplyStoreQuiet(bool quiet) => CommitMutation(settings => settings.StoreClientsQuiet = quiet);
@@ -643,7 +654,8 @@ public sealed class SettingsService
     public string? UpscalerConsent(string gameId)
     {
         lock (_stateGate)
-            return _current.UpscalerAntiCheatConsent.TryGetValue(gameId, out var antiCheat) ? antiCheat : null;
+            return _current.UpscalerAntiCheatEverywhere ? DlssSwapService.AnyAntiCheat
+                : _current.UpscalerAntiCheatConsent.TryGetValue(gameId, out var antiCheat) ? antiCheat : null;
     }
 
     /// <summary>Game sheet > Upscalers: Allow changes stores the anti-cheat shown, Stop allowing removes it.</summary>
@@ -731,6 +743,24 @@ public sealed class SettingsService
         {
             var rest = settings.FrameGenKeptOff.Where(id => !string.Equals(id, gameId, StringComparison.OrdinalIgnoreCase));
             settings.FrameGenKeptOff = NormalizeHiddenGames(keptOff ? rest.Append(gameId) : rest);
+        });
+    }
+
+    /// <summary>Whether the player keeps this game out of automatic updates.</summary>
+    public bool AutoUpdateOff(string gameId)
+    {
+        lock (_stateGate)
+            return _current.AutoUpdateOff.Contains(gameId, StringComparer.OrdinalIgnoreCase);
+    }
+
+    /// <summary>A game's Update automatically switch: off keeps it out of the idle update sweep (DownloadPolicy), on lets it back in.</summary>
+    public void SetAutoUpdateOff(string gameId, bool off)
+    {
+        if (!ValidId(gameId, 512)) throw new InvalidDataException("Invalid game id.");
+        CommitMutation(settings =>
+        {
+            var rest = settings.AutoUpdateOff.Where(id => !string.Equals(id, gameId, StringComparison.OrdinalIgnoreCase));
+            settings.AutoUpdateOff = NormalizeHiddenGames(off ? rest.Append(gameId) : rest);
         });
     }
 
@@ -918,14 +948,11 @@ public sealed class SettingsService
     private static string NormalizeTextColour(string? value) =>
         string.Equals(value, "grey", StringComparison.OrdinalIgnoreCase) ? "grey" : "white";
 
-    /// <summary>The background palettes (ui/src/tokens.css › Backgrounds); anything else is the default, Dark grey.</summary>
-    internal static readonly string[] Backgrounds = ["black", "near", "grey", "windows", "graphite"];
+    /// <summary>The background palettes (ui/src/tokens.css › Backgrounds). Exo is pure black (AMOLED) under Liquid Glass.</summary>
+    internal static readonly string[] Backgrounds = ["black"];
 
-    internal static string NormalizeBackground(string? value)
-    {
-        var v = value?.Trim().ToLowerInvariant();
-        return v is not null && Backgrounds.Contains(v) ? v : "grey";
-    }
+    /// <summary>Always "black": the palettes it once offered (near, grey, windows, graphite) and anything else come back as pure black.</summary>
+    internal static string NormalizeBackground(string? value) => "black";
 
     /// <summary>A palette's page color (the window's own background under the page), as #RRGGBB in tokens.css.</summary>
     internal static (byte R, byte G, byte B) BackgroundColor(string? value) => NormalizeBackground(value) switch
@@ -1002,8 +1029,6 @@ public sealed class SettingsService
         DiscordOnlyMyVoice = source.DiscordOnlyMyVoice,
         DiscordEvenVoices = source.DiscordEvenVoices,
         DiscordQuietWhilePlaying = source.DiscordQuietWhilePlaying,
-        DiscordGamesShared = NormalizeHiddenGames(source.DiscordGamesShared),
-        DiscordReadyShared = NormalizeHiddenGames(source.DiscordReadyShared),
         DiscordBandPins = NormalizeDiscordBandPins(source.DiscordBandPins),
         DiscordInputDevice = source.DiscordInputDevice is { Length: > 0 and <= 512 } input ? input : null,
         DiscordOutputDevice = source.DiscordOutputDevice is { Length: > 0 and <= 512 } output ? output : null,
@@ -1036,7 +1061,12 @@ public sealed class SettingsService
         DownloadHoursEnd = source.DownloadHoursEnd is >= 0 and <= 23 ? source.DownloadHoursEnd : null,
         AutoUpdateGames = source.AutoUpdateGames,
         AutoUpdateChipset = source.AutoUpdateChipset,
+        CompressWhileIdle = source.CompressWhileIdle,
+        RecompressAfterUpdates = source.RecompressAfterUpdates,
+        CompressSpeed = GameCompression.Speeds.Contains(source.CompressSpeed) ? source.CompressSpeed : "balanced",
         AutoUpdateUpscalers = source.AutoUpdateUpscalers,
+        UpscalerAntiCheatEverywhere = source.UpscalerAntiCheatEverywhere,
+        UpscalerAutoUpdateDefaulted = source.UpscalerAutoUpdateDefaulted,
         KeepAwakeDownloads = source.KeepAwakeDownloads,
         StoreClientsQuiet = source.StoreClientsQuiet,
         FastGpuForGames = source.FastGpuForGames,
@@ -1049,6 +1079,7 @@ public sealed class SettingsService
         HiddenGames = NormalizeHiddenGames(source.HiddenGames),
         FrameGenEverywhere = source.FrameGenEverywhere,
         FrameGenKeptOff = NormalizeHiddenGames(source.FrameGenKeptOff),
+        AutoUpdateOff = NormalizeHiddenGames(source.AutoUpdateOff),
         SteamOverlay = CopyStrings(source.SteamOverlay),
         ControllerSound = source.ControllerSound,
         SteamInput = CopyStrings(source.SteamInput),

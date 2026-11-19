@@ -446,7 +446,8 @@
 
 :root:root .exo-dc .exo-dc-channels .exo-dc-item {
   min-height: calc(34px * var(--exo-scale, 1));
-  padding-inline: 12px;
+  /* Its icon 16px in, on the line the pane's head, categories and DMs keep. */
+  padding-inline: 8px;
 }
 
 /* You at the panel's foot, a call's rows above you. */
@@ -623,7 +624,7 @@
   height: var(--dc-head-h);
   min-height: var(--dc-head-h);
   margin: 0;
-  padding: 0 12px 0 20px;
+  padding: 0 12px 0 16px;
   border: 0;
   background: transparent;
   box-shadow: none;
@@ -680,7 +681,9 @@
   flex-direction: column;
   min-width: 0;
   min-height: 0;
-  padding: 8px 12px 12px;
+  /* Its head is a pane head's height and its words 16px in, as the side pane's are (owner, 2026-11-19: spacing mismatches): the
+     two panes' titles share one line and their rows one inset. */
+  padding: 0 8px 8px;
   overflow: hidden;
   border-radius: var(--exo-panel-radius);
   background: var(--exo-float);
@@ -692,7 +695,7 @@
   align-items: center;
   gap: 8px;
   min-width: 0;
-  height: calc(40px * var(--exo-scale, 1));
+  height: var(--dc-head-h);
   padding: 0 4px 0 8px;
 }
 

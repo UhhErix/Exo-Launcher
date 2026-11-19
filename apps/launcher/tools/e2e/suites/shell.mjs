@@ -2,7 +2,7 @@
 // (what 3.13.3 got wrong on 4K), the window filling its monitor, the Bar's parts, the window's own buttons.
 import { sleep } from '../cdp.mjs'
 import { compare, cropFraction, readPng, shareNear } from '../lib/image.mjs'
-import { ROOMS } from '../lib/kit.mjs'
+import { BAR_ROOMS, ROOMS } from '../lib/kit.mjs'
 
 /** The screen under Exo's window against the page's own picture of the same moment. */
 export async function screenMatchesPage(t, c, label) {
@@ -125,7 +125,7 @@ export async function run(t) {
       out.settings = box(document.querySelector('.exo-settings-btn'))
       for (const name of ['Minimize', 'Maximize', 'Restore', 'Close']) out[name] = box(document.querySelector(`.exo-titlebar button[aria-label="${name}"]`))
       return out
-    }, ROOMS)
+    }, BAR_ROOMS)
     c.evidence.parts = parts
     const missing = Object.entries(parts).filter(([name, v]) => v !== true && !(name === 'Restore' || name === 'Maximize')).map(([n, v]) => `${n} ${v ?? 'missing'}`)
     if (parts.Restore !== true && parts.Maximize !== true) missing.push('no maximize/restore button')

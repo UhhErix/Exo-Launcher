@@ -16,7 +16,7 @@ export const SETTINGS_PAGES = [
     label: 'General',
     sections: [],
     keywords: [
-      'background', 'dark mode', 'theme', 'pure black', 'dark grey', 'graphite', 'text size', 'reduce motion', 'animation', 'start maximized', 'startup', 'start with windows', 'startup behaviour', 'window',
+      'dark mode', 'amoled', 'pure black', 'text size', 'reduce motion', 'animation', 'start maximized', 'startup', 'start with windows', 'startup behaviour', 'window',
       'keep pc awake', 'keep awake', 'awake', 'sleep', 'downloads and shader warming',
     ],
   },
@@ -47,7 +47,7 @@ export const SETTINGS_PAGES = [
     sections: ['achievements', 'fps'],
     keywords: [
       'in game', 'achievements', 'achievement banners', 'banners in games', 'unlock', 'trophy', 'banner sound', 'achievement sound', 'preview banner', 'obs browser source',
-      'fps counter', 'frame rate', 'frames per second', 'overlay', '1% low', 'frame time', 'gpu use', 'gpu temperature', 'cpu use', 'vram', 'ram', 'time of day', 'position',
+      'fps counter', 'frame rate', 'frames per second', 'overlay', '1% low', 'frame time', 'gpu use', 'gpu temperature', 'cpu use', 'vram', 'ram', 'battery', 'mouse battery', 'headset battery', 'time of day', 'position',
     ],
   },
   {

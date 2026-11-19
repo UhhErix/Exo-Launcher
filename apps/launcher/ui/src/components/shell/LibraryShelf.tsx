@@ -1,5 +1,7 @@
+import { useState } from 'react'
 import { Menu } from '../ui/Menu'
-import { ChevronDown, FolderPlus, Controller, Key, More, Refresh, SelectMany } from '../../brand/icons'
+import { DownloadsSheet } from '../DownloadsSheet'
+import { ChevronDown, Download, FolderPlus, Controller, Key, More, Refresh, SelectMany } from '../../brand/icons'
 import type { SortMode } from '../../lib/host'
 import { SORT_LABELS, SORT_OPTIONS } from '../../lib/library'
 import { ErrorState } from '../ui/ErrorState'
@@ -31,9 +33,11 @@ export function LibraryTools({ selecting, onSelecting, sort, onSort, hidden, onH
   refreshing: boolean
   onRefresh: () => void
 }) {
-  const actions: Record<string, () => void> = { 'new-folder': onNewFolder, game: onAddGame, key: onActivateKey, select: () => onSelecting(true), refresh: onRefresh }
+  const [downloads, setDownloads] = useState(false)
+  const actions: Record<string, () => void> = { 'new-folder': onNewFolder, game: onAddGame, key: onActivateKey, select: () => onSelecting(true), refresh: onRefresh, downloads: () => setDownloads(true) }
   return (
     <div className="exo-library-tools">
+      <DownloadsSheet open={downloads} onClose={() => setDownloads(false)} />
       <Menu
         label="Sort library"
         anchor="--exo-sort-menu"
@@ -56,6 +60,7 @@ export function LibraryTools({ selecting, onSelecting, sort, onSort, hidden, onH
         items={[
           ...ADD_ITEMS,
           ...(selecting ? [] : [{ id: 'select', label: 'Select games', icon: <SelectMany size={16} /> }]),
+          { id: 'downloads', label: 'Downloads', icon: <Download size={16} /> },
           { id: 'refresh', label: 'Refresh library', icon: <Refresh size={16} />, disabled: refreshing },
         ]}
         onAction={id => actions[id]?.()}

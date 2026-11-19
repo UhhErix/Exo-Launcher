@@ -100,6 +100,10 @@
   white-space: nowrap;
 }
 
+.exo-apps-select.is-wide {
+  grid-column: 3 / -1;
+}
+
 .exo-apps-run {
   display: inline-flex;
   align-items: center;

@@ -1,0 +1,23 @@
+{
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": [],
+    "ignoreValues": [
+      {
+        "rule": "bounce-easing",
+        "value": "var(--ease-spring)",
+        "createdAt": "2026-11-19T04:22:10.737Z",
+        "reason": "Claude: Exo's documented spring token (DESIGN.md Motion), Apple-style interruptible springs"
+      },
+      {
+        "rule": "gradient-text",
+        "value": "*",
+        "files": [
+          "apps/launcher/ui/src/styles/music-player.css"
+        ],
+        "createdAt": "2026-11-19T04:02:44.044Z",
+        "reason": "Claude: music-player.css:1240 is the synced-lyrics karaoke fill, a hard-stop split driven by --exo-sung (live song progress), not decorative gradient text"
+      }
+    ]
+  }
+}

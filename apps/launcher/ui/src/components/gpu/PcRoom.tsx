@@ -11,6 +11,7 @@ import { Popover } from '../ui/Dialog'
 import { UpscalersTab } from '../upscalers/UpscalersSheet'
 import { AutoTuneChip, AutoTuneRows, useTuneReads } from './AutoTune'
 import { BestSetup, bestSteps } from './BestSetup'
+import { CompressChip, CompressGames, useCompressList } from './CompressGames'
 import { BestScreenRows, DisplayRows, HdrRows } from './DisplayTab'
 import { DriverRow, savedBranch } from './DriverRow'
 import { DriversSection } from './DriversSection'
@@ -99,7 +100,7 @@ function stillToSet(state: PcState, hdr: HdrState | null, settings: LauncherSett
   return steps + setup + screens + irq
 }
 
-type Menu = 'best' | 'tune' | PcPartMenu
+type Menu = 'best' | 'tune' | 'compress' | PcPartMenu
 
 /**
  * The PC room (DESIGN.md › PC): one page, no scrolling on a 1080p screen. This PC leads, its name with its chips at the
@@ -107,8 +108,10 @@ type Menu = 'best' | 'tune' | PcPartMenu
  * card, the screen and the board open their own menus. Under it Updates, and beside both Shaders, each scrolling in its
  * own pane. What is set or up to date shows nothing. `jump` opens what a game's link, a notice or Ctrl+K asks for.
  */
-export function PcRoom({ active, jump, games, settings, onSave }: {
+export function PcRoom({ active, jump, games, settings, onSave, onDevices }: {
   active: boolean
+  /** Devices: your mouse, keyboard, audio and controllers, a page of this room. */
+  onDevices?: () => void
   jump: { tab: PcLink } | null
   games: readonly Game[]
   settings: LauncherSettings | null
@@ -124,6 +127,7 @@ export function PcRoom({ active, jump, games, settings, onSave }: {
   // A new number reads the apps again (after the sheet closes, after junk is cleaned).
   const [appsRead, setAppsRead] = useState(0)
   const apps = useAppsSummary(active, appsRead)
+  const compress = useCompressList(active)
 
   const setHealth = useCallback((next: PcHealth) => put('health', next), [put])
   const setInterrupts = useCallback((next: Interrupts) => put('interrupts', next), [put])
@@ -146,7 +150,7 @@ export function PcRoom({ active, jump, games, settings, onSave }: {
     if (jump.tab === 'control' && !vendor) return
     handled.current = jump
     // On a GeForce the control panel is Exo's own: the card's menu and the screen's.
-    const opens: Partial<Record<PcLink, Menu>> = { graphics: 'graphics', display: 'display', board: 'board', control: 'graphics', performance: 'best' }
+    const opens: Partial<Record<PcLink, Menu>> = { graphics: 'graphics', display: 'display', board: 'board', control: 'graphics', performance: 'best', compress: 'compress' }
     // AMD's and Intel's control panels are their own apps (the chip opens them): the link opens that app, not NVIDIA's menu.
     if (jump.tab === 'control' && vendor && vendor !== 'nvidia') {
       host.gpuControlPanel().catch((e: unknown) => report(e, 'PcRoom.controlPanelLink'))
@@ -171,6 +175,8 @@ export function PcRoom({ active, jump, games, settings, onSave }: {
         {upscalers === 0 ? <Check size={14} /> : null}Upscalers{upscalers ? ` · ${upscalers}` : null}
       </button>
       <AppsChip summary={apps} onOpen={openApps} />
+      <CompressChip list={compress.list} onOpen={() => setMenu('compress')} />
+      {onDevices ? <button type="button" className="exo-pc-chip" onClick={onDevices}>Devices</button> : null}
       <AutoTuneChip tune={state.tune} onOpen={() => setMenu('tune')} />
       {vendor && vendor !== 'nvidia' ? <MakerPanel name={PANEL[vendor]} /> : null}
     </>
@@ -233,6 +239,11 @@ export function PcRoom({ active, jump, games, settings, onSave }: {
             <DisplayRows display={state.display} onDisplay={setDisplay} />
             <HdrRows screen={hdr} settings={settings} onSave={onSave} />
           </div>
+        </PcMenu>
+      ) : null}
+      {menu === 'compress' ? (
+        <PcMenu title="Compress games" onClose={closeMenu}>
+          <CompressGames list={compress.list} onList={compress.setList} onRead={compress.read} />
         </PcMenu>
       ) : null}
       {menu === 'board' ? (

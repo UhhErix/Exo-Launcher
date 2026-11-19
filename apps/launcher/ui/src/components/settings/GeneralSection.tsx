@@ -4,7 +4,6 @@ import { Spinner } from '../ui/Spinner'
 import { report } from '../../lib/report'
 import { ChoiceRow, CopyRow, Row, Section, SliderRow, SwitchRow } from './parts'
 import { AUTO_UPSCALERS_DETAIL, AUTO_UPSCALERS_LABEL } from '../../lib/upscalerNotice'
-import { applyTextTheme, BACKGROUNDS, readCachedTextTheme, type Background } from '../../lib/exoTheme'
 
 /** Null when the save took, else why not. */
 type SaveSettings = (patch: Partial<LauncherSettings>) => Promise<string | null>
@@ -23,12 +22,6 @@ export const GeneralSection = memo(function GeneralSection({ settings, onSave: s
   const disabled = !settings
   return (
     <Section id="general">
-      <ChoiceRow id="set-background" label="Background" value={(settings?.background ?? 'grey') as Background} choices={BACKGROUNDS} disabled={disabled}
-        onChange={value => {
-          // Instant: the page takes it now, the save follows.
-          applyTextTheme({ ...readCachedTextTheme(), background: value })
-          return save({ background: value })
-        }} />
       <ChoiceRow id="set-text-size" label="Text size" value={settings?.textSize ?? 'normal'} choices={TEXT_SIZES} disabled={disabled}
         onChange={value => save({ textSize: value })} />
       <SwitchRow id="set-reduce-motion" label="Reduce motion" checked={settings?.reduceMotion === true} disabled={disabled}
@@ -118,6 +111,7 @@ const FPS_ITEMS = [
   { id: 'cpu', label: 'CPU use' },
   { id: 'vram', label: 'VRAM' },
   { id: 'ram', label: 'RAM' },
+  { id: 'battery', label: 'Lowest battery' },
   { id: 'clock', label: 'Time of day' },
 ] as const
 
@@ -227,7 +221,13 @@ export function DownloadsSection({ settings, disabled, save }: { settings: Launc
           checked={settings.autoUpdateChipset !== false} disabled={disabled} onChange={value => save({ autoUpdateChipset: value })} />
       ) : null}
       <SwitchRow id="set-auto-upscalers" label={AUTO_UPSCALERS_LABEL} detail={AUTO_UPSCALERS_DETAIL}
-        checked={settings?.autoUpdateUpscalers === true} disabled={disabled} onChange={value => save({ autoUpdateUpscalers: value })} />
+        checked={settings?.autoUpdateUpscalers !== false} disabled={disabled} onChange={value => save({ autoUpdateUpscalers: value })} />
+      <SwitchRow id="set-upscalers-anticheat" label="Also in games with anti-cheat" detail="Can risk a ban. Never Riot games or Vanguard."
+        checked={settings?.upscalerAntiCheatEverywhere === true} disabled={disabled} onChange={value => save({ upscalerAntiCheatEverywhere: value })} />
+      {settings?.frameGenEverywhereCard ? (
+        <SwitchRow id="set-frame-gen-everywhere-general" label="Frame generation in games without anti-cheat"
+          checked={settings.frameGenEverywhere === true} disabled={disabled} onChange={value => save({ frameGenEverywhere: value })} />
+      ) : null}
     </Section>
   )
 }

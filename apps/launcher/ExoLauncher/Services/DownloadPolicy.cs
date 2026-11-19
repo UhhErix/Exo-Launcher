@@ -20,6 +20,7 @@ internal sealed class DownloadPolicy : IDisposable
     private readonly AppServices _services;
     private readonly object _gate = new();
     private Timer? _tick;
+    private Timer? _accounts;
     private DateTime _lastUpdateSweep = DateTime.MinValue;
 
     internal DownloadPolicy(AppServices services) => _services = services;
@@ -29,7 +30,12 @@ internal sealed class DownloadPolicy : IDisposable
         var launcher = _services.Launcher;
         launcher.GameLaunched += OnGameLaunched;
         launcher.GameSessionCompleted += OnGameEnded;
-        lock (_gate) _tick ??= new Timer(_ => Tick(), null, TimeSpan.FromSeconds(30), TimeSpan.FromMinutes(1));
+        lock (_gate)
+        {
+            _tick ??= new Timer(_ => Tick(), null, TimeSpan.FromSeconds(30), TimeSpan.FromMinutes(1));
+            // A switch made in the store's own app is seen within seconds; with nothing downloading, the check reads nothing.
+            _accounts ??= new Timer(_ => CheckAccounts(), null, TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(5));
+        }
         Apply();
     }
 
@@ -43,14 +49,34 @@ internal sealed class DownloadPolicy : IDisposable
 
     private void OnGameLaunched(GameEntry game)
     {
-        if (_services.Settings.Current.PauseDownloadsWhilePlaying)
+        // Only a game holds downloads: an application or tool started from the Library does not.
+        if (_services.Settings.Current.PauseDownloadsWhilePlaying && HoldsDownloads(game))
             _services.Launcher.Hold(Playing, $"Downloads are paused while you play {game.Title}.");
     }
 
     private void OnGameEnded(GameEntry game)
     {
         // Another game may still run; the next tick releases once none does.
-        if (!_services.Launcher.AnyGameRunning) _services.Launcher.Release(Playing);
+        if (!GamePlaying()) _services.Launcher.Release(Playing);
+    }
+
+    /// <summary>A game Exo started still runs or starts (an application or tool it started does not count).</summary>
+    private bool GamePlaying() => _services.Launcher.AnyRunning(HoldsDownloads);
+
+    /// <summary>
+    /// Whether playing this pauses downloads: a game does; what Steam calls an application, a tool, a soundtrack or a video
+    /// (Wallpaper Engine, a benchmark, an editor), started from the Library, does not. Store apps, Exo's own windows and
+    /// programs opened outside Exo never reach here: only Exo's own Play raises GameLaunched.
+    /// </summary>
+    internal static bool HoldsDownloads(GameEntry game) =>
+        game.Store != StoreKind.Steam ||
+        (game.SteamAppType?.Trim().ToLowerInvariant() ?? "") is not ("application" or "tool" or "config" or "music" or "video"
+            or "series" or "episode" or "hardware" or "advertising" or "dedicated server" or "dedicatedserver" or "dedicated_server");
+
+    private void CheckAccounts()
+    {
+        try { _services.Launcher.CheckDownloadAccounts(); }
+        catch (Exception ex) { AppLog.Debug("Download account check failed: " + ex.Message); }
     }
 
     private void Tick()
@@ -58,7 +84,7 @@ internal sealed class DownloadPolicy : IDisposable
         try
         {
             var settings = _services.Settings.Current;
-            if (!_services.Launcher.AnyGameRunning) _services.Launcher.Release(Playing);
+            if (!GamePlaying()) _services.Launcher.Release(Playing);
             ApplyHours(settings);
             if (settings.AutoUpdateGames) SweepUpdates();
             if (settings.AutoUpdateChipset) UpdateChipset();
@@ -97,7 +123,8 @@ internal sealed class DownloadPolicy : IDisposable
         _lastUpdateSweep = DateTime.UtcNow;
         var paused = launcher.PausedDownloads.Select(p => p.GameId).ToHashSet(StringComparer.OrdinalIgnoreCase);
         var due = _services.Library.PeekCachedLibrary()
-            .Where(g => g.Installed && g.UpdateAvailable && LaunchOrchestrator.ExoDownloads(g.Store) && !paused.Contains(g.Id))
+            .Where(g => g.Installed && g.UpdateAvailable && LaunchOrchestrator.ExoDownloads(g.Store) && !paused.Contains(g.Id) &&
+                        !_services.Settings.AutoUpdateOff(g.Id))
             .ToList();
         if (due.Count == 0) return;
         AppLog.Info($"Auto-update while idle: {due.Count} game(s): {string.Join(", ", due.Select(g => g.Title))}");
@@ -127,6 +154,6 @@ internal sealed class DownloadPolicy : IDisposable
 
     public void Dispose()
     {
-        lock (_gate) { _tick?.Dispose(); _tick = null; }
+        lock (_gate) { _tick?.Dispose(); _tick = null; _accounts?.Dispose(); _accounts = null; }
     }
 }
