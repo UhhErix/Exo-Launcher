@@ -84,6 +84,8 @@ import { useShellLayout } from './shell/useShellLayout'
 import { useShelves } from './shell/useShelves'
 import { SETTINGS_SEARCH, type SettingsSectionId } from '../lib/settingsSections'
 import { openCaptures, useCapturesSheet } from '../lib/capture'
+import { suppressHover } from '../lib/hoverGate'
+import { clearDialogOpener } from './ui/Dialog'
 import { pageGet, pageSet } from '../lib/pageStore'
 import { runNoteCommand, useNoteCommands, watchNotesOpen } from '../lib/notes'
 
@@ -590,8 +592,14 @@ export function LauncherApp() {
     })
   }, [closeGamePage])
   const viewRequestedAt = useRef(0)
+  useEffect(() => {
+    suppressHover()
+    clearDialogOpener()
+  }, [view, libraryPane])
   const goToView = useCallback((next: View, morph?: Morph, alongside?: () => void): Promise<void> => {
     viewRequestedAt.current = performance.now()
+    suppressHover()
+    clearDialogOpener()
     closeGamePage()
     if (next === view) {
       // Back to the room you are in while another is still being built: that is a change of mind, not a wait.

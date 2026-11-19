@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import { host, onHostEvent } from '../../lib/host'
 import { MUSIC_LINK, takeMusicLink, type MusicPlayback, type MusicService } from '../../lib/music'
+import { coverArtForTrack } from '../../lib/musicCover'
 import { onScreen, pane, pressedArt, transition, visible, type Morph } from '../../lib/viewTransition'
 import type { MusicAdapter } from '../../lib/musicAdapters'
 import type { PlayerCard, PlayerOption, PlayerState, PlayerView, PlayerViewData, PlayerViewOptions } from '../../lib/player'
@@ -72,11 +73,8 @@ export function MusicPlayer({ adapter, service, active, nowPlaying }: { adapter:
     if (shouldReduceMotion()) { void transition(update, { kind: 'fade' }).then(landed); return }
     const small = () => visible('.exo-music-now > .exo-music-art') ?? visible('.exo-music-bar-art')
     const big = () => visible('.exo-music-immersive-art')
-    const room = () => visible('.exo-music')
-    const stage = () => visible('.exo-music-immersive')
     void transition(update, { kind: 'morph', back: !next, morph: [
       { name: 'exo-music-now', from: next ? small() : big(), to: next ? big : small, reshape: true },
-      { name: 'exo-music-immersive', from: next ? room() : stage(), to: next ? stage : room },
     ] }).then(landed)
   }, [])
 
@@ -223,7 +221,7 @@ export function MusicPlayer({ adapter, service, active, nowPlaying }: { adapter:
           onChanged={() => void readPlayer()} />
         {sheet ? <PlaylistSheet edit={sheet} onClose={() => setSheet(null)} /> : null}
       </main>
-      {immersive && !reveal.covered ? <Immersive player={player} live={live} active={active} onLeave={() => goImmersive(false)} onChanged={() => void readPlayer()} /> : null}
+      {immersive && !reveal.covered ? <Immersive player={player} live={live} volume={volume.level} onVolume={readVolume} active={active} onLeave={() => goImmersive(false)} onChanged={() => void readPlayer()} /> : null}
     </PlayerContext.Provider>
   )
 }
@@ -647,7 +645,7 @@ function PlayerBar({ playback, player, panel, volume, onVolume, onImmersive, onP
   return (
     <footer ref={glass} className="exo-glass exo-music-bar">
       <div className="exo-music-bar-song">
-        <Art className="exo-music-bar-art" src={player?.image || playback?.artworkDataUrl || undefined} />
+        <Art className="exo-music-bar-art" src={coverArtForTrack(player, playback)} />
         <span className="exo-music-row-text">
           <span className="exo-music-row-title">{playback?.title || player?.title || 'Nothing playing'}</span>
           {failed ? <ErrorNote as="span" className="exo-music-row-sub is-failed" message={failed} /> : <span className="exo-music-row-sub">{playback?.artist}</span>}

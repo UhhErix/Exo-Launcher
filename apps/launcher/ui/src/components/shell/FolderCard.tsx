@@ -129,7 +129,6 @@ export const FolderCard = memo(function FolderCard({ tile, tabIndex, position, s
             <span ref={flap} className="exo-glass exo-folder-flap">
               <span className="exo-folder-light" />
               <span className="exo-folder-label">{tile.title}</span>
-              <span className="exo-folder-count">{games.length} {games.length === 1 ? 'game' : 'games'}</span>
             </span>
           </span>
         </div>

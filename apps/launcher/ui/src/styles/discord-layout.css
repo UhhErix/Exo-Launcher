@@ -952,7 +952,8 @@ html[data-exo-motion="reduce"] .exo-dc-band-place {
 }
 
 :root:root .exo-dc .exo-dc-channels .exo-dc-item.is-muted:not([aria-current="true"]) {
-  opacity: 0.55;
+  color: color-mix(in srgb, var(--color-muted) 70%, #000);
+  opacity: 1;
 }
 
 @media (hover: hover) and (pointer: fine) {

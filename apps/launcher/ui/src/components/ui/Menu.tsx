@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent, type ReactNode, type RefObject } from 'react'
 import { cn } from '../../lib/cn'
+import { useDismissOnAncestorScroll } from '../../lib/dismiss'
 import { ConfirmLabel, useConfirmInPlace } from './ConfirmButton'
 
 /** section: a heading over the items that share it (macOS menus); on: this item's own check, for a menu
@@ -131,6 +132,7 @@ export function Menu({ label, anchor, offset, triggerClassName, trigger, classNa
     if (menuRef.current?.matches(':popover-open')) menuRef.current.hidePopover()
     if (returnFocus) triggerRef.current?.focus()
   }
+  useDismissOnAncestorScroll(open, triggerRef, menuRef, () => hide(false))
   async function choose(item: MenuItem) {
     const menu = menuRef.current
     if (item.instant && menu) menu.style.transition = 'none'

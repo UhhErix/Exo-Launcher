@@ -182,6 +182,11 @@
   white-space: nowrap;
 }
 
+/* Callouts at the top carry safety notes (counts, drivers): wrap cleanly instead of truncating across adjacent controls. */
+.exo-apps-ready-row .exo-apps-detail {
+  white-space: normal;
+}
+
 .exo-apps-used,
 .exo-apps-size {
   color: var(--exo-glass-panel-secondary);
@@ -197,8 +202,7 @@
 .exo-apps-act {
   display: flex;
   justify-content: flex-end;
-  opacity: 0;
-  transition: opacity var(--dur-quick) var(--ease-out);
+  visibility: hidden;
 }
 
 .exo-apps-row:hover .exo-apps-act,
@@ -206,7 +210,7 @@
 .exo-apps-row.is-kept .exo-apps-act,
 .exo-apps-act:has([data-exo-armed]),
 .exo-apps-act:has(.exo-action:not([data-action="idle"])) {
-  opacity: 1;
+  visibility: visible;
 }
 
 .exo-apps-error {
