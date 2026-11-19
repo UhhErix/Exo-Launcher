@@ -218,14 +218,17 @@ address: every URL the Worker hands out is on it, and GitHub is asked by the Wor
 **The newest release.** `GET https://api.github.com/repos/UhhErix/Exo-Launcher/releases/latest` (public, no token), at most
 once every five minutes across all of Cloudflare: R2 `_github/launcher.json` holds when GitHub was last asked, its ETag (the
 next ask is conditional, and GitHub doesn't count a 304 against its limit of 60 an hour per address) and the release it named;
-each edge keeps that answer five minutes, and past them answers with it once more while it asks again in the background. A
-failed ask counts as a check too, so a GitHub outage is not hammered. Drafts, pre-releases and tags that aren't `vX.Y.Z` are
+each edge keeps that answer five minutes, and past them answers with it once more while it asks again in the background. Only
+the request holding the lease `_github/launcher.lease` (an R2 conditional write, taken over after 30 seconds) asks; the others
+answer with the last release, so many edges at once still make one request. A failed ask counts as a check too, so a GitHub
+outage is not hammered. Drafts, pre-releases and tags that aren't `vX.Y.Z` are
 never a release.
 
 **Offering it.** When GitHub names a newer tag than `launcher/latest.json`, the Worker checks it and writes it (`promote`):
 
 - `ExoLauncher-<version>-Setup.exe` (or `ExoLauncher-Setup.exe`) and its `.sha256` are attached; the `.sha256` names the
-  installer and its hash, and GitHub's own size and SHA-256 for the installer (the asset's `digest`) agree with it;
+  installer and its hash, and GitHub's own size and SHA-256 for the installer (the asset's `digest`) agree with it (a release
+  whose installer has no digest is refused: that is the one check that doesn't come from the release's own files);
 - the tag's `apps/launcher/VERSION` (read through raw.githubusercontent.com at the tag) is the version, and its `CHANGELOG.md`
   has the `## <version>` entry;
 - What's New is the release's `whats-new.json` asset (held to GitHub's digest), else the version's entry in the tag's
@@ -236,8 +239,9 @@ never a release.
 
 Then it writes `launcher/<tag>/ExoLauncher-Setup.exe.sha256` (`"<hash>  ExoLauncher-Setup.exe"`, the name the app asks for),
 `whats-new.json` and `files.json`, each only if R2 doesn't hold it already (a tag's files are never replaced; a `.sha256` there
-that names another hash refuses the release), then `launcher/CHANGELOG.md` and last `launcher/latest.json`, read again just
-before the write so it never moves to an older tag. Any failed check leaves the mirror's release offered, with a warning.
+that names another hash refuses the release), then `launcher/latest.json`, written only if it is still the copy just read (an
+R2 conditional write on its ETag; otherwise it reads again and compares), so two promotions at once never move it to the older
+tag; then `launcher/CHANGELOG.md`, unless the one there is for a newer tag (its `customMetadata.tag`). Any failed check leaves the mirror's release offered, with a warning.
 The offered version never moves backwards: to pull a bad release, publish a fixed newer one.
 
 **The installer and the pack.** They are copied from the release into R2 (`fill`): when a release is first offered (in the
@@ -253,8 +257,10 @@ download never makes the Worker hold the rest of a 200 MB file in memory.
 doesn't hold for a tag GitHub can't be asked about answers 404 (`no-store`).
 
 **The card.** The first request that offers a new release posts its Discord card (`announce.js`, once per tag), and
-`.github/workflows/announce-release.yml` asks for it on publish too (the announce route reads GitHub first, so the release is
-offered within seconds); whichever comes first posts it.
+`.github/workflows/announce-release.yml` asks for it on publish too (the announce route asks GitHub when it wasn't asked in the
+last 30 seconds, so the workflow's retries find the release within a minute); whichever comes first posts it. A promotion leaves
+`_github/announce/<tag>` until Discord has the card, so a card Discord refused is asked for again on every cron tick. A launcher
+build put into the mirror by hand has no marker: its card stays `publish-release.ps1`'s (`-NoAnnounce` included).
 
 **File-level update (`files.json`, `files.pack`).** The app reads `files.filesJson` from `/v1/launcher/latest`, then asks
 `/v1/launcher/download/<tag>/files.pack` for one byte range per changed file. `files.json` is served whole; its format is the
@@ -274,8 +280,10 @@ cron), so deploy from a local copy with the live settings: bucket `exo-releases`
 `workers_dev = true`, cron `*/15 * * * *`. The Discord secrets stay on the Worker across deploys. Exo Cinema's releases and its
 `CHANGELOG.md` must be in the bucket before a Worker that serves them is deployed; Exo Launcher's come from GitHub.
 
-Last deployed: version `b6b10016-b31e-4ebe-a506-4fd02af10a65` (2026-11-19, the GitHub reader, `src/github.js`; the version before
-it, `365af797-4e64-4299-9b3b-42edfa87cbb2` of 2026-11-14, is the code of `021b878`, byte for byte). Checked live after it:
+Last deployed: version `652941e4-e735-402c-9870-fa5fb1b84cf8` (2026-11-19, the GitHub reader, `src/github.js`, with the
+review's fixes: the check lease, the conditional pointer write, the owed card, the required installer digest). It replaced
+`b6b10016-b31e-4ebe-a506-4fd02af10a65` of the same day (the reader without those fixes), which replaced
+`365af797-4e64-4299-9b3b-42edfa87cbb2` of 2026-11-14 (the code of `021b878`, byte for byte). Checked live after each:
 `/v1/launcher/latest` byte-identical to before (v3.26.0, the same ETag, a 304 for it, also on the workers.dev name); the installer
 by HEAD and GET (200, 212,673,653 bytes, SHA-256 `4dab24d7…a0b8`, the same R2 ETag), a byte range with `If-Range` (206, the same
 bytes), the `.sha256`, `whats-new.json` (18 items) and `/v1/launcher/changelog` byte-identical; `/v1/cinema/latest` and

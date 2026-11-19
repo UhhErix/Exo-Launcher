@@ -22,6 +22,9 @@ const HEADERS = { 'user-agent': 'exo-updates (+https://getexo.app)', 'x-github-a
 export const CHECK_SECONDS = 300
 /** The check's state: when GitHub was last asked, its ETag, and the release it named. */
 export const STATE_KEY = '_github/launcher.json'
+/** One edge at a time asks GitHub: the others answer with the last release meanwhile. A lease older than this is taken over. */
+const LEASE_KEY = '_github/launcher.lease'
+const LEASE_SECONDS = 30
 /** Each edge keeps the check's answer this long before it reads STATE_KEY again; past it, the old answer still serves once. */
 const EDGE_KEY = 'https://exo-updates.internal/github/launcher?v=1'
 const RELEASE_KEY = (tag) => `https://exo-updates.internal/github/launcher/${tag}?v=1`
@@ -118,47 +121,78 @@ export function assetsOf(release) {
  * CHECK_SECONDS and then serves it once more while it asks again in the background (stale-while-revalidate); R2 holds the
  * time GitHub was last asked, so all edges together ask about once every CHECK_SECONDS.
  */
-export async function latestRelease(env, ctx, { force = false } = {}) {
+export async function latestRelease(env, ctx, { maxAge = CHECK_SECONDS } = {}) {
   const cache = globalThis.caches?.default
-  if (!force && cache) {
+  if (cache) {
     const kept = await cache.match(EDGE_KEY).then((r) => r?.json()).catch(() => null)
     if (kept && typeof kept.at === 'number') {
-      if (now() - kept.at < CHECK_SECONDS * 1000) return kept.release ?? null
-      ctx?.waitUntil?.(checkGitHub(env, ctx, false).catch(() => {}))
-      return kept.release ?? null
-    }
-  }
-  return checkGitHub(env, ctx, force)
-}
-
-async function checkGitHub(env, ctx, force) {
-  const state = await readJson(env.MIRROR, STATE_KEY)
-  let release = state?.release ?? null
-  if (force || !(typeof state?.checkedAt === 'number' && now() - state.checkedAt < CHECK_SECONDS * 1000)) {
-    const response = await ask(`${API}/repos/${REPO}/releases/latest`, {
-      headers: { accept: 'application/vnd.github+json', ...(state?.etag ? { 'if-none-match': state.etag } : {}) },
-    })
-    let etag = state?.etag ?? null
-    if (response?.status === 200) {
-      const bytes = await bytesOf(response, LIMITS.release).catch(() => null)
-      let parsed = null
-      try {
-        parsed = bytes ? compactRelease(JSON.parse(text(bytes))) : null
-      } catch {}
-      if (parsed) {
-        release = parsed
-        etag = response.headers.get('etag')
+      if (now() - kept.at < maxAge * 1000) return kept.release ?? null
+      if (maxAge === CHECK_SECONDS) {
+        ctx?.waitUntil?.(checkGitHub(env, ctx, maxAge).catch(() => {}))
+        return kept.release ?? null
       }
     }
-    // A failed ask still counts as a check: GitHub is not asked again for CHECK_SECONDS, and the last release stands.
-    await env.MIRROR.put(STATE_KEY, JSON.stringify({ checkedAt: now(), etag, release, ok: response?.status === 200 || response?.status === 304 }))
-      .catch(() => {})
+  }
+  return checkGitHub(env, ctx, maxAge)
+}
+
+/**
+ * Takes the lease on asking GitHub (R2 conditional writes, so only one request holds it), or false when another request
+ * holds a fresh one.
+ */
+async function takeLease(mirror) {
+  const body = JSON.stringify({ at: now() })
+  if (await mirror.put(LEASE_KEY, body, { onlyIf: { etagDoesNotMatch: '*' } }).catch(() => null)) return true
+  const held = await mirror.get(LEASE_KEY).catch(() => null)
+  if (!held) return false
+  const at = await held.json().then((lease) => lease?.at).catch(() => null)
+  if (typeof at === 'number' && now() - at < LEASE_SECONDS * 1000) return false
+  return Boolean(await mirror.put(LEASE_KEY, body, { onlyIf: { etagMatches: held.etag } }).catch(() => null))
+}
+
+async function checkGitHub(env, ctx, maxAge) {
+  const state = await readJson(env.MIRROR, STATE_KEY)
+  let release = state?.release ?? null
+  const due = !(typeof state?.checkedAt === 'number' && now() - state.checkedAt < maxAge * 1000)
+  if (due && !(await takeLease(env.MIRROR))) return release // another request is asking; the next one reads its answer
+  if (due) {
+    try {
+      // Read again under the lease: a request that held it a moment ago may have just asked.
+      const fresh = await readJson(env.MIRROR, STATE_KEY)
+      release = typeof fresh?.checkedAt === 'number' && now() - fresh.checkedAt < maxAge * 1000 ? fresh.release ?? null : await askGitHub(env, fresh)
+    } finally {
+      await env.MIRROR.delete(LEASE_KEY).catch(() => {})
+    }
   }
   const cache = globalThis.caches?.default
   if (cache) {
     const put = cache.put(EDGE_KEY, new Response(JSON.stringify({ at: now(), release }), { headers: { 'cache-control': 'max-age=86400' } }))
     ctx?.waitUntil ? ctx.waitUntil(put.catch(() => {})) : await put.catch(() => {})
   }
+  return release
+}
+
+/** One conditional ask for the newest release; the state it leaves in R2 names the release (the old one when the ask failed). */
+async function askGitHub(env, state) {
+  let release = state?.release ?? null
+  const response = await ask(`${API}/repos/${REPO}/releases/latest`, {
+    headers: { accept: 'application/vnd.github+json', ...(state?.etag ? { 'if-none-match': state.etag } : {}) },
+  })
+  let etag = state?.etag ?? null
+  if (response?.status === 200) {
+    const bytes = await bytesOf(response, LIMITS.release).catch(() => null)
+    let parsed = null
+    try {
+      parsed = bytes ? compactRelease(JSON.parse(text(bytes))) : null
+    } catch {}
+    if (parsed) {
+      release = parsed
+      etag = response.headers.get('etag')
+    }
+  }
+  // A failed ask still counts as a check: GitHub is not asked again for CHECK_SECONDS, and the last release stands.
+  await env.MIRROR.put(STATE_KEY, JSON.stringify({ checkedAt: now(), etag, release, ok: response?.status === 200 || response?.status === 304 }))
+    .catch(() => {})
   return release
 }
 
@@ -229,7 +263,7 @@ async function check(name, bytes) {
  * The release's manifest (schema 2, the shape publish-release.ps1 writes), with its small files in R2 under
  * launcher/<tag>/. Returns { manifest } or { error } (a reason for the log). Checks, in order:
  *   - the installer and its .sha256 are attached; the .sha256 names the installer's SHA-256, and GitHub's own digest and
- *     size for the installer agree with it (GitHub records a SHA-256 for every upload);
+ *     size for the installer agree with it (GitHub records a SHA-256 for every upload; a release without one is refused);
  *   - the tag's apps/launcher/VERSION is the tag's version;
  *   - What's New: the release's whats-new.json asset (held to GitHub's digest), else the version's entry in the tag's
  *     ui/src/lib/whatsNew.json;
@@ -244,10 +278,12 @@ export async function materialize(release, env) {
   const assets = assetsOf(release)
   if (!assets.setup || !assets.sha256) return { error: `${tag} has no installer and .sha256 attached` }
   if (assets.setup.size <= 0 || assets.setup.size > MAX_FILE_BYTES) return { error: `${tag}'s installer size is out of range` }
+  // GitHub's own SHA-256 of the upload is the check that doesn't come from the release's files: no digest, no release.
+  if (!assets.setup.sha256) return { error: `GitHub recorded no SHA-256 for ${tag}'s installer` }
   const shaBytes = await assetBytes(assets.sha256, LIMITS.sha256)
   const hash = shaBytes ? parseSha256File(text(shaBytes), [assets.setup.name, NAMES.setup]) : null
   if (!hash) return { error: `${tag}'s .sha256 could not be read or does not name the installer` }
-  if (assets.setup.sha256 && assets.setup.sha256 !== hash) return { error: `${tag}'s .sha256 is not GitHub's digest of the installer` }
+  if (assets.setup.sha256 !== hash) return { error: `${tag}'s .sha256 is not GitHub's digest of the installer` }
 
   // What the apps read is "<hash>  ExoLauncher-Setup.exe", as Build-Release writes it: the name the app asks for.
   const prefix = `launcher/${tag}/`
@@ -322,13 +358,17 @@ async function deltaFiles(assets, tag) {
   return { list, packSha256 }
 }
 
+/** A release the Worker promoted and whose card is not posted yet (worker.js announcePending). */
+export const PENDING_CARD = (tag) => `_github/announce/${tag}`
+
 /**
  * The newest release for launcher/latest.json: GitHub's, when it is newer than the mirror's and checks out (then it is
- * written, with launcher/CHANGELOG.md, and onPromoted runs); else the mirror's own. Never moves to an older tag.
- * Returns { manifest, promoted } with manifest null when neither has one.
+ * written, with launcher/CHANGELOG.md); else the mirror's own. Never moves to an older tag: the pointer is written only
+ * if it is still the copy just read (an R2 conditional write), and read again when it isn't. Returns
+ * { manifest, promoted, release } with manifest null when neither has one.
  */
-export async function promote(env, ctx, { current, force = false } = {}) {
-  const release = await latestRelease(env, ctx, { force })
+export async function promote(env, ctx, { current, maxAge = CHECK_SECONDS } = {}) {
+  const release = await latestRelease(env, ctx, { maxAge })
   if (!release || (current && !newer(release.tag, current.tag))) return { manifest: current ?? null, promoted: false }
   const { manifest, error } = await materialize(release, env)
   if (!manifest) {
@@ -341,12 +381,40 @@ export async function promote(env, ctx, { current, force = false } = {}) {
     console.warn(`GitHub release not offered: CHANGELOG.md at ${release.tag} has no ${version} entry.`)
     return { manifest: current ?? null, promoted: false }
   }
-  // Read again just before the write: another request may have promoted the same or a newer tag meanwhile.
-  const again = await readJson(env.MIRROR, 'launcher/latest.json')
-  if (again && typeof again.tag === 'string' && TAG.test(again.tag) && !newer(release.tag, again.tag)) return { manifest: again, promoted: false }
-  await env.MIRROR.put('launcher/CHANGELOG.md', changelog, { httpMetadata: { contentType: 'text/markdown; charset=utf-8' } })
-  await env.MIRROR.put('launcher/latest.json', JSON.stringify(manifest), { httpMetadata: { contentType: 'application/json' } })
-  return { manifest, promoted: true, release }
+  const mirror = env.MIRROR
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const object = await mirror.get('launcher/latest.json')
+    const seen = object ? await object.json().catch(() => null) : null
+    if (seen && typeof seen.tag === 'string' && TAG.test(seen.tag) && !newer(release.tag, seen.tag)) return { manifest: seen, promoted: false }
+    const written = await mirror.put('launcher/latest.json', JSON.stringify(manifest), {
+      httpMetadata: { contentType: 'application/json' },
+      onlyIf: object ? { etagMatches: object.etag } : { etagDoesNotMatch: '*' },
+    })
+    if (!written) continue // another request wrote the pointer meanwhile: compare with what it wrote
+    await mirror.put(PENDING_CARD(release.tag), '{}').catch(() => {})
+    await writeChangelog(mirror, release.tag, changelog)
+    return { manifest, promoted: true, release }
+  }
+  return { manifest: current ?? null, promoted: false }
+}
+
+/**
+ * launcher/CHANGELOG.md for tag, unless the one there is already for a newer tag (its customMetadata names the tag it is
+ * for), with the same conditional write as the pointer, so the change list never ends up older than the release offered.
+ */
+async function writeChangelog(mirror, tag, bytes) {
+  const key = 'launcher/CHANGELOG.md'
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const head = await mirror.head(key).catch(() => null)
+    const kept = head?.customMetadata?.tag
+    if (typeof kept === 'string' && TAG.test(kept) && !newer(tag, kept)) return
+    const written = await mirror.put(key, bytes, {
+      httpMetadata: { contentType: 'text/markdown; charset=utf-8' },
+      customMetadata: { tag },
+      onlyIf: head ? { etagMatches: head.etag } : { etagDoesNotMatch: '*' },
+    }).catch(() => null)
+    if (written) return
+  }
 }
 
 /**

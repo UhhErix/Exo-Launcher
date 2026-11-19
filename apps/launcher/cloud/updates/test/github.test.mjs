@@ -24,7 +24,9 @@ const DL = (tag, name) => `https://github.com/${REPO}/releases/download/${tag}/$
 /** R2 as the Worker sees it. strict: put's sha256 option is enforced, as R2 does; lax stands in for an R2 that missed it. */
 function r2({ strict = true } = {}) {
   const objects = new Map()
+  const metas = new Map()
   const writes = []
+  const etagOf = (bytes) => sha(bytes).slice(0, 32)
   const object = (key, bytes, range) => {
     let part = bytes
     let r
@@ -43,7 +45,7 @@ function r2({ strict = true } = {}) {
       }
     }
     return {
-      key, size: bytes.length, httpEtag: `"${sha(bytes).slice(0, 32)}"`, range: r,
+      key, size: bytes.length, etag: etagOf(bytes), httpEtag: `"${etagOf(bytes)}"`, range: r, customMetadata: metas.get(key) ?? {},
       checksums: { sha256: Buffer.from(sha(bytes), 'hex') },
       body: new Blob([part]).stream(),
       writeHttpMetadata: (h) => h.set('content-type', key.endsWith('.json') ? 'application/json' : 'application/octet-stream'),
@@ -53,7 +55,7 @@ function r2({ strict = true } = {}) {
     }
   }
   return {
-    objects, writes,
+    objects, writes, metas,
     set: (key, value) => objects.set(key, typeof value === 'string' ? enc(value) : value),
     text: (key) => (objects.has(key) ? new TextDecoder().decode(objects.get(key)) : null),
     get: async (key, options) => {
@@ -65,15 +67,17 @@ function r2({ strict = true } = {}) {
     head: async (key) => (objects.has(key) ? { ...object(key, objects.get(key)), body: undefined } : null),
     put: async (key, value, options = {}) => {
       if (options.onlyIf?.etagDoesNotMatch === '*' && objects.has(key)) return null
+      if (options.onlyIf?.etagMatches !== undefined && (!objects.has(key) || etagOf(objects.get(key)) !== options.onlyIf.etagMatches)) return null
       let bytes
       if (value instanceof ReadableStream) bytes = new Uint8Array(await new Response(value).arrayBuffer())
       else bytes = typeof value === 'string' ? enc(value) : new Uint8Array(value)
       if (strict && options.sha256 && sha(bytes) !== options.sha256) throw new Error('put: The SHA-256 checksum you specified did not match')
       objects.set(key, bytes)
+      metas.set(key, options.customMetadata ?? {})
       writes.push(key)
       return object(key, bytes)
     },
-    delete: async (key) => { objects.delete(key) },
+    delete: async (key) => { objects.delete(key); metas.delete(key) },
     list: async ({ prefix }) => ({ objects: [...objects.keys()].filter((k) => k.startsWith(prefix)).map((key) => ({ key })) }),
   }
 }
@@ -200,7 +204,7 @@ async function ask(path, env, init = {}) {
   await ctx.settle()
   return { response, bytes, json: () => JSON.parse(new TextDecoder().decode(bytes)) }
 }
-const apiAsks = () => gh.asked.filter((a) => a.url.startsWith('https://api.github.com/')).length
+const apiAsks = () => gh.asked.filter((a) => new URL(a.url).hostname === 'api.github.com').length
 beforeEach(() => {
   clock = 1_800_000_000_000
   Date.now = () => clock
@@ -262,6 +266,7 @@ test('a release GitHub\'s own record contradicts, or a tag without its notes, VE
     'VERSION is another version': () => ({ latest: release('v3.27.0'), trees: { 'v3.27.0': { ...tree('3.27.0'), VERSION: '3.26.9' } } }),
     'no What\'s New entry': () => ({ latest: release('v3.27.0'), trees: { 'v3.27.0': { ...tree('3.27.0'), 'ui/src/lib/whatsNew.json': '[]' } } }),
     'no changelog entry': () => ({ latest: release('v3.27.0'), trees: { 'v3.27.0': tree('3.27.0', { changelog: '## 3.26.0 — x\n' }) } }),
+    'GitHub recorded no SHA-256 for the installer': () => ({ latest: release('v3.27.0', { digests: ['ExoLauncher-3.27.0-Setup.exe.sha256'] }), trees: { 'v3.27.0': tree('3.27.0') } }),
     'no installer attached': () => ({ latest: { ...release('v3.27.0'), json: { ...release('v3.27.0').json, assets: [] } }, trees: { 'v3.27.0': tree('3.27.0') } }),
   }
   for (const [name, setup] of Object.entries(cases)) {
@@ -295,7 +300,7 @@ test('the same tag as the mirror\'s is answered from the mirror unchanged (3.26.
   assert.equal(json().tag, 'v3.26.0')
   assert.equal(mirror.text('launcher/latest.json'), before)
   assert.equal(JSON.parse(mirror.text('launcher/v3.26.0/whats-new.json')).items.length, 1)
-  assert.ok(!gh.asked.some((a) => a.url.includes('raw.githubusercontent.com')))
+  assert.ok(!gh.asked.some((a) => new URL(a.url).hostname === 'raw.githubusercontent.com'))
 })
 
 test('never replace: a tag whose .sha256 the mirror already holds with another hash is refused', async () => {
@@ -335,7 +340,7 @@ test('past five minutes the edge answers with what it has and asks again in the 
   // The 60 s answer copy has expired at this edge, and its GitHub check is stale: it answers, and asks in the background.
   const { json } = await ask('/v1/launcher/latest', { MIRROR: mirror })
   assert.equal(json().tag, 'v3.26.0')
-  const last = gh.asked.filter((a) => a.url.startsWith('https://api.github.com/')).at(-1)
+  const last = gh.asked.filter((a) => new URL(a.url).hostname === 'api.github.com').at(-1)
   assert.equal(apiAsks(), 2)
   assert.equal(last.inm, '"rel-1"')
 })
@@ -562,7 +567,7 @@ test('the first sight of a new release posts its card once; later polls and the 
   const state = github({ latest: release('v3.27.0'), trees: { 'v3.27.0': tree('3.27.0') } })
   const posted = []
   globalThis.fetch = async (url, init) => {
-    if (String(url).startsWith('https://discord.com/')) {
+    if (new URL(String(url)).hostname === 'discord.com') {
       posted.push({ url: String(url), method: init?.method, body: init?.body })
       return Response.json({ id: '123456789012345678' })
     }
@@ -612,4 +617,115 @@ test('drafts, pre-releases and tags that are not vX.Y.Z are never a release; ass
   assert.equal(compactRelease({ ...base, tag_name: 'v3.27.0-beta' }), null)
   const moved = compactRelease({ ...base, assets: base.assets.map((a) => ({ ...a, browser_download_url: 'https://example.com/' + a.name })) })
   assert.deepEqual(moved.assets, {})
+})
+
+// ---- races and retries ----------------------------------------------------------------------------------------------
+test('two promotions at once never move the pointer backwards, and the change list stays the newest one\'s', async () => {
+  const mirror = r2()
+  seed(mirror, 'v3.26.0')
+  use(github({ latest: release('v3.27.0'), trees: { 'v3.27.0': tree('3.27.0') } }))
+  // Another request promotes v3.28.0 between this one's read of the pointer and its write.
+  const put = mirror.put
+  let raced = false
+  mirror.put = async (key, value, options) => {
+    if (key === 'launcher/latest.json' && !raced) {
+      raced = true
+      const newer = JSON.parse(mirror.text('launcher/latest.json'))
+      Object.assign(newer, { tag: 'v3.28.0', version: '3.28.0' })
+      await put(key, JSON.stringify(newer))
+      await put('launcher/CHANGELOG.md', '## 3.28.0 — x\n', { customMetadata: { tag: 'v3.28.0' } })
+    }
+    return put(key, value, options)
+  }
+  const { json } = await ask('/v1/launcher/latest', { MIRROR: mirror })
+  assert.equal(json().tag, 'v3.28.0')
+  assert.equal(JSON.parse(mirror.text('launcher/latest.json')).tag, 'v3.28.0')
+  assert.equal(mirror.text('launcher/CHANGELOG.md'), '## 3.28.0 — x\n')
+})
+
+test('an older change list is never written over a newer one\'s', async () => {
+  const mirror = r2()
+  seed(mirror, 'v3.26.0')
+  mirror.set('launcher/CHANGELOG.md', '## 3.28.0 — x\n')
+  mirror.metas.set('launcher/CHANGELOG.md', { tag: 'v3.28.0' })
+  use(github({ latest: release('v3.27.0'), trees: { 'v3.27.0': tree('3.27.0') } }))
+  await ask('/v1/launcher/latest', { MIRROR: mirror })
+  assert.equal(JSON.parse(mirror.text('launcher/latest.json')).tag, 'v3.27.0')
+  assert.equal(mirror.text('launcher/CHANGELOG.md'), '## 3.28.0 — x\n')
+})
+
+test('many cold edges at once ask GitHub once: the others answer with the last release while one holds the lease', async () => {
+  const mirror = r2()
+  seed(mirror, 'v3.26.0')
+  use(github({ latest: release('v3.26.0') }))
+  const answers = await Promise.all(Array.from({ length: 8 }, async () => {
+    const ctx = context()
+    const response = await worker.fetch(new Request(ORIGIN + '/v1/launcher/latest'), { MIRROR: mirror }, ctx)
+    await ctx.settle()
+    return (await response.json()).tag
+  }))
+  assert.deepEqual([...new Set(answers)], ['v3.26.0'])
+  assert.equal(apiAsks(), 1)
+  assert.ok(!mirror.objects.has('_github/launcher.lease'), 'the lease is released')
+  // A lease left by a request that died is taken over after 30 seconds.
+  clock += (CHECK_SECONDS + 1) * 1000
+  mirror.set('_github/launcher.lease', JSON.stringify({ at: clock }))
+  edge()
+  await ask('/v1/launcher/latest', { MIRROR: mirror })
+  assert.equal(apiAsks(), 1, 'a fresh lease: not asked')
+  clock += 31_000
+  edge()
+  await ask('/v1/launcher/latest', { MIRROR: mirror })
+  assert.equal(apiAsks(), 2)
+})
+
+test('the announce route asks GitHub if it was not asked in the last 30 seconds, so the workflow need not wait five minutes', async () => {
+  const mirror = r2()
+  seed(mirror, 'v3.26.0')
+  const state = github({ latest: release('v3.26.0'), trees: { 'v3.27.0': tree('3.27.0') } })
+  use(state)
+  await ask('/v1/launcher/latest', { MIRROR: mirror })
+  state.latest = release('v3.27.0')
+  state.etag = '"rel-2"'
+  clock += 40_000
+  const response = await ask('/v1/launcher/announce', { MIRROR: mirror }, { method: 'POST', body: JSON.stringify({ tag: 'v3.27.0' }) })
+  assert.equal(response.json().status, 'no-webhook')
+  assert.equal(JSON.parse(mirror.text('launcher/latest.json')).tag, 'v3.27.0')
+})
+
+test('a card Discord refused is asked for again on the next cron tick, once; a release put in by hand gets none from the cron', async () => {
+  const mirror = r2()
+  seed(mirror, 'v3.26.0')
+  const state = github({ latest: release('v3.27.0'), trees: { 'v3.27.0': tree('3.27.0') } })
+  gh = state
+  let discordUp = false
+  const posted = []
+  globalThis.fetch = async (url, init) => {
+    if (new URL(String(url)).hostname === 'discord.com') {
+      if (!discordUp) return new Response('bad gateway', { status: 502 })
+      if (init?.method === 'POST') posted.push(String(url))
+      return Response.json({ id: '123456789012345678' })
+    }
+    return state.fetch(url, init)
+  }
+  const env = { MIRROR: mirror, DISCORD_WEBHOOK_LAUNCHER: 'https://discord.com/api/webhooks/1/abc' }
+  await ask('/v1/launcher/latest', env)
+  assert.equal(posted.length, 0)
+  assert.ok(mirror.objects.has('_github/announce/v3.27.0'), 'the card is still owed')
+  discordUp = true
+  const tick = async () => { const ctx = context(); await worker.scheduled({}, env, ctx); await ctx.settle() }
+  await tick()
+  assert.equal(posted.length, 1)
+  assert.ok(!mirror.objects.has('_github/announce/v3.27.0'))
+  await tick()
+  assert.equal(posted.length, 1, 'once')
+  // v3.26.0 style: in the mirror by hand, no marker, no claim: the cron leaves its card alone.
+  const hand = r2()
+  seed(hand, 'v3.29.0')
+  state.latest = release('v3.26.0')
+  edge()
+  const ctx = context()
+  await worker.scheduled({}, { ...env, MIRROR: hand }, ctx)
+  await ctx.settle()
+  assert.equal(posted.length, 1)
 })

@@ -13,7 +13,7 @@
 // asked for (or on the next cron tick), so the apps still only ever talk to this address. Exo Cinema's releases reach the
 // mirror through publish-release.ps1. The release card is announce.js; the cache is filled by cache-mirror.mjs.
 import { announce } from './announce.js'
-import { LARGE, NAMES, assetsOf, fill, materialize, promote, releaseForTag, stream } from './github.js'
+import { LARGE, NAMES, PENDING_CARD, assetsOf, fill, materialize, promote, releaseForTag, stream } from './github.js'
 import { r2Store, runWatch } from './watch.js'
 const APPS = {
   launcher: { setup: 'ExoLauncher-Setup.exe' },
@@ -92,11 +92,11 @@ export default {
  * The launcher's manifest for /latest: GitHub's newest stable release when it is newer than the mirror's and checks out
  * (github.js promote), else the mirror's launcher/latest.json. GitHub down, slow or refusing: the mirror's answer, as before.
  */
-async function launcherManifest(env, ctx) {
+async function launcherManifest(env, ctx, { maxAge } = {}) {
   const current = await readManifest('launcher', env)
   if (!env.MIRROR) return current
   try {
-    const result = await promote(env, ctx, { current })
+    const result = await promote(env, ctx, { current, ...(maxAge ? { maxAge } : {}) })
     if (result.promoted) ctx?.waitUntil?.(afterPromote(result.release, result.manifest, env).catch(() => {}))
     return validManifest('launcher', result.manifest) ? result.manifest : current
   } catch {
@@ -106,8 +106,20 @@ async function launcherManifest(env, ctx) {
 
 /** A release first seen: its card (announce.js, once per tag), then its large files copied into R2. */
 async function afterPromote(release, manifest, env) {
-  await announce({ app: 'launcher', tag: manifest.tag, env, mirror: env.MIRROR }).catch(() => {})
+  await announcePending(env, manifest.tag)
   await fillLarge(release, manifest, env)
+}
+
+/**
+ * The card of a release this Worker promoted (promote leaves _github/announce/<tag>), until Discord has it: a card Discord
+ * refused is asked for again on the next cron tick. A launcher build put into the mirror by hand has no marker, so its
+ * card is publish-release.ps1's business (-NoAnnounce included).
+ */
+async function announcePending(env, tag) {
+  const key = PENDING_CARD(tag)
+  if (!(await env.MIRROR.head(key).catch(() => null))) return
+  const { status } = await announce({ app: 'launcher', tag, env, mirror: env.MIRROR }).catch(() => ({ status: 'failed' }))
+  if (status !== 'failed' && status !== 'not-live') await env.MIRROR.delete(key).catch(() => {})
 }
 
 async function fillLarge(release, manifest, env) {
@@ -122,7 +134,7 @@ async function syncLauncher(env, ctx) {
   const current = await readManifest('launcher', env)
   const result = await promote(env, ctx, { current })
   if (!validManifest('launcher', result.manifest)) return
-  if (result.promoted) await announce({ app: 'launcher', tag: result.manifest.tag, env, mirror: env.MIRROR }).catch(() => {})
+  await announcePending(env, result.manifest.tag)
   const release = result.release ?? (await releaseForTag(result.manifest.tag, env, ctx))
   if (release) await fillLarge(release, result.manifest, env)
 }
@@ -143,8 +155,9 @@ async function announceRoute(app, request, env, ctx) {
   }
   if (typeof body?.tag !== 'string' || !TAG.test(body.tag)) return reply({ status: 'bad-request' }, 400)
   try {
-    // A launcher release just published on GitHub is promoted here, so the announce workflow need not wait for a poll.
-    if (app === 'launcher') await launcherManifest(env, ctx)
+    // A launcher release just published on GitHub is promoted here (GitHub asked if it wasn't in the last 30 seconds), so the
+    // announce workflow's retries find it within a minute, not after the five-minute check.
+    if (app === 'launcher') await launcherManifest(env, ctx, { maxAge: 30 })
     const result = await announce({ app, tag: body.tag, announce: body.announce !== false, env, mirror: env.MIRROR })
     return reply({ status: result.status }, ANNOUNCE_STATUS[result.status] ?? 200)
   } catch {

@@ -218,7 +218,8 @@ test('a run from the recorded feed and advertisement stores the commit, the file
   assert.equal((await h.read(`cache/${NVIDIA}/releases/latest`)).toString(), JSON.stringify({ tag_name: TAG }))
   assert.equal((await h.readState()).repos[NVIDIA].complete, true)
   // The same tick also asks for Exo Launcher's own newest release (github.js); the vendor discovery never asks the API.
-  assert.ok(!h.calls.some((c) => c.includes('api.github.com') && !c.includes('/repos/UhhErix/Exo-Launcher/')), 'discovery never calls api.github.com')
+  const api = h.calls.map((c) => new URL(c.split(' ')[1])).filter((u) => u.hostname === 'api.github.com')
+  assert.ok(api.every((u) => u.pathname.startsWith('/repos/UhhErix/Exo-Launcher/')), 'discovery never calls api.github.com')
 })
 
 test('the listing\'s blob hash is git\'s for the bytes: "hello\\n" in a file is ce0136...', async () => {

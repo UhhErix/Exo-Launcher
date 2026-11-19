@@ -77,8 +77,8 @@ test('with GitHub down, latest answers from the mirror\'s manifest, with each fi
   assert.equal(body.checks.setup.sha256, SHA)
   assert.equal(body.checks.setup.size, 10)
   assert.equal(response.headers.get('cache-control'), 'public, max-age=60')
-  // GitHub was asked about its newest release, and nothing else.
-  assert.deepEqual(fetched, ['https://api.github.com/repos/UhhErix/Exo-Launcher/releases/latest'])
+  // At most GitHub's API was tried (this stand-in R2 takes no writes, so no request holds the lease to ask), nothing else.
+  assert.ok(fetched.every((url) => new URL(url).hostname === 'api.github.com'), fetched.join(', '))
 })
 test('an answer the old Worker cached under the plain latest URL is never served after a deploy', async () => {
   // The edge cache is shared by every Worker version: an entry under the plain URL is what an older Worker wrote.
