@@ -606,7 +606,7 @@ internal static partial class AntiCheatCheck
 
     /// <summary>
     /// The marker table: a name matched whole, "*x" a name ending in x, "x*" one starting with x, any case, files and
-    /// folders alike. Ported from Exo Shaders (exo-shaders\src\SCSKiller.Core\Games\GameFiles.cs, Markers, ExeMarkers and
+    /// folders alike. Ported from Exo Shaders (shaders\src\SCSKiller.Core\Games\GameFiles.cs, Markers, ExeMarkers and
     /// RootMarkers; the owner's own detector) and Exo's own earlier table. The two must stay in step:
     /// AntiCheatCheckTests.EveryExoShadersMarkerIsHere fails when Exo Shaders has a marker this table lacks.
     /// </summary>

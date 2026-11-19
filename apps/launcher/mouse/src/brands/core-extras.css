@@ -14,3 +14,32 @@
   align-items: center;
   gap: 8px;
 }
+
+/* Sensor angle: the slider and how the last change went, in a fixed slot so the row never moves. */
+.cx-angle {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.sa-control .cx-angle .m-slider { width: 180px; }
+.cx-angle .m-slider-value { min-width: 36px; }
+
+.cx-angle-state {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  flex: none;
+}
+
+.cx-angle-state .m-check.is-good { color: var(--good); }
+
+.cx-angle-error {
+  margin: 0;
+  padding: 0 0 12px;
+  color: var(--bad);
+  text-align: right;
+}

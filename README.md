@@ -13,9 +13,9 @@ See [RELEASES.md](RELEASES.md) for the installer filename and SHA-256 checksum.
 
 ## What's in this snapshot
 
-The Launcher host, UI and Exo Mouse source are included. The official installer
-ships with Exo Capture and Exo Shaders, but this repository does not include
-Exo Capture's native source or the separate Exo Shaders project. Launcher-side
+The Launcher host, UI, Exo Mouse and Exo Shaders source are included (Exo Shaders,
+GPL-3.0-or-later, in `apps/launcher/shaders`). The official installer also ships
+Exo Capture, whose native source this repository does not include. Launcher-side
 integration code is included.
 
 The snapshot also leaves out internal security test harnesses and production

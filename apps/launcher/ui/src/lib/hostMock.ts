@@ -772,8 +772,12 @@ function mockAbsorbIdSettings(next: Record<string, unknown>) {
 /** Two captures, so Favorite and its chip can be tried without the add-on. */
 const mockClipsFlag = typeof location !== 'undefined' ? new URLSearchParams(location.search).get('clips') : null
 const mockShot = (from: string, to: string) => 'data:image/svg+xml,' + encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="320" height="180"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="${from}"/><stop offset="1" stop-color="${to}"/></linearGradient></defs><rect width="320" height="180" fill="url(#g)"/></svg>`)
+/** A snip to draw on in the browser: a scoreboard with names and a chat line, so Blur and Copy text have something to work on. */
+const mockSnip = 'data:image/svg+xml,' + encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="1920" height="1080"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#14203a"/><stop offset="1" stop-color="#5a2b1a"/></linearGradient></defs><rect width="1920" height="1080" fill="url(#g)"/><g font-family="Segoe UI, sans-serif" fill="#fff"><text x="120" y="200" font-size="72" font-weight="700">VICTORY</text><text x="120" y="320" font-size="40">PlayerOne    24 / 3 / 11</text><text x="120" y="390" font-size="40">NightOwl     18 / 6 / 9</text><text x="120" y="900" font-size="34" fill="#9fd">[Team] NightOwl: gg that last fight was clean</text></g></svg>`)
 const mockCaptures: CaptureItem[] = [
-  { id: 'cap0000000000001', kind: 'image', game: 'Desktop', name: 'Snip 1', created: '2026-10-19T16:08:00Z', size: 120_000, favourite: false, url: '', thumb: null },
+  { id: 'cap0000000000001', kind: 'image', game: 'Desktop', name: 'Snip 1', created: '2026-10-19T16:08:00Z', size: 120_000, favourite: false, url: mockSnip, thumb: mockSnip },
+  { id: 'mock-rivals-snip', kind: 'image', game: 'Marvel Rivals', gameId: 'mock:rivals', name: 'Scoreboard', created: new Date(Date.now() - 2 * 3_600_000).toISOString(), size: 2_400_000, favourite: false, url: mockSnip, thumb: mockSnip },
+  { id: 'mock-lastyear', kind: 'video', game: 'Hades', gameId: 'mock:hades', name: 'First clear', created: new Date(new Date().setFullYear(new Date().getFullYear() - 1)).toISOString(), size: 31_000_000, durationMs: 34_000, favourite: true, url: 'mock-clip.webm', thumb: mockShot('#3a1430', '#d05a8a') },
   { id: 'cap0000000000002', kind: 'video', game: 'Elden Ring', gameId: 'mock:eldenring', name: 'Clip 1', created: '2026-10-18T20:00:00Z', size: 48_000_000, durationMs: 60_000, favourite: false, url: 'mock-clip.webm', thumb: mockShot('#3b2a14', '#a9792c') },
   { id: 'mock-rivals-1', kind: 'video', game: 'Marvel Rivals', gameId: 'mock:rivals', name: 'Triple on Tokyo 2099', created: new Date(Date.now() - 3_600_000).toISOString(), size: 18_400_000, durationMs: 42_000, favourite: true, url: 'mock-clip.webm', thumb: mockShot('#1a2a5a', '#d0452b') },
   { id: 'mock-rivals-2', kind: 'video', game: 'Marvel Rivals', gameId: 'mock:rivals', name: 'Last second capture', created: new Date(Date.now() - 86_400_000).toISOString(), size: 9_700_000, durationMs: 21_000, favourite: false, url: 'mock-clip.webm', thumb: mockShot('#2b1a4a', '#3b9bd0') },
@@ -951,7 +955,7 @@ const mockCaptureState = {
 }
 const mockCaptureSettings: Record<string, unknown> = {
   quality: 50, replaySeconds: 60, maxFps: 60, replayMode: 'games',
-  cursor: true, saveReplayKeys: 'Ctrl+Alt+F10', recordKeys: 'Ctrl+Alt+F9', snipKeys: 'Ctrl+Alt+F8', printScreen: false,
+  cursor: true, saveReplayKeys: 'Ctrl+Alt+F10', recordKeys: 'Ctrl+Alt+F9', snipKeys: 'Ctrl+Alt+F8', printScreen: false, afterSnip: 'edit',
   folder: 'C:\\Users\\Player\\Videos\\Exo Captures', keepGb: 0, keepDays: 0, autoShrink: true, callVoices: false,
 }
 
@@ -1145,6 +1149,13 @@ const MOCK_HANDLERS: Record<string, MockHandler> = {
     return { ok: true }
   },
   'capture.saveImage': () => ({ ok: false, message: 'Mock: no capture add-on.' }),
+  'capture.text': (params) => params?.width !== undefined && Number(params.width) < 4 ? { ok: false, message: 'No text found there.' } : { ok: true, text: ['VICTORY', 'PlayerOne 24 / 3 / 11'].join('\n') },
+  'capture.send': (params) => {
+    const item = mockCaptures.find(entry => entry.id === mockParamId(params))
+    if (!item) return { ok: false, message: 'That capture is gone.' }
+    const channels = Array.isArray(params?.channelIds) ? params.channelIds as string[] : []
+    return { ok: true, sent: channels, item: null }
+  },
   'notes.list': (params) => {
     const query = typeof params?.query === 'string' ? params.query.toLowerCase() : ''
     return { ok: true, notes: [...mockNotes.values()].filter(note => !query || note.text.toLowerCase().includes(query)).map(note => note.info), tabs: [], active: null }

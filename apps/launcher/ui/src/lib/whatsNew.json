@@ -8,6 +8,26 @@
         "detail": "Settings your PC, screen or controller can't use are no longer shown, and a choice with only one answer is simply set."
       },
       {
+        "icon": "Mouse",
+        "title": "Sensor angle on the Razer Viper V3 Pro",
+        "detail": "Turn your Viper V3 Pro's sensor angle a degree at a time in Devices, so a natural swipe runs straight across the screen."
+      },
+      {
+        "icon": "Scissors",
+        "title": "Captures, like Photos",
+        "detail": "Your clips and screenshots in one grid by day, with a scrubber to jump through months, chips that combine, and an editor with a tab for each job."
+      },
+      {
+        "icon": "Chats",
+        "title": "Send captures to Discord",
+        "detail": "Share a clip or screenshot straight into a DM or channel; a clip too big for Discord is cut to fit first."
+      },
+      {
+        "icon": "EyeOff",
+        "title": "Blur names, copy text",
+        "detail": "Blur hides names and chat in a screenshot, and Copy text reads words off it on your PC."
+      },
+      {
         "icon": "Encrypted",
         "title": "Cloudflare DNS, encrypted",
         "detail": "Best settings sets Cloudflare's DNS with encryption on, for faster lookups that nobody on the way can read; its switch puts your old DNS back."
