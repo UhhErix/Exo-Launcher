@@ -8,7 +8,7 @@ These run as their own programs. Exo talks to them only through messages, and Ex
 
 | Program | License | Source |
 | --- | --- | --- |
-| **Exo Mouse** (the Devices room), built on OpenMouse's protocol library `@openmouse/protocol` 0.58.0; [OpenMouse](https://github.com/OpenMouse-Project/openmouse) is made by [snekxs](https://github.com/snekxs) and its contributors, and is in Exo with snekxs's permission | AGPL-3.0-or-later | [getexo.app/source](https://getexo.app/source) |
+| **Exo Mouse** (the Devices room), built on OpenMouse's protocol library `@openmouse/protocol` 0.60.0; [OpenMouse](https://github.com/OpenMouse-Project/openmouse) is made by [snekxs](https://github.com/snekxs) and its contributors, and is in Exo with snekxs's permission | AGPL-3.0-or-later | [getexo.app/source](https://getexo.app/source) |
 | **Exo Shaders** (System > Shaders), an unofficial fork of [SCSKiller](https://github.com/BlueHeisenberg/SCSKiller) | GPL-3.0-or-later, with an additional permission under section 7 (`LICENSE-EXCEPTION.txt`) | [getexo.app/source](https://getexo.app/source). Its own third-party notices ship in `addons\shaders\THIRD-PARTY-NOTICES.md`. Its native helpers come unmodified from SCSKiller 1.3.0 (see `engine/prebuilt/SOURCE.md` in its repository). |
 | **Exo Capture** (instant replay, recording and snips; `addons\capture`), Exo's own | Exo Capture usage terms (`addons\capture\LICENSE`); versions up to Exo Launcher 3.17.1 were GPL-3.0-or-later | Not published; up to 3.17.1 at [github.com/UhhErix/exo-capture](https://github.com/UhhErix/exo-capture) |
 | **OBS Studio game capture files** 32.2.2 (`graphics-hook`, `inject-helper`, `get-graphics-offsets`; 32- and 64-bit), OBS Project and contributors, unmodified and signed by OBS Project, LLC, used by Exo Capture only for a game Windows capture gets no picture from | GPL-2.0-or-later | [github.com/obsproject/obs-studio/tree/32.2.2](https://github.com/obsproject/obs-studio/tree/32.2.2) (`plugins/win-capture`) |
@@ -43,8 +43,8 @@ The source for every build of these programs that Exo ships, Lucid aside, is pub
 | lottie-web (Airbnb), Discord's animated stickers | 5.13.0 | MIT |
 | [Skullet](https://skullet.lochie.me) (Lochie Axon), the skeletons of what is on its way | 0.0.3 | MIT |
 | hls.js | 1.7.4 | Apache-2.0 |
-| dash.js | 5.2.1 | BSD-3-Clause |
-| Lucide icons (lucide.dev, Lucide Contributors; through Iconify's `@iconify-json/lucide`), drawn inline from `ui/src/brand/glyphs.ts` in the UI and Exo Mouse | 1.2.156 (Iconify set) | ISC |
+| dash.js | 5.3.0 | BSD-3-Clause |
+| Lucide icons (lucide.dev, Lucide Contributors; through Iconify's `@iconify-json/lucide`), drawn inline from `ui/src/brand/glyphs.ts` in the UI and Exo Mouse | 1.2.157 (Iconify set) | ISC |
 | Goeist and Goeist Mono, Exo's typeface in the UI and Exo Mouse: Shadcn Labs' rounded Geist (Aniket Pawar; upstream Geist by Vercel and Basement Studio), unmodified. Goeist-Variable.woff2, Goeist-Italic-Variable.woff2 and GoeistMono-Variable.woff2 in `ui/public/fonts`, Goeist-Variable.woff2 in Exo Mouse; `LICENSE-Goeist.txt` beside each carries the copyright notices | 0.1.0 | SIL Open Font License 1.1 |
 | Exoline, Exo's earlier typeface (now the overlays', Setup's and the fallback): a modified version of the Geist font (Vercel and Basement Studio, 1.9.0), renamed as its licence asks. Exoline-Variable.woff2 and Exoline-Italic-Variable.woff2 in the UI (`ui/public/fonts`) and Exo Mouse, Exoline-Variable.ttf in the app; `LICENSE-Exoline.txt` beside each carries both copyright notices | 1.000 | SIL Open Font License 1.1 |
 | Simple Icons, the marks of a Discord profile's connected accounts (`ui/src/components/discord/connectionMarks.ts`; Skype, Xbox and Amazon from 8.15.0) | 16.36.0 | CC0 1.0 |
