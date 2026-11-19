@@ -37,16 +37,24 @@ const VERSION = /^\d{1,4}\.\d{1,4}\.\d{1,4}(?:-[0-9A-Za-z.]{1,20})?$/
 const sha256 = (bytes) => createHash('sha256').update(bytes).digest('hex')
 
 /**
- * The add-ons built from git trees, all folders of the launcher's own tree at one commit. `tree` is a git tree-ish (its path
- * starts with ./, so it is read from `launcher`, apps/launcher in the monorepo); `licenceFile` is the licence in it and
- * `marker` a line of its text.
+ * The add-ons built from git trees, all folders of the launcher's own tree at one commit. `repo` is the repository's top
+ * (git archive in a subfolder keeps only that subfolder's part of the tree) and `prefix` the launcher's folder in it
+ * (`apps/launcher/` in the monorepo, '' for a repository of its own); `tree` is a git tree-ish; `licenceFile` is the
+ * licence in it and `marker` a line of its text.
  */
-export function treeAddons({ launcher, rev }) {
+export function treeAddons({ repo, prefix = '', rev }) {
   return [
-    { name: 'exo-mouse', title: 'Exo Mouse', license: 'AGPL-3.0-or-later', repo: launcher, tree: `${rev}:./mouse`, licenceFile: 'LICENSE', marker: 'GNU AFFERO GENERAL PUBLIC LICENSE' },
-    { name: 'exo-shaders', title: 'Exo Shaders', license: 'GPL-3.0-or-later', repo: launcher, tree: `${rev}:./shaders`, licenceFile: 'LICENSE', marker: 'GNU GENERAL PUBLIC LICENSE' },
-    { name: 'exo-shield', title: 'Exo Shield', license: 'GPL-3.0', repo: launcher, tree: `${rev}:./ExoLauncher/Assets/Extensions/exo-shield`, licenceFile: 'LICENSE.txt', marker: 'GNU GENERAL PUBLIC LICENSE' },
+    { name: 'exo-mouse', title: 'Exo Mouse', license: 'AGPL-3.0-or-later', repo, tree: `${rev}:${prefix}mouse`, licenceFile: 'LICENSE', marker: 'GNU AFFERO GENERAL PUBLIC LICENSE' },
+    { name: 'exo-shaders', title: 'Exo Shaders', license: 'GPL-3.0-or-later', repo, tree: `${rev}:${prefix}shaders`, licenceFile: 'LICENSE', marker: 'GNU GENERAL PUBLIC LICENSE' },
+    { name: 'exo-shield', title: 'Exo Shield', license: 'GPL-3.0', repo, tree: `${rev}:${prefix}ExoLauncher/Assets/Extensions/exo-shield`, licenceFile: 'LICENSE.txt', marker: 'GNU GENERAL PUBLIC LICENSE' },
   ]
+}
+
+/** The repository's top and the launcher's folder in it (`launcher`: the launcher's own folder, apps/launcher in the monorepo). */
+export function launcherRepo(launcher) {
+  const repo = git(launcher, ['rev-parse', '--show-toplevel'], { encoding: 'utf8' }).trim()
+  const prefix = git(launcher, ['rev-parse', '--show-prefix'], { encoding: 'utf8' }).trim()
+  return { repo, prefix }
 }
 
 const git = (repo, args, options = {}) =>
@@ -178,10 +186,10 @@ async function main(argv) {
     return value
   }
   if (command === 'build') {
-    const launcher = need('--launcher')
-    const commit = commitOf(launcher, need('--rev'))
-    const version = git(launcher, ['show', `${commit}:./VERSION`], { encoding: 'utf8' }).trim()
-    const archives = treeAddons({ launcher, rev: commit }).map((def) => buildTreeArchive(def, version, commit))
+    const { repo, prefix } = launcherRepo(need('--launcher'))
+    const commit = commitOf(repo, need('--rev'))
+    const version = git(repo, ['show', `${commit}:${prefix}VERSION`], { encoding: 'utf8' }).trim()
+    const archives = treeAddons({ repo, prefix, rev: commit }).map((def) => buildTreeArchive(def, version, commit))
     const entries = writeOut(flag('--out', 'artifacts/source'), archives)
     for (const a of archives) console.log(`${a.file}  ${a.bytes} bytes  ${a.sha256}  from ${a.commit}`)
     console.log(JSON.stringify(entries, null, 2))
