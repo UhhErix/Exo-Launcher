@@ -98,10 +98,11 @@ export async function announce({ app, tag, announce = true, env, mirror, fetcher
   const claimed = await mirror.put(claim, JSON.stringify({ state: 'posting', at }), { onlyIf: { etagDoesNotMatch: '*' } })
   if (!claimed) {
     const existing = await readJson(mirror, claim)
-    if (existing?.state === 'posted' && SNOWFLAKE.test(String(existing.id ?? ''))) {
+    const isPosted = existing?.state === 'posted'
+    if (isPosted && SNOWFLAKE.test(String(existing.id ?? ''))) {
       await removeOlderCards({ app, tag, id: String(existing.id), mirror, fetcher, root, search })
     }
-    return { status: 'already' }
+    return { status: 'already', posted: isPosted }
   }
 
   const highlights = (Array.isArray(whatsNew.items) ? whatsNew.items : [])
