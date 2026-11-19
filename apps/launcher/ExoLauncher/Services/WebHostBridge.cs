@@ -718,6 +718,11 @@ public sealed partial class WebHostBridge
                 "apps.scan" => await AppsScanAsync(ReadString(paramsEl, hasParams, "id") ?? "", requestToken).ConfigureAwait(true),
                 "apps.clean" => await AppsCleanAsync(paramsEl, hasParams, requestToken).ConfigureAwait(true),
                 "apps.allowEdge" => await AppsAllowEdgeAsync(requestToken).ConfigureAwait(true),
+                "apps.openDefaults" => AppsOpenDefaults(),
+                "apps.packages" => await AppsPackagesAsync().ConfigureAwait(true),
+                "apps.packagesPlan" => await AppsPackagesPlanAsync(paramsEl, hasParams).ConfigureAwait(true),
+                "apps.packagesRemove" => await AppsPackagesRemoveAsync(paramsEl, hasParams, requestToken).ConfigureAwait(true),
+                "apps.packageAddBack" => await AppsPackageAddBackAsync(ReadString(paramsEl, hasParams, "id") ?? "", requestToken).ConfigureAwait(true),
                 "apps.tidy" => await AppsTidyAsync(ReadBool(paramsEl, hasParams, "fresh") == true).ConfigureAwait(true),
                 "apps.leave" => AppsLeave(paramsEl, hasParams),
                 "apps.history" => await Task.Run(AppsHistory).ConfigureAwait(true),
@@ -1124,7 +1129,7 @@ public sealed partial class WebHostBridge
         await RecorderOutOfTheWayAsync(game).ConfigureAwait(true);
 
         // Steam can't sign in because its servers are down: Play offers its offline mode instead of waiting on it.
-        // Both Steam checks read its logs, process table and appinfo.vdf: off the UI thread.
+        // Both Steam checks read its logs, process table and appinfo: off the UI thread.
         if (await Task.Run(() => SteamPlayOfflineFirst(game)).ConfigureAwait(true) is { } offlineFirst) return offlineFirst;
 
         // Controller settings wait for Steam's next close while it runs (never closing it).

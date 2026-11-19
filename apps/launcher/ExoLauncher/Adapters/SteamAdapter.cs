@@ -87,7 +87,7 @@ public sealed class SteamAdapter : IStoreAdapter, IInstalledSteamManifestSource,
         LastOwnedPlaytimeMinutes = ownedPlaytime;
         var presentAppIds = new HashSet<string>(StringComparer.Ordinal);
         var appNames = new Dictionary<string, SteamAppInfoNames.Entry>(StringComparer.Ordinal);
-        foreach (var pair in SteamAppInfoNames.Load(Path.Combine(steamRoot, "appcache", "appinfo.vdf")))
+        foreach (var pair in SteamAppInfoNames.Load(steamRoot))
             appNames[pair.Key] = pair.Value;
         LastAppInfo = appNames;
         // The running Steam client is the complete license list. The Web API
@@ -370,7 +370,7 @@ public sealed class SteamAdapter : IStoreAdapter, IInstalledSteamManifestSource,
     /// Candidate ids for the Steam-client license check: every installed
     /// manifest (any type — an installed tool must not flip to "Buy again"),
     /// plus game ids from localconfig, the account's librarycache,
-    /// appinfo.vdf, and the verified catalog. Uninstalled candidates must pass
+    /// appinfo, and the verified catalog. Uninstalled candidates must pass
     /// <see cref="CatalogHygiene.IsOwnedUninstalledSteamGame"/> so DLC, tools,
     /// soundtracks and companion apps never become a row. packageinfo.vdf is not read: appinfo already carries
     /// every app the client has licensed metadata for.
@@ -1316,6 +1316,13 @@ public sealed class SteamAdapter : IStoreAdapter, IInstalledSteamManifestSource,
         if (steamExe is null)
             return new LaunchResult { Ok = false, Message = "Steam could not be found. Open Steam once, then try Play again." };
 
+        // "Launch without anti-cheat" in Properties: Steam's own entry for it, by its option word. Frame generation and the
+        // rest were judged for that entry as the launch began; an entry Steam no longer offers is never swapped for the
+        // protected one here, where what went into the game for the other was not taken out.
+        var withoutAntiCheat = Services.AntiCheatCheck.WithoutAntiCheatLaunch(game);
+        if (withoutAntiCheat is null && Services.AntiCheatCheck.ChoseWithoutAntiCheat(game))
+            return new LaunchResult { Ok = false, Message = $"Steam no longer offers {game.Title} without its anti-cheat. Pick Launch with anti-cheat in Properties." };
+
         var installPath = FindInstalled(appId)?.Path ?? game.Path;
         ct.ThrowIfCancellationRequested();
 
@@ -1375,8 +1382,15 @@ public sealed class SteamAdapter : IStoreAdapter, IInstalledSteamManifestSource,
             ct.ThrowIfCancellationRequested();
             using var gameEula = SteamGameEulaPromptAutomator.Arm(
                 steamExe, game.Title, SteamProcessPath.LaunchChromeSuppressionTimeout, ct);
-            ProcessHelper.StartHidden(steamExe,
-                SteamProtocol.LaunchArguments(appId, options.ExtraArgs));
+            if (withoutAntiCheat is not null)
+            {
+                // steam://launch/<id>/<option> runs that Play-menu entry with no dialog; it carries no arguments.
+                if (!string.IsNullOrWhiteSpace(options.ExtraArgs)) AppLog.Info($"Steam launch without anti-cheat: {game.Title} starts without Exo's launch options.");
+                ProcessHelper.StartHidden(steamExe, [SteamProtocol.LaunchEntryUri(appId, withoutAntiCheat.Option)]);
+            }
+            else
+                ProcessHelper.StartHidden(steamExe,
+                    SteamProtocol.LaunchArguments(appId, options.ExtraArgs));
 
             QuietSteam();
 

@@ -10,8 +10,8 @@ const ROW: Record<HealthAction, PcHealthItem['key']> = {
   chipset: 'chipset', gpusched: 'gpusched', gpupref: 'gpupref', 'gpupref-undo': 'gpupref',
 }
 
-/** Best settings sets the network; the adapter is a part of This PC. */
-const NETWORK: readonly PcHealthItem['key'][] = ['network', 'netlink']
+/** Best settings sets the network and has its items (NetworkGroup.tsx); the adapter is a part of This PC. */
+const NETWORK: readonly PcHealthItem['key'][] = ['network', 'net-adapter', 'net-dns', 'net-tcp', 'netlink']
 
 /** Where a row of the PC room goes: Needs you (something to do), or its own section (what Exo set, with its Undo). */
 export type PcPlace = 'needs' | 'section'

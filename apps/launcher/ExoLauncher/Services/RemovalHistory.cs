@@ -10,12 +10,17 @@ internal sealed record RemovedPath(string Path, bool Machine);
 /// <summary>A scheduled task Exo deleted: its path, the program it ran, and the XML its definition was saved to first.</summary>
 internal sealed record RemovedTask(string Path, string Exe, string File);
 
+/// <summary>A driver's store package Exo deleted (pnputil /delete-driver): the oemNN.inf names and the administrators-only folder it was exported to first.</summary>
+internal sealed record RemovedDriver(string Folder, List<string> Infs);
+
 /// <summary>
 /// One program's removal, or one clear of what programs left: what went and where to find it again. Files: to the Recycle
 /// Bin. RegFiles: the .reg each hive's entries were saved to first. Keys: every key those may name (<see cref="RemovalHistory.RegStaysInside"/>).
 /// Tasks: the scheduled tasks deleted, each saved first (<see cref="LeftoverScan.TaskStaysInside"/>); null in records written before.
+/// Drivers: driver store packages deleted, each exported first; null in records written before.
 /// </summary>
-internal sealed record Removal(string Id, string Name, DateTime At, LeftoverSummary Cleared, List<RemovedPath> Files, List<string> RegFiles, List<string> Keys, bool Undone = false, bool Automatic = false, bool Told = false, List<RemovedTask>? Tasks = null);
+internal sealed record Removal(string Id, string Name, DateTime At, LeftoverSummary Cleared, List<RemovedPath> Files, List<string> RegFiles, List<string> Keys, bool Undone = false, bool Automatic = false, bool Told = false, List<RemovedTask>? Tasks = null,
+    List<RemovedDriver>? Drivers = null);
 
 /// <summary>What Put back managed: what came back, what couldn't (emptied from the bin, or something is there again).</summary>
 internal sealed record PutBack(int Back, int Lost, bool Declined);
@@ -70,7 +75,7 @@ internal sealed class RemovalHistory(string file, Func<string, IEnumerable<strin
 
     /// <summary>What just went, on the same record as this name's last one when that's within the hour (an uninstall, then its clear).</summary>
     internal string Add(string name, LeftoverSummary cleared, IEnumerable<RemovedPath> files, IEnumerable<string> regFiles, IEnumerable<string> keys, DateTime now, bool automatic = false,
-        IEnumerable<RemovedTask>? tasks = null)
+        IEnumerable<RemovedTask>? tasks = null, IEnumerable<RemovedDriver>? drivers = null)
     {
         if (HostMode.IsDisposable) return "";
         lock (_gate)
@@ -79,8 +84,9 @@ internal sealed class RemovalHistory(string file, Func<string, IEnumerable<strin
             var last = all.FirstOrDefault(record => record.Name == name && !record.Undone && now - record.At < TimeSpan.FromHours(1));
             if (last is not null) all.Remove(last);
             List<RemovedTask> saved = [.. tasks ?? []];
+            List<RemovedDriver> packages = [.. drivers ?? []];
             var record = last is null
-                ? new Removal(Guid.NewGuid().ToString("N"), name, now, cleared, [.. files], [.. regFiles], [.. keys], Automatic: automatic, Tasks: saved)
+                ? new Removal(Guid.NewGuid().ToString("N"), name, now, cleared, [.. files], [.. regFiles], [.. keys], Automatic: automatic, Tasks: saved, Drivers: packages)
                 : last with
                 {
                     At = now,
@@ -89,6 +95,7 @@ internal sealed class RemovalHistory(string file, Func<string, IEnumerable<strin
                     RegFiles = [.. last.RegFiles, .. regFiles],
                     Keys = [.. last.Keys, .. keys],
                     Tasks = [.. last.Tasks ?? [], .. saved],
+                    Drivers = [.. last.Drivers ?? [], .. packages],
                     Told = false,
                 };
             all.Insert(0, record);
@@ -112,7 +119,8 @@ internal sealed class RemovalHistory(string file, Func<string, IEnumerable<strin
 
     /// <summary>Whether anything of it can still come back: a saved .reg, or a file still in the bin (read once, for all the records asked about).</summary>
     internal bool CanPutBack(Removal record, IReadOnlyDictionary<string, RecycleEntry> bin) => !record.Undone &&
-        (record.RegFiles.Any(File.Exists) || record.Files.Any(item => bin.ContainsKey(item.Path)) || (record.Tasks ?? []).Any(task => File.Exists(task.File)));
+        (record.RegFiles.Any(File.Exists) || record.Files.Any(item => bin.ContainsKey(item.Path)) || (record.Tasks ?? []).Any(task => File.Exists(task.File)) ||
+        (record.Drivers ?? []).Any(driver => DriverStepBack(driver) is not null));
 
     /// <summary>
     /// Everything of a removal that can come back. <paramref name="import"/> brings back a .reg this user may;
@@ -159,6 +167,14 @@ internal sealed class RemovalHistory(string file, Func<string, IEnumerable<strin
             steps.Add(step);
             tasks.Add(task);
         }
+        // A driver's store package comes back from the folder it was exported to; its service comes back with the .reg above.
+        var packages = 0;
+        foreach (var driver in removal.Drivers ?? [])
+        {
+            if (DriverStepBack(driver) is not { } step) { lost++; continue; }
+            steps.Add(step);
+            packages++;
+        }
         var declined = false;
         if (steps.Count > 0)
         {
@@ -168,6 +184,7 @@ internal sealed class RemovalHistory(string file, Func<string, IEnumerable<strin
                 lost += waiting.Count(entry => !Directory.Exists(entry.Original) && !File.Exists(entry.Original));
                 back += steps.Count(step => step.StartsWith("reg import", StringComparison.Ordinal));
                 back += tasks.Count(task => taskThere(task.Path));
+                back += packages;
                 lost += tasks.Count(task => !taskThere(task.Path));
             }
             else declined = true;
@@ -194,6 +211,22 @@ internal sealed class RemovalHistory(string file, Func<string, IEnumerable<strin
         return true;
 
         static string Written(string key) => key.StartsWith("HKLM", StringComparison.Ordinal) ? "HKEY_LOCAL_MACHINE" + key[4..] : "HKEY_CURRENT_USER" + key[4..];
+    }
+
+    /// <summary>
+    /// The elevated step that adds a driver's exported package to the driver store again (pnputil /add-driver, never
+    /// /install: a device picks it up as Windows decides); null when its folder is gone, isn't the administrators-only one
+    /// Exo made under ProgramData, or can't sit in quotes.
+    /// </summary>
+    internal static string? DriverStepBack(RemovedDriver driver, string? root = null)
+    {
+        root ??= Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "ExoLauncher", "DriverBackup");
+        var folder = driver.Folder.TrimEnd('\\');
+        if (!string.Equals(Path.GetDirectoryName(folder), root.TrimEnd('\\'), StringComparison.OrdinalIgnoreCase) || !Guid.TryParseExact(Path.GetFileName(folder), "N", out _)) return null;
+        if (folder.Any(c => char.IsControl(c) || c is '"' or '%' or '!' or '^' or '&' or '|' or '<' or '>' or '(' or ')')) return null;
+        try { if (!Directory.Exists(folder) || !Directory.EnumerateFiles(folder, "*.inf", SearchOption.AllDirectories).Any()) return null; }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { return null; }
+        return $"\"{Path.Combine(Environment.SystemDirectory, "pnputil.exe")}\" /add-driver \"{folder}\\*.inf\" /subdirs";
     }
 
     // ---- the Recycle Bin's own records ----

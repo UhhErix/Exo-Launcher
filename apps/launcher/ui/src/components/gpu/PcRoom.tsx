@@ -11,6 +11,7 @@ import { Popover } from '../ui/Dialog'
 import { UpscalersTab } from '../upscalers/UpscalersSheet'
 import { AutoTuneChip, AutoTuneRows, useTuneReads } from './AutoTune'
 import { BestSetup, bestSteps } from './BestSetup'
+import { NetworkGroup } from './NetworkGroup'
 import { CompressChip, CompressGames, useCompressList } from './CompressGames'
 import { BestScreenRows, DisplayRows, HdrRows } from './DisplayTab'
 import { DriverRow, savedBranch } from './DriverRow'
@@ -80,8 +81,8 @@ function usePcState(active: boolean) {
   return { state, put, read }
 }
 
-// Setup's rows Best settings counts itself (power) or other parts show (network in Network, chipset in Drivers).
-const SETUP_ELSEWHERE: readonly string[] = ['power', 'network', 'netlink', 'chipset']
+// Setup's rows Best settings counts itself (power, the Network group and its items) or other parts show (netlink in This PC, chipset in Drivers).
+const SETUP_ELSEWHERE: readonly string[] = ['power', 'network', 'net-adapter', 'net-dns', 'net-tcp', 'netlink', 'chipset']
 
 /**
  * What Best settings still has to set on this PC: its steps not yet set, a screen not at its best, setup it can't set by
@@ -207,6 +208,7 @@ export function PcRoom({ active, jump, games, settings, onSave, onDevices }: {
             <SetupRows place="section" active={active} health={state.health} onHealth={setHealth} />
             <InterruptRows place="section" state={state.interrupts} onState={setInterrupts} />
           </div>
+          <NetworkGroup health={state.health} onHealth={setHealth} />
         </PcMenu>
       ) : null}
       {menu === 'tune' ? (

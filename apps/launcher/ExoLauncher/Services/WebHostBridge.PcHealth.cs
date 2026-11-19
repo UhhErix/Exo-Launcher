@@ -7,8 +7,9 @@ namespace ExoLauncher.Services;
 /// <summary>
 /// system.health: System > This PC (<see cref="PcHealth"/>). No action reads the checks; apply
 /// switches to Exo's power plan for this PC's processor (<see cref="PowerPlan"/>); chipset starts the AMD or
-/// Intel chipset update now (<see cref="ChipsetUpdate"/>); network sets the adapters for games
-/// (<see cref="NetworkTune"/>), never during a call or a game; gpusched opens Windows' Graphics settings; gamemode-on and gamemode-off, gamebar-on (Exo keeps Game Bar off) and gamebar-off (Exo puts it back) are the Windows side of Keep (<see cref="WindowsGameMode"/>, <see cref="WindowsGameBar"/>). Each answer
+/// Intel chipset update now (<see cref="ChipsetUpdate"/>); network sets Best settings' Network group in one elevated step
+/// (<see cref="NetworkBest"/>; network-on and network-off one item of it, by its item; netcheck measures the connection
+/// now), the adapters' own settings never during a call or a game; gpusched opens Windows' Graphics settings; gamemode-on and gamemode-off, gamebar-on (Exo keeps Game Bar off) and gamebar-off (Exo puts it back) are the Windows side of Keep (<see cref="WindowsGameMode"/>, <see cref="WindowsGameBar"/>). Each answer
 /// carries the checks as they are after it. system.about: PC › Overview's About card (<see cref="PcAbout"/>), read only.
 /// </summary>
 public sealed partial class WebHostBridge
@@ -24,7 +25,10 @@ public sealed partial class WebHostBridge
             "chipset" => await Task.Run(StartChipsetUpdateAsync, ct).ConfigureAwait(false),
             "gpupref" => await Task.Run(UseFastGpuForGames, ct).ConfigureAwait(false),
             "gpupref-undo" => await Task.Run(UndoFastGpuForGames, ct).ConfigureAwait(false),
-            "network" => NetworkBusy() ?? await Task.Run(NetworkTune.Shared.Apply, ct).ConfigureAwait(false),
+            "network" => NetworkBusy(null) ?? await Task.Run(() => NetworkBest.Shared.Apply(), ct).ConfigureAwait(false),
+            "network-on" => ReadString(p, hasParams, "item") is { } on ? NetworkBusy(on) ?? await Task.Run(() => NetworkBest.Shared.Apply([on]), ct).ConfigureAwait(false) : "Exo doesn't know that setting.",
+            "network-off" => ReadString(p, hasParams, "item") is { } off ? NetworkBusy(off) ?? await Task.Run(() => NetworkBest.Shared.TurnOff(off), ct).ConfigureAwait(false) : "Exo doesn't know that setting.",
+            "netcheck" => await Task.Run(() => { NetworkBest.Shared.Measure(); return (string?)null; }, ct).ConfigureAwait(false),
             "gpusched" => OpenWindowsSettings("ms-settings:display-advancedgraphics", "Graphics"),
             _ when IsWindowsSideAction(action) => await Task.Run(() => WindowsSideAction(action, WindowsGameMode.Shared, WindowsGameBar.Shared), ct).ConfigureAwait(false),
             _ => null,
@@ -35,7 +39,8 @@ public sealed partial class WebHostBridge
         {
             ok = message is null,
             message,
-            items = decided.Select(item => new { key = item.Key, label = item.Label, detail = item.Detail, url = item.Url, applied = item.Applied, canUndo = item.CanUndo, busy = item.Busy, cpu = item.Cpu, current = item.Current, held = item.Held }).ToList(),
+            items = decided.Select(item => new { key = item.Key, label = item.Label, detail = item.Detail, url = item.Url, applied = item.Applied, canUndo = item.CanUndo, busy = item.Busy, cpu = item.Cpu, current = item.Current, held = item.Held, off = item.Off }).ToList(),
+            check = NetworkBest.Shared.LastCheck is { } check ? new { before = Sample(check.Before), after = Sample(check.After), said = check.Said } : null,
         };
     }
 
@@ -68,9 +73,19 @@ public sealed partial class WebHostBridge
         return GpuPreference.Shared.UndoAndSay();
     }
 
-    /// <summary>Why not now: the adapter restarts, so the connection drops for a few seconds.</summary>
-    private static string? NetworkBusy() =>
-        DiscordClient.DiscordSession.Current?.InCall == true ? "You're in a call. Your connection drops for a few seconds while this changes, so try after it."
+    /// <summary>A check's numbers for the page, in whole milliseconds (null: no answer).</summary>
+    private static object? Sample(NetworkBest.Sample? s) => s is null ? null : new { ping = Round(s.Ping), jitter = Round(s.Jitter), router = Round(s.Router), lookup = Round(s.Lookup) };
+
+    private static double? Round(double? ms) => ms is { } v ? Math.Round(v) : null;
+
+    /// <summary>
+    /// Why not now: the adapters' own settings restart them, so the connection drops for a few seconds. Only when this
+    /// press sets or puts back those (<paramref name="item"/>: one item; null: Use best settings, when that item is due).
+    /// </summary>
+    private static string? NetworkBusy(string? item) =>
+        item is not null && item != NetworkBest.AdapterKey
+        || item is null && !NetworkBest.Shared.Read().Items.Any(i => i.Key == NetworkBest.AdapterKey && !i.On && !i.Off) ? null
+        : DiscordClient.DiscordSession.Current?.InCall == true ? "You're in a call. Your connection drops for a few seconds while this changes, so try after it."
         : App.Services.Launcher.AnyGameRunning || MainWindow.RunningLibraryGames().Count > 0 ? "A game is running. Your connection drops for a few seconds while this changes, so try after it."
         : null;
 

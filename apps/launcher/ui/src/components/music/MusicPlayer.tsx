@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import { host, onHostEvent } from '../../lib/host'
-import { report } from '../../lib/report'
 import { MUSIC_LINK, takeMusicLink, type MusicPlayback, type MusicService } from '../../lib/music'
 import { onScreen, pane, pressedArt, transition, visible, type Morph } from '../../lib/viewTransition'
 import type { MusicAdapter } from '../../lib/musicAdapters'
 import type { PlayerCard, PlayerOption, PlayerState, PlayerView, PlayerViewData, PlayerViewOptions } from '../../lib/player'
-import { ChevronLeft, Explore, Heart, Home, More, Movie, New, Next, NowPlaying, Pause, Pin, Play, Plus, Previous, Queue, Radio, Repeat, RepeatOne, Search, Shuffle, Songs, ThumbsDown } from '../../brand/icons'
+import { ChevronLeft, Explore, FullScreen, Home, More, Movie, New, NowPlaying, Pin, Plus, Queue, Radio, Search, Songs } from '../../brand/icons'
+import { shouldReduceMotion } from '../../lib/motionPreference'
 import { Menu, type MenuItem } from '../ui/Menu'
 import { useLens } from '../../lib/glass'
 import { MusicVolume, useMusicVolume } from '../shell/MusicVolume'
@@ -17,6 +17,9 @@ import { SongsPage } from './SongsPage'
 import { MusicWait, PageBones } from './MusicWait'
 import { CreditsPanel, DevicesPanel, FriendsPanel, JamPanel, NowPlayingPanel, QueuePanel } from './panels'
 import { useMusicShortcuts } from './shortcuts'
+import { BarControls, IconToggle, SongVerdict } from './controls'
+import { Immersive } from './Immersive'
+import { immersiveWasOn, rememberImmersive } from './immersiveRules'
 import { SoundPanel } from './SoundPanel'
 import { PlaylistSheet } from './PlaylistSheet'
 import { PlayerContext, loadView, onPlayerChanged, pageFor, runAction, usePlayer, useView, type Page, type Player, type PlaylistEdit } from './playerContext'
@@ -57,6 +60,24 @@ export function MusicPlayer({ adapter, service, active, nowPlaying }: { adapter:
   const playback = live?.playback ?? null
   const [tick, setTick] = useState(0)
   const page = stack[stack.length - 1]
+  // Now playing full window (Immersive.tsx), as it was left this session.
+  const [immersive, setImmersive] = useState(immersiveWasOn)
+  const goImmersive = useCallback((next: boolean) => {
+    const update = () => { rememberImmersive(next); setImmersive(next) }
+    // Leaving, focus goes back to the strip's Immersive button, so the keyboard is where it was.
+    const landed = () => { if (!next) (visible('.exo-music-bar-side .exo-music-immersive-toggle') as HTMLElement | null)?.focus({ preventScroll: true }) }
+    // Under Reduce motion it crossfades; else the cover flies between the strip (or the Now playing panel) and the
+    // full window while the room and Immersive crossfade under it, on the flight time (transitions.css).
+    if (shouldReduceMotion()) { void transition(update, { kind: 'fade' }).then(landed); return }
+    const small = () => visible('.exo-music-now > .exo-music-art') ?? visible('.exo-music-bar-art')
+    const big = () => visible('.exo-music-immersive-art')
+    const room = () => visible('.exo-music')
+    const stage = () => visible('.exo-music-immersive')
+    void transition(update, { kind: 'morph', back: !next, morph: [
+      { name: 'exo-music-now', from: next ? small() : big(), to: next ? big : small, reshape: true },
+      { name: 'exo-music-immersive', from: next ? room() : stage(), to: next ? stage : room },
+    ] }).then(landed)
+  }, [])
 
   // The cover pressed to open a page flies into that page's header once it lands (Main).
   const artFrom = useRef<Element | null>(null)
@@ -146,13 +167,14 @@ export function MusicPlayer({ adapter, service, active, nowPlaying }: { adapter:
     back: () => setStack(previous => previous.length > 1 ? previous.slice(0, -1) : previous),
     panel: name => { if (name !== 'devices' || adapter.features.has('devices')) setPanel(name) },
     closePanel: () => setPanel(null),
+    immersive: () => goImmersive(!immersive),
   })
 
   const search = query.trim()
   return (
     <PlayerContext.Provider value={value}>
       {reveal.covered ? <MusicWait name={adapter.name} leaving={reveal.ready} onLeft={reveal.uncover} /> : null}
-      <main className="exo-music" aria-label={adapter.name} inert={reveal.covered}>
+      <main className="exo-music" aria-label={adapter.name} inert={reveal.covered || immersive}>
         <h1 className="sr-only">{adapter.name}</h1>
         <nav className="exo-music-side" aria-label="Your library">
           {NAV.filter(([view]) => view === 'home' || view === 'songs' || value.has(view)).map(([view, Icon, name]) => (
@@ -178,7 +200,7 @@ export function MusicPlayer({ adapter, service, active, nowPlaying }: { adapter:
         {panel ? (
           <aside className="exo-music-panel exo-motion-switch" key={panel} aria-label={panelName(panel)}>
             {{
-              now: () => <NowPlayingPanel player={player} playback={playback} receivedAt={live?.at ?? 0} />,
+              now: () => <NowPlayingPanel player={player} playback={playback} receivedAt={live?.at ?? 0} onImmersive={() => goImmersive(true)} />,
               queue: () => <QueuePanel tick={tick} />,
               devices: () => <DevicesPanel />,
               friends: () => <FriendsPanel />,
@@ -188,7 +210,7 @@ export function MusicPlayer({ adapter, service, active, nowPlaying }: { adapter:
             }[panel]()}
           </aside>
         ) : null}
-        <PlayerBar playback={playback} player={player} panel={panel} volume={volume.level} onVolume={readVolume} onPanel={next => {
+        <PlayerBar playback={playback} player={player} panel={panel} volume={volume.level} onVolume={readVolume} onImmersive={() => goImmersive(true)} onPanel={next => {
           const toggle = () => setPanel(current => current === next ? null : next)
           if (next !== 'now') return toggle()
           // Now playing: the strip's cover flies up into the panel, and back down when it closes.
@@ -200,6 +222,7 @@ export function MusicPlayer({ adapter, service, active, nowPlaying }: { adapter:
           onChanged={() => void readPlayer()} />
         {sheet ? <PlaylistSheet edit={sheet} onClose={() => setSheet(null)} /> : null}
       </main>
+      {immersive && !reveal.covered ? <Immersive player={player} live={live} active={active} onLeave={() => goImmersive(false)} onChanged={() => void readPlayer()} /> : null}
     </PlayerContext.Provider>
   )
 }
@@ -591,34 +614,14 @@ function kindName(card: PlayerCard, podcasts: boolean) {
     : card.kind[0]?.toUpperCase() + card.kind.slice(1)
 }
 
-function IconToggle({ label, on, disabled, className, onPress, children }: {
-  label: string; on?: boolean; disabled?: boolean; className?: string; onPress: () => void; children: ReactNode
-}) {
-  return <button type="button" className={`exo-set-btn exo-music-toggle${on ? ' is-on' : ''}${className ? ' ' + className : ''}`} aria-label={label} aria-pressed={on} disabled={disabled} onClick={onPress}>{children}</button>
-}
-
-/** The playing song's heart, and YouTube Music's thumbs down beside it. */
-function SongVerdict({ player, change }: { player: PlayerState; change: (...args: Parameters<MusicAdapter['act']>) => void }) {
-  const { adapter, has } = usePlayer()
-  return (
-    <>
-      <IconToggle label={player.liked ? `Remove from ${adapter.likedName}` : `Save to ${adapter.likedName}`} on={player.liked}
-        onPress={() => change('like', { uri: player.trackUri, on: !player.liked })}><Heart size={16} filled={player.liked} /></IconToggle>
-      {has('dislike') ? (
-        <IconToggle label={player.disliked ? 'Remove dislike' : 'Dislike'} on={player.disliked}
-          onPress={() => change('dislike', { uri: player.trackUri, on: !player.disliked })}><ThumbsDown size={16} filled={player.disliked} /></IconToggle>
-      ) : null}
-    </>
-  )
-}
-
 /** The room's own controls and volume; the song's clock and seek stay in the title bar's mini player. */
-function PlayerBar({ playback, player, panel, volume, onVolume, onPanel, onChanged }: {
+function PlayerBar({ playback, player, panel, volume, onVolume, onImmersive, onPanel, onChanged }: {
   playback: MusicPlayback | null
   player: PlayerState | null
   panel: Panel
   volume: number | null
   onVolume: () => void
+  onImmersive: () => void
   onPanel: (panel: Exclude<Panel, null>) => void
   onChanged: () => void
 }) {
@@ -647,7 +650,7 @@ function PlayerBar({ playback, player, panel, volume, onVolume, onPanel, onChang
         {player?.trackUri ? <SongVerdict player={player} change={change} /> : null}
       </div>
       <BarControls playback={playback} player={player} change={change} onFail={setFailed} />
-      <BarSide panel={panel} onPanel={onPanel}>
+      <BarSide panel={panel} onPanel={onPanel} onImmersive={onImmersive}>
         <MusicVolume className="exo-music-bar-volume" volume={volume} onRefresh={onVolume} />
         {/* YouTube Music's Song / Video switch: the song's music video plays instead (its picture stays with the hidden player). */}
         {player?.canVideo && has('video') ? (
@@ -659,49 +662,7 @@ function PlayerBar({ playback, player, panel, volume, onVolume, onPanel, onChang
   )
 }
 
-function BarControls({ playback, player, change, onFail }: {
-  playback: MusicPlayback | null
-  player: PlayerState | null
-  change: (...args: Parameters<MusicAdapter['act']>) => void
-  onFail: (message: string | null) => void
-}) {
-  const playing = playback?.status === 'playing'
-  // Spotify plays on another device: this is that device's id, and Play here moves playback to the web player.
-  const [elsewhere, setElsewhere] = useState<string | null>(null)
-  const control = (action: 'toggle' | 'next' | 'previous') => {
-    onFail(null)
-    setElsewhere(null)
-    void host.musicControl(action).then(
-      result => {
-        if (result.ok) return
-        onFail(result.message ?? 'The player could not respond.')
-        if (result.cause === 'another-device' && result.deviceId) setElsewhere(result.deviceId)
-      },
-      error => { report(error, 'MusicPlayer.control'); onFail('The player could not respond.') })
-  }
-  const repeat = player?.repeat ?? 0
-  return (
-      <div className="exo-music-bar-controls">
-        <IconToggle label="Shuffle" on={player?.shuffle} disabled={!player?.canShuffle} onPress={() => change('shuffle', { on: !player?.shuffle })}><Shuffle size={16} /></IconToggle>
-        <IconToggle label="Previous" disabled={!playback?.canPrev} onPress={() => control('previous')}><Previous size={18} /></IconToggle>
-        <button type="button" className="exo-music-bar-play" aria-label={playing ? 'Pause' : 'Play'} disabled={!playback || playback.status === 'none'} onClick={() => control('toggle')}>
-          {playing ? <Pause size={18} /> : <Play size={18} />}
-        </button>
-        <IconToggle label="Next" disabled={!playback?.canNext} onPress={() => control('next')}><Next size={18} /></IconToggle>
-        <IconToggle label={repeat === 2 ? 'Repeat this song' : repeat === 1 ? 'Repeat' : 'Repeat off'} on={repeat > 0} disabled={!player?.canRepeat}
-          onPress={() => change('repeat', { index: (repeat + 1) % 3 })}>{repeat === 2 ? <RepeatOne size={16} /> : <Repeat size={16} />}</IconToggle>
-        {elsewhere ? (
-          <button type="button" className="exo-set-btn is-compact" onClick={() => {
-            onFail(null)
-            setElsewhere(null)
-            change('transfer', { context: elsewhere })
-          }}>Play here</button>
-        ) : null}
-      </div>
-  )
-}
-
-function BarSide({ panel, onPanel, children }: { panel: Panel; onPanel: (panel: Exclude<Panel, null>) => void; children?: ReactNode }) {
+function BarSide({ panel, onPanel, onImmersive, children }: { panel: Panel; onPanel: (panel: Exclude<Panel, null>) => void; onImmersive: () => void; children?: ReactNode }) {
   const { has } = usePlayer()
   // Now playing and Queue, the two everyone goes to; the rest (Jam, Spotify's Friend activity and Devices, then Sound) in one menu.
   const more = (['jam', 'friends', 'devices', 'sound'] as const).filter(name => name === 'jam' || name === 'sound' || has(name))
@@ -710,6 +671,7 @@ function BarSide({ panel, onPanel, children }: { panel: Panel; onPanel: (panel: 
         {children}
         <IconToggle label="Now playing" on={panel === 'now'} onPress={() => onPanel('now')}><NowPlaying size={16} /></IconToggle>
         <IconToggle label="Queue" on={panel === 'queue'} onPress={() => onPanel('queue')}><Queue size={16} /></IconToggle>
+        <IconToggle label="Immersive" className="exo-music-immersive-toggle" onPress={onImmersive}><FullScreen size={16} /></IconToggle>
         <Menu label="More panels" anchor="--exo-music-panels" offset={4}
           triggerClassName={`exo-set-btn exo-music-toggle${more.some(name => name === panel) ? ' is-on' : ''}`} trigger={<More size={16} />}
           items={more.map(name => ({ id: name, label: panelName(name), on: panel === name }))} onAction={id => onPanel(id as Exclude<Panel, null>)} />
