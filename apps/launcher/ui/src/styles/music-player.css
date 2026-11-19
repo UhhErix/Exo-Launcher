@@ -779,6 +779,17 @@
   align-self: center;
 }
 
+.exo-music-now-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.exo-music-now-text {
+  min-width: 0;
+}
+
 .exo-music-now-text h2 {
   margin: 0 0 4px;
   font-size: calc(20px * var(--exo-scale, 1));
@@ -1612,3 +1623,191 @@ html[data-exo-motion="reduce"] .exo-music-lyrics.is-synced li.is-active span.is-
 /* A library row's pitch: its 46px and the pane's 8px gap make the 54px the real rows take. */
 
 /* Home's recent grid and shelves, at their sizes (Recently played four across, eight cards to a shelf). */
+
+/* Immersive (Immersive.tsx): Now playing over the whole window, the cover large in its own light. The light is the
+   cover drawn small and blurred on a canvas and stretched (no filter on the page), at --exo-immersive-art over black
+   under --exo-immersive-dim, so words keep 4.5:1 on any art. Under the Bar (z-index 40), over the room. Still while
+   it shows: only the sung line moves. */
+.exo-music-immersive {
+  position: fixed;
+  inset: 0;
+  /* Over the room's panes, which rise to 50 while they hold a menu (glass.css); the room itself stays under the Bar. */
+  z-index: 60;
+  overflow: hidden;
+  background: var(--color-bg);
+  color: var(--color-fg);
+  font-size: calc(13px * var(--exo-scale, 1));
+}
+
+/* Focus is moved onto it as it opens (so keys land there); the whole window is not a control to ring. */
+.exo-music-immersive:focus {
+  outline: none;
+}
+
+.exo-music-immersive-light {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.exo-music-immersive-light canvas {
+  position: absolute;
+  inset: -6%;
+  width: 112%;
+  height: 112%;
+  opacity: 0;
+  transition: opacity var(--dur-move) var(--ease-out);
+}
+
+.exo-music-immersive-light canvas.is-drawn {
+  opacity: var(--exo-immersive-art);
+}
+
+.exo-music-immersive-light::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: var(--exo-immersive-dim);
+}
+
+/* The song alone, centred; with lyrics, the song on the left and its lyrics on the right, each half the window. */
+.exo-music-immersive-stage {
+  --exo-immersive-art-size: min(56vh, 560px);
+  position: relative;
+  display: grid;
+  place-items: center;
+  height: 100%;
+  padding: calc(var(--exo-titlebar-h) + 24px) 64px 48px;
+}
+
+.exo-music-immersive.has-lyrics .exo-music-immersive-stage {
+  --exo-immersive-art-size: min(52vh, 34vw, 520px);
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 64px;
+}
+
+.exo-music-immersive-song {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  width: var(--exo-immersive-art-size);
+  min-width: 0;
+}
+
+.exo-music-immersive-song > .exo-music-art.exo-music-immersive-art {
+  width: var(--exo-immersive-art-size);
+  height: var(--exo-immersive-art-size);
+  margin-bottom: 8px;
+  border-radius: var(--exo-panel-radius);
+}
+
+.exo-music-immersive-text {
+  width: 100%;
+  min-width: 0;
+  text-align: center;
+}
+
+.exo-music-immersive-text h2 {
+  display: -webkit-box;
+  margin: 0 0 4px;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  font-size: calc(28px * var(--exo-scale, 1));
+  font-weight: var(--exo-weight-title);
+  line-height: 1.2;
+}
+
+.exo-music-immersive-text p {
+  margin: 0;
+  font-size: calc(20px * var(--exo-scale, 1));
+}
+
+.exo-music-immersive-progress {
+  position: relative;
+  display: grid;
+  grid-template-columns: 40px minmax(0, 1fr) 40px;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+}
+
+.exo-music-immersive-progress input.exo-music-immersive-seek {
+  width: 100%;
+}
+
+.exo-music-immersive-time {
+  color: var(--color-muted);
+  font-size: calc(12px * var(--exo-scale, 1));
+  font-variant-numeric: tabular-nums;
+}
+
+.exo-music-immersive-time:last-child {
+  text-align: right;
+}
+
+.exo-music-immersive-controls {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+}
+
+.exo-music-immersive-verdict,
+.exo-music-immersive-leave {
+  display: flex;
+  gap: 4px;
+}
+
+.exo-music-immersive-leave {
+  justify-content: flex-end;
+}
+
+/* The lyrics scroll in their half alone, the sung line kept in its middle (panels.tsx › Lyrics), fading into its
+   top and foot; room above the first line and under the last lets either reach the middle. */
+.exo-music-immersive-lyrics {
+  align-self: stretch;
+  width: 100%;
+  min-height: 0;
+  overflow-y: auto;
+  mask-image: linear-gradient(transparent, var(--color-bg) 18%, var(--color-bg) 82%, transparent);
+}
+
+.exo-music-immersive .exo-music-lyrics {
+  gap: 16px;
+  margin: 0;
+  padding: 40vh 0;
+  border-top: 0;
+  font-size: calc(32px * var(--exo-scale, 1));
+  line-height: 1.25;
+}
+
+/* A narrow window: the song over its lyrics. */
+@media (max-width: 960px) {
+  .exo-music-immersive-stage {
+    padding-inline: 32px;
+  }
+
+  .exo-music-immersive.has-lyrics .exo-music-immersive-stage {
+    --exo-immersive-art-size: min(28vh, 240px);
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr);
+    gap: 24px;
+  }
+
+  .exo-music-immersive.has-lyrics .exo-music-immersive-song {
+    width: min(100%, 480px);
+  }
+}
+
+/* Over Immersive the Bar fades away while nothing needs it, and back with the pointer near the top or any key. */
+:root[data-exo-immersive] .exo-titlebar {
+  transition: opacity var(--dur-base) var(--ease-out);
+}
+
+:root[data-exo-immersive="away"] .exo-titlebar {
+  opacity: 0;
+}

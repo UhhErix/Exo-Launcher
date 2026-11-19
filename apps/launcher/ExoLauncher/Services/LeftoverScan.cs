@@ -9,6 +9,13 @@ namespace ExoLauncher.Services;
 internal enum LeftoverKind { Folder, File, Shortcut, Registry, Service, Task, Driver }
 
 /// <summary>
+/// How sure the scan is that a leftover is the app's (Review says it beside each, Revo's and BCU's confidence): Certain, it's
+/// inside the app's folder or points there, or carries its id, entry or Installer record; Likely, it has the app's own folder
+/// name; Possible, it's only named like it, or sits in a firewall group beside its rules. Only Certain is ever pre-selected.
+/// </summary>
+internal enum Certainty { Certain, Likely, Possible }
+
+/// <summary>
 /// One thing an app left: a file, folder or shortcut, a registry key (<see cref="Value"/> null) or value, a service (its
 /// key) or a scheduled task (its path). Machine: only an administrator may remove it. Likely: matched by a name alone, as
 /// BCU's "questionable": shown apart and only deleted when asked for on its own. Held: why something else may still need
@@ -18,7 +25,19 @@ internal sealed record Leftover(string Path, bool IsKey, string? Value, bool Mac
 {
     internal string? Held { get; init; }
 
+    /// <summary>One press takes it only when it is <see cref="Certainty.Certain"/> and nothing holds it.</summary>
     internal bool Selected => !Likely && Held is null;
+
+    /// <summary>Of what's matched by a name alone, the weaker evidence: named like it, or beside its own in a firewall group.</summary>
+    internal bool Loose { get; init; }
+
+    /// <summary>What ties it to the app, in the page's words ("inside the app's folder"); null says it plainly by its certainty.</summary>
+    internal string? Because { get; init; }
+
+    /// <summary>A driver's packages in Windows' driver store (oemNN.inf) that install its service: removed with it, saved first.</summary>
+    internal IReadOnlyList<string>? Infs { get; init; }
+
+    internal Certainty Sure => !Likely ? Certainty.Certain : Loose ? Certainty.Possible : Certainty.Likely;
 
     /// <summary>Read once, while it is still there.</summary>
     internal LeftoverKind Kind { get; } = As ?? (IsKey ? LeftoverKind.Registry
@@ -160,69 +179,86 @@ internal sealed partial class LeftoverScan
         var list = new List<Leftover>();
         // Its publisher's folder and its own name together are two facts, not one: that's the program's own, and it goes with it.
         var tied = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var home in homes) list.Add(new(home.TrimEnd('\\'), false, null, MachinePlace(home)));
+        foreach (var home in homes) list.Add(new(home.TrimEnd('\\'), false, null, MachinePlace(home)) { Because = InFolder });
+        // Its own folder's name is likely; a name the app only goes by (its name without its version) when its folder is
+        // called something else is only possible, as is anything named like it in Temp.
+        var folderNames = homes.Select(home => Path.GetFileName(home.TrimEnd('\\'))).ToHashSet(StringComparer.OrdinalIgnoreCase);
         foreach (var name in names)
         {
-            foreach (var root in NameRoots) list.Add(new(Expand(root + '\\' + name), false, null, MachinePlace(root), likely));
-            list.Add(new(@"HKCU\Software\" + name, true, null, false, likely));
-            list.Add(new(@"HKLM\SOFTWARE\" + name, true, null, true, likely));
-            list.Add(new(@"HKLM\SOFTWARE\WOW6432Node\" + name, true, null, true, likely));
+            var loose = likely && folderNames.Count > 0 && !folderNames.Contains(name);
+            foreach (var root in NameRoots) list.Add(new(Expand(root + '\\' + name), false, null, MachinePlace(root), likely) { Loose = loose || likely && root == "{Temp}" });
+            list.Add(new(@"HKCU\Software\" + name, true, null, false, likely) { Loose = loose });
+            list.Add(new(@"HKLM\SOFTWARE\" + name, true, null, true, likely) { Loose = loose });
+            list.Add(new(@"HKLM\SOFTWARE\WOW6432Node\" + name, true, null, true, likely) { Loose = loose });
             if (trail.Publisher is { Length: > 4 } publisher && OneName(publisher) && !Generic.Contains(publisher) && !publisher.Equals(name, StringComparison.OrdinalIgnoreCase))
             {
-                list.Add(new($@"HKCU\Software\{publisher}\{name}", true, null, false, likely));
-                list.Add(new($@"HKLM\SOFTWARE\{publisher}\{name}", true, null, true, likely));
-                foreach (var root in new[] { "{LocalAppData}", "{AppData}", "{ProgramData}" }) list.Add(new(Expand($@"{root}\{publisher}\{name}"), false, null, MachinePlace(root), likely));
+                list.Add(new($@"HKCU\Software\{publisher}\{name}", true, null, false, likely) { Loose = loose });
+                list.Add(new($@"HKLM\SOFTWARE\{publisher}\{name}", true, null, true, likely) { Loose = loose });
+                foreach (var root in new[] { "{LocalAppData}", "{AppData}", "{ProgramData}" }) list.Add(new(Expand($@"{root}\{publisher}\{name}"), false, null, MachinePlace(root), likely) { Loose = loose });
                 tied.UnionWith([$@"HKCU\Software\{publisher}\{name}", $@"HKLM\SOFTWARE\{publisher}\{name}", .. new[] { "{LocalAppData}", "{AppData}", "{ProgramData}" }.Select(root => Expand($@"{root}\{publisher}\{name}"))]);
             }
         }
         // Crash dumps and Windows Error Reporting's reports, by the executable's name.
         foreach (var exe in trail.Exes.Where(exe => exe.Length > 4 && exe.EndsWith(".exe", StringComparison.OrdinalIgnoreCase)).Distinct(StringComparer.OrdinalIgnoreCase))
         {
-            foreach (var dump in Matching(Expand(@"{LocalAppData}\CrashDumps"), exe + ".*.dmp")) list.Add(new(dump, false, null, false));
+            foreach (var dump in Matching(Expand(@"{LocalAppData}\CrashDumps"), exe + ".*.dmp")) list.Add(new(dump, false, null, false) { Because = Crashes });
             foreach (var (root, machine) in new[] { (@"{LocalAppData}\Microsoft\Windows\WER", false), (@"{ProgramData}\Microsoft\Windows\WER", true) })
             foreach (var store in new[] { "ReportArchive", "ReportQueue" })
             foreach (var report in Folders(Expand($@"{root}\{store}"), $"AppCrash_{exe}_*"))
-                list.Add(new(report, false, null, machine));
+                list.Add(new(report, false, null, machine) { Because = Crashes });
         }
         // A program in Program Files that wrote where it may not was given its own copy there (VirtualStore).
         foreach (var home in homes)
             if (home.Length > 3 && home[1] == ':')
-                list.Add(new(Expand(@"{LocalAppData}\VirtualStore") + home[2..].TrimEnd('\\'), false, null, false));
+                list.Add(new(Expand(@"{LocalAppData}\VirtualStore") + home[2..].TrimEnd('\\'), false, null, false) { Because = "Windows' copy of the app's folder" });
         // A Store app's own records, by its package family.
         foreach (var family in trail.Ids.Where(id => id.EndsWith('_')).Select(id => id.TrimEnd('_')))
-            foreach (var (path, isKey) in StoreRecords(family)) list.Add(new(path, isKey, null, false));
+            foreach (var (path, isKey) in StoreRecords(family)) list.Add(new(path, isKey, null, false) { Because = ItsId });
         list.AddRange(DeadEntries(trail));
-        foreach (var entry in trail.Entries) list.Add(new(entry, true, null, entry.StartsWith("HKLM", StringComparison.Ordinal)));
+        foreach (var entry in trail.Entries) list.Add(new(entry, true, null, entry.StartsWith("HKLM", StringComparison.Ordinal)) { Because = "Its Installed apps entry" });
         if (trail.ProductCode is { } product && Packed(product) is { } packed)
         {
-            list.Add(new($@"HKLM\SOFTWARE\Classes\Installer\Products\{packed}", true, null, true));
-            list.Add(new($@"HKLM\SOFTWARE\Classes\Installer\Features\{packed}", true, null, true));
-            list.Add(new($@"HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Installer\UserData\S-1-5-18\Products\{packed}", true, null, true));
-            list.Add(new($@"HKCU\Software\Microsoft\Installer\Products\{packed}", true, null, false));
-            list.Add(new($@"HKCU\Software\Microsoft\Installer\Features\{packed}", true, null, false));
+            list.Add(new($@"HKLM\SOFTWARE\Classes\Installer\Products\{packed}", true, null, true) { Because = Installer });
+            list.Add(new($@"HKLM\SOFTWARE\Classes\Installer\Features\{packed}", true, null, true) { Because = Installer });
+            list.Add(new($@"HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Installer\UserData\S-1-5-18\Products\{packed}", true, null, true) { Because = Installer });
+            list.Add(new($@"HKCU\Software\Microsoft\Installer\Products\{packed}", true, null, false) { Because = Installer });
+            list.Add(new($@"HKCU\Software\Microsoft\Installer\Features\{packed}", true, null, false) { Because = Installer });
         }
         var ids = trail.Ids;
         if (homes.Count > 0 || ids.Count > 0)
         {
             var sources = _sources ??= ReadSources(deep);
             if (deep && !sources.Deep) sources = _sources = ReadSources(deep);
+            var groups = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (var (key, name, text, machine) in sources.Values)
                 if (Ours(name) || Ours(text) ||
                     ids.Any(id => name.Contains(id, StringComparison.OrdinalIgnoreCase) || text.Contains(id, StringComparison.OrdinalIgnoreCase)))
-                    list.Add(new(key, true, name, machine));
+                {
+                    list.Add(new(key, true, name, machine) { Because = Ours(name) || Ours(text) ? PointsThere : ItsId });
+                    if (key.Equals(FirewallRules, StringComparison.OrdinalIgnoreCase) && FirewallGroup(text) is { } group) groups.Add(group);
+                }
+            // The firewall group its own rules are in: the group's other rules (a port it opened, naming no program) are possible.
+            foreach (var (key, name, text, machine) in sources.Values)
+                if (groups.Count > 0 && key.Equals(FirewallRules, StringComparison.OrdinalIgnoreCase) && FirewallGroup(text) is { } group && groups.Contains(group) && !AntiCheatIn(text))
+                    list.Add(new(key, true, name, machine, Likely: true) { Loose = true, Because = SameGroup });
             foreach (var (key, text, machine, kind) in sources.Keys)
             {
-                // A driver whose file is in the app's folder: shown, never taken by one press (a device may still need it).
-                if (kind == KeySource.Driver) { if (Ours(text)) list.Add(new(key, true, null, true, false, LeftoverKind.Driver) { Held = DriverHeld }); continue; }
+                // A driver whose file is in the app's folder: shown, never taken by one press (a device may still need it),
+                // with the driver store's package that installs it (pnputil refuses one a device still uses).
+                if (kind == KeySource.Driver)
+                {
+                    if (Ours(text)) list.Add(new(key, true, null, true, false, LeftoverKind.Driver) { Held = DriverHeld, Because = PointsThere, Infs = DriverInfs(key.Split('\\')[^1], text) });
+                    continue;
+                }
                 if (Ours(text) || kind == KeySource.AppId && ids.Any(id => text.StartsWith(id, StringComparison.OrdinalIgnoreCase)))
-                    list.Add(new(key, true, null, machine, false, kind == KeySource.Service ? LeftoverKind.Service : null));
+                    list.Add(new(key, true, null, machine, false, kind == KeySource.Service ? LeftoverKind.Service : null) { Because = Ours(text) ? PointsThere : ItsId });
             }
             // A shortcut by where it points; an internet shortcut (a store's game: steam://rungameid/730) also by its link.
             foreach (var (path, target, machine) in sources.Shortcuts)
                 if (Ours(target) || ids.Any(id => target.StartsWith(id + '|', StringComparison.OrdinalIgnoreCase)))
-                    list.Add(new(path, false, null, machine));
+                    list.Add(new(path, false, null, machine) { Because = Ours(target) ? PointsThere : ItsId });
             foreach (var (path, exe) in sources.Tasks)
-                if (Ours(exe)) list.Add(new(path, false, null, true, false, LeftoverKind.Task));
+                if (Ours(exe)) list.Add(new(path, false, null, true, false, LeftoverKind.Task) { Because = PointsThere });
             // What names the app's COM classes and file types (Revo's moderate scan): its shell extensions' entries and
             // their approval, a file type it was the handler of, its Open With entries.
             var classes = list.Where(item => item.IsKey && item.Value is null && item.Path.Contains(@"\CLSID\{", StringComparison.OrdinalIgnoreCase))
@@ -232,7 +268,9 @@ internal sealed partial class LeftoverScan
                 .Select(item => item.Path[(item.Path.LastIndexOf('\\') + 1)..]).Where(name => !name.StartsWith('{') && !name.StartsWith('.')).ToHashSet(StringComparer.OrdinalIgnoreCase);
             foreach (var (key, name, target, machine) in sources.Refs)
                 if (classes.Contains(target) || progIds.Contains(target))
-                    list.Add(name is null ? new(key, true, null, machine) : new(key, true, name, machine));
+                    list.Add(name is null ? new(key, true, null, machine) { Because = Handler } : new(key, true, name, machine) { Because = Handler });
+            // A file type Windows still opens with it: its UserChoice is signed, so Exo never writes it; Default apps changes it.
+            _defaults.UnionWith(DeadChoices(sources.Choices, progIds, ClassThere, names, trail.Exes));
         }
         // An MSI's upgrade code still naming it.
         if (trail.ProductCode is { } code && Packed(code) is { } upgraded)
@@ -249,7 +287,8 @@ internal sealed partial class LeftoverScan
             foreach (var approved in new[] { "Run", "Run32" })
                 list.Add(new(run.Path.Replace(@"\CurrentVersion\Run", @"\CurrentVersion\Explorer\StartupApproved\" + approved, StringComparison.OrdinalIgnoreCase), true, run.Value, run.Machine));
         var found = Weighed(Outermost(list.Where(item => Allowed(item, keep) && Exists(item)).ToList()), theirs)
-            .Select(item => item.Likely && (tied.Contains(item.Path) || HoldsItsExe(item, trail.Exes)) ? item with { Likely = false } : item).ToList();
+            .Select(item => item.Likely && item.Because != SameGroup && (tied.Contains(item.Path) || HoldsItsExe(item, trail.Exes))
+                ? item with { Likely = false, Loose = false, Because = tied.Contains(item.Path) ? "Its name, in its publisher's folder" : "Holds the app's own program" } : item).ToList();
         return trail.HomeHeld is not { } held ? found : found.Select(item => item.Held is null && homes.Contains(item.Path + '\\', StringComparer.OrdinalIgnoreCase) ? item with { Held = held } : item).ToList();
     }
 
@@ -301,6 +340,94 @@ internal sealed partial class LeftoverScan
     }
 
     internal const string DriverHeld = "A driver: only take it if no device needs it";
+
+    // What ties a leftover to the app, said after its certainty in Review.
+    internal const string InFolder = "Inside the app's folder";
+    internal const string PointsThere = "Points into the app's folder";
+    internal const string ItsId = "Carries the app's own id";
+    internal const string Installer = "Its Windows Installer record";
+    internal const string Crashes = "Its crash reports";
+    internal const string Handler = "Names the app's file types or shell add-ons";
+    internal const string SameGroup = "In a firewall group with its rules";
+    internal const string NamedAfter = "Named after it";
+    internal const string NamedLike = "Only named like it";
+
+    /// <summary>A leftover's certainty and what it rests on, as Review says it: "Certain: inside the app's folder".</summary>
+    internal static string Said(Certainty sure, string? because)
+    {
+        var why = because ?? (sure == Certainty.Certain ? "Tied to the app" : sure == Certainty.Likely ? NamedAfter : NamedLike);
+        return (sure switch { Certainty.Certain => "Certain", Certainty.Likely => "Likely", _ => "Possible" }) + ": " + char.ToLowerInvariant(why[0]) + why[1..];
+    }
+
+    /// <summary>File types Windows opens with the app (the last found): it's gone, so each needs a new default from Default apps.</summary>
+    internal IReadOnlyList<string> Defaults => [.. _defaults.Order(StringComparer.Ordinal)];
+
+    private readonly HashSet<string> _defaults = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// File types whose default (UserChoice's ProgId) is the app's: one of its own ProgIds, its Applications\exe entry, or a
+    /// ProgId no longer registered anywhere that carries its name. Windows signs UserChoice, so Exo never forges or deletes it:
+    /// the page sends the player to Default apps. A ProgId that's still registered and isn't the app's is never counted.
+    /// </summary>
+    internal static List<string> DeadChoices(IEnumerable<(string Ext, string ProgId)> choices, IReadOnlySet<string> progIds, Func<string, bool> classThere,
+        IReadOnlyList<string> names, IReadOnlyList<string> exes) => choices
+        .Where(choice => choice.Ext.StartsWith('.') && choice.ProgId.Length > 0 && (progIds.Contains(choice.ProgId) ||
+            exes.Any(exe => choice.ProgId.Equals(@"Applications\" + exe, StringComparison.OrdinalIgnoreCase)) ||
+            !classThere(choice.ProgId) && names.Any(name => name.Length > 4 && choice.ProgId.Contains(name.Replace(" ", ""), StringComparison.OrdinalIgnoreCase))))
+        .Select(choice => choice.Ext.ToLowerInvariant()).Distinct().Order(StringComparer.Ordinal).ToList();
+
+    private bool ClassThere(string progId) =>
+        ClassRoots.Any(root => { try { using var key = Open(root.Path + '\\' + progId, writable: false); return key is not null; } catch (Exception ex) when (ex is System.Security.SecurityException or IOException or UnauthorizedAccessException or ArgumentException) { return true; } });
+
+    /// <summary>A firewall rule's group (its EmbedCtxt), when it's the app's own: never one of Windows' (named by a resource, "@FirewallAPI.dll,-…") or a short generic one.</summary>
+    internal static string? FirewallGroup(string rule)
+    {
+        foreach (var part in rule.Split('|'))
+            if (part.StartsWith("EmbedCtxt=", StringComparison.OrdinalIgnoreCase) && part[10..].Trim() is { Length: > 4 } group && !group.StartsWith('@') && !Generic.Contains(group))
+                return group;
+        return null;
+    }
+
+    /// <summary>Where Windows keeps its driver store's INFs; tests set their own.</summary>
+    internal string? InfFolder { get; init; }
+
+    /// <summary>The driver store's packages (oemNN.inf) that add this driver's service with its file: what pnputil /delete-driver takes.</summary>
+    private List<string> DriverInfs(string service, string image)
+    {
+        var folder = InfFolder ?? (_isTest ? null : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "INF"));
+        if (folder is null || !Directory.Exists(folder)) return [];
+        var infs = new List<(string, string)>();
+        try
+        {
+            foreach (var file in Directory.EnumerateFiles(folder, "oem*.inf").Take(2000))
+                if (new FileInfo(file).Length < 4 << 20) infs.Add((Path.GetFileName(file), File.ReadAllText(file)));
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { AppLog.Debug("Leftovers: INFs unreadable: " + ex.GetType().Name); }
+        return InfsFor(service, image, infs);
+    }
+
+    /// <summary>
+    /// Of the driver store's INFs (name, text), those named oemNN.inf whose AddService installs <paramref name="service"/> and
+    /// that copy its file (the service's ImagePath's file name): never an INF that only mentions one of them.
+    /// </summary>
+    internal static List<string> InfsFor(string service, string image, IEnumerable<(string Name, string Text)> infs)
+    {
+        var file = Path.GetFileName(Environment.ExpandEnvironmentVariables(image).Trim().Trim('"'));
+        if (file.Length == 0 || service.Length == 0) return [];
+        var adds = new System.Text.RegularExpressions.Regex(@"^\s*AddService\s*=\s*""?" + System.Text.RegularExpressions.Regex.Escape(service) + @"""?\s*,",
+            System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.Multiline | System.Text.RegularExpressions.RegexOptions.CultureInvariant);
+        return infs.Where(inf => OemInf().IsMatch(inf.Name) && adds.IsMatch(inf.Text) && inf.Text.Contains(file, StringComparison.OrdinalIgnoreCase))
+            .Select(inf => inf.Name.ToLowerInvariant()).Distinct().Order(StringComparer.Ordinal).ToList();
+    }
+
+    [System.Text.RegularExpressions.GeneratedRegex(@"^oem\d{1,4}\.inf\z", System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.CultureInvariant)]
+    internal static partial System.Text.RegularExpressions.Regex OemInf();
+
+    /// <summary>Where a driver's store package is exported before it goes: a folder only administrators may write, made in the elevated step.</summary>
+    internal string DriverBackupRoot => Path.Combine(_isTest ? Expand("{ProgramData}") : Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "ExoLauncher", "DriverBackup");
+
+    /// <summary>Each driver's backup folder, by the leftover, set when its elevated step was written (<see cref="AdminCommand"/>).</summary>
+    internal Dictionary<Leftover, (string Folder, IReadOnlyList<string> Infs)> DriverBackups { get; } = [];
     internal const string StillShared = "Another program shares a file in it";
     internal const string StillRunning = "A running program uses it";
 
@@ -748,12 +875,44 @@ internal sealed partial class LeftoverScan
             return null;
         }
         if (item.Kind == LeftoverKind.Task) return $"schtasks /delete /tn \"{item.Path}\" /f";
+        if (item.Kind == LeftoverKind.Driver && item.Infs is { Count: > 0 } infs) return DriverStoreCommand(item, infs);
         if (item.Kind is LeftoverKind.Service or LeftoverKind.Driver) return $"sc stop \"{item.Path.Split('\\')[^1]}\" & sc delete \"{item.Path.Split('\\')[^1]}\"";
         if (!item.IsKey)
             return Directory.Exists(item.Path) ? $"rd /s /q \"{item.Path}\""
                 : File.Exists(item.Path) ? $"(if not exist \"{item.Path}\\*\" del /f /q \"{item.Path}\")" : null;
         var key = _isTest && item.Path.StartsWith("HKLM", StringComparison.Ordinal) ? @"HKCU\" + Join(_hklmBase, item.Path[5..]) : item.Path;
         return item.Value is null ? $"reg delete \"{key}\" /f" : item.Value.Length == 0 ? $"reg delete \"{key}\" /ve /f" : $"reg delete \"{key}\" /v \"{item.Value}\" /f";
+    }
+
+    /// <summary>
+    /// A driver with its driver store package: the package is exported first into a new folder only administrators may write
+    /// (made, owned and locked in the same step, so nothing this user runs can swap what Put back adds again), then pnputil
+    /// /delete-driver takes it, never /force nor /uninstall, so Windows refuses one a device still uses; only once it went
+    /// does the service go. Each part runs only after the one before it worked (&amp;&amp;). Null (it stays) when a name isn't
+    /// an oemNN.inf or can't sit in quotes.
+    /// </summary>
+    internal string? DriverStoreCommand(Leftover item, IReadOnlyList<string> infs)
+    {
+        var service = item.Path.Split('\\')[^1];
+        var root = DriverBackupRoot;
+        var folder = Path.Combine(root, Guid.NewGuid().ToString("N"));
+        if (infs.Any(inf => !OemInf().IsMatch(inf)) || $"{service}{folder}".Any(c => char.IsControl(c) || c is '"' or '%' or '!' or '^' or '&' or '|' or '<' or '>' or '(' or ')'))
+        {
+            Stay(item, Unquotable);
+            return null;
+        }
+        var pnputil = Path.Combine(Environment.SystemDirectory, "pnputil.exe");
+        const string Locked = "/inheritance:r /grant:r \"*S-1-5-32-544:(OI)(CI)F\" \"*S-1-5-18:(OI)(CI)F\" \"*S-1-5-32-545:(OI)(CI)RX\"";
+        // takeown /a makes the Administrators group the owner (a folder this user made first loses its say), then the locked ACL.
+        var parts = new List<string>
+        {
+            $"takeown /f \"{root}\" /a >nul", $"icacls \"{root}\" {Locked} >nul",
+            $"mkdir \"{folder}\"", $"takeown /f \"{folder}\" /a >nul", $"icacls \"{folder}\" {Locked} >nul",
+        };
+        foreach (var inf in infs) parts.AddRange([$"\"{pnputil}\" /export-driver {inf} \"{folder}\" >nul", $"\"{pnputil}\" /delete-driver {inf} >nul"]);
+        parts.Add($"(sc stop \"{service}\" >nul & sc delete \"{service}\")");
+        DriverBackups[item] = (folder, infs);
+        return $"(if not exist \"{root}\" mkdir \"{root}\") & " + string.Join(" && ", parts);
     }
 
     /// <summary>

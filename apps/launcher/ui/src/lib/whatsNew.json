@@ -13,6 +13,11 @@
         "detail": "Names of games you haven't installed, DLC, betas and languages show again on the current Steam."
       },
       {
+        "icon": "MusicNotes",
+        "title": "Music, full window",
+        "detail": "Press F or the full-window button in Music for the cover large, its colours around it and the lyrics big beside it; Esc goes back."
+      },
+      {
         "icon": "Drive",
         "title": "Compress games",
         "detail": "Windows' own compression makes games smaller on disk, and they play as before."

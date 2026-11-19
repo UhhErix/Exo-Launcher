@@ -268,6 +268,11 @@ body,
   --exo-scrim: rgb(0 0 0 / 0.72);
   /* The scrim one step deeper: what darkens further under the pointer (a video embed's play mark on hover). */
   --exo-scrim-strong: rgb(0 0 0 / 0.9);
+  /* Music's Immersive (Immersive.tsx): the cover's light at this opacity over black, under this dim. Together they keep
+     even white art at sRGB 0.18 at most, so white words hold 13:1, muted 6.6:1 and faint 4.8:1 over it
+     (test/musicImmersive.test.ts reads these two). */
+  --exo-immersive-art: 0.45;
+  --exo-immersive-dim: rgb(0 0 0 / 0.6);
   /* The colour picker's hue bar: the spectrum itself is data, not a theme colour. */
   --exo-hue-spectrum: linear-gradient(to right, #f00, #ff0, #0f0, #0ff, #00f, #f0f, #f00);
   /* Not installed (Library): the cover recedes, darker and drained (the host bakes it into the grid's thumbnail,
