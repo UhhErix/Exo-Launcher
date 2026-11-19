@@ -17,7 +17,8 @@ namespace ExoLauncher.Tests;
 /// - a shard cut short or with a record Steam is still writing (its hash doesn't match) is taken as whole, so an
 ///   anti-cheat word goes missing instead of "cannot tell";
 /// - a header that lies (sizes, counts, shard index) reads past the file;
-/// - an app in a later shard is not found, or launch entries lose their per-entry OS and branch.
+/// - an app in a later shard is not found, or launch entries lose their per-entry OS and branch;
+/// - a cold load that met a shard mid-write keeps the partial name catalog for the whole ten-minute reload window.
 /// </summary>
 public sealed class SteamAppInfoShardTests : IDisposable
 {
@@ -203,6 +204,33 @@ public sealed class SteamAppInfoShardTests : IDisposable
     }
 
     [Fact]
+    public void AColdLoadThatMetAShardMidWriteIsReadAgainSoon()
+    {
+        var k1 = new List<string>();
+        var k2 = new List<string>();
+        WriteShard(0x01, Shard(0x01, k1, [(1000, Game(k1, 1000, "First"))]));
+        var second = Shard(0x02, k2, [(2000, Game(k2, 2000, "Second"))]);
+        WriteShard(0x02, second[..^5]);
+        var now = new DateTime(2026, 11, 18, 12, 0, 0, DateTimeKind.Utc);
+        var names = SteamAppInfoNames.LoadAt(_root, now);
+        Assert.Equal("First", names["1000"].Name);
+        Assert.False(names.ContainsKey("2000"));
+
+        WriteShard(0x02, second);
+        // Within the short window the partial catalog still answers (no re-parse on every call) ...
+        Assert.False(SteamAppInfoNames.LoadAt(_root, now + TimeSpan.FromSeconds(5)).ContainsKey("2000"));
+        // ... and soon after it is read again, long before the ten-minute reload.
+        names = SteamAppInfoNames.LoadAt(_root, now + SteamAppInfoNames.PartialTtl + TimeSpan.FromSeconds(1));
+        Assert.Equal("Second", names["2000"].Name);
+        Assert.Equal("First", names["1000"].Name);
+
+        // Whole now: a shard torn later keeps the whole catalog instead of shrinking it.
+        WriteShard(0x02, second[..^5]);
+        names = SteamAppInfoNames.LoadAt(_root, now + TimeSpan.FromMinutes(11));
+        Assert.Equal("Second", names["2000"].Name);
+    }
+
+    [Fact]
     public void AntiCheatWordsComeFromEveryShardAndAHalfWrittenOneSaysCannotTell()
     {
         var k1 = new List<string>();
@@ -224,5 +252,28 @@ public sealed class SteamAppInfoShardTests : IDisposable
         // Nothing changed: not parsed again.
         Assert.Equal(SteamWord.Vac, steam.Word(1000));
         Assert.Equal(2, steam.Parses);
+    }
+
+    [Fact]
+    public void TheEntryWithoutAntiCheatIsReadWithTheWords()
+    {
+        var keys = new List<string>();
+        var nba = new Kv(keys).Open("appinfo").Int("appid", 3472040).Open("common").Str("name", "NBA 2K26").Str("type", "Game").Close()
+            .Open("config").Open("launch")
+                .Open("0").Str("executable", "start_protected_game.exe").Str("type", "default").Str("description", "Play NBA 2K26")
+                    .Open("config").Str("oslist", "windows").Close().Close()
+                .Open("1").Str("executable", "NBA2K26.exe").Str("type", "option1")
+                    .Open("description_loc").Str("english", "NBA 2K26 without EAC (offline only)").Close()
+                    .Open("config").Str("oslist", "windows").Close().Close()
+            .Close().Close().Close().Bytes;
+        WriteShard(0x07, Shard(0x07, keys, [(3472040, nba), (2000, Game(keys, 2000, "Puzzle"))]));
+        var steam = new SteamVacFile(() => SteamAppInfoNames.Files(_root));
+        Assert.Equal(new SteamAppInfoNames.AntiCheatFreeLaunch("option1", "NBA 2K26 without EAC (offline only)", "NBA2K26.exe"), steam.Free(3472040));
+        Assert.Null(steam.Free(2000));
+        Assert.Null(steam.Free(77));
+        // The court game's offline entry is tied to a beta: not offered.
+        var k2 = new List<string>();
+        WriteShard(0x08, Shard(0x08, k2, [(9100, TwoWayGame(k2))]));
+        Assert.Null(new SteamVacFile(() => SteamAppInfoNames.Files(_root)).Free(9100));
     }
 }

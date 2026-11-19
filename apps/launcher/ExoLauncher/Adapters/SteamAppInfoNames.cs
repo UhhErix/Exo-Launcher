@@ -29,6 +29,9 @@ internal static class SteamAppInfoNames
     private const long MaxFileBytes = 256L * 1024 * 1024;
     private static readonly object Gate = new();
     private static readonly TimeSpan ReloadTtl = TimeSpan.FromMinutes(10);
+    /// <summary>How soon a catalog read while Steam was writing a shard is read again.</summary>
+    internal static readonly TimeSpan PartialTtl = TimeSpan.FromSeconds(15);
+    private static bool _partial;
     private static string? _root;
     private static string? _stamp;
     private static DateTime _loadedAtUtc;
@@ -110,12 +113,14 @@ internal static class SteamAppInfoNames
             if (string.Equals(_failedRoot, steamRoot, StringComparison.OrdinalIgnoreCase) && nowUtc < _retryAtUtc)
                 return sameRoot ? _loaded : new Dictionary<string, Entry>(StringComparer.Ordinal);
             var stamp = Stamp(files);
-            if (sameRoot && stamp is not null && _stamp == stamp)
+            if (sameRoot && !_partial && stamp is not null && _stamp == stamp)
                 return _loaded;
             // Steam rewrites appinfo while running. Re-parsing several MB on every 30s library scan is what made Steam
-            // miss the 25s adapter timeout. Keep a short TTL even when the files moved.
-            if (sameRoot && _loaded.Count > 0 && nowUtc - _loadedAtUtc < ReloadTtl)
+            // miss the 25s adapter timeout. Keep a short TTL even when the files moved; a catalog missing a shard Steam was
+            // writing (a cold load keeps the rest) is read again soon instead.
+            if (sameRoot && _loaded.Count > 0 && nowUtc - _loadedAtUtc < (_partial ? PartialTtl : ReloadTtl))
                 return _loaded;
+            var partial = false;
             try
             {
                 var parsed = new Dictionary<string, Entry>(StringComparer.Ordinal);
@@ -125,13 +130,15 @@ internal static class SteamAppInfoNames
                     if (!IsKnownFormat(bytes))
                         throw new InvalidDataException("Steam appinfo header is incomplete or unsupported.");
                     // A file Steam is still writing: keep what an earlier whole read had.
-                    if (!ParseInto(bytes, parsed) && sameRoot && _loaded.Count > 0)
+                    if (ParseInto(bytes, parsed)) continue;
+                    if (sameRoot && _loaded.Count > 0 && !_partial)
                         throw new InvalidDataException("Steam appinfo ended before its last record.");
+                    partial = true;
                 }
                 if (parsed.Count == 0 && _loaded.Count > 0 && sameRoot)
                     throw new InvalidDataException("Steam appinfo did not contain a complete catalog.");
                 _loaded = parsed;
-                AppLog.Debug($"Steam appinfo: {parsed.Count} names from {files.Count} file(s).");
+                AppLog.Debug($"Steam appinfo: {parsed.Count} names from {files.Count} file(s){(partial ? ", some mid-write" : "")}.");
             }
             catch
             {
@@ -142,6 +149,7 @@ internal static class SteamAppInfoNames
             _root = steamRoot;
             _stamp = stamp;
             _loadedAtUtc = nowUtc;
+            _partial = partial;
             _failedRoot = null;
             _retryAtUtc = default;
             return _loaded;
@@ -286,6 +294,67 @@ internal static class SteamAppInfoNames
         }
         return entries;
     }
+
+    /// <summary>
+    /// The Play-menu entry that starts the game without its anti-cheat, as Steam itself offers it (NBA 2K26: the default is
+    /// <c>start_protected_game.exe</c>, Easy Anti-Cheat's bootstrapper, and option1 "NBA 2K26 without EAC (offline only)" is
+    /// <c>NBA2K26.exe</c>). <see cref="Option"/> is Steam's own word for it ("option1"), what <c>steam://launch</c> takes.
+    /// </summary>
+    internal sealed record AntiCheatFreeLaunch(string Option, string Description, string Executable);
+
+    /// <summary>
+    /// The entry of <paramref name="entries"/> that avoids the anti-cheat, or null. Only for a game with more than one
+    /// Windows entry for every branch (an entry tied to a beta applies only there): a protected one, first in Steam's order
+    /// (its program the anti-cheat's bootstrapper, or the other's words saying it is without), and another named by
+    /// Steam's "optionN" whose program is not a bootstrapper and which either says it is without anti-cheat or offline, or
+    /// sits beside a bootstrapper. An entry that only runs another program (an editor, a benchmark) beside a plain game
+    /// is not one.
+    /// </summary>
+    internal static AntiCheatFreeLaunch? WithoutAntiCheat(IReadOnlyList<LaunchEntry> entries)
+    {
+        var usable = entries.Where(entry => entry.BetaKey.Length == 0 && entry.Type != "none" &&
+                (entry.OsList.Length == 0 || entry.OsList.Contains("windows", StringComparison.OrdinalIgnoreCase)) &&
+                entry.Executable.EndsWith(".exe", StringComparison.OrdinalIgnoreCase))
+            .ToList();
+        if (usable.Count < 2) return null;
+        var main = usable.FirstOrDefault(entry => entry.Type is "default" or "") ?? usable[0];
+        foreach (var entry in usable)
+        {
+            if (ReferenceEquals(entry, main) || !IsOption(entry.Type) || IsAntiCheatBootstrapper(entry.Executable) || SaysWithAntiCheat(entry.Description)) continue;
+            if (SaysWithoutAntiCheat(entry.Description) || IsAntiCheatBootstrapper(main.Executable))
+                return new AntiCheatFreeLaunch(entry.Type, entry.Description, entry.Executable);
+        }
+        return null;
+    }
+
+    private static bool IsOption(string type) =>
+        type.Length is > 6 and <= 9 && type.StartsWith("option", StringComparison.Ordinal) && type[6..].All(char.IsAsciiDigit) && type[6] != '0';
+
+    /// <summary>A program whose only job is to start the anti-cheat and then the game.</summary>
+    internal static bool IsAntiCheatBootstrapper(string executable)
+    {
+        var name = Path.GetFileNameWithoutExtension(executable.Replace('\\', '/').Split('/')[^1]);
+        return name.Equals("start_protected_game", StringComparison.OrdinalIgnoreCase) ||
+               name.Contains("EasyAntiCheat", StringComparison.OrdinalIgnoreCase) ||
+               name.Contains("BattlEye", StringComparison.OrdinalIgnoreCase) ||
+               name.EndsWith("_BE", StringComparison.OrdinalIgnoreCase) ||
+               name.EndsWith("_EAC", StringComparison.OrdinalIgnoreCase) ||
+               name.Equals("BELauncher", StringComparison.OrdinalIgnoreCase) ||
+               name.Equals("EACLauncher", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static readonly System.Text.RegularExpressions.Regex AntiCheatWord = new(
+        @"(?<![a-z])(EAC|easy\s*anti-?cheat|anti-?cheat|BattlEye)(?![a-z])",
+        System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.CultureInvariant);
+
+    private static readonly System.Text.RegularExpressions.Regex WithoutWord = new(
+        @"(?<![a-z])(without|no|disabled?|off)(?![a-z])[^.]{0,40}?(?<![a-z])(EAC|easy\s*anti-?cheat|anti-?cheat|BattlEye)(?![a-z])|(?<![a-z])offline(?![a-z])",
+        System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.CultureInvariant);
+
+    internal static bool SaysWithoutAntiCheat(string description) => WithoutWord.IsMatch(description);
+
+    /// <summary>Names an anti-cheat and does not say it is without it ("Play with EasyAntiCheat").</summary>
+    private static bool SaysWithAntiCheat(string description) => AntiCheatWord.IsMatch(description) && !SaysWithoutAntiCheat(description);
 
     /// <summary>One record's key values; the record's single root is "appinfo", and callers read below it.</summary>
     private static SteamKeyValues ReadRecord(byte[] data, int start, int end, string[] table)
