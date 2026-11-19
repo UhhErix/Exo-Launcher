@@ -114,7 +114,10 @@ public sealed partial class WebHostBridge
     /// </summary>
     private void PollRunStates()
     {
-        if (_detached) return;
+        // Read before the detached check: Detach sets _detached before Exo's shutdown clears the signal, so a scan that
+        // passes the check with this generation and publishes after the clear is dropped (GameRunningSignal.Clear).
+        var generation = GameRunningSignal.Generation;
+        if (Volatile.Read(ref _detached)) return;
         if (Interlocked.Exchange(ref _runStatePolling, 1) == 1)
         {
             Volatile.Write(ref _runStateQueued, 1);
@@ -143,7 +146,7 @@ public sealed partial class WebHostBridge
             if (!running && sessionOpen && GameRunningSignal.Running)
                 AppLog.Info($"Game running signal: no game process for {sessionOnlyFor.TotalSeconds:0} s; the open session no longer counts.");
             _runStateSessionOnly = running && !found;
-            GameRunningSignal.Update(running);
+            GameRunningSignal.Update(running, generation);
             FpsCounter.Follow(_services.Launcher, installed.Where(game => runningIds.Contains(game.Id) && !_services.ShaderPrepare.Preparing(game.Id)));
         }
         catch (Exception ex) { AppLog.Debug("Run-state poll failed: " + ex.GetType().Name); }
@@ -270,7 +273,7 @@ public sealed partial class WebHostBridge
     public void Detach()
     {
         if (_detached) return;
-        _detached = true;
+        Volatile.Write(ref _detached, true);
         try { _bridgeLifetime.Cancel(); } catch { }
         try { Interlocked.Exchange(ref _keyWatchCts, null)?.Cancel(); } catch { }
         StopWatch(Interlocked.Exchange(ref _controllerWatch, null));

@@ -39,12 +39,28 @@ internal static class GameRunningSignal
         }
     }
 
-    /// <summary>Exo is closing: the event is reset now, so a reader holding a handle past Exo's exit reads no game.</summary>
+    /// <summary>
+    /// Exo is closing: the event is reset now, so a reader holding a handle past Exo's exit reads no game. A scan already
+    /// running when the bridge detached (its timer is disposed without waiting) carries the generation it started under,
+    /// so its <see cref="Update(bool, int)"/> after this is dropped instead of setting the event again.
+    /// </summary>
     internal static void Clear()
     {
-        if (Interlocked.Exchange(ref _state, 0) == 1) AppLog.Info("Game running signal: cleared as Exo closes.");
-        if (Handle.IsValueCreated && Handle.Value is { } handle) handle.Reset();
+        lock (Gate)
+        {
+            _generation++;
+            if (Interlocked.Exchange(ref _state, 0) == 1) AppLog.Info("Game running signal: cleared as Exo closes.");
+            if (Handle.IsValueCreated && Handle.Value is { } handle) handle.Reset();
+        }
     }
+
+    // Update and Clear run one at a time: an Update that passed its generation check finishes (event included) before
+    // Clear resets, and one that comes after Clear sees the new generation.
+    private static readonly Lock Gate = new();
+    private static int _generation;
+
+    /// <summary>Read by a scan before it starts; passed back to <see cref="Update(bool, int)"/> with its result.</summary>
+    internal static int Generation => Volatile.Read(ref _generation);
 
     private static int _state = -1;
 
@@ -52,19 +68,25 @@ internal static class GameRunningSignal
     /// stops or slows while a game runs, instead of a process scan of its own.</summary>
     internal static bool Running => Volatile.Read(ref _state) == 1;
 
-    internal static void Update(bool running) => Update(running, WifiGameMode.Hold, LeanSignal.Update, Signal);
+    internal static void Update(bool running, int generation) => Update(running, generation, WifiGameMode.Hold, LeanSignal.Update, Signal);
 
     /// <summary>
     /// The state is set first: LeanSignal.Changed's listeners (an update waiting for the game) read <see cref="Running"/>, and
-    /// read the old value when it was set after them.
+    /// read the old value when it was set after them. Returns false, changing nothing, when <see cref="Clear"/> ran after the
+    /// scan read <paramref name="generation"/>.
     /// </summary>
-    internal static void Update(bool running, Action<bool> wifi, Action<bool> lean, Action<bool> signal)
+    internal static bool Update(bool running, int generation, Action<bool> wifi, Action<bool> lean, Action<bool> signal)
     {
-        var next = running ? 1 : 0;
-        var prior = Interlocked.Exchange(ref _state, next);
-        wifi(running);
-        lean(running);
-        if (prior != next) signal(running);
+        lock (Gate)
+        {
+            if (generation != _generation) return false;
+            var next = running ? 1 : 0;
+            var prior = Interlocked.Exchange(ref _state, next);
+            wifi(running);
+            lean(running);
+            if (prior != next) signal(running);
+            return true;
+        }
     }
 
     private static void Signal(bool running)

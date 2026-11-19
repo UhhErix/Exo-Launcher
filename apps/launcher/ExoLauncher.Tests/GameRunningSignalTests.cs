@@ -11,12 +11,16 @@ namespace ExoLauncher.Tests;
 /// - a session left open with no game process (its watch stuck on a helper) holds the signal forever;
 /// - the periodic recheck runs during normal play, when every game's exit is watched;
 /// - the event outlives an Exo that crashed during a game (a reader held a handle) and opens still set;
-/// - Exo closes during a game and leaves its state saying a game runs.
+/// - Exo closes during a game and leaves its state saying a game runs;
+/// - a scan already running when Exo closes (Detach disposes its timer without waiting) publishes after the clear and
+///   sets the event again, or an Update and the clear interleave and leave the event set with the state cleared.
 /// </summary>
 [Collection(ProcessWideSignals.Name)]
 public sealed class GameRunningSignalTests
 {
     private static readonly TimeSpan Second = TimeSpan.FromSeconds(1);
+
+    private static void Reset() => GameRunningSignal.Update(false, GameRunningSignal.Generation, _ => { }, _ => { }, _ => { });
 
     [Fact]
     public void The_scan_inside_the_exit_debounce_keeps_the_signal_but_schedules_a_recheck()
@@ -32,7 +36,7 @@ public sealed class GameRunningSignalTests
     {
         var signals = new List<bool>();
         void Scan(bool found, bool sessionOpen, TimeSpan sessionOnlyFor) =>
-            GameRunningSignal.Update(RunStatePlan.GameRunning(found, sessionOpen, sessionOnlyFor), _ => { }, _ => { }, signals.Add);
+            GameRunningSignal.Update(RunStatePlan.GameRunning(found, sessionOpen, sessionOnlyFor), GameRunningSignal.Generation, _ => { }, _ => { }, signals.Add);
         try
         {
             Scan(found: true, sessionOpen: true, TimeSpan.Zero);       // playing
@@ -42,7 +46,7 @@ public sealed class GameRunningSignalTests
             Assert.False(GameRunningSignal.Running);
             Assert.Equal([true, false], signals);
         }
-        finally { GameRunningSignal.Update(false, _ => { }, _ => { }, _ => { }); }
+        finally { Reset(); }
     }
 
     [Fact]
@@ -76,10 +80,60 @@ public sealed class GameRunningSignalTests
         // The real event is the installed Exo's; this test never opens it (Clear touches only an event this process made).
         try
         {
-            GameRunningSignal.Update(true, _ => { }, _ => { }, _ => { });
+            GameRunningSignal.Update(true, GameRunningSignal.Generation, _ => { }, _ => { }, _ => { });
             GameRunningSignal.Clear();
             Assert.False(GameRunningSignal.Running);
         }
-        finally { GameRunningSignal.Update(false, _ => { }, _ => { }, _ => { }); }
+        finally { Reset(); }
+    }
+
+    [Fact]
+    public async Task A_scan_in_flight_when_Exo_closes_does_not_set_the_signal_again()
+    {
+        var signals = new List<bool>();
+        using var scanning = new ManualResetEventSlim();
+        using var finish = new ManualResetEventSlim();
+        try
+        {
+            // The poll read its generation and is mid process scan when the bridge detaches and Exo clears the signal.
+            var scan = Task.Run(() =>
+            {
+                var generation = GameRunningSignal.Generation;
+                scanning.Set();
+                finish.Wait(TimeSpan.FromSeconds(10));
+                return GameRunningSignal.Update(true, generation, _ => { }, _ => { }, signals.Add);
+            }, TestContext.Current.CancellationToken);
+            Assert.True(scanning.Wait(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken));
+            GameRunningSignal.Clear();
+            finish.Set();
+            Assert.False(await scan);
+            Assert.False(GameRunningSignal.Running);
+            Assert.Empty(signals);
+        }
+        finally { finish.Set(); Reset(); }
+    }
+
+    [Fact]
+    public async Task Closing_waits_for_an_update_already_publishing_then_clears()
+    {
+        using var inside = new ManualResetEventSlim();
+        using var release = new ManualResetEventSlim();
+        try
+        {
+            var update = Task.Run(() => GameRunningSignal.Update(true, GameRunningSignal.Generation, _ =>
+            {
+                inside.Set();
+                release.Wait(TimeSpan.FromSeconds(10));
+            }, _ => { }, _ => { }), TestContext.Current.CancellationToken);
+            Assert.True(inside.Wait(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken));
+            var clear = Task.Run(GameRunningSignal.Clear, TestContext.Current.CancellationToken);
+            var first = await Task.WhenAny(clear, Task.Delay(200, TestContext.Current.CancellationToken));
+            Assert.NotSame(clear, first); // held until the update is done
+            release.Set();
+            Assert.True(await update);
+            await clear;
+            Assert.False(GameRunningSignal.Running);
+        }
+        finally { release.Set(); Reset(); }
     }
 }
