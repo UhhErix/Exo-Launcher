@@ -154,6 +154,14 @@ function FpsRows({ settings, disabled, save }: { settings: LauncherSettings | nu
         disabled={disabled}
         onChange={value => save({ fpsCounterPosition: value })}
       />
+      <SwitchRow
+        id="set-fps-hide-builtin"
+        label="Hide in games with built-in FPS"
+        detail="Only hides when no extra stats below are turned on"
+        checked={settings?.fpsCounterHideOverBuiltIn === true}
+        disabled={disabled}
+        onChange={value => save({ fpsCounterHideOverBuiltIn: value })}
+      />
       {FPS_ITEMS.map(({ id, label }) => (
         <SwitchRow
           key={id}

@@ -71,6 +71,12 @@ public sealed partial class WebHostBridge
             _services.Settings.UpdateProfile(s => s.FpsCounterItems = chosen);
             changed = true;
         }
+        if (p.TryGetProperty("fpsCounterHideOverBuiltIn", out var hideBuiltIn) && hideBuiltIn.ValueKind is JsonValueKind.True or JsonValueKind.False)
+        {
+            var value = hideBuiltIn.GetBoolean();
+            _services.Settings.UpdateProfile(s => s.FpsCounterHideOverBuiltIn = value);
+            changed = true;
+        }
         if (changed) FpsCounter.SettingsChanged();
     }
 

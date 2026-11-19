@@ -2132,6 +2132,7 @@ public sealed partial class WebHostBridge
             fpsCounter = s.FpsCounter,
             fpsCounterPosition = FpsOverlay.PositionOf(s.FpsCounterPosition),
             fpsCounterItems = s.FpsCounterItems,
+            fpsCounterHideOverBuiltIn = s.FpsCounterHideOverBuiltIn,
             hdrForGames = s.HdrForGames,
             frameGenEverywhere = s.FrameGenEverywhere,
             frameGenEverywhereCard = DlssSwapService.FrameGenEverywhereCard(SystemSpecs.FrameGenGpu) is not null,

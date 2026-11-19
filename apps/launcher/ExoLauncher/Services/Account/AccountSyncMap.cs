@@ -19,7 +19,7 @@ internal static class AccountSyncMap
     [
         "AchievementBanners", "AchievementVolume", "AntiCheatSafeMode", "AutoInstallRedistributables", "AutoUpdateGames",
         "Background", "CloseStoreClientsAfterLaunch", "ControllerSound", "DownloadHoursEnd", "DownloadHoursStart", "FpsCounter",
-        "FpsCounterItems", "HiddenGames", "KeepAwakeDownloads", "LibraryShowInstalled", "LibraryShowOwned",
+        "FpsCounterHideOverBuiltIn", "FpsCounterItems", "HiddenGames", "KeepAwakeDownloads", "LibraryShowInstalled", "LibraryShowOwned",
         "MinimizeWhilePlaying", "PauseDownloadsWhilePlaying", "ReduceMotion", "ShowLibraryTools", "SortMode",
         "StoreClientsQuiet", "TextColour", "TextSize", "UiPrefs",
     ];

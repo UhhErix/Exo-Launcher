@@ -44,7 +44,7 @@ internal sealed unsafe partial class PresentTrace : IDisposable, IFrameTrace
     private const ulong DxgiKeywords = 0x8000000000000002, D3D9Keywords = 0x8000000000000002, KernelKeywords = 0x8000001;
     private const byte LevelInformation = 4;
 
-    private const uint ControlStop = 1, EnableProvider = 1, DisableProvider = 0, ClockQpc = 1, FlagTracedGuid = 0x00020000;
+    private const uint ControlStop = 1, ControlFlush = 3, EnableProvider = 1, DisableProvider = 0, ClockQpc = 1, FlagTracedGuid = 0x00020000;
     private const uint RealTime = 0x00000100, CommonBuffer = 0x10000000;
     private const uint ModeRealTime = 0x00000100, ModeRawTimestamp = 0x00001000, ModeEventRecord = 0x10000000;
     private const uint FilterEventIds = 0x80000200, FilterProcessIds = 0x80000004, IgnoreKeyword0 = 0x00000800;
@@ -52,6 +52,7 @@ internal sealed unsafe partial class PresentTrace : IDisposable, IFrameTrace
     private const ushort Header32Bit = 0x0020;
     private const ulong InvalidHandle = ulong.MaxValue;
     private const uint DxgiPresentTest = 0x1;
+    private const double KernelFallbackSeconds = 1.5;
 
     private static PresentTrace? _active;
 
@@ -62,10 +63,10 @@ internal sealed unsafe partial class PresentTrace : IDisposable, IFrameTrace
     private bool _kernel;
     private int _wanted;
     private int[] _pids = [];
-    private long _resumedAt;
+    private long _resumedAt, _lastFlushAt;
 
     // What reaches Windows, behind seams so a test can watch what is asked for without a real session.
-    private readonly Action _enableApi, _disableApi;
+    private readonly Action _enableApi, _disableApi, _flush;
     private readonly Action<bool> _switchKernel;
     private readonly Func<long> _clock;
 
@@ -74,17 +75,19 @@ internal sealed unsafe partial class PresentTrace : IDisposable, IFrameTrace
         _enableApi = EnableApi;
         _disableApi = DisableApi;
         _switchKernel = SwitchKernel;
+        _flush = FlushSession;
         _clock = Stopwatch.GetTimestamp;
     }
 
-    private PresentTrace(Action enableApi, Action disableApi, Action<bool> switchKernel, Func<long> clock)
+    private PresentTrace(Action enableApi, Action disableApi, Action<bool> switchKernel, Func<long> clock, Action? flush = null)
     {
-        (_enableApi, _disableApi, _switchKernel, _clock) = (enableApi, disableApi, switchKernel, clock);
+        (_enableApi, _disableApi, _switchKernel, _clock, _flush) = (enableApi, disableApi, switchKernel, clock, flush ?? (() => { }));
         _session = 1;
     }
 
     /// <summary>Tests only: a trace that asks nothing of Windows and says what it would ask, on a clock the test turns (in <see cref="Stopwatch.Frequency"/> ticks). Never disposed.</summary>
-    internal static PresentTrace ForTest(Action enableApi, Action disableApi, Action<bool> switchKernel, Func<long> clock) => new(enableApi, disableApi, switchKernel, clock);
+    internal static PresentTrace ForTest(Action enableApi, Action disableApi, Action<bool> switchKernel, Func<long> clock, Action? flush = null) =>
+        new(enableApi, disableApi, switchKernel, clock, flush);
 
     /// <summary>Tests only: a present as the trace's callback would record it.</summary>
     internal void RecordForTest(int pid, PresentKind kind, long ticks) => _slots.Record(pid, kind, ticks);
@@ -105,7 +108,7 @@ internal sealed unsafe partial class PresentTrace : IDisposable, IFrameTrace
     /// The kernel's events, on: only for a game that has had the time to make a DXGI or D3D9 present and hasn't. When it
     /// does, they go off again: a frame needs only one report.
     /// </summary>
-    internal static bool WantsKernel(bool apiLately, double secondsInFront) => !apiLately && secondsInFront >= FpsWindow.StallSeconds;
+    internal static bool WantsKernel(bool apiLately, double secondsInFront) => !apiLately && secondsInFront >= KernelFallbackSeconds;
 
     /// <summary>Whether a session can start, as Windows answers: <see cref="Ok"/>, <see cref="AccessDenied"/>, or another Win32 error.</summary>
     internal static int Probe()
@@ -183,12 +186,26 @@ internal sealed unsafe partial class PresentTrace : IDisposable, IFrameTrace
     }
 
     /// <summary>The kernel's events on or off by <see cref="WantsKernel"/>. Under the gate, while something wants frames.</summary>
-    private void UpdateKernel(long now)
+    private void UpdateKernel(long now, bool flushIfWaiting = false)
     {
         var want = WantsKernel(_slots.ApiLately(now), (now - _resumedAt) / (double)Stopwatch.Frequency);
-        if (want == _kernel) return;
-        _kernel = want;
-        _switchKernel(want);
+        if (want != _kernel)
+        {
+            _kernel = want;
+            _switchKernel(want);
+            if (want)
+            {
+                _lastFlushAt = now;
+                _flush();
+            }
+            return;
+        }
+        // Flush buffers promptly during initial Vulkan/GL startup instead of waiting for the 1s ETW timer.
+        if (flushIfWaiting && _kernel && now - _lastFlushAt >= Stopwatch.Frequency / 3)
+        {
+            _lastFlushAt = now;
+            _flush();
+        }
     }
 
     private void SwitchKernel(bool on)
@@ -210,7 +227,7 @@ internal sealed unsafe partial class PresentTrace : IDisposable, IFrameTrace
         lock (_gate)
         {
             if (_wanted == 0 || _session == 0) return reading;
-            UpdateKernel(now);
+            UpdateKernel(now, flushIfWaiting: !reading.Seen);
         }
         return reading;
     }
@@ -323,6 +340,12 @@ internal sealed unsafe partial class PresentTrace : IDisposable, IFrameTrace
     {
         var properties = NewProperties();
         fixed (char* name = SessionName) ControlTraceW(0, name, &properties, ControlStop);
+    }
+
+    private static void FlushSession()
+    {
+        var properties = NewProperties();
+        fixed (char* name = SessionName) ControlTraceW(0, name, &properties, ControlFlush);
     }
 
     /// <summary>Few buffers in one common set, not one per processor, so they stay in order; large enough that even at 1000 FPS they wake the reader about as seldom as the one-second flush does.</summary>

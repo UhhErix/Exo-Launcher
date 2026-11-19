@@ -1386,6 +1386,8 @@ export interface LauncherSettings {
   fpsCounterPosition?: string
   /** What it shows after the FPS, each off until switched on. */
   fpsCounterItems?: string[]
+  /** Opt-in suppression when a game can show its own FPS counter and no extra stats are enabled (default off). */
+  fpsCounterHideOverBuiltIn?: boolean
   /** Hours sum every Steam account and every Epic account on this PC. Off keeps a shared PC separate. */
   /** HDR on for the main screen while a game that supports it runs, back off after. */
   hdrForGames?: boolean

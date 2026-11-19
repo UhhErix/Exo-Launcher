@@ -642,6 +642,7 @@ const mockSettings: LauncherSettings = {
   fpsCounter: false,
   fpsCounterPosition: 'right',
   fpsCounterItems: [],
+  fpsCounterHideOverBuiltIn: false,
   hdrForGames: false,
   frameGenEverywhere: false,
   frameGenEverywhereCard: true,
