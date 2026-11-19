@@ -38,13 +38,11 @@ const COVERS = () => {
 
 export async function run(t) {
   const { run, k } = t
-  const applied = await run.check('rooms', 'page', "The page is the chosen Background's page color", async (c) => {
-    // tokens.css › Backgrounds: Pure black #000, Near black #0a0a0a, Dark grey #121212 (the default), Windows #202020, Graphite #0f1114.
-    const PAGES = { black: 'rgb(0, 0, 0)', near: 'rgb(10, 10, 10)', grey: 'rgb(18, 18, 18)', windows: 'rgb(32, 32, 32)', graphite: 'rgb(15, 17, 20)' }
-    const { bg, chosen } = await t.shell.eval(`({ bg: getComputedStyle(document.body).backgroundColor, chosen: document.documentElement.dataset.exoBg ?? 'grey' })`)
+  const applied = await run.check('rooms', 'page', 'The page is pure black', async (c) => {
+    // tokens.css: Exo is pure black (AMOLED) under Liquid Glass, with no other Background.
+    const bg = await t.shell.eval('getComputedStyle(document.body).backgroundColor')
     c.evidence.bg = bg
-    c.evidence.chosen = chosen
-    return bg === PAGES[chosen] ? [] : [`the page's background is ${bg}, not ${chosen}'s ${PAGES[chosen]}`]
+    return bg === 'rgb(0, 0, 0)' ? [] : [`the page's background is ${bg}, not pure black`]
   })
   if (applied.status === 'FAIL') return
   for (const room of ROOMS) {

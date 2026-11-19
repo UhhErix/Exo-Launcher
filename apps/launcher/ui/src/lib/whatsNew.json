@@ -94,6 +94,30 @@
       },
       {
         "icon": "Library",
+        "title": "Goeist, Exo's new type",
+        "detail": "Exo, Exo Mouse, Setup, the FPS counter and the achievement banner all use Goeist, a rounded take on Geist."
+      },
+      {
+        "icon": "ThisPc",
+        "title": "Five rooms, in the middle",
+        "detail": "Library, Store, Discord, Music and PC sit centered in the top bar, and Devices is inside the PC room."
+      },
+      {
+        "icon": "Download",
+        "title": "Every download in one list",
+        "detail": "Library › More › Downloads shows what's downloading, next and paused, with pause, stop, reorder and Pause all."
+      },
+      {
+        "icon": "GraphicsCard",
+        "title": "DLSS, FSR and XeSS update by themselves",
+        "detail": "Your games get the newest signed upscaler files from NVIDIA, AMD and Intel while you aren't playing."
+      },
+      {
+        "icon": "Chats",
+        "title": "Discord's Shop beside Home",
+        "detail": "The Shop is its own place at the top of the Discord room, and Play is gone."
+      },
+      {
         "title": "Every Steam Family game",
         "detail": "Your family's shared games show in the Library, installed or not, and a game's page says who shares it."
       },
@@ -105,7 +129,7 @@
       {
         "icon": "Library",
         "title": "Liquid Glass is back",
-        "detail": "Menus, sheets and controls are frosted glass again, inside one thin line, and Exo keeps its own typeface, Exoline."
+        "detail": "Menus, sheets and controls are frosted glass again, lit at their edge like glass instead of a gray outline."
       },
       {
         "icon": "GraphicsCard",

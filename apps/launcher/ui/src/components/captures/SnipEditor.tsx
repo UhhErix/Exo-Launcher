@@ -126,7 +126,7 @@ function paint(canvas: HTMLCanvasElement, image: HTMLImageElement, marks: Mark[]
       ctx.closePath()
       ctx.fill()
     } else if (mark.tool === 'note') {
-      ctx.font = `600 ${unit * 11}px "Goeist", "Exoline", "Segoe UI Variable", sans-serif`
+      ctx.font = `600 ${unit * 11}px "Goeist", "Segoe UI Variable", sans-serif`
       ctx.textBaseline = 'top'
       ctx.lineWidth = unit * 1.5
       ctx.strokeStyle = '#000'

@@ -73,7 +73,7 @@ function backShown(index: number, id: StepId, accountScreen: AccountScreen): boo
 }
 
 /** Steps with nothing to offer on this PC are left out; the one on screen stays, so it never drops from under the user. */
-function visibleSteps(offers: Record<'restore' | 'clients' | 'pc' | 'capture' | 'cleanup', boolean>, current: StepId) {
+function visibleSteps(offers: Record<'restore' | 'clients' | 'capture' | 'cleanup', boolean>, current: StepId) {
   return STEPS.filter(item => item.id === current || !(item.id in offers) || offers[item.id as keyof typeof offers])
 }
 
@@ -105,17 +105,8 @@ export function OnboardingPanel({
   useEffect(() => {
     host.backupStatus().then(status => setRestoreOffer(status.offer), (error: unknown) => report(error, 'OnboardingPanel.backupStatus', { level: 'warn' }))
   }, [])
-  // The glow on the welcome logo breathes only while the window has focus (SPEC-v2: idle CPU stays flat).
-  const [focused, setFocused] = useState(() => document.hasFocus())
   const stageRef = useRef<HTMLElement>(null)
   const leavingStep = useLeavingStep(stageRef)
-  useEffect(() => {
-    const on = () => setFocused(true)
-    const off = () => setFocused(false)
-    window.addEventListener('focus', on)
-    window.addEventListener('blur', off)
-    return () => { window.removeEventListener('focus', on); window.removeEventListener('blur', off) }
-  }, [])
   /** 1 going forward, -1 back: which side the next step slides in from. */
   const [direction, setDirection] = useState(1)
   const [feedback, setFeedback] = useState<Feedback | null>(null)
@@ -169,7 +160,7 @@ export function OnboardingPanel({
   const cleanupOffered = cleanupHas(replaced ?? undefined, junk)
   const best = pcRead ? bestSteps(gpu, health, screen, settings, saveSettings, drives, tuning) : null
   const bestLeft = !!best?.some(item => !item.done)
-  const steps = visibleSteps({ restore: restoreOffer !== null, clients: clientsOffered(clients, clientsFailed), pc: best === null || best.length > 0 || !!lucid, capture: capture.state?.present !== false, cleanup: cleanupOffered }, step)
+  const steps = visibleSteps({ restore: restoreOffer !== null, clients: clientsOffered(clients, clientsFailed), capture: capture.state?.present !== false, cleanup: cleanupOffered }, step)
   const index = Math.max(0, steps.findIndex(item => item.id === step))
   const current = steps[index]
   const next = footerNext(current.id, clients, clientsLater, clientsFailed, restoring, installerLong)
@@ -410,12 +401,12 @@ export function OnboardingPanel({
     apps: () => <AppsStep onFeedback={setFeedback} />,
     discord: () => <DiscordStep />,
     capture: () => <CaptureStep />,
-    pc: () => <PcStep steps={best} running={running} landed={landed} failed={bestFailed} lucid={lucid} onLucid={setLucid} />,
+    pc: () => <PcStep steps={best} running={running} landed={landed} failed={bestFailed} settings={settings} onSave={saveSettings} lucid={lucid} onLucid={setLucid} />,
     cleanup: () => <CleanupStep apps={replaced ?? []} onApps={setReplaced} junk={junk}
       onCleaned={() => void host.junkScan().then(({ items }) => setJunk(items), (error: unknown) => report(error, 'OnboardingPanel.junkScan', { level: 'warn' }))} />,
   }
   return (
-    <div className={`exo-app exo-ob${focused ? '' : ' is-unfocused'}`}>
+    <div className="exo-app exo-ob">
 
       <main className="exo-ob-stage" ref={stageRef}>
         <LeavingStep html={leavingStep.leaving} />

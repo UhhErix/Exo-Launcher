@@ -103,7 +103,7 @@
   font-weight: var(--exo-weight-title);
 }
 
-/* What is live reads as live: the green dot breathing beside how long it has been going. */
+/* What is live reads as live: a still green dot beside how long it has been going (the count moves; the dot needn't). */
 .exo-dc-now-live {
   display: flex;
   align-items: center;
@@ -118,11 +118,6 @@
   height: 7px;
   border-radius: 999px;
   background: var(--color-good);
-  animation: exo-dc-breathe calc(var(--dur-flight) * 10) ease-in-out infinite;
-}
-
-@keyframes exo-dc-breathe {
-  50% { opacity: 0.35; }
 }
 
 /* The faces, each with a name under it, large enough to recognize. */
@@ -205,21 +200,6 @@
 
 .exo-dc-lobby-facts .is-good {
   color: var(--color-good);
-}
-
-@keyframes exo-dc-bar {
-  from { transform: scaleY(0.3); }
-  to { transform: scaleY(1); }
-}
-
-/* Motion here stops whenever nothing shows it, and under Reduce motion and Performance mode it never starts. */
-.exo-room.is-backstage :is(.exo-dc-now-live > i, .exo-dc-now-bars > b) {
-  animation-play-state: paused;
-}
-
-[data-exo-motion="reduce"] :is(.exo-dc-now-live > i, .exo-dc-now-bars > b),
-.exo-dc.is-performance :is(.exo-dc-now-live > i, .exo-dc-now-bars > b) {
-  animation: none;
 }
 
 .exo-dc-friend-actions {

@@ -1373,7 +1373,7 @@ export interface LauncherSettings {
   /** Settings › General › Open Exo when Windows starts. */
   startWithWindows?: boolean
   textColour?: 'white' | 'grey' | string
-  /** Settings › General › Background (lib/exoTheme.ts › BACKGROUNDS). */
+  /** Always black: Exo is pure black (AMOLED), with no Background choice (lib/exoTheme.ts › BACKGROUNDS). */
   background?: 'black' | 'near' | 'grey' | 'windows' | 'graphite' | string
   textSize?: 'small' | 'normal' | 'large' | string
   /** The page's own choices Exo keeps (lib/uiPrefs.ts), by key. settings.set merges the keys sent; null removes one. */
