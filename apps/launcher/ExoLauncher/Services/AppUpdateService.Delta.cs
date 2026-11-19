@@ -254,9 +254,9 @@ public sealed partial class AppUpdateService
 
             foreach (var entry in plan.Reuse)
             {
-                var target = Target(entry);
-                Directory.CreateDirectory(Path.GetDirectoryName(target)!);
-                LinkOrCopy(Path.Combine(AppFolder, entry.Path.Replace('/', '\\')), target);
+                var dest = Target(entry);
+                Directory.CreateDirectory(Path.GetDirectoryName(dest)!);
+                LinkOrCopy(Path.Combine(AppFolder, entry.Path.Replace('/', '\\')), dest);
             }
             // NSIS writes its uninstaller into the app folder after the swap; it is the same while the installer revision is.
             var uninstaller = Path.Combine(AppFolder, "Uninstall.exe");
@@ -417,7 +417,7 @@ public sealed partial class AppUpdateService
             progress?.Report(($"Downloading {Mb(now)} of {Mb(total)}", total > 0 ? Math.Min(100, now * 100d / total) : null));
         }
         progress?.Report(($"Downloading {Mb(0)} of {Mb(total)}", 0));
-        foreach (var entry in plan.Fetch) Directory.CreateDirectory(Path.GetDirectoryName(target(entry))!);
+        foreach (var entry in files) Directory.CreateDirectory(Path.GetDirectoryName(target(entry))!);
         await Parallel.ForEachAsync(spans, new ParallelOptions { MaxDegreeOfParallelism = RangesAtOnce, CancellationToken = ct }, async (span, token) =>
         {
             for (var attempt = 1; ; attempt++)
@@ -447,7 +447,13 @@ public sealed partial class AppUpdateService
         request.Headers.Range = new RangeHeaderValue(span.Start, span.End - 1);
         using var response = await SendFollowingAllowedRedirectsAsync(request, stall.Token, _rangeHttp).ConfigureAwait(false);
         if (response.StatusCode != HttpStatusCode.PartialContent)
-            throw new InvalidDataException($"The pack answered {(int)response.StatusCode} to a range.");
+        {
+            var code = (int)response.StatusCode;
+            var message = $"The pack answered {code} to a range.";
+            if (code >= 500 || response.StatusCode is HttpStatusCode.RequestTimeout or HttpStatusCode.TooManyRequests)
+                throw new HttpRequestException(message, null, response.StatusCode);
+            throw new InvalidDataException(message);
+        }
         var range = response.Content.Headers.ContentRange;
         if (range is not { Unit: "bytes", HasRange: true, HasLength: true } || range.From != span.Start || range.To != span.End - 1 || range.Length != packSize)
             throw new InvalidDataException("The pack sent another range than the one asked for.");
