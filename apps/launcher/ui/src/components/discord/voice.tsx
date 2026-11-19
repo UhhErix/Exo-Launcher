@@ -3,7 +3,6 @@ import { CopyLogs, ErrorNote } from '../ui/ErrorNote'
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type CSSProperties } from 'react'
 import { createPortal, flushSync } from 'react-dom'
 import { host, onHostEvent } from '../../lib/host'
-import { useNotice } from '../../lib/notify'
 import { report } from '../../lib/report'
 import { useLens } from '../../lib/glass'
 import { cdnSized, openDiscord, type DiscordChannel, type DiscordVoice, type DiscordVoiceMember } from '../../lib/discord'
@@ -21,6 +20,7 @@ import { Spinner } from '../ui/Spinner'
 import { holdSpring, springHome } from '../../lib/spring'
 import { ChannelNav } from './Channels'
 import { pageGet, pageSet } from '../../lib/pageStore'
+import { errorText } from '../../lib/errorWords'
 
 const OFF: DiscordVoice = { state: 'off', guildId: null, channelId: null, muted: false, deafened: false, e2ee: false }
 
@@ -101,7 +101,7 @@ export function useDiscordVoice({ speaking: follow = true }: { speaking?: boolea
     try {
       const result = await host.discordVoice(action, params)
       if (result.voice) setVoice(result.voice)
-      if (!result.ok) setError(result.message ?? 'Discord voice did not answer.')
+      if (!result.ok) setError(errorText(result.message, 'Discord voice did not answer.'))
       return result.ok
     } catch (err) {
       report(err, 'DiscordVoice.' + action)
@@ -309,8 +309,9 @@ export function VoiceRoom({ channel, controls, meId, onJoin, dm = false, chat }:
   const liveEnded = useGoLiveValue(live => live.state === 'off' ? live.message : null)
   const [cameraError, setCameraError] = useState<string | null>(null)
   const notes = [error, cameraError, liveEnded].filter((note): note is string => !!note)
-  // What went wrong with the call, in Exo's notices while its room is open; dismissing it clears them.
-  useNotice('dc-voice', notes.length > 0 && { text: notes.join(' '), tone: 'bad', onDismiss: () => { controls.dismissError(); setCameraError(null); clearGoLiveMessage() } })
+  // What went wrong with the call says so in the call itself, over its bar (where its buttons are), not in a notice;
+  // its × clears it.
+  const dismissNotes = () => { controls.dismissError(); setCameraError(null); clearGoLiveMessage() }
   const { watching, big, small, watch, stop, focus } = useWatching(channel.id, members)
   // Discord's Hide Members while watching: the stream takes the room, the people strip folds away.
   const [membersHidden, setMembersHidden] = useState(false)
@@ -336,6 +337,12 @@ export function VoiceRoom({ channel, controls, meId, onJoin, dm = false, chat }:
         {members.length > 0 ? small.map(member => <StreamTile key={`stream-${member.id}`} member={member} onFocus={() => focus(member.id)} onStop={() => stop(member.id)} />) : null}
         {myStream && members.length > 0 ? <MyStreamTile meId={meId} members={members} /> : null}
       </div>
+      {notes.length > 0 ? (
+        <div className="exo-dc-voice-note">
+          <ErrorNote message={notes.join(' ')} />
+          <button type="button" className="exo-dc-icon-btn" aria-label="Dismiss" onClick={dismissNotes}><Icons.Close size={16} /></button>
+        </div>
+      ) : null}
       <VoiceBar here={here} dm={dm} channel={channel} controls={controls} onJoin={onJoin} onCameraError={setCameraError} />
     </section>
   )

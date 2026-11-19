@@ -128,7 +128,6 @@ public sealed class BridgeToPageTests
         foreach (Exception other in new Exception[]
         {
             new IOException(@"The process cannot access 'C:\Users\Someone\a.db'."),
-            new UnauthorizedAccessException(@"Access to 'C:\x' is denied."),
             new JsonException("The JSON value could not be converted. Path: $.secret.name"),
             new System.Runtime.InteropServices.COMException(@"Cannot find D:\z\q.dll", unchecked((int)0x80070002)),
             new ArgumentException("Value cannot be null. (Parameter 'token')"),
@@ -137,11 +136,20 @@ public sealed class BridgeToPageTests
             Assert.Equal(generic, WebHostBridge.UserMessage(other, generic));
     }
     [Fact]
-    public void AFullDiskAndNoNetworkKeepAPlainReason()
+    public void CommonWindowsFailuresSayWhatHappenedAndWhatToDo()
     {
-        Assert.Equal("There is not enough free space.", WebHostBridge.UserMessage(new IOException(@"There is not enough space on the disk. : 'D:\x'", unchecked((int)0x80070070)), "g"));
-        Assert.Equal("Exo could not reach the internet.", WebHostBridge.UserMessage(new HttpRequestException("No such host is known. (internal.example:443)"), "g"));
-        Assert.Equal("g", WebHostBridge.UserMessage(new IOException("sharing violation", unchecked((int)0x80070020)), "g"));
+        Assert.Equal(WebHostBridge.DriveFull, WebHostBridge.UserMessage(new IOException(@"There is not enough space on the disk. : 'D:\x'", unchecked((int)0x80070070)), "g"));
+        Assert.Equal(WebHostBridge.NoInternet, WebHostBridge.UserMessage(new HttpRequestException("No such host is known. (internal.example:443)"), "g"));
+        Assert.Equal(WebHostBridge.FileInUse, WebHostBridge.UserMessage(new IOException(@"sharing violation on 'C:\Games\x.pak'", unchecked((int)0x80070020)), "g"));
+        Assert.Equal(WebHostBridge.FileInUse, WebHostBridge.UserMessage(new IOException("lock violation", unchecked((int)0x80070021)), "g"));
+        Assert.Equal(WebHostBridge.AccessRefused, WebHostBridge.UserMessage(new UnauthorizedAccessException(@"Access to 'C:\x' is denied."), "g"));
+        Assert.Equal(WebHostBridge.AccessRefused, WebHostBridge.UserMessage(new System.ComponentModel.Win32Exception(5), "g"));
+        Assert.Equal(WebHostBridge.PromptDeclined, WebHostBridge.UserMessage(new System.ComponentModel.Win32Exception(1223), "g"));
+        Assert.Equal(WebHostBridge.TookTooLong, WebHostBridge.UserMessage(new TimeoutException(@"Timed out at \\server\x"), "g"));
+        Assert.Equal("g", WebHostBridge.UserMessage(new System.ComponentModel.Win32Exception(2), "g"));
+        // None of them carries a path, a host or the exception's own words, so each passes the page's own filter.
+        foreach (var line in new[] { WebHostBridge.DriveFull, WebHostBridge.FileInUse, WebHostBridge.AccessRefused, WebHostBridge.PromptDeclined, WebHostBridge.NoInternet, WebHostBridge.TookTooLong })
+            Assert.Equal(line, WebHostBridge.Safe(line));
     }
 
     [Fact]

@@ -4,6 +4,7 @@ import { host, onHostEvent } from '../../lib/host'
 import { report } from '../../lib/report'
 import { toRelease, type WhatsNewRelease } from '../../lib/whatsNew'
 import { isUpdateState, sheetAfterCheck, updatePhase, type UpdateState } from '../../lib/updatePhase'
+import { errorText } from '../../lib/errorWords'
 
 /** The startup check may hold the boot mark this long, never more. */
 const BOOT_HOLD_MS = 800
@@ -155,7 +156,7 @@ export function useAppUpdate(): AppUpdate {
       }
     } catch (e) {
       setNotNow(true)
-      setMessage(e instanceof Error ? e.message : 'The update didn’t install. Try again.')
+      setMessage(errorText(e, 'The update didn’t install. Try again.'))
       setHostState('failed')
     }
     setAsking(false)
@@ -184,7 +185,7 @@ export function useAppUpdate(): AppUpdate {
       setLatest(null)
       return { ok: true, updateAvailable: false, message: r.message || "You're up to date." }
     } catch (e) {
-      return { ok: false, updateAvailable: false, message: e instanceof Error ? e.message : 'Couldn’t check for updates. Try again.' }
+      return { ok: false, updateAvailable: false, message: errorText(e, 'Couldn’t check for updates. Try again.') }
     }
   }, [busy, take])
 

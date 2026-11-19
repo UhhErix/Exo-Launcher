@@ -14,6 +14,7 @@ import { Popover } from '../ui/Dialog'
 import { Spinner } from '../ui/Spinner'
 import { Wait, sample, times } from '../ui/Wait'
 import { CopyLogs, ErrorNote } from '../ui/ErrorNote'
+import { errorText } from '../../lib/errorWords'
 
 /**
  * Discord's Shop in the Discord room: its catalog by category, one kind of collectible, or what you own, each
@@ -36,7 +37,7 @@ let shopLoad: Promise<Shop> | null = null
 function loadShop(again = false) {
   if (!shopLoad || again) {
     shopLoad = host.discordShop('catalog').then(result => {
-      if (!result.ok || !result.catalog) throw new Error(result.message ?? "Discord didn't send the Shop. Try again.")
+      if (!result.ok || !result.catalog) throw new Error(errorText(result.message, "Discord didn't send the Shop. Try again."))
       return { categories: result.catalog.categories, owned: result.owned ?? [] }
     })
     shopLoad.catch(() => { shopLoad = null })
@@ -50,7 +51,7 @@ export function useShop() {
   const [error, setError] = useState<string | null>(null)
   const load = useCallback((again = false) => {
     setError(null)
-    loadShop(again).then(setShop, (err: unknown) => { report(err, 'Shop.load'); setError(err instanceof Error ? err.message : "Discord didn't send the Shop. Try again.") })
+    loadShop(again).then(setShop, (err: unknown) => { report(err, 'Shop.load'); setError(errorText(err, "Discord didn't send the Shop. Try again.")) })
   }, [])
   useEffect(() => load(), [load])
   return { shop, error, reload: () => load(true) }
@@ -87,7 +88,7 @@ export function useWorn(meId: string | null | undefined) {
 /** Puts an owned collectible on (skuId) or takes it off (null); Discord's reason when it refuses. */
 export async function wear(kind: Kind, skuId: string | null) {
   const result = await host.discordShop('equip', { kind, skuId }).catch(() => ({ ok: false, message: null }))
-  return result.ok ? null : result.message ?? "Discord didn't take that. Try again."
+  return result.ok ? null : errorText(result.message, "Discord didn't take that. Try again.")
 }
 
 /** Your own profile as previews show it: Discord's, or (until it arrives) your name and picture. */
@@ -440,7 +441,7 @@ function Checkout({ product, onBack, onBought }: { product: DiscordShopProduct; 
     let live = true
     host.discordShop('payment').then(result => {
       if (!live) return
-      if (!result.ok) { setError(result.message ?? "Discord didn't send your payment methods. Try again."); setChoices([]); return }
+      if (!result.ok) { setError(errorText(result.message, "Discord didn't send your payment methods. Try again.")); setChoices([]); return }
       const list = result.payment ?? []
       setChoices(list)
       setSource(firstCard(list))
@@ -453,7 +454,7 @@ function Checkout({ product, onBack, onBought }: { product: DiscordShopProduct; 
     host.discordShop('preview', { skuId: product.sku_id, paymentSourceId: source }).then(result => {
       if (!live) return
       if (result.ok && result.price?.amount != null && result.price.currency) setQuote({ source, price: result.price })
-      else setError(result.message ?? "Discord didn't give a price. Try again.")
+      else setError(errorText(result.message, "Discord didn't give a price. Try again."))
     }).catch(() => { if (live) setError("Discord didn't give a price. Try again.") })
     return () => { live = false }
   }, [source, product.sku_id])
@@ -469,7 +470,7 @@ function Checkout({ product, onBack, onBought }: { product: DiscordShopProduct; 
       // Your bank wants to confirm it: its check shows over the window, then Discord completes the purchase.
       if (result.confirm && result.paymentId) { setBusy(true); bank.confirm(result.paymentId); return }
       if (result.declined) return
-      setError(result.message ?? "Discord didn't complete the purchase. Nothing was charged.")
+      setError(errorText(result.message, "Discord didn't complete the purchase. Nothing was charged."))
     }, () => { setBusy(false); setError("Exo couldn't reach Discord. Check Your Collection before trying again.") })
   }
   const added = (list: DiscordPaymentChoice[]) => {

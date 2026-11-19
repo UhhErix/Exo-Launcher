@@ -4205,6 +4205,8 @@ public static partial class CoverArtService
         Store = g.Store,
         Installed = g.Installed,
         Owned = g.Owned,
+        FamilyShared = g.FamilyShared,
+        SharedBy = g.SharedBy,
         EntitlementState = g.EntitlementState,
         UpdateAvailable = g.UpdateAvailable,
         CanInstall = g.CanInstall,

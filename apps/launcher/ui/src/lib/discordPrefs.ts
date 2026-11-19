@@ -3,6 +3,7 @@ import { host, onHostEvent } from './host'
 import { onTextScale, textScale } from './exoTheme'
 import { onPageActivityChanged, streamingOpen, useStreamingOpen } from './pageActivity'
 import { onUiPrefs, setUiPref, uiPref } from './uiPrefs'
+import { errorText } from './errorWords'
 
 /**
  * Discord settings as Exo's Discord client applies them. Two kinds, as in Discord:
@@ -217,7 +218,7 @@ export async function changeAccountSettings(changes: Partial<AccountSettings>): 
     const result = await host.discordUserSettings(changes)
     savingAccount.delete(changes)
     if (result.ok) { setAccount(result.values); return null }
-    message = result.message ?? "Discord didn't save that. Try again."
+    message = errorText(result.message, "Discord didn't save that. Try again.")
   } catch {
     savingAccount.delete(changes)
     message = "Discord didn't save that. Try again."

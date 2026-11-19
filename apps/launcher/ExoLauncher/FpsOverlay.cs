@@ -4,8 +4,8 @@ using ExoLauncher.Helpers;
 namespace ExoLauncher;
 
 /// <summary>
-/// The FPS counter over the game: one small tab flush against the top of the game's screen ("142 FPS"), in its corner or
-/// its middle, rounded only where it faces the screen's interior. Drawn by plain GDI on a layered window on a thread of its
+/// The FPS counter over the game: one small pill in off the top of the game's screen ("142 FPS"), in its corner or its
+/// middle: Goeist on a black plate inside Exo's Liquid Glass edge. Drawn by plain GDI on a layered window on a thread of its
 /// own, with no WebView2, since it stays open for the whole session. It never takes focus or a click, and stays out of
 /// recordings and streams (WDA_EXCLUDEFROMCAPTURE) where Windows allows that. Nothing touches the game. It looks twice a
 /// second at most and only then if asked to (<see cref="Look"/>); away from the game it has no timer and sleeps until
@@ -25,8 +25,9 @@ internal sealed unsafe class FpsOverlay : IDisposable
     private const int Padding = 10, Height = 24, Margin = 8, FontPixels = 13, ForegroundOutOfContext = 0;
     // The plate is black at 78%: at half alpha white numbers were lost over a bright sky.
     private const byte CapsuleAlpha = 199, NumberInk = 255, RestInk = 191;
+    private const double EdgeTop = 0.17, EdgeFoot = 0.03;
     private const uint TextQuality = 4; // ANTIALIASED_QUALITY: gray, hinted to the pixel grid, so stems stay sharp at any scale.
-    private const string ClassName = "ExoFpsCounter", SemiBoldFace = "Exoline SemiBold", RegularFace = "Exoline", Separator = " · ";
+    private const string ClassName = "ExoFpsCounter", SemiBoldFace = "Goeist SemiBold", RegularFace = "Goeist", Separator = " · ";
 
     private static WndProc? _proc;
     private static WinEventProc? _frontChanged;
@@ -135,8 +136,8 @@ internal sealed unsafe class FpsOverlay : IDisposable
     internal static void AddFont(string? path = null)
     {
         if (Interlocked.Exchange(ref _fontAdded, 1) == 1) return;
-        path ??= Path.Combine(AppContext.BaseDirectory, "Assets", "Fonts", "Exoline-Variable.ttf");
-        if (AddFontResourceExW(path, 0x10 /* FR_PRIVATE */, IntPtr.Zero) == 0) AppLog.Warn("FPS counter: Exoline didn't load, so Windows picks a font.");
+        path ??= Path.Combine(AppContext.BaseDirectory, "Assets", "Fonts", "Goeist-Variable.ttf");
+        if (AddFontResourceExW(path, 0x10 /* FR_PRIVATE */, IntPtr.Zero) == 0) AppLog.Warn("FPS counter: Goeist didn't load, so Windows picks a font.");
     }
 
     /// <summary>The capsule: a 32-bit top-down DIB of premultiplied pixels, selected into its own DC.</summary>
@@ -254,19 +255,59 @@ internal sealed unsafe class FpsOverlay : IDisposable
 
     private static uint Gray(byte ink) => (uint)(ink | ink << 8 | ink << 16);
 
+    /// <summary>The faces GDI selected for the number and the rest at a scale, as it reports them: Goeist's, unless Windows fell back.</summary>
+    internal static (string Number, string Words) Faces(double scale = 1)
+    {
+        Draw(new(0, null), scale).Dispose();
+        using var measure = new Capsule(1, 1);
+        SelectObject(measure.Dc, t_fonts.Number);
+        var number = Face(measure.Dc);
+        SelectObject(measure.Dc, t_fonts.Regular);
+        return (number, Face(measure.Dc));
+    }
+
+    private static string Face(IntPtr dc)
+    {
+        var name = new char[64];
+        var length = GetTextFaceW(dc, name.Length, name);
+        return length > 0 ? new string(name, 0, length - 1) : "";
+    }
+
     private static int TextWidth(IntPtr dc, string text) => GetTextExtentPoint32W(dc, text, text.Length, out var size) ? size.Width : 0;
 
-    /// <summary>The text's pixels over the capsule: what the text added stays white, the black plate shows where it did not.</summary>
+    /// <summary>
+    /// How much of a pixel the capsule's edge covers, 0 to 1: its outermost pixel all the way round, the pill less the pill
+    /// one pixel in (ui/src/tokens.css --exo-hair is one line, whatever the scale).
+    /// </summary>
+    internal static double Edge(int width, int height, int column, int row)
+    {
+        var inner = column >= 1 && row >= 1 && column < width - 1 && row < height - 1 ? Cover(width - 2, height - 2, column - 1, row - 1) : 0;
+        return Math.Max(0, Cover(width, height, column, row) - inner);
+    }
+
+    /// <summary>
+    /// The edge's white, 0 to 1, by row: Exo's Liquid Glass edge (tokens.css --glassy-ring), lit like a lens, brightest along
+    /// the top (17%) and fading to the foot (3%), in place of a gray outline.
+    /// </summary>
+    internal static double EdgeLight(int height, int row) => height <= 1 ? EdgeTop : EdgeTop + (EdgeFoot - EdgeTop) * row / (height - 1.0);
+
+    /// <summary>The text's pixels over the capsule: what the text added stays white, then the glass edge, then the black plate where neither is.</summary>
     private static void Lay(Capsule capsule)
     {
         for (var row = 0; row < capsule.Height; row++)
-        for (var column = 0; column < capsule.Width; column++)
         {
-            var at = capsule.Bits + row * capsule.Width + column;
-            var ink = *at & 0xFF;
-            var under = (uint)Math.Round(CapsuleAlpha * Cover(capsule.Width, capsule.Height, column, row));
-            var alpha = ink + under * (255 - ink) / 255;
-            *at = alpha << 24 | ink << 16 | ink << 8 | ink;
+            var light = EdgeLight(capsule.Height, row);
+            for (var column = 0; column < capsule.Width; column++)
+            {
+                var at = capsule.Bits + row * capsule.Width + column;
+                var ink = *at & 0xFF;
+                var under = (uint)Math.Round(CapsuleAlpha * Cover(capsule.Width, capsule.Height, column, row));
+                var edge = (uint)Math.Round(255 * light * Edge(capsule.Width, capsule.Height, column, row));
+                var plate = edge + under * (255 - edge) / 255;
+                var white = ink + edge * (255 - ink) / 255;
+                var alpha = ink + plate * (255 - ink) / 255;
+                *at = alpha << 24 | white << 16 | white << 8 | white;
+            }
         }
     }
 
@@ -417,6 +458,7 @@ internal sealed unsafe class FpsOverlay : IDisposable
     [DllImport("gdi32.dll", CharSet = CharSet.Unicode)] private static extern bool TextOutW(IntPtr dc, int x, int y, string text, int length);
     [DllImport("gdi32.dll", CharSet = CharSet.Unicode)] private static extern bool GetTextExtentPoint32W(IntPtr dc, string text, int length, out Size size);
     [DllImport("gdi32.dll", CharSet = CharSet.Unicode)] private static extern bool GetTextMetricsW(IntPtr dc, out TextMetric metrics);
+    [DllImport("gdi32.dll", CharSet = CharSet.Unicode)] private static extern int GetTextFaceW(IntPtr dc, int count, [Out] char[] name);
     [DllImport("gdi32.dll")] private static extern bool GdiFlush();
     [DllImport("user32.dll", CharSet = CharSet.Unicode)] private static extern ushort RegisterClassExW(ref WndClassEx type);
     [DllImport("user32.dll", CharSet = CharSet.Unicode)] private static extern IntPtr CreateWindowExW(uint ex, string type, string name, uint style, int x, int y, int w, int h, IntPtr parent, IntPtr menu, IntPtr instance, IntPtr param);

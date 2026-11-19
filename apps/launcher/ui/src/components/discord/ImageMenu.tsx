@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { host } from '../../lib/host'
-import { notify } from '../../lib/notify'
+import { ActionButton } from '../ui/ConfirmButton'
 import { useLayer } from './admin'
 import { Icons } from './icons'
 import { openLink } from '../../lib/music'
@@ -47,15 +47,10 @@ function pictureAt(target: EventTarget | null) {
   return { src, link: el.getAttribute('data-dc-link') || el.closest('a')?.href || original(src).toString(), still: el.tagName === 'IMG' }
 }
 
-// What happened, in Exo's notices (Discord's own toast said "Image Copied!"); a newer one takes the last one's place.
-const say = (ok: boolean, text: string) => notify({ id: 'dc-image', text, tone: ok ? 'good' : 'bad' })
+/** Discord's Save Image: the host's answer, which the pressed control shows in itself (ActionButton). */
+export const saveImage = (src: string) => host.discordImage('save', original(src).toString())
 
-/** Discord's Save Image. */
-export function saveImage(src: string) {
-  void host.discordImage('save', original(src).toString())
-    .then(result => say(result.ok, result.ok ? 'Image saved' : result.message ?? "Exo couldn't save the image. Try again."))
-    .catch(() => say(false, "Exo couldn't save the image. Try again."))
-}
+export const SAVE_FAILED = 'Exo couldn’t save the image. Try again.'
 
 /**
  * Discord's image menu, on a right-click on any picture (an attachment, an embed's or a link's picture, a sticker,
@@ -92,18 +87,21 @@ function ImageMenu({ at, onClose }: { at: At; onClose: () => void }) {
   const saves = ownImage && (!type || SAVES.has(type))
   const kind = linkKind(at.link)
   const run = (action: () => void) => () => { onClose(); action() }
+  // Copy and Save say how they went on their own row (Discord's own toast said "Image Copied!"): the ring, then the
+  // check with its word, and the menu closes; a failure stays on the row with why.
   return (
     <div className="exo-dc-menu exo-dc-ctx" ref={box} role="menu" aria-label="Image actions" style={{ left: at.x, top: at.y }}>
       {copies ? (
-        <button type="button" role="menuitem" onClick={run(() => void host.discordImage('copy', picture.toString())
-          .then(result => say(result.ok, result.ok ? 'Image copied' : result.message ?? "Exo couldn't copy the image. Try again."))
-          .catch(() => say(false, "Exo couldn't copy the image. Try again.")))}><Icons.Copy size={16} />Copy image</button>
+        <ActionButton role="menuitem" context="Discord.copyImage" fallback="Exo couldn’t copy the image. Try again." done="Copied" onDone={onClose}
+          onPress={() => host.discordImage('copy', picture.toString())}><Icons.Copy size={16} />Copy image</ActionButton>
       ) : null}
-      {saves ? <button type="button" role="menuitem" onClick={run(() => saveImage(at.src))}><Icons.SaveImage size={16} />Save image</button> : null}
+      {saves ? (
+        <ActionButton role="menuitem" context="Discord.saveImage" fallback={SAVE_FAILED} done="Saved to Downloads" onDone={onClose}
+          onPress={() => saveImage(at.src)}><Icons.SaveImage size={16} />Save image</ActionButton>
+      ) : null}
       {copies || saves ? <span className="exo-dc-menu-line" role="separator" /> : null}
-      <button type="button" role="menuitem" onClick={run(() => void navigator.clipboard.writeText(at.link).then(() => say(true, 'Link copied')).catch(() => { }))}>
-        <Icons.Link size={16} />Copy {kind}
-      </button>
+      <ActionButton role="menuitem" context="Discord.copyLink" fallback="Windows didn’t let Exo copy the link. Try again." done="Copied" onDone={onClose}
+        onPress={() => navigator.clipboard.writeText(at.link)}><Icons.Link size={16} />Copy {kind}</ActionButton>
       <button type="button" role="menuitem" onClick={run(() => openLink(at.link))}><Icons.Open size={16} />Open {kind}</button>
     </div>
   )

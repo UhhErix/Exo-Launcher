@@ -11,6 +11,7 @@ import { isAfter } from './messageCache'
 import { Wait, sample, times } from '../ui/Wait'
 import { ErrorNote } from '../ui/ErrorNote'
 import { ChannelNav } from './Channels'
+import { errorText } from '../../lib/errorWords'
 
 type Page = { threads: DiscordThread[]; first: Map<string, DiscordMessage>; tags: DiscordForumTag[]; error: string | null; done: boolean; loading: boolean }
 
@@ -87,7 +88,7 @@ function usePosts(channelId: string, guildId: string) {
     setPage(p => ({ ...p, loading: true }))
     try {
       const result = await host.discordThreads(channelId, at)
-      if (!result.ok) { next.current = null; setPage(p => ({ ...p, loading: false, done: true, error: result.message ?? 'Discord did not send the posts.' })); return }
+      if (!result.ok) { next.current = null; setPage(p => ({ ...p, loading: false, done: true, error: errorText(result.message, 'Discord didn’t send the posts.') })); return }
       const threads = result.threads ?? []
       next.current = !at.archived ? { archived: true, offset: 0 } : result.hasMore ? { archived: true, offset: at.offset + threads.length } : null
       setPage(p => {
@@ -188,7 +189,7 @@ function NewPost({ channelId, tags, onCancel, onPosted }: {
     const result = await host.discordThread(channelId, { name: name.trim(), content: content.trim(), tags: picked }).catch(() => ({ ok: false, message: null, thread: null }))
     setBusy(false)
     if (result.ok && result.thread) onPosted(result.thread)
-    else setError(result.message ?? 'Discord did not take the post.')
+    else setError(errorText(result.message, 'Discord didn’t take the post.'))
   }
   return (
     <div className="exo-dc-forum-new" role="group" aria-label="New post">

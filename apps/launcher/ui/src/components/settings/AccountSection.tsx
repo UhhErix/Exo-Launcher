@@ -1,10 +1,12 @@
 import { useState, type FormEvent } from 'react'
 import { host } from '../../lib/host'
 import { report } from '../../lib/report'
+import { errorText } from '../../lib/errorWords'
 import { RecoveryCodeScreen } from '../onboarding/RecoveryCodeScreen'
 import { sendAccountRequest, useAccount, type AccountOverview } from '../account/useAccount'
 import { heldSentences } from './accountWords'
 import { Row, Section } from './parts'
+import { ActionButton } from '../ui/ConfirmButton'
 
 type Sessions = { device: string; created: number; lastUsed: number; current: boolean; thisPc: boolean; name?: string | null }[]
 
@@ -41,16 +43,14 @@ function syncProblem(sync: AccountOverview['sync']) {
 
 /** Sync's row, only while sync is stuck: why, and the one press that tries again now. */
 function SyncRow({ sync, onSynced }: { sync: AccountOverview['sync']; onSynced: () => void }) {
-  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
   const problem = syncProblem(sync)
   if (!problem) return null
-  async function syncNow() {
-    setBusy(true)
-    try { await host.exoAccountSync(); onSynced() } finally { setBusy(false) }
-  }
+  // The button says how it went in itself; the row reads again once its check has shown.
   return (
-    <Row label="Sync" detail={problem}>
-      <button type="button" className="exo-set-btn" disabled={busy} onClick={() => void syncNow()}>Sync now</button>
+    <Row label="Sync" detail={problem} error={error}>
+      <ActionButton className="exo-set-btn" context="AccountSection.sync" fallback="Exo couldn’t sync. Try again."
+        why="none" onFailed={failure => setError(failure.text)} onPress={() => { setError(null); return host.exoAccountSync() }} onDone={onSynced}>Sync now</ActionButton>
     </Row>
   )
 }
@@ -89,22 +89,29 @@ function Security() {
   const [note, setNote] = useState('')
   const [code, setCode] = useState<string | null>(null)
 
-  async function changePassword(event: FormEvent) {
-    event.preventDefault()
-    if (next.length < 12) return setError('Use at least 12 characters.')
-    const result = await host.exoAccountChangePassword(current, next)
-    if (!result.ok) return setError(result.message)
-    setCurrent(''); setNext(''); setOpen('none'); setError('')
+  // Each form's button says how it went (ActionButton); the form closes once its check has shown, and a refusal is the
+  // form's error line, the button in Bad.
+  async function changePassword() {
+    setError('')
+    if (next.length < 12) return { ok: false, message: 'Use at least 12 characters.' }
+    return host.exoAccountChangePassword(current, next)
+  }
+  function passwordChanged() {
+    setCurrent(''); setNext(''); setOpen('none')
     setNote('Password changed. Other PCs were signed out.')
   }
 
-  async function newRecoveryCode(event: FormEvent) {
-    event.preventDefault()
+  async function newRecoveryCode() {
+    setError('')
     // Counted before the call: the host saves the waiting code at once, and the account sheet must not open over this one.
     const result = await sendAccountRequest(() => host.exoAccountNewRecoveryCode(password))
-    if (!result.ok || !result.recoveryCode) return setError(result.message || 'The code was not made. Try again.')
-    setPassword(''); setOpen('none'); setError('')
-    setCode(result.recoveryCode)
+    return result.ok && !result.recoveryCode ? { ok: false, message: 'The code was not made. Try again.' } : result
+  }
+  function codeMade(result: unknown) {
+    const made = (result as { recoveryCode?: string | null }).recoveryCode
+    if (!made) return
+    setPassword(''); setOpen('none')
+    setCode(made)
   }
 
   if (code) return <Section id="account-security" title="Security"><div className={SUB}><RecoveryCodeScreen code={code} onDone={() => setCode(null)} onKeyDown={() => undefined} /></div></Section>
@@ -115,24 +122,32 @@ function Security() {
         <button type="button" className="exo-set-btn" onClick={() => { setOpen(open === 'password' ? 'none' : 'password'); setError('') }}>{open === 'password' ? 'Cancel' : 'Change'}</button>
       </Row>
       {open === 'password' ? (
-        <form className={SUB} onSubmit={changePassword} noValidate>
+        <form className={SUB} onSubmit={pressSubmit} noValidate>
           <label className="exo-ob-label" htmlFor="exo-account-current">Current password</label>
           <input id="exo-account-current" className="exo-field" type="password" autoComplete="current-password" value={current} onChange={e => setCurrent(e.target.value)} />
           <label className="exo-ob-label" htmlFor="exo-account-new">New password</label>
           <input id="exo-account-new" className="exo-field" type="password" autoComplete="new-password" placeholder={PASSWORD_RULE} value={next} onChange={e => setNext(e.target.value)} />
           {error ? <p className="exo-ob-error" role="alert">{error}</p> : null}
-          <div className="exo-ob-form-actions"><button type="submit" className="exo-set-btn is-primary" disabled={!current || !next}>Change password</button></div>
+          <div className="exo-ob-form-actions">
+            <ActionButton className="exo-set-btn is-primary" disabled={!current || !next} context="AccountSection.changePassword"
+              fallback="The password was not changed. Try again." why="none" onFailed={failure => setError(failure.text)}
+              onPress={changePassword} onDone={passwordChanged}>Change password</ActionButton>
+          </div>
         </form>
       ) : null}
       <Row label="Replace recovery code">
         <button type="button" className="exo-set-btn" onClick={() => { setOpen(open === 'recovery' ? 'none' : 'recovery'); setError('') }}>{open === 'recovery' ? 'Cancel' : 'Replace'}</button>
       </Row>
       {open === 'recovery' ? (
-        <form className={SUB} onSubmit={newRecoveryCode} noValidate>
+        <form className={SUB} onSubmit={pressSubmit} noValidate>
           <label className="exo-ob-label" htmlFor="exo-account-code-password">Password</label>
           <input id="exo-account-code-password" className="exo-field" type="password" autoComplete="current-password" value={password} onChange={e => setPassword(e.target.value)} />
           {error ? <p className="exo-ob-error" role="alert">{error}</p> : null}
-          <div className="exo-ob-form-actions"><button type="submit" className="exo-set-btn is-primary" disabled={!password}>Make a new code</button></div>
+          <div className="exo-ob-form-actions">
+            <ActionButton className="exo-set-btn is-primary" disabled={!password} context="AccountSection.recoveryCode"
+              fallback="The code was not made. Try again." why="none" onFailed={failure => setError(failure.text)}
+              onPress={newRecoveryCode} onDone={codeMade}>Make a new code</ActionButton>
+          </div>
         </form>
       ) : null}
       {note ? <p className="exo-account-hint" role="status">{note}</p> : null}
@@ -152,9 +167,7 @@ function Devices({ onChanged }: { onChanged: () => void }) {
     )
   }
 
-  async function revoke(device: string) {
-    const result = await host.exoAccountRevoke(device)
-    if (!result.ok) return setNote(result.message)
+  function revoked() {
     setNote('That PC was signed out.')
     load()
     onChanged()
@@ -174,7 +187,10 @@ function Devices({ onChanged }: { onChanged: () => void }) {
                   <li key={row.device} className="exo-account-row">
                     <span>{row.thisPc ? 'This PC' : 'Another PC'}</span>
                     <span className="exo-account-hint">Last used {when(row.lastUsed)}</span>
-                    {row.thisPc ? null : <button type="button" className="exo-set-btn" onClick={() => void revoke(row.device)}>Remove</button>}
+                    {row.thisPc ? null : (
+                      <ActionButton className="exo-set-btn" context="AccountSection.revoke" fallback="That PC was not signed out. Try again."
+                        onPress={() => { setNote(null); return host.exoAccountRevoke(row.device) }} onDone={revoked}>Remove</ActionButton>
+                    )}
                   </li>
                 ))}
               </ul>
@@ -187,10 +203,16 @@ function Devices({ onChanged }: { onChanged: () => void }) {
 
 function ExportData() {
   const [note, setNote] = useState<string | null>(null)
+  // Not an ActionButton: Windows' Save dialog is the wait, and a cancelled one is no result to show.
   async function exportData() {
-    const result = await host.exoAccountExport()
-    if (result.cancelled) return
-    setNote(result.ok ? 'Saved.' : result.message ?? 'The file was not saved.')
+    try {
+      const result = await host.exoAccountExport()
+      if (result.cancelled) return
+      setNote(result.ok ? 'Saved.' : errorText(result.message, 'The file was not saved. Try again.'))
+    } catch (error) {
+      report(error, 'AccountSection.export')
+      setNote(errorText(error, 'The file was not saved. Try again.'))
+    }
   }
   return (
     <Row label="Export my data">
@@ -202,15 +224,12 @@ function ExportData() {
 
 function SignOut({ onDone }: { onDone: () => void }) {
   const [confirming, setConfirming] = useState(false)
-  async function signOut() {
-    await host.exoAccountSignOut()
-    onDone()
-  }
   // Beside the account's email, the row's one control.
   return confirming ? (
     <span className="exo-account-inline">
       <button type="button" className="exo-set-btn" onClick={() => setConfirming(false)}>Keep me signed in</button>
-      <button type="button" className="exo-set-btn is-primary" onClick={() => void signOut()}>Sign out</button>
+      <ActionButton className="exo-set-btn is-primary" context="AccountSection.signOut" fallback="Exo couldn’t sign you out. Try again."
+        onPress={() => host.exoAccountSignOut()} onDone={onDone}>Sign out</ActionButton>
     </span>
   ) : <button type="button" className="exo-set-btn" onClick={() => setConfirming(true)}>Sign out</button>
 }
@@ -220,25 +239,22 @@ function DeleteAccount({ onDone }: { onDone: () => void }) {
   const [open, setOpen] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  async function remove(event: FormEvent) {
-    event.preventDefault()
-    const result = await host.exoAccountDelete(password)
-    if (!result.ok) return setError(result.message)
-    onDone()
-  }
-
   return (
     <>
       <Row label="Delete account">
         <button type="button" className="exo-set-btn is-danger" onClick={() => { setOpen(value => !value); setError(null) }}>{open ? 'Cancel' : 'Delete'}</button>
       </Row>
       {open ? (
-        <form className={SUB} onSubmit={remove} noValidate>
+        <form className={SUB} onSubmit={pressSubmit} noValidate>
           <label className="exo-ob-label" htmlFor="exo-account-delete-password">Password</label>
           <input id="exo-account-delete-password" className="exo-field" type="password" autoComplete="current-password" value={password} onChange={e => setPassword(e.target.value)} />
           <p className="exo-ob-hint">This deletes the account and every item synced to it. Your games, playtime and settings stay on this PC.</p>
           {error ? <p className="exo-ob-error" role="alert">{error}</p> : null}
-          <div className="exo-ob-form-actions"><button type="submit" className="exo-set-btn is-danger" disabled={!password}>Delete my account</button></div>
+          <div className="exo-ob-form-actions">
+            <ActionButton className="exo-set-btn is-danger" disabled={!password} context="AccountSection.delete"
+              fallback="The account was not deleted. Try again." why="none" onFailed={failure => setError(failure.text)}
+              onPress={() => { setError(null); return host.exoAccountDelete(password) }} onDone={onDone}>Delete my account</ActionButton>
+          </div>
         </form>
       ) : null}
     </>
@@ -255,18 +271,17 @@ function SignedOut({ onSignedIn, onCode }: { onSignedIn: () => void; onCode: (co
   const [error, setError] = useState('')
   const [offline, setOffline] = useState(false)
 
-  async function submit(event: FormEvent) {
-    event.preventDefault()
+  async function submit() {
     setError('')
     const result = await sendAccountRequest(() => mode === 'create' ? host.exoAccountCreate(email, password)
       : mode === 'signin' ? host.exoAccountSignIn(email, password)
         : host.exoAccountReset(email, code, password))
-    if (!result.ok) {
-      setOffline(result.offline === true)
-      setError(result.message || 'Something went wrong. Try again.')
-      return
-    }
-    if (result.recoveryCode) onCode(result.recoveryCode)
+    setOffline(!result.ok && result.offline === true)
+    return result
+  }
+  function signedIn(result: unknown) {
+    const issued = (result as { recoveryCode?: string | null }).recoveryCode
+    if (issued) onCode(issued)
     else { setPassword(''); onSignedIn() }
   }
 
@@ -274,7 +289,7 @@ function SignedOut({ onSignedIn, onCode }: { onSignedIn: () => void; onCode: (co
   return (
     <Section id="account">
       <Row label={heading} stacked>
-        <form className={SUB} onSubmit={submit} noValidate>
+        <form className={SUB} onSubmit={pressSubmit} noValidate>
           <label className="exo-ob-label" htmlFor="exo-account-email">Email</label>
           <input id="exo-account-email" className="exo-field" type="email" autoComplete="off" spellCheck={false} value={email} onChange={e => setEmail(e.target.value)} />
           {mode === 'reset' ? (
@@ -289,7 +304,9 @@ function SignedOut({ onSignedIn, onCode }: { onSignedIn: () => void; onCode: (co
           {error ? <p className="exo-ob-error" role="alert">{error}</p> : null}
           {offline ? <p className="exo-ob-hint">Exo works without an account for now.</p> : null}
           <div className="exo-ob-form-actions">
-            <button type="submit" className="exo-set-btn is-primary" disabled={!email || !password}>{mode === 'create' ? 'Create account' : mode === 'reset' ? 'Reset password' : 'Sign in'}</button>
+            <ActionButton className="exo-set-btn is-primary" disabled={!email || !password} context={`AccountSection.${mode}`}
+              fallback="Exo couldn’t reach your account. Try again." why="none" onFailed={failure => setError(failure.text)}
+              onPress={submit} onDone={signedIn}>{mode === 'create' ? 'Create account' : mode === 'reset' ? 'Reset password' : 'Sign in'}</ActionButton>
             <button type="button" className="exo-account-link" onClick={() => { setMode(mode === 'create' ? 'signin' : 'create'); setError('') }}>{mode === 'create' ? 'I already have one' : 'Create an account'}</button>
             {mode === 'signin' ? <button type="button" className="exo-account-link" onClick={() => { setMode('reset'); setError('') }}>Forgot your password?</button> : null}
           </div>
@@ -297,4 +314,10 @@ function SignedOut({ onSignedIn, onCode }: { onSignedIn: () => void; onCode: (co
       </Row>
     </Section>
   )
+}
+
+/** Enter in a form presses its action button, so a keyboard submit shows the same ring, check or failure as a press. */
+function pressSubmit(event: FormEvent<HTMLFormElement>) {
+  event.preventDefault()
+  event.currentTarget.querySelector<HTMLButtonElement>('.exo-action:not(:disabled)')?.click()
 }

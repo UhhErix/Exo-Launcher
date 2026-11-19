@@ -11,6 +11,7 @@ import {
 } from './profileParts'
 import { Popover } from '../ui/Dialog'
 import { ErrorNote } from '../ui/ErrorNote'
+import { errorText } from '../../lib/errorWords'
 
 /**
  * The person beside a DM, opened from their name: banner, picture and names (which open the full profile), what they're
@@ -149,7 +150,7 @@ function FriendAction({ data }: { data: Loaded }) {
     setBusy(true); setError(null)
     const why = "Discord didn't take that."
     void host.discordFriend(action, { userId: user.id, username: user.username, confirm })
-      .then(result => { if (result.ok) setRelation(next); else if (result.stranger) stranger.refused(); else setError(result.message ?? why) }, () => setError(why))
+      .then(result => { if (result.ok) setRelation(next); else if (result.stranger) stranger.refused(); else setError(errorText(result.message, why)) }, () => setError(why))
       .finally(() => setBusy(false))
   }
   const raised = 'exo-dc-tab is-raised'

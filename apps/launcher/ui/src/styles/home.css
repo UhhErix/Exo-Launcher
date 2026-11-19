@@ -15,8 +15,8 @@
 .exo-windowed-game-grid {
   --exo-grid-padding-top: 8px;
   --exo-grid-padding-bottom: 40px;
-  --exo-grid-column-gap: 12px;
-  --exo-grid-row-gap: 12px;
+  --exo-grid-column-gap: var(--exo-gap);
+  --exo-grid-row-gap: var(--exo-gap);
   display: block;
   width: 100%;
   min-width: 0;
@@ -959,7 +959,8 @@
   fill: none;
   /* The check in the disc's opposite (the ink at 4% on the ink drew a blank disc). */
   stroke: var(--color-primary-fg);
-  stroke-width: 1.8;
+  /* The icons' line at the check's 16px (lineAt). */
+  stroke-width: 1.5;
   stroke-linecap: round;
   stroke-linejoin: round;
 }

@@ -328,10 +328,10 @@ public sealed partial class MainWindow
                 .ToDictionary(row => row.Key, row => row.Value, StringComparer.OrdinalIgnoreCase);
     }
 
-    /// <summary>Exo's own Inter, so the add-on's toast and windows read like Exo.</summary>
+    /// <summary>Exo's own type (Goeist), so the add-on's toast and windows read like Exo.</summary>
     private static string CaptureFont()
     {
-        var path = Path.Combine(AppContext.BaseDirectory, "Assets", "Fonts", "Exoline-Variable.ttf");
+        var path = Path.Combine(AppContext.BaseDirectory, "Assets", "Fonts", "Goeist-Variable.ttf");
         return File.Exists(path) ? path : "";
     }
 

@@ -1,10 +1,8 @@
 import { useState } from 'react'
 import { host, type JunkItem, type LeftoverSummary, type ReplacedApp } from '../../lib/host'
-import { report } from '../../lib/report'
 import { JunkRow, junkWorth } from '../gpu/JunkRow'
 import { Row, State } from '../settings/parts'
 import { ConfirmButton } from '../ui/ConfirmButton'
-import { Spinner } from '../ui/Spinner'
 
 function size(bytes: number): string {
   if (bytes >= 1e9) return `${(bytes / 1e9).toFixed(1)} GB`
@@ -53,21 +51,20 @@ function ReplacedAppRows({ apps, onApps, empty }: { apps: ReplacedApp[]; onApps:
   const [listed] = useState(() => new Set(apps.filter(app => app.installed || app.leftovers > 0 || app.cleared).map(app => app.id)))
   const shown = apps.filter(app => listed.has(app.id))
 
+  // The button says it in itself (ConfirmButton): its ring, then its check, and only then does the row say Removed; a
+  // refusal turns it Bad with the reason under the row.
   async function remove(app: ReplacedApp) {
-    if (busy) return
     setBusy(app.id)
     setErrors(current => ({ ...current, [app.id]: undefined }))
     try {
       const result = await host.replacedRemove(app.id)
-      onApps(result.apps)
-      if (!result.ok) setErrors(current => ({ ...current, [app.id]: result.message ?? `${app.name} wasn't removed. Try again.` }))
-    } catch (error) {
-      report(error, 'CleanupStep.remove')
-      setErrors(current => ({ ...current, [app.id]: `${app.name} wasn't removed. Try again.` }))
+      if (!result.ok) onApps(result.apps)
+      return result
     } finally {
       setBusy(null)
     }
   }
+  const removed = (result: unknown) => onApps((result as { apps: ReplacedApp[] }).apps)
 
   if (shown.length === 0) return empty ? <Row label="Nothing to clean up" /> : null
   return (
@@ -82,8 +79,10 @@ function ReplacedAppRows({ apps, onApps, empty }: { apps: ReplacedApp[]; onApps:
             {gone ? <State on>Removed</State> : (
               <>
                 {app.installed && amount ? <State>{amount}</State> : null}
-                <ConfirmButton className="exo-set-btn is-danger" danger disabled={busy !== null} question={app.installed ? 'Remove?' : 'Clear?'}
-                  lead={busy === app.id ? <Spinner label={`Removing ${app.name}`} /> : null} onConfirm={() => void remove(app)}>
+                <ConfirmButton className="exo-set-btn is-danger" danger disabled={busy !== null && busy !== app.id} question={app.installed ? 'Remove?' : 'Clear?'}
+                  timeoutMs={null} context="CleanupStep.remove" fallback={`${app.name} wasn't removed. Try again.`}
+                  why="none" onFailed={error => setErrors(current => ({ ...current, [app.id]: error.text }))}
+                  onConfirm={() => remove(app)} onDone={removed}>
                   {app.installed ? 'Remove' : 'Clear'}
                 </ConfirmButton>
               </>

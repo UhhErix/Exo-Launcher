@@ -3,13 +3,13 @@ import { useEffect, useId, useMemo, useState, type CSSProperties } from 'react'
 import { Download, More, Play } from '../../brand/icons'
 import { trackLength, type PlayerActOptions, type PlayerAction, type PlayerCard, type PlayerHeader, type PlayerLink, type PlayerTrack, type PlayerViewData } from '../../lib/player'
 import type { MusicFeature } from '../../lib/musicAdapters'
-import { notify } from '../../lib/notify'
 import { Menu, type MenuItem } from '../ui/Menu'
 import { Spinner } from '../ui/Spinner'
 import { Wait, sample, times } from '../ui/Wait'
 import { Art, isLikedCard } from './Art'
 import { ArtistPage } from './artist'
-import { copyLink, newPlaylist, openRadio, shareLink } from './manage'
+import { COPY_FAILED, copyLink, newPlaylist, openRadio, shareLink } from './manage'
+import { ActionWhy, useAction } from '../ui/ConfirmButton'
 import { loadView, pageFor, runAction, usePlayer, useView, type Page } from './playerContext'
 import { ErrorNote } from '../ui/ErrorNote'
 
@@ -451,22 +451,33 @@ function PageMenu({ page, header }: { page: Page; header: PlayerHeader }) {
   const menuId = useId().replace(/[^a-z0-9]/gi, '')
   const link = shareLink(adapter, header)
   const items = pageItems(page, header, has, !!link)
-  if (!items.length) return null
 
-  async function choose(id: string) {
+  // The menu closes on a choice, so what it did is said beside its More (useAction): the ring while it works, then a
+  // word, or why it didn't take with Copy details.
+  const [chosen, setChosen] = useState<{ id: string; work: () => Promise<boolean> } | null>(null)
+  const action = useAction(() => chosen ? chosen.work() : false, {
+    context: 'MusicPlayer.pageMenu',
+    fallback: chosen?.id === 'delete' ? `${adapter.name} didn’t delete “${header.title}”. Try again.`
+      : chosen?.id === 'link' ? COPY_FAILED : `${adapter.name} didn’t take that. Try again.`,
+    onDone: () => { if (chosen?.id === 'delete') deleted(header.uri) },
+  })
+  const press = action.press
+  useEffect(() => { if (chosen) void press() }, [chosen]) // eslint-disable-line react-hooks/exhaustive-deps
+  if (!items.length) return null
+  function choose(id: string) {
     if (id === 'edit') { editPlaylist({ uri: header.uri, title: header.title, description: header.description, privacy: header.privacy, image: header.image }); return }
-    if (id === 'delete') { void remove(); return }
-    if (id === 'link' && link) { void copyLink(link); return }
-    if (!await pageAction(adapter, open, page, header, id)) notify({ text: `${adapter.name} didn't take that. Try again.`, tone: 'bad' })
-  }
-  async function remove() {
-    if (await runAction(adapter, 'deletePlaylist', { uri: header.uri })) deleted(header.uri)
-    else notify({ text: `${adapter.name} didn't delete “${header.title}”. Try again.`, tone: 'bad' })
+    const work = id === 'delete' ? () => runAction(adapter, 'deletePlaylist', { uri: header.uri })
+      : id === 'link' ? () => link ? copyLink(link) : Promise.resolve(false)
+        : () => pageAction(adapter, open, page, header, id)
+    setChosen({ id, work })
   }
   return (
     <>
+      {action.phase === 'pending' ? <Spinner label="Working" /> : null}
+      {action.phase === 'success' ? <span className="exo-music-state is-on" role="status">{chosen?.id === 'link' ? 'Copied' : 'Done'}</span> : null}
+      {action.error ? <ActionWhy error={action.error} /> : null}
       <Menu label={`More for ${header.title || page.title}`} anchor={`--exo-music-head-${menuId}`} offset={4} triggerClassName="exo-set-btn exo-music-page-more"
-        trigger={<More size={16} />} items={items} onAction={id => void choose(id)} />
+        trigger={<More size={16} />} items={items} onAction={choose} />
       {header.downloaded === true || header.downloaded === 'downloading'
         ? <span className="exo-music-state is-on"><Download size={14} /> {header.downloaded === true ? 'Downloaded' : 'Downloading'}</span> : null}
     </>
@@ -647,8 +658,8 @@ export function TrackList({ tracks, onPlay, showAlbum = false, numbered = false,
       played: act('played', { on: !track.played }, track.played ? 'Unplayed' : 'Played'),
       remove: act('removeFromPlaylist', { context: playlist, uid: track.uid }, 'Removed'),
       radio: async () => ({ ok: await openRadio(adapter, open, track.uri, `${track.title} Radio`), word: '' }),
-      // A copy says how it went in the notice stack (copyLink), not in the row.
-      link: async () => { if (link) await copyLink(link); return { ok: true, word: '' } },
+      // A copy says how it went in the row, as every other choice does.
+      link: async () => ({ ok: !!link && await copyLink(link), word: 'Copied' }),
       newPlaylist: async () => ({ ok: await newPlaylist(player, playlists.length, undefined, track.uri), word: adapter.newPlaylistName ? 'Added' : '' }),
       up: async () => ({ ok: !!onMove && await onMove(track, -1), word: 'Moved' }),
       down: async () => ({ ok: !!onMove && await onMove(track, 1), word: 'Moved' }),

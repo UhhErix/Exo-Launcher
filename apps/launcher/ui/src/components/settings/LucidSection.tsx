@@ -7,6 +7,8 @@ import { Wait, sample, times } from '../ui/Wait'
 import { Spinner } from '../ui/Spinner'
 import { Row, SliderRow, State, SwitchRow } from './parts'
 import { ErrorNote } from '../ui/ErrorNote'
+import { ActionButton } from '../ui/ConfirmButton'
+import type { PlainError } from '../../lib/errorWords'
 
 /**
  * Lucid, the headphone EQ that ships in Exo, set up from Exo's Devices › audio page (devices/AudioPage.tsx), in panels:
@@ -30,20 +32,22 @@ export function useLucid(output?: string) {
     return () => window.clearInterval(again)
   }, [settingUp])
 
+  /**
+   * A row's press, for its ActionButton: Lucid's answer with a message is its refusal (the button in Bad, the message
+   * under the row through `failed`); the button's ring and check say the rest.
+   */
   async function act(row: string, action: 'setup' | 'repair' | 'devices') {
     setBusy(row)
     setError(null)
-    try {
-      const next = await host.lucid(action)
+    const answer = await host.lucid(action).then(next => {
       setState(next)
-      if (next.message) setError({ row, text: next.message })
-    } catch (cause) {
-      report(cause, `Lucid.${action}`)
-      setError({ row, text: "Lucid didn't answer. Try again." })
-    }
-    // After the try, not in a finally: Oxc's React Compiler skips a hook with a finally, and this one feeds every row.
+      return next.message ? { ok: false, message: next.message } : { ok: true }
+    }, (cause: unknown) => { setBusy(null); throw cause })
+    // After the call, not in a finally: Oxc's React Compiler skips a hook with a finally, and this one feeds every row.
     setBusy(null)
+    return answer
   }
+  const failed = (row: string) => (failure: PlainError) => setError({ row, text: failure.text })
 
   /** Shows the change at once; Lucid's own file has the last word when it lands. */
   function change(row: string, patch: LucidChange, shown: Partial<LucidSettings>) {
@@ -61,7 +65,7 @@ export function useLucid(output?: string) {
     })
   }
   const errorFor = (row: string) => error?.row === row ? error.text : null
-  return { state, setState, busy, act, change, errorFor }
+  return { state, setState, busy, act, failed, change, errorFor }
 }
 
 export type Lucid = ReturnType<typeof useLucid>
@@ -85,9 +89,8 @@ export function LucidAppRows({ lucid: l }: { lucid: Lucid }) {
   const state = l.state
   if (!state?.found) return null
   const repair = (
-    <button type="button" className="exo-set-btn" disabled={l.busy !== null} onClick={() => void l.act('repair', 'repair')}>
-      {l.busy === 'repair' ? <Spinner label="Opening Lucid's window" /> : null}Repair
-    </button>
+    <ActionButton className="exo-set-btn" disabled={l.busy !== null && l.busy !== 'repair'} context="Lucid.repair" fallback="Lucid didn't answer. Try again."
+      why="none" onFailed={l.failed('repair')} onPress={() => l.act('repair', 'repair')}>Repair</ActionButton>
   )
   if (!state.ready) {
     return state.running ? (
@@ -97,9 +100,8 @@ export function LucidAppRows({ lucid: l }: { lucid: Lucid }) {
       </Row>
     ) : (
       <Row label="Set up Lucid" labelId="set-lucid-open" detail={lucidSetupWords(state)} error={l.errorFor('setup')}>
-        <button type="button" className="exo-set-btn" disabled={l.busy !== null} onClick={() => void l.act('setup', 'setup')}>
-          {l.busy === 'setup' ? <Spinner label="Setting up Lucid" /> : null}Set up
-        </button>
+        <ActionButton className="exo-set-btn" disabled={l.busy !== null && l.busy !== 'setup'} timeoutMs={null} context="Lucid.setup" fallback="Lucid didn't answer. Try again."
+          why="none" onFailed={l.failed('setup')} onPress={() => l.act('setup', 'setup')}>Set up</ActionButton>
       </Row>
     )
   }
@@ -131,9 +133,8 @@ function EqRow({ lucid: l }: { lucid: Lucid }) {
     <Row label="Lucid's EQ" labelId="set-lucid-eq" detail={detail} error={l.errorFor('devices')}>
       {eq?.covered && state.settings ? <State on={state.settings.eqOn}>{state.settings.eqOn ? 'On' : 'Off'}</State> : null}
       {state.devices ? (
-        <button type="button" className="exo-set-btn" disabled={l.busy !== null} onClick={() => void l.act('devices', 'devices')}>
-          {l.busy === 'devices' ? <Spinner label="Opening Equalizer APO" /> : null}Choose devices
-        </button>
+        <ActionButton className="exo-set-btn" disabled={l.busy !== null && l.busy !== 'devices'} context="Lucid.devices" fallback="Lucid didn't answer. Try again."
+          why="none" onFailed={l.failed('devices')} onPress={() => l.act('devices', 'devices')}>Choose devices</ActionButton>
       ) : null}
     </Row>
   )
