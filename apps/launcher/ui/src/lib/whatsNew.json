@@ -13,7 +13,7 @@
         "detail": "Your adapter's power saving, DNS and Windows' TCP defaults each have their own switch, all set with one Windows prompt, with a ping and lookup check before and after."
       },
       {
-        "icon": "Controller",
+        "icon": "AntiCheat",
         "title": "NBA 2K26 with or without anti-cheat",
         "detail": "Pick in Properties: without it the game plays offline with frame generation and mods, which are in the game only while you play it from Exo, and back with it Exo takes them out first."
       },
@@ -28,7 +28,7 @@
         "detail": "Press F or the full-window button in Music for the cover large, its colours around it and the lyrics big beside it; Esc goes back."
       },
       {
-        "icon": "Drive",
+        "icon": "Compress",
         "title": "Compress games",
         "detail": "Windows' own compression makes games smaller on disk, and they play as before."
       },
@@ -98,12 +98,12 @@
         "detail": "It was never switched on for anyone. A wish that can't be saved is no longer shown as saved, and games like Costume Quest are no longer hidden as not games."
       },
       {
-        "icon": "Performance",
+        "icon": "FrameGen",
         "title": "Frame generation for more cards",
         "detail": "Best settings now reaches GeForce GTX 900 and newer, Radeon RX 400 and newer, Radeon graphics in laptops and Intel Arc, and a game's line says what really happened."
       },
       {
-        "icon": "Settings",
+        "icon": "AntiCheat",
         "title": "Games with anti-cheat are left alone",
         "detail": "Exo finds anti-cheat from what is on the disk. Nothing is put into such a game, Exo Capture records it from the screen only, and Riot games are never touched."
       },
@@ -483,7 +483,7 @@
     "version": "3.18.0",
     "items": [
       {
-        "icon": "GraphicsCard",
+        "icon": "FrameGen",
         "title": "DLSS frame generation on RTX 20 and 30",
         "detail": "Games with DLSS Frame Generation can turn it on with an older RTX card, kept on the newest version for you."
       },

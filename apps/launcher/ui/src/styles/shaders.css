@@ -239,12 +239,13 @@
   height: 64px;
   margin-bottom: 10px;
   fill: none;
+  /* Lucide's circle-check at the icons' line from 24px (lineAt): it shows at 64 and at 24. */
+  stroke-width: 1.75;
   stroke-linejoin: round;
 }
 
 .exo-upscalers-clear-mark circle {
   stroke: rgb(var(--exo-ink-rgb) / 0.14);
-  stroke-width: 0.75;
   stroke-dasharray: 1;
   stroke-dashoffset: 1;
   /* The ring draws on Done's time (DESIGN.md › Motion), and the check follows before it ends: done within half a second. */
@@ -253,7 +254,6 @@
 
 .exo-upscalers-clear-mark path {
   stroke: var(--color-good);
-  stroke-width: 1.125;
   stroke-linecap: round;
   stroke-dasharray: 1;
   stroke-dashoffset: 1;

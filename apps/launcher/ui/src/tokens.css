@@ -396,8 +396,8 @@ body,
   aspect-ratio: 1;
   fill: none;
   stroke: var(--color-good);
-  /* The check glyph at the icons' line at a large size (scripts/icons.mjs checks it), drawn in. */
-  stroke-width: 1.5;
+  /* Lucide's check (glyphs.ts CHECK_PATH) at the icons' line from 24px (lineAt), drawn in. */
+  stroke-width: 1.75;
   stroke-linecap: round;
   stroke-linejoin: round;
   stroke-dasharray: 1;
