@@ -170,7 +170,9 @@ failed check is safe). Then, in this order, so no app is ever offered a release 
    size are the local ones, the `.sha256` names the same hash, `whats-new.json` is for the tag. A failure stops here, with
    `<app>/latest.json` never touched;
 3. only then it writes `<app>/latest.json` (schema 2, with each file's size and SHA-256) and checks that `/v1/<app>/latest`
-   names the tag with matching `checks`. If it doesn't, the `latest.json` from before the run is put back;
+   names the tag with matching `checks`. If it doesn't, the `latest.json` from before the run is put back. Just before the
+   write it reads `<app>/latest.json` from the bucket; when that already names a newer tag (another run published it
+   meanwhile) it stops and leaves it alone;
 4. when `-Dir` holds the app's `CHANGELOG.md`, it uploads it to `<app>/CHANGELOG.md` and checks `/v1/<app>/changelog`.
 
 With `-Payload <app folder>` the release can also be installed file by file (file-level updates; the design, the cases it
