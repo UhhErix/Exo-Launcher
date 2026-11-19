@@ -1859,6 +1859,7 @@ const MOCK_HANDLERS: Record<string, MockHandler> = {
   'store.wishlist': () => ({ ok: true, items: [] }),
   'keys.preview': () => ({ ok: true, looksLikeKey: false, store: 'unknown', key: '' }),
   'keys.activate': () => ({ ok: true, message: 'Mock key.' }),
+  'keep.status': () => ({ pc: 'none', games: {} }),
 }
 
 // ?hold=store.,discord.chat holds every call whose method starts so, for looking at a wait.
