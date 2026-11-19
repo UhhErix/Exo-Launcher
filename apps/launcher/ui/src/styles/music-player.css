@@ -1715,11 +1715,10 @@ html[data-exo-motion="reduce"] .exo-music-lyrics.is-synced li.is-active span.is-
   overflow: hidden;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
-  /* The serif accent (tokens.css › --exo-font-display-serif) at its one weight, tracked in a little; the artists under it stay Goeist. */
+  /* The serif accent (tokens.css › --exo-font-display-serif) at its one weight, untracked (DESIGN.md › Type); the artists under it stay Goeist. */
   font-family: var(--exo-font-display-serif);
   font-size: calc(28px * var(--exo-scale, 1));
   font-weight: var(--exo-weight-display-serif);
-  letter-spacing: -0.01em;
   line-height: 1.15;
 }
 

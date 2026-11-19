@@ -578,7 +578,6 @@
   font-family: var(--exo-font-display-serif);
   font-size: calc(56px * var(--exo-scale, 1));
   font-weight: var(--exo-weight-display-serif);
-  letter-spacing: -0.02em;
   line-height: 1.1;
 }
 .exo-ob-body {
