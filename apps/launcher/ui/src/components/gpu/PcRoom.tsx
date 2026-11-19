@@ -107,8 +107,10 @@ type Menu = 'best' | 'tune' | PcPartMenu
  * card, the screen and the board open their own menus. Under it Updates, and beside both Shaders, each scrolling in its
  * own pane. What is set or up to date shows nothing. `jump` opens what a game's link, a notice or Ctrl+K asks for.
  */
-export function PcRoom({ active, jump, games, settings, onSave }: {
+export function PcRoom({ active, jump, games, settings, onSave, onDevices }: {
   active: boolean
+  /** Devices: your mouse, keyboard, audio and controllers, a page of this room. */
+  onDevices?: () => void
   jump: { tab: PcLink } | null
   games: readonly Game[]
   settings: LauncherSettings | null
@@ -171,6 +173,7 @@ export function PcRoom({ active, jump, games, settings, onSave }: {
         {upscalers === 0 ? <Check size={14} /> : null}Upscalers{upscalers ? ` · ${upscalers}` : null}
       </button>
       <AppsChip summary={apps} onOpen={openApps} />
+      {onDevices ? <button type="button" className="exo-pc-chip" onClick={onDevices}>Devices</button> : null}
       <AutoTuneChip tune={state.tune} onOpen={() => setMenu('tune')} />
       {vendor && vendor !== 'nvidia' ? <MakerPanel name={PANEL[vendor]} /> : null}
     </>
