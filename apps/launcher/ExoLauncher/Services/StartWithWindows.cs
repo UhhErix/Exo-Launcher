@@ -24,18 +24,40 @@ internal static class StartWithWindows
         if (HostMode.IsDisposable) return true;
         try
         {
-            using var key = Registry.CurrentUser.CreateSubKey(RunKey, writable: true);
-            if (key is null) return false;
-            var wanted = CommandFor(Environment.ProcessPath ?? Path.Combine(AppContext.BaseDirectory, "ExoLauncher.exe"));
-            var now = key.GetValue(ValueName) as string;
-            if (on && !string.Equals(now, wanted, StringComparison.OrdinalIgnoreCase)) key.SetValue(ValueName, wanted, RegistryValueKind.String);
-            else if (!on && now is not null) key.DeleteValue(ValueName, throwOnMissingValue: false);
+            using var run = Registry.CurrentUser.CreateSubKey(RunKey, writable: true);
+            using var approved = Registry.CurrentUser.CreateSubKey(ApprovedKey, writable: true);
+            if (run is null) return false;
+            ApplyTo(run, approved, on, Environment.ProcessPath ?? Path.Combine(AppContext.BaseDirectory, "ExoLauncher.exe"));
             return true;
         }
         catch (Exception ex) when (ex is UnauthorizedAccessException or System.Security.SecurityException or IOException)
         {
             AppLog.Warn("Open Exo when Windows starts: the Run key could not be changed: " + ex.Message);
             return false;
+        }
+    }
+
+    /// <summary>Windows' own record of whether each Run value may start (what Task Manager's Startup apps switch writes).</summary>
+    internal const string ApprovedKey = @"Software\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\Run";
+
+    /// <summary>
+    /// On: the Run value names <paramref name="exePath"/>, and an off left by Task Manager is turned back on, so the switch
+    /// really brings startup back. Off: both go.
+    /// </summary>
+    internal static void ApplyTo(RegistryKey run, RegistryKey? approved, bool on, string exePath)
+    {
+        var wanted = CommandFor(exePath);
+        var now = run.GetValue(ValueName) as string;
+        if (on)
+        {
+            if (!string.Equals(now, wanted, StringComparison.OrdinalIgnoreCase)) run.SetValue(ValueName, wanted, RegistryValueKind.String);
+            if (approved?.GetValue(ValueName) is byte[] record && !StartupApps.IsEnabled(record))
+                approved.SetValue(ValueName, StartupApps.Approved(enabled: true, DateTime.UtcNow), RegistryValueKind.Binary);
+        }
+        else
+        {
+            if (now is not null) run.DeleteValue(ValueName, throwOnMissingValue: false);
+            approved?.DeleteValue(ValueName, throwOnMissingValue: false);
         }
     }
 }
@@ -48,6 +70,11 @@ public sealed partial class WebHostBridge
         if (!p.TryGetProperty("startWithWindows", out var value) || value.ValueKind is not (JsonValueKind.True or JsonValueKind.False)) return;
         var on = value.GetBoolean();
         _services.Settings.SetStartWithWindows(on);
-        StartWithWindows.Apply(on);
+        if (StartWithWindows.Apply(on)) return;
+        // Windows refused: the switch goes back to what Windows still does, and the player is told why.
+        _services.Settings.SetStartWithWindows(!on);
+        throw new InvalidOperationException(on
+            ? "Windows didn't let Exo add itself to startup. Try again, or turn Exo on in Task Manager › Startup apps."
+            : "Windows didn't let Exo take itself out of startup. Try again, or turn Exo off in Task Manager › Startup apps.");
     }
 }
