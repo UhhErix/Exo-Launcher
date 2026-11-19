@@ -39,4 +39,5 @@ export const LUCIDE = {
   'trophy': 'trophy', 'tv': 'tv', 'unassign': 'unlink', 'undo': 'undo', 'unread': 'circle-dot', 'upload': 'upload',
   'user-plus': 'user-plus', 'video': 'video', 'view-reactions': 'laugh', 'volume': 'volume', 'volume-low': 'volume-1',
   'volume-off': 'volume-off', 'wifi': 'wifi', 'zoom-in': 'zoom-in', 'zoom-out': 'zoom-out',
+  'blur': 'grid-2x2', 'info': 'info', 'redo': 'redo', 'scan-text': 'scan-text', 'share': 'share',
 }
