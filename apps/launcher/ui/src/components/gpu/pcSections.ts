@@ -1,6 +1,6 @@
 /** Where a link opens the PC room (DESIGN.md › PC): one of its sections, scrolled into view (Shaders held there while
     what is above it loads). */
-export type PcLink = 'overview' | 'graphics' | 'shaders' | 'display' | 'board' | 'network' | 'control' | 'performance' | 'apps' | 'drives' | 'drivers'
+export type PcLink = 'overview' | 'graphics' | 'shaders' | 'display' | 'board' | 'network' | 'control' | 'performance' | 'apps' | 'drives' | 'drivers' | 'compress'
 
 /** Game runtimes, by what people call them (they live in PC › Updates). */
 const RUNTIMES = [
@@ -24,5 +24,6 @@ export const PC_SECTIONS: readonly { id: PcLink; label: string; keywords: readon
   { id: 'network', label: 'Network', keywords: ['network', 'internet', 'internet optimize', 'optimize network', 'ethernet', 'wi-fi', 'wifi', 'wireless', 'network adapter', 'link speed', 'connection', 'ping', 'latency', 'lag', 'packet loss', 'energy-efficient ethernet', 'eee', 'green ethernet', 'dma coalescing', 'network buffers', 'cable', 'background scan'] },
   { id: 'performance', label: 'Performance', keywords: ['performance', 'power plan', 'gpu scheduling', 'resizable bar', 'rebar', 'interrupts', 'msi mode'] },
   { id: 'drives', label: 'Drives', keywords: ['drives', 'storage', 'ssd', 'nvme', 'hard drive', 'hdd', 'disk', 'disk space', 'free space', 'drive health', 'smart', 'temperature', 'firmware', 'pcie', 'bypassio', 'trim', 'retrim', 'optimize drives', 'defrag', 'write cache', 'old shader caches', 'directstorage fast path', 'samsung magician'] },
+  { id: 'compress', label: 'Compress games', keywords: ['compress', 'compress games', 'compression', 'compactgui', 'compact', 'compact os', 'wof', 'lzx', 'xpress', 'free up space', 'save space', 'shrink games', 'smaller games', 'uncompress'] },
   { id: 'apps', label: 'Apps', keywords: ['apps', 'uninstall', 'programs', 'remove', 'leftovers', 'left behind', 'clean up', 'junk', 'bloatware', 'uninstaller', 'startup', 'startup apps', 'start with windows', 'starts with windows', 'autostart', 'run at startup', 'boot apps', 'recycle bin', 'temp files', 'unused apps', 'last used', 'removed', 'put back', 'undo uninstall', 'broken apps'] },
 ]

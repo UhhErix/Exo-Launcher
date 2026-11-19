@@ -1,7 +1,7 @@
 import { spotifyMock } from './spotifyMock'
 import { mockAdmin, mockAppMessages, mockFew, mockFewMessages, mockApps, mockChannels, mockChannelsFor, mockDiscordStatus, mockMessageId, mockFriends, mockHome, mockMembers, mockMessages, mockProfile } from './discordMock'
 /** Browser development fixtures. Dynamically loaded only outside the packaged host. */
-import type { Game, GameProperties, LauncherSettings, InstallProgress, InstalledApp, ReplacedApp, RuntimeItem, StartupItem, StartupState, StoreGift } from './host'
+import type { CompressSettings, CompressState, Game, GameProperties, LauncherSettings, InstallProgress, InstalledApp, ReplacedApp, RuntimeItem, StartupItem, StartupState, StoreGift } from './host'
 import type { CaptureItem } from './capture'
 import type { NoteInfo } from './notes'
 import { emitHostEvent } from './host'
@@ -266,6 +266,11 @@ const mockNetItems = (p?: { action?: unknown }) => {
  * fast path, a worn SATA SSD with bad sectors (the problem case), and a hard drive with games on it. `?drives=fine`
  * shows the same drives with nothing wrong. flush, optimize and all set their row.
  */
+/** A game's compression on the mock host: a 62 GB game a sample says would save 12.4 GB. */
+const mockCompress = (id: string): CompressState => ({
+  state: 'none', percent: null, saved: 0, size: 62e9, estimate: id ? 12.4e9 : null, sampled: !!id, changed: 0, algorithm: null, message: null, antiCheat: null, held: null,
+})
+const mockCompressSettings: CompressSettings = { whileIdle: false, afterUpdates: false, speed: 'balanced' }
 const mockDrivesFine = typeof location !== 'undefined' && new URLSearchParams(location.search).get('drives') === 'fine'
 const mockDriveFixes = { flush: mockDrivesFine, optimize: mockDrivesFine, set: new Set<string>() }
 const MOCK_SAMSUNG = { name: 'Samsung', tool: 'Samsung Magician', url: 'https://semiconductor.samsung.com/consumer-storage/support/tools/' }
@@ -1630,6 +1635,23 @@ const MOCK_HANDLERS: Record<string, MockHandler> = {
     { id: 'bin', name: 'Recycle Bin', detail: '', bytes: 1.2e9, files: 38, auto: false },
   ], cleaned: { at: new Date(Date.now() - 5 * 3_600_000).toISOString(), bytes: 1.9e9 } }),
   'junk.clean': () => ({ ok: true, bytes: 37.7e9, files: 470 }),
+  'compress.state': (p) => ({ ok: true, compress: mockCompress(String(p?.id ?? '')) }),
+  'compress.list': () => {
+    const games = [
+      { id: 'steam:1091500', title: 'Cyberpunk 2077', compress: mockCompress('steam:1091500') },
+      { id: 'steam:1245620', title: 'ELDEN RING', compress: { ...mockCompress(''), state: 'compressed' as const, saved: 18.3e9, size: 49e9, estimate: null } },
+      { id: 'steam:578080', title: 'PUBG: BATTLEGROUNDS', compress: { ...mockCompress(''), state: 'needsConsent' as const, estimate: 9.1e9, antiCheat: 'BattlEye', message: 'This game uses BattlEye, so Exo compresses it only if you allow it for this game.' } },
+    ].map(game => ({ ...game, eligible: game.compress.state === 'none' }))
+    return { ok: true, games, saved: 18.3e9, potential: 21.4e9, settings: { ...mockCompressSettings } }
+  },
+  'compress.act': (p) => ({ ok: true, message: null, compress: { ...mockCompress(String(p?.id ?? '')), state: p?.action === 'compress' ? 'compressing' : 'none', percent: p?.action === 'compress' ? 0.42 : null } }),
+  'compress.all': () => ({ ok: true, queued: 1, message: null }),
+  'compress.settings': (p) => {
+    if (typeof p?.whileIdle === 'boolean') mockCompressSettings.whileIdle = p.whileIdle
+    if (typeof p?.afterUpdates === 'boolean') mockCompressSettings.afterUpdates = p.afterUpdates
+    if (p?.speed === 'gentle' || p?.speed === 'balanced' || p?.speed === 'fast') mockCompressSettings.speed = p.speed
+    return { ok: true, settings: { ...mockCompressSettings } }
+  },
   'startup.list': () => mockStartup(null),
   'achievements.preview': () => ({ ok: true }),
   'fps.counter': (p) => { const on = p?.on === true; return { on, state: on ? 'on' : 'off', message: null } },

@@ -298,6 +298,7 @@ internal static class PlayerData
         new("intel-games.json", "IntelProfileService", Why.ThisPc, "Intel per-game values before Exo set them"),
         new("intel-profile.json", "IntelProfileService", Why.ThisPc, "Intel global values before Exo set them"),
         new("junk-clean.json", "JunkAutoClean", Why.ThisPc, "when the junk clean last ran"),
+        new("compress.json", "GameCompressionStore", Why.ThisPc, "which games on this PC Windows compressed, and the yes for one with anti-cheat"),
         new("keep.txt", "PackagedSmoke", Why.ThisPc, "a marker for the packaged smoke test"),
         new("smoke-result.json", "PackagedSmoke", Why.ThisPc, "the packaged smoke test's result"),
         new("last-exo-version.txt", "WebViewCacheCleaner", Why.ThisPc, "the version whose WebView cache was cleared"),

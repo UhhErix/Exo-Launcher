@@ -490,6 +490,14 @@ public sealed class SettingsService
         });
     }
 
+    /// <summary>Compress games' switches and its CPU budget (one of <see cref="GameCompression.Speeds"/>).</summary>
+    internal void ApplyCompressPatch(bool? whileIdle, bool? afterUpdates, string? speed) => CommitMutation(settings =>
+    {
+        if (whileIdle is { } idle) settings.CompressWhileIdle = idle;
+        if (afterUpdates is { } again) settings.RecompressAfterUpdates = again;
+        if (speed is not null && GameCompression.Speeds.Contains(speed)) settings.CompressSpeed = speed;
+    });
+
     /// <summary>Settings: the store clients stay quiet (on) or are put back as they were (off).</summary>
     public void ApplyStoreQuiet(bool quiet) => CommitMutation(settings => settings.StoreClientsQuiet = quiet);
 
@@ -1053,6 +1061,9 @@ public sealed class SettingsService
         DownloadHoursEnd = source.DownloadHoursEnd is >= 0 and <= 23 ? source.DownloadHoursEnd : null,
         AutoUpdateGames = source.AutoUpdateGames,
         AutoUpdateChipset = source.AutoUpdateChipset,
+        CompressWhileIdle = source.CompressWhileIdle,
+        RecompressAfterUpdates = source.RecompressAfterUpdates,
+        CompressSpeed = GameCompression.Speeds.Contains(source.CompressSpeed) ? source.CompressSpeed : "balanced",
         AutoUpdateUpscalers = source.AutoUpdateUpscalers,
         UpscalerAntiCheatEverywhere = source.UpscalerAntiCheatEverywhere,
         UpscalerAutoUpdateDefaulted = source.UpscalerAutoUpdateDefaulted,

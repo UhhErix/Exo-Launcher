@@ -33,7 +33,7 @@ internal static class AccountSyncMap
     /// <summary>Stays on this PC: paths, window and display, GPU, Discord and voice, consents, and first-run flags.</summary>
     internal static readonly string[] DeviceSettings =
     [
-        "AllowResize", "AppVersion", "AutoUpdateChipset", "AutoUpdateUpscalers", "CheckForUpdates", "CopyPortableIntoLibrary", "DefaultInstallRoot",
+        "AllowResize", "AppVersion", "AutoUpdateChipset", "CompressSpeed", "CompressWhileIdle", "RecompressAfterUpdates", "AutoUpdateUpscalers", "CheckForUpdates", "CopyPortableIntoLibrary", "DefaultInstallRoot",
         "DiscordAttenuateOthers", "DiscordAttenuateSelf", "DiscordAttenuation", "DiscordAutoSensitivity",
         "DiscordDesktopNotifications", "DiscordDisableAllSounds", "DiscordDisabledSounds", "DiscordEchoCancellation",
         "DiscordEvenVoices", "DiscordInputDevice", "DiscordInputProfile", "DiscordInputVolume",
