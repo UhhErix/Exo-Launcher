@@ -1,5 +1,7 @@
 ﻿# Third-party notices
 
+This is Exo Shaders, Exo Launcher's fork of SCSKiller (https://github.com/BlueHeisenberg/SCSKiller), copyright the SCSKiller authors and Exo Shaders' contributors; each release's source is at https://getexo.app/source. The add-on is the engine service alone: the Windows App SDK and WebView2 rows below belong to SCSKiller's own app, which it doesn't ship.
+
 SCSKiller ships, downloads or embeds the components below, at the versions in the distribution. Each row names its licence (SPDX id) and links to its text below, where identical texts are listed once.
 
 SCSKiller's own licence: GPL-3.0-or-later (LICENSE), with an additional permission under section 7 for Oodle, the Windows App SDK and graphics driver libraries (LICENSE-EXCEPTION.txt).

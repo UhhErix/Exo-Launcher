@@ -42,7 +42,7 @@ Protocol version: **1** (reported in the `ready` event).
 |---|---|---|
 | `ready` | `{protocol: 1, service: string, engine: string, dataDir: string, pid: number, safe: boolean}` | once, first line, after the engine is constructed (before the first scan finishes) |
 | `state` | `Snapshot` (below) | whenever anything changes, **coalesced, at most every 250 ms** (~4/s). Always full. A snapshot identical to the last one sent (apart from `rev`) is not sent again. |
-| `progress` | `{rev: number, queue: Queue, game?: {id, statusTitle, statusReason, percent?}}` | queue progress-only changes (pipelines done, rate, time left) between `state` events, also at most ~4/s; `game` = the running game's `Game.statusTitle/statusReason/percent`, which otherwise only change with the next `state`. A `state` event supersedes it. |
+| `progress` | `{rev: number, queue: Queue, game?: {id, statusTitle, statusReason, percent?}}` | queue progress-only changes (pipelines done, rate, time left) between `state` events, also at most ~4/s, and only when it says something the last one didn't; `game` = the running game's `Game.statusTitle/statusReason/percent`, which otherwise only change with the next `state`. A `state` event supersedes it. |
 
 After `ui.visible {visible: false}` no `state` or `progress` events are sent (nothing would read them, and the host
 relays each one); `ui.visible {visible: true}` sends a fresh `state` at once. A host that never sends `ui.visible` gets
@@ -533,7 +533,7 @@ compile into the same driver cache, so a compile by one can read as a changed ca
 | method | params | semantics |
 |---|---|---|
 | `recorder.auto` | `{on: boolean}` | Exo's one consent, persisted. On: every eligible game records from then on. Off: the recorders this engine placed leave (their recording imported first), and only those, once each game has exited. Snapshot: `recorder.auto`. |
-| `recorder.set` | `{id, on: boolean, takeOver?: boolean}` | One game, either way, whatever `recorder.auto` says. On is refused with `recorder.refusal` for what can't record, and for another copy's recorder without `takeOver`. |
+| `recorder.set` | `{id, on: boolean, takeOver?: boolean, session?: boolean}` | One game, either way, whatever `recorder.auto` says. `id` may be Exo's id of the game where it differs from the engine's (the game in the folder `exo.library` listed under it). A game `exo.library` lists with `noRecorder` turns on only with `session: true`: for the session Exo starts, kept in memory until `recorder.set {on: false}` or the service exits (a service that starts later keeps it out again). On is refused with `recorder.refusal` for what can't record, and for another copy's recorder without `takeOver`. |
 | `recorder.clear` | `{id}` | "Clear recording". Error `"Nothing was cleared: no recording of this game was found."` when there is none. Confirm first with `CLEAR_RECORDING_CONFIRM`. |
 
 ### Diagnostics and the check
@@ -645,7 +645,14 @@ game; Amazon ids `amazon:<product id>`, GOG ids `gog:<product id>`.
 
 | method | params | result / semantics |
 |---|---|---|
-| `exo.library` | `{games: {id: string, title: string, store: string, installDir: string, exe?: string}[]}` | Exo's installed games, as a safety net. The list **replaces** the previous one (a game no longer in it leaves the library at the next scan) and is kept in `<dataDir>\exo-library.json`, so its games are there at the next start before Exo sends it again. The service rescans only when the list changed. Result `{ok: true, changed: boolean, games: number, refused: {id, title, problem}[]}`: `games` = entries kept; `refused` (worked out only when the list changed) = games whose folder no other source found and that Exo Shaders won't take, with the sentence `games.checkFolder` would give, e.g. `"C:\ is a whole drive: pick the game's own folder."`. |
+| `exo.library` | `{games: {id: string, title: string, store: string, installDir: string, exe?: string, noRecorder?: boolean}[]}` | Exo's installed games, as a safety net. The list **replaces** the previous one (a game no longer in it leaves the library at the next scan) and is kept in `<dataDir>\exo-library.json`, so its games are there at the next start before Exo sends it again. The service rescans only when the list changed. Result `{ok: true, changed: boolean, games: number, refused: {id, title, problem}[]}`: `games` = entries kept; `refused` (worked out only when the list changed) = games whose folder no other source found and that Exo Shaders won't take, with the sentence `games.checkFolder` would give, e.g. `"C:\ is a whole drive: pick the game's own folder."`. |
+
+`noRecorder: true`: Exo keeps the recorder out of the games in that folder (its anti-cheat answer refuses it, or a Steam
+game set to start without its anti-cheat, which runs it from Steam's default entry). The engine treats them like a game
+with anti-cheat (`recorder.skip` "Exo Launcher keeps the recorder out of this game", `canSet: false`): "Record games"
+(`recorder.auto`) never puts the recorder in, one already in leaves once the game has exited, and only `recorder.set
+{on: true, session: true}` lets it in, for one session. It is kept in `exo-library.json` with the list, so it holds from
+a run's first scan, before Exo sends its list again; a change to it alone is a changed list (a rescan).
 
 Each game whose `installDir` isn't the folder of a game another source found (nor inside or around one) becomes a
 discovered game: `id` = `"exo:" + Exo's id` (when that is 1 to 120 of `A-Z a-z 0-9 . _ : -`, else `"exo:"` + 16 hex of

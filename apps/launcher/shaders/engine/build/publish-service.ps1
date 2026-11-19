@@ -18,11 +18,11 @@
 #                                   Shader Compilation, run as administrator)
 # The native binaries are built from the source in proxy\ (prebuilt\SOURCE.md).
 #
-#   pwsh build\publish-service.ps1 [-NativeFrom <SCSKiller.App\current>] [-Out <dir>] [-SkipCli]
+#   pwsh engine\build\publish-service.ps1 [-NativeFrom <a folder in prebuilts layout>] [-Out <dir>] [-SkipCli]
 
 [CmdletBinding()]
 param(
-    # The native files built from proxy\ with -DSCSK_VERSION=1.4.4, kept in prebuilt\.
+    # The native files built from proxy\ (prebuilt\SOURCE.md), kept in prebuilt\.
     [string]$NativeFrom = (Join-Path $PSScriptRoot '..\prebuilt'),
     [string]$Out,
     # Every assembly's version. Core's test hooks (SCSK_TEST_HOOKS) build in only under 0.0.0-internal, a plain build's.
@@ -53,7 +53,7 @@ $natives = @(
 $zlibCandidates = @('zlib-ng2.dll', 'cli\zlib-ng2.dll')
 
 foreach ($n in $natives) {
-    if (-not (Test-Path (Join-Path $NativeFrom $n))) { throw "missing $n in $NativeFrom (pass -NativeFrom <installed SCSKiller.App\current>)" }
+    if (-not (Test-Path (Join-Path $NativeFrom $n))) { throw "missing $n in $NativeFrom (see prebuilt\SOURCE.md)" }
 }
 $zlib = $zlibCandidates | ForEach-Object { Join-Path $NativeFrom $_ } | Where-Object { Test-Path $_ } | Select-Object -First 1
 if (-not $zlib) { throw "zlib-ng2.dll not found in $NativeFrom" }

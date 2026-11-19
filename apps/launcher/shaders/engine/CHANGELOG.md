@@ -6,6 +6,20 @@ repository's root `CHANGELOG.md`.
 
 ## [Unreleased]
 
+**In Exo Launcher's repository**
+
+- The source moved into Exo Launcher's repository as `apps/launcher/shaders` (UPSTREAM.md: SCSKiller v1.4.6, imported
+  from exo-shaders af4f4f645ff9, the engine 3.25.0 and 3.26.0 shipped). Exo Launcher's release builds it from there and
+  publishes it at getexo.app/source from the same commit. Upstream's apps, Linux packaging and signing are left out, and
+  so is the fork's old page: Exo Launcher draws the Shaders board itself.
+- `exo.library` takes `noRecorder` per game, kept in `exo-library.json`: the engine keeps the recorder out of those
+  games like one with anti-cheat (`ScsKiller.HostSkips`), so "Record games" no longer puts it back between Exo's
+  sessions in a Steam game set to start without its anti-cheat. `recorder.set {on: true, session: true}` lets it in for
+  that one session, in memory only. `recorder.set` also finds a game by the folder Exo listed under its own id.
+- A `progress` event that says nothing the last one didn't is not sent.
+- Protocol tests (`engine/tests/ExoShaders.Service.Tests`) run the built service in `--safe` mode on a temporary data
+  folder. Service version 0.2.0.
+
 **SCSKiller 1.4.4 (engine 1.4.4)**
 
 - Merged from its published source. On Windows: WeGame games are found, GRYPHLINK games get their own section upstream, Unreal

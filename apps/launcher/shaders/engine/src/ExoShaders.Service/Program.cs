@@ -21,7 +21,7 @@ namespace ExoShaders.Service;
 
 internal static class Program
 {
-    public const string ServiceVersion = "0.1.0";
+    public const string ServiceVersion = "0.2.0";
 
     private const int ExitRefused = 3;
     private const int ExitUsage = 2;
