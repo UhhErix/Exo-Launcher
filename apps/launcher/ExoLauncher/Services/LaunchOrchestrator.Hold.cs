@@ -1,3 +1,4 @@
+using ExoLauncher.Adapters;
 using ExoLauncher.Helpers;
 using ExoLauncher.Models;
 
@@ -37,6 +38,14 @@ public sealed partial class LaunchOrchestrator
     internal bool AnyGameRunning
     {
         get { lock (_gate) return _activeOrLaunchingGames.Count > 0; }
+    }
+
+    /// <summary>True while something Exo started, and <paramref name="counts"/> accepts, runs or starts.</summary>
+    internal bool AnyRunning(Func<GameEntry, bool> counts)
+    {
+        GameEntry[] running;
+        lock (_gate) running = _gameSessions.Values.Select(session => session.Game).ToArray();
+        return running.Any(counts);
     }
 
     /// <summary>The downloaders Exo runs itself, which Pause can stop and Resume continue.</summary>
@@ -85,24 +94,27 @@ public sealed partial class LaunchOrchestrator
             if (!_holds.Remove(key)) return;
             PublishDownloadQueueChangedLocked();
             if (_holds.Count > 0) return;
-            resume = _heldTokens
-                .Select(token => _downloadIntents.TryGetValue(token, out var intent) && _pausedDownloadTokens.Contains(token) ? intent.GameId : null)
-                .OfType<string>().ToList();
+            resume = [];
+            var parked = false;
+            foreach (var token in _heldTokens)
+            {
+                if (!_downloadIntents.TryGetValue(token, out var intent) || !_pausedDownloadTokens.Contains(token)) continue;
+                // Another account of its store is signed in now: it waits for its own, instead of
+                // resuming into a refusal that left it paused for review for good.
+                if (!string.IsNullOrWhiteSpace(intent.AccountScope) && Find(intent.Store) is IStoreAccountScope && !CanResumeAccount(intent))
+                {
+                    ParkForAccountLocked(intent);
+                    parked = true;
+                }
+                else resume.Add(intent.GameId);
+            }
             _heldTokens.Clear();
+            if (parked) SaveDownloadIntentsLocked();
             AppLog.Info($"Downloads released; resuming {resume.Count} paused download(s).");
         }
         // Off the caller's thread, each resume claims its place before the queue
         // moves, so what the hold paused goes first, oldest first.
-        _ = Task.Run(() =>
-        {
-            foreach (var gameId in resume)
-                _ = ResumeDownloadAsync(gameId).ContinueWith(task =>
-                {
-                    if (task.IsFaulted) AppLog.Info("Resume after hold failed: " + task.Exception?.GetBaseException().Message);
-                    else if (!task.Result.Ok && !task.Result.Queued) AppLog.Info($"Resume after hold: gameId={gameId}; {task.Result.Message}");
-                }, TaskScheduler.Default);
-            DrainQueue();
-        });
+        ResumeInOrder(resume, "Resume after hold");
     }
 
     /// <summary>

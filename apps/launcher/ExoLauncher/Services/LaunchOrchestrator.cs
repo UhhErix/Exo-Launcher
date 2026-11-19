@@ -294,9 +294,10 @@ public sealed partial class LaunchOrchestrator
         var session = new GameSessionState(game);
         lock (_gate)
         {
-            if (_activeJob is not null && (_activeJob.Store == game.Store ||
-                string.Equals(_activeJob.GameId, game.Id, StringComparison.OrdinalIgnoreCase)))
-                return new LaunchResult { Ok = false, Message = "This store is busy installing, updating, or removing a game. Other stores remain available." };
+            // Only the game whose files are being written waits. Playing another game, of any store, while a
+            // download runs is fine (owner, 2026-11-19); the play hold pauses the download where it should.
+            if (_activeJob is not null && string.Equals(_activeJob.GameId, game.Id, StringComparison.OrdinalIgnoreCase))
+                return new LaunchResult { Ok = false, Message = $"{game.Title} is installing or updating. Play it once that finishes." };
             if (!_activeOrLaunchingGames.Add(game.Id))
                 return new LaunchResult { Ok = false, Message = $"{game.Title} is already running or starting." };
             _gameSessions[game.Id] = session;
@@ -1486,6 +1487,18 @@ public sealed partial class LaunchOrchestrator
                 if (held && candidate.DownloadIntent is not null)
                 {
                     waiting.Add(candidate);
+                    continue;
+                }
+                // Its store's signed-in account changed since it was queued: it waits for that account, paused,
+                // instead of reaching the front and being dropped as "account changed".
+                if (candidate.DownloadIntent is { AccountScope.Length: > 0 } intent && !candidate.Outer.IsCancellationRequested &&
+                    Find(intent.Store) is IStoreAccountScope && !CanResumeAccount(intent))
+                {
+                    ParkForAccountLocked(intent);
+                    SaveDownloadIntentsLocked();
+                    PublishDownloadQueueChangedLocked();
+                    candidate.Completion?.TrySetResult(new InstallResult { Ok = false, Message = AccountReason(intent.Store) });
+                    AppLog.Info($"Download account: queued gameId={intent.GameId} waits for its {intent.Store} account.");
                     continue;
                 }
                 if (AdmitQueuedLocked(candidate))
