@@ -1,6 +1,7 @@
 # Changelog
 
 ## 3.26.0 — November 14, 2026
+- **Compress games.** A game's Properties has a Compress row, and the PC room a Compress chip listing every game with what it saved and could still save, with Compress all. Exo uses Windows' own compression, which the game reads as before, picks the algorithm for your PC and drive, samples each kind of file first and leaves alone what wouldn't shrink, and never runs while the game plays or updates. Games with anti-cheat wait for your yes and their programs stay as they are. Compress while idle and Compress again after updates are off until you turn them on. _Checked in code only._
 - **Lucide icons.** Every icon in Exo and Exo Mouse is now from Lucide, one consistent line family; liked, starred and pinned show filled. _Checked in code only._
 - **GIFs in Discord stay.** A GIF that stumbled once (often while Exo was minimized) turned into a "would not load" line for good; it now tries again, and again when you come back. Imgur GIFs load too. _Checked in code only._
 - **Things line up.** In Discord the panes' titles share one line and every list starts at the same edge (channels, categories, messages, friends); in the PC room the This PC, Updates and Shaders titles sit on one line. _Checked in code only._
