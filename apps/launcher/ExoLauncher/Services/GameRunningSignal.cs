@@ -4,24 +4,47 @@ namespace ExoLauncher.Services;
 
 /// <summary>
 /// Local\ExoLauncher.GameRunning: a manual-reset event, set while any library game runs (one Exo started, or one found
-/// running however it was started) and reset when none does. An Exo starting during a game reads it to stay out of the
-/// way (<see cref="Helpers.ForegroundWatcher"/>), and so does tools/lab, which won't run during a game. It exists only
-/// while Exo Launcher runs: once Launcher closes, opening it fails, which reads as no game, so it can't go stale. Updated by the run-state poll,
-/// which also holds Wi-Fi in its game mode while a game runs (<see cref="WifiGameMode"/>).
+/// running however it was started) and reset when none does, and when Exo starts or closes. An Exo starting during a
+/// game reads it to stay out of the way (<see cref="Helpers.ForegroundWatcher"/>), and so do Exo Cinema and tools/lab.
+/// It exists only while Exo Launcher runs or a reader holds a handle: once it is gone, opening it fails, which reads as no
+/// game; one a reader kept alive is reset when Exo opens it again (<see cref="Open"/>). Updated by the run-state poll,
+/// which also holds Wi-Fi in its game mode while a game runs (<see cref="WifiGameMode"/>). A game session Exo
+/// still has open, with no game process left, keeps it set only until the session closes: the poll checks again every
+/// 15 s while that lasts (<see cref="RunStatePlan"/>) and once more when the session ends.
 /// </summary>
 internal static class GameRunningSignal
 {
     internal const string Name = @"Local\ExoLauncher.GameRunning";
 
-    private static readonly Lazy<EventWaitHandle?> Handle = new(() =>
+    private static readonly Lazy<EventWaitHandle?> Handle = new(() => Open(Name), LazyThreadSafetyMode.ExecutionAndPublication);
+
+    /// <summary>
+    /// Creates the event, or opens one that outlived an Exo that crashed while a game ran (a reader still held a
+    /// handle), and resets it: the constructor's initial state applies only to a new event, so an opened one would
+    /// keep "a game runs" until the next game ended.
+    /// </summary>
+    internal static EventWaitHandle? Open(string name)
     {
-        try { return new EventWaitHandle(false, EventResetMode.ManualReset, Name); }
+        try
+        {
+            var handle = new EventWaitHandle(false, EventResetMode.ManualReset, name, out var created);
+            if (!created && handle.WaitOne(0)) AppLog.Info("Game running signal: found set from an earlier Exo; cleared.");
+            handle.Reset();
+            return handle;
+        }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or WaitHandleCannotBeOpenedException)
         {
             AppLog.Warn("Game running signal: not created: " + ex.Message);
             return null;
         }
-    }, LazyThreadSafetyMode.ExecutionAndPublication);
+    }
+
+    /// <summary>Exo is closing: the event is reset now, so a reader holding a handle past Exo's exit reads no game.</summary>
+    internal static void Clear()
+    {
+        if (Interlocked.Exchange(ref _state, 0) == 1) AppLog.Info("Game running signal: cleared as Exo closes.");
+        if (Handle.IsValueCreated && Handle.Value is { } handle) handle.Reset();
+    }
 
     private static int _state = -1;
 
