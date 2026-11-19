@@ -686,7 +686,8 @@ public class CommunityTests : IDisposable
     public void A_server_full_cut_reads_as_an_x_entry()
     {
         var root = new DirectoryInfo(AppContext.BaseDirectory);
-        while (!File.Exists(Path.Combine(root.FullName, "SCSKiller.slnx"))) root = root.Parent!;
+        while (root != null && !File.Exists(Path.Combine(root.FullName, "SCSKiller.slnx"))) root = root.Parent;
+        if (root == null) return;
         var dir = Path.Combine(root.FullName, "server-rs", "conformance", "fixtures", "full");
         if (!Directory.Exists(dir)) return;
         var packed = File.ReadAllBytes(Path.Combine(dir, "x.br"));

@@ -101,7 +101,7 @@ public partial class AppTests
         p.K.Store.SaveGame(p.Id, rec);
         p.K.SetOfflineRecording(p.Id, true);
         var session = p.K.StartRiskSession(p.Id, confirmed: true, AntiCheat.BattlEye);
-        var ini = File.ReadAllText(Path.Combine(_exeDir, "scskiller.ini"));
+        var ini = File.ReadAllText(Path.Combine(_exeDir, ScsKiller.IniName));
         await session.WaitAsync(TimeSpan.FromSeconds(60));
         Assert.Contains("mode=record", ini);
         Assert.DoesNotContain("overlay=", ini);
@@ -176,7 +176,7 @@ public partial class AppTests
         await k.ScanAsync(default);
         k.SetOfflineRecording(id, true);
         var before = Names(_exeDir);
-        var ini = Path.Combine(_exeDir, "scskiller.ini");
+        var ini = Path.Combine(_exeDir, ScsKiller.IniName);
 
         var session = k.StartRiskSession(id, confirmed: true, AntiCheat.BattlEye);
         // a reader holding the ini as the store's launch is bound (its own open may meet the bind's rename)
@@ -221,7 +221,7 @@ public partial class AppTests
         k.LaunchCommand = g => new ProcessStartInfo(g.ExePath, k.OfflineArguments) { UseShellExecute = false, CreateNoWindow = true };
         await k.ScanAsync(default);
         k.SetOfflineRecording(_game.Id, true);
-        var ini = Path.Combine(_exeDir, "scskiller.ini");
+        var ini = Path.Combine(_exeDir, ScsKiller.IniName);
         var session = k.StartRiskSession(_game.Id, confirmed: true, AntiCheat.BattlEye);
         await Until(() => Bound(ini), 30);
         File.WriteAllText(Path.Combine(Directory.CreateDirectory(Path.Combine(TestEnv.Recorder, "refused")).FullName, ScsKiller.FileKey(_game.ExePath)), "1 " + why);
@@ -247,7 +247,7 @@ public partial class AppTests
             await k.ScanAsync(default);
             k.SetOfflineRecording(g.Id, true);
             var before = Names(_exeDir);
-            var ini = Path.Combine(_exeDir, "scskiller.ini");
+            var ini = Path.Combine(_exeDir, ScsKiller.IniName);
             var session = k.StartRiskSession(g.Id, confirmed: true, AntiCheat.BattlEye);
             await Until(() => Bound(ini), 30);
             Assert.Equal(g.ExePath, k.Store.LoadGame(g.Id).OfflineSession!.Exe);
@@ -307,7 +307,7 @@ public partial class AppTests
         }
         k.SetOfflineRecording(_game.Id, true);
         var before = Names(_exeDir);
-        var ini = Path.Combine(_exeDir, "scskiller.ini");
+        var ini = Path.Combine(_exeDir, ScsKiller.IniName);
         var session = k.StartRiskSession(_game.Id, confirmed: true, AntiCheat.BattlEye);
         await Until(() => Bound(ini), 30);
         Assert.True(ScsKiller.IsOurProxy(Path.Combine(_exeDir, dll)));
@@ -624,7 +624,7 @@ public partial class AppTests
         k.OfflineArguments = "-n 8 127.0.0.1";
         await k.ScanAsync(default);
         k.SetOfflineRecording(id, true);
-        var ini = Path.Combine(_exeDir, "scskiller.ini");
+        var ini = Path.Combine(_exeDir, ScsKiller.IniName);
         var session = k.StartRiskSession(id, confirmed: true, AntiCheat.None);
         await Until(() => Bound(ini), 30);
         var text = File.ReadAllText(ini);
@@ -661,7 +661,7 @@ public partial class AppTests
             k.OfflineArguments = "-n 4 127.0.0.1";
             await k.ScanAsync(default);
             k.SetOfflineRecording(id, true);
-            var ini = Path.Combine(_exeDir, "scskiller.ini");
+            var ini = Path.Combine(_exeDir, ScsKiller.IniName);
             var session = k.StartRiskSession(id, confirmed: true, AntiCheat.BattlEye);
             await Until(() => Bound(ini), 30);
             Assert.Equal(Path.Combine(data, "armed"), File.ReadAllText(Path.Combine(_exeDir, ScsKiller.LedgerStamp)));

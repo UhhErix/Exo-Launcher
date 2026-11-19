@@ -118,10 +118,11 @@ ExoShaders.Service.exe --asd-remove-all              (Exo Shaders' uninstall: ta
 - Pinned third-party downloads from GitHub stay, all of them third-party and licensed by their authors: the Oodle codec
   (WorkingRobot/OodleUE release, Oodle's own licence), the zlib codec, FromSoftware and RE Engine key tables, and the public
   Unreal key lists. Each is fetched at a pinned version when a game needs it.
-- Anti-cheat: a game whose folder holds a known anti-cheat module is never recorded or injected into, in this build. The
-  modules, by file name: EasyAntiCheat, BEService, BEClient, BattlEye, vgk, vgc, FACEIT, GameGuard, Ricochet, mhyprot,
-  XIGNCODE (App/ExoBuild.cs, `AntiCheatModules`; searched two folders down). Offline sessions without EasyAntiCheat and
-  "at your own risk" sessions are removed from this build.
+- Anti-cheat: SCSKiller's own decisions, unchanged. Which games count as having anti-cheat is upstream's (GameFiles), and
+  so is where the recorder may go: never by itself into a game with anti-cheat; an offline session (ELDEN RING, ARMORED CORE
+  VI without EasyAntiCheat) or a session "at your own risk" (`recorder.checkRisk`, `recorder.startRisk`, with
+  `recordAntiCheatGames` on, Hunt: Showdown 1896 among them since 1.4.8) only when the player confirms it. Riot games are
+  never handed to the engine by Exo Launcher, and upstream offers them no session (it can't start them).
 
 ## Settings policy
 
@@ -150,7 +151,7 @@ the engine compile by itself: a compile starts only from a request (`game.compil
 | `recordAllGames` | `recorder.auto` (`exo-consent.json`): `false` until Exo asks. An earlier Exo Shaders wrote `true` without asking, so settings.json's value counts for nothing. The first run under this policy also clears "on" switches from before consent, so recorders nobody asked for leave |
 | `useCommunityDb` | `true`: what a sign-in entitles downloads by itself |
 | `shareRecordings` | `sharing.setUpload` (`exo-consent.json`): `false` until asked. The uploader asks the consent file itself at each call |
-| `recordAntiCheatGames` | `false` |
+| `recordAntiCheatGames` | not the policy's: upstream's "Allow the recorder in games with anti-cheat (at your own risk)", off by default, `settings.set` turns it on; each session is still confirmed |
 | `recordingLimitMB` | the engine default (1024) |
 | `keepCachesAside` | `false`: keeping an AMD cache aside needs the engine running as each game starts, to put it back. Turning it off (from an earlier policy's `true`) first puts every kept cache, of listed and hidden games, back into the driver's cache (`game.putBackKept` for each), then the kept copies are dropped; a service that exits in between hasn't turned it off yet and does it again at its next run. Kept for another driver, or after the driver's cache was reset, they're dropped as before |
 | `experimentalIntel` | `true` only when the GPU the engine compiles for (the one with the most video memory) is Intel; takes effect at the next start |
@@ -516,9 +517,9 @@ runs: the moment one fails, the work pauses (a compile) or stops to start over l
 
 ### Recorder
 
-Nothing records until Exo asks once (`recorder.auto`) or for one game (`recorder.set`). All anti-cheat layers are
-unchanged: anti-cheat games, VAC and Riot are refused at every layer, and the offline and risk sessions stay refused
-(see Settings policy).
+Nothing records until Exo asks once (`recorder.auto`) or for one game (`recorder.set`). Anti-cheat games are
+upstream's call: `recorder.set` refuses them, and the offline and risk sessions are upstream's, confirmed per session
+(see Settings policy and Local-only).
 
 **Another SCSKiller copy on the PC** (a portable official app with its own data folder): a recorder's marker
 (`scskiller.ledger`) says whose it is, and its proxy finds that copy's `recorder.key` through it. Exo's engine never

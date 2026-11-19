@@ -148,7 +148,7 @@ public class SharedPackTests(ITestOutputHelper output)
         var plan = planner.Build(game, Engine, Index(), null, Nvidia, Path.Combine(x.Root, "plan-nv"), log, default);
         output.WriteLine(string.Join("\n", log.All));
         Assert.Equal((2, 2), (plan.Stats.MiddlewareItems, plan.Stats.MiddlewareSharedItems));   // the wave64 one: AMD only
-        Assert.Contains(log.All, l => l.Contains("2 shared pack PSOs") && l.Contains("1 with a wave size this GPU doesn't run left out"));
+        Assert.Contains(log.All, l => l.Contains("2 shared pack PSOs") && l.Contains("1 left out (a wave size this GPU doesn't run, or AMD's shader intrinsics)"));
         Assert.Equal(3, planner.Build(game, Engine, Index(), null, Amd, Path.Combine(x.Root, "plan-amd"), null, default).Stats.MiddlewareItems);
 
         // this PC's own pack seeds first: what both hold isn't counted as the shared pack's

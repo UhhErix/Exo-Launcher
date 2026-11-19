@@ -174,7 +174,7 @@ public class FromSoftFormatTests
         Assert.Equal(partial.Note, Core.App.ScsKiller.GuessNote(partial));
         Assert.Equal([SoulsKeys.Uxm], asked); // Elden Ring's keys are tried from UXM's file too
         Assert.Equal("DLC", skip.IndexStamp(game));
-        Assert.Equal(skip.IndexStamp(game), skip.DetectStamp(game, partial));
+        Assert.Equal("DLC|" + Core.App.KeyFiles.Stamp(keyFile), skip.DetectStamp(game, partial));
         var logged = new List<string>();
         var left = skip.Index(game, partial, new SyncLog(logged.Add), CancellationToken.None);
         Assert.Equal(index.Shaders.Keys.Order(), left.Shaders.Keys.Order());
@@ -216,10 +216,12 @@ public class FromSoftFormatTests
         var keyFile = new SoulsKeys(data).KeyFile(game);
 
         var engine = reader.Detect(game)!;
-        Assert.Equal("no key found for its archives, and none could be downloaded", engine.Unsupported);
+        Assert.True(FromSoftReader.NeedsKey(engine));
+        Assert.Null(engine.Unsupported);
+        Assert.Equal(Core.App.Download.FailedNote, engine.Note);
         var logged = new List<string>();
         var thrown = Assert.Throws<InvalidDataException>(() => reader.Index(game, engine, new SyncLog(logged.Add), CancellationToken.None));
-        Assert.Equal(engine.Unsupported, thrown.Message);
+        Assert.Equal("no key found for its archives", thrown.Message);
         Assert.Contains(logged, l => l.Contains(keyFile) && l.Contains("PEM"));
     }
 
@@ -274,8 +276,11 @@ public class FromSoftFormatTests
         var keyFile = new SoulsKeys(data).KeyFile(game);
 
         var asked = new List<string>();
-        var offline = new FromSoftReader(data, u => { asked.Add(u); return null; }).Detect(game)!;
-        Assert.Equal("no key found for its archives, and none could be downloaded", offline.Unsupported);
+        var offlineReader = new FromSoftReader(data, u => { asked.Add(u); return null; });
+        var offline = offlineReader.Detect(game)!;
+        Assert.True(FromSoftReader.NeedsKey(offline));
+        Assert.Null(offline.Unsupported);
+        Assert.Equal(Core.App.Download.FailedNote, offline.Note);
         Assert.Equal([SoulsKeys.Uxm], asked);
         Assert.StartsWith("https://raw.githubusercontent.com/Nordgaren/UXM-Selective-Unpack/9501be87e272b6dae55e60a13c3f4753ca6fb3bb/", SoulsKeys.Uxm); // pinned
         Assert.DoesNotContain(File.ReadAllLines(keyFile), l => !l.StartsWith("exe ")); // only the exe scan's stamp
@@ -284,11 +289,15 @@ public class FromSoftFormatTests
         byte[] src = [.. Encoding.UTF8.Preamble, .. Encoding.UTF8.GetBytes(UxmSource(("SekiroKeys", [("Data1", k1)]), ("DarkSouls3Keys", [("Data1", decoy), ("Data2", k1), ("DLC1", k2)])))];
         var logged = new List<string>();
         var tampered = new FromSoftReader(data, _ => src); // the real pin: not this file
-        Assert.Equal(offline.Unsupported, tampered.Detect(game)!.Unsupported);
+        var tamperedEngine = tampered.Detect(game)!;
+        Assert.True(FromSoftReader.NeedsKey(tamperedEngine));
+        Assert.Equal(Core.App.Download.FailedNote, tamperedEngine.Note);
         Assert.Throws<InvalidDataException>(() => tampered.Index(game, offline, new SyncLog(logged.Add), CancellationToken.None));
         Assert.Contains(logged, l => l.Contains("not the pinned"));
         Assert.DoesNotContain(File.ReadAllLines(keyFile), l => !l.StartsWith("exe ")); // nothing kept from it
-        Assert.Equal(offline.Unsupported, new FromSoftReader(data, _ => src, Sha256(src[3..])).Detect(game)!.Unsupported); // the text's hash isn't the file's
+        var wrongHash = new FromSoftReader(data, _ => src, Sha256(src[3..])).Detect(game)!; // the text's hash isn't the file's
+        Assert.True(FromSoftReader.NeedsKey(wrongHash));
+        Assert.Equal(Core.App.Download.FailedNote, wrongHash.Note);
 
         var engine = new FromSoftReader(data, _ => src, Sha256(src)).Detect(game)!;
         Assert.Equal(("Dark Souls III", (string?)null), (engine.Fork, engine.Unsupported));

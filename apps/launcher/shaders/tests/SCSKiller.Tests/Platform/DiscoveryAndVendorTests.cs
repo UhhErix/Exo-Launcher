@@ -1654,8 +1654,10 @@ public class DiscoveryAndVendorTests(ITestOutputHelper output)
             var install = Directory.CreateDirectory(Path.Combine(root, "Clean", "bin")).Parent!.FullName;
             File.WriteAllBytes(Path.Combine(install, "bin", "Game.exe"), new byte[100]);
             var game = new Game("test:clean", "Clean", Store.Other, install, Path.Combine(install, "bin", "Game.exe"));
-            Junction(Path.Combine(install, "shared"), protectedGame);   // into another game's install: not this game's files
+            Junction(Path.Combine(install, "shared"), protectedGame);   // followed (v1.4.8+): finds anti-cheat through directory links
             Junction(Path.Combine(install, "bin", "loop"), install);    // a cycle
+            Assert.Equal(AntiCheat.EasyAntiCheat, GameFiles.DetectAntiCheat(game));
+            Directory.Delete(Path.Combine(install, "shared"));
             Assert.Equal(AntiCheat.None, GameFiles.DetectAntiCheat(game));
 
             Junction(Path.Combine(install, "BattlEye"), protectedGame);   // its name still counts
@@ -2133,11 +2135,12 @@ public class DiscoveryAndVendorTests(ITestOutputHelper output)
             File.WriteAllText(Path.Combine(manifests, "c.item"), System.Text.Json.JsonSerializer.Serialize(new { AppName = "Pending", InstallLocation = pending }));   // the new launcher's record of it is unfinished
 
             var games = new EpicSource(manifests, launcher).Discover().OrderBy(g => g.Id).ToList();
-            Assert.Equal(["epic:Both", "epic:Fresh", "epic:Renamed", "epic:UGame"], games.Select(g => g.Id));
+            Assert.Equal(["epic:Both", "epic:Fresh", "epic:Pending", "epic:Renamed", "epic:UGame"], games.Select(g => g.Id));
             Assert.Equal(("Both Game", "2.0"), (games[0].Name, games[0].Version));   // the new launcher's record wins over a stale classic manifest
             Assert.Equal(("Fresh Game", fresh, Path.Combine(fresh, "Fresh.exe"), "1.2.3-CL-100"), (games[1].Name, games[1].InstallDir, games[1].ExePath, games[1].Version));
-            Assert.Equal(("Renamed", (string?)null), (games[2].Name, games[2].Version));
-            Assert.Equal(Path.Combine(unreal, "UGameClient-Win64-Shipping.exe"), games[3].ExePath);   // never the bootstrapper the launcher starts
+            Assert.Equal(("Pending", (string?)null), (games[2].Name, games[2].Version));
+            Assert.Equal(("Renamed", (string?)null), (games[3].Name, games[3].Version));
+            Assert.Equal(Path.Combine(unreal, "UGameClient-Win64-Shipping.exe"), games[4].ExePath);   // never the bootstrapper the launcher starts
             Assert.Equal(["Both (classic)", "Pending"], new EpicSource(manifests, Path.Combine(root, "missing")).Discover().Select(g => g.Name).Order());
         }
         finally { Directory.Delete(root, true); }

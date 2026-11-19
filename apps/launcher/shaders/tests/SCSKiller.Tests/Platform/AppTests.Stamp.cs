@@ -267,9 +267,9 @@ public partial class AppTests
         Assert.Null(k.Games.Single().RecorderRefused);
     }
 
-    /// <summary>A start with nothing changed walks only the installs of games with the recorder in: the scan goes by its cached
-    /// verdict and the folders' stamp, which the recorder's own files don't change, and the reconcile walks the recorder game
-    /// in full (anti-cheat put deep in its install while the app was closed changes neither). So does the periodic pass.</summary>
+    /// <summary>A start with nothing changed walks the recorder game in the scan (no cached-clean holdback when a recorder
+    /// may go in) and in reconcile (which starts the install watch before its full walk), then the periodic pass checks by
+    /// the watch alone without walking again.</summary>
     [Fact]
     public async Task A_start_with_nothing_changed_walks_only_the_recorder_games()
     {
@@ -279,9 +279,9 @@ public partial class AppTests
 
         var k = Managed();
         var walks = 0;
-        k.FullAntiCheatCheck = g => { Interlocked.Increment(ref walks); return Core.Games.GameFiles.DetectAntiCheat(g); };
+        k.FullAntiCheatCheck = (g, b) => { Interlocked.Increment(ref walks); return Core.Games.GameFiles.DetectAntiCheat(g, budget: b); };
         await k.ScanAsync(default);
-        Assert.Equal(1, walks);
+        Assert.Equal(2, walks);
         Assert.True(Attested(_game));
         await k.CheckRecorderGames();
         Assert.Equal(2, walks);
@@ -358,7 +358,7 @@ public partial class AppTests
         File.WriteAllText(ScsKiller.RefusedFile(_game.ExePath), $"{DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()} exe not as checked");
         await k.CheckRecorderGames();
         Assert.True(Attested(_game));
-        Assert.Contains($"the recorder's scskiller.ini didn't match {Path.GetFileName(_game.ExePath)}", RecordersLog());
+        Assert.Contains($"the recorder's {ScsKiller.IniName} didn't match {Path.GetFileName(_game.ExePath)}", RecordersLog());
         k.RefreshGame(_game.Id);
         var s = k.Games.Single();
         Assert.Equal("The game changed since the recorder was set up. It is set up again: play again.", s.RecorderRefused);
@@ -498,7 +498,7 @@ public partial class AppTests
         Assert.Throws<InvalidOperationException>(() => k.SetOfflineRecording(id, true));
         Assert.Contains("isn't available for this game", Assert.Throws<InvalidOperationException>(() => { _ = k.StartRiskSession(id, confirmed: true, AntiCheat.None); }).Message);
         Assert.DoesNotContain(Names(_exeDir), n => n is "d3d12.dll" or "d3d11.dll" or ScsKiller.ArmedFile);
-        Assert.Equal($"Not available: {game.Name} doesn't start with the recorder in its folder.", ScsKiller.CrashNote(game));
+        Assert.Equal($"Not available: {game.Name} doesn't start with the recorder enabled.", ScsKiller.CrashNote(game));
     }
 
     /// <summary>The cached answer follows the DLLs it was read from, not only the exe: sl.interposer.dll removed, or a DLL the
@@ -1820,18 +1820,18 @@ public partial class AppTests
         Assert.Equal(AntiCheat.None, await Start());
 
         Directory.CreateDirectory(marker);
-        if (deep && !recorder)   // a clean verdict holds until the folders change; turning the recorder on checks in full first
+        if (deep && !recorder)   // a clean verdict still walks when RecorderMayGoIn is true (no cached-clean holdback)
         {
             var k = Killer(new FakeReader(Unreal));
             k.ProcessNames = () => new HashSet<string>();
             await k.ScanAsync(default);
-            Assert.Equal(AntiCheat.None, k.Games.Single().AntiCheat);
+            Assert.Equal(AntiCheat.EasyAntiCheat, k.Games.Single().AntiCheat);
             Assert.Throws<InvalidOperationException>(() => k.InstallRecorder(_game.Id));
             Assert.Equal(AntiCheat.EasyAntiCheat, k.Games.Single().AntiCheat);
         }
         Assert.Equal(AntiCheat.EasyAntiCheat, await Start());
         Assert.False(File.Exists(dll));
-        Assert.False(File.Exists(Path.Combine(_exeDir, "scskiller.ini")));
+        Assert.False(File.Exists(Path.Combine(_exeDir, ScsKiller.IniName)));
     }
 
     /// <summary>A verdict found outside a scan's evaluation (here the reconcile's full walk) knows no marker path: the next

@@ -546,16 +546,19 @@ public partial class AppTests : IDisposable
         var k = Killer(new FakeReader(Unreal));
         k.ProcessNames = () => new HashSet<string>();
         await k.ScanAsync(default);
-        k.InstallRecorder(_game.Id);
         k.ManageRecorders = true;
+        k.InstallRecorder(_game.Id);
+        await k.RecorderIndexing.WaitAsync(HangGuard);   // writes scskiller.keys inside the install before the watch starts
+        k.ReconcileRecorders();
         Assert.True(Attested(_game));
         using var release = new ManualResetEventSlim();
-        k.FullAntiCheatCheck = _ => { release.Wait(TimeSpan.FromSeconds(10)); return AntiCheat.None; };
+        k.FullAntiCheatCheck = (_, _) => { release.Wait(TimeSpan.FromSeconds(10)); return AntiCheat.None; };
         k.RecorderCheckTimeout = TimeSpan.FromMilliseconds(100);
         await k.CheckRecorderGames();   // the install unchanged since its last complete check: kept clean
         Assert.Equal(AntiCheat.None, k.Games.Single().AntiCheat);
         Assert.True(File.Exists(dll));
         File.WriteAllText(Path.Combine(_exeDir, "patched.pak"), "");   // changed: not known clean
+        await Until(() => !k.WatchedNow(_game.Id));
         await k.CheckRecorderGames();
         Assert.Equal(AntiCheat.Other, k.Games.Single().AntiCheat);
         Assert.False(File.Exists(dll));
@@ -566,11 +569,11 @@ public partial class AppTests : IDisposable
         Assert.Equal(AntiCheat.Other, k.Games.Single().AntiCheat);
         Assert.False(File.Exists(dll));
         Assert.Equal(AntiCheat.None, k.Store.LoadScan()[_game.Id].AntiCheat);   // not a verdict: a restart checks it again
-        k.FullAntiCheatCheck = _ => null;   // the walk's own clock ran out
+        k.FullAntiCheatCheck = (_, _) => null;   // the walk's own clock ran out
         await k.CheckRecorderGames();
         Assert.Equal(AntiCheat.Other, k.Games.Single().AntiCheat);
         Assert.False(File.Exists(dll));
-        k.FullAntiCheatCheck = _ => AntiCheat.None;
+        k.FullAntiCheatCheck = (_, _) => AntiCheat.None;
         await k.CheckRecorderGames();
         Assert.Equal(AntiCheat.None, k.Games.Single().AntiCheat);
         Assert.True(ScsKiller.IsOurProxy(dll));
@@ -594,7 +597,7 @@ public partial class AppTests : IDisposable
         Assert.False(File.Exists(dll));
         Assert.Equal(AntiCheat.Other, k.Store.LoadScan()[_game.Id].AntiCheat);
         var walks = 0;
-        k.FullAntiCheatCheck = _ => { Interlocked.Increment(ref walks); return AntiCheat.None; };
+        k.FullAntiCheatCheck = (_, _) => { Interlocked.Increment(ref walks); return AntiCheat.None; };
         await k.CheckRecorderGames();
         Assert.Equal((0, AntiCheat.Other), (walks, k.Games.Single().AntiCheat));
         Assert.False(File.Exists(dll));
@@ -714,9 +717,9 @@ public partial class AppTests : IDisposable
         k.InstallRecorder(_game.Id);
         Assert.True(Attested(_game));
         var once = 0;
-        k.FullAntiCheatCheck = g =>
+        k.FullAntiCheatCheck = (g, b) =>
         {
-            var found = Core.Games.GameFiles.DetectAntiCheat(g);
+            var found = Core.Games.GameFiles.DetectAntiCheat(g, budget: b);
             if (Interlocked.Exchange(ref once, 1) == 0)
             {
                 Directory.CreateDirectory(Path.Combine(_game.InstallDir, "Fake", "Content", "support", "EasyAntiCheat"));
@@ -2189,13 +2192,13 @@ public partial class AppTests : IDisposable
         Assert.True(ScsKiller.IsOurProxy(dll));
         k.ManageRecorders = true;
         using var release = new ManualResetEventSlim();
-        k.FullAntiCheatCheck = _ => { release.Wait(TimeSpan.FromSeconds(10)); return AntiCheat.None; };
+        k.FullAntiCheatCheck = (_, _) => { release.Wait(TimeSpan.FromSeconds(10)); return AntiCheat.None; };
         k.RecorderCheckTimeout = TimeSpan.FromMilliseconds(100);
         File.WriteAllText(Path.Combine(_exeDir, "patched.pak"), "");   // changed since its last complete check: not held clean
         await k.CheckRecorderGames();
         release.Set();
         Assert.False(File.Exists(dll));
-        k.FullAntiCheatCheck = _ => AntiCheat.None;
+        k.FullAntiCheatCheck = (_, _) => AntiCheat.None;
         k.Enqueue(_game.Id);
         k.StartQueue();
         await k.WhenQueueIdle().WaitAsync(TimeSpan.FromSeconds(10));
@@ -3694,7 +3697,8 @@ public partial class AppTests : IDisposable
         k.InstallRecorder(_game.Id);
         File.AppendAllText(_game.ExePath, "update");   // a stale stamp: a clean check writes it anew
         var eac = Path.Combine(_game.InstallDir, "Fake", "Content", "EasyAntiCheat");
-        k.FullAntiCheatCheck = _ =>
+        k.WatchInstalls = false;   // appending to the exe doesn't trip FileName|DirectoryName|Attributes; this test exercises the full walk's late finish
+        k.FullAntiCheatCheck = (_, _) =>
         {
             using (new FileStream(dll, FileMode.Open, FileAccess.Read, FileShare.None))   // the dll can't go yet
             {
@@ -3926,7 +3930,7 @@ public partial class AppTests : IDisposable
         k.ProcessNames = () => new HashSet<string>();
         await k.ScanAsync(default);
         k.InstallRecorder(_game.Id);
-        var ini = Path.Combine(_exeDir, "scskiller.ini");
+        var ini = Path.Combine(_exeDir, ScsKiller.IniName);
         var written = File.GetLastWriteTimeUtc(ini);
         await k.CheckRecorderGames();
         Assert.Equal(written, File.GetLastWriteTimeUtc(ini));
@@ -3937,7 +3941,7 @@ public partial class AppTests : IDisposable
         k.ManageRecorders = true;
         await k.CheckRecorderGames();
         Assert.True(Attested(_game));
-        Assert.Contains("the recorder's scskiller.ini didn't match", RecordersLog());
+        Assert.Contains($"the recorder's {ScsKiller.IniName} didn't match", RecordersLog());
     }
 
     // The marker list and its EasyAntiCheat count live in admission.h since 1.4.0-alpha.3 (proxy.cpp before).
@@ -6561,7 +6565,7 @@ public partial class AppTests : IDisposable
         File.WriteAllText(stale, "0 not signed by SCSKiller");   // from a launch before the recorder was in
         // a check of the install for the exe stamped then, still walking when the game exits
         var gate = new TaskCompletionSource();
-        k.FullAntiCheatCheck = x => { if (x.ExePath == picked) gate.Task.Wait(HangGuard); return Core.Games.GameFiles.DetectAntiCheat(x); };
+        k.FullAntiCheatCheck = (x, b) => { if (x.ExePath == picked) gate.Task.Wait(HangGuard); return Core.Games.GameFiles.DetectAntiCheat(x, budget: b); };
         Task? check = null;
         GameState s;
         try
@@ -7159,7 +7163,7 @@ public partial class AppTests : IDisposable
         store.SaveGame("steam:1", rec);
         Assert.True(File.Exists(Path.Combine(_root, "data", "games", "steam_1", "state.json")));
         var back = store.LoadGame("steam:1");
-        Assert.Equal(plan, back.Plan);
+        Assert.Equal(plan with { FilePath = Path.Combine(store.GameDir("steam:1"), "plan.bin") }, back.Plan);
         Assert.Equal((rec.WarmedAt, rec.LastWarmTime, rec.ResumeAt, rec.BytesPerPso), (back.WarmedAt, back.LastWarmTime, back.ResumeAt, back.BytesPerPso));
         Assert.Equal("ABC", back.RecorderFiles["d3d12.dll"]);
         Assert.Null(store.LoadGame("steam:2").Plan);
@@ -11018,12 +11022,14 @@ public partial class AppTests : IDisposable
         (k.AppCache, k.RunningGameExes) = (new NvidiaAppCache(Path.Combine(_root, "DXCache")), () => { lock (running) return running.ToHashSet(StringComparer.OrdinalIgnoreCase); });
         async Task Launch(string key)
         {
+            var warmedAt = k.Store.LoadGame(game.Id).WarmedAt;
             var file = Path.Combine(_root, "DXCache", $"0002a91d{key}.nvph");   // the game opens the warm's file as it is
             using (new FileStream(File.Exists(file) ? file : CacheFile(Path.GetFileName(file), 4096), FileMode.Open, FileAccess.ReadWrite, FileShare.Read))
             {
                 lock (running) running.Add(Path.GetFileName(game.ExePath));
                 k.PollGames();
-                await Until(() => k.Store.LoadGame(game.Id).GameKeys.Contains(key));
+                await Until(() => k.Store.LoadGame(game.Id) is var r && r.GameKeys.Contains(key)
+                    && (warmedAt == null || r.WarmedKeys?.Contains(key) != false || r.KeysMissedAt >= warmedAt));
                 lock (running) running.Clear();
             }
             for (int i = 0; i < ScsKiller.ExitPolls; i++) k.PollGames();
@@ -11050,9 +11056,10 @@ public partial class AppTests : IDisposable
             Assert.Equal((GameStatus.Warmed, "7f303a45"), (k.Games.Single().Status, string.Join(",", k.Store.LoadGame(game.Id).WarmedKeys!)));
             return;
         }
-        // upstream: one missed launch is Stale (CantReach needs MissedTwice): the next complete warm missing the same key makes it Unsupported
+        // upstream: one missed launch is Stale (CantReach needs MissedTwice and a launch miss at/after that warm): the next complete warm missing the same key + launch makes it Unsupported
         Assert.Equal((GameStatus.Stale, ScsKiller.MissesGameReason), (k.Games.Single().Status, k.Games.Single().StatusReason));
         await Warm();
+        await Launch("7f303a45");
         Assert.Equal((GameStatus.Unsupported, ScsKiller.CantReachReason), (k.Games.Single().Status, k.Games.Single().StatusReason));
         k.Enqueue(game.Id);   // the command line's compile queues through it too
         Assert.Equal(QueueStage.Done, Assert.Single(k.Queue).Stage);   // the first compile's, not queued again
@@ -14121,8 +14128,8 @@ public partial class AppTests : IDisposable
     }
 
     /// <summary>What a stopped part of a warm didn't create stays out of compiled.keys when the warm completes after a resume
-    /// (work\, with its failed keys, goes with the stopped item); so does what it created: a later part's device may have
-    /// evicted it (AMD's cap). What the last part created, from its start, goes on record (SCSKiller 1.3.3).</summary>
+    /// (work\, with its failed keys, goes with the stopped item); what an earlier part created stays on record while the cache
+    /// files it wrote to hold (SCSKiller 1.4.8), so only what failed is replayed.</summary>
     [Fact]
     public async Task What_a_stopped_warm_didnt_create_is_replayed_by_the_next_recompile()
     {
@@ -14141,7 +14148,7 @@ public partial class AppTests : IDisposable
         Assert.Equal(QueueStage.Stopped, k.Queue.Single().Stage);
         await WarmOnce(k, game.Id);   // the resume, from item 2
         await WarmOnce(k, game.Id);
-        Assert.Equal(items.Take(2).Select(r => r.Key), replayed[^1]);   // the last part's item 2 isn't replayed again
+        Assert.Equal([items[0].Key], replayed[^1]);
     }
 
     /// <summary>Each reason a recompile replays everything (ScsKiller.FullReplayReason): nothing on record, another driver,
@@ -15510,7 +15517,7 @@ public partial class AppTests : IDisposable
         var before = File.ReadAllText(ini);
         Assert.True(Attested(game));
 
-        Assert.Contains("isn't in that folder", Assert.Throws<ArgumentException>(() => k.AddManualGame(game.ExePath, Path.GetPathRoot(_root)!)).Message);
+        Assert.Contains("is a whole drive", Assert.Throws<ArgumentException>(() => k.AddManualGame(game.ExePath, Path.GetPathRoot(_root)!)).Message);
         Assert.Equal(game.InstallDir, Manual().Entries().Single().InstallDir);
         Assert.Equal(before, File.ReadAllText(ini));
 
@@ -16334,7 +16341,7 @@ public partial class AppTests : IDisposable
         k.Enqueue(_game.Id);
         k.StartQueue();
         await k.WhenQueueIdle().WaitAsync(TimeSpan.FromSeconds(10));
-        Assert.Equal(GameStatus.Warmed, k.Games.Single().Status);   // A compiled from the shared pack, as an 'M' entry
+        Assert.Equal(GameStatus.NeedsRecording, k.Games.Single().Status);   // MiddlewareOnly: no game shaders found yet despite compiling pack entry A
 
         Record(a);   // played: the recorder saw A
         k.RefreshGame(_game.Id);
@@ -16454,7 +16461,7 @@ public partial class AppTests : IDisposable
         await k.ScanAsync(default);
         await Compile(k);   // NVIDIA: A compiles, the wave64 one never can
         var s = k.Games.Single();
-        Assert.Equal((GameStatus.Warmed, 0L), (s.Status, s.RecordedSinceWarm));
+        Assert.Equal((GameStatus.NeedsRecording, 0L), (s.Status, s.RecordedSinceWarm));
         Assert.Equal(1, s.Middleware!.Single().Pipelines);
     }
 
@@ -16522,7 +16529,11 @@ public partial class AppTests : IDisposable
         await Compile(k);   // its closing refresh publishes it with the keys file
         var kept = File.ReadAllBytes(Path.Combine(k.Store.GameDir(_game.Id), Recordings.WarmedFile));
         Assert.Equal("SCSKWRM1"u8.ToArray(), kept[..8]);
-        Assert.Equal([new PsoDb.Rec('C', PsoDb.Compute(PsoDb.Zero, CommunityTests.Sha1(a))).Key], kept[12..(12 + 20 * BitConverter.ToInt32(kept, 8))].Chunk(20).Select(Convert.ToHexStringLower));
+        var expected = new List<string> { new PsoDb.Rec('C', PsoDb.Compute(PsoDb.Zero, CommunityTests.Sha1(a))).Key };
+        var runtimeFirst = Path.Combine(_root, "runtime-first.db");
+        if (Middleware.WriteRuntimeFirst(_game, runtimeFirst))
+            expected.AddRange(PsoDb.Read(runtimeFirst).Where(r => r.Tag != 'B').Select(r => r.Key));
+        Assert.Equal(expected.Order(StringComparer.Ordinal), kept[12..(12 + 20 * BitConverter.ToInt32(kept, 8))].Chunk(20).Select(Convert.ToHexStringLower));
         Assert.Equal(kept, File.ReadAllBytes(Path.Combine(_exeDir, Recordings.WarmedFile)));
         Assert.False(k.Store.LoadGame(_game.Id).KeysPending);
         k.UninstallRecorder(_game.Id);
@@ -16847,7 +16858,7 @@ public partial class AppTests : IDisposable
         await Compile(k);
         Assert.Equal((GameStatus.Stale, 1L), (k.Games.Single().Status, k.Games.Single().RecordedSinceWarm));   // B: in no plan yet
         await Compile(k);   // the plan read A only: built again, with B
-        Assert.Equal((GameStatus.Warmed, 0L), (k.Games.Single().Status, k.Games.Single().RecordedSinceWarm));
+        Assert.Equal((GameStatus.NeedsRecording, 0L), (k.Games.Single().Status, k.Games.Single().RecordedSinceWarm));
     }
 
     [Fact]
@@ -16893,9 +16904,9 @@ public partial class AppTests : IDisposable
         for (var i = 0; i < 2; i++)
         {
             await Compile(k);
-            Assert.Equal((GameStatus.Warmed, 0L), (k.Games.Single().Status, NewShaders.Count(k.Games.Single())));
+            Assert.Equal((GameStatus.NeedsRecording, 0L), (k.Games.Single().Status, NewShaders.Count(k.Games.Single())));
             k.RefreshGame(_game.Id);
-            Assert.Equal((GameStatus.Warmed, 0L), (k.Games.Single().Status, NewShaders.Count(k.Games.Single())));
+            Assert.Equal((GameStatus.NeedsRecording, 0L), (k.Games.Single().Status, NewShaders.Count(k.Games.Single())));
         }
     }
 

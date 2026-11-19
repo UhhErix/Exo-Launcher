@@ -133,18 +133,28 @@ static partial class TestEnv
     static string FindRepoRoot()
     {
         for (var d = new DirectoryInfo(AppContext.BaseDirectory); d != null; d = d.Parent)
-            if (File.Exists(Path.Combine(d.FullName, "SCSKiller.slnx"))) return d.FullName;
+            if (File.Exists(Path.Combine(d.FullName, "SCSKiller.slnx"))
+                || File.Exists(Path.Combine(d.FullName, "UPSTREAM.md")) && File.Exists(Path.Combine(d.FullName, "proxy", "admission.h")))
+                return d.FullName;
         return AppContext.BaseDirectory;
     }
 
     static string FindMainCheckout()
     {
-        // a worktree's .git is a file: "gitdir: <main>\.git\worktrees\<name>"
-        var git = Path.Combine(RepoRoot, ".git");
-        if (!File.Exists(git) || File.ReadAllText(git).Trim() is not { } line || !line.StartsWith("gitdir:")) return RepoRoot;
-        var gitDir = Path.GetFullPath(Path.Combine(RepoRoot, line["gitdir:".Length..].Trim()));
-        var common = Directory.GetParent(gitDir)?.Parent;   // <main>\.git
-        return common?.Name == ".git" && common.Parent != null ? common.Parent.FullName : RepoRoot;
+        // a worktree's .git is a file at the worktree root (or above RepoRoot when vendored): "gitdir: <main>\.git\worktrees\<name>"
+        for (var d = new DirectoryInfo(RepoRoot); d != null; d = d.Parent)
+        {
+            var git = Path.Combine(d.FullName, ".git");
+            if (Directory.Exists(git)) return RepoRoot;
+            if (!File.Exists(git)) continue;
+            if (File.ReadAllText(git).Trim() is not { } line || !line.StartsWith("gitdir:", StringComparison.Ordinal)) return RepoRoot;
+            var gitDir = Path.GetFullPath(Path.Combine(d.FullName, line["gitdir:".Length..].Trim()));
+            var common = Directory.GetParent(gitDir)?.Parent;   // <main>\.git
+            if (common?.Name != ".git" || common.Parent == null) return RepoRoot;
+            var rel = Path.GetRelativePath(d.FullName, RepoRoot);
+            return rel == "." ? common.Parent.FullName : Path.Combine(common.Parent.FullName, rel);
+        }
+        return RepoRoot;
     }
 
     /// <summary>The skip reason when the test output has no Fixtures\<paramref name="folder"/>: the fixtures taken from games

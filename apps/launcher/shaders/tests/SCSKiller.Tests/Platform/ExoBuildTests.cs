@@ -3,8 +3,8 @@ using SCSKiller.Core.App;
 
 namespace SCSKiller.Tests.Platform;
 
-// The Exo build's local-only rules (App/ExoBuild.cs): the hosts it never contacts, the anti-cheat modules it never records or
-// injects into, and the request gate in RouteFailover. The gate is tested with localOnly on, whatever the build's constant.
+// The Exo build's local-only rules (App/ExoBuild.cs): the hosts it never contacts and the request gate
+// (anti-cheat decisions are upstream's: GameFiles) in RouteFailover. The gate is tested with localOnly on, whatever the build's constant.
 public class ExoBuildTests
 {
     sealed class CountingHandler : HttpMessageHandler
@@ -30,53 +30,6 @@ public class ExoBuildTests
     [InlineData("https://api.nuget.org/v3-flatcontainer/x.nupkg")]
     [InlineData("https://scskiller.com.evil.example/")]
     public void Other_hosts_are_not_blocked(string url) => Assert.False(ExoBuild.BlockedHost(new Uri(url)));
-
-    [Theory]
-    [InlineData("EasyAntiCheat.exe", "EasyAntiCheat")]
-    [InlineData("EasyAntiCheat_EOS.sys", "EasyAntiCheat")]
-    [InlineData("BEService.exe", "BEService")]
-    [InlineData("BEClient_x64.dll", "BEClient")]
-    [InlineData("vgk.sys", "vgk")]
-    [InlineData("vgc.exe", "vgc")]
-    [InlineData("FaceItService.exe", "FACEIT")]
-    [InlineData("GameGuard.des", "GameGuard")]
-    [InlineData("Ricochet_x64.dll", "Ricochet")]
-    [InlineData("mhyprot2.sys", "mhyprot")]
-    [InlineData("XIGNCODE3.exe", "XIGNCODE")]
-    public void Known_anti_cheat_modules_are_named(string file, string module) => Assert.Equal(module, ExoBuild.AntiCheatModule(file));
-
-    [Theory]
-    [InlineData("PBZ.exe")]
-    [InlineData("d3d12.dll")]
-    [InlineData("steam_api64.dll")]
-    public void Ordinary_game_files_are_not_anti_cheat(string file) => Assert.Null(ExoBuild.AntiCheatModule(file));
-
-    [Fact]
-    public void A_module_two_folders_down_refuses_the_game_and_a_deeper_one_is_not_seen()
-    {
-        var root = Path.Combine(Path.GetTempPath(), "exo-ac-" + Guid.NewGuid().ToString("N"));
-        try
-        {
-            Directory.CreateDirectory(Path.Combine(root, "Game", "Engine", "Binaries"));
-            File.WriteAllText(Path.Combine(root, "Game", "Game.exe"), "");
-            Assert.Null(ExoBuild.AntiCheatModuleIn(Path.Combine(root, "Game")));
-
-            Directory.CreateDirectory(Path.Combine(root, "Game", "EasyAntiCheat"));
-            File.WriteAllText(Path.Combine(root, "Game", "EasyAntiCheat", "EasyAntiCheat_EOS.sys"), "");
-            Assert.Equal("EasyAntiCheat", ExoBuild.AntiCheatModuleIn(Path.Combine(root, "Game")));
-
-            Directory.CreateDirectory(Path.Combine(root, "Deep", "A", "B", "C"));
-            File.WriteAllText(Path.Combine(root, "Deep", "A", "B", "C", "vgk.sys"), "");
-            Assert.Null(ExoBuild.AntiCheatModuleIn(Path.Combine(root, "Deep")));   // three folders down: beyond the depth of two
-            File.WriteAllText(Path.Combine(root, "Deep", "A", "B", "vgc.exe"), "");
-            Assert.Equal("vgc", ExoBuild.AntiCheatModuleIn(Path.Combine(root, "Deep")));   // two folders down: inside
-            Assert.Null(ExoBuild.AntiCheatModuleIn(Path.Combine(root, "Missing")));
-        }
-        finally
-        {
-            Directory.Delete(root, recursive: true);
-        }
-    }
 
     [Fact]
     public async Task A_local_only_client_sends_nothing_to_SCSKiller_or_Patreon()
