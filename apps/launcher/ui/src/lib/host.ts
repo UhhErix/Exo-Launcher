@@ -583,6 +583,7 @@ export type GraphicsRow = {
 
 /** One AMD or Intel setting to set by hand, in plain words, next to what their driver holds (only when Exo can't reach their driver). */
 export type GpuProfileItem = { key: string; label: string; value: string; why: string; current?: string | null }
+export type GpuProfileSetting = { key: string; label: string; value: string; current?: string | null; state: string; note?: string | null }
 
 /**
  * System > Graphics > Driver and profile: Exo's global profile for this PC's GeForce series, G-SYNC or No G-SYNC,
@@ -605,8 +606,16 @@ export type GpuProfile = {
   driverUpdated: boolean
   /** Set by hand (manual) only. */
   items: GpuProfileItem[]
-  /** Intel: Low latency mode on, on with boost, or off. */
-  lowLatency?: IntelLowLatency | null
+  /** Intel/NVIDIA: Low latency mode choice or live readback. */
+  lowLatency?: IntelLowLatency | 'ultra' | null
+  /** NVIDIA: live/target G-SYNC / VRR enabled state. */
+  vrrEnabled?: boolean | null
+  /** Resizable BAR capability/status from Direct3D 12 upload heaps. */
+  rebar?: boolean | null
+  /** Free gigabytes on the shader cache drive (%LOCALAPPDATA%). */
+  cacheFreeGb?: number | null
+  /** NVIDIA: per-setting breakdown with live values and driver/space notes. */
+  details?: GpuProfileSetting[] | null
   /** Radeon and Intel: what the profile does, in one line. */
   summary?: string | null
   /** True when at least one of the profile's settings is not in this driver: it was skipped or refused, so the page never shows the whole profile as on. */
@@ -2945,8 +2954,8 @@ export const host = {
    * System > Graphics > Driver and profile: Exo's global profile for this PC; apply it (an
    * Intel GPU's with its Low latency choice), backing up what it replaces, or undo it.
    */
-  gpuProfile: (action?: 'apply' | 'undo', latency?: { lowLatency?: IntelLowLatency }) =>
-    rawCall<GpuProfile>('gpu.profile', action ? { action, ...(action === 'apply' ? latency : {}) } : {}, 30_000),
+  gpuProfile: (action?: 'apply' | 'undo', options?: { lowLatency?: IntelLowLatency | 'ultra'; vrr?: boolean }) =>
+    rawCall<GpuProfile>('gpu.profile', action ? { action, ...(action === 'apply' ? options : {}) } : {}, 30_000),
   /** PC › Drives: every drive and the fix rows; `space` adds what fills each drive (slow the first time); an action sets or undoes a fix, Windows asking once. */
   systemDrives: (action?: DriveAction, space = false) =>
     rawCall<DrivesState>('system.drives', { ...(action ? { action } : {}), ...(space ? { space: true } : {}) }, 75_000),

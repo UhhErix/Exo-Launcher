@@ -196,10 +196,21 @@ public sealed partial class DlssSwapService
         if (changed) SaveRefusals(refused);
     }
 
-    /// <summary>The catalog's entries, read once with the cap (Content-Length first). Null when it is over the cap.</summary>
+    /// <summary>The catalog's entries, read once with the cap (Content-Length first). Returns empty on 404 (not published yet) or null when over cap.</summary>
     internal static async Task<IReadOnlyList<SwapperEntry>?> ReadCatalogEntriesAsync(CancellationToken ct)
     {
         using var response = await Http.GetAsync(SwapperCatalogUrl, ct).ConfigureAwait(false);
+        return await ParseCatalogResponseAsync(response, ct).ConfigureAwait(false);
+    }
+
+    /// <summary>Parses a catalog HTTP response, returning empty cleanly on 404 without throwing or warning.</summary>
+    internal static async Task<IReadOnlyList<SwapperEntry>?> ParseCatalogResponseAsync(HttpResponseMessage response, CancellationToken ct)
+    {
+        if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
+        {
+            AppLog.Debug("DLSS Swapper catalog not published yet (404).");
+            return [];
+        }
         response.EnsureSuccessStatusCode();
         if (response.Content.Headers.ContentLength is { } declared && declared > SwapperCatalogMaxBytes)
         {

@@ -74,20 +74,41 @@ internal static partial class NvidiaDriverService
     /// </summary>
     internal static string? WindowsDriverVersion() => NvidiaAdapter("DriverVersion") is { } version ? FromWindowsVersion(version) : null;
 
-    /// <summary>A value Windows records for the NVIDIA display driver (its DriverVersion, MatchingDeviceId), or null without one.</summary>
+    /// <summary>NVIDIA AjaxDriverService OS id: 135 on Windows 11 (build 22000+), 57 on Windows 10.</summary>
+    internal static int OsId(Version? osVersion = null) =>
+        (osVersion ?? Environment.OSVersion.Version).Build >= 22000 ? 135 : 57;
+
+    /// <summary>Picks the active DXGI NVIDIA adapter subkey value when its PCI device id matches, else falls back to the first NVIDIA entry.</summary>
+    internal static string? PickNvidiaSubkeyMatch(IEnumerable<(string? Provider, string? MatchingDeviceId, string? Value)> entries, uint? activeDeviceId)
+    {
+        string? fallback = null;
+        var needle = activeDeviceId is { } dev ? $"ven_10de&dev_{dev:x4}" : null;
+        foreach (var (provider, matchingDeviceId, value) in entries)
+        {
+            if (provider is null || !provider.Contains("NVIDIA", StringComparison.OrdinalIgnoreCase) || value is null) continue;
+            fallback ??= value;
+            if (needle is not null && matchingDeviceId is not null && matchingDeviceId.Contains(needle, StringComparison.OrdinalIgnoreCase))
+                return value;
+        }
+        return fallback;
+    }
+
+    /// <summary>A value Windows records for the active NVIDIA display driver (DriverVersion, MatchingDeviceId), or null without one.</summary>
     private static string? NvidiaAdapter(string value)
     {
         try
         {
             using var display = Registry.LocalMachine.OpenSubKey(@"SYSTEM\CurrentControlSet\Control\Class\{4d36e968-e325-11ce-bfc1-08002be10318}");
             if (display is null) return null;
+            var activeDev = PcHealth.ActiveNvidiaDeviceId();
+            var rows = new List<(string? Provider, string? MatchingDeviceId, string? Value)>();
             foreach (var name in display.GetSubKeyNames().Where(name => name.All(char.IsDigit)))
             {
                 using var adapter = display.OpenSubKey(name);
-                if (adapter?.GetValue("ProviderName") is string provider && provider.Contains("NVIDIA", StringComparison.OrdinalIgnoreCase) &&
-                    adapter.GetValue(value) is string text)
-                    return text;
+                if (adapter is null) continue;
+                rows.Add((adapter.GetValue("ProviderName") as string, adapter.GetValue("MatchingDeviceId") as string, adapter.GetValue(value) as string));
             }
+            return PickNvidiaSubkeyMatch(rows, activeDev);
         }
         catch (Exception ex) when (ex is System.Security.SecurityException or UnauthorizedAccessException or IOException) { }
         return null;
@@ -156,7 +177,7 @@ internal static partial class NvidiaDriverService
         {
             // Studio drivers are listed without NVIDIA's WHQL flag; betas are skipped either way.
             var url = "https://gfwsl.geforce.com/services_toolkit/services/com/nvidia/services/AjaxDriverService.php?func=DriverManualLookup" +
-                $"&psid={series}&pfid={product}&osID=57&languageCode=1033&isWHQL={(studio ? 0 : 1)}&dch=1&upCRD={(studio ? 1 : 0)}&sort1=0&numberOfResults=3";
+                $"&psid={series}&pfid={product}&osID={OsId()}&languageCode=1033&isWHQL={(studio ? 0 : 1)}&dch=1&upCRD={(studio ? 1 : 0)}&sort1=0&numberOfResults=3";
             using var doc = JsonDocument.Parse(await GetTextAsync(url, ct).ConfigureAwait(false));
             if (!doc.RootElement.TryGetProperty("IDS", out var ids) || ids.ValueKind != JsonValueKind.Array) continue;
             foreach (var entry in ids.EnumerateArray())

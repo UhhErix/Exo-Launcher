@@ -39,14 +39,14 @@ public sealed partial class WebHostBridge
                 if (!GameSettings.Set(profile, all ? null : group, turnOn, profile.Program?.Invoke(game))) return new { ok = false, message = "Could not save. Try again." };
                 // The record remembers the game it was pressed for: the page's status is told under its id without a walk of its folder.
                 GameSettings.NoteGame(profile.Id, game.Id);
-                // The game's own NVIDIA profile goes with Optimize (all) or on its own (its group), after the file it reads from.
+                // The game's own NVIDIA profile (including per-game Prefer Maximum Performance) goes with Optimize or its group.
                 if ((all || group == GameSettings.NvidiaGroup) && GameSettings.ReadAll(profile) is [var first, ..]
-                    && GameSettings.SetNvidia(game, profile, first.File, turnOn) is { } refused)
+                    && GameSettings.SetNvidia(game, profile, first.File, turnOn, includePerGamePower: true) is { } refused)
                     return new { ok = false, message = refused };
             }
             var files = GameSettings.ReadAll(profile);
             var states = files.Count == 0 ? null : GameSettings.States(profile, files, GameSettings.Kept(profile.Id), GameSettings.KeptOn(profile));
-            if (states is not null && GameSettings.NvidiaState(game, profile, files[0].File) is { } nvidia) states.Add(nvidia);
+            if (states is not null && GameSettings.NvidiaState(game, profile, files[0].File, includePerGamePower: true) is { } nvidia) states.Add(nvidia);
             var groups = states?.Select(state => new { id = state.Id, label = state.Label, on = state.On, exo = state.Exo }).ToList();
             var standing = states is null ? GameSettings.Standing.Off : GameSettings.Stands(states, GameSettings.Missing(profile, files).Count);
             return new { ok = true, supported = true, title = profile.Title, running, found = files.Count > 0, waiting = GameSettings.Waiting(profile), groups, standing = standing.ToString().ToLowerInvariant(), again = GameSettings.Again(profile), windowMode = profile.WindowMode };

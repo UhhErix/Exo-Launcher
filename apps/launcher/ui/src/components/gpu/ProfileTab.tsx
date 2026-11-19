@@ -3,6 +3,7 @@ import { host, type GpuImportAnswer, type GpuProfile } from '../../lib/host'
 import { report } from '../../lib/report'
 import { trimStop } from '../../lib/utils'
 import { changedLine, DriverProfile, PROFILE_ROW, ProfileButtons, type LatencyChoice } from './DriverProfile'
+import { Choice } from '../settings/Choice'
 import { Row, State } from '../settings/parts'
 import { Spinner } from '../ui/Spinner'
 import { Unfold } from '../ui/Unfold'
@@ -10,6 +11,17 @@ import type { PlainError } from '../../lib/errorWords'
 import type { PcPlace } from './ThisPcTab'
 import { gpuOffers } from '../../lib/canUse'
 import { Afmf3Row } from './Afmf3Row'
+
+const NVIDIA_LATENCY = [
+  { value: 'off', label: 'Off' },
+  { value: 'on', label: 'On' },
+  { value: 'ultra', label: 'Ultra' },
+] as const
+
+const NVIDIA_GSYNC = [
+  { value: 'on', label: 'G-SYNC on' },
+  { value: 'off', label: 'G-SYNC off' },
+] as const
 
 type Preview = NonNullable<GpuImportAnswer['preview']>
 
@@ -51,7 +63,7 @@ export function ProfileRows({ place, profile, onProfile }: {
   const card = tuned
     ? <DriverProfile profile={profile} error={error} onAct={act} onSettled={settle} onFailed={failed} />
     : nvidia
-      ? <NvidiaRow profile={profile} error={error} onAct={action => act(action)} onSettled={settle} onFailed={failed} />
+      ? <NvidiaRow profile={profile} error={error} onAct={(action, opts) => act(action, opts)} onSettled={settle} onFailed={failed} />
       : null
   if (place === 'needs') return needs ? card : null
   if (!tuned && !nvidia) return <ManualProfile profile={profile} />
@@ -59,26 +71,104 @@ export function ProfileRows({ place, profile, onProfile }: {
   return (
     <>
       {needs ? null : card}
+      {nvidia ? <NvidiaDetails profile={profile} /> : null}
       {gpuOffers(profile.vendor).profileImport ? <ImportRow /> : null}
       {gpuOffers(profile.vendor).afmf3 ? <Afmf3Row /> : null}
     </>
   )
 }
 
-/** A GeForce's row: Exo's profile, what changed since it was applied, and whether it is. */
+/** A GeForce's row: Exo's profile, Low Latency and G-SYNC choices, and Apply/Undo controls. */
+function nvidiaApplyLabel(status: GpuProfile['status'], dirty: boolean): 'Use' | 'Re-apply' | null {
+  if (dirty) return status === 'changed' ? 'Re-apply' : 'Use'
+  if (status === 'ready') return 'Use'
+  return status === 'changed' ? 'Re-apply' : null
+}
+
 function NvidiaRow({ profile, error, onAct, onSettled, onFailed }: {
   profile: GpuProfile
   error: string | null
-  onAct: (action: 'apply' | 'undo') => Promise<unknown>
+  onAct: (action: 'apply' | 'undo', opts?: LatencyChoice) => Promise<unknown>
   onSettled: (next: unknown) => void
   onFailed: (failure: PlainError) => void
 }) {
+  const savedLatency = (profile.lowLatency === 'off' || profile.lowLatency === 'ultra' ? profile.lowLatency : 'on') as 'off' | 'on' | 'ultra'
+  const savedVrr = profile.vrrEnabled ?? profile.screen.vrr
+  const [latencyChoice, setLatencyChoice] = useState<'off' | 'on' | 'ultra' | null>(null)
+  const [vrrChoice, setVrrChoice] = useState<boolean | null>(null)
+
+  const latency = latencyChoice ?? savedLatency
+  const vrr = vrrChoice ?? savedVrr
+  const dirty = latency !== savedLatency || (profile.screen.vrr && vrr !== savedVrr)
+  const apply = nvidiaApplyLabel(profile.status, dirty)
+  const showApplied = profile.status === 'applied' && !dirty
+  const rowError = error ?? (profile.ok ? null : trimStop(profile.message) || 'The driver did not answer. Try again.')
+
+  const act = (action: 'apply' | 'undo') => {
+    setLatencyChoice(null)
+    setVrrChoice(null)
+    const opts = profile.screen.vrr ? { lowLatency: latency, vrr } : { lowLatency: latency }
+    return onAct(action, action === 'apply' ? opts : undefined)
+  }
+
   return (
-    <Row label={PROFILE_ROW} detail={changedLine(profile)}
-      error={error ?? (profile.ok ? null : trimStop(profile.message) || 'The driver did not answer. Try again.')}>
-      {profile.status === 'applied' ? <State on>Applied</State> : null}
-      <ProfileAction profile={profile} onAct={onAct} onSettled={onSettled} onFailed={onFailed} />
+    <Row label={PROFILE_ROW} detail={dirty ? null : changedLine(profile)} error={rowError}>
+      {showApplied ? <State on>Applied</State> : null}
+      <Choice label="Low latency" value={latency} choices={NVIDIA_LATENCY} onChange={v => setLatencyChoice(v as 'off' | 'on' | 'ultra')} />
+      {profile.screen.vrr ? (
+        <Choice label="G-SYNC" value={vrr ? 'on' : 'off'} choices={NVIDIA_GSYNC} onChange={v => setVrrChoice(v === 'on')} />
+      ) : null}
+      {(apply || profile.canUndo || showApplied)
+        ? <ProfileButtons apply={apply} undo={!!profile.canUndo} onAct={act} onSettled={onSettled} onFailed={onFailed} />
+        : null}
     </Row>
+  )
+}
+
+/** Per-setting NVIDIA breakdown, Resizable BAR status, feature states, skipped warning, and < 50 GB shader cache note. */
+function NvidiaDetails({ profile }: { profile: GpuProfile }) {
+  const features = profile.features ?? []
+  const details = profile.details ?? []
+  const lowFreeSpace = typeof profile.cacheFreeGb === 'number' && profile.cacheFreeGb < 50
+  if (details.length === 0 && features.length === 0 && profile.rebar == null && !profile.skipped && !lowFreeSpace) return null
+  return (
+    <>
+      {profile.rebar != null && (
+        <Row label="Resizable BAR">
+          <State on={profile.rebar}>{profile.rebar ? 'On' : 'Off'}</State>
+        </Row>
+      )}
+      {features.map(feature => (
+        <Row key={feature.key} label={feature.label}>
+          <State on={feature.state === 'on'}>
+            {feature.state === 'on' ? 'On' : feature.state === 'unavailable' ? 'Unavailable on this driver' : 'Off'}
+          </State>
+        </Row>
+      ))}
+      {details.length > 0 && (
+        <ul className="exo-graphics-import-list" aria-label="NVIDIA profile settings">
+          {details.map(item => (
+            <li key={item.key}>
+              <span>{item.label}</span>
+              <span className="exo-graphics-import-value">
+                {item.value}
+                {item.current && item.current !== item.value ? ` (now ${item.current})` : ''}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+      {lowFreeSpace && (
+        <p className="exo-graphics-import-extra">
+          Shader cache stays at driver default because under 50 GB is free on the cache drive ({profile.cacheFreeGb} GB free).
+        </p>
+      )}
+      {profile.skipped && (
+        <p className="exo-graphics-import-extra">
+          Some driver settings were skipped because this driver version did not list them.
+        </p>
+      )}
+    </>
   )
 }
 
@@ -97,18 +187,6 @@ function ManualProfile({ profile }: { profile: GpuProfile }) {
       ))}
     </>
   )
-}
-
-/** Use (or switch to) the picked variant, Re-apply what changed since, and Undo while Exo's backup is there. */
-function ProfileAction({ profile, onAct, onSettled, onFailed }: {
-  profile: GpuProfile
-  onAct: (action: 'apply' | 'undo') => Promise<unknown>
-  onSettled: (next: unknown) => void
-  onFailed: (failure: PlainError) => void
-}) {
-  const apply = profile.status === 'ready' ? 'Use' : profile.status === 'changed' ? 'Re-apply' : null
-  if (!apply && profile.status !== 'applied') return null
-  return <ProfileButtons apply={apply} undo={!!profile.canUndo} onAct={onAct} onSettled={onSettled} onFailed={onFailed} />
 }
 
 /**

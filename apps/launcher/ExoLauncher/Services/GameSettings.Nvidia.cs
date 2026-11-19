@@ -14,6 +14,7 @@ namespace ExoLauncher.Services;
 internal static partial class GameSettings
 {
     internal const string NvidiaGroup = "nvidia";
+    internal static readonly NvidiaValue PerGamePowerPerformance = new(GpuProfile.PowerManagement, 1, "Power management", "Prefer maximum performance");
 
     /// <summary>One value in a game's NVIDIA profile: the setting, Exo's value (null: the driver's own), and how it reads.</summary>
     internal sealed record NvidiaValue(uint Id, uint? Value, string Label, string Words);
@@ -30,20 +31,28 @@ internal static partial class GameSettings
     private static string NvidiaBackupPath(Profile profile) => Path.Combine(Folder, profile.Id + ".nvidia.json");
 
     private static NvidiaProfiles.GameProgram? Program(Models.GameEntry game, Profile profile) =>
-        profile.Nvidia is not null && profile.Program?.Invoke(game) is { } exe
-            ? new(exe, profile.Title, profile.Nvidia.FileInFolder, (name, beside) =>
-                beside.Equals(profile.Nvidia.FileInFolder, StringComparison.OrdinalIgnoreCase) || name.Contains(profile.Title, StringComparison.OrdinalIgnoreCase))
+        profile.Program?.Invoke(game) is { } exe
+            ? new(exe, profile.Title, profile.Nvidia?.FileInFolder ?? "", (name, beside) =>
+                (profile.Nvidia is { FileInFolder.Length: > 0 } && beside.Equals(profile.Nvidia.FileInFolder, StringComparison.OrdinalIgnoreCase))
+                || name.Contains(profile.Title, StringComparison.OrdinalIgnoreCase))
             : null;
+
+    private static IReadOnlyList<NvidiaValue> EffectiveValues(Profile profile, SettingsFile file, bool includePerGamePower)
+    {
+        var baseValues = profile.Nvidia?.Values(file) ?? [];
+        if (!includePerGamePower || baseValues.Any(v => v.Id == GpuProfile.PowerManagement)) return baseValues;
+        return [.. baseValues, PerGamePowerPerformance];
+    }
 
     /// <summary>The group's words: "Its own NVIDIA profile: DLSS model the game's own, CNN".</summary>
     internal static string NvidiaLabel(IReadOnlyList<NvidiaValue> values) =>
         "Its own NVIDIA profile: " + string.Join(", ", values.Select(v => $"{v.Label} {v.Words}"));
 
     /// <summary>The game's NVIDIA group as Optimize shows it, or null when there's nothing for the driver here.</summary>
-    internal static GroupState? NvidiaState(Models.GameEntry game, Profile profile, SettingsFile file)
+    internal static GroupState? NvidiaState(Models.GameEntry game, Profile profile, SettingsFile file, bool includePerGamePower = false)
     {
-        if (!NvidiaProfiles.GameProfilesUsable || profile.Nvidia is not { } nvidia || Program(game, profile) is not { } program) return null;
-        var wanted = nvidia.Values(file);
+        if (!NvidiaProfiles.GameProfilesUsable || (!includePerGamePower && profile.Nvidia is null) || Program(game, profile) is not { } program) return null;
+        var wanted = EffectiveValues(profile, file, includePerGamePower);
         var backup = LoadNvidia(profile);
         if (wanted.Count == 0) return null;
         var state = NvidiaProfiles.ForGameLive(program, wanted.Select(v => v.Id).ToList());
@@ -66,13 +75,13 @@ internal static partial class GameSettings
     /// Sets the game's NVIDIA profile (<paramref name="on"/>) or puts back what it held. A set keeps the game's first values
     /// for Put back, and takes out what Exo set before that these settings no longer ask for. Null when done.
     /// </summary>
-    internal static string? SetNvidia(Models.GameEntry game, Profile profile, SettingsFile file, bool on)
+    internal static string? SetNvidia(Models.GameEntry game, Profile profile, SettingsFile file, bool on, bool includePerGamePower = false)
     {
-        if (!NvidiaProfiles.GameProfilesUsable || profile.Nvidia is not { } nvidia || Program(game, profile) is not { } program) return null;
+        if (!NvidiaProfiles.GameProfilesUsable || (!includePerGamePower && profile.Nvidia is null) || Program(game, profile) is not { } program) return null;
         lock (Gate)
         {
             var backup = LoadNvidia(profile);
-            var wanted = on ? nvidia.Values(file) : [];
+            var wanted = on ? EffectiveValues(profile, file, includePerGamePower) : [];
             // Exo's earlier values the settings no longer ask for go back to what the game had; the rest are set.
             var writes = new Dictionary<uint, uint?>();
             foreach (var old in backup?.Set ?? []) if (wanted.All(v => v.Id != old.Id)) writes[old.Id] = backup!.Before.GetValueOrDefault(old.Id);

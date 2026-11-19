@@ -135,6 +135,37 @@ internal static partial class PcHealth
         }
     }
 
+    /// <summary>PCI DeviceId of the active high-performance NVIDIA adapter from DXGI (VendorId 0x10DE), else null.</summary>
+    internal static unsafe uint? ActiveNvidiaDeviceId()
+    {
+        try
+        {
+            var factoryIid = new Guid("c1b6694f-ff09-44a9-b03c-77900a0a1d17"); // IDXGIFactory6
+            if (CreateDXGIFactory2(0, in factoryIid, out var factory) < 0) return null;
+            try
+            {
+                var adapterIid = new Guid("29038f61-3839-4626-91fd-086879011a05"); // IDXGIAdapter1
+                var byPreference = (delegate* unmanaged[Stdcall]<IntPtr, uint, int, Guid*, IntPtr*, int>)(*(IntPtr**)factory)[29];
+                for (uint i = 0; i < 8; i++)
+                {
+                    IntPtr adapter;
+                    if (byPreference(factory, i, 2 /* DXGI_GPU_PREFERENCE_HIGH_PERFORMANCE */, &adapterIid, &adapter) < 0) return null;
+                    try
+                    {
+                        AdapterDesc1 desc;
+                        var getDesc1 = (delegate* unmanaged[Stdcall]<IntPtr, AdapterDesc1*, int>)(*(IntPtr**)adapter)[10];
+                        if (getDesc1(adapter, &desc) < 0 || (desc.Flags & 2) != 0) continue;
+                        if (desc.VendorId == 0x10DE) return desc.DeviceId;
+                    }
+                    finally { Marshal.Release(adapter); }
+                }
+                return null;
+            }
+            finally { Marshal.Release(factory); }
+        }
+        catch (Exception ex) when (ex is DllNotFoundException or EntryPointNotFoundException or SEHException) { return null; }
+    }
+
     /// <summary>The adapter Windows picks for <paramref name="preference"/>, skipping Microsoft's software renderer: its name and LUID.</summary>
     private static unsafe (string Name, long Luid)? FirstAdapter(IntPtr factory, int preference)
     {

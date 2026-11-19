@@ -804,6 +804,53 @@ function mockDlssStatus(params?: Record<string, unknown>) {
   }
 }
 
+function mockNvidiaLatencyLabel(lowLatency: unknown): string {
+  if (lowLatency === 'ultra') return 'Ultra'
+  return lowLatency === 'off' ? 'Off' : 'On'
+}
+
+function mockNvidiaDetails(applied: boolean, latencyLabel: string, vrrEnabled: boolean) {
+  const state = applied ? 'on' as const : 'changed' as const
+  return [
+    { key: 'lowLatency', label: 'Low latency mode', value: latencyLabel, state },
+    { key: 'power', label: 'Power management', value: 'Normal (per-game max)', state },
+    { key: 'textureFiltering', label: 'Texture filtering', value: 'Quality', state },
+    { key: 'shaderCache', label: 'Shader cache', value: 'Unlimited', state },
+    { key: 'gsync', label: 'G-SYNC / VRR', value: vrrEnabled ? 'Full screen' : 'Off', state },
+    { key: 'dlss', label: 'DLSS overrides', value: 'Latest · Preset K / F / A', state },
+    { key: 'rebar', label: 'Resizable BAR', value: 'On', state: 'on' as const },
+  ]
+}
+
+function mockGpuProfile(p?: Record<string, unknown>) {
+  const applied = mockApply('profile', p)
+  const status = applied ? 'applied' : 'ready'
+  if (mockGpu === 'intel' || mockGpu === 'amd') {
+    const isIntel = mockGpu === 'intel'
+    return {
+      ok: true, vendor: mockGpu, gpu: isIntel ? 'Arc B580' : 'Radeon RX 9070 XT', series: 0, screen: { name: 'VG27AQ', hz: 165, vrr: true },
+      status, canUndo: mockApplied.has('profile'), driverUpdated: false, items: [],
+      lowLatency: isIntel ? p?.lowLatency ?? 'on' : null,
+      summary: isIntel
+        ? "Adaptive Sync on, Low latency on, Intel's prebuilt shaders; Endurance Gaming and sharpening off"
+        : 'FreeSync on, Anti-Lag on; Chill, Boost and Image Sharpening off',
+    }
+  }
+  const lowLatency = (p?.lowLatency as 'off' | 'on' | 'ultra' | undefined) ?? 'on'
+  const vrrEnabled = typeof p?.vrr === 'boolean' ? p.vrr : true
+  return {
+    ok: true, vendor: 'nvidia', gpu: 'RTX 3070', series: 30, screen: { name: 'VG248', hz: 165, vrr: true },
+    status, canUndo: mockApplied.has('profile'), driverUpdated: false, items: [],
+    lowLatency, vrrEnabled, rebar: true, cacheFreeGb: 180,
+    details: mockNvidiaDetails(applied, mockNvidiaLatencyLabel(lowLatency), vrrEnabled),
+    skipped: false,
+    features: [
+      { key: 'lowLatency', label: 'Low latency', state: applied ? 'on' : 'off' },
+      { key: 'dlssPresets', label: 'DLSS presets', state: applied ? 'on' : 'off' },
+    ],
+  }
+}
+
 
 /** Shaders per demo game, as the Exo Shaders engine would list them. */
 let mockPrepareRunning = false
@@ -1791,24 +1838,7 @@ const MOCK_HANDLERS: Record<string, MockHandler> = {
   }),
   'eq.headphones': () => ({ ok: true, headphones: MOCK_EQ_HEADPHONES }),
   'system.tune': (p) => mockTune(p),
-  'gpu.profile': (p) => mockGpu === 'intel' || mockGpu === 'amd' ? {
-    ok: true, vendor: mockGpu, gpu: mockGpu === 'intel' ? 'Arc B580' : 'Radeon RX 9070 XT', series: 0, screen: { name: 'VG27AQ', hz: 165, vrr: true },
-    status: mockApply('profile', p) ? 'applied' : 'ready', canUndo: mockApplied.has('profile'), driverUpdated: false, items: [],
-    lowLatency: mockGpu === 'intel' ? p?.lowLatency ?? 'on' : null,
-    summary: mockGpu === 'intel'
-      ? "Adaptive Sync on, Low latency on, Intel's prebuilt shaders; Endurance Gaming and sharpening off"
-      : 'FreeSync on, Anti-Lag on; Chill, Boost and Image Sharpening off',
-  } : {
-    ok: true, vendor: 'nvidia', gpu: 'RTX 3070', series: 30, screen: { name: 'VG248', hz: 165, vrr: false },
-    status: mockApply('profile', p) ? 'applied' : 'ready',
-    canUndo: mockApplied.has('profile'), driverUpdated: false, items: [],
-    // A driver that lists the low latency pair (as the mock's does) has nothing skipped.
-    skipped: false,
-    features: [
-      { key: 'lowLatency', label: 'Low latency', state: mockApply('profile', p) ? 'on' : 'off' },
-      { key: 'dlssPresets', label: 'DLSS presets', state: mockApply('profile', p) ? 'on' : 'off' },
-    ],
-  },
+  'gpu.profile': (p) => mockGpuProfile(p),
   'system.about': () => ({
     name: 'Erix-PC', processor: mockIntelCpu ? 'Intel Core i7-14700K' : 'AMD Ryzen 5 5600X', cores: mockIntelCpu ? 20 : 6, threads: mockIntelCpu ? 28 : 12,
     graphics: 'NVIDIA GeForce RTX 3070', videoMemoryGb: 8, directX: '12 Ultimate', resizableBar: true,

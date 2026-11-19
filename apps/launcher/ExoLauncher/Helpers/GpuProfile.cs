@@ -42,15 +42,19 @@ internal static partial class GpuProfile
     internal const uint VSync = 0x00A879CF;
     internal const uint FrameRateLimit = 0x10835002, FrameRateLimitSlider = 0x1083500A;
     internal const uint ModelPresetProfile = 0x00634291;
+    internal const uint PowerManagement = 0x1057EB71, TextureFilteringQuality = 0x00CE2691;
     internal const uint ShaderCacheSize = 0x00AC8497, CacheUnlimited = 0xFFFFFFFF;
+    internal const string LowLatencyUltra = "ultra";
+
+    internal static bool IsNvidiaLowLatencyChoice(string? choice) => choice is LowLatencyOff or LowLatencyOn or LowLatencyUltra;
 
     /// <summary>Free space the cache's drive needs for the Unlimited cache; below it the driver's default is written.</summary>
     internal const long UnlimitedMinFreeGb = 50;
     // Preset letters are A = 1 ... O = 15; Recommended lets NVIDIA pick per mode (SR/RR).
     private const uint PresetA = 1, PresetF = 6, PresetK = 11, Recommended = 0x00FFFFFF;
 
-    /// <summary>What the profile is built for: the GeForce series (0 = not one).</summary>
-    internal sealed record Variant(int Series)
+    /// <summary>What the profile is built for: the GeForce series (0 = not one), whether VRR/G-SYNC should stay on, and the Low Latency choice.</summary>
+    internal sealed record Variant(int Series, bool Vrr = false, string LowLatency = LowLatencyOn)
     {
         internal bool Rtx => Series >= 20;
         internal bool Fp8 => Series >= 40;
@@ -75,15 +79,18 @@ internal static partial class GpuProfile
     // Every setting Exo writes. docs/architecture/gpu-profiles.md gives each one's reason and source.
     private static readonly Rule[] Rules =
     [
-        // Latency: Low latency mode On (one queued frame), not Ultra: with a driver frame cap Blur Busters
-        // (G-SYNC 101 p.14) says On; Ultra only adds its own cap. Reflex overrides it; Vulkan ignores it.
-        Set(0x0005F543, 1), Set(0x10835000, 0), Set(0x007BA09E, 1),
+        // Latency: Off (0/0/default), On (1/0/1, one queued frame), or Ultra (2/1/1).
+        new(GraphicsCatalog.LowLatencyState, v => v.LowLatency == LowLatencyOff ? 0u : v.LowLatency == LowLatencyUltra ? 2u : 1u),
+        new(GraphicsCatalog.UltraLowLatency, v => v.LowLatency == LowLatencyUltra ? 1u : 0u),
+        new(GraphicsCatalog.PreRenderedFrames, v => v.LowLatency == LowLatencyOff ? null : 1u),
         Default(0x10111133),                                       // VR pre-rendered frames
 
-        // G-SYNC / variable refresh: full screen only, or off. Borderless DX12 games and DX10/11 games under
-        // Windows 11's windowed-game optimizations already count as full screen; "and windowed" globally lets
-        // desktop apps start variable refresh (stutter, and flicker on OLED and VA). display-best-settings.md.
-        Set(GsyncFeature, 0), Set(GsyncGlobalMode, 0), Set(GsyncAppMode, 0), Set(VrrControl, 0),
+        // G-SYNC / variable refresh: full screen on VRR-capable displays so desktop apps stay tear-free without
+        // flickering on OLED/VA, or Off on fixed-refresh displays.
+        new(GsyncFeature, v => v.Vrr ? 1u : 0u),
+        new(GsyncGlobalMode, v => v.Vrr ? 1u : 0u),
+        new(GsyncAppMode, v => v.Vrr ? 1u : 0u),
+        new(VrrControl, v => v.Vrr ? 1u : 0u),
         Default(GsyncAppState), Default(GsyncAppRequest),          // Allow: games may use it
         Set(0x1095F16F, 0),                                        // VRR overlay indicator off
 
@@ -96,11 +103,9 @@ internal static partial class GpuProfile
         Default(0x00666634), Default(0x201F619F), Default(0x20D690F8), Default(0x20FDD1F9),
         Default(0x10D91A4C), Default(0x10115C89), Default(0x10834FFE),
 
-        // Performance first (the user's call: heat and power don't matter): texture filtering
-        // High performance with its trilinear and anisotropic optimizations, the most frames
-        // the driver gives here. Anisotropic filtering and antialiasing stay each game's own:
-        // forcing them off overrides what a player picked in the game's menu.
-        Set(0x00CE2691, 0x14), Set(0x002ECAF2, 0), Set(0x0084CD70, 1), Set(0x00E73211, 1),
+        // Texture filtering Quality with trilinear and anisotropic sample optimizations;
+        // anisotropic filtering and antialiasing stay each game's own.
+        Set(TextureFilteringQuality, 0), Set(0x002ECAF2, 0), Set(0x0084CD70, 1), Set(0x00E73211, 1),
         Default(0x101E61A9), Default(0x10D2BB16),
         Default(0x0098C1AC), Default(0x107AFC5B), Default(0x107D639D), Default(0x107EFC5B), Default(0x10D773D2),
         Default(0x10D48A85), Default(0x10ECDB82), Default(0x10FC2D9C), Default(0x2089BF6C), Default(0x1034CB89), Default(0x1074C972),
@@ -111,11 +116,11 @@ internal static partial class GpuProfile
         Default(0x00D5E9C6), Default(0x00D5E9C7), Default(0x105E2A1D),
         Leave(0xB0D384C0), Leave(0xB0CC0875),                      // Smooth Motion: the player's (adds lag when on)
 
-        // System: NVIDIA's per-game Resizable BAR list (forcing it on everywhere costs frames in
-        // games NVIDIA left it off for), maximum performance power, compute defaults.
+        // System: NVIDIA's per-game Resizable BAR list, global Power management Normal (Prefer max performance runs per-game),
+        // shader cache on while idle, and compute defaults.
         Default(0x000F00BA), Default(0x000F00BB), Default(0x000BFA21),     // rBAR switch, options, v2 switch (616.56+)
         Default(0x00198FFF), Set(0x00EAD189, 3),                   // shader cache on; compile shaders while idle (High: done sooner)
-        Default(0x00211020), Default(0x00C63A79), Default(0x00DB3858), Set(0x1057EB71, 1), // power: prefer maximum performance
+        Default(0x00211020), Default(0x00C63A79), Default(0x00DB3858), Set(PowerManagement, 0), // global power: Normal (per-game sets Prefer max performance)
         Default(0x10ECECC9), Default(0x50166C5E), Default(0x20C1221E),
         Default(0x202888C1), Default(0x209DF23E), Default(0x20378242), Default(0x206194D6), Default(0x206C28C4), Default(0x2072C5A3),
 
@@ -237,6 +242,65 @@ internal static partial class GpuProfile
             features.Add(new Feature(key, label, state));
         }
         return features;
+    }
+
+    /// <summary>Per-setting breakdown for ProfileTab: what Exo targets, what the driver holds, and any free-space or driver note.</summary>
+    internal sealed record SettingDetail(string Key, string Label, string Value, string? Current, string State, string? Note = null);
+
+    /// <summary>Infers live NVIDIA low latency mode even when EnumAvailableSettingIds omits legacy CPL/ULL ids.</summary>
+    internal static string? InferNvidiaLowLatency(IReadOnlyDictionary<uint, uint?> values)
+    {
+        if (values.TryGetValue(GraphicsCatalog.LowLatencyState, out var cpl) && cpl is { } c)
+            return c == 2 ? LowLatencyUltra : c == 1 ? LowLatencyOn : LowLatencyOff;
+        if (values.TryGetValue(GraphicsCatalog.UltraLowLatency, out var ull) && ull is { } u)
+            return u != 0 ? LowLatencyUltra : values.GetValueOrDefault(GraphicsCatalog.PreRenderedFrames) == 1 ? LowLatencyOn : LowLatencyOff;
+        if (values.TryGetValue(GraphicsCatalog.PreRenderedFrames, out var prf) && prf is { } p)
+            return p == 1 ? LowLatencyOn : LowLatencyOff;
+        return null;
+    }
+
+    /// <summary>Builds the structured NVIDIA per-setting breakdown for PC › Graphics › Profile.</summary>
+    internal static IReadOnlyList<SettingDetail> NvidiaDetails(
+        Variant variant,
+        long cacheDriveFreeGb,
+        IReadOnlyDictionary<uint, uint?> writes,
+        IReadOnlyDictionary<uint, uint?> values,
+        IReadOnlyCollection<uint> notTaken,
+        bool? rebar)
+    {
+        string StateOf(params uint[] ids)
+        {
+            var wanted = ids.Where(id => writes.ContainsKey(id) || notTaken.Contains(id)).ToArray();
+            if (wanted.Length == 0) return FeatureUnavailable;
+            var written = wanted.Where(writes.ContainsKey).ToArray();
+            if (written.Any(id => !EqualityComparer<uint?>.Default.Equals(values.GetValueOrDefault(id), writes[id]))) return "changed";
+            return wanted.Any(notTaken.Contains) ? FeatureUnavailable : FeatureOn;
+        }
+        static string LatencyWord(string? mode) => mode switch
+        {
+            LowLatencyOff => "Off",
+            LowLatencyUltra => "Ultra",
+            _ => "On",
+        };
+        var liveLatency = InferNvidiaLowLatency(values);
+        var limitedCache = cacheDriveFreeGb < UnlimitedMinFreeGb;
+        var list = new List<SettingDetail>
+        {
+            new("lowLatency", "Low latency mode", LatencyWord(variant.LowLatency), liveLatency is null ? null : LatencyWord(liveLatency), StateOf(GraphicsCatalog.LowLatencyState, GraphicsCatalog.UltraLowLatency, GraphicsCatalog.PreRenderedFrames)),
+            new("power", "Power management", "Normal (per-game max)", values.TryGetValue(PowerManagement, out var pwr) && pwr is { } pv ? (pv == 1 ? "Prefer max performance" : "Normal") : null, StateOf(PowerManagement)),
+            new("textureFiltering", "Texture filtering", "Quality", values.TryGetValue(TextureFilteringQuality, out var tf) && tf is { } tv ? (tv == 0 ? "Quality" : tv == 0x14 ? "High performance" : GraphicsCatalog.ValueOf(TextureFilteringQuality, tv)) : null, StateOf(TextureFilteringQuality)),
+            new("shaderCache", "Shader cache", limitedCache ? "Driver default" : "Unlimited",
+                values.TryGetValue(ShaderCacheSize, out var sc) ? (sc == CacheUnlimited ? "Unlimited" : sc is null ? "Driver default" : GraphicsCatalog.ValueOf(ShaderCacheSize, sc.Value)) : null,
+                StateOf(ShaderCacheSize),
+                limitedCache ? $"Less than {UnlimitedMinFreeGb} GB free on cache drive ({cacheDriveFreeGb} GB free); left at driver default" : null),
+            new("gsync", "G-SYNC / VRR", variant.Vrr ? "Full screen" : "Off",
+                values.TryGetValue(GsyncFeature, out var gs) ? (gs == 1 ? "On" : gs == 0 ? "Off" : null) : null,
+                StateOf(GsyncFeature, GsyncGlobalMode, GsyncAppMode, VrrControl)),
+            new("dlss", "DLSS overrides", variant.Rtx ? (variant.Fp8 ? "Latest · Recommended" : "Latest · Preset K / F / A") : "Driver default (GTX)", null,
+                variant.Rtx ? StateOf(ModelPresetProfile, GraphicsCatalog.SrPreset, GraphicsCatalog.RrPreset, GraphicsCatalog.FgPreset) : FeatureOn),
+            new("rebar", "Resizable BAR", rebar switch { true => "On", false => "Off", null => "Unavailable" }, null, rebar is true ? FeatureOn : rebar is false ? FeatureOff : FeatureUnavailable),
+        };
+        return list;
     }
 
     /// <summary>applied (the driver holds every write), changed (Exo applied it and something moved since), or ready.</summary>

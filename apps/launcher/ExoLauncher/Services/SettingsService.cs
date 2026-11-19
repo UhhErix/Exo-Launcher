@@ -989,6 +989,8 @@ public sealed class SettingsService
         UpscalerAntiCheatConsent = CopyStrings(source.UpscalerAntiCheatConsent),
         HdrGameModes = CopyStrings(source.HdrGameModes),
         NvidiaColor = CopyStrings(source.NvidiaColor),
+        NvidiaGsync = source.NvidiaGsync,
+        NvidiaLowLatency = GpuProfile.IsNvidiaLowLatencyChoice(source.NvidiaLowLatency) ? source.NvidiaLowLatency : null,
         RtxVideoSuperResolution = source.RtxVideoSuperResolution is >= 0 and <= 5 ? source.RtxVideoSuperResolution : null,
         RtxVideoHdr = source.RtxVideoHdr,
         RtxVideoDriver = source.RtxVideoDriver is { Length: > 0 and <= 32 } driver ? driver : null,

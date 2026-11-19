@@ -24,7 +24,8 @@ internal static class GpuProfileService
     /// </summary>
     internal sealed record State(bool Ok, string? Message, string? Vendor, string? Gpu, int Series, GpuProfile.Screen Screen,
         string Status, bool CanUndo, bool DriverUpdated, IReadOnlyList<GpuProfile.Item> Manual,
-        string? Summary = null, string? LowLatency = null, IReadOnlyList<uint>? Skipped = null, IReadOnlyList<GpuProfile.Feature>? Features = null)
+        string? Summary = null, string? LowLatency = null, IReadOnlyList<uint>? Skipped = null, IReadOnlyList<GpuProfile.Feature>? Features = null,
+        bool? VrrEnabled = null, bool? Rebar = null, long? CacheFreeGb = null, IReadOnlyList<GpuProfile.SettingDetail>? Details = null)
     {
         /// <summary>Something the profile asks for is not in this driver, so the page never says the whole profile is on.</summary>
         internal bool Partly => Skipped is { Count: > 0 };
@@ -83,10 +84,12 @@ internal static class GpuProfileService
     }
 
     /// <summary>
-    /// Applies Exo's profile to the global profile (on a Radeon, its profile; on Intel, with the Low latency choice),
+    /// Applies Exo's profile to the global profile (on a Radeon, its profile; on Intel/NVIDIA, with Low latency and VRR choices),
     /// backing up what it replaces first.
     /// </summary>
-    internal static State Apply(string? lowLatency = null)
+    internal static State Apply(string? lowLatency = null) => ApplyWith(lowLatency, null);
+
+    internal static State ApplyWith(string? lowLatency, bool? vrr)
     {
         lock (Gate)
         {
@@ -96,7 +99,12 @@ internal static class GpuProfileService
             if (vendor == "intel")
                 return Intel(IntelProfileService.Shared.Apply(lowLatency ?? GpuProfile.LowLatencyOn), MainScreen(vendor)) ?? ReadLocked() with { Ok = false, Message = "Intel's driver did not answer." };
             if (vendor != "nvidia") return ReadLocked() with { Ok = false, Message = "Exo changes only NVIDIA, AMD and Intel driver settings." };
-            var (ok, message, writes, values, skipped) = Nvidia(new GpuProfile.Variant(Series()));
+            if (lowLatency is not null && GpuProfile.IsNvidiaLowLatencyChoice(lowLatency))
+                App.Services.Settings.UpdateProfile(s => s.NvidiaLowLatency = lowLatency);
+            if (vrr is { } chosenVrr)
+                App.Services.Settings.UpdateProfile(s => s.NvidiaGsync = chosenVrr);
+            var variant = NvidiaVariant(MainScreen("nvidia"));
+            var (ok, message, writes, values, skipped, _) = Nvidia(variant);
             if (!ok) return ReadLocked() with { Ok = false, Message = message };
             var ids = writes.Keys.Order().ToList();
             var earlier = LoadBackup();
@@ -171,14 +179,32 @@ internal static class GpuProfileService
                 amd ? GpuProfile.Amd(AmdAdlx.Read()) : GpuProfile.Intel());
         }
         var backup = LoadBackup();
-        var (ok, message, writes, values, skipped) = Nvidia(new GpuProfile.Variant(Series()));
-        if (!ok) return new State(false, message, vendor, AdapterName(vendor), Series(), screen, "none", backup is not null, false, []);
+        var variant = NvidiaVariant(screen);
+        var (ok, message, writes, values, skipped, free) = Nvidia(variant);
+        var rebar = PcHealth.MainGpu()?.UploadHeap;
+        if (!ok) return new State(false, message, vendor, AdapterName(vendor), Series(), screen, "none", backup is not null, false, [], Rebar: rebar);
         // The ids this driver does not list, and the ones the record says it refused at a write for the driver installed now.
         var notTaken = skipped.Concat(RefusedForThisDriver().Where(id => writes.ContainsKey(id))).Distinct().Order().ToList();
         var status = StatusOf(writes, values, notTaken, backup is not null);
         var driverUpdated = status == "changed" && backup!.Driver != (NvidiaProfiles.DriverVersion() ?? 0);
+        var liveLatency = GpuProfile.InferNvidiaLowLatency(values) ?? variant.LowLatency;
+        var liveVrr = values.TryGetValue(GpuProfile.GsyncFeature, out var gs) && gs is { } g ? g == 1 : variant.Vrr;
         return new State(true, null, vendor, AdapterName(vendor), Series(), screen, status, backup is not null, driverUpdated, [],
-            Skipped: notTaken, Features: GpuProfile.Features(writes, values, notTaken));
+            LowLatency: liveLatency,
+            Skipped: notTaken,
+            Features: GpuProfile.Features(writes, values, notTaken),
+            VrrEnabled: screen.Vrr ? liveVrr : false,
+            Rebar: rebar,
+            CacheFreeGb: free,
+            Details: GpuProfile.NvidiaDetails(variant, free, writes, values, notTaken, rebar));
+    }
+
+    private static GpuProfile.Variant NvidiaVariant(GpuProfile.Screen screen)
+    {
+        var s = App.Services.Settings.Current;
+        var latency = GpuProfile.IsNvidiaLowLatencyChoice(s.NvidiaLowLatency) ? s.NvidiaLowLatency! : GpuProfile.LowLatencyOn;
+        var vrr = screen.Vrr && (s.NvidiaGsync ?? true);
+        return new GpuProfile.Variant(Series(), Vrr: vrr, LowLatency: latency);
     }
 
     /// <summary>
@@ -199,17 +225,20 @@ internal static class GpuProfileService
         return [.. pc.DriverSkipped.Select(id => uint.TryParse(id.AsSpan(id.StartsWith("0x", StringComparison.Ordinal) ? 2 : 0), NumberStyles.HexNumber, CultureInfo.InvariantCulture, out var value) ? value : 0).Where(id => id != 0)];
     }
 
-    /// <summary>The profile's writes and what the global profile holds for them, in one driver session; <c>Skipped</c>: the ids this driver does not list.</summary>
-    private static (bool Ok, string? Message, IReadOnlyDictionary<uint, uint?> Writes, IReadOnlyDictionary<uint, uint?> Values, IReadOnlyList<uint> Skipped) Nvidia(GpuProfile.Variant variant)
+    /// <summary>The profile's writes and what the global profile holds for them, in one driver session; always reads back Low Latency ids even if EnumAvailableSettingIds omits legacy ids.</summary>
+    private static (bool Ok, string? Message, IReadOnlyDictionary<uint, uint?> Writes, IReadOnlyDictionary<uint, uint?> Values, IReadOnlyList<uint> Skipped, long FreeGb) Nvidia(GpuProfile.Variant variant)
     {
         var known = GraphicsService.KnownIds();
-        if (known.Count == 0) return (false, "The NVIDIA driver did not list its settings.", new Dictionary<uint, uint?>(), new Dictionary<uint, uint?>(), []);
         var free = FreeGb();
-        // The ids come from the profile built on nothing set; the values then pick the shader cache.
+        if (known.Count == 0) return (false, "The NVIDIA driver did not list its settings.", new Dictionary<uint, uint?>(), new Dictionary<uint, uint?>(), [], free);
         var plan = GpuProfile.NvidiaPlan(variant, free, known);
-        var read = NvidiaProfiles.Read(plan.Writes.Keys.ToList());
-        if (!read.Ok) return (false, read.Message, new Dictionary<uint, uint?>(), read.Values, plan.Skipped);
-        return (true, null, plan.Writes, read.Values, plan.Skipped);
+        var toRead = plan.Writes.Keys
+            .Concat([GraphicsCatalog.LowLatencyState, GraphicsCatalog.UltraLowLatency, GraphicsCatalog.PreRenderedFrames])
+            .Distinct()
+            .ToList();
+        var read = NvidiaProfiles.Read(toRead);
+        if (!read.Ok) return (false, read.Message, new Dictionary<uint, uint?>(), read.Values, plan.Skipped, free);
+        return (true, null, plan.Writes, read.Values, plan.Skipped, free);
     }
 
     /// <summary>The Radeon profile as the page's state; null (ADLX did not answer, or offers nothing Exo sets) falls back to what to set by hand.</summary>

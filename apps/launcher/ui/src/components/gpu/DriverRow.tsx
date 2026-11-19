@@ -68,13 +68,18 @@ function driverDetail(state: DriverState, vendor: Vendor, progress: DriverProgre
   return restingDetail(state, vendor)
 }
 
-/** The line at rest: nothing, unless what runs has a known problem here (said in a few words) or the vendor couldn't be reached. Versions are not shown. */
+/** The line at rest: always includes the installed driver version alongside status, advisory, or update target. */
 function restingDetail(state: DriverState, vendor: Vendor) {
+  const installed = state.installed
   const why = state.advised?.why
-  if (why) return sentenceStart(why)
-  if (!state.installed) return 'No driver'
-  if (!state.latest && !state.skipped) return vendor === 'nvidia' ? "NVIDIA's driver list couldn't be reached" : `${VENDOR[vendor].name}'s newest driver for this card couldn't be found`
-  return ''
+  if (why) return installed ? `${installed} · ${sentenceStart(why)}` : sentenceStart(why)
+  if (!installed) return 'No driver'
+  if (state.advised?.back) return `${installed} → ${state.advised.back}`
+  if (!state.latest && !state.skipped) {
+    return `${installed} · ${vendor === 'nvidia' ? "NVIDIA's driver list couldn't be reached" : `${VENDOR[vendor].name}'s newest driver for this card couldn't be found`}`
+  }
+  if (state.latest) return state.update ? `${installed} → ${state.latest.version}` : `${installed} · Up to date`
+  return installed
 }
 
 /**

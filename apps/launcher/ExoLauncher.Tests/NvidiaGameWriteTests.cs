@@ -124,5 +124,18 @@ public sealed class NvidiaGameWriteTests
         // And no backup is kept for a profile that did not take: Optimize never reads it as set.
         Assert.False(File.Exists(Path.Combine(folder, "t.nvidia.json")));
     }
+
+    [Fact]
+    public void OptimizeAppliesPerGamePreferMaximumPerformance()
+    {
+        var fake = new Fake();
+        fake.Held[GpuProfile.PowerManagement] = 1u;
+        fake.Held[SrPreset] = 11u;
+        using var rig = Rig(fake, out _);
+        var game = Game() with { Nvidia = new("", _ => [Value(SrPreset, 11)]) };
+        Assert.Null(GameSettings.SetNvidia(Entry(), game, AFile(), on: true, includePerGamePower: true));
+        Assert.Equal(1u, fake.LastWrites![GpuProfile.PowerManagement]);
+        Assert.Equal(11u, fake.LastWrites[SrPreset]);
+    }
 }
 

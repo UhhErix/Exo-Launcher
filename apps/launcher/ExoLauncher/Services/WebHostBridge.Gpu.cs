@@ -46,8 +46,9 @@ public sealed partial class WebHostBridge
     {
         var action = ReadString(p, hasParams, "action");
         var lowLatency = ReadString(p, hasParams, "lowLatency");
+        var vrr = ReadBool(p, hasParams, "vrr");
         var state = action is "apply" or "undo"
-            ? await Task.Run(() => action == "apply" ? GpuProfileService.Apply(lowLatency) : GpuProfileService.Undo(), ct).ConfigureAwait(false)
+            ? await Task.Run(() => action == "apply" ? GpuProfileService.ApplyWith(lowLatency, vrr) : GpuProfileService.Undo(), ct).ConfigureAwait(false)
             : await SharedProfileRead().WaitAsync(ct).ConfigureAwait(false);
         return new
         {
@@ -62,6 +63,10 @@ public sealed partial class WebHostBridge
             driverUpdated = state.DriverUpdated,
             items = state.Manual.Select(item => new { key = item.Key, label = item.Label, value = item.Value, why = item.Why, current = item.Current }).ToList(),
             lowLatency = state.LowLatency,
+            vrrEnabled = state.VrrEnabled,
+            rebar = state.Rebar,
+            cacheFreeGb = state.CacheFreeGb,
+            details = state.Details?.Select(d => new { key = d.Key, label = d.Label, value = d.Value, current = d.Current, state = d.State, note = d.Note }).ToList(),
             summary = state.Summary,
             // Something the profile asks for is not in this driver: no count and no id reach the page, only that.
             skipped = state.Partly,

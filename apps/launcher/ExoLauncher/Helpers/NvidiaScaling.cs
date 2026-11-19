@@ -55,6 +55,7 @@ internal static unsafe class NvidiaScaling
     /// <summary>Sets the raw NV_SCALING and reads it back; null on success, else a plain line.</summary>
     internal static string? Write(uint displayId, int code)
     {
+        if (HostMode.IsDisposable) return HostMode.Refusal;
         if (!WithConfig(displayId, code, out _)) return "The NVIDIA driver did not take that scaling.";
         Thread.Sleep(300);
         return Read(displayId) == code ? null : "The NVIDIA driver kept its own scaling.";
@@ -146,6 +147,7 @@ internal static unsafe class NvidiaScaling
     /// <summary>Turns the override on or off and reads it back; null on success, else a plain line.</summary>
     internal static string? WriteOverride(uint displayId, bool on)
     {
+        if (HostMode.IsDisposable) return HostMode.Refusal;
         lock (Gate)
         {
             try

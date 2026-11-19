@@ -217,4 +217,13 @@ public sealed class DlssSwapperCatalogTests
         }
         finally { DeletionGate.DeleteDirectory(dir, recursive: true); }
     }
+
+    [Fact]
+    public async Task ParseCatalogResponseAsync_Handles404CleanlyWithoutThrowing()
+    {
+        using var response = new System.Net.Http.HttpResponseMessage(System.Net.HttpStatusCode.NotFound);
+        var entries = await DlssSwapService.ParseCatalogResponseAsync(response, TestContext.Current.CancellationToken);
+        Assert.NotNull(entries);
+        Assert.Empty(entries);
+    }
 }

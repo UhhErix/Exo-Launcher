@@ -106,6 +106,8 @@ public sealed class DisposableHostGuardTests
         ("ExoLauncher/Helpers/NvidiaDisplay.cs", "internal static string? Write(uint displayId, OutputColor color, bool auto = false)"),
         ("ExoLauncher/Helpers/NvidiaDisplay.cs", "internal static string? SetVibrance(string gdiName, int level)"),
         ("ExoLauncher/Helpers/NvidiaDisplay.cs", "internal static string? SetHue(string gdiName, int angle)"),
+        ("ExoLauncher/Helpers/NvidiaScaling.cs", "internal static string? Write(uint displayId, int code)"),
+        ("ExoLauncher/Helpers/NvidiaScaling.cs", "internal static string? WriteOverride(uint displayId, bool on)"),
         ("ExoLauncher/Helpers/NvidiaVideo.cs", "internal static string? Write(string gdiName, int component, int value)"),
         ("ExoLauncher/Helpers/NvidiaColor.cs", "internal static string? Apply(WindowsHdr.Screen screen, Values values)"),
         ("ExoLauncher/Helpers/NvidiaColor.cs", "internal static (List<string> Done, List<string> Failed) ApplySaved(SettingsService settings)"),
