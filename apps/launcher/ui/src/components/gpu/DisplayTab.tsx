@@ -5,6 +5,7 @@ import { GraphicsControl } from '../graphics/GraphicsControl'
 import { Row, SliderRow, State, SwitchRow } from '../settings/parts'
 import { Choice } from '../settings/Choice'
 import { Spinner } from '../ui/Spinner'
+import { ActionButton } from '../ui/ConfirmButton'
 import { gpuOffers, hdrShown, isChoice } from '../../lib/canUse'
 
 const FORMATS: { id: OutputColor['format']; label: string }[] = [
@@ -57,17 +58,23 @@ function useDisplayChange(onDisplay: (next: DisplayState) => void) {
  * reports it takes), with Use. A screen at its best shows nothing.
  */
 export function BestScreenRows({ display, onDisplay }: { display: DisplayState | null; onDisplay: (next: DisplayState) => void }) {
-  const { busy, errorFor, run } = useDisplayChange(onDisplay)
+  const [errors, setErrors] = useState<Record<string, string | null>>({})
   if (!display) return null
   const several = display.displays.length > 1
+  // Use shows its own work (ActionButton): the ring, then its check, and then the row goes as the screen is at its best.
+  const use = (id: string) => async () => {
+    setErrors(current => ({ ...current, [id]: null }))
+    const next = await host.gpuDisplay('set', { display: id, best: true })
+    if (!next.ok) onDisplay(next)
+    return next
+  }
   return (
     <>
       {display.displays.filter(screen => !screen.isBest).map(screen => (
-        <Row key={screen.id} label={several ? `Best for ${screen.name}` : 'Best for this screen'} detail={bestLine(screen.best)} error={errorFor(screen.id)}>
-          <button type="button" className="exo-set-btn is-primary" disabled={!!busy} aria-busy={busy === screen.id}
-            onClick={() => { if (!busy) void run('set', { display: screen.id, best: true }, screen.id) }}>
-            {busy === screen.id ? <Spinner label="Setting the screen up" /> : null}Use
-          </button>
+        <Row key={screen.id} label={several ? `Best for ${screen.name}` : 'Best for this screen'} detail={bestLine(screen.best)} error={errors[screen.id] ?? null}>
+          <ActionButton className="exo-set-btn is-primary" why="none" context="DisplayRows.set" fallback="Not changed. Try again."
+            onPress={use(screen.id)} onFailed={failure => setErrors(current => ({ ...current, [screen.id]: failure.text }))}
+            onDone={next => onDisplay(next as DisplayState)}>Use</ActionButton>
         </Row>
       ))}
     </>

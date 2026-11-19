@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from 'react'
-import { notify } from '../../lib/notify'
 import { report } from '../../lib/report'
 import { loadView, runAction, runActionFor, type Page, type Player } from './playerContext'
 
@@ -14,18 +13,18 @@ export function shareLink(adapter: Player['adapter'], item: { uri: string; url?:
   return item.url ?? adapter.shareUrl?.(item.uri) ?? null
 }
 
-/** A share link on the clipboard, said in the notice stack; false when Windows refused it. */
+/** A share link on the clipboard; false when Windows refused it. The control that asked says which, where it is. */
 export async function copyLink(url: string): Promise<boolean> {
   try {
     await navigator.clipboard.writeText(url)
-    notify({ text: 'Link copied.', tone: 'good' })
     return true
   } catch (error) {
     report(error, 'MusicPlayer.copyLink')
-    notify({ text: "Couldn't copy the link.", tone: 'bad' })
     return false
   }
 }
+
+export const COPY_FAILED = 'Windows didn’t let Exo copy the link. Try again.'
 
 /** Song or artist radio: Spotify makes the playlist, the room opens it. */
 export async function openRadio(adapter: Player['adapter'], open: (page: Page) => void, uri: string, title: string) {

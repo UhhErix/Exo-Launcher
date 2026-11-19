@@ -226,8 +226,132 @@ img[data-exo-broken] {
   white-space: nowrap;
 }
 
-.exo-confirm-icon.is-armed > svg {
+.exo-confirm-icon.is-armed .exo-action-face.is-rest svg {
   display: none;
+}
+
+/* Actions (DESIGN.md › Feel, components/ui/ConfirmButton.tsx › ActionButton): a control reacts in itself. Its faces
+   (its words, the ring, the check) sit stacked in one cell, so it keeps one size whatever it shows, and only the
+   current one is seen; they crossfade, the arriving one growing from 0.9 on the spring. The ring waits 300ms (a quick
+   answer goes straight from the words to the check), the check draws itself, and a failure turns the control Bad and
+   shakes it once, as macOS shakes a wrong password. A face's extra words come from an attribute, so a face not showing
+   adds nothing to the control's text. */
+.exo-action-stack {
+  display: inline-grid;
+  gap: inherit;
+  min-width: 0;
+}
+
+.exo-action-face {
+  display: inline-flex;
+  grid-area: 1 / 1;
+  align-items: center;
+  justify-content: center;
+  gap: inherit;
+  min-width: 0;
+  opacity: 0;
+  scale: 0.9;
+  visibility: hidden;
+  transition: opacity var(--dur-base) var(--ease-out), scale var(--dur-move) var(--ease-spring), visibility 0s linear var(--dur-base);
+}
+
+.exo-action-face.is-rest {
+  justify-content: inherit;
+}
+
+.exo-action-face.is-on {
+  opacity: 1;
+  scale: 1;
+  visibility: visible;
+  transition: opacity var(--dur-base) var(--ease-out), scale var(--dur-move) var(--ease-spring), visibility 0s;
+}
+
+/* The ring shows only once the wait is real; the words stay until then. */
+.exo-action.is-pending .exo-action-face.is-pending.is-on,
+.exo-action.is-pending .exo-action-face.is-rest {
+  transition-delay: var(--dur-wait);
+}
+
+.exo-action.is-pending .exo-action-face.is-pending .exo-spinner {
+  animation: exo-spin 0.8s linear infinite;
+}
+
+.exo-action-words::before {
+  content: attr(data-words);
+  white-space: nowrap;
+}
+
+.exo-action-check {
+  flex: none;
+  fill: none;
+  stroke: var(--color-good);
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+}
+
+.exo-action.is-success .exo-action-check {
+  animation: exo-check-hold var(--dur-flight) var(--ease-out) forwards;
+}
+
+.exo-action.is-error {
+  color: color-mix(in srgb, var(--color-bad) 82%, var(--color-fg));
+  animation: exo-action-shake var(--dur-flight) var(--ease-out);
+}
+
+:is(.exo-set-btn.is-primary, .exo-game-tool.is-primary, .exo-play).exo-action.is-error,
+:is(.exo-set-btn.is-primary, .exo-game-tool.is-primary, .exo-play).exo-action.is-error:hover:not(:disabled) {
+  border-color: var(--color-bad);
+  background-color: var(--color-bad);
+  color: var(--color-primary-fg);
+}
+
+@keyframes exo-action-shake {
+  20% { translate: -4px 0; }
+  40% { translate: 4px 0; }
+  60% { translate: -2px 0; }
+  80% { translate: 1px 0; }
+}
+
+/* Why it failed, beside the control (before it in a row's control column, under it in a menu): one plain line in Bad,
+   two at most, then Copy details. It arrives as the shake settles. */
+.exo-action-why {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px 8px;
+  min-width: 0;
+  max-width: min(44ch, 100%);
+  color: color-mix(in srgb, var(--color-bad) 82%, var(--color-fg));
+  font-size: var(--exo-type-small);
+  line-height: 1.35;
+  animation: exo-fade-in var(--dur-base) var(--ease-out) backwards;
+}
+
+.exo-action-why-text {
+  display: -webkit-box;
+  min-width: 0;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.exo-action-why .exo-copy-logs {
+  flex: none;
+}
+
+[role="menu"] .exo-action-why,
+.exo-menu .exo-action-why {
+  padding: 2px 12px 6px;
+}
+
+html[data-exo-motion="reduce"] :is(.exo-action.is-error, .exo-action-why) {
+  animation: none;
+}
+
+html[data-exo-motion="reduce"] .exo-action-face {
+  scale: 1;
 }
 
 :is(.exo-menu-item, .exo-confirm-icon, a).is-armed.is-danger {

@@ -1785,7 +1785,7 @@ export function initHostBridge() {
     pending.delete(res.id)
     if (res.version !== undefined && res.version !== HOST_PROTOCOL_VERSION) p.reject(new Error('The launcher and UI versions do not match. Restart Exo.'))
     else if (res.ok === true) p.resolve(res.result)
-    else p.reject(new Error(res.error || 'Something went wrong. Try again.'))
+    else p.reject(new Error(res.error || 'Exo couldn’t finish that. Try again.'))
   })
 }
 

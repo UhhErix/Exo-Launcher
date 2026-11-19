@@ -2,6 +2,7 @@ import { memo, useEffect, useState } from 'react'
 import { host, type LauncherSettings } from '../../lib/host'
 import { Spinner } from '../ui/Spinner'
 import { report } from '../../lib/report'
+import { errorText } from '../../lib/errorWords'
 import { ChoiceRow, CopyRow, Row, Section, SliderRow, SwitchRow } from './parts'
 import { upscalerAntiCheatShown } from '../../lib/canUse'
 import { AUTO_UPSCALERS_DETAIL, AUTO_UPSCALERS_LABEL } from '../../lib/upscalerNotice'
@@ -199,9 +200,10 @@ export function DownloadsSection({ settings, disabled, save }: { settings: Launc
     try {
       const result = await host.pickFolder('Choose where new games install')
       if (result.ok && result.path) setFolderError(await save({ defaultInstallRoot: result.path }))
-      else if (!result.ok && !result.cancelled) setFolderError(result.message ?? 'Could not open the folder picker. Try again.')
+      else if (!result.ok && !result.cancelled) setFolderError(errorText(result.message, 'Could not open the folder picker. Try again.'))
     } catch (error) {
-      setFolderError(error instanceof Error ? error.message : 'Could not open the folder picker. Try again.')
+      report(error, 'Settings.installFolder')
+      setFolderError(errorText(error, 'Could not open the folder picker. Try again.'))
     } finally {
       setPicking(false)
     }

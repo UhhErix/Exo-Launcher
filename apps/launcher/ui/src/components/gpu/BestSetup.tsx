@@ -5,6 +5,7 @@ import { report } from '../../lib/report'
 import { trimStop } from '../../lib/utils'
 import { ErrorNote } from '../ui/ErrorNote'
 import { Spinner } from '../ui/Spinner'
+import { ActionButton } from '../ui/ConfirmButton'
 import { SectionActions } from './SectionHead'
 
 export type BestKey = 'power' | 'profile' | 'network' | 'system' | 'drives' | 'hdr' | 'frameGen'
@@ -136,24 +137,24 @@ export function BestSetup({ profile, health, tuning, drives, screen, settings, o
   onRead: () => Promise<void>
 }) {
   const [running, setRunning] = useState<BestKey | null>(null)
-  const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   // The steps set by this press: their checks draw in.
   const [landed, setLanded] = useState<ReadonlySet<BestKey>>(() => new Set())
 
   const steps = bestSteps(profile, health, screen, settings, onSave, drives, tuning)
 
+  // The button shows the run as a whole (ActionButton: its ring, then its check, or Bad when a step didn't take); each
+  // step turns its own ring and draws its own check; what didn't take is said under the list, step by step.
   const run = async () => {
-    if (busy) return
-    setBusy(true)
     setError(null)
     const failed = await runBest(steps, setRunning)
     setRunning(null)
     await onRead()
     setLanded(new Set(steps.filter(step => !step.done && !failed[step.key]).map(step => step.key)))
     const said = steps.filter(step => failed[step.key]).map(step => `${step.what}: ${failed[step.key]}`)
-    setError(said.length ? `${said.join('. ')}. Try again.` : null)
-    setBusy(false)
+    const words = said.length ? `${said.join('. ')}. Try again.` : null
+    setError(words)
+    return words ? { ok: false, message: words } : { ok: true }
   }
 
   if (!profile || !health || steps.length === 0) return null
@@ -161,7 +162,7 @@ export function BestSetup({ profile, health, tuning, drives, screen, settings, o
     <section className="exo-pc-best" aria-label="Steps">
       {steps.some(step => !step.done) ? (
         <SectionActions>
-          <button type="button" className="exo-set-btn is-primary" disabled={busy} aria-busy={busy} onClick={() => void run()}>Use best settings</button>
+          <ActionButton className="exo-set-btn is-primary" timeoutMs={null} why="none" context="BestSetup.run" onPress={run}>Use best settings</ActionButton>
         </SectionActions>
       ) : null}
       <ul className="exo-pc-best-steps">

@@ -18,8 +18,10 @@ import { ErrorNote } from '../ui/ErrorNote'
 import { Menu, type MenuItem } from '../ui/Menu'
 import { Wait, times } from '../ui/Wait'
 import { Spinner } from '../ui/Spinner'
+import { ActionButton } from '../ui/ConfirmButton'
 import { Progress } from '../ui/Progress'
 import { ArtImg } from '../ui/ArtImg'
+import { errorText, type PlainError } from '../../lib/errorWords'
 
 /** The captures as last read: the sheet shows them at once the next time it opens, while the folder is read again. */
 let lastList: CaptureItem[] | null = null
@@ -300,28 +302,31 @@ function Viewer({ item, game, edit, onStep, onBack, onFavourite, onChanged, onDe
     } else setNote({ text: message ?? 'Left as it was.' })
   }), [item.id, onChanged])
 
-  async function act(action: 'delete' | 'reveal' | 'copy' | 'shrink') {
+  // Delete says how it went in itself (ActionButton: its ring, its check, or Bad and a shake), and why it failed on the
+  // viewer's line; what the menus' rows did reads there too, as the menu that was pressed has closed (DESIGN.md › Notify).
+  const failedHere = (error: PlainError) => setNote({ text: error.text, bad: true })
+  const remove = () => { setNote(null); return host.captureItem(item.id, 'delete') }
+
+  async function act(action: 'reveal' | 'copy' | 'shrink') {
     setNote(null)
     const failed = ACT_FAILED[action]
     try {
       const result = await host.captureItem(item.id, action)
-      if (!result.ok) { setNote({ text: result.message ?? failed, bad: true }); return }
+      if (!result.ok) { setNote({ text: errorText(result.message, failed), bad: true }); return }
       if (result.item) onChanged(result.item)
-      if (action === 'delete') onDeleted()
       // DESIGN.md › Notify: the result of a press shows where it was, on the viewer's line.
       if (action === 'copy') setNote({ text: 'Copied' })
       if (action === 'shrink') { setShrinking(true); setNote({ text: result.message ?? 'Making it smaller…' }) }
-    } catch (error) { setNote({ text: error instanceof Error ? error.message : failed, bad: true }) }
+    } catch (error) { setNote({ text: errorText(error, failed), bad: true }) }
   }
-
   async function copyText() {
     setNote(null)
     try {
       const result = await host.captureText(item.id)
-      if (!result.ok || !result.text) { setNote({ text: result.message ?? 'No text found.', bad: true }); return }
+      if (!result.ok || !result.text) { setNote({ text: errorText(result.message, 'No text found.'), bad: true }); return }
       await navigator.clipboard.writeText(result.text)
       setNote({ text: 'Copied the text.' })
-    } catch (error) { setNote({ text: error instanceof Error ? error.message : 'Exo could not read the text. Try again.', bad: true }) }
+    } catch (error) { setNote({ text: errorText(error, 'Exo couldn’t read the text. Try again.'), bad: true }) }
   }
 
   if (editing) {
@@ -353,7 +358,8 @@ function Viewer({ item, game, edit, onStep, onBack, onFavourite, onChanged, onDe
         <button type="button" className={`exo-set-btn exo-editor-icon exo-capture-fav-btn${item.favourite ? ' is-on' : ''}`} aria-pressed={item.favourite}
           aria-label={item.favourite ? 'Remove from favorites' : 'Favorite'} onClick={onFavourite}><Star on={item.favourite} /></button>
         <button type="button" className="exo-set-btn exo-editor-icon" aria-pressed={info} aria-label="Info" onClick={() => setInfo(on => !on)}><Info size={14} /></button>
-        <button type="button" className="exo-set-btn exo-editor-icon is-danger" aria-label="Delete" disabled={busy} onClick={() => void act('delete')}><Trash size={14} /></button>
+        <ActionButton className="exo-set-btn exo-editor-icon is-danger" aria-label="Delete" disabled={busy} context="Captures.delete" fallback={ACT_FAILED.delete}
+          why="none" onFailed={failedHere} onDone={onDeleted} onPress={remove}><Trash size={14} /></ActionButton>
         <Menu label="More" anchor="--exo-capture-more" offset={6} triggerClassName="exo-set-btn exo-editor-icon" trigger={<More size={16} />}
           items={more} onAction={id => { if (id === 'text') void copyText(); else void act(id as 'reveal' | 'shrink') }} />
       </div>
@@ -384,7 +390,7 @@ function Viewer({ item, game, edit, onStep, onBack, onFavourite, onChanged, onDe
         <div className="exo-dc exo-capture-send">
           <SendToDialog
             title="Send to"
-            failed="Discord did not take it. Try again."
+            failed="Discord didn’t take it. Try again."
             send={async (ids, text) => {
               const result = await host.captureSend(item.id, ids, text, 0, 0)
               if (result.item) onAdded(result.item)
@@ -424,11 +430,11 @@ function CapturesEmpty({ onSettings }: { onSettings: () => void }) {
         : settings?.replayMode === 'games' ? 'Instant replay runs only while a game is open.' : "Instant replay isn't running.")
       return
     }
-    const failed = 'Exo Capture did not answer. Try again.'
-    void host.captureAct(action).then(result => { if (!result.ok) setNote(result.message ?? failed) })
+    const failed = 'Exo Capture didn’t answer. Try again.'
+    void host.captureAct(action).then(result => { if (!result.ok) setNote(errorText(result.message, failed)) })
       .catch((error: unknown) => {
         report(error, 'capture.act', { level: 'warn' })
-        setNote(error instanceof Error ? error.message : failed)
+        setNote(errorText(error, failed))
       })
   }
   // Without the add-on nothing can be captured: say so instead of buttons that do nothing.
@@ -653,7 +659,7 @@ function snipFromSheet(onFail: (message: string) => void) {
   closeCaptures()
   window.setTimeout(() => {
     void host.captureAct('snip')
-      .then(result => { if (!result.ok) onFail(result.message ?? 'Exo Capture did not answer. Try again.') })
+      .then(result => { if (!result.ok) onFail(errorText(result.message, 'Exo Capture didn’t answer. Try again.')) })
       .catch((error: unknown) => { report(error, 'capture.act', { level: 'warn' }) })
   }, 420)
 }
@@ -814,13 +820,13 @@ function CapturesSheet({ gameId, itemId, edit, settings, notes, games }: {
   const update = (next: CaptureItem) => setItems(list => list?.map(item => item.id === next.id ? next : item) ?? list)
   // The star turns at once; the host's answer settles it (and puts it back if the change did not save).
   const favourite = (item: CaptureItem) => {
-    const failed = 'Exo Capture could not change the favorite. Try again.'
+    const failed = 'Exo Capture couldn’t change the favorite. Try again.'
     update({ ...item, favourite: !item.favourite })
     void host.captureItem(item.id, item.favourite ? 'unfavourite' : 'favourite')
       .then(result => {
         if (result.item) update(result.item)
-        else if (!result.ok) { update(item); setNote(result.message ?? failed) }
-      }).catch((error: unknown) => { update(item); setNote(error instanceof Error ? error.message : failed) })
+        else if (!result.ok) { update(item); setNote(errorText(result.message, failed)) }
+      }).catch((error: unknown) => { update(item); setNote(errorText(error, failed)) })
   }
   // Null while not selecting; a filter change starts the pick again (no hidden captures in a delete).
   const [selection, setSelection] = useState<ReadonlySet<string> | null>(null)
@@ -865,8 +871,8 @@ function CapturesSheet({ gameId, itemId, edit, settings, notes, games }: {
       try {
         const result = await host.captureItem(id, 'delete')
         if (result.ok) gone.add(id)
-        else failed = result.message ?? ACT_FAILED.delete
-      } catch (error) { failed = error instanceof Error ? error.message : ACT_FAILED.delete }
+        else failed = errorText(result.message, ACT_FAILED.delete)
+      } catch (error) { failed = errorText(error, ACT_FAILED.delete) }
     }
     setItems(list => list?.filter(item => !gone.has(item.id)) ?? list)
     setDeleting(false)

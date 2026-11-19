@@ -8,6 +8,7 @@ import { AUTO_UPSCALERS_DETAIL, AUTO_UPSCALERS_LABEL } from '../../lib/upscalerN
 import { report } from '../../lib/report'
 import { Wait, sample, times } from '../ui/Wait'
 import { Spinner } from '../ui/Spinner'
+import { ActionButton } from '../ui/ConfirmButton'
 
 /**
  * First run's last step, Best settings for this PC: the same steps as the PC room's (gpu/BestSetup.tsx), each a row that
@@ -60,7 +61,11 @@ function LucidRows({ lucid, onLucid }: { lucid: LucidState; onLucid: (next: Luci
     return (
       <Row label={lucid.running ? 'Setting up Lucid' : 'Set up Lucid'} detail={lucid.running ? 'Say yes when Windows asks, then choose your devices.' : lucidSetupWords(lucid)} error={error}>
         {lucid.running ? <Spinner label="Setting up Lucid" /> : (
-          <button type="button" className="exo-set-btn" disabled={busy} onClick={() => run(host.lucid('setup'), "Lucid didn't start. Try again.")}>Set up</button>
+          <ActionButton className="exo-set-btn" timeoutMs={null} context="PcStep.lucidSetup" fallback="Lucid didn't start. Try again."
+            why="none" onFailed={failure => setError(failure.text)}
+            onPress={() => { setError(null); return host.lucid('setup').then(next => { onLucid(next); return next.message ? { ok: false, message: next.message } : next }) }}>
+            Set up
+          </ActionButton>
         )}
       </Row>
     )

@@ -3,6 +3,7 @@ import { host, type PadSettings, type PadStrength } from '../../lib/host'
 import { report } from '../../lib/report'
 import { Choice } from '../settings/Choice'
 import { Row, SwitchRow } from '../settings/parts'
+import { errorText } from '../../lib/errorWords'
 
 const DEFAULTS: PadSettings = { light: null, playerLight: false, micOff: false, speakerOff: false, vibration: 'full', triggerEffects: 'full' }
 
@@ -42,7 +43,7 @@ export function PadSettingsRows({ id, usb, settings }: { id: string; usb: boolea
     setError(null)
     try {
       const result = await host.controllerSettings(id, next)
-      if (!result.ok) { setCurrent(before); setError(result.message ?? 'The controller didn’t take it. Try again.') }
+      if (!result.ok) { setCurrent(before); setError(errorText(result.message, 'The controller didn’t take it. Try again.')) }
     } catch (cause) {
       report(cause, 'PadSettings.change')
       setCurrent(before)

@@ -15,6 +15,7 @@ import { SteamImage, StoreCard, useWarm } from './StoreCard'
 import { StoreGamePage } from './StoreGamePage'
 import { artSources, localDay, steamArt, steamSaleMarks, steamSaleNow, useOwned, useWishlist } from './storeData'
 import { ErrorState } from '../ui/ErrorState'
+import { errorText } from '../../lib/errorWords'
 
 type Tab = 'home' | 'calendar' | 'wishlist'
 /** A card at its place in the view; arrive: the view is showing its items for the first time. */
@@ -477,7 +478,7 @@ function useCalendar(active: boolean) {
     try {
       const res = await host.storeCalendar()
       if (mine !== latest.current) return
-      if (res.ok) { setData(res); setError(null) } else setError(res.message ?? 'The store could not be reached.')
+      if (res.ok) { setData(res); setError(null) } else setError(errorText(res.message, 'Exo couldn’t reach the store. Try again.'))
     } catch (e) {
       report(e, 'Store.calendar')
       if (mine === latest.current) setError('The store could not be reached. Check your connection and try again.')
@@ -543,7 +544,7 @@ function useHome() {
         setData(d => d && d.at === res.at ? d : res)
         if (keptHome?.at !== res.at) keptHome = res
         setError(null)
-      } else setError(res.message ?? 'The store could not be reached.')
+      } else setError(errorText(res.message, 'Exo couldn’t reach the store. Try again.'))
     } catch (e) {
       report(e, 'Store.home')
       setError('The store could not be reached. Check your connection and try again.')
@@ -578,7 +579,7 @@ function useSearch(query: string) {
           // A newer query replaced this one: live is false and the answer is dropped.
           if (!live) return
           if (res.ok) setResult({ items: res.items, query: q })
-          else setError(res.message ?? 'Search did not work.')
+          else setError(errorText(res.message, 'Search didn’t work. Try again.'))
         })
         .catch((e: unknown) => { report(e, 'Store.search'); if (live) setError('Search could not reach the store. Try again.') })
     }, 250)

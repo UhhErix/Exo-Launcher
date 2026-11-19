@@ -5,6 +5,7 @@ import type { CaptureItem } from '../../lib/capture'
 import { blurCell, centeredCrop, CROP_SHAPES, shapedCrop, type CropShape, type Rect } from '../../lib/gallery'
 import { ErrorNote } from '../ui/ErrorNote'
 import { EditorShell, PresetTile, type EditorTab } from './EditorShell'
+import { errorText } from '../../lib/errorWords'
 
 type Tab = 'crop' | 'markup' | 'blur' | 'text'
 type Markup = 'arrow' | 'box' | 'highlight' | 'note'
@@ -193,7 +194,7 @@ export function SnipEditor({ item, onDone }: { item: CaptureItem; onDone: (saved
     const next = new Image()
     next.crossOrigin = 'anonymous'
     next.onload = () => setImage(next)
-    next.onerror = () => setError('Exo could not open the snip. Cancel and open it again.')
+    next.onerror = () => setError('Exo couldn’t open the snip. Cancel and open it again.')
     next.src = item.url
     // Leaving the editor lets go of the decoded snip and the canvas's pixels at once, not whenever memory runs short.
     const drawn = canvas.current
@@ -254,10 +255,10 @@ export function SnipEditor({ item, onDone }: { item: CaptureItem; onDone: (saved
     setSaid(null)
     try {
       const result = await host.captureText(item.id, area && { x: area.x, y: area.y, width: area.w, height: area.h })
-      if (!result.ok || !result.text) { setError(result.message ?? 'No text found there.'); return }
+      if (!result.ok || !result.text) { setError(errorText(result.message, 'No text found there.')); return }
       await navigator.clipboard.writeText(result.text)
       setSaid(`Copied: ${result.text.length > 80 ? result.text.slice(0, 80) + '…' : result.text}`)
-    } catch (e) { setError(e instanceof Error ? e.message : 'Exo could not read the text. Try again.') }
+    } catch (e) { setError(errorText(e, 'Exo couldn’t read the text. Try again.')) }
     finally { setReading(false) }
   }
 
@@ -265,7 +266,7 @@ export function SnipEditor({ item, onDone }: { item: CaptureItem; onDone: (saved
     if (!image || busy) return
     setBusy(true)
     setError(null)
-    const failed = 'Exo could not save the snip. Try again.'
+    const failed = 'Exo couldn’t save the snip. Try again.'
     const out = document.createElement('canvas')
     try {
       paint(out, image, marks, null, true)
@@ -273,9 +274,9 @@ export function SnipEditor({ item, onDone }: { item: CaptureItem; onDone: (saved
       // Let go of the full-size pixels before the host's round trip.
       out.width = out.height = 0
       const result = await host.captureSaveImage(item.id, png)
-      if (!result.ok) { setError(result.message ?? failed); return }
+      if (!result.ok) { setError(errorText(result.message, failed)); return }
       onDone(result.item ?? null)
-    } catch (e) { setError(e instanceof Error ? e.message : failed) }
+    } catch (e) { setError(errorText(e, failed)) }
     finally { out.width = out.height = 0; setBusy(false) }
   }
 

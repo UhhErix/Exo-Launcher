@@ -11,6 +11,7 @@ import { Dialog } from './settingsAccess'
 import { EmojiField, ServerGuide, guideState, type Guide } from './settingsGuide'
 import { Spinner } from '../ui/Spinner'
 import { ErrorNote } from '../ui/ErrorNote'
+import { errorText } from '../../lib/errorWords'
 
 /**
  * Discord's Onboarding (a Community server's, for Manage Server and Manage Roles): on or off, Advanced Server Setup,
@@ -118,7 +119,7 @@ function Overview({ place, data, onEdit, onChanged }: { place: OnboardingPlace; 
     setBusy(true); setError(null)
     const result = await work()
     setBusy(false)
-    if (result.ok) onChanged(); else setError(result.message ?? 'Discord did not save that.')
+    if (result.ok) onChanged(); else setError(errorText(result.message, 'Discord didn’t save that.'))
   }
   // Turning onboarding on turns a finished Server Guide on with it, as Discord's Enable Onboarding does.
   const enable = () => run(async () => {
@@ -198,7 +199,7 @@ function DefaultChannels({ place, setup, onBack, onSaved }: { place: OnboardingP
     setBusy(true)
     const result = await admin('saveOnboarding', { guildId: place.guildId, defaultChannelIds: [...ids].filter(id => known.has(id)) })
     setBusy(false)
-    if (result.ok) onSaved(); else setError(result.message ?? 'Discord did not save that.')
+    if (result.ok) onSaved(); else setError(errorText(result.message, 'Discord didn’t save that.'))
   }
   return (
     <>
@@ -285,7 +286,7 @@ function Questions({ place, setup, onBack, onSaved }: { place: OnboardingPlace; 
     setBusy(true)
     const result = await admin('saveOnboarding', { guildId: place.guildId, prompts: list })
     setBusy(false)
-    if (result.ok) onSaved(); else setError(result.message ?? 'Discord did not save that.')
+    if (result.ok) onSaved(); else setError(errorText(result.message, 'Discord didn’t save that.'))
   }
   const question = editing ? list.find(q => q.id === editing.question) : undefined
   const card = (q: Question) => (
