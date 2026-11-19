@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * The corresponding source of the copyleft add-ons Exo ships itself, for getexo.app/source (exo-site src/source.js): Exo Mouse
- * (AGPL-3.0-or-later, `mouse/`), Exo Shaders (GPL-3.0-or-later, the exo-shaders repo at the commit Build-Release pinned),
+ * (AGPL-3.0-or-later, `mouse/`), Exo Shaders (GPL-3.0-or-later, `shaders/`: Exo's fork of SCSKiller with its native source),
  * Exo Shield (GPL-3.0, the extension folder shipped in the Launcher) and OBS Studio's game capture hook (GPL-2.0-or-later,
  * unchanged OBS files that Exo Capture runs). source-mirror.mjs does the same for the third-party GPL tools (Nile and the
  * others); this script is for Exo's own and the bundled OBS source. Exo Capture itself is not here: it is under its own
@@ -11,7 +11,7 @@
  * ships them. They are made from committed trees only (git archive: no node_modules, no dist, no working-tree changes), so
  * the same commits give the same bytes. Each holds its licence file, and EXO-SOURCE.txt names the commit it came from.
  *
- *   node addon-source.mjs build --launcher <checkout> --rev <commit> --shaders <exo-shaders checkout> --shaders-commit <sha>
+ *   node addon-source.mjs build --launcher <apps/launcher of a checkout> --rev <commit>
  *                               [--out artifacts/source]       local only: archives, entries.json, SHA256SUMS
  *   node addon-source.mjs fetch-obs --tag 32.2.2 [--out artifacts/source]
  *                               the one step that reads from the network: OBS Studio's tag archive from its upstream
@@ -36,13 +36,25 @@ const NAME = /^[a-z0-9-]{1,40}$/
 const VERSION = /^\d{1,4}\.\d{1,4}\.\d{1,4}(?:-[0-9A-Za-z.]{1,20})?$/
 const sha256 = (bytes) => createHash('sha256').update(bytes).digest('hex')
 
-/** The add-ons built from git trees. `tree` is a git tree-ish; `licenceFile` is the licence in it and `marker` a line of its text. */
-export function treeAddons({ launcher, rev, shaders, shadersCommit }) {
+/**
+ * The add-ons built from git trees, all folders of the launcher's own tree at one commit. `repo` is the repository's top
+ * (git archive in a subfolder keeps only that subfolder's part of the tree) and `prefix` the launcher's folder in it
+ * (`apps/launcher/` in the monorepo, '' for a repository of its own); `tree` is a git tree-ish; `licenceFile` is the
+ * licence in it and `marker` a line of its text.
+ */
+export function treeAddons({ repo, prefix = '', rev }) {
   return [
-    { name: 'exo-mouse', title: 'Exo Mouse', license: 'AGPL-3.0-or-later', repo: launcher, tree: `${rev}:mouse`, licenceFile: 'LICENSE', marker: 'GNU AFFERO GENERAL PUBLIC LICENSE' },
-    { name: 'exo-shaders', title: 'Exo Shaders', license: 'GPL-3.0-or-later', repo: shaders, tree: shadersCommit, licenceFile: 'LICENSE', marker: 'GNU GENERAL PUBLIC LICENSE' },
-    { name: 'exo-shield', title: 'Exo Shield', license: 'GPL-3.0', repo: launcher, tree: `${rev}:ExoLauncher/Assets/Extensions/exo-shield`, licenceFile: 'LICENSE.txt', marker: 'GNU GENERAL PUBLIC LICENSE' },
+    { name: 'exo-mouse', title: 'Exo Mouse', license: 'AGPL-3.0-or-later', repo, tree: `${rev}:${prefix}mouse`, licenceFile: 'LICENSE', marker: 'GNU AFFERO GENERAL PUBLIC LICENSE' },
+    { name: 'exo-shaders', title: 'Exo Shaders', license: 'GPL-3.0-or-later', repo, tree: `${rev}:${prefix}shaders`, licenceFile: 'LICENSE', marker: 'GNU GENERAL PUBLIC LICENSE' },
+    { name: 'exo-shield', title: 'Exo Shield', license: 'GPL-3.0', repo, tree: `${rev}:${prefix}ExoLauncher/Assets/Extensions/exo-shield`, licenceFile: 'LICENSE.txt', marker: 'GNU GENERAL PUBLIC LICENSE' },
   ]
+}
+
+/** The repository's top and the launcher's folder in it (`launcher`: the launcher's own folder, apps/launcher in the monorepo). */
+export function launcherRepo(launcher) {
+  const repo = git(launcher, ['rev-parse', '--show-toplevel'], { encoding: 'utf8' }).trim()
+  const prefix = git(launcher, ['rev-parse', '--show-prefix'], { encoding: 'utf8' }).trim()
+  return { repo, prefix }
 }
 
 const git = (repo, args, options = {}) =>
@@ -174,13 +186,10 @@ async function main(argv) {
     return value
   }
   if (command === 'build') {
-    const launcher = need('--launcher')
-    const commit = commitOf(launcher, need('--rev'))
-    const version = git(launcher, ['show', `${commit}:VERSION`], { encoding: 'utf8' }).trim()
-    const shaders = need('--shaders')
-    const shadersCommit = commitOf(shaders, need('--shaders-commit'))
-    const archives = treeAddons({ launcher, rev: commit, shaders, shadersCommit }).map((def) =>
-      buildTreeArchive(def, version, def.repo === shaders ? shadersCommit : commit))
+    const { repo, prefix } = launcherRepo(need('--launcher'))
+    const commit = commitOf(repo, need('--rev'))
+    const version = git(repo, ['show', `${commit}:${prefix}VERSION`], { encoding: 'utf8' }).trim()
+    const archives = treeAddons({ repo, prefix, rev: commit }).map((def) => buildTreeArchive(def, version, commit))
     const entries = writeOut(flag('--out', 'artifacts/source'), archives)
     for (const a of archives) console.log(`${a.file}  ${a.bytes} bytes  ${a.sha256}  from ${a.commit}`)
     console.log(JSON.stringify(entries, null, 2))
