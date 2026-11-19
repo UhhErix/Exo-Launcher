@@ -478,6 +478,15 @@ try {
 
         Step "3. Point $App/latest.json at $Tag, then check $Base/v1/$App/latest"
         $hadPreviousLatest = Get-Object "$App/latest.json" $previousLatest
+        # Read again from the bucket itself (the address's answer is a minute old at the edge), right before the write: a
+        # newer tag published meanwhile (another run, by hand or by the GitHub workflow) is never pointed back at this one.
+        if ($hadPreviousLatest) {
+            $bucketTag = ''
+            try { $bucketTag = [string](Get-Content -LiteralPath $previousLatest -Raw | ConvertFrom-Json).tag } catch { $bucketTag = '' }
+            if ($bucketTag -match '^v\d{1,4}\.\d{1,4}\.\d{1,4}$' -and [version]$bucketTag.Substring(1) -gt [version]$Version) {
+                throw "$Bucket/$App/latest.json already names $bucketTag, newer than $Tag (published during this run); latest.json was not touched."
+            }
+        }
         $latestUploaded = $true
         Publish-Object "$App/latest.json" $latestFile 'application/json'
         $servedTag = ''

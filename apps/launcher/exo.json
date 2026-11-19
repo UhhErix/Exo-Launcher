@@ -3,6 +3,7 @@
     { "name": "ui", "cwd": "ui", "cmd": "npm run -s check && npm run -s dead && npm run -s build" },
     { "name": "host", "cmd": "dotnet build ExoLauncher.Tests/ExoLauncher.Tests.csproj -c Release -p:Platform=x64 -m:1 -clp:ErrorsOnly" },
     { "name": "test", "cmd": "dotnet test --project ExoLauncher.Tests -c Release -p:Platform=x64 --no-build" },
+    { "name": "shaders", "cwd": "shaders", "cmd": "dotnet build engine/src/ExoShaders.Service/ExoShaders.Service.csproj -c Release -p:ExoBuild=true -clp:ErrorsOnly && dotnet test engine/tests/ExoShaders.Service.Tests -c Release" },
     { "name": "tools", "cmd": "node --test tools/exo.test.mjs tools/e2e/lib/affected.test.mjs" }
   ]
 }
