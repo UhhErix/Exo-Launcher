@@ -160,4 +160,114 @@ public sealed class SteamOverlayConfigTests
         Assert.Empty(overruled.Writes);
         Assert.Equal("on!", overruled.Record["3768760"]);
     }
+
+    [Fact]
+    public void OverlayWanted_defaults_off_for_all_installed_games_union_appinfo_and_preserves_opt_ins()
+    {
+        var info = new Dictionary<string, SteamKeyValues>(StringComparer.Ordinal)
+        {
+            ["730"] = SteamInputConfigTests.Cs2App,
+            ["1593500"] = SteamInputConfigTests.GodOfWarApp,
+        };
+        // 999000 is installed locally even though missing from appinfo.vdf.
+        var wanted = ExoLauncher.Services.WebHostBridge.OverlayWanted(["999000", "730"], info);
+        Assert.Equal(new[] { "1593500", "730", "999000" }, wanted.Keys.Order());
+        Assert.All(wanted.Values, want => Assert.False(want));
+
+        var existingRecord = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["730"] = "on=?",
+            ["1593500"] = "on!",
+        };
+        var appsOff730 = SteamOverlayConfig.Apps(SteamOverlayConfig.Write(LocalConfig, new Dictionary<string, bool> { ["730"] = false }));
+        var (writes, nextRecord) = SteamOverlayConfig.Plan(appsOff730, wanted, existingRecord);
+        Assert.True(writes["730"]);
+        Assert.Equal("on=?", nextRecord["730"]);
+        Assert.False(writes.ContainsKey("1593500"));
+        Assert.Equal("on!", nextRecord["1593500"]);
+        Assert.False(writes["999000"]);
+        Assert.Equal("off?", nextRecord["999000"]);
+    }
+
+    [Fact]
+    public void PreExo_state_is_recorded_across_all_accounts_and_reverses_cleanly_without_touching_global_setting()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "exo-steam-overlay-multi-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            var acct1Dir = Path.Combine(root, "userdata", "111111", "config");
+            var acct2Dir = Path.Combine(root, "userdata", "222222", "config");
+            Directory.CreateDirectory(acct1Dir);
+            Directory.CreateDirectory(acct2Dir);
+
+            // Account 1: 3768760 explicitly on ("1"), 1593500 absent, global EnableGameOverlay = "0".
+            var vdf1Before = SteamOverlayConfig.SetValue(LocalConfig, ["UserLocalConfigStore", "system"], "EnableGameOverlay", "0");
+            // Account 2: 3768760 absent, 1593500 explicitly off ("0").
+            const string vdf2Before =
+                "\"UserLocalConfigStore\"\n{\n\t\"system\"\n\t{\n\t\t\"EnableGameOverlay\"\t\t\"1\"\n\t}\n\t\"apps\"\n\t{\n\t\t\"1593500\"\n\t\t{\n\t\t\t\"OverlayAppEnable\"\t\t\"0\"\n\t\t}\n\t}\n}\n";
+            var path1 = Path.Combine(acct1Dir, "localconfig.vdf");
+            var path2 = Path.Combine(acct2Dir, "localconfig.vdf");
+            File.WriteAllText(path1, vdf1Before);
+            File.WriteAllText(path2, vdf2Before);
+
+            var accounts = ExoLauncher.Services.WebHostBridge.AccountLocalConfigs(root, path1);
+            Assert.Equal(2, accounts.Count);
+
+            var wanted = ExoLauncher.Services.WebHostBridge.OverlayWanted(["3768760", "1593500"], new Dictionary<string, SteamKeyValues>());
+            var goals = SteamOverlayConfig.EffectiveGoals(wanted, new Dictionary<string, string>());
+            var prior = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+            var writes1 = SteamOverlayConfig.WritesForAccount(SteamOverlayConfig.Apps(vdf1Before), goals);
+            SteamOverlayConfig.RecordPriors("111111", SteamOverlayConfig.Apps(vdf1Before), writes1.Keys, prior);
+            var vdf1After = SteamOverlayConfig.Write(vdf1Before, writes1);
+
+            var writes2 = SteamOverlayConfig.WritesForAccount(SteamOverlayConfig.Apps(vdf2Before), goals);
+            SteamOverlayConfig.RecordPriors("222222", SteamOverlayConfig.Apps(vdf2Before), writes2.Keys, prior);
+            var vdf2After = SteamOverlayConfig.Write(vdf2Before, writes2);
+
+            // Subsequent RecordPriors must never overwrite the original pre-Exo snapshot.
+            SteamOverlayConfig.RecordPriors("111111", SteamOverlayConfig.Apps(vdf1After), ["3768760", "1593500"], prior);
+            Assert.Equal("1", prior["111111/3768760"]);
+            Assert.Equal("", prior["111111/1593500"]);
+            Assert.Equal("", prior["222222/3768760"]);
+            Assert.False(prior.ContainsKey("222222/1593500"));
+
+            // Global EnableGameOverlay was never touched.
+            Assert.False(SteamOverlayConfig.GlobalEnabled(vdf1After));
+            Assert.True(SteamOverlayConfig.GlobalEnabled(vdf2After));
+
+            // Reversing restores the exact pre-Exo OverlayAppEnable state on both accounts.
+            var restored1 = SteamOverlayConfig.Restore(vdf1After, "111111", prior);
+            var restored2 = SteamOverlayConfig.Restore(vdf2After, "222222", prior);
+            Assert.True(SteamOverlayConfig.Read(SteamOverlayConfig.Apps(restored1), "3768760"));
+            Assert.Null(SteamOverlayConfig.Read(SteamOverlayConfig.Apps(restored1), "1593500"));
+            Assert.Null(SteamOverlayConfig.Read(SteamOverlayConfig.Apps(restored2), "3768760"));
+            Assert.False(SteamOverlayConfig.Read(SteamOverlayConfig.Apps(restored2), "1593500"));
+            Assert.False(SteamOverlayConfig.GlobalEnabled(restored1));
+        }
+        finally
+        {
+            try { DeletionGate.DeleteDirectory(root, recursive: true); } catch { /* temp */ }
+        }
+    }
+
+    [Fact]
+    public void Properties_warns_when_opted_on_while_global_EnableGameOverlay_is_zero()
+    {
+        var globalOffVdf = SteamOverlayConfig.SetValue(LocalConfig, ["UserLocalConfigStore", "system"], "EnableGameOverlay", "0");
+        Assert.False(SteamOverlayConfig.GlobalEnabled(globalOffVdf));
+        Assert.True(SteamOverlayConfig.GlobalEnabled(LocalConfig));
+
+        var (optedOn, warning) = ExoLauncher.Services.WebHostBridge.ResolveSteamOverlayState("on=", globalOffVdf, "1593500");
+        Assert.True(optedOn);
+        Assert.Equal(ExoLauncher.Services.WebHostBridge.GlobalOverlayOffWarning, warning);
+
+        var (optedOff, noWarnOff) = ExoLauncher.Services.WebHostBridge.ResolveSteamOverlayState("off", globalOffVdf, "1593500");
+        Assert.False(optedOff);
+        Assert.Null(noWarnOff);
+
+        var (globalOn, noWarnGlobalOn) = ExoLauncher.Services.WebHostBridge.ResolveSteamOverlayState("on=", LocalConfig, "1593500");
+        Assert.True(globalOn);
+        Assert.Null(noWarnGlobalOn);
+    }
 }

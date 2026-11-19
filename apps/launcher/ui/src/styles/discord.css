@@ -5556,11 +5556,6 @@ button.exo-dc-gifv {
   color: var(--color-fg);
 }
 
-.exo-dc-picker-count {
-  color: var(--color-faint);
-  font-size: var(--exo-type-small);
-}
-
 .exo-dc .exo-dc-gif-grid {
   grid-auto-rows: max-content;
   align-content: start;

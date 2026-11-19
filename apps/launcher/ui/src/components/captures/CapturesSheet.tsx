@@ -7,6 +7,7 @@ import { byDay, filterCaptures, monthTitle, onThisDay, scrubStops, type Day, typ
 import { reelOfGame, reelOfPicked } from '../../lib/reel'
 import type { NotesRequest } from '../../lib/notes'
 import { shouldReduceMotion } from '../../lib/motionPreference'
+import { allowHover } from '../../lib/hoverGate'
 import { report } from '../../lib/report'
 import { CaptureSettingsView } from './CaptureSettings'
 import { ClipEditor, playback, playerKey, useFrameKeys } from './ClipEditor'
@@ -90,7 +91,7 @@ function CaptureCard({ item, selected, badge, onOpen, onFavourite, onDelete }: {
   const [hover, setHover] = useState(false)
   const name = `${item.kind === 'image' ? 'Screenshot' : 'Clip'} ${when(item.created)}`
   return (
-    <div className={`exo-capture-card${selected ? ' is-selected' : ''}`} onPointerEnter={() => setHover(true)} onPointerLeave={() => setHover(false)}>
+    <div className={`exo-capture-card${selected ? ' is-selected' : ''}`} onPointerEnter={event => { if (allowHover(event)) setHover(true) }} onPointerLeave={() => setHover(false)}>
       <button type="button" className="exo-capture-thumb" data-capture-id={item.id} onClick={onOpen} aria-label={name} aria-pressed={selected ?? undefined}>
         <ArtImg src={item.thumb} loading="lazy" decoding="async" fallback={<span className="exo-capture-thumb-empty" />} />
         {hover && selected === null && item.kind === 'video' && !shouldReduceMotion() ? <video src={item.url} muted autoPlay loop playsInline preload="metadata" /> : null}

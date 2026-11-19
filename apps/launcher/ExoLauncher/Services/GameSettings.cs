@@ -91,10 +91,10 @@ internal static partial class GameSettings
     internal sealed record Remembered(string Was, string Set);
 
     /// <summary>The profile for a game, if Exo has one: by what its install folder holds (a Riot game's folder is never looked in, and Riot games have none).</summary>
-    internal static Profile? For(GameEntry game, Pc pc) =>
+    internal static Profile? For(GameEntry game, Pc pc, bool smoothMotion = false) =>
         // Every writer is behind the one anti-cheat answer: a game's own settings file is allowed with anti-cheat found
         // (DIRECTION.md point 4), never for Riot or Vanguard, never when Exo could not read the game's install.
-        AntiCheatCheck.Allows(game, AntiCheatCheck.Cached(game), AntiCheatCheck.Change.GameSettingsFile) && ProfileFor(game, pc) is { } profile ? Described(profile, game, pc) : null;
+        AntiCheatCheck.Allows(game, AntiCheatCheck.Cached(game), AntiCheatCheck.Change.GameSettingsFile) && ProfileFor(game, pc, smoothMotion) is { } profile ? Described(profile, game, pc) : null;
 
     /// <summary>The profile with what Keep needs to know about this game and this PC.</summary>
     private static Profile Described(Profile profile, GameEntry game, Pc pc) => WithInputs(profile, pc) with
@@ -123,7 +123,7 @@ internal static partial class GameSettings
     internal static string? AntiCheatNote(GameEntry game, Pc pc) =>
         ProfileFor(game, pc) is null ? null : AntiCheatCheck.Sentence(game, AntiCheatCheck.Cached(game), AntiCheatCheck.Change.GameSettingsFile);
 
-    private static Profile? ProfileFor(GameEntry game, Pc pc)
+    private static Profile? ProfileFor(GameEntry game, Pc pc, bool smoothMotion = false)
     {
         if (!game.Installed || string.IsNullOrEmpty(game.Path) || game.Store == StoreKind.Riot) return null;
         if (Directory.Exists(Path.Combine(game.Path, "cod26"))) return ModernWarfare4(Chosen(pc, "mw4"));
@@ -131,6 +131,7 @@ internal static partial class GameSettings
         if (IsControlResonant(game.Path)) return ControlResonant(Chosen(pc, "control-resonant"));
         if (IsHellIsUs(game.Path)) return HellIsUs(Chosen(pc, HellIsUsId), HellIsUsHasFrameGeneration(game.Path));
         if (IsPhantomBlade(game.Path)) return PhantomBladeZero(pc.HdrPeak, Chosen(pc, "pbz").Fullscreen);
+        if (IsWutheringWaves(game)) return WutheringWaves(pc, game, smoothMotion);
         if (RecipeFor(game) is { } recipe)
         {
             var profile = ProfileOf(recipe, Chosen(pc, recipe.Id));
@@ -540,6 +541,8 @@ internal static partial class GameSettings
             // The game, its launcher or a helper runs: it writes the file itself as it closes, so nothing is written now and
             // what Optimize keeps on stays as it was. The page says so first; this is the answer that counts.
             if (Busy(profile)) return false;
+            // NVIDIA-only profiles (such as Wuthering Waves) have no local settings file to edit or wait for.
+            if (string.IsNullOrEmpty(profile.File)) return true;
             // A file the game or an antivirus holds is not "no file": nothing is known about it, so nothing changes and the answer is no.
             if (!TryReadAll(profile, out var files)) return false;
             if (files.Count == 0)

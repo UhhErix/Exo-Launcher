@@ -1,16 +1,22 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { host } from '../../lib/host'
+import { coverArtForTrack } from '../../lib/musicCover'
 import { musicTime, playbackAnchor, type MusicPlayback } from '../../lib/music'
 import type { MusicAdapter } from '../../lib/musicAdapters'
+import { shouldReduceMotion } from '../../lib/motionPreference'
 import type { PlayerState } from '../../lib/player'
 import { anythingOpen } from '../../lib/dismiss'
+import { report } from '../../lib/report'
 import { ExitFullScreen } from '../../brand/icons'
 import { MusicClock, MusicSeek } from '../shell/MusicMiniPlayer'
+import { MusicVolume } from '../shell/MusicVolume'
 import { ErrorNote } from '../ui/ErrorNote'
 import { Art } from './Art'
 import { BarControls, IconToggle, SongVerdict } from './controls'
 import { Lyrics, SongArtists } from './panels'
 import { runAction, usePlayer } from './playerContext'
 import { BAR_IDLE_MS, barMayHide, wakesBar } from './immersiveRules'
+import { immersiveVolumeAction, nextImmersiveVolume } from '../../lib/musicVolume'
 
 /**
  * Now playing, full window (DESIGN.md › Rooms › Music): the cover large in its own light (the art, far out of focus and
@@ -18,9 +24,11 @@ import { BAR_IDLE_MS, barMayHide, wakesBar } from './immersiveRules'
  * service has them. The Bar fades away while nothing needs it and comes back with the pointer near the top or any key;
  * Esc and the exit control always leave. Still while it shows: only the sung line moves.
  */
-export function Immersive({ player, live, active, onLeave, onChanged }: {
+export function Immersive({ player, live, volume, onVolume, active, onLeave, onChanged }: {
   player: PlayerState | null
   live: { playback: MusicPlayback; at: number } | null
+  volume?: number | null
+  onVolume: () => void
   /** The room on screen with nothing over it: the Bar may go, and Esc is Immersive's. */
   active: boolean
   onLeave: () => void
@@ -28,13 +36,14 @@ export function Immersive({ player, live, active, onLeave, onChanged }: {
 }) {
   const playback = live?.playback ?? null
   const uri = player?.trackUri ?? ''
-  const art = player?.image || playback?.artworkDataUrl || undefined
+  const art = coverArtForTrack(player, playback)
   // How many lines the song's lyrics have, once known; none centres the song alone.
   const [lyrics, setLyrics] = useState<{ uri: string; count: number | null }>({ uri: '', count: null })
   const onLines = useCallback((count: number | null) => setLyrics({ uri, count }), [uri])
   const withLyrics = !!uri && !(lyrics.uri === uri && lyrics.count === 0)
   useBarAway(active)
   useEscape(active, onLeave)
+  useVolumeKeys(active, volume ?? null, onVolume)
   // Focus comes in with it (the room under it is inert), so keys land here and a Bar tab left focused can let the Bar go.
   const section = useRef<HTMLElement>(null)
   useEffect(() => { section.current?.focus({ preventScroll: true }) }, [])
@@ -42,7 +51,7 @@ export function Immersive({ player, live, active, onLeave, onChanged }: {
     <section ref={section} tabIndex={-1} className={`exo-music-immersive${withLyrics ? ' has-lyrics' : ''}`} aria-label="Now playing, full window">
       <AmbientLight src={art} />
       <div className="exo-music-immersive-stage">
-        <Song player={player} live={live} art={art} onLeave={onLeave} onChanged={onChanged} />
+        <Song player={player} live={live} art={art} volume={volume ?? null} onVolume={onVolume} onLeave={onLeave} onChanged={onChanged} />
         {withLyrics ? (
           <div className="exo-music-immersive-lyrics">
             <Lyrics uri={uri} playback={playback} receivedAt={live?.at ?? 0} onLines={onLines} />
@@ -54,10 +63,12 @@ export function Immersive({ player, live, active, onLeave, onChanged }: {
 }
 
 /** The song's column: its cover (what flies in and out), its name and artists, its place, and its controls with the exit. */
-function Song({ player, live, art, onLeave, onChanged }: {
+function Song({ player, live, art, volume, onVolume, onLeave, onChanged }: {
   player: PlayerState | null
   live: { playback: MusicPlayback; at: number } | null
   art?: string
+  volume: number | null
+  onVolume: () => void
   onLeave: () => void
   onChanged: () => void
 }) {
@@ -90,6 +101,7 @@ function Song({ player, live, art, onLeave, onChanged }: {
           <IconToggle label="Leave full window" onPress={onLeave}><ExitFullScreen size={16} /></IconToggle>
         </span>
       </div>
+      <MusicVolume className="exo-music-immersive-volume" volume={volume} onRefresh={onVolume} />
     </div>
   )
 }
@@ -127,7 +139,11 @@ function AmbientLight({ src }: { src?: string }) {
   const next = useRef(0)
   useEffect(() => {
     if (!src) { setLayers([]); return }
-    setLayers(previous => previous[previous.length - 1]?.src === src ? previous : [...previous.slice(-1), { src, id: ++next.current }])
+    setLayers(previous => {
+      if (previous[previous.length - 1]?.src === src) return previous
+      const layer = { src, id: ++next.current }
+      return shouldReduceMotion() ? [layer] : [...previous.slice(-1), layer]
+    })
   }, [src])
   return (
     <div className="exo-music-immersive-light" aria-hidden="true">
@@ -142,6 +158,14 @@ function AmbientLight({ src }: { src?: string }) {
 function LightLayer({ src, onShown }: { src: string; onShown?: () => void }) {
   const canvas = useRef<HTMLCanvasElement>(null)
   const [drawn, setDrawn] = useState(false)
+  const shownRef = useRef(onShown)
+  const doneRef = useRef(false)
+  useEffect(() => { shownRef.current = onShown })
+  const finish = useCallback(() => {
+    if (doneRef.current) return
+    doneRef.current = true
+    shownRef.current?.()
+  }, [])
   useEffect(() => {
     let live = true
     const image = new Image()
@@ -159,7 +183,14 @@ function LightLayer({ src, onShown }: { src: string; onShown?: () => void }) {
     }, () => { })
     return () => { live = false }
   }, [src])
-  return <canvas ref={canvas} width={LIGHT_PX} height={LIGHT_PX} className={drawn ? 'is-drawn' : undefined} onTransitionEnd={onShown} />
+  useEffect(() => {
+    if (!drawn) return
+    if (shouldReduceMotion()) { finish(); return }
+    // Reduce motion suppresses transitions, and occluded windows can skip transitionend: never leak old canvas layers.
+    const fallback = window.setTimeout(finish, 700)
+    return () => window.clearTimeout(fallback)
+  }, [drawn, finish])
+  return <canvas ref={canvas} width={LIGHT_PX} height={LIGHT_PX} className={drawn ? 'is-drawn' : undefined} onTransitionEnd={finish} />
 }
 
 /**
@@ -219,5 +250,32 @@ function useEscape(active: boolean, onLeave: () => void) {
     }
     window.addEventListener('keydown', onKey, true)
     return () => window.removeEventListener('keydown', onKey, true)
+  }, [active])
+}
+
+/** M mutes or restores, and Up/Down step volume by 5% while Immersive is on screen and no control owns the key. */
+function useVolumeKeys(active: boolean, volume: number | null, onVolume: () => void) {
+  const lastAudible = useRef(volume && volume > 0 ? volume : 25)
+  useEffect(() => { if (volume !== null && volume > 0) lastAudible.current = volume }, [volume])
+  const latest = useRef({ volume, onVolume })
+  useEffect(() => { latest.current = { volume, onVolume } })
+  useEffect(() => {
+    if (!active) return
+    const onKey = (event: KeyboardEvent) => {
+      if (event.defaultPrevented || event.ctrlKey || event.altKey || event.metaKey || anythingOpen()) return
+      const action = immersiveVolumeAction(event.key)
+      if (action === null) return
+      const target = event.target instanceof Element ? event.target : null
+      if (target?.closest('input:not([type="range"]), textarea, select, [contenteditable="true"], [role="menu"], [role="listbox"], [popover]:popover-open, dialog, [aria-modal="true"]')) return
+      if (action !== 'mute' && target?.closest('input[type="range"], [role="slider"]')) return
+      const current = latest.current.volume
+      if (current === null) return
+      event.preventDefault()
+      if (action === 'mute' && current > 0) lastAudible.current = current
+      const next = nextImmersiveVolume(action, current, lastAudible.current)
+      void host.musicVolume(next).then(() => latest.current.onVolume()).catch(error => report(error, 'Immersive.volume'))
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
   }, [active])
 }

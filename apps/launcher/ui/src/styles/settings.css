@@ -258,6 +258,12 @@ span.exo-error-note {
   margin: 0;
 }
 
+.exo-set-key-form .exo-field.is-short {
+  flex: 0 1 132px;
+  width: 132px;
+  min-width: 96px;
+}
+
 /* Progress buttons (update) */
 
 /* A row's control shows the Exo bar at a fixed width while it works. */

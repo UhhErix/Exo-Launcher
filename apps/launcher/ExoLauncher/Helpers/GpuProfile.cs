@@ -47,7 +47,7 @@ internal static partial class GpuProfile
     /// <summary>Free space the cache's drive needs for the Unlimited cache; below it the driver's default is written.</summary>
     internal const long UnlimitedMinFreeGb = 50;
     // Preset letters are A = 1 ... O = 15; Recommended lets NVIDIA pick per mode (SR/RR).
-    private const uint PresetA = 1, PresetF = 6, PresetK = 11, Recommended = 0x00FFFFFF;
+    internal const uint PresetA = 1, PresetF = 6, PresetK = 11, Recommended = 0x00FFFFFF;
 
     /// <summary>What the profile is built for: the GeForce series (0 = not one).</summary>
     internal sealed record Variant(int Series)

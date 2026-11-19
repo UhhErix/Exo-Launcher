@@ -412,6 +412,7 @@ public sealed partial class MainWindow
         title = snapshot.Title,
         artist = snapshot.Artist,
         artworkDataUrl = snapshot.ArtworkDataUrl,
+        artworkUrl = snapshot.ArtworkUrl,
         positionMs = snapshot.PositionMs,
         durationMs = snapshot.DurationMs,
         positionAgeMs = Math.Max(0, Environment.TickCount64 - snapshot.CapturedAt),

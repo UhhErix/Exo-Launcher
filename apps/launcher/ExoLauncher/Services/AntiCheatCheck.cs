@@ -689,7 +689,8 @@ internal static partial class AntiCheatCheck
         ("gameguard*", "nProtect GameGuard", Rule.Module), ("ricochet*", Ricochet, Rule.Module), ("xigncode*", "XIGNCODE3", Rule.Module),
     ];
 
-    private const string Eac = "Easy Anti-Cheat", Be = "BattlEye", Javelin = "EA Javelin", Ricochet = "Ricochet", Ace = "Anti-Cheat Expert",
+    internal const string Ace = "Anti-Cheat Expert";
+    private const string Eac = "Easy Anti-Cheat", Be = "BattlEye", Javelin = "EA Javelin", Ricochet = "Ricochet",
         HoYo = "HoYoverse anti-cheat", NetEase = "NetEase anti-cheat", Poe = "Path of Exile's anti-cheat", Denuvo = "Denuvo Anti-Cheat",
         Forza = "Forza's anti-cheat";
 
@@ -875,9 +876,9 @@ internal static partial class AntiCheatCheck
         (Word("overwatch|world of warcraft|hearthstone|heroes of the storm"), "Warden"),
         (Word("marvel rivals|naraka|once human|fragpunk|where winds meet"), NetEase),
         (Word("the finals"), "Elytra"),
-        (Word("delta force|arena breakout"), Ace),
+        (Word("delta force|arena breakout|wuthering waves"), Ace),
         (Word("genshin impact|honkai: star rail|honkai impact|zenless zone zero"), HoYo),
-        (Word("wuthering waves|throne and liberty|black desert"), "an anti-cheat"),
+        (Word("throne and liberty|black desert"), "an anti-cheat"),
         (Word("path of exile"), Poe),
         (Word("warframe"), "Warframe's anti-cheat"),
         (Word("forza horizon"), Forza),

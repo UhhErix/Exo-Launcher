@@ -425,7 +425,7 @@ const mockTuning = (p?: { action?: unknown; item?: unknown }) => {
 const mockCompress = (id: string): CompressState => ({
   state: 'none', percent: null, saved: 0, size: 62e9, estimate: id ? 12.4e9 : null, sampled: !!id, changed: 0, algorithm: null, message: null, antiCheat: null, held: null,
 })
-const mockCompressSettings: CompressSettings = { whileIdle: false, afterUpdates: false, speed: 'balanced' }
+const mockCompressSettings: CompressSettings = { whileIdle: false, afterUpdates: false }
 const mockDrivesFine = typeof location !== 'undefined' && new URLSearchParams(location.search).get('drives') === 'fine'
 const mockDriveFixes = { flush: mockDrivesFine, optimize: mockDrivesFine, set: new Set<string>() }
 const MOCK_SAMSUNG = { name: 'Samsung', tool: 'Samsung Magician', url: 'https://semiconductor.samsung.com/consumer-storage/support/tools/' }
@@ -484,7 +484,7 @@ function mockDriveList() {
       power: { state: 0, full: true, plan: 'Exo', exo: true, apst: null }, nvme: { hmbMb: null, hmbOn: null, sector: 512, fourK: false },
       space: { total: 1862 * GB, free: 308.5 * GB, games: 1180 * GB, caches: 66.1 * GB, oldCaches: 36.6 * GB, exo: 5.9 * GB, leftovers: 12.4 * GB, other: 289.1 * GB },
       games: [
-        { id: 'steam:3513350', title: 'Wuchang: Fallen Feathers', bytes: 152 * GB, cacheBytes: 0 },
+        { id: 'steam:3513350', title: 'Wuthering Waves', bytes: 152 * GB, cacheBytes: 0 },
         { id: 'steam:2515020', title: 'FINAL FANTASY XVI', bytes: 102 * GB, cacheBytes: 2.6 * GB },
         { id: 'steam:2001760', title: 'Beast of Reincarnation', bytes: 98 * GB, cacheBytes: 3.8 * GB },
         { id: 'steam:1501750', title: 'Lords of the Fallen', bytes: 72 * GB, cacheBytes: 6.6 * GB },
@@ -635,6 +635,7 @@ const mockSettings: LauncherSettings = {
   textSize: 'normal',
   sortMode: 'name',
   riotId: null,
+  riotBaseline: null,
   recent: [],
   showLibraryTools: false,
   achievementBanners: true,
@@ -951,6 +952,7 @@ function mockAbsorbIdSettings(next: Record<string, unknown>) {
   if (typeof next.riotId === 'string') {
     const trimmed = next.riotId.trim()
     mockSettings.riotId = trimmed.length > 0 ? trimmed : null
+    if (!mockSettings.riotId) mockSettings.riotBaseline = null
     delete next.riotId
   }
 }
@@ -1231,7 +1233,7 @@ async function mockMouseCore(params?: Record<string, unknown>) {
 /** The mock's song (spotifyMock › Song 1), playing from the page's start and looping, so the room and Immersive have one. */
 const mockSong = { playing: true, from: 0, since: 0 }
 const mockSongAt = () => (mockSong.from + (mockSong.playing ? performance.now() - mockSong.since : 0)) % MOCK_SONG_MS
-const mockPlayback = () => ({ provider: 'spotify', status: mockSong.playing ? 'playing' : 'paused', title: 'Song 1', artist: 'Artist 1', artworkDataUrl: mockArtwork,
+const mockPlayback = () => ({ provider: 'spotify', status: mockSong.playing ? 'playing' : 'paused', title: 'Song 1', artist: 'Artist 1', artworkDataUrl: mockArtwork, artworkUrl: null,
   positionMs: mockSongAt(), durationMs: MOCK_SONG_MS, positionAgeMs: 0, rate: mockSong.playing ? 1 : 0, canPlay: true, canPause: true, canPrev: true, canNext: true, canSeek: true })
 
 const MOCK_HANDLERS: Record<string, MockHandler> = {
@@ -1307,6 +1309,17 @@ const MOCK_HANDLERS: Record<string, MockHandler> = {
     message: "tracker.gg now blocks apps from reading its profiles, so Exo can't import your Riot hours from it. Exo still counts every session you play.",
     profileUrl: 'https://tracker.gg/valorant',
   }),
+  'playtime.setRiotBaseline': (params) => {
+    const current = mockSettings.riotBaseline ?? {}
+    const valorant = typeof params?.valorantHours === 'number' && params.valorantHours > 0
+      ? Math.round(params.valorantHours * 60)
+      : current.valorantMinutes ?? null
+    const league = typeof params?.leagueHours === 'number' && params.leagueHours > 0
+      ? Math.round(params.leagueHours * 60)
+      : current.leagueMinutes ?? null
+    mockSettings.riotBaseline = { valorantMinutes: valorant, leagueMinutes: league }
+    return { ok: true, message: 'Starting hours saved.', baseline: mockSettings.riotBaseline }
+  },
   'web.preferences.get': () => ({ microphone: 'ask', camera: 'ask', clipboard: 'ask', notifications: 'ask' }),
   // The state the engine left when it last exited (rev 0), shown until the board is on screen and the engine runs.
   'shaders.addon': () => ({ ok: true, present: mockShaders, snapshot: mockShaders ? { ...mockShadersSnapshot(), rev: 0 } : undefined }),
@@ -1489,6 +1502,35 @@ const MOCK_HANDLERS: Record<string, MockHandler> = {
   },
   'discord.colors': () => ({ colors: { '100000000000000002': '#e91e63', '100000000000000004': '#3498db' }, icons: { '100000000000000002': { name: 'Admins', emoji: '🛡️' } } }),
   'discord.setStatus': mockOk,
+  'discord.shop': (p?: { action?: string; skuId?: string | null; amount?: number; currency?: string }) => {
+    const product = {
+      sku_id: '900000000000000001',
+      name: 'Starlight Halo',
+      summary: 'A quiet orbital ring around your avatar.',
+      type: 1000,
+      prices: { '0': { country_prices: { country_code: 'US', prices: [{ amount: 499, currency: 'usd', exponent: 2 }] } } },
+      items: [{ type: 0, sku_id: '900000000000000002', asset: 'a_starlight_halo', label: 'Starlight Halo' }],
+      styles: { background_colors: [0x111528, 0x05070e] },
+    }
+    const ownedItem = {
+      sku_id: '900000000000000003',
+      name: 'Midnight Crest',
+      summary: 'An owned avatar decoration.',
+      type: 1000,
+      purchased_at: '2026-01-15T00:00:00.000Z',
+      items: [{ type: 0, sku_id: '900000000000000004', asset: 'a_midnight_crest', label: 'Midnight Crest' }],
+    }
+    if (p?.action === 'catalog') {
+      return { ok: true, catalog: { categories: [{ sku_id: '910000000000000001', name: 'Featured', summary: 'Collectibles for your profile.', products: [product] }] }, owned: [ownedItem] }
+    }
+    if (p?.action === 'product') return { ok: true, product: p.skuId === ownedItem.sku_id ? ownedItem : product }
+    if (p?.action === 'equip') return { ok: true }
+    if (p?.action === 'payment') return { ok: true, payment: [{ id: 'pm_mock_1', label: 'Visa •••• 4242', expires: '04/28', default: true, usable: true }] }
+    if (p?.action === 'preview') return { ok: true, price: { amount: 499, subtotal: 499, tax: 0, currency: 'usd', taxInclusive: true } }
+    if (p?.action === 'buy') return { ok: true }
+    if (p?.action === 'stripeKey') return { ok: true, key: null }
+    return { ok: false, message: 'Mock: unavailable in browser preview.' }
+  },
   'web.preferences.set': (p) => ({ microphone: 'ask', camera: 'ask', clipboard: 'ask', notifications: 'ask', ...p }),
   'shell.prepare': () => ({ ok: true }),
   'shell.painted': () => ({ ok: true }),
@@ -1889,7 +1931,6 @@ const MOCK_HANDLERS: Record<string, MockHandler> = {
   'compress.settings': (p) => {
     if (typeof p?.whileIdle === 'boolean') mockCompressSettings.whileIdle = p.whileIdle
     if (typeof p?.afterUpdates === 'boolean') mockCompressSettings.afterUpdates = p.afterUpdates
-    if (p?.speed === 'gentle' || p?.speed === 'balanced' || p?.speed === 'fast') mockCompressSettings.speed = p.speed
     return { ok: true, settings: { ...mockCompressSettings } }
   },
   'startup.list': () => mockStartup(null),

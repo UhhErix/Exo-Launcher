@@ -297,6 +297,7 @@ internal static class SteamClientIpc
                 CreateNoWindow = true,
                 RedirectStandardInput = true,
                 RedirectStandardOutput = true,
+                RedirectStandardError = true,
                 WorkingDirectory = Path.GetDirectoryName(exe),
             };
             foreach (var arg in args) start.ArgumentList.Add(arg);
@@ -304,9 +305,14 @@ internal static class SteamClientIpc
             if (process is null) return (-1, "");
             if (stdin is not null) await process.StandardInput.WriteLineAsync(stdin.AsMemory(), deadline.Token).ConfigureAwait(false);
             process.StandardInput.Close();
-            var output = await process.StandardOutput.ReadToEndAsync(deadline.Token).ConfigureAwait(false);
+            var outputTask = process.StandardOutput.ReadToEndAsync(deadline.Token);
+            var stderrTask = ReadBoundedAsync(process.StandardError, maxChars: 2048, deadline.Token);
+            await Task.WhenAll(outputTask, stderrTask).ConfigureAwait(false);
             await process.WaitForExitAsync(deadline.Token).ConfigureAwait(false);
-            return (process.ExitCode, output);
+            var stderr = stderrTask.Result;
+            if (process.ExitCode != 0 && !string.IsNullOrWhiteSpace(stderr))
+                AppLog.Warn($"Steam IPC {args[0]} exited {process.ExitCode}: {stderr}");
+            return (process.ExitCode, outputTask.Result);
         }
         catch (OperationCanceledException) when (!ct.IsCancellationRequested)
         {
@@ -327,6 +333,20 @@ internal static class SteamClientIpc
                 process.Dispose();
             }
         }
+    }
+
+    private static async Task<string> ReadBoundedAsync(StreamReader reader, int maxChars, CancellationToken ct)
+    {
+        var buffer = new char[512];
+        var sb = new System.Text.StringBuilder();
+        while (true)
+        {
+            var read = await reader.ReadAsync(buffer, ct).ConfigureAwait(false);
+            if (read == 0) break;
+            if (sb.Length < maxChars)
+                sb.Append(buffer, 0, Math.Min(read, maxChars - sb.Length));
+        }
+        return sb.ToString().Trim();
     }
 
     internal static SteamProgressWatcher StartProgressWatcher(

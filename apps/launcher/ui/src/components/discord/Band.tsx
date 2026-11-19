@@ -1,5 +1,6 @@
 import { createElement, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { host } from '../../lib/host'
+import { allowHover } from '../../lib/hoverGate'
 import { answerRailTip, emptyRailTip, endRailTip, railTipRooms, startRailTip, type RailTipState } from '../../lib/railTip'
 import { ChevronLeft, ChevronRight, Folder, Home, Plus, Shop, Volume } from '../../brand/icons'
 import { cdnSized, type DiscordChannel, type DiscordGuild, type DiscordHome, type DiscordRailItem } from '../../lib/discord'
@@ -153,7 +154,7 @@ function HomeTile({ home, chosen, onGo, onPeek }: { home: DiscordHome | null; ch
   return (
     <button type="button" className={`exo-dc-band-place${chosen ? ' is-chosen' : ''}`} aria-current={chosen ? 'true' : undefined}
       aria-label={['Home', mentions ? mentionsSaid(mentions) : unread ? `${unread} unread` : null].filter(Boolean).join(', ')}
-      onClick={onGo} onPointerEnter={() => onPeek('@me')} onPointerLeave={() => onPeek(null)}>
+      onClick={onGo} onPointerEnter={event => { if (allowHover(event)) onPeek('@me') }} onPointerLeave={() => onPeek(null)}>
       <span className="exo-dc-band-face is-glyph"><Home size={20} /></span>
       {chosen ? <span className="exo-dc-band-name">Home</span> : null}
       {mentions ? <span className="exo-dc-badge" aria-hidden="true">{count(mentions)}</span> : unread && !chosen ? <span className="exo-dc-band-dot" aria-hidden="true" /> : null}
@@ -266,7 +267,7 @@ function BandServer({ guild, current, onGo, onPeek, onMenu, tipShow, tipHide }: 
       aria-current={current ? 'true' : undefined}
       aria-label={[guild.name, guild.mentions ? mentionsSaid(guild.mentions) : unread ? 'unread' : null, guild.inVoice ? `${guild.inVoice} in voice` : null].filter(Boolean).join(', ')}
       onClick={onGo}
-      onPointerEnter={event => { onPeek(guild.id); if (!current) tipShow(event, guild.name, guild.inVoice ? guild.id : null) }}
+      onPointerEnter={event => { if (!allowHover(event)) return; onPeek(guild.id); if (!current) tipShow(event, guild.name, guild.inVoice ? guild.id : null) }}
       onPointerLeave={() => { onPeek(null); tipHide() }}
       onContextMenu={event => { event.preventDefault(); onMenu(event.clientX, event.clientY) }}>
       <span className="exo-dc-band-face">

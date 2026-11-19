@@ -171,3 +171,23 @@ export function useDismiss(ref: RefObject<Element | null>, onClose: (() => void)
 export function useChildRef(parent: RefObject<Element | null>): RefObject<Element | null> {
   return useMemo(() => ({ get current() { return parent.current?.firstElementChild ?? null } }), [parent])
 }
+
+/**
+ * Dismisses a top-layer popover when an ancestor of its trigger scrolls (leaving internal popover scrolling alone).
+ */
+export function useDismissOnAncestorScroll(open: boolean, triggerRef: RefObject<Element | null>, popoverRef: RefObject<HTMLElement | null>, onDismiss: () => void) {
+  const dismiss = useRef(onDismiss)
+  useEffect(() => { dismiss.current = onDismiss })
+  useEffect(() => {
+    if (!open) return
+    const onScroll = (event: Event) => {
+      const target = event.target
+      const popover = popoverRef.current
+      const trigger = triggerRef.current
+      if (!popover || !trigger || !(target instanceof Node)) return
+      if (!popover.contains(target) && target.contains(trigger)) dismiss.current()
+    }
+    window.addEventListener('scroll', onScroll, { capture: true, passive: true })
+    return () => window.removeEventListener('scroll', onScroll, true)
+  }, [open, triggerRef, popoverRef])
+}

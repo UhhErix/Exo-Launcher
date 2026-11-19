@@ -127,8 +127,26 @@ internal sealed class ShadersAddon : IDisposable
     internal string State { get; private set; } = "notRunning";
     internal string? Message { get; private set; }
 
-    /// <summary>The engine runs now.</summary>
-    internal bool Running { get { lock (_gate) return _engine is { HasExited: false }; } }
+    /// <summary>The engine runs now and has not announced it is exiting.</summary>
+    internal bool Running { get { lock (_gate) return _engine is { HasExited: false } && !ReferenceEquals(_leaving, _engine); } }
+
+    internal static async Task<(bool UsedAtRest, JsonNode? Result)> InvokeWithStoppingFallbackAsync(
+        string method,
+        bool starts,
+        Func<bool> isRunning,
+        Func<Task<JsonNode?>> invoke,
+        Func<JsonNode?> atRest)
+    {
+        if (!starts && !isRunning()) return (true, atRest());
+        try { return (false, await invoke().ConfigureAwait(false)); }
+        catch (OperationCanceledException) { throw; }
+        catch (InvalidOperationException ex) when (!starts)
+        {
+            // Between the check and the call, the engine started stopping or exited.
+            AppLog.Debug("Exo Shaders call " + method + " while stopping: " + ex.Message);
+            return (true, atRest());
+        }
+    }
 
     /// <summary>An engine event line (<c>{"event":..., "data":...}</c>), or a state change of Exo's own (<c>addon</c>).</summary>
     internal event Action<string, JsonNode?>? Event;

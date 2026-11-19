@@ -33,7 +33,7 @@ internal static class AccountSyncMap
     /// <summary>Stays on this PC: paths, window and display, GPU, Discord and voice, consents, and first-run flags.</summary>
     internal static readonly string[] DeviceSettings =
     [
-        "AllowResize", "AppVersion", "AutoUpdateChipset", "CompressSpeed", "CompressWhileIdle", "RecompressAfterUpdates", "AutoUpdateUpscalers", "CheckForUpdates", "CopyPortableIntoLibrary", "DefaultInstallRoot",
+        "AllowResize", "AppVersion", "AutoUpdateChipset", "CompressWhileIdle", "RecompressAfterUpdates", "AutoUpdateUpscalers", "CheckForUpdates", "CopyPortableIntoLibrary", "DefaultInstallRoot",
         "DiscordAttenuateOthers", "DiscordAttenuateSelf", "DiscordAttenuation", "DiscordAutoSensitivity",
         "DiscordDesktopNotifications", "DiscordDisableAllSounds", "DiscordDisabledSounds", "DiscordEchoCancellation",
         "DiscordEvenVoices", "DiscordInputDevice", "DiscordInputProfile", "DiscordInputVolume",
@@ -48,8 +48,8 @@ internal static class AccountSyncMap
         "HdrSwitchedOn", "HdrSwitchedRamp", "LastPlayed", "LaunchOverrides", "LibraryFolders", "StartLucidWithExo",
         "MouseBridge", "MouseBridgeAppAutostart", "MouseBridgeAppPath", "NvidiaColor", "NvidiaDriverBranch",
         "AccountAsked", "OnboardingComplete", "PlayStationPadSeen", "PreferredGameSources", "Recent", "RtxVideoDriver", "RtxVideoHdr",
-        "RtxVideoSuperResolution", "SdrGammaBefore", "StartMaximized", "StartWithWindows", "StartupHandedToExo", "SteamBetaJoined",
-        "SteamInput", "SteamOverlay", "SteamShortcuts", "SteamWithoutAntiCheat", "ThroughSteam", "UpscalerAntiCheatConsent", "UpscalerAntiCheatEverywhere", "UpscalerAutoUpdateDefaulted", "CustomCoverImages",
+        "RtxVideoSuperResolution", "SdrGammaBefore", "SmoothMotion", "StartMaximized", "StartWithWindows", "StartupHandedToExo", "SteamBetaJoined",
+        "SteamInput", "SteamOverlay", "SteamOverlayPrior", "SteamShortcuts", "SteamWithoutAntiCheat", "ThroughSteam", "UpscalerAntiCheatConsent", "UpscalerAntiCheatEverywhere", "UpscalerAutoUpdateDefaulted", "CustomCoverImages",
         "WhatsNewSeen", "UiPrefsMoved",
     ];
 

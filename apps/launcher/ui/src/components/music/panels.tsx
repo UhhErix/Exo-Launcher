@@ -1,6 +1,7 @@
 import { sample, times } from '../ui/Wait'
 import { Fragment, memo, useEffect, useId, useRef, useState, type CSSProperties } from 'react'
 import { host } from '../../lib/host'
+import { coverArtForTrack } from '../../lib/musicCover'
 import { cn } from '../../lib/utils'
 import { listenAlong, stopListening, useListenAlong, useListeningFriends } from '../../lib/listenAlong'
 import { useSaid } from '../ui/useSaid'
@@ -489,7 +490,7 @@ export function NowPlayingPanel({ player, playback, receivedAt, onImmersive }: {
   const uri = player?.trackUri ?? ''
   return (
     <div className="exo-music-now">
-      <Art src={player?.image || playback?.artworkDataUrl || undefined} size={368} />
+      <Art src={coverArtForTrack(player, playback)} size={368} />
       <div className="exo-music-now-head">
         <div className="exo-music-now-text">
           <h2>{player?.title || playback?.title || 'Nothing playing'}</h2>

@@ -44,7 +44,7 @@ const SCENES = [
   ['pc', async (p) => { await open(p, ''); await room(p, 'PC') }],
   ['pc-display-menu', async (p) => { await open(p, ''); await room(p, 'PC'); await p.clickText('Screen'); await sleep(900) }],
   ['pc-apps-sheet', async (p) => { await open(p, ''); await room(p, 'PC'); await p.clickText('Apps', 'button'); await sleep(1000) }],
-  ['devices', async (p) => { await open(p, ''); await room(p, 'Devices') }],
+  ['devices', async (p) => { await open(p, ''); await room(p, 'PC'); await p.clickText('Devices', 'button.exo-pc-chip'); await sleep(1300) }],
   ['capture-menu', async (p) => { await open(p, ''); await p.clickSel('.exo-capture-btn'); await sleep(600) }],
 ]
 

@@ -171,8 +171,9 @@ export function PcRoom({ active, jump, games, settings, onSave, onDevices }: {
       setMenu(wanted)
       return
     }
-    // Apps is a sheet; the network and the drives are parts of This PC: their links land on the hero.
+    // Apps and Upscalers are sheets; the network and the drives are parts of This PC: their links land on the hero.
     if (jump.tab === 'apps') { setAppsOpen(true); return }
+    if (jump.tab === 'upscalers') { setUpscalersOpen(true); return }
     if (jump.tab === 'overview' || jump.tab === 'network' || jump.tab === 'drives') { scroller.scrollTop = 0; return }
     scroller.querySelector(`[data-pc-part="${jump.tab}"]`)?.scrollIntoView({ block: 'start' })
   }, [active, jump, vendor])

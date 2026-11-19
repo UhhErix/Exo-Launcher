@@ -550,6 +550,8 @@ export type GameSettingsState = {
   again?: boolean
   /** The mode chosen on the line; null for a game whose mode Exo can't set. */
   windowMode?: 'borderless' | 'fullscreen' | null
+  /** Opt-in NVIDIA driver Smooth Motion on RTX 40/50 for supported profiles (such as Wuthering Waves); null elsewhere. */
+  smoothMotion?: boolean | null
 }
 
 /**
@@ -1068,8 +1070,8 @@ export interface CompressState {
 
 export type CompressAction = 'compress' | 'uncompress' | 'pause' | 'resume' | 'cancel' | 'allow' | 'deny'
 
-/** Compress games' settings: while idle, again after updates, and the CPU it may use. */
-export interface CompressSettings { whileIdle: boolean; afterUpdates: boolean; speed: 'gentle' | 'balanced' | 'fast' }
+/** Compress games' settings: while idle and again after updates (CPU thread budget is automatic). */
+export interface CompressSettings { whileIdle: boolean; afterUpdates: boolean }
 
 /** compress.list: every installed game's compression, the total saved and still to save. */
 export interface CompressList {
@@ -1371,8 +1373,10 @@ export interface LauncherSettings {
   recent?: string[]
   onboardingComplete?: boolean
   /** True when a Steam Web API key is saved on this PC. The key itself never arrives. */
-  /** Public Riot ID (Name#TAG). Used to fetch tracker.gg hours. */
+  /** Public Riot ID (Name#TAG). */
   riotId?: string | null
+  /** Saved manual or imported starting minutes per Riot game for the current Riot ID. */
+  riotBaseline?: RiotBaseline | null
   framelessPinTop?: boolean
   framelessPinSide?: boolean
   showLibraryTools?: boolean
@@ -1435,6 +1439,11 @@ export type ChromeLayout = {
   interactiveRegions?: ChromeRect[]
   /** Becomes Windows' maximize region (snap layouts flyout). */
   maximizeButton?: ChromeRect
+}
+
+export type RiotBaseline = {
+  valorantMinutes?: number | null
+  leagueMinutes?: number | null
 }
 
 export type RiotHoursRefresh = {
@@ -1648,6 +1657,8 @@ export interface GameProperties {
   throughSteam?: boolean | null
   /** A Steam game's overlay: Exo's rule until the player switches it here; null for other stores. */
   steamOverlay?: boolean | null
+  /** Warning shown when Steam's global overlay is disabled while the per-game overlay is turned on. */
+  steamOverlayNote?: string | null
   /** The game's own shader caches together (0 once cleared); null for a game Exo can't rebuild them for (Call of Duty only for now). */
   shaderCacheBytes?: number | null
   /**
@@ -2599,6 +2610,11 @@ export const host = {
       'playtime.riotRefresh',
       riotId ? { riotId } : {},
     ),
+  setRiotBaseline: (baseline: { valorantHours?: number; leagueHours?: number; riotId?: string }) =>
+    rawCall<{ ok: boolean; message?: string; baseline?: RiotBaseline | null }>(
+      'playtime.setRiotBaseline',
+      baseline,
+    ),
   minimize: () => rawCall<{ ok: boolean }>('shell.minimize'),
   maximize: () => rawCall<{ ok: boolean; maximized?: boolean }>('shell.maximize'),
   windowState: () => rawCall<{ ok: boolean; maximized?: boolean }>('shell.windowState'),
@@ -2655,7 +2671,7 @@ export const host = {
   hdrState: () => rawCall<HdrState>('hdr.state', {}),
   /** A game's HDR support (asks PCGamingWiki the first time); with a mode, sets its Auto/Always/Never. */
   hdrGame: (id: string, mode?: string) => rawCall<HdrGame>('hdr.game', { id, ...(mode ? { mode } : {}) }, 30_000),
-  gameSettings: (id: string, change?: { group?: string; all?: boolean; on?: boolean; mode?: string }) =>
+  gameSettings: (id: string, change?: { group?: string; all?: boolean; on?: boolean; mode?: string; smoothMotion?: boolean }) =>
     rawCall<GameSettingsState>('game.settings', { id, ...change }, 30_000),
   /** What Keep holds, said as one word for the PC and one per game; a game with nothing to say is left out. */
   keepStatus: () => rawCall<KeepStatus>('keep.status', {}, 30_000),

@@ -1,6 +1,6 @@
 import { Fragment, memo, useEffect, useState } from 'react'
 import { CompanyLogo } from '../../brand/CompanyLogo'
-import { host, onHostEvent, type AccountStore, type LauncherSettings, type StoreAccounts, type StoreStatus, type SwitchStore } from '../../lib/host'
+import { host, onHostEvent, type AccountStore, type LauncherSettings, type RiotBaseline, type StoreAccounts, type StoreStatus, type SwitchStore } from '../../lib/host'
 import { readSettings, saveSettingsPatch } from '../../lib/settingsSave'
 import { AccountControl, AccountHours, accountName, useStoreAccounts } from './StoreAccounts'
 import {
@@ -217,7 +217,7 @@ type Note = { text: string; error: boolean } | null
 
 const RIOT_ID = /^[^#]+#[^#]{2,}$/
 
-/** Riot ID (Name#TAG): the public name Riot hours are read for. Not a key. */
+/** Riot ID (Name#TAG): keys this PC's Riot playtime ledger. */
 function RiotIdRow({ riotId, onSettings }: { riotId: string; onSettings: (next: LauncherSettings) => void }) {
   const [editing, setEditing] = useState(riotId === '')
   const [draft, setDraft] = useState(riotId)
@@ -226,27 +226,19 @@ function RiotIdRow({ riotId, onSettings }: { riotId: string; onSettings: (next: 
   const value = draft.trim()
   const ready = value !== '' && value !== riotId && RIOT_ID.test(value)
 
-  // Save, Import hours, and Remove say how it went in themselves (ActionButton): the ring, then the check, then the row settles;
-  // a refusal is the button in Bad with the reason under the row. Hours that couldn't be read after a good save are the row's
-  // own line, not the save's failure.
   async function save(next: string) {
     setBusy(true)
     setNote(null)
     try {
       await saveSettingsPatch({ riotId: next })
-      if (!next) return { ok: true }
-      const refresh = await host.riotHoursRefresh(next)
       const read = await readSettings()
       if (read) onSettings(read)
-      return { ok: true, hours: refresh.ok ? refresh.message ?? 'Hours imported.' : null, hoursError: refresh.ok ? null : errorText(refresh.message, 'Hours could not be imported. Try again.') }
+      return { ok: true }
     } finally {
       setBusy(false)
     }
   }
-  function saved(result: unknown) {
-    const { hours, hoursError } = (result ?? {}) as { hours?: string | null; hoursError?: string | null }
-    if (hoursError) setNote({ text: hoursError, error: true })
-    else if (hours) setNote({ text: hours, error: false })
+  function saved() {
     setEditing(false)
   }
   const failed = (error: PlainError) => setNote({ text: error.text, error: true })
@@ -264,13 +256,121 @@ function RiotIdRow({ riotId, onSettings }: { riotId: string; onSettings: (next: 
       ) : (
         <>
           <State on>{riotId}</State>
-          <ActionButton className="exo-set-btn" disabled={busy} context="StoresSection.riotHoursImport" fallback="Hours could not be imported. Try again."
-            why="none" onFailed={failed}
-            onPress={() => { setNote(null); return host.riotHoursRefresh() }}
-            onDone={result => setNote({ text: (result as { message?: string | null })?.message ?? 'Hours imported.', error: false })}>Import hours</ActionButton>
           <button type="button" className="exo-set-btn" disabled={busy} onClick={() => setEditing(true)}>Replace</button>
           <ActionButton className="exo-set-btn" context="StoresSection.riotIdRemove" fallback="Riot ID could not be removed. Try again."
             why="none" onFailed={failed} onPress={() => save('')} onDone={saved}>Remove</ActionButton>
+        </>
+      )}
+    </Row>
+  )
+}
+
+function trackerUrlFor(riotId: string): string {
+  const hash = riotId.indexOf('#')
+  if (hash <= 0) return 'https://tracker.gg/valorant'
+  return `https://tracker.gg/valorant/profile/riot/${encodeURIComponent(riotId.slice(0, hash))}%23${encodeURIComponent(riotId.slice(hash + 1))}/overview`
+}
+
+function formatBaselineHours(minutes: number | null | undefined): string {
+  if (!minutes || minutes <= 0) return ''
+  const hours = minutes / 60
+  return Number.isInteger(hours) ? String(hours) : hours.toFixed(1)
+}
+
+function parseHoursInput(raw: string): number | null {
+  const trimmed = raw.trim()
+  if (!trimmed) return null
+  const n = Number(trimmed)
+  if (!Number.isFinite(n) || n <= 0) return Number.NaN
+  return n
+}
+
+function RiotBaselineRow({
+  riotId,
+  baseline,
+  onSettings,
+}: {
+  riotId: string
+  baseline: RiotBaseline | null
+  onSettings: (next: LauncherSettings) => void
+}) {
+  const hasSaved = !!(baseline?.valorantMinutes || baseline?.leagueMinutes)
+  const [editing, setEditing] = useState(!hasSaved)
+  const [valorant, setValorant] = useState(() => formatBaselineHours(baseline?.valorantMinutes))
+  const [league, setLeague] = useState(() => formatBaselineHours(baseline?.leagueMinutes))
+  const [busy, setBusy] = useState(false)
+  const [note, setNote] = useState<Note>(null)
+
+  const syncFromSaved = () => {
+    setValorant(formatBaselineHours(baseline?.valorantMinutes))
+    setLeague(formatBaselineHours(baseline?.leagueMinutes))
+  }
+
+  const parsedValorant = parseHoursInput(valorant)
+  const parsedLeague = parseHoursInput(league)
+  const invalid = Number.isNaN(parsedValorant) || Number.isNaN(parsedLeague)
+  const ready = !invalid && (parsedValorant !== null || parsedLeague !== null)
+
+  async function saveBaseline() {
+    if (!ready) return { ok: false, message: 'Enter starting hours greater than zero.' }
+    setBusy(true)
+    setNote(null)
+    try {
+      const result = await host.setRiotBaseline({
+        riotId,
+        ...(parsedValorant !== null ? { valorantHours: parsedValorant } : {}),
+        ...(parsedLeague !== null ? { leagueHours: parsedLeague } : {}),
+      })
+      const read = await readSettings()
+      if (read) onSettings(read)
+      return result
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  function savedBaseline(result: unknown) {
+    const reply = (result ?? {}) as { message?: string | null }
+    setNote({ text: reply.message ?? 'Starting hours saved.', error: false })
+    setEditing(false)
+  }
+
+  const failed = (error: PlainError) => setNote({ text: error.text, error: true })
+  const summaryParts = [
+    baseline?.valorantMinutes ? `VALORANT ${formatBaselineHours(baseline.valorantMinutes)} h` : null,
+    baseline?.leagueMinutes ? `League ${formatBaselineHours(baseline.leagueMinutes)} h` : null,
+  ].filter(Boolean)
+
+  const detail = note && !note.error
+    ? note.text
+    : (
+      <>
+        tracker.gg blocks automated imports. Add hours you played before Exo so new sessions add onto them.{' '}
+        <button type="button" className="exo-set-link" onClick={() => void host.openUrl(trackerUrlFor(riotId))}>Open tracker.gg</button>
+      </>
+    )
+
+  return (
+    <Row label="Starting hours" detail={detail} error={note?.error ? note.text : null}>
+      {editing ? (
+        <form className="exo-set-key-form" onSubmit={event => { event.preventDefault(); event.currentTarget.querySelector<HTMLButtonElement>('.exo-action:not(:disabled)')?.click() }}>
+          <input type="number" min="0.5" max="166666" step="0.5" className="exo-field is-short" value={valorant}
+            placeholder="VALORANT (h)" aria-label="VALORANT starting hours" disabled={busy}
+            onChange={event => setValorant(event.target.value)} />
+          <input type="number" min="0.5" max="166666" step="0.5" className="exo-field is-short" value={league}
+            placeholder="League (h)" aria-label="League of Legends starting hours" disabled={busy}
+            onChange={event => setLeague(event.target.value)} />
+          <ActionButton className="exo-set-btn" disabled={!ready || busy} context="StoresSection.riotBaseline"
+            fallback="Starting hours could not be saved. Try again." why="none"
+            onFailed={failed} onPress={saveBaseline} onDone={savedBaseline}>Save</ActionButton>
+          {hasSaved ? (
+            <button type="button" className="exo-set-btn" disabled={busy} onClick={() => { syncFromSaved(); setEditing(false) }}>Cancel</button>
+          ) : null}
+        </form>
+      ) : (
+        <>
+          <State on>{summaryParts.join(' · ')}</State>
+          <button type="button" className="exo-set-btn" disabled={busy} onClick={() => { syncFromSaved(); setNote(null); setEditing(true) }}>Edit</button>
         </>
       )}
     </Row>
@@ -355,7 +455,19 @@ export const StoresSection = memo(function StoresSection({
             })
           }} />
       ) : null}
-      {riotIdShown(installed.map(store => store.store), settings?.riotId) ? <RiotIdRow riotId={settings?.riotId?.trim() || ''} onSettings={onSettings} /> : null}
+      {riotIdShown(installed.map(store => store.store), settings?.riotId) ? (
+        <>
+          <RiotIdRow riotId={settings?.riotId?.trim() || ''} onSettings={onSettings} />
+          {settings?.riotId?.trim() ? (
+            <RiotBaselineRow
+              key={settings.riotId.trim()}
+              riotId={settings.riotId.trim()}
+              baseline={settings.riotBaseline ?? null}
+              onSettings={onSettings}
+            />
+          ) : null}
+        </>
+      ) : null}
       {missing.length > 0 ? (
         <Row label="Get another store" stacked error={getError}>
           <ul className="exo-set-chips" aria-label="Stores not on this PC">

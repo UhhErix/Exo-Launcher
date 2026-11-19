@@ -1,3 +1,4 @@
+using ExoLauncher.Models;
 using ExoLauncher.Services;
 
 namespace ExoLauncher.Tests;
@@ -143,4 +144,16 @@ public sealed class SetupsTests
     [InlineData("C:\\Users\\me\\Start Menu\\App.lnk", "C:\\Users\\me\\Start Menu\\App.lnk", "")]
     public void SplitsAStartupCommand(string command, string program, string arguments) =>
         Assert.Equal((program, arguments), Setups.Split(command));
+
+    [Fact]
+    public void PvEAntiCheatExpertGameGetsEverydayWhileCompetitiveGamesStayCompetitive()
+    {
+        var wuwa = new GameEntry { Id = "local:wuwa-" + Guid.NewGuid().ToString("N"), Title = "Wuthering Waves", Store = StoreKind.Local };
+        var deltaForce = new GameEntry { Id = "local:df-" + Guid.NewGuid().ToString("N"), Title = "Delta Force", Store = StoreKind.Local };
+        var valorant = new GameEntry { Id = "riot:valorant", Title = "VALORANT", Store = StoreKind.Riot };
+
+        Assert.Equal(Setups.Everyday, Setups.For(wuwa));
+        Assert.Equal(Setups.Competitive, Setups.For(deltaForce));
+        Assert.Equal(Setups.Competitive, Setups.For(valorant));
+    }
 }

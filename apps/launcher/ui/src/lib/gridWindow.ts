@@ -98,6 +98,26 @@ function clamp(value: number, minimum: number, maximum: number): number {
   return Math.min(maximum, Math.max(minimum, value))
 }
 
+/**
+ * Builds a WindowedGameGrid measurement input while guarding hidden/collapsed rooms (`containerWidth <= 0` or
+ * `viewportHeight <= 0`) and clamping `viewportStart >= 0` when scrolled above the grid's offset.
+ */
+export function resolveWindowedGridInput(
+  geometry: Omit<GridWindowInput, 'itemCount' | 'viewportStart' | 'overscanRows'> & { offset: number },
+  itemCount: number,
+  scrollTop: number,
+  overscanRows = GRID_OVERSCAN_ROWS,
+): GridWindowInput | null {
+  if (geometry.containerWidth <= 0 || geometry.viewportHeight <= 0) return null
+  const { offset, ...rest } = geometry
+  return {
+    ...rest,
+    itemCount,
+    viewportStart: Math.max(0, scrollTop - offset),
+    overscanRows,
+  }
+}
+
 export function calculateGridWindow(input: GridWindowInput): GridWindow {
   const itemCount = integerAtLeast(input.itemCount, 0)
   const containerWidth = finiteAtLeast(input.containerWidth, 0)

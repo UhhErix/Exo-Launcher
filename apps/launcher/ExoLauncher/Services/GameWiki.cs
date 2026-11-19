@@ -19,7 +19,9 @@ internal static partial class GameWiki
     /// <param name="FrameGen">Its frame generation field: "true", "false", "hackable" or "unknown".</param>
     /// <param name="Over60">Its 120 fps field: true past 60 fps, false when held at 60 (or lifted only by a mod), null when not known.</param>
     /// <param name="Apis">"dx9" to "dx12", "vulkan", "opengl".</param>
-    internal sealed record Facts(IReadOnlyList<string> Modes, IReadOnlyList<string> Genres, string FrameGen, bool? Over60, IReadOnlyList<string> Apis);
+    /// <param name="FrameGenTech">Listed frame generation technologies from "|framegen tech = ...", lower case (for distinguishing NVIDIA-only DLSS FG from cross-vendor FSR/XeSS FG).</param>
+    internal sealed record Facts(IReadOnlyList<string> Modes, IReadOnlyList<string> Genres, string FrameGen, bool? Over60, IReadOnlyList<string> Apis,
+        IReadOnlyList<string>? FrameGenTech = null);
 
     /// <param name="Facts">Null in an entry kept before 3.17.2, which read HDR alone.</param>
     private sealed record Entry(string Hdr, DateTimeOffset At, Facts? Facts = null);
@@ -169,7 +171,8 @@ internal static partial class GameWiki
         if (Value(VulkanField().Match(wikitext)) is { Length: > 0 } vulkan && vulkan != "false") apis.Add("vulkan");
         if (Value(OpenGlField().Match(wikitext)) is { Length: > 0 } openGl && openGl != "false") apis.Add("opengl");
         return new Facts(List(ModesRow().Match(wikitext)), List(GenresRow().Match(wikitext)),
-            frameGen is "true" or "false" or "hackable" ? frameGen : "unknown", over60, apis);
+            frameGen is "true" or "false" or "hackable" ? frameGen : "unknown", over60, apis,
+            List(FrameGenTechField().Match(wikitext)));
     }
 
     [GeneratedRegex(@"^\s*\|\s*hdr\s*=\s*([^\r\n|]*)", RegexOptions.Multiline | RegexOptions.IgnoreCase)]
@@ -177,6 +180,9 @@ internal static partial class GameWiki
 
     [GeneratedRegex(@"^\s*\|\s*framegen\s*=[ \t]*([^\r\n|]*)", RegexOptions.Multiline | RegexOptions.IgnoreCase)]
     private static partial Regex FrameGenField();
+
+    [GeneratedRegex(@"^\s*\|\s*framegen tech\s*=[ \t]*([^\r\n|]*)", RegexOptions.Multiline | RegexOptions.IgnoreCase)]
+    private static partial Regex FrameGenTechField();
 
     [GeneratedRegex(@"^\s*\|\s*120 fps\s*=[ \t]*([^\r\n|]*)", RegexOptions.Multiline | RegexOptions.IgnoreCase)]
     private static partial Regex Fps120Field();
