@@ -994,6 +994,10 @@ export interface Game {
   isRunning?: boolean
   /** Stop is never offered for a store client, overlay, or anti-cheat process. */
   canStop?: boolean
+  /** Played through Steam Families: someone else's copy. */
+  familyShared?: boolean
+  /** Genres and modes from Steam's own record of the game (racing, co-op, ...); none for a game Steam doesn't know. */
+  tags?: string[]
 }
 
 export interface InstallProgress {

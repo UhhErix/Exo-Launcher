@@ -522,3 +522,295 @@
 .exo-downloads-actions .exo-set-btn.is-icon {
   padding-inline: 8px;
 }
+
+/* The Library's head (LibraryHead.tsx): the room's name and one quiet chip on the left, the search on the true middle,
+   Filter, sort, More and Add (the one primary) on the right, on the grid's 10px edge. Three columns, the outer two equal,
+   so the search stays centred whatever the tools' width. */
+.exo-library-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(220px, 440px) minmax(0, 1fr);
+  align-items: center;
+  gap: 16px;
+  padding: 6px var(--exo-gutter) 20px;
+}
+
+.exo-library-name {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.exo-library-name h1 {
+  margin: 0;
+  color: var(--color-fg);
+  font-size: var(--exo-type-page);
+  font-weight: var(--exo-weight-title);
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.exo-library-chip {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 6px;
+  height: 24px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 999px;
+  background-color: var(--exo-fill);
+  box-shadow: var(--exo-rim);
+  color: var(--color-muted);
+  font: inherit;
+  font-size: calc(12px * var(--exo-scale, 1));
+  font-weight: 500;
+  line-height: normal;
+  white-space: nowrap;
+}
+
+.exo-library-search {
+  justify-self: stretch;
+  min-width: 0;
+  padding-right: 6px;
+}
+
+.exo-library-search-clear {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--color-muted);
+  transition: background-color var(--dur-quick) var(--ease-out), color var(--dur-quick) var(--ease-out);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .exo-library-search-clear:hover {
+    background: var(--hover-fill);
+    color: var(--color-fg);
+  }
+}
+
+.exo-library-head .exo-library-tools {
+  justify-self: end;
+}
+
+.exo-library-filter {
+  gap: 6px;
+}
+
+/* How many filters are on, beside Filter's name: a small white pill, as a chosen chip is. */
+.exo-library-filter-count {
+  display: grid;
+  place-items: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: var(--color-fg);
+  color: var(--color-primary-fg);
+  font-size: calc(12px * var(--exo-scale, 1));
+  line-height: normal;
+}
+
+.exo-library-add {
+  gap: 6px;
+}
+
+/* The filters that are on, as chips under the head: each a white pill (what is chosen) whose × takes it off; what the
+   search understood leads them, quiet, since it is changed in the search itself. */
+.exo-library-chips {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: -8px;
+  padding: 0 var(--exo-gutter) 16px;
+}
+
+.exo-library-chip.is-filter {
+  height: 28px;
+  padding: 0 8px 0 12px;
+  background-color: var(--color-fg);
+  box-shadow: none;
+  color: var(--color-primary-fg);
+  cursor: pointer;
+  transition: background-color var(--dur-quick) var(--ease-out), scale var(--dur-press) var(--ease-out);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .exo-library-chip.is-filter:hover {
+    background-color: var(--exo-primary-hover);
+  }
+}
+
+.exo-library-chip.is-filter:active {
+  scale: 0.97;
+}
+
+.exo-library-chip.is-filter:focus-visible {
+  outline: 2px solid var(--color-fg);
+  outline-offset: 2px;
+}
+
+.exo-library-chip.is-understood {
+  height: 28px;
+}
+
+.exo-library-note {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+/* A narrow window: the name and the tools on one line, the search across the next. */
+@media (max-width: 980px) {
+  .exo-library-head {
+    grid-template-columns: minmax(0, 1fr) auto;
+    row-gap: 12px;
+  }
+
+  .exo-library-search {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
+}
+
+/* The scrubber (LibraryScrubber.tsx): the sort's groups down the right edge, there while the grid scrolls or the pointer
+   is at the edge, and nothing at rest. Its strip catches the pointer over the grid's edge; the capsule of labels is a
+   plate (glass.css), so its words keep their contrast over any cover. */
+.exo-scrubber-track {
+  position: absolute;
+  top: 12px;
+  right: 0;
+  bottom: 24px;
+  z-index: 15;
+  width: 26px;
+  touch-action: none;
+  cursor: default;
+}
+
+.exo-scrubber {
+  position: absolute;
+  top: -8px;
+  right: 6px;
+  bottom: -8px;
+  width: var(--exo-scrubber-w, 26px);
+  border-radius: 13px;
+  background-color: var(--exo-fill);
+  box-shadow: var(--exo-rim);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--dur-quick) var(--ease-out);
+}
+
+.exo-scrubber-track.is-awake .exo-scrubber {
+  opacity: 1;
+  transition-duration: var(--dur-base);
+}
+
+.exo-scrubber-label {
+  position: absolute;
+  right: 0;
+  left: 0;
+  margin-top: 8px;
+  padding: 0 7px;
+  translate: 0 -50%;
+  color: var(--color-fg);
+  font-size: calc(12px * var(--exo-scale, 1));
+  font-weight: 500;
+  line-height: normal;
+  text-align: center;
+  white-space: nowrap;
+}
+
+/* Words (Today, 100+ hr, Steam) are wider than letters: the capsule takes their width, right-aligned. */
+.exo-scrubber-track.is-words {
+  --exo-scrubber-w: 100px;
+}
+
+.exo-scrubber-track.is-words .exo-scrubber-label {
+  padding-right: 10px;
+  text-align: right;
+}
+
+.exo-scrubber-dot {
+  position: absolute;
+  left: 50%;
+  width: 3px;
+  height: 3px;
+  margin-top: 8px;
+  border-radius: 999px;
+  background: var(--color-muted);
+  translate: -50% -50%;
+}
+
+/* Where the grid is now. */
+.exo-scrubber-now {
+  position: absolute;
+  right: 3px;
+  left: 3px;
+  height: 2px;
+  margin-top: 8px;
+  border-radius: 999px;
+  background: var(--color-fg);
+  opacity: 0.5;
+  translate: 0 -50%;
+}
+
+/* The group under the pointer, riding beside the capsule. */
+.exo-scrubber-bubble {
+  position: absolute;
+  right: calc(var(--exo-scrubber-w, 26px) + 14px);
+  min-height: 28px;
+  padding: 0 12px;
+  color: var(--color-fg);
+  white-space: nowrap;
+  translate: 0 -50%;
+  pointer-events: none;
+}
+
+/* Filter leads with its glyph, not a trailing chevron (the sort's svg rule pulls a chevron in by 10px). */
+.exo-shelf-sort-trigger.exo-library-filter {
+  padding: 0 14px 0 12px;
+}
+
+.exo-shelf-sort-trigger.exo-library-filter svg {
+  margin-right: 0;
+}
+
+/* Filter's popover: chips in groups, wrapping in a slab as wide as a few of them. */
+.exo-shelf-sort-menu.exo-library-filter-pop {
+  width: min(420px, calc(100vw - 2 * var(--exo-gutter)));
+  max-height: min(70vh, 560px);
+  padding: 4px 12px 14px;
+}
+
+.exo-library-filter-group .exo-menu-section {
+  padding-inline: 2px;
+}
+
+.exo-library-filter-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.exo-library-filter-chips .exo-shelf-chip {
+  box-shadow: var(--exo-rim);
+}
+
+.exo-library-filter-chips .exo-shelf-chip:disabled {
+  color: var(--color-muted);
+  box-shadow: none;
+}
+
+.exo-library-filter-clear {
+  align-self: flex-start;
+  margin-top: 12px;
+}

@@ -15,8 +15,8 @@
 .exo-windowed-game-grid {
   --exo-grid-padding-top: 8px;
   --exo-grid-padding-bottom: 40px;
-  --exo-grid-column-gap: 12px;
-  --exo-grid-row-gap: 12px;
+  --exo-grid-column-gap: var(--exo-gap);
+  --exo-grid-row-gap: var(--exo-gap);
   display: block;
   width: 100%;
   min-width: 0;

@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Menu } from '../ui/Menu'
 import { DownloadsSheet } from '../DownloadsSheet'
-import { ChevronDown, Download, FolderPlus, Controller, Key, More, Refresh, SelectMany } from '../../brand/icons'
+import { ChevronDown, Download, FolderPlus, Controller, Key, More, Plus, Refresh, SelectMany } from '../../brand/icons'
 import type { SortMode } from '../../lib/host'
 import { SORT_LABELS, SORT_OPTIONS } from '../../lib/library'
 import { ErrorState } from '../ui/ErrorState'
@@ -14,9 +14,10 @@ const ADD_ITEMS = [
 ]
 
 /**
- * The grid's two tools. The sort menu's Show section is what the grid lists: All games, or Hidden games (only the games
- * you hid). More holds the rest: adding (a folder, a game's .exe, a key), Select games, which picks games to act on
- * together (its bar's Done, or Escape, ends it), and Refresh library, while the covers shine.
+ * The Library's tools at the head's right edge, after Filter. The sort menu's Show section is what the grid lists: All
+ * games, or Hidden games (only the games you hid). More holds Select games, which picks games to act on together (its
+ * bar's Done, or Escape, ends it), Downloads, and Refresh library, while the covers shine. Add, the room's one primary,
+ * adds a folder, a game's .exe or a key.
  */
 export function LibraryTools({ selecting, onSelecting, sort, onSort, hidden, onHidden, onActivateKey, onNewFolder, onAddGame, refreshing, onRefresh }: {
   selecting: boolean
@@ -36,7 +37,7 @@ export function LibraryTools({ selecting, onSelecting, sort, onSort, hidden, onH
   const [downloads, setDownloads] = useState(false)
   const actions: Record<string, () => void> = { 'new-folder': onNewFolder, game: onAddGame, key: onActivateKey, select: () => onSelecting(true), refresh: onRefresh, downloads: () => setDownloads(true) }
   return (
-    <div className="exo-library-tools">
+    <>
       <DownloadsSheet open={downloads} onClose={() => setDownloads(false)} />
       <Menu
         label="Sort library"
@@ -58,14 +59,22 @@ export function LibraryTools({ selecting, onSelecting, sort, onSort, hidden, onH
         triggerClassName="exo-library-more"
         trigger={<More size={16} />}
         items={[
-          ...ADD_ITEMS,
           ...(selecting ? [] : [{ id: 'select', label: 'Select games', icon: <SelectMany size={16} /> }]),
           { id: 'downloads', label: 'Downloads', icon: <Download size={16} /> },
           { id: 'refresh', label: 'Refresh library', icon: <Refresh size={16} />, disabled: refreshing },
         ]}
         onAction={id => actions[id]?.()}
       />
-    </div>
+      <Menu
+        label="Add"
+        anchor="--exo-library-add"
+        offset={8}
+        triggerClassName="exo-set-btn is-primary exo-library-add"
+        trigger={<><Plus size={16} />Add</>}
+        items={ADD_ITEMS}
+        onAction={id => actions[id]?.()}
+      />
+    </>
   )
 }
 

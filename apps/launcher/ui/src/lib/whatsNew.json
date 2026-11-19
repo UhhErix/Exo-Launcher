@@ -3,6 +3,26 @@
     "version": "3.26.0",
     "items": [
       {
+        "icon": "Library",
+        "title": "A cleaner Library",
+        "detail": "Your games sit edge to edge under one head with the search in the middle, and a scrubber on the right edge jumps from A to Z as you scroll."
+      },
+      {
+        "icon": "Search",
+        "title": "Search the way you'd say it",
+        "detail": "Type \"racing games I haven't played\" or \"co-op installed\" and the Library shows just those, worked out on your PC."
+      },
+      {
+        "icon": "Filter",
+        "title": "Filters that add up",
+        "detail": "Pick stores, installed, played, family shared, friends playing, genres and modes together; each shows as a chip you can take off."
+      },
+      {
+        "icon": "Info",
+        "title": "Game pages, details on demand",
+        "detail": "A game opens on its cover, name and Play; Info (or I) opens its facts, upscalers, shaders and HDR beside it, every page the same size."
+      },
+      {
         "icon": "Encrypted",
         "title": "Cloudflare DNS, encrypted",
         "detail": "Best settings sets Cloudflare's DNS with encryption on, for faster lookups that nobody on the way can read; its switch puts your old DNS back."

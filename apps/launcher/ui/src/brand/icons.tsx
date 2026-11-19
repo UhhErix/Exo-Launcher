@@ -200,6 +200,8 @@ export const BellOff = icon('bell-off')
 export const Inbox = icon('inbox')
 export const Grip = icon('grip')
 export const Eye = icon('eye')
+export const Info = icon('info')
+export const Filter = icon('filter')
 export const EyeOff = icon('eye-off')
 /** Copy an ID (developer mode). */
 export const Id = icon('id')

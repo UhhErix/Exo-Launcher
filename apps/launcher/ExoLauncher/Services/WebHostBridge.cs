@@ -2963,6 +2963,9 @@ public sealed partial class WebHostBridge
         isRunning = runState.IsRunning,
         canStop = runState.CanStop,
         buyUrl = Storefront.BuyUrl(g),
+        familyShared = g.FamilyShared,
+        // The Library's search and Filter menu (racing, co-op ...): Steam's own record, already in memory.
+        tags = SteamAppTags.For(g),
         };
     }
 

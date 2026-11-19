@@ -173,6 +173,55 @@ const MOCK_GAMES: Game[] = [
   },
 ]
 
+/** Genres and modes as Steam's record words them (SteamAppTags.cs), for the Library's search and Filter menu in the mock. */
+const MOCK_TAGS: Record<string, string[]> = {
+  'mock:hades': ['action', 'rpg', 'indie', 'single-player', 'controller'],
+  'steam:3472040': ['sports', 'simulation', 'single-player', 'multiplayer', 'co-op', 'local co-op', 'controller'],
+  'steam:1938090': ['action', 'single-player', 'multiplayer', 'co-op', 'controller'],
+  'mock:eldenring': ['action', 'rpg', 'single-player', 'multiplayer', 'co-op', 'controller'],
+  'mock:rivals': ['action', 'free to play', 'multiplayer', 'controller'],
+}
+for (const game of MOCK_GAMES) if (MOCK_TAGS[game.id]) game.tags = MOCK_TAGS[game.id]
+const familyGame = MOCK_GAMES.find(game => game.id === 'steam:3472040')
+if (familyGame) familyGame.familyShared = true
+
+/**
+ * `?games=N` in browser dev: N more made-up games (no real titles), for the grid's windowing, the scrubber and search
+ * at the size of a big library.
+ */
+const mockExtraGames = typeof location === 'undefined' ? 0 : Math.min(2000, parseInt(new URLSearchParams(location.search).get('games') ?? '', 10) || 0)
+{
+  const first = ['Ashen', 'Bright', 'Cinder', 'Distant', 'Echo', 'Fallen', 'Glass', 'Hollow', 'Iron', 'Jade', 'Kindred', 'Lunar', 'Molten', 'Night', 'Outer', 'Pale', 'Quiet', 'Rust', 'Silent', 'Tidal', 'Umbral', 'Velvet', 'Wild', 'Xeno', 'Yonder', 'Zero']
+  const second = ['Circuit', 'Drift', 'Frontier', 'Harbor', 'Kingdom', 'Legion', 'Orbit', 'Pilgrim', 'Rally', 'Signal', 'Tactics', 'Voyage']
+  const stores = ['steam', 'steam', 'steam', 'epic', 'gog', 'xbox', 'ea', 'ubisoft']
+  const genres = ['action', 'adventure', 'rpg', 'strategy', 'simulation', 'racing', 'sports', 'casual', 'indie']
+  const modes = [['single-player'], ['multiplayer'], ['single-player', 'co-op'], ['multiplayer', 'co-op', 'local co-op'], ['single-player', 'controller']]
+  for (let i = 0; i < mockExtraGames; i++) {
+    const store = stores[i % stores.length]
+    const installed = i % 3 === 0
+    const played = i % 4 !== 1
+    MOCK_GAMES.push({
+      id: `mock:extra-${i}`,
+      title: `${first[i % first.length]} ${second[Math.floor(i / first.length) % second.length]}${i >= first.length * second.length ? ` ${Math.floor(i / (first.length * second.length)) + 1}` : ''}`,
+      // Made-up art addresses: the UI pass's harness draws a picture for each; anywhere else they fail and the card shows its name.
+      coverUrl: i % 5 === 4 ? null : `https://cdn.cloudflare.steamstatic.com/steam/apps/${900000 + i}/library_600x900.jpg`,
+      store,
+      installed,
+      owned: true,
+      canInstall: !installed,
+      primaryAction: installed ? 'play' : 'install',
+      status: installed ? 'Ready' : 'Demo',
+      playtimeMinutes: played ? (i * 137) % 9000 : 0,
+      lastPlayedUtc: played ? new Date(Date.now() - ((i * 9) % 800) * 86_400_000).toISOString() : null,
+      sizeBytes: ((i * 13) % 140 + 2) * 1024 ** 3,
+      deps: [],
+      launchNote: '',
+      tags: store === 'steam' ? [genres[i % genres.length], ...modes[i % modes.length]] : undefined,
+      familyShared: store === 'steam' && i % 11 === 0,
+    })
+  }
+}
+
 /** `?onboarding` in browser dev replays first-run setup against the mock. */
 const mockFirstRun = typeof location !== 'undefined' && new URLSearchParams(location.search).has('onboarding')
 // ?backup: a daily backup from yesterday exists (Last backup in Settings; the restore offer on first run); Back up now makes today's.
