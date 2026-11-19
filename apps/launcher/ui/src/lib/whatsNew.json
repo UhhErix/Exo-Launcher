@@ -156,6 +156,11 @@
         "icon": "Server",
         "title": "Crash reports are not lost",
         "detail": "A report Exo's service can't take right now is kept on your PC and sent at a later start."
+      },
+      {
+        "icon": "Performance",
+        "title": "A System group in Best settings",
+        "detail": "Exo puts back Windows settings a tweak tool changed that slow games down, each with its own switch and a restore point first; Memory Integrity off is yours to choose."
       }
     ]
   },
