@@ -41,7 +41,13 @@ async function fileFrom(t, button, id, label) {
   return false
 }
 
-/** A game's sheet through Ctrl+K by its name; false when it didn't open. */
+/** Opens the sheet's Info pane (the facts and the game's lines; it stays open game to game for the session) and waits for it. */
+async function showInfo(t) {
+  await t.shell.eval(`(() => { const b = document.querySelector('.exo-game-overlay-stage .exo-game-info-toggle'); if (b && b.getAttribute('aria-pressed') !== 'true') b.click() })()`)
+  return !!await t.shell.waitFor(() => document.querySelector('.exo-game-overlay-stage .exo-game-info-pane')?.checkVisibility() ? true : null, { timeoutMs: 2000 })
+}
+
+/** A game's sheet through Ctrl+K by its name, its Info pane open; false when it didn't open. */
 async function openByName(t, title) {
   await t.shell.key('k', { ctrl: true })
   if (!await t.shell.waitFor(() => document.activeElement?.getAttribute('role') === 'combobox', { timeoutMs: 3000 })) return false
@@ -49,7 +55,7 @@ async function openByName(t, title) {
   await t.shell.type(title)
   if (!await t.shell.waitFor((n) => [...document.querySelectorAll('[role="dialog"] [role="option"]')].some(o => o.textContent.includes(n)), { timeoutMs: 4000, args: [title.slice(0, 12)] })) return false
   await t.shell.key('Enter')
-  return !!await t.shell.waitFor(sheetTitle, { timeoutMs: 5000 })
+  return !!await t.shell.waitFor(sheetTitle, { timeoutMs: 5000 }) && await showInfo(t)
 }
 
 async function pickSort(t, label) {
@@ -411,9 +417,9 @@ export async function run(t) {
 
   await run.check('library', 'folder', 'a folder is made, shows first, opens, changes color and is deleted', async (c) => {
     const failures = []
-    await t.shell.click(() => document.querySelector('.exo-library-more'))
+    await t.shell.click(() => document.querySelector('.exo-library-add'))
     await sleep(400)
-    if (!await t.shell.click(menuItem, 'New folder')) return ['no New folder in the + menu']
+    if (!await t.shell.click(menuItem, 'New folder')) return ['no New folder in the Add menu']
     await sleep(700)
     await t.shell.type('Exo e2e')
     await t.shell.click(() => document.querySelector('.exo-folder-swatch[data-color="green"]'))
@@ -477,9 +483,9 @@ export async function run(t) {
   })
 
   await run.check('library', 'folder-not-installed', "New folder's Add all not installed ticks every uninstalled game and takes them back", async (c) => {
-    await t.shell.click(() => document.querySelector('.exo-library-more'))
+    await t.shell.click(() => document.querySelector('.exo-library-add'))
     await sleep(400)
-    if (!await t.shell.click(menuItem, 'New folder')) { await t.shell.key('Escape'); return ['no New folder in the + menu'] }
+    if (!await t.shell.click(menuItem, 'New folder')) { await t.shell.key('Escape'); return ['no New folder in the Add menu'] }
     await sleep(700)
     const TOGGLE = `[...document.querySelectorAll('.exo-folder-sheet-tools button')].find(b => /not installed/.test(b.textContent))`
     const label = await t.shell.eval(`${TOGGLE}?.textContent ?? null`)
@@ -531,14 +537,43 @@ export async function run(t) {
     return failures
   })
 
-  await run.check('library', 'add-menu', 'the + menu offers New folder, Add a game and Activate key, each once', async (c) => {
-    await t.shell.click(() => document.querySelector('.exo-library-more'))
+  await run.check('library', 'add-menu', 'the Add menu offers New folder, Add a game and Activate key, each once', async (c) => {
+    await t.shell.click(() => document.querySelector('.exo-library-add'))
     const items = await t.shell.waitFor(() => { const m = [...document.querySelectorAll('[role="menu"]')].find(x => x.getBoundingClientRect().width); return m ? [...m.querySelectorAll('[role^="menuitem"]')].map(i => i.textContent.trim()) : null }, { timeoutMs: 3000 })
     await t.shell.key('Escape')
     c.evidence.items = items
     const want = ['New folder', 'Add a game', 'Activate key']
     if (!items) return ['the menu did not open']
     return [...want.filter(w => !items.includes(w)).map(w => `no ${w}`), ...items.filter((w, i) => items.indexOf(w) !== i).map(w => `${w} twice`)]
+  })
+
+  await run.check('library', 'search', 'the search finds a game by its name and reads "installed" as a filter, and Filter > Installed leaves only installed games, as a chip that comes off', async (c) => {
+    const failures = []
+    const SEARCH = `document.querySelector('.exo-library-search input')`
+    const target = await t.shell.eval(`[...document.querySelectorAll('.exo-game-grid button[data-game-id]:not(.exo-folder-tile *)')].map(b => b.getAttribute('aria-label')).find(Boolean)?.split(' (')[0] ?? null`)
+    if (!target) c.skip('no game in the grid')
+    const word = target.split(/\s+/).find(w => /^[\p{L}\p{N}]{3,}$/u.test(w)) ?? target
+    await t.shell.click(() => document.querySelector('.exo-library-search input'))
+    await t.shell.type(word)
+    const found = await t.shell.waitFor((w) => { const labels = [...document.querySelectorAll('.exo-game-grid button[data-game-id]')].map(b => b.getAttribute('aria-label') ?? ''); return labels.length && labels.every(l => l.toLowerCase().includes(w.toLowerCase())) ? labels.length : null }, { timeoutMs: 3000, args: [word] })
+    c.evidence.search = { word, found }
+    if (!found) failures.push(`searching "${word}" left games without it in their name`)
+    await t.shell.eval(`(() => { const i = ${SEARCH}; const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set; set.call(i, 'installed'); i.dispatchEvent(new Event('input', { bubbles: true })) })()`)
+    const understood = await t.shell.waitFor(() => [...document.querySelectorAll('.exo-library-chip.is-understood')].map(x => x.textContent.trim()).join(',') || null, { timeoutMs: 3000 })
+    if (understood !== 'Installed') failures.push(`"installed" read as ${understood}`)
+    await t.shell.key('Escape')
+    if (!await t.shell.waitFor(() => document.querySelector('.exo-library-search input')?.value === '' ? true : null, { timeoutMs: 2000 })) failures.push('Escape left the search')
+    await t.shell.click(() => document.querySelector('.exo-library-filter'))
+    await sleep(350)
+    if (!await t.shell.click(() => [...document.querySelectorAll('.exo-library-filter-pop button')].find(b => b.textContent.trim() === 'Installed'))) { await t.shell.key('Escape'); return [...failures, 'no Installed in Filter'] }
+    await t.shell.key('Escape')
+    const only = await t.shell.waitFor(() => document.querySelector('.exo-library-chip.is-filter') ? { chips: document.querySelectorAll('.exo-library-chip.is-filter').length, dim: document.querySelectorAll('.exo-game-grid .exo-tile.is-dim').length } : null, { timeoutMs: 3000 })
+    c.evidence.filter = only
+    if (!only) failures.push('Installed did not show as a chip')
+    else if (only.dim) failures.push(`${only.dim} games not installed left in the grid`)
+    await t.shell.click(() => document.querySelector('.exo-library-chip.is-filter'))
+    if (!await t.shell.waitFor(() => !document.querySelector('.exo-library-chips') ? true : null, { timeoutMs: 2000 })) failures.push('the chip did not come off')
+    return failures
   })
 
   await run.check('library', 'continue', 'Continue shows its games with their titles on a dark plate, and a right-click opens the menu', async (c) => {
@@ -568,6 +603,8 @@ export async function run(t) {
     if (!named.plate || !named.label?.startsWith(named.plate)) failures.push(`the plate says ${named.plate}, the card ${named.label}`)
     if (named.plates !== 1) failures.push(`${named.plates} plates on screen`)
     await t.shell.key('Enter')
+    await t.shell.waitFor(sheetTitle, { timeoutMs: 5000 })
+    await showInfo(t)
     const facts = await t.shell.waitFor(() => {
       const all = [...document.querySelectorAll('.exo-game-overlay-stage .exo-game-fact')]
       return all.length ? all.map(x => ({ value: x.querySelector('dd')?.textContent.trim(), label: x.querySelector('dt')?.textContent.trim(), size: parseFloat(getComputedStyle(x.querySelector('dd')).fontSize) })) : null

@@ -68,16 +68,34 @@ public sealed class SteamFamilyLibraryTests
     }
 
     [Fact]
-    public void FamilyTitlesAreLicensedButNotOwnedAndOwnedWins()
+    public void FamilyMemberNamesAreTheFamilyBlocksOnly()
+    {
+        var text = LocalConfig
+            .Replace("\"accountid\"   \"100\"", "\"accountid\"   \"100\"\n \"name\" \"Me\"", StringComparison.Ordinal)
+            .Replace("\"accountid\"   \"200\"", "\"accountid\"   \"200\"\n \"avatar\" \"ab\"\n \"name\" \"Sam \\\"S\\\"\"", StringComparison.Ordinal);
+
+        var names = SteamPlaytime.ParseFamilyMemberNames(text);
+
+        Assert.Equal("Me", names["100"]);
+        Assert.Equal("Sam \\\"S\\\"", names["200"]);
+        Assert.False(names.ContainsKey("300"));   // no name in its block
+        Assert.False(names.ContainsKey("999"));   // a friend, not a member
+        Assert.Empty(SteamPlaytime.ParseFamilyMemberNames(text.Replace("\"10001\"", "\"0\"", StringComparison.Ordinal)));
+    }
+
+    [Fact]
+    public void FamilyTitlesFromTheClientAreLicensedButNotOwnedAndOwnedWins()
     {
         var client = new HashSet<string> { "10", "20", "30" };
         var webApi = new HashSet<string> { "10", "40" };
 
-        Assert.Equal(["20", "30"], SteamAccountLibrary.FamilyAppIds(true, client, webApi).Order(StringComparer.Ordinal));
-        Assert.Empty(SteamAccountLibrary.FamilyAppIds(false, client, webApi));
-        Assert.Empty(SteamAccountLibrary.FamilyAppIds(true, client, null));
-        Assert.Empty(SteamAccountLibrary.FamilyAppIds(true, null, webApi));
+        Assert.Equal(["20", "30"], Ids(SteamFamilyLibrary.Resolve(null, client, webApi, true, false, null)));
+        Assert.Empty(Ids(SteamFamilyLibrary.Resolve(null, client, webApi, false, false, null)));
+        Assert.Empty(Ids(SteamFamilyLibrary.Resolve(null, client, null, true, false, null)));
+        Assert.Empty(Ids(SteamFamilyLibrary.Resolve(null, null, webApi, true, false, null)));
     }
+
+    private static string[] Ids(SteamFamilyLibrary.Resolved resolved) => resolved.AppIds.Order(StringComparer.Ordinal).ToArray();
 
     [Theory]
     [InlineData(Lender, true)]
@@ -103,7 +121,7 @@ public sealed class SteamFamilyLibraryTests
             ["60"] = new("Installed Family Game", "game"),
         };
         var licensed = new HashSet<string> { "10", "20", "30", "40", "50", "60" };
-        var family = SteamAccountLibrary.FamilyAppIds(true, licensed, new HashSet<string> { "10" });
+        var family = SteamFamilyLibrary.Resolve(null, licensed, new HashSet<string> { "10" }, true, false, null).AppIds;
 
         var rows = SteamAccountLibrary.UninstalledOwnedGames(
             licensed, new HashSet<string> { "60" }, names, licensed, family);

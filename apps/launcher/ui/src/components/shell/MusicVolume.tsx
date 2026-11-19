@@ -6,6 +6,7 @@ import { onPageActivityChanged, pageIsActive, pageIsVisible } from '../../lib/pa
 import { volumeKeyStep } from '../../lib/musicVolume'
 import { Slider } from '../ui/Slider'
 import { Volume, VolumeLow, VolumeOff } from '../../brand/icons'
+import { errorText } from '../../lib/errorWords'
 
 /** The app's own level in percent (null until it has answered) and where it came from. */
 export type MusicLevel = { level: number | null; source: MusicVolumeSource | null }
@@ -92,7 +93,7 @@ export function MusicVolume({ volume, onRefresh, className }: { volume: number |
         try {
           const result = await host.musicVolume(target)
           if (!s.alive || revision !== s.revision) continue
-          if (!result.ok) throw Error(result.message || 'Music volume could not be changed.')
+          if (!result.ok) throw Error(result.message || 'The music volume didn’t change. Try again.')
           // A provider response may arrive while the thumb is still moving.
           // Keep the user's position until the gesture ends and the latest value settles.
           const actual = typeof result.level === 'number' ? Math.round(result.level * 100) : target
@@ -106,7 +107,7 @@ export function MusicVolume({ volume, onRefresh, className }: { volume: number |
         } catch (error) {
           // Roll back to the last level the session actually accepted; the
           // prop may still be a read from before the previous write landed.
-          if (s.alive && revision === s.revision) { setDraft(s.accepted); setError(error instanceof Error ? error.message : 'Music volume could not be changed.') }
+          if (s.alive && revision === s.revision) { setDraft(s.accepted); setError(errorText(error, 'The music volume didn’t change. Try again.')) }
         }
       }
     } finally { s.writing = false }

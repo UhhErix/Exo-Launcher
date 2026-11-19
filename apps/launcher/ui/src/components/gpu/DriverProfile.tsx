@@ -3,7 +3,9 @@ import type { GpuProfile, IntelLowLatency } from '../../lib/host'
 import { trimStop } from '../../lib/utils'
 import { Choice } from '../settings/Choice'
 import { Row, State } from '../settings/parts'
-import { Spinner } from '../ui/Spinner'
+import { ActionButton } from '../ui/ConfirmButton'
+import type { PlainError } from '../../lib/errorWords'
+import { gpuOffers } from '../../lib/canUse'
 
 const LOW_LATENCY = [
   { value: 'on', label: 'On' },
@@ -21,61 +23,57 @@ export type LatencyChoice = { lowLatency?: IntelLowLatency }
  * with Anti-Lag always on, no choice; an Intel GPU's with its Low latency mode beside Use, On by default), and Undo while
  * Exo's backup is there.
  */
-export function DriverProfile({ profile, busy, error, onAct }: {
+export function DriverProfile({ profile, error, onAct, onSettled, onFailed }: {
   profile: GpuProfile
-  /** What is being written, while it is. */
-  busy: 'apply' | 'undo' | null
   error: string | null
-  onAct: (action: 'apply' | 'undo', latency: LatencyChoice) => void
+  onAct: (action: 'apply' | 'undo', latency: LatencyChoice) => Promise<unknown>
+  onSettled: (next: unknown) => void
+  onFailed: (failure: PlainError) => void
 }) {
-  const intel = profile.vendor === 'intel'
+  const intel = gpuOffers(profile.vendor).lowLatency
   const saved = profile.lowLatency ?? 'on'
   const [choice, setChoice] = useState<string | null>(null)
   const latency = choice ?? saved
   const changed = intel && latency !== saved
   const act = (action: 'apply' | 'undo') => {
     setChoice(null)
-    onAct(action, intel ? { lowLatency: latency as IntelLowLatency } : {})
+    return onAct(action, intel ? { lowLatency: latency as IntelLowLatency } : {})
   }
   return (
     <Row label={PROFILE_ROW} detail={changed ? null : changedLine(profile)}
       error={error ?? (profile.ok ? null : trimStop(profile.message) || 'The driver did not answer. Try again.')}>
       {profile.status === 'applied' && !changed ? <State on>Applied</State> : null}
-      {intel ? <Choice label="Low latency" value={latency} choices={LOW_LATENCY} disabled={!!busy} onChange={setChoice} /> : null}
-      <ProfileButtons apply={applyWords(profile, changed, busy === 'apply')} undo={!!profile.canUndo} busy={busy} onAct={act} />
+      {intel ? <Choice label="Low latency" value={latency} choices={LOW_LATENCY} onChange={setChoice} /> : null}
+      <ProfileButtons apply={applyWords(profile, changed)} undo={!!profile.canUndo} onAct={act} onSettled={onSettled} onFailed={onFailed} />
     </Row>
   )
 }
 
 /**
- * Exo's profile's Use (or Re-apply), named by `apply`, and Undo while Exo's backup is there. The one pressed keeps its
- * words and carries the bar while the driver is written.
+ * Exo's profile's Use (or Re-apply), named by `apply`, and Undo while Exo's backup is there. Each shows its own work
+ * (ActionButton): the ring while the driver is written, then its check, and then the row takes the driver's answer.
  */
-export function ProfileButtons({ apply, undo, busy, onAct }: {
+export function ProfileButtons({ apply, undo, onAct, onSettled, onFailed }: {
   apply: string | null
   undo: boolean
-  busy: 'apply' | 'undo' | null
-  onAct: (action: 'apply' | 'undo') => void
+  onAct: (action: 'apply' | 'undo') => Promise<unknown>
+  onSettled: (next: unknown) => void
+  onFailed: (failure: PlainError) => void
 }) {
+  const press = (action: 'apply' | 'undo') => ({
+    onPress: () => onAct(action), onDone: onSettled, onFailed, why: 'none' as const, context: `ProfileRows.${action}`, fallback: 'Not changed. Try again.',
+  })
   return (
     <>
-      {apply
-        ? <button type="button" className="exo-set-btn is-primary" disabled={!!busy} aria-busy={busy === 'apply'} onClick={() => onAct('apply')}>
-          {busy === 'apply' ? <Spinner label="Writing Exo’s profile to the driver" /> : null}{apply}
-        </button>
-        : null}
-      {undo
-        ? <button type="button" className="exo-set-btn" disabled={!!busy} aria-busy={busy === 'undo'} onClick={() => onAct('undo')}>
-          {busy === 'undo' ? <Spinner label="Putting your driver settings back" /> : null}Undo
-        </button>
-        : null}
+      {apply ? <ActionButton className="exo-set-btn is-primary" {...press('apply')}>{apply}</ActionButton> : null}
+      {undo ? <ActionButton className="exo-set-btn" {...press('undo')}>Undo</ActionButton> : null}
     </>
   )
 }
 
-/** What Use says (Re-apply for what changed since), or null with nothing to apply; kept while it writes, as pressing it put the latency choice back. */
-function applyWords(profile: GpuProfile, changed: boolean, writing: boolean) {
-  if (profile.status !== 'ready' && profile.status !== 'changed' && !changed && !writing) return null
+/** What Use says (Re-apply for what changed since), or null with nothing to apply. The profile is taken only after the button's check, so it stays while it writes. */
+function applyWords(profile: GpuProfile, changed: boolean) {
+  if (profile.status !== 'ready' && profile.status !== 'changed' && !changed) return null
   return profile.status === 'changed' && !changed ? 'Re-apply' : 'Use'
 }
 

@@ -3,6 +3,7 @@ import { Slider } from '../ui/Slider'
 import { ZoomIn, ZoomOut } from '../../brand/icons'
 import { host } from '../../lib/host'
 import { report } from '../../lib/report'
+import { errorText } from '../../lib/errorWords'
 
 /** A folder is a cover: 2 wide by 3 tall. */
 const ASPECT = 2 / 3
@@ -50,7 +51,7 @@ export function FolderCropper({ file, folderId, name, onDone, onCancel }: {
       const { w, h } = cropSize(picture, 1)
       setView({ zoom: 1, x: (picture.width - w) / 2, y: (picture.height - h) / 2 })
       setImage(picture)
-    }, () => { if (live) setError('Exo could not read that picture. Choose another one.') })
+    }, () => { if (live) setError('Exo couldn’t read that picture. Choose another one.') })
     return () => { live = false; decoded?.close() }
   }, [file])
 
@@ -146,10 +147,10 @@ export function FolderCropper({ file, folderId, name, onDone, onCancel }: {
     try {
       const saved = await host.libraryFolderArt(folderId, canvas.toDataURL('image/png').split(',')[1] ?? '')
       if (saved.ok && saved.art) { onDone(saved.art); return }
-      setError(saved.message ?? 'Exo could not save that picture. Try again.')
+      setError(errorText(saved.message, 'Exo couldn’t save that picture. Try again.'))
     } catch (cause) {
       report(cause, 'FolderCropper.save')
-      setError('Exo could not save that picture. Try again.')
+      setError('Exo couldn’t save that picture. Try again.')
     }
     setBusy(false)
   }

@@ -19,8 +19,8 @@ test('the heading names what this PC is missing', () => {
   assert.equal(clientsHeading(status('old', 'beta', true)), 'Exo needs the new Epic launcher')
   assert.equal(clientsHeading(status('new', 'stable', true)), 'Exo needs Steam Beta')
   assert.equal(clientsHeading(status('new', 'beta', false)), 'Your game clients are ready')
-  assert.equal(clientsHeading(status('new', 'unknown', false, 'Exo could not read Steam.')), 'Exo could not check your game clients')
-  assert.equal(clientsHeading(status('unknown', 'beta', false, 'Exo could not read Epic.')), 'Exo could not check your game clients')
+  assert.equal(clientsHeading(status('new', 'unknown', false, 'Exo could not read Steam.')), 'Exo couldn’t check your game clients')
+  assert.equal(clientsHeading(status('unknown', 'beta', false, 'Exo could not read Epic.')), 'Exo couldn’t check your game clients')
 })
 
 test('the step is offered when a store is installed, and not for a PC with neither', () => {

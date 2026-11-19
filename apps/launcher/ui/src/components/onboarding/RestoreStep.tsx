@@ -4,6 +4,9 @@ import { report } from '../../lib/report'
 import { backupDayLabel } from '../../lib/backupDay'
 import { Button } from '../ui/Button'
 import { Spinner } from '../ui/Spinner'
+import { errorText } from '../../lib/errorWords'
+
+const FAILED = 'Your data could not be restored. Start fresh, or try again.'
 
 /**
  * The restore offer (first run only, when another PC's daily backup exists). Restore keeps the step busy until Exo restarts:
@@ -29,11 +32,11 @@ export function RestoreStep({ offer, busy, onBusy, onRefused }: { offer: { day: 
         onRefused()
         return
       }
-      setMessage({ text: done.message, error: true })
+      setMessage({ text: errorText(done.message, FAILED), error: true })
       onBusy(false)
     } catch (error) {
       report(error, 'RestoreStep.restore')
-      setMessage({ text: 'Your data could not be restored. Start fresh, or try again.', error: true })
+      setMessage({ text: errorText(error, FAILED), error: true })
       onBusy(false)
     }
   }

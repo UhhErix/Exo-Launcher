@@ -84,7 +84,7 @@ $Wrangler = if ($TestRun) { $env:EXO_TEST_WRANGLER } else { $null }
 # The address the apps ask. A test runs against a local stand-in (test/publish.test.mjs).
 $Base = if ($TestRun -and $env:EXO_TEST_UPDATES_BASE) { $env:EXO_TEST_UPDATES_BASE } else { 'https://updates.getexo.app' }
 $Bucket = 'exo-releases'
-$WranglerVersion = '4.158.0'
+$WranglerVersion = '4.165.0'
 $Name = @{ launcher = 'ExoLauncher'; cinema = 'ExoCinema' }[$App]
 $Setup = "$Name-Setup.exe"
 $Version = $Tag.Substring(1)
@@ -120,7 +120,7 @@ function Invoke-WranglerOrThrow([string[]]$arguments) {
 # The object's bytes saved to $file: $true when it exists, $false only when wrangler says R2 has no such key (its own
 # words for that, and nothing else); any other answer stops the run, so an outage or a login prompt is never taken for
 # "not there" (which would let a tag's files be replaced).
-# Checked against wrangler 4.158.0 reading a key that does not exist (2026-11-10): exit 1, an empty --file left behind, and
+# Checked against wrangler 4.165.0 reading a key that does not exist (2026-11-10): exit 1, an empty --file left behind, and
 # the line "X [ERROR] The specified key does not exist." in colour codes (the X is its error mark).
 $MissingKey = '(?m)^.{0,3}\[ERROR\] The specified key does not exist\.\s*$'
 function Get-Object([string]$key, [string]$file) {

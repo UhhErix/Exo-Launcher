@@ -8,6 +8,7 @@ import { Popover } from '../ui/Dialog'
 import { Switch } from '../Switch'
 import { Spinner } from '../ui/Spinner'
 import { ErrorNote } from '../ui/ErrorNote'
+import { errorText } from '../../lib/errorWords'
 
 // Form component types.
 const ROW = 1, TEXT_INPUT = 4, TEXT = 10, LABEL = 18, FILE_UPLOAD = 19, RADIO = 21, CHECKS = 22, CHECKBOX = 23
@@ -71,7 +72,7 @@ function AppForm({ modal, guildId, onClose }: { modal: AppModal; guildId: string
     }
     const result = await host.discordApps(modal.channel_id, 'modal', { interactionId: modal.id, answers: withFiles, ...(uploads.length ? { uploads } : {}) })
       .catch(() => ({ ok: false, message: null, nonce: null }))
-    if (!result.ok || !result.nonce) { setBusy(false); setError(result.message ?? "Discord didn't send the form. Try again."); return }
+    if (!result.ok || !result.nonce) { setBusy(false); setError(errorText(result.message, "Discord didn't send the form. Try again.")); return }
     stop.current = followInteraction(result.nonce, (ok, event) => {
       if (ok) onClose()
       else { setBusy(false); setError(failureLine(event)) }

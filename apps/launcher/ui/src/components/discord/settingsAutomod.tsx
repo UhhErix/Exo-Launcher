@@ -8,6 +8,7 @@ import { Spinner } from '../ui/Spinner'
 import { ConfirmButton } from '../ui/ConfirmButton'
 import { Wait, sample, times } from '../ui/Wait'
 import { ErrorNote } from '../ui/ErrorNote'
+import { errorText } from '../../lib/errorWords'
 
 type Action = { type: number; metadata?: { custom_message?: string; channel_id?: string; duration_seconds?: number } }
 type Meta = { keyword_filter?: string[]; regex_patterns?: string[]; allow_list?: string[]; presets?: number[]; mention_total_limit?: number; mention_raid_protection_enabled?: boolean }
@@ -50,7 +51,7 @@ export function AutoMod({ guildId, channels }: { guildId: string; channels: Disc
     setBusy(true); setFailed(null)
     const result = await admin<Rule>('saveAutomod', { guildId, rule })
     setBusy(false)
-    if (!result.ok) { setFailed({ key, message: result.message ?? 'Discord did not save that rule.' }); return false }
+    if (!result.ok) { setFailed({ key, message: errorText(result.message, 'Discord didn’t save that rule.') }); return false }
     rules.reload()
     return true
   }
@@ -58,7 +59,7 @@ export function AutoMod({ guildId, channels }: { guildId: string; channels: Disc
     setBusy(true)
     void admin('deleteAutomod', { guildId, ruleId: rule.id }).then(result => {
       setBusy(false)
-      if (!result.ok) { setFailed({ key: rule.id ?? '', message: result.message ?? 'Discord did not delete that rule.' }); return }
+      if (!result.ok) { setFailed({ key: rule.id ?? '', message: errorText(result.message, 'Discord didn’t delete that rule.') }); return }
       rules.reload()
     })
   }

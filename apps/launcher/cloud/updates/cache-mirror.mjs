@@ -27,7 +27,7 @@ import { tmpdir } from 'node:os'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-export const WRANGLER = 'wrangler@4.158.0'
+export const WRANGLER = 'wrangler@4.165.0'
 export const BUCKET = 'exo-releases'
 export const STATE_KEY = '_mirror/manifest.json'
 const HERE = dirname(fileURLToPath(import.meta.url))

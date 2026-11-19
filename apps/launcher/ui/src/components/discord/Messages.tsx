@@ -12,6 +12,7 @@ import { ErrorNote } from '../ui/ErrorNote'
 import { peek, REQUESTS, unpeek } from './roomPlaces'
 import { rowTime } from '../../lib/discordNow'
 import { mentionsSaid } from './Band'
+import { errorText } from '../../lib/errorWords'
 
 /** Home's rows at the top of the room's one list (Rail.tsx): Now, Friends, Message requests while any wait, then the Conversations
     label (find and New conversation) and the newest eight conversations, each with what was said last (the rest under All
@@ -115,7 +116,7 @@ function GroupDmMenu({ dm, x, y, onLeave, onClose }: { dm: DiscordDm; x: number;
   const [note, setNote] = useState<string | null>(null)
   const [editing, setEditing] = useState(false)
   const info = { id: dm.id, unread: dm.unread || dm.mentions > 0, muted: !!dm.muted, mutedUntil: dm.mutedUntil ?? null }
-  const done = (result: { ok: boolean; message?: string | null }) => { if (result.ok) onClose(); else setNote(result.message ?? 'Discord did not take that.') }
+  const done = (result: { ok: boolean; message?: string | null }) => { if (result.ok) onClose(); else setNote(errorText(result.message, 'Discord didn’t take that.')) }
   const box = useRef<HTMLDivElement>(null)
   useDismiss(box, onClose, { on: !editing })
   useEffect(() => {
@@ -160,7 +161,7 @@ function StartDm({ onOpen, onClose }: { onOpen: (channelId: string) => void; onC
     setError(null)
     const result = await host.discordFriend('dm', one ? { userId: one.id } : { userIds: picked }).catch(() => null)
     setBusy(false)
-    if (result?.channelId) onOpen(result.channelId); else setError(result?.message ?? 'Discord did not make that DM.')
+    if (result?.channelId) onOpen(result.channelId); else setError(errorText(result?.message, 'Discord didn’t make that DM.'))
   }
   const q = query.trim().toLowerCase()
   return (

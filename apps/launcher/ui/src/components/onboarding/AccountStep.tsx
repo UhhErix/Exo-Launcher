@@ -11,7 +11,7 @@ import { ResetScreen } from './ResetScreen'
 export type { AccountScreen } from '../../lib/accountFlow'
 
 const MIN_PASSWORD = 12
-const UNEXPECTED = "Something went wrong on Exo's side. Try again."
+const UNEXPECTED = "Exo's account service didn't answer. Try again in a moment."
 
 interface AccountStepProps {
   /** The account exists and its recovery code, if one was issued, was typed back: the step is done. */

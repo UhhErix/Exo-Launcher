@@ -9,6 +9,7 @@ import { Popover } from '../ui/Dialog'
 import { useDismiss } from '../../lib/dismiss'
 import { Spinner } from '../ui/Spinner'
 import { ErrorNote } from '../ui/ErrorNote'
+import { errorText } from '../../lib/errorWords'
 
 const LENGTHS = [
   { hours: 1, label: '1 hour' }, { hours: 4, label: '4 hours' }, { hours: 8, label: '8 hours' }, { hours: 24, label: '24 hours' },
@@ -34,7 +35,7 @@ export function PollCreator({ channelId, onClose }: { channelId: string; onClose
     setBusy(true)
     setError(null)
     host.discordPollCreate(channelId, { question: question.trim(), texts: filled, hours, multiple })
-      .then(result => { if (result.ok) onClose(); else setError(result.message ?? "Discord didn't post the poll. Try again.") })
+      .then(result => { if (result.ok) onClose(); else setError(errorText(result.message, "Discord didn't post the poll. Try again.")) })
       .catch((err: unknown) => { report(err, 'PollCreator.post'); setError("Discord didn't post the poll. Try again.") })
       .finally(() => setBusy(false))
   }

@@ -10,6 +10,7 @@ import { Menu } from '../ui/Menu'
 import { Wait, sample, times } from '../ui/Wait'
 import { Spinner } from '../ui/Spinner'
 import { ErrorNote } from '../ui/ErrorNote'
+import { errorText } from '../../lib/errorWords'
 
 /** What's reported: Discord's kind and the ids it wants, how it shows on the steps, and who's behind it (Block, Ignore). */
 export type ReportTarget = {
@@ -60,7 +61,7 @@ function ReportForm({ target, onClose }: { target: ReportTarget; onClose: () => 
     let live = true
     host.discordReport(target.kind, 'menu').then(result => {
       if (!live) return
-      if (!result.ok || !result.menu?.nodes) { setError(result.message ?? "Discord didn't send its report questions. Try again."); return }
+      if (!result.ok || !result.menu?.nodes) { setError(errorText(result.message, "Discord didn't send its report questions. Try again.")); return }
       setMenu(result.menu)
       setPath([{ node: result.menu.root_node_id }])
     }, () => { if (live) setError("Discord didn't send its report questions. Try again.") })
@@ -87,7 +88,7 @@ function ReportForm({ target, onClose }: { target: ReportTarget; onClose: () => 
       version: menu.version, variant: menu.variant, language: menu.language ?? 'en', breadcrumbs, elements, ids: target.ids,
     }).catch(() => ({ ok: false, message: null }))
     setSending(false)
-    if (!result.ok) setError(result.message ?? "Discord didn't take the report.")
+    if (!result.ok) setError(errorText(result.message, "Discord didn't take the report."))
     setResult(result.ok ? 'sent' : 'failed')
     // A step that sends itself is its own thank-you (I don't like it): it stays, unless the report failed.
     if (!result.ok || !node.is_auto_submit) setPath(steps => [...steps, { node: result.ok ? menu.success_node_id : menu.fail_node_id }])

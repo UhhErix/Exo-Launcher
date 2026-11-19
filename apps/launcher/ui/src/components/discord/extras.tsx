@@ -15,10 +15,11 @@ import { Popover } from '../ui/Dialog'
 import { useDismiss } from '../../lib/dismiss'
 import { openLink } from '../../lib/music'
 import { cn } from '../../lib/cn'
-import { ConfirmLabel } from '../ui/ConfirmButton'
+import { ActionButton, ConfirmLabel } from '../ui/ConfirmButton'
 import { useLinkGuard } from '../ui/useLinkGuard'
-import { saveImage } from './ImageMenu'
+import { SAVE_FAILED, saveImage } from './ImageMenu'
 import { ErrorNote } from '../ui/ErrorNote'
+import { errorText } from '../../lib/errorWords'
 
 // The room's overlays are asked for by event, so any message or list can open them. The person as the
 // message or list shows them stands in when Discord doesn't send their profile.
@@ -176,7 +177,7 @@ function PopoutFriend({ data, onError }: { data: Loaded; onError: (error: string
     setBusy(true); onError(null)
     const why = "Discord didn't take that."
     void host.discordFriend('accept', { userId: data.profile.user.id, confirm })
-      .then(result => { if (result.ok) setRelation(relation === 3 ? 1 : 4); else if (result.stranger) stranger.refused(); else onError(result.message ?? why) }, () => onError(why))
+      .then(result => { if (result.ok) setRelation(relation === 3 ? 1 : 4); else if (result.stranger) stranger.refused(); else onError(errorText(result.message, why)) }, () => onError(why))
       .finally(() => setBusy(false))
   }
   const label = relation === 3 ? 'Accept friend request' : relation === 4 ? 'Friend request sent' : 'Add friend'
@@ -245,7 +246,7 @@ export function ImageHost() {
       <div className="exo-dc-lightbox-foot" onClick={event => event.stopPropagation()}>
         <span className="exo-dc-lightbox-name">{imageName(item.original)}</span>
         <OpenInBrowser url={item.original} />
-        {view.video ? null : <button type="button" className="exo-dc-lightbox-act" onClick={keep(() => saveImage(item.src))}>Save</button>}
+        {view.video ? null : <ActionButton className="exo-dc-lightbox-act" context="Discord.saveImage" fallback={SAVE_FAILED} done="Saved" onPress={() => saveImage(item.src)}>Save</ActionButton>}
       </div>
       {count > 1 ? (
         <>
@@ -272,10 +273,10 @@ export function AddServer({ refused, onJoined, onClose }: { refused: boolean | {
     try {
       const result = await host.discordServer('join', { invite: invite.trim() })
       if (result.ok && result.guildId) onJoined(result.guildId)
-      else setError(result.message ?? 'Discord did not take that invite.')
+      else setError(errorText(result.message, 'Discord didn’t take that invite.'))
     } catch (err) {
       report(err, 'AddServer.join')
-      setError('Discord did not take that invite.')
+      setError('Discord didn’t take that invite.')
     } finally { setBusy(false) }
   }
   return (
