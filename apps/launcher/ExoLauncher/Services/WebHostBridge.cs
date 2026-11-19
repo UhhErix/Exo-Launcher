@@ -2114,6 +2114,7 @@ public sealed partial class WebHostBridge
             autoUpdateGames = s.AutoUpdateGames,
             autoUpdateChipset = s.AutoUpdateChipset,
             autoUpdateUpscalers = s.AutoUpdateUpscalers,
+            upscalerAntiCheatEverywhere = s.UpscalerAntiCheatEverywhere,
             keepAwakeDownloads = s.KeepAwakeDownloads,
             storeClientsQuiet = s.StoreClientsQuiet,
             chipset = ChipsetUpdate.ThisPc is { } update && update.Installed() is not null ? update.Vendor : null,
