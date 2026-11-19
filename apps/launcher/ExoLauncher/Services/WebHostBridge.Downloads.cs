@@ -26,4 +26,37 @@ public sealed partial class WebHostBridge
         _services.Downloads.Apply();
     }
 
+
+    /// <summary>The download manager's list (LaunchOrchestrator.Queue.cs), each game named from the library where the job has no title.</summary>
+    private object DownloadsList()
+    {
+        var (lines, held, pausedByPlayer) = _services.Launcher.DownloadsSnapshot();
+        var library = _services.Library.PeekCachedLibrary().ToDictionary(g => g.Id, g => g.Title, StringComparer.OrdinalIgnoreCase);
+        return new
+        {
+            ok = true,
+            held,
+            pausedByPlayer,
+            autoUpdateGames = _services.Settings.Current.AutoUpdateGames,
+            lines = lines.Select(line => new
+            {
+                gameId = line.GameId,
+                title = line.Title ?? library.GetValueOrDefault(line.GameId) ?? line.GameId,
+                store = line.Store,
+                state = line.State,
+                canPause = line.CanPause,
+                autoUpdate = !_services.Settings.AutoUpdateOff(line.GameId),
+            }).ToArray(),
+        };
+    }
+
+    /// <summary>A game's Update automatically switch: read without <c>on</c>; set with it.</summary>
+    private object GameAutoUpdate(JsonElement p, bool hasParams)
+    {
+        var id = ReadString(p, hasParams, "id");
+        if (string.IsNullOrWhiteSpace(id)) return new { ok = false, message = "Game not found." };
+        if (hasParams && p.TryGetProperty("on", out var on) && on.ValueKind is JsonValueKind.True or JsonValueKind.False)
+            _services.Settings.SetAutoUpdateOff(id, !on.GetBoolean());
+        return new { ok = true, on = !_services.Settings.AutoUpdateOff(id) };
+    }
 }
