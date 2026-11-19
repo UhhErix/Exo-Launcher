@@ -189,16 +189,27 @@ public sealed partial class DlssSwapService
         }
         catch (OperationCanceledException) { AppLog.Info($"Frame generation for {game.Title}'s session: it took too long; the game starts without it."); }
         // Last, after everything that went in: DLSSG SM86 and the recorder can hang the game before its window opens.
-        if (RecorderClashes(game.Id))
+        if (!RecorderClashes(game.Id)) return;
+        string? recorderStays;
+        using (var recorderTimeout = new CancellationTokenSource(TimeSpan.FromSeconds(20)))
         {
-            using var recorderTimeout = new CancellationTokenSource(TimeSpan.FromSeconds(20));
-            try
-            {
-                if (SessionRecorder(game.Id, false, recorderTimeout.Token).GetAwaiter().GetResult() is { } off) AppLog.Warn($"Shaders: recording in {game.Title} stays on: {off}");
-                else AppLog.Info($"Shaders: recording stops in {game.Title}: with its frame generation the game can hang as it starts.");
-            }
-            catch (OperationCanceledException) { AppLog.Warn($"Shaders: recording in {game.Title} stays on: the engine didn't answer."); }
+            try { recorderStays = SessionRecorder(game.Id, false, recorderTimeout.Token).GetAwaiter().GetResult(); }
+            catch (OperationCanceledException) { recorderStays = "the engine didn't answer"; }
         }
+        if (recorderStays is null && !RecorderClashes(game.Id))
+        {
+            // Off for this session only: held, so it is switched on again once it no longer meets DLSSG SM86.
+            SaveSessionHeld((SessionHeldFor(game.Id) ?? new SessionHeld(game.Id, null, false)) with { Recorder = true });
+            AppLog.Info($"Shaders: recording stops in {game.Title} for this session: with its frame generation the game can hang as it starts.");
+            return;
+        }
+        // The recorder stays in: the frame generation sits this session out instead, held for the next.
+        AppLog.Warn($"Shaders: recording in {game.Title} stays on ({recorderStays ?? "its files are still there"}), so its frame generation sits this session out.");
+        if (FrameGenInGame(game.Id) is { } folder)
+            using (var mutation = AcquireMutationGate(game))
+                lock (mutation.Sync)
+                    if (HoldFrameGen(game, folder, SessionHeldFor(game.Id) ?? new SessionHeld(game.Id, null, false)) is { } stays)
+                        AppLog.Warn($"Frame generation in {game.Title}: {stays}");
     }
 
     /// <summary>
@@ -220,11 +231,11 @@ public sealed partial class DlssSwapService
         }
         if (held.Recorder && FrameGenInGame(game.Id) is { } inGame && ReadFrameGenManifest(inGame) is { } back && back.Mod == DlssgSm86.Name)
         {
-            // DLSSG SM86 and the recorder can hang the game as it starts (RecorderClashes): frame generation wins, as at any launch.
-            AppLog.Info($"Shaders: recording stays off in {game.Title}: with its frame generation the game can hang as it starts.");
-            held = held with { Recorder = false };
+            // DLSSG SM86 and the recorder can hang the game as it starts (RecorderClashes): frame generation wins this session;
+            // the recorder stays held, to go back in once it no longer meets DLSSG SM86.
+            AppLog.Info($"Shaders: recording stays off in {game.Title} this session: with its frame generation the game can hang as it starts.");
         }
-        if (held.Recorder)
+        else if (held.Recorder)
         {
             if (await SessionRecorder(game.Id, true, ct).ConfigureAwait(false) is { } off) problem ??= off;
             else held = held with { Recorder = false };

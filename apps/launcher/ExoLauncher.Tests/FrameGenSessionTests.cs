@@ -205,15 +205,31 @@ public sealed partial class FrameGenModTests
         Assert.Equal(DlssgSm86.Name, ReadFrameGenManifest(Path.Combine(_root, UnrealProgram))!.Mod);
         Assert.Equal([false], calls);
 
-        // A recorder held beside DLSSG SM86 is not switched back on with it.
-        File.WriteAllText(Path.Combine(_root, UnrealProgram, "scskiller.ini"), "[scskiller]");
+        Assert.True(service.SessionHeldFor(_game.Id)!.Recorder);   // off for the session, still the player's choice
+
+        // A recorder held beside DLSSG SM86 is not switched back on with it, and stays held for later.
         Assert.Null(await service.TakeOutAfterSession(_game, ct));
-        Assert.True(service.SessionHeldFor(_game.Id)!.Recorder);
         calls.Clear();
         Play(service);
         Assert.Empty(calls);
         Assert.False(File.Exists(Path.Combine(_root, UnrealProgram, "scskiller.ini")));
-        Assert.Null(service.SessionHeldFor(_game.Id));
+        Assert.Equal(new SessionHeld(_game.Id, null, true), service.SessionHeldFor(_game.Id));
+    });
+
+    [Fact]
+    public Task WithoutAntiCheatARecorderThatWontComeOutKeepsDlssgSm86OutOfTheSession() => WithoutAntiCheat(async () =>
+    {
+        ProtectedGame();
+        var before = Snapshot();
+        var ini = Path.Combine(_root, UnrealProgram, "scskiller.ini");
+        // The engine doesn't answer: the recorder stays in.
+        var service = Service(recorder: (_, _, _) => Task.FromResult<string?>("Exo Shaders couldn't turn its recorder off."));
+        File.WriteAllText(ini, "[scskiller]");
+        Play(service);
+        DeletionGate.DeleteFile(ini);
+        Assert.Equal(before, Snapshot());
+        Assert.Equal(DlssgSm86.Name, service.SessionHeldFrameGen(_game.Id)?.Mod);
+        await Task.CompletedTask;
     });
 
     [Fact]
