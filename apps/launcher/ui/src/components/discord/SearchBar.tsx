@@ -7,6 +7,7 @@ import { Icons } from './icons'
 import type { MarkdownContext } from './markdown'
 import { Result, useOutside } from './results'
 import { ErrorNote } from '../ui/ErrorNote'
+import { errorText } from '../../lib/errorWords'
 
 /** Discord's search filters, as typed in its search bar (during: is also on:). */
 type FilterKey = 'from' | 'mentions' | 'has' | 'before' | 'during' | 'after' | 'in' | 'pinned' | 'authorType'
@@ -265,7 +266,7 @@ export function SearchResults({ channel, filters, ctx, onClose }: { channel: Dis
       if (!live) return
       setFound({
         messages: (result.result?.messages ?? []).map(group => group[0]).filter(Boolean), places: result.places ?? {},
-        total: result.result?.total_results ?? 0, error: result.ok ? null : result.message ?? 'Discord did not search.', loading: false,
+        total: result.result?.total_results ?? 0, error: result.ok ? null : errorText(result.message, 'Discord did not search.'), loading: false,
       })
       list.current?.scrollTo({ top: 0 })
     }).catch((err: unknown) => {

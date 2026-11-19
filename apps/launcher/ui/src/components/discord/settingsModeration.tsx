@@ -14,6 +14,7 @@ import { Spinner } from '../ui/Spinner'
 import { ConfirmButton } from '../ui/ConfirmButton'
 import { Wait, sample, times } from '../ui/Wait'
 import { ErrorNote } from '../ui/ErrorNote'
+import { errorText } from '../../lib/errorWords'
 
 type Invite = { code: string; uses: number; max_uses: number; expires_at?: string | null; inviter?: DiscordUser | null; channel?: { id: string; name: string } | null }
 
@@ -38,7 +39,7 @@ export function Invites({ guildId, channels, incidents, onChanged }: { guildId: 
   // A failed revoke, said under its invite.
   const [failed, setFailed] = useState<{ code: string; message: string } | null>(null)
   const revoke = (code: string) => { setFailed(null); void admin('revokeInvite', { guildId, code }).then(result => {
-    if (result.ok) invites.set(list => list && list.filter(i => i.code !== code)); else setFailed({ code, message: result.message ?? 'Discord did not revoke that.' })
+    if (result.ok) invites.set(list => list && list.filter(i => i.code !== code)); else setFailed({ code, message: errorText(result.message, 'Discord did not revoke that.') })
   }) }
   return (
     <>
@@ -93,7 +94,7 @@ function CreateInvite({ guildId, channels, onClose, onCreated }: { guildId: stri
     setBusy(true); setError(null)
     const result = await admin('createInvite', { guildId, channelId, maxAge: Number(maxAge), maxUses: Number(maxUses), temporary })
     setBusy(false)
-    if (result.ok) onCreated(); else setError(result.message ?? 'Discord did not make that invite.')
+    if (result.ok) onCreated(); else setError(errorText(result.message, 'Discord did not make that invite.'))
   }
   return (
     <Confirm title="Invite link settings" action="Generate a new link" danger={false} form busy={busy} disabled={!channelId} error={error} onConfirm={() => void create()} onClose={onClose}>
@@ -121,7 +122,7 @@ function SecurityActions({ guildId, incidents, onClose, onSaved }: { guildId: st
     setBusy(true); setError(null)
     const result = await admin('incidents', { guildId, invites, dms, hours: Number(hours) })
     setBusy(false)
-    if (result.ok) onSaved(); else setError(result.message ?? 'Discord did not save that.')
+    if (result.ok) onSaved(); else setError(errorText(result.message, 'Discord did not save that.'))
   }
   return (
     <Confirm title="Security actions" action="Save" danger={false} form busy={busy} error={error} onConfirm={() => void save()} onClose={onClose}>
@@ -157,7 +158,7 @@ function Webhooks({ guildId, hooks, channels, onRemove, onChanged }: { guildId: 
     if (!text[0]) return
     setError(null)
     void admin<Webhook>('createWebhook', { guildId, channelId: text[0].id }).then(result => {
-      if (!result.ok) { setError(result.message ?? 'Discord did not make that webhook.'); return }
+      if (!result.ok) { setError(errorText(result.message, 'Discord did not make that webhook.')); return }
       onChanged(); if (result.data) setOpen(result.data.id)
     })
   }
@@ -202,11 +203,11 @@ function WebhookEditor({ guildId, hook, channels, onRemove, onChanged }: { guild
     }
     const result = await admin('editWebhook', { guildId, webhookId: hook.id, name: name.trim(), channelId, ...(uploadId ? { uploadId } : {}), removeAvatar: picture === null })
     setBusy(false)
-    if (!result.ok) { dropUpload(uploadId); setError(result.message ?? 'Discord did not save that webhook.'); return }
+    if (!result.ok) { dropUpload(uploadId); setError(errorText(result.message, 'Discord did not save that webhook.')); return }
     setPicture(undefined); onChanged()
   }
   const copy = () => void admin('copyWebhook', { guildId, webhookId: hook.id }).then(result => {
-    if (result.ok) sayCopied('Copied'); else setError(result.message ?? 'Discord didn\u2019t send the link.')
+    if (result.ok) sayCopied('Copied'); else setError(errorText(result.message, 'Discord didn\u2019t send the link.'))
   })
   return (
     <div className="exo-dc-hook-editor">
@@ -274,7 +275,7 @@ export function Integrations({ guildId, moderation, channels }: { guildId: strin
     setBusy(true); setError(null)
     void admin(action, { guildId, [item.kind === 'webhook' ? 'webhookId' : 'integrationId']: item.id }).then(result => {
       setBusy(false)
-      if (!result.ok) { setError(result.message ?? 'Discord did not remove that.'); return }
+      if (!result.ok) { setError(errorText(result.message, 'Discord did not remove that.')); return }
       linked.reload()
     })
   }
@@ -367,7 +368,7 @@ export function AuditLog({ guildId }: { guildId: string }) {
     void admin<Audit>('audit', { ...params, before: entries.at(-1)?.id }).then(result => {
       setLoading(false)
       if (of !== current.current) return
-      if (!result.ok) { setMoreError(result.message ?? 'Discord did not send more.'); return }
+      if (!result.ok) { setMoreError(errorText(result.message, 'Discord did not send more.')); return }
       const page = result.data?.audit_log_entries ?? []
       setMore(m => ({ entries: [...m.entries, ...page.filter(e => !m.entries.some(o => o.id === e.id))], users: [...m.users, ...(result.data?.users ?? [])], done: page.length < 50 }))
     })
@@ -442,7 +443,7 @@ export function Bans({ guildId }: { guildId: string }) {
     setBusy(true)
     void admin('unban', { guildId, userId: ban.user.id }).then(result => {
       setBusy(false)
-      if (!result.ok) { setError(result.message ?? 'Discord did not revoke that ban.'); return }
+      if (!result.ok) { setError(errorText(result.message, 'Discord did not revoke that ban.')); return }
       setOpen(null); bans.set(all => all && all.filter(b => b.user.id !== ban.user.id))
     })
   }

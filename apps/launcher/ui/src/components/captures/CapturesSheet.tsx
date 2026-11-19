@@ -16,8 +16,10 @@ import { pane, pressedArt, transition, visible } from '../../lib/viewTransition'
 import { ErrorNote } from '../ui/ErrorNote'
 import { Wait, times } from '../ui/Wait'
 import { Spinner } from '../ui/Spinner'
+import { ActionButton } from '../ui/ConfirmButton'
 import { Progress } from '../ui/Progress'
 import { ArtImg } from '../ui/ArtImg'
+import { errorText, type PlainError } from '../../lib/errorWords'
 
 /** A capture plays at half volume, as the player's slider shows, until you move it; kept while Exo runs. */
 let playbackVolume = 0.5
@@ -303,11 +305,11 @@ function MakeSmaller({ item, disabled, onChanged, setNote }: {
     setNote(null)
     try {
       const result = await host.captureItem(item.id, 'shrink')
-      if (!result.ok) { setNote({ text: result.message ?? failed, bad: true }); return }
+      if (!result.ok) { setNote({ text: errorText(result.message, failed), bad: true }); return }
       setShrinking(true)
       // The button's ring says it is working; a word from the host (how long, what first) still reads under it.
       if (result.message) setNote({ text: result.message })
-    } catch (error) { setNote({ text: error instanceof Error ? error.message : failed, bad: true }) }
+    } catch (error) { setNote({ text: errorText(error, failed), bad: true }) }
   }
   return (
     <button type="button" className="exo-set-btn" disabled={disabled || shrinking} onClick={() => void start()}>
@@ -446,40 +448,41 @@ function Detail({ item, edit, onStep, onBack, onFavourite, onChanged, onDeleted,
   }, [editing, onStep])
 
 
-  async function act(action: 'delete' | 'reveal' | 'copy' | 'discord') {
+  // Each press says how it went in itself (ActionButton: its ring, its check, or Bad and a shake); why it failed goes on
+  // the sheet's line under them (DESIGN.md › Notify), and what an export saved says so there too.
+  const failedHere = (error: PlainError) => setNote({ text: error.text, bad: true })
+  const act = (action: 'delete' | 'reveal' | 'copy' | 'discord') => async () => {
     setNote(null)
-    const failed = ACT_FAILED[action]
-    try {
-      const result = await host.captureItem(item.id, action)
-      if (!result.ok) { setNote({ text: result.message ?? failed, bad: true }); return }
-      if (result.item) onChanged(result.item)
-      if (action === 'delete') onDeleted()
-      // DESIGN.md › Notify: the result of a press shows where it was, on the sheet's line.
-      if (action === 'copy') setNote({ text: 'Copied' })
-      if (action === 'discord') onDiscord()
-    } catch (error) { setNote({ text: error instanceof Error ? error.message : failed, bad: true }) }
+    const result = await host.captureItem(item.id, action)
+    if (result.ok && result.item) onChanged(result.item)
+    return result
   }
+  const after = (action: 'delete' | 'reveal' | 'copy' | 'discord') => () => {
+    if (action === 'delete') onDeleted()
+    if (action === 'discord') onDiscord()
+  }
+  const actButton = (action: 'delete' | 'reveal' | 'copy' | 'discord', words: string, done?: string) => (
+    <ActionButton className={`exo-set-btn${action === 'delete' ? ' is-danger' : ''}`} context={`Captures.${action}`} fallback={ACT_FAILED[action]}
+      why="none" onFailed={failedHere} done={done} onDone={after(action)} onPress={act(action)}>{words}</ActionButton>
+  )
 
-  async function save(preset: CaptureExport) {
-    if (busy) return
+  const save = (preset: CaptureExport) => async () => {
     setBusy(preset)
     setNote(null)
-    const failed = 'Exo Capture could not save the copy. Try again.'
     try {
       const result = await host.captureEdit(item.id, preset, range[0], trimmed ? range[1] : 0)
-      if (!result.ok) setNote({ text: result.message ?? failed, bad: true })
-      else {
+      if (result.ok) {
         setNote({ text: SAVED[preset] })
         if (result.item) onAdded(result.item)
       }
-    } catch (error) { setNote({ text: error instanceof Error ? error.message : failed, bad: true }) }
-    finally { setBusy(null) }
+      return result
+    } finally { setBusy(null) }
   }
-  /** One export's button: its ring while it saves, its words kept. */
+  /** One export's button: its ring while it saves (an export can take a while: no time limit), then its check. */
   const exportButton = (preset: CaptureExport, words: string, primary = false) => (
-    <button type="button" className={`exo-set-btn${primary ? ' is-primary' : ''}`} disabled={!!busy || (preset === 'trim' && !trimmed)} onClick={() => void save(preset)}>
-      {busy === preset ? <Spinner label={SAVING[preset]} /> : null}{words}
-    </button>
+    <ActionButton className={`exo-set-btn${primary ? ' is-primary' : ''}`} disabled={(!!busy && busy !== preset) || (preset === 'trim' && !trimmed)}
+      context="Captures.export" fallback="Exo Capture couldn’t save the copy. Try again." timeoutMs={null} why="none" onFailed={failedHere}
+      onPress={save(preset)}>{words}</ActionButton>
   )
 
   if (editing) {
@@ -546,10 +549,10 @@ function Detail({ item, edit, onStep, onBack, onFavourite, onChanged, onDeleted,
         <button type="button" className={`exo-set-btn exo-capture-fav-btn${item.favourite ? ' is-on' : ''}`} aria-pressed={item.favourite} onClick={onFavourite}>
           <Star on={item.favourite} />Favorite
         </button>
-        <button type="button" className="exo-set-btn" onClick={() => void act('copy')}>Copy</button>
-        <button type="button" className="exo-set-btn" onClick={() => void act('discord')}>Send to Discord</button>
-        <button type="button" className="exo-set-btn" onClick={() => void act('reveal')}>Show in folder</button>
-        <button type="button" className="exo-set-btn is-danger" onClick={() => void act('delete')}>Delete</button>
+        {actButton('copy', 'Copy', 'Copied')}
+        {actButton('discord', 'Send to Discord', 'Copied')}
+        {actButton('reveal', 'Show in folder')}
+        {actButton('delete', 'Delete')}
       </div>
       <NoteLine note={note} />
     </div>
@@ -563,14 +566,6 @@ const ACT_FAILED = {
   copy: 'Exo could not copy it. Try again.',
   discord: 'Exo could not send it to Discord. Try again.',
 } as const
-
-/** An export's ring, as screen readers hear it. */
-const SAVING: Record<CaptureExport, string> = {
-  trim: 'Saving the trim',
-  discord: 'Saving a copy for Discord',
-  youtube: 'Saving a full-quality copy',
-  vertical: 'Saving a vertical copy',
-}
 
 /** What an export says once it lands. */
 const SAVED: Record<CaptureExport, string> = {
@@ -598,10 +593,10 @@ function CapturesEmpty({ onSettings }: { onSettings: () => void }) {
       return
     }
     const failed = 'Exo Capture did not answer. Try again.'
-    void host.captureAct(action).then(result => { if (!result.ok) setNote(result.message ?? failed) })
+    void host.captureAct(action).then(result => { if (!result.ok) setNote(errorText(result.message, failed)) })
       .catch((error: unknown) => {
         report(error, 'capture.act', { level: 'warn' })
-        setNote(error instanceof Error ? error.message : failed)
+        setNote(errorText(error, failed))
       })
   }
   // Without the add-on nothing can be captured: say so instead of buttons that do nothing.
@@ -913,8 +908,8 @@ function CapturesSheet({ gameId, itemId, edit, settings, notes, games, onDiscord
     void host.captureItem(item.id, item.favourite ? 'unfavourite' : 'favourite')
       .then(result => {
         if (result.item) update(result.item)
-        else if (!result.ok) { update(item); setNote(result.message ?? failed) }
-      }).catch((error: unknown) => { update(item); setNote(error instanceof Error ? error.message : failed) })
+        else if (!result.ok) { update(item); setNote(errorText(result.message, failed)) }
+      }).catch((error: unknown) => { update(item); setNote(errorText(error, failed)) })
   }
   // Null while not selecting; a filter change starts the pick again (no hidden captures in a delete).
   const [selection, setSelection] = useState<ReadonlySet<string> | null>(null)
@@ -940,8 +935,8 @@ function CapturesSheet({ gameId, itemId, edit, settings, notes, games, onDiscord
       try {
         const result = await host.captureItem(id, 'delete')
         if (result.ok) gone.add(id)
-        else failed = result.message ?? ACT_FAILED.delete
-      } catch (error) { failed = error instanceof Error ? error.message : ACT_FAILED.delete }
+        else failed = errorText(result.message, ACT_FAILED.delete)
+      } catch (error) { failed = errorText(error, ACT_FAILED.delete) }
     }
     setItems(list => list?.filter(item => !gone.has(item.id)) ?? list)
     setDeleting(false)

@@ -17,6 +17,7 @@ import { Confirm } from './admin'
 import { ConfirmLabel, useConfirmInPlace } from '../ui/ConfirmButton'
 import { Switch } from '../Switch'
 import { pageGet, pageSet } from '../../lib/pageStore'
+import { errorText } from '../../lib/errorWords'
 
 /** A file's alt text (Modify Attachment's Description), carried to the send with the file. */
 export const fileDescriptions = new WeakMap<File, string>()
@@ -285,7 +286,7 @@ export function Composer({ channelId, guildId, users, placeholder, disabled, rep
   function sendSticker(id: string) {
     setNote(null)
     void host.discordSticker(channelId, id)
-      .then(result => { if (!result.ok) setNote(result.message ?? 'Discord did not send that sticker.') })
+      .then(result => { if (!result.ok) setNote(errorText(result.message, 'Discord did not send that sticker.')) })
       .catch(() => setNote('Discord did not send that sticker.'))
   }
 

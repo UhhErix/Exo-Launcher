@@ -1,7 +1,7 @@
 import { MessagesWait } from './waits'
-import { createElement, useContext, useEffect, useRef, useState } from 'react'
+import { createElement, useContext, useEffect, useRef, useState, type ReactNode } from 'react'
 import { host } from '../../lib/host'
-import { notify } from '../../lib/notify'
+import { ActionButton } from '../ui/ConfirmButton'
 import { report } from '../../lib/report'
 import { type DiscordChannel, type DiscordFriend, type DiscordMessage, type DiscordPlace, type DiscordSearchFilters, type DiscordThread } from '../../lib/discord'
 import { channelGlyph, Icons } from './icons'
@@ -17,6 +17,7 @@ import { Wait, sample, times } from '../ui/Wait'
 import { ErrorNote } from '../ui/ErrorNote'
 import { useFriends } from '../../lib/friendsPlaying'
 import { doingWords } from './ActivityLine'
+import { errorText } from '../../lib/errorWords'
 
 /**
  * The line over a conversation: where you are (a server's channel and its topic; a DM's person), then calls, pins and
@@ -196,7 +197,7 @@ function useFound(ask: () => Promise<{ ok: boolean; message?: string | null; mes
     let live = true
     setFound({ messages: [], places: {}, error: null, loading: true })
     ask().then(result => {
-      if (live) setFound({ messages: result.messages, places: result.places ?? {}, error: result.ok ? null : result.message ?? failed, loading: false })
+      if (live) setFound({ messages: result.messages, places: result.places ?? {}, error: result.ok ? null : errorText(result.message, failed), loading: false })
     }).catch((err: unknown) => {
       report(err, 'ChatHeader.' + key)
       if (live) setFound({ messages: [], places: {}, error: failed, loading: false })
@@ -362,35 +363,47 @@ function MoreMenu({ onClose, children }: { onClose: (focus?: boolean) => void; c
 function NotifyMenu({ channel, onDone }: { channel: DiscordChannel; onDone: () => void }) {
   const muted = channel.muted === true
   const level = channel.notify ?? null
-  // The menu is gone by then: a refusal goes to Exo's notices.
-  const failed = (why?: string | null) => notify({ text: why ?? 'Discord did not change that.', tone: 'bad' })
-  const change = (next: Parameters<typeof host.discordChannelNotify>[1]) => {
-    onDone()
-    void host.discordChannelNotify(channel.id, next).then(result => { if (!result.ok) failed(result.message) }, () => failed())
-  }
   return (
     <>
       {muted ? (
-        <button type="button" role="menuitem" onClick={() => change({ muted: false })}>
+        <NotifyRow channel={channel} onDone={onDone} next={{ muted: false }}>
           <span className="exo-dc-menu-text">Unmute channel{channel.mutedUntil ? <small>Muted until {new Date(channel.mutedUntil).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })}</small> : null}</span>
-        </button>
+        </NotifyRow>
       ) : MUTE_FOR.map(([minutes, label]) => (
-        <button key={minutes} type="button" role="menuitem" onClick={() => change(minutes ? { muted: true, minutes } : { muted: true })}>
+        <NotifyRow channel={channel} onDone={onDone} key={minutes} next={minutes ? { muted: true, minutes } : { muted: true }}>
           <span className="exo-dc-menu-text">Mute {label.replace('For', 'for').replace('Until', 'until')}</span>
-        </button>
+        </NotifyRow>
       ))}
       <span className="exo-dc-menu-line" role="separator" />
-      <button type="button" role="menuitemradio" aria-checked={level === null} onClick={() => change({ level: 3 })}>
+      <NotifyRow channel={channel} onDone={onDone} role="menuitemradio" aria-checked={level === null} next={{ level: 3 }}>
         <span className="exo-dc-menu-text">Use default<small>{LEVELS.find(([value]) => value === (channel.notifyDefault ?? 0))?.[1]}</small></span>
         {level === null ? <Icons.Check size={16} /> : null}
-      </button>
+      </NotifyRow>
       {LEVELS.map(([value, label]) => (
-        <button key={value} type="button" role="menuitemradio" aria-checked={level === value} onClick={() => change({ level: value })}>
+        <NotifyRow channel={channel} onDone={onDone} key={value} role="menuitemradio" aria-checked={level === value} next={{ level: value }}>
           <span className="exo-dc-menu-text">{label}</span>
           {level === value ? <Icons.Check size={16} /> : null}
-        </button>
+        </NotifyRow>
       ))}
     </>
+  )
+}
+
+/**
+ * A row of the channel's notifications that says how it went on itself (ActionButton): the ring, then the check, and
+ * the menu closes; a refusal stays on the row with why.
+ */
+function NotifyRow({ channel, next, onDone, children, role = 'menuitem', ...rest }: {
+  channel: DiscordChannel
+  next: Parameters<typeof host.discordChannelNotify>[1]
+  onDone: () => void
+  children: ReactNode
+  role?: string
+  'aria-checked'?: boolean
+}) {
+  return (
+    <ActionButton {...rest} role={role} context="Discord.channelNotify" fallback="Discord didn’t change that. Try again."
+      onDone={onDone} onPress={() => host.discordChannelNotify(channel.id, next)}>{children}</ActionButton>
   )
 }
 

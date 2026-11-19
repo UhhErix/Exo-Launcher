@@ -6,7 +6,7 @@ import { Avatar } from './presence'
 import { Icons } from './icons'
 import { Popover } from '../ui/Dialog'
 import { Wait, sample, times } from '../ui/Wait'
-import { ErrorNote } from '../ui/ErrorNote'
+import { ActionButton } from '../ui/ConfirmButton'
 
 type Target = { id: string; name: string; place: string | null; avatar: string | null; dm: boolean }
 
@@ -35,21 +35,18 @@ export function ForwardDialog({ message, onClose }: { message: DiscordMessage; o
   const [query, setQuery] = useState('')
   const [picked, setPicked] = useState<string[]>([])
   const [note, setNote] = useState('')
-  const [error, setError] = useState<string | null>(null)
-  const [busy, setBusy] = useState(false)
   const q = query.trim().toLowerCase()
   const shown = (targets ?? []).filter(t => !q || t.name.toLowerCase().includes(q) || t.place?.toLowerCase().includes(q)).slice(0, 60)
+  // Send says how it went in itself (ActionButton): the ring, the check, then the dialog closes; a refusal stays on it
+  // with why, and Send again goes only to those still picked.
   const send = async () => {
-    if (busy || picked.length === 0) return
-    setBusy(true); setError(null)
     for (const id of picked) {
       const result = await host.discordSend(id, note.trim(), undefined, undefined, { forward: { channelId: message.channel_id, messageId: message.id } })
-        .catch(() => ({ ok: false, message: null }))
-      if (!result.ok) { setBusy(false); setError(result.message ?? 'Discord did not forward that.'); return }
+      if (!result.ok) return result
       // Sent: a retry after a later one failed goes only to those still picked, never twice to this one.
       setPicked(list => list.filter(other => other !== id))
     }
-    onClose()
+    return true
   }
   return (
     <Popover portal={false} className="exo-dc-modal exo-dc-forward-dialog" label="Forward to" onClick={event => event.stopPropagation()} onClose={onClose}>
@@ -70,15 +67,18 @@ export function ForwardDialog({ message, onClose }: { message: DiscordMessage; o
           )
         })}
       </div>
-      <input className="exo-dc-modal-input" placeholder="Add an optional message" value={note} maxLength={4000} aria-label="Optional message"
-        onChange={event => setNote(event.target.value)} onKeyDown={event => { if (event.key === 'Enter') void send() }} />
-      {error ? <ErrorNote className="is-bad" message={error} /> : null}
-      <footer className="exo-dc-delete-foot">
-        <button type="button" className="exo-dc-tab" onClick={onClose}>Cancel</button>
-        <button type="button" className="exo-set-btn is-primary" disabled={busy || picked.length === 0} onClick={() => void send()}>
-          {picked.length > 1 ? `Send to ${picked.length}` : 'Send'}
-        </button>
-      </footer>
+      {/* Enter in the message presses Send (the form's own submit), so it shows its ring and its answer too. */}
+      <form className="exo-dc-modal-form" onSubmit={event => event.preventDefault()}>
+        <input className="exo-dc-modal-input" placeholder="Add an optional message" value={note} maxLength={4000} aria-label="Optional message"
+          onChange={event => setNote(event.target.value)} />
+        <footer className="exo-dc-delete-foot">
+          <button type="button" className="exo-dc-tab" onClick={onClose}>Cancel</button>
+          <ActionButton type="submit" className="exo-set-btn is-primary" disabled={picked.length === 0} context="Discord.forward"
+            fallback="Discord didn’t forward that. Try again." onDone={onClose} onPress={send}>
+            {picked.length > 1 ? `Send to ${picked.length}` : 'Send'}
+          </ActionButton>
+        </footer>
+      </form>
     </Popover>
   )
 }
@@ -86,26 +86,23 @@ export function ForwardDialog({ message, onClose }: { message: DiscordMessage; o
 /** Create Thread from a message: a name (the message's start by default), then the thread opens. */
 export function NewThreadDialog({ message, onClose, onCreated }: { message: DiscordMessage; onClose: () => void; onCreated: (thread: { id: string; name: string }) => void }) {
   const [name, setName] = useState(() => message.content.replace(/\s+/g, ' ').trim().slice(0, 40) || 'New thread')
-  const [error, setError] = useState<string | null>(null)
-  const [busy, setBusy] = useState(false)
+  // Create says how it went in itself (ActionButton); the thread opens once its check has shown.
   const create = async () => {
-    if (busy || !name.trim()) return
-    setBusy(true); setError(null)
-    const result = await host.discordThread(message.channel_id, { name: name.trim(), messageId: message.id }).catch(() => ({ ok: false, message: null, thread: null }))
-    setBusy(false)
-    if (result.ok && result.thread) onCreated(result.thread)
-    else setError(result.message ?? 'Discord did not start the thread.')
+    const result = await host.discordThread(message.channel_id, { name: name.trim(), messageId: message.id })
+    return result.ok && result.thread ? result : { ok: false, message: result.message }
   }
   return (
     <Popover portal={false} className="exo-dc-modal" label="Create thread" onClick={event => event.stopPropagation()} onClose={onClose}>
       <h2>Create thread</h2>
-      <input className="exo-dc-modal-input" value={name} maxLength={100} autoFocus aria-label="Thread name"
-        onChange={event => setName(event.target.value)} onKeyDown={event => { if (event.key === 'Enter') void create() }} />
-      {error ? <ErrorNote className="is-bad" message={error} /> : null}
-      <footer className="exo-dc-delete-foot">
-        <button type="button" className="exo-dc-tab" onClick={onClose}>Cancel</button>
-        <button type="button" className="exo-set-btn is-primary" disabled={busy || !name.trim()} onClick={() => void create()}>Create</button>
-      </footer>
+      <form className="exo-dc-modal-form" onSubmit={event => event.preventDefault()}>
+        <input className="exo-dc-modal-input" value={name} maxLength={100} autoFocus aria-label="Thread name"
+          onChange={event => setName(event.target.value)} />
+        <footer className="exo-dc-delete-foot">
+          <button type="button" className="exo-dc-tab" onClick={onClose}>Cancel</button>
+          <ActionButton type="submit" className="exo-set-btn is-primary" disabled={!name.trim()} context="Discord.thread" fallback="Discord didn’t start the thread. Try again."
+            onDone={result => { const thread = (result as { thread?: { id: string; name: string } | null }).thread; if (thread) onCreated(thread) }} onPress={create}>Create</ActionButton>
+        </footer>
+      </form>
     </Popover>
   )
 }

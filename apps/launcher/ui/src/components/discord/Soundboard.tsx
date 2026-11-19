@@ -6,6 +6,7 @@ import { Icons } from './icons'
 import { useDismiss } from '../../lib/dismiss'
 import { Wait, sample, times } from '../ui/Wait'
 import { ErrorNote } from '../ui/ErrorNote'
+import { errorText } from '../../lib/errorWords'
 
 type Sound = { sound_id: string; name: string; volume?: number; emoji_id?: string | null; emoji_name?: string | null; guild_id?: string | null; available?: boolean }
 
@@ -36,7 +37,7 @@ export function SoundboardButton({ guildId, channelId }: { guildId: string | nul
     setError(null)
     host.discordSoundboard('list', { guildId }).then(result => {
       if (!live) return
-      if (!result.ok) { setError(result.message ?? 'Discord did not answer.'); return }
+      if (!result.ok) { setError(errorText(result.message, 'Discord did not answer.')); return }
       const items = (result.guild as { items?: Sound[] } | null)?.items ?? []
       setSounds({ defaults: Array.isArray(result.defaults) ? result.defaults as Sound[] : [], guild: items })
     }).catch((err: unknown) => { report(err, 'Soundboard.list'); if (live) setError('Discord did not answer.') })
@@ -48,7 +49,7 @@ export function SoundboardButton({ guildId, channelId }: { guildId: string | nul
   function play(sound: Sound) {
     setError(null)
     host.discordSoundboard('play', { channelId, soundId: sound.sound_id, volume: sound.volume ?? 1, guildId: sound.guild_id ?? null, emojiId: sound.emoji_id ?? null, emojiName: sound.emoji_name ?? null })
-      .then(result => { if (!result.ok) setError(result.message ?? 'Discord did not play it.') })
+      .then(result => { if (!result.ok) setError(errorText(result.message, 'Discord did not play it.')) })
       .catch(() => setError('Discord did not play it.'))
   }
 

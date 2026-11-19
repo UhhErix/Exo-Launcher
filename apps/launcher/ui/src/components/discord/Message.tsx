@@ -11,7 +11,7 @@ import { LottieSticker } from './LottieSticker'
 import { performanceMode, avatarUrl, cdnSized, cdnStep, displayName, jumpToMessage, openDiscord, type DiscordEmbed, type DiscordInvite, type DiscordMessage } from '../../lib/discord'
 import { Reactions, ReactionsDialog, useNitro } from './Reactions'
 import { EmojiPicker, noteReaction, QuickEmoji, useQuickReactions, type QuickReaction } from './EmojiPicker'
-import { ConfirmButton } from '../ui/ConfirmButton'
+import { ActionButton, ConfirmButton } from '../ui/ConfirmButton'
 import { Icons } from './icons'
 import { RoleIcon } from './presence'
 import { SubContext, Submenu } from './UserMenu'
@@ -32,6 +32,7 @@ import { GuildTag } from './guildTag'
 import { Progress } from '../ui/Progress'
 import { initials } from '../ui/artInitial'
 import { showReport } from './Report'
+import { errorText } from '../../lib/errorWords'
 
 /**
  * A GIF link: plays by itself while Exo is active when Play GIFs when Discord is focused is on (not in
@@ -332,10 +333,12 @@ export type MessageActions = {
   onEdit: (message: DiscordMessage) => void
   /** The inline edit closed (saved or cancelled). */
   onEditDone: () => void
-  onDelete: (message: DiscordMessage) => void
+  /** Deletes it; the answer is shown by the row pressed (ActionButton). */
+  onDelete: (message: DiscordMessage) => Promise<unknown>
   /** burst: a super reaction. */
   onReact: (message: DiscordMessage, emoji: string, add: boolean, burst?: boolean) => void
-  onPin: (message: DiscordMessage) => void
+  /** Pins or unpins it; the answer is shown by the row pressed. */
+  onPin: (message: DiscordMessage) => Promise<unknown>
   onForward: (message: DiscordMessage) => void
   /** Read up to just before this message (Mark Unread, or Alt+click). */
   onMarkUnread: (message: DiscordMessage) => void
@@ -770,7 +773,7 @@ function InlineEdit({ message, onDone }: { message: DiscordMessage; onDone: () =
     const result = await host.discordEdit(message.channel_id, message.id, content).catch(() => ({ ok: false, message: null }))
     setBusy(false)
     if (result.ok) onDone()
-    else setError(result.message ?? 'Discord did not take the edit.')
+    else setError(errorText(result.message, 'Discord did not take the edit.'))
   }
   return (
     <div className="exo-dc-inline-edit">
@@ -874,7 +877,7 @@ function ActionsBar({ message, ctx, mine, canSend, actions, onViewReactions }: {
       ) : null}
       {more ? <MessageMenu message={message} ctx={ctx} mine={mine} canSend={canSend} actions={actions} at={at} editable={editable}
         onClose={() => setMore(false)} onReact={() => { setMore(false); setReacting(true) }} onViewReactions={onViewReactions}
-        onAction={action => { setMore(false); void messageAction(message, mine, action, actions) }} /> : null}
+        onAction={action => askMessage(message, mine, action)} /> : null}
     </div>
   )
 }
@@ -908,11 +911,11 @@ function speakMessage(message: DiscordMessage, ctx: MarkdownContext) {
   synth.speak(line)
 }
 
-// Publish, Remove Embeds or Remove All Reactions; Discord's own line when it doesn't take (the menu is gone by then).
-async function messageAction(message: DiscordMessage, mine: boolean, action: Ask | 'publish', actions: MessageActions) {
-  const result = await host.discordMessageAction(message.channel_id, message.id, action, { mine, flags: message.flags ?? 0 }).catch(() => null)
-  if (!result?.ok) actions.onError?.(result?.message ?? 'Discord did not take that.')
-}
+// Publish, Remove Embeds or Remove All Reactions: Discord's answer, which the row pressed shows in itself (ActionButton).
+const askMessage = (message: DiscordMessage, mine: boolean, action: Ask | 'publish') =>
+  host.discordMessageAction(message.channel_id, message.id, action, { mine, flags: message.flags ?? 0 })
+
+const NOT_TAKEN = 'Discord didn’t take that. Try again.'
 
 function MessageMenu({ message, ctx, mine, canSend, actions, at, editable, onClose, onReact, onViewReactions, onAction }: {
   message: DiscordMessage
@@ -925,8 +928,8 @@ function MessageMenu({ message, ctx, mine, canSend, actions, at, editable, onClo
   onClose: () => void
   onReact: () => void
   onViewReactions: () => void
-  /** Remove Embeds or Remove All Reactions, once its row has asked. */
-  onAction: (action: Ask) => void
+  /** Remove Embeds or Remove All Reactions, once its row has asked: Discord's answer, shown on the row. */
+  onAction: (action: Ask) => Promise<unknown>
 }) {
   // Developer Mode (Discord settings > Developer) adds Copy Message ID.
   // Publish: an announcement channel's message by you (or a moderator's), not published yet (Discord's CROSSPOSTED, 1).
@@ -942,7 +945,7 @@ function MessageMenu({ message, ctx, mine, canSend, actions, at, editable, onClo
       {editable ? <button type="button" role="menuitem" onClick={run(actions.onEdit)}><Icons.Edit size={16} />Edit message</button> : null}
       {canSend ? <button type="button" role="menuitem" onClick={run(actions.onReply)}><Icons.Reply size={16} />Reply</button> : null}
       <button type="button" role="menuitem" onClick={run(actions.onForward)}><Icons.Forward size={16} />Forward</button>
-      {publishable ? <button type="button" role="menuitem" onClick={() => { onClose(); void messageAction(message, mine, 'publish', actions) }}><Icons.Announcement size={16} />Publish</button> : null}
+      {publishable ? <ActionButton role="menuitem" context="Discord.publish" fallback={NOT_TAKEN} onDone={onClose} onPress={() => askMessage(message, mine, 'publish')}><Icons.Announcement size={16} />Publish</ActionButton> : null}
       <MessageApps channelId={message.channel_id} messageId={message.id} onRun={onClose} />
       {actions.onThread && !message.thread ? <button type="button" role="menuitem" onClick={run(actions.onThread)}><Icons.Threads size={16} />Create thread</button> : null}
       <ReactionItems message={message} actions={actions} onClose={onClose} onViewReactions={onViewReactions} onAction={onAction} />
@@ -951,12 +954,13 @@ function MessageMenu({ message, ctx, mine, canSend, actions, at, editable, onClo
       <span className="exo-dc-menu-line" role="separator" />
       {message.content ? <button type="button" role="menuitem" onClick={() => copy(message.content)}><Icons.Copy size={16} />Copy text</button> : null}
       {actions.canPin !== false ? (
-        // Pinning undoes itself (DESIGN.md › Confirm): no question.
-        <button type="button" role="menuitem" onClick={run(actions.onPin)}><Icons.Pin size={16} />{message.pinned ? 'Unpin message' : 'Pin message'}</button>
+        // Pinning undoes itself (DESIGN.md › Confirm): no question. The row says how it went, then the menu closes.
+        <ActionButton role="menuitem" context="Discord.pin" fallback={message.pinned ? 'Discord didn’t unpin that. Try again.' : 'Discord didn’t pin that. Try again.'}
+          onDone={onClose} onPress={() => actions.onPin(message)}><Icons.Pin size={16} />{message.pinned ? 'Unpin message' : 'Pin message'}</ActionButton>
       ) : null}
       <button type="button" role="menuitem" onClick={run(actions.onMarkUnread)}><Icons.Unread size={16} />Mark unread</button>
       <button type="button" role="menuitem" onClick={() => copy(link)}><Icons.Link size={16} />Copy message link</button>
-      <RemoveItems message={message} mine={mine} actions={actions} onDelete={run(actions.onDelete)} onAction={onAction} />
+      <RemoveItems message={message} mine={mine} actions={actions} onDone={onClose} onAction={onAction} />
       {mine || message.pending || message.failed ? null : (
         <button type="button" role="menuitem" className="is-danger" onClick={() => {
           onClose()
@@ -1007,25 +1011,26 @@ function SpeakItem({ message, ctx, onClose }: { message: DiscordMessage; ctx: Ma
 const shift = (event: React.MouseEvent) => event.shiftKey
 
 // View Reactions, and for a moderator Remove All Reactions (asked in place).
-function ReactionItems({ message, actions, onClose, onViewReactions, onAction }: { message: DiscordMessage; actions: MessageActions; onClose: () => void; onViewReactions: () => void; onAction: (action: Ask) => void }) {
+function ReactionItems({ message, actions, onClose, onViewReactions, onAction }: { message: DiscordMessage; actions: MessageActions; onClose: () => void; onViewReactions: () => void; onAction: (action: Ask) => Promise<unknown> }) {
   if (!message.reactions?.length) return null
   return (
     <>
       <button type="button" role="menuitem" onClick={() => { onClose(); onViewReactions() }}><Icons.ViewReactions size={16} />View reactions</button>
-      {actions.canManageMessages ? <ConfirmButton role="menuitem" className="is-danger" question="Remove all reactions?" danger now={shift} onConfirm={() => onAction('clearReactions')}>Remove all reactions</ConfirmButton> : null}
+      {actions.canManageMessages ? <ConfirmButton role="menuitem" className="is-danger" question="Remove all reactions?" danger now={shift} context="Discord.clearReactions" fallback={NOT_TAKEN} onDone={onClose} onConfirm={() => onAction('clearReactions')}>Remove all reactions</ConfirmButton> : null}
     </>
   )
 }
 
 // Your message's (or a moderator's) Remove Embeds while its embeds show (not SUPPRESS_EMBEDS, 4), and Delete, each asked in place.
-function RemoveItems({ message, mine, actions, onDelete, onAction }: { message: DiscordMessage; mine: boolean; actions: MessageActions; onDelete: () => void; onAction: (action: Ask) => void }) {
+function RemoveItems({ message, mine, actions, onDone, onAction }: { message: DiscordMessage; mine: boolean; actions: MessageActions; onDone: () => void; onAction: (action: Ask) => Promise<unknown> }) {
   if (!mine && !actions.canManageMessages) return null
   return (
     <>
       {message.embeds.length && ((message.flags ?? 0) & 4) === 0
-        ? <ConfirmButton role="menuitem" className="is-danger" question="Remove all embeds?" danger now={shift} onConfirm={() => onAction('removeEmbeds')}>Remove embeds</ConfirmButton>
+        ? <ConfirmButton role="menuitem" className="is-danger" question="Remove all embeds?" danger now={shift} context="Discord.removeEmbeds" fallback={NOT_TAKEN} onDone={onDone} onConfirm={() => onAction('removeEmbeds')}>Remove embeds</ConfirmButton>
         : null}
-      <ConfirmButton role="menuitem" className="is-danger" question="Delete this message?" danger now={shift} onConfirm={onDelete} lead={<Icons.Delete size={16} />}>Delete message</ConfirmButton>
+      <ConfirmButton role="menuitem" className="is-danger" question="Delete this message?" danger now={shift} lead={<Icons.Delete size={16} />}
+        context="Discord.delete" fallback="Discord didn’t delete that. Try again." onDone={onDone} onConfirm={() => actions.onDelete(message)}>Delete message</ConfirmButton>
     </>
   )
 }

@@ -11,7 +11,8 @@ import { useLens } from '../../lib/glass'
 import { MusicVolume, useMusicVolume } from '../shell/MusicVolume'
 import { Art, isLikedCard } from './Art'
 import { DiscographyPage } from './artist'
-import { copyLink, createFolder, NameField, newPlaylist, shareLink } from './manage'
+import { COPY_FAILED, copyLink, createFolder, NameField, newPlaylist, shareLink } from './manage'
+import { useSaid } from '../ui/useSaid'
 import { BrowsePage, HomePage, ListPage, SearchPage, Waiting } from './pages'
 import { SongsPage } from './SongsPage'
 import { MusicWait, PageBones } from './MusicWait'
@@ -440,6 +441,8 @@ function Library({ current, onSettled }: { current?: string; onSettled: () => vo
   // A folder being named in place ('new' for a new one).
   const [naming, setNaming] = useState<string | null>(null)
   const [failed, setFailed] = useState<string | null>(null)
+  // A copied link is said over the list, where the menu was, for 2 s.
+  const [said, say] = useSaid()
   const folder = folders[folders.length - 1]
   // offset only asks again: after a save, follow or add (revision) and on Retry.
   const { data, error } = useView('library', { uri: folder?.uri, query: `${filter}|${sort}`, offset: revision + retry * 1000 })
@@ -471,7 +474,7 @@ function Library({ current, onSettled }: { current?: string; onSettled: () => vo
     else if (id === 'pin') void act('pin', { uri: card.uri, on: !card.pinned })
     else if (id === 'rename') setNaming(card.uri)
     else if (id === 'delete') void remove(card)
-    else if (id === 'link' && link) void copyLink(link)
+    else if (id === 'link' && link) void copyLink(link).then(ok => ok ? say('Link copied') : setFailed(COPY_FAILED))
     else if (id === 'out') void act('moveToFolder', { uri: card.uri, context: data?.folder?.parent || undefined })
     else if (id.startsWith('move:')) void act('moveToFolder', { uri: card.uri, context: id.slice(5) })
   }
@@ -485,7 +488,7 @@ function Library({ current, onSettled }: { current?: string; onSettled: () => vo
     <>
       <LibraryHead filters={filters} {...chosen(data, filter, sort)}
         onPick={id => { setFolders([]); setFilter(id); setSort('') }} onSort={setSort} onCreate={create} />
-      <LibraryNote error={error} loaded={!!data} failed={failed} onRetry={() => setRetry(n => n + 1)} />
+      <LibraryNote error={error} loaded={!!data} failed={failed} said={said} onRetry={() => setRetry(n => n + 1)} />
       <ul className="exo-music-library">
         {folder ? <FolderBack title={data?.folder?.title || folder.title} onBack={() => setFolders(previous => previous.slice(0, -1))} /> : null}
         {naming === 'new' ? (
@@ -528,10 +531,11 @@ function FolderBack({ title, onBack }: { title: string; onBack: () => void }) {
 }
 
 /** The library's state line: a read that failed (with Retry), the first read, or what the last action said. */
-function LibraryNote({ error, loaded, failed, onRetry }: {
+function LibraryNote({ error, loaded, failed, said, onRetry }: {
   error: string | null
   loaded: boolean
   failed: string | null
+  said: string | null
   onRetry: () => void
 }) {
   if (error) {
@@ -543,7 +547,8 @@ function LibraryNote({ error, loaded, failed, onRetry }: {
     )
   }
   if (!loaded) return <Waiting label="Loading your library" />
-  return failed ? <ErrorNote className="exo-music-error" message={failed} /> : null
+  if (failed) return <ErrorNote className="exo-music-error" message={failed} />
+  return said ? <p className="exo-music-state is-on" role="status">{said}</p> : null
 }
 
 /**

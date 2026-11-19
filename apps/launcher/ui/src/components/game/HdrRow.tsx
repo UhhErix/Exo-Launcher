@@ -3,7 +3,7 @@ import { host, type HdrGame } from '../../lib/host'
 import { report } from '../../lib/report'
 import { useHdrState } from '../../lib/hdr'
 import { Choice } from '../settings/Choice'
-import { Spinner } from '../ui/Spinner'
+import { ActionButton } from '../ui/ConfirmButton'
 import { GameReading, type LineWord } from './GameLine'
 import { sheetMemory } from './useGameDetails'
 
@@ -29,7 +29,7 @@ export function HdrRow({ gameId, hdrForGames, onHdrForGames }: {
 }) {
   const screen = useHdrState()
   const [game, setGame] = useState<HdrGame | null>(() => hdrRead.get(gameId))
-  const [busy, setBusy] = useState<'mode' | 'on' | null>(null)
+  const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
@@ -47,7 +47,7 @@ export function HdrRow({ gameId, hdrForGames, onHdrForGames }: {
   if (!screen?.supported || !game?.ok) return null
   const mode = game.mode ?? 'auto'
   const pick = (next: string) => {
-    setBusy('mode')
+    setBusy(true)
     setError(null)
     host.hdrGame(gameId, next)
       .then(answer => {
@@ -56,12 +56,7 @@ export function HdrRow({ gameId, hdrForGames, onHdrForGames }: {
         setGame(answer)
       })
       .catch(e => { report(e, 'HdrRow.set'); setError('Could not save. Try again.') })
-      .finally(() => setBusy(null))
-  }
-  const turnOn = () => {
-    setBusy('on')
-    setError(null)
-    void onHdrForGames().then(ok => { if (!ok) setError('Could not save. Try again.') }).finally(() => setBusy(null))
+      .finally(() => setBusy(false))
   }
   const off = !hdrForGames && mode !== 'off'
   // Why Exo judges the game as it does, in plain words; with HDR for HDR games off, nothing switches whatever the verdict.
@@ -73,11 +68,10 @@ export function HdrRow({ gameId, hdrForGames, onHdrForGames }: {
   return (
     <GameReading name="HDR" word={word}>
       {off ? (
-        <button type="button" className="exo-set-btn is-compact" disabled={busy !== null} onClick={turnOn}>
-          {busy === 'on' ? <Spinner label="Turning on HDR for HDR games" /> : null}Turn on
-        </button>
+        <ActionButton className="exo-set-btn is-compact" why="none" context="HdrRow.hdrForGames" fallback="Could not save. Try again."
+          onPress={() => { setError(null); return onHdrForGames() }} onFailed={failure => setError(failure.text)}>Turn on</ActionButton>
       ) : (
-        <Choice label="HDR while playing" value={mode} choices={MODES} disabled={busy !== null} onChange={pick} />
+        <Choice label="HDR while playing" value={mode} choices={MODES} disabled={busy} onChange={pick} />
       )}
     </GameReading>
   )

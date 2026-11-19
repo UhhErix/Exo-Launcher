@@ -20,6 +20,7 @@ import { Dialog } from '../ui/Dialog'
 import { Menu } from '../ui/Menu'
 import { Wait, sample, times } from '../ui/Wait'
 import { ErrorNote } from '../ui/ErrorNote'
+import { errorText } from '../../lib/errorWords'
 
 /** Discord's rows over a server's channels, opened in place of a channel. */
 export const PAGES = { guide: 'page:guide', browse: 'page:browse', members: 'page:members' } as const
@@ -105,7 +106,7 @@ export function useServer(guildId: string, action: 'guide' | 'events', reload = 
     setError(null)
     host.discordServer(action, { guildId }).then(result => {
       if (!live) return
-      if (!result.ok) setError(result.message ?? 'Discord did not send this.')
+      if (!result.ok) setError(errorText(result.message, 'Discord did not send this.'))
       else setData(result)
     }).catch((err: unknown) => { report(err, 'ServerPage.' + action); if (live) setError('Discord did not send this.') })
     return () => { live = false }
@@ -341,7 +342,7 @@ function useMemberSearch(guildId: string, sort: number, search: string, reload: 
     host.discordServer('members', { guildId, sort, ...(search ? { query: search } : {}) }).then(result => {
       if (!live) return
       if (result.indexing && tries < 20) { setError(result.message ?? 'Discord is still getting this server’s members ready.'); again = window.setTimeout(() => setTries(n => n + 1), 3000); return }
-      if (!result.ok) { report(new Error(result.message ?? 'no answer'), 'ServerPage.members'); setError(result.message ?? 'Discord did not send this.'); return }
+      if (!result.ok) { report(new Error(errorText(result.message, 'no answer')), 'ServerPage.members'); setError(errorText(result.message, 'Discord did not send this.')); return }
       const rows = result.members?.members ?? []
       setLoaded({ rows, total: result.members?.total_result_count ?? rows.length, roles: result.roles ?? {}, done: rows.length < CHUNK })
     }).catch((err: unknown) => { report(err, 'ServerPage.members'); if (live) setError('Discord did not send this.') })
@@ -354,7 +355,7 @@ function useMemberSearch(guildId: string, sort: number, search: string, reload: 
     const of = asked
     void ask(last).then(result => {
       if (of !== current.current) return
-      if (!result.ok) { report(new Error(result.message ?? 'no answer'), 'ServerPage.members'); setError(result.message ?? 'Discord did not send more members.'); return }
+      if (!result.ok) { report(new Error(errorText(result.message, 'no answer')), 'ServerPage.members'); setError(errorText(result.message, 'Discord did not send more members.')); return }
       const page = result.members?.members ?? []
       setLoaded(l => {
         if (!l) return l
@@ -456,7 +457,7 @@ function Prune({ guildId, onClose, onPruned }: { guildId: string; onClose: () =>
     let live = true
     setCount(null); setError(null)
     host.discordServer('prune', { guildId, days, countOnly: true })
-      .then(result => { if (live) { if (result.ok) setCount(result.pruned ?? 0); else setError(result.message ?? 'Discord did not answer. Try again.') } })
+      .then(result => { if (live) { if (result.ok) setCount(result.pruned ?? 0); else setError(errorText(result.message, 'Discord did not answer. Try again.')) } })
       .catch(() => { if (live) setError('Discord did not answer. Try again.') })
     return () => { live = false }
   }, [guildId, days])
@@ -465,7 +466,7 @@ function Prune({ guildId, onClose, onPruned }: { guildId: string; onClose: () =>
     try {
       const result = await host.discordServer('prune', { guildId, days, countOnly: false })
       if (result.ok) onPruned()
-      else setError(result.message ?? 'Discord did not prune. Try again.')
+      else setError(errorText(result.message, 'Discord did not prune. Try again.'))
     } catch { setError('Discord did not prune. Try again.') } finally { setBusy(false) }
   }
   // Exo's one question (DESIGN.md › Confirm): Cancel first, the action named and red.
@@ -586,7 +587,7 @@ export function CreateChannel({ guildId, parentId, category, asCategory = false,
     try {
       const result = await host.discordServer('createChannel', { guildId, ...(parentId ? { parentId } : {}), name: name.trim(), kind: asCategory ? 'category' : kind })
       if (result.ok && result.channelId) onCreated(result.channelId)
-      else setError(result.message ?? `Discord did not make that ${what}.`)
+      else setError(errorText(result.message, `Discord did not make that ${what}.`))
     } catch (err) {
       report(err, 'CreateChannel')
       setError(`Discord did not make that ${what}.`)

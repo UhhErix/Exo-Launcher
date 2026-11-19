@@ -14,6 +14,7 @@ import { GuildTag } from './guildTag'
 import { ErrorNote } from '../ui/ErrorNote'
 import { ActivityLine } from './ActivityLine'
 import { openUserMenu } from './UserMenu'
+import { errorText } from '../../lib/errorWords'
 
 type Tab = 'online' | 'all' | 'pending'
 /** Resolves true when Discord wants an accept confirmed (someone you share no server with). */
@@ -30,7 +31,7 @@ function useFriendAct(onOpenDm: (channelId: string) => void, reload: () => void)
     try {
       const result = await host.discordFriend(action, { userId: friend.id, confirm })
       if (result.stranger) return true
-      if (!result.ok) setError(result.message ?? 'Discord did not take that.')
+      if (!result.ok) setError(errorText(result.message, 'Discord did not take that.'))
       else if (action !== 'dm') reload()
       else if (result.channelId) opening.current(result.channelId)
     } catch (err) {
@@ -181,7 +182,7 @@ function AddFriend() {
     setBusy(true)
     try {
       const reply = await host.discordFriend('add', { username: name.trim() })
-      setResult(reply.ok ? { ok: true, text: `Friend request sent to ${name.trim()}.` } : { ok: false, text: reply.message ?? 'Discord did not take that.' })
+      setResult(reply.ok ? { ok: true, text: `Friend request sent to ${name.trim()}.` } : { ok: false, text: errorText(reply.message, 'Discord did not take that.') })
       if (reply.ok) setName('')
     } catch (err) {
       report(err, 'HomePage.add')

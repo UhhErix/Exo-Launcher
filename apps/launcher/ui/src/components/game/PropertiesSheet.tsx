@@ -11,6 +11,7 @@ import { Choice } from '../settings/Choice'
 import { Row, State } from '../settings/parts'
 import { Switch } from '../Switch'
 import { ConfirmButton, ConfirmLabel, useConfirmInPlace } from '../ui/ConfirmButton'
+import { errorText as plainErrorText } from '../../lib/errorWords'
 import { ErrorNote } from '../ui/ErrorNote'
 import { useChoiceMenu } from '../ui/Menu'
 import { Progress, ProgressWords } from '../ui/Progress'
@@ -42,7 +43,8 @@ type Rows = {
   /** The game is running: nothing that changes its files can start. */
   locked: boolean
   busy: string | null
-  run: (change: Change) => void
+  /** Verify answers with its promise, for its button to show (ConfirmButton); every other change shows on its row. */
+  run: (change: Change) => void | Promise<unknown>
   apply: (key: GamePropertyKey, value?: string, secret?: string) => Promise<boolean>
   line: (row: string) => ReactNode
   /** Puts what happened on a row's line (a failure in Bad). */
@@ -51,8 +53,9 @@ type Rows = {
 
 type SectionId = 'general' | 'files' | 'betas' | 'content' | 'artwork'
 
+/** A failure in plain words (lib/errorWords.ts): what went wrong and what to do, never an exception's own text. */
 function errorText(error: unknown, fallback = CHANGE_FAILED): string {
-  return error instanceof Error ? error.message : fallback
+  return plainErrorText(error, fallback)
 }
 
 /** A download's question, with its size when the store gives one: "Download 22.4 GB?" */
@@ -99,7 +102,7 @@ function sectionsFor(props: GameProperties): { id: SectionId; title: string }[] 
  * moves files asks first, saying how much; the store's own download then shows
  * in Exo's downloads.
  */
-export function PropertiesSheet({ game, artwork, upscalers: upscalerStatus, onUpscalersChanged, uninstall, onClose, onStatus }: {
+export function PropertiesSheet({ game, artwork, upscalers: upscalerStatus, onUpscalersChanged, uninstall, onClose }: {
   game: Game
   artwork: Artwork
   upscalers: DlssStatus | null
@@ -107,7 +110,6 @@ export function PropertiesSheet({ game, artwork, upscalers: upscalerStatus, onUp
   /** Uninstall (or Remove), on the row with the game's size. */
   uninstall: ReactNode
   onClose: () => void
-  onStatus: (message: string | null, sticky?: boolean) => void
 }) {
   const dialog = useRef<HTMLDivElement>(null)
   useDialogFocus(dialog)
@@ -192,8 +194,7 @@ export function PropertiesSheet({ game, artwork, upscalers: upscalerStatus, onUp
         propertiesRead.set(game.id, result.properties)
         setProps(result.properties)
       }
-      note(row, result.message ?? (result.ok ? '' : CHANGE_FAILED), !result.ok)
-      if (result.ok && result.message) onStatus(result.message)
+      note(row, result.ok ? result.message ?? '' : errorText(result.message, CHANGE_FAILED), !result.ok)
       return result.ok
     } catch (error) {
       note(row, errorText(error), true)
@@ -238,10 +239,12 @@ export function PropertiesSheet({ game, artwork, upscalers: upscalerStatus, onUp
       void apply(asked.key, asked.value, undefined, rowOf(asked))
       return
     }
-    note('verify', 'Checking files')
-    void host.repair(game.id)
-      .then(result => onStatus(result.message ?? (result.ok ? 'Files verified.' : 'Exo could not check the files. Try again.'), !result.ok))
-      .catch((error: unknown) => onStatus(errorText(error), true))
+    // The button shows the check (its ring, then its check, or Bad); what the store said stays on the row.
+    note('verify', '')
+    return host.repair(game.id).then(result => {
+      if (result.ok) note('verify', result.message ?? 'Files verified.')
+      return result
+    })
   }
 
   /** The row's own line: what the last change said; a failure as every row's error, with Copy logs (settings › Row). */
@@ -412,7 +415,8 @@ function FilesSection({ props, locked, busy, run, line, note, gameId, game, upsc
       {props.verifyLabel && (
         <PropRow label="Damaged or missing files" line={line('verify')}>
           <ConfirmButton className="exo-set-btn" disabled={locked || busy !== null} question={size ? `Check all ${size}?` : 'Check every file?'}
-            onConfirm={() => run({ key: 'verify', value: '' })}>
+            timeoutMs={null} why="none" context="PropertiesSheet.verify" fallback="Exo could not check the files. Try again."
+            onConfirm={() => run({ key: 'verify', value: '' })} onFailed={failure => note('verify', failure.text, true)}>
             {props.verifyLabel}
           </ConfirmButton>
         </PropRow>

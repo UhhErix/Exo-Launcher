@@ -4,6 +4,7 @@ import { report } from '../../lib/report'
 import { Qr } from '../ui/Qr'
 import { Spinner } from '../ui/Spinner'
 import { ErrorNote } from '../ui/ErrorNote'
+import { ActionButton } from '../ui/ConfirmButton'
 
 type Account = { signedIn: boolean; accountName: string | null }
 type Result = { ok: boolean; message?: string | null }
@@ -60,6 +61,27 @@ function fail(cause: unknown, sink: Sink) {
   report(cause, 'SteamLibraryPanel')
   sink.setBusy(false)
   sink.setStep({ state: 'failed', message: TRY_AGAIN })
+}
+
+/**
+ * A form's press, for its ActionButton: the step Steam answered moves the panel on (Steam Guard, the phone, done), and
+ * a failed one is the button's refusal too, so it turns Bad while the panel's error line says why.
+ */
+function send(run: () => Promise<SteamSignInStep>, sink: Sink) {
+  sink.setBusy(true)
+  return run().then(next => {
+    settle(next, sink)
+    return next.state === 'failed' ? { ok: false, message: next.message ?? TRY_AGAIN } : { ok: true }
+  }, (cause: unknown) => {
+    fail(cause, sink)
+    return { ok: false, message: TRY_AGAIN }
+  })
+}
+
+/** Enter in a form presses its action button, so a keyboard submit shows the same ring or failure as a press. */
+function pressSubmit(event: FormEvent<HTMLFormElement>) {
+  event.preventDefault()
+  event.currentTarget.querySelector<HTMLButtonElement>('.exo-action:not(:disabled)')?.click()
 }
 
 async function attempt(run: () => Promise<SteamSignInStep>, sink: Sink) {
@@ -166,15 +188,13 @@ function PasswordBody({ step, ended, busy, sink }: { step: SteamSignInStep | nul
 function PasswordForm({ busy, sink, ended, message }: { busy: boolean; sink: Sink; ended: boolean; message: string | null }) {
   const [name, setName] = useState('')
   const [password, setPassword] = useState('')
-  function submit(event: FormEvent) {
-    event.preventDefault()
+  function submit() {
     const sent = password
     setPassword('')
-    sink.setBusy(true)
-    host.steamSignInPassword(name.trim(), sent).then(next => settle(next, sink), cause => fail(cause, sink))
+    return send(() => host.steamSignInPassword(name.trim(), sent), sink)
   }
   return (
-    <form className="exo-steam-panel-form" onSubmit={submit}>
+    <form className="exo-steam-panel-form" onSubmit={pressSubmit}>
       <div className="exo-steam-fields">
         <label className="exo-steam-field">
           <span className="exo-set-item-label">Username</span>
@@ -186,29 +206,27 @@ function PasswordForm({ busy, sink, ended, message }: { busy: boolean; sink: Sin
         </label>
       </div>
       {ended ? <ErrorNote message={message ?? TRY_AGAIN} /> : null}
-      <button type="submit" className="exo-set-btn is-primary" disabled={busy || name.trim() === '' || password === ''}>
-        {busy ? <Spinner label="Signing in" /> : null}Sign in
-      </button>
+      <ActionButton className="exo-set-btn is-primary" disabled={name.trim() === '' || (password === '' && !busy)} context="SteamLibrary.password"
+        fallback={TRY_AGAIN} why="none" onPress={submit}>Sign in</ActionButton>
     </form>
   )
 }
 
 function GuardForm({ busy, sink }: { busy: boolean; sink: Sink }) {
   const [code, setCode] = useState('')
-  function submit(event: FormEvent) {
-    event.preventDefault()
+  function submit() {
     const sent = code.trim()
     setCode('')
-    sink.setBusy(true)
-    host.steamSignInGuard(sent).then(next => settle(next, sink), cause => fail(cause, sink))
+    return send(() => host.steamSignInGuard(sent), sink)
   }
   return (
-    <form className="exo-steam-panel-form" onSubmit={submit}>
+    <form className="exo-steam-panel-form" onSubmit={pressSubmit}>
       <label className="exo-steam-field">
         <span className="exo-set-item-label">Steam Guard code</span>
         <input className="exo-field" value={code} autoComplete="one-time-code" spellCheck={false} onChange={e => setCode(e.target.value)} />
       </label>
-      <button type="submit" className="exo-set-btn is-primary" disabled={busy || code.trim() === ''}>Continue</button>
+      <ActionButton className="exo-set-btn is-primary" disabled={code.trim() === '' && !busy} context="SteamLibrary.guard"
+        fallback={TRY_AGAIN} why="none" onPress={submit}>Continue</ActionButton>
     </form>
   )
 }

@@ -7,6 +7,7 @@ import { ReactionEmoji } from './Reactions'
 import { Dialog } from './settingsAccess'
 import type { OnboardingPlace } from './settingsOnboarding'
 import { ErrorNote } from '../ui/ErrorNote'
+import { errorText } from '../../lib/errorWords'
 
 /**
  * Discord's Server Guide editor (Onboarding's last part): the welcome sign (its author and message), 3 to 5 tasks for
@@ -66,7 +67,7 @@ export function ServerGuide({ place, guide, meId, onBack, onSaved }: { place: On
     setBusy(true)
     const result = await admin('saveGuide', { guildId: place.guildId, guide: next })
     setBusy(false)
-    if (result.ok) onSaved(); else setError(result.message ?? 'Discord did not save that.')
+    if (result.ok) onSaved(); else setError(errorText(result.message, 'Discord did not save that.'))
   }
   const item = editing ? (editing.list === 'new_member_actions' ? tasks : resources)[editing.index] : undefined
   return (

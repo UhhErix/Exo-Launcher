@@ -6,6 +6,7 @@ import type { DiscordGuildProfile, DiscordLook } from '../../lib/discord'
 import { ProfilePlaces } from './profileParts'
 import { Wait, sample } from '../ui/Wait'
 import { ErrorNote } from '../ui/ErrorNote'
+import { errorText } from '../../lib/errorWords'
 
 /** A server tag's badge on Discord's CDN, at the size Discord asks for it (14 px shown from its 16 px file). */
 export const tagBadgeUrl = (guildId: string, badge: string) => `https://cdn.discordapp.com/clan-badges/${guildId}/${badge}.png?size=16`
@@ -45,7 +46,7 @@ function GuildTagCard({ guildId, tag, badge, at, onClose }: { guildId: string; t
     void host.discordServer('profile', { guildId }).then(result => {
       if (!live) return
       if (result.ok && result.profile) setProfile(result.profile)
-      else setError(result.message ?? 'Discord did not send this server.')
+      else setError(errorText(result.message, 'Discord did not send this server.'))
     }).catch(() => { if (live) setError('Discord did not answer.') })
     return () => { live = false }
   }, [guildId])

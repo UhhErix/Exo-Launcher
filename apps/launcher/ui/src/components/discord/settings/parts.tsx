@@ -4,6 +4,7 @@ import { host } from '../../../lib/host'
 import { report } from '../../../lib/report'
 import { changeAccountSettings, type AccountSettings, type DiscordClientSettings } from '../../../lib/discordPrefs'
 import { Row, SwitchRow } from '../../settings/parts'
+import { errorText } from '../../../lib/errorWords'
 
 /** A switch on one of the account's settings; invert for Discord's "restricted" and "opted out" fields shown as allows. */
 export function AccountToggle({ label, settings, field, invert = false, disabled }: {
@@ -93,7 +94,7 @@ export function useLoad<T>(key: string, load: () => Promise<{ ok: boolean; messa
     load().then(result => {
       if (!live) return
       if (result.ok) { setValue(map(result.data)); setError(null) }
-      else setError(result.message ?? "Discord didn't answer. Try again.")
+      else setError(errorText(result.message, "Discord didn't answer. Try again."))
     }).catch(() => { if (live) setError("Discord didn't answer. Try again.") })
     return () => { live = false }
   }, [round]) // eslint-disable-line react-hooks/exhaustive-deps -- load and map are the page's own, fixed per page

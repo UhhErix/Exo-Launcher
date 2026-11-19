@@ -1,7 +1,7 @@
 
 import { useEffect, useState } from 'react'
 import { CompanyLogo } from '../../brand/CompanyLogo'
-import { Spinner } from '../ui/Spinner'
+import { ActionButton } from '../ui/ConfirmButton'
 import { host, type DriveHeat, type Game, type GameVariant, type RiotLifetime } from '../../lib/host'
 import { formatRelativeLastPlayed, formatSize, storeLabel, formatPlayed } from '../../lib/utils'
 import type { Achievements } from './useGameDetails'
@@ -123,28 +123,13 @@ function useRiotLifetime(game: Game): { facts: { label: string; value: string }[
 
 /** Re-reads tracker.gg for the saved Riot ID by hand; the ledger keeps counting Exo's own sessions after it. */
 function RiotReimport({ onDone }: { onDone: () => void }) {
-  const [busy, setBusy] = useState(false)
   const [note, setNote] = useState<string | null>(null)
-
-  async function reimport() {
-    setBusy(true)
-    setNote(null)
-    try {
-      const result = await host.riotHoursRefresh()
-      setNote(result.message ?? (result.ok ? 'Hours imported.' : 'Hours could not be imported. Try again.'))
-      onDone()
-    } catch {
-      setNote('Hours could not be imported. Try again.')
-    } finally {
-      setBusy(false)
-    }
-  }
-
+  // The button shows the import (ActionButton: its ring, then its check, or Bad with why beside it); what tracker.gg said stays under it.
   return (
     <div className="exo-game-riot">
-      <button type="button" className="exo-set-btn is-compact" disabled={busy} onClick={() => void reimport()}>
-        {busy ? <Spinner label="Importing" /> : null}Re-import from tracker.gg
-      </button>
+      <ActionButton className="exo-set-btn is-compact" context="RiotReimport" fallback="Hours could not be imported. Try again."
+        onPress={() => { setNote(null); return host.riotHoursRefresh() }}
+        onDone={result => { setNote((result as { message?: string | null }).message ?? 'Hours imported.'); onDone() }}>Re-import from tracker.gg</ActionButton>
       {note ? <p className="exo-game-drive">{note}</p> : null}
     </div>
   )

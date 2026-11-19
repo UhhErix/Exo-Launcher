@@ -14,6 +14,7 @@ import { ErrorNote } from '../ui/ErrorNote'
 import { Menu, PointMenu, useChoiceMenu, type MenuItem } from '../ui/Menu'
 import { Wait, sample, times } from '../ui/Wait'
 import { NoteMarkdown } from './NoteMarkdown'
+import { errorText } from '../../lib/errorWords'
 
 /** A tab's note: its words as typed, what the host has of them, and whether they are still being read. */
 type Doc = {
@@ -384,7 +385,7 @@ export function NotesView({ request, games, onCaptures }: {
   const load = useCallback(async () => {
     try {
       const result = await host.notesList()
-      if (!result.ok) { setFailed(result.message ?? 'Exo could not read the Notes folder.'); return null }
+      if (!result.ok) { setFailed(errorText(result.message, 'Exo could not read the Notes folder.')); return null }
       setFailed(null)
       notePhotos = result.photos ?? null
       setNotes(result.notes ?? [])
@@ -454,7 +455,7 @@ export function NotesView({ request, games, onCaptures }: {
         shown.info = result.note
         shown.loaded = true
         shown.problem = null
-      } else shown.problem = result.message ?? 'Exo could not open this note.'
+      } else shown.problem = errorText(result.message, 'Exo could not open this note.')
       redraw()
     }).catch((error: unknown) => {
       shown.reading = false
@@ -505,7 +506,7 @@ export function NotesView({ request, games, onCaptures }: {
       if (target.fresh) {
         if (!text.trim()) return
         const result = await host.notesSave(null, text, { markdown: target.info.kind === 'markdown' })
-        if (!result.ok || !result.note) { target.problem = result.message ?? 'Exo could not save the note.'; redraw(); return }
+        if (!result.ok || !result.note) { target.problem = errorText(result.message, 'Exo could not save the note.'); redraw(); return }
         target.sent = text
         adopt(target, result.note)
         return
@@ -516,7 +517,7 @@ export function NotesView({ request, games, onCaptures }: {
         target.info = result.note
         target.problem = null
         upsert(result.note)
-      } else target.problem = result.message ?? 'Exo could not save the note.'
+      } else target.problem = errorText(result.message, 'Exo could not save the note.')
       redraw()
     }).catch((error: unknown) => {
       report(error, 'notes.save', { level: 'warn' })
@@ -590,7 +591,7 @@ export function NotesView({ request, games, onCaptures }: {
     try {
       const result = await host.notesSaveAs(target.info.id, target.text)
       if (result.cancelled) return
-      if (!result.ok || !result.id) { setStatus(result.message ?? 'Exo could not save the file.'); return }
+      if (!result.ok || !result.id) { setStatus(errorText(result.message, 'Exo could not save the file.')); return }
       const listed = await load()
       const info = listed?.notes?.find(note => note.id === result.id)
       if (!info) return
@@ -612,7 +613,7 @@ export function NotesView({ request, games, onCaptures }: {
     try {
       const result = await host.notesOpen()
       if (result.cancelled) return
-      if (!result.ok || !result.id) { setStatus(result.message ?? 'Exo could not open the file.'); return }
+      if (!result.ok || !result.id) { setStatus(errorText(result.message, 'Exo could not open the file.')); return }
       const listed = await load()
       const info = listed?.notes?.find(note => note.id === result.id)
       if (info) show(info)
@@ -631,7 +632,7 @@ export function NotesView({ request, games, onCaptures }: {
     await flush(target)
     try {
       const result = await host.notesAct(target.info.id, action)
-      if (!result.ok) { setStatus(result.message ?? NOTE_ACT_FAILED[action]); return }
+      if (!result.ok) { setStatus(errorText(result.message, NOTE_ACT_FAILED[action])); return }
       if (action === 'delete') {
         setNotes(list => list?.filter(note => note.id !== target.info.id) ?? list)
         drop(target.key)
@@ -667,7 +668,7 @@ export function NotesView({ request, games, onCaptures }: {
     if (name === null || target.fresh || name === baseName(target.info.name)) return
     try {
       const result = await host.notesAct(target.info.id, 'rename', name)
-      if (!result.ok || !result.note) { setStatus(result.message ?? 'Exo could not rename it.'); return }
+      if (!result.ok || !result.note) { setStatus(errorText(result.message, 'Exo could not rename it.')); return }
       target.info = result.note
       upsert(result.note)
       redraw()
@@ -770,7 +771,7 @@ export function NotesView({ request, games, onCaptures }: {
     if (picture && picture.size > MAX_PHOTO) { setStatus('That picture is over 25 MB.'); return }
     try {
       const result = await host.notesPhoto(picture ? await base64(picture) : undefined)
-      if (!result.ok || !result.src) { if (!result.cancelled) setStatus(result.message ?? 'Exo could not add the picture.'); return }
+      if (!result.ok || !result.src) { if (!result.cancelled) setStatus(errorText(result.message, 'Exo could not add the picture.')); return }
       if (await asMarkdown(target) && area.current) putLine(area.current, `![](${result.src})`)
     } catch (error) {
       report(error, 'notes.photo', { level: 'warn' })
@@ -834,7 +835,7 @@ export function NotesView({ request, games, onCaptures }: {
   })
 
   const onMore = (id: string) => {
-    if (id === 'folder') void host.notesAct('', 'folder').then(result => { if (!result.ok) setStatus(result.message ?? 'Exo could not open the Notes folder.') })
+    if (id === 'folder') void host.notesAct('', 'folder').then(result => { if (!result.ok) setStatus(errorText(result.message, 'Exo could not open the Notes folder.')) })
     else void textFilesAct(id as 'offer' | 'settings' | 'withdraw')
   }
   const onNoteAction = (target: Doc, id: string) => {

@@ -22,6 +22,7 @@ import { useDismiss } from '../../lib/dismiss'
 import { peek, unpeek } from './roomPlaces'
 import { initials } from '../ui/artInitial'
 import { mentionsSaid } from './Band'
+import { errorText } from '../../lib/errorWords'
 
 /** Where you are in the server, for the title line of whichever page of it is open. */
 /** `name`: the server you are in (its own name, never that of a list still showing from the one you left). */
@@ -310,7 +311,7 @@ function ChannelMenu({ channel, x, y, inCategory, guildId, serverName, canManage
     return () => window.removeEventListener('keydown', escape)
   }, [onClose])
   const run = (work: Promise<{ ok: boolean; message?: string | null }>) =>
-    void work.then(result => { if (result.ok) onClose(); else setNote(result.message ?? 'Discord did not take that.') }).catch(() => setNote('Discord did not take that.'))
+    void work.then(result => { if (result.ok) onClose(); else setNote(errorText(result.message, 'Discord did not take that.')) }).catch(() => setNote('Discord did not take that.'))
   const copy = (text: string) => { void navigator.clipboard.writeText(text).catch(() => { }); onClose() }
   const notify = (change: Parameters<typeof host.discordChannelNotify>[1]) => run(host.discordChannelNotify(channel.id, change))
   if (dialog) return { status: <VoiceStatusDialog channel={channel} onClose={onClose} />, invite: <InviteDialog name={serverName} channelId={channel.id} channelName={channel.name} onClose={onClose} /> }[dialog]
@@ -382,7 +383,7 @@ function CategoryMenu({ category, x, y, channels, collapsed, canManage, onToggle
   const box = useRef<HTMLDivElement>(null)
   useDismiss(box, onClose)
   const run = (work: Promise<{ ok: boolean; message?: string | null }>) =>
-    void work.then(result => { if (result.ok) onClose(); else setNote(result.message ?? 'Discord did not take that.') }).catch(() => setNote('Discord did not take that.'))
+    void work.then(result => { if (result.ok) onClose(); else setNote(errorText(result.message, 'Discord did not take that.')) }).catch(() => setNote('Discord did not take that.'))
   const categories = channels.filter(c => c.kind === 'category')
   // Its channels: the ones listed after it, up to the next category.
   const at = channels.indexOf(category)
@@ -450,7 +451,7 @@ function VoiceStatusDialog({ channel, onClose }: { channel: DiscordChannel; onCl
     setBusy(true)
     void host.discordServer('voiceStatus', { channelId: channel.id, text }).then(result => {
       setBusy(false)
-      if (result.ok) onClose(); else setError(result.message ?? 'Discord did not set that status.')
+      if (result.ok) onClose(); else setError(errorText(result.message, 'Discord did not set that status.'))
     }).catch(() => { setBusy(false); setError('Discord did not set that status.') })
   }
   return (

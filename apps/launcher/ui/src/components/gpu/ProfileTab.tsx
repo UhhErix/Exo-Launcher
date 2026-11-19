@@ -6,6 +6,7 @@ import { changedLine, DriverProfile, PROFILE_ROW, ProfileButtons, type LatencyCh
 import { Row, State } from '../settings/parts'
 import { Spinner } from '../ui/Spinner'
 import { Unfold } from '../ui/Unfold'
+import type { PlainError } from '../../lib/errorWords'
 import type { PcPlace } from './ThisPcTab'
 import { Afmf3Row } from './Afmf3Row'
 
@@ -28,23 +29,17 @@ export function ProfileRows({ place, profile, onProfile }: {
   profile: GpuProfile | null
   onProfile: (next: GpuProfile) => void
 }) {
-  const [busy, setBusy] = useState<'apply' | 'undo' | null>(null)
   const [error, setError] = useState<string | null>(null)
 
+  // The pressed button shows the work (ProfileButtons); the row takes the driver's answer after its check, or at once on a refusal.
   const act = async (action: 'apply' | 'undo', latency?: LatencyChoice) => {
-    if (busy) return
-    setBusy(action)
     setError(null)
-    try {
-      const next = await host.gpuProfile(action, latency)
-      onProfile(next)
-      if (!next.ok) setError(trimStop(next.message) || 'Not changed. Try again.')
-    } catch (e) {
-      report(e, `ProfileRows.${action}`)
-      setError('Not changed. Try again.')
-    }
-    setBusy(null)
+    const next = await host.gpuProfile(action, latency)
+    if (!next.ok) onProfile(next)
+    return next
   }
+  const settle = (next: unknown) => onProfile(next as GpuProfile)
+  const failed = (failure: PlainError) => setError(failure.text)
 
   if (!profile || (profile.status === 'none' && profile.ok)) return null
   const needs = profileNeedsYou(profile)
@@ -53,9 +48,9 @@ export function ProfileRows({ place, profile, onProfile }: {
 
   // The card's own row: in Needs you while Exo's profile isn't on it, else here with its Undo and its choice.
   const card = tuned
-    ? <DriverProfile profile={profile} busy={busy} error={error} onAct={(action, latency) => void act(action, latency)} />
+    ? <DriverProfile profile={profile} error={error} onAct={act} onSettled={settle} onFailed={failed} />
     : nvidia
-      ? <NvidiaRow profile={profile} busy={busy} error={error} onAct={action => void act(action)} />
+      ? <NvidiaRow profile={profile} error={error} onAct={action => act(action)} onSettled={settle} onFailed={failed} />
       : null
   if (place === 'needs') return needs ? card : null
   if (!tuned && !nvidia) return <ManualProfile profile={profile} />
@@ -70,17 +65,18 @@ export function ProfileRows({ place, profile, onProfile }: {
 }
 
 /** A GeForce's row: Exo's profile, what changed since it was applied, and whether it is. */
-function NvidiaRow({ profile, busy, error, onAct }: {
+function NvidiaRow({ profile, error, onAct, onSettled, onFailed }: {
   profile: GpuProfile
-  busy: 'apply' | 'undo' | null
   error: string | null
-  onAct: (action: 'apply' | 'undo') => void
+  onAct: (action: 'apply' | 'undo') => Promise<unknown>
+  onSettled: (next: unknown) => void
+  onFailed: (failure: PlainError) => void
 }) {
   return (
     <Row label={PROFILE_ROW} detail={changedLine(profile)}
       error={error ?? (profile.ok ? null : trimStop(profile.message) || 'The driver did not answer. Try again.')}>
       {profile.status === 'applied' ? <State on>Applied</State> : null}
-      <ProfileAction profile={profile} busy={busy} onAct={onAct} />
+      <ProfileAction profile={profile} onAct={onAct} onSettled={onSettled} onFailed={onFailed} />
     </Row>
   )
 }
@@ -103,10 +99,15 @@ function ManualProfile({ profile }: { profile: GpuProfile }) {
 }
 
 /** Use (or switch to) the picked variant, Re-apply what changed since, and Undo while Exo's backup is there. */
-function ProfileAction({ profile, busy, onAct }: { profile: GpuProfile; busy: 'apply' | 'undo' | null; onAct: (action: 'apply' | 'undo') => void }) {
+function ProfileAction({ profile, onAct, onSettled, onFailed }: {
+  profile: GpuProfile
+  onAct: (action: 'apply' | 'undo') => Promise<unknown>
+  onSettled: (next: unknown) => void
+  onFailed: (failure: PlainError) => void
+}) {
   const apply = profile.status === 'ready' ? 'Use' : profile.status === 'changed' ? 'Re-apply' : null
   if (!apply && profile.status !== 'applied') return null
-  return <ProfileButtons apply={apply} undo={!!profile.canUndo} busy={busy} onAct={onAct} />
+  return <ProfileButtons apply={apply} undo={!!profile.canUndo} onAct={onAct} onSettled={onSettled} onFailed={onFailed} />
 }
 
 /**

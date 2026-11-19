@@ -4,6 +4,7 @@ import { host } from '../../lib/host'
 import type { CaptureItem } from '../../lib/capture'
 import { ErrorNote } from '../ui/ErrorNote'
 import { Spinner } from '../ui/Spinner'
+import { errorText } from '../../lib/errorWords'
 
 type Tool = 'crop' | 'arrow' | 'highlight' | 'hide' | 'text'
 type Rect = { x: number; y: number; w: number; h: number }
@@ -217,9 +218,9 @@ export function SnipEditor({ item, onDone }: { item: CaptureItem; onDone: (saved
       // Let go of the full-size pixels before the host's round trip.
       out.width = out.height = 0
       const result = await host.captureSaveImage(item.id, png)
-      if (!result.ok) { setError(result.message ?? failed); return }
+      if (!result.ok) { setError(errorText(result.message, failed)); return }
       onDone(result.item ?? null)
-    } catch (e) { setError(e instanceof Error ? e.message : failed) }
+    } catch (e) { setError(errorText(e, failed)) }
     finally { out.width = out.height = 0; setBusy(false) }
   }
 

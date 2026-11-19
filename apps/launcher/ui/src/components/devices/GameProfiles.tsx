@@ -7,7 +7,8 @@ import { Switch } from '../Switch'
 import { Dialog } from '../ui/Dialog'
 import { ErrorNote } from '../ui/ErrorNote'
 import { Wait, WaitWord, sample, times } from '../ui/Wait'
-import { Spinner } from '../ui/Spinner'
+import { ActionButton } from '../ui/ConfirmButton'
+import type { PlainError } from '../../lib/errorWords'
 
 type Game = { id: string; title: string }
 
@@ -126,24 +127,26 @@ function ProfileEditor({ profile, profiles, games, isNew, onClose, onSave, onDel
 }) {
   const [draft, setDraft] = useState(profile)
   const [picking, setPicking] = useState(false)
-  const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const set = (patch: Partial<PadOverrides>) => setDraft(d => ({ ...d, settings: { ...d.settings, ...patch } }))
-  async function run(work: () => Promise<string | null>) {
-    setBusy(true)
+  // Save and Delete show their own work (ActionButton): the ring while it saves, then the dialog closes; a refusal turns
+  // the button Bad, with why in the dialog.
+  const run = (work: () => Promise<string | null>) => async () => {
     setError(null)
-    try { setError(await work()) } catch (cause) { report(cause, 'GameProfiles.save'); setError('Exo couldn’t save them. Try again.') } finally { setBusy(false) }
+    const why = await work()
+    return why ? { ok: false, message: why } : { ok: true }
   }
+  const failed = (failure: PlainError) => setError(failure.text)
   const s = draft.settings
   const owner = (id: string) => profiles.find(p => p.id !== draft.id && p.games.includes(id))?.name
   return (
     <Dialog title={isNew ? 'New game profile' : draft.name} form onClose={onClose} actions={
       <>
         <button type="button" className="exo-set-btn" data-autofocus onClick={onClose}>Cancel</button>
-        {!isNew ? <button type="button" className="exo-set-btn is-danger" disabled={busy} onClick={() => void run(onDelete)}>Delete</button> : null}
-        <button type="button" className="exo-set-btn is-primary" disabled={busy || !draft.name.trim()} onClick={() => void run(() => onSave(draft))}>
-          {busy ? <Spinner label="Saving" /> : null}Save
-        </button>
+        {!isNew ? <ActionButton className="exo-set-btn is-danger" why="none" context="GameProfiles.delete" fallback="Exo couldn’t delete it. Try again."
+          onPress={run(onDelete)} onFailed={failed}>Delete</ActionButton> : null}
+        <ActionButton className="exo-set-btn is-primary" disabled={!draft.name.trim()} why="none" context="GameProfiles.save" fallback="Exo couldn’t save them. Try again."
+          onPress={run(() => onSave(draft))} onFailed={failed}>Save</ActionButton>
       </>
     }>
       <label className="exo-field exo-profile-name">

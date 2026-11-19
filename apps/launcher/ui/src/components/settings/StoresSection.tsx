@@ -14,6 +14,9 @@ import {
   storeState,
 } from '../../lib/stores'
 import { Spinner } from '../ui/Spinner'
+import { ActionButton } from '../ui/ConfirmButton'
+import { errorText, type PlainError } from '../../lib/errorWords'
+import { report } from '../../lib/report'
 import { Switch } from '../Switch'
 import { Wait, sample, times } from '../ui/Wait'
 import { Row, Section, State, SwitchRow } from './parts'
@@ -120,11 +123,13 @@ function MissingStore({ store, onError }: { store: StoreStatus; onError: (error:
     if (!url) return
     setBusy(true)
     onError(null)
+    const failed = `Could not open the ${store.displayName} download. Try again.`
     try {
       const result = await host.openUrl(url)
-      if (!result.ok) onError(`Could not open the ${store.displayName} download. Try again.`)
-    } catch {
-      onError(`Could not open the ${store.displayName} download. Try again.`)
+      if (!result.ok) onError(failed)
+    } catch (cause) {
+      report(cause, 'StoresSection.getStore')
+      onError(errorText(cause, failed))
     } finally {
       setBusy(false)
     }
@@ -190,9 +195,10 @@ function SteamOfflineRow({ offline, onChanged }: { offline: boolean; onChanged: 
     try {
       const result = await host.steamSetOffline(next)
       setLine(result.ok ? result.message ?? null : null)
-      if (!result.ok) setError(result.message ?? failed)
-    } catch {
-      setError(failed)
+      if (!result.ok) setError(errorText(result.message, failed))
+    } catch (cause) {
+      report(cause, 'StoresSection.steamOffline')
+      setError(errorText(cause, failed))
     } finally {
       setPending(null)
       onChanged()
@@ -208,56 +214,58 @@ function SteamOfflineRow({ offline, onChanged }: { offline: boolean; onChanged: 
 
 type Note = { text: string; error: boolean } | null
 
-const messageOf = (cause: unknown, fallback: string) => cause instanceof Error ? cause.message : fallback
-
 const RIOT_ID = /^[^#]+#[^#]{2,}$/
 
 /** Riot ID (Name#TAG): the public name Riot hours are read for. Not a key. */
 function RiotIdRow({ riotId, onSettings }: { riotId: string; onSettings: (next: LauncherSettings) => void }) {
   const [editing, setEditing] = useState(riotId === '')
   const [draft, setDraft] = useState(riotId)
-  const [busy, setBusy] = useState<'save' | 'remove' | null>(null)
+  const [busy, setBusy] = useState(false)
   const [note, setNote] = useState<Note>(null)
   const value = draft.trim()
   const ready = value !== '' && value !== riotId && RIOT_ID.test(value)
 
+  // Save and Remove say how it went in themselves (ActionButton): the ring, then the check, then the row settles (the
+  // field closes); a refusal is the button in Bad with the reason under the row. Hours that couldn't be read after a
+  // good save are the row's own line, not the save's failure.
   async function save(next: string) {
-    setBusy(next ? 'save' : 'remove')
+    setBusy(true)
     setNote(null)
     try {
       await saveSettingsPatch({ riotId: next })
-      if (next) {
-        const refresh = await host.riotHoursRefresh(next)
-        const read = await readSettings()
-        if (read) onSettings(read)
-        setNote({ text: refresh.message ?? (refresh.ok ? 'Hours imported.' : 'Hours could not be imported. Try again.'), error: !refresh.ok })
-      }
-      setEditing(false)
-    } catch (cause) {
-      setNote({ text: messageOf(cause, 'Riot ID could not be saved. Try again.'), error: true })
+      if (!next) return { ok: true }
+      const refresh = await host.riotHoursRefresh(next)
+      const read = await readSettings()
+      if (read) onSettings(read)
+      return { ok: true, hours: refresh.ok ? refresh.message ?? 'Hours imported.' : null, hoursError: refresh.ok ? null : errorText(refresh.message, 'Hours could not be imported. Try again.') }
     } finally {
-      setBusy(null)
+      setBusy(false)
     }
   }
+  function saved(result: unknown) {
+    const { hours, hoursError } = (result ?? {}) as { hours?: string | null; hoursError?: string | null }
+    if (hoursError) setNote({ text: hoursError, error: true })
+    else if (hours) setNote({ text: hours, error: false })
+    setEditing(false)
+  }
+  const failed = (error: PlainError) => setNote({ text: error.text, error: true })
 
   return (
     <Row label="Riot ID" detail={note && !note.error ? note.text : undefined} error={note?.error ? note.text : null}>
       {editing ? (
-        <form className="exo-set-key-form" onSubmit={event => { event.preventDefault(); if (ready) void save(value) }}>
+        <form className="exo-set-key-form" onSubmit={event => { event.preventDefault(); event.currentTarget.querySelector<HTMLButtonElement>('.exo-action:not(:disabled)')?.click() }}>
           <input type="text" className="exo-field" value={draft} autoComplete="off" spellCheck={false} placeholder="Name#TAG"
-            aria-label="Riot ID" disabled={busy !== null} onChange={event => setDraft(event.target.value)} />
-          <button type="submit" className="exo-set-btn" disabled={busy !== null || !ready}>
-            {busy === 'save' ? <Spinner label="Saving" /> : null}Save
-          </button>
-          {riotId ? <button type="button" className="exo-set-btn" disabled={busy !== null} onClick={() => { setDraft(riotId); setEditing(false) }}>Cancel</button> : null}
+            aria-label="Riot ID" disabled={busy} onChange={event => setDraft(event.target.value)} />
+          <ActionButton className="exo-set-btn" disabled={!ready} context="StoresSection.riotId" fallback="Riot ID could not be saved. Try again."
+            why="none" onFailed={failed} onPress={() => save(value)} onDone={saved}>Save</ActionButton>
+          {riotId ? <button type="button" className="exo-set-btn" disabled={busy} onClick={() => { setDraft(riotId); setEditing(false) }}>Cancel</button> : null}
         </form>
       ) : (
         <>
           <State on>{riotId}</State>
-          <button type="button" className="exo-set-btn" disabled={busy !== null} onClick={() => setEditing(true)}>Replace</button>
-          <button type="button" className="exo-set-btn" disabled={busy !== null} onClick={() => void save('')}>
-            {busy === 'remove' ? <Spinner label="Removing" /> : null}Remove
-          </button>
+          <button type="button" className="exo-set-btn" disabled={busy} onClick={() => setEditing(true)}>Replace</button>
+          <ActionButton className="exo-set-btn" context="StoresSection.riotIdRemove" fallback="Riot ID could not be removed. Try again."
+            why="none" onFailed={failed} onPress={() => save('')} onDone={saved}>Remove</ActionButton>
         </>
       )}
     </Row>

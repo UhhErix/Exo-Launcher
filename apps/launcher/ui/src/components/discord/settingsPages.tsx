@@ -10,6 +10,7 @@ import { BadgeArtwork, tagBadgeUrl, type BadgeArt } from './guildTag'
 import { ErrorNote } from '../ui/ErrorNote'
 import { Spinner } from '../ui/Spinner'
 import { ConfirmButton } from '../ui/ConfirmButton'
+import { errorText } from '../../lib/errorWords'
 
 /**
  * Server Settings pages Discord has beyond the server's own fields, each as Discord's (read from its web client) in
@@ -59,7 +60,7 @@ export function ServerTag({ guild }: { guild: PageGuild }) {
     setBusy(true); setLine(null)
     const result = await admin('saveProfile', { guildId: guild.id, tag: value.tag.trim(), badge: value.badge, primary: value.colors[0], secondary: value.colors[1] })
     setBusy(false)
-    if (!result.ok) { setLine({ text: result.message ?? 'Discord did not save the tag.', bad: true }); return }
+    if (!result.ok) { setLine({ text: errorText(result.message, 'Discord did not save the tag.'), bad: true }); return }
     setTag(null); setBadge(null); setColors(null); setLine({ text: 'Saved. Members reapply the tag to show the change.', bad: false }); profile.reload()
   }
   return (
@@ -185,7 +186,7 @@ export function Soundboard({ guild }: { guild: PageGuild }) {
   const remove = (sound: Sound) => {
     setError(null)
     void admin('deleteSound', { guildId: guild.id, soundId: sound.sound_id }).then(result => {
-      if (result.ok) sounds.reload(); else setError(result.message ?? 'Discord did not delete that sound.')
+      if (result.ok) sounds.reload(); else setError(errorText(result.message, 'Discord did not delete that sound.'))
     })
   }
   return (
@@ -231,7 +232,7 @@ function SoundDialog({ guildId, sound, onClose, onSaved }: { guildId: string; so
     }
     const result = await admin(sound ? 'editSound' : 'uploadSound', { guildId, soundId: sound?.sound_id, uploadId, name: name.trim(), volume: volume / 100, emojiName: emoji.trim() || undefined })
     setBusy(false)
-    if (result.ok) onSaved(); else { dropUpload(uploadId); setError(result.message ?? 'Discord did not save that sound.') }
+    if (result.ok) onSaved(); else { dropUpload(uploadId); setError(errorText(result.message, 'Discord did not save that sound.')) }
   }
   return (
     <Confirm title={sound ? 'Edit sound' : 'Upload a sound'} action={sound ? 'Save' : 'Upload'} danger={false} form busy={busy} disabled={name.trim().length < 2} error={error} onConfirm={() => void save()} onClose={onClose}>
@@ -265,7 +266,7 @@ export function ServerTemplate({ guild }: { guild: PageGuild }) {
     setBusy(action); setError(null)
     const result = await admin(action, { guildId: guild.id, ...params })
     setBusy(null)
-    if (result.ok) templates.reload(); else setError(result.message ?? 'Discord did not do that.')
+    if (result.ok) templates.reload(); else setError(errorText(result.message, 'Discord did not do that.'))
   }
   const ring = (action: typeof busy, label: string) => busy === action ? <Spinner label={label} /> : null
   const link = template ? `https://discord.new/${template.code}` : ''
@@ -305,7 +306,7 @@ export function Widget({ guild, channels }: { guild: PageGuild; channels: Discor
   const widget = useAdmin<{ enabled: boolean; channel_id: string | null }>('widget', { guildId: guild.id })
   const [error, setError] = useState<string | null>(null)
   const save = (enabled: boolean, channelId: string | null) => void admin('saveWidget', { guildId: guild.id, enabled, channelId }).then(result => {
-    if (result.ok) { setError(null); widget.reload() } else setError(result.message ?? 'Discord did not save the widget.')
+    if (result.ok) { setError(null); widget.reload() } else setError(errorText(result.message, 'Discord did not save the widget.'))
   })
   const data = widget.data
   return (
@@ -333,7 +334,7 @@ export function CustomInvite({ guild }: { guild: PageGuild }) {
   const [code, setCode] = useState<string | null>(null)
   const [line, setLine] = useState<{ text: string; bad: boolean } | null>(null)
   const save = () => void admin('saveVanity', { guildId: guild.id, code: (code ?? '').trim() }).then(result => {
-    if (result.ok) { setCode(null); setLine({ text: 'Saved.', bad: false }); vanity.reload() } else setLine({ text: result.message ?? 'Discord did not save that link.', bad: true })
+    if (result.ok) { setCode(null); setLine({ text: 'Saved.', bad: false }); vanity.reload() } else setLine({ text: errorText(result.message, 'Discord did not save that link.'), bad: true })
   })
   return (
     <section className="exo-dc-perm-group" aria-label="Custom invite link">
@@ -366,7 +367,7 @@ export function WelcomeScreen({ guild, channels }: { guild: PageGuild; channels:
     setBusy(true); setLine(null)
     const result = await admin('saveWelcome', { guildId: guild.id, enabled: on, description: value.description ?? '', channels: list })
     setBusy(false)
-    if (result.ok) { setDraft(null); setLine({ text: 'Saved.', bad: false }); welcome.reload() } else setLine({ text: result.message ?? 'Discord did not save the welcome screen.', bad: true })
+    if (result.ok) { setDraft(null); setLine({ text: 'Saved.', bad: false }); welcome.reload() } else setLine({ text: errorText(result.message, 'Discord did not save the welcome screen.'), bad: true })
   }
   const text = textChannels(channels)
   return (
@@ -420,7 +421,7 @@ export function Community({ guild, channels, onSaved }: { guild: PageGuild; chan
       ? await admin('saveGuild', { guildId: guild.id, changes: { rules_channel_id: rules, public_updates_channel_id: updates } })
       : await admin('community', { guildId: guild.id, rulesChannelId: rules, updatesChannelId: updates })
     setBusy(false)
-    if (result.ok) onSaved(); else setError(result.message ?? 'Discord did not save that.')
+    if (result.ok) onSaved(); else setError(errorText(result.message, 'Discord did not save that.'))
   }
   return (
     <>

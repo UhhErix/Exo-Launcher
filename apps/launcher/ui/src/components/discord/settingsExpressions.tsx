@@ -8,6 +8,7 @@ import { Avatar } from './presence'
 import { Wait, sample, times } from '../ui/Wait'
 import { ConfirmButton } from '../ui/ConfirmButton'
 import { ErrorNote } from '../ui/ErrorNote'
+import { errorText } from '../../lib/errorWords'
 
 type Emoji = { id: string; name: string; animated?: boolean; roles?: string[]; user?: DiscordUser | null }
 type Sticker = { id: string; name: string; tags?: string; description?: string | null; format_type: number; user?: DiscordUser | null }
@@ -43,18 +44,18 @@ export function Emoji({ guildId, tier }: { guildId: string; tier: number }) {
     const sent = await upload(file, 256 * 1024, 'Emoji')
     const result = sent.id ? await admin<Emoji>('uploadEmoji', { guildId, name: emojiName(file.name), uploadId: sent.id }) : null
     setBusy(false)
-    if (!result?.ok) { dropUpload(sent.id); setError(sent.error ?? result?.message ?? 'Discord did not take that emoji.'); return }
+    if (!result?.ok) { dropUpload(sent.id); setError(sent.error ?? errorText(result?.message, 'Discord did not take that emoji.')); return }
     emojis.reload()
   }
   const rename = (emoji: Emoji, name: string) => {
     if (name === emoji.name) return
     setFailed(null)
     void admin('renameEmoji', { guildId, emojiId: emoji.id, name, roles: emoji.roles ?? [] }).then(result => {
-      if (result.ok) emojis.set(all => all && all.map(e => e.id === emoji.id ? { ...e, name } : e)); else setFailed({ id: emoji.id, message: result.message ?? 'Discord did not rename that.' })
+      if (result.ok) emojis.set(all => all && all.map(e => e.id === emoji.id ? { ...e, name } : e)); else setFailed({ id: emoji.id, message: errorText(result.message, 'Discord did not rename that.') })
     })
   }
   const remove = (emoji: Emoji) => { setFailed(null); void admin('deleteEmoji', { guildId, emojiId: emoji.id }).then(result => {
-    if (result.ok) emojis.set(all => all && all.filter(e => e.id !== emoji.id)); else setFailed({ id: emoji.id, message: result.message ?? 'Discord did not delete that.' })
+    if (result.ok) emojis.set(all => all && all.filter(e => e.id !== emoji.id)); else setFailed({ id: emoji.id, message: errorText(result.message, 'Discord did not delete that.') })
   }) }
   return (
     <>
@@ -108,7 +109,7 @@ export function Stickers({ guildId, tier }: { guildId: string; tier: number }) {
     setBusy(true); setError(null)
     void admin('deleteSticker', { guildId, stickerId: sticker.id }).then(result => {
       setBusy(false)
-      if (!result.ok) { setError(result.message ?? 'Discord did not delete that.'); return }
+      if (!result.ok) { setError(errorText(result.message, 'Discord did not delete that.')); return }
       stickers.set(all => all && all.filter(s => s.id !== sticker.id))
     })
   }
@@ -164,7 +165,7 @@ function StickerDialog({ guildId, sticker, onClose, onSaved }: { guildId: string
       if (!result.ok) dropUpload(sent.id)
     }
     setBusy(false)
-    if (result.ok) onSaved(); else setError(result.message ?? 'Discord did not take that sticker.')
+    if (result.ok) onSaved(); else setError(errorText(result.message, 'Discord did not take that sticker.'))
   }
   const ready = name.trim().length >= 2 && tags.trim().length > 0 && (sticker !== null || file !== null)
   return (
