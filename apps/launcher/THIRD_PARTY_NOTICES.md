@@ -27,7 +27,7 @@ The source for every build of these programs that Exo ships, Lucid aside, is pub
 | Windows App SDK (WinUI) | 2.x | Microsoft Software License Terms |
 | Microsoft Edge WebView2 SDK | 1.0.4314.35 | BSD-3-Clause |
 | [sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx) C API (`sherpa-onnx-c-api.dll`) with [ONNX Runtime](https://github.com/microsoft/onnxruntime) (`onnxruntime.dll`), from the org.k2fsa.sherpa.onnx.runtime.win-x64 package, for Only My Voice | 2.0.1 (ONNX Runtime 1.31.1, from the Microsoft.ML.OnnxRuntime package) | Apache-2.0 (sherpa-onnx), MIT (ONNX Runtime) |
-| Microsoft.Data.Sqlite | 10.0.14 | MIT |
+| Microsoft.Data.Sqlite | 10.0.15 | MIT |
 | SQLitePCLRaw | 3.0.5 | Apache-2.0 |
 | SQLite | bundled with SQLitePCLRaw | Public domain |
 | libdave (Discord, DAVE end-to-end encryption for calls; `dave.dll`), with Exo's one addition, an MLS exporter for the call relay (`voice/dave-exporter.patch`) | 1.2.2 (6396c90) | MIT |
