@@ -4,16 +4,17 @@ Where every Exo app (Launcher, Cinema) asks for its newest version and downloads
 `https://updates.getexo.app` (`https://exo-updates.exo-erix.workers.dev` is its older name). The apps name this address and
 nothing else, so moving downloads never strands an installed copy.
 
-It is a Cloudflare Worker (`src/worker.js`, plain JavaScript, no build step) with one R2 bucket, `exo-releases`, as its
-only source (binding `MIRROR`). GitHub is not asked for anything; releases reach the bucket through `publish-release.ps1`, run by
-hand or, for an Exo Launcher GitHub release, by the workflow in "From a GitHub release" below.
+It is a Cloudflare Worker (`src/worker.js`, plain JavaScript, no build step) with one R2 bucket, `exo-releases` (binding
+`MIRROR`), which it serves everything from. Exo Launcher's releases reach the bucket through the Worker itself: it reads the
+newest stable GitHub release of UhhErix/Exo-Launcher and fills R2 lazily (`src/github.js`, "Where a launcher release comes
+from" below). Exo Cinema's reach it through `publish-release.ps1`.
 
 ## What an app asks
 
 | Request | Answer |
 | --- | --- |
-| `GET /v1/<app>/latest` (`launcher`, `cinema`) | `{ app, tag, version, source: "mirror", files: { setup, sha256, whatsNew }, checks: { setup, sha256, whatsNew } }`, kept at the edge for one minute; an ETag, so a poll that holds it gets a 304 |
-| `GET /v1/<app>/download/<tag>/<file>` | The bucket's copy, with byte ranges and a 304 for a matching `If-None-Match`; kept at the edge an hour; 404 for a release that has no such file |
+| `GET /v1/<app>/latest` (`launcher`, `cinema`) | `{ app, tag, version, source: "mirror", files: { setup, sha256, whatsNew }, checks: { setup, sha256, whatsNew } }`, kept at the edge for one minute; an ETag, so a poll that holds it gets a 304. For a launcher release with the file-level update, `files` and `checks` also have `filesJson` and `filesPack` (older apps ignore them) |
+| `GET /v1/<app>/download/<tag>/<file>` | The bucket's copy, with one byte range per request (206 with `Content-Range`; a list of ranges gets the whole file, a range past the end 416) and a 304 for a matching `If-None-Match`; kept at the edge an hour. Files: `Exo<App>-Setup.exe`, its `.sha256`, `whats-new.json`, and for the launcher `files.json` and `files.pack`. A launcher file R2 doesn't hold yet comes from the tag's GitHub release (below); otherwise 404 |
 | `GET /v1/<app>/changelog` | The app's `CHANGELOG.md` as `text/markdown; charset=utf-8` (R2 object `<app>/CHANGELOG.md`), the source of getexo.app's Changelog pages; kept at the edge a minute; 404 until uploaded |
 | `GET /v1/<app>/payload/<tag>` | The release's file list (R2 object `<app>/<tag>/payload-manifest.json`): every file of the installed app with its path, size and SHA-256. Kept at the edge an hour; a 404 nothing keeps for a release that has none, and the app then updates through Setup |
 | `GET /v1/<app>/file/<sha256>` | One app file, gzipped, by the SHA-256 of its bytes (R2 object `<app>/files/<sha256>.gz`), with byte ranges; `immutable` for a year, since the name says what the bytes are; a 404 nothing keeps until uploaded |
@@ -58,13 +59,14 @@ with `node source-mirror.mjs --launcher <checkout> --rev <rev>`. Exo's own copyl
 there with `node addon-source.mjs` (below). Whether the bucket exists now is for `wrangler r2 bucket list` to say: this page
 used to say it did not (only `exo-source-backup`), and exo-site's `wrangler.toml` binds `exo-source`.
 
-**Exo's own add-ons' source (`addon-source.mjs`):** Exo Mouse (AGPL-3.0-or-later, `mouse/`), Exo Shaders (GPL-3.0-or-later,
-`shaders/`, the commit `Build-Release.ps1` prints) and Exo Shield (GPL-3.0, `ExoLauncher/Assets/Extensions/exo-shield`) are built from committed
+**Exo's own add-ons' source (`addon-source.mjs`):** Exo Mouse (AGPL-3.0-or-later, `mouse/`) and Exo Shaders (GPL-3.0-or-later,
+`shaders/`, the commit `Build-Release.ps1` prints) are built from committed
 trees into `<name>-<launcher version>.tar.gz` (deterministic: the commit's time, a fixed gzip header), each with its licence file
 and an `EXO-SOURCE.txt` naming the commit; `fetch-obs --tag 32.2.2` adds OBS Studio's tag archive (the one step that reads the
 network). `build` and `fetch-obs` write `artifacts/source/` only; `upload --dir artifacts/source` prints its plan, and with `--yes`
 puts the archives and then the merged `source/index.json` (the tools' entries stay; a release already listed with other bytes is
-refused). Exo Capture is not here: since 3.18.0 it is under its own unpublished terms.
+refused). Exo Shield is not here: since 3.26.0 it is Exo's own (`shield/`), and earlier releases' GPL archives of it stay in the
+index. Exo Capture is not here: since 3.18.0 it is under its own unpublished terms.
 
 `HEAD` answers the same status and headers as `GET`, with no body. Only an app's own files ever pass: `Exo<App>-Setup.exe`,
 its `.sha256` and `whats-new.json`. A tag must look like `v1.2.3`.
@@ -87,14 +89,22 @@ manifest from before schema 2 still answers, with no `checks`.
 
 Releases are not signed: Exo holds no keys (owner's rule), so the apps check the SHA-256, the size and the host. The
 signing code that once waited for keys is gone; a stray `files.sig` in a manifest is ignored and a `.sig` is never served.
-`CACHE_SCHEMA` in `src/worker.js` is 3 (the edge key names it, so a deploy never serves an older answer).
+`CACHE_SCHEMA` in `src/worker.js` is 4 (the edge key names it, so a deploy never serves an older answer).
+
+For the launcher, `files.filesJson` and `files.filesPack` are present together or not at all; each has `name`, `size` and
+`sha256` like the others.
 
 ## What it sees
 
-The IP address of each request, while it's answered. It writes no logs (`observability.enabled = false`, no `console`
+The IP address of each request, while it's answered. When it asks GitHub (below) it sends nothing about who asked: no
+address, no header of the player's, no token. It writes no logs (`observability.enabled = false`, no `console`
 calls) and stores nothing about who asked.
 
 ## Release in one command
+
+For Exo Launcher a published GitHub release is the whole release ("Where a launcher release comes from" below); these scripts
+are for Exo Cinema, and can still put a launcher build into the mirror by hand (the Worker then finds the tag already there and
+leaves it as it is).
 
 `release.ps1` runs a whole release for one app, and stops at the first failure:
 
@@ -112,7 +122,7 @@ pwsh -File cloud\updates\release.ps1 -App cinema -Repo C:\Users\Erix\Code\Exo\Ex
    in and must hold the entry.
 4. `publish-release.ps1 -WhatIf` must pass; then `publish-release.ps1` uploads, verifies `/v1/<app>/latest` and asks the
    Worker for the release card (`POST /v1/<app>/announce`).
-5. `exo-site`: `npm run build` (it reads the version the mirror now serves) and `npx wrangler@4.158.0 deploy`.
+5. `exo-site`: `npm run build` (it reads the version the mirror now serves) and `npx wrangler@4.165.0 deploy`.
 6. Live check: `updates.getexo.app/v1/<app>/latest` names the tag, `getexo.app/download/` shows the version, and
    `getexo.app/<app>/changelog` has the entry.
 
@@ -135,9 +145,9 @@ in R2 (`announce/<app>/<tag>.json`) before posting, so a re-upload of a live tag
 Each app has its webhook and an optional role, as Worker secrets (set once, from `cloud/updates`):
 
 ```powershell
-npx wrangler@4.158.0 secret put DISCORD_WEBHOOK_LAUNCHER     # the launcher releases channel's webhook URL
-npx wrangler@4.158.0 secret put DISCORD_WEBHOOK_CINEMA       # the cinema releases channel's webhook URL
-npx wrangler@4.158.0 secret put DISCORD_ROLE_LAUNCHER        # optional: a role id to ping once per release
+npx wrangler@4.165.0 secret put DISCORD_WEBHOOK_LAUNCHER     # the launcher releases channel's webhook URL
+npx wrangler@4.165.0 secret put DISCORD_WEBHOOK_CINEMA       # the cinema releases channel's webhook URL
+npx wrangler@4.165.0 secret put DISCORD_ROLE_LAUNCHER        # optional: a role id to ping once per release
 ```
 
 A missing webhook is logged and the card is skipped; a webhook that isn't `https://discord.com/api/webhooks/` (or
@@ -200,34 +210,88 @@ without the file leaves the previous list on getexo.app.
 Older tags are kept unless asked for: `-PruneOlder -OlderTag v3.24.0` deletes only the three files of each tag named, and
 only after the new release verifies. Wrangler's version is `$WranglerVersion` in the script.
 
-## From a GitHub release (`publish-github-release.ps1`)
+## Where a launcher release comes from (`src/github.js`)
 
-When a stable Exo Launcher release is published on GitHub, `.github/workflows/launcher-release-mirror.yml` runs
-`publish-github-release.ps1 -Tag <tag> -Publish` on a Windows runner. It needs the repo secrets `CLOUDFLARE_API_TOKEN` and
-`CLOUDFLARE_ACCOUNT_ID`; without them it warns and stops. The token steps are in the root `RELEASES.md`. The script:
+The Worker reads Exo Launcher's releases from GitHub itself; there is no upload step. Players' PCs still ask only this
+address: every URL the Worker hands out is on it, and GitHub is asked by the Worker, never by an app.
 
-- reads the release with gh (published, not a draft or pre-release) and downloads `ExoLauncher-<version>-Setup.exe` and its
-  `.sha256`, each checked against the size and SHA-256 GitHub recorded at upload (`digest`); the `.sha256` must name the
-  installer's hash and file;
-- reads the tag's committed tree (`git show`, never the working tree): `VERSION` must be the tag's version, `CHANGELOG.md`
-  must hold the entry, and the version's What's New entry (`ui/src/lib/whatsNew.json`) is written the way `Build-Release.ps1`
-  writes `whats-new.json` (a `whats-new.json` asset on the release is used instead when there is one);
-- stages `ExoLauncher-Setup.exe`, `ExoLauncher-Setup.exe.sha256` (`"<hash>  ExoLauncher-Setup.exe"`, ASCII, no newline),
-  `whats-new.json` and `CHANGELOG.md`, byte for byte as a local build does, and runs `publish-release.ps1` on them, so all its
-  checks, its order and its rollback apply;
-- with `-Publish`, checks `/v1/launcher/latest` once more against GitHub's size and SHA-256. Without it (the default) it is
-  the dry run: it prints the R2 keys and runs `publish-release.ps1`'s dry run, which still reads the bucket (wrangler login).
+**The newest release.** `GET https://api.github.com/repos/UhhErix/Exo-Launcher/releases/latest` (public, no token), at most
+once every five minutes across all of Cloudflare: R2 `_github/launcher.json` holds when GitHub was last asked, its ETag (the
+next ask is conditional, and GitHub doesn't count a 304 against its limit of 60 an hour per address) and the release it named;
+each edge keeps that answer five minutes, and past them answers with it once more while it asks again in the background. Only
+the request holding the lease `_github/launcher.lease` (an R2 conditional write, taken over after 30 seconds) asks; the others
+answer with the last release, so many edges at once still make one request. A failed ask counts as a check too, so a GitHub
+outage is not hammered. Drafts, pre-releases and tags that aren't `vX.Y.Z` are
+never a release.
 
-It does not publish the add-ons' source (`addon-source.mjs`), which needs the Exo Shaders checkout and Build-Release's
-commit, so that stays a step before the release. It passes no `-Payload` (a GitHub release has no app folder), so the
-release updates through Setup.
+**Offering it.** When GitHub names a newer tag than `launcher/latest.json`, the Worker checks it and writes it (`promote`):
+
+- `ExoLauncher-<version>-Setup.exe` (or `ExoLauncher-Setup.exe`) and its `.sha256` are attached; the `.sha256` names the
+  installer and its hash, and GitHub's own size and SHA-256 for the installer (the asset's `digest`) agree with it (a release
+  whose installer has no digest is refused: that is the one check that doesn't come from the release's own files);
+- the tag's `apps/launcher/VERSION` (read through raw.githubusercontent.com at the tag) is the version, and its `CHANGELOG.md`
+  has the `## <version>` entry;
+- What's New is the release's `whats-new.json` asset (held to GitHub's digest), else the version's entry in the tag's
+  `ui/src/lib/whatsNew.json` (written as `JSON.stringify(entry, null, 2)`);
+- with `files.json` and `files.pack` attached: `files.json` held to GitHub's digest, and the pack's SHA-256 from a
+  `files.pack.sha256` asset (`"<hash>  files.pack"`), else from files.json's own `"pack": { "size", "sha256" }`, agreeing with
+  GitHub's digest of `files.pack`. A `"version"` in files.json must be the tag's.
+
+Then it writes `launcher/<tag>/ExoLauncher-Setup.exe.sha256` (`"<hash>  ExoLauncher-Setup.exe"`, the name the app asks for),
+`whats-new.json` and `files.json`, each only if R2 doesn't hold it already (a tag's files are never replaced; a `.sha256` there
+that names another hash refuses the release), then `launcher/latest.json`, written only if it is still the copy just read (an
+R2 conditional write on its ETag; otherwise it reads again and compares), so two promotions at once never move it to the older
+tag; then `launcher/CHANGELOG.md`, unless the one there is for a newer tag (its `customMetadata.tag`). Any failed check leaves the mirror's release offered, with a warning.
+The offered version never moves backwards: to pull a bad release, publish a fixed newer one.
+
+**The installer and the pack.** They are copied from the release into R2 (`fill`): when a release is first offered (in the
+background), on every cron tick until they are there, and on any download R2 can't answer yet. R2 checks the SHA-256 as it
+stores the bytes (`put`'s `sha256` option, with the length fixed to GitHub's size), the stored object is checked again, and a
+copy that doesn't match is deleted, so it is never served. An object already there is never overwritten, and one copy at a time
+runs per file (`_fill/<key>`, taken over after ten minutes). A download R2 can't answer yet is passed through from the GitHub
+asset, the one byte range asked for included, with `Cache-Control: no-store` and no ETag (so no client resumes against it);
+every later request is R2's, with byte ranges. The two copies are separate streams rather than one tee, so a slow player's
+download never makes the Worker hold the rest of a 200 MB file in memory.
+
+**GitHub down.** `/v1/launcher/latest` answers from `launcher/latest.json` and every download from R2, as before. A file R2
+doesn't hold for a tag GitHub can't be asked about answers 404 (`no-store`).
+
+**The card.** The first request that offers a new release posts its Discord card (`announce.js`, once per tag), and
+`.github/workflows/announce-release.yml` asks for it on publish too (the announce route asks GitHub when it wasn't asked in the
+last 30 seconds, so the workflow's retries find the release within a minute); whichever comes first posts it. A promotion leaves
+`_github/announce/<tag>` until Discord has the card, so a card Discord refused is asked for again on every cron tick. A launcher
+build put into the mirror by hand has no marker: its card stays `publish-release.ps1`'s (`-NoAnnounce` included).
+
+**File-level update (`files.json`, `files.pack`).** The app reads `files.filesJson` from `/v1/launcher/latest`, then asks
+`/v1/launcher/download/<tag>/files.pack` for one byte range per changed file. `files.json` is served whole; its format is the
+release side's (`feat/delta-updates`), and the Worker only reads its optional `version` and `pack` header.
+
+**Not lazy:** `/v1/cache/` is unchanged. It is filled by `cache-mirror.mjs` and the cache watch, which check each file
+against the Launcher's own pins; a lazy GitHub fill there would skip those checks. Exo Cinema is unchanged too: its
+releases still go up with `publish-release.ps1`.
+
+`test/github.test.mjs` covers the manifest, the checks above, the five-minute check, the copy and its SHA-256, never-replace,
+GitHub down, byte ranges, the file-level update and the card, with GitHub, R2 and the edge stood in for.
 
 ## Deploying
 
-Deploy with `npx wrangler@4.158.0 deploy` from this folder, with the owner's OK. The Worker never asks GitHub: every release a
-live app can ask for, and each app's `CHANGELOG.md`, must be in the bucket before the Worker that serves it is deployed.
+Deploy with `npx wrangler@4.165.0 deploy` from this folder, with the owner's OK. `wrangler.toml` here keeps placeholders (no bucket name, routes or
+cron), so deploy from a local copy with the live settings: bucket `exo-releases`, the custom domain `updates.getexo.app`,
+`workers_dev = true`, cron `*/15 * * * *`. The Discord secrets stay on the Worker across deploys. Exo Cinema's releases and its
+`CHANGELOG.md` must be in the bucket before a Worker that serves them is deployed; Exo Launcher's come from GitHub.
 
-Last deployed: version `5fc7bfe7-666a-4c91-bbc0-ccd24a2f8e1f` (2026-11-09, release/3.25.0 base plus the `/v1/cache/` route; the
+Last deployed: version `652941e4-e735-402c-9870-fa5fb1b84cf8` (2026-11-19, the GitHub reader, `src/github.js`, with the
+review's fixes: the check lease, the conditional pointer write, the owed card, the required installer digest). It replaced
+`b6b10016-b31e-4ebe-a506-4fd02af10a65` of the same day (the reader without those fixes), which replaced
+`365af797-4e64-4299-9b3b-42edfa87cbb2` of 2026-11-14 (the code of `021b878`, byte for byte). Checked live after each:
+`/v1/launcher/latest` byte-identical to before (v3.26.0, the same ETag, a 304 for it, also on the workers.dev name); the installer
+by HEAD and GET (200, 212,673,653 bytes, SHA-256 `4dab24d7…a0b8`, the same R2 ETag), a byte range with `If-Range` (206, the same
+bytes), the `.sha256`, `whats-new.json` (18 items) and `/v1/launcher/changelog` byte-identical; `/v1/cinema/latest` and
+`/v1/advisories.json` 200; `files.pack` for 3.26.0 and a `.sig` 404; `POST /v1/launcher/announce` with no body 400;
+`_github/launcher.json` in R2 records the check (GitHub answered, v3.26.0). The bindings (R2 and six Discord secrets) and the
+cron are unchanged. `CACHE_SCHEMA` 4.
+
+Before that: version `5fc7bfe7-666a-4c91-bbc0-ccd24a2f8e1f` (2026-11-09, release/3.25.0 base plus the `/v1/cache/` route; the
 version before it, `45905582-35b0-4e7e-85c9-5ee635e144b3` of 2026-11-07, is the live release/3.25.0 code with the Discord card).
 Checked live after it: all 30 pinned binaries (HEAD and GET 200, size and SHA-256 match, immutable cache header, no redirect),
 7 folder listings and 7 tag commits (match), 12 licence files (size and SHA-256 match), and `/v1/launcher/latest`,
@@ -273,5 +337,5 @@ V8.
 Tests: `node --test test` (the scheduled handler in workerd against a fake upstream; the security fixes in `test/watch-security.test.mjs`; the
 floor and the vendor file names checked against the Launcher's sources).
 
-**Deploy (not done; the owner approves):** `npx wrangler@4.158.0 deploy` from this folder, on the free plan. Check the first runs through
+**Deploy (not done; the owner approves):** `npx wrangler@4.165.0 deploy` from this folder, on the free plan. Check the first runs through
 `_watch/state.json` in the bucket: the Worker's logs are off (`[observability]`).

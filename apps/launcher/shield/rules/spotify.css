@@ -1,0 +1,4 @@
+/* Exo Shield on Spotify: its cookie notice, should its script still load, and its upgrade prompts. */
+#onetrust-consent-sdk,
+[data-testid="upgrade-button"],
+[data-testid="upsell-button"] { display: none !important; }

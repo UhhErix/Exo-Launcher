@@ -382,6 +382,23 @@ public sealed partial class FrameGenModTests : IDisposable
         Assert.Null(FrameGenPath(null, Game()));
     }
 
+    /// <summary>
+    /// An RTX 40 or 50 has no mod route, so its line reads the game's own frame generation from the upscaler scan: a
+    /// DLSS frame generation game must not read as unsupported, and a mod's copy of the file is not the game's.
+    /// </summary>
+    [Fact]
+    public void AGameShipsFrameGenerationOnlyWithItsOwnFile()
+    {
+        static DetectedDll Dll(string name, string? mod = null) =>
+            new($@"C:\Game\{name}", name, name, "dlss", "310.2.1", null, "game", null, null, null, mod);
+        Assert.True(ShipsFrameGen([Dll("nvngx_dlss.dll"), Dll("nvngx_dlssg.dll")]));
+        Assert.True(ShipsFrameGen([Dll("amd_fidelityfx_framegeneration_dx12.dll")]));
+        Assert.True(ShipsFrameGen([Dll("libxess_fg.dll")]));
+        Assert.False(ShipsFrameGen([Dll("nvngx_dlss.dll")]));
+        Assert.False(ShipsFrameGen([Dll("nvngx_dlssg.dll", mod: "OptiScaler")]));
+        Assert.False(ShipsFrameGen([]));
+    }
+
     // ---- the pinned release: the cache serves bytes only, so which release is newest is pinned in code
 
     private static FrameGenRelease Pinned(string tag = "v1.7.0", string asset = "MFGUnlocker-v1.7.0.zip", long size = 4842619, string? sha = null) =>
@@ -557,8 +574,8 @@ public sealed partial class FrameGenModTests : IDisposable
     [InlineData("AMD Radeon RX 6600", "native")]
     [InlineData("Intel(R) Arc(TM) B580 Graphics", "native")]
     [InlineData("NVIDIA GeForce RTX 2070 SUPER", "off")]
-    [InlineData("NVIDIA GeForce RTX 4070", "hidden")]
-    [InlineData("NVIDIA GeForce RTX 5070", "hidden")]
+    [InlineData("NVIDIA GeForce RTX 4070", "native")]
+    [InlineData("NVIDIA GeForce RTX 5070", "native")]
     [InlineData("NVIDIA GeForce GTX 1660 SUPER", "native")]
     [InlineData("AMD Radeon RX 580 Series", "native")]
     [InlineData("Intel(R) UHD Graphics 770", "hidden")]
@@ -610,7 +627,7 @@ public sealed partial class FrameGenModTests : IDisposable
         Assert.False((await On(Service(), "NVIDIA GeForce RTX 4070")).Ok);
         Assert.Equal(before, Snapshot());
         var line = State(Service(), "NVIDIA GeForce RTX 4070");
-        Assert.Equal("hidden", line.State);
+        Assert.Equal("native", line.State);
         Assert.Null(line.Path);
 
         var service = Service();
@@ -997,9 +1014,9 @@ public sealed partial class FrameGenModTests : IDisposable
     }
 
     [Theory]
-    [InlineData("NVIDIA GeForce RTX 5090")]
-    [InlineData("Intel(R) UHD Graphics 770")]
-    public async Task CardsWithMultiFrameGenerationOrNoModGetNothing(string gpu)
+    [InlineData("NVIDIA GeForce RTX 5090", "native")]
+    [InlineData("Intel(R) UHD Graphics 770", "hidden")]
+    public async Task CardsWithMultiFrameGenerationOrNoModGetNothing(string gpu, string expectedState)
     {
         UnrealGame();
         var before = Snapshot();
@@ -1007,7 +1024,7 @@ public sealed partial class FrameGenModTests : IDisposable
 
         Assert.False((await On(service, gpu)).Ok);
         Assert.Equal(before, Snapshot());
-        Assert.Equal("hidden", State(service, gpu).State);
+        Assert.Equal(expectedState, State(service, gpu).State);
     }
 
     [Fact]

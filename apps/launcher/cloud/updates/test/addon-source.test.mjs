@@ -60,14 +60,13 @@ test('in a monorepo every add-on comes from the launcher folder, Exo Shaders fro
     'apps/launcher/mouse/LICENSE': 'GNU AFFERO GENERAL PUBLIC LICENSE\n',
     'apps/launcher/shaders/LICENSE': 'GNU GENERAL PUBLIC LICENSE\n',
     'apps/launcher/shaders/src/a.cs': 'class A {}\n',
-    'apps/launcher/ExoLauncher/Assets/Extensions/exo-shield/LICENSE.txt': 'GNU GENERAL PUBLIC LICENSE\n',
   })
   try {
     const where = launcherRepo(join(repo, 'apps', 'launcher'))
     assert.equal(where.prefix, 'apps/launcher/')
     const commit = commitOf(where.repo, 'HEAD')
     const archives = treeAddons({ ...where, rev: commit }).map((d) => buildTreeArchive(d, '3.26.0', commit))
-    assert.deepEqual(archives.map((a) => a.name), ['exo-mouse', 'exo-shaders', 'exo-shield'])
+    assert.deepEqual(archives.map((a) => a.name), ['exo-mouse', 'exo-shaders'])
     const shaders = gunzipSync(archives[1].gz).toString('latin1')
     assert.ok(shaders.includes('exo-shaders-3.26.0/src/a.cs') && !shaders.includes('mouse/LICENSE'))
   } finally {

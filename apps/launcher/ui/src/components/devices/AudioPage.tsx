@@ -5,6 +5,7 @@ import { usePageActive } from '../../lib/pageActivity'
 import { ChoiceRow, Row, SliderRow, State, SwitchRow } from '../settings/parts'
 import { DevicePage, DevicePanel as Panel } from './DevicePage'
 import { ApoPanel, GamesPanel, HeadphonePanel, NightPanel, SoundPanel, useEq } from './EqPanels'
+import { errorText } from '../../lib/errorWords'
 
 export type AudioLook = 'headphones' | 'iem' | 'headset'
 /** What you wear on the jack, as you picked it ("ZiiGaat Lush", in-ear; AutoEq's id for it); null until you do. */
@@ -121,7 +122,7 @@ function EndpointRows({ id, details, onChange }: { id: string; details: AudioEnd
     host.audioSetVolume(id, volume).then(result => {
       if (result.ok) return
       onChange({ volume: was })
-      setVolumeError(result.message ?? 'Windows didn’t take it. Try again.')
+      setVolumeError(errorText(result.message, 'Windows didn’t take it. Try again.'))
     }, (error: unknown) => {
       report(error, 'AudioPage.volume')
       onChange({ volume: was })
@@ -130,14 +131,14 @@ function EndpointRows({ id, details, onChange }: { id: string; details: AudioEnd
   }
   const setMute = async (muted: boolean) => {
     const result = await host.audioSetMute(id, muted).catch((error: unknown) => { report(error, 'AudioPage.mute'); return { ok: false, message: null } })
-    if (!result.ok) return result.message ?? 'Windows didn’t take it. Try again.'
+    if (!result.ok) return errorText(result.message, 'Windows didn’t take it. Try again.')
     onChange({ muted })
     return null
   }
   const setFormat = async (key: string) => {
     const result = await host.audioSetFormat(id, key).catch((error: unknown) => { report(error, 'AudioPage.format'); return { ok: false, message: null } })
     await ask()
-    if (!result.ok) return result.message ?? 'Windows didn’t take that format.'
+    if (!result.ok) return errorText(result.message, 'Windows didn’t take that format.')
     const picked = offered?.formats.find(format => format.key === key)
     if (picked) onChange({ format: { rate: picked.rate, bits: picked.bits, channels: picked.channels } })
     return null

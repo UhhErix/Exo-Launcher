@@ -1,7 +1,7 @@
 import { pageGet, pageSet } from './pageStore'
 type TextColour = 'white' | 'grey'
 type TextSize = 'small' | 'normal' | 'large'
-/** The page's palette (tokens.css › Backgrounds): Exo is pure black (AMOLED) under Liquid Glass, with no other choice. */
+/** The page's palette: Exo is pure black (AMOLED) under Liquid Glass, with no other choice. */
 export type Background = 'black'
 export const BACKGROUNDS: readonly { value: Background; label: string }[] = [
   { value: 'black', label: 'Pure black' },
@@ -73,7 +73,6 @@ export function applyTextTheme(theme: TextTheme) {
   root.style.zoom = '1'
   root.dataset.exoTextColour = theme.textColour
   root.dataset.exoTextSize = theme.textSize
-  root.dataset.exoBg = theme.background
   if (scale !== currentScale) {
     currentScale = scale
     for (const listener of scaleListeners) listener(scale)

@@ -52,6 +52,21 @@ const MOCK_GAMES: Game[] = [
     lastPlayedUtc: new Date(Date.now() - 26 * 3600_000).toISOString(),
   },
   {
+    // Lent by the Steam Family: not installed, its owner named on its page.
+    id: 'steam:1145350',
+    title: 'Hades II',
+    store: 'steam',
+    installed: false,
+    owned: true,
+    canInstall: true,
+    primaryAction: 'install',
+    status: 'Not installed',
+    deps: ['Steam client'],
+    launchNote: 'Shared by Sam through Steam Family. Installs through Steam.',
+    familyShared: true,
+    sharedBy: 'Sam',
+  },
+  {
     // Steam's Play menu offers it without its anti-cheat: Properties › Anti-cheat.
     id: 'steam:3472040',
     title: 'NBA 2K26',
@@ -173,6 +188,55 @@ const MOCK_GAMES: Game[] = [
   },
 ]
 
+/** Genres and modes as Steam's record words them (SteamAppTags.cs), for the Library's search and Filter menu in the mock. */
+const MOCK_TAGS: Record<string, string[]> = {
+  'mock:hades': ['action', 'rpg', 'indie', 'single-player', 'controller'],
+  'steam:3472040': ['sports', 'simulation', 'single-player', 'multiplayer', 'co-op', 'local co-op', 'controller'],
+  'steam:1938090': ['action', 'single-player', 'multiplayer', 'co-op', 'controller'],
+  'mock:eldenring': ['action', 'rpg', 'single-player', 'multiplayer', 'co-op', 'controller'],
+  'mock:rivals': ['action', 'free to play', 'multiplayer', 'controller'],
+}
+for (const game of MOCK_GAMES) if (MOCK_TAGS[game.id]) game.tags = MOCK_TAGS[game.id]
+const familyGame = MOCK_GAMES.find(game => game.id === 'steam:3472040')
+if (familyGame) familyGame.familyShared = true
+
+/**
+ * `?games=N` in browser dev: N more made-up games (no real titles), for the grid's windowing, the scrubber and search
+ * at the size of a big library.
+ */
+const mockExtraGames = typeof location === 'undefined' ? 0 : Math.min(2000, parseInt(new URLSearchParams(location.search).get('games') ?? '', 10) || 0)
+{
+  const first = ['Ashen', 'Bright', 'Cinder', 'Distant', 'Echo', 'Fallen', 'Glass', 'Hollow', 'Iron', 'Jade', 'Kindred', 'Lunar', 'Molten', 'Night', 'Outer', 'Pale', 'Quiet', 'Rust', 'Silent', 'Tidal', 'Umbral', 'Velvet', 'Wild', 'Xeno', 'Yonder', 'Zero']
+  const second = ['Circuit', 'Drift', 'Frontier', 'Harbor', 'Kingdom', 'Legion', 'Orbit', 'Pilgrim', 'Rally', 'Signal', 'Tactics', 'Voyage']
+  const stores = ['steam', 'steam', 'steam', 'epic', 'gog', 'xbox', 'ea', 'ubisoft']
+  const genres = ['action', 'adventure', 'rpg', 'strategy', 'simulation', 'racing', 'sports', 'casual', 'indie']
+  const modes = [['single-player'], ['multiplayer'], ['single-player', 'co-op'], ['multiplayer', 'co-op', 'local co-op'], ['single-player', 'controller']]
+  for (let i = 0; i < mockExtraGames; i++) {
+    const store = stores[i % stores.length]
+    const installed = i % 3 === 0
+    const played = i % 4 !== 1
+    MOCK_GAMES.push({
+      id: `mock:extra-${i}`,
+      title: `${first[i % first.length]} ${second[Math.floor(i / first.length) % second.length]}${i >= first.length * second.length ? ` ${Math.floor(i / (first.length * second.length)) + 1}` : ''}`,
+      // Made-up art addresses: the UI pass's harness draws a picture for each; anywhere else they fail and the card shows its name.
+      coverUrl: i % 5 === 4 ? null : `https://cdn.cloudflare.steamstatic.com/steam/apps/${900000 + i}/library_600x900.jpg`,
+      store,
+      installed,
+      owned: true,
+      canInstall: !installed,
+      primaryAction: installed ? 'play' : 'install',
+      status: installed ? 'Ready' : 'Demo',
+      playtimeMinutes: played ? (i * 137) % 9000 : 0,
+      lastPlayedUtc: played ? new Date(Date.now() - ((i * 9) % 800) * 86_400_000).toISOString() : null,
+      sizeBytes: ((i * 13) % 140 + 2) * 1024 ** 3,
+      deps: [],
+      launchNote: '',
+      tags: store === 'steam' ? [genres[i % genres.length], ...modes[i % modes.length]] : undefined,
+      familyShared: store === 'steam' && i % 11 === 0,
+    })
+  }
+}
+
 /** `?onboarding` in browser dev replays first-run setup against the mock. */
 const mockFirstRun = typeof location !== 'undefined' && new URLSearchParams(location.search).has('onboarding')
 // ?backup: a daily backup from yesterday exists (Last backup in Settings; the restore offer on first run); Back up now makes today's.
@@ -199,6 +263,10 @@ const mockShadersSnapshot = () => ({
 
 /** `?gpu=amd` or `?gpu=intel` in browser dev: System's profile and a game's frame generation for that GPU instead of a GeForce. */
 const mockGpu = typeof location !== 'undefined' ? new URLSearchParams(location.search).get('gpu') : null
+
+/** `?hdr=none`: a main screen without HDR (PC › Display has no HDR rows). `?pad=bluetooth`: the DualSense Edge over Bluetooth (its cable-only rows go). */
+const mockNoHdr = typeof location !== 'undefined' && new URLSearchParams(location.search).get('hdr') === 'none'
+const mockPadLink = typeof location !== 'undefined' && new URLSearchParams(location.search).get('pad') === 'bluetooth' ? 'bluetooth' as const : 'usb' as const
 
 /** PC > Auto tune on the mock: each read moves a run on one step, ?tune=crashed starts after a crash, ?tune=none has nothing to tune, and the Ryzen row is hidden as on the host (RyzenAvailable is false) unless ?tune=ryzen shows it needing PawnIO or ?tune=pawnio has the driver. */
 const mockTuneFlag = typeof location !== 'undefined' ? new URLSearchParams(location.search).get('tune') : null
@@ -279,6 +347,35 @@ const mockNetItems = (p?: { action?: unknown; item?: unknown }) => {
   items.unshift({ key: 'network', label: 'Network', detail: left.length ? left.join(', ') : "Exo's network settings for games", applied: left.length === 0, canUndo: mockNetOn.size > 0 })
   if (mockNet === 'slow') items.push({ key: 'netlink', label: 'Ethernet', detail: '100 Mbps of 2.5 Gbps. Try another cable or router port.' })
   return items
+}
+
+/**
+ * Best settings › System in browser dev: a PC a tweak left on the platform clock and without a page file, two services at
+ * boot and Memory Integrity on. `?tuning=vanguard` has Riot Vanguard installed, so Memory Integrity stays on.
+ */
+const mockTuningVanguard = typeof location !== 'undefined' && new URLSearchParams(location.search).get('tuning') === 'vanguard'
+const mockTuningOn = new Set<string>()
+const mockTuningOff = new Set<string>()
+const mockTuning = (p?: { action?: unknown; item?: unknown }) => {
+  const defaults = ['timer', 'pagefile']
+  if (p?.action === 'apply') for (const key of defaults) if (!mockTuningOff.has(key)) mockTuningOn.add(key)
+  const blocked = mockTuningVanguard ? 'Riot Vanguard (VALORANT, League of Legends) can require Memory Integrity, so Exo leaves it on: games with it may refuse to start without it.' : null
+  if (typeof p?.item === 'string' && !(p.item === 'integrity' && blocked)) {
+    if (p.action === 'on') { mockTuningOn.add(p.item); mockTuningOff.delete(p.item) }
+    if (p.action === 'off') { mockTuningOn.delete(p.item); if (defaults.includes(p.item)) mockTuningOff.add(p.item) }
+  }
+  const words: Record<string, [string, string, boolean]> = {
+    timer: ["Windows' own timer", 'A tweak forced the platform clock (HPET), so every clock read a game makes waits on it. Takes a restart.', false],
+    pagefile: ['A page file, managed by Windows', "There's no page file, so a game that needs more memory than your RAM crashes instead of slowing down.", false],
+    services: ['Services set to Manual', 'Downloaded Maps Manager and Program Compatibility Assistant Service start with Windows; Manual starts them only when something needs them. Takes a restart.', true],
+    integrity: ['Memory Integrity off', blocked ?? 'Less secure: Windows stops checking that every driver is signed and safe, which is what keeps malicious drivers out. Only for a PC you keep clean. Up to about 5-10% more frames in some games. Takes a restart.', true],
+  }
+  const items = Object.entries(words).map(([key, [label, detail, optIn]]) => {
+    const on = mockTuningOn.has(key)
+    return { key, label, detail: on ? 'Restart to finish.' : detail, on, canUndo: on, off: mockTuningOff.has(key), optIn, restart: on, blocked: key === 'integrity' ? blocked : null }
+  })
+  const message = p?.item === 'integrity' && p.action === 'on' && blocked ? blocked : null
+  return { ok: !message, message, applied: defaults.every(key => mockTuningOn.has(key) || mockTuningOff.has(key)), restart: mockTuningOn.size > 0, items }
 }
 
 /**
@@ -1168,15 +1265,11 @@ const MOCK_HANDLERS: Record<string, MockHandler> = {
     MOCK_STEAM_ACCOUNT = null
     return { ok: true }
   },
-  // ?riot=partial: VALORANT's hours are tracker.gg's playlist sum (the partial note), and the frame-gen line says the RTX 20/30 copy.
-  'playtime.riotLifetime': () => (mockRiotPartial
-    ? { ok: true, minutes: 9_840, partial: true, modes: [{ mode: 'competitive', minutes: 6_120 }, { mode: 'unrated', minutes: 3_720 }], stats: null }
-    : { ok: false, minutes: 0, partial: false, modes: [], stats: null }),
+  // What tracker.gg answers apps now (TrackerGgPlaytime.BlockedMessage): a browser check, so nothing is imported.
   'playtime.riotRefresh': () => ({
     ok: false,
-    profilePrivate: true,
-    message:
-      'This tracker.gg profile is private. Sign in with Riot on tracker.gg once so the profile is public.',
+    profilePrivate: false,
+    message: "tracker.gg now blocks apps from reading its profiles, so Exo can't import your Riot hours from it. Exo still counts every session you play.",
     profileUrl: 'https://tracker.gg/valorant',
   }),
   'web.preferences.get': () => ({ microphone: 'ask', camera: 'ask', clipboard: 'ask', notifications: 'ask' }),
@@ -1493,7 +1586,7 @@ const MOCK_HANDLERS: Record<string, MockHandler> = {
   'clients.status': () => {
     const mode = typeof location !== 'undefined' ? new URLSearchParams(location.search).get('clients') : null
     if (mode === 'failed') throw new Error('Mock: the game clients check could not be read.')
-    if (mode === 'unreadable') return { ok: true, needsFix: false, problem: 'Exo could not read Steam.', epic: { layout: 'new', version: '0.113.0', oldStillThere: false, installing: false }, steam: { channel: 'unknown' } }
+    if (mode === 'unreadable') return { ok: true, needsFix: false, problem: 'Exo couldn’t read Steam.', epic: { layout: 'new', version: '0.113.0', oldStillThere: false, installing: false }, steam: { channel: 'unknown' } }
     if (mode !== null) return { ok: true, needsFix: true, epic: { layout: 'old', version: '0.112.0', oldStillThere: false, installing: false }, steam: { channel: 'stable' } }
     return { ok: true, needsFix: false, epic: { layout: 'new', version: '0.113.0', oldStillThere: false, installing: false }, steam: { channel: 'beta' } }
   },
@@ -1554,6 +1647,14 @@ const MOCK_HANDLERS: Record<string, MockHandler> = {
   'exoAccount.codeConfirmed': () => ({ ok: true }),
   'exoAccount.probe': () => ({ reachable: true, gameRunning: false }),
   'app.openLogs': () => ({ ok: false, message: 'No logs folder in the browser mock.' }),
+  'report.preview': () => ({ ok: true, excerpt: [
+    'Exo Launcher 1.0.0 · Windows 10.0.26300 · 2026-11-19 10:00 UTC',
+    'Error (app): Report a problem',
+    '',
+    "Exo's log (1 entries):",
+    '[2026-11-19T09:58:00.000Z] WARN: Steam: the library did not answer in <path>',
+  ].join('\n') }),
+  'report.send': () => ({ ok: true, issue: 123 }),
   'app.installUpdate': () => ({
     ok: true,
     alreadyLatest: true,
@@ -1659,7 +1760,7 @@ const MOCK_HANDLERS: Record<string, MockHandler> = {
       { id: 'usb-361d-0300-747353800033', kind: 'mouse', name: 'StarlightX Dongle', maker: 'Finalmouse', model: null, connection: 'wireless', role: null, battery: null, color: null, layout: null },
       { id: 'usb-31e3-1342-95be6909a013', kind: 'keyboard', name: 'Wooting 60HE v2', maker: 'Wooting', model: '60', connection: 'usb', role: null, battery: null, color: null, layout: 'ansi-split',
         port: { where: 'chipset', chips: 1, hubs: 0, interrupts: 'msi', better: 'free' }, app: { id: 'wootility', name: 'Wootility', where: 'web' } },
-      { id: 'usb-054c-0df2-41a6f6ff466d', kind: 'controller', name: 'DualSense Edge Wireless Controller', maker: 'Sony', model: 'dualsense-edge', connection: 'usb', role: null, battery: null, color: 'Midnight Black', layout: null, lab: true,
+      { id: 'usb-054c-0df2-41a6f6ff466d', kind: 'controller', name: 'DualSense Edge Wireless Controller', maker: 'Sony', model: 'dualsense-edge', connection: mockPadLink, role: null, battery: null, color: 'Midnight Black', layout: null, lab: true,
         port: { where: 'cpu', chips: 0, hubs: 0, interrupts: 'msi', better: null } },
       { id: '{0.0.0.00000000}.{9709e4ab-6969-4817-ad38-1704eab1c079}', kind: 'audio', name: 'Headphones', maker: null, model: 'headphones', connection: 'jack', role: 'output', battery: null, color: null, layout: null },
       { id: '{0.0.1.00000000}.{0deb347c-90b6-43d6-b549-63e63b1b23a9}', kind: 'audio', name: 'fifine Microphone', maker: 'Fifine', model: 'microphone', connection: 'usb', role: 'input', battery: null, color: null, layout: null },
@@ -1715,6 +1816,7 @@ const MOCK_HANDLERS: Record<string, MockHandler> = {
       check: mockCheck,
     }
   },
+  'system.tuning': (p) => mockTuning(p),
   'system.interrupts': (p) => {
     const applied = p?.action === 'apply'
     return {
@@ -1766,7 +1868,7 @@ const MOCK_HANDLERS: Record<string, MockHandler> = {
   'startup.restore': () => mockStartup(null),
   'startup.clean': () => ({ ...mockStartup(null), cleaned: 4 }),
   'stores.quiet': () => ({ ok: true, message: null }),
-  'hdr.state': () => ({ supported: true, on: false, name: 'Mock OLED', peakNits: 1000, calibrated: false, verdict: 'great' }),
+  'hdr.state': () => mockNoHdr ? { supported: false } : ({ supported: true, on: false, name: 'Mock OLED', peakNits: 1000, calibrated: false, verdict: 'great' }),
   'hdr.game': (p) => ({ ok: true, hdr: 'true', mode: typeof p?.mode === 'string' ? p.mode : 'auto' }),
   'game.settings': mockGameSettings,
   // As on the RX 9070 XT of ?gpu=amd.
@@ -1779,7 +1881,7 @@ const MOCK_HANDLERS: Record<string, MockHandler> = {
     ok: true,
     pending: p?.action === 'set' ? { display: 'DISPLAY1', seconds: 15 } : null,
     displays: [{
-      id: 'DISPLAY1', name: 'VG248', main: true, hdr: false, vendor: 'nvidia', refresh: 144, refreshes: [60, 100, 120, 144],
+      id: 'DISPLAY1', name: 'VG248', main: true, hdr: false, vendor: mockGpu === 'amd' || mockGpu === 'intel' ? mockGpu : 'nvidia', refresh: 144, refreshes: [60, 100, 120, 144],
       color: { format: 'rgb', bpc: 8, full: true }, auto: false,
       supported: ['rgb', '444', '422'].flatMap(format => [6, 8].flatMap(bpc =>
         (format === 'rgb' ? [true, false] : [false]).map(full => ({ format, bpc, full })))),
@@ -1808,7 +1910,11 @@ const MOCK_HANDLERS: Record<string, MockHandler> = {
       vramUsed: 5600 + wave * 600, vramTotal: 8192, fan: 1500 + wave * 300, limit: { on: 'temperature', warn: 83, bad: 93 },
     }
   },
-  'gpu.driver': () => ({ ok: true, vendor: 'nvidia', card: 'RTX 3070', installed: '581.42', update: true, latest: { version: '581.57', size: 900_000_000, released: '2026-10-14', kind: 'game' } }),
+  'gpu.driver': () => mockGpu === 'amd'
+    ? { ok: true, vendor: 'amd', card: 'Radeon RX 9070 XT', installed: '26.1.1', update: false, latest: null }
+    : mockGpu === 'intel'
+      ? { ok: true, vendor: 'intel', card: 'Arc B580', installed: '32.0.101.6559', update: false, latest: null }
+      : { ok: true, vendor: 'nvidia', card: 'RTX 3070', installed: '581.42', update: true, latest: { version: '581.57', size: 900_000_000, released: '2026-10-14', kind: 'game' } },
   'gpu.game': (p) => {
     if (mockGpu === 'intel' && typeof p?.frameGen === 'string') mockFrameGen = p.frameGen
     return mockGpu === 'intel' ? { ok: true, vendor: 'intel', supported: true, frameGen: mockFrameGen }
@@ -1843,14 +1949,31 @@ const MOCK_HANDLERS: Record<string, MockHandler> = {
   'store.wishlist': () => ({ ok: true, items: [] }),
   'keys.preview': () => ({ ok: true, looksLikeKey: false, store: 'unknown', key: '' }),
   'keys.activate': () => ({ ok: true, message: 'Mock key.' }),
+  'keep.status': () => ({ pc: 'none', games: {} }),
 }
 
 // ?hold=store.,discord.chat holds every call whose method starts so, for looking at a wait.
 const mockHold = typeof location === 'undefined' ? [] : new URLSearchParams(location.search).get('hold')?.split(',') ?? []
 
+// ?fail=game.uninstall,stores. fails every call whose method starts so, as the host would (a file in use, by turns
+// with no network and a refusal), for looking at an action's error; ?slow=apps. answers those after 1.6 s, for its ring.
+const mockFail = typeof location === 'undefined' ? [] : new URLSearchParams(location.search).get('fail')?.split(',').filter(Boolean) ?? []
+const mockSlow = typeof location === 'undefined' ? [] : new URLSearchParams(location.search).get('slow')?.split(',').filter(Boolean) ?? []
+let mockFailures = 0
+const MOCK_FAILURES = [
+  'A file is in use. Close the game or app using it, then try again.',
+  'System.Net.Http.HttpRequestException: No such host is known. (api.example:443)',
+  { ok: false, message: 'Something went wrong.' },
+]
+
 export async function mockCall<T>(method: string, params?: Record<string, unknown>): Promise<T> {
   if (mockHold.some(held => method.startsWith(held))) await new Promise(() => {})
-  await new Promise((r) => setTimeout(r, 40))
+  await new Promise((r) => setTimeout(r, mockSlow.some(slow => method.startsWith(slow)) ? 1600 : 40))
+  if (mockFail.some(fail => method.startsWith(fail))) {
+    const failure = MOCK_FAILURES[mockFailures++ % MOCK_FAILURES.length]
+    if (typeof failure === 'string') throw new Error(failure)
+    return failure as T
+  }
   const handler = MOCK_HANDLERS[method]
 
   if (!handler) throw new Error(`Unknown mock method: ${method}`)

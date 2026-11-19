@@ -11,10 +11,12 @@ import { useAccountSettings } from '../../lib/discordPrefs'
 import { SubContext, Submenu } from './UserMenu'
 import { Popover } from '../ui/Dialog'
 import { useDismiss } from '../../lib/dismiss'
-import { notify } from '../../lib/notify'
-import { ConfirmButton } from '../ui/ConfirmButton'
+import { ActionButton, ConfirmButton } from '../ui/ConfirmButton'
 import { Wait, sample, times } from '../ui/Wait'
 import { ErrorNote } from '../ui/ErrorNote'
+import { errorText } from '../../lib/errorWords'
+
+const TOOK_NOTHING = 'Discord didn’t take that. Try again.'
 
 type Item = { event: DiscordEvent; interested: boolean }
 
@@ -62,7 +64,7 @@ function EventCard({ item, guildId, list, onChanged, onEdit }: { item: Item; gui
   const [copied, sayCopied] = useSaid()
   const channel = event.channel_id ? list?.channels.find(c => c.id === event.channel_id) : undefined
   const run = (work: ReturnType<typeof host.discordServer>) =>
-    void work.then(result => result.ok ? onChanged() : setNote(result.message ?? 'Discord did not take that.')).catch(() => setNote('Discord did not take that.'))
+    void work.then(result => result.ok ? onChanged() : setNote(errorText(result.message, TOOK_NOTHING))).catch(error => setNote(errorText(error, TOOK_NOTHING)))
   return (
     <div className="exo-dc-event">
       <div className="exo-dc-event-top">
@@ -77,8 +79,8 @@ function EventCard({ item, guildId, list, onChanged, onEdit }: { item: Item; gui
         <EventMenu event={event} guildId={guildId} canManage={list?.canManageEvents === true} run={run} onEdit={onEdit} />
         <button type="button" className="exo-dc-tab is-raised" onClick={() => void navigator.clipboard.writeText(link(guildId, event))
           .then(() => sayCopied('Copied'), () => sayCopied('Couldn’t copy'))}>{copied ?? 'Copy link'}</button>
-        <button type="button" className={`exo-dc-tab is-raised${interested ? ' is-good' : ''}`} aria-pressed={interested}
-          onClick={() => run(host.discordServer('rsvp', { guildId, eventId: event.id, interested: !interested }))}>{interested ? <Icons.Check size={14} /> : null}Interested</button>
+        <ActionButton className={`exo-dc-tab is-raised${interested ? ' is-good' : ''}`} aria-pressed={interested} context="Discord.rsvp" fallback={TOOK_NOTHING}
+          onDone={onChanged} onPress={() => host.discordServer('rsvp', { guildId, eventId: event.id, interested: !interested })}>{interested ? <Icons.Check size={14} /> : null}Interested</ActionButton>
       </div>
     </div>
   )
@@ -139,15 +141,12 @@ function Calendar({ event, guildId, onDone }: { event: DiscordEvent; guildId: st
   const place = event.entity_metadata?.location ?? ''
   const q = (o: Record<string, string>) => new URLSearchParams(o).toString()
   const go = (url: string) => { open(url); onDone() }
-  const ics = () => {
-    onDone()
-    const failed = (why?: string | null) => notify({ text: why ?? 'Discord did not send the ICS file.', tone: 'bad' })
-    void host.discordServer('ics', { guildId, eventId: event.id }).then(result => result.ok ? notify({ text: 'Saved to Downloads', tone: 'good' }) : failed(result.message), () => failed())
-  }
   return (
     <>
       <button type="button" role="menuitem" onClick={() => go(`https://calendar.google.com/calendar/render?${q({ action: 'TEMPLATE', text: event.name, dates: `${stamp(start)}/${stamp(end)}`, details, location: place })}`)}>Add to Google Calendar</button>
-      <button type="button" role="menuitem" onClick={ics}>Download ICS file</button>
+      {/* Says how it went on its own row: the ring, then "Saved to Downloads" with the check, and the menu closes. */}
+      <ActionButton role="menuitem" context="Discord.ics" fallback="Discord didn’t send the ICS file. Try again." done="Saved to Downloads"
+        onDone={onDone} onPress={() => host.discordServer('ics', { guildId, eventId: event.id })}>Download ICS file</ActionButton>
       <button type="button" role="menuitem" onClick={() => go(`https://calendar.yahoo.com/?${q({ v: '60', title: event.name, st: stamp(start), et: stamp(end), desc: details, in_loc: place })}`)}>Add to Yahoo</button>
       <button type="button" role="menuitem" onClick={() => go(`https://outlook.live.com/calendar/0/deeplink/compose?${q({ path: '/calendar/action/compose', rru: 'addevent', subject: event.name, startdt: start.toISOString(), enddt: end.toISOString(), body: details, location: place })}`)}>Add to Outlook</button>
     </>
@@ -177,8 +176,8 @@ function EventEditor({ guildId, list, event, onClose, onSaved }: { guildId: stri
         ...(where === 'elsewhere' ? { location: location.trim() } : { channelId: where }),
       })
       if (result.ok) onSaved()
-      else setError(result.message ?? 'Discord did not save that event.')
-    } catch { setError('Discord did not save that event.') } finally { setBusy(false) }
+      else setError(errorText(result.message, 'Discord didn’t save that event.'))
+    } catch { setError('Discord didn’t save that event.') } finally { setBusy(false) }
   }
   return (
     <Popover portal={false} className="exo-dc-modal" label={event ? 'Edit event' : 'Create event'} onClick={e => e.stopPropagation()} onClose={onClose}>

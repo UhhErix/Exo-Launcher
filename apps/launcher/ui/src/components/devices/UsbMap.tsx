@@ -3,6 +3,7 @@ import { host, type UsbMapController, type UsbMapDevice } from '../../lib/host'
 import { report } from '../../lib/report'
 import { Row, State } from '../settings/parts'
 import { Dialog } from '../ui/Dialog'
+import { errorText } from '../../lib/errorWords'
 
 const SPEED = ['1.5 Mbit/s', '12 Mbit/s', '480 Mbit/s', '5 Gbit/s or more']
 const PLACE: Record<string, string> = { cpu: 'On the processor', chipset: 'On the chipset', addin: 'On an extra chip', dock: 'On a dock' }
@@ -34,7 +35,7 @@ export function UsbMap({ onClose }: { onClose: () => void }) {
   const [error, setError] = useState<string | null>(null)
   useEffect(() => {
     let current = true
-    host.devicesUsbMap().then(next => { if (current) { setMap(next.controllers); setError(next.ok ? null : next.message ?? 'Exo couldn’t read your USB.') } }, (cause: unknown) => {
+    host.devicesUsbMap().then(next => { if (current) { setMap(next.controllers); setError(next.ok ? null : errorText(next.message, 'Exo couldn’t read your USB.')) } }, (cause: unknown) => {
       report(cause, 'UsbMap.read')
       if (current) setError('Exo couldn’t read your USB.')
     })

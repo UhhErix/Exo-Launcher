@@ -1,5 +1,5 @@
 import type { ComponentType } from 'react'
-import { AppUpdate, Calendar, Calibrate, Chats, CleanUp, Controller, Cover, Download, Drive, Encrypted, EyeOff, Folder, FolderOpen, Forum, Gift, GraphicsCard, Hash, Headphones, Home, ImageUpload, Library, LinkPreview, Live, Mail, Members, Mic, Monitor, Mouse, MusicNotes, Network, New, Notes, Performance, Record, Scissors, SelectMany, Server, Settings, Shaders, Smile, StoreBag, Suspend, Symbols, ThisPc, Trash, Volume, type IconProps } from '../brand/icons'
+import { AntiCheat, AppUpdate, Calendar, Calibrate, Chats, CleanUp, Compress, Controller, Cover, Download, Drive, Encrypted, EyeOff, Filter, Folder, FolderOpen, Forum, FrameGen, Gift, GraphicsCard, Hash, Headphones, Home, ImageUpload, Info, Library, LinkPreview, Live, Mail, Members, Mic, Monitor, Mouse, MusicNotes, Network, New, Notes, Performance, Record, Scissors, Search, SelectMany, Server, Settings, Shaders, Smile, StoreBag, Suspend, Symbols, ThisPc, Trash, Volume, type IconProps } from '../brand/icons'
 import data from './whatsNew.json'
 import type { WhatsNewWire } from './hostWire'
 
@@ -20,9 +20,9 @@ export const WHATS_NEW = 'exo-whats-new'
 const ICONS: Record<string, ComponentType<IconProps>> = {
   // How Exo looks (icons, type, glass): the shapes.
   Appearance: Symbols,
-  AppUpdate, Calendar, Calibrate, Chats, CleanUp, Controller, Cover, Download, Drive, Encrypted, EyeOff, Folder,
-  FolderOpen, Forum, Gift, GraphicsCard, Hash, Headphones, Home, ImageUpload, Library, LinkPreview, Live, Mail,
-  Members, Mic, Monitor, Mouse, MusicNotes, Network, Notes, Performance, Record, Scissors, SelectMany, Server, Settings,
+  AntiCheat, AppUpdate, Calendar, Calibrate, Chats, CleanUp, Compress, Controller, Cover, Download, Drive, Encrypted, EyeOff, Filter,
+  Folder, FolderOpen, Forum, FrameGen, Gift, GraphicsCard, Hash, Headphones, Home, ImageUpload, Info, Library, LinkPreview, Live, Mail,
+  Members, Mic, Monitor, Mouse, MusicNotes, Network, Notes, Performance, Record, Scissors, Search, SelectMany, Server, Settings,
   Shaders, Smile, StoreBag, Suspend, ThisPc, Trash, Volume,
 }
 

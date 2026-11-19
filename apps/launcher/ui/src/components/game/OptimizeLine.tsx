@@ -21,8 +21,9 @@ const WINDOW_MODES = [{ value: 'borderless', label: 'Borderless' }, { value: 'fu
  * changes while the game runs or before it has written its file, and the line says which. Once pressed it stays on:
  * after a game update resets the file, Exo writes it again as the game closes, and the line says Applied again after an
  * update until the game next runs. A game whose window mode Exo can set has its choice at the row's edge, and picking one
- * applies Optimize with that mode, which Exo then holds whenever the game is closed. Nothing shows until the game is read (as Upscalers: most games have no Optimize, so
- * a line shown while reading would vanish); the last read shows at once while it is read again.
+ * applies Optimize with that mode, which Exo then holds whenever the game is closed. The line is always there, like every
+ * line on the page: a shining word while the game is read (the last read shows at once while it is read again), and Not
+ * supported in this game (or its anti-cheat's sentence) when Exo has no best settings for it.
  */
 export function OptimizeLine({ gameId }: { gameId: string }) {
   const [state, setState] = useState<GameSettingsState | null>(() => settingsRead.get(gameId))
@@ -39,7 +40,7 @@ export function OptimizeLine({ gameId }: { gameId: string }) {
         if (next.ok) settingsRead.set(gameId, next)
         setState(next)
       })
-      .catch(e => report(e, 'OptimizeLine.load'))
+      .catch(e => { report(e, 'OptimizeLine.load'); if (live) setState(current => current ?? { ok: false }) })
       // What Exo has seen of its values since: put back after an update, the player's own changes kept, or some the game won't keep.
       .then(() => host.keepStatus())
       .then(status => { if (live && status) setKept(status.games[gameId] ?? null) })
@@ -55,8 +56,10 @@ export function OptimizeLine({ gameId }: { gameId: string }) {
     return () => { live = false; offRun(); offAgain(); offHeld() }
   }, [gameId])
 
-  if (state?.ok && !state.supported && state.note) return <GameReading name="Optimize" word={{ text: state.note }} />
-  if (!state?.ok || !state.supported) return null
+  // Always a line, like every other: shining while read, and said plainly when the game has no best settings.
+  if (!state) return <GameReading name="Optimize" word={null} waiting />
+  if (!state.ok) return <GameReading name="Optimize" word={{ text: 'Could not check', bad: true }} />
+  if (!state.supported) return <GameReading name="Optimize" word={{ text: state.note ?? 'Not supported in this game' }} />
   const applied = state.standing === 'applied' || state.standing === 'partly'
   const run = (on: boolean, mode?: string) => {
     setWorking(true)

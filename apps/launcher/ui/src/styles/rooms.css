@@ -1,15 +1,11 @@
 
 
-/* The first shelf's header carries Sort and Add (LibraryPane.tsx). */
+/* The Library head's tools: Filter, the sort, More and Add (LibraryHead.tsx). */
 .exo-library-tools {
   display: flex;
   flex: none;
   align-items: center;
   gap: 8px;
-}
-
-.exo-shelf-actions>.exo-library-tools {
-  margin-left: 4px;
 }
 
 /* A library refresh that failed while saved games are still on screen. */

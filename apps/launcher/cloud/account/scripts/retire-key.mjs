@@ -3,7 +3,7 @@
  * Checks that keys can leave ACCOUNT_SECRETS (README.md › Keys). Usage:
  *   node scripts/retire-key.mjs <current key id> <retired key id>... < rows.json
  * rows.json is the account rows, from (the Worker's D1, read only):
- *   npx wrangler@4.158.0 d1 execute exo-account --remote --json --command "SELECT id, email_mac, recovery_mac, hex(item_key) AS item_key FROM accounts"
+ *   npx wrangler@4.165.0 d1 execute exo-account --remote --json --command "SELECT id, email_mac, recovery_mac, hex(item_key) AS item_key FROM accounts"
  * Exit 0 when no row names a retired key. Exit 1, with the count per column and no account ids, when one does, or when the
  * current key is among those retired (the first key of the ring is current and never retires).
  */

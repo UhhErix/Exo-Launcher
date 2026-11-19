@@ -3,6 +3,7 @@ import { host, onHostEvent } from './host'
 import { notify } from './notify'
 import type { NotesRequest } from './notes'
 import { report } from './report'
+import { errorText } from './errorWords'
 
 /** What Exo Capture is doing (capture.state). */
 export type CaptureState = {
@@ -110,9 +111,9 @@ export async function saveCaptureSettings(patch: Partial<CaptureSettings>): Prom
   try {
     const result = await host.captureSettings(patch)
     if (result.settings) publish({ settings: result.settings, state: result.state ?? snapshot.state })
-    return result.ok ? null : result.message ?? 'Could not save. Try again.'
+    return result.ok ? null : errorText(result.message, 'Exo couldn’t save that. Try again.')
   } catch (error) {
-    return error instanceof Error ? error.message : 'Could not save. Try again.'
+    return errorText(error, 'Exo couldn’t save that. Try again.')
   }
 }
 
@@ -193,13 +194,13 @@ export function clearReelMessage() {
 /** Makes one clip of these (any order; the host puts them in time order). wait: hold it until the game that is running ends. */
 export async function makeReel(ids: string[], wait = false): Promise<void> {
   setReel({ ids, message: null, canWait: false })
-  const failed = 'Exo could not make the reel. Try again.'
+  const failed = 'Exo couldn’t make the reel. Try again.'
   try {
     const result = await host.captureReel(ids, wait)
-    if (!result.ok) setReel({ message: result.message ?? failed, canWait: result.wait === true })
+    if (!result.ok) setReel({ message: errorText(result.message, failed), canWait: result.wait === true })
     else if (reel.phase === 'idle') setReel({ phase: wait ? 'waiting' : 'working', percent: 0 })
   } catch (error) {
-    setReel({ message: error instanceof Error ? error.message : failed, canWait: false })
+    setReel({ message: errorText(error, failed), canWait: false })
   }
 }
 
@@ -212,7 +213,7 @@ function onReelEvent(event: ReelEvent) {
     case 'waiting': setReel({ phase: 'waiting', percent: 0, message: null, canWait: false }); break
     case 'working': setReel({ phase: 'working', percent: event.percent, message: null, canWait: false }); break
     case 'stopped': setReel({ phase: 'idle', percent: 0 }); break
-    case 'failed': setReel({ phase: 'idle', percent: 0, message: event.message ?? 'Exo could not make the reel.', canWait: event.wait }); break
+    case 'failed': setReel({ phase: 'idle', percent: 0, message: errorText(event.message, 'Exo couldn’t make the reel. Try again.'), canWait: event.wait }); break
     case 'done': {
       setReel({ phase: 'idle', percent: 0 })
       const item = event.item

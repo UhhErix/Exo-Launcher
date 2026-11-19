@@ -53,6 +53,7 @@ import { startMouseRelay } from '../lib/mouseRelay'
 import { dismissNotice, notify as notice } from '../lib/notify'
 import { newerNotice } from '../lib/upscalerNotice'
 import { report } from '../lib/report'
+import { errorText } from '../lib/errorWords'
 import { applyTextTheme, readCachedTextTheme } from '../lib/exoTheme'
 import { preloadUpscalerStatuses } from '../lib/upscalerCache'
 import { preloadInitialCoverArt, preloadLibraryArtwork } from './CoverArt'
@@ -153,7 +154,7 @@ function useLibraryStart(settings: LauncherSettings | null, loadLibrary: () => P
         const offer = newerNotice(answer?.items ?? [], () => {
           host.dlssDownloadNewer().then(done => notice(done?.ok
             ? { id: 'upscalers-newer-done', text: 'Downloaded and checked.', tone: 'good' }
-            : { id: 'upscalers-newer-done', text: done?.message ?? "Exo couldn't download it.", tone: 'bad' }))
+            : { id: 'upscalers-newer-done', text: errorText(done?.message, "Exo couldn't download it."), tone: 'bad' }))
             .catch(() => notice({ id: 'upscalers-newer-done', text: "Exo couldn't download it.", tone: 'bad' }))
         })
         if (offer) notice(offer)
@@ -175,7 +176,7 @@ function useLibraryStart(settings: LauncherSettings | null, loadLibrary: () => P
   // A read Exo could not answer shows as a notice with Try again; it never holds the library (only a confirmed old client does).
   // A status that says why it cannot answer, or a read that failed: the notice says so, and Try again shows busy while it reads.
   const clientsProblem = clients?.problem || clientsFailed
-    ? { text: clients?.problem ?? (clientsFailures > 1 ? 'Exo still could not check your game clients.' : 'Exo could not check your game clients.'), busy: clientsChecking, onRetry: recheckClients }
+    ? { text: clients?.problem ?? (clientsFailures > 1 ? 'Exo still could not check your game clients.' : 'Exo couldn’t check your game clients.'), busy: clientsChecking, onRetry: recheckClients }
     : null
   return { holdPage, libraryOn, clientsProblem }
 }
@@ -814,7 +815,7 @@ export function LauncherApp() {
       if (quietErrors || request !== libraryRequest.current) return
       // The Library shows a plain sentence (a banner over saved games, or in place of an empty shelf); the detail goes to the log.
       report(e, 'LauncherApp.loadLibrary')
-      setLibraryError(e instanceof Error ? e.message : 'Could not load the library.')
+      setLibraryError(errorText(e, 'Exo couldn’t load your library. Try again.'))
     } finally {
       setLoading(false)
     }
@@ -844,7 +845,7 @@ export function LauncherApp() {
       void loadUiPrefs(s.uiPrefs, { save: uiPrefs => saveSettingsPatch({ uiPrefs }), move: uiPrefsMoved => saveSettingsPatch({ uiPrefsMoved }) })
       setSettingsError(null)
     } catch (error) {
-      setSettingsError(error instanceof Error ? error.message : 'Settings could not be loaded')
+      setSettingsError(errorText(error, 'Exo couldn’t load your settings. Try again.'))
     }
   }, [])
 
@@ -1389,11 +1390,11 @@ export function LauncherApp() {
     try {
       const result = await host.accountsSwitch('riot', account.key)
       if (!result.ok) {
-        setStatus(result.message ?? 'Could not switch the Riot account.', null, false, 'bad')
+        setStatus(errorText(result.message, 'Exo couldn’t switch the Riot account. Try again.'), null, false, 'bad')
         return
       }
     } catch {
-      setStatus('Could not switch the Riot account.', null, false, 'bad')
+      setStatus('Exo couldn’t switch the Riot account. Try again.', null, false, 'bad')
       return
     }
     playFromLibrary(game)
@@ -1445,8 +1446,10 @@ export function LauncherApp() {
       if (nextAction === 'play') await runPlay(game, skipDeps, scope)
       else await runTransfer(game, nextAction, skipDeps, scope)
     } catch (e) {
-      setStatus(e instanceof Error ? e.message : 'Something went wrong. Try again.', scope, scope === null, 'bad')
-      if (nextAction !== 'play') setTransferFailures(current => ({ ...current, [game.id]: e instanceof Error ? e.message : nextAction === 'update' ? 'Update failed.' : 'Install failed.' }))
+      report(e, `LauncherApp.${nextAction}`)
+      const failed = nextAction === 'play' ? 'The game didn’t start. Try again.' : nextAction === 'update' ? 'The update didn’t start. Try again.' : 'The install didn’t start. Try again.'
+      setStatus(errorText(e, failed), scope, scope === null, 'bad')
+      if (nextAction !== 'play') setTransferFailures(current => ({ ...current, [game.id]: errorText(e, failed) }))
       if (nextAction === 'play') holdGame(game.id, null)
       writeProgress((p) => (p?.gameId === game.id && p.isActive ? { ...p, isActive: false, canCancel: false, phase: 'failed' } : p))
     } finally {
@@ -1459,9 +1462,9 @@ export function LauncherApp() {
   const openGameFolder = useCallback(async (game: Game) => {
     try {
       const result = await host.openFolder(game.id)
-      if (!result.ok) setStatus(result.message ?? 'Game folder not found.', null, false, 'bad')
+      if (!result.ok) setStatus(errorText(result.message, 'Game folder not found.'), null, false, 'bad')
     } catch (error) {
-      setStatus(error instanceof Error ? error.message : 'Could not open the game folder.', null, false, 'bad')
+      setStatus(errorText(error, 'Exo couldn’t open the game folder. Try again.'), null, false, 'bad')
     }
   }, [setStatus])
 
@@ -1503,7 +1506,7 @@ export function LauncherApp() {
         }).catch((e: unknown) => report(e, 'LauncherApp.stop.getGame'))
       }
     } catch (error) {
-      setStatus(error instanceof Error ? error.message : 'Could not close the game.', game.id, true)
+      setStatus(errorText(error, 'Exo couldn’t close the game. Try again.'), game.id, true)
     } finally {
       holdGame(game.id, null)
     }
@@ -1526,7 +1529,7 @@ export function LauncherApp() {
       }
       await onContinueAfterDeps()
     } catch (error) {
-      setStatus(error instanceof Error ? error.message : 'The runtime could not be installed. Try again.', prompt.gameId, true)
+      setStatus(errorText(error, 'The runtime didn’t install. Try again.'), prompt.gameId, true)
     } finally { dependencyPending.current = false }
   }
 
@@ -1544,10 +1547,10 @@ export function LauncherApp() {
       const id = progress?.isActive ? progress.gameId : null
       if (!id) return
       const res = await host.cancelInstall(id)
-      if (!res.ok) throw new Error(res.message || 'Could not cancel. Try again.')
+      if (!res.ok) throw new Error(res.message || 'Exo couldn’t cancel. Try again.')
       setStatus(res.message ?? null, progress?.gameId ?? selectedIdRef.current)
     } catch (e) {
-      setStatus(e instanceof Error ? e.message : 'Could not cancel. Try again.', progress?.gameId ?? selectedIdRef.current)
+      setStatus(errorText(e, 'Exo couldn’t cancel. Try again.'), progress?.gameId ?? selectedIdRef.current)
     }
   }
 
@@ -1560,7 +1563,7 @@ export function LauncherApp() {
       if (res.queuedGameIds) setQueuedIds(res.queuedGameIds)
       setStatus(res.message ?? (res.ok ? null : 'Could not remove this game from the queue.'), id, !res.ok)
     } catch (e) {
-      setStatus(e instanceof Error ? e.message : 'Could not remove this game from the queue.', id, true)
+      setStatus(errorText(e, 'Exo couldn’t take it off the queue. Try again.'), id, true)
     }
   }
 
@@ -1628,7 +1631,7 @@ export function LauncherApp() {
       setStatus(result.message ?? (result.ok ? 'Game added.' : 'Could not add the game.'), null, false, result.ok ? 'info' : 'bad')
       if (result.ok) await loadLibrary(true, true)
     } catch (error) {
-      setStatus(error instanceof Error ? error.message : 'Could not open the picker.', null, false, 'bad')
+      setStatus(errorText(error, 'The picker didn’t open. Try again.'), null, false, 'bad')
     } finally { addingFolder.current = false }
   }, [loadLibrary, setStatus])
   const addGameFromLibrary = useCallback(() => addFromLibrary(addPortableProgram), [addFromLibrary])
@@ -1685,7 +1688,7 @@ export function LauncherApp() {
     let queued = false
     for (const game of picked) {
       const r = await host.uninstall(game.id).catch((error: unknown) => ({ ok: false, message: error instanceof Error ? error.message : undefined, queued: false, handoffOnly: false }))
-      if (!r.ok) failed ??= r.message ?? `Could not uninstall ${game.title}.`
+      if (!r.ok) failed ??= errorText(r.message, `Exo couldn’t uninstall ${game.title}. Try again.`)
       handoff ||= !!r.handoffOnly
       queued ||= !!r.queued
     }

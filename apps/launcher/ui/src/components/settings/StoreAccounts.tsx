@@ -6,6 +6,8 @@ import { CompanyLogo } from '../../brand/CompanyLogo'
 import { ConfirmButton } from '../ui/ConfirmButton'
 import { Spinner } from '../ui/Spinner'
 import { Row } from './parts'
+import { errorText } from '../../lib/errorWords'
+import { report } from '../../lib/report'
 
 type Result = { ok: boolean; message?: string | null }
 
@@ -147,10 +149,11 @@ export function AccountControl({ store, accounts, extra = [], busy, onBusy, onLi
     try {
       const result = await action()
       onLine(result.ok ? result.message ?? null : null)
-      if (!result.ok) onError(result.message ?? failed)
-    } catch {
+      if (!result.ok) onError(errorText(result.message, failed))
+    } catch (cause) {
+      report(cause, `StoreAccounts.${store}`)
       onLine(null)
-      onError(failed)
+      onError(errorText(cause, failed))
     } finally {
       setRunning(false)
       onBusy(false)
@@ -187,27 +190,21 @@ export function AccountHours({ accounts, onChanged }: {
 }) {
   const [removing, setRemoving] = useState<string | null>(null)
   const [removeError, setRemoveError] = useState<{ key: string; message: string } | null>(null)
-  async function remove(account: { key: string; name: string }) {
-    const { key } = account
+  // The button says it in itself (ConfirmButton): its ring, then its check, and then the row goes as the list reads
+  // again; a refusal turns it Bad with the reason under the row.
+  async function remove(key: string) {
     setRemoving(key)
     setRemoveError(null)
-    const failed = { key, message: 'Could not remove that account. Try again.' }
-    try {
-      const result = await host.accountsEpicRemove(key)
-      if (!result.ok) setRemoveError({ key, message: result.message ?? failed.message })
-    } catch {
-      setRemoveError(failed)
-    } finally {
-      setRemoving(null)
-      onChanged()
-    }
+    try { return await host.accountsEpicRemove(key) } finally { setRemoving(null) }
   }
   return (
     <>
       {(accounts?.epic.added ?? []).map(account => (
         <Row key={account.key} label={account.name} icon={<CompanyLogo company="epic" size={22} />} error={removeError?.key === account.key ? removeError.message : null}>
-          <ConfirmButton className="exo-set-btn" question="Remove?" danger disabled={removing !== null} onConfirm={() => void remove(account)}
-            lead={removing === account.key ? <Spinner label={`Removing ${account.name}`} /> : null}>
+          <ConfirmButton className="exo-set-btn" question="Remove?" danger disabled={removing !== null && removing !== account.key}
+            context="StoreAccounts.epicRemove" fallback="Could not remove that account. Try again."
+            why="none" onFailed={error => { setRemoveError({ key: account.key, message: error.text }); onChanged() }}
+            onConfirm={() => remove(account.key)} onDone={onChanged}>
             Remove
           </ConfirmButton>
         </Row>

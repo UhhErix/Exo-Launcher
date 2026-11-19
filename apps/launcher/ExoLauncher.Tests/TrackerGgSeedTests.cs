@@ -8,7 +8,6 @@ namespace ExoLauncher.Tests;
 /// <summary>
 /// Ways the one-time tracker.gg seed can come out wrong:
 /// - a lifetime total is read from a playlist sum, or a split by mode counts a playlist twice;
-/// - the profile's stats (matches, wins, K/D, ranks, top picks) are read from the wrong segment or invented when absent;
 /// - a private profile reads as an empty seed instead of private;
 /// - a League answer is taken for Valorant (or the reverse) when both are fetched.
 /// The profiles are fixtures in the shape tracker.gg's profile JSON has (segments with a type, metadata and stats). The stat
@@ -34,7 +33,7 @@ public sealed class TrackerGgSeedTests
     private const string PrivateProfile = """{"errors":[{"code":"PrivatePlayerProfile","message":"This profile is private."}]}""";
 
     [Fact]
-    public async Task ALifetimeProfileGivesTheSeedWithItsSplitAndStats()
+    public async Task ALifetimeProfileGivesTheSeedWithItsSplit()
     {
         var handler = new FixedProfiles(url => url.AbsolutePath.Contains("/valorant/") ? (HttpStatusCode.OK, ValorantProfile) : (HttpStatusCode.NotFound, ""));
 
@@ -46,13 +45,6 @@ public sealed class TrackerGgSeedTests
         Assert.True(valorant.Lifetime);
         Assert.Equal(4000, valorant.Modes!["competitive"]);
         Assert.Equal(2000, valorant.Modes["unrated"]);
-        Assert.Equal(200, valorant.Stats!.Matches);
-        Assert.Equal(100, valorant.Stats.Wins);
-        Assert.Equal(1.12, valorant.Stats.KillDeath);
-        Assert.Equal("Gold 2", valorant.Stats.CurrentRank);
-        Assert.Equal("Platinum 1", valorant.Stats.PeakRank);
-        // The three most played agents by matches, not the first three in the profile.
-        Assert.Equal(new[] { "Jett", "Omen", "Sage" }, valorant.Stats.TopPicks);
         Assert.DoesNotContain("riot:league_of_legends", result.Readings!.Keys);
     }
 
@@ -103,36 +95,17 @@ public sealed class TrackerGgSeedTests
     }
 
     [Fact]
-    public void AProfileWithoutItsStatsGivesNoStats()
+    public void AProfileWithoutPlaylistsGivesNoModes()
     {
         var overviewOnly = """{"data":{"segments":[{"type":"overview","stats":{"timePlayed":{"value":60,"displayType":"TimeMinutes"}}}]}}""";
 
-        Assert.Null(TrackerGgPlaytime.ParseStats(overviewOnly, "riot:valorant"));
         Assert.Null(TrackerGgPlaytime.ParseModes(overviewOnly, "riot:valorant"));
-        Assert.Null(TrackerGgPlaytime.ParseStats(PrivateProfile, "riot:valorant"));
-    }
-
-    [Fact]
-    public void ALeagueProfilesTopPicksAreChampions()
-    {
-        var json = """
-            {"data":{"segments":[
-              {"type":"overview","stats":{"matchesPlayed":{"value":10}}},
-              {"type":"agent","metadata":{"name":"Jett"},"stats":{"matchesPlayed":{"value":99}}},
-              {"type":"champion","metadata":{"name":"Ahri"},"stats":{"matchesPlayed":{"value":5}}},
-              {"type":"champion","metadata":{"name":"Yasuo"},"stats":{"matchesPlayed":{"value":8}}}
-            ]}}
-            """;
-
-        var stats = TrackerGgPlaytime.ParseStats(json, "riot:league_of_legends");
-
-        Assert.Equal(new[] { "Yasuo", "Ahri" }, stats!.TopPicks);
-        Assert.Equal(10, stats.Matches);
+        Assert.Null(TrackerGgPlaytime.ParseModes(PrivateProfile, "riot:valorant"));
     }
 
     /// <summary>
     /// tracker.gg may drop or rename any stat, or send a profile that is not an object at the root. Each reads as absent and
-    /// the parsers never throw, so the seed still imports its hours and the game page hides the stats it does not have.
+    /// the parsers never throw, so the seed still imports what it can.
     /// </summary>
     [Theory]
     [InlineData("[]")]
@@ -146,7 +119,6 @@ public sealed class TrackerGgSeedTests
     [InlineData("{\"data\":{\"segments\":[{\"type\":\"champion\",\"metadata\":\"x\",\"stats\":null}]}}")]
     public void AMissingOrRenamedStatNeverThrows(string json)
     {
-        Assert.Null(Record.Exception(() => Assert.Null(TrackerGgPlaytime.ParseStats(json, "riot:league_of_legends"))));
         Assert.Null(Record.Exception(() => Assert.Null(TrackerGgPlaytime.ParseModes(json, "riot:valorant"))));
         Assert.Null(Record.Exception(() => Assert.Null(TrackerGgPlaytime.ParseReading(json))));
         Assert.Null(Record.Exception(() => Assert.False(TrackerGgPlaytime.IsPrivateProfile(json))));
@@ -165,12 +137,43 @@ public sealed class TrackerGgSeedTests
 
         Assert.False(result.Ok);
         Assert.False(result.ProfilePrivate);
-        Assert.Equal("tracker.gg isn't answering right now. Try Re-import later.", result.Message);
+        Assert.Equal(TrackerGgPlaytime.BlockedMessage, result.Message);
         Assert.Empty(result.Minutes);
     }
 
+    /// <summary>What api.tracker.gg answered an app in November 2026: Cloudflare's managed challenge, HTTP 403, as HTML.</summary>
+    private const string ChallengePage =
+        "<!DOCTYPE html><html lang=\"en-US\"><head><title>Just a moment...</title></head><body>" +
+        "<script>(function(){window._cf_chl_opt = {cType: 'managed',cZone: 'api.tracker.gg'};}());</script></body></html>";
+
     [Fact]
-    public async Task AnOversizedProfileIsRefusedLikeABlock()
+    public async Task ABrowserCheckSaysTrackerGgBlocksAppsAndAsksOnlyOnce()
+    {
+        var asked = 0;
+        var handler = new CapturingHandler(_ => { asked++; return (HttpStatusCode.Forbidden, ChallengePage); });
+
+        var result = await TrackerGgPlaytime.LoadAsync("PlayerC#EUW", handler, CancellationToken.None);
+
+        Assert.False(result.Ok);
+        Assert.False(result.ProfilePrivate);
+        Assert.Equal(TrackerGgPlaytime.BlockedMessage, result.Message);
+        Assert.Equal(1, asked);
+    }
+
+    [Theory]
+    [InlineData(403, ChallengePage, "Blocked")]
+    [InlineData(200, ChallengePage, "Blocked")]
+    [InlineData(403, "<title>You've Been Blocked - Tracker Network</title>", "Blocked")]
+    [InlineData(429, "", "Blocked")]
+    [InlineData(403, PrivateProfile, "Json")]
+    [InlineData(200, "{\"data\":{}}", "Json")]
+    [InlineData(500, "<html>oops</html>", "Unanswered")]
+    [InlineData(200, null, "Unanswered")]
+    public void AnAnswerIsAProfileABlockOrNothing(int status, string? body, string kind) =>
+        Assert.Equal(kind, TrackerGgPlaytime.Classify(status, body).Kind.ToString());
+
+    [Fact]
+    public async Task AnOversizedProfileIsNoAnswer()
     {
         var huge = "{\"data\":\"" + new string('x', 16 * 1024 * 1024 + 1) + "\"}";
         var handler = new FixedProfiles(_ => (HttpStatusCode.OK, huge));
@@ -178,7 +181,7 @@ public sealed class TrackerGgSeedTests
         var result = await TrackerGgPlaytime.LoadAsync("PlayerC#EUW", handler, CancellationToken.None);
 
         Assert.False(result.Ok);
-        Assert.Equal("tracker.gg isn't answering right now. Try Re-import later.", result.Message);
+        Assert.Equal(TrackerGgPlaytime.UnansweredMessage, result.Message);
         Assert.Empty(result.Minutes);
     }
 

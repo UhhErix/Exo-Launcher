@@ -1,0 +1,3 @@
+# The vendored OpenMouse source and its Exo patches stay byte for byte as upstream has them (LF), so the patches in
+# exo-patches/ apply with plain `git apply` on any checkout (UPSTREAM.md).
+** -text

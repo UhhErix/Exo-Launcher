@@ -1,10 +1,8 @@
 import { useState } from 'react'
 import { host, type JunkItem } from '../../lib/host'
 import { cleanOutcome } from '../../lib/junkClean'
-import { report } from '../../lib/report'
 import { Row, State } from '../settings/parts'
 import { ConfirmButton } from '../ui/ConfirmButton'
-import { Spinner } from '../ui/Spinner'
 
 /** Junk worth a row: under this, temp files come and go on their own. */
 const JUNK_WORTH = 1e9
@@ -21,32 +19,30 @@ export const junkWorth = (junk: JunkItem[]) => junkBytes(junk) >= JUNK_WORTH
  * why nothing did, stays on the row. Nothing under a gigabyte.
  */
 export function JunkRow({ junk, onCleaned }: { junk: JunkItem[]; onCleaned: () => void }) {
-  const [cleaning, setCleaning] = useState(false)
   const [done, setDone] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   if (!junkWorth(junk) && !done && !error) return null
 
+  // Clean shows its own work (ConfirmButton): the ring, then its check, and then what went takes its place; a clean that
+  // deleted nothing is a failure, with the reason on the row.
   const clean = async () => {
-    setCleaning(true)
     setError(null)
-    try {
-      const result = await host.junkClean(junk.map(item => item.id))
-      const outcome = cleanOutcome(result, size)
-      setDone(outcome.done ?? null)
-      setError(outcome.error ?? null)
-      onCleaned()
-    } catch (error) {
-      report(error, 'JunkRow.clean')
-      setError('Nothing was deleted. Try again.')
-    }
-    setCleaning(false)
+    const result = await host.junkClean(junk.map(item => item.id))
+    const outcome = cleanOutcome(result, size)
+    return outcome.done ? result : { ok: false, message: outcome.error ?? null }
+  }
+  const cleaned = (result: unknown) => {
+    const outcome = cleanOutcome(result as Awaited<ReturnType<typeof host.junkClean>>, size)
+    setDone(outcome.done ?? null)
+    setError(outcome.error ?? null)
+    onCleaned()
   }
 
   return (
     <Row label="Junk files" detail={done ? undefined : size(junkBytes(junk))} error={error}>
       {done ? <State on>{done}</State> : (
-        <ConfirmButton className="exo-set-btn is-danger" danger question={`Delete ${size(junkBytes(junk))}?`} disabled={cleaning} aria-busy={cleaning}
-          lead={cleaning ? <Spinner label="Deleting junk" /> : null} onConfirm={() => void clean()}>
+        <ConfirmButton className="exo-set-btn is-danger" danger question={`Delete ${size(junkBytes(junk))}?`} why="none" context="JunkRow.clean"
+          fallback="Nothing was deleted. Try again." onConfirm={clean} onFailed={failure => setError(failure.text)} onDone={cleaned}>
           Clean
         </ConfirmButton>
       )}

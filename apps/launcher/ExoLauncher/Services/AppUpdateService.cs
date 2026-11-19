@@ -17,6 +17,8 @@ public sealed partial class AppUpdateService
     private const int MaxRetainedInstallers = 2;
     private static readonly TimeSpan InstallerRetentionAge = TimeSpan.FromDays(14);
     private static readonly HttpClient SharedHttp = CreateClient();
+    /// <summary>The pack's byte ranges: no automatic decompression, so a range is exactly the bytes asked for.</summary>
+    private static readonly HttpClient SharedRangeHttp = CreateClient(decompress: false);
 
     private readonly HttpClient _http;
     private readonly string _updatesDirectory;
@@ -50,16 +52,18 @@ public sealed partial class AppUpdateService
     }
 
     public AppUpdateService()
-        : this(SharedHttp, GetDefaultUpdatesDirectory(), TimeProvider.System)
+        : this(SharedHttp, GetDefaultUpdatesDirectory(), TimeProvider.System, SharedRangeHttp)
     {
     }
 
     internal AppUpdateService(
         HttpClient http,
         string updatesDirectory,
-        TimeProvider timeProvider)
+        TimeProvider timeProvider,
+        HttpClient? rangeHttp = null)
     {
         _http = http ?? throw new ArgumentNullException(nameof(http));
+        _rangeHttp = rangeHttp ?? http;
         if (string.IsNullOrWhiteSpace(updatesDirectory))
             throw new ArgumentException("An updater working directory is required.", nameof(updatesDirectory));
         _updatesDirectory = Path.GetFullPath(updatesDirectory);
@@ -72,12 +76,12 @@ public sealed partial class AppUpdateService
     /// <summary>Exo's update address: /latest names the newest tag, /download/&lt;tag&gt;/&lt;file&gt; sends a release file.</summary>
     private static readonly Uri UpdateAddress = new("https://updates.getexo.app/v1/launcher/");
     internal const string InstallerAssetName = "ExoLauncher-Setup.exe";
-    private static HttpClient CreateClient()
+    private static HttpClient CreateClient(bool decompress = true)
     {
         var handler = new SocketsHttpHandler
         {
             AllowAutoRedirect = false,
-            AutomaticDecompression = DecompressionMethods.All,
+            AutomaticDecompression = decompress ? DecompressionMethods.All : DecompressionMethods.None,
             PooledConnectionLifetime = TimeSpan.FromMinutes(15),
             EnableMultipleHttp2Connections = false,
         };
@@ -104,6 +108,8 @@ public sealed partial class AppUpdateService
         public bool Staged { get; init; }
         /// <summary>The offered version's What's New; null when its release has none or it failed validation.</summary>
         internal ExoWhatsNewRelease? Upcoming { get; init; }
+        /// <summary>The offered release's file list and pack, when the update address lists them (a file-level update).</summary>
+        internal DeltaOffer? Delta { get; init; }
     }
 
     /// <param name="fresh">A check the user asked for skips the release cache.</param>
@@ -171,6 +177,7 @@ public sealed partial class AppUpdateService
             }
 
             var available = HasVerifiedInstallerMetadata(release);
+            if (available && release.Delta is { } offer) PrepareDelta(remote, offer);
             return new CheckResult
             {
                 UpdateAvailable = available,
@@ -179,6 +186,7 @@ public sealed partial class AppUpdateService
                 DownloadUrl = available ? release.DownloadUrl : null,
                 DownloadSize = release.Size,
                 Sha256 = release.Sha256,
+                Delta = available ? release.Delta : null,
                 Upcoming = available ? await LoadWhatsNewAsync(release, ct).ConfigureAwait(false) : null,
                 Message = available
                     ? $"Version {remote} is available (you have v{local})."
@@ -294,6 +302,10 @@ public sealed partial class AppUpdateService
             Directory.CreateDirectory(_updatesDirectory);
             // An installer this same release already downloaded and verified (a game was running then) is used as it is.
             var kept = await StagedInstallerAsync(offeredVersion, check.Sha256, ct).ConfigureAwait(false);
+            // Only the files that changed, when the release lists them; the installer whenever that can't be done or trusted.
+            if (kept is null && check.Delta is { } offer &&
+                await TryDeltaAsync(check, offer, progress, ct).ConfigureAwait(false) is { } delta)
+                return delta;
             var setupPath = kept?.Path;
             var record = kept?.Record;
             if (setupPath is null)
@@ -317,8 +329,8 @@ public sealed partial class AppUpdateService
                     (request, token) => SendFollowingAllowedRedirectsAsync(request, token),
                     check.DownloadSize, check.Sha256, (written, total) =>
                     {
-                        if (total is > 0) progress?.Report(("Downloading…", Math.Min(100, written * 100d / total.Value)));
-                        else progress?.Report(($"Downloading… {written / 1048576d:0.0} MB", null));
+                        if (total is > 0) progress?.Report(($"Downloading {Mb(written)} of {Mb(total.Value)}", Math.Min(100, written * 100d / total.Value)));
+                        else progress?.Report(($"Downloading {Mb(written)}", null));
                     }, ct).ConfigureAwait(false);
 
                 if (check.DownloadSize is > 0 && new FileInfo(partialPath).Length != check.DownloadSize.Value)
@@ -487,7 +499,8 @@ public sealed partial class AppUpdateService
 
     private async Task<HttpResponseMessage> SendFollowingAllowedRedirectsAsync(
         HttpRequestMessage initialRequest,
-        CancellationToken ct)
+        CancellationToken ct,
+        HttpClient? client = null)
     {
         var current = initialRequest.RequestUri ?? throw new InvalidOperationException("Missing download URL.");
         for (var redirect = 0; redirect <= 5; redirect++)
@@ -498,7 +511,7 @@ public sealed partial class AppUpdateService
             using var request = new HttpRequestMessage(HttpMethod.Get, current);
             foreach (var header in initialRequest.Headers)
                 request.Headers.TryAddWithoutValidation(header.Key, header.Value);
-            var response = await _http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, ct)
+            var response = await (client ?? _http).SendAsync(request, HttpCompletionOption.ResponseHeadersRead, ct)
                 .ConfigureAwait(false);
             if ((int)response.StatusCode is < 300 or >= 400)
             {
@@ -673,7 +686,8 @@ public sealed partial class AppUpdateService
         string? AssetName,
         long? Size,
         string? Sha256,
-        string? WhatsNewUrl = null);
+        string? WhatsNewUrl = null,
+        DeltaOffer? Delta = null);
 
     private static bool HasVerifiedInstallerMetadata(ParsedRelease release) =>
         NormalizeSha(release.Sha256) is not null && IsOfferedInstaller(release);
@@ -710,7 +724,7 @@ public sealed partial class AppUpdateService
                 return null;
             var (size, sha) = ReadInstallerCheck(root);
             return new ParsedRelease(tag, UpdateAddressFile(tag, InstallerAssetName), InstallerAssetName, size, sha,
-                UpdateAddressFile(tag, WhatsNewAssetName));
+                UpdateAddressFile(tag, WhatsNewAssetName), ReadDeltaOffer(root, tag));
         }
         catch (JsonException)
         {
@@ -766,7 +780,7 @@ public sealed partial class AppUpdateService
             using var req = new HttpRequestMessage(HttpMethod.Get, new Uri(UpdateAddress, "latest"));
             using var resp = await _http.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, timeout.Token).ConfigureAwait(false);
             if (resp.StatusCode != HttpStatusCode.OK) return null;
-            var release = ParseUpdateAddressReply(await ReadBoundedTextAsync(resp.Content, 4096, timeout.Token).ConfigureAwait(false));
+            var release = ParseUpdateAddressReply(await ReadBoundedTextAsync(resp.Content, 16 * 1024, timeout.Token).ConfigureAwait(false));
             if (release is null) return null;
             // Up to date: the files aren't needed, so the address isn't asked for them.
             if (VersionNumber.AtLeast(local, release.Tag)) return release;

@@ -1,6 +1,7 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import './tokens.css'
+import './styles/glyphs.css'
 import './exo-shell.css'
 import './styles/rooms.css'
 import './styles/hosted-room.css'

@@ -305,3 +305,66 @@ html[data-exo-motion="reduce"] .exo-notice-slot { transition: none; }
   .exo-notice { border: 1px solid CanvasText; }
   .exo-notice-close { opacity: 1; }
 }
+
+/* Report a problem (settings/ReportProblem.tsx): a wider dialog, a few lines to write in, Attach logs with what it sends
+   under Show what's sent, and the contact. Send keeps its place as it turns into Sending, then the issue's number. */
+.exo-dialog.exo-report {
+  width: min(480px, calc(100vw - 24px));
+}
+
+.exo-report-label {
+  display: grid;
+  gap: 6px;
+  color: var(--color-fg);
+}
+
+.exo-field.exo-report-text {
+  height: auto;
+  min-height: 96px;
+  padding: 8px 12px;
+  border-radius: var(--exo-card-radius);
+  line-height: 1.45;
+  resize: vertical;
+}
+
+.exo-report-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: var(--color-fg);
+}
+
+.exo-report-row-label { flex: 1; }
+
+.exo-report-preview {
+  max-height: 200px;
+  margin: 0;
+  padding: 8px 12px;
+  overflow: auto;
+  border-radius: var(--exo-card-radius);
+  background-color: var(--exo-fill);
+  color: var(--color-muted);
+  font-family: var(--font-mono);
+  font-size: calc(12px * var(--exo-scale, 1));
+  line-height: 1.45;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.exo-report-preview:focus-visible {
+  outline: 2px solid var(--color-fg);
+  outline-offset: 1px;
+}
+
+.exo-report-note {
+  color: var(--color-muted);
+  font-size: calc(12px * var(--exo-scale, 1));
+}
+
+.exo-report-send {
+  min-width: 96px;
+}
+
+.exo-report-send.is-sent:disabled {
+  opacity: 1;
+}

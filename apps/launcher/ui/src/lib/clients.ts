@@ -2,7 +2,7 @@ import type { ClientsStatus } from './host'
 
 /** The Game clients card's heading, in Exo's words: what this PC is missing. */
 export function clientsHeading(status: ClientsStatus): string {
-  if (status.problem && !status.needsFix) return 'Exo could not check your game clients'
+  if (status.problem && !status.needsFix) return 'Exo couldn’t check your game clients'
   const epic = status.epic.layout === 'old'
   const steam = status.steam.channel === 'stable'
   if (epic && steam) return 'Exo needs the new Epic launcher and Steam Beta'

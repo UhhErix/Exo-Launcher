@@ -3,6 +3,7 @@ import { host, type Afmf3State } from '../../lib/host'
 import { report } from '../../lib/report'
 import { Switch } from '../Switch'
 import { Row } from '../settings/parts'
+import { errorText } from '../../lib/errorWords'
 
 /**
  * AMD's unreleased Fluid Motion Frames 3, on the Radeons and drivers it was reported on, and nowhere else. Off until pressed, off again in one press, never with Best
@@ -23,7 +24,7 @@ export function Afmf3Row() {
     try {
       const next = await host.gpuAfmf3(on)
       setState(next)
-      if (!next.ok) setError(next.message ?? 'Not changed. Try again.')
+      if (!next.ok) setError(errorText(next.message, 'Not changed. Try again.'))
     } catch (cause) {
       report(cause, 'Afmf3Row.flip')
       setError('Not changed. Try again.')

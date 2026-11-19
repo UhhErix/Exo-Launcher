@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Search } from '../../brand/icons'
 import { host, type EqAction, type EqHeadphone, type EqSound, type EqState } from '../../lib/host'
+import { errorText } from '../../lib/errorWords'
 import { report } from '../../lib/report'
 import { Choice } from '../settings/Choice'
 import { ChoiceRow, Row, SliderRow, State, SwitchRow } from '../settings/parts'
@@ -69,10 +70,10 @@ export function useEq(output?: string) {
     try {
       const next = await host.eq(action, { output, ...params })
       if (mine === newest.current) setState(next)
-      if (!next.ok && next.message) problem = next.message
+      if (!next.ok && next.message) problem = errorText(next.message, "Exo EQ didn't answer. Try again.")
     } catch (cause) {
       report(cause, `Eq.${action}`)
-      problem = "Exo EQ didn't answer. Try again."
+      problem = errorText(cause, "Exo EQ didn't answer. Try again.")
     }
     if (problem) setError({ row, text: problem })
     if (mine === newest.current) setBusy(null)
