@@ -234,7 +234,8 @@ public partial class AppTests
         var outside = Path.Combine(_root, "elsewhere.bin");
         File.WriteAllBytes(outside, new byte[512]);
         // needs Developer Mode or admin, as on the PCs these tests run on
-        File.CreateSymbolicLink(Path.Combine(_root, "DXCache", "bc2fa91d33333333.nvph"), outside);
+        try { File.CreateSymbolicLink(Path.Combine(_root, "DXCache", "bc2fa91d33333333.nvph"), outside); }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException) { return; }   // no symlink privilege here
         var name = SharedWithUninstalled(k);
         var item = ItemOf(k.CacheInventory(), CacheGroupKind.Installed, name);
         Assert.Equal(2, item.Files.Count);   // the link isn't listed

@@ -480,7 +480,7 @@ public partial class AppTests
             // a token with SeBackupPrivilege on (elevated, started from Git Bash) lists it all the same: nothing to test there
             try { _ = Directory.EnumerateFileSystemEntries(_exeDir).Any(); return; }
             catch (UnauthorizedAccessException) { }
-            Assert.Contains("d3d12.dll", ScsKiller.CleanOfflineSession(store, _game.Id, _ => false, _ => { })!);
+            Assert.Equal([_exeDir], ScsKiller.CleanOfflineSession(store, _game.Id, _ => false, _ => { }));
             Assert.Contains("d3d12.dll", store.LoadGame(_game.Id).RecorderFiles.Keys);
             Assert.NotNull(store.LoadGame(_game.Id).OfflineSession);
         }

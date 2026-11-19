@@ -2,6 +2,7 @@ using System.Buffers.Binary;
 using System.IO.Compression;
 using System.Numerics;
 using System.Security.Cryptography;
+using System.Text;
 using SCSKiller.Core;
 using SCSKiller.Core.ReEngine;
 using SCSKiller.Tests.Carved;
@@ -315,7 +316,11 @@ public class RePakTests
         var game = new Game("test:re", "RE test", Store.Other, dir, Path.Combine(dir, "game.exe"));
 
         var reader = new ReEngineReader(Path.Combine(dir, "data"), Offline);
-        Assert.EndsWith(reader.ModulusFile(game), reader.Detect(game)!.Unsupported); // encrypted, no modulus: says where to put it
+        var keyless = reader.Detect(game)!;
+        Assert.True(ReEngineReader.NeedsKey(keyless));
+        Assert.Null(keyless.Unsupported);
+        Assert.Equal(Core.App.Download.FailedNote, keyless.Note);
+        Assert.Contains(RePak.NoModulus, Assert.Throws<InvalidDataException>(() => reader.Index(game, keyless, null, CancellationToken.None)).Message); // encrypted, no modulus: refused until given
         Directory.CreateDirectory(Path.GetDirectoryName(reader.ModulusFile(game))!);
         File.WriteAllText(reader.ModulusFile(game), "0x" + Convert.ToHexString(Modulus.ToByteArray(isUnsigned: true, isBigEndian: true)));
         var engine = reader.Detect(game)!;
@@ -358,7 +363,7 @@ public class RePakTests
         Directory.Delete(dir, true);
     }
 
-    static string? Offline(string url) => null;
+    static byte[]? Offline(string url) => null;
 
     /// <summary>ree-pak-rs's pak.rs shape (the modulus as a Rust byte array, little endian, 129 bytes; the exponent as a
     /// 4-byte one), with moduli generated here.</summary>
@@ -371,14 +376,14 @@ public class RePakTests
     public void ReePakModuliReadsEveryLongByteArray()
     {
         var other = new BigInteger(RSA.Create(1024).ExportParameters(false).Modulus, isUnsigned: true, isBigEndian: true);
-        var got = ReEngineReader.ReePakModuli(RustSource(other, Modulus) + "let v = vec![0x1, 0xab];\nlet s: [&str; 2] = [\"a\", \"b\"];\n");
+        var got = ReEngineReader.ByteArrays(RustSource(other, Modulus) + "let v = vec![0x1, 0xab];\nlet s: [&str; 2] = [\"a\", \"b\"];\n");
         Assert.Equal([other, Modulus], got.Select(b => new BigInteger(b, isUnsigned: true)));
-        Assert.Empty(ReEngineReader.ReePakModuli("fn main() {}"));
+        Assert.Empty(ReEngineReader.ByteArrays("fn main() {}"));
     }
 
     /// <summary>An encrypted table and no modulus given: the published one is downloaded (a fake of ree-pak-rs's shape), the
-    /// one that opens the base package kept in pak.modulus; offline, or none opening it, Detect names that file and nothing
-    /// is written.</summary>
+    /// one that opens the base package kept in pak.modulus; offline, or none opening it, Detect leaves it keyless with
+    /// <see cref="Core.App.Download.FailedNote"/> and nothing is written.</summary>
     [Fact]
     public void ModulusIsDownloadedWhenNoneIsGiven()
     {
@@ -390,16 +395,26 @@ public class RePakTests
         var wrong = new BigInteger(RSA.Create(1024).ExportParameters(false).Modulus, isUnsigned: true, isBigEndian: true);
 
         var asked = new List<string>();
-        var offline = new ReEngineReader(data, u => { asked.Add(u); return null; }).Detect(game)!.Unsupported!;
-        Assert.Contains(RePak.NoModulus, offline);
-        Assert.Contains("downloaded", offline);
-        Assert.EndsWith(file, offline);
+        var offlineReader = new ReEngineReader(data, u => { asked.Add(u); return null; });
+        var offline = offlineReader.Detect(game)!;
+        Assert.True(ReEngineReader.NeedsKey(offline));
+        Assert.Null(offline.Unsupported);
+        Assert.Equal(Core.App.Download.FailedNote, offline.Note);
         Assert.Equal([ReEngineReader.ReePakRs], asked);
         Assert.StartsWith("https://raw.githubusercontent.com/eigeen/ree-pak-rs/25562e6a6f9a52a43b80d54be91e4feb7ac7668b/", ReEngineReader.ReePakRs); // pinned
-        Assert.EndsWith(file, new ReEngineReader(data, _ => RustSource(wrong)).Detect(game)!.Unsupported);
+        Assert.Contains(RePak.NoModulus, Assert.Throws<InvalidDataException>(() => offlineReader.Index(game, offline, null, CancellationToken.None)).Message);
+
+        var wrongBytes = Encoding.UTF8.GetBytes(RustSource(wrong));
+        var wrongReader = new ReEngineReader(data, _ => wrongBytes, Convert.ToHexStringLower(SHA256.HashData(wrongBytes)));
+        var wrongEngine = wrongReader.Detect(game)!;
+        Assert.True(ReEngineReader.NeedsKey(wrongEngine));
+        Assert.Null(wrongEngine.Unsupported);
+        Assert.Equal(Core.App.Download.FailedNote, wrongEngine.Note);
+        Assert.Contains(RePak.NoModulus, Assert.Throws<InvalidDataException>(() => wrongReader.Index(game, wrongEngine, null, CancellationToken.None)).Message);
         Assert.False(File.Exists(file));
 
-        var engine = new ReEngineReader(data, _ => RustSource(wrong, Modulus)).Detect(game)!;
+        var goodBytes = Encoding.UTF8.GetBytes(RustSource(wrong, Modulus));
+        var engine = new ReEngineReader(data, _ => goodBytes, Convert.ToHexStringLower(SHA256.HashData(goodBytes))).Detect(game)!;
         Assert.DoesNotContain(RePak.NoModulus, engine.Unsupported ?? ""); // opened (no shader files in it: that's all it says)
         Assert.Equal(Modulus, new BigInteger(Convert.FromHexString(File.ReadAllText(file)), isUnsigned: true));
         Assert.Equal(engine, new ReEngineReader(data, _ => throw new InvalidOperationException("kept locally: no second download")).Detect(game));
@@ -447,7 +462,8 @@ public class RePakTests
         File.WriteAllBytes(Path.Combine(dir, "re_chunk_000.pak.patch_001.pak"), Pak(RePak.EncryptedTable, 64, new E(2, [.. "TEX\0"u8, .. Bytes(100, 5)])));
         var game = new Game("test:re-patch-key", "RE test", Store.Other, dir, Path.Combine(dir, "game.exe"));
         var wrong = new BigInteger(RSA.Create(1024).ExportParameters(false).Modulus, isUnsigned: true, isBigEndian: true);
-        var engine = new ReEngineReader(Path.Combine(dir, "data"), _ => RustSource(wrong, Modulus)).Detect(game)!;
+        var dl = Encoding.UTF8.GetBytes(RustSource(wrong, Modulus));
+        var engine = new ReEngineReader(Path.Combine(dir, "data"), _ => dl, Convert.ToHexStringLower(SHA256.HashData(dl))).Detect(game)!;
         Assert.DoesNotContain(RePak.NoModulus, engine.Unsupported ?? "");
         Directory.Delete(dir, true);
     }

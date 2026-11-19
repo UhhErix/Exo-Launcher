@@ -286,7 +286,7 @@ public class FormatTests
 
     /// <summary>A game that moves to another Library section is removed and inserted: with the list's default add/remove
     /// animations, it vanished and came back.</summary>
-    [Fact]
+    [Fact(Skip = "Exo Shaders leaves out the WinUI app (src/SCSKiller.App): Exo uses its own UI")]
     public void The_library_list_changes_rows_without_an_animation()
     {
         var page = System.Xml.Linq.XDocument.Load(Path.Combine(TestEnv.RepoRoot, "src", "SCSKiller.App", "Pages", "LibraryPage.xaml"));
@@ -297,7 +297,7 @@ public class FormatTests
     }
 
     /// <summary>The Library updates a game's row in place: its template must bind one-way, or the row keeps showing the old state.</summary>
-    [Fact]
+    [Fact(Skip = "Exo Shaders leaves out the WinUI app (src/SCSKiller.App): Exo uses its own UI")]
     public void The_library_rows_bind_one_way()
     {
         var page = System.Xml.Linq.XDocument.Load(Path.Combine(TestEnv.RepoRoot, "src", "SCSKiller.App", "Pages", "LibraryPage.xaml"));
@@ -307,7 +307,7 @@ public class FormatTests
     }
 
     /// <summary>Set AES key sits in the game page's actions, shown only while the game needs its key.</summary>
-    [Fact]
+    [Fact(Skip = "Exo Shaders leaves out the WinUI app (src/SCSKiller.App): Exo uses its own UI")]
     public void The_game_page_offers_set_aes_key_only_while_the_key_is_missing()
     {
         var page = System.Xml.Linq.XDocument.Load(Path.Combine(TestEnv.RepoRoot, "src", "SCSKiller.App", "Pages", "DetailPage.xaml"));
@@ -318,7 +318,7 @@ public class FormatTests
     }
 
     /// <summary>The before and after intro warns on every start, Start over included, that the game's own shader caches go too.</summary>
-    [Fact]
+    [Fact(Skip = "Exo Shaders leaves out the WinUI app (src/SCSKiller.App): Exo uses its own UI")]
     public void The_before_and_after_intro_always_says_the_game_caches_are_deleted()
     {
         var ui = File.ReadAllText(Path.Combine(TestEnv.RepoRoot, "src", "SCSKiller.App", "BeforeAfterUi.cs"));
@@ -327,7 +327,7 @@ public class FormatTests
 
     /// <summary>A WinUI slider clamps a thread or memory setting above this PC's to its maximum and writes that back: the getters show the
     /// clamped value so opening a page doesn't save it.</summary>
-    [Fact]
+    [Fact(Skip = "Exo Shaders leaves out the WinUI app (src/SCSKiller.App): Exo uses its own UI")]
     public void The_WinUI_thread_and_memory_sliders_dont_save_their_clamp()
     {
         var vms = File.ReadAllText(Path.Combine(TestEnv.RepoRoot, "src", "SCSKiller.App", "ViewModels.cs"));

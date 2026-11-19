@@ -10,14 +10,15 @@ SCSKiller's own licence: GPL-3.0-or-later (LICENSE), with an additional permissi
 
 | Component | Version | Licence | Copyright | Project | Text |
 |---|---|---|---|---|---|
-| .NET runtime (self-contained) | 10.0.12 | MIT | Copyright (c) .NET Foundation and Contributors | https://github.com/dotnet/runtime | [L1](#l1) |
+| .NET runtime (self-contained) | 10.0.14 | MIT | Copyright (c) .NET Foundation and Contributors | https://github.com/dotnet/runtime | [L1](#l1) |
 | Microsoft.Bcl.Memory | 10.0.12 | MIT | © Microsoft Corporation | https://github.com/dotnet/runtime | [L1](#l1) |
 | System.IO.Hashing | 10.0.10 | MIT | © Microsoft Corporation | https://github.com/dotnet/runtime | [L1](#l1) |
 | System.Numerics.Tensors | 10.0.10 | MIT | © Microsoft Corporation | https://github.com/dotnet/runtime | [L1](#l1) |
 | Windows App SDK (Runtime 2.5.1, WinUI 2.3.9, Foundation 2.3.12, Base 2.0.4, Interactive Experiences 2.1.9) | 2.5.1 | LicenseRef-Microsoft-WindowsAppSDK | © Microsoft Corporation | https://github.com/microsoft/windowsappsdk | [L2](#l2) |
 | Microsoft Edge WebView2 SDK | 1.0.3719.77 | BSD-3-Clause | Copyright (C) Microsoft Corporation | https://aka.ms/webview | [L3](#l3) |
 | Microsoft.Windows.SDK.NET (C#/WinRT projection, WinRT.Runtime) | 10.0.26100.57 | LicenseRef-Microsoft-WindowsSDK | © Microsoft Corporation | https://aka.ms/WinSDKLicenseURL | - |
-| CUE4Parse | 1.2.2.202609 | Apache-2.0 | Copyright (c) 2026 FabianFG | https://github.com/FabianFG/CUE4Parse | [L4](#l4) |
+| Microsoft Visual C++ runtime (vcruntime140.dll, vcruntime140_1.dll, msvcp140.dll) | 14.x | LicenseRef-Microsoft-VisualStudio | © Microsoft Corporation | https://learn.microsoft.com/visualstudio/releases/vs18/redistribution | - |
+| CUE4Parse (modified) | 1.2.2.202609 | Apache-2.0 | Copyright (c) 2026 FabianFG | https://github.com/FabianFG/CUE4Parse | [L4](#l4) |
 | Blake3.NET | 3.0.2 | BSD-2-Clause | Copyright (c) 2020, Alexandre Mutel | https://github.com/xoofx/Blake3.NET | [L5](#l5) |
 | BouncyCastle.Cryptography | 2.6.2 | MIT | Copyright (c) 2000-2025 The Legion of the Bouncy Castle Inc. | https://www.bouncycastle.org | [L6](#l6) |
 | CommunityToolkit.HighPerformance | 8.4.2 | MIT | Copyright © .NET Foundation and Contributors | https://github.com/CommunityToolkit/dotnet | [L7](#l7) |
@@ -51,6 +52,12 @@ SCSKiller's own licence: GPL-3.0-or-later (LICENSE), with an additional permissi
 | Vulkan-Headers (proxy/third_party/vulkan) | 1.4 (source tree) | Apache-2.0 | Copyright 2015-2026 The Khronos Group Inc. | https://github.com/KhronosGroup/Vulkan-Headers | [L4](#l4) |
 | AMD GPU Services (amd_ags_x64.dll) | 6.3.1 | MIT | Copyright (c) 2025 Advanced Micro Devices, Inc. | https://github.com/GPUOpen-LibrariesAndSDKs/AGS_SDK | [L29](#l29) |
 | Inter (font, in d3d12.dll) | 4.1 | OFL-1.1 | Copyright (c) 2016 The Inter Project Authors | https://github.com/rsms/inter | [L31](#l31) |
+| Fossilize (fossilize-replay.exe, scskiller_warm.exe, VkLayer_scskiller.dll, patched) | 556da9ff (source) | MIT | Copyright (c) 2018 Hans-Kristian Arntzen | https://github.com/ValveSoftware/Fossilize | [L32](#l32) |
+| miniz (in fossilize-replay.exe, scskiller_warm.exe, VkLayer_scskiller.dll) | Fossilize 556da9ff (source) | MIT | Copyright 2013-2014 RAD Game Tools and Valve Software, Copyright 2010-2014 Rich Geldreich and Tenacious Software LLC | https://github.com/richgel999/miniz | [L33](#l33) |
+| RapidJSON (in fossilize-replay.exe, scskiller_warm.exe, VkLayer_scskiller.dll) | 8f4c021f (source) | MIT | Copyright (C) 2015 THL A29 Limited, a Tencent company, and Milo Yip | https://github.com/Tencent/rapidjson | [L34](#l34) |
+| volk (in fossilize-replay.exe) | 8a2387af (source) | MIT | Copyright (c) 2018-2026 Arseny Kapoulkine | https://github.com/zeux/volk | [L35](#l35) |
+| SPIRV-Headers (in fossilize-replay.exe) | 49654312 (source) | MIT | Copyright (c) 2015-2024 The Khronos Group Inc. | https://github.com/KhronosGroup/SPIRV-Headers | [L36](#l36) |
+| dirent (in fossilize-replay.exe, scskiller_warm.exe, VkLayer_scskiller.dll) | c885633e (source) | MIT | Copyright (c) 1998-2019 Toni Ronkko | https://github.com/tronkko/dirent | [L37](#l37) |
 
 ### Notes
 
@@ -59,16 +66,18 @@ SCSKiller's own licence: GPL-3.0-or-later (LICENSE), with an additional permissi
 - **Microsoft Edge WebView2 SDK**: Its notices ship as notices\WebView2-NOTICE.txt.
 - **Microsoft.Windows.SDK.NET (C#/WinRT projection, WinRT.Runtime)**: Part of the .NET SDK's Windows targeting pack. The package has no licence file. Its terms are at https://aka.ms/WinSDKLicenseURL.
 - **CommunityToolkit.HighPerformance**: Its notices ship as notices\CommunityToolkit-ThirdPartyNotices.txt.
+- **CUE4Parse (modified)**: Built from source at the commit of its 1.2.2.202609 package by build/cue4parse/build.ps1, changed by the SCSKiller authors: every game key and decryption constant removed, and the Theia and .utoc keys taken from the caller. The changed files are listed in the package's MODIFIED.txt. Its NOTICE credits, as material it includes: UAssetAPI, Infrablack.UE4Config, LZMA-SDK, Newtonsoft.Json, System.Memory, System.Runtime.CompilerServices.Unsafe, K4os.Compression.LZ4, ZstdSharp.Port, BouncyCastle.Cryptography, FixedMathSharp, GenericReader, OffiUtils, Oodle.NET, Zlib-ng.NET, Fmod5Sharp, CriWareLibrary, VGAudio, SubstreamSharp, AssetRipper.TextureDecoder and FFVII-Rebirth-Mesh-Patcher (MIT), DotNetZip (MS-PL), Serilog and SwiftShader (Apache-2.0), Blake3 (BSD-2-Clause), crunch (zlib) and vgmstream (ISC-style).
 - **zlib-ng (zlib-ng2.dll)**: Native codec next to both exes, from the Zlib-ng.NET release assets, checked against a pinned SHA-256.
 - **Oodle Data (oodle-data-shared.dll)**: Proprietary software of Epic Games Tools (RAD Game Tools), with no published licence text. SCSKiller has no agreement with Epic or RAD. CUE4Parse downloads it from github.com/WorkingRobot/OodleUE (builds of the Oodle Data source that ships with Unreal Engine, no licence file there), checked against a pinned SHA-256. Releases leave it out (build/publish.ps1 -NoOodle) and the app downloads it on first use. Whether a build that includes it may be redistributed hasn't been established.
 - **Velopack**: the installer and updater. Its Update.exe and Setup.exe come from the same MIT source, built by `vpk pack`.
 - **NSec.Cryptography**: verifies the Ed25519 signature on the update feed. Its NOTICE lists libsodium (ISC) and RFC 6234 sample code (Simplified BSD).
 - **Vulkan-Headers (proxy/third_party/vulkan)**: Source only, for the proxy self-test. Not in the shipped binaries.
 - **AMD GPU Services (amd_ags_x64.dll)**: AMD's signed release DLL, unmodified, in native\, downloaded by the proxy's CMake configure and pinned by SHA-256. scskiller_warm.exe loads it on AMD to create its device under a game's AGS app name.
+- **Fossilize (fossilize-replay.exe, scskiller_warm.exe, VkLayer_scskiller.dll, patched)**: built from source by the proxy's CMake configure at a pinned commit with the submodules the replayer needs, each source archive checked against a pinned SHA-256, with proxy/third_party/fossilize/scskiller.patch applied (the Vulkan warm's stop and its list of created pipelines, and the capture layer behind the recorder's admission). scskiller_warm.exe links its replayer interface and VkLayer_scskiller.dll is its capture layer. Its Vulkan headers are Vulkan-Headers.
 - **Inter (font, in d3d12.dll)**: Inter SemiBold's glyphs for the in-game panel's texts, rasterized at four sizes into `proxy/overlay_font.h` by `proxy/overlay_font.py` and compiled into the recorder. The font file isn't shipped.
-- **Game archive formats** (knowledge only, no code, keys or other data copied): the FromSoftware readers follow the layouts SoulsFormats (github.com/soulsmods/SoulsFormatsNEXT) and UXM Selective Unpack (github.com/Nordgaren/UXM-Selective-Unpack) document, and use the shader file names in UXM's archive dictionaries. The RE Engine package reader follows ree-pak-rs (github.com/eigeen/ree-pak-rs) and REE.PAK.Tool. No game key is embedded or shipped. Archive keys come from the user's install or the user, and stay on that PC. Where an install doesn't carry them in the clear (Dark Souls III's archive keys, PRAGMATA's table-key modulus), the app downloads them from those projects' public sources, pinned to a commit (UXM's `UXM/ArchiveKeys.cs`, ree-pak-rs's `ree-pak-core/src/pak/cipher/pak.rs`), and keeps only what opens the user's own archives.
+- **Game archive formats** (knowledge only, no code, keys or other data copied): the FromSoftware readers follow the layouts SoulsFormats (github.com/soulsmods/SoulsFormatsNEXT) and community tools document, and use the shader file names of community archive lists. The RE Engine package reader follows community tools' layouts. No game key is embedded or shipped. Archive keys come from the user's install or the user, and stay on that PC. Where an install doesn't carry them in the clear (Dark Souls III's archive keys, PRAGMATA's table-key modulus), the app downloads them from the projects that publish them, pinned to a commit and a SHA-256 (UXM Selective Unpack's `UXM/ArchiveKeys.cs`, github.com/Nordgaren/UXM-Selective-Unpack, and ree-pak-rs's `ree-pak-core/src/pak/cipher/pak.rs`, github.com/eigeen/ree-pak-rs), and keeps only what opens the user's own archives.
 - **Build-time only, not shipped**: MemoryPack.Generator (source generator, MIT), Microsoft.Windows.SDK.BuildTools and Microsoft.Windows.SDK.BuildTools.MSIX (Microsoft Windows SDK terms), NETStandard.Library / Microsoft.NETCore.Platforms (metapackages).
-- **Native tools** (`d3d12.dll`, `scskiller_warm.exe`): SCSKiller's own code, statically linked with the Microsoft C/C++ runtime (Visual Studio distributable code).
+- **Native tools** (`d3d12.dll`, `scskiller_warm.exe`, `VkLayer_scskiller.dll`): SCSKiller's own code, statically linked with the Microsoft C/C++ runtime (Visual Studio distributable code).
 - **known-stutter.json**, **precompiles-at-boot.json** and **game-verdicts.json**: facts about games with the source of each (a link or a dated citation). No third-party text is copied.
 
 ## Licence texts
@@ -237,7 +246,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 ### L4
 
-Used by: CUE4Parse, Vulkan-Headers (proxy/third_party/vulkan)
+Used by: CUE4Parse (modified), Vulkan-Headers (proxy/third_party/vulkan)
 
 ```text
                                  Apache License
@@ -1589,6 +1598,165 @@ INCLUDING ANY GENERAL, SPECIAL, INDIRECT, INCIDENTAL, OR CONSEQUENTIAL
 DAMAGES, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
 FROM, OUT OF THE USE OR INABILITY TO USE THE FONT SOFTWARE OR FROM
 OTHER DEALINGS IN THE FONT SOFTWARE.
+```
+
+### L32
+
+Used by: Fossilize (fossilize-replay.exe, scskiller_warm.exe, VkLayer_scskiller.dll, patched)
+
+```text
+Copyright (c) 2018 Hans-Kristian Arntzen
+
+Permission is hereby granted, free of charge, to any person obtaining
+a copy of this software and associated documentation files (the
+"Software"), to deal in the Software without restriction, including
+without limitation the rights to use, copy, modify, merge, publish,
+distribute, sublicense, and/or sell copies of the Software, and to
+permit persons to whom the Software is furnished to do so, subject to
+the following conditions:
+
+The above copyright notice and this permission notice shall be included
+in all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY
+CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
+TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
+SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+```
+
+### L33
+
+Used by: miniz (in fossilize-replay.exe, scskiller_warm.exe, VkLayer_scskiller.dll)
+
+```text
+Copyright 2013-2014 RAD Game Tools and Valve Software
+Copyright 2010-2014 Rich Geldreich and Tenacious Software LLC
+
+All Rights Reserved.
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
+```
+
+### L34
+
+Used by: RapidJSON (in fossilize-replay.exe, scskiller_warm.exe, VkLayer_scskiller.dll)
+
+```text
+Copyright (C) 2015 THL A29 Limited, a Tencent company, and Milo Yip.  All rights reserved.
+
+Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+```
+
+### L35
+
+Used by: volk (in fossilize-replay.exe)
+
+```text
+Copyright (c) 2018-2026 Arseny Kapoulkine
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY
+CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
+TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
+SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+```
+
+### L36
+
+Used by: SPIRV-Headers (in fossilize-replay.exe)
+
+```text
+Files: All files except for those called out below.
+Copyright (c) 2015-2024 The Khronos Group Inc.
+
+Permission is hereby granted, free of charge, to any person obtaining a
+copy of this software and/or associated documentation files (the
+"Materials"), to deal in the Materials without restriction, including
+without limitation the rights to use, copy, modify, merge, publish,
+distribute, sublicense, and/or sell copies of the Materials, and to
+permit persons to whom the Materials are furnished to do so, subject to
+the following conditions:
+
+The above copyright notice and this permission notice shall be included
+in all copies or substantial portions of the Materials.
+
+MODIFICATIONS TO THIS FILE MAY MEAN IT NO LONGER ACCURATELY REFLECTS
+KHRONOS STANDARDS. THE UNMODIFIED, NORMATIVE VERSIONS OF KHRONOS
+SPECIFICATIONS AND HEADER INFORMATION ARE LOCATED AT
+   https://www.khronos.org/registry/
+
+THE MATERIALS ARE PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY
+CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
+TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
+MATERIALS OR THE USE OR OTHER DEALINGS IN THE MATERIALS.
+```
+
+### L37
+
+Used by: dirent (in fossilize-replay.exe, scskiller_warm.exe, VkLayer_scskiller.dll)
+
+```text
+The MIT License (MIT)
+
+Copyright (c) 1998-2019 Toni Ronkko
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO
+EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY
+CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
+TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
+SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 ```
 
 ## Trademarks

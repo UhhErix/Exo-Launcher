@@ -9,7 +9,7 @@ public static partial class GameFiles
 
     internal static partial string? SystemFolder(Game game) => Environment.SystemDirectory;
 
-    internal static partial string? PrefixOf(Game game) => null;
+    internal static partial string? PrefixOf(Game game, string? steamRoot) => null;
 
     internal static partial LauncherPrefix? AddedPrefix(Game game, out string? why)
     {
@@ -22,7 +22,7 @@ public static partial class GameFiles
     /// <summary>The path to open past MAX_PATH, as the proxy's long_path (recorder_key.h): this process isn't long-path aware
     /// unless Windows' LongPathsEnabled is on, so without the prefix a game past 260 characters gets the path form of its key
     /// where the proxy gets its file identity, and its stamp never matches.</summary>
-    static string LongPath(string p)
+    static string PastMaxPath(string p)
     {
         const string prefix = @"\\?\";
         if (p.Length < 260 || p.StartsWith(prefix, StringComparison.Ordinal) || p.Contains('/') || p.Contains(@"\.\") || p.Contains(@"\..\")) return p;
@@ -32,13 +32,13 @@ public static partial class GameFiles
 
     public static partial string? FinalPath(string dir)
     {
-        using var h = CreateFileW(LongPath(dir), 0, 7 /* FILE_SHARE_READ | WRITE | DELETE */, 0, 3 /* OPEN_EXISTING */, 0x02000000 /* FILE_FLAG_BACKUP_SEMANTICS */, 0);
+        using var h = CreateFileW(PastMaxPath(dir), 0, 7 /* FILE_SHARE_READ | WRITE | DELETE */, 0, 3 /* OPEN_EXISTING */, 0x02000000 /* FILE_FLAG_BACKUP_SEMANTICS */, 0);
         return h.IsInvalid ? null : FinalPath(h);
     }
 
     public static partial (byte[]? Id, string? Final)? Identity(string path)
     {
-        using var h = CreateFileW(LongPath(path), 0x80 /* FILE_READ_ATTRIBUTES */, 7, 0, 3, 0x02000000, 0);
+        using var h = CreateFileW(PastMaxPath(path), 0x80 /* FILE_READ_ATTRIBUTES */, 7, 0, 3, 0x02000000, 0);
         if (h.IsInvalid) return null;
         var id = new byte[24];
         if (!GetFileInformationByHandleEx(h, 0x12 /* FileIdInfo */, id, id.Length)) return (null, FinalPath(h));
@@ -66,7 +66,13 @@ public static partial class GameFiles
         return h;
     }
 
-    static string? FinalPath(Microsoft.Win32.SafeHandles.SafeFileHandle h)
+    internal static partial uint? Links(Microsoft.Win32.SafeHandles.SafeFileHandle h)
+    {
+        var standard = new byte[24];
+        return GetFileInformationByHandleEx(h, 1 /* FileStandardInfo */, standard, standard.Length) ? BitConverter.ToUInt32(standard, 16) : null;   // NumberOfLinks
+    }
+
+    internal static string? FinalPath(Microsoft.Win32.SafeHandles.SafeFileHandle h)
     {
         var name = new char[32768];
         var n = GetFinalPathNameByHandleW(h, name, name.Length, 0);
@@ -79,6 +85,16 @@ public static partial class GameFiles
     internal static partial bool TruckersMpHere() => TruckersMp(TruckersMpFolders(), InstalledPrograms());
 
     internal static partial FileStream? OpenRegular(string path) => new(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+
+    internal static partial string? LongPath(string path)
+    {
+        var b = new char[32768];
+        var n = GetLongPathNameW(path, b, b.Length);
+        return n is > 0 and < 32768 ? new string(b, 0, (int)n) : null;
+    }
+
+    [System.Runtime.InteropServices.DllImport("kernel32.dll", CharSet = System.Runtime.InteropServices.CharSet.Unicode, SetLastError = true)]
+    static extern uint GetLongPathNameW(string shortPath, char[] longPath, int size);
 
     // the launcher's mod files (Roaming\TruckersMP\installation; the older launcher's under ProgramData), its own data, and
     // the multiplayer profiles in Documents

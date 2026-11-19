@@ -315,10 +315,8 @@ public partial class AppTests
         was.RecorderFiles[ScsKiller.Dll12] = Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(dll)));
         (was.RecorderExe, was.RecorderInstallDir) = (_game.ExePath, _game.InstallDir);
         store.SaveGame(_game.Id, was);
-        var stamp = typeof(ScsKiller).GetMethod("Stamp", BindingFlags.NonPublic | BindingFlags.Static, [typeof(string), typeof(string[])])!;
-        var older = (string?)stamp.Invoke(null, [_game.Version, new[] { GameFiles.DirKey(_game.InstallDir), GameFiles.DirKey(_exeDir) }]);   // without the marker list
         var scan = store.LoadScan();
-        scan[_game.Id] = scan[_game.Id] with { Key = string.Join('|', scan[_game.Id].Key.Split('|').Select((f, i) => i == 5 ? "0.0.1-older" : f)), Clean = older };
+        scan[_game.Id] = scan[_game.Id] with { Key = string.Join('|', scan[_game.Id].Key.Split('|').Select((f, i) => i == 5 ? "0.0.1-older" : f)) };
         store.SaveScan(scan);
 
         var reader = new StampReader { Gate = new() };   // the background detection waits: the scan alone takes it out

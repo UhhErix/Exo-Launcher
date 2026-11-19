@@ -6,6 +6,23 @@ repository's root `CHANGELOG.md`.
 
 ## [Unreleased]
 
+**SCSKiller 1.4.8 (engine 1.4.8-exo.1)**
+
+- Merged SCSKiller v1.4.7 and v1.4.8 (`c5badf84`) into `apps/launcher/shaders`, updating all assemblies and the rebuilt
+  `proxy/` native binaries in `engine/prebuilt/` to `1.4.8-exo.1`. See the root `CHANGELOG.md` for upstream's full
+  1.4.7 and 1.4.8 changes (including Hunt: Showdown 1896 CryEngine shader compilation, Frostbite shader reading,
+  runtime archive key downloads from pinned public sources, DirectX 11/12 recording for keyless encrypted RE Engine and
+  FromSoftware games, Hookshot detection, memory/threading fixes, and `SCSKiller.CUE4Parse` key removal).
+- Adopted the upstream-first anti-cheat policy in `App/ExoBuild.cs`: `ExoBuild` continues to block requests to
+  SCSKiller's servers and Patreon, while `SCSKiller.Core`'s own anti-cheat classification and offline/risk session
+  machinery follow upstream unchanged (`PolicyOwned` in `Methods.cs` keeps `settings.set`, `recorder.offline`,
+  `recorder.startOffline`, `recorder.checkRisk`, and `recorder.startRisk` refused on the service protocol, and
+  `ScsKiller.HostSkips` keeps the recorder out of games Exo Launcher marks `noRecorder`).
+- `engine/build/publish-service.ps1` now bundles the app-local Visual C++ runtime (`vcruntime140.dll`,
+  `vcruntime140_1.dll`, `msvcp140.dll`, `VC-REDIST.txt`), copies `notices\dotnet-THIRD-PARTY-NOTICES.txt` and
+  `notices\CommunityToolkit-ThirdPartyNotices.txt`, stamps the actual `.NET` runtime and VC++ CRT versions into the
+  shipped `THIRD-PARTY-NOTICES.md`, and verifies imports with `build/check-vcruntime.ps1`.
+
 **In Exo Launcher's repository**
 
 - The source moved into Exo Launcher's repository as `apps/launcher/shaders` (UPSTREAM.md: SCSKiller v1.4.6, imported

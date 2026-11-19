@@ -214,8 +214,8 @@ public class WarmerTests : IDisposable
     {
         var install = @"C:\Games\" + new string('i', 60);
         var g = Game with { InstallDir = install, ExePath = Path.Combine(install, new string('d', 60), "Game.exe") };
-        var work = @"C:\" + new string('w', 86);
-        Assert.NotNull(Warmer.StagePath(g, work + "www", out _));   // 92 + @"\stage-4294967295-99\" + 60 + 1 + 60 + 1 + 24 = 259
+        var work = @"C:\" + new string('w', 84);
+        Assert.NotNull(Warmer.StagePath(g, work + "www", out _));   // 90 + @"\stage-4294967295-9999\" + 60 + 1 + 60 + 1 + 24 = 259
         Assert.Null(Warmer.StagePath(g, work + "wwww", out var why));
         Assert.Contains("longer than 259", why);
     }

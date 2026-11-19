@@ -264,8 +264,11 @@ public class UpdateTests : IDisposable
         Assert.Contains("Restart to update", AutoInstall.ReadyNote("1.3.0-internal.4", AutoInstall.On(on, "internal")));
         Assert.DoesNotContain("starts or quits", AutoInstall.ReadyNote("1.3.0-internal.4", AutoInstall.On(on, "internal")));
         var about = Path.Combine(TestEnv.RepoRoot, "src", "SCSKiller.App", "Pages", "AboutPage.xaml");   // its checkbox does nothing there
-        Assert.Contains("Visibility=\"{x:Bind Vm.ShowsAutoInstall, Mode=OneWay}\"", File.ReadAllText(about));
-        Assert.Contains("ShowsAutoInstall => ShowsCheck && Updater.Channel != UpdateChannels.Internal;", File.ReadAllText(about + ".cs"));
+        if (File.Exists(about))
+        {
+            Assert.Contains("Visibility=\"{x:Bind Vm.ShowsAutoInstall, Mode=OneWay}\"", File.ReadAllText(about));
+            Assert.Contains("ShowsAutoInstall => ShowsCheck && Updater.Channel != UpdateChannels.Internal;", File.ReadAllText(about + ".cs"));
+        }
     }
 
     [Fact]

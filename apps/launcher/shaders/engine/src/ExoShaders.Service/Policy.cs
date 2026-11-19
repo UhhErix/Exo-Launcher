@@ -70,7 +70,8 @@ internal sealed partial class Host
             UseCommunityDb = true,       // what a sign-in entitles comes down by itself: the sign-in is the consent
             ShareRecordings = Consent.ShareUpload,   // sharing.setUpload: off until asked; nothing else turns uploads on
             RecordAllGames = Consent.RecorderAuto,   // recorder.auto: Exo asks once; an earlier Exo Shaders wrote true without asking
-            RecordAntiCheatGames = false,
+            // RecordAntiCheatGames isn't the policy's: upstream's "Allow the recorder in games with anti-cheat (at your own risk)",
+            // off by default, settings.set recordAntiCheatGames turns it on, and each session is still confirmed (recorder.startRisk)
             RecordingLimitMB = defaults.RecordingLimitMB,
             // AMD: keeping a compiled cache aside needs the engine watching each game start to put it back, and the engine
             // runs only for Compile and Refresh. Off; what was kept goes back into the driver's cache first (ApplyPolicy).

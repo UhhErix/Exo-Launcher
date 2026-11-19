@@ -32,7 +32,7 @@ public sealed class EpicSource(string? manifestsDir = null, string? launcherDir 
             string key;
             try { key = GameFiles.DirKey(install); }
             catch (Exception e) when (e is ArgumentException or NotSupportedException or PathTooLongException) { return; }
-            if (folder && dirs.Contains(key) || ids.Contains($"epic:{app}")) return;
+            if (folder && dirs.Contains(key) || ids.Contains($"epic:{app}") || LeftOut(install)) return;
             if (GameFiles.FindExe(install, string.IsNullOrEmpty(launchExe) ? null : launchExe) is not { } exe) return;
             dirs.Add(key);
             ids.Add($"epic:{app}");
@@ -40,11 +40,9 @@ public sealed class EpicSource(string? manifestsDir = null, string? launcherDir 
         }
         var installs = Installs(launcherDir ?? (manifestsDir == null ? DefaultLauncherDir : null));
         foreach (var i in installs)
-            // Exo Shaders: complete=false is a first download still running (no version yet) or an update being applied (the game is
-            // on disk at its last version, so it stays listed)
-            try { if (i.Complete || i.Version != null) Add(i.App, i.Title, i.Dir, i.Exe, i.Version); }
+            try { if (i.Complete && !i.NotGame) Add(i.App, i.Title, i.Dir, i.Exe, i.Version); }
             catch (Exception e) when (e is not OperationCanceledException) { GameFiles.Skip("Epic", $"epic:{i.App}", e); }
-        var current = installs.Select(i => i.App).ToHashSet();   // the launcher leaves the classic one's manifests behind
+        var current = installs.Where(i => i.Complete).Select(i => i.App).ToHashSet();   // the launcher leaves the classic one's manifests behind
         var dir = manifestsDir ?? DefaultManifestsDir;
         if (Directory.Exists(dir))
             foreach (var item in Directory.EnumerateFiles(dir, "*.item"))
@@ -53,10 +51,13 @@ public sealed class EpicSource(string? manifestsDir = null, string? launcherDir 
                 {
                     using var doc = JsonDocument.Parse(File.ReadAllText(item));
                     var r = doc.RootElement;
+                    string? S(string k) => r.TryGetProperty(k, out var v) && v.ValueKind == JsonValueKind.String ? v.GetString() : null;
                     if (r.TryGetProperty("bIsIncompleteInstall", out var inc) && inc.ValueKind == JsonValueKind.True) continue;
-                    if (Str(r, "AppName") is not { } app || Str(r, "InstallLocation") is not { } install || current.Contains(app)) continue;
-                    if (Str(r, "MainGameAppName") is { Length: > 0 } main && main != app) continue;   // add-on sharing the main game's install (Legendary names a base game's own)
-                    Add(app, Str(r, "DisplayName"), install, Str(r, "LaunchExecutable"), Str(r, "AppVersionString"));
+                    if (S("AppName") is not { } app || S("InstallLocation") is not { } install || current.Contains(app) || LeftOut(install)) continue;
+                    if (S("MainGameAppName") is { Length: > 0 } main && main != app) continue;   // add-on sharing the main game's install (Legendary names a base game's own)
+                    if (NotGame(app, S("CatalogNamespace"), r.TryGetProperty("AppCategories", out var cats) && cats.ValueKind == JsonValueKind.Array
+                        ? [.. cats.EnumerateArray().Where(c => c.ValueKind == JsonValueKind.String).Select(c => c.GetString()!)] : null)) continue;
+                    Add(app, S("DisplayName"), install, S("LaunchExecutable"), S("AppVersionString"));
                 }
                 catch (JsonException) { }   // half-written manifest while the launcher installs
                 catch (Exception e) when (e is not OperationCanceledException) { GameFiles.Skip("Epic", item, e); }
@@ -66,15 +67,23 @@ public sealed class EpicSource(string? manifestsDir = null, string? launcherDir 
         return games;
     }
 
-    internal sealed record Install(string App, string Namespace, string ItemId, string Dir, string? Exe, string Title, string? Version, bool Complete);
+    internal sealed record Install(string App, string Namespace, string ItemId, string Dir, string? Exe, string Title, string? Version, bool Complete, bool NotGame = false);
+
+    /// <summary>An Unreal Engine install or one of its plugins (UE_5.5, the ue namespace: Quixel Bridge), or an item whose catalog categories
+    /// leave out "games" ("engines", "plugins", "software"). An item without categories (older manifests, an uncached catalog) counts as a game.</summary>
+    internal static bool NotGame(string app, string? ns, List<string>? categories) =>
+        app.StartsWith("UE_", StringComparison.OrdinalIgnoreCase) || string.Equals(ns, "ue", StringComparison.OrdinalIgnoreCase)
+        || categories is { Count: > 0 } && !categories.Contains("games", StringComparer.OrdinalIgnoreCase);
 
     /// <summary>The launcher's base-game installs, finished or not. installations.jsonl is a journal: a header line, then a full snapshot per
-    /// change, the last one per installationId current; one marked removed or deleted is dropped. Titles and add-ons come from its catalog cache.</summary>
+    /// change, the last one per installationId current; one marked removed or deleted is dropped. Titles and add-ons come from its catalog cache. Complete: installed once, so an
+    /// update in progress (complete false, the old version kept) still counts, a first install (no version yet) doesn't.</summary>
     internal static List<Install> Installs(string? launcherDir)
     {
         var journal = launcherDir == null ? null : Path.Combine(launcherDir, "installations.jsonl");
         if (journal == null || !File.Exists(journal)) return [];
         var last = new Dictionary<string, JsonElement>();
+        var finished = new HashSet<string>();
         try
         {
             using var reader = new StreamReader(new FileStream(journal, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete));
@@ -84,8 +93,9 @@ public sealed class EpicSource(string? manifestsDir = null, string? launcherDir 
                 {
                     using var doc = JsonDocument.Parse(line);
                     if (doc.RootElement is not { ValueKind: JsonValueKind.Object } e || Str(e, "installationId") is not { } id) continue;
-                    if (Flag(e, "removed") || Flag(e, "deleted") || Str(e, "op") is "remove" or "delete") last.Remove(id);
-                    else last[id] = e.Clone();
+                    if (Flag(e, "removed") || Flag(e, "deleted") || Str(e, "op") is "remove" or "delete") { last.Remove(id); finished.Remove(id); continue; }
+                    last[id] = e.Clone();
+                    if (e.TryGetProperty("complete", out var c) && c.ValueKind == JsonValueKind.True) finished.Add(id);
                 }
                 catch (JsonException) { }   // the line the launcher is appending
             }
@@ -93,7 +103,7 @@ public sealed class EpicSource(string? manifestsDir = null, string? launcherDir 
         catch (Exception e) when (e is IOException or UnauthorizedAccessException) { return []; }
         var catalog = Catalog(launcherDir!);
         var installs = new List<Install>();
-        foreach (var e in last.Values)
+        foreach (var (id, e) in last)
         {
             if (Str(e, "artifactId") is not { Length: > 0 } app || Str(e, "dir") is not { Length: > 0 } dir) continue;
             if (Str(e, "parentInstallationId") is { Length: > 0 }) continue;   // an add-on in its game's install
@@ -102,9 +112,12 @@ public sealed class EpicSource(string? manifestsDir = null, string? launcherDir 
             if (known && item.TryGetProperty("mainGameItem", out var main) && main.ValueKind != JsonValueKind.Null) continue;   // an add-on
             dir = Path.TrimEndingDirectorySeparator(dir);
             var title = known && Str(item, "title") is { Length: > 0 } t ? t : null;
+            List<string>? categories = known && item.TryGetProperty("categories", out var cats) && cats.ValueKind == JsonValueKind.Array
+                ? [.. cats.EnumerateArray().Select(c => c.ValueKind == JsonValueKind.Object ? Str(c, "path") : null).OfType<string>()] : null;
+            var version = Str(e, "version") is { Length: > 0 } v ? v : null;
             installs.Add(new Install(app, Str(e, "namespace") ?? "", itemId, dir, Str(e, "launchExecutable") is { Length: > 0 } exe ? exe : null,
-                title ?? (Path.GetFileName(dir) is { Length: > 0 } folder ? folder : app), Str(e, "version") is { Length: > 0 } v ? v : null,
-                e.TryGetProperty("complete", out var c) && c.ValueKind == JsonValueKind.True));
+                title ?? (Path.GetFileName(dir) is { Length: > 0 } folder ? folder : app), version,
+                finished.Contains(id) || version != null, NotGame(app, Str(e, "namespace"), categories)));
         }
         return installs;
     }
