@@ -98,9 +98,6 @@ kbd,
   --color-raised: #000000;
   --font-sans: "Goeist", "Exoline", "Segoe UI Variable", "Segoe UI", sans-serif;
   --font-mono: "Goeist Mono", "Cascadia Mono", Consolas, monospace;
-  /* The serif accent (fonts.css › Goeist Serif): display titles only, at its one weight, never UI text. Falls back to Goeist. */
-  --exo-font-display-serif: "Goeist Serif", "Goeist", "Exoline", "Segoe UI Variable", serif;
-  --exo-weight-display-serif: 400;
   /* Motion (DESIGN.md › Motion). Two curves: what appears, fades or changes state eases out (fast
      at once, then settling); what travels between two places or changes shape springs (from rest,
      critically damped at 0.9, so it never visibly overshoots: 0.15%, a twentieth of a pixel on a
