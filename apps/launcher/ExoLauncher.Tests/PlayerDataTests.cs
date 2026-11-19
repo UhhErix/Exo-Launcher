@@ -238,6 +238,8 @@ public sealed class PlayerDataTests : IDisposable
         ["frame-gen/games.json"] = Utf8("""{"steam:1":{"on":true,"wrote":["C:\\Users\\Player One\\Games\\x\\dlssg.dll"]}}"""),
         ["keep.json"] = Utf8("""{"version":1,"games":{"cs2":{"entries":{"fps_max":{"target":"fps_max","intended":"0"}}}}}"""),
         ["session-recorder.json"] = Utf8("""{"version":1,"sessions":[{"game":"steam:1","version":"none","seconds":600,"frames":60000,"histogram":[0]}]}"""),
+        ["autopilot-reports.json"] = Utf8("""{"version":1,"reports":[]}"""),
+        ["autopilot-journal.json"] = Utf8("""{"version":1,"entries":[]}"""),
         ["game-settings/kept.json"] = Utf8("""{"cs2":{"file":"C:/Users/Player One/Saved/cs2_video.txt"}}"""),
         ["game-settings/window-modes.json"] = Utf8("""{"steam:730":"borderless"}"""),
         ["game-settings/cs2.on.json"] = Utf8("""{"lines":[]}"""),
@@ -337,7 +339,7 @@ public sealed class PlayerDataTests : IDisposable
 
         Assert.True(restored.Ok, restored.Message);
         // That PC's Optimize originals and frame generation records would write its files into this PC's games: left out.
-        foreach (var undo in new[] { "game-settings/kept.json", "game-settings/cs2.on.json", "game-settings/cs2.nvidia.json", "game-settings/cs2.original.cfg", "frame-gen/games.json", "keep.json" })
+        foreach (var undo in new[] { "game-settings/kept.json", "game-settings/cs2.on.json", "game-settings/cs2.nvidia.json", "game-settings/cs2.original.cfg", "frame-gen/games.json", "keep.json", "autopilot-reports.json", "autopilot-journal.json" })
             Assert.False(File.Exists(At(undo)), undo + " came from another PC");
         // Choices still come: each game's window mode, the games added by hand, under this PC's profile and user.
         Assert.True(File.Exists(At("game-settings/window-modes.json")));

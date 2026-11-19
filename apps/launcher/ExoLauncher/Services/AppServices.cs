@@ -221,6 +221,8 @@ public sealed class AppServices
             try { if (!Setups.HoldsPlan() && PowerPlan.Shared.Auto(PcHealth.ThisPcProfile()) is { } why) AppLog.Info("Power plan: " + why); }
             catch (Exception ex) { AppLog.Warn("Power plan: " + ex.Message); }
             WindowsGameMode.KeepOn();
+            // Autopilot after the keeper: what a crash left goes back, and Game Mode follows Autopilot's switch.
+            Autopilot.Start();
             WindowsGameBar.KeepOff();
         });
         RadeonProfileService.Shared.Start(Launcher, () => GpuProfileService.MainScreen("amd"));

@@ -1,6 +1,6 @@
 /** Where a link opens the PC room (DESIGN.md › PC): one of its sections, scrolled into view (Shaders held there while
     what is above it loads). */
-export type PcLink = 'overview' | 'graphics' | 'shaders' | 'display' | 'board' | 'network' | 'control' | 'performance' | 'apps' | 'drives' | 'drivers' | 'compress'
+export type PcLink = 'overview' | 'graphics' | 'shaders' | 'display' | 'board' | 'network' | 'control' | 'performance' | 'apps' | 'drives' | 'drivers' | 'compress' | 'autopilot'
 
 /** Game runtimes, by what people call them (they live in PC › Updates). */
 const RUNTIMES = [
@@ -22,6 +22,7 @@ export const PC_SECTIONS: readonly { id: PcLink; label: string; keywords: readon
   { id: 'display', label: 'Display', keywords: ['screen', 'monitor', 'refresh rate', 'hz', 'hdr', 'color', 'scaling', 'rtx video', 'super resolution', 'adjust desktop color settings', 'change resolution', 'digital vibrance'] },
   { id: 'board', label: 'Motherboard', keywords: ['motherboard', 'bios', 'uefi', 'restart into bios', 'recovery', 'advanced startup', 'secure boot', 'tpm', 'memory integrity'] },
   { id: 'network', label: 'Network', keywords: ['network', 'internet', 'internet optimize', 'optimize network', 'ethernet', 'wi-fi', 'wifi', 'wireless', 'network adapter', 'link speed', 'connection', 'ping', 'latency', 'lag', 'packet loss', 'energy-efficient ethernet', 'eee', 'green ethernet', 'dma coalescing', 'network buffers', 'cable', 'background scan'] },
+  { id: 'autopilot', label: 'Autopilot', keywords: ['autopilot', 'game optimizer', 'optimize games', 'game booster', 'boost', 'stutter', 'stutters', 'frame times', '1% low', 'lows', 'session report', 'game mode', 'background apps', 'process priority', 'efficiency mode', 'core parking', 'park control', 'standby list', 'islc', 'memory cleaner', 'dpc latency', 'vram'] },
   { id: 'performance', label: 'Performance', keywords: ['performance', 'power plan', 'gpu scheduling', 'resizable bar', 'rebar', 'interrupts', 'msi mode'] },
   { id: 'drives', label: 'Drives', keywords: ['drives', 'storage', 'ssd', 'nvme', 'hard drive', 'hdd', 'disk', 'disk space', 'free space', 'drive health', 'smart', 'temperature', 'firmware', 'pcie', 'bypassio', 'trim', 'retrim', 'optimize drives', 'defrag', 'write cache', 'old shader caches', 'directstorage fast path', 'samsung magician'] },
   { id: 'compress', label: 'Compress games', keywords: ['compress', 'compress games', 'compression', 'compactgui', 'compact', 'compact os', 'wof', 'lzx', 'xpress', 'free up space', 'save space', 'shrink games', 'smaller games', 'uncompress'] },

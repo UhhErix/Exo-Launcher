@@ -26,11 +26,14 @@ internal sealed unsafe class GpuStats : IDisposable
     private uint _busiest;
     private int _reads;
 
-    private GpuStats(uint adapter, long luid, uint segments, uint nodes)
+    private GpuStats(uint adapter, long luid, uint segments, uint nodes, ulong dedicated)
     {
-        (_adapter, _luid, _segments, _nodes) = (adapter, luid, segments, nodes);
+        (_adapter, _luid, _segments, _nodes, DedicatedBytes) = (adapter, luid, segments, nodes, (long)dedicated);
         (_running, _at) = (new long[nodes], new long[nodes]);
     }
+
+    /// <summary>The size of the card's own memory (its dedicated segments), what <see cref="Read"/>'s memory is measured against.</summary>
+    internal long DedicatedBytes { get; }
 
     /// <summary>The card with the most memory of its own; null where Windows names none.</summary>
     internal static GpuStats? Open()
@@ -59,7 +62,7 @@ internal sealed unsafe class GpuStats : IDisposable
             }
             else Close(handle);
         }
-        return best is { Nodes: > 0 } card ? new GpuStats(card.Handle, card.Luid, card.Segments, card.Nodes) : null;
+        return best is { Nodes: > 0 } card ? new GpuStats(card.Handle, card.Luid, card.Segments, card.Nodes, card.Memory) : null;
     }
 
     /// <summary>A segment of the card's own memory: Aperture 0, the others being system memory it maps.</summary>

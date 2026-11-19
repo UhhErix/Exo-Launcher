@@ -9,6 +9,7 @@ import { SwitchRow } from '../settings/parts'
 import { ShadersBoard } from '../shaders/ShadersBoard'
 import { Popover } from '../ui/Dialog'
 import { UpscalersTab } from '../upscalers/UpscalersSheet'
+import { AutopilotChip, AutopilotControls, AutopilotReports, useAutopilot } from './Autopilot'
 import { AutoTuneChip, AutoTuneRows, useTuneReads } from './AutoTune'
 import { BestSetup, bestSteps } from './BestSetup'
 import { NetworkGroup } from './NetworkGroup'
@@ -101,7 +102,7 @@ function stillToSet(state: PcState, hdr: HdrState | null, settings: LauncherSett
   return steps + setup + screens + irq
 }
 
-type Menu = 'best' | 'tune' | 'compress' | PcPartMenu
+type Menu = 'best' | 'tune' | 'compress' | 'autopilot' | PcPartMenu
 
 /**
  * The PC room (DESIGN.md › PC): one page, no scrolling on a 1080p screen. This PC leads, its name with its chips at the
@@ -137,6 +138,7 @@ export function PcRoom({ active, jump, games, settings, onSave, onDevices }: {
   const setDisplay = useCallback((next: DisplayState) => put('display', next), [put])
   const setTune = useCallback((next: AutoTune) => put('tune', next), [put])
   useTuneReads(active, state.tune, menu === 'tune', setTune)
+  const autopilot = useAutopilot(active, menu === 'autopilot')
   const openApps = () => setAppsOpen(true)
   const readApps = () => setAppsRead(n => n + 1)
   const closeMenu = useCallback(() => setMenu(null), [])
@@ -151,7 +153,7 @@ export function PcRoom({ active, jump, games, settings, onSave, onDevices }: {
     if (jump.tab === 'control' && !vendor) return
     handled.current = jump
     // On a GeForce the control panel is Exo's own: the card's menu and the screen's.
-    const opens: Partial<Record<PcLink, Menu>> = { graphics: 'graphics', display: 'display', board: 'board', control: 'graphics', performance: 'best', compress: 'compress' }
+    const opens: Partial<Record<PcLink, Menu>> = { graphics: 'graphics', display: 'display', board: 'board', control: 'graphics', performance: 'best', compress: 'compress', autopilot: 'autopilot' }
     // AMD's and Intel's control panels are their own apps (the chip opens them): the link opens that app, not NVIDIA's menu.
     if (jump.tab === 'control' && vendor && vendor !== 'nvidia') {
       host.gpuControlPanel().catch((e: unknown) => report(e, 'PcRoom.controlPanelLink'))
@@ -172,6 +174,7 @@ export function PcRoom({ active, jump, games, settings, onSave, onDevices }: {
   const chips = (
     <>
       <BestChip left={stillToSet(state, hdr, settings, onSave)} onOpen={() => setMenu('best')} />
+      <AutopilotChip state={autopilot.state} onOpen={() => setMenu('autopilot')} />
       <button type="button" className={cn('exo-pc-chip', upscalers === 0 ? 'is-good' : upscalers ? 'is-bad' : null)} onClick={() => setUpscalersOpen(true)}>
         {upscalers === 0 ? <Check size={14} /> : null}Upscalers{upscalers ? ` · ${upscalers}` : null}
       </button>
@@ -182,6 +185,15 @@ export function PcRoom({ active, jump, games, settings, onSave, onDevices }: {
       {vendor && vendor !== 'nvidia' ? <MakerPanel name={PANEL[vendor]} /> : null}
     </>
   )
+
+  // The menus that are one part each, by name: the room places whichever is open.
+  const plainMenus: Partial<Record<Menu, { title: string; body: () => ReactNode }>> = {
+    autopilot: { title: 'Autopilot', body: () => <><AutopilotControls state={autopilot.state} onState={autopilot.setState} /><AutopilotReports state={autopilot.state} /></> },
+    tune: { title: 'Auto tune', body: () => <AutoTuneRows tune={state.tune} profile={state.profile} about={state.about} onTune={setTune} /> },
+    compress: { title: 'Compress games', body: () => <CompressGames list={compress.list} onList={compress.setList} onRead={compress.read} /> },
+    board: { title: 'Motherboard', body: () => <div className="exo-pc-menu-rows"><BoardRows about={state.about} /></div> },
+  }
+  const plain = menu ? plainMenus[menu] : undefined
 
   return (
     <main ref={room} className="exo-pc" aria-label="PC">
@@ -211,11 +223,7 @@ export function PcRoom({ active, jump, games, settings, onSave, onDevices }: {
           <NetworkGroup health={state.health} onHealth={setHealth} />
         </PcMenu>
       ) : null}
-      {menu === 'tune' ? (
-        <PcMenu title="Auto tune" onClose={closeMenu}>
-          <AutoTuneRows tune={state.tune} profile={state.profile} about={state.about} onTune={setTune} />
-        </PcMenu>
-      ) : null}
+      {plain ? <PcMenu title={plain.title} onClose={closeMenu}>{plain.body()}</PcMenu> : null}
       {menu === 'graphics' ? (
         <PcMenu title="Graphics" onClose={closeMenu}>
           <div className="exo-pc-menu-rows">
@@ -241,16 +249,6 @@ export function PcRoom({ active, jump, games, settings, onSave, onDevices }: {
             <DisplayRows display={state.display} onDisplay={setDisplay} />
             <HdrRows screen={hdr} settings={settings} onSave={onSave} />
           </div>
-        </PcMenu>
-      ) : null}
-      {menu === 'compress' ? (
-        <PcMenu title="Compress games" onClose={closeMenu}>
-          <CompressGames list={compress.list} onList={compress.setList} onRead={compress.read} />
-        </PcMenu>
-      ) : null}
-      {menu === 'board' ? (
-        <PcMenu title="Motherboard" onClose={closeMenu}>
-          <div className="exo-pc-menu-rows"><BoardRows about={state.about} /></div>
         </PcMenu>
       ) : null}
 

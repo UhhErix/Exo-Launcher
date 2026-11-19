@@ -37,7 +37,8 @@ internal sealed class SessionRecorderHost
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { return SettingsVersion.None; }
         },
         () => DateTime.UtcNow,
-        look => new Timer(_ => look(), null, LookEveryMs, LookEveryMs));
+        look => new Timer(_ => look(), null, LookEveryMs, LookEveryMs),
+        AutopilotWatch.Shared.Second);
 
     private readonly Lock _gate = new();
     private readonly SessionRecorder _recorder;
@@ -48,14 +49,17 @@ internal sealed class SessionRecorderHost
     private readonly List<double> _gaps = [];
     private IDisposable? _timer;
     private IFrameTrace? _trace;
-    private string? _game, _currentVersion;
+    private readonly Action<string?, string?, bool, IReadOnlyList<double>, IReadOnlyCollection<int>>? _watch;
+    private string? _game, _title, _currentVersion;
     private long _versionAt;
     private HashSet<int> _tree = [];
 
-    internal SessionRecorderHost(Func<SessionRecord, bool> save, Func<int> front, Func<GameEntry, string> version, Func<DateTime> now, Func<Action, IDisposable> startTimer)
+    /// <param name="watch">Each look's game, title, whether it is in front, its frames and its processes, for Autopilot's telemetry (<see cref="AutopilotWatch.Second"/>); a game of null ends its session.</param>
+    internal SessionRecorderHost(Func<SessionRecord, bool> save, Func<int> front, Func<GameEntry, string> version, Func<DateTime> now, Func<Action, IDisposable> startTimer,
+        Action<string?, string?, bool, IReadOnlyList<double>, IReadOnlyCollection<int>>? watch = null)
     {
         _recorder = new SessionRecorder(save);
-        (_front, _version, _now, _startTimer) = (front, version, now, startTimer);
+        (_front, _version, _now, _startTimer, _watch) = (front, version, now, startTimer, watch);
     }
 
     internal RecorderState State => _recorder.State;
@@ -126,6 +130,7 @@ internal sealed class SessionRecorderHost
     private void Note(GameEntry game, IReadOnlyCollection<int> tree)
     {
         _tree = [.. tree];
+        _title = game.Title;
         if (_game == game.Id && Environment.TickCount64 - _versionAt < VersionEveryMs) return;
         _game = game.Id;
         _versionAt = Environment.TickCount64;
@@ -147,6 +152,7 @@ internal sealed class SessionRecorderHost
                 if (!inFront) _gaps.Clear();
             }
             _recorder.Tick(new Observation(_game, _currentVersion ?? SettingsVersion.None, inFront, _trace is not null, _gaps, _now()));
+            _watch?.Invoke(_game, _title, inFront, _gaps, _tree);
         }
         catch (Exception ex)
         {

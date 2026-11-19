@@ -388,6 +388,8 @@ public sealed class AppSettings
     public string FpsCounterPosition { get; set; } = "right";
     /// <summary>What it shows after the FPS (<see cref="ExoLauncher.Services.FpsItems"/>); nothing until switched on.</summary>
     public List<string> FpsCounterItems { get; set; } = [];
+    /// <summary>Autopilot (<see cref="ExoLauncher.Services.Autopilot"/>): one switch, off until the player turns it on, and its tucked-away choices.</summary>
+    public AutopilotSettings Autopilot { get; set; } = new();
     /// <summary>HDR on for the screen an HDR game is on while it runs, back off after (System > Graphics > HDR). On by default:
     /// it only acts on games whose verdict says they output HDR (<see cref="ExoLauncher.Services.GameHdr"/>). A settings file
     /// that never recorded it gets the default; one that did keeps its choice.</summary>
@@ -601,4 +603,28 @@ public sealed class DiscordKeybind
 {
     public string Action { get; set; } = "";
     public List<int> Keys { get; set; } = [];
+}
+
+/// <summary>Autopilot's switch and choices (PC › Autopilot). The defaults are what Autopilot does when it is simply turned on.</summary>
+public sealed class AutopilotSettings
+{
+    /// <summary>The one switch. Off until the player turns it on.</summary>
+    public bool On { get; set; }
+    /// <summary>The game's processes: above (the default), high, or normal (left alone). Never realtime.</summary>
+    public string GamePriority { get; set; } = "above";
+    /// <summary>Keep Windows Game Mode on although Autopilot covers it (the player's override).</summary>
+    public bool KeepGameMode { get; set; }
+    /// <summary>Keep every core awake while a game runs, where the active plan would park them.</summary>
+    public bool CoreParking { get; set; } = true;
+    /// <summary>Apps (executable names) always held back while a game runs, from PC › Task Manager.</summary>
+    public List<string> AlwaysDemote { get; set; } = [];
+    /// <summary>Apps (executable names) paused while a game runs and started again after, from PC › Task Manager.</summary>
+    public List<string> Suspend { get; set; } = [];
+
+    internal AutopilotSettings Copy() => new()
+    {
+        On = On, GamePriority = GamePriority is "high" or "normal" ? GamePriority : "above", KeepGameMode = KeepGameMode, CoreParking = CoreParking,
+        AlwaysDemote = [.. (AlwaysDemote ?? []).Where(name => !string.IsNullOrWhiteSpace(name)).Distinct(StringComparer.OrdinalIgnoreCase).Take(200)],
+        Suspend = [.. (Suspend ?? []).Where(name => !string.IsNullOrWhiteSpace(name)).Distinct(StringComparer.OrdinalIgnoreCase).Take(50)],
+    };
 }
