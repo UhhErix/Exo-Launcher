@@ -542,8 +542,9 @@ export async function run(t) {
   })
 
   await run.check('library', 'continue', 'Continue shows its games with their titles on a dark plate, and a right-click opens the menu', async (c) => {
-    // A label over art sits on a dark plate (--exo-plate, DESIGN.md): what the page computes, not the class it carries.
-    const cards = await t.shell.eval(`[...document.querySelectorAll('.exo-continue-card')].map(card => { const text = card.querySelector('.exo-continue-text'); const m = text && /rgba?\\(([\\d.]+),\\s*([\\d.]+),\\s*([\\d.]+)(?:,\\s*([\\d.]+))?/.exec(getComputedStyle(text).backgroundColor); return { title: text?.querySelector('strong')?.textContent.trim(), plate: !!m && +m[1] < 40 && +m[2] < 40 && +m[3] < 40 && +(m[4] ?? 1) >= 0.6, play: !!card.querySelector('.exo-continue-play') } })`)
+    // A label over art sits on a dark plate: --exo-plate, or the plates' deeper glass (glass.css: a backdrop dimmed to 0.34),
+    // read from what the page computes, not the class it carries.
+    const cards = await t.shell.eval(`[...document.querySelectorAll('.exo-continue-card')].map(card => { const text = card.querySelector('.exo-continue-text'); const m = text && /rgba?\\(([\\d.]+),\\s*([\\d.]+),\\s*([\\d.]+)(?:,\\s*([\\d.]+))?/.exec(getComputedStyle(text).backgroundColor); const dim = text && /brightness\\(([\\d.]+)\\)/.exec(getComputedStyle(text).backdropFilter); return { title: text?.querySelector('strong')?.textContent.trim(), plate: (!!m && +m[1] < 40 && +m[2] < 40 && +m[3] < 40 && +(m[4] ?? 1) >= 0.6) || (!!dim && +dim[1] <= 0.4), play: !!card.querySelector('.exo-continue-play') } })`)
     c.evidence.cards = cards
     if (!cards.length) c.skip('nothing to continue')
     const failures = cards.filter(x => !x.title || !x.plate).map(x => `${x.title ?? '?'}: title not on a dark plate`)
