@@ -1,0 +1,21 @@
+/*
+ * Exo's type (DESIGN.md › Type): Exoline, Exo's own cut (SIL OFL 1.1): Geist's outlines with the tail-less a, the tailed l
+ * and round dots as its letters and a short middle bar on E and F, as Exo's mark has. Built by
+ * ..\exo-design-system\fonts\build_exoline.py; the variable fonts are in public/fonts, upright and italic. Local and preloaded (index.html), and font-display: block, so the UI never flashes a fallback.
+ * It draws Latin, Cyrillic, Greek and Vietnamese; other scripts fall back to Windows' own fonts.
+ */
+@font-face {
+  font-family: "Exoline";
+  font-style: normal;
+  font-display: block;
+  font-weight: 100 900;
+  src: url("/fonts/Exoline-Variable.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "Exoline";
+  font-style: italic;
+  font-display: block;
+  font-weight: 100 900;
+  src: url("/fonts/Exoline-Italic-Variable.woff2") format("woff2");
+}

@@ -1,0 +1,57 @@
+/* Contextual icon motion — hover, press, and state. Never decorative loops. */
+
+.exo-glyph {
+  transform-origin: center;
+}
+
+/* Exo draws its own icons (brand/icons.tsx): the line at every size, the solid glyph for a toggle that is on
+   and for the current room. A filled or current glyph comes up from 0.86 on the base time, as SF Symbols' fill does. */
+
+.exo-glyph:is(.is-filled, .is-current) {
+  animation: exo-glyph-fill var(--dur-base) var(--ease-out);
+}
+
+@keyframes exo-glyph-fill {
+  from { scale: 0.86; opacity: 0.6; }
+}
+
+:root[data-exo-motion="reduce"] .exo-glyph:is(.is-filled, .is-current) {
+  animation: none;
+}
+
+@keyframes exo-glyph-slash {
+  from { stroke-dashoffset: 1; }
+}
+
+/* Room tab icons: quiet at rest, full on the current room (tabs live in shelf.css). */
+.exo-nav-btn .exo-glyph {
+  opacity: 0.85;
+}
+
+.exo-nav-btn.is-on .exo-glyph {
+  opacity: 1;
+}
+
+/* A room being built for its first showing (TitleBar.tsx › NavTab): its ring takes the glyph's place only once the
+   wait is real, fading in over it as the glyph fades out, both after the ring's own 300ms (waits.css). */
+.exo-nav-glyph {
+  display: grid;
+  flex: none;
+}
+
+.exo-nav-glyph > * {
+  grid-area: 1 / 1;
+}
+
+.exo-nav-btn[aria-busy="true"] .exo-nav-glyph > .exo-glyph {
+  animation: exo-nav-glyph-out var(--dur-base) var(--ease-out) 300ms forwards;
+}
+
+@keyframes exo-nav-glyph-out {
+  to { opacity: 0; }
+}
+
+.exo-game-title {
+  text-wrap: pretty;
+}
+

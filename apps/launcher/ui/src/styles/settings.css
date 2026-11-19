@@ -1,0 +1,649 @@
+/* Settings, as Discord's settings in Exo's look: one column of sections in a floating sheet, each section a title
+   over rows split by hairlines. Shared status, segmented and busy-button rules used elsewhere also live here. */
+
+.exo-set-error {
+  margin: 8px 0 0;
+  color: var(--color-bad);
+  font-size: calc(13px * var(--exo-scale, 1));
+  line-height: 1.4;
+}
+
+/* An error with Copy logs beside it (ui/ErrorNote.tsx): the words, then the button, on one line while they fit. */
+.exo-error-note {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+}
+
+span.exo-error-note {
+  display: inline-flex;
+}
+
+.exo-error-note .exo-copy-logs {
+  flex: none;
+}
+
+/* Beside an error drawn its own way (an italic line, a note with Try again): upright, on the line's middle. */
+.exo-copy-logs {
+  font-style: normal;
+  vertical-align: middle;
+}
+
+.exo-set-state {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--color-muted);
+  font-size: calc(13px * var(--exo-scale, 1));
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.exo-set-state.is-on {
+  color: var(--color-good);
+}
+
+/* A status leading a row's line (System › Exo's profile: Applied) takes the line's own size. */
+.exo-set-item-detail .exo-set-state {
+  font-size: inherit;
+}
+
+/* ── Room layout ── */
+
+/* Every settings sheet (Settings, Properties, Discord's user, server and channel settings) is one column of
+   sections, no section list: one width for all, scaling with
+   the text so a row's label and control keep their room (at 900px a row's note wrapped beside its control). */
+:root {
+  --exo-settings-w: calc(1160px * var(--exo-scale, 1));
+}
+
+/* The sidebar (its title and pages), then the page scrolling beside it with the close at its
+   top right. */
+.exo-settings {
+  display: flex;
+  flex-direction: row;
+  flex: 1;
+  min-height: 0;
+  background: var(--color-bg);
+}
+
+.exo-settings-main {
+  position: relative;
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
+/* The page's title, level with the sheet's in the sidebar, clear of the close. */
+.exo-settings-page-title {
+  margin: 0;
+  padding: 20px 64px 0 32px;
+  color: var(--color-fg);
+  font-size: calc(20px * var(--exo-scale, 1));
+  font-weight: 650;
+}
+
+.exo-settings-main .exo-settings-layout,
+.exo-settings-main .exo-dc-settings-page {
+  padding-top: 18px;
+}
+
+/* A 28px press (the glyph is 16px and sits where it did: 6px less in from the corner). */
+.exo-settings-close {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+}
+
+.exo-settings-scroll {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+  scroll-padding-top: 26px;
+  /* A short fade where the sheet scrolls on: the last row stops above it, with the layout's 32px bottom padding. */
+  mask-image: linear-gradient(to bottom, #000 calc(100% - 28px), transparent);
+}
+
+/* The one column: its sections 28px apart. */
+.exo-settings-layout {
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+  min-width: 0;
+  padding: 26px 32px 32px;
+}
+
+/* ── Sections and rows ── */
+
+.exo-set-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  min-height: 32px;
+  margin: 0 0 8px;
+}
+
+.exo-set-section-head h2 {
+  margin: 0;
+  color: var(--color-fg);
+  font-size: calc(13px * var(--exo-scale, 1));
+  font-weight: var(--exo-weight-title);
+}
+
+/* A search or deep link moves focus here so Tab continues inside the section; a heading is not a control. */
+.exo-set-section-head h2:focus {
+  outline: none;
+}
+
+/* A named group of rows inside a section (Accounts and keys › Game stores, Captures' settings): its name over a
+   hairline, a gap before the next. */
+.exo-set-group + .exo-set-group {
+  margin-top: 28px;
+}
+
+.exo-set-group-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  min-height: 32px;
+  margin: 0 0 4px;
+}
+
+.exo-set-group-head h3 {
+  margin: 0;
+  color: var(--color-fg);
+  font-size: calc(13px * var(--exo-scale, 1));
+  font-weight: var(--exo-weight-title);
+}
+
+.exo-set-item {
+  padding: 12px 0;
+}
+
+.exo-set-item + .exo-set-item,
+.exo-set-list > .exo-set-item:first-child {
+  border-top: 1px solid var(--exo-float-line);
+}
+
+.exo-set-item-main {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  /* One row height whatever the control (switch, button, dropdown) or one or two lines of copy. */
+  min-height: 38px;
+}
+
+.exo-set-item-icon {
+  display: inline-flex;
+  flex: none;
+}
+
+/* A row's error lines up with its label, past the 22px icon and the row's 16px gap. */
+.exo-set-item:has(> .exo-set-item-main > .exo-set-item-icon) > .exo-set-error {
+  padding-left: 38px;
+}
+
+.exo-set-item-copy {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.exo-set-item-label {
+  color: var(--color-fg);
+  font-size: calc(13px * var(--exo-scale, 1));
+  font-weight: 500;
+}
+
+.exo-set-item-detail {
+  color: var(--color-muted);
+  font-size: calc(13px * var(--exo-scale, 1));
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.exo-set-item-control {
+  display: flex;
+  flex: none;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  max-width: 60%;
+}
+
+/* A wide control (a field, a meter, a row of chips) under its label, across the row. */
+.exo-set-item.is-stacked > .exo-set-item-main {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+}
+
+.exo-set-item.is-stacked .exo-set-item-control {
+  display: block;
+  max-width: none;
+}
+
+/* Key fields */
+
+/* At the narrowest window with Large text the buttons wrap under the field instead of pushing the row wide. */
+.exo-set-key-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  min-width: 0;
+}
+
+/* The field is 220px and gives way to 120px before a button wraps (a width in % of the form left it guessing, and
+   Get one and Remove wrapped under the field at every size). */
+.exo-set-key-form .exo-field {
+  flex: 0 1 220px;
+  width: 220px;
+  min-width: 120px;
+  margin: 0;
+}
+
+/* Progress buttons (update) */
+
+/* A row's control shows the Exo bar at a fixed width while it works. */
+.exo-set-item-control > .exo-progress {
+  width: 96px;
+}
+
+/* Store chips and links */
+
+.exo-set-chips,
+.exo-set-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.exo-set-link {
+  height: 32px;
+  padding: 0 4px;
+  border: 0;
+  /* A text link still gets a rounded focus ring. */
+  border-radius: 6px;
+  background: transparent;
+  color: var(--color-muted);
+  font-size: calc(13px * var(--exo-scale, 1));
+  text-decoration: underline;
+  text-decoration-color: rgb(var(--exo-ink-rgb) / 0.25);
+  text-underline-offset: 3px;
+  transition: color var(--dur-quick) var(--ease-out);
+}
+
+/* The links' 4px of padding (room for the focus ring) hangs outside the column, so their words start on its edge. */
+.exo-set-links {
+  gap: 4px 20px;
+  margin-inline-start: -4px;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .exo-set-link:hover {
+    color: var(--color-fg);
+  }
+
+}
+
+/* ── Lucid ── */
+
+/* The headphone list opens under its row: search, then each kind as Lucid groups them. */
+/* The picker opens under its row as its own framed panel: the search, then the list with room to read. */
+.exo-lucid-picker {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 16px;
+  padding: 12px;
+  border-radius: var(--exo-panel-radius);
+  background: var(--exo-float);
+  box-shadow: inset 0 0 0 var(--exo-hair) var(--exo-float-line);
+}
+
+.exo-lucid-picker .exo-field {
+  width: 100%;
+}
+
+.exo-lucid-list {
+  max-height: 440px;
+  overflow-y: auto;
+}
+
+.exo-lucid-kind {
+  margin: 16px 0 6px;
+  padding: 0 12px;
+  color: var(--color-muted);
+  font-size: calc(12px * var(--exo-scale, 1));
+  font-weight: 400;
+}
+
+.exo-lucid-headphone {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border-radius: var(--exo-small-radius);
+  transition: background-color var(--dur-quick) var(--ease-out);
+  /* Rows out of view aren't laid out or painted: the headphone list is long and not windowed. */
+  content-visibility: auto;
+  contain-intrinsic-size: auto 44px;
+}
+
+.exo-lucid-headphone.is-current {
+  background: var(--exo-selected);
+}
+
+.exo-lucid-pick {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 2px;
+  min-width: 0;
+  min-height: 44px;
+  padding: 4px 12px;
+  border: 0;
+  border-radius: var(--exo-small-radius);
+  background: transparent;
+  color: var(--color-fg);
+  font-size: calc(13px * var(--exo-scale, 1));
+  text-align: left;
+}
+
+.exo-lucid-pick small {
+  overflow: hidden;
+  color: var(--color-muted);
+  font-size: calc(12px * var(--exo-scale, 1));
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.exo-lucid-star {
+  display: inline-grid;
+  flex: none;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--color-muted);
+  transition: color var(--dur-quick) var(--ease-out), background-color var(--dur-quick) var(--ease-out);
+}
+
+.exo-lucid-star.is-on {
+  color: var(--color-fg);
+}
+
+.exo-lucid-empty {
+  margin: 8px 0;
+  color: var(--color-muted);
+  font-size: calc(13px * var(--exo-scale, 1));
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .exo-lucid-headphone:not(.is-current):hover,
+  .exo-lucid-star:hover {
+    background: var(--hover-fill);
+  }
+
+  .exo-lucid-star:hover {
+    color: var(--color-fg);
+  }
+}
+
+html[data-exo-motion="reduce"] :is(.exo-lucid-headphone, .exo-lucid-star) {
+  transition: none;
+}
+
+/* An amount (settings/parts.tsx › SliderRow): the slider, then its value on the row's right edge. */
+.exo-set-volume {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--color-muted);
+  font-size: calc(13px * var(--exo-scale, 1));
+  font-variant-numeric: tabular-nums;
+}
+
+.exo-set-volume input[type='range'] {
+  flex: 0 1 200px;
+  width: 200px;
+  min-width: 80px;
+}
+
+.exo-set-volume span {
+  min-width: 44px;
+  text-align: right;
+}
+
+/* ── Sidebar (SettingsPanel; lib/settingsSections.ts) ── */
+
+/* Each name a page; Discord's own under Discord while it's open. */
+.exo-settings-nav {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  gap: 12px;
+  width: calc(232px * var(--exo-scale, 1));
+  padding: 20px 12px;
+  overflow-y: auto;
+  border-right: 1px solid var(--exo-float-line);
+}
+
+.exo-settings-nav-title {
+  margin: 0;
+  padding: 0 12px;
+  color: var(--color-fg);
+  font-size: calc(20px * var(--exo-scale, 1));
+  font-weight: 650;
+}
+
+.exo-settings-nav ul {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.exo-settings-nav button {
+  width: 100%;
+  min-height: 34px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 10px;
+  position: relative;
+  background: transparent;
+  color: var(--color-muted);
+  font-size: calc(13px * var(--exo-scale, 1));
+  font-weight: 500;
+  text-align: left;
+  transition: background-color var(--dur-quick) var(--ease-out), color var(--dur-quick) var(--ease-out);
+}
+
+/* The open page: full ink and a white marker at the row's edge. No fill and no outline. */
+.exo-settings-nav button[aria-current="page"] {
+  color: var(--color-fg);
+  font-weight: var(--exo-weight-title);
+}
+
+.exo-settings-nav button[aria-current="page"]::before {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 0;
+  width: 3px;
+  height: 16px;
+  border-radius: 999px;
+  background: var(--color-fg);
+  translate: 0 -50%;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .exo-settings-nav button:hover:not([aria-current]) {
+    background: var(--exo-set-hover);
+    color: var(--color-fg);
+  }
+}
+
+.exo-settings-nav button:focus-visible {
+  outline: 2px solid var(--color-fg);
+  outline-offset: -2px;
+}
+
+/* Discord's pages in Settings: the Discord room's colors (discord.css › .exo-dc). */
+.exo-dc-vars {
+  --dc-raised: transparent;
+  --dc-hover: var(--hover-fill);
+  --dc-line: var(--exo-float-line);
+  --dc-control: var(--exo-control-line);
+  --dc-selected: var(--exo-selected);
+  --dc-text: var(--color-fg);
+  --dc-muted: var(--color-muted);
+  --dc-blurple: var(--color-fg);
+  --dc-on-accent: var(--color-bg);
+  --dc-link: var(--color-fg);
+  --dc-good: var(--color-good);
+  --dc-bad: var(--color-bad);
+  --exo-dc-line: calc(21px * var(--exo-scale, 1));
+  color: var(--dc-text);
+  font-size: calc(13px * var(--exo-scale, 1));
+}
+
+/* Settings is the same large Liquid Glass as every sheet (glass.css › Sheets): its sidebar and page are clear on that
+   glass, the current page a lift of it, one hairline between them. */
+.exo-settings {
+  --exo-set-card: var(--exo-selected);
+  --exo-set-hover: var(--hover-fill);
+}
+
+/* Settings > Library > Steam's in-row sign-in panel: the QR on the left, the steps beside it; the password form in its place. */
+.exo-steam-panel {
+  display: flex;
+  align-items: flex-start;
+  gap: calc(24px * var(--exo-scale, 1));
+  width: 100%;
+  padding: 12px 0 4px;
+  border-top: 1px solid var(--exo-float-line);
+}
+
+.exo-steam-qr,
+.exo-steam-qr-wait {
+  flex: 0 0 auto;
+  width: calc(160px * var(--exo-scale, 1));
+  height: calc(160px * var(--exo-scale, 1));
+}
+
+.exo-steam-qr-wait {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.exo-steam-qr-new {
+  align-self: center;
+}
+
+.exo-steam-panel-body {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: calc(12px * var(--exo-scale, 1));
+  min-width: 0;
+}
+
+.exo-steam-panel-title {
+  margin: 0;
+  color: var(--color-fg);
+  font-size: calc(13px * var(--exo-scale, 1));
+  font-weight: 500;
+}
+
+.exo-steam-steps {
+  display: grid;
+  gap: calc(4px * var(--exo-scale, 1));
+  margin: 0;
+  padding-left: calc(18px * var(--exo-scale, 1));
+  color: var(--color-muted);
+  font-size: calc(13px * var(--exo-scale, 1));
+  line-height: 1.4;
+}
+
+.exo-steam-panel-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.exo-steam-panel-form {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: calc(12px * var(--exo-scale, 1));
+  width: 100%;
+}
+
+.exo-steam-fields {
+  display: flex;
+  gap: calc(12px * var(--exo-scale, 1));
+}
+
+.exo-steam-field {
+  display: flex;
+  flex: 1 1 0;
+  flex-direction: column;
+  gap: calc(4px * var(--exo-scale, 1));
+  min-width: 0;
+}
+
+/* A window under 1100 px wide stacks the fields; wider, they sit side by side. */
+@media (max-width: 1100px) {
+  .exo-steam-fields {
+    flex-direction: column;
+  }
+}
+
+/* A form opened by a settings row (Settings › Account, as Exo Browser's): a field stack under its row. */
+.exo-account-sub {
+  display: grid;
+  gap: 8px;
+  padding: 4px 0 16px;
+}
+
+.exo-account-sub .exo-field {
+  max-width: calc(560px * var(--exo-scale, 1));
+}
+
+.exo-account-link {
+  justify-self: start;
+  padding: 0;
+  color: var(--color-muted);
+  font-size: calc(13px * var(--exo-scale, 1));
+}
+
+.exo-account-link:hover {
+  color: var(--color-fg);
+}

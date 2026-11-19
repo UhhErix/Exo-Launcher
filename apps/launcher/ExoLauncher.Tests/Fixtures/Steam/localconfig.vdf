@@ -1,0 +1,51 @@
+"UserLocalConfigStore"
+{
+	"Broadcast"
+	{
+		"Permissions"		"1"
+	}
+	"system"
+	{
+		"OverlayLogCleanupDone"		"1"
+	}
+	"apps"
+	{
+		"1790600"
+		{
+			"OverlayAppEnable"		"0"
+		}
+	}
+	"CloudManager"
+	{
+		"HintAppsToPreload"		""
+	}
+	"WebStorage"
+	{
+		"apps"
+		{
+			"4126040"
+			{
+				"DefaultLaunchOption"
+				{
+					"bde72369"		"1"
+				}
+			}
+		}
+		"deck_compatibility_feedback_ask"		"[]"
+		"deck_compatibility_feedback_eligible_apps"		"{}"
+		"Deck_ConfiguratorInterstitialsVersionSeen_GamepadRecommended"		"1"
+		"Deck_ConfiguratorInterstitialsCheckbox_GamepadRecommended"		"0"
+		"Deck_ConfiguratorInterstitialApps_GamepadRecommended"		"[1790600,620]"
+		"keyboard_initial_location_desktop"		"\"center-bottom\""
+		"LaunchOptionTipsShown"		"2"
+		"user-collections"		"{}"
+		"TimesSeenStatusChangeCallout"		"1"
+		"Deck_ConfiguratorInterstitialsVersionSeen_Intro"		"3"
+	}
+	"news"
+	{
+		"NotifyAvailableGames"		"0"
+	}
+	"LibraryLowPerfMode"		"1"
+	"ReadyToPlayIncludesStreaming"		"0"
+}

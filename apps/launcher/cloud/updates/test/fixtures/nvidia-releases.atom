@@ -1,0 +1,156 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom" xmlns:media="http://search.yahoo.com/mrss/" xml:lang="en-US">
+  <id>tag:github.com,2008:https://github.com/NVIDIA/DLSS/releases</id>
+  <link type="text/html" rel="alternate" href="https://github.com/NVIDIA/DLSS/releases"/>
+  <link type="application/atom+xml" rel="self" href="https://github.com/NVIDIA/DLSS/releases.atom"/>
+  <title>Release notes from DLSS</title>
+  <updated>2026-10-16T15:31:01Z</updated>
+  <entry>
+    <id>tag:github.com,2008:Repository/390024694/v310.9.16</id>
+    <updated>2026-10-16T16:07:20Z</updated>
+    <link rel="alternate" type="text/html" href="https://github.com/NVIDIA/DLSS/releases/tag/v310.9.16"/>
+    <title>DLSS 310.9.16 SDK</title>
+    <content type="html">&lt;p&gt;NVIDIA DLSS SDK 310.9.16 is now available for all developers:&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;Bug Fixes &amp;amp; Stability Improvements&lt;/li&gt;
+&lt;/ul&gt;</content>
+    <author>
+      <name>liam-middlebrook</name>
+    </author>
+    <media:thumbnail height="30" width="30" url="https://avatars.githubusercontent.com/u/3920942?s=60&amp;v=4"/>
+  </entry>
+  <entry>
+    <id>tag:github.com,2008:Repository/390024694/v310.9.1</id>
+    <updated>2026-09-08T15:30:04Z</updated>
+    <link rel="alternate" type="text/html" href="https://github.com/NVIDIA/DLSS/releases/tag/v310.9.1"/>
+    <title>DLSS 310.9.1 SDK</title>
+    <content type="html">&lt;p&gt;NVIDIA DLSS SDK 310.9.1 is now available for all developers:&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;Added DLSS Ray Reconstruction Transformer Mode (Preset F)&lt;/li&gt;
+&lt;li&gt;Bug Fixes &amp;amp; Stability Improvements&lt;/li&gt;
+&lt;/ul&gt;</content>
+    <author>
+      <name>liam-middlebrook</name>
+    </author>
+    <media:thumbnail height="30" width="30" url="https://avatars.githubusercontent.com/u/3920942?s=60&amp;v=4"/>
+  </entry>
+  <entry>
+    <id>tag:github.com,2008:Repository/390024694/v310.7.0</id>
+    <updated>2026-06-23T16:35:41Z</updated>
+    <link rel="alternate" type="text/html" href="https://github.com/NVIDIA/DLSS/releases/tag/v310.7.0"/>
+    <title>DLSS 310.7.0 SDK</title>
+    <content type="html">&lt;p&gt;NVIDIA DLSS SDK 310.7.0 is now available for all developers:&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;Improved tracking of resources and frames in Nsight Graphics and Nsight Systems&lt;/li&gt;
+&lt;li&gt;Bug Fixes &amp;amp; Stability Improvements&lt;/li&gt;
+&lt;/ul&gt;</content>
+    <author>
+      <name>liam-middlebrook</name>
+    </author>
+    <media:thumbnail height="30" width="30" url="https://avatars.githubusercontent.com/u/3920942?s=60&amp;v=4"/>
+  </entry>
+  <entry>
+    <id>tag:github.com,2008:Repository/390024694/v310.6.0</id>
+    <updated>2026-04-21T13:00:05Z</updated>
+    <link rel="alternate" type="text/html" href="https://github.com/NVIDIA/DLSS/releases/tag/v310.6.0"/>
+    <title>DLSS 310.6.0 SDK</title>
+    <content type="html">&lt;p&gt;NVIDIA DLSS SDK 310.6.0 is now available for all developers:&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;Added DLSS Frame Generation 5x and 6x Modes&lt;/li&gt;
+&lt;li&gt;Added DLSS Frame Generation User Interface Recomposition support (Preset B)&lt;/li&gt;
+&lt;li&gt;Bug Fixes &amp;amp; Stability Improvements&lt;/li&gt;
+&lt;/ul&gt;</content>
+    <author>
+      <name>liam-middlebrook</name>
+    </author>
+    <media:thumbnail height="30" width="30" url="https://avatars.githubusercontent.com/u/3920942?s=60&amp;v=4"/>
+  </entry>
+  <entry>
+    <id>tag:github.com,2008:Repository/390024694/v310.5.3</id>
+    <updated>2026-01-26T22:35:24Z</updated>
+    <link rel="alternate" type="text/html" href="https://github.com/NVIDIA/DLSS/releases/tag/v310.5.3"/>
+    <title>DLSS 310.5.3 SDK</title>
+    <content type="html">&lt;p&gt;NVIDIA DLSS SDK 310.5.3 is now available for all developers:&lt;br&gt;
+- Added CUDA application support to DLSS Ray Reconstruction&lt;br&gt;
+- Bug Fixes &amp;amp; Stability Improvements&lt;/p&gt;</content>
+    <author>
+      <name>liam-middlebrook</name>
+    </author>
+    <media:thumbnail height="30" width="30" url="https://avatars.githubusercontent.com/u/3920942?s=60&amp;v=4"/>
+  </entry>
+  <entry>
+    <id>tag:github.com,2008:Repository/390024694/v310.5.0</id>
+    <updated>2026-01-06T05:31:05Z</updated>
+    <link rel="alternate" type="text/html" href="https://github.com/NVIDIA/DLSS/releases/tag/v310.5.0"/>
+    <title>DLSS 310.5.0 SDK</title>
+    <content type="html">&lt;p&gt;NVIDIA DLSS SDK 310.5.0 is now available for all developers:&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;Added Preset L and M to DLSS Super Resolution.&lt;/li&gt;
+&lt;li&gt;Bug Fixes &amp;amp; Stability Improvements&lt;/li&gt;
+&lt;/ul&gt;</content>
+    <author>
+      <name>liam-middlebrook</name>
+    </author>
+    <media:thumbnail height="30" width="30" url="https://avatars.githubusercontent.com/u/3920942?s=60&amp;v=4"/>
+  </entry>
+  <entry>
+    <id>tag:github.com,2008:Repository/390024694/v310.4.0</id>
+    <updated>2025-08-26T17:06:43Z</updated>
+    <link rel="alternate" type="text/html" href="https://github.com/NVIDIA/DLSS/releases/tag/v310.4.0"/>
+    <title>DLSS 310.4.0 SDK</title>
+    <content type="html">&lt;p&gt;NVIDIA DLSS SDK 310.4.0 is now available for all developers:&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;Bug Fixes &amp;amp; Stability Improvements&lt;/li&gt;
+&lt;/ul&gt;</content>
+    <author>
+      <name>liam-middlebrook</name>
+    </author>
+    <media:thumbnail height="30" width="30" url="https://avatars.githubusercontent.com/u/3920942?s=60&amp;v=4"/>
+  </entry>
+  <entry>
+    <id>tag:github.com,2008:Repository/390024694/v310.3.0</id>
+    <updated>2025-06-25T16:19:05Z</updated>
+    <link rel="alternate" type="text/html" href="https://github.com/NVIDIA/DLSS/releases/tag/v310.3.0"/>
+    <title>DLSS Super Resolution and Ray Reconstruction SDK 310.3.0</title>
+    <content type="html">&lt;p&gt;NVIDIA DLSS SDK 310.3.0 is now available for all developers:&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;DLSS Transformer Model is officially out of Beta.&lt;/li&gt;
+&lt;li&gt;Bug Fixes &amp;amp; Stability Improvements&lt;/li&gt;
+&lt;/ul&gt;</content>
+    <author>
+      <name>ertam-NV</name>
+    </author>
+    <media:thumbnail height="30" width="30" url="https://avatars.githubusercontent.com/u/67923845?s=60&amp;v=4"/>
+  </entry>
+  <entry>
+    <id>tag:github.com,2008:Repository/390024694/v310.2.1</id>
+    <updated>2025-04-09T06:51:05Z</updated>
+    <link rel="alternate" type="text/html" href="https://github.com/NVIDIA/DLSS/releases/tag/v310.2.1"/>
+    <title>DLSS Super Resolution and Ray Reconstruction SDK v310.2.1</title>
+    <content type="html">&lt;p&gt;NVIDIA DLSS SDK 310.2.0 is now available for all developers:&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;Added Preset K to DLSS Super Resolution.&lt;/li&gt;
+&lt;li&gt;Added Preset E to DLSS Ray Reconstruction,  which adds provision for Depth of Field Guide Buffer in addition to Subsurface Scattering (SSS)&lt;/li&gt;
+&lt;li&gt;Bug Fixes &amp;amp; Stability Improvements&lt;/li&gt;
+&lt;/ul&gt;</content>
+    <author>
+      <name>ertam-NV</name>
+    </author>
+    <media:thumbnail height="30" width="30" url="https://avatars.githubusercontent.com/u/67923845?s=60&amp;v=4"/>
+  </entry>
+  <entry>
+    <id>tag:github.com,2008:Repository/390024694/v310.1.0</id>
+    <updated>2025-01-30T19:23:09Z</updated>
+    <link rel="alternate" type="text/html" href="https://github.com/NVIDIA/DLSS/releases/tag/v310.1.0"/>
+    <title>DLSS Super Resolution &amp; Ray Reconstruction SDK 310.1.0</title>
+    <content type="html">&lt;p&gt;NVIDIA DLSS SDK 310.1.0 is now available for all developers:&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;Added support for DLSS Ray Reconstruction. This includes the new transformer architecture for increased stability and lighting detail with ray tracing.&lt;/li&gt;
+&lt;li&gt;Added a new DLSS Super Resolution model (in beta) featuring a transformer architecture for improved stability and motion detail.&lt;/li&gt;
+&lt;/ul&gt;</content>
+    <author>
+      <name>ertam-NV</name>
+    </author>
+    <media:thumbnail height="30" width="30" url="https://avatars.githubusercontent.com/u/67923845?s=60&amp;v=4"/>
+  </entry>
+</feed>

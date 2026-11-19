@@ -1,0 +1,580 @@
+{
+  "title": "Account, sessions, password, recovery, sign-out, delete",
+  "service": "https://accounts.getexo.app",
+  "capturedAt": "2026-11-06T23:40:09.712Z",
+  "note": "Captured from the live service (https://accounts.getexo.app) with one throwaway account (test+<random>@example.invalid, deleted in the run). Secrets (passwords, tokens, recovery codes, addresses, device ids) are replaced by {{kind-n}} placeholders. Statuses, error codes, headers and body shapes are as the service answered. Replay: send the request, compare status, the listed headers and the body shape.",
+  "cases": [
+    {
+      "name": "account-get",
+      "request": {
+        "method": "GET",
+        "path": "/v1/account",
+        "headers": {
+          "Authorization": "Bearer {{token-1}}"
+        }
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/json",
+          "strict-transport-security": "max-age=31536000",
+          "x-content-type-options": "nosniff"
+        },
+        "body": {
+          "account": {
+            "id": "16cf69c1057724d84048297a36713071",
+            "created": 1794008133
+          }
+        }
+      }
+    },
+    {
+      "name": "account-get-signed-out",
+      "request": {
+        "method": "GET",
+        "path": "/v1/account"
+      },
+      "response": {
+        "status": 401,
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/json",
+          "strict-transport-security": "max-age=31536000",
+          "x-content-type-options": "nosniff"
+        },
+        "body": {
+          "error": "signed-out"
+        }
+      }
+    },
+    {
+      "name": "sessions-after-signup",
+      "request": {
+        "method": "GET",
+        "path": "/v1/sessions",
+        "headers": {
+          "Authorization": "Bearer {{token-1}}"
+        }
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/json",
+          "strict-transport-security": "max-age=31536000",
+          "x-content-type-options": "nosniff"
+        },
+        "body": {
+          "sessions": [
+            {
+              "device": "{{device-1}}",
+              "created": 1794008133,
+              "lastUsed": 1794008133,
+              "current": true
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "sessions-one",
+      "request": {
+        "method": "GET",
+        "path": "/v1/sessions",
+        "headers": {
+          "Authorization": "Bearer {{token-2}}"
+        }
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/json",
+          "strict-transport-security": "max-age=31536000",
+          "x-content-type-options": "nosniff"
+        },
+        "body": {
+          "sessions": [
+            {
+              "device": "{{device-1}}",
+              "created": 1794008166,
+              "lastUsed": 1794008166,
+              "current": true
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "sessions-two",
+      "request": {
+        "method": "GET",
+        "path": "/v1/sessions",
+        "headers": {
+          "Authorization": "Bearer {{token-2}}"
+        }
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/json",
+          "strict-transport-security": "max-age=31536000",
+          "x-content-type-options": "nosniff"
+        },
+        "body": {
+          "sessions": [
+            {
+              "device": "{{device-1}}",
+              "created": 1794008166,
+              "lastUsed": 1794008166,
+              "current": true
+            },
+            {
+              "device": "{{device-2}}",
+              "created": 1794008173,
+              "lastUsed": 1794008173,
+              "current": false
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "sessions-delete-device-b",
+      "request": {
+        "method": "DELETE",
+        "path": "/v1/sessions/{{device-2}}",
+        "headers": {
+          "Authorization": "Bearer {{token-2}}"
+        }
+      },
+      "response": {
+        "status": 204,
+        "headers": {
+          "cache-control": "no-store",
+          "strict-transport-security": "max-age=31536000",
+          "x-content-type-options": "nosniff"
+        },
+        "body": null
+      }
+    },
+    {
+      "name": "token3-after-device-removed",
+      "request": {
+        "method": "GET",
+        "path": "/v1/account",
+        "headers": {
+          "Authorization": "Bearer {{token-3}}"
+        }
+      },
+      "response": {
+        "status": 401,
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/json",
+          "strict-transport-security": "max-age=31536000",
+          "x-content-type-options": "nosniff"
+        },
+        "body": {
+          "error": "signed-out"
+        }
+      }
+    },
+    {
+      "name": "password-change-wrong-current",
+      "request": {
+        "method": "PUT",
+        "path": "/v1/password",
+        "headers": {
+          "Authorization": "Bearer {{token-2}}"
+        },
+        "contentType": "application/json",
+        "body": {
+          "current": "{{password-5}}",
+          "password": "{{password-4}}"
+        }
+      },
+      "response": {
+        "status": 401,
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/json",
+          "strict-transport-security": "max-age=31536000",
+          "x-content-type-options": "nosniff"
+        },
+        "body": {
+          "error": "wrong-password"
+        }
+      }
+    },
+    {
+      "name": "password-change-common",
+      "request": {
+        "method": "PUT",
+        "path": "/v1/password",
+        "headers": {
+          "Authorization": "Bearer {{token-2}}"
+        },
+        "contentType": "application/json",
+        "body": {
+          "current": "{{password-1}}",
+          "password": "{{password-3}}"
+        }
+      },
+      "response": {
+        "status": 400,
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/json",
+          "strict-transport-security": "max-age=31536000",
+          "x-content-type-options": "nosniff"
+        },
+        "body": {
+          "error": "common-password"
+        }
+      }
+    },
+    {
+      "name": "password-change",
+      "request": {
+        "method": "PUT",
+        "path": "/v1/password",
+        "headers": {
+          "Authorization": "Bearer {{token-2}}"
+        },
+        "contentType": "application/json",
+        "body": {
+          "current": "{{password-1}}",
+          "password": "{{password-4}}"
+        }
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "cache-control": "no-store",
+          "strict-transport-security": "max-age=31536000",
+          "x-content-type-options": "nosniff",
+          "content-type": "application/json"
+        },
+        "body": {
+          "deviceToken": "{{deviceToken-after-password-change}}"
+        }
+      },
+      "note": "Hand-edited to the device-token contract (200 with deviceToken), not captured live: the live service still answers 204 until the deploy in README.md."
+    },
+    {
+      "name": "other-pc-after-password-change",
+      "request": {
+        "method": "GET",
+        "path": "/v1/account",
+        "headers": {
+          "Authorization": "Bearer {{token-4}}"
+        }
+      },
+      "response": {
+        "status": 401,
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/json",
+          "strict-transport-security": "max-age=31536000",
+          "x-content-type-options": "nosniff"
+        },
+        "body": {
+          "error": "signed-out"
+        }
+      }
+    },
+    {
+      "name": "this-pc-after-password-change",
+      "request": {
+        "method": "GET",
+        "path": "/v1/account",
+        "headers": {
+          "Authorization": "Bearer {{token-2}}"
+        }
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/json",
+          "strict-transport-security": "max-age=31536000",
+          "x-content-type-options": "nosniff"
+        },
+        "body": {
+          "account": {
+            "id": "16cf69c1057724d84048297a36713071",
+            "created": 1794008133
+          }
+        }
+      }
+    },
+    {
+      "name": "recovery-code-wrong-password",
+      "request": {
+        "method": "POST",
+        "path": "/v1/recovery",
+        "headers": {
+          "Authorization": "Bearer {{token-2}}"
+        },
+        "contentType": "application/json",
+        "body": {
+          "password": "{{password-1}}"
+        }
+      },
+      "response": {
+        "status": 401,
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/json",
+          "strict-transport-security": "max-age=31536000",
+          "x-content-type-options": "nosniff"
+        },
+        "body": {
+          "error": "wrong-password"
+        }
+      }
+    },
+    {
+      "name": "recovery-code-new",
+      "request": {
+        "method": "POST",
+        "path": "/v1/recovery",
+        "headers": {
+          "Authorization": "Bearer {{token-2}}"
+        },
+        "contentType": "application/json",
+        "body": {
+          "password": "{{password-4}}"
+        }
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/json",
+          "strict-transport-security": "max-age=31536000",
+          "x-content-type-options": "nosniff"
+        },
+        "body": {
+          "recoveryCode": "{{recoveryCode-2}}"
+        }
+      }
+    },
+    {
+      "name": "recovery-reset-wrong-code",
+      "request": {
+        "method": "POST",
+        "path": "/v1/recovery/reset",
+        "contentType": "application/json",
+        "body": {
+          "email": "{{email-1}}",
+          "code": "0000-0000-0000-0000-0000-0000",
+          "password": "{{password-6}}",
+          "device": "{{device-1}}"
+        }
+      },
+      "response": {
+        "status": 401,
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/json",
+          "strict-transport-security": "max-age=31536000",
+          "x-content-type-options": "nosniff"
+        },
+        "body": {
+          "error": "wrong-code"
+        }
+      }
+    },
+    {
+      "name": "recovery-reset",
+      "request": {
+        "method": "POST",
+        "path": "/v1/recovery/reset",
+        "contentType": "application/json",
+        "body": {
+          "email": "{{email-1}}",
+          "code": "{{recoveryCode-2}}",
+          "password": "{{password-6}}",
+          "device": "{{device-1}}"
+        }
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/json",
+          "strict-transport-security": "max-age=31536000",
+          "x-content-type-options": "nosniff"
+        },
+        "body": {
+          "token": "{{token-5}}",
+          "account": {
+            "id": "16cf69c1057724d84048297a36713071"
+          },
+          "recoveryCode": "{{recoveryCode-3}}"
+        }
+      }
+    },
+    {
+      "name": "this-session-before-reset-after-reset",
+      "request": {
+        "method": "GET",
+        "path": "/v1/account",
+        "headers": {
+          "Authorization": "Bearer {{token-2}}"
+        }
+      },
+      "response": {
+        "status": 401,
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/json",
+          "strict-transport-security": "max-age=31536000",
+          "x-content-type-options": "nosniff"
+        },
+        "body": {
+          "error": "signed-out"
+        }
+      }
+    },
+    {
+      "name": "signout",
+      "request": {
+        "method": "POST",
+        "path": "/v1/signout",
+        "headers": {
+          "Authorization": "Bearer {{token-5}}"
+        }
+      },
+      "response": {
+        "status": 204,
+        "headers": {
+          "cache-control": "no-store",
+          "strict-transport-security": "max-age=31536000",
+          "x-content-type-options": "nosniff"
+        },
+        "body": null
+      }
+    },
+    {
+      "name": "account-after-signout",
+      "request": {
+        "method": "GET",
+        "path": "/v1/account",
+        "headers": {
+          "Authorization": "Bearer {{token-5}}"
+        }
+      },
+      "response": {
+        "status": 401,
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/json",
+          "strict-transport-security": "max-age=31536000",
+          "x-content-type-options": "nosniff"
+        },
+        "body": {
+          "error": "signed-out"
+        }
+      }
+    },
+    {
+      "name": "account-delete-wrong-password",
+      "request": {
+        "method": "DELETE",
+        "path": "/v1/account",
+        "headers": {
+          "Authorization": "Bearer {{token-6}}"
+        },
+        "contentType": "application/json",
+        "body": {
+          "password": "{{password-1}}"
+        }
+      },
+      "response": {
+        "status": 401,
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/json",
+          "strict-transport-security": "max-age=31536000",
+          "x-content-type-options": "nosniff"
+        },
+        "body": {
+          "error": "wrong-password"
+        }
+      }
+    },
+    {
+      "name": "account-delete",
+      "request": {
+        "method": "DELETE",
+        "path": "/v1/account",
+        "headers": {
+          "Authorization": "Bearer {{token-6}}"
+        },
+        "contentType": "application/json",
+        "body": {
+          "password": "{{password-6}}"
+        }
+      },
+      "response": {
+        "status": 204,
+        "headers": {
+          "cache-control": "no-store",
+          "strict-transport-security": "max-age=31536000",
+          "x-content-type-options": "nosniff"
+        },
+        "body": null
+      }
+    },
+    {
+      "name": "account-after-delete",
+      "request": {
+        "method": "GET",
+        "path": "/v1/account",
+        "headers": {
+          "Authorization": "Bearer {{token-6}}"
+        }
+      },
+      "response": {
+        "status": 401,
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/json",
+          "strict-transport-security": "max-age=31536000",
+          "x-content-type-options": "nosniff"
+        },
+        "body": {
+          "error": "signed-out"
+        }
+      }
+    },
+    {
+      "name": "delete-check-account",
+      "request": {
+        "method": "DELETE",
+        "path": "/v1/account",
+        "headers": {
+          "Authorization": "Bearer {{token-7}}"
+        },
+        "contentType": "application/json",
+        "body": {
+          "password": "{{password-1}}"
+        }
+      },
+      "response": {
+        "status": 204,
+        "headers": {
+          "cache-control": "no-store",
+          "strict-transport-security": "max-age=31536000",
+          "x-content-type-options": "nosniff"
+        },
+        "body": null
+      }
+    }
+  ]
+}

@@ -1,0 +1,47 @@
+# Exo cover cache (cloud/covers/README.md). Deploy steps are in DEPLOY.md: the KV id below is a placeholder that must be
+# replaced first (a deploy with the placeholder fails on purpose); `wrangler deploy` then creates the custom domain.
+name = "exo-covers"
+main = "src/worker.js"
+# The newest date the workerd build in devDependencies supports (the tests run under it).
+compatibility_date = "2026-08-22"
+workers_dev = false
+preview_urls = false
+send_metrics = false
+
+# covers.getexo.app on Exo's Cloudflare zone (a proxied DNS record is created with it).
+routes = []
+
+# No logs: the cache keeps no record of who asks.
+[observability]
+enabled = false
+
+# Cached answers: a store's art address per store id or normalized title (titles are game names, never user data).
+[[kv_namespaces]]
+binding = "COVERS"
+# Created 2026-11-10 by DEPLOY.md step 2 (namespace title "COVERS"). The tests ignore it.
+id = "REPLACE_WITH_RESOURCE_ID"
+
+# Requests per address, counted by Cloudflare at the edge for a minute; the Worker stores none.
+[[ratelimits]]
+name = "COVER_LIMIT"
+namespace_id = "2101"
+simple = { limit = 120, period = 60 }
+
+# Uncached asks per address: each one can cost up to six store requests, so this is much lower than the line above.
+[[ratelimits]]
+name = "COVER_LOOKUP_LIMIT"
+namespace_id = "2102"
+simple = { limit = 20, period = 60 }
+
+# A ceiling on every request this Worker sends to Steam, GOG and Epic, so no crowd can get a store to refuse it. Rate limits
+# count per Cloudflare location, not worldwide, so this is the ceiling of one location. Past it an ask is answered "partial".
+[[ratelimits]]
+name = "COVER_STORE_LIMIT"
+namespace_id = "2103"
+simple = { limit = 300, period = 60 }
+
+# One address's share of those store requests (a sixth of the ceiling), so a few addresses cannot use all of it.
+[[ratelimits]]
+name = "COVER_STORE_ADDRESS_LIMIT"
+namespace_id = "2104"
+simple = { limit = 50, period = 60 }

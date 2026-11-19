@@ -1,0 +1,19 @@
+{
+  "name": "exo-updates",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test test"
+  },
+  "engines": {
+    "node": ">=22.13"
+  },
+  "devDependencies": {
+    "miniflare": "^4.20260730.0"
+  },
+  "overrides": {
+    "miniflare": {
+      "sharp": "0.35.5"
+    }
+  }
+}

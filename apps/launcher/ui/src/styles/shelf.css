@@ -1,0 +1,144 @@
+
+
+.exo-top-rooms {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.exo-nav-btn {
+  position: relative;
+  z-index: 1;
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 11px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--color-fg);
+  font-size: var(--exo-type-control);
+  font-weight: 500;
+  line-height: 28px;
+  white-space: nowrap;
+  transition: color var(--dur-quick) var(--ease-out), background-color var(--dur-quick) var(--ease-out), scale var(--dur-quick) var(--ease-out);
+}
+
+.exo-nav-btn>*,
+.exo-settings-btn>* {
+  pointer-events: none;
+}
+
+.exo-nav-btn.is-on {
+  color: var(--color-primary-fg);
+  background: var(--color-fg);
+}
+
+/* Gear and window controls share the tab's height and pill. */
+.exo-settings-btn,
+.exo-winbtn,
+.exo-titlebar-button {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 28px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--color-muted);
+  transition: color var(--dur-quick) var(--ease-out), background-color var(--dur-quick) var(--ease-out), scale var(--dur-quick) var(--ease-out);
+}
+
+.exo-settings-btn.is-on {
+  color: var(--color-primary-fg);
+  background: var(--color-fg);
+}
+
+/* Maximize is Windows' own region (snap layouts); the host reports its hover. */
+.exo-winbtn.is-hover {
+  color: var(--color-fg);
+  background: var(--hover-fill);
+}
+
+@media (hover: hover) and (pointer: fine) {
+
+  .exo-nav-btn:hover:not(.is-on),
+  .exo-settings-btn:hover:not(.is-on),
+  .exo-winbtn:hover,
+  .exo-titlebar-button:hover {
+    color: var(--color-fg);
+    background: var(--hover-fill);
+  }
+
+  .exo-winbtn.is-close:hover,
+  .exo-titlebar-button.is-close:hover {
+    color: var(--color-bad);
+  }
+}
+
+/* Very narrow windows keep the icons and drop the names (still read by screen readers). At 960 wide the names stay:
+   icons alone were ambiguous. */
+@media (max-width: 760px) {
+  .exo-nav-btn {
+    gap: 0;
+    padding: 0 9px;
+  }
+
+  .exo-nav-btn .exo-nav-label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  .exo-nav-btn .exo-discord-notification-count {
+    margin-left: 4px;
+  }
+}
+
+.exo-titlebar .exo-top-rooms,
+.exo-titlebar .exo-titlebar-tools {
+  height: 36px;
+  border-radius: 999px;
+}
+
+/* The Rooms and the tools are bare on the Bar: no outline of their own, the current room a white pill. */
+.exo-titlebar .exo-top-rooms {
+  gap: 2px;
+}
+
+.exo-titlebar .exo-titlebar-tools {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.exo-titlebar .exo-titlebar-actions {
+  gap: 8px;
+}
+
+.exo-titlebar .exo-nav-btn {
+  height: 30px;
+  padding: 0 13px;
+  font-weight: var(--exo-weight-title);
+}
+
+.exo-titlebar .exo-titlebar-tools :is(.exo-settings-btn, .exo-titlebar-button) {
+  width: 34px;
+  height: 30px;
+}
+
+/* The current room is the glide's white pill (tokens.css). */
+
+.exo-titlebar .exo-nav-btn.is-on .exo-glyph {
+  opacity: 1;
+}
+

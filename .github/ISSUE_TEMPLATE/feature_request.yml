@@ -1,0 +1,10 @@
+name: Feature request
+description: Suggest something for Exo Launcher
+labels: [enhancement]
+body:
+  - type: textarea
+    attributes:
+      label: What would you like?
+      description: The problem it solves and how you'd like it to work.
+    validations:
+      required: true

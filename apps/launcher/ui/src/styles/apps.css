@@ -1,0 +1,352 @@
+/* PC › Apps, Exo's uninstaller (components/apps/AppsPanel.tsx): one list with its columns, and above it what's ready. */
+
+.exo-apps {
+  --exo-apps-used: 112px;
+  --exo-apps-size: 72px;
+  --exo-apps-act: 108px;
+  display: grid;
+  flex: 1;
+  grid-template-rows: auto auto minmax(0, 1fr);
+  gap: 12px;
+  min-height: 0;
+}
+
+/* The title line: its name and facts, what to show, search at the end. */
+.exo-apps-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 16px;
+}
+
+.exo-apps-head > h2 {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin: 0;
+  color: var(--color-fg);
+  font-size: calc(20px * var(--exo-scale, 1));
+  font-weight: 650;
+  white-space: nowrap;
+}
+
+.exo-apps-facts {
+  color: var(--exo-glass-panel-secondary);
+  font-size: calc(13px * var(--exo-scale, 1));
+  font-weight: 400;
+  font-variant-numeric: tabular-nums;
+}
+
+.exo-apps-head .exo-field {
+  flex: 0 1 240px;
+  margin-inline-start: auto;
+}
+
+/* The columns over the list, on the same grid as its rows. */
+.exo-apps-columns,
+.exo-apps-row {
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr) var(--exo-apps-used) var(--exo-apps-size) var(--exo-apps-act);
+  align-items: center;
+  column-gap: 12px;
+}
+
+.exo-apps-columns.is-short,
+.exo-apps-row.is-short {
+  grid-template-columns: 24px minmax(0, 1fr) var(--exo-apps-size) var(--exo-apps-act);
+}
+
+.exo-apps-columns {
+  min-height: 32px;
+  padding-inline: 8px;
+}
+
+.exo-apps-sort {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  justify-self: start;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--exo-glass-panel-secondary);
+  font-size: calc(12px * var(--exo-scale, 1));
+  font-weight: 500;
+  cursor: pointer;
+  transition: color var(--dur-quick) var(--ease-out);
+}
+
+.exo-apps-sort.is-end {
+  justify-self: end;
+}
+
+.exo-apps-sort:hover,
+.exo-apps-sort[data-current] {
+  color: var(--color-fg);
+}
+
+.exo-apps-sort:focus-visible {
+  outline: 2px solid var(--color-fg);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+.exo-apps-select {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  min-width: 0;
+  white-space: nowrap;
+}
+
+.exo-apps-run {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--exo-glass-panel-secondary);
+  font-size: calc(12px * var(--exo-scale, 1));
+  font-variant-numeric: tabular-nums;
+}
+
+.exo-apps-list {
+  display: grid;
+  align-content: start;
+  gap: 18px;
+  min-height: 0;
+  padding-bottom: 20px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+/* A row: one hairline above, a little lift under the pointer, what can be done with it shown then. */
+.exo-apps-row {
+  min-height: 52px;
+  padding: 6px 8px;
+  border-top: 1px solid var(--exo-float-line);
+  transition: background-color var(--dur-quick) var(--ease-out);
+}
+
+.exo-apps-row:hover,
+.exo-apps-row:focus-within {
+  border-radius: var(--exo-small-radius);
+  background: var(--hover-fill);
+}
+
+.exo-apps-icon {
+  display: inline-grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  overflow: hidden;
+  border-radius: 6px;
+  color: var(--exo-glass-panel-secondary);
+  font-size: calc(12px * var(--exo-scale, 1));
+  font-weight: var(--exo-weight-title);
+}
+
+.exo-apps-icon > img {
+  width: 24px;
+  height: 24px;
+  object-fit: contain;
+}
+
+.exo-apps-copy {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.exo-apps-name {
+  overflow: hidden;
+  color: var(--color-fg);
+  font-size: calc(13px * var(--exo-scale, 1));
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.exo-apps-name.is-done {
+  color: var(--color-good);
+}
+
+.exo-apps-detail {
+  overflow: hidden;
+  color: var(--exo-glass-panel-secondary);
+  font-size: calc(12px * var(--exo-scale, 1));
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.exo-apps-used,
+.exo-apps-size {
+  color: var(--exo-glass-panel-secondary);
+  font-size: calc(12px * var(--exo-scale, 1));
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.exo-apps-size {
+  text-align: end;
+}
+
+.exo-apps-act {
+  display: flex;
+  justify-content: flex-end;
+  opacity: 0;
+  transition: opacity var(--dur-quick) var(--ease-out);
+}
+
+.exo-apps-row:hover .exo-apps-act,
+.exo-apps-row:focus-within .exo-apps-act,
+.exo-apps-row.is-kept .exo-apps-act,
+.exo-apps-act:has([data-exo-armed]) {
+  opacity: 1;
+}
+
+.exo-apps-error {
+  grid-column: 2 / -1;
+}
+
+/* A pick, in Select and in a find's review: a ring, filled with a check once picked (as a poll's answer). */
+.exo-apps-pick {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  box-shadow: inset 0 0 0 var(--exo-hair) var(--exo-glass-panel-secondary);
+  color: var(--color-bg);
+  cursor: pointer;
+}
+
+.exo-apps-pick.is-picked {
+  background: var(--color-fg);
+  box-shadow: none;
+}
+
+.exo-apps-pick:focus-visible {
+  outline: 2px solid var(--color-fg);
+  outline-offset: 2px;
+}
+
+/* What's ready: each its words and its one press, on the list's edge. */
+.exo-apps-ready:empty {
+  display: none;
+}
+
+.exo-apps-ready-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 4px 16px;
+  min-height: 52px;
+  padding: 8px;
+  border-top: 1px solid var(--exo-float-line);
+}
+
+.exo-apps-ready-act {
+  display: flex;
+  gap: 6px;
+}
+
+.exo-apps-ready-row > .exo-apps-error {
+  grid-column: 1 / -1;
+}
+
+.exo-apps-items {
+  display: grid;
+  gap: 2px;
+  max-height: 320px;
+  margin: 0;
+  padding: 0 8px 12px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  list-style: none;
+  animation: exo-arrive var(--dur-arrive) var(--ease-out) backwards;
+}
+
+.exo-apps-items > li {
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  min-height: 32px;
+  font-size: calc(12px * var(--exo-scale, 1));
+}
+
+.exo-apps-item {
+  display: grid;
+  min-width: 0;
+}
+
+.exo-apps-path {
+  color: var(--color-fg);
+  overflow-wrap: anywhere;
+}
+
+.exo-apps-note,
+.exo-apps-item-size {
+  color: var(--exo-glass-panel-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+.exo-apps-filter {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding-inline: 8px;
+  color: var(--color-fg);
+  font-size: calc(13px * var(--exo-scale, 1));
+  font-weight: 500;
+}
+
+.exo-apps-group {
+  margin: 0 0 6px;
+  padding-inline: 8px;
+  color: var(--color-fg);
+  font-size: calc(13px * var(--exo-scale, 1));
+  font-weight: var(--exo-weight-title);
+}
+
+/* What Windows, games and Exo need: a row of its own that opens under itself. */
+.exo-apps-more {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  min-height: 44px;
+  padding: 0 8px;
+  border: 0;
+  border-top: 1px solid var(--exo-float-line);
+  background: none;
+  color: var(--exo-glass-panel-secondary);
+  font-size: calc(13px * var(--exo-scale, 1));
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color var(--dur-quick) var(--ease-out), color var(--dur-quick) var(--ease-out);
+}
+
+.exo-apps-more:hover {
+  border-radius: var(--exo-small-radius);
+  background: var(--hover-fill);
+  color: var(--color-fg);
+}
+
+.exo-apps-more:focus-visible {
+  outline: 2px solid var(--color-fg);
+  outline-offset: -2px;
+}
+
+.exo-apps-none {
+  margin: 0;
+  padding: 16px 8px;
+  border-top: 1px solid var(--exo-float-line);
+  color: var(--exo-glass-panel-secondary);
+  font-size: calc(13px * var(--exo-scale, 1));
+}

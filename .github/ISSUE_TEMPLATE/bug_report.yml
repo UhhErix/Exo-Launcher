@@ -1,0 +1,47 @@
+name: Bug report
+description: Something in Exo Launcher doesn't work right
+labels: [bug]
+body:
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: What you did, what you expected and what happened instead.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: "1. Open ...
+2. Click ...
+3. See ..."
+  - type: textarea
+    id: logs
+    attributes:
+      label: Copy logs
+      description: >-
+        If Exo showed an error, click **Copy logs** beside it and paste here. It copies Exo's and Windows' versions,
+        the error and the log lines that explain it, with your Windows user name and secrets taken out.
+      placeholder: Exo Launcher 3.26.0 · Windows 10.0.26100 · ...
+      render: text
+  - type: input
+    id: version
+    attributes:
+      label: Exo Launcher version
+      description: >-
+        Filled in for you when this form is opened with `?template=bug_report.yml&version=X.Y.Z`.
+        Otherwise it's in Settings > About, or the first line of Copy logs.
+      placeholder: "3.26.0"
+    validations:
+      required: true
+  - type: input
+    id: windows
+    attributes:
+      label: Windows version
+      placeholder: Windows 11 24H2
+  - type: textarea
+    id: screenshots
+    attributes:
+      label: Screenshots
+      description: Drag images or recordings here.

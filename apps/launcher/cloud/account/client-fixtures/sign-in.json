@@ -1,0 +1,221 @@
+{
+  "title": "Sign-in: POST /v1/session",
+  "service": "https://accounts.getexo.app",
+  "capturedAt": "2026-11-06T23:40:09.712Z",
+  "note": "Captured from the live service (https://accounts.getexo.app) with one throwaway account (test+<random>@example.invalid, deleted in the run). Secrets (passwords, tokens, recovery codes, addresses, device ids) are replaced by {{kind-n}} placeholders. Statuses, error codes, headers and body shapes are as the service answered. Replay: send the request, compare status, the listed headers and the body shape. Answers that carry a deviceToken (added with the device-token contract, 2026-11-09) are hand-edited to that contract: the live service does not return it yet. The rest are as captured.",
+  "cases": [
+    {
+      "name": "session-wrong-password",
+      "request": {
+        "method": "POST",
+        "path": "/v1/session",
+        "contentType": "application/json",
+        "body": {
+          "email": "{{email-1}}",
+          "password": "{{password-5}}",
+          "device": "{{device-1}}"
+        }
+      },
+      "response": {
+        "status": 401,
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/json",
+          "strict-transport-security": "max-age=31536000",
+          "x-content-type-options": "nosniff"
+        },
+        "body": {
+          "error": "wrong-credentials"
+        }
+      }
+    },
+    {
+      "name": "session-unknown-address",
+      "request": {
+        "method": "POST",
+        "path": "/v1/session",
+        "contentType": "application/json",
+        "body": {
+          "email": "{{email-4}}",
+          "password": "{{password-1}}",
+          "device": "{{device-1}}"
+        }
+      },
+      "response": {
+        "status": 401,
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/json",
+          "strict-transport-security": "max-age=31536000",
+          "x-content-type-options": "nosniff"
+        },
+        "body": {
+          "error": "wrong-credentials"
+        }
+      }
+    },
+    {
+      "name": "session-device-a",
+      "request": {
+        "method": "POST",
+        "path": "/v1/session",
+        "contentType": "application/json",
+        "body": {
+          "email": "{{email-1}}",
+          "password": "{{password-1}}",
+          "device": "{{device-1}}"
+        }
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/json",
+          "strict-transport-security": "max-age=31536000",
+          "x-content-type-options": "nosniff"
+        },
+        "body": {
+          "token": "{{token-2}}",
+          "account": {
+            "id": "16cf69c1057724d84048297a36713071"
+          },
+          "deviceToken": "{{deviceToken-session-device-a}}"
+        }
+      }
+    },
+    {
+      "name": "token1-after-same-device-signin",
+      "request": {
+        "method": "GET",
+        "path": "/v1/account",
+        "headers": {
+          "Authorization": "Bearer {{token-1}}"
+        }
+      },
+      "response": {
+        "status": 401,
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/json",
+          "strict-transport-security": "max-age=31536000",
+          "x-content-type-options": "nosniff"
+        },
+        "body": {
+          "error": "signed-out"
+        }
+      }
+    },
+    {
+      "name": "session-device-b",
+      "request": {
+        "method": "POST",
+        "path": "/v1/session",
+        "contentType": "application/json",
+        "body": {
+          "email": "{{email-1}}",
+          "password": "{{password-1}}",
+          "device": "{{device-2}}"
+        }
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/json",
+          "strict-transport-security": "max-age=31536000",
+          "x-content-type-options": "nosniff"
+        },
+        "body": {
+          "token": "{{token-3}}",
+          "account": {
+            "id": "16cf69c1057724d84048297a36713071"
+          },
+          "deviceToken": "{{deviceToken-session-device-b}}"
+        }
+      }
+    },
+    {
+      "name": "session-device-b-again",
+      "request": {
+        "method": "POST",
+        "path": "/v1/session",
+        "contentType": "application/json",
+        "body": {
+          "email": "{{email-1}}",
+          "password": "{{password-1}}",
+          "device": "{{device-2}}"
+        }
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/json",
+          "strict-transport-security": "max-age=31536000",
+          "x-content-type-options": "nosniff"
+        },
+        "body": {
+          "token": "{{token-4}}",
+          "account": {
+            "id": "16cf69c1057724d84048297a36713071"
+          },
+          "deviceToken": "{{deviceToken-session-device-b-again}}"
+        }
+      }
+    },
+    {
+      "name": "session-after-reset",
+      "request": {
+        "method": "POST",
+        "path": "/v1/session",
+        "contentType": "application/json",
+        "body": {
+          "email": "{{email-1}}",
+          "password": "{{password-6}}",
+          "device": "{{device-1}}"
+        }
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/json",
+          "strict-transport-security": "max-age=31536000",
+          "x-content-type-options": "nosniff"
+        },
+        "body": {
+          "token": "{{token-6}}",
+          "account": {
+            "id": "16cf69c1057724d84048297a36713071"
+          },
+          "deviceToken": "{{deviceToken-session-after-reset}}"
+        }
+      }
+    },
+    {
+      "name": "session-after-delete",
+      "request": {
+        "method": "POST",
+        "path": "/v1/session",
+        "contentType": "application/json",
+        "body": {
+          "email": "{{email-1}}",
+          "password": "{{password-6}}",
+          "device": "{{device-1}}"
+        }
+      },
+      "response": {
+        "status": 401,
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/json",
+          "strict-transport-security": "max-age=31536000",
+          "x-content-type-options": "nosniff"
+        },
+        "body": {
+          "error": "wrong-credentials"
+        }
+      }
+    }
+  ]
+}

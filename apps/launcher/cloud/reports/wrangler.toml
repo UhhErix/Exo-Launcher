@@ -1,0 +1,98 @@
+# Exo's crash reports (README.md). Deployed 2026-11-05 to reports.getexo.app with the owner's OK; redeploy with `wrangler deploy --env=""`.
+name = "exo-reports"
+main = "src/worker.js"
+compatibility_date = "2026-10-01"
+workers_dev = false
+preview_urls = false
+send_metrics = false
+routes = []
+
+# No logs: the reports service keeps nothing about who sends.
+[observability]
+enabled = false
+
+# Reports, by date (src/worker.js). Expired after 30 days by a lifecycle rule on the bucket, set up outside this file (README.md).
+[[r2_buckets]]
+binding = "REPORTS"
+bucket_name = "replace-with-bucket-name"
+
+# Crash reports, telemetry batches and deletes, counted by Cloudflare at the edge per route (src/worker.js admitted); the
+# Worker stores no count of its own. Each install has its own count, so many players online at once never share one: an
+# install sends at most one telemetry batch every five minutes (a backlog kept while offline drains at that same pace) and
+# at most five crash reports a day, so 20 a minute is far above any real install.
+[[ratelimits]]
+name = "REPORTS_PER_INSTALL"
+namespace_id = "4002"
+simple = { limit = 20, period = 60 }
+
+# The backstop: per sender network (an IPv4 address, an IPv6 /64), so one sender making up install IDs is stopped. The
+# address is the limiter's key only and is written nowhere. Sized for a LAN party or a shared address of many PCs.
+[[ratelimits]]
+name = "REPORTS_PER_NETWORK"
+namespace_id = "4003"
+simple = { limit = 300, period = 60 }
+
+# The cost ceiling, per route, checked after the two above: one count for every sender at a Cloudflare location (the
+# limiter counts per location, not worldwide), so senders spread over many addresses cannot run up R2 and D1 writes,
+# deletes and alert mails without bound. Sized above launch-day load (10,000 installs send about 2,000 telemetry batches a
+# minute). A refused request is not lost: the apps keep telemetry and crash reports refused with 429 and send them later.
+[[ratelimits]]
+name = "REPORTS_CEILING"
+namespace_id = "4004"
+simple = { limit = 10000, period = 60 }
+
+# Contact messages per sender IP per minute (POST /v1/contact). The key is the IP, held by Cloudflare's limiter only.
+[[ratelimits]]
+name = "CONTACT_PER_IP"
+namespace_id = "4201"
+simple = { limit = 5, period = 60 }
+
+# Email for each contact message: sent to CONTACT_TO (a secret, `wrangler secret put CONTACT_TO`), which must be a verified
+# destination address on the account. No destination is written here, so the owner's address stays out of this repo.
+# The message is stored in R2 before this is tried, so a failed send loses nothing.
+[[send_email]]
+name = "CONTACT_MAIL"
+
+# The dev copy (`wrangler deploy --env dev`): workers.dev, a bucket of its own.
+[env.dev]
+name = "exo-reports-dev"
+workers_dev = true
+routes = []
+
+[env.dev.observability]
+enabled = false
+
+[[env.dev.r2_buckets]]
+binding = "REPORTS"
+bucket_name = "replace-with-bucket-name"
+
+[[env.dev.ratelimits]]
+name = "REPORTS_PER_INSTALL"
+namespace_id = "4102"
+simple = { limit = 20, period = 60 }
+
+[[env.dev.ratelimits]]
+name = "REPORTS_PER_NETWORK"
+namespace_id = "4103"
+simple = { limit = 300, period = 60 }
+
+[[env.dev.ratelimits]]
+name = "REPORTS_CEILING"
+namespace_id = "4104"
+simple = { limit = 10000, period = 60 }
+
+[[env.dev.ratelimits]]
+name = "CONTACT_PER_IP"
+namespace_id = "4301"
+simple = { limit = 5, period = 60 }
+
+# Telemetry events and daily aggregates (src/telemetry*.js, migrations/). The dev copy has no D1 binding: its telemetry answers 503.
+[[d1_databases]]
+binding = "TELEMETRY"
+database_name = "exo-telemetry"
+database_id = "REPLACE_WITH_RESOURCE_ID"
+migrations_dir = "migrations"
+
+# The retention job: every day at 04:20 UTC (src/telemetry-store.js runRetention).
+[triggers]
+crons = []

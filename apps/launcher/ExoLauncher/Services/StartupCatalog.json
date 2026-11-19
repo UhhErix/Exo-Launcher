@@ -1,0 +1,974 @@
+[
+  {
+    "match": [
+      "spotify.exe"
+    ],
+    "name": "Spotify",
+    "does": "Opens Spotify minimized at sign-in so it's ready to play right away.",
+    "without": "Nothing you'd notice: Exo plays Spotify in its Music room, and Spotify opens when you start it.",
+    "verdict": "remove"
+  },
+  {
+    "match": [
+      "robloxplayerbeta.exe"
+    ],
+    "name": "Roblox",
+    "does": "Starts Roblox quietly in the tray at sign-in.",
+    "without": "Nothing you'd notice: Roblox still opens when you join a game.",
+    "verdict": "remove"
+  },
+  {
+    "match": [
+      "~af_"
+    ],
+    "name": "AppsFlyer game tracking values",
+    "does": "Not a program: a game's ad-tracking SDK stores an install ID and launch count here.",
+    "without": "Nothing you'd notice: nothing runs from these values; the game may simply write them again.",
+    "verdict": "remove"
+  },
+  {
+    "match": [
+      "lucid.exe"
+    ],
+    "name": "Lucid (the copy inside Exo)",
+    "does": "Starts the Lucid that comes with Exo at sign-in, with its own tray icon, before Exo is open.",
+    "without": "Nothing you'd notice: Exo starts Lucid out of sight when it opens, and your EQ keeps playing in between.",
+    "verdict": "remove",
+    "under": "\\addons\\lucid\\"
+  },
+  {
+    "match": [
+      "lucid.exe"
+    ],
+    "name": "Lucid",
+    "does": "Starts the Lucid EQ app at sign-in so your headphone EQ and per-game profiles apply.",
+    "without": "Your headphones play without Lucid's EQ and game profiles until you open Lucid.",
+    "verdict": "keep"
+  },
+  {
+    "match": [
+      "vgtray.exe"
+    ],
+    "name": "Riot Vanguard tray",
+    "does": "Shows Riot Vanguard's tray icon. The anti-cheat itself keeps running.",
+    "without": "The tray icon stays out of startup until you put it back. Valorant and League keep their anti-cheat.",
+    "verdict": "keep",
+    "realSwitch": {
+      "kind": "antiCheat",
+      "status": "Starts with Riot Vanguard when you play"
+    }
+  },
+  {
+    "match": [
+      "faceit.exe"
+    ],
+    "name": "FACEIT",
+    "does": "Starts the FACEIT client, which runs the anti-cheat for FACEIT matches.",
+    "without": "Exo leaves FACEIT's anti-cheat alone; change it only through FACEIT's own settings.",
+    "verdict": "locked"
+  },
+  {
+    "match": [
+      "securityhealthsystray.exe"
+    ],
+    "name": "Windows Security tray",
+    "does": "Shows the Windows Security shield icon and its alerts in the tray.",
+    "without": "Exo leaves it in startup: Windows Security needs its tray to show alerts.",
+    "verdict": "locked"
+  },
+  {
+    "match": [
+      "braveupdate.exe"
+    ],
+    "name": "Brave updater",
+    "does": "Checks for Brave browser updates when you sign in.",
+    "without": "Nothing you'd notice: Brave's update service still keeps it up to date.",
+    "verdict": "remove",
+    "realSwitch": {
+      "kind": "updaterService",
+      "service": "brave",
+      "status": "Started by its updater service"
+    },
+    "service": "brave"
+  },
+  {
+    "match": [
+      "googleupdate.exe"
+    ],
+    "name": "Google updater",
+    "does": "Checks for Chrome and other Google app updates when you sign in.",
+    "without": "Nothing you'd notice: Google's update service still keeps Chrome up to date.",
+    "verdict": "remove",
+    "realSwitch": {
+      "kind": "updaterService",
+      "service": "gupdate",
+      "status": "Started by its updater service"
+    },
+    "service": "gupdate"
+  },
+  {
+    "match": [
+      "microsoftedgeupdate.exe"
+    ],
+    "name": "Microsoft Edge updater",
+    "does": "Keeps Edge and WebView2 up to date.",
+    "without": "Exo leaves it in startup: Exo runs on WebView2, and its update service and tasks keep it up to date.",
+    "verdict": "locked",
+    "service": "edgeupdate",
+    "realSwitch": {
+      "kind": "updaterService",
+      "service": "edgeupdate",
+      "status": "Started by its updater service"
+    }
+  },
+  {
+    "match": [
+      "~microsoftedgeautolaunch_"
+    ],
+    "name": "Microsoft Edge startup boost",
+    "does": "Preloads Edge in the background at sign-in so it opens faster.",
+    "without": "Edge takes a moment longer to open the first time after sign-in.",
+    "verdict": "remove"
+  },
+  {
+    "match": [
+      "openmouse-bridge.exe"
+    ],
+    "name": "OpenMouse Bridge",
+    "does": "Runs OpenMouse's local helper in the tray so it can reach your mouse and apply game profiles.",
+    "without": "Game profiles and Razer mouse setup in Chrome stop working until you open Bridge.",
+    "verdict": "optional"
+  },
+  {
+    "match": [
+      "bluestacksservices.exe",
+      "bluestacks services.exe"
+    ],
+    "name": "BlueStacks Services",
+    "does": "Runs a BlueStacks helper that sends notifications with offers, game news and recommendations.",
+    "without": "Nothing you'd notice: BlueStacks still opens and runs Android games normally.",
+    "verdict": "remove"
+  },
+  {
+    "match": [
+      "scheduler.exe"
+    ],
+    "name": "IObit Driver Booster scheduler",
+    "does": "Runs Driver Booster's scheduled driver scans in the background.",
+    "without": "Nothing you'd notice: you can still scan for drivers when you open Driver Booster.",
+    "verdict": "remove",
+    "under": "\\iobit\\driver booster\\"
+  },
+  {
+    "match": [
+      "autoupdate.exe"
+    ],
+    "name": "IObit Driver Booster updater",
+    "does": "Checks for new versions of Driver Booster itself.",
+    "without": "Nothing you'd notice: Driver Booster offers updates when you open it.",
+    "verdict": "remove",
+    "under": "\\iobit\\driver booster\\"
+  },
+  {
+    "match": [
+      "updatechecker.exe"
+    ],
+    "name": "Equalizer APO update checker",
+    "does": "Checks whether a newer Equalizer APO version is available.",
+    "without": "Nothing you'd notice: your EQ keeps working; you just won't hear about new versions.",
+    "verdict": "remove",
+    "under": "\\equalizerapo\\"
+  },
+  {
+    "match": [
+      "steam.exe"
+    ],
+    "name": "Steam",
+    "does": "Opens Steam in the tray at sign-in so friends see you online and updates download.",
+    "without": "Game updates wait until Steam opens; Exo opens it when a game needs it.",
+    "verdict": "remove"
+  },
+  {
+    "match": [
+      "epicgameslauncher.exe"
+    ],
+    "name": "Epic Games Launcher",
+    "does": "Opens the Epic Games Launcher in the background at sign-in.",
+    "without": "Game updates wait until it opens; Exo opens it when a game needs it.",
+    "verdict": "remove"
+  },
+  {
+    "match": [
+      "riotclientservices.exe",
+      "riotclientux.exe"
+    ],
+    "name": "Riot Client",
+    "does": "Opens the Riot Client at sign-in so Riot games update and friends see you.",
+    "without": "Game updates wait until it opens; Exo opens it when a game needs it.",
+    "verdict": "remove"
+  },
+  {
+    "match": [
+      "discord.exe",
+      "discordptb.exe",
+      "discordcanary.exe"
+    ],
+    "name": "Discord",
+    "does": "Opens Discord in the tray at sign-in so you get messages and calls.",
+    "without": "Nothing you'd notice in Exo: Discord is built in; the separate app opens when you start it.",
+    "verdict": "remove"
+  },
+  {
+    "match": [
+      "eadesktop.exe"
+    ],
+    "name": "EA app",
+    "does": "Opens the EA app in the background at sign-in.",
+    "without": "Game updates wait until it opens; Exo opens it when a game needs it.",
+    "verdict": "remove"
+  },
+  {
+    "match": [
+      "upc.exe",
+      "ubisoftconnect.exe"
+    ],
+    "name": "Ubisoft Connect",
+    "does": "Opens Ubisoft Connect in the background at sign-in.",
+    "without": "Game updates wait until it opens; Exo opens it when a game needs it.",
+    "verdict": "remove"
+  },
+  {
+    "match": [
+      "battle.net.exe",
+      "battle.net launcher.exe"
+    ],
+    "name": "Battle.net",
+    "does": "Opens Battle.net in the background at sign-in so games update and friends see you.",
+    "without": "Game updates wait until it opens; Exo opens it when a game needs it.",
+    "verdict": "remove"
+  },
+  {
+    "match": [
+      "galaxyclient.exe"
+    ],
+    "name": "GOG Galaxy",
+    "does": "Opens GOG Galaxy in the background at sign-in.",
+    "without": "Game updates wait until it opens; Exo opens it when a game needs it.",
+    "verdict": "remove"
+  },
+  {
+    "match": [
+      "amazon games ui.exe",
+      "app amazon games.exe"
+    ],
+    "name": "Amazon Games",
+    "does": "Opens the Amazon Games app in the background at sign-in.",
+    "without": "Game updates wait until it opens; Exo opens it when a game needs it.",
+    "verdict": "remove"
+  },
+  {
+    "match": [
+      "xboxpcapp.exe"
+    ],
+    "name": "Xbox app",
+    "does": "Opens the Xbox app in the background at sign-in.",
+    "without": "Nothing you'd notice: Game Pass games still launch and the app opens when needed.",
+    "verdict": "remove"
+  },
+  {
+    "match": [
+      "itch.exe"
+    ],
+    "name": "itch.io app",
+    "does": "Opens the itch.io app in the background at sign-in.",
+    "without": "Nothing you'd notice: game updates wait until you open the app.",
+    "verdict": "remove"
+  },
+  {
+    "match": [
+      "playnite.desktopapp.exe",
+      "playnite.fullscreenapp.exe"
+    ],
+    "name": "Playnite",
+    "does": "Opens the Playnite game library at sign-in.",
+    "without": "Nothing you'd notice: Playnite opens when you start it.",
+    "verdict": "remove"
+  },
+  {
+    "match": [
+      "onedrive.exe"
+    ],
+    "name": "OneDrive",
+    "does": "Starts OneDrive at sign-in to keep your files synced and backed up to the cloud.",
+    "without": "Files stop syncing and backing up until you open OneDrive yourself.",
+    "verdict": "optional"
+  },
+  {
+    "match": [
+      "ms-teams.exe",
+      "teams.exe"
+    ],
+    "name": "Microsoft Teams",
+    "does": "Opens Teams in the background at sign-in so you get messages and calls.",
+    "without": "Teams messages and calls don't reach you until you open Teams.",
+    "verdict": "optional"
+  },
+  {
+    "match": [
+      "skype.exe"
+    ],
+    "name": "Skype",
+    "does": "Starts Skype at sign-in; Microsoft shut Skype down in May 2025.",
+    "without": "Nothing you'd notice: the Skype service no longer works.",
+    "verdict": "remove"
+  },
+  {
+    "match": [
+      "zoom.exe"
+    ],
+    "name": "Zoom",
+    "does": "Opens Zoom in the background at sign-in.",
+    "without": "Nothing you'd notice: meeting links still open Zoom when you join.",
+    "verdict": "remove"
+  },
+  {
+    "match": [
+      "slack.exe"
+    ],
+    "name": "Slack",
+    "does": "Opens Slack in the background at sign-in so you get messages.",
+    "without": "Slack messages don't notify you until you open Slack.",
+    "verdict": "optional"
+  },
+  {
+    "match": [
+      "googledrivefs.exe"
+    ],
+    "name": "Google Drive",
+    "does": "Starts Google Drive at sign-in so your Drive files sync and show in File Explorer.",
+    "without": "The Google Drive folder is missing and files don't sync until you open it.",
+    "verdict": "optional"
+  },
+  {
+    "match": [
+      "dropbox.exe"
+    ],
+    "name": "Dropbox",
+    "does": "Starts Dropbox at sign-in to keep your Dropbox folder synced.",
+    "without": "Files stop syncing until you open Dropbox yourself.",
+    "verdict": "optional"
+  },
+  {
+    "match": [
+      "creative cloud.exe"
+    ],
+    "name": "Adobe Creative Cloud",
+    "does": "Starts the Creative Cloud app at sign-in to sync Adobe Fonts, files and app updates.",
+    "without": "Adobe Fonts and synced files may be missing until you open Creative Cloud.",
+    "verdict": "optional"
+  },
+  {
+    "match": [
+      "agcinvokerutility.exe"
+    ],
+    "name": "Adobe Genuine Service",
+    "does": "Checks that installed Adobe apps are licensed copies.",
+    "without": "Nothing you'd notice: Adobe apps still open normally.",
+    "verdict": "remove"
+  },
+  {
+    "match": [
+      "jusched.exe"
+    ],
+    "name": "Java Update Scheduler",
+    "does": "Checks for Java updates in the background.",
+    "without": "Java won't remind you about updates; you can update it from the Java Control Panel.",
+    "verdict": "remove"
+  },
+  {
+    "match": [
+      "ituneshelper.exe"
+    ],
+    "name": "iTunes Helper",
+    "does": "Watches for iPhones and iPods so iTunes opens when you plug one in.",
+    "without": "iTunes won't open by itself when you connect an iPhone or iPod.",
+    "verdict": "remove"
+  },
+  {
+    "match": [
+      "rtkauduservice64.exe",
+      "rtkauduservice.exe"
+    ],
+    "name": "Realtek Audio service",
+    "does": "Runs Realtek's audio helper that applies Realtek Audio Console settings and jack detection.",
+    "without": "Jack detection and Realtek sound effects may stop; basic sound still plays.",
+    "verdict": "keep"
+  },
+  {
+    "match": [
+      "ravbg64.exe"
+    ],
+    "name": "Realtek HD Audio background",
+    "does": "Runs Realtek's older audio helper for jack detection and sound effects.",
+    "without": "Jack detection and Realtek sound effects may stop; basic sound still plays.",
+    "verdict": "keep"
+  },
+  {
+    "match": [
+      "rtkngui64.exe",
+      "ravcpl64.exe"
+    ],
+    "name": "Realtek HD Audio Manager",
+    "does": "Opens the Realtek HD Audio Manager tray icon at sign-in.",
+    "without": "The tray icon and jack pop-ups go away; sound still works.",
+    "verdict": "optional"
+  },
+  {
+    "match": [
+      "nvbackend.exe"
+    ],
+    "name": "NVIDIA GeForce Experience backend",
+    "does": "Checks for NVIDIA driver updates and optimal game settings in the background.",
+    "without": "Driver update alerts wait until you open the NVIDIA app or GeForce Experience.",
+    "verdict": "remove"
+  },
+  {
+    "match": [
+      "nvtray.exe"
+    ],
+    "name": "NVIDIA tray icon",
+    "does": "Shows the old NVIDIA settings icon in the tray.",
+    "without": "Nothing you'd notice: the graphics driver works the same without the icon.",
+    "verdict": "remove"
+  },
+  {
+    "match": [
+      "nvidia broadcast.exe"
+    ],
+    "name": "NVIDIA Broadcast",
+    "does": "Starts NVIDIA Broadcast so its noise removal and camera effects are ready.",
+    "without": "Apps set to the Broadcast mic or camera get nothing until you open it.",
+    "verdict": "optional"
+  },
+  {
+    "match": [
+      "radeonsoftware.exe"
+    ],
+    "name": "AMD Software: Adrenalin",
+    "does": "Starts AMD Software in the tray for its overlay, hotkeys, recording and update alerts.",
+    "without": "The AMD overlay, hotkeys and Instant Replay don't work until you open AMD Software.",
+    "verdict": "optional"
+  },
+  {
+    "match": [
+      "igfxtray.exe"
+    ],
+    "name": "Intel graphics tray icon",
+    "does": "Shows the old Intel graphics settings icon in the tray.",
+    "without": "Nothing you'd notice: graphics work the same without the icon.",
+    "verdict": "remove"
+  },
+  {
+    "match": [
+      "hkcmd.exe"
+    ],
+    "name": "Intel graphics hotkeys",
+    "does": "Listens for Intel's graphics hotkeys, like Ctrl+Alt+arrow to rotate the screen.",
+    "without": "Intel's screen hotkeys stop working; graphics are otherwise unchanged.",
+    "verdict": "remove"
+  },
+  {
+    "match": [
+      "lghub.exe",
+      "lghub_agent.exe"
+    ],
+    "name": "Logitech G HUB",
+    "does": "Starts G HUB so your Logitech lighting, macros and per-game profiles load.",
+    "without": "Logitech gear falls back to onboard or default settings; software macros stop.",
+    "verdict": "keep"
+  },
+  {
+    "match": [
+      "logioptionsplus_agent.exe"
+    ],
+    "name": "Logitech Options+",
+    "does": "Runs Options+ so your Logitech mouse and keyboard button settings apply.",
+    "without": "Custom buttons and gestures go back to defaults until you open Options+.",
+    "verdict": "keep"
+  },
+  {
+    "match": [
+      "razerappengine.exe",
+      "razer synapse 3.exe"
+    ],
+    "name": "Razer Synapse",
+    "does": "Starts Synapse so your Razer lighting, macros and device profiles load.",
+    "without": "Razer gear falls back to onboard or default settings; software macros stop.",
+    "verdict": "keep"
+  },
+  {
+    "match": [
+      "icue.exe"
+    ],
+    "name": "Corsair iCUE",
+    "does": "Starts iCUE so your Corsair lighting, fan curves and macros load.",
+    "without": "Your RGB lighting and macros stay at device defaults until you open iCUE.",
+    "verdict": "keep"
+  },
+  {
+    "match": [
+      "steelseriesgg.exe",
+      "steelseriesggclient.exe"
+    ],
+    "name": "SteelSeries GG",
+    "does": "Starts GG so your SteelSeries device settings and Sonar audio mixer load.",
+    "without": "Device settings fall back to defaults, and Sonar audio goes silent until you open GG.",
+    "verdict": "keep"
+  },
+  {
+    "match": [
+      "msiafterburner.exe"
+    ],
+    "name": "MSI Afterburner",
+    "does": "Starts Afterburner to apply your GPU overclock, fan curve and on-screen stats.",
+    "without": "Your GPU runs at stock clocks and fan curve until you open Afterburner.",
+    "verdict": "optional"
+  },
+  {
+    "match": [
+      "rtss.exe"
+    ],
+    "name": "RivaTuner Statistics Server",
+    "does": "Starts RivaTuner for the in-game stats overlay and frame-rate limits.",
+    "without": "The stats overlay and its frame-rate cap don't apply until it's open.",
+    "verdict": "optional"
+  },
+  {
+    "match": [
+      "fancontrol.exe"
+    ],
+    "name": "Fan Control",
+    "does": "Starts Fan Control to apply your custom fan curves.",
+    "without": "Fans run on the motherboard's default curves until you open Fan Control.",
+    "verdict": "keep"
+  },
+  {
+    "match": [
+      "hwinfo64.exe",
+      "hwinfo32.exe"
+    ],
+    "name": "HWiNFO",
+    "does": "Starts HWiNFO's sensor monitoring in the tray.",
+    "without": "Sensor readings and anything that reads them, like overlays, wait until HWiNFO opens.",
+    "verdict": "optional"
+  },
+  {
+    "match": [
+      "signalrgb.exe"
+    ],
+    "name": "SignalRGB",
+    "does": "Starts SignalRGB so your lighting effects play across your devices.",
+    "without": "Lighting stays at device defaults until you open SignalRGB.",
+    "verdict": "optional"
+  },
+  {
+    "match": [
+      "openrgb.exe"
+    ],
+    "name": "OpenRGB",
+    "does": "Starts OpenRGB to apply your saved lighting profile.",
+    "without": "Lighting stays at device defaults until you open OpenRGB.",
+    "verdict": "optional"
+  },
+  {
+    "match": [
+      "wootility.exe"
+    ],
+    "name": "Wootility",
+    "does": "Opens Wootility, the Wooting keyboard settings app, at sign-in.",
+    "without": "Nothing you'd notice: Wooting keyboards keep their settings on the keyboard itself.",
+    "verdict": "remove"
+  },
+  {
+    "match": [
+      "wallpaper32.exe",
+      "wallpaper64.exe"
+    ],
+    "name": "Wallpaper Engine",
+    "does": "Starts Wallpaper Engine so your animated wallpaper plays.",
+    "without": "Your desktop shows a plain wallpaper until you open Wallpaper Engine.",
+    "verdict": "optional"
+  },
+  {
+    "match": [
+      "medal.exe"
+    ],
+    "name": "Medal",
+    "does": "Starts Medal in the background so it can record clips while you play.",
+    "without": "Clips aren't recorded until you open Medal.",
+    "verdict": "optional"
+  },
+  {
+    "match": [
+      "overwolf.exe",
+      "overwolflauncher.exe"
+    ],
+    "name": "Overwolf",
+    "does": "Starts Overwolf and its apps, like Outplayed or Porofessor, at sign-in.",
+    "without": "Overwolf apps and their overlays don't run until you open Overwolf.",
+    "verdict": "optional"
+  },
+  {
+    "match": [
+      "blitz.exe"
+    ],
+    "name": "Blitz",
+    "does": "Starts Blitz so it can show stats and builds during your games.",
+    "without": "Blitz overlays and match stats don't appear until you open Blitz.",
+    "verdict": "optional"
+  },
+  {
+    "match": [
+      "parsecd.exe"
+    ],
+    "name": "Parsec",
+    "does": "Starts Parsec so you can connect to this PC remotely.",
+    "without": "You can't reach this PC through Parsec until you open it here.",
+    "verdict": "optional"
+  },
+  {
+    "match": [
+      "streamdeck.exe"
+    ],
+    "name": "Elgato Stream Deck",
+    "does": "Starts the Stream Deck app so your keys show icons and run actions.",
+    "without": "Your Stream Deck keys stay blank and do nothing until you open the app.",
+    "verdict": "keep"
+  },
+  {
+    "match": [
+      "wavelink.exe"
+    ],
+    "name": "Elgato Wave Link",
+    "does": "Starts Wave Link so your mic effects and audio mixes run.",
+    "without": "Wave Link's mixes and mic effects stop until you open it.",
+    "verdict": "optional"
+  },
+  {
+    "match": [
+      "obs64.exe",
+      "obs32.exe"
+    ],
+    "name": "OBS Studio",
+    "does": "Opens OBS Studio at sign-in.",
+    "without": "Nothing you'd notice: OBS opens when you start it to stream or record.",
+    "verdict": "remove"
+  },
+  {
+    "match": [
+      "voicemod.exe",
+      "voicemoddesktop.exe"
+    ],
+    "name": "Voicemod",
+    "does": "Starts Voicemod so its voice changer mic is ready.",
+    "without": "Apps set to the Voicemod mic hear nothing until you open Voicemod.",
+    "verdict": "optional"
+  },
+  {
+    "match": [
+      "krisp.exe"
+    ],
+    "name": "Krisp",
+    "does": "Starts Krisp so its noise-cancelled mic and speaker are ready.",
+    "without": "Apps set to the Krisp mic or speaker get no sound until you open Krisp.",
+    "verdict": "optional"
+  },
+  {
+    "match": [
+      "voicemeeter.exe",
+      "voicemeeterpro.exe",
+      "voicemeeter8.exe",
+      "voicemeeter8x64.exe",
+      "voicemeeterpro_x64.exe",
+      "voicemeeter_x64.exe"
+    ],
+    "name": "Voicemeeter",
+    "does": "Starts Voicemeeter so audio routed through its virtual devices reaches your speakers.",
+    "without": "Sound sent through Voicemeeter goes silent until you open it.",
+    "verdict": "keep"
+  },
+  {
+    "match": [
+      "eartrumpet.exe"
+    ],
+    "name": "EarTrumpet",
+    "does": "Starts EarTrumpet's per-app volume control in the tray.",
+    "without": "You use the normal Windows volume controls until you open EarTrumpet.",
+    "verdict": "optional"
+  },
+  {
+    "match": [
+      "phoneexperiencehost.exe"
+    ],
+    "name": "Phone Link",
+    "does": "Starts Phone Link in the background so phone notifications, texts and calls reach your PC.",
+    "without": "Phone notifications, texts and calls don't reach your PC until you open Phone Link.",
+    "verdict": "optional"
+  },
+  {
+    "match": [
+      "cortana.exe"
+    ],
+    "name": "Cortana",
+    "does": "Starts Cortana, which Microsoft retired and no longer supports.",
+    "without": "Nothing you'd notice: Cortana no longer works on Windows.",
+    "verdict": "remove"
+  },
+  {
+    "match": [
+      "ccleaner64.exe",
+      "ccleaner.exe"
+    ],
+    "name": "CCleaner",
+    "does": "Starts CCleaner's background monitoring and cleaning reminders.",
+    "without": "Nothing you'd notice: you can still clean when you open CCleaner.",
+    "verdict": "remove"
+  },
+  {
+    "match": [
+      "avastui.exe"
+    ],
+    "name": "Avast tray",
+    "does": "Shows Avast's tray icon and pop-ups; its protection runs as a separate service.",
+    "without": "The tray icon and pop-ups go away; protection keeps running as a service.",
+    "verdict": "keep"
+  },
+  {
+    "match": [
+      "avgui.exe"
+    ],
+    "name": "AVG tray",
+    "does": "Shows AVG's tray icon and pop-ups; its protection runs as a separate service.",
+    "without": "The tray icon and pop-ups go away; protection keeps running as a service.",
+    "verdict": "keep"
+  },
+  {
+    "match": [
+      "mbamtray.exe"
+    ],
+    "name": "Malwarebytes tray",
+    "does": "Shows the Malwarebytes tray icon and its alerts.",
+    "without": "The tray icon and alerts go away; Premium protection runs as a separate service.",
+    "verdict": "keep"
+  },
+  {
+    "match": [
+      "notion.exe"
+    ],
+    "name": "Notion",
+    "does": "Opens Notion in the background at sign-in.",
+    "without": "Nothing you'd notice: Notion opens when you start it.",
+    "verdict": "remove"
+  },
+  {
+    "match": [
+      "obsidian.exe"
+    ],
+    "name": "Obsidian",
+    "does": "Opens Obsidian at sign-in.",
+    "without": "Nothing you'd notice: Obsidian opens when you start it.",
+    "verdict": "remove"
+  },
+  {
+    "match": [
+      "telegram.exe"
+    ],
+    "name": "Telegram",
+    "does": "Opens Telegram in the tray at sign-in so you get messages.",
+    "without": "Telegram messages don't notify you on this PC until you open it.",
+    "verdict": "optional"
+  },
+  {
+    "match": [
+      "signal.exe"
+    ],
+    "name": "Signal",
+    "does": "Opens Signal in the background at sign-in so you get messages.",
+    "without": "Signal messages don't notify you on this PC until you open it.",
+    "verdict": "optional"
+  },
+  {
+    "match": [
+      "browser_assistant.exe"
+    ],
+    "name": "Opera Browser Assistant",
+    "does": "Runs Opera's tray helper with news, shortcuts and prompts to use Opera.",
+    "without": "Nothing you'd notice: Opera and Opera GX still open and update normally.",
+    "verdict": "remove"
+  },
+  {
+    "match": [
+      "docker desktop.exe"
+    ],
+    "name": "Docker Desktop",
+    "does": "Starts Docker Desktop and its engine so containers can run.",
+    "without": "Containers don't run until you open Docker Desktop.",
+    "verdict": "optional"
+  },
+  {
+    "match": [
+      "vmware-tray.exe"
+    ],
+    "name": "VMware tray",
+    "does": "Shows VMware's tray icon for virtual machines running in the background.",
+    "without": "Nothing you'd notice: virtual machines still open from VMware itself.",
+    "verdict": "remove"
+  },
+  {
+    "match": [
+      "sharex.exe"
+    ],
+    "name": "ShareX",
+    "does": "Starts ShareX in the tray so your screenshot and recording hotkeys work.",
+    "without": "ShareX hotkeys do nothing until you open ShareX.",
+    "verdict": "optional"
+  },
+  {
+    "match": [
+      "lightshot.exe"
+    ],
+    "name": "Lightshot",
+    "does": "Starts Lightshot so the Print Screen key opens its screenshot tool.",
+    "without": "Print Screen goes back to Windows' own screenshot tool.",
+    "verdict": "optional"
+  },
+  {
+    "match": [
+      "greenshot.exe"
+    ],
+    "name": "Greenshot",
+    "does": "Starts Greenshot in the tray so its screenshot hotkeys work.",
+    "without": "Print Screen goes back to Windows' own screenshot tool.",
+    "verdict": "optional"
+  },
+  {
+    "match": [
+      "flux.exe"
+    ],
+    "name": "f.lux",
+    "does": "Starts f.lux to warm your screen colors at night.",
+    "without": "Your screen stays its normal color at night until you open f.lux.",
+    "verdict": "optional"
+  },
+  {
+    "match": [
+      "powertoys.exe"
+    ],
+    "name": "PowerToys",
+    "does": "Starts PowerToys so its tools like FancyZones and the launcher work.",
+    "without": "PowerToys shortcuts and tools do nothing until you open PowerToys.",
+    "verdict": "optional"
+  },
+  {
+    "match": [
+      "everything.exe"
+    ],
+    "name": "Everything",
+    "does": "Starts Everything in the tray to keep its file search index up to date.",
+    "without": "Its search shortcut won't work until you open it, then it catches up.",
+    "verdict": "optional"
+  },
+  {
+    "match": [
+      "translucenttb.exe"
+    ],
+    "name": "TranslucentTB",
+    "does": "Starts TranslucentTB to make your taskbar clear or blurred.",
+    "without": "Your taskbar keeps the normal Windows look until you open TranslucentTB.",
+    "verdict": "optional"
+  },
+  {
+    "match": [
+      "rainmeter.exe"
+    ],
+    "name": "Rainmeter",
+    "does": "Starts Rainmeter so your desktop widgets and skins show.",
+    "without": "Your Rainmeter widgets don't appear until you open Rainmeter.",
+    "verdict": "optional"
+  },
+  {
+    "match": [
+      "flow.launcher.exe"
+    ],
+    "name": "Flow Launcher",
+    "does": "Starts Flow Launcher so its search hotkey works.",
+    "without": "The Flow Launcher hotkey does nothing until you open it.",
+    "verdict": "optional"
+  },
+  {
+    "match": [
+      "autohotkey.exe",
+      "autohotkey64.exe",
+      "autohotkeyu64.exe",
+      "autohotkey32.exe"
+    ],
+    "name": "AutoHotkey script",
+    "does": "Runs one of your AutoHotkey scripts, usually custom hotkeys or remaps.",
+    "without": "That script's hotkeys and remaps stop until you run it yourself.",
+    "verdict": "optional"
+  },
+  {
+    "match": [
+      "qbittorrent.exe"
+    ],
+    "name": "qBittorrent",
+    "does": "Opens qBittorrent at sign-in so downloads and seeding resume.",
+    "without": "Torrents pause until you open qBittorrent.",
+    "verdict": "remove"
+  },
+  {
+    "match": [
+      "nordvpn.exe"
+    ],
+    "name": "NordVPN",
+    "does": "Starts NordVPN at sign-in, connecting automatically if you turned that on.",
+    "without": "You aren't on the VPN until you open NordVPN and connect.",
+    "verdict": "optional"
+  },
+  {
+    "match": [
+      "tailscale-ipn.exe"
+    ],
+    "name": "Tailscale",
+    "does": "Starts Tailscale's tray app so this PC joins your private network.",
+    "without": "Your other Tailscale devices may not reach this PC until you open it.",
+    "verdict": "optional"
+  },
+  {
+    "match": [
+      "bitwarden.exe"
+    ],
+    "name": "Bitwarden",
+    "does": "Opens the Bitwarden desktop app at sign-in.",
+    "without": "The browser extension still works, but Windows Hello unlock through the app stops.",
+    "verdict": "remove"
+  },
+  {
+    "match": [
+      "scskillerw.exe",
+      "scskiller.exe"
+    ],
+    "name": "SCSKiller shader re-warm",
+    "does": "Rebuilds your games' shaders after a graphics driver update, when the PC is idle.",
+    "without": "Nothing you'd notice: Exo Shaders rebuilds shaders itself.",
+    "verdict": "remove",
+    "realSwitch": {
+      "kind": "jsonSetting",
+      "file": "%LocalAppData%\\SCSKiller\\settings.json",
+      "path": "OnDriverUpdate",
+      "off": "Off",
+      "process": "SCSKiller,scskillerw,scskiller",
+      "status": "Turned off in its own settings"
+    }
+  }
+]

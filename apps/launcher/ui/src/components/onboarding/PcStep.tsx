@@ -1,0 +1,63 @@
+import { useState } from 'react'
+import { Switch } from '../Switch'
+import { lucidSetupWords } from '../settings/LucidSection'
+import { Row, State } from '../settings/parts'
+import { BestCheck, type BestKey, type BestStep } from '../gpu/BestSetup'
+import { host, type LucidState } from '../../lib/host'
+import { report } from '../../lib/report'
+import { Wait, sample, times } from '../ui/Wait'
+import { Spinner } from '../ui/Spinner'
+
+/**
+ * First run's last step, Best settings for this PC: the same steps as the PC room's (gpu/BestSetup.tsx), each a row that
+ * turns its ring while it runs and takes a green check once set; the footer's Use best settings runs them. Then Lucid,
+ * the optional headphone EQ in Exo: Set up, which says what it will do first, and once set up, Start with Exo.
+ */
+export function PcStep({ steps, running, landed, failed, lucid, onLucid }: {
+  /** Null while this PC is still being read. */
+  steps: BestStep[] | null
+  running: BestKey | null
+  landed: ReadonlySet<BestKey>
+  failed: Partial<Record<BestKey, string>>
+  lucid: LucidState | null
+  onLucid: (next: LucidState) => void
+}) {
+  return (
+    <div className="exo-set-list">
+      {steps === null ? <Wait label="Reading this PC">{times(4, i => <Row label={sample(i)}><State on>Set</State></Row>)}</Wait> : steps.map(step => (
+        <Row key={step.key} label={step.what} error={failed[step.key]}>
+          {running === step.key ? <State><Spinner label={`Setting ${step.what}`} /> Setting</State>
+            : step.done ? <State on><BestCheck landed={landed.has(step.key)} />Set</State> : null}
+        </Row>
+      ))}
+      {lucid ? <LucidRows lucid={lucid} onLucid={onLucid} /> : null}
+    </div>
+  )
+}
+
+function LucidRows({ lucid, onLucid }: { lucid: LucidState; onLucid: (next: LucidState) => void }) {
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  function run(call: Promise<LucidState>, failed: string) {
+    setBusy(true)
+    setError(null)
+    call.then(next => { onLucid(next); setError(next.message ?? null) }, (cause: unknown) => { report(cause, 'PcStep.lucid'); setError(failed) })
+      .finally(() => setBusy(false))
+  }
+  if (!lucid.found) return null
+  if (!lucid.ready) {
+    return (
+      <Row label={lucid.running ? 'Setting up Lucid' : 'Set up Lucid'} detail={lucid.running ? 'Say yes when Windows asks, then choose your devices.' : lucidSetupWords(lucid)} error={error}>
+        {lucid.running ? <Spinner label="Setting up Lucid" /> : (
+          <button type="button" className="exo-set-btn" disabled={busy} onClick={() => run(host.lucid('setup'), "Lucid didn't start. Try again.")}>Set up</button>
+        )}
+      </Row>
+    )
+  }
+  return (
+    <Row label="Lucid headphone EQ" labelId="ob-lucid" error={error}>
+      <Switch checked={lucid.startWithExo} disabled={busy} labelledBy="ob-lucid"
+        onChange={on => run(host.lucid('set', { on }), "Lucid didn't change. Try again.")} />
+    </Row>
+  )
+}

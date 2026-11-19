@@ -1,0 +1,13 @@
+<EngineOptionGraphics Name="_graphicsOption" Template="/OS_M_Windows::Cinematic.engineoptiongraphics">
+<EnumSelectQualityLevel Name="_modelQualityLevelSelect" _select="Ultra"/>
+<EnumSelectQualityLevel Name="_textureQualityLevelSelect" _select="Cinematic"/>
+<EnumSelectQualityLevel Name="_shadowQualityLevelSelect" _select="Ultra"/>
+<EnumSelectQualityLevel Name="_lightingQualityLevelSelect" _select="Ultra"/>
+<EnumSelectQualityLevel Name="_reflectionQualityLevelSelect" _select="Cinematic"/>
+<OptionBool Name="_enableAdvancedWeatherEffect" _value="False"/>
+<EnumSelectQualityLevel Name="_waterQualityLevelSelect" _select="Cinematic"/>
+<EnumSelectQualityLevel Name="_foliageDensityLevelSelect" _select="Cinematic"/>
+<EnumSelectQualityLevel Name="_volumetricFogQualityLevelSelect" _select="High"/>
+<EnumSelectQualityLevel Name="_effectQualityLevelSelect" _select="Cinematic"/>
+<EnumSelectQualityLevel Name="_simulationQualityLevelSelect" _select="Cinematic"/>
+<OptionStringVector Name="_postProcessingQualityLevelSelect" _value="Cinematic"/>

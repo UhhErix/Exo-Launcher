@@ -1,0 +1,25 @@
+# Exo's update address (README.md). Deployed by `npx wrangler@4.158.0 deploy` from this folder.
+name = "exo-updates"
+main = "src/worker.js"
+compatibility_date = "2026-10-01"
+workers_dev = true
+# The address the apps name. exo-updates.exo-erix.workers.dev stays as a second name for copies that shipped with it.
+routes = []
+preview_urls = false
+send_metrics = false
+
+# No logs: the update address keeps nothing about who asks.
+[observability]
+enabled = false
+
+[[r2_buckets]]
+binding = "MIRROR"
+bucket_name = "replace-with-bucket-name"
+
+# Secrets, set with `wrangler secret put` and never kept here: DISCORD_WEBHOOK_<APP> (the release card's channel) and
+# DISCORD_ROLE_<APP> (optional role id), for LAUNCHER and CINEMA. README.md, "At each release".
+
+# The cache watch (src/watch.js): every 15 minutes, one discovery step and one queued file per run, so it fits the free plan
+# (no hashing, no large buffers). Deploy steps: README.md, "The cache watch".
+[triggers]
+crons = []

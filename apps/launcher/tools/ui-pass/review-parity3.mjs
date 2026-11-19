@@ -1,0 +1,12 @@
+import { launch, newPage, open, room, sleep } from './harness.mjs'
+await launch()
+const p = await newPage('void', 1920, 1080)
+await p.view(1920, 1080, { dpr: 1 })
+await open(p, ''); await room(p, 'Discord'); await sleep(1200)
+await p.clickSel('.exo-dc-rail-item.is-server', 0); await sleep(1500)
+const r = await p.fn(() => { const b = document.querySelector('.exo-dc-rail-list').getBoundingClientRect(); return { x: b.x + 100, y: b.y + 20 } })
+await p.mouse(r.x, r.y, 'move')
+await p.send('Input.dispatchMouseEvent', { type: 'mouseWheel', x: r.x, y: r.y, deltaX: 0, deltaY: 400 })
+await sleep(600)
+console.log(await p.fn(() => { const l = document.querySelector('.exo-dc-rail-list'); return JSON.stringify({ left: l.scrollLeft, sbw: getComputedStyle(l).scrollbarWidth, ov: getComputedStyle(l).overflowX, h: l.offsetHeight - l.clientHeight }) }))
+process.exit(0)

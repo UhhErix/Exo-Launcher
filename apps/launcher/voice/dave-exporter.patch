@@ -1,0 +1,177 @@
+diff --git a/cpp/includes/dave/dave.h b/cpp/includes/dave/dave.h
+index 1421eea..d7f1a3e 100644
+--- a/cpp/includes/dave/dave.h
++++ b/cpp/includes/dave/dave.h
+@@ -257,6 +257,25 @@ DAVE_EXPORT void daveSessionGetLastEpochAuthenticator(DAVESessionHandle session,
+                                                       uint8_t** authenticator,
+                                                       size_t* length);
+ 
++/**
++ * @brief Derives a secret from the current MLS epoch (MLS-Exporter, RFC 9420 section 8.5)
++ * Only members of the group in this epoch can compute it; a new epoch gives a new secret.
++ * @param session Session handle
++ * @param label Exporter label; use one of the application's own, never the media key label
++ * @param context Exporter context bytes (may be null when contextLength is 0)
++ * @param contextLength Length of the context
++ * @param size Number of bytes to derive
++ * @param[out] secret Output pointer to the secret (caller must free with daveFree); null without a group
++ * @param[out] length Output pointer to the secret's length; 0 without a group
++ */
++DAVE_EXPORT void daveSessionExportSecret(DAVESessionHandle session,
++                                         const char* label,
++                                         const uint8_t* context,
++                                         size_t contextLength,
++                                         size_t size,
++                                         uint8_t** secret,
++                                         size_t* length);
++
+ /**
+  * @brief Sets the external sender credentials for the session
+  * @param session Session handle
+diff --git a/cpp/includes/dave/dave_interfaces.h b/cpp/includes/dave/dave_interfaces.h
+index 0cce30d..731e645 100644
+--- a/cpp/includes/dave/dave_interfaces.h
++++ b/cpp/includes/dave/dave_interfaces.h
+@@ -104,6 +104,10 @@ public:
+ 
+     virtual std::vector<uint8_t> GetLastEpochAuthenticator() const noexcept = 0;
+ 
++    virtual std::vector<uint8_t> ExportSecret(std::string const& label,
++                                              std::vector<uint8_t> const& context,
++                                              size_t size) const noexcept = 0;
++
+     virtual void SetExternalSender(std::vector<uint8_t> const& externalSenderPackage) noexcept = 0;
+ 
+     virtual std::optional<std::vector<uint8_t>> ProcessProposals(
+diff --git a/cpp/src/bindings_capi.cpp b/cpp/src/bindings_capi.cpp
+index 15c8b14..30cc8c9 100644
+--- a/cpp/src/bindings_capi.cpp
++++ b/cpp/src/bindings_capi.cpp
+@@ -154,6 +154,26 @@ void daveSessionGetLastEpochAuthenticator(DAVESessionHandle sessionHandle,
+     CopyVectorToOutputBuffer(lastEpochAuthenticator, authenticator, length);
+ }
+ 
++void daveSessionExportSecret(DAVESessionHandle sessionHandle,
++                             const char* label,
++                             const uint8_t* context,
++                             size_t contextLength,
++                             size_t size,
++                             uint8_t** secret,
++                             size_t* length)
++{
++    ARG_CHECK(sessionHandle);
++    ARG_CHECK(label);
++    auto session = reinterpret_cast<discord::dave::mls::ISession*>(sessionHandle);
++    std::vector<uint8_t> exported;
++    if (context != nullptr || contextLength == 0) {
++        auto contextVec = context ? std::vector<uint8_t>(context, context + contextLength)
++                                  : std::vector<uint8_t>();
++        exported = session->ExportSecret(label, contextVec, size);
++    }
++    CopyVectorToOutputBuffer(exported, secret, length);
++}
++
+ void daveSessionSetExternalSender(DAVESessionHandle sessionHandle,
+                                   const uint8_t* externalSender,
+                                   size_t length)
+diff --git a/cpp/src/mls/session.cpp b/cpp/src/mls/session.cpp
+index 543e1ef..fe279c0 100644
+--- a/cpp/src/mls/session.cpp
++++ b/cpp/src/mls/session.cpp
+@@ -110,6 +110,21 @@ std::vector<uint8_t> Session::GetLastEpochAuthenticator() const noexcept
+     return std::move(currentState_->epoch_authenticator().as_vec());
+ }
+ 
++std::vector<uint8_t> Session::ExportSecret(std::string const& label,
++                                           std::vector<uint8_t> const& context,
++                                           size_t size) const noexcept
++try {
++    if (!currentState_ || label.empty() || label == USER_MEDIA_KEY_BASE_LABEL || size == 0) {
++        return {};
++    }
++
++    return std::move(currentState_->do_export(label, context, size).as_vec());
++}
++catch (const std::exception& e) {
++    DISCORD_LOG(LS_ERROR) << "Failed to export secret: " << e.what();
++    return {};
++}
++
+ void Session::SetExternalSender(const std::vector<uint8_t>& marshalledExternalSender) noexcept
+ try {
+     if (currentState_) {
+diff --git a/cpp/src/mls/session.h b/cpp/src/mls/session.h
+index f0d2cc5..cf03ccf 100644
+--- a/cpp/src/mls/session.h
++++ b/cpp/src/mls/session.h
+@@ -55,6 +55,10 @@ public:
+ 
+     virtual std::vector<uint8_t> GetLastEpochAuthenticator() const noexcept override;
+ 
++    virtual std::vector<uint8_t> ExportSecret(std::string const& label,
++                                              std::vector<uint8_t> const& context,
++                                              size_t size) const noexcept override;
++
+     virtual void SetExternalSender(
+       std::vector<uint8_t> const& externalSenderPackage) noexcept override;
+ 
+diff --git a/cpp/test/mls_session_tests.cpp b/cpp/test/mls_session_tests.cpp
+index a38380c..d6162b8 100644
+--- a/cpp/test/mls_session_tests.cpp
++++ b/cpp/test/mls_session_tests.cpp
+@@ -119,6 +119,55 @@ TEST_F(MlsSessionTests, SessionJoinViaCommitAndWelcome)
+     EXPECT_EQ(authenticatorA, authenticatorB);
+ }
+ 
++// Exo's call relay keys: every member of an epoch exports the same secret, a
++// non-member and the next epoch get another, and labels keep secrets apart.
++TEST_F(MlsSessionTests, SessionExportSecretIsSharedPerEpoch)
++{
++    const std::string label = "Exo call relay v1";
++    ExternalSender externalSender(kTestProtocolVersion, kTestGroupId);
++    TestSession a(kUserA);
++    TestSession b(kUserB);
++    TestSession c(kUserC);
++    a.InitAndSetExternalSender(externalSender, kTestGroupId);
++    b.InitAndSetExternalSender(externalSender, kTestGroupId);
++    c.InitAndSetExternalSender(externalSender, kTestGroupId);
++
++    EXPECT_TRUE(a.session->ExportSecret(label, {}, 32).empty());
++
++    auto first = ProposeAddAndCommit(externalSender, a, b);
++    ASSERT_TRUE(first.has_value());
++    auto firstRoster = a.session->ProcessCommit(first->commit);
++    ASSERT_NE(std::get_if<RosterMap>(&firstRoster), nullptr);
++    ASSERT_TRUE(b.session->ProcessWelcome(first->welcome, {kUserA, kUserB}).has_value());
++
++    auto epochOneA = a.session->ExportSecret(label, {}, 32);
++    auto epochOneB = b.session->ExportSecret(label, {}, 32);
++    ASSERT_EQ(epochOneA.size(), 32u);
++    EXPECT_EQ(epochOneA, epochOneB);
++    EXPECT_TRUE(c.session->ExportSecret(label, {}, 32).empty());
++    EXPECT_NE(a.session->ExportSecret("Another label", {}, 32), epochOneA);
++    EXPECT_NE(a.session->ExportSecret(label, {1}, 32), epochOneA);
++    EXPECT_NE(epochOneA, a.session->GetLastEpochAuthenticator());
++    EXPECT_TRUE(a.session->ExportSecret("Discord Secure Frames v0", {}, 32).empty());
++
++    // c joins: everyone moves to epoch 2 and a new secret
++    auto proposal = externalSender.ProposeAdd(1, c.session->GetMarshalledKeyPackage());
++    auto commitWelcome = a.session->ProcessProposals(proposal, {kUserA, kUserB, kUserC});
++    ASSERT_TRUE(commitWelcome.has_value());
++    b.session->ProcessProposals(proposal, {kUserA, kUserB, kUserC});
++    auto [commit, welcome] = externalSender.SplitCommitWelcome(*commitWelcome);
++    auto rosterA = a.session->ProcessCommit(commit);
++    auto rosterB = b.session->ProcessCommit(commit);
++    ASSERT_NE(std::get_if<RosterMap>(&rosterA), nullptr);
++    ASSERT_NE(std::get_if<RosterMap>(&rosterB), nullptr);
++    ASSERT_TRUE(c.session->ProcessWelcome(welcome, {kUserA, kUserB, kUserC}).has_value());
++
++    auto epochTwoA = a.session->ExportSecret(label, {}, 32);
++    EXPECT_EQ(epochTwoA, b.session->ExportSecret(label, {}, 32));
++    EXPECT_EQ(epochTwoA, c.session->ExportSecret(label, {}, 32));
++    EXPECT_NE(epochTwoA, epochOneA);
++}
++
+ TEST_F(MlsSessionTests, SessionWelcomeRejectsUnrecognizedRosterUser)
+ {
+     ExternalSender externalSender(kTestProtocolVersion, kTestGroupId);

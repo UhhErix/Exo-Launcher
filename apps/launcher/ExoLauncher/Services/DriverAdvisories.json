@@ -1,0 +1,199 @@
+{
+  "serial": 2026110801,
+  "advisories": [
+    {
+      "id": "nvidia-621.01-video-freeze",
+      "device": "^gpu:nvidia .*\\b(RTX 50[5-9]0|RTX Spark)",
+      "from": "621.01",
+      "before": "621.12",
+      "why": "video can freeze or go black",
+      "do": "update",
+      "to": "621.12",
+      "url": "https://nvidia.custhelp.com/app/answers/detail/a_id/5938/~/geforce-hotfix-display-driver-version-621.12",
+      "date": "2026-10-27"
+    },
+    {
+      "id": "intel-i225v-rev01-2.5g",
+      "device": "^(network|windows):PCI\\\\VEN_8086&DEV_15F3&SUBSYS_[0-9A-F]{8}&REV_01\\b",
+      "from": null,
+      "before": "1.0.0.30",
+      "why": "drops packets at 2.5 Gbps",
+      "do": "update",
+      "to": "1.0.0.30",
+      "url": "https://cdrdv2.intel.com/v1/dl/getContent/621661",
+      "date": "2020-11"
+    },
+    {
+      "id": "intel-i226v-link-drops",
+      "device": "^(network|windows):PCI\\\\VEN_8086&DEV_125C\\b",
+      "from": null,
+      "before": "2.1.3.15",
+      "why": "the link drops at random",
+      "do": "update",
+      "to": "2.1.3.15",
+      "minBuild": 22000,
+      "url": "https://community.intel.com/t/intel-r-ethernet-contoller-i226-v-connection-drop-for-a-few-seconds/111386/38",
+      "date": "2023-12-04"
+    },
+    {
+      "id": "intel-sst-10.29.0.5152",
+      "device": "^windows:.*Smart Sound Technology.{0,24}Audio Controller",
+      "from": "10.29.0.5152",
+      "before": "10.29.0.5153",
+      "why": "blue screens",
+      "do": "update",
+      "to": "10.29.0.5714",
+      "minBuild": 22000,
+      "url": "https://support.microsoft.com/en-us/topic/kb5078895-compatibility-issues-with-intel-smart-sound-technology-drivers-on-windows-11-f2da4985-f4b0-47b0-b907-85356d8eda1a",
+      "date": "2026-10-29"
+    },
+    {
+      "id": "intel-sst-10.30.0.5152",
+      "device": "^windows:.*Smart Sound Technology.{0,24}Audio Controller",
+      "from": "10.30.0.5152",
+      "before": "10.30.0.5153",
+      "why": "blue screens",
+      "do": "update",
+      "to": "10.30.0.5714",
+      "minBuild": 22000,
+      "url": "https://support.microsoft.com/en-us/topic/kb5078895-compatibility-issues-with-intel-smart-sound-technology-drivers-on-windows-11-f2da4985-f4b0-47b0-b907-85356d8eda1a",
+      "date": "2026-10-29"
+    },
+    {
+      "id": "amd-chipset-cppc2-windows-11",
+      "device": "^chipset:amd\\b",
+      "from": null,
+      "before": "3.10.08.506",
+      "why": "Windows 11 ignores the fastest cores",
+      "do": "update",
+      "to": "3.10.08.506",
+      "minBuild": 22000,
+      "url": "https://www.amd.com/en/resources/support-articles/faqs/PA-400.html",
+      "date": "2021-10-21"
+    },
+    {
+      "id": "amd-chipset-installer-not-responding",
+      "device": "^chipset:amd\\b",
+      "from": "3.08.17.735",
+      "before": "4.06.10.651",
+      "why": "its installer stops responding",
+      "do": "update",
+      "to": "4.06.10.651",
+      "url": "https://www.amd.com/en/resources/support-articles/release-notes/RN-RYZEN-CHIPSET-4-06-10-651.html",
+      "date": "2022-06-28"
+    },
+    {
+      "id": "asus-b550f-wifi-ii-ftpm-2026",
+      "device": "^bios:ASUS ROG STRIX B550-F GAMING WIFI II$",
+      "from": null,
+      "before": "3644",
+      "why": "fTPM security flaws",
+      "do": "update",
+      "to": "3644",
+      "url": "https://www.amd.com/en/resources/product-security/bulletin/amd-sb-7064.html",
+      "date": "2026-08-11"
+    },
+    {
+      "id": "asus-b550f-wifi-ii-ftpm-2025",
+      "device": "^bios:ASUS ROG STRIX B550-F GAMING WIFI II$",
+      "from": null,
+      "before": "3631",
+      "why": "an fTPM security flaw",
+      "do": "update",
+      "to": "3631",
+      "url": "https://www.amd.com/en/resources/product-security/bulletin/amd-sb-4011.html",
+      "date": "2025-06-10"
+    },
+    {
+      "id": "asus-b550f-wifi-ii-entrysign",
+      "device": "^bios:ASUS ROG STRIX B550-F GAMING WIFI II$",
+      "from": null,
+      "before": "3621",
+      "why": "the EntrySign security flaw",
+      "do": "update",
+      "to": "3621",
+      "url": "https://www.amd.com/en/resources/product-security/bulletin/amd-sb-7033.html",
+      "date": "2025-03-05"
+    },
+    {
+      "id": "asus-b550f-wifi-ii-sinkclose",
+      "device": "^bios:ASUS ROG STRIX B550-F GAMING WIFI II$",
+      "from": null,
+      "before": "3611",
+      "why": "the Sinkclose security flaw",
+      "do": "update",
+      "to": "3611",
+      "url": "https://www.amd.com/en/resources/product-security/bulletin/amd-sb-7014.html",
+      "date": "2024-08-09"
+    },
+    {
+      "id": "asus-b550f-wifi-ii-ftpm-stutter",
+      "device": "^bios:ASUS ROG STRIX B550-F GAMING WIFI II$",
+      "from": null,
+      "before": "2803",
+      "why": "fTPM stutter",
+      "do": "update",
+      "to": "2803",
+      "url": "https://www.amd.com/en/resources/support-articles/faqs/PA-410.html",
+      "date": "2022-03"
+    },
+    {
+      "id": "samsung-990-pro-0B2QJXD7",
+      "device": "^ssd:Samsung SSD 990 PRO\\b(?!.*4TB)",
+      "from": "0B2QJXD7",
+      "before": "1B2QJXD7",
+      "why": "its health falls fast",
+      "do": "update",
+      "to": "1B2QJXD7",
+      "url": "https://www.tomshardware.com/news/samsung-990-pro-firmware-update-released-ssd-health",
+      "date": "2023-02-13"
+    },
+    {
+      "id": "samsung-980-pro-3B2QGXA7",
+      "device": "^ssd:Samsung SSD 980 PRO\\b",
+      "from": "3B2QGXA7",
+      "before": "4B2QGXA7",
+      "why": "drives have gone read-only and died",
+      "do": "update",
+      "to": "5B2QGXA7",
+      "url": "https://www.tomshardware.com/news/samsung-980-pro-ssd-failures-firmware-update",
+      "date": "2023-02"
+    },
+    {
+      "id": "wd-sn770-2tb-hmb",
+      "device": "^ssd:.*\\bSN770M? 2TB\\b",
+      "from": null,
+      "before": "731130WD",
+      "why": "blue screens on Windows 11 24H2 and later",
+      "do": "update",
+      "to": "731130WD",
+      "minBuild": 26100,
+      "url": "https://heise.de/-9984513",
+      "date": "2024-10"
+    },
+    {
+      "id": "wd-sn580-2tb-hmb",
+      "device": "^ssd:.*\\bSN580 2TB\\b",
+      "from": null,
+      "before": "281050WD",
+      "why": "blue screens on Windows 11 24H2 and later",
+      "do": "update",
+      "to": "281050WD",
+      "minBuild": 26100,
+      "url": "https://heise.de/-9984513",
+      "date": "2024-10"
+    },
+    {
+      "id": "wd-sn5000-2tb-hmb",
+      "device": "^ssd:.*\\bSN5000 2TB\\b",
+      "from": null,
+      "before": "291020WD",
+      "why": "blue screens on Windows 11 24H2 and later",
+      "do": "update",
+      "to": "291020WD",
+      "minBuild": 26100,
+      "url": "https://heise.de/-9984513",
+      "date": "2024-10"
+    }
+  ]
+}

@@ -1,0 +1,19 @@
+{
+  "name": "exo-account",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test test",
+    "dev": "wrangler dev --local",
+    "e2e": "node --test test/workerd.test.mjs"
+  },
+  "engines": {
+    "node": ">=22.16"
+  },
+  "devDependencies": {
+    "wrangler": "4.158.0"
+  },
+  "dependencies": {
+    "@noble/hashes": "2.4.0"
+  }
+}

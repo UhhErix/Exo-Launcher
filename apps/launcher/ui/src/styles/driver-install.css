@@ -1,0 +1,145 @@
+/* The driver screen (shell/DriverInstallOverlay.tsx; DESIGN.md › PC): one layer over the whole window while a graphics
+   driver goes in. The page's own color, the driver and its step at its center, the Exo bar under them. Full screen with
+   no window buttons. It comes up at once and its words rise in as rows do. */
+.exo-driver-install {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: grid;
+  place-items: center;
+  background: var(--color-bg);
+  color: var(--color-fg);
+}
+
+.exo-driver-install-body {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  width: min(420px, calc(100% - 48px));
+  text-align: center;
+  animation: exo-arrive var(--dur-arrive) var(--ease-out) backwards;
+}
+
+.exo-driver-install-body > h2 {
+  margin: 8px 0 0;
+  font-size: calc(20px * var(--exo-scale, 1));
+  font-weight: 650;
+  line-height: 1.25;
+}
+
+.exo-driver-install-step {
+  margin: 0;
+  color: var(--color-muted);
+  font-size: calc(13px * var(--exo-scale, 1));
+  font-variant-numeric: tabular-nums;
+}
+
+.exo-driver-install-body > .exo-progress {
+  width: 100%;
+  margin-top: 8px;
+}
+
+.exo-driver-install-error {
+  margin: 0;
+  color: var(--color-bad);
+  font-size: calc(13px * var(--exo-scale, 1));
+}
+
+/* What Exo put back, each with its green check; what it couldn't, in red, each saying what to do. */
+.exo-driver-install-list {
+  display: grid;
+  gap: 8px;
+  width: 100%;
+  margin: 4px 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: calc(13px * var(--exo-scale, 1));
+  text-align: left;
+}
+
+.exo-driver-install-list li {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.exo-driver-install-list svg {
+  flex: none;
+  margin-top: 1px;
+  color: var(--color-good);
+}
+
+.exo-driver-install-list li.is-not,
+.exo-driver-install-list li.is-not svg {
+  color: var(--color-bad);
+}
+
+.exo-driver-install-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+/* Done: the check in a ring of the good color, where the screen was. */
+.exo-driver-install-done {
+  display: grid;
+  place-items: center;
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  color: var(--color-good);
+  box-shadow: inset 0 0 0 2px var(--color-good);
+}
+
+.exo-driver-install-foot > .exo-driver-install-error {
+  flex-basis: 100%;
+}
+
+.exo-driver-install-foot:empty {
+  display: none;
+}
+
+/* The screen: its frame in the ink, its glass dimming and lighting slowly while the driver goes in, as the real screen
+   may. A loop that breathes (ease-in-out), on the shine's 1.6s, resting while Exo is in the background. */
+.exo-driver-screen {
+  color: var(--color-fg);
+}
+
+.exo-driver-screen-frame {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.exo-driver-screen-glass {
+  fill: currentColor;
+  opacity: 0.08;
+}
+
+.exo-driver-install.is-working .exo-driver-screen-glass {
+  animation: exo-driver-screen 1.6s var(--ease-in-out) infinite alternate;
+}
+
+@keyframes exo-driver-screen {
+  from { opacity: 0.08; }
+  to { opacity: 0.45; }
+}
+
+html[data-exo-inactive="true"] .exo-driver-screen-glass {
+  animation-play-state: paused;
+}
+
+:root[data-exo-motion="reduce"] .exo-driver-install-body,
+:root[data-exo-motion="reduce"] .exo-driver-screen-glass {
+  animation: none;
+}
+
+:root[data-exo-motion="reduce"] .exo-driver-screen-glass {
+  opacity: 0.25;
+}

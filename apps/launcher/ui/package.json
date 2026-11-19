@@ -1,0 +1,55 @@
+{
+  "name": "exo-launcher-ui",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=24.19.0"
+  },
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build && npm --prefix ../mouse run build && node scripts/build-cache.mjs record",
+    "check": "npm run -s typecheck && npm run -s contracts && npm run -s lint && npm run -s lint:css && npm run -s css:prune:check && npm run -s test",
+    "typecheck": "tsc -p tsconfig.app.json --noEmit",
+    "crawl": "node ../tools/ui-pass/crawl.mjs",
+    "contracts": "node scripts/check-host-contract.mjs",
+    "contracts:write": "node scripts/check-host-contract.mjs --write",
+    "lint": "eslint src --max-warnings 0",
+    "lint:css": "node scripts/css-design.mjs && node scripts/icons.mjs --check",
+    "icons": "node scripts/icons.mjs",
+    "test": "node --test test/*.test.ts",
+    "dead": "knip --no-progress && knip --production --no-progress -c knip.production.json",
+    "css:prune": "node scripts/prune-dead-css.mjs",
+    "css:prune:check": "node scripts/prune-dead-css.mjs --check",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "clsx": "^2.1.1",
+    "dashjs": "^5.3.0",
+    "hls.js": "1.7.4",
+    "lottie-web": "5.13.0",
+    "qrcode-generator": "2.0.4",
+    "react": "19.3.1",
+    "react-dom": "19.3.1",
+    "skullet": "0.0.3"
+  },
+  "devDependencies": {
+    "@eslint/js": "10.0.1",
+    "@iconify-json/tabler": "^1.2.43",
+    "@tailwindcss/vite": "^4.3.4",
+    "@types/node": "26.6.6",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "@typescript/native": "npm:typescript@7.1.0-dev.20261030.1",
+    "@vitejs/plugin-react": "^6.2.1",
+    "eslint": "10.14.0",
+    "eslint-plugin-react-hooks": "7.1.1",
+    "globals": "^17.14.0",
+    "knip": "^6.44.1",
+    "oxc-transform-react": "^0.157.0",
+    "postcss": "8.5.32",
+    "tailwindcss": "^4.3.4",
+    "typescript": "npm:@typescript/typescript6@6.0.2",
+    "typescript-eslint": "8.72.1",
+    "vite": "^8.3.6"
+  }
+}

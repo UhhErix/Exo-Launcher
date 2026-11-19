@@ -1,0 +1,1026 @@
+/* The room's shape (DESIGN.md › Rooms › Discord; discord/DiscordClient.tsx, Rail.tsx): Discord's own, a rail of servers down the
+   left, then the stage: a pane of channels or conversations, the conversation and the people. */
+.exo-dc {
+  grid-template-rows: minmax(0, 1fr);
+  grid-template-columns: auto minmax(0, 1fr);
+  --dc-side-w: calc(320px * var(--exo-scale, 1));
+  /* A server's rail and people; the people's width is the title line's search too, and a DM's person or members, so they can't drift. */
+  --dc-channels-w: calc(240px * var(--exo-scale, 1));
+  --dc-people-w: calc(300px * var(--exo-scale, 1));
+  --dc-head-h: 48px;
+}
+
+.exo-dc-place-chip-name {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/* You: Discord's card across the foot of the rail and the sidebar, your picture and status, then mute, deafen and the Inbox.
+   It is the foot's lower row (system.css › the foot): a hairline above it when a call's rows sit over it. Its menus open
+   upward, and the rail's and sidebar's lists leave the foot's height clear. */
+.exo-dc {
+  position: relative;
+  --dc-me-h: calc(56px * var(--exo-scale, 1));
+}
+
+.exo-dc-me-text {
+  display: grid;
+  min-width: 0;
+  line-height: 1.2;
+}
+
+.exo-dc-me-text > b {
+  overflow: hidden;
+  font-size: var(--exo-type-body);
+  font-weight: var(--exo-weight-title);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.exo-dc .exo-dc-foot > .exo-dc-me > .exo-dc-icon-btn,
+.exo-dc .exo-dc-dock > .exo-dc-voice .exo-dc-voice-actions > .exo-dc-icon-btn {
+  flex: none;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border-radius: var(--exo-small-radius);
+}
+
+/* A pane's list stops short of its rim, so a row passing under the foot is never cut by the pane's rounded corner, and it
+   fades only over the last few pixels: a row reads whole up to its edge (the shared pool's 40px washed out the last row). */
+@keyframes exo-dc-pool-foot {
+  from { --exo-pool-bottom: 12px; }
+  to { --exo-pool-bottom: 0px; }
+}
+
+.exo-dc .exo-dc-members > .exo-dc-members-list {
+  padding-bottom: 4px;
+}
+
+.exo-dc :is(.exo-dc-side, .exo-dc-members) > :is(.exo-dc-side-list, .exo-dc-members-list) {
+  margin-bottom: 8px;
+  animation: exo-pool-top linear both, exo-dc-pool-foot linear both;
+  animation-timeline: scroll(self), scroll(self);
+  animation-range: 0 32px, calc(100% - 32px) 100%;
+}
+
+.exo-dc-stage[data-columns] > :is(.exo-dc-chat, .exo-dc-chat-col, .exo-dc-voice-split) {
+  padding-right: var(--dc-right);
+}
+
+.exo-dc-stage[data-columns] > :is(.exo-dc-chat, .exo-dc-chat-col > .exo-dc-chat) > .exo-dc-chat-head {
+  margin-right: calc(-1 * var(--dc-right));
+}
+
+/* The folded channel column: the page meets the rail, with no gap. */
+.exo-dc-stage[data-columns="none"] > :is(.exo-dc-chat, .exo-dc-chat-col, .exo-dc-voice-split) {
+  padding-left: 0;
+}
+
+.exo-dc-channels[hidden] {
+  display: none !important;
+}
+
+.exo-dc-channels .exo-dc-voice-channel > .exo-dc-item {
+  width: 100%;
+}
+
+/* The column's head: the server, whose press is its menu. */
+.exo-dc-channels-head {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  margin: 8px 8px 0;
+  padding: 8px;
+  border: 0;
+  border-radius: var(--exo-row-radius);
+  background: transparent;
+  color: var(--color-fg);
+  font: inherit;
+  font-size: var(--exo-type-body);
+  text-align: left;
+  cursor: pointer;
+}
+
+.exo-dc-channels-head:hover {
+  background: var(--hover-fill);
+}
+
+.exo-dc-channels-head > strong {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  font-weight: var(--exo-weight-title);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.exo-dc-channels-head .exo-dc-server-mark {
+  width: 24px;
+  height: 24px;
+  border-radius: var(--exo-small-radius);
+}
+
+.exo-dc-channels-head .exo-dc-initials {
+  font-size: var(--exo-type-small);
+}
+
+/* The title line: the channel you're in, and a window without the column opens the list from it. */
+.exo-dc-head-channel {
+  display: inline-flex;
+  flex: 0 1 auto;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  max-width: 50%;
+  color: var(--color-fg);
+  font-size: var(--exo-type-body);
+}
+
+.exo-dc-head-channel > strong {
+  font-weight: var(--exo-weight-title);
+}
+
+.exo-dc-head-channel .exo-dc-hash {
+  display: inline-flex;
+  flex: none;
+  color: var(--color-muted);
+}
+
+/* The title line's tools end before the Inbox, which stands at the room's right edge: the search is about 244px and ends 8px
+   before the Inbox. */
+.exo-dc .exo-dc-chat-head:has(> .exo-dc-head-tools .exo-dc-search) {
+  padding-right: var(--dc-inbox-room);
+}
+
+.exo-dc .exo-dc-chat-head .exo-dc-search,
+.exo-dc .exo-dc-chat-head .exo-dc-search:focus-within {
+  flex: 0 1 calc(244px * var(--exo-scale, 1));
+  box-sizing: border-box;
+  width: calc(244px * var(--exo-scale, 1));
+  min-width: calc(120px * var(--exo-scale, 1));
+  margin-left: 4px;
+}
+
+/* A narrow header (the member list folded, a small window): the empty search folds to its magnifier and opens when it is
+   pressed or focused, so its words are never cut off. The header is the query's container. */
+.exo-dc .exo-dc-chat-head {
+  container-type: inline-size;
+}
+
+@container (max-width: 760px) {
+  .exo-dc .exo-dc-chat-head .exo-dc-search:not(:focus-within):has(input:placeholder-shown) {
+    width: 32px;
+    min-width: 0;
+    flex: 0 0 32px;
+    justify-content: center;
+    gap: 0;
+    padding: 0;
+  }
+
+  .exo-dc .exo-dc-chat-head .exo-dc-search:not(:focus-within):has(input:placeholder-shown) input {
+    flex: 0 0 0;
+    width: 0;
+    padding: 0;
+  }
+}
+
+.exo-dc-head-tools:has(.exo-dc-search) {
+  flex: 0 1 auto;
+  min-width: 0;
+}
+
+.exo-dc-chat-head > .exo-dc-chat-topic {
+  flex: 0 1 auto;
+}
+
+/* A DM's person: their name is the way to their profile. */
+.exo-dc-head-person {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  height: 36px;
+  /* Its picture stands on the messages' pictures under it. */
+  padding: 0 12px 0 0;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--color-fg);
+  font: inherit;
+}
+
+.exo-dc-head-person strong {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.exo-dc-thread-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  color: var(--dc-text);
+}
+
+.exo-dc-thread-title strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Discord's whole list stays in the page; what is off screen isn't laid out or painted until it nears. A row holding an
+   open menu keeps painting (containment would clip the menu). */
+.exo-dc-friend:not(:has(.exo-dc-menu)) {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 48px;
+}
+
+.exo-dc-dm-row:not(:has(.exo-dc-menu)) {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 56px;
+}
+
+.exo-dc-dm-row {
+  flex: none;
+}
+
+.exo-dc .exo-dc-friends .exo-dc-tabs > .exo-dc-tab {
+  white-space: nowrap;
+}
+
+/* A call's panel floats over a page's foot-left corner: the page ends clear of it (system.css › the foot). */
+.exo-dc-lobby-scroll,
+.exo-dc-servers-scroll {
+  padding-bottom: var(--dc-foot-room);
+}
+
+/* A rounded square with its name beside it, never a round icon alone. */
+.exo-dc-server-mark {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  overflow: hidden;
+  border-radius: var(--exo-small-radius);
+  background: var(--exo-tile);
+  color: var(--color-fg);
+}
+
+.exo-dc-server-mark > img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.exo-dc-server-mark > .exo-dc-initials {
+  width: auto;
+  height: auto;
+  border-radius: 0;
+  background: none;
+  font-size: var(--exo-type-body);
+  font-weight: var(--exo-weight-title);
+}
+
+/* The band gives way as the window narrows: chips that no longer fit drop out one by one, then the places' names; their counts stay. */
+@media (max-width: 720px) {
+  .exo-dc {
+    --dc-side-w: calc(210px * var(--exo-scale, 1));
+  }
+
+}
+
+/* Exoline's content box is odd at most sizes, and a pill's height even: the spare pixel fell under the words' line box above them,
+   sinking every word a pixel below the pill's middle. An even line box keeps them on it, cap to baseline, at any text size. */
+.exo-dc :is(.exo-set-btn, .exo-dc-tab, .exo-dc-place, .exo-dc-now-live) {
+  line-height: calc(2 * round(calc(8px * var(--exo-scale, 1)), 1px));
+}
+
+/* Discord's own look, measured off the official app: a 72px rail of 40px marks, the sidebar 304px wide with its top left
+   corner rounded 12px and a hairline round it, the page and the people (264px) flat on the page's black, a 49px title line,
+   and your card across the foot of the rail and the sidebar. Its surfaces are Exo's Liquid Glass (glass.css). */
+.exo-dc {
+  --dc-side-w: calc(304px * var(--exo-scale, 1));
+  --dc-channels-w: calc(304px * var(--exo-scale, 1));
+  --dc-people-w: calc(264px * var(--exo-scale, 1));
+  --dc-head-h: 49px;
+  --dc-me-h: calc(56px * var(--exo-scale, 1));
+  /* The room's edges are the window's: no padding, no column gap, so the rail, the sidebar and the stage meet. */
+  --dc-rail-w: calc(72px * var(--exo-scale, 1));
+  --dc-inset: calc(8px * var(--exo-scale, 1));
+  /* The Inbox's 32px, its 8px from the room's right edge and the 8px before the search. */
+  --dc-inbox-room: calc(48px * var(--exo-scale, 1));
+}
+
+/* The room's own base (system.css) gives it a gap and a right and bottom padding; the window's edges are the room's. */
+main.exo-dc {
+  padding: 0;
+  column-gap: 0;
+}
+
+.exo-dc .exo-dc-chat-head,
+.exo-dc .exo-dc-side-head,
+.exo-dc .exo-dc-channels-head {
+  height: var(--dc-head-h);
+  border-bottom: 1px solid var(--exo-float-line);
+  box-shadow: none;
+}
+
+/* A conversation's row is Discord's: 40px, its picture 32. The list runs the pane's height, your card over its foot. */
+.exo-dc .exo-dc-item.is-dm {
+  height: 40px;
+  min-height: 40px;
+  border-radius: var(--exo-small-radius);
+}
+
+/* The Inbox at the room's top right, on the title line: 8px from the room's edges, the title line's search ends before it. */
+.exo-dc-inbox-anchor {
+  position: absolute;
+  /* Centred on the title line's button row (its 32px buttons on the line's middle). */
+  top: calc(11px * var(--exo-scale, 1) + (var(--dc-head-h) - 32px) / 2);
+  right: var(--dc-inset);
+  z-index: 8;
+}
+
+.exo-dc .exo-dc-inbox-anchor > .exo-dc-popover.is-inbox {
+  top: calc(100% + 6px);
+  right: 0;
+  bottom: auto;
+  left: auto;
+}
+
+.exo-dc .exo-dc-chat-head {
+  padding-right: var(--dc-inbox-room);
+}
+
+/* People's rows are 42px with an 8px corner. */
+.exo-dc .exo-dc-members .exo-dc-member {
+  border-radius: var(--exo-small-radius);
+}
+
+/* The composer: its own panel under the chat, as tall as the profile card under the channel list (its foot plus the 1px
+   edges), so the two bottoms line up, and 8px from the room's bottom edge. The field is the panel: the input inside it has
+   no fill or rim of its own, and the reply and edit bars and the attachments sit inside the same panel above it. */
+.exo-dc .exo-dc-chat-col > .exo-dc-compose-panel {
+  box-sizing: border-box;
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  justify-content: flex-end;
+  min-height: calc(var(--dc-foot-h) + 2px);
+  margin: var(--exo-gap) 0 var(--dc-inset);
+  border: 1px solid transparent;
+  border-radius: var(--exo-small-radius);
+  box-shadow: var(--glassy-shadow-raised);
+  container-type: inline-size;
+}
+
+.exo-dc .exo-dc-compose-panel > .exo-dc-compose {
+  padding: var(--dc-inset);
+}
+
+:root .exo-dc .exo-dc-compose-panel .exo-dc-input-row:not(.is-attached) {
+  min-height: calc(40px * var(--exo-scale, 1));
+  padding: 4px 8px;
+  border: 0;
+  border-radius: var(--exo-small-radius);
+  background: transparent;
+  box-shadow: none;
+}
+
+:root .exo-dc .exo-dc-compose-panel :is(.exo-dc-compose-bar, .exo-dc-files) {
+  padding: 4px 8px;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+/* Now, Friends and Message requests: 40px rows with an 8px corner, the glyph 20 and 8px in from the row's edge. */
+.exo-dc .exo-dc-side .exo-dc-item.is-big {
+  height: 40px;
+  min-height: 40px;
+  padding: 0 8px;
+  gap: 12px;
+  border-radius: var(--exo-small-radius);
+}
+
+.exo-dc .exo-dc-item.is-big > svg {
+  flex: none;
+  box-sizing: border-box;
+  width: 20px;
+  height: 20px;
+  padding-inline: 0;
+}
+
+/* A conversation's row: 40px with its 32px picture; the list's 2px gap and this row's 2px foot make the 44px step. Its name in the text color. */
+.exo-dc .exo-dc-dm-row {
+  padding-bottom: 2px;
+}
+
+.exo-dc .exo-dc-dm-row:not(:has(.exo-dc-menu)) {
+  contain-intrinsic-size: auto 42px;
+}
+
+.exo-dc .exo-dc-item.is-dm {
+  height: 40px;
+  min-height: 40px;
+  padding: 0 8px;
+  border-radius: var(--exo-small-radius);
+}
+
+.exo-dc .exo-dc-item.is-dm .exo-dc-item-name {
+  color: var(--dc-text);
+}
+
+/* Mute and deafen are plain 32px buttons at the row's end, the same set the voice row's actions use; devices live in Settings › Discord › Voice. */
+
+/* The server column, as Discord's: the server's head with Invite People at its right; channel rows 32px with an 8px corner,
+   2px apart, their tools (Invite People, Edit Channel) at the right on hover or while selected; categories a small muted
+   label with a small chevron; voice members under their channel, indented 28px, 24px pictures, the mute marks and LIVE at
+   the right. */
+.exo-dc .exo-dc-channels-head {
+  gap: 4px;
+  margin: 0;
+  padding: 0 8px;
+  border-radius: 0;
+}
+.exo-dc .exo-dc-channels-head:hover {
+  background: transparent;
+}
+.exo-dc .exo-dc-channels-head-main {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  height: 32px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: var(--exo-small-radius);
+  background: transparent;
+  color: var(--color-fg);
+  font: inherit;
+  font-size: var(--exo-type-body);
+  text-align: left;
+  cursor: pointer;
+}
+.exo-dc .exo-dc-channels-head-main:hover {
+  background: var(--hover-fill);
+}
+.exo-dc .exo-dc-channels-head-main > strong {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  font-weight: var(--exo-weight-title);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.exo-dc .exo-dc-channels-head-main > :not(strong) {
+  flex: none;
+}
+.exo-dc .exo-dc-channels-invite {
+  flex: none;
+}
+.exo-dc-chan {
+  position: relative;
+}
+.exo-dc-channels .exo-dc-item {
+  width: 100%;
+  height: 32px;
+  min-height: 32px;
+  margin: 0 0 2px;
+  padding: 0 8px;
+  gap: 8px;
+  border-radius: var(--exo-small-radius);
+  font-size: var(--exo-type-body);
+}
+
+/* The channel list's chosen row is a fill like its hover, the row's own 8px corner — not the glide's glass ring,
+   which read as a bordered box on the wide voice rows. */
+.exo-dc .exo-dc-channels .exo-dc-side-list.exo-glide::before {
+  border-radius: var(--exo-small-radius);
+  background: var(--dc-selected);
+  box-shadow: none;
+}
+/* Names in the rows (channels, conversations, members): body size, medium; a row's second line is small. */
+.exo-dc-channels .exo-dc-item-name, .exo-dc .exo-dc-item.is-dm .exo-dc-item-name, .exo-dc .exo-dc-members .exo-dc-member-name {
+  font-size: var(--exo-type-body);
+}
+.exo-dc-channels .exo-dc-voice-channel > .exo-dc-item {
+  margin-bottom: 0;
+}
+.exo-dc-channels .exo-dc-rows .exo-dc-item {
+  margin: 0;
+}
+.exo-dc-channels .exo-dc-thread-item {
+  height: 28px;
+  min-height: 28px;
+  padding-left: 32px;
+}
+.exo-dc-chan-tools {
+  display: none;
+  position: absolute;
+  top: 0;
+  right: 8px;
+  align-items: center;
+  gap: 2px;
+  height: 32px;
+}
+.exo-dc-chan:hover > .exo-dc-chan-tools,
+.exo-dc-chan.is-selected > .exo-dc-chan-tools {
+  display: flex;
+}
+
+/* While a row shows its tools, its name and count stop short of them (a voice row's 2/10 was drawn under the icons). */
+.exo-dc-channels .exo-dc-chan:is(:hover, .is-selected) > .exo-dc-item {
+  padding-right: calc(62px * var(--exo-scale, 1));
+}
+.exo-dc-chan-tools > .exo-dc-icon-btn {
+  width: 24px;
+  height: 24px;
+}
+.exo-dc-channels .exo-dc-category {
+  font-size: var(--exo-type-small);
+  font-weight: var(--exo-weight-title);
+}
+.exo-dc .exo-dc-voice-members {
+  margin: 0 0 4px;
+  padding: 0 8px 0 28px;
+}
+.exo-dc .exo-dc-voice-members li {
+  min-height: 32px;
+  gap: 8px;
+}
+.exo-dc .exo-dc-voice-members li > .exo-dc-item-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.exo-dc .exo-dc-voice-members img,
+.exo-dc .exo-dc-voice-members .exo-dc-voice-dot {
+  width: 24px;
+  height: 24px;
+}
+
+/* The title line's tools: 32px buttons 8px apart, as Discord's (the search follows them). */
+.exo-dc .exo-dc-head-tools {
+  gap: 8px;
+}
+
+/* Messages, Discord's: the picture 40px, 16px from the room's left; the name 16px medium in its role color, the muted
+   time 12px on the same line; grouped messages carry no name. */
+.exo-dc .exo-dc-msg-row {
+  gap: calc(16px * var(--exo-scale, 1));
+}
+
+.exo-dc .exo-dc-msg-face,
+.exo-dc .exo-dc-msg-face img {
+  width: calc(40px * var(--exo-scale, 1));
+  height: calc(40px * var(--exo-scale, 1));
+}
+
+.exo-dc .exo-dc-msg-head strong {
+  font-size: var(--exo-type-body);
+  font-weight: 500;
+}
+
+.exo-dc .exo-dc-msg-head .exo-dc-msg-time {
+  font-size: var(--exo-type-small);
+  color: var(--color-muted);
+}
+
+/* The DM's person: 300px, 8px from the edges, 8px corners; the banner on top, and the whole panel scrolls under it. */
+.exo-dc .exo-dc-dm-profile.exo-dc-pf {
+  display: flex;
+  flex-direction: column;
+  flex: none;
+  box-sizing: border-box;
+  width: calc(300px * var(--exo-scale, 1));
+  height: calc(100% - 2 * var(--dc-inset));
+  margin: var(--dc-inset);
+  border: 1px solid var(--dc-line);
+  border-radius: var(--exo-small-radius);
+  overflow: hidden;
+}
+
+.exo-dc .exo-dc-pf-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+/* A member's row is exactly 42px, the list's row height, so its picture and two lines sit on one 42px pitch. */
+.exo-dc .exo-dc-members .exo-dc-member:not(.is-pending) {
+  height: 42px;
+  padding: 0 8px;
+}
+
+/* Narrow columns (a voice chat's panel): a message's name line wraps before it runs past its column, a Jam card's row
+   wraps its button under its words, and the header's tools give way to the title line, never past the header's edge. */
+.exo-dc-msg-head {
+  flex-wrap: wrap;
+  min-width: 0;
+  row-gap: 2px;
+}
+
+.exo-dc-jam-row {
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.exo-dc-jam > * {
+  min-width: 0;
+}
+
+.exo-dc-embed-body,
+.exo-dc-embed {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.exo-dc-chat-head .exo-dc-head-tools {
+  min-width: 0;
+  max-width: 100%;
+}
+
+/* The header's search takes the tools' gap, not its own margin: the tools end inside the header. */
+.exo-dc .exo-dc-head-tools .exo-dc-search {
+  margin-left: 0;
+}
+
+/* A Jam card's name wraps before its button does: the row wraps the button under the name when the card is narrow. */
+.exo-dc .exo-dc-jam-what {
+  flex: 1 1 140px;
+}
+
+/* The room's frame (owner, 2026-11-10: "redesign the whole ux and layout ... why is it trapped in lines ... it just has to
+   feel familiar not exact"). An open room, as the Library is: nothing is boxed. No panel, no rule under a head, no line
+   between columns: the columns (servers, the place's rows, the conversation, the people) are told apart by space and by
+   type. The only outlines are things you act on: a field, a button, a card, a capsule. A place is a title; search is one
+   small pill at a head's end, never a bar across the page; you are a capsule, as the Bar's call is. */
+:root main.exo-dc {
+  --dc-me-h: calc(48px * var(--exo-scale, 1));
+  padding: 2px var(--exo-gap) var(--exo-gap) 0;
+  column-gap: 0;
+}
+
+.exo-dc .exo-dc-stage > :is(.exo-dc-chat, .exo-dc-chat-col),
+.exo-dc .exo-dc-stage > .exo-dc-chat-col > .exo-dc-chat,
+:root .exo-dc .exo-dc-columns .exo-dc-members {
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  overflow: hidden;
+}
+
+/* The conversation: its head, its messages, and the message box, a pill at its foot. */
+.exo-dc-chat-col {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
+.exo-dc-chat-col > .exo-dc-chat {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+:root .exo-dc .exo-dc-chat-col > .exo-dc-compose-panel {
+  min-height: 0;
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+:root .exo-dc .exo-dc-compose-panel > .exo-dc-compose {
+  padding: 8px 16px 0;
+}
+
+:root:root .exo-dc .exo-dc-compose-panel .exo-dc-input-row:not(.is-attached) {
+  min-height: calc(44px * var(--exo-scale, 1));
+  padding: 0 8px;
+  border-radius: calc(22px * var(--exo-scale, 1));
+  box-shadow: var(--glassy-ring);
+}
+
+/* The people: a column beside the conversation, nothing drawn round it. The conversation's width leaves the column, so
+   its margin box is the page and centring never pushes it under the list or the people. */
+:root .exo-dc .exo-dc-stage:has(> .exo-dc-columns:not(.is-over)) > :is(.exo-dc-chat, .exo-dc-chat-col) {
+  width: calc(100% - var(--dc-people-w));
+  margin-right: var(--dc-people-w);
+  padding-right: 0;
+}
+
+:root .exo-dc .exo-dc-members > .exo-dc-members-list {
+  margin: 0;
+  padding: 0 8px 16px;
+  border-radius: 0;
+}
+
+/* The head row: one height across the room, and no rule under it. */
+:root .exo-dc :is(.exo-dc-side-head, .exo-dc-channels-head, .exo-dc-chat-head, .exo-dc-members-head) {
+  box-sizing: border-box;
+  flex: none;
+  height: var(--dc-head-h);
+  min-height: var(--dc-head-h);
+  border: 0;
+  overflow: hidden;
+}
+
+:root:root .exo-dc .exo-dc-stage :is(.exo-dc-chat-head, .exo-dc-side-head, .exo-dc-channels-head) {
+  margin: 0;
+  background-image: none;
+}
+
+/* A place is a title: the server's name, the channel's, Messages, Friends. */
+.exo-dc :is(.exo-dc-channels-head-main, .exo-dc-head-channel, .exo-dc-head-person, .exo-dc-friends-title, .exo-dc-side-title) {
+  font-size: var(--exo-type-title);
+  font-weight: var(--exo-weight-title);
+}
+
+.exo-dc-members-head {
+  display: flex;
+  align-items: center;
+  /* Clear of the Inbox, which sits at the row's end. */
+  padding: 0 var(--dc-inbox-room) 0 16px;
+  color: var(--color-fg);
+  font-size: var(--exo-type-body);
+  font-weight: var(--exo-weight-title);
+}
+
+/* The Inbox ends the head row, centred on it. */
+.exo-dc .exo-dc-inbox-anchor {
+  top: calc(2px + (var(--dc-head-h) - 32px) / 2);
+  right: calc(var(--exo-gap) + 4px * var(--exo-scale, 1));
+}
+
+/* Nothing in the frame draws a rim of its own. */
+:root:root .exo-dc :is(.exo-dc-foot, .exo-dc-compose-panel, .exo-dc-stage > :is(.exo-dc-chat, .exo-dc-chat-col > .exo-dc-chat), .exo-dc-columns .exo-dc-members, .exo-dc-dm-profile)::before {
+  box-shadow: none !important;
+}
+
+/* ---- Inside the room: one row, one avatar, one card, everywhere ---- */
+
+/* A row in a list (a channel, a conversation, Friends): quiet until it is yours. The chosen one is full ink beside the
+   white marker at the list's edge (the glide's shape here, never a fill or a ring); one with news is full ink and bold
+   with its count, and the dot that sat at the row's edge, where the marker sits, is gone. */
+:root .exo-dc .exo-dc-side-list.exo-glide::before {
+  top: calc((var(--glide-h, 0px) - 16px) / 2);
+  left: calc(-1 * var(--glide-x, 0px) + 4px);
+  width: 3px;
+  height: 16px;
+  border-radius: 999px;
+  background: var(--color-fg);
+  box-shadow: none;
+}
+
+.exo-dc .exo-dc-side-list .exo-dc-item {
+  color: var(--color-muted);
+}
+
+.exo-dc .exo-dc-side-list .exo-dc-item:is([aria-current="true"], .is-unread),
+.exo-dc .exo-dc-side-list .exo-dc-chan.is-selected .exo-dc-item {
+  color: var(--color-fg);
+}
+
+.exo-dc .exo-dc-side-list .exo-dc-item:not(.is-dm).is-unread::before {
+  content: none;
+}
+
+/* Every avatar is a round picture; one with no picture is its first letter in a ring, never a bare letter. */
+.exo-dc-avatar-wrap > .exo-dc-initials {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+  border-radius: 999px;
+  box-shadow: var(--glassy-ring);
+  font-size: var(--exo-type-small);
+}
+
+/* What is new: one small pill at the top of the conversation, not a bar across it. */
+:root .exo-dc .exo-dc-new-bar {
+  align-self: center;
+  width: max-content;
+  max-width: calc(100% - 32px);
+  /* Clear of what is under it: a date label never touches it. */
+  margin: 8px auto;
+  background: var(--color-bg);
+  box-shadow: var(--glassy-ring);
+}
+
+/* While the pill shows, what scrolls up toward it fades out over the list's first 24px instead of meeting its edge. */
+.exo-dc .exo-dc-new-bar + .exo-dc-scroll {
+  mask-image: linear-gradient(to bottom, transparent, #000 24px);
+}
+
+/* Anything attached to a message is the one card: black, the one line, the card's corner. A link's card has no colour
+   bar down its side. */
+:root .exo-dc .exo-dc-embed {
+  border-color: var(--exo-line);
+  border-radius: var(--exo-card-radius);
+  background: transparent;
+  box-shadow: none;
+}
+
+/* A conversation's person is a column beside it: no panel and no line. Their connections are rows, not outlined cards. */
+:root .exo-dc .exo-dc-dm-profile.exo-dc-pf {
+  height: 100%;
+  margin: 0;
+  border: 0;
+  border-radius: var(--exo-panel-radius);
+}
+
+:root .exo-dc .exo-dc-dm-profile .exo-dc-pf-connection {
+  border-radius: var(--exo-small-radius);
+  background: transparent;
+  box-shadow: none;
+}
+
+/* ---- Friends: one grid of people and what they are doing ---- */
+
+/* The head: the title, the tabs, then one small search and Add friend at its end. */
+:root .exo-dc .exo-dc-friends .exo-dc-chat-head > .exo-dc-friend-search {
+  flex: none;
+  box-sizing: border-box;
+  width: calc(220px * var(--exo-scale, 1));
+  height: 32px;
+  margin: 0 8px 0 auto;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  box-shadow: var(--glassy-ring);
+}
+
+.exo-dc .exo-dc-friends > .exo-dc-friend-list {
+  display: block;
+  flex: 1 1 0;
+  min-height: 0;
+  padding: 0 8px 16px;
+  overflow-y: auto;
+}
+
+.exo-dc-friend-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, calc(300px * var(--exo-scale, 1))), 1fr));
+  gap: 2px 8px;
+}
+
+:root .exo-dc .exo-dc-friend-grid > .exo-dc-friend {
+  height: 60px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: var(--exo-card-radius);
+}
+
+.exo-dc .exo-dc-friends > .exo-dc-friend-list > .exo-dc-side-label {
+  margin: 12px 12px 4px;
+}
+
+/* A friend's two actions are bare glyphs, there under the pointer or on keyboard focus; a request's answer is always
+   there. An outlined disc on each, twice a row, was a column of rings down the page. */
+:root .exo-dc .exo-dc-friend-actions .exo-dc-round-btn:not(.is-good, .is-bad) {
+  background: transparent;
+  box-shadow: none;
+  color: var(--color-muted);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  :root .exo-dc .exo-dc-friend-actions .exo-dc-round-btn:not(.is-good, .is-bad):hover {
+    background: var(--hover-fill);
+    color: var(--color-fg);
+  }
+
+  .exo-dc .exo-dc-friend-grid > .exo-dc-friend:not(:hover, :focus-within) > .exo-dc-friend-actions:not(:has(.is-good, .is-bad)) {
+    visibility: hidden;
+  }
+}
+
+/* A toggled icon in a head (the person's column, the member list, the threads) is white with a black glyph, as every
+   chosen thing is; it was a grey disc. */
+:root .exo-dc .exo-dc-head-tools .exo-dc-icon-btn[aria-pressed="true"] {
+  background: var(--color-fg);
+  color: var(--color-primary-fg);
+}
+
+/* A voice channel's count is plain figures, not a grey chip. */
+.exo-dc .exo-dc-voice-limit {
+  padding: 0;
+  background: transparent;
+}
+
+/* A person's badges sit on their column, with no box around them. */
+:root .exo-dc .exo-dc-pf-badges {
+  padding: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+/* What holds something attached (a code block, a file, a picture still loading, the sign-in code) is black inside the
+   one line, never a grey wash. */
+.exo-dc :is(.exo-dc-pre, .exo-dc-media, .exo-dc-file, .exo-dc-qr) {
+  background: transparent;
+}
+
+/* A channel's own tools (invite, settings) show under the pointer or on keyboard focus, on the chosen channel too: shown
+   always there, they repeated the head's invite one row below it. */
+@media (hover: hover) and (pointer: fine) {
+  .exo-dc-channels .exo-dc-chan.is-selected:not(:hover, :focus-within) > .exo-dc-chan-tools {
+    visibility: hidden;
+  }
+
+  .exo-dc-channels .exo-dc-chan.is-selected:not(:hover, :focus-within) > .exo-dc-item {
+    padding-right: 8px;
+  }
+}
+
+/* Friends' head ends clear of the Inbox, as a conversation's does. */
+:root .exo-dc .exo-dc-friends > .exo-dc-chat-head {
+  padding-right: calc(var(--dc-inbox-room) + 4px);
+}
+
+/* ---- One list (owner, 2026-11-10: Discord remade, "different but familiar") ----
+   Discord has two columns of navigation: a rail of pictures with no names, then a list. Here it is one list, the same on
+   every page: Home's rows (Now, Message requests, your conversations), then your servers, each a row with its
+   picture and its name. The server you are in is open in place, its channels under its row, before the next server.
+   The list (Rail.tsx) is the room's first column and its one scroll; Home's rows and the server's channels are drawn into
+   it (DiscordClient.tsx › useListSlots) as plain rows, with no scroll of their own. The stage itself lays nothing out. */
+:root main.exo-dc {
+  grid-template-columns: var(--dc-left-w) minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
+}
+
+/* The list is one width at home and in a server. */
+:root:root main.exo-dc {
+  --dc-left-w: var(--dc-side-w);
+}
+
+/* Home's rows and the open server's channels are rows of the list: no box, no scroll, no height of their own. */
+.exo-dc-rail :is(.exo-dc-rail-home, .exo-dc-rail-open) > :is(.exo-dc-side, .exo-dc-channels) {
+  display: block;
+  min-height: 0;
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  overflow: visible;
+}
+
+:root:root:root .exo-dc > .exo-dc-rail :is(.exo-dc-rail-home, .exo-dc-rail-open) > :is(.exo-dc-side, .exo-dc-channels)::before {
+  content: none;
+}
+
+:root .exo-dc .exo-dc-rail .exo-dc-rail-item > :is(img, .exo-dc-initials, svg) {
+  flex: none;
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+}
+
+:root .exo-dc .exo-dc-rail-item.is-muted:not([aria-current="true"]) > :is(img, .exo-dc-initials) {
+  opacity: 0.5;
+}
+
+.exo-dc-rail-open :is(.exo-dc-channels-head, .exo-dc-guild-banner) {
+  display: none;
+}
+
+/* Forced colours: the marker and the open server are the system's highlight (a white bar on black is lost there). */
+@media (forced-colors: active) {
+  :root:root .exo-dc .exo-dc-side-list.exo-glide::before {
+    forced-color-adjust: none;
+    background: Highlight;
+  }
+
+  :root .exo-dc .exo-dc-rail-item.is-server[aria-current="true"],
+  :root:root .exo-dc .exo-dc-head-tools .exo-dc-icon-btn[aria-pressed="true"] {
+    forced-color-adjust: none;
+    /* design-disable-next-line exo/control-fill -- forced colours: a token's white is lost, the system's highlight is not */
+    background: Highlight;
+    color: HighlightText;
+  }
+
+  /* A voice room's card, the friends search, the message box and the new-messages pill are drawn with a ring the system
+     drops: a real border keeps their edge. The message box's own rule (the compose panel's, which sets no border) is
+     out-weighed here, as is the pill's. */
+  :root .exo-dc :is(.exo-dc-now-card, .exo-dc-friend-search, .exo-dc-input-row),
+  :root:root:root .exo-dc .exo-dc-compose-panel .exo-dc-input-row:not(.is-attached),
+  :root:root .exo-dc .exo-dc-new-bar {
+    border: 1px solid CanvasText;
+  }
+}

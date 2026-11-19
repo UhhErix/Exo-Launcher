@@ -1,0 +1,14 @@
+Exo Shield 2026.1026.1812.7267 core (2026.1026.1812 (Exo 2026-10-30T19:47, core)), made by tools/build-shield.mjs
+(node tools/build-shield.mjs, or --core from a built extensions/exo-shield) in https://github.com/UhhErix/exo-shield:
+Exo Shield's core: the same version without TTV LOL PRO, its permissions or a blocked count.
+
+uBlock Origin Lite 2026.1026.1812 (MV3, Edge build), Raymond Hill and contributors
+Source: https://github.com/uBlockOrigin/uBOL-home/releases/download/2026.1026.1812/uBOLite_2026.1026.1812.edge.zip
+Zip SHA-256: 12a3be6e4c24c932677208bd0b8fff0689676ef2b0db689cfe794b02e0ed69fc
+Corresponding source: https://github.com/gorhill/uBlock/tree/master/platform/mv3 (uBOL-home tag 2026.1026.1812)
+License: GPL-3.0 (LICENSE.txt).
+
+Changed here, after that build: adguard-spyware-url.json's query-stripping rules 5, 40, 81, 158, 159 and 238 no longer name
+apple.com or music.apple.com (cid, afid, ct, itscg, itsct, pt). Apple's sign-in comes back as a query MusicKit is handed:
+stripped, the window closes "signed in" and the player stays signed out. tools/build-shield.mjs needs the same exclusion
+(ExoLauncher.Tests/WebExtensionsTests.ExoShieldRewritesNoQueryOnApple fails a build without it).

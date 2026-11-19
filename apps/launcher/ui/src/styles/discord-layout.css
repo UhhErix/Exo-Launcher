@@ -1,0 +1,1035 @@
+/* The Discord room's frame (DESIGN.md › Rooms › Discord; DiscordClient.tsx, Band.tsx). The band of places across the
+   top; under it the left panel (your conversations at Home, a server's channels in a server, you at its foot) and the
+   page beside it: Home's blocks, a conversation, a server's people. Every panel is the page's black inside the one
+   hairline at the panel radius; what you are in is the white pill. */
+
+:root:root:root main.exo-dc {
+  --dc-pane-w: clamp(calc(280px * var(--exo-scale, 1)), 24vw, calc(400px * var(--exo-scale, 1)));
+  --dc-people-w: clamp(calc(224px * var(--exo-scale, 1)), 18vw, calc(300px * var(--exo-scale, 1)));
+  --dc-row-h: calc(52px * var(--exo-scale, 1));
+  --dc-head-h: calc(48px * var(--exo-scale, 1));
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--exo-gap);
+  padding: 0 var(--exo-gap) var(--exo-gap);
+}
+
+/* In a server the channels are a narrower column, the same width as its people, so the conversation sits centred. */
+:root:root:root main.exo-dc:has(> .exo-dc-body[data-place="server"]) {
+  --dc-pane-w: var(--dc-people-w);
+}
+
+/* ---- The band ---- */
+
+.exo-dc-band {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 10px 12px;
+  border-radius: var(--exo-panel-radius);
+  background: var(--exo-float);
+}
+
+.exo-dc-band-strip {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  /* Room for the marks that sit past a face's edge. */
+  padding: 4px 6px;
+  overflow: auto hidden;
+  overscroll-behavior: contain;
+  scrollbar-width: none;
+}
+
+.exo-dc-band-strip::-webkit-scrollbar {
+  display: none;
+}
+
+.exo-dc-band-place {
+  position: relative;
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 10px;
+  height: var(--dc-row-h);
+  padding: 4px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--color-fg);
+  font: inherit;
+  cursor: pointer;
+  transition: background-color var(--dur-quick) var(--ease-out);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .exo-dc-band-place:not(.is-chosen):hover {
+    background: var(--hover-fill);
+  }
+}
+
+.exo-dc-band-face {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: calc(44px * var(--exo-scale, 1));
+  height: calc(44px * var(--exo-scale, 1));
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--exo-float);
+}
+
+.exo-dc-band-face > :is(img, .exo-dc-initials) {
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+  object-fit: cover;
+}
+
+.exo-dc-band-face > .exo-dc-initials {
+  display: grid;
+  place-items: center;
+  box-shadow: var(--glassy-ring);
+  font-size: var(--exo-type-small);
+  font-weight: var(--exo-weight-title);
+}
+
+/* Home, Play and Add: a glyph in the one ring. */
+.exo-dc-band-face.is-glyph {
+  box-shadow: var(--glassy-ring);
+}
+
+.exo-dc-band-place.is-muted:not(.is-chosen) .exo-dc-band-face > :is(img, .exo-dc-initials) {
+  opacity: 0.5;
+}
+
+/* Where you are: the white pill with its name; its face keeps its own picture, a glyph sits on black. */
+.exo-dc-band-place.is-chosen {
+  padding-right: 18px;
+  background: var(--color-fg);
+  color: var(--color-bg);
+}
+
+.exo-dc-band-place.is-chosen .exo-dc-band-face.is-glyph {
+  box-shadow: none;
+  color: var(--color-fg);
+}
+
+.exo-dc-band-name {
+  max-width: calc(180px * var(--exo-scale, 1));
+  overflow: hidden;
+  font-size: var(--exo-type-body);
+  font-weight: var(--exo-weight-title);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.exo-dc-band-rule {
+  flex: none;
+  width: 1px;
+  height: 28px;
+  margin: 0 2px;
+  background: var(--exo-line);
+}
+
+/* Something new: a white dot ringed in the band's black at the face's top right; mentions are the count there. */
+.exo-dc-band-dot {
+  position: absolute;
+  top: 3px;
+  left: calc(4px + 44px * var(--exo-scale, 1) - 10px);
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  background: var(--color-fg);
+  box-shadow: 0 0 0 2px var(--color-bg);
+}
+
+:root .exo-dc .exo-dc-band-place > .exo-dc-badge {
+  position: absolute;
+  top: 0;
+  left: calc(4px + 44px * var(--exo-scale, 1) - 14px);
+  box-shadow: 0 0 0 2px var(--color-bg);
+}
+
+.exo-dc-band-place.is-chosen > .exo-dc-badge {
+  box-shadow: 0 0 0 2px var(--color-fg);
+}
+
+/* Someone in its voice: a green disc with a speaker at the face's foot left. */
+.exo-dc-band-voice {
+  position: absolute;
+  bottom: 2px;
+  left: 2px;
+  display: grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 999px;
+  background: var(--color-good);
+  color: var(--color-bg);
+  box-shadow: 0 0 0 2px var(--color-bg);
+}
+
+.exo-dc-band-step {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: var(--exo-fill);
+  color: var(--color-fg);
+  box-shadow: var(--exo-rim);
+  cursor: pointer;
+}
+
+.exo-dc-band-step[hidden] {
+  display: none;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .exo-dc-band-step:hover {
+    background: var(--hover-fill);
+  }
+}
+
+.exo-dc-band-end {
+  display: flex;
+  flex: none;
+  align-items: center;
+  padding-left: 4px;
+}
+
+:root:root .exo-dc .exo-dc-band-end > .exo-dc-inbox-anchor {
+  position: relative;
+  inset: auto;
+}
+
+/* A hovered server's name (and its voice rooms) under its face. */
+/* It hangs under the face (the rail's tip sat beside its icon, centred on it: none of that here). */
+:root .exo-dc .exo-dc-tip.is-band {
+  position: fixed;
+  z-index: 40;
+  transform: none;
+  translate: -50% 0;
+}
+
+/* ---- Under the band: the left panel and the page ---- */
+
+.exo-dc-body {
+  display: grid;
+  grid-template-columns: var(--dc-pane-w) minmax(0, 1fr);
+  gap: var(--exo-gap);
+  min-width: 0;
+  min-height: 0;
+}
+
+.exo-dc-pane {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  border-radius: var(--exo-panel-radius);
+  background: var(--exo-float);
+}
+
+:root:root .exo-dc .exo-dc-pane > :is(.exo-dc-side, .exo-dc-channels) {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+:root:root .exo-dc .exo-dc-pane > :is(.exo-dc-side, .exo-dc-channels)::before {
+  content: none;
+}
+
+:root:root .exo-dc .exo-dc-pane :is(.exo-dc-side, .exo-dc-channels) > .exo-dc-side-list {
+  flex: 1 1 auto;
+  gap: 2px;
+  height: auto;
+  min-height: 0;
+  margin: 0;
+  padding: 4px 8px 8px;
+  overflow: hidden auto;
+  scrollbar-width: none;
+  mask: none;
+  animation: none;
+}
+
+/* A panel's head: its title, a quiet note, then its tools at the end. */
+.exo-dc-pane-head {
+  position: relative;
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 4px;
+  height: var(--dc-head-h);
+  padding: 0 8px 0 16px;
+}
+
+.exo-dc-pane-title {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  font-size: var(--exo-type-read);
+  font-weight: var(--exo-weight-title);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.exo-dc-pane-note {
+  flex: none;
+  margin-right: 4px;
+  color: var(--color-muted);
+  font-size: var(--exo-type-small);
+}
+
+.exo-dc-pane-head > .exo-dc-find {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.exo-dc-pane-head > .exo-dc-menu.is-start {
+  top: calc(100% - 4px);
+  right: 8px;
+  left: 8px;
+}
+
+/* A row in the panel (a conversation, Message requests, a channel): a pill, quiet until it is yours. */
+:root:root .exo-dc .exo-dc-pane .exo-dc-item {
+  border-radius: 999px;
+}
+
+
+:root:root:root .exo-dc .exo-dc-pane .exo-dc-item[aria-current="true"] {
+  background: var(--color-fg);
+  color: var(--color-bg);
+  --color-muted: var(--exo-line);
+  --dc-muted: var(--exo-line);
+  --color-faint: var(--exo-line);
+}
+
+:root:root:root .exo-dc .exo-dc-pane .exo-dc-item[aria-current="true"] :is(svg, .exo-dc-item-name, .exo-dc-item-sub, .exo-dc-item-time) {
+  color: inherit;
+}
+
+:root:root:root .exo-dc .exo-dc-pane .exo-dc-item[aria-current="true"] .exo-dc-badge {
+  box-shadow: 0 0 0 2px var(--color-fg);
+}
+
+/* Conversations: 52px, the face 36, the name over what was said, the time over its count or dot. */
+:root:root .exo-dc .exo-dc-dms .exo-dc-item.is-dm,
+:root:root .exo-dc .exo-dc-dms .exo-dc-item.is-big {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  height: var(--dc-row-h);
+  min-height: var(--dc-row-h);
+  padding: 0 14px 0 8px;
+}
+
+:root:root .exo-dc .exo-dc-dms .exo-dc-item-names {
+  display: grid;
+  flex: 1 1 auto;
+  min-width: 0;
+  line-height: 1.3;
+}
+
+:root:root .exo-dc .exo-dc-dms .exo-dc-item-name {
+  overflow: hidden;
+  font-size: var(--exo-type-body);
+  font-weight: var(--exo-weight-control);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+:root:root .exo-dc .exo-dc-dms .exo-dc-item.is-unread .exo-dc-item-name {
+  font-weight: var(--exo-weight-title);
+}
+
+:root:root .exo-dc .exo-dc-dms .exo-dc-item-sub {
+  overflow: hidden;
+  color: var(--color-muted);
+  font-size: var(--exo-type-small);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+:root:root .exo-dc .exo-dc-dms .exo-dc-item.is-unread:not([aria-current="true"]) .exo-dc-item-sub {
+  color: var(--color-fg);
+}
+
+:root:root .exo-dc .exo-dc-dms .exo-dc-item.is-muted:not([aria-current="true"]) {
+  color: var(--color-faint);
+}
+
+:root:root .exo-dc .exo-dc-dms .exo-dc-item-meta {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+  min-width: 0;
+}
+
+.exo-dc-item-time {
+  color: var(--color-muted);
+  font-size: var(--exo-type-small);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.exo-dc-item-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--color-fg);
+}
+
+.exo-dc-item[aria-current="true"] .exo-dc-item-dot {
+  background: var(--color-bg);
+}
+
+.exo-dc-item-glyph {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 999px;
+  box-shadow: var(--glassy-ring);
+}
+
+/* Off screen, a conversation is not laid out or painted until it nears: 800 of them scroll as lightly as 20. */
+.exo-dc-dms .exo-dc-dm-row {
+  content-visibility: auto;
+  contain-intrinsic-size: auto var(--dc-row-h);
+}
+
+/* A server's channels: its head and banner on top, then its rows. */
+:root:root .exo-dc .exo-dc-pane .exo-dc-channels-head {
+  display: flex;
+  height: var(--dc-head-h);
+  margin: 0;
+  padding: 0 8px 0 16px;
+  border-radius: 0;
+}
+
+:root:root .exo-dc .exo-dc-pane .exo-dc-channels-head .exo-dc-channels-head-main {
+  font-size: var(--exo-type-read);
+}
+
+:root:root .exo-dc .exo-dc-pane .exo-dc-guild-banner {
+  display: block;
+  width: 100%;
+  margin-bottom: 6px;
+  border-radius: var(--exo-card-radius);
+  aspect-ratio: 16 / 7;
+  object-fit: cover;
+}
+
+:root:root .exo-dc .exo-dc-channels .exo-dc-item {
+  min-height: calc(34px * var(--exo-scale, 1));
+  padding-inline: 12px;
+}
+
+/* You at the panel's foot, a call's rows above you. */
+.exo-dc-you {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  box-shadow: inset 0 var(--exo-hair) 0 var(--exo-line);
+}
+
+.exo-dc-you > .exo-dc-dock {
+  display: flex;
+  flex-direction: column;
+}
+
+.exo-dc-you > .exo-dc-dock:empty {
+  display: none;
+}
+
+.exo-dc-you > .exo-dc-dock:not(:empty) {
+  box-shadow: inset 0 calc(-1 * var(--exo-hair)) 0 var(--exo-line);
+}
+
+:root:root .exo-dc .exo-dc-you > .exo-dc-dock > :is(.exo-dc-voice, .exo-dc-jam) {
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+:root:root .exo-dc .exo-dc-you > .exo-dc-me {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  height: calc(60px * var(--exo-scale, 1));
+  padding: 0 8px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+:root:root .exo-dc .exo-dc-you .exo-dc-me-who {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  height: 48px;
+  padding: 0 8px 0 4px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--color-fg);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  overflow: hidden;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  :root:root .exo-dc .exo-dc-you .exo-dc-me-who:hover {
+    background: var(--hover-fill);
+  }
+}
+
+:root:root .exo-dc .exo-dc-you .exo-dc-me-text {
+  display: grid;
+  min-width: 0;
+  line-height: 1.3;
+}
+
+:root:root .exo-dc .exo-dc-you .exo-dc-me-text > b {
+  overflow: hidden;
+  font-size: var(--exo-type-body);
+  font-weight: var(--exo-weight-title);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+:root:root .exo-dc .exo-dc-you .exo-dc-me-text > span {
+  overflow: hidden;
+  color: var(--color-muted);
+  font-size: var(--exo-type-small);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+:root:root .exo-dc .exo-dc-you .exo-dc-me > .exo-dc-icon-btn {
+  flex: none;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border-radius: 999px;
+}
+
+/* Your menu opens upward from you, inside the panel's width. */
+:root:root .exo-dc .exo-dc-you .exo-dc-me > .exo-dc-menu {
+  position: absolute;
+  top: auto;
+  right: auto;
+  bottom: calc(100% + 6px);
+  left: 8px;
+  z-index: 30;
+}
+
+/* ---- The page ---- */
+
+.exo-dc-view {
+  position: relative;
+  display: flex;
+  gap: var(--exo-gap);
+  min-width: 0;
+  min-height: 0;
+}
+
+.exo-dc-view > :not(.exo-dc-beside, .exo-dc-fit-probe) {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+}
+
+/* Every page but Home is one panel; Home lays out panels of its own. */
+:root:root .exo-dc .exo-dc-view > :not(.exo-dc-home, .exo-dc-beside, .exo-dc-fit-probe, .exo-dc-voice-split) {
+  margin: 0;
+  overflow: hidden;
+  border-radius: var(--exo-panel-radius);
+  background: var(--exo-float);
+}
+
+/* A call beside its chat: two panels. */
+:root:root .exo-dc .exo-dc-view > .exo-dc-voice-split {
+  display: flex;
+  gap: var(--exo-gap);
+}
+
+:root:root .exo-dc .exo-dc-view > .exo-dc-voice-split > * {
+  flex: 1 1 0;
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  border-radius: var(--exo-panel-radius);
+  background: var(--exo-float);
+}
+
+/* The conversation: its head, its messages, the message box at its foot; one panel. */
+:root:root .exo-dc .exo-dc-view .exo-dc-chat-col {
+  display: flex;
+  flex-direction: column;
+}
+
+:root:root .exo-dc .exo-dc-view .exo-dc-chat-col > .exo-dc-chat {
+  flex: 1 1 auto;
+  min-height: 0;
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+:root:root .exo-dc .exo-dc-view .exo-dc-chat-col > .exo-dc-compose-panel {
+  flex: none;
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+:root:root .exo-dc .exo-dc-view .exo-dc-chat-head {
+  height: var(--dc-head-h);
+  min-height: var(--dc-head-h);
+  margin: 0;
+  padding: 0 12px 0 20px;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+/* The people (or a conversation's person) beside the page. */
+.exo-dc-beside {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  width: var(--dc-people-w);
+  min-height: 0;
+  overflow: hidden;
+  border-radius: var(--exo-panel-radius);
+  background: var(--exo-float);
+}
+
+:root:root .exo-dc .exo-dc-beside > * {
+  flex: 1 1 auto;
+  width: auto;
+  min-height: 0;
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+/* No room for the column: a panel over the page's right side, floating with the one line. */
+.exo-dc-beside.is-over {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 5;
+  box-shadow: var(--glassy-shadow-raised);
+}
+
+/* ---- Home ---- */
+
+.exo-dc-home {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
+.exo-dc-home > .exo-dc-friends {
+  flex: 1 1 auto;
+}
+
+.exo-dc-block {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  padding: 8px 12px 12px;
+  overflow: hidden;
+  border-radius: var(--exo-panel-radius);
+  background: var(--exo-float);
+}
+
+.exo-dc-block-head {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  height: calc(40px * var(--exo-scale, 1));
+  padding: 0 4px 0 8px;
+}
+
+.exo-dc-block-title {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  font-size: var(--exo-type-read);
+  font-weight: var(--exo-weight-title);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.exo-dc-block-body {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 2px;
+  min-height: 0;
+  overflow: hidden auto;
+  scrollbar-width: none;
+}
+
+/* Friends: the rest of Home's height; its head holds the tabs, the search and Add friend. */
+.exo-dc-friends-head {
+  gap: 12px;
+}
+
+.exo-dc-friends-head > .exo-dc-block-title {
+  flex: none;
+}
+
+.exo-dc-friends-tools {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  min-width: 0;
+}
+
+:root:root .exo-dc .exo-dc-friends .exo-dc-friend-list {
+  padding: 4px 0 0;
+}
+
+:root:root .exo-dc .exo-dc-friends .exo-dc-friend-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(calc(280px * var(--exo-scale, 1)), 1fr));
+  gap: 2px 8px;
+}
+
+:root:root .exo-dc .exo-dc-friends .exo-dc-friend {
+  min-height: var(--dc-row-h);
+  padding: 0 4px 0 8px;
+  border-radius: 999px;
+}
+
+:root:root .exo-dc .exo-dc-friends .exo-dc-side-label {
+  margin: 10px 8px 4px;
+}
+
+@media (width < 900px) {
+  :root:root:root main.exo-dc {
+    --dc-pane-w: calc(240px * var(--exo-scale, 1));
+  }
+}
+
+html[data-exo-motion="reduce"] .exo-dc-band-place {
+  transition: none;
+}
+
+@media (forced-colors: active) {
+  .exo-dc-band-place.is-chosen,
+  :root:root:root .exo-dc .exo-dc-pane .exo-dc-item[aria-current="true"] {
+    forced-color-adjust: none;
+    background: Highlight;
+    color: HighlightText;
+  }
+}
+
+/* More servers past an end: the strip fades out over its last 32px there, so a face is never cut off hard. */
+.exo-dc-band-strip.has-back {
+  mask-image: linear-gradient(to right, transparent, var(--color-bg) 32px);
+}
+
+.exo-dc-band-strip.has-next {
+  mask-image: linear-gradient(to left, transparent, var(--color-bg) 32px);
+}
+
+.exo-dc-band-strip.has-back.has-next {
+  mask-image: linear-gradient(to right, transparent, var(--color-bg) 32px, var(--color-bg) calc(100% - 32px), transparent);
+}
+
+/* ---- A voice channel ---- */
+
+/* Its head: the channel, who is here, and whether you are connected (green once you are), then Show chat. */
+.exo-dc-voice-here {
+  flex: none;
+  color: var(--color-muted);
+  font-size: var(--exo-type-small);
+}
+
+.exo-dc-voice-state {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 6px;
+  height: 24px;
+  padding: 0 10px;
+  border-radius: 999px;
+  color: var(--color-muted);
+  font-size: var(--exo-type-small);
+  font-weight: var(--exo-weight-control);
+  box-shadow: var(--glassy-ring);
+}
+
+.exo-dc-voice-state::before {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--color-warn);
+  content: "";
+}
+
+.exo-dc-voice-state.is-on {
+  color: var(--color-good);
+}
+
+.exo-dc-voice-state.is-on::before {
+  background: var(--color-good);
+}
+
+/* The call's controls say what they do: a glyph and its word, a 40px pill each. */
+:root:root .exo-dc .exo-dc-voice-bar .exo-dc-voice-btn:has(> .exo-dc-voice-word) {
+  display: inline-flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: auto;
+  height: 40px;
+  padding: 0 16px 0 14px;
+  border-radius: 999px;
+}
+
+.exo-dc-voice-word {
+  font-size: var(--exo-type-body);
+  font-weight: var(--exo-weight-control);
+  white-space: nowrap;
+}
+
+/* A narrow call (a small window, or its chat beside it) keeps the glyphs alone. */
+.exo-dc-voice-room {
+  container: dc-voice / inline-size;
+}
+
+@container dc-voice (width < 760px) {
+  .exo-dc-voice-word {
+    display: none;
+  }
+
+  :root:root .exo-dc .exo-dc-voice-bar .exo-dc-voice-btn:has(> .exo-dc-voice-word) {
+    width: 40px;
+    padding: 0;
+  }
+}
+
+/* A friend's name ends inside its row: a styled name's last letter (a slant, a flourish) kept inside the box, and a long
+   one cut with an ellipsis rather than running into the next column. */
+:root:root .exo-dc .exo-dc-friends .exo-dc-friend-names {
+  min-width: 0;
+  overflow: hidden;
+}
+
+/* A friend's status line ends in an ellipsis in a narrow card, as the name does. */
+:root:root .exo-dc .exo-dc-friends .exo-dc-friend-names > :not(strong) {
+  display: block;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+:root:root .exo-dc .exo-dc-friends .exo-dc-friend-names > strong {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+
+/* The name gives way before its server tag: a plain name is bare text, so it is held in a box that can shrink. */
+:root:root .exo-dc .exo-dc-friends .exo-dc-friend-name {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+:root:root .exo-dc .exo-dc-friends .exo-dc-friend-names .exo-dc-dn {
+  min-width: 0;
+  overflow: hidden;
+  padding-inline-end: 0.2em;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/* A channel category is a row you can hit: 28px tall, its add button 24px. */
+:root:root .exo-dc .exo-dc-pane .exo-dc-category {
+  min-height: 28px;
+}
+
+:root:root .exo-dc .exo-dc-pane .exo-dc-category-add {
+  width: 24px;
+  height: 24px;
+}
+
+/* Inside the frame, the panels are the frame's own (one hairline each): a list, the people, a person, the message box
+   or a server guide's side drawn as a pane of their own (glass.css › Panes) would put a second line inside the first. */
+:root:root:root .exo-dc :is(.exo-dc-pane, .exo-dc-beside, .exo-dc-view) :is(.exo-dc-side, .exo-dc-channels, .exo-dc-members, .exo-dc-dm-profile, .exo-dc-profile, .exo-dc-compose-panel, .exo-dc-chat, .exo-dc-guide-side)::before {
+  content: none;
+}
+
+/* What is new in a server reads at a glance: an unread channel is full white and bold with a white mark at the row's
+   left edge; one read is quiet grey and regular; a muted one quieter still. The open one is the white pill. */
+:root:root .exo-dc .exo-dc-channels .exo-dc-item:not([aria-current="true"]) {
+  position: relative;
+  color: var(--color-faint);
+  font-weight: var(--exo-weight-body);
+}
+
+:root:root .exo-dc .exo-dc-channels .exo-dc-item:not([aria-current="true"]) :is(.exo-dc-item-name, svg) {
+  color: inherit;
+}
+
+:root:root:root .exo-dc .exo-dc-channels .exo-dc-item.is-unread:not([aria-current="true"]):not(.is-muted) {
+  color: var(--color-fg);
+  font-weight: var(--exo-weight-title);
+}
+
+:root:root:root .exo-dc .exo-dc-channels .exo-dc-item.is-unread:not([aria-current="true"]):not(.is-muted) .exo-dc-item-name {
+  font-weight: var(--exo-weight-title);
+}
+
+:root:root:root .exo-dc .exo-dc-channels .exo-dc-item.is-unread:not([aria-current="true"]):not(.is-muted)::before {
+  position: absolute;
+  top: 50%;
+  left: -6px;
+  width: 4px;
+  height: 8px;
+  border-radius: 0 4px 4px 0;
+  background: var(--color-fg);
+  content: "";
+  translate: 0 -50%;
+}
+
+:root:root .exo-dc .exo-dc-channels .exo-dc-item.is-muted:not([aria-current="true"]) {
+  opacity: 0.55;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  :root:root .exo-dc .exo-dc-channels .exo-dc-item:not([aria-current="true"]):hover {
+    color: var(--color-fg);
+  }
+}
+
+/* The message box: a 48px pill of its own, 16px in from the panel's sides and foot, so its edge never meets the panel's.
+   What sits above it (a reply, files, who is typing) keeps the same inset. */
+:root:root:root .exo-dc .exo-dc-view .exo-dc-chat-col > .exo-dc-compose-panel {
+  padding: 8px 16px 16px;
+}
+
+:root:root:root .exo-dc .exo-dc-view .exo-dc-compose-panel > .exo-dc-compose {
+  padding: 0;
+}
+
+:root:root:root:root .exo-dc .exo-dc-view .exo-dc-compose-panel .exo-dc-input-row:not(.is-attached) {
+  min-height: calc(48px * var(--exo-scale, 1));
+  padding: 0 8px 0 12px;
+  border-radius: calc(24px * var(--exo-scale, 1));
+}
+
+/* Every panel of the frame is edged as the rest of Exo is: the one hairline ring (--glassy-ring, a device pixel at any
+   display scale), drawn over what the panel holds so nothing inside it (the message box, a list's fill) covers it. A
+   CSS border rounds up to a whole pixel at 125% and 150% and read thicker than the app's other lines. */
+:root:root .exo-dc :is(.exo-dc-band, .exo-dc-pane, .exo-dc-block, .exo-dc-beside:not(.is-over),
+  .exo-dc-view > :not(.exo-dc-home, .exo-dc-beside, .exo-dc-fit-probe, .exo-dc-voice-split), .exo-dc-view > .exo-dc-voice-split > *) {
+  position: relative;
+  border: 0;
+  box-shadow: none;
+}
+
+:root:root .exo-dc .exo-dc-beside.is-over {
+  border: 0;
+}
+
+:root:root .exo-dc :is(.exo-dc-band, .exo-dc-pane, .exo-dc-block, .exo-dc-beside,
+  .exo-dc-view > :not(.exo-dc-home, .exo-dc-beside, .exo-dc-fit-probe, .exo-dc-voice-split), .exo-dc-view > .exo-dc-voice-split > *)::after {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  border-radius: inherit;
+  box-shadow: var(--glassy-ring);
+  content: "";
+  pointer-events: none;
+}
+
+/* Send, right of the emoji: a 32px white disc with an up arrow, quiet (the line only) until there is something to send. */
+:root:root .exo-dc .exo-dc-input-row .exo-dc-send {
+  display: grid;
+  flex: none;
+  place-items: center;
+  align-self: center;
+  width: 32px;
+  height: 32px;
+  margin-left: 4px;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: var(--color-fg);
+  color: var(--color-bg);
+  cursor: pointer;
+  transition: background-color var(--dur-quick) var(--ease-out);
+}
+
+:root:root .exo-dc .exo-dc-input-row .exo-dc-send:disabled {
+  background: transparent;
+  color: var(--color-muted);
+  box-shadow: var(--glassy-ring);
+  cursor: default;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  :root:root .exo-dc .exo-dc-input-row .exo-dc-send:not(:disabled):hover {
+    background: var(--exo-primary-hover);
+  }
+}
+
+html[data-exo-motion="reduce"] .exo-dc-send {
+  transition: none;
+}

@@ -1,0 +1,10 @@
+{
+  "defaultInstallDir": "C:\\Users\\a\\Epic Games",
+  "minimizeToTray": true,
+  "startOnBoot": false,
+  "enableNotifications": true,
+  "showWhatsNewOnStartup": true,
+  "performanceProfile": { "preset": "default", "customOverrides": null },
+  "verboseLogs": true,
+  "topBar": { "hideLabels": true }
+}

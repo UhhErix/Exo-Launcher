@@ -1,0 +1,239 @@
+import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
+import { createPortal } from 'react-dom'
+import { Alert, Check } from '../../brand/icons'
+import { focusWhenActive } from '../../lib/focusTrap'
+import { host, onHostEvent, type DriverProgress } from '../../lib/host'
+import { report } from '../../lib/report'
+import { CopyLogs } from '../ui/ErrorNote'
+import { Progress, ProgressWords } from '../ui/Progress'
+import { useHoldWindow } from './HoldWindow'
+import { pageGet, pageSet, pageRemove } from '../../lib/pageStore'
+import '../../styles/driver-install.css'
+
+type Phase = 'starting' | 'downloading' | 'unpacking' | 'waiting' | 'installing' | 'reloading' | 'restoring' | 'done' | 'failed'
+type Install = {
+  phase: Phase
+  /** The vendor ("NVIDIA") and the version going in ("621.12"), for the title. */
+  name: string | null
+  version: string | null
+  /** The download's share, 0 to 1, while it downloads. */
+  share: number | null
+  /** The download's size in bytes, when the driver row knew it. */
+  size: number | null
+  message: string | null
+  restored: string[]
+  notRestored: string[]
+}
+
+/** The order an install goes through: a progress event never takes it back a step. */
+const ORDER: Phase[] = ['starting', 'downloading', 'unpacking', 'waiting', 'installing', 'reloading', 'restoring', 'done', 'failed']
+const WORDS: Record<Exclude<Phase, 'done' | 'failed'>, string> = {
+  starting: 'Starting the update', downloading: 'Downloading the driver', unpacking: 'Unpacking the driver', waiting: 'Waiting to install',
+  installing: 'Installing the driver', reloading: 'Reloading the graphics driver', restoring: 'Putting your settings back',
+}
+const VENDOR: Record<string, string> = { nvidia: 'NVIDIA', amd: 'AMD', intel: 'Intel' }
+/** Kept through a page reload (the host reloads the page once the driver is in, and on a page that stops drawing), so the screen comes back at once. */
+const KEPT = 'exo.driverInstall'
+
+let current: Install | null = null
+const listeners = new Set<() => void>()
+const subscribe = (listener: () => void) => { listeners.add(listener); return () => { listeners.delete(listener) } }
+const read = () => current
+
+function put(next: Install | null) {
+  current = next
+  try {
+    if (next && next.phase !== 'done' && next.phase !== 'failed') pageSet(KEPT, JSON.stringify(next))
+    else pageRemove(KEPT)
+  } catch { /* the screen still shows; only a reload would lose it */ }
+  for (const listener of listeners) listener()
+}
+
+/** A step from the host: a later phase takes over; done and failed always land. */
+function advance(phase: Phase, change: Partial<Install>) {
+  const base: Install = current ?? { phase, name: null, version: null, share: null, size: null, message: null, restored: [], notRestored: [] }
+  if (current && phase !== 'failed' && ORDER.indexOf(phase) < ORDER.indexOf(current.phase)) return
+  put({ ...base, ...change, phase })
+}
+
+/** The driver row's Update, pressed: the screen comes up at once, before the host's first step. */
+export function driverInstallStarted(name: string, version: string, size?: number | null) {
+  put({ phase: 'starting', name, version, share: null, size: size ?? null, message: null, restored: [], notRestored: [] })
+}
+
+/** The update didn't start (the row says why): the screen goes. */
+export function driverInstallStopped() {
+  if (current?.phase === 'starting') put(null)
+}
+
+const STAGE: Partial<Record<DriverProgress['stage'], Phase>> = {
+  downloading: 'downloading', unpacking: 'unpacking', waiting: 'waiting', installing: 'installing',
+}
+
+/** The download's words: "Downloading the driver · 420 MB of 1.0 GB" when its size is known (its percent follows them). */
+function downloadWords(install: Install) {
+  if (install.share === null || !install.size) return WORDS.downloading
+  const mb = (bytes: number) => bytes >= 1e9 ? `${(bytes / 1e9).toFixed(1)} GB` : `${Math.round(bytes / 1e6)} MB`
+  return `${WORDS.downloading} · ${mb(install.size * install.share)} of ${mb(install.size)}`
+}
+
+/** The host's steps, as they come: the download and install from gpu.driver, the rest from gpu.driverInstall. */
+function listen() {
+  const offProgress = onHostEvent('gpu.driver', progress => {
+    const phase = STAGE[progress.stage]
+    if (phase) advance(phase, { share: progress.stage === 'downloading' ? progress.percent / 100 : null, message: progress.message })
+    else if (progress.stage === 'failed' && current) advance('failed', { message: progress.message })
+  })
+  const offStep = onHostEvent('gpu.driverInstall', step => {
+    advance(step.phase, {
+      version: step.version ?? current?.version ?? null,
+      message: step.message ?? null,
+      share: null,
+      restored: step.restored ?? [],
+      notRestored: step.notRestored ?? [],
+    })
+  })
+  return () => { offProgress(); offStep() }
+}
+
+/** After a reload mid-install, the screen comes back at once from what was kept, then follows the host's own state. */
+function recover() {
+  let kept: Install | null
+  try { kept = JSON.parse(pageGet(KEPT) ?? 'null') as Install | null } catch { kept = null }
+  if (!kept) return
+  put(kept)
+  host.gpuDriver('state').then(state => {
+    const phase = state.progress ? STAGE[state.progress.stage] : undefined
+    if (phase) advance(phase, { name: current?.name ?? (state.vendor ? VENDOR[state.vendor] : null) })
+    else if (state.progress?.stage === 'failed') advance('failed', { message: state.progress.message })
+    else if (current && ORDER.indexOf(current.phase) < ORDER.indexOf('reloading')) put(null)
+  }, (error: unknown) => report(error, 'DriverInstallOverlay.state', { level: 'warn' }))
+}
+
+const ended = (phase: Phase) => phase === 'done' || phase === 'failed'
+const named = (install: Install) => [install.name, install.version].filter(Boolean).join(' ')
+
+/**
+ * The driver screen (DESIGN.md › PC): while a graphics driver goes in, from the Update press through done or failed, one
+ * layer over the whole window, so nothing under it can be pressed or typed into. It is full screen on purpose: no
+ * window buttons (owner, 2026-11-14), so the window can't be closed or hidden mid-install. The driver and its version, the step in words, the Exo bar
+ * (measured while it downloads, gliding after), and a screen that dims and lights, slowly: the screen going black and
+ * coming back mid-install is expected. Done says the driver is in and that Exo's settings are back in one line (only
+ * what it couldn't put back is listed), and offers Restart now or Not now; failed says what happened with Copy logs. It comes back after a page reload: the host reloads the page once the driver is in, before restoring.
+ */
+export function DriverInstallOverlay() {
+  const install = useSyncExternalStore(subscribe, read)
+  const screen = useRef<HTMLDivElement>(null)
+  // Waiting (on a game or a call) can be set aside, so the call can be left or the game closed; it returns to install.
+  const [aside, setAside] = useState(false)
+  useEffect(() => { recover(); return listen() }, [])
+
+  const phase = install?.phase ?? null
+  const working = phase !== null && !ended(phase)
+  const shown = install !== null && !(aside && phase === 'waiting')
+  if (aside && phase !== 'waiting') setAside(false)
+  // Everything under it is inert and keys go nowhere else (Ctrl+K, a room's number); Escape closes it once it's over.
+  useHoldWindow(screen, shown, working ? null : () => put(null))
+
+  if (!install || !shown) return null
+  return createPortal(
+    <div ref={screen} className={`exo-portal exo-driver-install${working ? ' is-working' : ''}`} role="alertdialog" aria-modal="true" aria-labelledby="exo-driver-install-title" aria-busy={working}>
+      <div className="exo-driver-install-body">
+        {install.phase === 'done' ? <span className="exo-driver-install-done" aria-hidden="true"><Check size={36} /></span> : <Screen />}
+        {ended(install.phase) ? <Ended install={install} /> : <Working install={install} />}
+        <div className="exo-driver-install-foot">
+          {install.phase === 'waiting' ? <button type="button" className="exo-set-btn" onClick={() => setAside(true)}>Hide until it installs</button> : null}
+          {install.phase === 'failed' ? <CopyLogs error={install.message ?? 'Driver install failed'} /> : null}
+          {install.phase === 'done' ? <RestartChoice /> : null}
+          {install.phase === 'failed' ? (
+            <button ref={focusWhenActive} type="button" className="exo-set-btn is-primary" onClick={() => put(null)}>Close</button>
+          ) : null}
+        </div>
+      </div>
+    </div>,
+    document.body,
+  )
+}
+
+/** While it works: the driver and its version, the step in words (what holds it, while it waits), and the Exo bar. */
+function Working({ install }: { install: Install }) {
+  const step = install.phase === 'downloading' ? downloadWords(install) : WORDS[install.phase as keyof typeof WORDS]
+  const share = install.phase === 'downloading' ? install.share : null
+  return (
+    <>
+      <h2 id="exo-driver-install-title">{named(install) || 'Graphics driver'}</h2>
+      <p className="exo-driver-install-step" role="status">{install.phase === 'waiting' && install.message ? install.message : <ProgressWords words={step} value={share} />}</p>
+      <Progress size="large" value={share} label={step} />
+    </>
+  )
+}
+
+/** Once it's over: Driver updated with what Exo put back, or what went wrong and what to do. */
+function Ended({ install }: { install: Install }) {
+  const failed = install.phase === 'failed'
+  return (
+    <>
+      <h2 id="exo-driver-install-title">{failed ? 'The driver didn’t install' : 'Driver updated'}</h2>
+      {named(install) ? <p className="exo-driver-install-step">{named(install)}</p> : null}
+      {failed
+        ? <p className="exo-driver-install-error" role="alert">{install.message || 'Windows kept the driver you had. Try the update again from PC › Graphics.'}</p>
+        : <Outcome install={install} />}
+    </>
+  )
+}
+
+/**
+ * After the install: one line for what Exo put back (never a list of every setting), then only what it couldn't, each
+ * saying what to do, and the restart that finishes the driver.
+ */
+function Outcome({ install }: { install: Install }) {
+  const back = install.restored.length
+  const missed = install.notRestored
+  const settings = back === 0 ? null
+    : missed.length ? 'Exo put the rest of your settings back.' : 'Exo put your settings back on the new driver.'
+  return (
+    <>
+      <p className="exo-driver-install-step">{[settings, 'Restart your PC to finish.'].filter(Boolean).join(' ')}</p>
+      {missed.length ? (
+        <ul className="exo-driver-install-list">
+          {missed.map(item => <li key={item} className="is-not"><Alert size={16} />{item}</li>)}
+        </ul>
+      ) : null}
+    </>
+  )
+}
+
+/** Restart now (Windows restarts in 5 seconds) or Not now, which closes the screen. */
+function RestartChoice() {
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const restart = () => {
+    setBusy(true)
+    setError(null)
+    host.biosUpdate('windows').then(result => {
+      if (!result.ok) { setBusy(false); setError(result.message ?? 'Windows didn’t restart. Restart from the Start menu.') }
+    }, (failure: unknown) => {
+      report(failure, 'DriverInstallOverlay.restart', { level: 'warn' })
+      setBusy(false)
+      setError('Windows didn’t restart. Restart from the Start menu.')
+    })
+  }
+  return (
+    <>
+      {error ? <p className="exo-driver-install-error" role="alert">{error}</p> : null}
+      <button type="button" className="exo-set-btn" disabled={busy} onClick={() => put(null)}>Not now</button>
+      <button ref={focusWhenActive} type="button" className="exo-set-btn is-primary" disabled={busy} onClick={restart}>{busy ? 'Restarting…' : 'Restart now'}</button>
+    </>
+  )
+}
+
+/** A screen that dims and lights again, slowly, as the real one may during the install; still under Reduce motion. */
+function Screen() {
+  return (
+    <svg className="exo-driver-screen" viewBox="0 0 64 50" width="88" height="69" aria-hidden="true">
+      <rect className="exo-driver-screen-glass" x="5" y="4" width="54" height="34" rx="4" />
+      <rect className="exo-driver-screen-frame" x="5" y="4" width="54" height="34" rx="4" />
+      <path className="exo-driver-screen-frame" d="M24 46h16M32 38v8" />
+    </svg>
+  )
+}

@@ -1,0 +1,813 @@
+/* ── First-run setup ── one centered column of Settings' own rows and Exo's buttons; each step fades in on the
+   base time and slides from the side it comes from on the spring, as a page pushes (DESIGN.md › Motion › Move). ── */
+
+.exo-ob {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  height: 100%;
+  min-height: 0;
+  background: var(--color-bg);
+}
+
+.exo-ob-titlebar .exo-titlebar-actions {
+  margin-left: auto;
+}
+
+.exo-ob-stage {
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.exo-ob-step {
+  --exo-ob-from: 28px;
+  width: min(100% - 48px, 600px);
+  min-height: 0;
+  margin: 0 auto;
+  padding: clamp(32px, 8vh, 88px) 0 32px;
+  overflow-y: auto;
+  transition: opacity var(--dur-base) var(--ease-out), translate var(--dur-move) var(--ease-spring);
+
+  @starting-style {
+    opacity: 0;
+    translate: var(--exo-ob-from) 0;
+  }
+}
+
+.exo-ob-step[data-direction="back"] {
+  --exo-ob-from: -28px;
+}
+
+/* Welcome: the app's icon over a centered title, as the installer opens. */
+.exo-ob-step.is-welcome {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  padding-bottom: 12px;
+  text-align: center;
+}
+
+.exo-ob-mark {
+  width: 96px;
+  height: 96px;
+  margin-bottom: 28px;
+  transition: scale var(--dur-flight) var(--ease-spring), opacity var(--dur-base) var(--ease-out);
+
+  @starting-style {
+    scale: 0.92;
+    opacity: 0;
+  }
+}
+
+.exo-ob-title {
+  margin: 0;
+  color: var(--color-fg);
+  font-size: var(--exo-type-first-run);
+  font-weight: 650;
+  line-height: 1.1;
+}
+
+.exo-ob-title:focus {
+  outline: none;
+}
+
+.exo-ob-body {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin-top: 28px;
+}
+
+/* Footer: the note on the left, Back and the one white button on the right. */
+
+.exo-ob-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  width: min(100% - 48px, 600px);
+  margin: 0 auto;
+  padding: 20px 0 28px;
+}
+
+/* Welcome: Get started sits under the centered title, as the installer's Install does, the two on the window's middle. */
+.exo-ob-stage:has(> .is-welcome) {
+  grid-template-rows: minmax(0, 1fr) auto minmax(0, 1fr);
+}
+
+.exo-ob-foot.is-welcome {
+  justify-content: center;
+}
+
+.exo-ob-foot.is-welcome .exo-ob-note {
+  display: none;
+}
+
+.exo-ob-note {
+  min-width: 0;
+  margin: 0;
+  color: var(--color-muted);
+  font-size: calc(13px * var(--exo-scale, 1));
+  line-height: 1.4;
+}
+
+.exo-ob-note.is-error {
+  color: var(--color-bad);
+}
+
+.exo-ob-actions {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 8px;
+}
+
+.exo-ob-cta {
+  min-width: 140px;
+}
+
+/* Discord's phone sign-in inside first run: the instructions over the code, on a filled panel. */
+.exo-ob-discord {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 20px;
+  border-radius: var(--exo-card-radius);
+  background: var(--exo-fill);
+  box-shadow: var(--exo-rim);
+  color: var(--color-muted);
+  font-size: calc(13px * var(--exo-scale, 1));
+  line-height: 1.5;
+  text-align: center;
+}
+
+.exo-ob-discord p {
+  margin: 0;
+}
+
+/* Best settings' check (gpu/BestSetup.tsx), in first run's last step and the PC room: beside its words, drawn in as a
+   step lands (tokens.css › .exo-motion-check.is-held), simply there for one that was already set. Here, not in
+   pc-room.css, since first run shows it before the PC room's code has loaded. */
+.exo-motion-check.exo-best-check {
+  stroke-width: 1.91;
+  position: static;
+  display: inline-block;
+  flex: none;
+  width: 14px;
+  height: 14px;
+  margin: 0;
+}
+
+.exo-motion-check.exo-best-check.is-static {
+  animation: none;
+  stroke-dashoffset: 0;
+}
+
+.exo-best-miss {
+  display: inline-flex;
+  flex: none;
+  color: var(--color-bad);
+}
+
+.exo-set-state .exo-best-check {
+  margin-right: 6px;
+  vertical-align: -2px;
+}
+
+:root[data-exo-motion='reduce'] {
+  /* What appears still fades in (DESIGN.md › Motion › Reduce): nothing slides, grows or gives way. */
+  .exo-ob-step {
+    transition: opacity var(--dur-base) var(--ease-out);
+  }
+
+  .exo-ob-mark {
+    transition: opacity var(--dur-base) var(--ease-out);
+
+    @starting-style {
+      scale: 1;
+    }
+  }
+
+  .exo-ob-service {
+    transition: none;
+  }
+
+  .exo-ob-service:active {
+    scale: none;
+  }
+}
+
+@media (forced-colors: active) {
+  .exo-ob,
+  .exo-game-page,
+  .exo-set-list {
+    color: CanvasText;
+    background: Canvas;
+    border-color: CanvasText;
+  }
+
+  [role="radio"] {
+    border-color: ButtonText;
+  }
+
+  .is-on,
+  .is-current,
+  .is-selected,
+  [aria-current="page"],
+  [aria-checked="true"],
+  [aria-pressed="true"] {
+    color: HighlightText;
+    background: Highlight;
+    border-color: Highlight;
+  }
+
+}
+
+/* The Exo account step (CLIENT.md 4.1): left-aligned in the column, one screen at a time, fields and tiles from the
+   shared controls (.exo-field, .button). Sizes are the type scale: 20, 13 and 12 px. */
+.exo-ob-account {
+  display: grid;
+  gap: 8px;
+  width: min(100%, 480px);
+  margin: 0 auto;
+  text-align: left;
+}
+.exo-ob-subtitle {
+  margin: 0;
+  color: var(--color-fg);
+  font-size: calc(20px * var(--exo-scale, 1));
+  font-weight: var(--exo-weight-title);
+}
+.exo-ob-lede {
+  margin: 0 0 16px;
+  color: var(--color-muted);
+  font-size: calc(13px * var(--exo-scale, 1));
+  line-height: 1.5;
+}
+.exo-ob-label {
+  margin-top: 8px;
+  color: var(--color-fg);
+  font-size: calc(13px * var(--exo-scale, 1));
+}
+.exo-ob-hint {
+  margin: 0;
+  color: var(--color-muted);
+  font-size: calc(12px * var(--exo-scale, 1));
+}
+.exo-ob-error {
+  margin: 0;
+  color: var(--color-bad);
+  font-size: calc(13px * var(--exo-scale, 1));
+}
+.exo-ob-password {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.exo-ob-password .exo-field {
+  flex: 1 1 auto;
+}
+.exo-ob-form-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  justify-content: flex-end;
+  margin-top: 16px;
+}
+.exo-ob-choice {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+.exo-ob-tile {
+  display: grid;
+  gap: 4px;
+  justify-items: start;
+  min-height: 64px;
+  padding: 12px 16px;
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  text-align: left;
+}
+.exo-ob-tile-title {
+  color: var(--color-fg);
+  font-size: calc(13px * var(--exo-scale, 1));
+  font-weight: var(--exo-weight-title);
+}
+.exo-ob-tile-detail {
+  color: var(--color-muted);
+  font-size: calc(12px * var(--exo-scale, 1));
+}
+.exo-ob-code {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px 16px;
+  margin: 8px 0 0;
+  padding: 16px;
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  color: var(--color-fg);
+  font-family: ui-monospace, "Cascadia Mono", monospace;
+  font-size: calc(20px * var(--exo-scale, 1));
+  list-style: none;
+  letter-spacing: 0.04em;
+}
+
+/* Accounts outside first run: the Home banner, the top-bar spot, the sheet's actions, and Settings > Account. */
+.exo-account-banner {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  align-items: center;
+  justify-content: space-between;
+  max-width: 720px;
+  margin: 0 var(--exo-gutter) 16px;
+  padding: 8px 12px 8px 16px;
+  border-radius: var(--exo-card-radius);
+}
+/* The banner's place while it is not yet known whether it shows (AccountShell › bannerShownBefore). */
+.exo-account-banner-hold {
+  height: calc(52px * var(--exo-scale, 1));
+  margin: 0 var(--exo-gutter) 16px;
+}
+.exo-account-banner-text {
+  margin: 0;
+  color: var(--color-fg);
+  font-size: calc(13px * var(--exo-scale, 1));
+}
+.exo-account-banner-actions {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+}
+.exo-account-sheet-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  margin-top: 16px;
+}
+.exo-account-page,
+.exo-account-stack {
+  display: grid;
+  gap: 24px;
+}
+.exo-account-group {
+  display: grid;
+  gap: 8px;
+  padding-top: 16px;
+  border-top: 1px solid var(--color-border);
+}
+.exo-account-group-title {
+  margin: 0;
+  color: var(--color-fg);
+  font-size: calc(13px * var(--exo-scale, 1));
+  font-weight: var(--exo-weight-title);
+}
+.exo-account-facts {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 4px 16px;
+  margin: 0;
+  color: var(--color-fg);
+  font-size: calc(13px * var(--exo-scale, 1));
+}
+.exo-account-facts dt {
+  color: var(--color-muted);
+}
+.exo-account-facts dd {
+  margin: 0;
+}
+.exo-account-list {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.exo-account-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 48px;
+  padding: 8px 12px;
+  border-radius: 12px;
+  color: var(--color-fg);
+  font-size: calc(13px * var(--exo-scale, 1));
+}
+.exo-account-row:hover {
+  background-color: var(--hover-fill);
+}
+.exo-account-inline {
+  display: flex;
+  gap: 8px;
+}
+.exo-account-held {
+  margin: 0;
+  padding-left: 18px;
+  color: var(--color-fg);
+  font-size: calc(12px * var(--exo-scale, 1));
+}
+.exo-account-hint {
+  margin: 0;
+  color: var(--color-muted);
+  font-size: calc(12px * var(--exo-scale, 1));
+}
+.exo-account-lede {
+  margin: 0 0 8px;
+  color: var(--color-muted);
+  font-size: calc(13px * var(--exo-scale, 1));
+}
+.exo-account-panel {
+  display: grid;
+  gap: 8px;
+  max-width: 560px;
+}
+
+/* SPEC-v2 first run: segmented progress 24 px from the top, the welcome glow, the Done step, and the account pieces. */
+.exo-ob-segments {
+  position: absolute;
+  top: 24px;
+  left: 50%;
+  display: flex;
+  gap: 4px;
+  width: min(100% - 48px, 600px);
+  transform: translateX(-50%);
+}
+.exo-ob-segments span {
+  flex: 1 1 0;
+  height: 2px;
+  border-radius: 1px;
+  background: var(--color-border);
+  transition: background-color var(--dur-move) var(--ease-out);
+}
+.exo-ob-segments span.is-done {
+  background: var(--color-fg);
+}
+.exo-ob-mark {
+  width: 112px;
+  height: 112px;
+}
+.exo-ob-foot {
+  margin-bottom: 32px;
+}
+.exo-ob-done {
+  display: grid;
+  justify-items: center;
+  gap: 24px;
+  padding-top: 24px;
+}
+.exo-ob-check {
+  color: var(--color-fg);
+}
+.exo-ob-check-path {
+  stroke: currentColor;
+  stroke-width: 3;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  animation: exo-ob-draw var(--dur-flight) var(--ease-out) forwards;
+}
+@keyframes exo-ob-draw {
+  to { stroke-dashoffset: 0; }
+}
+.exo-ob-summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  width: min(100%, 600px);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.exo-ob-summary li {
+  display: grid;
+  gap: 4px;
+  min-height: 64px;
+  padding: 12px 16px;
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+}
+.exo-account-head {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  justify-content: space-between;
+}
+.exo-account-head .exo-set-section-head {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.exo-account-sheet-logo {
+  display: block;
+  margin: 0 auto 16px;
+}
+.exo-account-sheet-points {
+  display: grid;
+  gap: 8px;
+  margin: 0 0 8px;
+  padding-left: 18px;
+  color: var(--color-fg);
+  font-size: calc(13px * var(--exo-scale, 1));
+}
+.exo-account-sync-line {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  margin: 8px 0 0;
+  color: var(--color-muted);
+  font-size: calc(12px * var(--exo-scale, 1));
+}
+
+/* First run, SPEC-v2 layout: the column is centred between the progress bar (top) and the footer (bottom), every step
+   has a faint "Step N of M" label over a 36 px title, and only the welcome step uses the display size. The footer sits
+   32 px from the window's bottom at the column width. */
+.exo-ob-stage {
+  position: relative;
+  display: block;
+  min-height: 0;
+  overflow: hidden;
+}
+.exo-ob-segments {
+  top: 24px;
+}
+.exo-ob-step {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: auto;
+  margin: 0;
+  padding: 42px 24px 132px;
+  overflow-y: auto;
+  text-align: left;
+}
+.exo-ob-step > * {
+  width: min(100%, 560px);
+}
+.exo-ob-step.is-welcome {
+  justify-content: center;
+  text-align: center;
+}
+.exo-ob-step.is-welcome > * {
+  width: auto;
+}
+.exo-ob-step-label {
+  margin: 0 0 8px;
+  color: var(--color-faint);
+  font-size: calc(13px * var(--exo-scale, 1));
+}
+.exo-ob-step .exo-ob-title {
+  margin: 0 0 24px;
+  color: var(--color-fg);
+  font-size: var(--exo-type-first-run);
+  font-weight: var(--exo-weight-title);
+  line-height: 1.15;
+}
+.exo-ob-step .exo-ob-title.is-display {
+  margin: 24px 0 12px;
+  font-size: calc(56px * var(--exo-scale, 1));
+  font-weight: var(--exo-weight-title);
+}
+.exo-ob-body {
+  display: grid;
+  gap: 12px;
+  width: 100%;
+}
+.exo-ob-get-started {
+  min-height: 48px;
+  padding: 0 28px;
+}
+.exo-ob-mark-wrap {
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+}
+.exo-ob-mark {
+  position: relative;
+  z-index: 1;
+  width: 112px;
+  height: 112px;
+  margin: 0;
+}
+/* The footer: fixed 32 px from the window's bottom, at the column's width, no longer inline under the content. */
+.exo-ob-foot {
+  position: absolute;
+  bottom: 32px;
+  left: 50%;
+  z-index: 2;
+  width: min(100% - 48px, 560px);
+  margin: 0;
+  transform: translateX(-50%);
+}
+/* Motion (SPEC-v2): the incoming step arrives from 12 px in 280 ms, with 24 ms between its blocks. Reduced motion: fades. */
+.exo-ob-step > * {
+  animation: exo-ob-arrive var(--dur-arrive) var(--ease-out) backwards;
+}
+.exo-ob-step > :nth-child(2) { animation-delay: 24ms; }
+.exo-ob-step > :nth-child(3) { animation-delay: 48ms; }
+.exo-ob-step > :nth-child(4) { animation-delay: 72ms; }
+.exo-ob-step > :nth-child(n+5) { animation-delay: 96ms; }
+@keyframes exo-ob-arrive {
+  from { opacity: 0; translate: 0 12px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .exo-ob-step > * {
+    animation: exo-ob-fade var(--dur-arrive) var(--ease-out) backwards;
+  }
+}
+@keyframes exo-ob-fade {
+  from { opacity: 0; }
+}
+/* Status and choice tiles: 64 px tall, a 12 px radius, the one hairline, a lift on hover; the chosen one is white with black words. */
+.exo-step-tiles {
+  display: grid;
+  gap: 12px;
+}
+.exo-step-tile {
+  display: grid;
+  grid-template-columns: 40px minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  min-height: 64px;
+  padding: 12px 16px;
+  border: 1px solid var(--exo-line);
+  border-radius: 12px;
+  color: var(--color-fg);
+  text-align: left;
+  background: transparent;
+}
+button.exo-step-tile:hover {
+  background: var(--hover-fill);
+}
+.exo-step-tile.is-selected {
+  --color-muted: #3a3a3a;
+  --color-faint: #3a3a3a;
+  border-color: var(--color-fg);
+  background: var(--color-fg);
+  color: var(--color-primary-fg);
+}
+.exo-step-tile-icon {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  background: rgb(255 255 255 / 0.04);
+}
+.exo-step-tile-title {
+  font-size: calc(13px * var(--exo-scale, 1));
+  font-weight: var(--exo-weight-title);
+}
+.exo-step-tile-detail {
+  color: var(--color-muted);
+  font-size: calc(12px * var(--exo-scale, 1));
+}
+
+/* First run layout: the page is one column that fills the window; the stage fills the rest, and the body is the column width. */
+.exo-ob {
+  display: flex;
+  flex-direction: column;
+}
+.exo-ob-stage {
+  flex: 1 1 auto;
+}
+.exo-ob-body {
+  width: min(100%, 560px);
+}
+
+/* The welcome step fills the stage and centres its block (no glow: the page is true black). */
+.exo-ob-step.is-welcome {
+  position: absolute;
+  inset: 0;
+}
+
+.exo-step-tile-words {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+.exo-step-tile-title,
+.exo-step-tile-detail {
+  display: block;
+}
+
+/* One tile across every first-run step (SPEC-v2): the settings rows inside a step body take the Game clients tile's look,
+   64 px tall with an icon, a title and one line of detail, and the status or action on the right. */
+.exo-ob-body .exo-set-list {
+  display: grid;
+  gap: 12px;
+}
+.exo-ob-body .exo-set-list > * + * {
+  margin-top: 0;
+  border-top: 0;
+}
+.exo-ob-body .exo-set-item {
+  min-height: 64px;
+  padding: 12px 16px;
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  background: transparent;
+}
+.exo-ob-body .exo-set-item:hover {
+  background: var(--hover-fill);
+}
+.exo-ob-body .exo-set-item-main {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  min-height: 40px;
+}
+.exo-ob-body .exo-set-item-icon {
+  display: grid;
+  place-items: center;
+  flex: 0 0 40px;
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  background: var(--hover-fill);
+}
+.exo-ob-body .exo-set-item-copy {
+  display: grid;
+  flex: 1 1 auto;
+  gap: 2px;
+  min-width: 0;
+}
+.exo-ob-body .exo-set-item-label,
+.exo-ob-body .exo-set-item-detail {
+  display: block;
+}
+.exo-ob-body .exo-set-item-control {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 8px;
+  align-items: center;
+  margin-left: auto;
+}
+
+/* Motion (SPEC-v2): the outgoing step fades and rises 8 px in 120 ms; the incoming one follows after it. Reduced motion
+   fades only. */
+.exo-ob-leaving {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  animation: exo-ob-leave var(--dur-quick) var(--ease-out) forwards;
+}
+@keyframes exo-ob-leave {
+  to { opacity: 0; translate: 0 -8px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .exo-ob-leaving {
+    animation-name: exo-ob-leave-fade;
+  }
+}
+@keyframes exo-ob-leave-fade {
+  to { opacity: 0; }
+}
+.exo-ob-step > * {
+  animation-delay: 120ms;
+}
+.exo-ob-step > :nth-child(2) { animation-delay: 144ms; }
+.exo-ob-step > :nth-child(3) { animation-delay: 168ms; }
+.exo-ob-step > :nth-child(4) { animation-delay: 192ms; }
+.exo-ob-step > :nth-child(n+5) { animation-delay: 216ms; }
+
+/* Taller content scrolls between the progress bar and the footer, with an 8% fade at each edge. The auto margins centre
+   the column only while it fits: when it is taller they are zero, so the label and title start at the top of the scroll. */
+.exo-ob-step {
+  justify-content: flex-start;
+  mask-image: linear-gradient(to bottom, transparent 0, black 8%, black 92%, transparent 100%);
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0, black 8%, black 92%, transparent 100%);
+  overscroll-behavior: contain;
+}
+.exo-ob-step > :first-child {
+  margin-top: auto;
+}
+.exo-ob-step > :last-child {
+  margin-bottom: auto;
+}
+
+/* The scroll region ends where the footer begins, so content never runs under the footer. The welcome step has no footer and
+   keeps the whole stage. */
+.exo-ob-step {
+  inset: 0 0 116px;
+  padding: 42px 24px 16px;
+}
+.exo-ob-step.is-welcome {
+  inset: 0;
+  padding: 42px 24px;
+}
+
+.exo-ob-restore {
+  display: grid;
+  gap: 16px;
+  justify-items: start;
+}

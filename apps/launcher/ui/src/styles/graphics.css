@@ -1,0 +1,64 @@
+/* PC > Graphics > Driver and profile's menus and import preview, and the choice menus on a game sheet's HDR and frame generation lines. */
+.exo-graphics-menu {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* A link inside an import's or driver's note (in their dialog). */
+.exo-graphics-import-extra .exo-set-link {
+  height: auto;
+  padding: 0;
+  font-size: inherit;
+}
+
+/* An import's list, opened in place under its row (ProfileTab › ImportRow, ui/Unfold.tsx), then Cancel and Apply at
+   the right; the row after it keeps its hairline. Its bottom room is its buttons' own, so the opening springs from
+   nothing. */
+.exo-graphics-import {
+  display: grid;
+  gap: 10px;
+}
+
+.exo-graphics-import + .exo-set-item {
+  border-top: 1px solid var(--exo-float-line);
+}
+
+.exo-graphics-import-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding-bottom: 12px;
+}
+
+/* What an import or a driver update changes, one setting a line. */
+.exo-graphics-import-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 4px;
+  width: 100%;
+}
+
+.exo-graphics-import-list li {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 16px;
+  font-size: calc(12px * var(--exo-scale, 1));
+  color: var(--color-muted);
+}
+
+/* Wraps under itself, right-aligned, when the panel is narrow. */
+.exo-graphics-import-value {
+  min-width: 0;
+  color: var(--color-fg);
+  text-align: right;
+}
+
+.exo-graphics-import-extra {
+  margin: 0;
+  font-size: calc(12px * var(--exo-scale, 1));
+  color: var(--color-faint);
+}

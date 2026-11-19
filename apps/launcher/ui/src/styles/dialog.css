@@ -1,0 +1,307 @@
+/* Large glass hung from the control that opened it (components/ui/Dialog.tsx › Popover; DESIGN.md › Confirm): in the
+   top layer, over every sheet and the Bar, with no scrim, never taller or wider than the window. It grows from its
+   control's side, 0.96 to 1 with its opacity on the base time, and fades away on the quick time (a still copy of it,
+   Dialog.tsx › fadeAway); opened from the keyboard it is there at once, and under Reduce motion it is there and gone
+   at once (exo-shell.css). */
+.exo-hung {
+  position: fixed;
+  inset: auto;
+  max-width: calc(100vw - 24px);
+  max-height: calc(100vh - 24px);
+  margin: 0;
+  overflow-y: auto;
+  color: inherit;
+  outline: none;
+  transition: opacity var(--dur-base) var(--ease-out), scale var(--dur-base) var(--ease-out);
+}
+
+@starting-style {
+  .exo-hung:popover-open {
+    opacity: 0;
+    scale: 0.96;
+  }
+}
+
+:root[data-exo-input="key"] .exo-hung {
+  transition-duration: 0s;
+}
+
+/* Exo's one dialog (Dialog.tsx): its title and words read from the left, then its buttons at the right. */
+.exo-dialog {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  width: min(380px, calc(100vw - 24px));
+  padding: 20px;
+  border: 0;
+  border-radius: var(--exo-panel-radius);
+}
+
+.exo-dialog > h2 {
+  margin: 0;
+  color: var(--color-fg);
+  font-size: calc(13px * var(--exo-scale, 1));
+  font-weight: var(--exo-weight-title);
+  line-height: 1.35;
+  text-wrap: balance;
+}
+
+.exo-dialog-body {
+  display: grid;
+  gap: 8px;
+  color: var(--color-muted);
+  font-size: calc(13px * var(--exo-scale, 1));
+  line-height: 1.5;
+  text-wrap: pretty;
+}
+
+.exo-dialog-body p { margin: 0; }
+.exo-dialog-body strong { color: var(--color-fg); font-weight: 500; }
+
+/* Fields (a name, a reason) get more room between them. */
+.exo-dialog-body.is-form {
+  gap: 12px;
+}
+
+.exo-dialog-error {
+  color: var(--color-bad);
+}
+
+.exo-dialog-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.exo-dialog-actions > .exo-set-btn {
+  justify-content: center;
+  gap: 6px;
+}
+
+/* Three choices get the room their words need. */
+.exo-dialog:has(.exo-dialog-actions > :nth-child(3)) {
+  width: min(440px, calc(100vw - 24px));
+}
+
+/* Notices (lib/notify.ts, shell/NoticeStack.tsx; DESIGN.md › Notify): one stack at the bottom right (owner, 2026-11-10:
+   at the top right they sat on the room's own sort and More), newest lowest, three at most, over every sheet and dialog,
+   above Music's player. Each rises 8px into place; one leaves by fading while its slot closes, so the ones above settle. A row: its glyph or picture, a title over one short line,
+   then its one button and its ×. */
+.exo-notices {
+  position: fixed;
+  right: var(--exo-gap);
+  bottom: var(--exo-gap);
+  z-index: 100;
+  display: flex;
+  flex-direction: column-reverse;
+  width: min(360px, calc(100vw - var(--exo-gap) * 2));
+  max-height: calc(100vh - var(--exo-titlebar-h) - var(--exo-gap) * 2);
+  overflow: clip;
+  pointer-events: none;
+}
+
+/* What the live regions say, for screen readers only. */
+.exo-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.exo-notice-slot {
+  display: grid;
+  grid-template-rows: 1fr;
+  margin-top: 8px;
+  pointer-events: auto;
+  /* A horizontal drag is the notice's own (the swipe away); a vertical one still scrolls. */
+  touch-action: pan-y;
+  animation: exo-notice-in var(--dur-move) var(--ease-out) backwards;
+  transition: grid-template-rows var(--dur-move) var(--ease-out), margin-top var(--dur-move) var(--ease-out),
+    opacity var(--dur-base) var(--ease-out), translate var(--dur-move) var(--ease-out);
+}
+
+/* Under the finger it follows at once; let go and it settles or goes. */
+.exo-notice-slot[data-drag] { transition: none; user-select: none; }
+
+.exo-notice-slot.is-leaving {
+  grid-template-rows: 0fr;
+  margin-top: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.exo-notice-slot.is-leaving:not([style*="translate"]) { translate: 0 4px; }
+
+@keyframes exo-notice-in {
+  from { opacity: 0; translate: 0 8px; }
+}
+
+.exo-notice {
+  position: relative;
+  display: flex;
+  align-items: center;
+  min-height: 0;
+  overflow: hidden;
+  border-radius: var(--exo-card-radius);
+}
+
+/* Music's player keeps its own foot: the stack sits above it. */
+.exo-app:has(.exo-music-bar) .exo-notices { bottom: calc(var(--exo-gap) * 2 + 68px); }
+
+.exo-notice-main {
+  display: flex;
+  flex: 1;
+  align-items: flex-start;
+  gap: 12px;
+  min-width: 0;
+  padding: 12px;
+  border: 0;
+  border-radius: inherit;
+  background: transparent;
+  color: var(--color-muted);
+  font: inherit;
+  text-align: left;
+}
+
+button.exo-notice-main {
+  cursor: pointer;
+  transition: background-color var(--dur-quick) var(--ease-out);
+}
+
+button.exo-notice-main:hover { background: var(--hover-fill); }
+button.exo-notice-main:active { background: var(--exo-pressed); }
+
+button.exo-notice-main:focus-visible {
+  outline: 2px solid var(--color-fg);
+  outline-offset: -2px;
+}
+
+.exo-notice-main > :first-child { flex: none; }
+
+/* A notice's own glyph sits on its first line, in its tone. */
+.exo-notice-glyph {
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  color: var(--color-muted);
+}
+
+.exo-notice.is-good .exo-notice-glyph { color: var(--color-good); }
+.exo-notice.is-bad .exo-notice-glyph { color: var(--color-bad); }
+
+.exo-notice-text {
+  display: grid;
+  flex: 1;
+  gap: 2px;
+  min-width: 0;
+  padding-top: 1px;
+  font-size: calc(12px * var(--exo-scale, 1));
+  line-height: 1.35;
+}
+
+/* The title, with where it happened and how many beside it, quieter. */
+.exo-notice-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+
+.exo-notice-head strong {
+  flex: 0 1 auto;
+  overflow: hidden;
+  color: var(--color-fg);
+  font-size: calc(13px * var(--exo-scale, 1));
+  font-weight: 500;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.exo-notice-count {
+  flex: none;
+  color: var(--color-faint);
+  font-variant-numeric: tabular-nums;
+}
+
+.exo-notice-where {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--color-faint);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/* One short line; a longer one runs to a second and ends in an ellipsis. */
+.exo-notice-body {
+  display: -webkit-box;
+  overflow: hidden;
+  color: var(--color-fg);
+  font-size: calc(13px * var(--exo-scale, 1));
+  overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+}
+
+.exo-notice-head + .exo-notice-body { color: var(--color-muted); }
+
+/* Only a failure reads red. */
+.exo-notice.is-bad .exo-notice-body { color: var(--color-bad); }
+
+/* Its one button, then its ×, at the right, centered on the row. */
+.exo-notice-end {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 4px;
+  padding-right: 10px;
+}
+
+/* A wait along its foot leaves its words room. */
+.exo-notice:has(> .exo-progress.is-edge) > .exo-notice-main { padding-bottom: 18px; }
+
+/* Dismiss shows under the pointer or keyboard focus; on one that waits for it, always. */
+.exo-notice-close {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--color-muted);
+  opacity: 0;
+  cursor: pointer;
+  transition: opacity var(--dur-quick) var(--ease-out), background-color var(--dur-quick) var(--ease-out);
+}
+
+/* The disc stays 24px; its press is 28px (an invisible 2px ring). */
+.exo-notice-close {
+  position: relative;
+}
+.exo-notice-close::after {
+  content: '';
+  position: absolute;
+  inset: -2px;
+}
+
+.exo-notice.is-sticky .exo-notice-close,
+.exo-notice:hover .exo-notice-close,
+.exo-notice-close:focus-visible { opacity: 1; }
+.exo-notice-close:hover { background: var(--hover-fill); color: var(--color-fg); }
+.exo-notice-close:focus-visible { outline: 2px solid var(--color-fg); outline-offset: 1px; }
+
+/* Reduce motion: one goes at once, and a swipe follows the finger but never glides. */
+html[data-exo-motion="reduce"] .exo-notice-slot { transition: none; }
+
+
+@media (forced-colors: active) {
+  .exo-hung,
+  .exo-notice { border: 1px solid CanvasText; }
+  .exo-notice-close { opacity: 1; }
+}

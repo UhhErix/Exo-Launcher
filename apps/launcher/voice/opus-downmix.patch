@@ -1,0 +1,15 @@
+diff --git a/silk/enc_API.c b/silk/enc_API.c
+index d0fee4d46..5e5afef7b 100644
+--- a/silk/enc_API.c
++++ b/silk/enc_API.c
+@@ -314,7 +314,9 @@ opus_int silk_Encode(                                   /* O    Returns error co
+         } else if( encControl->nChannelsAPI == 2 && encControl->nChannelsInternal == 1 ) {
+             /* Combine left and right channels before resampling */
+             for( n = 0; n < nSamplesFromInput; n++ ) {
+-                sum = RES2INT16(samplesIn[ 2 * n ] + samplesIn[ 2 * n + 1 ]);
++                /* Each channel to 16 bits, then the sum, as Opus 1.5 did: saturating the sum itself clipped a voice
++                   sent on both channels at -6 dBFS (Exo's fix, voice/opus-downmix.patch). */
++                sum = RES2INT16(samplesIn[ 2 * n ]) + RES2INT16(samplesIn[ 2 * n + 1 ]);
+                 buf[ n ] = (opus_int16)silk_RSHIFT_ROUND( sum,  1 );
+             }
+             ret += silk_resampler( &psEnc->state_Fxx[ 0 ].sCmn.resampler_state,

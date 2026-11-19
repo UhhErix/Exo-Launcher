@@ -1,0 +1,273 @@
+.exo-field {
+  width: 100%;
+}
+
+/* Eager art warms the browser cache without becoming visible page content. */
+
+/* Library / friends / settings chrome. */
+
+.exo-shelf-head {
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  min-height: 28px;
+  padding: 4px var(--exo-gutter) 6px;
+  display: flex;
+}
+
+.exo-shelf-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.exo-shelf-title {
+  color: var(--color-fg);
+  margin: 0;
+  font-size: calc(13px * var(--exo-scale, 1));
+  font-weight: var(--exo-weight-title);
+}
+
+/* How many cards a shelf holds, quiet beside its name. */
+.exo-shelf-count {
+  margin-left: 8px;
+  color: var(--color-muted);
+  font-size: calc(13px * var(--exo-scale, 1));
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Store chips on the Owned shelf: bare words, the current store a white pill. */
+.exo-shelf-chips {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  border: 0;
+  border-radius: 999px;
+}
+
+.exo-shelf-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  /* Exo's tab: 28px inside a 32px group, as every room's tab bar. */
+  height: 28px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--color-fg);
+  font-size: calc(12px * var(--exo-scale, 1));
+  font-weight: 500;
+  white-space: nowrap;
+  transition: color var(--dur-quick) var(--ease-out), background-color var(--dur-quick) var(--ease-out), scale var(--dur-quick) var(--ease-out);
+}
+
+.exo-shelf-chip[aria-pressed="true"] {
+  background: var(--color-fg);
+  color: var(--color-primary-fg);
+}
+
+.exo-shelf-chip:focus-visible {
+  outline: 2px solid var(--color-fg);
+  outline-offset: 2px;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .exo-shelf-chip:hover:not([aria-pressed="true"]):not(:disabled) {
+    background: var(--hover-fill);
+  }
+}
+
+.exo-empty {
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 10px;
+  min-height: 100%;
+  padding: 40px var(--exo-gutter);
+  text-align: center;
+}
+
+.exo-empty h2,
+.exo-empty p {
+  margin: 0;
+}
+
+.exo-empty h2 {
+  font-size: calc(20px * var(--exo-scale, 1));
+  font-weight: var(--exo-weight-title);
+}
+
+.exo-empty p {
+  max-width: 58ch;
+  color: var(--color-muted);
+  font-size: calc(13px * var(--exo-scale, 1));
+  line-height: 1.5;
+}
+
+.exo-shelf-sort-trigger svg {
+  margin-right: -10px;
+}
+
+/* Settings floats over the room it was opened from: one sheet of one column (--exo-settings-w by 880 at most), over
+   the room dimmed below the Bar; a press around it closes it. */
+.exo-set-room {
+  position: absolute;
+  inset: var(--exo-titlebar-h, 52px) 0 0;
+  z-index: 40;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: var(--exo-scrim);
+  animation: exo-scrim-in var(--dur-base) var(--ease-out) backwards;
+}
+
+/* Settings, Properties and Discord's settings: one width, as tall as what they hold up to 960px. */
+.exo-set-room > .exo-settings,
+.exo-dc-settings,
+.exo-props {
+  width: min(var(--exo-settings-w), 100%);
+  max-height: min(960px, 100%);
+}
+
+/* Settings keeps one size whatever page is open (its sidebar beside a page that scrolls inside it): sized by its
+   content, it grew and shrank with every page. */
+.exo-set-room > .exo-settings {
+  height: min(calc(880px * var(--exo-scale, 1)), 100%);
+  max-height: none;
+  overflow: hidden;
+  border-radius: var(--exo-sheet-radius);
+  background: transparent;
+  animation: exo-sheet-in var(--dur-move) var(--ease-out) backwards;
+}
+
+/* A sheet or dialog settles in from the middle, where it stays (DESIGN.md › Motion › Appear). */
+/* By its size alone: a dialog fading whole would hide the room from the glass on its buttons until it landed. The same
+   move as exo-sheet-in under its own name: a room coming back finishes its entrances, exo-float-in among them
+   (BootGate.tsx › ENTRANCES), while a floating room (Settings, on exo-sheet-in) keeps its open motion each time. */
+@keyframes exo-float-in {
+  from { scale: 0.98; }
+}
+
+/* A glass sheet settles in by its size alone while its glass and its words fade (glass.css › Sheets): a sheet
+   fading whole would hide the page from its glass until it landed. */
+@keyframes exo-sheet-in {
+  from { scale: 0.98; }
+}
+
+/* Close is the open move run back: the sheet settles out by size, the scrim clears by color. Neither fades whole,
+   so the glass keeps the room until the sheet is gone. */
+.exo-set-room.is-leaving {
+  animation: exo-scrim-out var(--dur-move) var(--ease-out) forwards;
+}
+
+.exo-set-room.is-leaving > .exo-settings {
+  animation: exo-sheet-out var(--dur-move) var(--ease-out) forwards;
+}
+
+@keyframes exo-sheet-out {
+  to { scale: 0.98; }
+}
+
+@keyframes exo-scrim-out {
+  to { background-color: transparent; }
+}
+
+/* A scrim darkens in by its color, not its opacity, for the same reason: the glass over it sees the room at once. */
+@keyframes exo-scrim-in {
+  from { background-color: transparent; }
+}
+
+.exo-game-grid .exo-tile {
+  width: var(--exo-card-w);
+}
+
+/* Game Properties: a sheet over the game page, laid out as Settings: its title and close, then one column of the
+   sections this game's store has. */
+.exo-props-back {
+  position: fixed;
+  inset: var(--exo-titlebar-h, 52px) 0 0;
+  z-index: 90;
+  display: grid;
+  place-items: center;
+  padding: var(--exo-gap);
+  background: var(--exo-scrim);
+  animation: exo-scrim-in var(--dur-base) var(--ease-out) backwards;
+}
+
+.exo-props {
+  animation: exo-sheet-in var(--dur-move) var(--ease-out) backwards;
+}
+
+.exo-props {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border-radius: var(--exo-sheet-radius);
+  outline: none;
+}
+
+/* A settings sheet's title and close (Properties, Discord's settings), over its column's left and right edges. */
+.exo-props-head,
+.exo-dc-settings-head {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 12px;
+  padding: 20px 20px 0 32px;
+}
+
+.exo-props-pane {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+/* Each row carries its own note line, so the hairline sits on the row's wrapper, the first included. */
+.exo-props-section .exo-props-row {
+  border-top: 1px solid var(--exo-float-line);
+}
+
+/* The sheet's own edge is enough above its first row. */
+.exo-props .exo-set-section:first-child .exo-props-row:first-child {
+  border-top: 0;
+}
+
+/* Many DLC: two columns of compact rows, so a long list still fits. */
+.exo-props-content.is-columns {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  column-gap: 32px;
+}
+
+.exo-props-content.is-columns .exo-set-item {
+  padding: 6px 0;
+}
+
+.exo-props-content.is-columns .exo-set-item-main {
+  min-height: 32px;
+}
+
+.exo-props .exo-set-item {
+  border-top: 0;
+}
+
+.exo-props-field {
+  flex: 0 1 320px;
+  width: 320px;
+  min-width: 0;
+  height: 32px;
+}
+
+.exo-props-note {
+  margin: 0 0 12px;
+  color: var(--color-muted);
+  font-size: calc(13px * var(--exo-scale, 1));
+  line-height: 1.4;
+}
+
+.exo-props .exo-props-row > .exo-set-error {
+  margin: 0 0 12px;
+}

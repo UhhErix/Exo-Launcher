@@ -1,0 +1,967 @@
+[
+  {
+    "version": "3.26.0",
+    "items": [
+      {
+        "icon": "Chats",
+        "title": "Discord, laid out like Discord",
+        "detail": "Servers across the top, DMs and Friends on Home, members and profiles always beside the conversation, and mute, deafen and settings by your picture."
+      },
+      {
+        "icon": "Monitor",
+        "title": "Choose your background",
+        "detail": "Settings, General, Background: Pure black, Near black, Dark grey, Windows or Graphite, on every PC you sign in to."
+      },
+      {
+        "icon": "Library",
+        "title": "Liquid Glass is back",
+        "detail": "Menus, sheets and controls are frosted glass again, inside one thin line, and Exo keeps its own typeface, Exoline."
+      },
+      {
+        "icon": "GraphicsCard",
+        "title": "A full-screen driver install",
+        "detail": "No window buttons while the driver goes in, a short done screen, and Restart now or Not now."
+      },
+      {
+        "icon": "Performance",
+        "title": "Settings that stick",
+        "detail": "Optimize, driver settings and start-up items you turned off are put back when an update resets them, and shaders compile again after a driver update."
+      },
+      {
+        "icon": "Settings",
+        "title": "Exo says less",
+        "detail": "Settings, the PC room and Devices show names and controls, without the lines that explained how each one works."
+      },
+      {
+        "icon": "Performance",
+        "title": "Updates you can act on",
+        "detail": "PC lists only the updates that need you, by name, and a drive problem is one short line."
+      },
+      {
+        "icon": "Performance",
+        "title": "Notices, banner and FPS counter",
+        "detail": "Notices come up at the bottom right, the achievement banner says its tier, and the FPS counter is a pill of its own."
+      },
+      {
+        "icon": "Members",
+        "title": "An Exo account is required",
+        "detail": "Exo now opens on its account screen until this PC is signed in, so your library, settings and playtime are kept."
+      },
+      {
+        "icon": "LinkPreview",
+        "title": "App data is always sent",
+        "detail": "Exo now sends its anonymous app data and crash reports from every install; Settings, Privacy shows what was sent and can delete it."
+      },
+      {
+        "icon": "StoreBag",
+        "title": "The unfinished Exo Store is gone",
+        "detail": "It was never switched on for anyone. A wish that can't be saved is no longer shown as saved, and games like Costume Quest are no longer hidden as not games."
+      },
+      {
+        "icon": "Performance",
+        "title": "Frame generation for more cards",
+        "detail": "Best settings now reaches GeForce GTX 900 and newer, Radeon RX 400 and newer, Radeon graphics in laptops and Intel Arc, and a game's line says what really happened."
+      },
+      {
+        "icon": "Settings",
+        "title": "Games with anti-cheat are left alone",
+        "detail": "Exo finds anti-cheat from what is on the disk. Nothing is put into such a game, Exo Capture records it from the screen only, and Riot games are never touched."
+      },
+      {
+        "icon": "Record",
+        "title": "Replay length fits your PC",
+        "detail": "Exo can shorten instant replay without lowering quality, and Capture settings shows how much you can save when the add-on reports it."
+      },
+      {
+        "icon": "Folder",
+        "title": "Everything you chose is backed up",
+        "detail": "Folders, added games, controller and mouse choices, the wishlist and more are in your backup, also made when your last game closes. Wishlist, Riot ID and music service follow you to other PCs."
+      },
+      {
+        "icon": "AppUpdate",
+        "title": "Updates wait for your game",
+        "detail": "Update now during a game downloads the update and applies it after the game. Exo checks there is room on the drive first, and an update that failed to go in is offered again."
+      },
+      {
+        "icon": "Cover",
+        "title": "Covers stay when a store is down",
+        "detail": "One store failing no longer stops the others, and Refresh or Find cover keep the old picture until a new one is proven."
+      },
+      {
+        "icon": "Controller",
+        "title": "Play and Stop wait only for the busy game",
+        "detail": "Starting one game no longer holds Play and Stop for every other game, and Exo rests its timers while it is hidden."
+      },
+      {
+        "icon": "Server",
+        "title": "Crash reports are not lost",
+        "detail": "A report Exo's service can't take right now is kept on your PC and sent at a later start."
+      }
+    ]
+  },
+  {
+    "version": "3.25.0",
+    "items": [
+      {
+        "icon": "Members",
+        "title": "One Exo account for every Exo app",
+        "detail": "Sign up or sign in once, right after Welcome. Your settings and playtime sync between your PCs."
+      },
+      {
+        "icon": "Library",
+        "title": "Steam sign-in with no key",
+        "detail": "Scan a QR code in the Steam app, or sign in with your account name, to list every game you own and your Family games."
+      },
+      {
+        "icon": "Suspend",
+        "title": "Exo wakes less in the background",
+        "detail": "Game detection follows windows instead of polling, and Exo's page sleeps while Exo is hidden."
+      },
+      {
+        "icon": "CleanUp",
+        "title": "Cleaning keeps your sign-ins and saves",
+        "detail": "Junk cleaning never removes sign-in data, credentials, game saves or shader caches, and waits for any program still using a file."
+      },
+      {
+        "icon": "Library",
+        "title": "A calmer Library",
+        "detail": "The accounts banner sits above your games instead of over them, and keyboard focus stays inside Settings and other sheets."
+      },
+      {
+        "icon": "LinkPreview",
+        "title": "Help goes to getexo.app/help",
+        "detail": "The help link opens Exo's help page, and a release card posts from Exo's own service."
+      }
+    ]
+  },
+  {
+    "version": "3.24.4",
+    "items": [
+      {
+        "icon": "Settings",
+        "title": "Help improve Exo is your choice",
+        "detail": "App data and crash reports stay off until you choose. View what's sent shows them, and Delete my data removes what Exo holds."
+      },
+      {
+        "icon": "AppUpdate",
+        "title": "Updates come from Exo only",
+        "detail": "Exo's own updates are fetched from Exo's update address, never from GitHub."
+      },
+      {
+        "icon": "Suspend",
+        "title": "The PC stays awake while Exo works",
+        "detail": "Downloads, installs and shader warming keep it awake. Settings › General turns that off."
+      },
+      {
+        "icon": "Trash",
+        "title": "Uninstall says why an app stays",
+        "detail": "When Windows, a game or Exo needs an app, System › Apps says why beside it."
+      },
+      {
+        "icon": "Folder",
+        "title": "A file in use names its program",
+        "detail": "If a game's update or uninstall is blocked, the message names the program holding the file. Exo closes nothing."
+      },
+      {
+        "icon": "Shaders",
+        "title": "Shader compiles finish",
+        "detail": "Compiles that restarted or timed out now finish, on SCSKiller 1.4.6. Exo Shaders no longer uses SCSKiller's servers or Patreon."
+      }
+    ]
+  },
+  {
+    "version": "3.24.3",
+    "items": [
+      {
+        "icon": "Settings",
+        "title": "Crash reports are on by default",
+        "detail": "When Exo hits an error, freezes or a failure happens, one short scrubbed report goes to Exo's service. About says what is sent."
+      },
+      {
+        "icon": "Chats",
+        "title": "Discord's room lines up",
+        "detail": "The server and DM lists clear the call panel, the new-messages bar sits above the conversation, and the room fits at 1000 to 1920 px."
+      }
+    ]
+  },
+  {
+    "version": "3.24.2",
+    "items": [
+      {
+        "icon": "Headphones",
+        "title": "Discord calls, with Discord's controls",
+        "detail": "The call panel is one piece at the bottom left, and the mic and speakers buttons open their device menus."
+      },
+      {
+        "icon": "Record",
+        "title": "Clips play as you open them",
+        "detail": "A clip starts on its own, and the Captures list is leaner. Back or Escape returns to the list."
+      },
+      {
+        "icon": "Monitor",
+        "title": "HDR for games on the right screen",
+        "detail": "HDR turns on for the screen your game is on, and turns back off a few seconds after the game closes."
+      },
+      {
+        "icon": "Settings",
+        "title": "Optional crash reports",
+        "detail": "Settings › General can send one scrubbed report when you copy an error. It's off by default, and Preview shows the exact text first."
+      }
+    ]
+  },
+  {
+    "version": "3.24.1",
+    "items": [
+      {
+        "icon": "Chats",
+        "title": "Discord looks like Discord",
+        "detail": "Channels, conversations, people, Friends and the message box follow the official app."
+      }
+    ]
+  },
+  {
+    "version": "3.24.0",
+    "items": [
+      {
+        "icon": "Appearance",
+        "title": "Tabler icons",
+        "detail": "Every icon is now a light, minimal Tabler icon that fits what it does."
+      },
+      {
+        "icon": "Chats",
+        "title": "Discord, laid out like Discord",
+        "detail": "Your servers run down the left, then channels, the conversation and the people, with Friends and Active Now back."
+      },
+      {
+        "icon": "Notes",
+        "title": "Changelog",
+        "detail": "Settings has every release's notes now, all the way back."
+      },
+      {
+        "icon": "Maximize",
+        "title": "Start maximized",
+        "detail": "Turn it on in Settings and Exo always opens maximized."
+      },
+      {
+        "icon": "MusicNotes",
+        "title": "Spotify loads, or says why",
+        "detail": "A slow Spotify start reloads itself instead of loading forever."
+      }
+    ]
+  },
+  {
+    "version": "3.23.1",
+    "items": [
+      {
+        "icon": "MusicNotes",
+        "title": "Spotify always loads",
+        "detail": "Exo closes the Spotify app when it starts its own player, so the player no longer fails to load."
+      }
+    ]
+  },
+  {
+    "version": "3.23.0",
+    "items": [
+      {
+        "icon": "Headphones",
+        "title": "Lucid comes with Exo",
+        "detail": "Your headphone EQ is inside Exo now, with no window or tray icon; your audio's page is how you run it."
+      },
+      {
+        "icon": "Scissors",
+        "title": "Make reel",
+        "detail": "Join a game's clips into one video, copied without re-encoding when they match."
+      },
+      {
+        "icon": "Chats",
+        "title": "Play, with friends",
+        "detail": "Turn on Show Play in Settings to see who is on each game and launch one together."
+      },
+      {
+        "icon": "Trash",
+        "title": "Uninstall clears up after itself",
+        "detail": "Pressing Uninstall also removes what the program left behind, and Put back returns it."
+      },
+      {
+        "icon": "GraphicsCard",
+        "title": "Auto tune and more Optimize",
+        "detail": "One press finds a lower voltage or a faster clock for your graphics card, and Optimize covers 12 more games."
+      },
+      {
+        "icon": "Mouse",
+        "title": "More tests for your mouse and controller",
+        "detail": "Check a wireless mouse for dropouts, see your USB devices, and test a controller's triggers and buttons."
+      },
+      {
+        "icon": "Appearance",
+        "title": "New icons, and the facts are back",
+        "detail": "Every icon is redrawn as one set, and each room shows its numbers again with room to breathe."
+      }
+    ]
+  },
+  {
+    "version": "3.22.0",
+    "items": [
+      {
+        "icon": "Home",
+        "title": "Discord is now Home",
+        "detail": "It opens on what your friends are playing, and servers and messages have new places along the top."
+      },
+      {
+        "icon": "Controller",
+        "title": "Share my games",
+        "detail": "Turn it on and friends see the game you opened from Exo. It stays off until you do."
+      },
+      {
+        "icon": "CleanUp",
+        "title": "Exo says less",
+        "detail": "Every room lost its extra words and buttons, so what you came for is all that's on screen."
+      },
+      {
+        "icon": "Controller",
+        "title": "An FPS counter",
+        "detail": "Turn it on in Settings for games that don't have their own: one small line in a top corner."
+      },
+      {
+        "icon": "MusicNotes",
+        "title": "Music picks up where it was",
+        "detail": "Coming back after Music has been idle just works, and the volume slider no longer hangs."
+      },
+      {
+        "icon": "Headphones",
+        "title": "Your headphones stay picked",
+        "detail": "A headphone you pick in Lucid during a game now goes in when the game ends."
+      }
+    ]
+  },
+  {
+    "version": "3.21.0",
+    "items": [
+      {
+        "icon": "Mic",
+        "title": "Noise suppression built in",
+        "detail": "Exo's AI noise suppression comes with the app, so your mic is clean from the first call."
+      },
+      {
+        "icon": "Live",
+        "title": "Streams keep playing",
+        "detail": "A stream that paused or froze in picture-in-picture picks up again on its own."
+      },
+      {
+        "icon": "Mic",
+        "title": "No false voice warnings",
+        "detail": "The noise suppression notice and the silent-mic warning only show when something is really wrong."
+      },
+      {
+        "icon": "Settings",
+        "title": "Settings has its sidebar again",
+        "detail": "Each room's settings come first, Discord's included, then Exo's own."
+      }
+    ]
+  },
+  {
+    "version": "3.20.0",
+    "items": [
+      {
+        "icon": "Suspend",
+        "title": "Exo sleeps while you play",
+        "detail": "Hidden while a game runs, Exo suspends its page entirely and wakes exactly where you left it."
+      },
+      {
+        "icon": "Library",
+        "title": "Covers at their shown size",
+        "detail": "Every cover arrives scaled to its card, so cover-heavy pages open faster and use less memory."
+      },
+      {
+        "icon": "ThisPc",
+        "title": "Motion matched to your PC",
+        "detail": "Exo reads your graphics and screen and sets its own motion and material, with nothing to set."
+      },
+      {
+        "icon": "AppUpdate",
+        "title": "New versions show up within a minute",
+        "detail": "The update address turns its answer over every minute instead of five."
+      }
+    ]
+  },
+  {
+    "version": "3.19.1",
+    "items": [
+      {
+        "icon": "Live",
+        "title": "Go Live at full quality",
+        "detail": "Your stream climbs back to full quality even when your connection always drops a little."
+      },
+      {
+        "icon": "Live",
+        "title": "Stream controls by Disconnect",
+        "detail": "Change what you share or stop streaming right from the voice bar."
+      },
+      {
+        "icon": "Controller",
+        "title": "Steam overlay and DLC switches",
+        "detail": "Turn a game's Steam overlay off for good, and switch any DLC you own."
+      }
+    ]
+  },
+  {
+    "version": "3.19.0",
+    "items": [
+      {
+        "icon": "Controller",
+        "title": "Out of your way in games",
+        "detail": "Exo never takes the focus as it starts during a game, and its disk work yields to the game's."
+      },
+      {
+        "icon": "Mic",
+        "title": "Quiet mics stop cutting out",
+        "detail": "A microphone that can't be turned up is lifted by Exo before noise suppression decides."
+      },
+      {
+        "icon": "CleanUp",
+        "title": "Startup cleaned up",
+        "detail": "One Clean up turns off the startup apps and hidden tasks you don't need."
+      },
+      {
+        "icon": "ThisPc",
+        "title": "The PC room on one page",
+        "detail": "Drives, updates, apps and your card's own control panel, all in one place."
+      }
+    ]
+  },
+  {
+    "version": "3.18.1",
+    "items": [
+      {
+        "icon": "MusicNotes",
+        "title": "No ads in your music again",
+        "detail": "Exo Shield blocks ads in the music players again on a new install or an update."
+      }
+    ]
+  },
+  {
+    "version": "3.18.0",
+    "items": [
+      {
+        "icon": "GraphicsCard",
+        "title": "DLSS frame generation on RTX 20 and 30",
+        "detail": "Games with DLSS Frame Generation can turn it on with an older RTX card, kept on the newest version for you."
+      },
+      {
+        "icon": "Controller",
+        "title": "Optimize Rocket League and Phantom Blade Zero",
+        "detail": "The best settings for your PC, set again by themselves after a game update."
+      },
+      {
+        "icon": "Live",
+        "title": "Calls stay out of streams and clips",
+        "detail": "Go Live and your clips leave the call's voices out, so nobody hears themselves echo."
+      },
+      {
+        "icon": "Drive",
+        "title": "Your drives in the PC room",
+        "detail": "Each SSD and hard drive with its temperature, health and speed, and their fixes in Best settings."
+      },
+      {
+        "icon": "AppUpdate",
+        "title": "Update before you start",
+        "detail": "When a new Exo is out, it asks once as it opens, never in the middle of a game."
+      }
+    ]
+  },
+  {
+    "version": "3.17.1",
+    "items": [
+      {
+        "icon": "Mic",
+        "title": "Your voice stays clean in games",
+        "detail": "Exo Voice keeps your room out while a game runs, and is ready the moment you join a call."
+      },
+      {
+        "icon": "Mic",
+        "title": "Only My Voice knows you",
+        "detail": "It never holds back your own voice when you get loud, and learns your voice from your calls."
+      },
+      {
+        "icon": "Chats",
+        "title": "Cleaner calls",
+        "detail": "One green ring around whoever is talking, and names over pictures without a second edge."
+      }
+    ]
+  },
+  {
+    "version": "3.17.0",
+    "items": [
+      {
+        "icon": "Chats",
+        "title": "Report and every right-click menu",
+        "detail": "Report a message, a person, a server or an event with Discord's own questions, and right-click a server, thread or post for its full menu."
+      },
+      {
+        "icon": "MusicNotes",
+        "title": "Listen along",
+        "detail": "Play what a Discord friend is listening to, in time, on your own Spotify, Apple Music or YouTube Music."
+      },
+      {
+        "icon": "Record",
+        "title": "Steady 60 fps clips",
+        "detail": "Clips and recordings keep an even 60 fps, so a replay no longer drops frames."
+      },
+      {
+        "icon": "Notes",
+        "title": "Notes in Captures",
+        "detail": "Notes that save as you type, any text file opened in tabs that come back after a restart, and find, spelling and Markdown."
+      },
+      {
+        "icon": "AppUpdate",
+        "title": "New drivers found for you",
+        "detail": "Exo checks for new graphics drivers, NVIDIA hotfixes and its own updates in the background and tells you once."
+      },
+      {
+        "icon": "GraphicsCard",
+        "title": "Optimize Modern Warfare 4",
+        "detail": "One press sets MW4's own settings for your PC, where guides, benchmarks and shared configs agree."
+      },
+      {
+        "icon": "Monitor",
+        "title": "Fits every screen",
+        "detail": "A screen stood on end, a 16:10 screen or a narrow window gets a layout that fits, and nothing in the Bar overlaps."
+      },
+      {
+        "icon": "Controller",
+        "title": "Your controller's light and sound",
+        "detail": "Set its light bar, speaker, mic and vibration, and change them for the games you link."
+      },
+      {
+        "icon": "Mouse",
+        "title": "A picture for every device",
+        "detail": "The maker's own picture of your mouse, keyboard, headset and controller."
+      },
+      {
+        "icon": "StoreBag",
+        "title": "Judge a game before you buy",
+        "detail": "Store pages show recent reviews, controller support, languages, extra accounts and DRM."
+      }
+    ]
+  },
+  {
+    "version": "3.16.0",
+    "items": [
+      {
+        "icon": "Controller",
+        "title": "Your controller's own page",
+        "detail": "Live sticks and triggers, a stick test, its polling rate and the USB port it's on, for DualSense, Xbox and more."
+      },
+      {
+        "icon": "Calibrate",
+        "title": "Calibrate your sticks",
+        "detail": "Your DualSense recenters and maps its sticks with its own routine, and Undo puts it back."
+      },
+      {
+        "icon": "Controller",
+        "title": "Edge profiles in Exo",
+        "detail": "Edit your DualSense Edge's four profiles, stick curves, triggers and back buttons, stored in the controller."
+      },
+      {
+        "icon": "Controller",
+        "title": "Games read your controller",
+        "detail": "One switch turns Steam Input off for every game that supports your PlayStation controller."
+      },
+      {
+        "icon": "Mouse",
+        "title": "The right USB port",
+        "detail": "Exo shows which devices go through the chipset and helps you find the processor's own ports."
+      },
+      {
+        "icon": "Shaders",
+        "title": "Steadier shader compiles",
+        "detail": "Exo Shaders takes SCSKiller 1.3.3's fixes: no compile stuck at 100%, and stopped ones pick up where they were."
+      }
+    ]
+  },
+  {
+    "version": "3.15.5",
+    "items": [
+      {
+        "icon": "Mouse",
+        "title": "Devices, each as itself",
+        "detail": "Your mouse, keyboard, headphones and controller as cards with their real pictures; press one to open its page."
+      },
+      {
+        "icon": "Headphones",
+        "title": "A page for your headphones",
+        "detail": "Pick the pair you wear and set up Lucid, Game Mode and Night Shift on one screen."
+      },
+      {
+        "icon": "ThisPc",
+        "title": "PC, with game runtimes",
+        "detail": "System is now PC, and its Apps page installs or repairs every runtime games need in one press."
+      },
+      {
+        "icon": "Trash",
+        "title": "Exo's own uninstaller",
+        "detail": "PC › Apps uninstalls any app with a deep clean of what it leaves behind, shown before anything goes."
+      },
+      {
+        "icon": "MusicNotes",
+        "title": "Music opens in one piece",
+        "detail": "No more squares and jumps when Music first opens: it fades in whole."
+      },
+      {
+        "icon": "Appearance",
+        "title": "Sharper Liquid Glass",
+        "detail": "Cleaner glass edges, no scrollbars, and lists that fade into their panel instead of being cut off."
+      }
+    ]
+  },
+  {
+    "version": "3.15.4",
+    "items": [
+      {
+        "icon": "Mic",
+        "title": "No clicks from Only my voice",
+        "detail": "When it holds back a voice, it fades it out instead of cutting it off, so nobody in the call hears a click."
+      },
+      {
+        "icon": "Mic",
+        "title": "Hums stay out of the call",
+        "detail": "A steady buzz near your mic no longer keeps it open, and Only my voice no longer switches itself off because of noise."
+      },
+      {
+        "icon": "GraphicsCard",
+        "title": "RTX Video sets like NVIDIA’s",
+        "detail": "Super Resolution and HDR are changed the way NVIDIA Control Panel changes them, so the choice you make is the one that sticks."
+      }
+    ]
+  },
+  {
+    "version": "3.15.3",
+    "items": [
+      {
+        "icon": "Mic",
+        "title": "The voice meter works again",
+        "detail": "The microphone meter in Voice & video keeps moving, and Teach Exo my voice learns your voice again."
+      }
+    ]
+  },
+  {
+    "version": "3.15.2",
+    "items": [
+      {
+        "icon": "Mic",
+        "title": "Your mic keeps going",
+        "detail": "Only my voice can no longer mute you for a whole call: if it holds back most of your own speech, it stops and tells you."
+      },
+      {
+        "icon": "Mic",
+        "title": "Only my voice keeps learning",
+        "detail": "After you teach it once, it learns from calls where it’s clearly you, and Settings shows how much it has learned."
+      },
+      {
+        "icon": "Chats",
+        "title": "Purges clear at once",
+        "detail": "Messages a moderator’s bot purges disappear right away, and mentions name the person instead of @unknown-user."
+      },
+      {
+        "icon": "Forum",
+        "title": "New forum posts appear live",
+        "detail": "A forum you have open shows new posts as they’re made."
+      },
+      {
+        "icon": "Mouse",
+        "title": "Razer receivers connect",
+        "detail": "Exo Mouse finds the right interface on a Razer receiver by itself."
+      },
+      {
+        "icon": "Library",
+        "title": "A lighter Refresh",
+        "detail": "Library’s Refresh skips the games you hid."
+      }
+    ]
+  },
+  {
+    "version": "3.15.1",
+    "items": [
+      {
+        "icon": "Mic",
+        "title": "Exo Voice is Exo's own",
+        "detail": "Noise suppression runs Exo's own AI end to end — Krisp is gone — and Hear your voice plays live exactly what the call sends."
+      },
+      {
+        "icon": "StoreBag",
+        "title": "A Store made for you",
+        "detail": "Discover leads with games picked from what you play and wish for, marks why on each cover, and leaves out games you already own."
+      },
+      {
+        "icon": "Calendar",
+        "title": "A release calendar",
+        "detail": "The Store's Calendar shows what just came out and what's coming, your wishlist first."
+      },
+      {
+        "icon": "Volume",
+        "title": "Look into a voice channel",
+        "detail": "Click a voice channel to see who's in it, who's live and whose camera is on before you join; double-click joins."
+      },
+      {
+        "icon": "Live",
+        "title": "Stream volume",
+        "detail": "While you watch someone's Go Live, their menu has Stream volume and Mute stream, as in Discord."
+      },
+      {
+        "icon": "Members",
+        "title": "More from your friends",
+        "detail": "Friends are playing shows eight games, games you don't have too, and a game played with Medal or Overwolf reads as the game."
+      },
+      {
+        "icon": "ImageUpload",
+        "title": "Pictures send smaller",
+        "detail": "Big images added to a Discord message are remade smaller before they upload, so they fit under the size limit."
+      },
+      {
+        "icon": "Smile",
+        "title": "Bigger reactions",
+        "detail": "Reactions on Discord messages are larger and easier to read, and a role's colour can be any colour."
+      },
+      {
+        "icon": "Record",
+        "title": "Recordings take less room",
+        "detail": "While you aren't playing, Exo quietly re-saves your recordings at about a third of the size."
+      },
+      {
+        "icon": "Appearance",
+        "title": "Portrait screens",
+        "detail": "Library, Discord, System and Music keep their words and the player whole on a portrait screen or a narrow window."
+      },
+      {
+        "icon": "GraphicsCard",
+        "title": "Games on the fast chip",
+        "detail": "On a laptop with two graphics chips, Exo can have every game run on the faster one."
+      },
+      {
+        "icon": "Performance",
+        "title": "Best settings in one press",
+        "detail": "System › This PC sets your power plan, driver profile and HDR together."
+      },
+      {
+        "icon": "Monitor",
+        "title": "HDR before the game starts",
+        "detail": "Games that check for HDR only at launch now find it on."
+      },
+      {
+        "icon": "Controller",
+        "title": "Riot hours fix themselves",
+        "detail": "VALORANT and League hours that were counted too high correct themselves on the next refresh."
+      },
+      {
+        "icon": "Download",
+        "title": "GOG pauses keep their progress",
+        "detail": "Pausing a GOG download no longer throws away what it already has."
+      },
+      {
+        "icon": "Mouse",
+        "title": "More mice",
+        "detail": "Exo Mouse now works with Scyrox and Hitscan mice, with updated Lamzu and Pulsar support."
+      }
+    ]
+  },
+  {
+    "version": "3.15.0",
+    "items": [
+      {
+        "icon": "Server",
+        "title": "Run your server from Exo",
+        "detail": "Server Settings has every page Discord's does, from Access and Onboarding to invites, roles and the Server Guide."
+      },
+      {
+        "icon": "Chats",
+        "title": "Group DMs and video calls",
+        "detail": "Start a group DM with up to nine friends, and video call anyone from your DM with them."
+      },
+      {
+        "icon": "Chats",
+        "title": "Bookmarks and reminders",
+        "detail": "Save a message for later, or have Exo remind you about it, and find both in your Inbox."
+      },
+      {
+        "icon": "Mail",
+        "title": "Message requests",
+        "detail": "DMs from people you don't know wait apart from your chats until you accept them."
+      },
+      {
+        "icon": "LinkPreview",
+        "title": "Previews that play",
+        "detail": "YouTube, Twitch, Vimeo, TikTok and SoundCloud links play right in the chat."
+      },
+      {
+        "icon": "Hash",
+        "title": "React in one press",
+        "detail": "Your favorite reactions sit on every message, and a custom status shows what you're up to."
+      },
+      {
+        "icon": "Shaders",
+        "title": "Honest compile times",
+        "detail": "Shaders learns how long each game takes on your PC, and tells ready games apart."
+      },
+      {
+        "icon": "Scissors",
+        "title": "Snips at once",
+        "detail": "Snip opens instantly and stays light, even across several screens."
+      },
+      {
+        "icon": "Mouse",
+        "title": "Thanks to snekxs",
+        "detail": "Exo Mouse is built on OpenMouse, made by snekxs, and the Devices room now says so."
+      }
+    ]
+  },
+  {
+    "version": "3.14.1",
+    "items": [
+      {
+        "icon": "Performance",
+        "title": "Starts lighter",
+        "detail": "Exo opens sooner and uses about a third less memory: a room you don't open doesn't load."
+      },
+      {
+        "icon": "SelectMany",
+        "title": "Select several games",
+        "detail": "Press Select in your Library to hide, file or uninstall many games at once."
+      },
+      {
+        "icon": "Folder",
+        "title": "Arrange your folders",
+        "detail": "Drag a folder to move it, or use Move earlier and Move later on its menu."
+      },
+      {
+        "icon": "Live",
+        "title": "Watch several streams",
+        "detail": "Watch more than one friend's Go Live at a time, each with its own sound."
+      },
+      {
+        "icon": "Live",
+        "title": "Streams that look and sound right",
+        "detail": "Friends' streams show whole and stay sharp, and your stream carries your games and music, never your own voice."
+      },
+      {
+        "icon": "Appearance",
+        "title": "Glass that stays glass",
+        "detail": "Switching servers, Settings sections and pages keeps the glass clear the whole way."
+      },
+      {
+        "icon": "Shaders",
+        "title": "The newest Exo Shaders",
+        "detail": "Exo Shaders brings SCSKiller's newest improvements and sets each one up for you."
+      }
+    ]
+  },
+  {
+    "version": "3.14.0",
+    "items": [
+      {
+        "icon": "Mic",
+        "title": "Clearer voice",
+        "detail": "Fans, desk knocks and keyboard clicks are taken out of your mic, and your words aren't cut off."
+      },
+      {
+        "icon": "Volume",
+        "title": "Everyone at one volume",
+        "detail": "Each person in a call comes through at about the same loudness, so one loud mic doesn't drown out the rest."
+      },
+      {
+        "icon": "Mic",
+        "title": "Noise suppression like Discord’s",
+        "detail": "Pick Exo AI, Standard or None in Voice & Video, and Exo tells you when your mic sends nothing."
+      },
+      {
+        "icon": "GraphicsCard",
+        "title": "Driver updates on Radeon and Intel",
+        "detail": "System keeps your AMD or Intel graphics driver up to date in one click, as it does on a GeForce."
+      },
+      {
+        "icon": "Appearance",
+        "title": "Clearer glass",
+        "detail": "Menus, sheets and buttons are clear glass now: the colors behind them show through, and their edges catch the light."
+      },
+      {
+        "icon": "Performance",
+        "title": "Your PC, checked",
+        "detail": "System shows what's slowing your PC down, gives your PC a power plan tuned for its processor, and keeps your AMD or Intel chipset driver up to date."
+      },
+      {
+        "icon": "Performance",
+        "title": "Interrupts in one press",
+        "detail": "System › This PC can move your graphics card, USB and network to MSI mode, so they don't wait on each other. Undo puts them back."
+      },
+      {
+        "icon": "GraphicsCard",
+        "title": "Exo's profile on Radeon and Intel",
+        "detail": "An AMD Radeon or an Intel Arc gets the same one-press tuning as a GeForce, FSR 4 in FSR 3.1 games on a Radeon, and frame generation for the games you pick."
+      },
+      {
+        "icon": "Chats",
+        "title": "Discord stays fast",
+        "detail": "Messages and profiles load instantly, even right after you switch windows."
+      },
+      {
+        "icon": "Live",
+        "title": "Go Live your friends can watch",
+        "detail": "Your stream plays smoothly on Discord's app, in sharper H.265 when everyone watching can play it."
+      },
+      {
+        "icon": "Live",
+        "title": "Watch friends' streams",
+        "detail": "Open a friend's Go Live and watch it right in Exo."
+      },
+      {
+        "icon": "Performance",
+        "title": "Lighter on your PC",
+        "detail": "Calls with clips on and the streams you watch take far less of your processor and graphics card."
+      },
+      {
+        "icon": "Hash",
+        "title": "Discord, done right",
+        "detail": "Every channel opens, chats open at the newest message, and links show as previews."
+      },
+      {
+        "icon": "Appearance",
+        "title": "Light, Dark and Void",
+        "detail": "Choose your look in Settings › General. Void is pure black, for OLED screens."
+      },
+      {
+        "icon": "Gift",
+        "title": "Gifts in your Library",
+        "detail": "Games friends give you on Steam or Epic show in your Library, ready to accept in one click. Sign in to Steam once in Settings › Game stores."
+      },
+      {
+        "icon": "FolderOpen",
+        "title": "Folders you can peek into",
+        "detail": "Hover a folder and its games rise out of it."
+      },
+      {
+        "icon": "Folder",
+        "title": "Folders your way",
+        "detail": "Sort each folder its own way, put a game in more than one folder, and give a folder a picture of your own."
+      },
+      {
+        "icon": "EyeOff",
+        "title": "Hide games",
+        "detail": "Right-click a game and choose Hide to keep it out of your Library. Hidden games in the sort menu shows them again."
+      },
+      {
+        "icon": "Cover",
+        "title": "Sharper covers",
+        "detail": "Game covers in your Library look as crisp as on the game's own page."
+      },
+      {
+        "icon": "Shaders",
+        "title": "Fewer shader stutters",
+        "detail": "Compiled shaders are kept on NVIDIA's newest drivers instead of being thrown away."
+      },
+      {
+        "icon": "Mouse",
+        "title": "More mice",
+        "detail": "Exo Mouse supports 40 more SteelSeries mice and keeps working after your PC sleeps."
+      }
+    ]
+  }
+]

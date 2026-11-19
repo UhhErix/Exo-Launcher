@@ -1,0 +1,215 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data:; font-src 'self'; media-src 'self'; connect-src 'self'; style-src 'unsafe-inline'; script-src 'unsafe-inline'">
+<title>Exo achievement</title>
+<style>
+  /* Exo's achievement banner over the game (AchievementBanner.cs), one at a time, the page transparent around it. Solid
+     Void black with Exo's one line for an edge (#2e2e2e, 1px): a game's scene can't be blurred from here, and black reads
+     over any of them. A tier above common says so in one word, in its colour, beside the name; its line and bar take it too.
+     Each tier is a build, a hit and a hold, its hit timed to the sound's (HIT below, tools/make-achievement-sounds.mjs):
+       common      the card lands
+       rare        + the picture settles and a silver light runs its edge
+       epic        the card drops in with weight, the picture lands with it, ice light both ways
+       legendary   the picture alone, lifting, then at the hit the card opens from it; gold light, a gold edge at rest
+       completion  the same with three hits, gold light twice and one line going out
+     Transform and opacity only, on the compositor; all of it over in about two seconds, then nothing runs until it leaves.
+     The plate is three pieces so it can open without stretching its corners; black over black, so they don't show. */
+  @font-face { font-family: Exoline; src: url('/Exoline-Variable.woff2') format('woff2'); font-weight: 100 900; font-display: block; }
+  html, body { margin: 0; height: 100%; background: transparent; overflow: hidden; }
+  .stage { position: absolute; inset: 0; display: grid; justify-items: center; align-items: start; padding-top: 16px; box-sizing: border-box; }
+  .card {
+    --edge: #2e2e2e; --light: #fff; --fill: #fff; --hit: 270ms;
+    --out: cubic-bezier(0.23, 1, 0.32, 1);
+    --spring: linear(0, 0.005 1.8%, 0.018 3.7%, 0.04 5.7%, 0.074 8%, 0.111 10.2%, 0.156 12.5%, 0.437 25.8%, 0.512 29.7%, 0.576 33.2%, 0.645 37.3%, 0.703 41.3%, 0.756 45.5%, 0.803 49.8%, 0.846 54.5%, 0.883 59.5%, 0.913 64.7%, 0.939 70.3%, 0.958 76%, 0.973 82%, 0.986 90.2%, 0.995 99.8%, 1);
+    position: relative; display: flex; align-items: center; gap: 14px; box-sizing: border-box;
+    width: max-content; min-width: 340px; max-width: 420px; padding: 12px 16px 12px 12px;
+    font-family: Exoline, "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif; color: #fff;
+    opacity: 0; will-change: transform, opacity;
+  }
+  .rare { --edge: #3c3c3c; }
+  .epic { --edge: #3f4459; --light: #b9c6ff; --fill: #b9c6ff; --hit: 420ms; }
+  .legendary { --edge: #5f533a; --light: #f1cf8d; --fill: #f1cf8d; --hit: 700ms; }
+  .completion { --edge: #5f533a; --light: #f1cf8d; --fill: #f1cf8d; --hit: 980ms; }
+
+  .plate, .plate i, .edge, .ring { position: absolute; }
+  .plate { inset: 0; }
+  .plate i { top: 0; bottom: 0; background: #000; box-sizing: border-box; border: 1px solid var(--edge); }
+  .plate .l { left: 0; width: 17px; border-right: 0; border-radius: 16px 0 0 16px; }
+  .plate .r { right: 0; width: 17px; border-left: 0; border-radius: 0 16px 16px 0; }
+  .plate .m { left: 16px; right: 16px; border-width: 1px 0; }
+  .edge { inset: 0; padding: 1px; border-radius: 16px; overflow: hidden; pointer-events: none; mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); mask-composite: exclude; }
+  .edge i { position: absolute; top: 0; bottom: 0; left: 0; width: 45%; opacity: 0; background: linear-gradient(90deg, transparent, var(--light), transparent); }
+  .ring { inset: 0; border-radius: 16px; box-sizing: border-box; border: 1px solid var(--light); opacity: 0; }
+
+  .art { position: relative; flex: none; display: block; width: 64px; height: 64px; border-radius: 10px; object-fit: cover; }
+  .words { position: relative; flex: 1; min-width: 0; }
+  .head { display: flex; align-items: baseline; gap: 8px; }
+  .tier { flex: none; font-size: 12px; line-height: 20px; font-weight: 600; color: var(--fill); }
+  .name { font-size: 15px; line-height: 20px; font-weight: 600; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; overflow-wrap: anywhere; }
+  .line { font-size: 12px; line-height: 16px; color: #b4b4b4; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .bar { height: 2px; margin-top: 8px; background: #262626; overflow: hidden; border-radius: 1px; }
+  .bar i { display: block; height: 100%; background: var(--fill); transform-origin: left; transform: scaleX(var(--to)); }
+  .nums { display: flex; justify-content: space-between; gap: 12px; margin-top: 5px; font-size: 12px; line-height: 14px; color: #b4b4b4; font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+  /* Common: it lands. */
+  .in { animation: appear 220ms var(--out) both, arrive 620ms var(--spring) both; }
+  .in .words { animation: appear 420ms var(--out) calc(var(--hit) - 80ms) both; }
+  .in .bar i { animation: fill 1100ms var(--out) calc(var(--hit) + 240ms) both; }
+
+  /* Rare: the picture settles on the hit, silver runs the edge. */
+  .in.rare .art { animation: settle 460ms var(--out) calc(var(--hit) - 160ms) both; }
+  .in.rare .edge i:first-child { animation: sweep 1000ms cubic-bezier(0.4, 0, 0.3, 1) var(--hit) both; }
+
+  /* Epic: it drops in with weight; the picture lands with it; ice light both ways. */
+  .in.epic { animation: appear 200ms var(--out) both, drop 540ms both; }
+  .in.epic .art { animation: land 540ms both; }
+  .in.epic .edge i:first-child { animation: sweep 1100ms cubic-bezier(0.4, 0, 0.3, 1) var(--hit) both; }
+  .in.epic .edge i:last-child { animation: sweep-back 1100ms cubic-bezier(0.4, 0, 0.3, 1) var(--hit) both; }
+
+  /* Legendary and completion: the picture alone, lifting; at the hit, the card opens from it. */
+  .in.legendary, .in.completion { animation: appear 420ms ease-out both, lift var(--hit) cubic-bezier(0.5, 0, 0.9, 0.6) both, thud 240ms var(--out) var(--hit); }
+  .in.legendary .plate .l, .in.completion .plate .l { animation: open-l 680ms var(--spring) var(--hit) both; }
+  .in.legendary .plate .r, .in.completion .plate .r { animation: open-r 680ms var(--spring) var(--hit) both; }
+  .in.legendary .plate .m, .in.completion .plate .m { animation: open-m 680ms var(--spring) var(--hit) both; }
+  .in.legendary .art { animation: slide 680ms var(--spring) var(--hit) both; }
+  .in.completion .art { animation: slide 680ms var(--spring) var(--hit) both, pulse 280ms var(--out) 500ms; }
+  .in.legendary .words, .in.completion .words { animation: reveal 520ms var(--out) calc(var(--hit) + 440ms) both; }
+  .in.legendary .bar i, .in.completion .bar i { animation: fill 1400ms var(--out) calc(var(--hit) + 680ms) both; }
+  .in.legendary .edge i:first-child, .in.completion .edge i:first-child { animation: sweep 1300ms cubic-bezier(0.4, 0, 0.3, 1) calc(var(--hit) + 440ms) both; }
+  .in.legendary .edge i:last-child, .in.completion .edge i:last-child { animation: sweep-back 1300ms cubic-bezier(0.4, 0, 0.3, 1) calc(var(--hit) + 440ms) both; }
+  .in.completion .ring { animation: ring 900ms var(--out) calc(var(--hit) + 460ms) forwards; }
+
+  .out { animation: leave 360ms cubic-bezier(0.4, 0, 1, 1) both; }
+
+  @keyframes appear { from { opacity: 0; } to { opacity: 1; } }
+  @keyframes reveal { from { opacity: 0; translate: 10px 0; } to { opacity: 1; translate: 0 0; } }
+  @keyframes arrive { from { translate: 0 -16px; scale: 0.98; } to { translate: 0 0; scale: 1; } }
+  @keyframes settle { from { scale: 0.88; } to { scale: 1; } }
+  @keyframes drop {
+    0% { translate: 0 -24px; scale: 1.015; animation-timing-function: cubic-bezier(0.55, 0, 0.9, 0.45); }
+    78% { translate: 0 3px; scale: 1; animation-timing-function: var(--out); }
+    100% { translate: 0 0; scale: 1; }
+  }
+  @keyframes land {
+    0% { scale: 1.22; opacity: 0; animation-timing-function: cubic-bezier(0.55, 0, 0.9, 0.45); }
+    78% { scale: 0.98; opacity: 1; animation-timing-function: var(--out); }
+    100% { scale: 1; opacity: 1; }
+  }
+  @keyframes lift { from { translate: 0 -6px; scale: 0.93; } to { translate: 0 0; scale: 1; } }
+  @keyframes thud { 0% { translate: 0 3px; } 100% { translate: 0 0; } }
+  @keyframes pulse { 0% { scale: 1; } 30% { scale: 1.045; } 100% { scale: 1; } }
+  @keyframes open-l { from { translate: var(--d) 0; } to { translate: 0 0; } }
+  @keyframes open-r { from { translate: calc(var(--d) * -1) 0; } to { translate: 0 0; } }
+  @keyframes open-m { from { transform: scaleX(var(--s)); } to { transform: none; } }
+  @keyframes slide { from { translate: var(--a) 0; } to { translate: 0 0; } }
+  @keyframes fill { from { transform: scaleX(var(--from)); } to { transform: scaleX(var(--to)); } }
+  @keyframes sweep { 0% { opacity: 0; transform: translateX(-100%); } 15%, 80% { opacity: 1; } 100% { opacity: 0; transform: translateX(222%); } }
+  @keyframes sweep-back { 0% { opacity: 0; transform: translateX(222%); } 15%, 80% { opacity: 1; } 100% { opacity: 0; transform: translateX(-100%); } }
+  @keyframes ring { 0% { opacity: 0.8; transform: scale(1); } 100% { opacity: 0; transform: scale(1.05, 1.16); } }
+  @keyframes leave { from { opacity: 1; transform: none; } to { opacity: 0; transform: translateY(-10px) scale(0.99); } }
+  @keyframes gone { from { opacity: 1; } to { opacity: 0; } }
+
+  /* Exo's Reduce motion: every tier fades in whole and fades out; its colors and its sound stay. */
+  .reduce.in { animation: appear 220ms ease-out both !important; }
+  .reduce.in * { animation: none !important; }
+  .reduce.out { animation: gone 180ms ease-out both; }
+</style>
+</head>
+<body>
+<div class="stage" id="stage"></div>
+<script>
+  // Banners come one at a time from AchievementBanner.cs (PostWebMessageAsJson), each with its picture in the message.
+  // The sounds are made once (tools/make-achievement-sounds.mjs): this page says when one is due and the host plays it.
+  // At /achievements it is the OBS browser source (AchievementSource.cs): unlocks come from the event stream, and its
+  // sound, only with ?sound=1, plays in the page itself, which OBS mixes into the stream.
+  const source = location.pathname.startsWith('/achievements')
+  const sourceSound = source && new URLSearchParams(location.search).get('sound') === '1'
+  // How long each stays, from the start of its entrance to the start of its exit.
+  // What a tier above common calls itself, beside the name.
+  const WORD = { rare: 'Rare', epic: 'Epic', legendary: 'Legendary', completion: 'Complete' }
+  const STAY = { common: 5000, rare: 6000, epic: 7000, legendary: 9000, completion: 11000 }
+  // When its sound starts, from the same moment: its hit in the WAV, less about 40 ms for Windows to start it, lands on --hit.
+  const HIT = { common: 230, rare: 230, epic: 380, legendary: 40, completion: 40 }
+  const stage = document.getElementById('stage')
+  const queue = []
+  let showing = false
+  const wait = ms => new Promise(done => setTimeout(done, ms))
+  const el = (cls, text) => { const e = document.createElement('div'); e.className = cls; if (text) e.textContent = text; return e }
+  const pieces = (cls, ...names) => { const e = el(cls); e.innerHTML = names.map(n => `<i class="${n}"></i>`).join(''); return e }
+
+  function sound(a, tier) {
+    if (!source) { window.chrome?.webview?.postMessage({ sound: tier }); return }
+    if (!sourceSound) return
+    const voice = new Audio(`/sounds/${tier}.wav`)
+    voice.volume = a.volume > 0 ? a.volume : .6
+    voice.play().catch(() => { /* no sound: the banner still shows */ })
+  }
+
+  function build(a, tier) {
+    const root = el(`card ${tier}${a.reduce ? ' reduce' : ''}`)
+    root.append(pieces('plate', 'l', 'm', 'r'))
+    if (tier !== 'common') root.append(pieces('edge', '', ''))
+    if (tier === 'completion') root.append(el('ring'))
+    if (a.icon) { const art = document.createElement('img'); art.className = 'art'; art.alt = ''; art.src = a.icon; root.append(art) }
+    const words = el('words')
+    const head = el('head')
+    head.append(el('name', a.name || 'Achievement unlocked'))
+    if (WORD[tier]) head.append(el('tier', WORD[tier]))
+    words.append(head)
+    const line = tier === 'completion' ? `Every achievement in ${a.game}` : a.description || a.game
+    if (line) words.append(el('line', line))
+    const count = a.total > 0 ? `${a.unlocked} of ${a.total}` : ''
+    const share = typeof a.percent === 'number' ? `${a.percent < 1 ? a.percent.toFixed(1) : Math.round(a.percent)}% of players` : ''
+    if (count) {
+      const bar = pieces('bar', '')
+      bar.style.setProperty('--from', Math.max(0, a.unlocked - 1) / a.total)
+      bar.style.setProperty('--to', a.unlocked / a.total)
+      words.append(bar)
+    }
+    if (count || share) { const nums = el('nums'); nums.append(el('', count), el('', share)); words.append(nums) }
+    root.append(words)
+    return root
+  }
+
+  /** The card only moves once its picture and type are ready and its first frame is drawn, so it never arrives empty. */
+  async function ready(root) {
+    const art = root.querySelector('.art')
+    await Promise.race([wait(600), Promise.all([
+      art?.decode().catch(() => art.remove()),
+      document.fonts.load('600 15px Exoline').catch(() => {}),
+    ])])
+    // Where the closed card starts: a tile of its own height around the picture, in the middle.
+    const w = root.offsetWidth, h = root.offsetHeight
+    root.style.setProperty('--d', `${(w - h) / 2}px`)
+    root.style.setProperty('--s', (h - 32) / (w - 32))
+    root.style.setProperty('--a', `${(w - 64) / 2 - 12}px`)
+    await Promise.race([wait(100), new Promise(done => requestAnimationFrame(() => requestAnimationFrame(done)))])
+  }
+
+  async function show() {
+    if (showing) return
+    showing = true
+    while (queue.length) {
+      const a = queue.shift()
+      const tier = a.completed ? 'completion' : STAY[a.rarity] ? a.rarity : 'common'
+      const root = build(a, tier)
+      stage.replaceChildren(root)
+      await ready(root)
+      root.classList.add('in')
+      setTimeout(() => sound(a, tier), a.reduce ? 0 : HIT[tier])
+      await wait(STAY[tier])
+      root.classList.replace('in', 'out')
+      await wait(380)
+      root.remove()
+    }
+    showing = false
+  }
+
+  if (source) new EventSource('/achievements/events').onmessage = e => { try { queue.push(JSON.parse(e.data)); show() } catch { /* not a banner */ } }
+  else window.chrome?.webview?.addEventListener('message', e => { queue.push(e.data); show() })
+</script>
+</body>
+</html>

@@ -1,0 +1,181 @@
+using ExoLauncher.Services;
+
+namespace ExoLauncher.Tests;
+
+/// <summary>
+/// Ways the look-alike link check can fail:
+/// - a real address (a brand's own, a fan or tool site, a company page, a non-Latin domain, an IP) is warned about;
+/// - a spelling trick (0 for o, rn for m, another alphabet's letter, a hyphen), a bait word beside a brand, the brand's
+///   address used as a decoy or a name before the @ goes unwarned;
+/// - the wrong brand is named, or a link that isn't http(s) is looked at.
+/// </summary>
+public sealed class LinkLookalikeTests
+{
+    private static LinkLookalike.Finding? Check(string url) => LinkLookalike.Check(new Uri(url));
+
+    [Theory]
+    [InlineData("https://discord-nitro-gift.com/claim", "Discord")]
+    [InlineData("https://discordnitro.com", "Discord")]
+    [InlineData("https://discord-app.com", "Discord")]
+    [InlineData("https://discordsupport.net/ticket", "Discord")]
+    [InlineData("https://login-discord.com", "Discord")]
+    [InlineData("https://disc0rd.com", "Discord")]
+    [InlineData("https://dlscord.com", "Discord")]
+    [InlineData("https://discord-nitro.vercel.app", "Discord")]
+    [InlineData("https://free-nitro.discord.gg.example.com", "Discord")]
+    [InlineData("https://discord.gg.evil.example", "Discord")]
+    [InlineData("https://discord.com.evil.example/login", "Discord")]
+    [InlineData("https://discord.com@evil.example/", "Discord")]
+    [InlineData("https://dіscord.com", "Discord")]          // Cyrillic i
+    [InlineData("https://dіscord-gift.com", "Discord")]
+    [InlineData("https://ԁiscord.com", "Discord")]          // Cyrillic d
+    [InlineData("https://steamcommunlty.com", "Steam")]
+    [InlineData("https://steamcomrnunity.com/id/x", "Steam")]
+    [InlineData("https://steam-community.com", "Steam")]
+    [InlineData("https://steamcommunity.ru", "Steam")]
+    [InlineData("https://steamcommunity.com.evil.ru", "Steam")]
+    [InlineData("https://store.steampowered.com.login.xyz", "Steam")]
+    [InlineData("https://free-steam-gift.com", "Steam")]
+    [InlineData("https://steamfree.top", "Steam")]
+    [InlineData("https://steamcomunity.com", "Steam")]
+    [InlineData("https://steampowerd.com", "Steam")]
+    [InlineData("https://steamcommunity.com@evil.ru", "Steam")]
+    [InlineData("https://epicgames-free.com", "Epic Games")]
+    [InlineData("https://epic-games.store", "Epic Games")]
+    [InlineData("https://epicgarnes.com", "Epic Games")]
+    [InlineData("https://riotgames-support.com", "Riot Games")]
+    [InlineData("https://r1otgames.com", "Riot Games")]
+    [InlineData("https://roblox-free.com", "Roblox")]
+    [InlineData("https://r0blox.com", "Roblox")]
+    [InlineData("https://robIox.com", "Roblox")]
+    [InlineData("https://roblox.xyz", "Roblox")]
+    [InlineData("https://nvidia-driver-download.com", "NVIDIA")]
+    [InlineData("https://nvidlagiveaway.com", "NVIDIA")]
+    [InlineData("https://nvidia.xyz", "NVIDIA")]
+    [InlineData("https://rnicrosoft-support.com", "Microsoft")]
+    [InlineData("https://microsoft-login.azurewebsites.net", "Microsoft")]
+    [InlineData("https://microsoftt.com", "Microsoft")]
+    [InlineData("https://microsoft.com.account-verify.net", "Microsoft")]
+    [InlineData("https://paypal-login.com", "PayPal")]
+    [InlineData("https://paypa1.com", "PayPal")]
+    [InlineData("https://paypal.com.secure-login.net", "PayPal")]
+    [InlineData("https://paypal.com@evil.example", "PayPal")]
+    [InlineData("https://paypal.xyz", "PayPal")]
+    [InlineData("https://spotify-premium-free.com", "Spotify")]
+    [InlineData("https://twitch-prime-free.com", "Twitch")]
+    [InlineData("https://twitch.tv.login.xyz", "Twitch")]
+    [InlineData("https://blizzard-support.net", "Blizzard")]
+    public void ImitationsAreWarnedAboutWithTheBrand(string url, string brand) => Assert.Equal(brand, Check(url)?.Brand);
+
+    [Fact]
+    public void ANameBeforeTheAtThatReadsAsAnAddressIsWarnedAboutEvenForNoBrand()
+    {
+        var finding = Check("https://example.org:pass@evil.example/");
+        Assert.NotNull(finding);
+        Assert.Null(finding.Brand);
+    }
+
+    [Theory]
+    // The brands' own addresses, every kind of subdomain.
+    [InlineData("https://discord.com")]
+    [InlineData("https://www.discord.com/channels/1/2")]
+    [InlineData("https://discord.gg/abc")]
+    [InlineData("https://cdn.discordapp.com/attachments/1/2/a.png")]
+    [InlineData("https://media.discordapp.net/x")]
+    [InlineData("https://support.discord.com/hc/en-us")]
+    [InlineData("https://dis.gd/contact")]
+    [InlineData("https://store.steampowered.com/app/10")]
+    [InlineData("https://help.steampowered.com")]
+    [InlineData("https://steamcommunity.com/id/someone")]
+    [InlineData("https://store.epicgames.com/en-US/p/x")]
+    [InlineData("https://www.unrealengine.com")]
+    [InlineData("https://www.riotgames.com")]
+    [InlineData("https://na.leagueoflegends.com")]
+    [InlineData("https://playvalorant.com")]
+    [InlineData("https://www.roblox.com/games/1")]
+    [InlineData("https://www.nvidia.com/en-us/geforce/")]
+    [InlineData("https://developer.nvidia.com")]
+    [InlineData("https://nvidia.fr")]
+    [InlineData("https://www.nvidia.com.tw")]
+    [InlineData("https://www.nvidia.co.uk")]
+    [InlineData("https://www.microsoft.com")]
+    [InlineData("https://learn.microsoft.com")]
+    [InlineData("https://login.microsoftonline.com")]
+    [InlineData("https://microsoft.com.au")]
+    [InlineData("https://tenant.sharepoint.com")]
+    [InlineData("https://www.xbox.com")]
+    [InlineData("https://www.bing.com")]
+    [InlineData("https://account.live.com")]
+    [InlineData("https://www.paypal.com/signin")]
+    [InlineData("https://paypal.me/someone")]
+    [InlineData("https://paypal.de")]
+    [InlineData("https://www.battle.net")]
+    [InlineData("https://eu.battle.net")]
+    [InlineData("https://open.spotify.com/track/1")]
+    [InlineData("https://www.twitch.tv/someone")]
+    // Real sites near a brand's name.
+    [InlineData("https://steamdb.info/app/10")]
+    [InlineData("https://www.steamgifts.com")]
+    [InlineData("https://steamcharts.com")]
+    [InlineData("https://paypay.com")]
+    [InlineData("https://paypay.ne.jp")]
+    [InlineData("https://discord.me")]
+    [InlineData("https://top.gg")]
+    [InlineData("https://disboard.org")]
+    [InlineData("https://discordbotlist.com")]
+    [InlineData("https://discordservers.com")]
+    [InlineData("https://discord.fandom.com/wiki/x")]
+    [InlineData("https://riot.fandom.com")]
+    [InlineData("https://steam.tumblr.com")]
+    [InlineData("https://steam.com")]
+    [InlineData("https://epic.com")]
+    [InlineData("https://team.com")]
+    [InlineData("https://stream.com")]
+    [InlineData("https://steamed-buns.com")]
+    [InlineData("https://epicurious.com")]
+    [InlineData("https://riotous.com")]
+    [InlineData("https://switch.com")]
+    [InlineData("https://geforcenow.com")]
+    [InlineData("https://microsoft.github.io/vscode")]
+    [InlineData("https://nvidia.github.io/x")]
+    [InlineData("https://discord.github.io")]
+    [InlineData("https://myname.github.io")]
+    // Everything else.
+    [InlineData("https://github.com/UhhErix/ExoLauncher")]
+    [InlineData("https://www.google.com/search?q=discord")]
+    [InlineData("https://youtu.be/abc")]
+    [InlineData("https://www.youtube.com/watch?v=steam-gift-free-nitro")]
+    [InlineData("https://en.wikipedia.org/wiki/Steam_(service)")]
+    [InlineData("https://www.reddit.com/r/Steam")]
+    [InlineData("https://x.com/discord")]
+    [InlineData("https://amazon.com")]
+    [InlineData("https://nitrous-oxide.com")]
+    [InlineData("https://free-games.com")]
+    [InlineData("https://giftcards.com")]
+    [InlineData("https://secure.example.com/login")]
+    [InlineData("https://support.apple.com")]
+    [InlineData("http://example.com")]
+    [InlineData("https://news.ycombinator.com")]
+    [InlineData("https://paypalmanager.example.org/not-quite")]
+    [InlineData("https://user@example.com")]
+    public void RealAddressesPassWithoutAWarning(string url) => Assert.Null(Check(url));
+
+    [Theory]
+    [InlineData("https://bücher.de")]
+    [InlineData("https://münchen.de")]
+    [InlineData("https://日本語.jp")]
+    [InlineData("https://пример.рф")]
+    [InlineData("https://café.fr")]
+    [InlineData("https://αβγ.gr")]
+    public void OtherAlphabetsPassUnlessTheyCopyABrand(string url) => Assert.Null(Check(url));
+
+    [Theory]
+    [InlineData("https://localhost:5174/")]
+    [InlineData("http://192.168.1.10/")]
+    [InlineData("http://[::1]/")]
+    [InlineData("https://intranet/")]
+    [InlineData("steam://openurl/https://store.steampowered.com")]
+    [InlineData("ms-settings:windowsupdate")]
+    [InlineData("mailto:someone@disc0rd.com")]
+    public void AddressesWithoutAHostOrANameAreNotLookedAt(string url) => Assert.Null(Check(url));
+}

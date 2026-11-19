@@ -1,0 +1,67 @@
+{
+  "cache/NVIDIA/DLSS/374959484e79a640feaba44c93ac8cfb0a03f5b5/lib/Windows_x86_64/rel/LICENSE.txt": {
+    "size": 26620,
+    "sha256": "d4216e39ebef5f9b50a6712ebb37beeb5379862a67733a9999c651f21592aaf0",
+    "upstream": "https://raw.githubusercontent.com/NVIDIA/DLSS/374959484e79a640feaba44c93ac8cfb0a03f5b5/LICENSE.txt"
+  },
+  "cache/NVIDIA/DLSS/a291cc7d2cc642a51566f3dfd5376f635cd1b284/lib/Windows_x86_64/rel/LICENSE.txt": {
+    "size": 27176,
+    "sha256": "21b5daec892b12bea692e66bc8fe45cf5902ccaf3a7b831e78050d8859881c37",
+    "upstream": "https://raw.githubusercontent.com/NVIDIA/DLSS/a291cc7d2cc642a51566f3dfd5376f635cd1b284/LICENSE.txt"
+  },
+  "cache/GPUOpen-LibrariesAndSDKs/FidelityFX-SDK/c6efa6bf7f2027b3ec94f28578bb5965eabb9e55/PrebuiltSignedDLL/LICENSE.txt": {
+    "size": 1115,
+    "sha256": "82cf74fc23885107c7f69249ac3f1dac55898ff68320eb2c753984cae6b2d78a",
+    "upstream": "https://raw.githubusercontent.com/GPUOpen-LibrariesAndSDKs/FidelityFX-SDK/c6efa6bf7f2027b3ec94f28578bb5965eabb9e55/LICENSE.txt"
+  },
+  "cache/GPUOpen-LibrariesAndSDKs/FidelityFX-SDK/7539ae8b6568ad29ed78a753404351daf3b5cca7/Kits/FidelityFX/signedbin/3rdpartynotice.md": {
+    "size": 2519,
+    "sha256": "3b69b1a1011622557a81b55a9a211dd797d01b8160924a5ec51b4c3432d33a4f",
+    "upstream": "https://raw.githubusercontent.com/GPUOpen-LibrariesAndSDKs/FidelityFX-SDK/7539ae8b6568ad29ed78a753404351daf3b5cca7/3rdpartynotice.md"
+  },
+  "cache/GPUOpen-LibrariesAndSDKs/FidelityFX-SDK/60f4ea81909200d8542eca14dccb2628b763a9a3/Kits/FidelityFX/signedbin/3rdpartynotice.md": {
+    "size": 2441,
+    "sha256": "94401a90486d1b53b528bb7f845a7b8daf7227b60eb7c0fc3b8c5571ba202a27",
+    "upstream": "https://raw.githubusercontent.com/GPUOpen-LibrariesAndSDKs/FidelityFX-SDK/60f4ea81909200d8542eca14dccb2628b763a9a3/3rdpartynotice.md"
+  },
+  "cache/intel/xess/8fe81bdbbaf00b3c1b733fd0d830c333dc84e6f0/bin/LICENSE.txt": {
+    "size": 4194,
+    "sha256": "784be42c39a4a4d03cf85d88e15e59d75828fca773ce45b8dbfffbd7eaf208df",
+    "upstream": "https://raw.githubusercontent.com/intel/xess/8fe81bdbbaf00b3c1b733fd0d830c333dc84e6f0/LICENSE.txt"
+  },
+  "cache/intel/xess/b2e8f705ca9a36586010fe7615a470fcf0608c35/bin/LICENSE.txt": {
+    "size": 4194,
+    "sha256": "784be42c39a4a4d03cf85d88e15e59d75828fca773ce45b8dbfffbd7eaf208df",
+    "upstream": "https://raw.githubusercontent.com/intel/xess/b2e8f705ca9a36586010fe7615a470fcf0608c35/LICENSE.txt"
+  },
+  "cache/imLinguin/nile/releases/download/v1.2.0/LICENSE.md": {
+    "size": 34916,
+    "sha256": "33bc26d4498c183b703d1760ee45b8774d21d6e0178ca393dc715271840c7a21",
+    "upstream": "https://raw.githubusercontent.com/imLinguin/nile/v1.2.0/LICENSE.md"
+  },
+  "cache/derrod/legendary/releases/download/0.21.1/LICENSE": {
+    "size": 35149,
+    "sha256": "3972dc9744f6499f0f9b2dbf76696f2ae7ad8af9b23dde66d6af86c9dfb36986",
+    "upstream": "https://raw.githubusercontent.com/derrod/legendary/0.21.1/LICENSE"
+  },
+  "cache/Heroic-Games-Launcher/heroic-gogdl/releases/download/v1.4.0/LICENSE": {
+    "size": 35149,
+    "sha256": "3972dc9744f6499f0f9b2dbf76696f2ae7ad8af9b23dde66d6af86c9dfb36986",
+    "upstream": "https://raw.githubusercontent.com/Heroic-Games-Launcher/heroic-gogdl/v1.4.0/LICENSE"
+  },
+  "cache/dashdogy/MFG-Unlocker/releases/download/v1.7.0/LICENSE": {
+    "size": 1071,
+    "sha256": "433da96087fd9b91afd44c6350ca92da53167c9636a0a71e428f71036d8c372f",
+    "upstream": "https://raw.githubusercontent.com/dashdogy/MFG-Unlocker/v1.7.0/LICENSE"
+  },
+  "cache/optiscaler/OptiScaler/releases/download/v0.9.4/LICENSE": {
+    "size": 35149,
+    "sha256": "3972dc9744f6499f0f9b2dbf76696f2ae7ad8af9b23dde66d6af86c9dfb36986",
+    "upstream": "https://raw.githubusercontent.com/optiscaler/OptiScaler/v0.9.4/LICENSE"
+  },
+  "cache/k2-fsa/sherpa-onnx/releases/download/speaker-recongition-models/LICENSE": {
+    "size": 11358,
+    "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
+    "upstream": "https://raw.githubusercontent.com/k2-fsa/sherpa-onnx/speaker-recongition-models/LICENSE"
+  }
+}

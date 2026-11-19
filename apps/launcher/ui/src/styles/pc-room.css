@@ -1,0 +1,463 @@
+/* PC (gpu/PcRoom.tsx; DESIGN.md › PC): one page on a 1080p screen, no scrolling. On the left This PC (a pane of glass
+   with the PC's name large and its chips at the line's right end, its parts as a readout on hairlines), Updates under it; on the right Shaders, the window's full height. Updates and Shaders each
+   scroll in their own pane. A small window stacks them and the room scrolls as one. Each section is a pane of glass
+   (glass.css › .exo-system-panel) with its name inside it in the rooms' title size, as This PC's is. Loaded with the room's code, so the first paint carries none of it. */
+.exo-pc {
+  --exo-pc-space: 20px;
+  display: grid;
+  flex: 1;
+  grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
+  gap: var(--exo-gutter);
+  min-width: 0;
+  min-height: 0;
+  padding: 12px var(--exo-gutter) 20px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scroll-padding-top: 12px;
+  background: var(--color-bg);
+  color: var(--color-fg);
+}
+
+/* Rows a little tighter than Settings' 62px: a tool room of many short rows (DESIGN.md › Grammar › Rows). */
+.exo-pc .exo-set-item,
+.exo-pc-menu .exo-set-item {
+  padding: 9px 0;
+}
+
+/* The left column: This PC as tall as its parts, Updates the rest. */
+.exo-pc-main {
+  display: flex;
+  flex-direction: column;
+  gap: var(--exo-pc-space);
+  min-width: 0;
+  min-height: 0;
+}
+
+.exo-pc-main > .exo-pc-hero {
+  flex: none;
+}
+
+.exo-pc-main > .exo-pc-section {
+  flex: 1;
+}
+
+/* Nothing to show: only the title line ("Up to date"), not a box filling the column. */
+.exo-pc-main > .exo-pc-section:has(> .exo-pc-pane:empty) {
+  flex: none;
+}
+
+.exo-pc .exo-pc-section > .exo-pc-pane:empty {
+  display: none;
+}
+
+/* This PC: its name with the chips at the line's right end; its parts under them. */
+.exo-pc .exo-pc-hero {
+  padding: 22px 24px 8px;
+  min-width: 0;
+}
+
+.exo-pc-about {
+  min-width: 0;
+  container-type: inline-size;
+}
+
+.exo-pc-about-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 14px;
+  min-width: 0;
+}
+
+.exo-pc-about-name {
+  margin: 0;
+  color: var(--color-fg);
+  font-size: calc(28px * var(--exo-scale, 1));
+  font-weight: 650;
+  line-height: 1.15;
+  overflow-wrap: anywhere;
+}
+
+/* The chips: pills that open what they name. Green is what's on; red what's left to set (DESIGN.md › Tokens). */
+.exo-pc-chip {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--exo-fill);
+  box-shadow: var(--exo-rim);
+  color: var(--color-fg);
+  font: inherit;
+  font-size: calc(12px * var(--exo-scale, 1));
+  font-weight: var(--exo-weight-title);
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background-color var(--dur-quick) var(--ease-out);
+}
+
+.exo-pc-chip:hover {
+  background: var(--hover-fill);
+}
+
+.exo-pc-chip.is-good {
+  color: var(--color-good);
+}
+
+.exo-pc-chip.is-bad {
+  color: var(--color-bad);
+}
+
+.exo-pc-chips {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-left: auto;
+}
+
+/* Each part a cell under one hairline: its glyph, what it is, and a second line only for what a person acts on. Three
+   across in a wide hero, two in a narrower one. The card, the screen and the board are buttons that open their menu. */
+.exo-pc-facts {
+  display: grid;
+  /* Auto-fit: as many 170px cells as the width holds; the last row stretches over any gap, so no cell is left empty. */
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  margin: 18px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.exo-pc-facts > li {
+  min-width: 0;
+}
+
+.exo-pc-fact {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  width: 100%;
+  min-width: 0;
+  height: 100%;
+  margin: 0;
+  padding: 14px 24px 16px 0;
+  border: 0;
+  border-top: 1px solid var(--exo-float-line);
+  background: transparent;
+  color: var(--color-muted);
+  font: inherit;
+  text-align: left;
+}
+
+.exo-pc-fact > svg {
+  flex: none;
+  margin-top: 1px;
+}
+
+.exo-pc-fact.is-menu {
+  cursor: pointer;
+}
+
+.exo-pc-fact.is-menu:hover .exo-pc-fact-value {
+  text-decoration: underline;
+  text-decoration-color: var(--color-muted);
+  text-underline-offset: 3px;
+}
+
+.exo-pc-fact-words {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.exo-pc-fact-words .exo-meter {
+  margin-top: 5px;
+  margin-bottom: 2px;
+}
+
+.exo-pc-fact-value {
+  color: var(--color-fg);
+  font-size: calc(13px * var(--exo-scale, 1));
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+
+.exo-pc-fact-detail {
+  color: var(--color-muted);
+  font-size: calc(13px * var(--exo-scale, 1));
+  line-height: 1.4;
+  font-variant-numeric: tabular-nums;
+}
+
+/* A warning (a drive running hot, a game it fails) is its own row, 12px under the part's words. */
+.exo-pc-fact-note {
+  display: block;
+  margin-top: 12px;
+}
+
+.exo-pc-fact-detail.is-warn {
+  color: var(--color-warn);
+}
+
+.exo-pc-fact-detail.is-bad {
+  color: var(--color-bad);
+}
+
+/* A section: a pane of glass with its name inside at the top over a hairline, as This PC's is, then what it holds. The
+   name's line is a control's height, so a control on it lines up with it. A section fills its column's height and what
+   it holds scrolls on its own under the name. */
+.exo-pc .exo-pc-section {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  padding: 18px 0 4px;
+  scroll-margin-top: 12px;
+}
+
+/* A section's title line: its name, and its actions at the right end (SectionHead.tsx), a control's height. */
+.exo-pc .exo-pc-section-head {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 12px;
+  min-height: 32px;
+  margin: 0 24px;
+  padding-bottom: 12px;
+}
+
+.exo-pc-section-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  min-width: 0;
+  margin-left: auto;
+}
+
+.exo-pc-section-count {
+  color: var(--color-muted);
+  font-size: calc(13px * var(--exo-scale, 1));
+  font-variant-numeric: tabular-nums;
+}
+
+.exo-pc .exo-pc-section-head > h2 {
+  flex: none;
+  margin: 0;
+  color: var(--color-fg);
+  font-size: calc(20px * var(--exo-scale, 1));
+  font-weight: var(--exo-weight-title);
+  line-height: 1.25;
+}
+
+.exo-pc .exo-pc-pane {
+  padding: 4px 24px;
+}
+
+.exo-pc .exo-pc-pane > .exo-set-item:first-child {
+  border-top: 0;
+}
+
+/* Updates and Shaders fill their column, each pane scrolling on its own. */
+.exo-pc .exo-pc-section > .exo-pc-pane {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+/* PC › Updates: the game runtimes under the drivers and Windows, under their own quiet heading. */
+.exo-pc-updates-part {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px 0 18px;
+  border-top: 1px solid var(--exo-float-line);
+}
+
+.exo-pc-updates-part > h3 {
+  margin: 0;
+  color: var(--color-fg);
+  font-size: calc(13px * var(--exo-scale, 1));
+  font-weight: var(--exo-weight-title);
+}
+
+/* Shaders in its pane: the bar and the posters with the pane's own margin all round. */
+.exo-pc .exo-pc-section.is-shaders > .exo-pc-pane {
+  padding: 18px 24px;
+}
+
+/* A small window: the parts stack and the room scrolls as one, each pane as tall as what it holds. */
+@media (max-width: 1279px), (max-height: 799px) {
+  .exo-pc {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .exo-pc > * {
+    flex: none;
+  }
+
+  .exo-pc > .exo-pc-section > .exo-pc-pane,
+  .exo-pc-main > .exo-pc-section > .exo-pc-pane {
+    overflow: visible;
+  }
+
+  /* Stacked, the pane is as tall as its posters, so posters sized to fit the pane (useFit) would change the size they
+     were fitted to, every frame: the plain grid here. */
+  .exo-pc .exo-shaders-posters.is-fit {
+    grid-template-columns: repeat(auto-fill, minmax(112px, 1fr));
+    justify-content: normal;
+    padding-bottom: 24px;
+  }
+}
+
+/* A part's menu (PcRoom.tsx › PcMenu), hung from the part that opened it: its name with its action beside it (Use best
+   settings), its rows scrolling under. Best settings' steps lead its menu without their own heading; what Exo set, each
+   with Undo, follows under its name, and neither shows when it holds nothing. */
+.exo-pc-menu {
+  display: flex;
+  flex-direction: column;
+  border: 0;
+  border-radius: var(--exo-panel-radius);
+  width: min(560px, calc(100vw - 32px));
+  max-height: min(78vh, 760px);
+  padding: 18px 22px 10px;
+}
+
+.exo-pc-menu-head {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 32px;
+  padding-bottom: 6px;
+}
+
+.exo-pc-menu-head > h2 {
+  margin: 0;
+  color: var(--color-fg);
+  font-size: calc(13px * var(--exo-scale, 1));
+  font-weight: var(--exo-weight-title);
+}
+
+.exo-pc-menu-body {
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.exo-pc-menu .exo-pc-best {
+  margin: 0;
+  padding: 4px 0 10px;
+  border: 0;
+}
+
+.exo-pc-menu-rows:not(:has(.exo-set-item)) {
+  display: none;
+}
+
+/* Best settings (gpu/BestSetup.tsx): each step a row, its ring while it runs, or its check or X at the right. */
+.exo-pc-best {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+
+.exo-pc-best-steps {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: calc(13px * var(--exo-scale, 1));
+}
+
+.exo-pc-best-steps li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 42px;
+}
+
+.exo-pc-best-steps li + li {
+  border-top: 1px solid var(--exo-float-line);
+}
+
+/* The Upscalers sheet: every game's upscalers, as large glass over the dimmed room, its games scrolling under its name;
+   as tall as what it holds, up to 1000px. */
+.exo-game-overlay-stage:has(> .exo-pc-upscalers-sheet) {
+  width: min(1480px, 100%);
+  max-height: min(1000px, 100%);
+}
+
+/* Its name with the sheet's one action (Update all, or Check again) at the line's right end
+   (DESIGN.md › Panels), then the games scrolling under them on the same edges. */
+.exo-pc-upscalers-sheet {
+  display: grid;
+  flex: 1;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 16px 12px;
+  min-height: 0;
+  padding: 20px 28px 0;
+}
+
+.exo-pc-upscalers-sheet > .exo-upscalers {
+  display: contents;
+}
+
+.exo-pc-upscalers-sheet > h2 {
+  align-self: center;
+}
+
+.exo-pc-upscalers-sheet .exo-gpu-bar {
+  grid-area: 1 / 2;
+  min-height: 32px;
+  margin: 0;
+}
+
+/* 4px of room each side for a card's focus ring, hung outside the sheet's edge so the covers line up with its name. */
+.exo-pc-upscalers-sheet .exo-upscalers-body {
+  grid-area: 2 / 1 / 3 / -1;
+  margin: 0 -4px;
+  padding: 6px 4px 20px;
+  overscroll-behavior: contain;
+}
+
+/* A sheet's name, as Settings' and Captures': the title size, no hairline under it. */
+.exo-pc-upscalers-sheet > h2 {
+  margin: 0;
+  color: var(--color-fg);
+  font-size: calc(20px * var(--exo-scale, 1));
+  font-weight: 650;
+}
+
+/* The Apps sheet: Exo's uninstaller, its list scrolling under its head and fading into the sheet's foot (exo-shell.css › Infinity pool). */
+.exo-game-overlay-stage:has(> .exo-pc-apps-sheet) {
+  width: min(1080px, 100%);
+  height: min(1000px, 100%);
+  max-height: min(1000px, 100%);
+}
+
+.exo-pc-apps-sheet {
+  display: grid;
+  flex: 1;
+  min-height: 0;
+  padding: 20px 28px 0;
+}
+
+.exo-pc-apps-part {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}

@@ -1,0 +1,16 @@
+Exo Shield (core), Exo's blocker
+Copyright (C) Raymond Hill and contributors (uBlock Origin Lite), HaGeZi (HaGeZi DNS blocklists), and Erix (UhhErix)
+for the changes below.
+
+Exo Shield is a modified version of uBlock Origin Lite 2026.1026.1812, combined with HaGeZi's Multi PRO list (214202
+sites). It is free software under the GNU General Public License version 3 (LICENSE.txt), with no warranty.
+
+Changes, made by tools/build-shield.mjs (October 2026 and later):
+- Named Exo Shield, with Exo's icons.
+- HaGeZi's Multi PRO list added as an always-on ruleset (hagezi-pro.json).
+- uBlock Origin Lite's annoyance lists and tracking-parameter list on by default, and Complete filtering on every
+  site; both put back on every start (js/background.js, js/mode-manager.js).
+- No popup, options page or keyboard shortcuts.
+
+Source for this build, with the script that makes it: https://github.com/UhhErix/exo-shield
+uBlock Origin Lite: https://github.com/uBlockOrigin/uBOL-home  HaGeZi: https://github.com/hagezi/dns-blocklists

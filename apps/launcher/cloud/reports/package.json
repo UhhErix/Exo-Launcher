@@ -1,0 +1,11 @@
+{
+  "name": "exo-reports",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test test"
+  },
+  "engines": {
+    "node": ">=22.13"
+  }
+}

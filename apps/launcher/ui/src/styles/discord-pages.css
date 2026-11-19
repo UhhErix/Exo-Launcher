@@ -1,0 +1,311 @@
+/* discord-pages: see docs/architecture/discord-remade.md */
+
+/* ---- Settings sheets (a server's, a channel's) ----
+   Shaped as the app's own Settings: its pages down the left, the open page's rows at the right (a name, a control). No
+   line between the columns, none between the rows; the rows are told apart by space. */
+:root .exo-dc-settings.is-paged {
+  flex-direction: row;
+  height: min(calc(880px * var(--exo-scale, 1)), 100%);
+  max-height: none;
+}
+
+:root .exo-dc-sheet-nav {
+  border-right: 0;
+}
+
+.exo-dc-sheet-group {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.exo-dc-sheet-label {
+  padding: 8px 12px 4px;
+  color: var(--color-muted);
+  font-size: var(--exo-type-small);
+  font-weight: var(--exo-weight-title);
+}
+
+:root .exo-dc-settings .exo-set-item,
+:root .exo-dc-settings .exo-props-row {
+  border-top: 0;
+}
+
+:root .exo-dc-settings .exo-dc-settings-page .exo-set-item {
+  min-height: calc(52px * var(--exo-scale, 1));
+}
+
+/* ---- A voice channel and the chat beside it ---- */
+
+/* The call's tiles: the card's corner and the one line on black, no grey fill; one that speaks has a green edge. */
+:root .exo-dc .exo-dc-voice-tile {
+  border-radius: var(--exo-card-radius);
+  background: transparent;
+  box-shadow: var(--glassy-ring);
+}
+
+:root .exo-dc .exo-dc-voice-tile.is-speaking {
+  box-shadow: inset 0 0 0 2px var(--color-good);
+}
+
+:root .exo-dc .exo-dc-voice-tile:has(> .exo-dc-voice-backdrop, > .exo-dc-voice-video:not([hidden])) {
+  box-shadow: none;
+}
+
+/* The controls are one capsule at the foot; its groups are told apart by space, not by lines. */
+:root .exo-dc .exo-dc-voice-sep {
+  width: 4px;
+  background: transparent;
+}
+
+:root .exo-dc .exo-dc-voice-bar {
+  box-shadow: var(--glassy-ring);
+  background: var(--color-bg);
+}
+
+/* The room's chat opens beside the call as a column: nothing drawn round it. */
+:root .exo-dc .exo-dc-voice-split > .exo-dc-chat-col {
+  margin: 0 0 0 var(--exo-gap);
+}
+
+:root .exo-dc .exo-dc-voice-split > .exo-dc-chat-col > :is(.exo-dc-chat, .exo-dc-compose-panel) {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+:root:root .exo-dc .exo-dc-voice-split > .exo-dc-chat-col > :is(.exo-dc-chat, .exo-dc-compose-panel)::before {
+  box-shadow: none !important;
+}
+
+/* A call over a conversation (a direct or group message) has no rule under it. */
+:root .exo-dc .exo-dc-voice-room.is-dm {
+  border-bottom: 0;
+}
+
+/* ---- A group message, the person's column, Message requests ---- */
+
+/* The people of a group sit beside it as a column on the black: no panel, no line. */
+:root .exo-dc .exo-dc-group-members,
+:root .exo-dc .exo-dc-chat-col .exo-dc-members {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+:root:root .exo-dc :is(.exo-dc-group-members, .exo-dc-chat-col .exo-dc-members, .exo-dc-voice-room.is-dm)::before {
+  box-shadow: none !important;
+}
+
+/* A row of people, requests or friends: the next row is a step below it, never a line. */
+:root .exo-dc .exo-dc-friend {
+  border: 0;
+}
+
+:root .exo-dc .exo-dc-friend-list {
+  padding: 0 8px 16px;
+}
+
+:root .exo-dc .exo-dc-friend-list > .exo-dc-side-label {
+  margin: 12px 12px 4px;
+}
+
+/* A request's Ignore and Accept: one line of words and two buttons, held in no card. */
+:root .exo-dc .exo-dc-request-bar {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+/* The open page's title, as Settings' is. */
+:root .exo-dc-settings .exo-dc-settings-page > section > h1:first-child {
+  margin-bottom: 12px;
+  font-size: var(--exo-type-title);
+  font-weight: var(--exo-weight-title);
+}
+
+:root .exo-dc-sheet-nav .exo-dc-sheet-label {
+  font-weight: 500;
+}
+
+/* Nothing in a sheet is a grey disc or a boxed row: a picture's empty place is a letter in a ring. */
+:root .exo-dc-settings .exo-dc-picture-empty {
+  background: transparent;
+  box-shadow: var(--glassy-ring);
+}
+
+/* ---- A forum: its posts are cards in a grid ---- */
+:root .exo-dc .exo-dc-forum {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, calc(300px * var(--exo-scale, 1))), 1fr));
+  align-content: start;
+  gap: 12px;
+  padding: 8px 16px 24px;
+}
+
+:root .exo-dc .exo-dc-forum > :not(.exo-dc-forum-post) {
+  grid-column: 1 / -1;
+}
+
+/* Search is one small pill at the head's end; New post is the white button after it. */
+:root .exo-dc .exo-dc-chat-head > .exo-dc-head-tools > .exo-dc-friend-search {
+  flex: none;
+  box-sizing: border-box;
+  width: calc(220px * var(--exo-scale, 1));
+  height: 32px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  box-shadow: var(--glassy-ring);
+}
+
+:root .exo-dc .exo-dc-forum-post {
+  border-color: var(--exo-line);
+  background: transparent;
+}
+
+:root .exo-dc .exo-dc-forum-new {
+  border-color: var(--exo-line);
+}
+
+/* A tag is a pill in a group: the chosen one is white with black words, as every chosen pill is. */
+:root .exo-dc .exo-dc-tag-chip {
+  background: transparent;
+  box-shadow: var(--glassy-ring);
+}
+
+:root .exo-dc .exo-dc-tag-chip[aria-pressed="true"] {
+  background: var(--color-fg);
+  box-shadow: none;
+  color: var(--color-primary-fg);
+}
+
+/* A menu's groups are a step apart, not ruled. */
+:root .exo-dc .exo-dc-menu-line {
+  height: 0;
+  margin: 3px 0;
+  background: transparent;
+}
+
+/* A conversation's person: a column on the black, no panel, no line down its edge. The card inside keeps its banner. */
+:root:root .exo-dc .exo-dc-dm-profile.exo-dc-pf {
+  height: 100%;
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+:root:root .exo-dc :is(.exo-dc-members, .exo-dc-dm-profile) {
+  border-left: 0;
+}
+
+:root .exo-dc .exo-dc-dm-profile .exo-dc-pf-banner {
+  border-radius: var(--exo-card-radius);
+}
+
+:root .exo-dc .exo-dc-dm-profile .exo-dc-pf-face {
+  --pf-ring: var(--color-bg);
+}
+
+/* A list in a sheet (roles, perks, rules) is told apart by space, not by a line under each row. */
+:root .exo-dc-settings :is(.exo-dc-role-list li, .exo-dc-perk-list > li, .exo-dc-rule-list > li) {
+  border-top: 0;
+}
+
+/* Every avatar is round: a tall picture is cropped to its circle, never squeezed into an oval. */
+:root .exo-dc .exo-dc-avatar-wrap > img,
+:root .exo-dc-profile-preview .exo-dc-avatar-wrap > img {
+  width: 100%;
+  height: 100%;
+  aspect-ratio: 1;
+  object-fit: cover;
+}
+
+/* A face with no picture, large on a tile, is its letter in a ring on black. */
+:root .exo-dc .exo-dc-voice-tile-initial {
+  background: transparent;
+  box-shadow: var(--glassy-ring);
+}
+
+:root .exo-dc .exo-dc-pf-activity-icon {
+  background: transparent;
+  box-shadow: var(--glassy-ring);
+}
+
+:root .exo-dc .exo-dc-pf-mutuals {
+  border-top: 0;
+}
+
+/* The Inbox's tabs sit under its title with no rule between them; a call's row above you has none above it. */
+:root .exo-dc .exo-dc-popover-title {
+  border-bottom: 0;
+}
+
+/* A call's row above you: one line, "Voice connected" and the place under it; the red dot of clips is its own mark. */
+:root .exo-dc .exo-dc-voice-status {
+  flex: 1;
+}
+
+:root .exo-dc .exo-dc-voice-status strong {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+:root .exo-dc .exo-dc-voice-rec-text {
+  display: none;
+}
+
+/* ---- What is chosen is never a grey wash ---- */
+
+/* A choice in a sheet (a level, a filter) or a role in the permissions list: full ink beside the white marker, no fill. */
+:root .exo-dc-settings :is(.exo-dc-option.is-current, .exo-dc-role-pick.is-current) {
+  background: transparent;
+  color: var(--color-fg);
+  font-weight: var(--exo-weight-title);
+}
+
+:root .exo-dc-settings .exo-dc-role-pick {
+  position: relative;
+}
+
+:root .exo-dc-settings .exo-dc-role-pick.is-current::before {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 0;
+  width: 3px;
+  height: 16px;
+  border-radius: 999px;
+  background: var(--color-fg);
+  translate: 0 -50%;
+}
+
+/* The roles list's label and its add button sit on one line. */
+:root .exo-dc-settings .exo-dc-role-side .exo-dc-side-label.is-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+/* ---- Tables and pagers in a sheet: no rule lines; rows are told apart by space ---- */
+:root .exo-dc-settings :is(.exo-dc-table-row, .exo-dc-pager, .exo-dc-page-bar) {
+  border: 0;
+}
+
+:root .exo-dc-settings .exo-dc-table-row {
+  padding-block: 12px;
+}
+
+/* ---- Sign-in: the code's card is one line on black ---- */
+:root:root .exo-dc-qr {
+  background: transparent;
+}

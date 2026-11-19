@@ -1,0 +1,53 @@
+# Exo account (README.md): live at accounts.getexo.app. A change to this Worker or its database is deployed by the steps in README.md › Before deploy (migrations first, then the deploy).
+name = "exo-account"
+main = "src/worker.js"
+compatibility_date = "2026-10-01"
+workers_dev = false
+preview_urls = false
+send_metrics = false
+routes = []
+
+# No logs: the account service keeps nothing about who connects.
+[observability]
+enabled = false
+
+# Secret ACCOUNT_SECRETS, set with `wrangler secret put ACCOUNT_SECRETS` (a keyring, README.md › Keys). It derives the keys
+# that open every account's items and recovery codes. A key is rotated by adding one on top of the others, not by changing one.
+[[d1_databases]]
+binding = "DB"
+database_name = "exo-account"
+# `wrangler d1 create exo-account` prints the real id at deploy; local runs don't use it.
+database_id = "REPLACE_WITH_RESOURCE_ID"
+migrations_dir = "migrations"
+
+# Every route that takes a password (sign-up, sign-in, recovery, change, delete, a new code), per address, counted by
+# Cloudflare at the edge; the Worker stores none of it.
+[[ratelimits]]
+name = "SESSION_TRIES"
+namespace_id = "3002"
+simple = { limit = 10, period = 60 }
+
+# The dev copy (`wrangler deploy --env dev`): workers.dev, a database of its own, and the same code as live. Test accounts
+# need no email: the account service verifies no address (README.md), so dev has no bypass to switch on or off, and
+# nothing in this file can turn one on in live. Live (the top level above) has no [env.dev] keys.
+[env.dev]
+name = "exo-account-dev"
+main = "src/worker.js"
+compatibility_date = "2026-10-01"
+workers_dev = true
+preview_urls = false
+routes = []
+
+[env.dev.observability]
+enabled = false
+
+[[env.dev.d1_databases]]
+binding = "DB"
+database_name = "exo-account-dev"
+database_id = "REPLACE_WITH_RESOURCE_ID"
+migrations_dir = "migrations"
+
+[[env.dev.ratelimits]]
+name = "SESSION_TRIES"
+namespace_id = "3102"
+simple = { limit = 10, period = 60 }

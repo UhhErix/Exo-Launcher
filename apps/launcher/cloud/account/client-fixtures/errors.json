@@ -1,0 +1,199 @@
+{
+  "title": "Every error the service gave in the live run, and those it can give that the run did not hit",
+  "service": "https://accounts.getexo.app",
+  "capturedAt": "2026-11-06T23:40:09.712Z",
+  "note": "status and error are the contract; the message text is not. Timing-dependent cases (the lock burst) list the names that gave each answer in seenIn.",
+  "errors": [
+    {
+      "status": 415,
+      "error": "json-only",
+      "retryAfter": null,
+      "meaning": "A body without Content-Type: application/json.",
+      "seenIn": [
+        "signup-wrong-content-type"
+      ]
+    },
+    {
+      "status": 400,
+      "error": "bad-password",
+      "retryAfter": null,
+      "meaning": "Sign-up, change or reset: under 12 characters or over 1,024. Sign-in accepts 1 to 1,024.",
+      "seenIn": [
+        "signup-short-password"
+      ]
+    },
+    {
+      "status": 400,
+      "error": "common-password",
+      "retryAfter": null,
+      "meaning": "Sign-up, change or reset: on the 1,197-entry common list (case and NFKC ignored).",
+      "seenIn": [
+        "signup-common-password",
+        "password-change-common"
+      ]
+    },
+    {
+      "status": 400,
+      "error": "bad-email",
+      "retryAfter": null,
+      "meaning": "Not an address (loose check: name@domain.tld, at most 254 characters).",
+      "seenIn": [
+        "signup-bad-email"
+      ]
+    },
+    {
+      "status": 400,
+      "error": "bad-request",
+      "retryAfter": null,
+      "meaning": "Missing or malformed field (device not 32 lowercase hex; empty items list; bad ?after=).",
+      "seenIn": [
+        "signup-bad-device",
+        "sync-put-empty",
+        "sync-get-after-bad"
+      ]
+    },
+    {
+      "status": 409,
+      "error": "email-taken",
+      "retryAfter": null,
+      "meaning": "Sign-up: the address already has an account (also when it loses a race).",
+      "seenIn": [
+        "signup-email-taken-other-case"
+      ]
+    },
+    {
+      "status": 401,
+      "error": "signed-out",
+      "retryAfter": null,
+      "meaning": "The bearer token is unknown, ended, idle for 400 days, or its PC was removed or its password reset or changed by another PC.",
+      "seenIn": [
+        "account-get-signed-out",
+        "sync-get-signed-out",
+        "token1-after-same-device-signin",
+        "token3-after-device-removed",
+        "other-pc-after-password-change",
+        "this-session-before-reset-after-reset",
+        "account-after-signout",
+        "account-after-delete",
+        "sync-after-delete"
+      ]
+    },
+    {
+      "status": 400,
+      "error": "bad-item",
+      "retryAfter": null,
+      "meaning": "A sync item is malformed: app or type not [a-z][a-z0-9-]{0,31}, id not allowed, base or updated not a whole number, or a value that is not text.",
+      "seenIn": [
+        "sync-put-bad-app"
+      ]
+    },
+    {
+      "status": 413,
+      "error": "too-big",
+      "retryAfter": null,
+      "meaning": "A sync item value over 64 KiB (or a body over its cap).",
+      "seenIn": [
+        "sync-put-value-too-big"
+      ]
+    },
+    {
+      "status": 405,
+      "error": "method-not-allowed",
+      "retryAfter": null,
+      "meaning": "The route exists, the method does not.",
+      "seenIn": [
+        "sync-delete-method"
+      ]
+    },
+    {
+      "status": 404,
+      "error": "not-found",
+      "retryAfter": null,
+      "meaning": "No such route.",
+      "seenIn": [
+        "route-unknown"
+      ]
+    },
+    {
+      "status": 401,
+      "error": "wrong-credentials",
+      "retryAfter": null,
+      "meaning": "Sign-in: unknown address or wrong password (the same answer for both).",
+      "seenIn": [
+        "session-wrong-password",
+        "session-unknown-address",
+        "session-after-delete",
+        "lock-burst-1",
+        "lock-burst-11",
+        "lock-burst-3",
+        "lock-burst-8",
+        "lock-burst-6",
+        "lock-burst-5",
+        "lock-burst-9",
+        "lock-burst-7",
+        "lock-burst-12"
+      ]
+    },
+    {
+      "status": 401,
+      "error": "wrong-password",
+      "retryAfter": null,
+      "meaning": "Change, delete or new recovery code: the current password is wrong.",
+      "seenIn": [
+        "password-change-wrong-current",
+        "recovery-code-wrong-password",
+        "account-delete-wrong-password"
+      ]
+    },
+    {
+      "status": 401,
+      "error": "wrong-code",
+      "retryAfter": null,
+      "meaning": "Reset: the recovery code does not match.",
+      "seenIn": [
+        "recovery-reset-wrong-code"
+      ]
+    },
+    {
+      "status": 429,
+      "error": "slow-down",
+      "retryAfter": null,
+      "meaning": "More than ten password-route requests a minute from one client address. No Retry-After: wait a minute.",
+      "seenIn": [
+        "lock-burst-10"
+      ]
+    },
+    {
+      "status": 429,
+      "error": "locked",
+      "retryAfter": "900",
+      "meaning": "Ten wrong tries on one address from one client address locked that pair for 15 minutes. Retry-After is in seconds.",
+      "seenIn": [
+        "lock-burst-4",
+        "lock-burst-2",
+        "lock-after-burst"
+      ]
+    },
+    {
+      "status": 413,
+      "error": "account-full",
+      "retryAfter": null,
+      "meaning": "The account holds 20,000 items or 64 MiB of sealed values; a PUT that would pass either. Not exercised live.",
+      "seenIn": []
+    },
+    {
+      "status": 503,
+      "error": "not-configured",
+      "retryAfter": null,
+      "meaning": "ACCOUNT_SECRETS missing or not a valid keyring. Not exercised live.",
+      "seenIn": []
+    },
+    {
+      "status": 500,
+      "error": "server-error",
+      "retryAfter": null,
+      "meaning": "Unexpected failure, or a stored item under a key the keyring no longer lists. Not exercised live.",
+      "seenIn": []
+    }
+  ]
+}

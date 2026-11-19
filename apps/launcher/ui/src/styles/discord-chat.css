@@ -1,0 +1,135 @@
+/* discord-chat: see docs/architecture/discord-remade.md ("Head of a conversation", "People").
+   The head: the title, the topic muted on the same line, then bare tool glyphs, the search as a glyph that becomes a
+   field, and the people pill at the end. */
+
+/* The topic takes the free space: one muted line, cut with an ellipsis; the old divider before it is gone. */
+:root .exo-dc .exo-dc-chat-head > .exo-dc-head-line {
+  display: none;
+}
+
+:root .exo-dc .exo-dc-chat-head > .exo-dc-chat-topic {
+  flex: 1 1 0;
+  min-width: 0;
+  color: var(--color-muted);
+  font-size: var(--exo-type-body);
+}
+
+/* The title does not shrink for the topic: the topic gives way first. */
+:root .exo-dc .exo-dc-chat-head > :is(.exo-dc-head-channel, .exo-dc-head-person) {
+  flex: none;
+  max-width: 55%;
+}
+
+:root .exo-dc .exo-dc-chat-head > .exo-dc-head-tools {
+  flex: 0 1 auto;
+  margin-left: auto;
+  gap: 4px;
+}
+
+/* Bare glyphs: no outline, muted; ink on a soft fill on hover. */
+:root .exo-dc .exo-dc-chat-head .exo-dc-head-tools .exo-dc-icon-btn {
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  color: var(--color-muted);
+}
+
+:root .exo-dc .exo-dc-chat-head .exo-dc-head-tools .exo-dc-icon-btn:hover:not(:disabled, [aria-pressed="true"]) {
+  background: var(--hover-fill);
+  color: var(--color-fg);
+}
+
+/* Chosen (pressed) is white with black content, as everything chosen is. */
+:root:root .exo-dc .exo-dc-chat-head .exo-dc-head-tools :is(.exo-dc-icon-btn, .exo-dc-people-pill)[aria-pressed="true"] {
+  background: var(--color-fg);
+  color: var(--color-primary-fg);
+}
+
+/* ---- Search: one glyph until pressed; pressed, focused or holding words, the small pill field ---- */
+.exo-dc .exo-dc-head-search {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+
+.exo-dc .exo-dc-head-search-field {
+  display: flex;
+  min-width: 0;
+}
+
+.exo-dc .exo-dc-head-search-field[hidden] {
+  display: none;
+}
+
+:root .exo-dc .exo-dc-chat-head .exo-dc-head-search .exo-dc-search,
+:root .exo-dc .exo-dc-chat-head .exo-dc-head-search .exo-dc-search:focus-within,
+:root .exo-dc .exo-dc-chat-head .exo-dc-head-search .exo-dc-search:has(input:not(:placeholder-shown)) {
+  flex: 0 1 calc(220px * var(--exo-scale, 1));
+  width: calc(220px * var(--exo-scale, 1));
+  min-width: calc(120px * var(--exo-scale, 1));
+  margin: 0;
+}
+
+:root:root .exo-dc .exo-dc-stage:has(> .exo-dc-columns:not(.is-over)) :is(.exo-dc-chat, .exo-dc-chat-col) > .exo-dc-chat-head,
+:root:root .exo-dc .exo-dc-stage:has(> .exo-dc-columns:not(.is-over)) .exo-dc-chat-head {
+  padding-right: 16px;
+}
+
+/* ---- More: the one menu at the row's end; rows are a glyph and a short label, a state as the small line under it ---- */
+:root .exo-dc .exo-dc-chat-head .exo-dc-bell-menu > button {
+  justify-content: flex-start;
+  color: var(--color-fg);
+}
+
+:root .exo-dc .exo-dc-chat-head .exo-dc-bell-menu > button > svg:first-child {
+  flex: none;
+  color: var(--color-muted);
+}
+
+:root .exo-dc .exo-dc-chat-head .exo-dc-bell-menu > button > .exo-dc-menu-text {
+  flex: 1 1 auto;
+  padding: 0;
+}
+
+:root .exo-dc .exo-dc-chat-head .exo-dc-bell-menu > button > .exo-dc-menu-text:has(small) {
+  padding: 4px 0;
+}
+
+/* A topic line that follows the title (a server's name and topic, a DM's activity) is body type, muted. */
+:root .exo-dc .exo-dc-chat-head > .exo-dc-chat-topic {
+  cursor: default;
+}
+
+/* ---- Reactions: one add glyph after them, there while the pointer is on the message or focus is in it (or its picker
+   is open), opening the picker under it. ---- */
+.exo-dc .exo-dc-reaction-add {
+  position: relative;
+  display: inline-flex;
+}
+
+:root .exo-dc .exo-dc-reaction-add > button {
+  display: inline-grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--color-muted);
+  cursor: pointer;
+}
+
+:root .exo-dc .exo-dc-reaction-add > button:hover {
+  background: var(--hover-fill);
+  color: var(--color-fg);
+}
+
+.exo-dc .exo-dc-msg:not(:hover, :focus-within) .exo-dc-reaction-add:not(:has(.exo-dc-picker)) {
+  visibility: hidden;
+}
+
+:root .exo-dc .exo-dc-reaction-add > .exo-dc-picker {
+  right: auto;
+  left: 0;
+}

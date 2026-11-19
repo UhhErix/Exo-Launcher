@@ -1,0 +1,248 @@
+/* The Lobby, Home's Now (DESIGN.md › Rooms › Discord; discord/HomePage.tsx, discord/Lobby.tsx): where everyone is. The page is the
+   page's black; on it, places, each a block with the faces of who is there. */
+
+/* Friends, as Discord's page has it: the title, its tabs, Add Friend; then the list beside Active Now. */
+.exo-dc .exo-dc-friends .exo-dc-chat-head {
+  gap: 12px;
+  padding-right: 16px;
+}
+
+.exo-dc .exo-dc-friends .exo-dc-chat-head .exo-dc-tabs {
+  margin-left: 8px;
+}
+
+.exo-dc .exo-dc-friends .exo-dc-chat-head .exo-dc-tabs + * {
+  margin-left: 0;
+}
+
+.exo-dc-friends-body.is-classic {
+  display: grid;
+  flex: 1;
+  /* Active Now keeps its 420px where there is room, and gives way to the list (not the reverse) on a narrower room. */
+  grid-template-columns: minmax(0, 1fr) clamp(240px, calc(100% - 480px), calc(420px * var(--exo-scale, 1)));
+  min-height: 0;
+}
+
+.exo-dc-lobby-scroll {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  margin-bottom: 8px;
+  overflow-y: auto;
+  /* Only a short fade where the page scrolls on, so what passes under the foot isn't cut. */
+  mask-image: linear-gradient(to bottom, #000 calc(100% - var(--exo-pool-bottom)), transparent);
+  animation: exo-dc-pool-foot linear both;
+  animation-timeline: scroll(self);
+  animation-range: calc(100% - 32px) 100%;
+}
+
+/* The places wrap across the page. A block's base width and its share of what's left both grow with who is in it (--people), so the
+   busiest stands out by itself. */
+.exo-dc-lobby {
+  display: flex;
+  flex-wrap: wrap;
+  align-content: flex-start;
+  gap: 12px;
+  min-height: 100%;
+  padding: 14px 16px 16px;
+}
+
+.exo-dc-lobby-none {
+  margin: auto;
+  padding-top: 20vh;
+  color: var(--color-muted);
+  text-align: center;
+}
+
+.exo-dc-place-block {
+  display: flex;
+  flex: var(--people, 1) 1 calc((150px + 96px * var(--people, 1)) * var(--exo-scale, 1));
+  min-width: min(100%, calc(300px * var(--exo-scale, 1)));
+  animation: exo-dc-place-in var(--dur-move) var(--ease-out) both;
+}
+
+@keyframes exo-dc-place-in {
+  from { opacity: 0; }
+}
+
+/* A place: glass as a pane of the page, its rim and a faint lift. There is only black behind it, nothing a backdrop could bend, so it asks
+   for no blur: as many blocks as there are places cost nothing to scroll. */
+.exo-dc-lobby-place {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+  padding: 14px 16px;
+  border-radius: var(--exo-panel-radius);
+  background: rgb(var(--exo-ink-rgb) / 0.035);
+  box-shadow: var(--exo-rim);
+}
+
+.exo-dc-lobby-place.is-hanging {
+  flex: 0 0 100%;
+}
+
+.exo-dc-lobby-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+}
+
+.exo-dc-lobby-title {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.exo-dc-lobby-title > * {
+  margin: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.exo-dc-lobby-title h2 {
+  color: var(--color-fg);
+  font-size: var(--exo-type-body);
+  font-weight: var(--exo-weight-title);
+}
+
+.exo-dc-lobby-title h2 > span:not(.exo-dc-home-through) {
+  color: var(--color-muted);
+  font-weight: 400;
+}
+
+.exo-dc-home-through {
+  display: inline-flex;
+  margin-left: 6px;
+  vertical-align: -1px;
+}
+
+/* What is live reads as live: the green dot breathing beside how long it has been going. */
+.exo-dc-now-live {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--color-muted);
+  font-size: var(--exo-type-small);
+}
+
+.exo-dc-now-live > i {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: var(--color-good);
+  animation: exo-dc-breathe calc(var(--dur-flight) * 10) ease-in-out infinite;
+}
+
+@keyframes exo-dc-breathe {
+  50% { opacity: 0.35; }
+}
+
+/* The faces, each with a name under it, large enough to recognize. */
+.exo-dc-lobby-faces {
+  display: flex;
+  flex: 1;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  align-content: flex-start;
+  gap: 8px 4px;
+  margin: 0 -6px;
+  padding: 0;
+  list-style: none;
+}
+
+.exo-dc-lobby-face {
+  display: grid;
+  justify-items: center;
+  gap: 6px;
+  width: calc(84px * var(--exo-scale, 1));
+  padding: 6px 4px;
+  border: 0;
+  border-radius: var(--exo-card-radius);
+  background: transparent;
+  color: var(--color-fg);
+  font: inherit;
+  font-size: var(--exo-type-small);
+  cursor: pointer;
+  transition: scale var(--dur-quick) var(--ease-out);
+}
+
+.exo-dc-lobby-face:hover,
+.exo-dc-lobby-person:hover {
+  background: var(--hover-fill);
+}
+
+.exo-dc-lobby-face:active,
+.exo-dc-lobby-person:active {
+  scale: 0.97;
+}
+
+.exo-dc-lobby-face:focus-visible,
+.exo-dc-lobby-person:focus-visible {
+  outline: 2px solid var(--color-fg);
+  outline-offset: -2px;
+}
+
+.exo-dc-lobby-face > span:last-child {
+  max-width: 100%;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.exo-dc-lobby-face.is-small {
+  display: inline-flex;
+  flex: none;
+  width: auto;
+  padding: 0;
+  border-radius: 999px;
+}
+
+.exo-dc-lobby-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+  min-height: 28px;
+}
+
+.exo-dc-lobby-facts {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--color-muted);
+  font-size: var(--exo-type-small);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.exo-dc-lobby-facts .is-good {
+  color: var(--color-good);
+}
+
+@keyframes exo-dc-bar {
+  from { transform: scaleY(0.3); }
+  to { transform: scaleY(1); }
+}
+
+/* Motion here stops whenever nothing shows it, and under Reduce motion and Performance mode it never starts. */
+.exo-room.is-backstage :is(.exo-dc-now-live > i, .exo-dc-now-bars > b) {
+  animation-play-state: paused;
+}
+
+[data-exo-motion="reduce"] :is(.exo-dc-now-live > i, .exo-dc-now-bars > b),
+.exo-dc.is-performance :is(.exo-dc-now-live > i, .exo-dc-now-bars > b) {
+  animation: none;
+}
+
+.exo-dc-friend-actions {
+  display: flex;
+  flex: none;
+  gap: 10px;
+  align-items: center;
+}

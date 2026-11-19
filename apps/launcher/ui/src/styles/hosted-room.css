@@ -1,0 +1,21 @@
+/* The state a room shows while it can't show itself (Discord, Music): the shared error block (ui/ErrorState) fills it. */
+.exo-hosted-room {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  padding: 0;
+  background: var(--color-bg);
+  color: var(--color-muted);
+}
+
+/* Exo Mouse, its own program, fills the Devices room in a frame. */
+.exo-devices-frame {
+  display: block;
+  flex: 1;
+  width: 100%;
+  min-height: 0;
+  border: 0;
+  background: var(--color-bg);
+}

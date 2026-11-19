@@ -1,0 +1,55 @@
+name: Announce stable release on Discord
+
+on:
+  release:
+    types: [published]
+
+permissions: {}
+
+jobs:
+  announce:
+    if: ${{ github.repository == 'UhhErix/Exo-Launcher' && !github.event.release.prerelease && !github.event.release.draft }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Request an announcement from Cloudflare
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+          import re
+          from urllib.error import HTTPError
+          from urllib.request import Request, urlopen
+
+          tag = os.environ['RELEASE_TAG']
+          if not re.fullmatch(r'v[0-9]{1,4}\.[0-9]{1,4}\.[0-9]{1,4}', tag):
+              raise SystemExit('Release tag must use vMAJOR.MINOR.PATCH.')
+
+          request = Request(
+              'https://updates.getexo.app/v1/launcher/announce',
+              data=json.dumps({'tag': tag}).encode('utf-8'),
+              headers={'Content-Type': 'application/json'},
+              method='POST',
+          )
+          try:
+              response = urlopen(request, timeout=20)
+          except HTTPError as error:
+              response = error
+
+          with response:
+              code = response.code
+              try:
+                  result = json.load(response)
+              except (UnicodeError, ValueError):
+                  raise SystemExit(f'Cloudflare returned HTTP {code} without a valid announcement response.')
+
+          status = result.get('status') if isinstance(result, dict) else None
+          if code == 200 and status in ('posted', 'already'):
+              print(f'Cloudflare announcement status: {status}.')
+          elif code == 409 and status in ('not-live', 'wrong-version'):
+              raise SystemExit('Publish the matching Cloudflare release and release notes, then rerun this job.')
+          else:
+              raise SystemExit(f'Cloudflare could not confirm Discord delivery (HTTP {code}).')
+          PY

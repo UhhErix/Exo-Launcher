@@ -1,0 +1,668 @@
+/* discord-media: see docs/architecture/discord-remade.md
+   Everything a message can carry: links, pictures, galleries, video, files, sound, code, polls, reactions, the viewer.
+   One hairline on what you act on, no grey fill, the card's corner, a dark plate (--exo-plate) on anything over art. */
+
+/* ---- Link: one card, no colour bar. Site small and muted, title in ink (two lines), description (three), the picture
+   large under them at 16:9, or a small square icon at the right. The whole card opens the link. ---- */
+:root .exo-dc .exo-dc-embed {
+  position: relative;
+  box-sizing: border-box;
+  width: min(440px, 100%);
+  max-width: 100%;
+  padding: 14px;
+  border: 0;
+  border-radius: var(--exo-card-radius);
+  background: transparent;
+  box-shadow: var(--glassy-ring);
+}
+
+:root .exo-dc .exo-dc-embed-body {
+  gap: 4px;
+}
+
+:root .exo-dc .exo-dc-embed-small {
+  color: var(--color-muted);
+  font-size: var(--exo-type-small);
+}
+
+:root .exo-dc .exo-dc-embed-body p.exo-dc-embed-title {
+  display: -webkit-box;
+  overflow: hidden;
+  color: var(--color-fg);
+  font-size: var(--exo-type-read);
+  font-weight: var(--exo-weight-title);
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+}
+
+:root .exo-dc .exo-dc-embed-title :is(a, button) {
+  color: inherit;
+  text-decoration: none;
+}
+
+/* The title's link stretches over the card, so a press anywhere on it opens the link; what has its own press sits above. */
+:root .exo-dc .exo-dc-embed-title :is(a, button)::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: var(--exo-card-radius);
+}
+
+:root .exo-dc .exo-dc-embed-desc {
+  display: -webkit-box;
+  overflow: hidden;
+  color: var(--color-muted);
+  font-size: var(--exo-type-body);
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+}
+
+:root .exo-dc .exo-dc-embed-desc :is(p, div) {
+  margin: 0;
+  font-size: inherit;
+}
+
+:root .exo-dc .exo-dc-embed-desc :is(a, button),
+:root .exo-dc .exo-dc-embed-gallery,
+:root .exo-dc .exo-dc-embed-play,
+:root .exo-dc .exo-dc-embed-player,
+:root .exo-dc .exo-dc-embed-author a {
+  position: relative;
+  z-index: 1;
+}
+
+:root .exo-dc .exo-dc-embed-image {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  height: auto;
+  margin-top: 8px;
+  border-radius: var(--exo-card-radius);
+  aspect-ratio: 16 / 9;
+  object-fit: cover;
+}
+
+:root .exo-dc .exo-dc-embed-thumb {
+  width: 72px;
+  height: 72px;
+  border-radius: var(--exo-small-radius);
+}
+
+:root .exo-dc .exo-dc-embed-gallery {
+  width: 100%;
+  margin-top: 8px;
+  border-radius: var(--exo-card-radius);
+}
+
+/* A video link: the picture first, one round play button at its centre, the title and channel under it. */
+:root .exo-dc .exo-dc-embed.is-video > .exo-dc-embed-body > :is(.exo-dc-embed-play, .exo-dc-embed-player) {
+  order: -1;
+  margin: 0 0 8px;
+}
+
+:root .exo-dc .exo-dc-embed-play {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  border-radius: var(--exo-card-radius);
+}
+
+:root .exo-dc .exo-dc-embed-play .exo-dc-embed-image {
+  height: 100%;
+  margin: 0;
+}
+
+:root .exo-dc .exo-dc-embed-player {
+  width: 100%;
+  height: auto;
+  margin: 0;
+  border-radius: var(--exo-card-radius);
+  aspect-ratio: 16 / 9;
+}
+
+:root .exo-dc .exo-dc-embed-play-mark,
+:root .exo-dc .exo-dc-video-play {
+  display: grid;
+  place-items: center;
+  width: 56px;
+  height: 56px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--exo-plate);
+  color: var(--color-fg);
+}
+
+:root .exo-dc .exo-dc-embed-play:hover .exo-dc-embed-play-mark,
+:root .exo-dc .exo-dc-video-play:hover {
+  background: var(--color-bg);
+}
+
+/* ---- Picture: its own shape, the card's corner, no border, at most 520 by 420. ---- */
+:root .exo-dc .exo-dc-media {
+  max-width: min(520px, 100%);
+  border: 0;
+  border-radius: var(--exo-card-radius);
+  background: transparent;
+  box-shadow: none;
+}
+
+:root .exo-dc .exo-dc-media img {
+  max-width: 100%;
+  max-height: 420px;
+}
+
+/* Several: 2 side by side, 3 one tall and two stacked, 4 a square of four, more a grid of six with "+N" on the last. */
+:root .exo-dc .exo-dc-mosaic {
+  display: grid;
+  gap: 2px;
+  width: min(520px, 100%);
+  overflow: hidden;
+  border-radius: var(--exo-card-radius);
+}
+
+:root .exo-dc .exo-dc-mosaic > .exo-dc-media-wrap {
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+:root .exo-dc .exo-dc-mosaic.is-2 {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  aspect-ratio: 2 / 1;
+}
+
+:root .exo-dc .exo-dc-mosaic.is-3 {
+  grid-template: repeat(2, minmax(0, 1fr)) / repeat(2, minmax(0, 1fr));
+  aspect-ratio: 4 / 3;
+}
+
+:root .exo-dc .exo-dc-mosaic.is-3 > :first-child {
+  grid-row: span 2;
+}
+
+:root .exo-dc .exo-dc-mosaic.is-4 {
+  grid-template: repeat(2, minmax(0, 1fr)) / repeat(2, minmax(0, 1fr));
+  width: min(420px, 100%);
+  aspect-ratio: 1;
+}
+
+:root .exo-dc .exo-dc-mosaic.is-5 {
+  grid-template: repeat(2, minmax(0, 1fr)) / repeat(6, minmax(0, 1fr));
+  aspect-ratio: 3 / 2;
+}
+
+:root .exo-dc .exo-dc-mosaic.is-5 > :nth-child(-n + 2) {
+  grid-column: span 3;
+}
+
+:root .exo-dc .exo-dc-mosaic.is-5 > :nth-child(n + 3) {
+  grid-column: span 2;
+}
+
+:root .exo-dc .exo-dc-mosaic.is-6 {
+  grid-template: repeat(2, minmax(0, 1fr)) / repeat(3, minmax(0, 1fr));
+  aspect-ratio: 3 / 2;
+}
+
+:root .exo-dc .exo-dc-media-wrap.is-cell > :is(.exo-dc-media, .exo-dc-hidden-media, .exo-dc-video) {
+  width: 100%;
+  max-width: none;
+  height: 100%;
+  border-radius: 0;
+}
+
+:root .exo-dc .exo-dc-media-wrap.is-cell .exo-dc-media img,
+:root .exo-dc .exo-dc-media-wrap.is-cell .exo-dc-video video {
+  width: 100%;
+  max-width: none;
+  height: 100%;
+  max-height: none;
+  object-fit: cover;
+}
+
+:root .exo-dc .exo-dc-more {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: var(--exo-plate);
+  color: var(--color-fg);
+  font-size: var(--exo-type-title);
+  font-weight: var(--exo-weight-title);
+  pointer-events: none;
+}
+
+/* A spoiler is blurred with one word on it. */
+:root .exo-dc .exo-dc-hidden-media {
+  border-radius: var(--exo-card-radius);
+}
+
+:root .exo-dc .exo-dc-hidden-label {
+  background: var(--exo-plate);
+  box-shadow: none;
+  color: var(--color-fg);
+}
+
+:root .exo-dc .exo-dc-alt-tag {
+  border-radius: 999px;
+  background: var(--exo-plate);
+  box-shadow: none;
+}
+
+/* ---- Video file: the picture, one round play button and the length on a plate; the controls one bar on a plate at
+   the foot, shown on hover. ---- */
+:root .exo-dc .exo-dc-video {
+  position: relative;
+  width: fit-content;
+  max-width: 100%;
+  overflow: hidden;
+  cursor: default;
+}
+
+:root .exo-dc .exo-dc-video video {
+  display: block;
+  max-width: 100%;
+  max-height: 420px;
+  background: var(--color-bg);
+  cursor: pointer;
+}
+
+:root .exo-dc .exo-dc-video-play {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  translate: -50% -50%;
+  cursor: pointer;
+}
+
+:root .exo-dc .exo-dc-video-length {
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--exo-plate);
+  color: var(--color-fg);
+  font-size: var(--exo-type-small);
+  font-variant-numeric: tabular-nums;
+}
+
+:root .exo-dc .exo-dc-video-bar {
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  left: 8px;
+  display: none;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: var(--exo-plate);
+  color: var(--color-fg);
+}
+
+:root .exo-dc .exo-dc-video:is(:hover, :focus-within) .exo-dc-video-bar,
+:root .exo-dc .exo-dc-video.is-started:not(.is-playing) .exo-dc-video-bar {
+  display: flex;
+}
+
+:root .exo-dc .exo-dc-video-bar input[type="range"] {
+  flex: 1;
+  min-width: 0;
+}
+
+:root .exo-dc .exo-dc-video-time {
+  color: var(--color-fg);
+  font-size: var(--exo-type-small);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* A GIF: no frame, a small plate at its corner. */
+:root .exo-dc .exo-dc-gif-badge {
+  border-radius: 999px;
+  background: var(--exo-plate);
+  color: var(--color-fg);
+}
+
+:root .exo-dc .exo-dc-gifv > :is(img, video) {
+  border-radius: var(--exo-card-radius);
+}
+
+/* ---- Viewer: the picture on black; arrows beside it, its name with Open original and Save at the foot. ---- */
+:root .exo-dc-lightbox {
+  background: var(--color-bg);
+}
+
+:root .exo-dc-lightbox :is(img, video) {
+  max-height: 80vh;
+  border-radius: 0;
+}
+
+:root .exo-dc-lightbox :is(.exo-dc-lightbox-tools, .exo-dc-lightbox-count, .exo-dc-lightbox-step) {
+  background: var(--exo-plate);
+  box-shadow: var(--glassy-ring);
+}
+
+:root .exo-dc-lightbox .exo-dc-lightbox-count {
+  top: calc(var(--exo-titlebar-h, 52px) + var(--exo-gap));
+  bottom: auto;
+}
+
+:root .exo-dc-lightbox-foot {
+  position: fixed;
+  right: var(--exo-gap);
+  bottom: var(--exo-gap);
+  left: var(--exo-gap);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+:root .exo-dc-lightbox-name {
+  min-width: 0;
+  max-width: 40ch;
+  margin-right: 8px;
+  overflow: hidden;
+  color: var(--color-muted);
+  font-size: var(--exo-type-body);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+:root .exo-dc-lightbox-act {
+  padding: 7px 16px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  box-shadow: var(--glassy-ring);
+  color: var(--color-fg);
+  font: inherit;
+  font-size: var(--exo-type-body);
+  font-weight: var(--exo-weight-title);
+  cursor: pointer;
+}
+
+:root .exo-dc-lightbox-act:hover {
+  background: var(--hover-fill);
+}
+
+:root .exo-dc-lightbox-act:last-child {
+  background: var(--color-fg);
+  box-shadow: none;
+  color: var(--color-bg);
+}
+
+:root .exo-dc-lightbox-act:last-child:hover {
+  background: var(--color-fg);
+}
+
+/* ---- File: one card, a glyph, its name, its size, one download glyph. ---- */
+:root .exo-dc .exo-dc-file,
+:root .exo-dc .exo-dc-audio {
+  border: 0;
+  border-radius: var(--exo-card-radius);
+  background: transparent;
+  box-shadow: var(--glassy-ring);
+}
+
+:root .exo-dc .exo-dc-file {
+  padding: 12px 14px;
+}
+
+:root .exo-dc .exo-dc-file.has-preview {
+  padding: 0 0 12px;
+}
+
+:root .exo-dc button.exo-dc-file-name {
+  color: var(--color-fg);
+}
+
+:root .exo-dc .exo-dc-file-size {
+  color: var(--color-muted);
+}
+
+:root .exo-dc .exo-dc-file-preview {
+  border-bottom: 0;
+  color: var(--color-fg);
+}
+
+/* ---- Audio and voice message: one card, a round play button, the waveform in bars (played white), the length. ---- */
+:root .exo-dc .exo-dc-voice-msg {
+  width: min(380px, 100%);
+  height: 56px;
+  padding: 0 16px 0 10px;
+  border-radius: var(--exo-card-radius);
+  background: transparent;
+  box-shadow: var(--glassy-ring);
+}
+
+:root .exo-dc .exo-dc-voice-msg-play {
+  width: 36px;
+  height: 36px;
+}
+
+:root .exo-dc .exo-dc-voice-msg-wave i {
+  border-radius: 999px;
+}
+
+:root .exo-dc .exo-dc-voice-msg-wave i.is-played {
+  background: var(--color-fg);
+}
+
+/* ---- Code: the mono face, the one line, the small corner, Copy at its top right on hover; inline code is ink on no fill. ---- */
+:root .exo-dc .exo-dc-pre-wrap {
+  position: relative;
+  max-width: 100%;
+  margin: 4px 0;
+}
+
+:root .exo-dc .exo-dc-pre-wrap > .exo-dc-pre {
+  margin: 0;
+  padding: 10px 44px 10px 14px;
+  border: 0;
+  border-radius: var(--exo-small-radius);
+  background: transparent;
+  box-shadow: var(--glassy-ring);
+  color: var(--color-fg);
+}
+
+:root .exo-dc .exo-dc-pre-copy {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  display: none;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--exo-small-radius);
+  background: transparent;
+  color: var(--color-muted);
+  cursor: pointer;
+}
+
+:root .exo-dc .exo-dc-pre-wrap:is(:hover, :focus-within) > .exo-dc-pre-copy {
+  display: grid;
+}
+
+:root .exo-dc .exo-dc-pre-copy:hover {
+  background: var(--hover-fill);
+  color: var(--color-fg);
+}
+
+:root .exo-dc .exo-dc-code {
+  border: 0;
+  border-radius: var(--exo-small-radius);
+  background: transparent;
+  box-shadow: var(--glassy-ring);
+  color: var(--color-fg);
+}
+
+/* ---- Poll: the question a small title, each answer a row that fills with its share (yours white). ---- */
+:root .exo-dc .exo-dc-poll {
+  padding: 14px;
+  border-radius: var(--exo-card-radius);
+  background: transparent;
+  box-shadow: var(--glassy-ring);
+}
+
+:root .exo-dc .exo-dc-poll-question {
+  font-size: var(--exo-type-body);
+  font-weight: var(--exo-weight-title);
+}
+
+:root .exo-dc .exo-dc-poll-answer {
+  border-radius: var(--exo-small-radius);
+  background: var(--color-bg);
+  box-shadow: var(--glassy-ring);
+  isolation: isolate;
+}
+
+:root .exo-dc .exo-dc-poll-answer.is-mine::before {
+  background: var(--color-fg);
+}
+
+/* Over its own white fill the words turn black. */
+:root .exo-dc .exo-dc-poll-answer.is-mine :is(.exo-dc-poll-text, .exo-dc-poll-count) {
+  color: var(--color-fg);
+  mix-blend-mode: difference;
+}
+
+/* ---- Reactions: pills; yours white with black figures. ---- */
+:root .exo-dc .exo-dc-reaction.is-mine:not(.is-super) {
+  background: var(--color-fg);
+  box-shadow: none;
+  color: var(--color-bg);
+}
+
+:root .exo-dc .exo-dc-reaction.is-mine:not(.is-super):hover {
+  background: var(--color-fg);
+}
+
+/* ---- Reply: a quiet line above the message, no spine drawn down the side. ---- */
+:root .exo-dc .exo-dc-msg-reply::before {
+  content: none;
+}
+
+:root .exo-dc .exo-dc-msg-reply {
+  color: var(--color-muted);
+}
+
+/* ---- Invite: the server's picture, its name, how many are online, and Join (the white button). ---- */
+:root .exo-dc .exo-dc-jam {
+  width: min(100%, 400px);
+  border: 0;
+  border-radius: var(--exo-card-radius);
+  background: transparent;
+  box-shadow: var(--glassy-ring);
+}
+
+:root .exo-dc .exo-dc-jam-label {
+  color: var(--color-muted);
+}
+
+:root .exo-dc .exo-dc-invite-icon {
+  border-radius: 999px;
+}
+
+/* ---- Sticker: no frame, its name under the pointer. ---- */
+:root .exo-dc .exo-dc-sticker-msg {
+  background: transparent;
+  box-shadow: none;
+}
+
+/* ---- New messages: one red label in the flow where they start ("10 new messages"), no rule across and no plate, with
+   a quiet Mark as read beside it. ---- */
+:root .exo-dc .exo-dc-new {
+  justify-content: flex-start;
+  gap: 12px;
+}
+
+:root .exo-dc .exo-dc-new::before {
+  content: none;
+}
+
+:root .exo-dc .exo-dc-new span {
+  padding: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--dc-bad);
+}
+
+:root .exo-dc .exo-dc-new-read {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--color-muted);
+  font: inherit;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+:root .exo-dc .exo-dc-new-read:hover {
+  color: var(--color-fg);
+}
+
+/* A video's channel under its picture, quiet: the title is what you read. */
+:root .exo-dc .exo-dc-embed-author {
+  color: var(--color-muted);
+}
+
+:root .exo-dc .exo-dc-embed-author a {
+  color: inherit;
+  text-decoration: none;
+}
+
+/* A picture, GIF or video that would not load: one line in the file card's family (the one line, the card's corner), its
+   glyph and its name, never an empty box where it was. In a gallery it fills its cell. */
+:root .exo-dc .exo-dc-media-failed {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  box-sizing: border-box;
+  max-width: min(100%, calc(420px * var(--exo-scale, 1)));
+  min-height: calc(44px * var(--exo-scale, 1));
+  padding: 0 16px 0 14px;
+  border: 0;
+  border-radius: var(--exo-card-radius);
+  background: transparent;
+  box-shadow: var(--glassy-ring);
+  color: var(--color-fg);
+  font: inherit;
+  font-size: var(--exo-type-body);
+  cursor: pointer;
+}
+
+:root .exo-dc .exo-dc-media-failed > svg {
+  flex: none;
+  color: var(--color-muted);
+}
+
+:root .exo-dc .exo-dc-media-failed > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+:root .exo-dc .exo-dc-media-failed:hover {
+  background: var(--hover-fill);
+}
+
+:root .exo-dc .exo-dc-media-wrap.is-cell > .exo-dc-media-failed {
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  max-width: none;
+}
+
+@media (forced-colors: active) {
+  :root .exo-dc .exo-dc-media-failed {
+    border: 1px solid CanvasText;
+  }
+}

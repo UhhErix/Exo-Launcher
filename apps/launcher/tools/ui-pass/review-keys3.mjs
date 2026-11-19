@@ -1,0 +1,27 @@
+import { join } from 'node:path'
+import { writeFileSync } from 'node:fs'
+import { SHOTS, launch, newPage, open, room, sleep } from './harness.mjs'
+await launch()
+const p = await newPage('void', 1920, 1080)
+await open(p, ''); await room(p, 'Discord'); await sleep(1200)
+const desc = () => { const a = document.activeElement; if (!a || a === document.body) return 'BODY'; const r = a.getBoundingClientRect(); return (a.getAttribute('aria-label') || a.textContent.trim().slice(0, 25)) + ' | ' + a.tagName + '.' + String(a.className).slice(0, 30) + ` @${Math.round(r.left)},${Math.round(r.top)}` }
+const find = () => document.querySelector('button[aria-label="Find a conversation"]')
+const click = (sel) => p.fn((s) => { const b = document.querySelector(s); b.focus(); b.click() }, sel)
+await click('button[aria-label="Find a conversation"]'); await sleep(300); console.log('1 after open find:', await p.fn(desc))
+await p.key('Escape'); await sleep(300); console.log('2 Esc empty:', await p.fn(desc))
+await click('button[aria-label="Find a conversation"]'); await sleep(300)
+await p.fn(() => document.querySelector('.exo-dc-find').focus())
+await p.eval(`document.execCommand('insertText', false, 'ad')`); await sleep(300); console.log('3 typed:', await p.fn(() => document.querySelectorAll('.exo-dc-dm-row').length))
+await p.key('Escape'); await sleep(300); console.log('4 Esc w/ query:', await p.fn(desc), 'rows', await p.fn(() => document.querySelectorAll('.exo-dc-dm-row').length))
+await click('button[aria-label="Find a conversation"]'); await sleep(300); await p.key('Tab'); await sleep(300); console.log('5 Tab from empty find:', await p.fn(desc), 'input?', await p.fn(() => !!document.querySelector('.exo-dc-find')))
+await click('button[aria-label="Find a conversation"]'); await sleep(300); await p.key('Tab', {shift:true}); await sleep(300); console.log('6 ShiftTab from find:', await p.fn(desc))
+await click('button[aria-label="Find a conversation"]'); await sleep(300); await p.eval(`document.execCommand('insertText', false, 'zzz')`); await sleep(300)
+console.log('7 no match note:', await p.fn(() => document.querySelector('.exo-dc-side-list .exo-dc-note')?.textContent), await p.fn(() => ({ label: document.querySelector('.exo-dc-dm-label').innerHTML.slice(0, 200), rect: JSON.stringify(document.querySelector('.exo-dc-find').getBoundingClientRect()) })))
+const { data } = await p.send('Page.captureScreenshot', { format: 'png', clip: { x: 0, y: 150, width: 330, height: 300, scale: 2 } }); writeFileSync(join(SHOTS, 'rk-find.png'), Buffer.from(data, 'base64'))
+await p.key('Escape'); await sleep(200)
+await click('button[aria-label="New conversation"]'); await sleep(600)
+console.log('8 new conv:', await p.fn(desc), await p.fn(() => { const m = document.querySelector('.exo-dc-menu.is-start'); return m ? m.parentElement.tagName + ' ' + JSON.stringify(m.getBoundingClientRect()) : 'none' }))
+await p.key('Tab'); console.log('8b', await p.fn(desc))
+const s = await p.send('Page.captureScreenshot', { format: 'png', clip: { x: 0, y: 150, width: 500, height: 500, scale: 1 } }); writeFileSync(join(SHOTS, 'rk-newconv.png'), Buffer.from(s.data, 'base64'))
+await p.key('Escape'); await sleep(300); console.log('9 after esc:', await p.fn(desc), await p.fn(() => !!document.querySelector('.exo-dc-menu.is-start')))
+process.exit(0)

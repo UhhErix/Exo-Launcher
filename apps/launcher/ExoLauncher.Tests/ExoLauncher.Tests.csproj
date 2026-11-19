@@ -1,0 +1,48 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    Pure-logic tests for the host. The running app stays the real verification
+    (node tools\e2e\run.mjs); these pin parsing, ownership and policy code
+    whose failures are silent in the app.
+  -->
+  <PropertyGroup>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <TargetFramework>net10.0-windows10.0.26100.0</TargetFramework>
+    <TargetPlatformMinVersion>10.0.22000.0</TargetPlatformMinVersion>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <OutputType>Exe</OutputType>
+    <IsPackable>false</IsPackable>
+    <Platforms>x64</Platforms>
+    <Platform Condition="'$(Platform)' == '' or '$(Platform)' == 'AnyCPU'">x64</Platform>
+    <PlatformTarget>x64</PlatformTarget>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <SelfContained>false</SelfContained>
+    <WindowsPackageType>None</WindowsPackageType>
+    <!-- The host carries the Windows App SDK itself (self-contained). The test run loads ExoLauncher.dll, whose module initializer
+         starts the runtime; a second copy of the SDK's auto-initializer here only conflicts with it (CS0436). -->
+    <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
+    <WindowsAppSdkUndockedRegFreeWinRTInitialize>false</WindowsAppSdkUndockedRegFreeWinRTInitialize>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.11.0" />
+    <PackageReference Include="xunit.v3" Version="4.0.2" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="4.0.1" PrivateAssets="all" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- The Discord voice libraries the app ships (voice/build.ps1), beside the test run: the tests that load them check the same files. -->
+    <Content Include="..\voice\out\*.dll" Condition="Exists('..\voice\out')" Link="%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+    <ProjectReference Include="..\ExoLauncher\ExoLauncher.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- The deletion gate is the one delete path in tests too (BannedSymbols.txt). -->
+    <Using Include="ExoLauncher.Helpers" />
+  </ItemGroup>
+</Project>
