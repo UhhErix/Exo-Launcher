@@ -227,14 +227,17 @@
   height: 36px;
 }
 
+/* Search and Tools take equal shares (never less than their own width), so the Rooms sit in the middle of the window. */
 .exo-bar-start,
 .exo-bar-end {
   display: flex;
-  flex: none;
+  flex: 1 1 0;
+  min-width: max-content;
   align-items: center;
 }
 
 .exo-bar-end {
+  justify-content: flex-end;
   gap: 8px;
 }
 
@@ -243,7 +246,7 @@
    fill their slots, so the row reads as evenly spaced capsules. */
 .exo-bar-center {
   display: flex;
-  flex: 1 1 auto;
+  flex: 4 1 0;
   align-items: center;
   gap: var(--exo-gap);
   min-width: 0;
@@ -266,9 +269,10 @@
   justify-content: flex-end;
 }
 
-/* The end slot is measured (bar-live) so the mouse can give way when it no longer fits there. */
+/* The end slot is measured (bar-live) so the mouse can give way when it no longer fits there. Both slots share alike, so
+   the Rooms sit in the middle of the Bar. */
 .exo-bar-side.is-end {
-  flex: 2 1 0;
+  flex: 1 1 0;
   container: bar-live / inline-size;
 }
 

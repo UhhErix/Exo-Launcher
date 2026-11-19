@@ -41,7 +41,7 @@ type Card = {
  * Lab. Keyboards and controllers the lab can't read show what they are; Exo doesn't set them up yet. Each card says which
  * USB it's on, green where that's best for it, red with what to do where it isn't.
  */
-export function DevicesRoom({ active }: { active: boolean }) {
+export function DevicesRoom({ active, onBack }: { active: boolean; onBack?: () => void }) {
   const foreground = usePageActive()
   // On screen, focused or not: the controller's live view is watched beside whatever has focus.
   const onScreen = usePageVisible()
@@ -70,6 +70,10 @@ export function DevicesRoom({ active }: { active: boolean }) {
       {page !== 'overview' ? (
         <header className="exo-devices-back">
           <button type="button" className="exo-set-btn" onClick={back}><ChevronLeft size={16} />Devices</button>
+        </header>
+      ) : onBack ? (
+        <header className="exo-devices-back">
+          <button type="button" className="exo-set-btn" onClick={onBack}><ChevronLeft size={16} />PC</button>
         </header>
       ) : null}
       <div className="exo-devices-page">

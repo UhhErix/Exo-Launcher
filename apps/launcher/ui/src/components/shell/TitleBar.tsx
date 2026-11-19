@@ -4,7 +4,7 @@ import { Spinner } from '../ui/Spinner'
 import { useGlide } from '../../lib/glide'
 import { useLens } from '../../lib/glass'
 import { ExoMark } from '../../brand/ExoMark'
-import { Chats, ThisPc, Library, Mouse, MusicNotes, Settings, StoreBag } from '../../brand/icons'
+import { Chats, ThisPc, Library, MusicNotes, Settings, StoreBag } from '../../brand/icons'
 import { warmMusic, type MusicService } from '../../lib/music'
 import { DiscordBadge } from './DiscordBadge'
 import { MusicMiniPlayer } from './MusicMiniPlayer'
@@ -25,7 +25,6 @@ const NAV_TABS: ReadonlyArray<{
     { id: 'friends', label: 'Discord', Icon: Chats },
     { id: 'music', label: 'Music', Icon: MusicNotes },
     { id: 'system', label: 'PC', Icon: ThisPc },
-    { id: 'devices', label: 'Devices', Icon: Mouse },
   ]
 
 /** The rooms in tab order: Ctrl+1 is the first. */
@@ -90,7 +89,8 @@ function RoomNavigation({ view, opening, onView, onWarm }: Pick<TitleBarProps, '
           key={tab.id}
           label={tab.label}
           Icon={tab.Icon}
-          active={view === tab.id}
+          // Devices is a page of the PC room (its This PC line, or the mouse in the Bar): PC stays lit there.
+          active={view === tab.id || (tab.id === 'system' && view === 'devices')}
           opening={opening === tab.id}
           badge={tab.id === 'friends' ? <DiscordBadge /> : null}
           onOpen={() => onView(tab.id)}

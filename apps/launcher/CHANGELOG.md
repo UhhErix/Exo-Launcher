@@ -1,6 +1,8 @@
 # Changelog
 
 ## 3.26.0 — November 14, 2026
+- **Five rooms, in the middle.** The top bar has Library, Store, Discord, Music and PC, centered in the window. Devices moved into the PC room: its button sits on the This PC line beside Apps, the mouse in the top bar still opens it, and nothing in it changed. _Checked in code only._
+- **Battery in the FPS counter.** Settings › FPS counter can add Lowest battery: the wireless mouse, headset or controller lowest on charge, as "82% MOUSE", read once a minute. _Checked in code only._
 - **New and updated games compile their shaders by themselves.** While nobody uses the PC, Exo Shaders now compiles a game you just installed, one it never compiled, and one an update changed, most played first, the same way it already rebuilt games after a driver update. It pauses when you come back, and a game that won't compile is left alone until the next driver. _Checked in code only._
 - **Replay length fits your PC.** Exo can shorten how far back instant replay goes without lowering quality. Capture settings shows the replay time you can save when the add-on reports it. _Checked in code only._
 - **Capture recovers more reliably.** If Capture stops, Exo keeps the last saved clip and reconnects with your settings and the game you are playing. Switching games quickly no longer sends an old game after the new one. _Checked in code only._
