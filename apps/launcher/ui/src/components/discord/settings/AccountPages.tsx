@@ -133,7 +133,7 @@ function CustomStatusRow() {
   )
 }
 
-function CustomStatusDialog({ custom, onSave, onClose }: { custom: CustomStatus | null; onSave: (next: CustomStatus | null) => void; onClose: () => void }) {
+export function CustomStatusDialog({ custom, onSave, onClose }: { custom: CustomStatus | null; onSave: (next: CustomStatus | null) => void; onClose: () => void }) {
   const [text, setText] = useState(custom?.text ?? '')
   const [emoji, setEmoji] = useState<{ id?: string | null; name?: string | null } | null>(custom && (custom.emojiId || custom.emojiName) ? { id: custom.emojiId, name: custom.emojiName } : null)
   const [clear, setClear] = useState(custom && !custom.expiresAtMs ? 'never' : CLEAR_AFTER[0].value)
@@ -143,7 +143,16 @@ function CustomStatusDialog({ custom, onSave, onClose }: { custom: CustomStatus 
     onClose()
   }
   return (
-    <Dialog title="Set your status" onClose={onClose} actions={<button type="button" className="exo-set-btn is-primary" onClick={save}>Save</button>}>
+    <Dialog
+      title="Set your status"
+      onClose={onClose}
+      actions={
+        <>
+          {custom ? <button type="button" className="exo-set-btn" onClick={() => { onSave(null); onClose() }}>Clear</button> : null}
+          <button type="button" className="exo-set-btn is-primary" onClick={save}>Save</button>
+        </>
+      }
+    >
       <span className="exo-dc-settings-buttons exo-dc-custom-status">
         <EmojiField emoji={emoji} onChange={setEmoji} />
         <input className="exo-dc-modal-input" value={text} maxLength={128} autoFocus aria-label="Status"

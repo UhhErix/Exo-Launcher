@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type RefObject } from 'react'
+import { allowHover } from '../../lib/hoverGate'
 import type { ScrubMark } from '../../lib/librarySearch'
 
 /** How long the index stays after the last scroll, so it is there to grab once the wheel stops. */
@@ -105,7 +106,7 @@ export function LibraryScrubber({ marks, active, covered, scrollRootRef }: {
       ref={track}
       className={`exo-scrubber-track${awake || at ? ' is-awake' : ''}${marks.some(mark => mark.label.length > 2) ? ' is-words' : ''}`}
       aria-hidden="true"
-      onPointerEnter={() => { place(); setAwake(true) }}
+      onPointerEnter={event => { if (!allowHover(event)) return; place(); setAwake(true) }}
       onPointerLeave={() => { if (!dragging.current) { setAt(null); setAwake(false) } }}
       onPointerMove={jump}
       onPointerDown={event => {

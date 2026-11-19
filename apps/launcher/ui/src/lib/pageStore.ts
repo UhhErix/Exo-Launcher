@@ -27,6 +27,7 @@ const KEYS = {
   // Unsent Discord drafts, the last place open, the people pane per server, and where the call's small stream sat.
   'exo.discord.drafts': 'local',
   'exo.discord.where': 'local',
+  'exo.discord.folders': 'local',
   'exo.discord.people': 'local',
   'exo.discord.miniStream': 'local',
   // Which stop of the backups the shell already told (Settings › Backups keeps saying it).

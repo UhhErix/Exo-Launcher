@@ -114,7 +114,7 @@ export function StoreRoom({ active, games, onOpenGame }: {
     <main className="exo-store" aria-label="Store" data-room-scroll>
       <h1 className="sr-only">Store</h1>
       <header className="exo-store-top">
-        <StoreTools view={view} query={query} wished={wish.items.length} refreshing={home.refreshing}
+        <StoreTools view={view} query={query} refreshing={home.refreshing}
           onTab={next => void transition(() => { setTab(next); setQuery(''); setOpenError(null) }, { kind: 'push', back: next === 'home', morph: pane(scroller.current) })} onQuery={setQuery} onRefresh={() => void home.load(true)}>
           <p className="exo-store-status" role="status">{status}</p>
           {steamSale ? <span className="exo-store-sale">{steamSale}</span> : null}
@@ -377,7 +377,7 @@ function Wishlist({ wish, owned, card }: {
     <>
       <div className="exo-shelf-head">
         {/* The Wishlist chip already names the list and its count; a heading only when it splits by sale. */}
-        {sale.length ? <h2 className="exo-shelf-title">On sale now<span className="exo-shelf-count">{sale.length}</span></h2> : <span />}
+        {sale.length ? <h2 className="exo-shelf-title">On sale now</h2> : <span />}
         <button type="button" className="exo-set-btn" disabled={checking} onClick={onCheck} aria-label="Check prices">
           {checking ? <Spinner label="Checking prices" /> : null}
           <span className="exo-store-stack">
@@ -389,7 +389,7 @@ function Wishlist({ wish, owned, card }: {
       <div className="exo-store-grid">{(sale.length ? sale : items).map((t, i) => card(t, i, arrive))}</div>
       {sale.length && rest.length ? (
         <>
-          <div className="exo-shelf-head"><h2 className="exo-shelf-title">Not on sale<span className="exo-shelf-count">{rest.length}</span></h2></div>
+          <div className="exo-shelf-head"><h2 className="exo-shelf-title">Not on sale</h2></div>
           <div className="exo-store-grid">{rest.map((t, i) => card(t, sale.length + i, arrive))}</div>
         </>
       ) : null}
@@ -591,8 +591,7 @@ function useSearch(query: string) {
 }
 
 /** The Store's own controls, at the top of the room: Discover or Wishlist, search, and refresh. */
-function StoreTools({ view, query, wished, refreshing, onTab, onQuery, onRefresh, children }: {
-  wished: number
+function StoreTools({ view, query, refreshing, onTab, onQuery, onRefresh, children }: {
   children: ReactNode
   view: string
   query: string
@@ -610,7 +609,7 @@ function StoreTools({ view, query, wished, refreshing, onTab, onQuery, onRefresh
         <button type="button" className="exo-shelf-chip" aria-pressed={view === 'home'} onClick={() => onTab('home')}>Discover</button>
         <button type="button" className="exo-shelf-chip" aria-pressed={view === 'calendar'} onClick={() => onTab('calendar')}>Calendar</button>
         <button type="button" className="exo-shelf-chip" aria-pressed={view === 'wishlist'} onClick={() => onTab('wishlist')}>
-          Wishlist{wished ? <span className="exo-store-chip-count">{wished}</span> : null}
+          Wishlist
         </button>
       </div>
       {children}

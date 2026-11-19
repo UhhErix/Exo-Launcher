@@ -57,7 +57,22 @@ internal sealed partial class DiscordSession
     {
         lock (_voiceGate)
             // ringing: a DM call ringing this user now, for a page that opens after the ring began (its notification says to).
-            return new { state = _voiceState ?? "off", guildId = _voiceGuild, channelId = _voiceChannel, muted = _muted, deafened = _deafened, e2ee = _e2ee, micSilent = _micSilent, message = _voiceMessage, ringing = _ringingMe.FirstOrDefault(), recorded = _recordedBy.Count > 0 && _voiceChannel is not null };
+            return new
+            {
+                state = _voiceState ?? "off",
+                guildId = _voiceGuild,
+                channelId = _voiceChannel,
+                muted = _muted,
+                deafened = _deafened,
+                e2ee = _e2ee,
+                micSilent = _micSilent,
+                message = _voiceMessage,
+                ringing = _ringingMe.FirstOrDefault(),
+                recorded = _recordedBy.Count > 0 && _voiceChannel is not null,
+                rttMs = _voice?.RttMs,
+                region = _voice?.Region,
+                bitrate = _voice?.Bitrate,
+            };
     }
 
     /// <summary>Joins a voice channel (or a DM's call when <paramref name="guildId"/> is null), leaving any other first.</summary>
@@ -176,17 +191,19 @@ internal sealed partial class DiscordSession
         var s = App.Services.Settings.Shared;
         string? channel;
         lock (_voiceGate) channel = _voiceChannel;
-        if (SoundboardEffect(d, Cache.Me?.Id, channel, s.DiscordSoundboardMuted, s.DiscordSoundboardVolume) is var (sound, volume)) PlaySound(sound, volume);
+        var sender = d.ValueKind == JsonValueKind.Object && d.TryGetProperty("user_id", out var u) && u.ValueKind == JsonValueKind.String ? u.GetString() : null;
+        var senderMuted = sender is not null && UserSoundboardMuted(sender);
+        if (SoundboardEffect(d, Cache.Me?.Id, channel, s.DiscordSoundboardMuted, s.DiscordSoundboardVolume, senderMuted) is var (sound, volume)) PlaySound(sound, volume);
     }
 
     /// <summary>
     /// The soundboard sound a VOICE_CHANNEL_EFFECT_SEND has this client play, and how loud: someone else's, in the channel
     /// it is in, at the sender's volume times Soundboard Volume; null for the user's own (it played as they pressed it),
-    /// another channel's, an effect with no sound (an emoji), or with the soundboard muted.
+    /// another channel's, an effect with no sound (an emoji), or with the soundboard muted globally or for that user.
     /// </summary>
-    internal static (string Sound, double Volume)? SoundboardEffect(JsonElement d, string? me, string? channel, bool muted, int soundboardVolume)
+    internal static (string Sound, double Volume)? SoundboardEffect(JsonElement d, string? me, string? channel, bool muted, int soundboardVolume, bool senderMuted = false)
     {
-        if (muted || Text(d, "sound_id") is not { } sound || Text(d, "channel_id") is not { } at || at != channel || Text(d, "user_id") == me) return null;
+        if (muted || senderMuted || Text(d, "sound_id") is not { } sound || Text(d, "channel_id") is not { } at || at != channel || Text(d, "user_id") == me) return null;
         var volume = d.TryGetProperty("sound_volume", out var v) && v.ValueKind == JsonValueKind.Number ? v.GetDouble() : 1.0;
         return (sound, volume * soundboardVolume / 100.0);
 
@@ -315,6 +332,7 @@ internal sealed partial class DiscordSession
             PublishVoice();
             return;
         }
+        if (kind == "stats") { PublishVoice(); return; }
         if (kind == "video")
         {
             var video = JsonSerializer.SerializeToElement(data);

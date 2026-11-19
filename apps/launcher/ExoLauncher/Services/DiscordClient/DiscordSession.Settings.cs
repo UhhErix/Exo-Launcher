@@ -72,8 +72,11 @@ internal sealed partial class DiscordSession
             foreach (var kind in new[] { _people, _streams })
             {
                 if (values[kind.Key] is not JsonObject people) values[kind.Key] = people = [];
-                foreach (var (id, change) in kind.Pending) people[id] = AudioJson(people[id], change.Muted, change.Volume);
-                kind.Values = people.ToDictionary(p => p.Key, p => (p.Value?["muted"]?.GetValue<bool>() ?? false, p.Value?["volume"]?.GetValue<float>() ?? 100f));
+                foreach (var (id, change) in kind.Pending) people[id] = AudioJson(people[id], change.Muted, change.Volume, change.SoundboardMuted);
+                kind.Values = people.ToDictionary(p => p.Key, p => (
+                    p.Value?["muted"]?.GetValue<bool>() ?? false,
+                    p.Value?["volume"]?.GetValue<float>() ?? 100f,
+                    p.Value?["soundboardMuted"]?.GetValue<bool>() ?? false));
             }
         }
         _userSettings = (JsonObject)values.DeepClone();
@@ -91,8 +94,8 @@ internal sealed partial class DiscordSession
     private sealed class AudioKind(string key)
     {
         public string Key { get; } = key;
-        public IReadOnlyDictionary<string, (bool Muted, float Volume)> Values { get; set; } = new Dictionary<string, (bool, float)>();
-        public Dictionary<string, (bool? Muted, float? Volume)> Pending { get; } = [];
+        public IReadOnlyDictionary<string, (bool Muted, float Volume, bool SoundboardMuted)> Values { get; set; } = new Dictionary<string, (bool, float, bool)>();
+        public Dictionary<string, (bool? Muted, float? Volume, bool? SoundboardMuted)> Pending { get; } = [];
         public CancellationTokenSource? Save { get; set; }
 
         public float Gain(string userId) => Values.TryGetValue(userId, out var one) ? one.Muted ? 0 : one.Volume / 100f : 1f;
@@ -103,12 +106,14 @@ internal sealed partial class DiscordSession
     /// <summary>How loud a person in a call plays here: their User Volume (0-2), 0 when muted for me.</summary>
     internal float UserGain(string userId) => _people.Gain(userId);
 
+    /// <summary>Whether another person's soundboard sounds are muted locally for me.</summary>
+    internal bool UserSoundboardMuted(string userId) => _people.Values.TryGetValue(userId, out var one) && one.SoundboardMuted;
+
     /// <summary>How loud a person's stream plays here: its Stream Volume (0-2), 0 when muted for me.</summary>
     internal float StreamGain(string userId) => _streams.Gain(userId);
 
-    /// <summary>User Volume (0-200) or Mute for one person: heard now, on screen everywhere, and saved to the account like
-    /// Discord's client (a volume 2 s after the slider rests, a mute at once).</summary>
-    internal void SetAudioUser(string userId, bool? muted, float? volume, bool stream = false)
+    /// <summary>User Volume (0-200), Mute, or Soundboard Mute for one person: heard now, on screen everywhere, and saved to the account.</summary>
+    internal void SetAudioUser(string userId, bool? muted, float? volume, bool stream = false, bool? soundboardMuted = null)
     {
         if (userId == Cache.Me?.Id) return;
         var kind = stream ? _streams : _people;
@@ -117,25 +122,26 @@ internal sealed partial class DiscordSession
         lock (_audioGate)
         {
             var was = kind.Pending.GetValueOrDefault(userId);
-            kind.Pending[userId] = (muted ?? was.Muted, volume ?? was.Volume);
-            var users = new Dictionary<string, (bool Muted, float Volume)>(kind.Values);
-            var old = users.TryGetValue(userId, out var known) ? known : (Muted: false, Volume: 100f);
-            users[userId] = (muted ?? old.Muted, Math.Clamp(volume ?? old.Volume, 0, 200));
+            kind.Pending[userId] = (muted ?? was.Muted, volume ?? was.Volume, soundboardMuted ?? was.SoundboardMuted);
+            var users = new Dictionary<string, (bool Muted, float Volume, bool SoundboardMuted)>(kind.Values);
+            var old = users.TryGetValue(userId, out var known) ? known : (Muted: false, Volume: 100f, SoundboardMuted: false);
+            users[userId] = (muted ?? old.Muted, Math.Clamp(volume ?? old.Volume, 0, 200), soundboardMuted ?? old.SoundboardMuted);
             kind.Values = users;
             values = _userSettings is { } current ? (JsonObject)current.DeepClone() : null;
-            if (values?[kind.Key] is JsonObject people) people[userId] = AudioJson(people[userId], muted, volume);
+            if (values?[kind.Key] is JsonObject people) people[userId] = AudioJson(people[userId], muted, volume, soundboardMuted);
             if (values is not null) _userSettings = (JsonObject)values.DeepClone();
             kind.Save?.Cancel();
             kind.Save = save = new CancellationTokenSource();
         }
         if (values is not null) Event?.Invoke("discord.userSettings", values);
-        _ = SaveAudioAsync(kind, muted is not null ? 0 : 2000, save.Token);
+        _ = SaveAudioAsync(kind, muted is not null || soundboardMuted is not null ? 0 : 2000, save.Token);
     }
 
-    private static JsonObject AudioJson(JsonNode? before, bool? muted, float? volume) => new()
+    private static JsonObject AudioJson(JsonNode? before, bool? muted, float? volume, bool? soundboardMuted) => new()
     {
         ["muted"] = muted ?? before?["muted"]?.GetValue<bool>() ?? false,
         ["volume"] = Math.Clamp(volume ?? before?["volume"]?.GetValue<float>() ?? 100f, 0, 200),
+        ["soundboardMuted"] = soundboardMuted ?? before?["soundboardMuted"]?.GetValue<bool>() ?? false,
     };
 
     private async Task SaveAudioAsync(AudioKind kind, int delay, CancellationToken ct)
@@ -148,7 +154,11 @@ internal sealed partial class DiscordSession
             if (ct.IsCancellationRequested || kind.Pending.Count == 0) return;
             people = [];
             foreach (var (id, change) in kind.Pending)
-                people[id] = new JsonObject { ["muted"] = change.Muted, ["volume"] = change.Volume };
+            {
+                var entry = new JsonObject { ["muted"] = change.Muted, ["volume"] = change.Volume };
+                if (change.SoundboardMuted is { } sb) entry["soundboardMuted"] = sb;
+                people[id] = entry;
+            }
             kind.Pending.Clear();
         }
         var changes = new Dictionary<string, JsonElement> { [kind.Key] = JsonSerializer.SerializeToElement(people) };
@@ -263,23 +273,45 @@ internal sealed partial class DiscordSession
         try { CallStateChanged?.Invoke(); } catch { /* A listener never breaks the call. */ }
     }
 
-    // Called whenever the call's state is published.
+    private static bool HasNonCallKeybind() =>
+        App.Services.Settings.Shared.DiscordKeybinds.Any(k =>
+            k.Action is Keybinds.ToggleMute or Keybinds.ToggleDeafen or Keybinds.ToggleVoiceMode or Keybinds.ToggleStreamerMode);
+
+    // Called whenever the call's state is published or keybinds/session change.
     private void CallChanged(bool inCall)
     {
         RaiseCallStateChanged();
-        lock (_keysHeld)
-        {
-            if (inCall && _keyTick is null && App.Services.Settings.Shared.DiscordKeybinds.Count > 0)
-                _keyTick = new Timer(_ => KeyTick(), null, 30, 30);
-            else if (!inCall)
-            {
-                _keyTick?.Dispose();
-                _keyTick = null;
-            }
-        }
+        UpdateKeyTick(inCall);
         if (inCall) return;
         lock (_speaking) _speaking.Clear();
         Interlocked.Exchange(ref _attenuation, null)?.Dispose();
+    }
+
+    internal void UpdateKeyTick(bool? knownInCall = null)
+    {
+        var inCall = knownInCall ?? InCall;
+        var shouldRun = !_stop.IsCancellationRequested
+            && ((inCall && App.Services.Settings.Shared.DiscordKeybinds.Count > 0) || HasNonCallKeybind());
+        lock (_keysHeld)
+        {
+            if (shouldRun && _keyTick is null)
+                _keyTick = new Timer(_ => KeyTick(), null, 30, 30);
+            else if (!shouldRun && _keyTick is not null)
+            {
+                _keyTick.Dispose();
+                _keyTick = null;
+            }
+        }
+    }
+
+    internal void StopKeybinds()
+    {
+        lock (_keysHeld)
+        {
+            _keyTick?.Dispose();
+            _keyTick = null;
+            _keysHeld.Clear();
+        }
     }
 
     /// <summary>In a voice call (or joining one) right now.</summary>
@@ -288,17 +320,23 @@ internal sealed partial class DiscordSession
         get { lock (_voiceGate) return _voiceChannel is not null; }
     }
 
-    /// <summary>The keybinds changed: a call in progress starts or stops reading them.</summary>
+    /// <summary>The keybinds changed: updates active keybind polling inside and outside calls.</summary>
     internal void KeybindsChanged()
     {
         lock (_keysHeld) { _keyTick?.Dispose(); _keyTick = null; }
-        CallChanged(InCall);
+        UpdateKeyTick(InCall);
     }
 
     private void KeyTick()
     {
+        var inCall = InCall;
         foreach (var action in Toggles)
         {
+            if (action == Keybinds.Disconnect && !inCall)
+            {
+                lock (_keysHeld) _keysHeld.Remove(action);
+                continue;
+            }
             var held = Keybinds.Held(action);
             bool pressed;
             lock (_keysHeld)

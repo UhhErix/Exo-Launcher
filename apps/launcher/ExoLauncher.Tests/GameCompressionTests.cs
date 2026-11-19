@@ -54,16 +54,22 @@ public sealed class GameCompressionTests
     }
 
     [Fact]
-    public void Threads_follow_the_budget_and_a_hard_drive_gets_one()
+    public void Threads_adjust_for_drive_and_idle_within_bounds()
     {
-        Assert.Equal(4, Threads("gentle", 16, false));
-        Assert.Equal(8, Threads("balanced", 16, false));
-        Assert.Equal(8, Threads(null, 16, false));
-        Assert.Equal(15, Threads("fast", 16, false));
-        Assert.Equal(1, Threads("fast", 16, true));
-        Assert.Equal(1, Threads("gentle", 2, false));
-        Assert.Equal(1, Threads("fast", 1, false));
-        Assert.Equal(1, Threads("balanced", 0, false));
+        Assert.Equal(1, Threads(16, hardDrive: true, idle: false));
+        Assert.Equal(1, Threads(16, hardDrive: true, idle: true));
+        Assert.Equal(1, Threads(2, hardDrive: false, idle: true));
+        Assert.Equal(2, Threads(8, hardDrive: false, idle: true));
+        Assert.Equal(4, Threads(16, hardDrive: false, idle: true));
+        Assert.Equal(6, Threads(32, hardDrive: false, idle: true));
+        Assert.Equal(6, Threads(64, hardDrive: false, idle: true));
+        Assert.Equal(1, Threads(1, hardDrive: false, idle: false));
+        Assert.Equal(1, Threads(2, hardDrive: false, idle: false));
+        Assert.Equal(4, Threads(8, hardDrive: false, idle: false));
+        Assert.Equal(8, Threads(16, hardDrive: false, idle: false));
+        Assert.Equal(12, Threads(24, hardDrive: false, idle: false));
+        Assert.Equal(12, Threads(32, hardDrive: false, idle: false));
+        Assert.Equal(1, Threads(0, hardDrive: false, idle: false));
     }
 
     [Theory]

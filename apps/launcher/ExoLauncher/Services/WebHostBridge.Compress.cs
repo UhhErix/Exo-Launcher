@@ -79,7 +79,7 @@ public sealed partial class WebHostBridge
                 .Select(row => new { id = row.Game.Id, title = row.Game.Title, compress = CompressDto(row.View), eligible = GameCompressor.Eligible(row.View) }).ToArray(),
             saved = rows.Sum(row => row.View.Saved),
             potential = rows.Where(row => GameCompressor.Eligible(row.View)).Sum(row => GameCompressor.Gain(row.View)),
-            settings = new { whileIdle = s.CompressWhileIdle, afterUpdates = s.RecompressAfterUpdates, speed = s.CompressSpeed },
+            settings = new { whileIdle = s.CompressWhileIdle, afterUpdates = s.RecompressAfterUpdates },
         };
     }
 
@@ -114,11 +114,11 @@ public sealed partial class WebHostBridge
         return new { ok = true, queued, message = queued == 0 ? "Nothing more is worth compressing." : null };
     }
 
-    /// <summary>compress.settings: whileIdle, afterUpdates, speed (gentle, balanced, fast); each on its own.</summary>
+    /// <summary>compress.settings: whileIdle, afterUpdates; each on its own (legacy speed is ignored).</summary>
     private object CompressSettings(JsonElement p, bool hasParams)
     {
-        _services.Settings.ApplyCompressPatch(ReadBool(p, hasParams, "whileIdle"), ReadBool(p, hasParams, "afterUpdates"), ReadString(p, hasParams, "speed"));
+        _services.Settings.ApplyCompressPatch(ReadBool(p, hasParams, "whileIdle"), ReadBool(p, hasParams, "afterUpdates"));
         var s = _services.Settings.Current;
-        return new { ok = true, settings = new { whileIdle = s.CompressWhileIdle, afterUpdates = s.RecompressAfterUpdates, speed = s.CompressSpeed } };
+        return new { ok = true, settings = new { whileIdle = s.CompressWhileIdle, afterUpdates = s.RecompressAfterUpdates } };
     }
 }

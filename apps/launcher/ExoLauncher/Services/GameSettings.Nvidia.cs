@@ -16,6 +16,38 @@ internal static partial class GameSettings
     internal const string NvidiaGroup = "nvidia";
     internal static readonly NvidiaValue PerGamePowerPerformance = new(GpuProfile.PowerManagement, 1, "Power management", "Prefer maximum performance");
 
+    internal static readonly SettingsFile EmptyFile = new([], "\n", false, []);
+
+    /// <summary>Snapshot of a profile's groups (file + NVIDIA), overall standing, and whether any backing source was found.</summary>
+    internal sealed record StateSummary(List<GroupState>? Groups, Standing Standing, bool Found);
+
+    /// <summary>Reads file groups and optional NVIDIA group for a profile, handling both INI-backed and NVIDIA-only profiles.</summary>
+    internal static StateSummary InspectState(Models.GameEntry game, Profile profile, bool includePerGamePower = false)
+    {
+        var fileBased = !string.IsNullOrEmpty(profile.File);
+        var files = fileBased ? ReadAll(profile) : [];
+        var states = fileBased
+            ? (files.Count == 0 ? null : States(profile, files, Kept(profile.Id), KeptOn(profile)))
+            : new List<GroupState>();
+        if (states is not null && NvidiaState(game, profile, files.Count > 0 ? files[0].File : EmptyFile, includePerGamePower) is { } nvidia)
+            states.Add(nvidia);
+        var standing = states is null ? Standing.Off : Stands(states, fileBased ? Missing(profile, files).Count : 0);
+        return new(states, standing, !fileBased || files.Count > 0);
+    }
+
+    /// <summary>Applies Optimize/group changes including the NVIDIA driver profile when appropriate; returns an error sentence or null.</summary>
+    internal static string? ApplyWithNvidia(Models.GameEntry game, Profile profile, string? group, bool all, bool on, bool updateNvidiaEvenIfSingle = false, bool includePerGamePower = false)
+    {
+        if (!Set(profile, all ? null : group, on, profile.Program?.Invoke(game))) return "Could not save. Try again.";
+        NoteGame(profile.Id, game.Id);
+        var fileBased = !string.IsNullOrEmpty(profile.File);
+        var driverSource = fileBased ? (ReadAll(profile) is [var first, ..] ? first.File : null) : EmptyFile;
+        if ((all || group == NvidiaGroup || updateNvidiaEvenIfSingle) && driverSource is not null
+            && SetNvidia(game, profile, driverSource, on, includePerGamePower) is { } refused)
+            return refused;
+        return null;
+    }
+
     /// <summary>One value in a game's NVIDIA profile: the setting, Exo's value (null: the driver's own), and how it reads.</summary>
     internal sealed record NvidiaValue(uint Id, uint? Value, string Label, string Words);
 

@@ -630,6 +630,7 @@ public sealed partial class WebHostBridge
                 "steam.signInGuard" => await SteamSignInGuardAsync(paramsEl, hasParams, requestToken).ConfigureAwait(true),
                 "steam.signOut" => await SteamSignOutAsync(requestToken).ConfigureAwait(true),
                 "playtime.riotRefresh" => await RiotHoursRefreshAsync(paramsEl, hasParams).ConfigureAwait(true),
+                "playtime.setRiotBaseline" => await SetRiotBaselineAsync(paramsEl, hasParams).ConfigureAwait(true),
                 "web.preferences.get" => WebClientPreferences.Reload(),
 
                 "web.preferences.set" => await SaveWebPreferencesAsync(paramsEl),
@@ -853,7 +854,7 @@ public sealed partial class WebHostBridge
                 "discord.emojis" => DiscordEmojis(paramsEl, hasParams),
                 "discord.view" => DiscordView(paramsEl, hasParams),
                 "discord.upload" => DiscordUpload(paramsEl, hasParams),
-                "discord.voice" => DiscordVoice(paramsEl, hasParams),
+                "discord.voice" => await DiscordVoiceAsync(paramsEl, hasParams, requestToken).ConfigureAwait(true),
                 "discord.audio" => DiscordAudio(paramsEl, hasParams),
                 "discord.ring" => await DiscordRingAsync(paramsEl, hasParams, requestToken).ConfigureAwait(true),
                 "discord.friends" => DiscordFriends(),
@@ -1988,6 +1989,105 @@ public sealed partial class WebHostBridge
         }
     }
 
+    private async Task<object> SetRiotBaselineAsync(JsonElement p, bool hasParams)
+    {
+        var typed = ReadString(p, hasParams, "riotId");
+        var riotId = RiotIdStore.Normalize(typed) ?? (typed is null ? RiotIdStore.TryRead() : null);
+        if (riotId is null)
+            return new { ok = false, message = "Save a Riot ID first (Name#TAG)." };
+        var account = RiotLedger.AccountKey(riotId)!;
+        if (typed is not null) RiotIdStore.Save(riotId);
+
+        if (!TryParseBaselineMinutes(p, hasParams, "valorantHours", "valorantMinutes", out var valorant, out var err)
+            || !TryParseBaselineMinutes(p, hasParams, "leagueHours", "leagueMinutes", out var league, out err))
+        {
+            return new { ok = false, message = err ?? "Enter a valid number of hours." };
+        }
+
+        var seeds = new Dictionary<string, GameSeed>(StringComparer.OrdinalIgnoreCase);
+        if (valorant > 0) seeds["riot:valorant"] = new GameSeed(valorant);
+        if (league > 0) seeds["riot:league_of_legends"] = new GameSeed(league);
+        if (seeds.Count == 0)
+            return new { ok = false, message = "Enter starting hours for VALORANT or League of Legends." };
+
+        if (!RiotLedger.Seed(account, seeds, DateTimeOffset.UtcNow, RiotLedger.ManualSource))
+            return new { ok = false, message = "Starting hours could not be saved." };
+
+        try
+        {
+            await _services.Library.RefreshDerivedStateAsync(CancellationToken.None).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            AppLog.Debug("Riot baseline library refresh skipped: " + ex.GetType().Name);
+        }
+
+        return new
+        {
+            ok = true,
+            message = "Starting hours saved.",
+            baseline = RiotBaselineFor(riotId),
+        };
+    }
+
+    private static bool TryParseBaselineMinutes(
+        JsonElement p,
+        bool hasParams,
+        string hoursProp,
+        string minutesProp,
+        out int minutes,
+        out string? error)
+    {
+        minutes = 0;
+        error = null;
+        if (!hasParams || p.ValueKind != JsonValueKind.Object) return true;
+        if (p.TryGetProperty(hoursProp, out var hoursEl) && hoursEl.ValueKind != JsonValueKind.Null)
+        {
+            if (hoursEl.ValueKind != JsonValueKind.Number || !hoursEl.TryGetDouble(out var hours) || double.IsNaN(hours) || double.IsInfinity(hours) || hours < 0)
+            {
+                error = "Enter a valid number of hours.";
+                return false;
+            }
+            if (hours > 0)
+            {
+                var scaled = hours * 60d;
+                if (scaled > RiotLedger.MaxSeedMinutes)
+                {
+                    error = "Starting hours is too large.";
+                    return false;
+                }
+                minutes = Math.Clamp((int)Math.Round(scaled), 1, RiotLedger.MaxSeedMinutes);
+            }
+            return true;
+        }
+        if (p.TryGetProperty(minutesProp, out var minsEl) && minsEl.ValueKind != JsonValueKind.Null)
+        {
+            if (minsEl.ValueKind != JsonValueKind.Number || !minsEl.TryGetInt32(out var raw) || raw < 0 || raw > RiotLedger.MaxSeedMinutes)
+            {
+                error = "Starting hours is out of range.";
+                return false;
+            }
+            minutes = raw;
+        }
+        return true;
+    }
+
+    private static object? RiotBaselineFor(string? riotId)
+    {
+        var normalized = RiotIdStore.Normalize(riotId);
+        if (normalized is null) return null;
+        var account = RiotLedger.AccountKey(normalized);
+        if (account is null) return null;
+        var baselines = RiotLedger.Baselines(account);
+        baselines.TryGetValue("riot:valorant", out var valorant);
+        baselines.TryGetValue("riot:league_of_legends", out var league);
+        return new
+        {
+            valorantMinutes = valorant > 0 ? valorant : (int?)null,
+            leagueMinutes = league > 0 ? league : (int?)null,
+        };
+    }
+
     /// <summary>The picked file's path, or why there is none. Only the host may name a file.</summary>
     private sealed record PickedFile(string? Path, bool Cancelled, string? Message);
 
@@ -2126,6 +2226,7 @@ public sealed partial class WebHostBridge
             recent = s.Recent,
             onboardingComplete = s.OnboardingComplete,
             riotId = RiotIdStore.TryRead(),
+            riotBaseline = RiotBaselineFor(RiotIdStore.TryRead()),
             showLibraryTools = s.ShowLibraryTools,
             achievementBanners = s.AchievementBanners,
             achievementVolume = s.AchievementVolume,
@@ -2409,9 +2510,19 @@ public sealed partial class WebHostBridge
     private object OpenUrl(JsonElement p, bool hasParams)
     {
         var url = ReadString(p, hasParams, "url");
-        if (string.IsNullOrWhiteSpace(url)) return new { ok = false };
+        if (string.IsNullOrWhiteSpace(url))
+        {
+            AppLog.Warn("shell.openUrl rejected: empty URL.");
+            return new { ok = false, message = "Could not open that link." };
+        }
         if (!Uri.TryCreate(url, UriKind.Absolute, out var uri) || !ExoUrlLaunch.IsAllowed(uri))
-            return new { ok = false };
+        {
+            var label = Uri.TryCreate(url, UriKind.Absolute, out var parsed)
+                ? $"{parsed.Scheme}://{parsed.Host}{parsed.AbsolutePath}"
+                : "invalid URI";
+            AppLog.Warn($"shell.openUrl rejected disallowed URI: {label}");
+            return new { ok = false, message = "Exo cannot open that link." };
+        }
         // A link from a message or a note: the page asks first (guard) and opens again once the person confirmed (confirmed).
         if (ReadBool(p, hasParams, "guard") == true && ReadBool(p, hasParams, "confirmed") != true && LinkLookalike.Check(uri) is { } finding)
         {
@@ -2422,8 +2533,15 @@ public sealed partial class WebHostBridge
         {
             if (uri.Scheme.Equals("steam", StringComparison.OrdinalIgnoreCase))
                 return OpenSteamProtocol(uri.AbsoluteUri);
+            if (uri.Scheme.Equals("ms-windows-store", StringComparison.OrdinalIgnoreCase))
+            {
+                var outcome = ExoUrlLaunch.OpenStoreUri(uri);
+                return outcome.Ok
+                    ? new { ok = true }
+                    : new { ok = false, message = outcome.Message ?? "Windows couldn’t open Microsoft Store." };
+            }
 
-            Process.Start(new ProcessStartInfo(uri.AbsoluteUri) { UseShellExecute = true });
+            Process.Start(new ProcessStartInfo(ExoUrlLaunch.LaunchUri(uri)) { UseShellExecute = true });
             return new { ok = true };
         }
         catch (Exception ex)
@@ -2495,7 +2613,12 @@ public sealed partial class WebHostBridge
                     ExecutableCommand(SteamAdapter.TryResolveSteamExePublic()),
                     missing: "Steam is not installed.",
                     // Steam may be closed: what waited in Exo's record goes in before it starts to read its settings.
-                    beforeStart: () => SteamPendingSettings.BeforeStartAsync(_bridgeLifetime.Token)),
+                    beforeStart: async () =>
+                    {
+                        await SteamPendingSettings.BeforeStartAsync(_bridgeLifetime.Token).ConfigureAwait(false);
+                        return (string?)null;
+                    }),
+                "microsoft-store" => OpenMicrosoftStoreClient(),
                 "epic" => await OpenVendorClient(
                     StoreKind.Epic,
                     StoreWindowHider.EpicProcessNames,
@@ -2510,7 +2633,8 @@ public sealed partial class WebHostBridge
                     StoreKind.Riot,
                     StoreWindowHider.RiotUiProcessNames,
                     ExecutableCommand(ResolveRiotClientExe()),
-                    missing: "Riot Client is not installed."),
+                    missing: "Riot Client is not installed.",
+                    beforeStart: () => PrepareRiotVisibleLaunchAsync(_bridgeLifetime.Token)),
                 "xbox" => await OpenOfficialClient("xbox", StoreKind.Xbox, "Xbox app is not installed."),
                 "ea" => await OpenOfficialClient("ea", StoreKind.Ea, "EA app is not installed."),
                 "ubisoft" => await OpenOfficialClient("ubisoft", StoreKind.Ubisoft, "Ubisoft Connect is not installed."),
@@ -2532,12 +2656,20 @@ public sealed partial class WebHostBridge
         }
     }
 
+    private static StoreClientOpenResult OpenMicrosoftStoreClient()
+    {
+        var outcome = ExoUrlLaunch.OpenStoreUri(new Uri(ExoUrlLaunch.MicrosoftStoreHomeUri));
+        return new StoreClientOpenResult(
+            outcome.Ok,
+            outcome.Ok ? "Opened Microsoft Store." : outcome.Message ?? "Windows couldn’t open Microsoft Store.");
+    }
+
     private static async Task<StoreClientOpenResult> OpenVendorClient(
         StoreKind kind,
         string[] processNames,
         StoreClientLaunchCommand? command,
         string missing,
-        Func<Task>? beforeStart = null)
+        Func<Task<string?>>? beforeStart = null)
     {
         if (command is null ||
             (!command.IsAppx && (string.IsNullOrWhiteSpace(command.FileName) || !File.Exists(command.FileName))))
@@ -2551,7 +2683,8 @@ public sealed partial class WebHostBridge
             StoreKind.Wargaming => "Wargaming Game Center", StoreKind.Paradox => "Paradox Launcher",
             StoreKind.Minecraft => "Minecraft Launcher", StoreKind.Itch => "itch", _ => kind.ToString(),
         };
-        if (beforeStart is not null) await beforeStart().ConfigureAwait(false);
+        if (beforeStart is not null && await beforeStart().ConfigureAwait(false) is { } failure)
+            return new StoreClientOpenResult(false, failure);
         return await Task.Run(() => StoreClientOpener.OpenAsync(kind, label, command, processNames)).ConfigureAwait(false);
     }
 

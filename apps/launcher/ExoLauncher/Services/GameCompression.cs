@@ -70,20 +70,13 @@ internal static class GameCompression
         return installBytes >= 30 * GB && logicalCores >= 12 && settled ? Algorithm.Lzx : Algorithm.Xpress8K;
     }
 
-    /// <summary>The player's CPU budget: how many threads compress at once. A hard drive gets one (seeking costs more than it saves).</summary>
-    internal static int Threads(string? speed, int logicalCores, bool hardDrive)
+    /// <summary>Automatic CPU budget: 1 thread on HDD, capped low while idle so background compression stays unnoticeable, higher when triggered explicitly.</summary>
+    internal static int Threads(int logicalCores, bool hardDrive, bool idle)
     {
         if (hardDrive) return 1;
         var cores = Math.Max(1, logicalCores);
-        return speed switch
-        {
-            "gentle" => Math.Max(1, cores / 4),
-            "fast" => Math.Max(1, cores - 1),
-            _ => Math.Max(1, cores / 2),
-        };
+        return idle ? Math.Clamp(cores / 4, 1, 6) : Math.Clamp(cores / 2, 1, 12);
     }
-
-    internal static readonly string[] Speeds = ["gentle", "balanced", "fast"];
 
     // ------------------------------------------------------------------ where
 

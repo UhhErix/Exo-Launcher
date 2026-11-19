@@ -112,7 +112,7 @@ internal static class Storefront
     {
         if (LooksLikeMicrosoftStoreId(launchTarget))
             return "ms-windows-store://pdp/?ProductId=" + Uri.EscapeDataString(launchTarget);
-        return SearchOrHome(title, "ms-windows-store://", "ms-windows-store://search/?query=");
+        return SearchOrHome(title, ExoLauncher.Ui.ExoUrlLaunch.MicrosoftStoreHomeUri, "ms-windows-store://search/?query=");
     }
 
     internal static string UbisoftDestination(string title)

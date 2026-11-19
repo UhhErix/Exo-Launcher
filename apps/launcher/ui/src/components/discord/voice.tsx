@@ -3,6 +3,7 @@ import { CopyLogs, ErrorNote } from '../ui/ErrorNote'
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type CSSProperties } from 'react'
 import { createPortal, flushSync } from 'react-dom'
 import { host, onHostEvent } from '../../lib/host'
+import { allowHover } from '../../lib/hoverGate'
 import { report } from '../../lib/report'
 import { useLens } from '../../lib/glass'
 import { cdnSized, openDiscord, type DiscordChannel, type DiscordVoice, type DiscordVoiceMember } from '../../lib/discord'
@@ -14,6 +15,7 @@ import { AboveTip, anchorOf, type TipAnchor } from './AboveTip'
 import { Icons } from './icons'
 import { SoundboardButton } from './Soundboard'
 import { setAudioUser, useAccountSetting } from '../../lib/discordPrefs'
+import { useDismiss } from '../../lib/dismiss'
 import { Slider } from '../ui/Slider'
 import { Decoration } from './collectibles'
 import { Spinner } from '../ui/Spinner'
@@ -207,6 +209,7 @@ export function CallPersonItems({ userId, me }: { userId: string; me: boolean })
       {watched ? <VolumeRow label="Stream volume" volume={sound.volume} disabled={sound.muted} onChange={volume => setAudioUser(userId, { volume }, true)} /> : null}
       <span className="exo-dc-menu-line" role="separator" />
       <MenuCheck label="Mute" on={audio.muted} onToggle={() => setAudioUser(userId, { muted: !audio.muted })} />
+      <MenuCheck label="Mute soundboard" on={audio.soundboardMuted === true} onToggle={() => setAudioUser(userId, { soundboardMuted: !audio.soundboardMuted })} />
       {watched ? <MenuCheck label="Mute stream" on={sound.muted} onToggle={() => setAudioUser(userId, { muted: !sound.muted }, true)} /> : null}
     </>
   )
@@ -292,6 +295,143 @@ function useWatching(channelId: string, members: DiscordVoiceMember[]) {
   return { watching, big, small, watch, stop, focus }
 }
 
+function StageBanner({ channel, here, meMember, raisingCount, onAction }: {
+  channel: DiscordChannel
+  here: boolean
+  meMember?: DiscordVoiceMember
+  raisingCount: number
+  onAction: (params: { suppress?: boolean; requestToSpeak?: boolean }) => void
+}) {
+  const topic = channel.stageTopic ?? channel.topic
+  const requested = !!meMember?.requestToSpeak
+  return (
+    <div className="exo-dc-stage-banner" role="region" aria-label="Stage details">
+      <div className="exo-dc-stage-info">
+        <span className="exo-dc-stage-badge">
+          <Icons.Stage size={15} />
+          <span>{channel.stageTopic ? 'Live stage' : 'Stage'}</span>
+        </span>
+        <strong className="exo-dc-stage-topic">{topic || channel.name}</strong>
+        {raisingCount > 0 ? <span className="exo-dc-stage-hands">{raisingCount} waiting to speak</span> : null}
+      </div>
+      {here && meMember ? (
+        <div className="exo-dc-stage-actions">
+          {meMember.suppress ? (
+            <>
+              <button type="button" className="exo-dc-tab" aria-pressed={requested} onClick={() => onAction({ requestToSpeak: !requested })}>
+                {requested ? 'Lower hand' : 'Request to speak'}
+              </button>
+              {channel.canModerateStage ? (
+                <button type="button" className="exo-set-btn is-primary" onClick={() => onAction({ suppress: false })}>Join stage</button>
+              ) : null}
+            </>
+          ) : (
+            <button type="button" className="exo-dc-tab" onClick={() => onAction({ suppress: true })}>Move to audience</button>
+          )}
+        </div>
+      ) : null}
+    </div>
+  )
+}
+
+function StageAudience({ members, canModerate, onInvite }: {
+  members: DiscordVoiceMember[]
+  canModerate: boolean
+  onInvite: (userId: string) => void
+}) {
+  const ordered = [...members].sort((a, b) => Number(!!b.requestToSpeak) - Number(!!a.requestToSpeak))
+  return (
+    <section className="exo-dc-stage-audience" aria-label="Stage audience">
+      <p className="exo-dc-side-label">Audience · {members.length}</p>
+      <div className="exo-dc-stage-list">
+        {ordered.map(member => (
+          <div key={member.id} className={`exo-dc-stage-chip${member.requestToSpeak ? ' is-raising' : ''}`} data-dc-user={member.id} data-dc-name={member.name} data-dc-call="">
+            {member.avatar
+              ? <img className="exo-dc-stage-avatar" src={cdnSized(member.avatar, 64)} alt="" width={24} height={24} draggable={false} decoding="async" />
+              : <span className="exo-dc-stage-initial" aria-hidden="true">{member.name.slice(0, 1).toUpperCase()}</span>}
+            <span className="exo-dc-stage-name">{member.name}</span>
+            {member.requestToSpeak ? <span className="exo-dc-stage-hand" aria-label="Requested to speak"><Icons.Pending size={13} /></span> : null}
+            {canModerate ? (
+              <button type="button" className="exo-dc-tab" onClick={() => onInvite(member.id)}>
+                {member.requestToSpeak ? 'Invite to speak' : 'Bring to stage'}
+              </button>
+            ) : null}
+          </div>
+        ))}
+      </div>
+    </section>
+  )
+}
+
+function VoiceStageEmpty({ channelName, isStage, joining, hasAudience }: { channelName: string; isStage: boolean; joining: boolean; hasAudience: boolean }) {
+  if (joining) return <Wait label="Connecting to voice"><span className="exo-dc-voice-tile" skullet-block="" /></Wait>
+  return (
+    <div className="exo-dc-voice-empty">
+      <span className="exo-dc-voice-empty-icon" aria-hidden="true">{isStage ? <Icons.Stage size={28} /> : <Icons.Voice size={28} />}</span>
+      <strong>{channelName}</strong>
+      <span>{isStage && hasAudience ? 'No one is speaking yet.' : 'No one is here yet.'}</span>
+    </div>
+  )
+}
+
+function VoiceStageBody({ speakers, channelName, isStage, joining, hasAudience, meId, speaking, audio, here, watching, canModerate, small, myStream, onWatch, onDemote, onFocus, onStop }: {
+  speakers: DiscordVoiceMember[]
+  channelName: string
+  isStage: boolean
+  joining: boolean
+  hasAudience: boolean
+  meId: string | null
+  speaking: Set<string>
+  audio: Record<string, { muted?: boolean } | undefined>
+  here: boolean
+  watching: string[]
+  canModerate: boolean
+  small: DiscordVoiceMember[]
+  myStream: boolean
+  onWatch: (id: string) => void
+  onDemote: (id: string) => void
+  onFocus: (id: string) => void
+  onStop: (id: string) => void
+}) {
+  if (speakers.length === 0) return <VoiceStageEmpty channelName={channelName} isStage={isStage} joining={joining} hasAudience={hasAudience} />
+  return (
+    <>
+      {speakers.map(member => (
+        <VoiceTile key={member.id} member={member} me={member.id === meId} speaking={speaking.has(member.id) && !audio[member.id]?.muted}
+          muted={member.mute || audio[member.id]?.muted === true} canWatch={here && member.stream === true && !watching.includes(member.id) && member.id !== meId}
+          onWatch={() => onWatch(member.id)}
+          onDemote={canModerate && member.id !== meId ? () => onDemote(member.id) : undefined} />
+      ))}
+      {small.map(member => <StreamTile key={`stream-${member.id}`} member={member} onFocus={() => onFocus(member.id)} onStop={() => onStop(member.id)} />)}
+      {myStream ? <MyStreamTile meId={meId} members={speakers} /> : null}
+    </>
+  )
+}
+
+function useStageRoom(channel: DiscordChannel, voice: DiscordVoice, meId: string | null, here: boolean) {
+  const members = channel.members ?? []
+  const isStage = channel.type === 13
+  const speakers = isStage ? members.filter(m => !m.suppress) : members
+  const audience = isStage ? members.filter(m => m.suppress) : []
+  const meMember = meId ? members.find(m => m.id === meId) : undefined
+  const raisingCount = audience.filter(m => !!m.requestToSpeak).length
+  const [stageError, setStageError] = useState<string | null>(null)
+  const runStage = (params: { userId?: string; suppress?: boolean; requestToSpeak?: boolean }) => {
+    const guildId = voice.guildId
+    if (!guildId) return
+    setStageError(null)
+    void host.discordVoice('stage', { guildId, channelId: channel.id, ...params })
+      .then(result => { if (!result.ok) setStageError(errorText(result.message, 'Discord didn’t update the stage.')) })
+      .catch(() => setStageError('Discord didn’t update the stage.'))
+  }
+  return {
+    members, isStage, speakers, audience, meMember, raisingCount, stageError,
+    clearStageError: () => setStageError(null),
+    runStage,
+    canModerate: here && isStage && channel.canModerateStage === true,
+  }
+}
+
 export function VoiceRoom({ channel, controls, meId, onJoin, dm = false, chat }: {
   channel: DiscordChannel
   controls: VoiceControls
@@ -304,39 +444,28 @@ export function VoiceRoom({ channel, controls, meId, onJoin, dm = false, chat }:
   const { voice, error } = controls
   const speaking = useSpeaking()
   const here = voice.channelId === channel.id && voice.state !== 'off'
-  const members = channel.members ?? []
-  // Only why a stream ended: its numbers, a second apart, are the stream tile's.
+  const stageRoom = useStageRoom(channel, voice, meId, here)
   const liveEnded = useGoLiveValue(live => live.state === 'off' ? live.message : null)
   const [cameraError, setCameraError] = useState<string | null>(null)
-  const notes = [error, cameraError, liveEnded].filter((note): note is string => !!note)
-  // What went wrong with the call says so in the call itself, over its bar (where its buttons are), not in a notice;
-  // its × clears it.
-  const dismissNotes = () => { controls.dismissError(); setCameraError(null); clearGoLiveMessage() }
-  const { watching, big, small, watch, stop, focus } = useWatching(channel.id, members)
-  // Discord's Hide Members while watching: the stream takes the room, the people strip folds away.
+  const notes = [error, cameraError, stageRoom.stageError, liveEnded].filter((note): note is string => !!note)
+  const dismissNotes = () => { controls.dismissError(); setCameraError(null); stageRoom.clearStageError(); clearGoLiveMessage() }
+  const { watching, big, small, watch, stop, focus } = useWatching(channel.id, stageRoom.members)
   const [membersHidden, setMembersHidden] = useState(false)
   const myStream = useStreamTile() && here
-  const [stage, tileWidth] = useTileWidth(members.length + small.length + (myStream ? 1 : 0))
+  const [stage, tileWidth] = useTileWidth(stageRoom.speakers.length + small.length + (myStream ? 1 : 0))
   const audio = useAccountSetting('audioUsers')
   return (
     <section className={dm ? 'exo-dc-voice-room is-dm' : 'exo-dc-chat exo-dc-voice-room'} aria-label={dm ? `Call with ${channel.name}` : channel.name}>
-      {dm ? null : <VoiceHead chat={chat} count={members.length} state={here ? voice.state : null} />}
+      {dm ? null : <VoiceHead chat={chat} count={stageRoom.members.length} state={here ? voice.state : null} />}
+      {stageRoom.isStage ? <StageBanner channel={channel} here={here} meMember={stageRoom.meMember} raisingCount={stageRoom.raisingCount} onAction={stageRoom.runStage} /> : null}
       {big ? <StreamStage key={big.id} member={big} onStop={() => stop(big.id)} onRetry={() => watch(big.id)} membersHidden={membersHidden} onToggleMembers={() => setMembersHidden(h => !h)} /> : null}
       <div ref={stage} className="exo-dc-voice-stage" hidden={!!big && membersHidden} style={{ '--tile-w': `${tileWidth}px` } as CSSProperties}>
-        {/* Joining: your tile on its way, shining in its place (DESIGN.md › Waits). */}
-        {members.length === 0 ? here ? <Wait label="Connecting to voice"><span className="exo-dc-voice-tile" skullet-block="" /></Wait> : (
-          <div className="exo-dc-voice-empty">
-            <span className="exo-dc-voice-empty-icon" aria-hidden="true"><Icons.Voice size={28} /></span>
-            <strong>{channel.name}</strong>
-            <span>No one is here yet.</span>
-          </div>
-        ) : members.map(member => (
-          <VoiceTile key={member.id} member={member} me={member.id === meId} speaking={speaking.has(member.id) && !audio[member.id]?.muted} muted={member.mute || audio[member.id]?.muted === true} canWatch={here && member.stream === true && !watching.includes(member.id) && member.id !== meId}
-            onWatch={() => watch(member.id)} />
-        ))}
-        {members.length > 0 ? small.map(member => <StreamTile key={`stream-${member.id}`} member={member} onFocus={() => focus(member.id)} onStop={() => stop(member.id)} />) : null}
-        {myStream && members.length > 0 ? <MyStreamTile meId={meId} members={members} /> : null}
+        <VoiceStageBody speakers={stageRoom.speakers} channelName={channel.name} isStage={stageRoom.isStage} joining={stageRoom.members.length === 0 && here}
+          hasAudience={stageRoom.audience.length > 0} meId={meId} speaking={speaking} audio={audio} here={here} watching={watching}
+          canModerate={stageRoom.canModerate} small={small} myStream={myStream} onWatch={watch}
+          onDemote={userId => stageRoom.runStage({ userId, suppress: true })} onFocus={focus} onStop={stop} />
       </div>
+      {stageRoom.isStage && stageRoom.audience.length > 0 ? <StageAudience members={stageRoom.audience} canModerate={stageRoom.canModerate} onInvite={userId => stageRoom.runStage({ userId, suppress: false })} /> : null}
       {notes.length > 0 ? (
         <div className="exo-dc-voice-note">
           <ErrorNote message={notes.join(' ')} />
@@ -365,7 +494,7 @@ function VoiceBar({ here, dm, channel, controls, onJoin, onCameraError }: {
   return (
     <footer ref={bar} className={`exo-dc-voice-bar exo-glass${here ? '' : ' is-join'}`}>
       {here ? <CallButtons controls={controls} channelId={channel.id} onCameraError={onCameraError} /> : (
-        <button type="button" className="exo-dc-voice-join" disabled={channel.canConnect === false} onClick={onJoin}>{dm ? 'Join call' : 'Join voice'}</button>
+        <button type="button" className="exo-dc-voice-join" disabled={channel.canConnect === false} onClick={onJoin}>{dm ? 'Join call' : channel.type === 13 ? 'Join stage' : 'Join voice'}</button>
       )}
     </footer>
   )
@@ -439,7 +568,36 @@ function useTileWidth(count: number) {
 
 /** One person in the call: their camera when it's on, else their picture over its own blurred light; LIVE and Watch while they stream. */
 // muted: by the server, themselves, or you.
-function VoiceTile({ member, me, speaking, muted, canWatch, onWatch }: { member: DiscordVoiceMember; me: boolean; speaking: boolean; muted: boolean; canWatch: boolean; onWatch: () => void }) {
+function VoiceTileFace({ member, mine, showing, cameraRef }: {
+  member: DiscordVoiceMember
+  mine: MediaStream | null
+  showing: boolean
+  cameraRef: React.Ref<HTMLVideoElement>
+}) {
+  if (mine) return <LocalVideo stream={mine} />
+  return (
+    <>
+      {member.video ? <video ref={cameraRef} className="exo-dc-voice-video" hidden={!showing} muted playsInline disablePictureInPicture /> : null}
+      {showing ? null : (
+        <>
+          {member.avatar ? <img className="exo-dc-voice-backdrop" src={cdnSized(member.avatar, 128)} alt="" aria-hidden="true" draggable={false} decoding="async" /> : null}
+          {member.avatar ? <img className="exo-dc-voice-face" src={cdnSized(member.avatar, 128)} alt="" draggable={false} decoding="async" /> : <span className="exo-dc-voice-tile-initial">{member.name.slice(0, 1).toUpperCase()}</span>}
+          <Decoration look={member.look} size={128} />
+        </>
+      )}
+    </>
+  )
+}
+
+function VoiceTile({ member, me, speaking, muted, canWatch, onWatch, onDemote }: {
+  member: DiscordVoiceMember
+  me: boolean
+  speaking: boolean
+  muted: boolean
+  canWatch: boolean
+  onWatch: () => void
+  onDemote?: () => void
+}) {
   const camera = useVideoFeed('call', member.video && !me ? member.id : null)
   // Discord doesn't send this client its own camera: show the local picture instead.
   const own = useCamera()
@@ -447,12 +605,9 @@ function VoiceTile({ member, me, speaking, muted, canWatch, onWatch }: { member:
   const showing = mine !== null || (member.video === true && camera.live)
   return (
     <article className={`exo-dc-voice-tile${speaking ? ' is-speaking' : ''}${showing ? ' has-video' : ''}`} data-dc-user={member.id} data-dc-name={member.name} data-dc-call="">
-      {mine ? <LocalVideo stream={mine} /> : member.video && !me ? <video ref={camera.ref} className="exo-dc-voice-video" hidden={!showing} muted playsInline disablePictureInPicture /> : null}
-      {/* The backdrop is the face blurred over the tile: the face's own picture, decoded once for both. */}
-      {showing || !member.avatar ? null : <img className="exo-dc-voice-backdrop" src={cdnSized(member.avatar, 128)} alt="" aria-hidden="true" draggable={false} decoding="async" />}
-      {showing ? null : member.avatar ? <img className="exo-dc-voice-face" src={cdnSized(member.avatar, 128)} alt="" draggable={false} decoding="async" /> : <span className="exo-dc-voice-tile-initial">{member.name.slice(0, 1).toUpperCase()}</span>}
-      {showing ? null : <Decoration look={member.look} size={128} />}
+      <VoiceTileFace member={member} mine={mine} showing={showing} cameraRef={camera.ref} />
       {member.stream ? <span className="exo-dc-live">LIVE</span> : null}
+      {onDemote ? <button type="button" className="exo-dc-tab exo-dc-stage-demote" onClick={onDemote}>Move to audience</button> : null}
       {canWatch ? <button type="button" className="exo-dc-watch" onClick={onWatch}>Watch stream</button> : null}
       <span className="exo-dc-voice-tile-name">
         {member.deaf ? <Icons.Deafened size={14} /> : muted ? <Icons.Muted size={14} /> : null}
@@ -766,13 +921,81 @@ function RecordedDot() {
   return (
     <>
       <span className="exo-dc-voice-rec" role="img" aria-label={CLIPS_ON} tabIndex={0}
-        onPointerEnter={event => show(event.currentTarget)} onPointerLeave={() => setTip(null)}
+        onPointerEnter={event => { if (allowHover(event)) show(event.currentTarget) }} onPointerLeave={() => setTip(null)}
         onFocus={event => show(event.currentTarget)} onBlur={() => setTip(null)}>
         <span className="exo-dc-voice-rec-dot" aria-hidden="true" />
         <span className="exo-dc-voice-rec-text" aria-hidden="true">Clips on</span>
       </span>
       {tip ? <AboveTip at={tip}>{CLIPS_ON}</AboveTip> : null}
     </>
+  )
+}
+
+function PanelCamera({ onError }: { onError: (why: string | null) => void }) {
+  const { state } = useCamera()
+  const on = state !== 'off'
+  return (
+    <button type="button" className={`exo-dc-icon-btn${on ? ' is-live' : ''}`} aria-label={on ? 'Turn off camera' : 'Turn on camera'} aria-pressed={on}
+      onClick={() => { onError(null); if (on) void stopCamera(); else void startCamera().then(onError) }}>
+      <Icons.Camera size={18} />
+    </button>
+  )
+}
+
+function VoiceDiagnostics({ anchor, voice, onClose }: { anchor: React.RefObject<HTMLButtonElement | null>; voice: DiscordVoice; onClose: () => void }) {
+  const box = useRef<HTMLDivElement>(null)
+  useDismiss(box, onClose, { on: true })
+  useEffect(() => {
+    const key = (event: KeyboardEvent) => { if (event.key === 'Escape') { event.stopPropagation(); onClose() } }
+    window.addEventListener('keydown', key)
+    return () => window.removeEventListener('keydown', key)
+  }, [onClose])
+  useLayoutEffect(() => {
+    const el = box.current, trigger = anchor.current
+    if (!el || !trigger) return
+    const at = trigger.getBoundingClientRect()
+    Object.assign(el.style, { left: '0px', top: '0px', visibility: 'hidden' })
+    const pop = el.getBoundingClientRect()
+    const left = Math.max(8, Math.min(at.left, window.innerWidth - pop.width - 8))
+    const top = Math.max(8, at.top - 10 - pop.height)
+    Object.assign(el.style, { left: `${left}px`, top: `${top}px`, visibility: 'visible' })
+  }, [anchor, voice.rttMs, voice.region, voice.bitrate, voice.e2ee])
+
+  const card = (
+    <div ref={box} className="exo-dc-popover exo-dc-voice-diag" role="dialog" aria-label="Voice connection details">
+      <p className="exo-dc-voice-diag-head">{voice.e2ee ? 'DAVE end-to-end encrypted' : 'Voice connection'}</p>
+      <dl className="exo-dc-voice-diag-list">
+        <div className="exo-dc-voice-diag-row"><dt>Latency</dt><dd>{voice.rttMs !== null && voice.rttMs !== undefined ? `${voice.rttMs} ms` : 'Measuring'}</dd></div>
+        <div className="exo-dc-voice-diag-row"><dt>Region</dt><dd>{voice.region ?? 'Auto'}</dd></div>
+        <div className="exo-dc-voice-diag-row"><dt>Bitrate</dt><dd>{voice.bitrate ? `${Math.round(voice.bitrate / 1000)} kbps` : '64 kbps'}</dd></div>
+        <div className="exo-dc-voice-diag-row"><dt>Encryption</dt><dd>{voice.e2ee ? 'E2EE active' : 'Standard'}</dd></div>
+      </dl>
+    </div>
+  )
+  const room = document.querySelector('main.exo-dc')
+  return room ? createPortal(card, room) : card
+}
+
+function VoicePanelTitle({ voice, diagBtn, diag, onToggleDiag }: {
+  voice: DiscordVoice
+  diagBtn: React.RefObject<HTMLButtonElement | null>
+  diag: boolean
+  onToggleDiag: () => void
+}) {
+  const connected = voice.state === 'connected'
+  const recorded = connected && voice.recorded === true
+  return (
+    <strong className={connected ? 'is-on' : undefined}>
+      {voice.state === 'connecting' ? <Spinner label="Connecting to voice" /> : null}
+      {connected ? (
+        <button ref={diagBtn} type="button" className="exo-dc-voice-diag-btn" aria-expanded={diag} onClick={onToggleDiag}>
+          <Icons.VoiceSignal size={14} className="exo-dc-voice-signal" />
+          <span>Voice connected</span>
+        </button>
+      ) : voice.state === 'connecting' ? 'Connecting' : 'Voice'}
+      {connected && voice.e2ee ? <span className="exo-dc-voice-e2ee" role="img" aria-label="End-to-end encrypted"><Icons.Encrypted size={12} /></span> : null}
+      {recorded ? <RecordedDot /> : null}
+    </strong>
   )
 }
 
@@ -783,28 +1006,29 @@ function RecordedDot() {
  */
 export function VoicePanel({ controls, place, onOpen }: { controls: VoiceControls; place: string | null; onOpen: () => void }) {
   const { voice, error } = controls
+  const [diag, setDiag] = useState(false)
+  const [cameraError, setCameraError] = useState<string | null>(null)
+  const diagBtn = useRef<HTMLButtonElement>(null)
   if (voice.state === 'off' && !error) return null
-  const recorded = voice.state === 'connected' && voice.recorded === true
+  const connected = voice.state === 'connected'
+  const statusNote = error ?? cameraError
   return (
     <section className="exo-dc-voice" aria-label="Voice">
       <div className="exo-dc-voice-status">
-        <strong className={voice.state === 'connected' ? 'is-on' : undefined}>
-          {voice.state === 'connecting' ? <Spinner label="Connecting to voice" /> : null}
-          {voice.state === 'connected' ? <><Icons.VoiceSignal size={14} className="exo-dc-voice-signal" />Voice connected</> : voice.state === 'connecting' ? 'Connecting' : 'Voice'}
-          {voice.state === 'connected' && voice.e2ee ? <span className="exo-dc-voice-e2ee" role="img" aria-label="End-to-end encrypted"><Icons.Encrypted size={12} /></span> : null}
-          {recorded ? <RecordedDot /> : null}
-        </strong>
-        {error ? <ErrorNote as="span" message={error} /> : voice.state !== 'off' && place
+        <VoicePanelTitle voice={voice} diagBtn={diagBtn} diag={diag} onToggleDiag={() => setDiag(open => !open)} />
+        {statusNote ? <ErrorNote as="span" message={statusNote} /> : voice.state !== 'off' && place
           ? <button type="button" className="exo-dc-voice-place" onClick={onOpen}>{place}</button>
           : null}
-        {voice.state === 'connected' && voice.micSilent && !voice.muted
+        {connected && voice.micSilent && !voice.muted
           ? <span className="exo-dc-voice-warn" role="status">Your mic seems silent. Check it’s plugged in, unmuted and its gain is up.</span>
           : null}
-        <span className="sr-only" role="status">{recorded ? CLIPS_ON : ''}</span>
+        <span className="sr-only" role="status">{connected && voice.recorded ? CLIPS_ON : ''}</span>
       </div>
       {voice.state !== 'off' ? (
         <span className="exo-dc-voice-actions">
-          {voice.state === 'connected' ? <PanelStream /> : null}
+          {connected ? <PanelCamera onError={setCameraError} /> : null}
+          {connected && voice.channelId ? <SoundboardButton guildId={voice.guildId} channelId={voice.channelId} compact /> : null}
+          {connected ? <PanelStream /> : null}
           <button type="button" className="exo-dc-icon-btn is-hangup" aria-label="Disconnect" onClick={() => void controls.leave()}>
             <Icons.HangUp size={20} />
           </button>
@@ -812,6 +1036,7 @@ export function VoicePanel({ controls, place, onOpen }: { controls: VoiceControl
       ) : (
         <button type="button" className="exo-dc-icon-btn" aria-label="Dismiss" onClick={controls.dismissError}><Close size={14} /></button>
       )}
+      {diag && connected ? <VoiceDiagnostics anchor={diagBtn} voice={voice} onClose={() => setDiag(false)} /> : null}
     </section>
   )
 }

@@ -836,6 +836,21 @@ public sealed class AntiCheatCheckTests : IDisposable
         Assert.False(Allows(Game(), new Answer(Kind.PossiblyVac, PossiblyVacName, "steam"), Change.InjectedHook));
     }
 
+    [Fact]
+    public void WutheringWavesUsesAntiCheatExpertAndKeepsPlacedChangesBlocked()
+    {
+        var game = Game("Wuthering Waves");
+        var answer = Check(game);
+        Assert.Equal((Kind.Found, AntiCheatCheck.Ace), (answer.Kind, answer.Name));
+
+        // Placed files/hooks (OptiScaler, FrameGenMod, InjectedHook, ShaderRecorder, etc.) stay hard-blocked for ACE.
+        foreach (var placed in new[] { Change.FrameGenMod, Change.InjectedHook, Change.ShaderRecorder, Change.WorkingDirectory, Change.RunAsAdmin, Change.StartThroughSteam })
+            Assert.False(Allows(game, answer, placed));
+
+        // Safe interface / NVIDIA DRS profile optimization remains allowed.
+        Assert.True(Allows(game, answer, Change.GameSettingsFile));
+    }
+
     // ------------------------------------------------------------------ fixture helpers
 
     /// <summary>Arguments, Run as admin and the sentence of a launch override's verdict.</summary>

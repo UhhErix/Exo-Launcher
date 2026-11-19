@@ -84,7 +84,10 @@ function useCardWidth(mainRef: RefObject<HTMLElement | null>): number | null {
     const main = mainRef.current
     if (!main) return
     // Floor, not round: a rounded-up width can push the last column off the row.
-    const measure = () => setWidth(Math.floor(resolveGridCardLayout(main.clientWidth).cardWidth * 100) / 100)
+    const measure = () => {
+      if (main.clientWidth <= 0) return
+      setWidth(Math.floor(resolveGridCardLayout(main.clientWidth).cardWidth * 100) / 100)
+    }
     measure()
     const observer = new ResizeObserver(measure)
     observer.observe(main)
@@ -211,13 +214,13 @@ function ShelfNote({ note, searching, onClear }: { note: string | null; searchin
   )
 }
 
-/** The grid's heading, count, cards and a note under them: All games (folders first), or Hidden games only. */
-function shelfView(showHidden: boolean, hidden: Game[], grid: Game[], count: number) {
+/** The grid's heading, cards and a note under them: All games (folders first), or Hidden games only. */
+function shelfView(showHidden: boolean, hidden: Game[], grid: Game[]) {
   return showHidden ? {
-    heading: 'Hidden games', count: undefined, games: hidden,
+    heading: 'Hidden games', games: hidden,
     note: hidden.length ? null : 'No hidden games',
   } : {
-    heading: 'All games', count, games: grid,
+    heading: 'All games', games: grid,
     note: grid.length === 0 && hidden.length > 0 ? 'Every game is hidden' : null,
   }
 }
@@ -239,7 +242,7 @@ export const LibraryPane = memo(function LibraryPane(props: LibraryPaneProps) {
     return shown.size ? games.filter(game => !shown.has(game.id)) : games
   }, [playing, games])
   const grid = useMemo(() => withFolders(rest, games, folders), [rest, games, folders])
-  const search = useLibrarySearch(games, shelfView(showHidden, props.hidden, grid, rest.length), showHidden)
+  const search = useLibrarySearch(games, shelfView(showHidden, props.hidden, grid), showHidden)
   const { shelf, found } = search
   const marks = useMemo(() => scrubMarks(shelf.games, props.sort, isFolderTile), [shelf.games, props.sort])
   // Select mode (More's Select games): null outside it, else the picked games. A press picks a game, Shift a run of them
@@ -266,6 +269,12 @@ export const LibraryPane = memo(function LibraryPane(props: LibraryPaneProps) {
   }, [pickable])
   // Switching between All games and Hidden games starts the pick again.
   const hiddenView = useCallback((on: boolean) => { setShowHidden(on); setPicked(current => current && new Set()) }, [])
+  // Reset scroll to the top when the list's filter, sort, view or search query changes.
+  const resetScroll = useRef(false)
+  useEffect(() => {
+    if (!resetScroll.current) { resetScroll.current = true; return }
+    if (props.mainRef.current) props.mainRef.current.scrollTop = 0
+  }, [props.mainRef, showHidden, sort, search.query, search.filters])
   // The open folder; a new `rename` key opens it again with its name ready to type.
   const [open, setOpen] = useState<{ id: string; rename: number } | null>(null)
   const openTile = useMemo(() => open ? grid.find((item): item is FolderTile => isFolderTile(item) && item.folder.id === open.id) : undefined, [open, grid])
@@ -438,11 +447,11 @@ export const LibraryPane = memo(function LibraryPane(props: LibraryPaneProps) {
           total={games.length}
           found={found}
           query={search.query}
-          onQuery={search.setQuery}
+          onQuery={next => { if (showHidden && next) setShowHidden(false); search.setQuery(next) }}
           understood={search.read.understood}
           filters={search.filters}
           options={search.options}
-          onFilter={search.toggleFilter}
+          onFilter={filter => { if (showHidden) setShowHidden(false); search.toggleFilter(filter) }}
           onClear={search.clear}
           onWarmFilters={search.wantFriends}
           tools={tools}
@@ -477,7 +486,6 @@ export const LibraryPane = memo(function LibraryPane(props: LibraryPaneProps) {
             <div className="exo-library-grid">
             <BrowseShelf
               heading={shelf.heading}
-              count={shelf.count}
               games={shelf.games}
               selectedId={props.selectedId}
               activeGameId={props.activeGameId}

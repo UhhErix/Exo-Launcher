@@ -34,12 +34,14 @@ const RATES: Option[] = [{ key: 15, label: '15 fps' }, { key: 30, label: '30 fps
 // No rate above what the source's screen draws (a 60 Hz screen has no 120 fps to send); unknown: all of them.
 const ratesFor = (source: GoLiveSource): Option[] => (source.hz && source.hz >= 15 ? RATES.filter(r => r.key <= source.hz! + 1) : RATES)
 
-// The last quality chosen, for next time (kept in Exo's settings).
-function savedQuality(): Quality {
+// The last quality chosen, or saved client defaults from Voice & Video -> Screen share.
+function savedQuality(fallback?: { goLiveHeight?: number; goLiveFps?: number }): Quality {
   const saved = (uiPref('goLiveQuality') ?? null) as Partial<Quality> | null
+  const height = saved?.height ?? fallback?.goLiveHeight
+  const fps = saved?.fps ?? fallback?.goLiveFps
   return {
-    height: RESOLUTIONS.some(r => r.key === saved?.height) ? saved!.height! : 1080,
-    fps: RATES.some(r => r.key === saved?.fps) ? saved!.fps! : 30,
+    height: RESOLUTIONS.some(r => r.key === height) ? height! : 1080,
+    fps: RATES.some(r => r.key === fps) ? fps! : 30,
     sound: saved?.sound !== false,
   }
 }
@@ -217,25 +219,41 @@ function GoLiveDialog({ onClose, onLive }: { onClose: () => void; onLive: () => 
   )
 }
 
+function screenDetails(source: GoLiveSource): string | null {
+  if (source.kind !== 'screen') return null
+  const parts: string[] = []
+  if (source.width && source.height) parts.push(`${source.width}×${source.height}`)
+  if (source.hz && source.hz > 0) parts.push(`${source.hz} Hz`)
+  if (source.primary) parts.push('Primary')
+  return parts.length > 0 ? parts.join(' · ') : null
+}
+
 /** Applications and Screens, refreshed every four seconds so pictures stay current and new windows appear. */
-function SourcePicker({ onPick, onClose }: { onPick: (source: GoLiveSource) => void; onClose: () => void }) {
+function SourcePicker({ onPick, onClose, paused = false }: { onPick: (source: GoLiveSource) => void; onClose: () => void; paused?: boolean }) {
   const [sources, setSources] = useState<GoLiveSource[] | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [status, setStatus] = useState<{ mode?: 'wgc' | 'dxgi'; disabled?: boolean }>({})
   const [tab, setTab] = useState<'window' | 'screen'>('window')
   const tabs = useGlide<HTMLSpanElement>()
   const active = usePageActive()
   useEffect(() => {
-    if (!active) return
+    if (!active || paused) return
     let alive = true
-    const load = () => void goLiveSources().then(result => {
-      if (!alive) return
-      setSources(result.sources)
-      setError(result.message)
-    })
+    let inFlight = false
+    const load = () => {
+      if (inFlight) return
+      inFlight = true
+      void goLiveSources().then(result => {
+        if (!alive) return
+        setSources(result.sources)
+        setError(result.message)
+        setStatus({ mode: result.captureMode, disabled: result.serviceDisabled })
+      }).finally(() => { inFlight = false })
+    }
     load()
     const timer = window.setInterval(load, 4000)
     return () => { alive = false; window.clearInterval(timer) }
-  }, [active])
+  }, [active, paused])
   const game = sources?.find(source => source.game)
   const shown = (sources ?? []).filter(source => source.kind === tab && source !== game)
   return (
@@ -247,6 +265,13 @@ function SourcePicker({ onPick, onClose }: { onPick: (source: GoLiveSource) => v
         </span>
         <button type="button" className="exo-dc-icon-btn" aria-label="Close" onClick={onClose}><Close size={18} /></button>
       </header>
+      {status.disabled || status.mode === 'dxgi' ? (
+        <p className="exo-dc-golive-status" role="status">
+          {status.disabled
+            ? 'Using screen compatibility mode (Windows Capture Service is disabled).'
+            : 'Using screen compatibility mode.'}
+        </p>
+      ) : null}
       {game && tab === 'window' ? (
         <button type="button" className="exo-dc-golive-game" onClick={() => onPick(game)}>
           <span className="exo-dc-golive-thumb">{game.thumb ? <img src={game.thumb} alt="" draggable={false} decoding="async" /> : <SourceMark source={game} size={28} />}</span>
@@ -261,12 +286,21 @@ function SourcePicker({ onPick, onClose }: { onPick: (source: GoLiveSource) => v
         : shown.length === 0 ? <p className="exo-dc-note">{error ?? (tab === 'window' ? (game ? 'No other windows to share.' : 'No windows to share.') : 'No screens found.')}</p>
           : (
             <div className="exo-dc-golive-grid exo-motion-switch" key={tab}>
-              {shown.map(source => (
-                <button key={source.id} type="button" className="exo-dc-golive-tile" aria-label={`Share ${source.title}`} onClick={() => onPick(source)}>
-                  <span className="exo-dc-golive-thumb">{source.thumb ? <img src={source.thumb} alt="" draggable={false} decoding="async" /> : <SourceMark source={source} size={28} />}</span>
-                  <span className="exo-dc-golive-name"><SourceMark source={source} size={16} /><span>{source.title}</span></span>
-                </button>
-              ))}
+              {shown.map(source => {
+                const meta = screenDetails(source)
+                return (
+                  <button key={source.id} type="button" className="exo-dc-golive-tile" aria-label={`Share ${source.title}`} onClick={() => onPick(source)}>
+                    <span className="exo-dc-golive-thumb">{source.thumb ? <img src={source.thumb} alt="" draggable={false} decoding="async" /> : <SourceMark source={source} size={28} />}</span>
+                    <span className="exo-dc-golive-name">
+                      <SourceMark source={source} size={16} />
+                      <span className="exo-dc-golive-label">
+                        <span>{source.title}</span>
+                        {meta ? <small>{meta}</small> : null}
+                      </span>
+                    </span>
+                  </button>
+                )
+              })}
             </div>
           )}
     </>
@@ -280,7 +314,11 @@ function SourceMark({ source, size }: { source: GoLiveSource; size: number }) {
 
 /** The chosen source's live preview, resolution, frame rate and sound, then Go Live. */
 function GoLiveSettings({ source, onBack, onClose, onLive }: { source: GoLiveSource; onBack: () => void; onClose: () => void; onLive: () => void }) {
-  const [quality, setQuality] = useState(savedQuality)
+  const [quality, setQuality] = useState(() => savedQuality())
+  useEffect(() => {
+    if (uiPref('goLiveQuality') != null) return
+    void host.discordClientSettings({}).then(s => setQuality(savedQuality(s))).catch(() => { })
+  }, [])
   const [starting, setStarting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const preview = usePicture(source.id, 960, 250, source.thumb ?? null)

@@ -854,7 +854,7 @@ export function NotesView({ request, games, onCaptures }: {
 
   return (
     <div className="exo-notes" onKeyDown={onKeyDown}>
-      <NotesHead count={notes?.length ?? 0} more={moreMenu(textFiles)} onNew={newNote} onOpen={() => void openFile()} onMore={onMore} onCaptures={onCaptures} />
+      <NotesHead more={moreMenu(textFiles)} onNew={newNote} onOpen={() => void openFile()} onMore={onMore} onCaptures={onCaptures} />
       <div className="exo-notes-body">
         <NotesList listed={found ?? notes ?? NO_NOTES} reading={notes === null && !failed} query={query} searched={found !== null} failed={failed}
           active={active} games={games} onQuery={setQuery} onRetry={retry} onShow={show} />
@@ -937,8 +937,7 @@ function NotesEmpty({ any, onNew, onOpen }: { any: boolean; onNew: () => void; o
   )
 }
 
-function NotesHead({ count, more, onNew, onOpen, onMore, onCaptures }: {
-  count: number
+function NotesHead({ more, onNew, onOpen, onMore, onCaptures }: {
   more: MenuItem[]
   onNew: () => void
   onOpen: () => void
@@ -949,7 +948,6 @@ function NotesHead({ count, more, onNew, onOpen, onMore, onCaptures }: {
     <header className="exo-hub-head">
       <div className="min-w-0">
         <h2 id="exo-captures-title" className="exo-hub-title">Notes</h2>
-        {count ? <p className="exo-hub-sub tabular-nums">{count === 1 ? '1 note' : `${count} notes`}</p> : null}
       </div>
       <div className="exo-hub-head-actions">
         <button type="button" className="exo-set-btn is-primary" aria-keyshortcuts="Control+N" onClick={onNew}><Plus size={14} />New note</button>

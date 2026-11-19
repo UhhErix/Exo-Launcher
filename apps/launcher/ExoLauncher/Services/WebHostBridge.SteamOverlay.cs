@@ -149,8 +149,9 @@ public sealed partial class WebHostBridge
         var names = games.GroupBy(game => game.LaunchTarget!, StringComparer.Ordinal).ToDictionary(g => g.Key, g => g.First().Title, StringComparer.Ordinal);
         var settings = _services.Settings.Current;
         var configText = SteamPlaytime.ReadSharedText(config);
-        // A game appinfo doesn't have is left as it is.
+        // Union of installed appIds + appinfo.vdf: overlay defaults off for every installed game, preserving explicit opt-ins.
         var info = InstalledAppInfo(root, installed);
+        var wanted = OverlayWanted(installed, info);
         var rule = info.ToDictionary(a => a.Key, a => SteamInputConfig.Desired(a.Value), StringComparer.Ordinal);
         // Games that aren't Steam's, sent through Steam Input: their shortcuts, with Steam Input on for each.
         var (shortcutRecord, playersInput) = ShortcutRecord();
@@ -158,10 +159,16 @@ public sealed partial class WebHostBridge
         var shortcuts = PlanShortcuts(config, wantedShortcuts, shortcutRecord);
         var apps = SteamOverlayConfig.Apps(configText);
         var input = SteamInputConfig.Plan(apps, rule, ShortcutInputChoices(shortcuts?.Record ?? shortcutRecord, playersInput), settings.SteamInput);
-        var (writes, record) = SteamOverlayConfig.Plan(apps, OverlayWanted(info, apps, input.Writes), settings.SteamOverlay);
+        var (writes, record) = SteamOverlayConfig.Plan(apps, wanted, settings.SteamOverlay);
+        var accountConfigs = AccountLocalConfigs(root, config);
+        var goals = SteamOverlayConfig.EffectiveGoals(wanted, record);
+        var secondaryPending = accountConfigs.Any(acct =>
+            !string.Equals(acct.Path, config, StringComparison.OrdinalIgnoreCase)
+            && SteamPlaytime.ReadSharedText(acct.Path) is { Length: > 0 } acctText
+            && SteamOverlayConfig.WritesForAccount(SteamOverlayConfig.Apps(acctText), goals).Count > 0);
         var quietWanted = settings.StoreClientsQuiet;
         var quiet = StoreQuietPass.Pending(root, quietWanted);
-        var anything = writes.Count > 0 || quiet > 0 || input.Writes.Count > 0 || shortcuts?.File is not null;
+        var anything = writes.Count > 0 || secondaryPending || quiet > 0 || input.Writes.Count > 0 || shortcuts?.File is not null;
         // Whether there is anything to write and whether Steam is running decide the pass: nothing to do, values
         // waiting for Steam's next close, or the files written now because Steam is not holding them.
         switch (OverlayPass.Decide(ProcessHelper.IsProcessRunning("steam"), anything))
@@ -187,7 +194,7 @@ public sealed partial class WebHostBridge
             default:
                 break;
         }
-        // Steam is not running: the files on disk are its own last write, and Exo's values go into them.
+        // Steam is not running: re-read the files on disk and re-plan everything against their fresh state.
         var text = SteamPlaytime.ReadSharedText(config) ?? throw new IOException("localconfig.vdf is gone.");
         var shortcutsNow = PlanShortcuts(config, wantedShortcuts, shortcutRecord);
         if (shortcutsNow?.File is { } shortcutsFile)
@@ -195,11 +202,34 @@ public sealed partial class WebHostBridge
             WriteShortcuts(config, shortcutsFile);
             AppLog.Info($"Steam shortcuts: {shortcutsNow.Value.Record.Count} game(s) through Steam Input.");
         }
-        var inputNow = SteamInputConfig.Plan(SteamOverlayConfig.Apps(text), rule,
+        var appsNow = SteamOverlayConfig.Apps(text);
+        var inputNow = SteamInputConfig.Plan(appsNow, rule,
             ShortcutInputChoices(shortcutsNow?.Record ?? shortcutRecord, playersInput), settings.SteamInput);
+        var (writesNow, recordNow) = SteamOverlayConfig.Plan(appsNow, wanted, settings.SteamOverlay);
+        var prior = new Dictionary<string, string>(settings.SteamOverlayPrior, StringComparer.OrdinalIgnoreCase);
+        var activeAccountId = AccountIdFromConfigPath(config);
+        SteamOverlayConfig.RecordPriors(activeAccountId, appsNow, writesNow.Keys, prior);
         var (next, landed) = OverlayPass.Written(text, new OverlayPass.Wanted(
-            writes, record, inputNow.Writes));
+            writesNow, recordNow, inputNow.Writes));
+
+        var goalsNow = SteamOverlayConfig.EffectiveGoals(wanted, landed);
+        var secondaryWrites = new List<(string Path, string Text)>();
+        foreach (var (accountId, acctPath) in accountConfigs)
+        {
+            if (string.Equals(acctPath, config, StringComparison.OrdinalIgnoreCase)) continue;
+            if (SteamPlaytime.ReadSharedText(acctPath) is not { Length: > 0 } acctText) continue;
+            var acctApps = SteamOverlayConfig.Apps(acctText);
+            var acctWrites = SteamOverlayConfig.WritesForAccount(acctApps, goalsNow);
+            if (acctWrites.Count == 0) continue;
+            SteamOverlayConfig.RecordPriors(accountId, acctApps, acctWrites.Keys, prior);
+            var acctNext = SteamOverlayConfig.Write(acctText, acctWrites);
+            if (acctNext != acctText) secondaryWrites.Add((acctPath, acctNext));
+        }
+
+        // Record pre-Exo state before writing VDF files so a partial write remains cleanly reversible.
+        SaveOverlayPrior(prior);
         if (next != text) SteamOverlayConfig.WriteFile(config, next);
+        foreach (var (acctPath, acctNext) in secondaryWrites) SteamOverlayConfig.WriteFile(acctPath, acctNext);
         if (shortcutsNow is { } keptNow) SaveShortcuts(keptNow.Record, keptNow.Dropped, playersInput, inputNow.Choices);
         SaveSteamInput(inputNow.Record);
         foreach (var (appId, value) in inputNow.Writes)
@@ -209,22 +239,43 @@ public sealed partial class WebHostBridge
         var (quieted, _) = StoreQuietPass.Run(root, quietWanted);
         if (quieted > 0) AppLog.Info($"Steam: notifications, sounds and dialogs before a game {(quietWanted ? "off" : "back as they were")} ({quieted} file(s)).");
         SaveOverlayRecord(landed);
-        foreach (var (appId, on) in writes) AppLog.Info($"Steam overlay: {SteamName(names, appId)} {(on ? "on" : "off")}.");
+        foreach (var (appId, on) in writesNow) AppLog.Info($"Steam overlay: {SteamName(names, appId)} {(on ? "on" : "off")}.");
         return null;
     }
 
     private static string SteamName(IReadOnlyDictionary<string, string> names, string appId) =>
         names.TryGetValue(appId, out var title) ? $"{title} ({appId})" : appId == SteamInputConfig.DesktopLayout ? "desktop layout" : appId;
 
-    /// <summary>Each game's overlay as it needs it, with Steam Input as it will be once these writes land.</summary>
-    private Dictionary<string, bool> OverlayWanted(IReadOnlyDictionary<string, SteamKeyValues> info, SteamKeyValues apps, IReadOnlyDictionary<string, string> inputWrites)
+    /// <summary>Default overlay off for every installed game (union of installed appIds + appinfo.vdf); explicit opt-ins win in <see cref="SteamOverlayConfig.Plan"/>.</summary>
+    internal static Dictionary<string, bool> OverlayWanted(
+        IEnumerable<string> installedAppIds,
+        IReadOnlyDictionary<string, SteamKeyValues> info)
     {
-        bool? pad = null;
-        bool Pad() => pad ??= PlayStationPadKnown();
-        return info.ToDictionary(a => a.Key, a => SteamOverlayConfig.Needed(a.Value, SteamInputConfig.InUse(
-            inputWrites.TryGetValue(a.Key, out var written) ? written.Length == 0 ? null : written : SteamInputConfig.Read(apps, a.Key), a.Value, Pad)),
-            StringComparer.Ordinal);
+        var wanted = new Dictionary<string, bool>(StringComparer.Ordinal);
+        foreach (var appId in installedAppIds)
+            if (SteamProtocol.IsValidAppId(appId)) wanted[appId] = false;
+        foreach (var appId in info.Keys)
+            if (SteamProtocol.IsValidAppId(appId)) wanted[appId] = false;
+        return wanted;
     }
+
+    internal static List<(string AccountId, string Path)> AccountLocalConfigs(string root, string? activeConfig)
+    {
+        var list = new List<(string AccountId, string Path)>();
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var accountDir in StoreQuiet.Accounts(root))
+        {
+            var path = Path.Combine(accountDir, "config", "localconfig.vdf");
+            if (File.Exists(path) && seen.Add(path))
+                list.Add((Path.GetFileName(accountDir), path));
+        }
+        if (activeConfig is not null && File.Exists(activeConfig) && seen.Add(activeConfig))
+            list.Add((AccountIdFromConfigPath(activeConfig), activeConfig));
+        return list;
+    }
+
+    private static string AccountIdFromConfigPath(string configPath) =>
+        Path.GetFileName(Path.GetDirectoryName(Path.GetDirectoryName(configPath)) ?? "") ?? "active";
 
     /// <summary>Set once Play has asked for a pass for its controller dialogs this run, so a file Steam won't take is not asked for at every Play.</summary>
     private int _steamDialogsAsked;
@@ -279,5 +330,12 @@ public sealed partial class WebHostBridge
         var current = _services.Settings.Current.SteamOverlay;
         if (current.Count == record.Count && record.All(entry => current.GetValueOrDefault(entry.Key) == entry.Value)) return;
         _services.Settings.UpdateProfile(s => s.SteamOverlay = new Dictionary<string, string>(record, StringComparer.OrdinalIgnoreCase));
+    }
+
+    private void SaveOverlayPrior(Dictionary<string, string> prior)
+    {
+        var current = _services.Settings.Current.SteamOverlayPrior;
+        if (current.Count == prior.Count && prior.All(entry => current.GetValueOrDefault(entry.Key) == entry.Value)) return;
+        _services.Settings.UpdateProfile(s => s.SteamOverlayPrior = new Dictionary<string, string>(prior, StringComparer.OrdinalIgnoreCase));
     }
 }

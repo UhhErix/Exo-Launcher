@@ -88,10 +88,6 @@
 .exo-tile-media {
   position: absolute;
   inset: 0;
-  /* The cover's paint is the scroll's biggest cost: skip it for tiles out of view. The frame
-     keeps the clip and the ring lives on it, so nothing here can crop either. inset:0 pins
-     the box to the frame, so a skipped subtree never changes its size. */
-  content-visibility: auto;
 }
 
 .exo-tile-media .exo-cover {
@@ -428,13 +424,6 @@
   line-height: 1.2;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.exo-folder-count {
-  color: var(--folder-ink);
-  font-size: calc(12px * var(--exo-scale, 1));
-  font-weight: 500;
-  font-variant-numeric: tabular-nums;
 }
 
 /* A folder doesn't clip: opened, its covers rise out over its top and fan past its sides, and its front tips out

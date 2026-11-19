@@ -1,4 +1,6 @@
 using System.Text;
+using ExoLauncher.Helpers;
+using ExoLauncher.Models;
 using ExoLauncher.Services;
 
 namespace ExoLauncher.Tests;
@@ -618,4 +620,155 @@ public sealed class GameSettingsTests
         Assert.DoesNotContain("m_eRTReSTIRQuality", set.Keys);
     }
 
+    [Fact]
+    public void WutheringWavesIsDetectedAcrossSteamEpicAndLocalAndSkipsUnrelatedUeGames()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "exo-wuwa-detect-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            var steamWin64 = Path.Combine(root, "steam", "Client", "Binaries", "Win64");
+            Directory.CreateDirectory(steamWin64);
+            System.IO.File.WriteAllBytes(Path.Combine(steamWin64, "Client-Win64-Shipping.exe"), []);
+            System.IO.File.WriteAllBytes(Path.Combine(steamWin64, "Client-Win64-ShippingBase.dll"), []);
+
+            var epicWin64 = Path.Combine(root, "epic", "Wuthering Waves Game", "Client", "Binaries", "Win64");
+            Directory.CreateDirectory(epicWin64);
+            System.IO.File.WriteAllBytes(Path.Combine(epicWin64, "Client-Win64-Shipping.exe"), []);
+            System.IO.File.WriteAllBytes(Path.Combine(epicWin64, "Client-Win64-ShippingBase.dll"), []);
+
+            var otherUeWin64 = Path.Combine(root, "other", "Client", "Binaries", "Win64");
+            Directory.CreateDirectory(otherUeWin64);
+            System.IO.File.WriteAllBytes(Path.Combine(otherUeWin64, "Client-Win64-Shipping.exe"), []);
+
+            var rtx4070 = new GameSettings.Pc("nvidia", null, 12, Gpu: "NVIDIA GeForce RTX 4070");
+            var amd7800 = new GameSettings.Pc("amd", null, 16, Gpu: "AMD Radeon RX 7800 XT");
+            var gtx1660 = new GameSettings.Pc("nvidia", null, 6, Gpu: "NVIDIA GeForce GTX 1660 SUPER");
+
+            var steamGame = new GameEntry { Id = "steam:3513350", Title = "Wuthering Waves", Store = StoreKind.Steam, Installed = true, Path = Path.Combine(root, "steam") };
+            var epicGame = new GameEntry { Id = "epic:wuwa-app", Title = "Wuthering Waves", Store = StoreKind.Epic, Installed = true, Path = Path.Combine(root, "epic") };
+            var localGame = new GameEntry { Id = "local:wuthering-waves", Title = "Wuthering Waves", Store = StoreKind.Local, Installed = true, Path = Path.Combine(root, "epic") };
+            var otherGame = new GameEntry { Id = "local:other-ue", Title = "Some Other UE Game", Store = StoreKind.Local, Installed = true, Path = Path.Combine(root, "other") };
+
+            foreach (var entry in new[] { steamGame, epicGame, localGame })
+            {
+                var profile = GameSettings.For(entry, rtx4070);
+                Assert.NotNull(profile);
+                Assert.Equal(GameSettings.WutheringWavesId, profile.Id);
+                Assert.Equal("Client-Win64-ShippingBase.dll", profile.Nvidia?.FileInFolder);
+                Assert.EndsWith("Client-Win64-Shipping.exe", profile.Program?.Invoke(entry));
+            }
+
+            Assert.Null(GameSettings.For(otherGame, rtx4070));
+            Assert.Null(GameSettings.For(steamGame, amd7800));
+            Assert.Null(GameSettings.For(steamGame, gtx1660));
+        }
+        finally
+        {
+            try { DeletionGate.DeleteDirectory(root, recursive: true); } catch (IOException) { }
+        }
+    }
+
+    [Fact]
+    public void WutheringWavesNvidiaUsesSignedDlssOverridesAndOptInSmoothMotionOnlyOnRtx40PlusWithoutNativeDlssG()
+    {
+        // RTX 3070: Transformer SR Preset K (11), RR Preset F (6), FG Preset A (1), overrides + Streamline 0x10E41E06, never Smooth Motion.
+        var rtx30 = GameSettings.WutheringWavesNvidiaValues(30, smoothMotionOptIn: true, usingNativeDlssG: false)
+            .ToDictionary(v => v.Id, v => v.Value);
+        Assert.Equal(2u, rtx30[GpuProfile.ModelPresetProfile]);
+        Assert.Equal(1u, rtx30[GraphicsCatalog.SrOverride]);
+        Assert.Equal(GpuProfile.PresetK, rtx30[GraphicsCatalog.SrPreset]);
+        Assert.Equal(1u, rtx30[GraphicsCatalog.RrOverride]);
+        Assert.Equal(GpuProfile.PresetF, rtx30[GraphicsCatalog.RrPreset]);
+        Assert.Equal(1u, rtx30[GraphicsCatalog.FgOverride]);
+        Assert.Equal(GpuProfile.PresetA, rtx30[GraphicsCatalog.FgPreset]);
+        Assert.Equal(1u, rtx30[GameSettings.StreamlineDlssOverride]);
+        Assert.False(rtx30.ContainsKey(GraphicsCatalog.SmoothMotion));
+
+        // RTX 40/50 default (opt-in off): Recommended presets (0x00FFFFFF), NO Smooth Motion.
+        var rtx40Default = GameSettings.WutheringWavesNvidiaValues(40, smoothMotionOptIn: false, usingNativeDlssG: false)
+            .ToDictionary(v => v.Id, v => v.Value);
+        Assert.Equal(GpuProfile.Recommended, rtx40Default[GraphicsCatalog.SrPreset]);
+        Assert.Equal(GpuProfile.Recommended, rtx40Default[GraphicsCatalog.RrPreset]);
+        Assert.False(rtx40Default.ContainsKey(GraphicsCatalog.SmoothMotion));
+
+        // RTX 40/50 opt-in when NOT using native DLSS-G: enables driver Smooth Motion (0xB0D384C0 = 1).
+        var rtx40Smooth = GameSettings.WutheringWavesNvidiaValues(40, smoothMotionOptIn: true, usingNativeDlssG: false)
+            .ToDictionary(v => v.Id, v => v.Value);
+        Assert.Equal(1u, rtx40Smooth[GraphicsCatalog.SmoothMotion]);
+        Assert.Contains(
+            GameSettings.WutheringWavesNvidiaValues(50, smoothMotionOptIn: true, usingNativeDlssG: false),
+            v => v.Id == GraphicsCatalog.SmoothMotion && v.Value == 1u);
+
+        // RTX 40/50 opt-in when native DLSS-G IS used: leaves Smooth Motion off.
+        var rtx40Native = GameSettings.WutheringWavesNvidiaValues(40, smoothMotionOptIn: true, usingNativeDlssG: true)
+            .ToDictionary(v => v.Id, v => v.Value);
+        Assert.False(rtx40Native.ContainsKey(GraphicsCatalog.SmoothMotion));
+
+        // GTX / non-RTX: nothing.
+        Assert.Empty(GameSettings.WutheringWavesNvidiaValues(16, smoothMotionOptIn: true));
+    }
+
+    [Fact]
+    public void WutheringWavesOptimizeAndPutBackApplyAndRestoreNvidiaOnlyProfile()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "exo-wuwa-apply-" + Guid.NewGuid().ToString("N"));
+        var gameDir = Path.Combine(root, "game");
+        var dataDir = Path.Combine(root, "data");
+        var prevData = Environment.GetEnvironmentVariable(PathHelper.DataDirOverrideVariable);
+        var prevSeam = NvidiaProfiles.ForGameSeam;
+        try
+        {
+            var win64 = Path.Combine(gameDir, "Client", "Binaries", "Win64");
+            Directory.CreateDirectory(win64);
+            Directory.CreateDirectory(dataDir);
+            System.IO.File.WriteAllBytes(Path.Combine(win64, "Client-Win64-Shipping.exe"), []);
+            System.IO.File.WriteAllBytes(Path.Combine(win64, "Client-Win64-ShippingBase.dll"), []);
+            Environment.SetEnvironmentVariable(PathHelper.DataDirOverrideVariable, dataDir);
+
+            var driverHeld = new Dictionary<uint, uint?>();
+            string? capturedFileInFolder = null;
+            NvidiaProfiles.ForGameSeam = (program, ids, writes) =>
+            {
+                capturedFileInFolder = program.FileInFolder;
+                if (writes is not null)
+                    foreach (var (id, val) in writes)
+                    {
+                        if (val is { } v) driverHeld[id] = v;
+                        else driverHeld.Remove(id);
+                    }
+                var after = ids.ToDictionary(id => id, id => driverHeld.GetValueOrDefault(id));
+                return new NvidiaProfiles.GameState(true, null, "Exo: Wuthering Waves", new Dictionary<uint, uint?>(), after, []);
+            };
+
+            var game = new GameEntry { Id = "steam:3513350", Title = "Wuthering Waves", Store = StoreKind.Steam, Installed = true, Path = gameDir };
+            var rtx4080 = new GameSettings.Pc("nvidia", null, 16, Gpu: "NVIDIA GeForce RTX 4080");
+
+            var profileOff = GameSettings.For(game, rtx4080, smoothMotion: false)!;
+            var initial = GameSettings.InspectState(game, profileOff);
+            Assert.True(initial.Found);
+            Assert.Equal(GameSettings.Standing.Off, initial.Standing);
+            Assert.Single(initial.Groups!);
+
+            Assert.Null(GameSettings.ApplyWithNvidia(game, profileOff, null, all: true, on: true));
+            Assert.Equal("Client-Win64-ShippingBase.dll", capturedFileInFolder);
+            Assert.Equal(1u, driverHeld[GameSettings.StreamlineDlssOverride]);
+            Assert.False(driverHeld.ContainsKey(GraphicsCatalog.SmoothMotion));
+            Assert.Equal(GameSettings.Standing.Applied, GameSettings.InspectState(game, profileOff).Standing);
+
+            var profileSmooth = GameSettings.For(game, rtx4080, smoothMotion: true)!;
+            Assert.Null(GameSettings.ApplyWithNvidia(game, profileSmooth, null, all: true, on: true));
+            Assert.Equal(1u, driverHeld[GraphicsCatalog.SmoothMotion]);
+            Assert.Equal(GameSettings.Standing.Applied, GameSettings.InspectState(game, profileSmooth).Standing);
+
+            Assert.Null(GameSettings.ApplyWithNvidia(game, profileOff, null, all: true, on: false));
+            Assert.Empty(driverHeld);
+            Assert.Equal(GameSettings.Standing.Off, GameSettings.InspectState(game, profileOff).Standing);
+        }
+        finally
+        {
+            NvidiaProfiles.ForGameSeam = prevSeam;
+            Environment.SetEnvironmentVariable(PathHelper.DataDirOverrideVariable, prevData);
+            try { DeletionGate.DeleteDirectory(root, recursive: true); } catch (IOException) { }
+        }
+    }
 }

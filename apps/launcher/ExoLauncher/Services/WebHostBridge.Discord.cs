@@ -266,7 +266,7 @@ public sealed partial class WebHostBridge
         return files;
     }
 
-    private static object DiscordVoice(JsonElement p, bool hasParams)
+    private static async Task<object> DiscordVoiceAsync(JsonElement p, bool hasParams, CancellationToken ct)
     {
         if (DiscordSession.Current is not { } session) return new { ok = false, message = "Discord isn't connected." };
         switch (ReadString(p, hasParams, "action"))
@@ -285,8 +285,25 @@ public sealed partial class WebHostBridge
             case "user":
                 if (ReadString(p, hasParams, "userId") is not { } user) return new { ok = false };
                 session.SetAudioUser(DiscordRest.Id(user), ReadBool(p, hasParams, "muted"), ReadDouble(p, hasParams, "volume") is { } v ? (float)Math.Clamp(v, 0, 200) : null,
-                    stream: ReadBool(p, hasParams, "stream") == true);
+                    stream: ReadBool(p, hasParams, "stream") == true, soundboardMuted: ReadBool(p, hasParams, "soundboardMuted"));
                 break;
+            case "stage":
+                if (ReadString(p, hasParams, "guildId") is not { Length: > 0 } stageGuild || ReadString(p, hasParams, "channelId") is not { Length: > 0 } stageChannel)
+                    return new { ok = false, message = "Choose a stage channel first." };
+                var targetUser = ReadString(p, hasParams, "userId");
+                var suppress = ReadBool(p, hasParams, "suppress");
+                var rts = ReadBool(p, hasParams, "requestToSpeak");
+                DiscordRest.Reply stageReply;
+                if (targetUser is { Length: > 0 } uid && uid != session.Cache.Me?.Id)
+                {
+                    if (suppress is not { } sup) return new { ok = false };
+                    stageReply = await session.Rest.SetMemberStageStateAsync(DiscordRest.Id(stageGuild), DiscordRest.Id(uid), DiscordRest.Id(stageChannel), sup, ct).ConfigureAwait(false);
+                }
+                else
+                {
+                    stageReply = await session.Rest.SetOwnStageStateAsync(DiscordRest.Id(stageGuild), DiscordRest.Id(stageChannel), suppress, rts, ct).ConfigureAwait(false);
+                }
+                return new { ok = stageReply.Error is null, message = stageReply.Error, voice = session.VoiceStatus() };
         }
         return new { ok = true, voice = session.VoiceStatus() };
     }
@@ -560,14 +577,20 @@ public sealed partial class WebHostBridge
                     pictures = [];
                 }
                 var icons = await Task.Run(() => sources.Select(s => GoLiveSources.Icon(s.Exe)).ToArray(), ct).ConfigureAwait(true);
+                var (captureMode, serviceDisabled) = CaptureServiceHealth.CurrentStatus();
                 return new
                 {
                     ok = true,
                     message = (string?)null,
+                    captureMode,
+                    serviceDisabled,
                     sources = sources.Select((s, i) => new
                     {
                         id = s.Id, kind = s.Kind, title = s.Title, app = s.App, icon = icons[i],
-                        thumb = pictures.GetValueOrDefault(s.Id), game = s.Game, height = s.Height, hz = GoLiveSources.Refresh(s),
+                        thumb = pictures.GetValueOrDefault(s.Id), game = s.Game,
+                        width = s.Width, height = s.Height,
+                        hz = s.Hz > 0 ? s.Hz : GoLiveSources.Refresh(s),
+                        primary = s.Primary,
                     }),
                 };
             case "preview":
@@ -763,6 +786,10 @@ public sealed partial class WebHostBridge
                 var guild = accepted.ValueKind == JsonValueKind.Object && accepted.TryGetProperty("guild", out var g) && g.TryGetProperty("id", out var gid) ? gid.GetString() : null;
                 var invited = accepted.ValueKind == JsonValueKind.Object && accepted.TryGetProperty("channel", out var ch) && ch.TryGetProperty("id", out var cid) ? cid.GetString() : null;
                 return new { ok = reply.Error is null, message = reply.Error, guildId = guild, channelId = invited };
+            case "create" when (ReadString(p, hasParams, "name") ?? "").Trim() is { Length: >= 2 and <= 100 } guildName:
+                reply = await session.Rest.CreateGuildAsync(guildName, ct).ConfigureAwait(false);
+                var createdId = reply.Body is { ValueKind: JsonValueKind.Object } createdGuild && createdGuild.TryGetProperty("id", out var createdGuildId) ? createdGuildId.GetString() : null;
+                return new { ok = reply.Error is null, message = reply.Error, guildId = createdId };
             // A message's invite card: the server (or group DM), its counts and whether you're in it; invalid when
             // Discord says the invite is unknown or expired, so the card says so.
             case "invite" when InviteCode(ReadString(p, hasParams, "invite")) is { } info:

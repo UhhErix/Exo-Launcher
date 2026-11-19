@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react'
 import { ChevronRight } from '../../brand/icons'
 import { host, onHostEvent } from '../../lib/host'
+import { allowHover } from '../../lib/hoverGate'
 import type { DiscordChannels, DiscordHome } from '../../lib/discord'
 import { Switch } from '../Switch'
 import { Choice } from '../settings/Choice'
@@ -417,7 +418,7 @@ export function Submenu({ label, danger, children }: { label: string; danger?: b
     pendingSwitch = window.setTimeout(() => show(label), 300)
   }
   return (
-    <span className="exo-dc-ctx-parent" onPointerEnter={enter}
+    <span className="exo-dc-ctx-parent" onPointerEnter={event => { if (allowHover(event)) enter() }}
       onPointerLeave={() => { window.clearTimeout(pendingSwitch); if (open) { window.clearTimeout(leave.current); leave.current = window.setTimeout(() => show(now => now === label ? null : now), 300) } }}>
       <button ref={row} type="button" role="menuitem" aria-haspopup="menu" aria-expanded={open} className={danger ? 'is-danger' : undefined}
         onClick={event => { keyboard.current = event.detail === 0; stay() }}>

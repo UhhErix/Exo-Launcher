@@ -29,6 +29,14 @@ public sealed class DiscordVoiceTests
     }
 
     [Fact]
+    public void ExoOnIsFalseWhenStandardSuppressionIsSelected()
+    {
+        Assert.True(VoiceProcessing.ExoOn(new AppSettings { DiscordNoiseSuppression = true, DiscordNoiseSuppressionKind = "exo" }));
+        Assert.False(VoiceProcessing.ExoOn(new AppSettings { DiscordNoiseSuppression = true, DiscordNoiseSuppressionKind = "standard" }));
+        Assert.False(VoiceProcessing.ExoOn(new AppSettings { DiscordNoiseSuppression = false, DiscordNoiseSuppressionKind = "exo" }));
+    }
+
+    [Fact]
     public void HChaCha20MatchesTheXChaChaDraftVector()
     {
         // draft-irtf-cfrg-xchacha-03, section 2.2.1.

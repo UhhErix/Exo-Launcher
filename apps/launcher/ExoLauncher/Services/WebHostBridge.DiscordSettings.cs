@@ -406,6 +406,7 @@ public sealed partial class WebHostBridge
         if (keybinds is not null) DiscordSession.Current?.KeybindsChanged();
         if (settings.DiscordUnreadBadge != badgeBefore) App.MainAppWindow?.RefreshTaskbarBadge();
         if (VoiceProcessing.From(settings).NoiseSuppression || settings.DiscordOthersNoiseSuppression) _ = NoiseSuppressorDownload.EnsureAsync(CancellationToken.None);
+        var (captureMode, serviceDisabled) = CaptureServiceHealth.CurrentStatus();
         return new
         {
             inputProfile = VoiceProcessing.From(settings).Profile,
@@ -433,6 +434,11 @@ public sealed partial class WebHostBridge
             disableAllSounds = settings.DiscordDisableAllSounds,
             selectedChannelSound = settings.DiscordSelectedChannelSound,
             soundVolume = settings.DiscordSoundVolume,
+            goLiveHeight = settings.DiscordGoLiveHeight,
+            goLiveFps = settings.DiscordGoLiveFps,
+            goLiveHevc = settings.DiscordGoLiveHevc,
+            captureMode,
+            serviceDisabled,
         };
     }
 
@@ -460,6 +466,9 @@ public sealed partial class WebHostBridge
         if (ReadBool(p, hasParams, "disableAllSounds") is { } all) s.DiscordDisableAllSounds = all;
         if (ReadBool(p, hasParams, "selectedChannelSound") is { } selected) s.DiscordSelectedChannelSound = selected;
         if (ReadDouble(p, hasParams, "soundVolume") is { } volume) s.DiscordSoundVolume = (int)Math.Clamp(volume, 0, 100);
+        if (ReadDouble(p, hasParams, "goLiveHeight") is { } glh && (int)glh is 720 or 1080 or 1440 or 0) s.DiscordGoLiveHeight = (int)glh;
+        if (ReadDouble(p, hasParams, "goLiveFps") is { } glf && (int)glf is 15 or 30 or 60 or 120) s.DiscordGoLiveFps = (int)glf;
+        if (ReadBool(p, hasParams, "goLiveHevc") is { } hevc) s.DiscordGoLiveHevc = hevc;
     }
 
     private static List<DiscordKeybind> Keybinds(JsonElement list) =>

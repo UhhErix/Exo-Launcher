@@ -1,6 +1,7 @@
 import { sampleFace } from './waits'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { host } from '../../lib/host'
+import { allowHover } from '../../lib/hoverGate'
 import { report } from '../../lib/report'
 import { avatarUrl, reactionCounts, reactionKey, type DiscordMessage, type DiscordReaction, type DiscordUser } from '../../lib/discord'
 import { useAccountSetting } from '../../lib/discordPrefs'
@@ -108,7 +109,7 @@ export function Reactions({ message, nitro, onReact, onView, add }: {
             style={color ? { '--exo-dc-burst': color } as React.CSSProperties : undefined}
             aria-pressed={chip.mine} aria-label={`${emojiName(chip.reaction)}, ${chip.count}${chip.burst ? ' super reactions' : ''}`}
             aria-disabled={chip.burst && !chip.mine && !nitro}
-            onPointerEnter={event => show(chip, event.currentTarget)} onFocus={event => show(chip, event.currentTarget)} onBlur={hide}
+            onPointerEnter={event => { if (allowHover(event)) show(chip, event.currentTarget) }} onFocus={event => show(chip, event.currentTarget)} onBlur={hide}
             onContextMenu={event => { event.preventDefault(); event.stopPropagation(); hide(); onView(`${key}:${chip.burst}`) }}
             onClick={() => { if (!chip.burst || chip.mine || nitro) onReact(key, !chip.mine, chip.burst) }}>
             <ReactionEmoji reaction={chip.reaction} />

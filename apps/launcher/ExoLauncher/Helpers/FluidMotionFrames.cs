@@ -52,7 +52,7 @@ internal static partial class FluidMotionFrames
         public IReadOnlyList<int> Tags { get; init; } = [];
         /// <summary>PCGamingWiki's page.</summary>
         public GameWiki.Facts? Wiki { get; init; }
-        /// <summary>The install ships a frame generation library (nvngx_dlssg, amd_fidelityfx_framegeneration, libxess_fg).</summary>
+        /// <summary>The install ships an AMD-usable frame generation library (amd_fidelityfx_framegeneration_dx12, libxess_fg; excludes NVIDIA-only nvngx_dlssg).</summary>
         public bool FrameGenFiles { get; init; }
         /// <summary>This PC's graphics card against the game's Steam requirements: "recommended", "minimum", "below", or null.</summary>
         public string? Graphics { get; init; }
@@ -95,7 +95,7 @@ internal static partial class FluidMotionFrames
     {
         if (!Runs(gpu)) return new(false, "this GPU has no Fluid Motion Frames");
         if (IsCompetitive(game)) return new(false, "a competitive game");
-        if (game.FrameGenFiles || game.Wiki?.FrameGen == "true") return new(false, "it has frame generation of its own");
+        if (HasOwnFrameGen(game)) return new(false, "it has frame generation of its own");
         if (game.Wiki?.Apis is { Count: > 0 } apis && !apis.Any(api => api is "dx11" or "dx12" or "vulkan" or "opengl"))
             return new(false, "it runs on " + string.Join(" and ", apis));
         if (game.Graphics is "minimum" or "below") return new(false, "this GPU meets only its Minimum or less, under the base frame rate it needs");
@@ -113,6 +113,18 @@ internal static partial class FluidMotionFrames
             { Meets: "minimum", Recommended: null } => "recommended",
             var row => row?.Meets,
         };
+
+    /// <summary>
+    /// Whether the game ships its own AMD-usable frame generation (cross-vendor files, or PCGamingWiki "true" unless
+    /// its framegen tech list names NVIDIA DLSS alone, which cannot run on Radeon without mods blocked by anti-cheat).
+    /// </summary>
+    private static bool HasOwnFrameGen(Game game)
+    {
+        if (game.FrameGenFiles) return true;
+        if (game.Wiki?.FrameGen != "true") return false;
+        var tech = game.Wiki.FrameGenTech;
+        return tech is not { Count: > 0 } || tech.Any(t => !t.Contains("dlss", StringComparison.OrdinalIgnoreCase));
+    }
 
     /// <summary>Exo knows what kind of game it is: Steam's tags, or PCGamingWiki's modes or genres.</summary>
     private static bool Known(Game game) => game.Tags.Count > 0 || game.Wiki is { } wiki && (wiki.Modes.Count > 0 || wiki.Genres.Count > 0);

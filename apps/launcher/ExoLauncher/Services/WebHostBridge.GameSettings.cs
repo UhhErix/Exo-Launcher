@@ -19,37 +19,61 @@ public sealed partial class WebHostBridge
         var all = ReadBool(p, hasParams, "all") == true;
         var on = ReadBool(p, hasParams, "on");
         var mode = ReadString(p, hasParams, "mode");
+        var smoothMotion = ReadBool(p, hasParams, "smoothMotion");
         return await Task.Run(object () =>
         {
             var pc = GameSettings.ThisPc();
-            if (GameSettings.For(game, pc) is not { } profile) return new { ok = true, supported = false, note = GameSettings.AntiCheatNote(game, pc) };
+            var supportsSmooth = GameSettings.SupportsSmoothMotion(game, pc);
+            if (smoothMotion is true && !supportsSmooth)
+                return new { ok = false, message = "Smooth Motion requires Wuthering Waves on an RTX 40 or 50 GPU." };
+            var initialSmooth = supportsSmooth && _services.Settings.SmoothMotionEnabled(game.Id);
+            if (GameSettings.For(game, pc, initialSmooth) is not { } profile)
+                return new { ok = true, supported = false, note = GameSettings.AntiCheatNote(game, pc) };
             var running = MainWindow.RunningLibraryGames().ContainsKey(game.Id) || GameSettings.Busy(profile);
             if (mode is not null)
             {
                 if (profile.WindowMode is null || mode is not (GameSettings.Borderless or GameSettings.Fullscreen)) return new { ok = false, message = "This game has no such window mode." };
                 if (running) return new { ok = false, message = $"Close {profile.Title} first." };
                 if (!GameSettings.ChooseWindowMode(profile, mode)) return new { ok = false, message = "Could not save. Try again." };
-                profile = GameSettings.For(game, pc)!;
+                profile = GameSettings.For(game, pc, initialSmooth)!;
                 all = true;
                 on = true;
+            }
+            if (smoothMotion is { } wantSmooth)
+            {
+                if (running) return new { ok = false, message = $"Close {profile.Title} first." };
+                _services.Settings.SetSmoothMotion(game.Id, wantSmooth);
+                profile = GameSettings.For(game, pc, wantSmooth)!;
+            }
+            else if (all && on == false && supportsSmooth)
+            {
+                if (running) return new { ok = false, message = $"Close {profile.Title} first." };
+                _services.Settings.SetSmoothMotion(game.Id, false);
+                profile = GameSettings.For(game, pc, false)!;
             }
             if ((group is not null || all) && on is { } turnOn)
             {
                 if (running) return new { ok = false, message = $"Close {profile.Title} first." };
-                if (!GameSettings.Set(profile, all ? null : group, turnOn, profile.Program?.Invoke(game))) return new { ok = false, message = "Could not save. Try again." };
-                // The record remembers the game it was pressed for: the page's status is told under its id without a walk of its folder.
-                GameSettings.NoteGame(profile.Id, game.Id);
-                // The game's own NVIDIA profile (including per-game Prefer Maximum Performance) goes with Optimize or its group.
-                if ((all || group == GameSettings.NvidiaGroup) && GameSettings.ReadAll(profile) is [var first, ..]
-                    && GameSettings.SetNvidia(game, profile, first.File, turnOn, includePerGamePower: true) is { } refused)
+                if (GameSettings.ApplyWithNvidia(game, profile, group, all, turnOn, includePerGamePower: true) is { } refused)
                     return new { ok = false, message = refused };
             }
-            var files = GameSettings.ReadAll(profile);
-            var states = files.Count == 0 ? null : GameSettings.States(profile, files, GameSettings.Kept(profile.Id), GameSettings.KeptOn(profile));
-            if (states is not null && GameSettings.NvidiaState(game, profile, files[0].File, includePerGamePower: true) is { } nvidia) states.Add(nvidia);
-            var groups = states?.Select(state => new { id = state.Id, label = state.Label, on = state.On, exo = state.Exo }).ToList();
-            var standing = states is null ? GameSettings.Standing.Off : GameSettings.Stands(states, GameSettings.Missing(profile, files).Count);
-            return new { ok = true, supported = true, title = profile.Title, running, found = files.Count > 0, waiting = GameSettings.Waiting(profile), groups, standing = standing.ToString().ToLowerInvariant(), again = GameSettings.Again(profile), windowMode = profile.WindowMode };
+            var summary = GameSettings.InspectState(game, profile, includePerGamePower: true);
+            var groups = summary.Groups?.Select(state => new { id = state.Id, label = state.Label, on = state.On, exo = state.Exo }).ToList();
+            bool? smoothMotionState = supportsSmooth ? _services.Settings.SmoothMotionEnabled(game.Id) : null;
+            return new
+            {
+                ok = true,
+                supported = true,
+                title = profile.Title,
+                running,
+                found = summary.Found,
+                waiting = GameSettings.Waiting(profile),
+                groups,
+                standing = summary.Standing.ToString().ToLowerInvariant(),
+                again = GameSettings.Again(profile),
+                windowMode = profile.WindowMode,
+                smoothMotion = smoothMotionState,
+            };
         }, ct).ConfigureAwait(false);
     }
 

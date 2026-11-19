@@ -26,6 +26,7 @@ internal sealed class RiotClientApi : IDisposable
     private static readonly JsonDocumentOptions JsonOpts = new() { AllowTrailingCommas = true };
     internal static readonly TimeSpan ReadTimeout = TimeSpan.FromSeconds(2);
     private static readonly TimeSpan RequestTimeout = TimeSpan.FromSeconds(20);
+    private static readonly TimeSpan QuitTimeout = TimeSpan.FromSeconds(3);
     // Riot answers the launch POST only after it has started the game, which
     // can take longer than an ordinary request on a cold client.
     private static readonly TimeSpan LaunchTimeout = TimeSpan.FromSeconds(60);
@@ -520,7 +521,7 @@ internal sealed class RiotClientApi : IDisposable
             using var api = TryConnect();
             if (api is null) return false;
             using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
-            timeout.CancelAfter(RequestTimeout);
+            timeout.CancelAfter(QuitTimeout);
             using var response = await api._http.PostAsync("/process-control/v1/process/quit", null, timeout.Token).ConfigureAwait(false);
             return response.IsSuccessStatusCode;
         }

@@ -12,6 +12,10 @@ namespace ExoLauncher.Services.DiscordClient;
 /// </summary>
 internal sealed partial class DiscordRest
 {
+    /// <summary>Create Server: creates a new server with a default general channel.</summary>
+    internal Task<Reply> CreateGuildAsync(string name, CancellationToken ct) =>
+        SendAsync(HttpMethod.Post, "guilds", new JsonObject { ["name"] = name }, ct);
+
     internal Task<Reply> SaveGuildAsync(string guildId, JsonObject changes, CancellationToken ct) =>
         SendAsync(HttpMethod.Patch, $"guilds/{Id(guildId)}", changes, ct);
 
@@ -99,6 +103,20 @@ internal sealed partial class DiscordRest
     /// <summary>A member's nickname, or their voice (mute, deaf, channel_id; null disconnects).</summary>
     internal Task<Reply> SaveMemberAsync(string guildId, string userId, JsonObject changes, CancellationToken ct) =>
         SendAsync(HttpMethod.Patch, $"guilds/{Id(guildId)}/members/{Id(userId)}", changes, ct);
+
+    /// <summary>Stage Channel: updates your own voice state (@me) — request to speak, lower hand, move to audience, or join stage.</summary>
+    internal Task<Reply> SetOwnStageStateAsync(string guildId, string channelId, bool? suppress, bool? requestToSpeak, CancellationToken ct)
+    {
+        var body = new JsonObject { ["channel_id"] = Id(channelId) };
+        if (suppress is { } s) body["suppress"] = s;
+        if (requestToSpeak is { } r) body["request_to_speak_timestamp"] = r ? DateTimeOffset.UtcNow.ToString("o") : null;
+        return SendAsync(HttpMethod.Patch, $"guilds/{Id(guildId)}/voice-states/@me", body, ct);
+    }
+
+    /// <summary>Stage Channel moderator: invites a listener to speak (suppress: false) or moves a speaker back to the audience (suppress: true).</summary>
+    internal Task<Reply> SetMemberStageStateAsync(string guildId, string userId, string channelId, bool suppress, CancellationToken ct) =>
+        SendAsync(HttpMethod.Patch, $"guilds/{Id(guildId)}/voice-states/{Id(userId)}",
+            new JsonObject { ["channel_id"] = Id(channelId), ["suppress"] = suppress }, ct);
 
     /// <summary>The user's own nickname on a server.</summary>
     internal Task<Reply> SaveOwnNickAsync(string guildId, string? nick, CancellationToken ct) =>

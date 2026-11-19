@@ -175,7 +175,7 @@ export function AppsPanel({ active }: { active: boolean }) {
 
   if (!programs) return (
     <div className="exo-apps">
-      <Head view={view} onView={setView} query={query} onQuery={setQuery} startup={0} />
+      <Head view={view} onView={setView} query={query} onQuery={setQuery} />
       <Wait label="Reading this PC's apps"><Columns knowsUse sort={sort} onSort={() => { }} run={null} picked={null} busy={false} onUninstallPicked={() => { }} onSelect={() => { }} /></Wait>
       <div className="exo-apps-list"><Wait>{sampleLines(10)}</Wait></div>
     </div>
@@ -299,8 +299,8 @@ export function AppsPanel({ active }: { active: boolean }) {
 
   return (
     <div className="exo-apps">
-      <Head view={view} onView={setView} query={query} onQuery={setQuery} startup={startup.state?.items.filter(item => item.enabled).length ?? 0}
-        facts={`${count(mainApps.length, 'app', 'apps')}${total > 0 ? ` · ${size(total)}` : ''}`} />
+      <Head view={view} onView={setView} query={query} onQuery={setQuery}
+        facts={total > 0 ? size(total) : undefined} />
       {view === 'apps' ? (
         <Columns knowsUse={knowsUse} sort={sort} onSort={pressSort} run={run} picked={picked} busy={busy !== null}
           restore={restoreFirst} onRestore={setRestoreFirst}
@@ -413,7 +413,7 @@ function Parts({ count: how, searching, children }: { count: number; searching: 
     <section aria-label="Needed by Windows, games or Exo">
       {searching ? <h3 className="exo-apps-group">Needed by Windows, games or Exo</h3> : (
         <button type="button" className="exo-apps-more" aria-expanded={open} onClick={() => setOpen(value => !value)}>
-          <span>Needed by Windows, games or Exo · {how}</span>
+          <span>Needed by Windows, games or Exo</span>
           {open ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
         </button>
       )}
@@ -422,8 +422,8 @@ function Parts({ count: how, searching, children }: { count: number; searching: 
   )
 }
 
-function Head({ view, onView, query, onQuery, startup, facts }: { view: View; onView: (next: View) => void; query: string; onQuery: (next: string) => void; startup: number; facts?: string }) {
-  const views: { id: View; label: string }[] = [{ id: 'apps', label: 'Apps' }, { id: 'windows', label: 'Windows apps' }, { id: 'startup', label: startup > 0 ? `Starts with Windows · ${startup}` : 'Starts with Windows' }, { id: 'removed', label: 'Removed' }]
+function Head({ view, onView, query, onQuery, facts }: { view: View; onView: (next: View) => void; query: string; onQuery: (next: string) => void; facts?: string }) {
+  const views: { id: View; label: string }[] = [{ id: 'apps', label: 'Apps' }, { id: 'windows', label: 'Windows apps' }, { id: 'startup', label: 'Starts with Windows' }, { id: 'removed', label: 'Removed' }]
   return (
     <div className="exo-apps-head">
       <h2 id="pc-apps-title">Apps{facts ? <span className="exo-apps-facts">{facts}</span> : null}</h2>

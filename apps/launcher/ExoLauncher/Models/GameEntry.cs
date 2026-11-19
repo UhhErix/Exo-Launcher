@@ -460,6 +460,10 @@ public sealed class AppSettings
     public bool DiscordSelectedChannelSound { get; set; }
     /// <summary>How loud all of Discord's sounds play, in percent (60 until chosen, the level they always had).</summary>
     public int DiscordSoundVolume { get; set; } = 60;
+    /// <summary>Discord Go Live defaults: resolution height (0 for Source), frame rate, and hardware HEVC codec support.</summary>
+    public int DiscordGoLiveHeight { get; set; } = 1080;
+    public int DiscordGoLiveFps { get; set; } = 30;
+    public bool DiscordGoLiveHevc { get; set; } = true;
     /// <summary>Per game: "on" or "off" overrides what PCGamingWiki says; no entry is Auto.</summary>
     public Dictionary<string, string> HdrGameModes { get; set; } = new(StringComparer.OrdinalIgnoreCase);
     /// <summary>System > Display > Use NVIDIA color settings, by screen device path (format in <see cref="ExoLauncher.Helpers.NvidiaColor"/>). No entry: other apps control color.</summary>
@@ -506,8 +510,6 @@ public sealed class AppSettings
     public bool CompressWhileIdle { get; set; }
     /// <summary>A compressed game's files an update wrote back are compressed again while the PC is idle. Off until the player turns it on.</summary>
     public bool RecompressAfterUpdates { get; set; }
-    /// <summary>How much of the processor compressing may use: gentle, balanced or fast (<see cref="ExoLauncher.Services.GameCompression.Threads"/>).</summary>
-    public string CompressSpeed { get; set; } = "balanced";
     /// <summary>This PC's chipset driver (AMD's on a Ryzen, Intel's on an Intel processor) updates by itself while the PC is idle (<see cref="ExoLauncher.Services.ChipsetUpdate"/>).</summary>
     public bool AutoUpdateChipset { get; set; } = true;
     /// <summary>Newer DLSS, FSR and XeSS files download by themselves (from the vendor's own release, Exo's cache when that fails) while the PC is idle. On by default.</summary>
@@ -572,6 +574,13 @@ public sealed class AppSettings
     /// Steam has it and "!" once the player changed it in Steam (<see cref="ExoLauncher.Adapters.SteamOverlayConfig.Plan"/>).
     /// </summary>
     public Dictionary<string, string> SteamOverlay { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+    /// <summary>
+    /// Pre-Exo <c>OverlayAppEnable</c> value per Steam account and app (<c>"&lt;accountId&gt;/&lt;appId&gt;"</c> -&gt; <c>"1"</c>,
+    /// <c>"0"</c>, or <c>""</c> when the key was absent before Exo touched <c>localconfig.vdf</c>), so Exo can cleanly reverse its edits.
+    /// </summary>
+    public Dictionary<string, string> SteamOverlayPrior { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+    /// <summary>Per-game opt-in for NVIDIA driver Smooth Motion (<c>0xB0D384C0</c>) on RTX 40/50 when not using native DLSS-G.</summary>
+    public Dictionary<string, bool> SmoothMotion { get; set; } = new(StringComparer.OrdinalIgnoreCase);
     /// <summary>
     /// Devices > controller > Sound in Windows: controllers' own speakers and microphones as Windows audio devices.
     /// Off by default: Exo turns them off whenever a controller connects, so Windows never switches your sound to one.

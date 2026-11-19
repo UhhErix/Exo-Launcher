@@ -115,7 +115,7 @@ public sealed partial class WebHostBridge
             // controller, for its layout.
             var app = await Task.Run(() => FillSteamAsync(common, game.LaunchTarget!, ct), ct).ConfigureAwait(true);
             if (app is not null && SteamInputInUse(game.LaunchTarget!, app)) common.StoreProperties = "Steam";
-            common.SteamOverlay = SteamOverlayShown(game.LaunchTarget!);
+            (common.SteamOverlay, common.SteamOverlayNote) = SteamOverlayState(game.LaunchTarget!);
             common.AntiCheatLaunch = AntiCheatLaunchFor(game);
         }
         else if (game.Store == StoreKind.Epic && LegendaryProperties.IsAppName(game.LaunchTarget))
@@ -177,13 +177,35 @@ public sealed partial class WebHostBridge
         return off.Ok ? (true, true, "") : (false, false, "Exo couldn't take its frame generation out of the game, so it still starts without anti-cheat. " + off.Message);
     }
 
-    /// <summary>The overlay as the game will have it: the player's pick in Properties, else Steam's switch now (absent is on).</summary>
-    private bool? SteamOverlayShown(string appId)
+    internal const string GlobalOverlayOffWarning =
+        "Steam’s global in-game overlay is turned off in Steam Settings → In Game, so this game will not show it until that setting is on.";
+
+    /// <summary>The overlay as the game will have it, plus a warning if opted ON while Steam's global EnableGameOverlay is 0.</summary>
+    internal static (bool? Shown, string? Note) ResolveSteamOverlayState(
+        string? recordEntry,
+        string? localConfigText,
+        string appId)
     {
-        var picked = _services.Settings.Current.SteamOverlay.GetValueOrDefault(appId)?.TrimEnd('?');
-        if (picked is "on=" or "off=") return picked == "on=";
-        if (SteamInstallation.ResolveRoot() is not { } root || SteamPlaytime.TryGetLocalConfigPath(root) is not { } config) return null;
-        return SteamOverlayConfig.Read(SteamOverlayConfig.Apps(SteamPlaytime.ReadSharedText(config)), appId) ?? true;
+        var picked = recordEntry?.TrimEnd('?');
+        bool? shown = picked switch
+        {
+            "on=" or "on" or "on!" => true,
+            "off=" or "off" or "off!" => false,
+            _ => localConfigText is null ? null : SteamOverlayConfig.Read(SteamOverlayConfig.Apps(localConfigText), appId) ?? true,
+        };
+        var note = shown == true && localConfigText is not null && !SteamOverlayConfig.GlobalEnabled(localConfigText)
+            ? GlobalOverlayOffWarning
+            : null;
+        return (shown, note);
+    }
+
+    private (bool? Shown, string? Note) SteamOverlayState(string appId)
+    {
+        var recordEntry = _services.Settings.Current.SteamOverlay.GetValueOrDefault(appId);
+        var configText = SteamInstallation.ResolveRoot() is { } root && SteamPlaytime.TryGetLocalConfigPath(root) is { } config
+            ? SteamPlaytime.ReadSharedText(config)
+            : null;
+        return ResolveSteamOverlayState(recordEntry, configText, appId);
     }
 
     private static long? ShaderCacheBytesOf(GameEntry game)
@@ -371,13 +393,18 @@ public sealed partial class WebHostBridge
             AppLog.Info($"Steam overlay: {game.Title} ({game.LaunchTarget}) {value}, picked in Properties.");
             // Steam holds its settings in memory and writes them as it exits: its running is no reason to close it, so
             // the answer says at once that the change waits, and the pass is asked for only when Steam is not running.
+            var globalOff = value == "on"
+                && SteamInstallation.ResolveRoot() is { } root
+                && SteamPlaytime.TryGetLocalConfigPath(root) is { } cfg
+                && !SteamOverlayConfig.GlobalEnabled(SteamPlaytime.ReadSharedText(cfg));
             var (waits, message) = OverlayPass.SwitchAnswer(ProcessHelper.IsProcessRunning("steam"));
             if (waits)
             {
                 SetOverlayPending(true);
-                return message;
+                return globalOff ? $"{message} {GlobalOverlayOffWarning}" : message;
             }
-            return await ApplySteamOverlayAsync(ct).ConfigureAwait(true);
+            var passMessage = await ApplySteamOverlayAsync(ct).ConfigureAwait(true);
+            return globalOff && string.IsNullOrEmpty(passMessage) ? GlobalOverlayOffWarning : passMessage;
         }
         if (key == "antiCheatLaunch")
         {
@@ -647,6 +674,8 @@ public sealed partial class WebHostBridge
         public bool? ThroughSteam { get; set; }
         /// <summary>A Steam game's overlay switch; null for other stores.</summary>
         public bool? SteamOverlay { get; set; }
+        /// <summary>Warning when the game overlay is opted on while Steam's global EnableGameOverlay is 0.</summary>
+        public string? SteamOverlayNote { get; set; }
         /// <summary>The game's own shader caches together (0 once cleared); null for a game Exo can't rebuild them for.</summary>
         public long? ShaderCacheBytes { get; set; }
         /// <summary>A Steam game Steam offers without its anti-cheat: "with" or "without", and that entry's own words; null otherwise.</summary>
@@ -675,6 +704,7 @@ public sealed partial class WebHostBridge
             storeProperties = StoreProperties,
             throughSteam = ThroughSteam,
             steamOverlay = SteamOverlay,
+            steamOverlayNote = SteamOverlayNote,
             shaderCacheBytes = ShaderCacheBytes,
             antiCheatLaunch = AntiCheatLaunch is { } launch ? new { value = launch.Value, detail = launch.Detail } : null,
         };

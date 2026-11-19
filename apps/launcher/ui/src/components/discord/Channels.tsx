@@ -273,7 +273,7 @@ function VoiceChannel({ channel, voice, open, onPreview, onJoin, onInvite, onEdi
           {channel.members?.length ?? 0}/{channel.userLimit}</span> : null}
       </button>
       <ChannelTools channel={channel} onInvite={onInvite} onEdit={onEdit} />
-      {channel.status ? <VoiceStatus text={channel.status} /> : null}
+      {channel.stageTopic ? <VoiceStatus text={channel.stageTopic} /> : channel.status ? <VoiceStatus text={channel.status} /> : null}
       {channel.members?.length ? <VoiceMembers members={channel.members} /> : null}
     </div>
   )

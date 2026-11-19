@@ -22,6 +22,7 @@ import {
   moveGridFocusIndex,
   resolveActiveGameId,
   resolveGridFocusRestore,
+  resolveWindowedGridInput,
   rovingGridTabIndex,
   shouldClearPendingGridFocus,
   type GridNavigationKey,
@@ -230,15 +231,11 @@ export function WindowedGameGrid({
     const gridRoot = rootRef.current
     const scrollRoot = scrollRootRef.current
     if (!gridRoot || !scrollRoot) return
+    if (gridRoot.clientWidth <= 0 || scrollRoot.clientHeight <= 0) return
 
     if (resized || !geometryRef.current) geometryRef.current = measureGeometry(gridRoot, scrollRoot)
-    const { offset, ...geometry } = geometryRef.current
-    const input: GridWindowInput = {
-      ...geometry,
-      itemCount: games.length,
-      viewportStart: scrollRoot.scrollTop - offset,
-      overscanRows: GRID_OVERSCAN_ROWS,
-    }
+    const input = resolveWindowedGridInput(geometryRef.current, games.length, scrollRoot.scrollTop, GRID_OVERSCAN_ROWS)
+    if (!input) return
     const nextWindow = calculateGridWindow(input)
     const activeElement = document.activeElement
     const focusedId =
@@ -290,10 +287,25 @@ export function WindowedGameGrid({
       }
     }
     // Shelves above this one move it without resizing it: watch every box
-    // between the grid and the scroll root, and the root's own children.
-    for (let node: Element | null = gridRoot; node && node !== scrollRoot; node = node.parentElement) observer.observe(node)
-    for (const child of scrollRoot.children) observer.observe(child)
-    observer.observe(scrollRoot)
+    // between the grid and the scroll root, the root's children (including inside display: contents), and DOM changes.
+    const observeBoxes = () => {
+      observer.disconnect()
+      for (let node: Element | null = gridRoot; node && node !== scrollRoot; node = node.parentElement) observer.observe(node)
+      for (const child of scrollRoot.children) {
+        observer.observe(child)
+        if (getComputedStyle(child).display === 'contents') {
+          for (const nested of child.children) observer.observe(nested)
+        }
+      }
+      observer.observe(scrollRoot)
+    }
+    observeBoxes()
+    const mutations = new MutationObserver((records) => {
+      if (!records.some((record) => record.target !== gridRoot && !gridRoot.contains(record.target))) return
+      observeBoxes()
+      onResize()
+    })
+    mutations.observe(scrollRoot, { childList: true, subtree: true, attributes: true, attributeFilter: ['hidden', 'style', 'class'] })
     scrollRoot.addEventListener('scroll', onScroll, { passive: true })
     document.addEventListener('pointerdown', releaseFocusOwnership, true)
     document.addEventListener('focusin', releaseFocusOwnership, true)
@@ -302,6 +314,7 @@ export function WindowedGameGrid({
     return () => {
       scheduleMeasurementRef.current = () => { }
       window.cancelAnimationFrame(frame)
+      mutations.disconnect()
       observer.disconnect()
       scrollRoot.removeEventListener('scroll', onScroll)
       document.removeEventListener('pointerdown', releaseFocusOwnership, true)

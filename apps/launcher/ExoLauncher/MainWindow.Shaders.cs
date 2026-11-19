@@ -155,12 +155,20 @@ public sealed partial class MainWindow
         if (method == "ui.visible")
             addon.SetUiVisible(parameters?["visible"] is System.Text.Json.Nodes.JsonValue value && value.TryGetValue<bool>(out var on) && on);
         var starts = Services.ShadersAddon.StartMethods.Contains(method);
-        object AtRest() => method == "snapshot" ? new { ok = true, result = Services.ShadersAddon.AtRest() } : new { ok = true };
-        if (!starts && !addon.Running) return AtRest();
-        try { return new { ok = true, result = await addon.CallAsync(method, parameters, ct, starts ? (method == "scan" ? "Refresh" : method is "game.compile" or "queue.add" or "queue.start" or "queue.resume" ? "Compile" : "Shaders page") : null).ConfigureAwait(true) }; }
+        var startFor = starts ? (method == "scan" ? "Refresh" : method is "game.compile" or "queue.add" or "queue.start" or "queue.resume" ? "Compile" : "Shaders page") : null;
+        try
+        {
+            var (usedAtRest, result) = await Services.ShadersAddon.InvokeWithStoppingFallbackAsync(
+                method,
+                starts,
+                () => addon.Running,
+                () => addon.CallAsync(method, parameters, ct, startFor),
+                () => method == "snapshot" ? Services.ShadersAddon.AtRest() : null).ConfigureAwait(true);
+            return usedAtRest && method != "snapshot"
+                ? new { ok = true }
+                : new { ok = true, result };
+        }
         catch (OperationCanceledException) { throw; }
-        // It exited between the check and the call.
-        catch (InvalidOperationException) when (!starts && !addon.Running) { return AtRest(); }
         catch (Exception ex)
         {
             // The engine's words reach the page unless they name a path.

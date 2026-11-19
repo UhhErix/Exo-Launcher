@@ -137,6 +137,8 @@ export function ChatPage() {
         ) : null}
         <ChoiceRow label="Role colors" value={prefs.roleStyle} onChange={value => setDiscordPrefs({ roleStyle: value })}
           choices={[{ value: 'username', label: 'In names' }, { value: 'dot', label: 'Next to names' }, { value: 'hidden', label: 'Hidden' }]} />
+        <ChoiceRow label="Time format" value={String(settings.timestampHourCycle)} onChange={value => void changeAccountSettings({ timestampHourCycle: Number(value) })}
+          choices={[{ value: '0', label: 'Auto' }, { value: '1', label: '12-hour' }, { value: '2', label: '24-hour' }]} />
       </Section>
       <Section title="Motion">
         <SwitchRow label="Reduce motion" checked={reduced} onChange={setPerformanceMode} />
