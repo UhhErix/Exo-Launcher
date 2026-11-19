@@ -3,7 +3,6 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using ExoLauncher.Services;
-using Exo.Identity;
 
 namespace ExoLauncher.Tests;
 
@@ -180,7 +179,8 @@ public sealed class DriverAdvisoriesTests : IDisposable
     private static (ECDsa Key, byte[] Public) NewKey()
     {
         var key = ECDsa.Create(ECCurve.NamedCurves.nistP256);
-        return (key, P256.PublicKey(key));
+        var q = key.ExportParameters(false).Q;
+        return (key, [0x04, .. q.X!, .. q.Y!]);
     }
 
     private static string Table(long serial, string id = "feed-entry") => $$"""
@@ -192,8 +192,9 @@ public sealed class DriverAdvisoriesTests : IDisposable
     private static string Envelope(ECDsa key, string table, bool highS = false)
     {
         var payload = Encoding.UTF8.GetBytes(table);
-        var signature = P256.LowS(key.SignData(payload, HashAlgorithmName.SHA256, DSASignatureFormat.IeeeP1363FixedFieldConcatenation));
-        if (highS) signature = HighS(signature);
+        var signature = key.SignData(payload, HashAlgorithmName.SHA256, DSASignatureFormat.IeeeP1363FixedFieldConcatenation);
+        // CNG picks either s; the feed carries the low one, and the test's high one is the other.
+        if (P256.IsLowS(signature) == highS) signature = HighS(signature);
         return JsonSerializer.Serialize(new { payload = Convert.ToBase64String(payload), signature = Convert.ToBase64String(signature) });
     }
 

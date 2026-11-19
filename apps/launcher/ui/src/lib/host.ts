@@ -324,16 +324,6 @@ export type LucidChange = Partial<Omit<LucidSettings, 'headphone' | 'favorites' 
 }
 /** A headphone Lucid has a tuning for, as its picker lists it. */
 export type LucidHeadphone = { id: string; model: string; brand: string; category: string; grade: string; keywords: string }
-export type VoiceTuneWindows = { level: number | null; hardware: boolean; muted: boolean; ducking: number; processing: string | null }
-export type VoiceTuneResult = {
-  ok: boolean; message?: string | null; cancelled?: boolean; kept: boolean; windows: VoiceTuneWindows; before?: string; after?: string
-  mic?: { title: string; kind: string; app: string | null; tips: string[]; steps: { name: string; versus: 'better' | 'equal' | 'worse'; steps: string }[]; exoStepsAside: boolean } | null
-  report: {
-    heard: boolean; roomDb: number; humHz: number | null; bandLimited: boolean; peakDb: number; clipped: number
-    speechDb: number; softDb: number; loudDb: number; pitchHz: number; pops: number; typingDb: number
-    tuning: { suppressionLimitDb: number; gainDb: number; spectrum: number[] }
-  }
-}
 
 /** What the microphone's chain ran on the sound just now (see VoiceStages in the host). */
 export type VoiceStages = {
@@ -588,8 +578,6 @@ export type KeepStatus = {
 }
 /** Exo compiles the games' shaders again after a graphics driver change, by itself: where that stands, and how many games are ready. */
 export type ShaderRebuild = { state: 'idle' | 'waiting' | 'running' | 'paused' | 'done'; ready: number; total: number }
-/** One word for each store client's quiet (stores.quiet): applied, waiting for the client to close, or off. */
-export type StoresQuiet = Record<'steam' | 'epic', 'applied' | 'waiting' | 'off'>
 export type HdrGame = {
   ok: boolean
   message?: string | null
@@ -650,25 +638,6 @@ export type GpuFeature = { key: string; label: string; state: GpuFeatureState }
 export type IntelLowLatency = 'on' | 'boost' | 'off'
 /** XeSS frame generation for one game: the game's own choice, or the driver's 2x, 3x or 4x override. */
 export type IntelFrameGen = 'game' | '2x' | '3x' | '4x'
-
-/**
- * PC › Graphics: what the GPU reports right now (a Radeon's through ADLX, a GeForce's through NvAPI and NVML), in °C, W,
- * MHz, MB, RPM and %; ok false when there is nothing to show, and while a game runs.
- */
-export type GpuSensors = {
-  ok: boolean
-  temperature?: number | null
-  hotspot?: number | null
-  memoryTemperature?: number | null
-  watts?: number | null
-  clock?: number | null
-  vramUsed?: number | null
-  vramTotal?: number | null
-  fan?: number | null
-  usage?: number | null
-  /** The card's own limits, on the reading they apply to: warm from `warn`, hot from `bad` (°C). */
-  limit?: { on: 'temperature' | 'hotspot'; warn: number; bad: number } | null
-}
 
 /**
  * Game sheet > driver frame generation: whether this PC has it; on a Radeon, whether Exo turns Fluid Motion Frames on for
@@ -794,14 +763,6 @@ export type DriversState = { ok: boolean; message?: string | null; busy: string 
 /** A row of Update all starting (working) or ending (ok, message); id "" when the whole run ends. */
 export type DriverStep = { id: string; working: string | null; ok: boolean | null; message: string | null; restart: boolean }
 
-/**
- * PC › This PC and Network (PcAbout.cs): what this PC is, null where Windows can't say. name: its maker's model, else
- * the name Windows gives it. Memory speeds in MT/s (rated above speed: EXPO/XMP off); network the connection's kind
- * ("Ethernet" or "Wi-Fi"), networkMbps its link speed. tpm: "2.0", "1.2" or "None". The drives are PC › Drives' (DriveInfo).
- */
-/** One model in Exo's device picture list (devices.catalog). */
-export type CatalogDevice = { kind: 'mouse' | 'keyboard' | 'audio' | 'controller' | 'mousepad' | 'microphone'; maker: string; model: string; variants: string[] }
-
 /** PC > Auto tune: one row per part Exo can tune here. All of it measured by Exo's own test. */
 export type AutoTuneMode = 'cooler' | 'faster'
 export type TuneMeasure = { score: number; peakC?: number | null }
@@ -826,6 +787,11 @@ export type TunePart = {
 }
 export type AutoTune = { ok: boolean; message?: string | null; parts: TunePart[] }
 
+/**
+ * PC › This PC and Network (PcAbout.cs): what this PC is, null where Windows can't say. name: its maker's model, else
+ * the name Windows gives it. Memory speeds in MT/s (rated above speed: EXPO/XMP off); network the connection's kind
+ * ("Ethernet" or "Wi-Fi"), networkMbps its link speed. tpm: "2.0", "1.2" or "None". The drives are PC › Drives' (DriveInfo).
+ */
 export type PcAbout = {
   name?: string | null
   processor?: string | null
@@ -1809,8 +1775,6 @@ export interface HostEventMap {
   }
   /** A key redeemed in a store's own page: the game that came into the library, or why none was confirmed. */
   'keys.found': { ok: boolean; message: string; gameId?: string; title?: string }
-  /** A runtime Exo offered to install is downloading: bytes so far of total (null when the size is unknown). */
-  'deps.progress': { id: string; bytes: number; total: number | null }
   /** A game's compression moved on (twice a second at most while it works) or ended. */
   'compress.progress': { id: string; compress: CompressState }
   /** The window was maximized or restored, or the pointer moved over the native maximize button. */
@@ -1934,8 +1898,6 @@ export interface HostEventMap {
   'discord.micLevel': MicLevel
   /** One of Exo's parts (a store tool, a model) failed to come twice: the feature waiting on it ("Only My Voice"). */
   'components.failed': { feature: string }
-  /** Voice Tune's microphone gave its first sound: the guide's clock starts. */
-  'discord.voiceTune': { state: 'recording' }
   /** A keybind the room carries out (Toggle Streamer Mode). */
   'discord.keybind': { action: string }
   /** A /tts message in the conversation on screen, to read out. */
@@ -1988,7 +1950,6 @@ const COALESCE_READS = new Set([
   'game.get',
   'game.extras',
   'game.progress',
-  'app.version',
   'shell.windowState',
 ])
 
@@ -2251,8 +2212,6 @@ export const host = {
   artRefetch: (id: string) => rawCall<ArtworkMutationResponse>('art.refetch', { id }),
   /** The cover cache's address this run (its token), for the cache files the page names itself. */
   artBase: () => rawCall<{ covers: string }>('art.base'),
-  /** Wide art for a game known only by its name (the Lobby's games you don't have), kept in the cover cache by name; null when none. */
-  artByTitle: (title: string) => rawCall<{ ok: boolean; url: string | null }>('art.byTitle', { title }, 45_000),
   /** A folder's cropped picture (PNG, base64), stored for it; the folder names the returned address once saved. */
   libraryFolderArt: (folderId: string, image: string) =>
     rawCall<{ ok: boolean; message?: string; art?: string | null }>('library.folderArt', { folderId, image }, 60_000),
@@ -2571,11 +2530,6 @@ export const host = {
   appsPackageAddBack: (id: string) => rawCall<{ ok: boolean; store: boolean; message?: string | null }>('apps.packageAddBack', { id }, 5 * 60_000),
   /** Edge Update may install Edge again (asked in Exo's window): Exo told it not to when Edge was removed. */
   appsAllowEdge: () => rawCall<{ ok: boolean; message?: string | null }>('apps.allowEdge', {}, 5 * 60_000),
-  offerDepInstall: (id: string) =>
-    rawCall<{ ok: boolean; message?: string; exitCode?: number | null; restartRequired?: boolean; status?: string }>(
-      'deps.offerInstall', { id }, 30 * 60_000),
-  cancelDepInstall: (id: string) =>
-    rawCall<{ ok: boolean; message?: string }>('deps.cancelInstall', { id }),
   /** Game runtimes: every one that applies to this PC, its version and the newest. */
   runtimesList: () => rawCall<{ ok: boolean; busy?: boolean; items: RuntimeItem[] }>('runtimes.list', {}, 30_000),
   /** missing: what isn't here (or the named ids); update: that and every older one; repair: every Visual C++ again. One Windows prompt. */
@@ -2647,7 +2601,6 @@ export const host = {
     ),
   setChromeLayout: (chrome: ChromeLayout) =>
     rawCall<{ ok: boolean }>('shell.setChromeLayout', chrome),
-  version: () => rawCall<{ version: string }>('app.version'),
   /** `manual` skips the host's short release cache (Settings' Check for update). */
   checkUpdate: (manual = false) => rawCall<AppUpdateResponse>('app.checkUpdate', manual ? { manual: true } : {}),
   installUpdate: () => rawCall<AppUpdateResponse>('app.installUpdate', {}, 30 * 60_000),
@@ -2664,9 +2617,6 @@ export const host = {
     rawCall<DlssRunResult>('dlss.updateAll', { id, ...(file ? { file, release: release ?? 'latest' } : {}) }, 10 * 60_000),
   dlssRestore: (id: string, file?: string) =>
     rawCall<DlssRunResult>('dlss.restore', { id, ...(file ? { file } : {}) }),
-  /** NVIDIA's on-screen DLSS overlay. Changing it shows Windows' administrator prompt, so it waits up to 2 minutes. */
-  dlssIndicator: (on?: boolean) =>
-    rawCall<{ ok: boolean; available: boolean; on: boolean; message?: string | null }>('dlss.indicator', on === undefined ? {} : { on }, on === undefined ? 15_000 : 120_000),
   /** Allow (naming the anti-cheat the user was shown) or stop allowing changes to an anti-cheat game's upscaler files. */
   dlssConsent: (id: string, allow: boolean, antiCheat?: string) =>
     rawCall<{ ok: boolean; message?: string }>('dlss.consent', { id, allow, ...(allow && antiCheat ? { antiCheat } : {}) }),
@@ -2681,8 +2631,6 @@ export const host = {
   shadersPrepareStart: (id: string) => rawCall<{ ok: boolean; message?: string | null }>('shaders.prepare.start', { id }, 10 * 60_000),
   shadersPrepareCancel: (id: string) => rawCall<{ ok: boolean; message?: string | null }>('shaders.prepare.cancel', { id }),
   hdrState: () => rawCall<HdrState>('hdr.state', {}),
-  /** One word per store client for its quiet: applied, waiting (the client has to close first), or off. Never a key or a count. */
-  storesQuiet: () => rawCall<StoresQuiet>('stores.quiet', {}),
   /** A game's HDR support (asks PCGamingWiki the first time); with a mode, sets its Auto/Always/Never. */
   hdrGame: (id: string, mode?: string) => rawCall<HdrGame>('hdr.game', { id, ...(mode ? { mode } : {}) }, 30_000),
   gameSettings: (id: string, change?: { group?: string; all?: boolean; on?: boolean; mode?: string }) =>
@@ -2825,7 +2773,6 @@ export const host = {
   /** The user panel's device menus: devices, choices and volumes; with values, saves them. */
   discordAudio: (change: { input?: string; output?: string; inputVolume?: number; outputVolume?: number; soundboardVolume?: number; soundboardMuted?: boolean }) =>
     rawCall<{ inputs: { id: string; name: string }[]; outputs: { id: string; name: string }[]; input: string | null; output: string | null; inputVolume: number; outputVolume: number; soundboardVolume: number; soundboardMuted: boolean }>('discord.audio', change, 15_000),
-  discordBandPins: (pins?: string[]) => rawCall<{ ok: boolean; pins: string[]; message?: string | null }>('discord.bandPins', pins === undefined ? {} : { pins }),
   /** The account's Discord settings (PreloadedUserSettings, Discord's defaults filled in); with changes, saves them (guildFolders: the whole server list). */
   discordUserSettings: (changes?: Partial<AccountSettings> & { guildFolders?: DiscordRailItem[] }) =>
     rawCall<{ ok: boolean; message?: string | null; values?: AccountSettings | null }>('discord.userSettings', changes ? { changes } : {}, 30_000),
@@ -2874,8 +2821,6 @@ export const host = {
   /** Devices: the mouse, keyboards, audio and controllers on this PC (devices.changed says when one comes or goes). */
   devicesUsbMap: () => rawCall<{ ok: boolean; message?: string; controllers: UsbMapController[] }>('devices.usbMap', {}, 15_000),
   devicesList: () => rawCall<{ ok: boolean; devices: Peripheral[]; cpuPorts?: CpuPorts | null }>('devices.list', {}, 15_000),
-  /** Opens a keyboard's own settings app by the id its card carries: in the browser, installed, or its download page. */
-  devicesOpenApp: (app: string) => rawCall<{ ok: boolean; message?: string }>('devices.openApp', { app }, 15_000),
   controllerRead: (id: string) => rawCall<ControllerRead>('controller.read', { id }, 30_000),
   /** The output's and microphone's format, volume and mute, and how Exo Voice is set. */
   audioRead: (output: string | null, mic: string | null) => rawCall<AudioRead>('audio.read', { output, mic }),
@@ -2913,11 +2858,6 @@ export const host = {
    */
   devicesImage: (device: { kind: string; model?: string | null; name?: string | null; maker?: string | null; color?: string | null; layout?: string | null }) =>
     rawCall<{ ok: boolean; url: string | null }>('devices.image', device, 45_000),
-  /** Every device in Exo's picture list, each model once with its variants: what a profile's gear is picked from. */
-  devicesCatalog: () => rawCall<{ ok: boolean; devices: CatalogDevice[] }>('devices.catalog', {}),
-  /** Voice Tune: record the guided take (each part's seconds), cancel it, whether this mic has a kept tuning (state), keep its tuning for this mic, forget it, or fix Windows (unmute, no ducking). */
-  discordVoiceTune: (action: 'record' | 'cancel' | 'state' | 'keep' | 'forget' | 'unmute' | 'noDucking', params: { parts?: number[] } = {}) =>
-    rawCall<VoiceTuneResult & { windows?: VoiceTuneWindows; processing?: string | null }>('discord.voiceTune', { action, ...params }, 90_000),
   /** Plays one of Discord's sounds (preview: even when it's turned off). */
   discordSound: (name: string, preview = false) => rawCall<{ ok: boolean }>('discord.sound', { name, preview }),
   discordMutualFriends: (userId: string) =>
@@ -2984,8 +2924,6 @@ export const host = {
    */
   gpuProfile: (action?: 'apply' | 'undo', latency?: { lowLatency?: IntelLowLatency }) =>
     rawCall<GpuProfile>('gpu.profile', action ? { action, ...(action === 'apply' ? latency : {}) } : {}, 30_000),
-  /** System > Graphics: the GPU's temperature, power, clock, VRAM and fan now. */
-  gpuSensors: () => rawCall<GpuSensors>('gpu.sensors', {}, 15_000),
   /** PC › Drives: every drive and the fix rows; `space` adds what fills each drive (slow the first time); an action sets or undoes a fix, Windows asking once. */
   systemDrives: (action?: DriveAction, space = false) =>
     rawCall<DrivesState>('system.drives', { ...(action ? { action } : {}), ...(space ? { space: true } : {}) }, 75_000),

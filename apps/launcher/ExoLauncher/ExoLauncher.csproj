@@ -52,11 +52,6 @@
     <InternalsVisibleTo Include="ExoLauncher.Tests" />
   </ItemGroup>
 
-  <!-- Exo's identity (plan §2). -->
-  <ItemGroup>
-    <ProjectReference Include="..\Exo.Identity\Exo.Identity.csproj" />
-  </ItemGroup>
-
 
 
   <ItemGroup>

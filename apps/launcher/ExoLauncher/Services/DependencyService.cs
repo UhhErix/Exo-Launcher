@@ -96,27 +96,6 @@ public sealed partial class DependencyService
         }
     }
 
-    /// <summary>deps.offerInstall: one runtime, through the same install as the rest.</summary>
-    public async Task<object> OfferInstallAsync(string dependencyId, Action<long, long?>? progress = null, CancellationToken cancellationToken = default)
-    {
-        var result = await InstallAsync([dependencyId], "missing", update =>
-        {
-            if (update.Phase == "download") progress?.Invoke(update.Bytes, update.Total);
-        }, cancellationToken).ConfigureAwait(false);
-        var mine = result.Results.FirstOrDefault();
-        return new
-        {
-            ok = result.Ok,
-            message = mine?.Message ?? result.Message,
-            exitCode = mine?.Code,
-            restartRequired = mine?.Outcome == "restart",
-            status = mine?.Outcome,
-        };
-    }
-
-    /// <summary>deps.cancelInstall.</summary>
-    public object CancelInstall(string dependencyId) => Cancel();
-
     private static void RemoveStage(string stage)
     {
         if (!Directory.Exists(stage) || (File.GetAttributes(stage) & FileAttributes.ReparsePoint) != 0) return;

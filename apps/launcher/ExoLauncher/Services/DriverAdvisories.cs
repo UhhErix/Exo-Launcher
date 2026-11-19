@@ -3,7 +3,6 @@ using System.Globalization;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using ExoLauncher.Helpers;
-using Exo.Identity;
 
 namespace ExoLauncher.Services;
 

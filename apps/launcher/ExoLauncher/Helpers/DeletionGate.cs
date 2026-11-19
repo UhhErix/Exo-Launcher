@@ -1,10 +1,6 @@
 using System.Diagnostics;
 
-#if EXO_IDENTITY_LINKED
-namespace ExoLauncher.Helpers.Linked;
-#else
 namespace ExoLauncher.Helpers;
-#endif
 
 /// <summary>Raised by an Exo-owned delete the gate refuses. An IOException, so the callers' existing handlers still catch it.</summary>
 internal sealed class DeletionRefusedException(string message) : IOException(message);
@@ -15,7 +11,7 @@ internal sealed class DeletionRefusedException(string message) : IOException(mes
 /// <see cref="DeleteDirectory"/>): Exo's own files; it refuses only what Exo keeps for everyone and a shader cache while a
 /// compile runs. <b>Clean</b> (<see cref="Clean"/>): the junk and leftover cleaners; it also refuses sign-in data, credentials,
 /// game saves (a folder holding one stays whole), Exo's own data (except its old backups), every shader cache, and a program
-/// that owns the files while it runs. Each call decides afresh: a refusal is never remembered. Shared with Exo.Identity.
+/// that owns the files while it runs. Each call decides afresh: a refusal is never remembered.
 /// </summary>
 internal static class DeletionGate
 {

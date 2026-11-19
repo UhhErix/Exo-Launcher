@@ -406,8 +406,6 @@ public sealed class AppSettings
     public bool DiscordEvenVoices { get; set; } = true;
     /// <summary>Game focus: no Discord notifications while a game runs (the unread badge still counts).</summary>
     public bool DiscordQuietWhilePlaying { get; set; } = true;
-    /// <summary>What each Discord account (by user id) pinned to the room's top bar, in order: "g:id" a server, "d:id" a DM or group DM.</summary>
-    public Dictionary<string, List<string>> DiscordBandPins { get; set; } = [];
     /// <summary>Exo's Discord calls: the microphone and speakers chosen (Windows endpoint ids; none is Windows' default) and their volume, 0-200 like Discord's.</summary>
     public string? DiscordInputDevice { get; set; }
     public string? DiscordOutputDevice { get; set; }

@@ -549,7 +549,6 @@ public sealed partial class WebHostBridge
                 "art.refetch" => await ArtworkRefetchAsync(paramsEl, hasParams).ConfigureAwait(true),
                 // Answered at once, so it reaches the page before the library does (cover art the page names itself).
                 "art.base" => new { covers = LocalFileHost.Url(CoverArtService.VirtualHost, "") },
-                "art.byTitle" => await Task.Run(() => ArtByTitleAsync(paramsEl, hasParams, requestToken)).ConfigureAwait(true),
                 "library.folderArt" => await LibraryFolderArtAsync(paramsEl, hasParams).ConfigureAwait(true),
                 "library.refreshAll" => await LibraryRefreshAllAsync(_bridgeLifetime.Token).ConfigureAwait(true),
                 "game.cancelInstall" => _services.Launcher.Cancel(ReadString(paramsEl, hasParams, "id")),
@@ -743,8 +742,6 @@ public sealed partial class WebHostBridge
                 "startup.remove" => await StartupChangeAsync(paramsEl, hasParams, restore: false).ConfigureAwait(true),
                 "startup.restore" => await StartupChangeAsync(paramsEl, hasParams, restore: true).ConfigureAwait(true),
                 "startup.clean" => await StartupCleanAsync().ConfigureAwait(true),
-                "deps.offerInstall" => await DepsOfferInstallAsync(paramsEl, hasParams).ConfigureAwait(true),
-                "deps.cancelInstall" => _services.Dependencies.CancelInstall(ReadString(paramsEl, hasParams, "id") ?? ""),
                 "stores.check" => await StoresCheckAsync().ConfigureAwait(false),
                 "stores.matrix" => await Task.Run(StoreMatrixMapped).ConfigureAwait(true),
                 "settings.get" => BuildSettings(),
@@ -773,7 +770,6 @@ public sealed partial class WebHostBridge
                 "shell.pickFolder" => await PickFolderAsync().ConfigureAwait(true),
                 "shell.pickProgram" => await PickProgramAsync().ConfigureAwait(true),
                 "shell.setChromeLayout" => SetChrome(paramsEl, hasParams),
-                "app.version" => new { version = _services.AppVersion },
                 "app.log" => LogFromUi(paramsEl, hasParams),
                 "app.repairCache" => await RepairCacheAsync(paramsEl, hasParams).ConfigureAwait(false),
                 "app.openLogs" => OpenLogsFolder(),
@@ -788,7 +784,6 @@ public sealed partial class WebHostBridge
                 "dlss.consent" => await DlssConsentAsync(paramsEl, hasParams, requestToken).ConfigureAwait(true),
                 "dlss.frameGen" => await DlssFrameGenAsync(paramsEl, hasParams, requestToken).ConfigureAwait(true),
                 // Windows' administrator prompt blocks the thread that asks until it is answered.
-                "dlss.indicator" => await Task.Run(() => DlssIndicatorAsync(paramsEl, hasParams)).ConfigureAwait(true),
                 "shaders.status" => await ShadersStatusAsync(paramsEl, hasParams, requestToken).ConfigureAwait(true),
                 "shaders.prepare.games" => await ShaderPrepareGamesAsync(requestToken).ConfigureAwait(true),
                 "shaders.prepare.auto" => await Task.Run(() => ShaderPrepareAuto(paramsEl, hasParams)).ConfigureAwait(true),
@@ -800,7 +795,6 @@ public sealed partial class WebHostBridge
                 "hdr.game" => await HdrGameAsync(paramsEl, hasParams, requestToken).ConfigureAwait(true),
                 "game.settings" => await GameSettingsAsync(paramsEl, hasParams, requestToken).ConfigureAwait(true),
                 "keep.status" => KeepStatusForPage(paramsEl, hasParams),
-                "stores.quiet" => StoresQuietForPage(paramsEl, hasParams),
                 "gpu.display" => await GpuDeadlineAsync(GpuDisplayAsync(paramsEl, hasParams), TimeSpan.FromSeconds(25), requestToken).ConfigureAwait(true),
                 "discord.status" => DiscordStatus(paramsEl, hasParams),
                 "discord.signIn" => DiscordSignIn(paramsEl, hasParams),
@@ -860,7 +854,6 @@ public sealed partial class WebHostBridge
                 "discord.apps" => await DiscordAppsAsync(paramsEl, hasParams, requestToken).ConfigureAwait(true),
                 "discord.typing" => await DiscordTypingAsync(paramsEl, hasParams, requestToken).ConfigureAwait(true),
                 "discord.userSettings" => await DiscordUserSettingsAsync(paramsEl, hasParams, requestToken).ConfigureAwait(true),
-                "discord.bandPins" => DiscordBandPins(paramsEl, hasParams),
                 "discord.account" => await DiscordAccountAsync(paramsEl, hasParams, requestToken).ConfigureAwait(true),
                 "discord.shop" => await DiscordShopAsync(paramsEl, hasParams, requestToken).ConfigureAwait(true),
                 "discord.font" => await DiscordFontAsync(paramsEl, hasParams).ConfigureAwait(true),
@@ -868,11 +861,9 @@ public sealed partial class WebHostBridge
                 "discord.micTest" => DiscordMicTest(paramsEl, hasParams),
                 "discord.micMonitor" => DiscordMicMonitor(paramsEl, hasParams),
                 "discord.myVoice" => await DiscordMyVoiceAsync(paramsEl, hasParams, requestToken).ConfigureAwait(true),
-                "discord.voiceTune" => await DiscordVoiceTuneAsync(paramsEl, hasParams, requestToken).ConfigureAwait(true),
                 "lucid" => await Task.Run(() => LucidAsync(paramsEl, hasParams)).ConfigureAwait(true),
                 "lucid.headphones" => await Task.Run(LucidHeadphones).ConfigureAwait(true),
                 "devices.image" => await Task.Run(() => DevicesImageAsync(paramsEl, hasParams, requestToken)).ConfigureAwait(true),
-                "devices.catalog" => DevicesCatalog(),
                 "controller.read" => await Task.Run(() => ControllerReadAsync(paramsEl, hasParams)).ConfigureAwait(true),
                 "controller.measure" => await Task.Run(() => ControllerMeasureAsync(paramsEl, hasParams, requestToken)).ConfigureAwait(true),
                 "controller.test" => await Task.Run(() => ControllerTestAsync(paramsEl, hasParams, requestToken)).ConfigureAwait(true),
@@ -887,7 +878,6 @@ public sealed partial class WebHostBridge
                 "discord.sound" => DiscordSound(paramsEl, hasParams),
                 "gpu.driver" => await GpuDeadlineAsync(Task.Run(() => GpuDriverAsync(paramsEl, hasParams, requestToken), requestToken), TimeSpan.FromSeconds(55), requestToken).ConfigureAwait(true),
                 "gpu.profile" => await GpuDeadlineAsync(GpuProfileAsync(paramsEl, hasParams, requestToken), TimeSpan.FromSeconds(25), requestToken).ConfigureAwait(true),
-                "gpu.sensors" => await GpuDeadlineAsync(GpuSensorsAsync(requestToken), TimeSpan.FromSeconds(10), requestToken).ConfigureAwait(true),
                 "gpu.afmf3" => await GpuDeadlineAsync(GpuAfmf3Async(paramsEl, hasParams, requestToken), TimeSpan.FromSeconds(25), requestToken).ConfigureAwait(true),
                 "gpu.game" => await GpuDeadlineAsync(GpuGameAsync(paramsEl, hasParams, requestToken), TimeSpan.FromSeconds(25), requestToken).ConfigureAwait(true),
                 "gpu.import" => await GpuImportAsync(paramsEl, hasParams, requestToken).ConfigureAwait(true),
@@ -916,7 +906,6 @@ public sealed partial class WebHostBridge
                 "audio.setVolume" => await Task.Run(() => AudioSetVolume(paramsEl, hasParams)).ConfigureAwait(true),
                 "audio.setMute" => await Task.Run(() => AudioSetMute(paramsEl, hasParams)).ConfigureAwait(true),
                 "audio.setFormat" => await Task.Run(() => AudioSetFormat(paramsEl, hasParams)).ConfigureAwait(true),
-                "devices.openApp" => await Task.Run(() => DevicesOpenApp(paramsEl, hasParams)).ConfigureAwait(true),
                 "mouse.profiles.get" => MouseFileGet("profiles.json", "profiles"),
                 "mouse.profiles.set" => MouseFileSet("profiles.json", "profiles", paramsEl, hasParams),
                 "mouse.presets.get" => MouseFileGet("presets.json", "presets"),
@@ -2081,15 +2070,6 @@ public sealed partial class WebHostBridge
         }).ToList(),
     };
 
-    private async Task<object> DepsOfferInstallAsync(JsonElement p, bool hasParams)
-    {
-        var depId = ReadString(p, hasParams, "id");
-        if (string.IsNullOrWhiteSpace(depId))
-            return new { ok = false, message = "Missing dependency id." };
-        return await _services.Dependencies.OfferInstallAsync(depId!, (bytes, total) =>
-            PostEvent("deps.progress", new { id = depId, bytes, total })).ConfigureAwait(false);
-    }
-
     private object BuildSettings()
     {
         var s = _services.Settings.Current;
@@ -2784,15 +2764,6 @@ public sealed partial class WebHostBridge
         var file = ReadString(p, hasParams, "file");
         var result = await Task.Run(() => _dlss.RestoreGame(game, file), _bridgeLifetime.Token).ConfigureAwait(false);
         return MapDlssRun(result);
-    }
-
-    /// <summary>NVIDIA's DLSS overlay: read without <c>on</c>; with it, Windows asks for administrator rights.</summary>
-    private static async Task<object> DlssIndicatorAsync(JsonElement p, bool hasParams)
-    {
-        var result = hasParams && p.TryGetProperty("on", out var on) && on.ValueKind is JsonValueKind.True or JsonValueKind.False
-            ? await DlssSwapService.SetIndicatorAsync(on.GetBoolean()).ConfigureAwait(false)
-            : await Task.Run(DlssSwapService.GetIndicator).ConfigureAwait(false);
-        return new { ok = result.Ok, available = result.Available, on = result.On, message = result.Message };
     }
 
     /// <summary>One press, reported per file with its version before and after.</summary>

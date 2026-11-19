@@ -1,7 +1,7 @@
 namespace ExoLauncher.Helpers;
 
 /// <summary>
-/// PC › Graphics' live readings: what the GPU reports right now (null where it doesn't), the same for every vendor
+/// The GPU's live readings (Auto tune's): what it reports right now (null where it doesn't), the same for every vendor
 /// (<see cref="AmdAdlx.ReadSensors"/>, <see cref="NvidiaSensors.Read"/>).
 /// </summary>
 internal sealed record GpuSensors(double? TemperatureC, double? HotspotC, double? Watts, int? ClockMhz, int? VramUsedMb, int? VramTotalMb,

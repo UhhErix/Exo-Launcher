@@ -5,9 +5,7 @@ import type { CompressSettings, CompressState, Game, GameProperties, LauncherSet
 import type { CaptureItem } from './capture'
 import type { NoteInfo } from './notes'
 import { emitHostEvent } from './host'
-// A dev preview's ?pins=g:1,d:2 starts with those pinned to Discord's top bar.
 let mockMusicLevel = 0.6
-let mockBandPins: string[] = (typeof location === 'undefined' ? null : new URLSearchParams(location.search).get('pins'))?.split(',') ?? []
 const MOCK_GAMES: Game[] = [
   {
     id: 'local:add',
@@ -1061,10 +1059,6 @@ const MOCK_HANDLERS: Record<string, MockHandler> = {
   'art.reset': mockArtRefresh(true),
   'art.refetch': mockArtRefresh(false),
   // No cover cache here: store art off Steam's CDN, for the games the dev preview's friends play.
-  'art.byTitle': (params?: { title?: string }) => {
-    const appId = ({ 'Marvel Rivals': 2767030, 'Rocket League': 252950, 'Elden Ring': 1245620, 'Hades II': 1145350 } as Record<string, number>)[params?.title ?? '']
-    return appId ? { ok: true, url: `https://cdn.cloudflare.steamstatic.com/steam/apps/${appId}/library_hero.jpg` } : { ok: false, url: null }
-  },
   'art.base': () => ({ covers: 'https://covers.exo-launcher.local/mock/' }),
   // No cover cache here: the picture comes back as itself.
   'library.folderArt': (params) => ({ ok: true, art: `data:image/png;base64,${String(params?.image ?? '')}` }),
@@ -1197,7 +1191,6 @@ const MOCK_HANDLERS: Record<string, MockHandler> = {
   'shaders.rebuild': () => ({ ok: true, state: 'idle', ready: 0, total: 0 }),
   'friends.badge': () => ({ count: 0 }),
   'discord.status': () => mockDiscordStatus,
-  'discord.bandPins': (params?: { pins?: string[] }) => { if (params?.pins) mockBandPins = params.pins; return { ok: true, pins: mockBandPins } },
   'discord.signIn': mockOk,
   'discord.signOut': mockOk,
   'discord.home': () => mockHome,
@@ -1253,7 +1246,6 @@ const MOCK_HANDLERS: Record<string, MockHandler> = {
   'discord.clientSettings': (params?: Record<string, unknown>) => (mockDiscordClient = { ...mockDiscordClient, ...params }),
   'discord.micTest': mockOk,
   'discord.micMonitor': () => ({ ok: true, on: false, onHead: true }),
-  'discord.voiceTune': () => ({ ok: false, message: 'Voice Tune needs Exo.' }),
   'discord.sound': mockOk,
   'discord.server': (p?: { action?: string; invite?: string; hideMuted?: boolean }) => p?.action === 'notify' && p.hideMuted !== undefined
     ? (mockHideMuted = p.hideMuted, { ok: true })
@@ -1383,8 +1375,6 @@ const MOCK_HANDLERS: Record<string, MockHandler> = {
     MOCK_REPLACED = MOCK_REPLACED.map(app => app.id === id ? { ...app, installed: false, leftovers: 0, bytes: 0, needsAdmin: false, found: NONE_LEFT, cleared: { ...app.found, registry: app.found.registry + 7 } } : app)
     return { ok: true, removed: 9, left: 0, apps: MOCK_REPLACED }
   },
-  'deps.offerInstall': () => ({ ok: true, message: 'Mock: would open official installer page.' }),
-  'deps.cancelInstall': () => ({ ok: true, message: 'Download canceled.' }),
   'runtimes.list': () => ({ ok: true, items: MOCK_RUNTIMES }),
   'runtimes.install': mockRuntimesInstall,
   'runtimes.cancel': () => ({ ok: true, message: 'Stopping the downloads.' }),
@@ -1470,7 +1460,6 @@ const MOCK_HANDLERS: Record<string, MockHandler> = {
   'shell.showStore': mockOk,
   'shell.setChromeLayout': mockOk,
   'music.warm': mockOk,
-  'app.version': () => ({ version: '1.0.0-dev' }),
   'app.checkUpdate': () => mockUpdate
     ? { ok: true, updateAvailable: true, offerOnOpen: true, latest: '3.15.0', message: 'Version 3.15.0 is available.', current: '1.0.0-dev', upcoming: { version: '3.15.0', items: [
         { icon: 'Download', title: "See what's coming", detail: "What's New shows the next version's changes before you install it." },
@@ -1510,7 +1499,6 @@ const MOCK_HANDLERS: Record<string, MockHandler> = {
   'dlss.updateAll': (params) => { mockDlssUpdated.add(String(params?.id)); return { ok: true, updated: 1, failed: 0 } },
   'dlss.restore': () => ({ ok: false, message: 'Mock: no upscaler files.' }),
   'dlss.consent': (p) => p?.antiCheat ? { ok: true, message: 'Allowed for this game. Any ban is your risk.' } : { ok: false, message: 'Mock: no anti-cheat game.' },
-  'dlss.indicator': (params) => ({ ok: true, available: true, on: params?.on === true }),
   // An RTX 3070 (no ?gpu): an earlier DLSSG SM86 install (Cyberpunk; Marvel Rivals with anti-cheat), FSR's through
   // OptiScaler (Control). ?riot=partial: another mod replaced Exo's loader.
   'dlss.frameGen': (p) => {
@@ -1542,12 +1530,6 @@ const MOCK_HANDLERS: Record<string, MockHandler> = {
     }
   },
   'devices.image': () => ({ ok: false, url: null }),
-  'devices.catalog': () => ({ ok: true, devices: [
-    { kind: 'controller', maker: 'Sony', model: 'DualSense Edge', variants: ['White', 'Midnight Black'] },
-    { kind: 'mouse', maker: 'Finalmouse', model: 'Starlight X', variants: [] },
-    { kind: 'keyboard', maker: 'Wooting', model: '60HE v2', variants: ['ansi', 'iso'] },
-    { kind: 'audio', maker: 'ZiiGaat', model: 'Lush', variants: [] },
-  ] }),
   'audio.formats': (p) => {
     const id = (p as { id: string }).id
     const channels = id === MIC_ID ? 1 : 2
@@ -1562,7 +1544,6 @@ const MOCK_HANDLERS: Record<string, MockHandler> = {
     Object.assign(mockAudio[(p as { id: string }).id], { rate, bits })
     return { ok: true }
   },
-  'devices.openApp': mockOk,
   'controller.read': () => ({
     ok: true, link: 'usb', edge: true,
     firmware: { version: '2.17', built: 'Sep 19 2025', latest: '2.17', current: true },
@@ -1732,7 +1713,6 @@ const MOCK_HANDLERS: Record<string, MockHandler> = {
   'startup.remove': () => mockStartup(null),
   'startup.restore': () => mockStartup(null),
   'startup.clean': () => ({ ...mockStartup(null), cleaned: 4 }),
-  'stores.quiet': () => ({ ok: true, message: null }),
   'hdr.state': () => ({ supported: true, on: false, name: 'Mock OLED', peakNits: 1000, calibrated: false, verdict: 'great' }),
   'hdr.game': (p) => ({ ok: true, hdr: 'true', mode: typeof p?.mode === 'string' ? p.mode : 'auto' }),
   'game.settings': mockGameSettings,
@@ -1768,13 +1748,6 @@ const MOCK_HANDLERS: Record<string, MockHandler> = {
   'gpu.import': () => ({ ok: false, cancelled: true, undo: null }),
   'gpu.controlPanel': () => ({ ok: true }),
   // An RTX 3070 at work, drifting so the PC room's readings move.
-  'gpu.sensors': () => {
-    const wave = Math.sin(Date.now() / 20_000)
-    return {
-      ok: true, temperature: 62 + wave * 8, watts: 150 + wave * 60, clock: 1800 + wave * 120, usage: 70 + wave * 25,
-      vramUsed: 5600 + wave * 600, vramTotal: 8192, fan: 1500 + wave * 300, limit: { on: 'temperature', warn: 83, bad: 93 },
-    }
-  },
   'gpu.driver': () => ({ ok: true, vendor: 'nvidia', card: 'RTX 3070', installed: '581.42', update: true, latest: { version: '581.57', size: 900_000_000, released: '2026-10-14', kind: 'game' } }),
   'gpu.game': (p) => {
     if (mockGpu === 'intel' && typeof p?.frameGen === 'string') mockFrameGen = p.frameGen

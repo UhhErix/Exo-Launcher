@@ -59,10 +59,6 @@ Checked in code on `release/3.24.0`, the current release branch.
 - **The account was removed in Exo 3.4.** PRIVACY.md section "Exo accounts (removed)" says the app never contacts the
   account service, and `ExoLauncher/Services/LegacyProfileDataCleanup.cs` deletes the old token file `auth.bin` (the
   constant `ExoAccountSession`) on start. A new token file must not use that name: the cleanup would delete it.
-- **Exo.Identity is not the account.** `Exo.Identity/` holds device keys, a device list, a sync key and a mailbox client for
-  ExoStore (`ExoLauncher/Services/ExoStore/*`). Its `AccountClient.cs` targets an older API (`v1/providers`, `v1/start`,
-  an email code, a dev key) that the README no longer lists. Do not reuse it. The new client lives in
-  `ExoLauncher/Services/Account/` and does not touch the identity folder.
 - **Data the Launcher keeps** (AppDataDir is `%LocalAppData%\ExoLauncher`, `PathHelper.cs`):
   - `settings.json` (`PathHelper.SettingsPath`);
   - `playtime.json` (`PlaytimeService`: Exo's measured sessions, checkpointed every 5 minutes while a game runs);
@@ -249,8 +245,7 @@ Each type has one merge kind. The kind decides what a conflict does (7.4).
 
 ### 7.4 Push and conflicts
 
-- **When to push.** Every local change marks its item dirty. The push waits 2 seconds after the last change (the same
-  `PushDelay` `Exo.Identity`'s sync uses), then sends everything dirty in batches.
+- **When to push.** Every local change marks its item dirty. The push waits 2 seconds after the last change, then sends everything dirty in batches.
 - **Batches.** At most 100 items and 8 MiB of body per `PUT`, each value at most 64 KiB. The client keeps a settings
   section under 16 KiB and each log entry under 1 KiB, so the cap is never reached in normal use.
 - **Base.** Each item's last seen server version is its `base`. A new item has base 0.
@@ -334,7 +329,6 @@ Each row is a sync item type, what it holds, and its merge kind. Everything not 
 - Riot sign-in files (`RiotAccounts`): the Riot session files and the DPAPI wraps of them. Riot titles and their launchers
   are never touched by the sync.
 - Every store sign-in: the Epic and Legendary sign-ins. No store key exists after 3.24.4.
-- The identity folder (`Exo.Identity`, ExoStore's keys and device list).
 - The account token and the device id.
 - Caches and logs: `library-cache.json`, cover caches other than the chosen covers, achievement caches, `logs\`, crash reports.
 - Exo Notes: the note text lives in `Documents\Exo Notes` and is not in v1. Syncing note files is a separate decision

@@ -206,7 +206,7 @@ ADLX settings are global per GPU (Fluid Motion Frames for every GPU), so the pro
 
 The launch switches save what they replace to `amd-games.json` before switching, so a crash or a closed Exo mid-game puts them back at the next start. Apply and Undo drop a pending put-back for the settings they write. A game started outside Exo gets neither switch.
 
-Sensors (`gpu.sensors`, the "Right now" line under the profile, every 3 s while the tab is open): ADLX performance monitoring's current GPU metrics: temperature, hotspot, total board power (else GPU power), clock, load, VRAM in use against the card's total, fan RPM, each only where the GPU reports it supported. Exo shows no NVIDIA or Intel sensors yet.
+Sensors (`AmdAdlx.ReadSensors`; `NvidiaSensors.Read` on a GeForce): ADLX performance monitoring's current GPU metrics: temperature, hotspot, total board power (else GPU power), clock, load, VRAM in use against the card's total, fan RPM, each only where the GPU reports it supported. Only Auto tune reads them (its GPU test and the card's temperature limit); the page shows none.
 
 Smart Access Memory (AMD's Resizable BAR) is read only: `IADLXSystem.GetGPUTuningServices` (slot 8), `IADLXGPUTuningServices1.GetSmartAccessMemory` (18), `IADLXSmartAccessMemory.IsSupported`/`IsEnabled` (3, 4). Its `SetEnabled` is deprecated (ADLX_NOT_SUPPORTED: Resizable BAR is set in the BIOS). On a Radeon its answer decides System › This PC's Resizable BAR row, over Direct3D 12's upload heaps; when ADLX can't say, Direct3D 12's answer stays.
 

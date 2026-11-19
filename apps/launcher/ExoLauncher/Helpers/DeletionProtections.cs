@@ -1,12 +1,8 @@
-#if EXO_IDENTITY_LINKED
-namespace ExoLauncher.Helpers.Linked;
-#else
 namespace ExoLauncher.Helpers;
-#endif
 
 /// <summary>
-/// The one list the deletion gate reads. Add a path here, never in a caller. Shared with Exo.Identity (linked, no host
-/// dependencies), so it reads Exo's data folder the way PathHelper does.
+/// The one list the deletion gate reads. Add a path here, never in a caller. It reads Exo's data folder the way
+/// PathHelper does.
 /// <see cref="KeptSegments"/>: a path with these consecutive names is never deleted by Exo's cleaners, and an Exo file of
 /// its own (its sign-in files, a browser profile it made) only by the code that owns it. <see cref="KeptRoots"/>: never by
 /// anyone. <see cref="ShaderRoots"/> and <see cref="ShaderSegments"/>: Exo Shaders' caches, which Exo's cleaners never delete.

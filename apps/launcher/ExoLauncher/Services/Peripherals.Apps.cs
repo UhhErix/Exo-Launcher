@@ -1,18 +1,14 @@
 using System.Collections.Concurrent;
-using System.ComponentModel;
-using System.Diagnostics;
 using System.Text.RegularExpressions;
-using ExoLauncher.Helpers;
-using Microsoft.Win32;
 
 namespace ExoLauncher.Services;
 
 /// <summary>
-/// A keyboard's own settings app, the keyboard page's one button, chosen in one table: by the keyboard's vendor id
+/// A keyboard's own settings app, named on its card, chosen in one table: by the keyboard's vendor id
 /// (Wooting, Keychron, Razer, Logitech, Corsair, SteelSeries), else by what a QMK board says it speaks: Vial's serial
 /// number magic, or VIA's raw HID channel (usage page 0xFF60, usage 0x61). Wootility, Keychron Launcher, VIA and Vial
-/// run in the browser; a maker's app opens from its Start menu shortcut when installed, else its download page opens.
-/// Exo only opens them: nothing is sent to the keyboard.
+/// run in the browser; a maker's app is installed when its Start menu shortcut is there, else it has a download page.
+/// Nothing is sent to the keyboard.
 /// </summary>
 internal static partial class Peripherals
 {
@@ -71,7 +67,7 @@ internal static partial class Peripherals
 
     /// <summary>
     /// <see cref="ShortcutOf"/> for a card, looked for again after a minute: every device change lists the cards, and each
-    /// look walks both Start menus. Opening the app always looks again.
+    /// look walks both Start menus.
     /// </summary>
     private static string? KeptShortcutOf(KeyboardApp app)
     {
@@ -79,45 +75,6 @@ internal static partial class Peripherals
         var link = ShortcutOf(app);
         FoundShortcuts[app.Id] = (link, Environment.TickCount64);
         return link;
-    }
-
-    /// <summary>
-    /// Opens a keyboard's app by its id: a maker's app from its shortcut when installed, else its page in the browser.
-    /// A browser app needs WebHID, which Firefox and its kin lack: with one of them as the default browser it opens in
-    /// an installed Chromium browser (Edge, Chrome, Brave) when there is one. Null once it is opening, else what went wrong.
-    /// </summary>
-    internal static string? OpenKeyboardApp(string? id)
-    {
-        if (KeyboardApps.FirstOrDefault(a => a.Id == id) is not { } app) return "Exo doesn't know that app.";
-        if (app.Shortcuts is null && GeckoDefault() && ChromiumBrowser() is { } browser && Started(new ProcessStartInfo(browser, [app.Url]))) return null;
-        var target = app.Shortcuts is null ? app.Url : ShortcutOf(app) ?? app.Url;
-        return Started(new ProcessStartInfo(target) { UseShellExecute = true }) ? null : $"{app.Name} didn't open. Try again.";
-    }
-
-    private static bool Started(ProcessStartInfo start)
-    {
-        try
-        {
-            using var _ = Process.Start(start);
-            return true;
-        }
-        catch (Exception ex) when (ex is Win32Exception or InvalidOperationException or IOException)
-        {
-            AppLog.Warn($"Devices: a keyboard's app didn't open: {ex.Message}");
-            return false;
-        }
-    }
-
-    /// <summary>An installed Chromium browser, by its App Paths entry (this user's, then the machine's).</summary>
-    private static string? ChromiumBrowser()
-    {
-        foreach (var exe in new[] { "msedge.exe", "chrome.exe", "brave.exe" })
-            foreach (var hive in new[] { Registry.CurrentUser, Registry.LocalMachine })
-            {
-                using var key = hive.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\App Paths\" + exe);
-                if (key?.GetValue(null) is string path && path.Trim('"') is { } file && File.Exists(file)) return file;
-            }
-        return null;
     }
 
     /// <summary>An installed copy's Start menu shortcut, all users' or this user's.</summary>
@@ -141,23 +98,4 @@ internal static partial class Peripherals
         link.Equals(name, StringComparison.OrdinalIgnoreCase)
         || link.Length > name.Length + 1 && link.StartsWith(name + " ", StringComparison.OrdinalIgnoreCase)
             && link[(name.Length + 1)..].All(ch => char.IsAsciiDigit(ch) || ch == '.'));
-
-    /// <summary>Windows' default browser for https is Firefox or one built on it (Windows 11 keeps the newer choice in UserChoiceLatest).</summary>
-    private static bool GeckoDefault()
-    {
-        const string associations = @"Software\Microsoft\Windows\Shell\Associations\UrlAssociations\https\";
-        try
-        {
-            foreach (var choice in new[] { "UserChoiceLatest", "UserChoice" })
-            {
-                using var key = Registry.CurrentUser.OpenSubKey(associations + choice);
-                if (key?.GetValue("ProgId") is string progId) return GeckoProgId().IsMatch(progId);
-            }
-        }
-        catch (Exception ex) when (ex is System.Security.SecurityException or UnauthorizedAccessException or IOException) { }
-        return false;
-    }
-
-    [GeneratedRegex(@"^(Firefox|Waterfox|LibreWolf|Floorp|Zen|Mullvad|TorBrowser|PaleMoon|Basilisk)", RegexOptions.IgnoreCase)]
-    private static partial Regex GeckoProgId();
 }

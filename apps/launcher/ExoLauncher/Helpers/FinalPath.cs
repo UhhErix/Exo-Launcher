@@ -1,11 +1,7 @@
 using System.Runtime.InteropServices;
 using Microsoft.Win32.SafeHandles;
 
-#if EXO_IDENTITY_LINKED
-namespace ExoLauncher.Helpers.Linked;
-#else
 namespace ExoLauncher.Helpers;
-#endif
 
 /// <summary>Where Windows opens a path: every junction, symbolic link and mount point on the way followed.</summary>
 internal static class FinalPath

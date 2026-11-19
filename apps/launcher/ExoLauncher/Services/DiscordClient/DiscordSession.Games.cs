@@ -140,21 +140,4 @@ internal sealed partial class DiscordSession
         if (Current is not { } session) return;
         lock (session._linkGate) session._links?.Set(FriendGame.Section, FriendGame.Write(GamesOpened.Current));
     }
-
-    /// <summary>What this account pinned to the room's top bar, on this PC.</summary>
-    internal IReadOnlyList<string> BandPins => Cache.Me?.Id is { } id && App.Services.Settings.Shared.DiscordBandPins.TryGetValue(id, out var pins) ? pins : [];
-
-    /// <summary>Pins for the account signed in, in Exo's settings (the room's only other copy is on screen).</summary>
-    internal IReadOnlyList<string> SetBandPins(IEnumerable<string?> pins)
-    {
-        if (Cache.Me?.Id is not { } id) return [];
-        var list = SettingsService.NormalizeDiscordBandPinList(pins);
-        App.Services.Settings.UpdateProfile(s =>
-        {
-            if (list.Count == 0) s.DiscordBandPins.Remove(id);
-            else s.DiscordBandPins[id] = list;
-        });
-        return list;
-    }
-
 }

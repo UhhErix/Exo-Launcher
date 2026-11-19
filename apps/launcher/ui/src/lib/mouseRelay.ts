@@ -1,6 +1,6 @@
 import { host, onHostEvent, type HidReply } from './host'
 import { thumbUrl } from './coverThumb'
-import { publishMouseNotice, publishMouseProfile, publishMouseState } from './mouseState'
+import { publishMouseNotice, publishMouseState } from './mouseState'
 import { report } from './report'
 import { onTextScale, textScale } from './exoTheme'
 
@@ -140,7 +140,7 @@ const sendLook = () => { if (frameWindow()) postToMouse({ event: 'exo.theme', da
 
 type Request = {
   exo?: string; id?: number; method?: string; params?: Record<string, unknown>
-  notice?: unknown; state?: { name?: unknown; maker?: unknown; battery?: unknown; charging?: unknown; low?: unknown; image?: unknown; wireless?: unknown } | null; profile?: unknown
+  notice?: unknown; state?: { name?: unknown; maker?: unknown; battery?: unknown; charging?: unknown; low?: unknown; image?: unknown; wireless?: unknown } | null
 }
 
 /** A notice is one short line; anything longer or not text is dropped. */
@@ -166,7 +166,6 @@ export function postToMouse(message: object) {
 function fromModule(m: Request) {
   const text = noticeText(m.notice)
   if (text) publishMouseNotice(text)
-  if (m.profile === null || (typeof m.profile === 'string' && m.profile.length > 0)) publishMouseProfile(m.profile === null ? null : m.profile.slice(0, 40))
   if (m.state === null) { publishMouseState(null); return }
   if (!m.state || typeof m.state.name !== 'string') return
   const battery = typeof m.state.battery === 'number' && m.state.battery >= 0 && m.state.battery <= 100 ? Math.round(m.state.battery) : null

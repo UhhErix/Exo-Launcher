@@ -40,19 +40,3 @@ export function onMouseState(listener: (state: MouseState | null) => void) {
   listener(current)
   return () => { stateListeners.delete(listener) }
 }
-
-/** The saved profile the mouse has now (Exo Mouse's own name for it), or null. */
-const profileListeners = new Set<(profile: string | null) => void>()
-let currentProfile: string | null = null
-
-export function publishMouseProfile(profile: string | null) {
-  if (profile === currentProfile) return
-  currentProfile = profile
-  for (const listener of profileListeners) listener(profile)
-}
-
-export function onMouseProfile(listener: (profile: string | null) => void) {
-  profileListeners.add(listener)
-  listener(currentProfile)
-  return () => { profileListeners.delete(listener) }
-}

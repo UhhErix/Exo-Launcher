@@ -163,8 +163,4 @@ internal static class StoreQuietPass
         }
         catch (InvalidDataException) { return false; }
     }
-
-    /// <summary>One word for the page: applied, waiting (something still has to go in or back, which needs Steam closed), or off.</summary>
-    internal static string Word(string root, bool wanted) =>
-        Pending(root, wanted) > 0 ? "waiting" : wanted ? "applied" : "off";
 }

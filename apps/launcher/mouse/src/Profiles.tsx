@@ -222,10 +222,6 @@ export function Profiles({ device, status, client, applyAll, busy }: {
   const active = (p: Profile) => same(fit(p, status), now) || applied === p.id
   const list = all[device] ?? []
   const now = snapshot(status, client)
-  // The saved profile the mouse has now, for Exo's title bar (none when its settings match none).
-  const current = list.find(p => same(fit(p, status), now))?.name ?? null
-  useEffect(() => { tell({ profile: current }) }, [current])
-  useEffect(() => () => tell({ profile: null }), [])
 
   const [installed, setInstalled] = useState<Game[]>([])
   const [linking, setLinking] = useState<string | null>(null)
