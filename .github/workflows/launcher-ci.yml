@@ -25,9 +25,9 @@ jobs:
       run:
         working-directory: apps/launcher
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - uses: actions/setup-node@v5
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: '24'
           cache: npm
@@ -35,7 +35,7 @@ jobs:
             apps/launcher/ui/package-lock.json
             apps/launcher/mouse/package-lock.json
 
-      - uses: actions/setup-dotnet@v5
+      - uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
         with:
           global-json-file: apps/launcher/global.json
 

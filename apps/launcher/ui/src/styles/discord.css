@@ -4023,12 +4023,12 @@ button.exo-dc-pf-badge {
   height: 22px;
 }
 
-/* A badge's name over it, centered. */
+/* A badge's, a reaction's or a call's name over it (AboveTip.tsx places it, inside the window). */
 .exo-dc-tip.is-above {
   max-width: 260px;
   text-align: center;
   white-space: normal;
-  transform: translate(-50%, -100%);
+  transform: none;
 }
 
 .exo-dc-pf-mutual {

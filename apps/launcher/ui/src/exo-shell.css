@@ -18,7 +18,7 @@
 :root {
   --exo-titlebar-h: 52px;
   --exo-logo: 28px;
-  --exo-font: "Exoline", "Segoe UI Variable", "Segoe UI", sans-serif;
+  --exo-font: "Goeist", "Exoline", "Segoe UI Variable", "Segoe UI", sans-serif;
 }
 
 :is(.exo-app, .exo-hung, .exo-portal) [hidden] {

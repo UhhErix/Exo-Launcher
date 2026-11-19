@@ -5,6 +5,7 @@ import { report } from '../../lib/report'
 import { avatarUrl, reactionCounts, reactionKey, type DiscordMessage, type DiscordReaction, type DiscordUser } from '../../lib/discord'
 import { useAccountSetting } from '../../lib/discordPrefs'
 import { loadedEmojis, loadEmojis } from './EmojiPicker'
+import { AboveTip, anchorOf, type TipAnchor } from './AboveTip'
 import { Icons } from './icons'
 import { emojiUrl } from './markdown'
 import { Popover } from '../ui/Dialog'
@@ -78,12 +79,11 @@ export function Reactions({ message, nitro, onReact, onView, add }: {
   /** Add reaction, opening the picker the message's own react tool opens. */
   add: React.ReactNode
 }) {
-  const [tip, setTip] = useState<{ text: string; left: number; top: number } | null>(null)
+  const [tip, setTip] = useState<{ text: string; at: TipAnchor } | null>(null)
   const pending = useRef(0)
   if (!useAccountSetting('renderReactions')) return null
   const show = (chip: Chip, el: HTMLElement) => {
-    const box = el.getBoundingClientRect()
-    const at = { left: box.left + box.width / 2, top: box.top - 6 }
+    const at = anchorOf(el)
     const ask = ++pending.current
     const key = reactorsKey(message, chip)
     let entry = firstReactors.get(key)
@@ -93,7 +93,7 @@ export function Reactions({ message, nitro, onReact, onView, add }: {
       firstReactors.set(key, entry)
       while (firstReactors.size > 200) firstReactors.delete(firstReactors.keys().next().value!)
     }
-    entry.then(users => { if (pending.current === ask && users.length) setTip({ text: tipText(users, chip), ...at }) }).catch(() => { })
+    entry.then(users => { if (pending.current === ask && users.length) setTip({ text: tipText(users, chip), at }) }).catch(() => { })
   }
   const hide = () => { pending.current++; setTip(null) }
   return (
@@ -116,7 +116,7 @@ export function Reactions({ message, nitro, onReact, onView, add }: {
         )
       })}
       {add}
-      {tip ? <span className="exo-dc-tip is-above" role="tooltip" style={{ left: tip.left, top: tip.top }}>{tip.text}</span> : null}
+      {tip ? <AboveTip at={tip.at}>{tip.text}</AboveTip> : null}
     </div>
   )
 }

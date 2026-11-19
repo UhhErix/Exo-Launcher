@@ -295,12 +295,15 @@ public sealed class FriendPrepTests
         }
     }
 
-    // ---- the switch ----
+    // ---- no switch (3.26.0) ----
 
     [Fact]
-    public void ItIsOffForEveryAccountUntilItIsTurnedOn()
+    public void ASettingsFileFromWhenItWasASwitchStillLoads_AndTheOldListsAreDropped()
     {
-        Assert.Empty(new AppSettings().DiscordReadyShared);
-        Assert.Empty(JsonSerializer.Deserialize<AppSettings>("{}")!.DiscordReadyShared);
+        var old = JsonSerializer.Deserialize<AppSettings>("{\"DiscordReadyShared\":[\"" + FriendLinkTests.A + "\"],\"DiscordGamesShared\":[\"" + FriendLinkTests.A + "\"],\"DiscordQuietWhilePlaying\":false}")!;
+        Assert.False(old.DiscordQuietWhilePlaying); // the rest of the file is read as before
+        var written = JsonSerializer.Serialize(old);
+        Assert.DoesNotContain("\"DiscordReadyShared\"", written);
+        Assert.DoesNotContain("\"DiscordGamesShared\"", written);
     }
 }
