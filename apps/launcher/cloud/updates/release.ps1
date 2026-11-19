@@ -12,9 +12,8 @@
     and must hold the entry; publish-release.ps1 -WhatIf must pass; publish-release.ps1 uploads to the update mirror,
     verifies /v1/<app>/latest and asks the Worker for the release card; exo-site builds (its build reads the version the mirror serves
     now) and deploys with wrangler@4.158.0; then a live check of updates.getexo.app and getexo.app (the change list is
-    checked at the update address; getexo.app's Changelog page refreshes every 15 minutes, so it only warns); last, the
-    code backup (..\tools\backup-git.ps1 beside exo-site), which only warns when it fails and is taken whenever the
-    release went live, also when a site step after that failed.
+    checked at the update address; getexo.app's Changelog page refreshes every 15 minutes, so it only warns). The code
+    lives on GitHub; there is no separate code backup.
     When the build writes the app's file list (artifacts\payload-manifest.json, Exo Cinema from 1.5), publish-release.ps1
     gets -Payload and the release can be installed file by file (misc\updates\file-level-updates.md in the Exo folder).
     The version bump is left uncommitted. Nothing is pushed, tagged or made into a GitHub release.
@@ -121,25 +120,6 @@ function Test-Live([string]$Url, [scriptblock]$Holds, [string]$Expect, [switch]$
     Require $false "$Url $Expect after 6 tries (served: $($served.Substring(0, [Math]::Min(120, $served.Length))))"
 }
 
-# The off-site copy of every Exo repo (R2 exo-git-backup) is taken at each release, the owner's choice (2026-11-07).
-# It runs once the release is live, whatever happened to the site steps after that, and never fails a release.
-$BackupDone = $false
-function Invoke-Backup {
-    if ($script:BackupDone) { return }
-    $script:BackupDone = $true
-    Write-Host "`n== 9. Code backup: tools\backup-git.ps1 (every Exo repo to R2 exo-git-backup)" -ForegroundColor Cyan
-    $backup = Join-Path (Split-Path $SitePath) 'tools\backup-git.ps1'
-    if (-not (Test-Path $backup)) { Write-Host "  [WARN] $backup is missing; no code backup this release." -ForegroundColor Yellow }
-    elseif ($WhatIfPreference) { Write-Host "  WHATIF would run: pwsh -NoProfile -File $backup" -ForegroundColor Yellow }
-    else {
-        try {
-            & pwsh -NoProfile -File $backup
-            if ($LASTEXITCODE) { Write-Host "  [WARN] the code backup failed (exit $LASTEXITCODE); the release is live. Run it again by hand." -ForegroundColor Yellow }
-            else { Write-Host '  Code backup done.' }
-        } catch { Write-Host "  [WARN] the code backup failed ($($_.Exception.Message)); the release is live. Run it again by hand." -ForegroundColor Yellow }
-    }
-}
-
 function Test-WhatsNew([string]$Path) {
     if (-not (Test-Path -LiteralPath $Path)) { return $false }
     try {
@@ -226,19 +206,15 @@ try {
     Test-Live "$Front/download/" { param($t) [regex]::IsMatch($t, "data-release=`"$App`"[\s\S]*?<span data-version>Version $([regex]::Escape($Version))<") } "shows Version $Version for $App"
     # The change list, where it is published: the update address has the new CHANGELOG.md at once. getexo.app's
     # Changelog page is built from it and refreshed at the edge every 15 minutes, so the page not showing the version
-    # yet is a warning (1.4.11's run stopped here for that reason, and skipped the code backup).
+    # yet is a warning (1.4.11's run stopped here for that reason).
     Test-Live "$Base/v1/$App/changelog" { param($t) [regex]::IsMatch($t, "(?m)$ChangelogHeading") } "has the '## $Version' entry"
     Test-Live "$Front/$App/changelog" { param($t) $t.Contains($Version) } "has the $Version entry" -Soft
     if (-not $WhatIfPreference) { Write-Host "`nPASS: $Name $Tag is live: $Base serves it, and $Front shows $Version." -ForegroundColor Green }
-
-    Invoke-Backup
 } catch {
     $exitCode = 1
     Write-Host "`nSTOP at '$StepName': $($_.Exception.Message)" -ForegroundColor Red
     if ($Live) {
         Write-Host "$Name $Tag is already live on $Base. Finish the site by hand: cd `"$SitePath`"; npm run build; npx wrangler@$WranglerVersion deploy" -ForegroundColor Yellow
-        # The release is out: the code backup is taken all the same.
-        Invoke-Backup
     }
 }
 
