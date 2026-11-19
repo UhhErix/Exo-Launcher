@@ -399,6 +399,24 @@ export async function promote(env, ctx, { current, maxAge = CHECK_SECONDS } = {}
 }
 
 /**
+ * Repairs a missed launcher/CHANGELOG.md write when promote committed the pointer but all three changelog writes failed.
+ * Keeps the conditional write and newer-tag check so recovery never overwrites a newer changelog.
+ */
+export async function reconcileChangelog(env, tag) {
+  const mirror = env?.MIRROR
+  if (!mirror || typeof tag !== 'string' || !TAG.test(tag)) return
+  const head = await mirror.head('launcher/CHANGELOG.md').catch(() => undefined)
+  if (head === undefined) return
+  const kept = head?.customMetadata?.tag
+  if (typeof kept === 'string' && TAG.test(kept) && !newer(tag, kept)) return
+  const changelog = await tagFile(tag, 'CHANGELOG.md', LIMITS.changelog).catch(() => null)
+  if (!changelog) return
+  const version = tag.slice(1)
+  if (!text(changelog).split('\n').some((line) => line.startsWith(`## ${version} `) || line.trim() === `## ${version}`)) return
+  await writeChangelog(mirror, tag, changelog)
+}
+
+/**
  * launcher/CHANGELOG.md for tag, unless the one there is already for a newer tag (its customMetadata names the tag it is
  * for), with the same conditional write as the pointer, so the change list never ends up older than the release offered.
  */

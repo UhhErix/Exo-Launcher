@@ -13,7 +13,7 @@
 // asked for (or on the next cron tick), so the apps still only ever talk to this address. Exo Cinema's releases reach the
 // mirror through publish-release.ps1. The release card is announce.js; the cache is filled by cache-mirror.mjs.
 import { announce } from './announce.js'
-import { LARGE, NAMES, PENDING_CARD, assetsOf, fill, materialize, promote, releaseForTag, stream } from './github.js'
+import { LARGE, NAMES, PENDING_CARD, assetsOf, fill, materialize, promote, reconcileChangelog, releaseForTag, stream } from './github.js'
 import { r2Store, runWatch } from './watch.js'
 const APPS = {
   launcher: { setup: 'ExoLauncher-Setup.exe' },
@@ -118,8 +118,10 @@ async function afterPromote(release, manifest, env) {
 async function announcePending(env, tag) {
   const key = PENDING_CARD(tag)
   if (!(await env.MIRROR.head(key).catch(() => null))) return
-  const { status } = await announce({ app: 'launcher', tag, env, mirror: env.MIRROR }).catch(() => ({ status: 'failed' }))
-  if (status !== 'failed' && status !== 'not-live') await env.MIRROR.delete(key).catch(() => {})
+  const { status, posted } = await announce({ app: 'launcher', tag, env, mirror: env.MIRROR }).catch(() => ({ status: 'failed' }))
+  if (status !== 'failed' && status !== 'not-live' && !(status === 'already' && !posted)) {
+    await env.MIRROR.delete(key).catch(() => {})
+  }
 }
 
 async function fillLarge(release, manifest, env) {
@@ -129,12 +131,13 @@ async function fillLarge(release, manifest, env) {
   }
 }
 
-/** The cron's part for Exo Launcher: promote a new release (with its card), and make sure the newest's large files are in R2. */
+/** The cron's part for Exo Launcher: promote a new release (with its card), reconcile missed changelogs, and make sure the newest's large files are in R2. */
 async function syncLauncher(env, ctx) {
   const current = await readManifest('launcher', env)
   const result = await promote(env, ctx, { current })
   if (!validManifest('launcher', result.manifest)) return
   await announcePending(env, result.manifest.tag)
+  await reconcileChangelog(env, result.manifest.tag)
   const release = result.release ?? (await releaseForTag(result.manifest.tag, env, ctx))
   if (release) await fillLarge(release, result.manifest, env)
 }

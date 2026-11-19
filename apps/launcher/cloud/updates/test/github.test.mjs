@@ -729,3 +729,78 @@ test('a card Discord refused is asked for again on the next cron tick, once; a r
   await ctx.settle()
   assert.equal(posted.length, 1)
 })
+
+test('an in-progress announcement claim does not drop the pending retry marker when the foreground post fails', async () => {
+  const mirror = r2()
+  seed(mirror, 'v3.26.0')
+  const state = github({ latest: release('v3.27.0'), trees: { 'v3.27.0': tree('3.27.0') } })
+  gh = state
+  let discordStatus = 502
+  let discordCalls = 0
+  let releasePost
+  const postingStarted = new Promise((resolve) => { releasePost = resolve })
+  const posted = []
+  globalThis.fetch = async (url, init) => {
+    if (new URL(String(url)).hostname === 'discord.com') {
+      discordCalls++
+      if (discordCalls === 1) {
+        // Hold the foreground POST open while the background afterPromote runs announcePending and sees the posting claim.
+        await postingStarted
+        return new Response('bad gateway', { status: discordStatus })
+      }
+      if (init?.method === 'POST') posted.push(String(url))
+      return Response.json({ id: '123456789012345678' })
+    }
+    return state.fetch(url, init)
+  }
+  const env = { MIRROR: mirror, DISCORD_WEBHOOK_LAUNCHER: 'https://discord.com/api/webhooks/1/abc' }
+  const origHead = mirror.head
+  let sawPending = false
+  mirror.head = async (key) => {
+    const res = await origHead(key)
+    if (key === '_github/announce/v3.27.0' && res && !sawPending) {
+      sawPending = true
+      releasePost()
+    }
+    return res
+  }
+  const res = await ask('/v1/launcher/announce', env, { method: 'POST', body: JSON.stringify({ tag: 'v3.27.0' }) })
+  assert.equal(res.json().status, 'failed')
+  assert.ok(mirror.objects.has('_github/announce/v3.27.0'), 'pending marker remains for cron after foreground 502')
+  assert.equal(posted.length, 0)
+  discordStatus = 200
+  const tick = context()
+  await worker.scheduled({}, env, tick)
+  await tick.settle()
+  assert.equal(posted.length, 1)
+  assert.ok(!mirror.objects.has('_github/announce/v3.27.0'))
+})
+
+test('a changelog whose three promotion writes failed is reconciled on the next cron tick without overwriting newer tags', async () => {
+  const mirror = r2()
+  seed(mirror, 'v3.26.0')
+  mirror.set('launcher/CHANGELOG.md', '## 3.26.0 — old\n')
+  mirror.metas.set('launcher/CHANGELOG.md', { tag: 'v3.26.0' })
+  use(github({ latest: release('v3.27.0'), trees: { 'v3.27.0': tree('3.27.0') } }))
+  const origPut = mirror.put
+  let failChangelog = true
+  mirror.put = async (key, value, options) => {
+    if (key === 'launcher/CHANGELOG.md' && failChangelog) throw new Error('R2 write failed')
+    return origPut(key, value, options)
+  }
+  await ask('/v1/launcher/latest', { MIRROR: mirror })
+  assert.equal(JSON.parse(mirror.text('launcher/latest.json')).tag, 'v3.27.0')
+  assert.equal(mirror.text('launcher/CHANGELOG.md'), '## 3.26.0 — old\n')
+  failChangelog = false
+  const tick = context()
+  await worker.scheduled({}, { MIRROR: mirror }, tick)
+  await tick.settle()
+  assert.match(mirror.text('launcher/CHANGELOG.md'), /## 3\.27\.0/)
+  // Never overwrite a newer changelog already in R2.
+  mirror.set('launcher/CHANGELOG.md', '## 3.28.0 — newer\n')
+  mirror.metas.set('launcher/CHANGELOG.md', { tag: 'v3.28.0' })
+  const tick2 = context()
+  await worker.scheduled({}, { MIRROR: mirror }, tick2)
+  await tick2.settle()
+  assert.equal(mirror.text('launcher/CHANGELOG.md'), '## 3.28.0 — newer\n')
+})
