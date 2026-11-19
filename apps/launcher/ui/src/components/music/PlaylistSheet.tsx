@@ -5,6 +5,7 @@ import { Art } from './Art'
 import { runActionFor, usePlayer, type PlaylistEdit } from './playerContext'
 import { Popover } from '../ui/Dialog'
 import { ErrorNote } from '../ui/ErrorNote'
+import { errorText } from '../../lib/errorWords'
 
 /** A playlist's privacy, where the service has one (YouTube Music). */
 const PRIVACY = [['PUBLIC', 'Public'], ['UNLISTED', 'Unlisted'], ['PRIVATE', 'Private']] as const
@@ -62,7 +63,7 @@ export function PlaylistSheet({ edit, onClose }: { edit: PlaylistEdit; onClose: 
     const picture = made.ok && cover && uri ? await runActionFor(adapter, 'playlistImage', { uri, image: cover }) : { ok: true, message: undefined }
     setBusy(false)
     if (made.ok && picture.ok) onClose()
-    else setError(made.message ?? picture.message ?? `${adapter.name} did not take that. Try again.`)
+    else setError(errorText(made.message ?? picture.message, `${adapter.name} did not take that. Try again.`))
   }
 
   return (

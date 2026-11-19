@@ -9,26 +9,14 @@ using ExoLauncher.Services.Account;
 namespace ExoLauncher.Services;
 
 /// <summary>
-/// What tracker.gg's profile says beyond hours, for one game. Every field is optional: absent means not read (a
-/// profile that does not show it, or a field tracker.gg did not return). Ranks are tracker.gg's own display text.
+/// One game's seed from tracker.gg: its lifetime minutes and the minutes per mode (names from <see cref="RiotModes"/>).
+/// Modes may be absent when tracker.gg did not split the total. Partial: only its playlist sum, not its lifetime total.
 /// </summary>
-internal sealed record RiotStats(
-    int? Matches,
-    int? Wins,
-    double? KillDeath,
-    string? CurrentRank,
-    string? PeakRank,
-    IReadOnlyList<string>? TopPicks);
-
-/// <summary>
-/// One game's seed from tracker.gg: its lifetime minutes, the minutes per mode (names from <see cref="RiotModes"/>), and
-/// the optional profile stats. Modes may be absent when tracker.gg did not split the total.
-/// </summary>
-internal sealed record GameSeed(int Minutes, IReadOnlyDictionary<string, int>? Modes = null, RiotStats? Stats = null, bool Partial = false);
+internal sealed record GameSeed(int Minutes, IReadOnlyDictionary<string, int>? Modes = null, bool Partial = false);
 
 /// <summary>
 /// Riot play time Exo keeps for good: one append-only file per Riot ID, <c>riot-ledger/&lt;account&gt;.jsonl</c>, plain data
-/// with one JSON object per line. A seed line is tracker.gg's lifetime total for a game, with its per-mode split and stats,
+/// with one JSON object per line. A seed line is tracker.gg's lifetime total for a game, with its per-mode split,
 /// read when a Riot ID is added (or again by hand, which adds a newer seed). A play line is the whole minutes Exo counted
 /// of one session chunk, with the mode the client reported for it (<see cref="RiotModes.Unknown"/> when none). Every mode
 /// counts: a session is the whole time a game runs. Lifetime is the latest seed plus the play lines that start at or after
@@ -51,7 +39,7 @@ internal static partial class RiotLedger
     // Set by a restore or import: the ledger on disk is the restored one, so this run appends nothing more to it.
     private static string? _restoredFileKeptFor;
 
-    private sealed record SeedLine(int Minutes, DateTimeOffset ImportedAt, IReadOnlyDictionary<string, int>? Modes, RiotStats? Stats, bool Partial);
+    private sealed record SeedLine(int Minutes, DateTimeOffset ImportedAt, IReadOnlyDictionary<string, int>? Modes, bool Partial);
 
     private sealed record PlayLine(string Game, DateTimeOffset StartUtc, int Minutes, string Mode);
 
@@ -90,12 +78,6 @@ internal static partial class RiotLedger
     internal static bool Seed(string account, IReadOnlyDictionary<string, GameSeed> seeds, DateTimeOffset importedAt)
     {
         lock (Gate) return WriteSeeds(Open(account), seeds, importedAt, TrackerSource);
-    }
-
-    /// <summary>The optional stats from this Riot ID's latest seed of a game, or null when none was read.</summary>
-    internal static RiotStats? Stats(string account, string game)
-    {
-        lock (Gate) return Open(account).Seeds.GetValueOrDefault(game)?.Stats;
     }
 
     /// <summary>Opens a session. Start is moved up to the last minute already counted for the game, so a restart never counts it twice.</summary>
@@ -352,46 +334,14 @@ internal static partial class RiotLedger
                     split[mode] = minutes;
                 row["modes"] = split;
             }
-            if (StatsJson(seed.Stats) is { } stats) row["stats"] = stats;
             if (seed.Partial) row["partial"] = true;
             if (!Append(doc, row)) continue;
             SyncLine(doc, row);
             doc.Keys.Add(key);
-            doc.Seeds[game] = new SeedLine(seed.Minutes, importedAt, seed.Modes, seed.Stats, seed.Partial);
+            doc.Seeds[game] = new SeedLine(seed.Minutes, importedAt, seed.Modes, seed.Partial);
             written = true;
         }
         return written;
-    }
-
-    private static JsonObject? StatsJson(RiotStats? stats)
-    {
-        if (stats is null) return null;
-        var json = new JsonObject();
-        if (stats.Matches is { } matches) json["matches"] = matches;
-        if (stats.Wins is { } wins) json["wins"] = wins;
-        if (stats.KillDeath is { } killDeath) json["killDeath"] = killDeath;
-        if (stats.CurrentRank is { } current) json["currentRank"] = current;
-        if (stats.PeakRank is { } peak) json["peakRank"] = peak;
-        if (stats.TopPicks is { Count: > 0 } picks)
-        {
-            var array = new JsonArray();
-            foreach (var pick in picks) array.Add(pick);
-            json["topPicks"] = array;
-        }
-        return json.Count == 0 ? null : json;
-    }
-
-    private static RiotStats? ReadStats(JsonElement json)
-    {
-        if (json.ValueKind != JsonValueKind.Object) return null;
-        int? Int(string name) => json.TryGetProperty(name, out var value) && value.TryGetInt32(out var number) ? number : null;
-        double? Double(string name) => json.TryGetProperty(name, out var value) && value.TryGetDouble(out var number) ? number : null;
-        string? Text(string name) => json.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.String ? value.GetString() : null;
-        IReadOnlyList<string>? picks = json.TryGetProperty("topPicks", out var list) && list.ValueKind == JsonValueKind.Array
-            ? list.EnumerateArray().Where(pick => pick.ValueKind == JsonValueKind.String).Select(pick => pick.GetString()!).ToList()
-            : null;
-        var stats = new RiotStats(Int("matches"), Int("wins"), Double("killDeath"), Text("currentRank"), Text("peakRank"), picks);
-        return stats is { Matches: null, Wins: null, KillDeath: null, CurrentRank: null, PeakRank: null, TopPicks: null } ? null : stats;
     }
 
     private static bool Append(Document doc, JsonObject row)
@@ -472,7 +422,7 @@ internal static partial class RiotLedger
                 var at = DateTimeOffset.Parse(root.GetProperty("importedAt").GetString()!, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind);
                 if (doc.Seeds.TryGetValue(game, out var latest) && at <= latest.ImportedAt) return;
                 var partial = root.TryGetProperty("partial", out var flag) && flag.ValueKind == JsonValueKind.True;
-                doc.Seeds[game] = new SeedLine(minutes, at, ReadModes(root), root.TryGetProperty("stats", out var stats) ? ReadStats(stats) : null, partial);
+                doc.Seeds[game] = new SeedLine(minutes, at, ReadModes(root), partial);
             }
             else if (kind == "play")
             {

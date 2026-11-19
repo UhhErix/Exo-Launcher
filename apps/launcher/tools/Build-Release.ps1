@@ -2,15 +2,13 @@
 # (this version's What's New), and artifacts\files.json and files.pack (the app folder file by file, for the in-app
 # updater's file-level update; tools\AppFiles). cloud\updates\publish-release.ps1 puts the installer files in the update
 # mirror; -Release vX.Y.Z uploads files.json, files.pack and whats-new.json to that GitHub release (it must exist; gh signed in).
-#   pwsh -File tools\Build-Release.ps1 [-ShadersWork C:\path\to\exo-shaders] [-ShadersCommit <sha>] [-Release vX.Y.Z]
+#   pwsh -File tools\Build-Release.ps1 [-Release vX.Y.Z]
 # Steps: a clean Release publish (self-contained, ReadyToRun), the UI and Exo Mouse
-# builds, Exo Shaders (engine and page) under addons\shaders, Exo Capture under
+# builds, Exo Shaders' engine (from shaders\) under addons\shaders, Exo Capture under
 # addons\capture and Lucid under addons\lucid in the app folder,
 # then the NSIS installer and the SHA-256 file the in-app updater checks.
 [CmdletBinding()]
 param(
-    [string]$ShadersWork = (Join-Path $env:USERPROFILE 'Code\Exo\exo-shaders'),
-    [string]$ShadersCommit,
     [string]$MakeNsis = 'C:\Program Files (x86)\NSIS\makensis.exe',
     [string]$Release
 )
@@ -55,9 +53,9 @@ if (-not $publish) { throw 'No publish folder.' }
 $noVoice = @('dave.dll', 'opus.dll', 'exo_apm.dll', 'exo-deepfilter.dll') | Where-Object { -not (Test-Path (Join-Path $publish.FullName $_)) }
 if ($noVoice) { throw "The app folder lacks Discord voice's $($noVoice -join ', ')." }
 
-# Exo Shaders (GPL-3.0-or-later, source published at getexo.app/source by cloud\updates\addon-source.mjs): the engine and page built from one pinned commit in a
-# temporary worktree (tools\Build-ShadersEngine.ps1), so the release never builds from a dirty tree.
-$shaders = & (Join-Path $repo 'tools\Build-ShadersEngine.ps1') -ShadersWork $ShadersWork -ShadersCommit $ShadersCommit
+# Exo Shaders (GPL-3.0-or-later, shaders\; its source published at getexo.app/source by cloud\updates\addon-source.mjs from
+# the same commit): the engine built from the committed tree (tools\Build-ShadersEngine.ps1 refuses uncommitted changes).
+$shaders = & (Join-Path $repo 'tools\Build-ShadersEngine.ps1')
 $engine = Join-Path $shaders 'engine'
 $addon = Join-Path $publish.FullName 'addons\shaders'
 New-Item -ItemType Directory -Force -Path $addon | Out-Null
@@ -67,10 +65,8 @@ if ($LASTEXITCODE -ge 8) { throw "Copying the Shaders engine failed ($LASTEXITCO
 # Read its Core's constant without loading the file, so the copy stays unlocked.
 $exoBuild = [Reflection.Assembly]::Load([IO.File]::ReadAllBytes((Join-Path $addon 'engine\SCSKiller.Core.dll'))).GetType('SCSKiller.Core.App.ExoBuild').GetField('Enabled').GetRawConstantValue()
 if ($exoBuild -ne $true) { throw "The Exo Shaders engine in $engine is not the Exo build (ExoBuild.Enabled is off)." }
-# The engine pin: the exo-shaders commit this release bundles, named in the output below.
+# The commit of shaders\ this release bundles, named in the output below (addon-source.mjs build --rev publishes it).
 $shadersCommit = (Get-Content (Join-Path $shaders 'commit.txt') -Raw).Trim()
-robocopy (Join-Path $shaders 'ui') (Join-Path $addon 'ui') /MIR /NFL /NDL /NJH /NJS /NP | Out-Null
-if ($LASTEXITCODE -ge 8) { throw "Copying the Shaders page failed ($LASTEXITCODE)." }
 foreach ($notice in 'LICENSE', 'LICENSE-EXCEPTION.txt', 'THIRD-PARTY-NOTICES.md') {
     $source = Join-Path $shaders $notice
     if (Test-Path $source) { Copy-Item $source (Join-Path $addon $notice) -Force }
@@ -94,7 +90,7 @@ if ($LASTEXITCODE) { throw "Getting Lucid failed ($LASTEXITCODE)." }
 # without them, so a missing part stops the build, and the voice libraries must also load here.
 $voice = 'dave.dll', 'opus.dll', 'exo_apm.dll', 'exo-deepfilter.dll', 'sherpa-onnx-c-api.dll', 'onnxruntime.dll'
 $parts = $voice + 'ExoLauncher.exe', 'wwwroot\index.html', 'wwwroot\mouse\index.html', 'steam-ipc\ExoLauncher.SteamIpc.exe',
-    'addons\shaders\engine\ExoShaders.Service.exe', 'addons\shaders\ui\index.html', 'addons\capture\ExoCapture.exe', 'addons\lucid\Lucid.exe'
+    'addons\shaders\engine\ExoShaders.Service.exe', 'addons\capture\ExoCapture.exe', 'addons\lucid\Lucid.exe'
 $missing = $parts | Where-Object { -not (Test-Path (Join-Path $publish.FullName $_)) }
 if ($missing) { throw "The app folder lacks $($missing -join ', ')." }
 $dead = $voice | Where-Object {
@@ -152,7 +148,7 @@ Remove-Item $packShell -Recurse -Force
 $hash = (Get-FileHash $setup -Algorithm SHA256).Hash.ToLowerInvariant()
 Set-Content -Path "$setup.sha256" -Value "$hash  ExoLauncher-Setup.exe" -NoNewline -Encoding ascii
 Set-Content -Path (Join-Path $artifacts 'whats-new.json') -Value ($whatsNew | ConvertTo-Json -Depth 4) -NoNewline -Encoding utf8NoBOM
-Write-Output "Exo Launcher ${version}: $setup ($([math]::Round((Get-Item $setup).Length / 1MB, 1)) MB), SHA-256 $hash, Exo Shaders engine at exo-shaders $shadersCommit"
+Write-Output "Exo Launcher ${version}: $setup ($([math]::Round((Get-Item $setup).Length / 1MB, 1)) MB), SHA-256 $hash, Exo Shaders engine from shaders\ at $shadersCommit"
 Write-Output "File-level update: files.pack $([math]::Round((Get-Item (Join-Path $artifacts 'files.pack')).Length / 1MB, 1)) MB, installer revision $installerRevision"
 
 # The release's file list and pack (and its What's New) on the GitHub release, beside the installer. Never replaced: an

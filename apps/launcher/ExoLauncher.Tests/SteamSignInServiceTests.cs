@@ -260,9 +260,32 @@ public sealed class SteamSignInServiceTests
 
         Assert.NotNull(mine);
         Assert.Equal(["570"], mine.Value.Owned.AppIds.Order(StringComparer.Ordinal));
-        Assert.Equal(["400"], mine.Value.Family!.Order(StringComparer.Ordinal));
-        Assert.Equal(4242UL, mine.Value.FamilyGroupId);
+        Assert.Equal(["400"], mine.Value.Family!.Apps.Keys.Order(StringComparer.Ordinal));
+        Assert.Equal(4242UL, mine.Value.Family.GroupId);
         Assert.Null(other);
+    }
+
+    [Fact]
+    public async Task NoFamilyIsAnEmptyListAndNoAnswerIsUnknown()
+    {
+        var (none, _) = Fixture(request => request.RequestUri!.AbsolutePath.Contains("GetFamilyGroupForUser")
+            ? (HttpStatusCode.OK, null, Encoding.UTF8.GetBytes("""{"response":{"is_not_member_of_any_group":true}}"""))
+            : (HttpStatusCode.OK, null, Encoding.UTF8.GetBytes("""{"response":{"games":[]}}""")));
+        var (down, _) = Fixture(_ => (HttpStatusCode.ServiceUnavailable, null, []));
+        var (sharesDown, _) = Fixture(request => request.RequestUri!.AbsolutePath.Contains("GetFamilyGroupForUser")
+            ? (HttpStatusCode.OK, null, Encoding.UTF8.GetBytes("""{"response":{"family_groupid":"4242"}}"""))
+            : (HttpStatusCode.TooManyRequests, null, []));
+        var ct = TestContext.Current.CancellationToken;
+
+        var noFamily = await SteamSignInService.LibraryWithTokenAsync(none, "t", SteamId, ct);
+        var noAnswer = await SteamSignInService.LibraryWithTokenAsync(down, "t", SteamId, ct);
+        var limited = await SteamSignInService.LibraryWithTokenAsync(sharesDown, "t", SteamId, ct);
+
+        Assert.Equal(0UL, noFamily.Family!.GroupId);
+        Assert.Empty(noFamily.Family.Apps);
+        Assert.Null(noAnswer.Family);
+        Assert.False(noAnswer.Owned.Authoritative);
+        Assert.Null(limited.Family);   // in a family, but its games did not come: what was kept stands
     }
 
     [Fact]

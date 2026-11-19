@@ -1,8 +1,8 @@
-import { useState } from 'react'
-import { CHECK_PATH } from '../brand/icons'
+import { useEffect, useId, useState } from 'react'
+import { CHECK_PATH, Info } from '../brand/icons'
 import { hostedBuyUrl, resolvePrimaryAction, type Game, type GameVariant, type InstallProgress } from '../lib/host'
 import { transferForGame } from '../lib/library'
-import { installProgressLabel, transferPercent } from '../lib/utils'
+import { formatPlayed, formatRelativeLastPlayed, installProgressLabel, transferPercent } from '../lib/utils'
 import { CoverArt, HeroWash } from './CoverArt'
 import { GameHeader, GameStats, GameStore } from './game/GameSections'
 import { HdrRow } from './game/HdrRow'
@@ -80,9 +80,10 @@ export type GamePageProps = {
 }
 
 /**
- * The game's lines, one row each, their names, readings and controls on shared edges: Upscalers and Shaders (each
- * opening its part of PC › Graphics), Optimize for a game Exo has best settings for, then HDR and the driver's frame
- * generation where the PC has them, and frame generation through a mod on a card without NVIDIA's.
+ * The game's lines, one row each, their names, readings and controls on shared edges, every row the same height: Upscalers
+ * and Shaders (each opening its part of PC › Graphics), Frame generation, HDR and Optimize. The set is the same for every
+ * game: a line the game doesn't support stays and says so, so the page never grows or shrinks with what a game has. Last,
+ * the driver's own frame generation, on a PC whose AMD or Intel driver has it (the same for every game on that PC).
  */
 function GameLines({ selected, details, onOpenSystem, hdrForGames, onHdrForGames }: {
   selected: Game
@@ -101,10 +102,10 @@ function GameLines({ selected, details, onOpenSystem, hdrForGames, onHdrForGames
           <ShaderPrecompile key={'shaders' + details.selectionKey} gameId={selected.id} onOpenShaders={() => onOpenSystem('shaders')} />
         </>
       )}
-      <OptimizeLine key={'optimize' + details.selectionKey} gameId={selected.id} />
-      <HdrRow key={'hdr' + details.selectionKey} gameId={selected.id} hdrForGames={hdrForGames} onHdrForGames={onHdrForGames} />
-      <FrameGenRow key={'framegen' + details.selectionKey} gameId={selected.id} />
       <FrameGenModRow key={'framegenmod' + details.selectionKey} gameId={selected.id} />
+      <HdrRow key={'hdr' + details.selectionKey} gameId={selected.id} hdrForGames={hdrForGames} onHdrForGames={onHdrForGames} />
+      <OptimizeLine key={'optimize' + details.selectionKey} gameId={selected.id} />
+      <FrameGenRow key={'framegen' + details.selectionKey} gameId={selected.id} />
     </div>
   )
 }
@@ -146,6 +147,44 @@ function LiveStatus({
   )
 }
 
+/**
+ * Info (the pane beside the hero) stays as it was left for the rest of the session, game to game, as Photos' does.
+ * Not saved: Exo opens a game on its hero.
+ */
+let infoWanted = false
+
+/** The hero's one line under the title: hours and when last played, the two facts people open a game for. */
+function glanceLine(selected: Game): string | null {
+  const parts = [
+    selected.playtimeMinutes && selected.playtimeMinutes > 0 ? `${formatPlayed(selected.playtimeMinutes)} played` : null,
+    selected.lastPlayedUtc ? `Last played ${formatRelativeLastPlayed(selected.lastPlayedUtc).toLocaleLowerCase()}` : null,
+  ].filter(Boolean)
+  return parts.length ? parts.join(' · ') : null
+}
+
+/**
+ * Info's key and its Escape: I opens or closes it, and Escape closes it before the sheet (unless Properties, a menu or a
+ * field has the key). Capture, so it runs ahead of the sheet's own Escape.
+ */
+function useInfoKeys(open: boolean, setOpen: (open: boolean) => void, propertiesOpen: boolean) {
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (event.defaultPrevented || event.isComposing || event.ctrlKey || event.metaKey || event.altKey || propertiesOpen) return
+      const target = event.target instanceof HTMLElement ? event.target : null
+      if (target?.closest('input, textarea, [contenteditable="true"], [role="menu"], [popover]')) return
+      if (event.key === 'Escape' && open) {
+        event.preventDefault()
+        setOpen(false)
+      } else if (event.key.toLowerCase() === 'i' && !event.shiftKey) {
+        event.preventDefault()
+        setOpen(!open)
+      }
+    }
+    window.addEventListener('keydown', onKey, true)
+    return () => window.removeEventListener('keydown', onKey, true)
+  }, [open, setOpen, propertiesOpen])
+}
+
 export function GamePage({
   selected,
   busy,
@@ -178,9 +217,21 @@ export function GamePage({
   // Done (DESIGN.md › Motion) on the cover when a download lands installed; while it runs, the pill carries the bar.
   const downloading = !!selectedProgress?.isActive
   const finished = useJustFinished(downloading, isCurrent(selected))
+  // Content first, details on demand (DESIGN.md › Game sheet): the hero holds the cover, the name, Play and Properties;
+  // Info opens the pane beside it with the facts, the game's lines and the cover tools. The sheet is the same size for
+  // every game, whatever the PC supports for it; the pane scrolls what it holds.
+  const [info, setInfoState] = useState(infoWanted)
+  const setInfo = (open: boolean) => { infoWanted = open; setInfoState(open) }
+  // What the pane holds mounts the first time it opens for this game (each line reads its own state), then stays.
+  const [shownFor, setShownFor] = useState<string | null>(info ? details.selectionKey : null)
+  if (info && shownFor !== details.selectionKey) setShownFor(details.selectionKey)
+  useInfoKeys(info, setInfo, propertiesOpen)
+  const paneId = useId()
+  const glance = glanceLine(selected)
+  const note = !!details.driveHeat && details.driveHeat.slowedSeconds > 0
 
   return (
-    <article className="exo-game-page exo-enter">
+    <article className={`exo-game-page exo-enter${info ? ' is-info' : ''}`}>
       <div className="exo-game-page-wash" aria-hidden>
         <HeroWash game={artworkView} fill={false} />
       </div>
@@ -206,6 +257,7 @@ export function GamePage({
                   onSelectSource={onSelectSource}
                 />
               </GameHeader>
+              {glance ? <p className="exo-game-glance tabular-nums">{glance}</p> : null}
               <div className="exo-game-actions">
                 <PrimaryAction
                   selected={selected}
@@ -235,8 +287,23 @@ export function GamePage({
                     onPropertiesOpen={onPropertiesOpen}
                   />
                 )}
+                <button
+                  type="button"
+                  className={`exo-game-tool exo-game-side is-icon exo-game-info-toggle${note ? ' has-note' : ''}`}
+                  aria-label={note ? 'Info, something to know' : 'Info'}
+                  aria-pressed={info}
+                  aria-controls={paneId}
+                  onClick={() => setInfo(!info)}
+                >
+                  <Info size={16} />
+                </button>
               </div>
-
+            </div>
+          </div>
+        </div>
+        <aside id={paneId} className="exo-game-info-pane" aria-label="Info" hidden={!info}>
+          {shownFor === details.selectionKey && (
+            <>
               <GameStats selected={selected} sources={sources} achievements={details.achievements} driveHeat={details.driveHeat} loading={details.loading} />
               {artworkEnabled && !installedActions && (
                 <ArtworkStrip selected={selected} coverSource={artworkView.coverSource} locked={hostLocked} onArtwork={setArtworkGame} onStatus={onStatus} />
@@ -244,9 +311,9 @@ export function GamePage({
               {installedActions && (
                 <GameLines selected={selected} details={details} onOpenSystem={onOpenSystem} hdrForGames={hdrForGames} onHdrForGames={onHdrForGames} />
               )}
-            </div>
-          </div>
-        </div>
+            </>
+          )}
+        </aside>
       </div>
       <LiveStatus selected={selected} busy={busy} progress={selectedProgress} statusMsg={statusMsg} />
     </article>

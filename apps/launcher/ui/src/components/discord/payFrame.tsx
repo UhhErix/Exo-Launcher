@@ -5,6 +5,7 @@ import { Menu } from '../ui/Menu'
 import type { DiscordPaymentChoice } from '../../lib/discord'
 import { Spinner } from '../ui/Spinner'
 import { ErrorNote } from '../ui/ErrorNote'
+import { errorText } from '../../lib/errorWords'
 
 // The card form's own origin (wwwroot/pay): the only page that loads Stripe. Exo hears back only what it says.
 const PAY = 'https://pay.exo-launcher.local'
@@ -78,7 +79,7 @@ export function AddCard({ onSaved, onCancel }: { onSaved: (choices: DiscordPayme
       void host.discordShop('cardSave', { paymentMethod: message.paymentMethod, addressToken: pending.current.addressToken, ...address }).then(result => {
         setBusy(false)
         if (result.ok) onSaved(result.payment ?? [])
-        else setError(result.message ?? "Discord didn't save the card.")
+        else setError(errorText(result.message, "Discord didn't save the card."))
       }, () => { setBusy(false); setError("Exo couldn't reach Discord. Check your payment methods before trying again.") })
     }
   })
@@ -93,7 +94,7 @@ export function AddCard({ onSaved, onCancel }: { onSaved: (choices: DiscordPayme
   const save = () => {
     setBusy(true); setError(null)
     void host.discordShop('card', { ...address }).then(result => {
-      if (!result.ok || !result.clientSecret || !result.addressToken) { setBusy(false); setError(result.message ?? "Discord couldn't start adding a card."); return }
+      if (!result.ok || !result.clientSecret || !result.addressToken) { setBusy(false); setError(errorText(result.message, "Discord couldn't start adding a card.")); return }
       pending.current = { addressToken: result.addressToken }
       pay.send({
         type: 'save', clientSecret: result.clientSecret,
@@ -144,7 +145,7 @@ export function useConfirmPayment(onDone: (error: string | null) => void) {
     else if (message.type === 'error') { setPending(false); onDone(message.message) }
   }, true)
   const confirm = (paymentId: string) => void host.discordShop('paymentSecret', { paymentId }).then(result => {
-    if (!result.ok || !result.clientSecret || !result.key) { onDone(result.message ?? "Discord didn't send the payment to confirm."); return }
+    if (!result.ok || !result.clientSecret || !result.key) { onDone(errorText(result.message, "Discord didn't send the payment to confirm.")); return }
     pay.send({ type: 'confirmPayment', key: result.key, clientSecret: result.clientSecret })
   }, () => onDone("Exo couldn't reach Discord. Check Your Collection before trying again."))
   return { frame: pay.element, confirm, ready: pay.loaded, pending }

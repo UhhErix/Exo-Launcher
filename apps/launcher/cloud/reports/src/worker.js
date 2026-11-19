@@ -1,5 +1,6 @@
 // Exo's reports service (README.md). POST /v1/report stores one crash report the Launcher, Cinema or Browser sent, in R2
-// under the UTC date. POST /v1/telemetry stores scrubbed app events in D1, and /v1/telemetry/delete removes one install's
+// under the UTC date, and files or updates its error group's issue in the private UhhErix/Exo-Reports repository
+// (src/issues.js). POST /v1/user-report does the same for a Report a problem message, one issue each. POST /v1/telemetry stores scrubbed app events in D1, and /v1/telemetry/delete removes one install's
 // events; a daily cron job writes aggregates and removes raw events after 90 days. Nothing about the sender is kept: no IP
 // address is written (CF-Connecting-IP is read only as a rate limiter's key, `admitted` below), no user agent, no cookie, no
 // id the client makes beyond the install ID the telemetry envelope carries. Logs are off (wrangler.toml).
@@ -9,7 +10,10 @@ import { TelemetryError, parseBatch, parseDelete } from './telemetry.js'
 import { deleteInstall, insertEvents, installEventsSince, runRetention, utcDay } from './telemetry-store.js'
 import { addCrashIndex, deleteCrashReports, pruneCrashIndex, removeCrashIndex } from './crash-store.js'
 import { ContactError, contactLimits, parseContact } from './contact.js'
-import { ALERT_AT, alertOf, claimAlert, countReport, dailyMessage, digestOf, discordBody, heldBack, isDiscordWebhook, pausedAlert, pruneAlertDays, pruneCrashDays } from './triage.js'
+import { ALERT_AT, alertOf, claimAlert, countReport, dailyMessage, digestOf, discordBody, heldBack, isDiscordWebhook, pausedAlert, pruneAlertDays, pruneCrashDays, userAlertOf } from './triage.js'
+import { fileCrash, fileUserReport, flush, pruneIssueDays, queueUserReport } from './issues.js'
+import { gitHubOf } from './github.js'
+import { parseUserReport, userLimits } from './user-report.js'
 
 const HOUR_MS = 60 * 60 * 1000
 // The contact form's page is the only browser that may post (src/contact.js, README.md › Contact).
@@ -25,6 +29,10 @@ export default {
       if (request.method !== 'POST') return new Response('POST only', { status: 405, headers: { Allow: 'POST' } })
       return receive(request, env, ctx)
     }
+    if (url.pathname === '/v1/user-report') {
+      if (request.method !== 'POST') return new Response('POST only', { status: 405, headers: { Allow: 'POST' } })
+      return receiveUserReport(request, env)
+    }
     if (url.pathname === '/v1/telemetry' || url.pathname === '/v1/telemetry/delete') {
       if (request.method !== 'POST') return new Response(null, { status: 405, headers: { Allow: 'POST' } })
       return telemetry(request, env, url.pathname)
@@ -32,23 +40,30 @@ export default {
     return new Response('Not found', { status: 404 })
   },
 
-  // The daily job (wrangler.toml [triggers]): aggregates and removes raw events older than 90 days, and crash index rows
-  // older than the 30-day lifecycle of their objects; then yesterday's crash digest goes to the team (src/triage.js).
-  // Each step runs on its own: one that throws is named in the mail and stops nothing else, and the mail always goes.
+  // The daily job (wrangler.toml [triggers]): aggregates and removes raw events older than 90 days, crash index rows older
+  // than the 30-day lifecycle of their objects, and old counts and tallies. With GITHUB_REPORTS_TOKEN set, whatever GitHub
+  // has not been told yet goes (src/issues.js flush: groups and Report a problem messages kept while GitHub was down, capped
+  // or the token was not set) and nothing is mailed: GitHub's own notifications tell the team. Without the token,
+  // yesterday's crash digest goes to the team by mail and Discord (src/triage.js), as before GitHub. Each step runs on its
+  // own: one that throws stops nothing else, and without the token it is named in the mail, which always goes.
   async scheduled(controller, env) {
     if (!env.TELEMETRY) return
     const now = Date.now()
     const db = env.TELEMETRY
+    const gh = gitHubOf(env)
     const failed = []
     const steps = [
       ['retention', () => runRetention(db, now)],
       ['crash index pruning', () => pruneCrashIndex(db, now)],
       ['crash count pruning', () => pruneCrashDays(db, now)],
       ['alert tally pruning', () => pruneAlertDays(db, now)],
+      ['issue tally pruning', () => pruneIssueDays(db, now)],
+      ...(gh ? [['GitHub', () => flush(env, now)]] : []),
     ]
     for (const [name, step] of steps) {
       try { await step() } catch { failed.push(name) }
     }
+    if (gh) return
     let digest = null
     try { digest = await digestOf(db, now) } catch { failed.push('digest') }
     const yesterday = utcDay(now - 24 * HOUR_MS)
@@ -58,23 +73,31 @@ export default {
 }
 
 /**
- * Counts a stored report and tells the team when its group is new in its version or has grown tenfold (src/triage.js). It
- * runs after the answer and never fails a report: with no D1 (the dev copy) or a failed send, the report is still stored.
+ * Counts a stored report (src/triage.js) and files or updates its group's issue (src/issues.js). Until GITHUB_REPORTS_TOKEN
+ * is set, the team is told as before GitHub: by mail and Discord when the group is new in its version or has grown tenfold;
+ * the group is still recorded, so the daily job files it once the token is set. It runs after the answer and never fails a
+ * report: with no D1 (the dev copy), no token, a failed send or GitHub down, the report is still stored.
  */
 async function triage(env, report, key, day) {
   if (!env.TELEMETRY) return
+  const withGitHub = gitHubOf(env) !== null
   try {
     const total = await countReport(env.TELEMETRY, report, key, day)
-    if (!ALERT_AT.includes(total)) return
-    const does = await claimAlert(env.TELEMETRY, day)
-    if (does === 'send') await tellTeam(env, alertOf(report, total))
-    else if (does === 'pause') await tellTeam(env, pausedAlert(day))
+    if (!withGitHub && ALERT_AT.includes(total)) {
+      const does = await claimAlert(env.TELEMETRY, day)
+      if (does === 'send') await tellTeam(env, alertOf(report, total))
+      else if (does === 'pause') await tellTeam(env, pausedAlert(day))
+    }
   } catch {
-    // Logs are off; the report is in R2 and the daily digest reads the counts that did land.
+    // Logs are off; the report is in R2 and the daily job reads the counts that did land.
   }
+  await fileCrash(env, report, key, day)
 }
 
-/** One message to the team: by mail (the contact form's own binding and address), and to Discord when its webhook is set. */
+/**
+ * One message to the team before GitHub (no GITHUB_REPORTS_TOKEN): by mail (the contact form's own binding and address),
+ * and to Discord when its webhook is set.
+ */
 async function tellTeam(env, { subject, text }) {
   const sends = [mail(env, { subject, text })]
   if (isDiscordWebhook(env.DISCORD_WEBHOOK_REPORTS)) {
@@ -126,6 +149,64 @@ async function receive(request, env, ctx) {
   if (ctx?.waitUntil) ctx.waitUntil(counted)
   else await counted
   return new Response(null, { status: 202 })
+}
+
+/**
+ * POST /v1/user-report: one Report a problem message (src/user-report.js). Stored in R2 like a crash report (under
+ * reports/, so the same 30-day rule expires it, and indexed by install so Delete my data removes it), then filed as an issue
+ * at once when GitHub takes it. Answers 202 with { issue } (its number in Exo-Reports) or { ref } (8 hex, when it waits for
+ * the daily job), 400, 403 (any Origin: only the apps send), 405, 413, 415, 422 (the excerpt holds personal data), 429 and
+ * 503 (no index for an install ID).
+ */
+async function receiveUserReport(request, env) {
+  if (request.headers.has('Origin')) return empty(403)
+  if (!isJson(request.headers.get('Content-Type'))) return new Response('JSON only', { status: 415 })
+  const declared = request.headers.get('Content-Length')
+  if (declared !== null && !(Number(declared) <= userLimits.bodyBytes)) return new Response('Too large', { status: 413 })
+  const text = await readCapped(request, userLimits.bodyBytes)
+  if (text === null) return new Response('Too large', { status: 413 })
+
+  let report
+  let installId
+  try {
+    const value = JSON.parse(text)
+    report = parseUserReport(value)
+    installId = reportInstallId(value)
+  } catch (error) {
+    if (error instanceof ReportError) return new Response(error.message, { status: error.status })
+    return new Response('Not JSON', { status: 400 })
+  }
+  if (!(await admitted(env, request, 'user-report', installId === null ? [] : [installId]))) return new Response('Slow down', { status: 429 })
+
+  const day = utcDay(Date.now())
+  const ref = crypto.randomUUID().replace(/-/g, '').slice(0, 8)
+  const key = `${limits.prefix}${day}/user-${crypto.randomUUID()}.json`
+  const stored = { ...report, ref }
+  if (installId !== null) {
+    if (!env.TELEMETRY) return new Response('Unavailable', { status: 503 })
+    try {
+      await addCrashIndex(env.TELEMETRY, installId, key, day)
+    } catch {
+      return new Response('Unavailable', { status: 503 })
+    }
+  }
+  try {
+    await env.REPORTS.put(key, JSON.stringify(stored), { httpMetadata: { contentType: 'application/json' } })
+  } catch (error) {
+    if (installId !== null) await removeCrashIndex(env.TELEMETRY, installId, key).catch(() => {})
+    throw error
+  }
+
+  // Filed now when GitHub takes it, so the player sees the issue's number; otherwise kept for the daily job. Without the
+  // token the team is told by mail and Discord as well, and the issue is filed once the token is set.
+  const gh = gitHubOf(env)
+  let issue = null
+  if (gh && env.TELEMETRY) {
+    try { issue = await fileUserReport(env, gh, stored, day) } catch { issue = null }
+  }
+  if (!gh) await tellTeam(env, userAlertOf(stored, key)).catch(() => {})
+  if (issue === null && env.TELEMETRY) await queueUserReport(env.TELEMETRY, ref, key, day).catch(() => {})
+  return Response.json(issue === null ? { ref } : { issue }, { status: 202 })
 }
 
 /**

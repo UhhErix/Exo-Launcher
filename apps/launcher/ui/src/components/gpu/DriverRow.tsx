@@ -7,6 +7,7 @@ import { Row } from '../settings/parts'
 import { Choice } from '../settings/Choice'
 import { ConfirmDialog } from '../ui/Dialog'
 import { driverInstallStarted, driverInstallStopped } from '../shell/DriverInstallOverlay'
+import { gpuOffers } from '../../lib/canUse'
 import { Progress, ProgressWords } from '../ui/Progress'
 
 type Vendor = NonNullable<DriverState['vendor']>
@@ -158,7 +159,7 @@ export function DriverRow({ active, state, onState, ask }: { active: boolean; st
     <>
       {/* NVIDIA's Game Ready or Studio sits beside Update: the driver it installs. */}
       <Row label={`${VENDOR[vendor].name} driver`} detail={detail || share !== null ? <ProgressWords words={detail} value={share} /> : undefined} error={rowError(error, working, state.blocked)}>
-        {vendor === 'nvidia' && !state.workstation && (
+        {gpuOffers(vendor, state.workstation).driverType && (
           <Choice label="Driver type" value={branch} choices={BRANCHES} disabled={working}
             onChange={value => {
               const next: Branch = value === 'studio' ? 'studio' : 'game'

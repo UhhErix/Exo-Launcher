@@ -4,6 +4,7 @@
  */
 import { host, onHostEvent } from './host'
 import type { DiscordEmoji } from './discord'
+import { errorText } from './errorWords'
 
 export type AppChoice = { name: string; value: string | number }
 export type AppOption = {
@@ -102,8 +103,8 @@ export function loadCommands(channelId: string) {
   const kept = loaded.get(channelId)
   if (kept && Date.now() - kept.at < 60_000) return kept.result
   const result = host.discordApps(channelId, 'commands')
-    .then(r => ({ commands: r.commands ?? [], apps: r.applications ?? [], message: r.ok ? null : r.message ?? 'Discord did not list the commands.' }))
-    .catch(() => ({ commands: [], apps: [], message: 'Discord did not list the commands.' }))
+    .then(r => ({ commands: r.commands ?? [], apps: r.applications ?? [], message: r.ok ? null : errorText(r.message, 'Discord didn’t list the commands. Try again.') }))
+    .catch(() => ({ commands: [], apps: [], message: 'Discord didn’t list the commands. Try again.' }))
   loaded.delete(channelId)
   loaded.set(channelId, { at: Date.now(), result })
   // The latest 30 conversations' lists, as the message cache keeps them; older ones are asked for again.
@@ -159,7 +160,7 @@ export async function runCommand(channelId: string, params: { commandId: string;
   const show = (line: string | null, failed = false) => statusLines.get(channelId)?.(line, failed)
   show('Sending command…')
   const result = await host.discordApps(channelId, 'run', params).catch(() => ({ ok: false, message: null, nonce: null }))
-  if (!result.ok || !result.nonce) { show(result.message ?? 'The application did not respond', true); return false }
-  followInteraction(result.nonce, ok => show(ok ? null : 'The application did not respond', !ok))
+  if (!result.ok || !result.nonce) { show(errorText(result.message, 'The app didn’t answer. Try again.'), true); return false }
+  followInteraction(result.nonce, ok => show(ok ? null : 'The app didn’t answer. Try again.', !ok))
   return true
 }

@@ -1,6 +1,6 @@
 // Exo's Settings, used: it opens from the gear on its Library page, no wider than
 // the settings width, scrolling brings every section's heading into view, the column shows Exo's scrollbar while it scrolls (no width, then gone),
-// every switch in Downloads turns and turns back, Steam's Offline mode shows how Steam starts, Text size scales the page and goes back, About's What's
+// every switch in Downloads turns and turns back, Update DLSS, FSR and XeSS automatically stays off through a restart, Steam's Offline mode shows how Steam starts, Text size scales the page and goes back, About's What's
 // new holds the window until Continue and lets go, Escape closes it where you were. Settings is Exo's own (Library, Discord,
 // Music, General); capture options are checked in the capture suite, where they live.
 import { openPage, sleep } from '../cdp.mjs'
@@ -49,10 +49,15 @@ export async function run(t) {
     }
     await page(t, 'Library')
     await sleep(400)
+    const stores = await t.host('stores.matrix')
+    const settings = await t.host('settings.get')
+    const riotPresent = Array.isArray(stores) && stores.some(s => s.store === 'riot' && (s.signedIn || s.clientPresent === true || (s.clientPresent === undefined && s.agentPresent)))
+    const wantRiotId = riotPresent || !!settings?.riotId?.trim()
     state.riotIdInStores = await t.shell.eval(`[...document.querySelectorAll('.exo-set-section')].some(s => /^Game stores/.test(s.querySelector('h2')?.textContent.trim() ?? '') && [...s.querySelectorAll('.exo-set-item-label')].some(l => l.textContent.trim() === 'Riot ID'))`)
-    // Keys are gone: no Optional keys section, and Riot ID (a name, not a key) is a row of Game stores.
+    // Keys are gone: no Optional keys section, and Riot ID (a name, not a key) is a row of Game stores when Riot or a saved ID is present.
     if (state.sections.includes('Optional keys')) failures.push('the Optional keys section is still there')
-    if (!state.riotIdInStores) failures.push('Riot ID is not a row of Game stores')
+    if (wantRiotId && !state.riotIdInStores) failures.push('Riot ID is not a row of Game stores')
+    if (!wantRiotId && state.riotIdInStores) failures.push('Riot ID showed with no Riot Client or saved ID')
     if (state.width > state.max + 1) failures.push(`the sheet is ${state.width}px wide, more than ${state.max}px`)
     await c.shot('settings', t.shell)
     failures.push(...await k.look(c, 'settings'))
@@ -124,9 +129,52 @@ export async function run(t) {
     return failures
   })
 
+  // First run's Update DLSS, FSR and XeSS automatically (onboarding/PcStep.tsx) and this one in Downloads are one setting,
+  // saved the one way (lib/settingsSave.ts): turned off here, it is still off after Exo restarts, then it goes back on.
+  await run.check('settings', 'upscalers-kept', 'Update DLSS, FSR and XeSS automatically, turned off, stays off after a restart', async (c) => {
+    if (t.quick || t.run.meta.attach) c.skip(t.quick ? 'quick run' : 'attached: Exo is not restarted')
+    const sw = () => document.querySelector('#set-auto-upscalers')
+    const reopen = async () => {
+      if (!await t.shell.eval(`!!document.querySelector('.exo-settings')?.checkVisibility()`) && !await open(t)) return false
+      if (!await page(t, 'Downloads')) return false
+      return !!await t.shell.waitFor(() => !!document.querySelector('#set-auto-upscalers'), { timeoutMs: 5000 })
+    }
+    if (!await reopen()) return ['no Update DLSS, FSR and XeSS automatically switch in Settings › Downloads']
+    const was = (await t.host('settings.get'))?.autoUpdateUpscalers !== false
+    c.evidence.was = was
+    const failures = []
+    try {
+      if (was) {
+        await t.shell.click(sw)
+        if (!await t.shell.waitFor(() => document.querySelector('#set-auto-upscalers')?.getAttribute('aria-checked') === 'false', { timeoutMs: 3000 })) return ['the switch did not turn off']
+        await sleep(500)
+      }
+      await t.relaunch({})
+      const saved = (await t.host('settings.get'))?.autoUpdateUpscalers
+      c.evidence.afterRestart = saved
+      if (saved !== false) failures.push(`after a restart the setting is ${saved}, not off`)
+      if (!await reopen()) return [...failures, 'Settings › Downloads did not open after the restart']
+      const shown = await t.shell.eval(`document.querySelector('#set-auto-upscalers')?.getAttribute('aria-checked')`)
+      if (shown !== 'false') failures.push(`after a restart the switch shows ${shown}, not off`)
+      await c.shot('upscalers-kept', t.shell)
+    } finally {
+      // Back as it was: on, through the switch, or through the host if the page can't.
+      if (was && (await t.host('settings.get').catch(() => null))?.autoUpdateUpscalers === false) {
+        if (await reopen().catch(() => false)) await t.shell.click(sw).catch(() => {})
+        if (!await t.shell.waitFor(() => document.querySelector('#set-auto-upscalers')?.getAttribute('aria-checked') === 'true', { timeoutMs: 3000 }).catch(() => false)) {
+          failures.push('the switch did not turn back on')
+          await t.host('settings.set', { autoUpdateUpscalers: true }).catch(() => {})
+        }
+      }
+    }
+    return failures
+  })
+
   // Read only: pressing it restarts Steam. The row shows where Steam can play offline (a saved sign-in) or is offline now.
   await run.check('settings', 'steam-offline', "Game stores' Steam Offline mode shows how Steam starts", async (c) => {
     if (!await t.shell.eval(`!!document.querySelector('.exo-settings')?.checkVisibility()`) && !await open(t)) return ['Settings did not open']
+    await page(t, 'Library')
+    await sleep(300)
     const steam = (await t.host('accounts.list'))?.steam ?? null
     c.evidence.steam = steam ? { offline: steam.offline, canOffline: steam.canOffline } : null
     const want = steam && (steam.canOffline || steam.offline) ? String(steam.offline) : 'none'

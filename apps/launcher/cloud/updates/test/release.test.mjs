@@ -69,7 +69,7 @@ test('-WhatIf prints every step for launcher and changes nothing', (t) => {
     'WHATIF would run: pwsh -NoProfile -File tools\\Build-Release.ps1',
     'publish-release.ps1 -App launcher -Tag v9.9.9',
     'WHATIF would run: npm.cmd run build',
-    'WHATIF would run: npx.cmd -y wrangler@4.158.0 deploy',
+    'WHATIF would run: npx.cmd -y wrangler@4.165.0 deploy',
     'WHATIF would check https://updates.getexo.app/v1/launcher/latest names v9.9.9',
     'WHATIF PASS',
   ]) assert.ok(out.includes(step), `missing: ${step}\n${out}`)
@@ -160,12 +160,13 @@ test('a real run stops in its preflight, before it changes anything', (t) => {
   assert.equal(existsSync(join(fx.repo, 'artifacts')), false)
 })
 
-test('the plan checks the change list at the update address, passes the app folder along, and ends with the code backup', (t) => {
+test('the plan checks the change list at the update address, passes the app folder along, and ends with the live check', (t) => {
   const fx = fixture('cinema')
   cleanup(t, fx)
   const { code, out } = run(fx)
   assert.equal(code, 0, out)
   assert.ok(out.includes('WHATIF would check https://updates.getexo.app/v1/cinema/changelog'), out)
   assert.ok(out.includes('WHATIF would add -Payload'), out)
-  assert.ok(out.includes('9. Code backup'), out)
+  assert.ok(out.includes('8. Live check'), out)
+  assert.ok(!out.includes('Code backup'), out)
 })

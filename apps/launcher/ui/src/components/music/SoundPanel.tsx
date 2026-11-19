@@ -98,7 +98,7 @@ function SpotifySound() {
   return (
     <div className="exo-music-sound">
       {failed ? <ErrorNote className="exo-music-error" message={failed} /> : null}
-      <Row label="Audio quality" detail={audio.quality === 5 ? 'Up to 24-bit/44.1 kHz FLAC' : audio.lossless ? 'Lossless is on your plan' : undefined}>
+      <Row label="Audio quality" detail={audio.quality === 5 ? 'Up to 24-bit/44.1 kHz FLAC' : undefined}>
         <Choice label="Audio quality" value={String(audio.quality)} choices={qualities}
           onChange={value => set('quality', { index: Number(value) }, { quality: Number(value) })} />
       </Row>
@@ -126,11 +126,12 @@ function SpotifySound() {
       <Row label="Normalize volume">
         <Switch checked={audio.normalize} label="Normalize volume" onChange={on => set('normalize', { on }, { normalize: on })} />
       </Row>
-      <Row label="Smart Shuffle">
-        {audio.smartShuffle === null ? <span className="exo-set-state">Playlists only</span> : (
+      {/* Spotify offers it only while a playlist plays: no row otherwise. */}
+      {audio.smartShuffle === null ? null : (
+        <Row label="Smart Shuffle">
           <Switch checked={audio.smartShuffle} label="Smart Shuffle" onChange={on => set('smartShuffle', { on }, { smartShuffle: on })} />
-        )}
-      </Row>
+        </Row>
+      )}
       <Row label="Mono audio">
         <Switch checked={audio.mono} label="Mono audio" onChange={on => set('mono', { on }, { mono: on })} />
       </Row>

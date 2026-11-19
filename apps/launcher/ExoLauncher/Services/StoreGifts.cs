@@ -26,7 +26,8 @@ internal sealed class StoreGifts
     internal static string ProfileFolder => Path.Combine(PathHelper.AppDataDir, "gifts-webview");
 
     private const string SteamGiftsUrl = "https://store.steampowered.com/gifts?l=english";
-    private const string SteamLoginUrl = "https://store.steampowered.com/login/?redir=gifts%3Fl%3Denglish";
+    private const string SteamTokenUrl = "https://store.steampowered.com/pointssummary/ajaxgetasyncconfig";
+    private const string SteamLoginUrl ="https://store.steampowered.com/login/?redir=gifts%3Fl%3Denglish";
     private const string EpicGiftsUrl = "https://store.epicgames.com/en-US/gifts";
     // A plain page on the store's origin: the gifting calls answer it, and it loads no app and sends no one to sign in.
     private const string EpicOrigin = "https://store.epicgames.com/robots.txt";
@@ -135,6 +136,31 @@ internal sealed class StoreGifts
             $"{JsonSerializer.Serialize(EpicGifting + "/")} + {JsonSerializer.Serialize(id)} + '/status'",
             $"{{ method: 'PUT', credentials: 'include', headers: {{ 'content-type': 'application/json' }}, body: {JsonSerializer.Serialize(put)} }}"), ct).ConfigureAwait(true);
         return answer is null ? (false, null) : StoreGiftParser.ParseEpicAnswer(answer.Status, answer.Body);
+    }
+
+    /// <summary>
+    /// The Steam website sign-in's web API token (the one Steam's store gives its own signed-in page, from
+    /// <c>pointssummary/ajaxgetasyncconfig</c>), for the library's Steam Family list; null when the website is not
+    /// signed in here. Never logged. UI thread only.
+    /// </summary>
+    internal async Task<string?> SteamWebApiTokenAsync(nint owner, CancellationToken ct)
+    {
+        await _gate.WaitAsync(ct).ConfigureAwait(true);
+        try
+        {
+            using var page = await Page.OpenAsync(owner).ConfigureAwait(true);
+            if (!await page.HasCookieAsync("https://store.steampowered.com", "steamLoginSecure").ConfigureAwait(true)) return null;
+            // The answer is a few hundred bytes of JSON, shown as the page's text: no store page loads for it.
+            if (await page.GoAsync(SteamTokenUrl, uri => uri.Host == "store.steampowered.com", ct).ConfigureAwait(true) is not { } at ||
+                !at.AbsolutePath.StartsWith("/pointssummary/", StringComparison.OrdinalIgnoreCase))
+                return null;
+            return SteamSignIn.SteamWebsiteToken.ParseAsyncConfig(
+                await page.RunAsync("document.body ? document.body.innerText : ''", CallWait, ct).ConfigureAwait(true));
+        }
+        finally
+        {
+            _gate.Release();
+        }
     }
 
     /// <summary>Opens Steam's gifts page; false when Steam sends it to its sign-in instead.</summary>
@@ -251,6 +277,8 @@ internal sealed class StoreGifts
             Directory.CreateDirectory(ProfileFolder);
             await window.StartAsync().ConfigureAwait(true);
             var signedIn = await done.Task.WaitAsync(TimeSpan.FromMinutes(10), ct).ConfigureAwait(true);
+            // The library reads the family with the new sign-in at its next Steam scan.
+            if (signedIn) SteamSignIn.SteamWebsiteToken.Forget(retrySoon: true);
             return signedIn ? (true, "Signed in to Steam's website.") : (false, "The Steam window was closed before sign-in finished.");
         }
         catch (TimeoutException)
@@ -273,6 +301,7 @@ internal sealed class StoreGifts
             using var page = await Page.OpenAsync(owner).ConfigureAwait(true);
             foreach (var url in new[] { "https://store.steampowered.com", "https://login.steampowered.com", "https://help.steampowered.com", "https://steamcommunity.com" })
                 await page.DeleteCookiesAsync(url).ConfigureAwait(true);
+            SteamSignIn.SteamWebsiteToken.Forget();
             Last = new Snapshot(Last.Gifts.Where(g => g.Store != "steam").ToList(), false);
         }
         finally

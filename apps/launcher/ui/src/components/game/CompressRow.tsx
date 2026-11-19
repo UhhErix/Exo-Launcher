@@ -4,7 +4,9 @@ import { report } from '../../lib/report'
 import { formatSize } from '../../lib/utils'
 import { Row } from '../settings/parts'
 import { ConfirmButton } from '../ui/ConfirmButton'
+import { compressShown } from '../../lib/canUse'
 import { Progress } from '../ui/Progress'
+import { errorText } from '../../lib/errorWords'
 
 /** "Saved 18.3 GB", "Compressing 42%", "Saves about 12.4 GB": a game's compression in one line. */
 export function compressWords(c: CompressState): string {
@@ -48,7 +50,7 @@ export function useCompress(id: string, sample: boolean) {
     try {
       const answer = await host.compressAct(id, action, action === 'allow' ? compress?.antiCheat ?? undefined : undefined)
       if (answer.compress) setCompress(answer.compress)
-      if (!answer.ok) setError(answer.message ?? 'Exo couldn’t do that. Try again.')
+      if (!answer.ok) setError(errorText(answer.message, 'Exo couldn’t do that. Try again.'))
     } catch (e) {
       report(e, 'Compress.act')
       setError('Exo couldn’t do that. Try again.')
@@ -107,7 +109,8 @@ function Uncompress({ compress: c, locked, act }: { compress: CompressState; loc
  */
 export function CompressRow({ gameId, locked }: { gameId: string; locked: boolean }) {
   const { compress, error, act } = useCompress(gameId, !locked)
-  if (!compress) return null
+  // A game Exo will never compress has no row, as in PC › Compress games.
+  if (!compress || !compressShown(compress)) return null
   const working = compress.state === 'compressing' || compress.state === 'uncompressing'
   return (
     <div className="exo-props-row">

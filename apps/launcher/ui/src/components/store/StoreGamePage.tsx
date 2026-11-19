@@ -9,6 +9,7 @@ import { ggDealsUrl, loadGame, loadOffers, loadReviews, peekGame, peekOffers, pe
 import { TrailerPlayer } from './TrailerPlayer'
 import { ErrorNote } from '../ui/ErrorNote'
 import { ErrorState } from '../ui/ErrorState'
+import { errorText } from '../../lib/errorWords'
 
 /** GG.deals: the browser. */
 function open(url: string): Promise<unknown> {
@@ -174,7 +175,7 @@ function OfferRow({ offer, primary, free, soon }: { offer: StoreOffer; primary: 
     setError(null)
     const failed = `${offer.name}'s page could not be opened.`
     host.storeOpen(offer.url)
-      .then(res => { if (!res.ok) setError(res.message ?? failed) })
+      .then(res => { if (!res.ok) setError(errorText(res.message, failed)) })
       .catch((e: unknown) => { report(e, 'Store.openInStore'); setError(failed) })
       .finally(() => setBusy(false))
   }
@@ -389,7 +390,7 @@ function useStoreGame(appId: string) {
   useEffect(() => {
     let live = true
     loadGame(appId, attempt > 0)
-      .then(g => { if (live) setState(g.ok ? { data: g, error: null } : { data: null, error: g.message ?? 'The store could not be reached.' }) })
+      .then(g => { if (live) setState(g.ok ? { data: g, error: null } : { data: null, error: errorText(g.message, 'Exo couldn’t reach the store. Try again.') }) })
       .catch((e: unknown) => { report(e, 'Store.game'); if (live) setState({ data: null, error: 'The store could not be reached.' }) })
     return () => { live = false }
   }, [appId, attempt])

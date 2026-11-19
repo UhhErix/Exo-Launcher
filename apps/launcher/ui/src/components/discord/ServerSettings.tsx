@@ -22,6 +22,7 @@ import { Unfold } from '../ui/Unfold'
 import { Spinner } from '../ui/Spinner'
 import { ErrorNote } from '../ui/ErrorNote'
 import { NAV, type Section } from './serverSections'
+import { errorText } from '../../lib/errorWords'
 
 export type Guild = {
   id: string; name: string; icon: string | null; banner: string | null; description: string | null; owner_id: string
@@ -181,7 +182,7 @@ function Overview({ section, guild, moderation, channels, onSaved }: { section: 
     }
     const result = await admin('saveGuild', { guildId: guild.id, changes })
     setBusy(false)
-    if (!result.ok) { sent.forEach(dropUpload); setError(result.message ?? 'Discord did not save that.'); return }
+    if (!result.ok) { sent.forEach(dropUpload); setError(errorText(result.message, 'Discord didn’t save that.')); return }
     setDraft({}); setIcon(undefined); setBanner(undefined); onSaved()
   }
   const reset = () => { setDraft({}); setIcon(undefined); setBanner(undefined); setError(null); setNameError(null) }
@@ -328,7 +329,7 @@ function Safety({ guild, moderation, channels, value, set, onSaved }: { guild: G
     const result = await admin(action, { guildId: guild.id, on })
     setBusy(false)
     if (result.ok) onSaved()
-    else if (result.message !== MFA_CANCELLED) setError(result.message ?? 'Discord did not save that.')
+    else if (result.message !== MFA_CANCELLED) setError(errorText(result.message, 'Discord didn’t save that.'))
   }
   return (
     <>
@@ -363,7 +364,7 @@ function SafetyAlerts({ guild, channels, busy, onAlerts, onSaved }: { guild: Gui
   const channel = guild.safety_alerts_channel_id ?? guild.public_updates_channel_id ?? null
   const [error, setError] = useState<string | null>(null)
   const pick = (id: string) => void admin('saveGuild', { guildId: guild.id, changes: { safety_alerts_channel_id: id } }).then(result => {
-    if (result.ok) { setError(null); onSaved() } else setError(result.message ?? 'Discord did not save that.')
+    if (result.ok) { setError(null); onSaved() } else setError(errorText(result.message, 'Discord didn’t save that.'))
   })
   return (
     <>
@@ -395,7 +396,7 @@ function DeleteServer({ guildId, name, confirmByName, guard, onDeleted }: { guil
     setBusy(true); setError(null)
     const result = await admin('deleteGuild', { guildId })
     setBusy(false)
-    if (result.ok) onDeleted(); else if (result.message !== MFA_CANCELLED) setError(result.message ?? 'Discord did not delete it.')
+    if (result.ok) onDeleted(); else if (result.message !== MFA_CANCELLED) setError(errorText(result.message, 'Discord didn’t delete it.'))
   }
   const cancel = () => { setTyping(false); setTyped(''); setError(null) }
   const working = busy ? <Spinner label="Deleting the server" /> : null

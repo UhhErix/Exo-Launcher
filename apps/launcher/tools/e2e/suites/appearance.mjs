@@ -75,7 +75,7 @@ export async function run(t) {
     // only what passes under it.
     await t.shell.eval(`(() => { const s = document.createElement('style'); s.id = 'e2e-bar-off'; s.textContent = '.exo-titlebar, .exo-titlebar *, .exo-titlebar *::before, .exo-titlebar *::after { color: transparent !important; background: transparent !important; box-shadow: none !important; border-color: transparent !important; outline-color: transparent !important; backdrop-filter: none !important; fill: transparent !important; stroke: transparent !important } .exo-titlebar img { opacity: 0 !important }'; document.head.append(s) })()`)
     await sleep(300)
-    // The page's own color (the chosen Background): what shows behind the Bar must be it and nothing else.
+    // The page's own color (pure black): what shows behind the Bar must be it and nothing else.
     const page = await t.shell.eval(`(() => { const m = /(\\d+),\\s*(\\d+),\\s*(\\d+)/.exec(getComputedStyle(document.body).backgroundColor) || [0, 0, 0, 0]; return 0.2126 * m[1] + 0.7152 * m[2] + 0.0722 * m[3] })()`)
     const behind = -page + mean(await t.shell.pixelsClip({ ...scan.bar, y: Math.max(0, scan.bar.y - 4), height: scan.bar.height + 8 }))
     if (Math.abs(behind) >= 3) await c.shot('behind-bar', t.shell)

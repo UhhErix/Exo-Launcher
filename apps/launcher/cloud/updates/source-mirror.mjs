@@ -24,7 +24,7 @@ import { readPins } from './cache-mirror.mjs'
 
 export const SOURCE_BUCKET = 'exo-source'
 export const MANIFEST_KEY = '_source/manifest.json'
-const WRANGLER = 'wrangler@4.158.0'
+const WRANGLER = 'wrangler@4.165.0'
 const GPL3 = ['GNU GENERAL PUBLIC LICENSE', 'Version 3, 29 June 2007']
 const TITLES = {
   nile: 'Nile (Amazon Games)',

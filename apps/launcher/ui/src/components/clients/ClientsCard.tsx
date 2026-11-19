@@ -4,6 +4,7 @@ import { StepTile } from '../onboarding/StepTile'
 import { host, type ClientsStatus } from '../../lib/host'
 import { clientsFixCopy, clientsHeading, offersLater } from '../../lib/clients'
 import { report } from '../../lib/report'
+import { errorText } from '../../lib/errorWords'
 import { markShellReady } from '../../lib/shellReady'
 import { Button } from '../ui/Button'
 import { Spinner } from '../ui/Spinner'
@@ -126,11 +127,11 @@ export function ClientsCard({ status, onStatus, onLater }: { status: ClientsStat
     setNote(null)
     try {
       const result = await host.clientsFix()
-      setNote(result.message ? { text: result.message, failed: !result.ok } : null)
+      setNote(result.message ? { text: result.ok ? result.message : errorText(result.message, 'Exo couldn’t update your clients. Try again.'), failed: !result.ok } : null)
       onStatus(await host.clientsStatus())
     } catch (cause) {
       report(cause, 'ClientsCard.fix')
-      setNote({ text: 'Exo could not update your clients. Try again.', failed: true })
+      setNote({ text: errorText(cause, 'Exo couldn’t update your clients. Try again.'), failed: true })
     } finally {
       setBusy(false)
     }
@@ -144,7 +145,7 @@ export function ClientsCard({ status, onStatus, onLater }: { status: ClientsStat
       onStatus(await host.clientsStatus())
     } catch (cause) {
       report(cause, 'ClientsCard.recheck', { level: 'warn' })
-      setNote({ text: 'Exo could not check your game clients. Try again.', failed: true })
+      setNote({ text: 'Exo couldn’t check your game clients. Try again.', failed: true })
     } finally {
       setBusy(false)
     }
