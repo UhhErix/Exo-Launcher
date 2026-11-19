@@ -113,7 +113,7 @@ pwsh -File cloud\updates\release.ps1 -App cinema -Repo C:\Users\Erix\Code\Exo\Ex
    in and must hold the entry.
 4. `publish-release.ps1 -WhatIf` must pass; then `publish-release.ps1` uploads, verifies `/v1/<app>/latest` and asks the
    Worker for the release card (`POST /v1/<app>/announce`).
-5. `exo-site`: `npm run build` (it reads the version the mirror now serves) and `npx wrangler@4.158.0 deploy`.
+5. `exo-site`: `npm run build` (it reads the version the mirror now serves) and `npx wrangler@4.165.0 deploy`.
 6. Live check: `updates.getexo.app/v1/<app>/latest` names the tag, `getexo.app/download/` shows the version, and
    `getexo.app/<app>/changelog` has the entry.
 
@@ -136,9 +136,9 @@ in R2 (`announce/<app>/<tag>.json`) before posting, so a re-upload of a live tag
 Each app has its webhook and an optional role, as Worker secrets (set once, from `cloud/updates`):
 
 ```powershell
-npx wrangler@4.158.0 secret put DISCORD_WEBHOOK_LAUNCHER     # the launcher releases channel's webhook URL
-npx wrangler@4.158.0 secret put DISCORD_WEBHOOK_CINEMA       # the cinema releases channel's webhook URL
-npx wrangler@4.158.0 secret put DISCORD_ROLE_LAUNCHER        # optional: a role id to ping once per release
+npx wrangler@4.165.0 secret put DISCORD_WEBHOOK_LAUNCHER     # the launcher releases channel's webhook URL
+npx wrangler@4.165.0 secret put DISCORD_WEBHOOK_CINEMA       # the cinema releases channel's webhook URL
+npx wrangler@4.165.0 secret put DISCORD_ROLE_LAUNCHER        # optional: a role id to ping once per release
 ```
 
 A missing webhook is logged and the card is skipped; a webhook that isn't `https://discord.com/api/webhooks/` (or
@@ -225,7 +225,7 @@ release updates through Setup.
 
 ## Deploying
 
-Deploy with `npx wrangler@4.158.0 deploy` from this folder, with the owner's OK. The Worker never asks GitHub: every release a
+Deploy with `npx wrangler@4.165.0 deploy` from this folder, with the owner's OK. The Worker never asks GitHub: every release a
 live app can ask for, and each app's `CHANGELOG.md`, must be in the bucket before the Worker that serves it is deployed.
 
 Last deployed: version `5fc7bfe7-666a-4c91-bbc0-ccd24a2f8e1f` (2026-11-09, release/3.25.0 base plus the `/v1/cache/` route; the
@@ -274,5 +274,5 @@ V8.
 Tests: `node --test test` (the scheduled handler in workerd against a fake upstream; the security fixes in `test/watch-security.test.mjs`; the
 floor and the vendor file names checked against the Launcher's sources).
 
-**Deploy (not done; the owner approves):** `npx wrangler@4.158.0 deploy` from this folder, on the free plan. Check the first runs through
+**Deploy (not done; the owner approves):** `npx wrangler@4.165.0 deploy` from this folder, on the free plan. Check the first runs through
 `_watch/state.json` in the bucket: the Worker's logs are off (`[observability]`).
