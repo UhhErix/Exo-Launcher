@@ -747,6 +747,8 @@ public sealed class SettingsService
         });
     }
 
+    /// <summary>Settings › General › Open Exo when Windows starts.</summary>
+    public void SetStartWithWindows(bool on) => CommitMutation(settings => settings.StartWithWindows = on);
     /// <summary>Whether the player set this Steam game to Launch without anti-cheat (<see cref="AppSettings.SteamWithoutAntiCheat"/>).</summary>
     public bool SteamWithoutAntiCheat(string gameId)
     {
@@ -1108,6 +1110,7 @@ public sealed class SettingsService
         PlayStationPadSeen = source.PlayStationPadSeen,
         SteamBetaJoined = source.SteamBetaJoined,
         NvidiaDriverBranch = source.NvidiaDriverBranch == "studio" ? "studio" : null,
+        StartWithWindows = source.StartWithWindows,
         StartupHandedToExo = [.. (source.StartupHandedToExo ?? []).Where(id => StartupApps.Known.Any(app => app.Id == id)).Distinct()],
         LucidPath = source.LucidPath is { Length: > 0 and <= 1024 } lucid ? lucid : null,
     };
