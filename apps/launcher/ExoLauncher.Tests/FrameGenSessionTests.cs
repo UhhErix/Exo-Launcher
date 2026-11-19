@@ -158,13 +158,8 @@ public sealed partial class FrameGenModTests
         var before = Snapshot();
         var ini = Path.Combine(_root, UnrealProgram, "scskiller.ini");
         var calls = new List<bool>();
-        var service = Service(recorder: (_, on, _) =>
-        {
-            calls.Add(on);
-            if (on) File.WriteAllText(ini, "[scskiller]");
-            else DeletionGate.DeleteFile(ini);
-            return Task.FromResult<string?>(null);
-        });
+        // OptiScaler: DLSSG SM86 keeps the recorder out (WithoutAntiCheatDlssgSm86KeepsTheRecorderOutOfItsSession).
+        var service = Service(dlssgOffered: false, recorder: Recorder(calls));
         var ct = TestContext.Current.CancellationToken;
         Play(service);
         File.WriteAllText(ini, "[scskiller]");
@@ -185,5 +180,130 @@ public sealed partial class FrameGenModTests
         Assert.Null(service.SessionHeldFor(_game.Id));
         Play(service, bestSettings: false);
         Assert.Equal(before, Snapshot());
+    });
+
+    /// <summary>A recorder that takes its settings file in and out beside the game's program, as Exo Shaders' engine does.</summary>
+    private Func<string, bool, CancellationToken, Task<string?>> Recorder(List<bool> calls) => (_, on, _) =>
+    {
+        var ini = Path.Combine(_root, UnrealProgram, "scskiller.ini");
+        calls.Add(on);
+        if (on) File.WriteAllText(ini, "[scskiller]");
+        else if (File.Exists(ini)) DeletionGate.DeleteFile(ini);
+        return Task.FromResult<string?>(null);
+    };
+
+    [Fact]
+    public Task WithoutAntiCheatDlssgSm86KeepsTheRecorderOutOfItsSession() => WithoutAntiCheat(async () =>
+    {
+        ProtectedGame();
+        var calls = new List<bool>();
+        var service = Service(recorder: Recorder(calls));
+        var ct = TestContext.Current.CancellationToken;
+        // The recorder was in before frame generation's first session: DLSSG SM86 goes in, so the recorder comes out.
+        File.WriteAllText(Path.Combine(_root, UnrealProgram, "scskiller.ini"), "[scskiller]");
+        Play(service);
+        Assert.Equal(DlssgSm86.Name, ReadFrameGenManifest(Path.Combine(_root, UnrealProgram))!.Mod);
+        Assert.Equal([false], calls);
+
+        Assert.True(service.SessionHeldFor(_game.Id)!.Recorder);   // off for the session, still the player's choice
+
+        // A recorder held beside DLSSG SM86 is not switched back on with it, and stays held for later.
+        Assert.Null(await service.TakeOutAfterSession(_game, ct));
+        calls.Clear();
+        Play(service);
+        Assert.Empty(calls);
+        Assert.False(File.Exists(Path.Combine(_root, UnrealProgram, "scskiller.ini")));
+        Assert.Equal(new SessionHeld(_game.Id, null, true), service.SessionHeldFor(_game.Id));
+    });
+
+    [Fact]
+    public Task WithoutAntiCheatARecorderThatWontComeOutKeepsDlssgSm86OutOfTheSession() => WithoutAntiCheat(async () =>
+    {
+        ProtectedGame();
+        var before = Snapshot();
+        var ini = Path.Combine(_root, UnrealProgram, "scskiller.ini");
+        // The engine doesn't answer: the recorder stays in.
+        var service = Service(recorder: (_, _, _) => Task.FromResult<string?>("Exo Shaders couldn't turn its recorder off."));
+        File.WriteAllText(ini, "[scskiller]");
+        Play(service);
+        DeletionGate.DeleteFile(ini);
+        Assert.Equal(before, Snapshot());
+        Assert.Equal(DlssgSm86.Name, service.SessionHeldFrameGen(_game.Id)?.Mod);
+        await Task.CompletedTask;
+    });
+
+    [Fact]
+    public Task WithoutAntiCheatFilesInTheModsFolderThatArentExosStayAndBestSettingsOffKeepsTheRecorder() => WithoutAntiCheat(async () =>
+    {
+        ProtectedGame();
+        var calls = new List<bool>();
+        var service = Service(dlssgOffered: false, recorder: Recorder(calls));
+        var ct = TestContext.Current.CancellationToken;
+        Play(service);
+        Assert.Equal(OptiScaler.Name, ReadFrameGenManifest(Path.Combine(_root, UnrealProgram))!.Mod);
+        // The player dropped a newer XeSS over Exo's and a DLL of their own beside it, and the recorder is on.
+        var changed = Put(Path.Combine(UnrealProgram, @"OptiScaler\libxess.dll"), Pe(640, 4));
+        var theirs = Put(Path.Combine(UnrealProgram, @"OptiScaler\custom.dll"), Pe(320, 5));
+        File.WriteAllText(Path.Combine(_root, UnrealProgram, "scskiller.ini"), "[scskiller]");
+        var (changedSha, theirsSha) = (Sha(changed), Sha(theirs));
+
+        Assert.NotNull(await service.TakeOutAfterSession(_game, ct));   // says what stayed
+        Assert.Equal(changedSha, Sha(changed));
+        Assert.Equal(theirsSha, Sha(theirs));
+        Assert.False(File.Exists(Path.Combine(_root, UnrealProgram, OptiScaler.Settings)));
+
+        // Best settings off: the held frame generation is let go, their files are still there, the recorder stays held.
+        service.FrameGenEverywhereOff([_game], _ => false);
+        Assert.Null(service.SessionHeldFrameGen(_game.Id));
+        Assert.True(service.SessionHeldFor(_game.Id)!.Recorder);
+        Assert.Equal(changedSha, Sha(changed));
+        Assert.Equal(theirsSha, Sha(theirs));
+        Play(service, bestSettings: false);
+        Assert.Equal([false, true], calls);
+    });
+
+    [Fact]
+    public Task WithoutAntiCheatTheDriversFrameCapGoesBackBetweenSessions() => WithoutAntiCheat(async () =>
+    {
+        ProtectedGame();
+        var driver = new FakeDriver(global: 138);
+        var service = Service(driver, dlssgOffered: false);
+        var ct = TestContext.Current.CancellationToken;
+        Play(service);
+        Assert.Equal(0u, driver.Game);   // OptiScaler caps at 138 in its ini; the game's own profile cap is off
+
+        Assert.Null(await service.TakeOutAfterSession(_game, ct));
+        Assert.Null(driver.Game);        // as before: the global 138 applies to a start from Steam
+
+        Play(service);
+        service.FrameGenAtLaunch(_game, Rtx3070);
+        Assert.Equal(0u, driver.Game);
+    });
+
+    [Fact]
+    public Task WithoutAntiCheatAHeldModMovesToTheNewestReleaseAndFilesThatWentGoBack() => WithoutAntiCheat(async () =>
+    {
+        ProtectedGame();
+        var service = Service(dlssgOffered: false);
+        var ct = TestContext.Current.CancellationToken;
+        Play(service);
+        var program = Path.Combine(_root, UnrealProgram);
+        Assert.Equal("v0.9.4", ReadFrameGenManifest(program)!.Release);
+        Assert.Null(await service.TakeOutAfterSession(_game, ct));
+
+        // A newer release while it is held: the next Play moves it, with the release before kept to go back to.
+        Release(OptiScaler, "v0.9.5");
+        Play(service);
+        Assert.Equal(("v0.9.5", "v0.9.4"), ReadFrameGenManifest(program) is { } moved ? (moved.Release, moved.Previous) : default);
+
+        // A file of Exo's went (antivirus): the next Play puts the mod back whole, once.
+        var full = Snapshot();
+        var loader = ReadFrameGenManifest(program)!.Loader;
+        DeletionGate.DeleteFile(Path.Combine(program, loader));
+        Assert.Null(await service.TakeOutAfterSession(_game, ct));
+        Play(service);
+        Assert.True(File.Exists(Path.Combine(program, ReadFrameGenManifest(program)!.Loader)));
+        Assert.Equal("on", State(service).State);
+        Assert.Equal(full.Keys.Count, Snapshot().Keys.Count);
     });
 }

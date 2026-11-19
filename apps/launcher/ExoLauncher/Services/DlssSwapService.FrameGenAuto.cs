@@ -100,7 +100,7 @@ public sealed partial class DlssSwapService
     {
         foreach (var game in games)
         {
-            if (DropSessionHeld(game.Id)) AppLog.Info($"Frame generation for {game.Title}: Best settings turned it off; what Exo held for its sessions is let go.");
+            if (DropSessionHeldFrameGen(game.Id)) AppLog.Info($"Frame generation for {game.Title}: Best settings turned it off; what Exo held for its sessions is let go.");
             if (FrameGenFolderFor(game.Id) is not { } folder || ReadFrameGenManifest(folder) is null || busy(game)) continue;
             var (ok, message) = FrameGenOff(game);
             AppLog.Info($"Frame generation in {game.Title}: Best settings turned it off; {(ok ? "taken out" : message)}.");

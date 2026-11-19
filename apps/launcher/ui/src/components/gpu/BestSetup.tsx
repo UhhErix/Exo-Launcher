@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { CHECK_PATH, Close } from '../../brand/icons'
+import { CHECK_PATH, Failed } from '../../brand/icons'
 import { host, type DrivesState, type GpuProfile, type HdrState, type LauncherSettings, type PcHealth } from '../../lib/host'
 import { report } from '../../lib/report'
 import { trimStop } from '../../lib/utils'
@@ -155,7 +155,7 @@ export function BestSetup({ profile, health, drives, screen, settings, onSave, o
             <span>{step.what}</span>
             {running === step.key ? <Spinner label={`Setting ${step.what}`} />
               : step.done ? <BestCheck landed={landed.has(step.key)} />
-                : <span className="exo-best-miss" role="img" aria-label="Not set"><Close size={14} /></span>}
+                : <span className="exo-best-miss" role="img" aria-label="Not set"><Failed size={14} /></span>}
           </li>
         ))}
       </ul>

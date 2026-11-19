@@ -48,6 +48,11 @@
         "detail": "Windows' own compression makes games smaller on disk, and they play as before."
       },
       {
+        "icon": "Appearance",
+        "title": "Icons that say what they do",
+        "detail": "Every icon now plainly shows what its button does, in Lucide's light line: Maximize and Restore are arrows out and in, Stop is a square, and liked, starred and pinned show filled."
+      },
+      {
         "icon": "Chats",
         "title": "GIFs in Discord stay",
         "detail": "A GIF, sticker or video that hiccups once tries again instead of turning into a line that says it would not load, and Imgur GIFs load."
