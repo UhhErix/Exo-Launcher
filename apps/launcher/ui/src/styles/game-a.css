@@ -82,12 +82,15 @@
 /* The game's lines (Upscalers, Shaders, Optimize, HDR, frame generation): one row each, like an iOS Settings row
    (name, reading, then a chevron to its PC page, or the row's own control, at the right edge), hairlines between, so
    the page stays short. A line that opens something is a button whose hover fill reaches 10px past the text on both
-   sides, so the text lines up with the page; a reading (.is-reading) sits in the same places and lights nothing. */
+   sides, so the text lines up with the page; a reading (.is-reading) sits in the same places and lights nothing. Every
+   line is one height whatever it holds (a word, a choice, a button): its word ends in an ellipsis and its control never
+   wraps under it, so the page is the same size for every game. */
 .exo-game-lines {
   margin-top: 16px;
 }
 
 .exo-game-line {
+  height: 49px;
   border-top: 1px solid var(--exo-line);
   padding: 2px 0;
 }
@@ -97,7 +100,7 @@
   align-items: center;
   gap: 12px;
   width: calc(100% + 20px);
-  min-height: 44px;
+  height: 44px;
   margin: 0 -10px;
   padding: 0 10px;
   border: 0;
@@ -111,7 +114,7 @@
 
 .exo-game-line.has-control {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   align-items: center;
   gap: 0 12px;
 }

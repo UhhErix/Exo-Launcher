@@ -323,7 +323,7 @@
   height: 22px;
   border-radius: 50%;
   background:
-    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ffffff' stroke-width='1.91' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 4V15M7.5 10.5L12 15L16.5 10.5M5 20H19'/%3E%3C/svg%3E") center / 14px no-repeat,
+    var(--exo-glyph-download) center / 14px no-repeat,
     var(--exo-scrim);
   pointer-events: none;
 }

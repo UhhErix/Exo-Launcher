@@ -80,9 +80,10 @@ export type GamePageProps = {
 }
 
 /**
- * The game's lines, one row each, their names, readings and controls on shared edges: Upscalers and Shaders (each
- * opening its part of PC › Graphics), Optimize for a game Exo has best settings for, then HDR and the driver's frame
- * generation where the PC has them, and frame generation through a mod on a card without NVIDIA's.
+ * The game's lines, one row each, their names, readings and controls on shared edges, every row the same height: Upscalers
+ * and Shaders (each opening its part of PC › Graphics), Frame generation, HDR and Optimize. The set is the same for every
+ * game: a line the game doesn't support stays and says so, so the page never grows or shrinks with what a game has. Last,
+ * the driver's own frame generation, on a PC whose AMD or Intel driver has it (the same for every game on that PC).
  */
 function GameLines({ selected, details, onOpenSystem, hdrForGames, onHdrForGames }: {
   selected: Game
@@ -101,10 +102,10 @@ function GameLines({ selected, details, onOpenSystem, hdrForGames, onHdrForGames
           <ShaderPrecompile key={'shaders' + details.selectionKey} gameId={selected.id} onOpenShaders={() => onOpenSystem('shaders')} />
         </>
       )}
-      <OptimizeLine key={'optimize' + details.selectionKey} gameId={selected.id} />
-      <HdrRow key={'hdr' + details.selectionKey} gameId={selected.id} hdrForGames={hdrForGames} onHdrForGames={onHdrForGames} />
-      <FrameGenRow key={'framegen' + details.selectionKey} gameId={selected.id} />
       <FrameGenModRow key={'framegenmod' + details.selectionKey} gameId={selected.id} />
+      <HdrRow key={'hdr' + details.selectionKey} gameId={selected.id} hdrForGames={hdrForGames} onHdrForGames={onHdrForGames} />
+      <OptimizeLine key={'optimize' + details.selectionKey} gameId={selected.id} />
+      <FrameGenRow key={'framegen' + details.selectionKey} gameId={selected.id} />
     </div>
   )
 }

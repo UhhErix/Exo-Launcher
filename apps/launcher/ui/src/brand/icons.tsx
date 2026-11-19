@@ -2,6 +2,8 @@ import type { CSSProperties } from 'react'
 import { CompanyLogo } from './CompanyLogo'
 import { GLYPHS, lineAt } from './glyphs'
 
+export { CHECK_PATH } from './glyphs'
+
 /** `filled`: the glyph solid, for a toggle that is on (a starred capture, a liked song). `current`: the glyph solid
     too, for the place you are (the current room). */
 export type IconProps = { size?: number; className?: string; filled?: boolean; current?: boolean }
@@ -26,11 +28,11 @@ const block: CSSProperties = { display: 'block', flexShrink: 0 }
 /** The glyph's solid form, where it has one. */
 const solid = (glyph: Glyph) => (`${glyph}-on` in GLYPHS ? `${glyph}-on` : glyph) as Glyph
 
-function Svg({ glyph, size, className, style = block }: { glyph: Glyph; size: number; className?: string; style?: CSSProperties }) {
+function Svg({ glyph, size, line = lineAt(size), className, style = block }: { glyph: Glyph; size: number; line?: number; className?: string; style?: CSSProperties }) {
   const [markup, solid] = GLYPHS[glyph]
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill={solid ? 'currentColor' : 'none'} stroke="currentColor"
-      strokeWidth={lineAt(size)} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" className={className} style={style}
+      strokeWidth={line} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" className={className} style={style}
       dangerouslySetInnerHTML={{ __html: markup }} />
   )
 }
@@ -52,7 +54,8 @@ function marked(name: string, glyph: Glyph, badge: Glyph) {
     return (
       <span aria-hidden="true" className={classes(name, false, className)} style={{ ...block, position: 'relative', width: size, height: size }}>
         <Svg glyph={glyph} size={size} style={{ position: 'absolute', inset: 0, maskImage: corner, maskSize: '100% 100%' }} />
-        <Svg glyph={badge} size={size * 0.5} style={{ position: 'absolute', right: -size * 0.06, top: -size * 0.06 }} />
+        {/* At half the size, twice the line on its grid: the badge's shackle draws as heavy as the glyph beside it. */}
+        <Svg glyph={badge} size={size * 0.5} line={lineAt(size) * 2} style={{ position: 'absolute', right: -size * 0.06, top: -size * 0.06 }} />
       </span>
     )
   }
@@ -151,6 +154,12 @@ export const ExitFullScreen = icon('exit-full-screen')
 export const Cover = icon('cover')
 /** Exo Shaders: a game's shaders compiled ahead (the cube they draw). */
 export const Shaders = icon('shaders')
+/** Frame generation: the frame you see, with the frames made behind it. */
+export const FrameGen = icon('frame-gen')
+/** Compress games: arrows pressing onto a fold. */
+export const Compress = icon('compress')
+/** A game's anti-cheat, which Exo leaves alone: the shield (an encrypted call is the shield with its lock). */
+export const AntiCheat = icon('anti-cheat')
 
 // ── Music ───────────────────────────────────────────────────────────────────────────────
 export const Play = icon('play')
@@ -281,7 +290,7 @@ export const FlagsCategory = icon('flags-category')
 export const OnlyYou = icon('only-you')
 /** Stop watching someone's stream. */
 export const StopWatching = icon('stop-watching')
-/** Captures' editor: a Box drawn around something. */
+/** The snip editor's box over what you hide. */
 export const Redact = icon('redact')
 /** Captures' editor: Blur over names and chat, Redo; the viewer's Info, Share and Copy text. */
 export const Blur = icon('blur')
@@ -345,9 +354,6 @@ export const CodeIcon = icon('code')
 export const ReplaceIcon = icon('replace')
 export const ArrowUp = icon('arrow-up')
 export const ArrowDown = icon('arrow-down')
-
-/** A check that draws itself in (tokens.css › .exo-motion-check): the check glyph, as a line to animate. */
-export const CHECK_PATH = 'M5 12.5L10 17.5L19.5 8'
 
 // ── Brand marks ─────────────────────────────────────────────────────────────────────────
 export const Spotify = brand('spotify')
