@@ -149,6 +149,8 @@ public sealed partial class LaunchOrchestrator
     public event Action<GameEntry>? GameLaunched;
     /// <summary>Just before the store adapter starts a game, on the pool: driver settings that apply from process start go here.</summary>
     internal event Action<GameEntry>? GameLaunching;
+    /// <summary>A launch that <see cref="GameLaunching"/> began and that never reached the game (its session ends with it).</summary>
+    internal event Action<GameEntry>? GameLaunchFailed;
     /// <summary>A store's client waits for the player mid-launch: the sentence for the launch status the page shows.</summary>
     internal event Action<GameEntry, string>? LaunchNotice;
     /// <summary>An exact game id gained or lost its verified process, whether Exo launched it or not.</summary>
@@ -253,6 +255,12 @@ public sealed partial class LaunchOrchestrator
                 .Concat(_downloadIntents.Values.Where(intent => _pausedDownloadTokens.Contains(intent.Token)).Select(intent => intent.GameId))
                 .Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
         }
+    }
+
+    /// <summary>Exo's own session of the game: from its Play until its watch of the game ends.</summary>
+    internal bool InExoSession(string gameId)
+    {
+        lock (_gate) return _gameSessions.ContainsKey(gameId);
     }
 
     /// <summary>True while Exo or the game's store is installing or updating it (files may be half-written).</summary>
@@ -695,7 +703,11 @@ public sealed partial class LaunchOrchestrator
                 _ = DisposeQuietGameSessionAsync(quietGameSession, session.Game.Title);
 
             if (!session.LaunchSucceeded)
+            {
+                try { GameLaunchFailed?.Invoke(session.Game); }
+                catch (Exception ex) { AppLog.Debug("Launch-failed listener failed: " + ex.Message); }
                 return;
+            }
             var handlers = GameSessionCompleted?.GetInvocationList();
             if (handlers is null)
                 return;

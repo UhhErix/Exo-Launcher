@@ -105,6 +105,44 @@ public sealed partial class MainWindow
     /// (<see cref="Services.ShadersAddon.StartMethods"/>) starts a stopped engine; without one, snapshot is the last
     /// state it left and the rest (ui.visible, queue.move, queue.remove, queue.pause, queue.stop) have nothing to act on.
     /// </summary>
+    /// <summary>
+    /// The shader recorder out of a game (Properties › Anti-cheat back to "with"), the engine started for it if it isn't
+    /// running: null once the engine said so, or when Exo Shaders isn't installed (no recorder can be there); else why not.
+    /// </summary>
+    /// <summary>
+    /// The shader recorder on or off in a game for its session without anti-cheat (DlssSwapService.SessionMods.cs), the
+    /// engine started for it: null once the engine said so (off: also when Exo Shaders isn't installed); else why not.
+    /// </summary>
+    internal async Task<string?> ShadersRecorderSetAsync(string gameId, bool on, CancellationToken ct)
+    {
+        if (ShadersAddon is not { } addon) return on ? "Exo Shaders isn't installed." : null;
+        try
+        {
+            await addon.CallAsync("recorder.set", new System.Text.Json.Nodes.JsonObject { ["id"] = gameId, ["on"] = on }, ct, "a session without anti-cheat").ConfigureAwait(false);
+            return null;
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or OperationCanceledException or IOException)
+        {
+            AppLog.Warn($"Shaders: the recorder could not be turned {(on ? "on" : "off")} in {gameId}: {ex.Message}");
+            return $"Exo Shaders couldn't turn its recorder {(on ? "on" : "off")}.";
+        }
+    }
+
+    internal async Task<string?> ShadersRecorderOffAsync(string gameId, CancellationToken ct)
+    {
+        if (ShadersAddon is not { } addon) return null;
+        try
+        {
+            await addon.CallAsync("recorder.set", new System.Text.Json.Nodes.JsonObject { ["id"] = gameId, ["on"] = false }, ct, "anti-cheat back on").ConfigureAwait(true);
+            return null;
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or OperationCanceledException or IOException)
+        {
+            AppLog.Warn($"Anti-cheat: the shader recorder could not be turned off in {gameId}: {ex.Message}");
+            return "Exo Shaders couldn't turn its recorder off in this game, so it still starts without anti-cheat. Try again.";
+        }
+    }
+
     internal async Task<object> ShadersAddonCallAsync(string? method, System.Text.Json.Nodes.JsonNode? parameters, CancellationToken ct)
     {
         if (ShadersAddon is not { } addon) return new { ok = false, message = "Exo Shaders is not installed." };

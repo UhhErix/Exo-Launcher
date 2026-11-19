@@ -3,6 +3,7 @@ import { host } from '../../lib/host'
 import { musicPosition, playbackAnchor, type MusicPlayback } from '../../lib/music'
 import type { MusicShortcuts } from '../../lib/musicAdapters'
 import { report } from '../../lib/report'
+import { withImmersiveKey } from './immersiveRules'
 
 /** What a service's keyboard shortcuts do, as the room does them. */
 export type ShortcutActions = {
@@ -17,6 +18,8 @@ export type ShortcutActions = {
   back: () => void
   panel: (name: 'queue' | 'now' | 'devices') => void
   closePanel: () => void
+  /** Immersive on or off (F, in every service: none of them uses it). Esc leaves it (Immersive.tsx). */
+  immersive: () => void
 }
 
 type Live = { playback: MusicPlayback; at: number } | null
@@ -65,8 +68,13 @@ function musicApp(act: ShortcutActions): Record<string, () => unknown> {
  * Alt+Shift+D devices, Alt+Left goes back and Escape closes the panel.
  * YouTube Music's, beside the Music app's: K plays and pauses, J and L go back and ahead 10 s, N and P
  * the next and previous song, S shuffle, R repeat, + likes, − dislikes and / searches.
+ * Exo's own beside them: F takes Now playing full window (Immersive), and back.
  */
 function bindings(keys: MusicShortcuts, act: ShortcutActions, live: Live): Record<string, () => unknown> {
+  return withImmersiveKey(serviceBindings(keys, act, live), act.immersive)
+}
+
+function serviceBindings(keys: MusicShortcuts, act: ShortcutActions, live: Live): Record<string, () => unknown> {
   if (keys === 'music') return musicApp(act)
   if (keys === 'youtube') {
     return {

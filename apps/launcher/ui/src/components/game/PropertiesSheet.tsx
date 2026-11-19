@@ -79,7 +79,7 @@ function Working({ on, label }: { on: boolean; label: string }) {
 function sectionsFor(props: GameProperties): { id: SectionId; title: string }[] {
   return [
     // General only with something in it (a Riot game has none of these).
-    ...(props.launchOptions !== null || props.launchOptionsNote || props.language !== null || props.cloudSync || props.storeProperties || props.throughSteam != null || props.steamOverlay != null
+    ...(props.launchOptions !== null || props.launchOptionsNote || props.language !== null || props.cloudSync || props.storeProperties || props.throughSteam != null || props.steamOverlay != null || props.antiCheatLaunch
       ? [{ id: 'general' as const, title: 'General' }] : []),
     { id: 'files' as const, title: 'Installed files' },
     ...(props.beta !== null && props.betaChoices.length > 0 ? [{ id: 'betas' as const, title: 'Betas' }] : []),
@@ -319,6 +319,12 @@ function PropRow({ label: name, detail, line, children }: { label: string; detai
   )
 }
 
+/** Which of Steam's Play-menu entries Play starts, for a game Steam offers without its anti-cheat. */
+const ANTI_CHEAT_LAUNCH = [
+  { value: 'with', label: 'Launch with anti-cheat' },
+  { value: 'without', label: 'Launch without anti-cheat (offline)' },
+] as const
+
 function GeneralSection({ props, locked, busy, run, apply, line }: Rows) {
   const languages = props.language !== null && props.languageChoices.length > 1 ? props.languageChoices : null
   return (
@@ -357,6 +363,21 @@ function GeneralSection({ props, locked, busy, run, apply, line }: Rows) {
         <PropRow label="Steam overlay" line={line('steamOverlay')}>
           <Working on={busy === 'steamOverlay'} label="Changing the Steam overlay" />
           <Switch checked={props.steamOverlay} label="Steam overlay" disabled={busy !== null} onChange={on => void apply('steamOverlay', on ? 'on' : 'off')} />
+        </PropRow>
+      )}
+      {props.antiCheatLaunch && (
+        // Without: Steam's own entry for it, and the game counts as one with no anti-cheat. Back with: Exo takes out
+        // what went in first.
+        <PropRow label="Anti-cheat" detail={props.antiCheatLaunch.detail} line={line('antiCheatLaunch')}>
+          <Working on={busy === 'antiCheatLaunch'} label="Saving your choice" />
+          <Choice
+            label="Anti-cheat"
+            value={props.antiCheatLaunch.value}
+            choices={ANTI_CHEAT_LAUNCH}
+            disabled={locked || busy !== null}
+            confirm={value => value === 'without' ? 'Play offline only?' : ''}
+            onChange={value => run({ key: 'antiCheatLaunch', value })}
+          />
         </PropRow>
       )}
       {props.storeProperties && (

@@ -12,8 +12,9 @@ export type BestStep = { key: BestKey; what: string; done: boolean; run: () => P
 
 /**
  * Everything Exo sets for this PC, each done or still to set, from what was read. Each is something the PC room offers
- * on its own row too. Only what this PC has: a power plan to change, a driver profile for its card, a network adapter
- * Exo tunes, drives with write-cache flushing off or Windows' weekly optimize unable to run (one step, one Windows
+ * on its own row too. Only what this PC has: a power plan to change, a driver profile for its card, the Network group
+ * (the adapters' own settings, Cloudflare DNS encrypted, Windows' TCP defaults: each with its switch, all in one Windows
+ * prompt), drives with write-cache flushing off or Windows' weekly optimize unable to run (one step, one Windows
  * prompt for both; flushing finishes with a restart), a screen that shows HDR well (on a dim one HDR usually looks worse,
  * so it stays the user's choice), and frame generation in
  * every game without anti-cheat it works in, on a card that gains from it (DlssSwapService.FrameGenAuto.cs; PC ›
@@ -40,9 +41,8 @@ export function bestSteps(
   }
   const network = health?.items.find(item => item.key === 'network')
   if (network) {
-    // "Ethernet" or "Wi-Fi" while there is something to set; "Network" for both, and once set.
-    const kind = network.label === 'Network' ? 'network' : network.label
-    steps.push({ key: 'network', what: `Exo’s ${kind} settings`, done: !!network.applied, run: async () => {
+    // The Network group (NetworkGroup.tsx): every item the player keeps on, in one Windows prompt.
+    steps.push({ key: 'network', what: 'Exo’s network settings', done: !!network.applied, run: async () => {
       const next = await host.systemHealth('network')
       return next.ok ? null : trimStop(next.message) || 'Not changed'
     } })

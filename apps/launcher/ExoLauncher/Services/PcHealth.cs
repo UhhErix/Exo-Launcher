@@ -11,7 +11,7 @@ namespace ExoLauncher.Services;
 /// RAM below its rated speed (EXPO/XMP off), Resizable BAR off, a power plan that isn't Exo's (the one row Exo can fix,
 /// with Undo: <see cref="PowerPlan"/>; Windows' own plans switch to it by themselves, a custom one is offered it), an AMD
 /// or Intel chipset driver behind its maker's newest (<see cref="ChipsetUpdate"/>), and network adapter settings that add
-/// delay (<see cref="NetworkTune"/>, with Undo) or a cable holding Ethernet back. Game Mode has no row: Exo keeps it on
+/// delay, DNS and TCP (Best settings' Network group, <see cref="NetworkBest"/>) or a cable holding Ethernet back. Game Mode has no row: Exo keeps it on
 /// itself (<see cref="WindowsGameMode"/>). Each check is a pure decision over a reading (<see cref="Decide"/>); a reading
 /// that fails drops its row instead of guessing.
 /// </summary>
@@ -24,7 +24,7 @@ internal static partial class PcHealth
     /// driver on its maker's newest, so an update that just finished doesn't make its row vanish). <paramref name="Held"/>:
     /// nothing to do because the maker's newest has a known problem here; shown in Drivers with no button.
     /// </summary>
-    internal sealed record Item(string Key, string Label, string Detail, string? Url = null, bool Applied = false, bool CanUndo = false, bool Busy = false, string? Cpu = null, bool Current = false, bool Held = false);
+    internal sealed record Item(string Key, string Label, string Detail, string? Url = null, bool Applied = false, bool CanUndo = false, bool Busy = false, string? Cpu = null, bool Current = false, bool Held = false, bool Off = false);
 
     /// <summary>A fitted memory module as SMBIOS (type 17) describes it. Speeds in MT/s; 0 when the firmware leaves them out.</summary>
     internal sealed record Dimm(int Speed, int Configured, string? Part, byte FormFactor);
@@ -47,7 +47,7 @@ internal static partial class PcHealth
         bool HagsOff = false,
         HybridGpu? Hybrid = null,
         bool FastGpuForGames = false,
-        NetworkTune.State? Network = null,
+        NetworkBest.State? Network = null,
         DriverAdvisories.Advisory? ChipsetSkipped = null,
         DriverAdvisories.Advisory? ChipsetAdvised = null);
 
@@ -96,21 +96,20 @@ internal static partial class PcHealth
     }
 
     /// <summary>
-    /// The network rows: what Exo would set ("Ethernet", "Wi-Fi", or "Network" for both), Exo's settings on with Undo once
-    /// nothing is left, and a link slower than its adapter (a cable or port fault, no button).
+    /// The network rows: Best settings' Network group ("network": set once every item the player keeps on is), each of
+    /// its items ("net-adapter", "net-dns", "net-tcp": on, with something to put back, or turned off by the player), and a
+    /// link slower than its adapter (a cable or port fault, no button).
     /// </summary>
-    private static IEnumerable<Item> Network(NetworkTune.State net)
+    private static IEnumerable<Item> Network(NetworkBest.State net)
     {
-        if (net.Pending.Count > 0)
+        if (net.Items.Count > 0)
         {
-            var kinds = net.Pending.Select(p => p.Adapter.Wireless).Distinct().ToList();
-            var label = kinds.Count > 1 ? "Network" : kinds[0] ? "Wi-Fi" : "Ethernet";
-            // One adapter: "Energy-efficient Ethernet on and network buffers shrunk"; more: each named by its kind.
-            var on = string.Join("; ", net.Pending.Select(p => NetworkTune.Names(p.Rules) + (net.Pending.Count > 1 ? $" on your {(p.Adapter.Wireless ? "Wi-Fi" : "Ethernet")}" : "")));
-            yield return new("network", label, $"{char.ToUpperInvariant(on[0])}{on[1..]}");
+            var left = net.Items.Where(i => !i.On && !i.Off).Select(i => i.Label).ToList();
+            yield return new("network", "Network", left.Count == 0 ? "Exo's network settings for games" : string.Join(", ", left), Applied: net.Applied, CanUndo: net.Items.Any(i => i.CanUndo));
+            foreach (var item in net.Items)
+                yield return new("net-" + item.Key, item.Label, item.Detail, Applied: item.On, CanUndo: item.CanUndo, Off: item.Off);
         }
-        else if (net.Applied) yield return new("network", "Network", "Exo's settings for games", Applied: true, CanUndo: true);
-        if (net.SlowLink is { } slow)
+        if (net.Tune.SlowLink is { } slow)
             yield return new("netlink", "Ethernet", $"{NetworkTune.Speed(slow.Adapter.LinkBps)} of {NetworkTune.Speed(slow.CanBps)}. Try another cable or router port.");
     }
 
@@ -368,7 +367,7 @@ internal static partial class PcHealth
         var subject = chipset is null ? null : DriverAdvisories.Chipset(chipset.Vendor, cpu);
         var skipped = subject is null || latest is null || VersionNumber.Same(latest, installed) ? null : DriverAdvisories.Shared.Against(subject, latest);
         var advised = subject is null ? null : DriverAdvisories.Shared.Against(subject, installed);
-        var reading = new Reading(Memory.Value, Gpu.Value, cpu, power.Read(), installed, latest, update, chipsetAuto && installed is not null && !chipset!.WindowsAsks(), HagsOff(scheduling), Hybrid.Value, fastGpuForGames, NetworkTune.Shared.Read(), skipped, advised);
+        var reading = new Reading(Memory.Value, Gpu.Value, cpu, power.Read(), installed, latest, update, chipsetAuto && installed is not null && !chipset!.WindowsAsks(), HagsOff(scheduling), Hybrid.Value, fastGpuForGames, NetworkBest.Shared.Read(), skipped, advised);
         if (Interlocked.Exchange(ref _logged, 1) == 0) AppLog.Info("PC health: " + Describe(reading));
         return reading;
     }
@@ -381,7 +380,7 @@ internal static partial class PcHealth
         var bar = r.Gpu is null ? "GPU not read" : $"{r.Gpu.Name}: {(r.Gpu.Uma ? "shared memory" : r.Gpu.UploadHeap switch { true => "Resizable BAR on", false => "Resizable BAR off", null => "Resizable BAR unknown" })}";
         var plan = r.Power is null ? "plan not read"
             : $"plan {r.Power.Active} overlay {r.Power.Overlay}{(r.Power.Exo ? " (Exo's)" : "")} class {PowerProfiles.Keys[ClassOf(r.Cpu, null)]} max {r.Power.Cpu?.MaxState?.ToString() ?? "-"}% boost {r.Power.Cpu?.BoostMode?.ToString() ?? "-"} min cores {r.Power.Cpu?.MinCores?.ToString() ?? "-"}%";
-        return $"{ram}; {bar}; {plan}; chipset {r.ChipsetInstalled ?? "-"} (newest {r.ChipsetLatest ?? "-"}{(r.ChipsetUpdate is { } u ? $", update {u.Phase} {u.Version}" : "")}); GPU scheduling {(r.HagsOff ? "off" : "on or left to Windows")}; {(r.Hybrid is { } two ? $"two graphics chips ({two.PowerSaving} and {two.HighPerformance}), games on {(r.FastGpuForGames ? "the fast one by Exo" : "Windows' pick")}" : "one graphics chip")}; network {(r.Network is { } n ? $"{n.Pending.Count} to set{(n.Applied ? ", Exo's on" : "")}{(n.SlowLink is { } s ? $", slow link {NetworkTune.Speed(s.Adapter.LinkBps)}" : "")}" : "not read")}.";
+        return $"{ram}; {bar}; {plan}; chipset {r.ChipsetInstalled ?? "-"} (newest {r.ChipsetLatest ?? "-"}{(r.ChipsetUpdate is { } u ? $", update {u.Phase} {u.Version}" : "")}); GPU scheduling {(r.HagsOff ? "off" : "on or left to Windows")}; {(r.Hybrid is { } two ? $"two graphics chips ({two.PowerSaving} and {two.HighPerformance}), games on {(r.FastGpuForGames ? "the fast one by Exo" : "Windows' pick")}" : "one graphics chip")}; network {(r.Network is { } n ? $"{string.Join(", ", n.Items.Select(i => $"{i.Key} {(i.Off ? "off" : i.On ? "on" : "to set")}"))}{(n.Tune.SlowLink is { } s ? $", slow link {NetworkTune.Speed(s.Adapter.LinkBps)}" : "")}" : "not read")}.";
     }
 
     private static readonly Lazy<string?> Processor = new(ReadCpuName, LazyThreadSafetyMode.ExecutionAndPublication);
