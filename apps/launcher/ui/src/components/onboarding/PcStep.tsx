@@ -12,9 +12,10 @@ import { Spinner } from '../ui/Spinner'
 /**
  * First run's last step, Best settings for this PC: the same steps as the PC room's (gpu/BestSetup.tsx), each a row that
  * turns its ring while it runs and takes a green check once set; the footer's Use best settings runs them (frame
- * generation among them, on a card that gains from it). Then the switch Settings › General has for DLSS, FSR and XeSS
- * updating by themselves (on by default, shown as it is, so turning it off here is the choice), and Lucid, the optional
- * headphone EQ in Exo: Set up, which says what it will do first, and once set up, Start with Exo.
+ * generation among them, on a card that gains from it). Then the switch Settings › Downloads has (DownloadsSection in
+ * settings/GeneralSection.tsx) for DLSS, FSR and XeSS updating by themselves (on by default, shown as it is, so turning it
+ * off here is the choice), and Lucid, the optional headphone EQ in Exo: Set up, which says what it will do first, and once
+ * set up, Start with Exo.
  */
 export function PcStep({ steps, running, landed, failed, settings, onSave, lucid, onLucid }: {
   /** Null while this PC is still being read. */

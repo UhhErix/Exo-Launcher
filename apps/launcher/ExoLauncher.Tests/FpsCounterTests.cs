@@ -526,6 +526,14 @@ public sealed class FpsCounterTests
         Assert.InRange(tiny.Width, 1, 300);
     }
 
+    /// <summary>The widths above hold for any face (every digit is padded to one cell), so this asks GDI which face it selected.</summary>
+    [Fact]
+    public void ItDrawsGoeistNotAFallback()
+    {
+        FpsOverlay.AddFont(Font());
+        Assert.Equal(("Goeist SemiBold", "Goeist"), FpsOverlay.Faces());
+    }
+
     [Fact]
     public void EveryDigitInTheLineHoldsItsWidth()
     {
@@ -570,7 +578,7 @@ public sealed class FpsCounterTests
         Assert.Contains(pixels, pixel => (pixel & 0xFF) > 230);
     }
 
-    /// <summary>The Liquid Glass edge: one pixel all round, white at a low alpha, brightest along the top; never a grey ring inside the body.</summary>
+    /// <summary>The Liquid Glass edge: one pixel all round, white at a low alpha, brightest along the top; never a gray ring inside the body.</summary>
     [Fact]
     public void ItsEdgeIsLiquidGlassLitFromTheTop()
     {

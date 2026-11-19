@@ -180,20 +180,19 @@ body,
   --exo-float-line: rgb(255 255 255 / 0.055);
   /* Controls (DESIGN.md › Controls): every control on the page (secondary buttons, chips, segment groups,
      fields, labels over art) is small Liquid Glass: a clear fill (--exo-fill) over the glass's blur and tone
-     (--exo-control-glass; glass.css lists the controls), with one even hairline all around (--exo-rim,
-     --exo-field-rim). No shading: on black a lit top or a dark foot reads as an edge missing, not depth.
+     (--exo-control-glass; glass.css lists the controls), inside the Liquid Glass edge (--exo-rim, --exo-field-rim:
+     --glassy-ring, below).
      Under the pointer the glass lifts (--hover-fill); pressed it takes the pressed fill and gives way
      (--exo-rim-pressed keeps the edge, a touch quieter). Solid glass, more contrast and forced colors fill
      it #000 (--exo-solid-fill). Quiet controls are transparent until hovered; current is --exo-selected; primary is
      --color-fg on #0a0a0a, --exo-primary-hover under the pointer; danger is --color-bad words on the glass.
      --exo-control-line is only for a ring that is the control itself (a radio dot, a checkbox box). */
-  /* Exo's liquid glass: clear, vivid frost (blur, saturation 1.8) inside one even line, with no tint or wash across
+  /* Exo's liquid glass: clear, vivid frost (blur, saturation 1.8) inside its lit edge, with no tint or wash across
      the body (both read as metal). Over art it dims what is behind enough to keep white words readable, lifted by a
      tight shadow (--glassy-words). */
   --glassy-rim: inset 0 0 0 transparent;
-  /* One thin even line all the way round, the same 1px on every glass: a dark hairline outside a light one read as a
-     thicker outline than everything else's. A lit top, a shaded foot and a bent rim read as one side brighter than the
-     other and the sides as concave, at 1080p stepped too. */
+  /* No second rim: a dark hairline outside a light one read as a thicker outline than everything else's, and a bent rim
+     read as concave sides, at 1080p stepped too. The edge is --glassy-ring alone, the same 1px on every glass. */
   /* Glass is lit at its edge like a lens (WWDC25 "Meet Liquid Glass"): brightest along the top, faint down the sides,
      fainter at the foot, with a soft inner glow under the top edge. No grey ring all the way round. */
   --glassy-ring: inset 0 var(--exo-hair) 0 rgb(255 255 255 / 0.17), inset var(--exo-hair) 0 0 rgb(255 255 255 / 0.06),
@@ -226,14 +225,13 @@ body,
   --exo-rim: var(--glassy-ring), var(--glassy-rim);
   /* Pressed keeps the same line: the press is the fill and the give, not a second, dimmer outline. */
   --exo-rim-pressed: var(--glassy-ring), var(--glassy-rim);
-  /* A field's edge is every glass's one even line (DESIGN.md › Glass › Its edge): at 10% of the ink it read a third
+  /* A field's edge is every glass's edge (DESIGN.md › Surfaces): at 10% of the ink it read a third
      dimmer than the buttons and chips beside it. */
   --exo-field-rim: var(--glassy-ring);
   --exo-control-line: var(--exo-line);
   /* Liquid Glass (styles/glass.css). Words on small glass: secondary brighter than --color-muted, so it keeps 4.5:1
      at the glass's brightest; on large glass a step under it. The rims are inset only, since lens glass casts no outer
-     shadow (lib/glass.ts), and even all the way round: a light hairline. No lit top or shaded foot: on black those
-     read as an edge missing, not as depth. */
+     shadow (lib/glass.ts): the Liquid Glass edge, lit along the top. */
   --exo-glass-secondary: #e4e4e4;
   --exo-glass-panel-secondary: #dcdcdc;
   --exo-glass-rim: var(--glassy-ring), var(--glassy-rim);

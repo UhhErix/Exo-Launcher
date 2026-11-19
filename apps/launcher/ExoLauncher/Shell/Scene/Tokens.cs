@@ -4,7 +4,7 @@ namespace ExoLauncher.Shell.Scene;
 
 /// <summary>
 /// Product tokens for what the host draws itself, matched to ui/src/tokens.css. Pure black (AMOLED): the page and its
-/// panels are #000. A line is white at a low alpha (--exo-line), a Liquid Glass edge rather than a grey
+/// panels are #000. A line is white at a low alpha (--exo-line), a Liquid Glass edge rather than a gray
 /// outline. The type is Goeist, the UI's. Not Fluent.
 /// </summary>
 internal static class Tokens

@@ -1,6 +1,6 @@
 # Exo's rooms
 
-Exo is one window with five rooms centred along the Bar at the top: Library, Store, Discord, Music and PC. **Ctrl+1** to **Ctrl+5** open them in that order, and **Ctrl+K** finds any room, game, action or setting. The gear opens Settings.
+Exo is one window with five rooms centered along the Bar at the top: Library, Store, Discord, Music and PC. **Ctrl+1** to **Ctrl+5** open them in that order, and **Ctrl+K** finds any room, game, action or setting. The gear opens Settings.
 
 | Room | What it's for |
 | --- | --- |

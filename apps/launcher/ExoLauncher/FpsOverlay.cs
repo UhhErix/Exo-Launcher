@@ -255,6 +255,24 @@ internal sealed unsafe class FpsOverlay : IDisposable
 
     private static uint Gray(byte ink) => (uint)(ink | ink << 8 | ink << 16);
 
+    /// <summary>The faces GDI selected for the number and the rest at a scale, as it reports them: Goeist's, unless Windows fell back.</summary>
+    internal static (string Number, string Words) Faces(double scale = 1)
+    {
+        Draw(new(0, null), scale).Dispose();
+        using var measure = new Capsule(1, 1);
+        SelectObject(measure.Dc, t_fonts.Number);
+        var number = Face(measure.Dc);
+        SelectObject(measure.Dc, t_fonts.Regular);
+        return (number, Face(measure.Dc));
+    }
+
+    private static string Face(IntPtr dc)
+    {
+        var name = new char[64];
+        var length = GetTextFaceW(dc, name.Length, name);
+        return length > 0 ? new string(name, 0, length - 1) : "";
+    }
+
     private static int TextWidth(IntPtr dc, string text) => GetTextExtentPoint32W(dc, text, text.Length, out var size) ? size.Width : 0;
 
     /// <summary>
@@ -269,7 +287,7 @@ internal sealed unsafe class FpsOverlay : IDisposable
 
     /// <summary>
     /// The edge's white, 0 to 1, by row: Exo's Liquid Glass edge (tokens.css --glassy-ring), lit like a lens, brightest along
-    /// the top (17%) and fading to the foot (3%), in place of a grey outline.
+    /// the top (17%) and fading to the foot (3%), in place of a gray outline.
     /// </summary>
     internal static double EdgeLight(int height, int row) => height <= 1 ? EdgeTop : EdgeTop + (EdgeFoot - EdgeTop) * row / (height - 1.0);
 
@@ -440,6 +458,7 @@ internal sealed unsafe class FpsOverlay : IDisposable
     [DllImport("gdi32.dll", CharSet = CharSet.Unicode)] private static extern bool TextOutW(IntPtr dc, int x, int y, string text, int length);
     [DllImport("gdi32.dll", CharSet = CharSet.Unicode)] private static extern bool GetTextExtentPoint32W(IntPtr dc, string text, int length, out Size size);
     [DllImport("gdi32.dll", CharSet = CharSet.Unicode)] private static extern bool GetTextMetricsW(IntPtr dc, out TextMetric metrics);
+    [DllImport("gdi32.dll", CharSet = CharSet.Unicode)] private static extern int GetTextFaceW(IntPtr dc, int count, [Out] char[] name);
     [DllImport("gdi32.dll")] private static extern bool GdiFlush();
     [DllImport("user32.dll", CharSet = CharSet.Unicode)] private static extern ushort RegisterClassExW(ref WndClassEx type);
     [DllImport("user32.dll", CharSet = CharSet.Unicode)] private static extern IntPtr CreateWindowExW(uint ex, string type, string name, uint style, int x, int y, int w, int h, IntPtr parent, IntPtr menu, IntPtr instance, IntPtr param);

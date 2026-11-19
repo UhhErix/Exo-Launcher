@@ -1,6 +1,6 @@
 // Exo's Settings, used: it opens from the gear on its Library page, no wider than
 // the settings width, scrolling brings every section's heading into view, the column shows Exo's scrollbar while it scrolls (no width, then gone),
-// every switch in Downloads turns and turns back, Steam's Offline mode shows how Steam starts, Text size scales the page and goes back, About's What's
+// every switch in Downloads turns and turns back, Update DLSS, FSR and XeSS automatically stays off through a restart, Steam's Offline mode shows how Steam starts, Text size scales the page and goes back, About's What's
 // new holds the window until Continue and lets go, Escape closes it where you were. Settings is Exo's own (Library, Discord,
 // Music, General); capture options are checked in the capture suite, where they live.
 import { openPage, sleep } from '../cdp.mjs'
@@ -120,6 +120,47 @@ export async function run(t) {
       const label = await t.shell.call((n) => { const all = [...document.querySelectorAll('.exo-settings button[role="switch"]')].filter(b => /^Downloads/.test(b.closest('section')?.querySelector('h2, h3')?.textContent.trim() ?? '')); return all[n]?.closest('.exo-set-item')?.querySelector('.exo-set-item-label')?.textContent.trim() ?? `switch ${n}` }, i)
       if (!flipped) failures.push(`${label} did not turn`)
       else if (!back) failures.push(`${label} did not turn back`)
+    }
+    return failures
+  })
+
+  // First run's Update DLSS, FSR and XeSS automatically (onboarding/PcStep.tsx) and this one in Downloads are one setting,
+  // saved the one way (lib/settingsSave.ts): turned off here, it is still off after Exo restarts, then it goes back on.
+  await run.check('settings', 'upscalers-kept', 'Update DLSS, FSR and XeSS automatically, turned off, stays off after a restart', async (c) => {
+    if (t.quick || t.run.meta.attach) c.skip(t.quick ? 'quick run' : 'attached: Exo is not restarted')
+    const sw = () => document.querySelector('#set-auto-upscalers')
+    const reopen = async () => {
+      if (!await t.shell.eval(`!!document.querySelector('.exo-settings')?.checkVisibility()`) && !await open(t)) return false
+      if (!await page(t, 'Downloads')) return false
+      return !!await t.shell.waitFor(() => !!document.querySelector('#set-auto-upscalers'), { timeoutMs: 5000 })
+    }
+    if (!await reopen()) return ['no Update DLSS, FSR and XeSS automatically switch in Settings › Downloads']
+    const was = (await t.host('settings.get'))?.autoUpdateUpscalers !== false
+    c.evidence.was = was
+    const failures = []
+    try {
+      if (was) {
+        await t.shell.click(sw)
+        if (!await t.shell.waitFor(() => document.querySelector('#set-auto-upscalers')?.getAttribute('aria-checked') === 'false', { timeoutMs: 3000 })) return ['the switch did not turn off']
+        await sleep(500)
+      }
+      await t.relaunch({})
+      const saved = (await t.host('settings.get'))?.autoUpdateUpscalers
+      c.evidence.afterRestart = saved
+      if (saved !== false) failures.push(`after a restart the setting is ${saved}, not off`)
+      if (!await reopen()) return [...failures, 'Settings › Downloads did not open after the restart']
+      const shown = await t.shell.eval(`document.querySelector('#set-auto-upscalers')?.getAttribute('aria-checked')`)
+      if (shown !== 'false') failures.push(`after a restart the switch shows ${shown}, not off`)
+      await c.shot('upscalers-kept', t.shell)
+    } finally {
+      // Back as it was: on, through the switch, or through the host if the page can't.
+      if (was && (await t.host('settings.get').catch(() => null))?.autoUpdateUpscalers === false) {
+        if (await reopen().catch(() => false)) await t.shell.click(sw).catch(() => {})
+        if (!await t.shell.waitFor(() => document.querySelector('#set-auto-upscalers')?.getAttribute('aria-checked') === 'true', { timeoutMs: 3000 }).catch(() => false)) {
+          failures.push('the switch did not turn back on')
+          await t.host('settings.set', { autoUpdateUpscalers: true }).catch(() => {})
+        }
+      }
     }
     return failures
   })
