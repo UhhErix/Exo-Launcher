@@ -8,6 +8,7 @@ import { CalibrationRows } from './Calibration'
 import { DevicePage, DevicePanel as Panel } from './DevicePage'
 import { GameProfileRows } from './GameProfiles'
 import { ControllerSoundRow, PadSettingsRows } from './PadSettings'
+import { padSettable } from '../../lib/canUse'
 import { portWords } from './ports'
 
 /**
@@ -34,7 +35,7 @@ export function ControllerPage({ card, name, status, art, visible }: { card: Per
   const read = loaded?.id === card.id ? loaded.read : null
   const edge = card.model === 'dualsense-edge'
   const sony = edge || card.model === 'dualsense'
-  const usb = card.connection === 'usb'
+  const usb = padSettable(card.connection)
   const firmware = read?.firmware
   return (
     <DevicePage name={name} status={status} art={art} stats={heroStats(card, firmware, live, polling.result)}>

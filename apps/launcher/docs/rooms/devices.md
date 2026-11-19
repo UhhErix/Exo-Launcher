@@ -1,6 +1,6 @@
 # Devices
 
-Devices is inside the PC room: the **Devices** button on its This PC line. It shows what you plug in: your mouse, what you listen on and your controller, each with its picture. Press a card to open its page. Keyboards are marked Coming soon.
+Devices is inside the PC room: the **Devices** button on its This PC line. It shows what you plug in: your mouse, what you listen on and your controller, each with its picture. Press a card to open its page.
 
 ## Mouse
 

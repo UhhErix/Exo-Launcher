@@ -46,6 +46,8 @@ public sealed class GameEntry
     public bool Owned { get; init; } = true;
     /// <summary>Steam Family / borrowed license. Playable through Steam, not in GetOwnedGames.</summary>
     public bool FamilyShared { get; init; }
+    /// <summary>Who shares a <see cref="FamilyShared"/> game ("Sam", "Sam and Alex"), when Steam's family names them.</summary>
+    public string? SharedBy { get; init; }
     public EntitlementState EntitlementState { get; init; } = EntitlementState.Unknown;
     public bool UpdateAvailable { get; init; }
     public bool CanInstall { get; init; }
@@ -110,6 +112,7 @@ public sealed class GameEntry
         Installed = Installed,
         Owned = Owned,
         FamilyShared = FamilyShared,
+        SharedBy = SharedBy,
         EntitlementState = EntitlementState,
         UpdateAvailable = UpdateAvailable,
         CanInstall = CanInstall,
@@ -162,6 +165,8 @@ public sealed record GameVariant
     public required StoreKind Store { get; init; }
     public bool Installed { get; init; }
     public bool Owned { get; init; }
+    public bool FamilyShared { get; init; }
+    public string? SharedBy { get; init; }
     public EntitlementState EntitlementState { get; init; } = EntitlementState.Unknown;
     public bool UpdateAvailable { get; init; }
     public bool CanInstall { get; init; }
@@ -183,6 +188,8 @@ public sealed record GameVariant
         Store = game.Store,
         Installed = game.Installed,
         Owned = game.Owned,
+        FamilyShared = game.FamilyShared,
+        SharedBy = game.SharedBy,
         EntitlementState = game.EntitlementState,
         UpdateAvailable = game.UpdateAvailable,
         CanInstall = game.CanInstall,
@@ -200,6 +207,8 @@ public sealed record GameVariant
         Store = Store,
         Installed = Installed,
         Owned = Owned,
+        FamilyShared = FamilyShared,
+        SharedBy = SharedBy,
         EntitlementState = EntitlementState,
         UpdateAvailable = UpdateAvailable,
         CanInstall = CanInstall,

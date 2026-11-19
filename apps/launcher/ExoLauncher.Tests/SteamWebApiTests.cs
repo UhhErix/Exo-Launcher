@@ -183,18 +183,51 @@ public sealed class SteamWebApiTests
         Assert.Null(SteamWebApi.ParseFamilyGroup(JsonDocument.Parse("{}").RootElement));
     }
 
+    // The shape of GetSharedLibraryApps' answer (SteamDatabase/Protobufs service_familygroups.proto); ids and names made up.
+    private const string SharedLibraryFixture = """
+        {"response":{"apps":[
+          {"appid":570,"owner_steamids":["76561197960265731","76561197960265732"],"name":"Shared Game","sort_as":"shared game",
+           "capsule_filename":"library_600x900.jpg","exclude_reason":0,"rt_time_acquired":1700000000,"rt_playtime":3600,"app_type":1},
+          {"appid":400,"owner_steamids":["76561197960265731"],"app_type":1},
+          {"appid":620,"owner_steamids":["76561197960265731"],"name":"Kept Private","exclude_reason":1,"app_type":1},
+          {"appid":630,"owner_steamids":["76561197960265731"],"name":"A Tool","exclude_reason":0,"app_type":4},
+          {"appid":0,"name":"Zero"},
+          {"appid":570,"owner_steamids":["76561197960265733","not-an-id","0"],"name":"Shared Game"}
+        ],"owner_steamid":"76561197960265729"}}
+        """;
+
     [Fact]
-    public async Task FamilySharedAppsAreReadWithOwnGamesLeftOut()
+    public async Task FamilySharedAppsAreReadWithNamesAndOwnersAndExcludedOnesLeftOut()
     {
-        var fixture = SteamFixtureHandler.Json("""{"response":{"apps":[{"appid":570,"owner_steamids":["76561197960265731"]},{"appid":400}]}}""");
+        var fixture = SteamFixtureHandler.Json(SharedLibraryFixture);
 
         var apps = await Api(fixture).FamilySharedAppsAsync("t", 4242, 76561197960265729, TestContext.Current.CancellationToken);
 
         Assert.NotNull(apps);
-        Assert.Equal(["400", "570"], apps.Order(StringComparer.Ordinal));
+        Assert.Equal(["400", "570"], apps.Keys.Order(StringComparer.Ordinal));
+        Assert.Equal("Shared Game", apps["570"].Name);
+        // Owners as account ids, each once, from every entry of the app; a malformed id is dropped.
+        Assert.Equal(["3", "4", "5"], apps["570"].OwnerAccountIds.Order(StringComparer.Ordinal));
+        Assert.Null(apps["400"].Name);
         var query = fixture.Requests.Single().RequestUri!.Query;
         Assert.Contains("family_groupid=4242", query);
         Assert.Contains("include_own=false", query);
+        Assert.Contains("include_excluded=false", query);
+        Assert.Contains("include_non_games=false", query);
+    }
+
+    [Theory]
+    [InlineData("""{"response":{}}""", 0)]                                   // Steam leaves out an empty list
+    [InlineData("""{"response":{"owner_steamid":"76561197960265729"}}""", 0)]
+    [InlineData("""{"response":{"apps":[]}}""", 0)]
+    [InlineData("""{}""", -1)]                                               // no response: unknown, not empty
+    [InlineData("""{"response":{"apps":{}}}""", -1)]
+    [InlineData("""{"response":{"error":"x"}}""", -1)]
+    public void ASharedLibraryWithNothingInItIsEmptyAndABrokenOneUnknown(string json, int expected)
+    {
+        var apps = SteamWebApi.ParseSharedApps(JsonDocument.Parse(json).RootElement);
+
+        Assert.Equal(expected, apps?.Count ?? -1);
     }
 
     [Fact]
