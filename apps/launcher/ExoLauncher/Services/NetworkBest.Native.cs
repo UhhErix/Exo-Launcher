@@ -120,7 +120,7 @@ internal sealed partial class NetworkBest
                 });
                 if (process is null) return (null, "Windows didn't start the change.");
                 // Each item may wait up to about 25 seconds for a lookup after an adapter restarts.
-                if (!process.WaitForExit(TimeSpan.FromMinutes(3))) return (null, "The change didn't finish.");
+                if (!process.WaitForExit(TimeSpan.FromMinutes(3))) return (Unfinished, "The change didn't finish.");
                 return (process.ExitCode, null);
             }
             catch (System.ComponentModel.Win32Exception ex) when (ex.NativeErrorCode == 1223)
