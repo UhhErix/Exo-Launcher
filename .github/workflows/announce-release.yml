@@ -10,7 +10,8 @@ jobs:
   announce:
     if: ${{ github.repository == 'UhhErix/Exo-Launcher' && !github.event.release.prerelease && !github.event.release.draft }}
     runs-on: ubuntu-latest
-    # launcher-release-mirror.yml publishes the same tag to the mirror on the same event; this waits for it.
+    # The exo-updates Worker reads the release from GitHub when asked here, and posts the card once per tag (it also posts it
+    # by itself the first time it offers the release). Until the release is ready to offer it answers 409 not-live.
     timeout-minutes: 25
     steps:
       - name: Request an announcement from Cloudflare
