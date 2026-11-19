@@ -262,6 +262,7 @@ public sealed partial class WebHostBridge
         _services.Launcher.GameLaunched -= OnGameLaunched;
         _services.Launcher.GameRunStateChanged -= OnGameRunStateChanged;
         _services.Shaders.Changed -= OnShadersChanged;
+        UnwireCompress();
         _services.ShaderPrepare.Changed -= OnShadersChanged;
         ShaderRebuildWatch.Changed -= OnShadersRebuildChanged;
         _services.Store.Changed -= OnStoreChanged;
@@ -554,6 +555,12 @@ public sealed partial class WebHostBridge
                 "game.cancelInstall" => _services.Launcher.Cancel(ReadString(paramsEl, hasParams, "id")),
                 "game.pauseInstall" => _services.Launcher.Pause(ReadString(paramsEl, hasParams, "id") ?? ""),
                 "game.dequeue" => _services.Launcher.Dequeue(ReadString(paramsEl, hasParams, "id") ?? ""),
+                "downloads.list" => DownloadsList(),
+                "downloads.move" => _services.Launcher.MoveQueued(ReadString(paramsEl, hasParams, "id") ?? "",
+                    hasParams && paramsEl.TryGetProperty("by", out var by) && by.ValueKind == JsonValueKind.Number && by.TryGetInt32(out var places) ? Math.Clamp(places, -500, 500) : 0),
+                "downloads.pauseAll" => _services.Launcher.PauseAll(),
+                "downloads.resumeAll" => _services.Launcher.ResumeAll(),
+                "game.autoUpdate" => GameAutoUpdate(paramsEl, hasParams),
                 "game.progress" => GameProgress(paramsEl, hasParams),
                 "stores.auth" => await StoresAuthAsync(paramsEl, hasParams).ConfigureAwait(true),
                 "exoAccount.state" => ExoAccountState(),
@@ -702,7 +709,10 @@ public sealed partial class WebHostBridge
                 "telemetry.sent" => new { ok = true, payloads = Telemetry.Sent() },
                 "telemetry.delete" => await TelemetryDeleteAsync(requestToken).ConfigureAwait(true),
                 "telemetry.track" => TelemetryTrack(paramsEl, hasParams),
-                "apps.uninstall" => await AppsUninstallAsync(ReadString(paramsEl, hasParams, "id") ?? "", requestToken).ConfigureAwait(true),
+                "apps.uninstall" => await AppsUninstallAsync(ReadString(paramsEl, hasParams, "id") ?? "", ReadBool(paramsEl, hasParams, "quiet") == true, requestToken).ConfigureAwait(true),
+                "apps.restorePoint" => await AppsRestorePointAsync(requestToken).ConfigureAwait(true),
+                "apps.installerCache" => await AppsInstallerCacheAsync().ConfigureAwait(true),
+                "apps.installerCacheClean" => await AppsInstallerCacheCleanAsync(requestToken).ConfigureAwait(true),
                 "apps.scan" => await AppsScanAsync(ReadString(paramsEl, hasParams, "id") ?? "", requestToken).ConfigureAwait(true),
                 "apps.clean" => await AppsCleanAsync(paramsEl, hasParams, requestToken).ConfigureAwait(true),
                 "apps.allowEdge" => await AppsAllowEdgeAsync(requestToken).ConfigureAwait(true),
@@ -711,6 +721,11 @@ public sealed partial class WebHostBridge
                 "apps.history" => await Task.Run(AppsHistory).ConfigureAwait(true),
                 "apps.undo" => await AppsUndoAsync(ReadString(paramsEl, hasParams, "id") ?? "", requestToken).ConfigureAwait(true),
                 "junk.scan" => await JunkScanAsync().ConfigureAwait(true),
+                "compress.state" => await CompressStateAsync(paramsEl, hasParams, requestToken).ConfigureAwait(true),
+                "compress.list" => await CompressListAsync(requestToken).ConfigureAwait(true),
+                "compress.act" => await CompressActAsync(paramsEl, hasParams, requestToken).ConfigureAwait(true),
+                "compress.all" => await CompressAllAsync(requestToken).ConfigureAwait(true),
+                "compress.settings" => CompressSettings(paramsEl, hasParams),
                 "junk.clean" => await JunkCleanAsync(paramsEl, hasParams).ConfigureAwait(true),
                 "startup.list" => await StartupListAsync().ConfigureAwait(true),
                 "bios.update" => await BiosUpdateAsync(paramsEl, hasParams, requestToken).ConfigureAwait(true),
@@ -784,7 +799,6 @@ public sealed partial class WebHostBridge
                 "discord.signOut" => await DiscordSignOutAsync().ConfigureAwait(true),
                 "app.notify" => hasParams ? AppNotify(paramsEl) : new { ok = false },
                 "discord.home" => DiscordHome(),
-                "discord.voiceNow" => DiscordVoiceNow(),
                 "discord.channels" => DiscordChannels(paramsEl, hasParams),
                 "discord.messages" => await DiscordMessagesAsync(paramsEl, hasParams, requestToken).ConfigureAwait(true),
                 "discord.send" => await DiscordSendAsync(paramsEl, hasParams, requestToken).ConfigureAwait(true),
@@ -837,9 +851,6 @@ public sealed partial class WebHostBridge
                 "discord.apps" => await DiscordAppsAsync(paramsEl, hasParams, requestToken).ConfigureAwait(true),
                 "discord.typing" => await DiscordTypingAsync(paramsEl, hasParams, requestToken).ConfigureAwait(true),
                 "discord.userSettings" => await DiscordUserSettingsAsync(paramsEl, hasParams, requestToken).ConfigureAwait(true),
-                "discord.shareGames" => await DiscordShareGamesAsync(paramsEl, hasParams).ConfigureAwait(true),
-                "discord.shareReady" => DiscordShareReady(paramsEl, hasParams),
-                "discord.shareClip" => await DiscordShareClipAsync(paramsEl, hasParams, requestToken).ConfigureAwait(true),
                 "discord.bandPins" => DiscordBandPins(paramsEl, hasParams),
                 "discord.account" => await DiscordAccountAsync(paramsEl, hasParams, requestToken).ConfigureAwait(true),
                 "discord.shop" => await DiscordShopAsync(paramsEl, hasParams, requestToken).ConfigureAwait(true),

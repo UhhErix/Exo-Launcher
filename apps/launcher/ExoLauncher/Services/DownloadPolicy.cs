@@ -97,7 +97,8 @@ internal sealed class DownloadPolicy : IDisposable
         _lastUpdateSweep = DateTime.UtcNow;
         var paused = launcher.PausedDownloads.Select(p => p.GameId).ToHashSet(StringComparer.OrdinalIgnoreCase);
         var due = _services.Library.PeekCachedLibrary()
-            .Where(g => g.Installed && g.UpdateAvailable && LaunchOrchestrator.ExoDownloads(g.Store) && !paused.Contains(g.Id))
+            .Where(g => g.Installed && g.UpdateAvailable && LaunchOrchestrator.ExoDownloads(g.Store) && !paused.Contains(g.Id) &&
+                        !_services.Settings.AutoUpdateOff(g.Id))
             .ToList();
         if (due.Count == 0) return;
         AppLog.Info($"Auto-update while idle: {due.Count} game(s): {string.Join(", ", due.Select(g => g.Title))}");

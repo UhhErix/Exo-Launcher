@@ -1,4 +1,4 @@
-import { idAt, type DiscordChannels, type DiscordDm, type DiscordFriend, type DiscordHome, type DiscordMemberList, type DiscordMessage, type DiscordVoiceNow } from './discord'
+import { idAt, type DiscordChannels, type DiscordDm, type DiscordFriend, type DiscordHome, type DiscordMemberList, type DiscordMessage } from './discord'
 
 /** Made-up people and servers for the dev preview of Exo's own Discord client (never real accounts). */
 const me = { id: '100000000000000001', username: 'you', global_name: 'You' }
@@ -80,20 +80,6 @@ export const mockHome: DiscordHome = scenario === 'empty' ? { ...baseHome, dms: 
   ],
 } : baseHome
 
-const person = (id: string, name: string) => ({ id, name, avatar: face(id) })
-export const mockVoiceNow: DiscordVoiceNow[] = scenario === 'empty' ? [] : scenario === 'long' ? Array.from({ length: 60 }, (_, i) => ({
-  channelId: `41${String(i).padStart(16, '0')}`, name: i % 4 ? `Room ${i}` : `${LONG} ${i}`, guildId: `31${String(i * 8).padStart(16, '0')}`, guild: i % 6 ? `Server ${i * 8}` : `${LONG} ${i * 8}`, icon: mark(`31${String(i * 8).padStart(16, '0')}`), muted: false, canConnect: true,
-  count: 4, friends: 0, streaming: false, people: Array.from({ length: 4 }, (_, n) => person(`13${String(i * 10 + n).padStart(16, '0')}`, `Person ${n}`)),
-})) : [
-  { channelId: '400000000000000005', name: 'Lobby', guildId: '300000000000000001', guild: 'Night Raid', icon: mark('300000000000000001'), muted: false, canConnect: true, limit: 10, count: 2, friends: 2, streaming: true,
-    people: [person(ada.id, 'Ada'), person(kai.id, 'Kai')] },
-  { channelId: '400000000000000030', name: 'Squad', guildId: '300000000000000001', guild: 'Night Raid', icon: mark('300000000000000001'), muted: false, canConnect: true, limit: 6, count: 3, friends: 3, streaming: false,
-    people: [person('100000000000000010', 'Bea'), person('100000000000000011', 'Cole'), person('100000000000000015', 'Rowan')] },
-  { channelId: '400000000000000021', name: 'Frame time talk', guildId: '300000000000000002', guild: 'Frame Pacing Club', icon: mark('300000000000000002'), muted: false, canConnect: true, count: 7, friends: 1, streaming: false,
-    people: Array.from({ length: 7 }, (_, n) => person(`13000000000000000${n}`, ['Rowan', 'Vale', 'Ivo', 'Wren', 'Tam', 'Oz', 'Ash'][n])) },
-  { channelId: '400000000000000022', name: 'Bench', guildId: '300000000000000009', guild: 'Hardware Heads', icon: mark('300000000000000009'), muted: false, canConnect: false, count: 1, friends: 0, streaming: false,
-    people: [person('130000000000000009', 'Quinn')] },
-]
 export const mockChannels: DiscordChannels = {
   name: 'Night Raid',
   threads: [{ id: '400000000000000042', name: 'Patch 9 hot takes', parentId: '400000000000000002', locked: false, joined: true, archived: false, unread: true, mentions: 1 }],

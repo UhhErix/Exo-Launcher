@@ -17,6 +17,7 @@ import { Progress, ProgressWords } from '../ui/Progress'
 import { Spinner } from '../ui/Spinner'
 import { Wait, sample, times } from '../ui/Wait'
 import { ArtworkTools, type Artwork } from './Artwork'
+import { CompressRow } from './CompressRow'
 import { sheetMemory } from './useGameDetails'
 
 /** The last few games' properties, so Properties opened again draws at once while it reads again. */
@@ -386,6 +387,7 @@ function FilesSection({ props, locked, busy, run, line, note, gameId, game, upsc
         {props.canBrowse && <button type="button" className="exo-set-btn" onClick={openFolder}>Open folder</button>}
         {uninstall}
       </PropRow>
+      <CompressRow gameId={gameId} locked={locked} />
       {props.verifyLabel && (
         <PropRow label="Damaged or missing files" line={line('verify')}>
           <ConfirmButton className="exo-set-btn" disabled={locked || busy !== null} question={size ? `Check all ${size}?` : 'Check every file?'}

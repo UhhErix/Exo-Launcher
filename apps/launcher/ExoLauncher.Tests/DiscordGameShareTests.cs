@@ -10,21 +10,20 @@ namespace ExoLauncher.Tests;
 /// - a game stays said after it closed, or a launcher handing over to the game drops it and says it again;
 /// - the game that ended was the older of two, and the one still open goes with it;
 /// - a game you hid, or a title that came from a file on this PC, is named to friends;
-/// - a link stays up, or a key stays in the presence, with the switch off or while invisible.
+/// - a link stays up, or a key stays in the presence, while invisible or with Discord gone.
 /// </summary>
 public sealed class DiscordGameShareTests
 {
     [Theory]
-    [InlineData(true, false, true, "online", true, true)]
-    [InlineData(true, false, true, "dnd", true, true)]
-    [InlineData(true, false, true, "idle", true, true)]
-    [InlineData(true, false, true, "invisible", true, false)]
-    [InlineData(true, false, false, "online", true, false)] // the switch is off
-    [InlineData(false, false, true, "online", true, false)] // Discord isn't connected
-    [InlineData(true, true, true, "online", true, false)]   // Discord refused the key this run
-    [InlineData(true, false, true, "online", false, false)] // no relay
-    public void TheLinkRunsOnlyWithEveryGateOpen(bool gatewayUp, bool keyRefused, bool shares, string status, bool hasRelay, bool allowed) =>
-        Assert.Equal(allowed, DiscordSession.LinksAllowed(gatewayUp, keyRefused, shares, status, hasRelay));
+    [InlineData(true, false, "online", true, true)]
+    [InlineData(true, false, "dnd", true, true)]
+    [InlineData(true, false, "idle", true, true)]
+    [InlineData(true, false, "invisible", true, false)]
+    [InlineData(false, false, "online", true, false)] // Discord isn't connected
+    [InlineData(true, true, "online", true, false)]   // Discord refused the key this run
+    [InlineData(true, false, "online", false, false)] // no relay
+    public void TheLinkRunsOnlyWithEveryGateOpen(bool gatewayUp, bool keyRefused, string status, bool hasRelay, bool allowed) =>
+        Assert.Equal(allowed, DiscordSession.LinksAllowed(gatewayUp, keyRefused, status, hasRelay));
 
     [Theory]
     [InlineData(StoreKind.Steam, false, true)]

@@ -31,6 +31,9 @@ public sealed class AppServices
     private DownloadPolicy? _downloads;
     /// <summary>Temporary files, crash reports, the thumbnail cache and Exo's old backups, cleaned while the PC is idle.</summary>
     private JunkAutoClean? _junk;
+    /// <summary>Compress games: Windows' own file compression for a game's install, by a press or while the PC is idle.</summary>
+    internal GameCompressor Compressor => _compressor ??= new GameCompressor(this);
+    private GameCompressor? _compressor;
     private readonly Lazy<StoreService> _store = new(() => new StoreService(RunningVersion));
     /// <summary>HID devices for the Devices room's mouse module.</summary>
     internal Hid.HidService Hid => _hid.Value;
@@ -195,6 +198,7 @@ public sealed class AppServices
         Store.Start();
         Downloads.Start();
         (_junk = new JunkAutoClean(this)).Start();
+        Compressor.Start();
         // Exo's parts setup didn't fetch (or that no longer match their pins), quietly, when downloads aren't held.
         ExoComponents.FillInBackground(() => Launcher.HoldReason, _lifetime.Token);
         NvidiaTrayIcon.Soon();
@@ -345,6 +349,7 @@ public sealed class AppServices
         if (_hid.IsValueCreated) _hid.Value.Dispose();
         _downloads?.Dispose();
         _junk?.Dispose();
+        _compressor?.Dispose();
         Achievements.Dispose();
         HiddenStores.Dispose();
         GogAuth.Dispose();
