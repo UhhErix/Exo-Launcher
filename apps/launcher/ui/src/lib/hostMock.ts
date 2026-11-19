@@ -52,6 +52,20 @@ const MOCK_GAMES: Game[] = [
     lastPlayedUtc: new Date(Date.now() - 26 * 3600_000).toISOString(),
   },
   {
+    // Steam's Play menu offers it without its anti-cheat: Properties › Anti-cheat.
+    id: 'steam:3472040',
+    title: 'NBA 2K26',
+    store: 'steam',
+    installed: true,
+    owned: true,
+    primaryAction: 'play',
+    status: 'Ready',
+    playtimeMinutes: 310,
+    sizeBytes: 140 * 1024 ** 3,
+    deps: ['Steam client'],
+    launchNote: '',
+  },
+  {
     // One Steam app holding the games bought as its DLC: named by the newest, and found by any of them.
     id: 'steam:1938090',
     title: 'Call of Duty®: Modern Warfare® 4',
@@ -851,6 +865,7 @@ function mockPropertiesFor(id: string): GameProperties {
     cloudSync: false, language: null, languageChoices: [], beta: null, betaChoices: [], betaCode: false,
     contentLabel: 'DLC', content: null, folder: null, folderChoices: [], moving: null, storeProperties: null,
     ...(game?.store === 'steam' ? STEAM_PROPERTIES : game?.store === 'epic' ? EPIC_PROPERTIES : {}),
+    ...(id === 'steam:3472040' ? { antiCheatLaunch: { value: 'with' as const, detail: 'NBA 2K26 without EAC (offline only)' } } : {}),
   }
   return mockProperties[id]
 }
@@ -870,6 +885,10 @@ function mockSetProperty(params?: Record<string, unknown>) {
   } else if (key === 'launchOptions') next.launchOptions = value
   else if (key === 'language') { next.language = value; message = 'Steam is updating the game.' }
   else if (key === 'storeProperties') message = "Opened in Steam. Its Properties are under the gear on the game's page."
+  else if (key === 'antiCheatLaunch' && current.antiCheatLaunch) {
+    next.antiCheatLaunch = { ...current.antiCheatLaunch, value: value === 'without' ? 'without' : 'with' }
+    message = value === 'without' ? 'Plays offline, without anti-cheat. Frame generation and mods can go in.' : "Plays with anti-cheat. Exo's frame generation came out of the game."
+  }
   mockProperties[id] = next
   return { ok: true, message, properties: next }
 }

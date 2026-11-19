@@ -262,7 +262,11 @@ internal static partial class AntiCheatCheck
     /// <param name="store">The store's anti-cheat (<see cref="ForStore"/>).</param>
     /// <param name="known">The anti-cheat Exo Shaders lists the game's id for (<see cref="KnownGames"/>).</param>
     /// <param name="disk">The walk's phrase: null for nothing found, the names, with <see cref="Unreadable"/> or <see cref="OutOfTime"/> among them when it could not finish.</param>
-    internal static Answer Decide(string? store, string? known, bool installFound, string? disk, string? service, SteamWord steam, string? title)
+    /// <param name="withoutEntry">The player picked the Play-menu entry Steam offers without the anti-cheat
+    /// (<see cref="WithoutAntiCheatLaunch"/>): what the files, title, a known id or Steam's silence say counts for nothing,
+    /// since that entry never starts it. Never Riot or Vanguard, never an install that could not be read, never Valve
+    /// Anti-Cheat (Steam's own, on in every entry), a store's or a service's anti-cheat.</param>
+    internal static Answer Decide(string? store, string? known, bool installFound, string? disk, string? service, SteamWord steam, string? title, bool withoutEntry = false)
     {
         if (store == DlssSwapService.RiotVanguard) return new(Kind.Found, store, "store");
         var names = new SortedSet<string>(StringComparer.Ordinal);
@@ -287,6 +291,9 @@ internal static partial class AntiCheatCheck
         if (unknown is not null) return new(Kind.Unknown, names.ToList(), unknown);
         if (names.Count == 0 && title is not null) Add(title, "title");
         if (steam == SteamWord.CannotTell && !names.Contains(ValveAntiCheat)) Add(PossiblyVacName, "steam");
+        if (withoutEntry && names.Count > 0 && store is null && service is null && steam != SteamWord.Vac &&
+            !names.Contains(ValveAntiCheat) && !names.Contains(DlssSwapService.RiotVanguard))
+            return new(Kind.None, [], WithoutAntiCheatEvidence);
         if (names.Count == 0) return Answer.Clean;
         return new(names.All(name => name == PossiblyVacName) ? Kind.PossiblyVac : Kind.Found, names.ToList(), evidence!);
     }
@@ -314,7 +321,31 @@ internal static partial class AntiCheatCheck
 
     private static Answer FromParts(GameEntry game, string? root, string? walked, IReadOnlyList<(string Name, string ImagePath)> services, Func<uint, SteamWord> steam) =>
         Decide(ForStore(game.Store), KnownGames.GetValueOrDefault(game.Id), root is not null, walked, root is null ? null : ServiceIn(root, services),
-            SteamSays(game, steam), ByTitle(game));
+            SteamSays(game, steam), ByTitle(game), WithoutAntiCheatLaunch(game) is not null);
+
+    /// <summary>What decided a clean answer for a game started from Steam's entry without its anti-cheat.</summary>
+    internal const string WithoutAntiCheatEvidence = "launch without anti-cheat";
+
+    /// <summary>The player's pick in Properties: this Steam game starts from Steam's entry without its anti-cheat (settings, wired at start).</summary>
+    internal static Func<GameEntry, bool> ChoseWithoutAntiCheat { get; set; } = _ => false;
+
+    /// <summary>Steam's entry without the anti-cheat for an app id, from its appinfo (<see cref="SteamVacFile.Free"/>).</summary>
+    internal static Func<uint, SteamAppInfoNames.AntiCheatFreeLaunch?> SteamFreeEntry { get; set; } = SteamVacFile.Default.Free;
+
+    /// <summary>
+    /// The entry the game starts from when it starts without its anti-cheat: only a Steam game (never Riot's) the player set
+    /// to "Launch without anti-cheat" whose appinfo still offers the entry; else null, and it starts, and is judged, with it.
+    /// Every place asks this one: Play (which entry), the policy (<see cref="Decide"/>) and frame generation at launch.
+    /// </summary>
+    internal static Func<GameEntry, SteamAppInfoNames.AntiCheatFreeLaunch?> WithoutAntiCheatLaunch { get; set; } = game =>
+        game.Store == StoreKind.Steam && !IsRiot(game) && SteamAppId(game) is { } id && ChoseWithoutAntiCheat(game) ? SteamFreeEntry(id) : null;
+
+    /// <summary>A Steam game's app id: the launch target, else the library id's ("steam:440"); null when it has none.</summary>
+    internal static uint? SteamAppId(GameEntry game)
+    {
+        var text = game.LaunchTarget is { Length: > 0 } target ? target : game.Id.StartsWith("steam:", StringComparison.OrdinalIgnoreCase) ? game.Id[6..] : null;
+        return uint.TryParse(text, out var id) && id != 0 ? id : null;
+    }
 
     /// <summary>Where Steam's word comes from: Steam's own appinfo, read once per change of its files (<see cref="SteamVacFile"/>).</summary>
     internal static Func<uint, SteamWord> SteamSource { get; set; } = SteamVacFile.Default.Word;
@@ -405,9 +436,7 @@ internal static partial class AntiCheatCheck
     internal static SteamWord SteamSays(GameEntry game, Func<uint, SteamWord> steam)
     {
         if (game.Store != StoreKind.Steam) return SteamWord.NotSteam;
-        // Its app id: the launch target, else the library id's ("steam:440").
-        var text = game.LaunchTarget is { Length: > 0 } target ? target : game.Id.StartsWith("steam:", StringComparison.OrdinalIgnoreCase) ? game.Id[6..] : null;
-        if (!uint.TryParse(text, out var id) || id == 0) return SteamWord.CannotTell;
+        if (SteamAppId(game) is not { } id) return SteamWord.CannotTell;
         if (ValveVac.Contains(id)) return SteamWord.Vac;
         return steam(id);
     }
@@ -437,6 +466,7 @@ internal static partial class AntiCheatCheck
         private readonly Lock _gate = new();
         private readonly Func<DateTime> _now = now ?? (() => DateTime.UtcNow);
         private Dictionary<uint, SteamWord> _words = [];
+        private Dictionary<uint, SteamAppInfoNames.AntiCheatFreeLaunch> _free = [];
         private string? _stamp;
         private DateTime _retryAt;
         private string? _warned;
@@ -450,6 +480,16 @@ internal static partial class AntiCheatCheck
             {
                 Load();
                 return _words.TryGetValue(appId, out var word) ? word : SteamWord.CannotTell;
+            }
+        }
+
+        /// <summary>The Play-menu entry Steam offers that starts the game without its anti-cheat, or null (<see cref="SteamAppInfoNames.WithoutAntiCheat"/>).</summary>
+        internal SteamAppInfoNames.AntiCheatFreeLaunch? Free(uint appId)
+        {
+            lock (_gate)
+            {
+                Load();
+                return _free.GetValueOrDefault(appId);
             }
         }
 
@@ -498,22 +538,28 @@ internal static partial class AntiCheatCheck
                 all.Add(bytes);
             }
             var words = new Dictionary<uint, SteamWord>();
+            var free = new Dictionary<uint, SteamAppInfoNames.AntiCheatFreeLaunch>();
             Parses++;
             foreach (var bytes in all)
             {
-                if (SteamAppInfoNames.EachApp(bytes, (id, app) => words[id] = FromAppInfo(app))) continue;
+                if (SteamAppInfoNames.EachApp(bytes, (id, app) =>
+                {
+                    words[id] = FromAppInfo(app);
+                    if (SteamAppInfoNames.WithoutAntiCheat(SteamAppInfoNames.LaunchEntries(app)) is { } entry) free[id] = entry;
+                })) continue;
                 // Steam is writing it: tried again soon, never kept.
                 _retryAt = _now() + RetryAfter;
                 AppLog.Debug("Anti-cheat: Steam's app list ended early; it is read again shortly.");
                 return;
             }
-            Settle(stamp, words, null);
+            Settle(stamp, words, null, free);
         }
 
-        private void Settle(string stamp, Dictionary<uint, SteamWord> words, string? problem)
+        private void Settle(string stamp, Dictionary<uint, SteamWord> words, string? problem, Dictionary<uint, SteamAppInfoNames.AntiCheatFreeLaunch>? free = null)
         {
             _stamp = stamp;
             _words = words;
+            _free = free ?? [];
             _retryAt = default;
             if (problem is not null) Warn(problem);
         }
@@ -523,6 +569,7 @@ internal static partial class AntiCheatCheck
             if (!keepWords)
             {
                 _words = [];
+                _free = [];
                 _stamp = null;
             }
             _retryAt = _now() + RetryAfter;

@@ -116,12 +116,65 @@ public sealed partial class WebHostBridge
             var app = await Task.Run(() => FillSteamAsync(common, game.LaunchTarget!, ct), ct).ConfigureAwait(true);
             if (app is not null && SteamInputInUse(game.LaunchTarget!, app)) common.StoreProperties = "Steam";
             common.SteamOverlay = SteamOverlayShown(game.LaunchTarget!);
+            common.AntiCheatLaunch = AntiCheatLaunchFor(game);
         }
         else if (game.Store == StoreKind.Epic && LegendaryProperties.IsAppName(game.LaunchTarget))
             await Task.Run(() => FillEpicAsync(common, game.LaunchTarget!, ct), ct).ConfigureAwait(true);
         if (game.Store != StoreKind.Steam) common.ThroughSteam = await Task.Run(() => ThroughSteamFor(game), ct).ConfigureAwait(true);
         common.ShaderCacheBytes = await Task.Run(() => ShaderCacheBytesOf(game), ct).ConfigureAwait(true);
         return common.ToDto();
+    }
+
+    /// <summary>
+    /// Properties › Anti-cheat for a Steam game whose Play menu has an entry without its anti-cheat (NBA 2K26's "without
+    /// EAC (offline only)"): "with" (the default) or "without", and Steam's own words for that entry; null for any other.
+    /// </summary>
+    private (string Value, string Detail)? AntiCheatLaunchFor(GameEntry game)
+    {
+        if (game.Store != StoreKind.Steam || AntiCheatCheck.IsRiot(game) || AntiCheatCheck.SteamAppId(game) is not { } id ||
+            AntiCheatCheck.SteamFreeEntry(id) is not { } entry) return null;
+        return (_services.Settings.SteamWithoutAntiCheat(game.Id) ? "without" : "with", entry.Description);
+    }
+
+    /// <summary>
+    /// The pick saved. Back to "with": before anything else, what Exo put into the game for its start without anti-cheat
+    /// comes out (its frame generation mod, the shader recorder), so the protected start never finds it; frame generation
+    /// at launch checks again (<see cref="DlssSwapService.FrameGenAtLaunch"/>). A take-out that fails leaves the pick on
+    /// "without" and says so.
+    /// </summary>
+    private async Task<string?> SetAntiCheatLaunchAsync(GameEntry game, bool without, CancellationToken ct)
+    {
+        if (without)
+        {
+            _services.Settings.SetSteamWithoutAntiCheat(game.Id, true);
+            AppLog.Info($"Anti-cheat: {game.Title} starts from Steam's entry without its anti-cheat.");
+            return "Plays offline, without anti-cheat. Frame generation and mods can go in.";
+        }
+        var off = await Task.Run(() => AntiCheatBackOn(_dlss, game), ct).ConfigureAwait(true);
+        if (!off.Ok) throw new UserFacingException(off.Message);
+        _services.Settings.SetSteamWithoutAntiCheat(game.Id, false);
+        if (ShadersAddon.Live is { } engine)
+        {
+            try
+            {
+                using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(20));
+                await engine.CallAsync("recorder.set", new System.Text.Json.Nodes.JsonObject { ["id"] = game.Id, ["on"] = false }, timeout.Token, "anti-cheat back on in " + game.Title).ConfigureAwait(true);
+            }
+            catch (Exception ex) when (ex is InvalidOperationException or OperationCanceledException or IOException)
+            {
+                AppLog.Warn($"Anti-cheat: the shader recorder in {game.Title} could not be turned off: {ex.Message}");
+            }
+        }
+        AppLog.Info($"Anti-cheat: {game.Title} starts with its anti-cheat again{(off.Removed ? "; Exo's frame generation came out" : "")}.");
+        return off.Removed ? "Plays with anti-cheat. Exo's frame generation came out of the game." : "Plays with anti-cheat.";
+    }
+
+    /// <summary>Exo's frame generation out of the game, if it is in; Ok false (with why) when it could not come out.</summary>
+    internal static (bool Ok, bool Removed, string Message) AntiCheatBackOn(DlssSwapService dlss, GameEntry game)
+    {
+        if (dlss.FrameGenFolderFor(game.Id) is not { } folder || DlssSwapService.ReadFrameGenManifest(folder) is not { Out: false }) return (true, false, "");
+        var off = dlss.FrameGenOff(game);
+        return off.Ok ? (true, true, "") : (false, false, "Exo couldn't take its frame generation out of the game, so it still starts without anti-cheat. " + off.Message);
     }
 
     /// <summary>The overlay as the game will have it: the player's pick in Properties, else Steam's switch now (absent is on).</summary>
@@ -325,6 +378,13 @@ public sealed partial class WebHostBridge
                 return message;
             }
             return await ApplySteamOverlayAsync(ct).ConfigureAwait(true);
+        }
+        if (key == "antiCheatLaunch")
+        {
+            if (value is not ("with" or "without") || AntiCheatLaunchFor(game) is null)
+                throw new UserFacingException("Steam offers this game no start without its anti-cheat.");
+            if (_services.Launcher.GetGameRunState(game).IsRunning) throw new UserFacingException($"Close {game.Title} first.");
+            return await SetAntiCheatLaunchAsync(game, value == "without", ct).ConfigureAwait(true);
         }
         if (key == "throughSteam")
         {
@@ -587,6 +647,8 @@ public sealed partial class WebHostBridge
         public bool? SteamOverlay { get; set; }
         /// <summary>The game's own shader caches together (0 once cleared); null for a game Exo can't rebuild them for.</summary>
         public long? ShaderCacheBytes { get; set; }
+        /// <summary>A Steam game Steam offers without its anti-cheat: "with" or "without", and that entry's own words; null otherwise.</summary>
+        public (string Value, string Detail)? AntiCheatLaunch { get; set; }
 
         public object ToDto() => new
         {
@@ -612,6 +674,7 @@ public sealed partial class WebHostBridge
             throughSteam = ThroughSteam,
             steamOverlay = SteamOverlay,
             shaderCacheBytes = ShaderCacheBytes,
+            antiCheatLaunch = AntiCheatLaunch is { } launch ? new { value = launch.Value, detail = launch.Detail } : null,
         };
 
         private static object Choice(PropertyChoice choice) =>

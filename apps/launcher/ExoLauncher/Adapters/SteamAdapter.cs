@@ -1296,6 +1296,13 @@ public sealed class SteamAdapter : IStoreAdapter, IInstalledSteamManifestSource,
         if (steamExe is null)
             return new LaunchResult { Ok = false, Message = "Steam could not be found. Open Steam once, then try Play again." };
 
+        // "Launch without anti-cheat" in Properties: Steam's own entry for it, by its option word. Frame generation and the
+        // rest were judged for that entry as the launch began; an entry Steam no longer offers is never swapped for the
+        // protected one here, where what went into the game for the other was not taken out.
+        var withoutAntiCheat = Services.AntiCheatCheck.WithoutAntiCheatLaunch(game);
+        if (withoutAntiCheat is null && Services.AntiCheatCheck.ChoseWithoutAntiCheat(game))
+            return new LaunchResult { Ok = false, Message = $"Steam no longer offers {game.Title} without its anti-cheat. Pick Launch with anti-cheat in Properties." };
+
         var installPath = FindInstalled(appId)?.Path ?? game.Path;
         ct.ThrowIfCancellationRequested();
 
@@ -1355,8 +1362,15 @@ public sealed class SteamAdapter : IStoreAdapter, IInstalledSteamManifestSource,
             ct.ThrowIfCancellationRequested();
             using var gameEula = SteamGameEulaPromptAutomator.Arm(
                 steamExe, game.Title, SteamProcessPath.LaunchChromeSuppressionTimeout, ct);
-            ProcessHelper.StartHidden(steamExe,
-                SteamProtocol.LaunchArguments(appId, options.ExtraArgs));
+            if (withoutAntiCheat is not null)
+            {
+                // steam://launch/<id>/<option> runs that Play-menu entry with no dialog; it carries no arguments.
+                if (!string.IsNullOrWhiteSpace(options.ExtraArgs)) AppLog.Info($"Steam launch without anti-cheat: {game.Title} starts without Exo's launch options.");
+                ProcessHelper.StartHidden(steamExe, [SteamProtocol.LaunchEntryUri(appId, withoutAntiCheat.Option)]);
+            }
+            else
+                ProcessHelper.StartHidden(steamExe,
+                    SteamProtocol.LaunchArguments(appId, options.ExtraArgs));
 
             QuietSteam();
 

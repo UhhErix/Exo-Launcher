@@ -1623,6 +1623,12 @@ export interface GameProperties {
   steamOverlay?: boolean | null
   /** The game's own shader caches together (0 once cleared); null for a game Exo can't rebuild them for (Call of Duty only for now). */
   shaderCacheBytes?: number | null
+  /**
+   * A Steam game whose Play menu has an entry without its anti-cheat (NBA 2K26's "without EAC (offline only)"): which one
+   * Play starts, and that entry's own words. Without it the game counts as one with no anti-cheat, so frame generation and
+   * mods can go in; back with it, they come out first. Null for every other game.
+   */
+  antiCheatLaunch?: { value: 'with' | 'without'; detail: string } | null
 }
 
 /** The host leaves empty values out: each one a store does not have reads as null here, so its row stays hidden. */
@@ -1636,7 +1642,7 @@ function withNulls(properties: GameProperties): GameProperties {
 
 export type GamePropertyKey =
   | 'launchOptions' | 'cloudSync' | 'language'
-  | 'beta' | 'betaCode' | 'content' | 'folder' | 'storeProperties' | 'throughSteam' | 'steamOverlay' | 'shaders'
+  | 'beta' | 'betaCode' | 'content' | 'folder' | 'storeProperties' | 'throughSteam' | 'steamOverlay' | 'shaders' | 'antiCheatLaunch'
 
 /** Desktop app install (Spotify). */
 type HostRequest = { version: number; id: string; method: string; params?: Record<string, unknown> }
