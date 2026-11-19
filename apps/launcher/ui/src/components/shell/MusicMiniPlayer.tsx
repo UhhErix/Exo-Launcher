@@ -7,6 +7,7 @@ import { onPageActivityChanged, pageIsVisible } from '../../lib/pageActivity'
 import { BarCapsule } from './BarCapsule'
 import { Slider } from '../ui/Slider'
 import { ErrorNote } from '../ui/ErrorNote'
+import { errorText } from '../../lib/errorWords'
 
 /** anchor: performance.now() at which playback.positionMs was true. floor: the
     position already on screen when a resync arrived slightly behind it; the
@@ -139,7 +140,7 @@ export function MusicMiniPlayer({ service, onOpen, hidden = false }: { service: 
       try {
         const result = await host.musicControl(next)
         if (alive.current && !result.ok && !controls.current.length) {
-          setOptimistic(null); setError(result.message ?? 'The player didn’t take that. Try again.')
+          setOptimistic(null); setError(errorText(result.message, 'The player didn’t take that. Try again.'))
         }
       } catch {
         if (alive.current && !controls.current.length) { setOptimistic(null); setError('The player didn’t respond. Try again.') }
@@ -266,7 +267,7 @@ export function MusicSeek({ position, duration, enabled, onPreview, className = 
     const request = ++revision.current
     try {
       const result = await host.musicControl('seek', { positionMs: target })
-      if (alive.current && request === revision.current) { setError(result.ok ? null : result.message ?? 'This song can’t move to another time.'); if (!result.ok) setDraft(null) }
+      if (alive.current && request === revision.current) { setError(result.ok ? null : errorText(result.message, 'This song can’t move to another time.')); if (!result.ok) setDraft(null) }
     } catch { if (alive.current && request === revision.current) { setDraft(null); setError('The player didn’t move the song. Try again.') } }
     if (alive.current && request === revision.current) timer.current = window.setTimeout(() => setDraft(null), 1200)
   }

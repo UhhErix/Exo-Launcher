@@ -482,6 +482,7 @@ public sealed partial class MainWindow : Window
         try { _notificationAreaIcon?.Dispose(); } catch { }
         try { _bridge?.Detach(); } catch { }
         AppLog.Info("Shutdown: bridge detached.");
+        try { Services.GameRunningSignal.Clear(); } catch { }
         try { Services.FpsCounter.Shutdown(); } catch { }
         // The hosted sessions close side
         // by side under one bounded wait.
@@ -1127,13 +1128,12 @@ public sealed partial class MainWindow : Window
         catch { }
     }
 
-    /// <summary>The window's own background in the page's color (Settings › General › Background), so a resize or the first frame never flashes another color.</summary>
+    /// <summary>The window's own background in the page's pure black, so a resize or the first frame never flashes another color.</summary>
     internal void ApplyAppearance()
     {
-        var (r, g, b) = SettingsService.BackgroundColor(App.Services.Settings.Current.Background);
-        var color = Windows.UI.Color.FromArgb(255, r, g, b);
-        var words = Windows.UI.Color.FromArgb(255, 0xff, 0xff, 0xff);
-        var secondary = Windows.UI.Color.FromArgb(255, 0xb8, 0xb8, 0xbc);
+        var color = Shell.Scene.Tokens.Bg;
+        var words = Shell.Scene.Tokens.Fg;
+        var secondary = Shell.Scene.Tokens.Muted;
         try
         {
             RootGrid.Background = new Microsoft.UI.Xaml.Media.SolidColorBrush(color);

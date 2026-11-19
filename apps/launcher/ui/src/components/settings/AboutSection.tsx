@@ -4,7 +4,7 @@ import { invalidateUpscalerStatus } from '../../lib/upscalerCache'
 import { WHATS_NEW } from '../../lib/whatsNew'
 import { updateWords } from '../shell/useAppUpdate'
 import { Progress, ProgressWords } from '../ui/Progress'
-import { Spinner } from '../ui/Spinner'
+import { ActionButton } from '../ui/ConfirmButton'
 import { Row, Section, State } from './parts'
 import { ReportProblem } from './ReportProblem'
 
@@ -29,23 +29,15 @@ export type UpdateProps = {
 }
 
 function UpdateRow({ version, updateBusy, updateError, updatePercent, updateStatus, updateAvailable, onCheckUpdate, onInstallUpdate }: UpdateProps & { version: string | null }) {
-  const [checking, setChecking] = useState(false)
   const [note, setNote] = useState<Note>(null)
 
+  // The button says how the check went (ActionButton: its ring, its check, or Bad with the reason under the row); the
+  // answer's words stay beside it.
   async function check() {
-    setChecking(true)
     setNote(null)
-    try {
-      const result = await onCheckUpdate()
-      setNote({
-        text: result.message || (result.updateAvailable ? `Version ${result.latest ?? ''} is available.` : "You're up to date."),
-        error: !result.ok,
-      })
-    } catch (error) {
-      setNote({ text: error instanceof Error ? error.message : 'Couldn’t check for updates. Try again.', error: true })
-    } finally {
-      setChecking(false)
-    }
+    const result = await onCheckUpdate()
+    if (result.ok) setNote({ text: result.message || (result.updateAvailable ? `Version ${result.latest ?? ''} is available.` : "You're up to date."), error: false })
+    return result
   }
 
   // A failed install comes back from the updater (updateError), never as a rejection.
@@ -70,10 +62,10 @@ function UpdateRow({ version, updateBusy, updateError, updatePercent, updateStat
           {updateAvailable ? (
             <button type="button" className="exo-set-btn is-primary" onClick={install}>Install update</button>
           ) : (
-            <button type="button" className="exo-set-btn" disabled={checking} onClick={() => void check()}>
-              {checking ? <Spinner label="Checking for updates" /> : null}
+            <ActionButton className="exo-set-btn" context="Settings.checkUpdate" fallback="Couldn’t check for updates. Try again."
+              why="none" onFailed={error => setNote({ text: error.text, error: true })} onPress={check}>
               Check for updates
-            </button>
+            </ActionButton>
           )}
         </>
       )}
@@ -82,32 +74,24 @@ function UpdateRow({ version, updateBusy, updateError, updatePercent, updateStat
 }
 
 function RebuildCachesRow() {
-  const [busy, setBusy] = useState(false)
-  const [note, setNote] = useState<Note>(null)
-  // Its button is disabled while it works, and a click's render lands before the next click can.
+  const [error, setError] = useState<string | null>(null)
+  // The button says it in itself (ActionButton): its ring while it clears, its check once cleared; a failure is Bad
+  // with the reason under the row.
   async function rebuild() {
-    setBusy(true)
-    setNote(null)
-    try {
-      for (const scope of ['sizes', 'upscalers'] as const) {
-        const result = await host.repairCache(scope)
-        if (!result.ok) throw Error(result.message || 'Caches could not be cleared. Try again.')
-        if (scope === 'upscalers') invalidateUpscalerStatus()
-      }
-      setNote({ text: 'Cleared', error: false })
-    } catch (error) {
-      setNote({ text: error instanceof Error ? error.message : 'Caches could not be cleared. Try again.', error: true })
-    } finally {
-      setBusy(false)
+    setError(null)
+    for (const scope of ['sizes', 'upscalers'] as const) {
+      const result = await host.repairCache(scope)
+      if (!result.ok) return result
+      if (scope === 'upscalers') invalidateUpscalerStatus()
     }
+    return { ok: true }
   }
   return (
-    <Row label="Clear caches" error={note?.error ? note.text : null}>
-      {note && !note.error ? <State>{note.text}</State> : null}
-      <button type="button" className="exo-set-btn" disabled={busy} onClick={() => void rebuild()}>
-        {busy ? <Spinner label="Clearing caches" /> : null}
+    <Row label="Clear caches" error={error}>
+      <ActionButton className="exo-set-btn" context="Settings.clearCaches" fallback="Caches could not be cleared. Try again."
+        why="none" onFailed={failure => setError(failure.text)} onPress={rebuild}>
         Clear
-      </button>
+      </ActionButton>
     </Row>
   )
 }

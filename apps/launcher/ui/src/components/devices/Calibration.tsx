@@ -1,11 +1,19 @@
 import { useEffect, useRef, useState } from 'react'
 import { host, type ControllerCalibration, type ControllerState, type StickRest } from '../../lib/host'
-import { report } from '../../lib/report'
 import { Row, State } from '../settings/parts'
-import { ConfirmButton } from '../ui/ConfirmButton'
+import { ActionButton, ConfirmButton } from '../ui/ConfirmButton'
+import type { PlainError } from '../../lib/errorWords'
 import { Dialog } from '../ui/Dialog'
 import { Spinner } from '../ui/Spinner'
 import { ErrorNote } from '../ui/ErrorNote'
+import { errorText } from '../../lib/errorWords'
+
+/** Keep, asked in place (the one write to a DualSense's permanent memory). */
+type Press = { onPress: () => Promise<unknown>; onFailed: (failure: PlainError) => void; onDone: () => void; why: 'none'; context: string; fallback: string }
+
+function KeepButton({ press: { onPress, ...rest } }: { press: Press }) {
+  return <ConfirmButton className="exo-set-btn" question="Keep? Leave the cable in" onConfirm={onPress} {...rest}>Keep</ConfirmButton>
+}
 
 /**
  * The sticks' calibration rows (DESIGN.md › Devices › controller): Calibrate opens the controller's own routine, and
@@ -22,37 +30,25 @@ export function CalibrationRows({ id, edge, usb, live, state, onChanged }: {
   onChanged: () => void
 }) {
   const [open, setOpen] = useState(false)
-  const [busy, setBusy] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
-  async function step(name: 'undo' | 'keep') {
-    setBusy(name)
-    setError(null)
-    try {
-      const result = await host.controllerCalibrate(id, name)
-      if (!result.ok) setError(result.message ?? 'The controller didn’t take it. Try again.')
-      onChanged()
-    } catch (cause) {
-      report(cause, 'Calibration.step')
-      setError('The controller didn’t take it. Try again.')
-    } finally {
-      setBusy(null)
-    }
-  }
+  // Undo and Keep show their own work (ActionButton): the ring, then the check, and then the rows read the controller again.
+  const step = (name: 'undo' | 'keep'): Press => ({
+    onPress: () => { setError(null); return host.controllerCalibrate(id, name) },
+    onFailed: (failure: PlainError) => { setError(failure.text); onChanged() },
+    onDone: onChanged, why: 'none', context: `Calibration.${name}`, fallback: 'The controller didn’t take it. Try again.',
+  })
   const calibrated = state?.calibrated === true
   return (
     <>
       <Row label="Calibration" error={error} detail={calibrationLine(usb, edge, state)}>
         {calibrated && state?.canUndo ? (
-          <button type="button" className="exo-set-btn" disabled={busy !== null} onClick={() => void step('undo')}>
-            {busy === 'undo' ? <Spinner label="Putting it back" /> : null}Undo
-          </button>
+          <ActionButton className="exo-set-btn" {...step('undo')}>Undo</ActionButton>
         ) : null}
-        <button type="button" className="exo-set-btn" disabled={!usb || busy !== null} onClick={() => setOpen(true)}>{calibrated ? 'Again' : 'Calibrate'}</button>
+        {usb ? <button type="button" className="exo-set-btn" onClick={() => setOpen(true)}>{calibrated ? 'Again' : 'Calibrate'}</button> : null}
       </Row>
       {calibrated && !edge && state && !state.kept ? (
         <Row label="Keep it after unplugging">
-          <ConfirmButton className="exo-set-btn" disabled={busy !== null} question="Keep? Leave the cable in" onConfirm={() => void step('keep')}
-            lead={busy === 'keep' ? <Spinner label="Keeping it" /> : null}>Keep</ConfirmButton>
+          <KeepButton press={step('keep')} />
         </Row>
       ) : null}
       {open ? <CalibrateDialog id={id} edge={edge} live={live} onClose={() => { setOpen(false); onChanged() }} /> : null}
@@ -60,7 +56,7 @@ export function CalibrationRows({ id, edge, usb, live, state, onChanged }: {
   )
 }
 
-/** Only what can't be seen otherwise: why Calibrate is off, or how long Exo's calibration lasts. */
+/** Only what can't be seen otherwise: why there's no Calibrate, or how long Exo's calibration lasts. */
 function calibrationLine(usb: boolean, edge: boolean, state: ControllerCalibration | undefined) {
   if (!usb) return 'Connect it with a cable to calibrate it'
   if (!state?.calibrated) return undefined
@@ -126,7 +122,7 @@ function CalibrateDialog({ id, edge, live, onClose }: { id: string; edge: boolea
       swept.current = { left: new Set(), right: new Set() }
       setPhase('range')
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : 'The calibration stopped. Try again.')
+      setError(errorText(cause, 'The calibration stopped. Try again.'))
       setPhase('intro')
     }
   }
@@ -137,7 +133,7 @@ function CalibrateDialog({ id, edge, live, onClose }: { id: string; edge: boolea
     try {
       const end = await host.controllerCalibrate(id, 'range-end')
       if (!end.ok) {
-        setError(end.message ?? 'The controller didn’t take it. Try again.')
+        setError(errorText(end.message, 'The controller didn’t take it. Try again.'))
         setPhase(end.more ? 'range' : 'intro')
         if (!end.more) inRange.current = false
         return
@@ -147,7 +143,7 @@ function CalibrateDialog({ id, edge, live, onClose }: { id: string; edge: boolea
       setAfter(await rest())
       setPhase('done')
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : 'The calibration stopped. Try again.')
+      setError(errorText(cause, 'The calibration stopped. Try again.'))
       setPhase('done')
     }
   }

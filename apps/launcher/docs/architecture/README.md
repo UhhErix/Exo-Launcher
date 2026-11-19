@@ -112,6 +112,7 @@ and historical decisions as well as current implementation notes; their own
 status and dates matter.
 
 - [Auto tune](auto-tune.md): CPU/GPU tuning research and decisions.
+- [System tuning](system-tuning.md): Best settings › System, each Windows setting's evidence, and what was left out.
 - [Capture editor](capture-editor.md): editor implementation review and candidate approaches.
 - [Chat rooms](chat-rooms.md): earlier Discord room design, with its replacement noted.
 - [Cinema art cache](cinema-art-cache.md): decision on caching art and metadata.

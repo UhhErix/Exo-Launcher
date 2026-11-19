@@ -40,7 +40,9 @@ internal static class SteamAppInfoNames
     private static IReadOnlyDictionary<string, Entry> _loaded =
         new Dictionary<string, Entry>(StringComparer.Ordinal);
 
-    public readonly record struct Entry(string Name, string Type, string ParentAppId = "");
+    /// <summary>An app's name, type and parent, and <see cref="Tags"/>: its genres and modes as the page words them
+    /// (<see cref="SteamAppTags"/>), comma-separated, so two entries still compare by value.</summary>
+    public readonly record struct Entry(string Name, string Type, string ParentAppId = "", string Tags = "");
 
     /// <summary>
     /// One of an app's <c>config/launch</c> entries, as Steam offers it in its Play menu. <see cref="Type"/> is Steam's word
@@ -100,6 +102,17 @@ internal static class SteamAppInfoNames
     /// <summary>The names, types and parents of every app Steam has a record of under <paramref name="steamRoot"/>.</summary>
     public static IReadOnlyDictionary<string, Entry> Load(string? steamRoot)
         => LoadAt(steamRoot, DateTime.UtcNow);
+
+    /// <summary>
+    /// An app's genres and modes from the catalog the last library scan read (<see cref="Load"/>), as the page words them;
+    /// none before a scan or for an app Steam has no record of. Reads only what is in memory.
+    /// </summary>
+    internal static string[] TagsOf(string appId)
+    {
+        IReadOnlyDictionary<string, Entry> loaded;
+        lock (Gate) loaded = _loaded;
+        return loaded.TryGetValue(appId, out var entry) ? SteamAppTags.Split(entry.Tags) : [];
+    }
 
     internal static IReadOnlyDictionary<string, Entry> LoadAt(string? steamRoot, DateTime nowUtc)
     {
@@ -190,39 +203,40 @@ internal static class SteamAppInfoNames
     /// <summary>Adds one file's names to <paramref name="result"/>; false when the file isn't whole.</summary>
     private static bool ParseInto(byte[] data, Dictionary<string, Entry> result)
     {
-        int commonIdx = -1, nameIdx = -1, typeIdx = -1, parentAppIdIdx = -1, parentIdx = -1;
+        var keys = new Keys();
         string[]? indexed = null;
         return EachRecord(data, (appId, start, end, table) =>
         {
             if (!ReferenceEquals(indexed, table))
             {
                 indexed = table;
-                commonIdx = IndexOf(table, "common");
-                nameIdx = IndexOf(table, "name");
-                typeIdx = IndexOf(table, "type");
-                // DLC, soundtracks, mod uploaders and bonus content name their base
-                // game in common/parent; a few older records use parentappid.
-                parentAppIdIdx = IndexOf(table, "parentappid");
-                parentIdx = IndexOf(table, "parent");
+                keys = new Keys
+                {
+                    Common = IndexOf(table, "common"),
+                    Name = IndexOf(table, "name"),
+                    Type = IndexOf(table, "type"),
+                    // DLC, soundtracks, mod uploaders and bonus content name their base
+                    // game in common/parent; a few older records use parentappid.
+                    ParentAppId = IndexOf(table, "parentappid"),
+                    Parent = IndexOf(table, "parent"),
+                    Genres = IndexOf(table, "genres"),
+                    Category = IndexOf(table, "category"),
+                };
             }
-            if (commonIdx < 0 || nameIdx < 0) return true;
+            if (keys.Common < 0 || keys.Name < 0) return true;
             var pos = start;
-            string? name = null;
-            string? type = null;
-            string? parentAppId = null;
-            WalkDict(
-                data, ref pos, end, table, commonIdx, nameIdx, typeIdx, parentAppIdIdx, parentIdx,
-                inCommon: false, ref name, ref type, ref parentAppId);
-            if (!string.IsNullOrWhiteSpace(name))
+            var found = new Found();
+            WalkDict(data, ref pos, end, table, keys, Section.Other, found);
+            if (!string.IsNullOrWhiteSpace(found.Name))
                 result[appId.ToString(System.Globalization.CultureInfo.InvariantCulture)] = new Entry(
-                    name.Trim(),
-                    type?.Trim() ?? "",
-                    parentAppId?.Trim() ?? "");
+                    found.Name.Trim(),
+                    found.Type?.Trim() ?? "",
+                    found.ParentAppId?.Trim() ?? "",
+                    SteamAppTags.Words(found.Genres, found.Categories));
             return true;
         });
     }
 
-    /// <summary>The file is appinfo of a layout Exo reads: the v41 file or a shard.</summary>
     internal static bool IsKnownFormat(byte[] data) =>
         data.Length >= 16 && BinaryPrimitives.ReadUInt32LittleEndian(data) is MagicV41 or MagicShard;
 
@@ -490,21 +504,24 @@ internal static class SteamAppInfoNames
         }
     }
 
-    private static void WalkDict(
-        byte[] data,
-        ref int pos,
-        int end,
-        string[] table,
-        int commonIdx,
-        int nameIdx,
-        int typeIdx,
-        int parentAppIdIdx,
-        int parentIdx,
-        bool inCommon,
-        ref string? name,
-        ref string? type,
-        ref string? parentAppId)
+    /// <summary>The key table's indexes of the keys a name read looks for (-1: not in this file).</summary>
+    private sealed class Keys
     {
+        public int Common = -1, Name = -1, Type = -1, ParentAppId = -1, Parent = -1, Genres = -1, Category = -1;
+    }
+
+    /// <summary>What one record's <c>common</c> says: its name, type and parent, and its Steam genre and category ids.</summary>
+    private sealed class Found
+    {
+        public string? Name, Type, ParentAppId;
+        public List<int>? Genres, Categories;
+    }
+
+    private enum Section { Other, Common, Genres, Category }
+
+    private static void WalkDict(byte[] data, ref int pos, int end, string[] table, Keys keys, Section section, Found found)
+    {
+        var inCommon = section == Section.Common;
         while (pos < end)
         {
             var kind = data[pos++];
@@ -514,22 +531,28 @@ internal static class SteamAppInfoNames
             switch (kind)
             {
                 case 0:
-                    WalkDict(
-                        data, ref pos, end, table, commonIdx, nameIdx, typeIdx, parentAppIdIdx, parentIdx,
-                        inCommon: key == commonIdx, ref name, ref type, ref parentAppId);
+                    var inner = key == keys.Common ? Section.Common
+                        : inCommon && key == keys.Genres ? Section.Genres
+                        : inCommon && key == keys.Category ? Section.Category
+                        : Section.Other;
+                    WalkDict(data, ref pos, end, table, keys, inner, found);
                     break;
                 case 1:
                     var value = ReadCString(data, ref pos, end);
+                    if (section == Section.Genres) AddId(ref found.Genres, value);
+                    else if (section == Section.Category && value.Trim() != "0") AddCategory(found, table, key);
                     if (!inCommon) break;
-                    if (key == nameIdx && name is null) name = value;
-                    else if (key == typeIdx && type is null) type = value;
-                    else if (IsParentKey(key, parentAppIdIdx, parentIdx) && parentAppId is null && !string.IsNullOrWhiteSpace(value) && value.Trim() != "0")
-                        parentAppId = value.Trim();
+                    if (key == keys.Name && found.Name is null) found.Name = value;
+                    else if (key == keys.Type && found.Type is null) found.Type = value;
+                    else if (IsParentKey(key, keys.ParentAppId, keys.Parent) && found.ParentAppId is null && !string.IsNullOrWhiteSpace(value) && value.Trim() != "0")
+                        found.ParentAppId = value.Trim();
                     break;
                 case 2:
                     var number = ReadU32(data, ref pos, end);
-                    if (inCommon && IsParentKey(key, parentAppIdIdx, parentIdx) && parentAppId is null && number != 0)
-                        parentAppId = number.ToString();
+                    if (section == Section.Genres) (found.Genres ??= []).Add((int)number);
+                    else if (section == Section.Category && number != 0) AddCategory(found, table, key);
+                    if (inCommon && IsParentKey(key, keys.ParentAppId, keys.Parent) && found.ParentAppId is null && number != 0)
+                        found.ParentAppId = number.ToString();
                     break;
                 case 3:
                 case 4:
@@ -547,6 +570,19 @@ internal static class SteamAppInfoNames
                     return;
             }
         }
+    }
+
+    private static void AddId(ref List<int>? into, string value)
+    {
+        if (int.TryParse(value, System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var id))
+            (into ??= []).Add(id);
+    }
+
+    /// <summary>A category is its key ("category_9"), set to 1.</summary>
+    private static void AddCategory(Found found, string[] table, int key)
+    {
+        if (key >= 0 && key < table.Length && table[key].StartsWith("category_", StringComparison.Ordinal))
+            AddId(ref found.Categories, table[key]["category_".Length..]);
     }
 
     private static bool IsParentKey(int key, int parentAppIdIdx, int parentIdx) =>

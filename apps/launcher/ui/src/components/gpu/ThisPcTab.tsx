@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
 import { host, type PcHealth, type PcHealthItem } from '../../lib/host'
 import { report } from '../../lib/report'
-import { trimStop } from '../../lib/utils'
+import type { PlainError } from '../../lib/errorWords'
+import { ActionButton } from '../ui/ConfirmButton'
 import { Row } from '../settings/parts'
 import { Spinner } from '../ui/Spinner'
 
@@ -28,7 +29,6 @@ export function SetupRows({ place, active, health, onHealth }: {
   health: PcHealth | null
   onHealth: (next: PcHealth) => void
 }) {
-  const [busy, setBusy] = useState<HealthAction | null>(null)
   const [error, setError] = useState<{ key: PcHealthItem['key']; text: string } | null>(null)
 
   const installing = place === 'drivers' && health?.items.some(item => item.busy) === true
@@ -41,20 +41,16 @@ export function SetupRows({ place, active, health, onHealth }: {
     return () => window.clearInterval(timer)
   }, [active, installing, onHealth])
 
+  // The pressed button shows the work (ActionButton); the rows take the answer after its check, or at once on a refusal.
   const act = async (action: HealthAction) => {
-    if (busy) return
-    setBusy(action)
     setError(null)
-    try {
-      const next = await host.systemHealth(action)
-      onHealth(next)
-      if (!next.ok) setError({ key: ROW[action], text: trimStop(next.message) || 'Not changed. Try again.' })
-    } catch (e) {
-      report(e, `SetupRows.${action}`)
-      setError({ key: ROW[action], text: 'Not changed. Try again.' })
-    }
-    setBusy(null)
+    const next = await host.systemHealth(action)
+    if (!next.ok) onHealth(next)
+    return next
   }
+  const press = (action: HealthAction): Press => ({
+    onPress: () => act(action), onDone: next => onHealth(next as PcHealth), onFailed: failure => setError({ key: ROW[action], text: failure.text }),
+  })
 
   if (!health) return null
   const items = health.items.filter(item => !NETWORK.includes(item.key) && (item.key === 'chipset') === (place === 'drivers') && (
@@ -65,34 +61,29 @@ export function SetupRows({ place, active, health, onHealth }: {
     <>
       {items.map(item => (
         <Row key={item.key} label={item.label} detail={item.key === 'chipset' && !item.busy && !item.applied ? undefined : item.detail} error={error?.key === item.key ? error.text : null}>
-          <Action item={item} busy={busy} onAct={action => void act(action)} />
+          <Action item={item} press={press} />
         </Row>
       ))}
     </>
   )
 }
 
-/** What each action is doing while it runs, for its ring. */
-const WORKING: Record<HealthAction, string> = {
-  chipset: 'Updating the chipset driver',
-  gpusched: 'Opening Settings', gpupref: 'Setting games to the fast card', 'gpupref-undo': 'Putting the graphics card choice back',
-}
+type Press = { onPress: () => Promise<unknown>; onDone: (next: unknown) => void; onFailed: (failure: PlainError) => void }
 
 /**
  * What a row's button does: update the chipset driver (its maker's page after a
- * failed install), open Windows' Graphics settings. RAM and Resizable BAR are set in the BIOS. The one pressed keeps its words
- * and carries the ring while it works; the chipset's Update carries it for as long as the install runs.
+ * failed install), open Windows' Graphics settings. RAM and Resizable BAR are set in the BIOS. The one pressed shows its
+ * own work (ActionButton: the ring, then its check, or Bad with the reason under the row); the chipset's Update carries
+ * the ring for as long as the install runs.
  */
-function Action({ item, busy, onAct }: { item: PcHealthItem; busy: HealthAction | null; onAct: (action: HealthAction) => void }) {
-  const button = (action: HealthAction, words: string, primary = false, working = busy === action) => (
-    <button type="button" className={`exo-set-btn${primary ? ' is-primary' : ''}`} disabled={!!busy || working} aria-busy={working}
-      onClick={() => onAct(action)}>
-      {working ? <Spinner label={WORKING[action]} /> : null}{words}
-    </button>
+function Action({ item, press }: { item: PcHealthItem; press: (action: HealthAction) => Press }) {
+  const button = (action: HealthAction, words: string, primary = false) => (
+    <ActionButton className={`exo-set-btn${primary ? ' is-primary' : ''}`} why="none" timeoutMs={null} context={`SetupRows.${action}`}
+      fallback="Not changed. Try again." {...press(action)}>{words}</ActionButton>
   )
   if (item.key === 'chipset') {
     if (item.held || item.current) return null
-    if (item.busy) return button('chipset', 'Update', false, true)
+    if (item.busy) return <button type="button" className="exo-set-btn" disabled aria-busy><Spinner label="Updating the chipset driver" />Update</button>
     if (item.url) {
       const url = item.url
       return <button type="button" className="exo-set-btn" onClick={() => void host.openUrl(url)}>Update</button>

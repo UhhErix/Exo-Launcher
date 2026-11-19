@@ -2,6 +2,7 @@ import { createContext, useCallback, useEffect, useState } from 'react'
 import type { DiscordFriend, DiscordPresence } from './discord'
 import { host, onHostEvent, type Game } from './host'
 import { onPageActivityChanged, pageIsVisible } from './pageActivity'
+import { findLibraryGameByTitle } from './library'
 
 /**
  * The Library as Home sees it: the games, the one starting, and Play or Install (the Library's own
@@ -57,4 +58,17 @@ export function useFriends(): { friends: DiscordFriend[]; loaded: boolean; reloa
     return () => { window.clearTimeout(timer); window.clearTimeout(flush); offActivity(); offChanged(); offPresence() }
   }, [reload])
   return { friends, loaded, reload }
+}
+
+/** The library games a friend is playing now, by the activity's name as Discord gives it (Playing or Competing). */
+export function gamesFriendsPlay(friends: DiscordFriend[], games: Game[]): Set<string> {
+  const ids = new Set<string>()
+  for (const friend of friends) {
+    if (friend.kind !== 'friend' || friend.status === 'offline') continue
+    const type = friend.rich?.type ?? friend.activityType
+    if (type !== 0 && type !== 5) continue
+    const game = findLibraryGameByTitle(games, friend.rich?.name ?? friend.activity ?? '')
+    if (game) ids.add(game.id)
+  }
+  return ids
 }

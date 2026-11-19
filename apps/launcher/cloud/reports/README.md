@@ -1,6 +1,6 @@
 # Exo's crash reports (`cloud/reports`)
 
-A Worker that takes crash and freeze reports from Exo Launcher, Cinema and Browser, stores them in R2 and files them as issues in the private GitHub repository UhhErix/Exo-Reports, takes Report a problem messages from the Launcher the same way, and runs the help page's contact form. Exo Launcher sends crash reports from every install from 3.26.0 (the owner's decision, 2026-11-09: essential, no switch; 3.24.4 and 3.25.0 asked first, and Cinema and Browser still do until they follow). Each app sends only the five fields below, stripped of anything personal, at most a few a day and the same error once. It runs on this PC with `npx wrangler@4.158.0 dev`; deployed at `reports.getexo.app` since November 5, 2026 (the owner's OK), redeployed 7 November 2026 with the contact endpoint (version `5dc2d4e3-4a6d-43c1-8f1a-dc2c27aceee0`).
+A Worker that takes crash and freeze reports from Exo Launcher, Cinema and Browser, stores them in R2 and files them as issues in the private GitHub repository UhhErix/Exo-Reports, takes Report a problem messages from the Launcher the same way, and runs the help page's contact form. Exo Launcher sends crash reports from every install from 3.26.0 (the owner's decision, 2026-11-09: essential, no switch; 3.24.4 and 3.25.0 asked first, and Cinema and Browser still do until they follow). Each app sends only the five fields below, stripped of anything personal, at most a few a day and the same error once. It runs on this PC with `npx wrangler@4.165.0 dev`; deployed at `reports.getexo.app` since November 5, 2026 (the owner's OK), redeployed 7 November 2026 with the contact endpoint (version `5dc2d4e3-4a6d-43c1-8f1a-dc2c27aceee0`).
 
 ## What it takes
 
@@ -53,8 +53,8 @@ Reports expire 30 days after they are stored. R2 lifecycle rules are set on the 
 bucket, after it exists (done for both):
 
 ```
-npx wrangler@4.158.0 r2 bucket lifecycle add exo-crash-reports reports-30-days reports/ --expire-days 30
-npx wrangler@4.158.0 r2 bucket lifecycle add exo-crash-reports-dev reports-30-days reports/ --expire-days 30
+npx wrangler@4.165.0 r2 bucket lifecycle add exo-crash-reports reports-30-days reports/ --expire-days 30
+npx wrangler@4.165.0 r2 bucket lifecycle add exo-crash-reports-dev reports-30-days reports/ --expire-days 30
 ```
 
 `wrangler r2 bucket lifecycle add --help` lists the flags. Check the rule with `wrangler r2 bucket lifecycle list`.
@@ -105,8 +105,8 @@ the deploy and the token.
   waiting for GitHub, and prints the newest sample of the top ones, through wrangler's own login. Read only.
 
 The token: a fine-grained personal access token limited to UhhErix/Exo-Reports with Issues read and write (nothing else),
-set with `npx wrangler@4.158.0 secret put GITHUB_REPORTS_TOKEN` from this folder (it asks for the value; nothing is
-written to disk). Apply 0006 before deploying this code (`npx wrangler@4.158.0 d1 migrations apply exo-telemetry
+set with `npx wrangler@4.165.0 secret put GITHUB_REPORTS_TOKEN` from this folder (it asks for the value; nothing is
+written to disk). Apply 0006 before deploying this code (`npx wrangler@4.165.0 d1 migrations apply exo-telemetry
 --remote`); it keeps 0005's `alert_days`, which the alerts before the token still use.
 
 What the Launcher sends on its own, with no Copy logs (`ExoLauncher/Helpers/CrashReport.cs`, `FailureReportRules.cs`): a
@@ -200,7 +200,7 @@ the daily job), the daily caps, and Report a problem's issue, refusals and Delet
    the account, change it in `wrangler.toml`.
 3. `reports.getexo.app` is a custom domain on the `getexo.app` zone: its DNS record is created on deploy. The updates
    address (`updates.getexo.app`) and the account service use the same zone.
-4. Deploy with `npx wrangler@4.158.0 deploy` from this folder (the dev copy with `--env dev`), after the owner's OK.
+4. Deploy with `npx wrangler@4.165.0 deploy` from this folder (the dev copy with `--env dev`), after the owner's OK.
 5. Then `PRIVACY.md` and `NetworkDestinations.cs` already name `reports.getexo.app`; a host change must update both.
 
 Cost on the paid Workers plan: one Worker request and one R2 write per report that passes, a few D1 rows, and GitHub calls

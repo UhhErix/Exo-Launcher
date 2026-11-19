@@ -111,7 +111,7 @@ Or under Cloudflare's own runtime (workerd), still only on this PC, with Wrangle
 
 ```bash
 cd cloud/mailbox
-npx wrangler@4.158.0 dev --port 8787 --ip 127.0.0.1
+npx wrangler@4.165.0 dev --port 8787 --ip 127.0.0.1
 ```
 
 ## Tests
@@ -130,7 +130,7 @@ while even though the WebSocket close is done; that's why the PC left behind is 
 
 ## Deploy (only with the owner's OK)
 
-1. From this folder, with Wrangler signed in to Exo's Cloudflare account: `npx wrangler@4.158.0 deploy`. The first
+1. From this folder, with Wrangler signed in to Exo's Cloudflare account: `npx wrangler@4.165.0 deploy`. The first
    deploy creates the `Box` and `Link` classes (`[[migrations]]`) and the `LINK_GUESSES` limiter.
 2. Check it answers 426 to a plain request: `curl -i https://exo-mailbox.<subdomain>.workers.dev/v1/link`.
 3. Add the host to `ExoLauncher/NetworkDestinations.cs` with its PRIVACY.md row, before any app

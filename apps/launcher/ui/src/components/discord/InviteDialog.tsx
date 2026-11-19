@@ -10,6 +10,7 @@ import { Avatar } from './presence'
 import { Popover } from '../ui/Dialog'
 import { EXPIRES, USES } from './settingsModeration'
 import { ErrorNote } from '../ui/ErrorNote'
+import { errorText } from '../../lib/errorWords'
 
 type Link = { maxAge: number; maxUses: number; temporary: boolean }
 const FIRST: Link = { maxAge: 604800, maxUses: 0, temporary: false }
@@ -34,7 +35,7 @@ export function InviteDialog({ name, channelId, channelName, onClose }: { name: 
   const [copied, sayCopied] = useSaid()
   const [editing, setEditing] = useState(false)
   const make = (next: Link) => host.discordInvite(channelId, next).then(result => {
-    if (!result.url) return result.message ?? "Discord didn't make an invite. Try again."
+    if (!result.url) return errorText(result.message, "Discord didn't make an invite. Try again.")
     setUrl(result.url); setLink(next)
     return null
   }, () => "Discord didn't make an invite. Try again.")

@@ -305,8 +305,9 @@ function AllCurrent() {
   return (
     <div className="exo-upscalers-clear">
       <svg className="exo-upscalers-clear-mark" viewBox="0 0 24 24" aria-hidden="true">
-        <circle cx="12" cy="12" r="9" pathLength="1" />
-        <path d="M8.25 12.75L10.5 15L15.75 9.75" pathLength="1" />
+        {/* Lucide's circle-check, its check run from the short arm to draw in. */}
+        <circle cx="12" cy="12" r="10" pathLength="1" />
+        <path d="M8 12L10.5 14.5L16 9" pathLength="1" />
       </svg>
       <p className="exo-upscalers-clear-title">Up to date</p>
     </div>

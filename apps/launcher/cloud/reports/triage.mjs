@@ -15,7 +15,7 @@ import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
-const WRANGLER = 'wrangler@4.158.0'
+const WRANGLER = 'wrangler@4.165.0'
 const arg = (name, fallback) => { const at = process.argv.indexOf('--' + name); return at > -1 ? process.argv[at + 1] : fallback }
 const days = Math.max(1, Math.min(90, Number(arg('days', 2)) || 2))
 const app = arg('app', null)

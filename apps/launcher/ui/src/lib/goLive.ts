@@ -2,6 +2,7 @@ import { useSyncExternalStore } from 'react'
 import { host, onHostEvent, type GoLiveSource } from './host'
 import { report } from './report'
 import { discordPrefs } from './discordPrefs'
+import { errorText } from './errorWords'
 
 /**
  * This client's own video to Discord (docs/architecture/discord-video.md).
@@ -74,7 +75,7 @@ class Camera {
     const answer = await host.discordCamera('start', { width, height, fps: 30 }).catch(() => null)
     // Turned off while Discord was asked: stop() already let the track go; the host's camera goes too.
     if (!current()) { if (answer?.ok) void host.discordCamera('stop').catch(() => { }); return null }
-    if (!answer?.ok) { await this.stop(); return answer?.message ?? 'Discord didn\'t start the video. Try again.' }
+    if (!answer?.ok) { await this.stop(); return errorText(answer?.message, 'Discord didn\'t start the video. Try again.') }
     this.set('live')
     const why = await this.encode(width, height, current)
     if (!why && current()) void this.pump(track)
@@ -219,7 +220,7 @@ function listenHost() {
 /** What can be shared now: screens, then windows front to back, with their pictures. */
 export async function goLiveSources(): Promise<{ sources: GoLiveSource[]; message: string | null }> {
   const answer = await host.discordGoLive('sources').catch(() => null)
-  return { sources: answer?.sources ?? [], message: answer?.ok ? null : answer?.message ?? 'Exo couldn\'t list your windows. Try again.' }
+  return { sources: answer?.sources ?? [], message: answer?.ok ? null : errorText(answer?.message, 'Exo couldn\'t list your windows. Try again.') }
 }
 
 /** A fresh picture of a source, or of the stream while live (no source), as a data URL. */
@@ -235,7 +236,7 @@ export async function startGoLive(choice: GoLiveChoice): Promise<string | null> 
   const answer = await host.discordGoLive('start', choice).catch(() => null)
   if (answer?.ok) return null
   setGoLive({ state: 'off' })
-  return answer?.message ?? 'Discord didn\'t start the stream. Try again.'
+  return errorText(answer?.message, 'Discord didn\'t start the stream. Try again.')
 }
 
 /** Why the stream ended, read and put away. */
