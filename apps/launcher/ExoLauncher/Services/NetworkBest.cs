@@ -72,8 +72,13 @@ internal sealed partial class NetworkBest(NetworkTune tune, NetworkBest.ISystem 
         IReadOnlySet<string> Registered();
         /// <summary>Windows' TCP settings, or null when they can't be read.</summary>
         Tcp? Tcp();
-        /// <summary>Runs the script as administrator, Windows asking once: its exit code, or the line to show when it didn't run.</summary>
+        /// <summary>Runs the script as administrator, Windows asking once: its exit code (<see cref="Unfinished"/> when it was still running at the end of the wait), or the line to show when it didn't run.</summary>
         (int? Code, string? Problem) Elevated(string script);
+        /// <summary>
+        /// An elevated script that outlived its wait is still running: no other change starts until it ends, so it can't
+        /// change Windows under a record another press just wrote.
+        /// </summary>
+        bool StillRunning();
         /// <summary>A DNS lookup answers now.</summary>
         bool Online();
         Sample Measure();
@@ -123,9 +128,35 @@ internal sealed partial class NetworkBest(NetworkTune tune, NetworkBest.ISystem 
 
     /// <summary>
     /// Sets the items in <paramref name="only"/> (a switch turned on: it's taken out of Off), or with null every item the
-    /// player keeps on that isn't set yet (Use best settings), in one elevated script. Null when all went; else what didn't, plainly.
+    /// player keeps on that isn't set yet (Use best settings), in one elevated script. Null when all went; else what didn't,
+    /// plainly. One change at a time: a second press while one runs is told so, so neither writes over the other's record.
     /// </summary>
     internal string? Apply(IReadOnlyCollection<string>? only = null)
+    {
+        if (!Monitor.TryEnter(_gate)) return Busy;
+        try { return Logged(system.StillRunning() ? Busy : ApplyNow(only)); }
+        finally { Monitor.Exit(_gate); }
+    }
+
+    /// <summary>Turns one item off: puts back what Exo recorded for it and keeps it out of Best settings until it's on again.</summary>
+    internal string? TurnOff(string key)
+    {
+        if (!Monitor.TryEnter(_gate)) return Busy;
+        try { return Logged(system.StillRunning() ? Busy : TurnOffNow(key)); }
+        finally { Monitor.Exit(_gate); }
+    }
+
+    /// <summary>What the player is told reaches app.log too.</summary>
+    private static string? Logged(string? said)
+    {
+        if (said is not null) AppLog.Warn("Network best settings: " + said);
+        return said;
+    }
+
+    private readonly object _gate = new();
+    internal const string Busy = "Exo is still changing your network settings. Try again when it's done.";
+
+    private string? ApplyNow(IReadOnlyCollection<string>? only)
     {
         var saved = Load() ?? new Saved(now(), [], [], [], null);
         if (only is not null && only.Any(k => !Keys.Contains(k))) return "Exo doesn't know that setting.";
@@ -139,6 +170,9 @@ internal sealed partial class NetworkBest(NetworkTune tune, NetworkBest.ISystem 
         if (wanted.Count == 0) return null;
         if (!system.Online()) return "You're offline, so Exo couldn't check the change. Connect, then try again.";
 
+        // The record as it was before this press: what goes back when the press is declined or an item is put back, so a
+        // record an earlier press made (the user's own DNS) is never lost to a retry.
+        var prior = saved;
         var before = system.Measure();
         var script = new StringBuilder(Prelude);
         var said = new List<string>();
@@ -167,6 +201,7 @@ internal sealed partial class NetworkBest(NetworkTune tune, NetworkBest.ISystem 
 
         // Cloudflare DNS: each adapter's DNS recorded before anything changes (a record Exo made before keeps the user's).
         var dnsAdapters = new List<CloudflareDns.Adapter>();
+        var snapshots = new Dictionary<string, CloudflareDns.Entry>(StringComparer.OrdinalIgnoreCase);
         var registered = new List<string>();
         if (wanted.Contains(DnsKey))
         {
@@ -174,10 +209,11 @@ internal sealed partial class NetworkBest(NetworkTune tune, NetworkBest.ISystem 
             var known = system.Registered();
             var v6 = dnsAdapters.Any(a => a.Nic.Ipv6);
             registered = CloudflareDns.V4.Concat(v6 ? CloudflareDns.V6 : []).Where(a => !known.Contains(a)).ToList();
+            foreach (var a in dnsAdapters) snapshots[a.Nic.Guid] = CloudflareDns.Snapshot(a);
             var entries = saved.Dns.Where(e => dnsAdapters.All(a => a.Nic.Guid != e.Guid)).ToList();
-            entries.AddRange(dnsAdapters.Select(a => saved.Dns.Find(e => e.Guid == a.Nic.Guid) ?? CloudflareDns.Snapshot(a)));
+            entries.AddRange(dnsAdapters.Select(a => saved.Dns.Find(e => e.Guid == a.Nic.Guid) ?? snapshots[a.Nic.Guid]));
             var set = dnsAdapters.Select(CloudflareDns.Apply).ToList();
-            var back = dnsAdapters.Select(a => CloudflareDns.Revert(CloudflareDns.Snapshot(a))).ToList();
+            var back = dnsAdapters.Select(a => CloudflareDns.Revert(snapshots[a.Nic.Guid])).ToList();
             if (set.Any(s => s is null) || back.Any(s => s is null) || CloudflareDns.Register(registered) is not { } add)
             {
                 dnsAdapters = [];
@@ -209,11 +245,17 @@ internal sealed partial class NetworkBest(NetworkTune tune, NetworkBest.ISystem 
         script.Append($"exit ({Ran} + $r)\n");
 
         var (code, refused) = system.Elevated(script.ToString());
+        if (code == Unfinished)
+        {
+            // Still running past the wait: Windows may have changed some of it already, so every record stays for Off.
+            AppLog.Warn("Network best settings: the elevated step didn't finish in time; records kept.");
+            return "The change didn't finish in time. Exo kept what it needs to put it back: turn a switch off to undo it.";
+        }
         if (code is not { } exit || exit < Ran || exit >= Ran * 2)
         {
-            // Declined, or it didn't finish: what was recorded goes back to before this press.
+            // Declined, or it stopped before it ran: nothing changed, so the record goes back to before this press.
             if (staged is not null) tune.PutBack(staged);
-            Save(Without(saved, dnsAdapters, registered, tcpBefore));
+            Save(prior);
             return refused ?? "The change didn't finish.";
         }
 
@@ -230,15 +272,21 @@ internal sealed partial class NetworkBest(NetworkTune tune, NetworkBest.ISystem 
         {
             if ((exit & PutBackBit[DnsKey]) != 0)
             {
-                saved = Without(saved, dnsAdapters, registered, null);
+                saved = saved with { Dns = prior.Dns, Registered = prior.Registered };
                 said.Add("DNS lookups stopped answering with Cloudflare, so Exo put your DNS back.");
             }
             else
             {
                 var after = InUse().Where(a => dnsAdapters.Any(d => d.Nic.Guid == a.Nic.Guid)).ToList();
-                if (after.All(a => !CloudflareDns.IsOn(a) && !CloudflareDns.ServersOnly(a)))
+                // An adapter Windows left exactly as it was keeps the record from before this press; one with any change
+                // (one family taken, keys written) keeps the record that puts it back.
+                var unchanged = after.Where(a => CloudflareDns.Same(CloudflareDns.Snapshot(a), snapshots[a.Nic.Guid]))
+                    .Select(a => a.Nic.Guid).ToHashSet(StringComparer.OrdinalIgnoreCase);
+                if (unchanged.Count > 0)
+                    saved = saved with { Dns = [.. saved.Dns.Where(e => !unchanged.Contains(e.Guid)), .. prior.Dns.Where(e => unchanged.Contains(e.Guid))] };
+                if (unchanged.Count == after.Count)
                 {
-                    saved = Without(saved, dnsAdapters, registered, null);
+                    saved = saved with { Registered = prior.Registered };
                     said.Add("Windows didn't take Cloudflare's DNS.");
                 }
                 else said.AddRange(DnsMissed(after));
@@ -246,12 +294,17 @@ internal sealed partial class NetworkBest(NetworkTune tune, NetworkBest.ISystem 
         }
         if (tcpBefore is not null)
         {
+            var tcpNow = system.Tcp();
             if ((exit & PutBackBit[TcpKey]) != 0)
             {
-                saved = Without(saved, [], [], tcpBefore);
+                saved = saved with { Tcp = prior.Tcp };
                 said.Add("Windows' TCP defaults cut the connection, so Exo put the old ones back.");
             }
-            else if (system.Tcp() is not { } tcpNow || TcpOff(tcpNow) is not null) said.Add("Windows didn't take its TCP defaults.");
+            else if (tcpNow is null || TcpOff(tcpNow) is not null)
+            {
+                if (tcpNow == tcpBefore) saved = saved with { Tcp = prior.Tcp };
+                said.Add("Windows didn't take its TCP defaults.");
+            }
         }
         Save(saved);
         var afterSample = system.Measure();
@@ -266,8 +319,7 @@ internal sealed partial class NetworkBest(NetworkTune tune, NetworkBest.ISystem 
             ? $"Encryption didn't turn on for {a.Nic.Name}, so its lookups go to Cloudflare unencrypted."
             : $"{a.Nic.Name} didn't take Cloudflare's DNS.");
 
-    /// <summary>Turns one item off: puts back what Exo recorded for it and keeps it out of Best settings until it's on again.</summary>
-    internal string? TurnOff(string key)
+    private string? TurnOffNow(string key)
     {
         if (!Keys.Contains(key)) return "Exo doesn't know that setting.";
         var saved = Load() ?? new Saved(now(), [], [], [], null);
@@ -279,13 +331,38 @@ internal sealed partial class NetworkBest(NetworkTune tune, NetworkBest.ISystem 
                 break;
             case DnsKey when saved.Dns.Count > 0:
             {
-                var lines = saved.Dns.Select(CloudflareDns.Revert).ToList();
+                // Each record by its adapter's GUID, at the interface number it has now (a reinstalled adapter gets a new
+                // one); a record whose adapter isn't here waits for it.
+                var adapters = system.Adapters();
+                var here = saved.Dns.Select(e => Find(adapters, e.Guid) is { } a ? e with { Index = a.Nic.Index } : null).OfType<CloudflareDns.Entry>().ToList();
+                var away = saved.Dns.Where(e => Find(adapters, e.Guid) is null).ToList();
+                var lines = here.Select(CloudflareDns.Revert).ToList();
                 if (lines.Any(l => l is null)) return "Exo's record of your DNS couldn't be read, so nothing changed.";
-                var script = new StringBuilder(Prelude);
-                foreach (var line in lines.SelectMany(l => l!).Concat(CloudflareDns.Unregister(saved.Registered))) script.Append(line).Append('\n');
-                script.Append($"Clear-DnsClientCache\nexit {Ran}\n");
-                problem = Run(script.ToString());
-                if (problem is null) saved = saved with { Dns = [], Registered = [] };
+                if (here.Count > 0)
+                {
+                    var script = new StringBuilder(Prelude);
+                    var unregister = away.Count == 0 ? CloudflareDns.Unregister(saved.Registered) : [];
+                    foreach (var line in lines.SelectMany(l => l!).Concat(unregister)) script.Append(line).Append('\n');
+                    script.Append($"Clear-DnsClientCache\nexit {Ran}\n");
+                    if (Run(script.ToString()) is { } refused) return refused;
+                }
+                // A record stays until Windows shows its adapter as recorded, so a restore that didn't take can be tried again.
+                var now = system.Adapters();
+                var notBack = here.Where(e => !Restored(e, now)).ToList();
+                var kept = saved.Dns.Where(e => away.Contains(e) || notBack.Any(n => n.Guid == e.Guid)).ToList();
+                saved = saved with { Dns = kept, Registered = kept.Count == 0 ? [] : saved.Registered };
+                if (notBack.Count > 0)
+                {
+                    Save(saved);
+                    return $"Windows didn't put back the DNS of {string.Join(" and ", notBack.Select(e => e.Name))}. Try again.";
+                }
+                if (away.Count > 0)
+                {
+                    // The player's Off holds for what was put back; the adapter that's away keeps its record.
+                    if (!saved.Off.Contains(key)) saved = saved with { Off = [.. saved.Off, key] };
+                    Save(saved);
+                    return $"{string.Join(" and ", away.Select(e => e.Name))} isn't connected: its DNS is put back when you turn this off again with it connected.";
+                }
                 break;
             }
             case DnsKey:
@@ -297,6 +374,7 @@ internal sealed partial class NetworkBest(NetworkTune tune, NetworkBest.ISystem 
                 foreach (var line in TcpLines(tcp)) script.Append(line).Append('\n');
                 script.Append($"exit {Ran}\n");
                 problem = Run(script.ToString());
+                if (problem is null && system.Tcp() != tcp) problem = "Windows didn't put back its old TCP settings. Try again.";
                 if (problem is null) saved = saved with { Tcp = null };
                 break;
             }
@@ -306,22 +384,24 @@ internal sealed partial class NetworkBest(NetworkTune tune, NetworkBest.ISystem 
         return Save(saved) ? null : "Exo couldn't save your choice.";
     }
 
+    private static CloudflareDns.Adapter? Find(IReadOnlyList<CloudflareDns.Adapter> adapters, string guid) =>
+        adapters.FirstOrDefault(a => a.Nic.Guid.Equals(guid, StringComparison.OrdinalIgnoreCase));
+
+    /// <summary>The adapter shows what it was recorded with: its servers per family (DHCP as DHCP) and Cloudflare's DoH keys as they were.</summary>
+    internal static bool Restored(CloudflareDns.Entry e, IReadOnlyList<CloudflareDns.Adapter> adapters) =>
+        Find(adapters, e.Guid) is { } a && CloudflareDns.Same(CloudflareDns.Snapshot(a) with { Index = e.Index, Name = e.Name, Ipv6 = e.Ipv6 }, e);
+
     /// <summary>Measures now, for the group's check line (no press).</summary>
     internal Check Measure() => LastCheck = new Check(null, system.Measure(), "");
 
     private string? Run(string script)
     {
         var (code, problem) = system.Elevated(script);
-        return code == Ran ? null : problem ?? "The change didn't finish.";
+        return code == Ran ? null : code == Unfinished ? "The change didn't finish in time. Try again." : problem ?? "The change didn't finish.";
     }
 
-    /// <summary>The record without what this press added: the adapters it set, the registrations it added, the TCP settings it saved.</summary>
-    private static Saved Without(Saved saved, IReadOnlyList<CloudflareDns.Adapter> adapters, IReadOnlyList<string> registered, Tcp? tcp) => saved with
-    {
-        Dns = [.. saved.Dns.Where(e => adapters.All(a => a.Nic.Guid != e.Guid))],
-        Registered = [.. saved.Registered.Except(registered)],
-        Tcp = tcp is null ? saved.Tcp : null,
-    };
+    /// <summary>The exit code <see cref="ISystem.Elevated"/> gives when the script was still running at the end of its wait.</summary>
+    internal const int Unfinished = -1;
 
     /// <summary>
     /// The script's start: errors don't stop it (each item is checked by what Windows reads afterwards), $r gathers the

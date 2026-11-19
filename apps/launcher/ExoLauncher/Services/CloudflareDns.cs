@@ -13,7 +13,7 @@ namespace ExoLauncher.Services;
 /// switch is the one Settings writes: InterfaceSpecificParameters\{guid}\DohInterfaceSettings\Doh\&lt;ip&gt; (Doh6 for IPv6),
 /// DohFlags a QWORD whose bits are DNS_DOH_SERVER_SETTINGS' (0x1 automatic template, 0x2 own template, 0x4 fallback to
 /// plain text, 0x10 discovery of designated resolvers); Exo writes 1 (automatic, no fallback) and counts either template
-/// bit as encrypted. Everything here is pure: the adapter filter, the detection and the PowerShell lines that set and put
+/// bit without the fallback bit as encrypted. Everything here is pure: the adapter filter, the detection and the PowerShell lines that set and put
 /// back each adapter, built only from addresses, GUIDs and interface numbers checked here. <see cref="NetworkBest"/> runs
 /// them in its one elevated step.
 /// </summary>
@@ -26,6 +26,9 @@ internal static partial class CloudflareDns
 
     /// <summary>DNS_DOH_SERVER_SETTINGS_ENABLE_AUTO and _ENABLE: either one means the server is asked over HTTPS.</summary>
     internal const long AutoTemplate = 0x1, OwnTemplate = 0x2;
+
+    /// <summary>DNS_DOH_SERVER_SETTINGS_FALLBACK_TO_UDP: a key with it isn't counted as encrypted, and Exo's write leaves it out.</summary>
+    internal const long Fallback = 0x4;
 
     internal enum Kind { Ethernet, WiFi, Other }
 
@@ -76,8 +79,18 @@ internal static partial class CloudflareDns
     internal static bool Same(IReadOnlyList<string> servers, IReadOnlyList<string> wanted) =>
         servers.Select(Address).ToHashSet() is var have && have.SetEquals(wanted);
 
+    /// <summary>DoH on with a template and no fallback to plain text (0x4): with fallback, a blocked HTTPS query goes out readable.</summary>
     internal static bool Encrypted(IReadOnlyList<Doh> keys, string server) =>
-        keys.FirstOrDefault(k => Address(k.Server) == server) is { Flags: { } flags } && (flags & (AutoTemplate | OwnTemplate)) != 0;
+        keys.FirstOrDefault(k => Address(k.Server) == server) is { Flags: { } flags } && (flags & (AutoTemplate | OwnTemplate)) != 0 && (flags & Fallback) == 0;
+
+    /// <summary>The same record for the same adapter: its servers by hand per family, in order, and Cloudflare's DoH keys (number and name aside).</summary>
+    internal static bool Same(Entry a, Entry b) =>
+        a.Guid.Equals(b.Guid, StringComparison.OrdinalIgnoreCase)
+        && (a.Static4 ?? []).SequenceEqual(b.Static4 ?? []) && (a.Static6 ?? []).SequenceEqual(b.Static6 ?? [])
+        && SameKeys(a.Doh4, b.Doh4) && SameKeys(a.Doh6, b.Doh6);
+
+    private static bool SameKeys(IReadOnlyList<Doh> a, IReadOnlyList<Doh> b) =>
+        a.Select(k => (Address(k.Server), k.Flags)).ToHashSet().SetEquals(b.Select(k => (Address(k.Server), k.Flags)));
 
     /// <summary>Cloudflare's IPv4 pair with DoH on both, and where the adapter runs IPv6, its IPv6 pair with DoH on both.</summary>
     internal static bool IsOn(Adapter a) =>
