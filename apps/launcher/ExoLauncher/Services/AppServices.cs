@@ -184,16 +184,16 @@ public sealed class AppServices
             });
         // The day's play is in today's backup once the last game running closes, not only at the next day's start.
         Launcher.GameSessionCompleted += ended => _ = Task.Run(() => BackUpToday(LauncherBackup.Moment.GameClosed));
+        // Exo EQ: the move from Lucid once (it needs the library, for Lucid's per-game EQ), then exo.txt as it should be now.
         _ = Task.Run(async () =>
         {
-            LucidCompanion.RestoreHeld(Settings.Current);
-            try { LucidCompanion.KeepVoiceOff(Settings); }
-            catch (Exception ex) { Helpers.AppLog.Warn("Lucid: keeping Lucid Voice off failed: " + ex.GetType().Name); }
-            try { await LucidCompanion.StartWithExoAsync(Settings.Current).ConfigureAwait(false); }
-            catch (Exception ex) { Helpers.AppLog.Warn("Lucid: start with Exo failed: " + ex.GetType().Name); }
-            LucidCompanion.WatchUpdates(Settings);
-            Peripherals.Watch(() => _ = Task.Run(FollowLucidAsync));
-            await FollowLucidAsync().ConfigureAwait(false);
+            LucidRetire.Hosted = () => Settings.Current.StartLucidWithExo;
+            LucidRetire.Games = () => [.. Library.PeekCachedLibrary().Where(game => game.Installed).Select(game => (game.Id, game.Title))];
+            try { if (!ExoEq.Current.LucidImported) await Library.GetLibraryAsync().ConfigureAwait(false); }
+            catch (Exception ex) { AppLog.Warn("Exo EQ: the library wasn't read for Lucid's games: " + ex.GetType().Name); }
+            ExoEq.Start();
+            if (Settings.Current.StartLucidWithExo) Settings.UpdateProfile(s => s.StartLucidWithExo = false);
+            await LucidRetire.ResolveAsync().ConfigureAwait(false);
         });
         Store.Start();
         Downloads.Start();
@@ -299,13 +299,6 @@ public sealed class AppServices
         }, _lifetime.Token);
     }
 
-    /// <summary>Lucid's EQ follows the headset Windows plays on (<see cref="LucidCompanion.FollowAsync"/>).</summary>
-    private async Task FollowLucidAsync()
-    {
-        try { await LucidCompanion.FollowAsync(Settings.Current).ConfigureAwait(false); }
-        catch (Exception ex) { Helpers.AppLog.Warn("Lucid: following the headset failed: " + ex.GetType().Name); }
-    }
-
     /// <summary>
     /// Today's backup of everything the player chose (PlayerData), once setup is done, when LauncherBackup.Due says so for
     /// this moment (at start when today has none; when the last game running closes; at exit when the last is not fresh).
@@ -323,7 +316,7 @@ public sealed class AppServices
                 if (!LauncherBackup.Due(moment, written is not null, Launcher.AnyGameRunning, now - (written ?? DateTimeOffset.MinValue))) return;
                 var before = LauncherBackup.LastResult(PathHelper.AppDataDir);
                 var outcome = LauncherBackup.BackUpDaily(PathHelper.AppDataDir, LauncherBackup.DefaultFolder, now,
-                    typeof(AppServices).Assembly.GetName().Version?.ToString(3) ?? "0", replace: true, LauncherBackup.ThisPc(PathHelper.AppDataDir, LucidSettings.FilePath));
+                    typeof(AppServices).Assembly.GetName().Version?.ToString(3) ?? "0", replace: true, LauncherBackup.ThisPc(PathHelper.AppDataDir));
                 if (!outcome.Ok) AppLog.Warn("Backup: " + outcome.Message);
                 // A stop in the middle of a session is said as it happens, not at the next start.
                 LauncherBackup.AnnounceStop(before, LauncherBackup.LastResult(PathHelper.AppDataDir));
@@ -336,15 +329,11 @@ public sealed class AppServices
         try { _lifetime.Cancel(); } catch { }
         Updater.Exiting();
         PlaytimeService.FlushActiveSessions();
-        LucidCompanion.StopWatchingUpdates();
-        // Within the 8 s the installer allows Exo to close: Lucid runs from the app folder it renames, so it goes first.
+        // Compare held as Exo closes: the EQ comes back, as it would when let go.
+        if (ExoEq.Comparing) ExoEq.Compare(false);
+        // At exit, with the sessions just flushed: today's backup holds the whole run, inside the 8 s the installer allows.
         var budget = System.Diagnostics.Stopwatch.StartNew();
-        var lucid = Task.Run(LucidCompanion.LetGoAsync);
-        // At exit, with the sessions just flushed: today's backup holds the whole run, beside Lucid's close and never past its deadline.
         var backup = Task.Run(() => BackUpToday(LauncherBackup.Moment.Exit));
-        try { if (!lucid.Wait(LauncherBackup.ExitBudget)) Helpers.AppLog.Warn("Lucid: still closing as Exo closes."); }
-        catch (AggregateException ex) { Helpers.AppLog.Warn("Lucid: closing with Exo failed: " + ex.InnerException?.GetType().Name); }
-        // Lucid and the backup share one budget, inside the 8 s the installer allows: the backup gets what Lucid left.
         try { if (!backup.Wait(LauncherBackup.BackupMayWait(budget.Elapsed))) AppLog.Warn("Backup: the backup at exit was still being written as Exo closed."); }
         catch (AggregateException ex) { AppLog.Warn("Backup: at exit: " + ex.InnerException?.GetType().Name); }
         NvidiaTrayIcon.Stop();

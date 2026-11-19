@@ -3,6 +3,16 @@
     "version": "3.26.0",
     "items": [
       {
+        "icon": "Headphones",
+        "title": "Exo EQ for your headphones",
+        "detail": "Pick your headphones and Exo corrects their sound, with Bass, Vocal, Footsteps or your own bands on top, per output and per game."
+      },
+      {
+        "icon": "Volume",
+        "title": "Lucid's settings, carried over",
+        "detail": "Your Lucid headphone, game EQ and Night Shift move into Exo EQ by themselves. Thank you, tekkusai, for Lucid."
+      },
+      {
         "icon": "Mouse",
         "title": "Sensor angle on the Razer Viper V3 Pro",
         "detail": "Turn your Viper V3 Pro's sensor angle a degree at a time in Devices, so a natural swipe runs straight across the screen."

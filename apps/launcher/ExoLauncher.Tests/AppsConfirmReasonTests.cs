@@ -17,7 +17,7 @@ public sealed class AppsConfirmReasonTests
     private static InstalledProgram Package(string family) =>
         new("store:" + family, family, null, null, null, null, null, null, Store: true, Machine: false, null, null, family, true, null, null, null);
 
-    private static readonly AppsKeep.Needs Nothing = new(new Dictionary<StoreKind, int>(), new Dictionary<string, string>(), Lucid: false);
+    private static readonly AppsKeep.Needs Nothing = new(new Dictionary<StoreKind, int>(), new Dictionary<string, string>(), Eq: false);
 
     [Fact]
     public void AnAppWithNoUninstallerCanOnlyBeClearedNotUninstalled()
@@ -36,7 +36,7 @@ public sealed class AppsConfirmReasonTests
     [Fact]
     public void AnAppWhatGamesNeedStaysWithTheReasonNamed()
     {
-        var needs = new AppsKeep.Needs(new Dictionary<StoreKind, int> { [StoreKind.Steam] = 3 }, new Dictionary<string, string>(), Lucid: false);
+        var needs = new AppsKeep.Needs(new Dictionary<StoreKind, int> { [StoreKind.Steam] = 3 }, new Dictionary<string, string>(), Eq: false);
 
         Assert.Equal("Your 3 Steam games need it: it stays.", WebHostBridge.ConfirmReason(Desktop("Steam"), needs));
     }

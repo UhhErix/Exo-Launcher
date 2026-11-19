@@ -154,7 +154,7 @@
   font-size: calc(12px * var(--exo-scale, 1));
 }
 
-/* The hero's foot: thanks to Lucid's maker, with a red heart, as Exo Mouse thanks OpenMouse's. */
+/* The hero's foot: thanks to AutoEq and Equalizer APO, with a red heart, as Exo Mouse thanks OpenMouse's. */
 .exo-device-page-credit {
   display: flex;
   align-items: center;
@@ -555,7 +555,7 @@
 /* Sides only: a percent of the top and bottom is a percent of the width, which squeezed a tall drawing to a third of its box. */
 .exo-device-art { padding: 0 14%; }
 
-/* Your headphones: a search of the models Lucid knows in the row's button's place, a short list under the row. */
+/* Your headphones: a search of AutoEq's models in the row's button's place, a short list under the row. */
 .exo-devices-pick-field {
   display: flex;
   align-items: center;

@@ -96,7 +96,7 @@ public sealed partial class WebHostBridge
         KeepSteamClientCurrent();
         KeepShadersPrepared();
         WatchVersions();
-        WatchLucid();
+        WatchEq();
         _ = Task.Run(() => EpicQuietSettings.HandToExo(EpicQuietWanted()));
     }
 
@@ -869,8 +869,8 @@ public sealed partial class WebHostBridge
                 "discord.micMonitor" => DiscordMicMonitor(paramsEl, hasParams),
                 "discord.myVoice" => await DiscordMyVoiceAsync(paramsEl, hasParams, requestToken).ConfigureAwait(true),
                 "discord.voiceTune" => await DiscordVoiceTuneAsync(paramsEl, hasParams, requestToken).ConfigureAwait(true),
-                "lucid" => await Task.Run(() => LucidAsync(paramsEl, hasParams)).ConfigureAwait(true),
-                "lucid.headphones" => await Task.Run(LucidHeadphones).ConfigureAwait(true),
+                "eq" => await Task.Run(() => EqAsync(paramsEl, hasParams)).ConfigureAwait(true),
+                "eq.headphones" => await Task.Run(EqHeadphonesAsync).ConfigureAwait(true),
                 "devices.image" => await Task.Run(() => DevicesImageAsync(paramsEl, hasParams, requestToken)).ConfigureAwait(true),
                 "devices.catalog" => DevicesCatalog(),
                 "controller.read" => await Task.Run(() => ControllerReadAsync(paramsEl, hasParams)).ConfigureAwait(true),

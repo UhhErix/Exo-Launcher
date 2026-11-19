@@ -506,16 +506,15 @@ public sealed class AppSettings
     public bool UpscalerAutoUpdateDefaulted { get; set; } = true;
     /// <summary>On a PC with two graphics chips, Windows is asked to run Exo's games on the fast one (<see cref="ExoLauncher.Services.GpuPreference"/>); off until the user turns it on.</summary>
     public bool FastGpuForGames { get; set; }
-    /// <summary>Lucid (<see cref="ExoLauncher.Services.LucidCompanion"/>) starts with Exo, out of sight; off until the user turns it on.</summary>
+    /// <summary>
+    /// An earlier Exo hosted Lucid with itself (3.25 and before); read once by the move to Exo EQ
+    /// (<see cref="ExoLauncher.Services.LucidRetire"/>), which then turns it off for good.
+    /// </summary>
     public bool StartLucidWithExo { get; set; }
-    /// <summary>Lucid's EQ switches to the tuning of the headset Windows moves to (<see cref="ExoLauncher.Services.LucidCompanion.FollowAsync"/>); on until the user turns it off.</summary>
-    public bool LucidFollowHeadset { get; set; } = true;
     /// <summary>Apps whose start with Windows Exo turned off (<see cref="ExoLauncher.Helpers.StartupApps"/>); one turned back on stays on.</summary>
     public List<string> StartupHandedToExo { get; set; } = [];
     /// <summary>Exo opens when Windows starts (the current user's Run key, <see cref="ExoLauncher.Services.StartWithWindows"/>); off until the player turns it on.</summary>
     public bool StartWithWindows { get; set; }
-    /// <summary>Where a separate Lucid.exe was, as earlier versions of Exo found it: used only while it's newer than the one in Exo.</summary>
-    public string? LucidPath { get; set; }
     /// <summary>
     /// Retired with Exo's own OpenMouse bridge, read once by
     /// <see cref="ExoLauncher.Services.MouseBridgeRetirement"/> and then

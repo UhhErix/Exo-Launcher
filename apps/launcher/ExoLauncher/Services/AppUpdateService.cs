@@ -35,12 +35,6 @@ public sealed partial class AppUpdateService
     private readonly Lock _openGate = new();
     private Task<CheckResult>? _openCheck;
 
-    /// <summary>Closes the Lucid that Exo hosts before an installer renames its folder; the exe it ran, or null when none ran.</summary>
-    internal Func<Task<string?>> StopLucid { get; init; } = async () => (await LucidCompanion.StopHostedAsync().ConfigureAwait(false)).File;
-
-    /// <summary>Starts that Lucid again when the installer did not start.</summary>
-    internal Action<string> StartLucid { get; init; } = path => LucidCompanion.Start(path);
-
     /// <summary>Whether this launch's check opens the update sheet (UpdateOnOpen).</summary>
     internal UpdateOnOpen OnOpen { get; } = new();
 
@@ -294,7 +288,6 @@ public sealed partial class AppUpdateService
         var installerStarted = false;
         var keepStaged = false;
         var swapping = false;
-        string? lucidStopped = null;
         try
         {
             await _cleanup.ConfigureAwait(false);
@@ -403,9 +396,6 @@ public sealed partial class AppUpdateService
 
             swapping = true;
             progress?.Report(("Installing…", null));
-            // Lucid runs from the app folder the installer renames and outlives a close it can't answer: stopped here, where
-            // it can still be started again if the installer doesn't. A finished update starts Exo, which starts Lucid.
-            lucidStopped = await StopLucid().ConfigureAwait(false);
             // One more start counted on disk first: an installer that fails and rolls back runs at most MaxStarts times. A record
             // Windows won't let Exo write does not stop the update the player asked for (the next start ignores such a record).
             if (!CountStart(_updatesDirectory, record!)) AppLog.Warn("Update: this start of the installer is not counted.");
@@ -473,7 +463,6 @@ public sealed partial class AppUpdateService
                 TryDeleteOwnedArtifact(artifactPath);
                 if (artifactPath.EndsWith(".exe", StringComparison.OrdinalIgnoreCase)) DiscardStaged(_updatesDirectory, null);
             }
-            if (!installerStarted && lucidStopped is not null) StartLucid(lucidStopped);
         }
     }
 
