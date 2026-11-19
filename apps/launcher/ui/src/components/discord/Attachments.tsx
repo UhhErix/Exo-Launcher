@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { host } from '../../lib/host'
 import { performanceMode, type DiscordAttachment } from '../../lib/discord'
 import { mediaFilter, useAccountSetting, useAccountSettings, type MediaFilter } from '../../lib/discordPrefs'
@@ -60,6 +60,37 @@ export function sized(src: string, width?: number | null, height?: number | null
  * is on, Exo is active and neither Reduced Motion nor Performance mode is on; otherwise it holds its first frame until
  * pointed at, as Discord's GIFs do.
  */
+/**
+ * A picture's or video's error, tried again before it counts: 1.5 s later, then 6 s later, and afresh each time the page
+ * comes back into view. Exo's WebView drops a playing GIF's decoder when it is minimized and low on memory, which reads as
+ * an error: taken at once, a GIF that had played turned into its "would not load" line for good. `attempt` is the element's
+ * key, so each try loads it anew.
+ */
+export function useMediaRetry(onFail?: () => void) {
+  const active = usePageActive()
+  const [attempt, setAttempt] = useState(0)
+  const tries = useRef(0)
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  useEffect(() => { if (active) tries.current = 0 }, [active])
+  useEffect(() => () => { if (timer.current) clearTimeout(timer.current) }, [])
+  const onError = useCallback(() => {
+    if (tries.current >= 2) { onFail?.(); return }
+    const wait = tries.current === 0 ? 1500 : 6000
+    tries.current += 1
+    if (timer.current) clearTimeout(timer.current)
+    timer.current = setTimeout(() => setAttempt(n => n + 1), wait)
+  }, [onFail])
+  return { attempt, onError }
+}
+
+/** A failed picture gets another go when the page comes back into view (it may have failed only while Exo was away). */
+export function useFailedUntilBack<T>(empty: T): [T, (value: T) => void] {
+  const active = usePageActive()
+  const [failed, setFailed] = useState<T>(empty)
+  useEffect(() => { if (active) setFailed(empty) }, [active, empty])
+  return [failed, setFailed]
+}
+
 export function MovingImage({ src, width, height, moving, alt, link, box, onFail }: {
   src: string; width?: number | null; height?: number | null; moving: boolean; alt: string; link?: string | null; box: { width?: number; height?: number }
   /** It would not load (only then: a picture still loading is not a failure). */
@@ -69,9 +100,10 @@ export function MovingImage({ src, width, height, moving, alt, link, box, onFail
   const active = usePageActive()
   const [hover, setHover] = useState(false)
   const play = moving && (hover || (gifAutoPlay && active && !performanceMode() && !shouldReduceMotion()))
+  const { attempt, onError } = useMediaRetry(onFail)
   return (
-    <img src={sized(src, width, height, box.width && box.height ? { width: box.width, height: box.height } : undefined, play, moving && !play)} alt={alt} loading="lazy" decoding="async" draggable={false} data-dc-link={link ?? undefined} {...box}
-      onPointerEnter={moving ? () => setHover(true) : undefined} onPointerLeave={moving ? () => setHover(false) : undefined} onError={onFail} />
+    <img key={attempt} src={sized(src, width, height, box.width && box.height ? { width: box.width, height: box.height } : undefined, play, moving && !play)} alt={alt} loading="lazy" decoding="async" draggable={false} data-dc-link={link ?? undefined} {...box}
+      onPointerEnter={moving ? () => setHover(true) : undefined} onPointerLeave={moving ? () => setHover(false) : undefined} onError={onError} />
   )
 }
 
@@ -132,13 +164,14 @@ function VideoFile({ src, box, duration, onFail }: { src: string; box: { width?:
   const [at, setAt] = useState(0)
   const [length, setLength] = useState(duration ?? 0)
   const [muted, setMuted] = useState(false)
+  const { attempt, onError } = useMediaRetry(onFail)
   const toggle = () => { const element = video.current; if (!element) return; if (element.paused) void element.play().catch(() => { }); else element.pause() }
   return (
     <div className={`exo-dc-media exo-dc-video${started ? ' is-started' : ''}${playing ? ' is-playing' : ''}`}>
-      <video ref={video} src={src} preload="metadata" playsInline {...box} onClick={toggle}
+      <video key={attempt} ref={video} src={src} muted={muted} preload="metadata" playsInline {...box} onClick={toggle}
         onLoadedMetadata={event => setLength(event.currentTarget.duration || 0)} onTimeUpdate={event => setAt(event.currentTarget.currentTime)}
         onPlay={() => { setPlaying(true); setStarted(true) }} onPause={() => setPlaying(false)} onEnded={() => { setPlaying(false); setStarted(false) }}
-        onVolumeChange={event => setMuted(event.currentTarget.muted)} onError={onFail} />
+        onVolumeChange={event => setMuted(event.currentTarget.muted)} onError={onError} />
       {started ? null : (
         <>
           <button type="button" className="exo-dc-video-play" aria-label="Play video" onClick={toggle}><Play size={22} /></button>
@@ -167,7 +200,7 @@ function Media({ file, media, guildId, moderator, cell, pictures, more }: { file
   const settings = useAccountSettings()
   const [alt, setAlt] = useState(false)
   const src = file.proxy_url ?? file.url
-  const [failed, setFailed] = useState<string | null>(null)
+  const [failed, setFailed] = useFailedUntilBack<string | null>(null)
   const box = cell ? { width: undefined, height: undefined } : fit(file.width, file.height)
   const flags = file.flags ?? 0
   const spoiler = (file.filename.startsWith('SPOILER_') || (flags & 8) !== 0) && !spoilersShown(settings.renderSpoilers, moderator)

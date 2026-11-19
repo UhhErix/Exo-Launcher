@@ -440,7 +440,95 @@ public sealed class LeftoverScanTests : IDisposable
 
         var found = Scan().Find(new Trail("Acme Paint") { Homes = [home] }, deep: true);
 
+        // No Start at all: Windows' own way of loading it is unknown, so it is never offered.
         Assert.DoesNotContain(found, item => item.Path.EndsWith("AcmeDriver", StringComparison.Ordinal));
+    }
+
+    [Theory]
+    [InlineData(2)]
+    [InlineData(3)]
+    [InlineData(4)]
+    public void ADriverTheAppLeftInItsFolderIsShownButNeverTakenByOnePress(int start)
+    {
+        var home = Place("ProgramFiles", "Acme Paint");
+        File_("ProgramFiles", @"Acme Paint\acme.sys");
+        using (var driver = Key("HKLM", @"SYSTEM\CurrentControlSet\Services\AcmeDriver"))
+        {
+            driver.SetValue("ImagePath", @"\??\" + home + @"\acme.sys");
+            driver.SetValue("Type", 1, RegistryValueKind.DWord);
+            driver.SetValue("Start", start, RegistryValueKind.DWord);
+        }
+        var scan = Scan();
+
+        var found = scan.Find(new Trail("Acme Paint") { Homes = [home] }, deep: true).Single(item => item.Path.EndsWith("AcmeDriver", StringComparison.Ordinal));
+
+        Assert.Equal(LeftoverKind.Driver, found.Kind);
+        Assert.False(found.Selected);
+        Assert.Equal(LeftoverScan.DriverHeld, found.Held);
+        Assert.Empty(AutoClear.Its([found]));
+        Assert.Equal("sc stop \"AcmeDriver\" & sc delete \"AcmeDriver\"", scan.AdminCommand(found));
+    }
+
+    [Theory]
+    [InlineData(0, "AcmeDriver", @"Acme Paint\acme.sys")]     // boot
+    [InlineData(1, "AcmeDriver", @"Acme Paint\acme.sys")]     // system
+    [InlineData(3, "BEDaisy", @"Acme Paint\BEDaisy.sys")]     // BattlEye's, by name
+    [InlineData(3, "vgk", @"Acme Paint\vgk.sys")]             // Vanguard's
+    [InlineData(3, "AcmeGuard", @"Acme Paint\EasyAntiCheat\eac.sys")] // anti-cheat by its path
+    public void ABootDriverOrAntiCheatsIsNeverFound(int start, string name, string file)
+    {
+        var home = Place("ProgramFiles", "Acme Paint");
+        var sys = File_("ProgramFiles", file);
+        using (var driver = Key("HKLM", $@"SYSTEM\CurrentControlSet\Services\{name}"))
+        {
+            driver.SetValue("ImagePath", sys);
+            driver.SetValue("Type", 1, RegistryValueKind.DWord);
+            driver.SetValue("Start", start, RegistryValueKind.DWord);
+        }
+
+        var found = Scan().Find(new Trail("Acme Paint") { Homes = [home] }, deep: true);
+
+        Assert.DoesNotContain(found, item => item.IsKey && item.Path.EndsWith('\\' + name, StringComparison.Ordinal));
+        Assert.DoesNotContain(found, item => item.Kind == LeftoverKind.Driver);
+    }
+
+    [Fact]
+    public void ADriverIsOnlyEverTheAppsWhenItsFileIsInTheAppsFolder()
+    {
+        var home = Place("ProgramFiles", "Acme Paint");
+        File_("ProgramFiles", @"Acme Paint\acmepaint.exe");
+        var elsewhere = File_("ProgramFiles", @"Other\other.sys");
+        using (var driver = Key("HKLM", @"SYSTEM\CurrentControlSet\Services\OtherDriver"))
+        {
+            driver.SetValue("ImagePath", elsewhere);
+            driver.SetValue("Type", 1, RegistryValueKind.DWord);
+            driver.SetValue("Start", 3, RegistryValueKind.DWord);
+        }
+
+        Assert.DoesNotContain(Scan().Find(new Trail("Acme Paint") { Homes = [home], Names = ["Acme Paint"] }, deep: true), item => item.Kind == LeftoverKind.Driver);
+    }
+
+    [Fact]
+    public void AFoundTaskIsWrittenDownBeforeItGoesAndNamesOnlyWhatItRan()
+    {
+        var home = Place("ProgramFiles", "Acme Paint");
+        File_("ProgramFiles", @"Acme Paint\updater.exe");
+        var scan = new LeftoverScan(Places, _hkcu, _hklm) { Running = () => [], DriveThere = _ => true, TaskBackupFolder = Place("LocalAppData", "cleanup") };
+        scan.AddTestTask(@"\Acme\Update it's", home + @"\updater.exe");
+
+        var task = scan.Find(new Trail("Acme Paint") { Homes = [home] }, deep: true).Single(item => item.Kind == LeftoverKind.Task);
+        var file = scan.TaskBackupFile("Acme Paint", task.Path);
+
+        Assert.Equal(home + @"\updater.exe", scan.TaskExe(task.Path));
+        Assert.NotNull(file);
+        Assert.StartsWith(Place("LocalAppData", "cleanup"), file);
+        Assert.EndsWith(".xml", file, StringComparison.Ordinal);
+        // The export step carries the task's names as literals inside its encoded script: the quote in its name stays text.
+        var step = LeftoverScan.TaskExportStep(task.Path, file!);
+        Assert.NotNull(step);
+        var script = System.Text.Encoding.Unicode.GetString(Convert.FromBase64String(step!.Split(' ')[^1]));
+        Assert.Contains(@"-TaskPath '\Acme\' -TaskName 'Update it''s'", script, StringComparison.Ordinal);
+        Assert.DoesNotContain("-Force", script, StringComparison.Ordinal);
     }
 
     [Fact]

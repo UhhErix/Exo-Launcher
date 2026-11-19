@@ -487,6 +487,12 @@ public sealed class AppSettings
     public bool StoreClientsQuiet { get; set; } = true;
     /// <summary>Games from Epic, GOG and Amazon update by themselves while the PC is idle.</summary>
     public bool AutoUpdateGames { get; set; } = true;
+    /// <summary>Compress games while idle: the games worth it on this PC are compressed by Windows (<see cref="ExoLauncher.Services.GameCompressor"/>) while nobody uses it. Off until the player turns it on.</summary>
+    public bool CompressWhileIdle { get; set; }
+    /// <summary>A compressed game's files an update wrote back are compressed again while the PC is idle. Off until the player turns it on.</summary>
+    public bool RecompressAfterUpdates { get; set; }
+    /// <summary>How much of the processor compressing may use: gentle, balanced or fast (<see cref="ExoLauncher.Services.GameCompression.Threads"/>).</summary>
+    public string CompressSpeed { get; set; } = "balanced";
     /// <summary>This PC's chipset driver (AMD's on a Ryzen, Intel's on an Intel processor) updates by itself while the PC is idle (<see cref="ExoLauncher.Services.ChipsetUpdate"/>).</summary>
     public bool AutoUpdateChipset { get; set; } = true;
     /// <summary>Newer DLSS, FSR and XeSS files download by themselves (from the vendor's own release, Exo's cache when that fails) while the PC is idle. On by default.</summary>

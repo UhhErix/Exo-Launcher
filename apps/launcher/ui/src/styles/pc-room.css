@@ -217,7 +217,8 @@
   flex-direction: column;
   min-width: 0;
   min-height: 0;
-  padding: 18px 0 4px;
+  /* 22px down, as the This PC panel: a section's title centres on the line 'Erix-PC' does beside it. */
+  padding: 22px 0 4px;
   scroll-margin-top: 12px;
 }
 
@@ -227,7 +228,9 @@
   flex: none;
   align-items: center;
   gap: 12px;
-  min-height: 32px;
+  /* A control's height above its 12px foot, with or without a control in it (border-box: 32px alone let a head with no button
+     shrink to its words, so Shaders' title sat 3px above Updates'). */
+  min-height: 44px;
   margin: 0 24px;
   padding-bottom: 12px;
 }

@@ -38,7 +38,7 @@ These fail the build or `check`. Fix the code, not the check; an exception goes 
 
 The UI is moving to GPUI on our fork `exo-gpui` (`docs/decisions/2026-11-09-native-ui-gpui.md`): only the UI moves, the .NET host stays and talks to the native UI over named pipes with the `host-v1.json` contract, and WebView2 stays in the host for pages that cannot leave a browser. Until the native UI ships, the React/WebView2 stack below is what ships and what this file's rules and checks cover; no new UI work starts on a third stack.
 
-WinUI 3 + Windows App SDK 2 + .NET 10 host (stable only; .NET 11 waits on `docs/RUNTIME_RELEASE_READINESS.md`), one WebView2, React 19 + Tailwind 4 + Tabler icons (named for Exo in `ui/scripts/tabler-map.mjs`, used through `ui/src/brand/icons.tsx`, data written by `npm run icons`) in `ui/`, with native controls in `ui/src/components/ui/` (no component library). `WebHostBridge.cs` dispatches JSON-RPC named in `ui/src/lib/host.ts`; the manifest is `ui/contracts/host-v1.json`. Windows 11 x64 only.
+WinUI 3 + Windows App SDK 2 + .NET 10 host (stable only; .NET 11 waits on `docs/RUNTIME_RELEASE_READINESS.md`), one WebView2, React 19 + Tailwind 4 + Lucide icons (named for Exo in `ui/scripts/lucide-map.mjs`, used through `ui/src/brand/icons.tsx`, data written by `npm run icons`) in `ui/`, with native controls in `ui/src/components/ui/` (no component library). `WebHostBridge.cs` dispatches JSON-RPC named in `ui/src/lib/host.ts`; the manifest is `ui/contracts/host-v1.json`. Windows 11 x64 only.
 
 ## How to work
 

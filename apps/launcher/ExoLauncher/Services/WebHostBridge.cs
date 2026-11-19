@@ -262,6 +262,7 @@ public sealed partial class WebHostBridge
         _services.Launcher.GameLaunched -= OnGameLaunched;
         _services.Launcher.GameRunStateChanged -= OnGameRunStateChanged;
         _services.Shaders.Changed -= OnShadersChanged;
+        UnwireCompress();
         _services.ShaderPrepare.Changed -= OnShadersChanged;
         ShaderRebuildWatch.Changed -= OnShadersRebuildChanged;
         _services.Store.Changed -= OnStoreChanged;
@@ -708,7 +709,10 @@ public sealed partial class WebHostBridge
                 "telemetry.sent" => new { ok = true, payloads = Telemetry.Sent() },
                 "telemetry.delete" => await TelemetryDeleteAsync(requestToken).ConfigureAwait(true),
                 "telemetry.track" => TelemetryTrack(paramsEl, hasParams),
-                "apps.uninstall" => await AppsUninstallAsync(ReadString(paramsEl, hasParams, "id") ?? "", requestToken).ConfigureAwait(true),
+                "apps.uninstall" => await AppsUninstallAsync(ReadString(paramsEl, hasParams, "id") ?? "", ReadBool(paramsEl, hasParams, "quiet") == true, requestToken).ConfigureAwait(true),
+                "apps.restorePoint" => await AppsRestorePointAsync(requestToken).ConfigureAwait(true),
+                "apps.installerCache" => await AppsInstallerCacheAsync().ConfigureAwait(true),
+                "apps.installerCacheClean" => await AppsInstallerCacheCleanAsync(requestToken).ConfigureAwait(true),
                 "apps.scan" => await AppsScanAsync(ReadString(paramsEl, hasParams, "id") ?? "", requestToken).ConfigureAwait(true),
                 "apps.clean" => await AppsCleanAsync(paramsEl, hasParams, requestToken).ConfigureAwait(true),
                 "apps.allowEdge" => await AppsAllowEdgeAsync(requestToken).ConfigureAwait(true),
@@ -717,6 +721,11 @@ public sealed partial class WebHostBridge
                 "apps.history" => await Task.Run(AppsHistory).ConfigureAwait(true),
                 "apps.undo" => await AppsUndoAsync(ReadString(paramsEl, hasParams, "id") ?? "", requestToken).ConfigureAwait(true),
                 "junk.scan" => await JunkScanAsync().ConfigureAwait(true),
+                "compress.state" => await CompressStateAsync(paramsEl, hasParams, requestToken).ConfigureAwait(true),
+                "compress.list" => await CompressListAsync(requestToken).ConfigureAwait(true),
+                "compress.act" => await CompressActAsync(paramsEl, hasParams, requestToken).ConfigureAwait(true),
+                "compress.all" => await CompressAllAsync(requestToken).ConfigureAwait(true),
+                "compress.settings" => CompressSettings(paramsEl, hasParams),
                 "junk.clean" => await JunkCleanAsync(paramsEl, hasParams).ConfigureAwait(true),
                 "startup.list" => await StartupListAsync().ConfigureAwait(true),
                 "bios.update" => await BiosUpdateAsync(paramsEl, hasParams, requestToken).ConfigureAwait(true),

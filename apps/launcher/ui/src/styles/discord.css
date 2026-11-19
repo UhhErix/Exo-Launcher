@@ -1841,7 +1841,7 @@ video.exo-dc-media {
   align-items: center;
   gap: 2px;
   margin: 16px 0 2px;
-  padding: 0 4px;
+  padding: 0 8px;
   color: var(--dc-muted);
 }
 

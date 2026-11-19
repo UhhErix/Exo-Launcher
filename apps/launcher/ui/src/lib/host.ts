@@ -1039,6 +1039,39 @@ export interface InstalledApp {
   replaces: string | null
 }
 
+/**
+ * A game's compression (Windows' own file compression, the game reads it as before): what it is doing, what it saved
+ * (bytes on disk), what it might save (`estimate`, read from a sample of its files once `sampled`), and what an update
+ * wrote back uncompressed (`changed`). `antiCheat` is the set the player is asked to allow; `held` why a job waits.
+ */
+export interface CompressState {
+  state: 'none' | 'queued' | 'compressing' | 'uncompressing' | 'paused' | 'compressed' | 'changed' | 'kept' | 'refused' | 'needsConsent'
+  percent: number | null
+  saved: number
+  size: number | null
+  estimate: number | null
+  sampled: boolean
+  changed: number
+  algorithm: string | null
+  message: string | null
+  antiCheat: string | null
+  held: string | null
+}
+
+export type CompressAction = 'compress' | 'uncompress' | 'pause' | 'resume' | 'cancel' | 'allow' | 'deny'
+
+/** Compress games' settings: while idle, again after updates, and the CPU it may use. */
+export interface CompressSettings { whileIdle: boolean; afterUpdates: boolean; speed: 'gentle' | 'balanced' | 'fast' }
+
+/** compress.list: every installed game's compression, the total saved and still to save. */
+export interface CompressList {
+  ok: boolean
+  games: { id: string; title: string; compress: CompressState; eligible: boolean }[]
+  saved: number
+  potential: number
+  settings: CompressSettings
+}
+
 /** One kind of junk on this PC (junk.scan): its size and how many files. */
 export interface JunkItem {
   id: 'temp' | 'crash' | 'thumbs' | 'shaders' | 'exo' | 'bin'
@@ -1099,7 +1132,8 @@ export interface StartupState {
 /** One thing an app left, as the deep clean found it; likely: matched by its name alone. */
 export interface AppLeftover {
   id: number
-  kind: 'folder' | 'file' | 'shortcut' | 'registry' | 'service' | 'task'
+  /** A driver is only ever shown, never selected: a device may still need it. */
+  kind: 'folder' | 'file' | 'shortcut' | 'registry' | 'service' | 'task' | 'driver'
   /** Where it is, by the place's name ("AppData\\Local\\Acme"): never a user's own folder. */
   path: string
   bytes: number
@@ -1727,6 +1761,8 @@ export interface HostEventMap {
   'keys.found': { ok: boolean; message: string; gameId?: string; title?: string }
   /** A runtime Exo offered to install is downloading: bytes so far of total (null when the size is unknown). */
   'deps.progress': { id: string; bytes: number; total: number | null }
+  /** A game's compression moved on (twice a second at most while it works) or ended. */
+  'compress.progress': { id: string; compress: CompressState }
   /** The window was maximized or restored, or the pointer moved over the native maximize button. */
   'shell.window': { maximized: boolean; maximizeHover?: boolean }
   /** Exo's own update is downloading or installing: the step in words and its share (null while it can't be measured). */
@@ -2401,6 +2437,18 @@ export const host = {
   appsIcons: (ids: string[]) => rawCall<{ ok: boolean; icons: Record<string, string | null> }>('apps.icons', { ids }, 60_000),
   /** Junk on this PC by kind (temp files, crash reports, thumbnails, the Recycle Bin), with sizes; cleaned: Exo's last clean by itself (at: ISO time). */
   junkScan: () => rawCall<{ ok: boolean; items: JunkItem[]; cleaned: { at: string; bytes: number } | null }>('junk.scan', {}, 2 * 60_000),
+  /** A game's compression; `estimate` reads a sample of its files for what it would really save (seconds). */
+  compressState: (id: string, estimate = false) =>
+    rawCall<{ ok: boolean; message?: string; compress?: CompressState }>('compress.state', { id, estimate }, 5 * 60_000),
+  /** Every installed game's compression for PC › Compress games. */
+  compressList: () => rawCall<CompressList>('compress.list', {}, 5 * 60_000),
+  /** Compress, put back, pause, resume, stop; allow or take back the yes for a game with anti-cheat (`antiCheat`: the set shown). */
+  compressAct: (id: string, action: CompressAction, antiCheat?: string) =>
+    rawCall<{ ok: boolean; message?: string | null; compress?: CompressState }>('compress.act', antiCheat ? { id, action, antiCheat } : { id, action }, 60_000),
+  /** Every game worth it, one after another: how many went in the queue. */
+  compressAll: () => rawCall<{ ok: boolean; queued: number; message?: string | null }>('compress.all', {}, 5 * 60_000),
+  compressSettings: (patch: Partial<CompressSettings>) =>
+    rawCall<{ ok: boolean; settings: CompressSettings }>('compress.settings', patch, 10_000),
   /** PC › Apps › Startup: everything that starts at sign-in, and what Exo removed from it. */
   startupList: () => rawCall<StartupState>('startup.list', {}, 60_000),
   /** PC › Updates' BIOS (ASUS): what is staged for EZ Flash; prepare downloads, checks and stages it; restart goes into the BIOS. Each asked in Exo's window. */
@@ -2431,9 +2479,19 @@ export const host = {
   telemetryDelete: () => rawCall<{ ok: boolean; message?: string | null }>('telemetry.delete', {}, 30_000),
   /** The room the page shows (room.opened). */
   telemetryRoom: (room: string) => rawCall<{ ok: true }>('telemetry.track', { room }),
-  /** One uninstalled with its own uninstaller (asked in Exo's window, unless apps.confirm's pass covers it), then what it left cleared by itself. */
-  appsUninstall: (id: string) =>
-    rawCall<AppFind | { ok: false; still?: boolean; message?: string | null }>('apps.uninstall', { id }, 65 * 60_000),
+  /**
+   * One uninstalled with its own uninstaller, then what it left cleared by itself. quiet: one of a run apps.confirm passed,
+   * with its installer's quiet switches where it has them (Windows' prompt still asks for rights).
+   */
+  appsUninstall: (id: string, quiet = false) =>
+    rawCall<AppFind | { ok: false; still?: boolean; message?: string | null }>('apps.uninstall', quiet ? { id, quiet } : { id }, 65 * 60_000),
+  /** A System Restore point before a run, under Windows' prompt; ok only when there is one to go back to. */
+  appsRestorePoint: () => rawCall<{ ok: boolean; made: boolean; message?: string | null }>('apps.restorePoint', {}, 10 * 60_000),
+  /** How many of Windows Installer's cached copies no product or patch needs, and how big (only reads). */
+  appsInstallerCache: () => rawCall<{ ok: true; files: number; bytes: number }>('apps.installerCache', {}, 2 * 60_000),
+  /** Those, found again, to the Recycle Bin under one Windows prompt; undo is the Put back record. */
+  appsInstallerCacheClean: () =>
+    rawCall<{ ok: boolean; files: number; bytes: number; undo?: string | null; message?: string | null }>('apps.installerCacheClean', {}, 10 * 60_000),
   /** What is left of a program whose uninstaller is gone. */
   appsScan: (id: string) => rawCall<AppFind | { ok: false; message?: string | null }>('apps.scan', { id }, 5 * 60_000),
   /** The chosen items of a find deleted (asked in Exo's window). */
