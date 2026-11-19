@@ -97,7 +97,8 @@ kbd,
   --color-on-bad: #000000;
   --color-card: #000000;
   --color-raised: #000000;
-  --font-sans: "Exoline", "Segoe UI Variable", "Segoe UI", sans-serif;
+  --font-sans: "Goeist", "Exoline", "Segoe UI Variable", "Segoe UI", sans-serif;
+  --font-mono: "Goeist Mono", "Cascadia Mono", Consolas, monospace;
   /* Motion (DESIGN.md › Motion). Two curves: what appears, fades or changes state eases out (fast
      at once, then settling); what travels between two places or changes shape springs (from rest,
      critically damped at 0.9, so it never visibly overshoots: 0.15%, a twentieth of a pixel on a

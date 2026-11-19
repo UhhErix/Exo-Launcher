@@ -1,6 +1,7 @@
 # Changelog
 
 ## 3.26.0 — November 14, 2026
+- **Goeist, Exo's new type.** Exo and Exo Mouse use Goeist, a rounded take on Geist: the same proportions, every corner softened. _Checked in code only._
 - **Upscalers and frame generation stay current by themselves.** DLSS, FSR and XeSS files, OptiScaler, MFG Unlocker and DLSSG SM86 now come straight from their makers' releases the day they ship, with Exo's own copy as the backup, and every file is still checked before it goes in. Automatic upscaler updates are on for everyone. _Checked in code only._
 - **NVIDIA's frame generation on RTX 20 and 30.** Best settings' Frame generation now puts DLSSG SM86 into games on an RTX 20 or 30, instead of FSR frame generation. _Checked in code only._
 - **DLSS updates download again.** Updating a game to DLSS 310.9.16 stopped with "Not Found"; it downloads now. _Checked in code only._
