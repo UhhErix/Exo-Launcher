@@ -1032,6 +1032,7 @@ public sealed class SettingsService
         FpsCounter = source.FpsCounter,
         FpsCounterPosition = source.FpsCounterPosition,
         FpsCounterItems = FpsItems.Clean(source.FpsCounterItems),
+        Autopilot = (source.Autopilot ?? new()).Copy(),
         HdrForGames = source.HdrForGames,
         HdrSdrGamma = source.HdrSdrGamma,
         DiscordNoiseSuppression = source.DiscordNoiseSuppression,

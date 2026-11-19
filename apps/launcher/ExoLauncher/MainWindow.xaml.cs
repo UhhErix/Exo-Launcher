@@ -484,6 +484,7 @@ public sealed partial class MainWindow : Window
         AppLog.Info("Shutdown: bridge detached.");
         try { Services.GameRunningSignal.Clear(); } catch { }
         try { Services.FpsCounter.Shutdown(); } catch { }
+        try { Services.Autopilot.Shutdown(); } catch { }
         // The hosted sessions close side
         // by side under one bounded wait.
         CloseMusicWeb();

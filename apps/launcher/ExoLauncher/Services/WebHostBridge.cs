@@ -83,6 +83,7 @@ public sealed partial class WebHostBridge
         InstalledSizeCache.MeasurementUpdated += OnLibraryUpdated;
         ExoComponents.FailedTwice += OnComponentFailed;
         GameSettings.AppliedAgain += OnOptimizedAgain;
+        AutopilotWatch.Reported += OnAutopilotReported;
         GameSettings.WindowModeHeld += OnOptimizeHeld;
         Account.AccountSessionStore.Changed += OnAccountChanged;
         _runStatePoll = new System.Threading.Timer(_ => PollRunStates(), null, Timeout.InfiniteTimeSpan, Timeout.InfiniteTimeSpan);
@@ -148,7 +149,9 @@ public sealed partial class WebHostBridge
                 AppLog.Info($"Game running signal: no game process for {sessionOnlyFor.TotalSeconds:0} s; the open session no longer counts.");
             _runStateSessionOnly = running && !found;
             GameRunningSignal.Update(running, generation);
-            FpsCounter.Follow(_services.Launcher, installed.Where(game => runningIds.Contains(game.Id) && !_services.ShaderPrepare.Preparing(game.Id)));
+            var playing = installed.Where(game => runningIds.Contains(game.Id) && !_services.ShaderPrepare.Preparing(game.Id)).ToArray();
+            FpsCounter.Follow(_services.Launcher, playing);
+            Autopilot.Follow(_services.Launcher, playing);
         }
         catch (Exception ex) { AppLog.Debug("Run-state poll failed: " + ex.GetType().Name); }
         finally
@@ -306,6 +309,7 @@ public sealed partial class WebHostBridge
         InstalledSizeCache.MeasurementUpdated -= OnLibraryUpdated;
         ExoComponents.FailedTwice -= OnComponentFailed;
         GameSettings.AppliedAgain -= OnOptimizedAgain;
+        AutopilotWatch.Reported -= OnAutopilotReported;
         GameSettings.WindowModeHeld -= OnOptimizeHeld;
         Account.AccountSessionStore.Changed -= OnAccountChanged;
         if (Volatile.Read(ref _driverEvents) is { } driverEvents)
@@ -931,6 +935,8 @@ public sealed partial class WebHostBridge
                 "system.health" => await GpuDeadlineAsync(SystemHealthAsync(paramsEl, hasParams, requestToken), TimeSpan.FromSeconds(30), requestToken).ConfigureAwait(true),
                 "system.about" => await SystemAboutAsync(requestToken).ConfigureAwait(true),
                 "system.tune" => await Task.Run(() => AutoTuneService.Act(ReadString(paramsEl, hasParams, "action"), ReadString(paramsEl, hasParams, "part"), ReadString(paramsEl, hasParams, "mode"))).ConfigureAwait(true),
+                "autopilot.state" => await Task.Run(AutopilotState).ConfigureAwait(true),
+                "autopilot.set" => await Task.Run(() => AutopilotSet(paramsEl, hasParams)).ConfigureAwait(true),
                 "system.interrupts" => await SystemInterruptsAsync(paramsEl, hasParams, requestToken).ConfigureAwait(true),
                 "system.tuning" => await SystemTuningAsync(paramsEl, hasParams, requestToken).ConfigureAwait(true),
                 "system.mouseCore" => await SystemMouseCoreAsync(paramsEl, hasParams, requestToken).ConfigureAwait(true),

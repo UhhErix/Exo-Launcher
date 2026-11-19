@@ -384,11 +384,12 @@ public sealed class GamePropertiesTests
 
         // No other host code names a change for these switches: the only place the app writes one of Steam's own switch
         // names is the helper's read answer, and the helper program beside it (Steam's own Properties page in a test).
-        // Cover art's "background" key is its own picture pick and has nothing to do with Steam.
+        // Cover art's "background" key (picture pick) and StutterAnalysis's "background" finding kind have nothing to do with Steam.
         var named = Repo.HostSources()
             .Where(path => !path.EndsWith(Path.Combine("Adapters", "SteamGameProperties.cs"), StringComparison.Ordinal) &&
                            !path.Contains(Path.DirectorySeparatorChar + "ExoLauncher.SteamIpc" + Path.DirectorySeparatorChar) &&
-                           !path.EndsWith(Path.Combine("Services", "CoverArtService.cs"), StringComparison.Ordinal))
+                           !path.EndsWith(Path.Combine("Services", "CoverArtService.cs"), StringComparison.Ordinal) &&
+                           !path.EndsWith(Path.Combine("Services", "StutterAnalysis.cs"), StringComparison.Ordinal))
             .SelectMany(path => File.ReadLines(path).Select((line, index) => (path, line, index)))
             .Where(entry => entry.line.Contains("\"cloud\"", StringComparison.Ordinal) ||
                             entry.line.Contains("\"cloudAccount\"", StringComparison.Ordinal) ||

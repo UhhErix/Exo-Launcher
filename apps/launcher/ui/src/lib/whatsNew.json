@@ -3,6 +3,11 @@
     "version": "3.26.0",
     "items": [
       {
+        "icon": "Performance",
+        "title": "Autopilot session reports",
+        "detail": "After you play, PC › Autopilot shows what made a game stutter, from a background app to a full graphics card, and what to do about it."
+      },
+      {
         "icon": "Headphones",
         "title": "Exo EQ for your headphones",
         "detail": "Pick your headphones and Exo corrects their sound, with Bass, Vocal, Footsteps or your own bands on top, per output and per game."

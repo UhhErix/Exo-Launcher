@@ -91,6 +91,9 @@ internal static class ExoUninstall
             AppLog.Warn("Uninstall: start-up items not put back: " + ex.GetType().Name);
         }
         Adapters.EpicQuietSettings.PutBack();
+        // Autopilot's changes first: Game Mode comes back to what it held before Autopilot, then the keeper gives back its own.
+        try { Autopilot.GiveBack(); }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Security.SecurityException) { AppLog.Warn("Uninstall: Autopilot not put back: " + ex.GetType().Name); }
         GiveBackWindowsSettings(WindowsGameBar.Shared, GpuPreference.Shared, WindowsGameMode.Shared);
         try
         {

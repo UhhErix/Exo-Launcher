@@ -865,6 +865,41 @@ export type PcAbout = {
   } | null
 }
 
+/** PC › Autopilot: the game in front now, read once a second while it is (its frames so far, the last second's numbers); null with no game. */
+export type AutopilotLive = {
+  game: string; title: string; seconds: number; fps: number; low1: number; low01: number; stutters: number
+  cpu?: number | null; gpu?: number | null; gpuTemp?: number | null; vramGb?: number | null; vramTotalGb?: number | null
+  ramGb?: number | null; ramTotalGb?: number | null; standbyGb?: number | null; freeGb?: number | null
+  /** The busiest processor's share of the second in drivers' deferred calls, in %. */
+  dpc?: number | null
+  /** The processor's performance against its base clock, in % (over 100 is boost). */
+  clock?: number | null
+}
+/** One cause a session's stutters came with: background (app set), vram, gpuHeat, cpuThrottle, paging, dpc, shaders, unexplained. */
+export type AutopilotFinding = { kind: string; stutters: number; app?: string | null; detail: string; suggestion: string }
+/** A session's report, kept on this PC: frames, stutters and what they came with, what Autopilot did, and what it learned for next time. */
+export type AutopilotReport = {
+  id: string; game: string; title: string; started: string; minutes: number; fps: number; low1: number; low01: number; stutters: number
+  findings: AutopilotFinding[]; did: string[]; learned: string[]
+  peaks?: { cpu: number; gpu?: number | null; gpuTemp?: number | null; vramGb?: number | null; vramTotalGb?: number | null; ramGb: number | null; ramTotalGb: number | null } | null
+  /** Seconds in which ISLC's rule (free memory under 1 GB, a standby list of 1 GB or more) would have purged. */
+  islcSeconds: number
+}
+export type AutopilotPriority = 'above' | 'high' | 'normal'
+/**
+ * PC › Autopilot: the switch and its choices (the game's priority, Windows Game Mode kept on, cores kept awake, the apps always held
+ * back and the apps paused while playing); where Game Mode stands (off: Autopilot turned it off; keptOn: why it stays on with
+ * Autopilot on); the processor's cache layout in words; what Autopilot does for the game running now; the live line and the reports.
+ */
+export type AutopilotState = {
+  on: boolean; gamePriority: AutopilotPriority; keepGameMode: boolean; coreParking: boolean; alwaysDemote: string[]; suspend: string[]
+  gameMode: { off: boolean; keptOn?: string | null }
+  cpu: string
+  now?: { game: string; did: string[] } | null
+  live: AutopilotLive | null; reports: AutopilotReport[]
+}
+export type AutopilotChange = Partial<Pick<AutopilotState, 'on' | 'gamePriority' | 'keepGameMode' | 'coreParking' | 'alwaysDemote' | 'suspend'>>
+
 /** System > This PC > Interrupts: one PCI device, its interrupt now (msi, line, or none when it isn't running) and what Optimize does to it. */
 export type InterruptDevice = {
   id: string
@@ -1809,6 +1844,8 @@ export interface HostEventMap {
   /** Exo wrote a game's Optimize again after its update reset it (title: the game's name). */
   'game.optimizedAgain': { title: string }
   'game.optimizeHeld': { title: string }
+  /** Autopilot kept a session's report (shown in PC › Autopilot afterwards; nothing is said during play). */
+  'autopilot.report': { game: string; title: string }
   /** The shader precompile moved on (at most four a second) or ended (ok set). */
   /** The Exo Shaders engine changed its list or a game's record: read shaders.status again. */
   'shaders.changed': Record<string, never>
@@ -2996,6 +3033,10 @@ export const host = {
   /** PC > Auto tune: what's tunable and where it stands; start, stop or undo one part. Off until pressed. */
   systemTune: (action?: 'start' | 'stop' | 'undo', part?: TunePart['id'], mode?: AutoTuneMode) =>
     rawCall<AutoTune>('system.tune', action ? { action, part, mode } : {}, 45_000),
+  /** PC › Autopilot: the game being watched now and the session reports kept on this PC, newest first. */
+  autopilotState: () => rawCall<AutopilotState>('autopilot.state', {}, 15_000),
+  /** One change to Autopilot: the switch (Windows Game Mode follows it at once) or a choice. message: what Windows didn't take. */
+  autopilotSet: (change: AutopilotChange) => rawCall<{ ok: boolean; message?: string | null; state: AutopilotState }>('autopilot.set', change, 15_000),
   /** System > This PC > Interrupts: the devices; apply switches every one that can to MSI mode, undo puts all back, revert one. Waits on Windows' permission prompt. */
   /** Best settings › System: the items; apply sets every Best settings item that's on, on and off one item. Waits on Windows' permission prompt and a restore point. */
   systemTuning: (action?: 'apply' | 'on' | 'off', item?: TuningKey) =>

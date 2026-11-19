@@ -1,13 +1,53 @@
 import { MOCK_SONG_MS, mockArtwork, spotifyMock } from './spotifyMock'
 import { mockAdmin, mockAppMessages, mockFew, mockFewMessages, mockApps, mockChannels, mockChannelsFor, mockDiscordStatus, mockMessageId, mockFriends, mockHome, mockMembers, mockMessages, mockProfile } from './discordMock'
 /** Browser development fixtures. Dynamically loaded only outside the packaged host. */
-import type { CompressSettings, CompressState, Game, GameProperties, LauncherSettings, InstallProgress, InstalledApp, ReplacedApp, RuntimeItem, StartupItem, StartupState, StoreGift } from './host'
+import type { AutopilotState, CompressSettings, CompressState, Game, GameProperties, LauncherSettings, InstallProgress, InstalledApp, ReplacedApp, RuntimeItem, StartupItem, StartupState, StoreGift } from './host'
 import type { CaptureItem } from './capture'
 import type { NoteInfo } from './notes'
 import { emitHostEvent } from './host'
 // A dev preview's ?pins=g:1,d:2 starts with those pinned to Discord's top bar.
 let mockMusicLevel = 0.6
 let mockBandPins: string[] = (typeof location === 'undefined' ? null : new URLSearchParams(location.search).get('pins'))?.split(',') ?? []
+/** PC › Autopilot: Counter-Strike 2 in front now, and two sessions' reports. */
+let mockAutopilotChoices: Pick<AutopilotState, 'on' | 'gamePriority' | 'keepGameMode' | 'coreParking' | 'alwaysDemote' | 'suspend'> = {
+  on: true, gamePriority: 'above', keepGameMode: false, coreParking: true, alwaysDemote: ['OneDrive'], suspend: [],
+}
+const mockAutopilot = (): AutopilotState => ({
+  ...mockAutopilotChoices,
+  gameMode: { off: mockAutopilotChoices.on && !mockAutopilotChoices.keepGameMode, keptOn: mockAutopilotChoices.keepGameMode ? 'you keep it on' : null },
+  cpu: 'One CCD: every core shares one cache, so there is nothing to pin',
+  now: mockAutopilotChoices.on ? { game: 'steam:730', did: ['Gave Counter-Strike 2 above normal priority', 'Held back OneDrive, steamwebhelper (efficiency mode, lower priority, low disk and memory priority)'] } : null,
+  live: {
+    game: 'steam:730', title: 'Counter-Strike 2', seconds: 1260, fps: 287.4, low1: 191.2, low01: 140.6, stutters: 4,
+    cpu: 46, gpu: 88, gpuTemp: 71, vramGb: 5.8, vramTotalGb: 8, ramGb: 13.2, ramTotalGb: 32, standbyGb: 9.4, freeGb: 6.1, dpc: 0.6, clock: 112,
+  },
+  reports: [
+    {
+      id: 'steam:730:2026-11-19T18:02:00Z', game: 'steam:730', title: 'Counter-Strike 2', started: '2026-11-19T18:02:00Z', minutes: 47,
+      fps: 281.2, low1: 186.4, low01: 121.8, stutters: 23,
+      findings: [
+        { kind: 'background', stutters: 14, app: 'OneDrive', detail: '14 stutters came as OneDrive jumped to 1.8 cores in the background.', suggestion: 'Autopilot holds OneDrive back the next time you play Counter-Strike 2.' },
+        { kind: 'shaders', stutters: 6, app: null, detail: '6 stutters came while the game wrote to its shader cache: most likely compiling shaders.', suggestion: 'These go away as the shaders are kept; Exo Shaders can compile them ahead (PC › Shaders).' },
+        { kind: 'unexplained', stutters: 3, app: null, detail: '3 stutters came with nothing Exo can see on the PC.', suggestion: 'Most likely the game itself: streaming a new area, or its own work on the main thread.' },
+      ],
+      did: ['Gave Counter-Strike 2 above normal priority', 'Held back 6 background apps (efficiency mode, low disk and memory priority)', 'Kept every processor core awake'],
+      learned: ['OneDrive'],
+      peaks: { cpu: 71, gpu: 99, gpuTemp: 76, vramGb: 6.4, vramTotalGb: 8, ramGb: 14.1, ramTotalGb: 32 },
+      islcSeconds: 0,
+    },
+    {
+      id: 'steam:1086940:2026-11-18T20:10:00Z', game: 'steam:1086940', title: "Baldur's Gate 3", started: '2026-11-18T20:10:00Z', minutes: 132,
+      fps: 96.3, low1: 61.0, low01: 38.2, stutters: 61,
+      findings: [
+        { kind: 'vram', stutters: 41, app: null, detail: "41 stutters came with the graphics card's memory 99% full (8 GB).", suggestion: 'Lower texture quality or the resolution a step: what doesn’t fit is read over PCIe from system memory.' },
+        { kind: 'gpuHeat', stutters: 12, app: null, detail: '12 stutters came with the graphics card at 88 °C, where cards lower their clocks.', suggestion: 'Check the card’s fans and the case’s airflow, or cap the frame rate a little below your screen’s refresh.' },
+      ],
+      did: [], learned: [],
+      peaks: { cpu: 58, gpu: 100, gpuTemp: 88, vramGb: 7.9, vramTotalGb: 8, ramGb: 18.7, ramTotalGb: 32 },
+      islcSeconds: 0,
+    },
+  ],
+})
 const MOCK_GAMES: Game[] = [
   {
     id: 'local:add',
@@ -1827,6 +1867,11 @@ const MOCK_HANDLERS: Record<string, MockHandler> = {
         { id: 'a3', name: 'Standard NVM Express Controller', kind: 'storage controller', mode: 'msi', plan: 'skip', reason: 'Left alone: Windows starts from the drive behind it', changed: false },
       ],
     }
+  },
+  'autopilot.state': mockAutopilot,
+  'autopilot.set': (p) => {
+    mockAutopilotChoices = { ...mockAutopilotChoices, ...(p as Partial<typeof mockAutopilotChoices>) }
+    return { ok: true, message: null, state: mockAutopilot() }
   },
   'system.mouseCore': mockMouseCore,
   'system.drives': mockDrives,

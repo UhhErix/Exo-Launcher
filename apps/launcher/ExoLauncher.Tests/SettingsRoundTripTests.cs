@@ -61,6 +61,12 @@ public sealed class SettingsRoundTripTests : IDisposable
                 else if (property.GetValue(settings) is List<string> list) list.Add("steam:1");
                 else if (property.GetValue(settings) is List<LibraryFolder> folders) folders.Add(new LibraryFolder { Id = "f1", Name = "Shooters", Games = ["steam:1"] });
                 else if (property.GetValue(settings) is Dictionary<string, System.Text.Json.JsonElement> prefs) prefs["voiceChat"] = System.Text.Json.JsonDocument.Parse("false").RootElement.Clone();
+                else if (property.GetValue(settings) is AutopilotSettings autopilot)
+                {
+                    (autopilot.On, autopilot.GamePriority, autopilot.KeepGameMode, autopilot.CoreParking) = (true, "high", true, false);
+                    autopilot.AlwaysDemote.Add("OneDrive");
+                    autopilot.Suspend.Add("Updater");
+                }
                 else Assert.Fail(property.Name + " has a type this test does not set; add it here.");
             }
         });
@@ -86,6 +92,9 @@ public sealed class SettingsRoundTripTests : IDisposable
             else if (want is List<string> list) Assert.True(list.SequenceEqual((List<string>)got!), property.Name + " was not kept");
             else if (want is Dictionary<string, System.Text.Json.JsonElement>)
                 Assert.True(got is Dictionary<string, System.Text.Json.JsonElement> kept && kept.TryGetValue("voiceChat", out var choice) && choice.ValueKind == System.Text.Json.JsonValueKind.False, property.Name + " was not kept");
+            else if (want is AutopilotSettings autopilot)
+                Assert.True(got is AutopilotSettings { On: true, GamePriority: "high", KeepGameMode: true, CoreParking: false } kept
+                    && kept.AlwaysDemote.SequenceEqual(autopilot.AlwaysDemote) && kept.Suspend.SequenceEqual(autopilot.Suspend) && kept.Suspend.SequenceEqual(["Updater"]), property.Name + " was not kept");
             else if (want is List<LibraryFolder>)
                 Assert.True(got is List<LibraryFolder> { Count: 1 } kept && kept[0] is { Id: "f1", Name: "Shooters" } && kept[0].Games.SequenceEqual(["steam:1"]), property.Name + " was not kept");
             else Assert.True(Equals(want, got), $"{property.Name} was not kept: {want} became {got}");

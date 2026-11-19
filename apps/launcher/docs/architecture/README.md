@@ -131,6 +131,7 @@ status and dates matter.
 - [NVIDIA driver install](nvidia-driver-install.md): driver installation research and built flow.
 - [Release 3.25.0](release-3.25.0.md): preparation and verification record.
 - [Session recorder](session-recorder.md): local frame-time measurement.
+- [Autopilot](autopilot.md): realtime telemetry, stutter reports, and what Autopilot changes while a game runs.
 - [Shader rebuild](shader-rebuild.md): driver-change rebuild watcher and code map.
 - [Store quiet](store-quiet.md): notification suppression and restoration policy.
 - [Store windows](store-windows.md): client identity and safe window hiding.
