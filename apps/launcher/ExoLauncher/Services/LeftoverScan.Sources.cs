@@ -19,7 +19,11 @@ internal sealed partial class LeftoverScan
         List<(string Key, string Text, bool Machine, KeySource Kind)> Keys,
         List<(string Path, string Target, bool Machine)> Shortcuts,
         List<(string Path, string Exe)> Tasks,
-        List<(string Key, string? Name, string Target, bool Machine)> Refs);
+        List<(string Key, string? Name, string Target, bool Machine)> Refs)
+    {
+        /// <summary>This user's file-type defaults: each extension and the ProgId its UserChoice (or UserChoiceLatest) names.</summary>
+        internal List<(string Ext, string ProgId)> Choices { get; init; } = [];
+    }
 
     // Windows' records of a program by its path, in a value's name or data: the name cache, compatibility, startup, recent apps.
     private static readonly string[] UserValues =
@@ -46,8 +50,10 @@ internal sealed partial class LeftoverScan
         @"HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\AppCompatFlags\Layers",
         @"HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\SharedDLLs",
         @"HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Installer\Folders",
-        @"HKLM\SYSTEM\CurrentControlSet\Services\SharedAccess\Parameters\FirewallPolicy\FirewallRules",
+        FirewallRules,
     ];
+
+    private const string FirewallRules = @"HKLM\SYSTEM\CurrentControlSet\Services\SharedAccess\Parameters\FirewallPolicy\FirewallRules";
 
     private const string UserAssist = @"HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\UserAssist";
     private const string Notifications = @"HKCU\Software\Microsoft\Windows\CurrentVersion\Notifications\Settings";
@@ -123,6 +129,7 @@ internal sealed partial class LeftoverScan
         }
         ReadSubKeys(Notifications, (name, _) => keys.Add((Notifications + '\\' + name, name, false, KeySource.AppId)));
         var tasks = new List<(string, string)>();
+        var choices = new List<(string, string)>();
         var refs = new List<(string, string?, string, bool)>();
         if (deep)
         {
@@ -191,6 +198,12 @@ internal sealed partial class LeftoverScan
                 using var openWith = key.OpenSubKey("OpenWithProgids");
                 foreach (var progIdName in openWith?.GetValueNames() ?? [])
                     if (progIdName.Length > 0) refs.Add(($@"{FileExts}\{ext}\OpenWithProgids", progIdName, progIdName, false));
+                // Only read: Windows signs UserChoice with a hash, and Exo never writes or forges it.
+                foreach (var choice in new[] { "UserChoiceLatest", "UserChoice", @"UserChoiceLatest\ProgId" })
+                {
+                    using var chosen = key.OpenSubKey(choice);
+                    if (chosen?.GetValue("ProgId") is string progId && progId.Length > 0) { choices.Add((ext, progId)); break; }
+                }
             });
             tasks.AddRange(_isTest ? _testTaskList : ReadTasks());
         }
@@ -204,7 +217,7 @@ internal sealed partial class LeftoverScan
             foreach (var link in Matching(full, "*.url", recurse))
                 if (InternetShortcut(link) is { } target) shortcuts.Add((link, target, machine));
         }
-        return new Sources(deep, values, keys, shortcuts, tasks, refs);
+        return new Sources(deep, values, keys, shortcuts, tasks, refs) { Choices = choices };
 
         void Command(string path, RegistryKey key, bool machine)
         {
