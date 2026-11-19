@@ -4,8 +4,8 @@ name: Launcher CI
 # tests, on Windows, so auto-merge waits for a green build and not only for CodeQL.
 
 on:
+  # Every pull request, with no path filter: `test` is a required check, so a PR that skipped it could never merge.
   pull_request:
-    paths: ['apps/launcher/**', '.github/workflows/launcher-ci.yml']
   push:
     branches: [main]
     paths: ['apps/launcher/**', '.github/workflows/launcher-ci.yml']
