@@ -4,6 +4,9 @@ updates:
     directory: /
     schedule:
       interval: weekly
+    groups:
+      actions:
+        patterns: ["*"]
   - package-ecosystem: npm
     directories:
       - "/apps/launcher/cloud/*"
@@ -13,9 +16,17 @@ updates:
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
+    ignore:
+      # Pinned: mouse/scripts/patch-protocol.mjs patches this exact version and stops the build on any other,
+      # and THIRD_PARTY_NOTICES names it. A new version is a deliberate change, not a Dependabot bump.
+      - dependency-name: "@openmouse/protocol"
     groups:
       npm-minor-and-patch:
+        applies-to: version-updates
         update-types: [minor, patch]
+      npm-security:
+        applies-to: security-updates
+        patterns: ["*"]
   - package-ecosystem: nuget
     directories:
       - "/apps/launcher/ExoLauncher"
@@ -25,6 +36,14 @@ updates:
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
+    ignore:
+      # The 11.x train follows .NET 11, which waits on docs/RUNTIME_RELEASE_READINESS.md; 10.0.x patches still come.
+      - dependency-name: "Microsoft.Data.Sqlite"
+        update-types: ["version-update:semver-major"]
     groups:
       nuget-minor-and-patch:
+        applies-to: version-updates
         update-types: [minor, patch]
+      nuget-security:
+        applies-to: security-updates
+        patterns: ["*"]
