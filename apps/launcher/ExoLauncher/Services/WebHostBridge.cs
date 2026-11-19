@@ -38,6 +38,8 @@ public sealed partial class WebHostBridge
     private int _runStatePolling;
     private int _runStateQueued;
     private volatile bool _runStateUnwatched;
+    private volatile bool _runStateSessionOnly;
+    private long _sessionOnlySince; // Environment.TickCount64 of the first scan with a session open and no game process; 0 when none
     // Window events: the process image per pid and the installed folders as a set, rebuilt only when the library changes.
     private readonly GameWindowWatch _windowWatch;
     private readonly ConcurrentDictionary<int, byte> _exitWatches = new();
@@ -86,6 +88,9 @@ public sealed partial class WebHostBridge
         ForegroundWatcher.WindowActivity += OnWindowActivity;
         _services.Library.LibraryUpdated += OnLibraryChangedForGames;
         _services.Launcher.GameLaunched += OnGameLaunchedScan;
+        _services.Launcher.GameLaunching += OnGameLaunchingAllowance;
+        _services.Launcher.GameSessionCompleted += OnGameSessionEndedScan;
+        _services.Launcher.GameLaunchFailed += OnGameSessionEndedScan;
         // One scan shortly after launch finds games already running; then only events (or the fallback) wake it.
         ArmRunStatePoll(TimeSpan.FromSeconds(10));
         _services.Launcher.GameSessionCompleted += ReapplyCalibrationsAfter;
@@ -109,7 +114,10 @@ public sealed partial class WebHostBridge
     /// </summary>
     private void PollRunStates()
     {
-        if (_detached) return;
+        // Read before the detached check: Detach sets _detached before Exo's shutdown clears the signal, so a scan that
+        // passes the check with this generation and publishes after the clear is dropped (GameRunningSignal.Clear).
+        var generation = GameRunningSignal.Generation;
+        if (Volatile.Read(ref _detached)) return;
         if (Interlocked.Exchange(ref _runStatePolling, 1) == 1)
         {
             Volatile.Write(ref _runStateQueued, 1);
@@ -127,7 +135,18 @@ public sealed partial class WebHostBridge
                 if (pids.Count == 0) _runStateUnwatched = true;
                 foreach (var pid in pids) ArmExitWatch(pid);
             }
-            GameRunningSignal.Update(runningIds.Count > 0 || _services.Launcher.AnyGameRunning);
+            var found = runningIds.Count > 0;
+            var sessionOpen = _services.Launcher.AnyGameRunning;
+            var now = Environment.TickCount64;
+            if (found || !sessionOpen) Interlocked.Exchange(ref _sessionOnlySince, 0);
+            else Interlocked.CompareExchange(ref _sessionOnlySince, now, 0);
+            var since = Interlocked.Read(ref _sessionOnlySince);
+            var sessionOnlyFor = since == 0 ? TimeSpan.Zero : TimeSpan.FromMilliseconds(now - since);
+            var running = RunStatePlan.GameRunning(found, sessionOpen, sessionOnlyFor);
+            if (!running && sessionOpen && GameRunningSignal.Running)
+                AppLog.Info($"Game running signal: no game process for {sessionOnlyFor.TotalSeconds:0} s; the open session no longer counts.");
+            _runStateSessionOnly = running && !found;
+            GameRunningSignal.Update(running, generation);
             FpsCounter.Follow(_services.Launcher, installed.Where(game => runningIds.Contains(game.Id) && !_services.ShaderPrepare.Preparing(game.Id)));
         }
         catch (Exception ex) { AppLog.Debug("Run-state poll failed: " + ex.GetType().Name); }
@@ -146,7 +165,7 @@ public sealed partial class WebHostBridge
         .ToArray();
 
     private TimeSpan PeriodicOrNever() =>
-        RunStatePlan.PeriodicEvery(ForegroundWatcher.ActivityHooked, _runStateUnwatched) ?? Timeout.InfiniteTimeSpan;
+        RunStatePlan.PeriodicEvery(ForegroundWatcher.ActivityHooked, _runStateUnwatched, _runStateSessionOnly) ?? Timeout.InfiniteTimeSpan;
 
     private void ArmRunStatePoll(TimeSpan due) => _runStatePoll?.Change(due, PeriodicOrNever());
 
@@ -175,6 +194,17 @@ public sealed partial class WebHostBridge
 
     /// <summary>Exo launched a game: one scan a few seconds on, once its process has appeared.</summary>
     private void OnGameLaunchedScan(GameEntry game) => RequestRunStateScan(TimeSpan.FromSeconds(5));
+
+    /// <summary>A launch begins: its session gets its own <see cref="RunStatePlan.SessionOnlyLimit"/>, not what an
+    /// earlier session left of it.</summary>
+    private void OnGameLaunchingAllowance(GameEntry game) => Interlocked.Exchange(ref _sessionOnlySince, 0);
+
+    /// <summary>
+    /// A session Exo started closed (the game ended, or its launch never reached it). The exit watch's scan ran inside
+    /// the session's exit debounce, while the session still counted the game as running; this scan is the one that
+    /// clears the signal.
+    /// </summary>
+    private void OnGameSessionEndedScan(GameEntry game) => RequestRunStateScan();
 
     private void ArmExitWatch(int pid)
     {
@@ -243,7 +273,7 @@ public sealed partial class WebHostBridge
     public void Detach()
     {
         if (_detached) return;
-        _detached = true;
+        Volatile.Write(ref _detached, true);
         try { _bridgeLifetime.Cancel(); } catch { }
         try { Interlocked.Exchange(ref _keyWatchCts, null)?.Cancel(); } catch { }
         StopWatch(Interlocked.Exchange(ref _controllerWatch, null));
@@ -300,6 +330,9 @@ public sealed partial class WebHostBridge
         ForegroundWatcher.WindowActivity -= OnWindowActivity;
         _services.Library.LibraryUpdated -= OnLibraryChangedForGames;
         _services.Launcher.GameLaunched -= OnGameLaunchedScan;
+        _services.Launcher.GameLaunching -= OnGameLaunchingAllowance;
+        _services.Launcher.GameSessionCompleted -= OnGameSessionEndedScan;
+        _services.Launcher.GameLaunchFailed -= OnGameSessionEndedScan;
         FpsCounter.Stop();
     }
 
