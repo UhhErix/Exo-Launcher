@@ -290,7 +290,7 @@ function Camera() {
   return (
     <Section title="Camera">
       {cameras.length === 0 ? <Row label="Camera"><State>No camera found</State></Row>
-        : devicePicker(named.length) === 'one' && (!prefs.cameraId || prefs.cameraId === named[0].deviceId) ? <Row label="Camera"><State>{named[0].label || 'Camera'}</State></Row> : (
+        : devicePicker(named.length) === 'one' && !prefs.cameraId ? <Row label="Camera"><State>{named[0].label || 'Camera'}</State></Row> : (
         <ChoiceRow<string> label="Camera" detail={named.length === 0 ? 'Test video once to choose' : undefined} value={prefs.cameraId ?? ''}
           onChange={id => setDiscordPrefs({ cameraId: id || null })}
           choices={[{ value: '', label: 'Default' }, ...named.map((c, i) => ({ value: c.deviceId, label: c.label || `Camera ${i + 1}` }))]} />

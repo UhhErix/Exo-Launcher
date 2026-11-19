@@ -175,18 +175,22 @@ const HOURS = [
   { value: '9-17', label: '9 AM–5 PM', start: 9, end: 17 },
 ] as const
 
-// Hours set some other way (an older build, the settings file) show as "Set elsewhere", never as Any time.
-function downloadHoursValue(settings: LauncherSettings | null): string {
-  const start = settings?.downloadHoursStart ?? null
-  const end = settings?.downloadHoursEnd ?? null
-  return HOURS.find(h => h.start === start && h.end === end)?.value ?? 'custom'
-}
-
 /** Settings › Downloads: where games install, when they download, and what updates by itself. Frame generation lives in PC › Graphics only. */
 export function DownloadsSection({ settings, disabled, save }: { settings: LauncherSettings | null; disabled: boolean; save: SaveSettings }) {
   const [picking, setPicking] = useState(false)
   const [folderError, setFolderError] = useState<string | null>(null)
-  const root = settings?.defaultInstallRoot?.trim() || null
+  const {
+    defaultInstallRoot,
+    downloadHoursStart = null,
+    downloadHoursEnd = null,
+    pauseDownloadsWhilePlaying,
+    autoUpdateGames,
+    chipset,
+    autoUpdateChipset,
+    autoUpdateUpscalers,
+    upscalerAntiCheatEverywhere,
+  }: Partial<LauncherSettings> = settings ?? {}
+  const root = defaultInstallRoot?.trim() || null
 
   async function browse() {
     if (picking) return
@@ -203,7 +207,8 @@ export function DownloadsSection({ settings, disabled, save }: { settings: Launc
     }
   }
 
-  const hours = downloadHoursValue(settings)
+  // Hours set some other way (an older build, the settings file) show as "Set elsewhere", never as Any time.
+  const hours: string = HOURS.find(h => h.start === downloadHoursStart && h.end === downloadHoursEnd)?.value ?? 'custom'
   return (
     <Section id="downloads" title="Downloads">
       <Row label="Install folder" detail={root ?? "Exo's Games folder"} error={folderError}>
@@ -221,19 +226,19 @@ export function DownloadsSection({ settings, disabled, save }: { settings: Launc
           const pick = HOURS.find(h => h.value === value)
           return pick ? save({ downloadHoursStart: pick.start, downloadHoursEnd: pick.end }) : undefined
         }} />
-      <SwitchRow id="set-pause-playing" label="Pause downloads while playing" checked={settings?.pauseDownloadsWhilePlaying !== false} disabled={disabled}
+      <SwitchRow id="set-pause-playing" label="Pause downloads while playing" checked={pauseDownloadsWhilePlaying !== false} disabled={disabled}
         onChange={value => save({ pauseDownloadsWhilePlaying: value })} />
-      <SwitchRow id="set-auto-update" label="Update games automatically" checked={settings?.autoUpdateGames !== false} disabled={disabled}
+      <SwitchRow id="set-auto-update" label="Update games automatically" checked={autoUpdateGames !== false} disabled={disabled}
         onChange={value => save({ autoUpdateGames: value })} />
-      {settings?.chipset ? (
-        <SwitchRow id="set-auto-chipset" label={`Update the ${settings.chipset === 'amd' ? 'AMD' : 'Intel'} chipset driver automatically`}
-          checked={settings.autoUpdateChipset !== false} disabled={disabled} onChange={value => save({ autoUpdateChipset: value })} />
+      {chipset ? (
+        <SwitchRow id="set-auto-chipset" label={`Update the ${chipset === 'amd' ? 'AMD' : 'Intel'} chipset driver automatically`}
+          checked={autoUpdateChipset !== false} disabled={disabled} onChange={value => save({ autoUpdateChipset: value })} />
       ) : null}
       <SwitchRow id="set-auto-upscalers" label={AUTO_UPSCALERS_LABEL} detail={AUTO_UPSCALERS_DETAIL}
-        checked={settings?.autoUpdateUpscalers !== false} disabled={disabled} onChange={value => save({ autoUpdateUpscalers: value })} />
-      {upscalerAntiCheatShown(settings?.autoUpdateUpscalers, settings?.upscalerAntiCheatEverywhere) ? (
+        checked={autoUpdateUpscalers !== false} disabled={disabled} onChange={value => save({ autoUpdateUpscalers: value })} />
+      {upscalerAntiCheatShown(autoUpdateUpscalers, upscalerAntiCheatEverywhere) ? (
         <SwitchRow id="set-upscalers-anticheat" label="Also in games with anti-cheat" detail="In automatic and Update all runs. Can risk a ban. Never Riot games or Vanguard."
-          checked={settings?.upscalerAntiCheatEverywhere === true} disabled={disabled} onChange={value => save({ upscalerAntiCheatEverywhere: value })} />
+          checked={upscalerAntiCheatEverywhere === true} disabled={disabled} onChange={value => save({ upscalerAntiCheatEverywhere: value })} />
       ) : null}
     </Section>
   )

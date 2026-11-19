@@ -1810,7 +1810,7 @@ const MOCK_HANDLERS: Record<string, MockHandler> = {
     }
   },
   'gpu.driver': () => mockGpu === 'amd'
-    ? { ok: true, vendor: 'amd', card: 'RX 6600', installed: '26.1.1', update: false, latest: null }
+    ? { ok: true, vendor: 'amd', card: 'Radeon RX 9070 XT', installed: '26.1.1', update: false, latest: null }
     : mockGpu === 'intel'
       ? { ok: true, vendor: 'intel', card: 'Arc B580', installed: '32.0.101.6559', update: false, latest: null }
       : { ok: true, vendor: 'nvidia', card: 'RTX 3070', installed: '581.42', update: true, latest: { version: '581.57', size: 900_000_000, released: '2026-10-14', kind: 'game' } },
