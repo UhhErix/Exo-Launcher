@@ -22,7 +22,7 @@ internal static class WebExtensions
             "47e23e0e1fdf19eec2c55d4ccefa5ae563c132181ad72d8fe40701617cc4d2f7", "SponsorBlock"),
         // Built and pinned by shield/build.mjs: change shield/rules, never this folder.
         new("exo-shield", "Exo Shield", "2026.1119.1", "exo-shield",
-            "3cc5a7fe62b737268450a232c0ecd47740a4bccb7b6f7e1f0788cf4ee1ef3dba", "Exo Shield"),
+            "57766f356bf141fafa4c17632dbab38db5b371900625377ada6adf35ea571334", "Exo Shield"),
     ];
 
     private sealed record SurfaceContext(nint Owner, DispatcherQueue Dispatcher);

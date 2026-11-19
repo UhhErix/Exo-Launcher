@@ -77,7 +77,7 @@
    "type": "block"
   },
   "condition": {
-   "urlFilter": "||music.youtube.com/api/stats/qoe",
+   "urlFilter": "||youtube.com/get_midroll_",
    "initiatorDomains": [
     "music.youtube.com"
    ]
@@ -90,7 +90,7 @@
    "type": "block"
   },
   "condition": {
-   "urlFilter": "||music.youtube.com/youtubei/v1/log_event",
+   "urlFilter": "||music.youtube.com/youtubei/v1/player/ad_break",
    "initiatorDomains": [
     "music.youtube.com"
    ]
@@ -103,7 +103,7 @@
    "type": "block"
   },
   "condition": {
-   "urlFilter": "||google.com/pagead/",
+   "urlFilter": "||music.youtube.com/api/stats/qoe",
    "initiatorDomains": [
     "music.youtube.com"
    ]
@@ -116,9 +116,9 @@
    "type": "block"
   },
   "condition": {
-   "urlFilter": "spclient.spotify.com/ads/",
+   "urlFilter": "||music.youtube.com/youtubei/v1/log_event",
    "initiatorDomains": [
-    "open.spotify.com"
+    "music.youtube.com"
    ]
   }
  },
@@ -129,9 +129,9 @@
    "type": "block"
   },
   "condition": {
-   "urlFilter": "spclient.spotify.com/ad-logic/",
+   "urlFilter": "||google.com/pagead/",
    "initiatorDomains": [
-    "open.spotify.com"
+    "music.youtube.com"
    ]
   }
  },
@@ -142,7 +142,7 @@
    "type": "block"
   },
   "condition": {
-   "urlFilter": "spclient.wg.spotify.com/ads/",
+   "urlFilter": "spclient.spotify.com/ads/",
    "initiatorDomains": [
     "open.spotify.com"
    ]
@@ -155,7 +155,7 @@
    "type": "block"
   },
   "condition": {
-   "urlFilter": "spclient.wg.spotify.com/ad-logic/",
+   "urlFilter": "spclient.spotify.com/ad-logic/",
    "initiatorDomains": [
     "open.spotify.com"
    ]
@@ -168,7 +168,7 @@
    "type": "block"
   },
   "condition": {
-   "urlFilter": "spotify.com/gabo-receiver-service/",
+   "urlFilter": "spclient.wg.spotify.com/ads/",
    "initiatorDomains": [
     "open.spotify.com"
    ]
@@ -181,7 +181,7 @@
    "type": "block"
   },
   "condition": {
-   "urlFilter": "||open.spotifycdn.com/cdn/js/retargeting-pixels",
+   "urlFilter": "spclient.wg.spotify.com/ad-logic/",
    "initiatorDomains": [
     "open.spotify.com"
    ]
@@ -195,12 +195,8 @@
   },
   "condition": {
    "requestDomains": [
-    "cookielaw.org",
-    "doubleclick.net",
-    "google-analytics.com",
-    "googletagmanager.com",
-    "onetrust.com",
-    "sentry.io"
+    "pixel-static.spotify.com",
+    "pixel.spotify.com"
    ],
    "initiatorDomains": [
     "open.spotify.com"
@@ -209,6 +205,46 @@
  },
  {
   "id": 16,
+  "priority": 1,
+  "action": {
+   "type": "block"
+  },
+  "condition": {
+   "urlFilter": "||open.spotifycdn.com/cdn/js/retargeting-pixels",
+   "initiatorDomains": [
+    "open.spotify.com"
+   ]
+  }
+ },
+ {
+  "id": 17,
+  "priority": 1,
+  "action": {
+   "type": "block"
+  },
+  "condition": {
+   "requestDomains": [
+    "ads.linkedin.com",
+    "analytics.tiktok.com",
+    "bat.bing.com",
+    "connect.facebook.net",
+    "cookielaw.org",
+    "doubleclick.net",
+    "google-analytics.com",
+    "googletagmanager.com",
+    "onetrust.com",
+    "sc-static.net",
+    "sentry.io",
+    "static.ads-twitter.com",
+    "tr.snapchat.com"
+   ],
+   "initiatorDomains": [
+    "open.spotify.com"
+   ]
+  }
+ },
+ {
+  "id": 18,
   "priority": 1,
   "action": {
    "type": "block"
