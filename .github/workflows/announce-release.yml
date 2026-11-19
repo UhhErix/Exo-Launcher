@@ -30,7 +30,7 @@ jobs:
           request = Request(
               'https://updates.getexo.app/v1/launcher/announce',
               data=json.dumps({'tag': tag}).encode('utf-8'),
-              headers={'Content-Type': 'application/json'},
+              headers={'Content-Type': 'application/json', 'User-Agent': 'ExoReleaseAnnouncer/1.0 (+https://github.com/UhhErix/Exo-Launcher)'},
               method='POST',
           )
           try:
