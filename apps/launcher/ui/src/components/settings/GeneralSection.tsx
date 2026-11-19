@@ -227,7 +227,11 @@ export function DownloadsSection({ settings, disabled, save }: { settings: Launc
           checked={settings.autoUpdateChipset !== false} disabled={disabled} onChange={value => save({ autoUpdateChipset: value })} />
       ) : null}
       <SwitchRow id="set-auto-upscalers" label={AUTO_UPSCALERS_LABEL} detail={AUTO_UPSCALERS_DETAIL}
-        checked={settings?.autoUpdateUpscalers === true} disabled={disabled} onChange={value => save({ autoUpdateUpscalers: value })} />
+        checked={settings?.autoUpdateUpscalers !== false} disabled={disabled} onChange={value => save({ autoUpdateUpscalers: value })} />
+      {settings?.frameGenEverywhereCard ? (
+        <SwitchRow id="set-frame-gen-everywhere-general" label="Frame generation in games without anti-cheat"
+          checked={settings.frameGenEverywhere === true} disabled={disabled} onChange={value => save({ frameGenEverywhere: value })} />
+      ) : null}
     </Section>
   )
 }

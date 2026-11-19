@@ -1,6 +1,8 @@
 # Changelog
 
 ## 3.26.0 — November 14, 2026
+- **Your games' DLSS, FSR and XeSS update by themselves.** With Update DLSS, FSR and XeSS automatically on, every game that has them moves to the newest signed files while you aren't playing, as Update all would, with nothing to press. Games with anti-cheat are left alone unless you allowed it for that game, and Restore in a game's Properties still puts its own files back. _Checked in code only._
+- **Frame generation's switch is in Settings too.** Frame generation in games without anti-cheat sits in Settings › General beside the upscaler switch, as well as in the PC room, and each game's page still turns it off for that game. _Checked in code only._
 - **Upscalers and frame generation stay current by themselves.** DLSS, FSR and XeSS files, OptiScaler, MFG Unlocker and DLSSG SM86 now come straight from their makers' releases the day they ship, with Exo's own copy as the backup, and every file is still checked before it goes in. Automatic upscaler updates are on for everyone. _Checked in code only._
 - **NVIDIA's frame generation on RTX 20 and 30.** Best settings' Frame generation now puts DLSSG SM86 into games on an RTX 20 or 30, instead of FSR frame generation. _Checked in code only._
 - **DLSS updates download again.** Updating a game to DLSS 310.9.16 stopped with "Not Found"; it downloads now. _Checked in code only._
