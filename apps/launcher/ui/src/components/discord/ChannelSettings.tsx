@@ -236,7 +236,7 @@ function Permissions({ settings, onSaved }: { settings: Settings; onSaved: () =>
   )
 }
 
-/** Deny, neutral (the roles decide) or allow, as Discord's red cross, gray slash and green check. */
+/** Deny, neutral (the roles decide) or allow: a no-entry sign, Discord's gray slash and a check. */
 function TriState({ label, state, onChange }: { label: string; state: Tri; onChange: (state: Tri) => void }) {
   const options: { value: Tri; name: string; icon: React.ReactNode }[] = [
     { value: 'deny', name: 'Deny', icon: <Deny size={14} /> },

@@ -591,7 +591,7 @@ function readInvite(code: string) {
  */
 function InviteBadge({ verified, partnered }: { verified?: boolean; partnered?: boolean }) {
   if (!verified && !partnered) return null
-  return <span className="exo-dc-invite-badge" aria-label={verified ? 'Verified' : 'Partnered'}>{verified ? <Icons.Verified size={16} filled /> : <Icons.Partnered size={16} />}</span>
+  return <span className="exo-dc-invite-badge" aria-label={verified ? 'Verified' : 'Partnered'}>{verified ? <Icons.Verified size={16} /> : <Icons.Partnered size={16} />}</span>
 }
 
 function InviteCard({ code, mine }: { code: string; mine: boolean }) {
