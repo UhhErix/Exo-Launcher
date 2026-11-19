@@ -116,7 +116,7 @@ public sealed class DisposableHostGuardTests
         ("ExoLauncher/Services/Notes.cs", "internal NoteInfo? Rename(string id, string name, out string? problem)"),
         ("ExoLauncher/Services/Notes.cs", "internal NoteInfo? SetKind(string id, bool markdown, out string? problem)"),
         ("ExoLauncher/MainWindow.Capture.cs", "internal async Task<object> CaptureSaveImageAsync(string? id, string? base64)"),
-        ("ExoLauncher/MainWindow.Capture.cs", "private async Task ConfigureCaptureAsync()"),
+        ("ExoLauncher/MainWindow.Capture.cs", "private async Task ConfigureCaptureAsync(bool retry = false)"),
         ("ExoLauncher/Services/MouseBridgeRetirement.cs", "private static bool WriteProfilesBack()"),
         ("ExoLauncher/Services/GameSettings.CallOfDuty.cs", "internal static bool ClearLeftoverMarker(Models.GameEntry game, Func<string, (bool Read, int? Pid)>? read = null,"),
         ("ExoLauncher/Services/GameSettings.CallOfDuty.cs", "internal static void ClearShaderCaches(IEnumerable<string> caches)"),

@@ -2,6 +2,7 @@
 
 ## 3.26.0 — November 14, 2026
 - **GIFs in Discord stay.** A GIF that stumbled once (often while Exo was minimized) turned into a "would not load" line for good; it now tries again, and again when you come back. Imgur GIFs load too. _Checked in code only._
+- **Glass edges, not grey outlines.** Panels, menus and controls are lit at their edge like glass, brightest along the top, instead of a grey line all the way round, and lines inside a panel are faint enough that they never stack into a grey band. _Checked in code only._
 - **Old frame generation installs come out.** A game that got Exo Bridge from an earlier test build (Hell Is Us) had it left behind for good; Exo now takes it out by its record and puts today's frame generation in. _Checked in code only._
 - **Five rooms, in the middle.** The top bar has Library, Store, Discord, Music and PC, centered in the window. Devices moved into the PC room: its button sits on the This PC line beside Apps, and nothing in it changed. The mouse's capsule left the top bar; its battery shows in the FPS counter. _Checked in code only._
 - **Battery in the FPS counter.** Settings › FPS counter can add Lowest battery: the wireless mouse, headset or controller lowest on charge, as "82% MOUSE", read once a minute. _Checked in code only._

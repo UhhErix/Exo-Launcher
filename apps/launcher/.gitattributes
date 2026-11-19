@@ -16,3 +16,7 @@
 ExoLauncher/Assets/Extensions/** -text
 *.gz binary
 *.bin binary
+
+# Browser extensions ship byte for byte as downloaded: their manifest hash pins every byte (WebExtensions.cs), and
+# text=auto once rewrote their line endings, so the bundled SponsorBlock stopped matching its pin.
+ExoLauncher/Assets/Extensions/** -text

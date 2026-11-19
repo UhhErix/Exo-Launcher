@@ -179,8 +179,10 @@ body,
      or chip is a white pill with black words, as the primary button is, and its group has no outline of its own (never a
      pill inside a pill); a chosen row in a list is a fill; a picked picture shows its check. */
   --exo-hair: 1px;
-  --exo-line: #2e2e2e;
-  --exo-float-line: var(--exo-line);
+  /* Liquid Glass edges (owner, 2026-11-19: the grey outlines looked stacked and grey; Apple's HIG › Materials): a line is
+     white at a low alpha, so on black it is barely there and two of them side by side never add up to a grey band. */
+  --exo-line: rgb(255 255 255 / 0.07);
+  --exo-float-line: rgb(255 255 255 / 0.055);
   /* Controls (DESIGN.md › Controls): every control on the page (secondary buttons, chips, segment groups,
      fields, labels over art) is small Liquid Glass: a clear fill (--exo-fill) over the glass's blur and tone
      (--exo-control-glass; glass.css lists the controls), with one even hairline all around (--exo-rim,
@@ -197,7 +199,11 @@ body,
   /* One thin even line all the way round, the same 1px on every glass: a dark hairline outside a light one read as a
      thicker outline than everything else's. A lit top, a shaded foot and a bent rim read as one side brighter than the
      other and the sides as concave, at 1080p stepped too. */
-  --glassy-ring: inset 0 0 0 var(--exo-hair) var(--exo-line);
+  /* Glass is lit at its edge like a lens (WWDC25 "Meet Liquid Glass"): brightest along the top, faint down the sides,
+     fainter at the foot, with a soft inner glow under the top edge. No grey ring all the way round. */
+  --glassy-ring: inset 0 var(--exo-hair) 0 rgb(255 255 255 / 0.17), inset var(--exo-hair) 0 0 rgb(255 255 255 / 0.06),
+    inset calc(-1 * var(--exo-hair)) 0 0 rgb(255 255 255 / 0.06), inset 0 calc(-1 * var(--exo-hair)) 0 rgb(255 255 255 / 0.03),
+    inset 0 16px 28px -22px rgb(255 255 255 / 0.1);
   /* Words keep a tight shadow over bright art; a 12px halo around them read as a smudge. */
   --glassy-words: 0 1px 2px rgb(0 0 0 / 0.45);
   /* Small glass casts nothing (a shadow below it alone read as fake); large glass floats in an even halo. */

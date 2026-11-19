@@ -8,6 +8,9 @@ import { a11yScan, brokenImages, layoutFaults, layoutScan, roomState, settle, wh
 
 export const ROOMS = ['Library', 'Store', 'Discord', 'Music', 'PC', 'Devices']
 
+/** The rooms with a tab in the Bar: Devices is a page of the PC room, opened from its Devices chip. */
+export const BAR_ROOMS = ROOMS.filter(room => room !== 'Devices')
+
 /** The Bar's tab for a room (its label without a count badge). */
 export const roomTab = (name) => [...document.querySelectorAll('.exo-titlebar button, nav button')]
   .find(b => (b.getAttribute('aria-label') || b.textContent || '').trim().replace(/\s*\d+$/, '') === name)
@@ -35,6 +38,18 @@ export function kit(t) {
     /** Goes to a room by its Bar tab and waits until it is current and still; returns the time it took (ms). */
     async nav(room) {
       await k.closeAll()
+      if (room === 'Devices') {
+        // A page of the PC room: its chip on the This PC line opens it, and the PC tab stays lit there.
+        const t0 = Date.now()
+        await k.nav('PC')
+        const opened = await t.shell.click(() => [...document.querySelectorAll('.exo-pc-chip')].find(b => b.textContent.trim() === 'Devices'))
+        if (!opened) throw new Error('no Devices chip in the PC room')
+        const ok = await t.shell.waitFor(() => { const m = document.querySelector('main[aria-label="Devices"]'); return !!m && m.getBoundingClientRect().width > 0 }, { timeoutMs: 8000 })
+        if (!ok) throw new Error('Devices did not open from the PC room')
+        const ms = Date.now() - t0
+        await k.settle()
+        return ms
+      }
       const t0 = Date.now()
       const clicked = await t.shell.click(roomTab, room)
       if (!clicked) throw new Error(`no Bar tab for ${room}`)

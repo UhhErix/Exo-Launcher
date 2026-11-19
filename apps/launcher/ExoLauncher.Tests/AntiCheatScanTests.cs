@@ -43,8 +43,11 @@ public sealed class AntiCheatScanTests : IDisposable
         Directory.CreateDirectory(outside);
         var game = Path.Combine(_root, "Game");
         Directory.CreateDirectory(game);
-        Assert.SkipUnless(TryCreateJunction(Path.Combine(game, "BattlEye"), outside), "This volume takes no junctions.");
-        Assert.Equal("BattlEye", Scan());
+        var link = Path.Combine(game, "BattlEye");
+        Assert.SkipUnless(TryCreateJunction(link, outside), "This volume takes no junctions.");
+        try { Assert.Equal("BattlEye", Scan()); }
+        // The link goes on its own first: a recursive delete of the folder holding it was refused ("Access ... denied").
+        finally { DeletionGate.DeleteDirectory(link); }
     }
 
     private static bool TryCreateJunction(string link, string target)
