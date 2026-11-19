@@ -211,6 +211,6 @@ public sealed class DlssSwapperSecurityTests
         Assert.True(DlssSwapService.DownloadAllowed(DlssSwapService.FindPinned("nvngx_dlss.dll", "dlss-310.9.1")!.Url));
 
     [Fact]
-    public void AutomaticUpscalerUpdatesAreOffUntilTheUserTurnsThemOn() =>
-        Assert.False(new AppSettings().AutoUpdateUpscalers);
+    public void AutomaticUpscalerUpdatesAreOnUntilTheUserTurnsThemOff() =>
+        Assert.True(new AppSettings().AutoUpdateUpscalers);
 }

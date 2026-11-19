@@ -103,8 +103,8 @@ public sealed class FrameGenModTests : IDisposable
         VersionText = versionText ?? (_ => null),
         OriginalName = path => _loaders.GetValueOrDefault(Sha(path)),
         FrameGenLatest = (mod, _) => Task.FromResult(_latest[mod.Repo]),
-        // Off is the real switch: no pin for DLSSG SM86 in PinnedFrameGenReleases.
-        UnofferedReason = mod => dlssgOffered ? null : Unoffered(mod),
+        // DLSSG SM86 held back, as a card class Exo stops offering would be.
+        UnofferedReason = mod => dlssgOffered || mod != DlssgSm86 ? null : "Not available yet",
         FrameGenSource = (mod, release, _) =>
         {
             var folder = Path.Combine(_source, mod.Repo, release.Tag);
@@ -409,16 +409,15 @@ public sealed class FrameGenModTests : IDisposable
         Assert.Matches("^[0-9a-f]{64}$", selected.Sha256);
     }
 
-    /// <summary>DLSSG SM86's one switch is its pin. Ways it could fail: it reads as offered with no pin (a download with
-    /// nothing to check it against), a pin added later doesn't offer it, a pin of another mod offers it, or a mod with a
-    /// pin is refused. The owner is still deciding where its files come from, so it ships off.</summary>
+    /// <summary>Every mod is offered: its newest release comes from GitHub with the digest GitHub publishes, a pin is only
+    /// the cache's fallback. Ways the pin fallback could fail: a pin added later isn't the newest, a pin of another mod
+    /// offers it, or a mod with a pin is refused.</summary>
     [Fact]
-    public void TheDlssgSwitchIsItsPinAndShipsOff()
+    public void EveryModIsOfferedAndAPinIsTheFallback()
     {
         Assert.Null(Unoffered(MfgUnlocker));
         Assert.Null(Unoffered(OptiScaler));
-        Assert.DoesNotContain(PinnedFrameGenReleases, pin => pin.Repo == DlssgSm86.Repo);
-        Assert.NotNull(Unoffered(DlssgSm86));
+        Assert.Null(Unoffered(DlssgSm86));
         var on = PinnedFrameGenReleases.Append((DlssgSm86.Repo, new FrameGenRelease("0.4.1", "dlssg-release-0.4.1-x64.zip", 1000, new string('a', 64)))).ToList();
         Assert.Null(Unoffered(DlssgSm86, on));
         Assert.Equal("0.4.1", NewestPinnedRelease(DlssgSm86, on).Tag);

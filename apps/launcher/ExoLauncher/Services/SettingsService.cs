@@ -117,6 +117,9 @@ public sealed class SettingsService
                     loaded = DeserializeSalvaging(json, settingsRoot)
                         ?? throw new JsonException("settings.json deserialized to null");
                     NormalizeLoaded(loaded);
+                    // 3.26 and earlier kept upscaler updates off by default and wrote that false into every settings file: a file
+                    // from before the flag existed has them turned on once; from then on the user's switch decides.
+                    if (!settingsRoot.TryGetProperty("upscalerAutoUpdateDefaulted", out _)) { loaded.AutoUpdateUpscalers = true; loaded.UpscalerAutoUpdateDefaulted = true; }
                 }
                 else
                 {
@@ -1037,6 +1040,7 @@ public sealed class SettingsService
         AutoUpdateGames = source.AutoUpdateGames,
         AutoUpdateChipset = source.AutoUpdateChipset,
         AutoUpdateUpscalers = source.AutoUpdateUpscalers,
+        UpscalerAutoUpdateDefaulted = source.UpscalerAutoUpdateDefaulted,
         KeepAwakeDownloads = source.KeepAwakeDownloads,
         StoreClientsQuiet = source.StoreClientsQuiet,
         FastGpuForGames = source.FastGpuForGames,
