@@ -574,8 +574,8 @@ public sealed partial class FrameGenModTests : IDisposable
     [InlineData("AMD Radeon RX 6600", "native")]
     [InlineData("Intel(R) Arc(TM) B580 Graphics", "native")]
     [InlineData("NVIDIA GeForce RTX 2070 SUPER", "off")]
-    [InlineData("NVIDIA GeForce RTX 4070", "hidden")]
-    [InlineData("NVIDIA GeForce RTX 5070", "hidden")]
+    [InlineData("NVIDIA GeForce RTX 4070", "native")]
+    [InlineData("NVIDIA GeForce RTX 5070", "native")]
     [InlineData("NVIDIA GeForce GTX 1660 SUPER", "native")]
     [InlineData("AMD Radeon RX 580 Series", "native")]
     [InlineData("Intel(R) UHD Graphics 770", "hidden")]
@@ -627,7 +627,7 @@ public sealed partial class FrameGenModTests : IDisposable
         Assert.False((await On(Service(), "NVIDIA GeForce RTX 4070")).Ok);
         Assert.Equal(before, Snapshot());
         var line = State(Service(), "NVIDIA GeForce RTX 4070");
-        Assert.Equal("hidden", line.State);
+        Assert.Equal("native", line.State);
         Assert.Null(line.Path);
 
         var service = Service();
@@ -1014,9 +1014,9 @@ public sealed partial class FrameGenModTests : IDisposable
     }
 
     [Theory]
-    [InlineData("NVIDIA GeForce RTX 5090")]
-    [InlineData("Intel(R) UHD Graphics 770")]
-    public async Task CardsWithMultiFrameGenerationOrNoModGetNothing(string gpu)
+    [InlineData("NVIDIA GeForce RTX 5090", "native")]
+    [InlineData("Intel(R) UHD Graphics 770", "hidden")]
+    public async Task CardsWithMultiFrameGenerationOrNoModGetNothing(string gpu, string expectedState)
     {
         UnrealGame();
         var before = Snapshot();
@@ -1024,7 +1024,7 @@ public sealed partial class FrameGenModTests : IDisposable
 
         Assert.False((await On(service, gpu)).Ok);
         Assert.Equal(before, Snapshot());
-        Assert.Equal("hidden", State(service, gpu).State);
+        Assert.Equal(expectedState, State(service, gpu).State);
     }
 
     [Fact]
