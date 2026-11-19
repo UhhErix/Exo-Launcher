@@ -422,6 +422,7 @@ const mockSettings: LauncherSettings = {
     discordQuietWhilePlaying: true,
   autoUpdateChipset: true,
   autoUpdateUpscalers: true,
+  upscalerAntiCheatEverywhere: false,
   keepAwakeDownloads: true,
   storeClientsQuiet: true,
   chipset: mockIntelCpu ? 'intel' : 'amd',
