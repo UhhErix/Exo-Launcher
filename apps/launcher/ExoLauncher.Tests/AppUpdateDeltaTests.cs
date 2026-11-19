@@ -161,7 +161,7 @@ public sealed class AppUpdateDeltaTests : IDisposable
     /// <summary>A small HTTP server on loopback that serves files.json, files.pack (with byte ranges) and the latest answer.</summary>
     private sealed class Server : IDisposable
     {
-        private readonly HttpListener _listener = new();
+        private readonly HttpListener _listener;
         private readonly Task _loop;
         internal int Port { get; }
         internal string Served { get; set; } = "";
@@ -180,10 +180,10 @@ public sealed class AppUpdateDeltaTests : IDisposable
             for (var attempt = 0; ; attempt++)
             {
                 Port = Random.Shared.Next(20000, 60000);
-                _listener.Prefixes.Clear();
-                _listener.Prefixes.Add($"http://127.0.0.1:{Port}/");
-                try { _listener.Start(); break; }
-                catch (HttpListenerException) when (attempt < 10) { }
+                var listener = new HttpListener();
+                listener.Prefixes.Add($"http://127.0.0.1:{Port}/");
+                try { listener.Start(); _listener = listener; break; }
+                catch (HttpListenerException) when (attempt < 10) { listener.Close(); }
             }
             _loop = Task.Run(async () =>
             {

@@ -1,0 +1,5 @@
+M:System.Net.Http.HttpClient.#ctor;Exo Capture never reaches the network
+M:System.Net.Http.HttpClient.#ctor(System.Net.Http.HttpMessageHandler);Exo Capture never reaches the network
+M:System.Net.Http.HttpClient.#ctor(System.Net.Http.HttpMessageHandler,System.Boolean);Exo Capture never reaches the network
+M:System.Diagnostics.Process.Kill;Never end a process: OBS's helpers are waited on, and a game is never touched
+M:System.Diagnostics.Process.Kill(System.Boolean);Never end a process: OBS's helpers are waited on, and a game is never touched

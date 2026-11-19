@@ -73,7 +73,7 @@ foreach ($notice in 'LICENSE', 'LICENSE-EXCEPTION.txt', 'THIRD-PARTY-NOTICES.md'
 }
 Remove-Item $shaders -Recurse -Force
 
-# Exo Capture (GPL-3.0-or-later, source in capture\): built here, under addons\capture.
+# Exo Capture (MIT, capture\LICENSE, source in capture\; OBS hook files stay GPL-2.0-or-later): built here, under addons\capture.
 pwsh -NoProfile -File (Join-Path $repo 'capture\build.ps1')
 if ($LASTEXITCODE) { throw "Exo Capture build failed ($LASTEXITCODE)." }
 $captureAddon = Join-Path $publish.FullName 'addons\capture'

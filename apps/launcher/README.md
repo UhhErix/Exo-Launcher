@@ -18,10 +18,10 @@ This snapshot comes from `release/3.26.0` at `7e1289f`. The recovered
 `VERSION` said `3.25.0`; it was updated here to `3.26.0` to match the
 changelog and published installer.
 
-Exo Capture source is left out until its licensing is confirmed.
-This snapshot also omits internal attack-reproduction harnesses.
-First-party source is [MIT licensed](LICENSE); third-party components
+Exo Capture (`capture/`) is MIT licensed; third-party components
 keep their own licenses.
+This snapshot omits internal attack-reproduction harnesses.
+First-party source is [MIT licensed](LICENSE).
 
 ## Download
 
@@ -31,7 +31,7 @@ Exo Launcher requires Windows 11 x64.
 **Open-source parts that ship with Exo** keep their own licenses, and their source is public:
 
 - [Exo Mouse](https://getexo.app/source) (AGPL-3.0-or-later), built on OpenMouse by snekxs.
-- OBS Studio's game capture hook (GPL-2.0-or-later), unchanged, which Exo Capture runs for a game in exclusive full screen. Exo Capture itself is Exo's own; [its versions up to 3.17.1](https://getexo.app/source) are GPL-3.0-or-later.
+- OBS Studio's game capture hook (GPL-2.0-or-later), unchanged, which Exo Capture (MIT, in `capture/`) runs for a game in exclusive full screen; [versions up to 3.17.1](https://getexo.app/source) were GPL-3.0-or-later.
 - [Exo Shaders](https://getexo.app/source) (GPL-3.0-or-later), Exo's fork of SCSKiller, a separate program whose source is in `shaders/`.
 - [Exo Shield](https://getexo.app/source) (GPL-3.0), Exo's blocker, made from uBlock Origin Lite and HaGeZi's Multi PRO list, and SponsorBlock (GPL-3.0), in the music players' browser.
 
