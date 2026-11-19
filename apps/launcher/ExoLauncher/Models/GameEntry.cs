@@ -515,6 +515,8 @@ public sealed class AppSettings
     public bool LucidFollowHeadset { get; set; } = true;
     /// <summary>Apps whose start with Windows Exo turned off (<see cref="ExoLauncher.Helpers.StartupApps"/>); one turned back on stays on.</summary>
     public List<string> StartupHandedToExo { get; set; } = [];
+    /// <summary>Exo opens when Windows starts (the current user's Run key, <see cref="ExoLauncher.Services.StartWithWindows"/>); off until the player turns it on.</summary>
+    public bool StartWithWindows { get; set; }
     /// <summary>Where a separate Lucid.exe was, as earlier versions of Exo found it: used only while it's newer than the one in Exo.</summary>
     public string? LucidPath { get; set; }
     /// <summary>

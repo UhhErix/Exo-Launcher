@@ -591,7 +591,7 @@ function readInvite(code: string) {
  */
 function InviteBadge({ verified, partnered }: { verified?: boolean; partnered?: boolean }) {
   if (!verified && !partnered) return null
-  return <span className="exo-dc-invite-badge" aria-label={verified ? 'Verified' : 'Partnered'}>{verified ? <Icons.Verified size={16} filled /> : <Icons.Partnered size={16} />}</span>
+  return <span className="exo-dc-invite-badge" aria-label={verified ? 'Verified' : 'Partnered'}>{verified ? <Icons.Verified size={16} /> : <Icons.Partnered size={16} />}</span>
 }
 
 function InviteCard({ code, mine }: { code: string; mine: boolean }) {
@@ -998,7 +998,7 @@ function SpeakItem({ message, ctx, onClose }: { message: DiscordMessage; ctx: Ma
   if (!message.content || !('speechSynthesis' in window)) return null
   return (
     <button type="button" role="menuitem" onClick={() => { onClose(); speakMessage(message, ctx) }}>
-      <Icons.Speak size={16} />{speaking === message.id ? 'Stop speaking message' : 'Speak message'}
+      {speaking === message.id ? <Icons.StopSpeaking size={16} /> : <Icons.Speak size={16} />}{speaking === message.id ? 'Stop speaking message' : 'Speak message'}
     </button>
   )
 }

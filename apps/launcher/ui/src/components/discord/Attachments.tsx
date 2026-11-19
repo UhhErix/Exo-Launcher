@@ -184,7 +184,7 @@ function VideoFile({ src, box, duration, onFail }: { src: string; box: { width?:
           <span className="exo-dc-video-time">{clock(at)} / {clock(length)}</span>
           <Slider value={at} max={length || 1} step={0.1} aria-label="Position" onChange={event => { if (video.current) video.current.currentTime = Number(event.target.value) }} />
           <button type="button" className="exo-dc-icon-btn" aria-label={muted ? 'Unmute' : 'Mute'} onClick={() => { if (video.current) video.current.muted = !video.current.muted }}>{muted ? <Icons.SoundOff size={16} /> : <Icons.Sound size={16} />}</button>
-          <button type="button" className="exo-dc-icon-btn" aria-label="Full screen" onClick={() => { void video.current?.requestFullscreen().catch(() => { }) }}><Icons.Expand size={16} /></button>
+          <button type="button" className="exo-dc-icon-btn" aria-label="Full screen" onClick={() => { void video.current?.requestFullscreen().catch(() => { }) }}><Icons.FullScreen size={16} /></button>
         </div>
       ) : null}
     </div>

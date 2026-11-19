@@ -24,6 +24,19 @@ internal sealed partial class NetworkBest
         private const string WellKnown = @"SYSTEM\CurrentControlSet\Services\Dnscache\Parameters\DohWellKnownServers";
 
         private (DateTimeOffset At, Tcp? Value)? _tcp;
+        private Process? _running;
+
+        public bool StillRunning()
+        {
+            if (_running is not { } process) return false;
+            try { if (!process.HasExited) return true; }
+            catch (InvalidOperationException) { /* gone: as ended */ }
+            // Ended: its handle goes, and the TCP reading cached while it ran with it.
+            process.Dispose();
+            _running = null;
+            _tcp = null;
+            return false;
+        }
 
         public IReadOnlyList<CloudflareDns.Adapter> Adapters()
         {
@@ -108,9 +121,10 @@ internal sealed partial class NetworkBest
         public (int? Code, string? Problem) Elevated(string script)
         {
             _tcp = null;
+            Process? process = null;
             try
             {
-                using var process = Process.Start(new ProcessStartInfo(LeftoverScan.PowerShell,
+                process = Process.Start(new ProcessStartInfo(LeftoverScan.PowerShell,
                     "-NoProfile -NonInteractive -ExecutionPolicy Bypass -WindowStyle Hidden -EncodedCommand " + Convert.ToBase64String(Encoding.Unicode.GetBytes(script)))
                 {
                     UseShellExecute = true,
@@ -120,7 +134,13 @@ internal sealed partial class NetworkBest
                 });
                 if (process is null) return (null, "Windows didn't start the change.");
                 // Each item may wait up to about 25 seconds for a lookup after an adapter restarts.
-                if (!process.WaitForExit(TimeSpan.FromMinutes(3))) return (null, "The change didn't finish.");
+                if (!process.WaitForExit(TimeSpan.FromMinutes(3)))
+                {
+                    // Kept: StillRunning holds every other change until it ends.
+                    _running = process;
+                    process = null;
+                    return (Unfinished, "The change didn't finish.");
+                }
                 return (process.ExitCode, null);
             }
             catch (System.ComponentModel.Win32Exception ex) when (ex.NativeErrorCode == 1223)
@@ -131,6 +151,12 @@ internal sealed partial class NetworkBest
             {
                 AppLog.Warn("Network best settings: the change didn't start: " + ex.Message);
                 return (null, "Windows didn't start the change.");
+            }
+            finally
+            {
+                process?.Dispose();
+                // A reading cached while the script ran is from before it.
+                _tcp = null;
             }
         }
 
