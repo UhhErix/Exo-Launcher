@@ -87,8 +87,11 @@ public sealed class RiotClientCloseTests
         public void AllowUserOpen(StoreKind store) { }
         public void Dispatch(StoreKind store, StoreClientLaunchCommand command) { }
 
-        public bool RevealAndCheck(StoreClientLaunchCommand command, IReadOnlyList<string> processNames) =>
-            RevealAt?.Invoke(Checks++) ?? false;
+        public bool RevealAndCheck(StoreClientLaunchCommand command, IReadOnlyList<string> processNames)
+        {
+            var attempt = Checks++;
+            return RevealAt?.Invoke(attempt) ?? false;
+        }
 
         public bool SpawnedExitedEarly(StoreClientLaunchCommand command, IReadOnlyList<string> processNames) =>
             EarlyExitAt?.Invoke(Checks - 1) ?? false;

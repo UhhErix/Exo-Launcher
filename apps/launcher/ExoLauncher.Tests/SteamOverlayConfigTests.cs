@@ -176,11 +176,11 @@ public sealed class SteamOverlayConfigTests
 
         var existingRecord = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
         {
-            ["730"] = "on=",
+            ["730"] = "on=?",
             ["1593500"] = "on!",
         };
-        var apps = SteamOverlayConfig.Apps(LocalConfig);
-        var (writes, nextRecord) = SteamOverlayConfig.Plan(apps, wanted, existingRecord);
+        var appsOff730 = SteamOverlayConfig.Apps(SteamOverlayConfig.Write(LocalConfig, new Dictionary<string, bool> { ["730"] = false }));
+        var (writes, nextRecord) = SteamOverlayConfig.Plan(appsOff730, wanted, existingRecord);
         Assert.True(writes["730"]);
         Assert.Equal("on=?", nextRecord["730"]);
         Assert.False(writes.ContainsKey("1593500"));
