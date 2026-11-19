@@ -21,6 +21,9 @@ public sealed partial class DlssSwapService
 
     internal const string RiotVanguard = "Riot Vanguard";
 
+    /// <summary>The consent Settings' one-time allow gives every game (<see cref="AppSettings.UpscalerAntiCheatEverywhere"/>).</summary>
+    internal const string AnyAntiCheat = "*";
+
     /// <summary>The install could not be read, so it cannot be cleared of anti-cheat.</summary>
     internal const string UnreadableInstall = "unreadable";
 
@@ -38,7 +41,7 @@ public sealed partial class DlssSwapService
     /// </summary>
     internal static bool Accepted(GameEntry game, string antiCheat, string? consented) =>
         !NeverAllowed(game, antiCheat) && consented is not null &&
-        string.Equals(antiCheat, consented, StringComparison.OrdinalIgnoreCase);
+        (consented == AnyAntiCheat || string.Equals(antiCheat, consented, StringComparison.OrdinalIgnoreCase));
 
     /// <summary><c>never</c>, <c>available</c> (the user may allow it) or <c>given</c>; null without anti-cheat.</summary>
     internal static string? ConsentState(GameEntry game, string? antiCheat, string? consented) =>

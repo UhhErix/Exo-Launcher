@@ -140,6 +140,8 @@ public sealed partial class DlssSwapService
             try { if (download) await WatchSwapperCatalogAsync(used).ConfigureAwait(false); else await CheckSwapperCatalogAsync(used, found).ConfigureAwait(false); }
             catch (Exception ex) { AppLog.Info("DLSS Swapper archives not checked (the ones Exo has still apply): " + ex.Message); }
             SaveAvailable(found);
+            // Newer files arrived: the games move to them shortly, not at the next six-hour round.
+            if (download) FrameGenEverywhereSoon();
         }
         catch (Exception ex) { AppLog.Info("Upscaler releases not checked: " + ex.Message); }
     }
