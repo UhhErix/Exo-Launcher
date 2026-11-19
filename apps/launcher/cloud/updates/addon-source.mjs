@@ -1,9 +1,10 @@
 #!/usr/bin/env node
 /**
  * The corresponding source of the copyleft add-ons Exo ships itself, for getexo.app/source (exo-site src/source.js): Exo Mouse
- * (AGPL-3.0-or-later, `mouse/`), Exo Shaders (GPL-3.0-or-later, `shaders/`: Exo's fork of SCSKiller with its native source),
- * Exo Shield (GPL-3.0, the extension folder shipped in the Launcher) and OBS Studio's game capture hook (GPL-2.0-or-later,
- * unchanged OBS files that Exo Capture runs). source-mirror.mjs does the same for the third-party GPL tools (Nile and the
+ * (AGPL-3.0-or-later, `mouse/`), Exo Shaders (GPL-3.0-or-later, `shaders/`: Exo's fork of SCSKiller with its native source)
+ * and OBS Studio's game capture hook (GPL-2.0-or-later, unchanged OBS files that Exo Capture runs). Exo Shield is not here: since
+ * 3.26.0 it is Exo's own code (`shield/`, under the launcher's licence); the GPL builds of it that earlier releases shipped
+ * keep their archives in the index. source-mirror.mjs does the same for the third-party GPL tools (Nile and the
  * others); this script is for Exo's own and the bundled OBS source. Exo Capture itself is not here: it is under its own
  * unpublished terms (capture/LICENSE).
  *
@@ -46,7 +47,6 @@ export function treeAddons({ repo, prefix = '', rev }) {
   return [
     { name: 'exo-mouse', title: 'Exo Mouse', license: 'AGPL-3.0-or-later', repo, tree: `${rev}:${prefix}mouse`, licenceFile: 'LICENSE', marker: 'GNU AFFERO GENERAL PUBLIC LICENSE' },
     { name: 'exo-shaders', title: 'Exo Shaders', license: 'GPL-3.0-or-later', repo, tree: `${rev}:${prefix}shaders`, licenceFile: 'LICENSE', marker: 'GNU GENERAL PUBLIC LICENSE' },
-    { name: 'exo-shield', title: 'Exo Shield', license: 'GPL-3.0', repo, tree: `${rev}:${prefix}ExoLauncher/Assets/Extensions/exo-shield`, licenceFile: 'LICENSE.txt', marker: 'GNU GENERAL PUBLIC LICENSE' },
   ]
 }
 

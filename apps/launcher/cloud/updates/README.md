@@ -60,13 +60,14 @@ with `node source-mirror.mjs --launcher <checkout> --rev <rev>`. Exo's own copyl
 there with `node addon-source.mjs` (below). Whether the bucket exists now is for `wrangler r2 bucket list` to say: this page
 used to say it did not (only `exo-source-backup`), and exo-site's `wrangler.toml` binds `exo-source`.
 
-**Exo's own add-ons' source (`addon-source.mjs`):** Exo Mouse (AGPL-3.0-or-later, `mouse/`), Exo Shaders (GPL-3.0-or-later,
-`shaders/`, the commit `Build-Release.ps1` prints) and Exo Shield (GPL-3.0, `ExoLauncher/Assets/Extensions/exo-shield`) are built from committed
+**Exo's own add-ons' source (`addon-source.mjs`):** Exo Mouse (AGPL-3.0-or-later, `mouse/`) and Exo Shaders (GPL-3.0-or-later,
+`shaders/`, the commit `Build-Release.ps1` prints) are built from committed
 trees into `<name>-<launcher version>.tar.gz` (deterministic: the commit's time, a fixed gzip header), each with its licence file
 and an `EXO-SOURCE.txt` naming the commit; `fetch-obs --tag 32.2.2` adds OBS Studio's tag archive (the one step that reads the
 network). `build` and `fetch-obs` write `artifacts/source/` only; `upload --dir artifacts/source` prints its plan, and with `--yes`
 puts the archives and then the merged `source/index.json` (the tools' entries stay; a release already listed with other bytes is
-refused). Exo Capture is not here: since 3.18.0 it is under its own unpublished terms.
+refused). Exo Shield is not here: since 3.26.0 it is Exo's own (`shield/`), and earlier releases' GPL archives of it stay in the
+index. Exo Capture is not here: since 3.18.0 it is under its own unpublished terms.
 
 `HEAD` answers the same status and headers as `GET`, with no body. Only an app's own files ever pass: `Exo<App>-Setup.exe`,
 its `.sha256` and `whats-new.json`. A tag must look like `v1.2.3`.
