@@ -28,8 +28,14 @@ internal sealed partial class NetworkBest
 
         public bool StillRunning()
         {
-            try { return _running is { HasExited: false }; }
-            catch (InvalidOperationException) { return false; }
+            if (_running is not { } process) return false;
+            try { if (!process.HasExited) return true; }
+            catch (InvalidOperationException) { /* gone: as ended */ }
+            // Ended: its handle goes, and the TCP reading cached while it ran with it.
+            process.Dispose();
+            _running = null;
+            _tcp = null;
+            return false;
         }
 
         public IReadOnlyList<CloudflareDns.Adapter> Adapters()
