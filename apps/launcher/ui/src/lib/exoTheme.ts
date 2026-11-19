@@ -1,14 +1,10 @@
 import { pageGet, pageSet } from './pageStore'
 type TextColour = 'white' | 'grey'
 type TextSize = 'small' | 'normal' | 'large'
-/** Settings › General › Background: the palettes in tokens.css › Backgrounds. Dark grey is the default. */
-export type Background = 'black' | 'near' | 'grey' | 'windows' | 'graphite'
+/** The page's palette (tokens.css › Backgrounds): Exo is pure black (AMOLED) under Liquid Glass, with no other choice. */
+export type Background = 'black'
 export const BACKGROUNDS: readonly { value: Background; label: string }[] = [
   { value: 'black', label: 'Pure black' },
-  { value: 'near', label: 'Near black' },
-  { value: 'grey', label: 'Dark grey' },
-  { value: 'windows', label: 'Windows' },
-  { value: 'graphite', label: 'Graphite' },
 ]
 
 /**
@@ -27,7 +23,7 @@ const TEXT_SCALES: Record<TextSize, number> = {
 
 export type TextTheme = { textColour: TextColour; textSize: TextSize; background: Background }
 
-const DEFAULT_TEXT_THEME: TextTheme = { textColour: 'white', textSize: 'normal', background: 'grey' }
+const DEFAULT_TEXT_THEME: TextTheme = { textColour: 'white', textSize: 'normal', background: 'black' }
 
 function isBackground(value: unknown): value is Background {
   return BACKGROUNDS.some(b => b.value === value)
