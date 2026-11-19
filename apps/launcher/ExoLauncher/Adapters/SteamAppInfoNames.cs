@@ -306,9 +306,10 @@ internal static class SteamAppInfoNames
     /// The entry of <paramref name="entries"/> that avoids the anti-cheat, or null. Only for a game with more than one
     /// Windows entry for every branch (an entry tied to a beta applies only there): a protected one, first in Steam's order
     /// (its program the anti-cheat's bootstrapper, or the other's words saying it is without), and another named by
-    /// Steam's "optionN" whose program is not a bootstrapper and which either says it is without anti-cheat or offline, or
-    /// sits beside a bootstrapper. An entry that only runs another program (an editor, a benchmark) beside a plain game
-    /// is not one.
+    /// Steam's "optionN" whose program is not a bootstrapper, whose words never name the anti-cheat as on, and with
+    /// positive evidence it skips it: its words say so ("without EAC", "no anti-cheat"), or the protected entry's program
+    /// is the bootstrapper this one does not run. "Offline" alone is no evidence ("Play offline with EAC" keeps it), and
+    /// an entry that only runs another program (an editor, a benchmark) beside a plain game is not one.
     /// </summary>
     internal static AntiCheatFreeLaunch? WithoutAntiCheat(IReadOnlyList<LaunchEntry> entries)
     {
@@ -348,12 +349,12 @@ internal static class SteamAppInfoNames
         System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.CultureInvariant);
 
     private static readonly System.Text.RegularExpressions.Regex WithoutWord = new(
-        @"(?<![a-z])(without|no|disabled?|off)(?![a-z])[^.]{0,40}?(?<![a-z])(EAC|easy\s*anti-?cheat|anti-?cheat|BattlEye)(?![a-z])|(?<![a-z])offline(?![a-z])",
+        @"(?<![a-z])(without|no|disabled?|off)(?![a-z])[^.]{0,40}?(?<![a-z])(EAC|easy\s*anti-?cheat|anti-?cheat|BattlEye)(?![a-z])",
         System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.CultureInvariant);
 
     internal static bool SaysWithoutAntiCheat(string description) => WithoutWord.IsMatch(description);
 
-    /// <summary>Names an anti-cheat and does not say it is without it ("Play with EasyAntiCheat").</summary>
+    /// <summary>Names an anti-cheat and does not say it is without it ("Play with EasyAntiCheat", "Play offline with EAC").</summary>
     private static bool SaysWithAntiCheat(string description) => AntiCheatWord.IsMatch(description) && !SaysWithoutAntiCheat(description);
 
     /// <summary>One record's key values; the record's single root is "appinfo", and callers read below it.</summary>

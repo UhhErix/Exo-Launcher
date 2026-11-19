@@ -127,20 +127,24 @@ public sealed partial class WebHostBridge
 
     /// <summary>
     /// Properties › Anti-cheat for a Steam game whose Play menu has an entry without its anti-cheat (NBA 2K26's "without
-    /// EAC (offline only)"): "with" (the default) or "without", and Steam's own words for that entry; null for any other.
+    /// EAC (offline only)"): "with" (the default) or "without", and Steam's own words for that entry. A game left on
+    /// "without" after Steam stopped offering the entry keeps the row (Play refuses until it goes back to "with"); null
+    /// for any other.
     /// </summary>
     private (string Value, string Detail)? AntiCheatLaunchFor(GameEntry game)
     {
-        if (game.Store != StoreKind.Steam || AntiCheatCheck.IsRiot(game) || AntiCheatCheck.SteamAppId(game) is not { } id ||
-            AntiCheatCheck.SteamFreeEntry(id) is not { } entry) return null;
-        return (_services.Settings.SteamWithoutAntiCheat(game.Id) ? "without" : "with", entry.Description);
+        if (game.Store != StoreKind.Steam || AntiCheatCheck.IsRiot(game) || AntiCheatCheck.SteamAppId(game) is not { } id) return null;
+        var without = _services.Settings.SteamWithoutAntiCheat(game.Id);
+        if (AntiCheatCheck.SteamFreeEntry(id) is { } entry) return (without ? "without" : "with", entry.Description);
+        return without ? ("without", "Steam no longer offers this game without its anti-cheat. Pick Launch with anti-cheat to play.") : null;
     }
 
     /// <summary>
     /// The pick saved. Back to "with": before anything else, what Exo put into the game for its start without anti-cheat
     /// comes out (its frame generation mod, the shader recorder), so the protected start never finds it; frame generation
-    /// at launch checks again (<see cref="DlssSwapService.FrameGenAtLaunch"/>). A take-out that fails leaves the pick on
-    /// "without" and says so.
+    /// at launch checks again (<see cref="DlssSwapService.FrameGenAtLaunch"/>). The pick is saved only once both are out
+    /// (the recorder confirmed by the engine, started for it if needed); a take-out that fails leaves it on "without" and
+    /// says so.
     /// </summary>
     private async Task<string?> SetAntiCheatLaunchAsync(GameEntry game, bool without, CancellationToken ct)
     {
@@ -152,19 +156,13 @@ public sealed partial class WebHostBridge
         }
         var off = await Task.Run(() => AntiCheatBackOn(_dlss, game), ct).ConfigureAwait(true);
         if (!off.Ok) throw new UserFacingException(off.Message);
-        _services.Settings.SetSteamWithoutAntiCheat(game.Id, false);
-        if (ShadersAddon.Live is { } engine)
+        if (App.MainAppWindow is not { } window) throw new UserFacingException("Exo couldn't check its shader recorder in this game. Try again.");
+        using (var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct))
         {
-            try
-            {
-                using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(20));
-                await engine.CallAsync("recorder.set", new System.Text.Json.Nodes.JsonObject { ["id"] = game.Id, ["on"] = false }, timeout.Token, "anti-cheat back on in " + game.Title).ConfigureAwait(true);
-            }
-            catch (Exception ex) when (ex is InvalidOperationException or OperationCanceledException or IOException)
-            {
-                AppLog.Warn($"Anti-cheat: the shader recorder in {game.Title} could not be turned off: {ex.Message}");
-            }
+            timeout.CancelAfter(TimeSpan.FromSeconds(60));
+            if (await window.ShadersRecorderOffAsync(game.Id, timeout.Token).ConfigureAwait(true) is { } recorder) throw new UserFacingException(recorder);
         }
+        _services.Settings.SetSteamWithoutAntiCheat(game.Id, false);
         AppLog.Info($"Anti-cheat: {game.Title} starts with its anti-cheat again{(off.Removed ? "; Exo's frame generation came out" : "")}.");
         return off.Removed ? "Plays with anti-cheat. Exo's frame generation came out of the game." : "Plays with anti-cheat.";
     }
@@ -381,7 +379,9 @@ public sealed partial class WebHostBridge
         }
         if (key == "antiCheatLaunch")
         {
-            if (value is not ("with" or "without") || AntiCheatLaunchFor(game) is null)
+            // Back to "with" is always taken where the row is; "without" only while Steam offers the entry.
+            var offered = AntiCheatCheck.SteamAppId(game) is { } appId && AntiCheatCheck.SteamFreeEntry(appId) is not null;
+            if (value is not ("with" or "without") || AntiCheatLaunchFor(game) is null || value == "without" && !offered)
                 throw new UserFacingException("Steam offers this game no start without its anti-cheat.");
             if (_services.Launcher.GetGameRunState(game).IsRunning) throw new UserFacingException($"Close {game.Title} first.");
             return await SetAntiCheatLaunchAsync(game, value == "without", ct).ConfigureAwait(true);

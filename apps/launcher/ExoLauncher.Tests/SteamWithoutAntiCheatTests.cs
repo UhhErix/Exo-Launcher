@@ -41,8 +41,8 @@ public sealed class SteamWithoutAntiCheatTests
             Entry("1", "Game_BE.exe", "Play (DX11)", "option1"),
             Entry("2", "bin/Game.exe", "Play", "option2"),
         ])?.Option);
-        // A plain game whose other entry says offline.
-        Assert.Equal("option1", WithoutAntiCheat([Entry("0", "Game.exe", "Play", "default"), Entry("1", "Game.exe", "Play offline", "option1")])?.Option);
+        // A plain game whose other entry says in words that it skips the anti-cheat.
+        Assert.Equal("option1", WithoutAntiCheat([Entry("0", "Game.exe", "Play", "default"), Entry("1", "Game.exe", "Play with no anti-cheat", "option1")])?.Option);
     }
 
     [Fact]
@@ -55,6 +55,10 @@ public sealed class SteamWithoutAntiCheatTests
         // The other entry is the bootstrapper too, or says the anti-cheat is on.
         Assert.Null(WithoutAntiCheat([Nba2K26[0], Entry("1", "EasyAntiCheat_launcher.exe", "Play (DX11)", "option1")]));
         Assert.Null(WithoutAntiCheat([Nba2K26[0], Entry("1", "Game.exe", "Play with EasyAntiCheat", "option1")]));
+        // "Offline" is no evidence: an offline entry that keeps EAC, or that says nothing of it beside a plain game.
+        Assert.Null(WithoutAntiCheat([Nba2K26[0], Entry("1", "Game.exe", "Play offline with EAC", "option1")]));
+        Assert.Null(WithoutAntiCheat([Entry("0", "Game.exe", "Play", "default"), Entry("1", "Game.exe", "Play offline with EAC", "option1")]));
+        Assert.Null(WithoutAntiCheat([Entry("0", "Game.exe", "Play", "default"), Entry("1", "Game.exe", "Play offline", "option1")]));
         // Only on a beta branch, only on another OS, or with no option word for steam://launch.
         Assert.Null(WithoutAntiCheat([Nba2K26[0], Nba2K26[1] with { BetaKey = "public_test" }]));
         Assert.Null(WithoutAntiCheat([Nba2K26[0], Nba2K26[1] with { OsList = "linux" }]));
