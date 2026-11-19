@@ -2138,7 +2138,7 @@ public sealed partial class WebHostBridge
         bool? startMaximized = null;
         bool? framelessPinTop = null, framelessPinSide = null;
         bool? showLibraryTools = null;
-        string? textColour = null, textSize = null, background = null;
+        string? textColour = null, textSize = null;
         string? sort = null, root = null;
         Dictionary<string, string>? preferredGameSources = null;
 
@@ -2204,8 +2204,6 @@ public sealed partial class WebHostBridge
             textColour = tc.GetString();
         if (p.TryGetProperty("textSize", out var tsz) && tsz.ValueKind == JsonValueKind.String)
             textSize = tsz.GetString();
-        if (p.TryGetProperty("background", out var bg) && bg.ValueKind == JsonValueKind.String)
-            background = bg.GetString();
         string? whatsNewSeen = p.TryGetProperty("whatsNewSeen", out var wn) && wn.ValueKind == JsonValueKind.String ? wn.GetString() : null;
         var previousShowLibraryTools = _services.Settings.Current.ShowLibraryTools;
         // Settings validate and commit first; a rejected patch must not leave
@@ -2218,7 +2216,6 @@ public sealed partial class WebHostBridge
             startMaximized: startMaximized,
             textColour: textColour,
             textSize: textSize,
-            background: background,
             framelessPinTop: framelessPinTop,
             framelessPinSide: framelessPinSide,
             showLibraryTools: showLibraryTools,
@@ -2230,7 +2227,6 @@ public sealed partial class WebHostBridge
             whatsNewSeen: whatsNewSeen,
             frameGenEverywhere: frameGenEverywhere);
         if (hdrForGames is not null || hdrSdrGamma is not null) App.MainAppWindow?.SyncHdrSoon();
-        if (background is not null && App.MainAppWindow is { } window) window.DispatcherQueue.TryEnqueue(window.ApplyAppearance);
         if (frameGenEverywhere is not null) DlssSwapService.FrameGenEverywhereSoon();
         if (showLibraryTools is { } tools && tools != previousShowLibraryTools)
             RefreshLibraryAfterToolsToggle();
