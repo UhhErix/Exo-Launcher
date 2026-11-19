@@ -168,7 +168,7 @@ function VideoFile({ src, box, duration, onFail }: { src: string; box: { width?:
   const toggle = () => { const element = video.current; if (!element) return; if (element.paused) void element.play().catch(() => { }); else element.pause() }
   return (
     <div className={`exo-dc-media exo-dc-video${started ? ' is-started' : ''}${playing ? ' is-playing' : ''}`}>
-      <video key={attempt} ref={video} src={src} preload="metadata" playsInline {...box} onClick={toggle}
+      <video key={attempt} ref={video} src={src} muted={muted} preload="metadata" playsInline {...box} onClick={toggle}
         onLoadedMetadata={event => setLength(event.currentTarget.duration || 0)} onTimeUpdate={event => setAt(event.currentTarget.currentTime)}
         onPlay={() => { setPlaying(true); setStarted(true) }} onPause={() => setPlaying(false)} onEnded={() => { setPlaying(false); setStarted(false) }}
         onVolumeChange={event => setMuted(event.currentTarget.muted)} onError={onError} />
