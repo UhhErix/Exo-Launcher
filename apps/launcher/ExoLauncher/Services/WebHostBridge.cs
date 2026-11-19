@@ -2130,6 +2130,7 @@ public sealed partial class WebHostBridge
             whatsNewSeen = s.WhatsNewSeen,
             reduceMotion = s.ReduceMotion,
             startMaximized = s.StartMaximized,
+            startWithWindows = s.StartWithWindows,
             framelessPinTop = s.FramelessPinTop,
             framelessPinSide = s.FramelessPinSide,
             textColour = s.TextColour,
@@ -2278,6 +2279,7 @@ public sealed partial class WebHostBridge
             RefreshLibraryAfterToolsToggle();
         ApplyDownloadSettings(p);
         ApplyStoreQuietSetting(p);
+        ApplyStartWithWindowsSetting(p);
         ApplyAchievementSettings(p);
         ApplyFpsCounterSettings(p);
         if (p.TryGetProperty("libraryFolders", out var folders) && folders.ValueKind == JsonValueKind.Array)
