@@ -28,6 +28,22 @@
 }
 
 /*
+ * Goeist Serif (2026-11-19), Goeist's editorial partner (same release and licence: Shadcn Labs, SIL OFL 1.1, npm goeist
+ * 0.1.0): Geist Serif with its serifs ending in half-rounds. An accent only, through --exo-font-display-serif: the song's name in
+ * Music's Immersive and first run's welcome headline; every other word stays Goeist (tried on the game page's title, What's
+ * New's heading and the first-run steps' titles, and left off: there the light serif lost the title's weight over bold Goeist). One weight
+ * (400) exists; the file is the variable one (its only axis is the dots' shape, ELSH, left at round), the smallest of the
+ * release. Not preloaded: neither is on the first frame of an ordinary start, and the file is local.
+ */
+@font-face {
+  font-family: "Goeist Serif";
+  font-style: normal;
+  font-display: block;
+  font-weight: 400;
+  src: url("/fonts/GoeistSerif-Variable.woff2") format("woff2");
+}
+
+/*
  * Exoline stays for what draws outside the page (the overlays and Setup take it from public/fonts) and as the fallback.
  * Exo's earlier type (DESIGN.md › Type): Exoline, Exo's own cut (SIL OFL 1.1): Geist's outlines with the tail-less a, the tailed l
  * and round dots as its letters and a short middle bar on E and F, as Exo's mark has. Built by
