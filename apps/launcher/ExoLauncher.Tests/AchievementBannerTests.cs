@@ -95,4 +95,50 @@ public sealed class AchievementBannerTests
         Assert.Equal(wav.Length - 44, BitConverter.ToInt32(wav, 40));
         Assert.Equal((2, 48000, 16), (BitConverter.ToInt16(wav, 22), BitConverter.ToInt32(wav, 24), BitConverter.ToInt16(wav, 34)));
     }
+
+    [Fact]
+    public void SampleFrom_skips_corrupt_and_small_cached_icons()
+    {
+        var dir = Directory.CreateTempSubdirectory("exo-ach-sample-").FullName;
+        try
+        {
+            static byte[] PngHeader(int w, int h)
+            {
+                var bytes = new byte[24];
+                byte[] sig = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A];
+                sig.CopyTo(bytes, 0);
+                "IHDR"u8.CopyTo(bytes.AsSpan(12));
+                System.Buffers.Binary.BinaryPrimitives.WriteInt32BigEndian(bytes.AsSpan(16, 4), w);
+                System.Buffers.Binary.BinaryPrimitives.WriteInt32BigEndian(bytes.AsSpan(20, 4), h);
+                return bytes;
+            }
+
+            var small = Path.Combine(dir, "small");
+            var good = Path.Combine(dir, "good");
+            var corrupt = Path.Combine(dir, "corrupt");
+            File.WriteAllBytes(good, PngHeader(128, 128));
+            File.WriteAllBytes(small, PngHeader(32, 32));
+            File.WriteAllBytes(corrupt, [0x01, 0x02, 0x03]);
+            File.SetLastWriteTimeUtc(good, DateTime.UtcNow.AddMinutes(-2));
+            File.SetLastWriteTimeUtc(small, DateTime.UtcNow.AddMinutes(-1));
+            File.SetLastWriteTimeUtc(corrupt, DateTime.UtcNow);
+
+            var picked = AchievementIconCache.SampleFrom(dir);
+            Assert.NotNull(picked);
+            Assert.StartsWith("data:image/png;base64,", picked, StringComparison.Ordinal);
+            Assert.Equal(Convert.ToBase64String(PngHeader(128, 128)), picked["data:image/png;base64,".Length..]);
+
+            DeletionGate.DeleteFile(good);
+            Assert.Null(AchievementIconCache.SampleFrom(dir));
+        }
+        finally { DeletionGate.DeleteDirectory(dir, recursive: true); }
+    }
+
+    [Fact]
+    public void Banner_page_announces_ready_and_never_removes_art_on_decode()
+    {
+        var page = BannerPage();
+        Assert.Contains("banner.ready", page, StringComparison.Ordinal);
+        Assert.DoesNotContain("art.remove()", page, StringComparison.Ordinal);
+    }
 }

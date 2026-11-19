@@ -153,7 +153,9 @@
     root.append(pieces('plate', 'l', 'm', 'r'))
     if (tier !== 'common') root.append(pieces('edge', '', ''))
     if (tier === 'completion') root.append(el('ring'))
-    if (a.icon) { const art = document.createElement('img'); art.className = 'art'; art.alt = ''; art.src = a.icon; root.append(art) }
+    const fallback = typeof a.fallback === 'string' && a.fallback.startsWith('data:image/') ? a.fallback : ''
+    const icon = typeof a.icon === 'string' && a.icon.startsWith('data:image/') ? a.icon : fallback
+    if (icon) { const art = document.createElement('img'); art.className = 'art'; art.alt = ''; art.dataset.fallback = fallback; art.src = icon; root.append(art) }
     const words = el('words')
     const head = el('head')
     head.append(el('name', a.name || 'Achievement unlocked'))
@@ -174,11 +176,39 @@
     return root
   }
 
+  function waitArt(art) {
+    if (!art) return Promise.resolve()
+    return new Promise(resolve => {
+      let backed = false
+      const cleanup = () => { art.removeEventListener('load', onLoad); art.removeEventListener('error', onError) }
+      const done = () => { cleanup(); resolve() }
+      const onLoad = () => {
+        if (typeof art.decode === 'function') art.decode().catch(() => {}).finally(done)
+        else done()
+      }
+      const onError = () => {
+        const fallback = art.dataset.fallback
+        if (!backed && fallback && art.src !== fallback) {
+          backed = true
+          art.src = fallback
+          return
+        }
+        done()
+      }
+      art.addEventListener('load', onLoad)
+      art.addEventListener('error', onError)
+      if (art.complete) {
+        if (art.naturalWidth > 0) onLoad()
+        else onError()
+      }
+    })
+  }
+
   /** The card only moves once its picture and type are ready and its first frame is drawn, so it never arrives empty. */
   async function ready(root) {
     const art = root.querySelector('.art')
     await Promise.race([wait(600), Promise.all([
-      art?.decode().catch(() => art.remove()),
+      waitArt(art),
       document.fonts.load('600 15px Goeist').catch(() => {}),
     ])])
     // Where the closed card starts: a tile of its own height around the picture, in the middle.
@@ -209,7 +239,10 @@
   }
 
   if (source) new EventSource('/achievements/events').onmessage = e => { try { queue.push(JSON.parse(e.data)); show() } catch { /* not a banner */ } }
-  else window.chrome?.webview?.addEventListener('message', e => { queue.push(e.data); show() })
+  else if (window.chrome?.webview) {
+    window.chrome.webview.addEventListener('message', e => { queue.push(e.data); show() })
+    window.chrome.webview.postMessage({ type: 'banner.ready' })
+  }
 </script>
 </body>
 </html>
