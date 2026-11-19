@@ -13,7 +13,9 @@ using System.Text.RegularExpressions;
 namespace SCSKiller.Core.Games;
 
 /// <summary>One installed game as Exo Launcher lists it (the service's exo.library method).</summary>
-public sealed record ExoLibraryEntry(string Id, string Title, string Store, string InstallDir, string? Exe = null);
+/// <param name="NoRecorder">Exo keeps the shader recorder out of this game's folder (its anti-cheat answer, or a game that runs
+/// without its anti-cheat only in an Exo session): the engine never puts it there by itself (<see cref="App.ScsKiller.HostSkips"/>).</param>
+public sealed record ExoLibraryEntry(string Id, string Title, string Store, string InstallDir, string? Exe = null, bool NoRecorder = false);
 
 /// <summary>
 /// The safety net from Exo Launcher: its installed games, as it last sent them, kept in &lt;data&gt;\exo-library.json.
@@ -208,7 +210,7 @@ public sealed class ExoLibrarySource : IGameSource
 			{
 				continue;
 			}
-			ExoLibraryEntry exoLibraryEntry = new ExoLibraryEntry(text, entry.Title?.Trim() ?? "", (entry.Store?.Trim() is { Length: >0 } s) ? s : "Exo Launcher", text3, (entry.Exe?.Trim() is { Length: >0 } x) ? x : null);
+			ExoLibraryEntry exoLibraryEntry = new ExoLibraryEntry(text, entry.Title?.Trim() ?? "", (entry.Store?.Trim() is { Length: >0 } s) ? s : "Exo Launcher", text3, (entry.Exe?.Trim() is { Length: >0 } x) ? x : null, entry.NoRecorder);
 			if (hashSet.Add(IdOf(exoLibraryEntry)))
 			{
 				list.Add(exoLibraryEntry);
@@ -245,7 +247,8 @@ public sealed class ExoLibrarySource : IGameSource
 			{
 				if (item.ValueKind == JsonValueKind.Object)
 				{
-					list.Add(new ExoLibraryEntry(EpicInstalls.Text(item, "id") ?? "", EpicInstalls.Text(item, "title") ?? "", EpicInstalls.Text(item, "store") ?? "", EpicInstalls.Text(item, "installDir") ?? "", EpicInstalls.Text(item, "exe")));
+					list.Add(new ExoLibraryEntry(EpicInstalls.Text(item, "id") ?? "", EpicInstalls.Text(item, "title") ?? "", EpicInstalls.Text(item, "store") ?? "", EpicInstalls.Text(item, "installDir") ?? "", EpicInstalls.Text(item, "exe"),
+						item.TryGetProperty("noRecorder", out var noRecorder) && noRecorder.ValueKind == JsonValueKind.True));
 				}
 			}
 			return Normalize(list);
@@ -277,6 +280,10 @@ public sealed class ExoLibrarySource : IGameSource
 				if (entry.Exe != null)
 				{
 					utf8JsonWriter.WriteString("exe", entry.Exe);
+				}
+				if (entry.NoRecorder)
+				{
+					utf8JsonWriter.WriteBoolean("noRecorder", value: true);
 				}
 				utf8JsonWriter.WriteEndObject();
 			}

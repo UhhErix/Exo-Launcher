@@ -3,8 +3,10 @@
 //
 // What Exo asks the user once (ExoConsent), the per-game recorder switch, game.diagnostics and game.verify.
 
+using System.Collections.Concurrent;
 using SCSKiller.Core;
 using SCSKiller.Core.App;
+using SCSKiller.Core.Games;
 
 namespace ExoShaders.Service;
 
@@ -47,17 +49,68 @@ internal sealed partial class Host
         if (!left) Consent = Consent with { OverridesCleared = true };
     }
 
-    /// <summary>recorder.set: on or off for one game. Another copy's recorder stays that copy's unless takeOver says otherwise.</summary>
-    private async Task SetGameRecorder(string id, bool on, bool takeOver)
+    /// <summary>
+    /// recorder.set: on or off for one game. Another copy's recorder stays that copy's unless takeOver says otherwise. A game
+    /// Exo keeps the recorder out of (exo.library's noRecorder) turns on only with session: for the session Exo starts, until
+    /// Exo turns it off again or this service exits; nothing of it is saved, so a service that starts later keeps it out.
+    /// </summary>
+    private async Task SetGameRecorder(string id, bool on, bool takeOver, bool session)
     {
-        GameState g = Game(id);
-        if (on && (g.AnyAntiCheat || g.RecorderSkip is not null)) throw new ServiceError(new GameView(g, Context()).RefusalLine);
+        GameState g = RecorderGame(id);
+        id = g.Game.Id;
+        bool lift = on && session && g.RecorderSkip == ScsKiller.SkipHost && !g.AnyAntiCheat;
+        if (lift) _sessionRecorders[id] = 0;
+        else if (!on) _sessionRecorders.TryRemove(id, out _);
+        if (on && !lift && (g.AnyAntiCheat || g.RecorderSkip is not null)) throw new ServiceError(new GameView(g, Context()).RefusalLine);
         if (on && g.RecorderForeign && !takeOver) throw new ServiceError("Another SCSKiller copy records this game. Turning it on here takes that over until that copy takes it back (takeOver: true).");
-        await Act(id, () =>
+        try
         {
-            if (on && g.RecorderForeign) _k.TakeOverRecorder(id);
-            else _k.SetRecorderOverride(id, on ? RecorderOverride.On : RecorderOverride.Off);
-        });
+            await Act(id, () =>
+            {
+                if (on && g.RecorderForeign) _k.TakeOverRecorder(id);
+                else _k.SetRecorderOverride(id, on ? RecorderOverride.On : RecorderOverride.Off);
+            });
+        }
+        catch when (lift)
+        {
+            _sessionRecorders.TryRemove(id, out _);
+            throw;
+        }
+        // Let in, the game may still not record for a reason of the engine's own: then it stays out, as for any game.
+        if (on && Game(id) is { RecorderSkip: not null } after)
+        {
+            _sessionRecorders.TryRemove(id, out _);
+            throw new ServiceError(new GameView(after, Context()).RefusalLine);
+        }
+    }
+
+    /// <summary>The games recorder.set {session: true} let the recorder into for an Exo session: in memory only.</summary>
+    private readonly ConcurrentDictionary<string, byte> _sessionRecorders = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// ScsKiller.HostSkips: Exo keeps the recorder out of a game whose folder it listed with noRecorder (persisted in
+    /// exo-library.json, so it holds from the first scan of a run, before Exo sends its list), unless a session let it in.
+    /// </summary>
+    private bool ExoKeepsRecorderOut(Game game)
+    {
+        if (_sessionRecorders.ContainsKey(game.Id) || _k?.ExoLibrary is not { } library) return false;
+        foreach (ExoLibraryEntry e in library.Entries)
+        {
+            if (!e.NoRecorder) continue;
+            if (game.InstallDir.Length > 0 && (game.InstallDir.Equals(e.InstallDir, StringComparison.OrdinalIgnoreCase) || GameFiles.Inside(e.InstallDir, game.InstallDir))) return true;
+            if (game.ExePath.Length > 0 && GameFiles.Inside(e.InstallDir, game.ExePath)) return true;
+        }
+        return false;
+    }
+
+    /// <summary>The engine's game for an id: the engine's own, else the game in the folder Exo listed under that id (Exo's ids can differ).</summary>
+    private GameState RecorderGame(string id)
+    {
+        if (_k.Games.FirstOrDefault(g => g.Game.Id == id) is { } own) return own;
+        if (_k.ExoLibrary?.Entries.FirstOrDefault(e => e.Id == id) is { } entry
+            && _k.Games.FirstOrDefault(g => g.Game.InstallDir.Equals(entry.InstallDir, StringComparison.OrdinalIgnoreCase)) is { } listed)
+            return listed;
+        return Game(id);
     }
 
     private static string VerdictKey(WarmVerdict v) => v switch { WarmVerdict.Helped => "helped", WarmVerdict.Partly => "partly", WarmVerdict.Missed => "missed", _ => "noData" };

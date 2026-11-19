@@ -6,6 +6,7 @@
     <Project Path="../src/SCSKiller.Core/SCSKiller.Core.csproj" />
   </Folder>
   <Folder Name="/tests/">
+    <Project Path="tests/ExoShaders.Service.Tests/ExoShaders.Service.Tests.csproj" />
     <Project Path="../tests/SCSKiller.Tests/SCSKiller.Tests.csproj" />
   </Folder>
 </Solution>

@@ -1415,7 +1415,7 @@ public sealed partial class ScsKiller : IScsKiller
         lock (_lock) (last, driverStale) = (_games.FirstOrDefault(s => s.Game.Id == g.Id), _driverStale.GetValueOrDefault(g.Id));
         return last != null ? last with { Game = g, Status = GameStatus.Unsupported, StatusReason = reason, NotPlanned = false,   // an error may pass: "Not supported yet"
                 OfflineRunning = last.OfflineRunning || _offlineLeft?.ContainsKey(g.Id) == true && !_armed.ContainsKey(g.Id) }
-            : new GameState(g, null, AntiCheat.None, GameStatus.Unsupported, reason, null, null, null, null, null, null, null, false, null) { RecorderSkip = SkipUnsupported };
+            : new GameState(g, null, AntiCheat.None, GameStatus.Unsupported, reason, null, null, null, null, null, null, null, false, null) { RecorderSkip = UnsupportedSkip(g) };
     }
 
     /// <summary>A game listed before a scan reached it.</summary>
@@ -1486,7 +1486,10 @@ public sealed partial class ScsKiller : IScsKiller
     /// <summary>A game's state before anything of it was read: its anti-cheat isn't known, so nothing goes near it.</summary>
     GameState Unchecked(Game g, string reason) =>
         new GameState(g, null, AntiCheat.None, GameStatus.Unsupported, reason, null, null, null, null, null, null, null, false, null,
-            KnownStutter: StutterList.Current.Find(g), Playing: IsPlaying(g.Id)) { RecorderSkip = SkipUnsupported };
+            KnownStutter: StutterList.Current.Find(g), Playing: IsPlaying(g.Id)) { RecorderSkip = UnsupportedSkip(g) };
+
+    /// <summary>A game not read (yet) records nothing; its host's word comes first, as in <see cref="RecorderSkip"/>.</summary>
+    static string UnsupportedSkip(Game g) => HostSkips?.Invoke(g) == true ? SkipHost : SkipUnsupported;
 
     /// <summary>The game page opened: a game no evaluation read yet is read now, ahead of the scan. In HDD mode every game is
     /// evaluated again, so a failed check is retried and a plan check it needs is queued now (none is queued on its own there).</summary>
@@ -1959,7 +1962,7 @@ public sealed partial class ScsKiller : IScsKiller
         // another copy's recorder is no mod, nor ours left unarmed, but a DLL where no copy's proxy is under any name is one
         var proxy = ours || unarmed || foreign && (ProxyAt(Path.Combine(exeDir, dllName)) != false || ProxyNames.Any(n => ProxyAt(Path.Combine(exeDir, n)) == true));
         var vulkan = VulkanRoute(s.Game, s.Engine);   // no DLL of the recorder in the game's folder: no mod is in its way
-        var skip = by != null && RecorderSkip(s, null) is not (SkipAntiCheat or SkipUnsupported or SkipNotDx12 or SkipCrashes or SkipIntelDriver)
+        var skip = by != null && RecorderSkip(s, null) is not (SkipAntiCheat or SkipHost or SkipUnsupported or SkipNotDx12 or SkipCrashes or SkipIntelDriver)
             ? SharedRecorder(Collections.Member(by)!.Value.Game.Name)
             : RecorderSkip(s, by != null || vulkan ? null : ModSkip(s.Game, exeDir, rec, proxy, dllName)) ?? _recorderSkips.GetValueOrDefault(s.Game.Id);
         var o = rec.Recorder ?? (ours ? RecorderOverride.On : RecorderOverride.Default);
@@ -6885,6 +6888,7 @@ public sealed partial class ScsKiller : IScsKiller
     /// <paramref name="modSkip"/>: <see cref="ModSkip"/>.</summary>
     public static string? RecorderSkip(GameState s, string? modSkip) =>
         s.AnyAntiCheat ? SkipAntiCheat
+        : HostSkips?.Invoke(s.Game) == true ? SkipHost
         : IntelLocalDriver(s.Game) ? SkipIntelDriver
         : RecorderCrashes(s.Game) ? SkipCrashes
         : s.ShaderModBlocks ? SkipShaderMod
@@ -6898,6 +6902,14 @@ public sealed partial class ScsKiller : IScsKiller
         : modSkip != null ? modSkip   // ReShade, OptiScaler, another wrapper: never replaced, chained only when the user asks
         : s.Game.ExePath.Contains(@"\WindowsApps\", StringComparison.OrdinalIgnoreCase) ? SkipNeedsAdmin
         : null;
+
+    /// <summary>The recorder stays out of a game its host keeps it out of (<see cref="SkipHost"/>; Exo Launcher: its anti-cheat
+    /// answer, or a game that runs without its anti-cheat only for a session Exo starts), checked right after the engine's own
+    /// anti-cheat and kept like it. Set where the service starts; null: no host says anything.</summary>
+    public static Func<Game, bool>? HostSkips { get; set; }
+
+    /// <summary><see cref="RecorderSkip"/>'s reason for a game <see cref="HostSkips"/> keeps the recorder out of.</summary>
+    public const string SkipHost = "Exo Launcher keeps the recorder out of this game";
 
     /// <summary>Why the recorder stays out of Steam's games when Steam runs them in a Flatpak or Snap sandbox, which doesn't
     /// see the recorder folder (its key, ledger and inbox are in the data folder): set where the app starts, null for the

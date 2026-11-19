@@ -119,6 +119,7 @@ internal sealed partial class Host
         }
         k.ManageRecorders = !_opt.Safe;
         k.RecordOnlyWithConsent = true;
+        ScsKiller.HostSkips = ExoKeepsRecorderOut;   // exo.library's noRecorder: Exo's own word on each game (Consent.cs)
         k.CleanupHelper = _opt.Safe ? null : Environment.ProcessPath;
         k.CheckPlans = !_opt.Safe;
         k.UseChannels(null);   // what the app does while signed out
@@ -382,6 +383,7 @@ internal sealed partial class Host
                     if (_lastState is null || !body.AsSpan().SequenceEqual(_lastState))
                     {
                         _lastState = body;
+                        _lastProgress = null;   // a state carries the queue too: the next progress goes out whatever it says
                         long rev = Interlocked.Increment(ref _rev);
                         _io.EventRaw("state", WithRev(body, rev));
                     }
@@ -389,7 +391,6 @@ internal sealed partial class Host
                 }
                 else if (progress)
                 {
-                    long rev = Interlocked.Increment(ref _rev);
                     IReadOnlyList<GameState> games = _k.Games;
                     IReadOnlyList<QueueItem> queue = _k.Queue;
                     // the running game's progress lines, so a game page can update without a full state
@@ -398,7 +399,14 @@ internal sealed partial class Host
                         && new GameView(rg, Context(games, queue)) is var v
                             ? new { id = rg.Game.Id, statusTitle = v.StatusTitle, statusReason = v.StatusReason, percent = Fmt.Indeterminate(run) ? (double?)null : Math.Round(Fmt.Percent(run), 1) }
                             : null;
-                    _io.Event("progress", new { rev, queue = QueueDto(games, queue), game });
+                    // A pass that changed nothing the page shows (the rate rounds the same, the same time left) isn't sent.
+                    object queueDto = QueueDto(games, queue);
+                    byte[] same = System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(new { queue = queueDto, game }, Protocol.Json);
+                    if (_lastProgress is null || !same.AsSpan().SequenceEqual(_lastProgress))
+                    {
+                        _lastProgress = same;
+                        _io.Event("progress", new { rev = Interlocked.Increment(ref _rev), queue = queueDto, game });
+                    }
                 }
                 await Task.Delay(250, ct);
             }
@@ -428,14 +436,14 @@ internal sealed partial class Host
         Touch();
         if (visible)
         {
-            _lastState = null;   // the page may have missed states while hidden: the next one goes out in any case
+            _lastState = _lastProgress = null;   // the page may have missed states while hidden: the next one goes out in any case
             MarkState();
         }
     }
 
     // Until the page says otherwise it's treated as shown, so a host that never sends ui.visible gets every state.
     private volatile bool _uiHidden;
-    private byte[]? _lastState;
+    private byte[]? _lastState, _lastProgress;
     private long _statesSkipped;
 
     /// <summary>`{"rev":0,...}` (the placeholder Snapshot(fixedRev: 0) writes first) with the real rev.</summary>

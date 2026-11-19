@@ -247,7 +247,7 @@ internal sealed partial class Host
                 SetRecorderAuto(p.ReqBool("on"));
                 return Ok;
             case "recorder.set":
-                await SetGameRecorder(p.ReqStr("id"), p.ReqBool("on"), p.Bool("takeOver") ?? false);
+                await SetGameRecorder(p.ReqStr("id"), p.ReqBool("on"), p.Bool("takeOver") ?? false, p.Bool("session") ?? false);
                 return Ok;
             case "recorder.alongside":
             {
@@ -541,7 +541,8 @@ internal sealed partial class Host
                     if (e.ValueKind != JsonValueKind.Object) throw new ServiceError("each game must be an object");
                     string? S(string name) => e.TryGetProperty(name, out JsonElement v) && v.ValueKind == JsonValueKind.String ? v.GetString() : null;
                     if (S("id") is not { Length: > 0 } id || S("installDir") is not { Length: > 0 } dir) continue;
-                    entries.Add(new ExoLibraryEntry(id, S("title") ?? "", S("store") ?? "", dir, S("exe")));
+                    entries.Add(new ExoLibraryEntry(id, S("title") ?? "", S("store") ?? "", dir, S("exe"),
+                        NoRecorder: e.TryGetProperty("noRecorder", out JsonElement nr) && nr.ValueKind == JsonValueKind.True));
                 }
                 bool changed;
                 try { changed = await Task.Run(() => source.Replace(entries)); }
