@@ -57,6 +57,7 @@ public sealed partial class NetworkDestinationsTests
         ["klipy.com"] = "page loads GIFs",
         ["tenor.com"] = "page loads GIFs",
         ["giphy.com"] = "page loads GIFs",
+        ["i.imgur.com"] = "page loads GIFs",
         // Exo's page in Windows' Installed apps entry: written to the registry, opened by Windows, never requested (InstalledAppsEntry).
         ["getexo.app"] = "Installed apps link",
         // Store sign-in pages hosted in WebView2.
