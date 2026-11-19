@@ -493,8 +493,10 @@ public sealed class AppSettings
     public bool AutoUpdateGames { get; set; } = true;
     /// <summary>This PC's chipset driver (AMD's on a Ryzen, Intel's on an Intel processor) updates by itself while the PC is idle (<see cref="ExoLauncher.Services.ChipsetUpdate"/>).</summary>
     public bool AutoUpdateChipset { get; set; } = true;
-    /// <summary>Newer DLSS, FSR and XeSS files download from Exo's cache by themselves while the PC is idle. Off by default: Exo checks nothing and downloads nothing on its own.</summary>
-    public bool AutoUpdateUpscalers { get; set; }
+    /// <summary>Newer DLSS, FSR and XeSS files download by themselves (from the vendor's own release, Exo's cache when that fails) while the PC is idle. On by default.</summary>
+    public bool AutoUpdateUpscalers { get; set; } = true;
+    /// <summary>Set once Exo has turned <see cref="AutoUpdateUpscalers"/> on for a settings file written while it was off by default (3.26 and earlier).</summary>
+    public bool UpscalerAutoUpdateDefaulted { get; set; } = true;
     /// <summary>On a PC with two graphics chips, Windows is asked to run Exo's games on the fast one (<see cref="ExoLauncher.Services.GpuPreference"/>); off until the user turns it on.</summary>
     public bool FastGpuForGames { get; set; }
     /// <summary>Lucid (<see cref="ExoLauncher.Services.LucidCompanion"/>) starts with Exo, out of sight; off until the user turns it on.</summary>

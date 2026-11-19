@@ -22,12 +22,13 @@ public sealed class FrameGenDocsTests
     }
 
     [Fact]
-    public void PrivacyNamesWhatExoLearnsAndNoNewestReleaseCheck()
+    public void PrivacyNamesWhatExoLearnsAndTheNewestReleaseCheck()
     {
         var privacy = File.ReadAllText(Repo.PathOf("PRIVACY.md"));
         Assert.Contains(@"frame-gen\learned.json", privacy, StringComparison.Ordinal);
         var row = privacy.Split('\n').Single(text => text.StartsWith("| Frame generation mods", StringComparison.Ordinal));
-        Assert.DoesNotContain("newest release", row, StringComparison.Ordinal);
+        Assert.Contains("newest release", row, StringComparison.Ordinal);
+        Assert.Contains("api.github.com", row, StringComparison.Ordinal);
         Assert.DoesNotContain("six hours", row, StringComparison.Ordinal);
         Assert.Contains("SHA-256", row, StringComparison.Ordinal);
     }

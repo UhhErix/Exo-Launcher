@@ -267,8 +267,9 @@ public sealed partial class DlssSwapService
             foreach (var (name, size, blob) in wanted)
             {
                 var path = Path.Combine(incoming, name);
-                AppLog.Info($"{sdk.Name} {release} from Exo's cache: fetching {name} ({size} bytes).");
-                await DownloadToFileAsync($"https://{VerifiedGitHubReleaseDownloader.CacheHost}/v1/cache/{sdk.Repo}/{commit}/{sdk.Folder}/{name}", path, size, ct).ConfigureAwait(false);
+                AppLog.Info($"{sdk.Name} {release}: fetching {name} ({size} bytes).");
+                await DownloadToFileAsync($"https://{VerifiedGitHubReleaseDownloader.CacheHost}/v1/cache/{sdk.Repo}/{commit}/{sdk.Folder}/{name}", path, size, ct,
+                    file => blob.Equals(GitBlobSha1(file), StringComparison.OrdinalIgnoreCase)).ConfigureAwait(false);
                 if (!blob.Equals(GitBlobSha1(path), StringComparison.OrdinalIgnoreCase) || !IsTrustedReplacementDll(path, name, revocationChecked: true) ||
                     TryFileVersion(path) is not { } fileVersion || FileSha256(path) is not { } sha)
                     throw new InvalidDataException($"{name} from {sdk.Name} {release} did not match the cache's listing or the vendor's signature.");
@@ -301,7 +302,7 @@ public sealed partial class DlssSwapService
             _watched = kept;
             _allReleases = null;
         }
-        AppLog.Info($"{sdk.Name} {release} found in Exo's cache: {string.Join(", ", found.Select(file => file.FileName + " " + file.Display))}.");
+        AppLog.Info($"{sdk.Name} {release} downloaded: {string.Join(", ", found.Select(file => file.FileName + " " + file.Display))}.");
     }
 
     /// <summary>
@@ -327,14 +328,29 @@ public sealed partial class DlssSwapService
 
     private const int CacheJsonMaxChars = 8 << 20;
 
+    /// <summary>A small JSON answer (a release, a commit, a folder listing): GitHub's own first, Exo's cache when GitHub fails.</summary>
     private static async Task<JsonNode?> GetCacheJsonAsync(string url, CancellationToken ct)
     {
-        using var request = new HttpRequestMessage(HttpMethod.Get, url);
-        using var response = await Http.SendAsync(request, ct).ConfigureAwait(false);
-        response.EnsureSuccessStatusCode();
-        if (response.Content.Headers.ContentLength is { } declared && declared > CacheJsonMaxChars) return null;
-        var text = await ReadCappedTextAsync(await response.Content.ReadAsStreamAsync(ct).ConfigureAwait(false), CacheJsonMaxChars, ct).ConfigureAwait(false);
-        return text is null ? null : JsonNode.Parse(text);
+        Exception? last = null;
+        foreach (var source in UpstreamSource.SourcesFor(url))
+        {
+            try
+            {
+                var upstream = source != url;
+                using var response = upstream
+                    ? await UpstreamSource.GetAsync(Http, source, UpstreamSource.IsUpstreamHop, ct).ConfigureAwait(false)
+                    : await Http.GetAsync(source, ct).ConfigureAwait(false);
+                response.EnsureSuccessStatusCode();
+                if (response.Content.Headers.ContentLength is { } declared && declared > CacheJsonMaxChars) return null;
+                var text = await ReadCappedTextAsync(await response.Content.ReadAsStreamAsync(ct).ConfigureAwait(false), CacheJsonMaxChars, ct).ConfigureAwait(false);
+                return text is null ? null : JsonNode.Parse(text);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
+            {
+                last = ex;
+            }
+        }
+        throw last ?? new HttpRequestException("No source answered.");
     }
 
     /// <summary>Git's blob hash of a file: SHA-1 over "blob {size}\0" and its bytes, as a git listing states it.</summary>

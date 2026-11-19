@@ -61,11 +61,19 @@ internal sealed class VerifiedGitHubReleaseDownloader : IDisposable
     /// <summary>For a download too big for <see cref="Shared"/>'s five minutes on a slow line (frame generation's files).</summary>
     internal static VerifiedGitHubReleaseDownloader Large { get; } = new(CreateProductionHandler(), TimeSpan.FromHours(3));
 
-    private readonly HttpClient _http;
+    /// <summary>
+    /// Frame generation's mods: the release asset from GitHub first (github.com, redirected only to GitHub's release asset
+    /// hosts), Exo's cache when GitHub fails or its bytes fail the checks. Same size, SHA-256 and executable checks either way.
+    /// </summary>
+    internal static VerifiedGitHubReleaseDownloader Upstream { get; } = new(CreateProductionHandler(), TimeSpan.FromHours(3), upstreamFirst: true);
 
-    internal VerifiedGitHubReleaseDownloader(HttpMessageHandler handler, TimeSpan? timeout = null)
+    private readonly HttpClient _http;
+    private readonly bool _upstreamFirst;
+
+    internal VerifiedGitHubReleaseDownloader(HttpMessageHandler handler, TimeSpan? timeout = null, bool upstreamFirst = false)
     {
         ArgumentNullException.ThrowIfNull(handler);
+        _upstreamFirst = upstreamFirst;
         _http = ExoHttp.Create(timeout ?? TimeSpan.FromMinutes(5), handler, disposeHandler: true);
         _http.DefaultRequestHeaders.UserAgent.Add(new ProductInfoHeaderValue("ExoLauncher", "1.0"));
     }
@@ -102,25 +110,36 @@ internal sealed class VerifiedGitHubReleaseDownloader : IDisposable
             // caller's thread, and a model is hundreds of megabytes.
             if (await Task.Run(() => IsPinnedAssetFile(asset, destination, validateExecutable), ct).ConfigureAwait(false)) return destination;
 
-            var downloadUri = PinnedDownloadUri(asset);
-            var temporaryPath = CreateUniqueTemporaryPath(destination);
-            try
+            var sources = _upstreamFirst ? new[] { UpstreamDownloadUri(asset), PinnedDownloadUri(asset) } : new[] { PinnedDownloadUri(asset) };
+            Exception? last = null;
+            foreach (var downloadUri in sources)
             {
-                await DownloadAndVerifyAsync(asset, downloadUri, temporaryPath, ct, progress).ConfigureAwait(false);
-                if (!TryValidate(validateExecutable, temporaryPath))
-                    throw new InvalidDataException("The verified release asset failed executable validation.");
+                var upstream = !downloadUri.Host.Equals(CacheHost, StringComparison.OrdinalIgnoreCase);
+                var temporaryPath = CreateUniqueTemporaryPath(destination);
+                try
+                {
+                    await DownloadAndVerifyAsync(asset, downloadUri, temporaryPath, ct, progress, upstream).ConfigureAwait(false);
+                    if (!TryValidate(validateExecutable, temporaryPath))
+                        throw new InvalidDataException("The verified release asset failed executable validation.");
 
-                // The unique temporary file is created beside the destination,
-                // so this same-volume move is the only promotion step observed by
-                // other callers. Existing files remain intact until now.
-                File.Move(temporaryPath, destination, overwrite: true);
-                ExecutionContracts[destination] = (asset, validateExecutable);
-                return destination;
+                    // The unique temporary file is created beside the destination,
+                    // so this same-volume move is the only promotion step observed by
+                    // other callers. Existing files remain intact until now.
+                    File.Move(temporaryPath, destination, overwrite: true);
+                    ExecutionContracts[destination] = (asset, validateExecutable);
+                    return destination;
+                }
+                catch (Exception ex) when (upstream && (ex is not OperationCanceledException || !ct.IsCancellationRequested))
+                {
+                    last = ex;
+                    AppLog.Info($"{asset.AssetName}: GitHub failed ({ex.Message}); using Exo's cache.");
+                }
+                finally
+                {
+                    TryDelete(temporaryPath);
+                }
             }
-            finally
-            {
-                TryDelete(temporaryPath);
-            }
+            throw last ?? new InvalidDataException("The release asset could not be downloaded.");
         }
         finally
         {
@@ -223,6 +242,15 @@ internal sealed class VerifiedGitHubReleaseDownloader : IDisposable
         return uri;
     }
 
+    /// <summary>The release asset on GitHub itself: <c>https://github.com/{owner}/{repo}/releases/download/{tag}/{asset}</c>.</summary>
+    internal static Uri UpstreamDownloadUri(GitHubReleaseAsset asset)
+    {
+        ValidateAssetContract(asset);
+        return new Uri(
+            $"https://{UpstreamSource.GitHub}/{asset.Owner}/{asset.Repository}/releases/download/{Uri.EscapeDataString(asset.Tag)}/{Uri.EscapeDataString(asset.AssetName)}",
+            UriKind.Absolute);
+    }
+
     internal static string CreateUniqueTemporaryPath(string destinationPath)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(destinationPath);
@@ -240,12 +268,15 @@ internal sealed class VerifiedGitHubReleaseDownloader : IDisposable
         Uri downloadUri,
         string temporaryPath,
         CancellationToken ct,
-        Action<long>? progress)
+        Action<long>? progress,
+        bool upstream = false)
     {
         using var request = new HttpRequestMessage(HttpMethod.Get, downloadUri);
-        using var response = await _http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, ct)
-            .ConfigureAwait(false);
-        // The cache answers directly; a redirect could only send the bytes somewhere Exo did not pin.
+        // GitHub redirects a release download to its asset hosts, each hop checked; the cache answers directly.
+        using var response = upstream
+            ? await UpstreamSource.GetAsync(_http, downloadUri.AbsoluteUri, UpstreamSource.IsUpstreamHop, ct).ConfigureAwait(false)
+            : await _http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, ct).ConfigureAwait(false);
+        // A redirect left over could only send the bytes somewhere Exo did not pin.
         if (IsRedirect(response.StatusCode))
             throw new SecurityException("The cached release asset redirected; Exo accepts only its own copy.");
         if (!response.IsSuccessStatusCode)
