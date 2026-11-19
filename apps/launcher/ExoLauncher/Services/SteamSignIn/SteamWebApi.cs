@@ -97,13 +97,16 @@ internal sealed class SteamWebApi(HttpClient http, string baseUrl = "https://api
         return doc is null ? null : ParseFamilyGroup(doc.RootElement);
     }
 
-    /// <summary>The app ids other family members share with the account (its own games left out); null when Steam did not answer.</summary>
-    internal async Task<IReadOnlySet<string>?> FamilySharedAppsAsync(string accessToken, ulong familyGroupId, ulong steamId, CancellationToken ct)
+    /// <summary>
+    /// The games other family members share with the account (its own left out, and the ones an owner keeps private or
+    /// Steam does not let a family share), each with its name and owners; null when Steam did not answer.
+    /// </summary>
+    internal async Task<IReadOnlyDictionary<string, SteamFamilyLibrary.SharedApp>?> FamilySharedAppsAsync(string accessToken, ulong familyGroupId, ulong steamId, CancellationToken ct)
     {
         using var doc = await GetJsonAsync("IFamilyGroupsService", "GetSharedLibraryApps", ct,
             ("access_token", accessToken), ("family_groupid", familyGroupId.ToString(CultureInfo.InvariantCulture)),
             ("steamid", steamId.ToString(CultureInfo.InvariantCulture)), ("include_own", "false"), ("include_excluded", "false"),
-            ("include_free", "false"), ("include_non_games", "false")).ConfigureAwait(false);
+            ("include_non_games", "false"), ("language", "english")).ConfigureAwait(false);
         return doc is null ? null : ParseSharedApps(doc.RootElement);
     }
 
@@ -156,17 +159,48 @@ internal sealed class SteamWebApi(HttpClient http, string baseUrl = "https://api
         };
     }
 
-    internal static IReadOnlySet<string>? ParseSharedApps(JsonElement root)
+    /// <summary>
+    /// The shared library: a game once, with its name and its owners' account ids. An app Steam marks excluded
+    /// (<c>exclude_reason</c> not 0: kept private by its owner, free, or not shareable) or that is not a game
+    /// (<c>app_type</c> not 1) is left out, whatever the request asked. A response with nothing in it is an empty
+    /// library (Steam leaves out an empty list); no response is null.
+    /// </summary>
+    internal static IReadOnlyDictionary<string, SteamFamilyLibrary.SharedApp>? ParseSharedApps(JsonElement root)
     {
         if (!root.TryGetProperty("response", out var response) || response.ValueKind != JsonValueKind.Object) return null;
-        if (!response.TryGetProperty("apps", out var apps) || apps.ValueKind != JsonValueKind.Array) return null;
-        var ids = new HashSet<string>(StringComparer.Ordinal);
-        foreach (var app in apps.EnumerateArray())
+        var apps = new Dictionary<string, SteamFamilyLibrary.SharedApp>(StringComparer.Ordinal);
+        if (!response.TryGetProperty("apps", out var list)) return response.EnumerateObject().Any(p => p.Name != "owner_steamid") ? null : apps;
+        if (list.ValueKind != JsonValueKind.Array) return null;
+        foreach (var app in list.EnumerateArray())
         {
             var appId = AppId(app);
-            if (appId is not null) ids.Add(appId);
+            if (appId is null) continue;
+            if (app.TryGetProperty("exclude_reason", out var excluded) && excluded.ValueKind == JsonValueKind.Number &&
+                (!excluded.TryGetInt32(out var reason) || reason != 0))
+                continue;
+            if (app.TryGetProperty("app_type", out var type) && type.ValueKind == JsonValueKind.Number &&
+                (!type.TryGetInt32(out var kind) || kind != 1))
+                continue;
+            var name = app.TryGetProperty("name", out var n) && n.ValueKind == JsonValueKind.String && !string.IsNullOrWhiteSpace(n.GetString())
+                ? n.GetString()!.Trim()
+                : null;
+            var owners = new List<string>();
+            if (app.TryGetProperty("owner_steamids", out var ids) && ids.ValueKind == JsonValueKind.Array)
+                foreach (var id in ids.EnumerateArray())
+                {
+                    var steamId = id.ValueKind switch
+                    {
+                        JsonValueKind.String => ulong.TryParse(id.GetString(), NumberStyles.None, CultureInfo.InvariantCulture, out var s) ? s : 0UL,
+                        JsonValueKind.Number => id.TryGetUInt64(out var u) ? u : 0UL,
+                        _ => 0UL,
+                    };
+                    if (SteamFamilyLibrary.AccountIdOf(steamId) is { } account && !owners.Contains(account)) owners.Add(account);
+                }
+            apps[appId] = apps.TryGetValue(appId, out var seen)
+                ? seen with { Name = seen.Name ?? name, OwnerAccountIds = seen.OwnerAccountIds.Union(owners).ToArray() }
+                : new SteamFamilyLibrary.SharedApp(appId, name, owners);
         }
-        return ids;
+        return apps;
     }
 
     private static string? AppId(JsonElement item)

@@ -58,6 +58,7 @@ public sealed partial class WebHostBridge
         _queue = queue;
         // The adapter and the store opener start Steam without the bridge at hand; the waiting settings go in first.
         SteamPendingSettings.Attach(this);
+        SteamSignIn.SteamWebsiteToken.Fetch = SteamWebsiteTokenAsync;
         _windowWatch = new GameWindowWatch(pid => ProcessHelper.TryGetExecutablePath((int)pid),
             new GameFolderSet(() => InstalledGames().Select(game => game.Path!).ToArray()));
         // The update's state as the host holds it (UpdateFlow): the UI draws the update from this alone.
@@ -325,6 +326,7 @@ public sealed partial class WebHostBridge
             DiscordClient.DiscordSession.VideoFrame -= PostVideoFrame;
         }
         try { _giftsTimer?.Stop(); } catch { }
+        if (SteamSignIn.SteamWebsiteToken.Fetch == SteamWebsiteTokenAsync) SteamSignIn.SteamWebsiteToken.Fetch = null;
         _runStatePoll?.Dispose();
         _runStatePoll = null;
         ForegroundWatcher.WindowActivity -= OnWindowActivity;
@@ -2961,6 +2963,9 @@ public sealed partial class WebHostBridge
         status = PageText(g.Status),
         deps = g.Deps.Select(PageText).ToArray(),
         launchNote = PageText(g.LaunchNote),
+        familyShared = g.FamilyShared,
+        // A family member's Steam name, for the game page's "Shared by"; never an id.
+        sharedBy = g.FamilyShared && PageText(g.SharedBy) is { Length: > 0 } lender ? lender : null,
         launchTarget = PageTarget(g.LaunchTarget),
         includes = g.Includes?.Select(game => new { appId = game.AppId, title = game.Title }),
         lastPlayedUtc = g.LastPlayedUtc?.ToString("O"),

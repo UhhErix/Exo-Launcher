@@ -93,6 +93,11 @@
         "detail": "Servers across the top, DMs and Friends on Home, members and profiles always beside the conversation, and mute, deafen and settings by your picture."
       },
       {
+        "icon": "Library",
+        "title": "Every Steam Family game",
+        "detail": "Your family's shared games show in the Library, installed or not, and a game's page says who shares it."
+      },
+      {
         "icon": "Monitor",
         "title": "Pure black under Liquid Glass",
         "detail": "Exo is AMOLED black everywhere, under its frosted glass."
