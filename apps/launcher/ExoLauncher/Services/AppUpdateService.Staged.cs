@@ -316,8 +316,7 @@ public sealed partial class AppUpdateService
     /// <summary>
     /// This start, before Exo's main window: an installer kept for after a game goes in now when it is for a newer version than
     /// this one, has been started fewer than <see cref="MaxStarts"/> times, still has its size, SHA-256 and identity, matches
-    /// the SHA-256 the update address gives for that release (when it can be asked), and no game runs. Lucid, which the
-    /// installer would otherwise close, is stopped first and started again if the installer doesn't start. True when the
+    /// the SHA-256 the update address gives for that release (when it can be asked), and no game runs. True when the
     /// installer started (Exo then exits; Setup's window shows the update and opens the new version).
     /// </summary>
     internal async Task<bool> ApplyKeptAtStartAsync(string runningVersion, CancellationToken ct = default)
@@ -353,12 +352,7 @@ public sealed partial class AppUpdateService
                 return false;
             }
             if (!CountStart(_updatesDirectory, staged)) return false;
-            var lucid = await StopLucid().ConfigureAwait(false);
-            if (!StartInstaller(path))
-            {
-                if (lucid is not null) StartLucid(lucid);
-                return false;
-            }
+            if (!StartInstaller(path)) return false;
             AppLog.Info($"Update {staged.Version}: the installer kept from a game is running; Exo closes for it.");
             return true;
         }

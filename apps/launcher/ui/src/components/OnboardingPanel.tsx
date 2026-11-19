@@ -6,7 +6,6 @@ import {
   type GpuProfile,
   type JunkItem,
   type LauncherSettings,
-  type LucidState,
   type PcHealth,
   type ReplacedApp,
   type StoreStatus,
@@ -144,7 +143,6 @@ export function OnboardingPanel({
   const [pcRead, setPcRead] = useState(false)
   const [settings, setLocalSettings] = useState<LauncherSettings | null>(null)
   const screen = useHdrState(false)
-  const [lucid, setLucid] = useState<LucidState | null>(null)
   /** The step at work, whether Use best settings has run, the steps it set (their checks draw in) and why any failed. */
   const [running, setRunning] = useState<BestKey | null>(null)
   const [bestBusy, setBestBusy] = useState(false)
@@ -194,7 +192,6 @@ export function OnboardingPanel({
 
   useEffect(() => {
     void readPc()
-    host.lucid().then(setLucid, (error: unknown) => report(error, 'OnboardingPanel.lucid'))
   }, [readPc])
 
   useEffect(() => {
@@ -402,7 +399,7 @@ export function OnboardingPanel({
     apps: () => <AppsStep onFeedback={setFeedback} />,
     discord: () => <DiscordStep />,
     capture: () => <CaptureStep />,
-    pc: () => <PcStep steps={best} running={running} landed={landed} failed={bestFailed} settings={settings} onSave={saveSettings} lucid={lucid} onLucid={setLucid} />,
+    pc: () => <PcStep steps={best} running={running} landed={landed} failed={bestFailed} settings={settings} onSave={saveSettings} />,
     cleanup: () => <CleanupStep apps={replaced ?? []} onApps={setReplaced} junk={junk}
       onCleaned={() => void host.junkScan().then(({ items }) => setJunk(items), (error: unknown) => report(error, 'OnboardingPanel.junkScan', { level: 'warn' }))} />,
   }

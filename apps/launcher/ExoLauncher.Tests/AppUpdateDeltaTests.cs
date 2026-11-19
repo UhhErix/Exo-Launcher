@@ -292,8 +292,6 @@ public sealed class AppUpdateDeltaTests : IDisposable
             GameRunning = () => game,
             FreeBytes = _ => long.MaxValue,
             AppFolderBytes = () => 1_000_000,
-            StopLucid = () => Task.FromResult<string?>(null),
-            StartLucid = _ => { },
         };
     }
 

@@ -72,7 +72,7 @@ export async function run(t) {
     return failures
   })
 
-  await run.check('devices', 'audio', 'your audio page fits one screen beside its hero, credits Lucid, and its headphone search lists under its row', async (c) => {
+  await run.check('devices', 'audio', 'your audio page fits one screen beside its hero, credits AutoEq and Equalizer APO, and its headphone search lists under its row', async (c) => {
     if (!await t.shell.eval(`!!document.querySelector('button[data-device-card="audio"]')`)) c.skip('no audio device')
     await t.shell.click(() => document.querySelector('button[data-device-card="audio"]'))
     await t.shell.waitFor(() => document.querySelector('.exo-device-page-hero') || null, { timeoutMs: 8000 })
@@ -83,11 +83,9 @@ export async function run(t) {
     await c.shot('audio', t.shell)
     const failures = []
     if (shown.page > 0 || shown.panels > 0) failures.push(`the page scrolls (${shown.page}px, its panels ${shown.panels}px)`)
-    if (shown.credit !== 'Built on Lucid by tekkusai') failures.push(`the hero's foot says "${shown.credit}", not Lucid's credit`)
-    if (!await t.shell.eval(`!!document.querySelector('.exo-device-page-credit .exo-glyph')`)) failures.push('no heart beside Lucid\'s credit')
-    const lucidButtons = await t.shell.eval(`[...document.querySelectorAll('.exo-device-page-panel[aria-label="Lucid"] button')].map(b => b.textContent.trim())`)
-    c.evidence.lucidButtons = lucidButtons
-    for (const gone of ['Get Lucid', 'Open Lucid', 'Update']) if (lucidButtons.includes(gone)) failures.push(`Lucid's panel still offers ${gone}`)
+    if (shown.credit !== 'Corrections by AutoEq, sound by Equalizer APO') failures.push(`the hero's foot says "${shown.credit}", not Exo EQ's credit`)
+    if (!await t.shell.eval(`!!document.querySelector('.exo-device-page-credit .exo-glyph')`)) failures.push('no heart beside the credit')
+    if (await t.shell.eval(`!!document.querySelector('.exo-device-page-panel[aria-label="Lucid"]')`)) failures.push('a Lucid panel is still on the page')
     // Read only: a run never changes a real device's format, since its sound would restart.
     const audio = (await t.host('devices.list')).devices.filter(d => d.kind === 'audio')
     for (const device of audio) {

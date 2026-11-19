@@ -1085,7 +1085,6 @@ public sealed class SettingsService
         MouseBridgeAppAutostart = source.MouseBridgeAppAutostart,
         MouseBridgeAppPath = source.MouseBridgeAppPath,
         StartLucidWithExo = source.StartLucidWithExo,
-        LucidFollowHeadset = source.LucidFollowHeadset,
         LibraryFolders = NormalizeLibraryFolders(source.LibraryFolders),
         HiddenGames = NormalizeHiddenGames(source.HiddenGames),
         FrameGenEverywhere = source.FrameGenEverywhere,
@@ -1102,7 +1101,6 @@ public sealed class SettingsService
         NvidiaDriverBranch = source.NvidiaDriverBranch == "studio" ? "studio" : null,
         StartWithWindows = source.StartWithWindows,
         StartupHandedToExo = [.. (source.StartupHandedToExo ?? []).Where(id => StartupApps.Known.Any(app => app.Id == id)).Distinct()],
-        LucidPath = source.LucidPath is { Length: > 0 and <= 1024 } lucid ? lucid : null,
     };
 
     // settings.json is read with case-sensitive keys and may hold nulls. Copies

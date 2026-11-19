@@ -36,14 +36,13 @@ hash (`_mirror/manifest.json` in the bucket, outside the served prefix, records 
 present. Folder listings and tag commits come from the GitHub API and must agree with the pinned bytes before upload.
 `cache-licences.json` records each licence file's first hash; a later change is refused. Tests: `node --test test`.
 
-**What is not mirrored, and why:** the dynamic "latest" lookups for FrameGen's three mods and Lucid's release list have
+**What is not mirrored, and why:** the dynamic "latest" lookups for FrameGen's three mods have
 no pin in the Launcher, so nothing is stored for them and they answer 404; the Launcher's fallbacks apply. The vendor
 repos' newest releases and DLSS Swapper's newer archives are stored by the cache watch (below). The pinned DLSS Swapper
 archive zips (`dlss-swapper-downloads.beeradmoore.com/dlss`, `dlss_d`, `dlss_g`, DLSS 310.9.16) are mirrored at the same
 path under `cache/`; the Launcher pins each archive by SHA-256 (DlssSwapService.Releases.cs) and the mirror checks the zip
 against that pin. Each zip's inner DLL is checked for its pinned size and SHA-256 and a valid NVIDIA Corporation
-Authenticode signature before upload, read without running it. The NVIDIA DLSS licence sits beside each zip. Lucid's own
-update is dormant in the Launcher: it holds no per-release SHA-256 pin (`LucidUpdate.Pins`), so nothing is fetched for it.
+Authenticode signature before upload, read without running it. The NVIDIA DLSS licence sits beside each zip.
 
 **Licensing (decided):** the vendor DLLs (NVIDIA DLSS, AMD FidelityFX, Intel XeSS) are mirrored with each upstream licence
 file (or the third-party notice where a commit has no licence file) stored next to them in the same folder, served only by

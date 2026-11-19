@@ -38,7 +38,7 @@ type Card = {
  * they rise in as the room first opens. A press grows a card into its page, and Devices at its top folds the page back
  * into its card. The mouse's page is Exo Mouse, a separate program (AGPL, in
  * /mouse) in a frame, kept running behind the grid so its battery stays current; Exo relays its HID calls
- * (lib/mouseRelay.ts). Your audio's page holds your pick and Lucid on one screen; a controller's holds the Controller
+ * (lib/mouseRelay.ts). Your audio's page holds your pick and Exo EQ on one screen; a controller's holds the Controller
  * Lab. Keyboards and controllers the lab can't read show what they are; Exo doesn't set them up yet. Each card says which
  * USB it's on, green where that's best for it, red with what to do where it isn't.
  */

@@ -13,15 +13,13 @@ $previous = Join-Path $env:LOCALAPPDATA ('ExoLauncher\app.previous-dev-' + [guid
 robocopy $pub $incoming /E /NFL /NDL /NJH /NJS | Out-Null
 if ($LASTEXITCODE -gt 7) { throw "robocopy failed with exit code $LASTEXITCODE" }
 if (-not (Test-Path -LiteralPath (Join-Path $incoming 'ExoLauncher.exe'))) { throw 'staged copy is missing ExoLauncher.exe' }
-# dotnet publish carries no add-ons (Build-Release.ps1 adds them): Lucid at its pin, and keep each other installed one
-# the publish lacks, or the swap drops Exo Capture and Settings says it is not installed.
-pwsh -NoProfile -File (Join-Path $PSScriptRoot 'Get-Lucid.ps1') -AppFolder $incoming
-if ($LASTEXITCODE) { throw "Getting Lucid failed ($LASTEXITCODE)." }
+# dotnet publish carries no add-ons (Build-Release.ps1 adds them): keep each installed one the publish lacks, or the swap
+# drops Exo Capture and Settings says it is not installed. Lucid (addons\lucid, hosted until 3.25) is not carried over.
 $installedAddons = Join-Path $app 'addons'
 if (Test-Path -LiteralPath $installedAddons) {
     foreach ($addon in Get-ChildItem -LiteralPath $installedAddons -Directory) {
         $target = Join-Path $incoming ('addons\' + $addon.Name)
-        if (Test-Path -LiteralPath $target) { continue }
+        if ($addon.Name -eq 'lucid' -or (Test-Path -LiteralPath $target)) { continue }
         robocopy $addon.FullName $target /E /NFL /NDL /NJH /NJS | Out-Null
         if ($LASTEXITCODE -gt 7) { throw "robocopy of add-on $($addon.Name) failed with exit code $LASTEXITCODE" }
     }
@@ -31,9 +29,9 @@ foreach ($process in $targets) {
     if (-not $process.CloseMainWindow()) { throw 'Exo did not accept a normal close. Exit Exo before swapping.' }
     if (-not $process.WaitForExit(20000)) { throw 'Exo has not finished releasing hosted apps. Swap canceled; no processes were killed.' }
 }
-# The Lucid Exo hosts (addons\lucid in the app folder, or the newer one it downloaded to addons\lucid-current in its data folder) stays running when an Exo that cannot close it exits, and would stop the
-# swap below. Asked to close, then ended if it won't, only when it is the exact exe in this folder; a Lucid run from anywhere
-# else is left alone. The next Exo start starts it again (Start with Exo).
+# The Lucid an installed Exo before 3.26 hosts (addons\lucid in the app folder, or addons\lucid-current in its data folder)
+# stays running when that Exo exits, and would stop the swap below. Asked to close, then ended if it won't, only when it is
+# the exact exe in this folder; a Lucid run from anywhere else is left alone. The new Exo takes over from it (Exo EQ).
 if (-not (Stop-ExoHostedLucid $app (Join-Path $env:LOCALAPPDATA 'ExoLauncher'))) { throw "Lucid from Exo's folder would not close. Swap canceled." }
 # Exo's helpers (the Steam watcher checks its parent's pid every few seconds) can outlive it briefly and hold the folder.
 $appPrefix = $app.TrimEnd('\') + '\'

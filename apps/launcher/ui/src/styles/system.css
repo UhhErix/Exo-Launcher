@@ -910,7 +910,7 @@
   padding: 4px 0 8px;
 }
 
-/* A panel with nothing to show yet or at all (a PC without Lucid, its rows still being read) isn't drawn. */
+/* A panel with nothing to show yet or at all (a PC without Equalizer APO, its rows still being read) isn't drawn. */
 .exo-system-panel:has(> .exo-system-panel-body:empty) {
   display: none;
 }

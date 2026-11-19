@@ -30,9 +30,9 @@
     "match": [
       "lucid.exe"
     ],
-    "name": "Lucid (the copy inside Exo)",
-    "does": "Starts the Lucid that comes with Exo at sign-in, with its own tray icon, before Exo is open.",
-    "without": "Nothing you'd notice: Exo starts Lucid out of sight when it opens, and your EQ keeps playing in between.",
+    "name": "Lucid (the copy an earlier Exo came with)",
+    "does": "Starts the Lucid an earlier Exo came with at sign-in. That copy is gone: Exo EQ on your audio's page does its job now.",
+    "without": "Nothing you'd notice: Exo EQ plays through Equalizer APO without anything running.",
     "verdict": "remove",
     "under": "\\addons\\lucid\\"
   },

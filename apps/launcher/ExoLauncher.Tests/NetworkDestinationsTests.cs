@@ -184,16 +184,17 @@ public sealed partial class NetworkDestinationsTests
 
     /// <summary>
     /// GitHub is contacted only for the vendors' upscaler files and the frame generation mods (UpstreamSource), each with
-    /// Exo's cache behind it, and no code line writes a GitHub URL out (UpstreamSource builds them from its host names).
-    /// Ways it could fail: a GitHub host listed for another row (store tools, Lucid, the voice model), or a request string
+    /// Exo's cache behind it, and for Exo EQ's AutoEq list and corrections (kept on the PC once fetched), and no code line
+    /// writes a GitHub URL out (UpstreamSource's host names build them). Ways it could fail: a GitHub host listed for
+    /// another row (store tools, the voice model), or a request string
     /// naming api.github.com, github.com, a raw or release file host, or GitHub Pages. Comment lines are skipped: they name
     /// upstream pages as credits.
     /// </summary>
     [Fact]
-    public void GitHubIsAskedOnlyForUpscalersAndFrameGeneration()
+    public void GitHubIsAskedOnlyForUpscalersFrameGenerationAndAutoEq()
     {
         Assert.All(NetworkDestinations.Hosts.Where(host => host.Host.Contains("github", StringComparison.OrdinalIgnoreCase)),
-            host => Assert.Contains(host.PrivacyRow, new[] { NetworkDestinations.Upscalers, NetworkDestinations.FrameGenMod }));
+            host => Assert.Contains(host.PrivacyRow, new[] { NetworkDestinations.Upscalers, NetworkDestinations.FrameGenMod, NetworkDestinations.AutoEq }));
         var github = new Regex(@"https?://[A-Za-z0-9.-]*(github\.com|githubusercontent\.com|github\.io)", RegexOptions.IgnoreCase);
         var offenders = Repo.HostSources()
             .SelectMany(path => File.ReadLines(path).Select((line, index) => (path, line, index)))
