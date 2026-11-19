@@ -1,20 +1,22 @@
 import { useState } from 'react'
 import { CHECK_PATH, Failed } from '../../brand/icons'
-import { host, type DrivesState, type GpuProfile, type HdrState, type LauncherSettings, type PcHealth } from '../../lib/host'
+import { host, type DrivesState, type GpuProfile, type HdrState, type LauncherSettings, type PcHealth, type Tuning } from '../../lib/host'
 import { report } from '../../lib/report'
 import { trimStop } from '../../lib/utils'
 import { ErrorNote } from '../ui/ErrorNote'
 import { Spinner } from '../ui/Spinner'
+import { ActionButton } from '../ui/ConfirmButton'
 import { SectionActions } from './SectionHead'
 
-export type BestKey = 'power' | 'profile' | 'network' | 'drives' | 'hdr' | 'frameGen'
+export type BestKey = 'power' | 'profile' | 'network' | 'system' | 'drives' | 'hdr' | 'frameGen'
 export type BestStep = { key: BestKey; what: string; done: boolean; run: () => Promise<string | null> }
 
 /**
  * Everything Exo sets for this PC, each done or still to set, from what was read. Each is something the PC room offers
  * on its own row too. Only what this PC has: a power plan to change, a driver profile for its card, the Network group
  * (the adapters' own settings, Cloudflare DNS encrypted, Windows' TCP defaults: each with its switch, all in one Windows
- * prompt), drives with write-cache flushing off or Windows' weekly optimize unable to run (one step, one Windows
+ * prompt), the System group's Windows defaults a tweak changed (its opt-ins, Services and Memory Integrity, never: only
+ * their own switch sets them; one Windows prompt with a restore point first), drives with write-cache flushing off or Windows' weekly optimize unable to run (one step, one Windows
  * prompt for both; flushing finishes with a restart), a screen that shows HDR well (on a dim one HDR usually looks worse,
  * so it stays the user's choice), and frame generation in
  * every game without anti-cheat it works in, on a card that gains from it (DlssSwapService.FrameGenAuto.cs; PC ›
@@ -22,7 +24,7 @@ export type BestStep = { key: BestKey; what: string; done: boolean; run: () => P
  */
 export function bestSteps(
   profile: GpuProfile | null, health: PcHealth | null, screen: HdrState | null, settings: LauncherSettings | null,
-  onSave: (patch: Partial<LauncherSettings>) => Promise<boolean>, drives: DrivesState | null,
+  onSave: (patch: Partial<LauncherSettings>) => Promise<boolean>, drives: DrivesState | null, tuning: Tuning | null = null,
 ): BestStep[] {
   const steps: BestStep[] = []
   const power = health?.items.find(item => item.key === 'power')
@@ -47,6 +49,8 @@ export function bestSteps(
       return next.ok ? null : trimStop(next.message) || 'Not changed'
     } })
   }
+  const systemStep = tuningStep(tuning)
+  if (systemStep) steps.push(systemStep)
   const drivesStep = driveStep(drives)
   if (drivesStep) steps.push(drivesStep)
   if (screen?.supported && screen.verdict !== 'weak' && settings) {
@@ -55,6 +59,17 @@ export function bestSteps(
   const frameGen = frameGenStep(settings, onSave)
   if (frameGen) steps.push(frameGen)
   return steps
+}
+
+/** The System group (SystemGroup.tsx): its Best settings items, in one Windows prompt behind a restore point; never an opt-in. */
+function tuningStep(tuning: Tuning | null): BestStep | null {
+  const items = tuning?.items.filter(item => !item.optIn && !item.off && !item.blocked) ?? []
+  if (items.length === 0) return null
+  const restart = items.some(item => !item.on || item.restart)
+  return { key: 'system', what: `Windows’ own defaults for games${restart ? ', after a restart' : ''}`, done: items.every(item => item.on), run: async () => {
+    const next = await host.systemTuning('apply')
+    return next.ok ? null : trimStop(next.message) || 'Not changed'
+  } }
 }
 
 /** Frame generation in every game without anti-cheat it works in, on a card that gains from it. */
@@ -110,9 +125,10 @@ export function BestCheck({ landed }: { landed: boolean }) {
  * ring. The rest (display modes, BIOS, Windows settings) stay where they ask first. First run shows the same steps
  * (onboarding/PcStep.tsx).
  */
-export function BestSetup({ profile, health, drives, screen, settings, onSave, onRead }: {
+export function BestSetup({ profile, health, tuning, drives, screen, settings, onSave, onRead }: {
   profile: GpuProfile | null
   health: PcHealth | null
+  tuning: Tuning | null
   drives: DrivesState | null
   screen: HdrState | null
   settings: LauncherSettings | null
@@ -121,24 +137,24 @@ export function BestSetup({ profile, health, drives, screen, settings, onSave, o
   onRead: () => Promise<void>
 }) {
   const [running, setRunning] = useState<BestKey | null>(null)
-  const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   // The steps set by this press: their checks draw in.
   const [landed, setLanded] = useState<ReadonlySet<BestKey>>(() => new Set())
 
-  const steps = bestSteps(profile, health, screen, settings, onSave, drives)
+  const steps = bestSteps(profile, health, screen, settings, onSave, drives, tuning)
 
+  // The button shows the run as a whole (ActionButton: its ring, then its check, or Bad when a step didn't take); each
+  // step turns its own ring and draws its own check; what didn't take is said under the list, step by step.
   const run = async () => {
-    if (busy) return
-    setBusy(true)
     setError(null)
     const failed = await runBest(steps, setRunning)
     setRunning(null)
     await onRead()
     setLanded(new Set(steps.filter(step => !step.done && !failed[step.key]).map(step => step.key)))
     const said = steps.filter(step => failed[step.key]).map(step => `${step.what}: ${failed[step.key]}`)
-    setError(said.length ? `${said.join('. ')}. Try again.` : null)
-    setBusy(false)
+    const words = said.length ? `${said.join('. ')}. Try again.` : null
+    setError(words)
+    return words ? { ok: false, message: words } : { ok: true }
   }
 
   if (!profile || !health || steps.length === 0) return null
@@ -146,7 +162,7 @@ export function BestSetup({ profile, health, drives, screen, settings, onSave, o
     <section className="exo-pc-best" aria-label="Steps">
       {steps.some(step => !step.done) ? (
         <SectionActions>
-          <button type="button" className="exo-set-btn is-primary" disabled={busy} aria-busy={busy} onClick={() => void run()}>Use best settings</button>
+          <ActionButton className="exo-set-btn is-primary" timeoutMs={null} why="none" context="BestSetup.run" onPress={run}>Use best settings</ActionButton>
         </SectionActions>
       ) : null}
       <ul className="exo-pc-best-steps">

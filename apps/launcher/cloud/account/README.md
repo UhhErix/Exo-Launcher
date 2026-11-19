@@ -137,13 +137,13 @@ no human holds them, so a `secret put` today could only drop them. Rotating need
 others (a design still to make); until then the keyring is left as it is. The steps, for then:
 
 1. Put a new key first, keeping every current one, `ACCOUNT_SECRETS=<new>,<old>`, given on standard input to
-   `npx wrangler@4.158.0 secret put ACCOUNT_SECRETS`.
+   `npx wrangler@4.165.0 secret put ACCOUNT_SECRETS`.
 2. Accounts keep working. A row made under the old key moves to the new one when its account next signs in (its address
    digest and its item key). A recovery code moves only when it is next made or reset, so it is the last to move.
 3. Retire the old key only when the check passes. `scripts/retire-key.mjs` refuses while any row names the key, in its
    address digest, its recovery code digest or its item key. Read the rows (this only reads; the file holds account ids,
    so delete it afterwards):
-   `npx wrangler@4.158.0 d1 execute exo-account --remote --json --command "SELECT id, email_mac, recovery_mac, hex(item_key) AS item_key FROM accounts" > rows.json`
+   `npx wrangler@4.165.0 d1 execute exo-account --remote --json --command "SELECT id, email_mac, recovery_mac, hex(item_key) AS item_key FROM accounts" > rows.json`
    then `node scripts/retire-key.mjs <current id> <old id> < rows.json`. It exits 0 when no row names the old key, and 1
    with the count per column (no account ids) when one does. It also refuses the current key. Until it passes, removing
    the old key leaves those accounts unable to sign in (a server error, not a wrong password) and their items unreadable.
@@ -223,24 +223,24 @@ schema), the secret `ACCOUNT_SECRETS`, the `SESSION_TRIES` rate limit (namespace
 `accounts.getexo.app`. Workers Logs and Logpush are off and stay off.
 
 1. **Read what live has applied**:
-   `npx wrangler@4.158.0 d1 execute exo-account --remote --command "SELECT name FROM d1_migrations ORDER BY id"`.
+   `npx wrangler@4.165.0 d1 execute exo-account --remote --command "SELECT name FROM d1_migrations ORDER BY id"`.
    It lists 0001 to 0007 today. Stop if it lists something this folder does not have.
 2. **Export first** when a new migration changes or drops anything:
-   `npx wrangler@4.158.0 d1 export exo-account --remote --output <a path outside the repo>/exo-account-before-<n>.sql`.
+   `npx wrangler@4.165.0 d1 export exo-account --remote --output <a path outside the repo>/exo-account-before-<n>.sql`.
    Keep it until the checks in step 6 pass, and never in the repository (it holds the hashes and the sealed items).
-3. **Dev first**: `npx wrangler@4.158.0 d1 migrations apply exo-account-dev --remote --env dev`, then
-   `npx wrangler@4.158.0 deploy --env dev`. On dev run sign-up, sign-in (the answer has `deviceToken`), password change (200
+3. **Dev first**: `npx wrangler@4.165.0 d1 migrations apply exo-account-dev --remote --env dev`, then
+   `npx wrangler@4.165.0 deploy --env dev`. On dev run sign-up, sign-in (the answer has `deviceToken`), password change (200
    with `deviceToken`), new recovery code and reset (the answer has `deviceToken`). Any 500 is a failure. The lock and the
    token rules are tested in the harness, not on dev: `node --test test/ceiling.test.mjs test/known-device.test.mjs`.
 4. **Live migrations**, only when step 1 shows one this folder adds:
-   `npx wrangler@4.158.0 d1 migrations apply exo-account --remote`. Wrangler applies only those `d1_migrations` does not
+   `npx wrangler@4.165.0 d1 migrations apply exo-account --remote`. Wrangler applies only those `d1_migrations` does not
    list. If an apply stops part way: stop, read `d1_migrations` and `PRAGMA table_info(<table>)`, and run the rest of that
    file by hand (CREATE, triggers and DROP use IF EXISTS / IF NOT EXISTS; ALTER TABLE ADD COLUMN does not re-run).
-5. **Deploy** (with the owner's OK), from this folder: `npx wrangler@4.158.0 deploy`. It replaces the code only: the secret,
+5. **Deploy** (with the owner's OK), from this folder: `npx wrangler@4.165.0 deploy`. It replaces the code only: the secret,
    the D1, the rate limit and the domain stay as they are.
 6. **Checks live**: `GET https://accounts.getexo.app/v1/account` answers 401 `signed-out`; a sign-in answers 200 with a
    `deviceToken`; a sync of a test account reads back its items (a `keyring-mismatch` 500 means the secret is not the one
-   the accounts were made under. A rollback (`npx wrangler@4.158.0 rollback`) restores code, never a secret: the cause
+   the accounts were made under. A rollback (`npx wrangler@4.165.0 rollback`) restores code, never a secret: the cause
    is a replaced `ACCOUNT_SECRETS`, and a replaced secret cannot be recovered, so every account's items and recovery codes
    stay unreadable. Stop and tell the owner; the way back is in [Keys](#keys) › Owed).
 7. **Record it**: the deployed version id in the paragraph "Which deployed version this is" at the top of this file.

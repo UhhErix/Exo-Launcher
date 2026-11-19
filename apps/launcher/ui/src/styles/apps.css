@@ -204,12 +204,15 @@
 .exo-apps-row:hover .exo-apps-act,
 .exo-apps-row:focus-within .exo-apps-act,
 .exo-apps-row.is-kept .exo-apps-act,
-.exo-apps-act:has([data-exo-armed]) {
+.exo-apps-act:has([data-exo-armed]),
+.exo-apps-act:has(.exo-action:not([data-action="idle"])) {
   opacity: 1;
 }
 
 .exo-apps-error {
   grid-column: 2 / -1;
+  color: color-mix(in srgb, var(--color-bad) 82%, var(--color-fg));
+  font-size: var(--exo-type-small);
 }
 
 /* A pick, in Select and in a find's review: a ring, filled with a check once picked (as a poll's answer). */

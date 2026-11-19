@@ -45,19 +45,20 @@ The internal security harnesses are omitted from this snapshot. The installer ch
 
 ## The add-ons
 
-Three programs ship beside Exo and are separate projects. Exo Mouse and Exo Shaders have their source at [getexo.app/source](https://getexo.app/source); Exo Capture is omitted from this snapshot; see the [third-party notices](THIRD_PARTY_NOTICES.md):
+Three programs ship beside Exo and are separate programs, each run as its own process. Exo Mouse (`mouse/`) and Exo Shaders (`shaders/`) are in this repository, and each release's source is at [getexo.app/source](https://getexo.app/source); Exo Capture is omitted from this snapshot; see the [third-party notices](THIRD_PARTY_NOTICES.md):
 
 | Add-on | License | Source | Build |
 | --- | --- | --- | --- |
 | Exo Capture | Exo's own terms (`capture/LICENSE`) | Not published | `pwsh -File captureuild.ps1` (Visual Studio C++ tools, CMake, Ninja) |
 | Exo Mouse | AGPL-3.0-or-later | [getexo.app/source](https://getexo.app/source) | `npm run build` in `mouse/` |
-| Exo Shaders | GPL-3.0-or-later | [getexo.app/source](https://getexo.app/source) | its own README |
+| Exo Shaders | GPL-3.0-or-later, with a section 7 exception | `shaders/` and [getexo.app/source](https://getexo.app/source) | `pwsh -File shaders\engine\build\publish-service.ps1` (the .NET SDK; its native files are prebuilt from `shaders\proxy`) |
 
 ## Checking a build against the release
 
 - The installer of each release has a SHA-256 beside it. That checks your download, not your build.
 - Builds are not promised to be byte-for-byte reproducible: a different compiler, SDK or ReadyToRun pass changes the bytes. To check the official release against the source, read what it does rather than hash it: [PRIVACY.md](PRIVACY.md) lists every network destination, [SECURITY.md](SECURITY.md) the trust boundaries, and the tests in `ExoLauncher.Tests` (`NetworkDestinationsTests`, `BannedNativeImportsTests`) fail the build when code strays from them.
-- The upstream script `tools/Build-Release.ps1` publishes the host and UI and packages the add-ons with NSIS. It needs the omitted add-on source to build the same installer.
+- The upstream script `tools/Build-Release.ps1` publishes the host and UI and packages the add-ons with NSIS. It needs the omitted Exo Capture source to build the same installer.
+- Beside the installer it writes `files.json` and `files.pack`, the app folder file by file, which the in-app updater uses to download only the files that changed. Each file's SHA-256 is in `files.json`, so you can compare any file of an installed Exo with the release's list. To see what an update from your installed copy would download: `dotnet run --project tools\AppFiles -- measure --manifest files.json --app %LOCALAPPDATA%\ExoLauncher\app`.
 
 ## When something does not build
 

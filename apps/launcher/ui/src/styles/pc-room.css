@@ -368,13 +368,20 @@
   display: none;
 }
 
-/* Best settings › Network (gpu/NetworkGroup.tsx): its name over its items, like the menu's own. */
+/* Best settings › Network and System (gpu/NetworkGroup.tsx, gpu/SystemGroup.tsx): its name over its items, like the menu's own. */
 .exo-pc-best-group {
   margin: 8px 0 0;
   padding-bottom: 6px;
   color: var(--color-fg);
   font-size: calc(13px * var(--exo-scale, 1));
   font-weight: var(--exo-weight-title);
+}
+
+/* Best settings › System: a change that waits on a restart, one quiet line under its items. */
+.exo-pc-best-note {
+  margin: 6px 0 0;
+  color: var(--color-fg-muted);
+  font-size: calc(12px * var(--exo-scale, 1));
 }
 
 /* Best settings (gpu/BestSetup.tsx): each step a row, its ring while it runs, or its check or X at the right. */

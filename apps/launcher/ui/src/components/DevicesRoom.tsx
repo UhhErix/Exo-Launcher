@@ -16,6 +16,7 @@ import { readWearing, saveWearing } from './devices/wearing'
 import { onUiPrefs } from '../lib/uiPrefs'
 import { UsbMap } from './devices/UsbMap'
 import { ErrorState } from './ui/ErrorState'
+import { deviceHasPage } from '../lib/canUse'
 
 /** How long Exo Mouse has to say anything after its frame starts loading before the room says it didn't load. */
 const LOAD_MS = 15_000
@@ -32,7 +33,7 @@ type Card = {
 
 /**
  * Devices (DESIGN.md › Devices): what you plug in, each as itself. The room is its devices: their cards fill it, laid
- * out by how many there are (four two by two), one per device Exo found (your mouse, keyboard, what you listen on, your
+ * out by how many there are (four two by two), one per device Exo has a page for (your mouse, what you listen on, your
  * controller), each its official picture as large as its card allows, name, battery and link, and which USB it's on;
  * they rise in as the room first opens. A press grows a card into its page, and Devices at its top folds the page back
  * into its card. The mouse's page is Exo Mouse, a separate program (AGPL, in
@@ -49,10 +50,11 @@ export function DevicesRoom({ active, onBack }: { active: boolean; onBack?: () =
   const { devices, known, failed, scanning, rescan } = usePeripherals(active && onScreen)
   const mouse = useMouse()
   const [wearing, setWearing] = useWearing()
-  const cards = cardsFor(devices, mouse, wearing)
+  // Only what has a page: a keyboard, or a controller the Controller Lab can't read, has nothing to open (lib/canUse.ts).
+  const cards = cardsFor(devices, mouse, wearing).filter(card => deviceHasPage(card.kind, card.device?.lab))
   const pictures = usePictures(cards)
-  // A device that went (unplugged) takes its page with it; one that's coming soon has none.
-  useEffect(() => { if (page !== 'overview' && !cards.some(card => card.id === page && !soon(card))) setPage('overview') }, [cards, page])
+  // A device that went (unplugged) takes its page with it.
+  useEffect(() => { if (page !== 'overview' && !cards.some(card => card.id === page)) setPage('overview') }, [cards, page])
   const current = cards.find(card => card.id === page) ?? null
   // Back from a page the cards are simply there, the one you left folding back into place: they rose in once.
   const [returned, setReturned] = useState(false)
@@ -94,9 +96,6 @@ export function DevicesRoom({ active, onBack }: { active: boolean; onBack?: () =
   )
 }
 
-/** What Exo doesn't set up yet, a keyboard and a controller the Controller Lab can't read: its card says so and opens nothing. */
-const soon = (card: Card) => card.kind === 'keyboard' || (card.kind === 'controller' && card.device?.lab !== true)
-
 /** A device's picture is one thing in two places (a view transition's shared element): it flies from its card to its
     page's picture and back, as a game's art does, while the page fades in around it (transitions.css fits it whole in
     the flying box). A page with no picture of its own (Exo Mouse's) just fades. */
@@ -115,9 +114,6 @@ function cardsFor(devices: Peripheral[], mouse: MouseState | null, wearing: Wear
   const audio = audioCard(devices, wearing)
   return [
     ...mouseCard(devices, mouse),
-    ...devices.filter(device => device.kind === 'keyboard').map((keyboard): Card => ({
-      id: keyboard.id, kind: 'keyboard', name: keyboard.name, status: linked(keyboard), device: keyboard, art: 'keyboard', picture: keyboard,
-    })),
     ...(audio ? [audio] : []),
     ...devices.filter(device => device.kind === 'controller').map((pad): Card => ({
       // "DualSense Edge Wireless Controller" is a DualSense Edge.
@@ -214,7 +210,7 @@ function Overview({ hidden, cards, pictures, known, failed, scanning, rise, onRe
     <section className="exo-devices-overview" aria-label="Devices" hidden={hidden}>
       <header className="exo-devices-head">
         {/* Nothing found only once Windows has been asked: the first list takes a moment. */}
-        <h1>{cards.length === 0 && known && !failed ? 'No devices found' : 'Devices'}</h1>
+        <h1>{cards.length === 0 && known && !failed ? 'No devices to set up' : 'Devices'}</h1>
         <div className="exo-devices-head-end">
           <button type="button" className="exo-set-btn" aria-expanded={usbMap} onClick={() => setUsbMap(true)}>USB map</button>
           {usbMap ? <UsbMap onClose={() => setUsbMap(false)} /> : null}
@@ -224,7 +220,7 @@ function Overview({ hidden, cards, pictures, known, failed, scanning, rise, onRe
         </div>
       </header>
       {/* Laid out by how many there are (devices.css); seven or more are a fuller grid that scrolls. */}
-      {failed && cards.length === 0 ? <ErrorState title="Devices unavailable" message="Exo could not read your devices." onRetry={onRescan} busy={scanning} /> : null}
+      {failed && cards.length === 0 ? <ErrorState title="Devices unavailable" message="Exo couldn’t read your devices." onRetry={onRescan} busy={scanning} /> : null}
       <div className="exo-devices-grid" data-count={cards.length > 6 ? 'many' : cards.length}>
         {cards.map((card, i) => {
           const tag = tagOf(card)
@@ -242,14 +238,7 @@ function Overview({ hidden, cards, pictures, known, failed, scanning, rise, onRe
               </span>
             </span>
           </>
-          // Controllers the lab can't read show what they are until Exo sets them up: no page behind them yet.
-          return soon(card) ? (
-            <div key={card.id} data-device-card={card.id} className={cn('exo-device-card exo-glass is-panel is-soon', rise && 'exo-motion-arrive')} style={turn(i)}
-              role="group" aria-label={`${said}. Coming soon.`}>
-              {inside}
-              <span className="exo-device-soon exo-glass" aria-hidden="true">Coming soon</span>
-            </div>
-          ) : (
+          return (
             <button key={card.id} type="button" data-device-card={card.id} className={cn('exo-device-card exo-glass is-panel', rise && 'exo-motion-arrive')} style={turn(i)}
               onClick={() => onOpen(card.id)} aria-label={`${said}. Open.`}>
               {inside}

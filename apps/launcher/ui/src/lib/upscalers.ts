@@ -98,6 +98,29 @@ export function upscalerView(status: DlssStatus | null | undefined): UpscalerVie
   }
 }
 
+/**
+ * The game page's Upscalers line in a word: why the files could not be read, the anti-cheat, how many upscalers have an
+ * update, which versions Exo couldn't read (never up to date while one is unread), else that they are up to date and at
+ * which version. Only the game's own files count: a file an upscaler mod put
+ * in (Exo's frame generation through OptiScaler included) is left alone and never the line's word; the Frame generation
+ * line names that mod.
+ */
+export function upscalerLineWord(view: UpscalerView, scanError: string | null): { text: string; good?: boolean; bad?: boolean } {
+  if (scanError) return { text: scanError, bad: true }
+  if (view.rows.length === 0) return { text: 'Not supported in this game' }
+  if (view.locked || view.consent === 'never') return { text: `Uses ${view.antiCheatName ?? 'anti-cheat'}` }
+  const families = upscalerFamilies(view.rows.filter(row => row.state !== 'mod'))
+  if (families.length === 0) return { text: 'Not updated: a mod owns these files' }
+  const outdated = families.filter(row => row.state === 'outdated').length || (view.updatable > 0 ? 1 : 0)
+  if (outdated > 0) return { text: outdated === 1 ? '1 update' : `${outdated} updates` }
+  const known = families.filter(row => row.state === 'current' || row.state === 'newer')
+  if (known.length === 0) return { text: 'Version unknown' }
+  // A file Exo can't read or update (an image format it can't parse, a Store app's file) is not up to date: it says which.
+  const unread = families.filter(row => !known.includes(row))
+  if (unread.length > 0) return { text: `Version unknown: ${unread.map(row => row.label).join(', ')}` }
+  return { text: `Up to date: ${known.map(row => (row.version ? `${row.label} ${row.version}` : row.label)).join(', ')}`, good: true }
+}
+
 const FAMILIES = ['DLSS', 'FSR', 'XeSS'] as const
 
 export function compareVersions(a: string, b: string): number {

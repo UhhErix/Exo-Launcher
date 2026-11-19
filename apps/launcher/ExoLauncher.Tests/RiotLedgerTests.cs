@@ -287,30 +287,13 @@ public sealed class RiotLedgerTests : IDisposable
     }
 
     [Fact]
-    public void TheSeedsStatsAndSplitSurviveARestart()
+    public void TheSeedsSplitSurvivesARestart()
     {
-        var stats = new RiotStats(200, 100, 1.12, "Gold 2", "Platinum 1", new[] { "Jett", "Omen" });
         var split = new Dictionary<string, int> { ["competitive"] = 4000 };
-        RiotLedger.Seed(Account, new Dictionary<string, GameSeed> { [Valorant] = new GameSeed(6000, split, stats) }, Now.AddDays(-10));
+        RiotLedger.Seed(Account, new Dictionary<string, GameSeed> { [Valorant] = new GameSeed(6000, split) }, Now.AddDays(-10));
 
         RiotLedger.ForgetLoaded();
-        var back = RiotLedger.Stats(Account, Valorant)!;
-        Assert.Equal(200, back.Matches);
-        Assert.Equal(100, back.Wins);
-        Assert.Equal(1.12, back.KillDeath);
-        Assert.Equal("Gold 2", back.CurrentRank);
-        Assert.Equal("Platinum 1", back.PeakRank);
-        Assert.Equal(new[] { "Jett", "Omen" }, back.TopPicks);
         Assert.Equal(4000, RiotLedger.ModeTotals(Account, Valorant)["competitive"]);
-    }
-
-    [Fact]
-    public void ASeedWithoutStatsHasNoStats()
-    {
-        RiotLedger.Seed(Account, Seed(Valorant, 6000), Now.AddDays(-10));
-
-        RiotLedger.ForgetLoaded();
-        Assert.Null(RiotLedger.Stats(Account, Valorant));
     }
 
     [Fact]
@@ -387,8 +370,8 @@ public sealed class RiotLedgerTests : IDisposable
         // A profile with no overview lifetime is imported as before, marked partial; a lifetime reading is whole.
         var readings = new Dictionary<string, TrackerGgPlaytime.RiotGameSeedReading>
         {
-            [Valorant] = new(900, false, null, null),
-            [League] = new(6000, true, null, null),
+            [Valorant] = new(900, false, null),
+            [League] = new(6000, true, null),
         };
 
         var seeds = TrackerGgPlaytime.ToSeeds(readings);

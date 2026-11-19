@@ -1,4 +1,3 @@
-using System.Text.Json;
 using ExoLauncher.Helpers;
 
 namespace ExoLauncher.Tests;
@@ -13,9 +12,8 @@ namespace ExoLauncher.Tests;
 /// - a retired extension (uBlock Origin Lite, which Exo Shield replaced, or plain uBlock Origin) is not caught by its
 ///   name or its marker's id, so it keeps running beside Exo Shield in the embedded profile;
 /// - a shipped extension's name falls under a retired rule ("Exo Shield", or a name that only starts with
-///   "uBlock Origin"), so every start removes it and installs it again;
-/// - a filter list strips a query parameter on apple.com, and Apple's sign-in loses what it comes back with, so the
-///   window closes "signed in" and the player stays signed out, with nothing in the log.
+///   "uBlock Origin"), so every start removes it and installs it again.
+/// Exo Shield's own rules are checked in ExoShieldTests.
 /// </summary>
 public sealed class WebExtensionsTests
 {
@@ -73,38 +71,5 @@ public sealed class WebExtensionsTests
             Assert.False(WebExtensions.Retires(entry.DisplayName, "shipped-id", none), entry.Title + " would be removed every start");
             Assert.False(WebExtensions.Retires(entry.Title, "shipped-id", none), entry.Title + " would be removed every start");
         }
-    }
-
-    /// Apple's sign-in comes back as a query (cid, and ct and at on the way out) that its own page hands to MusicKit, and the
-    /// page's API calls are queries too. A list's "strip this tracking parameter on apple.com" rewrites those as they load.
-    [Theory]
-    [InlineData("authorize.music.apple.com")]
-    [InlineData("music.apple.com")]
-    [InlineData("amp-api.music.apple.com")]
-    [InlineData("auth.music.apple.com")]
-    [InlineData("activate.apple.com")]
-    [InlineData("idmsa.apple.com")]
-    [InlineData("appleid.apple.com")]
-    [InlineData("buy.itunes.apple.com")]
-    [InlineData("p24-buy.itunes.apple.com")]
-    public void ExoShieldRewritesNoQueryOnApple(string host)
-    {
-        var folder = Bundled("exo-shield");
-        using var manifest = JsonDocument.Parse(File.ReadAllText(Path.Combine(folder, "manifest.json")));
-        var rewrites = new List<string>();
-        foreach (var ruleset in manifest.RootElement.GetProperty("declarative_net_request").GetProperty("rule_resources").EnumerateArray())
-        {
-            if (!ruleset.GetProperty("enabled").GetBoolean()) continue;
-            using var rules = JsonDocument.Parse(File.ReadAllText(Path.Combine(folder, ruleset.GetProperty("path").GetString()!)));
-            foreach (var rule in rules.RootElement.EnumerateArray())
-            {
-                if (!rule.GetProperty("action").TryGetProperty("redirect", out var redirect) ||
-                    !redirect.TryGetProperty("transform", out var transform) || !transform.TryGetProperty("queryTransform", out _) ||
-                    !rule.GetProperty("condition").TryGetProperty("requestDomains", out var domains)) continue;
-                if (domains.EnumerateArray().Select(domain => domain.GetString()!).Any(domain => host == domain || host.EndsWith("." + domain, StringComparison.Ordinal)))
-                    rewrites.Add(ruleset.GetProperty("id").GetString() + " #" + rule.GetProperty("id").GetInt32());
-            }
-        }
-        Assert.Empty(rewrites);
     }
 }

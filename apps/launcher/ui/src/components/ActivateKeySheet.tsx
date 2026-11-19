@@ -1,16 +1,15 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Button } from './ui/Button'
-import { Spinner } from './ui/Spinner'
+import { ActionButton } from './ui/ConfirmButton'
 import { host } from '../lib/host'
 import { useSaid } from './ui/useSaid'
-import { report } from '../lib/report'
 import { useGlide } from '../lib/glide'
 import { useDismiss } from '../lib/dismiss'
 
 const STORES = ['steam', 'epic', 'gog'] as const
 const STORE_LABELS: Record<(typeof STORES)[number], string> = { steam: 'Steam', epic: 'Epic', gog: 'GOG' }
-const OPEN_FAILED = 'Exo could not open the redeem page. Try again.'
+const OPEN_FAILED = 'Exo couldn’t open the redeem page. Try again.'
 
 type Place = { top: number; left: number; width: number; maxHeight: number }
 const samePlace = (a: Place, b: Place) => a.top === b.top && a.left === b.left && a.width === b.width && a.maxHeight === b.maxHeight
@@ -30,6 +29,7 @@ export function ActivateKeySheet({
   onStatus: (message: string, fail?: boolean) => void
 }) {
   const inputRef = useRef<HTMLInputElement>(null)
+  const openRef = useRef<HTMLSpanElement>(null)
   const chipGlide = useGlide<HTMLDivElement>()
   const panelRef = useRef<HTMLDivElement>(null)
   const sessionRevision = useRef(0)
@@ -117,27 +117,22 @@ export function ActivateKeySheet({
   if (!open) return null
 
   const trimmed = key.trim()
-  const activate = () => {
-    const revision = sessionRevision.current
+  // Open says how it went in itself (ActionButton): its ring while the store's page opens, its check, and then the
+  // popover closes with where to finish; a refusal turns it Bad with the reason in the popover's note.
+  const activate = async () => {
     setBusy(true)
     setNote('')
-    // Epic's page cannot take the key in its address, so it goes to the clipboard for the paste.
-    const copied = store === 'epic' ? navigator.clipboard.writeText(trimmed).catch(() => undefined) : Promise.resolve()
-    void copied.then(() => host.keysActivate(trimmed, store)).then((result) => {
-      if (revision !== sessionRevision.current) return
+    try {
+      // Epic's page cannot take the key in its address, so it goes to the clipboard for the paste.
+      if (store === 'epic') await navigator.clipboard.writeText(trimmed).catch(() => undefined)
+      return await host.keysActivate(trimmed, store)
+    } finally {
       setBusy(false)
-      if (result.ok) {
-        onStatus(result.message ?? `Finish in ${STORE_LABELS[store]}.`)
-        onClose()
-        return
-      }
-      setNote(result.message ?? OPEN_FAILED)
-    }).catch((e: unknown) => {
-      if (revision !== sessionRevision.current) return
-      report(e, 'ActivateKeySheet.keysActivate')
-      setBusy(false)
-      setNote(OPEN_FAILED)
-    })
+    }
+  }
+  const opened = (result: unknown) => {
+    onStatus((result as { message?: string | null } | undefined)?.message ?? `Finish in ${STORE_LABELS[store]}.`)
+    onClose()
   }
 
   return createPortal(
@@ -148,7 +143,7 @@ export function ActivateKeySheet({
         className="exo-field"
         value={key}
         onChange={(event) => { edited.current = true; setKey(event.target.value) }}
-        onKeyDown={(event) => { if (event.key === 'Enter' && trimmed && !busy) { event.preventDefault(); activate() } }}
+        onKeyDown={(event) => { if (event.key === 'Enter' && trimmed && !busy) { event.preventDefault(); openRef.current?.querySelector<HTMLButtonElement>('.exo-action')?.click() } }}
         placeholder="Product key"
         autoComplete="off"
         spellCheck={false}
@@ -187,15 +182,12 @@ export function ActivateKeySheet({
         <Button type="button" size="sm" className="exo-set-btn" onPress={onClose}>
           Cancel
         </Button>
-        <Button
-          type="button"
-          size="sm"
-          className="exo-set-btn is-primary"
-          isDisabled={busy || !trimmed}
-          onPress={activate}
-        >
-          {busy ? <Spinner label={`Opening ${STORE_LABELS[store]}`} /> : null}Open {STORE_LABELS[store]}
-        </Button>
+        <span ref={openRef} className="contents">
+          <ActionButton className="exo-set-btn is-primary" disabled={!trimmed} context="ActivateKeySheet.keysActivate"
+            fallback={OPEN_FAILED} why="none" onFailed={error => setNote(error.text)} onPress={activate} onDone={opened}>
+            Open {STORE_LABELS[store]}
+          </ActionButton>
+        </span>
       </div>
     </div>,
     document.body,

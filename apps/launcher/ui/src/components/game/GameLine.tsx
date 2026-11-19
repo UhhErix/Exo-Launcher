@@ -51,15 +51,16 @@ export function GameLine({ name, word, state, external, action, disabled, confir
 /**
  * A line that is a reading, not a button (HDR, frame generation): the name and its state in the same places as the
  * lines above (with its moving dots while working), and at the right edge its own control when it has one (HDR's
- * choice, frame generation's switch), or nothing when Exo decides.
+ * choice, frame generation's switch), or nothing when Exo decides. While it is read (`waiting`), a word-sized skeleton
+ * shines in its place, so the line is there from the start and the page never grows.
  */
-export function GameReading({ name, word, children }: { name: string; word: LineWord | null; children?: ReactNode }) {
+export function GameReading({ name, word, waiting, children }: { name: string; word: LineWord | null; waiting?: boolean; children?: ReactNode }) {
   return (
     <section className="exo-game-line" aria-label={name}>
       <div className="exo-game-line-row is-reading">
         <span className="exo-game-line-name">{name}</span>
         <span className={`exo-game-line-word${word?.good ? ' is-good' : ''}${word?.bad ? ' is-bad' : ''}`} role={word?.bad ? 'alert' : undefined}>
-          {word?.working ? <WorkingWord word={word.text} /> : word?.text}
+          {waiting && !word ? <WaitWord label={`Checking ${name.toLowerCase()}`} /> : word?.working ? <WorkingWord word={word.text} /> : word?.text}
         </span>
         {children}
       </div>

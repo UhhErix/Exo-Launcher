@@ -18,6 +18,7 @@ import { Icons } from './icons'
 import type { MarkdownContext } from './markdown'
 import { useAccountSetting, useDiscordPrefs } from '../../lib/discordPrefs'
 import { applyMessage, byId, forgetMessages, FRESH_MS, isAfter, isAsking, keepMessages, keptMessages, mergeNewest, newestMessages, PAGE, releaseMessages } from './messageCache'
+import { errorText } from '../../lib/errorWords'
 
 const GROUP_MS = 7 * 60 * 1000
 
@@ -255,16 +256,14 @@ function useMessageTools({ channel, guildId, threadable, onOpenThread, setMessag
   const channelId = channel.id
   const [forwarding, setForwarding] = useState<DiscordMessage | null>(null)
   const [threading, setThreading] = useState<DiscordMessage | null>(null)
-  const fail = useCallback((fallback: string) => (result: { ok: boolean; message?: string | null }) => { if (!result.ok) setError(result.message ?? fallback) }, [setError])
-  const removeMessage = useCallback((message: DiscordMessage) => {
-    void host.discordDelete(channelId, message.id).then(fail('Discord did not delete that.')).catch(() => setError('Discord did not delete that.'))
-  }, [channelId, fail, setError])
-  const pin = useCallback((message: DiscordMessage) => {
-    void host.discordPins(channelId, message.id, !message.pinned).then(result => {
-      if (!result.ok) setError(result.message ?? 'Discord did not pin that.')
-      else setMessages(list => list.map(m => m.id === message.id ? { ...m, pinned: !message.pinned } : m))
-    }).catch(() => setError('Discord did not pin that.'))
-  }, [channelId, setError, setMessages])
+  const fail = useCallback((fallback: string) => (result: { ok: boolean; message?: string | null }) => { if (!result.ok) setError(errorText(result.message, fallback)) }, [setError])
+  // Delete and Pin answer the menu row pressed, which shows how it went in itself (ActionButton).
+  const removeMessage = useCallback((message: DiscordMessage) => host.discordDelete(channelId, message.id), [channelId])
+  const pin = useCallback(async (message: DiscordMessage) => {
+    const result = await host.discordPins(channelId, message.id, !message.pinned)
+    if (result.ok) setMessages(list => list.map(m => m.id === message.id ? { ...m, pinned: !message.pinned } : m))
+    return result
+  }, [channelId, setMessages])
   const actions = useMemo<MessageActions>(() => ({
     canManageMessages: !!guildId && channel.canManageMessages === true,
     canPin: !guildId || channel.canPin === true,
@@ -278,7 +277,7 @@ function useMessageTools({ channel, guildId, threadable, onOpenThread, setMessag
       const before = idBefore(message.id)
       holdUnread.current = true
       setLastRead(before)
-      void host.discordAck(channelId, before, true).then(fail('Discord did not mark that unread.')).catch(() => setError('Discord did not mark that unread.'))
+      void host.discordAck(channelId, before, true).then(fail('Discord didn’t mark that unread.')).catch(() => setError('Discord didn’t mark that unread.'))
     },
     onEdit: message => setEditing(message),
     onEditDone: () => setEditing(null),
@@ -293,7 +292,7 @@ function useMessageTools({ channel, guildId, threadable, onOpenThread, setMessag
       react(mine)
       const refused = (why?: string | null) => {
         if (ownReactions.delete(key)) react({ ...mine, add: !add })
-        setError(why ?? 'Discord did not take that reaction.')
+        setError(why ?? 'Discord didn’t take that reaction.')
       }
       void host.discordReact(channelId, message.id, emoji, add, { burst }).then(result => { if (!result.ok) refused(result.message) }, () => refused())
     },
@@ -423,7 +422,7 @@ function Folded({ reason, count, open, onShow }: { reason: string; count: number
 function HistoryTop({ history }: { history: ReturnType<typeof useHistory> }) {
   const { load, edge } = history
   if (load.state === 'loading') return <MessagesWait label="Loading messages" rows={8} />
-  if (load.state === 'error') return <Retry message={load.message ?? "Discord didn't send this channel."} onRetry={history.toPresent} />
+  if (load.state === 'error') return <Retry message={errorText(load.message, "Discord didn't send this channel.")} onRetry={history.toPresent} />
   return edge?.where === 'older' ? <Retry message={edge.message} onRetry={() => void history.loadOlder(true)} /> : null
 }
 
@@ -631,7 +630,7 @@ function useHistory(channelId: string, meId: string | null, scroller: React.RefO
     try {
       const result = await host.discordMessages(channelId, where === 'older' ? { before: from.id } : { after: from.id })
       if (generationNow !== generation.current) return
-      if (!result.ok || !result.messages) { setEdge({ where, message: result.message ?? failed }); return }
+      if (!result.ok || !result.messages) { setEdge({ where, message: errorText(result.message, failed) }); return }
       const page = byId(result.messages)
       anchor.current = firstOnScreen(scroller.current)
       // The far end let go loads again on the way back.
@@ -810,7 +809,7 @@ function useSend({ channelId, me, meId, replyTo, replyPing, setReplyTo, setError
     }
     try {
       const result = await deliver({ channelId, content, reply, replyPing, uploads, descriptions })
-      if (!result.ok) return drop(result.message ?? 'Discord did not send that.')
+      if (!result.ok) return drop(errorText(result.message, 'Discord didn’t send that.'))
       const sent = result.sent
       setMessages(list => {
         const without = list.filter(m => m.id !== pendingId)
@@ -851,7 +850,7 @@ export async function uploadFile(file: File, onProgress?: (sent: number) => void
       .catch(() => ({ ok: false, uploadId: undefined, message: undefined }))
     if (!result.ok || !result.uploadId) {
       if (uploadId) void host.discordUpload({ uploadId, cancel: true }).catch(() => { })
-      return { message: result.message ?? `${file.name} couldn't be added.` }
+      return { message: errorText(result.message, `${file.name} couldn't be added.`) }
     }
     uploadId = result.uploadId
     onProgress?.(Math.min(file.size, at + PIECE))

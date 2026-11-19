@@ -5,6 +5,10 @@ import { utcDay } from './telemetry-store.js'
  * crash report is counted in D1 (`crash_days`, migrations/0004_crash_days.sql) by app, version, error type and UTC day. The
  * first report of an error in a version, and its 10th, 100th and 1000th, tell the team at once; a digest follows the daily
  * job. A group holds a count and one sample's key: no install ID, no time finer than the day.
+ *
+ * The alerts and the digest (mail, and the private Discord channel when its webhook is set) are the fallback until the
+ * secret GITHUB_REPORTS_TOKEN is set (README.md › Issues): with the token the team is told through GitHub issues
+ * (src/issues.js) and nothing here is mailed; the counts are kept either way, for `node triage.mjs`.
  */
 
 const DAY_MS = 24 * 60 * 60 * 1000
@@ -95,6 +99,20 @@ export function alertOf(report, total) {
   return {
     subject: `${app} ${report.version}: ${report.errorType} (${what})`,
     text: `${app} ${report.version} on Windows ${report.osBuild}\n${report.errorType}: ${what} in this version\n\n${excerpt}\n`,
+  }
+}
+
+/**
+ * The message for one Report a problem message before GitHub (src/user-report.js): who sent what, in the player's own
+ * words cut to EXCERPT_CHARS, the contact when given, and the reference and R2 key to read the rest (its log included).
+ */
+export function userAlertOf(report, key) {
+  const app = APP_NAMES[report.app] ?? report.app
+  const message = report.message.length > EXCERPT_CHARS ? report.message.slice(0, EXCERPT_CHARS) + '…' : report.message
+  return {
+    subject: `${app} ${report.version}: Report a problem (${report.ref})`,
+    text: `${app} ${report.version} on Windows ${report.osBuild}\nContact: ${report.contact ?? 'none left'}\n`
+      + `Logs: ${report.excerpt ? 'attached' : 'not attached'} · stored at ${key}\n\n${message}\n`,
   }
 }
 

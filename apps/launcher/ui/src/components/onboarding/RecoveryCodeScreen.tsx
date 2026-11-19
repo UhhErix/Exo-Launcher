@@ -4,6 +4,7 @@ import { report } from '../../lib/report'
 import { recoveryCodeShown, refreshAccount } from '../account/useAccount'
 import { Button } from '../ui/Button'
 import { RECOVERY_CODE_LENGTH, normalizeRecoveryCode, recoveryCodeConfirmed } from './accountCode'
+import { errorText } from '../../lib/errorWords'
 
 /**
  * The recovery code, shown once (CLIENT.md 4.1 C): six groups of four, Copy, Save as text file, and a typed confirmation.
@@ -50,7 +51,7 @@ export function RecoveryCodeScreen({ code, onDone, onKeyDown }: { code: string; 
     try {
       const result = await host.exoAccountSaveCode(code)
       if (result.cancelled) return
-      setNote(result.ok ? 'Saved.' : result.message ?? "The file wasn't saved. Try again.")
+      setNote(result.ok ? 'Saved.' : errorText(result.message, "The file wasn't saved. Try again."))
     } catch (error) {
       report(error, 'RecoveryCodeScreen.save')
       setNote("The file wasn't saved. Try again.")

@@ -1,0 +1,4 @@
+<Project>
+  <!-- Exo Shaders builds on its own: this file stops MSBuild from taking apps\launcher\Directory.Build.targets (Exo
+       Launcher's Debug version stamp), as Directory.Build.props here already stops its props. -->
+</Project>

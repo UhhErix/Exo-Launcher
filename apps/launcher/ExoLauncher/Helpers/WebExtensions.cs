@@ -7,9 +7,10 @@ namespace ExoLauncher.Helpers;
 
 /// <summary>Pinned, hash-verified provider extensions installed once into the
 /// shared embedded profile (the YouTube Music and Apple Music players) — never into
-/// sign-in or shell profiles. Exo Shield, Exo's own blocker (uBlock Origin Lite with HaGeZi's Multi PRO list),
-/// blocks the players' ads, trackers and cookie notices. The profile is shared with the services' sign-in windows, so
-/// the blocker runs on those pages too; Exo Shield's lists leave Apple's URLs alone (its SOURCE.txt says what changed).</summary>
+/// sign-in or shell profiles. Exo Shield, Exo's own blocker (built by shield/build.mjs), blocks the players' ads and
+/// trackers with a few dozen network rules limited to the provider pages, and strips YouTube Music's ad fields in the page;
+/// it has no service worker. The profile is shared with the services' sign-in windows; its rules name only requests
+/// the three player pages make, so those windows load untouched.</summary>
 internal static class WebExtensions
 {
     internal sealed record Entry(string Key, string Title, string Version, string Folder, string ManifestSha256,
@@ -19,10 +20,9 @@ internal static class WebExtensions
     [
         new("sponsorblock", "SponsorBlock", "6.1.7", "sponsorblock",
             "47e23e0e1fdf19eec2c55d4ccefa5ae563c132181ad72d8fe40701617cc4d2f7", "SponsorBlock"),
-        // Re-pinned 2026-11-19: the repository's fresh start committed Exo Shield with text=auto, which rewrote its line endings, and
-        // its build repository (UhhErix/exo-shield) is gone, so the committed bytes (now -text in .gitattributes) are the release.
-        new("exo-shield", "Exo Shield", "2026.1026.1812.7267", "exo-shield",
-            "7cd6c11a683c273e6ad86625c21792b7f0ec8cbe9d05e64661a7cd40a3d7ba76", "Exo Shield"),
+        // Built and pinned by shield/build.mjs: change shield/rules, never this folder.
+        new("exo-shield", "Exo Shield", "2026.1119.1", "exo-shield",
+            "57766f356bf141fafa4c17632dbab38db5b371900625377ada6adf35ea571334", "Exo Shield"),
     ];
 
     private sealed record SurfaceContext(nint Owner, DispatcherQueue Dispatcher);

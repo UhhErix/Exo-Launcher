@@ -14,7 +14,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
 import { gunzipSync } from 'node:zlib'
-import { buildTreeArchive, commitOf, entriesOf, uploadSources } from '../addon-source.mjs'
+import { buildTreeArchive, commitOf, entriesOf, launcherRepo, treeAddons, uploadSources } from '../addon-source.mjs'
 import { mergeAddons } from '../source-mirror.mjs'
 
 const git = (repo, ...args) => execFileSync('git', ['-C', repo, ...args], { encoding: 'utf8' })
@@ -49,6 +49,26 @@ test('the same commit gives the same archive, with the licence and the commit na
     const tar = gunzipSync(a.gz).toString('latin1')
     assert.ok(tar.includes(`Commit: ${commit}`) && tar.includes('exo-mouse-3.25.0/LICENSE'))
     assert.ok(!tar.includes('other/x'))
+  } finally {
+    rmSync(repo, { recursive: true, force: true })
+  }
+})
+
+test('in a monorepo every add-on comes from the launcher folder, Exo Shaders from its shaders folder', () => {
+  const repo = repoWith({
+    'apps/launcher/VERSION': '3.26.0\n',
+    'apps/launcher/mouse/LICENSE': 'GNU AFFERO GENERAL PUBLIC LICENSE\n',
+    'apps/launcher/shaders/LICENSE': 'GNU GENERAL PUBLIC LICENSE\n',
+    'apps/launcher/shaders/src/a.cs': 'class A {}\n',
+  })
+  try {
+    const where = launcherRepo(join(repo, 'apps', 'launcher'))
+    assert.equal(where.prefix, 'apps/launcher/')
+    const commit = commitOf(where.repo, 'HEAD')
+    const archives = treeAddons({ ...where, rev: commit }).map((d) => buildTreeArchive(d, '3.26.0', commit))
+    assert.deepEqual(archives.map((a) => a.name), ['exo-mouse', 'exo-shaders'])
+    const shaders = gunzipSync(archives[1].gz).toString('latin1')
+    assert.ok(shaders.includes('exo-shaders-3.26.0/src/a.cs') && !shaders.includes('mouse/LICENSE'))
   } finally {
     rmSync(repo, { recursive: true, force: true })
   }

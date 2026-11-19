@@ -95,7 +95,7 @@ internal static class ExoConnectedTheme
             var stroke = Brush(look.Glyph);
             var icon = new XamlPath
             {
-                Data = Geometry(glyph), Stroke = stroke, StrokeThickness = 4.0 / 3, Width = 16, Height = 16,
+                Data = Geometry(glyph), Stroke = stroke, StrokeThickness = 1, Width = 16, Height = 16, // the Bar's line at 16px: 1.5 on the grid
                 StrokeStartLineCap = PenLineCap.Round, StrokeEndLineCap = PenLineCap.Round, StrokeLineJoin = PenLineJoin.Round,
             };
             var button = new Button

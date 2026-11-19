@@ -5,6 +5,7 @@ import { host, onHostEvent } from '../../lib/host'
 import { report } from '../../lib/report'
 import type { DiscordSignInStep } from '../../lib/discord'
 import { ErrorNote } from '../ui/ErrorNote'
+import { errorText } from '../../lib/errorWords'
 
 // The Discord section of HELP: what Exo does on Discord's side, what commonly gets an account locked, and how to recover.
 const DISCORD_HELP = 'https://getexo.app/help#discord-accounts'
@@ -35,7 +36,7 @@ export function DiscordQrSignIn({ note = null }: { note?: string | null }) {
         {step?.state === 'waiting' && step.url ? <Qr text={step.url} label="Discord sign-in code" className="exo-dc-qr-code" />
           : step?.state === 'scanned' ? <p>Confirm on your phone{step.user ? `, ${step.user}` : ''}.</p>
           : step?.state === 'done' ? <p>Signed in.</p>
-          : ended ? <ErrorNote message={step.message ?? 'The code expired.'} />
+          : ended ? <ErrorNote message={errorText(step.message, 'The code expired.')} />
           : <Wait label="Getting a sign-in code"><span className="exo-dc-qr-code" skullet-block="" /></Wait>}
       </div>
       {ended ? <button type="button" className="exo-set-btn is-primary" onClick={() => setAttempt(n => n + 1)}>New code</button> : null}

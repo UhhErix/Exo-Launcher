@@ -176,6 +176,7 @@
 
 /* A busy control keeps its words and its full color: its ring (Spinner) or its turning glyph (exo-spin) says it is
    working (DESIGN.md › Waits), where a dimmed one would read as unavailable. */
-button:disabled:has(:is(.exo-spinner, .exo-spin)) {
+button:disabled:not(.exo-action):has(:is(.exo-spinner, .exo-spin)),
+button.exo-action:disabled:is(.is-pending, :has(.exo-action-face.is-on :is(.exo-spinner, .exo-spin))) {
   opacity: 1;
 }
