@@ -329,7 +329,7 @@ export type MicHeard = { speechDb: number | null; quietDb: number | null; clippi
 export type MicLevel = { level: number; gateLevel: number; after: number; voiced: boolean; stages: VoiceStages; heard?: MicHeard }
 
 /** Something Go Live can share: a screen or an app's window, its picture and icon (data URLs), and the game it is, if one. */
-export type GoLiveSource = { id: string; kind: 'screen' | 'window'; title: string; app: string; icon?: string | null; thumb?: string | null; game?: string | null; height?: number; hz?: number }
+export type GoLiveSource = { id: string; kind: 'screen' | 'window'; title: string; app: string; icon?: string | null; thumb?: string | null; game?: string | null; width?: number; height?: number; hz?: number; primary?: boolean }
 
 /** What a Store card shows besides art: Steam's own regional price text ("19,99€"), its review summary, free to play, and when an unreleased game comes out. */
 export type StoreFacts = { priceText?: string | null; wasText?: string | null; review?: string | null; reviewPercent?: number | null; free?: boolean; soon?: boolean; when?: string | null; wished?: boolean; similarTo?: string[] | null }
@@ -2729,7 +2729,7 @@ export const host = {
   discordAck: (channelId: string, messageId: string, unread = false) =>
     rawCall<{ ok: boolean; message?: string | null; unread?: DiscordUnread }>('discord.ack', { channelId, messageId, ...(unread ? { unread } : {}) }),
   /** Voice: join a channel (or a DM's call with no guildId), leave, or set mute and deafen. */
-  discordVoice: (action: 'state' | 'join' | 'leave' | 'set' | 'user', params: { guildId?: string | null; channelId?: string; muted?: boolean; deafened?: boolean; userId?: string; volume?: number; stream?: boolean } = {}) =>
+  discordVoice: (action: 'state' | 'join' | 'leave' | 'set' | 'user' | 'stage', params: { guildId?: string | null; channelId?: string; muted?: boolean; deafened?: boolean; userId?: string; volume?: number; stream?: boolean; soundboardMuted?: boolean; suppress?: boolean; requestToSpeak?: boolean } = {}) =>
     rawCall<{ ok: boolean; message?: string | null; voice?: DiscordVoice }>('discord.voice', { action, ...params }),
   /** Rings the other people in a DM, after joining its call. */
   /** Go Live: watch someone's stream in the call this client is in, or stop watching. */
@@ -2748,7 +2748,7 @@ export const host = {
    * one (or of the stream while live, no source), start (a source, height 0 for its own, frame rate, sound), stop.
    */
   discordGoLive: (action: 'sources' | 'preview' | 'start' | 'stop' | 'self', params: { source?: string; width?: number; height?: number; fps?: number; sound?: boolean; on?: boolean } = {}) =>
-    rawCall<{ ok: boolean; message?: string | null; sources?: GoLiveSource[]; thumb?: string | null }>('discord.golive', { action, ...params }, 20_000),
+    rawCall<{ ok: boolean; message?: string | null; captureMode?: 'wgc' | 'dxgi'; serviceDisabled?: boolean; sources?: GoLiveSource[]; thumb?: string | null }>('discord.golive', { action, ...params }, 20_000),
   /** The camera in the call: start (size and frame rate), one encoded frame (Annex B, base64), or stop. */
   discordCamera: (action: 'start' | 'frame' | 'stop', params: { width?: number; height?: number; fps?: number; timestamp?: number; data?: string } = {}) =>
     rawCall<{ ok: boolean; message?: string | null }>('discord.camera', { action, ...params }, 15_000),
@@ -2794,7 +2794,7 @@ export const host = {
     rawCall<{ ok: boolean; favorites?: string[] | null; frequent?: string[] | null; reactions?: string[] | null }>('discord.emojiFavorites', { action, ...(emoji ? { emoji } : {}), ...(reaction ? { reaction } : {}) }, 30_000),
   discordGifs: (query?: string) => rawCall<{ ok: boolean; gifs?: DiscordGif[] | null }>('discord.gifs', query ? { query } : {}, 30_000),
   /** Join or leave a server, read an invite (a message's invite card), its Server Guide or events, or create a channel. */
-  discordServer: (action: 'join' | 'invite' | 'leave' | 'profile' | 'guide' | 'events' | 'members' | 'createChannel' | 'prune' | 'createEvent' | 'eventStatus' | 'ics' | 'rsvp' | 'showAll' | 'mute' | 'notify' | 'voiceStatus', params: { text?: string; muted?: boolean; minutes?: number; level?: number; suppressEveryone?: boolean; suppressRoles?: boolean; suppressHighlights?: boolean; muteEvents?: boolean; mobilePush?: boolean; hideMuted?: boolean; invite?: string; guildId?: string; parentId?: string; name?: string; kind?: 'text' | 'voice' | 'category'; sort?: number; days?: number; countOnly?: boolean; eventId?: string; interested?: boolean; on?: boolean; status?: 2 | 3 | 4; description?: string; start?: string; channelId?: string; location?: string; end?: string; query?: string; afterJoined?: number; afterUser?: string }) =>
+  discordServer: (action: 'join' | 'create' | 'invite' | 'leave' | 'profile' | 'guide' | 'events' | 'members' | 'createChannel' | 'prune' | 'createEvent' | 'eventStatus' | 'ics' | 'rsvp' | 'showAll' | 'mute' | 'notify' | 'voiceStatus', params: { text?: string; muted?: boolean; minutes?: number; level?: number; suppressEveryone?: boolean; suppressRoles?: boolean; suppressHighlights?: boolean; muteEvents?: boolean; mobilePush?: boolean; hideMuted?: boolean; invite?: string; guildId?: string; parentId?: string; name?: string; kind?: 'text' | 'voice' | 'category'; sort?: number; days?: number; countOnly?: boolean; eventId?: string; interested?: boolean; on?: boolean; status?: 2 | 3 | 4; description?: string; start?: string; channelId?: string; location?: string; end?: string; query?: string; afterJoined?: number; afterUser?: string }) =>
     rawCall<{ ok: boolean; message?: string | null; guildId?: string | null; channelId?: string | null; invite?: DiscordInvite | null; invalid?: boolean; guide?: DiscordGuide | null; events?: { event: DiscordEvent; interested: boolean }[] | null; members?: DiscordMemberSearch | null; roles?: Record<string, DiscordRole>; online?: number | null; total?: number | null; resources?: DiscordResource[]; pruned?: number | null; indexing?: boolean; profile?: DiscordGuildProfile | null }>('discord.server', { action, ...params }, 30_000),
   /**
    * Server Settings, Edit Channel and the person menu: a server's (guildId) or channel's (channelId) settings and the
@@ -2914,7 +2914,7 @@ export const host = {
     rawCall<{ ok: boolean; message?: string | null }>('discord.poll', answers === 'end' ? { channelId, messageId, action: 'end' } : { channelId, messageId, answers }),
   /** The soundboard: Discord's default sounds and this server's (list), or play one in your voice channel (and here, at its own volume, in the call's sound). */
   discordSoundboard: (action: 'list' | 'play', params: { guildId?: string | null; channelId?: string; soundId?: string; volume?: number; emojiId?: string | null; emojiName?: string | null }) =>
-    rawCall<{ ok: boolean; message?: string | null; defaults?: unknown; guild?: unknown }>('discord.soundboard', { action, ...params }),
+    rawCall<{ ok: boolean; message?: string | null; premium?: boolean; defaults?: unknown; guild?: unknown; guilds?: { id: string; name: string; items?: unknown[] }[] }>('discord.soundboard', { action, ...params }),
   /** An animated (Lottie) sticker's animation, as JSON text. */
   discordStickerData: (id: string) => rawCall<{ ok: boolean; json?: string; message?: string }>('discord.stickerData', { id }, 20_000),
   /** The sticker picker's groups and the account's favorites; add or remove favorites or unfavorites one first. */

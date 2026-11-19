@@ -79,6 +79,18 @@ function HeadSearch({ children }: { children: React.ReactNode }) {
   const [open, setOpen] = useState(false)
   const box = useRef<HTMLSpanElement>(null)
   useEffect(() => { if (open) box.current?.querySelector('input')?.focus() }, [open])
+  useEffect(() => {
+    const focus = () => {
+      setOpen(true)
+      window.requestAnimationFrame(() => {
+        const input = box.current?.querySelector('input')
+        input?.focus()
+        input?.select()
+      })
+    }
+    window.addEventListener('exo-dc-focus-search', focus)
+    return () => window.removeEventListener('exo-dc-focus-search', focus)
+  }, [])
   // Focus leaving the field for somewhere outside it: empty, it folds back to the glyph (Escape blurs it, so folds too).
   const left = (event: React.FocusEvent<HTMLSpanElement>) => {
     if (event.relatedTarget instanceof Node && event.currentTarget.contains(event.relatedTarget)) return
@@ -330,13 +342,24 @@ function HeadMore({ channel, guildId, threads, panel, toggle }: { channel: Disco
             </button>
           ) : null}
           {channel.dm ? (
-            <button type="button" role="menuitem" onClick={pick(() => setAdding(true))}>
-              <Icons.AddFriend size={18} /><span className="exo-dc-menu-text">Add friends</span>
-            </button>
+            <>
+              {muted ? (
+                <NotifyRow channel={channel} onDone={() => setView(null)} next={{ muted: false }}>
+                  <Icons.Bell size={18} /><span className="exo-dc-menu-text">Unmute conversation</span>
+                </NotifyRow>
+              ) : (
+                <button type="button" role="menuitem" onClick={() => setView('notify')}>
+                  <Icons.BellOff size={18} /><span className="exo-dc-menu-text">Mute conversation</span>
+                </button>
+              )}
+              <button type="button" role="menuitem" onClick={pick(() => setAdding(true))}>
+                <Icons.AddFriend size={18} /><span className="exo-dc-menu-text">Add friends</span>
+              </button>
+            </>
           ) : null}
         </MoreMenu>
       ) : null}
-      {view === 'notify' && guildId ? <MoreMenu onClose={close}><NotifyMenu channel={channel} onDone={() => setView(null)} /></MoreMenu> : null}
+      {view === 'notify' && (guildId || channel.dm) ? <MoreMenu onClose={close}><NotifyMenu channel={channel} dm={!guildId} onDone={() => setView(null)} /></MoreMenu> : null}
       {adding ? <FriendPicker title="Select friends" onClose={() => setAdding(false)} onPick={addFriend} /> : null}
     </span>
   )
@@ -360,31 +383,35 @@ function MoreMenu({ onClose, children }: { onClose: (focus?: boolean) => void; c
 }
 
 // This channel's notifications: mute for a while or until turned back on (or unmute), and what it notifies you of.
-function NotifyMenu({ channel, onDone }: { channel: DiscordChannel; onDone: () => void }) {
+function NotifyMenu({ channel, dm = false, onDone }: { channel: DiscordChannel; dm?: boolean; onDone: () => void }) {
   const muted = channel.muted === true
   const level = channel.notify ?? null
   return (
     <>
       {muted ? (
         <NotifyRow channel={channel} onDone={onDone} next={{ muted: false }}>
-          <span className="exo-dc-menu-text">Unmute channel{channel.mutedUntil ? <small>Muted until {new Date(channel.mutedUntil).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })}</small> : null}</span>
+          <span className="exo-dc-menu-text">{dm ? 'Unmute conversation' : 'Unmute channel'}{channel.mutedUntil ? <small>Muted until {new Date(channel.mutedUntil).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })}</small> : null}</span>
         </NotifyRow>
       ) : MUTE_FOR.map(([minutes, label]) => (
         <NotifyRow channel={channel} onDone={onDone} key={minutes} next={minutes ? { muted: true, minutes } : { muted: true }}>
           <span className="exo-dc-menu-text">Mute {label.replace('For', 'for').replace('Until', 'until')}</span>
         </NotifyRow>
       ))}
-      <span className="exo-dc-menu-line" role="separator" />
-      <NotifyRow channel={channel} onDone={onDone} role="menuitemradio" aria-checked={level === null} next={{ level: 3 }}>
-        <span className="exo-dc-menu-text">Use default<small>{LEVELS.find(([value]) => value === (channel.notifyDefault ?? 0))?.[1]}</small></span>
-        {level === null ? <Icons.Check size={16} /> : null}
-      </NotifyRow>
-      {LEVELS.map(([value, label]) => (
-        <NotifyRow channel={channel} onDone={onDone} key={value} role="menuitemradio" aria-checked={level === value} next={{ level: value }}>
-          <span className="exo-dc-menu-text">{label}</span>
-          {level === value ? <Icons.Check size={16} /> : null}
-        </NotifyRow>
-      ))}
+      {dm ? null : (
+        <>
+          <span className="exo-dc-menu-line" role="separator" />
+          <NotifyRow channel={channel} onDone={onDone} role="menuitemradio" aria-checked={level === null} next={{ level: 3 }}>
+            <span className="exo-dc-menu-text">Use default<small>{LEVELS.find(([value]) => value === (channel.notifyDefault ?? 0))?.[1]}</small></span>
+            {level === null ? <Icons.Check size={16} /> : null}
+          </NotifyRow>
+          {LEVELS.map(([value, label]) => (
+            <NotifyRow channel={channel} onDone={onDone} key={value} role="menuitemradio" aria-checked={level === value} next={{ level: value }}>
+              <span className="exo-dc-menu-text">{label}</span>
+              {level === value ? <Icons.Check size={16} /> : null}
+            </NotifyRow>
+          ))}
+        </>
+      )}
     </>
   )
 }

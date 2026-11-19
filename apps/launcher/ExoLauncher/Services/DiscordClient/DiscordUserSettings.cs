@@ -109,7 +109,7 @@ internal static class DiscordUserSettings
         var values = new JsonObject();
         foreach (var setting in Known) values[setting.Key] = Read(setting, Leaf(proto, setting.Path));
         var users = new JsonObject();
-        foreach (var (id, user) in AudioUsers(proto)) users[id] = new JsonObject { ["muted"] = user.Muted, ["volume"] = user.Volume };
+        foreach (var (id, user) in AudioUsers(proto)) users[id] = new JsonObject { ["muted"] = user.Muted, ["volume"] = user.Volume, ["soundboardMuted"] = user.SoundboardMuted };
         values["audioUsers"] = users;
         var streams = new JsonObject();
         foreach (var (id, stream) in AudioUsers(proto, StreamMap)) streams[id] = new JsonObject { ["muted"] = stream.Muted, ["volume"] = stream.Volume };
@@ -209,7 +209,7 @@ internal static class DiscordUserSettings
 
     // Section 16 with these people's entries set, as Discord's client writes them: stamped now, and left out once back
     // to 100 and unmuted. Everyone else's entry, and the other map, stay as they were.
-    private static byte[] AudioPatch(byte[] proto, IReadOnlyDictionary<ulong, (bool? Muted, float? Volume)> changes, int map = UserMap)
+    private static byte[] AudioPatch(byte[] proto, IReadOnlyDictionary<ulong, (bool? Muted, float? Volume, bool? SoundboardMuted)> changes, int map = UserMap)
     {
         var before = AudioUsers(proto, map);
         var section = new List<byte>();
@@ -222,7 +222,7 @@ internal static class DiscordUserSettings
         foreach (var (id, change) in changes)
         {
             var old = before.GetValueOrDefault(id.ToString(System.Globalization.CultureInfo.InvariantCulture), new AudioUser(false, 100));
-            var user = new AudioUser(change.Muted ?? old.Muted, Math.Clamp(change.Volume ?? old.Volume, 0, 200), old.SoundboardMuted);
+            var user = new AudioUser(change.Muted ?? old.Muted, Math.Clamp(change.Volume ?? old.Volume, 0, 200), change.SoundboardMuted ?? old.SoundboardMuted);
             if (user is { Muted: false, Volume: 100, SoundboardMuted: false }) continue;
             var setting = new List<byte>();
             if (user.Muted) { WriteTag(setting, 1, 0); WriteVarint(setting, 1); }
@@ -239,18 +239,19 @@ internal static class DiscordUserSettings
         return [.. leaf];
     }
 
-    // "audioUsers": {id: {muted?, volume?}} as the people's changes, or null when it isn't that.
-    private static Dictionary<ulong, (bool? Muted, float? Volume)>? AudioChanges(JsonElement value)
+    // "audioUsers": {id: {muted?, volume?, soundboardMuted?}} as the people's changes, or null when it isn't that.
+    private static Dictionary<ulong, (bool? Muted, float? Volume, bool? SoundboardMuted)>? AudioChanges(JsonElement value)
     {
         if (value.ValueKind != JsonValueKind.Object) return null;
-        var changes = new Dictionary<ulong, (bool?, float?)>();
+        var changes = new Dictionary<ulong, (bool?, float?, bool?)>();
         foreach (var person in value.EnumerateObject())
         {
             if (!ulong.TryParse(person.Name, System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var id) || person.Value.ValueKind != JsonValueKind.Object) return null;
             bool? muted = person.Value.TryGetProperty("muted", out var m) && m.ValueKind is JsonValueKind.True or JsonValueKind.False ? m.GetBoolean() : null;
             // A mute alone carries no volume (null): TryGetDouble throws on anything but a number.
             float? volume = person.Value.TryGetProperty("volume", out var v) && v.ValueKind == JsonValueKind.Number && v.TryGetDouble(out var d) && d is >= 0 and <= 200 ? (float)d : null;
-            changes[id] = (muted, volume);
+            bool? soundboardMuted = person.Value.TryGetProperty("soundboardMuted", out var sb) && sb.ValueKind is JsonValueKind.True or JsonValueKind.False ? sb.GetBoolean() : null;
+            changes[id] = (muted, volume, soundboardMuted);
         }
         return changes;
     }

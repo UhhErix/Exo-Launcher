@@ -854,7 +854,7 @@ public sealed partial class WebHostBridge
                 "discord.emojis" => DiscordEmojis(paramsEl, hasParams),
                 "discord.view" => DiscordView(paramsEl, hasParams),
                 "discord.upload" => DiscordUpload(paramsEl, hasParams),
-                "discord.voice" => DiscordVoice(paramsEl, hasParams),
+                "discord.voice" => await DiscordVoiceAsync(paramsEl, hasParams, requestToken).ConfigureAwait(true),
                 "discord.audio" => DiscordAudio(paramsEl, hasParams),
                 "discord.ring" => await DiscordRingAsync(paramsEl, hasParams, requestToken).ConfigureAwait(true),
                 "discord.friends" => DiscordFriends(),

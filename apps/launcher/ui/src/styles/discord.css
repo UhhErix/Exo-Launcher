@@ -2007,7 +2007,40 @@ video.exo-dc-media {
   left: auto;
 }
 
+.exo-dc-audio-menu {
+  width: 260px;
+  max-height: min(440px, 70vh);
+  overflow-y: auto;
+}
+
+.exo-dc-menu-item-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* The arrow beside Mute and Deafen: half a button, as Discord's. */
+.exo-dc-me-pair {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+}
+
+.exo-dc-me-pair > .exo-dc-icon-btn:first-child {
+  width: 28px;
+  height: 32px;
+  padding: 0;
+  border-radius: var(--exo-small-radius);
+}
+
+.exo-dc .exo-dc-me-pair > .exo-dc-me-caret {
+  width: 14px;
+  height: 32px;
+  padding: 0;
+  border-radius: var(--exo-small-radius);
+}
 
 /* A reading inside a menu: when a status ends, or why something didn't take. */
 .exo-dc-menu-note {
@@ -6025,7 +6058,76 @@ button.exo-dc-gifv {
   display: flex;
   flex: none;
   align-items: center;
+  gap: 2px;
+}
+
+.exo-dc-voice-diag-btn {
+  display: inline-flex;
+  align-items: center;
   gap: 4px;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.exo-dc-voice-diag-btn > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.exo-dc-voice-diag-btn:hover {
+  text-decoration: underline;
+}
+
+.exo-dc-voice-diag {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: auto;
+  bottom: auto;
+  z-index: 20;
+  gap: 8px;
+  width: 248px;
+  max-height: none;
+  padding: 12px 14px;
+  visibility: hidden;
+}
+
+.exo-dc-voice-diag-head {
+  margin: 0;
+  color: var(--dc-text);
+  font-size: var(--exo-type-small);
+  font-weight: var(--exo-weight-title);
+}
+
+.exo-dc-voice-diag-list {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  font-size: var(--exo-type-small);
+}
+
+.exo-dc-voice-diag-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.exo-dc-voice-diag-row > dt {
+  color: var(--color-faint);
+}
+
+.exo-dc-voice-diag-row > dd {
+  margin: 0;
+  color: var(--color-fg);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
 }
 
 /* Discord's voice bar: "Voice Connected", then the call's channel / server as a link to it — the text left, its
@@ -6715,6 +6817,171 @@ button.exo-dc-poll-answer:hover:not(:disabled) {
   overscroll-behavior: contain;
   border-radius: var(--exo-panel-radius);
   transform: translateX(-50%);
+}
+
+.exo-dc-soundboard-pop.is-panel {
+  position: fixed;
+  top: 0;
+  left: 0;
+  bottom: auto;
+  z-index: 20;
+  width: min(360px, calc(100vw - 16px));
+  transform: none;
+  visibility: hidden;
+}
+
+.exo-dc-soundboard-head {
+  display: grid;
+  gap: 8px;
+}
+
+.exo-dc-soundboard-search {
+  width: 100%;
+}
+
+.exo-dc-soundboard-vol {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 6px;
+  border-radius: var(--exo-row-radius);
+  background: var(--exo-fill);
+}
+
+.exo-dc-soundboard-vol > input[type="range"] {
+  flex: 1;
+}
+
+.exo-dc-soundboard-vol-pct {
+  min-width: 34px;
+  color: var(--color-faint);
+  font-size: var(--exo-type-small);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+/* Stage channels: live topic banner, speaker controls, and audience chips. */
+.exo-dc-stage-banner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 12px 16px 0;
+  padding: 10px 14px;
+  border-radius: var(--exo-row-radius);
+  background: var(--exo-fill);
+  box-shadow: var(--exo-rim);
+}
+
+.exo-dc-stage-info {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  min-width: 0;
+}
+
+.exo-dc-stage-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--color-good);
+  font-size: var(--exo-type-small);
+  font-weight: var(--exo-weight-title);
+}
+
+.exo-dc-stage-topic {
+  color: var(--dc-text);
+  font-size: var(--exo-type-body);
+}
+
+.exo-dc-stage-hands {
+  color: var(--color-faint);
+  font-size: var(--exo-type-small);
+}
+
+.exo-dc-stage-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.exo-dc-stage-audience {
+  display: grid;
+  gap: 8px;
+  margin: 0 16px 12px;
+  padding: 10px 12px;
+  border-radius: var(--exo-row-radius);
+  background: var(--exo-fill);
+  box-shadow: var(--exo-rim);
+}
+
+.exo-dc-stage-audience > .exo-dc-side-label {
+  padding: 0;
+}
+
+.exo-dc-stage-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.exo-dc-stage-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 10px 4px 6px;
+  border-radius: 999px;
+  background: var(--exo-fill);
+  box-shadow: var(--exo-rim);
+  font-size: var(--exo-type-small);
+}
+
+.exo-dc-stage-chip.is-raising {
+  box-shadow: var(--exo-rim), inset 0 0 0 1px var(--color-good);
+}
+
+.exo-dc-stage-avatar,
+.exo-dc-stage-initial {
+  width: 24px;
+  height: 24px;
+  border-radius: 999px;
+  object-fit: cover;
+  flex: none;
+}
+
+.exo-dc-stage-initial {
+  display: grid;
+  place-items: center;
+  background: var(--hover-fill);
+  color: var(--dc-text);
+  font-weight: var(--exo-weight-title);
+}
+
+.exo-dc-stage-name {
+  max-width: 150px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.exo-dc-stage-hand {
+  display: inline-flex;
+  color: var(--color-good);
+}
+
+.exo-dc-stage-demote {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  z-index: 2;
+  opacity: 0;
+}
+
+.exo-dc-voice-tile:is(:hover, :focus-within) .exo-dc-stage-demote {
+  opacity: 1;
 }
 
 .exo-dc-sound-grid {

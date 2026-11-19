@@ -115,6 +115,8 @@ internal sealed partial class DiscordCache
         public HashSet<string> Events = [];
         // Who is in which of this server's voice channels: user id -> state.
         public Dictionary<string, VoiceMember> Voice = [];
+        // Live Stage topics keyed by channel id.
+        public Dictionary<string, string> StageTopics = [];
     }
 
     private sealed record Emoji(string Id, string Name, bool Animated, bool Available);
@@ -123,7 +125,7 @@ internal sealed partial class DiscordCache
     internal sealed record RoleStyle(int Color, int Position, string Name, bool Hoist, bool Managed = false, string? Icon = null, string? Emoji = null);
 
     internal sealed record VoiceMember(string ChannelId, string Name, string? Avatar, bool Mute, bool Deaf, bool Video = false, bool Stream = false,
-        bool ServerMute = false, bool ServerDeaf = false);
+        bool ServerMute = false, bool ServerDeaf = false, bool Suppress = false, string? RequestToSpeak = null);
 
     internal sealed record User(string Id, string Name, string? Avatar, string? Username = null, Look? Look = null, bool Bot = false);
 
@@ -548,6 +550,21 @@ internal sealed partial class DiscordCache
                         events.Add(("discord.changed", new { guildId = (string?)null, voice = true }));
                     }
                     break;
+                case "STAGE_INSTANCE_CREATE":
+                case "STAGE_INSTANCE_UPDATE":
+                    if (Str(d, "guild_id") is { } stageGuildId && _guilds.TryGetValue(stageGuildId, out var stageGuild) && Str(d, "channel_id") is { } stageChanId && Str(d, "topic") is { } stageTopicText)
+                    {
+                        stageGuild.StageTopics[stageChanId] = stageTopicText;
+                        events.Add(("discord.changed", new { guildId = stageGuildId }));
+                    }
+                    break;
+                case "STAGE_INSTANCE_DELETE":
+                    if (Str(d, "guild_id") is { } delStageGuildId && _guilds.TryGetValue(delStageGuildId, out var delStageGuild) && Str(d, "channel_id") is { } delStageChanId)
+                    {
+                        delStageGuild.StageTopics.Remove(delStageChanId);
+                        events.Add(("discord.changed", new { guildId = delStageGuildId }));
+                    }
+                    break;
                 case "USER_GUILD_SETTINGS_UPDATE":
                     ApplyGuildSettings(d);
                     events.Add(("discord.changed", new { guildId = Str(d, "guild_id") }));
@@ -867,6 +884,7 @@ internal sealed partial class DiscordCache
                                 id = v.Key, name = guild.Members.TryGetValue(v.Key, out var known) && known.Nick is { } nick ? nick : _users.GetValueOrDefault(v.Key)?.Name ?? v.Value.Name,
                                 avatar = Avatar(v.Key), look = LookOf(v.Key), mute = v.Value.Mute, deaf = v.Value.Deaf,
                                 video = v.Value.Video, stream = v.Value.Stream, serverMute = v.Value.ServerMute, serverDeaf = v.Value.ServerDeaf,
+                                suppress = v.Value.Suppress, requestToSpeak = v.Value.RequestToSpeak,
                             }).ToArray()
                             : null,
                         // A voice channel's user limit, for Discord's "2/5" beside its name.
@@ -874,6 +892,8 @@ internal sealed partial class DiscordCache
                         // Its status under its name, and whether the user may set it (Set Voice Channel Status) once in it.
                         status = IsVoice(c.Type) && !string.IsNullOrWhiteSpace(c.Status) ? c.Status : null,
                         canSetStatus = IsVoice(c.Type) && (perms & SetVoiceStatus) != 0,
+                        stageTopic = c.Type == 13 && guild.StageTopics.TryGetValue(c.Id, out var stageTopic) ? stageTopic : null,
+                        canModerateStage = c.Type == 13 && (perms & (MuteMembers | MoveMembers | ManageChannels)) != 0,
                     });
                 }
             }
@@ -1214,7 +1234,8 @@ internal sealed partial class DiscordCache
             if (Str(m, "nick") is { } nick) name = nick;
         }
         return new VoiceMember(channel, name ?? "Someone", Avatar(user),
-            Bool(v, "self_mute") || Bool(v, "mute"), Bool(v, "self_deaf") || Bool(v, "deaf"), Bool(v, "self_video"), Bool(v, "self_stream"), Bool(v, "mute"), Bool(v, "deaf"));
+            Bool(v, "self_mute") || Bool(v, "mute"), Bool(v, "self_deaf") || Bool(v, "deaf"), Bool(v, "self_video"), Bool(v, "self_stream"), Bool(v, "mute"), Bool(v, "deaf"),
+            Bool(v, "suppress"), Str(v, "request_to_speak_timestamp"));
     }
 
     /// <summary>Whether the user may set this voice channel's status (in it, with Set Voice Channel Status) or clear it (Manage Channels).</summary>
@@ -1883,6 +1904,13 @@ internal sealed partial class DiscordCache
         }
     }
 
+    /// <summary>Other joined servers in the account, used when Nitro unlocks cross-server soundboards.</summary>
+    internal IReadOnlyList<(string Id, string Name)> OtherGuilds(string? currentGuildId)
+    {
+        lock (_gate)
+            return [.. _guilds.Values.Where(g => g.Id != currentGuildId).Select(g => (g.Id, g.Name))];
+    }
+
     /// <summary>
     /// Threads Discord sent (a forum's posts, a channel's threads): kept so they open like channels, with their parent's
     /// permissions. Your membership stays as Exo had it, or comes from members (Discord's thread members for you, as a
@@ -2215,6 +2243,9 @@ internal sealed partial class DiscordCache
         guild.Voice = g.TryGetProperty("voice_states", out _)
             ? Array(g, "voice_states").Select(v => (Id: Str(v, "user_id"), Member: ReadVoice(v))).Where(v => v.Id is not null && v.Member is not null).ToDictionary(v => v.Id!, v => v.Member!)
             : existing?.Voice ?? [];
+        guild.StageTopics = g.TryGetProperty("stage_instances", out _)
+            ? Array(g, "stage_instances").Select(s => (Channel: Str(s, "channel_id"), Topic: Str(s, "topic"))).Where(s => s.Channel is not null && s.Topic is not null).ToDictionary(s => s.Channel!, s => s.Topic!)
+            : existing?.StageTopics ?? [];
         guild.Channels = g.TryGetProperty("channels", out _)
             ? Array(g, "channels").Select(c => ReadChannel(c, guild.Id)).ToDictionary(c => c.Id)
             : existing?.Channels ?? [];

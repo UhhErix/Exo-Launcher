@@ -164,6 +164,21 @@
     <Copy SourceFiles="$(_OnnxRuntime)" DestinationFolder="$(PublishDir)" />
   </Target>
 
+  <ItemGroup Condition="Exists('$(MSBuildThisFileDirectory)..\capture\out\ExoCapture.exe')">
+    <_ExoCaptureFiles Include="$(MSBuildThisFileDirectory)..\capture\out\ExoCapture.exe" />
+    <_ExoCaptureObsFiles Include="$(MSBuildThisFileDirectory)..\capture\out\obs\**\*.*" />
+  </ItemGroup>
+  <Target Name="CopyExoCapture" AfterTargets="Build" Condition="'$(DesignTimeBuild)' != 'true' and Exists('$(MSBuildThisFileDirectory)..\capture\out\ExoCapture.exe')">
+    <MakeDir Directories="$(OutDir)addons\capture" />
+    <Copy SourceFiles="@(_ExoCaptureFiles)" DestinationFolder="$(OutDir)addons\capture" SkipUnchangedFiles="true" />
+    <Copy SourceFiles="@(_ExoCaptureObsFiles)" DestinationFiles="@(_ExoCaptureObsFiles->'$(OutDir)addons\capture\obs\%(RecursiveDir)%(Filename)%(Extension)')" SkipUnchangedFiles="true" />
+  </Target>
+  <Target Name="PublishExoCapture" AfterTargets="Publish" Condition="'$(DesignTimeBuild)' != 'true' and Exists('$(MSBuildThisFileDirectory)..\capture\out\ExoCapture.exe')">
+    <MakeDir Directories="$(PublishDir)addons\capture" />
+    <Copy SourceFiles="@(_ExoCaptureFiles)" DestinationFolder="$(PublishDir)addons\capture" SkipUnchangedFiles="true" />
+    <Copy SourceFiles="@(_ExoCaptureObsFiles)" DestinationFiles="@(_ExoCaptureObsFiles->'$(PublishDir)addons\capture\obs\%(RecursiveDir)%(Filename)%(Extension)')" SkipUnchangedFiles="true" />
+  </Target>
+
   <ItemGroup>
     <!-- Discord voice: libdave (DAVE end-to-end encryption), libopus and exo_apm (WebRTC's echo cancellation), built by voice\build.ps1.
          Each is copied once it is built: CI builds and tests without them (their tests skip), and tools\Build-Release.ps1

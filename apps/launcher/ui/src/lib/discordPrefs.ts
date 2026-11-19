@@ -93,7 +93,7 @@ export type AccountSettings = {
 /** A custom status as Discord keeps it: its words, an emoji (a server one's id with its name, or a Unicode one). */
 export type CustomStatus = { text: string; emojiId: string | null; emojiName: string | null; expiresAtMs: number | null }
 
-export type AudioUser = { muted: boolean; volume: number }
+export type AudioUser = { muted: boolean; volume: number; soundboardMuted?: boolean }
 
 /** The account as My Account and Profiles show it (the email and phone number come masked). */
 export type DiscordAccount = {
@@ -150,6 +150,12 @@ export type DiscordClientSettings = {
   selectedChannelSound: boolean
   /** How loud all of Discord's sounds play, 0-100%. */
   soundVolume: number
+  /** Screen share defaults and capture engine status. */
+  goLiveHeight?: number
+  goLiveFps?: number
+  goLiveHevc?: boolean
+  captureMode?: 'wgc' | 'dxgi'
+  serviceDisabled?: boolean
 }
 
 /** One keybind: an action and the Windows virtual-key codes held together. */

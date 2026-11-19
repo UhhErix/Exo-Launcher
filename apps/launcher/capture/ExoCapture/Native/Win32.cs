@@ -16,7 +16,10 @@ internal static unsafe partial class Win32
     internal const uint WDA_EXCLUDEFROMCAPTURE = 0x11;
     internal const int GWL_EXSTYLE = -20, GWL_STYLE = -16;
     internal const int SM_XVIRTUALSCREEN = 76, SM_YVIRTUALSCREEN = 77, SM_CXVIRTUALSCREEN = 78, SM_CYVIRTUALSCREEN = 79;
-    internal const uint GA_ROOT = 2, GW_OWNER = 4;
+    internal const uint GA_ROOT = 2, GA_ROOTOWNER = 3, GW_OWNER = 4;
+    internal const uint PW_RENDERFULLCONTENT = 0x2;
+    internal const uint KEY_READ = 0x20019, REG_DWORD = 4;
+    internal static readonly nint HKEY_LOCAL_MACHINE = unchecked((nint)0x80000002);
     internal const int DWMWA_EXTENDED_FRAME_BOUNDS = 9, DWMWA_CLOAKED = 14;
     internal const uint MONITOR_DEFAULTTONEAREST = 2;
     internal const uint PROCESS_QUERY_LIMITED_INFORMATION = 0x1000, SYNCHRONIZE = 0x00100000;
@@ -101,6 +104,7 @@ internal static unsafe partial class Win32
     [LibraryImport("user32.dll")] [return: MarshalAs(UnmanagedType.Bool)] internal static partial bool IsIconic(nint hwnd);
     [LibraryImport("user32.dll")] internal static partial uint GetWindowThreadProcessId(nint hwnd, uint* pid);
     [LibraryImport("user32.dll")] [return: MarshalAs(UnmanagedType.Bool)] internal static partial bool GetWindowRect(nint hwnd, RECT* rect);
+    [LibraryImport("user32.dll")] [return: MarshalAs(UnmanagedType.Bool)] internal static partial bool PrintWindow(nint hwnd, nint hdcBlt, uint flags);
     [LibraryImport("user32.dll")] [return: MarshalAs(UnmanagedType.Bool)] internal static partial bool GetClientRect(nint hwnd, RECT* rect);
     [LibraryImport("user32.dll")] [return: MarshalAs(UnmanagedType.Bool)] internal static partial bool ClientToScreen(nint hwnd, POINT* point);
     [LibraryImport("user32.dll")] internal static partial nint GetAncestor(nint hwnd, uint flags);
@@ -181,6 +185,45 @@ internal static unsafe partial class Win32
     [LibraryImport("user32.dll")] [return: MarshalAs(UnmanagedType.Bool)] internal static partial bool SetProcessDpiAwarenessContext(nint context);
     [LibraryImport("shcore.dll")] internal static partial int GetDpiForMonitor(nint monitor, int type, out uint x, out uint y);
     [LibraryImport("avrt.dll", EntryPoint = "AvSetMmThreadCharacteristicsW", StringMarshalling = StringMarshalling.Utf16)] internal static partial nint AvSetMmThreadCharacteristics(string task, ref uint index);
+    [LibraryImport("advapi32.dll", EntryPoint = "RegOpenKeyExW", StringMarshalling = StringMarshalling.Utf16)] internal static partial int RegOpenKeyEx(nint key, string subKey, uint options, uint samDesired, out nint result);
+    [LibraryImport("advapi32.dll", EntryPoint = "RegQueryValueExW", StringMarshalling = StringMarshalling.Utf16)] internal static partial int RegQueryValueEx(nint key, string? valueName, nint reserved, uint* type, byte* data, uint* dataBytes);
+    [LibraryImport("advapi32.dll", EntryPoint = "RegEnumKeyExW", StringMarshalling = StringMarshalling.Utf16)] internal static partial int RegEnumKeyEx(nint key, uint index, char* name, ref uint nameLen, nint reserved, nint cls, nint clsLen, nint lastWrite);
+    [LibraryImport("advapi32.dll")] internal static partial int RegCloseKey(nint key);
+
+    /// <summary>True when Windows' CaptureService (or its per-user CaptureService_* instance) has Start == 4 (disabled).</summary>
+    internal static bool IsCaptureServiceDisabled()
+    {
+        if (RegOpenKeyEx(HKEY_LOCAL_MACHINE, @"SYSTEM\CurrentControlSet\Services", 0, KEY_READ, out var services) != 0)
+            return false;
+        try
+        {
+            if (ReadDwordStart(services, "CaptureService") == 4) return true;
+            var name = stackalloc char[256];
+            for (uint index = 0; ; index++)
+            {
+                var len = 256u;
+                var rc = RegEnumKeyEx(services, index, name, ref len, 0, 0, 0, 0);
+                if (rc == 259 /* ERROR_NO_MORE_ITEMS */) break;
+                if (rc != 0) continue;
+                var sub = new ReadOnlySpan<char>(name, (int)len);
+                if (sub.StartsWith("CaptureService_", StringComparison.OrdinalIgnoreCase) && ReadDwordStart(services, sub.ToString()) == 4)
+                    return true;
+            }
+            return false;
+        }
+        finally { RegCloseKey(services); }
+    }
+
+    private static uint? ReadDwordStart(nint servicesKey, string subKey)
+    {
+        if (RegOpenKeyEx(servicesKey, subKey, 0, KEY_READ, out var key) != 0) return null;
+        try
+        {
+            uint type = 0, value = 0, size = 4;
+            return RegQueryValueEx(key, "Start", 0, &type, (byte*)&value, &size) == 0 && type == REG_DWORD ? value : null;
+        }
+        finally { RegCloseKey(key); }
+    }
 
     /// <summary>QPC in 100 ns units: the one clock every frame and sound sample is stamped with.</summary>
     internal static long Now()

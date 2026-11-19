@@ -2,7 +2,7 @@ import { useCallback, useDeferredValue, useRef, useState } from 'react'
 import { host } from '../../lib/host'
 import { report } from '../../lib/report'
 import { useGlide } from '../../lib/glide'
-import type { DiscordFriend } from '../../lib/discord'
+import type { DiscordFriend, DiscordRestricted } from '../../lib/discord'
 import { useFriends } from '../../lib/friendsPlaying'
 import { Icons } from './icons'
 import { Avatar } from './presence'
@@ -16,9 +16,9 @@ import { ActivityLine } from './ActivityLine'
 import { openUserMenu } from './UserMenu'
 import { errorText } from '../../lib/errorWords'
 
-type Tab = 'online' | 'all' | 'pending'
+type Tab = 'online' | 'all' | 'pending' | 'blocked'
 /** Resolves true when Discord wants an accept confirmed (someone you share no server with). */
-type Act = (action: 'accept' | 'remove' | 'dm', friend: DiscordFriend, confirm?: boolean) => Promise<boolean>
+type Act = (action: 'accept' | 'remove' | 'dm', friend: { id: string; dmId?: string | null }, confirm?: boolean) => Promise<boolean>
 type FriendList = ReturnType<typeof useFriends>
 
 function useFriendAct(onOpenDm: (channelId: string) => void, reload: () => void) {
@@ -58,43 +58,19 @@ export function HomePage({ onOpenDm }: { onOpenDm: (channelId: string) => void }
  * bodyOnly is the same page without its head, for a page that holds it under its own sections: the tabs, search and
  * Add friend sit on a row of their own above the grids.
  */
-export function FriendsPage({ list, onOpenDm }: { list: FriendList; onOpenDm: (channelId: string) => void }) {
-  const [tab, setTab] = useState<Tab>('online')
-  const { friends, loaded, reload } = list
-  const { act, error } = useFriendAct(onOpenDm, reload)
-  const [query, setQuery] = useState('')
-  const tabs = useGlide<HTMLSpanElement>()
-  const pending = friends.filter(f => f.kind !== 'friend')
-  // The field answers each key at once; a long list filters behind it.
-  const q = useDeferredValue(query).trim().toLowerCase()
-  const matches = (f: DiscordFriend) => !q || f.name.toLowerCase().includes(q) || (f.username ?? '').toLowerCase().includes(q)
-  const listed = (tab === 'pending' ? pending : friends.filter(f => f.kind === 'friend' && (tab === 'all' || f.status !== 'offline'))).filter(matches)
-  // On Online, whoever is doing something leads the grid; the other tabs are one group.
-  const active = tab === 'online' ? listed.filter(f => f.activity) : []
-  const rest = tab === 'online' ? listed.filter(f => !f.activity) : listed
-  const incoming = friends.filter(f => f.kind === 'incoming').length
-  const label = tab === 'pending' ? 'Pending' : tab === 'all' ? 'All friends' : 'Online'
-  const tabButtons = (
-    <span ref={tabs} className="exo-dc-tabs exo-glide" role="group" aria-label="Friends">
-      <button type="button" className="exo-dc-tab" aria-pressed={tab === 'online'} onClick={() => setTab('online')}>Online</button>
-      <button type="button" className="exo-dc-tab" aria-pressed={tab === 'all'} onClick={() => setTab('all')}>All</button>
-      <button type="button" className="exo-dc-tab" aria-pressed={tab === 'pending'} onClick={() => setTab('pending')}>
-        Pending{incoming ? <span className="exo-dc-badge">{incoming}</span> : null}
-      </button>
-    </span>
-  )
-  // The search is one small field at the row's end, never a bar across the page.
-  const search = (
-    <>
-      <label className="exo-dc-friend-search">
-        <Icons.Search size={16} />
-        <input placeholder="Search friends" value={query} onChange={event => setQuery(event.target.value)} aria-label="Search friends"
-          onKeyDown={event => { if (event.key === 'Escape' && query) { event.stopPropagation(); setQuery('') } }} />
-      </label>
-      <AddFriend />
-    </>
-  )
-  const body = (
+function FriendsBody({ loaded, error, active, rest, label, blockedList, showBlocked, emptyText, act, onReload }: {
+  loaded: boolean
+  error: string | null
+  active: DiscordFriend[]
+  rest: DiscordFriend[]
+  label: string
+  blockedList: DiscordRestricted[]
+  showBlocked: boolean
+  emptyText: string
+  act: Act
+  onReload: () => void
+}) {
+  return (
     <>
       {error ? <ErrorNote className="exo-dc-note" message={error} /> : null}
       {active.length ? <>
@@ -105,18 +81,76 @@ export function FriendsPage({ list, onOpenDm }: { list: FriendList; onOpenDm: (c
         <p className="exo-dc-side-label" role="heading" aria-level={2}>{label}</p>
         <div className="exo-dc-friend-grid">{rest.map(friend => <FriendRow key={friend.id} friend={friend} act={act} />)}</div>
       </> : null}
-      {loaded && listed.length === 0 ? <p className="exo-dc-note">{q ? 'No friend by that name.' : tab === 'pending' ? 'No pending requests.' : 'No friends here yet.'}</p> : null}
+      {loaded && showBlocked && blockedList.length ? <>
+        <p className="exo-dc-side-label" role="heading" aria-level={2}>Blocked · {blockedList.length}</p>
+        <div className="exo-dc-friend-grid">{blockedList.map(person => <BlockedRow key={person.id} person={person} onUnblock={() => void act('remove', person).then(() => onReload())} />)}</div>
+      </> : null}
+      {loaded && active.length === 0 && rest.length === 0 && blockedList.length === 0 ? <p className="exo-dc-note">{emptyText}</p> : null}
     </>
   )
+}
+
+export function FriendsPage({ list, onOpenDm }: { list: FriendList; onOpenDm: (channelId: string) => void }) {
+  const [tab, setTab] = useState<Tab>('online')
+  const { friends, blocked, loaded, reload } = list
+  const { act, error } = useFriendAct(onOpenDm, reload)
+  const [query, setQuery] = useState('')
+  const tabs = useGlide<HTMLSpanElement>()
+  const pending = friends.filter(f => f.kind !== 'friend')
+  // The field answers each key at once; a long list filters behind it.
+  const q = useDeferredValue(query).trim().toLowerCase()
+  const matches = (f: { name: string; username?: string | null }) => !q || f.name.toLowerCase().includes(q) || (f.username ?? '').toLowerCase().includes(q)
+  const blockedList = tab === 'blocked' ? blocked.filter(matches) : []
+  const listed = tab === 'blocked' ? [] : (tab === 'pending' ? pending : friends.filter(f => f.kind === 'friend' && (tab === 'all' || f.status !== 'offline'))).filter(matches)
+  // On Online, whoever is doing something leads the grid; the other tabs are one group.
+  const active = tab === 'online' ? listed.filter(f => f.activity) : []
+  const rest = tab === 'online' ? listed.filter(f => !f.activity) : listed
+  const incoming = friends.filter(f => f.kind === 'incoming').length
+  const labels: Record<Tab, string> = { pending: 'Pending', all: 'All friends', blocked: 'Blocked', online: 'Online' }
+  const emptyText = q ? 'No match by that name.' : tab === 'pending' ? 'No pending requests.' : tab === 'blocked' ? 'No blocked users.' : 'No friends here yet.'
   return (
     <section className="exo-dc-block exo-dc-friends" aria-label="Friends">
       <header className="exo-dc-block-head exo-dc-friends-head">
         <h2 className="exo-dc-block-title">Friends</h2>
-        {tabButtons}
-        <span className="exo-dc-friends-tools">{search}</span>
+        <span ref={tabs} className="exo-dc-tabs exo-glide" role="group" aria-label="Friends">
+          <button type="button" className="exo-dc-tab" aria-pressed={tab === 'online'} onClick={() => setTab('online')}>Online</button>
+          <button type="button" className="exo-dc-tab" aria-pressed={tab === 'all'} onClick={() => setTab('all')}>All</button>
+          <button type="button" className="exo-dc-tab" aria-pressed={tab === 'pending'} onClick={() => setTab('pending')}>
+            Pending{incoming ? <span className="exo-dc-badge">{incoming}</span> : null}
+          </button>
+          <button type="button" className="exo-dc-tab" aria-pressed={tab === 'blocked'} onClick={() => setTab('blocked')}>Blocked</button>
+        </span>
+        <span className="exo-dc-friends-tools">
+          <label className="exo-dc-friend-search">
+            <Icons.Search size={16} />
+            <input placeholder="Search friends" value={query} onChange={event => setQuery(event.target.value)} aria-label="Search friends"
+              onKeyDown={event => { if (event.key === 'Escape' && query) { event.stopPropagation(); setQuery('') } }} />
+          </label>
+          <AddFriend />
+        </span>
       </header>
-      <div className="exo-dc-block-body exo-dc-friend-list">{body}</div>
+      <div className="exo-dc-block-body exo-dc-friend-list">
+        <FriendsBody loaded={loaded} error={error} active={active} rest={rest} label={labels[tab]} blockedList={blockedList}
+          showBlocked={tab === 'blocked'} emptyText={emptyText} act={act} onReload={reload} />
+      </div>
     </section>
+  )
+}
+
+function BlockedRow({ person, onUnblock }: { person: DiscordRestricted; onUnblock: () => void }) {
+  return (
+    <div className="exo-dc-friend" data-dc-user={person.id} data-dc-name={person.name} data-dc-username={person.username ?? undefined}>
+      <button type="button" className="exo-dc-avatar-btn" aria-label={`${person.name}, profile`} onClick={() => showFullProfile(person.id)}>
+        <Avatar src={person.avatar ?? null} name={person.name} status={null} size={40} />
+      </button>
+      <span className="exo-dc-friend-names">
+        <strong><span className="exo-dc-friend-name">{person.name}</span></strong>
+        {person.username ? <span>@{person.username}</span> : null}
+      </span>
+      <span className="exo-dc-friend-actions">
+        <button type="button" className="exo-dc-tab" onClick={onUnblock}>Unblock</button>
+      </span>
+    </div>
   )
 }
 

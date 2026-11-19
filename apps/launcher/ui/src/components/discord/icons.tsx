@@ -1,5 +1,5 @@
 import type { DiscordChannel } from '../../lib/discord'
-import { Plus, Apps, ArrowRight, At, Award, BadgeCheck, Bell, BellOff, Bolt, Book, Bookmark, Boost, Burst, Calendar, Car, Category, Check, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Clock, Close, Copy, Cover, Crown, Decline, Download, Encrypted, EyeOff, ExitFullScreen, ExternalLink, Failed, FileIcon, Flag, FlagsCategory, Folder, Forum, Forward, FriendAccepted, FullScreen, Controller, Grip, Hash, HashLock, Headphones, HeadphonesOff, Hourglass, Id, Inbox, Leaf, Lightbulb, LinkIcon, ListSearch, Live, Lock, Mail, Megaphone, Members, MessageCircle, Mic, MicOff, More, Movie, MusicNotes, Nitro, OnlyYou, Partnered, Pencil, Pending, Person, Phone, PhoneDown, Pin, Pizza, Poll, Remove, Reply, Rules, SaveImage, Search, Shop, Smile, SmilePlus, Soundboard, Volume, Speaker, Star, StopWatching, Symbols, Threads, Trash, Trophy, Tv, Unread, Upload, UserPlus, Video, ViewReactions, VolumeLock, VolumeOff, ZoomIn, ZoomOut, Signal, Stop } from '../../brand/icons'
+import { Plus, Apps, ArrowRight, At, Award, BadgeCheck, Bell, BellOff, Bolt, Book, Bookmark, Boost, Burst, Calendar, Car, Category, Check, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Clock, Close, Copy, Cover, Crown, Decline, Download, Encrypted, EyeOff, ExitFullScreen, ExternalLink, Failed, FileIcon, Flag, FlagsCategory, Folder, Forum, Forward, FriendAccepted, FullScreen, Controller, Grip, Hash, HashLock, Headphones, HeadphonesOff, Hourglass, Id, Inbox, Leaf, Lightbulb, LinkIcon, ListSearch, Live, Lock, Mail, Megaphone, Members, MessageCircle, Mic, MicOff, More, Movie, MusicNotes, Nitro, OnlyYou, Partnered, Pencil, Pending, Person, Phone, PhoneDown, Pin, Pizza, Poll, Radio, Remove, Reply, Rules, SaveImage, Search, Shop, Smile, SmilePlus, Soundboard, Volume, Speaker, Star, StopWatching, Symbols, Threads, Trash, Trophy, Tv, Unread, Upload, UserPlus, Video, ViewReactions, VolumeLock, VolumeOff, ZoomIn, ZoomOut, Signal, Stop } from '../../brand/icons'
 
 /** The Discord room's glyphs, in the places Discord's own client puts them, drawn in Exo's set: one glyph per meaning. */
 export const Icons = {
@@ -45,9 +45,10 @@ export const Icons = {
   Profile: Person,
   Events: Calendar,
   Browse: ListSearch,
-  // A voice channel is Discord's speaker.
+  // A voice channel is Discord's speaker; a stage channel is its broadcast radio icon.
   Voice: Volume,
   VoiceLock: VolumeLock,
+  Stage: Radio,
   HashLock,
   Lock,
   Chat: MessageCircle,
@@ -131,7 +132,10 @@ export const Icons = {
 
 /** A channel's mark, as Discord draws it: with a lock when @everyone can't see it (a voice one: can't join it). */
 export function channelGlyph(channel: Pick<DiscordChannel, 'kind' | 'locked' | 'rules' | 'type'>) {
-  if (channel.kind === 'voice') return channel.locked ? Icons.VoiceLock : Icons.Voice
+  if (channel.kind === 'voice') {
+    if (channel.type === 13) return channel.locked ? Icons.VoiceLock : Icons.Stage
+    return channel.locked ? Icons.VoiceLock : Icons.Voice
+  }
   if (channel.rules) return Icons.Rules
   if (channel.kind === 'forum') return Icons.Forum
   if (channel.type === 5) return Icons.Announcement

@@ -2,12 +2,13 @@ import { createElement, useEffect, useLayoutEffect, useMemo, useRef, useState } 
 import { host } from '../../lib/host'
 import { allowHover } from '../../lib/hoverGate'
 import { answerRailTip, emptyRailTip, endRailTip, railTipRooms, startRailTip, type RailTipState } from '../../lib/railTip'
-import { ChevronLeft, ChevronRight, Home, Plus, Shop, Volume } from '../../brand/icons'
+import { ChevronLeft, ChevronRight, Folder, Home, Plus, Shop, Volume } from '../../brand/icons'
 import { cdnSized, type DiscordChannel, type DiscordGuild, type DiscordHome, type DiscordRailItem } from '../../lib/discord'
 import { initials } from '../ui/artInitial'
 import { channelGlyph } from './icons'
 import { GuildMenu } from './ServerMenu'
 import { Picture } from './presence'
+import { pageGet, pageSet } from '../../lib/pageStore'
 
 /** Which of the room's places you are in: Home (your conversations, friends and what is happening), the Shop, or a server. */
 export type PlaceTab = 'home' | 'shop' | 'servers'
@@ -26,11 +27,47 @@ const count = (n: number) => (n > 99 ? '99+' : String(n))
 /** A count as a screen reader says it. */
 export const mentionsSaid = (n: number) => `${n} mention${n === 1 ? '' : 's'}`
 
+const FOLDERS_KEY = 'exo.discord.folders'
+function readCollapsedFolders(): Set<string> {
+  try {
+    const raw = pageGet(FOLDERS_KEY)
+    const parsed = raw ? JSON.parse(raw) : []
+    return new Set(Array.isArray(parsed) ? parsed.filter((x): x is string => typeof x === 'string') : [])
+  } catch {
+    return new Set()
+  }
+}
+function saveCollapsedFolders(set: Set<string>) {
+  try { pageSet(FOLDERS_KEY, JSON.stringify([...set])) } catch { /* a preference */ }
+}
+
+type BandEntry =
+  | { kind: 'guild'; guild: DiscordGuild }
+  | { kind: 'folder'; id: string; name: string; guilds: DiscordGuild[] }
+
+function buildBandEntries(home: DiscordHome | null, rail: DiscordRailItem[]): { entries: BandEntry[]; guilds: DiscordGuild[] } {
+  const byId = new Map((home?.guilds ?? []).map(g => [g.id, g]))
+  const seen = new Set<string>()
+  const entries: BandEntry[] = []
+  const guilds: DiscordGuild[] = []
+  for (const item of rail) {
+    const members = item.guildIds.map(id => byId.get(id)).filter((g): g is DiscordGuild => !!g && !seen.has(g.id))
+    for (const m of members) { seen.add(m.id); guilds.push(m) }
+    if (!members.length) continue
+    if (item.id != null) entries.push({ kind: 'folder', id: item.id, name: item.name?.trim() || members.map(m => m.name).join(', '), guilds: members })
+    else for (const m of members) entries.push({ kind: 'guild', guild: m })
+  }
+  for (const g of home?.guilds ?? []) {
+    if (!seen.has(g.id)) { seen.add(g.id); guilds.push(g); entries.push({ kind: 'guild', guild: g }) }
+  }
+  return { entries, guilds }
+}
+
 /**
- * The band across the room's top (DESIGN.md › Rooms › Discord): Home, then your servers in the order Discord keeps them
- * (folders flattened), and Add a server. The Shop stands beside Home. The place you are in is a white pill with its name; the rest
- * are faces with what is new on them. It scrolls sideways when the servers don't fit, with a step button at each end
- * that shows only while there is more that way, so no server is ever cut off unreachable. The Inbox stands at its end.
+ * The band across the room's top (DESIGN.md › Rooms › Discord): Home, then your servers and collapsible folders in
+ * Discord's order, and Add a server. The Shop stands beside Home. The place you are in is a white pill with its name;
+ * the rest are faces with what is new on them. It scrolls sideways when the servers don't fit, with a step button at
+ * each end that shows only while there is more that way, so no server is ever cut off unreachable. The Inbox stands at its end.
  */
 export function Band({ home, tab, place, open, inbox, onTab, onServer, onAdd, onPeek }: {
   home: DiscordHome | null
@@ -46,6 +83,15 @@ export function Band({ home, tab, place, open, inbox, onTab, onServer, onAdd, on
 }) {
   const { rail, save } = useServerOrder(home)
   const [menu, setMenu] = useState<{ guild: DiscordGuild; x: number; y: number } | null>(null)
+  const [collapsed, setCollapsed] = useState<Set<string>>(readCollapsedFolders)
+  const toggleFolder = (folderId: string) => {
+    setCollapsed(prev => {
+      const next = new Set(prev)
+      if (next.has(folderId)) next.delete(folderId); else next.add(folderId)
+      saveCollapsedFolders(next)
+      return next
+    })
+  }
   // The server's menu, asked for from its column's head (Channels.tsx ColumnHead dispatches exo-dc-guild-menu).
   const askedGuilds = home?.guilds
   useEffect(() => {
@@ -57,15 +103,16 @@ export function Band({ home, tab, place, open, inbox, onTab, onServer, onAdd, on
     window.addEventListener('exo-dc-guild-menu', ask)
     return () => window.removeEventListener('exo-dc-guild-menu', ask)
   }, [askedGuilds])
-  const guilds = useMemo(() => {
-    const byId = new Map((home?.guilds ?? []).map(g => [g.id, g]))
-    const ordered = rail.flatMap(item => item.guildIds).map(id => byId.get(id)).filter((g): g is DiscordGuild => !!g)
-    const seen = new Set(ordered.map(g => g.id))
-    return [...ordered, ...(home?.guilds ?? []).filter(g => !seen.has(g.id))]
-  }, [home?.guilds, rail])
+  const { entries, guilds } = useMemo(() => buildBandEntries(home, rail), [home, rail])
+  const visibleSlots = entries.reduce((sum, entry) => sum + (entry.kind === 'folder' && !collapsed.has(entry.id) ? entry.guilds.length + 1 : 1), 0)
   const tipCtl = useBandTip(guilds)
-  const strip = useStrip(place, guilds.length)
+  const strip = useStrip(place, visibleSlots)
   const go = (to: PlaceTab) => { tipCtl.clicked(null); onTab(to) }
+  const renderGuild = (guild: DiscordGuild) => (
+    <BandServer key={guild.id} guild={guild} current={guild.id === place}
+      onGo={() => { tipCtl.clicked(guild.id); onServer(guild.id) }} onPeek={onPeek} onMenu={(x, y) => { tipCtl.clicked(guild.id); setMenu({ guild, x, y }) }}
+      tipShow={tipCtl.show} tipHide={tipCtl.hide} />
+  )
   return (
     <nav className="exo-dc-band" aria-label="Servers" onPointerMove={tipCtl.moved}>
       <button type="button" className="exo-dc-band-step is-back" aria-label="Scroll servers back" hidden={!strip.back} onClick={() => strip.step(-1)}><ChevronLeft size={18} /></button>
@@ -77,9 +124,9 @@ export function Band({ home, tab, place, open, inbox, onTab, onServer, onAdd, on
           {tab === 'shop' ? <span className="exo-dc-band-name">Shop</span> : null}
         </button>
         <span className="exo-dc-band-rule" aria-hidden="true" />
-        {guilds.map(guild => (
-          <BandServer key={guild.id} guild={guild} current={guild.id === place}
-            onGo={() => { tipCtl.clicked(guild.id); onServer(guild.id) }} onPeek={onPeek} onMenu={(x, y) => { tipCtl.clicked(guild.id); setMenu({ guild, x, y }) }}
+        {entries.map(entry => entry.kind === 'guild' ? renderGuild(entry.guild) : (
+          <BandFolder key={`folder:${entry.id}`} folderId={entry.id} name={entry.name} guilds={entry.guilds} place={place}
+            collapsed={collapsed.has(entry.id)} onToggle={() => toggleFolder(entry.id)} renderGuild={renderGuild}
             tipShow={tipCtl.show} tipHide={tipCtl.hide} />
         ))}
         <button type="button" className="exo-dc-band-place is-add" aria-label="Add a server" onClick={onAdd}>
@@ -154,6 +201,53 @@ function useStrip(place: string, servers: number) {
     if (el) el.scrollBy({ left: by * el.clientWidth * 0.8, behavior: 'smooth' })
   }
   return { box, measure, step, ...ends }
+}
+
+function BandFolder({ folderId, name, guilds, place, collapsed, onToggle, renderGuild, tipShow, tipHide }: {
+  folderId: string
+  name: string
+  guilds: DiscordGuild[]
+  place: string
+  collapsed: boolean
+  onToggle: () => void
+  renderGuild: (guild: DiscordGuild) => React.ReactNode
+  tipShow: (event: React.PointerEvent<HTMLElement>, label: string, guildId?: string | null) => void
+  tipHide: () => void
+}) {
+  const hasActive = guilds.some(g => g.id === place)
+  const unmuted = guilds.filter(g => !g.muted)
+  const mentions = unmuted.reduce((sum, g) => sum + g.mentions, 0)
+  const unread = unmuted.some(g => g.unread || g.mentions > 0)
+  if (collapsed) {
+    return (
+      <button type="button" data-dc-place={`folder:${folderId}`}
+        className={`exo-dc-band-place is-folder${hasActive ? ' is-chosen' : ''}`}
+        aria-expanded={false}
+        aria-label={[name, `${guilds.length} servers`, mentions ? mentionsSaid(mentions) : unread ? 'unread' : null].filter(Boolean).join(', ')}
+        onClick={() => { tipHide(); onToggle() }}
+        onPointerEnter={event => tipShow(event, name)}
+        onPointerLeave={tipHide}>
+        <span className="exo-dc-band-face is-folder-mini">
+          {guilds.slice(0, 4).map(g => g.icon
+            ? <img key={g.id} src={cdnSized(g.icon, 40)} alt="" width={16} height={16} decoding="async" draggable={false} />
+            : <span key={g.id} className="exo-dc-folder-mini-init" aria-hidden="true">{initials(g.name).slice(0, 1)}</span>)}
+        </span>
+        {mentions ? <span className="exo-dc-badge" aria-hidden="true">{count(mentions)}</span>
+          : unread && !hasActive ? <span className="exo-dc-band-dot" aria-hidden="true" /> : null}
+      </button>
+    )
+  }
+  return (
+    <div className="exo-dc-band-folder-group" role="group" aria-label={name}>
+      <button type="button" className="exo-dc-band-folder-btn" aria-expanded={true} aria-label={`Collapse ${name}`}
+        onClick={() => { tipHide(); onToggle() }}
+        onPointerEnter={event => tipShow(event, name)}
+        onPointerLeave={tipHide}>
+        <Folder size={16} />
+      </button>
+      {guilds.map(renderGuild)}
+    </div>
+  )
 }
 
 /** A server in the band: its face, with a white dot when something is new, its mentions, and who is in voice; the server you are in is the pill with its name. */

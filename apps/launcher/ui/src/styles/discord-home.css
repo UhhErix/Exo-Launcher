@@ -39,11 +39,11 @@
   white-space: nowrap;
 }
 
-.exo-dc .exo-dc-foot > .exo-dc-me > .exo-dc-icon-btn,
-.exo-dc .exo-dc-dock > .exo-dc-voice .exo-dc-voice-actions > .exo-dc-icon-btn {
+.exo-dc .exo-dc-dock > .exo-dc-voice .exo-dc-voice-actions > .exo-dc-icon-btn,
+.exo-dc .exo-dc-dock > .exo-dc-voice .exo-dc-soundboard.is-panel > .exo-dc-icon-btn {
   flex: none;
-  width: 32px;
-  height: 32px;
+  width: 28px;
+  height: 28px;
   padding: 0;
   border-radius: var(--exo-small-radius);
 }

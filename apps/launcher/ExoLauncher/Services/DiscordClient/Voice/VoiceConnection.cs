@@ -64,6 +64,20 @@ internal sealed class VoiceConnection : IAsyncDisposable
     private readonly int _bitrate;
     private int _seqAck = -1;
     private bool _acked = true;
+    private long _heartbeatSentAt;
+    private int _rttMs;
+    internal int? RttMs => Volatile.Read(ref _rttMs) is > 0 and var r ? r : null;
+    internal int Bitrate => _bitrate;
+    internal string? Region => ParseRegion(_endpoint);
+
+    internal static string? ParseRegion(string? endpoint)
+    {
+        if (string.IsNullOrWhiteSpace(endpoint)) return null;
+        var host = endpoint.Split(':')[0].Split('.')[0];
+        var i = host.Length;
+        while (i > 0 && char.IsAsciiDigit(host[i - 1])) i--;
+        return i > 0 ? host[..i] : host;
+    }
     private bool _speaking;
     private int _silence;
     private readonly MicSilence _micSilence = new();
@@ -242,7 +256,16 @@ internal sealed class VoiceConnection : IAsyncDisposable
                 else
                     await SendJsonAsync(0, Identify(_serverId, _channelId, _userId, _sessionId, _token, _videoType, DaveSession.MaxVersion)).ConfigureAwait(false);
                 break;
-            case 6: _acked = true; break;
+            case 6:
+                _acked = true;
+                var sentAt = Interlocked.Read(ref _heartbeatSentAt);
+                if (sentAt > 0)
+                {
+                    var rtt = Math.Max(1, (int)Math.Round(System.Diagnostics.Stopwatch.GetElapsedTime(sentAt).TotalMilliseconds));
+                    Volatile.Write(ref _rttMs, rtt);
+                    Changed?.Invoke("stats", new { rttMs = rtt });
+                }
+                break;
             case 2: await OnReadyAsync(d, ct).ConfigureAwait(false); break;
             case 4: OnSessionDescription(d); break;
             case 14: UseCodec(d); break;
@@ -1109,6 +1132,7 @@ internal sealed class VoiceConnection : IAsyncDisposable
 
     private StreamAudio? _soundshare;
     private nint _musicEncoder;
+    private readonly Lock _soundGate = new();
 
     /// <summary>Your stream's sound, for its status line: an app left out because it plays the call or your mic, or null.</summary>
     internal string? SoundNote => _soundshare?.Note;
@@ -1116,22 +1140,46 @@ internal sealed class VoiceConnection : IAsyncDisposable
     /// <summary>Go Live's sound as music-quality Opus on this stream's audio SSRC: a window's app (its process), or this PC's sound but Exo's (0).</summary>
     internal void StartSoundshare(uint app)
     {
-        if (_soundshare is not null || _transport is null || _dave is null) return;
-        _musicEncoder = Opus.NewMusicEncoder(256000);
-        _soundshare = new StreamAudio(app);
-        _soundshare.Captured += frame =>
+        lock (_soundGate)
         {
-            if (_musicEncoder == 0 || _transport is not { Started: true } || _dave is null) return;
-            try
+            if (_soundshare is not null || _transport is null || _dave is null) return;
+            _musicEncoder = Opus.NewMusicEncoder(256000);
+            var soundshare = new StreamAudio(app);
+            soundshare.Captured += frame =>
             {
-                if (_lossWanted != _lossSet) Opus.SetExpectedLoss(_musicEncoder, _lossSet = _lossWanted);
-                Span<byte> opus = stackalloc byte[1275];
-                var length = Opus.Encode(_musicEncoder, frame, opus);
-                _sound.Going(frame, length > 0 && SendFrame(opus[..length]));
-            }
-            catch (Exception ex) when (ex is not OutOfMemoryException) { AppLog.Debug("Discord video: a stream sound frame failed (" + ex.GetType().Name + ")."); }
-        };
-        _soundshare.Start();
+                lock (_soundGate)
+                {
+                    if (_soundshare != soundshare || _musicEncoder == 0 || _transport is not { Started: true } || _dave is null) return;
+                    try
+                    {
+                        if (_lossWanted != _lossSet) Opus.SetExpectedLoss(_musicEncoder, _lossSet = _lossWanted);
+                        Span<byte> opus = stackalloc byte[1275];
+                        var length = Opus.Encode(_musicEncoder, frame, opus);
+                        _sound.Going(frame, length > 0 && SendFrame(opus[..length]));
+                    }
+                    catch (Exception ex) when (ex is not OutOfMemoryException) { AppLog.Debug("Discord video: a stream sound frame failed (" + ex.GetType().Name + ")."); }
+                }
+            };
+            _soundshare = soundshare;
+            soundshare.Start();
+        }
+    }
+
+    /// <summary>Hot-swaps Go Live audio capture when changing shared source without dropping the voice connection.</summary>
+    internal void ReplaceSoundshare(uint? app)
+    {
+        StreamAudio? old;
+        lock (_soundGate)
+        {
+            old = _soundshare;
+            _soundshare = null;
+        }
+        old?.Dispose();
+        lock (_soundGate)
+        {
+            if (_musicEncoder != 0) { Opus.EncoderDestroy(_musicEncoder); _musicEncoder = 0; }
+        }
+        if (app is { } target) StartSoundshare(target);
     }
 
     /// <summary>Says this client is sending (speaking flags: 1 voice, 2 Go Live).</summary>
@@ -1213,6 +1261,7 @@ internal sealed class VoiceConnection : IAsyncDisposable
                 await Task.Delay(TimeSpan.FromMilliseconds(interval), ct).ConfigureAwait(false);
                 if (!_acked) { ws.Abort(); return; }
                 _acked = false;
+                Interlocked.Exchange(ref _heartbeatSentAt, System.Diagnostics.Stopwatch.GetTimestamp());
                 await SendJsonAsync(3, new { t = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(), seq_ack = _seqAck }).ConfigureAwait(false);
             }
         }

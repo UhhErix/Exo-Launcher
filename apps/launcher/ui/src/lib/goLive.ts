@@ -218,9 +218,14 @@ function listenHost() {
 }
 
 /** What can be shared now: screens, then windows front to back, with their pictures. */
-export async function goLiveSources(): Promise<{ sources: GoLiveSource[]; message: string | null }> {
+export async function goLiveSources(): Promise<{ sources: GoLiveSource[]; message: string | null; captureMode?: 'wgc' | 'dxgi'; serviceDisabled?: boolean }> {
   const answer = await host.discordGoLive('sources').catch(() => null)
-  return { sources: answer?.sources ?? [], message: answer?.ok ? null : errorText(answer?.message, 'Exo couldn\'t list your windows. Try again.') }
+  return {
+    sources: answer?.sources ?? [],
+    message: answer?.ok ? null : errorText(answer?.message, 'Exo couldn\'t list your windows. Try again.'),
+    captureMode: answer?.captureMode,
+    serviceDisabled: answer?.serviceDisabled,
+  }
 }
 
 /** A fresh picture of a source, or of the stream while live (no source), as a data URL. */

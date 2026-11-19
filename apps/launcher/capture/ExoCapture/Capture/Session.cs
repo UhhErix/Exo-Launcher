@@ -23,11 +23,11 @@ internal sealed class CaptureSession : IDisposable
     internal readonly SessionOptions Options;
     internal readonly long Epoch = Win32.Now();
     private IFrameSource _source;
-    private readonly VideoConverter _converter;
-    private readonly ID3D11Texture2D _last;
-    private VideoEncoder _encoder;
+    private readonly VideoConverter? _converter;
+    private readonly ID3D11Texture2D? _last;
+    private VideoEncoder? _encoder;
     internal readonly SoundMixer? Sound;
-    private readonly Thread _thread;
+    private readonly Thread? _thread;
     private volatile bool _stop;
     private volatile bool _forceKey = true;
     private readonly Lock _listenerGate = new();
@@ -40,9 +40,9 @@ internal sealed class CaptureSession : IDisposable
     internal int Height { get; }
     internal int Fps => Options.Fps;
     internal bool Hdr { get; }
-    internal Codec Codec => _encoder.Choice.Codec;
-    internal string EncoderName => _encoder.Choice.Name;
-    internal int Bitrate => _encoder.Bitrate;
+    internal Codec Codec => _encoder!.Choice.Codec;
+    internal string EncoderName => _encoder!.Choice.Name;
+    internal int Bitrate => _encoder!.Bitrate;
     internal string SourceKind => _source.Kind;
     internal long Frames, Dropped;
     /// <summary>Why it stopped on its own, or null.</summary>
@@ -61,21 +61,33 @@ internal sealed class CaptureSession : IDisposable
         Gpu = gpu;
         Options = options;
         _source = source;
-        var (w, h) = (options.Width ?? source.Width, options.Height ?? source.Height);
-        // Within what every encoder takes: 4096 a side, even sides.
-        var scale = Math.Min(1.0, Math.Min(4096.0 / w, 4096.0 / h));
-        Width = Math.Max(64, (int)(w * scale) & ~1);
-        Height = Math.Max(64, (int)(h * scale) & ~1);
-        var codecs = options.Codecs ?? [Codec.Av1, Codec.Hevc, Codec.H264];
-        Hdr = options.Hdr && source.Hdr;
-        _encoder = OpenEncoder(codecs, Hdr);
-        if (Hdr && _encoder.Choice.Codec == Codec.H264) Hdr = false;
-        var inFormat = source.Hdr ? Format.R16G16B16A16_Float : Format.B8G8R8A8_UNorm;
-        _converter = new VideoConverter(gpu, source.Width, source.Height, inFormat, Width, Height, Hdr ? Format.P010 : Format.NV12, Hdr);
-        _last = gpu.Texture(Width, Height, Hdr ? Format.P010 : Format.NV12);
-        if (options.Sound) Sound = new SoundMixer(Epoch, (track, aac, time) => Deliver(new Packet(track, aac, time, true)));
-        _thread = new Thread(Run) { IsBackground = true, Name = "Exo Capture clock", Priority = ThreadPriority.AboveNormal };
-        _thread.Start();
+        try
+        {
+            var (w, h) = (options.Width ?? source.Width, options.Height ?? source.Height);
+            // Within what every encoder takes: 4096 a side, even sides.
+            var scale = Math.Min(1.0, Math.Min(4096.0 / w, 4096.0 / h));
+            Width = Math.Max(64, (int)(w * scale) & ~1);
+            Height = Math.Max(64, (int)(h * scale) & ~1);
+            var codecs = options.Codecs ?? [Codec.Av1, Codec.Hevc, Codec.H264];
+            Hdr = options.Hdr && source.Hdr;
+            _encoder = OpenEncoder(codecs, Hdr);
+            if (Hdr && _encoder.Choice.Codec == Codec.H264) Hdr = false;
+            var inFormat = source.Hdr ? Format.R16G16B16A16_Float : Format.B8G8R8A8_UNorm;
+            _converter = new VideoConverter(gpu, source.Width, source.Height, inFormat, Width, Height, Hdr ? Format.P010 : Format.NV12, Hdr);
+            _last = gpu.Texture(Width, Height, Hdr ? Format.P010 : Format.NV12);
+            if (options.Sound) Sound = new SoundMixer(Epoch, (track, aac, time) => Deliver(new Packet(track, aac, time, true)));
+            _thread = new Thread(Run) { IsBackground = true, Name = "Exo Capture clock", Priority = ThreadPriority.AboveNormal };
+            _thread.Start();
+        }
+        catch
+        {
+            Sound?.Dispose();
+            _last?.Dispose();
+            _converter?.Dispose();
+            _encoder?.Dispose();
+            _source.Dispose();
+            throw;
+        }
     }
 
     /// <summary>The bit rate a clip gets: about 0.1 bit a pixel at quality 50 in HEVC, doubling every 25 points.</summary>
@@ -135,7 +147,7 @@ internal sealed class CaptureSession : IDisposable
 
     internal void RequestKeyFrame() => _forceKey = true;
 
-    internal void SetBitrate(int bitrate) => _encoder.SetBitrate(bitrate);
+    internal void SetBitrate(int bitrate) => _encoder!.SetBitrate(bitrate);
 
     /// <summary>The MP4 description of the video track, once the encoder has named its parameter sets.</summary>
     internal TrackInfo? VideoTrack => _videoTrack;
@@ -159,7 +171,7 @@ internal sealed class CaptureSession : IDisposable
     {
         try
         {
-            _videoTrack = Bitstream.Track(Codec, _encoder.SequenceHeader, keyFrame, Width, Height, Hdr);
+            _videoTrack = Bitstream.Track(Codec, _encoder!.SequenceHeader, keyFrame, Width, Height, Hdr);
             if (_videoTrack is null) return;
             var stream = _encoder.SequenceHeader is { } h ? [.. h, .. keyFrame] : keyFrame;
             var sets = Bitstream.ParameterSets(Codec, stream);
@@ -212,7 +224,7 @@ internal sealed class CaptureSession : IDisposable
                     if (f.Time != lastTime) { lastFrame = Win32.Now(); lastTime = f.Time; }
                     try
                     {
-                        _converter.Convert(f.Texture, _last, f.Crop, f.Flip);
+                        _converter!.Convert(f.Texture, _last!, f.Crop, f.Flip);
                         if (_wantShot) lock (_shotGate) { KeepForShot(f); _wantShot = false; _shotReady.Set(); }
                         have = true;
                     }
@@ -224,7 +236,7 @@ internal sealed class CaptureSession : IDisposable
                     if (Rescue(_source) is { } replacement) { _source.Dispose(); _source = replacement; }
                 }
                 if (!have || Gate?.Invoke() == false) continue;
-                Gpu.Context.CopyResource(_encoder.NextInput(), _last);
+                Gpu.Context.CopyResource(_encoder!.NextInput(), _last!);
                 var key = _forceKey;
                 if (_encoder.Encode(tick, interval, key))
                 {
@@ -318,11 +330,11 @@ internal sealed class CaptureSession : IDisposable
     public void Dispose()
     {
         _stop = true;
-        _thread.Join(3000);
+        _thread?.Join(3000);
         Sound?.Dispose();
-        _encoder.Dispose();
-        _converter.Dispose();
-        _last.Dispose();
+        _encoder?.Dispose();
+        _converter?.Dispose();
+        _last?.Dispose();
         _sourceCopy?.Dispose();
         _source.Dispose();
     }

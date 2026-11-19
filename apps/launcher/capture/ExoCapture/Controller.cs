@@ -84,7 +84,7 @@ internal sealed partial class Controller : IDisposable
     private long _replayRestartAt;
     private readonly string _obs = Path.Combine(AppContext.BaseDirectory, "obs");
     private bool _hookFailed;
-    private readonly Dictionary<long, GoLive> _streams = [];
+    private readonly StreamTable<GoLive> _streams = new();
     private long _nextStream;
     private volatile bool _closing;
     private CancellationTokenSource? _shrinkCts, _concatCts;
@@ -124,9 +124,9 @@ internal sealed partial class Controller : IDisposable
             case "stream.start": return StartStream(p);
             case "stream.stop": return StopStream(p);
             case "stream.thumbs": return GoLive.Thumbs(GpuDevice.ForMonitor, p?["items"] as JsonArray ?? [], p.Int("width", 320));
-            case "stream.preview": return CurrentStream()?.Preview(p.Int("width", 480)) is { } jpeg ? JsonValue.Create(jpeg) : JsonValue.Create("");
-            case "stream.bitrate": CurrentStream()?.SetBitrate(Math.Clamp(p.Int("bitrate", 6_000_000), 300_000, 80_000_000)); return true;
-            case "stream.keyframe": CurrentStream()?.Keyframe(); return true;
+            case "stream.preview": return StreamFor(p)?.Preview(p.Int("width", 480)) is { } jpeg ? JsonValue.Create(jpeg) : JsonValue.Create("");
+            case "stream.bitrate": StreamFor(p)?.SetBitrate(Math.Clamp(p.Int("bitrate", 6_000_000), 300_000, 80_000_000)); return true;
+            case "stream.keyframe": StreamFor(p)?.Keyframe(); return true;
             case "voice.feed": return StartFeed(p);
             case "clip.voiced": return ClipVoiced(p);
             default: throw new CaptureException("Unknown request.");
@@ -346,26 +346,14 @@ internal sealed partial class Controller : IDisposable
     private (IFrameSource Source, Func<bool>? Gate) OpenSource(GpuDevice gpu, nint window, nint monitor)
     {
         var interval = TimeSpan.FromTicks(10_000_000 / Math.Max(1, _config.MaxFps));
-        var wgc = WgcSource.Available(out _);
         var hdr = DuplicationSource.MonitorIsHdr(gpu, monitor);
         if (window == 0)
-        {
-            if (wgc)
-                try { return (WgcSource.ForMonitor(gpu, monitor, hdr, _config.Cursor, "(screen)", interval), null); }
-                catch (CaptureException ex) { Host.Log("Windows capture: " + ex.Message + "; the screen's own copy instead."); }
-            return (new DuplicationSource(gpu, monitor, 0, hdr, "(screen)"), null);
-        }
+            return (CaptureSources.OpenCaptureSource(gpu, false, monitor, _config.Cursor, interval, hdr, "(screen)"), null);
         var fills = GameWindow.FillsMonitor(window, monitor);
         Func<bool>? gate = fills ? () => Win32.GetAncestor(Win32.GetForegroundWindow(), Win32.GA_ROOT) == window : null;
-        if (wgc)
-            try
-            {
-                return fills
-                    ? (WgcSource.ForMonitor(gpu, monitor, hdr, _config.Cursor, "(the game's screen)", interval), gate)
-                    : (WgcSource.ForWindow(gpu, window, hdr, _config.Cursor, "(game window)", interval), null);
-            }
-            catch (CaptureException ex) { Host.Log("Windows capture: " + ex.Message + "; the screen's own copy instead."); }
-        return (new DuplicationSource(gpu, monitor, fills ? 0 : window, hdr, fills ? "(the game's screen)" : "(game window)"), gate);
+        var source = CaptureSources.OpenCaptureSource(gpu, !fills, fills ? monitor : window, _config.Cursor, interval, hdr,
+            fills ? "(the game's screen)" : "(game window)");
+        return (source, gate);
     }
 
     /// <summary>Five seconds without a picture from the game: OBS's hook, if this game may have it.</summary>

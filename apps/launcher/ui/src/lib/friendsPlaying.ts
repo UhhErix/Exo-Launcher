@@ -1,5 +1,5 @@
 import { createContext, useCallback, useEffect, useState } from 'react'
-import type { DiscordFriend, DiscordPresence } from './discord'
+import type { DiscordFriend, DiscordPresence, DiscordRestricted } from './discord'
 import { host, onHostEvent, type Game } from './host'
 import { onPageActivityChanged, pageIsVisible } from './pageActivity'
 import { findLibraryGameByTitle } from './library'
@@ -24,10 +24,16 @@ function changes(friend: DiscordFriend, event: DiscordPresence) {
  * for every server member on screen in Discord: only a friend's that changes what shows redraws, and a burst of them
  * (a big server coming online) lands as one redraw. reload: read again now (after an accept or a remove).
  */
-export function useFriends(): { friends: DiscordFriend[]; loaded: boolean; reload: () => void } {
+export function useFriends(): { friends: DiscordFriend[]; blocked: DiscordRestricted[]; loaded: boolean; reload: () => void } {
   const [friends, setFriends] = useState<DiscordFriend[]>([])
+  const [blocked, setBlocked] = useState<DiscordRestricted[]>([])
   const [loaded, setLoaded] = useState(false)
-  const reload = useCallback(() => { host.discordFriends().then(result => setFriends(result.friends)).catch(() => { }).finally(() => setLoaded(true)) }, [])
+  const reload = useCallback(() => {
+    host.discordFriends().then(result => {
+      setFriends(result.friends)
+      setBlocked(result.restricted?.blocked ?? [])
+    }).catch(() => { }).finally(() => setLoaded(true))
+  }, [])
   useEffect(() => {
     let stale = false
     const load = reload
@@ -57,7 +63,7 @@ export function useFriends(): { friends: DiscordFriend[]; loaded: boolean; reloa
     })
     return () => { window.clearTimeout(timer); window.clearTimeout(flush); offActivity(); offChanged(); offPresence() }
   }, [reload])
-  return { friends, loaded, reload }
+  return { friends, blocked, loaded, reload }
 }
 
 /** The library games a friend is playing now, by the activity's name as Discord gives it (Playing or Competing). */

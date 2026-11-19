@@ -406,9 +406,10 @@ internal sealed partial class Controller
 
     // ---------------------------------------------------------------- Go Live
 
-    private GoLive? CurrentStream()
+    private GoLive? StreamFor(JsonNode? p)
     {
-        lock (_gate) return _streams.Values.LastOrDefault();
+        var id = p.Long("id", 0);
+        lock (_gate) return _streams.Get(id);
     }
 
     private JsonNode StartStream(JsonNode? p)
@@ -422,20 +423,15 @@ internal sealed partial class Controller
         var cursor = p.Bool("cursor", true);
         var id = Interlocked.Increment(ref _nextStream);
         var stream = GoLive.Start(id, p, () => GpuFor(at), gpu =>
-        {
-            var interval = TimeSpan.FromMilliseconds(8);
-            if (WgcSource.Available(out _))
-                return window != 0 ? WgcSource.ForWindow(gpu, window, false, cursor, "(window)", interval) : WgcSource.ForMonitor(gpu, monitor, false, cursor, "(screen)", interval);
-            return new DuplicationSource(gpu, at, window, false, window != 0 ? "(window)" : "(screen)");
-        });
+            CaptureSources.OpenCaptureSource(gpu, window != 0, window != 0 ? window : monitor, cursor, TimeSpan.FromMilliseconds(8)));
         stream.Ended += reason =>
         {
-            lock (_gate) _streams.Remove(id);
+            lock (_gate) _streams.Remove(id, out _);
             Host.Log("Go Live ended: " + reason);
             Host.Event("stream.ended", new JsonObject { ["id"] = id, ["reason"] = reason });
             Task.Run(stream.Dispose);
         };
-        lock (_gate) _streams[id] = stream;
+        lock (_gate) _streams.Add(id, stream);
         Host.Log($"Go Live: {stream.Width}x{stream.Height} at {stream.Fps} fps, {stream.Bitrate / 1000} kbit/s, {Name(stream.Codec)}{(window != 0 ? " (window)" : " (screen)")}.");
         return new JsonObject
         {
@@ -451,13 +447,9 @@ internal sealed partial class Controller
 
     private JsonNode StopStream(JsonNode? p)
     {
-        GoLive? stream;
-        lock (_gate)
-        {
-            var id = p.Long("id", 0);
-            if (!_streams.Remove(id, out stream) && _streams.Count > 0 && id == 0) { stream = _streams.Values.Last(); _streams.Remove(stream.Id); }
-        }
-        stream?.Dispose();
+        List<GoLive> toStop;
+        lock (_gate) toStop = _streams.TakeStop(p);
+        foreach (var s in toStop) s.Dispose();
         return true;
     }
 
@@ -596,5 +588,55 @@ internal sealed class VoiceFeed
         Host.Log("Sound: Exo's voice feed ended");
         Mixer?.FeedEnded(_mic());
         Ended?.Invoke();
+    }
+}
+
+internal sealed class StreamTable<T> where T : class
+{
+    private readonly Dictionary<long, T> _items = [];
+    private readonly List<long> _order = [];
+    private long _currentId;
+
+    internal long CurrentId => _currentId;
+    internal T? Current => _currentId != 0 && _items.TryGetValue(_currentId, out var item) ? item : null;
+    internal IEnumerable<T> Values => _items.Values;
+    internal T? Get(long id) => id > 0 && _items.TryGetValue(id, out var item) ? item : Current;
+
+    internal void Clear()
+    {
+        _items.Clear();
+        _order.Clear();
+        _currentId = 0;
+    }
+
+    internal void Add(long id, T item)
+    {
+        _items[id] = item;
+        _order.Remove(id);
+        _order.Add(id);
+        _currentId = id;
+    }
+
+    internal bool Remove(long id, out T? item)
+    {
+        if (!_items.Remove(id, out item)) return false;
+        _order.Remove(id);
+        if (_currentId == id) _currentId = _order.Count > 0 ? _order[^1] : 0;
+        return true;
+    }
+
+    internal List<T> TakeStop(JsonNode? p)
+    {
+        if (p.Bool("all", false))
+        {
+            var all = _items.Values.ToList();
+            _items.Clear();
+            _order.Clear();
+            _currentId = 0;
+            return all;
+        }
+        var id = p.Long("id", 0);
+        if (id <= 0 || !Remove(id, out var item) || item is null) return [];
+        return [item];
     }
 }

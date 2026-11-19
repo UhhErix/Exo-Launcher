@@ -115,7 +115,7 @@ internal sealed class GoLiveCapture : IAsyncDisposable
     }
 
     /// <summary>Starts the add-on's stream of a source; the capture, or why not.</summary>
-    internal static async Task<(GoLiveCapture? Capture, string? Error)> StartAsync(CaptureAddon addon, GoLiveSources.Source source, GoLivePlan plan, CancellationToken ct, bool hevc = false)
+    internal static async Task<(GoLiveCapture? Capture, string? Error)> StartAsync(CaptureAddon addon, GoLiveSources.Source source, GoLivePlan plan, CancellationToken ct, bool hevc = false, bool allowFallback = true)
     {
         var pipe = new AnonymousPipeServerStream(PipeDirection.In, HandleInheritability.None, 1 << 20);
         nint remote;
@@ -141,6 +141,7 @@ internal sealed class GoLiveCapture : IAsyncDisposable
                 ["fps"] = plan.Fps,
                 ["bitrate"] = plan.Bitrate,
                 ["codec"] = hevc ? "hevc" : "h264",
+                ["allowFallback"] = allowFallback,
                 ["cursor"] = true,
                 ["pipe"] = (long)remote,
             }, ct).WaitAsync(TimeSpan.FromSeconds(10), ct).ConfigureAwait(false);
@@ -156,6 +157,8 @@ internal sealed class GoLiveCapture : IAsyncDisposable
         }
         catch (Exception ex) when (ex is InvalidOperationException or TimeoutException or OperationCanceledException)
         {
+            if (ex.Message.Contains("0x80070422", StringComparison.OrdinalIgnoreCase))
+                CaptureServiceHealth.MarkServiceDisabled();
             AppLog.Info("Discord video: Go Live capture did not start: " + ex.Message);
             await capture.DisposeAsync().ConfigureAwait(false);
             return (null, Explain(ex));
@@ -169,6 +172,8 @@ internal sealed class GoLiveCapture : IAsyncDisposable
     internal static string Explain(Exception ex) => ex switch
     {
         InvalidOperationException { Message: "Unknown request." } => "Exo Capture needs updating to share your screen.",
+        InvalidOperationException e when e.Message.Contains("0x80070422", StringComparison.OrdinalIgnoreCase) =>
+            "Windows Capture Service is disabled (0x80070422). Enable CaptureService in Windows Services, or Exo will use screen compatibility mode.",
         InvalidOperationException e when e.Message.StartsWith("capture the window", StringComparison.Ordinal) =>
             "Windows didn't let Exo capture that window. Share the screen it's on instead.",
         InvalidOperationException e when e.Message.StartsWith("capture the screen", StringComparison.Ordinal) =>
@@ -200,7 +205,9 @@ internal sealed class GoLiveCapture : IAsyncDisposable
     {
         try
         {
-            var reply = await _addon.CallAsync("stream.preview", new JsonObject { ["width"] = width }, CancellationToken.None)
+            var req = new JsonObject { ["width"] = width };
+            if (_id > 0) req["id"] = _id;
+            var reply = await _addon.CallAsync("stream.preview", req, CancellationToken.None)
                 .WaitAsync(TimeSpan.FromSeconds(3)).ConfigureAwait(false);
             return reply is JsonValue v && v.TryGetValue<string>(out var data) && data.Length > 0 ? "data:image/jpeg;base64," + data : null;
         }
@@ -211,7 +218,9 @@ internal sealed class GoLiveCapture : IAsyncDisposable
     internal void SetBitrate(int bitrate)
     {
         Bitrate = bitrate;
-        _ = _addon.CallAsync("stream.bitrate", new JsonObject { ["bitrate"] = bitrate }, CancellationToken.None)
+        var req = new JsonObject { ["bitrate"] = bitrate };
+        if (_id > 0) req["id"] = _id;
+        _ = _addon.CallAsync("stream.bitrate", req, CancellationToken.None)
             .ContinueWith(t => _ = t.Exception, TaskContinuationOptions.OnlyOnFaulted);
     }
 
@@ -221,7 +230,8 @@ internal sealed class GoLiveCapture : IAsyncDisposable
         var now = Environment.TickCount64;
         var last = Interlocked.Read(ref _lastKeyframe);
         if (now - last < 250 || Interlocked.CompareExchange(ref _lastKeyframe, now, last) != last) return;
-        _ = _addon.CallAsync("stream.keyframe", null, CancellationToken.None)
+        var req = _id > 0 ? new JsonObject { ["id"] = _id } : null;
+        _ = _addon.CallAsync("stream.keyframe", req, CancellationToken.None)
             .ContinueWith(t => _ = t.Exception, TaskContinuationOptions.OnlyOnFaulted);
     }
 
@@ -288,7 +298,11 @@ internal sealed class GoLiveCapture : IAsyncDisposable
 
     private void OnAddon(string name, JsonNode? data)
     {
-        if (name == "stream.ended") End(data?["reason"]?.GetValue<string>() is { Length: > 0 } reason ? reason : "the picture stopped");
+        if (name == "stream.ended")
+        {
+            if (data?["id"] is JsonValue idVal && idVal.TryGetValue<long>(out var eid) && _id != 0 && eid != _id) return;
+            End(data?["reason"]?.GetValue<string>() is { Length: > 0 } reason ? reason : "the picture stopped");
+        }
         else if (name == "exited") End("Exo Capture stopped");
     }
 
@@ -302,12 +316,15 @@ internal sealed class GoLiveCapture : IAsyncDisposable
     {
         if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
         _addon.Event -= OnAddon;
-        try
+        if (_id > 0)
         {
-            await _addon.CallAsync("stream.stop", new JsonObject { ["id"] = _id }, CancellationToken.None)
-                .WaitAsync(TimeSpan.FromSeconds(3)).ConfigureAwait(false);
+            try
+            {
+                await _addon.CallAsync("stream.stop", new JsonObject { ["id"] = _id }, CancellationToken.None)
+                    .WaitAsync(TimeSpan.FromSeconds(3)).ConfigureAwait(false);
+            }
+            catch (Exception ex) when (ex is InvalidOperationException or TimeoutException) { }
         }
-        catch (Exception ex) when (ex is InvalidOperationException or TimeoutException) { }
         // The add-on closing its end ends the read; if it didn't, the read is cancelled.
         lock (_threadGate) if (_readerThread != 0) CancelSynchronousIo(_readerThread);
         _pipe.Dispose();
