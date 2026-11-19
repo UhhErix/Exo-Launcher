@@ -49,6 +49,8 @@ export default {
     { selector: ':root', value: scaled(16), why: 'The rem base Tailwind spacing is measured in, not a text size on a surface' },
     { selector: '.exo-game-title', value: scaled(28), why: 'Game sheet: the game title' },
     { selector: '.exo-music-header h2', value: scaled(28), why: 'Music: a playlist, album or artist page title beside its cover, as on the game sheet' },
+    { selector: '.exo-music-immersive-text h2', value: scaled(28), why: "Music's Immersive: the song's title under its full-window cover, a page title as on a playlist's page" },
+    { selector: '.exo-music-immersive .exo-music-lyrics', value: scaled(32), why: "Music's Immersive: the lyrics as the full window's subject, read from across the room" },
     { selector: '.exo-pc-about-name', value: scaled(28), why: "PC: this PC's name as the room's hero, a page title as on the game sheet" },
     { selector: ':root', value: scaled(28), why: 'The page title token (--exo-type-page)' },
     { selector: ':root', value: scaled(32), why: 'The first-run title token (--exo-type-first-run)' },

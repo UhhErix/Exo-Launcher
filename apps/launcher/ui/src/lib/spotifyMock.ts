@@ -11,6 +11,14 @@ const episode = (n: number): PlayerTrack => track(n, {
   uri: `spotify:episode:mockepisode${n}`, title: `Episode ${n}`, album: null, artists: [{ uri: '', name: 'Mock Podcasts' }],
   date: `2026-10-${String(10 + n).padStart(2, '0')}`, played: n === 1, progressMs: n === 2 ? 600_000 : undefined, durationMs: 2_400_000,
 })
+/** The mock's playing song (Song 1): a cover drawn here, and lyrics timed to its first minute, looping with it. */
+export const MOCK_SONG_MS = 180_000
+export const mockArtwork = 'data:image/svg+xml,' + encodeURIComponent(
+  '<svg xmlns="http://www.w3.org/2000/svg" width="600" height="600"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1">' +
+  '<stop offset="0" stop-color="#ff5f6d"/><stop offset="0.55" stop-color="#7b2ff7"/><stop offset="1" stop-color="#00c6ff"/></linearGradient></defs>' +
+  '<rect width="600" height="600" fill="url(#g)"/><circle cx="420" cy="190" r="120" fill="#ffd36e" opacity="0.85"/></svg>')
+const LYRICS = ['Lights come up over the city', 'Every window singing the same', 'I hear you under the noise', 'Calling out my name',
+  'Hold on, hold on', 'We are almost home', 'Turn it up and let it carry', 'Everything we have ever known', 'Hold on, hold on', 'We are almost home']
 const many = <T,>(count: number, make: (n: number) => T) => Array.from({ length: count }, (_, i) => make(i + 1))
 
 const VIEWS: Record<string, (params: Record<string, unknown>) => PlayerViewData> = {
@@ -51,13 +59,13 @@ const VIEWS: Record<string, (params: Record<string, unknown>) => PlayerViewData>
     playlists: [], shows: [], audiobooks: many(3, n => card('show', n + 5, { subtitle: 'Author' })), episodes: many(2, episode) }) as unknown as PlayerViewData,
   credits: () => ({ title: 'Song 1', groups: [{ role: 'Performed by', people: [{ name: 'Artist 1', uri: 'spotify:artist:mockartist1' }] }, { role: 'Written by', people: [{ name: 'Writer', uri: '' }] }], sources: 'Mock Records' }),
   radio: () => ({ uri: 'spotify:playlist:mockradio' }),
-  player: () => ({ trackUri: 'spotify:track:mocktrack1', contextUri: '', shuffle: false, repeat: 0, liked: true, canShuffle: true, canRepeat: true, speed: 1, title: 'Song 1', artists: [{ uri: 'spotify:artist:mockartist1', name: 'Artist 1' }] }) as unknown as PlayerViewData,
+  player: () => ({ trackUri: 'spotify:track:mocktrack1', contextUri: '', shuffle: false, repeat: 0, liked: true, canShuffle: true, canRepeat: true, speed: 1, title: 'Song 1', image: mockArtwork, artists: [{ uri: 'spotify:artist:mockartist1', name: 'Artist 1' }] }) as unknown as PlayerViewData,
   queue: () => ({ current: track(1), queued: many(3, n => track(n + 1)), next: many(3, n => track(n + 5)) }),
   devices: () => ({ devices: [{ id: 'd1', name: 'This PC', type: 'COMPUTER', active: true, local: true }, { id: 'd2', name: 'Kitchen', type: 'SPEAKER', active: false, local: false }] }),
   jam: () => ({ experience: 'PREMIUM', session: { owner: true, link: 'https://spotify.link/mockjam', canRemove: true, guestsPlay: true, guestVolume: false,
     members: [{ id: 'm1', name: 'You', image: '', me: true, host: true }, { id: 'm2', name: 'Friend', image: '', me: false, host: false }] } }),
   friends: () => ({ friends: [] }),
-  lyrics: () => ({ lines: [], synced: false }),
+  lyrics: () => ({ lines: LYRICS.map((text, i) => ({ start: 4000 + i * 4500, text })), synced: true }),
   playlists: () => ({ items: many(4, n => card('playlist', n)) }),
   audio: () => ({ quality: 5, lossless: true, crossfade: false, crossfadeMs: 5000, gapless: true, autoMix: false, normalize: true, mono: false, exclusive: false, smartShuffle: null,
     equalizer: { supported: false, enabled: null, filters: null } }) as unknown as PlayerViewData,

@@ -1,4 +1,4 @@
-import { spotifyMock } from './spotifyMock'
+import { MOCK_SONG_MS, mockArtwork, spotifyMock } from './spotifyMock'
 import { mockAdmin, mockAppMessages, mockFew, mockFewMessages, mockVoiceNow, mockApps, mockChannels, mockChannelsFor, mockDiscordStatus, mockMessageId, mockFriends, mockHome, mockMembers, mockMessages, mockProfile } from './discordMock'
 /** Browser development fixtures. Dynamically loaded only outside the packaged host. */
 import type { Game, GameProperties, LauncherSettings, InstallProgress, InstalledApp, ReplacedApp, RuntimeItem, StartupItem, StartupState, StoreGift } from './host'
@@ -990,6 +990,12 @@ async function mockMouseCore(params?: Record<string, unknown>) {
   }
 }
 
+/** The mock's song (spotifyMock › Song 1), playing from the page's start and looping, so the room and Immersive have one. */
+const mockSong = { playing: true, from: 0, since: 0 }
+const mockSongAt = () => (mockSong.from + (mockSong.playing ? performance.now() - mockSong.since : 0)) % MOCK_SONG_MS
+const mockPlayback = () => ({ provider: 'spotify', status: mockSong.playing ? 'playing' : 'paused', title: 'Song 1', artist: 'Artist 1', artworkDataUrl: mockArtwork,
+  positionMs: mockSongAt(), durationMs: MOCK_SONG_MS, positionAgeMs: 0, rate: mockSong.playing ? 1 : 0, canPlay: true, canPause: true, canPrev: true, canNext: true, canSeek: true })
+
 const MOCK_HANDLERS: Record<string, MockHandler> = {
   ...spotifyMock,
   'library.get': mockLibraryGet,
@@ -1244,10 +1250,17 @@ const MOCK_HANDLERS: Record<string, MockHandler> = {
   'shell.prepare': () => ({ ok: true }),
   'shell.painted': () => ({ ok: true }),
   'shell.ready': () => ({ ok: true }),
-  'music.playback': () => ({ ok: true, playback: null }),
+  'music.playback': () => ({ ok: true, playback: mockPlayback() }),
   // The mock's music level: a set answers with the level it took (the room's slider follows it).
   'music.volume': (p) => { if (typeof p?.level === 'number') mockMusicLevel = p.level; return { ok: true, level: mockMusicLevel, muted: mockMusicLevel <= 0, source: 'app' } },
-  'music.control': () => ({ ok: false, message: 'Open Exo to control music.' }),
+  'music.control': (p) => {
+    const at = mockSongAt()
+    if (p?.action === 'toggle') { mockSong.playing = !mockSong.playing; mockSong.from = at; mockSong.since = performance.now() }
+    else if (p?.action === 'seek' && typeof p.positionMs === 'number') { mockSong.from = p.positionMs; mockSong.since = performance.now() }
+    else return { ok: false, message: 'Open Exo to control music.' }
+    emitHostEvent('music.playback', mockPlayback())
+    return { ok: true }
+  },
   'deps.list': mockDepsList,
   'replaced.scan': () => ({ ok: true, cleared: 2, apps: MOCK_REPLACED }),
   'apps.list': () => ({ ok: true, programs: MOCK_PROGRAMS }),
