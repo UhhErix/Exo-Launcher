@@ -1,6 +1,7 @@
 # Changelog
 
 ## 3.26.0 — November 14, 2026
+- **Things line up.** In Discord the panes' titles share one line and every list starts at the same edge (channels, categories, messages, friends); in the PC room the This PC, Updates and Shaders titles sit on one line. _Checked in code only._
 - **Five rooms, in the middle.** The top bar has Library, Store, Discord, Music and PC, centered in the window. Devices moved into the PC room: its button sits on the This PC line beside Apps, and nothing in it changed. The mouse's capsule left the top bar; its battery shows in the FPS counter. _Checked in code only._
 - **Battery in the FPS counter.** Settings › FPS counter can add Lowest battery: the wireless mouse, headset or controller lowest on charge, as "82% MOUSE", read once a minute. _Checked in code only._
 - **One switch for upscalers in games with anti-cheat.** Settings › General › Also in games with anti-cheat lets DLSS, FSR and XeSS update in every such game at once, instead of allowing each game. It can risk a ban; Riot games and Vanguard are never touched, and frame generation mods still stay out of games with anti-cheat. Turning the upscaler switch on or off on its own also saves now. _Checked in code only._
