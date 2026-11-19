@@ -1,6 +1,6 @@
 ---
 name: exo-design
-description: Exo Launcher's design system and visual-change checklist. Use for any change to how Exo looks, moves or reads, in ui/ or mouse/, even a one-line CSS tweak: CSS, tokens, Liquid Glass, type, icons, motion, hover and press states, layout, menus, sheets, a room's UI (Library, Store, Discord, Music, PC, Devices, Settings), UI copy, or a mockup. Not for host C#, RPC or logic changes that draw nothing new.
+description: "Exo Launcher's design system and visual-change checklist. Use for any change to how Exo looks, moves or reads, in ui/ or mouse/, even a one-line CSS tweak: CSS, tokens, Liquid Glass, type, icons, motion, hover and press states, layout, menus, sheets, a room's UI (Library, Store, Discord, Music, PC, Devices, Settings), UI copy, or a mockup. Not for host C#, RPC or logic changes that draw nothing new."
 ---
 
 # Exo design system
