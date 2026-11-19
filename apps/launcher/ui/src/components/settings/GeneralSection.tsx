@@ -29,6 +29,8 @@ export const GeneralSection = memo(function GeneralSection({ settings, onSave: s
         onChange={value => save({ reduceMotion: value })} />
       <SwitchRow id="set-start-maximized" label="Start maximized" checked={settings?.startMaximized === true} disabled={disabled}
         onChange={value => save({ startMaximized: value })} />
+      <SwitchRow id="set-start-with-windows" label="Open Exo when Windows starts" checked={settings?.startWithWindows === true} disabled={disabled}
+        onChange={value => save({ startWithWindows: value })} />
       <SwitchRow id="set-keep-awake" label="Keep PC awake during downloads and shader warming" checked={settings?.keepAwakeDownloads !== false} disabled={disabled}
         onChange={value => save({ keepAwakeDownloads: value })} />
     </Section>

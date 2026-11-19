@@ -7,6 +7,7 @@ import type { MouseStatus } from '@openmouse/protocol/drivers/mouse-types'
 import { capabilitiesForFormat } from '@openmouse/protocol/drivers/logitech/onboard-profiles'
 import { exoHid, onHostEvent } from './exo-hid'
 import { loadSaved, saveValue, savedValue } from './saved'
+import { attachRazerAngle } from './razer-angle'
 
 /** One connectable device: the interface its best driver wants. */
 /** others: the product's other interfaces, the next best first, tried when this one won't open (a Razer receiver's). */
@@ -163,6 +164,7 @@ export function useMouse() {
       for (const device of [pick.device, ...pick.others]) {
         const next = drivers.createSupportedClient(device)
         if (!next) continue
+        attachRazerAngle(next)
         try {
           if (can(next, 'open')) await invoke(next, 'open', [])
           const status = withHostBunnyHop(await next.readStatus(), next, pick.id)

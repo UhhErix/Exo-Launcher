@@ -1,30 +1,27 @@
-import { useCallback, useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent, type ReactNode, type RefObject } from 'react'
+import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode, type RefObject } from 'react'
 import { GameOverlay } from '../../motion'
-import { Check, ChevronLeft, Close, History, Notes, Record, Repeat, Scissors, Settings, Star as StarGlyph, Trash } from '../../brand/icons'
+import { Check, ChevronLeft, Close, History, Info, More, Notes, Pencil, Record, Scissors, Settings, Share, Star as StarGlyph, Trash } from '../../brand/icons'
 import { host, onHostEvent, type Game } from '../../lib/host'
-import { cancelReel, clearReelMessage, clock, closeCaptures, keysLabel, makeReel, onReelDone, useCapture, useCapturesSheet, useReel, type CaptureExport, type CaptureItem } from '../../lib/capture'
+import { cancelReel, clearReelMessage, clock, closeCaptures, keysLabel, makeReel, onReelDone, useCapture, useCapturesSheet, useReel, type CaptureItem } from '../../lib/capture'
+import { byDay, filterCaptures, monthTitle, onThisDay, scrubStops, type Day, type GalleryFilter } from '../../lib/gallery'
 import { reelOfGame, reelOfPicked } from '../../lib/reel'
 import type { NotesRequest } from '../../lib/notes'
 import { shouldReduceMotion } from '../../lib/motionPreference'
 import { report } from '../../lib/report'
 import { CaptureSettingsView } from './CaptureSettings'
+import { ClipEditor, playback, playerKey, useFrameKeys } from './ClipEditor'
 import { NotesView } from './NotesView'
 import { SnipEditor } from './SnipEditor'
-import { TimelineStrip } from './TimelineStrip'
-import { timeAt } from '../../lib/timeline'
+import { SendToDialog } from '../discord/MessageTools'
 import { pane, pressedArt, transition, visible } from '../../lib/viewTransition'
 import { ErrorNote } from '../ui/ErrorNote'
+import { Menu, type MenuItem } from '../ui/Menu'
 import { Wait, times } from '../ui/Wait'
 import { Spinner } from '../ui/Spinner'
 import { ActionButton } from '../ui/ConfirmButton'
 import { Progress } from '../ui/Progress'
 import { ArtImg } from '../ui/ArtImg'
 import { errorText, type PlainError } from '../../lib/errorWords'
-
-/** A capture plays at half volume, as the player's slider shows, until you move it; kept while Exo runs. */
-let playbackVolume = 0.5
-/** Muted stays as the viewer left it, like the volume; kept while Exo runs. */
-let playbackMuted = false
 
 /** The captures as last read: the sheet shows them at once the next time it opens, while the folder is read again. */
 let lastList: CaptureItem[] | null = null
@@ -46,7 +43,7 @@ function when(iso: string): string {
   if (date.toDateString() === today.toDateString()) return `Today ${time}`
   const yesterday = new Date(today.getTime() - 86_400_000)
   if (date.toDateString() === yesterday.toDateString()) return `Yesterday ${time}`
-  return `${date.toLocaleDateString(undefined, { day: 'numeric', month: 'short' })} ${time}`
+  return `${date.toLocaleDateString(undefined, date.getFullYear() === today.getFullYear() ? { day: 'numeric', month: 'short' } : { day: 'numeric', month: 'short', year: 'numeric' })} ${time}`
 }
 
 /** The captures folder a game's title gets, as the host names it (MainWindow.Capture.cs SafeCaptureName). */
@@ -61,8 +58,9 @@ function size(bytes: number): string {
   return bytes >= 1024 ** 3 ? `${(bytes / 1024 ** 3).toFixed(1)} GB` : `${Math.max(0.1, bytes / 1024 ** 2).toFixed(1)} MB`
 }
 
+
 /** The Captures sheet over any room: Exo Capture's clips, recordings and snips, and Exo Notes. */
-export function CapturesOverlay({ games, onDiscord }: { games: readonly Game[]; onDiscord: () => void }) {
+export function CapturesOverlay({ games }: { games: readonly Game[] }) {
   const sheet = useCapturesSheet()
   return (
     <GameOverlay
@@ -70,31 +68,34 @@ export function CapturesOverlay({ games, onDiscord }: { games: readonly Game[]; 
       label="Captures"
       scrim={<button type="button" className="exo-game-overlay-scrim" aria-label="Close" tabIndex={-1} onClick={closeCaptures} />}
     >
-      <CapturesSheet key={sheet.seq} gameId={sheet.gameId ?? null} itemId={sheet.itemId ?? null} edit={!!sheet.edit} settings={!!sheet.settings} notes={sheet.notes ?? null} games={games} onDiscord={onDiscord} />
+      <CapturesSheet key={sheet.seq} gameId={sheet.gameId ?? null} itemId={sheet.itemId ?? null} edit={!!sheet.edit} settings={!!sheet.settings} notes={sheet.notes ?? null} games={games} />
     </GameOverlay>
   )
 }
 
 /**
- * One card: the thumbnail; a video previews itself while hovered. Favorite and
- * Delete sit on its corner; while selecting, a click picks the card instead.
+ * One tile of the grid, edge to edge with its neighbours: the thumbnail; a video previews itself while hovered.
+ * Favorite and Delete sit on its corner while hovered; while selecting, a click picks the tile instead.
  */
-function CaptureCard({ item, selected, onOpen, onFavourite, onDelete }: {
+function CaptureCard({ item, selected, badge, onOpen, onFavourite, onDelete }: {
   item: CaptureItem
   /** Null: not selecting. */
   selected: boolean | null
+  /** A word over the tile's corner (On this day's "1 year ago"). */
+  badge?: string
   onOpen: () => void
   onFavourite: () => void
   onDelete: () => void
 }) {
   const [hover, setHover] = useState(false)
-  const name = `${item.kind === 'image' ? 'Snip' : 'Clip'} ${when(item.created)}`
+  const name = `${item.kind === 'image' ? 'Screenshot' : 'Clip'} ${when(item.created)}`
   return (
     <div className={`exo-capture-card${selected ? ' is-selected' : ''}`} onPointerEnter={() => setHover(true)} onPointerLeave={() => setHover(false)}>
       <button type="button" className="exo-capture-thumb" data-capture-id={item.id} onClick={onOpen} aria-label={name} aria-pressed={selected ?? undefined}>
         <ArtImg src={item.thumb} loading="lazy" decoding="async" fallback={<span className="exo-capture-thumb-empty" />} />
         {hover && selected === null && item.kind === 'video' && !shouldReduceMotion() ? <video src={item.url} muted autoPlay loop playsInline preload="metadata" /> : null}
         {item.durationMs ? <span className="exo-capture-duration">{clock(item.durationMs)}</span> : null}
+        {badge ? <span className="exo-capture-badge">{badge}</span> : null}
         {selected !== null ? (
           <span className="exo-capture-check" aria-hidden>
             {selected ? <Check size={14} /> : null}
@@ -117,92 +118,8 @@ function CaptureCard({ item, selected, onOpen, onFavourite, onDelete }: {
           </button>
         </div>
       ) : null}
-      <div className="exo-capture-meta tabular-nums">
-        <span>{when(item.created)}</span>
-      </div>
     </div>
   )
-}
-
-/** A trim point's keys: arrows move it a second (Shift: five), Home and End to as far as it goes. */
-function trimKey(event: ReactKeyboardEvent, value: number, min: number, max: number, set: (ms: number) => void) {
-  const step = event.shiftKey ? 5000 : 1000
-  const next = event.key === 'ArrowLeft' || event.key === 'ArrowDown' ? value - step
-    : event.key === 'ArrowRight' || event.key === 'ArrowUp' ? value + step
-      : event.key === 'Home' ? min : event.key === 'End' ? max : null
-  if (next === null) return
-  event.preventDefault()
-  set(Math.min(max, Math.max(min, next)))
-}
-
-/** In and out points on the clip's timeline; drag either, or click to seek. Each point is a slider for the keyboard too. */
-function TrimBar({ id, src, duration, start, end, time, onChange, onSeek }: {
-  id: string
-  src: string
-  duration: number
-  start: number
-  end: number
-  time: number
-  onChange: (start: number, end: number) => void
-  onSeek: (ms: number) => void
-}) {
-  const bar = useRef<HTMLDivElement>(null)
-  const drag = useRef<'start' | 'end' | 'seek' | null>(null)
-  const at = (event: ReactPointerEvent) => {
-    const box = bar.current!.getBoundingClientRect()
-    return timeAt(event.clientX, box.left, box.width, duration)
-  }
-  const pct = (ms: number) => `${duration ? (ms / duration) * 100 : 0}%`
-  return (
-    <div
-      ref={bar}
-      className="exo-trim"
-      role="group"
-      aria-label="Trim"
-      onPointerDown={event => {
-        const ms = at(event)
-        const near = Math.abs(ms - start) < Math.abs(ms - end) ? 'start' : 'end'
-        const box = bar.current!.getBoundingClientRect()
-        const handle = Math.abs(((near === 'start' ? start : end) / duration) * box.width - (event.clientX - box.left)) < 12
-        if (handle) { drag.current = near; event.currentTarget.setPointerCapture(event.pointerId) }
-        else { drag.current = 'seek'; event.currentTarget.setPointerCapture(event.pointerId); onSeek(ms) }
-      }}
-      onPointerMove={event => {
-        if (!drag.current) return
-        const ms = at(event)
-        if (drag.current === 'seek') onSeek(ms)
-        else if (drag.current === 'start') onChange(Math.min(ms, end - 500), end)
-        else onChange(start, Math.max(ms, start + 500))
-      }}
-      onPointerUp={() => { drag.current = null }}
-      onPointerCancel={() => { drag.current = null }}
-      onLostPointerCapture={() => { drag.current = null }}
-    >
-      <TimelineStrip id={id} src={src} durationMs={duration} />
-      <div className="exo-trim-dim" style={{ left: 0, width: pct(start) }} />
-      <div className="exo-trim-dim" style={{ right: 0, width: `calc(100% - ${pct(end)})` }} />
-      <div className="exo-trim-kept" style={{ left: pct(start), width: `calc(${pct(end)} - ${pct(start)})` }} />
-      <div className="exo-trim-time" style={{ left: pct(time) }} />
-      <span className="exo-trim-handle" style={{ left: pct(start) }} role="slider" tabIndex={0} aria-label="Start"
-        aria-valuemin={0} aria-valuemax={Math.round(end - 500)} aria-valuenow={Math.round(start)} aria-valuetext={clock(start)}
-        onKeyDown={event => trimKey(event, start, 0, end - 500, ms => onChange(ms, end))} />
-      <span className="exo-trim-handle" style={{ left: pct(end) }} role="slider" tabIndex={0} aria-label="End"
-        aria-valuemin={Math.round(start + 500)} aria-valuemax={Math.round(duration)} aria-valuenow={Math.round(end)} aria-valuetext={clock(end)}
-        onKeyDown={event => trimKey(event, end, start + 500, duration, ms => onChange(start, ms))} />
-    </div>
-  )
-}
-
-/** The viewer's speeds, slowest first; [ and ] step through them. */
-const SPEEDS = [0.5, 1, 2] as const
-type Speed = (typeof SPEEDS)[number]
-
-/** A key for the viewer: not one going into a field, a trim point (its arrows move it) or anything over the sheet. */
-function viewerKey(event: KeyboardEvent): boolean {
-  if (event.defaultPrevented || event.ctrlKey || event.altKey || event.metaKey) return false
-  const target = event.target instanceof HTMLElement ? event.target : null
-  if (target && target !== document.body && !target.closest('.exo-captures')) return false
-  return !target?.isContentEditable && !target?.closest('input, textarea, select, [role="slider"]')
 }
 
 /** Where the pointer is from an element's middle. */
@@ -215,7 +132,7 @@ function fromMiddle(element: Element, event: { clientX: number; clientY: number 
  * A snip, fitted to the stage. The wheel zooms in at the pointer, a drag moves it, and a double-click fits it again
  * (or, fitted, shows the snip's own pixels). Past twice its own size, its pixels stay square.
  */
-function ZoomImage({ src }: { src: string }) {
+function ZoomImage({ src, onSize }: { src: string; onSize: (size: { width: number; height: number }) => void }) {
   const image = useRef<HTMLImageElement>(null)
   const [view, setView] = useState({ scale: 1, x: 0, y: 0, square: false })
   const drag = useRef<{ x: number; y: number } | null>(null)
@@ -259,6 +176,7 @@ function ZoomImage({ src }: { src: string }) {
       src={src}
       alt=""
       draggable={false}
+      onLoad={event => onSize({ width: event.currentTarget.naturalWidth, height: event.currentTarget.naturalHeight })}
       className={zoomed ? `is-zoomed${panning ? ' is-panning' : ''}${view.square ? ' is-square' : ''}` : undefined}
       style={zoomed ? { transform: `translate(${view.x}px, ${view.y}px) scale(${view.scale})` } : undefined}
       onPointerDown={event => {
@@ -284,39 +202,6 @@ function ZoomImage({ src }: { src: string }) {
   )
 }
 
-/** Make smaller: Exo Capture re-saves the recording at a third of the size (it checks the result first). The press starts it; Exo says how it went. */
-function MakeSmaller({ item, disabled, onChanged, setNote }: {
-  item: CaptureItem
-  disabled: boolean
-  onChanged: (item: CaptureItem) => void
-  setNote: (note: Note | null) => void
-}) {
-  const [shrinking, setShrinking] = useState(false)
-  useEffect(() => onHostEvent('capture.shrunk', ({ id, item: next, before, after, message }) => {
-    if (id !== item.id) return
-    setShrinking(false)
-    if (next) {
-      onChanged(next)
-      setNote({ text: `Smaller now: ${size(before)} to ${size(after)}.` })
-    } else setNote({ text: message ?? 'Left as it was.' })
-  }), [item.id, onChanged, setNote])
-  const failed = 'Exo Capture could not make it smaller. Try again.'
-  const start = async () => {
-    setNote(null)
-    try {
-      const result = await host.captureItem(item.id, 'shrink')
-      if (!result.ok) { setNote({ text: errorText(result.message, failed), bad: true }); return }
-      setShrinking(true)
-      // The button's ring says it is working; a word from the host (how long, what first) still reads under it.
-      if (result.message) setNote({ text: result.message })
-    } catch (error) { setNote({ text: errorText(error, failed), bad: true }) }
-  }
-  return (
-    <button type="button" className="exo-set-btn" disabled={disabled || shrinking} onClick={() => void start()}>
-      {shrinking ? <Spinner label="Making it smaller" /> : null}Make smaller
-    </button>
-  )
-}
 
 /** What the viewer last said: a result, or what went wrong (bad). */
 type Note = { text: string; bad?: boolean }
@@ -329,8 +214,33 @@ function NoteLine({ note }: { note: Note | null }) {
     : <p className="exo-capture-note" role="status">{note.text}</p>
 }
 
-function Detail({ item, edit, onStep, onBack, onFavourite, onChanged, onDeleted, onAdded, onDiscord }: {
+/** The Info pane's facts: what the capture is, from the list and from the picture itself once it has loaded. */
+function InfoPane({ item, size: shown, game }: { item: CaptureItem; size: { width: number; height: number } | null; game: string }) {
+  const facts: [string, string][] = [
+    ['Game', game],
+    ['Taken', new Date(item.created).toLocaleString(undefined, { dateStyle: 'long', timeStyle: 'short' })],
+    ['Kind', item.kind === 'image' ? 'Screenshot' : item.derived ? 'Clip, made from another' : 'Clip'],
+  ]
+  if (shown) facts.push(['Resolution', `${shown.width} × ${shown.height}`])
+  if (item.durationMs) facts.push(['Length', clock(item.durationMs)])
+  facts.push(['Size', size(item.size)], ['Folder', `Exo Captures › ${item.game}`])
+  return (
+    <aside className="exo-viewer-info" aria-label="Info">
+      <dl className="tabular-nums">
+        {facts.map(([term, value]) => <div key={term}><dt>{term}</dt><dd>{value}</dd></div>)}
+      </dl>
+    </aside>
+  )
+}
+
+/**
+ * One capture, edge to edge (Windows Photos' viewer): a slim bar of Back, then Edit, Share, Favorite, Info, Delete and
+ * More; Left and Right step through the list, Escape and the mouse's Back go back to it. Info is a pane on demand.
+ * Edit opens the snip editor or the clip editor in its place.
+ */
+function Viewer({ item, game, edit, onStep, onBack, onFavourite, onChanged, onDeleted, onAdded }: {
   item: CaptureItem
+  game: string
   edit: boolean
   /** Left and Right: the capture before or after this one in the list. */
   onStep: (by: -1 | 1) => void
@@ -339,55 +249,19 @@ function Detail({ item, edit, onStep, onBack, onFavourite, onChanged, onDeleted,
   onChanged: (item: CaptureItem) => void
   onDeleted: () => void
   onAdded: (item: CaptureItem) => void
-  onDiscord: () => void
 }) {
   const video = useRef<HTMLVideoElement>(null)
-  const [duration, setDuration] = useState(item.durationMs ?? 0)
-  const [range, setRange] = useState<[number, number]>([0, item.durationMs ?? 0])
-  const [time, setTime] = useState(0)
-  const [busy, setBusy] = useState<CaptureExport | null>(null)
   const [note, setNote] = useState<Note | null>(null)
-  const [editing, setEditing] = useState(edit && item.kind === 'image')
-  const [speed, setSpeed] = useState<Speed>(1)
-  const [loop, setLoop] = useState(false)
-  const trimmed = duration > 0 && (range[0] > 250 || range[1] < duration - 250)
-
-  useEffect(() => {
-    if (!video.current) return
-    video.current.defaultPlaybackRate = speed
-    video.current.playbackRate = speed
-  }, [speed])
-
-  // The frame on screen, as the video presents each one: , and . step from it. Forward goes by the gap to the next
-  // frame, learned on the way (from 120 fps, twice as far whenever a step stays on its frame); back, to just before it.
-  const frame = useRef({ at: -1, gap: 1 / 120, from: -1, stepped: 0 })
-  useEffect(() => {
-    const el = video.current
-    if (!el) return
-    let handle = 0
-    const seen = (_now: number, meta: VideoFrameCallbackMetadata) => {
-      const f = frame.current
-      if (f.from >= 0) {
-        const from = f.from
-        f.from = -1
-        if (meta.mediaTime > from + 1e-6) f.gap = Math.min(meta.mediaTime - from, 1 / 24)
-        else if (f.gap < 1) { f.gap *= 2; f.from = from; el.currentTime = from + f.gap + 0.0005 }
-        else f.gap = 1 / 120 // the last frame: nothing comes after it
-      }
-      f.at = meta.mediaTime
-      // Plays only what stays after the trim: at its end, back to its start, paused unless Loop is on.
-      if (trimmed && !el.paused && meta.mediaTime * 1000 >= range[1]) {
-        el.currentTime = range[0] / 1000
-        if (!loop) el.pause()
-      }
-      handle = el.requestVideoFrameCallback(seen)
-    }
-    handle = el.requestVideoFrameCallback(seen)
-    return () => el.cancelVideoFrameCallback(handle)
-  }, [trimmed, range, loop])
+  const [editing, setEditing] = useState(edit)
+  const [info, setInfo] = useState(false)
+  const [sending, setSending] = useState(false)
+  const [shrinking, setShrinking] = useState(false)
+  const [shown, setShown] = useState<{ width: number; height: number } | null>(null)
+  const busy = sending || shrinking
+  useFrameKeys(video, !editing)
 
   // Escape and the mouse's Back button go back to the list, not out of the sheet: captured ahead of the sheet's own
-  // Escape. A menu or dialog that has focus over the viewer keeps its own Escape.
+  // Escape. A menu or dialog that has focus over the viewer keeps its own Escape. Left and Right step, outside full screen.
   useEffect(() => {
     if (editing) return
     const escape = (event: KeyboardEvent) => {
@@ -402,159 +276,131 @@ function Detail({ item, edit, onStep, onBack, onFavourite, onChanged, onDeleted,
       event.preventDefault()
       onBack()
     }
+    const arrows = (event: KeyboardEvent) => {
+      if (!playerKey(event) || document.fullscreenElement || sending) return
+      if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return
+      event.preventDefault()
+      onStep(event.key === 'ArrowLeft' ? -1 : 1)
+    }
     window.addEventListener('keydown', escape, true)
     window.addEventListener('mouseup', mouseBack, true)
+    window.addEventListener('keydown', arrows)
     return () => {
       window.removeEventListener('keydown', escape, true)
       window.removeEventListener('mouseup', mouseBack, true)
+      window.removeEventListener('keydown', arrows)
     }
-  }, [editing, onBack])
+  }, [editing, sending, onBack, onStep])
 
-  // The viewer's keys, while it shows (the snip editor has its own).
-  useEffect(() => {
-    if (editing) return
-    const stepFrame = (el: HTMLVideoElement, by: -1 | 1) => {
-      el.pause()
-      if (el.seeking) return // the last step is still on its way
-      const f = frame.current
-      const at = f.at >= 0 ? f.at : el.currentTime
-      // A step forward that stayed on this frame without the video saying so: further this time.
-      if (by > 0 && f.from === at && performance.now() - f.stepped > 250) f.gap = Math.min(f.gap * 2, 1)
-      f.from = by > 0 ? at : -1
-      f.stepped = performance.now()
-      el.currentTime = by > 0 ? at + f.gap + 0.0005 : Math.max(0, at - 0.001)
-    }
-    const onKey = (event: KeyboardEvent) => {
-      if (!viewerKey(event)) return
-      const el = video.current, key = event.key
-      // In full screen the arrows are the player's.
-      if ((key === 'ArrowLeft' || key === 'ArrowRight') && !document.fullscreenElement) onStep(key === 'ArrowLeft' ? -1 : 1)
-      else if (!el) return
-      else if (key === ' ') {
-        // Space on a focused button presses it, as everywhere else.
-        if (event.target instanceof Element && event.target.closest('button, a')) return
-        if (el.paused) void el.play().catch(() => undefined)
-        else el.pause()
-      } else if (key === ',' || key === '.') stepFrame(el, key === ',' ? -1 : 1)
-      else if (key === '[' || key === ']') {
-        const by = key === '[' ? -1 : 1
-        setSpeed(now => SPEEDS[Math.min(SPEEDS.length - 1, Math.max(0, SPEEDS.indexOf(now) + by))])
-      } else if (key === 'l' || key === 'L') setLoop(on => !on)
-      else return
-      event.preventDefault()
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [editing, onStep])
+  // Make smaller: the host says how it went when it is done.
+  useEffect(() => onHostEvent('capture.shrunk', ({ id, item: next, before, after, message }) => {
+    if (id !== item.id) return
+    setShrinking(false)
+    if (next) {
+      onChanged(next)
+      setNote({ text: `Smaller now: ${size(before)} to ${size(after)}.` })
+    } else setNote({ text: message ?? 'Left as it was.' })
+  }), [item.id, onChanged])
 
-
-  // Each press says how it went in itself (ActionButton: its ring, its check, or Bad and a shake); why it failed goes on
-  // the sheet's line under them (DESIGN.md › Notify), and what an export saved says so there too.
+  // Delete says how it went in itself (ActionButton: its ring, its check, or Bad and a shake), and why it failed on the
+  // viewer's line; what the menus' rows did reads there too, as the menu that was pressed has closed (DESIGN.md › Notify).
   const failedHere = (error: PlainError) => setNote({ text: error.text, bad: true })
-  const act = (action: 'delete' | 'reveal' | 'copy' | 'discord') => async () => {
-    setNote(null)
-    const result = await host.captureItem(item.id, action)
-    if (result.ok && result.item) onChanged(result.item)
-    return result
-  }
-  const after = (action: 'delete' | 'reveal' | 'copy' | 'discord') => () => {
-    if (action === 'delete') onDeleted()
-    if (action === 'discord') onDiscord()
-  }
-  const actButton = (action: 'delete' | 'reveal' | 'copy' | 'discord', words: string, done?: string) => (
-    <ActionButton className={`exo-set-btn${action === 'delete' ? ' is-danger' : ''}`} context={`Captures.${action}`} fallback={ACT_FAILED[action]}
-      why="none" onFailed={failedHere} done={done} onDone={after(action)} onPress={act(action)}>{words}</ActionButton>
-  )
+  const remove = () => { setNote(null); return host.captureItem(item.id, 'delete') }
 
-  const save = (preset: CaptureExport) => async () => {
-    setBusy(preset)
+  async function act(action: 'reveal' | 'copy' | 'shrink') {
+    setNote(null)
+    const failed = ACT_FAILED[action]
+    try {
+      const result = await host.captureItem(item.id, action)
+      if (!result.ok) { setNote({ text: errorText(result.message, failed), bad: true }); return }
+      if (result.item) onChanged(result.item)
+      // DESIGN.md › Notify: the result of a press shows where it was, on the viewer's line.
+      if (action === 'copy') setNote({ text: 'Copied' })
+      if (action === 'shrink') { setShrinking(true); setNote({ text: result.message ?? 'Making it smaller…' }) }
+    } catch (error) { setNote({ text: errorText(error, failed), bad: true }) }
+  }
+  async function copyText() {
     setNote(null)
     try {
-      const result = await host.captureEdit(item.id, preset, range[0], trimmed ? range[1] : 0)
-      if (result.ok) {
-        setNote({ text: SAVED[preset] })
-        if (result.item) onAdded(result.item)
-      }
-      return result
-    } finally { setBusy(null) }
+      const result = await host.captureText(item.id)
+      if (!result.ok || !result.text) { setNote({ text: errorText(result.message, 'No text found.'), bad: true }); return }
+      await navigator.clipboard.writeText(result.text)
+      setNote({ text: 'Copied the text.' })
+    } catch (error) { setNote({ text: errorText(error, 'Exo couldn’t read the text. Try again.'), bad: true }) }
   }
-  /** One export's button: its ring while it saves (an export can take a while: no time limit), then its check. */
-  const exportButton = (preset: CaptureExport, words: string, primary = false) => (
-    <ActionButton className={`exo-set-btn${primary ? ' is-primary' : ''}`} disabled={(!!busy && busy !== preset) || (preset === 'trim' && !trimmed)}
-      context="Captures.export" fallback="Exo Capture couldn’t save the copy. Try again." timeoutMs={null} why="none" onFailed={failedHere}
-      onPress={save(preset)}>{words}</ActionButton>
-  )
 
   if (editing) {
-    return <SnipEditor item={item} onDone={saved => { setEditing(false); if (saved) { onChanged(saved); setNote({ text: 'Saved and copied.' }) } }} />
+    return item.kind === 'image'
+      ? <SnipEditor item={item} onDone={saved => { setEditing(false); if (saved) { onChanged(saved); setNote({ text: 'Saved and copied.' }) } }} />
+      : <ClipEditor item={item} onDone={() => setEditing(false)} onAdded={onAdded} />
   }
+
+  const share: MenuItem[] = [
+    { id: 'discord', label: 'Send to Discord', icon: <Share size={16} /> },
+    { id: 'copy', label: item.kind === 'image' ? 'Copy picture' : 'Copy file' },
+  ]
+  const more: MenuItem[] = [
+    ...(item.kind === 'image' ? [{ id: 'text', label: 'Copy text' }] : [{ id: 'shrink', label: 'Make smaller', disabled: shrinking }]),
+    { id: 'reveal', label: 'Show in folder' },
+  ]
   return (
-    <div className="exo-capture-detail exo-motion-switch">
-      <div className="exo-capture-stage">
-        {item.kind === 'video' ? (
-          <video
-            ref={video}
-            src={item.url}
-            controls
-            playsInline
-            /* Plays on open, as the hover preview does; Reduce motion holds it still, as it does there. */
-            autoPlay={!shouldReduceMotion()}
-            loop={loop && !trimmed}
-            onLoadedMetadata={event => {
-              event.currentTarget.volume = playbackVolume
-              event.currentTarget.muted = playbackMuted
-              const ms = event.currentTarget.duration * 1000
-              if (Number.isFinite(ms) && ms > 0) { setDuration(ms); setRange(r => [r[0], r[1] > 0 && r[1] <= ms ? r[1] : ms]) }
-            }}
-            onPlay={event => {
-              // Played from past the trim's end, it starts at the trim's start.
-              if (trimmed && event.currentTarget.currentTime * 1000 >= range[1] - 50) event.currentTarget.currentTime = range[0] / 1000
-            }}
-            onTimeUpdate={event => setTime(event.currentTarget.currentTime * 1000)}
-            onVolumeChange={event => { playbackVolume = event.currentTarget.volume; playbackMuted = event.currentTarget.muted }}
-          />
-        ) : <ZoomImage src={item.url} />}
-      </div>
-      {item.kind === 'video' && duration > 0 ? (
-        <div className="exo-capture-trim-row">
-          <TrimBar id={item.id} src={item.url} duration={duration} start={range[0]} end={range[1]} time={time}
-            onChange={(start, end) => { setRange([start, end]); if (video.current) video.current.currentTime = start / 1000 }}
-            onSeek={ms => { if (video.current) video.current.currentTime = ms / 1000 }} />
-          <span className="exo-capture-trim-len">{clock(range[1] - range[0])}</span>
-          <span className="exo-shelf-chips" role="group" aria-label="Speed">
-            {SPEEDS.map(rate => (
-              <button key={rate} type="button" className="exo-shelf-chip" aria-pressed={speed === rate} onClick={() => setSpeed(rate)}>{rate}×</button>
-            ))}
-          </span>
-          <span className="exo-shelf-chips">
-            <button type="button" className="exo-shelf-chip" aria-pressed={loop} aria-keyshortcuts="L" onClick={() => setLoop(on => !on)}>
-              <Repeat size={14} />Loop
-            </button>
-          </span>
+    <div className="exo-viewer exo-motion-switch">
+      <div className="exo-viewer-bar">
+        <button type="button" className="exo-set-btn" onClick={onBack}><ChevronLeft size={14} />Back</button>
+        <div className="exo-viewer-title min-w-0">
+          <strong>{game}</strong>
+          <span className="tabular-nums">{when(item.created)}</span>
         </div>
-      ) : null}
-      <div className="exo-capture-actions">
-        {item.kind === 'video' ? (
-          <>
-            {exportButton('trim', 'Save trim', true)}
-            {exportButton('discord', 'For Discord')}
-            {exportButton('youtube', 'Full quality')}
-            {exportButton('vertical', 'Vertical')}
-            <MakeSmaller item={item} disabled={!!busy} onChanged={onChanged} setNote={setNote} />
-          </>
-        ) : (
-          <button type="button" className="exo-set-btn is-primary" onClick={() => setEditing(true)}>Edit</button>
-        )}
         <span className="exo-capture-actions-gap" />
-        <button type="button" className={`exo-set-btn exo-capture-fav-btn${item.favourite ? ' is-on' : ''}`} aria-pressed={item.favourite} onClick={onFavourite}>
-          <Star on={item.favourite} />Favorite
-        </button>
-        {actButton('copy', 'Copy', 'Copied')}
-        {actButton('discord', 'Send to Discord', 'Copied')}
-        {actButton('reveal', 'Show in folder')}
-        {actButton('delete', 'Delete')}
+        <button type="button" className="exo-set-btn is-primary" disabled={busy} onClick={() => setEditing(true)}><Pencil size={14} />Edit</button>
+        <Menu label="Share" anchor="--exo-capture-share" offset={6} triggerClassName="exo-set-btn" trigger={<><Share size={14} />Share</>}
+          items={share} onAction={id => { if (id === 'discord') setSending(true); else void act('copy') }} />
+        <button type="button" className={`exo-set-btn exo-editor-icon exo-capture-fav-btn${item.favourite ? ' is-on' : ''}`} aria-pressed={item.favourite}
+          aria-label={item.favourite ? 'Remove from favorites' : 'Favorite'} onClick={onFavourite}><Star on={item.favourite} /></button>
+        <button type="button" className="exo-set-btn exo-editor-icon" aria-pressed={info} aria-label="Info" onClick={() => setInfo(on => !on)}><Info size={14} /></button>
+        <ActionButton className="exo-set-btn exo-editor-icon is-danger" aria-label="Delete" disabled={busy} context="Captures.delete" fallback={ACT_FAILED.delete}
+          why="none" onFailed={failedHere} onDone={onDeleted} onPress={remove}><Trash size={14} /></ActionButton>
+        <Menu label="More" anchor="--exo-capture-more" offset={6} triggerClassName="exo-set-btn exo-editor-icon" trigger={<More size={16} />}
+          items={more} onAction={id => { if (id === 'text') void copyText(); else void act(id as 'reveal' | 'shrink') }} />
+      </div>
+      <div className="exo-viewer-body">
+        <div className="exo-capture-stage is-full">
+          {item.kind === 'video' ? (
+            <video
+              ref={video}
+              src={item.url}
+              controls
+              playsInline
+              /* Plays on open, as the hover preview does; Reduce motion holds it still, as it does there. */
+              autoPlay={!shouldReduceMotion()}
+              onLoadedMetadata={event => {
+                event.currentTarget.volume = playback.volume
+                event.currentTarget.muted = playback.muted
+                setShown({ width: event.currentTarget.videoWidth, height: event.currentTarget.videoHeight })
+              }}
+              onVolumeChange={event => { playback.volume = event.currentTarget.volume; playback.muted = event.currentTarget.muted }}
+            />
+          ) : <ZoomImage src={item.url} onSize={setShown} />}
+        </div>
+        {info ? <InfoPane item={item} size={shown} game={game} /> : null}
       </div>
       <NoteLine note={note} />
+      {sending ? (
+        // Inside Discord's scope, so the picker's words take Discord's colors as they do in the room.
+        <div className="exo-dc exo-capture-send">
+          <SendToDialog
+            title="Send to"
+            failed="Discord did not take it. Try again."
+            send={async (ids, text) => {
+              const result = await host.captureSend(item.id, ids, text, 0, 0)
+              if (result.item) onAdded(result.item)
+              return result
+            }}
+            onSent={names => setNote({ text: names.length ? `Sent to ${names.join(', ')}.` : 'Sent.' })}
+            onClose={() => setSending(false)}
+          />
+        </div>
+      ) : null}
     </div>
   )
 }
@@ -564,16 +410,8 @@ const ACT_FAILED = {
   delete: 'Windows could not move it to the Recycle Bin. Try again.',
   reveal: 'Exo could not open its folder. Try again.',
   copy: 'Exo could not copy it. Try again.',
-  discord: 'Exo could not send it to Discord. Try again.',
+  shrink: 'Exo Capture could not make it smaller. Try again.',
 } as const
-
-/** What an export says once it lands. */
-const SAVED: Record<CaptureExport, string> = {
-  trim: 'Saved the trim as a new clip.',
-  discord: 'Saved a copy for Discord, under 10 MB.',
-  youtube: 'Saved a full-quality copy.',
-  vertical: 'Saved a vertical copy.',
-}
 
 /** Nothing saved yet: the three ways to capture, each one press away, with its keys. */
 function CapturesEmpty({ onSettings }: { onSettings: () => void }) {
@@ -625,14 +463,15 @@ function CapturesEmpty({ onSettings }: { onSettings: () => void }) {
   )
 }
 
-/** The first `limit` captures of the groups shown, in their groups. */
-function firstOf<T extends { items: CaptureItem[] }>(groups: readonly T[], limit: number): T[] {
-  const out: T[] = []
+
+/** The first `limit` captures of the days shown, in their days. */
+function firstOf(days: readonly Day[], limit: number): Day[] {
+  const out: Day[] = []
   let left = limit
-  for (const group of groups) {
+  for (const day of days) {
     if (left <= 0) break
-    out.push(group.items.length > left ? { ...group, items: group.items.slice(0, left) } : group)
-    left -= group.items.length
+    out.push(day.items.length > left ? { ...day, items: day.items.slice(0, left) } : day)
+    left -= day.items.length
   }
   return out
 }
@@ -649,6 +488,7 @@ function MoreCards({ root, onNear }: { root: RefObject<HTMLDivElement | null>; o
   }, [root, onNear])
   return <div ref={mark} aria-hidden="true" />
 }
+
 
 /** A reel being made: its bar and Cancel; or waiting for the game to end; or why none started (with Wait, when a game is why). */
 function ReelLine() {
@@ -678,24 +518,23 @@ function ReelLine() {
   ) : <ErrorNote className="exo-capture-note is-bad exo-captures-note" message={reel.message} />
 }
 
-/** In place of the cards: their shine while the folder is first read, the ways to capture when it is empty, or that the chip holds none. */
-function ListState({ items, shown, favorites, failed, onSettings }: {
+/** In place of the grid: its shine while the folder is first read, the ways to capture when it is empty, or that the chips leave none. */
+function ListState({ items, shown, failed, onSettings }: {
   items: readonly CaptureItem[] | null
-  /** How many groups the chip shows. */
+  /** How many captures the chips leave. */
   shown: number
-  favorites: boolean
   failed: boolean
   onSettings: () => void
 }) {
   if (items === null) return failed ? null : (
     <Wait label="Reading the captures folder">
       <div className="exo-captures-grid">
-        {times(8, () => <div className="exo-capture-card"><span className="exo-capture-thumb" skullet-block="" /><div className="exo-capture-meta"><span>Sep 12, 8:40 PM</span><span>000 MB</span></div></div>)}
+        {times(12, () => <div className="exo-capture-card"><span className="exo-capture-thumb" skullet-block="" /></div>)}
       </div>
     </Wait>
   )
   if (items.length === 0) return <CapturesEmpty onSettings={onSettings} />
-  return shown === 0 ? <p className="exo-hub-sub">{favorites ? 'No favorites yet' : 'Nothing saved for this game yet'}</p> : null
+  return shown === 0 ? <p className="exo-hub-sub">Nothing here with those chips</p> : null
 }
 
 /** Left and Right in the viewer: the capture before or after, in the order the sheet lists them (or all of them, for one it doesn't list). */
@@ -705,16 +544,15 @@ function neighbour(listed: readonly CaptureItem[], all: readonly CaptureItem[] |
   return at < 0 ? undefined : order[at + by]
 }
 
+
 type Group = { key: string; title: string; gameId?: string | null }
 
-/** The captures by game, in the order the list has them. */
-function groupByGame(items: readonly CaptureItem[] | null): (Group & { items: CaptureItem[] })[] {
-  const groups = new Map<string, Group & { items: CaptureItem[] }>()
+/** Each game with captures, once, in the order the list first has it. */
+function gamesOf(items: readonly CaptureItem[] | null): Group[] {
+  const groups = new Map<string, Group>()
   for (const item of items ?? []) {
     const key = item.gameId ?? item.game
-    const group = groups.get(key) ?? { key, title: item.game, gameId: item.gameId, items: [] }
-    group.items.push(item)
-    groups.set(key, group)
+    if (!groups.has(key)) groups.set(key, { key, title: item.game, gameId: item.gameId })
   }
   return [...groups.values()]
 }
@@ -726,27 +564,56 @@ function folderOf(filter: string | null, games: readonly Game[]): string | null 
   return game ? captureFolder(game.title).toLowerCase() : null
 }
 
-const countOf = (groups: readonly { items: readonly CaptureItem[] }[]) => groups.reduce((sum, group) => sum + group.items.length, 0)
 
-/** All, Favorites, then one chip per game. */
-function Chips({ groups, filter, favorites, items, matches, onPick }: {
-  groups: readonly Group[]
-  filter: string | null
-  favorites: boolean
-  items: readonly CaptureItem[] | null
-  matches: (group: Group) => boolean
-  onPick: (key: string | null, favorites?: boolean) => void
+/** Clips, Screenshots and Favorites, then one chip per game: each narrows the others; pressed again, it lets go. */
+function Chips({ games, filter, gameTitle, onChange, children }: {
+  games: readonly Group[]
+  filter: GalleryFilter
+  gameTitle: (group: Group) => string
+  onChange: (next: GalleryFilter) => void
+  children?: ReactNode
 }) {
-  if (groups.length < 2 && !filter && !favorites && !items?.some(item => item.favourite)) return null
+  const kind = (value: 'video' | 'image') => onChange({ ...filter, kind: filter.kind === value ? 'all' : value })
   return (
-    <div className="exo-shelf-chips exo-captures-chips" role="toolbar" aria-label="Games">
-      <button type="button" className="exo-shelf-chip" aria-pressed={!filter && !favorites} onClick={() => onPick(null)}>All</button>
-      <button type="button" className="exo-shelf-chip" aria-pressed={favorites} onClick={() => onPick(null, true)}><Star on={favorites} />Favorites</button>
-      {groups.map(group => (
-        <button key={group.key} type="button" className="exo-shelf-chip"
-          aria-pressed={!!filter && matches(group)} onClick={() => onPick(group.key)}>{group.title}</button>
-      ))}
+    <div className="exo-shelf-chips exo-captures-chips" role="toolbar" aria-label="Show">
+      <button type="button" className="exo-shelf-chip" aria-pressed={filter.kind === 'video'} onClick={() => kind('video')}>Clips</button>
+      <button type="button" className="exo-shelf-chip" aria-pressed={filter.kind === 'image'} onClick={() => kind('image')}>Screenshots</button>
+      <button type="button" className="exo-shelf-chip" aria-pressed={filter.favorites} onClick={() => onChange({ ...filter, favorites: !filter.favorites })}><Star on={filter.favorites} />Favorites</button>
+      {games.length > 1 || filter.game ? <span className="exo-captures-chips-gap" aria-hidden="true" /> : null}
+      {games.length > 1 || filter.game ? games.map(group => {
+        const on = filter.game === group.key
+        return <button key={group.key} type="button" className="exo-shelf-chip" aria-pressed={on} onClick={() => onChange({ ...filter, game: on ? null : group.key })}>{gameTitle(group)}</button>
+      }) : null}
+      {children}
     </div>
+  )
+}
+
+/**
+ * The scrubber on the grid's right edge: one stop a month (the year where one starts), newest at the top. A press, or
+ * a drag down it, jumps to that month's newest day.
+ */
+function Scrubber({ stops, current, onJump }: { stops: ReturnType<typeof scrubStops>; current: string | null; onJump: (day: string) => void }) {
+  const dragging = useRef(false)
+  if (stops.length < 2) return null
+  const jumpAt = (event: ReactPointerEvent<HTMLElement>) => {
+    const row = document.elementFromPoint(event.clientX, event.clientY)?.closest<HTMLElement>('[data-scrub-day]')
+    if (row?.dataset.scrubDay) onJump(row.dataset.scrubDay)
+  }
+  return (
+    <nav className="exo-scrub" aria-label="Jump to a month"
+      onPointerDown={event => { dragging.current = true; event.currentTarget.setPointerCapture(event.pointerId); jumpAt(event) }}
+      onPointerMove={event => { if (dragging.current) jumpAt(event) }}
+      onPointerUp={() => { dragging.current = false }}
+      onLostPointerCapture={() => { dragging.current = false }}>
+      {stops.map(stop => (
+        <button key={stop.month} type="button" data-scrub-day={stop.day} className={stop.year ? 'is-year' : undefined}
+          aria-current={current === stop.month || undefined} aria-label={monthTitle(stop.month)}
+          onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); onJump(stop.day) } }}>
+          {stop.label}
+        </button>
+      ))}
+    </nav>
   )
 }
 
@@ -760,6 +627,7 @@ function ReadFailed({ failed, onRetry }: { failed: boolean; onRetry: () => void 
     </>
   )
 }
+
 
 /** Select, then Make reel N, Delete N or Cancel. */
 function SelectActions({ selection, deleting, reelClips, onSelect, onDelete, onReel }: {
@@ -786,51 +654,109 @@ function SelectActions({ selection, deleting, reelClips, onSelect, onDelete, onR
   )
 }
 
-/**
- * The sheet's title line: Captures, or Capture settings; then its actions (Select and the rest,
- * given as children), Settings (All captures from them), Notes and Close. The captures folder is in Settings.
- */
-/** Under the title: what the sheet holds, as you'd say it. */
-function subtitle(items: readonly CaptureItem[] | null): string | null {
-  if (!items?.length) return null
-  return `${items.length} ${items.length === 1 ? 'capture' : 'captures'} · ${size(items.reduce((sum, item) => sum + item.size, 0))}`
+/** The sheet closes, then Exo Capture's snip overlay freezes the screen as it is: the sheet is gone from it by then. */
+function snipFromSheet(onFail: (message: string) => void) {
+  closeCaptures()
+  window.setTimeout(() => {
+    void host.captureAct('snip')
+      .then(result => { if (!result.ok) onFail(result.message ?? 'Exo Capture did not answer. Try again.') })
+      .catch((error: unknown) => { report(error, 'capture.act', { level: 'warn' }) })
+  }, 420)
 }
 
-function Head({ setting, list, sub, back, onSettings, onNotes, children }: {
+/**
+ * The sheet's title line: Captures, bold, with the month the grid is on as a chip beside it (or Capture settings); then
+ * the one primary action (Snip), its other actions (Select and the rest, given as children), Settings, Notes and Close.
+ */
+function Head({ setting, list, month, onSettings, onNotes, onSnip, children }: {
   setting: boolean
-  /** How many captures and how much they take. */
-  sub: string | null
-  /** The list is shown and nothing is being picked: Settings and Notes are offered. */
+  /** The list is shown and nothing is being picked: Snip, Settings and Notes are offered. */
   list: boolean
-  /** A clip is open: Back takes its place as the sheet's way out, so there is one control and no second close. */
-  back: (() => void) | null
+  /** The month at the top of the grid, for the chip. */
+  month: string | null
   onSettings: (open: boolean) => void
   onNotes: () => void
+  onSnip: () => void
   children: ReactNode
 }) {
-  const { state } = useCapture()
+  const { state, settings } = useCapture()
+  const present = state?.present !== false
   return (
-    <header className="exo-hub-head">
-      <div className="min-w-0">
+    <header className="exo-hub-head exo-captures-head">
+      <div className="exo-captures-title min-w-0">
         <h2 id="exo-captures-title" className="exo-hub-title">{setting ? 'Capture settings' : 'Captures'}</h2>
-        {setting || !sub ? null : <p className="exo-hub-sub tabular-nums">{sub}</p>}
+        {!setting && month ? <span className="exo-captures-date tabular-nums">{monthTitle(month)}</span> : null}
       </div>
       <div className="exo-hub-head-actions">
         {setting ? <button type="button" className="exo-set-btn" onClick={() => onSettings(false)}><ChevronLeft size={14} />All captures</button> : children}
-        {/* Without the add-on there is nothing to set. */}
-        {setting || !list || state?.present === false ? null : (
+        {/* Without the add-on there is nothing to set or take. */}
+        {setting || !list || !present ? null : (
           <button type="button" className="exo-set-btn" onClick={() => onSettings(true)}><Settings size={14} />Settings</button>
         )}
         {setting || !list ? null : <button type="button" className="exo-set-btn" onClick={onNotes}><Notes size={14} />Notes</button>}
-        {back ? (
-          <button type="button" className="exo-set-btn" onClick={back}><ChevronLeft size={14} />Back</button>
-        ) : <button type="button" className="exo-game-close" aria-label="Close Captures" onClick={closeCaptures}><Close size={16} /></button>}
+        {setting || !list || !present ? null : (
+          <button type="button" className="exo-set-btn is-primary" aria-keyshortcuts={settings?.snipKeys?.replaceAll('Ctrl', 'Control')} onClick={onSnip}>
+            <Scissors size={14} />Snip
+          </button>
+        )}
+        <button type="button" className="exo-game-close" aria-label="Close Captures" onClick={closeCaptures}><Close size={16} /></button>
       </div>
     </header>
   )
 }
 
-function CapturesSheet({ gameId, itemId, edit, settings, notes, games, onDiscord }: {
+/**
+ * What the grid shows for the chips on: the captures left, by day; the scrubber's months; On this day (only with no chip
+ * on); each game once for its chip; and with a game's chip on, what its Make reel takes (its newest sitting, or the
+ * starred clips of it).
+ */
+function useGallery(items: CaptureItem[] | null, filter: GalleryFilter, games: readonly Game[], now: Date) {
+  // A game's chip (or a game page's filter) matches like the host's list: the game id in any case, or the folder named for its title.
+  const folder = folderOf(filter.game, games)
+  const inGame = (item: CaptureItem) => !filter.game || (item.gameId ?? item.game) === filter.game
+    || item.gameId?.toLowerCase() === filter.game.toLowerCase() || (folder !== null && item.game.toLowerCase() === folder)
+  const days = byDay(items ? filterCaptures(items, filter, inGame) : [], now)
+  const plain = !filter.game && filter.kind === 'all' && !filter.favorites
+  return {
+    days,
+    flat: days.flatMap(day => day.items),
+    stops: scrubStops(days, now),
+    resurfaced: plain && items ? onThisDay(items, now).slice(0, 6) : [],
+    gameGroups: gamesOf(items),
+    gameTitle: (group: Group) => games.find(g => g.id === group.gameId)?.title ?? group.title,
+    reelClips: filter.game ? reelOfGame(items?.filter(inGame) ?? []) : [],
+  }
+}
+
+/** With a game's chip on, its Make reel N (two clips or more, nothing being made). */
+function ReelButton({ clips }: { clips: readonly CaptureItem[] }) {
+  const reeling = useReel().phase !== 'idle'
+  if (clips.length < 2) return null
+  return (
+    <button type="button" className="exo-set-btn is-compact exo-captures-reel-btn" disabled={reeling} onClick={() => void makeReel(clips.map(item => item.id))}>
+      Make reel {clips.length}
+    </button>
+  )
+}
+
+/** On this day: captures from today's date in earlier years, over the grid, each with how long ago. */
+function OnThisDay({ items, now, card }: { items: readonly CaptureItem[]; now: Date; card: (item: CaptureItem, badge?: string) => ReactNode }) {
+  if (!items.length) return null
+  return (
+    <section className="exo-captures-day" aria-label="On this day">
+      <h3>On this day</h3>
+      <div className="exo-captures-grid">{items.map(item => card(item, yearsAgo(item.created, now)))}</div>
+    </section>
+  )
+}
+
+/** Years ago, as a badge says it. */
+function yearsAgo(iso: string, now: Date): string {
+  const years = now.getFullYear() - new Date(iso).getFullYear()
+  return years === 1 ? '1 year ago' : `${years} years ago`
+}
+
+function CapturesSheet({ gameId, itemId, edit, settings, notes, games }: {
   gameId: string | null
   itemId: string | null
   edit: boolean
@@ -839,7 +765,6 @@ function CapturesSheet({ gameId, itemId, edit, settings, notes, games, onDiscord
   /** Open on Notes (Capture's menu, Ctrl+K, a text file Windows opened with Exo). */
   notes: NotesRequest | null
   games: readonly Game[]
-  onDiscord: () => void
 }) {
   // The captures last read show at once (stale while the folder is read again), so the sheet never opens empty; not when
   // it opens on one they don't have yet (a new snip, straight into its editor), which would show the list first.
@@ -857,10 +782,9 @@ function CapturesSheet({ gameId, itemId, edit, settings, notes, games, onDiscord
   // The button pressed goes with the view it was in: focus stays in the sheet.
   const showSettings = (next: boolean) => void transition(() => { body.current?.scrollTo(0, 0); setSetting(next) }, { kind: 'push', back: !next, morph: pane(body.current) })
     .then(() => { if (!sheetRef.current?.contains(document.activeElement)) sheetRef.current?.focus({ preventScroll: true }) })
-  const [filter, setFilter] = useState<string | null>(gameId)
-  /** Favorites: every game's starred captures, one chip beside All. */
-  const [favorites, setFavorites] = useState(false)
+  const [filter, setFilter] = useState<GalleryFilter>({ game: gameId, kind: 'all', favorites: false })
   const [openId, setOpenId] = useState<string | null>(itemId)
+  const [now] = useState(() => new Date())
 
   // A failed read is not an empty folder: it says so, with Try again.
   const [listFailed, setListFailed] = useState(false)
@@ -876,17 +800,10 @@ function CapturesSheet({ gameId, itemId, edit, settings, notes, games, onDiscord
     setItems(list => list ? [item, ...list.filter(other => other.id !== item.id)] : list)
   }), [])
 
-  const byGame = groupByGame(items)
-  // A game page's filter matches like the host's list: the game id in any case, or the folder named for its title.
-  const folder = folderOf(filter, games)
-  const matches = (group: Group) => !filter || group.key === filter
-    || group.gameId?.toLowerCase() === filter.toLowerCase() || (folder !== null && group.title.toLowerCase() === folder)
-  const shown = byGame.filter(matches).map(group => favorites ? { ...group, items: group.items.filter(item => item.favourite) } : group)
-    .filter(group => group.items.length > 0)
+  const { flat, days, stops, resurfaced, gameGroups, gameTitle, reelClips } = useGallery(items, filter, games, now)
+  /** Anything saved: the chips, Select and the month's chip show. */
+  const any = !!items?.length
   const open = openId ? items?.find(item => item.id === openId) ?? null : null
-  /** Per game, what its Make reel takes: its newest sitting (the starred clips when there are two or more). */
-  const reelByGame = new Map(shown.map(group => [group.key, reelOfGame(group.items)]))
-  const reeling = useReel().phase !== 'idle'
   // A new snip opens in the editor once; stepped away from or left, it opens as the others do.
   const [editId, setEditId] = useState(edit ? itemId : null)
   // A reel that finishes while the sheet shows opens like a clip you picked; what an earlier press said is forgotten.
@@ -895,7 +812,7 @@ function CapturesSheet({ gameId, itemId, edit, settings, notes, games, onDiscord
     return onReelDone(item => { setEditId(null); setOpenId(item.id) })
   }, [])
   const stepTo = (by: -1 | 1) => {
-    const next = open && neighbour(shown.flatMap(group => group.items), items, open.id, by)
+    const next = open && neighbour(flat, items, open.id, by)
     if (!next) return
     setEditId(null)
     setOpenId(next.id)
@@ -917,13 +834,32 @@ function CapturesSheet({ gameId, itemId, edit, settings, notes, games, onDiscord
   /** What Make reel takes while selecting: the picked clips. */
   const picked = selection && items ? reelOfPicked(items, selection) : []
   const [note, setNote] = useState<string | null>(null)
-  const pickFilter = (next: string | null, starred = false) => { setFilter(next); setFavorites(starred); setSelection(s => s && new Set<string>()) }
+  const pickFilter = (next: GalleryFilter) => { setFilter(next); setSelection(s => s && new Set<string>()); body.current?.scrollTo(0, 0) }
   const toggle = (id: string) => setSelection(s => {
     if (!s) return s
     const next = new Set(s)
     if (!next.delete(id)) next.add(id)
     return next
   })
+
+  // The month chip and the scrubber follow the day at the top of the grid as it scrolls (one read a frame).
+  const [topMonth, setTopMonth] = useState<string | null>(null)
+  const frame = useRef(0)
+  const readTop = useCallback(() => {
+    frame.current = 0
+    const scroller = body.current
+    if (!scroller) return
+    const top = scroller.getBoundingClientRect().top
+    const day = [...scroller.querySelectorAll<HTMLElement>('[data-day-month]')].find(el => el.getBoundingClientRect().bottom > top + 8)
+    setTopMonth(day?.dataset.dayMonth ?? null)
+  }, [])
+  useEffect(() => { readTop() }, [readTop, items, filter, open, setting])
+  /** A scrubber stop: its day drawn first (past the page drawn so far), then at the top of the grid. */
+  const jump = (dayKey: string) => {
+    const at = flat.findIndex(item => days.find(day => day.key === dayKey)?.items[0]?.id === item.id)
+    if (at >= 0) setLimit(was => Math.max(was, at + PAGE))
+    requestAnimationFrame(() => body.current?.querySelector(`[data-day="${CSS.escape(dayKey)}"]`)?.scrollIntoView({ block: 'start' }))
+  }
 
   /** To the Recycle Bin, one at a time like Delete on a capture; what Windows refused stays. */
   async function remove(ids: readonly string[]) {
@@ -944,11 +880,11 @@ function CapturesSheet({ gameId, itemId, edit, settings, notes, games, onDiscord
     else setSelection(null)
   }
 
-  /** Back to the list from a clip: the picture flies back down into its thumbnail, drawn by then even if the arrows stepped past the cards drawn. */
+  /** Back to the list from a clip: the picture flies back down into its thumbnail, drawn by then even if the arrows stepped past the tiles drawn. */
   const backToList = () => {
     if (!open) return
     const id = open.id
-    const at = shown.flatMap(group => group.items).findIndex(item => item.id === id)
+    const at = flat.findIndex(item => item.id === id)
     setEditId(null)
     void transition(() => { setLimit(was => Math.max(was, at + 1)); setOpenId(null) }, {
       kind: 'morph',
@@ -956,13 +892,36 @@ function CapturesSheet({ gameId, itemId, edit, settings, notes, games, onDiscord
       morph: { name: 'exo-capture', from: visible('.exo-capture-stage > :is(img, video)'), to: () => visible(`.exo-capture-thumb[data-capture-id="${CSS.escape(id)}"]`) },
     })
   }
+  const openItem = (item: CaptureItem) => {
+    if (selection) toggle(item.id)
+    // The thumbnail flies up into the viewer.
+    else void transition(() => setOpenId(item.id), { kind: 'morph', morph: { name: 'exo-capture', from: pressedArt('.exo-capture-thumb'), to: () => visible('.exo-capture-stage > :is(img, video)') } })
+  }
+  const card = (item: CaptureItem, badge?: string) => (
+    <CaptureCard key={item.id} item={item} badge={badge} selected={selection ? selection.has(item.id) : null}
+      onOpen={() => openItem(item)} onFavourite={() => favourite(item)} onDelete={() => void remove([item.id])} />
+  )
 
   return (
     <section ref={sheetRef} className="exo-hub exo-captures" aria-labelledby="exo-captures-title" tabIndex={-1} data-autofocus>
-      {notesShown ? <NotesView request={notes} games={games} onCaptures={() => showNotes(false)} /> : (
+      {notesShown ? <NotesView request={notes} games={games} onCaptures={() => showNotes(false)} /> : open && !setting ? (
+        <Viewer
+          key={open.id}
+          item={open}
+          game={gameTitle({ key: open.gameId ?? open.game, title: open.game, gameId: open.gameId })}
+          edit={open.id === editId}
+          onStep={stepTo}
+          onBack={backToList}
+          onFavourite={() => favourite(open)}
+          onChanged={update}
+          onDeleted={() => { setItems(list => list?.filter(item => item.id !== open.id) ?? list); setOpenId(null) }}
+          onAdded={item => setItems(list => list ? [item, ...list.filter(other => other.id !== item.id)] : [item])}
+        />
+      ) : (
         <>
-          <Head setting={setting} list={!open && !selection} sub={subtitle(items)} back={open && !setting ? backToList : null} onSettings={showSettings} onNotes={() => showNotes(true)}>
-            {open || !items?.length ? null : (
+          <Head setting={setting} list={!selection} month={any ? topMonth : null} onSettings={showSettings} onNotes={() => showNotes(true)}
+            onSnip={() => snipFromSheet(message => setNote(message))}>
+            {!any ? null : (
               <SelectActions selection={selection} deleting={deleting} reelClips={picked.length}
                 onSelect={next => { setSelection(next); setNote(null) }} onDelete={() => void remove([...selection ?? []])}
                 onReel={() => { void makeReel(picked.map(item => item.id)); setSelection(null) }} />
@@ -972,64 +931,28 @@ function CapturesSheet({ gameId, itemId, edit, settings, notes, games, onDiscord
             <div ref={body} className="exo-captures-body">
               <CaptureSettingsView />
             </div>
-          ) : open ? (
-            <Detail
-              key={open.id}
-              item={open}
-              edit={open.id === editId}
-              onStep={stepTo}
-              onBack={backToList}
-              onFavourite={() => favourite(open)}
-              onChanged={update}
-              onDeleted={() => { setItems(list => list?.filter(item => item.id !== open.id) ?? list); setOpenId(null) }}
-              onAdded={item => setItems(list => list ? [item, ...list.filter(other => other.id !== item.id)] : [item])}
-              onDiscord={onDiscord}
-            />
           ) : (
-            <div ref={body} className="exo-captures-body">
-              {/* All is always there while filtered, so a game with nothing saved never leaves an empty sheet with no way out. */}
-              <Chips groups={byGame} filter={filter} favorites={favorites} items={items} matches={matches} onPick={pickFilter} />
-              {note ? <ErrorNote className="exo-capture-note is-bad exo-captures-note" message={note} /> : null}
-              <ReadFailed failed={listFailed} onRetry={load} />
-              <ReelLine />
-              <ListState items={items} shown={shown.length} favorites={favorites} failed={listFailed} onSettings={() => showSettings(true)} />
-              {firstOf(shown, limit).map(group => {
-                const game = games.find(g => g.id === group.gameId)
-                const reel = !selection && (reelByGame.get(group.key)?.length ?? 0) > 1
-                return (
-                  <section key={group.key} className="exo-captures-group" aria-label={group.title}>
-                    {/* A game's filter chip already names it, so a filtered group keeps only its Make reel, if it has one. */}
-                    {filter && !reel ? null : (
-                      <header className="exo-captures-group-head">
-                        {filter ? null : <h3>{game?.title ?? group.title}</h3>}
-                        {reel ? (
-                          <button type="button" className="exo-set-btn is-compact" disabled={reeling}
-                            onClick={() => void makeReel(reelByGame.get(group.key)!.map(item => item.id))}>
-                            Make reel {reelByGame.get(group.key)!.length}
-                          </button>
-                        ) : null}
-                      </header>
-                    )}
-                    <div className="exo-captures-grid">
-                      {group.items.map(item => (
-                        <CaptureCard
-                          key={item.id}
-                          item={item}
-                          selected={selection ? selection.has(item.id) : null}
-                          onOpen={() => {
-                            if (selection) toggle(item.id)
-                            // The thumbnail flies up into the viewer.
-                            else void transition(() => setOpenId(item.id), { kind: 'morph', morph: { name: 'exo-capture', from: pressedArt('.exo-capture-thumb'), to: () => visible('.exo-capture-stage > :is(img, video)') } })
-                          }}
-                          onFavourite={() => favourite(item)}
-                          onDelete={() => void remove([item.id])}
-                        />
-                      ))}
-                    </div>
+            <div className="exo-captures-frame">
+              <div ref={body} className="exo-captures-body" onScroll={() => { if (!frame.current) frame.current = requestAnimationFrame(readTop) }}>
+                {any ? (
+                  <Chips games={gameGroups} filter={filter} gameTitle={gameTitle} onChange={pickFilter}>
+                    <ReelButton clips={selection ? [] : reelClips} />
+                  </Chips>
+                ) : null}
+                {note ? <ErrorNote className="exo-capture-note is-bad exo-captures-note" message={note} /> : null}
+                <ReadFailed failed={listFailed} onRetry={load} />
+                <ReelLine />
+                <ListState items={items} shown={flat.length} failed={listFailed} onSettings={() => showSettings(true)} />
+                <OnThisDay items={resurfaced} now={now} card={card} />
+                {firstOf(days, limit).map(day => (
+                  <section key={day.key} className="exo-captures-day" data-day={day.key} data-day-month={day.month} aria-label={day.title}>
+                    <h3>{day.title}</h3>
+                    <div className="exo-captures-grid">{day.items.map(item => card(item))}</div>
                   </section>
-                )
-              })}
-              {countOf(shown) > limit ? <MoreCards key={limit} root={body} onNear={() => setLimit(was => was + PAGE)} /> : null}
+                ))}
+                {flat.length > limit ? <MoreCards key={limit} root={body} onNear={() => setLimit(was => was + PAGE)} /> : null}
+              </div>
+              <Scrubber stops={stops} current={topMonth} onJump={jump} />
             </div>
           )}
         </>

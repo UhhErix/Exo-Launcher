@@ -49,6 +49,8 @@ public sealed class NetworkBestTests : IDisposable
             return (Code, null);
         }
         public bool Online() => IsOnline;
+        public bool Running { get; set; }
+        public bool StillRunning() => Running;
         public Sample Measure() => new(20, 2, 1, 30);
 
         /// <summary>Windows taking Cloudflare's DNS on every adapter (with or without its DoH keys).</summary>
@@ -135,14 +137,15 @@ public sealed class NetworkBestTests : IDisposable
     public void Apply_SecondPressKeepsTheUsersOwnDns()
     {
         var (best, system) = Make();
-        system.List.Add(Ethernet() with { Dns = new CloudflareDns.Servers(["8.8.8.8"], null, ["8.8.8.8"], [], [], []) });
+        var own = Ethernet() with { Dns = new CloudflareDns.Servers(["8.8.8.8"], null, ["8.8.8.8"], [], [], []) };
+        system.List.Add(own);
         system.OnRun = _ => system.TakeDns(doh: false);
         Assert.NotNull(best.Apply()); // encryption refused: said, and the servers stay
         system.OnRun = _ => system.TakeDns();
         Assert.Null(best.Apply());
 
         system.Scripts.Clear();
-        system.OnRun = null;
+        system.OnRun = _ => system.List[0] = own;
         Assert.Null(best.TurnOff(DnsKey));
         var off = Assert.Single(system.Scripts);
         Assert.Contains("netsh interface ipv4 set dnsservers name=12 source=static address=8.8.8.8 validate=no", off);
@@ -215,7 +218,7 @@ public sealed class NetworkBestTests : IDisposable
         Assert.Contains("Add-DnsClientDohServerAddress -ServerAddress '1.0.0.1'", script);
         Assert.DoesNotContain("Add-DnsClientDohServerAddress -ServerAddress '1.1.1.1'", script);
 
-        system.OnRun = null;
+        system.OnRun = _ => system.List[0] = Ethernet();
         Assert.Null(best.TurnOff(DnsKey));
         Assert.Contains("Remove-DnsClientDohServerAddress -ServerAddress '1.0.0.1' -Confirm:$false", system.Scripts[^1]);
         Assert.DoesNotContain("Remove-DnsClientDohServerAddress -ServerAddress '1.1.1.1'", system.Scripts[^1]);
@@ -262,6 +265,7 @@ public sealed class NetworkBestTests : IDisposable
         system.TcpNow = new(1, true);
         system.OnRun = _ => system.TcpNow = new(3, true);
         Assert.Null(best.Apply([TcpKey]));
+        system.OnRun = _ => system.TcpNow = new(1, true);
         Assert.Null(best.TurnOff(TcpKey));
         Assert.Contains("netsh interface tcp set global autotuninglevel=highlyrestricted", system.Scripts[^1]);
         Assert.Contains("netsh interface tcp set global rss=enabled", system.Scripts[^1]);
@@ -324,5 +328,138 @@ public sealed class NetworkBestTests : IDisposable
     {
         Assert.Equal("C '\"C:\\Windows\\system32\\reg.exe\" add ''x'''", Cmd("\"C:\\Windows\\system32\\reg.exe\" add 'x'"));
         Assert.Contains("Resolve-DnsName getexo.app -Type A -DnsOnly -QuickTimeout", Prelude);
+    }
+
+    // Review fixes (PR #37's Devin threads).
+
+    [Fact]
+    public void Retry_DeclinedOrPutBack_KeepsTheRecordFromTheFirstPress()
+    {
+        var (best, system) = Make();
+        var own = Ethernet() with { Dns = new CloudflareDns.Servers(["8.8.8.8"], null, ["8.8.8.8"], [], [], []) };
+        system.List.Add(own);
+        system.OnRun = _ => system.TakeDns(doh: false);
+        Assert.NotNull(best.Apply());
+
+        system.OnRun = null;
+        system.Refused = "Windows' permission was declined, so nothing changed.";
+        Assert.Equal(system.Refused, best.Apply());
+        system.Refused = null;
+        system.Code = Ran + PutBackBit[DnsKey];
+        Assert.NotNull(best.Apply());
+
+        system.Code = Ran;
+        system.OnRun = _ => system.List[0] = own;
+        Assert.Null(best.TurnOff(DnsKey));
+        Assert.Contains("source=static address=8.8.8.8 validate=no", system.Scripts[^1]);
+    }
+
+    [Fact]
+    public void TurnOff_UsesTheAdaptersNumberNow_AndWaitsForOneThatIsAway()
+    {
+        var (best, system) = Make();
+        system.List.Add(Ethernet());
+        system.OnRun = _ => system.TakeDns();
+        Assert.Null(best.Apply());
+
+        // Reinstalled: same GUID, a new interface number.
+        system.List[0] = system.List[0] with { Nic = system.List[0].Nic with { Index = 31 } };
+        system.OnRun = _ => system.List[0] = Ethernet() with { Nic = Ethernet().Nic with { Index = 31 } };
+        Assert.Null(best.TurnOff(DnsKey));
+        Assert.Contains("set dnsservers name=31 source=dhcp", system.Scripts[^1]);
+        Assert.DoesNotContain("name=12", system.Scripts[^1]);
+
+        system.List[0] = Ethernet();
+        system.OnRun = _ => system.TakeDns();
+        Assert.Null(best.Apply([DnsKey]));
+        system.List.Clear();
+        system.Scripts.Clear();
+        Assert.Contains("isn't connected", best.TurnOff(DnsKey));
+        Assert.Empty(system.Scripts);
+        Assert.Contains(DnsKey, System.Text.Json.JsonSerializer.Deserialize<Saved>(File.ReadAllText(SavedPath))!.Off); // the player's Off holds
+        system.List.Add(Ethernet());
+        system.TakeDns();
+        system.OnRun = _ => system.List[0] = Ethernet();
+        Assert.Null(best.TurnOff(DnsKey));
+    }
+
+    [Fact]
+    public void TurnOff_ThatWindowsDidntTake_KeepsItsRecordToTryAgain()
+    {
+        var (best, system) = Make();
+        system.List.Add(Ethernet());
+        system.OnRun = _ => system.TakeDns();
+        Assert.Null(best.Apply());
+        system.OnRun = null; // the restore ran, but Windows still shows Cloudflare
+        Assert.StartsWith("Windows didn't put back the DNS of Ethernet", best.TurnOff(DnsKey), StringComparison.Ordinal);
+        var item = best.Read().Items.Single();
+        Assert.True(item.CanUndo);
+        Assert.False(item.Off);
+
+        system.TcpNow = new(0, true);
+        system.OnRun = _ => system.TcpNow = new(3, true);
+        Assert.Null(best.Apply([TcpKey]));
+        system.OnRun = null;
+        Assert.StartsWith("Windows didn't put back its old TCP settings", best.TurnOff(TcpKey), StringComparison.Ordinal);
+        Assert.True(best.Read().Items.Single(i => i.Key == TcpKey).CanUndo);
+    }
+
+    [Fact]
+    public void Overlapping_Presses_TheSecondIsToldToWait()
+    {
+        var (best, system) = Make();
+        system.List.Add(Ethernet());
+        string? second = "not asked";
+        system.OnRun = _ =>
+        {
+            second = Task.Run(() => best.TurnOff(DnsKey)).Result;
+            system.TakeDns();
+        };
+        Assert.Null(best.Apply());
+        Assert.Equal(Busy, second);
+        Assert.True(best.Read().Items.Single().CanUndo);
+
+        // A script that outlived its wait holds every change until it ends.
+        system.Running = true;
+        system.Scripts.Clear();
+        Assert.Equal(Busy, best.TurnOff(DnsKey));
+        Assert.Equal(Busy, best.Apply([TcpKey]));
+        Assert.Empty(system.Scripts);
+    }
+
+    [Fact]
+    public void Unfinished_KeepsEveryRecord()
+    {
+        var adapters = new EeeAdapters();
+        var (best, system) = Make(adapters);
+        system.List.Add(Ethernet());
+        system.Code = Unfinished;
+        Assert.StartsWith("The change didn't finish in time", best.Apply(), StringComparison.Ordinal);
+        Assert.True(File.Exists(TunePath));
+        Assert.True(best.Read().Items.Single(i => i.Key == DnsKey).CanUndo);
+    }
+
+    [Fact]
+    public void Partial_OneFamilyTaken_KeepsTheRecord()
+    {
+        var (best, system) = Make();
+        var own = Ethernet() with { Dns = new CloudflareDns.Servers(["9.9.9.9"], ["2620:fe::fe"], ["9.9.9.9"], ["2620:fe::fe"], [], []) };
+        system.List.Add(own);
+        system.OnRun = _ => system.List[0] = own with { Dns = own.Dns with { Static4 = CloudflareDns.V4, Now4 = CloudflareDns.V4, Doh4 = V4On } };
+        Assert.Equal("Ethernet didn't take Cloudflare's DNS.", best.Apply());
+        Assert.True(best.Read().Items.Single().CanUndo);
+        system.OnRun = _ => system.List[0] = own;
+        Assert.Null(best.TurnOff(DnsKey));
+        Assert.Contains("netsh interface ipv6 set dnsservers name=12 source=static address=2620:fe::fe validate=no", system.Scripts[^1]);
+    }
+
+    [Fact]
+    public void Fallback_IsNotEncrypted_AndIsWrittenWithout()
+    {
+        var a = Ethernet(ipv6: false) with { Dns = new CloudflareDns.Servers(CloudflareDns.V4, null, CloudflareDns.V4, [], [new("1.1.1.1", 5), new("1.0.0.1", 6)], []) };
+        Assert.False(CloudflareDns.IsOn(a));
+        var lines = CloudflareDns.Apply(a)!;
+        Assert.Equal(2, lines.Count(l => l.Contains("-Value 1 -Force")));
+        Assert.Contains(CloudflareDns.Revert(CloudflareDns.Snapshot(a))!, l => l.Contains(@"\Doh\1.1.1.1'") && l.Contains("-Value 5 -Force"));
     }
 }

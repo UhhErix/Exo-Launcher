@@ -131,6 +131,7 @@ export function CaptureKeyRows({ state, settings, withIcons = false }: { state: 
       <HotkeyRow label="Record" field="recordKeys" settings={settings} ok={state?.hotkeys.record ?? true} disabled={!settings} icon={withIcons ? <Record size={18} /> : undefined} />
       <HotkeyRow label="Snip" field="snipKeys" settings={settings} ok={state?.hotkeys.snip ?? true} disabled={!settings} icon={withIcons ? <Scissors size={18} /> : undefined} />
       <PrintScreenRow state={state} settings={settings} />
+      {withIcons ? null : <AfterSnipRow settings={settings} />}
     </>
   )
 }
@@ -224,6 +225,22 @@ function PrintScreenRow({ state, settings }: { state: CaptureState | null; setti
       error={error ?? (printBlocked ? 'Windows keeps Print Screen for Snipping Tool. Turn that off in Windows Settings > Accessibility > Keyboard.' : null)}>
       <Switch checked={settings?.printScreen === true} disabled={!settings} labelledBy="set-capture-prtsc"
         onChange={value => { setError(null); void save({ printScreen: value }).then(setError) }} />
+    </Row>
+  )
+}
+
+const AFTER_SNIP = [
+  { value: 'edit', label: 'Open the editor' },
+  { value: 'copy', label: 'Copy only' },
+] as const
+
+/** After a snip: it is always copied and saved; the editor opens unless Copy only (never over a game). */
+function AfterSnipRow({ settings }: { settings: CaptureSettings | null }) {
+  const [error, setError] = useState<string | null>(null)
+  return (
+    <Row label="After a snip" labelId="set-capture-after" error={error}>
+      <Choice label="After a snip" value={settings?.afterSnip ?? 'edit'} choices={AFTER_SNIP} disabled={!settings}
+        onChange={value => void save({ afterSnip: value as CaptureSettings['afterSnip'] }).then(setError)} />
     </Row>
   )
 }

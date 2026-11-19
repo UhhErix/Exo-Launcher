@@ -559,17 +559,8 @@ public sealed class AntiCheatCheckTests : IDisposable
 
     // ------------------------------------------------------------------ Exo Shaders' table
 
-    /// <summary>Exo Shaders' Core folder (C:\Users\Erix\Code\Exo\exo-shaders, a sibling repo, read only), or a visible skip.</summary>
-    private static string ExoShadersCore()
-    {
-        for (var dir = new DirectoryInfo(AppContext.BaseDirectory); dir is not null; dir = dir.Parent)
-        {
-            var core = Path.Combine(dir.FullName, "exo-shaders", "src", "SCSKiller.Core");
-            if (File.Exists(Path.Combine(core, "Games", "GameFiles.cs"))) return core;
-        }
-        Assert.Skip("Exo Shaders' repo (exo-shaders beside this one) is not on this PC, so its anti-cheat table can't be compared.");
-        return "";
-    }
+    /// <summary>Exo Shaders' Core folder in this repository (<c>shaders\src\SCSKiller.Core</c>), read only.</summary>
+    private static string ExoShadersCore() => Repo.PathOf("shaders", "src", "SCSKiller.Core");
 
     private static string Block(string text, string start, char end)
     {
@@ -668,6 +659,27 @@ public sealed class AntiCheatCheckTests : IDisposable
         Assert.Null(ShadersAddon.RecorderRefusal("game.compile", Set(game.Id, true), Find, Probe));
         DeletionGate.DeleteDirectory(Path.Combine(Install, "EasyAntiCheat"), recursive: true);
         Assert.Null(ShadersAddon.RecorderRefusal("recorder.set", Set(game.Id, true), Find, Probe));
+    }
+
+    [Fact]
+    public void TheEngineKeepsItsRecorderOutOfWhatExoRefusesAndOfGamesWithoutAntiCheatBetweenSessions()
+    {
+        // exo.library's noRecorder: the engine's "Record games" never puts the recorder into these by itself.
+        Ship("Game.exe", "EasyAntiCheat/Settings.json");
+        var game = Game();
+        Answer Probe(GameEntry g) => Of(g, NoServices, NoSteam, Ct);
+        Assert.True(ShadersAddon.KeepsRecorderOut(game, Probe));
+        Assert.True(ShadersAddon.KeepsRecorderOut(game, _ => new Answer(Kind.Unknown, (string?)null, "unreadable")));
+        DeletionGate.DeleteDirectory(Path.Combine(Install, "EasyAntiCheat"), recursive: true);
+        Assert.False(ShadersAddon.KeepsRecorderOut(game, Probe));
+        // Set to start without its anti-cheat: its answer is clean, yet Steam's default entry still runs it, so only a session lets it in.
+        var prior = WithoutAntiCheatLaunch;
+        try
+        {
+            WithoutAntiCheatLaunch = g => g.Id == game.Id ? new ExoLauncher.Adapters.SteamAppInfoNames.AntiCheatFreeLaunch("option1", "Play without anti-cheat", "Game.exe") : prior(g);
+            Assert.True(ShadersAddon.KeepsRecorderOut(game, _ => Answer.Clean));
+        }
+        finally { WithoutAntiCheatLaunch = prior; }
     }
 
     [Fact]
