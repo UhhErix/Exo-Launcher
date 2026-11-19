@@ -9,10 +9,21 @@ namespace ExoLauncher.Services;
 /// <summary>What can be added after "142 FPS", in the order it shows. Each is off until switched on, and nothing is read for one that's off.</summary>
 internal static class FpsItems
 {
-    internal const string Low = "low", FrameTime = "frametime", GpuUse = "gpu", GpuTemperature = "gputemp", CpuUse = "cpu", Vram = "vram", Ram = "ram", Clock = "clock";
-    private static readonly string[] Order = [Low, FrameTime, GpuUse, GpuTemperature, CpuUse, Vram, Ram, Clock];
+    internal const string Low = "low", FrameTime = "frametime", GpuUse = "gpu", GpuTemperature = "gputemp", CpuUse = "cpu", Vram = "vram", Ram = "ram", Battery = "battery", Clock = "clock";
+    private static readonly string[] Order = [Low, FrameTime, GpuUse, GpuTemperature, CpuUse, Vram, Ram, Battery, Clock];
 
-    internal readonly record struct Sample(int? GpuUse, int? GpuTemperature, int? CpuUse, double? VramGb, double? RamGb);
+    /// <param name="Battery">The wireless device lowest on battery: its kind ("MOUSE", "HEADSET", "CONTROLLER") and percent.</param>
+    internal readonly record struct Sample(int? GpuUse, int? GpuTemperature, int? CpuUse, double? VramGb, double? RamGb, (string Kind, int Percent)? Battery = null);
+
+    /// <summary>The kind shown for a device's battery, by the Devices card's kind; a kind Exo doesn't name shows as "DEVICE".</summary>
+    internal static string BatteryKind(string? kind) => kind?.ToLowerInvariant() switch
+    {
+        "mouse" => "MOUSE",
+        "headset" or "headphones" or "audio" or "output" => "HEADSET",
+        "controller" or "gamepad" => "CONTROLLER",
+        "keyboard" => "KEYBOARD",
+        _ => "DEVICE",
+    };
 
     /// <summary>Only names Exo knows, once each, in their order, whatever a settings file or the page held.</summary>
     internal static List<string> Clean(IEnumerable<string>? items) => items is null ? [] : [.. Order.Where(items.Contains)];
@@ -35,6 +46,7 @@ internal static class FpsItems
                 case CpuUse when sample.CpuUse is { } value: Add(Number(value) + "% CPU"); break;
                 case Vram when sample.VramGb is { } value: Add(value.ToString("0.0", CultureInfo.InvariantCulture) + " VRAM"); break;
                 case Ram when sample.RamGb is { } value: Add(value.ToString("0.0", CultureInfo.InvariantCulture) + " RAM"); break;
+                case Battery when sample.Battery is { } battery: Add(Number(battery.Percent) + "% " + battery.Kind); break;
                 case Clock: Add(now.ToString("t", CultureInfo.CurrentCulture)); break;
             }
         }
@@ -358,7 +370,39 @@ internal static class FpsCounter
                 _gpu = null;
             }
             return _last = new(gpu.Use, gpu.Temperature, items.Contains(FpsItems.CpuUse) ? CpuUse() : null,
-                gpu.MemoryBytes / (double)(1L << 30), items.Contains(FpsItems.Ram) ? RamGb() : null);
+                gpu.MemoryBytes / (double)(1L << 30), items.Contains(FpsItems.Ram) ? RamGb() : null,
+                items.Contains(FpsItems.Battery) ? LowestBattery() : null);
+        }
+
+        private const long BatteryEveryMs = 60_000;
+        private long _batteryNext;
+        private volatile Box? _battery;
+        private int _batteryReading;
+
+        private sealed record Box((string Kind, int Percent)? Value);
+
+        /// <summary>
+        /// The wireless device lowest on battery, from the last read; read again on the pool once a minute (the device tree is
+        /// too slow for the overlay's thread). Nothing on the first look.
+        /// </summary>
+        private (string Kind, int Percent)? LowestBattery()
+        {
+            var now = Environment.TickCount64;
+            if (now >= _batteryNext && Interlocked.Exchange(ref _batteryReading, 1) == 0)
+            {
+                _batteryNext = now + BatteryEveryMs;
+                _ = Task.Run(() =>
+                {
+                    try
+                    {
+                        var low = Peripherals.List(() => true).Where(card => card.Battery is >= 0 and <= 1).MinBy(card => card.Battery);
+                        _battery = new(low is null ? null : (FpsItems.BatteryKind(low.Kind), (int)Math.Round(low.Battery!.Value * 100)));
+                    }
+                    catch (Exception ex) { AppLog.Debug("FPS counter battery: " + ex.Message); }
+                    finally { Volatile.Write(ref _batteryReading, 0); }
+                });
+            }
+            return _battery?.Value;
         }
 
         /// <summary>Of all processors since the last look; nothing on the first.</summary>
