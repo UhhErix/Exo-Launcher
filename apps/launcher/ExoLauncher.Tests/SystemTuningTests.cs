@@ -89,7 +89,7 @@ public sealed class SystemTuningTests : IDisposable
                 else if (line.Contains("/set {current} useplatformclock true", StringComparison.Ordinal)) { if (!BcdRefuses) Clock = true; }
             }
             // The restore point's answer: the one fresh path no line names (its step is encoded).
-            foreach (var fresh in _issued.Where(p => _seen.Add(p) && !lines.Any(l => l.Contains($""{p}"", StringComparison.Ordinal))))
+            foreach (var fresh in _issued.Where(p => _seen.Add(p) && !lines.Any(l => l.Contains($"\"{p}\"", StringComparison.Ordinal))))
                 _answers[fresh] = PointWord;
             OnRun?.Invoke(lines);
             if (Closes) throw new OperationCanceledException("Exo closed");
