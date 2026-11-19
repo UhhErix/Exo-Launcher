@@ -1,7 +1,10 @@
-import { useCallback, useDeferredValue, useMemo, useState } from 'react'
+import { useCallback, useDeferredValue, useEffect, useMemo, useState } from 'react'
 import type { Game } from '../../lib/host'
 import { filterKey, isEmptyQuery, LIBRARY_TAGS, matchesFilters, matchesQuery, parseLibraryQuery, type LibraryFilter } from '../../lib/librarySearch'
 import type { FilterOption } from './LibraryHead'
+
+const NO_FILTERS: LibraryFilter[] = []
+const EMPTY_QUERY = parseLibraryQuery('')
 
 /** Genres first, then modes (librarySearch › LIBRARY_TAGS): where the Filter menu starts its Mode section. */
 const FIRST_MODE = LIBRARY_TAGS.indexOf('single-player')
@@ -25,7 +28,7 @@ function filterOptions(games: Game[], friendsPlaying: ReadonlySet<string> | null
   return options
 }
 
-type Shelf = { heading: string; count: number | undefined; games: Game[]; note: string | null }
+type Shelf = { heading: string; games: Game[]; note: string | null }
 
 /**
  * The Library's search and Filter chips (DESIGN.md › Library): a search reads as filters and title words, and the result
@@ -35,12 +38,17 @@ type Shelf = { heading: string; count: number | undefined; games: Game[]; note: 
 export function useLibrarySearch(games: Game[], browse: Shelf, showHidden: boolean) {
   const [query, setQuery] = useState('')
   const [filters, setFilters] = useState<LibraryFilter[]>([])
+  useEffect(() => {
+    if (!showHidden) return
+    setFilters([])
+    setQuery('')
+  }, [showHidden])
   const typed = useDeferredValue(query)
   const read = useMemo(() => parseLibraryQuery(typed), [typed])
   // The friends list is read only once Filter is pointed at or a search names friends (LibraryPane › FriendsPlaying).
   const [friendsWanted, setFriendsWanted] = useState(false)
   const [friendsPlaying, setFriendsPlaying] = useState<ReadonlySet<string> | null>(null)
-  const wantsFriends = friendsWanted || [...filters, ...read.filters].some(filter => filter.kind === 'friends')
+  const wantsFriends = friendsWanted || (!showHidden && [...filters, ...read.filters].some(filter => filter.kind === 'friends'))
   const searching = !showHidden && (filters.length > 0 || !isEmptyQuery(read))
   const found = useMemo(() => {
     if (!searching) return null
@@ -51,9 +59,17 @@ export function useLibrarySearch(games: Game[], browse: Shelf, showHidden: boole
     current.some(item => filterKey(item) === filterKey(filter)) ? current.filter(item => filterKey(item) !== filterKey(filter)) : [...current, filter]), [])
   const clear = useCallback(() => { setFilters([]); setQuery('') }, [])
   const options = useMemo(() => filterOptions(games, friendsPlaying), [games, friendsPlaying])
-  const shelf: Shelf = found ? { heading: 'Results', count: undefined, games: found, note: found.length ? null : 'No games match' } : browse
+  const shelf: Shelf = found ? { heading: 'Results', games: found, note: found.length ? null : 'No games match' } : browse
   return {
-    query, setQuery, filters, toggleFilter, clear, read, found, options, shelf,
+    query: showHidden ? '' : query,
+    setQuery,
+    filters: showHidden ? NO_FILTERS : filters,
+    toggleFilter,
+    clear,
+    read: showHidden ? EMPTY_QUERY : read,
+    found,
+    options,
+    shelf,
     /** Continue and Gifts show: neither a search nor Hidden games. */
     browsing: !found && !showHidden,
     wantsFriends, wantFriends: () => setFriendsWanted(true), setFriendsPlaying,

@@ -98,11 +98,11 @@ export function FriendsPage({ list, onOpenDm }: { list: FriendList; onOpenDm: (c
     <>
       {error ? <ErrorNote className="exo-dc-note" message={error} /> : null}
       {active.length ? <>
-        <p className="exo-dc-side-label" role="heading" aria-level={2}>Active now · {active.length}</p>
+        <p className="exo-dc-side-label" role="heading" aria-level={2}>Active now</p>
         <div className="exo-dc-friend-grid">{active.map(friend => <FriendRow key={friend.id} friend={friend} act={act} />)}</div>
       </> : null}
       {loaded && rest.length ? <>
-        <p className="exo-dc-side-label" role="heading" aria-level={2}>{label} · {rest.length}</p>
+        <p className="exo-dc-side-label" role="heading" aria-level={2}>{label}</p>
         <div className="exo-dc-friend-grid">{rest.map(friend => <FriendRow key={friend.id} friend={friend} act={act} />)}</div>
       </> : null}
       {loaded && listed.length === 0 ? <p className="exo-dc-note">{q ? 'No friend by that name.' : tab === 'pending' ? 'No pending requests.' : 'No friends here yet.'}</p> : null}

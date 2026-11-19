@@ -14,8 +14,6 @@ export type BrowseShelfProps = {
   onMoveFolder?: (folderId: string, toId: string, after: boolean) => void
   transferFor?: (game: Game) => InstallProgress | null
   heading: string
-  /** The count beside the heading, when it isn't the grid's cards (a folder is one card of several games). */
-  count?: number
   queuedIds?: string[]
   /** Select mode: the picked games' ids; null outside it. */
   pickedIds?: ReadonlySet<string> | null
@@ -33,7 +31,6 @@ export const BrowseShelf = memo(function BrowseShelf({
   onMoveFolder,
   transferFor,
   heading,
-  count,
   queuedIds = [],
   pickedIds,
   scrollRootRef,
@@ -44,7 +41,7 @@ export const BrowseShelf = memo(function BrowseShelf({
   return (
     <section className="min-w-0" aria-labelledby={headingId}>
       <header className="exo-shelf-head">
-        <h2 className="exo-shelf-title" id={headingId}>{heading}{games.length > 0 && <span className="exo-shelf-count">{(count ?? games.length).toLocaleString('en-US')}</span>}</h2>
+        <h2 className="exo-shelf-title" id={headingId}>{heading}</h2>
       </header>
 
       {games.length === 0 ? null : (

@@ -124,7 +124,7 @@ export function GifPicker({ tabs, onPick, onClose }: { tabs?: ReactNode; onPick:
         <div className="exo-dc-picker-tabs" role="tablist" aria-label="GIFs">
           <button type="button" role="tab" aria-selected={tab === 'trending'} onClick={() => { setTab('trending'); setQuery('') }}>Trending</button>
           <button type="button" role="tab" aria-selected={tab === 'favorites'} onClick={() => { setTab('favorites'); setQuery('') }}>
-            Favorites{favorites?.length ? <span className="exo-dc-picker-count">{favorites.length}</span> : null}
+            Favorites
           </button>
         </div>
       </header>

@@ -25,7 +25,7 @@ export function GroupMembers({ channel, me }: { channel: DiscordChannel; me: Dis
   const everyone: DiscordDmMember[] = [...(me ? [{ id: me.id, name: me.name, avatar: me.avatar, status: me.status ?? 'online' }] : []), ...dm.members]
   return (
     <aside className="exo-dc-members exo-dc-group-members" aria-label="Members">
-      <p className="exo-dc-side-label">Members ({everyone.length})</p>
+      <p className="exo-dc-side-label">Members</p>
       {everyone.map(member => (
         <button key={member.id} type="button" className={`exo-dc-member${member.status === 'offline' ? ' is-offline' : ''}`} data-dc-user={member.id}
           onClick={event => { const box = event.currentTarget.getBoundingClientRect(); showProfile(member.id, null, box.left - 316, box.top) }}

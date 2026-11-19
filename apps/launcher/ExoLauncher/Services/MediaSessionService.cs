@@ -30,6 +30,8 @@ internal sealed class MediaSessionService : IDisposable
         internal long Seq { get; init; }
         /// The page's own id for the song (Spotify's URI, YouTube Music's video id, Apple Music's id); null from the media session.
         internal string? TrackId { get; init; }
+        /// CSP-whitelisted HTTPS artwork URL forwarded immediately while ArtworkDataUrl downloads.
+        internal string? ArtworkUrl { get; init; }
         internal bool HasTrack => Status != "none" && Title.Length > 0;
     }
 
@@ -43,8 +45,8 @@ internal sealed class MediaSessionService : IDisposable
     // being believed after this long.
     private const long PageStaleMs = 10_000;
     private const int MaxArtworkDataUrlBytes = 768 * 1024;
-    // Covers kept as data URLs (up to 1.5 MB of text each): the shown song's, and a few it may go back to.
-    private const int KeptCovers = 4;
+    // Covers kept as data URLs (up to 1.5 MB of text each): LRU across recent songs, playlists and skips.
+    internal const int KeptCovers = 64;
     private static readonly HttpClient ArtworkHttp = CreateArtworkHttp();
 
     private static HttpClient CreateArtworkHttp()
@@ -54,10 +56,57 @@ internal sealed class MediaSessionService : IDisposable
         return http;
     }
 
+    internal sealed class CoverLru
+    {
+        private readonly int _capacity;
+        private readonly Dictionary<string, LinkedListNode<(string Key, string? Value)>> _map = new(StringComparer.Ordinal);
+        private readonly LinkedList<(string Key, string? Value)> _order = new();
+
+        public CoverLru(int capacity) => _capacity = Math.Max(1, capacity);
+
+        public int Count => _map.Count;
+
+        public bool TryGet(string key, out string? value)
+        {
+            if (!_map.TryGetValue(key, out var node))
+            {
+                value = null;
+                return false;
+            }
+            _order.Remove(node);
+            _order.AddFirst(node);
+            value = node.Value.Value;
+            return true;
+        }
+
+        public void Set(string key, string? value)
+        {
+            if (_map.TryGetValue(key, out var existing))
+            {
+                existing.Value = (key, value);
+                _order.Remove(existing);
+                _order.AddFirst(existing);
+                return;
+            }
+            if (_map.Count >= _capacity && _order.Last is { } oldest)
+            {
+                _order.RemoveLast();
+                _map.Remove(oldest.Value.Key);
+            }
+            var node = _order.AddFirst((key, value));
+            _map[key] = node;
+        }
+
+        public void Remove(string key)
+        {
+            if (_map.Remove(key, out var node)) _order.Remove(node);
+        }
+    }
+
     private readonly object _gate = new();
-    private readonly Dictionary<string, string?> _pageArtwork = new(StringComparer.Ordinal);
+    private readonly CoverLru _pageArtwork = new(KeptCovers);
     private readonly HashSet<string> _pageArtworkPending = new(StringComparer.Ordinal);
-    private readonly Dictionary<string, string?> _spotifyCovers = new(StringComparer.Ordinal);
+    private readonly CoverLru _spotifyCovers = new(KeptCovers);
     // A cover that could not be fetched, and when: asked again after a minute, never on every update.
     private readonly Dictionary<string, long> _pageArtworkFailed = new(StringComparer.Ordinal);
     private Task<GlobalSystemMediaTransportControlsSessionManager?>? _managerTask;
@@ -248,6 +297,7 @@ internal sealed class MediaSessionService : IDisposable
         if (a.Provider != b.Provider || a.Source != b.Source || a.Status != b.Status || a.Title != b.Title ||
             a.Artist != b.Artist ||
             !string.Equals(a.ArtworkDataUrl, b.ArtworkDataUrl, StringComparison.Ordinal) ||
+            !string.Equals(a.ArtworkUrl, b.ArtworkUrl, StringComparison.Ordinal) ||
             a.DurationMs != b.DurationMs || Math.Abs(a.Rate - b.Rate) > 0.001 || a.CanPlay != b.CanPlay ||
             a.CanPause != b.CanPause || a.CanPrev != b.CanPrev || a.CanNext != b.CanNext || a.CanSeek != b.CanSeek)
             return false;
@@ -276,13 +326,28 @@ internal sealed class MediaSessionService : IDisposable
     private Snapshot FromPage(string provider, MusicNowPlaying.Track track, bool frozen)
     {
         var playing = track.Playing && !frozen;
+        var coverUrl = track.ArtworkUrl ?? (provider == "spotify" ? SpotifyCoverUrl(track.Id) : null);
         return new Snapshot(provider, "page", playing ? "playing" : "paused", track.Title, track.Artist,
-            PageArtwork(track.ArtworkUrl ?? (provider == "spotify" ? SpotifyCoverUrl(track.Id) : null)), track.PositionMs, track.DurationMs, playing ? track.Rate : 0, track.CapturedAt,
+            PageArtwork(coverUrl), track.PositionMs, track.DurationMs, playing ? track.Rate : 0, track.CapturedAt,
             CanPlay: true, CanPause: true, CanPrev: track.CanPrev, CanNext: track.CanNext, CanSeek: track.CanSeek)
-        { TrackId = track.Id };
+        { TrackId = track.Id, ArtworkUrl = AllowedArtworkUrl(coverUrl) };
     }
 
     private static readonly string[] ArtworkHosts = ["googleusercontent.com", "ggpht.com", "ytimg.com", "scdn.co", "spotifycdn.com", "mzstatic.com"];
+    private static readonly string[] CspArtworkSubdomainHosts = ["googleusercontent.com", "ytimg.com", "scdn.co", "spotifycdn.com", "mzstatic.com"];
+    private static readonly string[] CspArtworkExactHosts = ["music.youtube.com", "www.gstatic.com"];
+
+    /// Returns the URL unchanged only when it is HTTPS with no credentials and permitted by ui/index.html img-src CSP.
+    internal static string? AllowedArtworkUrl(string? url)
+    {
+        if (string.IsNullOrWhiteSpace(url) || !Uri.TryCreate(url, UriKind.Absolute, out var uri) ||
+            uri.Scheme != Uri.UriSchemeHttps || !string.IsNullOrEmpty(uri.UserInfo))
+            return null;
+        var host = uri.Host;
+        var allowed = CspArtworkExactHosts.Any(h => host.Equals(h, StringComparison.OrdinalIgnoreCase)) ||
+            CspArtworkSubdomainHosts.Any(h => host.EndsWith("." + h, StringComparison.OrdinalIgnoreCase));
+        return allowed ? url : null;
+    }
 
     /// The page's artwork URL, fetched once and re-encoded as a bounded data
     /// URL. Keyed by URL, which arrives with its title, so a track change can
@@ -295,7 +360,7 @@ internal sealed class MediaSessionService : IDisposable
             return null;
         lock (_gate)
         {
-            if (_pageArtwork.TryGetValue(url, out var cached)) return cached;
+            if (_pageArtwork.TryGet(url, out var cached)) return cached;
             if (_pageArtworkFailed.TryGetValue(url, out var failed) && Environment.TickCount64 - failed < 60_000) return null;
             if (!_pageArtworkPending.Add(url)) return null;
         }
@@ -314,10 +379,10 @@ internal sealed class MediaSessionService : IDisposable
         if (parts.Length != 3 || parts[0] != "spotify" || parts[1] is not ("track" or "episode")) return null;
         lock (_gate)
         {
-            if (_spotifyCovers.TryGetValue(id, out var known)) return known;
+            if (_spotifyCovers.TryGet(id, out var known)) return known;
             // A failed ask (offline, Spotify busy) is asked again after a minute, like a page cover.
             if (_pageArtworkFailed.TryGetValue(id, out var failed) && Environment.TickCount64 - failed < 60_000) return null;
-            _spotifyCovers[id] = null;
+            _spotifyCovers.Set(id, null);
         }
         _ = FetchSpotifyCoverAsync(id, parts[1], parts[2]);
         return null;
@@ -343,8 +408,7 @@ internal sealed class MediaSessionService : IDisposable
                 return;
             }
             _pageArtworkFailed.Remove(id);
-            if (_spotifyCovers.Count >= 64) _spotifyCovers.Clear();
-            _spotifyCovers[id] = url;
+            _spotifyCovers.Set(id, url);
         }
         if (url is not null) SchedulePublish(PageCoalesce);
     }
@@ -362,8 +426,7 @@ internal sealed class MediaSessionService : IDisposable
             _pageArtworkPending.Remove(url);
             if (artwork is null) { FailedLocked(url); return; }
             _pageArtworkFailed.Remove(url);
-            if (_pageArtwork.Count >= KeptCovers) _pageArtwork.Clear();
-            _pageArtwork[url] = artwork;
+            _pageArtwork.Set(url, artwork);
         }
         if (artwork is not null) SchedulePublish(PageCoalesce);
     }

@@ -1766,6 +1766,80 @@ html[data-exo-motion="reduce"] .exo-music-lyrics.is-synced li.is-active span.is-
   justify-content: flex-end;
 }
 
+.exo-music-immersive .exo-music-toggle {
+  color: var(--exo-glass-secondary);
+}
+
+.exo-music-immersive .exo-music-toggle:hover:not(:disabled) {
+  color: var(--color-fg);
+}
+
+.exo-music-immersive .exo-music-toggle.is-on {
+  color: var(--color-good);
+}
+
+/* Compact Liquid Glass volume + mute capsule centred below the transport controls. */
+.exo-music-immersive-volume {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 34px;
+  padding: 0 12px 0 8px;
+  border-radius: 999px;
+}
+
+.exo-music-immersive-volume button {
+  display: inline-grid;
+  flex: none;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--color-fg);
+  cursor: pointer;
+  transition: background-color var(--dur-quick) var(--ease-out), scale var(--dur-quick) var(--ease-out);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .exo-music-immersive-volume button:hover:not(:disabled) {
+    background-color: var(--hover-fill);
+  }
+}
+
+.exo-music-immersive-volume button:active:not(:disabled) {
+  scale: 0.97;
+}
+
+.exo-music-immersive-volume button:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.exo-music-immersive-volume input[type='range'] {
+  width: 112px;
+  min-width: 84px;
+}
+
+.exo-music-immersive-volume .exo-mini-volume-value {
+  position: static;
+  width: auto;
+  height: auto;
+  overflow: visible;
+  clip-path: none;
+  min-width: 3ch;
+  text-align: end;
+  color: var(--exo-glass-secondary);
+  font-size: var(--exo-type-small);
+  font-variant-numeric: tabular-nums;
+}
+
+.exo-music-immersive-volume .exo-mini-error {
+  top: calc(100% + 8px);
+}
+
 /* The lyrics scroll in their half alone, the sung line kept in its middle (panels.tsx › Lyrics), fading into its
    top and foot; room above the first line and under the last lets either reach the middle. */
 .exo-music-immersive-lyrics {
@@ -1803,11 +1877,18 @@ html[data-exo-motion="reduce"] .exo-music-lyrics.is-synced li.is-active span.is-
   }
 }
 
-/* Over Immersive the Bar fades away while nothing needs it, and back with the pointer near the top or any key. */
+/* Over Immersive the Bar slides away cleanly while nothing needs it — keeping opacity: 1 so Chromium never creates
+   a Backdrop Root that blinds nested Bar glass — and returns when the pointer nears the top or a key is pressed. */
 :root[data-exo-immersive] .exo-titlebar {
-  transition: opacity var(--dur-base) var(--ease-out);
+  opacity: 1;
+  transition: transform var(--dur-base) var(--ease-out);
 }
 
 :root[data-exo-immersive="away"] .exo-titlebar {
-  opacity: 0;
+  transform: translateY(-100%);
+  pointer-events: none;
+}
+
+:root[data-exo-motion="reduce"][data-exo-immersive] .exo-titlebar {
+  transition: none;
 }

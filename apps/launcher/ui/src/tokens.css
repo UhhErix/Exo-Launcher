@@ -192,35 +192,32 @@ body,
   /* Exo's liquid glass: clear, vivid frost (blur, saturation 1.8) inside its lit edge, with no tint or wash across
      the body (both read as metal). Over art it dims what is behind enough to keep white words readable, lifted by a
      tight shadow (--glassy-words). */
-  --glassy-rim: inset 0 0 0 transparent;
-  /* No second rim: a dark hairline outside a light one read as a thicker outline than everything else's, and a bent rim
-     read as concave sides, at 1080p stepped too. The edge is --glassy-ring alone, the same 1px on every glass. */
-  /* Glass is lit at its edge like a lens (WWDC25 "Meet Liquid Glass"): brightest along the top, faint down the sides,
-     fainter at the foot, with a soft inner glow under the top edge. No grey ring all the way round. */
-  --glassy-ring: inset 0 var(--exo-hair) 0 rgb(255 255 255 / 0.17), inset var(--exo-hair) 0 0 rgb(255 255 255 / 0.06),
-    inset calc(-1 * var(--exo-hair)) 0 0 rgb(255 255 255 / 0.06), inset 0 calc(-1 * var(--exo-hair)) 0 rgb(255 255 255 / 0.03),
-    inset 0 16px 28px -22px rgb(255 255 255 / 0.1);
+  --glassy-rim: 0 0 0 var(--exo-hair) rgb(0 0 0 / 0.55);
+  /* Seamless curved 1px Fresnel specular rim (155deg top-left light + soft bottom-right bounce) rendered via mask-composite on ::before. */
+  --glassy-fresnel-rim: linear-gradient(155deg, rgb(255 255 255 / 0.28) 0%, rgb(255 255 255 / 0.08) 38%, rgb(255 255 255 / 0.04) 68%, rgb(255 255 255 / 0.14) 100%);
+  /* Uniform hairline + inner top specular glow for non-masked frames and controls (replaces segmented 4-direction inset borders). */
+  --glassy-ring: inset 0 0 0 var(--exo-hair) rgb(255 255 255 / 0.11), inset 0 var(--exo-hair) 0 rgb(255 255 255 / 0.08),
+    inset 0 14px 24px -20px rgb(255 255 255 / 0.12);
   /* Words keep a tight shadow over bright art; a 12px halo around them read as a smudge. */
   --glassy-words: 0 1px 2px rgb(0 0 0 / 0.45);
-  /* Small glass casts nothing (a shadow below it alone read as fake); large glass floats in an even halo. */
+  /* Small glass casts nothing (a shadow below it alone read as fake); large glass floats in a deep layered shadow. */
   --glassy-shadow: 0 0 0 transparent;
-  --glassy-shadow-raised: 0 0 40px rgb(0 0 0 / 0.5);
-  /* No sheen on Void: a white wash at the top of every pane read as gray on black. */
+  --glassy-shadow-raised: 0 2px 8px rgb(0 0 0 / 0.45), 0 18px 48px rgb(0 0 0 / 0.65);
+  /* Delicate top-lit sheen for Small Glass / Controls; panes keep none on Void so black panes never turn gray on black. */
+  --glassy-control-sheen: linear-gradient(180deg, rgb(255 255 255 / 0.055) 0%, transparent 55%);
   --glassy-sheen: none;
-  /* Liquid glass, chosen side by side on the user's screen: a clear body that shows the colors behind it, lit only
-     at its edges (a bright top line, a faint bottom one, a hairline and a soft inner glow) with no gray tint or wash
-     across it (those read as metal), and its words lifted by a soft shadow. Large glass (menus, sheets) dims what is
-     behind it to 0.66 under a 0.36 tint: over pure white #6c6c6c, white words 5.3:1 and secondary (#dcdcdc) 4.1:1
-     before their shadow. Small glass is the controls' glass, clear (--exo-fill transparent over --exo-control-glass): over the black page it
-     is black inside its one line, and it shows color only over art; an 8% light tint there read as a fake gray. */
-  /* AMOLED (owner, 2026-11-10): the page and the panels are pure black, and a floating layer over the black page is
-     black too (36% black over #000 is #000); over art it shows the art, dimmed. Its outline separates it. */
-  --glassy-overlay: rgb(0 0 0 / 0.36);
-  --glassy-overlay-tone: brightness(0.66);
+  /* Liquid glass optical tiers:
+     1. Small Glass / Controls: crisp blur(12px) brightness(0.68) saturate(1.85) + delicate 180deg top-lit sheen.
+     2. Large Glass / Panels / Menus / Popovers / Sheets: rgb(0 0 0 / 0.44) + blur(20px) brightness(0.60) saturate(1.75), >= 4.8:1 secondary text even over white art.
+     3. Media Plates / Badges over Art: rgb(0 0 0 / 0.32) + blur(12px) brightness(0.42) saturate(1.65). */
+  --glassy-overlay: rgb(0 0 0 / 0.44);
+  --glassy-overlay-tone: brightness(0.6) saturate(1.75);
+  --glassy-plate: rgb(0 0 0 / 0.32);
   --exo-fill: transparent;
-  /* Blur, dim, contrast and saturation in CSS's own functions: an SVG filter cost frames on a control over a
-     scrolling list (2 to 3% at 165 Hz), these none. */
-  --exo-control-glass: blur(10px) brightness(0.62) saturate(1.8);
+  --exo-control-glass: blur(12px) brightness(0.68) saturate(1.85);
+  /* Immersive transport toggles and volume capsule: luminous Liquid Glass over ambient cover light. */
+  --exo-immersive-glass: blur(18px) brightness(0.78) saturate(1.9);
+  --exo-immersive-fill: rgb(255 255 255 / 0.06);
   /* A plate over art (a badge, a cover's name, a title on a banner): a dark scrim of its own. Discord's media plates
      (discord-media.css) still take it; glass.css's plates take the deeper dim of the glass instead. */
   --exo-plate: rgb(0 0 0 / 0.72);
@@ -249,7 +246,7 @@ body,
   --exo-ink-rgb: 255 255 255;
   /* Words on large glass and sheets, and the glass's own tone (what it does to what is behind it). */
   --exo-panel-ink: #ffffff;
-  --glassy-pane-tone: brightness(0.62) saturate(1.8);
+  --glassy-pane-tone: brightness(0.6) saturate(1.75);
   --glassy-pane: transparent;
   /* Mid transition and Solid: the glass as a still fill (glass.css). */
   --glassy-still: rgb(0 0 0 / 0.8);
@@ -264,10 +261,10 @@ body,
   /* The scrim one step deeper: what darkens further under the pointer (a video embed's play mark on hover). */
   --exo-scrim-strong: rgb(0 0 0 / 0.9);
   /* Music's Immersive (Immersive.tsx): the cover's light at this opacity over black, under this dim. Together they keep
-     even white art at sRGB 0.18 at most, so white words hold 13:1, muted 6.6:1 and faint 4.8:1 over it
-     (test/musicImmersive.test.ts reads these two). */
-  --exo-immersive-art: 0.45;
-  --exo-immersive-dim: rgb(0 0 0 / 0.6);
+     even white art at sRGB 0.18 at most, so white words hold 13:1, muted 6.6:1 and faint 4.8:1 over it while letting
+     colored ambient art glow crisply behind Liquid Glass controls (test/musicImmersive.test.ts reads these two). */
+  --exo-immersive-art: 0.5;
+  --exo-immersive-dim: rgb(0 0 0 / 0.64);
   /* The colour picker's hue bar: the spectrum itself is data, not a theme colour. */
   --exo-hue-spectrum: linear-gradient(to right, #f00, #ff0, #0f0, #0ff, #00f, #f0f, #f00);
   /* Not installed (Library): the cover recedes, darker and drained (the host bakes it into the grid's thumbnail,

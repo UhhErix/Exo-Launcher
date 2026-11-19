@@ -20,15 +20,24 @@ if (typeof document !== 'undefined') {
 
 type Opener = { element: Element | null; box: DOMRect | null }
 
-/** What opened it: the control just pressed (the point pressed, when it went with its menu), else the one focused. */
-function openerNow(): Opener {
+/** Clears the cached pointer opener on route/view transitions so cross-room dialogs don't anchor to a stale click. */
+export function clearDialogOpener() {
+  pressed = null
+}
+
+/** What opened it: explicit anchor if given, else the control just pressed, else the connected focused element. */
+function openerNow(anchor?: Element | DOMRect | null): Opener {
+  if (anchor instanceof DOMRect) return { element: null, box: anchor }
+  if (anchor instanceof Element) return anchor.isConnected ? { element: anchor, box: anchor.getBoundingClientRect() } : { element: null, box: null }
   if (pressed && performance.now() - pressed.time < OPENER_MS) {
     const control = pressed.at.closest('button, a, [role^="menuitem"], [tabindex]') ?? pressed.at
     if (control.isConnected) return { element: control, box: control.getBoundingClientRect() }
     return { element: null, box: new DOMRect(pressed.x, pressed.y, 0, 0) }
   }
   const focused = document.activeElement
-  return focused && focused !== document.body ? { element: focused, box: focused.getBoundingClientRect() } : { element: null, box: null }
+  return focused && focused.isConnected && focused !== document.body && focused !== document.documentElement
+    ? { element: focused, box: focused.getBoundingClientRect() }
+    : { element: null, box: null }
 }
 
 /**
@@ -92,16 +101,17 @@ function fadeAway(box: HTMLElement) {
  * colors its words use (Discord's), else from the page's root; either way it is in the top layer, over every sheet and
  * the Bar. `onSubmit` makes it a form.
  */
-export function Popover({ label, labelledBy, className, onClose, portal = true, onSubmit, onKeyDown, children, ...rest }:
+export function Popover({ label, labelledBy, anchor, className, onClose, portal = true, onSubmit, onKeyDown, children, ...rest }:
   Omit<HTMLAttributes<HTMLElement>, 'popover' | 'role' | 'title' | 'onSubmit'> & {
     label?: string
     labelledBy?: string
+    anchor?: Element | DOMRect | null
     onClose: () => void
     portal?: boolean
     onSubmit?: (event: FormEvent<HTMLFormElement>) => void
   }) {
   const ref = useRef<HTMLElement>(null)
-  const [opener] = useState(openerNow)
+  const [opener] = useState(() => openerNow(anchor))
   // What it holds mounts once it shows, so a field's autoFocus lands (nothing can take focus in a popover not yet shown).
   const [shown, setShown] = useState(false)
   useLayer(ref, onClose)
@@ -147,8 +157,9 @@ export function Popover({ label, labelledBy, className, onClose, portal = true, 
 }
 
 /** Exo's one dialog (a Popover): its title, what it holds, then its buttons at the right. `form`: its body holds fields, set further apart. */
-export function Dialog({ title, children, actions, onClose, form, portal = true, className }: {
+export function Dialog({ title, anchor, children, actions, onClose, form, portal = true, className }: {
   title: string
+  anchor?: Element | DOMRect | null
   children?: ReactNode
   actions: ReactNode
   onClose: () => void
@@ -158,7 +169,7 @@ export function Dialog({ title, children, actions, onClose, form, portal = true,
 }) {
   const id = useId()
   return (
-    <Popover labelledBy={id} className={cn('exo-dialog exo-glass is-panel', className)} portal={portal} onClose={onClose}>
+    <Popover labelledBy={id} anchor={anchor} className={cn('exo-dialog exo-glass is-panel', className)} portal={portal} onClose={onClose}>
       <h2 id={id}>{title}</h2>
       {children ? <div className={cn('exo-dialog-body', form && 'is-form')}>{children}</div> : null}
       <div className="exo-dialog-actions">{actions}</div>

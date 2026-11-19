@@ -1,5 +1,6 @@
-import { useEffect, useId, useRef, type ReactNode } from 'react'
+import { useEffect, useId, useRef, useState, type ReactNode } from 'react'
 import { Close, Filter, Search } from '../../brand/icons'
+import { useDismissOnAncestorScroll } from '../../lib/dismiss'
 import { filterKey, filterLabel, type LibraryFilter } from '../../lib/librarySearch'
 
 /** One row of the Filter menu: the filter it sets, under its section. */
@@ -49,9 +50,11 @@ export function LibraryHead({ empty, total, found, query, onQuery, understood, f
       <header className="exo-library-head">
         <div className="exo-library-name">
           <h1>Library</h1>
-          <span className="exo-library-chip tabular-nums">
-            {found == null ? `${total.toLocaleString('en-US')} ${total === 1 ? 'game' : 'games'}` : `${found.length.toLocaleString('en-US')} of ${total.toLocaleString('en-US')}`}
-          </span>
+          {found != null ? (
+            <span className="exo-library-chip tabular-nums">
+              {`${found.length.toLocaleString('en-US')} of ${total.toLocaleString('en-US')}`}
+            </span>
+          ) : null}
         </div>
         <label className="exo-library-search">
           <Search size={16} />
@@ -110,12 +113,16 @@ function FilterPopover({ filters, options, onFilter, onClear, onWarm }: {
   onWarm: () => void
 }) {
   const id = useId()
+  const triggerRef = useRef<HTMLButtonElement>(null)
   const pop = useRef<HTMLDivElement>(null)
+  const [open, setOpen] = useState(false)
+  useDismissOnAncestorScroll(open, triggerRef, pop, () => pop.current?.hidePopover())
   const on = new Set(filters.map(filterKey))
   const sections = [...new Set(options.map(option => option.section))]
   return (
     <>
       <button
+        ref={triggerRef}
         type="button"
         className={`exo-shelf-sort-trigger exo-library-filter${filters.length ? ' is-on' : ''}`}
         style={{ anchorName: '--exo-library-filter' }}
@@ -135,7 +142,11 @@ function FilterPopover({ filters, options, onFilter, onClear, onWarm }: {
         aria-label="Filter"
         className="exo-shelf-sort-menu exo-library-filter-pop"
         style={{ positionAnchor: '--exo-library-filter', marginTop: 4 }}
-        onToggle={event => { if (event.newState === 'open') pop.current?.querySelector<HTMLElement>('button')?.focus() }}
+        onToggle={event => {
+          const isOpen = event.newState === 'open'
+          setOpen(isOpen)
+          if (isOpen) pop.current?.querySelector<HTMLElement>('button')?.focus()
+        }}
       >
         {sections.map(section => (
           <div key={section} className="exo-library-filter-group" role="group" aria-label={section}>

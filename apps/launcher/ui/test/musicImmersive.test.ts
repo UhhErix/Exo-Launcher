@@ -8,6 +8,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { BAR_REVEAL_PX, IMMERSIVE_KEY, barMayHide, contrastOver, immersiveWasOn, rememberImmersive, wakesBar, withImmersiveKey } from '../src/components/music/immersiveRules.ts'
+import { immersiveVolumeAction, nextImmersiveVolume } from '../src/lib/musicVolume.ts'
 
 const tokens = readFileSync(new URL('../src/tokens.css', import.meta.url), 'utf8')
 const token = (name: string) => new RegExp(`--${name}:\\s*([^;]+);`).exec(tokens)?.[1]?.trim()
@@ -57,4 +58,18 @@ test('Immersive starts off and is remembered for the session only', () => {
   assert.equal(immersiveWasOn(), true)
   rememberImmersive(false)
   assert.equal(immersiveWasOn(), false)
+})
+
+test('Immersive volume shortcuts toggle mute with M and step 5% with Up/Down', () => {
+  assert.equal(immersiveVolumeAction('m'), 'mute')
+  assert.equal(immersiveVolumeAction('M'), 'mute')
+  assert.equal(immersiveVolumeAction('ArrowUp'), 5)
+  assert.equal(immersiveVolumeAction('ArrowDown'), -5)
+  assert.equal(immersiveVolumeAction('Space'), null)
+
+  assert.equal(nextImmersiveVolume('mute', 60, 60), 0)
+  assert.equal(nextImmersiveVolume('mute', 0, 60), 60)
+  assert.equal(nextImmersiveVolume('mute', 0, 0), 25)
+  assert.equal(nextImmersiveVolume(5, 98, 98), 100)
+  assert.equal(nextImmersiveVolume(-5, 2, 2), 0)
 })

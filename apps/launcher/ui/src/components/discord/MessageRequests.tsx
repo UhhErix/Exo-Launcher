@@ -48,7 +48,7 @@ export function MessageRequestsPage({ home, onOpenDm }: { home: DiscordHome | nu
       </header>
       <div className="exo-dc-friends-body">
         <div className="exo-dc-friend-list">
-          <p className="exo-dc-side-label">{tab === 'requests' ? 'Requests' : 'Spam'} ({shown.length})</p>
+          <p className="exo-dc-side-label">{tab === 'requests' ? 'Requests' : 'Spam'}</p>
           {shown.map(dm => <RequestRow key={dm.id} dm={dm} spam={tab === 'spam'} onOpen={() => onOpenDm(dm.id)} />)}
           {shown.length === 0 ? <p className="exo-dc-note">{tab === 'requests' ? 'There are no pending message requests.' : 'Nothing in spam.'}</p> : null}
         </div>

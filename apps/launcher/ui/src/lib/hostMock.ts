@@ -1232,7 +1232,7 @@ async function mockMouseCore(params?: Record<string, unknown>) {
 /** The mock's song (spotifyMock › Song 1), playing from the page's start and looping, so the room and Immersive have one. */
 const mockSong = { playing: true, from: 0, since: 0 }
 const mockSongAt = () => (mockSong.from + (mockSong.playing ? performance.now() - mockSong.since : 0)) % MOCK_SONG_MS
-const mockPlayback = () => ({ provider: 'spotify', status: mockSong.playing ? 'playing' : 'paused', title: 'Song 1', artist: 'Artist 1', artworkDataUrl: mockArtwork,
+const mockPlayback = () => ({ provider: 'spotify', status: mockSong.playing ? 'playing' : 'paused', title: 'Song 1', artist: 'Artist 1', artworkDataUrl: mockArtwork, artworkUrl: null,
   positionMs: mockSongAt(), durationMs: MOCK_SONG_MS, positionAgeMs: 0, rate: mockSong.playing ? 1 : 0, canPlay: true, canPause: true, canPrev: true, canNext: true, canSeek: true })
 
 const MOCK_HANDLERS: Record<string, MockHandler> = {
@@ -1496,6 +1496,35 @@ const MOCK_HANDLERS: Record<string, MockHandler> = {
   },
   'discord.colors': () => ({ colors: { '100000000000000002': '#e91e63', '100000000000000004': '#3498db' }, icons: { '100000000000000002': { name: 'Admins', emoji: '🛡️' } } }),
   'discord.setStatus': mockOk,
+  'discord.shop': (p?: { action?: string; skuId?: string | null; amount?: number; currency?: string }) => {
+    const product = {
+      sku_id: '900000000000000001',
+      name: 'Starlight Halo',
+      summary: 'A quiet orbital ring around your avatar.',
+      type: 1000,
+      prices: { '0': { country_prices: { country_code: 'US', prices: [{ amount: 499, currency: 'usd', exponent: 2 }] } } },
+      items: [{ type: 0, sku_id: '900000000000000002', asset: 'a_starlight_halo', label: 'Starlight Halo' }],
+      styles: { background_colors: [0x111528, 0x05070e] },
+    }
+    const ownedItem = {
+      sku_id: '900000000000000003',
+      name: 'Midnight Crest',
+      summary: 'An owned avatar decoration.',
+      type: 1000,
+      purchased_at: '2026-01-15T00:00:00.000Z',
+      items: [{ type: 0, sku_id: '900000000000000004', asset: 'a_midnight_crest', label: 'Midnight Crest' }],
+    }
+    if (p?.action === 'catalog') {
+      return { ok: true, catalog: { categories: [{ sku_id: '910000000000000001', name: 'Featured', summary: 'Collectibles for your profile.', products: [product] }] }, owned: [ownedItem] }
+    }
+    if (p?.action === 'product') return { ok: true, product: p.skuId === ownedItem.sku_id ? ownedItem : product }
+    if (p?.action === 'equip') return { ok: true }
+    if (p?.action === 'payment') return { ok: true, payment: [{ id: 'pm_mock_1', label: 'Visa •••• 4242', expires: '04/28', default: true, usable: true }] }
+    if (p?.action === 'preview') return { ok: true, price: { amount: 499, subtotal: 499, tax: 0, currency: 'usd', taxInclusive: true } }
+    if (p?.action === 'buy') return { ok: true }
+    if (p?.action === 'stripeKey') return { ok: true, key: null }
+    return { ok: false, message: 'Mock: unavailable in browser preview.' }
+  },
   'web.preferences.set': (p) => ({ microphone: 'ask', camera: 'ask', clipboard: 'ask', notifications: 'ask', ...p }),
   'shell.prepare': () => ({ ok: true }),
   'shell.painted': () => ({ ok: true }),

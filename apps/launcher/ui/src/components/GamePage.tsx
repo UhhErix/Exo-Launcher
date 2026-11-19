@@ -65,8 +65,8 @@ export type GamePageProps = {
   onStop: () => void
   onCancel: () => void
   onDequeue?: () => void
-  /** Opens the PC room's Graphics page: every game's upscalers, or its Shaders. */
-  onOpenSystem?: (page: 'graphics' | 'shaders') => void
+  /** Opens the PC room's Graphics page, Upscalers sheet, or Shaders. */
+  onOpenSystem?: (page: 'graphics' | 'shaders' | 'upscalers') => void
   /** Switches the exact store entry behind a grouped library card. */
   onSelectSource?: (id: string) => void
   onStatus: (msg: string | null, sticky?: boolean) => void
@@ -97,7 +97,7 @@ function GameLines({ selected, details, onOpenSystem, hdrForGames, onHdrForGames
             key={'upscalers' + details.selectionKey}
             status={details.dlss}
             scanState={!details.dlss ? 'loading' : details.dlss.ok === false ? 'failed' : 'ready'}
-            onOpen={() => onOpenSystem('graphics')}
+            onOpen={() => onOpenSystem('upscalers')}
           />
           <ShaderPrecompile key={'shaders' + details.selectionKey} gameId={selected.id} onOpenShaders={() => onOpenSystem('shaders')} />
         </>

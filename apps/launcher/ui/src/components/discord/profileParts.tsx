@@ -3,6 +3,7 @@ import { createContext, useContext, useEffect, useState } from 'react'
 import { CompanyLogo } from '../../brand/CompanyLogo'
 import { Remove } from '../../brand/icons'
 import { host, onHostEvent } from '../../lib/host'
+import { allowHover } from '../../lib/hoverGate'
 import { report } from '../../lib/report'
 import { avatarUrl, cdnSize, cdnStep, performanceMode, snowflakeTime, type DiscordBadge, type DiscordConnection, type DiscordGuild, type DiscordProfile, type DiscordProfileExtras, type DiscordUser } from '../../lib/discord'
 import { AboveTip, anchorOf, type TipAnchor } from './AboveTip'
@@ -217,7 +218,7 @@ function Badges({ badges }: { badges: DiscordBadge[] }) {
     <span className="exo-dc-pf-badges" onPointerLeave={() => setTip(null)}>
       {badges.map(badge => {
         const icon = <img src={`https://cdn.discordapp.com/badge-icons/${badge.icon}.png`} alt="" width={22} height={22} decoding="async" draggable={false} />
-        const events = { onPointerEnter: (e: React.PointerEvent<HTMLElement>) => show(badge, e.currentTarget), onFocus: (e: React.FocusEvent<HTMLElement>) => show(badge, e.currentTarget), onBlur: () => setTip(null) }
+        const events = { onPointerEnter: (e: React.PointerEvent<HTMLElement>) => { if (allowHover(e)) show(badge, e.currentTarget) }, onFocus: (e: React.FocusEvent<HTMLElement>) => show(badge, e.currentTarget), onBlur: () => setTip(null) }
         return badge.link
           ? <button key={badge.id} type="button" className="exo-dc-pf-badge" aria-label={badge.description} onClick={() => open(badge.link!)} {...events}>{icon}</button>
           : <span key={badge.id} className="exo-dc-pf-badge" role="img" aria-label={badge.description} tabIndex={0} {...events}>{icon}</span>

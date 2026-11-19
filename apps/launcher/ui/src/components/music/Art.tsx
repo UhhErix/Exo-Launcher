@@ -24,17 +24,36 @@ export function Art({ src, round = false, liked = false, folder = false, size, c
   const [failed, setFailed] = useState(false)
   useEffect(() => {
     const next = src ?? ''
-    if (next === shown) return
-    if (!next) { setShown(''); return }
+    if (!next) {
+      setShown('')
+      setFailed(false)
+      return
+    }
+    if (next === shown && !failed) return
     let live = true
-    const image = new Image()
-    image.decoding = 'async'
-    image.src = next
-    image.decode().then(
-      () => { if (live) { setShown(next); setFailed(false) } },
-      () => { if (live) { setShown(next); setFailed(true) } })
-    return () => { live = false }
-  }, [src, shown])
+    let timer = 0
+    let tries = 0
+    const load = () => {
+      const image = new Image()
+      image.referrerPolicy = 'no-referrer'
+      image.decoding = 'async'
+      image.src = next
+      image.decode().then(
+        () => { if (live) { setShown(next); setFailed(false) } },
+        () => {
+          if (!live) return
+          if (tries < 2) {
+            tries += 1
+            timer = window.setTimeout(load, tries * 350)
+          } else {
+            setShown(next)
+            setFailed(true)
+          }
+        })
+    }
+    load()
+    return () => { live = false; window.clearTimeout(timer) }
+  }, [src, shown, failed])
   const style = size ? { width: size, height: size } : undefined
   const classes = ['exo-music-art', round && 'is-round', (liked || folder) && 'is-icon', className].filter(Boolean).join(' ')
   if (liked || folder) {
@@ -44,7 +63,7 @@ export function Art({ src, round = false, liked = false, folder = false, size, c
   return (
     <span className={classes} style={style}>
       {shown && !failed
-        ? <img key={shown} src={shown} alt="" loading="lazy" decoding="async" onError={() => setFailed(true)} />
+        ? <img src={shown} alt="" decoding="async" referrerPolicy="no-referrer" onError={() => { if (shown === (src ?? '')) setFailed(true) }} />
         : src && !failed ? null : <MusicNotes size={size ? Math.round(size / 4) : 14} />}
     </span>
   )

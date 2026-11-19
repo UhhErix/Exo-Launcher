@@ -43,14 +43,46 @@
   text-shadow: var(--glassy-words);
 }
 
+/* Tier 1 Small Glass / Controls: subtle top-lit 180deg glass sheen without washing black panels gray. */
+.exo-glass:not(.is-panel, .exo-folder-flap, .exo-continue-text, .exo-store-mark, .exo-store-hero-name) {
+  background-image: var(--glassy-control-sheen);
+}
+
+/* Curved 1px Fresnel specular rim via mask-composite on ::before + outer dark hairline separation. */
+:is(
+  .exo-glass:not(.exo-folder-flap, .exo-continue-text, .exo-store-mark, .exo-store-hero-name),
+  .exo-music-immersive :is(.exo-music-toggle, .exo-music-immersive-volume),
+  .exo-dc :is(.exo-dc-picker, .exo-dc-modal, .exo-dc-tip, .exo-dc-suggest)
+) {
+  box-shadow: var(--glassy-rim), var(--glassy-shadow);
+}
+
+:is(
+  .exo-glass:not(.exo-folder-flap, .exo-continue-text, .exo-store-mark, .exo-store-hero-name),
+  .exo-music-immersive :is(.exo-music-toggle, .exo-music-immersive-volume),
+  .exo-dc :is(.exo-dc-picker, .exo-dc-modal, .exo-dc-tip, .exo-dc-suggest)
+)::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  border-radius: inherit;
+  padding: var(--exo-hair);
+  background: var(--glassy-fresnel-rim);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  mask-composite: exclude;
+  pointer-events: none;
+}
+
 /* A primary button on glass is ink on its own fill: no lift under its words. */
 :is(.exo-glass, .exo-shelf-sort-menu, .exo-key-popover) .is-primary {
   text-shadow: none;
 }
 
-/* Large glass is a thicker pane: it scatters more, keeps the floating layer's hairline as a light edge and
-   casts the deeper shadow. It is always dark, so its words are always white, even when it opens from a capsule (a menu is
-   drawn in the top layer but lives inside the capsule that opened it). */
+/* Tier 2 Large Glass / Panels / Menus / Popovers / Sheets: deeper dim and blur so secondary text keeps >= 4.8:1
+   even over white art, always white ink even when anchored to a capsule. */
 .exo-glass.is-panel,
 .exo-shelf-sort-menu,
 .exo-key-popover,
@@ -66,14 +98,21 @@
   /* Glassy's floating layer: Apple's dark material, frosted on the element itself, lit at its rim. */
   background-color: var(--glassy-overlay);
   background-image: var(--glassy-sheen);
-  backdrop-filter: blur(16px) saturate(1.8) var(--glassy-overlay-tone);
+  backdrop-filter: blur(20px) var(--glassy-overlay-tone);
   box-shadow: var(--glassy-ring), var(--glassy-rim), var(--glassy-shadow-raised);
+}
+
+:is(
+  .exo-glass.is-panel,
+  .exo-dc :is(.exo-dc-picker, .exo-dc-modal, .exo-dc-tip, .exo-dc-suggest)
+) {
+  box-shadow: var(--glassy-rim), var(--glassy-shadow-raised);
 }
 
 /* A sheet holds a page of words over the dimmed room: it frosts deeper than a menu, so the room behind shows as color
    and never as shapes behind its words. */
 .exo-glass.is-panel {
-  backdrop-filter: blur(16px) saturate(1.8) var(--glassy-overlay-tone);
+  backdrop-filter: blur(20px) var(--glassy-overlay-tone);
 }
 
 /* A hovered row or control on glass lifts the glass under it, so its secondary words go full ink there, as a
@@ -100,8 +139,7 @@ button.exo-glass:hover {
   .exo-dc-inline-input,
   .exo-dc-tri,
   .exo-dc-command-field,
-  .exo-dc-cv-button,
-  .exo-dc-cv-button.is-primary,
+  .exo-dc-cv-button:not(.is-primary),
   .exo-dc-cv-select-field,
   .exo-dc .exo-dc-golive-seg,
   .exo-dc-segments,
@@ -181,7 +219,7 @@ button.exo-glass:hover {
   .exo-dc-search,
   .exo-dc-friend-search,
   .exo-dc :is(.exo-dc-find, .exo-dc-search, .exo-dc-friend-search, .exo-dc-picker-search, .exo-dc-modal-input, .exo-dc-input-row:not(.is-attached)),
-  .exo-set-btn,
+  .exo-set-btn:not(.is-primary),
   .exo-game-tool,
   .exo-shelf-sort-trigger,
   .exo-library-more,
@@ -211,7 +249,9 @@ button.exo-glass:hover {
   .exo-capture-corner-btn, .exo-dc-alt-tag, .exo-dc-alt, .exo-dc-hidden-label, .exo-dc-voice-tile-name, .exo-dc-watch,
   .exo-dc-stream-bar :is(.exo-dc-stream-tools > .exo-dc-voice-btn, .exo-dc-stream-name, .exo-dc-stream-sound),
   .exo-dc-lightbox-tools, .exo-dc-lightbox-step, .exo-dc-lightbox-count, .exo-profile-page-actions .exo-set-btn:not(.is-primary)) {
-  --exo-control-glass: blur(10px) brightness(0.34) contrast(0.9) saturate(1.6);
+  --exo-fill: var(--glassy-plate);
+  --exo-control-glass: blur(12px) brightness(0.42) saturate(1.65);
+  background-color: var(--glassy-plate);
   /* One shape, no line: over light art the glass's line drew a grey ring around the dimmed pill. */
   --exo-rim: 0 0 0 0 transparent;
   --exo-glass-rim: 0 0 0 0 transparent;
@@ -219,6 +259,7 @@ button.exo-glass:hover {
   /* Their own dim is set on them, so flying they drop the blur here too (see above). */
   :root[data-exo-vt] [data-exo-vt-named] & {
     --exo-control-glass: none;
+    background-color: var(--glassy-still-control);
   }
 }
 
@@ -255,17 +296,31 @@ button.exo-glass:hover {
   backdrop-filter: none;
 }
 
-.exo-music-toggle {
+/* Bar transport toggles sit inside .exo-music-bar glass without a second backdrop pass; Immersive toggles and
+   the Immersive volume capsule sit directly over AmbientLight and render real Liquid Glass. */
+.exo-music-bar .exo-music-toggle {
   --exo-control-glass: none;
   --exo-fill: rgb(var(--exo-ink-rgb) / 0.05);
 }
 
-/* The same for all glass mid transition (a room switching, a page opening): small glass keeps its own tint without
-   the blur, as a control does, so the Bar never changes as a room slides in; menus and large glass, which dim more,
-   draw their still tint (below). */
-:root[data-exo-vt] :is(.exo-titlebar, [data-exo-vt-named]) :is(.exo-glass, .exo-shelf-sort-menu, .exo-key-popover),
-:root[data-exo-vt="push"] .exo-music-bar :is(.exo-glass, .exo-shelf-sort-menu, .exo-key-popover) {
+.exo-music-immersive .exo-music-toggle,
+.exo-music-immersive-volume {
+  position: relative;
+  isolation: isolate;
+  --exo-control-glass: var(--exo-immersive-glass);
+  --exo-fill: var(--exo-immersive-fill);
   background-color: var(--exo-fill);
+  background-image: var(--glassy-control-sheen);
+  backdrop-filter: var(--exo-control-glass);
+  text-shadow: var(--glassy-words);
+}
+
+/* The same for all glass mid transition (a room switching, a page opening): small glass keeps its still control tint
+   without blur, as a control does; menus and large glass draw their still panel tint. */
+:root[data-exo-vt] :is(.exo-titlebar, [data-exo-vt-named]) :is(.exo-glass, .exo-shelf-sort-menu, .exo-key-popover),
+:root[data-exo-vt="push"] .exo-music-bar.exo-glass,
+:root[data-exo-vt="push"] .exo-music-bar :is(.exo-glass, .exo-shelf-sort-menu, .exo-key-popover) {
+  background-color: var(--glassy-still-control);
   backdrop-filter: none !important;
 }
 
@@ -346,7 +401,7 @@ button.exo-glass:hover {
 
 :root .exo-game-overlay-stage.exo-game-overlay-stage::before {
   background-color: var(--glassy-overlay);
-  backdrop-filter: blur(16px) saturate(1.8) var(--glassy-overlay-tone);
+  backdrop-filter: blur(20px) var(--glassy-overlay-tone);
 }
 
 /* A sheet's art wash (a game's, a store page's) lies over its glass layer and hid the rim drawn there wherever the
@@ -469,6 +524,10 @@ button.exo-glass:hover {
   button.exo-glass:hover:not(:disabled) {
     background-image: linear-gradient(var(--hover-fill), var(--hover-fill)), var(--glassy-sheen);
   }
+
+  button.exo-glass:not(.is-panel, .exo-folder-flap, .exo-continue-text, .exo-store-mark, .exo-store-hero-name):hover:not(:disabled) {
+    background-image: linear-gradient(var(--hover-fill), var(--hover-fill)), var(--glassy-control-sheen);
+  }
 }
 
 .exo-glass:active::after {
@@ -481,7 +540,7 @@ button.exo-glass:hover {
    or the control's opaque fill and rim hide it. */
 .exo-glass.exo-game-close {
   background-color: transparent;
-  box-shadow: var(--exo-glass-rim);
+  box-shadow: var(--glassy-rim);
 }
 
 /* Keyboard focus on glass rings inside its edge: an outer ring would move the lens (lib/glass.ts). */
@@ -505,23 +564,43 @@ button.exo-glass:hover {
 
 /* Increase contrast: black with a white border, every word full ink. */
 @media (prefers-contrast: more) {
-  :root :is(.exo-glass, .exo-shelf-sort-menu, .exo-key-popover, .exo-dc :is(.exo-dc-menu, .exo-dc-popover, .exo-dc-picker, .exo-dc-modal, .exo-dc-tip, .exo-dc-suggest, .exo-dc-soundboard-pop)) {
+  :root :is(.exo-glass, .exo-shelf-sort-menu, .exo-key-popover, .exo-music-immersive :is(.exo-music-toggle, .exo-music-immersive-volume), .exo-dc :is(.exo-dc-menu, .exo-dc-popover, .exo-dc-picker, .exo-dc-modal, .exo-dc-tip, .exo-dc-suggest, .exo-dc-soundboard-pop)) {
     --color-muted: var(--color-fg);
     --color-faint: var(--color-fg);
     background-color: var(--color-bg);
     backdrop-filter: none;
     box-shadow: inset 0 0 0 var(--exo-hair) rgb(var(--exo-ink-rgb) / 0.9);
   }
+
+  :root :is(
+    .exo-glass:not(.exo-folder-flap, .exo-continue-text, .exo-store-mark, .exo-store-hero-name),
+    .exo-music-immersive :is(.exo-music-toggle, .exo-music-immersive-volume),
+    .exo-dc :is(.exo-dc-picker, .exo-dc-modal, .exo-dc-tip, .exo-dc-suggest)
+  )::before {
+    display: none;
+  }
 }
 
 @media (forced-colors: active) {
-  :root :is(.exo-glass, .exo-shelf-sort-menu, .exo-key-popover, .exo-dc :is(.exo-dc-menu, .exo-dc-popover, .exo-dc-picker, .exo-dc-modal, .exo-dc-tip, .exo-dc-suggest, .exo-dc-soundboard-pop)) {
+  :root :is(.exo-glass, .exo-shelf-sort-menu, .exo-key-popover, .exo-music-immersive-volume, .exo-dc :is(.exo-dc-menu, .exo-dc-popover, .exo-dc-picker, .exo-dc-modal, .exo-dc-tip, .exo-dc-suggest, .exo-dc-soundboard-pop)) {
     background-color: Canvas;
     backdrop-filter: none;
     outline: 1px solid CanvasText;
     outline-offset: -1px;
   }
 
+  .exo-music-immersive .exo-music-toggle {
+    background-color: var(--exo-solid-fill);
+    backdrop-filter: none;
+    outline: 1px solid CanvasText;
+    outline-offset: -1px;
+  }
+
+  :root :is(
+    .exo-glass:not(.exo-folder-flap, .exo-continue-text, .exo-store-mark, .exo-store-hero-name),
+    .exo-music-immersive :is(.exo-music-toggle, .exo-music-immersive-volume),
+    .exo-dc :is(.exo-dc-picker, .exo-dc-modal, .exo-dc-tip, .exo-dc-suggest)
+  )::before,
   :root :is(.exo-glass, .exo-shelf-sort-menu, .exo-key-popover, .exo-dc :is(.exo-dc-menu, .exo-dc-popover, .exo-dc-picker, .exo-dc-modal, .exo-dc-tip, .exo-dc-suggest, .exo-dc-soundboard-pop))::after {
     display: none;
   }
