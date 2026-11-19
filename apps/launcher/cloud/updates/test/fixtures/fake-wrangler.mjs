@@ -32,7 +32,7 @@ if (verb === 'put') {
   copyFileSync(file, path)
 } else if (verb === 'get') {
   if (!existsSync(path)) {
-    // What wrangler 4.158.0 prints for a missing key, colour codes and all (and it leaves an empty --file behind).
+    // What wrangler 4.165.0 prints for a missing key, colour codes and all (and it leaves an empty --file behind).
     writeFileSync(file, '')
     console.error('\x1b[31mX \x1b[41;31m[\x1b[41;97mERROR\x1b[41;31m]\x1b[0m \x1b[1mThe specified key does not exist.\x1b[0m')
     process.exit(1)

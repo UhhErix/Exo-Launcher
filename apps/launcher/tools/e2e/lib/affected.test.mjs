@@ -35,7 +35,7 @@ test('a host change in HDR and shaders runs system', () => {
 
 test('Exo Mouse and Exo Capture run their own suites', () => {
   assert.ok(pick('mouse/src/main.tsx').suites.includes('devices'))
-  assert.ok(pick('capture/src/main.cpp').suites.includes('capture'))
+  assert.ok(pick('capture/ExoCapture/Program.cs').suites.includes('capture'))
 })
 
 test('an app file no rule knows still runs shell and is named', () => {

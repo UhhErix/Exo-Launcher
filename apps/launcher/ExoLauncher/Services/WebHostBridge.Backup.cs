@@ -49,7 +49,7 @@ public sealed partial class WebHostBridge
 
     private static object BackupNow()
     {
-        var outcome = LauncherBackup.BackUpDaily(PathHelper.AppDataDir, LauncherBackup.DefaultFolder, DateTimeOffset.UtcNow, BackupVersion, replace: true, LauncherBackup.ThisPc(PathHelper.AppDataDir, LucidSettings.FilePath));
+        var outcome = LauncherBackup.BackUpDaily(PathHelper.AppDataDir, LauncherBackup.DefaultFolder, DateTimeOffset.UtcNow, BackupVersion, replace: true, LauncherBackup.ThisPc(PathHelper.AppDataDir));
         return new { ok = outcome.Ok, message = outcome.Message, files = outcome.Files };
     }
 
@@ -67,7 +67,7 @@ public sealed partial class WebHostBridge
         if (picked.Failed) return new { ok = false, message = "The file picker could not open." };
         if (picked.Path is null) return new { ok = false, cancelled = true };
         var path = picked.Path;
-        var outcome = await Task.Run(() => LauncherBackup.ExportTo(PathHelper.AppDataDir, path, DateTimeOffset.UtcNow, BackupVersion, LauncherBackup.ThisPc(PathHelper.AppDataDir, LucidSettings.FilePath))).ConfigureAwait(true);
+        var outcome = await Task.Run(() => LauncherBackup.ExportTo(PathHelper.AppDataDir, path, DateTimeOffset.UtcNow, BackupVersion, LauncherBackup.ThisPc(PathHelper.AppDataDir))).ConfigureAwait(true);
         return new { ok = outcome.Ok, message = outcome.Message, files = outcome.Files };
     }
 

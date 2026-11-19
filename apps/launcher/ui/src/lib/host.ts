@@ -124,9 +124,10 @@ export type FrameGenMod = {
   /**
    * Why it is broken. replaced: another mod's file is where Exo's loader was (Exo leaves it and keeps the game off);
    * changed: another of Exo's files has other bytes (Exo leaves it); removed: Exo's files went (they go back once);
-   * gone: the game no longer ships DLSS Frame Generation.
+   * gone: the game no longer ships DLSS Frame Generation. With hidden: unread (Exo couldn't read the game: no install,
+   * a Store app, a folder it can't open), card (no mod adds to this card; the line hides).
    */
-  reason?: 'replaced' | 'changed' | 'removed' | 'gone' | null
+  reason?: 'replaced' | 'changed' | 'removed' | 'gone' | 'unread' | 'card' | null
 }
 
 /**
@@ -137,7 +138,6 @@ export type FrameGenMod = {
  */
 /** Steam's current art for a game (newer games keep it under hashed folders). */
 export type StoreArt = { poster?: string | null; hero?: string | null; capsule?: string | null; header?: string | null }
-/** Lucid's own settings as Exo shows them (Lucid Voice is never among them). Times are "HH:mm" on half-hour steps. */
 /** What you plug in, as Devices shows it (devices.list): a mouse, a keyboard, your audio out and in, a game controller. */
 export type PeripheralKind = 'mouse' | 'keyboard' | 'audio' | 'controller'
 export type Peripheral = {
@@ -278,52 +278,36 @@ export type ControllerState = {
   extras: number
 }
 
-export type LucidSettings = {
-  headphone: { id: string; name: string; chosen: boolean }
-  favorites: string[]
-  gameMode: boolean
-  keepOnAltTab: boolean
-  onlyWhileGaming: boolean
-  nightShift: boolean
-  nightStart: string
-  nightEnd: string
-  nightSync: boolean
-  notifications: boolean
-  discord: boolean
-  /** Lucid's cue sounds, 0 (off) to 100: switching on or off, and a game detected. */
-  toggleSound: number
-  detectSound: number
-  /** Lucid's on/off hotkey: Windows' virtual key (0: none) and its modifiers (Alt 1, Ctrl 2, Shift 4, Win 8). */
-  hotkey: { modifiers: number; key: number }
-  /** Lucid's EQ switched on (its hotkey and Only while gaming turn it off). */
-  eqOn: boolean
-}
+/** Exo EQ's sounds over the correction. */
+export type EqSound = 'flat' | 'bass' | 'vocal' | 'footsteps' | 'custom'
+/** A headphone AutoEq has a correction for: its result's folder (id), who measured it, and its kind. */
+export type EqHeadphone = { id: string; name: string; source: string; form: 'in-ear' | 'earbud' | 'over-ear' }
 /**
- * Lucid here: found (a build without it says no), its version, whether it can start without asking anything of Windows
- * (ready: Equalizer APO and its own setup are in place), running, Start with Exo, Equalizer APO's device picker, and its
- * settings (null until Lucid has saved some).
+ * Exo EQ for one output (the one the page shows): Equalizer APO here and on it, the switch and Compare, the headphones
+ * and sound on this output, the Custom sound's ten bands, the preamp its chain gets, the game playing now with its own
+ * sound, the games with a sound, the library to add from, Night Shift, the other outputs that have an EQ, a headset
+ * the output's name suggests, and whether Lucid's EQ block still plays.
  */
-export type LucidState = {
-  ok: boolean; message?: string | null; found: boolean; version: string | null; ready: boolean; running: boolean; voiceOn: boolean; startWithExo: boolean; devices: boolean
-  /** Lucid's EQ switches to the tuning of the headset Windows moves to (on by default). */
-  followHeadset: boolean
-  settings: LucidSettings | null
-  /** The output Lucid's EQ is on (null: none yet), the one Windows plays on, and whether that one has it; null without Equalizer APO. */
-  eq: { on: string | null; playing: string | null; covered: boolean } | null
-  /** A change waiting for the game to end (Lucid starts again to take one); the settings already show it. */
-  held?: boolean
-  /** Why Lucid's last update didn't go in (the Lucid before stays or is back); absent when nothing is wrong. Updates say nothing otherwise. */
-  updateNote?: string | null
-  /** The USB or wireless headset Windows plays on, by its name, when Lucid has its tuning and isn't on it. */
-  guess?: { id: string; name: string } | null
+export type EqState = {
+  ok: boolean
+  message?: string | null
+  apo: { installed: boolean; installing: boolean; version: string | null; onOutput: boolean; restart: boolean; effectsOff: boolean; outputs: number; installerVersion: string }
+  on: boolean
+  comparing: boolean
+  output: { name: string | null } | null
+  headphone: EqHeadphone | null
+  sound: EqSound
+  custom: { hz: number; gain: number }[]
+  preamp: number
+  playing: { id: string; title: string; sound: EqSound | null } | null
+  games: { id: string; title: string; sound: EqSound }[]
+  library: { id: string; title: string }[]
+  night: { on: boolean; start: string; end: string; sync: boolean; now: boolean }
+  others: { name: string; headphone: string | null; sound: EqSound }[]
+  guess: EqHeadphone | null
+  lucidPlays: boolean
 }
-/** One change to Lucid's settings; favorites by headphone id. */
-export type LucidChange = Partial<Omit<LucidSettings, 'headphone' | 'favorites' | 'eqOn'>> & {
-  headphone?: string
-  favorites?: Record<string, boolean>
-}
-/** A headphone Lucid has a tuning for, as its picker lists it. */
-export type LucidHeadphone = { id: string; model: string; brand: string; category: string; grade: string; keywords: string }
+export type EqAction = 'state' | 'install' | 'devices' | 'sound-settings' | 'headphone' | 'sound' | 'custom' | 'compare' | 'on' | 'game' | 'night' | 'lucid-off'
 export type VoiceTuneWindows = { level: number | null; hardware: boolean; muted: boolean; ducking: number; processing: string | null }
 export type VoiceTuneResult = {
   ok: boolean; message?: string | null; cancelled?: boolean; kept: boolean; windows: VoiceTuneWindows; before?: string; after?: string
@@ -720,6 +704,15 @@ export type NetSample = { ping: number | null; jitter: number | null; router: nu
 export type NetCheck = { before: NetSample | null; after: NetSample; said: string }
 export type PcHealth = { ok: boolean; message?: string | null; items: PcHealthItem[]; check?: NetCheck | null }
 
+/** Best settings › System's items (SystemTuning.cs): Windows defaults a tweak changed (Best settings) and two opt-ins (their own switch only). */
+export type TuningKey = 'timer' | 'scheduling' | 'pagefile' | 'cache' | 'services' | 'integrity'
+/**
+ * One item: on, Exo's setting is in place; off, the player turned a Best settings item off; optIn, only its own switch sets it;
+ * restart, a change (either way) waits on a restart; blocked, why Exo won't change it here (an anti-cheat, a policy).
+ */
+export type TuningItem = { key: TuningKey; label: string; detail: string; on: boolean; canUndo: boolean; off: boolean; optIn: boolean; restart: boolean; blocked: string | null }
+export type Tuning = { ok: boolean; message?: string | null; applied: boolean; restart: boolean; items: TuningItem[] }
+
 /**
  * PC › Drives (Drives.cs): one physical drive. link: the PCIe generation and lanes negotiated against the drive's own
  * (NVMe only); temperature in °C against the drive's warning and critical points; health as the drive reports it
@@ -872,6 +865,41 @@ export type PcAbout = {
   } | null
 }
 
+/** PC › Autopilot: the game in front now, read once a second while it is (its frames so far, the last second's numbers); null with no game. */
+export type AutopilotLive = {
+  game: string; title: string; seconds: number; fps: number; low1: number; low01: number; stutters: number
+  cpu?: number | null; gpu?: number | null; gpuTemp?: number | null; vramGb?: number | null; vramTotalGb?: number | null
+  ramGb?: number | null; ramTotalGb?: number | null; standbyGb?: number | null; freeGb?: number | null
+  /** The busiest processor's share of the second in drivers' deferred calls, in %. */
+  dpc?: number | null
+  /** The processor's performance against its base clock, in % (over 100 is boost). */
+  clock?: number | null
+}
+/** One cause a session's stutters came with: background (app set), vram, gpuHeat, cpuThrottle, paging, dpc, shaders, unexplained. */
+export type AutopilotFinding = { kind: string; stutters: number; app?: string | null; detail: string; suggestion: string }
+/** A session's report, kept on this PC: frames, stutters and what they came with, what Autopilot did, and what it learned for next time. */
+export type AutopilotReport = {
+  id: string; game: string; title: string; started: string; minutes: number; fps: number; low1: number; low01: number; stutters: number
+  findings: AutopilotFinding[]; did: string[]; learned: string[]
+  peaks?: { cpu: number; gpu?: number | null; gpuTemp?: number | null; vramGb?: number | null; vramTotalGb?: number | null; ramGb: number | null; ramTotalGb: number | null } | null
+  /** Seconds in which ISLC's rule (free memory under 1 GB, a standby list of 1 GB or more) would have purged. */
+  islcSeconds: number
+}
+export type AutopilotPriority = 'above' | 'high' | 'normal'
+/**
+ * PC › Autopilot: the switch and its choices (the game's priority, Windows Game Mode kept on, cores kept awake, the apps always held
+ * back and the apps paused while playing); where Game Mode stands (off: Autopilot turned it off; keptOn: why it stays on with
+ * Autopilot on); the processor's cache layout in words; what Autopilot does for the game running now; the live line and the reports.
+ */
+export type AutopilotState = {
+  on: boolean; gamePriority: AutopilotPriority; keepGameMode: boolean; coreParking: boolean; alwaysDemote: string[]; suspend: string[]
+  gameMode: { off: boolean; keptOn?: string | null }
+  cpu: string
+  now?: { game: string; did: string[] } | null
+  live: AutopilotLive | null; reports: AutopilotReport[]
+}
+export type AutopilotChange = Partial<Pick<AutopilotState, 'on' | 'gamePriority' | 'keepGameMode' | 'coreParking' | 'alwaysDemote' | 'suspend'>>
+
 /** System > This PC > Interrupts: one PCI device, its interrupt now (msi, line, or none when it isn't running) and what Optimize does to it. */
 export type InterruptDevice = {
   id: string
@@ -985,6 +1013,10 @@ export interface Game {
   status: string
   deps: string[]
   launchNote: string
+  /** Lent by the account's Steam Family, not the account's own. */
+  familyShared?: boolean
+  /** The family member(s) who share it ("Sam", "Sam and Alex"); null when Steam names nobody. */
+  sharedBy?: string | null
   launchTarget?: string | null
   /** Official storefront from the host. Absent when Buy must not appear. */
   buyUrl?: string | null
@@ -994,6 +1026,8 @@ export interface Game {
   isRunning?: boolean
   /** Stop is never offered for a store client, overlay, or anti-cheat process. */
   canStop?: boolean
+  /** Genres and modes from Steam's own record of the game (racing, co-op, ...); none for a game Steam doesn't know. */
+  tags?: string[]
 }
 
 export interface InstallProgress {
@@ -1359,7 +1393,7 @@ export interface LauncherSettings {
   /** Settings › General › Open Exo when Windows starts. */
   startWithWindows?: boolean
   textColour?: 'white' | 'grey' | string
-  /** Settings › General › Background (lib/exoTheme.ts › BACKGROUNDS). */
+  /** Always black: Exo is pure black (AMOLED), with no Background choice (lib/exoTheme.ts › BACKGROUNDS). */
   background?: 'black' | 'near' | 'grey' | 'windows' | 'graphite' | string
   textSize?: 'small' | 'normal' | 'large' | string
   /** The page's own choices Exo keeps (lib/uiPrefs.ts), by key. settings.set merges the keys sent; null removes one. */
@@ -1456,23 +1490,6 @@ export interface ClientsStatus {
   /** A read that failed (Epic's version, Steam's branch): unknown, never a confirmed fix. problem says why; onboarding holds on it, the start card does not. */
   problem: string | null
   steam: { channel: 'none' | 'stable' | 'beta' | 'unknown' }
-}
-
-/** A Riot game's lifetime from the Riot ID's ledger: its minutes per mode (largest first) and tracker.gg's profile stats. */
-export type RiotLifetime = {
-  ok: boolean
-  minutes: number
-  /** The seed is tracker.gg's playlist sum, not its lifetime total. */
-  partial: boolean
-  modes: { mode: string; minutes: number }[]
-  stats: {
-    matches?: number | null
-    wins?: number | null
-    killDeath?: number | null
-    currentRank?: string | null
-    peakRank?: string | null
-    topPicks?: string[] | null
-  } | null
 }
 
 export interface StoreStatus {
@@ -1788,7 +1805,7 @@ export function initHostBridge() {
     pending.delete(res.id)
     if (res.version !== undefined && res.version !== HOST_PROTOCOL_VERSION) p.reject(new Error('The launcher and UI versions do not match. Restart Exo.'))
     else if (res.ok === true) p.resolve(res.result)
-    else p.reject(new Error(res.error || 'Something went wrong. Try again.'))
+    else p.reject(new Error(res.error || 'Exo couldn’t finish that. Try again.'))
   })
 }
 
@@ -1827,6 +1844,8 @@ export interface HostEventMap {
   /** Exo wrote a game's Optimize again after its update reset it (title: the game's name). */
   'game.optimizedAgain': { title: string }
   'game.optimizeHeld': { title: string }
+  /** Autopilot kept a session's report (shown in PC › Autopilot afterwards; nothing is said during play). */
+  'autopilot.report': { game: string; title: string }
   /** The shader precompile moved on (at most four a second) or ended (ok set). */
   /** The Exo Shaders engine changed its list or a game's record: read shaders.status again. */
   'shaders.changed': Record<string, never>
@@ -2626,8 +2645,6 @@ export const host = {
       'playtime.riotRefresh',
       riotId ? { riotId } : {},
     ),
-  /** A Riot game's lifetime for its game page: minutes per mode and the seed's profile stats. */
-  riotLifetime: (game: string) => rawCall<RiotLifetime>('playtime.riotLifetime', { game }),
   minimize: () => rawCall<{ ok: boolean }>('shell.minimize'),
   maximize: () => rawCall<{ ok: boolean; maximized?: boolean }>('shell.maximize'),
   windowState: () => rawCall<{ ok: boolean; maximized?: boolean }>('shell.windowState'),
@@ -2656,6 +2673,11 @@ export const host = {
   /** What an error's Copy logs copies: Exo's version, the error, where (a room's name) and the log entries behind it. */
   /** The report for an error's Copy logs, already on Windows' clipboard when copied is true. */
   logsFor: (error: string, area: string) => rawCall<{ ok: boolean; text?: string; copied?: boolean }>('app.logsFor', { error, area }, 15_000),
+  /** Report a problem's Attach logs: the scrubbed log excerpt Send would attach, exactly as it goes. */
+  reportPreview: () => rawCall<{ ok: boolean; excerpt?: string }>('report.preview', {}, 15_000),
+  /** Report a problem's Send: to the team's private tracker through Exo's report service; the issue's number, or a reference. */
+  reportSend: (report: { message: string; excerpt?: string; contact?: string }) =>
+    rawCall<{ ok: boolean; issue?: number | null; ref?: string | null; message?: string | null }>('report.send', report, 45_000),
   repairCache: (scope: 'sizes' | 'upscalers') => rawCall<{ ok: boolean; message?: string }>('app.repairCache', { scope }),
   dlssStatus: (id: string, refresh = false) =>
     rawCall<DlssStatus>('dlss.status', { id, ...(refresh ? { refresh: true } : {}) }, refresh ? 120_000 : 60_000),
@@ -2863,14 +2885,13 @@ export const host = {
   /** Only My Voice: learn the voice from the live meter's last seconds (fetches the 40 MB voice model the first time), or forget it. */
   discordMyVoice: (action: 'learn' | 'forget') => rawCall<{ ok: boolean; learned: boolean; message?: string | null }>('discord.myVoice', { action }, 180_000),
   /**
-   * Lucid, the EQ in Exo: its state, Start with Exo (set), its first set up (setup: downloads and installs what the row
-   * has said), its own window for Repair (repair), Equalizer APO's device picker (devices), or a change to its settings
-   * (change: Lucid closes and starts again out of sight).
+   * Exo EQ for an output (its endpoint id; the one Windows plays on when absent): its state, Equalizer APO's install
+   * (downloads from SourceForge, one Windows prompt), its Device Selector, Windows' Sound settings, or a change.
    */
-  lucid: (action: 'state' | 'set' | 'follow' | 'setup' | 'repair' | 'devices' | 'change' = 'state', params: { on?: boolean; change?: LucidChange } = {}) =>
-    rawCall<LucidState>('lucid', { action, ...params }, 30_000),
-  /** The headphones Lucid has tunings for, read from the Lucid in use. */
-  lucidHeadphones: () => rawCall<{ ok: boolean; headphones: LucidHeadphone[] }>('lucid.headphones'),
+  eq: (action: EqAction = 'state', params: { output?: string | null; id?: string | null; sound?: EqSound | null; gains?: number[]; on?: boolean; game?: string; start?: string; end?: string; sync?: boolean } = {}) =>
+    rawCall<EqState>('eq', { action, ...params }, action === 'install' ? 900_000 : 30_000),
+  /** AutoEq's headphones (fetched the first time, then kept a week). */
+  eqHeadphones: () => rawCall<{ ok: boolean; headphones: EqHeadphone[] }>('eq.headphones', {}, 30_000),
   /** Devices: the mouse, keyboards, audio and controllers on this PC (devices.changed says when one comes or goes). */
   devicesUsbMap: () => rawCall<{ ok: boolean; message?: string; controllers: UsbMapController[] }>('devices.usbMap', {}, 15_000),
   devicesList: () => rawCall<{ ok: boolean; devices: Peripheral[]; cpuPorts?: CpuPorts | null }>('devices.list', {}, 15_000),
@@ -2908,7 +2929,7 @@ export const host = {
   steamInputState: () => rawCall<{ ok: boolean; steam: boolean; native: number; translated: number }>('steamInput.state'),
   /**
    * A device's official product picture (the maker's own), fitted to one transparent 1200x800 frame with the same
-   * margin as every other and kept on this PC. Pass what devices.list or Lucid says of it; url null: Exo's list has
+   * margin as every other and kept on this PC. Pass what devices.list or Exo EQ's pick says of it; url null: Exo's list has
    * no picture for it, or it couldn't be fetched (draw the device instead). The first ask fetches, so it can take a few seconds.
    */
   devicesImage: (device: { kind: string; model?: string | null; name?: string | null; maker?: string | null; color?: string | null; layout?: string | null }) =>
@@ -3012,7 +3033,14 @@ export const host = {
   /** PC > Auto tune: what's tunable and where it stands; start, stop or undo one part. Off until pressed. */
   systemTune: (action?: 'start' | 'stop' | 'undo', part?: TunePart['id'], mode?: AutoTuneMode) =>
     rawCall<AutoTune>('system.tune', action ? { action, part, mode } : {}, 45_000),
+  /** PC › Autopilot: the game being watched now and the session reports kept on this PC, newest first. */
+  autopilotState: () => rawCall<AutopilotState>('autopilot.state', {}, 15_000),
+  /** One change to Autopilot: the switch (Windows Game Mode follows it at once) or a choice. message: what Windows didn't take. */
+  autopilotSet: (change: AutopilotChange) => rawCall<{ ok: boolean; message?: string | null; state: AutopilotState }>('autopilot.set', change, 15_000),
   /** System > This PC > Interrupts: the devices; apply switches every one that can to MSI mode, undo puts all back, revert one. Waits on Windows' permission prompt. */
+  /** Best settings › System: the items; apply sets every Best settings item that's on, on and off one item. Waits on Windows' permission prompt and a restore point. */
+  systemTuning: (action?: 'apply' | 'on' | 'off', item?: TuningKey) =>
+    rawCall<Tuning>('system.tuning', action ? { action, ...(item ? { item } : {}) } : {}, 240_000),
   systemInterrupts: (action?: 'apply' | 'undo' | 'revert' | 'reapply', device?: string) =>
     rawCall<Interrupts>('system.interrupts', action ? { action, ...(device ? { device } : {}) } : {}, 120_000),
   /**

@@ -4,6 +4,7 @@ import { report } from '../../lib/report'
 import { Button } from '../ui/Button'
 import { Row, Section } from './parts'
 import { SentPayloads } from './SentPayloads'
+import { errorText } from '../../lib/errorWords'
 
 /** Settings › Privacy: what was sent, and Delete my data. App data and crash reports are always sent (owner, 2026-11-09): no switches. */
 export function PrivacySection() {
@@ -16,7 +17,7 @@ export function PrivacySection() {
     setConfirming(false)
     try {
       const done = await host.telemetryDelete()
-      setMessage(done.ok ? 'Your data was deleted. Exo made a new install ID for this PC.' : done.message ?? 'Your data was not deleted. Try again.')
+      setMessage(done.ok ? 'Your data was deleted. Exo made a new install ID for this PC.' : errorText(done.message, 'Your data was not deleted. Try again.'))
       if (done.ok) setViewing(false)
     } catch (error) {
       report(error, 'PrivacySection.delete')

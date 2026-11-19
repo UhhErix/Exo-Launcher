@@ -34,7 +34,7 @@ internal sealed class AppsOrphans(AppServices services)
 
     internal List<string> Games() => services.Library.PeekCachedLibrary().Where(game => !string.IsNullOrWhiteSpace(game.Path)).Select(game => game.Path!).ToList();
 
-    // What the games here and Lucid need (AppsKeep), read again after five minutes: a game's runtimes come from its files.
+    // What the games here and Exo EQ need (AppsKeep), read again after five minutes: a game's runtimes come from its files.
     private (DateTime At, AppsKeep.Needs Needs)? _keepNeeds;
 
     internal AppsKeep.Needs KeepNeeds()
@@ -45,7 +45,7 @@ internal sealed class AppsOrphans(AppServices services)
         foreach (var game in installed)
             foreach (var id in DependencyService.RuntimesFor(game)) runtimes.TryAdd(id, game.Title);
         var needs = new AppsKeep.Needs(installed.GroupBy(game => game.Store).ToDictionary(group => group.Key, group => group.Count()), runtimes,
-            File.Exists(LucidSettings.FilePath));
+            ExoEq.Current.Outputs.Values.Any(output => output.Headphone is not null || output.Sound != ExoEqSounds.Flat));
         _keepNeeds = (DateTime.UtcNow, needs);
         return needs;
     }

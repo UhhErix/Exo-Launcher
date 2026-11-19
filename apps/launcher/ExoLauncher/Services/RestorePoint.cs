@@ -15,15 +15,24 @@ internal static class RestorePoint
     internal enum Outcome { Made, Recent, Off, Declined, Failed }
 
     private const string Script =
-        "$s=Get-Date;$o='off';try{Checkpoint-Computer -Description 'Exo Launcher: before removing apps' -RestorePointType APPLICATION_UNINSTALL -ErrorAction Stop -WarningAction SilentlyContinue;" +
+        "$s=Get-Date;$o='off';try{Checkpoint-Computer -Description '{1}' -RestorePointType {2} -ErrorAction Stop -WarningAction SilentlyContinue;" +
         "$r=Get-ComputerRestorePoint|Sort-Object SequenceNumber|Select-Object -Last 1;" +
         "if($r){$t=$r.ConvertToDateTime($r.CreationTime);if($t -ge $s.AddMinutes(-1)){$o='made'}elseif($t -ge $s.AddHours(-24)){$o='recent'}else{$o='failed'}}else{$o='failed'}}catch{$o='off'};" +
         "[IO.File]::WriteAllText({0},$o)";
 
     /// <summary>The elevated step that makes one and writes its one-word answer to <paramref name="answer"/>.</summary>
-    internal static string Step(string answer) =>
+    internal static string Step(string answer) => Step(answer, "Exo Launcher: before removing apps", "APPLICATION_UNINSTALL");
+
+    /// <summary>
+    /// The same step for another change: <paramref name="description"/> is the name Windows lists it by (a fixed text of
+    /// Exo's own) and <paramref name="type"/> one of Windows' restore point types (MODIFY_SETTINGS for settings).
+    /// </summary>
+    internal static string Step(string answer, string description, string type) =>
         $"{LeftoverScan.PowerShell} -NoProfile -NonInteractive -WindowStyle Hidden -EncodedCommand " +
-        Convert.ToBase64String(Encoding.Unicode.GetBytes(Script.Replace("{0}", "'" + answer.Replace("'", "''") + "'", StringComparison.Ordinal)));
+        Convert.ToBase64String(Encoding.Unicode.GetBytes(Script
+            .Replace("{0}", "'" + answer.Replace("'", "''") + "'", StringComparison.Ordinal)
+            .Replace("{1}", description.Replace("'", "''"), StringComparison.Ordinal)
+            .Replace("{2}", type is "MODIFY_SETTINGS" or "APPLICATION_UNINSTALL" ? type : "MODIFY_SETTINGS", StringComparison.Ordinal)));
 
     /// <summary>The elevated step's word as an outcome; anything else (nothing written, a word changed) failed.</summary>
     internal static Outcome Read(string? word) => word?.Trim() switch

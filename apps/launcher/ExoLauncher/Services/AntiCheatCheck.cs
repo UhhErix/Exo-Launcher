@@ -372,7 +372,7 @@ internal static partial class AntiCheatCheck
     internal static readonly IReadOnlyDictionary<string, string> KnownGames = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
     {
         ["steam:2139460"] = NetEase, ["steam:2767030"] = NetEase, ["epic:575efd0b5dd54429b035ffc8fe2d36d0"] = NetEase, ["steam:2943650"] = NetEase,
-        ["steam:2782500"] = NetEase, ["steam:1203220"] = NetEase, ["steam:2073850"] = "Elytra", ["steam:2016590"] = "IronShield",
+        ["steam:2782500"] = NetEase, ["steam:1203220"] = NetEase, ["steam:3564740"] = NetEase, ["steam:2073850"] = "Elytra", ["steam:2016590"] = "IronShield",
         ["steam:1551360"] = Forza, ["steam:2483190"] = Forza, ["xbox:Microsoft.ForteBaseGame_8wekyb3d8bbwe"] = Forza,
         ["xbox:Microsoft.624F8B84B80_8wekyb3d8bbwe"] = Forza, ["steam:2000950"] = Ricochet, ["steam:1938090"] = Ricochet,
         ["steam:1962663"] = Ricochet, ["steam:238960"] = Poe, ["steam:2694490"] = Poe,
@@ -657,7 +657,7 @@ internal static partial class AntiCheatCheck
         ("NEP2.dll", "NetEase Protect", Rule.Module), ("NEPCleaner.exe", "NetEase Protect", Rule.Module),
         ("ONCE_HUMAN.exe", NetEase, Rule.Program), ("Marvel-Win64-Shipping.exe", NetEase, Rule.Program), ("Marvel-Win64-Test.exe", NetEase, Rule.Program),
         ("Marvel.exe", NetEase, Rule.RootOrExe), ("MarvelRivals_Launcher.exe", NetEase, Rule.Program),
-        ("FragPunk.exe", NetEase, Rule.Program), ("nshm.exe", NetEase, Rule.Program), ("NarakaBladepoint.exe", NetEase, Rule.Program),
+        ("FragPunk.exe", NetEase, Rule.Program), ("nshm.exe", NetEase, Rule.Program), ("NarakaBladepoint.exe", NetEase, Rule.Program), ("wwm.exe", NetEase, Rule.Program),
         // Nexon Game Security, AhnLab HackShield
         ("BlackCall.aes", "Nexon Game Security", Rule.Module), ("BlackCall64.aes", "Nexon Game Security", Rule.Module), ("BlackCat64.sys", "Nexon Game Security", Rule.Module),
         ("HShield", "AhnLab HackShield", Rule.Module),
@@ -684,7 +684,7 @@ internal static partial class AntiCheatCheck
         ("DenuvoAC", Denuvo, Rule.Module), ("Denuvo Anti-Cheat", Denuvo, Rule.Module), ("denuvo-anti-cheat.sys", Denuvo, Rule.Module),
         ("denuvo-anti-cheat-runtime.dll", Denuvo, Rule.Module), ("denuvo-anti-cheat-update-service.exe", Denuvo, Rule.Module),
         ("Denuvo Anti-Cheat Installer.exe", Denuvo, Rule.Module), ("denuvo-anti-cheat*", Denuvo, Rule.Module),
-        // Exo Shaders' ExoBuild.AntiCheatModules, by the start of a file's name
+        // Prefix markers by the start of a file's name
         ("battleye*", Be, Rule.Module), ("vgk*", DlssSwapService.RiotVanguard, Rule.Module), ("vgc*", DlssSwapService.RiotVanguard, Rule.Module),
         ("gameguard*", "nProtect GameGuard", Rule.Module), ("ricochet*", Ricochet, Rule.Module), ("xigncode*", "XIGNCODE3", Rule.Module),
     ];
@@ -873,7 +873,7 @@ internal static partial class AntiCheatCheck
         (Word("counter-strike|dota 2|deadlock|team fortress 2|left 4 dead|garry's mod|day of defeat|half-life 2: deathmatch"), ValveAntiCheat),
         // Blizzard's online-only games; Diablo and StarCraft are left to the store (GOG sells the single-player Diablo).
         (Word("overwatch|world of warcraft|hearthstone|heroes of the storm"), "Warden"),
-        (Word("marvel rivals|naraka|once human|fragpunk"), NetEase),
+        (Word("marvel rivals|naraka|once human|fragpunk|where winds meet"), NetEase),
         (Word("the finals"), "Elytra"),
         (Word("delta force|arena breakout"), Ace),
         (Word("genshin impact|honkai: star rail|honkai impact|zenless zone zero"), HoYo),

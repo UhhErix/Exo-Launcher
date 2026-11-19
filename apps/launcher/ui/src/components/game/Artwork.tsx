@@ -6,10 +6,10 @@ import { useSelectionGuard } from './useSelectionGuard'
 
 type ArtAction = 'replace' | 'reset' | 'refetch'
 
-const FAILED = 'Exo could not update the cover. Try again.'
+const FAILED = 'Exo couldn’t update the cover. Try again.'
 
 function errorText(error: unknown, fallback: string): string {
-  return error instanceof Error ? error.message : fallback
+  return errorText(error, fallback)
 }
 
 /** The cover's own tools: Replace, and Reset (a custom cover) or Refresh art (the store's). */

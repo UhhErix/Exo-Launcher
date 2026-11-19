@@ -46,6 +46,8 @@ public sealed class GameEntry
     public bool Owned { get; init; } = true;
     /// <summary>Steam Family / borrowed license. Playable through Steam, not in GetOwnedGames.</summary>
     public bool FamilyShared { get; init; }
+    /// <summary>Who shares a <see cref="FamilyShared"/> game ("Sam", "Sam and Alex"), when Steam's family names them.</summary>
+    public string? SharedBy { get; init; }
     public EntitlementState EntitlementState { get; init; } = EntitlementState.Unknown;
     public bool UpdateAvailable { get; init; }
     public bool CanInstall { get; init; }
@@ -110,6 +112,7 @@ public sealed class GameEntry
         Installed = Installed,
         Owned = Owned,
         FamilyShared = FamilyShared,
+        SharedBy = SharedBy,
         EntitlementState = EntitlementState,
         UpdateAvailable = UpdateAvailable,
         CanInstall = CanInstall,
@@ -162,6 +165,8 @@ public sealed record GameVariant
     public required StoreKind Store { get; init; }
     public bool Installed { get; init; }
     public bool Owned { get; init; }
+    public bool FamilyShared { get; init; }
+    public string? SharedBy { get; init; }
     public EntitlementState EntitlementState { get; init; } = EntitlementState.Unknown;
     public bool UpdateAvailable { get; init; }
     public bool CanInstall { get; init; }
@@ -183,6 +188,8 @@ public sealed record GameVariant
         Store = game.Store,
         Installed = game.Installed,
         Owned = game.Owned,
+        FamilyShared = game.FamilyShared,
+        SharedBy = game.SharedBy,
         EntitlementState = game.EntitlementState,
         UpdateAvailable = game.UpdateAvailable,
         CanInstall = game.CanInstall,
@@ -200,6 +207,8 @@ public sealed record GameVariant
         Store = Store,
         Installed = Installed,
         Owned = Owned,
+        FamilyShared = FamilyShared,
+        SharedBy = SharedBy,
         EntitlementState = EntitlementState,
         UpdateAvailable = UpdateAvailable,
         CanInstall = CanInstall,
@@ -388,6 +397,8 @@ public sealed class AppSettings
     public string FpsCounterPosition { get; set; } = "right";
     /// <summary>What it shows after the FPS (<see cref="ExoLauncher.Services.FpsItems"/>); nothing until switched on.</summary>
     public List<string> FpsCounterItems { get; set; } = [];
+    /// <summary>Autopilot (<see cref="ExoLauncher.Services.Autopilot"/>): one switch, off until the player turns it on, and its tucked-away choices.</summary>
+    public AutopilotSettings Autopilot { get; set; } = new();
     /// <summary>HDR on for the screen an HDR game is on while it runs, back off after (System > Graphics > HDR). On by default:
     /// it only acts on games whose verdict says they output HDR (<see cref="ExoLauncher.Services.GameHdr"/>). A settings file
     /// that never recorded it gets the default; one that did keeps its choice.</summary>
@@ -506,16 +517,15 @@ public sealed class AppSettings
     public bool UpscalerAutoUpdateDefaulted { get; set; } = true;
     /// <summary>On a PC with two graphics chips, Windows is asked to run Exo's games on the fast one (<see cref="ExoLauncher.Services.GpuPreference"/>); off until the user turns it on.</summary>
     public bool FastGpuForGames { get; set; }
-    /// <summary>Lucid (<see cref="ExoLauncher.Services.LucidCompanion"/>) starts with Exo, out of sight; off until the user turns it on.</summary>
+    /// <summary>
+    /// An earlier Exo hosted Lucid with itself (3.25 and before); read once by the move to Exo EQ
+    /// (<see cref="ExoLauncher.Services.LucidRetire"/>), which then turns it off for good.
+    /// </summary>
     public bool StartLucidWithExo { get; set; }
-    /// <summary>Lucid's EQ switches to the tuning of the headset Windows moves to (<see cref="ExoLauncher.Services.LucidCompanion.FollowAsync"/>); on until the user turns it off.</summary>
-    public bool LucidFollowHeadset { get; set; } = true;
     /// <summary>Apps whose start with Windows Exo turned off (<see cref="ExoLauncher.Helpers.StartupApps"/>); one turned back on stays on.</summary>
     public List<string> StartupHandedToExo { get; set; } = [];
     /// <summary>Exo opens when Windows starts (the current user's Run key, <see cref="ExoLauncher.Services.StartWithWindows"/>); off until the player turns it on.</summary>
     public bool StartWithWindows { get; set; }
-    /// <summary>Where a separate Lucid.exe was, as earlier versions of Exo found it: used only while it's newer than the one in Exo.</summary>
-    public string? LucidPath { get; set; }
     /// <summary>
     /// Retired with Exo's own OpenMouse bridge, read once by
     /// <see cref="ExoLauncher.Services.MouseBridgeRetirement"/> and then
@@ -601,4 +611,28 @@ public sealed class DiscordKeybind
 {
     public string Action { get; set; } = "";
     public List<int> Keys { get; set; } = [];
+}
+
+/// <summary>Autopilot's switch and choices (PC › Autopilot). The defaults are what Autopilot does when it is simply turned on.</summary>
+public sealed class AutopilotSettings
+{
+    /// <summary>The one switch. Off until the player turns it on.</summary>
+    public bool On { get; set; }
+    /// <summary>The game's processes: above (the default), high, or normal (left alone). Never realtime.</summary>
+    public string GamePriority { get; set; } = "above";
+    /// <summary>Keep Windows Game Mode on although Autopilot covers it (the player's override).</summary>
+    public bool KeepGameMode { get; set; }
+    /// <summary>Keep every core awake while a game runs, where the active plan would park them.</summary>
+    public bool CoreParking { get; set; } = true;
+    /// <summary>Apps (executable names) always held back while a game runs, from PC › Task Manager.</summary>
+    public List<string> AlwaysDemote { get; set; } = [];
+    /// <summary>Apps (executable names) paused while a game runs and started again after, from PC › Task Manager.</summary>
+    public List<string> Suspend { get; set; } = [];
+
+    internal AutopilotSettings Copy() => new()
+    {
+        On = On, GamePriority = GamePriority is "high" or "normal" ? GamePriority : "above", KeepGameMode = KeepGameMode, CoreParking = CoreParking,
+        AlwaysDemote = [.. (AlwaysDemote ?? []).Where(name => !string.IsNullOrWhiteSpace(name)).Distinct(StringComparer.OrdinalIgnoreCase).Take(200)],
+        Suspend = [.. (Suspend ?? []).Where(name => !string.IsNullOrWhiteSpace(name)).Distinct(StringComparer.OrdinalIgnoreCase).Take(50)],
+    };
 }

@@ -15,7 +15,7 @@ public sealed class AppsKeepTests
     private static InstalledProgram Package(string family) =>
         new("store:" + family, family, null, null, null, null, null, null, Store: true, Machine: false, null, null, family, true, null, null, null);
 
-    private static readonly AppsKeep.Needs Nothing = new(new Dictionary<StoreKind, int>(), new Dictionary<string, string>(), Lucid: false);
+    private static readonly AppsKeep.Needs Nothing = new(new Dictionary<StoreKind, int>(), new Dictionary<string, string>(), Eq: false);
 
     [Fact]
     public void WhatGamesAndWindowsRunOnAlwaysStays()
@@ -65,14 +65,14 @@ public sealed class AppsKeepTests
     public void AStoreOrRuntimeStaysOnlyWhileAGameHereNeedsIt()
     {
         var needs = new AppsKeep.Needs(new Dictionary<StoreKind, int> { [StoreKind.Steam] = 12, [StoreKind.Ea] = 1 },
-            new Dictionary<string, string> { ["physx-legacy"] = "Batman: Arkham Asylum" }, Lucid: true);
+            new Dictionary<string, string> { ["physx-legacy"] = "Batman: Arkham Asylum" }, Eq: true);
         Assert.Equal("Your 12 Steam games need it", AppsKeep.Why(Desktop("Steam"), needs));
         Assert.Equal("Your EA game needs it", AppsKeep.Why(Desktop("EA app"), needs));
         Assert.Null(AppsKeep.Why(Desktop("Ubisoft Connect"), needs));                                // no Ubisoft game here
         Assert.Equal("Batman: Arkham Asylum needs it", AppsKeep.Why(Desktop("NVIDIA PhysX (Legacy)"), needs));
         Assert.Null(AppsKeep.Why(Desktop("NVIDIA PhysX System Software 9.23.1019"), needs));          // the other PhysX: no game asks
-        Assert.Equal("Lucid's EQ runs on it", AppsKeep.Why(Desktop("Equalizer APO"), needs));
-        Assert.Null(AppsKeep.Why(Desktop("Equalizer APO"), Nothing));                                 // without Lucid it can go
+        Assert.Equal("Exo EQ runs on it", AppsKeep.Why(Desktop("Equalizer APO"), needs));
+        Assert.Null(AppsKeep.Why(Desktop("Equalizer APO"), Nothing));                                 // without Exo EQ it can go
         Assert.Null(AppsKeep.Why(Desktop("Steam"), Nothing));
     }
 }

@@ -41,7 +41,7 @@ function e2eRule(path) {
 }
 
 /** The app's own source: a path here that no rule knows is named in the plan, not silently dropped. */
-const APP_SOURCE = /^(ExoLauncher|ui\/src|mouse\/src|capture\/src)\//
+const APP_SOURCE = /^(ExoLauncher|ui\/src|mouse\/src|capture\/ExoCapture)\//
 
 /**
  * @param {string[]} files repo-relative paths, forward slashes

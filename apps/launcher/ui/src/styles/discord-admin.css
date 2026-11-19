@@ -45,6 +45,20 @@ textarea.exo-dc-field {
   flex: 1;
 }
 
+/* Why a save didn't take, in the bar's own words (SaveBar). */
+.exo-dc-savebar > .exo-dc-savebar-why {
+  color: var(--dc-bad);
+}
+
+/* Saved: the check draws itself where Save was, then the bar goes. */
+.exo-dc-savebar > .exo-dc-savebar-done {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+}
+
 /* Leaving with unsaved changes: the bar flashes red and shakes, Discord's warning; under Reduce motion, the red alone. */
 .exo-dc-savebar.is-nudged {
   /* design-disable-next-line exo/motion-token -- the unsaved bar holds its red while it shakes, not a move */

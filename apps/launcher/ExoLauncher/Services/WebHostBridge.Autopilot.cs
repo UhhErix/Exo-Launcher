@@ -1,0 +1,131 @@
+using System.Text.Json;
+using ExoLauncher.Helpers;
+
+namespace ExoLauncher.Services;
+
+/// <summary>
+/// autopilot.state: PC › Autopilot. The switch and its choices, where Windows Game Mode stands, this processor's cache layout,
+/// what Autopilot does for the game running now, the game being watched (its frames so far and the last second's numbers) and the
+/// session reports kept on this PC, newest first. autopilot.set changes the switch or a choice (Game Mode follows the switch at
+/// once; turning it off puts back what the running game's session changed). autopilot.report tells the page a new report was
+/// kept; nothing is said during play.
+/// </summary>
+public sealed partial class WebHostBridge
+{
+    private static readonly Lazy<string> CcdText = new(() =>
+    {
+        try { return CcdLayout.Of(MouseCore.Sampler.ReadTopology()).Describe(); }
+        catch (Exception ex) when (ex is not OutOfMemoryException) { return "The processor's layout couldn't be read"; }
+    });
+
+    private static object AutopilotState()
+    {
+        var settings = Autopilot.Settings;
+        var keptOn = AutopilotGameMode.KeptOnBecause(settings, Autopilot.CpuClass);
+        var game = Autopilot.Engine.Game;
+        return new
+        {
+            on = settings.On,
+            gamePriority = settings.GamePriority,
+            keepGameMode = settings.KeepGameMode,
+            coreParking = settings.CoreParking,
+            alwaysDemote = settings.AlwaysDemote,
+            suspend = settings.Suspend,
+            gameMode = new { off = Autopilot.GameMode.Held is not null, keptOn = settings.On ? keptOn : null },
+            cpu = CcdText.Value,
+            now = game is null ? null : new { game, did = Autopilot.Engine.Did(game) },
+            live = AutopilotLive(),
+            reports = AutopilotReports.Load(AutopilotReports.DefaultPath).Take(10).Select(AutopilotReportDto).ToList(),
+        };
+    }
+
+    /// <summary>One change: on, gamePriority (above, high, normal), keepGameMode, coreParking, alwaysDemote or suspend (app names). Answers the state, with a sentence when Windows didn't take Game Mode.</summary>
+    private object AutopilotSet(JsonElement p, bool hasParams)
+    {
+        bool? Flag(string name) => hasParams && p.TryGetProperty(name, out var v) && v.ValueKind is JsonValueKind.True or JsonValueKind.False ? v.GetBoolean() : null;
+        List<string>? Names(string name) => hasParams && p.TryGetProperty(name, out var v) && v.ValueKind == JsonValueKind.Array
+            ? [.. v.EnumerateArray().Where(item => item.ValueKind == JsonValueKind.String).Select(item => AutopilotSafety.Bare(item.GetString())).Where(item => item.Length is > 0 and <= 128)]
+            : null;
+        var on = Flag("on");
+        var priority = ReadString(p, hasParams, "gamePriority");
+        var keep = Flag("keepGameMode");
+        var parking = Flag("coreParking");
+        var demote = Names("alwaysDemote");
+        var suspend = Names("suspend");
+        _services.Settings.UpdateProfile(s =>
+        {
+            var next = (s.Autopilot ?? new()).Copy();
+            if (on is { } o) next.On = o;
+            if (priority is "above" or "high" or "normal") next.GamePriority = priority;
+            if (keep is { } k) next.KeepGameMode = k;
+            if (parking is { } c) next.CoreParking = c;
+            if (demote is not null) next.AlwaysDemote = demote;
+            // An app on the safety list is never paused, whatever the page sent.
+            if (suspend is not null) next.Suspend = [.. suspend.Where(name => AutopilotSafety.WhyLeftAlone(name) is null)];
+            s.Autopilot = next.Copy();
+        });
+        if (on == false) Autopilot.Shutdown();
+        var message = on is not null || keep is not null ? Autopilot.HandGameMode() : null;
+        if (on == true) ArmRunStatePoll(RunStateDebounce);
+        AppLog.Info($"Autopilot: {(on is { } now ? now ? "on" : "off" : "a choice changed")}.");
+        return new { ok = message is null, message, state = AutopilotState() };
+    }
+
+    private static object? AutopilotLive()
+    {
+        if (AutopilotWatch.Shared.Live is not { } live) return null;
+        var s = live.Last;
+        return new
+        {
+            game = live.Game,
+            title = live.Title,
+            seconds = Math.Round(live.Frames.Seconds),
+            fps = Math.Round(live.Frames.AverageFps, 1),
+            low1 = Math.Round(live.Frames.Low1Fps, 1),
+            low01 = Math.Round(live.Frames.Low01Fps, 1),
+            stutters = live.Stutters,
+            cpu = s?.CpuPercent,
+            gpu = s?.GpuPercent,
+            gpuTemp = s?.GpuTemperature,
+            vramGb = Gb(s?.VramUsed),
+            vramTotalGb = Gb(s?.VramTotal),
+            ramGb = Gb(s?.RamUsed),
+            ramTotalGb = Gb(s?.RamTotal),
+            standbyGb = Gb(s?.Standby),
+            freeGb = Gb(s?.Free),
+            dpc = s?.DpcPercent is { } dpc ? Math.Round(dpc, 1) : (double?)null,
+            clock = s?.CpuPerformance is { } perf ? Math.Round(perf) : (double?)null,
+        };
+    }
+
+    private static double? Gb(long? bytes) => bytes is { } b ? Math.Round(b / (double)(1L << 30), 1) : null;
+
+    private static object AutopilotReportDto(AutopilotReport r) => new
+    {
+        id = $"{r.Game}:{r.StartedUtc:O}",
+        game = r.Game,
+        title = r.Title,
+        started = r.StartedUtc,
+        minutes = Math.Round(r.Seconds / 60),
+        fps = r.AverageFps,
+        low1 = r.Low1Fps,
+        low01 = r.Low01Fps,
+        stutters = r.Stutters,
+        findings = r.Findings.Select(f => new { kind = f.Kind, stutters = f.Stutters, app = f.App, detail = f.Detail, suggestion = f.Suggestion }).ToList(),
+        did = r.Did,
+        learned = r.Learned,
+        peaks = r.Peaks is { } p ? new
+        {
+            cpu = Math.Round(p.CpuPercent),
+            gpu = p.GpuPercent,
+            gpuTemp = p.GpuTemperature,
+            vramGb = Gb(p.VramUsed),
+            vramTotalGb = Gb(p.VramTotal),
+            ramGb = Gb(p.RamUsed),
+            ramTotalGb = Gb(p.RamTotal),
+        } : null,
+        islcSeconds = r.IslcSeconds,
+    };
+
+    private void OnAutopilotReported(AutopilotReport report) => PostEvent("autopilot.report", new { game = report.Game, title = report.Title });
+}

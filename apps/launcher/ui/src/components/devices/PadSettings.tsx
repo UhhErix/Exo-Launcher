@@ -3,6 +3,7 @@ import { host, type PadSettings, type PadStrength } from '../../lib/host'
 import { report } from '../../lib/report'
 import { Choice } from '../settings/Choice'
 import { Row, SwitchRow } from '../settings/parts'
+import { errorText } from '../../lib/errorWords'
 
 const DEFAULTS: PadSettings = { light: null, playerLight: false, micOff: false, speakerOff: false, vibration: 'full', triggerEffects: 'full' }
 
@@ -28,7 +29,7 @@ const TRIGGER_STRENGTHS = STRENGTHS.map(s => s.value === 'off' ? { ...s, label: 
 
 /**
  * A DualSense's or Edge's light, player light, microphone, speaker, vibration and trigger effects (DESIGN.md ›
- * Devices). Each change is sent at once over USB and again each time the controller connects and after each game,
+ * Devices), over USB only (lib/canUse.ts › padSettable). Each change is sent at once and again each time the controller connects and after each game,
  * since the controller forgets them and a game may set its own light.
  */
 export function PadSettingsRows({ id, usb, settings }: { id: string; usb: boolean; settings: PadSettings | null | undefined }) {
@@ -42,7 +43,7 @@ export function PadSettingsRows({ id, usb, settings }: { id: string; usb: boolea
     setError(null)
     try {
       const result = await host.controllerSettings(id, next)
-      if (!result.ok) { setCurrent(before); setError(result.message ?? 'The controller didn’t take it. Try again.') }
+      if (!result.ok) { setCurrent(before); setError(errorText(result.message, 'The controller didn’t take it. Try again.')) }
     } catch (cause) {
       report(cause, 'PadSettings.change')
       setCurrent(before)
@@ -51,11 +52,12 @@ export function PadSettingsRows({ id, usb, settings }: { id: string; usb: boolea
       setBusy(false)
     }
   }
-  const off = busy || !usb
   const switched = (key: 'micOff' | 'speakerOff', on: boolean) => change({ ...current, [key]: !on }).then(() => null)
+  // Sent over the cable only: over Bluetooth the rows go, and one line says why.
+  if (!usb) return <Row label="Connect it with a cable to change these" />
+  const off = busy
   return (
     <>
-      {!usb ? <Row label="Connect it with a cable to change these" /> : null}
       <Row label="Light bar" error={error}>
         <Choice label="Light bar" value={current.light ?? 'games'} choices={LIGHTS} disabled={off}
           onChange={value => void change({ ...current, light: value === 'games' ? null : value })} />

@@ -3,7 +3,8 @@ import { Check, ChevronDown, ChevronUp } from '../../brand/icons'
 import { cleanOutcome } from '../../lib/junkClean'
 import { host, onHostEvent, type AppFind, type AppLeftover, type InstalledApp, type JunkItem, type LeftoverSummary, type RemovalRecord, type StartupItem, type StartupState, type WindowsApp, type WindowsAppLine } from '../../lib/host'
 import { report } from '../../lib/report'
-import { ConfirmButton } from '../ui/ConfirmButton'
+import { ActionButton, ConfirmButton } from '../ui/ConfirmButton'
+import { errorText, type PlainError } from '../../lib/errorWords'
 import { Switch } from '../Switch'
 import { ErrorNote } from '../ui/ErrorNote'
 import { Wait, sample, times } from '../ui/Wait'
@@ -185,36 +186,57 @@ export function AppsPanel({ active }: { active: boolean }) {
   const knowsUse = programs.some(app => app.lastOpened || app.quietSince)
   const setError = (id: string, message: string | null) => setErrors(current => ({ ...current, [id]: message }))
 
+  /** One app's removal: its uninstaller, Exo's clean-up for one it does the job of, or only a look at what's left when its uninstaller is gone. */
+  const removal = (app: InstalledApp, quiet: boolean) => app.replaces ? host.replacedRemove(app.replaces)
+    : app.uninstaller ? host.appsUninstall(app.id, quiet) : host.appsScan(app.id)
+
+  /** What went, said in the Ready view; then the list read again. */
+  async function afterRemoval(app: InstalledApp, result: Awaited<ReturnType<typeof removal>>) {
+    if (result.ok) {
+      if (app.replaces) setRemoved(current => [{ id: app.id, name: app.name, message: `${app.name} is gone.` }, ...current])
+      else setRemoved(current => [{ id: app.id, name: app.name, find: result as AppFind }, ...current.filter(other => other.id !== app.id)])
+    }
+    const next = await host.appsList()
+    setPrograms(next.programs)
+    setEdgeRemoved(Boolean(next.edgeRemoved))
+  }
+
   /**
-   * One app, gone or not: its uninstaller, Exo's clean-up for one it does the job of, or only a look at what's left when its
-   * uninstaller is gone. quiet: one of a confirmed run. True when it went.
+   * One of a confirmed run, quietly where its installer allows. True when it went; a refusal shows under its row.
    */
   async function uninstall(app: InstalledApp, quiet = false): Promise<boolean> {
     setBusy(app.id)
     setError(app.id, null)
     let gone = false
     try {
-      if (app.replaces) {
-        const result = await host.replacedRemove(app.replaces)
-        if (!result.ok) setError(app.id, result.message ?? `${app.name} wasn't removed.`)
-        else setRemoved(current => [{ id: app.id, name: app.name, message: `${app.name} is gone.` }, ...current])
-        gone = result.ok
-      } else {
-        const result = app.uninstaller ? await host.appsUninstall(app.id, quiet) : await host.appsScan(app.id)
-        if (result.ok) setRemoved(current => [{ id: app.id, name: app.name, find: result }, ...current.filter(other => other.id !== app.id)])
-        else setError(app.id, result.message ?? `${app.name} wasn't removed.`)
-        gone = result.ok
-      }
-      const next = await host.appsList()
-      setPrograms(next.programs)
-      setEdgeRemoved(Boolean(next.edgeRemoved))
+      const result = await removal(app, quiet)
+      if (!result.ok) setError(app.id, errorText(result.message, `${app.name} wasn't removed. Try again.`))
+      gone = result.ok
+      await afterRemoval(app, result)
     } catch (error) {
       report(error, 'AppsPanel.uninstall')
-      setError(app.id, `${app.name} wasn't removed.`)
+      setError(app.id, errorText(error, `${app.name} wasn't removed. Try again.`))
     } finally {
       setBusy(null)
     }
     return gone
+  }
+
+  /**
+   * A row's own press (ActionButton): its ring while it works, then its check, and only then does the row go (`onDone`);
+   * a refusal turns the button Bad with the reason beside it, and the next press is Retry. The list is read again
+   * either way.
+   */
+  async function pressUninstall(app: InstalledApp) {
+    setBusy(app.id)
+    setError(app.id, null)
+    try {
+      const result = await removal(app, false)
+      if (!result.ok) void afterRemoval(app, result).catch(error => report(error, 'AppsPanel.list'))
+      return { ...result, settle: () => void afterRemoval(app, result).catch(error => report(error, 'AppsPanel.list')) }
+    } finally {
+      setBusy(null)
+    }
   }
 
   /**
@@ -229,14 +251,14 @@ export function AppsPanel({ active }: { active: boolean }) {
       // Each app left out says why, beside its own row (Exo logs the same reason).
       for (const skip of agreed.skipped) setError(skip.id, skip.reason)
       if (!agreed.ok) {
-        setError('many', agreed.message ?? 'Nothing was removed.')
+        setError('many', errorText(agreed.message, 'Nothing was removed.'))
         return
       }
       if (restore) {
         setRun({ at: 0, of: agreed.ids.length })
         const point = await host.appsRestorePoint()
         if (!point.ok) {
-          setError('many', point.message ?? 'No restore point was made. Nothing was removed.')
+          setError('many', errorText(point.message, 'No restore point was made. Nothing was removed.'))
           return
         }
       }
@@ -268,8 +290,8 @@ export function AppsPanel({ active }: { active: boolean }) {
 
   const line = (app: InstalledApp) => (
     <AppLine key={app.id} app={app} icon={icons[app.id] ?? null} starts={startsWithWindows.has(app.id)} showUsed={knowsUse} error={errors[app.id] ?? null}
-      working={busy === app.id} disabled={busy !== null || run !== null} picked={picked && pickable(app) ? picked.has(app.id) : null}
-      onPick={() => pick(app.id)} onUninstall={() => void uninstall(app)} />
+      working={busy === app.id} disabled={(busy !== null && busy !== app.id) || run !== null} picked={picked && pickable(app) ? picked.has(app.id) : null}
+      onPick={() => pick(app.id)} onUninstall={() => pressUninstall(app)} onFailed={why => setError(app.id, why)} />
   )
 
   const searching = query.trim().length > 0
@@ -459,7 +481,7 @@ function AppIcon({ name, icon }: { name: string; icon: string | null }) {
   return <ArtImg src={icon} loading="lazy" decoding="async" draggable={false} fallback={<span aria-hidden="true">{name.slice(0, 1)}</span>} />
 }
 
-function AppLine({ app, icon, starts, showUsed, error, working, disabled, picked, onPick, onUninstall }: {
+function AppLine({ app, icon, starts, showUsed, error, working, disabled, picked, onPick, onUninstall, onFailed }: {
   app: InstalledApp
   icon: string | null
   starts: boolean
@@ -469,7 +491,8 @@ function AppLine({ app, icon, starts, showUsed, error, working, disabled, picked
   disabled: boolean
   picked: boolean | null
   onPick: () => void
-  onUninstall: () => void
+  onUninstall: () => Promise<{ ok: boolean; message?: string | null; settle: () => void }>
+  onFailed: (why: string) => void
 }) {
   const detail = working
     ? (app.replaces ? `Removing ${app.name}` : app.uninstaller ? 'Finish in its window' : 'Looking for what it left')
@@ -480,8 +503,8 @@ function AppLine({ app, icon, starts, showUsed, error, working, disabled, picked
         <button type="button" className={picked ? 'exo-apps-pick is-picked' : 'exo-apps-pick'} aria-pressed={picked} aria-label={`Pick ${app.name}`} onClick={onPick}>
           {picked ? <Check size={12} /> : null}
         </button>
-      ) : !app.removable ? null : working ? <Spinner label={`Removing ${app.name}`} /> : (
-        <AppAction app={app} disabled={disabled} onUninstall={onUninstall} />
+      ) : !app.removable ? null : (
+        <AppAction app={app} disabled={disabled} onUninstall={onUninstall} onFailed={onFailed} />
       )}
     </Line>
   )
@@ -496,11 +519,27 @@ function whatItIs(app: InstalledApp): string | null {
   return app.caution?.replace(/\.$/, '') ?? app.publisher
 }
 
-/** Uninstall or Remove, asked in place; Clear only looks first, so what it found shows before anything goes. */
-function AppAction({ app, disabled, onUninstall }: { app: InstalledApp; disabled: boolean; onUninstall: () => void }) {
-  if (!app.uninstaller && !app.replaces) return <button type="button" className="exo-set-btn is-compact" disabled={disabled} onClick={onUninstall}>Look</button>
+/**
+ * Uninstall or Remove, asked in place; Look only looks first, so what it found shows before anything goes. The button
+ * says how it went (ActionButton): its ring, then its check, and then the row goes; or Retry with why.
+ */
+function AppAction({ app, disabled, onUninstall, onFailed }: {
+  app: InstalledApp
+  disabled: boolean
+  onUninstall: () => Promise<{ ok: boolean; message?: string | null; settle: () => void }>
+  onFailed: (why: string) => void
+}) {
+  const settle = (value: unknown) => (value as { settle?: () => void } | undefined)?.settle?.()
+  // The row's columns leave no room beside the button: the reason is the row's error line, under it.
+  const failed = (error: PlainError) => onFailed(error.text)
+  // An uninstaller runs in its own window for as long as the player takes: no time limit.
+  if (!app.uninstaller && !app.replaces) {
+    return <ActionButton className="exo-set-btn is-compact" disabled={disabled} timeoutMs={null} context="AppsPanel.look"
+      fallback={`Exo couldn’t look at what ${app.name} left. Try again.`} why="none" onFailed={failed} onPress={onUninstall} onDone={settle}>Look</ActionButton>
+  }
   const action = app.replaces ? 'Remove' : 'Uninstall'
-  return <ConfirmButton className="exo-set-btn is-compact is-danger" danger disabled={disabled} question={`${action}?`} onConfirm={onUninstall}>{action}</ConfirmButton>
+  return <ConfirmButton className="exo-set-btn is-compact is-danger" danger disabled={disabled} question={`${action}?`} timeoutMs={null}
+    context="AppsPanel.uninstall" fallback={`${app.name} wasn't removed. Try again.`} why="none" onFailed={failed} onConfirm={onUninstall} onDone={settle}>{action}</ConfirmButton>
 }
 
 // ---- what's ready ----
@@ -546,9 +585,8 @@ function Ready({ active, programs, removed, tidy, wentByItself, busy, startup, r
       {unneeded > 0 ? (
         <ReadyRow title={`${count(unneeded, 'thing', 'things')} starting with Windows can go`} error={startup.errors.clean || undefined}
           detail={names(startup.state?.items.filter(item => item.unneeded).map(item => item.name) ?? [])}>
-          <button type="button" className="exo-set-btn" disabled={startup.busy !== null} aria-busy={startup.busy === 'clean'} onClick={() => void startup.clean()}>
-            {startup.busy === 'clean' ? <Spinner label="Cleaning up startup" /> : null}Turn off {unneeded}
-          </button>
+          <ActionButton className="exo-set-btn" context="AppsPanel.startupClean" fallback="Startup wasn’t cleaned up. Try again." why="none"
+            onPress={startup.clean} onFailed={failure => startup.tell('clean', failure.text)} onDone={startup.settle}>Turn off {unneeded}</ActionButton>
         </ReadyRow>
       ) : null}
       <JunkRow active={active} />
@@ -584,31 +622,15 @@ function ReadyRow({ title, detail, done, error, children }: { title: string; det
 
 /** What went, in one plain line, with Put back beside it. */
 function ClearedRow({ line, undo, onChanged }: { line: string; undo: string | null | undefined; onChanged: () => void }) {
-  const [working, setWorking] = useState(false)
   const [back, setBack] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  async function putBack(id: string) {
-    setWorking(true)
-    setError(null)
-    try {
-      const result = await host.appsUndo(id)
-      if (result.ok) setBack(true)
-      else setError(result.message ?? 'It wasn’t put back.')
-      onChanged()
-    } catch (failure) {
-      report(failure, 'AppsPanel.undo')
-      setError('It wasn’t put back.')
-    } finally {
-      setWorking(false)
-    }
-  }
   if (back) return <ReadyRow title="Put back" done />
   return (
     <ReadyRow title={line} done error={error ?? undefined}>
       {undo ? (
-        <button type="button" className="exo-set-btn" disabled={working} onClick={() => void putBack(undo)}>
-          {working ? <Spinner label="Putting it back" /> : null}Put back
-        </button>
+        <ActionButton className="exo-set-btn" context="AppsPanel.undo" fallback="It wasn’t put back. Try again." why="none"
+          onPress={() => { setError(null); return host.appsUndo(undo) }}
+          onFailed={failure => { setError(failure.text); onChanged() }} onDone={() => { setBack(true); onChanged() }}>Put back</ActionButton>
       ) : null}
     </ReadyRow>
   )
@@ -651,26 +673,23 @@ function FindRow({ find, title, names: showNames, waiting, onLeave, onChanged, b
 }) {
   const [picks, setPicks] = useState(() => new Set(find.items.filter(item => item.selected).map(item => item.id)))
   const [open, setOpen] = useState(false)
-  const [working, setWorking] = useState(false)
   const [cleared, setCleared] = useState<{ what: LeftoverSummary; undo: string | null } | null>(null)
   const [error, setError] = useState<string | null>(null)
   const chosen = find.items.filter(item => picks.has(item.id))
 
+  /** The button's ring, then its check, then what went (and Put back) in its place; a refusal shows under the row. */
   async function clear() {
-    setWorking(true)
     setError(null)
-    try {
-      const result = await host.appsClean(find.token, [...picks], restore && chosen.some(item => item.machine))
-      if (result.cleared) setCleared({ what: result.cleared, undo: result.undo ?? null })
-      if (!result.ok) setError(result.message ?? 'Nothing was deleted.')
-      setOpen(false)
-      onChanged()
-    } catch (failure) {
-      report(failure, 'AppsPanel.clean')
-      setError('Nothing was deleted.')
-    } finally {
-      setWorking(false)
-    }
+    const result = await host.appsClean(find.token, [...picks], restore && chosen.some(item => item.machine))
+    // Some went before it stopped: what went shows, with the reason.
+    if (!result.ok && result.cleared) { setCleared({ what: result.cleared, undo: result.undo ?? null }); onChanged() }
+    return result
+  }
+  const cleanedUp = (value: unknown) => {
+    const result = value as Awaited<ReturnType<typeof host.appsClean>>
+    if (result.cleared) setCleared({ what: result.cleared, undo: result.undo ?? null })
+    setOpen(false)
+    onChanged()
   }
 
   const defaults = <DefaultsRow name={showNames ? 'apps that are gone' : find.name} types={find.defaults ?? []} />
@@ -681,17 +700,16 @@ function FindRow({ find, title, names: showNames, waiting, onLeave, onChanged, b
     <>
       <ReadyRow title={title} error={error ?? undefined} detail={findDetail(find, showNames, waiting)}>
         {picks.size > 0 ? (
-          <button type="button" className="exo-set-btn is-primary" disabled={busy || working} aria-busy={working} onClick={() => void clear()}>
-            {working ? <Spinner label={`Clearing what ${find.name} left`} /> : null}Clear {chosen.length}
-          </button>
+          <ActionButton className="exo-set-btn is-primary" disabled={busy} context="AppsPanel.clean" fallback="Nothing was deleted. Try again." why="none"
+            onPress={clear} onFailed={failure => setError(failure.text)} onDone={cleanedUp}>Clear {chosen.length}</ActionButton>
         ) : null}
         <button type="button" className="exo-set-btn" aria-expanded={open} onClick={() => setOpen(value => !value)}>{open ? 'Hide' : 'Review'}</button>
-        <button type="button" className="exo-set-btn" disabled={working} onClick={() => { void host.appsLeave(find.token); onLeave() }}>Leave</button>
+        <button type="button" className="exo-set-btn" onClick={() => { void host.appsLeave(find.token); onLeave() }}>Leave</button>
       </ReadyRow>
       {open && needsPermission ? (
         <div className="exo-apps-filter">
           <span id={`apps-restore-${find.token}`}>Restore point first</span>
-          <Switch checked={restore} onChange={onRestore} labelledBy={`apps-restore-${find.token}`} disabled={working} />
+          <Switch checked={restore} onChange={onRestore} labelledBy={`apps-restore-${find.token}`} />
         </div>
       ) : null}
       {open ? (
@@ -727,20 +745,11 @@ function FindRow({ find, title, names: showNames, waiting, onLeave, onChanged, b
 function DefaultsRow({ name, types }: { name: string; types: string[] }) {
   const [error, setError] = useState<string | null>(null)
   if (types.length === 0) return null
-  async function open() {
-    setError(null)
-    try {
-      const result = await host.appsOpenDefaults()
-      if (!result.ok) setError(result.message ?? 'Default apps didn’t open.')
-    } catch (failure) {
-      report(failure, 'AppsPanel.defaults')
-      setError('Default apps didn’t open.')
-    }
-  }
   return (
     <ReadyRow title={`${count(types.length, 'file type still opens', 'file types still open')} with ${name}`} error={error ?? undefined}
       detail={`${types.join(', ')} · Choose another app for ${types.length === 1 ? 'it' : 'each'} in Default apps`}>
-      <button type="button" className="exo-set-btn" onClick={() => void open()}>Default apps</button>
+      <ActionButton className="exo-set-btn" context="AppsPanel.defaults" fallback="Default apps didn’t open. Try again." why="none"
+        onPress={() => { setError(null); return host.appsOpenDefaults() }} onFailed={failure => setError(failure.text)}>Default apps</ActionButton>
     </ReadyRow>
   )
 }
@@ -761,7 +770,6 @@ function findDetail(find: AppFind, showNames?: boolean, waiting?: boolean): stri
  */
 function JunkRow({ active }: { active: boolean }) {
   const [items, setItems] = useState<JunkItem[] | null>(null)
-  const [busy, setBusy] = useState(false)
   const [cleaned, setCleaned] = useState<{ done?: string; error?: string } | null>(null)
   const read = useRef(false)
   const rescan = () => host.junkScan().then(
@@ -773,28 +781,23 @@ function JunkRow({ active }: { active: boolean }) {
     read.current = true
     void rescan()
   }, [active])
+  /** The button's ring and check; a clean that deleted nothing is a failure with its reason. */
   async function clean(junk: JunkItem[]) {
-    setBusy(true)
     setCleaned(null)
-    try {
-      const result = await host.junkClean(junk.map(item => item.id))
-      // A partial clean keeps the holder's line beside what it deleted: "Deleted 1.2 GB" and "3 files kept. ...".
-      setCleaned(cleanOutcome(result, size))
-      if (result.ok) await rescan()
-    } catch (error) {
-      report(error, 'AppsPanel.junkClean')
-      setCleaned({ error: 'Nothing was deleted.' })
-    } finally {
-      setBusy(false)
-    }
+    const result = await host.junkClean(junk.map(item => item.id))
+    const outcome = cleanOutcome(result, size)
+    return outcome.done ? result : { ok: false, message: outcome.error ?? null }
   }
+  // A partial clean keeps the holder's line beside what it deleted: "Deleted 1.2 GB" and "3 files kept. ...".
+  const cleanedUp = (value: unknown) => { setCleaned(cleanOutcome(value as Awaited<ReturnType<typeof host.junkClean>>, size)); void rescan() }
   if (!items) return null
   const total = items.reduce((sum, item) => sum + item.bytes, 0)
   if (cleaned?.done && total < JUNK_WORTH) return <ReadyRow title={cleaned.done} done error={cleaned.error} />
   if (total < JUNK_WORTH && !cleaned) return null
   return (
     <ReadyRow title={`${size(total)} of junk`} detail={names(items.filter(item => item.bytes > 0).map(item => item.name.toLowerCase())).replace(/^./, first => first.toUpperCase())} error={cleaned?.error}>
-      <ConfirmButton className="exo-set-btn is-danger" danger disabled={busy} question={`Delete ${size(total)}?`} lead={busy ? <Spinner label="Deleting junk" /> : null} onConfirm={() => void clean(items)}>Clean</ConfirmButton>
+      <ConfirmButton className="exo-set-btn is-danger" danger question={`Delete ${size(total)}?`} context="AppsPanel.junkClean" fallback="Nothing was deleted. Try again." why="none"
+        onConfirm={() => clean(items)} onFailed={failure => setCleaned({ error: failure.text })} onDone={cleanedUp}>Clean</ConfirmButton>
     </ReadyRow>
   )
 }
@@ -808,7 +811,6 @@ const CACHE_WORTH = 50e6
  */
 function InstallerCacheRow({ active, busy, onChanged }: { active: boolean; busy: boolean; onChanged: () => void }) {
   const [found, setFound] = useState<{ files: number; bytes: number } | null>(null)
-  const [working, setWorking] = useState(false)
   const [done, setDone] = useState<{ line: string; undo: string | null } | null>(null)
   const [error, setError] = useState<string | null>(null)
   const read = useRef(false)
@@ -817,26 +819,23 @@ function InstallerCacheRow({ active, busy, onChanged }: { active: boolean; busy:
     read.current = true
     host.appsInstallerCache().then(result => setFound(result), (failure: unknown) => report(failure, 'AppsPanel.installerCache', { level: 'warn' }))
   }, [active])
+  const moved = (result: Awaited<ReturnType<typeof host.appsInstallerCacheClean>>) => {
+    if (result.files > 0) setDone({ line: `Moved ${count(result.files, 'Windows Installer file', 'Windows Installer files')} to the Recycle Bin: ${size(result.bytes)} back.`, undo: result.undo ?? null })
+    onChanged()
+  }
   async function clear() {
-    setWorking(true)
     setError(null)
-    try {
-      const result = await host.appsInstallerCacheClean()
-      if (result.files > 0) setDone({ line: `Moved ${count(result.files, 'Windows Installer file', 'Windows Installer files')} to the Recycle Bin: ${size(result.bytes)} back.`, undo: result.undo ?? null })
-      if (!result.ok) setError(result.message ?? 'Nothing was moved.')
-      onChanged()
-    } catch (failure) {
-      report(failure, 'AppsPanel.installerCacheClean')
-      setError('Nothing was moved.')
-    } finally {
-      setWorking(false)
-    }
+    const result = await host.appsInstallerCacheClean()
+    // Some moved before it stopped: what moved shows, with the reason.
+    if (!result.ok && result.files > 0) moved(result)
+    return result
   }
   if (done) return <ClearedRow line={done.line} undo={done.undo} onChanged={onChanged} />
   if (!found || found.bytes < CACHE_WORTH) return error ? <ReadyRow title="Windows Installer files" error={error} /> : null
   return (
     <ReadyRow title={`${size(found.bytes)} of Windows Installer files no app needs`} detail={`${count(found.files, 'copy', 'copies')} of removed installers · To the Recycle Bin`} error={error ?? undefined}>
-      <ConfirmButton className="exo-set-btn is-danger" danger disabled={busy || working} question={`Move ${size(found.bytes)}?`} lead={working ? <Spinner label="Moving Windows Installer files" /> : null} onConfirm={() => void clear()}>Clear</ConfirmButton>
+      <ConfirmButton className="exo-set-btn is-danger" danger disabled={busy} question={`Move ${size(found.bytes)}?`} context="AppsPanel.installerCacheClean" fallback="Nothing was moved. Try again." why="none"
+        onConfirm={clear} onFailed={failure => setError(failure.text)} onDone={value => moved(value as Awaited<ReturnType<typeof host.appsInstallerCacheClean>>)}>Clear</ConfirmButton>
     </ReadyRow>
   )
 }
@@ -849,7 +848,6 @@ type Startup = ReturnType<typeof useStartup>
 function useStartup(active: boolean) {
   const [state, setState] = useState<StartupState | null>(null)
   const [icons, setIcons] = useState<Record<string, string | null>>({})
-  const [busy, setBusy] = useState<string | null>(null)
   const [errors, setErrors] = useState<Record<string, string>>({})
   const read = useRef(false)
 
@@ -865,47 +863,33 @@ function useStartup(active: boolean) {
     host.startupList().then(next => void take(next), (error: unknown) => report(error, 'AppsPanel.startup'))
   }, [active])
 
+  const tell = (id: string, text: string) => setErrors(current => ({ ...current, [id]: text }))
+  // The row's button (ActionButton) shows the work; the list takes the answer after its check (`settle`), or at once on a refusal.
+  const settle = (value: unknown) => { const next = value as StartupState | null; if (next) void take(next) }
+
   // One row may stand for several entries with one name (a game's two tracking values, Edge's two updaters): each goes.
   async function change(ids: string[], restore: boolean) {
-    const id = ids[0]
-    setBusy(id)
-    setErrors(current => ({ ...current, [id]: '' }))
-    try {
-      let next: StartupState | null = null
-      for (const one of ids) {
-        next = restore ? await host.startupRestore(one) : await host.startupRemove(one)
-        if (!next.ok) break
-      }
-      if (!next) return
-      await take(next)
-      if (!next.ok && next.message) setErrors(current => ({ ...current, [id]: next.message ?? '' }))
-    } catch (error) {
-      report(error, restore ? 'AppsPanel.startupRestore' : 'AppsPanel.startupRemove')
-      setErrors(current => ({ ...current, [id]: restore ? 'It wasn’t put back. Try again.' : 'It wasn’t turned off. Try again.' }))
-    } finally {
-      setBusy(null)
+    tell(ids[0], '')
+    let next: StartupState | null = null
+    for (const one of ids) {
+      next = restore ? await host.startupRestore(one) : await host.startupRemove(one)
+      if (!next.ok) break
     }
+    if (next && !next.ok) await take(next)
+    return next
   }
 
   // Everything safe to remove at once; Windows asks once for the scheduled tasks it guards.
   async function clean() {
-    setBusy('clean')
-    setErrors(current => ({ ...current, clean: '' }))
-    try {
-      const next = await host.startupClean()
-      await take(next)
-      if (!next.ok && next.message) setErrors(current => ({ ...current, clean: next.message ?? '' }))
-    } catch (error) {
-      report(error, 'AppsPanel.startupClean')
-      setErrors(current => ({ ...current, clean: 'Startup wasn’t cleaned up. Try again.' }))
-    } finally {
-      setBusy(null)
-    }
+    tell('clean', '')
+    const next = await host.startupClean()
+    if (!next.ok) await take(next)
+    return next
   }
 
   // Clean up counts Windows' telemetry tasks too; they have no row of their own.
   const unneeded = (state?.items.filter(item => item.unneeded).length ?? 0) + (state?.extras ?? 0)
-  return { state, icons, busy, errors, change, clean, unneeded }
+  return { state, icons, errors, tell, settle, change, clean, unneeded }
 }
 
 const VERDICT: Record<NonNullable<StartupItem['verdict']>, string | null> = { remove: 'Safe to turn off', optional: null, keep: 'Worth keeping', locked: null }
@@ -937,7 +921,7 @@ function byName<T extends { id: string; name: string }>(list: T[]): (T & { ids: 
  * asks first for one that's every user's); what Exo turned off waits below with Put back. Exo itself and anti-cheat have no button.
  */
 function StartupView({ startup, query }: { startup: Startup; query: string }) {
-  const { state, icons, busy, errors, change } = startup
+  const { state, icons, errors, tell, settle, change } = startup
   if (!state) return <Wait label="Reading what starts with Windows">{sampleLines(5)}</Wait>
   const words = query.trim().toLowerCase()
   const matches = (text: string) => !words || text.toLowerCase().includes(words)
@@ -951,11 +935,10 @@ function StartupView({ startup, query }: { startup: Startup; query: string }) {
         <section aria-label="Starts with Windows">
           {items.map(item => (
             <Line key={item.id} name={item.name} icon={<AppIcon name={item.name} icon={item.icon ? icons[item.icon] ?? null : null} />} detail={startupDetail(item)}
-              used={!item.enabled ? 'Off' : null} amount={size(item.memory)} error={errors[item.id] || undefined} keep={busy === item.id}>
+              used={!item.enabled ? 'Off' : null} amount={size(item.memory)} error={errors[item.id] || undefined}>
               {item.locked || item.readOnly ? null : (
-                <button type="button" className="exo-set-btn is-compact" disabled={busy !== null} onClick={() => void change(item.ids, false)}>
-                  {busy === item.id ? <Spinner label={`Turning off ${item.name}`} /> : null}Turn off
-                </button>
+                <ActionButton className="exo-set-btn is-compact" context="AppsPanel.startupRemove" fallback="It wasn’t turned off. Try again." why="none"
+                  onPress={() => change(item.ids, false)} onFailed={failure => tell(item.id, failure.text)} onDone={settle}>Turn off</ActionButton>
               )}
             </Line>
           ))}
@@ -966,9 +949,8 @@ function StartupView({ startup, query }: { startup: Startup; query: string }) {
           <h3 className="exo-apps-group">Turned off</h3>
           {removed.map(item => (
             <Line key={item.id} name={item.name} detail={fullDay.format(new Date(item.at))} error={errors[item.id] || undefined} keep>
-              <button type="button" className="exo-set-btn is-compact" disabled={busy !== null} onClick={() => void change(item.ids, true)}>
-                {busy === item.id ? <Spinner label={`Putting ${item.name} back`} /> : null}Put back
-              </button>
+              <ActionButton className="exo-set-btn is-compact" context="AppsPanel.startupRestore" fallback="It wasn’t put back. Try again." why="none"
+                onPress={() => change(item.ids, true)} onFailed={failure => tell(item.id, failure.text)} onDone={settle}>Put back</ActionButton>
             </Line>
           ))}
         </section>
@@ -999,7 +981,6 @@ function WindowsAppsView({ active, query, onChanged }: { active: boolean; query:
   const [picked, setPicked] = useState<Set<string> | null>(null)
   const [everyone, setEveryone] = useState(false)
   const [plan, setPlan] = useState<{ token: string; admin: boolean; lines: WindowsAppLine[] } | null>(null)
-  const [busy, setBusy] = useState<string | null>(null)
   const [errors, setErrors] = useState<Record<string, string | null>>({})
   const [done, setDone] = useState<string | null>(null)
   const read = () => host.appsPackages().then(
@@ -1010,56 +991,41 @@ function WindowsAppsView({ active, query, onChanged }: { active: boolean; query:
   const setError = (id: string, message: string | null) => setErrors(current => ({ ...current, [id]: message }))
 
   async function review() {
-    if (!picked || picked.size === 0) return
-    setBusy('plan')
+    if (!picked || picked.size === 0) return { ok: false, message: 'Pick an app first.' }
     setError('plan', null)
-    try {
-      const result = await host.appsPackagesPlan([...picked], everyone)
-      if (result.ok && result.token) setPlan({ token: result.token, admin: result.admin, lines: result.lines })
-      else setError('plan', result.message ?? 'Nothing there can be removed that way.')
-    } catch (error) {
-      report(error, 'AppsPanel.packagesPlan')
-      setError('plan', 'Exo couldn’t look at what goes.')
-    } finally {
-      setBusy(null)
-    }
+    const result = await host.appsPackagesPlan([...picked], everyone)
+    if (result.ok && !result.token) return { ok: false, message: 'Nothing there can be removed that way.' }
+    if (result.ok && result.token) setPlan({ token: result.token, admin: result.admin, lines: result.lines })
+    return result
   }
 
+  /** Removes the plan's apps; what went, the list again and the picks cleared once its check has shown. */
   async function remove() {
-    if (!plan) return
-    setBusy('remove')
+    if (!plan) return { ok: false }
     setError('plan', null)
-    try {
-      const result = await host.appsPackagesRemove(plan.token)
+    const result = await host.appsPackagesRemove(plan.token)
+    if (!result.ok) {
       if (result.removed > 0) setDone(`Removed ${count(result.removed, 'app', 'apps')} ${everyone ? 'for every account' : 'for you'}.`)
-      if (!result.ok) setError('plan', result.message ?? 'Nothing was removed.')
-      setPlan(null)
-      setPicked(null)
       await read()
-      onChanged()
-    } catch (error) {
-      report(error, 'AppsPanel.packagesRemove')
-      setError('plan', 'Nothing was removed.')
-    } finally {
-      setBusy(null)
     }
+    return result
+  }
+  const removed = (value: unknown) => {
+    const result = value as Awaited<ReturnType<typeof host.appsPackagesRemove>>
+    if (result.removed > 0) setDone(`Removed ${count(result.removed, 'app', 'apps')} ${everyone ? 'for every account' : 'for you'}.`)
+    setPlan(null)
+    setPicked(null)
+    void read().then(onChanged)
   }
 
   async function addBack(app: WindowsApp) {
-    setBusy(app.id)
     setError(app.id, null)
-    try {
-      const result = await host.appsPackageAddBack(app.id)
-      if (!result.ok) setError(app.id, result.message ?? 'Windows didn’t add it back.')
-      else if (result.store) setError(app.id, 'Windows couldn’t add it back from this PC: its Microsoft Store page is open.')
-      await read()
-      onChanged()
-    } catch (error) {
-      report(error, 'AppsPanel.packageAddBack')
-      setError(app.id, 'Windows didn’t add it back.')
-    } finally {
-      setBusy(null)
+    const result = await host.appsPackageAddBack(app.id)
+    if (result.ok && result.store) {
+      void read()
+      return { ok: false, message: 'Windows couldn’t add it back from this PC: its Microsoft Store page is open.' }
     }
+    return result
   }
 
   if (!state) return <Wait label="Reading Windows apps">{sampleLines(6)}</Wait>
@@ -1088,16 +1054,15 @@ function WindowsAppsView({ active, query, onChanged }: { active: boolean; query:
                 <button type="button" className="exo-shelf-chip" aria-pressed={!everyone} onClick={() => { setEveryone(false); setPlan(null) }}>For you</button>
                 <button type="button" className="exo-shelf-chip" aria-pressed={everyone} onClick={() => { setEveryone(true); setPlan(null) }}>Every account</button>
               </span>
-              <button type="button" className="exo-set-btn is-compact" disabled={picked.size === 0 || busy !== null} aria-busy={busy === 'plan'} onClick={() => void review()}>
-                {busy === 'plan' ? <Spinner label="Looking at what goes" /> : null}Review
-              </button>
+              <ActionButton className="exo-set-btn is-compact" disabled={picked.size === 0} context="AppsPanel.packagesPlan" fallback="Exo couldn’t look at what goes. Try again." why="none"
+                onPress={review} onFailed={failure => setError('plan', failure.text)}>Review</ActionButton>
             </>
           ) : null}
           <button type="button" className="exo-set-btn is-compact" aria-pressed={picked !== null} onClick={() => { setPicked(current => current ? null : new Set()); setPlan(null) }}>{picked ? 'Cancel' : 'Select'}</button>
         </span>
       </div>
       {errors.plan ? <ErrorNote className="exo-set-error" message={errors.plan} /> : null}
-      {plan ? <PackagePlan plan={plan} busy={busy} onRemove={() => void remove()} onBack={() => setPlan(null)} /> : null}
+      {plan ? <PackagePlan plan={plan} onRemove={remove} onRemoved={removed} onFailed={failure => setError('plan', failure.text)} onBack={() => setPlan(null)} /> : null}
       <section aria-label="Windows apps">
         {items.map(app => (
           <Line key={app.id} name={app.name} icon={<AppIcon name={app.name} icon={null} />} detail={[app.bloat, whereItIs(app)].filter(Boolean).join(' · ')} showUsed={false} error={errors[app.id] ?? null} keep={picked !== null || app.addBack}>
@@ -1106,9 +1071,8 @@ function WindowsAppsView({ active, query, onChanged }: { active: boolean; query:
                 {picked.has(app.id) ? <Check size={12} /> : null}
               </button>
             ) : app.addBack ? (
-              <button type="button" className="exo-set-btn is-compact" disabled={busy !== null} onClick={() => void addBack(app)}>
-                {busy === app.id ? <Spinner label={`Adding ${app.name} back`} /> : null}Add for you
-              </button>
+              <ActionButton className="exo-set-btn is-compact" context="AppsPanel.packageAddBack" fallback="Windows didn’t add it back. Try again." why="none"
+                onPress={() => addBack(app)} onFailed={failure => setError(app.id, failure.text)} onDone={() => void read().then(onChanged)}>Add for you</ActionButton>
             ) : null}
           </Line>
         ))}
@@ -1120,16 +1084,22 @@ function WindowsAppsView({ active, query, onChanged }: { active: boolean; query:
 }
 
 /** Before anything goes: what each removal does and how it comes back, and the one press that does it (asked in place). */
-function PackagePlan({ plan, busy, onRemove, onBack }: { plan: { admin: boolean; lines: WindowsAppLine[] }; busy: string | null; onRemove: () => void; onBack: () => void }) {
+function PackagePlan({ plan, onRemove, onRemoved, onFailed, onBack }: {
+  plan: { admin: boolean; lines: WindowsAppLine[] }
+  onRemove: () => Promise<unknown>
+  onRemoved: (value: unknown) => void
+  onFailed: (failure: PlainError) => void
+  onBack: () => void
+}) {
   const lasting = plan.lines.filter(line => !line.undoable).length
   const apps = count(plan.lines.length, 'app', 'apps')
   return (
     <section className="exo-apps-ready" aria-label="What goes">
       <ReadyRow title={plan.admin ? `Remove ${apps} for every account` : `Remove ${apps} for you`}
         detail={[plan.admin ? 'Windows asks for permission' : 'No permission needed', lasting > 0 ? `${lasting} can’t be undone here` : 'Each can be added back', 'A restore point doesn’t bring Store apps back'].join(' · ')}>
-        <ConfirmButton className="exo-set-btn is-danger" danger disabled={busy !== null} question={lasting > 0 ? 'Remove for good?' : `Remove ${plan.lines.length}?`}
-          lead={busy === 'remove' ? <Spinner label="Removing Windows apps" /> : null} onConfirm={onRemove}>Remove {plan.lines.length}</ConfirmButton>
-        <button type="button" className="exo-set-btn" disabled={busy !== null} onClick={onBack}>Back</button>
+        <ConfirmButton className="exo-set-btn is-danger" danger question={lasting > 0 ? 'Remove for good?' : `Remove ${plan.lines.length}?`} timeoutMs={null}
+          context="AppsPanel.packagesRemove" fallback="Nothing was removed. Try again." why="none" onConfirm={onRemove} onFailed={onFailed} onDone={onRemoved}>Remove {plan.lines.length}</ConfirmButton>
+        <button type="button" className="exo-set-btn" onClick={onBack}>Back</button>
       </ReadyRow>
       <ul className="exo-apps-items">
         {plan.lines.map(line => (
@@ -1152,26 +1122,11 @@ function PackagePlan({ plan, busy, onRemove, onBack }: { plan: { admin: boolean;
 /** What Exo removed from this PC, newest first, and Put back where what was cleared can still come back. Edge, once removed here, waits to be allowed again. */
 function RemovedView({ active, edgeRemoved, disabled, onEdgeAllowed, onChanged }: { active: boolean; edgeRemoved: boolean; disabled: boolean; onEdgeAllowed: () => void; onChanged: () => void }) {
   const [items, setItems] = useState<RemovalRecord[] | null>(null)
-  const [busy, setBusy] = useState<string | null>(null)
   const [errors, setErrors] = useState<Record<string, string | null>>({})
   const read = () => host.appsHistory().then(result => setItems(result.items), (error: unknown) => { report(error, 'AppsPanel.history'); setItems(current => current ?? []) })
   useEffect(() => { if (active) void read() }, [active])
-
-  async function putBack(item: RemovalRecord) {
-    setBusy(item.id)
-    setErrors(current => ({ ...current, [item.id]: null }))
-    try {
-      const result = await host.appsUndo(item.id)
-      if (!result.ok) setErrors(current => ({ ...current, [item.id]: result.message ?? 'It wasn’t put back.' }))
-      await read()
-      onChanged()
-    } catch (failure) {
-      report(failure, 'AppsPanel.undo')
-      setErrors(current => ({ ...current, [item.id]: 'It wasn’t put back.' }))
-    } finally {
-      setBusy(null)
-    }
-  }
+  const tell = (id: string, text: string | null) => setErrors(current => ({ ...current, [id]: text }))
+  const reread = () => { void read().then(onChanged) }
 
   if (!items) return <Wait label="Reading what Exo removed">{sampleLines(4)}</Wait>
   if (items.length === 0 && !edgeRemoved) return <p className="exo-apps-none">Nothing removed yet</p>
@@ -1184,9 +1139,8 @@ function RemovedView({ active, edgeRemoved, disabled, onEdgeAllowed, onChanged }
         return (
           <Line key={item.id} name={item.name} detail={[when, item.undone ? 'Put back' : what && `Cleared ${what}`].filter(Boolean).join(' · ')} error={errors[item.id] ?? null} keep>
             {item.canPutBack ? (
-              <button type="button" className="exo-set-btn is-compact" disabled={busy !== null} onClick={() => void putBack(item)}>
-                {busy === item.id ? <Spinner label={`Putting back what ${item.name} lost`} /> : null}Put back
-              </button>
+              <ActionButton className="exo-set-btn is-compact" context="AppsPanel.undo" fallback="It wasn’t put back. Try again." why="none" timeoutMs={null}
+                onPress={() => { tell(item.id, null); return host.appsUndo(item.id) }} onFailed={failure => { tell(item.id, failure.text); reread() }} onDone={reread}>Put back</ActionButton>
             ) : null}
           </Line>
         )
@@ -1197,27 +1151,11 @@ function RemovedView({ active, edgeRemoved, disabled, onEdgeAllowed, onChanged }
 
 /** Edge, removed here: Edge Update is told not to install it again until Allow again (no confirm: removing it blocks it again). */
 function EdgeRow({ busy, onAllowed }: { busy: boolean; onAllowed: () => void }) {
-  const [asking, setAsking] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  async function allow() {
-    setAsking(true)
-    setError(null)
-    try {
-      const result = await host.appsAllowEdge()
-      if (result.ok) onAllowed()
-      else setError(result.message ?? 'Windows didn’t allow it.')
-    } catch (failure) {
-      report(failure, 'AppsPanel.allowEdge')
-      setError('Windows didn’t allow it.')
-    } finally {
-      setAsking(false)
-    }
-  }
   return (
     <Line name="Microsoft Edge" detail="Won’t install itself again" error={error} keep>
-      <button type="button" className="exo-set-btn is-compact" disabled={busy || asking} onClick={() => void allow()}>
-        {asking ? <Spinner label="Allow Edge again" /> : null}Allow again
-      </button>
+      <ActionButton className="exo-set-btn is-compact" disabled={busy} context="AppsPanel.allowEdge" fallback="Windows didn’t allow it. Try again." why="none"
+        onPress={() => { setError(null); return host.appsAllowEdge() }} onFailed={failure => setError(failure.text)} onDone={onAllowed}>Allow again</ActionButton>
     </Line>
   )
 }

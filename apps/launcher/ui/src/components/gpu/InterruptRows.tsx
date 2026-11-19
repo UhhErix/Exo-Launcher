@@ -1,9 +1,7 @@
 import { useState } from 'react'
 import { host, type InterruptDevice, type Interrupts } from '../../lib/host'
-import { report } from '../../lib/report'
-import { trimStop } from '../../lib/utils'
 import { Row, State } from '../settings/parts'
-import { Spinner } from '../ui/Spinner'
+import { ActionButton } from '../ui/ConfirmButton'
 import type { PcPlace } from './ThisPcTab'
 
 const MODE: Record<InterruptDevice['mode'], string> = { msi: 'MSI mode', line: 'Shared line', none: 'Not running' }
@@ -19,34 +17,29 @@ const PLAN: Record<InterruptDevice['plan'], string | null> = { change: null, don
  * one row in Needs you, Switch back.
  */
 export function InterruptRows({ place, state, onState }: { place: PcPlace; state: Interrupts | null; onState: (next: Interrupts) => void }) {
-  // What is being written, while it is: Optimize, Undo all, or one device's Revert (its id).
-  const [busy, setBusy] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [open, setOpen] = useState(false)
 
-  const act = async (action: 'apply' | 'undo' | 'revert' | 'reapply', device?: string) => {
-    if (busy) return
-    setBusy(device ?? action)
+  // Each button shows its own work (ActionButton): the ring while Windows' prompt and the write run, then its check, and
+  // then the rows take the new state; a refusal says why under the row. Behind Windows' prompt, so no time limit of its own.
+  const act = (action: 'apply' | 'undo' | 'revert' | 'reapply', device?: string) => async () => {
     setError(null)
-    try {
-      const next = await host.systemInterrupts(action, device)
-      onState(next)
-      if (!next.ok) setError(trimStop(next.message) || 'Not changed. Try again.')
-    } catch (e) {
-      report(e, `InterruptRows.${action}`)
-      setError('Not changed. Try again.')
-    }
-    setBusy(null)
+    const next = await host.systemInterrupts(action, device)
+    if (!next.ok) onState(next)
+    return next
   }
+  const button = (action: 'apply' | 'undo' | 'revert' | 'reapply', words: string, primary = false, device?: string) => (
+    <ActionButton className={primary ? 'exo-set-btn is-primary' : 'exo-set-btn'} timeoutMs={null} why="none" context={`InterruptRows.${action}`}
+      fallback="Not changed. Try again." onPress={act(action, device)} onFailed={failure => setError(failure.text)}
+      onDone={next => onState(next as Interrupts)}>{words}</ActionButton>
+  )
 
   if (!state || state.devices.length === 0) return null
   // A driver update put Windows' interrupt values back, and setting them again needs its permission: one row, one press.
   if (state.reset) {
     return place === 'needs' ? (
       <Row label="A driver update reset your interrupts" error={error}>
-        <button type="button" className="exo-set-btn is-primary" disabled={!!busy} aria-busy={busy === 'reapply'} onClick={() => void act('reapply')}>
-          {busy === 'reapply' ? <Spinner label="Switching your interrupts back" /> : null}Switch back
-        </button>
+        {button('reapply', 'Switch back', true)}
       </Row>
     ) : null
   }
@@ -57,25 +50,13 @@ export function InterruptRows({ place, state, onState }: { place: PcPlace; state
     <>
       <Row label="Interrupts (MSI mode)" detail={detail} error={error}>
         {state.restart ? <State on>Restart to finish</State> : null}
-        {needs
-          ? <button type="button" className="exo-set-btn is-primary" disabled={!!busy} aria-busy={busy === 'apply'} onClick={() => void act('apply')}>
-            {busy === 'apply' ? <Spinner label="Switching devices to MSI mode" /> : null}Optimize interrupts
-          </button>
-          : null}
-        {state.canUndo
-          ? <button type="button" className="exo-set-btn" disabled={!!busy} aria-busy={busy === 'undo'} onClick={() => void act('undo')}>
-            {busy === 'undo' ? <Spinner label="Putting every device's interrupt back" /> : null}Undo all
-          </button>
-          : null}
+        {needs ? button('apply', 'Optimize interrupts', true) : null}
+        {state.canUndo ? button('undo', 'Undo all') : null}
         <button type="button" className="exo-set-btn" aria-expanded={open} onClick={() => setOpen(!open)}>{open ? 'Hide devices' : 'Devices'}</button>
       </Row>
       {open && state.devices.map(device => (
         <Row key={device.id} label={device.name} detail={[`${device.kind[0].toUpperCase()}${device.kind.slice(1)}`, PLAN[device.plan]].filter(Boolean).join(' · ')}>
-          {device.changed
-            ? <button type="button" className="exo-set-btn" disabled={!!busy} aria-busy={busy === device.id} onClick={() => void act('revert', device.id)}>
-              {busy === device.id ? <Spinner label={`Putting ${device.name}'s interrupt back`} /> : null}Revert
-            </button>
-            : <State on={device.mode === 'msi'}>{MODE[device.mode]}</State>}
+          {device.changed ? button('revert', 'Revert', false, device.id) : <State on={device.mode === 'msi'}>{MODE[device.mode]}</State>}
         </Row>
       ))}
     </>

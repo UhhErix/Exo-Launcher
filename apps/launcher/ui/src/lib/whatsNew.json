@@ -3,6 +3,66 @@
     "version": "3.26.0",
     "items": [
       {
+        "icon": "Performance",
+        "title": "Autopilot session reports",
+        "detail": "After you play, PC › Autopilot shows what made a game stutter, from a background app to a full graphics card, and what to do about it."
+      },
+      {
+        "icon": "Headphones",
+        "title": "Exo EQ for your headphones",
+        "detail": "Pick your headphones and Exo corrects their sound, with Bass, Vocal, Footsteps or your own bands on top, per output and per game."
+      },
+      {
+        "icon": "Volume",
+        "title": "Lucid's settings, carried over",
+        "detail": "Your Lucid headphone, game EQ and Night Shift move into Exo EQ by themselves. Thank you, tekkusai, for Lucid."
+      },
+      {
+        "icon": "Library",
+        "title": "A cleaner Library",
+        "detail": "Your games sit edge to edge under one head with the search in the middle, and a scrubber on the right edge jumps from A to Z as you scroll."
+      },
+      {
+        "icon": "Search",
+        "title": "Search the way you'd say it",
+        "detail": "Type \"racing games I haven't played\" or \"co-op installed\" and the Library shows just those, worked out on your PC."
+      },
+      {
+        "icon": "Filter",
+        "title": "Filters that add up",
+        "detail": "Pick stores, installed, played, family shared, friends playing, genres and modes together; each shows as a chip you can take off."
+      },
+      {
+        "icon": "Info",
+        "title": "Game pages, details on demand",
+        "detail": "A game opens on its cover, name and Play; Info (or I) opens its facts, upscalers, shaders and HDR beside it, every page the same size."
+      },
+      {
+        "icon": "ThisPc",
+        "title": "Only what works on your PC",
+        "detail": "Settings your PC, screen or controller can't use are no longer shown, and a choice with only one answer is simply set."
+      },
+      {
+        "icon": "Controller",
+        "title": "Riot hours like Steam",
+        "detail": "A VALORANT or League page shows the hours you played, the same way a Steam game does."
+      },
+      {
+        "icon": "Library",
+        "title": "tracker.gg, said plainly",
+        "detail": "When tracker.gg won't let Exo import your Riot hours, Exo says so and keeps counting every session you play."
+      },
+      {
+        "icon": "Performance",
+        "title": "Upscalers say if they're up to date",
+        "detail": "A game's Upscalers line shows the version you have or how many updates wait."
+      },
+      {
+        "icon": "Library",
+        "title": "The same lines on every game",
+        "detail": "Upscalers, Shaders, Frame generation, HDR and Optimize are on every game's page, and say so when the game or screen can't use them."
+      },
+      {
         "icon": "Mouse",
         "title": "Sensor angle on the Razer Viper V3 Pro",
         "detail": "Turn your Viper V3 Pro's sensor angle a degree at a time in Devices, so a natural swipe runs straight across the screen."
@@ -33,7 +93,7 @@
         "detail": "Your adapter's power saving, DNS and Windows' TCP defaults each have their own switch, all set with one Windows prompt, with a ping and lookup check before and after."
       },
       {
-        "icon": "Controller",
+        "icon": "AntiCheat",
         "title": "NBA 2K26 with or without anti-cheat",
         "detail": "Pick in Properties: without it the game plays offline with frame generation and mods, which are in the game only while you play it from Exo, and back with it Exo takes them out first."
       },
@@ -48,7 +108,7 @@
         "detail": "Press F or the full-window button in Music for the cover large, its colours around it and the lyrics big beside it; Esc goes back."
       },
       {
-        "icon": "Drive",
+        "icon": "Compress",
         "title": "Compress games",
         "detail": "Windows' own compression makes games smaller on disk, and they play as before."
       },
@@ -68,6 +128,35 @@
         "detail": "Servers across the top, DMs and Friends on Home, members and profiles always beside the conversation, and mute, deafen and settings by your picture."
       },
       {
+        "icon": "Library",
+        "title": "Goeist, Exo's new type",
+        "detail": "Exo, Exo Mouse, Setup, the FPS counter and the achievement banner all use Goeist, a rounded take on Geist."
+      },
+      {
+        "icon": "ThisPc",
+        "title": "Five rooms, in the middle",
+        "detail": "Library, Store, Discord, Music and PC sit centered in the top bar, and Devices is inside the PC room."
+      },
+      {
+        "icon": "Download",
+        "title": "Every download in one list",
+        "detail": "Library › More › Downloads shows what's downloading, next and paused, with pause, stop, reorder and Pause all."
+      },
+      {
+        "icon": "GraphicsCard",
+        "title": "DLSS, FSR and XeSS update by themselves",
+        "detail": "Your games get the newest signed upscaler files from NVIDIA, AMD and Intel while you aren't playing."
+      },
+      {
+        "icon": "Chats",
+        "title": "Discord's Shop beside Home",
+        "detail": "The Shop is its own place at the top of the Discord room, and Play is gone."
+      },
+      {
+        "title": "Every Steam Family game",
+        "detail": "Your family's shared games show in the Library, installed or not, and a game's page says who shares it."
+      },
+      {
         "icon": "Monitor",
         "title": "Pure black under Liquid Glass",
         "detail": "Exo is AMOLED black everywhere, under its frosted glass."
@@ -75,7 +164,7 @@
       {
         "icon": "Library",
         "title": "Liquid Glass is back",
-        "detail": "Menus, sheets and controls are frosted glass again, inside one thin line, and Exo keeps its own typeface, Exoline."
+        "detail": "Menus, sheets and controls are frosted glass again, lit at their edge like glass instead of a gray outline."
       },
       {
         "icon": "GraphicsCard",
@@ -118,12 +207,12 @@
         "detail": "It was never switched on for anyone. A wish that can't be saved is no longer shown as saved, and games like Costume Quest are no longer hidden as not games."
       },
       {
-        "icon": "Performance",
+        "icon": "FrameGen",
         "title": "Frame generation for more cards",
         "detail": "Best settings now reaches GeForce GTX 900 and newer, Radeon RX 400 and newer, Radeon graphics in laptops and Intel Arc, and a game's line says what really happened."
       },
       {
-        "icon": "Settings",
+        "icon": "AntiCheat",
         "title": "Games with anti-cheat are left alone",
         "detail": "Exo finds anti-cheat from what is on the disk. Nothing is put into such a game, Exo Capture records it from the screen only, and Riot games are never touched."
       },
@@ -156,6 +245,11 @@
         "icon": "Server",
         "title": "Crash reports are not lost",
         "detail": "A report Exo's service can't take right now is kept on your PC and sent at a later start."
+      },
+      {
+        "icon": "Performance",
+        "title": "A System group in Best settings",
+        "detail": "Exo puts back Windows settings a tweak tool changed that slow games down, each with its own switch and a restore point first; Memory Integrity off is yours to choose."
       }
     ]
   },
@@ -503,7 +597,7 @@
     "version": "3.18.0",
     "items": [
       {
-        "icon": "GraphicsCard",
+        "icon": "FrameGen",
         "title": "DLSS frame generation on RTX 20 and 30",
         "detail": "Games with DLSS Frame Generation can turn it on with an older RTX card, kept on the newest version for you."
       },

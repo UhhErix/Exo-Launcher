@@ -69,8 +69,6 @@ public sealed class AppUpdateSafetyTests : IDisposable
             AppFolderBytes = () => 500L * 1024 * 1024,
             IsInstaller = _ => true,
             StartInstaller = path => { rig.Started.Add(path); return true; },
-            StopLucid = () => Task.FromResult<string?>(null),
-            StartLucid = _ => { },
         };
     }
 
@@ -158,7 +156,6 @@ public sealed class AppUpdateSafetyTests : IDisposable
         public bool Game;
         public string? Released = InstallerSha;
         public bool Takes = true;
-        public string? LucidRunning;
         public readonly List<string> Started = [];
         public readonly List<string> Events = [];
         public int? StartsSeenAtStart;
@@ -176,8 +173,6 @@ public sealed class AppUpdateSafetyTests : IDisposable
             InstallFolder = InstallRoot,
             IsInstaller = isInstaller ?? (_ => true),
             ReleaseSha256 = (_, _) => Task.FromResult(start.Released),
-            StopLucid = () => { start.Events.Add("lucid stopped"); return Task.FromResult(start.LucidRunning); },
-            StartLucid = path => start.Events.Add("lucid started " + path),
             StartInstaller = path =>
             {
                 start.StartsSeenAtStart = AppUpdateService.ReadStaged(_updates)?.Starts;
@@ -207,15 +202,6 @@ public sealed class AppUpdateSafetyTests : IDisposable
         Assert.Equal([installer, installer], start.Started);
         Assert.Null(AppUpdateService.ReadStaged(_updates));
         Assert.False(File.Exists(installer));
-    }
-
-    [Fact]
-    public async Task AHostedLucidIsStoppedBeforeTheInstallerAndStartedAgainIfItDoesNotStart()
-    {
-        Stage(Remote);
-        var start = new Start { LucidRunning = @"C:\lucid\Lucid.exe", Takes = false };
-        Assert.False(await AtStart(start).ApplyKeptAtStartAsync("1.0.0", TestContext.Current.CancellationToken));
-        Assert.Equal(["lucid stopped", "installer", @"lucid started C:\lucid\Lucid.exe"], start.Events);
     }
 
     [Fact]
@@ -287,7 +273,6 @@ public sealed class AppUpdateSafetyTests : IDisposable
             AppFolderBytes = () => 0,
             IsInstaller = _ => true,
             StartInstaller = _ => { seen = AppUpdateService.ReadStaged(_updates)?.Starts; return true; },
-            StopLucid = () => Task.FromResult<string?>(null),
         };
         Assert.True((await service.InstallAsync("1.0.0", null, TestContext.Current.CancellationToken)).ShouldExit);
         Assert.Equal(1, seen);
@@ -444,7 +429,6 @@ public sealed class AppUpdateSafetyTests : IDisposable
             InstallFolder = _updates,
             IsInstaller = _ => true,
             StartInstaller = _ => true,
-            StopLucid = () => Task.FromResult<string?>(null),
         };
         var full = await Service(folder => folder.StartsWith('Q') ? 1024 : long.MaxValue).InstallAsync("1.0.0", null, TestContext.Current.CancellationToken);
         Assert.Matches(@"^Exo needs \d+\.\d GB free on drive Q to update\.$", full.Message);

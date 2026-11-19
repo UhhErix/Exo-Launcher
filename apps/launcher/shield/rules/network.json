@@ -1,0 +1,55 @@
+{
+  "comment": "Exo Shield's network rules. Each group blocks requests made by the provider pages in \"from\" (and only by them). \"domains\" blocks every request to those hosts and their subdomains; \"urls\" blocks requests whose address contains the pattern (declarativeNetRequest urlFilter syntax: || anchors at a host, ^ is a separator). Every entry is an ad or tracker address of that provider's page; ExoShieldTests lists a known address for each and the addresses playback needs, and README.md says how to find and update one.",
+  "groups": [
+    {
+      "why": "Ad, ad-measurement and tag servers the YouTube Music page calls around a video ad",
+      "from": ["music.youtube.com"],
+      "domains": ["doubleclick.net", "googlesyndication.com", "googleadservices.com", "googletagmanager.com", "google-analytics.com"]
+    },
+    {
+      "why": "YouTube's own ad endpoints and ad reporting, and the page's usage logging",
+      "from": ["music.youtube.com"],
+      "urls": [
+        "||youtube.com/pagead/",
+        "||youtube.com/api/stats/ads",
+        "||youtube.com/pcs/activeview",
+        "||youtube.com/ptracking",
+        "||youtube.com/get_midroll_",
+        "||music.youtube.com/youtubei/v1/player/ad_break",
+        "||music.youtube.com/api/stats/qoe",
+        "||music.youtube.com/youtubei/v1/log_event",
+        "||google.com/pagead/"
+      ]
+    },
+    {
+      "why": "Spotify's ad slots and ad decisions for the web player (Free accounts)",
+      "from": ["open.spotify.com"],
+      "urls": [
+        "spclient.spotify.com/ads/",
+        "spclient.spotify.com/ad-logic/",
+        "spclient.wg.spotify.com/ads/",
+        "spclient.wg.spotify.com/ad-logic/"
+      ]
+    },
+    {
+      "why": "Spotify's ad pixels and the retargeting script that loads the ad networks' pixels",
+      "from": ["open.spotify.com"],
+      "urls": ["||open.spotifycdn.com/cdn/js/retargeting-pixels"],
+      "domains": ["pixel.spotify.com", "pixel-static.spotify.com"]
+    },
+    {
+      "why": "Ad networks' pixels and trackers on Spotify's page, and its cookie notice (OneTrust)",
+      "from": ["open.spotify.com"],
+      "domains": [
+        "doubleclick.net", "googletagmanager.com", "google-analytics.com", "connect.facebook.net", "analytics.tiktok.com",
+        "sc-static.net", "tr.snapchat.com", "bat.bing.com", "static.ads-twitter.com", "ads.linkedin.com", "sentry.io",
+        "cookielaw.org", "onetrust.com"
+      ]
+    },
+    {
+      "why": "Apple Music's usage reporting",
+      "from": ["music.apple.com"],
+      "domains": ["xp.apple.com"]
+    }
+  ]
+}

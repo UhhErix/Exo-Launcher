@@ -10,6 +10,7 @@ import { emojiUrl, Markdown, open, type MarkdownContext } from './markdown'
 import { useDismiss } from '../../lib/dismiss'
 import { Spinner } from '../ui/Spinner'
 import { ErrorNote } from '../ui/ErrorNote'
+import { errorText } from '../../lib/errorWords'
 
 /**
  * A card's accent, as Discord gives it, drawn inside the card's outline so it never takes an edge away (a border colored black, as
@@ -46,7 +47,7 @@ export function MessageComponents({ message, ctx }: { message: DiscordMessage; c
       messageId: message.id, applicationId: message.application_id ?? message.author.id, messageFlags: message.flags ?? 0,
       componentType: component.type, customId: id, ...(values ? { values } : {}),
     }).catch(() => ({ ok: false, message: null, nonce: null })).then(result => {
-      if (!result.ok || !result.nonce) { setState({ busy: null, failed: result.message ?? 'This interaction failed' }); return }
+      if (!result.ok || !result.nonce) { setState({ busy: null, failed: errorText(result.message, 'This interaction failed') }); return }
       stop.current = followInteraction(result.nonce, (ok, event) => setState({ busy: null, failed: ok ? null : failureLine(event) }))
     })
   }

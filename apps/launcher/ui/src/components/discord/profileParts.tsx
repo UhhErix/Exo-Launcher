@@ -16,6 +16,7 @@ import { Decoration, effectSkuOf, lookOf, ProfileEffect, StyledName, themeStyle 
 import { GuildTag } from './guildTag'
 import { Wait, sample, times } from '../ui/Wait'
 import { ErrorNote } from '../ui/ErrorNote'
+import { errorText } from '../../lib/errorWords'
 
 /** A profile as every surface shows it: Discord's reply, what Exo adds (roles, presence), and your note. */
 export type Loaded = { profile: DiscordProfile; extras: DiscordProfileExtras | null; note: string | null }
@@ -303,7 +304,7 @@ export function RoleList({ data, guildId }: { data: Loaded; guildId: string | nu
     setError(null)
     void admin(add ? 'addRole' : 'removeRole', { guildId, userId, roleId }).then(result => {
       setBusy(false)
-      if (!result.ok) { setError(result.message ?? "Discord didn't change that role."); return }
+      if (!result.ok) { setError(errorText(result.message, "Discord didn't change that role.")); return }
       setPerson(p => p && { ...p, roles: add ? [...p.roles, roleId] : p.roles.filter(id => id !== roleId) })
       if (add) { setPicking(false); setQuery('') }
       window.dispatchEvent(new Event('exo-dc-members-changed'))
@@ -385,7 +386,7 @@ export function NoteField({ userId, note }: { userId: string; note: string | nul
   const save = () => {
     if (text === saved) return
     setError(null)
-    host.discordSaveNote(userId, text).then(result => { if (result.ok) setSaved(text); else setError(result.message ?? "Discord didn't save your note.") })
+    host.discordSaveNote(userId, text).then(result => { if (result.ok) setSaved(text); else setError(errorText(result.message, "Discord didn't save your note.")) })
       .catch(() => setError("Discord didn't save your note."))
   }
   return (

@@ -1,6 +1,6 @@
 // Exo Setup: Exo's own window for installing, updating and uninstalling Exo Launcher.
 //
-// The screens are Exo's (its tokens, Exoline, icons and motion) drawn by WebView2, the engine
+// The screens are Exo's (its tokens, Goeist, icons and motion) drawn by WebView2, the engine
 // Exo itself runs on, from a page packed into this exe. The work is the proven NSIS engine appended
 // to this exe, run silently: it writes each step to a status file this window shows, and the
 // staging folder it fills gives the real progress. Then the installed Exo fetches its parts (FetchParts).

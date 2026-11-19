@@ -112,6 +112,7 @@ and historical decisions as well as current implementation notes; their own
 status and dates matter.
 
 - [Auto tune](auto-tune.md): CPU/GPU tuning research and decisions.
+- [System tuning](system-tuning.md): Best settings › System, each Windows setting's evidence, and what was left out.
 - [Capture editor](capture-editor.md): editor implementation review and candidate approaches.
 - [Chat rooms](chat-rooms.md): earlier Discord room design, with its replacement noted.
 - [Cinema art cache](cinema-art-cache.md): decision on caching art and metadata.
@@ -123,13 +124,14 @@ status and dates matter.
 - [Keep](keep.md): recording, checking and restoring values Exo writes.
 - [Launcher tuning](launcher-tuning.md): hidden store clients and download tuning.
 - [Liquid Glass](liquid-glass.md): material decisions, rendering and legibility.
-- [Lucid inside](lucid-inside.md): integration decision and permission boundary.
+- [Exo EQ](exo-eq.md): Exo's own headphone EQ on Equalizer APO, its data's licences, and the move from Lucid.
 - [Music engines](music-engines.md): current provider engines and lifecycle.
 - [Music native](music-native.md): native-engine research, evidence and plan.
 - [NVIDIA Control Panel](nvidia-control-panel.md): setting getters, writers and research.
 - [NVIDIA driver install](nvidia-driver-install.md): driver installation research and built flow.
 - [Release 3.25.0](release-3.25.0.md): preparation and verification record.
 - [Session recorder](session-recorder.md): local frame-time measurement.
+- [Autopilot](autopilot.md): realtime telemetry, stutter reports, and what Autopilot changes while a game runs.
 - [Shader rebuild](shader-rebuild.md): driver-change rebuild watcher and code map.
 - [Store quiet](store-quiet.md): notification suppression and restoration policy.
 - [Store windows](store-windows.md): client identity and safe window hiding.

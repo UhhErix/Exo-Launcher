@@ -298,7 +298,7 @@
 
 }
 
-/* Exoline's content box is odd at most sizes, and a pill's height even: the spare pixel fell under the words' line box above them,
+/* The type's content box is odd at most sizes, and a pill's height even: the spare pixel fell under the words' line box above them,
    sinking every word a pixel below the pill's middle. An even line box keeps them on it, cap to baseline, at any text size. */
 .exo-dc :is(.exo-set-btn, .exo-dc-tab, .exo-dc-place, .exo-dc-now-live) {
   line-height: calc(2 * round(calc(8px * var(--exo-scale, 1)), 1px));

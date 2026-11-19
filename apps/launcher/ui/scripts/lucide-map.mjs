@@ -2,7 +2,7 @@
 // form is the outline filled (scripts/icons.mjs). Edit here, then run npm run icons. One glyph per meaning (scripts/icons.mjs
 // stops on two that share one).
 export const LUCIDE = {
-  'alert': 'circle-exclamation-point', 'signal': 'signal', 'app-update': 'circle-arrow-up', 'app-window': 'app-window',
+  'alert': 'circle-exclamation-point', 'anti-cheat': 'shield', 'signal': 'signal', 'app-update': 'circle-arrow-up', 'app-window': 'app-window',
   'apps': 'layout-grid', 'arrow-down': 'arrow-down', 'arrow-right': 'arrow-right', 'arrow-up': 'arrow-up',
   'arrow-up-right': 'arrow-up-right', 'at': 'at-sign', 'award': 'award', 'badge-check': 'badge-check', 'bell': 'bell',
   'bell-off': 'bell-off', 'board': 'circuit-board', 'bold': 'letter-b', 'book': 'book', 'bookmark': 'bookmark',
@@ -10,16 +10,16 @@ export const LUCIDE = {
   'capture': 'camera', 'car': 'car', 'category': 'folders', 'change-share': 'arrow-left-right', 'chats': 'message-circle',
   'check': 'check', 'checklist': 'list-checks', 'chevron-down': 'chevron-down', 'chevron-left': 'chevron-left',
   'chevron-right': 'chevron-right', 'chevron-up': 'chevron-up', 'clean-up': 'brush-cleaning', 'clock': 'clock', 'close': 'x',
-  'code': 'code', 'controller': 'gamepad-2', 'copy': 'copy', 'cover': 'image', 'cpu': 'cpu', 'crop': 'crop', 'crown': 'crown',
+  'code': 'code', 'compress': 'fold-vertical', 'controller': 'gamepad-2', 'copy': 'copy', 'cover': 'image', 'cpu': 'cpu', 'crop': 'crop', 'crown': 'crown',
   'decline': 'circle-x', 'deny': 'ban', 'download': 'arrow-down-to-line', 'drive': 'hard-drive', 'encrypted': 'shield-lock',
   'exit-full-screen': 'minimize', 'explore': 'compass', 'external': 'external-link', 'eye': 'eye', 'eye-off': 'eye-off',
   'failed': 'triangle-exclamation-point', 'file': 'file', 'file-text': 'file-text', 'flag': 'flag',
   'flags-category': 'flag-triangle-right', 'folder': 'folder', 'folder-open': 'folder-open', 'folder-plus': 'folder-plus',
-  'forum': 'messages-square', 'forward': 'forward', 'friend-accepted': 'user-check', 'full-screen': 'maximize',
+  'forum': 'messages-square', 'forward': 'forward', 'frame-gen': 'gallery-horizontal-end', 'friend-accepted': 'user-check', 'full-screen': 'maximize',
   'gallery': 'images', 'gift': 'gift', 'graphics-card': 'gpu', 'grip': 'grip-vertical', 'hash': 'hash', 'heading': 'heading',
   'headphones': 'headphones', 'headphones-off': 'headphone-off', 'heart': 'heart', 'highlighter': 'highlighter',
   'history': 'rotate-ccw-clock', 'home': 'house', 'hourglass': 'hourglass', 'id': 'id-card', 'keyboard': 'keyboard',
-  'image-upload': 'image-up', 'inbox': 'inbox', 'italic': 'italic', 'key': 'key', 'leaf': 'leaf', 'library': 'library',
+  'image-upload': 'image-up', 'inbox': 'inbox', 'filter': 'list-filter', 'italic': 'italic', 'key': 'key', 'leaf': 'leaf', 'library': 'library',
   'lightbulb': 'lightbulb', 'link': 'link', 'link-preview': 'panels-top-left', 'list-search': 'text-search', 'live': 'screen-share',
   'lock': 'lock', 'mail': 'mail', 'maximize': 'maximize-2', 'megaphone': 'megaphone', 'members': 'users', 'memory': 'memory-stick',
   'message': 'message-square', 'mic': 'mic', 'mic-off': 'mic-off', 'minus': 'minus', 'monitor': 'monitor', 'more': 'ellipsis',
@@ -41,3 +41,4 @@ export const LUCIDE = {
   'volume-off': 'volume-off', 'wifi': 'wifi', 'zoom-in': 'zoom-in', 'zoom-out': 'zoom-out',
   'blur': 'grid-2x2', 'info': 'info', 'redo': 'redo', 'scan-text': 'scan-text', 'share': 'share',
 }
+

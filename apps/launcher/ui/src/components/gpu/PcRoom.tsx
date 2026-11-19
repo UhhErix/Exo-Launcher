@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import { Check } from '../../brand/icons'
-import { host, type AutoTune, type DisplayState, type DriverState, type DrivesState, type Game, type GpuProfile, type HdrState, type Interrupts, type LauncherSettings, type PcAbout, type PcHealth } from '../../lib/host'
+import { host, type AutoTune, type DisplayState, type DriverState, type DrivesState, type Game, type GpuProfile, type HdrState, type Interrupts, type LauncherSettings, type PcAbout, type PcHealth, type Tuning } from '../../lib/host'
 import { useHdrState } from '../../lib/hdr'
 import { report } from '../../lib/report'
 import { cn } from '../../lib/utils'
@@ -9,9 +9,11 @@ import { SwitchRow } from '../settings/parts'
 import { ShadersBoard } from '../shaders/ShadersBoard'
 import { Popover } from '../ui/Dialog'
 import { UpscalersTab } from '../upscalers/UpscalersSheet'
+import { AutopilotChip, AutopilotControls, AutopilotReports, useAutopilot } from './Autopilot'
 import { AutoTuneChip, AutoTuneRows, useTuneReads } from './AutoTune'
 import { BestSetup, bestSteps } from './BestSetup'
 import { NetworkGroup } from './NetworkGroup'
+import { SystemGroup } from './SystemGroup'
 import { CompressChip, CompressGames, useCompressList } from './CompressGames'
 import { BestScreenRows, DisplayRows, HdrRows } from './DisplayTab'
 import { DriverRow, savedBranch } from './DriverRow'
@@ -23,7 +25,9 @@ import { ProfileRows } from './ProfileTab'
 import { SectionSlot } from './SectionHead'
 import { SetupRows } from './ThisPcTab'
 import type { PcLink } from './pcSections'
+import { gpuOffers } from '../../lib/canUse'
 import '../../styles/pc-room.css'
+import { errorText } from '../../lib/errorWords'
 
 /** What the room reads from the host, shared by every row that shows or changes it. */
 export type PcState = {
@@ -32,13 +36,14 @@ export type PcState = {
   driver: DriverState | null
   health: PcHealth | null
   interrupts: Interrupts | null
+  tuning: Tuning | null
   display: DisplayState | null
   drives: DrivesState | null
   tune: AutoTune | null
 }
 
 /** What the room last read, for this run: it shows at once the next time the room opens and is read again behind it. */
-const last: PcState = { about: null, profile: null, driver: null, health: null, interrupts: null, display: null, drives: null, tune: null }
+const last: PcState = { about: null, profile: null, driver: null, health: null, interrupts: null, tuning: null, display: null, drives: null, tune: null }
 
 /**
  * This PC, its card, driver, setup, interrupts and screens: read each time the room shows and when Exo's window comes
@@ -60,6 +65,7 @@ function usePcState(active: boolean) {
       one('driver', () => host.gpuDriver('state', savedBranch())),
       one('health', () => host.systemHealth()),
       one('interrupts', () => host.systemInterrupts()),
+      one('tuning', () => host.systemTuning()),
       one('display', () => host.gpuDisplay('state')),
       one('tune', () => host.systemTune()),
       // At once: what fills each drive is a walk of the disk (6.6 s here), and only a hard drive's row uses it.
@@ -91,9 +97,9 @@ const SETUP_ELSEWHERE: readonly string[] = ['power', 'network', 'net-adapter', '
  */
 function stillToSet(state: PcState, hdr: HdrState | null, settings: LauncherSettings | null,
   onSave: (patch: Partial<LauncherSettings>) => Promise<boolean>): number | null {
-  const { profile, health, display, drives, interrupts } = state
+  const { profile, health, display, drives, interrupts, tuning } = state
   if (!profile || !health) return null
-  const steps = bestSteps(profile, health, hdr, settings, onSave, drives).filter(step => !step.done).length
+  const steps = bestSteps(profile, health, hdr, settings, onSave, drives, tuning).filter(step => !step.done).length
   const setup = health.items.filter(item => !SETUP_ELSEWHERE.includes(item.key) && !item.applied && !item.current).length
   const screens = display?.displays.filter(screen => !screen.isBest).length ?? 0
   const irq = interrupts && interrupts.devices.length > 0 &&
@@ -101,7 +107,7 @@ function stillToSet(state: PcState, hdr: HdrState | null, settings: LauncherSett
   return steps + setup + screens + irq
 }
 
-type Menu = 'best' | 'tune' | 'compress' | PcPartMenu
+type Menu = 'best' | 'tune' | 'compress' | 'autopilot' | PcPartMenu
 
 /**
  * The PC room (DESIGN.md › PC): one page, no scrolling on a 1080p screen. This PC leads, its name with its chips at the
@@ -132,11 +138,13 @@ export function PcRoom({ active, jump, games, settings, onSave, onDevices }: {
 
   const setHealth = useCallback((next: PcHealth) => put('health', next), [put])
   const setInterrupts = useCallback((next: Interrupts) => put('interrupts', next), [put])
+  const setTuning = useCallback((next: Tuning) => put('tuning', next), [put])
   const setProfile = useCallback((next: GpuProfile) => put('profile', next), [put])
   const setDriver = useCallback((next: DriverState) => put('driver', next), [put])
   const setDisplay = useCallback((next: DisplayState) => put('display', next), [put])
   const setTune = useCallback((next: AutoTune) => put('tune', next), [put])
   useTuneReads(active, state.tune, menu === 'tune', setTune)
+  const autopilot = useAutopilot(active, menu === 'autopilot')
   const openApps = () => setAppsOpen(true)
   const readApps = () => setAppsRead(n => n + 1)
   const closeMenu = useCallback(() => setMenu(null), [])
@@ -151,7 +159,7 @@ export function PcRoom({ active, jump, games, settings, onSave, onDevices }: {
     if (jump.tab === 'control' && !vendor) return
     handled.current = jump
     // On a GeForce the control panel is Exo's own: the card's menu and the screen's.
-    const opens: Partial<Record<PcLink, Menu>> = { graphics: 'graphics', display: 'display', board: 'board', control: 'graphics', performance: 'best', compress: 'compress' }
+    const opens: Partial<Record<PcLink, Menu>> = { graphics: 'graphics', display: 'display', board: 'board', control: 'graphics', performance: 'best', compress: 'compress', autopilot: 'autopilot' }
     // AMD's and Intel's control panels are their own apps (the chip opens them): the link opens that app, not NVIDIA's menu.
     if (jump.tab === 'control' && vendor && vendor !== 'nvidia') {
       host.gpuControlPanel().catch((e: unknown) => report(e, 'PcRoom.controlPanelLink'))
@@ -172,6 +180,7 @@ export function PcRoom({ active, jump, games, settings, onSave, onDevices }: {
   const chips = (
     <>
       <BestChip left={stillToSet(state, hdr, settings, onSave)} onOpen={() => setMenu('best')} />
+      <AutopilotChip state={autopilot.state} onOpen={() => setMenu('autopilot')} />
       <button type="button" className={cn('exo-pc-chip', upscalers === 0 ? 'is-good' : upscalers ? 'is-bad' : null)} onClick={() => setUpscalersOpen(true)}>
         {upscalers === 0 ? <Check size={14} /> : null}Upscalers{upscalers ? ` · ${upscalers}` : null}
       </button>
@@ -179,9 +188,18 @@ export function PcRoom({ active, jump, games, settings, onSave, onDevices }: {
       <CompressChip list={compress.list} onOpen={() => setMenu('compress')} />
       {onDevices ? <button type="button" className="exo-pc-chip" onClick={onDevices}>Devices</button> : null}
       <AutoTuneChip tune={state.tune} onOpen={() => setMenu('tune')} />
-      {vendor && vendor !== 'nvidia' ? <MakerPanel name={PANEL[vendor]} /> : null}
+      <MakerPanel vendor={vendor} />
     </>
   )
+
+  // The menus that are one part each, by name: the room places whichever is open.
+  const plainMenus: Partial<Record<Menu, { title: string; body: () => ReactNode }>> = {
+    autopilot: { title: 'Autopilot', body: () => <><AutopilotControls state={autopilot.state} onState={autopilot.setState} /><AutopilotReports state={autopilot.state} /></> },
+    tune: { title: 'Auto tune', body: () => <AutoTuneRows tune={state.tune} profile={state.profile} about={state.about} onTune={setTune} /> },
+    compress: { title: 'Compress games', body: () => <CompressGames list={compress.list} onList={compress.setList} onRead={compress.read} /> },
+    board: { title: 'Motherboard', body: () => <div className="exo-pc-menu-rows"><BoardRows about={state.about} /></div> },
+  }
+  const plain = menu ? plainMenus[menu] : undefined
 
   return (
     <main ref={room} className="exo-pc" aria-label="PC">
@@ -200,7 +218,7 @@ export function PcRoom({ active, jump, games, settings, onSave, onDevices }: {
 
       {menu === 'best' ? (
         <PcMenu title="Best settings" onClose={closeMenu}>
-          <BestSetup profile={state.profile} health={state.health} drives={state.drives} screen={hdr} settings={settings} onSave={onSave} onRead={read} />
+          <BestSetup profile={state.profile} health={state.health} tuning={state.tuning} drives={state.drives} screen={hdr} settings={settings} onSave={onSave} onRead={read} />
           <div className="exo-pc-menu-rows">
             <BestScreenRows display={state.display} onDisplay={setDisplay} />
             <SetupRows place="needs" active={active} health={state.health} onHealth={setHealth} />
@@ -209,13 +227,10 @@ export function PcRoom({ active, jump, games, settings, onSave, onDevices }: {
             <InterruptRows place="section" state={state.interrupts} onState={setInterrupts} />
           </div>
           <NetworkGroup health={state.health} onHealth={setHealth} />
+          <SystemGroup tuning={state.tuning} onTuning={setTuning} />
         </PcMenu>
       ) : null}
-      {menu === 'tune' ? (
-        <PcMenu title="Auto tune" onClose={closeMenu}>
-          <AutoTuneRows tune={state.tune} profile={state.profile} about={state.about} onTune={setTune} />
-        </PcMenu>
-      ) : null}
+      {plain ? <PcMenu title={plain.title} onClose={closeMenu}>{plain.body()}</PcMenu> : null}
       {menu === 'graphics' ? (
         <PcMenu title="Graphics" onClose={closeMenu}>
           <div className="exo-pc-menu-rows">
@@ -241,16 +256,6 @@ export function PcRoom({ active, jump, games, settings, onSave, onDevices }: {
             <DisplayRows display={state.display} onDisplay={setDisplay} />
             <HdrRows screen={hdr} settings={settings} onSave={onSave} />
           </div>
-        </PcMenu>
-      ) : null}
-      {menu === 'compress' ? (
-        <PcMenu title="Compress games" onClose={closeMenu}>
-          <CompressGames list={compress.list} onList={compress.setList} onRead={compress.read} />
-        </PcMenu>
-      ) : null}
-      {menu === 'board' ? (
-        <PcMenu title="Motherboard" onClose={closeMenu}>
-          <div className="exo-pc-menu-rows"><BoardRows about={state.about} /></div>
         </PcMenu>
       ) : null}
 
@@ -294,12 +299,14 @@ function PcMenu({ title, onClose, children }: { title: string; onClose: () => vo
 
 const PANEL: Record<Exclude<NonNullable<GpuProfile['vendor']>, 'nvidia'>, string> = { amd: 'AMD Software', intel: 'Intel Graphics' }
 
-/** A Radeon's or an Intel card's own control panel, for what Exo doesn't set; what stopped it opening, in its place. */
-function MakerPanel({ name }: { name: string }) {
+/** A Radeon's or an Intel card's own control panel, for what Exo doesn't set; what stopped it opening, in its place. None on a GeForce (Exo is its panel). */
+function MakerPanel({ vendor }: { vendor: GpuProfile['vendor'] }) {
   const [error, setError] = useState<string | null>(null)
+  if (!vendor || vendor === 'nvidia' || !gpuOffers(vendor).makerPanel) return null
+  const name = PANEL[vendor]
   const open = () => {
     setError(null)
-    host.gpuControlPanel().then(result => { if (!result.ok) setError(result.message ?? `${name} didn't open.`) },
+    host.gpuControlPanel().then(result => { if (!result.ok) setError(errorText(result.message, `${name} didn't open.`)) },
       (e: unknown) => { report(e, 'PcRoom.controlPanel'); setError(`${name} didn't open.`) })
   }
   return <button type="button" className={cn('exo-pc-chip', error && 'is-bad')} onClick={open}>{error ?? name}</button>

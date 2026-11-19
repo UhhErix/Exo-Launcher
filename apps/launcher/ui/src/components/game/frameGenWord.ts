@@ -10,6 +10,8 @@ const curly = (text: string) => text.replace(/'/g, '’')
  * knows it.
  */
 export function frameGenWord(state: FrameGenMod): LineWord | null {
+  // Hidden is about Exo's mod route, not the game: an RTX 40 or 50 with a frame generation game reads native instead.
+  if (state.state === 'hidden') return { text: state.reason === 'unread' ? 'Could not check' : 'Not supported in this game' }
   if (state.state === 'native') return { text: 'Built into the game' }
   if (state.state === 'mod') return { text: curly(state.mod ?? 'A mod') }
   if (state.state === 'note') return { text: curly(state.note ?? '') }

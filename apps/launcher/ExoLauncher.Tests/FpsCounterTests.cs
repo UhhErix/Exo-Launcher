@@ -526,6 +526,14 @@ public sealed class FpsCounterTests
         Assert.InRange(tiny.Width, 1, 300);
     }
 
+    /// <summary>The widths above hold for any face (every digit is padded to one cell), so this asks GDI which face it selected.</summary>
+    [Fact]
+    public void ItDrawsGoeistNotAFallback()
+    {
+        FpsOverlay.AddFont(Font());
+        Assert.Equal(("Goeist SemiBold", "Goeist"), FpsOverlay.Faces());
+    }
+
     [Fact]
     public void EveryDigitInTheLineHoldsItsWidth()
     {
@@ -541,7 +549,7 @@ public sealed class FpsCounterTests
 
     private static unsafe uint[] Pixels(FpsOverlay.Capsule capsule) => new ReadOnlySpan<uint>(capsule.Bits, capsule.Width * capsule.Height).ToArray();
 
-    private static string Font() => Repo.PathOf("ExoLauncher", "Assets", "Fonts", "Exoline-Variable.ttf");
+    private static string Font() => Repo.PathOf("ExoLauncher", "Assets", "Fonts", "Goeist-Variable.ttf");
 
     [Theory]
     [InlineData(1.0, 24)]
@@ -568,6 +576,23 @@ public sealed class FpsCounterTests
         // Its plain body is black at 78%; the number is full white somewhere.
         Assert.Equal(0xC7000000u, pixels[w + w / 2]);
         Assert.Contains(pixels, pixel => (pixel & 0xFF) > 230);
+    }
+
+    /// <summary>The Liquid Glass edge: one pixel all round, white at a low alpha, brightest along the top; never a gray ring inside the body.</summary>
+    [Fact]
+    public void ItsEdgeIsLiquidGlassLitFromTheTop()
+    {
+        FpsOverlay.AddFont(Font());
+        using var capsule = FpsOverlay.Draw(new(142, null), 1);
+        var pixels = Pixels(capsule);
+        var (w, h) = (capsule.Width, capsule.Height);
+        var (top, foot, body) = (pixels[w / 2] & 0xFF, pixels[(h - 1) * w + w / 2] & 0xFF, pixels[w + w / 2] & 0xFF);
+        Assert.InRange(top, 40u, 48u);
+        Assert.True(foot < top, $"the foot ({foot}) is as bright as the top ({top})");
+        Assert.Equal(0u, body);
+        Assert.Equal(0.0, FpsOverlay.Edge(100, 24, 50, 12), 3);
+        Assert.Equal(1.0, FpsOverlay.Edge(100, 24, 50, 0), 3);
+        Assert.InRange(FpsOverlay.Edge(100, 24, 0, 12), 0.9, 1.0);
     }
 
     [Theory]

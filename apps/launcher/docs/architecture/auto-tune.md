@@ -175,7 +175,7 @@ The CPU side has a legal answer but not a clean one. **Decided: option 2.** `Ryz
 1. **Keep the CPU row (built that way).** Shows on Ryzen 5000, 7000 and 9000 desktops. The user installs PawnIO themselves, warned up front. Risk: a user finds out Vanguard or another anti-cheat refuses PawnIO; uninstalling fixes it. Before release, the owner tries PawnIO with VALORANT on this PC, since `vgk` runs here, and that one result moves Vanguard from unknown to known.
 2. **Hold the CPU row until that test.** One line: `AutoTuneService.RyzenAvailable` becomes false. The GPU ships alone.
 3. **Remove it.** Delete `TuneRyzen`, the module and the row.
-4. **Ask namazso to bundle PawnIO** (admin@namazso.eu), as with Lucid: ask the author. Only needed if a one-press install is wanted; it doesn't change the anti-cheat answer.
+4. **Ask namazso to bundle PawnIO** (admin@namazso.eu), as with OpenMouse: ask the author. Only needed if a one-press install is wanted; it doesn't change the anti-cheat answer.
 
 ## First real run
 
