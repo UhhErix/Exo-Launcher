@@ -36,10 +36,10 @@ internal static class ExoConnectedTheme
     /// The title band and its hairline, in DIPs.
     internal const int Band = 53;
 
-    // The Bar's window buttons: Exo's minus, maximize, restore and close (ui/src/brand/glyphs.ts), lines on its 24 grid.
+    // The Bar's window buttons: Exo's minus, maximize (arrows out), restore (arrows in) and close (ui/src/brand/glyphs.ts), lines on its 24 grid.
     private const string MinimizeGlyph = "M5 12h14";
-    private const string MaximizeGlyph = "M7 4h10a3 3 0 0 1 3 3v10a3 3 0 0 1 -3 3h-10a3 3 0 0 1 -3 -3v-10a3 3 0 0 1 3 -3Z";
-    private const string RestoreGlyph = "M6 8h7.5a2.5 2.5 0 0 1 2.5 2.5v7.5a2.5 2.5 0 0 1 -2.5 2.5h-7.5a2.5 2.5 0 0 1 -2.5 -2.5v-7.5a2.5 2.5 0 0 1 2.5 -2.5ZM8 8V6a2.5 2.5 0 0 1 2.5-2.5H18A2.5 2.5 0 0 1 20.5 6v7.5a2.5 2.5 0 0 1-2.5 2.5h-2";
+    private const string MaximizeGlyph = "M15 3h6v6M21 3l-7 7M3 21l7-7M9 21H3v-6";
+    private const string RestoreGlyph = "M14 10l7-7M20 10h-6V4M3 21l7-7M4 14h6v6";
     private const string CloseGlyph = "M6 6l12 12M18 6L6 18";
 
     /// The page and the Bar's small glass (Void; ui/src/tokens.css; glass.css on .exo-glass): its words, the
