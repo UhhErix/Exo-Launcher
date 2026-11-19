@@ -1050,15 +1050,11 @@ const MOCK_HANDLERS: Record<string, MockHandler> = {
     MOCK_STEAM_ACCOUNT = null
     return { ok: true }
   },
-  // ?riot=partial: VALORANT's hours are tracker.gg's playlist sum (the partial note), and the frame-gen line says the RTX 20/30 copy.
-  'playtime.riotLifetime': () => (mockRiotPartial
-    ? { ok: true, minutes: 9_840, partial: true, modes: [{ mode: 'competitive', minutes: 6_120 }, { mode: 'unrated', minutes: 3_720 }], stats: null }
-    : { ok: false, minutes: 0, partial: false, modes: [], stats: null }),
+  // What tracker.gg answers apps now (TrackerGgPlaytime.BlockedMessage): a browser check, so nothing is imported.
   'playtime.riotRefresh': () => ({
     ok: false,
-    profilePrivate: true,
-    message:
-      'This tracker.gg profile is private. Sign in with Riot on tracker.gg once so the profile is public.',
+    profilePrivate: false,
+    message: "tracker.gg now blocks apps from reading its profiles, so Exo can't import your Riot hours from it. Exo still counts every session you play.",
     profileUrl: 'https://tracker.gg/valorant',
   }),
   'web.preferences.get': () => ({ microphone: 'ask', camera: 'ask', clipboard: 'ask', notifications: 'ask' }),

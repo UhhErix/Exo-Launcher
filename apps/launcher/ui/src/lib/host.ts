@@ -1380,23 +1380,6 @@ export interface ClientsStatus {
   steam: { channel: 'none' | 'stable' | 'beta' | 'unknown' }
 }
 
-/** A Riot game's lifetime from the Riot ID's ledger: its minutes per mode (largest first) and tracker.gg's profile stats. */
-export type RiotLifetime = {
-  ok: boolean
-  minutes: number
-  /** The seed is tracker.gg's playlist sum, not its lifetime total. */
-  partial: boolean
-  modes: { mode: string; minutes: number }[]
-  stats: {
-    matches?: number | null
-    wins?: number | null
-    killDeath?: number | null
-    currentRank?: string | null
-    peakRank?: string | null
-    topPicks?: string[] | null
-  } | null
-}
-
 export interface StoreStatus {
   store: string
   displayName: string
@@ -2482,8 +2465,6 @@ export const host = {
       'playtime.riotRefresh',
       riotId ? { riotId } : {},
     ),
-  /** A Riot game's lifetime for its game page: minutes per mode and the seed's profile stats. */
-  riotLifetime: (game: string) => rawCall<RiotLifetime>('playtime.riotLifetime', { game }),
   minimize: () => rawCall<{ ok: boolean }>('shell.minimize'),
   maximize: () => rawCall<{ ok: boolean; maximized?: boolean }>('shell.maximize'),
   windowState: () => rawCall<{ ok: boolean; maximized?: boolean }>('shell.windowState'),

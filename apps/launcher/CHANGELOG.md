@@ -1,6 +1,10 @@
 # Changelog
 
 ## 3.26.0 — November 14, 2026
+- **Riot games show their hours like Steam games.** A VALORANT or League page shows its lifetime hours as Played and nothing more: the per-mode hours, rank, K/D, matches and top picks are gone from the page. _Checked in code only._
+- **tracker.gg says why it can't import.** tracker.gg now answers apps with a browser check, so importing Riot hours from it can't work; Exo says that plainly instead of "isn't answering right now", stops after the first refusal, and keeps counting every session you play. Settings › Stores › Riot ID has Import hours to try again. _Checked in code only._
+- **Upscalers say whether they're up to date.** A game's Upscalers line reads "Up to date: DLSS 310.9.16" or how many updates wait, never the name of an upscaler mod in the game (OptiScaler from Exo's frame generation included); the Frame generation line still names the mod, and Exo still leaves a mod's files alone. _Checked in code only._
+- **Every game page has the same lines.** Upscalers, Shaders, Frame generation, HDR and Optimize are on every installed game's page, each the same height, and a line the game or screen doesn't support says so ("Not supported in this game", "This screen can't show HDR") instead of disappearing. _Checked in code only._
 - **Glass edges, not grey outlines.** Panels, menus and controls are lit at their edge like glass, brightest along the top, instead of a grey line all the way round, and lines inside a panel are faint enough that they never stack into a grey band. _Checked in code only._
 - **Old frame generation installs come out.** A game that got Exo Bridge from an earlier test build (Hell Is Us) had it left behind for good; Exo now takes it out by its record and puts today's frame generation in. _Checked in code only._
 - **Five rooms, in the middle.** The top bar has Library, Store, Discord, Music and PC, centered in the window. Devices moved into the PC room: its button sits on the This PC line beside Apps, and nothing in it changed. The mouse's capsule left the top bar; its battery shows in the FPS counter. _Checked in code only._

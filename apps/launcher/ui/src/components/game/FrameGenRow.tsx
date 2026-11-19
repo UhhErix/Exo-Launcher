@@ -71,8 +71,8 @@ const modRead = sheetMemory<FrameGenMod>()
  * Game sheet > Frame generation. Exo picks it from the card and from what the game already has, in the background
  * when Best settings has frame generation on. An RTX 20 or 30 with DLSS frame generation gets DLSS where Exo can offer
  * it; every other card a mod helps, and an RTX 20 or 30 where DLSS can't go, gets AMD FidelityFX. An RTX 40 or 50 is
- * left on NVIDIA's own. A game with anti-cheat never gets it. Nothing shows while it is read; the last read shows at
- * once while it is read again.
+ * left on NVIDIA's own. A game with anti-cheat never gets it. The line is always there: a shining word while it is read
+ * (the last read shows at once while it is read again), and Not supported in this game when Exo has nothing to offer.
  */
 export function FrameGenModRow({ gameId }: { gameId: string }) {
   const [state, setState] = useState<FrameGenMod | null>(() => modRead.get(gameId))
@@ -84,10 +84,12 @@ export function FrameGenModRow({ gameId }: { gameId: string }) {
       if (!live) return
       modRead.set(gameId, answer)
       setState(answer)
-    }).catch(e => report(e, 'FrameGenModRow.load'))
+    }).catch(e => { report(e, 'FrameGenModRow.load'); if (live) setState({ ok: false, state: 'hidden' }) })
     return () => { live = false }
   }, [gameId])
 
-  if (!state?.ok || state.state === 'hidden') return null
+  if (!state) return <GameReading name="Frame generation" word={null} waiting />
+  if (!state.ok) return <GameReading name="Frame generation" word={{ text: 'Could not check', bad: true }} />
+  if (state.state === 'hidden') return <GameReading name="Frame generation" word={{ text: 'Not supported in this game' }} />
   return <GameReading name="Frame generation" word={frameGenWord(state)} />
 }

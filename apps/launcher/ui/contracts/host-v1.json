@@ -248,7 +248,6 @@
     "notes.session": "{ ok: boolean }",
     "notes.spell": "{ ok: boolean; wrong?: boolean; suggestions?: string[] }",
     "notes.textFiles": "{ ok: boolean; offered: boolean; isDefault: boolean; message?: string | null }",
-    "playtime.riotLifetime": "RiotLifetime",
     "playtime.riotRefresh": "RiotHoursRefresh",
     "replaced.remove": "{ ok: boolean; message?: string | null; removed: number; left: number; apps: ReplacedApp[] }",
     "replaced.scan": "{ ok: boolean; cleared: number; apps: ReplacedApp[] }",
