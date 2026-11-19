@@ -1,6 +1,7 @@
 # Changelog
 
 ## 3.26.0 — November 14, 2026
+- **Sensor angle on the Razer Viper V3 Pro.** Devices › Sensor has a Sensor angle slider for the Viper V3 Pro, on its cable or its HyperSpeed receiver, from -30° to +30° a degree at a time, with Reset to 0 and Measure beside it. Exo reads the angle from the mouse when it connects; the row shows a ring while the angle goes in, a check once the mouse took it, and a plain line if it didn't. Exo sends Synapse's own command, read off a capture of Synapse setting it; other mice whose angle Exo can't set don't get the row. _Checked in code only._
 - **Open Exo when Windows starts.** A switch in Settings › General, off until you turn it on. _Checked in code only._
 - **Captures, laid out like Photos.** The Captures sheet is one grid of your clips and screenshots by day, edge to edge, under a big title with the month you're on; a slim scrubber down the right edge jumps through months and years, and On this day brings back what you captured on this date in earlier years. Clips, Screenshots, Favorites and each game are chips that combine (a game's favorite screenshots), and Snip is the one main button. _Checked in code only._
 - **A viewer that gets out of the way.** A capture opens edge to edge under one slim bar: Edit, Share, Favorite, Info, Delete and More; the arrow keys step through them. Info (game, date, resolution, length, size, folder) is a pane you open when you want it. _Checked in code only._
