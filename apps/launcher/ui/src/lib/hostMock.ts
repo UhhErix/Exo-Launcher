@@ -1804,9 +1804,25 @@ const MOCK_HANDLERS: Record<string, MockHandler> = {
 // ?hold=store.,discord.chat holds every call whose method starts so, for looking at a wait.
 const mockHold = typeof location === 'undefined' ? [] : new URLSearchParams(location.search).get('hold')?.split(',') ?? []
 
+// ?fail=game.uninstall,stores. fails every call whose method starts so, as the host would (a file in use, by turns
+// with no network and a refusal), for looking at an action's error; ?slow=apps. answers those after 1.6 s, for its ring.
+const mockFail = typeof location === 'undefined' ? [] : new URLSearchParams(location.search).get('fail')?.split(',').filter(Boolean) ?? []
+const mockSlow = typeof location === 'undefined' ? [] : new URLSearchParams(location.search).get('slow')?.split(',').filter(Boolean) ?? []
+let mockFailures = 0
+const MOCK_FAILURES = [
+  'A file is in use. Close the game or app using it, then try again.',
+  'System.Net.Http.HttpRequestException: No such host is known. (api.example:443)',
+  { ok: false, message: 'Something went wrong.' },
+]
+
 export async function mockCall<T>(method: string, params?: Record<string, unknown>): Promise<T> {
   if (mockHold.some(held => method.startsWith(held))) await new Promise(() => {})
-  await new Promise((r) => setTimeout(r, 40))
+  await new Promise((r) => setTimeout(r, mockSlow.some(slow => method.startsWith(slow)) ? 1600 : 40))
+  if (mockFail.some(fail => method.startsWith(fail))) {
+    const failure = MOCK_FAILURES[mockFailures++ % MOCK_FAILURES.length]
+    if (typeof failure === 'string') throw new Error(failure)
+    return failure as T
+  }
   const handler = MOCK_HANDLERS[method]
 
   if (!handler) throw new Error(`Unknown mock method: ${method}`)

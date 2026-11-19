@@ -3,7 +3,8 @@ import { Check, ChevronDown, ChevronUp } from '../../brand/icons'
 import { cleanOutcome } from '../../lib/junkClean'
 import { host, onHostEvent, type AppFind, type AppLeftover, type InstalledApp, type JunkItem, type LeftoverSummary, type RemovalRecord, type StartupItem, type StartupState, type WindowsApp, type WindowsAppLine } from '../../lib/host'
 import { report } from '../../lib/report'
-import { ConfirmButton } from '../ui/ConfirmButton'
+import { ActionButton, ConfirmButton } from '../ui/ConfirmButton'
+import { errorText, type PlainError } from '../../lib/errorWords'
 import { Switch } from '../Switch'
 import { ErrorNote } from '../ui/ErrorNote'
 import { Wait, sample, times } from '../ui/Wait'
@@ -185,36 +186,57 @@ export function AppsPanel({ active }: { active: boolean }) {
   const knowsUse = programs.some(app => app.lastOpened || app.quietSince)
   const setError = (id: string, message: string | null) => setErrors(current => ({ ...current, [id]: message }))
 
+  /** One app's removal: its uninstaller, Exo's clean-up for one it does the job of, or only a look at what's left when its uninstaller is gone. */
+  const removal = (app: InstalledApp, quiet: boolean) => app.replaces ? host.replacedRemove(app.replaces)
+    : app.uninstaller ? host.appsUninstall(app.id, quiet) : host.appsScan(app.id)
+
+  /** What went, said in the Ready view; then the list read again. */
+  async function afterRemoval(app: InstalledApp, result: Awaited<ReturnType<typeof removal>>) {
+    if (result.ok) {
+      if (app.replaces) setRemoved(current => [{ id: app.id, name: app.name, message: `${app.name} is gone.` }, ...current])
+      else setRemoved(current => [{ id: app.id, name: app.name, find: result as AppFind }, ...current.filter(other => other.id !== app.id)])
+    }
+    const next = await host.appsList()
+    setPrograms(next.programs)
+    setEdgeRemoved(Boolean(next.edgeRemoved))
+  }
+
   /**
-   * One app, gone or not: its uninstaller, Exo's clean-up for one it does the job of, or only a look at what's left when its
-   * uninstaller is gone. quiet: one of a confirmed run. True when it went.
+   * One of a confirmed run, quietly where its installer allows. True when it went; a refusal shows under its row.
    */
   async function uninstall(app: InstalledApp, quiet = false): Promise<boolean> {
     setBusy(app.id)
     setError(app.id, null)
     let gone = false
     try {
-      if (app.replaces) {
-        const result = await host.replacedRemove(app.replaces)
-        if (!result.ok) setError(app.id, result.message ?? `${app.name} wasn't removed.`)
-        else setRemoved(current => [{ id: app.id, name: app.name, message: `${app.name} is gone.` }, ...current])
-        gone = result.ok
-      } else {
-        const result = app.uninstaller ? await host.appsUninstall(app.id, quiet) : await host.appsScan(app.id)
-        if (result.ok) setRemoved(current => [{ id: app.id, name: app.name, find: result }, ...current.filter(other => other.id !== app.id)])
-        else setError(app.id, result.message ?? `${app.name} wasn't removed.`)
-        gone = result.ok
-      }
-      const next = await host.appsList()
-      setPrograms(next.programs)
-      setEdgeRemoved(Boolean(next.edgeRemoved))
+      const result = await removal(app, quiet)
+      if (!result.ok) setError(app.id, errorText(result.message, `${app.name} wasn't removed. Try again.`))
+      gone = result.ok
+      await afterRemoval(app, result)
     } catch (error) {
       report(error, 'AppsPanel.uninstall')
-      setError(app.id, `${app.name} wasn't removed.`)
+      setError(app.id, errorText(error, `${app.name} wasn't removed. Try again.`))
     } finally {
       setBusy(null)
     }
     return gone
+  }
+
+  /**
+   * A row's own press (ActionButton): its ring while it works, then its check, and only then does the row go (`onDone`);
+   * a refusal turns the button Bad with the reason beside it, and the next press is Retry. The list is read again
+   * either way.
+   */
+  async function pressUninstall(app: InstalledApp) {
+    setBusy(app.id)
+    setError(app.id, null)
+    try {
+      const result = await removal(app, false)
+      if (!result.ok) void afterRemoval(app, result).catch(error => report(error, 'AppsPanel.list'))
+      return { ...result, settle: () => void afterRemoval(app, result).catch(error => report(error, 'AppsPanel.list')) }
+    } finally {
+      setBusy(null)
+    }
   }
 
   /**
@@ -268,8 +290,8 @@ export function AppsPanel({ active }: { active: boolean }) {
 
   const line = (app: InstalledApp) => (
     <AppLine key={app.id} app={app} icon={icons[app.id] ?? null} starts={startsWithWindows.has(app.id)} showUsed={knowsUse} error={errors[app.id] ?? null}
-      working={busy === app.id} disabled={busy !== null || run !== null} picked={picked && pickable(app) ? picked.has(app.id) : null}
-      onPick={() => pick(app.id)} onUninstall={() => void uninstall(app)} />
+      working={busy === app.id} disabled={(busy !== null && busy !== app.id) || run !== null} picked={picked && pickable(app) ? picked.has(app.id) : null}
+      onPick={() => pick(app.id)} onUninstall={() => pressUninstall(app)} onFailed={why => setError(app.id, why)} />
   )
 
   const searching = query.trim().length > 0
@@ -459,7 +481,7 @@ function AppIcon({ name, icon }: { name: string; icon: string | null }) {
   return <ArtImg src={icon} loading="lazy" decoding="async" draggable={false} fallback={<span aria-hidden="true">{name.slice(0, 1)}</span>} />
 }
 
-function AppLine({ app, icon, starts, showUsed, error, working, disabled, picked, onPick, onUninstall }: {
+function AppLine({ app, icon, starts, showUsed, error, working, disabled, picked, onPick, onUninstall, onFailed }: {
   app: InstalledApp
   icon: string | null
   starts: boolean
@@ -469,7 +491,8 @@ function AppLine({ app, icon, starts, showUsed, error, working, disabled, picked
   disabled: boolean
   picked: boolean | null
   onPick: () => void
-  onUninstall: () => void
+  onUninstall: () => Promise<{ ok: boolean; message?: string | null; settle: () => void }>
+  onFailed: (why: string) => void
 }) {
   const detail = working
     ? (app.replaces ? `Removing ${app.name}` : app.uninstaller ? 'Finish in its window' : 'Looking for what it left')
@@ -480,8 +503,8 @@ function AppLine({ app, icon, starts, showUsed, error, working, disabled, picked
         <button type="button" className={picked ? 'exo-apps-pick is-picked' : 'exo-apps-pick'} aria-pressed={picked} aria-label={`Pick ${app.name}`} onClick={onPick}>
           {picked ? <Check size={12} /> : null}
         </button>
-      ) : !app.removable ? null : working ? <Spinner label={`Removing ${app.name}`} /> : (
-        <AppAction app={app} disabled={disabled} onUninstall={onUninstall} />
+      ) : !app.removable ? null : (
+        <AppAction app={app} disabled={disabled} onUninstall={onUninstall} onFailed={onFailed} />
       )}
     </Line>
   )
@@ -496,11 +519,27 @@ function whatItIs(app: InstalledApp): string | null {
   return app.caution?.replace(/\.$/, '') ?? app.publisher
 }
 
-/** Uninstall or Remove, asked in place; Clear only looks first, so what it found shows before anything goes. */
-function AppAction({ app, disabled, onUninstall }: { app: InstalledApp; disabled: boolean; onUninstall: () => void }) {
-  if (!app.uninstaller && !app.replaces) return <button type="button" className="exo-set-btn is-compact" disabled={disabled} onClick={onUninstall}>Look</button>
+/**
+ * Uninstall or Remove, asked in place; Look only looks first, so what it found shows before anything goes. The button
+ * says how it went (ActionButton): its ring, then its check, and then the row goes; or Retry with why.
+ */
+function AppAction({ app, disabled, onUninstall, onFailed }: {
+  app: InstalledApp
+  disabled: boolean
+  onUninstall: () => Promise<{ ok: boolean; message?: string | null; settle: () => void }>
+  onFailed: (why: string) => void
+}) {
+  const settle = (value: unknown) => (value as { settle?: () => void } | undefined)?.settle?.()
+  // The row's columns leave no room beside the button: the reason is the row's error line, under it.
+  const failed = (error: PlainError) => onFailed(error.text)
+  // An uninstaller runs in its own window for as long as the player takes: no time limit.
+  if (!app.uninstaller && !app.replaces) {
+    return <ActionButton className="exo-set-btn is-compact" disabled={disabled} timeoutMs={null} context="AppsPanel.look"
+      fallback={`Exo couldn’t look at what ${app.name} left. Try again.`} why="none" onFailed={failed} onPress={onUninstall} onDone={settle}>Look</ActionButton>
+  }
   const action = app.replaces ? 'Remove' : 'Uninstall'
-  return <ConfirmButton className="exo-set-btn is-compact is-danger" danger disabled={disabled} question={`${action}?`} onConfirm={onUninstall}>{action}</ConfirmButton>
+  return <ConfirmButton className="exo-set-btn is-compact is-danger" danger disabled={disabled} question={`${action}?`} timeoutMs={null}
+    context="AppsPanel.uninstall" fallback={`${app.name} wasn't removed. Try again.`} why="none" onFailed={failed} onConfirm={onUninstall} onDone={settle}>{action}</ConfirmButton>
 }
 
 // ---- what's ready ----

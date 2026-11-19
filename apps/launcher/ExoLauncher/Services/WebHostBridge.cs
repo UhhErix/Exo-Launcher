@@ -2863,10 +2863,25 @@ public sealed partial class WebHostBridge
     internal static string UserMessage(Exception ex, string generic) => ex switch
     {
         _ when ExoSentence(ex) is { } line => line,
-        IOException io when (io.HResult & 0xFFFF) is 0x27 or 0x70 => "There is not enough free space.",
-        HttpRequestException or System.Net.Sockets.SocketException => "Exo could not reach the internet.",
+        IOException io when (io.HResult & 0xFFFF) is 0x27 or 0x70 => DriveFull,
+        // A sharing or lock violation: a game, its store or an app still has the file open.
+        IOException io when (io.HResult & 0xFFFF) is 0x20 or 0x21 => FileInUse,
+        UnauthorizedAccessException => AccessRefused,
+        System.ComponentModel.Win32Exception { NativeErrorCode: 5 } => AccessRefused,
+        // ERROR_CANCELLED: Windows' prompt (UAC) was answered No.
+        System.ComponentModel.Win32Exception { NativeErrorCode: 1223 } => PromptDeclined,
+        HttpRequestException or System.Net.Sockets.SocketException => NoInternet,
+        TimeoutException => TookTooLong,
         _ => generic,
     };
+
+    // The page's errorWords.ts says the same sentences for the same failures reaching it from elsewhere.
+    internal const string DriveFull = "The drive is full. Free up some space, then try again.";
+    internal const string FileInUse = "A file is in use. Close the game or app using it, then try again.";
+    internal const string AccessRefused = "Windows refused access. Try again, and allow Windows’ prompt if it asks.";
+    internal const string PromptDeclined = "Windows’ prompt was declined. Try again and choose Yes.";
+    internal const string NoInternet = "Exo couldn’t reach the internet. Check your connection, then try again.";
+    internal const string TookTooLong = "That is taking too long. Try again.";
 
     private static string? ExoSentence(Exception ex) =>
         (ex is UserFacingException || ex is InvalidOperationException or InvalidDataException && ThrownByExo(ex)) && Safe(ex.Message) is { Length: > 0 } line ? line : null;

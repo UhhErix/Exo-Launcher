@@ -53,6 +53,7 @@ import { startMouseRelay } from '../lib/mouseRelay'
 import { dismissNotice, notify as notice } from '../lib/notify'
 import { newerNotice } from '../lib/upscalerNotice'
 import { report } from '../lib/report'
+import { errorText } from '../lib/errorWords'
 import { applyTextTheme, readCachedTextTheme } from '../lib/exoTheme'
 import { preloadUpscalerStatuses } from '../lib/upscalerCache'
 import { preloadInitialCoverArt, preloadLibraryArtwork } from './CoverArt'
@@ -1450,8 +1451,10 @@ export function LauncherApp() {
       if (nextAction === 'play') await runPlay(game, skipDeps, scope)
       else await runTransfer(game, nextAction, skipDeps, scope)
     } catch (e) {
-      setStatus(e instanceof Error ? e.message : 'Something went wrong. Try again.', scope, scope === null, 'bad')
-      if (nextAction !== 'play') setTransferFailures(current => ({ ...current, [game.id]: e instanceof Error ? e.message : nextAction === 'update' ? 'Update failed.' : 'Install failed.' }))
+      report(e, `LauncherApp.${nextAction}`)
+      const failed = nextAction === 'play' ? 'The game didn’t start. Try again.' : nextAction === 'update' ? 'The update didn’t start. Try again.' : 'The install didn’t start. Try again.'
+      setStatus(errorText(e, failed), scope, scope === null, 'bad')
+      if (nextAction !== 'play') setTransferFailures(current => ({ ...current, [game.id]: errorText(e, failed) }))
       if (nextAction === 'play') holdGame(game.id, null)
       writeProgress((p) => (p?.gameId === game.id && p.isActive ? { ...p, isActive: false, canCancel: false, phase: 'failed' } : p))
     } finally {

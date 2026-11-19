@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react'
 import { host } from '../../lib/host'
 import { report } from '../../lib/report'
+import { errorText } from '../../lib/errorWords'
 import { RecoveryCodeScreen } from '../onboarding/RecoveryCodeScreen'
 import { sendAccountRequest, useAccount, type AccountOverview } from '../account/useAccount'
 import { heldSentences } from './accountWords'
@@ -263,7 +264,7 @@ function SignedOut({ onSignedIn, onCode }: { onSignedIn: () => void; onCode: (co
         : host.exoAccountReset(email, code, password))
     if (!result.ok) {
       setOffline(result.offline === true)
-      setError(result.message || 'Something went wrong. Try again.')
+      setError(errorText(result.message, 'Exo couldn’t reach your account. Try again.'))
       return
     }
     if (result.recoveryCode) onCode(result.recoveryCode)

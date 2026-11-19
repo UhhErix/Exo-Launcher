@@ -6,7 +6,7 @@ namespace ExoLauncher.Services.Account;
 /// </summary>
 internal static class AccountMessages
 {
-    internal const string Generic = "Something went wrong on Exo's side. Try again.";
+    internal const string Generic = "Exo's account service didn't answer. Try again in a moment.";
 
     private static readonly Dictionary<string, string> Sentences = new()
     {

@@ -119,6 +119,8 @@ kbd,
   /* Not motion the eye follows: a shelf's arrive (DESIGN.md › Arrive) and how long Done holds before easing back. */
   --dur-arrive: 280ms;
   --dur-hold: 3000ms;
+  /* A wait under this shows nothing (DESIGN.md › Waits): a control's ring comes in only after it. */
+  --dur-wait: 300ms;
 }
 
 html,
