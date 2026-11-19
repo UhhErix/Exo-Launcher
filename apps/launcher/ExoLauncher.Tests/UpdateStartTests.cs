@@ -30,8 +30,8 @@ public sealed class UpdateStartTests : IDisposable
         LeanSignal.Changed += Listen;
         try
         {
-            GameRunningSignal.Update(true, _ => { }, LeanSignal.Update, _ => { });
-            GameRunningSignal.Update(false, _ => { }, LeanSignal.Update, _ => { });
+            GameRunningSignal.Update(true, GameRunningSignal.Generation, _ => { }, LeanSignal.Update, _ => { });
+            GameRunningSignal.Update(false, GameRunningSignal.Generation, _ => { }, LeanSignal.Update, _ => { });
         }
         finally { LeanSignal.Changed -= Listen; }
         Assert.Equal([true, false], seen);
@@ -45,16 +45,16 @@ public sealed class UpdateStartTests : IDisposable
         LeanSignal.Changed += Changed;
         try
         {
-            GameRunningSignal.Update(true, _ => { }, LeanSignal.Update, _ => { });
+            GameRunningSignal.Update(true, GameRunningSignal.Generation, _ => { }, LeanSignal.Update, _ => { });
             Assert.Equal(UpdateFlow.State.Downloading, service.Move(UpdateFlow.Step.Install));
             Assert.Equal(UpdateFlow.State.WaitingForGame, service.Move(UpdateFlow.Step.Verified));
-            GameRunningSignal.Update(false, _ => { }, LeanSignal.Update, _ => { });
+            GameRunningSignal.Update(false, GameRunningSignal.Generation, _ => { }, LeanSignal.Update, _ => { });
             Assert.Equal(UpdateFlow.State.Ready, service.State);
         }
         finally
         {
             LeanSignal.Changed -= Changed;
-            GameRunningSignal.Update(false, _ => { }, LeanSignal.Update, _ => { });
+            GameRunningSignal.Update(false, GameRunningSignal.Generation, _ => { }, LeanSignal.Update, _ => { });
         }
     }
 
