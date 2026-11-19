@@ -194,7 +194,7 @@ export function SnipEditor({ item, onDone }: { item: CaptureItem; onDone: (saved
     const next = new Image()
     next.crossOrigin = 'anonymous'
     next.onload = () => setImage(next)
-    next.onerror = () => setError('Exo could not open the snip. Cancel and open it again.')
+    next.onerror = () => setError('Exo couldn’t open the snip. Cancel and open it again.')
     next.src = item.url
     // Leaving the editor lets go of the decoded snip and the canvas's pixels at once, not whenever memory runs short.
     const drawn = canvas.current
@@ -266,7 +266,7 @@ export function SnipEditor({ item, onDone }: { item: CaptureItem; onDone: (saved
     if (!image || busy) return
     setBusy(true)
     setError(null)
-    const failed = 'Exo could not save the snip. Try again.'
+    const failed = 'Exo couldn’t save the snip. Try again.'
     const out = document.createElement('canvas')
     try {
       paint(out, image, marks, null, true)

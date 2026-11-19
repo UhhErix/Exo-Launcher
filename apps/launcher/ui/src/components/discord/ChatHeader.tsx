@@ -245,7 +245,7 @@ function Pins({ channel, ctx, onClose }: { channel: DiscordChannel; ctx: Markdow
   const unpin = (message: DiscordMessage) => {
     setError(null)
     setGone(set => new Set(set).add(message.id))
-    const failed = (why?: string | null) => { setGone(set => { const next = new Set(set); next.delete(message.id); return next }); setError(why ?? 'Discord did not unpin that.') }
+    const failed = (why?: string | null) => { setGone(set => { const next = new Set(set); next.delete(message.id); return next }); setError(why ?? 'Discord didn’t unpin that.') }
     void host.discordPins(channel.id, message.id, false).then(result => { if (!result.ok) failed(result.message) }, () => failed())
   }
   const shown = { ...found, error: error ?? found.error, messages: found.messages.filter(m => !gone.has(m.id)) }

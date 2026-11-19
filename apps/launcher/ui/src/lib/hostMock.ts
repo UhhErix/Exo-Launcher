@@ -1438,7 +1438,7 @@ const MOCK_HANDLERS: Record<string, MockHandler> = {
   'clients.status': () => {
     const mode = typeof location !== 'undefined' ? new URLSearchParams(location.search).get('clients') : null
     if (mode === 'failed') throw new Error('Mock: the game clients check could not be read.')
-    if (mode === 'unreadable') return { ok: true, needsFix: false, problem: 'Exo could not read Steam.', epic: { layout: 'new', version: '0.113.0', oldStillThere: false, installing: false }, steam: { channel: 'unknown' } }
+    if (mode === 'unreadable') return { ok: true, needsFix: false, problem: 'Exo couldn’t read Steam.', epic: { layout: 'new', version: '0.113.0', oldStillThere: false, installing: false }, steam: { channel: 'unknown' } }
     if (mode !== null) return { ok: true, needsFix: true, epic: { layout: 'old', version: '0.112.0', oldStillThere: false, installing: false }, steam: { channel: 'stable' } }
     return { ok: true, needsFix: false, epic: { layout: 'new', version: '0.113.0', oldStillThere: false, installing: false }, steam: { channel: 'beta' } }
   },

@@ -67,7 +67,7 @@ export function ServerGuide({ place, guide, meId, onBack, onSaved }: { place: On
     setBusy(true)
     const result = await admin('saveGuide', { guildId: place.guildId, guide: next })
     setBusy(false)
-    if (result.ok) onSaved(); else setError(errorText(result.message, 'Discord did not save that.'))
+    if (result.ok) onSaved(); else setError(errorText(result.message, 'Discord didn’t save that.'))
   }
   const item = editing ? (editing.list === 'new_member_actions' ? tasks : resources)[editing.index] : undefined
   return (

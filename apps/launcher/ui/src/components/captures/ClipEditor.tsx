@@ -218,7 +218,7 @@ export function ClipEditor({ item, onDone, onAdded }: { item: CaptureItem; onDon
     if (busy) return
     setBusy(preset)
     setNote(null)
-    const failed = 'Exo Capture could not save the copy. Try again.'
+    const failed = 'Exo Capture couldn’t save the copy. Try again.'
     try {
       const result = await host.captureEdit(item.id, preset, range[0], trimmed ? range[1] : 0)
       if (!result.ok) setNote({ text: errorText(result.message, failed), bad: true })

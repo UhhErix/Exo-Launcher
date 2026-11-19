@@ -24,6 +24,7 @@ import { SectionSlot } from './SectionHead'
 import { SetupRows } from './ThisPcTab'
 import type { PcLink } from './pcSections'
 import '../../styles/pc-room.css'
+import { errorText } from '../../lib/errorWords'
 
 /** What the room reads from the host, shared by every row that shows or changes it. */
 export type PcState = {
@@ -299,7 +300,7 @@ function MakerPanel({ name }: { name: string }) {
   const [error, setError] = useState<string | null>(null)
   const open = () => {
     setError(null)
-    host.gpuControlPanel().then(result => { if (!result.ok) setError(result.message ?? `${name} didn't open.`) },
+    host.gpuControlPanel().then(result => { if (!result.ok) setError(errorText(result.message, `${name} didn't open.`)) },
       (e: unknown) => { report(e, 'PcRoom.controlPanel'); setError(`${name} didn't open.`) })
   }
   return <button type="button" className={cn('exo-pc-chip', error && 'is-bad')} onClick={open}>{error ?? name}</button>

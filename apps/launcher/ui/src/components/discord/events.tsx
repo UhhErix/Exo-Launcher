@@ -176,8 +176,8 @@ function EventEditor({ guildId, list, event, onClose, onSaved }: { guildId: stri
         ...(where === 'elsewhere' ? { location: location.trim() } : { channelId: where }),
       })
       if (result.ok) onSaved()
-      else setError(errorText(result.message, 'Discord did not save that event.'))
-    } catch { setError('Discord did not save that event.') } finally { setBusy(false) }
+      else setError(errorText(result.message, 'Discord didn’t save that event.'))
+    } catch { setError('Discord didn’t save that event.') } finally { setBusy(false) }
   }
   return (
     <Popover portal={false} className="exo-dc-modal" label={event ? 'Edit event' : 'Create event'} onClick={e => e.stopPropagation()} onClose={onClose}>

@@ -147,10 +147,10 @@ export function ReactionsDialog({ message, first, onClose }: { message: DiscordM
       setUsers(list => after ? [...list, ...page] : page)
       setMore(page.length >= 100)
       setCanRemove(result.canRemove === true)
-      setError(result.ok ? null : errorText(result.message, 'Discord did not send who reacted.'))
+      setError(result.ok ? null : errorText(result.message, 'Discord didn’t send who reacted.'))
     }).catch((err: unknown) => {
       report(err, 'Reactions.list')
-      if (asked.current === ask) setError('Discord did not send who reacted.')
+      if (asked.current === ask) setError('Discord didn’t send who reacted.')
     }).finally(() => { if (asked.current === ask) setBusy(false) })
   }, [message.channel_id, message.id, chosen])
   useEffect(() => { setUsers([]); setMore(true); load() }, [chosenKey]) // eslint-disable-line react-hooks/exhaustive-deps -- chosenKey names the list
@@ -158,8 +158,8 @@ export function ReactionsDialog({ message, first, onClose }: { message: DiscordM
     if (!chosen) return
     void host.discordReact(message.channel_id, message.id, reactionKey(chosen.reaction.emoji), false, { burst: chosen.burst, userId: user.id }).then(result => {
       if (result.ok) setUsers(list => list.filter(u => u.id !== user.id))
-      else setError(errorText(result.message, 'Discord did not take that reaction off.'))
-    }).catch(() => setError('Discord did not take that reaction off.'))
+      else setError(errorText(result.message, 'Discord didn’t take that reaction off.'))
+    }).catch(() => setError('Discord didn’t take that reaction off.'))
   }
   return (
     <Popover portal={false} className="exo-dc-modal exo-dc-reactors" label="Reactions" onClick={event => event.stopPropagation()} onClose={onClose}>

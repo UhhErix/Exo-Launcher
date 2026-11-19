@@ -49,7 +49,7 @@ export function useAdmin<T>(action: string, params: Record<string, unknown>) {
     let live = true
     void admin<T>(action, JSON.parse(key) as Record<string, unknown>).then(result => {
       if (!live) return
-      if (result.ok) { setData(result.data ?? null); setError(null) } else setError(errorText(result.message, 'Discord did not answer.'))
+      if (result.ok) { setData(result.data ?? null); setError(null) } else setError(errorText(result.message, 'Discord didn’t answer.'))
     })
     return () => { live = false }
   }, [action, key, tick])

@@ -50,7 +50,7 @@ function MemberMenu({ channelId, member, x, y, onClose }: { channelId: string; m
   const box = useRef<HTMLDivElement>(null)
   useDismiss(box, onClose)
   const run = (action: 'removeMember' | 'makeOwner') => void host.discordGroup(channelId, action, { userId: member.id })
-    .then(result => { if (result.ok) onClose(); else setNote(errorText(result.message, 'Discord did not take that.')) }, () => setNote('Discord did not take that.'))
+    .then(result => { if (result.ok) onClose(); else setNote(errorText(result.message, 'Discord didn’t take that.')) }, () => setNote('Discord didn’t take that.'))
   return (
     <div ref={box} className="exo-dc-menu exo-dc-channel-menu" role="menu" aria-label={member.name} style={{ left: x, top: y }}>
       <button type="button" role="menuitem" className="is-danger" onClick={() => run('removeMember')}>Remove from group</button>
@@ -80,8 +80,8 @@ export function EditGroup({ dm, onClose }: { dm: DiscordDm; onClose: () => void 
     const changes = { ...(name.trim() !== dm.name ? { name: name.trim() } : {}), ...(icon === 'remove' ? { removeIcon: true } : icon ? { icon: icon.data } : {}) }
     void host.discordGroup(dm.id, 'editGroup', changes).then(result => {
       setBusy(false)
-      if (result.ok) onClose(); else setError(errorText(result.message, 'Discord did not save that.'))
-    }, () => { setBusy(false); setError('Discord did not save that.') })
+      if (result.ok) onClose(); else setError(errorText(result.message, 'Discord didn’t save that.'))
+    }, () => { setBusy(false); setError('Discord didn’t save that.') })
   }
   const shown = icon === 'remove' ? null : icon ? icon.data : dm.avatar
   return (

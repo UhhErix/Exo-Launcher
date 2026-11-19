@@ -9,6 +9,7 @@ import { DevicePage, DevicePanel as Panel } from './DevicePage'
 import { GameProfileRows } from './GameProfiles'
 import { ControllerSoundRow, PadSettingsRows } from './PadSettings'
 import { portWords } from './ports'
+import { errorText } from '../../lib/errorWords'
 
 /**
  * A controller's page (DESIGN.md › Devices): the Controller Lab, on one screen. The hero holds its picture, its link, and
@@ -195,7 +196,7 @@ function Sticks({ id, live, tested }: { id: string; live: ControllerState | null
       // A stick the host has no edge for (null) wasn't rolled far enough round to measure.
       setResult(current => ({ ...current ?? {}, edge: { left: (edge.left ?? null) as StickEdge | null, right: (edge.right ?? null) as StickEdge | null } }))
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : STOPPED)
+      setError(errorText(cause, STOPPED))
     } finally {
       running.current = false
       setStep('idle')
@@ -267,7 +268,7 @@ function Triggers({ id, live, edge }: { id: string; live: ControllerState | null
     try {
       const answer = await host.controllerQuality(id, 'triggers', 6)
       if (answer.ok) setSwept({ left: answer.left ?? null, right: answer.right ?? null })
-      else setError(answer.message ?? STOPPED)
+      else setError(errorText(answer.message, STOPPED))
     } catch (cause) {
       report(cause, 'ControllerPage.triggers')
       setError(STOPPED)
@@ -321,7 +322,7 @@ function Buttons({ id }: { id: string }) {
     try {
       const answer = await host.controllerQuality(id, 'buttons', 8)
       if (answer.ok && answer.buttons) setCheck(answer.buttons)
-      else setError(answer.message ?? STOPPED)
+      else setError(errorText(answer.message, STOPPED))
     } catch (cause) {
       report(cause, 'ControllerPage.buttons')
       setError(STOPPED)
@@ -417,7 +418,7 @@ function usePolling(id: string, visible: boolean): PollingRun {
     try {
       const answer = await host.controllerMeasure(id, 3)
       if (answer.ok && answer.polling) setResult(answer.polling)
-      else setError(answer.message ?? 'Exo couldn’t measure it. Try again.')
+      else setError(errorText(answer.message, 'Exo couldn’t measure it. Try again.'))
     } catch (cause) {
       report(cause, 'ControllerPage.measure')
       setError('Exo couldn’t measure it. Try again.')

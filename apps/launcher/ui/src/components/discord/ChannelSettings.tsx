@@ -46,8 +46,8 @@ export function ChannelSettings({ channelId, onClose }: { channelId: string; onC
   const reload = settings.reload
   useEffect(() => onHostEvent('discord.changed', event => { if (guildId && event.guildId === guildId) reload() }), [guildId, reload])
   const remove = () => void host.discordChannel(channelId, 'delete').then(result => {
-    if (result.ok) onClose(); else setError(errorText(result.message, 'Discord did not delete that channel.'))
-  }).catch(() => setError('Discord did not delete that channel.'))
+    if (result.ok) onClose(); else setError(errorText(result.message, 'Discord didn’t delete that channel.'))
+  }).catch(() => setError('Discord didn’t delete that channel.'))
   return (
     <UnsavedProvider value={unsaved}>
     <SettingsLayer onClose={close}>
@@ -110,7 +110,7 @@ function Overview({ settings, onSaved }: { settings: Settings; onSaved: () => vo
     setBusy(true)
     const result = await admin('channelSave', { channelId: settings.id, changes: draft })
     setBusy(false)
-    if (!result.ok) { setError(errorText(result.message, 'Discord did not save that.')); return }
+    if (!result.ok) { setError(errorText(result.message, 'Discord didn’t save that.')); return }
     setDraft({}); onSaved()
   }
   return (
@@ -192,7 +192,7 @@ function Permissions({ settings, onSaved }: { settings: Settings; onSaved: () =>
       const result = o
         ? await admin('channelOverwrite', { channelId: settings.id, targetId: id, type: o.type, allow: o.allow, deny: o.deny })
         : await admin('channelClearOverwrite', { channelId: settings.id, targetId: id })
-      if (!result.ok) { setError(errorText(result.message, 'Discord did not save those permissions.')); setBusy(false); return }
+      if (!result.ok) { setError(errorText(result.message, 'Discord didn’t save those permissions.')); setBusy(false); return }
     }
     setBusy(false); setEdits(new Map()); onSaved()
   }

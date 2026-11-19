@@ -9,6 +9,7 @@ import { ErrorNote } from '../ui/ErrorNote'
 import { Wait, WaitWord, sample, times } from '../ui/Wait'
 import { ActionButton } from '../ui/ConfirmButton'
 import type { PlainError } from '../../lib/errorWords'
+import { errorText } from '../../lib/errorWords'
 
 type Game = { id: string; title: string }
 
@@ -42,7 +43,7 @@ async function readProfiles(): Promise<ControllerGameProfile[]> {
 /** Saves the whole list: the list as saved, or why it wasn't. */
 async function saveProfiles(next: ControllerGameProfile[]): Promise<ControllerGameProfile[] | string> {
   const result = await host.controllerGameProfilesSave(next)
-  if (!result.ok || !result.profiles) return result.message ?? 'Exo couldn’t save them. Try again.'
+  if (!result.ok || !result.profiles) return errorText(result.message, 'Exo couldn’t save them. Try again.')
   lastProfiles = result.profiles
   return lastProfiles
 }

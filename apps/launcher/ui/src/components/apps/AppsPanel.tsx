@@ -251,14 +251,14 @@ export function AppsPanel({ active }: { active: boolean }) {
       // Each app left out says why, beside its own row (Exo logs the same reason).
       for (const skip of agreed.skipped) setError(skip.id, skip.reason)
       if (!agreed.ok) {
-        setError('many', agreed.message ?? 'Nothing was removed.')
+        setError('many', errorText(agreed.message, 'Nothing was removed.'))
         return
       }
       if (restore) {
         setRun({ at: 0, of: agreed.ids.length })
         const point = await host.appsRestorePoint()
         if (!point.ok) {
-          setError('many', point.message ?? 'No restore point was made. Nothing was removed.')
+          setError('many', errorText(point.message, 'No restore point was made. Nothing was removed.'))
           return
         }
       }

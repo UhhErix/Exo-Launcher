@@ -773,7 +773,7 @@ function InlineEdit({ message, onDone }: { message: DiscordMessage; onDone: () =
     const result = await host.discordEdit(message.channel_id, message.id, content).catch(() => ({ ok: false, message: null }))
     setBusy(false)
     if (result.ok) onDone()
-    else setError(errorText(result.message, 'Discord did not take the edit.'))
+    else setError(errorText(result.message, 'Discord didn’t take the edit.'))
   }
   return (
     <div className="exo-dc-inline-edit">

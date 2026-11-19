@@ -46,8 +46,8 @@ function GuildTagCard({ guildId, tag, badge, at, onClose }: { guildId: string; t
     void host.discordServer('profile', { guildId }).then(result => {
       if (!live) return
       if (result.ok && result.profile) setProfile(result.profile)
-      else setError(errorText(result.message, 'Discord did not send this server.'))
-    }).catch(() => { if (live) setError('Discord did not answer.') })
+      else setError(errorText(result.message, 'Discord didn’t send this server.'))
+    }).catch(() => { if (live) setError('Discord didn’t answer.') })
     return () => { live = false }
   }, [guildId])
   // Kept on screen: above the tag when there's no room under it.

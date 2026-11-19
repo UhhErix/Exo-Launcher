@@ -390,7 +390,7 @@ function Viewer({ item, game, edit, onStep, onBack, onFavourite, onChanged, onDe
         <div className="exo-dc exo-capture-send">
           <SendToDialog
             title="Send to"
-            failed="Discord did not take it. Try again."
+            failed="Discord didn’t take it. Try again."
             send={async (ids, text) => {
               const result = await host.captureSend(item.id, ids, text, 0, 0)
               if (result.item) onAdded(result.item)
@@ -430,7 +430,7 @@ function CapturesEmpty({ onSettings }: { onSettings: () => void }) {
         : settings?.replayMode === 'games' ? 'Instant replay runs only while a game is open.' : "Instant replay isn't running.")
       return
     }
-    const failed = 'Exo Capture did not answer. Try again.'
+    const failed = 'Exo Capture didn’t answer. Try again.'
     void host.captureAct(action).then(result => { if (!result.ok) setNote(errorText(result.message, failed)) })
       .catch((error: unknown) => {
         report(error, 'capture.act', { level: 'warn' })
@@ -659,7 +659,7 @@ function snipFromSheet(onFail: (message: string) => void) {
   closeCaptures()
   window.setTimeout(() => {
     void host.captureAct('snip')
-      .then(result => { if (!result.ok) onFail(result.message ?? 'Exo Capture did not answer. Try again.') })
+      .then(result => { if (!result.ok) onFail(errorText(result.message, 'Exo Capture didn’t answer. Try again.')) })
       .catch((error: unknown) => { report(error, 'capture.act', { level: 'warn' }) })
   }, 420)
 }
@@ -820,7 +820,7 @@ function CapturesSheet({ gameId, itemId, edit, settings, notes, games }: {
   const update = (next: CaptureItem) => setItems(list => list?.map(item => item.id === next.id ? next : item) ?? list)
   // The star turns at once; the host's answer settles it (and puts it back if the change did not save).
   const favourite = (item: CaptureItem) => {
-    const failed = 'Exo Capture could not change the favorite. Try again.'
+    const failed = 'Exo Capture couldn’t change the favorite. Try again.'
     update({ ...item, favourite: !item.favourite })
     void host.captureItem(item.id, item.favourite ? 'unfavourite' : 'favourite')
       .then(result => {

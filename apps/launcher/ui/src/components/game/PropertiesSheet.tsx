@@ -28,8 +28,8 @@ const propertiesRead = sheetMemory<GameProperties>(8)
 const MOVE_READ_MS = 2000
 const MOVE_READ_MAX_MS = 8000
 
-const READ_FAILED = 'Exo could not read this game\'s properties. Try again.'
-const CHANGE_FAILED = 'Exo could not make that change. Try again.'
+const READ_FAILED = 'Exo couldn’t read this game\'s properties. Try again.'
+const CHANGE_FAILED = 'Exo couldn’t make that change. Try again.'
 
 /**
  * A change once it is asked for. One that downloads, deletes or moves files (or lets Exo change an anti-cheat game's)
@@ -122,7 +122,7 @@ export function PropertiesSheet({ game, artwork, upscalers: upscalerStatus, onUp
   /** Reads the properties (the last read stays on screen meanwhile); how far a move has got, for its reads. */
   const load = useCallback(() => host.properties(game.id).then((result) => {
     if (!result.ok) {
-      setLoadError(result.message ?? READ_FAILED)
+      setLoadError(errorText(result.message, READ_FAILED))
       return null
     }
     propertiesRead.set(game.id, result)
@@ -398,10 +398,10 @@ function FilesSection({ props, locked, busy, run, line, note, gameId, game, upsc
   const size = props.sizeBytes ? formatSize(props.sizeBytes) : null
   const folders = props.folder !== null && props.folderChoices.length > 1 ? props.folderChoices : null
   const openFolder = () => {
-    const failed = 'Exo could not open the folder. Try again.'
+    const failed = 'Exo couldn’t open the folder. Try again.'
     note('openFolder', '')
     void host.openFolder(gameId)
-      .then(result => { if (!result.ok) note('openFolder', result.message ?? failed, true) })
+      .then(result => { if (!result.ok) note('openFolder', errorText(result.message, failed), true) })
       .catch((error: unknown) => note('openFolder', errorText(error, failed), true))
   }
   return (
@@ -415,7 +415,7 @@ function FilesSection({ props, locked, busy, run, line, note, gameId, game, upsc
       {props.verifyLabel && (
         <PropRow label="Damaged or missing files" line={line('verify')}>
           <ConfirmButton className="exo-set-btn" disabled={locked || busy !== null} question={size ? `Check all ${size}?` : 'Check every file?'}
-            timeoutMs={null} why="none" context="PropertiesSheet.verify" fallback="Exo could not check the files. Try again."
+            timeoutMs={null} why="none" context="PropertiesSheet.verify" fallback="Exo couldn’t check the files. Try again."
             onConfirm={() => run({ key: 'verify', value: '' })} onFailed={failure => note('verify', failure.text, true)}>
             {props.verifyLabel}
           </ConfirmButton>

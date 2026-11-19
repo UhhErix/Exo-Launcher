@@ -273,10 +273,10 @@ export function AddServer({ refused, onJoined, onClose }: { refused: boolean | {
     try {
       const result = await host.discordServer('join', { invite: invite.trim() })
       if (result.ok && result.guildId) onJoined(result.guildId)
-      else setError(errorText(result.message, 'Discord did not take that invite.'))
+      else setError(errorText(result.message, 'Discord didn’t take that invite.'))
     } catch (err) {
       report(err, 'AddServer.join')
-      setError('Discord did not take that invite.')
+      setError('Discord didn’t take that invite.')
     } finally { setBusy(false) }
   }
   return (

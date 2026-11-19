@@ -22,6 +22,7 @@ import { BackupSection } from './settings/BackupSection'
 import { AccountSection } from './settings/AccountSection'
 import { ShadersSection } from './shaders/ShaderTools'
 import { StoresSection, type StoreAction, type StoreNote } from './settings/StoresSection'
+import { errorText } from '../lib/errorWords'
 
 export async function preloadSettingsRoom() {
   await preloadAppsSection()
@@ -180,7 +181,7 @@ export const SettingsPanel = memo(function SettingsPanel({
         }
       }
     } catch (error) {
-      storeStatus(store.store, error instanceof Error ? error.message : `Could not sign in to ${store.displayName}. Try again.`, true)
+      storeStatus(store.store, errorText(error, `Exo couldn’t sign in to ${store.displayName}. Try again.`), true)
     } finally {
       finishStoreAction(store.store, 'connect')
     }
@@ -211,9 +212,9 @@ export const SettingsPanel = memo(function SettingsPanel({
       const result: { ok: boolean; message?: string } = store.store === 'microsoft-store'
         ? await host.openUrl('ms-windows-store://home')
         : await host.showStore(store.store)
-      if (!result.ok) storeStatus(store.store, result.message ?? `Could not open ${store.displayName}. Try again.`, true)
+      if (!result.ok) storeStatus(store.store, errorText(result.message, `Exo couldn’t open ${store.displayName}. Try again.`), true)
     } catch (error) {
-      storeStatus(store.store, error instanceof Error ? error.message : `Could not open ${store.displayName}. Try again.`, true)
+      storeStatus(store.store, errorText(error, `Exo couldn’t open ${store.displayName}. Try again.`), true)
     } finally {
       finishStoreAction(store.store, 'open')
     }

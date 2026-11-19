@@ -163,7 +163,7 @@ function useSteamWebSignIn() {
     const failed = signIn ? 'Could not sign in to Steam. Try again.' : 'Could not sign out of Steam. Try again.'
     try {
       const result = await (signIn ? host.giftsSteamSignIn() : host.giftsSteamSignOut())
-      if (!result.ok) return { ok: false, message: result.message ?? failed }
+      if (!result.ok) return { ok: false, message: errorText(result.message, failed) }
       steamSignedIn = signIn
       setSignedIn(signIn)
       return result

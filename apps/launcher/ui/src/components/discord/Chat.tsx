@@ -256,7 +256,7 @@ function useMessageTools({ channel, guildId, threadable, onOpenThread, setMessag
   const channelId = channel.id
   const [forwarding, setForwarding] = useState<DiscordMessage | null>(null)
   const [threading, setThreading] = useState<DiscordMessage | null>(null)
-  const fail = useCallback((fallback: string) => (result: { ok: boolean; message?: string | null }) => { if (!result.ok) setError(result.message ?? fallback) }, [setError])
+  const fail = useCallback((fallback: string) => (result: { ok: boolean; message?: string | null }) => { if (!result.ok) setError(errorText(result.message, fallback)) }, [setError])
   // Delete and Pin answer the menu row pressed, which shows how it went in itself (ActionButton).
   const removeMessage = useCallback((message: DiscordMessage) => host.discordDelete(channelId, message.id), [channelId])
   const pin = useCallback(async (message: DiscordMessage) => {
@@ -277,7 +277,7 @@ function useMessageTools({ channel, guildId, threadable, onOpenThread, setMessag
       const before = idBefore(message.id)
       holdUnread.current = true
       setLastRead(before)
-      void host.discordAck(channelId, before, true).then(fail('Discord did not mark that unread.')).catch(() => setError('Discord did not mark that unread.'))
+      void host.discordAck(channelId, before, true).then(fail('Discord didn’t mark that unread.')).catch(() => setError('Discord didn’t mark that unread.'))
     },
     onEdit: message => setEditing(message),
     onEditDone: () => setEditing(null),
@@ -292,7 +292,7 @@ function useMessageTools({ channel, guildId, threadable, onOpenThread, setMessag
       react(mine)
       const refused = (why?: string | null) => {
         if (ownReactions.delete(key)) react({ ...mine, add: !add })
-        setError(why ?? 'Discord did not take that reaction.')
+        setError(why ?? 'Discord didn’t take that reaction.')
       }
       void host.discordReact(channelId, message.id, emoji, add, { burst }).then(result => { if (!result.ok) refused(result.message) }, () => refused())
     },
@@ -809,7 +809,7 @@ function useSend({ channelId, me, meId, replyTo, replyPing, setReplyTo, setError
     }
     try {
       const result = await deliver({ channelId, content, reply, replyPing, uploads, descriptions })
-      if (!result.ok) return drop(errorText(result.message, 'Discord did not send that.'))
+      if (!result.ok) return drop(errorText(result.message, 'Discord didn’t send that.'))
       const sent = result.sent
       setMessages(list => {
         const without = list.filter(m => m.id !== pendingId)

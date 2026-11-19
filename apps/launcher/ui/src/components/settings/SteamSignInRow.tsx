@@ -5,6 +5,7 @@ import { Qr } from '../ui/Qr'
 import { Spinner } from '../ui/Spinner'
 import { ErrorNote } from '../ui/ErrorNote'
 import { ActionButton } from '../ui/ConfirmButton'
+import { errorText } from '../../lib/errorWords'
 
 type Account = { signedIn: boolean; accountName: string | null }
 type Result = { ok: boolean; message?: string | null }
@@ -71,7 +72,7 @@ function send(run: () => Promise<SteamSignInStep>, sink: Sink) {
   sink.setBusy(true)
   return run().then(next => {
     settle(next, sink)
-    return next.state === 'failed' ? { ok: false, message: next.message ?? TRY_AGAIN } : { ok: true }
+    return next.state === 'failed' ? { ok: false, message: errorText(next.message, TRY_AGAIN) } : { ok: true }
   }, (cause: unknown) => {
     fail(cause, sink)
     return { ok: false, message: TRY_AGAIN }

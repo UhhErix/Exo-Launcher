@@ -279,9 +279,9 @@ function StorageRows({ settings }: { settings: CaptureSettings | null }) {
     fail(null)
     try {
       const result = await host.captureAct('openFolder')
-      if (!result.ok) fail(errorText(result.message, 'Exo could not open the captures folder.'))
+      if (!result.ok) fail(errorText(result.message, 'Exo couldn’t open the captures folder.'))
     } catch (error) {
-      fail(errorText(error, 'Exo could not open the captures folder.'))
+      fail(errorText(error, 'Exo couldn’t open the captures folder.'))
     }
   }
   async function browse() {
@@ -292,9 +292,9 @@ function StorageRows({ settings }: { settings: CaptureSettings | null }) {
     try {
       const result = await host.pickFolder('Choose where captures are saved')
       if (result.ok && result.path) fail(await save({ folder: result.path }))
-      else if (!result.ok && !result.cancelled) fail(errorText(result.message, 'Exo could not open the folder picker. Try again.'))
+      else if (!result.ok && !result.cancelled) fail(errorText(result.message, 'Exo couldn’t open the folder picker. Try again.'))
     } catch (error) {
-      fail(errorText(error, 'Exo could not open the folder picker. Try again.'))
+      fail(errorText(error, 'Exo couldn’t open the folder picker. Try again.'))
     } finally { setPicking(false) }
   }
   return (

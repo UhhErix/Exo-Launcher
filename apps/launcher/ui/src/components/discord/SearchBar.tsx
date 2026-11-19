@@ -266,7 +266,7 @@ export function SearchResults({ channel, filters, ctx, onClose }: { channel: Dis
       if (!live) return
       setFound({
         messages: (result.result?.messages ?? []).map(group => group[0]).filter(Boolean), places: result.places ?? {},
-        total: result.result?.total_results ?? 0, error: result.ok ? null : errorText(result.message, 'Discord did not search.'), loading: false,
+        total: result.result?.total_results ?? 0, error: result.ok ? null : errorText(result.message, 'Discord didn’t search.'), loading: false,
       })
       list.current?.scrollTo({ top: 0 })
     }).catch((err: unknown) => {

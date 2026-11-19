@@ -224,7 +224,7 @@ function Overview({ hidden, cards, pictures, known, failed, scanning, rise, onRe
         </div>
       </header>
       {/* Laid out by how many there are (devices.css); seven or more are a fuller grid that scrolls. */}
-      {failed && cards.length === 0 ? <ErrorState title="Devices unavailable" message="Exo could not read your devices." onRetry={onRescan} busy={scanning} /> : null}
+      {failed && cards.length === 0 ? <ErrorState title="Devices unavailable" message="Exo couldn’t read your devices." onRetry={onRescan} busy={scanning} /> : null}
       <div className="exo-devices-grid" data-count={cards.length > 6 ? 'many' : cards.length}>
         {cards.map((card, i) => {
           const tag = tagOf(card)

@@ -73,7 +73,7 @@ export function Access({ guild, administrator, onSaved }: { guild: AccessGuild; 
     setBusy(true); setError(null)
     for (const step of steps(guild, saved, now, formDirty, listing, bulkAction)) {
       const result = await step()
-      if (!result.ok) { setBusy(false); setError(errorText(result.message, 'Discord did not save that.')); return }
+      if (!result.ok) { setBusy(false); setError(errorText(result.message, 'Discord didn’t save that.')); return }
     }
     setBusy(false); setDraft({}); setListing(null)
     form.reload(); profile.reload(); pending.reload(); onSaved()

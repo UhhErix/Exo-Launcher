@@ -39,6 +39,7 @@ import { continueWithoutAccount, refreshAccount, useAccount } from './account/us
 import { setupSkipsAccount } from '../lib/accountFlow'
 import { bestSteps, runBest, type BestKey } from './gpu/BestSetup'
 import { junkWorth } from './gpu/JunkRow'
+import { errorText } from '../lib/errorWords'
 
 let onboardingStoreCheck: Promise<StoreStatus[]> | null = null
 
@@ -279,7 +280,7 @@ export function OnboardingPanel({
     try {
       const result = await host.storesAuth(store.store)
       if (!result.ok) {
-        fail(result.message ?? `Couldn’t sign in to ${store.displayName}. Try again.`)
+        fail(errorText(result.message, `Couldn’t sign in to ${store.displayName}. Try again.`))
         return
       }
       try {
@@ -289,7 +290,7 @@ export function OnboardingPanel({
       }
       if (result.message) setFeedback({ message: result.message })
     } catch (cause) {
-      fail(cause instanceof Error ? cause.message : `Couldn’t reach ${store.displayName}. Try again.`)
+      fail(errorText(cause, `Couldn’t reach ${store.displayName}. Try again.`))
     } finally {
       setStoreBusy((busy) => {
         const next = { ...busy }
@@ -309,7 +310,7 @@ export function OnboardingPanel({
         setFeedback({ message: 'Game folder added.' })
       }
     } catch (cause) {
-      setFeedback({ message: cause instanceof Error ? cause.message : 'The folder wasn’t added. Try again.', error: true })
+      setFeedback({ message: errorText(cause, 'The folder wasn’t added. Try again.'), error: true })
     } finally {
       setFolderBusy(false)
     }
@@ -376,7 +377,7 @@ export function OnboardingPanel({
     } catch (cause) {
       completingRef.current = false
       setCompleting(false)
-      setFeedback({ message: cause instanceof Error ? cause.message : 'Setup didn’t finish. Try again.', error: true })
+      setFeedback({ message: errorText(cause, 'Setup didn’t finish. Try again.'), error: true })
     }
   }
 

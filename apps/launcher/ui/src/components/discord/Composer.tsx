@@ -286,8 +286,8 @@ export function Composer({ channelId, guildId, users, placeholder, disabled, rep
   function sendSticker(id: string) {
     setNote(null)
     void host.discordSticker(channelId, id)
-      .then(result => { if (!result.ok) setNote(errorText(result.message, 'Discord did not send that sticker.')) })
-      .catch(() => setNote('Discord did not send that sticker.'))
+      .then(result => { if (!result.ok) setNote(errorText(result.message, 'Discord didn’t send that sticker.')) })
+      .catch(() => setNote('Discord didn’t send that sticker.'))
   }
 
   function insert(value: string) {

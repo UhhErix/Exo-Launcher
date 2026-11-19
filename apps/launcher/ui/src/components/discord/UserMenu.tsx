@@ -143,7 +143,7 @@ function UserMenu({ at, guildId, serverName, meId, onClose }: { at: At; guildId:
   const username = at.username ?? person?.username ?? null
   const run: Run = (action, params, after, settled) => void admin(action, { guildId, userId: at.userId, ...params }).then(result => {
     settled?.()
-    if (!result.ok) { setError(errorText(result.message, 'Discord did not take that.')); return }
+    if (!result.ok) { setError(errorText(result.message, 'Discord didn’t take that.')); return }
     // The Members page shows each member's roles and nickname as they are now.
     window.dispatchEvent(new Event('exo-dc-members-changed'))
     if (after) after(); else onClose()
@@ -209,7 +209,7 @@ function MenuDialog({ dialog, at, guildId, serverName, person, name, username, o
 
 // A DM row's action settled: the menu closes, or says why Discord refused.
 const finish = (onClose: () => void, setError: (error: string) => void) => (result: { ok: boolean; message?: string | null }) => {
-  if (result.ok) onClose(); else setError(errorText(result.message, 'Discord did not take that.'))
+  if (result.ok) onClose(); else setError(errorText(result.message, 'Discord didn’t take that.'))
 }
 
 // Profile, Mention, Message and Start a Call (their DM opens and rings, as Discord's; off while blocked, none for a bot).
@@ -462,7 +462,7 @@ function PersonDialog({ kind, guildId, userId, name, nick, serverName, onClose }
         : { deleteSeconds: seconds, reason: reason === 'other' ? text.trim() : reason }
     void admin(kind, { guildId, userId, ...params }).then(result => {
       setBusy(false)
-      if (!result.ok) { setError(errorText(result.message, 'Discord did not take that.')); return }
+      if (!result.ok) { setError(errorText(result.message, 'Discord didn’t take that.')); return }
       // The Members page shows who is still here, and their nickname as it is now.
       window.dispatchEvent(new Event('exo-dc-members-changed'))
       onClose()
@@ -522,7 +522,7 @@ function TransferOwnership({ guildId, userId, name, mfa, onClose }: { guildId: s
     if (!mfa && !sent) {
       const asked = await admin('transferCode', { guildId })
       setBusy(false)
-      if (asked.ok) setSent(true); else setError(errorText(asked.message, 'Discord did not send the code.'))
+      if (asked.ok) setSent(true); else setError(errorText(asked.message, 'Discord didn’t send the code.'))
       return
     }
     const result = await admin('transfer', { guildId, userId, ...(mfa ? {} : { code: code.trim() }) })

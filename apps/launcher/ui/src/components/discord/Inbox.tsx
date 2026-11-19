@@ -63,8 +63,8 @@ function SavedList({ kind, ctx, here, onClose }: { kind: 'bookmarks' | 'reminder
       setItems(list => before ? [...list, ...sorted] : sorted)
       setPlaces(p => ({ ...(before ? p : {}), ...result.places }))
       setMore(kind === 'bookmarks' && result.hasMore === true)
-      setError(result.ok ? null : errorText(result.message, 'Discord did not send what you saved.'))
-    }).catch(() => setError('Discord did not send what you saved.')).finally(() => setBusy(false))
+      setError(result.ok ? null : errorText(result.message, 'Discord didn’t send what you saved.'))
+    }).catch(() => setError('Discord didn’t send what you saved.')).finally(() => setBusy(false))
   }, [kind])
   useEffect(() => { load() }, [load])
   const remove = (item: DiscordSavedMessage) => {
@@ -114,16 +114,16 @@ function Mentions({ ctx, here, onClose }: { ctx: MarkdownContext; here: string; 
       setMessages(list => before ? [...list, ...page] : page)
       setPlaces(p => ({ ...(before ? p : {}), ...result.places }))
       setMore(page.length >= 25)
-      setError(result.ok ? null : errorText(result.message, 'Discord did not send your mentions.'))
+      setError(result.ok ? null : errorText(result.message, 'Discord didn’t send your mentions.'))
     }).catch((err: unknown) => {
       report(err, 'Inbox.mentions')
-      if (asked.current === ask) setError('Discord did not send your mentions.')
+      if (asked.current === ask) setError('Discord didn’t send your mentions.')
     }).finally(() => { if (asked.current === ask) setBusy(false) })
   }, [guildId, roles, everyone])
   useEffect(() => { load() }, [load])
   const remove = (message: DiscordMessage) => {
     setMessages(list => list.filter(m => m.id !== message.id))
-    void host.discordMentions({ remove: message.id }).then(result => { if (!result.ok) setError(errorText(result.message, 'Discord did not take that off.')) }).catch(() => setError('Discord did not take that off.'))
+    void host.discordMentions({ remove: message.id }).then(result => { if (!result.ok) setError(errorText(result.message, 'Discord didn’t take that off.')) }).catch(() => setError('Discord didn’t take that off.'))
   }
   return (
     <>
@@ -174,11 +174,11 @@ function Unreads({ ctx, onClose }: { ctx: MarkdownContext; onClose: () => void }
   const read = (ids: string[]) => setChannels(list => list?.filter(c => !ids.includes(c.channelId)) ?? null)
   const markChannel = (c: DiscordUnreadChannel) => {
     read([c.channelId])
-    void host.discordChannel(c.channelId, 'read').then(result => { if (!result.ok) setError(errorText(result.message, 'Discord did not mark that read.')) }).catch(() => setError('Discord did not mark that read.'))
+    void host.discordChannel(c.channelId, 'read').then(result => { if (!result.ok) setError(errorText(result.message, 'Discord didn’t mark that read.')) }).catch(() => setError('Discord didn’t mark that read.'))
   }
   const markServer = (group: UnreadGroup) => {
     setChannels(list => list?.filter(c => c.guildId !== group.guildId) ?? null)
-    void host.discordMarkRead(group.guildId).then(result => { if (!result.ok) setError('Discord did not mark that server read.') }).catch(() => setError('Discord did not mark that server read.'))
+    void host.discordMarkRead(group.guildId).then(result => { if (!result.ok) setError('Discord didn’t mark that server read.') }).catch(() => setError('Discord didn’t mark that server read.'))
   }
   const visible = channels?.slice(0, shown) ?? []
   return (
@@ -261,10 +261,10 @@ function ForYou({ onClose }: { onClose: () => void }) {
       if (asked.current !== ask) return
       setItems(list => before ? [...list, ...(result.items ?? [])] : result.items ?? [])
       setMore(result.hasMore === true)
-      setError(result.ok ? null : errorText(result.message, 'Discord did not send your notifications.'))
+      setError(result.ok ? null : errorText(result.message, 'Discord didn’t send your notifications.'))
     }).catch((err: unknown) => {
       report(err, 'Inbox.forYou')
-      if (asked.current === ask) setError('Discord did not send your notifications.')
+      if (asked.current === ask) setError('Discord didn’t send your notifications.')
     }).finally(() => { if (asked.current === ask) setBusy(false) })
   }, [])
   useEffect(() => { load() }, [load])

@@ -51,7 +51,7 @@ export function AutoMod({ guildId, channels }: { guildId: string; channels: Disc
     setBusy(true); setFailed(null)
     const result = await admin<Rule>('saveAutomod', { guildId, rule })
     setBusy(false)
-    if (!result.ok) { setFailed({ key, message: errorText(result.message, 'Discord did not save that rule.') }); return false }
+    if (!result.ok) { setFailed({ key, message: errorText(result.message, 'Discord didn’t save that rule.') }); return false }
     rules.reload()
     return true
   }
@@ -59,7 +59,7 @@ export function AutoMod({ guildId, channels }: { guildId: string; channels: Disc
     setBusy(true)
     void admin('deleteAutomod', { guildId, ruleId: rule.id }).then(result => {
       setBusy(false)
-      if (!result.ok) { setFailed({ key: rule.id ?? '', message: errorText(result.message, 'Discord did not delete that rule.') }); return }
+      if (!result.ok) { setFailed({ key: rule.id ?? '', message: errorText(result.message, 'Discord didn’t delete that rule.') }); return }
       rules.reload()
     })
   }

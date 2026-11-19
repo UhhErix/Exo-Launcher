@@ -6,6 +6,7 @@ import type { PlainError } from '../../lib/errorWords'
 import { Dialog } from '../ui/Dialog'
 import { Spinner } from '../ui/Spinner'
 import { ErrorNote } from '../ui/ErrorNote'
+import { errorText } from '../../lib/errorWords'
 
 /** Keep, asked in place (the one write to a DualSense's permanent memory). */
 type Press = { onPress: () => Promise<unknown>; onFailed: (failure: PlainError) => void; onDone: () => void; why: 'none'; context: string; fallback: string }
@@ -121,7 +122,7 @@ function CalibrateDialog({ id, edge, live, onClose }: { id: string; edge: boolea
       swept.current = { left: new Set(), right: new Set() }
       setPhase('range')
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : 'The calibration stopped. Try again.')
+      setError(errorText(cause, 'The calibration stopped. Try again.'))
       setPhase('intro')
     }
   }
@@ -132,7 +133,7 @@ function CalibrateDialog({ id, edge, live, onClose }: { id: string; edge: boolea
     try {
       const end = await host.controllerCalibrate(id, 'range-end')
       if (!end.ok) {
-        setError(end.message ?? 'The controller didn’t take it. Try again.')
+        setError(errorText(end.message, 'The controller didn’t take it. Try again.'))
         setPhase(end.more ? 'range' : 'intro')
         if (!end.more) inRange.current = false
         return
@@ -142,7 +143,7 @@ function CalibrateDialog({ id, edge, live, onClose }: { id: string; edge: boolea
       setAfter(await rest())
       setPhase('done')
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : 'The calibration stopped. Try again.')
+      setError(errorText(cause, 'The calibration stopped. Try again.'))
       setPhase('done')
     }
   }

@@ -58,7 +58,7 @@ export function GameActions({
   // A game added from a folder leaves the Library, its files where they are: that is a Remove.
   const addedHere = selected.store === 'local'
   const verb = addedHere ? 'remove' : 'uninstall'
-  const failed = `Exo could not ${verb} the game. Try again.`
+  const failed = `Exo couldn’t ${verb} the game. Try again.`
   // Whether the sheet is still open when the answer comes: a failure says so on the button there, else on the page.
   const open = useRef(propertiesOpen)
   useEffect(() => { open.current = propertiesOpen }, [propertiesOpen])

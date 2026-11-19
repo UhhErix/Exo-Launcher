@@ -37,10 +37,10 @@ export function SoundboardButton({ guildId, channelId }: { guildId: string | nul
     setError(null)
     host.discordSoundboard('list', { guildId }).then(result => {
       if (!live) return
-      if (!result.ok) { setError(errorText(result.message, 'Discord did not answer.')); return }
+      if (!result.ok) { setError(errorText(result.message, 'Discord didn’t answer.')); return }
       const items = (result.guild as { items?: Sound[] } | null)?.items ?? []
       setSounds({ defaults: Array.isArray(result.defaults) ? result.defaults as Sound[] : [], guild: items })
-    }).catch((err: unknown) => { report(err, 'Soundboard.list'); if (live) setError('Discord did not answer.') })
+    }).catch((err: unknown) => { report(err, 'Soundboard.list'); if (live) setError('Discord didn’t answer.') })
     const escape = (event: KeyboardEvent) => { if (event.key === 'Escape') setOpen(false) }
     document.addEventListener('keydown', escape)
     return () => { live = false; document.removeEventListener('keydown', escape) }
@@ -49,8 +49,8 @@ export function SoundboardButton({ guildId, channelId }: { guildId: string | nul
   function play(sound: Sound) {
     setError(null)
     host.discordSoundboard('play', { channelId, soundId: sound.sound_id, volume: sound.volume ?? 1, guildId: sound.guild_id ?? null, emojiId: sound.emoji_id ?? null, emojiName: sound.emoji_name ?? null })
-      .then(result => { if (!result.ok) setError(errorText(result.message, 'Discord did not play it.')) })
-      .catch(() => setError('Discord did not play it.'))
+      .then(result => { if (!result.ok) setError(errorText(result.message, 'Discord didn’t play it.')) })
+      .catch(() => setError('Discord didn’t play it.'))
   }
 
   return (

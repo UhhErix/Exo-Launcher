@@ -9,7 +9,7 @@ import { useDismiss } from '../lib/dismiss'
 
 const STORES = ['steam', 'epic', 'gog'] as const
 const STORE_LABELS: Record<(typeof STORES)[number], string> = { steam: 'Steam', epic: 'Epic', gog: 'GOG' }
-const OPEN_FAILED = 'Exo could not open the redeem page. Try again.'
+const OPEN_FAILED = 'Exo couldn’t open the redeem page. Try again.'
 
 type Place = { top: number; left: number; width: number; maxHeight: number }
 const samePlace = (a: Place, b: Place) => a.top === b.top && a.left === b.left && a.width === b.width && a.maxHeight === b.maxHeight
