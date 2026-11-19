@@ -19,8 +19,10 @@ internal static class WebExtensions
     [
         new("sponsorblock", "SponsorBlock", "6.1.7", "sponsorblock",
             "47e23e0e1fdf19eec2c55d4ccefa5ae563c132181ad72d8fe40701617cc4d2f7", "SponsorBlock"),
+        // Re-pinned 2026-11-19: the repository's fresh start committed Exo Shield with text=auto, which rewrote its line endings, and
+        // its build repository (UhhErix/exo-shield) is gone, so the committed bytes (now -text in .gitattributes) are the release.
         new("exo-shield", "Exo Shield", "2026.1026.1812.7267", "exo-shield",
-            "c70c2943f90eb4e852ecaa3fdbcfd8c4c48918e745de0196b3105ddf643c1074", "Exo Shield"),
+            "7cd6c11a683c273e6ad86625c21792b7f0ec8cbe9d05e64661a7cd40a3d7ba76", "Exo Shield"),
     ];
 
     private sealed record SurfaceContext(nint Owner, DispatcherQueue Dispatcher);
