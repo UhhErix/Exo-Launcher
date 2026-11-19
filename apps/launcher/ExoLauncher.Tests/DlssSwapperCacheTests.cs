@@ -39,9 +39,10 @@ public sealed class DlssSwapperCacheTests
     }
 
     [Fact]
-    public void NoRuntimeRequestGoesToBeeradmoore()
+    public void DlssSwappersHostIsAskedOnlyForUpscalers()
     {
-        Assert.DoesNotContain(NetworkDestinations.Hosts, host => host.Host.Contains("beeradmoore", StringComparison.OrdinalIgnoreCase));
+        Assert.All(NetworkDestinations.Hosts.Where(host => host.Host.Contains("beeradmoore", StringComparison.OrdinalIgnoreCase)),
+            host => Assert.Equal(NetworkDestinations.Upscalers, host.PrivacyRow));
 
         var offenders = Repo.HostSources()
             .SelectMany(path => File.ReadLines(path).Select((line, index) => (path, line, index)))

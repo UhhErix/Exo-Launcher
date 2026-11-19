@@ -181,14 +181,17 @@ public sealed partial class NetworkDestinationsTests
     }
 
     /// <summary>
-    /// GitHub is not contacted at runtime: its hosts are not listed, and no code line asks one. Ways it could fail: a
-    /// registry entry or a request string naming api.github.com, github.com, a raw or release file host, or GitHub Pages
-    /// comes back. Comment lines are skipped: they name upstream pages as credits.
+    /// GitHub is contacted only for the vendors' upscaler files and the frame generation mods (UpstreamSource), each with
+    /// Exo's cache behind it, and no code line writes a GitHub URL out (UpstreamSource builds them from its host names).
+    /// Ways it could fail: a GitHub host listed for another row (store tools, Lucid, the voice model), or a request string
+    /// naming api.github.com, github.com, a raw or release file host, or GitHub Pages. Comment lines are skipped: they name
+    /// upstream pages as credits.
     /// </summary>
     [Fact]
-    public void NoRuntimeRequestGoesToGitHub()
+    public void GitHubIsAskedOnlyForUpscalersAndFrameGeneration()
     {
-        Assert.DoesNotContain(NetworkDestinations.Hosts, host => host.Host.Contains("github", StringComparison.OrdinalIgnoreCase));
+        Assert.All(NetworkDestinations.Hosts.Where(host => host.Host.Contains("github", StringComparison.OrdinalIgnoreCase)),
+            host => Assert.Contains(host.PrivacyRow, new[] { NetworkDestinations.Upscalers, NetworkDestinations.FrameGenMod }));
         var github = new Regex(@"https?://[A-Za-z0-9.-]*(github\.com|githubusercontent\.com|github\.io)", RegexOptions.IgnoreCase);
         var offenders = Repo.HostSources()
             .SelectMany(path => File.ReadLines(path).Select((line, index) => (path, line, index)))
