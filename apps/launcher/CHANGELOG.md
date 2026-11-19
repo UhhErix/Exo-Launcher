@@ -2,6 +2,11 @@
 
 ## 3.26.0 — November 14, 2026
 - **Goeist, Exo's new type.** Exo and Exo Mouse use Goeist, a rounded take on Geist: the same proportions, every corner softened. _Checked in code only._
+- **Shop beside Home.** Discord's Shop is its own place at the top of the Discord room, next to Home, and opens in one press. _Checked in code only._
+- **Play is gone from Discord.** The Play place (Games, Party and Clips) and its Show Play switch are removed; Home, your conversations and servers are unchanged. _Checked in code only._
+- **Sharing with friends on Exo is how Exo works, not a switch.** The game you opened from Exo and a game you are installing, building shaders for or have ready are always shared with friends who use Exo (never through Discord, never a game you hid or added yourself, nothing while you're Invisible), and show under their name in your friends list. The two switches in Settings › Discord › Privacy are gone. _Checked in code only._
+- **Badge and reaction tips sit on what they name.** The name of a profile badge, a reaction's people and a call's Clips on tip now show right above it (or below it at the top of the window) and stay inside the window, instead of landing somewhere else on the card. _Checked in code only._
+- **Pinned messages in a DM say so.** A DM or group with no pins says so in its own words; pinning and unpinning there works as in a server. _Checked in code only._
 - **Glass edges, not grey outlines.** Panels, menus and controls are lit at their edge like glass, brightest along the top, instead of a grey line all the way round, and lines inside a panel are faint enough that they never stack into a grey band. _Checked in code only._
 - **Old frame generation installs come out.** A game that got Exo Bridge from an earlier test build (Hell Is Us) had it left behind for good; Exo now takes it out by its record and puts today's frame generation in. _Checked in code only._
 - **Five rooms, in the middle.** The top bar has Library, Store, Discord, Music and PC, centered in the window. Devices moved into the PC room: its button sits on the This PC line beside Apps, and nothing in it changed. The mouse's capsule left the top bar; its battery shows in the FPS counter. _Checked in code only._
