@@ -443,14 +443,27 @@ export type HdrState = {
 /** What a screen's cable carries: format (rgb, or YCbCr 444/422/420), bits per color, Full or Limited range (YCbCr is always Limited). */
 export type OutputColor = { format: 'rgb' | '444' | '422' | '420'; bpc: number; full: boolean }
 
+export type DdcLevels = {
+  brightness: number | null
+  brightnessMin: number
+  brightnessMax: number
+  contrast: number | null
+  contrastMin: number
+  contrastMax: number
+}
+
 /** One screen in System > Display: refresh rates (Windows) and output color (its GPU's driver; vendor null when Exo can't reach it). */
 export type DisplayScreen = {
   id: string
   name: string
   main: boolean
   hdr: boolean
+  /** True when the panel accepts Windows HDR, even if HDR is currently turned off. */
+  hdrSupported?: boolean
   vendor: 'nvidia' | 'amd' | 'intel' | null
   refresh: number
+  /** Exact QueryDisplayConfig refresh label for the active mode (e.g. "59.94 Hz" or "165 Hz"). */
+  refreshLabel?: string | null
   refreshes: number[]
   color: OutputColor | null
   /** The driver picks the color itself (NVIDIA's default color settings). */
@@ -464,6 +477,8 @@ export type DisplayScreen = {
   isBest: boolean
   /** Color sliders; nvidia is "Use NVIDIA color settings" (null on AMD, which has no such choice). Null when the driver has none. */
   adjust: { nvidia: boolean | null; controls: ColorControl[] } | null
+  /** DDC/CI hardware monitor brightness and contrast controls when the monitor supports MCCS. */
+  ddc?: DdcLevels | null
   /** NVIDIA scaling: the mode and whether the GPU (else the screen) scales; null off NVIDIA. */
   /** over: "Override the scaling mode set by games and programs" (null when the driver doesn't say). */
   scaling: { mode: ScalingMode | 'default'; gpu: boolean; over: boolean | null } | null
@@ -518,8 +533,10 @@ export type DisplayChange = {
   display: string; best?: boolean; refresh?: number; format?: string; bpc?: number; full?: boolean
   /** The driver's own color settings (NVIDIA "Use default color settings"). */
   auto?: boolean
-  /** action 'video': RTX Video Super resolution (0-5) or HDR. */
+  /** action 'video': RTX Video Super resolution (0-5) or HDR; action 'set': Windows per-display HDR toggle. */
   superResolution?: number; hdr?: boolean
+  /** action 'ddc': monitor hardware brightness or contrast over DDC/CI. */
+  brightness?: number; contrast?: number
   /** action 'override': the screen's scaling overrides what games ask for. */
   override?: boolean
   scaling?: ScalingMode; scalingGpu?: boolean
@@ -2948,7 +2965,7 @@ export const host = {
   discordApps: (channelId: string, action: 'commands' | 'run' | 'autocomplete' | 'component' | 'modal' | 'dismiss', params: Record<string, unknown> = {}) =>
     rawCall<{ ok: boolean; message?: string | null; nonce?: string | null; commands?: AppCommand[]; applications?: AppInfo[] }>('discord.apps', { channelId, action, ...params }, 60_000),
   gpuDriver: (action: 'state' | 'update' | 'goback' = 'state', branch: 'game' | 'studio' = 'game') => rawCall<DriverState>('gpu.driver', { action, branch }, 60_000),
-  gpuDisplay: (action: 'state' | 'set' | 'adjust' | 'video' | 'override' = 'state', change?: DisplayChange) =>
+  gpuDisplay: (action: 'state' | 'set' | 'adjust' | 'video' | 'override' | 'ddc' = 'state', change?: DisplayChange) =>
     rawCall<DisplayState>('gpu.display', { action, ...(change ?? {}) }, 30_000),
   /**
    * System > Graphics > Driver and profile: Exo's global profile for this PC; apply it (an

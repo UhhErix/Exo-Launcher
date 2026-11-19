@@ -103,6 +103,8 @@ public sealed class DisposableHostGuardTests
         ("ExoLauncher/Helpers/WindowsHdr.cs", "internal static bool WriteRamp(string gdiName, ushort[] ramp)"),
         ("ExoLauncher/Helpers/DisplayOutput.cs", "internal static string? SetRefresh(string gdiName, int hz)"),
         ("ExoLauncher/Helpers/DisplayOutput.cs", "internal static string? SaveRefresh(string gdiName)"),
+        ("ExoLauncher/Helpers/MonitorDdc.cs", "internal static string? SetBrightness(string gdiName, int value)"),
+        ("ExoLauncher/Helpers/MonitorDdc.cs", "internal static string? SetContrast(string gdiName, int value)"),
         ("ExoLauncher/Helpers/NvidiaDisplay.cs", "internal static string? Write(uint displayId, OutputColor color, bool auto = false)"),
         ("ExoLauncher/Helpers/NvidiaDisplay.cs", "internal static string? SetVibrance(string gdiName, int level)"),
         ("ExoLauncher/Helpers/NvidiaDisplay.cs", "internal static string? SetHue(string gdiName, int angle)"),

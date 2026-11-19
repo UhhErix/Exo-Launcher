@@ -16,7 +16,11 @@ internal static class WindowsHdr
     /// plugged into: "dp" (DisplayPort, USB-C's included), "hdmi", "dvi", or "" for anything else.
     /// </summary>
     internal sealed record Screen(Luid Adapter, uint Target, uint Source, string GdiName, string Name, string DevicePath,
-        bool Supported, bool Enabled, bool NewApi, long PixelRate = 0, string Connector = "");
+        bool Supported, bool Enabled, bool NewApi, long PixelRate = 0, string Connector = "", double RefreshHz = 0);
+
+    /// <summary>Exact vertical refresh rate in Hz from a QueryDisplayConfig numerator/denominator pair (0 when invalid).</summary>
+    internal static double ExactRefreshHz(uint numerator, uint denominator) =>
+        denominator > 0 && numerator > 0 ? (double)numerator / denominator : 0;
 
     /// <summary>The main screen's HDR state; null when Windows does not answer.</summary>
     internal static Screen? Primary()
@@ -39,10 +43,13 @@ internal static class WindowsHdr
                 if (gdi.Length == 0 || screens.Any(screen => string.Equals(screen.GdiName, gdi, StringComparison.OrdinalIgnoreCase))) continue;
                 var (supported, enabled, newApi) = ReadHdr(path.targetInfo.adapterId, path.targetInfo.id);
                 var (name, devicePath) = TargetName(path.targetInfo.adapterId, path.targetInfo.id);
-                // DISPLAYCONFIG_TARGET_MODE: the video signal's pixel rate is the union's first field.
+                // DISPLAYCONFIG_TARGET_MODE: u0 is pixelRate, u2 packs vSyncFreq (low uint numerator, high uint denominator).
                 var mode = path.targetInfo.modeInfoIdx < modes.Length ? modes[path.targetInfo.modeInfoIdx] : default;
+                var refreshHz = ExactRefreshHz(path.targetInfo.refreshNumerator, path.targetInfo.refreshDenominator);
+                if (refreshHz <= 0 && mode.infoType == 2)
+                    refreshHz = ExactRefreshHz((uint)(mode.u2 & 0xFFFF_FFFF), (uint)(mode.u2 >> 32));
                 screens.Add(new Screen(path.targetInfo.adapterId, path.targetInfo.id, path.sourceInfo.id, gdi, name, devicePath,
-                    supported, enabled, newApi, mode.infoType == 2 ? (long)mode.u0 : 0, Connector(path.targetInfo.outputTechnology)));
+                    supported, enabled, newApi, mode.infoType == 2 ? (long)mode.u0 : 0, Connector(path.targetInfo.outputTechnology), refreshHz));
             }
         }
         catch (Exception ex) { AppLog.Debug("HDR state: " + ex.GetType().Name); }

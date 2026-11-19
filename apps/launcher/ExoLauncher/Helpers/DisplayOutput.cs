@@ -44,10 +44,42 @@ internal static class DisplayOutput
     /// desktop compositor more frames to draw beside the game; Windows 11 runs each screen at its own rate, so a
     /// fraction of the main screen's (82 of 165) gains nothing over 60.
     /// </summary>
-    internal static int BestRefresh(bool main, IReadOnlyCollection<int> refreshes, int current)
+    /// <summary>The best refresh rate for a screen: its highest usable refresh rate regardless of whether it is primary or secondary.</summary>
+    internal static int BestRefresh(bool main, IReadOnlyCollection<int> refreshes, int current) =>
+        refreshes.Count == 0 ? current : refreshes.Max();
+
+    internal static readonly int[] RetrainPollBackoffMs = [150, 250, 400, 600, 800, 800];
+
+    /// <summary>
+    /// Waits for a display mode change to settle after <see cref="SetRefresh"/> with progressive backoff up to <paramref name="maxWaitMs"/>.
+    /// Waits at least one step for link retrain so driver queries see the new mode, then exits as soon as <paramref name="readCurrentHz"/> matches.
+    /// </summary>
+    internal static bool WaitForRefreshSettle(Func<int> readCurrentHz, int targetHz, Action<int> sleep, int maxWaitMs = 3000)
     {
-        if (refreshes.Count == 0) return current;
-        return main ? refreshes.Max() : refreshes.OrderBy(hz => Math.Abs(hz - 60)).ThenByDescending(hz => hz).First();
+        var elapsed = 0;
+        foreach (var slice in RetrainPollBackoffMs)
+        {
+            var wait = Math.Min(slice, maxWaitMs - elapsed);
+            if (wait <= 0) break;
+            sleep(wait);
+            elapsed += wait;
+            if (readCurrentHz() == targetHz) return true;
+        }
+        return readCurrentHz() == targetHz;
+    }
+
+    /// <summary>
+    /// Formats an exact <c>QueryDisplayConfig</c> refresh rate cleanly (<c>"59.94 Hz"</c> vs <c>"165 Hz"</c>),
+    /// falling back to the integer mode rate when the rational rate is unavailable or disagrees by &gt;= 1.5 Hz.
+    /// </summary>
+    internal static string FormatRefreshLabel(double exactHz, int fallbackHz)
+    {
+        if (exactHz <= 0 || (fallbackHz > 0 && Math.Abs(exactHz - fallbackHz) >= 1.5))
+            return $"{fallbackHz} Hz";
+        var rounded = Math.Round(exactHz);
+        if (Math.Abs(exactHz - rounded) < 0.01)
+            return $"{(int)rounded} Hz";
+        return Math.Round(exactHz, 2).ToString("0.##", System.Globalization.CultureInfo.InvariantCulture) + " Hz";
     }
 
     /// <summary>

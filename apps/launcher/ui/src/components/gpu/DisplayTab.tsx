@@ -26,7 +26,7 @@ function Busy({ on, label, children }: { on: boolean; label: string; children: R
   return <span className="exo-display-busy">{on ? <Spinner label={label} /> : null}{children}</span>
 }
 
-type Action = 'set' | 'adjust' | 'video' | 'override'
+type Action = 'set' | 'adjust' | 'video' | 'override' | 'ddc'
 
 /**
  * One display change at a time, for the rows that make it: the row whose change is being written (null when none) and
@@ -108,6 +108,14 @@ export function DisplayRows({ display, onDisplay }: { display: DisplayState | nu
         </Row>
       )}
       <ScreenRows screen={screen} busy={busy} error={error} onSet={set} />
+      {screen.hdrSupported && (
+        <SwitchRow id={`display-hdr-${screen.id}`} label="HDR" checked={screen.hdr} disabled={!!busy}
+          onChange={on => run('set', { display: screen.id, hdr: on }, 'hdr')} />
+      )}
+      {screen.ddc && (
+        <DdcRows ddc={screen.ddc} busy={busy} errorFor={errorFor}
+          onDdc={(key, value) => { if (!busy) void run('ddc', { display: screen.id, [key]: value }, key === 'brightness' ? 'ddcBrightness' : 'ddcContrast') }} />
+      )}
       {display.video && (
         <VideoRows
           video={display.video}
@@ -197,7 +205,7 @@ function ColorRows({ adjust, busy, error, onColor }: {
       {adjust.controls.map(control => (
         <SliderRow key={control.key} label={control.label} min={control.min} max={control.max} step={control.step} value={control.value} render={value => colorText(control, value)} disabled={!!busy} error={error?.key === control.key ? error.text : null} onCommit={value => onColor(control.key, { key: control.key, value })} />
       ))}
-      {changed ? (
+      {changed || nvidia === true ? (
         <Row label="Default color" error={error?.key === 'reset' ? error.text : null}>
           <button type="button" className="exo-set-btn" disabled={!!busy} aria-busy={busy === 'reset'} onClick={() => onColor('reset', nvidia === null ? { reset: true } : { nvidia: false })}>
             {busy === 'reset' ? <Spinner label="Putting the screen's color back" /> : null}Restore
@@ -333,6 +341,28 @@ function bestLine(best: DisplayScreen['best']) {
   return best.why && best.color && best.color.format !== 'rgb' ? `${line}. ${best.why}` : line
 }
 
+function DdcRows({ ddc, busy, errorFor, onDdc }: {
+  ddc: NonNullable<DisplayScreen['ddc']>
+  busy: string | null
+  errorFor: (key: string) => string | null
+  onDdc: (key: 'brightness' | 'contrast', value: number) => void
+}) {
+  return (
+    <>
+      {ddc.brightness !== null && (
+        <SliderRow label="Monitor brightness" min={ddc.brightnessMin} max={ddc.brightnessMax} step={1} value={ddc.brightness}
+          render={value => `${value}%`} disabled={!!busy} error={errorFor('ddcBrightness')}
+          onCommit={value => onDdc('brightness', value)} />
+      )}
+      {ddc.contrast !== null && (
+        <SliderRow label="Monitor contrast" min={ddc.contrastMin} max={ddc.contrastMax} step={1} value={ddc.contrast}
+          render={value => `${value}%`} disabled={!!busy} error={errorFor('ddcContrast')}
+          onCommit={value => onDdc('contrast', value)} />
+      )}
+    </>
+  )
+}
+
 function ScreenRows({ screen, busy, error, onSet }: {
   screen: DisplayScreen
   busy: string | null
@@ -361,7 +391,7 @@ function ScreenRows({ screen, busy, error, onSet }: {
         <Row label="Refresh rate" error={errorFor('refresh')}>
           <Busy on={busy === 'refresh'} label="Changing the refresh rate">
             <GraphicsControl
-              row={{ key: 'refresh', label: 'Refresh rate', detail: '', choice: String(screen.refresh), choices: screen.refreshes.map(hz => ({ id: String(hz), label: `${hz} Hz` })) }}
+              row={{ key: 'refresh', label: 'Refresh rate', detail: '', choice: String(screen.refresh), choices: screen.refreshes.map(hz => ({ id: String(hz), label: hz === screen.refresh && screen.refreshLabel ? screen.refreshLabel : `${hz} Hz` })) }}
               busy={!!busy}
               onPick={hz => onSet('refresh', { refresh: Number(hz) })}
             />

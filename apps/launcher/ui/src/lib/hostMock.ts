@@ -1937,13 +1937,14 @@ const MOCK_HANDLERS: Record<string, MockHandler> = {
     ok: true,
     pending: p?.action === 'set' ? { display: 'DISPLAY1', seconds: 15 } : null,
     displays: [{
-      id: 'DISPLAY1', name: 'VG248', main: true, hdr: false, vendor: mockGpu === 'amd' || mockGpu === 'intel' ? mockGpu : 'nvidia', refresh: 144, refreshes: [60, 100, 120, 144],
+      id: 'DISPLAY1', name: 'VG248', main: true, hdr: false, hdrSupported: !mockNoHdr, vendor: mockGpu === 'amd' || mockGpu === 'intel' ? mockGpu : 'nvidia', refresh: 144, refreshLabel: '144 Hz', refreshes: [60, 100, 120, 144],
       color: { format: 'rgb', bpc: 8, full: true }, auto: false,
       supported: ['rgb', '444', '422'].flatMap(format => [6, 8].flatMap(bpc =>
         (format === 'rgb' ? [true, false] : [false]).map(full => ({ format, bpc, full })))),
       best: { refresh: 144, color: { format: 'rgb', bpc: 8, full: true }, why: null, scaling: true, over: true },
       isBest: false,
       scaling: { mode: 'aspect', gpu: false, over: false },
+      ddc: { brightness: 75, brightnessMin: 0, brightnessMax: 100, contrast: 50, contrastMin: 0, contrastMax: 100 },
       adjust: {
         nvidia: p?.action === 'adjust' && p.nvidia === true,
         controls: [
