@@ -124,9 +124,10 @@ export type FrameGenMod = {
   /**
    * Why it is broken. replaced: another mod's file is where Exo's loader was (Exo leaves it and keeps the game off);
    * changed: another of Exo's files has other bytes (Exo leaves it); removed: Exo's files went (they go back once);
-   * gone: the game no longer ships DLSS Frame Generation.
+   * gone: the game no longer ships DLSS Frame Generation. With hidden: unread (Exo couldn't read the game: no install,
+   * a Store app, a folder it can't open), card (no mod adds to this card; the line hides).
    */
-  reason?: 'replaced' | 'changed' | 'removed' | 'gone' | null
+  reason?: 'replaced' | 'changed' | 'removed' | 'gone' | 'unread' | 'card' | null
 }
 
 /**

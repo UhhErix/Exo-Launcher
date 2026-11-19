@@ -38,6 +38,15 @@ test('anti-cheat without consent names the anti-cheat', () => {
   assert.equal(word({ items: [dlss('outdated', '310.2.1')], antiCheat: 'Vanguard', consent: 'never' }).text, 'Uses Vanguard')
 })
 
+test('an unread version is never up to date, even beside a current one', () => {
+  // XeSS whose version Exo can't read and can't update (an image it can't parse): no update waits, but it isn't current.
+  const xess = ({ key: 'libxess.dll', fileName: 'libxess.dll', displayName: 'XeSS Super Resolution', currentVersion: null, state: 'unknown', canUpdate: false }) as DlssStatusItem
+  const line = word({ items: [dlss('current', '310.9.16'), xess] })
+  assert.equal(line.text, 'Version unknown: XeSS')
+  assert.notEqual(line.good, true)
+  assert.equal(word({ items: [xess] }).text, 'Version unknown')
+})
+
 test('a read that failed is the line\'s word, in red', () => {
   assert.deepEqual(upscalerLineWord(upscalerView(null), 'Could not check the files'), { text: 'Could not check the files', bad: true })
 })
