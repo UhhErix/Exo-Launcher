@@ -10,6 +10,7 @@ import { Icons } from './icons'
 import { emojiUrl } from './markdown'
 import { SubContext, Submenu } from './UserMenu'
 import { ErrorNote } from '../ui/ErrorNote'
+import { errorText } from '../../lib/errorWords'
 
 type At = { threadId: string; x: number; y: number }
 
@@ -67,7 +68,7 @@ function ThreadMenu({ at, onClose }: { at: At; onClose: () => void }) {
   }, [at.threadId])
   const why = "Discord didn't take that."
   const run = (action: Action, params?: Params, after?: () => void) => void host.discordThreadAction(at.threadId, action, params).then(
-    result => { if (!result.ok) setError(result.message ?? why); else if (after) after(); else onClose() }, () => setError(why))
+    result => { if (!result.ok) setError(errorText(result.message, why)); else if (after) after(); else onClose() }, () => setError(why))
   const copy = (text: string) => { void navigator.clipboard.writeText(text).catch(() => { }); onClose() }
   return (
     <SubContext.Provider value={{ open: sub, show: setSub }}>

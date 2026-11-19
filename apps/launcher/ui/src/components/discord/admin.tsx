@@ -7,6 +7,9 @@ import { Dialog } from '../ui/Dialog'
 import { CopyLogs, ErrorNote } from '../ui/ErrorNote'
 import { ConfirmLabel, useConfirmInPlace } from '../ui/ConfirmButton'
 import { cn } from '../../lib/utils'
+import { errorText } from '../../lib/errorWords'
+import { SUCCESS_HOLD_MS } from '../../lib/actionState'
+import { CHECK_PATH } from '../../brand/icons'
 
 /** Discord wants the person to verify first: the check's id (the ticket stays in Exo's host) and the ways Discord offers. */
 export type MfaAsk = { id: string; methods: string[] }
@@ -46,7 +49,7 @@ export function useAdmin<T>(action: string, params: Record<string, unknown>) {
     let live = true
     void admin<T>(action, JSON.parse(key) as Record<string, unknown>).then(result => {
       if (!live) return
-      if (result.ok) { setData(result.data ?? null); setError(null) } else setError(result.message ?? 'Discord did not answer.')
+      if (result.ok) { setData(result.data ?? null); setError(null) } else setError(errorText(result.message, 'Discord didn’t answer.'))
     })
     return () => { live = false }
   }, [action, key, tick])
@@ -110,6 +113,11 @@ export function PickChips({ label, ids, options, onChange }: {
 }
 
 /** Discord's bar for unsaved changes: Reset and Save Changes, with the error under it when Discord refused. */
+/**
+ * Discord's unsaved-changes bar. It says how a save went in itself: the ring on Save while it works; on success the
+ * bar stays a beat (SUCCESS_HOLD_MS) saying so with the check drawn where Save was, then goes; a refusal turns Save
+ * Bad, shakes it once, and the bar's words say why (errorText), Save then trying again.
+ */
 export function SaveBar({ shown, busy, error, onReset, onSave }: { shown: boolean; busy: boolean; error: string | null; onReset: () => void; onSave: () => void }) {
   const unsaved = useContext(UnsavedContext)
   const mark = unsaved?.mark
@@ -118,16 +126,39 @@ export function SaveBar({ shown, busy, error, onReset, onSave }: { shown: boolea
     mark(true)
     return () => mark(false)
   }, [mark, shown])
-  if (!shown) return null
+  // A save that ended without an error while the bar was up: held as done for a beat, even once nothing is unsaved.
+  const [saved, setSaved] = useState(false)
+  const [wasBusy, setWasBusy] = useState(busy)
+  if (busy !== wasBusy) {
+    setWasBusy(busy)
+    if (!busy && !error) setSaved(true)
+    if (busy) setSaved(false)
+  }
+  useEffect(() => {
+    if (!saved) return
+    const timer = window.setTimeout(() => setSaved(false), SUCCESS_HOLD_MS)
+    return () => window.clearTimeout(timer)
+  }, [saved])
+  const done = saved && !shown
+  if (!shown && !done) return null
   const nudge = unsaved?.nudge ?? 0
+  const failed = !busy && !!error
   // A new key each nudge plays the shake again.
   return (
     <div key={nudge} className={`exo-dc-savebar exo-glass${nudge ? ' is-nudged' : ''}`} role="status">
-      <span>{error ?? 'Unsaved changes'}</span>
-      <button type="button" className="exo-dc-tab" disabled={busy} onClick={onReset}>Reset</button>
-      <button type="button" className="exo-set-btn is-primary" disabled={busy} onClick={onSave}>
-        {busy ? <Spinner label="Saving changes" /> : null}Save changes
-      </button>
+      <span className={failed ? 'exo-dc-savebar-why' : undefined}>{done ? 'Changes saved' : error ? errorText(error, 'Discord didn’t save that. Try again.') : 'Unsaved changes'}</span>
+      {done ? (
+        <span className="exo-action is-success exo-dc-savebar-done" aria-hidden="true">
+          <svg className="exo-action-check" width="18" height="18" viewBox="0 0 24 24"><path d={CHECK_PATH} pathLength="1" /></svg>
+        </span>
+      ) : (
+        <>
+          <button type="button" className="exo-dc-tab" disabled={busy} onClick={onReset}>Reset</button>
+          <button type="button" key={failed ? 'failed' : 'save'} className={cn('exo-set-btn is-primary', failed && 'exo-action is-error')} disabled={busy} onClick={onSave}>
+            {busy ? <Spinner label="Saving changes" /> : null}Save changes
+          </button>
+        </>
+      )}
     </div>
   )
 }

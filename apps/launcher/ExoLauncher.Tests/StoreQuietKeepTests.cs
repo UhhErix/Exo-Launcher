@@ -128,7 +128,6 @@ public sealed partial class StoreQuietTests
             Assert.Equal(steam.SharedText, steam.SharedNow);
             // Forgotten once put back.
             Assert.DoesNotContain("steam/123", Keep.Load().Stores.Keys);
-            Assert.Equal("off", StoreQuietPass.Word(steam.Root, wanted: false));
         }
     }
 

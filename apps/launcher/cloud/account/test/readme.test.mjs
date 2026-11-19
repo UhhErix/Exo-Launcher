@@ -59,7 +59,7 @@ test('the warning is at the top and the redeploy steps exist', () => {
 })
 
 test('the guard finds a put outside Keys, the way the old Before deploy step had it', () => {
-  const old = "# Exo account\n## Before deploy\n2. **ACCOUNT_SECRETS**: `node -e \"...\" | npx wrangler@4.158.0 secret put ACCOUNT_SECRETS`.\n## Keys\n1. `npx wrangler secret put ACCOUNT_SECRETS`\n"
+  const old = "# Exo account\n## Before deploy\n2. **ACCOUNT_SECRETS**: `node -e \"...\" | npx wrangler@4.165.0 secret put ACCOUNT_SECRETS`.\n## Keys\n1. `npx wrangler secret put ACCOUNT_SECRETS`\n"
   assert.equal(strayPuts(old).length, 1)
   assert.match(strayPuts(old)[0], /^Before deploy: /)
 })

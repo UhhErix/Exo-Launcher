@@ -40,7 +40,7 @@ function wordFor(status: ShaderStatus | null): LineWord | null {
     case 'warmed': return { text: 'Compiled' }
     case 'stale': return { text: status.reason ?? 'Compile again' }
     case 'ready': case 'record': return { text: 'Not compiled' }
-    case 'unsupported': return { text: 'Not supported' }
+    case 'unsupported': return { text: 'Not supported in this game' }
     case 'noApp': return { text: 'Get Exo Shaders' }
     case 'error': return { text: 'Could not check', bad: true }
     default: return null

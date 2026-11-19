@@ -178,21 +178,36 @@ internal sealed class SteamSignInService(SteamWebApi api, ISteamTokenVault vault
         }
     }
 
-    /// <summary>The owned games and, when the account is in a Family, the games its members share with it.</summary>
-    internal async Task<(SteamCommunityGames.OwnedGamesResult Owned, IReadOnlySet<string>? Family, ulong FamilyGroupId)?> LibraryAsync(ulong steamId, CancellationToken ct)
+    /// <summary>
+    /// The owned games and the account's Steam Family shares, with Exo's own Steam sign-in; null without one for
+    /// <paramref name="steamId"/>.
+    /// </summary>
+    internal async Task<(SteamCommunityGames.OwnedGamesResult Owned, SteamFamilyLibrary.Shares? Family)?> LibraryAsync(ulong steamId, CancellationToken ct)
     {
         var tokens = await FreshTokensAsync(ct).ConfigureAwait(false);
         if (tokens is null || tokens.SteamId != steamId) return null;
-        var owned = await api.OwnedGamesAsync(tokens.AccessToken, steamId, ct).ConfigureAwait(false);
-        var group = await api.FamilyGroupAsync(tokens.AccessToken, steamId, ct).ConfigureAwait(false);
-        // Not in a family: an empty list (it clears what was remembered). Steam not answering: null (keeps what was).
-        IReadOnlySet<string>? family = group switch
+        return await LibraryWithTokenAsync(api, tokens.AccessToken, steamId, ct).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// The owned games and the Family shares with any access token for <paramref name="steamId"/> (Exo's sign-in, or
+    /// the Steam website's). Family: <see cref="SteamFamilyLibrary.Shares.None"/> in no family (it clears what was
+    /// remembered); null when Steam did not answer (what was remembered stands).
+    /// </summary>
+    internal static async Task<(SteamCommunityGames.OwnedGamesResult Owned, SteamFamilyLibrary.Shares? Family)> LibraryWithTokenAsync(
+        SteamWebApi api, string accessToken, ulong steamId, CancellationToken ct)
+    {
+        var ownedTask = api.OwnedGamesAsync(accessToken, steamId, ct);
+        var group = await api.FamilyGroupAsync(accessToken, steamId, ct).ConfigureAwait(false);
+        SteamFamilyLibrary.Shares? family = group switch
         {
             null => null,
-            0 => new HashSet<string>(StringComparer.Ordinal),
-            _ => await api.FamilySharedAppsAsync(tokens.AccessToken, group.Value, steamId, ct).ConfigureAwait(false),
+            0 => SteamFamilyLibrary.Shares.None,
+            _ => await api.FamilySharedAppsAsync(accessToken, group.Value, steamId, ct).ConfigureAwait(false) is { } apps
+                ? new SteamFamilyLibrary.Shares(group.Value, apps)
+                : null,
         };
-        return (owned, family, group ?? 0);
+        return (await ownedTask.ConfigureAwait(false), family);
     }
 
     private PendingSignIn? Pending()

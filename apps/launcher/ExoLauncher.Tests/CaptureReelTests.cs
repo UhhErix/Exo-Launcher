@@ -11,7 +11,7 @@ namespace ExoLauncher.Tests;
 /// - HDR clips of different kinds are squeezed into an SDR picture;
 /// - a stopped, failed or refused join touches a source clip, or asks the add-on anything first;
 /// - a copy the add-on finds impossible after all fails the user instead of being encoded.
-/// The join itself (the add-on's muxer, on real files) is checked by capture/src/concat_selftest.cpp.
+/// The join itself (the add-on's muxer, on real files) is implemented in capture/ExoCapture/Edit/Clips.cs and checked by capture/ExoCapture.Tests/MuxerTests.cs.
 /// </summary>
 public sealed class CaptureReelTests : IDisposable
 {

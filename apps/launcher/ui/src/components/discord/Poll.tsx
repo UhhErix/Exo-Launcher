@@ -6,6 +6,7 @@ import type { DiscordMessage, DiscordPoll } from '../../lib/discord'
 import { emojiUrl } from './markdown'
 import { Icons } from './icons'
 import { ErrorNote } from '../ui/ErrorNote'
+import { errorText } from '../../lib/errorWords'
 
 /** "3 hours left", "1 day left", or "Poll closed". */
 function timeLeft(poll: DiscordPoll, now: number) {
@@ -65,7 +66,7 @@ export function Poll({ message, meId }: { message: DiscordMessage; meId: string 
     setBusy(true)
     setError(null)
     host.discordPoll(message.channel_id, message.id, answers)
-      .then(result => { if (!result.ok) setError(result.message ?? "Discord didn't take that. Try again."); else setPicked(new Set()) })
+      .then(result => { if (!result.ok) setError(errorText(result.message, "Discord didn't take that. Try again.")); else setPicked(new Set()) })
       .catch((err: unknown) => { report(err, 'Poll.vote'); setError("Discord didn't take that. Try again.") })
       .finally(() => setBusy(false))
   }

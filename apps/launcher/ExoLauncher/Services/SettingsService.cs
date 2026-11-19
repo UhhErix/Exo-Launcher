@@ -946,21 +946,11 @@ public sealed class SettingsService
     private static string NormalizeTextColour(string? value) =>
         string.Equals(value, "grey", StringComparison.OrdinalIgnoreCase) ? "grey" : "white";
 
-    /// <summary>The background palettes (ui/src/tokens.css › Backgrounds). Exo is pure black (AMOLED) under Liquid Glass.</summary>
+    /// <summary>The one background: Exo is pure black (AMOLED) under Liquid Glass.</summary>
     internal static readonly string[] Backgrounds = ["black"];
 
     /// <summary>Always "black": the palettes it once offered (near, grey, windows, graphite) and anything else come back as pure black.</summary>
     internal static string NormalizeBackground(string? value) => "black";
-
-    /// <summary>A palette's page color (the window's own background under the page), as #RRGGBB in tokens.css.</summary>
-    internal static (byte R, byte G, byte B) BackgroundColor(string? value) => NormalizeBackground(value) switch
-    {
-        "black" => (0x00, 0x00, 0x00),
-        "near" => (0x0a, 0x0a, 0x0a),
-        "windows" => (0x20, 0x20, 0x20),
-        "graphite" => (0x0f, 0x11, 0x14),
-        _ => (0x12, 0x12, 0x12),
-    };
 
     private static string NormalizeTextSize(string? value) =>
         value?.Trim().ToLowerInvariant() switch
@@ -1019,6 +1009,7 @@ public sealed class SettingsService
         FpsCounter = source.FpsCounter,
         FpsCounterPosition = source.FpsCounterPosition,
         FpsCounterItems = FpsItems.Clean(source.FpsCounterItems),
+        Autopilot = (source.Autopilot ?? new()).Copy(),
         HdrForGames = source.HdrForGames,
         HdrSdrGamma = source.HdrSdrGamma,
         DiscordNoiseSuppression = source.DiscordNoiseSuppression,
@@ -1071,7 +1062,6 @@ public sealed class SettingsService
         MouseBridgeAppAutostart = source.MouseBridgeAppAutostart,
         MouseBridgeAppPath = source.MouseBridgeAppPath,
         StartLucidWithExo = source.StartLucidWithExo,
-        LucidFollowHeadset = source.LucidFollowHeadset,
         LibraryFolders = NormalizeLibraryFolders(source.LibraryFolders),
         HiddenGames = NormalizeHiddenGames(source.HiddenGames),
         FrameGenEverywhere = source.FrameGenEverywhere,
@@ -1088,7 +1078,6 @@ public sealed class SettingsService
         NvidiaDriverBranch = source.NvidiaDriverBranch == "studio" ? "studio" : null,
         StartWithWindows = source.StartWithWindows,
         StartupHandedToExo = [.. (source.StartupHandedToExo ?? []).Where(id => StartupApps.Known.Any(app => app.Id == id)).Distinct()],
-        LucidPath = source.LucidPath is { Length: > 0 and <= 1024 } lucid ? lucid : null,
     };
 
     // settings.json is read with case-sensitive keys and may hold nulls. Copies

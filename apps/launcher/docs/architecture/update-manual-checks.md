@@ -94,10 +94,10 @@ anything else is a fail. Write down the date, the build and the result of each s
 1. Keep an update (step 2), close the game, sign out and in so Exo starts with Windows.
 2. Seen: the update goes in at that start or waits for a game; it never opens a second Exo and never loops.
 
-## 13. Hosted Lucid running at the start that applies the update
+## 13. The update from an Exo that hosted Lucid
 
-1. Keep an update, start Lucid hosted, then quit Exo and open it so the kept update applies.
-2. Seen: Lucid is stopped for the update and started again after Exo N opens; no half-installed Lucid.
+1. On Exo 3.25 or earlier with Lucid on, update to 3.26 or later.
+2. Seen: the installer closes the hosted Lucid (`Close-ExoLauncher.ps1`), the new Exo starts without `addons\lucid`, Lucid's settings show on the audio page as Exo EQ, and no Lucid runs from Exo's folders.
 
 ## 14. Not enough free space
 

@@ -14,7 +14,7 @@ public static partial class AppLog
     /// <summary>The words that mark each room's entries (its log prefixes and host method names), by the room's name.</summary>
     private static readonly Dictionary<string, string[]> Areas = new(StringComparer.OrdinalIgnoreCase)
     {
-        ["devices"] = ["Controller", "Mouse", "Devices", "Peripheral", "Lucid", "Audio", "Usb", "Keyboard", "steamInput"],
+        ["devices"] = ["Controller", "Mouse", "Devices", "Peripheral", "Exo EQ", "Audio", "Usb", "Keyboard", "steamInput"],
         ["pc"] = ["Runtimes", "Apps", "Leftovers", "Edge", "Gpu", "Driver", "Display", "Chipset", "Hdr", "Graphics", "Upscaler", "Dlss", "Vsr", "Performance", "Signature"],
         ["library"] = ["Launch", "Install", "Uninstall", "Library", "Steam", "Epic", "Legendary", "Gog", "EA ", "Ubisoft", "Battle.net", "Riot", "Xbox", "Shaders", "Cover", "Achievement", "game."],
         ["store"] = ["Store"],

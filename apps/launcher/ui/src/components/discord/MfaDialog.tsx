@@ -5,6 +5,7 @@ import { onMfaAsk, type AdminReply, type MfaAsk } from './admin'
 import { Popover } from '../ui/Dialog'
 import { Spinner } from '../ui/Spinner'
 import { ErrorNote } from '../ui/ErrorNote'
+import { errorText } from '../../lib/errorWords'
 
 type Waiting = { ask: MfaAsk; done: (reply: AdminReply<unknown>) => void }
 
@@ -79,7 +80,7 @@ function CodeForm({ ask, way, onElse, onDone }: { ask: MfaAsk; way: Way; onElse:
     try {
       const reply = await host.discordAdmin('mfa', { id: ask.id, step: 'finish', method: way, code: data }) as AdminReply<unknown>
       // The ask back with the error: Discord didn't take the code and the check is still open.
-      if (reply.mfa) { setError(reply.message ?? 'Discord didn’t take that code. Check it and try again.'); setBusy(false); return }
+      if (reply.mfa) { setError(errorText(reply.message, 'Discord didn’t take that code. Check it and try again.')); setBusy(false); return }
       onDone(reply)
     } catch {
       setError('Discord didn’t answer. Try again.')
@@ -135,7 +136,7 @@ function SmsSent({ id }: { id: string }) {
   const send = () => {
     setLine(null)
     void (host.discordAdmin('mfa', { id, step: 'sms' }) as Promise<AdminReply<{ phone?: string }>>)
-      .then(reply => setLine(reply.ok ? `Discord sent a code to ${reply.data?.phone ?? 'your phone'}.` : reply.message ?? 'Discord didn’t send the code. Try again.'))
+      .then(reply => setLine(reply.ok ? `Discord sent a code to ${reply.data?.phone ?? 'your phone'}.` : errorText(reply.message, 'Discord didn’t send the code. Try again.')))
       .catch(() => setLine('Discord didn’t answer. Try again.'))
   }
   useEffect(send, [id])

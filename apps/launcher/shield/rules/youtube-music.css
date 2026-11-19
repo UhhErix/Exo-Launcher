@@ -1,0 +1,7 @@
+/* Exo Shield on YouTube Music: what is left of an ad on the page, and its Premium promos. */
+ytmusic-player .video-ads,
+ytmusic-player .ytp-ad-module,
+ytmusic-player .ytp-ad-player-overlay,
+ytmusic-mealbar-promo-renderer,
+ytmusic-statement-banner-renderer,
+tp-yt-paper-dialog:has(ytmusic-mealbar-promo-renderer) { display: none !important; }

@@ -38,6 +38,8 @@ public sealed partial class WebHostBridge
     private int _runStatePolling;
     private int _runStateQueued;
     private volatile bool _runStateUnwatched;
+    private volatile bool _runStateSessionOnly;
+    private long _sessionOnlySince; // Environment.TickCount64 of the first scan with a session open and no game process; 0 when none
     // Window events: the process image per pid and the installed folders as a set, rebuilt only when the library changes.
     private readonly GameWindowWatch _windowWatch;
     private readonly ConcurrentDictionary<int, byte> _exitWatches = new();
@@ -56,6 +58,7 @@ public sealed partial class WebHostBridge
         _queue = queue;
         // The adapter and the store opener start Steam without the bridge at hand; the waiting settings go in first.
         SteamPendingSettings.Attach(this);
+        SteamSignIn.SteamWebsiteToken.Fetch = SteamWebsiteTokenAsync;
         _windowWatch = new GameWindowWatch(pid => ProcessHelper.TryGetExecutablePath((int)pid),
             new GameFolderSet(() => InstalledGames().Select(game => game.Path!).ToArray()));
         // The update's state as the host holds it (UpdateFlow): the UI draws the update from this alone.
@@ -80,12 +83,16 @@ public sealed partial class WebHostBridge
         InstalledSizeCache.MeasurementUpdated += OnLibraryUpdated;
         ExoComponents.FailedTwice += OnComponentFailed;
         GameSettings.AppliedAgain += OnOptimizedAgain;
+        AutopilotWatch.Reported += OnAutopilotReported;
         GameSettings.WindowModeHeld += OnOptimizeHeld;
         Account.AccountSessionStore.Changed += OnAccountChanged;
         _runStatePoll = new System.Threading.Timer(_ => PollRunStates(), null, Timeout.InfiniteTimeSpan, Timeout.InfiniteTimeSpan);
         ForegroundWatcher.WindowActivity += OnWindowActivity;
         _services.Library.LibraryUpdated += OnLibraryChangedForGames;
         _services.Launcher.GameLaunched += OnGameLaunchedScan;
+        _services.Launcher.GameLaunching += OnGameLaunchingAllowance;
+        _services.Launcher.GameSessionCompleted += OnGameSessionEndedScan;
+        _services.Launcher.GameLaunchFailed += OnGameSessionEndedScan;
         // One scan shortly after launch finds games already running; then only events (or the fallback) wake it.
         ArmRunStatePoll(TimeSpan.FromSeconds(10));
         _services.Launcher.GameSessionCompleted += ReapplyCalibrationsAfter;
@@ -96,7 +103,7 @@ public sealed partial class WebHostBridge
         KeepSteamClientCurrent();
         KeepShadersPrepared();
         WatchVersions();
-        WatchLucid();
+        WatchEq();
         _ = Task.Run(() => EpicQuietSettings.HandToExo(EpicQuietWanted()));
     }
 
@@ -109,7 +116,10 @@ public sealed partial class WebHostBridge
     /// </summary>
     private void PollRunStates()
     {
-        if (_detached) return;
+        // Read before the detached check: Detach sets _detached before Exo's shutdown clears the signal, so a scan that
+        // passes the check with this generation and publishes after the clear is dropped (GameRunningSignal.Clear).
+        var generation = GameRunningSignal.Generation;
+        if (Volatile.Read(ref _detached)) return;
         if (Interlocked.Exchange(ref _runStatePolling, 1) == 1)
         {
             Volatile.Write(ref _runStateQueued, 1);
@@ -127,8 +137,21 @@ public sealed partial class WebHostBridge
                 if (pids.Count == 0) _runStateUnwatched = true;
                 foreach (var pid in pids) ArmExitWatch(pid);
             }
-            GameRunningSignal.Update(runningIds.Count > 0 || _services.Launcher.AnyGameRunning);
-            FpsCounter.Follow(_services.Launcher, installed.Where(game => runningIds.Contains(game.Id) && !_services.ShaderPrepare.Preparing(game.Id)));
+            var found = runningIds.Count > 0;
+            var sessionOpen = _services.Launcher.AnyGameRunning;
+            var now = Environment.TickCount64;
+            if (found || !sessionOpen) Interlocked.Exchange(ref _sessionOnlySince, 0);
+            else Interlocked.CompareExchange(ref _sessionOnlySince, now, 0);
+            var since = Interlocked.Read(ref _sessionOnlySince);
+            var sessionOnlyFor = since == 0 ? TimeSpan.Zero : TimeSpan.FromMilliseconds(now - since);
+            var running = RunStatePlan.GameRunning(found, sessionOpen, sessionOnlyFor);
+            if (!running && sessionOpen && GameRunningSignal.Running)
+                AppLog.Info($"Game running signal: no game process for {sessionOnlyFor.TotalSeconds:0} s; the open session no longer counts.");
+            _runStateSessionOnly = running && !found;
+            GameRunningSignal.Update(running, generation);
+            var playing = installed.Where(game => runningIds.Contains(game.Id) && !_services.ShaderPrepare.Preparing(game.Id)).ToArray();
+            FpsCounter.Follow(_services.Launcher, playing);
+            Autopilot.Follow(_services.Launcher, playing);
         }
         catch (Exception ex) { AppLog.Debug("Run-state poll failed: " + ex.GetType().Name); }
         finally
@@ -146,7 +169,7 @@ public sealed partial class WebHostBridge
         .ToArray();
 
     private TimeSpan PeriodicOrNever() =>
-        RunStatePlan.PeriodicEvery(ForegroundWatcher.ActivityHooked, _runStateUnwatched) ?? Timeout.InfiniteTimeSpan;
+        RunStatePlan.PeriodicEvery(ForegroundWatcher.ActivityHooked, _runStateUnwatched, _runStateSessionOnly) ?? Timeout.InfiniteTimeSpan;
 
     private void ArmRunStatePoll(TimeSpan due) => _runStatePoll?.Change(due, PeriodicOrNever());
 
@@ -175,6 +198,17 @@ public sealed partial class WebHostBridge
 
     /// <summary>Exo launched a game: one scan a few seconds on, once its process has appeared.</summary>
     private void OnGameLaunchedScan(GameEntry game) => RequestRunStateScan(TimeSpan.FromSeconds(5));
+
+    /// <summary>A launch begins: its session gets its own <see cref="RunStatePlan.SessionOnlyLimit"/>, not what an
+    /// earlier session left of it.</summary>
+    private void OnGameLaunchingAllowance(GameEntry game) => Interlocked.Exchange(ref _sessionOnlySince, 0);
+
+    /// <summary>
+    /// A session Exo started closed (the game ended, or its launch never reached it). The exit watch's scan ran inside
+    /// the session's exit debounce, while the session still counted the game as running; this scan is the one that
+    /// clears the signal.
+    /// </summary>
+    private void OnGameSessionEndedScan(GameEntry game) => RequestRunStateScan();
 
     private void ArmExitWatch(int pid)
     {
@@ -243,7 +277,7 @@ public sealed partial class WebHostBridge
     public void Detach()
     {
         if (_detached) return;
-        _detached = true;
+        Volatile.Write(ref _detached, true);
         try { _bridgeLifetime.Cancel(); } catch { }
         try { Interlocked.Exchange(ref _keyWatchCts, null)?.Cancel(); } catch { }
         StopWatch(Interlocked.Exchange(ref _controllerWatch, null));
@@ -275,6 +309,7 @@ public sealed partial class WebHostBridge
         InstalledSizeCache.MeasurementUpdated -= OnLibraryUpdated;
         ExoComponents.FailedTwice -= OnComponentFailed;
         GameSettings.AppliedAgain -= OnOptimizedAgain;
+        AutopilotWatch.Reported -= OnAutopilotReported;
         GameSettings.WindowModeHeld -= OnOptimizeHeld;
         Account.AccountSessionStore.Changed -= OnAccountChanged;
         if (Volatile.Read(ref _driverEvents) is { } driverEvents)
@@ -295,11 +330,15 @@ public sealed partial class WebHostBridge
             DiscordClient.DiscordSession.VideoFrame -= PostVideoFrame;
         }
         try { _giftsTimer?.Stop(); } catch { }
+        if (SteamSignIn.SteamWebsiteToken.Fetch == SteamWebsiteTokenAsync) SteamSignIn.SteamWebsiteToken.Fetch = null;
         _runStatePoll?.Dispose();
         _runStatePoll = null;
         ForegroundWatcher.WindowActivity -= OnWindowActivity;
         _services.Library.LibraryUpdated -= OnLibraryChangedForGames;
         _services.Launcher.GameLaunched -= OnGameLaunchedScan;
+        _services.Launcher.GameLaunching -= OnGameLaunchingAllowance;
+        _services.Launcher.GameSessionCompleted -= OnGameSessionEndedScan;
+        _services.Launcher.GameLaunchFailed -= OnGameSessionEndedScan;
         FpsCounter.Stop();
     }
 
@@ -591,7 +630,6 @@ public sealed partial class WebHostBridge
                 "steam.signInGuard" => await SteamSignInGuardAsync(paramsEl, hasParams, requestToken).ConfigureAwait(true),
                 "steam.signOut" => await SteamSignOutAsync(requestToken).ConfigureAwait(true),
                 "playtime.riotRefresh" => await RiotHoursRefreshAsync(paramsEl, hasParams).ConfigureAwait(true),
-                "playtime.riotLifetime" => RiotLifetime(paramsEl, hasParams),
                 "web.preferences.get" => WebClientPreferences.Reload(),
 
                 "web.preferences.set" => await SaveWebPreferencesAsync(paramsEl),
@@ -774,6 +812,8 @@ public sealed partial class WebHostBridge
                 "app.repairCache" => await RepairCacheAsync(paramsEl, hasParams).ConfigureAwait(false),
                 "app.openLogs" => OpenLogsFolder(),
                 "app.logsFor" => await LogsForAsync(paramsEl, hasParams).ConfigureAwait(true),
+                "report.preview" => await ReportPreviewAsync().ConfigureAwait(true),
+                "report.send" => await ReportSendAsync(paramsEl, hasParams, requestToken).ConfigureAwait(true),
                 "app.checkUpdate" => await CheckUpdateAsync(ReadBool(paramsEl, hasParams, "manual") == true, requestToken).ConfigureAwait(true),
                 "app.installUpdate" => await InstallUpdateAsync(requestToken).ConfigureAwait(true),
                 "dlss.status" => await DlssStatusAsync(paramsEl, hasParams, requestToken).ConfigureAwait(true),
@@ -861,8 +901,8 @@ public sealed partial class WebHostBridge
                 "discord.micTest" => DiscordMicTest(paramsEl, hasParams),
                 "discord.micMonitor" => DiscordMicMonitor(paramsEl, hasParams),
                 "discord.myVoice" => await DiscordMyVoiceAsync(paramsEl, hasParams, requestToken).ConfigureAwait(true),
-                "lucid" => await Task.Run(() => LucidAsync(paramsEl, hasParams)).ConfigureAwait(true),
-                "lucid.headphones" => await Task.Run(LucidHeadphones).ConfigureAwait(true),
+                "eq" => await Task.Run(() => EqAsync(paramsEl, hasParams)).ConfigureAwait(true),
+                "eq.headphones" => await Task.Run(EqHeadphonesAsync).ConfigureAwait(true),
                 "devices.image" => await Task.Run(() => DevicesImageAsync(paramsEl, hasParams, requestToken)).ConfigureAwait(true),
                 "controller.read" => await Task.Run(() => ControllerReadAsync(paramsEl, hasParams)).ConfigureAwait(true),
                 "controller.measure" => await Task.Run(() => ControllerMeasureAsync(paramsEl, hasParams, requestToken)).ConfigureAwait(true),
@@ -885,7 +925,10 @@ public sealed partial class WebHostBridge
                 "system.health" => await GpuDeadlineAsync(SystemHealthAsync(paramsEl, hasParams, requestToken), TimeSpan.FromSeconds(30), requestToken).ConfigureAwait(true),
                 "system.about" => await SystemAboutAsync(requestToken).ConfigureAwait(true),
                 "system.tune" => await Task.Run(() => AutoTuneService.Act(ReadString(paramsEl, hasParams, "action"), ReadString(paramsEl, hasParams, "part"), ReadString(paramsEl, hasParams, "mode"))).ConfigureAwait(true),
+                "autopilot.state" => await Task.Run(AutopilotState).ConfigureAwait(true),
+                "autopilot.set" => await Task.Run(() => AutopilotSet(paramsEl, hasParams)).ConfigureAwait(true),
                 "system.interrupts" => await SystemInterruptsAsync(paramsEl, hasParams, requestToken).ConfigureAwait(true),
+                "system.tuning" => await SystemTuningAsync(paramsEl, hasParams, requestToken).ConfigureAwait(true),
                 "system.mouseCore" => await SystemMouseCoreAsync(paramsEl, hasParams, requestToken).ConfigureAwait(true),
                 "system.drives" => await SystemDrivesAsync(paramsEl, hasParams, requestToken).ConfigureAwait(true),
                 "system.drivers" => await SystemDriversAsync(paramsEl, hasParams, requestToken).WaitAsync(TimeSpan.FromMinutes(4), requestToken).ConfigureAwait(true),
@@ -1076,6 +1119,26 @@ public sealed partial class WebHostBridge
         catch (Exception ex) { AppLog.Warn("Copy logs: the clipboard refused the report: " + ex.Message); }
         AppLog.Info($"Logs {(copied ? "copied" : "built")} for an error in {(area.Length == 0 ? "the app" : area)}.");
         return new { ok = true, text, copied };
+    }
+
+    /// <summary>report.preview: the log excerpt Report a problem's Attach logs sends, scrubbed as a crash report's (UserReport.Excerpt).</summary>
+    private async Task<object> ReportPreviewAsync()
+    {
+        var profile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        var excerpt = await Task.Run(() => UserReport.Excerpt(AppLog.RecentLines(), DateTime.UtcNow, _services.AppVersion,
+            Environment.OSVersion.Version.ToString(), Environment.UserName, profile, Environment.MachineName)).ConfigureAwait(true);
+        return new { ok = true, excerpt };
+    }
+
+    /// <summary>
+    /// report.send: Report a problem's Send. The excerpt is the preview the player saw (null with Attach logs off); the host
+    /// scrubs it again before it leaves (UserReport.ToJson). Answers the issue's number in Exo-Reports, or its reference.
+    /// </summary>
+    private async Task<object> ReportSendAsync(JsonElement p, bool hasParams, CancellationToken ct)
+    {
+        var message = ReadString(p, hasParams, "message") ?? "";
+        var result = await UserReport.SendAsync(message, ReadString(p, hasParams, "excerpt"), ReadString(p, hasParams, "contact"), _services.AppVersion, ct).ConfigureAwait(true);
+        return new { ok = result.Ok, issue = result.Issue, @ref = result.Ref, message = result.Message };
     }
 
     private static object OpenLogsFolder()
@@ -1845,7 +1908,7 @@ public sealed partial class WebHostBridge
 
     /// <summary>
     /// Riot hours from tracker.gg, asked for only by hand. A Riot ID saved in Settings imports its lifetime total once (one
-    /// that already has a total keeps it); the manual "Re-import from tracker.gg" (no ID) reads the saved one again. After
+    /// that already has a total keeps it); Settings › Stores › Riot ID › Import hours (no ID) reads the saved one again. After
     /// that Exo's own session log is the only source.
     /// </summary>
     private Task<object> RiotHoursRefreshAsync(JsonElement p, bool hasParams)
@@ -1857,40 +1920,6 @@ public sealed partial class WebHostBridge
             ? id.GetString()
             : null;
         return ImportRiotHoursAsync(typed, CancellationToken.None);
-    }
-
-    /// <summary>A Riot game's lifetime for its game page, from the saved Riot ID's ledger: minutes per mode and the seed's stats.</summary>
-    private object RiotLifetime(JsonElement p, bool hasParams)
-    {
-        var game = hasParams && p.ValueKind == JsonValueKind.Object && p.TryGetProperty("game", out var id) && id.ValueKind == JsonValueKind.String
-            ? id.GetString()
-            : null;
-        if (game is null || !game.StartsWith("riot:", StringComparison.OrdinalIgnoreCase) ||
-            RiotLedger.AccountKey(RiotIdStore.TryRead()) is not { } account)
-            return new { ok = false, minutes = 0, modes = Array.Empty<object>(), stats = (object?)null };
-        var modes = RiotLedger.ModeTotals(account, game)
-            .Where(pair => pair.Value > 0)
-            .OrderByDescending(pair => pair.Value)
-            .Select(pair => new { mode = pair.Key, minutes = pair.Value })
-            .ToList();
-        var stats = RiotLedger.Stats(account, game);
-        return new
-        {
-            ok = true,
-            minutes = modes.Sum(mode => mode.minutes),
-            // Only tracker.gg's playlist sum, not its lifetime total: the page says so beside the hours.
-            partial = RiotLedger.IsPartial(account, game),
-            modes,
-            stats = stats is null ? null : new
-            {
-                matches = stats.Matches,
-                wins = stats.Wins,
-                killDeath = stats.KillDeath,
-                currentRank = stats.CurrentRank,
-                peakRank = stats.PeakRank,
-                topPicks = stats.TopPicks,
-            },
-        };
     }
 
     private async Task<object> ImportRiotHoursAsync(string? typedId, CancellationToken ct)
@@ -2840,10 +2869,25 @@ public sealed partial class WebHostBridge
     internal static string UserMessage(Exception ex, string generic) => ex switch
     {
         _ when ExoSentence(ex) is { } line => line,
-        IOException io when (io.HResult & 0xFFFF) is 0x27 or 0x70 => "There is not enough free space.",
-        HttpRequestException or System.Net.Sockets.SocketException => "Exo could not reach the internet.",
+        IOException io when (io.HResult & 0xFFFF) is 0x27 or 0x70 => DriveFull,
+        // A sharing or lock violation: a game, its store or an app still has the file open.
+        IOException io when (io.HResult & 0xFFFF) is 0x20 or 0x21 => FileInUse,
+        UnauthorizedAccessException => AccessRefused,
+        System.ComponentModel.Win32Exception { NativeErrorCode: 5 } => AccessRefused,
+        // ERROR_CANCELLED: Windows' prompt (UAC) was answered No.
+        System.ComponentModel.Win32Exception { NativeErrorCode: 1223 } => PromptDeclined,
+        HttpRequestException or System.Net.Sockets.SocketException => NoInternet,
+        TimeoutException => TookTooLong,
         _ => generic,
     };
+
+    // The page's errorWords.ts says the same sentences for the same failures reaching it from elsewhere.
+    internal const string DriveFull = "The drive is full. Free up some space, then try again.";
+    internal const string FileInUse = "A file is in use. Close the game or app using it, then try again.";
+    internal const string AccessRefused = "Windows refused access. Try again, and allow Windows’ prompt if it asks.";
+    internal const string PromptDeclined = "Windows’ prompt was declined. Try again and choose Yes.";
+    internal const string NoInternet = "Exo couldn’t reach the internet. Check your connection, then try again.";
+    internal const string TookTooLong = "That is taking too long. Try again.";
 
     private static string? ExoSentence(Exception ex) =>
         (ex is UserFacingException || ex is InvalidOperationException or InvalidDataException && ThrownByExo(ex)) && Safe(ex.Message) is { Length: > 0 } line ? line : null;
@@ -2933,6 +2977,9 @@ public sealed partial class WebHostBridge
         status = PageText(g.Status),
         deps = g.Deps.Select(PageText).ToArray(),
         launchNote = PageText(g.LaunchNote),
+        familyShared = g.FamilyShared,
+        // A family member's Steam name, for the game page's "Shared by"; never an id.
+        sharedBy = g.FamilyShared && PageText(g.SharedBy) is { Length: > 0 } lender ? lender : null,
         launchTarget = PageTarget(g.LaunchTarget),
         includes = g.Includes?.Select(game => new { appId = game.AppId, title = game.Title }),
         lastPlayedUtc = g.LastPlayedUtc?.ToString("O"),
@@ -2940,6 +2987,8 @@ public sealed partial class WebHostBridge
         isRunning = runState.IsRunning,
         canStop = runState.CanStop,
         buyUrl = Storefront.BuyUrl(g),
+        // The Library's search and Filter menu (racing, co-op ...): Steam's own record, already in memory.
+        tags = SteamAppTags.For(g),
         };
     }
 

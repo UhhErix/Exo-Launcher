@@ -6,6 +6,7 @@ import { report } from '../../lib/report'
 import { usePageClock } from '../../lib/pageActivity'
 import { reportFailure } from './useActionStatus'
 import { Menu, type MenuItem } from '../ui/Menu'
+import { errorText } from '../../lib/errorWords'
 
 type Action = 'saveReplay' | 'record' | 'snip' | 'note' | 'captures' | 'notes'
 
@@ -37,11 +38,11 @@ export function CaptureButton() {
       const result = await host.captureAct(action)
       if (!result.ok) {
         report(new Error(result.message ?? 'Capture failed.'), 'capture.act', { level: 'warn' })
-        reportFailure(result.message ?? 'Capture failed.')
+        reportFailure(errorText(result.message, 'Exo Capture didn’t answer. Try again.'))
       }
     } catch (error) {
       report(error, 'capture.act', { level: 'warn' })
-      reportFailure(error instanceof Error ? error.message : 'Capture failed.')
+      reportFailure(errorText(error, 'Exo Capture didn’t answer. Try again.'))
     }
   }
 

@@ -1,0 +1,13 @@
+[d3d8]
+present=0x0
+[d3d9]
+present=0x61c40
+present_ex=0x1c6f0
+present_swap=0x80a90
+d3d9_clsoff=0x4030
+is_d3d9ex_clsoff=0x55a0
+[dxgi]
+present=0x84c0
+present1=0x89a0
+resize=0x37a20
+release=0x3a020

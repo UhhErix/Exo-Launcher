@@ -1,0 +1,38 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    Exo Capture: instant replay, recording, snips and Go Live frames, in a process of its own beside Exo (a GPU encoder
+    crash never takes Exo down). Exo speaks to it in NDJSON over stdio (CONTRACT.md). Native AOT: one exe, no runtime.
+  -->
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <Platforms>x64</Platforms>
+    <Platform Condition="'$(Platform)' == '' or '$(Platform)' == 'AnyCPU'">x64</Platform>
+    <PlatformTarget>x64</PlatformTarget>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <AssemblyName>ExoCapture</AssemblyName>
+    <RootNamespace>ExoCapture</RootNamespace>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <PublishAot>true</PublishAot>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <UseSystemResourceKeys>true</UseSystemResourceKeys>
+    <IlcOptimizationPreference>Speed</IlcOptimizationPreference>
+    <StackTraceSupport>true</StackTraceSupport>
+    <Product>Exo Capture</Product>
+    <Company>Exo</Company>
+    <Copyright>Copyright (c) 2026 Erix (UhhErix)</Copyright>
+    <Description>Exo Capture: instant replay, recording, snips and Go Live for Exo Launcher.</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="ExoCapture.Tests" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Vortice.Direct3D11" Version="3.8.3" />
+    <PackageReference Include="Vortice.MediaFoundation" Version="3.8.3" />
+    <PackageReference Include="Vortice.Direct2D1" Version="3.8.3" />
+  </ItemGroup>
+</Project>

@@ -2,7 +2,9 @@ import { memo, useEffect, useState } from 'react'
 import { host, type LauncherSettings } from '../../lib/host'
 import { Spinner } from '../ui/Spinner'
 import { report } from '../../lib/report'
+import { errorText } from '../../lib/errorWords'
 import { ChoiceRow, CopyRow, Row, Section, SliderRow, SwitchRow } from './parts'
+import { upscalerAntiCheatShown } from '../../lib/canUse'
 import { AUTO_UPSCALERS_DETAIL, AUTO_UPSCALERS_LABEL } from '../../lib/upscalerNotice'
 
 /** Null when the save took, else why not. */
@@ -174,11 +176,22 @@ const HOURS = [
   { value: '9-17', label: '9 AM–5 PM', start: 9, end: 17 },
 ] as const
 
-/** Settings › Downloads: where games install, when they download, and what updates by itself. */
+/** Settings › Downloads: where games install, when they download, and what updates by itself. Frame generation lives in PC › Graphics only. */
 export function DownloadsSection({ settings, disabled, save }: { settings: LauncherSettings | null; disabled: boolean; save: SaveSettings }) {
   const [picking, setPicking] = useState(false)
   const [folderError, setFolderError] = useState<string | null>(null)
-  const root = settings?.defaultInstallRoot?.trim() || null
+  const {
+    defaultInstallRoot,
+    downloadHoursStart = null,
+    downloadHoursEnd = null,
+    pauseDownloadsWhilePlaying,
+    autoUpdateGames,
+    chipset,
+    autoUpdateChipset,
+    autoUpdateUpscalers,
+    upscalerAntiCheatEverywhere,
+  }: Partial<LauncherSettings> = settings ?? {}
+  const root = defaultInstallRoot?.trim() || null
 
   async function browse() {
     if (picking) return
@@ -187,16 +200,17 @@ export function DownloadsSection({ settings, disabled, save }: { settings: Launc
     try {
       const result = await host.pickFolder('Choose where new games install')
       if (result.ok && result.path) setFolderError(await save({ defaultInstallRoot: result.path }))
-      else if (!result.ok && !result.cancelled) setFolderError(result.message ?? 'Could not open the folder picker. Try again.')
+      else if (!result.ok && !result.cancelled) setFolderError(errorText(result.message, 'Could not open the folder picker. Try again.'))
     } catch (error) {
-      setFolderError(error instanceof Error ? error.message : 'Could not open the folder picker. Try again.')
+      report(error, 'Settings.installFolder')
+      setFolderError(errorText(error, 'Could not open the folder picker. Try again.'))
     } finally {
       setPicking(false)
     }
   }
 
   // Hours set some other way (an older build, the settings file) show as "Set elsewhere", never as Any time.
-  const hours: string = HOURS.find(h => h.start === (settings?.downloadHoursStart ?? null) && h.end === (settings?.downloadHoursEnd ?? null))?.value ?? 'custom'
+  const hours: string = HOURS.find(h => h.start === downloadHoursStart && h.end === downloadHoursEnd)?.value ?? 'custom'
   return (
     <Section id="downloads" title="Downloads">
       <Row label="Install folder" detail={root ?? "Exo's Games folder"} error={folderError}>
@@ -214,21 +228,19 @@ export function DownloadsSection({ settings, disabled, save }: { settings: Launc
           const pick = HOURS.find(h => h.value === value)
           return pick ? save({ downloadHoursStart: pick.start, downloadHoursEnd: pick.end }) : undefined
         }} />
-      <SwitchRow id="set-pause-playing" label="Pause downloads while playing" checked={settings?.pauseDownloadsWhilePlaying !== false} disabled={disabled}
+      <SwitchRow id="set-pause-playing" label="Pause downloads while playing" checked={pauseDownloadsWhilePlaying !== false} disabled={disabled}
         onChange={value => save({ pauseDownloadsWhilePlaying: value })} />
-      <SwitchRow id="set-auto-update" label="Update games automatically" checked={settings?.autoUpdateGames !== false} disabled={disabled}
+      <SwitchRow id="set-auto-update" label="Update games automatically" checked={autoUpdateGames !== false} disabled={disabled}
         onChange={value => save({ autoUpdateGames: value })} />
-      {settings?.chipset ? (
-        <SwitchRow id="set-auto-chipset" label={`Update the ${settings.chipset === 'amd' ? 'AMD' : 'Intel'} chipset driver automatically`}
-          checked={settings.autoUpdateChipset !== false} disabled={disabled} onChange={value => save({ autoUpdateChipset: value })} />
+      {chipset ? (
+        <SwitchRow id="set-auto-chipset" label={`Update the ${chipset === 'amd' ? 'AMD' : 'Intel'} chipset driver automatically`}
+          checked={autoUpdateChipset !== false} disabled={disabled} onChange={value => save({ autoUpdateChipset: value })} />
       ) : null}
       <SwitchRow id="set-auto-upscalers" label={AUTO_UPSCALERS_LABEL} detail={AUTO_UPSCALERS_DETAIL}
-        checked={settings?.autoUpdateUpscalers !== false} disabled={disabled} onChange={value => save({ autoUpdateUpscalers: value })} />
-      <SwitchRow id="set-upscalers-anticheat" label="Also in games with anti-cheat" detail="Can risk a ban. Never Riot games or Vanguard."
-        checked={settings?.upscalerAntiCheatEverywhere === true} disabled={disabled} onChange={value => save({ upscalerAntiCheatEverywhere: value })} />
-      {settings?.frameGenEverywhereCard ? (
-        <SwitchRow id="set-frame-gen-everywhere-general" label="Frame generation in games without anti-cheat"
-          checked={settings.frameGenEverywhere === true} disabled={disabled} onChange={value => save({ frameGenEverywhere: value })} />
+        checked={autoUpdateUpscalers !== false} disabled={disabled} onChange={value => save({ autoUpdateUpscalers: value })} />
+      {upscalerAntiCheatShown(autoUpdateUpscalers, upscalerAntiCheatEverywhere) ? (
+        <SwitchRow id="set-upscalers-anticheat" label="Also in games with anti-cheat" detail="In automatic and Update all runs. Can risk a ban. Never Riot games or Vanguard."
+          checked={upscalerAntiCheatEverywhere === true} disabled={disabled} onChange={value => save({ upscalerAntiCheatEverywhere: value })} />
       ) : null}
     </Section>
   )

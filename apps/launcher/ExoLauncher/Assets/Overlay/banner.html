@@ -7,8 +7,8 @@
 <title>Exo achievement</title>
 <style>
   /* Exo's achievement banner over the game (AchievementBanner.cs), one at a time, the page transparent around it. Solid
-     Void black with Exo's one line for an edge (#2e2e2e, 1px): a game's scene can't be blurred from here, and black reads
-     over any of them. A tier above common says so in one word, in its colour, beside the name; its line and bar take it too.
+     Void black inside Exo's Liquid Glass edge (tokens.css --glassy-ring: white at a low alpha, brightest along the top, a lens
+     edge rather than a gray outline): a game's scene can't be blurred from here, and black reads over any of them. A tier above common says so in one word, in its color, beside the name; its line and bar take it too.
      Each tier is a build, a hit and a hold, its hit timed to the sound's (HIT below, tools/make-achievement-sounds.mjs):
        common      the card lands
        rare        + the picture settles and a silver light runs its edge
@@ -17,26 +17,26 @@
        completion  the same with three hits, gold light twice and one line going out
      Transform and opacity only, on the compositor; all of it over in about two seconds, then nothing runs until it leaves.
      The plate is three pieces so it can open without stretching its corners; black over black, so they don't show. */
-  @font-face { font-family: Exoline; src: url('/Exoline-Variable.woff2') format('woff2'); font-weight: 100 900; font-display: block; }
+  @font-face { font-family: Goeist; src: url('/Goeist-Variable.woff2') format('woff2'); font-weight: 100 900; font-display: block; }
   html, body { margin: 0; height: 100%; background: transparent; overflow: hidden; }
   .stage { position: absolute; inset: 0; display: grid; justify-items: center; align-items: start; padding-top: 16px; box-sizing: border-box; }
   .card {
-    --edge: #2e2e2e; --light: #fff; --fill: #fff; --hit: 270ms;
+    --edge: rgb(255 255 255 / 0.08); --top: rgb(255 255 255 / 0.17); --light: #fff; --fill: #fff; --hit: 270ms;
     --out: cubic-bezier(0.23, 1, 0.32, 1);
     --spring: linear(0, 0.005 1.8%, 0.018 3.7%, 0.04 5.7%, 0.074 8%, 0.111 10.2%, 0.156 12.5%, 0.437 25.8%, 0.512 29.7%, 0.576 33.2%, 0.645 37.3%, 0.703 41.3%, 0.756 45.5%, 0.803 49.8%, 0.846 54.5%, 0.883 59.5%, 0.913 64.7%, 0.939 70.3%, 0.958 76%, 0.973 82%, 0.986 90.2%, 0.995 99.8%, 1);
     position: relative; display: flex; align-items: center; gap: 14px; box-sizing: border-box;
     width: max-content; min-width: 340px; max-width: 420px; padding: 12px 16px 12px 12px;
-    font-family: Exoline, "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif; color: #fff;
+    font-family: Goeist, "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif; color: #fff;
     opacity: 0; will-change: transform, opacity;
   }
-  .rare { --edge: #3c3c3c; }
-  .epic { --edge: #3f4459; --light: #b9c6ff; --fill: #b9c6ff; --hit: 420ms; }
-  .legendary { --edge: #5f533a; --light: #f1cf8d; --fill: #f1cf8d; --hit: 700ms; }
-  .completion { --edge: #5f533a; --light: #f1cf8d; --fill: #f1cf8d; --hit: 980ms; }
+  .rare { --edge: rgb(255 255 255 / 0.14); --top: rgb(255 255 255 / 0.24); }
+  .epic { --edge: #3f4459; --top: #3f4459; --light: #b9c6ff; --fill: #b9c6ff; --hit: 420ms; }
+  .legendary { --edge: #5f533a; --top: #5f533a; --light: #f1cf8d; --fill: #f1cf8d; --hit: 700ms; }
+  .completion { --edge: #5f533a; --top: #5f533a; --light: #f1cf8d; --fill: #f1cf8d; --hit: 980ms; }
 
   .plate, .plate i, .edge, .ring { position: absolute; }
   .plate { inset: 0; }
-  .plate i { top: 0; bottom: 0; background: #000; box-sizing: border-box; border: 1px solid var(--edge); }
+  .plate i { top: 0; bottom: 0; background: #000; box-sizing: border-box; border: 1px solid var(--edge); border-top-color: var(--top); }
   .plate .l { left: 0; width: 17px; border-right: 0; border-radius: 16px 0 0 16px; }
   .plate .r { right: 0; width: 17px; border-left: 0; border-radius: 0 16px 16px 0; }
   .plate .m { left: 16px; right: 16px; border-width: 1px 0; }
@@ -179,7 +179,7 @@
     const art = root.querySelector('.art')
     await Promise.race([wait(600), Promise.all([
       art?.decode().catch(() => art.remove()),
-      document.fonts.load('600 15px Exoline').catch(() => {}),
+      document.fonts.load('600 15px Goeist').catch(() => {}),
     ])])
     // Where the closed card starts: a tile of its own height around the picture, in the middle.
     const w = root.offsetWidth, h = root.offsetHeight

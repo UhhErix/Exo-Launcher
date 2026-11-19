@@ -368,13 +368,20 @@
   display: none;
 }
 
-/* Best settings › Network (gpu/NetworkGroup.tsx): its name over its items, like the menu's own. */
+/* Best settings › Network and System (gpu/NetworkGroup.tsx, gpu/SystemGroup.tsx): its name over its items, like the menu's own. */
 .exo-pc-best-group {
   margin: 8px 0 0;
   padding-bottom: 6px;
   color: var(--color-fg);
   font-size: calc(13px * var(--exo-scale, 1));
   font-weight: var(--exo-weight-title);
+}
+
+/* Best settings › System: a change that waits on a restart, one quiet line under its items. */
+.exo-pc-best-note {
+  margin: 6px 0 0;
+  color: var(--color-fg-muted);
+  font-size: calc(12px * var(--exo-scale, 1));
 }
 
 /* Best settings (gpu/BestSetup.tsx): each step a row, its ring while it runs, or its check or X at the right. */
@@ -472,4 +479,49 @@
   flex-direction: column;
   min-width: 0;
   min-height: 0;
+}
+
+/* PC › Autopilot (gpu/Autopilot.tsx): a report opens in place under its row, its findings and what was done as plain lines on hairlines. */
+.exo-set-item + .exo-autopilot-report,
+.exo-autopilot-report + .exo-autopilot-report {
+  border-top: 1px solid var(--exo-float-line);
+}
+
+.exo-autopilot-details {
+  padding: 0 0 12px;
+  color: var(--color-fg);
+  font-size: calc(13px * var(--exo-scale, 1));
+}
+
+.exo-autopilot-details h3 {
+  margin: 8px 0 4px;
+  font-size: calc(13px * var(--exo-scale, 1));
+  font-weight: var(--exo-weight-title);
+}
+
+.exo-autopilot-details ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.exo-autopilot-details li {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px 0;
+}
+
+.exo-autopilot-details li + li {
+  border-top: 1px solid var(--exo-float-line);
+}
+
+.exo-autopilot-details p {
+  margin: 6px 0 0;
+}
+
+.exo-autopilot-hint,
+.exo-autopilot-details li.is-quiet {
+  color: var(--color-muted);
+  font-size: calc(12px * var(--exo-scale, 1));
 }

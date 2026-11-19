@@ -1,16 +1,13 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Sliders } from '../../brand/icons'
 import { host, type DlssStatus, type Game } from '../../lib/host'
 import { formatSize } from '../../lib/utils'
 import { ConfirmButton } from '../ui/ConfirmButton'
-import { Spinner } from '../ui/Spinner'
+import { errorText } from '../../lib/errorWords'
+import { SUCCESS_HOLD_MS } from '../../lib/actionState'
 import { ArtworkTools, useArtwork } from './Artwork'
 import { PropertiesSheet } from './PropertiesSheet'
 import { useSelectionGuard } from './useSelectionGuard'
-
-function errorText(error: unknown, fallback: string): string {
-  return error instanceof Error ? error.message : fallback
-}
 
 export type GameActionsProps = {
   selected: Game
@@ -33,7 +30,7 @@ export type GameActionsProps = {
 /**
  * Beside Play on an installed game: Properties, which holds everything else (folder, files, updates, DLC, artwork)
  * and Uninstall (it asks first; Remove for a game added from a folder, whose files Exo leaves where they are). The
- * uninstall runs here, so it outlives the sheet; its result closes the sheet, and the page says what happened.
+ * uninstall runs here, so it outlives the sheet; its button shows how it went, and then the sheet closes.
  */
 export function GameActions({
   selected,
@@ -61,20 +58,36 @@ export function GameActions({
   // A game added from a folder leaves the Library, its files where they are: that is a Remove.
   const addedHere = selected.store === 'local'
   const verb = addedHere ? 'remove' : 'uninstall'
-  function remove() {
-    const failed = `Exo could not ${verb} the game. Try again.`
+  const failed = `Exo couldn’t ${verb} the game. Try again.`
+  // Whether the sheet is still open when the answer comes: a failure says so on the button there, else on the page.
+  const open = useRef(propertiesOpen)
+  useEffect(() => { open.current = propertiesOpen }, [propertiesOpen])
+  /**
+   * The button shows the uninstall (ConfirmButton: its ring, its check, or Bad with why beside it). It runs here, so it
+   * outlives the sheet: the sheet closes and the game leaves once the check has shown, even if the sheet closed first.
+   */
+  async function remove() {
     setUninstallingKey(key)
-    onStatus(`${addedHere ? 'Removing' : 'Uninstalling'} ${selected.title}…`)
-    void host.uninstall(selected.id)
-      .then(guard((r) => {
-        onPropertiesOpen(false)
-        // A handoff opened the store's own app: neutral info, never a sticky error.
-        const handoff = !!r.handoffOnly
-        onStatus(r.message ?? (handoff ? 'Finish uninstalling it in the store app.' : r.ok ? (addedHere ? 'Removed.' : 'Uninstalled.') : failed), !r.ok && !handoff)
-        if (r.ok && !r.handoffOnly && !r.queued) onUninstalled()
-      }))
-      .catch(guard((error: unknown) => { onPropertiesOpen(false); onStatus(errorText(error, failed), true) }))
-      .finally(() => setUninstallingKey(current => current === key ? null : current))
+    try {
+      const r = await host.uninstall(selected.id)
+      // A handoff opened the store's own app, and a queued one waits its turn: neutral info, never an error.
+      const handoff = !!r.handoffOnly
+      if (r.ok || handoff) {
+        window.setTimeout(guard(() => {
+          onPropertiesOpen(false)
+          if (handoff || r.queued) onStatus(r.message ?? 'Finish uninstalling it in the store app.')
+          else onUninstalled()
+        }), SUCCESS_HOLD_MS)
+        return { ...r, ok: true }
+      }
+      if (!open.current) guard(() => onStatus(errorText(r.message, failed), true))(undefined)
+      return r
+    } catch (error) {
+      if (!open.current) guard(() => onStatus(errorText(error, failed), true))(undefined)
+      throw error
+    } finally {
+      setUninstallingKey(current => current === key ? null : current)
+    }
   }
 
   return (
@@ -91,18 +104,19 @@ export function GameActions({
           onUpscalersChanged={onUpscalersChanged}
           uninstall={
             <ConfirmButton
-              disabled={locked || uninstalling || !!selected.canStop}
+              disabled={locked || !!selected.canStop}
               className="exo-set-btn is-danger"
               question={addedHere ? 'Remove? Files stay' : selected.sizeBytes ? `Uninstall? ${formatSize(selected.sizeBytes)}` : 'Uninstall?'}
               danger
               onConfirm={remove}
-              lead={uninstalling ? <Spinner label={`${addedHere ? 'Removing' : 'Uninstalling'} ${selected.title}`} /> : null}
+              timeoutMs={null}
+              context="GameActions.uninstall"
+              fallback={failed}
             >
               {addedHere ? 'Remove' : 'Uninstall'}
             </ConfirmButton>
           }
           onClose={() => onPropertiesOpen(false)}
-          onStatus={onStatus}
         />
       )}
     </>

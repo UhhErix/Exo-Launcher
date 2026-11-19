@@ -18,6 +18,7 @@ import { Dialog } from '../settingsAccess'
 import { EmojiField } from '../settingsGuide'
 import { Spinner } from '../../ui/Spinner'
 import { CopyLogs, ErrorNote } from '../../ui/ErrorNote'
+import { errorText } from '../../../lib/errorWords'
 
 type Status = 'online' | 'idle' | 'dnd' | 'invisible'
 
@@ -38,7 +39,7 @@ export function useAccount() {
     host.discordAccount('me').then(result => {
       if (!live) return
       if (result.ok && result.me) setMe(result.me)
-      else setError(result.message ?? "Discord didn't send your account. Try again.")
+      else setError(errorText(result.message, "Discord didn't send your account. Try again."))
     }).catch(() => { if (live) setError("Discord didn't send your account. Try again.") })
     return () => { live = false }
   }, [round, setMe])
@@ -189,7 +190,7 @@ export function DevicesPage({ onBack }: { onBack: () => void }) {
     setFailed(null); setBusy(true)
     const why = "Discord didn't log that device out."
     void host.discordAccount('logoutSessions', { idHashes: hashes })
-      .then(result => { if (result.ok) reload(); else setFailed(result.message ?? why) }, () => setFailed(why))
+      .then(result => { if (result.ok) reload(); else setFailed(errorText(result.message, why)) }, () => setFailed(why))
       .finally(() => setBusy(false))
   }
   return (
@@ -222,7 +223,7 @@ function draftOf(me: DiscordAccount): Draft {
 async function savePicture(field: 'avatar' | 'banner', picture: Picture): Promise<string | null> {
   if (picture === 'remove') {
     const result = await host.discordAccount(field, { remove: true })
-    return result.ok ? null : result.message ?? `Discord didn't remove your ${field}.`
+    return result.ok ? null : errorText(result.message, `Discord didn't remove your ${field}.`)
   }
   if (!picture) return null
   const uploaded = await uploadFile(picture)
@@ -230,14 +231,14 @@ async function savePicture(field: 'avatar' | 'banner', picture: Picture): Promis
   const result = await host.discordAccount(field, { uploadId: uploaded })
   if (result.ok) return null
   dropUpload(uploaded)
-  return result.message ?? "Discord didn't take that picture."
+  return errorText(result.message, "Discord didn't take that picture.")
 }
 
 /** Saves what changed, the way Discord's Profiles does: the name and avatar on the account, the rest on the profile. */
 async function saveProfile(me: DiscordAccount, draft: Draft): Promise<string | null> {
   if (draft.globalName !== (me.globalName ?? '')) {
     const result = await host.discordAccount('name', { globalName: draft.globalName })
-    if (!result.ok) return result.message ?? "Discord didn't save your display name."
+    if (!result.ok) return errorText(result.message, "Discord didn't save your display name.")
   }
   const profile: { bio?: string; pronouns?: string; accentColor?: number | null } = {}
   if (draft.bio !== me.bio) profile.bio = draft.bio
@@ -245,7 +246,7 @@ async function saveProfile(me: DiscordAccount, draft: Draft): Promise<string | n
   if (draft.accentColor !== me.accentColor) profile.accentColor = draft.accentColor
   if (Object.keys(profile).length) {
     const result = await host.discordAccount('profile', profile)
-    if (!result.ok) return result.message ?? "Discord didn't save your profile."
+    if (!result.ok) return errorText(result.message, "Discord didn't save your profile.")
   }
   return await savePicture('avatar', draft.avatar) ?? await savePicture('banner', draft.banner)
 }
@@ -327,7 +328,7 @@ function ServerProfiles({ meId, guilds, start }: { meId: string | null; guilds: 
     void admin<{ ok: boolean; nick: string | null; can: { nick: boolean } }>('person', { guildId, userId: meId }).then(result => {
       if (!live) return
       if (result.ok && result.data?.ok) { setError(null); setNick({ guildId, saved: result.data.nick ?? '', text: result.data.nick ?? '', can: result.data.can.nick }) }
-      else setError(result.message ?? "Discord didn't send your server profile. Try again.")
+      else setError(errorText(result.message, "Discord didn't send your server profile. Try again."))
     })
     return () => { live = false }
   }, [guildId, meId, round])
@@ -339,7 +340,7 @@ function ServerProfiles({ meId, guilds, start }: { meId: string | null; guilds: 
     void admin('nick', { guildId: current.guildId, userId: meId, nick: current.text.trim() }).then(result => {
       setBusy(false)
       if (result.ok) setNick({ ...current, saved: current.text.trim(), text: current.text.trim() })
-      else setError(result.message ?? "Discord didn't save your nickname.")
+      else setError(errorText(result.message, "Discord didn't save your nickname."))
     })
   }
   return (
@@ -502,7 +503,7 @@ function ServerTagRow() {
     let live = true
     void host.discordAccount('tags').then(result => {
       if (!live) return
-      if (result.ok) { setServers(result.servers ?? []); setMine(result.mine ?? null) } else setError(result.message ?? "Discord didn't answer.")
+      if (result.ok) { setServers(result.servers ?? []); setMine(result.mine ?? null) } else setError(errorText(result.message, "Discord didn't answer."))
     }).catch(() => { if (live) setError("Discord didn't answer.") })
     return () => { live = false }
   }, [])
@@ -510,7 +511,7 @@ function ServerTagRow() {
     setBusy(true); setError(null)
     const result = await host.discordAccount('setTag', { guildId }).catch(() => ({ ok: false, message: "Discord didn't answer." }))
     setBusy(false)
-    if (result.ok) setMine(guildId); else setError(result.message ?? "Discord didn't change your tag. Try again.")
+    if (result.ok) setMine(guildId); else setError(errorText(result.message, "Discord didn't change your tag. Try again."))
   }
   const worn = servers?.find(s => s.id === mine)
   return (

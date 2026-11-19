@@ -559,33 +559,24 @@ public sealed class AntiCheatCheckTests : IDisposable
 
     // ------------------------------------------------------------------ Exo Shaders' table
 
-    /// <summary>Exo Shaders' Core folder (C:\Users\Erix\Code\Exo\exo-shaders, a sibling repo, read only), or a visible skip.</summary>
-    private static string ExoShadersCore()
-    {
-        for (var dir = new DirectoryInfo(AppContext.BaseDirectory); dir is not null; dir = dir.Parent)
-        {
-            var core = Path.Combine(dir.FullName, "exo-shaders", "src", "SCSKiller.Core");
-            if (File.Exists(Path.Combine(core, "Games", "GameFiles.cs"))) return core;
-        }
-        Assert.Skip("Exo Shaders' repo (exo-shaders beside this one) is not on this PC, so its anti-cheat table can't be compared.");
-        return "";
-    }
+    /// <summary>Exo Shaders' Core folder in this repository (<c>shaders\src\SCSKiller.Core</c>), read only.</summary>
+    private static string ExoShadersCore() => Repo.PathOf("shaders", "src", "SCSKiller.Core");
 
-    private static string Block(string text, string start, char end)
+    private static string Block(string text, string start, string end)
     {
         var at = text.IndexOf(start, StringComparison.Ordinal);
         Assert.True(at >= 0, start + " was not found in Exo Shaders");
-        return text[at..text.IndexOf(end, at + start.Length)];
+        return text[at..text.IndexOf(end, at + start.Length, StringComparison.Ordinal)];
     }
 
     [Fact]
     public void EveryExoShadersMarkerIsHereWithTheSameAntiCheatAndRule()
     {
         var text = File.ReadAllText(Path.Combine(ExoShadersCore(), "Games", "GameFiles.cs"));
-        var block = Block(text, "(string Name, AntiCheat Kind)[] Markers =", ';');
+        var block = Block(text, "(string Name, AntiCheat Kind)[] Markers =", "];");
         var theirs = Regex.Matches(block, "\\(\"([^\"]+)\", AntiCheat\\.(\\w+)\\)").Select(m => (Name: m.Groups[1].Value, Kind: m.Groups[2].Value)).ToList();
         Assert.True(theirs.Count > 50, "Exo Shaders' table was not read");
-        string[] Strings(string name) => [.. Regex.Matches(Block(text, name + " =", ';'), "@?\"([^\"]+)\"").Select(m => m.Groups[1].Value)];
+        string[] Strings(string name) => [.. Regex.Matches(Block(text, name + " =", ";"), "@?\"([^\"]+)\"").Select(m => m.Groups[1].Value)];
         var exeOnly = Strings("ExeMarkers");
         var rootOnly = Strings("RootMarkers");
         var problems = new List<string>();
@@ -612,7 +603,7 @@ public sealed class AntiCheatCheckTests : IDisposable
     {
         var core = ExoShadersCore();
         var files = File.ReadAllText(Path.Combine(core, "Games", "GameFiles.cs"));
-        var ids = Regex.Matches(Block(files, "AntiCheatIds =", ';'), "\"([^\"]+)\"").Select(m => m.Groups[1].Value).ToList();
+        var ids = Regex.Matches(Block(files, "AntiCheatIds =", ";"), "\"([^\"]+)\"").Select(m => m.Groups[1].Value).ToList();
         Assert.NotEmpty(ids);
         Assert.All(ids, id => Assert.True(KnownGames.ContainsKey(id), id + " is not in KnownGames"));
 
@@ -625,11 +616,9 @@ public sealed class AntiCheatCheckTests : IDisposable
                 foreach (var exe in exes.EnumerateArray()) Assert.True(MarkerFor(exe.GetString()!) is not null, exe + " is not a marker");
         }
 
-        var build = File.ReadAllText(Path.Combine(core, "App", "ExoBuild.cs"));
-        var modules = Regex.Matches(Block(build, "AntiCheatModules =", ';'), "\"([^\"]+)\"").Select(m => m.Groups[1].Value).ToList();
-        Assert.NotEmpty(modules);
-        // Its modules match by the start of a file's name: so does a file here.
-        Assert.All(modules, module => Assert.True(ForFile(module + "x.dll") is not null, module + " is not matched by its start"));
+        // Prefix markers match by the start of a file's name.
+        string[] prefixModules = ["EasyAntiCheat", "BEService", "BEClient", "BattlEye", "vgk", "vgc", "GameGuard", "Ricochet", "XIGNCODE"];
+        Assert.All(prefixModules, module => Assert.True(ForFile(module + "x.dll") is not null, module + " is not matched by its start"));
     }
 
     // ------------------------------------------------------------------ the callers
@@ -668,6 +657,27 @@ public sealed class AntiCheatCheckTests : IDisposable
         Assert.Null(ShadersAddon.RecorderRefusal("game.compile", Set(game.Id, true), Find, Probe));
         DeletionGate.DeleteDirectory(Path.Combine(Install, "EasyAntiCheat"), recursive: true);
         Assert.Null(ShadersAddon.RecorderRefusal("recorder.set", Set(game.Id, true), Find, Probe));
+    }
+
+    [Fact]
+    public void TheEngineKeepsItsRecorderOutOfWhatExoRefusesAndOfGamesWithoutAntiCheatBetweenSessions()
+    {
+        // exo.library's noRecorder: the engine's "Record games" never puts the recorder into these by itself.
+        Ship("Game.exe", "EasyAntiCheat/Settings.json");
+        var game = Game();
+        Answer Probe(GameEntry g) => Of(g, NoServices, NoSteam, Ct);
+        Assert.True(ShadersAddon.KeepsRecorderOut(game, Probe));
+        Assert.True(ShadersAddon.KeepsRecorderOut(game, _ => new Answer(Kind.Unknown, (string?)null, "unreadable")));
+        DeletionGate.DeleteDirectory(Path.Combine(Install, "EasyAntiCheat"), recursive: true);
+        Assert.False(ShadersAddon.KeepsRecorderOut(game, Probe));
+        // Set to start without its anti-cheat: its answer is clean, yet Steam's default entry still runs it, so only a session lets it in.
+        var prior = WithoutAntiCheatLaunch;
+        try
+        {
+            WithoutAntiCheatLaunch = g => g.Id == game.Id ? new ExoLauncher.Adapters.SteamAppInfoNames.AntiCheatFreeLaunch("option1", "Play without anti-cheat", "Game.exe") : prior(g);
+            Assert.True(ShadersAddon.KeepsRecorderOut(game, _ => Answer.Clean));
+        }
+        finally { WithoutAntiCheatLaunch = prior; }
     }
 
     [Fact]

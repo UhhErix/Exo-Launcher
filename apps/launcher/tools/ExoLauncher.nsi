@@ -66,14 +66,15 @@ UninstallIcon "${ICON}"
 !include "x64.nsh"
 !include "WinMessages.nsh"
 
-; Colors (DESIGN.md): ink, muted, faint, bad, the page, hairlines. COLORREF is 0xBBGGRR.
+; Colors (ui/src/tokens.css): ink, muted, faint, bad, the page (pure black), and the hairlines: --exo-line and
+; --exo-float-line (white at 7% and 5.5%) as they land on black, since a static control has no alpha. COLORREF is 0xBBGGRR.
 !define INK "FFFFFF"
-!define MUTED "9D9D9D"
-!define FAINT "757575"
+!define MUTED "B4B4B4"
+!define FAINT "9A9A9A"
 !define BAD "FF5C5C"
 !define PAGE "000000"
-!define HAIRLINE "1F1F1F"
-!define LINE_SOFT "161616"
+!define HAIRLINE "121212"
+!define LINE_SOFT "0E0E0E"
 !define STATIC_STYLE 0x50000000 ; WS_CHILD | WS_VISIBLE
 !define TEXT_STYLE 0x50000080   ; ... | SS_NOPREFIX
 !define WM_NEXT 0x408           ; NSIS: WM_NOTIFY_OUTER_NEXT
@@ -212,14 +213,14 @@ Function ${UN}ExoGuiInit
     StrCpy $S 300
     !insertmacro Pictures 300
   ${EndIf}
-  ; Exoline, private to setup: GDI names its instances "Exoline <weight>".
-  File "/oname=$PLUGINSDIR\Exoline.ttf" "${__FILEDIR__}\..\ExoLauncher\Assets\Fonts\Exoline-Variable.ttf"
-  System::Call 'gdi32::AddFontResourceExW(w "$PLUGINSDIR\Exoline.ttf", i 0x10, p 0)'
-  !insertmacro Font $FontTitle 26 600 "Exoline SemiBold"
-  !insertmacro Font $FontButton 13 600 "Exoline SemiBold"
-  !insertmacro Font $FontBody 13 400 "Exoline"
-  !insertmacro Font $FontSmall 12 400 "Exoline"
-  !insertmacro Font $FontClose 16 400 "Exoline"
+  ; Goeist, Exo's type, private to setup: GDI names its instances "Goeist <weight>".
+  File "/oname=$PLUGINSDIR\Goeist.ttf" "${__FILEDIR__}\..\ExoLauncher\Assets\Fonts\Goeist-Variable.ttf"
+  System::Call 'gdi32::AddFontResourceExW(w "$PLUGINSDIR\Goeist.ttf", i 0x10, p 0)'
+  !insertmacro Font $FontTitle 26 600 "Goeist SemiBold"
+  !insertmacro Font $FontButton 13 600 "Goeist SemiBold"
+  !insertmacro Font $FontBody 13 400 "Goeist"
+  !insertmacro Font $FontSmall 12 400 "Goeist"
+  !insertmacro Font $FontClose 16 400 "Goeist"
   !insertmacro Bitmap $BmpMark mark
   !insertmacro Bitmap $BmpButton button
   !insertmacro Bitmap $BmpButtonHover button-hover
@@ -269,7 +270,7 @@ Function ${UN}ExoGuiInit
 FunctionEnd
 
 Function ${UN}ExoGuiEnd
-  System::Call 'gdi32::RemoveFontResourceExW(w "$PLUGINSDIR\Exoline.ttf", i 0x10, p 0)'
+  System::Call 'gdi32::RemoveFontResourceExW(w "$PLUGINSDIR\Goeist.ttf", i 0x10, p 0)'
 FunctionEnd
 
 ; NSIS shows its Back and Next again on every page.
@@ -898,6 +899,13 @@ Section "Exo Launcher" SecApp
   WriteRegStr HKCU "${PRODUCT_UNINST_KEY}" "URLUpdateInfo" "${PRODUCT_WEB}"
   WriteRegStr HKCU "${PRODUCT_UNINST_KEY}" "HelpLink" "${PRODUCT_HELP}"
   WriteRegStr HKCU "${PRODUCT_UNINST_KEY}" "InstallLocation" "$INSTDIR"
+!ifdef INSTALLER_REVISION
+  ; What this installer does outside the app folder, as a hash (Build-Release.ps1): an in-app update with the same
+  ; revision may replace only the files that changed (AppUpdateService.Delta); another revision runs this installer.
+  WriteRegStr HKCU "${PRODUCT_UNINST_KEY}" "ExoInstaller" "${INSTALLER_REVISION}"
+!else
+  DeleteRegValue HKCU "${PRODUCT_UNINST_KEY}" "ExoInstaller"
+!endif
   WriteRegDWORD HKCU "${PRODUCT_UNINST_KEY}" "NoModify" 1
   WriteRegDWORD HKCU "${PRODUCT_UNINST_KEY}" "NoRepair" 1
   ${GetSize} "$INSTDIR" "/S=0K" $0 $1 $2

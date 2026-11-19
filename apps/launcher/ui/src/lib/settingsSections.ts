@@ -2,7 +2,7 @@
  * Settings' sidebar (SettingsPanel): the rooms' settings, in the Bar's order, then Exo's own. Each entry is one page;
  * `sections` are the parts of a page a link can open at (the Library's Sign in to a store opens Library › Game stores),
  * and `keywords` name the rows it holds, which is how Ctrl+K finds them (LauncherApp). A tool's options still live with
- * the tool (Captures has its own, Lucid is in Devices, Graphics in the PC room).
+ * the tool (Captures has its own, Exo EQ is in Devices, Graphics in the PC room).
  */
 export const SETTINGS_PAGES = [
   {

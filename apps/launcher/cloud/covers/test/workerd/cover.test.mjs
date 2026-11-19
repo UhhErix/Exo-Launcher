@@ -7,8 +7,11 @@
 import { env, SELF } from 'cloudflare:test'
 import { beforeEach, describe, expect, it } from 'vitest'
 import worker, {
-  TOTAL_BUDGET_MS, backoffSeconds, flagGet, flagSet, forgetAllFlags, timeLeft,
+  backoffSeconds, flagGet, flagSet, forgetAllFlags, timeLeft,
 } from '../../src/worker.js'
+import limits from '../../src/limits.json'
+
+const TOTAL_BUDGET_MS = limits.totalBudgetMs
 
 const POSTER_HOST = 'https://cdn.cloudflare.steamstatic.com'
 const POSTER = `${POSTER_HOST}/steam/apps/1145360/library_600x900_2x.jpg`

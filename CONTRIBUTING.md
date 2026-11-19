@@ -44,7 +44,7 @@ pwsh -File Run-ExoLauncher.ps1
 
 ## Checks to run
 
-No CI runs on pull requests, so run the checks for what you changed before you open one. Commands run from `apps/launcher`.
+Launcher CI (`.github/workflows/launcher-ci.yml`) runs the UI check and the .NET tests on every pull request, and its `test` job must pass before a PR merges. Run the checks for what you changed before you open one anyway: CI does not cover Workers, Exo Shaders or the installed app. Commands run from `apps/launcher`.
 
 | You changed | Run |
 | --- | --- |

@@ -1,6 +1,6 @@
 # Devices
 
-Devices shows what you plug in: your mouse, what you listen on and your controller, each with its picture. Press a card to open its page. Keyboards are marked Coming soon.
+Devices is inside the PC room: the **Devices** button on its This PC line. It shows what you plug in: your mouse, what you listen on and your controller, each with its picture. Press a card to open its page.
 
 ## Mouse
 
@@ -8,7 +8,7 @@ Plug in a supported mouse or its receiver and open its card. Only the settings y
 
 ## Headphones
 
-**Pick** the pair you wear, then set up Lucid, Game Mode and Night Shift. Lucid's **Set up** says what it will do first.
+**Pick** the pair you wear and Exo EQ corrects it (AutoEq's settings for that model). **Install** gets Equalizer APO, the audio engine it plays through; then **Choose outputs** and restart once. **Sound**, **Compare**, **Games** and **Night Shift** finish it; each output keeps its own EQ.
 
 ## Controller
 

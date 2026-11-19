@@ -1,11 +1,51 @@
 import { MOCK_SONG_MS, mockArtwork, spotifyMock } from './spotifyMock'
 import { mockAdmin, mockAppMessages, mockFew, mockFewMessages, mockApps, mockChannels, mockChannelsFor, mockDiscordStatus, mockMessageId, mockFriends, mockHome, mockMembers, mockMessages, mockProfile } from './discordMock'
 /** Browser development fixtures. Dynamically loaded only outside the packaged host. */
-import type { CompressSettings, CompressState, Game, GameProperties, LauncherSettings, InstallProgress, InstalledApp, ReplacedApp, RuntimeItem, StartupItem, StartupState, StoreGift } from './host'
+import type { AutopilotState, CompressSettings, CompressState, Game, GameProperties, LauncherSettings, InstallProgress, InstalledApp, ReplacedApp, RuntimeItem, StartupItem, StartupState, StoreGift } from './host'
 import type { CaptureItem } from './capture'
 import type { NoteInfo } from './notes'
 import { emitHostEvent } from './host'
 let mockMusicLevel = 0.6
+/** PC › Autopilot: Counter-Strike 2 in front now, and two sessions' reports. */
+let mockAutopilotChoices: Pick<AutopilotState, 'on' | 'gamePriority' | 'keepGameMode' | 'coreParking' | 'alwaysDemote' | 'suspend'> = {
+  on: true, gamePriority: 'above', keepGameMode: false, coreParking: true, alwaysDemote: ['OneDrive'], suspend: [],
+}
+const mockAutopilot = (): AutopilotState => ({
+  ...mockAutopilotChoices,
+  gameMode: { off: mockAutopilotChoices.on && !mockAutopilotChoices.keepGameMode, keptOn: mockAutopilotChoices.keepGameMode ? 'you keep it on' : null },
+  cpu: 'One CCD: every core shares one cache, so there is nothing to pin',
+  now: mockAutopilotChoices.on ? { game: 'steam:730', did: ['Gave Counter-Strike 2 above normal priority', 'Held back OneDrive, steamwebhelper (efficiency mode, lower priority, low disk and memory priority)'] } : null,
+  live: {
+    game: 'steam:730', title: 'Counter-Strike 2', seconds: 1260, fps: 287.4, low1: 191.2, low01: 140.6, stutters: 4,
+    cpu: 46, gpu: 88, gpuTemp: 71, vramGb: 5.8, vramTotalGb: 8, ramGb: 13.2, ramTotalGb: 32, standbyGb: 9.4, freeGb: 6.1, dpc: 0.6, clock: 112,
+  },
+  reports: [
+    {
+      id: 'steam:730:2026-11-19T18:02:00Z', game: 'steam:730', title: 'Counter-Strike 2', started: '2026-11-19T18:02:00Z', minutes: 47,
+      fps: 281.2, low1: 186.4, low01: 121.8, stutters: 23,
+      findings: [
+        { kind: 'background', stutters: 14, app: 'OneDrive', detail: '14 stutters came as OneDrive jumped to 1.8 cores in the background.', suggestion: 'Autopilot holds OneDrive back the next time you play Counter-Strike 2.' },
+        { kind: 'shaders', stutters: 6, app: null, detail: '6 stutters came while the game wrote to its shader cache: most likely compiling shaders.', suggestion: 'These go away as the shaders are kept; Exo Shaders can compile them ahead (PC › Shaders).' },
+        { kind: 'unexplained', stutters: 3, app: null, detail: '3 stutters came with nothing Exo can see on the PC.', suggestion: 'Most likely the game itself: streaming a new area, or its own work on the main thread.' },
+      ],
+      did: ['Gave Counter-Strike 2 above normal priority', 'Held back 6 background apps (efficiency mode, low disk and memory priority)', 'Kept every processor core awake'],
+      learned: ['OneDrive'],
+      peaks: { cpu: 71, gpu: 99, gpuTemp: 76, vramGb: 6.4, vramTotalGb: 8, ramGb: 14.1, ramTotalGb: 32 },
+      islcSeconds: 0,
+    },
+    {
+      id: 'steam:1086940:2026-11-18T20:10:00Z', game: 'steam:1086940', title: "Baldur's Gate 3", started: '2026-11-18T20:10:00Z', minutes: 132,
+      fps: 96.3, low1: 61.0, low01: 38.2, stutters: 61,
+      findings: [
+        { kind: 'vram', stutters: 41, app: null, detail: "41 stutters came with the graphics card's memory 99% full (8 GB).", suggestion: 'Lower texture quality or the resolution a step: what doesn’t fit is read over PCIe from system memory.' },
+        { kind: 'gpuHeat', stutters: 12, app: null, detail: '12 stutters came with the graphics card at 88 °C, where cards lower their clocks.', suggestion: 'Check the card’s fans and the case’s airflow, or cap the frame rate a little below your screen’s refresh.' },
+      ],
+      did: [], learned: [],
+      peaks: { cpu: 58, gpu: 100, gpuTemp: 88, vramGb: 7.9, vramTotalGb: 8, ramGb: 18.7, ramTotalGb: 32 },
+      islcSeconds: 0,
+    },
+  ],
+})
 const MOCK_GAMES: Game[] = [
   {
     id: 'local:add',
@@ -48,6 +88,21 @@ const MOCK_GAMES: Game[] = [
     deps: ['Steam client'],
     launchNote: '',
     lastPlayedUtc: new Date(Date.now() - 26 * 3600_000).toISOString(),
+  },
+  {
+    // Lent by the Steam Family: not installed, its owner named on its page.
+    id: 'steam:1145350',
+    title: 'Hades II',
+    store: 'steam',
+    installed: false,
+    owned: true,
+    canInstall: true,
+    primaryAction: 'install',
+    status: 'Not installed',
+    deps: ['Steam client'],
+    launchNote: 'Shared by Sam through Steam Family. Installs through Steam.',
+    familyShared: true,
+    sharedBy: 'Sam',
   },
   {
     // Steam's Play menu offers it without its anti-cheat: Properties › Anti-cheat.
@@ -171,6 +226,55 @@ const MOCK_GAMES: Game[] = [
   },
 ]
 
+/** Genres and modes as Steam's record words them (SteamAppTags.cs), for the Library's search and Filter menu in the mock. */
+const MOCK_TAGS: Record<string, string[]> = {
+  'mock:hades': ['action', 'rpg', 'indie', 'single-player', 'controller'],
+  'steam:3472040': ['sports', 'simulation', 'single-player', 'multiplayer', 'co-op', 'local co-op', 'controller'],
+  'steam:1938090': ['action', 'single-player', 'multiplayer', 'co-op', 'controller'],
+  'mock:eldenring': ['action', 'rpg', 'single-player', 'multiplayer', 'co-op', 'controller'],
+  'mock:rivals': ['action', 'free to play', 'multiplayer', 'controller'],
+}
+for (const game of MOCK_GAMES) if (MOCK_TAGS[game.id]) game.tags = MOCK_TAGS[game.id]
+const familyGame = MOCK_GAMES.find(game => game.id === 'steam:3472040')
+if (familyGame) familyGame.familyShared = true
+
+/**
+ * `?games=N` in browser dev: N more made-up games (no real titles), for the grid's windowing, the scrubber and search
+ * at the size of a big library.
+ */
+const mockExtraGames = typeof location === 'undefined' ? 0 : Math.min(2000, parseInt(new URLSearchParams(location.search).get('games') ?? '', 10) || 0)
+{
+  const first = ['Ashen', 'Bright', 'Cinder', 'Distant', 'Echo', 'Fallen', 'Glass', 'Hollow', 'Iron', 'Jade', 'Kindred', 'Lunar', 'Molten', 'Night', 'Outer', 'Pale', 'Quiet', 'Rust', 'Silent', 'Tidal', 'Umbral', 'Velvet', 'Wild', 'Xeno', 'Yonder', 'Zero']
+  const second = ['Circuit', 'Drift', 'Frontier', 'Harbor', 'Kingdom', 'Legion', 'Orbit', 'Pilgrim', 'Rally', 'Signal', 'Tactics', 'Voyage']
+  const stores = ['steam', 'steam', 'steam', 'epic', 'gog', 'xbox', 'ea', 'ubisoft']
+  const genres = ['action', 'adventure', 'rpg', 'strategy', 'simulation', 'racing', 'sports', 'casual', 'indie']
+  const modes = [['single-player'], ['multiplayer'], ['single-player', 'co-op'], ['multiplayer', 'co-op', 'local co-op'], ['single-player', 'controller']]
+  for (let i = 0; i < mockExtraGames; i++) {
+    const store = stores[i % stores.length]
+    const installed = i % 3 === 0
+    const played = i % 4 !== 1
+    MOCK_GAMES.push({
+      id: `mock:extra-${i}`,
+      title: `${first[i % first.length]} ${second[Math.floor(i / first.length) % second.length]}${i >= first.length * second.length ? ` ${Math.floor(i / (first.length * second.length)) + 1}` : ''}`,
+      // Made-up art addresses: the UI pass's harness draws a picture for each; anywhere else they fail and the card shows its name.
+      coverUrl: i % 5 === 4 ? null : `https://cdn.cloudflare.steamstatic.com/steam/apps/${900000 + i}/library_600x900.jpg`,
+      store,
+      installed,
+      owned: true,
+      canInstall: !installed,
+      primaryAction: installed ? 'play' : 'install',
+      status: installed ? 'Ready' : 'Demo',
+      playtimeMinutes: played ? (i * 137) % 9000 : 0,
+      lastPlayedUtc: played ? new Date(Date.now() - ((i * 9) % 800) * 86_400_000).toISOString() : null,
+      sizeBytes: ((i * 13) % 140 + 2) * 1024 ** 3,
+      deps: [],
+      launchNote: '',
+      tags: store === 'steam' ? [genres[i % genres.length], ...modes[i % modes.length]] : undefined,
+      familyShared: store === 'steam' && i % 11 === 0,
+    })
+  }
+}
+
 /** `?onboarding` in browser dev replays first-run setup against the mock. */
 const mockFirstRun = typeof location !== 'undefined' && new URLSearchParams(location.search).has('onboarding')
 // ?backup: a daily backup from yesterday exists (Last backup in Settings; the restore offer on first run); Back up now makes today's.
@@ -197,6 +301,10 @@ const mockShadersSnapshot = () => ({
 
 /** `?gpu=amd` or `?gpu=intel` in browser dev: System's profile and a game's frame generation for that GPU instead of a GeForce. */
 const mockGpu = typeof location !== 'undefined' ? new URLSearchParams(location.search).get('gpu') : null
+
+/** `?hdr=none`: a main screen without HDR (PC › Display has no HDR rows). `?pad=bluetooth`: the DualSense Edge over Bluetooth (its cable-only rows go). */
+const mockNoHdr = typeof location !== 'undefined' && new URLSearchParams(location.search).get('hdr') === 'none'
+const mockPadLink = typeof location !== 'undefined' && new URLSearchParams(location.search).get('pad') === 'bluetooth' ? 'bluetooth' as const : 'usb' as const
 
 /** PC > Auto tune on the mock: each read moves a run on one step, ?tune=crashed starts after a crash, ?tune=none has nothing to tune, and the Ryzen row is hidden as on the host (RyzenAvailable is false) unless ?tune=ryzen shows it needing PawnIO or ?tune=pawnio has the driver. */
 const mockTuneFlag = typeof location !== 'undefined' ? new URLSearchParams(location.search).get('tune') : null
@@ -277,6 +385,35 @@ const mockNetItems = (p?: { action?: unknown; item?: unknown }) => {
   items.unshift({ key: 'network', label: 'Network', detail: left.length ? left.join(', ') : "Exo's network settings for games", applied: left.length === 0, canUndo: mockNetOn.size > 0 })
   if (mockNet === 'slow') items.push({ key: 'netlink', label: 'Ethernet', detail: '100 Mbps of 2.5 Gbps. Try another cable or router port.' })
   return items
+}
+
+/**
+ * Best settings › System in browser dev: a PC a tweak left on the platform clock and without a page file, two services at
+ * boot and Memory Integrity on. `?tuning=vanguard` has Riot Vanguard installed, so Memory Integrity stays on.
+ */
+const mockTuningVanguard = typeof location !== 'undefined' && new URLSearchParams(location.search).get('tuning') === 'vanguard'
+const mockTuningOn = new Set<string>()
+const mockTuningOff = new Set<string>()
+const mockTuning = (p?: { action?: unknown; item?: unknown }) => {
+  const defaults = ['timer', 'pagefile']
+  if (p?.action === 'apply') for (const key of defaults) if (!mockTuningOff.has(key)) mockTuningOn.add(key)
+  const blocked = mockTuningVanguard ? 'Riot Vanguard (VALORANT, League of Legends) can require Memory Integrity, so Exo leaves it on: games with it may refuse to start without it.' : null
+  if (typeof p?.item === 'string' && !(p.item === 'integrity' && blocked)) {
+    if (p.action === 'on') { mockTuningOn.add(p.item); mockTuningOff.delete(p.item) }
+    if (p.action === 'off') { mockTuningOn.delete(p.item); if (defaults.includes(p.item)) mockTuningOff.add(p.item) }
+  }
+  const words: Record<string, [string, string, boolean]> = {
+    timer: ["Windows' own timer", 'A tweak forced the platform clock (HPET), so every clock read a game makes waits on it. Takes a restart.', false],
+    pagefile: ['A page file, managed by Windows', "There's no page file, so a game that needs more memory than your RAM crashes instead of slowing down.", false],
+    services: ['Services set to Manual', 'Downloaded Maps Manager and Program Compatibility Assistant Service start with Windows; Manual starts them only when something needs them. Takes a restart.', true],
+    integrity: ['Memory Integrity off', blocked ?? 'Less secure: Windows stops checking that every driver is signed and safe, which is what keeps malicious drivers out. Only for a PC you keep clean. Up to about 5-10% more frames in some games. Takes a restart.', true],
+  }
+  const items = Object.entries(words).map(([key, [label, detail, optIn]]) => {
+    const on = mockTuningOn.has(key)
+    return { key, label, detail: on ? 'Restart to finish.' : detail, on, canUndo: on, off: mockTuningOff.has(key), optIn, restart: on, blocked: key === 'integrity' ? blocked : null }
+  })
+  const message = p?.item === 'integrity' && p.action === 'on' && blocked ? blocked : null
+  return { ok: !message, message, applied: defaults.every(key => mockTuningOn.has(key) || mockTuningOff.has(key)), restart: mockTuningOn.size > 0, items }
 }
 
 /**
@@ -416,7 +553,7 @@ const mockUpdate = typeof location !== 'undefined' && new URLSearchParams(locati
 
 // ?folders: two Library folders to start with, Hades in both, one sorted by time played.
 const mockFolders = typeof location !== 'undefined' && new URLSearchParams(location.search).has('folders')
-// ?lucidsetup: Lucid isn't set up on this PC (=apo: Equalizer APO is already here); Set up takes 6 seconds.
+// ?noapo: Equalizer APO isn't installed (Install takes 6 seconds, then it isn't on the output until Choose outputs).
 const OUTPUT_ID = '{0.0.0.00000000}.{9709e4ab-6969-4817-ad38-1704eab1c079}'
 const MIC_ID = '{0.0.1.00000000}.{0deb347c-90b6-43d6-b549-63e63b1b23a9}'
 const mockAudio: Record<string, { rate: number; bits: number; channels: number; volume: number; muted: boolean }> = {
@@ -427,8 +564,63 @@ const mockEndpoint = (id: string) => {
   const { rate, bits, channels, volume, muted } = mockAudio[id]
   return { format: { rate, bits, channels }, volume, muted }
 }
-const mockLucidSetup = typeof location !== 'undefined' ? new URLSearchParams(location.search).get('lucidsetup') : null
-let mockLucidPressed = 0
+const mockNoApo = typeof location !== 'undefined' && new URLSearchParams(location.search).has('noapo')
+let mockApoPressed = 0
+let mockApoOn = !mockNoApo
+const MOCK_EQ_HEADPHONES = [
+  { id: 'Super Review/in-ear/ZiiGaat Lush', name: 'ZiiGaat Lush', source: 'Super Review', form: 'in-ear' as const },
+  { id: 'oratory1990/over-ear/Sennheiser HD 600', name: 'Sennheiser HD 600', source: 'oratory1990', form: 'over-ear' as const },
+  { id: 'Rtings/Bruel & Kjaer 5128 over-ear/SteelSeries Arctis Nova 7', name: 'SteelSeries Arctis Nova 7', source: 'Rtings', form: 'over-ear' as const },
+]
+const mockEq: { on: boolean; comparing: boolean; headphone: (typeof MOCK_EQ_HEADPHONES)[number] | null; sound: string; custom: number[]; games: Record<string, string>; night: { on: boolean; start: string; end: string; sync: boolean } } = {
+  on: true, comparing: false, headphone: MOCK_EQ_HEADPHONES[0], sound: 'footsteps', custom: [0, 2, 3, 1, 0, 0, -1, 1.5, 2, 0],
+  games: { 'mock:valorant': 'footsteps' }, night: { on: false, start: '21:00', end: '06:00', sync: false },
+}
+type MockEqParams = Record<string, unknown> | undefined
+const mockNight = (p: MockEqParams) => {
+  const night = mockEq.night
+  if (typeof p?.on === 'boolean') night.on = p.on
+  if (typeof p?.sync === 'boolean') night.sync = p.sync
+  if (typeof p?.start === 'string') night.start = p.start
+  if (typeof p?.end === 'string') night.end = p.end
+}
+const mockEqGame = (p: MockEqParams) => {
+  if (typeof p?.game !== 'string') return
+  if (typeof p.sound === 'string') mockEq.games[p.game] = p.sound
+  else delete mockEq.games[p.game]
+}
+const MOCK_EQ_ACTIONS: Record<string, (p: MockEqParams) => void> = {
+  install: () => { mockApoPressed = Date.now() },
+  devices: () => { mockApoOn = true },
+  headphone: p => { mockEq.headphone = MOCK_EQ_HEADPHONES.find(h => h.id === p?.id) ?? null },
+  sound: p => { if (typeof p?.sound === 'string') mockEq.sound = p.sound },
+  custom: p => { if (Array.isArray(p?.gains)) { mockEq.custom = p.gains as number[]; mockEq.sound = 'custom' } },
+  on: p => { mockEq.on = p?.on === true },
+  compare: p => { mockEq.comparing = p?.on === true },
+  game: mockEqGame,
+  night: mockNight,
+}
+function mockEqState(p?: Record<string, unknown>) {
+  MOCK_EQ_ACTIONS[String(p?.action)]?.(p)
+  const installed = !mockNoApo || (mockApoPressed > 0 && Date.now() - mockApoPressed > 6000)
+  const title = (id: string) => MOCK_GAMES.find(game => game.id === id)?.title ?? id
+  const boosts = mockEq.sound === 'custom' ? Math.max(0, ...mockEq.custom) : mockEq.sound === 'flat' ? 0 : 3.5
+  return {
+    ok: true, message: null,
+    apo: { installed, installing: mockApoPressed > 0 && !installed, version: installed ? '1.4.2' : null, onOutput: installed && mockApoOn, restart: false, effectsOff: false, outputs: mockApoOn ? 1 : 0, installerVersion: '1.4.2' },
+    on: mockEq.on, comparing: mockEq.comparing, output: { name: 'Headphones (High Definition Audio Device)' },
+    headphone: mockEq.headphone, sound: mockEq.sound,
+    custom: [31, 62, 125, 250, 500, 1000, 2000, 4000, 8000, 16000].map((hz, i) => ({ hz, gain: mockEq.custom[i] ?? 0 })),
+    preamp: -Math.round((boosts + (mockEq.headphone ? 2.9 : 0)) * 10) / 10,
+    playing: null,
+    games: Object.entries(mockEq.games).map(([id, sound]) => ({ id, title: title(id), sound })),
+    library: MOCK_GAMES.filter(game => game.installed && !mockEq.games[game.id]).map(game => ({ id: game.id, title: game.title })),
+    night: { ...mockEq.night, now: false },
+    others: [{ name: 'Speakers (Realtek(R) Audio)', headphone: null, sound: 'bass' }],
+    guess: null,
+    lucidPlays: false,
+  }
+}
 
 const mockSettings: LauncherSettings = {
   onboardingComplete: !mockFirstRun,
@@ -1107,15 +1299,11 @@ const MOCK_HANDLERS: Record<string, MockHandler> = {
     MOCK_STEAM_ACCOUNT = null
     return { ok: true }
   },
-  // ?riot=partial: VALORANT's hours are tracker.gg's playlist sum (the partial note), and the frame-gen line says the RTX 20/30 copy.
-  'playtime.riotLifetime': () => (mockRiotPartial
-    ? { ok: true, minutes: 9_840, partial: true, modes: [{ mode: 'competitive', minutes: 6_120 }, { mode: 'unrated', minutes: 3_720 }], stats: null }
-    : { ok: false, minutes: 0, partial: false, modes: [], stats: null }),
+  // What tracker.gg answers apps now (TrackerGgPlaytime.BlockedMessage): a browser check, so nothing is imported.
   'playtime.riotRefresh': () => ({
     ok: false,
-    profilePrivate: true,
-    message:
-      'This tracker.gg profile is private. Sign in with Riot on tracker.gg once so the profile is public.',
+    profilePrivate: false,
+    message: "tracker.gg now blocks apps from reading its profiles, so Exo can't import your Riot hours from it. Exo still counts every session you play.",
     profileUrl: 'https://tracker.gg/valorant',
   }),
   'web.preferences.get': () => ({ microphone: 'ask', camera: 'ask', clipboard: 'ask', notifications: 'ask' }),
@@ -1428,7 +1616,7 @@ const MOCK_HANDLERS: Record<string, MockHandler> = {
   'clients.status': () => {
     const mode = typeof location !== 'undefined' ? new URLSearchParams(location.search).get('clients') : null
     if (mode === 'failed') throw new Error('Mock: the game clients check could not be read.')
-    if (mode === 'unreadable') return { ok: true, needsFix: false, problem: 'Exo could not read Steam.', epic: { layout: 'new', version: '0.113.0', oldStillThere: false, installing: false }, steam: { channel: 'unknown' } }
+    if (mode === 'unreadable') return { ok: true, needsFix: false, problem: 'Exo couldn’t read Steam.', epic: { layout: 'new', version: '0.113.0', oldStillThere: false, installing: false }, steam: { channel: 'unknown' } }
     if (mode !== null) return { ok: true, needsFix: true, epic: { layout: 'old', version: '0.112.0', oldStillThere: false, installing: false }, steam: { channel: 'stable' } }
     return { ok: true, needsFix: false, epic: { layout: 'new', version: '0.113.0', oldStillThere: false, installing: false }, steam: { channel: 'beta' } }
   },
@@ -1488,6 +1676,14 @@ const MOCK_HANDLERS: Record<string, MockHandler> = {
   'exoAccount.codeConfirmed': () => ({ ok: true }),
   'exoAccount.probe': () => ({ reachable: true, gameRunning: false }),
   'app.openLogs': () => ({ ok: false, message: 'No logs folder in the browser mock.' }),
+  'report.preview': () => ({ ok: true, excerpt: [
+    'Exo Launcher 1.0.0 · Windows 10.0.26300 · 2026-11-19 10:00 UTC',
+    'Error (app): Report a problem',
+    '',
+    "Exo's log (1 entries):",
+    '[2026-11-19T09:58:00.000Z] WARN: Steam: the library did not answer in <path>',
+  ].join('\n') }),
+  'report.send': () => ({ ok: true, issue: 123 }),
   'app.installUpdate': () => ({
     ok: true,
     alreadyLatest: true,
@@ -1513,22 +1709,7 @@ const MOCK_HANDLERS: Record<string, MockHandler> = {
   'shaders.prepare.auto': (p) => { if (typeof p?.on === 'boolean') { mockPrepareAuto = p.on; emitHostEvent('shaders.changed', {}) } return { ok: true, auto: mockPrepareAuto } },
   'shaders.prepare.start': () => { mockPrepareRunning = true; emitHostEvent('shaders.changed', {}); return { ok: true, message: null } },
   'shaders.prepare.cancel': () => { mockPrepareRunning = false; emitHostEvent('shaders.changed', {}); return { ok: true } },
-  lucid: (p) => {
-    if (p?.action === 'setup') mockLucidPressed = Date.now()
-    const ready = mockLucidSetup === null || (mockLucidPressed > 0 && Date.now() - mockLucidPressed > 6000)
-    return {
-      ok: true, found: true, version: '6.0.4', ready, running: ready || mockLucidPressed > 0, voiceOn: false, startWithExo: p?.action === 'set' ? p.on === true : false,
-      followHeadset: p?.action === 'follow' ? p.on === true : true,
-      devices: ready || mockLucidSetup === 'apo',
-      settings: !ready ? null : {
-          headphone: { id: 'ziigaat_lush', name: 'Lush', chosen: true }, favorites: [], gameMode: true, keepOnAltTab: false,
-          onlyWhileGaming: false,
-          nightShift: false, nightStart: '21:00', nightEnd: '06:00', nightSync: false, notifications: false, discord: false,
-          hotkey: { modifiers: 0, key: 122 }, eqOn: true,
-      },
-      eq: { on: 'Headphones (High Definition Audio Device)', playing: 'Headphones (High Definition Audio Device)', covered: true },
-    }
-  },
+  eq: (p) => mockEqState(p),
   'devices.image': () => ({ ok: false, url: null }),
   'audio.formats': (p) => {
     const id = (p as { id: string }).id
@@ -1600,21 +1781,14 @@ const MOCK_HANDLERS: Record<string, MockHandler> = {
       { id: 'usb-361d-0300-747353800033', kind: 'mouse', name: 'StarlightX Dongle', maker: 'Finalmouse', model: null, connection: 'wireless', role: null, battery: null, color: null, layout: null },
       { id: 'usb-31e3-1342-95be6909a013', kind: 'keyboard', name: 'Wooting 60HE v2', maker: 'Wooting', model: '60', connection: 'usb', role: null, battery: null, color: null, layout: 'ansi-split',
         port: { where: 'chipset', chips: 1, hubs: 0, interrupts: 'msi', better: 'free' }, app: { id: 'wootility', name: 'Wootility', where: 'web' } },
-      { id: 'usb-054c-0df2-41a6f6ff466d', kind: 'controller', name: 'DualSense Edge Wireless Controller', maker: 'Sony', model: 'dualsense-edge', connection: 'usb', role: null, battery: null, color: 'Midnight Black', layout: null, lab: true,
+      { id: 'usb-054c-0df2-41a6f6ff466d', kind: 'controller', name: 'DualSense Edge Wireless Controller', maker: 'Sony', model: 'dualsense-edge', connection: mockPadLink, role: null, battery: null, color: 'Midnight Black', layout: null, lab: true,
         port: { where: 'cpu', chips: 0, hubs: 0, interrupts: 'msi', better: null } },
       { id: '{0.0.0.00000000}.{9709e4ab-6969-4817-ad38-1704eab1c079}', kind: 'audio', name: 'Headphones', maker: null, model: 'headphones', connection: 'jack', role: 'output', battery: null, color: null, layout: null },
       { id: '{0.0.1.00000000}.{0deb347c-90b6-43d6-b549-63e63b1b23a9}', kind: 'audio', name: 'fifine Microphone', maker: 'Fifine', model: 'microphone', connection: 'usb', role: 'input', battery: null, color: null, layout: null },
     ],
     cpuPorts: { free: 2, total: 4, freeTypeC: false },
   }),
-  'lucid.headphones': () => ({
-    ok: true,
-    headphones: [
-      { id: 'lucid_iems', model: 'Lucid IEMs', brand: 'tekkusai', category: 'In-Ear Monitors', grade: 'Excellent', keywords: '' },
-      { id: 'ziigaat_lush', model: 'Lush', brand: 'ZiiGaat', category: 'In-Ear Monitors', grade: 'Excellent', keywords: '' },
-      { id: 'astro_a50_x', model: 'A50 X', brand: 'Astro', category: 'Gaming Headsets', grade: 'Good', keywords: 'a50x' },
-    ],
-  }),
+  'eq.headphones': () => ({ ok: true, headphones: MOCK_EQ_HEADPHONES }),
   'system.tune': (p) => mockTune(p),
   'gpu.profile': (p) => mockGpu === 'intel' || mockGpu === 'amd' ? {
     ok: true, vendor: mockGpu, gpu: mockGpu === 'intel' ? 'Arc B580' : 'Radeon RX 9070 XT', series: 0, screen: { name: 'VG27AQ', hz: 165, vrr: true },
@@ -1663,6 +1837,7 @@ const MOCK_HANDLERS: Record<string, MockHandler> = {
       check: mockCheck,
     }
   },
+  'system.tuning': (p) => mockTuning(p),
   'system.interrupts': (p) => {
     const applied = p?.action === 'apply'
     return {
@@ -1673,6 +1848,11 @@ const MOCK_HANDLERS: Record<string, MockHandler> = {
         { id: 'a3', name: 'Standard NVM Express Controller', kind: 'storage controller', mode: 'msi', plan: 'skip', reason: 'Left alone: Windows starts from the drive behind it', changed: false },
       ],
     }
+  },
+  'autopilot.state': mockAutopilot,
+  'autopilot.set': (p) => {
+    mockAutopilotChoices = { ...mockAutopilotChoices, ...(p as Partial<typeof mockAutopilotChoices>) }
+    return { ok: true, message: null, state: mockAutopilot() }
   },
   'system.mouseCore': mockMouseCore,
   'system.drives': mockDrives,
@@ -1713,7 +1893,7 @@ const MOCK_HANDLERS: Record<string, MockHandler> = {
   'startup.remove': () => mockStartup(null),
   'startup.restore': () => mockStartup(null),
   'startup.clean': () => ({ ...mockStartup(null), cleaned: 4 }),
-  'hdr.state': () => ({ supported: true, on: false, name: 'Mock OLED', peakNits: 1000, calibrated: false, verdict: 'great' }),
+  'hdr.state': () => mockNoHdr ? { supported: false } : ({ supported: true, on: false, name: 'Mock OLED', peakNits: 1000, calibrated: false, verdict: 'great' }),
   'hdr.game': (p) => ({ ok: true, hdr: 'true', mode: typeof p?.mode === 'string' ? p.mode : 'auto' }),
   'game.settings': mockGameSettings,
   // As on the RX 9070 XT of ?gpu=amd.
@@ -1726,7 +1906,7 @@ const MOCK_HANDLERS: Record<string, MockHandler> = {
     ok: true,
     pending: p?.action === 'set' ? { display: 'DISPLAY1', seconds: 15 } : null,
     displays: [{
-      id: 'DISPLAY1', name: 'VG248', main: true, hdr: false, vendor: 'nvidia', refresh: 144, refreshes: [60, 100, 120, 144],
+      id: 'DISPLAY1', name: 'VG248', main: true, hdr: false, vendor: mockGpu === 'amd' || mockGpu === 'intel' ? mockGpu : 'nvidia', refresh: 144, refreshes: [60, 100, 120, 144],
       color: { format: 'rgb', bpc: 8, full: true }, auto: false,
       supported: ['rgb', '444', '422'].flatMap(format => [6, 8].flatMap(bpc =>
         (format === 'rgb' ? [true, false] : [false]).map(full => ({ format, bpc, full })))),
@@ -1747,8 +1927,11 @@ const MOCK_HANDLERS: Record<string, MockHandler> = {
   }),
   'gpu.import': () => ({ ok: false, cancelled: true, undo: null }),
   'gpu.controlPanel': () => ({ ok: true }),
-  // An RTX 3070 at work, drifting so the PC room's readings move.
-  'gpu.driver': () => ({ ok: true, vendor: 'nvidia', card: 'RTX 3070', installed: '581.42', update: true, latest: { version: '581.57', size: 900_000_000, released: '2026-10-14', kind: 'game' } }),
+  'gpu.driver': () => mockGpu === 'amd'
+    ? { ok: true, vendor: 'amd', card: 'Radeon RX 9070 XT', installed: '26.1.1', update: false, latest: null }
+    : mockGpu === 'intel'
+      ? { ok: true, vendor: 'intel', card: 'Arc B580', installed: '32.0.101.6559', update: false, latest: null }
+      : { ok: true, vendor: 'nvidia', card: 'RTX 3070', installed: '581.42', update: true, latest: { version: '581.57', size: 900_000_000, released: '2026-10-14', kind: 'game' } },
   'gpu.game': (p) => {
     if (mockGpu === 'intel' && typeof p?.frameGen === 'string') mockFrameGen = p.frameGen
     return mockGpu === 'intel' ? { ok: true, vendor: 'intel', supported: true, frameGen: mockFrameGen }
@@ -1783,14 +1966,31 @@ const MOCK_HANDLERS: Record<string, MockHandler> = {
   'store.wishlist': () => ({ ok: true, items: [] }),
   'keys.preview': () => ({ ok: true, looksLikeKey: false, store: 'unknown', key: '' }),
   'keys.activate': () => ({ ok: true, message: 'Mock key.' }),
+  'keep.status': () => ({ pc: 'none', games: {} }),
 }
 
 // ?hold=store.,discord.chat holds every call whose method starts so, for looking at a wait.
 const mockHold = typeof location === 'undefined' ? [] : new URLSearchParams(location.search).get('hold')?.split(',') ?? []
 
+// ?fail=game.uninstall,stores. fails every call whose method starts so, as the host would (a file in use, by turns
+// with no network and a refusal), for looking at an action's error; ?slow=apps. answers those after 1.6 s, for its ring.
+const mockFail = typeof location === 'undefined' ? [] : new URLSearchParams(location.search).get('fail')?.split(',').filter(Boolean) ?? []
+const mockSlow = typeof location === 'undefined' ? [] : new URLSearchParams(location.search).get('slow')?.split(',').filter(Boolean) ?? []
+let mockFailures = 0
+const MOCK_FAILURES = [
+  'A file is in use. Close the game or app using it, then try again.',
+  'System.Net.Http.HttpRequestException: No such host is known. (api.example:443)',
+  { ok: false, message: 'Something went wrong.' },
+]
+
 export async function mockCall<T>(method: string, params?: Record<string, unknown>): Promise<T> {
   if (mockHold.some(held => method.startsWith(held))) await new Promise(() => {})
-  await new Promise((r) => setTimeout(r, 40))
+  await new Promise((r) => setTimeout(r, mockSlow.some(slow => method.startsWith(slow)) ? 1600 : 40))
+  if (mockFail.some(fail => method.startsWith(fail))) {
+    const failure = MOCK_FAILURES[mockFailures++ % MOCK_FAILURES.length]
+    if (typeof failure === 'string') throw new Error(failure)
+    return failure as T
+  }
   const handler = MOCK_HANDLERS[method]
 
   if (!handler) throw new Error(`Unknown mock method: ${method}`)

@@ -10,6 +10,7 @@ import { ChangeMusicService } from './ChangeMusicService'
 import { MusicSignIn } from './MusicSignIn'
 import { MusicWait } from './MusicWait'
 import { ErrorState } from '../ui/ErrorState'
+import { errorText } from '../../lib/errorWords'
 
 const adapters = { spotify: spotifyAdapter, youtube: youtubeAdapter, apple: appleAdapter }
 
@@ -46,7 +47,7 @@ export function NativeMusicRoom({ service, active, shown, nowPlaying }: {
     try {
       const result = await adapter.signIn()
       if (!result.ok) {
-        const message = result.message ?? `${adapter.name} could not start sign-in. Try again.`
+        const message = errorText(result.message, `${adapter.name} could not start sign-in. Try again.`)
         report(message, 'NativeMusicRoom.signIn')
         setSignInMessage(message)
       }

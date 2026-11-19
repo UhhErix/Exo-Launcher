@@ -12,6 +12,7 @@ import { RoleLinks, type RoleLink } from './settingsRoleLinks'
 import { ConfirmButton } from '../ui/ConfirmButton'
 import { Spinner } from '../ui/Spinner'
 import { ErrorNote } from '../ui/ErrorNote'
+import { errorText } from '../../lib/errorWords'
 
 type Role = { id: string; name: string; color: number; position: number; hoist: boolean; mentionable: boolean; managed: boolean; permissions: string }
 type RolesData = { roles: Role[]; counts: Record<string, number> | null; top: number }
@@ -124,7 +125,7 @@ export function Roles({ guildId }: { guildId: string }) {
     setError(null); setCreating(true)
     const result = await admin<Role>('createRole', { guildId })
     setCreating(false)
-    if (!result.ok || !result.data) { setError(result.message ?? 'Discord did not make that role.'); return }
+    if (!result.ok || !result.data) { setError(errorText(result.message, 'Discord didn’t make that role.')); return }
     roles.reload()
     setOpen(result.data.id)
   }
@@ -171,7 +172,7 @@ function RoleList({ guildId, sorted, data, error, creating, onCreate, onOpen, on
     setFailed(null)
     onMoved([...order.map((r, i) => ({ ...r, position: positions[i].position })), ...(everyone ? [everyone] : [])])
     void admin('moveRoles', { guildId, positions }).then(result => {
-      if (!result.ok) { setFailed({ id, message: result.message ?? 'Discord did not move that role.' }); onFailed() }
+      if (!result.ok) { setFailed({ id, message: errorText(result.message, 'Discord didn’t move that role.') }); onFailed() }
     })
   }
   function drop(target: Role) {
@@ -258,12 +259,12 @@ function RoleEditor({ guildId, role, roles, data, onPick, onBack, onSaved, onDel
     setBusy(true)
     if (Object.keys(draft).length) {
       const result = await admin('saveRole', { guildId, roleId: role.id, changes: draft })
-      if (!result.ok) { setBusy(false); setError(result.message ?? 'Discord did not save that role.'); return }
+      if (!result.ok) { setBusy(false); setError(errorText(result.message, 'Discord didn’t save that role.')); return }
       setDraft({}); onSaved()
     }
     if (links) {
       const result = await admin('saveRoleLinks', { guildId, roleId: role.id, groups: links })
-      if (!result.ok) { setBusy(false); setError(result.message ?? 'Discord did not save those requirements.'); return }
+      if (!result.ok) { setBusy(false); setError(errorText(result.message, 'Discord didn’t save those requirements.')); return }
       setLinks(null); setLinksSaved(n => n + 1)
     }
     setBusy(false)
@@ -313,7 +314,7 @@ function RoleDisplay({ role, value, editable, change, guildId, onDeleted }: {
     setBusy(true); setError(null)
     void admin('deleteRole', { guildId, roleId: role.id }).then(result => {
       setBusy(false)
-      if (result.ok) onDeleted(); else setError(result.message ?? 'Discord did not delete that role.')
+      if (result.ok) onDeleted(); else setError(errorText(result.message, 'Discord didn’t delete that role.'))
     })
   }
   return (
@@ -381,7 +382,7 @@ function RoleMembers({ guildId, role, editable, onChanged }: { guildId: string; 
   const [error, setError] = useState<string | null>(null)
   const q = query.trim().toLowerCase()
   const remove = (row: Member) => void admin('removeRole', { guildId, userId: row.member.user.id, roleId: role.id }).then(result => {
-    if (!result.ok) { setError(result.message ?? 'Discord did not take that.'); return }
+    if (!result.ok) { setError(errorText(result.message, 'Discord didn’t take that.')); return }
     members.set(list => list && { ...list, members: list.members.filter(m => m.member.user.id !== row.member.user.id) })
     onChanged()
   })
@@ -430,7 +431,7 @@ function AddMembers({ guildId, role, onClose, onAdded }: { guildId: string; role
     if (text.length < 2) { setFound([]); return }
     const wait = window.setTimeout(() => void admin<MemberSearch>('searchMembers', { guildId, query: text }).then(result => {
       if (latest.current !== text) return
-      if (!result.ok) { setError(result.message ?? 'Discord did not search.'); return }
+      if (!result.ok) { setError(errorText(result.message, 'Discord didn’t search.')); return }
       setError(null)
       setFound((result.data?.members ?? []).filter(m => !m.member.roles.includes(role.id)))
     }), 300)
@@ -440,7 +441,7 @@ function AddMembers({ guildId, role, onClose, onAdded }: { guildId: string; role
     setBusy(true)
     void admin('addRoleMembers', { guildId, roleId: role.id, userIds: [...picked] }).then(result => {
       setBusy(false)
-      if (result.ok) onAdded(); else setError(result.message ?? 'Discord did not add them.')
+      if (result.ok) onAdded(); else setError(errorText(result.message, 'Discord didn’t add them.'))
     })
   }
   return (

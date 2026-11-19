@@ -19,9 +19,9 @@ internal static class AccountSyncMap
     [
         "AchievementBanners", "AchievementVolume", "AntiCheatSafeMode", "AutoInstallRedistributables", "AutoUpdateGames",
         "Background", "CloseStoreClientsAfterLaunch", "ControllerSound", "DownloadHoursEnd", "DownloadHoursStart", "FpsCounter",
-        "FpsCounterItems", "HiddenGames", "KeepAwakeDownloads", "LibraryShowInstalled", "LibraryShowOwned", "LucidFollowHeadset",
+        "FpsCounterItems", "HiddenGames", "KeepAwakeDownloads", "LibraryShowInstalled", "LibraryShowOwned",
         "MinimizeWhilePlaying", "PauseDownloadsWhilePlaying", "ReduceMotion", "ShowLibraryTools", "SortMode",
-        "StartLucidWithExo", "StoreClientsQuiet", "TextColour", "TextSize", "UiPrefs",
+        "StoreClientsQuiet", "TextColour", "TextSize", "UiPrefs",
     ];
 
     /// <summary>
@@ -42,9 +42,9 @@ internal static class AccountSyncMap
         "DiscordPushToTalk", "DiscordQuietWhilePlaying", "DiscordSelectedChannelSound",
         "DiscordSensitivity", "DiscordSoundVolume", "DiscordSoundboardMuted", "DiscordSoundboardVolume",
         "DiscordTaskbarFlash", "DiscordUnreadBadge", "DiscordVoiceFocus", "DiscordVoiceTunes",
-        "AutoUpdateOff", "FastGpuForGames", "FpsCounterPosition", "FrameGenEverywhere", "FrameGenKeptOff", "FramelessMode",
+        "AutoUpdateOff", "Autopilot", "FastGpuForGames", "FpsCounterPosition", "FrameGenEverywhere", "FrameGenKeptOff", "FramelessMode",
         "FramelessPinSide", "FramelessPinTop", "HdrForGames", "HdrGameModes", "HdrGameScreens", "HdrSdrGamma",
-        "HdrSwitchedOn", "HdrSwitchedRamp", "LastPlayed", "LaunchOverrides", "LibraryFolders", "LucidPath",
+        "HdrSwitchedOn", "HdrSwitchedRamp", "LastPlayed", "LaunchOverrides", "LibraryFolders", "StartLucidWithExo",
         "MouseBridge", "MouseBridgeAppAutostart", "MouseBridgeAppPath", "NvidiaColor", "NvidiaDriverBranch",
         "AccountAsked", "OnboardingComplete", "PlayStationPadSeen", "PreferredGameSources", "Recent", "RtxVideoDriver", "RtxVideoHdr",
         "RtxVideoSuperResolution", "SdrGammaBefore", "StartMaximized", "StartWithWindows", "StartupHandedToExo", "SteamBetaJoined",

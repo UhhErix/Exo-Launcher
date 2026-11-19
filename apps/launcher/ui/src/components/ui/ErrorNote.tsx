@@ -6,16 +6,16 @@ type LogsReader = (error: string, area: string) => Promise<{ ok: boolean; text?:
 let readLogs: LogsReader | null = null
 
 /**
- * Where Copy logs gets its report: the app's own host, set once by main.tsx before anything draws. Set, not imported, so
+ * Where Copy details gets its report: the app's own host, set once by main.tsx before anything draws. Set, not imported, so
  * the pages every Exo app shares (the Exo Profile's) can say an error without reaching Launcher's host; with none set,
- * an error shows without Copy logs.
+ * an error shows without Copy details.
  */
 export function setLogsReader(next: LogsReader): void {
   readLogs = next
 }
 
 /**
- * An error as a page says it, with Copy logs beside it (DESIGN.md › Controls): Exo's version, the error, where it
+ * An error as a page says it, with Copy details beside it (DESIGN.md › Controls): Exo's version, the error, where it
  * happened and the log entries that explain it (AppLog.ReportFor), ready to paste into a report. Where is the room it
  * sits in (the nearest data-log-area: Library, Devices, PC, Discord and so on).
  */
@@ -53,7 +53,7 @@ export function CopyLogs({ error }: { error: string }) {
   }
   return (
     <button type="button" className="exo-set-btn is-compact exo-copy-logs" onClick={event => void copy(reader, event.currentTarget)}>
-      {said ?? 'Copy logs'}
+      {said ?? 'Copy details'}
     </button>
   )
 }
