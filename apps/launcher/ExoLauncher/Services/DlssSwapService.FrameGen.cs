@@ -1672,7 +1672,7 @@ public sealed partial class DlssSwapService
         {
             FrameGenStarted[game.Id] = DateTime.UtcNow;
             // A game started without its anti-cheat: Exo's mod and recorder go in for this session only (SessionMods.cs).
-            try { service.ForSessionAtLaunch(game, SystemSpecs.FrameGenGpu, settings.Shared.FrameGenEverywhere, settings.FrameGenKeptOff); }
+            try { service.ForSessionAtLaunch(game, SystemSpecs.FrameGenGpu, settings.Shared.FrameGenEverywhere, settings.FrameGenKeptOff, id => settings.SetFrameGenKeptOff(id, true)); }
             catch (Exception ex) { AppLog.Warn("Frame generation for a session without anti-cheat: " + ex.Message); }
             try { service.FrameGenAtLaunch(game, SystemSpecs.FrameGenGpu); }
             catch (Exception ex) { AppLog.Warn("Frame generation at launch: " + ex.Message); }

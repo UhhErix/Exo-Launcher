@@ -127,6 +127,15 @@ public sealed partial class DlssSwapService
         return true;
     }
 
+    /// <summary>Best settings off: the frame generation Exo held for the game is let go; a held recorder stays held. True when one was held.</summary>
+    internal bool DropSessionHeldFrameGen(string gameId)
+    {
+        if (SessionHeldFor(gameId) is not { Folder: not null } held) return false;
+        DeleteHeldFiles(gameId);
+        SaveSessionHeld(held with { Folder = null });
+        return true;
+    }
+
     /// <summary>The folders under the install where the shader recorder sits (its settings file beside the game's program).</summary>
     internal static IReadOnlyList<string> RecorderFolders(string root)
     {
@@ -154,7 +163,8 @@ public sealed partial class DlssSwapService
     /// anti-cheat: what Exo held goes back in, and Best settings' mod goes in where the table says so (<see cref="FrameGenNext.PutIn"/>),
     /// at most a minute. The game starts whatever happens here.
     /// </summary>
-    internal void ForSessionAtLaunch(GameEntry game, string? gpu, bool bestSettings, Func<string, bool> keptOff)
+    /// <param name="keepOff">Keeps a game off for good where Exo couldn't save what it learned there (<see cref="PutRemovedBack"/>).</param>
+    internal void ForSessionAtLaunch(GameEntry game, string? gpu, bool bestSettings, Func<string, bool> keptOff, Action<string>? keepOff = null)
     {
         if (AntiCheatCheck.WithoutAntiCheatLaunch(game) is null) return;
         using var timeout = new CancellationTokenSource(TimeSpan.FromMinutes(1));
@@ -162,12 +172,33 @@ public sealed partial class DlssSwapService
         {
             if (SessionHeldFor(game.Id) is not null && PutInForSession(game, timeout.Token).GetAwaiter().GetResult() is { } why)
                 AppLog.Info($"Frame generation for {game.Title}'s session: what Exo held stays out: {why}");
-            if (!bestSettings || keptOff(game.Id) || FrameGenInGame(game.Id) is not null) return;
-            if (FrameGenRead(game, gpu, timeout.Token).Next != FrameGenNext.PutIn) return;
-            var (ok, message) = FrameGenOnAsync(game, gpu, timeout.Token).GetAwaiter().GetResult();
-            AppLog.Info($"Frame generation in {game.Title} for its session without anti-cheat: {(ok ? "on" : message)}.");
+            if (bestSettings && !keptOff(game.Id))
+            {
+                // Best settings' table, as its background pass reads it for any other game: files that went are put back
+                // once, a game without the mod gets it, and one with it moves to the mod's newest release.
+                var next = FrameGenRead(game, gpu, timeout.Token).Next;
+                if (next == FrameGenNext.PutBack && PutRemovedBack(game, keepOff)) next = FrameGenRead(game, gpu, timeout.Token).Next;
+                if (next == FrameGenNext.PutIn)
+                {
+                    var (ok, message) = FrameGenOnAsync(game, gpu, timeout.Token).GetAwaiter().GetResult();
+                    AppLog.Info($"Frame generation in {game.Title} for its session without anti-cheat: {(ok ? "on" : message)}.");
+                }
+                else if (FrameGenInGame(game.Id) is not null)
+                    FrameGenKeepCurrentAsync([game], gpu, _ => false, timeout.Token).GetAwaiter().GetResult();
+            }
         }
         catch (OperationCanceledException) { AppLog.Info($"Frame generation for {game.Title}'s session: it took too long; the game starts without it."); }
+        // Last, after everything that went in: DLSSG SM86 and the recorder can hang the game before its window opens.
+        if (RecorderClashes(game.Id))
+        {
+            using var recorderTimeout = new CancellationTokenSource(TimeSpan.FromSeconds(20));
+            try
+            {
+                if (SessionRecorder(game.Id, false, recorderTimeout.Token).GetAwaiter().GetResult() is { } off) AppLog.Warn($"Shaders: recording in {game.Title} stays on: {off}");
+                else AppLog.Info($"Shaders: recording stops in {game.Title}: with its frame generation the game can hang as it starts.");
+            }
+            catch (OperationCanceledException) { AppLog.Warn($"Shaders: recording in {game.Title} stays on: the engine didn't answer."); }
+        }
     }
 
     /// <summary>
@@ -186,6 +217,12 @@ public sealed partial class DlssSwapService
                 lock (mutation.Sync)
                     problem = ReturnFrameGen(game, root, folder);
             if (problem is null) held = held with { Folder = null };
+        }
+        if (held.Recorder && FrameGenInGame(game.Id) is { } inGame && ReadFrameGenManifest(inGame) is { } back && back.Mod == DlssgSm86.Name)
+        {
+            // DLSSG SM86 and the recorder can hang the game as it starts (RecorderClashes): frame generation wins, as at any launch.
+            AppLog.Info($"Shaders: recording stays off in {game.Title}: with its frame generation the game can hang as it starts.");
+            held = held with { Recorder = false };
         }
         if (held.Recorder)
         {
@@ -304,16 +341,14 @@ public sealed partial class DlssSwapService
                 Hold(path, Path.Combine(into, file.Path));
                 moved++;
             }
+            // The mod's folder as Off leaves it: its logs go, a file Exo didn't write (or one changed since) stays, empty folders go.
             if (mod.Folder is { } own && Path.Combine(folder, own) is var modFolder && Directory.Exists(modFolder) && (File.GetAttributes(modFolder) & FileAttributes.ReparsePoint) == 0)
-            {
-                foreach (var path in Directory.EnumerateFiles(modFolder, "*", new EnumerationOptions { RecurseSubdirectories = true, AttributesToSkip = FileAttributes.ReparsePoint }).ToList())
-                {
-                    Hold(path, Path.Combine(into, Path.GetRelativePath(folder, path)));
-                    moved++;
-                }
-                RemoveEmptyFolders(modFolder);
-            }
+                ClearModFolder(modFolder, mod, logs: !over, folder, left);
             if (!over) foreach (var leftover in FrameGenLeftovers(folder, mod).ToList()) TryDelete(leftover);
+            // The driver's frame cap Exo moved into OptiScaler goes back for the game's other starts; the record keeps it,
+            // so the next session moves it again (FollowDriverCap) and a let-go record has nothing left to undo.
+            if (install.Cap is { } cap && FrameGenDriver is { } driver && !driver.SetGameCap(game, Path.Combine(folder, install.Exe), cap.Before, out _, out _))
+                AppLog.Warn($"Frame generation in {game.Title}: the driver didn't take back its frame cap for the game.");
             Hold(Path.Combine(folder, FrameGenManifestName), Path.Combine(into, FrameGenManifestName));
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or DeletionRefusedException)
@@ -321,7 +356,7 @@ public sealed partial class DlssSwapService
             return "Exo couldn't take all of its frame generation out: " + ex.Message + ". It tries again shortly.";
         }
         AppLog.Info($"Frame generation for {game.Title}: out of the game after its session without anti-cheat ({mod.Name} {install.Release}, {moved} files held by Exo).");
-        return left.Count == 0 ? null : $"{string.Join(" and ", left)} under Exo's name isn't Exo's file now, so it stays where it is.";
+        return left.Count == 0 ? null : $"{string.Join(" and ", left)} isn't Exo's file as Exo wrote it, so it stays where it is.";
     }
 
     /// <summary>One file out of the game into Exo's held folder (another volume: copied, then gone from the game).</summary>
@@ -342,14 +377,6 @@ public sealed partial class DlssSwapService
         if (!Directory.Exists(files) || !RecursiveDeleteGuard.TryValidateManagedChild(SessionFolder(gameId), files, out var safe, out _)) return;
         try { DeletionGate.DeleteDirectory(safe, recursive: true); }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or DeletionRefusedException) { AppLog.Debug("Frame generation held files: " + ex.Message); }
-    }
-
-    /// <summary>Each folder under <paramref name="dir"/> (and it) that is empty, deepest first; one with anything left stays.</summary>
-    private static void RemoveEmptyFolders(string dir)
-    {
-        foreach (var child in Directory.EnumerateDirectories(dir).ToList())
-            if ((File.GetAttributes(child) & FileAttributes.ReparsePoint) == 0) RemoveEmptyFolders(child);
-        if (!Directory.EnumerateFileSystemEntries(dir).Any()) DeletionGate.DeleteDirectory(dir);
     }
 
     // ------------------------------------------------------------------ leftovers
