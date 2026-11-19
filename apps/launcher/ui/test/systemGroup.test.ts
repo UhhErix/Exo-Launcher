@@ -5,7 +5,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
-import { sendSystemTuning, systemItemCanPutBack } from '../src/components/gpu/systemGroupModel.ts'
+import { systemItemCanPutBack } from '../src/components/gpu/systemGroupModel.ts'
 
 const groupSource = readFileSync(new URL('../src/components/gpu/SystemGroup.tsx', import.meta.url), 'utf8')
 const onboardingSource = readFileSync(new URL('../src/components/OnboardingPanel.tsx', import.meta.url), 'utf8')
@@ -16,20 +16,9 @@ test('an off item that keeps an undo record offers Put back', () => {
   assert.equal(systemItemCanPutBack({ on: false, canUndo: false }), false)
 })
 
-test('Put back invokes host.systemTuning with off and the item key', async () => {
-  const calls: Array<{ action: string; key?: string }> = []
-  const fakeBridge = {
-    async systemTuning(action: 'read' | 'apply' | 'on' | 'off', key?: 'timer' | 'scheduling' | 'pagefile' | 'cache' | 'services' | 'integrity') {
-      calls.push({ action, key })
-      return { ok: true, message: null, restart: false, items: [] }
-    },
-  }
-  await sendSystemTuning('services', false, fakeBridge)
-  assert.deepEqual(calls, [{ action: 'off', key: 'services' }])
-})
-
-test('SystemGroup renders Put back via systemItemCanPutBack and OnboardingPanel passes tuning to bestSteps', () => {
+test('SystemGroup renders Put back via systemItemCanPutBack, calls host.systemTuning directly, and OnboardingPanel passes tuning to bestSteps', () => {
   assert.match(groupSource, /systemItemCanPutBack\(item\)/)
+  assert.match(groupSource, /await host\.systemTuning\(on \? 'on' : 'off', item\.key\)/)
   assert.match(groupSource, /onClick=\{\(\) => void run\(item, false\)\}>Put back</)
   assert.match(onboardingSource, /host\.systemTuning\(\)/)
   assert.match(onboardingSource, /bestSteps\(gpu, health, screen, settings, saveSettings, drives, tuning\)/)

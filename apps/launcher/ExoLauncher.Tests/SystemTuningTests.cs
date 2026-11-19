@@ -291,11 +291,27 @@ public sealed class SystemTuningTests : IDisposable
         await Assert.ThrowsAsync<OperationCanceledException>(() => Make().ApplyAsync());
         _system.Closes = false;
         Assert.False(_system.Clock);
-        // The next read settles it from what the step wrote before removing the value.
+        // The next read before a restart settles it from what the step wrote and keeps the restart prompt.
         var item = Make().Read().Items.Single();
-        Assert.True(item.On && item.CanUndo);
+        Assert.True(item.On && item.CanUndo && item.Restart);
         Assert.Null(await Make().TurnOffAsync(TimerKey));
         Assert.True(_system.Clock);
+    }
+
+    [Fact]
+    public async Task A_timer_step_recovered_after_restart_clears_its_restart_prompt()
+    {
+        _system.Hz = HpetHz;
+        _system.Closes = true;
+        await Assert.ThrowsAsync<OperationCanceledException>(() => Make().ApplyAsync());
+        _system.Closes = false;
+        // Windows rebooted after the elevated step ran; settling later uses the step's original timestamp, not recovery time.
+        _system.Hz = 10_000_000;
+        _system.BootAt = _now.AddMinutes(5);
+        _now = _now.AddMinutes(6);
+        var item = Make().Read().Items.Single();
+        Assert.True(item.On && item.CanUndo);
+        Assert.False(item.Restart);
     }
 
     [Fact]

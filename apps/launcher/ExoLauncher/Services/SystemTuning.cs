@@ -112,7 +112,7 @@ internal sealed partial class SystemTuning(SystemTuning.ISystem system, string p
     /// is the timer's change under way: the file its elevated step writes Windows' boot entry to before it removes anything,
     /// saved before the step, so a step Exo didn't see finish is settled from it the next time Exo reads (<see cref="Settle"/>).
     /// </summary>
-    internal sealed record Was(int? Value = null, string[]? Strings = null, bool Absent = false, List<ServiceWas>? Services = null, bool Clock = false, string? Probe = null);
+    internal sealed record Was(int? Value = null, string[]? Strings = null, bool Absent = false, List<ServiceWas>? Services = null, bool Clock = false, string? Probe = null, DateTimeOffset? ProbeAt = null);
 
     /// <summary>
     /// What Exo keeps: the items the player turned off, what each changed item held, when each was last changed (a restart
@@ -295,7 +295,7 @@ internal sealed partial class SystemTuning(SystemTuning.ISystem system, string p
                     clockWas = system.Answer();
                     clockAfter = system.Answer();
                     // Saved with the record below, before the step: what it finds there is settled even if Exo never sees it end.
-                    kept[key] = (kept.TryGetValue(key, out var earlier) ? earlier : new Was()) with { Probe = clockWas };
+                    kept[key] = (kept.TryGetValue(key, out var earlier) ? earlier : new Was()) with { Probe = clockWas, ProbeAt = now() };
                     lines.AddRange(TimerLines(clockWas, clockAfter));
                     break;
                 case SchedulingKey:
@@ -545,8 +545,8 @@ internal sealed partial class SystemTuning(SystemTuning.ISystem system, string p
         var kept = new Dictionary<string, Was>(saved.Kept);
         var changed = new Dictionary<string, DateTimeOffset>(saved.Changed);
         var native = saved.Native;
-        if (forced == true) { kept[TimerKey] = new Was(Clock: true); changed[TimerKey] = now(); }
-        else if (record.Clock) kept[TimerKey] = record with { Probe = null };
+        if (forced == true) { kept[TimerKey] = new Was(Clock: true); changed[TimerKey] = record.ProbeAt ?? now(); }
+        else if (record.Clock) kept[TimerKey] = record with { Probe = null, ProbeAt = null };
         else kept.Remove(TimerKey);
         if (forced == false && !record.Clock)
         {

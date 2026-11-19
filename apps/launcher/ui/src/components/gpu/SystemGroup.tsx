@@ -7,7 +7,7 @@ import { Switch } from '../Switch'
 import { Row } from '../settings/parts'
 import { ConfirmButton } from '../ui/ConfirmButton'
 import { Spinner } from '../ui/Spinner'
-import { sendSystemTuning, systemItemCanPutBack } from './systemGroupModel'
+import { systemItemCanPutBack } from './systemGroupModel'
 
 const ICONS: Record<TuningKey, ReactNode> = {
   timer: <Clock size={16} />,
@@ -34,7 +34,7 @@ export function SystemGroup({ tuning, onTuning }: { tuning: Tuning | null; onTun
     setBusy(item.key)
     setError(null)
     try {
-      const next = await sendSystemTuning(item.key, on, host)
+      const next = await host.systemTuning(on ? 'on' : 'off', item.key)
       onTuning(next)
       if (!next.ok) setError({ key: item.key, text: trimStop(next.message) || 'Not changed. Try again.' })
     } catch (e) {
