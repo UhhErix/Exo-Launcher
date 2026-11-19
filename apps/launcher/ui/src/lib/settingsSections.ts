@@ -16,7 +16,7 @@ export const SETTINGS_PAGES = [
     label: 'General',
     sections: [],
     keywords: [
-      'background', 'dark mode', 'theme', 'pure black', 'dark grey', 'graphite', 'text size', 'reduce motion', 'animation', 'start maximized', 'startup', 'start with windows', 'startup behaviour', 'window',
+      'dark mode', 'amoled', 'pure black', 'text size', 'reduce motion', 'animation', 'start maximized', 'startup', 'start with windows', 'startup behaviour', 'window',
       'keep pc awake', 'keep awake', 'awake', 'sleep', 'downloads and shader warming',
     ],
   },

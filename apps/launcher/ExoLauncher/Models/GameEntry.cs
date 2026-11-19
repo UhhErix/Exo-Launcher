@@ -328,7 +328,7 @@ public sealed class AppSettings
     /// <summary>Shell text size: "small", "normal" or "large".</summary>
     public string TextSize { get; set; } = "normal";
     /// <summary>The page's background palette (Settings › General › Background): "black", "near", "grey" (the default), "windows" or "graphite".</summary>
-    public string Background { get; set; } = "grey";
+    public string Background { get; set; } = "black";
     /// <summary>
     /// The choices the page makes and Exo keeps for it (Discord's look and streamer mode, the driver branch, the headphones
     /// worn, the Shaders order, Go Live's quality, ...), by key. Only the keys in <see cref="ExoLauncher.Services.PlayerData.UiPrefKeys"/>
