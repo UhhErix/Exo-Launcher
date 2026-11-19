@@ -32,7 +32,7 @@ Exo Launcher requires Windows 11 x64.
 
 - [Exo Mouse](https://getexo.app/source) (AGPL-3.0-or-later), built on OpenMouse by snekxs.
 - OBS Studio's game capture hook (GPL-2.0-or-later), unchanged, which Exo Capture runs for a game in exclusive full screen. Exo Capture itself is Exo's own; [its versions up to 3.17.1](https://getexo.app/source) are GPL-3.0-or-later.
-- [Exo Shaders](https://getexo.app/source) (GPL-3.0-or-later), based on SCSKiller.
+- [Exo Shaders](https://getexo.app/source) (GPL-3.0-or-later), Exo's fork of SCSKiller, a separate program whose source is in `shaders/`.
 - [Exo Shield](https://getexo.app/source) (GPL-3.0), Exo's blocker, made from uBlock Origin Lite and HaGeZi's Multi PRO list, and SponsorBlock (GPL-3.0), in the music players' browser.
 
 Every bundled library and tool is listed in [Third-party notices](THIRD_PARTY_NOTICES.md).
