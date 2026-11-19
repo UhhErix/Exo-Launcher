@@ -118,7 +118,10 @@ public sealed partial class MainWindow
         if (ShadersAddon is not { } addon) return on ? "Exo Shaders isn't installed." : null;
         try
         {
-            await addon.CallAsync("recorder.set", new System.Text.Json.Nodes.JsonObject { ["id"] = gameId, ["on"] = on }, ct, "a session without anti-cheat").ConfigureAwait(false);
+            // session: the engine lets it in only while this engine runs and until Exo turns it off (exo.library's noRecorder keeps it out otherwise).
+            var ask = new System.Text.Json.Nodes.JsonObject { ["id"] = gameId, ["on"] = on };
+            if (on) ask["session"] = true;
+            await addon.CallAsync("recorder.set", ask, ct, "a session without anti-cheat").ConfigureAwait(false);
             return null;
         }
         catch (Exception ex) when (ex is InvalidOperationException or OperationCanceledException or IOException)
