@@ -48,7 +48,7 @@ internal static class AccountSyncMap
         "MouseBridge", "MouseBridgeAppAutostart", "MouseBridgeAppPath", "NvidiaColor", "NvidiaDriverBranch",
         "AccountAsked", "OnboardingComplete", "PlayStationPadSeen", "PreferredGameSources", "Recent", "RtxVideoDriver", "RtxVideoHdr",
         "RtxVideoSuperResolution", "SdrGammaBefore", "StartMaximized", "StartWithWindows", "StartupHandedToExo", "SteamBetaJoined",
-        "SteamInput", "SteamOverlay", "SteamShortcuts", "ThroughSteam", "UpscalerAntiCheatConsent", "UpscalerAntiCheatEverywhere", "UpscalerAutoUpdateDefaulted", "CustomCoverImages",
+        "SteamInput", "SteamOverlay", "SteamShortcuts", "SteamWithoutAntiCheat", "ThroughSteam", "UpscalerAntiCheatConsent", "UpscalerAntiCheatEverywhere", "UpscalerAutoUpdateDefaulted", "CustomCoverImages",
         "WhatsNewSeen", "UiPrefsMoved",
     ];
 

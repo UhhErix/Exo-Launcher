@@ -81,7 +81,7 @@ public sealed class SteamVacFileTests : IDisposable
     public void TheFileIsReadOnceAndEachAppGetsSteamsWord()
     {
         Write(AppInfo(ThreeGames));
-        var steam = new SteamVacFile(() => File_);
+        var steam = new SteamVacFile(() => [File_]);
         Assert.Equal(SteamWord.Vac, steam.Word(1000));
         Assert.Equal(SteamWord.None, steam.Word(2000));
         Assert.Equal(SteamWord.Listed, steam.Word(3000));
@@ -99,7 +99,7 @@ public sealed class SteamVacFileTests : IDisposable
     {
         var now = new DateTime(2026, 11, 10, 12, 0, 0, DateTimeKind.Utc);
         Write(AppInfo(ThreeGames));
-        var steam = new SteamVacFile(() => File_, () => now);
+        var steam = new SteamVacFile(() => [File_], () => now);
         Assert.Equal(SteamWord.Vac, steam.Word(1000));
         // Steam rewrites it and Exo reads it mid-write: the last whole read stays.
         Write(AppInfo([(4000, App("New", vac: true)), .. ThreeGames], cut: 30), now.AddHours(1));
@@ -117,18 +117,18 @@ public sealed class SteamVacFileTests : IDisposable
     public void AHalfWrittenFirstReadSaysCannotTell()
     {
         Write(AppInfo(ThreeGames, cut: 30));
-        Assert.Equal(SteamWord.CannotTell, new SteamVacFile(() => File_).Word(1000));
+        Assert.Equal(SteamWord.CannotTell, new SteamVacFile(() => [File_]).Word(1000));
     }
 
     [Fact]
     public void ANewerFormatOrAHugeFileIsPossiblyVacNeverUnknown()
     {
-        Write(AppInfo(ThreeGames, magic: 0x0756442A));
-        var newer = new SteamVacFile(() => File_);
+        Write(AppInfo(ThreeGames, magic: 0x0756442B));
+        var newer = new SteamVacFile(() => [File_]);
         Assert.Equal(SteamWord.CannotTell, newer.Word(1000));
         Assert.Equal(0, newer.Parses);
         Write(AppInfo(ThreeGames));
-        var huge = new SteamVacFile(() => File_, maxBytes: 64);
+        var huge = new SteamVacFile(() => [File_], maxBytes: 64);
         Assert.Equal(SteamWord.CannotTell, huge.Word(1000));
         Assert.Equal(0, huge.Parses);
         // Through the whole check: a Steam game is possibly VAC, not unknown, and Valve's own titles are VAC whatever the file says.
@@ -143,5 +143,5 @@ public sealed class SteamVacFileTests : IDisposable
     }
 
     [Fact]
-    public void NoFileSaysCannotTell() => Assert.Equal(SteamWord.CannotTell, new SteamVacFile(() => Path.Combine(_dir, "missing.vdf")).Word(1000));
+    public void NoFileSaysCannotTell() => Assert.Equal(SteamWord.CannotTell, new SteamVacFile(() => [Path.Combine(_dir, "missing.vdf")]).Word(1000));
 }

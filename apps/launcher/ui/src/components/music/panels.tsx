@@ -10,7 +10,7 @@ import { musicPosition, playbackAnchor, type MusicPlayback } from '../../lib/mus
 import { shouldReduceMotion } from '../../lib/motionPreference'
 import { onPageActivityChanged, pageIsActive, pageIsVisible } from '../../lib/pageActivity'
 import type { LyricsLine, PlayerActOptions, PlayerAction, PlayerFriend, PlayerState, PlayerTrack, PlayerViewData } from '../../lib/player'
-import { ChevronDown, ChevronUp, LinkIcon, Remove } from '../../brand/icons'
+import { ChevronDown, ChevronUp, FullScreen, LinkIcon, Remove } from '../../brand/icons'
 import { Switch } from '../Switch'
 import { Qr } from '../ui/Qr'
 import { Art } from './Art'
@@ -479,25 +479,41 @@ export function CreditsPanel({ uri }: { uri: string }) {
 }
 
 /** The playing song large, with its lyrics; synced lines follow the song and a click seeks to one. */
-export function NowPlayingPanel({ player, playback, receivedAt }: { player: PlayerState | null; playback: MusicPlayback | null; receivedAt: number }) {
-  const { open } = usePlayer()
+export function NowPlayingPanel({ player, playback, receivedAt, onImmersive }: {
+  player: PlayerState | null
+  playback: MusicPlayback | null
+  receivedAt: number
+  /** Now playing full window (Immersive.tsx). */
+  onImmersive: () => void
+}) {
   const uri = player?.trackUri ?? ''
   return (
     <div className="exo-music-now">
       <Art src={player?.image || playback?.artworkDataUrl || undefined} size={368} />
-      <div className="exo-music-now-text">
-        <h2>{player?.title || playback?.title || 'Nothing playing'}</h2>
-        <p className="exo-music-row-sub">
-          {(player?.artists ?? []).map((artist, i) => (
-            <span key={`${artist.uri}:${artist.name}`}>{i ? ', ' : ''}
-              {artist.uri ? <button type="button" className="exo-music-link" onClick={() => open({ view: 'artist', uri: artist.uri, title: artist.name })}>{artist.name}</button> : artist.name}
-            </span>
-          ))}
-          {player?.artists?.length ? null : playback?.artist}
-        </p>
+      <div className="exo-music-now-head">
+        <div className="exo-music-now-text">
+          <h2>{player?.title || playback?.title || 'Nothing playing'}</h2>
+          <p className="exo-music-row-sub"><SongArtists player={player} playback={playback} /></p>
+        </div>
+        <button type="button" className="exo-set-btn exo-music-toggle" aria-label="Immersive" aria-keyshortcuts="F" onClick={onImmersive}><FullScreen size={16} /></button>
       </div>
       {uri ? <SongTabs uri={uri} playback={playback} receivedAt={receivedAt} /> : null}
     </div>
+  )
+}
+
+/** The song's artists, each opening their page where the service has one; else the artist line as the song reports it. */
+export function SongArtists({ player, playback, onOpen }: { player: PlayerState | null; playback: MusicPlayback | null; onOpen?: () => void }) {
+  const { open } = usePlayer()
+  return (
+    <>
+      {(player?.artists ?? []).map((artist, i) => (
+        <span key={`${artist.uri}:${artist.name}`}>{i ? ', ' : ''}
+          {artist.uri ? <button type="button" className="exo-music-link" onClick={() => { onOpen?.(); open({ view: 'artist', uri: artist.uri, title: artist.name }) }}>{artist.name}</button> : artist.name}
+        </span>
+      ))}
+      {player?.artists?.length ? null : playback?.artist}
+    </>
   )
 }
 
@@ -527,9 +543,17 @@ function Related({ uri }: { uri: string }) {
   return <>{sections.map((section, index) => <Shelf key={`${index}:${section.title}`} title={section.title} cards={section.items} more={section.more} />)}</>
 }
 
-function Lyrics({ uri, playback, receivedAt }: { uri: string; playback: MusicPlayback | null; receivedAt: number }) {
+/** Tells onLines how many lines the lyrics have once they are in, and null while they load. */
+function useLineCount(fresh: boolean, count: number, onLines?: (count: number | null) => void) {
+  const known = fresh ? count : null
+  useEffect(() => { onLines?.(known) }, [known, onLines])
+}
+
+/** The song's lyrics, synced where the service has the times; onLines hears how many lines it has once known (null while they load). */
+export function Lyrics({ uri, playback, receivedAt, onLines }: { uri: string; playback: MusicPlayback | null; receivedAt: number; onLines?: (count: number | null) => void }) {
   const { data, error, fresh } = useView('lyrics', { uri })
   const lines = fresh ? data?.lines ?? [] : []
+  useLineCount(fresh, lines.length, onLines)
   const synced = !!data?.synced
   // Word by word (Apple Music's syllable lyrics): the sung words light as the song reaches them.
   const timed = lines.some(line => line.words?.length)
@@ -558,10 +582,10 @@ function Lyrics({ uri, playback, receivedAt }: { uri: string; playback: MusicPla
   const waiting = gap && position !== null && position >= gap.from ? gap : null
   const lead = lines.find(line => line.agent)?.agent
   const list = useRef<HTMLOListElement>(null)
-  // Keep the sung line (or the wait) in the middle of the panel (only the panel scrolls).
+  // Keep the sung line (or the wait) in the middle of the panel, or of Immersive's lyrics (only that scrolls).
   useEffect(() => {
     const line = list.current?.querySelector<HTMLElement>('.is-active')
-    const panel = list.current?.closest<HTMLElement>('.exo-music-panel')
+    const panel = list.current?.closest<HTMLElement>('.exo-music-panel, .exo-music-immersive-lyrics')
     if (!line || !panel) return
     const top = line.getBoundingClientRect().top - panel.getBoundingClientRect().top + panel.scrollTop
     panel.scrollTo({ top: top - panel.clientHeight / 2 + line.offsetHeight / 2, behavior: shouldReduceMotion() ? 'auto' : 'smooth' })

@@ -189,6 +189,7 @@ public sealed class SettingsService
         loaded.HiddenGames = NormalizeHiddenGames(loaded.HiddenGames);
         loaded.DiscordBandPins = NormalizeDiscordBandPins(loaded.DiscordBandPins);
         loaded.FrameGenKeptOff = NormalizeHiddenGames(loaded.FrameGenKeptOff);
+        loaded.SteamWithoutAntiCheat = NormalizeHiddenGames(loaded.SteamWithoutAntiCheat);
         loaded.AutoUpdateOff = NormalizeHiddenGames(loaded.AutoUpdateOff);
         if (string.IsNullOrWhiteSpace(loaded.SortMode) || !IsLibrarySortMode(loaded.SortMode))
             loaded.SortMode = "name";
@@ -748,6 +749,24 @@ public sealed class SettingsService
 
     /// <summary>Settings › General › Open Exo when Windows starts.</summary>
     public void SetStartWithWindows(bool on) => CommitMutation(settings => settings.StartWithWindows = on);
+    /// <summary>Whether the player set this Steam game to Launch without anti-cheat (<see cref="AppSettings.SteamWithoutAntiCheat"/>).</summary>
+    public bool SteamWithoutAntiCheat(string gameId)
+    {
+        lock (_stateGate)
+            return _current.SteamWithoutAntiCheat.Contains(gameId, StringComparer.OrdinalIgnoreCase);
+    }
+
+    /// <summary>Properties › Anti-cheat: with (the default) or without, for this game.</summary>
+    public void SetSteamWithoutAntiCheat(string gameId, bool without)
+    {
+        if (!ValidId(gameId, 512)) throw new InvalidDataException("Invalid game id.");
+        CommitMutation(settings =>
+        {
+            var rest = settings.SteamWithoutAntiCheat.Where(id => !string.Equals(id, gameId, StringComparison.OrdinalIgnoreCase));
+            settings.SteamWithoutAntiCheat = NormalizeHiddenGames(without ? rest.Append(gameId) : rest);
+        });
+    }
+
     /// <summary>Whether the player keeps this game out of automatic updates.</summary>
     public bool AutoUpdateOff(string gameId)
     {
@@ -1081,6 +1100,7 @@ public sealed class SettingsService
         HiddenGames = NormalizeHiddenGames(source.HiddenGames),
         FrameGenEverywhere = source.FrameGenEverywhere,
         FrameGenKeptOff = NormalizeHiddenGames(source.FrameGenKeptOff),
+        SteamWithoutAntiCheat = NormalizeHiddenGames(source.SteamWithoutAntiCheat),
         AutoUpdateOff = NormalizeHiddenGames(source.AutoUpdateOff),
         SteamOverlay = CopyStrings(source.SteamOverlay),
         ControllerSound = source.ControllerSound,

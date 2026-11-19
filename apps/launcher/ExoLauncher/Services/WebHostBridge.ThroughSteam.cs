@@ -118,7 +118,7 @@ public sealed partial class WebHostBridge
         string config, IReadOnlyList<SteamShortcuts.Wanted> wanted, IReadOnlyDictionary<string, SteamShortcuts.Kept> record)
     {
         if (wanted.Count == 0 && record.Count == 0) return null;
-        try { return SteamShortcuts.Plan(ReadSharedBytes(ShortcutsPath(config)), wanted, record); }
+        try { return SteamShortcuts.Plan(SteamAppInfoNames.ReadShared(ShortcutsPath(config)), wanted, record); }
         catch (Exception ex) when (ex is InvalidDataException or UserFacingException)
         {
             AppLog.Warn("Steam shortcuts: shortcuts.vdf not changed: " + ex.Message);

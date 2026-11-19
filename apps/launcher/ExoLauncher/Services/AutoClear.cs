@@ -1,7 +1,8 @@
 namespace ExoLauncher.Services;
 
 /// <summary>What a clear did: what went, what's still there and why, and the record Put back undoes it by.</summary>
-internal sealed record Cleared(List<Leftover> Removed, List<Leftover> Left, bool Declined, string? Why, string? Undo, LeftoverSummary What);
+/// <paramref name="Point"/>: why what needed Windows' permission stayed when a restore point was asked for and none could be made.
+internal sealed record Cleared(List<Leftover> Removed, List<Leftover> Left, bool Declined, string? Why, string? Undo, LeftoverSummary What, string? Point = null);
 
 /// <summary>How an uninstall ended: whether the program is gone, and what its uninstaller said went wrong.</summary>
 internal sealed record Uninstalled(bool Gone, string? Problem)
@@ -60,8 +61,12 @@ internal static class AutoClear
     /// <summary>
     /// Clears what was chosen: first the registry written down, then what this user may remove, then what only an administrator
     /// may, all in one prompt. <paramref name="admin"/> null leaves those alone; false means it was declined, and they stay.
+    /// <paramref name="restore"/>: a System Restore point first, in the same prompt (<see cref="RestorePoint.Gated"/>); without
+    /// one, nothing that needs the prompt goes. What this user may remove needs none: it goes to the Recycle Bin and a saved
+    /// .reg, which Put back undoes.
     /// </summary>
-    internal static async Task<Cleared> ClearAsync(LeftoverScan scan, string name, IReadOnlyList<Leftover> chosen, Func<IReadOnlyList<string>, Task<bool>>? admin, RemovalHistory history, DateTime now, bool automatic = false)
+    internal static async Task<Cleared> ClearAsync(LeftoverScan scan, string name, IReadOnlyList<Leftover> chosen, Func<IReadOnlyList<string>, Task<bool>>? admin, RemovalHistory history, DateTime now, bool automatic = false,
+        bool restore = false)
     {
         var sizes = LeftoverScan.Sizes(chosen);
         var backup = scan.Backup(name, chosen);
@@ -69,6 +74,8 @@ internal static class AutoClear
         var machine = chosen.Where(item => item.Machine).ToList();
         var declined = false;
         var tasks = new List<RemovedTask>();
+        var drivers = new List<RemovedDriver>();
+        string? point = null;
         if (admin is not null)
         {
             // Files first, to the bin; then entries, services and tasks by name, each task written down just before it goes.
@@ -88,10 +95,15 @@ internal static class AutoClear
             }
             if (commands.Count > 0)
             {
-                if (await admin(commands).ConfigureAwait(false))
+                var (ran, made) = restore ? await RestorePoint.BehindAsync(commands, admin).ConfigureAwait(false) : (await admin(commands).ConfigureAwait(false), null);
+                if (ran)
                 {
+                    if (made is { } outcome && RestorePoint.Problem(outcome) is { } problem) point = problem.Replace("Nothing was removed.", "What needs Windows' permission stayed.", StringComparison.Ordinal);
                     removed.AddRange(machine.Where(item => !scan.Exists(item)));
                     tasks.AddRange(saving.Where(pair => removed.Contains(pair.Item) && File.Exists(pair.Task.File)).Select(pair => pair.Task));
+                    // A driver's store package, exported before it went: Put back adds it again.
+                    foreach (var item in removed.Where(item => item.Kind == LeftoverKind.Driver))
+                        if (scan.DriverBackups.TryGetValue(item, out var saved) && DriverSaved(saved.Folder)) drivers.Add(new RemovedDriver(saved.Folder, [.. saved.Infs]));
                 }
                 else declined = true;
             }
@@ -100,7 +112,13 @@ internal static class AutoClear
         var what = LeftoverScan.Summarize(removed, sizes);
         var undo = what.Count == 0 ? null : history.Add(name, what,
             removed.Where(item => !item.IsKey && item.Kind is LeftoverKind.Folder or LeftoverKind.File or LeftoverKind.Shortcut).Select(item => new RemovedPath(item.Path, item.Machine)),
-            backup, removed.Where(item => item.IsKey).Select(item => item.Path).Distinct(StringComparer.OrdinalIgnoreCase), now, automatic, tasks);
-        return new(removed, left, declined, scan.Why(left), undo, what);
+            backup, removed.Where(item => item.IsKey).Select(item => item.Path).Distinct(StringComparer.OrdinalIgnoreCase), now, automatic, tasks, drivers);
+        return new(removed, left, declined, scan.Why(left), undo, what, point);
+    }
+
+    private static bool DriverSaved(string folder)
+    {
+        try { return Directory.Exists(folder) && Directory.EnumerateFiles(folder, "*.inf", SearchOption.AllDirectories).Any(); }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { return false; }
     }
 }

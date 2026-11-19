@@ -285,7 +285,22 @@ public sealed partial class WebHostBridge
         var outcome = await RestorePoint.MakeAsync(steps => ReplacedApps.RemoveAsAdminAsync(steps, ct)).ConfigureAwait(true);
         return RestorePoint.Problem(outcome) is { } problem
             ? new { ok = false, made = false, message = (string?)problem }
-            : new { ok = true, made = outcome == RestorePoint.Outcome.Made, message = outcome == RestorePoint.Outcome.Recent ? "Windows made one in the last day: that one stands." : null };
+            : new { ok = true, made = outcome == RestorePoint.Outcome.Made, message = outcome == RestorePoint.Outcome.Recent ? "Windows keeps one restore point a day: the one from the last day stands." : null };
+    }
+
+    /// <summary>apps.openDefaults: Windows' Default apps, where a file type an app left pointing at itself gets a new default (Windows signs that choice; Exo never writes it).</summary>
+    private static object AppsOpenDefaults()
+    {
+        try
+        {
+            using var _ = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("ms-settings:defaultapps") { UseShellExecute = true });
+            return new { ok = true, message = (string?)null };
+        }
+        catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException)
+        {
+            AppLog.Debug("Apps: Default apps didn't open: " + ex.GetType().Name);
+            return new { ok = false, message = (string?)"Windows' Default apps didn't open." };
+        }
     }
 
     /// <summary>apps.installerCache: only reads. How many of Windows Installer's cached copies no product or patch needs, and how big.</summary>
@@ -525,10 +540,17 @@ public sealed partial class WebHostBridge
                 path = scan.Said(pair.Item),
                 bytes = sizes.GetValueOrDefault(pair.Item),
                 selected = pair.Item.Selected,
-                note = pair.Item.Held ?? (pair.Item.Likely ? "Only its name matches" : scan.Stayed.GetValueOrDefault(pair.Item)),
+                note = pair.Item.Held ?? scan.Stayed.GetValueOrDefault(pair.Item),
+                // How sure the scan is that it's the app's, and why: only certain is ever selected.
+                certainty = pair.Item.Sure.ToString().ToLowerInvariant(),
+                because = LeftoverScan.Said(pair.Item.Sure, pair.Item.Because),
+                // A driver that goes with its driver store package (exported first; Put back adds it again).
+                store = pair.Item.Infs is { Count: > 0 },
                 machine = pair.Item.Machine,
                 from = pair.From,
             }),
+            // File types Windows still opens with it: Default apps changes them (Windows signs that choice; Exo never writes it).
+            defaults = scan.Defaults.Take(20).ToArray(),
             // After an uninstall: it cleared by itself, what went, how to put it back, and whether Windows' prompt was declined.
             auto = done is not null,
             cleared = done?.What,
@@ -621,8 +643,11 @@ public sealed partial class WebHostBridge
                 .Select(id => find.Items[id]).ToList() : [];
         if (chosen.Count == 0) return new { ok = false, message = "Nothing was chosen." };
         // No confirm: files go to the Recycle Bin and registry entries to a backup first (Put back); Windows' one prompt asks for Program Files.
+        // restore: what needs that prompt goes only behind a System Restore point, made in the same prompt (a forced uninstall's
+        // clear, a driver and its store package, services and machine entries); what this user may remove needs none.
+        var restore = hasParams && p.TryGetProperty("restore", out var asked) && asked.ValueKind == JsonValueKind.True;
         var scan = new LeftoverScan(LeftoverScan.ThisPc());
-        var done = await Task.Run(() => AutoClear.ClearAsync(scan, find.Name, chosen, steps => ReplacedApps.RemoveAsAdminAsync(steps, ct), RemovalHistory.ForThisPc, DateTime.UtcNow), ct).ConfigureAwait(true);
+        var done = await Task.Run(() => AutoClear.ClearAsync(scan, find.Name, chosen, steps => ReplacedApps.RemoveAsAdminAsync(steps, ct), RemovalHistory.ForThisPc, DateTime.UtcNow, restore: restore), ct).ConfigureAwait(true);
         AppsChangedHere();
         Finds.TryRemove(token, out _);
         AppsMemory.ForThisPc.Forget(find.Remembered);
@@ -635,6 +660,7 @@ public sealed partial class WebHostBridge
             undo = done.Undo,
             left = done.Left.Count,
             message = done.Left.Count == 0 ? null : done.Declined ? "Windows' permission was declined: what needs it stayed."
+                : done.Point is { } point ? point + " Turn off Restore point to clear it without one."
                 : $"{done.Left.Count} {(done.Left.Count == 1 ? "item" : "items")} stayed: {done.Why ?? LeftoverScan.InUse}.",
         };
     }

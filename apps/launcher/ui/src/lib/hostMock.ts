@@ -1,4 +1,4 @@
-import { spotifyMock } from './spotifyMock'
+import { MOCK_SONG_MS, mockArtwork, spotifyMock } from './spotifyMock'
 import { mockAdmin, mockAppMessages, mockFew, mockFewMessages, mockApps, mockChannels, mockChannelsFor, mockDiscordStatus, mockMessageId, mockFriends, mockHome, mockMembers, mockMessages, mockProfile } from './discordMock'
 /** Browser development fixtures. Dynamically loaded only outside the packaged host. */
 import type { CompressSettings, CompressState, Game, GameProperties, LauncherSettings, InstallProgress, InstalledApp, ReplacedApp, RuntimeItem, StartupItem, StartupState, StoreGift } from './host'
@@ -50,6 +50,20 @@ const MOCK_GAMES: Game[] = [
     deps: ['Steam client'],
     launchNote: '',
     lastPlayedUtc: new Date(Date.now() - 26 * 3600_000).toISOString(),
+  },
+  {
+    // Steam's Play menu offers it without its anti-cheat: Properties › Anti-cheat.
+    id: 'steam:3472040',
+    title: 'NBA 2K26',
+    store: 'steam',
+    installed: true,
+    owned: true,
+    primaryAction: 'play',
+    status: 'Ready',
+    playtimeMinutes: 310,
+    sizeBytes: 140 * 1024 ** 3,
+    deps: ['Steam client'],
+    launchNote: '',
   },
   {
     // One Steam app holding the games bought as its DLC: named by the newest, and found by any of them.
@@ -230,18 +244,39 @@ const mockApply = (step: string, p?: { action?: unknown }) => { if (p?.action ==
 const mockIntelCpu = typeof location !== 'undefined' && new URLSearchParams(location.search).get('cpu') === 'intel'
 
 /**
- * PC › Network in browser dev: an Intel I226-V with Energy-Efficient Ethernet on, which network sets.
- * `?net=fine` has nothing to set, `?net=slow` a link held at 100 Mbps by its cable, `?net=wifi` a Wi-Fi
- * adapter (Exo has nothing to set on Wi-Fi; it holds the radio while a game runs).
+ * Best settings › Network in browser dev: an Intel I226-V with Energy-Efficient Ethernet on, DHCP DNS and Windows' TCP
+ * defaults, so the group has its adapter and Cloudflare DNS items. network sets every item kept on (with a check before
+ * and after), network-on and network-off one item. `?net=fine` has nothing to set on the adapter, `?net=slow` a link held
+ * at 100 Mbps by its cable, `?net=wifi` a Wi-Fi adapter with no IPv6, `?net=tcp` receive window tuning disabled.
  */
 const mockNet = typeof location !== 'undefined' ? new URLSearchParams(location.search).get('net') : null
-let mockNetSet = false
-const mockNetItems = (p?: { action?: unknown }) => {
-  if (p?.action === 'network') mockNetSet = true
-  if (mockNet === 'wifi' || mockNet === 'fine') return []
-  const items: Record<string, unknown>[] = [mockNetSet
-    ? { key: 'network', label: 'Network', detail: "Exo's settings for games", applied: true, canUndo: true }
-    : { key: 'network', label: 'Ethernet', detail: 'Energy-efficient Ethernet on' }]
+const mockNetOn = new Set<string>()
+const mockNetOff = new Set<string>()
+let mockCheck: Record<string, unknown> | null = null
+const mockNetItems = (p?: { action?: unknown; item?: unknown }) => {
+  const offered = [...(mockNet === 'wifi' || mockNet === 'fine' ? [] : ['adapter']), 'dns', ...(mockNet === 'tcp' ? ['tcp'] : [])]
+  const before = { ping: 21, jitter: 4, router: 2, lookup: 38 }
+  if (p?.action === 'network') {
+    for (const key of offered) if (!mockNetOff.has(key)) mockNetOn.add(key)
+    mockCheck = { before, after: { ping: 20, jitter: 4, router: 2, lookup: 11 }, said: 'Lookups fell from 38 ms to 11 ms.' }
+  }
+  if (p?.action === 'netcheck') mockCheck = { before: null, after: before, said: '' }
+  if (typeof p?.item === 'string') {
+    if (p.action === 'network-on') { mockNetOn.add(p.item); mockNetOff.delete(p.item) }
+    if (p.action === 'network-off') { mockNetOn.delete(p.item); mockNetOff.add(p.item) }
+  }
+  const words: Record<string, [string, string, string]> = {
+    adapter: ['Adapter settings for games', 'Energy-efficient Ethernet on.', 'Power saving that drops the link is off.'],
+    dns: ['Cloudflare DNS, encrypted', mockNet === 'wifi' ? 'Faster lookups, and your DNS is private. IPv4 only on Wi-Fi: it has no IPv6.' : 'Faster lookups, and your DNS is private.', ''],
+    tcp: ["Windows' TCP defaults", 'Receive window tuning disabled.', 'Downloads tune their own speed.'],
+  }
+  const items: Record<string, unknown>[] = offered.map(key => {
+    const on = mockNetOn.has(key)
+    const [label, off, set] = words[key]
+    return { key: `net-${key}`, label, detail: on && set ? set : off, applied: on, canUndo: on, off: mockNetOff.has(key) }
+  })
+  const left = offered.filter(key => !mockNetOn.has(key) && !mockNetOff.has(key)).map(key => words[key][0])
+  items.unshift({ key: 'network', label: 'Network', detail: left.length ? left.join(', ') : "Exo's network settings for games", applied: left.length === 0, canUndo: mockNetOn.size > 0 })
   if (mockNet === 'slow') items.push({ key: 'netlink', label: 'Ethernet', detail: '100 Mbps of 2.5 Gbps. Try another cable or router port.' })
   return items
 }
@@ -851,6 +886,7 @@ function mockPropertiesFor(id: string): GameProperties {
     cloudSync: false, language: null, languageChoices: [], beta: null, betaChoices: [], betaCode: false,
     contentLabel: 'DLC', content: null, folder: null, folderChoices: [], moving: null, storeProperties: null,
     ...(game?.store === 'steam' ? STEAM_PROPERTIES : game?.store === 'epic' ? EPIC_PROPERTIES : {}),
+    ...(id === 'steam:3472040' ? { antiCheatLaunch: { value: 'with' as const, detail: 'NBA 2K26 without EAC (offline only)' } } : {}),
   }
   return mockProperties[id]
 }
@@ -870,6 +906,10 @@ function mockSetProperty(params?: Record<string, unknown>) {
   } else if (key === 'launchOptions') next.launchOptions = value
   else if (key === 'language') { next.language = value; message = 'Steam is updating the game.' }
   else if (key === 'storeProperties') message = "Opened in Steam. Its Properties are under the gear on the game's page."
+  else if (key === 'antiCheatLaunch' && current.antiCheatLaunch) {
+    next.antiCheatLaunch = { ...current.antiCheatLaunch, value: value === 'without' ? 'without' : 'with' }
+    message = value === 'without' ? 'Plays offline, without anti-cheat. Frame generation and mods can go in.' : "Plays with anti-cheat. Exo's frame generation came out of the game."
+  }
   mockProperties[id] = next
   return { ok: true, message, properties: next }
 }
@@ -992,6 +1032,12 @@ async function mockMouseCore(params?: Record<string, unknown>) {
       : { verdict: 'fix', detail: "1000 Hz, 40 of 9,951 reports late, the longest 2.1 ms. They come with your screen's refresh. Its input lands on CPU 0, where Windows and most drivers go first. CPU 6 is quiet.", offer: 6, result: MOCK_MOUSE_BEFORE },
   }
 }
+
+/** The mock's song (spotifyMock › Song 1), playing from the page's start and looping, so the room and Immersive have one. */
+const mockSong = { playing: true, from: 0, since: 0 }
+const mockSongAt = () => (mockSong.from + (mockSong.playing ? performance.now() - mockSong.since : 0)) % MOCK_SONG_MS
+const mockPlayback = () => ({ provider: 'spotify', status: mockSong.playing ? 'playing' : 'paused', title: 'Song 1', artist: 'Artist 1', artworkDataUrl: mockArtwork,
+  positionMs: mockSongAt(), durationMs: MOCK_SONG_MS, positionAgeMs: 0, rate: mockSong.playing ? 1 : 0, canPlay: true, canPause: true, canPrev: true, canNext: true, canSeek: true })
 
 const MOCK_HANDLERS: Record<string, MockHandler> = {
   ...spotifyMock,
@@ -1250,16 +1296,25 @@ const MOCK_HANDLERS: Record<string, MockHandler> = {
   'shell.prepare': () => ({ ok: true }),
   'shell.painted': () => ({ ok: true }),
   'shell.ready': () => ({ ok: true }),
-  'music.playback': () => ({ ok: true, playback: null }),
+  'music.playback': () => ({ ok: true, playback: mockPlayback() }),
   // The mock's music level: a set answers with the level it took (the room's slider follows it).
   'music.volume': (p) => { if (typeof p?.level === 'number') mockMusicLevel = p.level; return { ok: true, level: mockMusicLevel, muted: mockMusicLevel <= 0, source: 'app' } },
-  'music.control': () => ({ ok: false, message: 'Open Exo to control music.' }),
+  'music.control': (p) => {
+    const at = mockSongAt()
+    if (p?.action === 'toggle') { mockSong.playing = !mockSong.playing; mockSong.from = at; mockSong.since = performance.now() }
+    else if (p?.action === 'seek' && typeof p.positionMs === 'number') { mockSong.from = p.positionMs; mockSong.since = performance.now() }
+    else return { ok: false, message: 'Open Exo to control music.' }
+    emitHostEvent('music.playback', mockPlayback())
+    return { ok: true }
+  },
   'deps.list': mockDepsList,
   'replaced.scan': () => ({ ok: true, cleared: 2, apps: MOCK_REPLACED }),
   'apps.list': () => ({ ok: true, programs: MOCK_PROGRAMS }),
-  'apps.tidy': () => ({ ok: true, token: 'mock-tidy', name: 'Programs that are gone', autoCleared: [{ id: 'mock-3', name: 'Old leftovers', cleared: { folders: 1, files: 0, registry: 2, shortcuts: 3, bytes: 310_000_000 } }], items: [
-    { id: 0, kind: 'service', path: 'HKLM\\SYSTEM\\CurrentControlSet\\Services\\OldToolUpdate', bytes: 0, selected: true, note: null, machine: true, from: 'Old Tool' },
-    { id: 1, kind: 'folder', path: 'Program Files\\Old Tool', bytes: 1_204_000_000, selected: false, note: 'Only its name matches', machine: true, from: 'Old Tool' },
+  'apps.tidy': () => ({ ok: true, token: 'mock-tidy', name: 'Programs that are gone', defaults: ['.oldproj', '.oldtool'], autoCleared: [{ id: 'mock-3', name: 'Old leftovers', cleared: { folders: 1, files: 0, registry: 2, shortcuts: 3, bytes: 310_000_000 } }], items: [
+    { id: 0, kind: 'service', path: 'HKLM\\SYSTEM\\CurrentControlSet\\Services\\OldToolUpdate', bytes: 0, selected: true, note: null, certainty: 'certain', because: 'Certain: points into the app’s folder', machine: true, from: 'Old Tool' },
+    { id: 2, kind: 'driver', path: 'HKLM\\SYSTEM\\CurrentControlSet\\Services\\OldToolFilter', bytes: 0, selected: false, note: 'A driver: only take it if no device needs it', certainty: 'certain', because: 'Certain: points into the app’s folder', store: true, machine: true, from: 'Old Tool' },
+    { id: 3, kind: 'registry', path: 'HKLM\\SYSTEM\\CurrentControlSet\\Services\\SharedAccess\\Parameters\\FirewallPolicy\\FirewallRules › {OLD-TOOL-PORT}', bytes: 0, selected: false, note: null, certainty: 'possible', because: 'Possible: in a firewall group with its rules', machine: true, from: 'Old Tool' },
+    { id: 1, kind: 'folder', path: 'Program Files\\Old Tool', bytes: 1_204_000_000, selected: false, note: null, certainty: 'likely', because: 'Likely: named after it', machine: true, from: 'Old Tool' },
   ] }),
   'apps.leave': () => ({ ok: true }),
   'apps.history': () => ({ ok: true, items: [
@@ -1280,7 +1335,7 @@ const MOCK_HANDLERS: Record<string, MockHandler> = {
     return {
       ok: true, token: 'mock', name,
       items: [
-        { id: 0, kind: 'folder', path: `AppData\\Roaming\\${name}`, bytes: 820_000, selected: false, note: 'Only its name matches', machine: false, from: name },
+        { id: 0, kind: 'folder', path: `AppData\\Roaming\\${name}`, bytes: 820_000, selected: false, note: null, certainty: 'likely', because: 'Likely: named after it', machine: false, from: name },
       ],
       auto: true, cleared: { folders: 1, files: 0, registry: 1, shortcuts: 1, bytes: 4_101_200 }, undo: 'mock-1', declined: false,
     }
@@ -1291,6 +1346,27 @@ const MOCK_HANDLERS: Record<string, MockHandler> = {
   'apps.scan': () => ({ ok: false, message: 'Mock: nothing to scan.' }),
   'apps.clean': () => ({ ok: true, cleared: { folders: 1, files: 0, registry: 1, shortcuts: 1, bytes: 4_101_200 }, undo: 'mock-1', left: 0 }),
   'apps.allowEdge': () => ({ ok: true }),
+  'apps.openDefaults': () => ({ ok: true, message: null }),
+  'apps.packages': () => ({
+    ok: true, hidden: 41, items: [
+      { id: 'Microsoft.BingNews_8wekyb3d8bbwe', name: 'Microsoft News', publisher: 'Microsoft Corporation', forMe: true, others: 1, provisioned: true, bloat: 'Comes with Windows; nothing needs it', addBack: false },
+      { id: 'king.com.CandyCrushSaga_kgqvnymyfvs32', name: 'Candy Crush Saga', publisher: 'king.com', forMe: true, others: 0, provisioned: false, bloat: 'Windows installed it as an ad', addBack: false },
+      { id: 'Microsoft.WindowsMaps_8wekyb3d8bbwe', name: 'Windows Maps', publisher: null, forMe: false, others: 0, provisioned: true, bloat: 'Comes with Windows; nothing needs it', addBack: true },
+      { id: 'Microsoft.WindowsCalculator_8wekyb3d8bbwe', name: 'Windows Calculator', publisher: 'Microsoft Corporation', forMe: true, others: 2, provisioned: true, bloat: null, addBack: false },
+    ],
+  }),
+  'apps.packagesPlan': (p) => {
+    const params = (p ?? {}) as { ids?: string[]; everyone?: boolean }
+    return {
+    ok: true, token: 'mock-plan', admin: Boolean(params.everyone),
+    lines: (params.ids ?? []).map(id => params.everyone
+      ? { id, name: id.split('_')[0], does: 'Removed for every account, and new accounts won’t get it, with their data', back: 'Can’t be undone here: only the Microsoft Store brings it back, if it has it', undoable: false }
+      : { id, name: id.split('_')[0], does: 'Removed for you, with its data; new accounts still get it', back: 'Add back puts it back here (its files stay on this PC); its data doesn’t come back', undoable: true }),
+    message: null,
+    }
+  },
+  'apps.packagesRemove': () => ({ ok: true, removed: 1, left: 0, message: null }),
+  'apps.packageAddBack': () => ({ ok: true, store: false, message: null }),
   'replaced.remove': (p) => {
     const id = (p as { id?: string } | undefined)?.id
     MOCK_REPLACED = MOCK_REPLACED.map(app => app.id === id ? { ...app, installed: false, leftovers: 0, bytes: 0, needsAdmin: false, found: NONE_LEFT, cleared: { ...app.found, registry: app.found.registry + 7 } } : app)
@@ -1592,6 +1668,7 @@ const MOCK_HANDLERS: Record<string, MockHandler> = {
           : { key: 'chipset', label, detail: `${from} installed · ${to} installs while you're away` },
         ...mockNetItems(p),
       ],
+      check: mockCheck,
     }
   },
   'system.interrupts': (p) => {

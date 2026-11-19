@@ -43,14 +43,65 @@ internal static class RestorePoint
         _ => "Windows didn't make a restore point. Nothing was removed.",
     };
 
+    // When Exo last made one this run. Windows keeps at most one a day (SystemRestorePointCreationFrequency, 1440 minutes),
+    // so within a day of it no prompt is spent on asking for another: that one stands.
+    private static DateTime? _made;
+
+    /// <summary>Exo made one within the last day (Windows wouldn't make another): it stands for this run too.</summary>
+    internal static bool Standing(DateTime now, DateTime? made) => made is { } at && now >= at && now - at < TimeSpan.FromHours(24);
+
+    internal static bool StandingNow => Standing(DateTime.UtcNow, _made);
+
+    internal static void Noted(Outcome outcome, DateTime now) { if (outcome == Outcome.Made) _made = now; }
+
+    /// <summary>
+    /// <paramref name="steps"/> behind a restore point in one elevated run, so Windows asks once: the point's step first, and
+    /// each step after it runs only when its answer says there is one to go back to (made, or one from the last day). Nothing
+    /// of the rest runs when System Restore is off or the point failed.
+    /// </summary>
+    internal static List<string> Gated(string answer, IReadOnlyList<string> steps)
+    {
+        var quoted = answer.Replace("\"", "", StringComparison.Ordinal);
+        return [Step(answer), .. steps.Select(step => $"findstr /x \"made recent\" \"{quoted}\" >nul && ({step})")];
+    }
+
+    /// <summary>
+    /// Runs <paramref name="steps"/> as administrator behind a restore point (<see cref="Gated"/>), or as they are when Exo made
+    /// one in the last day. Ran: Windows' prompt was accepted; Point: the restore point's outcome (null: the one made earlier stood).
+    /// </summary>
+    internal static async Task<(bool Ran, Outcome? Point)> BehindAsync(IReadOnlyList<string> steps, Func<IReadOnlyList<string>, Task<bool>> admin)
+    {
+        if (StandingNow) return (await admin(steps).ConfigureAwait(false), null);
+        var answer = Path.Combine(Path.GetTempPath(), $"exo-{Guid.NewGuid():N}.restore");
+        try
+        {
+            if (!await admin(Gated(answer, steps)).ConfigureAwait(false)) return (false, Outcome.Declined);
+            var outcome = Read(File.Exists(answer) ? await File.ReadAllTextAsync(answer).ConfigureAwait(false) : null);
+            Noted(outcome, DateTime.UtcNow);
+            AppLog.Info($"Apps: restore point before a clear: {outcome}.");
+            return (true, outcome);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            AppLog.Debug("Apps: restore point answer unreadable: " + ex.GetType().Name);
+            return (true, Outcome.Failed);
+        }
+        finally
+        {
+            if (File.Exists(answer)) DeletionGate.DeleteFile(answer);
+        }
+    }
+
     internal static async Task<Outcome> MakeAsync(Func<IReadOnlyList<string>, Task<bool>> admin)
     {
         if (HostMode.IsDisposable) return Outcome.Failed;
+        if (StandingNow) return Outcome.Recent;
         var answer = Path.Combine(Path.GetTempPath(), $"exo-{Guid.NewGuid():N}.restore");
         try
         {
             if (!await admin([Step(answer)]).ConfigureAwait(false)) return Outcome.Declined;
             var outcome = Read(File.Exists(answer) ? await File.ReadAllTextAsync(answer).ConfigureAwait(false) : null);
+            Noted(outcome, DateTime.UtcNow);
             AppLog.Info($"Apps: restore point before removing apps: {outcome}.");
             return outcome;
         }

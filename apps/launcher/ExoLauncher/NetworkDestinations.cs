@@ -57,6 +57,7 @@ internal static class NetworkDestinations
     internal const string LucidUpdates = "Lucid's updates (the newest release of tekkusai/Lucid and its Lucid.exe, from Exo's cache at updates.getexo.app, on Exo's Cloudflare account)";
     internal const string ControllerFirmware = "Sony's controller firmware versions (fwupdater.dl.playstation.net)";
     internal const string WindowsRelease = "Microsoft's Windows release information page (learn.microsoft.com)";
+    internal const string NetworkCheck = "Best settings › Network's connection check (Cloudflare's 1.1.1.1, your router, and Exo's own domain looked up)";
     internal const string AsusBios = "ASUS's BIOS list and, on your press, the BIOS file itself (`www.asus.com`, dlcdnets.asus.com)";
     internal const string SpotifyShareLinks = "Spotify share links (spotify.link, spotify.app.link)";
     internal const string ExoAccount = "Exo account (accounts.getexo.app, on Exo's Cloudflare account)";
@@ -237,6 +238,7 @@ internal static class NetworkDestinations
         // PcAbout: which Windows version is newest, for PC > Overview's About card.
         new("learn.microsoft.com", WindowsRelease),
         // BiosUpdate: the newest BIOS ASUS lists for an ASUS board or laptop, by its model.
+        new("1.1.1.1", NetworkCheck),
         new("www.asus.com", AsusBios),
         new("dlcdnets.asus.com", AsusBios),
 
