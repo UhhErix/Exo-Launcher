@@ -1,6 +1,7 @@
 # Changelog
 
 ## 3.26.0 — November 14, 2026
+- **Downloads follow your store account.** Switch to another Steam, Epic, GOG or Amazon account while a game downloads, in Exo or in the store's own app, and the downloads of the account you left pause and say so, instead of carrying on or being dropped from the line (one Steam is already running stays Steam's to continue); switch back and they carry on by themselves. A download you paused yourself stays paused. Starting an app or tool from the Library (what Steam calls an application or a tool) no longer pauses downloads as a game does, and you can play another game of the same store while one downloads. _Checked in code only._
 - **Downloads, in one place.** Library › More › Downloads lists what's downloading, what's next and what's paused: pause or stop what runs, move what's next up or down or take it out, resume what's paused, and Pause all until you Resume all. Each game has its own Update automatically switch. _Checked in code only._
 - **Goeist, Exo's new type.** Exo and Exo Mouse use Goeist, a rounded take on Geist: the same proportions, every corner softened. _Checked in code only._
 - **Shop beside Home.** Discord's Shop is its own place at the top of the Discord room, next to Home, and opens in one press. _Checked in code only._
