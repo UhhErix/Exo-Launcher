@@ -50,6 +50,8 @@ public sealed partial class LaunchOrchestrator
             };
             _pausedDownloadTokens.Add(intent.Token);
             if (restart) _restartTokens.Add(intent.Token);
+            // Paused for its store account: it still carries on when that account is signed in again.
+            else if (intent.State == AccountState) _accountHeldTokens.Add(intent.Token);
         }
     }
 
@@ -65,6 +67,17 @@ public sealed partial class LaunchOrchestrator
         string[] ids;
         lock (_gate)
         {
+            // Saved for another account of its store: it waits for that account instead of for review.
+            var parked = false;
+            foreach (var other in _restartTokens.Where(token => _pausedDownloadTokens.Contains(token) && _downloadIntents.ContainsKey(token))
+                         .Select(token => _downloadIntents[token])
+                         .Where(intent => !string.IsNullOrWhiteSpace(intent.AccountScope) && Find(intent.Store) is IStoreAccountScope && !CanResumeAccount(intent))
+                         .ToArray())
+            {
+                ParkForAccountLocked(other);
+                parked = true;
+            }
+            if (parked) SaveDownloadIntentsLocked();
             // A Steam preload that finished is done: Steam installs it on release day and refuses to before.
             foreach (var done in _restartTokens.Where(_downloadIntents.ContainsKey).Select(token => _downloadIntents[token])
                          .Where(intent => intent.GameId.StartsWith("steam:", StringComparison.OrdinalIgnoreCase) && SteamAdapter.Preloaded(intent.GameId[6..])).ToArray())
@@ -104,7 +117,9 @@ public sealed partial class LaunchOrchestrator
                     .OrderBy(intent => intent.CreatedAtUtc).Select(intent => new PausedDownload(
                         intent.GameId, intent.Title, intent.Store.ToString().ToLowerInvariant(), intent.Action,
                         CanResumeAccount(intent),
-                        IsOfficialCatalogLinkIntent(intent)
+                        WaitsForAccountLocked(intent) && !CanResumeAccount(intent)
+                            ? AccountReason(intent.Store)
+                            : IsOfficialCatalogLinkIntent(intent)
                             ? "Open the game's download again to retry the official download link, or remove this saved request."
                             : string.IsNullOrWhiteSpace(intent.AccountScope)
                             ? "Paused for review. Check this title in its store, then remove this saved request before starting a fresh action."
@@ -129,6 +144,11 @@ public sealed partial class LaunchOrchestrator
             intent = _downloadIntents.Values.FirstOrDefault(value => _pausedDownloadTokens.Contains(value.Token) &&
                 string.Equals(value.GameId, gameId, StringComparison.OrdinalIgnoreCase));
         if (intent is null) return new InstallResult { Ok = false, Message = "That saved download is no longer paused." };
+        // Another account of its store is signed in: it keeps waiting for its own, unchanged, instead of failing into review.
+        bool waitsForAccount;
+        lock (_gate) waitsForAccount = WaitsForAccountLocked(intent);
+        if (waitsForAccount && !CanResumeAccount(intent))
+            return new InstallResult { Ok = false, Message = AccountReason(intent.Store) };
         var game = new GameEntry
         {
             Id = intent.GameId, Title = intent.Title, Store = intent.Store,
@@ -205,6 +225,7 @@ public sealed partial class LaunchOrchestrator
         }
         _downloadIntents[intent.Token] = next;
         _pausedDownloadTokens.Remove(intent.Token);
+        _accountHeldTokens.Remove(intent.Token);
         PublishDownloadQueueChangedLocked();
         return true;
     }
@@ -240,6 +261,7 @@ public sealed partial class LaunchOrchestrator
         {
             _downloadIntents.Remove(intent.Token);
             _pausedDownloadTokens.Remove(intent.Token);
+            _accountHeldTokens.Remove(intent.Token);
         }
         SaveDownloadIntentsLocked();
         PublishDownloadQueueChangedLocked();

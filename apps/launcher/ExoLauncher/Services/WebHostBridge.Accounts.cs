@@ -129,6 +129,9 @@ public sealed partial class WebHostBridge
         finally
         {
             _accountsGate.Release();
+            // A switch that stopped halfway may still have changed the signed-in account.
+            try { _services.Launcher.CheckDownloadAccounts(); }
+            catch (Exception ex) { AppLog.Debug("Download account check after a switch failed: " + ex.GetType().Name); }
         }
     }
 
@@ -801,6 +804,9 @@ public sealed partial class WebHostBridge
     /// <summary>A store's account changed: its sign-in state and library are read again.</summary>
     private void AfterAccountChange(string? store)
     {
+        // Downloads follow the account at once: the old account's pause, the account that came back carries on.
+        try { _services.Launcher.CheckDownloadAccounts(); }
+        catch (Exception ex) { AppLog.Warn($"Download account check after a {store} account change failed: " + ex.GetType().Name); }
         _services.Library.InvalidateStoreMatrix();
         _services.Library.Invalidate();
         _ = Task.Run(async () =>
