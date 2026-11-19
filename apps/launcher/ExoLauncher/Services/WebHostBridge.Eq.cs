@@ -11,7 +11,8 @@ namespace ExoLauncher.Services;
 /// </summary>
 public sealed partial class WebHostBridge
 {
-    private static volatile bool _apoInstalling;
+    // 1 while Equalizer APO's installer runs: two presses never start two installers.
+    private static int _apoInstalling;
 
     /// <summary>The library game running now that has a sound of its own in Exo EQ.</summary>
     private void WatchEq()
@@ -48,10 +49,9 @@ public sealed partial class WebHostBridge
         var needsOutput = "Exo can't tell which output Windows plays on. Plug it in, then try again.";
         switch (ReadString(p, hasParams, "action"))
         {
-            case "install" when !_apoInstalling:
-                _apoInstalling = true;
+            case "install" when Interlocked.CompareExchange(ref _apoInstalling, 1, 0) == 0:
                 try { message = await EqualizerApo.InstallAsync().ConfigureAwait(false); }
-                finally { _apoInstalling = false; }
+                finally { Volatile.Write(ref _apoInstalling, 0); }
                 break;
             case "devices":
                 message = EqualizerApo.OpenDeviceSelector();
@@ -140,7 +140,7 @@ public sealed partial class WebHostBridge
             apo = new
             {
                 installed = folder is not null,
-                installing = _apoInstalling,
+                installing = Volatile.Read(ref _apoInstalling) == 1,
                 version = EqualizerApo.Version(),
                 onOutput = output?.Apo == true,
                 restart = output?.Restart == true,

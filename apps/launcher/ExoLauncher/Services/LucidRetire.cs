@@ -9,7 +9,7 @@ using Microsoft.Win32;
 namespace ExoLauncher.Services;
 
 /// <summary>
-/// The move from Lucid (tekkusai's EQ, which Exo hosted from <c>addons\lucid</c> until 3.26) to Exo EQ, once, at the
+/// The move from Lucid (tekkusai's EQ, which Exo hosted from <c>addons\lucid</c> through 3.25) to Exo EQ, once, at the
 /// first start of an Exo without it: the Lucid Exo hosted is closed (<see cref="LucidStop"/>: asked, then ended only if it
 /// is that exact exe in Exo's folders), a sign-in entry for it goes, Lucid's settings are read into Exo EQ
 /// (<see cref="LucidImport"/>), Lucid's EQ block in config.txt is turned off when it was Exo's Lucid that played it (once its
@@ -59,17 +59,19 @@ internal static class LucidRetire
             try { DeletionGate.DeleteFile(Path.Combine(PathHelper.AppDataDir, name)); } catch (IOException) { } catch (UnauthorizedAccessException) { }
         try { DeletionGate.DeleteDirectory(Path.Combine(PathHelper.AppDataDir, "addons", "lucid-current"), recursive: true); } catch (IOException) { } catch (UnauthorizedAccessException) { }
         AppLog.Info($"Exo EQ: took over from Lucid (settings {(lucid is null ? "none" : "read")}, Exo's Lucid {(stopped ? "closed" : "not running")}).");
-        if (ExoEq.Current.LucidHeadphone is not null) _ = Task.Run(ResolveAsync);
     }
 
-    /// <summary>Lucid's headphone, matched in AutoEq's list and its correction fetched; tried again at the next start if offline.</summary>
+    /// <summary>
+    /// Lucid's headphone, matched in AutoEq's list and its correction fetched; tried again at the next start if offline. Run
+    /// once per start, after <see cref="Once"/> (AppServices), so two never race over the same headphone.
+    /// </summary>
     internal static async Task ResolveAsync()
     {
-        if (ExoEq.Current.LucidHeadphone is null) return;
+        if (ExoEq.Current.LucidHeadphone is not { } name) return;
         try
         {
             if (await AutoEqCatalog.ListAsync().ConfigureAwait(false) is not { } list) return;
-            if (AutoEqCatalog.Named(ExoEq.Current.LucidHeadphone, list) is not { } found)
+            if (AutoEqCatalog.Named(name, list) is not { } found)
             {
                 ExoEq.Change(store => { LucidImport.Resolve(store, list, _ => null); store.LucidBlockOff = false; });
                 AppLog.Info("Exo EQ: Lucid's headphone isn't in AutoEq's list.");
