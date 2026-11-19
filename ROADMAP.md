@@ -1,6 +1,6 @@
 # Rooms roadmap
 
-These are the six tabs in the Launcher's [top bar](apps/launcher/ui/src/components/shell/TitleBar.tsx).
+These are the Launcher's Rooms: five tabs in the [top bar](apps/launcher/ui/src/components/shell/TitleBar.tsx), and Devices, a page of the PC room.
 **Shipped** means the Room is present in 3.26.0, not that every feature works
 with every store, service or device. See the [support matrix](apps/launcher/docs/SUPPORT_MATRIX.md)
 for those limits.

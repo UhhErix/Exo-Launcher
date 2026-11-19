@@ -174,21 +174,6 @@
   outline-offset: -2px;
 }
 
-.exo-mouse-battery-bar {
-  width: 18px;
-  height: 9px;
-  padding: 1px;
-  border: 1px solid currentColor;
-  border-radius: 2px;
-}
-
-.exo-mouse-battery-bar > span {
-  display: block;
-  height: 100%;
-  border-radius: 1px;
-  background: currentColor;
-}
-
 /* A busy control keeps its words and its full color: its ring (Spinner) or its turning glyph (exo-spin) says it is
    working (DESIGN.md › Waits), where a dimmed one would read as unavailable. */
 button:disabled:has(:is(.exo-spinner, .exo-spin)) {
