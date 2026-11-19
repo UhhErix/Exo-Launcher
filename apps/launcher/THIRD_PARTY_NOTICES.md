@@ -30,6 +30,7 @@ The source for every build of these programs that Exo ships, Lucid aside, is pub
 | Microsoft.Data.Sqlite | 10.0.15 | MIT |
 | SQLitePCLRaw | 3.0.5 | Apache-2.0 |
 | SQLite | bundled with SQLitePCLRaw | Public domain |
+| [ZstdSharp.Port](https://github.com/oleg-st/ZstdSharp) (zstd for .NET; reads the in-app updater's files.pack) | 0.8.8 | MIT |
 | libdave (Discord, DAVE end-to-end encryption for calls; `dave.dll`), with Exo's one addition, an MLS exporter for the call relay (`voice/dave-exporter.patch`) | 1.2.2 (6396c90) | MIT |
 | mlspp (Cisco, linked into `dave.dll`) | as pinned by libdave | BSD-2-Clause |
 | OpenSSL (linked into `dave.dll`), built with vcpkg's openssl port (MIT, `voice/ports/openssl`) | 3.5.9 | Apache-2.0 |

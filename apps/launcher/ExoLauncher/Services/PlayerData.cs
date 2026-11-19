@@ -329,6 +329,8 @@ internal static class PlayerData
         new("launch-handoff.json", "UpdateHandOff", Why.ThisPc, "a launch handed to the next Exo across an update"),
         new("staged-update.json", "AppUpdateService", Why.ThisPc, "the update installer kept for after a game"),
         new("skipped-update.json", "AppUpdateService", Why.ThisPc, "the update that did not take, not offered again by itself"),
+        new("delta-failed.json", "AppUpdateService", Why.ThisPc, "the version whose file-level update failed, so its next try uses the installer"),
+        new("app-file-hashes.json", "AppFileHashes,AppUpdateService", Why.Cache, "the SHA-256 of each installed app file, for the next file-level update"),
         // Another program's files that Exo reads or writes in that program's place.
         new(".1.0.l.txt", "GameSettings", Why.Elsewhere, "Call of Duty's settings file suffix in its own folder"),
         new(".pm.1.0.l.txt", "GameSettings", Why.Elsewhere, "Call of Duty's profile settings suffix"),
@@ -462,6 +464,8 @@ internal static class PlayerData
         new("xbox-signin.bin", "LegacyProfileDataCleanup", Why.Retired, "the old Xbox sign-in"),
         // Files in what Exo installs or downloads.
         new("DriverAdvisories.json", "DriverAdvisories", Why.Shipped, "the advisories Exo ships"),
+        new("files.json", "AppFiles,AppUpdateService", Why.Shipped, "a release's file list, read from the update address for a file-level update"),
+        new("payload-manifest.json", "AppFiles", Why.Shipped, "the installer's list of the app folder's files"),
         new("LICENSE.txt", "WebExtensionManifest", Why.Shipped, "an extension's licence"),
         new("SOURCE.txt", "WebExtensionManifest", Why.Shipped, "an extension's source note"),
         new("manifest.json", "WebExtensions", Why.Shipped, "an extension's manifest"),
