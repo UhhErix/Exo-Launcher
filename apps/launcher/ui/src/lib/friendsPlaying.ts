@@ -2,10 +2,6 @@ import { createContext, useCallback, useEffect, useState } from 'react'
 import type { DiscordFriend, DiscordPresence } from './discord'
 import { host, onHostEvent, type Game } from './host'
 import { onPageActivityChanged, pageIsVisible } from './pageActivity'
-import { titleIdentity } from './utils'
-
-/** A game friends are in: one you have (its card), or one you don't (only its name, from their presence). */
-export type PlayingGroup = { key: string; title: string; game: Game | null; friends: DiscordFriend[] }
 
 /**
  * The Library as Home sees it: the games, the one starting, and Play or Install (the Library's own
@@ -13,40 +9,6 @@ export type PlayingGroup = { key: string; title: string; game: Game | null; frie
  */
 export type GameLink = { games: Game[]; startingId: string | null; onPlay: (game: Game) => void; onFind: (title: string) => void }
 export const GameLinkContext = createContext<GameLink | null>(null)
-
-/**
- * The game in a presence's name. A clip recorder or overlay that reports the game for its user adds itself to the name
- * ("VALORANT with Medal", "Apex Legends via Overwolf"); the game is what comes before it.
- */
-function gameName(presence: string): string {
-  return presence.trim().replace(/\s+(?:with|via|on|\+|-|\|)\s+(?:Medal(?:\.tv)?|Overwolf|Outplayed|Insights Capture|SteelSeries Moments|Blitz|Mobalytics|Porofessor|U\.GG)\s*$/i, '').trim()
-}
-
-/** What a friend is playing, by its rich presence's name, else the activity Discord says is Playing; null when nothing. */
-export function playingName(friend: DiscordFriend): string | null {
-  if (friend.kind !== 'friend' || friend.status === 'offline') return null
-  const name = friend.rich?.type === 0 ? friend.rich.name : friend.activityType === 0 ? friend.activity : null
-  return name ? gameName(name) || null : null
-}
-
-// Friends in a game, the most players first: those you have by their card, the rest by the name they show in Discord.
-export function playingGroups(friends: DiscordFriend[], games: Game[]): PlayingGroup[] {
-  if (friends.length === 0) return []
-  // A card goes by each game it holds too: a friend's Discord says "Call of Duty®" of the card named Modern Warfare 4.
-  const byTitle = new Map(games.flatMap(game => [game.title, ...(game.includes ?? []).map(part => part.title)].map(title => [titleIdentity(title), game] as const)))
-  const groups = new Map<string, PlayingGroup>()
-  for (const friend of friends) {
-    const name = playingName(friend)
-    const identity = name ? titleIdentity(name) : ''
-    if (!name || !identity) continue
-    const game = byTitle.get(identity) ?? null
-    const key = game ? game.id : `title:${identity}`
-    const group = groups.get(key) ?? { key, title: game ? game.title : name, game, friends: [] }
-    group.friends.push(friend)
-    groups.set(key, group)
-  }
-  return [...groups.values()].sort((a, b) => b.friends.length - a.friends.length || a.title.localeCompare(b.title))
-}
 
 /** A presence that changes what the list shows: someone on it whose status or activity is not what it shows. */
 function changes(friend: DiscordFriend, event: DiscordPresence) {

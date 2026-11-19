@@ -29,50 +29,6 @@ public sealed partial class WebHostBridge
         return new { ok = values is not null, message = error, values = (object?)values };
     }
 
-    /// <summary>Share my games for the account signed in: reads it, or sets { on }.</summary>
-    private static async Task<object> DiscordShareGamesAsync(JsonElement p, bool hasParams)
-    {
-        if (DiscordSession.Current is not { } session) return new { ok = false, on = false, message = (string?)"Discord isn't connected." };
-        if (ReadBool(p, hasParams, "on") is not { } on) return new { ok = true, on = session.SharesGames, message = (string?)null };
-        var (now, error) = await session.SetShareGamesAsync(on).ConfigureAwait(false);
-        return new { ok = error is null, on = now, message = error };
-    }
-
-    /// <summary>Share when I'm getting ready for the account signed in: reads it, or turns it on or off with { on }. It rides Share my games' link, so it reads off while that is.</summary>
-    private static object DiscordShareReady(JsonElement p, bool hasParams)
-    {
-        if (DiscordSession.Current is not { } session) return new { ok = false, on = false, message = (string?)"Discord isn't connected." };
-        if (ReadBool(p, hasParams, "on") is not { } on) return new { ok = true, on = session.SharesReady, message = (string?)null };
-        var (now, error) = session.SetShareReady(on);
-        return new { ok = error is null, on = now, message = error };
-    }
-
-    /// <summary>
-    /// Play › Clips: posts one capture (by its id) to a conversation, as an attachment of its own. The press is the page's, once confirmed in
-    /// place; the file is read here, so no path crosses the bridge, and <see cref="ClipShare.Check"/> keeps out what isn't a capture or is over 25 MB.
-    /// </summary>
-    private static async Task<object> DiscordShareClipAsync(JsonElement p, bool hasParams, CancellationToken ct)
-    {
-        if (Channel(p, hasParams) is not { } c) return new { ok = false, message = (string?)"Discord isn't connected." };
-        if (!c.Session.Cache.CanSend(c.Id)) return new { ok = false, message = (string?)"You can't send messages here." };
-        if (App.MainAppWindow is not { } window) return new { ok = false, message = (string?)"Exo isn't ready." };
-        var path = await Task.Run(() => window.CaptureFileForShare(ReadString(p, hasParams, "captureId")), ct).ConfigureAwait(false);
-        if (path is null) return new { ok = false, message = (string?)"That capture is gone." };
-        try
-        {
-            var (plan, error) = ClipShare.Check(path, new FileInfo(path).Length);
-            if (plan is null) return new { ok = false, message = error };
-            var data = await File.ReadAllBytesAsync(path, ct).ConfigureAwait(false);
-            var reply = await c.Session.Rest.PostMessageAsync(c.Id, "", null, c.Guild, ct, [new DiscordRest.Upload(plan.Name, plan.Type, data)]).ConfigureAwait(false);
-            return new { ok = reply.Error is null, message = reply.Error };
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-        {
-            AppLog.Warn("Discord client: a capture could not be read to share (" + ex.GetType().Name + ").");
-            return new { ok = false, message = (string?)"Exo couldn't read that capture." };
-        }
-    }
-
     /// <summary>What the account signed in pinned to the room's top bar: reads it, or replaces it with { pins } (at most the limit, each checked).</summary>
     private static object DiscordBandPins(JsonElement p, bool hasParams)
     {

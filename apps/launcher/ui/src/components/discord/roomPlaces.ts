@@ -9,8 +9,6 @@ export const MESSAGES = 'messages'
 export const SERVERS = 'servers'
 export const SHOP = 'shop'
 export const REQUESTS = 'requests'
-/** Play, the place of Exo's own rooms for games, parties and clips (play/PlayPage.tsx); on only when its setting is. */
-export const PLAY = 'play'
 
 // A conversation the pointer rests on is read before the click, as Discord's own client does.
 export const peek = (event: React.PointerEvent) => prefetchMessages((event.target as HTMLElement).closest<HTMLElement>('[data-dc-channel]')?.dataset.dcChannel)

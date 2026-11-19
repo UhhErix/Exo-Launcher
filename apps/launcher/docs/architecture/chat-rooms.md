@@ -1,5 +1,7 @@
 # Chat rooms: Exo's own face on Discord
 
+> **Play was retired in 3.26.0** (owner: "I don't want that room at all"): Games, Party and Clips, `discord.shareClip` and `discord.voiceNow` are gone. What stays is the friend link's `prep` section, always on with Share my games (no switches since 3.26.0), said under a friend's name in the friends list. The rest of this page is the record of what Play was.
+>
 > **The room was remade in 3.26** (`discord-remade.md`): the band of Home, Messages and Servers described below is now one list (Now, Friends, your conversations, your servers as rows). Where this page says the band or Home, read that list and Now; Play, Games, Party and Clips are unchanged.
 
 Exo's Discord client stays the transport: the person's accounts, servers, DMs, voice, and what Discord already knows about people. Only the face changes, a room at a time, and the Discord layout stays beside it as the fallback until a room does its job better. The rule for every room is the owner's: **simple purpose, simple design; no tagline, no helper text.** A room is judged by whether it says what someone came to see at a glance and lets them do the one thing it is for.
