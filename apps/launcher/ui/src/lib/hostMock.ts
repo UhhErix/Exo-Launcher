@@ -52,6 +52,21 @@ const MOCK_GAMES: Game[] = [
     lastPlayedUtc: new Date(Date.now() - 26 * 3600_000).toISOString(),
   },
   {
+    // Lent by the Steam Family: not installed, its owner named on its page.
+    id: 'steam:1145350',
+    title: 'Hades II',
+    store: 'steam',
+    installed: false,
+    owned: true,
+    canInstall: true,
+    primaryAction: 'install',
+    status: 'Not installed',
+    deps: ['Steam client'],
+    launchNote: 'Shared by Sam through Steam Family. Installs through Steam.',
+    familyShared: true,
+    sharedBy: 'Sam',
+  },
+  {
     // Steam's Play menu offers it without its anti-cheat: Properties › Anti-cheat.
     id: 'steam:3472040',
     title: 'NBA 2K26',

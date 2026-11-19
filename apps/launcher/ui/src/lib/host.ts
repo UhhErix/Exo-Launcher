@@ -995,6 +995,10 @@ export interface Game {
   status: string
   deps: string[]
   launchNote: string
+  /** Lent by the account's Steam Family, not the account's own. */
+  familyShared?: boolean
+  /** The family member(s) who share it ("Sam", "Sam and Alex"); null when Steam names nobody. */
+  sharedBy?: string | null
   launchTarget?: string | null
   /** Official storefront from the host. Absent when Buy must not appear. */
   buyUrl?: string | null
