@@ -291,6 +291,12 @@ export const OnlyYou = icon('only-you')
 export const StopWatching = icon('stop-watching')
 /** The snip editor's box over what you hide. */
 export const Redact = icon('redact')
+/** Captures' editor: Blur over names and chat, Redo; the viewer's Info, Share and Copy text. */
+export const Blur = icon('blur')
+export const Redo = icon('redo')
+export const Info = icon('info')
+export const Share = icon('share')
+export const ScanText = icon('scan-text')
 /** An end-to-end encrypted call. */
 export const Encrypted = icon('encrypted')
 /** A check still running. */

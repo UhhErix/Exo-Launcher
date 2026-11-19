@@ -18,6 +18,7 @@ import { Switch } from '../Switch'
 import { Wait, sample, times } from '../ui/Wait'
 import { Row, Section, State, SwitchRow } from './parts'
 import { SteamLibraryPanel, useSteamLibrary, type SteamLibrary } from './SteamSignInRow'
+import { riotIdShown } from '../../lib/canUse'
 import { ErrorNote } from '../ui/ErrorNote'
 
 export type StoreAction = 'connect' | 'open'
@@ -216,10 +217,24 @@ const RIOT_ID = /^[^#]+#[^#]{2,}$/
 function RiotIdRow({ riotId, onSettings }: { riotId: string; onSettings: (next: LauncherSettings) => void }) {
   const [editing, setEditing] = useState(riotId === '')
   const [draft, setDraft] = useState(riotId)
-  const [busy, setBusy] = useState<'save' | 'remove' | null>(null)
+  const [busy, setBusy] = useState<'save' | 'remove' | 'import' | null>(null)
   const [note, setNote] = useState<Note>(null)
   const value = draft.trim()
   const ready = value !== '' && value !== riotId && RIOT_ID.test(value)
+
+  // Reads tracker.gg again for the saved ID; its answer (imported, private, or tracker.gg refusing apps) is the row's note.
+  async function reimport() {
+    setBusy('import')
+    setNote(null)
+    try {
+      const refresh = await host.riotHoursRefresh()
+      setNote({ text: refresh.message ?? (refresh.ok ? 'Hours imported.' : 'Hours could not be imported. Try again.'), error: !refresh.ok })
+    } catch (cause) {
+      setNote({ text: messageOf(cause, 'Hours could not be imported. Try again.'), error: true })
+    } finally {
+      setBusy(null)
+    }
+  }
 
   async function save(next: string) {
     setBusy(next ? 'save' : 'remove')
@@ -254,6 +269,9 @@ function RiotIdRow({ riotId, onSettings }: { riotId: string; onSettings: (next: 
       ) : (
         <>
           <State on>{riotId}</State>
+          <button type="button" className="exo-set-btn" disabled={busy !== null} onClick={() => void reimport()}>
+            {busy === 'import' ? <Spinner label="Importing" /> : null}Import hours
+          </button>
           <button type="button" className="exo-set-btn" disabled={busy !== null} onClick={() => setEditing(true)}>Replace</button>
           <button type="button" className="exo-set-btn" disabled={busy !== null} onClick={() => void save('')}>
             {busy === 'remove' ? <Spinner label="Removing" /> : null}Remove
@@ -342,7 +360,7 @@ export const StoresSection = memo(function StoresSection({
             })
           }} />
       ) : null}
-      <RiotIdRow riotId={settings?.riotId?.trim() || ''} onSettings={onSettings} />
+      {riotIdShown(installed.map(store => store.store), settings?.riotId) ? <RiotIdRow riotId={settings?.riotId?.trim() || ''} onSettings={onSettings} /> : null}
       {missing.length > 0 ? (
         <Row label="Get another store" stacked error={getError}>
           <ul className="exo-set-chips" aria-label="Stores not on this PC">

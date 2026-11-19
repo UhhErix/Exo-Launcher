@@ -8,12 +8,10 @@ using ExoLauncher.Helpers;
 namespace ExoLauncher.Services;
 
 /// <summary>
-/// The shader add-on for System > Shaders (Exo Shaders, GPL-3.0-or-later, source
-/// at getexo.app/source): its own program, shipped in Exo's app
-/// folder under <c>addons\shaders</c> or installed beside Exo's data under
-/// <c>%LOCALAPPDATA%\ExoLauncher\addons\shaders</c>, with an
-/// engine (<c>engine\ExoShaders.Service.exe</c>) and a page (<c>ui\index.html</c>).
-/// Exo runs no part of it in-process. It starts the engine hidden at below-normal
+/// The shader add-on for System > Shaders (Exo Shaders, GPL-3.0-or-later; its source is this repository's
+/// <c>shaders\</c>, published at getexo.app/source): its own program, shipped in Exo's app folder under
+/// <c>addons\shaders</c> or installed beside Exo's data under <c>%LOCALAPPDATA%\ExoLauncher\addons\shaders</c>: an engine
+/// (<c>engine\ExoShaders.Service.exe</c>) that Exo's own Shaders page drives. Exo runs no part of it in-process. It starts the engine hidden at below-normal
 /// priority, speaks newline-delimited JSON over its stdin and stdout, and passes
 /// requests and events between the engine and Exo's Shaders page. Without the add-on, Shaders says it is not installed.
 /// The engine starts when you press Compile or Refresh on the page (<see cref="StartMethods"/>), and for
@@ -45,8 +43,6 @@ internal sealed class ShadersAddon : IDisposable
         "scan", "game.compile", "queue.add", "queue.start", "queue.resume", "game.diagnostics", "recorder.auto", "recorder.set",
     };
 
-    internal const string VirtualHost = "shaders.exo-launcher.local";
-
     /// <summary>An add-on installed beside Exo's data (a newer or development build) wins over the copy that ships in Exo's app folder.</summary>
     internal static string Root => File.Exists(Path.Combine(LocalRoot, "engine", "ExoShaders.Service.exe")) ? LocalRoot : BundledRoot;
 
@@ -56,10 +52,9 @@ internal sealed class ShadersAddon : IDisposable
     /// <summary>The release installer carries Exo Shaders under <c>addons\shaders</c> in the app folder.</summary>
     private static string BundledRoot => Path.Combine(AppContext.BaseDirectory, "addons", "shaders");
     internal static string EnginePath => Path.Combine(Root, "engine", "ExoShaders.Service.exe");
-    internal static string PageFolder => Path.Combine(Root, "ui");
 
-    /// <summary>Both halves are on this PC.</summary>
-    internal static bool Present => File.Exists(EnginePath) && File.Exists(Path.Combine(PageFolder, "index.html"));
+    /// <summary>The engine is on this PC.</summary>
+    internal static bool Present => File.Exists(EnginePath);
 
     /// <summary>The engine exits with this when another engine (SCSKiller's own app) holds the shader data.</summary>
     private const int OtherInstanceExit = 3;
@@ -73,13 +68,26 @@ internal sealed class ShadersAddon : IDisposable
     private static ShadersAddon? _live;
 
     private readonly object _gate = new();
-    private readonly ConcurrentDictionary<long, TaskCompletionSource<JsonNode?>> _pending = new();
+    private readonly ConcurrentDictionary<long, (Process Engine, TaskCompletionSource<JsonNode?> Reply)> _pending = new();
     private Process? _engine;
+    // The engine that sent its "exiting" event: it refuses new work, then exits. A press waits for it and starts the next.
+    private Process? _leaving;
     private long _nextId;
     private bool _disposed;
 
     /// <summary>Exo makes one, the first time Shaders or its engine is asked for.</summary>
-    internal ShadersAddon() => Volatile.Write(ref _live, this);
+    internal ShadersAddon() : this(EnginePath, []) { }
+
+    /// <summary>Tests: another engine program and its arguments (the built service, <c>--data-dir</c> and <c>--safe</c>).</summary>
+    internal ShadersAddon(string enginePath, IReadOnlyList<string> engineArgs)
+    {
+        _enginePath = enginePath;
+        _engineArgs = engineArgs;
+        Volatile.Write(ref _live, this);
+    }
+
+    private readonly string _enginePath;
+    private readonly IReadOnlyList<string> _engineArgs;
 
     /// <summary>The add-on Exo made, or null: none yet means its engine never ran.</summary>
     internal static ShadersAddon? Live => Volatile.Read(ref _live);
@@ -130,13 +138,13 @@ internal sealed class ShadersAddon : IDisposable
     {
         lock (_gate)
         {
-            if (_disposed || !Present || _engine is { HasExited: false }) return;
+            if (_disposed || !File.Exists(_enginePath) || _engine is { HasExited: false }) return;
             SetState("starting", null);
             try
             {
-                var info = new ProcessStartInfo(EnginePath)
+                var info = new ProcessStartInfo(_enginePath)
                 {
-                    WorkingDirectory = Path.GetDirectoryName(EnginePath)!,
+                    WorkingDirectory = Path.GetDirectoryName(_enginePath)!,
                     UseShellExecute = false,
                     CreateNoWindow = true,
                     RedirectStandardInput = true,
@@ -145,6 +153,7 @@ internal sealed class ShadersAddon : IDisposable
                     StandardOutputEncoding = new UTF8Encoding(false),
                     StandardInputEncoding = new UTF8Encoding(false),
                 };
+                foreach (var arg in _engineArgs) info.ArgumentList.Add(arg);
                 var engine = Process.Start(info) ?? throw new InvalidOperationException("The shader engine did not start.");
                 try { engine.PriorityClass = ProcessPriorityClass.BelowNormal; } catch { }
                 var reading = Task.Run(() => ReadLoop(engine));
@@ -172,6 +181,31 @@ internal sealed class ShadersAddon : IDisposable
     {
         if (DriverInstallSignal.Installing && CompileMethods.Contains(method))
             throw new InvalidOperationException("Your graphics driver is updating. Compile when it's done.");
+        if (startFor is null) return await SendAsync(method, parameters, ct, null).ConfigureAwait(false);
+        // A press that meets an engine on its way out (its idle wait ended a moment ago) goes to the next one, once.
+        if (Leaving() is { } leaving) await GoneAsync(leaving, ct).ConfigureAwait(false);
+        try { return await SendAsync(method, parameters, ct, startFor).ConfigureAwait(false); }
+        catch (InvalidOperationException) when (Leaving() is { } left)
+        {
+            await GoneAsync(left, ct).ConfigureAwait(false);
+            return await SendAsync(method, parameters, ct, startFor).ConfigureAwait(false);
+        }
+    }
+
+    private Process? Leaving() { lock (_gate) return _leaving; }
+
+    /// <summary>Waits for an exiting engine to be gone: its quit waits up to two minutes for a running compile to stop.</summary>
+    private static async Task GoneAsync(Process engine, CancellationToken ct)
+    {
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        timeout.CancelAfter(TimeSpan.FromMinutes(3));
+        try { await engine.WaitForExitAsync(timeout.Token).ConfigureAwait(false); }
+        catch (OperationCanceledException) when (!ct.IsCancellationRequested) { throw new InvalidOperationException("The shader engine is still stopping. Try again in a minute."); }
+        catch (InvalidOperationException) { }   // it is gone already
+    }
+
+    private async Task<JsonNode?> SendAsync(string method, JsonNode? parameters, CancellationToken ct, string? startFor)
+    {
         Process? engine;
         lock (_gate) engine = _engine is { HasExited: false } live ? live : null;
         if (engine is null)
@@ -184,7 +218,7 @@ internal sealed class ShadersAddon : IDisposable
         }
         var id = Interlocked.Increment(ref _nextId);
         var reply = new TaskCompletionSource<JsonNode?>(TaskCreationOptions.RunContinuationsAsynchronously);
-        _pending[id] = reply;
+        _pending[id] = (engine, reply);
         try
         {
             var line = new JsonObject { ["id"] = id, ["method"] = method, ["params"] = parameters?.DeepClone() ?? new JsonObject() }.ToJsonString();
@@ -212,12 +246,16 @@ internal sealed class ShadersAddon : IDisposable
                 // The line's own nodes are handed on, taken out of it (a board can be hundreds of KB, four times a second).
                 if (message["id"] is JsonValue idValue && idValue.TryGetValue<long>(out var id))
                 {
-                    if (!_pending.TryGetValue(id, out var reply)) continue;
+                    if (!_pending.TryGetValue(id, out var pending) || !ReferenceEquals(pending.Engine, engine)) continue;
+                    var reply = pending.Reply;
                     if (message["error"] is { } error) reply.TrySetException(new InvalidOperationException(Trim(error.ToString(), 400)));
                     else reply.TrySetResult(Detach(message, "result"));
                 }
                 else if (message["event"]?.GetValue<string>() is { } name)
+                {
+                    if (name == "exiting") lock (_gate) _leaving = engine;
                     Event?.Invoke(name, Detach(message, "data"));
+                }
             }
         }
         catch (Exception ex) { AppLog.Debug("Shaders engine read ended: " + ex.Message); }
@@ -229,14 +267,22 @@ internal sealed class ShadersAddon : IDisposable
         try { code = engine.ExitCode; } catch { code = -1; }
         // Its last lines (replies, its exiting event) are read before the requests still open are failed.
         try { reading.Wait(TimeSpan.FromSeconds(2)); } catch { }
-        lock (_gate) if (ReferenceEquals(_engine, engine)) _engine = null;
-        // The next engine knows none of Exo's games.
-        Volatile.Write(ref _syncedGames, null);
+        bool current;
+        lock (_gate)
+        {
+            current = _engine is null || ReferenceEquals(_engine, engine) || _engine.HasExited;
+            if (ReferenceEquals(_engine, engine)) _engine = null;
+            if (ReferenceEquals(_leaving, engine)) _leaving = null;
+        }
         var blocked = code == OtherInstanceExit ? "SCSKiller is open. Quit it from its tray icon, then try again." : null;
-        foreach (var pending in _pending.Values)
-            pending.TrySetException(new InvalidOperationException(blocked ?? "The shader engine stopped."));
+        // Only this engine's own requests fail: a press may already have started the next one.
+        foreach (var pending in _pending.Values.Where(p => ReferenceEquals(p.Engine, engine)))
+            pending.Reply.TrySetException(new InvalidOperationException(blocked ?? "The shader engine stopped."));
         if (_disposed) return;
         AppLog.Info("Shaders add-on engine exited: code " + code + ".");
+        if (!current) return;
+        // The next engine knows none of Exo's games.
+        Volatile.Write(ref _syncedGames, null);
         if (blocked is not null) SetState("blocked", blocked);
         else SetState(code == 0 ? "notRunning" : "failed", code == 0 ? null : "The shader engine stopped.");
     }
@@ -302,6 +348,7 @@ internal sealed class ShadersAddon : IDisposable
                 // Riot's games are never handed to the engine.
                 foreach (var g in library().Where(g => !AntiCheatCheck.IsRiot(g)))
                 {
+                    var noRecorder = KeepsRecorderOut(g);
                     var copies = g.Variants.Count > 0
                         ? g.Variants.Select(v => (v.Id, v.Store, v.Installed, v.Path, v.LaunchTarget))
                         : [(g.Id, g.Store, g.Installed, g.Path, g.LaunchTarget)];
@@ -309,7 +356,9 @@ internal sealed class ShadersAddon : IDisposable
                     {
                         if (!installed || string.IsNullOrWhiteSpace(path) || !Directory.Exists(path) || !seen.Add(path)) continue;
                         var exe = target is { } t && t.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) && File.Exists(t) ? t : null;
-                        games.Add(new JsonObject { ["id"] = id, ["title"] = g.Title, ["store"] = StoreName(store), ["installDir"] = path, ["exe"] = exe });
+                        var entry = new JsonObject { ["id"] = id, ["title"] = g.Title, ["store"] = StoreName(store), ["installDir"] = path, ["exe"] = exe };
+                        if (noRecorder) entry["noRecorder"] = true;
+                        games.Add(entry);
                     }
                 }
                 var payload = games.ToJsonString();
@@ -325,6 +374,17 @@ internal sealed class ShadersAddon : IDisposable
             }
         });
     }
+
+    /// <summary>
+    /// Whether the engine must keep its recorder out of this game between Exo's sessions (exo.library's <c>noRecorder</c>):
+    /// Exo's anti-cheat answer refuses it (anti-cheat found, or one Exo can't read), or the game is a Steam game set to
+    /// start without its anti-cheat, whose default entry still runs it, so the recorder is in only for a session Exo starts
+    /// (<see cref="DlssSwapService"/>'s session mods, which let it in with <c>recorder.set {session: true}</c>). With it, the
+    /// engine's "Record games" never puts the recorder back between sessions.
+    /// </summary>
+    internal static bool KeepsRecorderOut(Models.GameEntry game, Func<Models.GameEntry, AntiCheatCheck.Answer>? check = null) =>
+        AntiCheatCheck.WithoutAntiCheatLaunch(game) is not null ||
+        !AntiCheatCheck.Allows(game, (check ?? AntiCheatCheck.Cached)(game), AntiCheatCheck.Change.ShaderRecorder);
 
     /// <summary>
     /// Why the page may not turn the recorder on for this game, or null: the recorder puts a file beside the game's program,

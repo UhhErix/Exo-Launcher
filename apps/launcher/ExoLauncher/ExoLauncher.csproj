@@ -73,7 +73,7 @@
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
     <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.4314.35" />
-    <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.14" />
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.15" />
     <PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3" Version="3.0.5" />
     <!-- Only My Voice: sherpa-onnx's C interface and ONNX Runtime (native, win-x64), for NVIDIA's TitaNet voiceprints. -->
     <PackageReference Include="org.k2fsa.sherpa.onnx.runtime.win-x64" Version="2.0.1" />
@@ -87,7 +87,7 @@
     <EmbeddedResource Include="Services\DriverAdvisories.json" LogicalName="DriverAdvisories.json" />
     <EmbeddedResource Include="Services\StartupCatalog.json" LogicalName="StartupCatalog.json" />
     <!-- The banner page's font (Assets/Overlay/banner.html): the one the UI ships, one copy in the repo. -->
-    <Content Include="..\ui\public\fonts\Exoline-Variable.woff2" Link="Assets\Overlay\Exoline-Variable.woff2">
+    <Content Include="..\ui\public\fonts\Goeist-Variable.woff2" Link="Assets\Overlay\Goeist-Variable.woff2">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
       <CopyToPublishDirectory>Always</CopyToPublishDirectory>
     </Content>

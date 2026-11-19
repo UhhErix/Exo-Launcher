@@ -52,6 +52,21 @@ const MOCK_GAMES: Game[] = [
     lastPlayedUtc: new Date(Date.now() - 26 * 3600_000).toISOString(),
   },
   {
+    // Lent by the Steam Family: not installed, its owner named on its page.
+    id: 'steam:1145350',
+    title: 'Hades II',
+    store: 'steam',
+    installed: false,
+    owned: true,
+    canInstall: true,
+    primaryAction: 'install',
+    status: 'Not installed',
+    deps: ['Steam client'],
+    launchNote: 'Shared by Sam through Steam Family. Installs through Steam.',
+    familyShared: true,
+    sharedBy: 'Sam',
+  },
+  {
     // Steam's Play menu offers it without its anti-cheat: Properties › Anti-cheat.
     id: 'steam:3472040',
     title: 'NBA 2K26',
@@ -200,6 +215,10 @@ const mockShadersSnapshot = () => ({
 /** `?gpu=amd` or `?gpu=intel` in browser dev: System's profile and a game's frame generation for that GPU instead of a GeForce. */
 const mockGpu = typeof location !== 'undefined' ? new URLSearchParams(location.search).get('gpu') : null
 
+/** `?hdr=none`: a main screen without HDR (PC › Display has no HDR rows). `?pad=bluetooth`: the DualSense Edge over Bluetooth (its cable-only rows go). */
+const mockNoHdr = typeof location !== 'undefined' && new URLSearchParams(location.search).get('hdr') === 'none'
+const mockPadLink = typeof location !== 'undefined' && new URLSearchParams(location.search).get('pad') === 'bluetooth' ? 'bluetooth' as const : 'usb' as const
+
 /** PC > Auto tune on the mock: each read moves a run on one step, ?tune=crashed starts after a crash, ?tune=none has nothing to tune, and the Ryzen row is hidden as on the host (RyzenAvailable is false) unless ?tune=ryzen shows it needing PawnIO or ?tune=pawnio has the driver. */
 const mockTuneFlag = typeof location !== 'undefined' ? new URLSearchParams(location.search).get('tune') : null
 const mockTuneReads: Record<string, number | undefined> = {}
@@ -279,6 +298,35 @@ const mockNetItems = (p?: { action?: unknown; item?: unknown }) => {
   items.unshift({ key: 'network', label: 'Network', detail: left.length ? left.join(', ') : "Exo's network settings for games", applied: left.length === 0, canUndo: mockNetOn.size > 0 })
   if (mockNet === 'slow') items.push({ key: 'netlink', label: 'Ethernet', detail: '100 Mbps of 2.5 Gbps. Try another cable or router port.' })
   return items
+}
+
+/**
+ * Best settings › System in browser dev: a PC a tweak left on the platform clock and without a page file, two services at
+ * boot and Memory Integrity on. `?tuning=vanguard` has Riot Vanguard installed, so Memory Integrity stays on.
+ */
+const mockTuningVanguard = typeof location !== 'undefined' && new URLSearchParams(location.search).get('tuning') === 'vanguard'
+const mockTuningOn = new Set<string>()
+const mockTuningOff = new Set<string>()
+const mockTuning = (p?: { action?: unknown; item?: unknown }) => {
+  const defaults = ['timer', 'pagefile']
+  if (p?.action === 'apply') for (const key of defaults) if (!mockTuningOff.has(key)) mockTuningOn.add(key)
+  const blocked = mockTuningVanguard ? 'Riot Vanguard (VALORANT, League of Legends) can require Memory Integrity, so Exo leaves it on: games with it may refuse to start without it.' : null
+  if (typeof p?.item === 'string' && !(p.item === 'integrity' && blocked)) {
+    if (p.action === 'on') { mockTuningOn.add(p.item); mockTuningOff.delete(p.item) }
+    if (p.action === 'off') { mockTuningOn.delete(p.item); if (defaults.includes(p.item)) mockTuningOff.add(p.item) }
+  }
+  const words: Record<string, [string, string, boolean]> = {
+    timer: ["Windows' own timer", 'A tweak forced the platform clock (HPET), so every clock read a game makes waits on it. Takes a restart.', false],
+    pagefile: ['A page file, managed by Windows', "There's no page file, so a game that needs more memory than your RAM crashes instead of slowing down.", false],
+    services: ['Services set to Manual', 'Downloaded Maps Manager and Program Compatibility Assistant Service start with Windows; Manual starts them only when something needs them. Takes a restart.', true],
+    integrity: ['Memory Integrity off', blocked ?? 'Less secure: Windows stops checking that every driver is signed and safe, which is what keeps malicious drivers out. Only for a PC you keep clean. Up to about 5-10% more frames in some games. Takes a restart.', true],
+  }
+  const items = Object.entries(words).map(([key, [label, detail, optIn]]) => {
+    const on = mockTuningOn.has(key)
+    return { key, label, detail: on ? 'Restart to finish.' : detail, on, canUndo: on, off: mockTuningOff.has(key), optIn, restart: on, blocked: key === 'integrity' ? blocked : null }
+  })
+  const message = p?.item === 'integrity' && p.action === 'on' && blocked ? blocked : null
+  return { ok: !message, message, applied: defaults.every(key => mockTuningOn.has(key) || mockTuningOff.has(key)), restart: mockTuningOn.size > 0, items }
 }
 
 /**
@@ -768,8 +816,12 @@ function mockAbsorbIdSettings(next: Record<string, unknown>) {
 /** Two captures, so Favorite and its chip can be tried without the add-on. */
 const mockClipsFlag = typeof location !== 'undefined' ? new URLSearchParams(location.search).get('clips') : null
 const mockShot = (from: string, to: string) => 'data:image/svg+xml,' + encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="320" height="180"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="${from}"/><stop offset="1" stop-color="${to}"/></linearGradient></defs><rect width="320" height="180" fill="url(#g)"/></svg>`)
+/** A snip to draw on in the browser: a scoreboard with names and a chat line, so Blur and Copy text have something to work on. */
+const mockSnip = 'data:image/svg+xml,' + encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="1920" height="1080"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#14203a"/><stop offset="1" stop-color="#5a2b1a"/></linearGradient></defs><rect width="1920" height="1080" fill="url(#g)"/><g font-family="Segoe UI, sans-serif" fill="#fff"><text x="120" y="200" font-size="72" font-weight="700">VICTORY</text><text x="120" y="320" font-size="40">PlayerOne    24 / 3 / 11</text><text x="120" y="390" font-size="40">NightOwl     18 / 6 / 9</text><text x="120" y="900" font-size="34" fill="#9fd">[Team] NightOwl: gg that last fight was clean</text></g></svg>`)
 const mockCaptures: CaptureItem[] = [
-  { id: 'cap0000000000001', kind: 'image', game: 'Desktop', name: 'Snip 1', created: '2026-10-19T16:08:00Z', size: 120_000, favourite: false, url: '', thumb: null },
+  { id: 'cap0000000000001', kind: 'image', game: 'Desktop', name: 'Snip 1', created: '2026-10-19T16:08:00Z', size: 120_000, favourite: false, url: mockSnip, thumb: mockSnip },
+  { id: 'mock-rivals-snip', kind: 'image', game: 'Marvel Rivals', gameId: 'mock:rivals', name: 'Scoreboard', created: new Date(Date.now() - 2 * 3_600_000).toISOString(), size: 2_400_000, favourite: false, url: mockSnip, thumb: mockSnip },
+  { id: 'mock-lastyear', kind: 'video', game: 'Hades', gameId: 'mock:hades', name: 'First clear', created: new Date(new Date().setFullYear(new Date().getFullYear() - 1)).toISOString(), size: 31_000_000, durationMs: 34_000, favourite: true, url: 'mock-clip.webm', thumb: mockShot('#3a1430', '#d05a8a') },
   { id: 'cap0000000000002', kind: 'video', game: 'Elden Ring', gameId: 'mock:eldenring', name: 'Clip 1', created: '2026-10-18T20:00:00Z', size: 48_000_000, durationMs: 60_000, favourite: false, url: 'mock-clip.webm', thumb: mockShot('#3b2a14', '#a9792c') },
   { id: 'mock-rivals-1', kind: 'video', game: 'Marvel Rivals', gameId: 'mock:rivals', name: 'Triple on Tokyo 2099', created: new Date(Date.now() - 3_600_000).toISOString(), size: 18_400_000, durationMs: 42_000, favourite: true, url: 'mock-clip.webm', thumb: mockShot('#1a2a5a', '#d0452b') },
   { id: 'mock-rivals-2', kind: 'video', game: 'Marvel Rivals', gameId: 'mock:rivals', name: 'Last second capture', created: new Date(Date.now() - 86_400_000).toISOString(), size: 9_700_000, durationMs: 21_000, favourite: false, url: 'mock-clip.webm', thumb: mockShot('#2b1a4a', '#3b9bd0') },
@@ -947,7 +999,7 @@ const mockCaptureState = {
 }
 const mockCaptureSettings: Record<string, unknown> = {
   quality: 50, replaySeconds: 60, maxFps: 60, replayMode: 'games',
-  cursor: true, saveReplayKeys: 'Ctrl+Alt+F10', recordKeys: 'Ctrl+Alt+F9', snipKeys: 'Ctrl+Alt+F8', printScreen: false,
+  cursor: true, saveReplayKeys: 'Ctrl+Alt+F10', recordKeys: 'Ctrl+Alt+F9', snipKeys: 'Ctrl+Alt+F8', printScreen: false, afterSnip: 'edit',
   folder: 'C:\\Users\\Player\\Videos\\Exo Captures', keepGb: 0, keepDays: 0, autoShrink: true, callVoices: false,
 }
 
@@ -1109,15 +1161,11 @@ const MOCK_HANDLERS: Record<string, MockHandler> = {
     MOCK_STEAM_ACCOUNT = null
     return { ok: true }
   },
-  // ?riot=partial: VALORANT's hours are tracker.gg's playlist sum (the partial note), and the frame-gen line says the RTX 20/30 copy.
-  'playtime.riotLifetime': () => (mockRiotPartial
-    ? { ok: true, minutes: 9_840, partial: true, modes: [{ mode: 'competitive', minutes: 6_120 }, { mode: 'unrated', minutes: 3_720 }], stats: null }
-    : { ok: false, minutes: 0, partial: false, modes: [], stats: null }),
+  // What tracker.gg answers apps now (TrackerGgPlaytime.BlockedMessage): a browser check, so nothing is imported.
   'playtime.riotRefresh': () => ({
     ok: false,
-    profilePrivate: true,
-    message:
-      'This tracker.gg profile is private. Sign in with Riot on tracker.gg once so the profile is public.',
+    profilePrivate: false,
+    message: "tracker.gg now blocks apps from reading its profiles, so Exo can't import your Riot hours from it. Exo still counts every session you play.",
     profileUrl: 'https://tracker.gg/valorant',
   }),
   'web.preferences.get': () => ({ microphone: 'ask', camera: 'ask', clipboard: 'ask', notifications: 'ask' }),
@@ -1141,6 +1189,13 @@ const MOCK_HANDLERS: Record<string, MockHandler> = {
     return { ok: true }
   },
   'capture.saveImage': () => ({ ok: false, message: 'Mock: no capture add-on.' }),
+  'capture.text': (params) => params?.width !== undefined && Number(params.width) < 4 ? { ok: false, message: 'No text found there.' } : { ok: true, text: ['VICTORY', 'PlayerOne 24 / 3 / 11'].join('\n') },
+  'capture.send': (params) => {
+    const item = mockCaptures.find(entry => entry.id === mockParamId(params))
+    if (!item) return { ok: false, message: 'That capture is gone.' }
+    const channels = Array.isArray(params?.channelIds) ? params.channelIds as string[] : []
+    return { ok: true, sent: channels, item: null }
+  },
   'notes.list': (params) => {
     const query = typeof params?.query === 'string' ? params.query.toLowerCase() : ''
     return { ok: true, notes: [...mockNotes.values()].filter(note => !query || note.text.toLowerCase().includes(query)).map(note => note.info), tabs: [], active: null }
@@ -1608,7 +1663,7 @@ const MOCK_HANDLERS: Record<string, MockHandler> = {
       { id: 'usb-361d-0300-747353800033', kind: 'mouse', name: 'StarlightX Dongle', maker: 'Finalmouse', model: null, connection: 'wireless', role: null, battery: null, color: null, layout: null },
       { id: 'usb-31e3-1342-95be6909a013', kind: 'keyboard', name: 'Wooting 60HE v2', maker: 'Wooting', model: '60', connection: 'usb', role: null, battery: null, color: null, layout: 'ansi-split',
         port: { where: 'chipset', chips: 1, hubs: 0, interrupts: 'msi', better: 'free' }, app: { id: 'wootility', name: 'Wootility', where: 'web' } },
-      { id: 'usb-054c-0df2-41a6f6ff466d', kind: 'controller', name: 'DualSense Edge Wireless Controller', maker: 'Sony', model: 'dualsense-edge', connection: 'usb', role: null, battery: null, color: 'Midnight Black', layout: null, lab: true,
+      { id: 'usb-054c-0df2-41a6f6ff466d', kind: 'controller', name: 'DualSense Edge Wireless Controller', maker: 'Sony', model: 'dualsense-edge', connection: mockPadLink, role: null, battery: null, color: 'Midnight Black', layout: null, lab: true,
         port: { where: 'cpu', chips: 0, hubs: 0, interrupts: 'msi', better: null } },
       { id: '{0.0.0.00000000}.{9709e4ab-6969-4817-ad38-1704eab1c079}', kind: 'audio', name: 'Headphones', maker: null, model: 'headphones', connection: 'jack', role: 'output', battery: null, color: null, layout: null },
       { id: '{0.0.1.00000000}.{0deb347c-90b6-43d6-b549-63e63b1b23a9}', kind: 'audio', name: 'fifine Microphone', maker: 'Fifine', model: 'microphone', connection: 'usb', role: 'input', battery: null, color: null, layout: null },
@@ -1671,6 +1726,7 @@ const MOCK_HANDLERS: Record<string, MockHandler> = {
       check: mockCheck,
     }
   },
+  'system.tuning': (p) => mockTuning(p),
   'system.interrupts': (p) => {
     const applied = p?.action === 'apply'
     return {
@@ -1722,7 +1778,7 @@ const MOCK_HANDLERS: Record<string, MockHandler> = {
   'startup.restore': () => mockStartup(null),
   'startup.clean': () => ({ ...mockStartup(null), cleaned: 4 }),
   'stores.quiet': () => ({ ok: true, message: null }),
-  'hdr.state': () => ({ supported: true, on: false, name: 'Mock OLED', peakNits: 1000, calibrated: false, verdict: 'great' }),
+  'hdr.state': () => mockNoHdr ? { supported: false } : ({ supported: true, on: false, name: 'Mock OLED', peakNits: 1000, calibrated: false, verdict: 'great' }),
   'hdr.game': (p) => ({ ok: true, hdr: 'true', mode: typeof p?.mode === 'string' ? p.mode : 'auto' }),
   'game.settings': mockGameSettings,
   // As on the RX 9070 XT of ?gpu=amd.
@@ -1735,7 +1791,7 @@ const MOCK_HANDLERS: Record<string, MockHandler> = {
     ok: true,
     pending: p?.action === 'set' ? { display: 'DISPLAY1', seconds: 15 } : null,
     displays: [{
-      id: 'DISPLAY1', name: 'VG248', main: true, hdr: false, vendor: 'nvidia', refresh: 144, refreshes: [60, 100, 120, 144],
+      id: 'DISPLAY1', name: 'VG248', main: true, hdr: false, vendor: mockGpu === 'amd' || mockGpu === 'intel' ? mockGpu : 'nvidia', refresh: 144, refreshes: [60, 100, 120, 144],
       color: { format: 'rgb', bpc: 8, full: true }, auto: false,
       supported: ['rgb', '444', '422'].flatMap(format => [6, 8].flatMap(bpc =>
         (format === 'rgb' ? [true, false] : [false]).map(full => ({ format, bpc, full })))),
@@ -1764,7 +1820,11 @@ const MOCK_HANDLERS: Record<string, MockHandler> = {
       vramUsed: 5600 + wave * 600, vramTotal: 8192, fan: 1500 + wave * 300, limit: { on: 'temperature', warn: 83, bad: 93 },
     }
   },
-  'gpu.driver': () => ({ ok: true, vendor: 'nvidia', card: 'RTX 3070', installed: '581.42', update: true, latest: { version: '581.57', size: 900_000_000, released: '2026-10-14', kind: 'game' } }),
+  'gpu.driver': () => mockGpu === 'amd'
+    ? { ok: true, vendor: 'amd', card: 'Radeon RX 9070 XT', installed: '26.1.1', update: false, latest: null }
+    : mockGpu === 'intel'
+      ? { ok: true, vendor: 'intel', card: 'Arc B580', installed: '32.0.101.6559', update: false, latest: null }
+      : { ok: true, vendor: 'nvidia', card: 'RTX 3070', installed: '581.42', update: true, latest: { version: '581.57', size: 900_000_000, released: '2026-10-14', kind: 'game' } },
   'gpu.game': (p) => {
     if (mockGpu === 'intel' && typeof p?.frameGen === 'string') mockFrameGen = p.frameGen
     return mockGpu === 'intel' ? { ok: true, vendor: 'intel', supported: true, frameGen: mockFrameGen }

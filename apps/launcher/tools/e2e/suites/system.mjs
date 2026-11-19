@@ -63,6 +63,25 @@ export async function run(t) {
       const steps = await t.shell.waitFor(() => { const li = [...document.querySelectorAll('.exo-pc-menu .exo-pc-best-steps li')]; return li.length ? li.map(l => l.textContent.trim()) : null }, { timeoutMs: 5000 })
       c.evidence.bestSteps = steps
       if (!steps) failures.push('Best settings opens with no step named')
+      const tuningState = await t.host('system.tuning')
+      c.evidence.systemTuning = tuningState
+      if (!tuningState?.ok) failures.push('system.tuning did not answer ok')
+      const systemGroup = await t.shell.eval(`(() => {
+        const section = [...document.querySelectorAll('.exo-pc-menu section')].find(s => s.getAttribute('aria-labelledby') === 'pc-best-system')
+        if (!section) return null
+        return [...section.querySelectorAll('.exo-set-item')].map(row => ({
+          label: row.querySelector('.exo-set-item-label')?.textContent?.trim() ?? '',
+          controls: row.querySelectorAll('[role="switch"], button').length,
+        }))
+      })()`)
+      c.evidence.systemGroup = systemGroup
+      if (tuningState?.items?.length && !systemGroup) failures.push('Best settings › System did not render its items')
+      if (systemGroup) {
+        if (systemGroup.length === 0) failures.push('Best settings › System rendered with no rows')
+        for (const row of systemGroup) {
+          if (!row.label || row.controls === 0) failures.push(`System row "${row.label || 'unnamed'}" has no control`)
+        }
+      }
       await c.shot('best-settings', t.shell)
       await t.shell.key('Escape')
       await sleep(300)

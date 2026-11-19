@@ -87,12 +87,40 @@ public sealed partial class WebHostBridge
         }
     }
 
-    /// <summary>gifts.steamSignIn: Steam's own sign-in page, once, so its gifts can be read; then a read.</summary>
+    /// <summary>gifts.steamSignIn: Steam's own sign-in page, once, so its gifts can be read; then a read, and Steam's family list again.</summary>
     private async Task<object> GiftsSteamSignInAsync(CancellationToken ct)
     {
         var (ok, message) = await _gifts.SignInSteamAsync(ct).ConfigureAwait(true);
-        if (ok) _ = ReadGiftsAsync();
+        if (ok)
+        {
+            _ = ReadGiftsAsync();
+            _ = Task.Run(() => _services.Library.RefreshStoreAsync(Models.StoreKind.Steam, _bridgeLifetime.Token));
+        }
         return new { ok, message };
+    }
+
+    /// <summary>
+    /// The Steam library reads its family with the website sign-in's token when Exo's own Steam sign-in is not used
+    /// (<see cref="SteamSignIn.SteamWebsiteToken"/>): it asks from any thread, and the hidden gifts page runs here.
+    /// </summary>
+    private Task<string?> SteamWebsiteTokenAsync(CancellationToken ct)
+    {
+        var done = new TaskCompletionSource<string?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        if (!_queue.TryEnqueue(() => UiGuard.Run(() => _ = ReadOnUiAsync())))
+            done.TrySetResult(null);
+        return done.Task.WaitAsync(ct);
+
+        async Task ReadOnUiAsync()
+        {
+            try
+            {
+                done.TrySetResult(_detached || GiftsOwner() is not { } owner ? null : await _gifts.SteamWebApiTokenAsync(owner, ct).ConfigureAwait(true));
+            }
+            catch (Exception ex)
+            {
+                done.TrySetException(ex);
+            }
+        }
     }
 
     /// <summary>gifts.steamSignOut: Exo forgets its Steam website sign-in; Steam itself stays signed in.</summary>

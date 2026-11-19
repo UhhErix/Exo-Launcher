@@ -3,6 +3,51 @@
     "version": "3.26.0",
     "items": [
       {
+        "icon": "ThisPc",
+        "title": "Only what works on your PC",
+        "detail": "Settings your PC, screen or controller can't use are no longer shown, and a choice with only one answer is simply set."
+      },
+      {
+        "icon": "Controller",
+        "title": "Riot hours like Steam",
+        "detail": "A VALORANT or League page shows the hours you played, the same way a Steam game does."
+      },
+      {
+        "icon": "Library",
+        "title": "tracker.gg, said plainly",
+        "detail": "When tracker.gg won't let Exo import your Riot hours, Exo says so and keeps counting every session you play."
+      },
+      {
+        "icon": "Performance",
+        "title": "Upscalers say if they're up to date",
+        "detail": "A game's Upscalers line shows the version you have or how many updates wait."
+      },
+      {
+        "icon": "Library",
+        "title": "The same lines on every game",
+        "detail": "Upscalers, Shaders, Frame generation, HDR and Optimize are on every game's page, and say so when the game or screen can't use them."
+      },
+      {
+        "icon": "Mouse",
+        "title": "Sensor angle on the Razer Viper V3 Pro",
+        "detail": "Turn your Viper V3 Pro's sensor angle a degree at a time in Devices, so a natural swipe runs straight across the screen."
+      },
+      {
+        "icon": "Scissors",
+        "title": "Captures, like Photos",
+        "detail": "Your clips and screenshots in one grid by day, with a scrubber to jump through months, chips that combine, and an editor with a tab for each job."
+      },
+      {
+        "icon": "Chats",
+        "title": "Send captures to Discord",
+        "detail": "Share a clip or screenshot straight into a DM or channel; a clip too big for Discord is cut to fit first."
+      },
+      {
+        "icon": "EyeOff",
+        "title": "Blur names, copy text",
+        "detail": "Blur hides names and chat in a screenshot, and Copy text reads words off it on your PC."
+      },
+      {
         "icon": "Encrypted",
         "title": "Cloudflare DNS, encrypted",
         "detail": "Best settings sets Cloudflare's DNS with encryption on, for faster lookups that nobody on the way can read; its switch puts your old DNS back."
@@ -48,6 +93,35 @@
         "detail": "Servers across the top, DMs and Friends on Home, members and profiles always beside the conversation, and mute, deafen and settings by your picture."
       },
       {
+        "icon": "Library",
+        "title": "Goeist, Exo's new type",
+        "detail": "Exo, Exo Mouse, Setup, the FPS counter and the achievement banner all use Goeist, a rounded take on Geist."
+      },
+      {
+        "icon": "ThisPc",
+        "title": "Five rooms, in the middle",
+        "detail": "Library, Store, Discord, Music and PC sit centered in the top bar, and Devices is inside the PC room."
+      },
+      {
+        "icon": "Download",
+        "title": "Every download in one list",
+        "detail": "Library › More › Downloads shows what's downloading, next and paused, with pause, stop, reorder and Pause all."
+      },
+      {
+        "icon": "GraphicsCard",
+        "title": "DLSS, FSR and XeSS update by themselves",
+        "detail": "Your games get the newest signed upscaler files from NVIDIA, AMD and Intel while you aren't playing."
+      },
+      {
+        "icon": "Chats",
+        "title": "Discord's Shop beside Home",
+        "detail": "The Shop is its own place at the top of the Discord room, and Play is gone."
+      },
+      {
+        "title": "Every Steam Family game",
+        "detail": "Your family's shared games show in the Library, installed or not, and a game's page says who shares it."
+      },
+      {
         "icon": "Monitor",
         "title": "Pure black under Liquid Glass",
         "detail": "Exo is AMOLED black everywhere, under its frosted glass."
@@ -55,7 +129,7 @@
       {
         "icon": "Library",
         "title": "Liquid Glass is back",
-        "detail": "Menus, sheets and controls are frosted glass again, inside one thin line, and Exo keeps its own typeface, Exoline."
+        "detail": "Menus, sheets and controls are frosted glass again, lit at their edge like glass instead of a gray outline."
       },
       {
         "icon": "GraphicsCard",
@@ -136,6 +210,11 @@
         "icon": "Server",
         "title": "Crash reports are not lost",
         "detail": "A report Exo's service can't take right now is kept on your PC and sent at a later start."
+      },
+      {
+        "icon": "Performance",
+        "title": "A System group in Best settings",
+        "detail": "Exo puts back Windows settings a tweak tool changed that slow games down, each with its own switch and a restore point first; Memory Integrity off is yours to choose."
       }
     ]
   },

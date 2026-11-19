@@ -14,7 +14,7 @@
 
 /* Exo's Liquid Glass (DESIGN.md › Glass), as Exo draws it in each Appearance. In Exo, Exo sends its own values for
    every look token below (host-look.ts), read off its own surfaces, and they replace these; these are the same
-   material for Exo Mouse on its own. One thin even line round every glass, no lit top, shaded foot or glow inside. */
+   material for Exo Mouse on its own, one thin even line round every glass; inside Exo the edge is Exo's own lit one. */
 :root {
   --bg: #000;
   --ink: #ffffff;

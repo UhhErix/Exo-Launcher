@@ -3,7 +3,7 @@ import { host } from '../../lib/host'
 import { report } from '../../lib/report'
 import { CHECK_PATH } from '../../brand/icons'
 
-/** The Done step (SPEC-v2): a check drawn on in 400 ms, "You're all set", a summary in three tiles, then Open library. */
+/** The Done step (SPEC-v2): Exo's check glyph (brand/icons) drawn on, "You're all set", a summary in three tiles, then Open library. */
 export function DoneStep() {
   const [signedIn, setSignedIn] = useState<boolean | null>(null)
   useEffect(() => {

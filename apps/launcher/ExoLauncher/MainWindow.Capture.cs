@@ -58,6 +58,8 @@ public sealed partial class MainWindow
         public string RecordKeys { get; set; } = "Ctrl+Alt+F9";
         public string SnipKeys { get; set; } = "Ctrl+Alt+F8";
         public bool PrintScreen { get; set; }
+        /// <summary>edit: a snip opens in the editor (not one taken over a game); copy: it is only copied and saved.</summary>
+        public string AfterSnip { get; set; } = "edit";
         /// <summary>Null: Videos\Exo Captures.</summary>
         public string? Folder { get; set; }
         /// <summary>0: no limit.</summary>
@@ -326,10 +328,10 @@ public sealed partial class MainWindow
                 .ToDictionary(row => row.Key, row => row.Value, StringComparer.OrdinalIgnoreCase);
     }
 
-    /// <summary>Exo's own Inter, so the add-on's toast and windows read like Exo.</summary>
+    /// <summary>Exo's own type (Goeist), so the add-on's toast and windows read like Exo.</summary>
     private static string CaptureFont()
     {
-        var path = Path.Combine(AppContext.BaseDirectory, "Assets", "Fonts", "Exoline-Variable.ttf");
+        var path = Path.Combine(AppContext.BaseDirectory, "Assets", "Fonts", "Goeist-Variable.ttf");
         return File.Exists(path) ? path : "";
     }
 
@@ -390,9 +392,9 @@ public sealed partial class MainWindow
                 }
                 try { SaveCaptureIndex(); } catch (Exception ex) { AppLog.Warn("Capture index: " + ex.Message); }
                 _ = Task.Run(EnforceCaptureLimits);
-                // A snip opens in the page's editor, Exo in front for it; one taken over the game leaves the game in
-                // front (Exo Capture said it was saved) and waits in Captures.
-                var edit = kind == "snip" && data["inGame"]?.GetValue<bool>() != true;
+                // A snip opens in the page's editor, Exo in front for it, unless After a snip is Copy only; one taken over
+                // the game leaves the game in front (Exo Capture said it was saved) and waits in Captures.
+                var edit = Services.CaptureShare.OpensEditor(kind, data["inGame"]?.GetValue<bool>() == true, CaptureConfig.AfterSnip);
                 if (ItemFor(path) is { } item) _bridge?.PostCaptureEvent("capture.saved", new { item, edit });
                 if (kind != "snip") ScheduleShrink(Services.CaptureShrink.Settle + TimeSpan.FromSeconds(5));
                 if (edit) DispatcherQueue.Enqueue(() => RestoreAndActivate("a snip opens in the editor"));
@@ -454,6 +456,7 @@ public sealed partial class MainWindow
             s.RecordKeys,
             s.SnipKeys,
             s.PrintScreen,
+            afterSnip = Services.CaptureShare.NormalizeAfterSnip(s.AfterSnip),
             folder = CaptureFolder,
             s.KeepGb,
             s.KeepDays,
@@ -491,6 +494,7 @@ public sealed partial class MainWindow
                     case "replayMode" when v.ValueKind == JsonValueKind.String && v.GetString() is "games" or "always" or "off": s.ReplayMode = v.GetString()!; break;
                     case "cursor" when v.ValueKind is JsonValueKind.True or JsonValueKind.False: s.Cursor = v.GetBoolean(); break;
                     case "printScreen" when v.ValueKind is JsonValueKind.True or JsonValueKind.False: s.PrintScreen = v.GetBoolean(); break;
+                    case "afterSnip" when v.ValueKind == JsonValueKind.String: s.AfterSnip = Services.CaptureShare.NormalizeAfterSnip(v.GetString()); break;
                     case "saveReplayKeys" or "recordKeys" or "snipKeys" when v.ValueKind == JsonValueKind.String:
                         var keys = v.GetString()!.Trim();
                         if (CaptureHotkeyProblem(keys) is { } problem) { error = problem; break; }
@@ -715,7 +719,7 @@ public sealed partial class MainWindow
         return new { ok = true, items = items.ToList() };
     }
 
-    /// <summary>capture.item: favourite, unfavourite, delete (to the Recycle Bin), reveal, copy, discord.</summary>
+    /// <summary>capture.item: favourite, unfavourite, delete (to the Recycle Bin), reveal, copy, shrink.</summary>
     internal async Task<object> CaptureItemAsync(string? id, string? action)
     {
         var path = PathOfCapture(id);
@@ -742,13 +746,12 @@ public sealed partial class MainWindow
             case "shrink":
                 return StartManualShrink(path, relative);
             case "copy":
-            case "discord":
                 if (CaptureAddon is not { } addon) return new { ok = false, message = "Exo Capture is not installed." };
                 var image = path.EndsWith(".png", StringComparison.OrdinalIgnoreCase);
                 try
                 {
-                    // A snip copies as a picture; a video (and anything for Discord) as a file to paste.
-                    await addon.CallAsync(image && action == "copy" ? "copyImage" : "copy", new JsonObject { ["path"] = path }, CancellationToken.None).ConfigureAwait(true);
+                    // A snip copies as a picture; a video as a file to paste.
+                    await addon.CallAsync(image ? "copyImage" : "copy", new JsonObject { ["path"] = path }, CancellationToken.None).ConfigureAwait(true);
                     return new { ok = true };
                 }
                 catch (Exception ex) { return CaptureFailure("Capture copy", ex); }
