@@ -244,18 +244,39 @@ const mockApply = (step: string, p?: { action?: unknown }) => { if (p?.action ==
 const mockIntelCpu = typeof location !== 'undefined' && new URLSearchParams(location.search).get('cpu') === 'intel'
 
 /**
- * PC › Network in browser dev: an Intel I226-V with Energy-Efficient Ethernet on, which network sets.
- * `?net=fine` has nothing to set, `?net=slow` a link held at 100 Mbps by its cable, `?net=wifi` a Wi-Fi
- * adapter (Exo has nothing to set on Wi-Fi; it holds the radio while a game runs).
+ * Best settings › Network in browser dev: an Intel I226-V with Energy-Efficient Ethernet on, DHCP DNS and Windows' TCP
+ * defaults, so the group has its adapter and Cloudflare DNS items. network sets every item kept on (with a check before
+ * and after), network-on and network-off one item. `?net=fine` has nothing to set on the adapter, `?net=slow` a link held
+ * at 100 Mbps by its cable, `?net=wifi` a Wi-Fi adapter with no IPv6, `?net=tcp` receive window tuning disabled.
  */
 const mockNet = typeof location !== 'undefined' ? new URLSearchParams(location.search).get('net') : null
-let mockNetSet = false
-const mockNetItems = (p?: { action?: unknown }) => {
-  if (p?.action === 'network') mockNetSet = true
-  if (mockNet === 'wifi' || mockNet === 'fine') return []
-  const items: Record<string, unknown>[] = [mockNetSet
-    ? { key: 'network', label: 'Network', detail: "Exo's settings for games", applied: true, canUndo: true }
-    : { key: 'network', label: 'Ethernet', detail: 'Energy-efficient Ethernet on' }]
+const mockNetOn = new Set<string>()
+const mockNetOff = new Set<string>()
+let mockCheck: Record<string, unknown> | null = null
+const mockNetItems = (p?: { action?: unknown; item?: unknown }) => {
+  const offered = [...(mockNet === 'wifi' || mockNet === 'fine' ? [] : ['adapter']), 'dns', ...(mockNet === 'tcp' ? ['tcp'] : [])]
+  const before = { ping: 21, jitter: 4, router: 2, lookup: 38 }
+  if (p?.action === 'network') {
+    for (const key of offered) if (!mockNetOff.has(key)) mockNetOn.add(key)
+    mockCheck = { before, after: { ping: 20, jitter: 4, router: 2, lookup: 11 }, said: 'Lookups fell from 38 ms to 11 ms.' }
+  }
+  if (p?.action === 'netcheck') mockCheck = { before: null, after: before, said: '' }
+  if (typeof p?.item === 'string') {
+    if (p.action === 'network-on') { mockNetOn.add(p.item); mockNetOff.delete(p.item) }
+    if (p.action === 'network-off') { mockNetOn.delete(p.item); mockNetOff.add(p.item) }
+  }
+  const words: Record<string, [string, string, string]> = {
+    adapter: ['Adapter settings for games', 'Energy-efficient Ethernet on.', 'Power saving that drops the link is off.'],
+    dns: ['Cloudflare DNS, encrypted', mockNet === 'wifi' ? 'Faster lookups, and your DNS is private. IPv4 only on Wi-Fi: it has no IPv6.' : 'Faster lookups, and your DNS is private.', ''],
+    tcp: ["Windows' TCP defaults", 'Receive window tuning disabled.', 'Downloads tune their own speed.'],
+  }
+  const items: Record<string, unknown>[] = offered.map(key => {
+    const on = mockNetOn.has(key)
+    const [label, off, set] = words[key]
+    return { key: `net-${key}`, label, detail: on && set ? set : off, applied: on, canUndo: on, off: mockNetOff.has(key) }
+  })
+  const left = offered.filter(key => !mockNetOn.has(key) && !mockNetOff.has(key)).map(key => words[key][0])
+  items.unshift({ key: 'network', label: 'Network', detail: left.length ? left.join(', ') : "Exo's network settings for games", applied: left.length === 0, canUndo: mockNetOn.size > 0 })
   if (mockNet === 'slow') items.push({ key: 'netlink', label: 'Ethernet', detail: '100 Mbps of 2.5 Gbps. Try another cable or router port.' })
   return items
 }
@@ -1647,6 +1668,7 @@ const MOCK_HANDLERS: Record<string, MockHandler> = {
           : { key: 'chipset', label, detail: `${from} installed · ${to} installs while you're away` },
         ...mockNetItems(p),
       ],
+      check: mockCheck,
     }
   },
   'system.interrupts': (p) => {
