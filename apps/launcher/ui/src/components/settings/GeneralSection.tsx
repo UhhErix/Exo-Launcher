@@ -111,6 +111,7 @@ const FPS_ITEMS = [
   { id: 'cpu', label: 'CPU use' },
   { id: 'vram', label: 'VRAM' },
   { id: 'ram', label: 'RAM' },
+  { id: 'battery', label: 'Lowest battery' },
   { id: 'clock', label: 'Time of day' },
 ] as const
 

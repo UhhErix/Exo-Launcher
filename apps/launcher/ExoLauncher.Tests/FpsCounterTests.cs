@@ -389,6 +389,19 @@ public sealed class FpsCounterTests
         Assert.Equal(" \u00B7 96 LOW \u00B7 7.0 MS \u00B7 98% GPU \u00B7 71\u00B0C \u00B7 34% CPU \u00B7 6.1 VRAM \u00B7 18.2 RAM", FpsItems.Text(all, 142, 96, Sample, Noon));
     }
 
+    /// <summary>The battery item: the lowest wireless device's percent and kind, after RAM and before the time; none read, none shown.</summary>
+    [Fact]
+    public void TheLowestBatteryShowsItsPercentAndKind()
+    {
+        var items = FpsItems.Clean([FpsItems.Clock, FpsItems.Battery, FpsItems.Ram]);
+        Assert.Equal([FpsItems.Ram, FpsItems.Battery, FpsItems.Clock], items);
+        Assert.Equal(" · 82% MOUSE", FpsItems.Text([FpsItems.Battery], 142, null, Sample with { Battery = ("MOUSE", 82) }, Noon));
+        Assert.Null(FpsItems.Text([FpsItems.Battery], 142, null, Sample, Noon));
+        Assert.Equal("HEADSET", FpsItems.BatteryKind("headset"));
+        Assert.Equal("CONTROLLER", FpsItems.BatteryKind("Controller"));
+        Assert.Equal("DEVICE", FpsItems.BatteryKind(null));
+    }
+
     [Fact]
     public void AValueWindowsDidntGiveIsLeftOutNotGuessed()
     {
