@@ -92,7 +92,8 @@
 
 /* The done check, small, on the control that finished (1.6 s). */
 .exo-motion-check.exo-store-check {
-  stroke-width: 1.91;
+  /* The icons' line at 14px (lineAt), as the Check glyph beside it. */
+  stroke-width: 1.5;
   position: static;
   width: 14px;
   height: 14px;

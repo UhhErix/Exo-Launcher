@@ -15,5 +15,6 @@ test('saving a Riot ID triggers the one-time tracker.gg import after the ID is s
   const imported = save.indexOf('host.riotHoursRefresh(next)')
   assert.ok(saved >= 0, 'the save writes riotId')
   assert.ok(imported > saved, 'the import runs after the ID is saved')
-  assert.ok(save.slice(0, imported).includes('if (next) {'), 'the import runs only for a saved ID, not a removal')
+  const between = save.slice(saved, imported)
+  assert.ok(/if\s*\(\s*!next\s*\)\s*return|if\s*\(\s*next\s*\)/.test(between), 'the import runs only for a saved ID, not a removal')
 })

@@ -58,6 +58,7 @@ Three programs ship beside Exo and are separate programs, each run as its own pr
 - The installer of each release has a SHA-256 beside it. That checks your download, not your build.
 - Builds are not promised to be byte-for-byte reproducible: a different compiler, SDK or ReadyToRun pass changes the bytes. To check the official release against the source, read what it does rather than hash it: [PRIVACY.md](PRIVACY.md) lists every network destination, [SECURITY.md](SECURITY.md) the trust boundaries, and the tests in `ExoLauncher.Tests` (`NetworkDestinationsTests`, `BannedNativeImportsTests`) fail the build when code strays from them.
 - The upstream script `tools/Build-Release.ps1` publishes the host and UI, builds the add-ons, and packages them with NSIS.
+- Beside the installer it writes `files.json` and `files.pack`, the app folder file by file, which the in-app updater uses to download only the files that changed. Each file's SHA-256 is in `files.json`, so you can compare any file of an installed Exo with the release's list. To see what an update from your installed copy would download: `dotnet run --project tools\AppFiles -- measure --manifest files.json --app %LOCALAPPDATA%\ExoLauncher\app`.
 
 ## When something does not build
 

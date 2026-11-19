@@ -14,7 +14,8 @@ namespace ExoLauncher.Adapters;
 /// (<c>steamcommunity.com/profiles/&lt;steamid64&gt;/games?xml=1</c>). No key and no sign-in: it answers only for a
 /// profile whose game details are public, and it is the one keyless list of what the account owns. The running Steam
 /// client is asked first (it licenses family titles too); this list separates the account's own titles from them.
-/// A private profile is unavailable, never an empty library.
+/// A private profile is unavailable, never an empty library. With a sign-in (Exo's own, or the Steam website's token)
+/// it also reads the owned list and the Steam Family's shared library from Steam's web API.
 /// </summary>
 internal static class SteamCommunityGames
 {
@@ -25,6 +26,7 @@ internal static class SteamCommunityGames
     private static string _cachedFor = "";
     private static DateTimeOffset _cachedAt = DateTimeOffset.MinValue;
     private static OwnedGamesResult _cached = OwnedGamesResult.Unavailable;
+    private static SteamFamilyLibrary.Shares? _cachedFamily;
 
     internal sealed record OwnedGamesResult(
         bool Authoritative,
@@ -47,31 +49,36 @@ internal static class SteamCommunityGames
             _cachedFor = "";
             _cachedAt = DateTimeOffset.MinValue;
             _cached = OwnedGamesResult.Unavailable;
+            _cachedFamily = null;
         }
     }
 
-    /// <summary>The account's public owned list, cached for five minutes. Unavailable for a bad id, a private or unreadable profile.</summary>
-    internal static async Task<OwnedGamesResult> LoadOwnedGamesAsync(string steamId64, CancellationToken ct = default)
+    /// <summary>
+    /// The account's owned list and its Steam Family shares, cached for five minutes. Owned is unavailable for a bad id
+    /// or when neither a sign-in nor a public profile answers; Family is null when no sign-in could ask Steam's family
+    /// service (or it did not answer).
+    /// </summary>
+    internal static async Task<(OwnedGamesResult Owned, SteamFamilyLibrary.Shares? Family)> LoadOwnedGamesAsync(string steamId64, CancellationToken ct = default)
     {
-        if (!IsSteamId64(steamId64)) return OwnedGamesResult.Unavailable;
+        if (!IsSteamId64(steamId64)) return (OwnedGamesResult.Unavailable, null);
         lock (Gate)
         {
             if (string.Equals(_cachedFor, steamId64, StringComparison.Ordinal) && DateTimeOffset.UtcNow - _cachedAt < Ttl)
-                return _cached;
+                return (_cached, _cachedFamily);
         }
 
-        var (signedIn, family, familyGroup) = await SignedInLibraryAsync(steamId64, ct).ConfigureAwait(false);
+        var signedInTask = SignedInLibraryAsync(steamId64, ct);
         var publicList = await PublicProfileAsync(steamId64, ct).ConfigureAwait(false);
+        var (signedIn, family) = await signedInTask.ConfigureAwait(false);
         var result = Merge(signedIn, publicList);
-        // The family list the account's sign-in gave: kept where the Steam adapter reads it when Steam is closed.
-        if (family is not null) SteamFamilyShares.Remember(ScopeOf(steamId64), family.Except(result.AppIds).ToHashSet(StringComparer.Ordinal));
         lock (Gate)
         {
             _cachedFor = steamId64;
             _cachedAt = DateTimeOffset.UtcNow;
             _cached = result;
+            _cachedFamily = family;
         }
-        return result;
+        return (result, family);
     }
 
     /// <summary>
@@ -97,13 +104,26 @@ internal static class SteamCommunityGames
         return authoritative ? new OwnedGamesResult(true, ids, minutes, names) : OwnedGamesResult.Unavailable;
     }
 
-    private static async Task<(OwnedGamesResult? Owned, IReadOnlySet<string>? Family, ulong FamilyGroup)> SignedInLibraryAsync(string steamId64, CancellationToken ct)
+    /// <summary>
+    /// The library with Exo's Steam sign-in; without one, with the Steam website sign-in's token (when it is held:
+    /// a missing one is fetched behind this scan, never waited for). A website token Steam no longer answers is dropped.
+    /// </summary>
+    private static async Task<(OwnedGamesResult? Owned, SteamFamilyLibrary.Shares? Family)> SignedInLibraryAsync(string steamId64, CancellationToken ct)
     {
-        if (!ulong.TryParse(steamId64, System.Globalization.NumberStyles.None, CultureInfo.InvariantCulture, out var steamId)) return (null, null, 0);
+        if (!ulong.TryParse(steamId64, System.Globalization.NumberStyles.None, CultureInfo.InvariantCulture, out var steamId)) return (null, null);
+        var via = "Exo's Steam sign-in";
         try
         {
-            var library = await SteamSignInRuntime.Service.LibraryAsync(steamId, ct).ConfigureAwait(false);
-            return library is { } l ? (l.Owned, l.Family, l.FamilyGroupId) : (null, null, 0);
+            if (await SteamSignInRuntime.Service.LibraryAsync(steamId, ct).ConfigureAwait(false) is { } library) return library;
+            if (SteamWebsiteToken.For(steamId) is not { } token) return (null, null);
+            via = "the Steam website sign-in";
+            var web = await SteamSignInService.LibraryWithTokenAsync(SteamSignInRuntime.Api, token, steamId, ct).ConfigureAwait(false);
+            if (web.Family is null && !web.Owned.Authoritative)
+            {
+                AppLog.Info("Steam website sign-in: Steam did not answer with its token; it is read again.");
+                SteamWebsiteToken.Forget();
+            }
+            return web;
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
@@ -111,8 +131,8 @@ internal static class SteamCommunityGames
         }
         catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or IOException or InvalidOperationException or SteamAuthException or FormatException)
         {
-            AppLog.Debug("Steam sign-in library unavailable: " + ex.GetType().Name);
-            return (null, null, 0);
+            AppLog.Debug($"Steam library with {via} unavailable: " + ex.GetType().Name);
+            return (null, null);
         }
     }
 
@@ -138,10 +158,6 @@ internal static class SteamCommunityGames
             return OwnedGamesResult.Unavailable;
         }
     }
-
-    /// <summary>The Steam adapter's key for this account (the same hash it uses for its family list).</summary>
-    private static string ScopeOf(string steamId64) =>
-        SteamPlaytime.HashAccountId((ulong.Parse(steamId64, CultureInfo.InvariantCulture) & 0xFFFFFFFF).ToString(CultureInfo.InvariantCulture));
 
     /// <summary>The games list of a community profile XML answer. A DTD is refused; no <c>games</c> element (private, error) is unavailable.</summary>
     internal static OwnedGamesResult Parse(string? xml)

@@ -6,6 +6,8 @@ import { trimStop } from '../../lib/utils'
 import { Switch } from '../Switch'
 import { Row } from '../settings/parts'
 import { Spinner } from '../ui/Spinner'
+import { ActionButton } from '../ui/ConfirmButton'
+import { errorText } from '../../lib/errorWords'
 
 /** Each item's icon and its key for the host (system.health's network-on and network-off). */
 const ITEMS: Record<NetworkItemKey, { icon: ReactNode; item: 'adapter' | 'dns' | 'tcp' }> = {
@@ -22,22 +24,22 @@ const isItem = (item: PcHealthItem): item is PcHealthItem & { key: NetworkItemKe
  * connection, before and after the last press. Use best settings sets every item that's on in one prompt (BestSetup.tsx).
  */
 export function NetworkGroup({ health, onHealth }: { health: PcHealth | null; onHealth: (next: PcHealth) => void }) {
-  const [busy, setBusy] = useState<NetworkItemKey | 'check' | null>(null)
+  const [busy, setBusy] = useState<NetworkItemKey | null>(null)
   const [error, setError] = useState<{ key: NetworkItemKey | 'check'; text: string } | null>(null)
   const items = health?.items.filter(isItem) ?? []
   if (!health || items.length === 0) return null
 
-  const run = async (key: NetworkItemKey | 'check', call: () => Promise<PcHealth>) => {
+  const run = async (key: NetworkItemKey, call: () => Promise<PcHealth>) => {
     if (busy) return
     setBusy(key)
     setError(null)
     try {
       const next = await call()
       onHealth(next)
-      if (!next.ok) setError({ key, text: trimStop(next.message) || 'Not changed. Try again.' })
+      if (!next.ok) setError({ key, text: errorText(trimStop(next.message), 'Not changed. Try again.') })
     } catch (e) {
       report(e, `NetworkGroup.${key}`)
-      setError({ key, text: 'Not changed. Try again.' })
+      setError({ key, text: errorText(e, 'Not changed. Try again.') })
     }
     setBusy(null)
   }
@@ -49,7 +51,7 @@ export function NetworkGroup({ health, onHealth }: { health: PcHealth | null; on
         const id = `pc-best-${item.key}`
         return (
           <Row key={item.key} label={item.label} labelId={id} icon={ITEMS[item.key].icon}
-            detail={item.off ? 'Off: Use best settings leaves it as it is.' : item.detail}
+            detail={item.off ? undefined : item.detail}
             error={error?.key === item.key ? error.text : null}>
             {busy === item.key ? <Spinner label={`Changing ${item.label}`} /> : null}
             <Switch checked={!!item.applied} disabled={!!busy} labelledBy={id}
@@ -59,10 +61,9 @@ export function NetworkGroup({ health, onHealth }: { health: PcHealth | null; on
       })}
       <Row label="Connection check" icon={<Signal size={16} />} detail={<CheckWords check={health.check ?? null} />}
         error={error?.key === 'check' ? error.text : null}>
-        <button type="button" className="exo-set-btn" disabled={!!busy} aria-busy={busy === 'check'}
-          onClick={() => void run('check', () => host.systemHealth('netcheck'))}>
-          {busy === 'check' ? <Spinner label="Checking the connection" /> : null}Check
-        </button>
+        <ActionButton className="exo-set-btn" disabled={!!busy} why="none" context="NetworkGroup.check" fallback="The connection wasn’t checked. Try again."
+          onPress={() => { setError(null); return host.systemHealth('netcheck') }} onFailed={failure => setError({ key: 'check', text: failure.text })}
+          onDone={next => onHealth(next as PcHealth)}>Check</ActionButton>
       </Row>
     </section>
   )
@@ -70,7 +71,7 @@ export function NetworkGroup({ health, onHealth }: { health: PcHealth | null; on
 
 /** The check in words: before and after the last press with what changed, or the numbers now. */
 function CheckWords({ check }: { check: NetCheck | null }) {
-  if (!check) return <>Ping, jitter and a DNS lookup, measured before and after Exo changes anything.</>
+  if (!check) return null
   if (!check.before) return <>{sample(check.after)}</>
   return <>Before: {sample(check.before)}. After: {sample(check.after)}. {check.said}</>
 }

@@ -9,6 +9,7 @@ import { Avatar } from './presence'
 import { SubContext, Submenu } from './UserMenu'
 import { Icons } from './icons'
 import { SHOP } from './roomPlaces'
+import { errorText } from '../../lib/errorWords'
 
 type Status = 'online' | 'idle' | 'dnd' | 'invisible'
 
@@ -41,11 +42,11 @@ export function MeMenu({ meId, status, onClose }: { meId: string; status: string
   const settings = useAccountSettings()
   const until = status && status !== 'online' && settings.statusExpiresAtMs ? new Date(settings.statusExpiresAtMs) : null
   const set = (next: Status, minutes = 0) => void host.discordSetStatus(next, minutes).then(
-    result => { if (result.ok) onClose(); else setError(result.message ?? "Discord didn't change your status.") },
+    result => { if (result.ok) onClose(); else setError(errorText(result.message, "Discord didn't change your status.")) },
     () => setError("Discord didn't change your status."))
   const settingsAt = (section: Parameters<typeof requestDiscordSettings>[0]) => { onClose(); requestDiscordSettings(section) }
   const switchTo = (id: string) => void host.discordAccounts('switch', id).then(
-    result => { if (result.ok) onClose(); else setError(result.message ?? "Exo couldn't switch accounts.") },
+    result => { if (result.ok) onClose(); else setError(errorText(result.message, "Exo couldn't switch accounts.")) },
     () => setError("Exo couldn't switch accounts."))
   if (adding) return <AddAccount onClose={onClose} />
   return (

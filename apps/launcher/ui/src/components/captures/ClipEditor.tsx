@@ -6,6 +6,7 @@ import { timeAt } from '../../lib/timeline'
 import { ErrorNote } from '../ui/ErrorNote'
 import { EditorShell, PresetTile, type EditorTab } from './EditorShell'
 import { TimelineStrip } from './TimelineStrip'
+import { errorText } from '../../lib/errorWords'
 
 /** A capture plays at half volume, as the player's slider shows, until you move it; kept while Exo runs. */
 export const playback = { volume: 0.5, muted: false }
@@ -217,15 +218,15 @@ export function ClipEditor({ item, onDone, onAdded }: { item: CaptureItem; onDon
     if (busy) return
     setBusy(preset)
     setNote(null)
-    const failed = 'Exo Capture could not save the copy. Try again.'
+    const failed = 'Exo Capture couldn’t save the copy. Try again.'
     try {
       const result = await host.captureEdit(item.id, preset, range[0], trimmed ? range[1] : 0)
-      if (!result.ok) setNote({ text: result.message ?? failed, bad: true })
+      if (!result.ok) setNote({ text: errorText(result.message, failed), bad: true })
       else {
         setNote({ text: SAVED[preset] })
         if (result.item) onAdded(result.item)
       }
-    } catch (error) { setNote({ text: error instanceof Error ? error.message : failed, bad: true }) }
+    } catch (error) { setNote({ text: errorText(error, failed), bad: true }) }
     finally { setBusy(null) }
   }
 

@@ -17,6 +17,7 @@ import { CallPersonItems } from './voice'
 import { useDismiss } from '../../lib/dismiss'
 import { Wait, sample, times } from '../ui/Wait'
 import { ErrorNote } from '../ui/ErrorNote'
+import { errorText } from '../../lib/errorWords'
 
 type Person = {
   ok: boolean; known: boolean; me: boolean; owner: boolean; outranks: boolean; timedOut: boolean; mfa?: boolean
@@ -142,7 +143,7 @@ function UserMenu({ at, guildId, serverName, meId, onClose }: { at: At; guildId:
   const username = at.username ?? person?.username ?? null
   const run: Run = (action, params, after, settled) => void admin(action, { guildId, userId: at.userId, ...params }).then(result => {
     settled?.()
-    if (!result.ok) { setError(result.message ?? 'Discord did not take that.'); return }
+    if (!result.ok) { setError(errorText(result.message, 'Discord didn’t take that.')); return }
     // The Members page shows each member's roles and nickname as they are now.
     window.dispatchEvent(new Event('exo-dc-members-changed'))
     if (after) after(); else onClose()
@@ -208,7 +209,7 @@ function MenuDialog({ dialog, at, guildId, serverName, person, name, username, o
 
 // A DM row's action settled: the menu closes, or says why Discord refused.
 const finish = (onClose: () => void, setError: (error: string) => void) => (result: { ok: boolean; message?: string | null }) => {
-  if (result.ok) onClose(); else setError(result.message ?? 'Discord did not take that.')
+  if (result.ok) onClose(); else setError(errorText(result.message, 'Discord didn’t take that.'))
 }
 
 // Profile, Mention, Message and Start a Call (their DM opens and rings, as Discord's; off while blocked, none for a bot).
@@ -251,7 +252,7 @@ type Relate = 'accept' | 'remove' | 'block' | 'ignore' | 'unignore'
 // A request from someone you share no server with answers STRANGER until it is confirmed (Discord asks first too).
 const STRANGER = 'stranger'
 const relateTo = (userId: string, action: Relate, confirm = false) => host.discordFriend(action, { userId, confirm })
-  .then(result => result.ok ? null : result.stranger ? STRANGER : result.message ?? "Discord didn't take that.", () => "Discord didn't take that.")
+  .then(result => result.ok ? null : result.stranger ? STRANGER : errorText(result.message, "Discord didn't take that."), () => "Discord didn't take that.")
 
 // What Discord sent of your relationship with them, for the friend, Ignore and Block rows (none on yourself).
 function useRelation(userId: string, me: boolean) {
@@ -461,7 +462,7 @@ function PersonDialog({ kind, guildId, userId, name, nick, serverName, onClose }
         : { deleteSeconds: seconds, reason: reason === 'other' ? text.trim() : reason }
     void admin(kind, { guildId, userId, ...params }).then(result => {
       setBusy(false)
-      if (!result.ok) { setError(result.message ?? 'Discord did not take that.'); return }
+      if (!result.ok) { setError(errorText(result.message, 'Discord didn’t take that.')); return }
       // The Members page shows who is still here, and their nickname as it is now.
       window.dispatchEvent(new Event('exo-dc-members-changed'))
       onClose()
@@ -521,13 +522,13 @@ function TransferOwnership({ guildId, userId, name, mfa, onClose }: { guildId: s
     if (!mfa && !sent) {
       const asked = await admin('transferCode', { guildId })
       setBusy(false)
-      if (asked.ok) setSent(true); else setError(asked.message ?? 'Discord did not send the code.')
+      if (asked.ok) setSent(true); else setError(errorText(asked.message, 'Discord didn’t send the code.'))
       return
     }
     const result = await admin('transfer', { guildId, userId, ...(mfa ? {} : { code: code.trim() }) })
     setBusy(false)
     if (result.ok) { window.dispatchEvent(new Event('exo-dc-members-changed')); onClose() }
-    else if (result.message !== 'Multi-factor authentication cancelled') setError(result.message ?? 'Server ownership transfer failed')
+    else if (result.message !== 'Multi-factor authentication cancelled') setError(errorText(result.message, 'Server ownership transfer failed'))
   }
   return (
     <Confirm title="Transfer ownership?" action={!mfa && !sent ? 'Send code' : 'Transfer ownership'} busy={busy} disabled={!agreed || (sent && !code.trim())} error={error} form

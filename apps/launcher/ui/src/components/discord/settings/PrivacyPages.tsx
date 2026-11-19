@@ -10,6 +10,7 @@ import { ChoiceRow, Row, Section, State, SwitchRow } from '../../settings/parts'
 import { AccountToggle, LinkRow, LoadError, useLoad } from './parts'
 import { useAccount } from './AccountPages'
 import { ErrorNote } from '../../ui/ErrorNote'
+import { errorText } from '../../../lib/errorWords'
 
 const REDACTION = { show: 1, blur: 2, block: 3 } as const
 
@@ -131,7 +132,7 @@ function RestrictedList({ title, people, action, run, onDone }: { title: string;
   const act = (id: string) => {
     setBusy(id)
     setError(null)
-    void run(id).then(result => { if (!result.ok) setError({ id, message: result.message ?? "Discord didn't take that." }); onDone() },
+    void run(id).then(result => { if (!result.ok) setError({ id, message: errorText(result.message, "Discord didn't take that.") }); onDone() },
       () => setError({ id, message: "Discord didn't take that." })).finally(() => setBusy(null))
   }
   return (
@@ -170,7 +171,7 @@ export function ConnectedAppsPage() {
     setFailed(null); setBusy(id)
     const why = "Discord didn't deauthorize that app."
     void host.discordAccount('deauthorize', { id })
-      .then(result => { if (result.ok) apps.reload(); else setFailed(result.message ?? why) }, () => setFailed(why))
+      .then(result => { if (result.ok) apps.reload(); else setFailed(errorText(result.message, why)) }, () => setFailed(why))
       .finally(() => setBusy(null))
   }
   return (

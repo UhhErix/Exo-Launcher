@@ -4,6 +4,7 @@ import { channelGlyph } from '../discord/icons'
 import { host } from '../../lib/host'
 import { openDiscord, type DiscordHome } from '../../lib/discord'
 import type { Command } from '../blocks/command-menu-1'
+import { errorText } from '../../lib/errorWords'
 
 const MUSIC: Command[] = [
   { id: 'music-toggle', group: 'Music', title: 'Play or pause', icon: Pause },
@@ -59,7 +60,7 @@ export function runPaletteExtra(command: Command, onFail: (message: string) => v
   const action = id === 'music-toggle' ? 'toggle' : id === 'music-next' ? 'next' : id === 'music-previous' ? 'previous' : null
   if (!action) return null
   void host.musicControl(action).then(
-    result => { if (!result.ok) onFail(result.message ?? 'The player could not respond.') },
-    () => onFail('The player could not respond.'))
+    result => { if (!result.ok) onFail(errorText(result.message, 'The player didn’t answer. Try again.')) },
+    () => onFail('The player didn’t answer. Try again.'))
   return 'stay'
 }

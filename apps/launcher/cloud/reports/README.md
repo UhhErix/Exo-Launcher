@@ -1,6 +1,6 @@
 # Exo's crash reports (`cloud/reports`)
 
-A Worker that takes crash and freeze reports from Exo Launcher, Cinema and Browser and stores them in R2, and the help page's contact form. Exo Launcher sends crash reports from every install from 3.26.0 (the owner's decision, 2026-11-09: essential, no switch; 3.24.4 and 3.25.0 asked first, and Cinema and Browser still do until they follow). Each app sends only the five fields below, stripped of anything personal, at most a few a day and the same error once. It runs on this PC with `npx wrangler@4.158.0 dev`; deployed at `reports.getexo.app` since November 5, 2026 (the owner's OK), redeployed 7 November 2026 with the contact endpoint (version `5dc2d4e3-4a6d-43c1-8f1a-dc2c27aceee0`).
+A Worker that takes crash and freeze reports from Exo Launcher, Cinema and Browser, stores them in R2 and files them as issues in the private GitHub repository UhhErix/Exo-Reports, takes Report a problem messages from the Launcher the same way, and runs the help page's contact form. Exo Launcher sends crash reports from every install from 3.26.0 (the owner's decision, 2026-11-09: essential, no switch; 3.24.4 and 3.25.0 asked first, and Cinema and Browser still do until they follow). Each app sends only the five fields below, stripped of anything personal, at most a few a day and the same error once. It runs on this PC with `npx wrangler@4.165.0 dev`; deployed at `reports.getexo.app` since November 5, 2026 (the owner's OK), redeployed 7 November 2026 with the contact endpoint (version `5dc2d4e3-4a6d-43c1-8f1a-dc2c27aceee0`).
 
 ## What it takes
 
@@ -41,7 +41,7 @@ after its index row is written; the dev copy has no index, so it answers 503 for
   its /64), 300 a minute, the backstop against one sender making up install IDs. A report from an old client without an
   install ID meets the network's alone. Last comes `REPORTS_CEILING`, one count per route for every sender at a Cloudflare
   location (Cloudflare's limiter counts per location, not worldwide), 10,000 a minute: the
-  cost ceiling, so senders spread over many addresses cannot run up R2 and D1 writes, deletes and alert mails without bound
+  cost ceiling, so senders spread over many addresses cannot run up R2 and D1 writes, deletes and GitHub calls without bound
   (a request refused by its own install or network never spends it). Cloudflare's limiter holds the keys for the minute;
   the Worker stores none of them. A 429 loses nothing: the Launcher keeps a refused telemetry batch and resends it, and
   keeps a crash report refused with 429 or 5xx (or with no answer) as a pending file sent at the next start, at most five.
@@ -53,35 +53,87 @@ Reports expire 30 days after they are stored. R2 lifecycle rules are set on the 
 bucket, after it exists (done for both):
 
 ```
-npx wrangler@4.158.0 r2 bucket lifecycle add exo-crash-reports reports-30-days reports/ --expire-days 30
-npx wrangler@4.158.0 r2 bucket lifecycle add exo-crash-reports-dev reports-30-days reports/ --expire-days 30
+npx wrangler@4.165.0 r2 bucket lifecycle add exo-crash-reports reports-30-days reports/ --expire-days 30
+npx wrangler@4.165.0 r2 bucket lifecycle add exo-crash-reports-dev reports-30-days reports/ --expire-days 30
 ```
 
 `wrangler r2 bucket lifecycle add --help` lists the flags. Check the rule with `wrangler r2 bucket lifecycle list`.
 
-## Triage: the team is told
+## Issues: the team is told on GitHub
 
-So an error is worked on the day it happens (owner, 2026-11-09: "auto sent to us so we can work on it immediately"):
+So an error is worked on the day it happens (owner, 2026-11-09: "auto sent to us so we can work on it immediately"), every
+error group is an issue in the **private** repository [UhhErix/Exo-Reports](https://github.com/UhhErix/Exo-Reports)
+(`src/issues.js`). Private, because UhhErix/Exo-Launcher is public and automatic reports must not land in public issues.
+GitHub's own notifications (watch the repository) tell the team. That starts when the secret `GITHUB_REPORTS_TOKEN` is
+set; until then the Worker tells the team as it did before (below, **Before the token**), so nothing goes quiet between
+the deploy and the token.
 
-- **Counted.** Every stored report is counted in D1 (`crash_days`, `migrations/0004_crash_days.sql`) by app, version, error
-  type and UTC day, with the key of the group's newest report. No install ID, no time finer than the day.
-- **Told at once.** The first report of an error type in a version, and its 10th, 100th and 1000th, mail the team: the
-  contact form's own binding and address (`CONTACT_MAIL` to `CONTACT_TO`), subject `Exo Launcher 3.26.0: UiError (new error)`,
-  body the Windows build and the end of the scrubbed excerpt. With the secret `DISCORD_WEBHOOK_REPORTS` (a webhook of a
-  private channel; `npx wrangler@4.158.0 secret put DISCORD_WEBHOOK_REPORTS`) the same message is posted there. It runs
-  after the answer and never fails a report: the dev copy (no D1), a failed count and a failed send still store it. At most
-  50 alerts go out a UTC day (`alert_days`, `migrations/0005_alert_days.sql`), so invented error types cannot mail without
-  end; past that the digest still lists every group. Apply 0005 before deploying this code
-  (`npx wrangler@4.158.0 d1 migrations apply exo-telemetry --remote`).
-- **Digest.** The daily job mails yesterday's groups, most reports first, new ones marked, and removes counts older than 90 days.
-- **From this PC.** `node triage.mjs [--days 7] [--app launcher] [--version 3.26.0] [--show 3]` lists the groups and prints
-  the newest sample of the top ones, through wrangler's own login. Read only.
+- **Grouped.** A report's group is its app, error type and top three stack frames (`src/fingerprint.js`), normalised so a
+  rebuild or another PC does not split it: line numbers, offsets, addresses, lambda and generic numbering and arguments are
+  taken out. A report with no stack is grouped by its error line with numbers and quoted values taken out. One group is one
+  issue across versions; D1 `crash_groups` (`migrations/0006_github_issues.sql`) holds its issue number, count, versions and
+  days, with no install ID and no excerpt.
+- **The first report opens the issue**, titled `[launcher] NullReferenceException: Namespace.Type.Method`, with the scrubbed
+  excerpt, the version and the Windows build, the top frames, and, from Workers AI (the `AI` binding), three lines on the
+  likely cause. Labels: `app:launcher|cinema|browser`, `kind:crash` (or `kind:freeze` for a `Hang`), `v<version>` (made on
+  the fly) and `new`.
+- **Later reports edit its count**, the `<!-- exo:stats -->` block in the body ("Seen N times · versions … · first seen …
+  · last seen … · newest version …"); the rest of the body is left as people wrote it. A report tells GitHub at once while
+  the group has 10 reports or fewer, at a new version, at a threshold, or when it has a quarter more reports than the issue
+  shows; the rest waits for the daily job, so a flood is a few edits. Only 10, 100 and 1000 reports comment, each once, and
+  add `count-10`, `count-100` or `count-1000`.
+- **Regressions reopen.** When an issue is found closed, the newest version it showed is taken as the version it was
+  closed in. A report from a newer version reopens it, labels it `regression` and the new version, and says so in a
+  comment; reports from that version or older (players who haven't updated) only move the count.
+- **Caps** against a sender inventing errors, versions or messages (`issue_days`): 50 new crash issues, 100 Report a problem
+  issues and 2000 edits or comments a UTC day. Past a cap nothing is lost: the group stays pending for the next day.
+- **GitHub down never fails a report.** The report is in R2 and answered 202 before GitHub is called (8 seconds at most a
+  call). What GitHub did not take stays pending in D1 (`crash_groups.pending`, `issue_queue`) and the daily job sends it,
+  at most 100 groups and 100 messages a run, stopping at the first failure.
+- **Before the token** (`GITHUB_REPORTS_TOKEN` not set) nothing reaches GitHub and the team is told as before GitHub
+  (`src/triage.js`): the first report of an error type in a version, and its 10th, 100th and 1000th, mail the team (the
+  contact form's binding and address, `CONTACT_MAIL` to `CONTACT_TO`) and post to the private Discord channel when the
+  secret `DISCORD_WEBHOOK_REPORTS` is set; at most 50 a UTC day (`alert_days`, `migrations/0005_alert_days.sql`), and the
+  daily job mails yesterday's groups. A Report a problem message is mailed and posted the same way (the player's words
+  cut to 1,500 characters, the contact, the reference and its R2 key). Groups and messages are still recorded, and the
+  daily job files the backlog as issues once the token is set (a group already past 10 reports is labelled, not
+  commented); from then on no alert, digest or message is mailed or posted. The Discord channel and its webhook can be
+  removed after that; the Worker no longer uses them.
+- **Counted** as before in `crash_days` (`migrations/0004_crash_days.sql`) by app, version, error type and UTC day, for
+  `triage.mjs`. The daily job removes counts and cap tallies older than 90 days.
+- **From this PC.** `node triage.mjs [--days 7] [--app launcher] [--version 3.26.0] [--show 3]` lists the groups, what is
+  waiting for GitHub, and prints the newest sample of the top ones, through wrangler's own login. Read only.
+
+The token: a fine-grained personal access token limited to UhhErix/Exo-Reports with Issues read and write (nothing else),
+set with `npx wrangler@4.165.0 secret put GITHUB_REPORTS_TOKEN` from this folder (it asks for the value; nothing is
+written to disk). Apply 0006 before deploying this code (`npx wrangler@4.165.0 d1 migrations apply exo-telemetry
+--remote`); it keeps 0005's `alert_days`, which the alerts before the token still use.
 
 What the Launcher sends on its own, with no Copy logs (`ExoLauncher/Helpers/CrashReport.cs`, `FailureReportRules.cs`): a
 crash (at the next start), a freeze, a WebView2 exit, Discord failing five times, Exo Capture exiting with an error, a store
 launch or install failing, an update failing, and from 3.26.0 every page error (`UiError`: an uncaught error, a rejected
 promise, a failure a room caught) and every host call that failed in a way nobody planned for (`HostCallFailed`). The
 client's limits hold: one report per error type and cause a day, five a day in all.
+
+## Report a problem (`POST /v1/user-report`)
+
+Settings › About › Report a problem in the Launcher posts here, so players don't need a GitHub account
+(`src/user-report.js`). JSON: `app`, `version`, `osBuild` (as a crash report), `message` (required, at most 4000 characters,
+what the player wrote), `excerpt` (optional: the scrubbed log when Attach logs is on, at most 8192 characters, refused with
+422 when it still holds a path, URL, email, long number or token), `contact` (optional, one line, at most 200 characters)
+and `installId` (optional, as a crash report).
+
+- Stored in R2 at `reports/<UTC date>/user-<id>.json` (the same 30-day rule) and indexed by install, so Delete my data
+  removes it; then filed at once as one issue in Exo-Reports, labelled `app:…`, `kind:user-report`, `v<version>` and `new`.
+  The message sits in a code block and the contact in a code span, so neither mentions anyone; the title drops `@` and `#`.
+- Answers `202 {"issue": 123}` when filed, or `202 {"ref": "1a2b3c4d"}` when it waits (no token, GitHub down or the day's
+  cap; the daily job files it, at most 500 waiting; with no token it is also mailed and posted, as under **Before the
+  token**), and `400`, `403` (any `Origin`: only the apps send), `405`, `413`,
+  `415`, `422`, `429` (the same per-install, per-network and ceiling limits as crash reports), `503`.
+- The issue itself is not removed by Delete my data; the team deletes one on request.
+
+The public alternative, with no logs, is Open on GitHub beside it: UhhErix/Exo-Launcher's bug form, prefilled with the
+version and the message only.
 
 ## Contact (`POST /v1/contact`)
 
@@ -135,6 +187,9 @@ per install per day across 10,000 installs (about 3 GB at 10 per day). Above tha
 against fake R2 and rate limiter bindings. They cover the shape of each field, the personal-data refusals on realistic
 samples, the size caps, the rate limits' keys (10,000 installs in one minute all pass; one sender making up install IDs
 is stopped), and that no IP address, cookie or client id reaches R2, and the address no limiter but the network's.
+`test/issues.test.mjs` runs the Worker against a fake GitHub API in memory: grouping by fingerprint, one issue per group
+and edits instead of comments, the 10/100/1000 comments, regression reopening, GitHub down and no token (queued, filed by
+the daily job), the daily caps, and Report a problem's issue, refusals and Delete my data.
 
 ## Before deploy
 
@@ -145,7 +200,8 @@ is stopped), and that no IP address, cookie or client id reaches R2, and the add
    the account, change it in `wrangler.toml`.
 3. `reports.getexo.app` is a custom domain on the `getexo.app` zone: its DNS record is created on deploy. The updates
    address (`updates.getexo.app`) and the account service use the same zone.
-4. Deploy with `npx wrangler@4.158.0 deploy` from this folder (the dev copy with `--env dev`), after the owner's OK.
+4. Deploy with `npx wrangler@4.165.0 deploy` from this folder (the dev copy with `--env dev`), after the owner's OK.
 5. Then `PRIVACY.md` and `NetworkDestinations.cs` already name `reports.getexo.app`; a host change must update both.
 
-Cost on the paid Workers plan: one Worker request and one R2 write per report that passes; nothing is read back.
+Cost on the paid Workers plan: one Worker request and one R2 write per report that passes, a few D1 rows, and GitHub calls
+within the caps above.

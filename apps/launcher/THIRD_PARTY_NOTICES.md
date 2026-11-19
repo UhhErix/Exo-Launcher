@@ -30,6 +30,7 @@ The source for every build of these programs that Exo ships, Lucid aside, is pub
 | Microsoft.Data.Sqlite | 10.0.15 | MIT |
 | SQLitePCLRaw | 3.0.5 | Apache-2.0 |
 | SQLite | bundled with SQLitePCLRaw | Public domain |
+| [ZstdSharp.Port](https://github.com/oleg-st/ZstdSharp) (zstd for .NET; reads the in-app updater's files.pack) | 0.8.8 | MIT |
 | libdave (Discord, DAVE end-to-end encryption for calls; `dave.dll`), with Exo's one addition, an MLS exporter for the call relay (`voice/dave-exporter.patch`) | 1.2.2 (6396c90) | MIT |
 | mlspp (Cisco, linked into `dave.dll`) | as pinned by libdave | BSD-2-Clause |
 | OpenSSL (linked into `dave.dll`), built with vcpkg's openssl port (MIT, `voice/ports/openssl`) | 3.5.9 | Apache-2.0 |
@@ -43,10 +44,9 @@ The source for every build of these programs that Exo ships, Lucid aside, is pub
 | lottie-web (Airbnb), Discord's animated stickers | 5.13.0 | MIT |
 | [Skullet](https://skullet.lochie.me) (Lochie Axon), the skeletons of what is on its way | 0.0.3 | MIT |
 | hls.js | 1.7.4 | Apache-2.0 |
-| dash.js | 5.2.1 | BSD-3-Clause |
-| Lucide icons (lucide.dev, Lucide Contributors; through Iconify's `@iconify-json/lucide`), drawn inline from `ui/src/brand/glyphs.ts` in the UI and Exo Mouse | 1.2.156 (Iconify set) | ISC |
-| Goeist and Goeist Mono, Exo's typeface in the UI and Exo Mouse: Shadcn Labs' rounded Geist (Aniket Pawar; upstream Geist by Vercel and Basement Studio), unmodified. Goeist-Variable.woff2, Goeist-Italic-Variable.woff2 and GoeistMono-Variable.woff2 in `ui/public/fonts`, Goeist-Variable.woff2 in Exo Mouse; `LICENSE-Goeist.txt` beside each carries the copyright notices | 0.1.0 | SIL Open Font License 1.1 |
-| Exoline, Exo's earlier typeface (now the overlays', Setup's and the fallback): a modified version of the Geist font (Vercel and Basement Studio, 1.9.0), renamed as its licence asks. Exoline-Variable.woff2 and Exoline-Italic-Variable.woff2 in the UI (`ui/public/fonts`) and Exo Mouse, Exoline-Variable.ttf in the app; `LICENSE-Exoline.txt` beside each carries both copyright notices | 1.000 | SIL Open Font License 1.1 |
+| dash.js | 5.3.0 | BSD-3-Clause |
+| Lucide icons (lucide.dev, Lucide Contributors; through Iconify's `@iconify-json/lucide`), drawn inline from `ui/src/brand/glyphs.ts` in the UI and Exo Mouse | 1.2.157 (Iconify set) | ISC |
+| Goeist and Goeist Mono, Exo's typeface everywhere it draws words (the UI, Exo Mouse, Setup, the FPS counter, the achievement banner, the capture add-on's windows and the native dialogs): Shadcn Labs' rounded Geist (Aniket Pawar; upstream Geist by Vercel and Basement Studio), unmodified, from the v0.1.0 release (github.com/shadcn-labs/goeist-font). Goeist-Variable.woff2, Goeist-Italic-Variable.woff2 and GoeistMono-Variable.woff2 in `ui/public/fonts`, Goeist-Variable.woff2 in Exo Mouse, the release's variable TTF as Goeist-Variable.ttf in the app (`ExoLauncher/Assets/Fonts`, for GDI); `LICENSE-Goeist.txt` beside each carries the copyright notices | 0.1.0 | SIL Open Font License 1.1 |
 | Simple Icons, the marks of a Discord profile's connected accounts (`ui/src/components/discord/connectionMarks.ts`; Skype, Xbox and Amazon from 8.15.0) | 16.36.0 | CC0 1.0 |
 | Simple Icons, the YouTube Music, Apple Music, Steam, Epic Games and GOG.com marks and brand colors in the title bar and taskbar icon of Exo's sign-in and pop-out windows (`ExoLauncher/Helpers/ServiceMarks.cs`) | 16.36.0 | CC0 1.0 |
 | emojibase-data (Miles Johnson), the Discord room's emoji names, categories and keywords (`ui/src/components/discord/emoji.json`, trimmed from it) | 18.0.0 | MIT |

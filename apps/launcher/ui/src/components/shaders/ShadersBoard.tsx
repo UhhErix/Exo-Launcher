@@ -13,6 +13,7 @@ import { call, message, type Estimate, type Queue, type QueueItem, type ShaderGa
 import { ConfirmLabel, useConfirmInPlace } from '../ui/ConfirmButton'
 import { rebase, stale } from './snapshotOrder'
 import { ArtImg } from '../ui/ArtImg'
+import { errorText } from '../../lib/errorWords'
 
 /** The board before the engine has ever run: no games read yet, nothing queued. */
 const NEVER_RAN: Snapshot = { rev: 0, games: [], queue: { waiting: [], running: false, paused: false, canStart: false }, app: {} }
@@ -668,7 +669,7 @@ function PreparePoster({ item, cover }: { item: ShaderPrepareGame | undefined; c
     setFailed(null)
     if (!running) setOpening(true)
     void (running ? host.shadersPrepareCancel(item.id) : host.shadersPrepareStart(item.id))
-      .then(result => { if (!result.ok) { setOpening(false); setFailed(result.message ?? 'Could not start') } })
+      .then(result => { if (!result.ok) { setOpening(false); setFailed(errorText(result.message, 'Could not start')) } })
       .catch((error: unknown) => { report(error, 'ShadersBoard.prepareRun'); setOpening(false); setFailed('Could not start') })
   }
   const ask = useConfirmInPlace<HTMLButtonElement>('Opens the game, then closes it', run)

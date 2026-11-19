@@ -9,6 +9,7 @@ import { Progress, ProgressWords } from '../ui/Progress'
 import { useHoldWindow } from './HoldWindow'
 import { pageGet, pageSet, pageRemove } from '../../lib/pageStore'
 import '../../styles/driver-install.css'
+import { errorText } from '../../lib/errorWords'
 
 type Phase = 'starting' | 'downloading' | 'unpacking' | 'waiting' | 'installing' | 'reloading' | 'restoring' | 'done' | 'failed'
 type Install = {
@@ -211,7 +212,7 @@ function RestartChoice() {
     setBusy(true)
     setError(null)
     host.biosUpdate('windows').then(result => {
-      if (!result.ok) { setBusy(false); setError(result.message ?? 'Windows didn’t restart. Restart from the Start menu.') }
+      if (!result.ok) { setBusy(false); setError(errorText(result.message, 'Windows didn’t restart. Restart from the Start menu.')) }
     }, (failure: unknown) => {
       report(failure, 'DriverInstallOverlay.restart', { level: 'warn' })
       setBusy(false)

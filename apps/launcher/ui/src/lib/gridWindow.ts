@@ -12,7 +12,7 @@ export function resolveGridCardLayout(
   // The grid's own inset, home.css › .exo-game-grid's --exo-gutter (10px): a wider guess here left the last column
   // short of the window's edge.
   paddingInline = 10,
-  columnGap = 12,
+  columnGap = 10,
   minCardWidth = GRID_MIN_CARD_WIDTH,
   maxColumns = GRID_MAX_COLUMNS,
 ): { columnCount: number; cardWidth: number } {

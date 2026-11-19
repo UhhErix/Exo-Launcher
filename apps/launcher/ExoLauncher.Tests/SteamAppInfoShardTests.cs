@@ -115,6 +115,23 @@ public sealed class SteamAppInfoShardTests : IDisposable
         Assert.Equal(new SteamAppInfoNames.Entry("Bonus Pack", "DLC", "9100"), names["9101"]);
     }
 
+    // The Library's search reads genres and modes from here: a genre written as a number or a string, a category set to 0
+    // (Steam's way of saying no), an id Exo doesn't know, and a "genres" key outside common must each be read right.
+    [Fact]
+    public void ReadsGenresAndModesAsThePageWordsThem()
+    {
+        var keys = new List<string>();
+        var racer = new Kv(keys).Open("appinfo").Open("common").Str("name", "Rally").Str("type", "Game")
+            .Open("genres").Str("0", "9").Int("1", 1).Str("2", "9999").Close()
+            .Open("category").Str("category_2", "1").Str("category_39", "1").Str("category_1", "0").Str("category_77", "1").Close()
+            .Close().Open("extended").Open("genres").Str("0", "3").Close().Close().Close().Bytes;
+        var plain = new Kv(keys).Open("appinfo").Open("common").Str("name", "Plain").Str("type", "Game").Close().Close().Bytes;
+        var names = SteamAppInfoNames.Parse(Shard(0x01, keys, [(500, racer), (501, plain)]));
+        Assert.Equal("action,racing,single-player,co-op,local co-op", names["500"].Tags);
+        Assert.Equal("", names["501"].Tags);
+        Assert.Equal(new SteamAppInfoNames.Entry("Plain", "Game", ""), names["501"]);
+    }
+
     [Fact]
     public void ReadsLaunchEntriesWithUnknownFieldsAndALongerIndexEntry()
     {

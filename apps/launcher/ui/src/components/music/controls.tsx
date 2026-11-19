@@ -6,6 +6,7 @@ import type { MusicAdapter } from '../../lib/musicAdapters'
 import type { PlayerState } from '../../lib/player'
 import { Heart, Next, Pause, Play, Previous, Repeat, RepeatOne, Shuffle, ThumbsDown } from '../../brand/icons'
 import { usePlayer } from './playerContext'
+import { errorText } from '../../lib/errorWords'
 
 /* The song's own controls, shared by the player strip and Immersive (Immersive.tsx). */
 
@@ -45,7 +46,7 @@ export function BarControls({ playback, player, change, onFail }: {
     void host.musicControl(action).then(
       result => {
         if (result.ok) return
-        onFail(result.message ?? 'The player could not respond.')
+        onFail(errorText(result.message, 'The player could not respond.'))
         if (result.cause === 'another-device' && result.deviceId) setElsewhere(result.deviceId)
       },
       error => { report(error, 'MusicPlayer.control'); onFail('The player could not respond.') })
