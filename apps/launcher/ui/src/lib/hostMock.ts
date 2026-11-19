@@ -1280,6 +1280,9 @@ const MOCK_HANDLERS: Record<string, MockHandler> = {
       auto: true, cleared: { folders: 1, files: 0, registry: 1, shortcuts: 1, bytes: 4_101_200 }, undo: 'mock-1', declined: false,
     }
   },
+  'apps.restorePoint': () => ({ ok: true, made: true, message: null }),
+  'apps.installerCache': () => ({ ok: true, files: 7, bytes: 1_380_000_000 }),
+  'apps.installerCacheClean': () => ({ ok: true, files: 7, bytes: 1_380_000_000, undo: 'mock-1', message: null }),
   'apps.scan': () => ({ ok: false, message: 'Mock: nothing to scan.' }),
   'apps.clean': () => ({ ok: true, cleared: { folders: 1, files: 0, registry: 1, shortcuts: 1, bytes: 4_101_200 }, undo: 'mock-1', left: 0 }),
   'apps.allowEdge': () => ({ ok: true }),
