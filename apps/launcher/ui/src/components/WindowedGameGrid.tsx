@@ -64,8 +64,8 @@ type GridGeometry = Omit<GridWindowInput, 'itemCount' | 'viewportStart' | 'overs
   offset: number
 }
 
-const DEFAULT_COLUMN_GAP = 12
-const DEFAULT_ROW_GAP = 12
+const DEFAULT_COLUMN_GAP = 10
+const DEFAULT_ROW_GAP = 10
 const DEFAULT_GUTTER = 10
 const DEFAULT_PADDING_TOP = 8
 const DEFAULT_PADDING_BOTTOM = 40
@@ -131,6 +131,21 @@ function isNavigationKey(key: string): key is GridNavigationKey {
     key === 'PageUp' ||
     key === 'PageDown'
   )
+}
+
+/** A plain letter or digit, no modifier but Shift. */
+const isInitialKey = (event: ReactKeyboardEvent) =>
+  event.key.length === 1 && /[\p{Letter}\p{Number}]/u.test(event.key) && !event.ctrlKey && !event.altKey && !event.metaKey
+
+/** The next game after `from` (wrapping) whose name starts with `key`, folders aside; -1 when none does. */
+function nextByInitial(games: Game[], from: number, key: string): number {
+  const want = key.toLocaleLowerCase()
+  for (let step = 1; step <= games.length; step++) {
+    const index = (from + step + games.length) % games.length
+    const game = games[index]
+    if (!isFolderTile(game) && game.title.trim().normalize('NFD').toLocaleLowerCase().startsWith(want)) return index
+  }
+  return -1
 }
 
 export function WindowedGameGrid({
@@ -381,6 +396,16 @@ export function WindowedGameGrid({
   const onGridKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
     const target = event.target instanceof HTMLElement ? event.target : null
     const focusedId = target?.closest<HTMLElement>('[data-game-id]')?.dataset.gameId
+    // A letter or digit jumps to the next game whose name starts with it, as a list does (the scrubber's keys).
+    if (isInitialKey(event)) {
+      const from = gameIds.indexOf(pendingFocusId.current ?? focusedId ?? resolvedActiveId ?? '')
+      const next = nextByInitial(games, from, event.key)
+      if (next < 0) return
+      event.preventDefault()
+      intendedColumnRef.current = next % measurement.window.columnCount
+      focusIndex(next)
+      return
+    }
     if (!isNavigationKey(event.key) || event.altKey || event.metaKey) return
 
     const navigationId = pendingFocusId.current ?? focusedId ?? resolvedActiveId

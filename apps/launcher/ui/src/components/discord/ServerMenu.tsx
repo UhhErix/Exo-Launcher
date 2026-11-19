@@ -15,6 +15,7 @@ import { transition } from '../../lib/viewTransition'
 import { LEVELS, MUTE_FOR } from './ChatHeader'
 import { SubContext, Submenu } from './UserMenu'
 import { useDismiss } from '../../lib/dismiss'
+import { errorText } from '../../lib/errorWords'
 
 // The server menu's Create Channel and Create Category (Manage Channels) and Create Event (Manage Events), as Discord's.
 function CreateItems({ list, onCreate }: { list: DiscordChannels | null; onCreate: (what: 'channel' | 'category' | 'event') => void }) {
@@ -71,7 +72,7 @@ export function GuildMenu({ guild, open = null, x, y, rail, onGo, onMove, onClos
   }, [onClose, dialog])
   const why = 'Discord did not take that.'
   const run = (work: Promise<{ ok: boolean; message?: string | null }>) =>
-    void work.then(result => { if (result.ok) onClose(); else setNote(result.message ?? why) }).catch(() => setNote(why))
+    void work.then(result => { if (result.ok) onClose(); else setNote(errorText(result.message, why)) }).catch(() => setNote(why))
   const server = (action: 'mute' | 'notify', params: Parameters<typeof host.discordServer>[1]) => run(host.discordServer(action, { guildId: guild.id, ...params }))
   const invite = () => {
     const channel = inviteChannel(list, open)
@@ -113,7 +114,7 @@ export function GuildMenu({ guild, open = null, x, y, rail, onGo, onMove, onClos
       {guild.owner ? null : <>
         <span className="exo-dc-menu-line" role="separator" />
         <ConfirmButton role="menuitem" className="is-danger" question="Leave server?" danger
-          onConfirm={() => void host.discordServer('leave', { guildId: guild.id }).then(result => { if (result.ok) { onClose(); onGo('@me') } else setNote(result.message ?? why) }, () => setNote(why))}>
+          onConfirm={() => void host.discordServer('leave', { guildId: guild.id }).then(result => { if (result.ok) { onClose(); onGo('@me') } else setNote(errorText(result.message, why)) }, () => setNote(why))}>
           Leave server
         </ConfirmButton>
         <button type="button" role="menuitem" className="is-danger" onClick={() => {

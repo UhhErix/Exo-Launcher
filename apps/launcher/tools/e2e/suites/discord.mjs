@@ -60,7 +60,7 @@ export async function run(t) {
     return failures
   })
 
-  await run.check('discord', 'home-is-home', "Home is the band, your conversations on the left with you at their foot (mute, deafen, settings), and Friends (Online, All, Pending) on the Background's panel color", async (c) => {
+  await run.check('discord', 'home-is-home', "Home is the band, your conversations on the left with you at their foot (mute, deafen, settings), and Friends (Online, All, Pending) on the panel color", async (c) => {
     // Home's pill was just pressed: its page is still coming in.
     await t.shell.waitFor(() => document.querySelector('main.exo-dc .exo-dc-home .exo-dc-friends') || null, { timeoutMs: 5000 })
     const home = await t.shell.eval(`({
@@ -70,7 +70,7 @@ export async function run(t) {
       blocks: [...document.querySelectorAll('.exo-dc-home .exo-dc-block-title')].map(h => h.textContent.trim()),
       dms: document.querySelectorAll('.exo-dc-pane .exo-dc-item.is-dm').length,
       me: ['Mute', 'Unmute', 'Deafen', 'Undeafen', 'Discord settings'].filter(l => document.querySelector('.exo-dc-pane .exo-dc-me [aria-label="' + l + '"]')).length,
-      // The room's panels are the Background's panel color (--exo-float; black on Pure black): glass is only for what floats.
+      // The room's panels are the panel color (--exo-float: pure black): glass is only for what floats.
       panels: [...document.querySelectorAll('.exo-dc-band, .exo-dc-pane, .exo-dc-block')].map(e => getComputedStyle(e).backgroundColor),
       panel: (() => { const e = document.createElement('div'); e.style.background = 'var(--exo-float)'; document.body.append(e); const v = getComputedStyle(e).backgroundColor; e.remove(); return v })(),
     })`)

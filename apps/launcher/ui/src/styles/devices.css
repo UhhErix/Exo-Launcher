@@ -435,7 +435,7 @@
   display: grid;
   gap: 4px;
   min-width: 0;
-  /* One height whether the card is a button or (coming soon) not: a div kept the page's looser line height. */
+  /* A button's line height, not the page's looser one. */
   line-height: 1.25;
 }
 
@@ -524,24 +524,7 @@
   transition: translate var(--dur-move) var(--ease-out);
 }
 
-.exo-device-card:not(.is-soon):hover .exo-device-card-art > * { translate: 0 -3px; }
-
-/* A device Exo doesn't set up yet: its card shows what it is, opens nothing, and says so in a small capsule of glass at
-   its top right, over the picture's own margin. */
-.exo-device-card.is-soon { cursor: default; }
-
-.exo-device-soon {
-  position: absolute;
-  top: 16px;
-  right: 20px;
-  z-index: 5;
-  padding: 5px 12px;
-  border-radius: 999px;
-  color: var(--color-fg);
-  font-size: calc(12px * var(--exo-scale, 1));
-  font-weight: 500;
-  pointer-events: none;
-}
+.exo-device-card:hover .exo-device-card-art > * { translate: 0 -3px; }
 
 .exo-device-render {
   display: block;

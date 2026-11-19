@@ -63,8 +63,13 @@ export function parseReport(value) {
   if (!ERROR_TYPE.test(errorType)) throw new ReportError('Bad error type')
   if (excerpt.length > limits.excerptChars) throw new ReportError('Excerpt too long')
   if (CONTROL.test(excerpt)) throw new ReportError('Excerpt has control characters')
-  for (const [pattern, what] of PERSONAL) {
-    if (pattern.test(excerpt) || pattern.test(errorType)) throw new ReportError(`Report holds ${what}`, 422)
-  }
+  const personal = personalIn(excerpt) ?? personalIn(errorType)
+  if (personal) throw new ReportError(`Report holds ${personal}`, 422)
   return { app, version, osBuild, errorType, excerpt }
+}
+
+/** What personal data `text` still holds ('a file path', 'a URL', ...), or null. Shared with src/user-report.js. */
+export function personalIn(text) {
+  for (const [pattern, what] of PERSONAL) if (pattern.test(text)) return what
+  return null
 }

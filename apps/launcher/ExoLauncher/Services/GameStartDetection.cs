@@ -78,15 +78,33 @@ internal sealed class GameWindowWatch(Func<uint, string?> resolveImage, GameFold
 /// <summary>
 /// When the run-state scan runs. With window events, a scan runs after a window of a game's folder shows or comes to the
 /// front, after a watched game process exits, and once when Exo launches a game. Nothing repeats while every running game
-/// is watched. Without the window hooks, or while a running game's exit can't be watched, it runs every 15 s.
+/// is watched. Without the window hooks, while a running game's exit can't be watched, or while only an open session
+/// (no game process) keeps a game counted as running, it runs every 15 s.
 /// </summary>
 internal static class RunStatePlan
 {
     internal static readonly TimeSpan FallbackEvery = TimeSpan.FromSeconds(15);
 
-    /// <summary>The repeat interval, or null for none.</summary>
-    internal static TimeSpan? PeriodicEvery(bool eventsAvailable, bool anyRunningGameUnwatched) =>
-        !eventsAvailable || anyRunningGameUnwatched ? FallbackEvery : null;
+    /// <summary>How long an open session with no game process still counts as a game running: the session's exit
+    /// debounce and clean-up, or a launch handoff, end well within it. Past it, a session left open (its watch stuck
+    /// on a process that is not the game) no longer holds the signal; a game window showing scans again.</summary>
+    internal static readonly TimeSpan SessionOnlyLimit = TimeSpan.FromMinutes(2);
+
+    /// <summary>
+    /// Whether a game runs for <see cref="GameRunningSignal"/>: a game process the scan found, or a session Exo has open
+    /// that has gone <paramref name="sessionOnlyFor"/> without one, for at most <see cref="SessionOnlyLimit"/>.
+    /// </summary>
+    internal static bool GameRunning(bool gameProcessFound, bool sessionOpen, TimeSpan sessionOnlyFor) =>
+        gameProcessFound || (sessionOpen && sessionOnlyFor < SessionOnlyLimit);
+
+    /// <summary>
+    /// The repeat interval, or null for none. <paramref name="heldBySessionOnly"/>: the scan found no game process, yet a
+    /// session Exo started is still open (its 12 s exit debounce and clean-up after the game's exit, or a launch whose
+    /// game hasn't appeared). No window or exit event follows the session closing, so without a recheck the signal
+    /// would stay set until the next game.
+    /// </summary>
+    internal static TimeSpan? PeriodicEvery(bool eventsAvailable, bool anyRunningGameUnwatched, bool heldBySessionOnly = false) =>
+        !eventsAvailable || anyRunningGameUnwatched || heldBySessionOnly ? FallbackEvery : null;
 }
 
 /// <summary>

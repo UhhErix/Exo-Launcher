@@ -124,9 +124,10 @@ export type FrameGenMod = {
   /**
    * Why it is broken. replaced: another mod's file is where Exo's loader was (Exo leaves it and keeps the game off);
    * changed: another of Exo's files has other bytes (Exo leaves it); removed: Exo's files went (they go back once);
-   * gone: the game no longer ships DLSS Frame Generation.
+   * gone: the game no longer ships DLSS Frame Generation. With hidden: unread (Exo couldn't read the game: no install,
+   * a Store app, a folder it can't open), card (no mod adds to this card; the line hides).
    */
-  reason?: 'replaced' | 'changed' | 'removed' | 'gone' | null
+  reason?: 'replaced' | 'changed' | 'removed' | 'gone' | 'unread' | 'card' | null
 }
 
 /**
@@ -720,6 +721,15 @@ export type NetSample = { ping: number | null; jitter: number | null; router: nu
 export type NetCheck = { before: NetSample | null; after: NetSample; said: string }
 export type PcHealth = { ok: boolean; message?: string | null; items: PcHealthItem[]; check?: NetCheck | null }
 
+/** Best settings › System's items (SystemTuning.cs): Windows defaults a tweak changed (Best settings) and two opt-ins (their own switch only). */
+export type TuningKey = 'timer' | 'scheduling' | 'pagefile' | 'cache' | 'services' | 'integrity'
+/**
+ * One item: on, Exo's setting is in place; off, the player turned a Best settings item off; optIn, only its own switch sets it;
+ * restart, a change (either way) waits on a restart; blocked, why Exo won't change it here (an anti-cheat, a policy).
+ */
+export type TuningItem = { key: TuningKey; label: string; detail: string; on: boolean; canUndo: boolean; off: boolean; optIn: boolean; restart: boolean; blocked: string | null }
+export type Tuning = { ok: boolean; message?: string | null; applied: boolean; restart: boolean; items: TuningItem[] }
+
 /**
  * PC › Drives (Drives.cs): one physical drive. link: the PCIe generation and lanes negotiated against the drive's own
  * (NVMe only); temperature in °C against the drive's warning and critical points; health as the drive reports it
@@ -985,6 +995,10 @@ export interface Game {
   status: string
   deps: string[]
   launchNote: string
+  /** Lent by the account's Steam Family, not the account's own. */
+  familyShared?: boolean
+  /** The family member(s) who share it ("Sam", "Sam and Alex"); null when Steam names nobody. */
+  sharedBy?: string | null
   launchTarget?: string | null
   /** Official storefront from the host. Absent when Buy must not appear. */
   buyUrl?: string | null
@@ -994,6 +1008,8 @@ export interface Game {
   isRunning?: boolean
   /** Stop is never offered for a store client, overlay, or anti-cheat process. */
   canStop?: boolean
+  /** Genres and modes from Steam's own record of the game (racing, co-op, ...); none for a game Steam doesn't know. */
+  tags?: string[]
 }
 
 export interface InstallProgress {
@@ -1359,7 +1375,7 @@ export interface LauncherSettings {
   /** Settings › General › Open Exo when Windows starts. */
   startWithWindows?: boolean
   textColour?: 'white' | 'grey' | string
-  /** Settings › General › Background (lib/exoTheme.ts › BACKGROUNDS). */
+  /** Always black: Exo is pure black (AMOLED), with no Background choice (lib/exoTheme.ts › BACKGROUNDS). */
   background?: 'black' | 'near' | 'grey' | 'windows' | 'graphite' | string
   textSize?: 'small' | 'normal' | 'large' | string
   /** The page's own choices Exo keeps (lib/uiPrefs.ts), by key. settings.set merges the keys sent; null removes one. */
@@ -1456,23 +1472,6 @@ export interface ClientsStatus {
   /** A read that failed (Epic's version, Steam's branch): unknown, never a confirmed fix. problem says why; onboarding holds on it, the start card does not. */
   problem: string | null
   steam: { channel: 'none' | 'stable' | 'beta' | 'unknown' }
-}
-
-/** A Riot game's lifetime from the Riot ID's ledger: its minutes per mode (largest first) and tracker.gg's profile stats. */
-export type RiotLifetime = {
-  ok: boolean
-  minutes: number
-  /** The seed is tracker.gg's playlist sum, not its lifetime total. */
-  partial: boolean
-  modes: { mode: string; minutes: number }[]
-  stats: {
-    matches?: number | null
-    wins?: number | null
-    killDeath?: number | null
-    currentRank?: string | null
-    peakRank?: string | null
-    topPicks?: string[] | null
-  } | null
 }
 
 export interface StoreStatus {
@@ -1788,7 +1787,7 @@ export function initHostBridge() {
     pending.delete(res.id)
     if (res.version !== undefined && res.version !== HOST_PROTOCOL_VERSION) p.reject(new Error('The launcher and UI versions do not match. Restart Exo.'))
     else if (res.ok === true) p.resolve(res.result)
-    else p.reject(new Error(res.error || 'Something went wrong. Try again.'))
+    else p.reject(new Error(res.error || 'Exo couldn’t finish that. Try again.'))
   })
 }
 
@@ -2626,8 +2625,6 @@ export const host = {
       'playtime.riotRefresh',
       riotId ? { riotId } : {},
     ),
-  /** A Riot game's lifetime for its game page: minutes per mode and the seed's profile stats. */
-  riotLifetime: (game: string) => rawCall<RiotLifetime>('playtime.riotLifetime', { game }),
   minimize: () => rawCall<{ ok: boolean }>('shell.minimize'),
   maximize: () => rawCall<{ ok: boolean; maximized?: boolean }>('shell.maximize'),
   windowState: () => rawCall<{ ok: boolean; maximized?: boolean }>('shell.windowState'),
@@ -2656,6 +2653,11 @@ export const host = {
   /** What an error's Copy logs copies: Exo's version, the error, where (a room's name) and the log entries behind it. */
   /** The report for an error's Copy logs, already on Windows' clipboard when copied is true. */
   logsFor: (error: string, area: string) => rawCall<{ ok: boolean; text?: string; copied?: boolean }>('app.logsFor', { error, area }, 15_000),
+  /** Report a problem's Attach logs: the scrubbed log excerpt Send would attach, exactly as it goes. */
+  reportPreview: () => rawCall<{ ok: boolean; excerpt?: string }>('report.preview', {}, 15_000),
+  /** Report a problem's Send: to the team's private tracker through Exo's report service; the issue's number, or a reference. */
+  reportSend: (report: { message: string; excerpt?: string; contact?: string }) =>
+    rawCall<{ ok: boolean; issue?: number | null; ref?: string | null; message?: string | null }>('report.send', report, 45_000),
   repairCache: (scope: 'sizes' | 'upscalers') => rawCall<{ ok: boolean; message?: string }>('app.repairCache', { scope }),
   dlssStatus: (id: string, refresh = false) =>
     rawCall<DlssStatus>('dlss.status', { id, ...(refresh ? { refresh: true } : {}) }, refresh ? 120_000 : 60_000),
@@ -3013,6 +3015,9 @@ export const host = {
   systemTune: (action?: 'start' | 'stop' | 'undo', part?: TunePart['id'], mode?: AutoTuneMode) =>
     rawCall<AutoTune>('system.tune', action ? { action, part, mode } : {}, 45_000),
   /** System > This PC > Interrupts: the devices; apply switches every one that can to MSI mode, undo puts all back, revert one. Waits on Windows' permission prompt. */
+  /** Best settings › System: the items; apply sets every Best settings item that's on, on and off one item. Waits on Windows' permission prompt and a restore point. */
+  systemTuning: (action?: 'apply' | 'on' | 'off', item?: TuningKey) =>
+    rawCall<Tuning>('system.tuning', action ? { action, ...(item ? { item } : {}) } : {}, 240_000),
   systemInterrupts: (action?: 'apply' | 'undo' | 'revert' | 'reapply', device?: string) =>
     rawCall<Interrupts>('system.interrupts', action ? { action, ...(device ? { device } : {}) } : {}, 120_000),
   /**

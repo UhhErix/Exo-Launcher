@@ -22,6 +22,8 @@ public sealed class FrameGenStateTableTests
     private static readonly (int Row, FrameGenFacts Facts, string State, string? Reason, string? Note, FrameGenNext Next)[] Table =
     [
         (1, new(Readable: false), "hidden", null, null, FrameGenNext.Nothing),
+        (1, new(Readable: false, Unread: "unread"), "hidden", "unread", null, FrameGenNext.Nothing),
+        (1, new(Readable: false, Unread: "card"), "hidden", "card", null, FrameGenNext.Nothing),
         (1, new(Readable: false, Note: "Taken out: the game updated"), "note", null, "Taken out: the game updated", FrameGenNext.Nothing),
         (2, Read with { Record = Opti, TakeOut = "Taken out: the game updated", Damage = "removed", Pending = true }, "note", null, "Coming out: the game updated", FrameGenNext.Nothing),
         (2, Read with { Record = Opti, TakeOut = DlssgGoneNote, Pending = true }, "note", null, DlssgGoneNote, FrameGenNext.Nothing),
@@ -37,6 +39,9 @@ public sealed class FrameGenStateTableTests
         (10, Read with { Record = Opti, Note = "Back on OptiScaler 0.9.4: 0.9.5 didn't run" }, "on", null, "Back on OptiScaler 0.9.4: 0.9.5 didn't run", FrameGenNext.Forget),
         (11, Read with { Wanted = null }, "hidden", null, null, FrameGenNext.Nothing),
         (11, Read with { Wanted = null, Note = DlssgGoneNote }, "note", null, DlssgGoneNote, FrameGenNext.Nothing),
+        // An RTX 40 or 50 with a game that ships frame generation: the game's own, never "not supported".
+        (11, Read with { Wanted = null, Native = true }, "native", null, null, FrameGenNext.Nothing),
+        (11, Read with { Wanted = null, Native = true, Note = "Taken out: this card has DLSS Frame Generation" }, "note", null, "Taken out: this card has DLSS Frame Generation", FrameGenNext.Nothing),
         (12, Read with { Wanted = "native", OtherMod = "UE4SS", AntiCheat = "BattlEye" }, "native", null, null, FrameGenNext.Nothing),
         (13, Read with { Folder = false, OtherMod = "UE4SS" }, "hidden", null, null, FrameGenNext.Nothing),
         (14, Read with { OtherMod = "UE4SS", AntiCheat = "BattlEye" }, "mod", null, null, FrameGenNext.Nothing),

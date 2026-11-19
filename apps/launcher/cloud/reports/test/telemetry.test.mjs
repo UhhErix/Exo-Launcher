@@ -46,6 +46,7 @@ function fakeD1({ failOn = null, legacy = false } = {}) {
   sql.exec(CRASH_INDEX_MIGRATION)
   sql.exec(readFileSync(new URL('../migrations/0004_crash_days.sql', import.meta.url), 'utf8'))
   sql.exec(readFileSync(new URL('../migrations/0005_alert_days.sql', import.meta.url), 'utf8'))
+  sql.exec(readFileSync(new URL('../migrations/0006_github_issues.sql', import.meta.url), 'utf8'))
   const statement = (text) => {
     let args = []
     const check = () => {
@@ -453,7 +454,7 @@ test('the scheduled job runs the retention and removes old rows', async () => {
 test('the migration replaces the empty draft tables and creates the new ones', () => {
   const db = fakeD1({ legacy: true })
   const tables = db.sql.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name").all().map((t) => t.name)
-  assert.deepEqual(tables, ['aggregates', 'alert_days', 'crash_days', 'crash_index', 'events'])
+  assert.deepEqual(tables, ['aggregates', 'alert_days', 'crash_days', 'crash_groups', 'crash_index', 'events', 'issue_days', 'issue_queue'])
   const columns = db.sql.prepare('PRAGMA table_info(events)').all().map((c) => c.name).sort()
   assert.deepEqual(columns, ['app', 'channel', 'event', 'id', 'install_id', 'props_json', 'received_at', 'received_day', 'session_id', 'ts', 'version'])
 })

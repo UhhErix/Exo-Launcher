@@ -1,5 +1,6 @@
 import { useSyncExternalStore } from 'react'
 import { host } from './host'
+import { errorText } from './errorWords'
 
 /**
  * Discord's saved messages, as the message menu needs them: which messages are bookmarked, and when each reminder is
@@ -35,7 +36,7 @@ export function useSaved() {
 /** Bookmark a message (no due time) or set its reminder (due, ms); null when Discord took it, else why not. */
 export async function saveMessage(channelId: string, messageId: string, due?: number) {
   const result = await host.discordSaved('save', { channelId, messageId, ...(due ? { dueAt: due } : {}) }).catch(() => null)
-  if (!result?.ok) return result?.message ?? 'Discord did not save that.'
+  if (!result?.ok) return errorText(result?.message, 'Discord didn’t save that. Try again.')
   const next = { bookmarks: new Set(saved.bookmarks), reminders: new Map(saved.reminders) }
   if (due) next.reminders.set(messageId, due); else next.bookmarks.add(messageId)
   changed(next)
@@ -45,7 +46,7 @@ export async function saveMessage(channelId: string, messageId: string, due?: nu
 /** Remove Bookmark, Remove Reminder or Mark Complete. */
 export async function unsaveMessage(channelId: string, messageId: string) {
   const result = await host.discordSaved('remove', { channelId, messageId }).catch(() => null)
-  if (!result?.ok) return result?.message ?? 'Discord did not take that off.'
+  if (!result?.ok) return errorText(result?.message, 'Discord didn’t take that off. Try again.')
   const next = { bookmarks: new Set(saved.bookmarks), reminders: new Map(saved.reminders) }
   next.bookmarks.delete(messageId)
   next.reminders.delete(messageId)

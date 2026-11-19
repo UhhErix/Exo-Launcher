@@ -21,6 +21,7 @@
    icon is a label around a bare input; a field alone is the input. Keyboard focus is the white ring. */
 .exo-store-search,
 .exo-music-search,
+.exo-library-search,
 .exo-field,
 .exo-shelf-sort-menu .exo-menu-find {
   display: flex;
@@ -40,7 +41,8 @@
 }
 
 .exo-store-search,
-.exo-music-search {
+.exo-music-search,
+.exo-library-search {
   color: var(--color-muted);
 }
 
@@ -50,7 +52,8 @@
 }
 
 .exo-store-search input,
-.exo-music-search input {
+.exo-music-search input,
+.exo-library-search input {
   flex: 1;
   min-width: 0;
   height: 100%;
@@ -64,6 +67,7 @@
 
 .exo-store-search input::placeholder,
 .exo-music-search input::placeholder,
+.exo-library-search input::placeholder,
 .exo-field::placeholder,
 .exo-menu-find::placeholder {
   color: var(--color-muted);
@@ -72,6 +76,7 @@
 
 .exo-store-search input::-webkit-search-cancel-button,
 .exo-music-search input::-webkit-search-cancel-button,
+.exo-library-search input::-webkit-search-cancel-button,
 .exo-field::-webkit-search-cancel-button,
 .exo-menu-find::-webkit-search-cancel-button {
   display: none;
@@ -81,6 +86,7 @@
    pane it sits in. */
 .exo-store-search:has(input:focus-visible),
 .exo-music-search:has(input:focus-visible),
+.exo-library-search:has(input:focus-visible),
 .exo-field:focus-visible,
 .exo-menu-find:focus-visible {
   outline: 2px solid var(--color-fg);
@@ -532,6 +538,7 @@
 .exo-dc-search,
 .exo-dc-friend-search,
 .exo-music-search,
+.exo-library-search,
 .exo-store-search,
 .exo-dc :is(.exo-dc-find, .exo-dc-search, .exo-dc-friend-search, .exo-dc-picker-search, .exo-dc-modal-input, .exo-dc-input-row:not(.is-attached)) {
   border-color: transparent;
@@ -871,8 +878,8 @@
   height: 14px;
   margin-left: auto;
   background: currentColor;
-  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.91' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 12.5L10 17.5L19.5 8'/%3E%3C/svg%3E") center / contain no-repeat;
-  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.91' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 12.5L10 17.5L19.5 8'/%3E%3C/svg%3E") center / contain no-repeat;
+  -webkit-mask: var(--exo-glyph-check) center / contain no-repeat;
+  mask: var(--exo-glyph-check) center / contain no-repeat;
 }
 
 /* The PC room's own layout is in pc-room.css, loaded with the room. A pane of glass with its name over its rows
