@@ -74,6 +74,11 @@ internal sealed partial class NetworkBest(NetworkTune tune, NetworkBest.ISystem 
         Tcp? Tcp();
         /// <summary>Runs the script as administrator, Windows asking once: its exit code (<see cref="Unfinished"/> when it was still running at the end of the wait), or the line to show when it didn't run.</summary>
         (int? Code, string? Problem) Elevated(string script);
+        /// <summary>
+        /// An elevated script that outlived its wait is still running: no other change starts until it ends, so it can't
+        /// change Windows under a record another press just wrote.
+        /// </summary>
+        bool StillRunning();
         /// <summary>A DNS lookup answers now.</summary>
         bool Online();
         Sample Measure();
@@ -129,7 +134,7 @@ internal sealed partial class NetworkBest(NetworkTune tune, NetworkBest.ISystem 
     internal string? Apply(IReadOnlyCollection<string>? only = null)
     {
         if (!Monitor.TryEnter(_gate)) return Busy;
-        try { return ApplyNow(only); }
+        try { return Logged(system.StillRunning() ? Busy : ApplyNow(only)); }
         finally { Monitor.Exit(_gate); }
     }
 
@@ -137,12 +142,19 @@ internal sealed partial class NetworkBest(NetworkTune tune, NetworkBest.ISystem 
     internal string? TurnOff(string key)
     {
         if (!Monitor.TryEnter(_gate)) return Busy;
-        try { return TurnOffNow(key); }
+        try { return Logged(system.StillRunning() ? Busy : TurnOffNow(key)); }
         finally { Monitor.Exit(_gate); }
     }
 
+    /// <summary>What the player is told reaches app.log too.</summary>
+    private static string? Logged(string? said)
+    {
+        if (said is not null) AppLog.Warn("Network best settings: " + said);
+        return said;
+    }
+
     private readonly object _gate = new();
-    internal const string Busy = "Exo is already changing your network settings. Try again when it's done.";
+    internal const string Busy = "Exo is still changing your network settings. Try again when it's done.";
 
     private string? ApplyNow(IReadOnlyCollection<string>? only)
     {
@@ -339,12 +351,17 @@ internal sealed partial class NetworkBest(NetworkTune tune, NetworkBest.ISystem 
                 var notBack = here.Where(e => !Restored(e, now)).ToList();
                 var kept = saved.Dns.Where(e => away.Contains(e) || notBack.Any(n => n.Guid == e.Guid)).ToList();
                 saved = saved with { Dns = kept, Registered = kept.Count == 0 ? [] : saved.Registered };
-                if (notBack.Count > 0) problem = $"Windows didn't put back the DNS of {string.Join(" and ", notBack.Select(e => e.Name))}. Try again.";
-                else if (away.Count > 0) problem = $"{string.Join(" and ", away.Select(e => e.Name))} isn't connected: its DNS is put back when you turn this off with it connected.";
-                if (problem is not null)
+                if (notBack.Count > 0)
                 {
                     Save(saved);
-                    return problem;
+                    return $"Windows didn't put back the DNS of {string.Join(" and ", notBack.Select(e => e.Name))}. Try again.";
+                }
+                if (away.Count > 0)
+                {
+                    // The player's Off holds for what was put back; the adapter that's away keeps its record.
+                    if (!saved.Off.Contains(key)) saved = saved with { Off = [.. saved.Off, key] };
+                    Save(saved);
+                    return $"{string.Join(" and ", away.Select(e => e.Name))} isn't connected: its DNS is put back when you turn this off again with it connected.";
                 }
                 break;
             }

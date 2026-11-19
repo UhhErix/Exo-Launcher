@@ -49,6 +49,8 @@ public sealed class NetworkBestTests : IDisposable
             return (Code, null);
         }
         public bool Online() => IsOnline;
+        public bool Running { get; set; }
+        public bool StillRunning() => Running;
         public Sample Measure() => new(20, 2, 1, 30);
 
         /// <summary>Windows taking Cloudflare's DNS on every adapter (with or without its DoH keys).</summary>
@@ -374,6 +376,7 @@ public sealed class NetworkBestTests : IDisposable
         system.Scripts.Clear();
         Assert.Contains("isn't connected", best.TurnOff(DnsKey));
         Assert.Empty(system.Scripts);
+        Assert.Contains(DnsKey, System.Text.Json.JsonSerializer.Deserialize<Saved>(File.ReadAllText(SavedPath))!.Off); // the player's Off holds
         system.List.Add(Ethernet());
         system.TakeDns();
         system.OnRun = _ => system.List[0] = Ethernet();
@@ -415,6 +418,13 @@ public sealed class NetworkBestTests : IDisposable
         Assert.Null(best.Apply());
         Assert.Equal(Busy, second);
         Assert.True(best.Read().Items.Single().CanUndo);
+
+        // A script that outlived its wait holds every change until it ends.
+        system.Running = true;
+        system.Scripts.Clear();
+        Assert.Equal(Busy, best.TurnOff(DnsKey));
+        Assert.Equal(Busy, best.Apply([TcpKey]));
+        Assert.Empty(system.Scripts);
     }
 
     [Fact]
