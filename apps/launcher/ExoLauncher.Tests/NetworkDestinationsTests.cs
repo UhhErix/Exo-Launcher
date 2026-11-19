@@ -266,6 +266,7 @@ public sealed partial class NetworkDestinationsTests
         "embed.gog.com",                    // gogdl's sign-in redirect, which the sign-in window only recognises (GogdlCli)
         "epicgames.dev", "fortnite.com",    // hosts Epic's sign-in window may navigate through (EpicAuthService)
         "play.spotify.com",                 // a link shape SpotifyLinks recognises
+        "www.gstatic.com",                  // matched against ui/index.html img-src CSP allowlist only; native code never requests it (MediaSessionService)
         "microsoft.windowsdesktop.app",     // a .NET runtime's name, not a host
     };
 

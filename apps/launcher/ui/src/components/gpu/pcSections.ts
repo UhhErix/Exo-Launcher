@@ -1,6 +1,6 @@
 /** Where a link opens the PC room (DESIGN.md › PC): one of its sections, scrolled into view (Shaders held there while
     what is above it loads). */
-export type PcLink = 'overview' | 'graphics' | 'shaders' | 'display' | 'board' | 'network' | 'control' | 'performance' | 'apps' | 'drives' | 'drivers' | 'compress' | 'autopilot'
+export type PcLink = 'overview' | 'graphics' | 'shaders' | 'upscalers' | 'display' | 'board' | 'network' | 'control' | 'performance' | 'apps' | 'drives' | 'drivers' | 'compress' | 'autopilot'
 
 /** Game runtimes, by what people call them (they live in PC › Updates). */
 const RUNTIMES = [

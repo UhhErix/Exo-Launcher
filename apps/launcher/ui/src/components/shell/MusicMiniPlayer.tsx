@@ -175,7 +175,7 @@ export function MusicMiniPlayer({ service, onOpen, hidden = false }: { service: 
           <>
             <div className="exo-mini-lcd">
               <button className="exo-mini-track" onClick={onOpen} aria-label={`Open Music: ${playback.title} by ${playback.artist}`}>
-                <MiniArtwork src={playback.artworkDataUrl ?? null} track={trackKey(playback)} />
+                <MiniArtwork src={playback.artworkDataUrl ?? playback.artworkUrl ?? null} track={trackKey(playback)} hasArtworkUrl={!!playback.artworkUrl} />
                 <span key={trackKey(playback)} className="exo-mini-info exo-motion-switch"><span className="exo-mini-title">{playback.title}</span><span className="exo-mini-artist">{playback.artist}</span></span>
               </button>
               <MusicSeek key={seekKey} position={position} duration={playback.durationMs ?? null} enabled={playback.canSeek === true} onPreview={position => setSeekPreview(position === null ? null : { key: seekKey, position })} />
@@ -221,7 +221,7 @@ export function MusicClock({ playback, clock, preview, children }: { playback: M
  * cover stays until then. The same song's cover never unloads: an update without art (or with the
  * same art at another size) keeps it. A song that really has no art shows the note after a while.
  */
-function MiniArtwork({ src, track }: { src: string | null; track: string }) {
+function MiniArtwork({ src, track, hasArtworkUrl }: { src: string | null; track: string; hasArtworkUrl?: boolean }) {
   // under: the cover it replaced, kept beneath while the new one fades in over it.
   const [shown, setShown] = useState<{ src: string; track: string; under: string | null } | null>(null)
   const held = shown?.track === track
@@ -230,6 +230,7 @@ function MiniArtwork({ src, track }: { src: string | null; track: string }) {
     let timer = 0
     if (!src) {
       if (held) return
+      if (hasArtworkUrl) { setShown(null); return }
       timer = window.setTimeout(() => setShown(null), 6000)
       return () => clearTimeout(timer)
     }
@@ -237,14 +238,19 @@ function MiniArtwork({ src, track }: { src: string | null; track: string }) {
     const load = () => {
       const image = new Image()
       image.referrerPolicy = 'no-referrer'
+      image.decoding = 'async'
       image.src = src
       image.decode()
         .then(() => { if (live) setShown(previous => previous?.src === src ? previous : { src, track, under: previous?.src ?? null }) })
-        .catch(() => { if (live && tries < 1) { tries += 1; timer = window.setTimeout(load, 350) } })
+        .catch(() => {
+          if (!live) return
+          if (tries < 1) { tries += 1; timer = window.setTimeout(load, 350) }
+          else if (!held) setShown(previous => previous?.track === track ? previous : null)
+        })
     }
     load()
     return () => { live = false; clearTimeout(timer) }
-  }, [src, track, held])
+  }, [src, track, held, hasArtworkUrl])
   if (!shown) return <span className="exo-mini-art"><MusicNotes size={16} /></span>
   return (
     <span className="exo-mini-cover">

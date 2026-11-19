@@ -18,12 +18,6 @@
   padding: 16px var(--exo-gutter) 16px;
 }
 
-.exo-store-chip-count {
-  margin-left: 6px;
-  color: var(--color-muted);
-  font-variant-numeric: tabular-nums;
-}
-
 .exo-store-sale {
   color: var(--color-muted);
   font-size: calc(13px * var(--exo-scale, 1));

@@ -3,6 +3,7 @@ import { CopyLogs, ErrorNote } from '../ui/ErrorNote'
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type CSSProperties } from 'react'
 import { createPortal, flushSync } from 'react-dom'
 import { host, onHostEvent } from '../../lib/host'
+import { allowHover } from '../../lib/hoverGate'
 import { report } from '../../lib/report'
 import { useLens } from '../../lib/glass'
 import { cdnSized, openDiscord, type DiscordChannel, type DiscordVoice, type DiscordVoiceMember } from '../../lib/discord'
@@ -766,7 +767,7 @@ function RecordedDot() {
   return (
     <>
       <span className="exo-dc-voice-rec" role="img" aria-label={CLIPS_ON} tabIndex={0}
-        onPointerEnter={event => show(event.currentTarget)} onPointerLeave={() => setTip(null)}
+        onPointerEnter={event => { if (allowHover(event)) show(event.currentTarget) }} onPointerLeave={() => setTip(null)}
         onFocus={event => show(event.currentTarget)} onBlur={() => setTip(null)}>
         <span className="exo-dc-voice-rec-dot" aria-hidden="true" />
         <span className="exo-dc-voice-rec-text" aria-hidden="true">Clips on</span>

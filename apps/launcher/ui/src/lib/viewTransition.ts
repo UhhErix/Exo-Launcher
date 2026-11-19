@@ -1,4 +1,5 @@
 import { flushSync } from 'react-dom'
+import { suppressHover } from './hoverGate'
 import { fromKeyboard, shouldReduceMotion } from './motionPreference'
 import { report } from './report'
 
@@ -83,6 +84,8 @@ if (typeof document !== 'undefined') {
   }, { capture: true, passive: true })
 }
 
+const named = new Set<Element>()
+
 const setName = (element: Element | null | undefined, name: string) => {
   if (!(element instanceof HTMLElement || element instanceof SVGElement)) return
   element.style.viewTransitionName = name
@@ -91,7 +94,23 @@ const setName = (element: Element | null | undefined, name: string) => {
   // the way (filmed: a server switch drew every name and button on Discord's call as a dark plate that turned back
   // into glass as the push ended, the "fading" glass). Nor art that flies with its own picture (OWN_ART): its badges and
   // buttons sit over that picture, captured with them (a still tint there blinked their glass out and back in).
-  element.toggleAttribute('data-exo-vt-named', name !== '' && name !== PANE && !element.matches(OWN_ART))
+  const mark = name !== '' && name !== PANE && !element.matches(OWN_ART)
+  element.toggleAttribute('data-exo-vt-named', mark)
+  if (name) named.add(element)
+  else named.delete(element)
+}
+
+function clearNamed() {
+  for (const element of named) {
+    if (element instanceof HTMLElement || element instanceof SVGElement) {
+      element.style.viewTransitionName = ''
+      element.removeAttribute('data-exo-vt-named')
+    }
+  }
+  named.clear()
+  if (typeof document !== 'undefined') {
+    for (const element of document.querySelectorAll('[data-exo-vt-named]')) element.removeAttribute('data-exo-vt-named')
+  }
 }
 
 /** Art whose glass lies on its own picture: a Continue card (it flies whole), a game tile, a Store poster or hero, the stream's mini player. */
@@ -220,33 +239,43 @@ export function transition(update: () => void, options: { kind?: TransitionKind;
     return Promise.resolve()
   }
   const root = document.documentElement
+  suppressHover()
+  clearNamed()
   const landed: Element[] = []
   for (const morph of morphs) setName(morph.from, morph.name)
   root.dataset.exoVt = kind
   root.toggleAttribute('data-exo-vt-back', back)
   setCorners(morphs)
   pending = update
-  const view = document.startViewTransition(async () => {
-    for (const morph of morphs) setName(morph.from, '')
-    const run = pending
-    pending = null
-    updating = true
-    try { if (run) flushSync(run) } finally { updating = false }
-    // A room coming back from hidden draws its content a task or two later: art flying there
-    // gets a few milliseconds to appear (the last picture holds meanwhile; input still ends it).
-    for (const until = performance.now() + LAND_WAIT_MS; !back && morphs.some(morph => !onScreen(morph.to())) && performance.now() < until;) {
-      await new Promise(resolve => setTimeout(resolve, 4))
-    }
-    for (const morph of morphs) {
-      const to = morph.to()
-      if (!onScreen(to)) continue
-      setName(to, morph.name)
-      settle(to, morph.name === PANE)
-      if (morph.reshape) reshape(morph.name, to)
-      landed.push(to)
-    }
-    if (kind === 'room') for (const room of document.querySelectorAll('.exo-room:not([hidden], .is-backstage)')) settle(room, false)
-  })
+  let view: ViewTransition
+  try {
+    view = document.startViewTransition(async () => {
+      for (const morph of morphs) setName(morph.from, '')
+      const run = pending
+      pending = null
+      updating = true
+      try { if (run) flushSync(run) } finally { updating = false }
+      // A room coming back from hidden draws its content a task or two later: art flying there
+      // gets a few milliseconds to appear (the last picture holds meanwhile; input still ends it).
+      for (const until = performance.now() + LAND_WAIT_MS; !back && morphs.some(morph => !onScreen(morph.to())) && performance.now() < until;) {
+        await new Promise(resolve => setTimeout(resolve, 4))
+      }
+      for (const morph of morphs) {
+        const to = morph.to()
+        if (!onScreen(to)) continue
+        setName(to, morph.name)
+        settle(to, morph.name === PANE)
+        if (morph.reshape) reshape(morph.name, to)
+        landed.push(to)
+      }
+      if (kind === 'room') for (const room of document.querySelectorAll('.exo-room:not([hidden], .is-backstage)')) settle(room, false)
+    })
+  } catch (error) {
+    clearNamed()
+    delete root.dataset.exoVt
+    root.removeAttribute('data-exo-vt-back')
+    throw error
+  }
   running = view
   // Ended early by input (skipTransition): ready rejects with "Transition was skipped", which is expected.
   void view.ready.catch(() => { })
@@ -257,6 +286,8 @@ export function transition(update: () => void, options: { kind?: TransitionKind;
   const done = () => {
     for (const element of landed) setName(element, '')
     for (const morph of morphs) setName(morph.from, '')
+    clearNamed()
+    suppressHover(180)
     if (running !== view) return
     running = null
     delete root.dataset.exoVt

@@ -79,6 +79,7 @@ export type MusicPlayback = {
   title: string
   artist: string
   artworkDataUrl?: string | null
+  artworkUrl?: string | null
   positionMs?: number | null
   durationMs?: number | null
   /** How old positionMs was when the host sent it (host monotonic clock). */

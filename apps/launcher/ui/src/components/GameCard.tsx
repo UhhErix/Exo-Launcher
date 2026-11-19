@@ -1,4 +1,5 @@
 import { isPreloaded, resolvePrimaryAction, type Game, type InstallProgress } from '../lib/host'
+import { allowHover } from '../lib/hoverGate'
 import { cn, formatPlayed, formatSize, transferShare } from '../lib/utils'
 import { useJustFinished } from '../lib/useJustFinished'
 import { CoverArt } from './CoverArt'
@@ -147,7 +148,7 @@ export const GameCard = memo(function GameCard({
         tabIndex={tabIndex}
         onFocus={() => { onActiveGameChange?.(game.id); plateOn(point) }}
         onBlur={() => point(false)}
-        onPointerEnter={() => plateOn(point)}
+        onPointerEnter={event => { if (allowHover(event)) plateOn(point) }}
         onPointerLeave={() => point(false)}
         onClick={(event) => {
           if (event.detail > 1 && picked == null) return
