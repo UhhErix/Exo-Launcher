@@ -24,7 +24,7 @@ Interaction feel, after Emil Kowalski's apple-design skill (github.com/emilkowal
 - US spelling everywhere: color, gray, favorite, center, behavior.
 - No source notes under values ("From tracker.gg"); show the value alone.
 - The Discord room is Exo's own client in Exo's own shape, not Discord's: a band of places (Home, Messages, Servers) instead of a rail, friends' games first (DESIGN.md > Rooms > Discord); tokens, rows, menus, glass and motion from DESIGN.md, never Discord's palette. Every room is one ecosystem.
-- Icons are Tabler (always the newest), named for Exo in `ui/scripts/tabler-map.mjs` and used through `ui/src/brand/icons.tsx` (`npm run icons` writes the data and checks them); no emoji, no native `title=` tooltips.
+- Icons are Lucide (always the newest), named for Exo in `ui/scripts/lucide-map.mjs` and used through `ui/src/brand/icons.tsx` (`npm run icons` writes the data and checks them); no emoji, no native `title=` tooltips.
 - Ideas and brainstorms: show rendered PNG mockups; DESIGN.md is the current state, not a limit on ideas.
 
 ## Enforced checks
