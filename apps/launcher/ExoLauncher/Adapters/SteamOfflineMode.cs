@@ -7,7 +7,7 @@ namespace ExoLauncher.Adapters;
 /// <summary>
 /// When Exo puts Steam in its own offline mode (<see cref="SteamLoginUsers.WriteOffline"/>) and when it may restart
 /// Steam for it. A game borrowed from the account's Steam Family starts with Steam offline when it plays offline, judged
-/// from Steam's own record of it (appinfo.vdf): single-player or play on one screen, not an MMO, nothing Steam says needs
+/// from Steam's own record of it (appinfo): single-player or play on one screen, not an MMO, nothing Steam says needs
 /// the internet for single-player, and no anti-cheat by Steam's marks or Exo's. A game Steam can't tell Exo about, or
 /// with an update waiting (Steam updates only online), starts online as before. Steam restarts only while no Steam game
 /// runs, it moves no files (a download or update in progress), and, going offline, it has a saved sign-in.

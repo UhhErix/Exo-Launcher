@@ -696,7 +696,7 @@ export type GpuImportAnswer = {
 
 /** System > This PC: one row per setup problem (none when all is well); power switches to Exo's plan for cpu, with Undo; chipset Exo updates (busy while it installs, applied while it waits for a restart, url only after a failed install). */
 export type PcHealthItem = {
-  key: 'ram' | 'rebar' | 'power' | 'chipset' | 'gpusched' | 'gpupref' | 'network' | 'netlink'
+  key: 'ram' | 'rebar' | 'power' | 'chipset' | 'gpusched' | 'gpupref' | 'network' | NetworkItemKey | 'netlink'
   label: string
   detail: string
   url?: string | null
@@ -709,8 +709,16 @@ export type PcHealthItem = {
   current?: boolean
   /** Nothing to do because the maker's newest has a known problem here: the row says so ("… skipped: …") with no button. */
   held?: boolean
+  /** A Network item the player turned off: Best settings leaves it until its switch is on again. */
+  off?: boolean
 }
-export type PcHealth = { ok: boolean; message?: string | null; items: PcHealthItem[] }
+/** Best settings › Network's items (NetworkBest.cs): the adapters' own settings, Cloudflare DNS encrypted, Windows' TCP defaults. */
+export type NetworkItemKey = 'net-adapter' | 'net-dns' | 'net-tcp'
+/** A quick measure of the connection, in ms (null: no answer): ping to 1.1.1.1, its jitter, ping to the router, a DNS lookup. */
+export type NetSample = { ping: number | null; jitter: number | null; router: number | null; lookup: number | null }
+/** The last check: before and after the last press (before null for a check on its own), and what it says. */
+export type NetCheck = { before: NetSample | null; after: NetSample; said: string }
+export type PcHealth = { ok: boolean; message?: string | null; items: PcHealthItem[]; check?: NetCheck | null }
 
 /**
  * PC › Drives (Drives.cs): one physical drive. link: the PCIe generation and lanes negotiated against the drive's own
@@ -1141,6 +1149,12 @@ export interface AppLeftover {
   selected: boolean
   /** Why it isn't selected. */
   note: string | null
+  /** How sure Exo is that it's the app's: only certain is ever selected. */
+  certainty: 'certain' | 'likely' | 'possible'
+  /** That certainty and what it rests on: "Certain: inside the app's folder". */
+  because: string
+  /** A driver that goes with its driver store package, saved first (Put back adds it again). */
+  store?: boolean
   machine: boolean
   /** Which program it was left by; empty when only what points at a program that's gone found it. */
   from: string
@@ -1171,6 +1185,34 @@ export interface AppFind {
   declined?: boolean
   /** apps.tidy: what went by itself with the junk while the PC was idle, said once. */
   autoCleared?: { id: string; name: string; cleared: LeftoverSummary }[] | null
+  /** File types Windows still opens with it (".abc"): Windows signs that choice, so only Default apps changes it. */
+  defaults?: string[]
+}
+
+/** A Store or preinstalled app across this PC's accounts (apps.packages); what Windows needs is never listed. */
+export interface WindowsApp {
+  /** Its package family. */
+  id: string
+  name: string
+  publisher: string | null
+  /** Installed for you. */
+  forMe: boolean
+  /** How many other accounts have it. */
+  others: number
+  /** New accounts get it (Windows' image has it). */
+  provisioned: boolean
+  bloat: string | null
+  /** Removed for you, with its files still on this PC: Add back registers it again. */
+  addBack: boolean
+}
+
+/** What removing one does and how it comes back, said before anything goes (apps.packagesPlan). */
+export interface WindowsAppLine {
+  id: string
+  name: string
+  does: string
+  back: string
+  undoable: boolean
 }
 
 export interface ReplacedApp {
@@ -1606,6 +1648,12 @@ export interface GameProperties {
   steamOverlay?: boolean | null
   /** The game's own shader caches together (0 once cleared); null for a game Exo can't rebuild them for (Call of Duty only for now). */
   shaderCacheBytes?: number | null
+  /**
+   * A Steam game whose Play menu has an entry without its anti-cheat (NBA 2K26's "without EAC (offline only)"): which one
+   * Play starts, and that entry's own words. Without it the game counts as one with no anti-cheat, so frame generation and
+   * mods can go in; back with it, they come out first. Null for every other game.
+   */
+  antiCheatLaunch?: { value: 'with' | 'without'; detail: string } | null
 }
 
 /** The host leaves empty values out: each one a store does not have reads as null here, so its row stays hidden. */
@@ -1619,7 +1667,7 @@ function withNulls(properties: GameProperties): GameProperties {
 
 export type GamePropertyKey =
   | 'launchOptions' | 'cloudSync' | 'language'
-  | 'beta' | 'betaCode' | 'content' | 'folder' | 'storeProperties' | 'throughSteam' | 'steamOverlay' | 'shaders'
+  | 'beta' | 'betaCode' | 'content' | 'folder' | 'storeProperties' | 'throughSteam' | 'steamOverlay' | 'shaders' | 'antiCheatLaunch'
 
 /** Desktop app install (Spotify). */
 type HostRequest = { version: number; id: string; method: string; params?: Record<string, unknown> }
@@ -2477,9 +2525,24 @@ export const host = {
     rawCall<{ ok: boolean; files: number; bytes: number; undo?: string | null; message?: string | null }>('apps.installerCacheClean', {}, 10 * 60_000),
   /** What is left of a program whose uninstaller is gone. */
   appsScan: (id: string) => rawCall<AppFind | { ok: false; message?: string | null }>('apps.scan', { id }, 5 * 60_000),
-  /** The chosen items of a find deleted (asked in Exo's window). */
-  appsClean: (token: string, ids: number[]) =>
-    rawCall<{ ok: boolean; cleared?: LeftoverSummary; undo?: string | null; left?: number; message?: string | null }>('apps.clean', { token, ids }, 15 * 60_000),
+  /**
+   * The chosen items of a find deleted (asked in Exo's window). restore: what needs Windows' permission goes only behind a
+   * System Restore point, made in the same prompt.
+   */
+  appsClean: (token: string, ids: number[], restore = false) =>
+    rawCall<{ ok: boolean; cleared?: LeftoverSummary; undo?: string | null; left?: number; message?: string | null }>('apps.clean', { token, ids, restore }, 15 * 60_000),
+  /** Windows' Default apps, for file types an app that's gone still opens. */
+  appsOpenDefaults: () => rawCall<{ ok: boolean; message?: string | null }>('apps.openDefaults', {}, 30_000),
+  /** Store and preinstalled apps across this PC's accounts; hidden: the parts of Windows never offered. */
+  appsPackages: () => rawCall<{ ok: boolean; hidden: number; items: WindowsApp[] }>('apps.packages', {}, 60_000),
+  /** What removing these for you, or for every account, does and whether it comes back; the plan stays with Exo under token. */
+  appsPackagesPlan: (ids: string[], everyone: boolean) =>
+    rawCall<{ ok: boolean; token: string | null; admin: boolean; lines: WindowsAppLine[]; message?: string | null }>('apps.packagesPlan', { ids, everyone }, 60_000),
+  /** That plan carried out: for you with no prompt, for every account under one Windows prompt. */
+  appsPackagesRemove: (token: string) =>
+    rawCall<{ ok: boolean; removed: number; left: number; message?: string | null }>('apps.packagesRemove', { token }, 15 * 60_000),
+  /** One removed for you back from the files still on this PC, else its Microsoft Store page (store: true). */
+  appsPackageAddBack: (id: string) => rawCall<{ ok: boolean; store: boolean; message?: string | null }>('apps.packageAddBack', { id }, 5 * 60_000),
   /** Edge Update may install Edge again (asked in Exo's window): Exo told it not to when Edge was removed. */
   appsAllowEdge: () => rawCall<{ ok: boolean; message?: string | null }>('apps.allowEdge', {}, 5 * 60_000),
   offerDepInstall: (id: string) =>
@@ -2913,7 +2976,9 @@ export const host = {
   /** The card maker's own control panel opened as the user (NVIDIA Control Panel, AMD Software, Intel Graphics Software); message names one that isn't installed. */
   gpuControlPanel: () => rawCall<{ ok: boolean; message?: string | null }>('gpu.controlPanel', {}, 20_000),
   /** System > This PC: the checks; apply or undo Exo's power plan; gpusched opens Windows' Graphics settings; gamemode-on/off and gamebar-on (Exo keeps Game Bar off)/off (Exo puts it back) answer ok, and a sentence when Windows didn't take it. */
-  systemHealth: (action?: 'apply' | 'chipset' | 'gpusched' | 'gpupref' | 'gpupref-undo' | 'network' | 'gamemode-on' | 'gamemode-off' | 'gamebar-on' | 'gamebar-off') => rawCall<PcHealth>('system.health', action ? { action } : {}, 35_000),
+  systemHealth: (action?: 'apply' | 'chipset' | 'gpusched' | 'gpupref' | 'gpupref-undo' | 'network' | 'netcheck' | 'gamemode-on' | 'gamemode-off' | 'gamebar-on' | 'gamebar-off') => rawCall<PcHealth>('system.health', action ? { action } : {}, action === 'network' ? 240_000 : 35_000),
+  /** One item of Best settings › Network on (set now, back in Best settings) or off (put back as it was, left out of Best settings). */
+  systemNetwork: (on: boolean, item: 'adapter' | 'dns' | 'tcp') => rawCall<PcHealth>('system.health', { action: on ? 'network-on' : 'network-off', item }, 240_000),
   /** PC › Overview: what this PC is (processor, memory, drives, board, BIOS, Windows, security, connection). */
   systemAbout: () => rawCall<PcAbout>('system.about', {}, 15_000),
   /** PC > Auto tune: what's tunable and where it stands; start, stop or undo one part. Off until pressed. */

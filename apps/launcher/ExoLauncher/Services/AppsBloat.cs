@@ -39,13 +39,15 @@ internal static class AppsBloat
     internal static string? Why(InstalledProgram program)
     {
         if (program.Care is not null || program.Replaces is not null) return null;
-        if (program.Store && program.Id.StartsWith("store:", StringComparison.Ordinal))
-        {
-            var package = program.Id["store:".Length..].Split('_')[0];
-            if (WindowsPackages.Any(known => package.Equals(known, StringComparison.OrdinalIgnoreCase))) return Windows;
-            if (AdPackages.Any(known => package.StartsWith(known, StringComparison.OrdinalIgnoreCase))) return Ad;
-            return null;
-        }
+        if (program.Store && program.Id.StartsWith("store:", StringComparison.Ordinal)) return ForPackage(program.Id["store:".Length..].Split('_')[0]);
         return TrialNames.Any(name => program.Name.StartsWith(name, StringComparison.OrdinalIgnoreCase)) ? Trial : null;
+    }
+
+    /// <summary>Why a Store package (by its name, before the publisher hash) is bloatware; null when it isn't.</summary>
+    internal static string? ForPackage(string package)
+    {
+        if (WindowsPackages.Any(known => package.Equals(known, StringComparison.OrdinalIgnoreCase))) return Windows;
+        if (AdPackages.Any(known => package.StartsWith(known, StringComparison.OrdinalIgnoreCase))) return Ad;
+        return null;
     }
 }

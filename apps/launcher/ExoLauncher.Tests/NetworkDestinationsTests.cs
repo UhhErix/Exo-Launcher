@@ -58,6 +58,8 @@ public sealed partial class NetworkDestinationsTests
         ["tenor.com"] = "page loads GIFs",
         ["giphy.com"] = "page loads GIFs",
         ["i.imgur.com"] = "page loads GIFs",
+        // Cloudflare's DoH template, registered with Windows by Best settings › Network: Windows' own DNS client asks it, never Exo's code.
+        ["cloudflare-dns.com"] = "Windows' DNS client (CloudflareDns)",
         // Exo's page in Windows' Installed apps entry: written to the registry, opened by Windows, never requested (InstalledAppsEntry).
         ["getexo.app"] = "Installed apps link",
         // Store sign-in pages hosted in WebView2.

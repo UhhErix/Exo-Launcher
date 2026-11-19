@@ -1,5 +1,5 @@
 import { useState, type KeyboardEvent, type ReactNode } from 'react'
-import { Record, Scissors, Video } from '../../brand/icons'
+import { History, Record, Scissors } from '../../brand/icons'
 import { host } from '../../lib/host'
 import { Slider } from '../ui/Slider'
 import { clock, keysLabel, saveCaptureSettings as save, useCapture, type CaptureSettings, type CaptureState } from '../../lib/capture'
@@ -126,7 +126,7 @@ export function CaptureSettingsView() {
 export function CaptureKeyRows({ state, settings, withIcons = false }: { state: CaptureState | null; settings: CaptureSettings | null; withIcons?: boolean }) {
   return (
     <>
-      <HotkeyRow label="Save replay" field="saveReplayKeys" settings={settings} ok={state?.hotkeys.saveReplay ?? true} disabled={!settings} icon={withIcons ? <Video size={18} /> : undefined} />
+      <HotkeyRow label="Save replay" field="saveReplayKeys" settings={settings} ok={state?.hotkeys.saveReplay ?? true} disabled={!settings} icon={withIcons ? <History size={18} /> : undefined} />
       <HotkeyRow label="Record" field="recordKeys" settings={settings} ok={state?.hotkeys.record ?? true} disabled={!settings} icon={withIcons ? <Record size={18} /> : undefined} />
       <HotkeyRow label="Snip" field="snipKeys" settings={settings} ok={state?.hotkeys.snip ?? true} disabled={!settings} icon={withIcons ? <Scissors size={18} /> : undefined} />
       <PrintScreenRow state={state} settings={settings} />
