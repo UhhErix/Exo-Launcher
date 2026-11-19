@@ -82,7 +82,7 @@ import { useLiveLibraryRefresh } from './shell/useLiveLibraryRefresh'
 import { useShellLayout } from './shell/useShellLayout'
 import { useShelves } from './shell/useShelves'
 import { SETTINGS_SEARCH, type SettingsSectionId } from '../lib/settingsSections'
-import { closeCaptures, openCaptures, useCapturesSheet } from '../lib/capture'
+import { openCaptures, useCapturesSheet } from '../lib/capture'
 import { pageGet, pageSet } from '../lib/pageStore'
 import { runNoteCommand, useNoteCommands, watchNotesOpen } from '../lib/notes'
 
@@ -651,11 +651,6 @@ export function LauncherApp() {
   // front); Send to Discord opens the Discord room with the file copied.
   const capturesSheet = useCapturesSheet()
   useEffect(() => { if (capturesSheet.open) closeGamePage() }, [capturesSheet.open, capturesSheet.seq, closeGamePage])
-  const sendToDiscord = useCallback(() => {
-    closeCaptures()
-    goToView('friends')
-    notice({ text: 'Copied', tone: 'good' })
-  }, [goToView])
   // A backup that stops while Exo runs is said when it happens (the start reads the same note, once per stop).
   useEffect(() => onHostEvent('backup.stopped', stop => { if (stop?.sentence && stop.since) announceBackupStop(stop.sentence, stop.since) }), [])
   useEffect(() => onHostEvent('discord.open', open => { setPendingOpen(open); goToView('friends') }), [goToView])
@@ -1925,7 +1920,7 @@ export function LauncherApp() {
           }}
         /></Suspense>
       </ErrorBoundary>
-      <Suspense fallback={null}><CapturesOverlay games={games} onDiscord={sendToDiscord} /></Suspense>
+      <Suspense fallback={null}><CapturesOverlay games={games} /></Suspense>
       {activateKeySheet}
       <RoomReport room={view} />
       {commandMenu}

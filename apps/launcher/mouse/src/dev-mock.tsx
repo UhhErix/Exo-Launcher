@@ -17,7 +17,7 @@ import type { Candidate, Step, useMouse } from './mouse'
  * older Starlight X (no release points reported, no custom lift-off, no Late);
  * ?unread one whose mouse slept through the read (only the receiver answered). ?razer shows a Razer
  * Viper V3 Pro on its HyperSpeed receiver instead, as a friend's reads it
- * (Razer's button controls, asymmetric lift-off, low power mode), for the
+ * (Razer's button controls, asymmetric lift-off, low power mode, the sensor angle), for the
  * room with many panels. ?lamzu is a Lamzu with X and Y stored per DPI stage.
  * ?logitech is a PRO X 3 Superstrike on its receiver running from this PC (Host mode: bunny hop as Exo last wrote
  * it, each connection's polling rate in a game profile's sheet); with ?onboard it runs from its memory (bunny hop
@@ -106,6 +106,7 @@ const RAZER_START = {
   liftOffDistance: 'Low',
   supportedLiftOffDistances: ['Low', 'Medium', 'High'],
   asymmetricLiftOff: { enabled: null, liftOff: 2, landing: 26, liftOffRange: { min: 2, max: 26 }, landingRange: { min: 1, max: 25 } },
+  angleTuning: 10,
   razerButtonMappings: {
     leftClick: 'Left Click', rightClick: 'Right Click', mouse4: 'Mouse Button 4', mouse5: 'Mouse Button 5',
     scrollUp: 'Scroll Up', scrollDown: 'Scroll Down', sensitivityButton: 'Disabled',
