@@ -11,7 +11,7 @@ import { ErrorNote } from '../ui/ErrorNote'
 /** anchor: performance.now() at which playback.positionMs was true. floor: the
     position already on screen when a resync arrived slightly behind it; the
     clock holds there until the true position catches up instead of stepping back. */
-type Clock = { anchor: number; floor: number | null }
+export type Clock = { anchor: number; floor: number | null }
 type Snapshot = { playback: MusicPlayback; clock: Clock }
 type Optimistic = { playing?: boolean }
 const trackKey = (playback?: MusicPlayback) => `${playback?.title ?? ''}
@@ -193,7 +193,7 @@ export function MusicMiniPlayer({ service, onOpen, hidden = false }: { service: 
     plays. It wakes on each whole second of the song (not of the wall clock), so
     the time never skips or repeats a second; it runs only while the position
     advances and Exo is on screen (focused or not), and each snapshot re-anchors it. */
-function MusicClock({ playback, clock, preview, children }: { playback: MusicPlayback; clock: Clock; preview: number | null; children: (position: number | null) => ReactNode }) {
+export function MusicClock({ playback, clock, preview, children }: { playback: MusicPlayback; clock: Clock; preview: number | null; children: (position: number | null) => ReactNode }) {
   const [now, setNow] = useState(() => performance.now())
   const rate = playback.status === 'playing' && typeof playback.rate === 'number' && playback.rate > 0 ? playback.rate : 0
   useEffect(() => {
@@ -253,7 +253,9 @@ function MiniArtwork({ src, track }: { src: string | null; track: string }) {
   )
 }
 
-function MusicSeek({ position, duration, enabled, onPreview }: { position: number | null; duration: number | null; enabled: boolean; onPreview: (position: number | null) => void }) {
+export function MusicSeek({ position, duration, enabled, onPreview, className = 'exo-mini-seek' }: {
+  position: number | null; duration: number | null; enabled: boolean; onPreview: (position: number | null) => void; className?: string
+}) {
   const [error, setError] = useState<string | null>(null)
   const timer = useRef(0), alive = useRef(true), dragging = useRef(false), revision = useRef(0)
   useEffect(() => { alive.current = true; return () => { alive.current = false; clearTimeout(timer.current) } }, [])
@@ -269,7 +271,7 @@ function MusicSeek({ position, duration, enabled, onPreview }: { position: numbe
     if (alive.current && request === revision.current) timer.current = window.setTimeout(() => setDraft(null), 1200)
   }
   return <>
-    <Slider compact className="exo-mini-seek" min={0} max={duration ?? 1} step={500} value={value}
+    <Slider compact className={className} min={0} max={duration ?? 1} step={500} value={value}
       aria-label="Seek song" aria-valuetext={`${musicTime(value)} of ${musicTime(duration)}`} disabled={!enabled || !duration}
       onPointerDown={() => { dragging.current = true }}
       onChange={event => { const next = Number(event.target.value); setDraft(next); if (!dragging.current) void commit(next) }}
