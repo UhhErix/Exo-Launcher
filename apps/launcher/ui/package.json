@@ -34,7 +34,7 @@
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",
-    "@iconify-json/tabler": "^1.2.43",
+    "@iconify-json/lucide": "1.2.156",
     "@tailwindcss/vite": "^4.3.4",
     "@types/node": "26.6.6",
     "@types/react": "19.3.0",
