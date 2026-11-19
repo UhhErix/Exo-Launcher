@@ -1,7 +1,7 @@
 # Exo's crash reports (README.md). Deployed 2026-11-05 to reports.getexo.app with the owner's OK; redeploy with `wrangler deploy --env=""`.
 name = "exo-reports"
 main = "src/worker.js"
-compatibility_date = "2026-10-01"
+compatibility_date = "2026-11-18"
 workers_dev = false
 preview_urls = false
 send_metrics = false

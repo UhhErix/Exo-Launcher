@@ -10,6 +10,7 @@ import {
   type PcHealth,
   type ReplacedApp,
   type StoreStatus,
+  type Tuning,
 } from '../lib/host'
 import { loadSettingsOrFail, saveSettingsPatch } from '../lib/settingsSave'
 import { useCapture } from '../lib/capture'
@@ -147,6 +148,7 @@ export function OnboardingPanel({
   const [gpu, setGpu] = useState<GpuProfile | null>(null)
   const [health, setHealth] = useState<PcHealth | null>(null)
   const [drives, setDrives] = useState<DrivesState | null>(null)
+  const [tuning, setTuning] = useState<Tuning | null>(null)
   const [pcRead, setPcRead] = useState(false)
   const [settings, setLocalSettings] = useState<LauncherSettings | null>(null)
   const screen = useHdrState(false)
@@ -165,7 +167,7 @@ export function OnboardingPanel({
   const [junkScanning, setJunkScanning] = useState(false)
   const junkStarted = useRef(false)
   const cleanupOffered = cleanupHas(replaced ?? undefined, junk)
-  const best = pcRead ? bestSteps(gpu, health, screen, settings, saveSettings, drives) : null
+  const best = pcRead ? bestSteps(gpu, health, screen, settings, saveSettings, drives, tuning) : null
   const bestLeft = !!best?.some(item => !item.done)
   const steps = visibleSteps({ restore: restoreOffer !== null, clients: clientsOffered(clients, clientsFailed), pc: best === null || best.length > 0 || !!lucid, capture: capture.state?.present !== false, cleanup: cleanupOffered }, step)
   const index = Math.max(0, steps.findIndex(item => item.id === step))
@@ -193,6 +195,7 @@ export function OnboardingPanel({
       host.gpuProfile().then(setGpu, (error: unknown) => report(error, 'OnboardingPanel.gpuProfile')),
       host.systemHealth().then(setHealth, (error: unknown) => report(error, 'OnboardingPanel.systemHealth')),
       host.systemDrives().then(setDrives, (error: unknown) => report(error, 'OnboardingPanel.systemDrives', { level: 'warn' })),
+      host.systemTuning().then(setTuning, (error: unknown) => report(error, 'OnboardingPanel.systemTuning', { level: 'warn' })),
     ])
     setPcRead(true)
   }, [])

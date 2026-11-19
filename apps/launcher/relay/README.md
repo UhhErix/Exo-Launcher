@@ -97,11 +97,11 @@ relay clients through `local/server.mjs`.
 2. From this folder, sign Wrangler in to that account and deploy:
 
    ```bash
-   npx wrangler@4.158.0 login
+   npx wrangler@4.165.0 login
    ```
 
    ```bash
-   npx wrangler@4.158.0 deploy
+   npx wrangler@4.165.0 deploy
    ```
 
    The first deploy creates the `Topic` Durable Object class (`[[migrations]]` in `wrangler.toml`). It prints the
