@@ -1333,6 +1333,8 @@ export interface LauncherSettings {
   /** This PC's chipset driver (AMD's or Intel's) updates by itself while the PC is idle (default on). */
   autoUpdateChipset?: boolean
   autoUpdateUpscalers?: boolean
+  /** Settings' one-time allow: upscaler files update in games with anti-cheat too (never Riot or Vanguard). */
+  upscalerAntiCheatEverywhere?: boolean
   /** Whose chipset driver this PC has and Exo updates: AMD's on a Ryzen, Intel's on an Intel processor (read-only: shows Keep the AMD or Intel chipset driver up to date). */
   chipset?: 'amd' | 'intel' | null
   /** Store clients (Steam, Epic) stay quiet: their pop-ups and sounds off and kept off; off puts them back as they were (default on). */
