@@ -39,6 +39,8 @@ public sealed partial class DlssSwapService
         {
             ct.ThrowIfCancellationRequested();
             if (!game.Installed || string.IsNullOrEmpty(game.Path) || keptOff(game.Id) || busy(game)) continue;
+            // A game started without its anti-cheat gets it only for a session Exo starts (ForSessionAtLaunch).
+            if (AntiCheatCheck.ChoseWithoutAntiCheat(game)) continue;
             if (ResolveInstallRoot(game.Path) is not { } root || IsGameRunning(game, root)) continue;
             // The state table (FrameGenDecide) says what happens next; Best settings acts on PutBack and PutIn.
             FrameGenNext next;
@@ -98,6 +100,7 @@ public sealed partial class DlssSwapService
     {
         foreach (var game in games)
         {
+            if (DropSessionHeld(game.Id)) AppLog.Info($"Frame generation for {game.Title}: Best settings turned it off; what Exo held for its sessions is let go.");
             if (FrameGenFolderFor(game.Id) is not { } folder || ReadFrameGenManifest(folder) is null || busy(game)) continue;
             var (ok, message) = FrameGenOff(game);
             AppLog.Info($"Frame generation in {game.Title}: Best settings turned it off; {(ok ? "taken out" : message)}.");

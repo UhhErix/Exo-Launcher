@@ -152,7 +152,7 @@ public sealed partial class WebHostBridge
         {
             _services.Settings.SetSteamWithoutAntiCheat(game.Id, true);
             AppLog.Info($"Anti-cheat: {game.Title} starts from Steam's entry without its anti-cheat.");
-            return "Plays offline, without anti-cheat. Frame generation and mods can go in.";
+            return "Plays offline, without anti-cheat, from Exo's Play. Frame generation and mods are in the game only while it runs.";
         }
         var off = await Task.Run(() => AntiCheatBackOn(_dlss, game), ct).ConfigureAwait(true);
         if (!off.Ok) throw new UserFacingException(off.Message);
@@ -170,7 +170,9 @@ public sealed partial class WebHostBridge
     /// <summary>Exo's frame generation out of the game, if it is in; Ok false (with why) when it could not come out.</summary>
     internal static (bool Ok, bool Removed, string Message) AntiCheatBackOn(DlssSwapService dlss, GameEntry game)
     {
-        if (dlss.FrameGenFolderFor(game.Id) is not { } folder || DlssSwapService.ReadFrameGenManifest(folder) is not { Out: false }) return (true, false, "");
+        // What Exo held between sessions without anti-cheat is not in the game: it is let go, never put back.
+        var held = dlss.DropSessionHeld(game.Id);
+        if (dlss.FrameGenFolderFor(game.Id) is not { } folder || DlssSwapService.ReadFrameGenManifest(folder) is not { Out: false }) return (true, held, "");
         var off = dlss.FrameGenOff(game);
         return off.Ok ? (true, true, "") : (false, false, "Exo couldn't take its frame generation out of the game, so it still starts without anti-cheat. " + off.Message);
     }

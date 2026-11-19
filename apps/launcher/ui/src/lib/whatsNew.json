@@ -3,9 +3,19 @@
     "version": "3.26.0",
     "items": [
       {
+        "icon": "Encrypted",
+        "title": "Cloudflare DNS, encrypted",
+        "detail": "Best settings sets Cloudflare's DNS with encryption on, for faster lookups that nobody on the way can read; its switch puts your old DNS back."
+      },
+      {
+        "icon": "Network",
+        "title": "A Network group in Best settings",
+        "detail": "Your adapter's power saving, DNS and Windows' TCP defaults each have their own switch, all set with one Windows prompt, with a ping and lookup check before and after."
+      },
+      {
         "icon": "Controller",
         "title": "NBA 2K26 with or without anti-cheat",
-        "detail": "Pick in Properties: without it the game plays offline and frame generation and mods can go in, and back with it Exo takes them out first."
+        "detail": "Pick in Properties: without it the game plays offline with frame generation and mods, which are in the game only while you play it from Exo, and back with it Exo takes them out first."
       },
       {
         "icon": "StoreBag",

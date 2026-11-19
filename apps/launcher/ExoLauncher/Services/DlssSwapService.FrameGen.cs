@@ -860,6 +860,10 @@ public sealed partial class DlssSwapService
     {
         var root = ResolveInstallRoot(game.Path);
         if (root is null || IsWindowsAppsPath(root)) return FrameGenDecide(new(Readable: false));
+        // A game set to "without anti-cheat" between its sessions: Exo holds its mod, which goes in only as Exo starts it.
+        if (AntiCheatCheck.ChoseWithoutAntiCheat(game) && SessionHeldFrameGen(game.Id) is { } held)
+            return new(new("on", Path: held.Mod == OptiScaler.Name ? "fsr" : "dlss", Version: $"{held.Mod} {held.Release}",
+                Note: $"{held.Mod} {held.Release}, in the game only while you play it from Exo"));
         var card = FrameGenCardFor(gpu);
         FrameGenNotes.TryRemove(game.Id, out var note);
         // A card no mod adds to reads nothing unless Exo's install is there to take out.
@@ -1255,11 +1259,7 @@ public sealed partial class DlssSwapService
         {
             var path = Path.Combine(folder, file.Path);
             if (!File.Exists(path)) continue;
-            var loader = file.Path.Equals(install.Loader, StringComparison.OrdinalIgnoreCase);
-            var original = loader ? OriginalName(path) : null;
-            var ours = file.Sha256!.Equals(FileSha256(path), StringComparison.OrdinalIgnoreCase) &&
-                       (!loader || mod == DlssgSm86 && string.IsNullOrEmpty(original) || string.Equals(original, mod.Dll, StringComparison.OrdinalIgnoreCase));
-            if (!ours || ManagerBackedUp(path)) { kept.Add(file.Path); continue; }
+            if (!StillExos(path, file, install, mod, over: false)) { kept.Add(file.Path); continue; }
             ClearReadOnly(path);
             DeletionGate.DeleteFile(path);
         }
@@ -1268,8 +1268,7 @@ public sealed partial class DlssSwapService
         {
             var path = Path.Combine(folder, file.Path);
             if (!File.Exists(path)) continue;
-            var info = new FileInfo(path);
-            if (ManagerBackedUp(path) || over && (info.Length != file.Size || info.LastWriteTimeUtc != file.Written)) { kept.Add(file.Path); continue; }
+            if (!StillExos(path, file, install, mod, over)) { kept.Add(file.Path); continue; }
             ClearReadOnly(path);
             DeletionGate.DeleteFile(path);
         }
@@ -1288,6 +1287,25 @@ public sealed partial class DlssSwapService
         }
         else TryDelete(manifest);
         return (kept, others);
+    }
+
+    /// <summary>
+    /// Whether a file Exo's record lists is still Exo's: a hashed one while its bytes are what Exo wrote (the loader only
+    /// while it is also the mod's own DLL); the settings file unless another mod is over the loader
+    /// (<paramref name="over"/>) and it changed since. Never one a mod manager keeps a backup of.
+    /// </summary>
+    private bool StillExos(string path, FrameGenFile file, FrameGenInstall install, FrameGenMod mod, bool over)
+    {
+        if (ManagerBackedUp(path)) return false;
+        if (file.Sha256 is null)
+        {
+            var info = new FileInfo(path);
+            return !over || info.Length == file.Size && info.LastWriteTimeUtc == file.Written;
+        }
+        var loader = file.Path.Equals(install.Loader, StringComparison.OrdinalIgnoreCase);
+        var original = loader ? OriginalName(path) : null;
+        return file.Sha256.Equals(FileSha256(path), StringComparison.OrdinalIgnoreCase) &&
+               (!loader || mod == DlssgSm86 && string.IsNullOrEmpty(original) || string.Equals(original, mod.Dll, StringComparison.OrdinalIgnoreCase));
     }
 
     /// <summary>
@@ -1653,6 +1671,9 @@ public sealed partial class DlssSwapService
         launcher.GameLaunching += game =>
         {
             FrameGenStarted[game.Id] = DateTime.UtcNow;
+            // A game started without its anti-cheat: Exo's mod and recorder go in for this session only (SessionMods.cs).
+            try { service.ForSessionAtLaunch(game, SystemSpecs.FrameGenGpu, settings.Shared.FrameGenEverywhere, settings.FrameGenKeptOff); }
+            catch (Exception ex) { AppLog.Warn("Frame generation for a session without anti-cheat: " + ex.Message); }
             try { service.FrameGenAtLaunch(game, SystemSpecs.FrameGenGpu); }
             catch (Exception ex) { AppLog.Warn("Frame generation at launch: " + ex.Message); }
         };
@@ -1663,8 +1684,27 @@ public sealed partial class DlssSwapService
                 TimeSpan? ran = FrameGenStarted.TryRemove(game.Id, out var at) ? DateTime.UtcNow - at : null;
                 // Best settings' first try failed and came out: it doesn't go back in by itself.
                 if (service.FrameGenAfterSession(game, ran, SystemSpecs.FrameGenGpu)) settings.SetFrameGenKeptOff(game.Id, true);
+                // Started without its anti-cheat: what went in for the session comes out (a successor still running: as it exits).
+                if (AntiCheatCheck.ChoseWithoutAntiCheat(game)) service.TakeOutAfterSession(game, CancellationToken.None).GetAwaiter().GetResult();
             }
             catch (Exception ex) { AppLog.Warn("Frame generation after a session: " + ex.Message); }
+        });
+        // Leftovers of a session without anti-cheat: at Exo's start (it closed or crashed mid-session), after a launch that
+        // never reached the game, and as such a game starts or stops outside an Exo session.
+        void TakeOutIdle(IEnumerable<GameEntry> games) => _ = Task.Run(async () =>
+        {
+            try { await service.TakeOutWhereIdle(games, game => launcher.InExoSession(game.Id), launcher.IsGameBusy, CancellationToken.None).ConfigureAwait(false); }
+            catch (Exception ex) { AppLog.Warn("Frame generation leftovers of a session without anti-cheat: " + ex.Message); }
+        });
+        launcher.GameLaunchFailed += game => TakeOutIdle([game]);
+        launcher.GameRunStateChanged += (id, _) =>
+        {
+            if (!launcher.InExoSession(id) && library.Find(id) is { } game && AntiCheatCheck.ChoseWithoutAntiCheat(game)) TakeOutIdle([game]);
+        };
+        _ = Task.Run(async () =>
+        {
+            try { TakeOutIdle(await library.GetLibraryAsync().ConfigureAwait(false)); }
+            catch (Exception ex) { AppLog.Warn("Frame generation leftovers at start: " + ex.Message); }
         });
         _frameGenUpdates = new Timer(_ =>
         {
@@ -1673,6 +1713,7 @@ public sealed partial class DlssSwapService
             {
                 try
                 {
+                    await service.TakeOutWhereIdle(library.PeekCachedLibrary(), game => launcher.InExoSession(game.Id), launcher.IsGameBusy, CancellationToken.None).ConfigureAwait(false);
                     // Best settings' frame generation first, so a game it goes into is on the newest release with the rest.
                     if (settings.Shared.FrameGenEverywhere)
                         await service.FrameGenEverywhereAsync(library.PeekCachedLibrary(), SystemSpecs.FrameGenGpu, launcher.IsGameBusy, settings.FrameGenKeptOff, CancellationToken.None,

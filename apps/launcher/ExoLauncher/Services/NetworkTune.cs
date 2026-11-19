@@ -10,9 +10,11 @@ namespace ExoLauncher.Services;
 /// a game, set in one press with Undo. Only settings with evidence behind them (.claude/research/network-tuning.md), each
 /// only where the adapter's driver offers it and accepts the value: Energy-Efficient Ethernet off (Intel's own fix for the
 /// I225/I226 dropouts), Intel's DMA coalescing off ("may increase network latency"), and receive and transmit buffers an
-/// optimizer shrank put back to the driver's own size (too few and the adapter runs out under load). The rest of the
-/// usual "network tweaks" (interrupt moderation, flow control, Nagle, NetworkThrottlingIndex, QoS, DNS, green Ethernet,
-/// selective suspend) have no evidence of helping a game and are left alone. Wi-Fi's real fix needs no press: while a game
+/// optimizer shrank put back to the driver's own size (too few and the adapter runs out under load); Realtek's Green
+/// Ethernet, Power Saving Mode and Gigabit Lite off; receive-side scaling and Intel Wi-Fi's Throughput Booster put back to
+/// their defaults (on, off). The rest of the usual "network tweaks" (interrupt moderation, flow control, offloads, Nagle,
+/// NetworkThrottlingIndex, SystemResponsiveness, QoS, selective suspend) have no evidence of helping a game and are left
+/// alone (the reasons are in <see cref="NetworkBest"/>). DNS is its own item in the Network group (<see cref="CloudflareDns"/>). Wi-Fi's real fix needs no press: while a game
 /// runs Exo stops Windows' background scans and keeps the radio at full power (<see cref="WifiGameMode"/>). Read without administrator rights (the network class key and its
 /// Ndi\Params lists); written in one step Windows asks permission for, then each changed adapter restarts so its driver
 /// takes the values, which drops the connection for a few seconds: never during a call or a game. Every value is backed
@@ -80,11 +82,22 @@ internal sealed partial class NetworkTune(NetworkTune.IAdapters adapters, Networ
         new("EEE", "0", "energy-efficient Ethernet on", Wireless: false, DesktopOnly: true),
         new("AdvancedEEE", "0", "energy-efficient Ethernet on", Wireless: false, DesktopOnly: true),
         new("EEELinkAdvertisement", "0", "energy-efficient Ethernet on", Wireless: false, DesktopOnly: true),
+        // Realtek's own power savers beside 802.3az: Green Ethernet and Power Saving Mode cut the link's power when the
+        // cable seems short or idle (desktops only, as above); Gigabit Lite holds a gigabit link at 500 Mbps, so it's off everywhere.
+        new("EnableGreenEthernet", "0", "Green Ethernet on", Wireless: false, DesktopOnly: true),
+        new("PowerSavingMode", "0", "power saving mode on", Wireless: false, DesktopOnly: true),
+        new("GigaLite", "0", "Gigabit Lite on", Wireless: false),
         // Intel's DMA coalescing holds packets to save power; off by default, back off if something turned it on.
         new("DMACoalescing", "0", "DMA coalescing on", Wireless: false),
         // Buffers an "optimizer" shrank: too few and the adapter runs out of them under a download's load.
         new("*ReceiveBuffers", "", "network buffers shrunk", Wireless: false, UpToDefault: true),
         new("*TransmitBuffers", "", "network buffers shrunk", Wireless: false, UpToDefault: true),
+        // Receive-side scaling is on by default (Microsoft's standardized *RSS): off, every packet is handled on one core.
+        // Only put back; the queue count stays the driver's.
+        new("*RSS", "1", "receive-side scaling off", Wireless: false),
+        // Intel Wi-Fi's Throughput Booster is off by default: on, it bursts packets and takes airtime from every other
+        // device on the router (Intel's own advanced-settings page). Put back off.
+        new("ThroughputBoosterEnabled", "0", "Throughput Booster on", Wireless: true),
     ];
 
     private static readonly long Gigabit = 1_000_000_000;
@@ -142,39 +155,73 @@ internal sealed partial class NetworkTune(NetworkTune.IAdapters adapters, Networ
     [GeneratedRegex(@"(?<n>\d+(?:[.,]\d+)?)\s*(?<unit>[GM])(?:bps|bit)", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex SpeedName();
 
+    /// <summary>What one press writes, adapter by adapter, and what puts those values back; the backup as it was before it.</summary>
+    internal sealed record Staged(
+        IReadOnlyList<(Adapter Adapter, IReadOnlyList<Rule> Rules)> Pending,
+        Backup? Before,
+        IReadOnlyList<(Adapter Adapter, IReadOnlyList<(string Keyword, string? Value)> Values)> Writes,
+        IReadOnlyList<(Adapter Adapter, IReadOnlyList<(string Keyword, string? Value)> Values)> Reverts);
+
     /// <summary>Exo's values on every adapter that has one to set, backed up first. Null when done or nothing to do.</summary>
     internal string? Apply()
     {
+        if (Stage(out var problem) is not { } staged) return problem;
+        return Finish(staged, writer.Write(staged.Writes));
+    }
+
+    /// <summary>
+    /// Backs up what a press changes and says what it writes (Best settings' Network group runs it in its one elevated
+    /// script, <see cref="NetworkBest"/>). Null with no problem when there is nothing to set.
+    /// </summary>
+    internal Staged? Stage(out string? problem)
+    {
+        problem = null;
         var state = Read();
         if (state.Pending.Count == 0) return null;
         var before = Load();
         var entries = before?.Adapters.Where(e => state.Pending.All(p => p.Adapter.Key != e.Key)).ToList() ?? [];
+        var reverts = new List<(Adapter, IReadOnlyList<(string, string?)>)>();
         foreach (var (adapter, rules) in state.Pending)
         {
             var kept = before?.Adapters.Find(e => e.Key == adapter.Key)?.Changes ?? [];
             // A keyword Exo wrote before keeps what it held first, so Undo goes back to the user's value, not Exo's.
             var changes = kept.Where(c => rules.All(r => !r.Keyword.Equals(c.Keyword, StringComparison.OrdinalIgnoreCase))).ToList();
-            changes.AddRange(rules.Select(r => kept.Find(c => c.Keyword.Equals(r.Keyword, StringComparison.OrdinalIgnoreCase)) ?? new Change(r.Keyword, r.To, adapter.Params[r.Keyword].Value)));
+            var now = rules.Select(r => kept.Find(c => c.Keyword.Equals(r.Keyword, StringComparison.OrdinalIgnoreCase)) ?? new Change(r.Keyword, r.To, adapter.Params[r.Keyword].Value)).ToList();
+            changes.AddRange(now);
             entries.Add(new Entry(adapter.Key, adapter.Name, adapter.DeviceId, changes));
+            // Put back: each keyword this press writes, to what the adapter held just before it.
+            reverts.Add((adapter, rules.Select(r => (r.Keyword, adapter.Params[r.Keyword].Value)).ToList()));
         }
-        if (!Save(new Backup(now(), entries))) return "Your current settings couldn't be saved for Undo, so nothing changed.";
-
-        var writes = state.Pending.Select(p => (p.Adapter, (IReadOnlyList<(string, string?)>)p.Rules.Select(r => (r.Keyword, (string?)r.To)).ToList())).ToList();
-        if (writer.Write(writes) is { } refused)
+        if (!Save(new Backup(now(), entries)))
         {
-            Restore(before);
+            problem = "Your current settings couldn't be saved for Undo, so nothing changed.";
+            return null;
+        }
+        var writes = state.Pending.Select(p => (p.Adapter, (IReadOnlyList<(string, string?)>)p.Rules.Select(r => (r.Keyword, (string?)r.To)).ToList())).ToList();
+        return new Staged(state.Pending, before, writes, reverts);
+    }
+
+    /// <summary>After the write ran (<paramref name="refused"/>: the line when it didn't): what took, the backup put back when nothing did.</summary>
+    internal string? Finish(Staged staged, string? refused)
+    {
+        if (refused is not null)
+        {
+            Restore(staged.Before);
             return refused;
         }
-        var missed = state.Pending.Where(p => adapters.Params(p.Adapter.Key) is not { } now
+        var missed = staged.Pending.Where(p => adapters.Params(p.Adapter.Key) is not { } now
             || p.Rules.Any(r => !now.TryGetValue(r.Keyword, out var v) || v.Now != r.To)).ToList();
-        if (missed.Count == state.Pending.Count)
+        if (missed.Count == staged.Pending.Count)
         {
-            Restore(before);
+            Restore(staged.Before);
             return "Windows didn't take the change.";
         }
-        AppLog.Info($"Network: {string.Join("; ", state.Pending.Select(p => $"{p.Adapter.Description}: {string.Join(", ", p.Rules.Select(r => $"{r.Keyword}={r.To}"))}"))}{(missed.Count > 0 ? $"; {missed.Count} refused" : "")}.");
+        AppLog.Info($"Network: {string.Join("; ", staged.Pending.Select(p => $"{p.Adapter.Description}: {string.Join(", ", p.Rules.Select(r => $"{r.Keyword}={r.To}"))}"))}{(missed.Count > 0 ? $"; {missed.Count} refused" : "")}.");
         return missed.Count > 0 ? $"{string.Join(" and ", missed.Select(m => m.Adapter.Name))} didn't take the change." : null;
     }
+
+    /// <summary>The press was put back by the elevated script (it cut the connection): the backup as it was before it.</summary>
+    internal void PutBack(Staged staged) => Restore(staged.Before);
 
     /// <summary>Puts back what Exo changed on every adapter still here, and restarts them.</summary>
     internal string? Undo()
