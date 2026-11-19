@@ -44,7 +44,7 @@ export function CalibrationRows({ id, edge, usb, live, state, onChanged }: {
         {calibrated && state?.canUndo ? (
           <ActionButton className="exo-set-btn" {...step('undo')}>Undo</ActionButton>
         ) : null}
-        <button type="button" className="exo-set-btn" disabled={!usb} onClick={() => setOpen(true)}>{calibrated ? 'Again' : 'Calibrate'}</button>
+        {usb ? <button type="button" className="exo-set-btn" onClick={() => setOpen(true)}>{calibrated ? 'Again' : 'Calibrate'}</button> : null}
       </Row>
       {calibrated && !edge && state && !state.kept ? (
         <Row label="Keep it after unplugging">
@@ -56,7 +56,7 @@ export function CalibrationRows({ id, edge, usb, live, state, onChanged }: {
   )
 }
 
-/** Only what can't be seen otherwise: why Calibrate is off, or how long Exo's calibration lasts. */
+/** Only what can't be seen otherwise: why there's no Calibrate, or how long Exo's calibration lasts. */
 function calibrationLine(usb: boolean, edge: boolean, state: ControllerCalibration | undefined) {
   if (!usb) return 'Connect it with a cable to calibrate it'
   if (!state?.calibrated) return undefined

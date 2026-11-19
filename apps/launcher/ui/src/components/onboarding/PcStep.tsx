@@ -1,9 +1,10 @@
 import { useState } from 'react'
 import { Switch } from '../Switch'
 import { lucidSetupWords } from '../settings/LucidSection'
-import { Row, State } from '../settings/parts'
+import { Row, State, SwitchRow } from '../settings/parts'
 import { BestCheck, type BestKey, type BestStep } from '../gpu/BestSetup'
-import { host, type LucidState } from '../../lib/host'
+import { host, type LauncherSettings, type LucidState } from '../../lib/host'
+import { AUTO_UPSCALERS_DETAIL, AUTO_UPSCALERS_LABEL } from '../../lib/upscalerNotice'
 import { report } from '../../lib/report'
 import { Wait, sample, times } from '../ui/Wait'
 import { Spinner } from '../ui/Spinner'
@@ -11,15 +12,21 @@ import { ActionButton } from '../ui/ConfirmButton'
 
 /**
  * First run's last step, Best settings for this PC: the same steps as the PC room's (gpu/BestSetup.tsx), each a row that
- * turns its ring while it runs and takes a green check once set; the footer's Use best settings runs them. Then Lucid,
- * the optional headphone EQ in Exo: Set up, which says what it will do first, and once set up, Start with Exo.
+ * turns its ring while it runs and takes a green check once set; the footer's Use best settings runs them (frame
+ * generation among them, on a card that gains from it). Then the switch Settings › Downloads has (DownloadsSection in
+ * settings/GeneralSection.tsx) for DLSS, FSR and XeSS updating by themselves (on by default, shown as it is, so turning it
+ * off here is the choice), and Lucid, the optional headphone EQ in Exo: Set up, which says what it will do first, and once
+ * set up, Start with Exo.
  */
-export function PcStep({ steps, running, landed, failed, lucid, onLucid }: {
+export function PcStep({ steps, running, landed, failed, settings, onSave, lucid, onLucid }: {
   /** Null while this PC is still being read. */
   steps: BestStep[] | null
   running: BestKey | null
   landed: ReadonlySet<BestKey>
   failed: Partial<Record<BestKey, string>>
+  /** Null until the settings are read; the switches wait for them. */
+  settings: LauncherSettings | null
+  onSave: (patch: Partial<LauncherSettings>) => Promise<boolean>
   lucid: LucidState | null
   onLucid: (next: LucidState) => void
 }) {
@@ -31,6 +38,10 @@ export function PcStep({ steps, running, landed, failed, lucid, onLucid }: {
             : step.done ? <State on><BestCheck landed={landed.has(step.key)} />Set</State> : null}
         </Row>
       ))}
+      {settings ? (
+        <SwitchRow id="ob-auto-upscalers" label={AUTO_UPSCALERS_LABEL} detail={AUTO_UPSCALERS_DETAIL} checked={settings.autoUpdateUpscalers !== false}
+          onChange={async on => await onSave({ autoUpdateUpscalers: on }) ? null : 'Not saved. Try again.'} />
+      ) : null}
       {lucid ? <LucidRows lucid={lucid} onLucid={onLucid} /> : null}
     </div>
   )

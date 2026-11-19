@@ -51,7 +51,7 @@ export function NetworkGroup({ health, onHealth }: { health: PcHealth | null; on
         const id = `pc-best-${item.key}`
         return (
           <Row key={item.key} label={item.label} labelId={id} icon={ITEMS[item.key].icon}
-            detail={item.off ? 'Off: Use best settings leaves it as it is.' : item.detail}
+            detail={item.off ? undefined : item.detail}
             error={error?.key === item.key ? error.text : null}>
             {busy === item.key ? <Spinner label={`Changing ${item.label}`} /> : null}
             <Switch checked={!!item.applied} disabled={!!busy} labelledBy={id}
@@ -71,7 +71,7 @@ export function NetworkGroup({ health, onHealth }: { health: PcHealth | null; on
 
 /** The check in words: before and after the last press with what changed, or the numbers now. */
 function CheckWords({ check }: { check: NetCheck | null }) {
-  if (!check) return <>Ping, jitter and a DNS lookup, measured before and after Exo changes anything.</>
+  if (!check) return null
   if (!check.before) return <>{sample(check.after)}</>
   return <>Before: {sample(check.before)}. After: {sample(check.after)}. {check.said}</>
 }

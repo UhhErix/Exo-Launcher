@@ -28,22 +28,6 @@ internal static class SteamAccountLibrary
     }
 
     /// <summary>
-    /// Steam Family titles: the running client licenses every family title to
-    /// the account (with a purchase time, so ISteamApps cannot tell them
-    /// apart), while the Web API's owned list holds only the account's own
-    /// licenses, free ones included. What the client licenses beyond that list
-    /// is the family's. Empty without both answers or outside a family.
-    /// </summary>
-    internal static IReadOnlySet<string> FamilyAppIds(
-        bool inFamily,
-        IReadOnlySet<string>? clientLicensed,
-        IReadOnlySet<string>? webApiOwned)
-    {
-        if (!inFamily || clientLicensed is null || webApiOwned is null) return new HashSet<string>();
-        return clientLicensed.Where(id => !webApiOwned.Contains(id)).ToHashSet(StringComparer.Ordinal);
-    }
-
-    /// <summary>
     /// An app manifest's <c>LastOwner</c> (SteamID64 of the license Steam
     /// installs with) names another member of the account's family. Steam
     /// writes it when the download starts, so this holds mid-download too.
@@ -67,7 +51,8 @@ internal static class SteamAccountLibrary
         IReadOnlyDictionary<string, SteamAppInfoNames.Entry> names,
         IReadOnlySet<string>? authoritativeOwnedAppIds = null,
         IReadOnlySet<string>? familyAppIds = null,
-        IReadOnlySet<string>? heldInHubs = null)
+        IReadOnlySet<string>? heldInHubs = null,
+        Func<string, string?>? sharedBy = null)
     {
         ArgumentNullException.ThrowIfNull(cacheAppIds);
         ArgumentNullException.ThrowIfNull(presentAppIds);
@@ -107,6 +92,7 @@ internal static class SteamAccountLibrary
                 Installed = false,
                 Owned = true,
                 FamilyShared = family,
+                SharedBy = family ? sharedBy?.Invoke(appId) : null,
                 EntitlementState = EntitlementState.Owned,
                 CanInstall = true,
                 UpdateAvailable = false,
@@ -117,11 +103,15 @@ internal static class SteamAccountLibrary
                 Status = "Not installed",
                 Deps = new[] { "Steam client" },
                 LaunchNote = family
-                    ? "Shared through Steam Family. Installs through Steam."
+                    ? FamilyNote(sharedBy?.Invoke(appId), "Installs through Steam.")
                     : "Installs through Steam.",
             });
         }
 
         return games;
     }
+
+    /// <summary>"Shared by Sam through Steam Family. …", or without a name when Steam's family names nobody.</summary>
+    internal static string FamilyNote(string? sharedBy, string how) =>
+        (string.IsNullOrWhiteSpace(sharedBy) ? "Shared through Steam Family. " : $"Shared by {sharedBy} through Steam Family. ") + how;
 }

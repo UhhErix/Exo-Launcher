@@ -72,11 +72,6 @@ kbd,
   --color-bg-elevated: #000000;
   --color-surface-2: #000000;
   --color-surface-3: #080808;
-  /* Every line is the one line (--exo-line, below): a divider is not a dimmer outline. */
-  --color-line: #2e2e2e;
-  --color-line-soft: #2e2e2e;
-  --color-border: #2e2e2e;
-  --color-border-strong: #2e2e2e;
   /* White ink on AMOLED black, neutral grays under it, each matched in contrast to the step it replaces. */
   --color-fg: #ffffff;
   --color-muted: #b4b4b4;
@@ -96,7 +91,7 @@ kbd,
   --color-on-bad: #000000;
   --color-card: #000000;
   --color-raised: #000000;
-  --font-sans: "Goeist", "Exoline", "Segoe UI Variable", "Segoe UI", sans-serif;
+  --font-sans: "Goeist", "Segoe UI Variable", "Segoe UI", sans-serif;
   --font-mono: "Goeist Mono", "Cascadia Mono", Consolas, monospace;
   /* Motion (DESIGN.md › Motion). Two curves: what appears, fades or changes state eases out (fast
      at once, then settling); what travels between two places or changes shape springs (from rest,
@@ -187,20 +182,19 @@ body,
   --exo-float-line: rgb(255 255 255 / 0.055);
   /* Controls (DESIGN.md › Controls): every control on the page (secondary buttons, chips, segment groups,
      fields, labels over art) is small Liquid Glass: a clear fill (--exo-fill) over the glass's blur and tone
-     (--exo-control-glass; glass.css lists the controls), with one even hairline all around (--exo-rim,
-     --exo-field-rim). No shading: on black a lit top or a dark foot reads as an edge missing, not depth.
+     (--exo-control-glass; glass.css lists the controls), inside the Liquid Glass edge (--exo-rim, --exo-field-rim:
+     --glassy-ring, below).
      Under the pointer the glass lifts (--hover-fill); pressed it takes the pressed fill and gives way
      (--exo-rim-pressed keeps the edge, a touch quieter). Solid glass, more contrast and forced colors fill
      it #000 (--exo-solid-fill). Quiet controls are transparent until hovered; current is --exo-selected; primary is
      --color-fg on #0a0a0a, --exo-primary-hover under the pointer; danger is --color-bad words on the glass.
      --exo-control-line is only for a ring that is the control itself (a radio dot, a checkbox box). */
-  /* Exo's liquid glass: clear, vivid frost (blur, saturation 1.8) inside one even line, with no tint or wash across
+  /* Exo's liquid glass: clear, vivid frost (blur, saturation 1.8) inside its lit edge, with no tint or wash across
      the body (both read as metal). Over art it dims what is behind enough to keep white words readable, lifted by a
      tight shadow (--glassy-words). */
   --glassy-rim: inset 0 0 0 transparent;
-  /* One thin even line all the way round, the same 1px on every glass: a dark hairline outside a light one read as a
-     thicker outline than everything else's. A lit top, a shaded foot and a bent rim read as one side brighter than the
-     other and the sides as concave, at 1080p stepped too. */
+  /* No second rim: a dark hairline outside a light one read as a thicker outline than everything else's, and a bent rim
+     read as concave sides, at 1080p stepped too. The edge is --glassy-ring alone, the same 1px on every glass. */
   /* Glass is lit at its edge like a lens (WWDC25 "Meet Liquid Glass"): brightest along the top, faint down the sides,
      fainter at the foot, with a soft inner glow under the top edge. No grey ring all the way round. */
   --glassy-ring: inset 0 var(--exo-hair) 0 rgb(255 255 255 / 0.17), inset var(--exo-hair) 0 0 rgb(255 255 255 / 0.06),
@@ -233,14 +227,13 @@ body,
   --exo-rim: var(--glassy-ring), var(--glassy-rim);
   /* Pressed keeps the same line: the press is the fill and the give, not a second, dimmer outline. */
   --exo-rim-pressed: var(--glassy-ring), var(--glassy-rim);
-  /* A field's edge is every glass's one even line (DESIGN.md › Glass › Its edge): at 10% of the ink it read a third
+  /* A field's edge is every glass's edge (DESIGN.md › Surfaces): at 10% of the ink it read a third
      dimmer than the buttons and chips beside it. */
   --exo-field-rim: var(--glassy-ring);
   --exo-control-line: var(--exo-line);
   /* Liquid Glass (styles/glass.css). Words on small glass: secondary brighter than --color-muted, so it keeps 4.5:1
      at the glass's brightest; on large glass a step under it. The rims are inset only, since lens glass casts no outer
-     shadow (lib/glass.ts), and even all the way round: a light hairline. No lit top or shaded foot: on black those
-     read as an edge missing, not as depth. */
+     shadow (lib/glass.ts): the Liquid Glass edge, lit along the top. */
   --exo-glass-secondary: #e4e4e4;
   --exo-glass-panel-secondary: #dcdcdc;
   --exo-glass-rim: var(--glassy-ring), var(--glassy-rim);
@@ -288,66 +281,6 @@ body,
   --exo-lift-shadow: 0 8px 24px rgb(0 0 0 / 0.45);
   /* What a color is mixed into for a tinted fill (a super reaction, Discord's red warning): black. */
   --exo-tint-base: #000;
-}
-
-/* Backgrounds (Settings › General › Background; owner, 2026-11-14: "add all of them as options"). Pure black is the
-   :root above, unchanged. Each other palette names its page, its panels (the lifted surface a pane, the band and a
-   solid menu stand on), its raised step, its one line and its words; the rule after them maps those onto every token,
-   so the whole app follows. Dark grey (#121212, Material's dark surface) is the default; no palette goes to #000, so
-   nothing smears on an OLED pixel turning on and off. lib/exoTheme.ts sets data-exo-bg; the host paints its window
-   in the page color (SettingsService.BackgroundColor). */
-:root[data-exo-bg='near'] {
-  --pal-page: #0a0a0a; --pal-panel: #141414; --pal-raised: #1e1e1e; --pal-line: #2e2e2e;
-  --pal-fg: #e6e6e6; --pal-muted: #b4b4b4;
-}
-
-:root[data-exo-bg='grey'] {
-  --pal-page: #121212; --pal-panel: #1e1e1e; --pal-raised: #2e2e2e; --pal-line: #3a3a3a;
-  --pal-fg: #e0e0e0; --pal-muted: #a8a8a8;
-}
-
-:root[data-exo-bg='windows'] {
-  --pal-page: #202020; --pal-panel: #2b2b2b; --pal-raised: #363636; --pal-line: #424242;
-  --pal-fg: #f0f0f0; --pal-muted: #cccccc;
-}
-
-:root[data-exo-bg='graphite'] {
-  --pal-page: #0f1114; --pal-panel: #171a1f; --pal-raised: #20242b; --pal-line: #2c313a;
-  --pal-fg: #e4e8ee; --pal-muted: #9aa3b0;
-}
-
-:root:is([data-exo-bg='near'], [data-exo-bg='grey'], [data-exo-bg='windows'], [data-exo-bg='graphite']) {
-  --color-bg: var(--pal-page);
-  --color-surface: var(--pal-panel);
-  --color-elevated: var(--pal-raised);
-  --color-hover: var(--pal-raised);
-  --color-bg-elevated: var(--pal-panel);
-  --color-surface-2: var(--pal-panel);
-  --color-surface-3: var(--pal-raised);
-  --color-card: var(--pal-panel);
-  --color-raised: var(--pal-raised);
-  --color-line: var(--pal-line);
-  --color-line-soft: var(--pal-line);
-  --color-border: var(--pal-line);
-  --color-border-strong: var(--pal-line);
-  --exo-line: var(--pal-line);
-  --color-fg: var(--pal-fg);
-  --color-muted: var(--pal-muted);
-  --color-faint: var(--pal-muted);
-  --color-fg-muted: var(--pal-muted);
-  --color-fg-subtle: var(--pal-muted);
-  --exo-float: var(--pal-panel);
-  --exo-tile: var(--pal-panel);
-  --exo-solid-fill: var(--pal-panel);
-  --exo-solid-panel: var(--pal-panel);
-  --exo-tint-base: var(--pal-page);
-  /* Panes stand on the page in the panel's own color; what floats is the raised step, still frosted over art. */
-  --glassy-pane: var(--pal-panel);
-  --glassy-overlay: color-mix(in srgb, var(--pal-raised) 88%, transparent);
-  --glassy-still: color-mix(in srgb, var(--pal-panel) 80%, transparent);
-  --glassy-still-panel: color-mix(in srgb, var(--pal-panel) 92%, transparent);
-  --glassy-still-pane: var(--pal-panel);
-  --glassy-still-control: color-mix(in srgb, var(--pal-raised) 65%, transparent);
 }
 
 /*

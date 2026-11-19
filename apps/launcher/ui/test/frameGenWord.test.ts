@@ -34,6 +34,13 @@ test('one apostrophe on the line: the host’s straight one reads as the page’
   assert.deepEqual(frameGenWord({ ok: true, state: 'native' }), { text: 'Built into the game' })
 })
 
+test('hidden is about Exo’s mod, not the game: unread says so, an RTX 40 or 50 game with its own reads native', () => {
+  assert.deepEqual(frameGenWord({ ok: true, state: 'hidden' }), { text: 'Not supported in this game' })
+  assert.deepEqual(frameGenWord({ ok: true, state: 'hidden', reason: 'unread' }), { text: 'Could not check' })
+  // The host sends native for a DLSS frame generation game on an RTX 40 or 50, never hidden.
+  assert.deepEqual(frameGenWord({ ok: true, state: 'native' }), { text: 'Built into the game' })
+})
+
 test('the mod that replaced Exo’s loader is named when Exo knows it', () => {
   assert.equal(frameGenWord({ ...broken, reason: 'replaced', mod: 'UE4SS' })!.text, 'UE4SS replaced Exo’s loader')
 })

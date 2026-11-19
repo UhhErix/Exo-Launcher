@@ -2,7 +2,7 @@ import { useLayoutEffect, type RefObject } from 'react'
 
 /*
  * The light of Exo's Liquid Glass (styles/glass.css, DESIGN.md › Glass): a press lights the glass from within where
- * it lands, one listener for every glass on the page. The glass is frosted inside one even line all the way round; it
+ * it lands, one listener for every glass on the page. The glass is frosted inside its edge, lit along the top; it
  * does not bend what is behind it at its edge (at 1080p that read as bent inward and stepped).
  */
 

@@ -4,6 +4,7 @@ import { report } from '../../lib/report'
 import { formatSize } from '../../lib/utils'
 import { Row } from '../settings/parts'
 import { ConfirmButton } from '../ui/ConfirmButton'
+import { compressShown } from '../../lib/canUse'
 import { Progress } from '../ui/Progress'
 import { errorText } from '../../lib/errorWords'
 
@@ -108,7 +109,8 @@ function Uncompress({ compress: c, locked, act }: { compress: CompressState; loc
  */
 export function CompressRow({ gameId, locked }: { gameId: string; locked: boolean }) {
   const { compress, error, act } = useCompress(gameId, !locked)
-  if (!compress) return null
+  // A game Exo will never compress has no row, as in PC › Compress games.
+  if (!compress || !compressShown(compress)) return null
   const working = compress.state === 'compressing' || compress.state === 'uncompressing'
   return (
     <div className="exo-props-row">

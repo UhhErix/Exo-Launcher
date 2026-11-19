@@ -21,6 +21,7 @@ import { Switch } from '../Switch'
 import { Wait, sample, times } from '../ui/Wait'
 import { Row, Section, State, SwitchRow } from './parts'
 import { SteamLibraryPanel, useSteamLibrary, type SteamLibrary } from './SteamSignInRow'
+import { riotIdShown } from '../../lib/canUse'
 import { ErrorNote } from '../ui/ErrorNote'
 
 export type StoreAction = 'connect' | 'open'
@@ -225,9 +226,9 @@ function RiotIdRow({ riotId, onSettings }: { riotId: string; onSettings: (next: 
   const value = draft.trim()
   const ready = value !== '' && value !== riotId && RIOT_ID.test(value)
 
-  // Save and Remove say how it went in themselves (ActionButton): the ring, then the check, then the row settles (the
-  // field closes); a refusal is the button in Bad with the reason under the row. Hours that couldn't be read after a
-  // good save are the row's own line, not the save's failure.
+  // Save, Import hours, and Remove say how it went in themselves (ActionButton): the ring, then the check, then the row settles;
+  // a refusal is the button in Bad with the reason under the row. Hours that couldn't be read after a good save are the row's
+  // own line, not the save's failure.
   async function save(next: string) {
     setBusy(true)
     setNote(null)
@@ -263,6 +264,10 @@ function RiotIdRow({ riotId, onSettings }: { riotId: string; onSettings: (next: 
       ) : (
         <>
           <State on>{riotId}</State>
+          <ActionButton className="exo-set-btn" disabled={busy} context="StoresSection.riotHoursImport" fallback="Hours could not be imported. Try again."
+            why="none" onFailed={failed}
+            onPress={() => { setNote(null); return host.riotHoursRefresh() }}
+            onDone={result => setNote({ text: (result as { message?: string | null })?.message ?? 'Hours imported.', error: false })}>Import hours</ActionButton>
           <button type="button" className="exo-set-btn" disabled={busy} onClick={() => setEditing(true)}>Replace</button>
           <ActionButton className="exo-set-btn" context="StoresSection.riotIdRemove" fallback="Riot ID could not be removed. Try again."
             why="none" onFailed={failed} onPress={() => save('')} onDone={saved}>Remove</ActionButton>
@@ -350,7 +355,7 @@ export const StoresSection = memo(function StoresSection({
             })
           }} />
       ) : null}
-      <RiotIdRow riotId={settings?.riotId?.trim() || ''} onSettings={onSettings} />
+      {riotIdShown(installed.map(store => store.store), settings?.riotId) ? <RiotIdRow riotId={settings?.riotId?.trim() || ''} onSettings={onSettings} /> : null}
       {missing.length > 0 ? (
         <Row label="Get another store" stacked error={getError}>
           <ul className="exo-set-chips" aria-label="Stores not on this PC">

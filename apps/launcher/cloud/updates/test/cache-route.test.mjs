@@ -24,7 +24,7 @@ const mf = new Miniflare({
   // The Worker's files are ES modules (package.json "type": "module"); miniflare's default treats .js as CommonJS.
   modulesRules: [{ type: 'ESModule', include: ['**/*.js', '**/*.mjs'] }],
   scriptPath: fileURLToPath(new URL('../src/worker.js', import.meta.url)),
-  // The newest date this local workerd accepts. The Worker deploys at 2026-10-01; the route uses nothing date-dependent.
+  // The newest date this local workerd accepts. The Worker deploys at 2026-11-18; the route uses nothing date-dependent.
   compatibilityDate: '2026-08-06',
   r2Buckets: ['MIRROR'],
 })

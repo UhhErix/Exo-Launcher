@@ -5,6 +5,7 @@ import { Choice } from '../settings/Choice'
 import { Row, State } from '../settings/parts'
 import { ActionButton } from '../ui/ConfirmButton'
 import type { PlainError } from '../../lib/errorWords'
+import { gpuOffers } from '../../lib/canUse'
 
 const LOW_LATENCY = [
   { value: 'on', label: 'On' },
@@ -29,7 +30,7 @@ export function DriverProfile({ profile, error, onAct, onSettled, onFailed }: {
   onSettled: (next: unknown) => void
   onFailed: (failure: PlainError) => void
 }) {
-  const intel = profile.vendor === 'intel'
+  const intel = gpuOffers(profile.vendor).lowLatency
   const saved = profile.lowLatency ?? 'on'
   const [choice, setChoice] = useState<string | null>(null)
   const latency = choice ?? saved

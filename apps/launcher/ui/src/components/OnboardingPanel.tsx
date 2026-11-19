@@ -10,6 +10,7 @@ import {
   type PcHealth,
   type ReplacedApp,
   type StoreStatus,
+  type Tuning,
 } from '../lib/host'
 import { loadSettingsOrFail, saveSettingsPatch } from '../lib/settingsSave'
 import { useCapture } from '../lib/capture'
@@ -73,7 +74,7 @@ function backShown(index: number, id: StepId, accountScreen: AccountScreen): boo
 }
 
 /** Steps with nothing to offer on this PC are left out; the one on screen stays, so it never drops from under the user. */
-function visibleSteps(offers: Record<'restore' | 'clients' | 'pc' | 'capture' | 'cleanup', boolean>, current: StepId) {
+function visibleSteps(offers: Record<'restore' | 'clients' | 'capture' | 'cleanup', boolean>, current: StepId) {
   return STEPS.filter(item => item.id === current || !(item.id in offers) || offers[item.id as keyof typeof offers])
 }
 
@@ -105,17 +106,8 @@ export function OnboardingPanel({
   useEffect(() => {
     host.backupStatus().then(status => setRestoreOffer(status.offer), (error: unknown) => report(error, 'OnboardingPanel.backupStatus', { level: 'warn' }))
   }, [])
-  // The glow on the welcome logo breathes only while the window has focus (SPEC-v2: idle CPU stays flat).
-  const [focused, setFocused] = useState(() => document.hasFocus())
   const stageRef = useRef<HTMLElement>(null)
   const leavingStep = useLeavingStep(stageRef)
-  useEffect(() => {
-    const on = () => setFocused(true)
-    const off = () => setFocused(false)
-    window.addEventListener('focus', on)
-    window.addEventListener('blur', off)
-    return () => { window.removeEventListener('focus', on); window.removeEventListener('blur', off) }
-  }, [])
   /** 1 going forward, -1 back: which side the next step slides in from. */
   const [direction, setDirection] = useState(1)
   const [feedback, setFeedback] = useState<Feedback | null>(null)
@@ -148,6 +140,7 @@ export function OnboardingPanel({
   const [gpu, setGpu] = useState<GpuProfile | null>(null)
   const [health, setHealth] = useState<PcHealth | null>(null)
   const [drives, setDrives] = useState<DrivesState | null>(null)
+  const [tuning, setTuning] = useState<Tuning | null>(null)
   const [pcRead, setPcRead] = useState(false)
   const [settings, setLocalSettings] = useState<LauncherSettings | null>(null)
   const screen = useHdrState(false)
@@ -166,9 +159,9 @@ export function OnboardingPanel({
   const [junkScanning, setJunkScanning] = useState(false)
   const junkStarted = useRef(false)
   const cleanupOffered = cleanupHas(replaced ?? undefined, junk)
-  const best = pcRead ? bestSteps(gpu, health, screen, settings, saveSettings, drives) : null
+  const best = pcRead ? bestSteps(gpu, health, screen, settings, saveSettings, drives, tuning) : null
   const bestLeft = !!best?.some(item => !item.done)
-  const steps = visibleSteps({ restore: restoreOffer !== null, clients: clientsOffered(clients, clientsFailed), pc: best === null || best.length > 0 || !!lucid, capture: capture.state?.present !== false, cleanup: cleanupOffered }, step)
+  const steps = visibleSteps({ restore: restoreOffer !== null, clients: clientsOffered(clients, clientsFailed), capture: capture.state?.present !== false, cleanup: cleanupOffered }, step)
   const index = Math.max(0, steps.findIndex(item => item.id === step))
   const current = steps[index]
   const next = footerNext(current.id, clients, clientsLater, clientsFailed, restoring, installerLong)
@@ -194,6 +187,7 @@ export function OnboardingPanel({
       host.gpuProfile().then(setGpu, (error: unknown) => report(error, 'OnboardingPanel.gpuProfile')),
       host.systemHealth().then(setHealth, (error: unknown) => report(error, 'OnboardingPanel.systemHealth')),
       host.systemDrives().then(setDrives, (error: unknown) => report(error, 'OnboardingPanel.systemDrives', { level: 'warn' })),
+      host.systemTuning().then(setTuning, (error: unknown) => report(error, 'OnboardingPanel.systemTuning', { level: 'warn' })),
     ])
     setPcRead(true)
   }, [])
@@ -408,12 +402,12 @@ export function OnboardingPanel({
     apps: () => <AppsStep onFeedback={setFeedback} />,
     discord: () => <DiscordStep />,
     capture: () => <CaptureStep />,
-    pc: () => <PcStep steps={best} running={running} landed={landed} failed={bestFailed} lucid={lucid} onLucid={setLucid} />,
+    pc: () => <PcStep steps={best} running={running} landed={landed} failed={bestFailed} settings={settings} onSave={saveSettings} lucid={lucid} onLucid={setLucid} />,
     cleanup: () => <CleanupStep apps={replaced ?? []} onApps={setReplaced} junk={junk}
       onCleaned={() => void host.junkScan().then(({ items }) => setJunk(items), (error: unknown) => report(error, 'OnboardingPanel.junkScan', { level: 'warn' }))} />,
   }
   return (
-    <div className={`exo-app exo-ob${focused ? '' : ' is-unfocused'}`}>
+    <div className="exo-app exo-ob">
 
       <main className="exo-ob-stage" ref={stageRef}>
         <LeavingStep html={leavingStep.leaving} />

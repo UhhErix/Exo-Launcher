@@ -8,6 +8,7 @@ import { Spinner } from '../ui/Spinner'
 import { Unfold } from '../ui/Unfold'
 import type { PlainError } from '../../lib/errorWords'
 import type { PcPlace } from './ThisPcTab'
+import { gpuOffers } from '../../lib/canUse'
 import { Afmf3Row } from './Afmf3Row'
 
 type Preview = NonNullable<GpuImportAnswer['preview']>
@@ -58,8 +59,8 @@ export function ProfileRows({ place, profile, onProfile }: {
   return (
     <>
       {needs ? null : card}
-      {nvidia ? <ImportRow /> : null}
-      {profile.vendor === 'amd' ? <Afmf3Row /> : null}
+      {gpuOffers(profile.vendor).profileImport ? <ImportRow /> : null}
+      {gpuOffers(profile.vendor).afmf3 ? <Afmf3Row /> : null}
     </>
   )
 }
