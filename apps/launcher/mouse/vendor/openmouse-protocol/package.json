@@ -1,16 +1,11 @@
 {
   "name": "@openmouse/protocol",
-  "version": "0.1.0",
+  "version": "0.60.0-exo.1",
   "description": "Gaming mouse protocol codecs and WebHID drivers used by OpenMouse.",
   "license": "AGPL-3.0-or-later",
   "type": "module",
   "publishConfig": {
     "access": "public"
-  },
-  "release": {
-    "branches": [
-      "main"
-    ]
   },
   "files": [
     "dist",
@@ -258,19 +253,6 @@
       "types": "./dist/roccat/index.d.ts",
       "import": "./dist/roccat/index.js"
     }
-  },
-  "scripts": {
-    "clean": "node -e \"require('node:fs').rmSync('dist', { recursive: true, force: true })\"",
-    "build": "npm run clean && tsc -p tsconfig.json",
-    "test": "tsx --import ./scripts/fast-test-timers.mjs --test \"src/**/*.test.ts\"",
-    "check": "npm run build && npm test && npm pack --dry-run",
-    "prepare": "npm run build"
-  },
-  "devDependencies": {
-    "@types/node": "^26.2.0",
-    "semantic-release": "25.0.9",
-    "tsx": "^4.23.11",
-    "typescript": "^5.8.3"
   },
   "engines": {
     "node": ">=20"

@@ -1,0 +1,24 @@
+diff --git a/src/finalmouse/index.ts b/src/finalmouse/index.ts
+index a83780e..326ebf9 100644
+--- a/src/finalmouse/index.ts
++++ b/src/finalmouse/index.ts
+@@ -418,14 +418,16 @@ export function decodeFinalmouseReport(reportId: number, data: Uint8Array): Part
+       return update;
+     }
+     case 53: {
+-      if (payload.length < 8) return null;
++      // Exo: a firmware that answers the two actuation values without rapid
++      // trigger keeps its actuation; only the hysteresis pair is optional.
++      if (payload.length < 4) return null;
+       const thrR = u16le(payload.subarray(0));
+       const thrL = u16le(payload.subarray(2));
+       const hystR = u16le(payload.subarray(4));
+       const hystL = u16le(payload.subarray(6));
+-      return thrR === null || thrL === null || hystR === null || hystL === null
++      return thrR === null || thrL === null
+         ? null
+-        : { tmrThrR: thrR, tmrThrL: thrL, tmrHystR: hystR, tmrHystL: hystL };
++        : { tmrThrR: thrR, tmrThrL: thrL, ...(hystR === null || hystL === null ? {} : { tmrHystR: hystR, tmrHystL: hystL }) };
+     }
+     case 54: {
+       if (payload.length < 3) return null;
