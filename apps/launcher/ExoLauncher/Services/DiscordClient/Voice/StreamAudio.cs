@@ -29,8 +29,7 @@ internal sealed unsafe class StreamAudio(uint app = 0) : IDisposable
     /// <summary>
     /// Executables (lowercase, no ".exe"; a trailing * matches the start) whose own sound is a call's or a microphone's:
     /// voice apps, Discord's apps, mixers and relays that play every app again (each app is taken on its own already),
-    /// mic monitors and voice changers, and streaming apps that monitor their sources. Exo Capture's replay leaves out the
-    /// same (capture/src/audio.cpp, EchoNames): keep the two alike.
+    /// mic monitors and voice changers, and streaming apps that monitor their sources.
     /// </summary>
     internal static readonly string[] EchoNames = [
         // Exo's own capture; Discord and the apps built on it

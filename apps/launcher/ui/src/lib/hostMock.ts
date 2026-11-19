@@ -555,7 +555,7 @@ const mockUpdate = typeof location !== 'undefined' && new URLSearchParams(locati
 
 // ?folders: two Library folders to start with, Hades in both, one sorted by time played.
 const mockFolders = typeof location !== 'undefined' && new URLSearchParams(location.search).has('folders')
-// ?lucidsetup: Lucid isn't set up on this PC (=apo: Equalizer APO is already here); Set up takes 6 seconds.
+// ?noapo: Equalizer APO isn't installed (Install takes 6 seconds, then it isn't on the output until Choose outputs).
 const OUTPUT_ID = '{0.0.0.00000000}.{9709e4ab-6969-4817-ad38-1704eab1c079}'
 const MIC_ID = '{0.0.1.00000000}.{0deb347c-90b6-43d6-b549-63e63b1b23a9}'
 const mockAudio: Record<string, { rate: number; bits: number; channels: number; volume: number; muted: boolean }> = {
@@ -566,8 +566,63 @@ const mockEndpoint = (id: string) => {
   const { rate, bits, channels, volume, muted } = mockAudio[id]
   return { format: { rate, bits, channels }, volume, muted }
 }
-const mockLucidSetup = typeof location !== 'undefined' ? new URLSearchParams(location.search).get('lucidsetup') : null
-let mockLucidPressed = 0
+const mockNoApo = typeof location !== 'undefined' && new URLSearchParams(location.search).has('noapo')
+let mockApoPressed = 0
+let mockApoOn = !mockNoApo
+const MOCK_EQ_HEADPHONES = [
+  { id: 'Super Review/in-ear/ZiiGaat Lush', name: 'ZiiGaat Lush', source: 'Super Review', form: 'in-ear' as const },
+  { id: 'oratory1990/over-ear/Sennheiser HD 600', name: 'Sennheiser HD 600', source: 'oratory1990', form: 'over-ear' as const },
+  { id: 'Rtings/Bruel & Kjaer 5128 over-ear/SteelSeries Arctis Nova 7', name: 'SteelSeries Arctis Nova 7', source: 'Rtings', form: 'over-ear' as const },
+]
+const mockEq: { on: boolean; comparing: boolean; headphone: (typeof MOCK_EQ_HEADPHONES)[number] | null; sound: string; custom: number[]; games: Record<string, string>; night: { on: boolean; start: string; end: string; sync: boolean } } = {
+  on: true, comparing: false, headphone: MOCK_EQ_HEADPHONES[0], sound: 'footsteps', custom: [0, 2, 3, 1, 0, 0, -1, 1.5, 2, 0],
+  games: { 'mock:valorant': 'footsteps' }, night: { on: false, start: '21:00', end: '06:00', sync: false },
+}
+type MockEqParams = Record<string, unknown> | undefined
+const mockNight = (p: MockEqParams) => {
+  const night = mockEq.night
+  if (typeof p?.on === 'boolean') night.on = p.on
+  if (typeof p?.sync === 'boolean') night.sync = p.sync
+  if (typeof p?.start === 'string') night.start = p.start
+  if (typeof p?.end === 'string') night.end = p.end
+}
+const mockEqGame = (p: MockEqParams) => {
+  if (typeof p?.game !== 'string') return
+  if (typeof p.sound === 'string') mockEq.games[p.game] = p.sound
+  else delete mockEq.games[p.game]
+}
+const MOCK_EQ_ACTIONS: Record<string, (p: MockEqParams) => void> = {
+  install: () => { mockApoPressed = Date.now() },
+  devices: () => { mockApoOn = true },
+  headphone: p => { mockEq.headphone = MOCK_EQ_HEADPHONES.find(h => h.id === p?.id) ?? null },
+  sound: p => { if (typeof p?.sound === 'string') mockEq.sound = p.sound },
+  custom: p => { if (Array.isArray(p?.gains)) { mockEq.custom = p.gains as number[]; mockEq.sound = 'custom' } },
+  on: p => { mockEq.on = p?.on === true },
+  compare: p => { mockEq.comparing = p?.on === true },
+  game: mockEqGame,
+  night: mockNight,
+}
+function mockEqState(p?: Record<string, unknown>) {
+  MOCK_EQ_ACTIONS[String(p?.action)]?.(p)
+  const installed = !mockNoApo || (mockApoPressed > 0 && Date.now() - mockApoPressed > 6000)
+  const title = (id: string) => MOCK_GAMES.find(game => game.id === id)?.title ?? id
+  const boosts = mockEq.sound === 'custom' ? Math.max(0, ...mockEq.custom) : mockEq.sound === 'flat' ? 0 : 3.5
+  return {
+    ok: true, message: null,
+    apo: { installed, installing: mockApoPressed > 0 && !installed, version: installed ? '1.4.2' : null, onOutput: installed && mockApoOn, restart: false, effectsOff: false, outputs: mockApoOn ? 1 : 0, installerVersion: '1.4.2' },
+    on: mockEq.on, comparing: mockEq.comparing, output: { name: 'Headphones (High Definition Audio Device)' },
+    headphone: mockEq.headphone, sound: mockEq.sound,
+    custom: [31, 62, 125, 250, 500, 1000, 2000, 4000, 8000, 16000].map((hz, i) => ({ hz, gain: mockEq.custom[i] ?? 0 })),
+    preamp: -Math.round((boosts + (mockEq.headphone ? 2.9 : 0)) * 10) / 10,
+    playing: null,
+    games: Object.entries(mockEq.games).map(([id, sound]) => ({ id, title: title(id), sound })),
+    library: MOCK_GAMES.filter(game => game.installed && !mockEq.games[game.id]).map(game => ({ id: game.id, title: game.title })),
+    night: { ...mockEq.night, now: false },
+    others: [{ name: 'Speakers (Realtek(R) Audio)', headphone: null, sound: 'bass' }],
+    guess: null,
+    lucidPlays: false,
+  }
+}
 
 const mockSettings: LauncherSettings = {
   onboardingComplete: !mockFirstRun,
@@ -1666,22 +1721,7 @@ const MOCK_HANDLERS: Record<string, MockHandler> = {
   'shaders.prepare.auto': (p) => { if (typeof p?.on === 'boolean') { mockPrepareAuto = p.on; emitHostEvent('shaders.changed', {}) } return { ok: true, auto: mockPrepareAuto } },
   'shaders.prepare.start': () => { mockPrepareRunning = true; emitHostEvent('shaders.changed', {}); return { ok: true, message: null } },
   'shaders.prepare.cancel': () => { mockPrepareRunning = false; emitHostEvent('shaders.changed', {}); return { ok: true } },
-  lucid: (p) => {
-    if (p?.action === 'setup') mockLucidPressed = Date.now()
-    const ready = mockLucidSetup === null || (mockLucidPressed > 0 && Date.now() - mockLucidPressed > 6000)
-    return {
-      ok: true, found: true, version: '6.0.4', ready, running: ready || mockLucidPressed > 0, voiceOn: false, startWithExo: p?.action === 'set' ? p.on === true : false,
-      followHeadset: p?.action === 'follow' ? p.on === true : true,
-      devices: ready || mockLucidSetup === 'apo',
-      settings: !ready ? null : {
-          headphone: { id: 'ziigaat_lush', name: 'Lush', chosen: true }, favorites: [], gameMode: true, keepOnAltTab: false,
-          onlyWhileGaming: false,
-          nightShift: false, nightStart: '21:00', nightEnd: '06:00', nightSync: false, notifications: false, discord: false,
-          hotkey: { modifiers: 0, key: 122 }, eqOn: true,
-      },
-      eq: { on: 'Headphones (High Definition Audio Device)', playing: 'Headphones (High Definition Audio Device)', covered: true },
-    }
-  },
+  eq: (p) => mockEqState(p),
   'devices.image': () => ({ ok: false, url: null }),
   'devices.catalog': () => ({ ok: true, devices: [
     { kind: 'controller', maker: 'Sony', model: 'DualSense Edge', variants: ['White', 'Midnight Black'] },
@@ -1767,14 +1807,7 @@ const MOCK_HANDLERS: Record<string, MockHandler> = {
     ],
     cpuPorts: { free: 2, total: 4, freeTypeC: false },
   }),
-  'lucid.headphones': () => ({
-    ok: true,
-    headphones: [
-      { id: 'lucid_iems', model: 'Lucid IEMs', brand: 'tekkusai', category: 'In-Ear Monitors', grade: 'Excellent', keywords: '' },
-      { id: 'ziigaat_lush', model: 'Lush', brand: 'ZiiGaat', category: 'In-Ear Monitors', grade: 'Excellent', keywords: '' },
-      { id: 'astro_a50_x', model: 'A50 X', brand: 'Astro', category: 'Gaming Headsets', grade: 'Good', keywords: 'a50x' },
-    ],
-  }),
+  'eq.headphones': () => ({ ok: true, headphones: MOCK_EQ_HEADPHONES }),
   'system.tune': (p) => mockTune(p),
   'gpu.profile': (p) => mockGpu === 'intel' || mockGpu === 'amd' ? {
     ok: true, vendor: mockGpu, gpu: mockGpu === 'intel' ? 'Arc B580' : 'Radeon RX 9070 XT', series: 0, screen: { name: 'VG27AQ', hz: 165, vrr: true },

@@ -5,7 +5,7 @@
 #   pwsh -File tools\Build-Release.ps1 [-Release vX.Y.Z]
 # Steps: a clean Release publish (self-contained, ReadyToRun), the UI and Exo Mouse
 # builds, Exo Shaders' engine (from shaders\) under addons\shaders, Exo Capture under
-# addons\capture and Lucid under addons\lucid in the app folder,
+# addons\capture in the app folder,
 # then the NSIS installer and the SHA-256 file the in-app updater checks.
 [CmdletBinding()]
 param(
@@ -73,7 +73,7 @@ foreach ($notice in 'LICENSE', 'LICENSE-EXCEPTION.txt', 'THIRD-PARTY-NOTICES.md'
 }
 Remove-Item $shaders -Recurse -Force
 
-# Exo Capture (GPL-3.0-or-later, source in capture\): built here, under addons\capture.
+# Exo Capture (MIT, capture\LICENSE, source in capture\; OBS hook files stay GPL-2.0-or-later): built here, under addons\capture.
 pwsh -NoProfile -File (Join-Path $repo 'capture\build.ps1')
 if ($LASTEXITCODE) { throw "Exo Capture build failed ($LASTEXITCODE)." }
 $captureAddon = Join-Path $publish.FullName 'addons\capture'
@@ -82,15 +82,11 @@ Copy-Item (Join-Path $repo 'capture\out\ExoCapture.exe'), (Join-Path $repo 'capt
 # OBS Studio's signed game capture files (GPL-2.0-or-later, see capture\third_party\obs\README.md).
 Copy-Item (Join-Path $repo 'capture\out\obs') $captureAddon -Recurse -Force
 
-# Lucid, unmodified, at its pinned hash (shipped with its author's permission; see THIRD_PARTY_NOTICES.md).
-pwsh -NoProfile -File (Join-Path $repo 'tools\Get-Lucid.ps1') -AppFolder $publish.FullName
-if ($LASTEXITCODE) { throw "Getting Lucid failed ($LASTEXITCODE)." }
-
 # What every release must hold. The voice libraries are only copied once they're built, and releases have gone out
 # without them, so a missing part stops the build, and the voice libraries must also load here.
 $voice = 'dave.dll', 'opus.dll', 'exo_apm.dll', 'exo-deepfilter.dll', 'sherpa-onnx-c-api.dll', 'onnxruntime.dll'
 $parts = $voice + 'ExoLauncher.exe', 'wwwroot\index.html', 'wwwroot\mouse\index.html', 'steam-ipc\ExoLauncher.SteamIpc.exe',
-    'addons\shaders\engine\ExoShaders.Service.exe', 'addons\capture\ExoCapture.exe', 'addons\lucid\Lucid.exe'
+    'addons\shaders\engine\ExoShaders.Service.exe', 'addons\capture\ExoCapture.exe'
 $missing = $parts | Where-Object { -not (Test-Path (Join-Path $publish.FullName $_)) }
 if ($missing) { throw "The app folder lacks $($missing -join ', ')." }
 $dead = $voice | Where-Object {

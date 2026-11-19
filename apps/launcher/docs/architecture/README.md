@@ -124,7 +124,7 @@ status and dates matter.
 - [Keep](keep.md): recording, checking and restoring values Exo writes.
 - [Launcher tuning](launcher-tuning.md): hidden store clients and download tuning.
 - [Liquid Glass](liquid-glass.md): material decisions, rendering and legibility.
-- [Lucid inside](lucid-inside.md): integration decision and permission boundary.
+- [Exo EQ](exo-eq.md): Exo's own headphone EQ on Equalizer APO, its data's licences, and the move from Lucid.
 - [Music engines](music-engines.md): current provider engines and lifecycle.
 - [Music native](music-native.md): native-engine research, evidence and plan.
 - [NVIDIA Control Panel](nvidia-control-panel.md): setting getters, writers and research.

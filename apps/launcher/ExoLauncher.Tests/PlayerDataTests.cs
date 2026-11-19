@@ -234,7 +234,7 @@ public sealed class PlayerDataTests : IDisposable
         ["mouse/presets.json"] = Utf8("""{"hits-presets":[{"name":"Fast"}]}"""),
         ["controllers/games.json"] = Utf8("""[{"game":"steam:1","layout":"xbox"}]"""),
         ["controllers/054c_0ce6.json"] = Utf8("""{"original":{"deadzone":4}}"""),
-        ["lucid-held.json"] = Utf8("""{"gameMode":true}"""),
+        ["exo-eq.json"] = Utf8("""{"version":1,"on":true}"""),
         ["frame-gen/games.json"] = Utf8("""{"steam:1":{"on":true,"wrote":["C:\\Users\\Player One\\Games\\x\\dlssg.dll"]}}"""),
         ["keep.json"] = Utf8("""{"version":1,"games":{"cs2":{"entries":{"fps_max":{"target":"fps_max","intended":"0"}}}}}"""),
         ["session-recorder.json"] = Utf8("""{"version":1,"sessions":[{"game":"steam:1","version":"none","seconds":600,"frames":60000,"histogram":[0]}]}"""),
@@ -409,21 +409,12 @@ public sealed class PlayerDataTests : IDisposable
         Assert.Equal(due, LauncherBackup.Due(Enum.Parse<LauncherBackup.Moment>(moment), todayWritten, gameRunning, TimeSpan.FromSeconds(secondsSince)));
 
     [Fact]
-    public void Lucids_settings_go_into_the_backup_as_the_change_that_puts_them_back()
+    public void Exo_eq_goes_into_the_backup()
     {
-        var lucid = Path.Combine(_root, "LucidEQ", "settings.json");
-        Directory.CreateDirectory(Path.GetDirectoryName(lucid)!);
-        File.WriteAllText(lucid, """{"AudioSourceType":1,"SelectedHeadphoneId":"hd600","SelectedHeadphoneName":"HD 600","HasCompletedAudioSourceOnboarding":true,"OptimizeForEsports":false,"NightShiftEnabled":true,"HotkeyModifiers":2,"HotkeyVirtualKey":76}""");
         Put(Data, "settings.json", Utf8("{}"));
+        Put(Data, "exo-eq.json", Utf8("""{"version":1,"on":true}"""));
 
-        var entry = Assert.Single(LauncherBackup.Gather(Data, PcA with { LucidSettings = lucid }), e => e.Name == "lucid-held.json");
-        var change = LucidSettings.FromStored(Encoding.UTF8.GetString(entry.Bytes));
-
-        Assert.NotNull(change);
-        Assert.Equal("hd600", change!.Headphone);
-        Assert.False(change.GameMode);
-        Assert.True(change.NightShift);
-        Assert.Equal((2, 76), change.Hotkey);
+        Assert.Single(LauncherBackup.Gather(Data, PcA), e => e.Name == "exo-eq.json");
     }
 
     [Fact]
@@ -714,6 +705,6 @@ public sealed class PlayerDataTests : IDisposable
     [InlineData(4.5, 1.5)]
     [InlineData(6, 0)]
     [InlineData(9, 0)]
-    public void Lucid_and_the_backup_at_exit_share_one_budget(double lucidTook, double backupMay) =>
-        Assert.Equal(TimeSpan.FromSeconds(backupMay), LauncherBackup.BackupMayWait(TimeSpan.FromSeconds(lucidTook)));
+    public void The_backup_at_exit_gets_what_is_left_of_the_budget(double spent, double backupMay) =>
+        Assert.Equal(TimeSpan.FromSeconds(backupMay), LauncherBackup.BackupMayWait(TimeSpan.FromSeconds(spent)));
 }

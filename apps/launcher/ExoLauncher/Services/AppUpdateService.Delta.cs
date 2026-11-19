@@ -22,8 +22,7 @@ namespace ExoLauncher.Services;
 /// waits for one), the last file-level try at this version failed, the changed files aren't smaller than the installer, or
 /// any request, range, file or check fails. Ways it could fail, tested in AppFilesTests and AppUpdateDeltaTests: a list
 /// from another host or for another version is used; a range the server didn't send as asked is read; one changed file
-/// is missed (a stale hash cache); the old folder is touched before the swap; a failure leaves the staging folder behind or
-/// Lucid stopped.
+/// is missed (a stale hash cache); the old folder is touched before the swap; or a failure leaves the staging folder behind.
 /// </summary>
 public sealed partial class AppUpdateService
 {
@@ -222,7 +221,6 @@ public sealed partial class AppUpdateService
         if (GameRunning()) return Refuse("a game is running, and a kept installer is how an update waits for one");
 
         string? staging = null, setupFolder = null;
-        string? lucid = null;
         var started = false;
         var parts = Path.Combine(_updatesDirectory, DeltaPartsFolder);
         var fetched = new System.Collections.Concurrent.ConcurrentDictionary<string, AppFiles.Entry>(StringComparer.OrdinalIgnoreCase);
@@ -276,7 +274,6 @@ public sealed partial class AppUpdateService
             if (GameRunning() || Move(UpdateFlow.Step.Apply) != UpdateFlow.State.Applying)
                 return Refuse("a game started during the download");
             progress?.Report(("Installing…", null));
-            lucid = await StopLucid().ConfigureAwait(false);
             if (!StartDeltaApply(new DeltaApply(InstallFolder, staging, setupFolder, plan.Manifest.Version, _updatesDirectory, Environment.ProcessId)))
                 throw new InvalidOperationException("Windows did not start the update's swap.");
             started = true;
@@ -308,7 +305,6 @@ public sealed partial class AppUpdateService
                     if (folder is not null && Directory.Exists(folder))
                         try { DeletionGate.DeleteDirectory(folder, recursive: true); }
                         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { AppLog.Debug("Update: a staging folder stays for the next cleanup: " + ex.GetType().Name); }
-                if (lucid is not null) StartLucid(lucid);
             }
         }
 

@@ -18,9 +18,10 @@ function Test-ExoWebViewCommandLine([string]$CommandLine, [string[]]$ProfileRoot
     return $false
 }
 
-# The Lucid that Exo hosts runs from addons\lucid in the app folder (and would hold it), or from addons\lucid-current in the
-# data folder when Exo downloaded a newer one. Only those exact files count: a Lucid the user runs from anywhere else (even
-# from a folder named like the app's) is theirs and never touched.
+# Exo hosted Lucid until 3.25, from addons\lucid in the app folder (which it would hold), or from addons\lucid-current in the
+# data folder when Exo downloaded a newer one. An update from such an Exo closes it here, before the folder is replaced; Exo
+# itself no longer starts it (Exo EQ took over). Only those exact files count: a Lucid the user runs from anywhere else
+# (even from a folder named like the app's) is theirs and never touched.
 function Test-ExoHostedLucid([string]$ExecutablePath, [string]$AppDirectory, [string]$DataDirectory = '') {
     if ([string]::IsNullOrWhiteSpace($ExecutablePath) -or -not [IO.Path]::IsPathRooted($ExecutablePath)) { return $false }
     try {
@@ -37,8 +38,7 @@ function Get-ExoHostedLucid([string]$AppDirectory, [string]$DataDirectory = '') 
 }
 
 # Asks the hosted Lucid to close and waits, then ends the ones still running (each listed again just before, so an id that
-# went to another program is not touched). True when none is left. Exo brings Lucid back by itself: it starts it when it
-# starts, so an update that relaunches Exo restores it.
+# went to another program is not touched). True when none is left.
 function Stop-ExoHostedLucid([string]$AppDirectory, [string]$DataDirectory = '', [int]$AskSeconds = 3) {
     $hosted = @(Get-ExoHostedLucid $AppDirectory $DataDirectory)
     if ($hosted.Count -eq 0) { return $true }
@@ -55,6 +55,21 @@ function Stop-ExoHostedLucid([string]$AppDirectory, [string]$DataDirectory = '',
         Start-Sleep -Milliseconds 100
     } while ([DateTime]::UtcNow -lt $deadline)
     return (@(Get-ExoHostedLucid $AppDirectory $DataDirectory).Count -eq 0)
+}
+
+# A sign-in entry (the current user's Run key) for the Lucid Exo hosted: it goes, with its Startup Apps toggle. One that starts
+# a Lucid from anywhere else is the user's own and stays.
+function Remove-ExoHostedLucidSignIn([string]$AppDirectory, [string]$DataDirectory = '') {
+    $run = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run'
+    $key = Get-Item -LiteralPath $run -ErrorAction SilentlyContinue
+    if (-not $key) { return }
+    foreach ($name in $key.GetValueNames()) {
+        $command = [string]$key.GetValue($name)
+        $exe = if ($command -match '^\s*"([^"]+)"') { $Matches[1] } elseif ($command -match '^\s*(\S.*?\.exe)\b') { $Matches[1] } else { '' }
+        if (-not (Test-ExoHostedLucid $exe $AppDirectory $DataDirectory)) { continue }
+        Remove-ItemProperty -LiteralPath $run -Name $name -ErrorAction SilentlyContinue
+        Remove-ItemProperty -LiteralPath 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\Run' -Name $name -ErrorAction SilentlyContinue
+    }
 }
 
 function Get-ExoProfileRoots([string]$AppDirectory, [string]$DataDirectory) {
@@ -95,9 +110,9 @@ do {
 } while ([DateTime]::UtcNow -lt $deadline)
 if (@(Get-InstalledExoProcess).Count -gt 0) { return 1 }
 
-# Lucid runs from the app folder and would hold it. Exo closes it as it closes (and ends it if it won't answer); this is
-# for one Exo left behind (a crash) or an older Exo that could not.
+# An Exo from before 3.26 hosted Lucid from the app folder, which it would hold: closed here, and its sign-in entry goes.
 if (-not (Stop-ExoHostedLucid $app $data)) { return 1 }
+Remove-ExoHostedLucidSignIn $app $data
 
 $deadline = [DateTime]::UtcNow.AddSeconds(5)
 do {

@@ -6,13 +6,13 @@ namespace ExoLauncher.Services;
 /// What System › Apps never uninstalls because Exo, the games here or Windows itself need it, and why, in the words the
 /// page shows. Always: Visual C++ and DirectX (games and apps run on them), GameInput, Xbox's Gaming Services, Windows' app
 /// runtimes and Store, and the HEVC and AV1 extensions Exo Capture records with. While it's needed: a store's app while
-/// games from it are installed, a game runtime (PhysX, OpenAL, XNA) a game here needs, and Equalizer APO while Lucid is
-/// here. Everything else that's needed (.NET, other drivers) stays removable with a warning (InstalledPrograms.Cares).
+/// games from it are installed, a game runtime (PhysX, OpenAL, XNA) a game here needs, and Equalizer APO while Exo EQ
+/// plays on it. Everything else that's needed (.NET, other drivers) stays removable with a warning (InstalledPrograms.Cares).
 /// </summary>
 internal static class AppsKeep
 {
-    /// <summary>What's needed right now: installed games by store, the runtimes games here need (to a game that does), Lucid.</summary>
-    internal sealed record Needs(IReadOnlyDictionary<StoreKind, int> Games, IReadOnlyDictionary<string, string> Runtimes, bool Lucid);
+    /// <summary>What's needed right now: installed games by store, the runtimes games here need (to a game that does), Exo EQ.</summary>
+    internal sealed record Needs(IReadOnlyDictionary<StoreKind, int> Games, IReadOnlyDictionary<string, string> Runtimes, bool Eq);
 
     private static readonly string[] AlwaysNames = ["Microsoft Visual C++", "Microsoft DirectX", "DirectX", "Microsoft GameInput"];
     private static readonly string[] XboxPackages = ["Microsoft.GamingServices", "Microsoft.XboxIdentityProvider"];
@@ -48,7 +48,7 @@ internal static class AppsKeep
         if (Runtimes.FirstOrDefault(runtime => name.StartsWith(runtime.Name, StringComparison.OrdinalIgnoreCase)) is { Id: { } id }
             && needs.Runtimes.TryGetValue(id, out var game))
             return $"{game} needs it";
-        if (needs.Lucid && name.StartsWith("Equalizer APO", StringComparison.OrdinalIgnoreCase)) return "Lucid's EQ runs on it";
+        if (needs.Eq && name.StartsWith("Equalizer APO", StringComparison.OrdinalIgnoreCase)) return "Exo EQ runs on it";
         return null;
     }
 }

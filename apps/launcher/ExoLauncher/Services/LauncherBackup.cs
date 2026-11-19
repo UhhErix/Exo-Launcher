@@ -11,8 +11,8 @@ namespace ExoLauncher.Services;
 
 /// <summary>
 /// Exo Launcher's backups: every file the player's choices live in (<see cref="PlayerData.Files"/>: settings, playtime, the
-/// Riot ledger and ID, covers and folder pictures, games added by hand, the wishlist, mouse and controller memory, Lucid's
-/// settings, Optimize's undo data, start-up choices) copied into one JSON file, so a reinstall or a new PC gets it back. Daily
+/// Riot ledger and ID, covers and folder pictures, games added by hand, the wishlist, mouse and controller memory, Exo EQ,
+/// Optimize's undo data, start-up choices) copied into one JSON file, so a reinstall or a new PC gets it back. Daily
 /// backups go to Documents\Exo\Backups\Launcher; export and import use the same file. The file names carry this PC's short id,
 /// so two PCs on one Documents folder never overwrite each other.
 ///
@@ -83,17 +83,15 @@ internal static class LauncherBackup
     /// <summary>
     /// Where a backup is made or restored: the Windows user's profile folder and name (a backup holds neither: a path under the
     /// profile becomes <c>%EXO_PROFILE%</c> and a task's user <c>%EXO_USER%</c>, filled in again for whoever restores), this
-    /// PC's hardware id (<see cref="PcHealth.MachineId"/>, which outlives a reinstall; only a salted mark of it is written), and
-    /// Lucid's own settings file.
+    /// PC's hardware id (<see cref="PcHealth.MachineId"/>, which outlives a reinstall; only a salted mark of it is written).
     /// </summary>
-    internal sealed record Here(string Profile, string User, string Machine, string? LucidSettings = null);
+    internal sealed record Here(string Profile, string User, string Machine);
 
     /// <summary>This PC and Windows user, for a backup or restore of <paramref name="dataDir"/>.</summary>
-    internal static Here ThisPc(string dataDir, string? lucidSettings = null) => new(
+    internal static Here ThisPc(string dataDir) => new(
         Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
         Environment.UserDomainName + "\\" + Environment.UserName,
-        PcHealth.MachineId() ?? "install-" + DeviceId(dataDir),
-        lucidSettings);
+        PcHealth.MachineId() ?? "install-" + DeviceId(dataDir));
 
     private const string ProfileMark = "%EXO_PROFILE%";
     private const string ProfileMarkSlash = "%EXO_PROFILE_SLASH%";
@@ -199,14 +197,12 @@ internal static class LauncherBackup
     }
 
     /// <summary>
-    /// Reads every file of <see cref="PlayerData.Files"/> that exists in the data folder, in name order. With
-    /// <paramref name="lucidSettings"/> (Lucid's own settings file), Lucid's settings as Exo sets them are added as
-    /// lucid-held.json, which Exo's next start puts back into Lucid. Throws IOException when one cannot be read.
+    /// Reads every file of <see cref="PlayerData.Files"/> that exists in the data folder, in name order. Throws IOException
+    /// when one cannot be read.
     /// </summary>
     internal static IReadOnlyList<Entry> Gather(string dataDir, Here? here = null)
     {
         here ??= ThisPc(dataDir);
-        var lucidSettings = here.LucidSettings;
         var names = new SortedSet<string>(StringComparer.Ordinal);
         var chosen = ChosenNames(dataDir);
         foreach (var file in PlayerData.Files)
@@ -225,44 +221,7 @@ internal static class LauncherBackup
         }
         var entries = new List<Entry>();
         foreach (var name in names) AddIfThere(entries, dataDir, name, here);
-        if (lucidSettings is not null && LucidSnapshot(dataDir, lucidSettings) is { } lucid)
-        {
-            entries.RemoveAll(entry => entry.Name == LucidHeld);
-            entries.Add(new Entry(LucidHeld, lucid));
-        }
         return entries;
-    }
-
-    private const string LucidHeld = "lucid-held.json";
-
-    /// <summary>
-    /// Lucid's settings as Exo sets them (the headphone, favourites, game mode, night shift, sounds and the on/off key), read
-    /// from Lucid's own file, with a change still waiting for a game to end laid over them. Null when Lucid has no settings.
-    /// </summary>
-    private static byte[]? LucidSnapshot(string dataDir, string lucidSettings)
-    {
-        if (LucidSettings.Load(lucidSettings) is not { } root) return null;
-        var view = LucidSettings.Read(root);
-        var now = new LucidSettings.Change
-        {
-            Headphone = view.HeadphoneChosen ? view.HeadphoneId : null,
-            Favorites = view.Favorites.ToDictionary(id => id, _ => true, StringComparer.OrdinalIgnoreCase),
-            GameMode = view.GameMode,
-            KeepOnAltTab = view.KeepOnAltTab,
-            OnlyWhileGaming = view.OnlyWhileGaming,
-            NightShift = view.NightShift,
-            NightStart = view.NightStart,
-            NightEnd = view.NightEnd,
-            NightSync = view.NightSync,
-            Notifications = view.Notifications,
-            Discord = view.Discord,
-            ToggleSound = view.ToggleSound,
-            DetectSound = view.DetectSound,
-            Hotkey = (view.HotkeyModifiers, view.HotkeyKey),
-        };
-        var held = Path.Combine(dataDir, LucidHeld);
-        if (File.Exists(held) && LucidSettings.FromStored(File.ReadAllText(held)) is { } waiting) now = now.Then(waiting);
-        return Encoding.UTF8.GetBytes(LucidSettings.Stored(now));
     }
 
     private static void AddIfThere(List<Entry> entries, string dataDir, string name, Here here)
@@ -523,7 +482,7 @@ internal static class LauncherBackup
             files = files.Where(file => PlayerData.Of(file.Name)?.OfThisMachine != true).ToList();
         }
         IReadOnlyList<Entry> current;
-        try { current = Gather(dataDir, here with { LucidSettings = null }); }
+        try { current = Gather(dataDir, here); }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
             return new Outcome(false, "Exo could not read the data it has now, so nothing was restored.");
@@ -673,8 +632,7 @@ internal static class LauncherBackup
             settings["onboardingComplete"] = false;
             // The install folder is this PC's: one that is not here is dropped, so the default falls back to a folder that exists.
             if (settings["defaultInstallRoot"] is JsonValue { } root && root.TryGetValue(out string? folder) && !LocalPath.ExistsLocally(folder)) settings.Remove("defaultInstallRoot");
-            // This PC's own: a Lucid path, and a launch's elevation and working folder, are never restored from another PC.
-            settings.Remove("lucidPath");
+            // This PC's own: a launch's elevation and working folder are never restored from another PC.
             foreach (var launch in (settings["launchOverrides"] as JsonObject)?.Select(pair => pair.Value).OfType<JsonObject>().ToList() ?? [])
             {
                 launch.Remove("runAsAdmin");
@@ -1021,7 +979,7 @@ internal static class LauncherBackup
 
     internal static readonly TimeSpan ExitFresh = TimeSpan.FromMinutes(10);
 
-    /// <summary>What closing Exo may spend on Lucid and the backup together, inside the 8 s the installer allows.</summary>
+    /// <summary>What closing Exo may spend on the backup, inside the 8 s the installer allows.</summary>
     internal static readonly TimeSpan ExitBudget = TimeSpan.FromSeconds(6);
 
     /// <summary>How long the backup at exit may still be waited for once <paramref name="spent"/> of the budget is gone (it is written whole or not at all).</summary>

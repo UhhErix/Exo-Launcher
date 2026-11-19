@@ -71,7 +71,7 @@ internal static partial class GameSettings
     /// <summary>
     /// What the values depend on: the graphics card's maker, the render threads the processor suits, the video memory,
     /// how many screens there are, the main screen's highest refresh rate, whether you listen on headphones (Windows'
-    /// default output is headphones or a headset, or Lucid is tuned for a pair), the main screen's real HDR peak in nits
+    /// default output is headphones or a headset, or Exo EQ corrects a pair), the main screen's real HDR peak in nits
     /// (<see cref="GameHdr.PeakNits"/>; null when it can't show HDR), and whether this game was chosen to run in true full
     /// screen (<see cref="Chosen"/>, which <see cref="For"/> fills in).
     /// </summary>
@@ -174,7 +174,7 @@ internal static partial class GameSettings
         try
         {
             if (Peripherals.DefaultEndpoints().Any(endpoint => !endpoint.Capture && endpoint.FormFactor is 3 or 5)) return true;
-            return LucidSettings.Load(LucidSettings.FilePath) is { } root && LucidSettings.Read(root) is { HeadphoneChosen: true };
+            return ExoEq.Current.Outputs.Values.Any(output => output.Headphone is not null);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException or System.Runtime.InteropServices.COMException)
         {

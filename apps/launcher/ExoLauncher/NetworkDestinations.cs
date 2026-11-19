@@ -55,8 +55,8 @@ internal static class NetworkDestinations
     internal const string DiscordGifs = "GIF hosts Discord points to (*.klipy.com, *.tenor.com, *.giphy.com, i.imgur.com)";
     internal const string SteamAchievementStats = "Steam's global achievement percentages (api.steampowered.com)";
     internal const string DiscordPlayers = "Video and music players in Discord messages (YouTube, Twitch, Vimeo, TikTok, SoundCloud, Spotify, Apple Music)";
-    /// <summary>Lucid's updates: off (<c>LucidCompanion.UpdatesAvailable</c>), so no registry entry or PRIVACY.md row names it until the gate is turned on.</summary>
-    internal const string LucidUpdates = "Lucid's updates (the newest release of tekkusai/Lucid and its Lucid.exe, from Exo's cache at updates.getexo.app, on Exo's Cloudflare account)";
+    internal const string AutoEq = "Exo EQ's headphone list and corrections (AutoEq's results on GitHub, raw.githubusercontent.com/jaakkopasanen/AutoEq)";
+    internal const string EqualizerApo = "Equalizer APO's installer (SourceForge: downloads.sourceforge.net and the mirror it sends you to on *.dl.sourceforge.net)";
     internal const string ControllerFirmware = "Sony's controller firmware versions (fwupdater.dl.playstation.net)";
     internal const string WindowsRelease = "Microsoft's Windows release information page (learn.microsoft.com)";
     internal const string NetworkCheck = "Best settings › Network's connection check (Cloudflare's 1.1.1.1, your router, and Exo's own domain looked up)";
@@ -238,8 +238,11 @@ internal static class NetworkDestinations
         new("m.stripe.network", StripeCards),
         new("hooks.stripe.com", StripeCards),
 
-        // LucidUpdate is off (LucidCompanion.UpdatesAvailable): Exo makes no request for it, so it has no row here or in PRIVACY.md.
-        // Turning it on needs LucidUpdates back in PRIVACY.md and its host here: updates.getexo.app.
+        // AutoEqCatalog: AutoEq's recommended list (at most weekly) and the one model's ParametricEQ.txt the player picks.
+        new("raw.githubusercontent.com", AutoEq),
+        // EqualizerApo.InstallAsync: the pinned installer, only on Install; SourceForge redirects to one of its mirrors.
+        new("downloads.sourceforge.net", EqualizerApo),
+        new("*.sourceforge.net", EqualizerApo),
         new("fwupdater.dl.playstation.net", ControllerFirmware),
         // PcAbout: which Windows version is newest, for PC > Overview's About card.
         new("learn.microsoft.com", WindowsRelease),

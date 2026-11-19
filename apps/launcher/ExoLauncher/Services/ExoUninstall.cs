@@ -128,14 +128,8 @@ internal static class ExoUninstall
         // Exo offered for text files (Notes): out of Open with and Default apps again.
         NoteTextFiles.Withdraw();
         ExoComponents.RemoveAll();
-        try
-        {
-            // The newer Lucid Exo downloaded (outside the app folder, so Exo's updates keep it): it goes with Exo. The Close script ended it first.
-            var store = LucidCompanion.Store;
-            if (Directory.Exists(store.Folder)) DeletionGate.DeleteDirectory(store.Folder, recursive: true);
-            DeletionGate.DeleteFile(Path.Combine(PathHelper.AppDataDir, "lucid-update.json"));
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { AppLog.Warn("Uninstall: the downloaded Lucid stayed: " + ex.GetType().Name); }
+        // Exo EQ's file and its Include line leave Equalizer APO's config; the player's own lines stay.
+        ExoEq.Remove();
         var app = AppContext.BaseDirectory.TrimEnd('\\');
         var scan = new LeftoverScan(LeftoverScan.ThisPc());
         var found = scan.Find(new Trail("Exo Launcher")

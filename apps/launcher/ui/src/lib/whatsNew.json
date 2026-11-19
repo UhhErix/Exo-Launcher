@@ -8,6 +8,16 @@
         "detail": "After you play, PC › Autopilot shows what made a game stutter, from a background app to a full graphics card, and what to do about it."
       },
       {
+        "icon": "Headphones",
+        "title": "Exo EQ for your headphones",
+        "detail": "Pick your headphones and Exo corrects their sound, with Bass, Vocal, Footsteps or your own bands on top, per output and per game."
+      },
+      {
+        "icon": "Volume",
+        "title": "Lucid's settings, carried over",
+        "detail": "Your Lucid headphone, game EQ and Night Shift move into Exo EQ by themselves. Thank you, tekkusai, for Lucid."
+      },
+      {
         "icon": "Library",
         "title": "A cleaner Library",
         "detail": "Your games sit edge to edge under one head with the search in the middle, and a scrubber on the right edge jumps from A to Z as you scroll."

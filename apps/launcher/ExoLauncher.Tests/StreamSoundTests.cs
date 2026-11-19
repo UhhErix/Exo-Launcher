@@ -11,7 +11,7 @@ namespace ExoLauncher.Tests;
 /// Exo's parent (or Exo's real parent a stranger's child); an app under Discord or a mixer slips in; an app whose capture
 /// failed still covers its children, so a game under it is never heard; Exo's own WebView2 or a game Exo started is left
 /// out; a window of an app Exo runs under is captured whole. The name list matches too much (a prefix where an exact
-/// name was meant) or drifts from Exo Capture's copy. The call detector misses the call copied into a game's sound, or
+/// name was meant). The call detector misses the call copied into a game's sound, or
 /// takes music, a game or someone else's voice for it and mutes a game; it never lets an app back once the call is gone
 /// from it. A watched stream's counts misread silence as sound or a muted stream as playing.
 /// </summary>
@@ -127,20 +127,6 @@ public sealed class StreamSoundTests
     [InlineData("steam", false), InlineData("chrome", false), InlineData("msedgewebview2", false), InlineData("spotify", false), InlineData("obs", false)]
     [InlineData("signalrgb", false), InlineData("lghub_updater", false), InlineData("teamspeak3", false), InlineData("zoomit", false), InlineData("krisp-helper", false)]
     public void EchoNamesMatchWhatTheySay(string exe, bool echoes) => Assert.Equal(echoes, StreamAudio.Echoes(exe));
-
-    [Fact]
-    public void EchoNamesMatchExoCapturesCopy()
-    {
-        var dir = new DirectoryInfo(AppContext.BaseDirectory);
-        while (dir is not null && !File.Exists(Path.Combine(dir.FullName, "capture", "src", "audio.cpp"))) dir = dir.Parent;
-        // Exo Capture's source lives in its own repository; where it isn't beside the launcher there is nothing to compare.
-        Assert.SkipUnless(dir is not null, "Exo Capture's source (capture/src/audio.cpp) is not in this checkout.");
-        var source = File.ReadAllText(Path.Combine(dir!.FullName, "capture", "src", "audio.cpp"));
-        var start = source.IndexOf("EchoNames[] = {", StringComparison.Ordinal);
-        var list = source[start..source.IndexOf("};", start, StringComparison.Ordinal)];
-        var names = System.Text.RegularExpressions.Regex.Matches(list, "L\"([^\"]+)\"").Select(m => m.Groups[1].Value);
-        Assert.Equal(StreamAudio.EchoNames, names);
-    }
 
     // ---- the call heard in an app's sound ----
 

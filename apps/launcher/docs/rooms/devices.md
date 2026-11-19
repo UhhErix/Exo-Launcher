@@ -8,7 +8,7 @@ Plug in a supported mouse or its receiver and open its card. Only the settings y
 
 ## Headphones
 
-**Pick** the pair you wear, then set up Lucid, Game Mode and Night Shift. Lucid's **Set up** says what it will do first.
+**Pick** the pair you wear and Exo EQ corrects it (AutoEq's settings for that model). **Install** gets Equalizer APO, the audio engine it plays through; then **Choose outputs** and restart once. **Sound**, **Compare**, **Games** and **Night Shift** finish it; each output keeps its own EQ.
 
 ## Controller
 

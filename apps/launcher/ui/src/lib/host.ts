@@ -138,7 +138,6 @@ export type FrameGenMod = {
  */
 /** Steam's current art for a game (newer games keep it under hashed folders). */
 export type StoreArt = { poster?: string | null; hero?: string | null; capsule?: string | null; header?: string | null }
-/** Lucid's own settings as Exo shows them (Lucid Voice is never among them). Times are "HH:mm" on half-hour steps. */
 /** What you plug in, as Devices shows it (devices.list): a mouse, a keyboard, your audio out and in, a game controller. */
 export type PeripheralKind = 'mouse' | 'keyboard' | 'audio' | 'controller'
 export type Peripheral = {
@@ -279,52 +278,36 @@ export type ControllerState = {
   extras: number
 }
 
-export type LucidSettings = {
-  headphone: { id: string; name: string; chosen: boolean }
-  favorites: string[]
-  gameMode: boolean
-  keepOnAltTab: boolean
-  onlyWhileGaming: boolean
-  nightShift: boolean
-  nightStart: string
-  nightEnd: string
-  nightSync: boolean
-  notifications: boolean
-  discord: boolean
-  /** Lucid's cue sounds, 0 (off) to 100: switching on or off, and a game detected. */
-  toggleSound: number
-  detectSound: number
-  /** Lucid's on/off hotkey: Windows' virtual key (0: none) and its modifiers (Alt 1, Ctrl 2, Shift 4, Win 8). */
-  hotkey: { modifiers: number; key: number }
-  /** Lucid's EQ switched on (its hotkey and Only while gaming turn it off). */
-  eqOn: boolean
-}
+/** Exo EQ's sounds over the correction. */
+export type EqSound = 'flat' | 'bass' | 'vocal' | 'footsteps' | 'custom'
+/** A headphone AutoEq has a correction for: its result's folder (id), who measured it, and its kind. */
+export type EqHeadphone = { id: string; name: string; source: string; form: 'in-ear' | 'earbud' | 'over-ear' }
 /**
- * Lucid here: found (a build without it says no), its version, whether it can start without asking anything of Windows
- * (ready: Equalizer APO and its own setup are in place), running, Start with Exo, Equalizer APO's device picker, and its
- * settings (null until Lucid has saved some).
+ * Exo EQ for one output (the one the page shows): Equalizer APO here and on it, the switch and Compare, the headphones
+ * and sound on this output, the Custom sound's ten bands, the preamp its chain gets, the game playing now with its own
+ * sound, the games with a sound, the library to add from, Night Shift, the other outputs that have an EQ, a headset
+ * the output's name suggests, and whether Lucid's EQ block still plays.
  */
-export type LucidState = {
-  ok: boolean; message?: string | null; found: boolean; version: string | null; ready: boolean; running: boolean; voiceOn: boolean; startWithExo: boolean; devices: boolean
-  /** Lucid's EQ switches to the tuning of the headset Windows moves to (on by default). */
-  followHeadset: boolean
-  settings: LucidSettings | null
-  /** The output Lucid's EQ is on (null: none yet), the one Windows plays on, and whether that one has it; null without Equalizer APO. */
-  eq: { on: string | null; playing: string | null; covered: boolean } | null
-  /** A change waiting for the game to end (Lucid starts again to take one); the settings already show it. */
-  held?: boolean
-  /** Why Lucid's last update didn't go in (the Lucid before stays or is back); absent when nothing is wrong. Updates say nothing otherwise. */
-  updateNote?: string | null
-  /** The USB or wireless headset Windows plays on, by its name, when Lucid has its tuning and isn't on it. */
-  guess?: { id: string; name: string } | null
+export type EqState = {
+  ok: boolean
+  message?: string | null
+  apo: { installed: boolean; installing: boolean; version: string | null; onOutput: boolean; restart: boolean; effectsOff: boolean; outputs: number; installerVersion: string }
+  on: boolean
+  comparing: boolean
+  output: { name: string | null } | null
+  headphone: EqHeadphone | null
+  sound: EqSound
+  custom: { hz: number; gain: number }[]
+  preamp: number
+  playing: { id: string; title: string; sound: EqSound | null } | null
+  games: { id: string; title: string; sound: EqSound }[]
+  library: { id: string; title: string }[]
+  night: { on: boolean; start: string; end: string; sync: boolean; now: boolean }
+  others: { name: string; headphone: string | null; sound: EqSound }[]
+  guess: EqHeadphone | null
+  lucidPlays: boolean
 }
-/** One change to Lucid's settings; favorites by headphone id. */
-export type LucidChange = Partial<Omit<LucidSettings, 'headphone' | 'favorites' | 'eqOn'>> & {
-  headphone?: string
-  favorites?: Record<string, boolean>
-}
-/** A headphone Lucid has a tuning for, as its picker lists it. */
-export type LucidHeadphone = { id: string; model: string; brand: string; category: string; grade: string; keywords: string }
+export type EqAction = 'state' | 'install' | 'devices' | 'sound-settings' | 'headphone' | 'sound' | 'custom' | 'compare' | 'on' | 'game' | 'night' | 'lucid-off'
 export type VoiceTuneWindows = { level: number | null; hardware: boolean; muted: boolean; ducking: number; processing: string | null }
 export type VoiceTuneResult = {
   ok: boolean; message?: string | null; cancelled?: boolean; kept: boolean; windows: VoiceTuneWindows; before?: string; after?: string
@@ -2902,14 +2885,13 @@ export const host = {
   /** Only My Voice: learn the voice from the live meter's last seconds (fetches the 40 MB voice model the first time), or forget it. */
   discordMyVoice: (action: 'learn' | 'forget') => rawCall<{ ok: boolean; learned: boolean; message?: string | null }>('discord.myVoice', { action }, 180_000),
   /**
-   * Lucid, the EQ in Exo: its state, Start with Exo (set), its first set up (setup: downloads and installs what the row
-   * has said), its own window for Repair (repair), Equalizer APO's device picker (devices), or a change to its settings
-   * (change: Lucid closes and starts again out of sight).
+   * Exo EQ for an output (its endpoint id; the one Windows plays on when absent): its state, Equalizer APO's install
+   * (downloads from SourceForge, one Windows prompt), its Device Selector, Windows' Sound settings, or a change.
    */
-  lucid: (action: 'state' | 'set' | 'follow' | 'setup' | 'repair' | 'devices' | 'change' = 'state', params: { on?: boolean; change?: LucidChange } = {}) =>
-    rawCall<LucidState>('lucid', { action, ...params }, 30_000),
-  /** The headphones Lucid has tunings for, read from the Lucid in use. */
-  lucidHeadphones: () => rawCall<{ ok: boolean; headphones: LucidHeadphone[] }>('lucid.headphones'),
+  eq: (action: EqAction = 'state', params: { output?: string | null; id?: string | null; sound?: EqSound | null; gains?: number[]; on?: boolean; game?: string; start?: string; end?: string; sync?: boolean } = {}) =>
+    rawCall<EqState>('eq', { action, ...params }, action === 'install' ? 900_000 : 30_000),
+  /** AutoEq's headphones (fetched the first time, then kept a week). */
+  eqHeadphones: () => rawCall<{ ok: boolean; headphones: EqHeadphone[] }>('eq.headphones', {}, 30_000),
   /** Devices: the mouse, keyboards, audio and controllers on this PC (devices.changed says when one comes or goes). */
   devicesUsbMap: () => rawCall<{ ok: boolean; message?: string; controllers: UsbMapController[] }>('devices.usbMap', {}, 15_000),
   devicesList: () => rawCall<{ ok: boolean; devices: Peripheral[]; cpuPorts?: CpuPorts | null }>('devices.list', {}, 15_000),
@@ -2947,7 +2929,7 @@ export const host = {
   steamInputState: () => rawCall<{ ok: boolean; steam: boolean; native: number; translated: number }>('steamInput.state'),
   /**
    * A device's official product picture (the maker's own), fitted to one transparent 1200x800 frame with the same
-   * margin as every other and kept on this PC. Pass what devices.list or Lucid says of it; url null: Exo's list has
+   * margin as every other and kept on this PC. Pass what devices.list or Exo EQ's pick says of it; url null: Exo's list has
    * no picture for it, or it couldn't be fetched (draw the device instead). The first ask fetches, so it can take a few seconds.
    */
   devicesImage: (device: { kind: string; model?: string | null; name?: string | null; maker?: string | null; color?: string | null; layout?: string | null }) =>
