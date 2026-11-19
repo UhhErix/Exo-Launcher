@@ -54,6 +54,21 @@ const MOCK_GAMES: Game[] = [
     lastPlayedUtc: new Date(Date.now() - 26 * 3600_000).toISOString(),
   },
   {
+    // Lent by the Steam Family: not installed, its owner named on its page.
+    id: 'steam:1145350',
+    title: 'Hades II',
+    store: 'steam',
+    installed: false,
+    owned: true,
+    canInstall: true,
+    primaryAction: 'install',
+    status: 'Not installed',
+    deps: ['Steam client'],
+    launchNote: 'Shared by Sam through Steam Family. Installs through Steam.',
+    familyShared: true,
+    sharedBy: 'Sam',
+  },
+  {
     // One Steam app holding the games bought as its DLC: named by the newest, and found by any of them.
     id: 'steam:1938090',
     title: 'Call of Duty®: Modern Warfare® 4',

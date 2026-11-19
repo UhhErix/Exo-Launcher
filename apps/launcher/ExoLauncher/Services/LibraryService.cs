@@ -1283,6 +1283,7 @@ public sealed class LibraryService
                 CoverSource = customUrl is null ? g.CoverSource : "custom",
                 ArtRevision = artRevision,
                 FamilyShared = g.FamilyShared,
+                SharedBy = g.SharedBy,
                 PlaytimeMinutes = g.PlaytimeMinutes,
                 SizeBytes = g.SizeBytes,
                 Status = g.Status,
@@ -1400,6 +1401,7 @@ public sealed class LibraryService
                 Installed = true,
                 Owned = false,
                 FamilyShared = entry.FamilyShared,
+                SharedBy = entry.SharedBy,
                 EntitlementState = EntitlementState.Unverified,
                 UpdateAvailable = entry.UpdateAvailable,
                 CanInstall = false,
@@ -1457,6 +1459,7 @@ public sealed class LibraryService
                 Installed = entry.Installed,
                 Owned = owned,
                 FamilyShared = entry.FamilyShared,
+                SharedBy = entry.SharedBy,
                 EntitlementState = !verified && !entry.FamilyShared
                     ? EntitlementState.Unverified
                     : owned ? EntitlementState.Owned : EntitlementState.NotOwned,

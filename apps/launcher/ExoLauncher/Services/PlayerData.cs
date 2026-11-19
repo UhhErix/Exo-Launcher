@@ -252,7 +252,7 @@ internal static class PlayerData
         new("runtimes-graphics.json", "DependencyService", Why.Cache, "the graphics runtimes found on this PC"),
         new("status-v2.json", "DlssSwapService", Why.Cache, "the upscaler files' status as checked"),
         new("steam-app-types.json", "SteamStoreAppTypes", Why.Cache, "which Steam apps are games, demos or tools"),
-        new("steam-family.json", "SteamFamilyShares", Why.Cache, "Steam family-shared games as read"),
+        new("steam-family.json", "SteamFamilyShares", Why.Cache, "Steam family-shared games as read: ids, names and owners' account ids"),
         new("steam-owned.json", "SteamOwnershipCatalog", Why.Cache, "the Steam games owned, read again from Steam"),
         new("swapper-refused.json", "DlssSwapService", Why.Cache, "upscaler releases that did not check out"),
         new("swapper-releases.json", "DlssSwapService", Why.Cache, "upscaler releases as fetched"),

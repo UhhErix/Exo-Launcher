@@ -25,7 +25,9 @@ internal static partial class SteamPlaytime
         string AccountKey,
         IReadOnlyDictionary<string, Entry> Entries,
         IReadOnlySet<string> AppTicketIds,
-        IReadOnlySet<string>? FamilyMemberIds = null);
+        IReadOnlySet<string>? FamilyMemberIds = null,
+        IReadOnlyDictionary<string, string>? FamilyMemberNames = null,
+        string? AccountId = null);
 
     internal static string? TryGetLocalConfigPath(string steamRoot)
     {
@@ -152,6 +154,7 @@ internal static partial class SteamPlaytime
             var map = new Dictionary<string, Entry>(StringComparer.Ordinal);
             IReadOnlySet<string> appTickets;
             IReadOnlySet<string> family;
+            IReadOnlyDictionary<string, string> familyNames;
             try
             {
                 var text = ReadSharedText(config);
@@ -159,10 +162,11 @@ internal static partial class SteamPlaytime
                 MergeFile(map, text);
                 appTickets = ParseAppTickets(text);
                 family = ParseFamilyMembers(text);
+                familyNames = ParseFamilyMemberNames(text);
             }
             catch { return null; }
 
-            _snapshot = new AccountSnapshot(HashAccountId(accountId!), map, appTickets, family);
+            _snapshot = new AccountSnapshot(HashAccountId(accountId!), map, appTickets, family, familyNames, accountId);
             _loadedRoot = root;
             _loadedAccountId = accountId;
             _loadedStamp = stamp;
@@ -337,6 +341,30 @@ internal static partial class SteamPlaytime
         return members;
     }
 
+    /// <summary>
+    /// The family members' Steam names, by account id, from the same block (<c>"members" { "0" { "accountid" "N"
+    /// "name" "Sam" } }</c>): who shares a game, for its page. Kept in memory only.
+    /// </summary>
+    internal static IReadOnlyDictionary<string, string> ParseFamilyMemberNames(string text)
+    {
+        var names = new Dictionary<string, string>(StringComparer.Ordinal);
+        var section = FamilyGroupOpenRegex().Match(text ?? "");
+        if (!section.Success) return names;
+        var block = SliceBraceBlock(text!, section.Index + section.Length - 1);
+        if (block is null || ReadInt(block, FamilyGroupIdRegex()) is not > 0) return names;
+        var open = FamilyMembersOpenRegex().Match(block);
+        if (!open.Success || SliceBraceBlock(block, open.Index + open.Length - 1) is not { } list) return names;
+        foreach (Match member in FamilyMemberBlockRegex().Matches(list))
+        {
+            var body = member.Groups[1].Value;
+            var id = FamilyMemberIdRegex().Match(body);
+            var name = FamilyMemberNameRegex().Match(body);
+            if (id.Success && name.Success && !string.IsNullOrWhiteSpace(name.Groups[1].Value))
+                names[id.Groups[1].Value] = name.Groups[1].Value.Trim();
+        }
+        return names;
+    }
+
     private static int? ReadPlaytimeMinutes(string block)
     {
         // PlaytimeForever is the lifetime counter. Bare "Playtime" is the
@@ -389,6 +417,15 @@ internal static partial class SteamPlaytime
 
     [GeneratedRegex(@"""accountid""\s+""(\d{1,10})""", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex FamilyMemberIdRegex();
+
+    [GeneratedRegex(@"""members""\s*\{", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+    private static partial Regex FamilyMembersOpenRegex();
+
+    [GeneratedRegex(@"""\d+""\s*\{([^{}]*)\}", RegexOptions.CultureInvariant)]
+    private static partial Regex FamilyMemberBlockRegex();
+
+    [GeneratedRegex(@"""name""\s+""((?:[^""\\]|\\.)*)""", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+    private static partial Regex FamilyMemberNameRegex();
 
     [GeneratedRegex(@"""PlaytimeForever""\s+""(\d+)""", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex PlaytimeForeverRegex();

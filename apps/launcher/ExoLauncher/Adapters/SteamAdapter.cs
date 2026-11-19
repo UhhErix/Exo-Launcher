@@ -70,9 +70,11 @@ public sealed class SteamAdapter : IStoreAdapter, IInstalledSteamManifestSource,
         // Set once, after the Web API answers: another scan of this adapter (an action's
         // revalidation) reading it meanwhile must see the last answer, not a blank one.
         IReadOnlyDictionary<string, int>? ownedPlaytime = null;
+        SteamFamilyLibrary.Shares? familyService = null;
         if (steamId64 is not null)
         {
-            var ownedResult = await SteamCommunityGames.LoadOwnedGamesAsync(steamId64, ct).ConfigureAwait(false);
+            var (ownedResult, shares) = await SteamCommunityGames.LoadOwnedGamesAsync(steamId64, ct).ConfigureAwait(false);
+            familyService = shares;
             if (ownedResult.Authoritative)
             {
                 webApiOwned = ownedResult.AppIds;
@@ -94,6 +96,13 @@ public sealed class SteamAdapter : IStoreAdapter, IInstalledSteamManifestSource,
         var candidates = CollectOwnershipCandidates(steamRoot, activeAccount, appNames);
         if (webApiOwned is not null)
             candidates.AddRange(webApiOwned.Where(id => !candidates.Contains(id)));
+        // The family's games are asked about too, as the family service or the last answer lists them: Steam's local
+        // app list need not know a game nobody here has opened, and a game the client was never asked about can't
+        // stay on its family list.
+        var accountScope = GetActiveAccountScope();
+        var rememberedFamily = SteamFamilyShares.Recall(accountScope);
+        var familyHints = (familyService?.Apps.Keys ?? []).Concat(rememberedFamily?.Keys ?? []).ToHashSet(StringComparer.Ordinal);
+        candidates.AddRange(familyHints.Where(id => !candidates.Contains(id)));
         candidates.AddRange(SteamGameHubs.GameAppIds.Where(id => !candidates.Contains(id)));
         var clientOwned = await QueryClientOwnershipAsync(
             GetActiveAccountScope(), candidates, ct).ConfigureAwait(false);
@@ -132,18 +141,25 @@ public sealed class SteamAdapter : IStoreAdapter, IInstalledSteamManifestSource,
         }
         var familyMembers = activeAccount?.FamilyMemberIds;
         var inFamily = familyMembers is { Count: > 0 };
-        var familyAppIds = SteamAccountLibrary.FamilyAppIds(inFamily, clientOwned, webApiOwned);
-        var accountScope = GetActiveAccountScope();
         // Steam in its offline mode answers from what it cached: the family list it last gave online stands, never one it gives offline.
         var clientOffline = clientOwned is not null && SteamLoginUsers.CurrentOffline(steamRoot).Offline;
-        if (clientOwned is not null && webApiOwned is not null && !clientOffline) SteamFamilyShares.Remember(accountScope, familyAppIds);
-        else if ((clientOwned is null || clientOffline) && inFamily && authoritativeOwnedAppIds is not null && SteamFamilyShares.Recall(accountScope) is { Count: > 0 } shared)
+        var family = SteamFamilyLibrary.Resolve(familyService, clientOwned, webApiOwned, inFamily, clientOffline, rememberedFamily);
+        if (family.Remember) SteamFamilyShares.Remember(accountScope, family.Apps);
+        // A game one app holds (its DLC) names that app's card, here as for the account's own games.
+        var familyAppIds = family.AppIds.Where(id => !SteamGameHubs.IsHeldGame(id)).ToHashSet(StringComparer.Ordinal);
+        if (familyAppIds.Count > 0 && authoritativeOwnedAppIds is not null)
         {
-            // Steam is closed (Exo closes it when idle) or offline: the family's games as it last listed them, less any bought since.
-            familyAppIds = shared.Where(id => webApiOwned?.Contains(id) != true).ToHashSet(StringComparer.Ordinal);
+            // A family game is playable through Steam whether or not this scan's client answer covered it (Steam closed,
+            // or a family change the client has not caught up with): the family's own list says so.
             authoritativeOwnedAppIds = authoritativeOwnedAppIds.Union(familyAppIds).ToHashSet(StringComparer.Ordinal);
-            ownershipSource += "+family-remembered";
         }
+        if (family.Source != "steam-client" && familyAppIds.Count > 0) ownershipSource += "+family-" + family.Source;
+        // Names the family service gave fill in games Steam's local app list has never seen, so they get a row.
+        foreach (var app in family.Apps.Values)
+            if (app.Name is { } sharedName && !appNames.ContainsKey(app.AppId))
+                appNames[app.AppId] = new SteamAppInfoNames.Entry(sharedName, "game");
+        string? SharedBy(string appId) => SteamFamilyLibrary.SharedBy(
+            family.Apps.GetValueOrDefault(appId), activeAccount?.FamilyMemberNames, activeAccount?.AccountId);
         // The ownership catalog remembers (and prunes to) the account's own
         // titles: a family share is someone else's license.
         LastAuthoritativeOwnedAppIds = familyAppIds.Count == 0 || authoritativeOwnedAppIds is null
@@ -261,6 +277,7 @@ public sealed class SteamAdapter : IStoreAdapter, IInstalledSteamManifestSource,
                         Installed = installed,
                         Owned = playable,
                         FamilyShared = familyShared,
+                        SharedBy = familyShared ? SharedBy(appId) : null,
                         EntitlementState = !ownershipVerified && !familyShared
                             ? EntitlementState.Unverified
                             : playable
@@ -283,7 +300,7 @@ public sealed class SteamAdapter : IStoreAdapter, IInstalledSteamManifestSource,
                         Status = entitlementStatus,
                         Deps = new[] { "Steam client" },
                         LaunchNote = familyShared
-                            ? "Shared through Steam Family. Launches through Steam."
+                            ? SteamAccountLibrary.FamilyNote(SharedBy(appId), "Launches through Steam.")
                             : !ownershipVerified
                                 ? "Installed files found. Ownership is unverified for the active Steam account."
                                 : ownedByActiveAccount
@@ -299,11 +316,14 @@ public sealed class SteamAdapter : IStoreAdapter, IInstalledSteamManifestSource,
         // and for hygiene on installed ACF rows. GetOwnedGames names never
         // invent type=game: unknown ids stay empty-type and drop until
         // appinfo or the Steam store supplies a real game type.
-        var ownedIds = authoritativeOwnedAppIds is null
+        // With nothing else known (Steam closed, no sign-in, a private profile), the family's own list still lists its
+        // games: they are the family's to lend, not a guess at the account's own.
+        var listedOwned = authoritativeOwnedAppIds ?? (familyAppIds.Count > 0 ? familyAppIds : null);
+        var ownedIds = listedOwned is null
             ? new HashSet<string>(StringComparer.Ordinal)
-            : authoritativeOwnedAppIds.ToHashSet(StringComparer.Ordinal);
+            : listedOwned.ToHashSet(StringComparer.Ordinal);
         foreach (var extra in SteamAccountLibrary.UninstalledOwnedGames(
-                     ownedIds, presentAppIds, appNames, authoritativeOwnedAppIds, familyAppIds, heldInHubs))
+                     ownedIds, presentAppIds, appNames, listedOwned, familyAppIds, heldInHubs, SharedBy))
         {
             if (IsAlwaysHiddenSteamEntry(extra.LaunchTarget ?? "", extra.Title, null))
                 continue;

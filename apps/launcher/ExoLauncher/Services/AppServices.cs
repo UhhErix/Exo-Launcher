@@ -122,6 +122,7 @@ public sealed class AppServices
         EpicAdapter.OwnedLibraryCacheUpdated += OnEpicOwnedLibraryUpdated;
         EpicPlaytime.CachedMinutesUpdated += OnEpicPlaytimeUpdated;
         SteamClientReady.ClientReady += OnSteamClientReady;
+        SteamSignIn.SteamWebsiteToken.Arrived += OnSteamWebsiteToken;
 
         return built;
     }
@@ -349,6 +350,7 @@ public sealed class AppServices
         EpicPlaytime.CachedMinutesUpdated -= OnEpicPlaytimeUpdated;
         EpicAdapter.OwnedLibraryCacheUpdated -= OnEpicOwnedLibraryUpdated;
         SteamClientReady.ClientReady -= OnSteamClientReady;
+        SteamSignIn.SteamWebsiteToken.Arrived -= OnSteamWebsiteToken;
         GogOwnedLibrary.CacheUpdated -= OnGogOwnedLibraryUpdated;
         GogOwnedLibrary.Dispose();
         if (_library.IsValueCreated)
@@ -390,6 +392,9 @@ public sealed class AppServices
     }
 
     private void OnEpicOwnedLibraryUpdated() => RefreshOwnedStore(Models.StoreKind.Epic);
+
+    /// <summary>The Steam website sign-in's token arrived: the Steam library reads its family with it.</summary>
+    private void OnSteamWebsiteToken() => RefreshOwnedStore(Models.StoreKind.Steam);
 
     /// <summary>A Steam client that was still signing in now answers ownership.</summary>
     private void OnSteamClientReady()

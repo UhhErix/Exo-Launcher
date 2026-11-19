@@ -1,6 +1,7 @@
 # Changelog
 
 ## 3.26.0 — November 14, 2026
+- **Your Steam Family's games all show, and say whose they are.** Exo now reads your family's whole shared library from Steam's family service, installed or not, with the Steam website sign-in in Settings › Game stores when you don't use Exo's own Steam sign-in, so a game nobody on this PC has opened yet still shows with its name and cover. Before, a family game showed only once Steam on this PC had seen it, and a Steam update that moved its app list cut a family from 110 games to 3. A game's page says who shares it, games an owner keeps private are left out, and when Steam is closed or the sign-in has lapsed the family's last list stands until Steam answers again. _Checked in code only._
 - **Goeist, Exo's new type.** Exo and Exo Mouse use Goeist, a rounded take on Geist: the same proportions, every corner softened. _Checked in code only._
 - **Glass edges, not grey outlines.** Panels, menus and controls are lit at their edge like glass, brightest along the top, instead of a grey line all the way round, and lines inside a panel are faint enough that they never stack into a grey band. _Checked in code only._
 - **Old frame generation installs come out.** A game that got Exo Bridge from an earlier test build (Hell Is Us) had it left behind for good; Exo now takes it out by its record and puts today's frame generation in. _Checked in code only._

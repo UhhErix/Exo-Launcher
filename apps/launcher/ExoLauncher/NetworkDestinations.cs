@@ -32,6 +32,7 @@ internal static class NetworkDestinations
     internal const string Gog = "GOG (gameplay.gog.com, api.gog.com, gamesdb.gog.com, galaxy-library.gog.com)";
     internal const string SteamAccount = "Steam sign-in and your account's library (api.steampowered.com)";
     internal const string SteamProfile = "Steam public game list (steamcommunity.com)";
+    internal const string SteamWebsiteFamily = "Steam Family's shared games with the Steam website sign-in (api.steampowered.com)";
     internal const string TrackerGg = "tracker.gg";
     internal const string PcGamingWiki = "PCGamingWiki";
     internal const string CoverArt = "Cover art: Steam CDN and Steam store search, Epic store catalog, GOG, Microsoft Store catalog, and the image servers a store's own data points to";
@@ -128,6 +129,8 @@ internal static class NetworkDestinations
         new("api.steampowered.com", CoverArt),
         // SteamWebApi (Services/SteamSignIn): Exo's own Steam sign-in, then the account's games, Steam Family and achievements with its token.
         new("api.steampowered.com", SteamAccount),
+        // SteamCommunityGames: without Exo's Steam sign-in, the Steam website sign-in's token (SteamWebsiteToken) reads the same library and family.
+        new("api.steampowered.com", SteamWebsiteFamily),
         // AchievementWatch: a game's global unlock percentages, by app id, when its watch starts.
         new("api.steampowered.com", SteamAchievementStats),
         new("*.epicgames.com", CoverArt),

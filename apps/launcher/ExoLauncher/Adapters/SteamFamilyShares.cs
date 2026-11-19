@@ -1,15 +1,17 @@
 using System.Text.Json;
 using ExoLauncher.Adapters.Cli;
 using ExoLauncher.Helpers;
+using SharedApp = ExoLauncher.Adapters.SteamFamilyLibrary.SharedApp;
 
 namespace ExoLauncher.Adapters;
 
 /// <summary>
-/// The games a Steam account's family shares with it, as the running Steam client last listed them, kept per account
-/// (<c>steam-family.json</c>). Only the client knows family licenses (the Web API leaves them out), and Exo closes an
-/// idle Steam: without this, every family game left the library until Steam ran again (107 of 217 games). Written
-/// only from a client answer; read only while the client can't answer. A share someone stops is dropped at Steam's next
-/// answer, and a game bought since counts as the account's own.
+/// The games a Steam account's family shares with it, as Steam's family service or the running client last listed
+/// them, kept per account (<c>steam-family.json</c>: each game's id, name and owners' account ids). Exo closes an idle
+/// Steam and the family service needs a sign-in: without this, every family game left the library until Steam ran again
+/// (107 of 217 games). Written only from an answer that can see the whole family (<see cref="SteamFamilyLibrary.Resolve"/>);
+/// read while none can. A share someone stops is dropped at the next answer, and a game bought since counts as the
+/// account's own. The file written before 3.26.0 (ids only) still reads.
 /// </summary>
 internal static class SteamFamilyShares
 {
@@ -17,20 +19,26 @@ internal static class SteamFamilyShares
 
     private static readonly object Gate = new();
 
-    /// <summary>The client's current family list for <paramref name="scope"/> (empty when the account left its family).</summary>
-    internal static void Remember(string? scope, IReadOnlySet<string> appIds)
+    private sealed record Kept(string? Name, string[]? Owners);
+
+    /// <summary>The current family list for <paramref name="scope"/> (empty when the account left its family).</summary>
+    internal static void Remember(string? scope, IReadOnlyDictionary<string, SharedApp> apps)
     {
         if (string.IsNullOrWhiteSpace(scope)) return;
         lock (Gate)
         {
             var all = Read();
-            if (all.TryGetValue(scope, out var kept) && kept.SetEquals(appIds)) return;
-            all[scope] = appIds.ToHashSet(StringComparer.Ordinal);
+            if (all.TryGetValue(scope, out var kept) && Same(kept, apps)) return;
+            all[scope] = apps.ToDictionary(p => p.Key, p => p.Value, StringComparer.Ordinal);
             try
             {
                 Directory.CreateDirectory(Path.GetDirectoryName(FilePath)!);
                 var temp = FilePath + ".tmp";
-                File.WriteAllText(temp, JsonSerializer.Serialize(all.ToDictionary(p => p.Key, p => p.Value.Order(StringComparer.Ordinal).ToArray())));
+                var json = all.ToDictionary(
+                    p => p.Key,
+                    p => p.Value.OrderBy(a => a.Key, StringComparer.Ordinal).ToDictionary(
+                        a => a.Key, a => new Kept(a.Value.Name, a.Value.OwnerAccountIds.Count == 0 ? null : a.Value.OwnerAccountIds.ToArray())));
+                File.WriteAllText(temp, JsonSerializer.Serialize(json, new JsonSerializerOptions { DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull }));
                 File.Move(temp, FilePath, overwrite: true);
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
@@ -40,21 +48,54 @@ internal static class SteamFamilyShares
         }
     }
 
-    /// <summary>The family list the client last gave for <paramref name="scope"/>, or null when it never did.</summary>
-    internal static IReadOnlySet<string>? Recall(string? scope)
+    /// <summary>The family list last kept for <paramref name="scope"/>, or null when none ever was.</summary>
+    internal static IReadOnlyDictionary<string, SharedApp>? Recall(string? scope)
     {
         if (string.IsNullOrWhiteSpace(scope)) return null;
         lock (Gate) return Read().TryGetValue(scope, out var kept) ? kept : null;
     }
 
-    private static Dictionary<string, HashSet<string>> Read()
+    private static bool Same(Dictionary<string, SharedApp> kept, IReadOnlyDictionary<string, SharedApp> apps) =>
+        kept.Count == apps.Count && apps.All(p => kept.TryGetValue(p.Key, out var k) &&
+            k.Name == p.Value.Name && k.OwnerAccountIds.SequenceEqual(p.Value.OwnerAccountIds));
+
+    private static Dictionary<string, Dictionary<string, SharedApp>> Read()
     {
+        var all = new Dictionary<string, Dictionary<string, SharedApp>>(StringComparer.Ordinal);
         try
         {
-            if (!File.Exists(FilePath)) return new(StringComparer.Ordinal);
-            var raw = JsonSerializer.Deserialize<Dictionary<string, string[]>>(File.ReadAllText(FilePath));
-            return raw?.ToDictionary(p => p.Key, p => p.Value.Where(SteamProtocol.IsValidAppId).ToHashSet(StringComparer.Ordinal), StringComparer.Ordinal)
-                ?? new(StringComparer.Ordinal);
+            if (!File.Exists(FilePath)) return all;
+            using var doc = JsonDocument.Parse(File.ReadAllText(FilePath));
+            if (doc.RootElement.ValueKind != JsonValueKind.Object) return all;
+            foreach (var scope in doc.RootElement.EnumerateObject())
+            {
+                var apps = new Dictionary<string, SharedApp>(StringComparer.Ordinal);
+                if (scope.Value.ValueKind == JsonValueKind.Array)
+                {
+                    // Before 3.26.0: the ids alone.
+                    foreach (var id in scope.Value.EnumerateArray())
+                        if (id.ValueKind == JsonValueKind.String && id.GetString() is { } text && SteamProtocol.IsValidAppId(text))
+                            apps[text] = new SharedApp(text, null, []);
+                }
+                else if (scope.Value.ValueKind == JsonValueKind.Object)
+                {
+                    foreach (var app in scope.Value.EnumerateObject())
+                    {
+                        if (!SteamProtocol.IsValidAppId(app.Name) || app.Value.ValueKind != JsonValueKind.Object) continue;
+                        var name = app.Value.TryGetProperty("Name", out var n) && n.ValueKind == JsonValueKind.String && !string.IsNullOrWhiteSpace(n.GetString())
+                            ? n.GetString()
+                            : null;
+                        var owners = app.Value.TryGetProperty("Owners", out var o) && o.ValueKind == JsonValueKind.Array
+                            ? o.EnumerateArray().Where(e => e.ValueKind == JsonValueKind.String).Select(e => e.GetString()!)
+                                .Where(id => id.Length is > 0 and <= 10 && id.All(char.IsAsciiDigit)).ToArray()
+                            : [];
+                        apps[app.Name] = new SharedApp(app.Name, name, owners);
+                    }
+                }
+                else continue;
+                all[scope.Name] = apps;
+            }
+            return all;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)
         {

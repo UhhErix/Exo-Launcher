@@ -181,11 +181,14 @@ export function GameStats({
   const size = formatSize(selected.sizeBytes)
   const known = (value: string) => value !== '—'
   const riot = useRiotLifetime(selected)
+  // A Steam Family game says whose it is: the member's name, or the family when Steam names nobody.
+  const sharedBy = selected.familyShared ? (selected.sharedBy || 'Steam Family') : null
   // Stale first: what is known shows at once, and nothing stands in for the extras while they load.
-  if (!shownAny([played, last, size].filter(known).length, achievements, driveHeat, riot.facts.length, riot.saved)) return null
+  if (!shownAny([played, last, size, sharedBy ?? '—'].filter(known).length, achievements, driveHeat, riot.facts.length, riot.saved)) return null
   return (
     <div className="exo-game-stats" aria-busy={loading || undefined}>
       <dl className="exo-game-facts">
+        {sharedBy && <Fact label="Shared by" value={sharedBy} />}
         {known(played) && <Fact label="Played" value={played} />}
         {known(last) && <Fact label="Last played" value={last} />}
         {known(size) && <Fact label={selected.installed ? 'Storage' : 'Size'} value={size} />}
