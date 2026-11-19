@@ -70,8 +70,8 @@ public sealed partial class WebHostBridge
     private async Task<GameEntry?> PropertiesGameAsync(string? id)
     {
         if (string.IsNullOrWhiteSpace(id)) return null;
-        // The library's account checks and every read below (the game's folder, Steam's config files, appinfo.vdf) run
-        // off the UI thread: each open of Properties read appinfo.vdf there.
+        // The library's account checks and every read below (the game's folder, Steam's config files, appinfo) run
+        // off the UI thread: each open of Properties read appinfo there.
         await Task.Run(() => _services.Library.GetLibraryAsync()).ConfigureAwait(true);
         return _services.Library.Find(id) is { Installed: true } game ? game : null;
     }
@@ -157,11 +157,9 @@ public sealed partial class WebHostBridge
         view.SizeBytes = manifest.SizeOnDisk is > 0 ? manifest.SizeOnDisk : view.SizeBytes;
 
         var id = uint.Parse(appId, CultureInfo.InvariantCulture);
-        var appInfo = ReadSharedBytes(Path.Combine(root, "appcache", "appinfo.vdf"));
-        var app = appInfo is null ? SteamKeyValues.Empty
-            : SteamAppInfoNames.ReadApps(appInfo, new HashSet<uint> { id }).GetValueOrDefault(id) ?? SteamKeyValues.Empty;
+        var app = SteamAppInfoNames.ReadApps(root, new HashSet<uint> { id }).GetValueOrDefault(id) ?? SteamKeyValues.Empty;
         var dlcIds = SteamGameProperties.DlcIds(app).ToHashSet();
-        var dlcRecords = appInfo is null || dlcIds.Count == 0 ? new Dictionary<uint, SteamKeyValues>() : SteamAppInfoNames.ReadApps(appInfo, dlcIds);
+        var dlcRecords = SteamAppInfoNames.ReadApps(root, dlcIds);
         // Every listed DLC is asked about: one without files is held by a license only Steam knows.
         var live = ProcessHelper.IsProcessRunning("steam") && SteamClientReady.ReadActiveUser() != 0
             ? await SteamClientIpc.QueryPropertiesAsync(appId, dlcIds.Order().Take(1000), ct).ConfigureAwait(false)
@@ -531,22 +529,6 @@ public sealed partial class WebHostBridge
 
     private static bool IsSteamBranch(string value) =>
         value.Length is > 0 and <= 64 && value.All(c => char.IsAsciiLetterOrDigit(c) || c is '_' or '-' or '.');
-
-    private static byte[]? ReadSharedBytes(string path)
-    {
-        try
-        {
-            using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
-            if (stream.Length > 256L * 1024 * 1024) return null;
-            var bytes = new byte[stream.Length];
-            stream.ReadExactly(bytes);
-            return bytes;
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-        {
-            return null;
-        }
-    }
 
     /// <summary>A library folder as its drive ("D:"), numbered when one drive holds two.</summary>
     private static string DriveLabel(string path, IReadOnlyList<string> all, int index)

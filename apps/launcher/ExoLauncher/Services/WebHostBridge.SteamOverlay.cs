@@ -33,7 +33,7 @@ public sealed partial class WebHostBridge
 
     /// <summary>
     /// After a library read: brings new Steam games to Exo's rules, in the background. Library pushes come in bursts (a
-    /// cover warm raises one per batch) and each pass reads localconfig.vdf and appinfo.vdf whole, so a burst is one pass,
+    /// cover warm raises one per batch) and each pass reads localconfig.vdf and appinfo whole, so a burst is one pass,
     /// 5 s after its first push; a push during the pass asks for one more.
     /// </summary>
     private void SteamOverlaySoon()
@@ -238,8 +238,7 @@ public sealed partial class WebHostBridge
     private static Dictionary<string, SteamKeyValues> InstalledAppInfo(string root, IReadOnlyCollection<string> installed)
     {
         var ids = installed.Select(id => uint.TryParse(id, out var n) ? n : 0).Where(n => n != 0).ToHashSet();
-        if (ids.Count == 0 || ReadSharedBytes(Path.Combine(root, "appcache", "appinfo.vdf")) is not { } appInfo) return [];
-        return SteamAppInfoNames.ReadApps(appInfo, ids).ToDictionary(a => a.Key.ToString(System.Globalization.CultureInfo.InvariantCulture), a => a.Value, StringComparer.Ordinal);
+        return SteamAppInfoNames.ReadApps(root, ids).ToDictionary(a => a.Key.ToString(System.Globalization.CultureInfo.InvariantCulture), a => a.Value, StringComparer.Ordinal);
     }
 
 

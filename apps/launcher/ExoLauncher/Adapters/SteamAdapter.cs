@@ -85,7 +85,7 @@ public sealed class SteamAdapter : IStoreAdapter, IInstalledSteamManifestSource,
         LastOwnedPlaytimeMinutes = ownedPlaytime;
         var presentAppIds = new HashSet<string>(StringComparer.Ordinal);
         var appNames = new Dictionary<string, SteamAppInfoNames.Entry>(StringComparer.Ordinal);
-        foreach (var pair in SteamAppInfoNames.Load(Path.Combine(steamRoot, "appcache", "appinfo.vdf")))
+        foreach (var pair in SteamAppInfoNames.Load(steamRoot))
             appNames[pair.Key] = pair.Value;
         LastAppInfo = appNames;
         // The running Steam client is the complete license list. The Web API
@@ -350,7 +350,7 @@ public sealed class SteamAdapter : IStoreAdapter, IInstalledSteamManifestSource,
     /// Candidate ids for the Steam-client license check: every installed
     /// manifest (any type — an installed tool must not flip to "Buy again"),
     /// plus game ids from localconfig, the account's librarycache,
-    /// appinfo.vdf, and the verified catalog. Uninstalled candidates must pass
+    /// appinfo, and the verified catalog. Uninstalled candidates must pass
     /// <see cref="CatalogHygiene.IsOwnedUninstalledSteamGame"/> so DLC, tools,
     /// soundtracks and companion apps never become a row. packageinfo.vdf is not read: appinfo already carries
     /// every app the client has licensed metadata for.

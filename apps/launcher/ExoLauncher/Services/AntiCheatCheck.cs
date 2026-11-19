@@ -237,7 +237,7 @@ internal static partial class AntiCheatCheck
         Vac,
         /// <summary>An anti-cheat page or a Deck test about anti-cheat, the anti-cheat not named.</summary>
         Listed,
-        /// <summary>Steam can't say: no app id, appinfo.vdf unreadable or of a format Exo doesn't read, the app not in it.</summary>
+        /// <summary>Steam can't say: no app id, appinfo unreadable or of a format Exo doesn't read, the app not in it.</summary>
         CannotTell,
     }
 
@@ -305,7 +305,7 @@ internal static partial class AntiCheatCheck
         Decide(ForStore(game.Store), KnownGames.GetValueOrDefault(game.Id), root is not null, walked, root is null ? null : ServiceIn(root, services),
             SteamSays(game, steam), ByTitle(game));
 
-    /// <summary>Where Steam's word comes from: Steam's own appinfo.vdf, read once per change of the file (<see cref="SteamVacFile"/>).</summary>
+    /// <summary>Where Steam's word comes from: Steam's own appinfo, read once per change of its files (<see cref="SteamVacFile"/>).</summary>
     internal static Func<uint, SteamWord> SteamSource { get; set; } = SteamVacFile.Default.Word;
 
     /// <summary>Riot's games: by store, installed under a Riot Games folder, or a Riot program as the game's own.</summary>
@@ -410,26 +410,27 @@ internal static partial class AntiCheatCheck
     }
 
     /// <summary>
-    /// Steam's appinfo.vdf read whole once per change of its size or time (as Exo Shaders' Vac.cs keeps it), every app's
-    /// word kept from that one parse. A read that fails, or one of a file Steam is still writing (it ends before its last
-    /// record), is tried again after <see cref="RetryAfter"/>, the last good words kept meanwhile; a format Exo doesn't
-    /// read, or a file over <see cref="MaxBytes"/>, says "cannot tell" for every app (possibly Valve Anti-Cheat), never
-    /// unknown. A whole-file failure is logged once.
+    /// Steam's appinfo (its shards, or the one appinfo.vdf of older Steam) read whole once per change of any file's size,
+    /// time or presence (as Exo Shaders' Vac.cs keeps it), every app's word kept from that one parse. A read that fails, a
+    /// file gone between listing and reading, or a file Steam is still writing (it ends before its last record, or a
+    /// record's hash doesn't match) is tried again after <see cref="RetryAfter"/>, the last good words kept meanwhile; a
+    /// format Exo doesn't read, or files over <see cref="MaxBytes"/> together, say "cannot tell" for every app (possibly
+    /// Valve Anti-Cheat), never unknown. A whole-read failure is logged once.
     /// </summary>
-    internal sealed class SteamVacFile(Func<string?> path, Func<DateTime>? now = null, long maxBytes = SteamVacFile.MaxBytes)
+    internal sealed class SteamVacFile(Func<IReadOnlyList<string>> files, Func<DateTime>? now = null, long maxBytes = SteamVacFile.MaxBytes)
     {
         internal const long MaxBytes = 256L * 1024 * 1024;
         internal static readonly TimeSpan RetryAfter = TimeSpan.FromSeconds(30);
-        internal static readonly SteamVacFile Default = new(() => SteamInstallation.ResolveRoot() is { } root ? Path.Combine(root, "appcache", "appinfo.vdf") : null);
+        internal static readonly SteamVacFile Default = new(() => SteamInstallation.ResolveRoot() is { } root ? SteamAppInfoNames.Files(root) : []);
 
         private readonly Lock _gate = new();
         private readonly Func<DateTime> _now = now ?? (() => DateTime.UtcNow);
         private Dictionary<uint, SteamWord> _words = [];
-        private (long Length, long Ticks)? _stamp;
+        private string? _stamp;
         private DateTime _retryAt;
         private string? _warned;
 
-        /// <summary>How many times the file was parsed (the tests count them).</summary>
+        /// <summary>How many times the files were parsed (the tests count them).</summary>
         internal int Parses { get; private set; }
 
         internal SteamWord Word(uint appId)
@@ -443,50 +444,53 @@ internal static partial class AntiCheatCheck
 
         private void Load()
         {
-            var file = path();
-            (long, long) stamp;
-            try
+            var list = files();
+            if (list.Count == 0)
             {
-                var info = file is null ? null : new FileInfo(file);
-                if (info is not { Exists: true })
+                Fail("Steam's app list isn't there", keepWords: false);
+                return;
+            }
+            var stamp = SteamAppInfoNames.Stamp(list);
+            if (stamp is null)
+            {
+                Fail("Steam's app list can't be read: Steam is rewriting it", keepWords: true);
+                return;
+            }
+            if (_stamp == stamp || _now() < _retryAt) return;
+            var all = new List<byte[]>(list.Count);
+            long total = 0;
+            foreach (var file in list)
+            {
+                byte[] bytes;
+                try
                 {
-                    Fail("Steam's app list isn't there", keepWords: false);
+                    using var stream = new FileStream(file, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+                    total += stream.Length;
+                    if (total > maxBytes)
+                    {
+                        Settle(stamp, [], "Steam's app list is larger than Exo reads");
+                        return;
+                    }
+                    bytes = new byte[stream.Length];
+                    stream.ReadExactly(bytes);
+                }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+                {
+                    Fail("Steam's app list can't be read: " + ex.GetType().Name, keepWords: true);
                     return;
                 }
-                stamp = (info.Length, info.LastWriteTimeUtc.Ticks);
-                if (_stamp == stamp || _now() < _retryAt) return;
-                if (info.Length > maxBytes)
+                if (!SteamAppInfoNames.IsKnownFormat(bytes))
                 {
-                    Settle(stamp, [], "Steam's app list is larger than Exo reads");
+                    Settle(stamp, [], "Steam's app list is of a format Exo doesn't read");
                     return;
                 }
-            }
-            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException)
-            {
-                Fail("Steam's app list can't be read: " + ex.GetType().Name, keepWords: true);
-                return;
-            }
-            byte[] bytes;
-            try
-            {
-                using var stream = new FileStream(file!, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
-                bytes = new byte[stream.Length];
-                stream.ReadExactly(bytes);
-            }
-            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-            {
-                Fail("Steam's app list can't be read: " + ex.GetType().Name, keepWords: true);
-                return;
-            }
-            if (!SteamAppInfoNames.IsKnownFormat(bytes))
-            {
-                Settle(stamp, [], "Steam's app list is of a format Exo doesn't read");
-                return;
+                all.Add(bytes);
             }
             var words = new Dictionary<uint, SteamWord>();
             Parses++;
-            if (!SteamAppInfoNames.EachApp(bytes, (id, app) => words[id] = FromAppInfo(app)))
+            foreach (var bytes in all)
             {
+                if (SteamAppInfoNames.EachApp(bytes, (id, app) => words[id] = FromAppInfo(app))) continue;
                 // Steam is writing it: tried again soon, never kept.
                 _retryAt = _now() + RetryAfter;
                 AppLog.Debug("Anti-cheat: Steam's app list ended early; it is read again shortly.");
@@ -495,7 +499,7 @@ internal static partial class AntiCheatCheck
             Settle(stamp, words, null);
         }
 
-        private void Settle((long, long) stamp, Dictionary<uint, SteamWord> words, string? problem)
+        private void Settle(string stamp, Dictionary<uint, SteamWord> words, string? problem)
         {
             _stamp = stamp;
             _words = words;
