@@ -1,6 +1,7 @@
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.Json;
+using ExoLauncher.Adapters;
 
 namespace ExoLauncher.SteamIpc;
 
@@ -10,39 +11,36 @@ namespace ExoLauncher.SteamIpc;
 /// SetAppAutoUpdateBehavior, JoinAppContentBeta, ToggleAppSteamCloudEnabled ...).
 /// Exo never edits Steam's files for these; Steam writes its own manifests.
 ///
-/// Every method is found by the 32-bit name hash its IPC stub sends, read out of
-/// steamclient64 (IClientAppManagerMap and IClientRemoteStorageMap): a moved
-/// method is still found, and a method that is missing or shows up twice is
-/// refused instead of guessed. Argument shapes come from the same stubs.
+/// Every method is found from <c>steamclient64.dll</c> by decoding the x64 RIP-relative
+/// <c>LEA</c> ASCII method and interface names inside each IPC stub (with 24-bit hash
+/// prefix disambiguation for overloaded names and 24-bit fallback if needed). A method
+/// that is missing or matches more than once is refused instead of guessed.
 /// </summary>
 internal static partial class Program
 {
     // IClientEngine slot that returns IClientRemoteStorage (checked by RTTI before use).
     internal const int EngineGetIClientRemoteStorage = 24;
 
-    // IClientAppManager methods by name hash.
-    private const uint HashBIsDlcEnabled = 0x143d455d;      // bool (app, dlc, bool* )
-    private const uint HashSetDlcEnabled = 0x0ec3c8a6;      // void (app, dlc, bool)
-    private const uint HashIsAppDlcInstalled = 0xcdbd8c75;  // bool (app, dlc)
-    private const uint HashGetCurrentLanguage = 0x600aa904; // ELanguage (app)
-    private const uint HashSetCurrentLanguage = 0x8050d9d2; // int (app, ELanguage)
-    private const uint HashGetActiveBeta = 0x5062a05a;      // bool (app, char*, int)
-    private const uint HashSetActiveBeta = 0x4d0b20cf;      // bool (app, const char*)
-    private const uint HashCheckBetaPassword = 0x75217c37;  // bool (app, const char*)
-    private const uint HashGetAutoUpdate = 0x34e964d2;      // int (app)
-    private const uint HashSetAutoUpdate = 0xc5d6e59d;      // bool (app, int)
-    private const uint HashGetBackground = 0x7145c838;      // int (app)
-    private const uint HashSetBackground = 0xfe722135;      // bool (app, int)
-    private const uint HashNumLibraryFolders = 0xab50eb2f;  // int ()
-    private const uint HashLibraryFolderPath = 0xf27c5d48;  // int (index, char*, int)
-    private const uint HashAppLibraryFolder = 0x166ebaa1;   // int (app)
-    private const uint HashMoveApp = 0x47804a94;            // int (app, folder index)
-    private const uint HashMoveProgress = 0x55236ba9;       // bool (app, u64*, u64*, u32*)
-
-    // IClientRemoteStorage methods by name hash.
-    private const uint HashCloudForAccount = 0x8694e98e;    // bool ()
-    private const uint HashCloudForApp = 0x88a72799;        // bool (app)
-    private const uint HashSetCloudForApp = 0x2eaada04;     // void (app, bool)
+    private static SteamIpcStubResolver.StubSpec SpecBIsDlcEnabled => SteamIpcStubResolver.BIsDlcEnabled;
+    private static SteamIpcStubResolver.StubSpec SpecSetDlcEnabled => SteamIpcStubResolver.SetDlcEnabled;
+    private static SteamIpcStubResolver.StubSpec SpecIsAppDlcInstalled => SteamIpcStubResolver.IsAppDlcInstalled;
+    private static SteamIpcStubResolver.StubSpec SpecGetCurrentLanguage => SteamIpcStubResolver.GetCurrentLanguage;
+    private static SteamIpcStubResolver.StubSpec SpecSetCurrentLanguage => SteamIpcStubResolver.SetCurrentLanguage;
+    private static SteamIpcStubResolver.StubSpec SpecGetActiveBeta => SteamIpcStubResolver.GetActiveBeta;
+    private static SteamIpcStubResolver.StubSpec SpecSetActiveBeta => SteamIpcStubResolver.SetActiveBeta;
+    private static SteamIpcStubResolver.StubSpec SpecCheckBetaPassword => SteamIpcStubResolver.CheckBetaPassword;
+    private static SteamIpcStubResolver.StubSpec SpecGetAutoUpdate => SteamIpcStubResolver.GetAutoUpdate;
+    private static SteamIpcStubResolver.StubSpec SpecSetAutoUpdate => SteamIpcStubResolver.SetAutoUpdate;
+    private static SteamIpcStubResolver.StubSpec SpecGetBackground => SteamIpcStubResolver.GetBackground;
+    private static SteamIpcStubResolver.StubSpec SpecSetBackground => SteamIpcStubResolver.SetBackground;
+    private static SteamIpcStubResolver.StubSpec SpecNumLibraryFolders => SteamIpcStubResolver.NumLibraryFolders;
+    private static SteamIpcStubResolver.StubSpec SpecLibraryFolderPath => SteamIpcStubResolver.LibraryFolderPath;
+    private static SteamIpcStubResolver.StubSpec SpecAppLibraryFolder => SteamIpcStubResolver.AppLibraryFolder;
+    private static SteamIpcStubResolver.StubSpec SpecMoveApp => SteamIpcStubResolver.MoveApp;
+    private static SteamIpcStubResolver.StubSpec SpecMoveProgress => SteamIpcStubResolver.MoveProgress;
+    private static SteamIpcStubResolver.StubSpec SpecCloudForAccount => SteamIpcStubResolver.CloudForAccount;
+    private static SteamIpcStubResolver.StubSpec SpecCloudForApp => SteamIpcStubResolver.CloudForApp;
+    private static SteamIpcStubResolver.StubSpec SpecSetCloudForApp => SteamIpcStubResolver.SetCloudForApp;
 
     [UnmanagedFunctionPointer(CallingConvention.ThisCall, CharSet = CharSet.Ansi)]
     private delegate IntPtr GetClientInterfaceFn(IntPtr self, int user, int pipe, string version);
@@ -113,25 +111,25 @@ internal static partial class Program
             {
                 json.WriteStartObject();
                 json.WriteBoolean("ok", true);
-                if (Find<AppIntFn>(manager, HashGetAutoUpdate) is { } autoUpdate)
+                if (Find<AppIntFn>(manager, SpecGetAutoUpdate) is { } autoUpdate)
                     json.WriteNumber("autoUpdate", autoUpdate(manager, appId));
-                if (Find<AppIntFn>(manager, HashGetBackground) is { } background)
+                if (Find<AppIntFn>(manager, SpecGetBackground) is { } background)
                     json.WriteNumber("background", background(manager, appId));
-                if (Find<AppIntFn>(manager, HashGetCurrentLanguage) is { } language)
+                if (Find<AppIntFn>(manager, SpecGetCurrentLanguage) is { } language)
                     json.WriteNumber("language", language(manager, appId));
-                if (Find<AppBufferFn>(manager, HashGetActiveBeta) is { } activeBeta)
+                if (Find<AppBufferFn>(manager, SpecGetActiveBeta) is { } activeBeta)
                     json.WriteString("beta", ReadString((buffer, length) => activeBeta(manager, appId, buffer, length)) ?? "");
                 if (storage != IntPtr.Zero &&
-                    Find<NoArgBoolFn>(storage, HashCloudForAccount) is { } cloudAccount &&
-                    Find<AppBoolFn>(storage, HashCloudForApp) is { } cloudApp)
+                    Find<NoArgBoolFn>(storage, SpecCloudForAccount) is { } cloudAccount &&
+                    Find<AppBoolFn>(storage, SpecCloudForApp) is { } cloudApp)
                 {
                     json.WriteBoolean("cloudAccount", cloudAccount(storage));
                     json.WriteBoolean("cloud", cloudApp(storage, appId));
                 }
-                if (Find<AppIntFn>(manager, HashAppLibraryFolder) is { } appFolder)
+                if (Find<AppIntFn>(manager, SpecAppLibraryFolder) is { } appFolder)
                     json.WriteNumber("folder", appFolder(manager, appId));
-                if (Find<NoArgIntFn>(manager, HashNumLibraryFolders) is { } folderCount &&
-                    Find<FolderPathFn>(manager, HashLibraryFolderPath) is { } folderPath)
+                if (Find<NoArgIntFn>(manager, SpecNumLibraryFolders) is { } folderCount &&
+                    Find<FolderPathFn>(manager, SpecLibraryFolderPath) is { } folderPath)
                 {
                     json.WriteStartArray("folders");
                     var count = Math.Clamp(folderCount(manager), 0, 64);
@@ -139,14 +137,14 @@ internal static partial class Program
                         json.WriteStringValue(ReadString((buffer, length) => folderPath(manager, index, buffer, length) > 0) ?? "");
                     json.WriteEndArray();
                 }
-                if (Find<MoveProgressFn>(manager, HashMoveProgress) is { } move &&
+                if (Find<MoveProgressFn>(manager, SpecMoveProgress) is { } move &&
                     move(manager, appId, out var moved, out var toMove, out _) && toMove > 0)
                 {
                     json.WriteNumber("moveDone", moved);
                     json.WriteNumber("moveTotal", toMove);
                 }
-                var enabled = Find<AppDlcOutFn>(manager, HashBIsDlcEnabled);
-                var installed = Find<AppDlcFn>(manager, HashIsAppDlcInstalled);
+                var enabled = Find<AppDlcOutFn>(manager, SpecBIsDlcEnabled);
+                var installed = Find<AppDlcFn>(manager, SpecIsAppDlcInstalled);
                 // For a DLC with files, IsAppDlcInstalled says only whether they are on disk: an owned DLC not downloaded
                 // yet read as unknown and got no switch. Ownership comes from the public ISteamApps, as `owned` asks it.
                 var owns = dlcs.Count > 0 ? OwnershipProbe() : null;
@@ -199,22 +197,22 @@ internal static partial class Program
             var code = what switch
             {
                 "dlc" when uint.TryParse(Arg(3), out var dlc) && Arg(4) is "0" or "1" =>
-                    Call<AppDlcSetFn>(manager, HashSetDlcEnabled, set => set(manager, appId, dlc, Arg(4) == "1")),
+                    Call<AppDlcSetFn>(manager, SpecSetDlcEnabled, set => set(manager, appId, dlc, Arg(4) == "1")),
                 "beta" when Arg(3) is { } beta && IsBranchName(beta) =>
-                    CallString(manager, HashSetActiveBeta, appId, beta == "-" ? "" : beta),
+                    CallString(manager, SpecSetActiveBeta, appId, beta == "-" ? "" : beta),
                 "betacode" => Console.In.ReadLine()?.Trim() is { Length: > 0 and <= 256 } secret
-                    ? CallString(manager, HashCheckBetaPassword, appId, secret)
+                    ? CallString(manager, SpecCheckBetaPassword, appId, secret)
                     : 2,
                 "autoupdate" when int.TryParse(Arg(3), out var behavior) && behavior is >= 0 and <= 3 =>
-                    CallBool<AppSetIntBoolFn>(manager, HashSetAutoUpdate, set => set(manager, appId, behavior)),
+                    CallBool<AppSetIntBoolFn>(manager, SpecSetAutoUpdate, set => set(manager, appId, behavior)),
                 "background" when int.TryParse(Arg(3), out var behavior) && behavior is >= 0 and <= 2 =>
-                    CallBool<AppSetIntBoolFn>(manager, HashSetBackground, set => set(manager, appId, behavior)),
+                    CallBool<AppSetIntBoolFn>(manager, SpecSetBackground, set => set(manager, appId, behavior)),
                 "language" when int.TryParse(Arg(3), out var language) && language is >= 0 and < 64 =>
-                    Call<AppSetIntFn>(manager, HashSetCurrentLanguage, set => set(manager, appId, language)),
+                    Call<AppSetIntFn>(manager, SpecSetCurrentLanguage, set => set(manager, appId, language)),
                 "move" when int.TryParse(Arg(3), out var folder) && folder is >= 0 and < 64 =>
-                    CallBool<AppSetIntFn>(manager, HashMoveApp, move => move(manager, appId, folder) == 0),
+                    CallBool<AppSetIntFn>(manager, SpecMoveApp, move => move(manager, appId, folder) == 0),
                 "cloud" when Arg(3) is "0" or "1" && storage != IntPtr.Zero =>
-                    Call<AppSetBoolFn>(storage, HashSetCloudForApp, set => set(storage, appId, Arg(3) == "1")),
+                    Call<AppSetBoolFn>(storage, SpecSetCloudForApp, set => set(storage, appId, Arg(3) == "1")),
                 _ => 2,
             };
             Note($"Steam IPC set appId={appId}; {what}; exit={code}.");
@@ -230,19 +228,19 @@ internal static partial class Program
     internal static bool IsBranchName(string value) =>
         value == "-" || value.Length is > 0 and <= 64 && value.All(c => char.IsAsciiLetterOrDigit(c) || c is '_' or '-' or '.');
 
-    private static int Call<T>(IntPtr target, uint hash, Action<T> call) where T : Delegate
+    private static int Call<T>(IntPtr target, SteamIpcStubResolver.StubSpec spec, Action<T> call) where T : Delegate
     {
-        if (Find<T>(target, hash) is not { } method) return 1;
+        if (Find<T>(target, spec) is not { } method) return 1;
         call(method);
         return 0;
     }
 
-    private static int CallBool<T>(IntPtr target, uint hash, Func<T, bool> call) where T : Delegate =>
-        Find<T>(target, hash) is { } method ? call(method) ? 0 : 1 : 1;
+    private static int CallBool<T>(IntPtr target, SteamIpcStubResolver.StubSpec spec, Func<T, bool> call) where T : Delegate =>
+        Find<T>(target, spec) is { } method ? call(method) ? 0 : 1 : 1;
 
-    private static int CallString(IntPtr manager, uint hash, uint appId, string text)
+    private static int CallString(IntPtr manager, SteamIpcStubResolver.StubSpec spec, uint appId, string text)
     {
-        if (Find<AppStringFn>(manager, hash) is not { } method) return 1;
+        if (Find<AppStringFn>(manager, spec) is not { } method) return 1;
         var native = Marshal.StringToCoTaskMemUTF8(text);
         try { return method(manager, appId, native) ? 0 : 1; }
         finally { Marshal.ZeroFreeCoTaskMemUTF8(native); }
@@ -261,54 +259,38 @@ internal static partial class Program
         finally { Marshal.FreeHGlobal(buffer); }
     }
 
-    private static T? Find<T>(IntPtr target, uint hash) where T : Delegate
+    private static T? Find<T>(IntPtr target, SteamIpcStubResolver.StubSpec spec) where T : Delegate
     {
-        var slot = FindSlot(target, hash);
+        var slot = FindSlot(target, spec);
         if (slot == IntPtr.Zero)
         {
-            Note($"Steam IPC: method 0x{hash:x8} not found once on this Steam build; skipped.");
+            Note($"Steam IPC: method {spec.InterfaceName}::{spec.MethodName} (0x{spec.HashPrefix24:x8}) not found uniquely on this Steam build; skipped.");
             return null;
         }
         return Marshal.GetDelegateForFunctionPointer<T>(slot);
     }
 
-    /// <summary>
-    /// The one vtable entry whose IPC stub sends <paramref name="hash"/> near its
-    /// start (every stub writes its hash within its first 0x84 bytes on today's
-    /// build). None, or more than one, is <see cref="IntPtr.Zero"/>.
-    /// </summary>
-    private static IntPtr FindSlot(IntPtr target, uint hash)
+    private static IntPtr FindSlot(IntPtr target, SteamIpcStubResolver.StubSpec spec)
     {
         if (target == IntPtr.Zero || SteamclientModule == IntPtr.Zero) return IntPtr.Zero;
-        var moduleEnd = SteamclientModule + ModuleSize(SteamclientModule);
+        var moduleStart = SteamclientModule.ToInt64();
+        var moduleEnd = moduleStart + ModuleSize(SteamclientModule);
         var table = Marshal.ReadIntPtr(target);
-        var found = IntPtr.Zero;
-        var stub = new byte[0xC0];
-        for (var index = 0; index < 192; index++)
-        {
-            var method = Marshal.ReadIntPtr(table, index * IntPtr.Size);
-            if (method < SteamclientModule || method + stub.Length > moduleEnd) break;
-            Marshal.Copy(method, stub, 0, stub.Length);
-            if (!StubSendsHash(stub, hash)) continue;
-            if (found != IntPtr.Zero) return IntPtr.Zero;
-            found = method;
-        }
-        return found;
+        var slots = new long[SteamIpcStubResolver.MaxVtableSlots];
+        for (var i = 0; i < slots.Length; i++)
+            slots[i] = Marshal.ReadIntPtr(table, i * IntPtr.Size).ToInt64();
+        return (IntPtr)SteamIpcStubResolver.FindSlot(slots, moduleStart, moduleEnd, ReadModuleMemory, spec);
     }
 
-    /// <summary>A <c>mov dword ptr [rbp/rsp+disp], hash</c> in the stub's first bytes.</summary>
-    internal static bool StubSendsHash(ReadOnlySpan<byte> stub, uint hash)
+    private static bool ReadModuleMemory(long address, Span<byte> destination)
     {
-        Span<byte> needle = stackalloc byte[4];
-        System.Buffers.Binary.BinaryPrimitives.WriteUInt32LittleEndian(needle, hash);
-        for (var at = stub.IndexOf(needle); at >= 0;)
-        {
-            foreach (var back in (ReadOnlySpan<int>)[3, 4, 6, 7])
-                if (at >= back && stub[at - back] == 0xC7) return true;
-            var next = stub[(at + 1)..].IndexOf(needle);
-            at = next < 0 ? -1 : at + 1 + next;
-        }
-        return false;
+        var moduleStart = SteamclientModule.ToInt64();
+        var moduleEnd = moduleStart + ModuleSize(SteamclientModule);
+        if (address < moduleStart || address + destination.Length > moduleEnd) return false;
+        var temp = new byte[destination.Length];
+        Marshal.Copy((IntPtr)address, temp, 0, temp.Length);
+        temp.CopyTo(destination);
+        return true;
     }
 
     private static long ModuleSize(IntPtr module)

@@ -356,7 +356,7 @@ internal sealed class GameCompressor(AppServices services) : IDisposable
             var files = Walk(root, deep: true, job.Stop.Token);
             var cluster = GameCompressionNative.Cluster(root);
             var hard = HardDriveOf(root);
-            var threads = Threads(services.Settings.Current.CompressSpeed, Environment.ProcessorCount, hard);
+            var threads = Threads(Environment.ProcessorCount, hard, job.Idle);
             if (job.Compress) Compress(job, root, files, saved, cluster, threads);
             else Uncompress(job, root, files, saved, threads);
         }

@@ -414,4 +414,25 @@ public sealed class RiotLedgerTests : IDisposable
         Assert.Equal(0, PlaytimeService.ExoMinutesForRow(StoreKind.Riot, 500));
         Assert.Equal(500, PlaytimeService.ExoMinutesForRow(StoreKind.Steam, 500));
     }
+
+    [Fact]
+    public void ManualBaselinePreservesTrackedSessionsBeforeAndAfterAndUpdatesCleanly()
+    {
+        // User played two sessions tracked by Exo before entering their starting hours manually.
+        Play(Account, Valorant, Now.AddDays(-5), Now.AddDays(-5).AddMinutes(90));
+        Play(Account, Valorant, Now.AddDays(-2), Now.AddDays(-2).AddMinutes(30));
+
+        Assert.True(RiotLedger.Seed(Account, Seed(Valorant, 6000), Now, RiotLedger.ManualSource));
+        Assert.Equal(6120, RiotLedger.Totals(Account, Valorant));
+
+        // Adjusting starting hours again preserves all prior tracked sessions and survives reload.
+        Assert.True(RiotLedger.Seed(Account, Seed(Valorant, 7200), Now, RiotLedger.ManualSource));
+        RiotLedger.ForgetLoaded();
+        Assert.Equal(7320, RiotLedger.Totals(Account, Valorant));
+        Assert.Equal(7200, RiotLedger.Baselines(Account)[Valorant]);
+
+        // Sessions played afterward continue adding cleanly on top.
+        Play(Account, Valorant, Now.AddHours(1), Now.AddHours(2));
+        Assert.Equal(7380, RiotLedger.Totals(Account, Valorant));
+    }
 }

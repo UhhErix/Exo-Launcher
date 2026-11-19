@@ -15,11 +15,14 @@ internal static class FrameGenFacts
 {
     private sealed record SteamFacts(IReadOnlyList<int> Tags, string? Graphics, DateTimeOffset At);
 
-    /// <summary>The upscaler scan's frame generation libraries: DLSS's, FSR's and XeSS's.</summary>
+    /// <summary>The upscaler scan's cross-vendor frame generation libraries usable on AMD GPUs (FSR and XeSS; not NVIDIA's <c>nvngx_dlssg.dll</c>).</summary>
     private static readonly HashSet<string> FrameGenLibraries = new(StringComparer.OrdinalIgnoreCase)
     {
-        "nvngx_dlssg.dll", "amd_fidelityfx_framegeneration_dx12.dll", "libxess_fg.dll",
+        "amd_fidelityfx_framegeneration_dx12.dll", "libxess_fg.dll",
     };
+
+    /// <summary>True when a DLL filename is an AMD-usable frame generation library (FSR or XeSS, never NVIDIA-only <c>nvngx_dlssg.dll</c>).</summary>
+    internal static bool IsAmdUsableFrameGenFile(string fileName) => FrameGenLibraries.Contains(fileName);
 
     /// <summary>How long a launch waits for a game not looked up yet; past it, the launch goes with what is known.</summary>
     private static readonly TimeSpan LaunchWait = TimeSpan.FromSeconds(2);
@@ -106,8 +109,8 @@ internal static class FrameGenFacts
         }
     }
 
-    private static bool HasFrameGenFiles(GameEntry game, CancellationToken ct) =>
-        Upscalers.GetStatus(game, refresh: false, consented: null, ct).Rows.Any(row => FrameGenLibraries.Contains(row.Dll.FileName));
+    internal static bool HasFrameGenFiles(GameEntry game, CancellationToken ct) =>
+        Upscalers.GetStatus(game, refresh: false, consented: null, ct).Rows.Any(row => IsAmdUsableFrameGenFile(row.Dll.FileName));
 
     private static SteamFacts? Kept(string gameId)
     {

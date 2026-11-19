@@ -26,6 +26,7 @@ internal static partial class RiotLedger
 {
     internal const int SchemaVersion = 1;
     internal const string TrackerSource = "tracker.gg";
+    internal const string ManualSource = "manual";
 
     /// <summary>
     /// The ledger for sessions played before any Riot ID is set on this PC. It is local only (never synced) and moves into
@@ -39,7 +40,7 @@ internal static partial class RiotLedger
     // Set by a restore or import: the ledger on disk is the restored one, so this run appends nothing more to it.
     private static string? _restoredFileKeptFor;
 
-    private sealed record SeedLine(int Minutes, DateTimeOffset ImportedAt, IReadOnlyDictionary<string, int>? Modes, bool Partial);
+    private sealed record SeedLine(int Minutes, DateTimeOffset ImportedAt, IReadOnlyDictionary<string, int>? Modes, bool Partial, string Source = TrackerSource);
 
     private sealed record PlayLine(string Game, DateTimeOffset StartUtc, int Minutes, string Mode);
 
@@ -75,9 +76,26 @@ internal static partial class RiotLedger
     }
 
     /// <summary>Writes tracker.gg's seed for every game with minutes as this Riot ID's seed. False when nothing was written.</summary>
-    internal static bool Seed(string account, IReadOnlyDictionary<string, GameSeed> seeds, DateTimeOffset importedAt)
+    internal static bool Seed(string account, IReadOnlyDictionary<string, GameSeed> seeds, DateTimeOffset importedAt) =>
+        Seed(account, seeds, importedAt, TrackerSource);
+
+    /// <summary>Writes a seed line for every Riot game with positive minutes. False when nothing was written.</summary>
+    internal static bool Seed(string account, IReadOnlyDictionary<string, GameSeed> seeds, DateTimeOffset importedAt, string source)
     {
-        lock (Gate) return WriteSeeds(Open(account), seeds, importedAt, TrackerSource);
+        var effectiveSource = string.IsNullOrWhiteSpace(source) ? TrackerSource : source;
+        lock (Gate) return WriteSeeds(Open(account), seeds, importedAt, effectiveSource);
+    }
+
+    /// <summary>The latest baseline minutes saved per Riot game for this account (excluding Exo's own session rows).</summary>
+    internal static IReadOnlyDictionary<string, int> Baselines(string account)
+    {
+        lock (Gate)
+        {
+            var doc = Open(account);
+            var map = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+            foreach (var (game, seed) in doc.Seeds) map[game] = seed.Minutes;
+            return map;
+        }
     }
 
     /// <summary>Opens a session. Start is moved up to the last minute already counted for the game, so a restart never counts it twice.</summary>
@@ -243,7 +261,8 @@ internal static partial class RiotLedger
             }
             foreach (var play in doc.Plays)
             {
-                if (play.Game != game || (seed is not null && play.StartUtc < seed.ImportedAt)) continue;
+                // Automated lifetime imports already include sessions played before the snapshot; manual starting hours add prior hours without dropping tracked sessions.
+                if (play.Game != game || (seed is not null && !string.Equals(seed.Source, ManualSource, StringComparison.OrdinalIgnoreCase) && play.StartUtc < seed.ImportedAt)) continue;
                 byMode[play.Mode] = (int)Math.Min(int.MaxValue, (long)byMode.GetValueOrDefault(play.Mode) + play.Minutes);
             }
             return byMode;
@@ -313,9 +332,13 @@ internal static partial class RiotLedger
     private static bool WriteSeeds(Document doc, IReadOnlyDictionary<string, GameSeed> seeds, DateTimeOffset importedAt, string source)
     {
         var written = false;
-        foreach (var (game, seed) in seeds.Where(pair => pair.Key.StartsWith("riot:", StringComparison.OrdinalIgnoreCase) && pair.Value.Minutes > 0))
+        var manual = string.Equals(source, ManualSource, StringComparison.OrdinalIgnoreCase);
+        foreach (var (game, seed) in seeds.Where(pair => pair.Key.StartsWith("riot:", StringComparison.OrdinalIgnoreCase) && pair.Value.Minutes > 0 && pair.Value.Minutes <= MaxSeedMinutes))
         {
-            var key = "seed|" + game + "|" + importedAt.ToString("O", CultureInfo.InvariantCulture);
+            var effectiveAt = manual && doc.Seeds.TryGetValue(game, out var existing) && importedAt <= existing.ImportedAt
+                ? existing.ImportedAt.AddTicks(1)
+                : importedAt;
+            var key = "seed|" + game + "|" + effectiveAt.ToString("O", CultureInfo.InvariantCulture);
             if (doc.Keys.Contains(key)) continue;
             var row = new JsonObject
             {
@@ -324,7 +347,7 @@ internal static partial class RiotLedger
                 ["key"] = key,
                 ["game"] = game,
                 ["minutes"] = seed.Minutes,
-                ["importedAt"] = importedAt.ToString("O", CultureInfo.InvariantCulture),
+                ["importedAt"] = effectiveAt.ToString("O", CultureInfo.InvariantCulture),
                 ["source"] = source,
             };
             if (seed.Modes is { Count: > 0 } modes)
@@ -338,7 +361,7 @@ internal static partial class RiotLedger
             if (!Append(doc, row)) continue;
             SyncLine(doc, row);
             doc.Keys.Add(key);
-            doc.Seeds[game] = new SeedLine(seed.Minutes, importedAt, seed.Modes, seed.Partial);
+            doc.Seeds[game] = new SeedLine(seed.Minutes, effectiveAt, seed.Modes, seed.Partial, source);
             written = true;
         }
         return written;
@@ -422,7 +445,10 @@ internal static partial class RiotLedger
                 var at = DateTimeOffset.Parse(root.GetProperty("importedAt").GetString()!, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind);
                 if (doc.Seeds.TryGetValue(game, out var latest) && at <= latest.ImportedAt) return;
                 var partial = root.TryGetProperty("partial", out var flag) && flag.ValueKind == JsonValueKind.True;
-                doc.Seeds[game] = new SeedLine(minutes, at, ReadModes(root), partial);
+                var source = root.TryGetProperty("source", out var src) && src.ValueKind == JsonValueKind.String
+                    ? src.GetString() ?? TrackerSource
+                    : TrackerSource;
+                doc.Seeds[game] = new SeedLine(minutes, at, ReadModes(root), partial, source);
             }
             else if (kind == "play")
             {

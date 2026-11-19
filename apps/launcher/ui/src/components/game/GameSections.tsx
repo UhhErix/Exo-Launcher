@@ -83,7 +83,7 @@ function shownAny(known: number, achievements: Achievements | null, driveHeat: D
 /**
  * What people open a game page for: time played, last played, storage and achievements, each its own fact with room
  * around it. A fact Exo doesn't know is left out. A Riot game shows its lifetime hours as Played, as a Steam game does
- * (the Riot ID's ledger: tracker.gg's total once, then Exo's own sessions), and nothing more. The drive is said under
+ * (the Riot ID's ledger: starting hours plus Exo's tracked sessions), and nothing more. The drive is said under
  * them, only when its heat slowed the game.
  */
 export function GameStats({

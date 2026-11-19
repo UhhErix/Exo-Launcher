@@ -425,7 +425,7 @@ const mockTuning = (p?: { action?: unknown; item?: unknown }) => {
 const mockCompress = (id: string): CompressState => ({
   state: 'none', percent: null, saved: 0, size: 62e9, estimate: id ? 12.4e9 : null, sampled: !!id, changed: 0, algorithm: null, message: null, antiCheat: null, held: null,
 })
-const mockCompressSettings: CompressSettings = { whileIdle: false, afterUpdates: false, speed: 'balanced' }
+const mockCompressSettings: CompressSettings = { whileIdle: false, afterUpdates: false }
 const mockDrivesFine = typeof location !== 'undefined' && new URLSearchParams(location.search).get('drives') === 'fine'
 const mockDriveFixes = { flush: mockDrivesFine, optimize: mockDrivesFine, set: new Set<string>() }
 const MOCK_SAMSUNG = { name: 'Samsung', tool: 'Samsung Magician', url: 'https://semiconductor.samsung.com/consumer-storage/support/tools/' }
@@ -484,7 +484,7 @@ function mockDriveList() {
       power: { state: 0, full: true, plan: 'Exo', exo: true, apst: null }, nvme: { hmbMb: null, hmbOn: null, sector: 512, fourK: false },
       space: { total: 1862 * GB, free: 308.5 * GB, games: 1180 * GB, caches: 66.1 * GB, oldCaches: 36.6 * GB, exo: 5.9 * GB, leftovers: 12.4 * GB, other: 289.1 * GB },
       games: [
-        { id: 'steam:3513350', title: 'Wuchang: Fallen Feathers', bytes: 152 * GB, cacheBytes: 0 },
+        { id: 'steam:3513350', title: 'Wuthering Waves', bytes: 152 * GB, cacheBytes: 0 },
         { id: 'steam:2515020', title: 'FINAL FANTASY XVI', bytes: 102 * GB, cacheBytes: 2.6 * GB },
         { id: 'steam:2001760', title: 'Beast of Reincarnation', bytes: 98 * GB, cacheBytes: 3.8 * GB },
         { id: 'steam:1501750', title: 'Lords of the Fallen', bytes: 72 * GB, cacheBytes: 6.6 * GB },
@@ -635,6 +635,7 @@ const mockSettings: LauncherSettings = {
   textSize: 'normal',
   sortMode: 'name',
   riotId: null,
+  riotBaseline: null,
   recent: [],
   showLibraryTools: false,
   achievementBanners: true,
@@ -951,6 +952,7 @@ function mockAbsorbIdSettings(next: Record<string, unknown>) {
   if (typeof next.riotId === 'string') {
     const trimmed = next.riotId.trim()
     mockSettings.riotId = trimmed.length > 0 ? trimmed : null
+    if (!mockSettings.riotId) mockSettings.riotBaseline = null
     delete next.riotId
   }
 }
@@ -1306,6 +1308,17 @@ const MOCK_HANDLERS: Record<string, MockHandler> = {
     message: "tracker.gg now blocks apps from reading its profiles, so Exo can't import your Riot hours from it. Exo still counts every session you play.",
     profileUrl: 'https://tracker.gg/valorant',
   }),
+  'playtime.setRiotBaseline': (params) => {
+    const current = mockSettings.riotBaseline ?? {}
+    const valorant = typeof params?.valorantHours === 'number' && params.valorantHours > 0
+      ? Math.round(params.valorantHours * 60)
+      : current.valorantMinutes ?? null
+    const league = typeof params?.leagueHours === 'number' && params.leagueHours > 0
+      ? Math.round(params.leagueHours * 60)
+      : current.leagueMinutes ?? null
+    mockSettings.riotBaseline = { valorantMinutes: valorant, leagueMinutes: league }
+    return { ok: true, message: 'Starting hours saved.', baseline: mockSettings.riotBaseline }
+  },
   'web.preferences.get': () => ({ microphone: 'ask', camera: 'ask', clipboard: 'ask', notifications: 'ask' }),
   // The state the engine left when it last exited (rev 0), shown until the board is on screen and the engine runs.
   'shaders.addon': () => ({ ok: true, present: mockShaders, snapshot: mockShaders ? { ...mockShadersSnapshot(), rev: 0 } : undefined }),
@@ -1912,7 +1925,6 @@ const MOCK_HANDLERS: Record<string, MockHandler> = {
   'compress.settings': (p) => {
     if (typeof p?.whileIdle === 'boolean') mockCompressSettings.whileIdle = p.whileIdle
     if (typeof p?.afterUpdates === 'boolean') mockCompressSettings.afterUpdates = p.afterUpdates
-    if (p?.speed === 'gentle' || p?.speed === 'balanced' || p?.speed === 'fast') mockCompressSettings.speed = p.speed
     return { ok: true, settings: { ...mockCompressSettings } }
   },
   'startup.list': () => mockStartup(null),

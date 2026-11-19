@@ -68,6 +68,24 @@ public sealed class ProtocolTests
     }
 
     [Fact]
+    public async Task UiVisibleIsExemptWhenQuittingWhileOtherWorkIsRefused()
+    {
+        using var dir = new TempDir();
+        await using var s = Service.Start(dir.Path);
+        await s.Event("ready");
+
+        // Trigger graceful shutdown with 5s wait so QuitAsync keeps Quitting == true briefly.
+        await s.Reply(s.Send("shutdown", new JsonObject { ["waitSeconds"] = 5 }));
+
+        JsonObject uiReply = await s.Reply(s.Send("ui.visible", new JsonObject { ["visible"] = false }));
+        Assert.Null(uiReply["error"]);
+        Assert.True((bool)uiReply["result"]!["ok"]!);
+
+        JsonObject pauseReply = await s.Reply(s.Send("queue.pause"));
+        Assert.Equal("the service is stopping", (string?)pauseReply["error"]);
+    }
+
+    [Fact]
     public async Task ItExitsByItselfOnceIdleAndLeavesItsLastState()
     {
         using var dir = new TempDir();

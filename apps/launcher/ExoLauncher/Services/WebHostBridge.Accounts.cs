@@ -514,57 +514,216 @@ public sealed partial class WebHostBridge
         return new { ok = true, message = $"Steam forgot {target.PersonaName}." };
     }
 
-    /// <summary>Riot Client Services and its UI: what holds the session files. Its crash handler holds none.</summary>
-    private static readonly string[] RiotSessionProcesses = ["RiotClientServices", .. StoreWindowHider.RiotUiProcessNames];
+    private static readonly TimeSpan RiotQuitPollInterval = TimeSpan.FromMilliseconds(250);
+    internal static readonly string[] RiotCloseProcessNames =
+    [
+        "RiotClientServices", "Riot Client", "RiotClientUx", "RiotClientUxRender", "RiotClientCrashHandler",
+    ];
+    private static readonly HashSet<string> RiotCloseProcessSet = new(RiotCloseProcessNames, StringComparer.OrdinalIgnoreCase);
+    private int _riotStartedHeadless;
 
-    /// <summary>
-    /// Closes the Riot Client for an account change: never while a Riot game or its
-    /// client (LeagueClient) runs. Riot's own quit first (Riot Client Services takes its
-    /// UI with it, also when it runs in the background with no window), then a normal
-    /// window close, then, for the UI processes alone, a forced end. Riot Client Services
-    /// is only ever asked; Vanguard and games are never touched. Returns why it could not, or null.
-    /// </summary>
-    private async Task<string?> CloseRiotClientAsync(CancellationToken ct)
+    internal interface IRiotCloseOps
     {
-        if (RiotAccounts.RunningGame() is { } game)
-        {
-            AppLog.Info($"Riot: account change refused; {game} is running.");
-            return $"{game} is running. Close it, then try again.";
-        }
-        string[] Running() => RiotSessionProcesses.Where(ProcessHelper.IsProcessRunning).ToArray();
-        async Task<bool> ClosedWithinAsync(TimeSpan wait)
-        {
-            var deadline = DateTimeOffset.UtcNow + wait;
-            while (Running().Length > 0 && DateTimeOffset.UtcNow < deadline)
-                await Task.Delay(500, ct).ConfigureAwait(false);
-            return Running().Length == 0;
-        }
-        if (Running().Length == 0) return null;
-        AccountProgress("riot", "Closing the Riot Client…");
-        var asked = await Adapters.Riot.RiotClientApi.RequestQuitAsync(ct).ConfigureAwait(false);
-        AppLog.Info("Riot: closing the Riot Client for an account change; its quit was " + (asked ? "accepted." : "not answered."));
-        if (await ClosedWithinAsync(TimeSpan.FromSeconds(asked ? 20 : 5)).ConfigureAwait(false)) return null;
+        string? RunningGame();
+        IReadOnlyList<string> RunningProcesses(IReadOnlyList<string> names);
+        bool LockfileExists();
+        Task<bool> RequestQuitAsync(CancellationToken ct);
+        void SoftClose(IReadOnlyList<string> names);
+        void KillProcesses(IReadOnlyList<string> names);
+        bool TryDeleteStaleLockfile();
+        DateTimeOffset UtcNow();
+        Task Delay(TimeSpan duration, CancellationToken ct);
+    }
 
-        ProcessHelper.TryCloseStoreClient(StoreKind.Riot, StoreWindowHider.RiotUiProcessNames);
-        if (await ClosedWithinAsync(TimeSpan.FromSeconds(10)).ConfigureAwait(false)) return null;
+    private sealed class LiveRiotCloseOps : IRiotCloseOps
+    {
+        internal static readonly LiveRiotCloseOps Instance = new();
 
-        // The UI only, and only Riot's own copy of it (under the Riot Client's folder).
-        var install = RiotAdapter.TryResolveRiotClientServicesPublic() is { } rcs ? Path.GetDirectoryName(rcs) : null;
-        foreach (var name in StoreWindowHider.RiotUiProcessNames)
+        public string? RunningGame() => RiotAccounts.RunningGame();
+
+        public IReadOnlyList<string> RunningProcesses(IReadOnlyList<string> names)
+        {
+            var running = new List<string>();
+            foreach (var name in names)
+            {
+                if (RunningRiotProcessPids(name).Count > 0)
+                    running.Add(name);
+            }
+            return running;
+        }
+
+        public bool LockfileExists() => File.Exists(Adapters.Riot.RiotClientApi.LockfilePath);
+
+        public Task<bool> RequestQuitAsync(CancellationToken ct) =>
+            Adapters.Riot.RiotClientApi.RequestQuitAsync(ct);
+
+        public void SoftClose(IReadOnlyList<string> names) =>
+            ProcessHelper.TryCloseStoreClient(StoreKind.Riot, [.. names]);
+
+        public void KillProcesses(IReadOnlyList<string> names)
+        {
+            foreach (var name in names)
+            {
+                if (ProcessTermination.IsAntiCheat(name)) continue;
+                try
+                {
+                    foreach (var process in System.Diagnostics.Process.GetProcessesByName(name))
+                        using (process)
+                            try
+                            {
+                                if (process.HasExited) continue;
+                                var exe = ProcessHelper.TryGetExecutablePath(process);
+                                if (CanTerminateRiotClientProcess(name, exe, path => StoreClientIdentity.BelongsTo(StoreKind.Riot, path))
+                                    && ProcessTermination.Kill(process, entireProcessTree: false))
+                                {
+                                    AppLog.Info($"Riot: {name} did not close; ended it.");
+                                }
+                            }
+                            catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception) { }
+                }
+                catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception) { }
+            }
+        }
+
+        public bool TryDeleteStaleLockfile()
+        {
+            var path = Adapters.Riot.RiotClientApi.LockfilePath;
+            try
+            {
+                if (File.Exists(path)) DeletionGate.DeleteFile(path);
+                return !File.Exists(path);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                return !File.Exists(path);
+            }
+        }
+
+        public DateTimeOffset UtcNow() => DateTimeOffset.UtcNow;
+
+        public Task Delay(TimeSpan duration, CancellationToken ct) => Task.Delay(duration, ct);
+    }
+
+    internal static bool CanTerminateRiotClientProcess(string? processName, string? executablePath, Func<string?, bool> belongsToRiot) =>
+        !string.IsNullOrWhiteSpace(processName)
+        && RiotCloseProcessSet.Contains(processName)
+        && !ProcessTermination.IsAntiCheat(processName)
+        && !ProcessTermination.IsAntiCheat(Path.GetFileNameWithoutExtension(executablePath))
+        && belongsToRiot(executablePath);
+
+    private static List<int> RunningRiotProcessPids(string name)
+    {
+        var pids = new List<int>();
+        if (ProcessTermination.IsAntiCheat(name)) return pids;
+        try
+        {
             foreach (var process in System.Diagnostics.Process.GetProcessesByName(name))
                 using (process)
                     try
                     {
-                        if (install is not null && ProcessHelper.MatchesOptionalPath(process, install) && ProcessTermination.Kill(process))
-                            AppLog.Info($"Riot: {name} did not close; ended it.");
+                        if (process.HasExited) continue;
+                        var exe = ProcessHelper.TryGetExecutablePath(process);
+                        if (StoreClientIdentity.BelongsTo(StoreKind.Riot, exe))
+                            pids.Add(process.Id);
                     }
                     catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception) { }
-        // With its UI gone, Riot Client Services is asked once more.
-        if (Running().Contains("RiotClientServices")) await Adapters.Riot.RiotClientApi.RequestQuitAsync(ct).ConfigureAwait(false);
-        if (await ClosedWithinAsync(TimeSpan.FromSeconds(10)).ConfigureAwait(false)) return null;
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception) { }
+        return pids;
+    }
 
-        AppLog.Warn("Riot: the Riot Client did not close (" + string.Join(", ", Running()) + " still running); account change skipped.");
+    /// <summary>
+    /// Closes the Riot Client for an account change or visible relaunch: never while a Riot game or its client
+    /// (LeagueClient) runs. Riot's own quit first (4 s if accepted, 1 s if unanswered), then soft-close across UI and
+    /// path-verified RiotClientServices, then an active-game re-check immediately before terminating ONLY path-verified
+    /// Riot Client processes (never games or Vanguard vgc/vgk/vgtray) and waiting up to 5 s for exit and lockfile removal.
+    /// </summary>
+    private async Task<string?> CloseRiotClientAsync(CancellationToken ct)
+    {
+        var error = await CloseRiotClientAsync(LiveRiotCloseOps.Instance, message => AccountProgress("riot", message), ct).ConfigureAwait(false);
+        if (error is null) Interlocked.Exchange(ref _riotStartedHeadless, 0);
+        return error;
+    }
+
+    internal static async Task<string?> CloseRiotClientAsync(IRiotCloseOps ops, Action<string>? progress, CancellationToken ct)
+    {
+        if (ops.RunningGame() is { } game)
+        {
+            AppLog.Info($"Riot: account change refused; {game} is running.");
+            return $"{game} is running. Close it, then try again.";
+        }
+        IReadOnlyList<string> Running() => ops.RunningProcesses(RiotCloseProcessNames);
+        async Task<bool> ClosedWithinAsync(TimeSpan wait, bool deleteStaleLockfileAfterExit)
+        {
+            var deadline = ops.UtcNow() + wait;
+            while (true)
+            {
+                var remaining = Running();
+                if (remaining.Count == 0)
+                {
+                    if (!ops.LockfileExists()) return true;
+                    if (deleteStaleLockfileAfterExit && ops.TryDeleteStaleLockfile()) return true;
+                    if (!ops.LockfileExists()) return true;
+                }
+                var now = ops.UtcNow();
+                if (now >= deadline) return false;
+                var left = deadline - now;
+                await ops.Delay(left < RiotQuitPollInterval ? left : RiotQuitPollInterval, ct).ConfigureAwait(false);
+            }
+        }
+        if (Running().Count == 0) return null;
+        progress?.Invoke("Closing the Riot Client…");
+        var asked = await ops.RequestQuitAsync(ct).ConfigureAwait(false);
+        AppLog.Info("Riot: closing the Riot Client for an account change; its quit was " + (asked ? "accepted." : "not answered."));
+        if (await ClosedWithinAsync(TimeSpan.FromSeconds(asked ? 4 : 1), deleteStaleLockfileAfterExit: false).ConfigureAwait(false))
+            return null;
+
+        ops.SoftClose(RiotCloseProcessNames);
+        if (await ClosedWithinAsync(TimeSpan.FromSeconds(2), deleteStaleLockfileAfterExit: false).ConfigureAwait(false))
+            return null;
+
+        // Verify again immediately before any process termination so a game started mid-close aborts safely.
+        if (ops.RunningGame() is { } activeGame)
+        {
+            AppLog.Info($"Riot: account change refused before ending Riot Client; {activeGame} is running.");
+            return $"{activeGame} is running. Close it, then try again.";
+        }
+
+        ops.KillProcesses(RiotCloseProcessNames);
+        if (await ClosedWithinAsync(TimeSpan.FromSeconds(5), deleteStaleLockfileAfterExit: true).ConfigureAwait(false))
+            return null;
+
+        var left = Running();
+        AppLog.Warn("Riot: the Riot Client did not close (" + (left.Count > 0 ? string.Join(", ", left) + " still running" : "lockfile still present") + "); account change skipped.");
         return "The Riot Client did not close. Quit it from its tray icon, then try again.";
+    }
+
+    internal static bool NeedsRestartForVisibleLaunch(
+        bool runningGame, bool trackedHeadless, bool servicesRunning, bool servicesHasHeadlessArg, bool anyUiRunning) =>
+        !runningGame && servicesRunning && (trackedHeadless || servicesHasHeadlessArg || !anyUiRunning);
+
+    private async Task<string?> PrepareRiotVisibleLaunchAsync(CancellationToken ct)
+    {
+        var servicesPids = RunningRiotProcessPids("RiotClientServices");
+        if (servicesPids.Count == 0)
+        {
+            Interlocked.Exchange(ref _riotStartedHeadless, 0);
+            return null;
+        }
+        var trackedHeadless = Volatile.Read(ref _riotStartedHeadless) != 0;
+        var hasHeadlessArg = servicesPids.Any(pid =>
+            HostedProcessClass.QueryCommandLine(pid)?.Contains("--headless", StringComparison.OrdinalIgnoreCase) == true);
+        var anyUiRunning = StoreWindowHider.RiotUiProcessNames.Any(name => RunningRiotProcessPids(name).Count > 0);
+        if (!NeedsRestartForVisibleLaunch(
+            RiotAccounts.RunningGame() is not null,
+            trackedHeadless,
+            servicesRunning: true,
+            hasHeadlessArg,
+            anyUiRunning))
+            return null;
+
+        AppLog.Info("Riot: closing headless or tray-only Riot Client before opening its window.");
+        return await CloseRiotClientAsync(ct).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -572,12 +731,18 @@ public sealed partial class WebHostBridge
     /// once it's signed in, false when it still stands at its sign-in after 15 seconds (Riot ends a saved sign-in after a
     /// while), null when it never said.
     /// </summary>
-    private static async Task<bool?> StartRiotHiddenAsync(string rcs, CancellationToken ct)
+    private async Task<bool?> StartRiotHiddenAsync(string rcs, CancellationToken ct)
     {
         try
         {
+            Interlocked.Exchange(ref _riotStartedHeadless, 1);
             using var api = await Adapters.Riot.RiotClientApi.ConnectAsync(rcs, TimeSpan.FromSeconds(35), ct).ConfigureAwait(false);
-            if (api is null) return null;
+            if (api is null)
+            {
+                if (RunningRiotProcessPids("RiotClientServices").Count == 0)
+                    Interlocked.Exchange(ref _riotStartedHeadless, 0);
+                return null;
+            }
             bool? last = null;
             for (var i = 0; i < 20; i++)
             {
@@ -588,6 +753,8 @@ public sealed partial class WebHostBridge
         }
         catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
         {
+            if (RunningRiotProcessPids("RiotClientServices").Count == 0)
+                Interlocked.Exchange(ref _riotStartedHeadless, 0);
             AppLog.Debug("Riot: hidden start after an account change: " + ex.GetType().Name);
             return null;
         }

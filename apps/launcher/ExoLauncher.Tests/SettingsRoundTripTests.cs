@@ -57,6 +57,7 @@ public sealed class SettingsRoundTripTests : IDisposable
                 else if (type == typeof(int?)) property.SetValue(settings, 3);
                 else if (type == typeof(bool?)) property.SetValue(settings, true);
                 else if (property.GetValue(settings) is Dictionary<string, string> map) map[@"\\?\DISPLAY#Key"] = "value";
+                else if (property.GetValue(settings) is Dictionary<string, bool> boolMap) boolMap[@"\\?\DISPLAY#Key"] = true;
                 else if (property.GetValue(settings) is Dictionary<string, List<string>> pins) pins["111"] = ["g:1", "d:2"];
                 else if (property.GetValue(settings) is List<string> list) list.Add("steam:1");
                 else if (property.GetValue(settings) is List<LibraryFolder> folders) folders.Add(new LibraryFolder { Id = "f1", Name = "Shooters", Games = ["steam:1"] });
@@ -88,6 +89,11 @@ public sealed class SettingsRoundTripTests : IDisposable
             {
                 var gotMap = Assert.IsType<Dictionary<string, string>>(got);
                 Assert.True(gotMap.TryGetValue(@"\\?\display#key", out var value) && value == "value", property.Name + " was not kept");
+            }
+            else if (want is Dictionary<string, bool>)
+            {
+                var gotMap = Assert.IsType<Dictionary<string, bool>>(got);
+                Assert.True(gotMap.TryGetValue(@"\\?\display#key", out var value) && value, property.Name + " was not kept");
             }
             else if (want is List<string> list) Assert.True(list.SequenceEqual((List<string>)got!), property.Name + " was not kept");
             else if (want is Dictionary<string, System.Text.Json.JsonElement>)

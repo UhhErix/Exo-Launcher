@@ -2,16 +2,9 @@ import { useCallback, useEffect, useState } from 'react'
 import { host, onHostEvent, type CompressAction, type CompressList, type CompressSettings, type CompressState } from '../../lib/host'
 import { report } from '../../lib/report'
 import { formatSize } from '../../lib/utils'
-import { Choice } from '../settings/Choice'
 import { Row, State, SwitchRow } from '../settings/parts'
 import { ConfirmButton } from '../ui/ConfirmButton'
 import { CompressActions, compressWords, stopped } from '../game/CompressRow'
-
-const SPEEDS = [
-  { value: 'gentle', label: 'Gentle' },
-  { value: 'balanced', label: 'Balanced' },
-  { value: 'fast', label: 'Fast' },
-] as const
 
 /** Every game's compression, read when the room opens and kept current by compress.progress. */
 export function useCompressList(active: boolean) {
@@ -77,9 +70,6 @@ export function CompressGames({ list, onList, onRead }: { list: CompressList | n
       </Row>
       <SwitchRow id="compress-idle" label="Compress while idle" checked={settings.whileIdle} onChange={value => save({ whileIdle: value })} />
       <SwitchRow id="compress-again" label="Compress again after updates" checked={settings.afterUpdates} onChange={value => save({ afterUpdates: value })} />
-      <Row label="Speed">
-        <Choice label="Speed" value={settings.speed} choices={SPEEDS} onChange={value => void save({ speed: value as CompressSettings['speed'] })} />
-      </Row>
       {shown.map(game => (
         <Row key={game.id} label={game.title} detail={compressWords(game.compress)} error={stopped(game.compress)}>
           <CompressActions compress={game.compress} locked={false} act={action => act(game.id, action, game.compress)} />

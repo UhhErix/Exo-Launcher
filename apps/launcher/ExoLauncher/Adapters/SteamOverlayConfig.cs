@@ -78,6 +78,80 @@ internal static class SteamOverlayConfig
         return (writes, next);
     }
 
+    /// <summary>Steam's global in-game overlay switch in localconfig.vdf; true unless explicitly <c>"0"</c>.</summary>
+    internal static bool GlobalEnabled(string? localConfigText)
+    {
+        if (string.IsNullOrEmpty(localConfigText)) return true;
+        var root = SteamKeyValues.ParseText(localConfigText).Section("UserLocalConfigStore");
+        var value = root.Section("system").Value("EnableGameOverlay")
+            ?? root.Section("Software/Valve/Steam").Value("EnableGameOverlay");
+        return value != "0";
+    }
+
+    internal static string PriorKey(string accountId, string appId) => $"{accountId}/{appId}";
+
+    /// <summary>Records the pre-Exo VDF value (<c>"1"</c>, <c>"0"</c>, or <c>""</c> for absent) once per account/app before editing.</summary>
+    internal static void RecordPriors(
+        string accountId,
+        SteamKeyValues apps,
+        IEnumerable<string> appIds,
+        IDictionary<string, string> prior)
+    {
+        if (string.IsNullOrWhiteSpace(accountId)) return;
+        foreach (var appId in appIds)
+        {
+            if (appId.Length is 0 or > 10 || !appId.All(char.IsAsciiDigit)) continue;
+            var key = PriorKey(accountId, appId);
+            if (prior.ContainsKey(key)) continue;
+            prior[key] = Read(apps, appId) switch { true => "1", false => "0", null => "" };
+        }
+    }
+
+    /// <summary>Reverses Exo's per-app <c>OverlayAppEnable</c> changes for <paramref name="accountId"/> back to pre-Exo VDF state without touching <c>EnableGameOverlay</c>.</summary>
+    internal static string Restore(string text, string accountId, IReadOnlyDictionary<string, string> prior)
+    {
+        if (string.IsNullOrWhiteSpace(accountId)) return text;
+        var prefix = accountId + "/";
+        foreach (var (key, original) in prior)
+        {
+            if (!key.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)) continue;
+            var appId = key[prefix.Length..];
+            if (appId.Length is 0 or > 10 || !appId.All(char.IsAsciiDigit)) continue;
+            string[] path = [.. AppsPath, appId];
+            text = original.Length == 0 ? RemoveValue(text, path, Key) : SetValue(text, path, Key, original);
+        }
+        return text;
+    }
+
+    /// <summary>Target per-app overlay states after applying explicit player opt-ins and Steam overrides over <paramref name="wanted"/>.</summary>
+    internal static Dictionary<string, bool> EffectiveGoals(
+        IReadOnlyDictionary<string, bool> wanted,
+        IReadOnlyDictionary<string, string> record)
+    {
+        var goals = new Dictionary<string, bool>(StringComparer.Ordinal);
+        foreach (var (appId, want) in wanted)
+        {
+            var entry = record.GetValueOrDefault(appId)?.TrimEnd('?');
+            if (entry is "on!" or "off!") continue;
+            goals[appId] = entry is "on=" or "off=" ? entry == "on=" : want;
+        }
+        return goals;
+    }
+
+    /// <summary>Per-app writes needed for an account's VDF to match <paramref name="goals"/>.</summary>
+    internal static Dictionary<string, bool> WritesForAccount(
+        SteamKeyValues apps,
+        IReadOnlyDictionary<string, bool> goals)
+    {
+        var writes = new Dictionary<string, bool>(StringComparer.Ordinal);
+        foreach (var (appId, goal) in goals)
+        {
+            if ((Read(apps, appId) ?? true) != goal)
+                writes[appId] = goal;
+        }
+        return writes;
+    }
+
     /// <summary>
     /// The file with each game's switch set. A missing game or section is added in
     /// Steam's own layout (tabs, one key per line); nothing else changes.

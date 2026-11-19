@@ -1,4 +1,5 @@
 using ExoLauncher.Helpers;
+using ExoLauncher.Models;
 using ExoLauncher.Services;
 
 namespace ExoLauncher.Tests;
@@ -187,5 +188,51 @@ public sealed class FluidMotionFramesTests
         Assert.Equal("unknown", none.FrameGen);
         Assert.Null(none.Over60);
         Assert.Empty(none.Apis);
+    }
+
+    [Fact]
+    public void WutheringWavesGetsFluidMotionFramesOnRx6000PlusWithoutBlockingOnNvidiaDlssg()
+    {
+        var wuwaWiki = GameWiki.ReadFacts("{{Infobox game/row/taxonomy/modes | Singleplayer, Multiplayer }}\n" +
+            "{{Infobox game/row/taxonomy/genres | Action, RPG, Open world }}\n" +
+            "|framegen = true\n|framegen tech = DLSS FG, DLSS MFG\n|120 fps = true\n" +
+            "|direct3d versions = 11, 12\n");
+        var wuwa = new FluidMotionFrames.Game("Wuthering Waves")
+        {
+            Wiki = wuwaWiki,
+            FrameGenFiles = false,
+        };
+
+        Assert.True(FluidMotionFrames.Decide(Rx6600, wuwa).On);
+        Assert.True(FluidMotionFrames.Decide(Rx7800Xt, wuwa).On);
+        Assert.True(FluidMotionFrames.Decide(Rx9070Xt, wuwa).On);
+        Assert.False(FluidMotionFrames.Decide(Rx5700, wuwa).On);
+
+        // Cross-vendor FSR / XeSS FG still suppresses AFMF 2.
+        Assert.False(FluidMotionFrames.Decide(Rx7800Xt, wuwa with { FrameGenFiles = true }).On);
+        Assert.False(FluidMotionFrames.Decide(Rx7800Xt, wuwa with
+        {
+            Wiki = GameWiki.ReadFacts("{{Infobox game/row/taxonomy/modes | Singleplayer }}\n{{Infobox game/row/taxonomy/genres | Action, RPG }}\n|framegen = true\n|framegen tech = DLSS FG, fsr fg\n|direct3d versions = 12\n"),
+        }).On);
+
+        // File scanner: nvngx_dlssg.dll alone does not block AFMF 2; FSR/XeSS FG DLLs do.
+        Assert.False(FrameGenFacts.IsAmdUsableFrameGenFile("nvngx_dlssg.dll"));
+        Assert.True(FrameGenFacts.IsAmdUsableFrameGenFile("amd_fidelityfx_framegeneration_dx12.dll"));
+        Assert.True(FrameGenFacts.IsAmdUsableFrameGenFile("libxess_fg.dll"));
+
+        var folder = Path.Combine(Path.GetTempPath(), "exo-wuwa-fmf-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            var win64 = Path.Combine(folder, "Client", "Binaries", "Win64");
+            Directory.CreateDirectory(win64);
+            File.WriteAllBytes(Path.Combine(win64, "Client-Win64-Shipping.exe"), []);
+            File.WriteAllBytes(Path.Combine(win64, "nvngx_dlssg.dll"), []);
+            var game = new GameEntry { Id = "steam:3513350", Title = "Wuthering Waves", Store = StoreKind.Steam, Installed = true, Path = folder };
+            Assert.False(FrameGenFacts.HasFrameGenFiles(game, CancellationToken.None));
+        }
+        finally
+        {
+            try { DeletionGate.DeleteDirectory(folder, recursive: true); } catch (IOException) { }
+        }
     }
 }

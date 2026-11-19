@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { host, onHostEvent, type GameSettingsState, type KeepStatus } from '../../lib/host'
 import { report } from '../../lib/report'
+import { Switch } from '../Switch'
 import { Choice } from '../settings/Choice'
 import { GameLine, GameReading, type LineWord } from './GameLine'
 import { sheetMemory } from './useGameDetails'
@@ -61,22 +62,36 @@ export function OptimizeLine({ gameId }: { gameId: string }) {
   if (!state.ok) return <GameReading name="Optimize" word={{ text: 'Could not check', bad: true }} />
   if (!state.supported) return <GameReading name="Optimize" word={{ text: state.note ?? 'Not supported in this game' }} />
   const applied = state.standing === 'applied' || state.standing === 'partly'
-  const run = (on: boolean, mode?: string) => {
+  const applySettings = (payload: { group?: string; all?: boolean; on?: boolean; mode?: string; smoothMotion?: boolean }, nextOn: boolean, context: string) => {
     setWorking(true)
-    setWork({ on, failed: false })
-    host.gameSettings(gameId, mode ? { mode } : { all: true, on })
+    setWork({ on: nextOn, failed: false })
+    host.gameSettings(gameId, payload)
       .then(guard((answer: GameSettingsState) => {
-        if (!answer.ok) { setWork({ on, failed: true }); return }
+        if (!answer.ok) { setWork({ on: nextOn, failed: true }); return }
         settingsRead.set(gameId, answer)
         setState(answer)
       }))
-      .catch(e => { report(e, on ? 'OptimizeLine.apply' : 'OptimizeLine.putBack'); setWork({ on, failed: true }) })
+      .catch(e => { report(e, context); setWork({ on: nextOn, failed: true }) })
       .finally(() => setWorking(false))
   }
+  const run = (on: boolean, mode?: string) =>
+    applySettings(mode ? { mode } : { all: true, on }, on, on ? 'OptimizeLine.apply' : 'OptimizeLine.putBack')
+  const toggleSmoothMotion = (smoothMotion: boolean) => {
+    const payload = smoothMotion ? { smoothMotion: true, all: true, on: true }
+      : applied ? { smoothMotion: false, all: true, on: true } : { smoothMotion: false }
+    applySettings(payload, smoothMotion || applied, 'OptimizeLine.smoothMotion')
+  }
   return (
-    <GameLine name="Optimize" word={wordFor(state, working, work, kept)} state={state.standing === 'applied' ? 'applied' : state.running ? 'running' : 'ready'} action
-      disabled={working || state.running === true || state.standing === 'unfound'} confirm={applied ? 'Put back your settings?' : undefined} onOpen={() => run(!applied)}
-      control={state.windowMode ? <Choice label="Window mode" value={state.windowMode} choices={WINDOW_MODES} disabled={working || state.running === true} onChange={mode => run(true, mode)} /> : null} />
+    <>
+      <GameLine name="Optimize" word={wordFor(state, working, work, kept)} state={state.standing === 'applied' ? 'applied' : state.running ? 'running' : 'ready'} action
+        disabled={working || state.running === true || state.standing === 'unfound'} confirm={applied ? 'Put back your settings?' : undefined} onOpen={() => run(!applied)}
+        control={state.windowMode ? <Choice label="Window mode" value={state.windowMode} choices={WINDOW_MODES} disabled={working || state.running === true} onChange={mode => run(true, mode)} /> : null} />
+      {state.smoothMotion != null && (
+        <GameReading name="Smooth Motion" word={state.smoothMotion ? { text: 'On (without in-game DLSS-G)', good: true } : { text: 'Off' }}>
+          <Switch checked={state.smoothMotion} label="Smooth Motion" disabled={working || state.running === true} onChange={toggleSmoothMotion} />
+        </GameReading>
+      )}
+    </>
   )
 }
 
