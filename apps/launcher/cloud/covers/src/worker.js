@@ -26,8 +26,9 @@ const MAX_BACKOFF_SECONDS = 900
 const RATE_LIMIT_BACKOFF_SECONDS = 60
 const FAILURE_BACKOFF_SECONDS = 300
 const UPSTREAM_TIMEOUT_MS = 3000
-/** One ask never runs longer than this in total, however many stores are slow: the Launcher waits longer than this (limits.json is the one number both sides read). */
-export const TOTAL_BUDGET_MS = limits.totalBudgetMs
+/** One ask never runs longer than this in total, however many stores are slow: the Launcher waits longer than this (limits.json is the one number both sides read).
+ * Not exported: workerd takes every named export of the main module as an entrypoint and refuses to start on a number. */
+const TOTAL_BUDGET_MS = limits.totalBudgetMs
 const MAX_TITLE_BYTES = 200
 const ID = /^\d{1,12}$/
 const STORES = ['steam', 'gog', 'epic']

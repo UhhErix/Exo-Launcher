@@ -931,6 +931,7 @@ public sealed partial class WebHostBridge
                 "system.about" => await SystemAboutAsync(requestToken).ConfigureAwait(true),
                 "system.tune" => await Task.Run(() => AutoTuneService.Act(ReadString(paramsEl, hasParams, "action"), ReadString(paramsEl, hasParams, "part"), ReadString(paramsEl, hasParams, "mode"))).ConfigureAwait(true),
                 "system.interrupts" => await SystemInterruptsAsync(paramsEl, hasParams, requestToken).ConfigureAwait(true),
+                "system.tuning" => await SystemTuningAsync(paramsEl, hasParams, requestToken).ConfigureAwait(true),
                 "system.mouseCore" => await SystemMouseCoreAsync(paramsEl, hasParams, requestToken).ConfigureAwait(true),
                 "system.drives" => await SystemDrivesAsync(paramsEl, hasParams, requestToken).ConfigureAwait(true),
                 "system.drivers" => await SystemDriversAsync(paramsEl, hasParams, requestToken).WaitAsync(TimeSpan.FromMinutes(4), requestToken).ConfigureAwait(true),

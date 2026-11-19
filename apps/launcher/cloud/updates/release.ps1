@@ -11,7 +11,7 @@
     tools\Build-Release.ps1 writes artifacts\ (installer, .sha256, whats-new.json); CHANGELOG.md is copied into artifacts\
     and must hold the entry; publish-release.ps1 -WhatIf must pass; publish-release.ps1 uploads to the update mirror,
     verifies /v1/<app>/latest and asks the Worker for the release card; exo-site builds (its build reads the version the mirror serves
-    now) and deploys with wrangler@4.158.0; then a live check of updates.getexo.app and getexo.app (the change list is
+    now) and deploys with wrangler@4.165.0; then a live check of updates.getexo.app and getexo.app (the change list is
     checked at the update address; getexo.app's Changelog page refreshes every 15 minutes, so it only warns). The code
     lives on GitHub; there is no separate code backup.
     When the build writes the app's file list (artifacts\payload-manifest.json, Exo Cinema from 1.5), publish-release.ps1
@@ -44,7 +44,7 @@ param(
 
 $ErrorActionPreference = 'Stop'
 # The Wrangler pin every cloud README and script uses (publish-release.ps1 has the same one).
-$WranglerVersion = '4.158.0'
+$WranglerVersion = '4.165.0'
 $Base = 'https://updates.getexo.app'
 $Front = 'https://getexo.app'
 $Dash = [char]0x2014

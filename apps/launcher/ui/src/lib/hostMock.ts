@@ -297,6 +297,35 @@ const mockNetItems = (p?: { action?: unknown; item?: unknown }) => {
 }
 
 /**
+ * Best settings › System in browser dev: a PC a tweak left on the platform clock and without a page file, two services at
+ * boot and Memory Integrity on. `?tuning=vanguard` has Riot Vanguard installed, so Memory Integrity stays on.
+ */
+const mockTuningVanguard = typeof location !== 'undefined' && new URLSearchParams(location.search).get('tuning') === 'vanguard'
+const mockTuningOn = new Set<string>()
+const mockTuningOff = new Set<string>()
+const mockTuning = (p?: { action?: unknown; item?: unknown }) => {
+  const defaults = ['timer', 'pagefile']
+  if (p?.action === 'apply') for (const key of defaults) if (!mockTuningOff.has(key)) mockTuningOn.add(key)
+  const blocked = mockTuningVanguard ? 'Riot Vanguard (VALORANT, League of Legends) can require Memory Integrity, so Exo leaves it on: games with it may refuse to start without it.' : null
+  if (typeof p?.item === 'string' && !(p.item === 'integrity' && blocked)) {
+    if (p.action === 'on') { mockTuningOn.add(p.item); mockTuningOff.delete(p.item) }
+    if (p.action === 'off') { mockTuningOn.delete(p.item); if (defaults.includes(p.item)) mockTuningOff.add(p.item) }
+  }
+  const words: Record<string, [string, string, boolean]> = {
+    timer: ["Windows' own timer", 'A tweak forced the platform clock (HPET), so every clock read a game makes waits on it. Takes a restart.', false],
+    pagefile: ['A page file, managed by Windows', "There's no page file, so a game that needs more memory than your RAM crashes instead of slowing down.", false],
+    services: ['Services set to Manual', 'Downloaded Maps Manager and Program Compatibility Assistant Service start with Windows; Manual starts them only when something needs them. Takes a restart.', true],
+    integrity: ['Memory Integrity off', blocked ?? 'Less secure: Windows stops checking that every driver is signed and safe, which is what keeps malicious drivers out. Only for a PC you keep clean. Up to about 5-10% more frames in some games. Takes a restart.', true],
+  }
+  const items = Object.entries(words).map(([key, [label, detail, optIn]]) => {
+    const on = mockTuningOn.has(key)
+    return { key, label, detail: on ? 'Restart to finish.' : detail, on, canUndo: on, off: mockTuningOff.has(key), optIn, restart: on, blocked: key === 'integrity' ? blocked : null }
+  })
+  const message = p?.item === 'integrity' && p.action === 'on' && blocked ? blocked : null
+  return { ok: !message, message, applied: defaults.every(key => mockTuningOn.has(key) || mockTuningOff.has(key)), restart: mockTuningOn.size > 0, items }
+}
+
+/**
  * PC › Drives in browser dev: this PC's 990 PRO with flushing off and 132 unsafe shutdowns and a game off DirectStorage's
  * fast path, a worn SATA SSD with bad sectors (the problem case), and a hard drive with games on it. `?drives=fine`
  * shows the same drives with nothing wrong. flush, optimize and all set their row.
@@ -1697,6 +1726,7 @@ const MOCK_HANDLERS: Record<string, MockHandler> = {
       check: mockCheck,
     }
   },
+  'system.tuning': (p) => mockTuning(p),
   'system.interrupts': (p) => {
     const applied = p?.action === 'apply'
     return {

@@ -292,6 +292,7 @@ internal static class PlayerData
         new("exo-network-best.json", "NetworkBest", Why.ThisPc, "this PC's DNS and TCP settings before Best settings › Network, and the items turned off"),
         new("exo-network-tune.json", "NetworkTune", Why.ThisPc, "network adapter values before Exo tuned them"),
         new("exo-power-plan.json", "PowerPlan", Why.ThisPc, "the power plan before Exo's"),
+        new("exo-system-tuning.json", "SystemTuning", Why.ThisPc, "this PC's Windows settings before Best settings › System, and the items turned off"),
         new("exo-shared.json", "WebViewHostProfile", Why.ThisPc, "marks the shared WebView profile"),
         new("exo-snapshot.json", "ShadersAddon", Why.ThisPc, "the shader engine's last state"),
         new("gpu-preference.json", "GpuPreference", Why.ThisPc, "Windows' per-game GPU choice before Exo set it"),
