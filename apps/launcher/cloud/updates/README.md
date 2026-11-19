@@ -5,7 +5,8 @@ Where every Exo app (Launcher, Cinema) asks for its newest version and downloads
 nothing else, so moving downloads never strands an installed copy.
 
 It is a Cloudflare Worker (`src/worker.js`, plain JavaScript, no build step) with one R2 bucket, `exo-releases`, as its
-only source (binding `MIRROR`). GitHub is not asked for anything; releases reach the bucket through `publish-release.ps1`.
+only source (binding `MIRROR`). GitHub is not asked for anything; releases reach the bucket through `publish-release.ps1`, run by
+hand or, for an Exo Launcher GitHub release, by the workflow in "From a GitHub release" below.
 
 ## What an app asks
 
@@ -169,7 +170,9 @@ failed check is safe). Then, in this order, so no app is ever offered a release 
    size are the local ones, the `.sha256` names the same hash, `whats-new.json` is for the tag. A failure stops here, with
    `<app>/latest.json` never touched;
 3. only then it writes `<app>/latest.json` (schema 2, with each file's size and SHA-256) and checks that `/v1/<app>/latest`
-   names the tag with matching `checks`. If it doesn't, the `latest.json` from before the run is put back;
+   names the tag with matching `checks`. If it doesn't, the `latest.json` from before the run is put back. Just before the
+   write it reads `<app>/latest.json` from the bucket; when that already names a newer tag (another run published it
+   meanwhile) it stops and leaves it alone;
 4. when `-Dir` holds the app's `CHANGELOG.md`, it uploads it to `<app>/CHANGELOG.md` and checks `/v1/<app>/changelog`.
 
 With `-Payload <app folder>` the release can also be installed file by file (file-level updates; the design, the cases it
@@ -197,6 +200,28 @@ without the file leaves the previous list on getexo.app.
 
 Older tags are kept unless asked for: `-PruneOlder -OlderTag v3.24.0` deletes only the three files of each tag named, and
 only after the new release verifies. Wrangler's version is `$WranglerVersion` in the script.
+
+## From a GitHub release (`publish-github-release.ps1`)
+
+When a stable Exo Launcher release is published on GitHub, `.github/workflows/launcher-release-mirror.yml` runs
+`publish-github-release.ps1 -Tag <tag> -Publish` on a Windows runner. It needs the repo secrets `CLOUDFLARE_API_TOKEN` and
+`CLOUDFLARE_ACCOUNT_ID`; without them it warns and stops. The token steps are in the root `RELEASES.md`. The script:
+
+- reads the release with gh (published, not a draft or pre-release) and downloads `ExoLauncher-<version>-Setup.exe` and its
+  `.sha256`, each checked against the size and SHA-256 GitHub recorded at upload (`digest`); the `.sha256` must name the
+  installer's hash and file;
+- reads the tag's committed tree (`git show`, never the working tree): `VERSION` must be the tag's version, `CHANGELOG.md`
+  must hold the entry, and the version's What's New entry (`ui/src/lib/whatsNew.json`) is written the way `Build-Release.ps1`
+  writes `whats-new.json` (a `whats-new.json` asset on the release is used instead when there is one);
+- stages `ExoLauncher-Setup.exe`, `ExoLauncher-Setup.exe.sha256` (`"<hash>  ExoLauncher-Setup.exe"`, ASCII, no newline),
+  `whats-new.json` and `CHANGELOG.md`, byte for byte as a local build does, and runs `publish-release.ps1` on them, so all its
+  checks, its order and its rollback apply;
+- with `-Publish`, checks `/v1/launcher/latest` once more against GitHub's size and SHA-256. Without it (the default) it is
+  the dry run: it prints the R2 keys and runs `publish-release.ps1`'s dry run, which still reads the bucket (wrangler login).
+
+It does not publish the add-ons' source (`addon-source.mjs`), which needs the Exo Shaders checkout and Build-Release's
+commit, so that stays a step before the release. It passes no `-Payload` (a GitHub release has no app folder), so the
+release updates through Setup.
 
 ## Deploying
 
