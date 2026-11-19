@@ -45,6 +45,7 @@ internal static class NetworkDestinations
     internal const string Shaders = "Exo Shaders (compression libraries for some games, from their makers' release pages on GitHub)";
     internal const string CrashReports = "Crash, freeze and error reports (reports.getexo.app, on Exo's Cloudflare account)";
     internal const string AppTelemetry = "App telemetry (reports.getexo.app, on Exo's Cloudflare account)";
+    internal const string UserReports = "Report a problem (reports.getexo.app, on Exo's Cloudflare account)";
     internal const string AmdDrivers = "AMD (newest chipset and graphics driver versions and their downloads: `www.amd.com`, `drivers.amd.com`)";
     internal const string IntelDrivers = "Intel (newest chipset, graphics and network driver versions and their downloads: `www.intel.com`, `downloadmirror.intel.com`)";
     internal const string RealtekDrivers = "Realtek (newest network driver version: `www.realtek.com`)";
@@ -78,6 +79,8 @@ internal static class NetworkDestinations
         new("reports.getexo.app", CrashReports),
         // Telemetry: every install (owner, 2026-11-09: no switch; Telemetry.cs).
         new("reports.getexo.app", AppTelemetry),
+        // UserReport: Settings > About > Report a problem, only on Send; cloud/reports files it in the private Exo-Reports repo.
+        new("reports.getexo.app", UserReports),
 
         // VerifiedGitHubReleaseDownloader: pinned tool assets (Legendary, gogdl, Nile), read from Exo's cache.
         new("updates.getexo.app", ToolReleases),

@@ -1592,6 +1592,14 @@ const MOCK_HANDLERS: Record<string, MockHandler> = {
   'exoAccount.codeConfirmed': () => ({ ok: true }),
   'exoAccount.probe': () => ({ reachable: true, gameRunning: false }),
   'app.openLogs': () => ({ ok: false, message: 'No logs folder in the browser mock.' }),
+  'report.preview': () => ({ ok: true, excerpt: [
+    'Exo Launcher 1.0.0 · Windows 10.0.26300 · 2026-11-19 10:00 UTC',
+    'Error (app): Report a problem',
+    '',
+    "Exo's log (1 entries):",
+    '[2026-11-19T09:58:00.000Z] WARN: Steam: the library did not answer in <path>',
+  ].join('\n') }),
+  'report.send': () => ({ ok: true, issue: 123 }),
   'app.installUpdate': () => ({
     ok: true,
     alreadyLatest: true,

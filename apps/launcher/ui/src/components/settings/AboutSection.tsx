@@ -1,5 +1,4 @@
 import { memo, useState } from 'react'
-import { bugReportUrl } from '../../lib/bugReport'
 import { host } from '../../lib/host'
 import { invalidateUpscalerStatus } from '../../lib/upscalerCache'
 import { WHATS_NEW } from '../../lib/whatsNew'
@@ -7,6 +6,7 @@ import { updateWords } from '../shell/useAppUpdate'
 import { Progress, ProgressWords } from '../ui/Progress'
 import { ActionButton } from '../ui/ConfirmButton'
 import { Row, Section, State } from './parts'
+import { ReportProblem } from './ReportProblem'
 
 /** Changelog opens the sheet of every release's notes (LauncherApp); the rest open in the browser. */
 const LINKS = [
@@ -98,22 +98,28 @@ function RebuildCachesRow() {
 
 /**
  * Settings › About: Exo's version with Check for updates beside it (where people look for it: it was at the foot of
- * General until 3.26), the caches, and the links: Report a problem opens GitHub's bug form with this version filled in.
+ * General until 3.26), the caches, and the links: Report a problem opens its form (ReportProblem: sent to the team's
+ * private tracker, or opened as a public GitHub issue).
  */
 export const AboutSection = memo(function AboutSection({ version, ...update }: UpdateProps & { version: string | null }) {
+  const [reporting, setReporting] = useState(false)
   return (
     <Section id="updates">
       <UpdateRow version={version} {...update} />
       <RebuildCachesRow />
       <div className="exo-set-item">
         <ul className="exo-set-links">
-          {[{ label: 'Report a problem', url: bugReportUrl(version) }, ...LINKS].map(link => (
+          <li>
+            <button type="button" className="exo-set-link" aria-haspopup="dialog" onClick={() => setReporting(true)}>Report a problem</button>
+          </li>
+          {LINKS.map(link => (
             <li key={link.label}>
               <button type="button" className="exo-set-link" onClick={() => link.url ? void host.openUrl(link.url) : window.dispatchEvent(new Event(WHATS_NEW))}>{link.label}</button>
             </li>
           ))}
         </ul>
       </div>
+      {reporting ? <ReportProblem version={version} onClose={() => setReporting(false)} /> : null}
     </Section>
   )
 })
