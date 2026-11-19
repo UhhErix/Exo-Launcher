@@ -134,7 +134,26 @@ public sealed partial class DlssSwapService
     internal bool RecorderClashes(string gameId) =>
         FrameGenFolderFor(gameId) is { } folder && ReadFrameGenManifest(folder) is { Out: false } install && install.Mod == DlssgSm86.Name && File.Exists(Path.Combine(folder, "scskiller.ini"));
 
-    private static FrameGenMod? FrameGenModNamed(string? name) => FrameGenMods.FirstOrDefault(mod => mod.Name == name);
+    private static FrameGenMod? FrameGenModNamed(string? name) =>
+        FrameGenMods.FirstOrDefault(mod => mod.Name == name) ?? LegacyFrameGenMods.FirstOrDefault(mod => mod.Name == name);
+
+    /// <summary>
+    /// Exo Bridge: OptiScaler's fork that an Exo build of mid-November 2026 put into games ("Exo Bridge, a fork of OptiScaler",
+    /// its loader OptiScaler.dll by its own name), whose code went with that build. Exo still knows it as its own, so its record
+    /// isn't forgotten at launch (which left its files in the game for good): the next round takes it out by the record's file
+    /// hashes (<see cref="FrameGenKeepCurrentAsync"/>) and Best settings puts today's mod in. Never installed or updated.
+    /// </summary>
+    internal static readonly FrameGenMod ExoBridgeLegacy = new(
+        "Exo Bridge", "exo", "exo-bridge", NoReleaseAsset(), 0, "OptiScaler.dll", "OptiScaler.ini",
+        ["dxgi.dll", "winmm.dll", "version.dll", "dbghelp.dll", "wininet.dll", "winhttp.dll"],
+        [], ["OptiScaler.log", "dlssg_to_fsr3.log", "fakenvapi.log"], ["RTXMFG-", "RTX40MFG-"], "OptiScaler", new(0, 0, 0));
+
+    internal static readonly FrameGenMod[] LegacyFrameGenMods = [ExoBridgeLegacy];
+
+    private static bool IsLegacy(FrameGenMod mod) => LegacyFrameGenMods.Contains(mod);
+
+    [GeneratedRegex(@"(?!)")]
+    private static partial Regex NoReleaseAsset();
 
     // ------------------------------------------------------------------ the newest release
 
@@ -1331,6 +1350,15 @@ public sealed partial class DlssSwapService
         foreach (var game in games)
         {
             if (FrameGenFolderFor(game.Id) is not { } folder || ReadFrameGenManifest(folder) is not { Out: false } install || FrameGenModNamed(install.Mod) is not { } mod) continue;
+            if (IsLegacy(mod))
+            {
+                // A mod Exo no longer ships: out by its record, and the game goes round again for today's.
+                if (busy(game)) continue;
+                var (ok, message) = FrameGenOff(game);
+                AppLog.Info($"Frame generation in {game.Title}: {mod.Name} {install.Release} is no longer Exo's mod; {(ok ? message : "not taken out: " + message)}");
+                if (ok) FrameGenEverywhereSoon();
+                continue;
+            }
             if (!latest.TryGetValue(mod.Repo, out var release))
             {
                 try { release = await FrameGenLatest(mod, ct).ConfigureAwait(false); }
