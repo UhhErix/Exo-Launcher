@@ -1,12 +1,10 @@
 import { spotifyMock } from './spotifyMock'
-import { mockAdmin, mockAppMessages, mockFew, mockFewMessages, mockVoiceNow, mockApps, mockChannels, mockChannelsFor, mockDiscordStatus, mockMessageId, mockFriends, mockHome, mockMembers, mockMessages, mockProfile } from './discordMock'
+import { mockAdmin, mockAppMessages, mockFew, mockFewMessages, mockApps, mockChannels, mockChannelsFor, mockDiscordStatus, mockMessageId, mockFriends, mockHome, mockMembers, mockMessages, mockProfile } from './discordMock'
 /** Browser development fixtures. Dynamically loaded only outside the packaged host. */
 import type { Game, GameProperties, LauncherSettings, InstallProgress, InstalledApp, ReplacedApp, RuntimeItem, StartupItem, StartupState, StoreGift } from './host'
 import type { CaptureItem } from './capture'
 import type { NoteInfo } from './notes'
 import { emitHostEvent } from './host'
-let mockShareGames = false
-let mockShareReady = false
 // A dev preview's ?pins=g:1,d:2 starts with those pinned to Discord's top bar.
 let mockMusicLevel = 0.6
 let mockBandPins: string[] = (typeof location === 'undefined' ? null : new URLSearchParams(location.search).get('pins'))?.split(',') ?? []
@@ -1128,16 +1126,9 @@ const MOCK_HANDLERS: Record<string, MockHandler> = {
   'friends.badge': () => ({ count: 0 }),
   'discord.status': () => mockDiscordStatus,
   'discord.bandPins': (params?: { pins?: string[] }) => { if (params?.pins) mockBandPins = params.pins; return { ok: true, pins: mockBandPins } },
-  'discord.shareGames': (params?: { on?: boolean }) => { if (params?.on !== undefined) mockShareGames = params.on; return { ok: true, on: mockShareGames } },
-  'discord.shareReady': (params?: { on?: boolean }) => { if (params?.on !== undefined) mockShareReady = params.on; return { ok: true, on: mockShareReady && mockShareGames } },
-  'discord.shareClip': async (params?: { captureId?: string }) => {
-    await new Promise(done => setTimeout(done, 700))
-    return params?.captureId === 'mock-big' ? { ok: false, message: "It's over 25 MB. Shrink it first." } : { ok: true }
-  },
   'discord.signIn': mockOk,
   'discord.signOut': mockOk,
   'discord.home': () => mockHome,
-  'discord.voiceNow': () => ({ rooms: mockVoiceNow }),
   'discord.channels': (params?: { guildId?: string }) => ({ ...mockChannelsFor(params?.guildId ?? ''), hideMuted: mockHideMuted }),
   'discord.admin': mockAdmin,
   'discord.messages': (params?: { before?: string }) => ({ ok: true, messages: params?.before ? [] : (mockFew ? mockFewMessages : [...mockMessages, ...mockAppMessages]).slice().sort((a, b) => (BigInt(b.id) > BigInt(a.id) ? 1 : -1)) }),

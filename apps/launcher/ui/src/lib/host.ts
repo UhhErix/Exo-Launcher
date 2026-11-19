@@ -3,7 +3,7 @@ import type { UpdateState } from './updatePhase'
 import { report } from './report'
 import type { MatchSong, MusicPlayback, MusicService, MusicAction } from './music'
 import type { PlayerAction, PlayerActOptions, PlayerRoomState, PlayerView, PlayerViewData, PlayerViewOptions } from './player'
-import type { DiscordChannel, DiscordChannels, DiscordPlace, DiscordEvent, DiscordGuide, DiscordInvite, DiscordMemberSearch, DiscordResource, DiscordRole, DiscordUser, DiscordEmojis, DiscordFriend, DiscordRestricted, DiscordRoleIcon, DiscordSavedMessage, DiscordGif, DiscordFavoriteGif, DiscordMemberList, DiscordProfile, DiscordProfileExtras, DiscordGuildProfile, DiscordStickerGroup, DiscordThread, DiscordPresence, DiscordCallSong, DiscordHome, DiscordReactionEvent, DiscordVoice, DiscordMessage, DiscordMessageEvent, DiscordSignInStep, DiscordState, DiscordStatus, DiscordUnread, DiscordNotice, DiscordForumTag, DiscordForYouItem, DiscordUnreadChannel, DiscordSearchFilters, DiscordShopCatalog, DiscordShopProduct, DiscordPaymentChoice, DiscordShopPrice, DiscordRailItem, DiscordThreadState, DiscordVoiceNow } from './discord'
+import type { DiscordChannel, DiscordChannels, DiscordPlace, DiscordEvent, DiscordGuide, DiscordInvite, DiscordMemberSearch, DiscordResource, DiscordRole, DiscordUser, DiscordEmojis, DiscordFriend, DiscordRestricted, DiscordRoleIcon, DiscordSavedMessage, DiscordGif, DiscordFavoriteGif, DiscordMemberList, DiscordProfile, DiscordProfileExtras, DiscordGuildProfile, DiscordStickerGroup, DiscordThread, DiscordPresence, DiscordCallSong, DiscordHome, DiscordReactionEvent, DiscordVoice, DiscordMessage, DiscordMessageEvent, DiscordSignInStep, DiscordState, DiscordStatus, DiscordUnread, DiscordNotice, DiscordForumTag, DiscordForYouItem, DiscordUnreadChannel, DiscordSearchFilters, DiscordShopCatalog, DiscordShopProduct, DiscordPaymentChoice, DiscordShopPrice, DiscordRailItem, DiscordThreadState } from './discord'
 import type { CaptureExport, CaptureItem, CaptureSettings, CaptureState, ReelEvent } from './capture'
 import type { NoteInfo } from './notes'
 import type { AccountSettings, DiscordAccount, DiscordAccountAction, DiscordClientSettings } from './discordPrefs'
@@ -2559,7 +2559,6 @@ export const host = {
   appNotify: (title: string, body: string) => rawCall<{ ok: boolean }>('app.notify', { title, body }),
   discordHome: () => rawCall<DiscordHome>('discord.home', {}),
   /** Who is in voice across your servers, from what the connection holds. */
-  discordVoiceNow: () => rawCall<{ rooms: DiscordVoiceNow[] }>('discord.voiceNow', {}),
   /** The server channels with mentions waiting; at most one read of Discord's Mentions per connection. */
   discordChannels: (guildId: string) => rawCall<DiscordChannels>('discord.channels', { guildId }),
   /** 50 messages: the newest, or those before, after or around one; peek reads them without opening the channel (the Inbox's Unreads). */
@@ -2682,14 +2681,7 @@ export const host = {
   /** The user panel's device menus: devices, choices and volumes; with values, saves them. */
   discordAudio: (change: { input?: string; output?: string; inputVolume?: number; outputVolume?: number; soundboardVolume?: number; soundboardMuted?: boolean }) =>
     rawCall<{ inputs: { id: string; name: string }[]; outputs: { id: string; name: string }[]; input: string | null; output: string | null; inputVolume: number; outputVolume: number; soundboardVolume: number; soundboardMuted: boolean }>('discord.audio', change, 15_000),
-  /** Share my games for the account signed in: reads it, or sets it. */
   discordBandPins: (pins?: string[]) => rawCall<{ ok: boolean; pins: string[]; message?: string | null }>('discord.bandPins', pins === undefined ? {} : { pins }),
-  discordShareGames: (on?: boolean) => rawCall<{ ok: boolean; on: boolean; message?: string | null }>('discord.shareGames', on === undefined ? {} : { on }, 30_000),
-  /** Share when I'm getting ready (off until turned on; reads off while Share my games is): friends on Exo see a game installing, building its shaders or ready. */
-  discordShareReady: (on?: boolean) => rawCall<{ ok: boolean; on: boolean; message?: string | null }>('discord.shareReady', on === undefined ? {} : { on }, 30_000),
-  /** Posts one capture (by its id, from capture.list) to a conversation as an attachment; the host reads the file, and refuses what is over 25 MB. */
-  discordShareClip: (channelId: string, captureId: string) =>
-    rawCall<{ ok: boolean; message?: string | null }>('discord.shareClip', { channelId, captureId }, 5 * 60_000),
   /** The account's Discord settings (PreloadedUserSettings, Discord's defaults filled in); with changes, saves them (guildFolders: the whole server list). */
   discordUserSettings: (changes?: Partial<AccountSettings> & { guildFolders?: DiscordRailItem[] }) =>
     rawCall<{ ok: boolean; message?: string | null; values?: AccountSettings | null }>('discord.userSettings', changes ? { changes } : {}, 30_000),

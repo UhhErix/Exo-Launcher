@@ -406,10 +406,6 @@ public sealed class AppSettings
     public bool DiscordEvenVoices { get; set; } = true;
     /// <summary>Game focus: no Discord notifications while a game runs (the unread badge still counts).</summary>
     public bool DiscordQuietWhilePlaying { get; set; } = true;
-    /// <summary>The Discord accounts (user ids) that turned Share my games on, on this PC: friends on Exo see the game they opened from Exo (<see cref="ExoLauncher.Services.DiscordClient.DiscordSession.SharesGames"/>). Off for every account until it is. 3.23.0 made it opt-in again; the 3.22.0 list, DiscordShareGames, shared to Discord and is read by nothing.</summary>
-    public List<string> DiscordGamesShared { get; set; } = [];
-    /// <summary>The Discord accounts (user ids) that turned Share when I'm getting ready on, on this PC: friends on Exo see that a game is installing, building its shaders or ready (<see cref="ExoLauncher.Services.DiscordClient.FriendPrep"/>). Off for every account until it is.</summary>
-    public List<string> DiscordReadyShared { get; set; } = [];
     /// <summary>What each Discord account (by user id) pinned to the room's top bar, in order: "g:id" a server, "d:id" a DM or group DM.</summary>
     public Dictionary<string, List<string>> DiscordBandPins { get; set; } = [];
     /// <summary>Exo's Discord calls: the microphone and speakers chosen (Windows endpoint ids; none is Windows' default) and their volume, 0-200 like Discord's.</summary>

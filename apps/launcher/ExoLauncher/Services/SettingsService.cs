@@ -187,8 +187,6 @@ public sealed class SettingsService
         loaded.DiscordVoiceTunes = CopyStrings(loaded.DiscordVoiceTunes);
         loaded.LibraryFolders = NormalizeLibraryFolders(loaded.LibraryFolders);
         loaded.HiddenGames = NormalizeHiddenGames(loaded.HiddenGames);
-        loaded.DiscordGamesShared = NormalizeHiddenGames(loaded.DiscordGamesShared);
-        loaded.DiscordReadyShared = NormalizeHiddenGames(loaded.DiscordReadyShared);
         loaded.DiscordBandPins = NormalizeDiscordBandPins(loaded.DiscordBandPins);
         loaded.FrameGenKeptOff = NormalizeHiddenGames(loaded.FrameGenKeptOff);
         if (string.IsNullOrWhiteSpace(loaded.SortMode) || !IsLibrarySortMode(loaded.SortMode))
@@ -1004,8 +1002,6 @@ public sealed class SettingsService
         DiscordOnlyMyVoice = source.DiscordOnlyMyVoice,
         DiscordEvenVoices = source.DiscordEvenVoices,
         DiscordQuietWhilePlaying = source.DiscordQuietWhilePlaying,
-        DiscordGamesShared = NormalizeHiddenGames(source.DiscordGamesShared),
-        DiscordReadyShared = NormalizeHiddenGames(source.DiscordReadyShared),
         DiscordBandPins = NormalizeDiscordBandPins(source.DiscordBandPins),
         DiscordInputDevice = source.DiscordInputDevice is { Length: > 0 and <= 512 } input ? input : null,
         DiscordOutputDevice = source.DiscordOutputDevice is { Length: > 0 and <= 512 } output ? output : null,

@@ -47,13 +47,6 @@
   padding: 14px 16px 16px;
 }
 
-.exo-dc-lobby-none {
-  margin: auto;
-  padding-top: 20vh;
-  color: var(--color-muted);
-  text-align: center;
-}
-
 .exo-dc-place-block {
   display: flex;
   flex: var(--people, 1) 1 calc((150px + 96px * var(--people, 1)) * var(--exo-scale, 1));
@@ -108,17 +101,6 @@
   color: var(--color-fg);
   font-size: var(--exo-type-body);
   font-weight: var(--exo-weight-title);
-}
-
-.exo-dc-lobby-title h2 > span:not(.exo-dc-home-through) {
-  color: var(--color-muted);
-  font-weight: 400;
-}
-
-.exo-dc-home-through {
-  display: inline-flex;
-  margin-left: 6px;
-  vertical-align: -1px;
 }
 
 /* What is live reads as live: the green dot breathing beside how long it has been going. */

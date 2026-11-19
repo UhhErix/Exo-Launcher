@@ -432,11 +432,6 @@ export type DiscordSearchFilters = {
   content?: string; authorIds?: string[]; mentions?: string[]; has?: string[]; channelIds?: string[]; authorTypes?: string[]
   pinned?: boolean; minId?: string; maxId?: string; sort?: 'newest' | 'oldest' | 'relevance'; offset?: number
 }
-/** Who is in a voice room right now, in any server (discord.voiceNow): a few faces, friends first, and how many in all. */
-export type DiscordVoiceNow = {
-  channelId: string; name: string; guildId: string; guild: string; icon: string | null; muted: boolean; canConnect: boolean
-  limit?: number | null; count: number; friends: number; streaming: boolean; people: { id: string; name: string; avatar: string | null }[]
-}
 export type DiscordMessageEvent ={ kind: 'create' | 'update' | 'delete'; channelId: string; message?: DiscordMessage; id?: string }
 
 export function displayName(message: Pick<DiscordMessage, 'author' | 'member'>): string {

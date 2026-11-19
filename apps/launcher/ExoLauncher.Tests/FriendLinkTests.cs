@@ -323,14 +323,15 @@ public sealed class FriendLinkTests
     public void OnlyACloseRightAfterTheKeyBlamesIt(int? code, long ms, bool blamed) =>
         Assert.Equal(blamed, DiscordSession.KeyRefused(code, ms));
 
-    // ---- the switch ----
+    // ---- no switch (3.26.0) ----
 
     [Fact]
-    public void NobodyIsSharingUntilTheyTurnItOn_AndTheOldListSharedToDiscordNotToFriends()
+    public void TheOldListsOfWhoTurnedSharingOnAreReadByNothing()
     {
-        var old = JsonSerializer.Deserialize<AppSettings>("{\"DiscordShareGames\":[\"" + A + "\"]}", new JsonSerializerOptions { PropertyNameCaseInsensitive = true })!;
-        Assert.Empty(old.DiscordGamesShared);
-        Assert.DoesNotContain("\"DiscordShareGames\"", JsonSerializer.Serialize(old));
+        var old = JsonSerializer.Deserialize<AppSettings>("{\"DiscordShareGames\":[\"" + A + "\"],\"DiscordGamesShared\":[\"" + A + "\"]}", new JsonSerializerOptions { PropertyNameCaseInsensitive = true })!;
+        var written = JsonSerializer.Serialize(old);
+        Assert.DoesNotContain("\"DiscordShareGames\"", written);
+        Assert.DoesNotContain("\"DiscordGamesShared\"", written);
     }
 
     [Fact]
