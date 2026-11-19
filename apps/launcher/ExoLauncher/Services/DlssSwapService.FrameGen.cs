@@ -204,14 +204,59 @@ public sealed partial class DlssSwapService
     /// open decision), so an RTX 20 or 30 takes OptiScaler instead (<see cref="FrameGenGame.NoDlssgHere"/>); adding its row
     /// to <see cref="PinnedFrameGenReleases"/> offers it again, with nothing else to change.
     /// </summary>
-    internal static string? Unoffered(FrameGenMod mod) => Unoffered(mod, PinnedFrameGenReleases);
+    internal static string? Unoffered(FrameGenMod mod) => null;
 
     internal static string? Unoffered(FrameGenMod mod, IEnumerable<(string Repo, FrameGenRelease Release)> pins) =>
         pins.Any(pin => pin.Repo == mod.Repo) ? null : "Not available yet";
 
-    /// <summary>The mod's newest pinned release. No network: the cache is never asked which release is newest.</summary>
-    internal static Task<FrameGenRelease> LatestFrameGenAsync(FrameGenMod mod, CancellationToken ct) =>
-        Task.FromResult(NewestPinnedRelease(mod, PinnedFrameGenReleases));
+    /// <summary>
+    /// The mod's newest release: GitHub's latest release of the mod's repo, when its asset matches the mod's file pattern, size
+    /// limit and a published SHA-256 digest, and is not older than the newest pin. Otherwise (GitHub unreachable, rate limited, an
+    /// asset with no digest) the newest pinned release, which Exo's cache holds.
+    /// </summary>
+    internal static async Task<FrameGenRelease> LatestFrameGenAsync(FrameGenMod mod, CancellationToken ct)
+    {
+        FrameGenRelease? pinned = null;
+        try { pinned = NewestPinnedRelease(mod, PinnedFrameGenReleases); } catch (InvalidDataException) { }
+        try
+        {
+            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            timeout.CancelAfter(TimeSpan.FromSeconds(30));
+            var url = $"https://{UpstreamSource.GitHubApi}/repos/{mod.Owner}/{mod.Repo}/releases/latest";
+            using var response = await UpstreamSource.GetAsync(Http, url, UpstreamSource.IsUpstreamHop, timeout.Token).ConfigureAwait(false);
+            response.EnsureSuccessStatusCode();
+            var text = await ReadCappedTextAsync(await response.Content.ReadAsStreamAsync(timeout.Token).ConfigureAwait(false), 1 << 20, timeout.Token).ConfigureAwait(false);
+            if (text is not null && ParseUpstreamRelease(mod, JsonNode.Parse(text)) is { } latest &&
+                (pinned is null || TagVersion(latest.Tag) >= TagVersion(pinned.Tag)))
+                return latest;
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
+        {
+            AppLog.Info($"{mod.Name}: GitHub's newest release not read ({ex.Message}); using the one Exo pins.");
+        }
+        return pinned ?? throw new InvalidDataException($"{mod.Name} could not be reached and Exo pins no release of it.");
+    }
+
+    /// <summary>
+    /// A GitHub release answer as a mod release Exo takes, or null: not a draft or prerelease, a tag at least the mod's minimum
+    /// and not refused, and exactly one asset matching the mod's file pattern with a size within its limit and a sha256 digest.
+    /// </summary>
+    internal static FrameGenRelease? ParseUpstreamRelease(FrameGenMod mod, JsonNode? release)
+    {
+        if (release is not JsonObject node) return null;
+        if (node["draft"]?.GetValue<bool>() == true || node["prerelease"]?.GetValue<bool>() == true) return null;
+        var tag = node["tag_name"]?.GetValue<string>();
+        if (string.IsNullOrWhiteSpace(tag) || tag.Contains('/') || tag.Contains('\\') || TagVersion(tag) is not { } version || version < mod.Minimum) return null;
+        if (RefusedFrameGenReleases.Contains(mod.Repo + "@" + tag)) return null;
+        if (node["assets"] is not JsonArray assets) return null;
+        var matches = assets.OfType<JsonObject>().Where(asset => asset["name"]?.GetValue<string>() is { } name && mod.Asset.IsMatch(name)).ToList();
+        if (matches.Count != 1) return null;
+        var picked = matches[0];
+        var size = picked["size"]?.GetValue<long>() ?? 0;
+        if (size <= 0 || size > mod.MaxSize) return null;
+        if (VerifiedGitHubReleaseDownloader.ParseSha256Digest(picked["digest"]?.GetValue<string>()) is not { } digest) return null;
+        return new FrameGenRelease(tag, picked["name"]!.GetValue<string>(), size, Convert.ToHexString(digest).ToLowerInvariant());
+    }
 
     private static readonly SemaphoreSlim FrameGenFetch = new(1, 1);
     private static string FrameGenCacheFolder(FrameGenMod mod, string tag) => Path.Combine(PathHelper.AppDataDir, "frame-gen", mod.Repo, tag);
@@ -237,7 +282,7 @@ public sealed partial class DlssSwapService
             var unpack = folder + ".unpack-" + Guid.NewGuid().ToString("N");
             try
             {
-                await VerifiedGitHubReleaseDownloader.Large.DownloadPinnedAsync(
+                await VerifiedGitHubReleaseDownloader.Upstream.DownloadPinnedAsync(
                     new GitHubReleaseAsset(mod.Owner, mod.Repo, release.Tag, release.Asset, release.Size, release.Sha256), archive, IsFrameGenArchive, ct).ConfigureAwait(false);
                 Directory.CreateDirectory(unpack);
                 await UnpackFrameGenAsync(mod, archive, unpack, ct).ConfigureAwait(false);

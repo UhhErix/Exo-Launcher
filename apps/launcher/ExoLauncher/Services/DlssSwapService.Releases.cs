@@ -189,7 +189,7 @@ public sealed partial class DlssSwapService
                     {
                         AppLog.Info($"Upscaler download: vendor={file.Vendor}; file={file.FileName}; release={file.Release}; bytes={file.Size}.");
                         if (file.Zip is { } zip) await DownloadFromZipAsync(file, zip, dest, ct).ConfigureAwait(false);
-                        else await DownloadToFileAsync(file.Url, dest, file.Size, ct).ConfigureAwait(false);
+                        else await DownloadToFileAsync(file.Url, dest, file.Size, ct, path => IsVerifiedPinned(path, file)).ConfigureAwait(false);
                     }
                     if (!IsVerifiedPinned(dest, file))
                     {
@@ -294,7 +294,7 @@ public sealed partial class DlssSwapService
         var temp = destination + ".part-" + Guid.NewGuid().ToString("N");
         try
         {
-            await DownloadToFileAsync(zip.Url, archive, zip.Size, ct).ConfigureAwait(false);
+            await DownloadToFileAsync(zip.Url, archive, zip.Size, ct, path => zip.Sha256 is not { } sha || ArchiveMatches(path, sha)).ConfigureAwait(false);
             // A pinned archive is checked before it is opened: a mirror that serves another zip of the same size is refused.
             if (zip.Sha256 is { } pinned && !ArchiveMatches(archive, pinned))
                 throw new InvalidDataException($"The archive for {file.FileName} from {file.Sdk} did not match its pinned SHA-256.");
@@ -339,12 +339,38 @@ public sealed partial class DlssSwapService
         }
     }
 
-    private static async Task DownloadToFileAsync(string url, string destination, long expectedSize, CancellationToken ct)
+    /// <summary>
+    /// A pinned or catalog file, or a vendor's new SDK file at its release's commit (DlssSwapService.VendorWatch.cs), from its
+    /// upstream copy first and Exo's cache second (<see cref="UpstreamSource"/>). <paramref name="check"/> is the caller's check of
+    /// the bytes (SHA-256, git blob hash); a copy that fails it, or whose download fails, is followed by the next source.
+    /// </summary>
+    private static async Task DownloadToFileAsync(string url, string destination, long expectedSize, CancellationToken ct, Func<string, bool>? check = null)
     {
-        // A pinned or catalog file, or a vendor's new SDK file at its release's commit (DlssSwapService.VendorWatch.cs).
-        static bool Allowed(string url) => DownloadAllowed(url);
-        if (!Allowed(url))
+        if (!DownloadAllowed(url))
             throw new InvalidDataException("Exo only downloads the upscaler files it has pinned.");
+        Exception? last = null;
+        foreach (var source in UpstreamSource.SourcesFor(url))
+        {
+            ct.ThrowIfCancellationRequested();
+            var upstream = source != url;
+            try
+            {
+                await DownloadOnceAsync(source, upstream, destination, expectedSize, ct).ConfigureAwait(false);
+                if (check is null || check(destination)) return;
+                TryDelete(destination);
+                last = new InvalidDataException("The downloaded file did not match what Exo expects.");
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
+            {
+                last = ex;
+            }
+            if (upstream) AppLog.Info($"Upscaler download: upstream {new Uri(source).Host} failed ({last!.Message}); using Exo's cache.");
+        }
+        throw last ?? new InvalidDataException("The download failed.");
+    }
+
+    private static async Task DownloadOnceAsync(string url, bool upstream, string destination, long expectedSize, CancellationToken ct)
+    {
         using var deadline = CancellationTokenSource.CreateLinkedTokenSource(ct);
         deadline.CancelAfter(TimeSpan.FromMinutes(8));
         using var inactivity = CancellationTokenSource.CreateLinkedTokenSource(deadline.Token);
@@ -354,7 +380,9 @@ public sealed partial class DlssSwapService
         var temp = destination + ".part-" + Guid.NewGuid().ToString("N");
         try
         {
-            using var response = await GetAllowedAsync(url, token).ConfigureAwait(false);
+            using var response = upstream
+                ? await UpstreamSource.GetAsync(Http, url, UpstreamSource.IsUpstreamHop, token).ConfigureAwait(false)
+                : await GetAllowedAsync(url, token).ConfigureAwait(false);
             response.EnsureSuccessStatusCode();
             if (response.Content.Headers.ContentLength is { } length && length != expectedSize)
                 throw new InvalidDataException("The vendor's file is not the size Exo expects.");
