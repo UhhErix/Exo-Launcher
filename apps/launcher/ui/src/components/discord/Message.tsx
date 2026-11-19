@@ -6,7 +6,7 @@ import { host } from '../../lib/host'
 import { usePageActive } from '../../lib/pageActivity'
 import { shouldReduceMotion } from '../../lib/motionPreference'
 import { Poll, PollResultLine } from './Poll'
-import { Attachments, fit, MediaFailed, MovingImage, size, sized } from './Attachments'
+import { Attachments, fit, MediaFailed, MovingImage, size, sized, useFailedUntilBack, useMediaRetry } from './Attachments'
 import { LottieSticker } from './LottieSticker'
 import { performanceMode, avatarUrl, cdnSized, cdnStep, displayName, jumpToMessage, openDiscord, type DiscordEmbed, type DiscordInvite, type DiscordMessage } from '../../lib/discord'
 import { Reactions, ReactionsDialog, useNitro } from './Reactions'
@@ -42,6 +42,7 @@ function Gifv({ src, link, box, onFail }: { src: string; link: string; box: { wi
   const active = usePageActive()
   const auto = gifAutoPlay && !performanceMode() && !shouldReduceMotion()
   const video = useRef<HTMLVideoElement>(null)
+  const { attempt, onError } = useMediaRetry(onFail)
   useEffect(() => {
     const el = video.current
     if (!el) return
@@ -49,17 +50,17 @@ function Gifv({ src, link, box, onFail }: { src: string; link: string; box: { wi
     else el.pause()
     // Discord out of sight (Activity) runs only this: the GIF holds instead of looping hidden.
     return () => el.pause()
-  }, [auto, active])
+  }, [auto, active, attempt])
   return (
-    <video ref={video} className="exo-dc-media" src={src} data-dc-link={link} autoPlay={auto && active} loop muted playsInline {...box}
+    <video key={attempt} ref={video} className="exo-dc-media" src={src} data-dc-link={link} autoPlay={auto && active} loop muted playsInline {...box}
       onPointerEnter={event => { if (!auto || !active) void event.currentTarget.play().catch(() => { }) }}
-      onPointerLeave={event => { if (!auto || !active) event.currentTarget.pause() }} onError={onFail} />
+      onPointerLeave={event => { if (!auto || !active) event.currentTarget.pause() }} onError={onError} />
   )
 }
 
 // A bare picture or GIF link, the way Discord shows one: the picture alone; one that would not load is a one-line card.
 function MediaEmbed({ embed }: { embed: DiscordEmbed }) {
-  const [failed, setFailed] = useState(false)
+  const [failed, setFailed] = useFailedUntilBack(false)
   const gif = embed.type === 'gifv'
   const media = gif ? embed.video! : embed.thumbnail!
   const src = media.proxy_url ?? media.url ?? ''
@@ -183,8 +184,8 @@ function MusicPlayer({ player }: { player: { src: string; height: number } }) {
 
 // An embed's picture at most 400 by 300; a video's (YouTube's) in the video's own shape with its thumbnail's bars cropped, as Discord shows it.
 function EmbedImage({ image, video }: { image: NonNullable<DiscordEmbed['image']>; video?: DiscordEmbed['video'] }) {
-  // A picture that won't load shows nothing rather than the browser's broken-picture box (as EmbedThumb).
-  const [failed, setFailed] = useState<string | null>(null)
+  // A picture that won't load shows nothing rather than the browser's broken-picture box (as EmbedThumb), until the page is back.
+  const [failed, setFailed] = useFailedUntilBack<string | null>(null)
   // A site's player (no file of Discord's own to play): Play swaps the picture for it.
   const player = video && !video.proxy_url ? playerUrl(video.url) : null
   if (video && player) return <EmbedPlayer image={image} video={video} player={player} />
@@ -707,12 +708,13 @@ function StickerImage({ id, name, format }: { id: string; name: string; format: 
   const mode = accountSettings().animateStickers
   const active = usePageActive()
   const plays = format === 2 && active && (hover ? mode !== 2 : mode === 0 && !performanceMode() && !shouldReduceMotion())
-  const [failed, setFailed] = useState(false)
+  const [failed, setFailed] = useFailedUntilBack(false)
+  const retry = useMediaRetry(() => setFailed(true))
   const src = `https://media.discordapp.net/stickers/${id}.${format === 4 ? 'gif' : 'png'}?size=${cdnStep(160)}`
   if (failed) return <MediaFailed name={name} kind="picture" url={src} />
   return (
-    <img className="exo-dc-sticker" alt={name} width={160} height={160} draggable={false} loading="lazy" decoding="async" onPointerEnter={() => setHover(true)} onPointerLeave={() => setHover(false)}
-      src={`${src}${format === 2 && !plays ? '&passthrough=false' : ''}`} onError={() => setFailed(true)} />
+    <img key={retry.attempt} className="exo-dc-sticker" alt={name} width={160} height={160} draggable={false} loading="lazy" decoding="async" onPointerEnter={() => setHover(true)} onPointerLeave={() => setHover(false)}
+      src={`${src}${format === 2 && !plays ? '&passthrough=false' : ''}`} onError={retry.onError} />
   )
 }
 

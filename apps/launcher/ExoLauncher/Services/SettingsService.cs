@@ -187,10 +187,9 @@ public sealed class SettingsService
         loaded.DiscordVoiceTunes = CopyStrings(loaded.DiscordVoiceTunes);
         loaded.LibraryFolders = NormalizeLibraryFolders(loaded.LibraryFolders);
         loaded.HiddenGames = NormalizeHiddenGames(loaded.HiddenGames);
-        loaded.DiscordGamesShared = NormalizeHiddenGames(loaded.DiscordGamesShared);
-        loaded.DiscordReadyShared = NormalizeHiddenGames(loaded.DiscordReadyShared);
         loaded.DiscordBandPins = NormalizeDiscordBandPins(loaded.DiscordBandPins);
         loaded.FrameGenKeptOff = NormalizeHiddenGames(loaded.FrameGenKeptOff);
+        loaded.AutoUpdateOff = NormalizeHiddenGames(loaded.AutoUpdateOff);
         if (string.IsNullOrWhiteSpace(loaded.SortMode) || !IsLibrarySortMode(loaded.SortMode))
             loaded.SortMode = "name";
     }
@@ -491,6 +490,14 @@ public sealed class SettingsService
         });
     }
 
+    /// <summary>Compress games' switches and its CPU budget (one of <see cref="GameCompression.Speeds"/>).</summary>
+    internal void ApplyCompressPatch(bool? whileIdle, bool? afterUpdates, string? speed) => CommitMutation(settings =>
+    {
+        if (whileIdle is { } idle) settings.CompressWhileIdle = idle;
+        if (afterUpdates is { } again) settings.RecompressAfterUpdates = again;
+        if (speed is not null && GameCompression.Speeds.Contains(speed)) settings.CompressSpeed = speed;
+    });
+
     /// <summary>Settings: the store clients stay quiet (on) or are put back as they were (off).</summary>
     public void ApplyStoreQuiet(bool quiet) => CommitMutation(settings => settings.StoreClientsQuiet = quiet);
 
@@ -736,6 +743,24 @@ public sealed class SettingsService
         {
             var rest = settings.FrameGenKeptOff.Where(id => !string.Equals(id, gameId, StringComparison.OrdinalIgnoreCase));
             settings.FrameGenKeptOff = NormalizeHiddenGames(keptOff ? rest.Append(gameId) : rest);
+        });
+    }
+
+    /// <summary>Whether the player keeps this game out of automatic updates.</summary>
+    public bool AutoUpdateOff(string gameId)
+    {
+        lock (_stateGate)
+            return _current.AutoUpdateOff.Contains(gameId, StringComparer.OrdinalIgnoreCase);
+    }
+
+    /// <summary>A game's Update automatically switch: off keeps it out of the idle update sweep (DownloadPolicy), on lets it back in.</summary>
+    public void SetAutoUpdateOff(string gameId, bool off)
+    {
+        if (!ValidId(gameId, 512)) throw new InvalidDataException("Invalid game id.");
+        CommitMutation(settings =>
+        {
+            var rest = settings.AutoUpdateOff.Where(id => !string.Equals(id, gameId, StringComparison.OrdinalIgnoreCase));
+            settings.AutoUpdateOff = NormalizeHiddenGames(off ? rest.Append(gameId) : rest);
         });
     }
 
@@ -1004,8 +1029,6 @@ public sealed class SettingsService
         DiscordOnlyMyVoice = source.DiscordOnlyMyVoice,
         DiscordEvenVoices = source.DiscordEvenVoices,
         DiscordQuietWhilePlaying = source.DiscordQuietWhilePlaying,
-        DiscordGamesShared = NormalizeHiddenGames(source.DiscordGamesShared),
-        DiscordReadyShared = NormalizeHiddenGames(source.DiscordReadyShared),
         DiscordBandPins = NormalizeDiscordBandPins(source.DiscordBandPins),
         DiscordInputDevice = source.DiscordInputDevice is { Length: > 0 and <= 512 } input ? input : null,
         DiscordOutputDevice = source.DiscordOutputDevice is { Length: > 0 and <= 512 } output ? output : null,
@@ -1038,6 +1061,9 @@ public sealed class SettingsService
         DownloadHoursEnd = source.DownloadHoursEnd is >= 0 and <= 23 ? source.DownloadHoursEnd : null,
         AutoUpdateGames = source.AutoUpdateGames,
         AutoUpdateChipset = source.AutoUpdateChipset,
+        CompressWhileIdle = source.CompressWhileIdle,
+        RecompressAfterUpdates = source.RecompressAfterUpdates,
+        CompressSpeed = GameCompression.Speeds.Contains(source.CompressSpeed) ? source.CompressSpeed : "balanced",
         AutoUpdateUpscalers = source.AutoUpdateUpscalers,
         UpscalerAntiCheatEverywhere = source.UpscalerAntiCheatEverywhere,
         UpscalerAutoUpdateDefaulted = source.UpscalerAutoUpdateDefaulted,
@@ -1053,6 +1079,7 @@ public sealed class SettingsService
         HiddenGames = NormalizeHiddenGames(source.HiddenGames),
         FrameGenEverywhere = source.FrameGenEverywhere,
         FrameGenKeptOff = NormalizeHiddenGames(source.FrameGenKeptOff),
+        AutoUpdateOff = NormalizeHiddenGames(source.AutoUpdateOff),
         SteamOverlay = CopyStrings(source.SteamOverlay),
         ControllerSound = source.ControllerSound,
         SteamInput = CopyStrings(source.SteamInput),

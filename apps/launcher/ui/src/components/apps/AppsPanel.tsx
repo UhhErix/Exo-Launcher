@@ -4,6 +4,7 @@ import { cleanOutcome } from '../../lib/junkClean'
 import { host, onHostEvent, type AppFind, type AppLeftover, type InstalledApp, type JunkItem, type LeftoverSummary, type RemovalRecord, type StartupItem, type StartupState } from '../../lib/host'
 import { report } from '../../lib/report'
 import { ConfirmButton } from '../ui/ConfirmButton'
+import { Switch } from '../Switch'
 import { ErrorNote } from '../ui/ErrorNote'
 import { Wait, sample, times } from '../ui/Wait'
 import { Spinner } from '../ui/Spinner'
@@ -49,7 +50,7 @@ function clearedLine(what: LeftoverSummary): string {
 
 function summary(items: AppLeftover[]): LeftoverSummary {
   const of = (...kinds: AppLeftover['kind'][]) => items.filter(item => kinds.includes(item.kind)).length
-  return { folders: of('folder'), files: of('file'), registry: of('registry', 'service', 'task'), shortcuts: of('shortcut'), bytes: items.reduce((sum, item) => sum + item.bytes, 0) }
+  return { folders: of('folder'), files: of('file'), registry: of('registry', 'service', 'task', 'driver'), shortcuts: of('shortcut'), bytes: items.reduce((sum, item) => sum + item.bytes, 0) }
 }
 
 const fullDay = new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
@@ -112,6 +113,8 @@ export function AppsPanel({ active }: { active: boolean }) {
   // Select: the apps picked to uninstall together (null: not selecting), and how far a run of them has got.
   const [picked, setPicked] = useState<Set<string> | null>(null)
   const [run, setRun] = useState<{ at: number; of: number } | null>(null)
+  // A System Restore point before a run of picked apps (Windows asks first); on until turned off for this sheet.
+  const [restoreFirst, setRestoreFirst] = useState(true)
   const startup = useStartup(active)
   const read = useRef(false)
 
@@ -182,19 +185,25 @@ export function AppsPanel({ active }: { active: boolean }) {
   const knowsUse = programs.some(app => app.lastOpened || app.quietSince)
   const setError = (id: string, message: string | null) => setErrors(current => ({ ...current, [id]: message }))
 
-  /** One app, gone or not: its uninstaller, Exo's clean-up for one it does the job of, or only a look at what's left when its uninstaller is gone. */
-  async function uninstall(app: InstalledApp) {
+  /**
+   * One app, gone or not: its uninstaller, Exo's clean-up for one it does the job of, or only a look at what's left when its
+   * uninstaller is gone. quiet: one of a confirmed run. True when it went.
+   */
+  async function uninstall(app: InstalledApp, quiet = false): Promise<boolean> {
     setBusy(app.id)
     setError(app.id, null)
+    let gone = false
     try {
       if (app.replaces) {
         const result = await host.replacedRemove(app.replaces)
         if (!result.ok) setError(app.id, result.message ?? `${app.name} wasn't removed.`)
         else setRemoved(current => [{ id: app.id, name: app.name, message: `${app.name} is gone.` }, ...current])
+        gone = result.ok
       } else {
-        const result = app.uninstaller ? await host.appsUninstall(app.id) : await host.appsScan(app.id)
+        const result = app.uninstaller ? await host.appsUninstall(app.id, quiet) : await host.appsScan(app.id)
         if (result.ok) setRemoved(current => [{ id: app.id, name: app.name, find: result }, ...current.filter(other => other.id !== app.id)])
         else setError(app.id, result.message ?? `${app.name} wasn't removed.`)
+        gone = result.ok
       }
       const next = await host.appsList()
       setPrograms(next.programs)
@@ -205,10 +214,14 @@ export function AppsPanel({ active }: { active: boolean }) {
     } finally {
       setBusy(null)
     }
+    return gone
   }
 
-  /** Several, asked once in place, then each in turn. */
-  async function uninstallMany(ids: string[]) {
+  /**
+   * Several, asked once in place, then each in turn, quietly where its installer allows; a restore point first when asked
+   * for (no restore point, nothing goes). One line after says how many went.
+   */
+  async function uninstallMany(ids: string[], restore = false) {
     if (ids.length === 0 || busy || run || !programs) return
     setError('many', null)
     try {
@@ -219,11 +232,25 @@ export function AppsPanel({ active }: { active: boolean }) {
         setError('many', agreed.message ?? 'Nothing was removed.')
         return
       }
+      if (restore) {
+        setRun({ at: 0, of: agreed.ids.length })
+        const point = await host.appsRestorePoint()
+        if (!point.ok) {
+          setError('many', point.message ?? 'No restore point was made. Nothing was removed.')
+          return
+        }
+      }
       setPicked(null)
       const chosen = agreed.ids.map(id => programs.find(app => app.id === id)).filter((app): app is InstalledApp => !!app)
+      let went = 0
       for (const [index, app] of chosen.entries()) {
         setRun({ at: index + 1, of: chosen.length })
-        await uninstall(app)
+        if (await uninstall(app, true)) went++
+      }
+      if (chosen.length > 1) {
+        const stayed = chosen.length - went
+        const line = `Uninstalled ${went} of ${chosen.length}${stayed > 0 ? `: ${count(stayed, 'app says', 'apps say')} why beside ${stayed === 1 ? 'it' : 'them'}` : ''}.`
+        setRemoved(current => [{ id: `run-${Date.now()}`, name: '', message: line }, ...current])
       }
     } catch (error) {
       report(error, 'AppsPanel.uninstallMany')
@@ -254,7 +281,8 @@ export function AppsPanel({ active }: { active: boolean }) {
         facts={`${count(mainApps.length, 'app', 'apps')}${total > 0 ? ` · ${size(total)}` : ''}`} />
       {view === 'apps' ? (
         <Columns knowsUse={knowsUse} sort={sort} onSort={pressSort} run={run} picked={picked} busy={busy !== null}
-          onUninstallPicked={ids => void uninstallMany(ids)} onSelect={() => setPicked(current => current ? null : new Set())} />
+          restore={restoreFirst} onRestore={setRestoreFirst}
+          onUninstallPicked={ids => void uninstallMany(ids, restoreFirst)} onSelect={() => setPicked(current => current ? null : new Set())} />
       ) : null}
       {errors.many ? <ErrorNote className="exo-set-error" message={errors.many} /> : null}
       {/* The list scrolls under the head and fades into the sheet's foot. */}
@@ -285,31 +313,70 @@ export function AppsPanel({ active }: { active: boolean }) {
   )
 }
 
-/** The columns over the list: what sorts it, and Select at the end, where a row's action is. */
-function Columns({ knowsUse, sort, onSort, run, picked, busy, onUninstallPicked, onSelect }: {
+/**
+ * The columns over the list: what sorts it, and Select at the end, where a row's action is. With apps picked: Restore point
+ * (a System Restore point first, Windows asks) and Uninstall, asked in place; the run goes quietly where each installer allows.
+ */
+function Columns({ knowsUse, sort, onSort, run, picked, busy, restore, onRestore, onUninstallPicked, onSelect }: {
   knowsUse: boolean
   sort: { by: Sort; back: boolean }
   onSort: (by: Sort) => void
   run: { at: number; of: number } | null
   picked: Set<string> | null
   busy: boolean
+  restore?: boolean
+  onRestore?: (on: boolean) => void
   onUninstallPicked: (ids: string[]) => void
   onSelect: () => void
 }) {
+  // A run, or apps picked: its controls take the columns after Name, so nothing sits under them.
+  const wide = run !== null || (picked?.size ?? 0) > 0
   return (
     <div className={knowsUse ? 'exo-apps-columns' : 'exo-apps-columns is-short'} role="row">
       <span />
       <SortHead label="Name" by="name" sort={sort} onSort={onSort} />
-      {knowsUse ? <SortHead label="Last used" by="used" sort={sort} onSort={onSort} /> : null}
-      <SortHead label="Size" by="size" sort={sort} onSort={onSort} end />
-      <div className="exo-apps-select">
-        {run ? <span className="exo-apps-run" role="status"><Spinner label={`Uninstalling ${run.at} of ${run.of}`} />{run.at} of {run.of}</span> : null}
-        {!run && picked && picked.size > 0 ? (
-          <ConfirmButton className="exo-set-btn is-compact is-danger" danger disabled={busy} question={`Uninstall ${picked.size}?`} onConfirm={() => onUninstallPicked([...picked])}>Uninstall {picked.size}</ConfirmButton>
-        ) : null}
-        {!run ? <button type="button" className="exo-set-btn is-compact" aria-pressed={picked !== null} onClick={onSelect}>{picked ? 'Cancel' : 'Select'}</button> : null}
+      {knowsUse && !wide ? <SortHead label="Last used" by="used" sort={sort} onSort={onSort} /> : null}
+      {!wide ? <SortHead label="Size" by="size" sort={sort} onSort={onSort} end /> : null}
+      <div className={wide ? 'exo-apps-select is-wide' : 'exo-apps-select'}>
+        {run ? <RunStatus run={run} /> : (
+          <>
+            {picked && picked.size > 0 ? <PickedActions picked={picked} busy={busy} restore={restore} onRestore={onRestore} onUninstallPicked={onUninstallPicked} /> : null}
+            <button type="button" className="exo-set-btn is-compact" aria-pressed={picked !== null} onClick={onSelect}>{picked ? 'Cancel' : 'Select'}</button>
+          </>
+        )}
       </div>
     </div>
+  )
+}
+
+/** How far a run has got: its restore point first (at 0), then each app. */
+function RunStatus({ run }: { run: { at: number; of: number } }) {
+  const making = run.at === 0
+  return (
+    <span className="exo-apps-run" role="status">
+      <Spinner label={making ? 'Making a restore point' : `Uninstalling ${run.at} of ${run.of}`} />{making ? 'Restore point' : `${run.at} of ${run.of}`}
+    </span>
+  )
+}
+
+/** With apps picked: Restore point (a System Restore point first, Windows asks) and Uninstall, asked in place. */
+function PickedActions({ picked, busy, restore, onRestore, onUninstallPicked }: {
+  picked: Set<string>
+  busy: boolean
+  restore?: boolean
+  onRestore?: (on: boolean) => void
+  onUninstallPicked: (ids: string[]) => void
+}) {
+  return (
+    <>
+      {onRestore ? (
+        <>
+          <span className="exo-apps-run" id="apps-restore-first">Restore point</span>
+          <Switch checked={restore ?? false} onChange={onRestore} labelledBy="apps-restore-first" disabled={busy} />
+        </>
+      ) : null}
+      <ConfirmButton className="exo-set-btn is-compact is-danger" danger disabled={busy} question={`Uninstall ${picked.size}?`} onConfirm={() => onUninstallPicked([...picked])}>Uninstall {picked.size}</ConfirmButton>
+    </>
   )
 }
 
@@ -479,6 +546,7 @@ function Ready({ active, programs, removed, tidy, wentByItself, busy, startup, o
         </ReadyRow>
       ) : null}
       <JunkRow active={active} />
+      <InstallerCacheRow active={active} busy={busy} onChanged={onChanged} />
       {idle.length > 0 ? (
         <ReadyRow title={`${count(idle.length, 'app', 'apps')} not opened in three months`} detail={`${size(idle.reduce((sum, app) => sum + (app.bytes ?? 0), 0))}: ${names(idle.map(app => app.name))}`}>
           <button type="button" className="exo-set-btn" onClick={onShowUnused}>Show</button>
@@ -674,6 +742,48 @@ function JunkRow({ active }: { active: boolean }) {
   return (
     <ReadyRow title={`${size(total)} of junk`} detail={names(items.filter(item => item.bytes > 0).map(item => item.name.toLowerCase())).replace(/^./, first => first.toUpperCase())} error={cleaned?.error}>
       <ConfirmButton className="exo-set-btn is-danger" danger disabled={busy} question={`Delete ${size(total)}?`} lead={busy ? <Spinner label="Deleting junk" /> : null} onConfirm={() => void clean(items)}>Clean</ConfirmButton>
+    </ReadyRow>
+  )
+}
+
+/** Windows Installer's cache keeps a copy of every MSI; copies no product or patch needs any more are worth a row past this. */
+const CACHE_WORTH = 50e6
+
+/**
+ * Windows Installer files no app needs: copies in Windows' installer cache that no installed product or patch is registered
+ * with. Clear, asked in place, moves them to the Recycle Bin under one Windows prompt; Put back brings them back.
+ */
+function InstallerCacheRow({ active, busy, onChanged }: { active: boolean; busy: boolean; onChanged: () => void }) {
+  const [found, setFound] = useState<{ files: number; bytes: number } | null>(null)
+  const [working, setWorking] = useState(false)
+  const [done, setDone] = useState<{ line: string; undo: string | null } | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const read = useRef(false)
+  useEffect(() => {
+    if (!active || read.current) return
+    read.current = true
+    host.appsInstallerCache().then(result => setFound(result), (failure: unknown) => report(failure, 'AppsPanel.installerCache', { level: 'warn' }))
+  }, [active])
+  async function clear() {
+    setWorking(true)
+    setError(null)
+    try {
+      const result = await host.appsInstallerCacheClean()
+      if (result.files > 0) setDone({ line: `Moved ${count(result.files, 'Windows Installer file', 'Windows Installer files')} to the Recycle Bin: ${size(result.bytes)} back.`, undo: result.undo ?? null })
+      if (!result.ok) setError(result.message ?? 'Nothing was moved.')
+      onChanged()
+    } catch (failure) {
+      report(failure, 'AppsPanel.installerCacheClean')
+      setError('Nothing was moved.')
+    } finally {
+      setWorking(false)
+    }
+  }
+  if (done) return <ClearedRow line={done.line} undo={done.undo} onChanged={onChanged} />
+  if (!found || found.bytes < CACHE_WORTH) return error ? <ReadyRow title="Windows Installer files" error={error} /> : null
+  return (
+    <ReadyRow title={`${size(found.bytes)} of Windows Installer files no app needs`} detail={`${count(found.files, 'copy', 'copies')} of removed installers · To the Recycle Bin`} error={error ?? undefined}>
+      <ConfirmButton className="exo-set-btn is-danger" danger disabled={busy || working} question={`Move ${size(found.bytes)}?`} lead={working ? <Spinner label="Moving Windows Installer files" /> : null} onConfirm={() => void clear()}>Clear</ConfirmButton>
     </ReadyRow>
   )
 }

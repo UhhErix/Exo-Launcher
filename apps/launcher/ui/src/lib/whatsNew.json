@@ -6,6 +6,14 @@
         "icon": "MusicNotes",
         "title": "Music, full window",
         "detail": "Press F or the full-window button in Music for the cover large, its colours around it and the lyrics big beside it; Esc goes back."
+        "icon": "Drive",
+        "title": "Compress games",
+        "detail": "Windows' own compression makes games smaller on disk, and they play as before."
+      },
+      {
+        "icon": "Chats",
+        "title": "GIFs in Discord stay",
+        "detail": "A GIF, sticker or video that hiccups once tries again instead of turning into a line that says it would not load, and Imgur GIFs load."
       },
       {
         "icon": "Chats",

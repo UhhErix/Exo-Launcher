@@ -406,10 +406,6 @@ public sealed class AppSettings
     public bool DiscordEvenVoices { get; set; } = true;
     /// <summary>Game focus: no Discord notifications while a game runs (the unread badge still counts).</summary>
     public bool DiscordQuietWhilePlaying { get; set; } = true;
-    /// <summary>The Discord accounts (user ids) that turned Share my games on, on this PC: friends on Exo see the game they opened from Exo (<see cref="ExoLauncher.Services.DiscordClient.DiscordSession.SharesGames"/>). Off for every account until it is. 3.23.0 made it opt-in again; the 3.22.0 list, DiscordShareGames, shared to Discord and is read by nothing.</summary>
-    public List<string> DiscordGamesShared { get; set; } = [];
-    /// <summary>The Discord accounts (user ids) that turned Share when I'm getting ready on, on this PC: friends on Exo see that a game is installing, building its shaders or ready (<see cref="ExoLauncher.Services.DiscordClient.FriendPrep"/>). Off for every account until it is.</summary>
-    public List<string> DiscordReadyShared { get; set; } = [];
     /// <summary>What each Discord account (by user id) pinned to the room's top bar, in order: "g:id" a server, "d:id" a DM or group DM.</summary>
     public Dictionary<string, List<string>> DiscordBandPins { get; set; } = [];
     /// <summary>Exo's Discord calls: the microphone and speakers chosen (Windows endpoint ids; none is Windows' default) and their volume, 0-200 like Discord's.</summary>
@@ -491,6 +487,12 @@ public sealed class AppSettings
     public bool StoreClientsQuiet { get; set; } = true;
     /// <summary>Games from Epic, GOG and Amazon update by themselves while the PC is idle.</summary>
     public bool AutoUpdateGames { get; set; } = true;
+    /// <summary>Compress games while idle: the games worth it on this PC are compressed by Windows (<see cref="ExoLauncher.Services.GameCompressor"/>) while nobody uses it. Off until the player turns it on.</summary>
+    public bool CompressWhileIdle { get; set; }
+    /// <summary>A compressed game's files an update wrote back are compressed again while the PC is idle. Off until the player turns it on.</summary>
+    public bool RecompressAfterUpdates { get; set; }
+    /// <summary>How much of the processor compressing may use: gentle, balanced or fast (<see cref="ExoLauncher.Services.GameCompression.Threads"/>).</summary>
+    public string CompressSpeed { get; set; } = "balanced";
     /// <summary>This PC's chipset driver (AMD's on a Ryzen, Intel's on an Intel processor) updates by itself while the PC is idle (<see cref="ExoLauncher.Services.ChipsetUpdate"/>).</summary>
     public bool AutoUpdateChipset { get; set; } = true;
     /// <summary>Newer DLSS, FSR and XeSS files download by themselves (from the vendor's own release, Exo's cache when that fails) while the PC is idle. On by default.</summary>
@@ -541,6 +543,8 @@ public sealed class AppSettings
     public bool FrameGenEverywhere { get; set; }
     /// <summary>Games the player turned Exo's frame generation off in (card ids), which <see cref="FrameGenEverywhere"/> leaves alone.</summary>
     public List<string> FrameGenKeptOff { get; set; } = [];
+    /// <summary>Games the player keeps out of Update games automatically (game ids): they update only when the player presses Update.</summary>
+    public List<string> AutoUpdateOff { get; set; } = [];
     /// <summary>
     /// Each installed Steam game's overlay switch as Exo set it, by app id: "on" or "off", with "?" until
     /// Steam has it and "!" once the player changed it in Steam (<see cref="ExoLauncher.Adapters.SteamOverlayConfig.Plan"/>).

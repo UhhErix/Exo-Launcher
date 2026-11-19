@@ -5,9 +5,9 @@ namespace ExoLauncher.Services.DiscordClient;
 
 /// <summary>
 /// Share when I'm getting ready: the signed-in person's Exo tells their friends' Exo apps over the friend link that a game
-/// is installing, building its shaders or ready (<see cref="FriendPrep"/>, <see cref="DiscordPrep"/>), so a Party can say who is
-/// still compiling. Off until the person turns it on (Settings › Discord › Privacy), and only while Share my games is on
-/// too, since it rides the same link. Told by the Launcher's install events and Prepare's state alone: nothing looks at a
+/// is installing, building its shaders or ready (<see cref="FriendPrep"/>, <see cref="DiscordPrep"/>), said under their name in
+/// friends' lists. Always on since 3.26.0 (owner: not a switch), with the link's own gates and only for games Share my games
+/// may name. Told by the Launcher's install events and Prepare's state alone: nothing looks at a
 /// game's process, window or files, anti-cheat and Riot's games included.
 /// </summary>
 internal sealed partial class DiscordSession
@@ -47,11 +47,8 @@ internal sealed partial class DiscordSession
         launcher.GameLaunched += game => { if (Prep.Launched(game.Id)) PublishPrep(); };
     }
 
-    /// <summary>Whether this account shares that a game is getting ready: only when it turned that on, and Share my games is on.</summary>
-    internal bool SharesReady => SharesGames && Cache.Me?.Id is { } id && App.Services.Settings.Shared.DiscordReadyShared.Contains(id, StringComparer.Ordinal);
-
-    /// <summary>What the link says of getting ready now: nothing unless this account turned it on.</summary>
-    private System.Text.Json.Nodes.JsonObject? PrepSection() => SharesReady ? FriendPrep.Write(Prep.Current(DateTimeOffset.UtcNow.ToUnixTimeMilliseconds())) : null;
+    /// <summary>What the link says of getting ready now (always on since 3.26.0; the link itself has its own gates).</summary>
+    private System.Text.Json.Nodes.JsonObject? PrepSection() => FriendPrep.Write(Prep.Current(DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()));
 
     private static void PublishPrep()
     {
@@ -63,25 +60,4 @@ internal sealed partial class DiscordSession
         _prepExpiry.Change(next is { } wait ? wait + 500 : Timeout.Infinite, Timeout.Infinite);
     }
 
-    /// <summary>
-    /// Share when I'm getting ready for the account signed in. Off: what was said goes at once and nothing more is sent.
-    /// Nothing on the Discord account changes either way.
-    /// </summary>
-    internal (bool On, string? Error) SetShareReady(bool on)
-    {
-        if (Cache.Me?.Id is not { } id) return (false, "Discord isn't connected.");
-        try
-        {
-            App.Services.Settings.UpdateProfile(s => s.DiscordReadyShared =
-                SettingsService.NormalizeHiddenGames(on ? s.DiscordReadyShared.Append(id) : s.DiscordReadyShared.Where(kept => kept != id)));
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException)
-        {
-            AppLog.Warn("Discord client: Share when I'm getting ready not saved (" + ex.GetType().Name + ").");
-            return (SharesReady, "Exo didn't save that. Try again.");
-        }
-        AppLog.Info("Discord client: Share when I'm getting ready " + (on ? "on." : "off."));
-        PublishPrep();
-        return (on, null);
-    }
 }

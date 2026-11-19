@@ -694,8 +694,6 @@ public sealed partial class MainWindow
         return CaptureFiles().FirstOrDefault(f => CaptureId(Path.GetFullPath(f)) == id);
     }
 
-    /// <summary>The file of a capture the page named by its id, for a share: null when it is gone. The path never leaves native code.</summary>
-    internal string? CaptureFileForShare(string? id) => PathOfCapture(id);
 
     /// <summary>capture.list: every capture, newest first; with a game id, only that game's.</summary>
     internal object CaptureList(string? gameId, int? limit)
