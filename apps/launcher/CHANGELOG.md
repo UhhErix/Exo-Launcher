@@ -3,6 +3,7 @@
 ## 3.26.0 — November 14, 2026
 - **Goeist on every surface, not just the page.** The FPS counter, the achievement banner, Exo Capture's windows, Exo's own dialogs and menus, Setup's screens and the installer's pages now draw Goeist like the rest of Exo, and Exoline is gone. The FPS counter's pill and the banner take the same glass edge as the app (lit along the top) instead of a grey outline, and Exo's native colours match the app's pure black. _Checked in code only._
 - **First run keeps up with Exo.** Best settings for this PC now shows Update DLSS, FSR and XeSS automatically (on, as it is by default) beside frame generation, its tiles and the summary on Done take the glass line instead of a grey border, and Done draws Exo's own check. _Checked in code only._
+- **Exo Mouse's checks, menu arrow and heart are Lucide's.** The last glyphs Exo Mouse drew itself match the Lucide icons the rest of Exo uses, and the check that draws itself in across Exo is Lucide's check. _Checked in code only._
 - **A live call's dot holds still.** The green dot beside how long a call has been going no longer breathes; the time already shows it is live. _Checked in code only._
 - **Lucide icons.** Every icon in Exo and Exo Mouse is now from Lucide, one consistent line family; liked, starred and pinned show filled. _Checked in code only._
 - **GIFs in Discord stay.** A GIF that stumbled once (often while Exo was minimized) turned into a "would not load" line for good; it now tries again, and again when you come back. Imgur GIFs load too. _Checked in code only._
