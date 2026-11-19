@@ -184,8 +184,8 @@ function MusicPlayer({ player }: { player: { src: string; height: number } }) {
 
 // An embed's picture at most 400 by 300; a video's (YouTube's) in the video's own shape with its thumbnail's bars cropped, as Discord shows it.
 function EmbedImage({ image, video }: { image: NonNullable<DiscordEmbed['image']>; video?: DiscordEmbed['video'] }) {
-  // A picture that won't load shows nothing rather than the browser's broken-picture box (as EmbedThumb).
-  const [failed, setFailed] = useState<string | null>(null)
+  // A picture that won't load shows nothing rather than the browser's broken-picture box (as EmbedThumb), until the page is back.
+  const [failed, setFailed] = useFailedUntilBack<string | null>(null)
   // A site's player (no file of Discord's own to play): Play swaps the picture for it.
   const player = video && !video.proxy_url ? playerUrl(video.url) : null
   if (video && player) return <EmbedPlayer image={image} video={video} player={player} />
@@ -708,12 +708,13 @@ function StickerImage({ id, name, format }: { id: string; name: string; format: 
   const mode = accountSettings().animateStickers
   const active = usePageActive()
   const plays = format === 2 && active && (hover ? mode !== 2 : mode === 0 && !performanceMode() && !shouldReduceMotion())
-  const [failed, setFailed] = useState(false)
+  const [failed, setFailed] = useFailedUntilBack(false)
+  const retry = useMediaRetry(() => setFailed(true))
   const src = `https://media.discordapp.net/stickers/${id}.${format === 4 ? 'gif' : 'png'}?size=${cdnStep(160)}`
   if (failed) return <MediaFailed name={name} kind="picture" url={src} />
   return (
-    <img className="exo-dc-sticker" alt={name} width={160} height={160} draggable={false} loading="lazy" decoding="async" onPointerEnter={() => setHover(true)} onPointerLeave={() => setHover(false)}
-      src={`${src}${format === 2 && !plays ? '&passthrough=false' : ''}`} onError={() => setFailed(true)} />
+    <img key={retry.attempt} className="exo-dc-sticker" alt={name} width={160} height={160} draggable={false} loading="lazy" decoding="async" onPointerEnter={() => setHover(true)} onPointerLeave={() => setHover(false)}
+      src={`${src}${format === 2 && !plays ? '&passthrough=false' : ''}`} onError={retry.onError} />
   )
 }
 
