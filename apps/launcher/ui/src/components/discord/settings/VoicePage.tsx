@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type CSSProperties } from 'react'
 import { host, onHostEvent, type MicHeard, type MicLevel } from '../../../lib/host'
 import { setDiscordPrefs, useDiscordPrefs, type DiscordClientSettings, type DiscordKeybind } from '../../../lib/discordPrefs'
+import { uiPref, setUiPref } from '../../../lib/uiPrefs'
 import { Menu } from '../../ui/Menu'
 import { Slider } from '../../ui/Slider'
 import { ChoiceRow, Row, Section, SliderRow, State, SwitchRow } from '../../settings/parts'
@@ -24,6 +25,7 @@ export function VoicePage() {
       {settings ? <Microphone settings={settings} save={save} /> : null}
       {settings ? <Attenuation settings={settings} save={save} /> : null}
       <Camera />
+      {settings ? <ScreenShare settings={settings} save={save} /> : null}
     </>
   )
 }
@@ -68,6 +70,8 @@ function Devices() {
 
 function Microphone({ settings, save }: { settings: DiscordClientSettings; save: Save }) {
   const live = useMicLevel()
+  const [showExoControls, setShowExoControls] = useState(false)
+  const exoOn = settings.noiseSuppression && settings.noiseSuppressionKind !== 'standard'
   const ptt = settings.keybinds.find(k => k.action === 'PUSH_TO_TALK')
   const setPtt = (keys: number[]) => {
     const others = settings.keybinds.filter(k => k !== ptt)
@@ -80,14 +84,21 @@ function Microphone({ settings, save }: { settings: DiscordClientSettings; save:
       <HearYourVoice />
       <NoiseSuppression settings={settings} save={save} live={live} />
       <OnlyMyVoice settings={settings} save={save} />
-      {settings.noiseSuppression ? null : (
+      {exoOn ? (
+        <Row label="Voice controls" detail="Exo Voice tunes noise suppression, leveling, echo cancellation, and input sensitivity automatically.">
+          <button type="button" className="exo-set-btn" aria-expanded={showExoControls} onClick={() => setShowExoControls(v => !v)}>
+            {showExoControls ? 'Hide' : 'Customize'}
+          </button>
+        </Row>
+      ) : null}
+      {!exoOn || showExoControls ? (
         <>
           <SwitchRow label="Noise suppression for others" checked={settings.othersNoiseSuppression} onChange={value => save({ othersNoiseSuppression: value })} />
           <SwitchRow label="Even out voices" checked={settings.evenVoices} onChange={value => save({ evenVoices: value })} />
           <SwitchRow label="Echo cancellation" checked={settings.echoCancellation} onChange={value => save({ echoCancellation: value })} />
           <Sensitivity settings={settings} save={save} live={live} />
         </>
-      )}
+      ) : null}
       <SwitchRow label="Push to talk" checked={settings.pushToTalk} onChange={value => save({ pushToTalk: value })} />
       {settings.pushToTalk ? (
         <>
@@ -301,6 +312,52 @@ function Camera() {
         </Row>
       )}
       {testing ? <video className="exo-dc-settings-video" ref={video} autoPlay muted playsInline /> : null}
+    </Section>
+  )
+}
+
+function ScreenShare({ settings, save }: { settings: DiscordClientSettings; save: Save }) {
+  const resolution = String(settings.goLiveHeight ?? 1080)
+  const fps = String(settings.goLiveFps ?? 30)
+  const updateGoLiveDefault = (nextHeight: number, nextFps: number) => {
+    const prev = (uiPref('goLiveQuality') ?? null) as { sound?: boolean } | null
+    setUiPref('goLiveQuality', { height: nextHeight, fps: nextFps, sound: prev?.sound !== false })
+  }
+  const compat = settings.serviceDisabled || settings.captureMode === 'dxgi'
+  return (
+    <Section title="Screen share">
+      <Row
+        label="Capture engine"
+        detail={settings.serviceDisabled ? 'Windows Capture Service is disabled (0x80070422). Enable CaptureService in Windows Services for direct window capture.' : undefined}
+      >
+        <State>{compat ? 'Screen compatibility mode' : 'Windows Graphics Capture'}</State>
+      </Row>
+      <ChoiceRow
+        label="Default resolution"
+        value={resolution}
+        choices={[{ value: '720', label: '720p' }, { value: '1080', label: '1080p' }, { value: '1440', label: '1440p' }, { value: '0', label: 'Source' }]}
+        onChange={value => {
+          const next = Number(value)
+          updateGoLiveDefault(next, Number(fps))
+          void save({ goLiveHeight: next })
+        }}
+      />
+      <ChoiceRow
+        label="Default frame rate"
+        value={fps}
+        choices={[{ value: '15', label: '15 fps' }, { value: '30', label: '30 fps' }, { value: '60', label: '60 fps' }, { value: '120', label: '120 fps' }]}
+        onChange={value => {
+          const next = Number(value)
+          updateGoLiveDefault(Number(resolution), next)
+          void save({ goLiveFps: next })
+        }}
+      />
+      <SwitchRow
+        label="Hardware HEVC (H.265)"
+        detail="Uses HEVC when your GPU supports it and everyone watching can decode it."
+        checked={settings.goLiveHevc !== false}
+        onChange={value => void save({ goLiveHevc: value })}
+      />
     </Section>
   )
 }

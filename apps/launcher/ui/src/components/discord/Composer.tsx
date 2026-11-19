@@ -24,7 +24,9 @@ export const fileDescriptions = new WeakMap<File, string>()
 
 const TYPING_EVERY_MS = 8000
 const MAX_FILES = 10
-const TOKEN = /(^|\s)([:@#])([\w.+-]{2,32})$/
+const MENTION_TOKEN = /(^|\s)([@#])([\w.+-]{0,32})$/
+const EMOJI_TOKEN = /(^|\s)(:)([\w.+-]{2,32})$/
+const matchTokenAtCursor = (before: string) => MENTION_TOKEN.exec(before) ?? EMOJI_TOKEN.exec(before)
 
 // detail: dimmer words after the name (a username, a channel's category, what @everyone does); color: a role's.
 type Suggestion = { key: string; label: string; image?: string; glyph?: React.ReactNode; insert: string; sticker?: string; mention?: string; detail?: string | null; color?: string }
@@ -93,11 +95,11 @@ type Mentionable = Awaited<ReturnType<typeof host.discordMentionable>>
 function usePeople(guildId: string | null, users: Map<string, DiscordUser>, q: string | null) {
   const [found, setFound] = useState<Mentionable>({ users: [] })
   useEffect(() => {
-    if (!guildId || !q) { setFound({ users: [] }); return }
+    if (!guildId || q === null) { setFound({ users: [] }); return }
     let live = true
     const look = (ask: boolean) => host.discordMentionable(guildId, q, ask).then(result => { if (live) setFound(result) }).catch(() => { })
     void look(false)
-    const asking = window.setTimeout(() => void look(true), 300)
+    const asking = q ? window.setTimeout(() => void look(true), 300) : 0
     const off = onHostEvent('discord.colors', event => { if (event.guildId === guildId) void look(false) })
     return () => { live = false; window.clearTimeout(asking); off() }
   }, [guildId, q])
@@ -113,7 +115,7 @@ function usePeople(guildId: string | null, users: Map<string, DiscordUser>, q: s
 function useChannels(guildId: string | null, q: string | null) {
   const [found, setFound] = useState<NonNullable<Mentionable['channels']>>([])
   useEffect(() => {
-    if (!guildId || !q) { setFound([]); return }
+    if (!guildId || q === null) { setFound([]); return }
     let live = true
     host.discordMentionable(guildId, q, false, true).then(result => { if (live) setFound(result.channels ?? []) }).catch(() => { })
     return () => { live = false }
@@ -260,8 +262,10 @@ export function Composer({ channelId, guildId, users, placeholder, disabled, rep
     return () => observer.disconnect()
   }, [command])
 
+  const [cursor, setCursor] = useState(0)
   const stickers = useStickers(guildId)
-  const token = TOKEN.exec(text)
+  const safeCursor = Math.min(cursor, text.length)
+  const token = matchTokenAtCursor(text.slice(0, safeCursor))
   const open = token && token[0] !== dismissed ? token : null
   const asEmoji = open?.[2] === ':'
   useEffect(() => { if (asEmoji && !unicode) loadUnicodeEmoji().then(setUnicode).catch(() => { }) }, [asEmoji, unicode])
@@ -278,9 +282,19 @@ export function Composer({ channelId, guildId, users, placeholder, disabled, rep
     // A sticker picked from the list is sent at once, as in Discord.
     if (suggestion.sticker) sendSticker(suggestion.sticker)
     if (suggestion.mention) mentions.current.set(suggestion.insert, suggestion.mention)
-    setText(current => current.replace(TOKEN, suggestion.sticker ? '$1' : `$1${suggestion.insert} `))
+    const end = Math.min(box.current?.selectionStart ?? safeCursor, text.length)
+    const active = matchTokenAtCursor(text.slice(0, end))
+    if (active) {
+      const start = active.index + active[1].length
+      const replacement = suggestion.sticker ? '' : `${suggestion.insert} `
+      const nextAt = start + replacement.length
+      setText(current => `${current.slice(0, start)}${replacement}${current.slice(end)}`)
+      setCursor(nextAt)
+      requestAnimationFrame(() => { box.current?.focus(); box.current?.setSelectionRange(nextAt, nextAt) })
+    } else {
+      box.current?.focus()
+    }
     setPick(0)
-    box.current?.focus()
   }
 
   function sendSticker(id: string) {
@@ -380,8 +394,9 @@ export function Composer({ channelId, guildId, users, placeholder, disabled, rep
     }
   }
 
-  function onChange(value: string) {
+  function onChange(value: string, at: number) {
     setText(value)
+    setCursor(at)
     setPick(0)
     setDismissed(null)
     if (value.trim() && Date.now() - typedAt.current > TYPING_EVERY_MS) {
@@ -444,7 +459,10 @@ export function Composer({ channelId, guildId, users, placeholder, disabled, rep
           placeholder={placeholder}
           disabled={disabled}
           aria-label={placeholder}
-          onChange={event => onChange(event.target.value)}
+          onChange={event => onChange(event.target.value, event.target.selectionStart ?? event.target.value.length)}
+          onSelect={event => setCursor(event.currentTarget.selectionStart ?? event.currentTarget.value.length)}
+          onKeyUp={event => setCursor(event.currentTarget.selectionStart ?? event.currentTarget.value.length)}
+          onClick={event => setCursor(event.currentTarget.selectionStart ?? event.currentTarget.value.length)}
           onKeyDown={onKeyDown}
           onPaste={event => {
             if (event.clipboardData.files.length) { event.preventDefault(); addFiles(event.clipboardData.files); return }

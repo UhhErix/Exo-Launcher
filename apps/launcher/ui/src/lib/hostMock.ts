@@ -1028,6 +1028,7 @@ let mockDiscordClient: Record<string, unknown> = {
   inputProfile: 'exo', noiseSuppression: true, noiseSuppressionKind: 'ai', othersNoiseSuppression: false, onlyMyVoice: false, myVoiceLearned: false, myVoiceSeconds: 0, evenVoices: true, echoCancellation: true, voiceFocus: true, pushToTalk: false, pttDelay: 20,
   autoSensitivity: true, sensitivity: -60, attenuation: 0, attenuateSelf: false, attenuateOthers: true, keybinds: [], desktopNotifications: true,
   unreadBadge: true, taskbarFlash: true, disabledSounds: [], disableAllSounds: false, selectedChannelSound: false, soundVolume: 60,
+  goLiveHeight: 1080, goLiveFps: 30, goLiveHevc: false, captureMode: 'wgc', serviceDisabled: false,
 }
 
 const mockOk: MockHandler = () => ({ ok: true })
@@ -1122,7 +1123,7 @@ const mockGoLive = [
   { id: 'window:3', kind: 'window', title: 'notes.txt - Notepad', app: 'Notepad', thumb: null },
 ]
 const mockGoLiveHandler: MockHandler = (params?: { action?: string; source?: string }) => {
-  if (params?.action === 'sources') return { ok: true, sources: mockGoLive }
+  if (params?.action === 'sources') return { ok: true, sources: mockGoLive, captureMode: 'wgc', serviceDisabled: false }
   if (params?.action === 'preview') return { ok: true, thumb: (mockGoLive.find(s => s.id === params.source) ?? mockGoLive[0]).thumb }
   if (params?.action === 'start') {
     const title = mockGoLive.find(s => s.id === params.source)?.title ?? null
@@ -1403,7 +1404,7 @@ const MOCK_HANDLERS: Record<string, MockHandler> = {
   'discord.view': mockOk,
   // Watching a stream in the mock: always taken (no pictures arrive), so its view, controls and menus can be seen.
   'discord.stream': () => ({ ok: true }),
-  'discord.voice': (params?: { action?: string; guildId?: string; channelId?: string }) => ({ ok: true, voice: params?.action === 'join' ? { state: 'connected', guildId: params.guildId ?? null, channelId: params.channelId ?? null, muted: false, deafened: false, e2ee: true, recorded: params.channelId === '400000000000000005' } : { state: 'off', guildId: null, channelId: null, muted: false, deafened: false, e2ee: false } }),
+  'discord.voice': (params?: { action?: string; guildId?: string; channelId?: string }) => ({ ok: true, voice: params?.action === 'join' ? { state: 'connected', guildId: params.guildId ?? null, channelId: params.channelId ?? null, muted: false, deafened: false, e2ee: true, recorded: params.channelId === '400000000000000005', rttMs: 24, region: 'us-east', bitrate: 64000 } : { state: 'off', guildId: null, channelId: null, muted: false, deafened: false, e2ee: false } }),
   'discord.ring': mockOk,
   'discord.golive': mockGoLiveHandler,
   'discord.friends': () => ({ friends: mockFriends, restricted: { blocked: [{ id: '100000000000000009', name: 'Spammy', username: 'spammy.bot', avatar: null }], ignored: [{ id: '100000000000000008', name: 'Loud Larry', username: 'larry', avatar: null }] } }),
@@ -1437,6 +1438,8 @@ const MOCK_HANDLERS: Record<string, MockHandler> = {
   'discord.sound': mockOk,
   'discord.server': (p?: { action?: string; invite?: string; hideMuted?: boolean }) => p?.action === 'notify' && p.hideMuted !== undefined
     ? (mockHideMuted = p.hideMuted, { ok: true })
+    : p?.action === 'create'
+    ? { ok: true, guildId: '300000000000000001' }
     : p?.action === 'profile'
     ? { ok: true, profile: { id: '200000000000000001', name: 'Exo Lab', icon_hash: null, description: 'Where Exo gets built.', member_count: 1204, online_count: 312, tag: 'EXO', traits: [{ label: 'Gaming', emoji_name: '🎮', position: 0 }] } }
     : p?.action === 'invite'
@@ -1453,6 +1456,9 @@ const MOCK_HANDLERS: Record<string, MockHandler> = {
       : { ok: true },
   'discord.profile': (p?: { mutualFriends?: boolean; note?: string }) => p?.mutualFriends ? { ok: true, friends: [{ id: '100000000000000003', username: 'kai', global_name: 'Kai' }] } : p?.note !== undefined ? mockOk() : mockProfile,
   'discord.threads': () => ({ ok: true, threads: [{ id: '600000000000000001', name: 'Best crosshair codes?', parent_id: '400000000000000007', message_count: 42 }, { id: '600000000000000002', name: 'Patch 9.2 tier list', parent_id: '400000000000000007', message_count: 7 }] }),
+  'discord.soundboard': (p?: { action?: string }) => p?.action === 'list'
+    ? { ok: true, premium: true, defaults: [{ sound_id: '1', name: 'Quack', emoji_name: '🦆', volume: 1 }], guild: { items: [] }, guilds: [] }
+    : mockOk(),
   'discord.stickers': (p?: { action?: string; stickerId?: string }) => {
     if (p?.stickerId && p.action === 'add' && !mockFavoriteStickers.includes(p.stickerId)) mockFavoriteStickers.push(p.stickerId)
     if (p?.stickerId && p.action === 'remove') mockFavoriteStickers.splice(mockFavoriteStickers.indexOf(p.stickerId), 1)

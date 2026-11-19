@@ -5,7 +5,7 @@ import { Settings } from '../../brand/icons'
 import { Icons } from './icons'
 import { Avatar } from './presence'
 import type { VoiceControls } from './voice'
-import { MeMenu } from './MeMenus'
+import { AudioQuickMenu, MeMenu } from './MeMenus'
 import { Inbox } from './Inbox'
 import type { MarkdownContext } from './markdown'
 
@@ -18,7 +18,7 @@ const statusWord = (status: string | null) => STATUS[status ?? 'online'] ?? 'Onl
  */
 export function MePanel({ home, voice }: { home: DiscordHome | null; voice: VoiceControls }) {
   const { muted, deafened } = voice.voice
-  const [menu, setMenu] = useState(false)
+  const [menu, setMenu] = useState<'me' | 'input' | 'output' | null>(null)
   const custom = useAccountSettings().customStatus
   const me = home?.me
   if (!me) return null
@@ -26,20 +26,35 @@ export function MePanel({ home, voice }: { home: DiscordHome | null; voice: Voic
   const line = custom?.text?.trim() || statusWord(status)
   return (
     <footer className="exo-dc-me">
-      {menu ? <MeMenu meId={me.id} status={status} onClose={() => setMenu(false)} /> : null}
+      {menu === 'me' ? <MeMenu meId={me.id} status={status} onClose={() => setMenu(null)} /> : null}
+      {menu === 'input' || menu === 'output' ? <AudioQuickMenu kind={menu} onClose={() => setMenu(null)} /> : null}
       <button type="button" className="exo-dc-me-who" aria-label={`${me.name}, ${statusWord(status)}`}
-        aria-haspopup="menu" aria-expanded={menu} onClick={() => setMenu(now => !now)}>
+        aria-haspopup="menu" aria-expanded={menu === 'me'} onClick={() => setMenu(now => now === 'me' ? null : 'me')}>
         <Avatar src={me.avatar} name={me.name} status={status ?? 'online'} size={36} look={me.look} scope=".exo-dc-me-who" />
         <span className="exo-dc-me-text"><b>{me.name}</b><span>{line}</span></span>
       </button>
-      <button type="button" className={`exo-dc-icon-btn${muted ? ' is-off' : ''}`} aria-label={muted ? 'Unmute' : 'Mute'} aria-pressed={muted}
-        onClick={() => void voice.setMuted(!muted)}>
-        {muted ? <Icons.Muted size={18} /> : <Icons.Mic size={18} />}
-      </button>
-      <button type="button" className={`exo-dc-icon-btn${deafened ? ' is-off' : ''}`} aria-label={deafened ? 'Undeafen' : 'Deafen'} aria-pressed={deafened}
-        onClick={() => void voice.setDeafened(!deafened)}>
-        {deafened ? <Icons.Deafened size={18} /> : <Icons.Headphones size={18} />}
-      </button>
+      <span className="exo-dc-me-pair">
+        <button type="button" className={`exo-dc-icon-btn${muted ? ' is-off' : ''}`} aria-label={muted ? 'Unmute' : 'Mute'} aria-pressed={muted}
+          onClick={() => void voice.setMuted(!muted)}
+          onContextMenu={event => { event.preventDefault(); setMenu(now => now === 'input' ? null : 'input') }}>
+          {muted ? <Icons.Muted size={18} /> : <Icons.Mic size={18} />}
+        </button>
+        <button type="button" className="exo-dc-icon-btn exo-dc-me-caret" aria-label="Input options" aria-haspopup="menu" aria-expanded={menu === 'input'}
+          onClick={() => setMenu(now => now === 'input' ? null : 'input')}>
+          <Icons.Collapse size={12} />
+        </button>
+      </span>
+      <span className="exo-dc-me-pair">
+        <button type="button" className={`exo-dc-icon-btn${deafened ? ' is-off' : ''}`} aria-label={deafened ? 'Undeafen' : 'Deafen'} aria-pressed={deafened}
+          onClick={() => void voice.setDeafened(!deafened)}
+          onContextMenu={event => { event.preventDefault(); setMenu(now => now === 'output' ? null : 'output') }}>
+          {deafened ? <Icons.Deafened size={18} /> : <Icons.Headphones size={18} />}
+        </button>
+        <button type="button" className="exo-dc-icon-btn exo-dc-me-caret" aria-label="Output options" aria-haspopup="menu" aria-expanded={menu === 'output'}
+          onClick={() => setMenu(now => now === 'output' ? null : 'output')}>
+          <Icons.Collapse size={12} />
+        </button>
+      </span>
       <button type="button" className="exo-dc-icon-btn" aria-label="Discord settings" onClick={() => requestDiscordSettings('account')}>
         <Settings size={18} />
       </button>

@@ -158,6 +158,108 @@ function useBackForward(active: boolean, place: string, open: string | null, thr
   }, [active, navigate])
 }
 
+function adjacentTarget(place: string, open: string | null, home: DiscordHome | null, list: DiscordChannels | null, dir: -1 | 1) {
+  const ids = place === HOME
+    ? (home?.dms ?? []).filter(d => !d.request && !d.spam).map(d => d.id)
+    : (list?.channels ?? []).filter(c => c.kind !== 'category' && c.canRead !== false).map(c => c.id)
+  if (!ids.length) return null
+  const index = open ? ids.indexOf(open) : -1
+  const next = index < 0 ? (dir > 0 ? 0 : ids.length - 1) : (index + dir + ids.length) % ids.length
+  return { to: place, id: ids[next] }
+}
+
+function nextUnreadTarget(place: string, open: string | null, home: DiscordHome | null, list: DiscordChannels | null, dir: -1 | 1) {
+  const current = place === HOME
+    ? (home?.dms ?? []).filter(d => !d.request && !d.spam && d.unread && !d.muted).map(d => d.id)
+    : (list?.channels ?? []).filter(c => c.kind !== 'category' && c.canRead !== false && c.unread && !c.muted).map(c => c.id)
+  if (current.length) {
+    const idx = open ? current.indexOf(open) : -1
+    if (idx < 0) return { to: place, id: current[dir > 0 ? 0 : current.length - 1] }
+    if (current.length > 1) return { to: place, id: current[(idx + dir + current.length) % current.length] }
+  }
+  const everywhere: { to: string; id: string | null }[] = [
+    ...(home?.dms ?? []).filter(d => !d.request && !d.spam && d.unread && !d.muted).map(d => ({ to: HOME, id: d.id as string | null })),
+    ...(home?.guilds ?? []).filter(g => g.unread && !g.muted).map(g => ({ to: g.id, id: null as string | null })),
+  ].filter(target => !(target.to === place && (target.id === null || target.id === open)))
+  if (!everywhere.length) return null
+  return everywhere[dir > 0 ? 0 : everywhere.length - 1]
+}
+
+function scrollMessagePane(dir: -1 | 1, target: EventTarget | null) {
+  if (target instanceof Element && target.closest('[role="dialog"], [role="menu"], .exo-dc-popover, .exo-dc-suggest, select')) return false
+  const scroller = document.querySelector<HTMLElement>('main.exo-dc .exo-dc-scroll')
+  if (!scroller) return false
+  scroller.scrollBy({ top: dir * Math.max(120, Math.round(scroller.clientHeight * 0.85)) })
+  return true
+}
+
+type RoomShortcutState = {
+  active: boolean
+  modalOpen: boolean
+  place: string
+  open: string | null
+  home: DiscordHome | null
+  list: DiscordChannels | null
+  voice: VoiceControls
+  navigate: (to: string, channelId: string | null) => void
+  refreshHome: () => void
+}
+
+function handleCtrlShortcut(event: KeyboardEvent, s: RoomShortcutState) {
+  const low = event.key.toLowerCase()
+  if (!event.altKey && !event.shiftKey && low === 'f') {
+    if (!document.querySelector('main.exo-dc .exo-dc-head-search')) return false
+    window.dispatchEvent(new CustomEvent('exo-dc-focus-search'))
+    return true
+  }
+  if (event.shiftKey && !event.altKey && (low === 'm' || low === 'd')) {
+    if (low === 'm') void s.voice.setMuted(!s.voice.voice.muted)
+    else void s.voice.setDeafened(!s.voice.voice.deafened)
+    return true
+  }
+  return false
+}
+
+function handleAltShortcut(event: KeyboardEvent, s: RoomShortcutState) {
+  if (event.key !== 'ArrowUp' && event.key !== 'ArrowDown') return false
+  const dir: -1 | 1 = event.key === 'ArrowUp' ? -1 : 1
+  const next = event.shiftKey ? nextUnreadTarget(s.place, s.open, s.home, s.list, dir) : adjacentTarget(s.place, s.open, s.home, s.list, dir)
+  if (!next) return false
+  s.navigate(next.to, next.id)
+  return true
+}
+
+function handleRoomShortcutKey(event: KeyboardEvent, s: RoomShortcutState) {
+  if (s.modalOpen || event.metaKey) return
+  if (event.ctrlKey) {
+    if (handleCtrlShortcut(event, s)) event.preventDefault()
+    return
+  }
+  if (event.altKey) {
+    if (handleAltShortcut(event, s)) event.preventDefault()
+    return
+  }
+  if (event.shiftKey && event.key === 'Escape' && s.place !== HOME) {
+    event.preventDefault()
+    void host.discordMarkRead(s.place).then(result => { if (result.ok) s.refreshHome() }).catch(() => { })
+    return
+  }
+  if (!event.shiftKey && (event.key === 'PageUp' || event.key === 'PageDown')) {
+    if (scrollMessagePane(event.key === 'PageDown' ? 1 : -1, event.target)) event.preventDefault()
+  }
+}
+
+function useRoomShortcuts(state: RoomShortcutState) {
+  const latest = useRef(state)
+  latest.current = state
+  useEffect(() => {
+    if (!state.active) return
+    const handle = (event: KeyboardEvent) => handleRoomShortcutKey(event, latest.current)
+    window.addEventListener('keydown', handle)
+    return () => window.removeEventListener('keydown', handle)
+  }, [state.active])
+}
+
 function useRememberWhere(home: DiscordHome | null, place: string, open: string | null, thread: DiscordChannel | null, leave: () => void) {
   useEffect(() => {
     if (open) {
@@ -410,6 +512,7 @@ export function DiscordClient({ active }: { active: boolean }) {
   useEffect(() => onPerformanceMode(() => setPerformance(performanceMode())), [])
   // Discord settings in effect: the account's, Streamer Mode, /tts, and the room's look.
   useEffect(startDiscordSettings, [])
+  useRoomShortcuts({ active, modalOpen: !!settings || !!adding, place, open, home, list, voice, navigate, refreshHome })
   const look = useRoomLook()
   const { nav, join: joinVoice } = useServerNav(place, home, list, listOf, open, voice, navigate)
   const voiceChat = useVoiceChat()

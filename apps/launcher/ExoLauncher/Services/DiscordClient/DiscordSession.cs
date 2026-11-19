@@ -116,6 +116,7 @@ internal sealed partial class DiscordSession
         }
         Interlocked.Exchange(ref _customExpiry, null)?.Cancel();
         Interlocked.Exchange(ref _statusExpiry, null)?.Cancel();
+        StopKeybinds();
         StopFriendLinks();
         lock (_linkGate)
         {
@@ -472,6 +473,7 @@ internal sealed partial class DiscordSession
             _ = Task.Run(KeepPrivacyAsync);
             _ = Task.Run(ResumeStatusExpiryAsync);
             OnGatewayReady(freshSession: true);
+            UpdateKeyTick();
             return;
         }
         if (type == "RESUMED")

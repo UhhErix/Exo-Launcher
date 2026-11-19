@@ -458,6 +458,10 @@ public sealed class AppSettings
     public bool DiscordSelectedChannelSound { get; set; }
     /// <summary>How loud all of Discord's sounds play, in percent (60 until chosen, the level they always had).</summary>
     public int DiscordSoundVolume { get; set; } = 60;
+    /// <summary>Discord Go Live defaults: resolution height (0 for Source), frame rate, and hardware HEVC codec support.</summary>
+    public int DiscordGoLiveHeight { get; set; } = 1080;
+    public int DiscordGoLiveFps { get; set; } = 30;
+    public bool DiscordGoLiveHevc { get; set; } = true;
     /// <summary>Per game: "on" or "off" overrides what PCGamingWiki says; no entry is Auto.</summary>
     public Dictionary<string, string> HdrGameModes { get; set; } = new(StringComparer.OrdinalIgnoreCase);
     /// <summary>System > Display > Use NVIDIA color settings, by screen device path (format in <see cref="ExoLauncher.Helpers.NvidiaColor"/>). No entry: other apps control color.</summary>

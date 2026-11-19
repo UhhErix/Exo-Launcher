@@ -20,9 +20,9 @@ internal readonly record struct VoiceProcessing(string Profile, bool NoiseSuppre
     /// </summary>
     internal static readonly VoiceProcessing ExoVoice = new("exo", true, true, false, true, -60, 0, false);
 
-    /// <summary>Exo Voice is on: the best of everything at once, so nothing else needs choosing (noise
-    /// suppression's on switch is that switch; an earlier build's kind becomes Exo Voice too).</summary>
-    internal static bool ExoOn(Models.AppSettings s) => s.DiscordNoiseSuppression;
+    /// <summary>Exo Voice is on: true only when noise suppression is on AND kind is not Standard (WebRTC).</summary>
+    internal static bool ExoOn(Models.AppSettings s) =>
+        s.DiscordNoiseSuppression && !string.Equals(s.DiscordNoiseSuppressionKind, "standard", StringComparison.OrdinalIgnoreCase);
 
     // Exo Voice, the whole smart preset: Exo's own AI (the tuned DeepFilterNet chain), Exo's echo
     // cancellation (on speakers only: Windows' smeared voices), the automatic gate read by DeepFilterNet's own VAD, and

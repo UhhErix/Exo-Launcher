@@ -149,6 +149,9 @@ export type DiscordChannel = {
   /** A voice channel's status (Set Channel Status), and whether you may set it once in the channel. */
   status?: string | null
   canSetStatus?: boolean
+  /** A stage channel's live topic and whether you can invite/demote speakers. */
+  stageTopic?: string | null
+  canModerateStage?: boolean
   /** A category the user collapsed (kept in their Discord settings). */
   collapsed?: boolean
   /** A Server Guide resource (Discord lists it in the guide, not the channel lists). */
@@ -170,10 +173,10 @@ export type DiscordChannel = {
   /** When its last message was sent (ms). */
   active?: number | null
 }
-export type DiscordVoiceMember = { id: string; name: string; avatar: string | null; look?: DiscordLook | null; mute: boolean; deaf: boolean; video?: boolean; stream?: boolean; serverMute?: boolean; serverDeaf?: boolean }
+export type DiscordVoiceMember = { id: string; name: string; avatar: string | null; look?: DiscordLook | null; mute: boolean; deaf: boolean; video?: boolean; stream?: boolean; serverMute?: boolean; serverDeaf?: boolean; suppress?: boolean; requestToSpeak?: string | null }
 /** message: why the call ended on its own (a join Discord never answered, a connection that gave up). */
 export type DiscordVoice = { state: 'off' | 'connecting' | 'connected'; guildId: string | null; channelId: string | null; muted: boolean; deafened: boolean; e2ee: boolean; micSilent?: boolean
-  message?: string | null; ringing?: string | null; recorded?: boolean }
+  message?: string | null; ringing?: string | null; recorded?: boolean; rttMs?: number | null; region?: string | null; bitrate?: number | null }
 export type DiscordChannels = {
   name: string | null
   channels: DiscordChannel[]

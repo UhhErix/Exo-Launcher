@@ -259,36 +259,66 @@ export function ImageHost() {
   )
 }
 
-/** Discord's Add a Server: join with an invite link (refused: a clicked link Discord didn't take, and why). */
+/** Discord's Add a Server: join with an invite link or create a new server. */
 export function AddServer({ refused, onJoined, onClose }: { refused: boolean | { invite: string; message: string }; onJoined: (guildId: string) => void; onClose: () => void }) {
   const clicked = typeof refused === 'object' ? refused : null
+  const [tab, setTab] = useState<'join' | 'create'>('join')
   const [invite, setInvite] = useState(clicked?.invite ?? '')
+  const [name, setName] = useState('')
   const [error, setError] = useState<string | null>(clicked?.message ?? null)
   const [busy, setBusy] = useState(false)
   useEscape(onClose)
-  async function join() {
-    if (!invite.trim() || busy) return
+
+  function switchTab(next: 'join' | 'create') {
+    setTab(next)
+    setError(null)
+  }
+
+  async function submit() {
+    if (busy) return
+    const value = tab === 'join' ? invite.trim() : name.trim()
+    if (!value || (tab === 'create' && value.length < 2)) return
     setBusy(true)
     setError(null)
     try {
-      const result = await host.discordServer('join', { invite: invite.trim() })
+      const result = tab === 'join'
+        ? await host.discordServer('join', { invite: value })
+        : await host.discordServer('create', { name: value })
       if (result.ok && result.guildId) onJoined(result.guildId)
-      else setError(errorText(result.message, 'Discord didn’t take that invite.'))
+      else setError(errorText(result.message, tab === 'join' ? 'Discord didn’t take that invite.' : 'Discord didn’t create that server.'))
     } catch (err) {
-      report(err, 'AddServer.join')
-      setError('Discord didn’t take that invite.')
+      report(err, tab === 'join' ? 'AddServer.join' : 'AddServer.create')
+      setError(tab === 'join' ? 'Discord didn’t take that invite.' : 'Discord didn’t create that server.')
     } finally { setBusy(false) }
   }
+
+  const ready = tab === 'join' ? invite.trim().length > 0 : name.trim().length >= 2 && name.trim().length <= 100
   return (
-    <Popover portal={false} className="exo-dc-modal" label="Join a server" onClick={event => event.stopPropagation()} onClose={onClose}>
-      <strong>Join a server</strong>
-      <label className="exo-dc-side-label" htmlFor="exo-dc-invite">Invite link</label>
-      <input id="exo-dc-invite" className="exo-dc-modal-input" placeholder="https://discord.gg/hTKzmak" value={invite} autoFocus
-        onChange={event => setInvite(event.target.value)} onKeyDown={event => { if (event.key === 'Enter') void join() }} />
+    <Popover portal={false} className="exo-dc-modal" label={tab === 'join' ? 'Join a server' : 'Create a server'} onClick={event => event.stopPropagation()} onClose={onClose}>
+      <div className="exo-dc-popover-tabs" role="group" aria-label="Add server mode">
+        <button type="button" className="exo-dc-tab" aria-pressed={tab === 'join'} onClick={() => switchTab('join')}>Join</button>
+        <button type="button" className="exo-dc-tab" aria-pressed={tab === 'create'} onClick={() => switchTab('create')}>Create</button>
+      </div>
+      <strong>{tab === 'join' ? 'Join a server' : 'Create a server'}</strong>
+      {tab === 'join' ? (
+        <>
+          <label className="exo-dc-side-label" htmlFor="exo-dc-invite">Invite link</label>
+          <input id="exo-dc-invite" className="exo-dc-modal-input" placeholder="https://discord.gg/hTKzmak" value={invite} autoFocus
+            onChange={event => setInvite(event.target.value)} onKeyDown={event => { if (event.key === 'Enter') void submit() }} />
+        </>
+      ) : (
+        <>
+          <label className="exo-dc-side-label" htmlFor="exo-dc-create-server">Server name</label>
+          <input id="exo-dc-create-server" className="exo-dc-modal-input" placeholder="My server" maxLength={100} value={name} autoFocus
+            onChange={event => setName(event.target.value)} onKeyDown={event => { if (event.key === 'Enter') void submit() }} />
+        </>
+      )}
       {error ? <ErrorNote className="is-bad" message={error} /> : null}
       <div className="exo-dc-modal-row">
         <button type="button" className="exo-dc-tab" onClick={onClose}>Back</button>
-        <button type="button" className="exo-set-btn is-primary" disabled={!invite.trim() || busy} onClick={() => void join()}>Join server</button>
+        <button type="button" className="exo-set-btn is-primary" disabled={!ready || busy} onClick={() => void submit()}>
+          {tab === 'join' ? 'Join server' : 'Create server'}
+        </button>
       </div>
     </Popover>
   )

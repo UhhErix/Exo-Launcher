@@ -19,7 +19,7 @@ internal static class GoLiveSources
 {
     /// <summary>A screen (Monitor set) or a window: its title, app, physical size, process and executable (native only).</summary>
     internal sealed record Source(string Id, string Kind, string Title, string App, nint Window, nint Monitor,
-        int Width, int Height, uint ProcessId, string? Exe, string? Game);
+        int Width, int Height, uint ProcessId, string? Exe, string? Game, bool Primary = false, int Hz = 0);
 
     /// <summary>What decides whether a visible, unminimized window is listed (<see cref="Shareable"/>).</summary>
     internal readonly record struct WindowFacts(bool Owned, bool AppWindow, bool Tool, bool NoActivate,
@@ -87,8 +87,15 @@ internal static class GoLiveSources
             .OrderByDescending(m => (m.Info.Flags & 1) != 0)
             .ThenBy(m => m.Info.Monitor.Left).ThenBy(m => m.Info.Monitor.Top)
             .Select((m, i) => new Source("screen:" + m.Info.Device, "screen", "Screen " + (i + 1), "Screen", 0, m.Handle,
-                m.Info.Monitor.Right - m.Info.Monitor.Left, m.Info.Monitor.Bottom - m.Info.Monitor.Top, 0, null, null))
+                m.Info.Monitor.Right - m.Info.Monitor.Left, m.Info.Monitor.Bottom - m.Info.Monitor.Top, 0, null, null,
+                Primary: (m.Info.Flags & 1) != 0, Hz: Helpers.DisplayOutput.CurrentRefresh(m.Info.Device)))
             .ToList();
+    }
+
+    private static bool IsOwnedPopup(nint hwnd)
+    {
+        var rootOwner = GetAncestor(hwnd, 3 /* GA_ROOTOWNER */);
+        return rootOwner != 0 && GetLastActivePopup(rootOwner) != hwnd;
     }
 
     private static Source? Describe(nint hwnd, IReadOnlyList<(string Title, string Folder)> games)
@@ -103,7 +110,7 @@ internal static class GoLiveSources
             GetWindowRect(hwnd, out bounds);
         var title = Text(hwnd);
         var facts = new WindowFacts(
-            Owned: GetWindow(hwnd, 4 /* GW_OWNER */) != 0,
+            Owned: IsOwnedPopup(hwnd),
             AppWindow: (style & 0x00040000) != 0, Tool: (style & 0x00000080) != 0, NoActivate: (style & 0x08000000) != 0,
             Cloaked: cloaked,
             Exo: pid == Environment.ProcessId || string.Equals(Path.GetFileName(exe), "ExoCapture.exe", StringComparison.OrdinalIgnoreCase),
@@ -209,6 +216,8 @@ internal static class GoLiveSources
     [DllImport("user32.dll")] private static extern bool IsWindowVisible(nint hwnd);
     [DllImport("user32.dll")] private static extern bool IsIconic(nint hwnd);
     [DllImport("user32.dll")] private static extern nint GetWindow(nint hwnd, uint command);
+    [DllImport("user32.dll")] private static extern nint GetAncestor(nint hwnd, uint flags);
+    [DllImport("user32.dll")] private static extern nint GetLastActivePopup(nint hwnd);
     [DllImport("user32.dll", EntryPoint = "GetWindowLongPtrW")] private static extern nint GetWindowLongPtr(nint hwnd, int index);
     [DllImport("user32.dll")] private static extern bool GetWindowRect(nint hwnd, out Rect rect);
     [DllImport("user32.dll")] private static extern nint MonitorFromWindow(nint hwnd, uint flags);

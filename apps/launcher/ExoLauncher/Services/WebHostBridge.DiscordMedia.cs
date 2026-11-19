@@ -131,9 +131,45 @@ public sealed partial class WebHostBridge
             var played = await session.Rest.SendSoundAsync(c.Id, sound, ReadString(p, hasParams, "guildId"), ReadString(p, hasParams, "emojiId"), ReadString(p, hasParams, "emojiName"), ct).ConfigureAwait(false);
             return new { ok = played.Error is null, message = played.Error };
         }
-        var defaults = await session.Rest.SoundboardDefaultsAsync(ct).ConfigureAwait(false);
+        var defaultsTask = session.Rest.SoundboardDefaultsAsync(ct);
         var guildId = ReadString(p, hasParams, "guildId") is { Length: > 0 } g ? DiscordRest.Id(g) : null;
-        var guild = guildId is null ? null : await session.Rest.SoundboardAsync(guildId, ct).ConfigureAwait(false);
-        return new { ok = defaults.Error is null, message = defaults.Error, defaults = defaults.Body, guild = guild?.Body };
+        var guildTask = guildId is null ? null : session.Rest.SoundboardAsync(guildId, ct);
+        await Task.WhenAll(guildTask is null ? [defaultsTask] : [defaultsTask, guildTask]).ConfigureAwait(false);
+        var defaults = await defaultsTask.ConfigureAwait(false);
+        var guild = guildTask is null ? null : await guildTask.ConfigureAwait(false);
+        var otherGuilds = new List<object>();
+        if (session.Cache.Premium)
+        {
+            using var gate = new SemaphoreSlim(6);
+            using var peerCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            peerCts.CancelAfter(TimeSpan.FromSeconds(4));
+            var peers = session.Cache.OtherGuilds(guildId);
+            var results = await Task.WhenAll(peers.Select(async peer =>
+            {
+                try
+                {
+                    await gate.WaitAsync(peerCts.Token).ConfigureAwait(false);
+                    try
+                    {
+                        var res = await session.Rest.SoundboardAsync(peer.Id, peerCts.Token).ConfigureAwait(false);
+                        if (res.Error is null && res.Body is { ValueKind: JsonValueKind.Object } soundBody && soundBody.TryGetProperty("items", out var items) && items.ValueKind == JsonValueKind.Array && items.GetArrayLength() > 0)
+                            return (object?)new { id = peer.Id, name = peer.Name, items = items.Clone() };
+                    }
+                    finally { gate.Release(); }
+                }
+                catch when (!ct.IsCancellationRequested) { }
+                return null;
+            })).ConfigureAwait(false);
+            foreach (var r in results) if (r is not null) otherGuilds.Add(r);
+        }
+        return new
+        {
+            ok = defaults.Error is null,
+            message = defaults.Error,
+            premium = session.Cache.Premium,
+            defaults = defaults.Body,
+            guild = guild?.Body,
+            guilds = otherGuilds,
+        };
     }
 }

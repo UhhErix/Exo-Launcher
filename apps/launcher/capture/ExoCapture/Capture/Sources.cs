@@ -43,13 +43,18 @@ internal sealed unsafe class WgcSource : IFrameSource
     private static readonly Guid IID_DxgiAccess = new("A9B3D012-3DF2-4EE3-B8D1-8695F457D3C1");
     private const int FormatBgra = 87, FormatFp16 = 10;
 
-    private readonly nint _item, _pool, _session, _device;
+    private nint _item, _pool, _session, _device;
     private readonly nint _window;
     private nint _frame;
     private ID3D11Texture2D? _texture;
     private int _poolW, _poolH;
     private readonly int _format;
     private long _lastTime;
+
+    internal const int ErrorServiceDisabled = unchecked((int)0x80070422);
+    private static volatile bool _serviceDisabled;
+    private static long _registryCheckedAt;
+    private static volatile bool _registryDisabled;
 
     public string Kind { get; }
     public int Width { get; private set; }
@@ -65,31 +70,39 @@ internal sealed unsafe class WgcSource : IFrameSource
         Kind = kind;
         Hdr = hdr;
         _format = hdr ? FormatFp16 : FormatBgra;
-        using var dxgi = gpu.Device.QueryInterface<IDXGIDevice>();
-        Check(CreateDirect3D11DeviceFromDXGIDevice(dxgi.NativePointer, out _device), "capture device");
-        SizeInt32 size;
-        Check(Vt<nint, nint, int>(item, 7)(item, (nint)(&size)), "capture size");
-        (Width, Height, _poolW, _poolH) = (size.Width, size.Height, size.Width, size.Height);
-        var statics = Factory("Windows.Graphics.Capture.Direct3D11CaptureFramePool", IID_PoolStatics2);
         try
         {
-            nint pool;
-            Check(Vt<nint, nint, int, int, SizeInt32, nint, int>(statics, 6)(statics, _device, _format, 2, size, (nint)(&pool)), "frame pool");
-            _pool = pool;
+            using var dxgi = gpu.Device.QueryInterface<IDXGIDevice>();
+            Check(CreateDirect3D11DeviceFromDXGIDevice(dxgi.NativePointer, out _device), "capture device");
+            SizeInt32 size;
+            Check(Vt<nint, nint, int>(item, 7)(item, (nint)(&size)), "capture size");
+            (Width, Height, _poolW, _poolH) = (size.Width, size.Height, size.Width, size.Height);
+            var statics = Factory("Windows.Graphics.Capture.Direct3D11CaptureFramePool", IID_PoolStatics2);
+            try
+            {
+                nint pool;
+                Check(Vt<nint, nint, int, int, SizeInt32, nint, int>(statics, 6)(statics, _device, _format, 2, size, (nint)(&pool)), "frame pool");
+                _pool = pool;
+            }
+            finally { Marshal.Release(statics); }
+            nint session;
+            Check(Vt<nint, nint, nint, int>(_pool, 10)(_pool, item, (nint)(&session)), "capture session");
+            _session = session;
+            SetBool(_session, IID_Session2, 7, cursor);
+            SetBool(_session, IID_Session3, 7, false); // no yellow border
+            SetBool(_session, IID_Session6, 7, true);  // a game's child windows too
+            if (Marshal.QueryInterface(_session, IID_Session5, out var s5) == 0)
+            {
+                Vt<nint, long, int>(s5, 7)(s5, minInterval.Ticks);
+                Marshal.Release(s5);
+            }
+            Check(Vt<nint, int>(_session, 6)(_session), kind == "(screen)" || kind == "(the game's screen)" ? "capture the screen" : "capture the window");
         }
-        finally { Marshal.Release(statics); }
-        nint session;
-        Check(Vt<nint, nint, nint, int>(_pool, 10)(_pool, item, (nint)(&session)), "capture session");
-        _session = session;
-        SetBool(_session, IID_Session2, 7, cursor);
-        SetBool(_session, IID_Session3, 7, false); // no yellow border
-        SetBool(_session, IID_Session6, 7, true);  // a game's child windows too
-        if (Marshal.QueryInterface(_session, IID_Session5, out var s5) == 0)
+        catch
         {
-            Vt<nint, long, int>(s5, 7)(s5, minInterval.Ticks);
-            Marshal.Release(s5);
+            Dispose();
+            throw;
         }
-        Check(Vt<nint, int>(_session, 6)(_session), kind == "(screen)" || kind == "(the game's screen)" ? "capture the screen" : "capture the window");
     }
 
     internal static WgcSource ForWindow(GpuDevice gpu, nint hwnd, bool hdr, bool cursor, string kind, TimeSpan minInterval)
@@ -187,13 +200,13 @@ internal sealed unsafe class WgcSource : IFrameSource
 
     public void Dispose()
     {
-        if (_frame != 0) Close(_frame);
-        _frame = 0;
+        if (_frame != 0) { Close(_frame); _frame = 0; }
         _texture?.Dispose();
-        if (_session != 0) Close(_session);
-        if (_pool != 0) Close(_pool);
-        if (_item != 0) Marshal.Release(_item);
-        if (_device != 0) Close(_device);
+        _texture = null;
+        if (_session != 0) { Close(_session); _session = 0; }
+        if (_pool != 0) { Close(_pool); _pool = 0; }
+        if (_item != 0) { Marshal.Release(_item); _item = 0; }
+        if (_device != 0) { Close(_device); _device = 0; }
     }
 
     // ---------------------------------------------------------------- the ABI
@@ -225,22 +238,54 @@ internal sealed unsafe class WgcSource : IFrameSource
         finally { WindowsDeleteString(hstring); }
     }
 
+    internal static bool RecordFailureHr(int hr)
+    {
+        if (hr != ErrorServiceDisabled) return false;
+        _serviceDisabled = true;
+        return true;
+    }
+
+    internal static void ResetAvailabilityCacheForTests()
+    {
+        _serviceDisabled = false;
+        _registryDisabled = false;
+        Interlocked.Exchange(ref _registryCheckedAt, 0);
+    }
+
     internal static void Check(int hr, string step)
     {
-        if (hr < 0) throw new CaptureException($"{step} (0x{hr:X8})");
+        if (hr >= 0) return;
+        RecordFailureHr(hr);
+        throw new CaptureException($"{step} (0x{hr:X8})");
+    }
+
+    private static bool RegistryServiceDisabled()
+    {
+        var now = Environment.TickCount64;
+        var last = Interlocked.Read(ref _registryCheckedAt);
+        if (last != 0 && now - last < 10_000) return _registryDisabled;
+        var disabled = Win32.IsCaptureServiceDisabled();
+        _registryDisabled = disabled;
+        Interlocked.Exchange(ref _registryCheckedAt, now);
+        return disabled;
     }
 
     /// <summary>Windows capture can run here: its service is on and the API exists.</summary>
     internal static bool Available(out string? why)
     {
         why = null;
+        if (_serviceDisabled || RegistryServiceDisabled())
+        {
+            why = "Windows capture service is disabled";
+            return false;
+        }
         try
         {
             var statics = Factory("Windows.Graphics.Capture.GraphicsCaptureSession", new Guid("2224A540-5974-49AA-B232-0882536F4CB5"));
             try
             {
                 byte supported;
-                Vt<nint, nint, int>(statics, 6)(statics, (nint)(&supported));
+                Check(Vt<nint, nint, int>(statics, 6)(statics, (nint)(&supported)), "Windows capture");
                 if (supported == 0) why = "Windows capture is not supported here";
             }
             finally { Marshal.Release(statics); }
@@ -255,4 +300,35 @@ internal sealed unsafe class WgcSource : IFrameSource
     [DllImport("combase.dll")] private static extern int RoGetActivationFactory(nint classId, Guid* iid, nint* factory);
     [DllImport("combase.dll")] private static extern int WindowsCreateString(char* source, uint length, nint* hstring);
     [DllImport("combase.dll")] private static extern int WindowsDeleteString(nint hstring);
+}
+
+/// <summary>Shared source opener: prefers Windows capture when available and falls back to desktop duplication on CaptureException.</summary>
+internal static class CaptureSources
+{
+    internal static IFrameSource OpenCaptureSource(GpuDevice gpu, bool isWindow, nint target, bool cursor, TimeSpan? minInterval = null, bool hdr = false, string? kind = null)
+    {
+        var interval = minInterval ?? TimeSpan.FromMilliseconds(16);
+        var resolvedKind = kind ?? (isWindow ? "(window)" : "(screen)");
+        return OpenCaptureSource(
+            () => WgcSource.Available(out _),
+            () => isWindow
+                ? WgcSource.ForWindow(gpu, target, hdr, cursor, resolvedKind, interval)
+                : WgcSource.ForMonitor(gpu, target, hdr, cursor, resolvedKind, interval),
+            () =>
+            {
+                var monitor = isWindow ? Win32.MonitorFromWindow(target, Win32.MONITOR_DEFAULTTONEAREST) : target;
+                return new DuplicationSource(gpu, monitor, isWindow ? target : 0, hdr, resolvedKind, cursor);
+            },
+            Host.Log);
+    }
+
+    internal static IFrameSource OpenCaptureSource(Func<bool> wgcAvailable, Func<IFrameSource> openWgc, Func<IFrameSource> openFallback, Action<string>? log = null)
+    {
+        if (wgcAvailable())
+        {
+            try { return openWgc(); }
+            catch (CaptureException ex) { log?.Invoke("Windows capture: " + ex.Message + "; the screen's own copy instead."); }
+        }
+        return openFallback();
+    }
 }

@@ -163,7 +163,11 @@ public sealed class GoLiveTests
             GoLiveCapture.Explain(new InvalidOperationException("no hardware video encoder (0xC00D5212)")));
         Assert.Equal("Exo Capture couldn't use your graphics card to share your screen.",
             GoLiveCapture.Explain(new InvalidOperationException("D3D11 device (0x887A0004)")));
+        Assert.Contains("0x80070422", GoLiveCapture.Explain(new InvalidOperationException("capture the window (0x80070422)")));
         Assert.Equal("Exo Capture didn't start the stream in time.", GoLiveCapture.Explain(new TimeoutException()));
+        Assert.True(CaptureServiceHealth.IsDisabledDword(4));
+        Assert.False(CaptureServiceHealth.IsDisabledDword(3));
+        Assert.False(CaptureServiceHealth.IsDisabledDword(null));
     }
 
     [Fact]

@@ -99,6 +99,33 @@
   font-size: var(--exo-type-body);
 }
 
+.exo-dc-golive-label {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.exo-dc-golive-label > span {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.exo-dc-golive-label > small {
+  color: var(--dc-muted);
+  font-size: var(--exo-type-small);
+  font-variant-numeric: tabular-nums;
+}
+
+.exo-dc-golive-status {
+  margin: 0;
+  padding: 6px 10px;
+  border-radius: var(--exo-card-radius);
+  background: var(--exo-fill);
+  color: var(--dc-muted);
+  font-size: var(--exo-type-small);
+}
+
 .exo-dc-golive-icon {
   flex: none;
   border-radius: 4px;
