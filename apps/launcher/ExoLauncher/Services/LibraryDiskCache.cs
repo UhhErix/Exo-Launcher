@@ -127,6 +127,8 @@ internal static class LibraryDiskCache
             Store = variant.Store.ToString(),
             Installed = variant.Installed,
             Owned = variant.Owned,
+            FamilyShared = variant.FamilyShared,
+            SharedBy = variant.SharedBy,
             EntitlementState = variant.EntitlementState,
             UpdateAvailable = variant.UpdateAvailable,
             CanInstall = variant.CanInstall,
@@ -183,6 +185,8 @@ internal static class LibraryDiskCache
             Store = store,
             Installed = variant.Installed,
             Owned = variant.Owned,
+            FamilyShared = variant.FamilyShared,
+            SharedBy = variant.SharedBy,
             EntitlementState = variant.EntitlementState,
             UpdateAvailable = variant.UpdateAvailable,
             CanInstall = variant.CanInstall,
@@ -237,6 +241,8 @@ internal static class LibraryDiskCache
         public string Store { get; set; } = "";
         public bool Installed { get; set; }
         public bool Owned { get; set; }
+        public bool FamilyShared { get; set; }
+        public string? SharedBy { get; set; }
         public EntitlementState EntitlementState { get; set; } = EntitlementState.Unknown;
         public bool UpdateAvailable { get; set; }
         public bool CanInstall { get; set; }

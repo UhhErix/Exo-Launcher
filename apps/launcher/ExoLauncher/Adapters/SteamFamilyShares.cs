@@ -21,14 +21,27 @@ internal static class SteamFamilyShares
 
     private sealed record Kept(string? Name, string[]? Owners);
 
-    /// <summary>The current family list for <paramref name="scope"/> (empty when the account left its family).</summary>
-    internal static void Remember(string? scope, IReadOnlyDictionary<string, SharedApp> apps)
+    /// <summary>
+    /// The current family list for <paramref name="scope"/> (empty when the account left its family), the account that
+    /// started the scan. <paramref name="activeScope"/> is Steam's signed-in account as it is now, read just before the
+    /// write: when someone else signed in meanwhile, the list (the first account's) is not kept, so it can never be
+    /// read back as the second account's family. False when nothing was written for that reason or no scope is known.
+    /// </summary>
+    internal static bool Remember(string? scope, IReadOnlyDictionary<string, SharedApp> apps, Func<string?> activeScope)
     {
-        if (string.IsNullOrWhiteSpace(scope)) return;
+        if (string.IsNullOrWhiteSpace(scope)) return false;
         lock (Gate)
         {
+            string? now;
+            try { now = activeScope(); }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Security.SecurityException) { now = null; }
+            if (!string.Equals(now, scope, StringComparison.Ordinal))
+            {
+                AppLog.Info("Steam family shares not saved: the Steam account changed during the scan.");
+                return false;
+            }
             var all = Read();
-            if (all.TryGetValue(scope, out var kept) && Same(kept, apps)) return;
+            if (all.TryGetValue(scope, out var kept) && Same(kept, apps)) return true;
             all[scope] = apps.ToDictionary(p => p.Key, p => p.Value, StringComparer.Ordinal);
             try
             {
@@ -45,6 +58,7 @@ internal static class SteamFamilyShares
             {
                 AppLog.Debug("Steam family shares not saved: " + ex.GetType().Name);
             }
+            return true;
         }
     }
 

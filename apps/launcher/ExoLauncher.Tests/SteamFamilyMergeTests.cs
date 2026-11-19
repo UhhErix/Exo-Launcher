@@ -2,6 +2,7 @@ using System.Text;
 using System.Text.Json;
 using ExoLauncher.Adapters;
 using ExoLauncher.Models;
+using ExoLauncher.Services;
 using ExoLauncher.Services.SteamSignIn;
 using SharedApp = ExoLauncher.Adapters.SteamFamilyLibrary.SharedApp;
 using Shares = ExoLauncher.Adapters.SteamFamilyLibrary.Shares;
@@ -19,7 +20,9 @@ namespace ExoLauncher.Tests;
 /// - a shared game nobody here has opened gets no row (no local name), is listed twice, or is not marked shared;
 /// - owners' names: the account itself is named, an unknown owner is shown as a blank, many owners overflow;
 /// - the website token: a token for another account is used, an expired or malformed one is kept, the store's answer
-///   without a token reads as one.
+///   without a token reads as one;
+/// - a client batch that failed (its ids unchecked) drops the kept shares it held;
+/// - an artwork or grouped-card copy of a shared row loses who shares it.
 /// </summary>
 public sealed class SteamFamilyMergeTests
 {
@@ -84,6 +87,53 @@ public sealed class SteamFamilyMergeTests
         Assert.Equal("Lent", family.Apps["20"].Name);
         Assert.Null(family.Apps["30"].Name);
         Assert.True(family.Remember);
+    }
+
+    [Fact]
+    public void AClientBatchThatNeverAnsweredKeepsTheKeptSharesItHeld()
+    {
+        var kept = Apps(new SharedApp("20", "Lent", ["200"]), new("21", "Lent Too", ["300"]), new("22", "Stopped", ["300"]), new("11", "Bought since", ["200"]));
+        // The first batch answered (20 licensed, 22 checked and no longer); the batch with 21 and 11 failed.
+        var client = new HashSet<string> { "10", "20" };
+
+        var family = SteamFamilyLibrary.Resolve(null, client, Owned, true, false, kept, clientUnchecked: ["21", "11"]);
+
+        Assert.Equal(["20", "21"], family.AppIds.Order(StringComparer.Ordinal));   // 22 checked out; 11 is the account's own
+        Assert.Equal("Lent Too", family.Apps["21"].Name);
+        Assert.Equal("steam-client", family.Source);
+    }
+
+    [Fact]
+    public void ArtworkAndGroupedCardCopiesKeepWhoSharesTheGame()
+    {
+        var steam = new GameEntry
+        {
+            Id = "steam:3999990", Title = "Exo Family Fixture", Store = StoreKind.Steam, Installed = true,
+            FamilyShared = true, SharedBy = "Sam", CoverUrl = "ftp://not-a-cover",
+        };
+        var epic = new GameEntry { Id = "epic:exo-family-fixture", Title = "Exo Family Fixture", Store = StoreKind.Epic, Installed = true };
+
+        var art = CoverArtService.WithCover(steam);
+        Assert.NotEqual(steam.CoverUrl, art.CoverUrl);   // a copy was made
+        Assert.True(art.FamilyShared);
+        Assert.Equal("Sam", art.SharedBy);
+
+        var card = Assert.Single(LibraryService.GroupVariants([art, epic]));
+        var lent = card.Variants.Single(v => v.Store == StoreKind.Steam);
+        Assert.True(lent.FamilyShared);
+        Assert.Equal("Sam", lent.SharedBy);
+        Assert.False(card.Variants.Single(v => v.Store == StoreKind.Epic).FamilyShared);
+
+        GameEntry Pick(string id) => LibraryService.SelectPreferredSource(card, new Dictionary<string, string> { [card.CanonicalTitleKey!] = id });
+        var asSteam = Pick(steam.Id);
+        Assert.Equal(steam.Id, asSteam.Id);
+        Assert.True(asSteam.FamilyShared);
+        Assert.Equal("Sam", asSteam.SharedBy);
+        var asEpic = Pick(epic.Id);
+        Assert.Equal(epic.Id, asEpic.Id);
+        Assert.False(asEpic.FamilyShared);
+        Assert.Null(asEpic.SharedBy);
+        Assert.Equal("Sam", lent.ToGameEntry(asEpic).SharedBy);
     }
 
     [Fact]

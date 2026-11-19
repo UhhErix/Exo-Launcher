@@ -165,6 +165,8 @@ public sealed record GameVariant
     public required StoreKind Store { get; init; }
     public bool Installed { get; init; }
     public bool Owned { get; init; }
+    public bool FamilyShared { get; init; }
+    public string? SharedBy { get; init; }
     public EntitlementState EntitlementState { get; init; } = EntitlementState.Unknown;
     public bool UpdateAvailable { get; init; }
     public bool CanInstall { get; init; }
@@ -186,6 +188,8 @@ public sealed record GameVariant
         Store = game.Store,
         Installed = game.Installed,
         Owned = game.Owned,
+        FamilyShared = game.FamilyShared,
+        SharedBy = game.SharedBy,
         EntitlementState = game.EntitlementState,
         UpdateAvailable = game.UpdateAvailable,
         CanInstall = game.CanInstall,
@@ -203,6 +207,8 @@ public sealed record GameVariant
         Store = Store,
         Installed = Installed,
         Owned = Owned,
+        FamilyShared = FamilyShared,
+        SharedBy = SharedBy,
         EntitlementState = EntitlementState,
         UpdateAvailable = UpdateAvailable,
         CanInstall = CanInstall,

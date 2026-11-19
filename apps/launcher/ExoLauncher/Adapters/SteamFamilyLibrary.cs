@@ -40,13 +40,15 @@ internal static class SteamFamilyLibrary
     /// <param name="localInFamily">localconfig.vdf names family members for the account.</param>
     /// <param name="clientOffline">Steam is in its offline mode: its licence list is what it cached.</param>
     /// <param name="remembered">What a source last said for this account; null when none ever did.</param>
+    /// <param name="clientUnchecked">Ids the client was asked about but did not answer for (a later batch failed).</param>
     internal static Resolved Resolve(
         Shares? service,
         IReadOnlySet<string>? clientLicensed,
         IReadOnlySet<string>? ownedByAccount,
         bool localInFamily,
         bool clientOffline,
-        IReadOnlyDictionary<string, SharedApp>? remembered)
+        IReadOnlyDictionary<string, SharedApp>? remembered,
+        IReadOnlyCollection<string>? clientUnchecked = null)
     {
         bool Own(string id) => ownedByAccount?.Contains(id) == true;
 
@@ -67,6 +69,12 @@ internal static class SteamFamilyLibrary
                 id => id,
                 id => remembered?.GetValueOrDefault(id) ?? new SharedApp(id, null, []),
                 StringComparer.Ordinal);
+            // A batch the client never answered says nothing about its ids: a kept share among them stays, so a failed
+            // batch can't shrink the family. Only a share the client checked and no longer licenses leaves.
+            if (clientUnchecked is { Count: > 0 } && remembered is { Count: > 0 })
+                foreach (var id in clientUnchecked)
+                    if (!Own(id) && remembered.TryGetValue(id, out var kept))
+                        apps.TryAdd(id, kept);
             return new Resolved(apps, "steam-client", Remember: true);
         }
 

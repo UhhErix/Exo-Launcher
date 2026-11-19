@@ -57,6 +57,9 @@ public sealed class SteamAdapter : IStoreAdapter, IInstalledSteamManifestSource,
         // Leftover download cleanup walks large trees. Never block the library
         // scan — a cancelled 50 GB leftover used to trip the 25s adapter timeout.
         ScheduleStaleDownloadCleanup(steamRoot);
+        // The account this scan is for, read before anything is awaited: what the scan keeps (the family list) is kept
+        // under it, and only while it is still the one signed in.
+        var accountScope = GetActiveAccountScope();
         var activeAccount = SteamPlaytime.LoadActiveAccount(steamRoot);
         // Ownership below is the active account's; only hours may span accounts.
         var hours = SteamPlaytime.LoadHours(steamRoot, allAccounts: true);
@@ -99,13 +102,12 @@ public sealed class SteamAdapter : IStoreAdapter, IInstalledSteamManifestSource,
         // The family's games are asked about too, as the family service or the last answer lists them: Steam's local
         // app list need not know a game nobody here has opened, and a game the client was never asked about can't
         // stay on its family list.
-        var accountScope = GetActiveAccountScope();
         var rememberedFamily = SteamFamilyShares.Recall(accountScope);
         var familyHints = (familyService?.Apps.Keys ?? []).Concat(rememberedFamily?.Keys ?? []).ToHashSet(StringComparer.Ordinal);
         candidates.AddRange(familyHints.Where(id => !candidates.Contains(id)));
         candidates.AddRange(SteamGameHubs.GameAppIds.Where(id => !candidates.Contains(id)));
-        var clientOwned = await QueryClientOwnershipAsync(
-            GetActiveAccountScope(), candidates, ct).ConfigureAwait(false);
+        var clientAnswer = await QueryClientOwnershipAsync(accountScope, candidates, ct).ConfigureAwait(false);
+        var clientOwned = clientAnswer is null ? null : WithPreviouslyVerified(clientAnswer, ExtraOwnershipCandidates);
         // The games one app holds are its DLC: they name its card and are no rows of their own, so nothing below (the family
         // list, the ownership catalog) counts them.
         var heldInHubs = clientOwned?.Where(SteamGameHubs.IsHeldGame).ToHashSet(StringComparer.Ordinal);
@@ -143,8 +145,11 @@ public sealed class SteamAdapter : IStoreAdapter, IInstalledSteamManifestSource,
         var inFamily = familyMembers is { Count: > 0 };
         // Steam in its offline mode answers from what it cached: the family list it last gave online stands, never one it gives offline.
         var clientOffline = clientOwned is not null && SteamLoginUsers.CurrentOffline(steamRoot).Offline;
-        var family = SteamFamilyLibrary.Resolve(familyService, clientOwned, webApiOwned, inFamily, clientOffline, rememberedFamily);
-        if (family.Remember) SteamFamilyShares.Remember(accountScope, family.Apps);
+        // The client's own answer, not the catalog's titles a partial answer keeps: those are the account's, never lent.
+        var clientLicensed = clientAnswer?.Owned.Where(id => !SteamGameHubs.IsHeldGame(id)).ToHashSet(StringComparer.Ordinal);
+        var family = SteamFamilyLibrary.Resolve(
+            familyService, clientLicensed, webApiOwned, inFamily, clientOffline, rememberedFamily, clientAnswer?.Unchecked);
+        if (family.Remember) SteamFamilyShares.Remember(accountScope, family.Apps, GetActiveAccountScope);
         // A game one app holds (its DLC) names that app's card, here as for the account's own games.
         var familyAppIds = family.AppIds.Where(id => !SteamGameHubs.IsHeldGame(id)).ToHashSet(StringComparer.Ordinal);
         if (familyAppIds.Count > 0 && authoritativeOwnedAppIds is not null)
@@ -345,8 +350,7 @@ public sealed class SteamAdapter : IStoreAdapter, IInstalledSteamManifestSource,
     private readonly SemaphoreSlim _clientOwnershipGate = new(1, 1);
     private string _clientOwnershipKey = "";
     private DateTimeOffset _clientOwnershipAt = DateTimeOffset.MinValue;
-    private IReadOnlySet<string>? _clientOwnership;
-    private bool _clientOwnershipPartial;
+    private SteamClientIpc.OwnedAnswer? _clientOwnership;
 
     /// <summary>
     /// A partial answer prunes nothing it did not check: titles Exo verified
@@ -444,7 +448,8 @@ public sealed class SteamAdapter : IStoreAdapter, IInstalledSteamManifestSource,
         _clientOwnership = null;
     }
 
-    private async Task<IReadOnlySet<string>?> QueryClientOwnershipAsync(
+    /// <summary>The running client's answer for the candidates (cached briefly per account); null when it gave none.</summary>
+    private async Task<SteamClientIpc.OwnedAnswer?> QueryClientOwnershipAsync(
         string? accountScope,
         IReadOnlyList<string> candidates,
         CancellationToken ct)
@@ -459,15 +464,13 @@ public sealed class SteamAdapter : IStoreAdapter, IInstalledSteamManifestSource,
         {
             var age = DateTimeOffset.UtcNow - _clientOwnershipAt;
             if (string.Equals(key, _clientOwnershipKey, StringComparison.Ordinal) &&
-                age < (_clientOwnership is null || _clientOwnershipPartial ? ClientOwnershipRetry : ClientOwnershipTtl))
+                age < (_clientOwnership is not { Unchecked.Count: 0 } ? ClientOwnershipRetry : ClientOwnershipTtl))
                 return _clientOwnership;
             var answer = await SteamClientIpc.QueryOwnedAsync(candidates, ct).ConfigureAwait(false);
-            var result = answer is null ? null : WithPreviouslyVerified(answer, ExtraOwnershipCandidates);
             _clientOwnershipKey = key;
             _clientOwnershipAt = DateTimeOffset.UtcNow;
-            _clientOwnership = result;
-            _clientOwnershipPartial = answer is { Unchecked.Count: > 0 };
-            return result;
+            _clientOwnership = answer;
+            return answer;
         }
         finally
         {

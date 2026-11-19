@@ -1546,6 +1546,8 @@ public sealed class LibraryService
         Store = source.Store,
         Installed = source.Installed,
         Owned = source.Owned,
+        FamilyShared = source.FamilyShared,
+        SharedBy = source.SharedBy,
         EntitlementState = source.EntitlementState,
         // Store actions must reflect this source. Sibling update indicators stay
         // on their variants and must never turn this source's Play into Update.
