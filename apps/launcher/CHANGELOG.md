@@ -1,6 +1,7 @@
 # Changelog
 
 ## 3.26.0 — November 14, 2026
+- **Glass edges, not grey outlines.** Panels, menus and controls are lit at their edge like glass, brightest along the top, instead of a grey line all the way round, and lines inside a panel are faint enough that they never stack into a grey band. _Checked in code only._
 - **New and updated games compile their shaders by themselves.** While nobody uses the PC, Exo Shaders now compiles a game you just installed, one it never compiled, and one an update changed, most played first, the same way it already rebuilt games after a driver update. It pauses when you come back, and a game that won't compile is left alone until the next driver. _Checked in code only._
 - **Replay length fits your PC.** Exo can shorten how far back instant replay goes without lowering quality. Capture settings shows the replay time you can save when the add-on reports it. _Checked in code only._
 - **Capture recovers more reliably.** If Capture stops, Exo keeps the last saved clip and reconnects with your settings and the game you are playing. Switching games quickly no longer sends an old game after the new one. _Checked in code only._
