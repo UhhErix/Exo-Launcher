@@ -4,6 +4,7 @@ import { MIN_CHECK, MIN_SWIPES, measureAngle, nextValue, observedGain, type Angl
 import { Overlay } from './brands/magnetic-tools-tests'
 import { can } from './mouse'
 import type { Section } from './section'
+import type { RazerAngleStatus } from './razer-angle'
 import { Panel, Progress, Row, Spinner } from './ui'
 import { frameGet, frameSet } from './frameStore'
 import './sensor-angle.css'
@@ -31,6 +32,9 @@ const FIRST_GUESS = 1
 function angleSetting({ status, client }: Pick<Section, 'status' | 'client'>): Setting | null {
   const egg = (status as MouseStatus & { eggAngleTuning?: number | null }).eggAngleTuning
   if (egg != null && can(client, 'setSensorAngleTuning')) return { value: egg, min: -127, max: 127, method: 'setSensorAngleTuning', degrees: false }
+  // A Razer whose angle Exo couldn't read and hasn't set (razer-angle.ts) has no value to correct from: the
+  // measurement alone until one is set.
+  if ((status as RazerAngleStatus).razerAngleUnknown) return null
   // An ATK F1 Ultimate's angle has no row (core-extras.tsx).
   if (status.angleTuning != null && status.atkSensorMode == null && can(client, 'setAngleTuning')) {
     return { value: status.angleTuning, min: -30, max: 30, method: 'setAngleTuning', degrees: true }
@@ -297,7 +301,7 @@ function AngleSheet({ section, onClose }: { section: Section; onClose: () => voi
             ) : null}
           </span>
         </Row>
-      ) : status.angleTuning != null ? (
+      ) : status.angleTuning != null && !(status as RazerAngleStatus).razerAngleUnknown ? (
         <Row label="Sensor angle"><span className="m-state">{shown(status.angleTuning)}</span></Row>
       ) : null}
       {failed === 'write' ? <p className="mt-message is-bad">Your mouse didn't take the new angle.</p> : null}

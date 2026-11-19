@@ -1360,6 +1360,8 @@ export interface LauncherSettings {
   reduceMotion?: boolean
   /** The window always opens maximized; off, it opens as it was when it closed. */
   startMaximized?: boolean
+  /** Settings › General › Open Exo when Windows starts. */
+  startWithWindows?: boolean
   textColour?: 'white' | 'grey' | string
   /** Settings › General › Background (lib/exoTheme.ts › BACKGROUNDS). */
   background?: 'black' | 'near' | 'grey' | 'windows' | 'graphite' | string
@@ -2407,7 +2409,7 @@ export const host = {
   /** Every capture, newest first; with a game id, that game's only. */
   captureList: (gameId?: string | null, limit?: number) =>
     rawCall<{ ok: boolean; items?: CaptureItem[] }>('capture.list', { gameId: gameId ?? null, limit: limit ?? 0 }),
-  captureItem: (id: string, action: 'favourite' | 'unfavourite' | 'delete' | 'reveal' | 'copy' | 'discord' | 'shrink') =>
+  captureItem: (id: string, action: 'favourite' | 'unfavourite' | 'delete' | 'reveal' | 'copy' | 'shrink') =>
     rawCall<{ ok: boolean; message?: string; item?: CaptureItem }>('capture.item', { id, action }),
   /** A lossless trim, or an export preset, between two points (ms). */
   captureEdit: (id: string, preset: CaptureExport, startMs: number, endMs: number) =>
@@ -2416,6 +2418,13 @@ export const host = {
   captureReel: (ids: string[], wait: boolean) =>
     rawCall<{ ok: boolean; message?: string; wait?: boolean }>('capture.reel', { ids, wait }),
   captureReelCancel: () => rawCall<{ ok: boolean }>('capture.reel.cancel'),
+  /** Copy text: Windows' on-device text recognition over a snip, or the part of it given (the snip's own pixels). */
+  captureText: (id: string, area?: { x: number; y: number; width: number; height: number }) =>
+    rawCall<{ ok: boolean; text?: string | null; message?: string | null }>('capture.text', { id, ...(area ?? {}) }, 60_000),
+  /** A capture into up to five Discord conversations through Exo's Discord client; a trimmed or too-large clip goes as its Discord copy
+      (item: that new clip). sent: the conversations it reached, even when a later one failed. */
+  captureSend: (id: string, channelIds: string[], content: string, startMs: number, endMs: number) =>
+    rawCall<{ ok: boolean; message?: string | null; sent?: string[]; item?: CaptureItem | null }>('capture.send', { id, channelIds, content, startMs, endMs }, 15 * 60_000),
   /** The snip editor's PNG (base64) over the snip, then copied. */
   captureSaveImage: (id: string, png: string) =>
     rawCall<{ ok: boolean; message?: string; item?: CaptureItem }>('capture.saveImage', { id, png }, 60_000),

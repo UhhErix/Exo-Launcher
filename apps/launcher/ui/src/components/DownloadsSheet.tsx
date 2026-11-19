@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { ChevronDown, ChevronUp, Close, Pause, Play } from '../brand/icons'
+import { ChevronDown, ChevronUp, Pause, Play, Remove } from '../brand/icons'
 import { host, onHostEvent, type DownloadLine, type DownloadsList, type InstallProgress } from '../lib/host'
 import { report } from '../lib/report'
 import { GameOverlay } from '../motion'
@@ -86,7 +86,7 @@ export function DownloadsSheet({ open, onClose }: { open: boolean; onClose: () =
             <button type="button" className="exo-set-btn is-icon" aria-label={`Move ${line.title} down`} disabled={i === queued.length - 1 || busy === line.gameId}
               onClick={() => void act(line.gameId, () => host.downloadsMove(line.gameId, 1))}><ChevronDown size={16} /></button>
             <button type="button" className="exo-set-btn is-icon" aria-label={`Remove ${line.title} from the queue`} disabled={busy === line.gameId}
-              onClick={() => void act(line.gameId, () => host.dequeue(line.gameId))}><Close size={16} /></button>
+              onClick={() => void act(line.gameId, () => host.dequeue(line.gameId))}><Remove size={16} /></button>
           </Row>
         ))}</Group> : null}
 
@@ -95,7 +95,7 @@ export function DownloadsSheet({ open, onClose }: { open: boolean; onClose: () =
             <button type="button" className="exo-set-btn" aria-label={`Resume ${line.title}`} disabled={busy === line.gameId}
               onClick={() => void act(line.gameId, () => host.resumeDownload(line.gameId))}><Play size={14} />Resume</button>
             <button type="button" className="exo-set-btn is-icon" aria-label={`Remove ${line.title}`} disabled={busy === line.gameId}
-              onClick={() => void act(line.gameId, () => host.dequeue(line.gameId))}><Close size={16} /></button>
+              onClick={() => void act(line.gameId, () => host.dequeue(line.gameId))}><Remove size={16} /></button>
           </Row>
         ))}</Group> : null}
       </section>

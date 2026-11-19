@@ -123,6 +123,19 @@ test('a newest-version answer that never names the tag: the latest.json from bef
   assert.equal(readFileSync(join(fx.bucket, 'launcher', 'latest.json'), 'utf8'), before)
 })
 
+test('a newer tag that reached the bucket during the run (the address still a minute old) is never pointed back', { timeout: 120_000 }, async (t) => {
+  const fx = fixture(t, { live: { tag: 'v9.9.8', bytes: 'installer 9.9.8' } })
+  const served = readFileSync(join(fx.bucket, 'launcher', 'latest.json'), 'utf8')
+  const newer = JSON.stringify({ ...JSON.parse(served), tag: 'v9.9.10', version: '9.9.10' })
+  writeFileSync(join(fx.bucket, 'launcher', 'latest.json'), newer)
+  const base = await standIn(t, fx.bucket, { frozen: served })
+  const r = await publish(fx, base)
+  assert.equal(r.code, 1, r.out)
+  assert.match(r.out, /already names v9\.9\.10, newer than v9\.9\.9/)
+  assert.equal(puts(fx).includes('put launcher/latest.json'), false)
+  assert.equal(readFileSync(join(fx.bucket, 'launcher', 'latest.json'), 'utf8'), newer)
+})
+
 test('a tag that already holds another build is refused before anything uploads', { timeout: 120_000 }, async (t) => {
   const fx = fixture(t, { bytes: 'a second build of 9.9.9' })
   mkdirSync(join(fx.bucket, 'launcher', 'v9.9.9'), { recursive: true })

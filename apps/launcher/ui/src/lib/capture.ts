@@ -40,6 +40,8 @@ export type CaptureSettings = {
   recordKeys: string
   snipKeys: string
   printScreen: boolean
+  /** edit: a new snip opens in the editor (not one taken over a game); copy: it is only copied and saved. */
+  afterSnip: 'edit' | 'copy'
   folder: string
   keepGb: number
   keepDays: number

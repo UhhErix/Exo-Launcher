@@ -23,6 +23,26 @@
         "detail": "A game opens on its cover, name and Play; Info (or I) opens its facts, upscalers, shaders and HDR beside it, every page the same size."
       },
       {
+        "icon": "Mouse",
+        "title": "Sensor angle on the Razer Viper V3 Pro",
+        "detail": "Turn your Viper V3 Pro's sensor angle a degree at a time in Devices, so a natural swipe runs straight across the screen."
+      },
+      {
+        "icon": "Scissors",
+        "title": "Captures, like Photos",
+        "detail": "Your clips and screenshots in one grid by day, with a scrubber to jump through months, chips that combine, and an editor with a tab for each job."
+      },
+      {
+        "icon": "Chats",
+        "title": "Send captures to Discord",
+        "detail": "Share a clip or screenshot straight into a DM or channel; a clip too big for Discord is cut to fit first."
+      },
+      {
+        "icon": "EyeOff",
+        "title": "Blur names, copy text",
+        "detail": "Blur hides names and chat in a screenshot, and Copy text reads words off it on your PC."
+      },
+      {
         "icon": "Encrypted",
         "title": "Cloudflare DNS, encrypted",
         "detail": "Best settings sets Cloudflare's DNS with encryption on, for faster lookups that nobody on the way can read; its switch puts your old DNS back."
@@ -51,6 +71,11 @@
         "icon": "Drive",
         "title": "Compress games",
         "detail": "Windows' own compression makes games smaller on disk, and they play as before."
+      },
+      {
+        "icon": "Appearance",
+        "title": "Icons that say what they do",
+        "detail": "Every icon now plainly shows what its button does, in Lucide's light line: Maximize and Restore are arrows out and in, Stop is a square, and liked, starred and pinned show filled."
       },
       {
         "icon": "Chats",
