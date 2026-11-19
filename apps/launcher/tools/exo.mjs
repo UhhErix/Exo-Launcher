@@ -14,7 +14,7 @@ import { fileURLToPath } from 'node:url'
 
 const HERE = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const HOME = process.env.EXO_HOME ?? dirname(HERE)
-const REPOS = ['ExoLauncher', 'ExoSite', 'exo-shaders']
+const REPOS = ['ExoLauncher', 'ExoSite']
 const BOARD = process.env.EXO_BOARD ?? join(process.env.USERPROFILE ?? HOME, '.exo-team', 'ideas.md')
 
 export function parseBoard(md) {
