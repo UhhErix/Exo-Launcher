@@ -72,11 +72,6 @@ kbd,
   --color-bg-elevated: #000000;
   --color-surface-2: #000000;
   --color-surface-3: #080808;
-  /* Every line is the one line, --exo-line (below): white at a low alpha, a Liquid Glass edge, never a grey outline. */
-  --color-line: rgb(255 255 255 / 0.07);
-  --color-line-soft: rgb(255 255 255 / 0.07);
-  --color-border: rgb(255 255 255 / 0.07);
-  --color-border-strong: rgb(255 255 255 / 0.07);
   /* White ink on AMOLED black, neutral grays under it, each matched in contrast to the step it replaces. */
   --color-fg: #ffffff;
   --color-muted: #b4b4b4;
