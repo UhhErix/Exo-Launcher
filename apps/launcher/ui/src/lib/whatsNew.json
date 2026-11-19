@@ -3,6 +3,11 @@
     "version": "3.26.0",
     "items": [
       {
+        "icon": "Drive",
+        "title": "Compress games",
+        "detail": "Windows' own compression makes games smaller on disk, and they play as before."
+      },
+      {
         "icon": "Chats",
         "title": "GIFs in Discord stay",
         "detail": "A GIF, sticker or video that hiccups once tries again instead of turning into a line that says it would not load, and Imgur GIFs load."

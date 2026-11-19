@@ -100,6 +100,8 @@ internal static partial class AntiCheatCheck
         DeleteRegenerated,
         /// <summary>(c) The vendor's own signed upscaler file swapped for a newer one.</summary>
         UpscalerSwap,
+        /// <summary>(d) The game's files compressed by Windows (WOF): stored smaller, every byte read back the same.</summary>
+        Compress,
     }
 
     /// <summary>The three kinds of change (the orchestrator's decision, 2026-11-10).</summary>
@@ -117,12 +119,17 @@ internal static partial class AntiCheatCheck
         /// <summary>(c) The vendor's own signed upscaler file (DIRECTION.md, the owner's correction of 2026-11-10): with the
         /// player's consent naming this exact set of anti-cheats; never Riot, Vanguard or an install that could not be read.</summary>
         SignedUpscaler,
+        /// <summary>(d) Stored differently: Windows' own file compression (<see cref="GameCompression"/>), no byte changed.
+        /// With anti-cheat, only with the player's consent for this game naming this exact set, and then only its data
+        /// (no program, library or anti-cheat file); never Riot, Vanguard or an install that could not be read.</summary>
+        Stored,
     }
 
     internal static Category CategoryOf(Change change) => change switch
     {
         Change.LaunchOptions or Change.GameSettingsFile or Change.DeleteRegenerated => Category.OwnInterface,
         Change.UpscalerSwap => Category.SignedUpscaler,
+        Change.Compress => Category.Stored,
         _ => Category.Placed,
     };
 
@@ -134,6 +141,7 @@ internal static partial class AntiCheatCheck
     /// (a) placed: none only.
     /// (b) own interface: found and possibly Valve Anti-Cheat too; never unknown.
     /// (c) signed upscaler: found or possibly Valve Anti-Cheat with consent naming this full set; never unknown.
+    /// (d) stored: as (c), its own consent (the game's data only; <see cref="GameCompression.Guard"/>).
     /// </summary>
     internal static bool Allows(GameEntry game, Answer answer, Change change, string? consented = null)
     {
@@ -142,7 +150,7 @@ internal static partial class AntiCheatCheck
         return CategoryOf(change) switch
         {
             Category.OwnInterface => true,
-            Category.SignedUpscaler => DlssSwapService.Accepted(game, answer.Label!, consented),
+            Category.SignedUpscaler or Category.Stored => DlssSwapService.Accepted(game, answer.Label!, consented),
             _ => false,
         };
     }
@@ -162,9 +170,12 @@ internal static partial class AntiCheatCheck
             _ => "Exo couldn't check this game for anti-cheat, so it leaves it as it is.",
         };
         var uses = answer.Kind == Kind.PossiblyVac ? "Steam can't say whether this game uses Valve Anti-Cheat" : $"This game uses {answer.Name}";
-        return CategoryOf(change) == Category.SignedUpscaler
-            ? uses + ", so Exo changes nothing here unless you allow it for this game."
-            : uses + ", so Exo puts nothing into it.";
+        return CategoryOf(change) switch
+        {
+            Category.SignedUpscaler => uses + ", so Exo changes nothing here unless you allow it for this game.",
+            Category.Stored => uses + ", so Exo compresses it only if you allow it for this game.",
+            _ => uses + ", so Exo puts nothing into it.",
+        };
     }
 
     /// <summary>
