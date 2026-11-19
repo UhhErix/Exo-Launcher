@@ -13,7 +13,10 @@ namespace ExoLauncher.Tests;
 /// - the record of what was there is written after the change, a second press overwrites the first record, or a declined
 ///   prompt leaves a record of a change that never happened;
 /// - a value Windows didn't take keeps a record, so Off "puts back" something that never changed;
-/// - the timer's value is removed or recorded when the elevated step didn't find it (Windows' own HPET);
+/// - the timer's value is removed or recorded when the elevated step didn't find it (Windows' own HPET), a read that failed
+///   counts as "nothing to change" for good, a step Exo didn't see finish leaves no Undo, or an Undo Windows refused drops it;
+/// - a declined prompt to turn a switch on again forgets the player's Off;
+/// - a service Windows kept automatic beside one it set to Manual leaves the switch unable to put that one back;
 /// - Off writes anything but the recorded value (a delayed start comes back as plain automatic), or forgets the player's Off;
 /// - a service outside the allowlist, or a page file line cmd would read specially, reaches an elevated line;
 /// - the restore point isn't the first step, or a PC with System Restore off is refused when Exo's own record is the way back;
@@ -47,14 +50,19 @@ public sealed class SystemTuningTests : IDisposable
         public List<IReadOnlyList<string>> Runs { get; } = [];
         /// <summary>What Windows does when the step runs.</summary>
         public Action<IReadOnlyList<string>>? OnRun { get; set; }
-        /// <summary>bcdedit's line for the forced clock before and after the step (empty: not there).</summary>
-        public string ClockBefore { get; set; } = "useplatformclock        Yes";
-        public string ClockAfter { get; set; } = "";
+        /// <summary>The platform clock forced in the boot entry (bcdedit's useplatformclock).</summary>
+        public bool Clock { get; set; } = true;
+        /// <summary>bcdedit can't read the boot entry, or refuses to change it.</summary>
+        public bool BcdFails { get; set; }
+        public bool BcdRefuses { get; set; }
+        /// <summary>Exo closes while the step runs: the step finishes, Exo never reads what it wrote.</summary>
+        public bool Closes { get; set; }
         public string PointWord { get; set; } = "made";
         public bool Standing { get; set; }
 
         private readonly List<string> _issued = [];
         private readonly Dictionary<string, string> _answers = [];
+        private readonly HashSet<string> _seen = [];
 
         public long Frequency() => Hz;
         public int? Dword(string key, string name) => Dwords.TryGetValue((key, name), out var v) ? v : null;
@@ -68,10 +76,23 @@ public sealed class SystemTuningTests : IDisposable
         {
             Runs.Add(lines);
             if (!Accept) return Task.FromResult(false);
-            var timer = _issued.Where(p => lines.Any(l => l.Contains($"> \"{p}\"", StringComparison.Ordinal))).ToList();
-            foreach (var path in _issued.Where(p => !_answers.ContainsKey(p)))
-                _answers[path] = timer.IndexOf(path) switch { 0 => ClockBefore, 1 => ClockAfter, _ => PointWord };
+            foreach (var line in lines)
+            {
+                var path = _issued.FirstOrDefault(p => line.Contains($"\"{p}\"", StringComparison.Ordinal));
+                if (line.Contains("/enum {current}", StringComparison.Ordinal))
+                    _answers[path!] = BcdFails ? "" : (Clock ? "useplatformclock        Yes\r\n" : "") + "identifier              {current}\r\n" + ReadOk + "\r\n";
+                else if (line.Contains("/deletevalue {current} useplatformclock", StringComparison.Ordinal))
+                {
+                    // Behind findstr: only when the read before found the value.
+                    if (_answers.GetValueOrDefault(path!)?.Contains("useplatformclock", StringComparison.Ordinal) == true && !BcdRefuses) Clock = false;
+                }
+                else if (line.Contains("/set {current} useplatformclock true", StringComparison.Ordinal)) { if (!BcdRefuses) Clock = true; }
+            }
+            // The restore point's answer: the one fresh path no line names (its step is encoded).
+            foreach (var fresh in _issued.Where(p => _seen.Add(p) && !lines.Any(l => l.Contains($""{p}"", StringComparison.Ordinal))))
+                _answers[fresh] = PointWord;
             OnRun?.Invoke(lines);
+            if (Closes) throw new OperationCanceledException("Exo closed");
             return Task.FromResult(true);
         }
 
@@ -82,7 +103,7 @@ public sealed class SystemTuningTests : IDisposable
             return path;
         }
 
-        public string? ReadAnswer(string answer) => _answers.Remove(answer, out var text) ? text : null;
+        public string? ReadAnswer(string answer, bool keep = false) => keep ? _answers.GetValueOrDefault(answer) : _answers.Remove(answer, out var text) ? text : null;
         public bool PointStanding => Standing;
         public void PointMade(RestorePoint.Outcome outcome) { }
 
@@ -222,7 +243,7 @@ public sealed class SystemTuningTests : IDisposable
     public async Task The_timer_is_recorded_only_when_the_step_found_the_forced_clock()
     {
         _system.Hz = HpetHz;
-        _system.ClockBefore = "";
+        _system.Clock = false;
         Assert.Contains("by itself", await Make().ApplyAsync(), StringComparison.Ordinal);
         Assert.Empty(Make().Read().Items);
         Assert.Single(_system.Runs);
@@ -238,11 +259,89 @@ public sealed class SystemTuningTests : IDisposable
         Assert.Null(await Make().ApplyAsync());
         var item = Make().Read().Items.Single();
         Assert.True(item.On && item.CanUndo && item.Restart);
+        Assert.False(_system.Clock);
         Assert.Null(await Make().TurnOffAsync(TimerKey));
-        Assert.Contains("/set {current} useplatformclock true", _system.Runs[^1].Single(), StringComparison.Ordinal);
+        Assert.Contains("/set {current} useplatformclock true", _system.Runs[^1][0], StringComparison.Ordinal);
+        Assert.True(_system.Clock);
         var after = Make().Read().Items.Single();
         Assert.True(after.Off);
         Assert.Equal("Goes back to how it was after a restart.", after.Detail);
+    }
+
+    [Fact]
+    public async Task A_failed_timer_read_changes_nothing_and_can_be_tried_again()
+    {
+        _system.Hz = HpetHz;
+        _system.BcdFails = true;
+        Assert.Contains("couldn't read", await Make().ApplyAsync(), StringComparison.Ordinal);
+        Assert.True(_system.Clock);
+        var item = Make().Read().Items.Single();
+        Assert.False(item.On || item.CanUndo);
+        _system.BcdFails = false;
+        Assert.Null(await Make().ApplyAsync());
+        Assert.False(_system.Clock);
+        Assert.True(Make().Read().Items.Single().CanUndo);
+    }
+
+    [Fact]
+    public async Task A_timer_step_exo_didnt_see_finish_still_has_its_undo()
+    {
+        _system.Hz = HpetHz;
+        _system.Closes = true;
+        await Assert.ThrowsAsync<OperationCanceledException>(() => Make().ApplyAsync());
+        _system.Closes = false;
+        Assert.False(_system.Clock);
+        // The next read settles it from what the step wrote before removing the value.
+        var item = Make().Read().Items.Single();
+        Assert.True(item.On && item.CanUndo);
+        Assert.Null(await Make().TurnOffAsync(TimerKey));
+        Assert.True(_system.Clock);
+    }
+
+    [Fact]
+    public async Task A_timer_undo_windows_refused_keeps_its_record()
+    {
+        _system.Hz = HpetHz;
+        Assert.Null(await Make().ApplyAsync());
+        _system.BcdRefuses = true;
+        Assert.Contains("didn't put it back", await Make().TurnOffAsync(TimerKey), StringComparison.Ordinal);
+        Assert.True(Make().Read().Items.Single().CanUndo);
+        _system.BcdRefuses = false;
+        Assert.Null(await Make().TurnOffAsync(TimerKey));
+        Assert.True(_system.Clock);
+    }
+
+    [Fact]
+    public async Task A_declined_prompt_to_turn_a_switch_on_again_keeps_the_players_off()
+    {
+        _system.Dwords[(PriorityControl, Separation)] = 0x18;
+        _system.OnRun = _system.Take;
+        Assert.Null(await Make().ApplyAsync());
+        Assert.Null(await Make().TurnOffAsync(SchedulingKey));
+        _system.Accept = false;
+        Assert.Contains("declined", await Make().ApplyAsync([SchedulingKey]), StringComparison.Ordinal);
+        Assert.True(Make().Read().Items.Single().Off);
+        _system.Accept = true;
+        var runs = _system.Runs.Count;
+        Assert.Null(await Make().ApplyAsync());
+        Assert.Equal(runs, _system.Runs.Count);
+        Assert.Equal(0x18, _system.Dwords[(PriorityControl, Separation)]);
+    }
+
+    [Fact]
+    public async Task Services_windows_set_only_in_part_can_still_be_put_back()
+    {
+        _system.Services["MapsBroker"] = (2, false);
+        _system.Services["PcaSvc"] = (2, true);
+        _system.OnRun = lines => _system.Take([.. lines.Where(l => !l.Contains("PcaSvc", StringComparison.Ordinal))]);
+        Assert.Contains("Program Compatibility", await Make().ApplyAsync([ServicesKey]), StringComparison.Ordinal);
+        var item = Make().Read().Items.Single();
+        Assert.True(item.On && item.CanUndo);
+        _system.BootAt = _now.AddMinutes(5);
+        Assert.Contains("still starts with Windows", Make().Read().Items.Single().Detail, StringComparison.Ordinal);
+        Assert.Null(await Make().TurnOffAsync(ServicesKey));
+        Assert.Equal((2, false), _system.Services["MapsBroker"]);
+        Assert.Equal((2, true), _system.Services["PcaSvc"]);
     }
 
     [Fact]

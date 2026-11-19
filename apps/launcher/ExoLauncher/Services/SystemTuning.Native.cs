@@ -81,13 +81,13 @@ internal sealed partial class SystemTuning
 
         public string Answer() => Path.Combine(Path.GetTempPath(), $"exo-{Guid.NewGuid():N}.answer");
 
-        public string? ReadAnswer(string answer)
+        public string? ReadAnswer(string answer, bool keep = false)
         {
             try
             {
                 if (!File.Exists(answer)) return null;
                 var text = File.ReadAllText(answer);
-                DeletionGate.DeleteFile(answer);
+                if (!keep) DeletionGate.DeleteFile(answer);
                 return text;
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)

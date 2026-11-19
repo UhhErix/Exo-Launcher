@@ -96,8 +96,8 @@ internal sealed partial class SystemTuning(SystemTuning.ISystem system, string p
         Task<bool> Admin(IReadOnlyList<string> lines);
         /// <summary>A fresh file path the elevated step writes an answer to (no quotes in it).</summary>
         string Answer();
-        /// <summary>What the elevated step wrote there (null: nothing), and the file goes.</summary>
-        string? ReadAnswer(string answer);
+        /// <summary>What the elevated step wrote there (null: nothing), and the file goes unless <paramref name="keep"/>.</summary>
+        string? ReadAnswer(string answer, bool keep = false);
         /// <summary>A restore point made in the last day stands for a new one (Windows keeps one a day).</summary>
         bool PointStanding { get; }
         void PointMade(RestorePoint.Outcome outcome);
@@ -108,9 +108,11 @@ internal sealed partial class SystemTuning(SystemTuning.ISystem system, string p
 
     /// <summary>
     /// What one item held before Exo changed it: a DWORD (<paramref name="Value"/>, null with <paramref name="Absent"/>: not
-    /// there), a list of strings (the page file), each service's start, or the platform clock forced on.
+    /// there), a list of strings (the page file), each service's start, or the platform clock forced on. <paramref name="Probe"/>
+    /// is the timer's change under way: the file its elevated step writes Windows' boot entry to before it removes anything,
+    /// saved before the step, so a step Exo didn't see finish is settled from it the next time Exo reads (<see cref="Settle"/>).
     /// </summary>
-    internal sealed record Was(int? Value = null, string[]? Strings = null, bool Absent = false, List<ServiceWas>? Services = null, bool Clock = false);
+    internal sealed record Was(int? Value = null, string[]? Strings = null, bool Absent = false, List<ServiceWas>? Services = null, bool Clock = false, string? Probe = null);
 
     /// <summary>
     /// What Exo keeps: the items the player turned off, what each changed item held, when each was last changed (a restart
@@ -131,9 +133,16 @@ internal sealed partial class SystemTuning(SystemTuning.ISystem system, string p
         internal bool Restart => Items.Any(i => i.Restart);
     }
 
+    /// <summary>The items as they are, a timer change Exo didn't see finish settled first (unless a change is running now).</summary>
     internal State Read()
     {
-        var saved = Load();
+        if (!_gate.Wait(0)) return StateOf(Load());
+        try { return StateOf(Settled()); }
+        finally { _gate.Release(); }
+    }
+
+    private State StateOf(Saved saved)
+    {
         var boot = system.Boot();
         bool Pending(string key) => saved.Changed.TryGetValue(key, out var at) && at > boot;
         var items = new List<Item>();
@@ -144,7 +153,7 @@ internal sealed partial class SystemTuning(SystemTuning.ISystem system, string p
 
         // The timer: the performance counter says which clock Windows reads.
         var hpet = system.Frequency() == HpetHz;
-        var timerKept = saved.Kept.ContainsKey(TimerKey);
+        var timerKept = saved.Kept.TryGetValue(TimerKey, out var timerWas) && timerWas.Clock;
         if (timerKept || Pending(TimerKey))
             items.Add(new(TimerKey, "Windows' own timer", Tell(TimerKey, hpet ? "Windows still reads the platform clock (HPET)." : "Games read the processor's fast clock, not the platform clock (HPET)."),
                 timerKept && (!hpet || Pending(TimerKey)), timerKept, off.Contains(TimerKey), false, Pending(TimerKey)));
@@ -170,15 +179,19 @@ internal sealed partial class SystemTuning(SystemTuning.ISystem system, string p
             items.Add(new(CacheKey, "Memory for programs first", Tell(CacheKey, large ? "Set to the server setting, which gives Windows' file cache memory before your games." : "Games keep their memory before Windows' file cache."),
                 !large, saved.Kept.ContainsKey(CacheKey), off.Contains(CacheKey), false, Pending(CacheKey)));
 
-        // Services: only those Windows starts at boot now.
+        // Services: only those Windows starts at boot now. On while Exo holds a record of any it set to Manual, so its switch
+        // always puts those back, even when Windows kept another starting with it (turning it on again tries that one again).
         var automatic = Trimmed.Where(s => system.Service(s.Name) is { Start: 2 }).ToList();
-        if (automatic.Count > 0 || saved.Kept.ContainsKey(ServicesKey) || Pending(ServicesKey))
+        var servicesKept = saved.Kept.ContainsKey(ServicesKey);
+        if (automatic.Count > 0 || servicesKept || Pending(ServicesKey))
         {
-            var them = automatic.Count == 1 ? "it" : "them";
-            var detail = automatic.Count > 0
-                ? $"{Join(automatic.Select(s => s.Label))} start{(automatic.Count == 1 ? "s" : "")} with Windows; Manual starts {them} only when something needs {them}. Takes a restart."
-                : $"{Join(Trimmed.Where(s => saved.Kept.GetValueOrDefault(ServicesKey)?.Services?.Any(w => w.Name == s.Name) == true).Select(s => s.Label))} start only when something needs them.";
-            items.Add(new(ServicesKey, "Services set to Manual", Tell(ServicesKey, detail), automatic.Count == 0 && saved.Kept.ContainsKey(ServicesKey), saved.Kept.ContainsKey(ServicesKey), false, true, Pending(ServicesKey)));
+            var manual = Trimmed.Where(s => saved.Kept.GetValueOrDefault(ServicesKey)?.Services?.Any(w => w.Name == s.Name) == true && automatic.All(a => a.Name != s.Name)).ToList();
+            var detail = !servicesKept || manual.Count == 0
+                ? $"{Join(automatic.Select(s => s.Label))} start{S(automatic)} with Windows; Manual starts {Them(automatic)} only when something needs {Them(automatic)}. Takes a restart."
+                : automatic.Count == 0
+                    ? $"{Join(manual.Select(s => s.Label))} start{S(manual)} only when something needs {Them(manual)}."
+                    : $"{Join(manual.Select(s => s.Label))} start{S(manual)} only when something needs {Them(manual)}; {Join(automatic.Select(s => s.Label))} still start{S(automatic)} with Windows.";
+            items.Add(new(ServicesKey, "Services set to Manual", Tell(ServicesKey, detail), servicesKept, servicesKept, false, true, Pending(ServicesKey)));
         }
 
         // Memory Integrity: shown while it's on (or Exo turned it off).
@@ -214,6 +227,9 @@ internal sealed partial class SystemTuning(SystemTuning.ISystem system, string p
 
     /// <summary>No page file: the value missing, or only empty lines (what "No paging file" leaves).</summary>
     internal static bool NoPageFile(string[]? paging) => paging is null || paging.All(string.IsNullOrWhiteSpace);
+
+    private static string S<T>(IReadOnlyCollection<T> list) => list.Count == 1 ? "s" : "";
+    private static string Them<T>(IReadOnlyCollection<T> list) => list.Count == 1 ? "it" : "them";
 
     private static string Join(IEnumerable<string> parts)
     {
@@ -253,19 +269,20 @@ internal sealed partial class SystemTuning(SystemTuning.ISystem system, string p
     private async Task<string?> ApplyNowAsync(IReadOnlyCollection<string>? only)
     {
         if (only is not null && only.Any(k => !Keys.Contains(k))) return "Exo doesn't know that setting.";
-        var saved = Load();
+        var saved = Settled();
+        // What a declined prompt puts back: the player's choices as they were, an Off this press took out included.
+        var prior = saved;
         if (only is not null && saved.Off.Any(only.Contains))
         {
             saved = saved with { Off = [.. saved.Off.Where(k => !only.Contains(k))] };
             if (!Save(saved)) return "Exo couldn't save your choice, so nothing changed.";
         }
-        var state = Read();
+        var state = StateOf(saved);
         var asked = state.Items.Where(i => !i.On && (only?.Contains(i.Key) ?? (!i.OptIn && !i.Off))).ToList();
         if (asked.FirstOrDefault(i => i.Blocked is not null) is { } held && only is not null) return held.Blocked;
         var wanted = asked.Where(i => i.Blocked is null).Select(i => i.Key).ToList();
         if (wanted.Count == 0) return null;
 
-        var prior = saved;
         var lines = new List<string>();
         var kept = new Dictionary<string, Was>(saved.Kept);
         var said = new List<string>();
@@ -277,6 +294,8 @@ internal sealed partial class SystemTuning(SystemTuning.ISystem system, string p
                 case TimerKey:
                     clockWas = system.Answer();
                     clockAfter = system.Answer();
+                    // Saved with the record below, before the step: what it finds there is settled even if Exo never sees it end.
+                    kept[key] = (kept.TryGetValue(key, out var earlier) ? earlier : new Was()) with { Probe = clockWas };
                     lines.AddRange(TimerLines(clockWas, clockAfter));
                     break;
                 case SchedulingKey:
@@ -357,19 +376,14 @@ internal sealed partial class SystemTuning(SystemTuning.ISystem system, string p
             {
                 case TimerKey:
                 {
-                    var was = system.ReadAnswer(clockWas!);
-                    var left = system.ReadAnswer(clockAfter!);
-                    var forced = was?.Contains("useplatformclock", StringComparison.OrdinalIgnoreCase) == true;
-                    if (!forced)
+                    var left = Forced(system.ReadAnswer(clockAfter!));
+                    after = Settle(after, out var note);
+                    if (note is not null) said.Add(note);
+                    else if (left == true)
                     {
-                        // Windows picks the platform clock itself here (no invariant TSC, or the firmware): nothing to change.
-                        after = after with { Native = [.. after.Native.Where(k => k != TimerKey), TimerKey] };
-                        said.Add("Windows picks the platform clock on this PC by itself, so there's nothing to change.");
-                    }
-                    else if (left?.Contains("useplatformclock", StringComparison.OrdinalIgnoreCase) == true)
+                        after = Drop(after, prior, key);
                         said.Add("Windows didn't take its own timer back.");
-                    else
-                        after = after with { Kept = new(after.Kept) { [TimerKey] = new Was(Clock: true) }, Changed = new(after.Changed) { [TimerKey] = now() } };
+                    }
                     break;
                 }
                 case SchedulingKey when system.Dword(PriorityControl, Separation) != Programs:
@@ -401,7 +415,9 @@ internal sealed partial class SystemTuning(SystemTuning.ISystem system, string p
                     break;
             }
         }
-        Save(after);
+        // The probe goes only once what it settled is saved; until then the record saved before the step still names it.
+        if (!Save(after)) said.Add("Exo couldn't save what changed; it reads it again next time.");
+        else if (clockWas is not null) system.ReadAnswer(clockWas);
         AppLog.Info($"System best settings: {string.Join(", ", wanted)}{(said.Count > 0 ? "; " + string.Join(" ", said) : "")}.");
         return Said(said);
     }
@@ -419,11 +435,18 @@ internal sealed partial class SystemTuning(SystemTuning.ISystem system, string p
     private async Task<string?> TurnOffNowAsync(string key)
     {
         if (!Keys.Contains(key)) return "Exo doesn't know that setting.";
-        var saved = Load();
+        var saved = Settled();
         if (saved.Kept.TryGetValue(key, out var was))
         {
             if (Revert(key, was) is not { } lines) return "Exo's record of this setting couldn't be read, so nothing changed.";
-            if (!await system.Admin(lines).ConfigureAwait(false)) return "Windows' permission was declined, so nothing changed.";
+            // The timer's BCD value can't be read without administrator rights: the same step reads it back after setting it.
+            var check = key == TimerKey ? system.Answer() : null;
+            if (check is not null) lines = [.. lines, TimerRead(check)];
+            if (!await system.Admin(lines).ConfigureAwait(false))
+            {
+                if (check is not null) system.ReadAnswer(check);
+                return "Windows' permission was declined, so nothing changed.";
+            }
             var back = key switch
             {
                 SchedulingKey => system.Dword(PriorityControl, Separation) == was.Value,
@@ -431,7 +454,7 @@ internal sealed partial class SystemTuning(SystemTuning.ISystem system, string p
                 CacheKey => system.Dword(MemoryManagement, LargeSystemCache) == was.Value,
                 ServicesKey => was.Services!.All(s => system.Service(s.Name) is { } now && now.Start == s.Start && now.Delayed == s.Delayed),
                 IntegrityKey => system.Dword(Hvci, "Enabled") == was.Value,
-                _ => true, // the timer's BCD value can't be read without administrator rights: the step's own exit is the answer
+                _ => Forced(system.ReadAnswer(check!)) == true,
             };
             if (!back) return "Windows didn't put it back. Try again.";
             var kept = new Dictionary<string, Was>(saved.Kept);
@@ -460,15 +483,32 @@ internal sealed partial class SystemTuning(SystemTuning.ISystem system, string p
     };
 
     /// <summary>
-    /// The timer's lines: bcdedit's entry for this Windows, filtered to the forced clock, into <paramref name="was"/>; the value
-    /// removed only when it's there; then the same read into <paramref name="after"/>, so Exo knows what it found and what's left.
+    /// The timer's lines: bcdedit's entry for this Windows into <paramref name="was"/>; the value removed only when it's there;
+    /// then the same read into <paramref name="after"/>, so Exo knows what it found and what's left.
     /// </summary>
     internal static IReadOnlyList<string> TimerLines(string was, string after) =>
     [
-        $"({Tool("bcdedit.exe")} /enum {{current}} | {Tool("findstr.exe")} /i /c:\"useplatformclock\" > \"{Quoted(was)}\")",
+        TimerRead(was),
         $"({Tool("findstr.exe")} /i /c:\"useplatformclock\" \"{Quoted(was)}\" >nul && {Tool("bcdedit.exe")} /deletevalue {{current}} useplatformclock)",
-        $"({Tool("bcdedit.exe")} /enum {{current}} | {Tool("findstr.exe")} /i /c:\"useplatformclock\" > \"{Quoted(after)}\")",
+        TimerRead(after),
     ];
+
+    /// <summary>What a read of the boot entry ends with when bcdedit read it: without it the read failed, and says nothing.</summary>
+    internal const string ReadOk = "exo-read-ok";
+
+    /// <summary>bcdedit's entry for this Windows into <paramref name="answer"/>, then <see cref="ReadOk"/> only when bcdedit read it.</summary>
+    internal static string TimerRead(string answer) =>
+        $"({Tool("bcdedit.exe")} /enum {{current}} > \"{Quoted(answer)}\" && echo {ReadOk}>>\"{Quoted(answer)}\")";
+
+    /// <summary>
+    /// The platform clock forced in a boot entry read (<see cref="TimerRead"/>): true when the value is there (seen in any
+    /// read, even one cut short), false when bcdedit read the entry and it isn't, null when the read didn't happen or failed.
+    /// </summary>
+    internal static bool? Forced(string? read) =>
+        read is null ? null
+        : read.Contains("useplatformclock", StringComparison.OrdinalIgnoreCase) ? true
+        : read.Contains(ReadOk, StringComparison.Ordinal) ? false
+        : null;
 
     internal static string RegDword(string key, string name, int value) =>
         $"{Tool("reg.exe")} add \"HKLM\\{key}\" /v {name} /t REG_DWORD /d {value} /f";
@@ -490,6 +530,41 @@ internal sealed partial class SystemTuning(SystemTuning.ISystem system, string p
     internal static partial Regex SafeText();
 
     private static string? Said(List<string> said) => said.Count == 0 ? null : string.Join(" ", said);
+
+    /// <summary>
+    /// The timer's change under way, settled from what its step read before removing anything: the clock was forced (Exo's
+    /// record: Off forces it again), it wasn't (Windows picks the HPET itself here: nothing to change, and the timer isn't
+    /// offered again), or the read never came (nothing was removed, since the removal runs only behind it, and the press can be
+    /// tried again). A record from an earlier change stays whatever the read says. <paramref name="note"/> says why nothing changed.
+    /// </summary>
+    private Saved Settle(Saved saved, out string? note)
+    {
+        note = null;
+        if (!saved.Kept.TryGetValue(TimerKey, out var record) || record.Probe is not { } probe) return saved;
+        var forced = Forced(system.ReadAnswer(probe, keep: true));
+        var kept = new Dictionary<string, Was>(saved.Kept);
+        var changed = new Dictionary<string, DateTimeOffset>(saved.Changed);
+        var native = saved.Native;
+        if (forced == true) { kept[TimerKey] = new Was(Clock: true); changed[TimerKey] = now(); }
+        else if (record.Clock) kept[TimerKey] = record with { Probe = null };
+        else kept.Remove(TimerKey);
+        if (forced == false && !record.Clock)
+        {
+            native = [.. native.Where(k => k != TimerKey), TimerKey];
+            note = "Windows picks the platform clock on this PC by itself, so there's nothing to change.";
+        }
+        else if (forced is null) note = "Exo couldn't read Windows' timer setting, so it didn't change it. Try again.";
+        return saved with { Kept = kept, Changed = changed, Native = native };
+    }
+
+    /// <summary>What Exo keeps, a timer step it didn't see finish settled and saved (its probe goes once that's saved).</summary>
+    private Saved Settled()
+    {
+        var saved = Load();
+        var settled = Settle(saved, out _);
+        if (!ReferenceEquals(settled, saved) && Save(settled)) system.ReadAnswer(saved.Kept[TimerKey].Probe!);
+        return settled;
+    }
 
     private Saved Load()
     {
