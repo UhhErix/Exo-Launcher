@@ -1,0 +1,8 @@
+# Exo Capture build and test outputs
+bin/
+obj/
+out/
+TestResults/
+
+# Root .gitignore ignores *.exe; keep OBS Studio's signed helper binaries in third_party/obs/.
+!third_party/obs/*.exe

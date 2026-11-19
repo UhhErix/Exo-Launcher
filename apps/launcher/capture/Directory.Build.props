@@ -1,0 +1,11 @@
+<Project>
+  <!--
+    Exo Capture is the one place screen capture is allowed (AGENTS.md › Enforced rules): it takes the parent props, then
+    swaps Exo's BannedSymbols.txt for its own, which keeps the bans that still apply here (no network, no Process.Kill).
+  -->
+  <Import Project="$([MSBuild]::GetPathOfFileAbove('Directory.Build.props', '$(MSBuildThisFileDirectory)..'))" />
+  <ItemGroup>
+    <AdditionalFiles Remove="$(MSBuildThisFileDirectory)..\BannedSymbols.txt" />
+    <AdditionalFiles Include="$(MSBuildThisFileDirectory)BannedSymbols.txt" Link="BannedSymbols.txt" Visible="false" />
+  </ItemGroup>
+</Project>

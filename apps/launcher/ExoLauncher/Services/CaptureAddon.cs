@@ -9,8 +9,8 @@ using ExoLauncher.Helpers;
 namespace ExoLauncher.Services;
 
 /// <summary>
-/// Exo Capture (instant replay, recording, snips): its own program, under Exo's own usage terms
-/// (<c>capture/LICENSE</c>), source in <c>capture/</c>; the OBS game-capture hook it runs stays GPL-2.0-or-later, a separate file. Exo's core never captures the screen (BannedSymbols.txt);
+/// Exo Capture (instant replay, recording, snips): its own program, under MIT (<c>capture/LICENSE</c>), source in
+/// <c>capture/</c>; the OBS game-capture hook it runs stays GPL-2.0-or-later, a separate file. Exo's core never captures the screen (BannedSymbols.txt);
 /// all of that lives in this add-on, shipped under <c>addons\capture</c> in the app folder
 /// or installed beside Exo's data under <c>%LOCALAPPDATA%\ExoLauncher\addons\capture</c>.
 /// Exo starts it hidden and speaks newline-delimited JSON over its stdin and stdout:
