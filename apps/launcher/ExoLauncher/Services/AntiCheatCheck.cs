@@ -412,6 +412,10 @@ internal static partial class AntiCheatCheck
         return GameOrAntiCheatRunning(game, answer.Names, processes) ? $"Close {game.Title} first." : null;
     }
 
+    /// <summary>An anti-cheat's own program runs now (Easy Anti-Cheat's service, a game's bootstrapper), Vanguard's left out: it runs whatever the game.</summary>
+    internal static bool AntiCheatProcessRunning(Func<IEnumerable<(string Name, string? Path)>>? processes = null) =>
+        (processes ?? RunningProcesses)().Any(process => ForFile(process.Name + ".exe") is { } antiCheat && antiCheat != DlssSwapService.RiotVanguard);
+
     private static IEnumerable<(string Name, string? Path)> RunningProcesses()
     {
         foreach (var process in Process.GetProcesses())

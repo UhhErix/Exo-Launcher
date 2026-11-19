@@ -31,7 +31,7 @@ namespace ExoLauncher.Tests;
 /// - a mod beside the game (AMDNR, dlss-unlocked, the FSR 4 shader overrides, UE4SS, Ultimate ASI Loader) goes unnamed,
 ///   or a new marker takes the game's own files.
 /// </summary>
-public sealed class FrameGenModTests : IDisposable
+public sealed partial class FrameGenModTests : IDisposable
 {
     private const string Rtx3070 = "NVIDIA GeForce RTX 3070";
     private const string Radeon = "AMD Radeon RX 6600";
@@ -91,8 +91,15 @@ public sealed class FrameGenModTests : IDisposable
     }
 
     /// <param name="dlssgOffered">The DLSSG SM86 switch (its pin): on in these fixtures unless a test turns it off, as it ships today.</param>
-    private DlssSwapService Service(FakeDriver? driver = null, bool dlssgOffered = true, Func<string, string?>? versionText = null) => new()
+    /// <param name="running">The programs running from the game's folder (none unless a test says so).</param>
+    private DlssSwapService Service(FakeDriver? driver = null, bool dlssgOffered = true, Func<string, string?>? versionText = null,
+        Func<string, IReadOnlyList<string>>? running = null, Func<string, bool, CancellationToken, Task<string?>>? recorder = null,
+        Action<GameEntry>? warn = null, Func<bool>? antiCheatRunning = null) => new()
     {
+        ProgramsRunningIn = running ?? (_ => []),
+        SessionRecorder = recorder ?? ((_, _, _) => Task.FromResult<string?>(null)),
+        WarnFilesInUse = warn ?? (_ => { }),
+        AntiCheatRunning = antiCheatRunning ?? (() => false),
         FileVersion = path => Path.GetFileName(path).ToLowerInvariant() switch
         {
             "sl.interposer.dll" => _streamline,

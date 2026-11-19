@@ -342,6 +342,7 @@ internal static class PlayerData
         new("UserSettings.json", "GameSettings", Why.Elsewhere, "a game's user settings"),
         new("system.xml", "GameSettings", Why.Elsewhere, "a game's system settings XML"),
         new("user_engine_option_save.xml", "GameSettings", Why.Elsewhere, "a game's saved engine options"),
+        new("held.json", "DlssSwapService", Why.ThisPc, "what Exo took out of a game started without its anti-cheat, held for its next session"),
         new("exo-frame-gen.json", "DlssSwapService,GameSettings", Why.Elsewhere, "the note Exo leaves in a game's folder beside frame generation"),
         new(".exo-upscale.json", "DlssSwapService", Why.Elsewhere, "the note Exo leaves beside a swapped upscaler file"),
         new("OptiScaler.ini", "DlssSwapService", Why.Elsewhere, "OptiScaler's settings in a game's folder"),
