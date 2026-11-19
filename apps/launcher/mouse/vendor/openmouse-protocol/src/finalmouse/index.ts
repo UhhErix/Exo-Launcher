@@ -498,7 +498,10 @@ function u32le(payload: Uint8Array): number | null {
 }
 
 function decodeAscii(payload: Uint8Array, length: number): string {
-  if (length <= 0) return "";
-  return new TextDecoder("ascii").decode(payload.subarray(0, Math.min(length, payload.length))).replace(/[\0 ]+$/, "");
+  // Exo: linear-time trailing NUL/space trim (avoids polynomial regex backtracking flagged by CodeQL).
+  let end = Math.min(length, payload.length);
+  if (end <= 0) return "";
+  while (end > 0 && (payload[end - 1] === 0 || payload[end - 1] === 0x20)) end--;
+  return new TextDecoder("ascii").decode(payload.subarray(0, end));
 }
 
