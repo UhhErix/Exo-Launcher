@@ -696,7 +696,7 @@ export type GpuImportAnswer = {
 
 /** System > This PC: one row per setup problem (none when all is well); power switches to Exo's plan for cpu, with Undo; chipset Exo updates (busy while it installs, applied while it waits for a restart, url only after a failed install). */
 export type PcHealthItem = {
-  key: 'ram' | 'rebar' | 'power' | 'chipset' | 'gpusched' | 'gpupref' | 'network' | 'netlink'
+  key: 'ram' | 'rebar' | 'power' | 'chipset' | 'gpusched' | 'gpupref' | 'network' | NetworkItemKey | 'netlink'
   label: string
   detail: string
   url?: string | null
@@ -709,8 +709,16 @@ export type PcHealthItem = {
   current?: boolean
   /** Nothing to do because the maker's newest has a known problem here: the row says so ("… skipped: …") with no button. */
   held?: boolean
+  /** A Network item the player turned off: Best settings leaves it until its switch is on again. */
+  off?: boolean
 }
-export type PcHealth = { ok: boolean; message?: string | null; items: PcHealthItem[] }
+/** Best settings › Network's items (NetworkBest.cs): the adapters' own settings, Cloudflare DNS encrypted, Windows' TCP defaults. */
+export type NetworkItemKey = 'net-adapter' | 'net-dns' | 'net-tcp'
+/** A quick measure of the connection, in ms (null: no answer): ping to 1.1.1.1, its jitter, ping to the router, a DNS lookup. */
+export type NetSample = { ping: number | null; jitter: number | null; router: number | null; lookup: number | null }
+/** The last check: before and after the last press (before null for a check on its own), and what it says. */
+export type NetCheck = { before: NetSample | null; after: NetSample; said: string }
+export type PcHealth = { ok: boolean; message?: string | null; items: PcHealthItem[]; check?: NetCheck | null }
 
 /**
  * PC › Drives (Drives.cs): one physical drive. link: the PCIe generation and lanes negotiated against the drive's own
@@ -2981,7 +2989,9 @@ export const host = {
   /** The card maker's own control panel opened as the user (NVIDIA Control Panel, AMD Software, Intel Graphics Software); message names one that isn't installed. */
   gpuControlPanel: () => rawCall<{ ok: boolean; message?: string | null }>('gpu.controlPanel', {}, 20_000),
   /** System > This PC: the checks; apply or undo Exo's power plan; gpusched opens Windows' Graphics settings; gamemode-on/off and gamebar-on (Exo keeps Game Bar off)/off (Exo puts it back) answer ok, and a sentence when Windows didn't take it. */
-  systemHealth: (action?: 'apply' | 'chipset' | 'gpusched' | 'gpupref' | 'gpupref-undo' | 'network' | 'gamemode-on' | 'gamemode-off' | 'gamebar-on' | 'gamebar-off') => rawCall<PcHealth>('system.health', action ? { action } : {}, 35_000),
+  systemHealth: (action?: 'apply' | 'chipset' | 'gpusched' | 'gpupref' | 'gpupref-undo' | 'network' | 'netcheck' | 'gamemode-on' | 'gamemode-off' | 'gamebar-on' | 'gamebar-off') => rawCall<PcHealth>('system.health', action ? { action } : {}, action === 'network' ? 240_000 : 35_000),
+  /** One item of Best settings › Network on (set now, back in Best settings) or off (put back as it was, left out of Best settings). */
+  systemNetwork: (on: boolean, item: 'adapter' | 'dns' | 'tcp') => rawCall<PcHealth>('system.health', { action: on ? 'network-on' : 'network-off', item }, 240_000),
   /** PC › Overview: what this PC is (processor, memory, drives, board, BIOS, Windows, security, connection). */
   systemAbout: () => rawCall<PcAbout>('system.about', {}, 15_000),
   /** PC > Auto tune: what's tunable and where it stands; start, stop or undo one part. Off until pressed. */

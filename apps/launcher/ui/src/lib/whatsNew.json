@@ -3,6 +3,16 @@
     "version": "3.26.0",
     "items": [
       {
+        "icon": "Encrypted",
+        "title": "Cloudflare DNS, encrypted",
+        "detail": "Best settings sets Cloudflare's DNS with encryption on, for faster lookups that nobody on the way can read; its switch puts your old DNS back."
+      },
+      {
+        "icon": "Network",
+        "title": "A Network group in Best settings",
+        "detail": "Your adapter's power saving, DNS and Windows' TCP defaults each have their own switch, all set with one Windows prompt, with a ping and lookup check before and after."
+      },
+      {
         "icon": "MusicNotes",
         "title": "Music, full window",
         "detail": "Press F or the full-window button in Music for the cover large, its colours around it and the lyrics big beside it; Esc goes back."
