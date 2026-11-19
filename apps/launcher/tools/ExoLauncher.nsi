@@ -898,6 +898,13 @@ Section "Exo Launcher" SecApp
   WriteRegStr HKCU "${PRODUCT_UNINST_KEY}" "URLUpdateInfo" "${PRODUCT_WEB}"
   WriteRegStr HKCU "${PRODUCT_UNINST_KEY}" "HelpLink" "${PRODUCT_HELP}"
   WriteRegStr HKCU "${PRODUCT_UNINST_KEY}" "InstallLocation" "$INSTDIR"
+!ifdef INSTALLER_REVISION
+  ; What this installer does outside the app folder, as a hash (Build-Release.ps1): an in-app update with the same
+  ; revision may replace only the files that changed (AppUpdateService.Delta); another revision runs this installer.
+  WriteRegStr HKCU "${PRODUCT_UNINST_KEY}" "ExoInstaller" "${INSTALLER_REVISION}"
+!else
+  DeleteRegValue HKCU "${PRODUCT_UNINST_KEY}" "ExoInstaller"
+!endif
   WriteRegDWORD HKCU "${PRODUCT_UNINST_KEY}" "NoModify" 1
   WriteRegDWORD HKCU "${PRODUCT_UNINST_KEY}" "NoRepair" 1
   ${GetSize} "$INSTDIR" "/S=0K" $0 $1 $2

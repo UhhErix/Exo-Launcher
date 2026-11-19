@@ -1,6 +1,8 @@
-# Builds a release installer: artifacts\ExoLauncher-Setup.exe and its .sha256, and artifacts\whats-new.json
-# (this version's What's New); cloud\updates\publish-release.ps1 puts all three in the update mirror.
-#   pwsh -File tools\Build-Release.ps1 [-ShadersWork C:\path\to\exo-shaders] [-ShadersCommit <sha>]
+# Builds a release installer: artifacts\ExoLauncher-Setup.exe and its .sha256, artifacts\whats-new.json
+# (this version's What's New), and artifacts\files.json and files.pack (the app folder file by file, for the in-app
+# updater's file-level update; tools\AppFiles). cloud\updates\publish-release.ps1 puts the installer files in the update
+# mirror; -Release vX.Y.Z uploads files.json, files.pack and whats-new.json to that GitHub release (it must exist; gh signed in).
+#   pwsh -File tools\Build-Release.ps1 [-ShadersWork C:\path\to\exo-shaders] [-ShadersCommit <sha>] [-Release vX.Y.Z]
 # Steps: a clean Release publish (self-contained, ReadyToRun), the UI and Exo Mouse
 # builds, Exo Shaders (engine and page) under addons\shaders, Exo Capture under
 # addons\capture and Lucid under addons\lucid in the app folder,
@@ -9,7 +11,8 @@
 param(
     [string]$ShadersWork = (Join-Path $env:USERPROFILE 'Code\Exo\exo-shaders'),
     [string]$ShadersCommit,
-    [string]$MakeNsis = 'C:\Program Files (x86)\NSIS\makensis.exe'
+    [string]$MakeNsis = 'C:\Program Files (x86)\NSIS\makensis.exe',
+    [string]$Release
 )
 $ErrorActionPreference = 'Stop'
 $repo = Split-Path -Parent $PSScriptRoot
@@ -107,10 +110,29 @@ $setup = Join-Path $artifacts 'ExoLauncher-Setup.exe'
 pwsh -NoProfile -File (Join-Path $repo 'setup\build.ps1')
 if ($LASTEXITCODE) { throw "Exo Setup build failed ($LASTEXITCODE)." }
 $shell = Join-Path $repo 'setup\out\ExoSetup.exe'
+# The very ExoSetup.exe the installer puts in the app folder, for files.pack (joining the installer below builds it again).
+$packShell = Join-Path $artifacts 'pack-setup'
+New-Item -ItemType Directory -Force -Path $packShell | Out-Null
+Copy-Item $shell (Join-Path $packShell 'ExoSetup.exe') -Force
+# What the installer does outside the app folder (its script and the helpers it runs), as one SHA-256 over their text with
+# LF line ends. The installer records it in Apps & features; the in-app updater replaces only the changed files while a
+# release's revision is the same (AppUpdateService.Delta) and runs the installer when it differs. Apply-ExoDelta.ps1 is
+# the updater's own and is left out.
+$installerInputs = @(Get-Item (Join-Path $repo 'tools\ExoLauncher.nsi')) +
+    @(Get-ChildItem (Join-Path $repo 'tools\installer') -Filter *.ps1 | Where-Object Name -NE 'Apply-ExoDelta.ps1') | Sort-Object Name
+$installerRevision = & {
+    $sha = [Security.Cryptography.SHA256]::Create()
+    $lines = $installerInputs | ForEach-Object {
+        $text = [IO.File]::ReadAllText($_.FullName).Replace("`r`n", "`n")
+        $_.Name + ' ' + [Convert]::ToHexString($sha.ComputeHash([Text.Encoding]::UTF8.GetBytes($text))).ToLowerInvariant()
+    }
+    [Convert]::ToHexString($sha.ComputeHash([Text.Encoding]::UTF8.GetBytes($lines -join "`n"))).ToLowerInvariant()
+    $sha.Dispose()
+}
 # The install engine (NSIS): the payload, its checks, the atomic swap, shortcuts and registry. Its icon and helper paths are relative to tools\.
 $engine = Join-Path $artifacts 'ExoLauncher-Engine.exe'
 Push-Location (Join-Path $repo 'tools')
-& $MakeNsis /V2 "/DPAYLOAD_DIR=$($publish.FullName)" "/DOUTFILE=$engine" "/DPRODUCT_VERSION=$version" "/DSETUP_SHELL=$shell" ExoLauncher.nsi
+& $MakeNsis /V2 "/DPAYLOAD_DIR=$($publish.FullName)" "/DOUTFILE=$engine" "/DPRODUCT_VERSION=$version" "/DSETUP_SHELL=$shell" "/DINSTALLER_REVISION=$installerRevision" ExoLauncher.nsi
 $nsis = $LASTEXITCODE
 Pop-Location
 if ($nsis) { throw "makensis failed ($nsis)." }
@@ -120,7 +142,27 @@ pwsh -NoProfile -File (Join-Path $repo 'setup\build.ps1') -Engine $engine -AppBy
 if ($LASTEXITCODE) { throw "Joining Exo Setup failed ($LASTEXITCODE)." }
 Remove-Item $engine -Force
 
+# files.json and files.pack: every file of the app folder the installer writes (the payload with the payload-manifest.json
+# makensis wrote into the publish folder, and ExoSetup.exe), each compressed with zstd on its own.
+dotnet run --project (Join-Path $repo 'tools\AppFiles\AppFiles.csproj') -c Release -- build --app $publish.FullName `
+    --setup (Join-Path $packShell 'ExoSetup.exe') --version $version --installer $installerRevision --out $artifacts
+if ($LASTEXITCODE) { throw "Building files.json and files.pack failed ($LASTEXITCODE)." }
+Remove-Item $packShell -Recurse -Force
+
 $hash = (Get-FileHash $setup -Algorithm SHA256).Hash.ToLowerInvariant()
 Set-Content -Path "$setup.sha256" -Value "$hash  ExoLauncher-Setup.exe" -NoNewline -Encoding ascii
 Set-Content -Path (Join-Path $artifacts 'whats-new.json') -Value ($whatsNew | ConvertTo-Json -Depth 4) -NoNewline -Encoding utf8NoBOM
 Write-Output "Exo Launcher ${version}: $setup ($([math]::Round((Get-Item $setup).Length / 1MB, 1)) MB), SHA-256 $hash, Exo Shaders engine at exo-shaders $shadersCommit"
+Write-Output "File-level update: files.pack $([math]::Round((Get-Item (Join-Path $artifacts 'files.pack')).Length / 1MB, 1)) MB, installer revision $installerRevision"
+
+# The release's file list and pack (and its What's New) on the GitHub release, beside the installer. Never replaced: an
+# install may already have read them.
+if ($Release) {
+    $existing = @(gh release view $Release --repo UhhErix/Exo-Launcher --json assets --jq '.assets[].name')
+    if ($LASTEXITCODE) { throw "GitHub release $Release was not found (create it first)." }
+    foreach ($asset in 'files.json', 'files.pack', 'whats-new.json') {
+        if ($existing -contains $asset) { throw "$asset is already on $Release; delete it there first if this build replaces it." }
+        gh release upload $Release (Join-Path $artifacts $asset) --repo UhhErix/Exo-Launcher
+        if ($LASTEXITCODE) { throw "Uploading $asset to $Release failed ($LASTEXITCODE)." }
+    }
+}
