@@ -168,6 +168,8 @@ export async function run(t) {
   // Read only: pressing it restarts Steam. The row shows where Steam can play offline (a saved sign-in) or is offline now.
   await run.check('settings', 'steam-offline', "Game stores' Steam Offline mode shows how Steam starts", async (c) => {
     if (!await t.shell.eval(`!!document.querySelector('.exo-settings')?.checkVisibility()`) && !await open(t)) return ['Settings did not open']
+    await page(t, 'Library')
+    await sleep(300)
     const steam = (await t.host('accounts.list'))?.steam ?? null
     c.evidence.steam = steam ? { offline: steam.offline, canOffline: steam.canOffline } : null
     const want = steam && (steam.canOffline || steam.offline) ? String(steam.offline) : 'none'
