@@ -1127,7 +1127,7 @@ public sealed partial class WebHostBridge
         await RecorderOutOfTheWayAsync(game).ConfigureAwait(true);
 
         // Steam can't sign in because its servers are down: Play offers its offline mode instead of waiting on it.
-        // Both Steam checks read its logs, process table and appinfo.vdf: off the UI thread.
+        // Both Steam checks read its logs, process table and appinfo: off the UI thread.
         if (await Task.Run(() => SteamPlayOfflineFirst(game)).ConfigureAwait(true) is { } offlineFirst) return offlineFirst;
 
         // Controller settings wait for Steam's next close while it runs (never closing it).

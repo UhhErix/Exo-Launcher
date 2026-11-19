@@ -225,6 +225,8 @@ public sealed class AppServices
         });
         RadeonProfileService.Shared.Start(Launcher, () => GpuProfileService.MainScreen("amd"));
         IntelProfileService.Shared.Start(Launcher);
+        // Properties › Anti-cheat: a Steam game the player starts from Steam's entry without its anti-cheat.
+        AntiCheatCheck.ChoseWithoutAntiCheat = game => Settings.SteamWithoutAntiCheat(game.Id);
         // Frame generation Exo put into a game: checked as each game starts and ends, and kept on the mod's newest release.
         DlssSwapService.WatchFrameGen(Launcher, Settings, Library);
         // Exo no longer runs a G-SYNC recipe: what it set for that goes back.

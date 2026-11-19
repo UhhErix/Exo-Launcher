@@ -70,8 +70,8 @@ public sealed partial class WebHostBridge
     private async Task<GameEntry?> PropertiesGameAsync(string? id)
     {
         if (string.IsNullOrWhiteSpace(id)) return null;
-        // The library's account checks and every read below (the game's folder, Steam's config files, appinfo.vdf) run
-        // off the UI thread: each open of Properties read appinfo.vdf there.
+        // The library's account checks and every read below (the game's folder, Steam's config files, appinfo) run
+        // off the UI thread: each open of Properties read appinfo there.
         await Task.Run(() => _services.Library.GetLibraryAsync()).ConfigureAwait(true);
         return _services.Library.Find(id) is { Installed: true } game ? game : null;
     }
@@ -116,12 +116,63 @@ public sealed partial class WebHostBridge
             var app = await Task.Run(() => FillSteamAsync(common, game.LaunchTarget!, ct), ct).ConfigureAwait(true);
             if (app is not null && SteamInputInUse(game.LaunchTarget!, app)) common.StoreProperties = "Steam";
             common.SteamOverlay = SteamOverlayShown(game.LaunchTarget!);
+            common.AntiCheatLaunch = AntiCheatLaunchFor(game);
         }
         else if (game.Store == StoreKind.Epic && LegendaryProperties.IsAppName(game.LaunchTarget))
             await Task.Run(() => FillEpicAsync(common, game.LaunchTarget!, ct), ct).ConfigureAwait(true);
         if (game.Store != StoreKind.Steam) common.ThroughSteam = await Task.Run(() => ThroughSteamFor(game), ct).ConfigureAwait(true);
         common.ShaderCacheBytes = await Task.Run(() => ShaderCacheBytesOf(game), ct).ConfigureAwait(true);
         return common.ToDto();
+    }
+
+    /// <summary>
+    /// Properties › Anti-cheat for a Steam game whose Play menu has an entry without its anti-cheat (NBA 2K26's "without
+    /// EAC (offline only)"): "with" (the default) or "without", and Steam's own words for that entry. A game left on
+    /// "without" after Steam stopped offering the entry keeps the row (Play refuses until it goes back to "with"); null
+    /// for any other.
+    /// </summary>
+    private (string Value, string Detail)? AntiCheatLaunchFor(GameEntry game)
+    {
+        if (game.Store != StoreKind.Steam || AntiCheatCheck.IsRiot(game) || AntiCheatCheck.SteamAppId(game) is not { } id) return null;
+        var without = _services.Settings.SteamWithoutAntiCheat(game.Id);
+        if (AntiCheatCheck.SteamFreeEntry(id) is { } entry) return (without ? "without" : "with", entry.Description);
+        return without ? ("without", "Steam no longer offers this game without its anti-cheat. Pick Launch with anti-cheat to play.") : null;
+    }
+
+    /// <summary>
+    /// The pick saved. Back to "with": before anything else, what Exo put into the game for its start without anti-cheat
+    /// comes out (its frame generation mod, the shader recorder), so the protected start never finds it; frame generation
+    /// at launch checks again (<see cref="DlssSwapService.FrameGenAtLaunch"/>). The pick is saved only once both are out
+    /// (the recorder confirmed by the engine, started for it if needed); a take-out that fails leaves it on "without" and
+    /// says so.
+    /// </summary>
+    private async Task<string?> SetAntiCheatLaunchAsync(GameEntry game, bool without, CancellationToken ct)
+    {
+        if (without)
+        {
+            _services.Settings.SetSteamWithoutAntiCheat(game.Id, true);
+            AppLog.Info($"Anti-cheat: {game.Title} starts from Steam's entry without its anti-cheat.");
+            return "Plays offline, without anti-cheat. Frame generation and mods can go in.";
+        }
+        var off = await Task.Run(() => AntiCheatBackOn(_dlss, game), ct).ConfigureAwait(true);
+        if (!off.Ok) throw new UserFacingException(off.Message);
+        if (App.MainAppWindow is not { } window) throw new UserFacingException("Exo couldn't check its shader recorder in this game. Try again.");
+        using (var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct))
+        {
+            timeout.CancelAfter(TimeSpan.FromSeconds(60));
+            if (await window.ShadersRecorderOffAsync(game.Id, timeout.Token).ConfigureAwait(true) is { } recorder) throw new UserFacingException(recorder);
+        }
+        _services.Settings.SetSteamWithoutAntiCheat(game.Id, false);
+        AppLog.Info($"Anti-cheat: {game.Title} starts with its anti-cheat again{(off.Removed ? "; Exo's frame generation came out" : "")}.");
+        return off.Removed ? "Plays with anti-cheat. Exo's frame generation came out of the game." : "Plays with anti-cheat.";
+    }
+
+    /// <summary>Exo's frame generation out of the game, if it is in; Ok false (with why) when it could not come out.</summary>
+    internal static (bool Ok, bool Removed, string Message) AntiCheatBackOn(DlssSwapService dlss, GameEntry game)
+    {
+        if (dlss.FrameGenFolderFor(game.Id) is not { } folder || DlssSwapService.ReadFrameGenManifest(folder) is not { Out: false }) return (true, false, "");
+        var off = dlss.FrameGenOff(game);
+        return off.Ok ? (true, true, "") : (false, false, "Exo couldn't take its frame generation out of the game, so it still starts without anti-cheat. " + off.Message);
     }
 
     /// <summary>The overlay as the game will have it: the player's pick in Properties, else Steam's switch now (absent is on).</summary>
@@ -157,11 +208,9 @@ public sealed partial class WebHostBridge
         view.SizeBytes = manifest.SizeOnDisk is > 0 ? manifest.SizeOnDisk : view.SizeBytes;
 
         var id = uint.Parse(appId, CultureInfo.InvariantCulture);
-        var appInfo = ReadSharedBytes(Path.Combine(root, "appcache", "appinfo.vdf"));
-        var app = appInfo is null ? SteamKeyValues.Empty
-            : SteamAppInfoNames.ReadApps(appInfo, new HashSet<uint> { id }).GetValueOrDefault(id) ?? SteamKeyValues.Empty;
+        var app = SteamAppInfoNames.ReadApps(root, new HashSet<uint> { id }).GetValueOrDefault(id) ?? SteamKeyValues.Empty;
         var dlcIds = SteamGameProperties.DlcIds(app).ToHashSet();
-        var dlcRecords = appInfo is null || dlcIds.Count == 0 ? new Dictionary<uint, SteamKeyValues>() : SteamAppInfoNames.ReadApps(appInfo, dlcIds);
+        var dlcRecords = SteamAppInfoNames.ReadApps(root, dlcIds);
         // Every listed DLC is asked about: one without files is held by a license only Steam knows.
         var live = ProcessHelper.IsProcessRunning("steam") && SteamClientReady.ReadActiveUser() != 0
             ? await SteamClientIpc.QueryPropertiesAsync(appId, dlcIds.Order().Take(1000), ct).ConfigureAwait(false)
@@ -327,6 +376,15 @@ public sealed partial class WebHostBridge
                 return message;
             }
             return await ApplySteamOverlayAsync(ct).ConfigureAwait(true);
+        }
+        if (key == "antiCheatLaunch")
+        {
+            // Back to "with" is always taken where the row is; "without" only while Steam offers the entry.
+            var offered = AntiCheatCheck.SteamAppId(game) is { } appId && AntiCheatCheck.SteamFreeEntry(appId) is not null;
+            if (value is not ("with" or "without") || AntiCheatLaunchFor(game) is null || value == "without" && !offered)
+                throw new UserFacingException("Steam offers this game no start without its anti-cheat.");
+            if (_services.Launcher.GetGameRunState(game).IsRunning) throw new UserFacingException($"Close {game.Title} first.");
+            return await SetAntiCheatLaunchAsync(game, value == "without", ct).ConfigureAwait(true);
         }
         if (key == "throughSteam")
         {
@@ -532,22 +590,6 @@ public sealed partial class WebHostBridge
     private static bool IsSteamBranch(string value) =>
         value.Length is > 0 and <= 64 && value.All(c => char.IsAsciiLetterOrDigit(c) || c is '_' or '-' or '.');
 
-    private static byte[]? ReadSharedBytes(string path)
-    {
-        try
-        {
-            using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
-            if (stream.Length > 256L * 1024 * 1024) return null;
-            var bytes = new byte[stream.Length];
-            stream.ReadExactly(bytes);
-            return bytes;
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-        {
-            return null;
-        }
-    }
-
     /// <summary>A library folder as its drive ("D:"), numbered when one drive holds two.</summary>
     private static string DriveLabel(string path, IReadOnlyList<string> all, int index)
     {
@@ -605,6 +647,8 @@ public sealed partial class WebHostBridge
         public bool? SteamOverlay { get; set; }
         /// <summary>The game's own shader caches together (0 once cleared); null for a game Exo can't rebuild them for.</summary>
         public long? ShaderCacheBytes { get; set; }
+        /// <summary>A Steam game Steam offers without its anti-cheat: "with" or "without", and that entry's own words; null otherwise.</summary>
+        public (string Value, string Detail)? AntiCheatLaunch { get; set; }
 
         public object ToDto() => new
         {
@@ -630,6 +674,7 @@ public sealed partial class WebHostBridge
             throughSteam = ThroughSteam,
             steamOverlay = SteamOverlay,
             shaderCacheBytes = ShaderCacheBytes,
+            antiCheatLaunch = AntiCheatLaunch is { } launch ? new { value = launch.Value, detail = launch.Detail } : null,
         };
 
         private static object Choice(PropertyChoice choice) =>

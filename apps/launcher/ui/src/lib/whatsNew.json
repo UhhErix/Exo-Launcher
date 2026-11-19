@@ -13,6 +13,16 @@
         "detail": "Your adapter's power saving, DNS and Windows' TCP defaults each have their own switch, all set with one Windows prompt, with a ping and lookup check before and after."
       },
       {
+        "icon": "Controller",
+        "title": "NBA 2K26 with or without anti-cheat",
+        "detail": "Pick in Properties: without it the game plays offline and frame generation and mods can go in, and back with it Exo takes them out first."
+      },
+      {
+        "icon": "StoreBag",
+        "title": "Steam game details are back",
+        "detail": "Names of games you haven't installed, DLC, betas and languages show again on the current Steam."
+      },
+      {
         "icon": "MusicNotes",
         "title": "Music, full window",
         "detail": "Press F or the full-window button in Music for the cover large, its colours around it and the lyrics big beside it; Esc goes back."

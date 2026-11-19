@@ -1839,6 +1839,56 @@ public sealed class FrameGenModTests : IDisposable
         Assert.Contains("Easy Anti-Cheat", status.Note);
     }
 
+    /// <summary>
+    /// A game whose files show Easy Anti-Cheat, started from Steam's entry without it (NBA 2K26's "without EAC"): frame
+    /// generation may go in. Back to "with anti-cheat" it comes out before the next start, whether Properties takes it out
+    /// (<see cref="WebHostBridge.AntiCheatBackOn"/>) or, the pick changed some other way, the start itself does.
+    /// </summary>
+    [Fact]
+    public async Task WithoutAntiCheatItGoesInAndBackWithItComesOutBeforeTheStart()
+    {
+        UnrealGame();
+        Put(@"EasyAntiCheat\EasyAntiCheat_EOS_Setup.exe", Pe(300));
+        var before = Snapshot();
+        var without = true;
+        var prior = AntiCheatCheck.WithoutAntiCheatLaunch;
+        AntiCheatCheck.WithoutAntiCheatLaunch = game => game.Id == _game.Id
+            ? without ? new Adapters.SteamAppInfoNames.AntiCheatFreeLaunch("option1", "Frame Gen Test without EAC (offline only)", "Game.exe") : null
+            : prior(game);
+        try
+        {
+            var service = Service();
+            Assert.True((await On(service)).Ok);
+            Assert.Equal("on", State(service).State);
+            Assert.NotEqual(before, Snapshot());
+            // Still without: the start keeps it.
+            service.FrameGenAtLaunch(_game, Rtx3070);
+            Assert.Equal("on", State(service).State);
+
+            // Back with anti-cheat through Properties: out at once, and nothing goes back in.
+            without = false;
+            Assert.Equal((true, true), AntiCheatBackOn(service) is var (ok, removed, _) ? (ok, removed) : default);
+            Assert.Equal(before, Snapshot());
+            Assert.Equal(0, await BestSettingsPass(service));
+            Assert.False((await On(service)).Ok);
+            Assert.Equal(before, Snapshot());
+            Assert.Equal(("note", "Easy Anti-Cheat"), (State(service).State, State(service).AntiCheat));
+            // Nothing in: taking out again is a no-op.
+            Assert.Equal((true, false), AntiCheatBackOn(service) is var (ok2, removed2, _) ? (ok2, removed2) : default);
+
+            // In again without, then the pick goes back some other way: the start takes it out first.
+            without = true;
+            Assert.True((await On(service)).Ok);
+            without = false;
+            service.FrameGenAtLaunch(_game, Rtx3070);
+            Assert.Equal(before, Snapshot());
+            Assert.Contains("Easy Anti-Cheat", State(service).Note);
+        }
+        finally { AntiCheatCheck.WithoutAntiCheatLaunch = prior; }
+    }
+
+    private (bool Ok, bool Removed, string Message) AntiCheatBackOn(DlssSwapService service) => WebHostBridge.AntiCheatBackOn(service, _game);
+
     [Fact]
     public async Task AsTheGameStartsItComesOutOnceAPatchChangedTheGamesProgram()
     {

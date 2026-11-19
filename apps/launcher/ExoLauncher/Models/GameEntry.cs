@@ -543,6 +543,12 @@ public sealed class AppSettings
     public bool FrameGenEverywhere { get; set; }
     /// <summary>Games the player turned Exo's frame generation off in (card ids), which <see cref="FrameGenEverywhere"/> leaves alone.</summary>
     public List<string> FrameGenKeptOff { get; set; } = [];
+    /// <summary>
+    /// Steam games (card ids) set to "Launch without anti-cheat" in Properties: Play starts Steam's own entry without it
+    /// (NBA 2K26's "without EAC (offline only)"), and the game then counts as one without anti-cheat
+    /// (<see cref="ExoLauncher.Services.AntiCheatCheck.WithoutAntiCheatLaunch"/>).
+    /// </summary>
+    public List<string> SteamWithoutAntiCheat { get; set; } = [];
     /// <summary>Games the player keeps out of Update games automatically (game ids): they update only when the player presses Update.</summary>
     public List<string> AutoUpdateOff { get; set; } = [];
     /// <summary>

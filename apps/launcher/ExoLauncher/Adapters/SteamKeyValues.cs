@@ -4,7 +4,7 @@ namespace ExoLauncher.Adapters;
 
 /// <summary>
 /// One section of Steam's KeyValues: text ones (<c>appmanifest_*.acf</c>) and the
-/// binary records of <c>appinfo.vdf</c> read into the same shape. Keys compare
+/// binary records of Steam's appinfo read into the same shape. Keys compare
 /// case-insensitively, as Steam's own lookups do; the first of a repeated key wins.
 /// </summary>
 internal sealed class SteamKeyValues

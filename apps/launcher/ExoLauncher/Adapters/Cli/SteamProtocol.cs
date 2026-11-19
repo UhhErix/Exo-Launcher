@@ -19,6 +19,15 @@ public static partial class SteamProtocol
         return ["-applaunch", appId, .. WindowsCommandLine.Parse(extraArgs)];
     }
 
+    /// <summary>One of the app's Play-menu entries by Steam's own word for it ("option1"), started with no dialog.</summary>
+    public static string LaunchEntryUri(string appId, string option)
+    {
+        if (!IsValidAppId(appId)) throw new ArgumentException("Invalid Steam app id.", nameof(appId));
+        if (option.Length is < 7 or > 9 || !option.StartsWith("option", StringComparison.Ordinal) || !option[6..].All(char.IsAsciiDigit))
+            throw new ArgumentException("Invalid Steam launch option.", nameof(option));
+        return $"steam://launch/{appId}/{option}";
+    }
+
     public static string InstallUri(string appId) => $"steam://install/{appId}";
 
     public static string UninstallUri(string appId) => $"steam://uninstall/{appId}";
