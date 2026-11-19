@@ -572,13 +572,10 @@
   font-weight: var(--exo-weight-title);
   line-height: 1.15;
 }
-/* The welcome headline in the serif accent (tokens.css › --exo-font-display-serif); the steps' titles stay Goeist. */
 .exo-ob-step .exo-ob-title.is-display {
   margin: 24px 0 12px;
-  font-family: var(--exo-font-display-serif);
   font-size: calc(56px * var(--exo-scale, 1));
-  font-weight: var(--exo-weight-display-serif);
-  line-height: 1.1;
+  font-weight: var(--exo-weight-title);
 }
 .exo-ob-body {
   display: grid;
