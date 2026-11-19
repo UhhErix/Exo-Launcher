@@ -30,7 +30,7 @@ there is no upload step, no workflow and no Cloudflare token in this repository.
 Attach `artifacts\whats-new.json` from `Build-Release.ps1` beside the installer and its `.sha256`, so the notes are exactly
 the ones that build wrote. The offered version never moves backwards: to pull a bad release, publish a fixed newer one.
 The add-ons' source archives (`addon-source.mjs`, R2 `exo-source`) still go up by hand before the release: they need the
-Exo Shaders checkout and the commit Build-Release printed, and a GitHub release carries neither.
+commit Build-Release printed, which a GitHub release doesn't carry.
 
 The repository secret `CLOUDFLARE_ACCOUNT_ID` (and `CLOUDFLARE_API_TOKEN`, if it was set) was only for the upload workflow
 this replaced, and nothing uses it now. Details: `apps/launcher/cloud/updates/README.md`.
