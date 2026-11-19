@@ -43,6 +43,43 @@ the mirror gets the exact notes that build wrote. The add-ons' source archives (
 R2 `exo-source`) still go up by hand before the release: they need the Exo Shaders checkout and the
 commit Build-Release printed, and a GitHub release carries neither.
 
+### Only the files that changed
+
+Each release also carries `files.json` and `files.pack`, which `tools/Build-Release.ps1` writes
+into `artifacts` beside the installer (`tools/AppFiles`, format in
+`apps/launcher/ExoLauncher/Services/AppFiles.cs`):
+
+- `files.pack` is every file of the installed app folder (the payload with its
+  `payload-manifest.json`, and `ExoSetup.exe`), each compressed with zstd on its own, one after
+  another in path order. The same folder always packs to the same bytes.
+- `files.json` lists each file's path, size, SHA-256, and the offset and length of its bytes in
+  the pack, with the pack's size and SHA-256 and the *installer revision*: one SHA-256 over
+  `tools/ExoLauncher.nsi` and the installer's helper scripts.
+
+`pwsh -File tools\Build-Release.ps1 -Release vX.Y.Z` uploads both (and `whats-new.json`) to an
+existing GitHub release; it never replaces an asset that is already there. The installer stays the
+download for new installs.
+
+When `/v1/launcher/latest` lists the two (`/v1/launcher/<tag>/files.json` and `files.pack`, or
+the same under `download/`), Update now reads `files.json`, hashes the installed app folder (a
+cache keyed by size and write time makes a second look quick), downloads only the changed and new
+files as byte ranges of the pack (adjacent ones merged, four at a time), checks each against its
+SHA-256, and builds the new folder beside the installed one from hard links to the unchanged files.
+Exo then closes and `tools/installer/Apply-ExoDelta.ps1` swaps the folders as Setup does (the same
+payload check, `app.previous` kept until `Complete-ExoUpdate.ps1` sees the new build start), puts
+`ExoSetup.exe` and the uninstaller in, and sets the version and size in Apps & features. Because it
+compares with what is installed, skipping versions works the same way.
+A try that stops before the swap (cancelled, offline, Exo closed) keeps the files it already downloaded
+and checked in the updates folder's `delta-parts`, named by SHA-256; the next try checks each again and
+downloads only the rest.
+
+The installer is used instead when the release lists no files, the copy was not installed by an
+installer that recorded its revision (every install before this change, and developer swaps), the
+release's installer revision differs (it may change something outside the app folder), a game runs,
+the changed files are not smaller than the installer, the last file-level try at that version failed,
+or anything is refused or fails to verify on the way. Releases are not code-signed today; the files a
+file-level update writes are the same bytes as the installer's.
+
 ### Cloudflare secrets (once)
 
 The workflow needs two repository secrets. Without them it warns that the release was **not**
