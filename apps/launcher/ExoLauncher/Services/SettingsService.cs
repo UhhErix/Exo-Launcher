@@ -940,21 +940,11 @@ public sealed class SettingsService
     private static string NormalizeTextColour(string? value) =>
         string.Equals(value, "grey", StringComparison.OrdinalIgnoreCase) ? "grey" : "white";
 
-    /// <summary>The background palettes (ui/src/tokens.css › Backgrounds). Exo is pure black (AMOLED) under Liquid Glass.</summary>
+    /// <summary>The one background: Exo is pure black (AMOLED) under Liquid Glass.</summary>
     internal static readonly string[] Backgrounds = ["black"];
 
     /// <summary>Always "black": the palettes it once offered (near, grey, windows, graphite) and anything else come back as pure black.</summary>
     internal static string NormalizeBackground(string? value) => "black";
-
-    /// <summary>A palette's page color (the window's own background under the page), as #RRGGBB in tokens.css.</summary>
-    internal static (byte R, byte G, byte B) BackgroundColor(string? value) => NormalizeBackground(value) switch
-    {
-        "black" => (0x00, 0x00, 0x00),
-        "near" => (0x0a, 0x0a, 0x0a),
-        "windows" => (0x20, 0x20, 0x20),
-        "graphite" => (0x0f, 0x11, 0x14),
-        _ => (0x12, 0x12, 0x12),
-    };
 
     private static string NormalizeTextSize(string? value) =>
         value?.Trim().ToLowerInvariant() switch

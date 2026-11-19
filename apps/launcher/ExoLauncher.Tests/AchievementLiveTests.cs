@@ -66,7 +66,7 @@ public sealed class AchievementLiveTests
     [InlineData("GET /achievements HTTP/1.1\r\nHost: 127.0.0.1:9364", "Page")]
     [InlineData("GET /achievements?sound=1 HTTP/1.1\r\nhost: localhost:9364\r\nUser-Agent: OBS", "Page")]
     [InlineData("GET /achievements/events HTTP/1.1\r\nHost: 127.0.0.1:9364", "Events")]
-    [InlineData("GET /Exoline-Variable.woff2 HTTP/1.1\r\nHost: 127.0.0.1:9364", "Asset")]
+    [InlineData("GET /Goeist-Variable.woff2 HTTP/1.1\r\nHost: 127.0.0.1:9364", "Asset")]
     [InlineData("GET /sounds/common.wav HTTP/1.1\r\nHost: 127.0.0.1:9364", "Asset")]
     [InlineData("GET /sounds/rare.wav HTTP/1.1\r\nHost: localhost:9364", "Asset")]
     [InlineData("GET /sounds/completion.wav HTTP/1.1\r\nHost: 127.0.0.1:9364", "Asset")]

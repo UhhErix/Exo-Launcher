@@ -72,11 +72,11 @@ kbd,
   --color-bg-elevated: #000000;
   --color-surface-2: #000000;
   --color-surface-3: #080808;
-  /* Every line is the one line (--exo-line, below): a divider is not a dimmer outline. */
-  --color-line: #2e2e2e;
-  --color-line-soft: #2e2e2e;
-  --color-border: #2e2e2e;
-  --color-border-strong: #2e2e2e;
+  /* Every line is the one line, --exo-line (below): white at a low alpha, a Liquid Glass edge, never a grey outline. */
+  --color-line: rgb(255 255 255 / 0.07);
+  --color-line-soft: rgb(255 255 255 / 0.07);
+  --color-border: rgb(255 255 255 / 0.07);
+  --color-border-strong: rgb(255 255 255 / 0.07);
   /* White ink on AMOLED black, neutral grays under it, each matched in contrast to the step it replaces. */
   --color-fg: #ffffff;
   --color-muted: #b4b4b4;
@@ -96,7 +96,7 @@ kbd,
   --color-on-bad: #000000;
   --color-card: #000000;
   --color-raised: #000000;
-  --font-sans: "Goeist", "Exoline", "Segoe UI Variable", "Segoe UI", sans-serif;
+  --font-sans: "Goeist", "Segoe UI Variable", "Segoe UI", sans-serif;
   --font-mono: "Goeist Mono", "Cascadia Mono", Consolas, monospace;
   /* Motion (DESIGN.md › Motion). Two curves: what appears, fades or changes state eases out (fast
      at once, then settling); what travels between two places or changes shape springs (from rest,
@@ -281,66 +281,6 @@ body,
   --exo-lift-shadow: 0 8px 24px rgb(0 0 0 / 0.45);
   /* What a color is mixed into for a tinted fill (a super reaction, Discord's red warning): black. */
   --exo-tint-base: #000;
-}
-
-/* Backgrounds (Settings › General › Background; owner, 2026-11-14: "add all of them as options"). Pure black is the
-   :root above, unchanged. Each other palette names its page, its panels (the lifted surface a pane, the band and a
-   solid menu stand on), its raised step, its one line and its words; the rule after them maps those onto every token,
-   so the whole app follows. Dark grey (#121212, Material's dark surface) is the default; no palette goes to #000, so
-   nothing smears on an OLED pixel turning on and off. lib/exoTheme.ts sets data-exo-bg; the host paints its window
-   in the page color (SettingsService.BackgroundColor). */
-:root[data-exo-bg='near'] {
-  --pal-page: #0a0a0a; --pal-panel: #141414; --pal-raised: #1e1e1e; --pal-line: #2e2e2e;
-  --pal-fg: #e6e6e6; --pal-muted: #b4b4b4;
-}
-
-:root[data-exo-bg='grey'] {
-  --pal-page: #121212; --pal-panel: #1e1e1e; --pal-raised: #2e2e2e; --pal-line: #3a3a3a;
-  --pal-fg: #e0e0e0; --pal-muted: #a8a8a8;
-}
-
-:root[data-exo-bg='windows'] {
-  --pal-page: #202020; --pal-panel: #2b2b2b; --pal-raised: #363636; --pal-line: #424242;
-  --pal-fg: #f0f0f0; --pal-muted: #cccccc;
-}
-
-:root[data-exo-bg='graphite'] {
-  --pal-page: #0f1114; --pal-panel: #171a1f; --pal-raised: #20242b; --pal-line: #2c313a;
-  --pal-fg: #e4e8ee; --pal-muted: #9aa3b0;
-}
-
-:root:is([data-exo-bg='near'], [data-exo-bg='grey'], [data-exo-bg='windows'], [data-exo-bg='graphite']) {
-  --color-bg: var(--pal-page);
-  --color-surface: var(--pal-panel);
-  --color-elevated: var(--pal-raised);
-  --color-hover: var(--pal-raised);
-  --color-bg-elevated: var(--pal-panel);
-  --color-surface-2: var(--pal-panel);
-  --color-surface-3: var(--pal-raised);
-  --color-card: var(--pal-panel);
-  --color-raised: var(--pal-raised);
-  --color-line: var(--pal-line);
-  --color-line-soft: var(--pal-line);
-  --color-border: var(--pal-line);
-  --color-border-strong: var(--pal-line);
-  --exo-line: var(--pal-line);
-  --color-fg: var(--pal-fg);
-  --color-muted: var(--pal-muted);
-  --color-faint: var(--pal-muted);
-  --color-fg-muted: var(--pal-muted);
-  --color-fg-subtle: var(--pal-muted);
-  --exo-float: var(--pal-panel);
-  --exo-tile: var(--pal-panel);
-  --exo-solid-fill: var(--pal-panel);
-  --exo-solid-panel: var(--pal-panel);
-  --exo-tint-base: var(--pal-page);
-  /* Panes stand on the page in the panel's own color; what floats is the raised step, still frosted over art. */
-  --glassy-pane: var(--pal-panel);
-  --glassy-overlay: color-mix(in srgb, var(--pal-raised) 88%, transparent);
-  --glassy-still: color-mix(in srgb, var(--pal-panel) 80%, transparent);
-  --glassy-still-panel: color-mix(in srgb, var(--pal-panel) 92%, transparent);
-  --glassy-still-pane: var(--pal-panel);
-  --glassy-still-control: color-mix(in srgb, var(--pal-raised) 65%, transparent);
 }
 
 /*

@@ -87,7 +87,7 @@
     <EmbeddedResource Include="Services\DriverAdvisories.json" LogicalName="DriverAdvisories.json" />
     <EmbeddedResource Include="Services\StartupCatalog.json" LogicalName="StartupCatalog.json" />
     <!-- The banner page's font (Assets/Overlay/banner.html): the one the UI ships, one copy in the repo. -->
-    <Content Include="..\ui\public\fonts\Exoline-Variable.woff2" Link="Assets\Overlay\Exoline-Variable.woff2">
+    <Content Include="..\ui\public\fonts\Goeist-Variable.woff2" Link="Assets\Overlay\Goeist-Variable.woff2">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
       <CopyToPublishDirectory>Always</CopyToPublishDirectory>
     </Content>
