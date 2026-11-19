@@ -20,6 +20,7 @@ bucket_name = "replace-with-bucket-name"
 # DISCORD_ROLE_<APP> (optional role id), for LAUNCHER and CINEMA. README.md, "At each release".
 
 # The cache watch (src/watch.js): every 15 minutes, one discovery step and one queued file per run, so it fits the free plan
-# (no hashing, no large buffers). Deploy steps: README.md, "The cache watch".
+# (no hashing, no large buffers). Deploy steps: README.md, "The cache watch". The same tick checks Exo Launcher's newest GitHub
+# release and copies its installer and files.pack into R2 (src/github.js; README.md, "Where a launcher release comes from").
 [triggers]
 crons = []

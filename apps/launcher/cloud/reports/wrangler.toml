@@ -7,6 +7,10 @@ preview_urls = false
 send_metrics = false
 routes = []
 
+# Smart Placement: runs next to the D1 database it reads on most requests, so each request makes fewer long round trips.
+[placement]
+mode = "smart"
+
 # No logs: the reports service keeps nothing about who sends.
 [observability]
 enabled = false
