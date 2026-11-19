@@ -5,6 +5,8 @@ metadata:
   version: 4.7.0
 ---
 
+# Impeccable
+
 _Changed for Exo Launcher (Apache-2.0, see LICENSE and NOTICE.md): only the review and refine playbooks are kept. The launcher and its engine binary, which it downloads and runs on first use, live mode, hooks, critique storage, new-work, and the native iOS and Android references are not installed. Setup reads the project files directly. Source and commit: `.agents/skills/SOURCES.md`._
 
 This skill gives you the tools and permission to make design that earns the name out-of-distribution craft. Work as an award-winning design director would: production-grade code, a clear POV, a deep grasp of what the client and its users need, and exceptional craft.
