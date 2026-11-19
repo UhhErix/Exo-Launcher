@@ -31,6 +31,34 @@ function useTargets() {
 
 /** Discord's Forward: pick up to five conversations, add an optional message, Send. */
 export function ForwardDialog({ message, onClose }: { message: DiscordMessage; onClose: () => void }) {
+  // One forward per conversation, in turn; those reached are said, so a retry skips them.
+  const send = async (ids: string[], note: string) => {
+    const sent: string[] = []
+    for (const id of ids) {
+      const result = await host.discordSend(id, note, undefined, undefined, { forward: { channelId: message.channel_id, messageId: message.id } })
+        .catch(() => ({ ok: false, message: null }))
+      if (!result.ok) return { ok: false, message: result.message, sent }
+      sent.push(id)
+    }
+    return { ok: true, sent }
+  }
+  return <SendToDialog title="Forward to" failed="Discord did not forward that." send={send} onClose={onClose} />
+}
+
+/**
+ * Pick up to five of your DMs and channels, add an optional message, Send: Forward, and Captures' Send to Discord. A
+ * conversation reached leaves the pick, so a retry after a later one failed never sends to it twice.
+ * `portal={false}` keeps it inside the room (or the `.exo-dc` scope) whose colors its words use.
+ */
+export function SendToDialog({ title, failed, send: sendTo, onClose, onSent }: {
+  title: string
+  failed: string
+  /** Sends to the picked conversations; `sent`: those it reached, even when one failed. */
+  send: (channelIds: string[], note: string) => Promise<{ ok: boolean; message?: string | null; sent?: string[] }>
+  onClose: () => void
+  /** The names it went to, once every pick was reached. */
+  onSent?: (names: string[]) => void
+}) {
   const targets = useTargets()
   const [query, setQuery] = useState('')
   const [picked, setPicked] = useState<string[]>([])
@@ -39,25 +67,24 @@ export function ForwardDialog({ message, onClose }: { message: DiscordMessage; o
   const [busy, setBusy] = useState(false)
   const q = query.trim().toLowerCase()
   const shown = (targets ?? []).filter(t => !q || t.name.toLowerCase().includes(q) || t.place?.toLowerCase().includes(q)).slice(0, 60)
+  const names = (list: string[]) => list.map(id => targets?.find(t => t.id === id)?.name ?? '').filter(Boolean)
   const send = async () => {
     if (busy || picked.length === 0) return
     setBusy(true); setError(null)
-    for (const id of picked) {
-      const result = await host.discordSend(id, note.trim(), undefined, undefined, { forward: { channelId: message.channel_id, messageId: message.id } })
-        .catch(() => ({ ok: false, message: null }))
-      if (!result.ok) { setBusy(false); setError(result.message ?? 'Discord did not forward that.'); return }
-      // Sent: a retry after a later one failed goes only to those still picked, never twice to this one.
-      setPicked(list => list.filter(other => other !== id))
-    }
+    const all = picked
+    const result = await sendTo(picked, note.trim()).catch(() => ({ ok: false, message: null, sent: [] as string[] }))
+    setPicked(list => list.filter(id => !result.sent?.includes(id)))
+    if (!result.ok) { setBusy(false); setError(result.message ?? failed); return }
+    onSent?.(names(all))
     onClose()
   }
   return (
-    <Popover portal={false} className="exo-dc-modal exo-dc-forward-dialog" label="Forward to" onClick={event => event.stopPropagation()} onClose={onClose}>
-      <h2>Forward to</h2>
+    <Popover portal={false} className="exo-dc-modal exo-dc-forward-dialog" label={title} onClick={event => event.stopPropagation()} onClose={onClose}>
+      <h2>{title}</h2>
       <input className="exo-dc-modal-input" placeholder="Search" value={query} autoFocus aria-label="Search conversations" onChange={event => setQuery(event.target.value)} />
       <div className="exo-dc-forward-list" role="listbox" aria-multiselectable="true" aria-label="Conversations">
         {targets === null ? <Wait label="Loading conversations">{times(5, i => <span className="exo-dc-forward-row">{sampleFace(24)}<span className="exo-dc-forward-name"><strong>{sample(i)}</strong><span>{sample(i + 2)}</span></span></span>)}</Wait> : null}
-        {targets?.length === 0 ? <p className="exo-dc-note">Nowhere to forward to.</p> : null}
+        {targets?.length === 0 ? <p className="exo-dc-note">Nowhere to send to. Sign in to Discord in Exo first.</p> : null}
         {shown.map(t => {
           const on = picked.includes(t.id)
           return (

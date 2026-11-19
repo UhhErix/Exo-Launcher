@@ -797,18 +797,6 @@ public sealed partial class MainWindow : Window
             }
             catch (Exception ex) { AppLog.Warn("Exo's own files could not be served: " + ex.Message); }
 
-            // The shader add-on's page, on its own host so it runs as another origin in its frame.
-            if (Services.ShadersAddon.Present)
-            {
-                try
-                {
-                    core.SetVirtualHostNameToFolderMapping(
-                        Services.ShadersAddon.VirtualHost,
-                        Services.ShadersAddon.PageFolder,
-                        CoreWebView2HostResourceAccessKind.DenyCors);
-                }
-                catch (Exception ex) { AppLog.Warn("Shaders add-on page could not be mapped: " + ex.Message); }
-            }
             // Exo Mouse likewise: another origin in its frame, so it reaches Exo only through mouseRelay.
             try
             {

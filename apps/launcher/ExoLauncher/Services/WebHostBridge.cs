@@ -706,6 +706,10 @@ public sealed partial class WebHostBridge
                 "capture.reel" => App.MainAppWindow is { } reelWindow && hasParams
                     ? await Task.Run(() => reelWindow.CaptureReelStart(paramsEl)).ConfigureAwait(true) : new { ok = false },
                 "capture.reel.cancel" => App.MainAppWindow?.CaptureReelCancel() ?? new { ok = false },
+                "capture.text" => App.MainAppWindow is { } textWindow
+                    ? await Task.Run(() => textWindow.CaptureTextAsync(ReadString(paramsEl, hasParams, "id"), ReadDouble(paramsEl, hasParams, "x"), ReadDouble(paramsEl, hasParams, "y"),
+                        ReadDouble(paramsEl, hasParams, "width"), ReadDouble(paramsEl, hasParams, "height"))).ConfigureAwait(true) : new { ok = false },
+                "capture.send" => await CaptureSendAsync(paramsEl, hasParams, requestToken).ConfigureAwait(true),
                 "capture.saveImage" => App.MainAppWindow is { } imageWindow
                     ? await Task.Run(() => imageWindow.CaptureSaveImageAsync(ReadString(paramsEl, hasParams, "id"), ReadString(paramsEl, hasParams, "png"))).ConfigureAwait(true) : new { ok = false },
                 "friends.badge" => App.MainAppWindow?.FriendsBadge() ?? new { count = 0 },
