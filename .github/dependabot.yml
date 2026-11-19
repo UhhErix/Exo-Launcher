@@ -20,6 +20,10 @@ updates:
       # Pinned: mouse/scripts/patch-protocol.mjs patches this exact version and stops the build on any other,
       # and THIRD_PARTY_NOTICES names it. A new version is a deliberate change, not a Dependabot bump.
       - dependency-name: "@openmouse/protocol"
+      # Pinned repo-wide: every deploy and release script runs npx wrangler@<version>, and covers' @cloudflare/vitest-plugin
+      # is held at the release that bundles that same Wrangler. Move them together, by hand.
+      - dependency-name: "wrangler"
+      - dependency-name: "@cloudflare/vitest-plugin"
     groups:
       npm-minor-and-patch:
         applies-to: version-updates
