@@ -273,14 +273,12 @@ export type DiscordPrefs = {
   streamerDisableNotifications: boolean
   /** The camera for video calls (a browser device id), or the default. */
   cameraId: string | null
-  /** Play beside Home, Messages and Servers: Exo's own rooms for games, parties and clips (docs/architecture/chat-rooms.md). Off until turned on. */
-  playRooms: boolean
 }
 
 const PREFS_DEFAULTS: DiscordPrefs = {
   fontSize: 16, groupSpacing: null, zoom: 100, saturation: 1, desaturateUserColors: false, roleStyle: 'username',
   underlineLinks: false, ttsRate: 1, streamerMode: false, streamerHidePersonal: true, streamerHideInvites: true,
-  streamerDisableSounds: true, streamerDisableNotifications: true, cameraId: null, playRooms: false,
+  streamerDisableSounds: true, streamerDisableNotifications: true, cameraId: null,
 }
 
 const prefsListeners = new Set<() => void>()

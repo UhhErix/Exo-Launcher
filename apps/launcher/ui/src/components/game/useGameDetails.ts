@@ -38,7 +38,7 @@ function selectionKeyFor(game: Pick<Game, 'id' | 'store'>): string {
 /**
  * A game's achievements and its drive's heat in the last session (only when it came near its limit or slowed itself), for
  * the game page and Play's game room. The last read shows at once; one read answers the cached counts; the host pushes a
- * newer read. `selectionKey` is the exact store entry's (gameSelectionKey).
+ * newer read. `selectionKey` is the exact store entry's (selectionKeyFor).
  */
 export function useAchievements(id: string, selectionKey: string, installed: boolean) {
   const [achievements, setAchievements] = useState<Achievements | null>(() => achievementsRead.get(selectionKey))
@@ -74,9 +74,6 @@ export function useAchievements(id: string, selectionKey: string, installed: boo
   }, [id, installed, selectionKey])
   return { achievements, driveHeat, loading }
 }
-
-/** The key a game's reads are kept under: one exact store entry. */
-export const gameSelectionKey = selectionKeyFor
 
 /**
  * Optional controls load after the sheet renders, keyed by the exact store

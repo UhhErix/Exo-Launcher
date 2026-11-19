@@ -154,6 +154,40 @@ public sealed class InstallLaunchTests : IDisposable
         adapter.Finish["local:b"].TrySetResult(new InstallResult { Ok = true, Message = "Installed." });
     }
 
+    /// <summary>
+    /// The download manager: a queued game moves up the line and every other job keeps its order; Pause all is the player's
+    /// own hold, which Resume all lifts. Ways it could fail: a move drops or doubles a job, the running job moves, or another
+    /// hold's release ends the player's pause.
+    /// </summary>
+    [Fact]
+    public async Task TheQueueReordersAndPauseAllIsThePlayersOwnHold()
+    {
+        var adapter = new FakeAdapter();
+        var orchestrator = Orchestrator(adapter);
+        var first = orchestrator.InstallAsync(Local("a"), outer: TestContext.Current.CancellationToken);
+        await adapter.Started["local:a"].Task.WaitAsync(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken);
+        foreach (var id in new[] { "b", "c", "d" })
+            Assert.True((await orchestrator.InstallAsync(Local(id), outer: TestContext.Current.CancellationToken)).Queued);
+
+        orchestrator.MoveQueued("local:d", -2);
+        var (lines, _, _) = orchestrator.DownloadsSnapshot();
+        Assert.Equal(["local:a", "local:d", "local:b", "local:c"], lines.Select(line => line.GameId));
+        Assert.Equal("running", lines[0].State);
+        orchestrator.MoveQueued("local:c", -10);
+        Assert.Equal(["local:a", "local:c", "local:d", "local:b"], orchestrator.DownloadsSnapshot().Lines.Select(line => line.GameId));
+
+        orchestrator.PauseAll();
+        orchestrator.Hold("play", "Paused while you play.");
+        orchestrator.Release("play");
+        Assert.True(orchestrator.DownloadsSnapshot().PausedByPlayer);
+        orchestrator.ResumeAll();
+        Assert.False(orchestrator.DownloadsSnapshot().PausedByPlayer);
+
+        orchestrator.Cancel();
+        await first;
+        foreach (var id in new[] { "b", "c", "d" }) orchestrator.Dequeue("local:" + id);
+    }
+
     [Fact]
     public async Task AHoldKeepsDownloadsWaitingButNotAQueuedUninstall()
     {

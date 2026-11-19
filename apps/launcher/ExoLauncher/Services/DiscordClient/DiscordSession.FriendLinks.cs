@@ -35,11 +35,11 @@ internal sealed partial class DiscordSession
     private int _peersLogged = -1;
     private int _heardLogged;
 
-    private bool LinksWanted => LinksAllowed(_gatewayUp, _keyRefused, SharesGames, Cache.MyStatus, CallRelayClient.Endpoint is not null);
+    private bool LinksWanted => LinksAllowed(_gatewayUp, _keyRefused, Cache.MyStatus, CallRelayClient.Endpoint is not null);
 
     /// <summary>Every gate on the link: with any of them shut there is no key in the presence, no connection, and nothing sent or heard.</summary>
-    internal static bool LinksAllowed(bool gatewayUp, bool keyRefused, bool sharesGames, string status, bool hasRelay) =>
-        gatewayUp && !keyRefused && sharesGames && status != "invisible" && hasRelay;
+    internal static bool LinksAllowed(bool gatewayUp, bool keyRefused, string status, bool hasRelay) =>
+        gatewayUp && !keyRefused && status != "invisible" && hasRelay;
 
     /// <summary>The key to put in a presence now: none unless links are wanted and this account's key is loaded.</summary>
     private string? KeyToPublish()
