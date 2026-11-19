@@ -8,6 +8,7 @@ import { KeybindRecorder } from './KeybindsPage'
 import { LoadError, useClientSettings, useRemembered } from './parts'
 import { cameraError } from '../../../lib/goLive'
 import { usePageActive } from '../../../lib/pageActivity'
+import { devicePicker } from '../../../lib/canUse'
 import { ErrorNote } from '../../ui/ErrorNote'
 
 type Audio = Awaited<ReturnType<typeof host.discordAudio>>
@@ -41,8 +42,10 @@ function Devices() {
   if (!audio) return <LoadError error={error} onRetry={() => setRound(r => r + 1)} />
   const device = (side: 'input' | 'output') => {
     const list = side === 'input' ? audio.inputs : audio.outputs
-    // With none at all, the menu would offer only Default: say so instead.
-    if (list.length === 0) return <State>{side === 'input' ? 'No microphone found' : 'No speakers found'}</State>
+    // None: say so. One: Default is that one, so it is named, not offered (lib/canUse.ts › devicePicker).
+    const pick = devicePicker(list.length)
+    if (pick === 'none') return <State>{side === 'input' ? 'No microphone found' : 'No speakers found'}</State>
+    if (pick === 'one') return <State>{list[0].name}</State>
     const chosen = (side === 'input' ? audio.input : audio.output) ?? ''
     return (
       <Menu label={side === 'input' ? 'Input device' : 'Output device'} anchor={side === 'input' ? '--exo-dc-in' : '--exo-dc-out'} offset={4}
@@ -55,9 +58,9 @@ function Devices() {
     <Section title="Devices">
       {error ? <ErrorNote className="exo-dc-settings-note" message={error} /> : null}
       <Row label="Microphone">{device('input')}</Row>
-      <SliderRow label="Microphone volume" min={0} max={200} value={audio.inputVolume} render={v => `${v}%`} onCommit={v => save({ inputVolume: v })} />
+      {audio.inputs.length === 0 ? null : <SliderRow label="Microphone volume" min={0} max={200} value={audio.inputVolume} render={v => `${v}%`} onCommit={v => save({ inputVolume: v })} />}
       <Row label="Speaker">{device('output')}</Row>
-      <SliderRow label="Speaker volume" min={0} max={200} value={audio.outputVolume} render={v => `${v}%`} onCommit={v => save({ outputVolume: v })} />
+      {audio.outputs.length === 0 ? null : <SliderRow label="Speaker volume" min={0} max={200} value={audio.outputVolume} render={v => `${v}%`} onCommit={v => save({ outputVolume: v })} />}
       {/* Off is its mute; the volume stays saved under it, as it was. */}
       <SliderRow label="Soundboard volume" min={0} max={100} value={audio.soundboardMuted ? 0 : audio.soundboardVolume} render={v => v === 0 ? 'Off' : `${v}%`}
         onCommit={v => save(v === 0 ? { soundboardMuted: true } : { soundboardVolume: v, soundboardMuted: false })} />
@@ -288,14 +291,17 @@ function Camera() {
   const named = cameras.filter(c => c.deviceId)
   return (
     <Section title="Camera">
-      {cameras.length === 0 ? <Row label="Camera"><State>No camera found</State></Row> : (
+      {cameras.length === 0 ? <Row label="Camera"><State>No camera found</State></Row>
+        : devicePicker(named.length) === 'one' ? <Row label="Camera"><State>{named[0].label || 'Camera'}</State></Row> : (
         <ChoiceRow<string> label="Camera" detail={named.length === 0 ? 'Test video once to choose' : undefined} value={prefs.cameraId ?? ''}
           onChange={id => setDiscordPrefs({ cameraId: id || null })}
           choices={[{ value: '', label: 'Default' }, ...named.map((c, i) => ({ value: c.deviceId, label: c.label || `Camera ${i + 1}` }))]} />
       )}
-      <Row label="Test video" error={error}>
-        <button type="button" className="exo-set-btn" onClick={() => { setError(null); setTesting(t => !t) }}>{testing ? 'Stop' : 'Test'}</button>
-      </Row>
+      {cameras.length === 0 ? null : (
+        <Row label="Test video" error={error}>
+          <button type="button" className="exo-set-btn" onClick={() => { setError(null); setTesting(t => !t) }}>{testing ? 'Stop' : 'Test'}</button>
+        </Row>
+      )}
       {testing ? <video className="exo-dc-settings-video" ref={video} autoPlay muted playsInline /> : null}
     </Section>
   )

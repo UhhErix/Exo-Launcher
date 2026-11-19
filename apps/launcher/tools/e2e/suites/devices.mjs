@@ -1,5 +1,4 @@
-// Devices: the grid of what you plug in (each card with its picture, keyboards and other controllers marked Coming
-// soon), the line about the processor's own USB and Find them, a card growing into its page and folding back, your
+// Devices: the grid of what you plug in (each card with its picture, only devices Exo has a page for), the line about the processor's own USB and Find them, a card growing into its page and folding back, your
 // audio's page and a DualSense's Controller Lab on one screen; and Exo Mouse's page loads in its frame, finds the mouse
 // (or says there is none), and wears Exo's Appearance.
 import { literal, openFrame, sleep } from '../cdp.mjs'
@@ -20,20 +19,20 @@ export async function run(t) {
   await k.nav('Devices')
 
   const grid = await t.shell.waitFor(() => document.querySelectorAll('[data-device-card]').length || null, { timeoutMs: 15000 })
-  await run.check('devices', 'grid', 'each device is a card with its picture; ones Exo does not set up yet say Coming soon and open nothing', async (c) => {
+  await run.check('devices', 'grid', 'each device Exo has a page for is a card with its picture that opens it; one with no page (a keyboard, a controller the lab can't read) has no card', async (c) => {
     if (!grid) c.skip('no devices found on this PC')
     await t.shell.waitFor(() => document.querySelectorAll('[data-device-card] .exo-device-card-art > *').length === document.querySelectorAll('[data-device-card]').length || null, { timeoutMs: 15000 })
     // A picture from the catalog loads (or fails) before it is judged; one that fails is a broken picture, not drawn art.
     await t.shell.waitFor(() => [...document.querySelectorAll('[data-device-card] img.exo-device-render')].every(i => i.complete) || null, { timeoutMs: 15000 })
-    const cards = await t.shell.eval(`[...document.querySelectorAll('[data-device-card]')].map(card => ({ id: card.dataset.deviceCard, soon: card.classList.contains('is-soon'), button: card.tagName === 'BUTTON', label: card.querySelector('.exo-device-soon')?.textContent ?? null, picture: !!card.querySelector('.exo-device-card-art > *'), render: (img => img ? (img.naturalWidth > 0 ? img.naturalWidth + 'x' + img.naturalHeight : 'broken') : 'drawn')(card.querySelector('.exo-device-card-art img.exo-device-render')), name: card.querySelector('strong')?.textContent ?? '' }))`)
+    const cards = await t.shell.eval(`[...document.querySelectorAll('[data-device-card]')].map(card => ({ id: card.dataset.deviceCard, button: card.tagName === 'BUTTON', picture: !!card.querySelector('.exo-device-card-art > *'), render: (img => img ? (img.naturalWidth > 0 ? img.naturalWidth + 'x' + img.naturalHeight : 'broken') : 'drawn')(card.querySelector('.exo-device-card-art img.exo-device-render')), name: card.querySelector('strong')?.textContent ?? '' }))`)
     const head = await t.shell.eval(`document.querySelector('.exo-devices-head')?.innerText ?? ''`)
-    c.evidence.cards = cards.map(({ id, soon, picture, render }) => ({ id, soon, picture, render }))
+    c.evidence.cards = cards.map(({ id, picture, render }) => ({ id, picture, render }))
     await c.shot('grid', t.shell)
     const failures = []
     for (const card of cards) {
       if (!card.picture) failures.push(`${card.name} has no picture`)
       if (card.render === 'broken') failures.push(`${card.name}'s picture did not load`)
-      if (card.soon && (card.button || card.label !== 'Coming soon')) failures.push(`${card.name} is coming soon but opens or doesn't say so`)
+      if (!card.button) failures.push(`${card.name} has a card that opens nothing`)
     }
     if (/found/i.test(head)) failures.push('a line under the heading counts the devices')
     return failures

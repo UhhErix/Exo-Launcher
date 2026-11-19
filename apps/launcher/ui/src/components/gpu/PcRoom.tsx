@@ -23,6 +23,7 @@ import { ProfileRows } from './ProfileTab'
 import { SectionSlot } from './SectionHead'
 import { SetupRows } from './ThisPcTab'
 import type { PcLink } from './pcSections'
+import { gpuOffers } from '../../lib/canUse'
 import '../../styles/pc-room.css'
 
 /** What the room reads from the host, shared by every row that shows or changes it. */
@@ -179,7 +180,7 @@ export function PcRoom({ active, jump, games, settings, onSave, onDevices }: {
       <CompressChip list={compress.list} onOpen={() => setMenu('compress')} />
       {onDevices ? <button type="button" className="exo-pc-chip" onClick={onDevices}>Devices</button> : null}
       <AutoTuneChip tune={state.tune} onOpen={() => setMenu('tune')} />
-      {vendor && vendor !== 'nvidia' ? <MakerPanel name={PANEL[vendor]} /> : null}
+      <MakerPanel vendor={vendor} />
     </>
   )
 
@@ -294,9 +295,11 @@ function PcMenu({ title, onClose, children }: { title: string; onClose: () => vo
 
 const PANEL: Record<Exclude<NonNullable<GpuProfile['vendor']>, 'nvidia'>, string> = { amd: 'AMD Software', intel: 'Intel Graphics' }
 
-/** A Radeon's or an Intel card's own control panel, for what Exo doesn't set; what stopped it opening, in its place. */
-function MakerPanel({ name }: { name: string }) {
+/** A Radeon's or an Intel card's own control panel, for what Exo doesn't set; what stopped it opening, in its place. None on a GeForce (Exo is its panel). */
+function MakerPanel({ vendor }: { vendor: GpuProfile['vendor'] }) {
   const [error, setError] = useState<string | null>(null)
+  if (!vendor || vendor === 'nvidia' || !gpuOffers(vendor).makerPanel) return null
+  const name = PANEL[vendor]
   const open = () => {
     setError(null)
     host.gpuControlPanel().then(result => { if (!result.ok) setError(result.message ?? `${name} didn't open.`) },

@@ -67,12 +67,15 @@ export function ShadersSection() {
   const [auto, setAuto] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [games, setGames] = useState(false)
+  // Recording is Exo Shaders' own: without the add-on its rows go (unknown until asked: shown).
+  const [present, setPresent] = useState(true)
   const read = useCallback(() => call('snapshot').then(next => setSnap(next as Snapshot | null)).catch((caught: unknown) => report(caught, 'ShaderTools.snapshot', { level: 'warn' })), [])
   useEffect(() => {
     void read()
+    void host.shadersAddon().then(status => setPresent(status.present)).catch((caught: unknown) => report(caught, 'ShaderTools.addon', { level: 'warn' }))
     void host.shadersPrepareAuto().then(next => setAuto(next.auto)).catch((caught: unknown) => report(caught, 'ShaderTools.prepare'))
     return onHostEvent('shaders.event', ({ name, data }) => {
-      if (name === 'state') setSnap(data as Snapshot)
+      if (name === 'state') { setSnap(data as Snapshot); setPresent(true) }
       else if (name === 'addon' || name === 'ready') void read()
     })
   }, [read])
@@ -91,13 +94,17 @@ export function ShadersSection() {
           void host.shadersPrepareAuto(on).catch((caught: unknown) => report(caught, 'ShaderTools.auto'))
         }} />
       </Row>
-      <Row label="Record games to improve compiles" detail="Adds a small d3d12.dll to each game’s folder" error={error}>
-        <Switch checked={!!snap?.recorder?.auto} label="Record games to improve compiles" onChange={on => run('recorder.auto', { on })} />
-      </Row>
-      <Row label="Games">
-        <button type="button" className="exo-set-btn" aria-expanded={games} onClick={() => setGames(open => !open)}>{games ? 'Hide' : 'Show'}</button>
-      </Row>
-      {games && snap ? <Group id="shaders-games" title="Recording and how compiles did"><GameRows games={snap.games} run={run} /></Group> : null}
+      {present ? (
+        <>
+          <Row label="Record games to improve compiles" detail="Adds a small d3d12.dll to each game’s folder" error={error}>
+            <Switch checked={!!snap?.recorder?.auto} label="Record games to improve compiles" onChange={on => run('recorder.auto', { on })} />
+          </Row>
+          <Row label="Games">
+            <button type="button" className="exo-set-btn" aria-expanded={games} onClick={() => setGames(open => !open)}>{games ? 'Hide' : 'Show'}</button>
+          </Row>
+          {games && snap ? <Group id="shaders-games" title="Recording and how compiles did"><GameRows games={snap.games} run={run} /></Group> : null}
+        </>
+      ) : null}
     </Section>
   )
 }

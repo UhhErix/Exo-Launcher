@@ -3,6 +3,11 @@
     "version": "3.26.0",
     "items": [
       {
+        "icon": "ThisPc",
+        "title": "Only what works on your PC",
+        "detail": "Settings your PC, screen or controller can't use are no longer shown, and a choice with only one answer is simply set."
+      },
+      {
         "icon": "Encrypted",
         "title": "Cloudflare DNS, encrypted",
         "detail": "Best settings sets Cloudflare's DNS with encryption on, for faster lookups that nobody on the way can read; its switch puts your old DNS back."

@@ -3,6 +3,7 @@ import type { GpuProfile, IntelLowLatency } from '../../lib/host'
 import { trimStop } from '../../lib/utils'
 import { Choice } from '../settings/Choice'
 import { Row, State } from '../settings/parts'
+import { gpuOffers } from '../../lib/canUse'
 import { Spinner } from '../ui/Spinner'
 
 const LOW_LATENCY = [
@@ -28,7 +29,7 @@ export function DriverProfile({ profile, busy, error, onAct }: {
   error: string | null
   onAct: (action: 'apply' | 'undo', latency: LatencyChoice) => void
 }) {
-  const intel = profile.vendor === 'intel'
+  const intel = gpuOffers(profile.vendor).lowLatency
   const saved = profile.lowLatency ?? 'on'
   const [choice, setChoice] = useState<string | null>(null)
   const latency = choice ?? saved

@@ -3,6 +3,7 @@ import { host, type LauncherSettings } from '../../lib/host'
 import { Spinner } from '../ui/Spinner'
 import { report } from '../../lib/report'
 import { ChoiceRow, CopyRow, Row, Section, SliderRow, SwitchRow } from './parts'
+import { upscalerAntiCheatShown } from '../../lib/canUse'
 import { AUTO_UPSCALERS_DETAIL, AUTO_UPSCALERS_LABEL } from '../../lib/upscalerNotice'
 
 /** Null when the save took, else why not. */
@@ -172,7 +173,7 @@ const HOURS = [
   { value: '9-17', label: '9 AM–5 PM', start: 9, end: 17 },
 ] as const
 
-/** Settings › Downloads: where games install, when they download, and what updates by itself. */
+/** Settings › Downloads: where games install, when they download, and what updates by itself. Frame generation lives in PC › Graphics only. */
 export function DownloadsSection({ settings, disabled, save }: { settings: LauncherSettings | null; disabled: boolean; save: SaveSettings }) {
   const [picking, setPicking] = useState(false)
   const [folderError, setFolderError] = useState<string | null>(null)
@@ -222,11 +223,9 @@ export function DownloadsSection({ settings, disabled, save }: { settings: Launc
       ) : null}
       <SwitchRow id="set-auto-upscalers" label={AUTO_UPSCALERS_LABEL} detail={AUTO_UPSCALERS_DETAIL}
         checked={settings?.autoUpdateUpscalers !== false} disabled={disabled} onChange={value => save({ autoUpdateUpscalers: value })} />
-      <SwitchRow id="set-upscalers-anticheat" label="Also in games with anti-cheat" detail="Can risk a ban. Never Riot games or Vanguard."
-        checked={settings?.upscalerAntiCheatEverywhere === true} disabled={disabled} onChange={value => save({ upscalerAntiCheatEverywhere: value })} />
-      {settings?.frameGenEverywhereCard ? (
-        <SwitchRow id="set-frame-gen-everywhere-general" label="Frame generation in games without anti-cheat"
-          checked={settings.frameGenEverywhere === true} disabled={disabled} onChange={value => save({ frameGenEverywhere: value })} />
+      {upscalerAntiCheatShown(settings?.autoUpdateUpscalers) ? (
+        <SwitchRow id="set-upscalers-anticheat" label="Also in games with anti-cheat" detail="Can risk a ban. Never Riot games or Vanguard."
+          checked={settings?.upscalerAntiCheatEverywhere === true} disabled={disabled} onChange={value => save({ upscalerAntiCheatEverywhere: value })} />
       ) : null}
     </Section>
   )
