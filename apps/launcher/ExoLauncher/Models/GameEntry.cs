@@ -495,6 +495,11 @@ public sealed class AppSettings
     public bool AutoUpdateChipset { get; set; } = true;
     /// <summary>Newer DLSS, FSR and XeSS files download by themselves (from the vendor's own release, Exo's cache when that fails) while the PC is idle. On by default.</summary>
     public bool AutoUpdateUpscalers { get; set; } = true;
+    /// <summary>
+    /// Settings' one-time allow: the vendors' signed DLSS, FSR and XeSS files update in games with anti-cheat too, at the player's
+    /// risk, without asking per game. Never Riot games, Vanguard or an install Exo can't read; never a frame generation mod.
+    /// </summary>
+    public bool UpscalerAntiCheatEverywhere { get; set; }
     /// <summary>Set once Exo has turned <see cref="AutoUpdateUpscalers"/> on for a settings file written while it was off by default (3.26 and earlier).</summary>
     public bool UpscalerAutoUpdateDefaulted { get; set; } = true;
     /// <summary>On a PC with two graphics chips, Windows is asked to run Exo's games on the fast one (<see cref="ExoLauncher.Services.GpuPreference"/>); off until the user turns it on.</summary>

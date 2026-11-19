@@ -475,7 +475,7 @@ public sealed class SettingsService
     /// their AppSettings properties stay so older settings.json files load.
     /// </remarks>
     /// <summary>Settings > Downloads. Hours: both 0-23, or <paramref name="anyTime"/> to clear them.</summary>
-    public void ApplyDownloadPatch(bool? pauseWhilePlaying, int? hoursStart, int? hoursEnd, bool anyTime, bool? autoUpdate, bool? autoUpdateChipset = null, bool? keepAwake = null, bool? autoUpdateUpscalers = null)
+    public void ApplyDownloadPatch(bool? pauseWhilePlaying, int? hoursStart, int? hoursEnd, bool anyTime, bool? autoUpdate, bool? autoUpdateChipset = null, bool? keepAwake = null, bool? autoUpdateUpscalers = null, bool? upscalerAntiCheatEverywhere = null)
     {
         CommitMutation(settings =>
         {
@@ -487,6 +487,7 @@ public sealed class SettingsService
             if (autoUpdateChipset is { } chipset) settings.AutoUpdateChipset = chipset;
             if (keepAwake is { } awake) settings.KeepAwakeDownloads = awake;
             if (autoUpdateUpscalers is { } upscalers) settings.AutoUpdateUpscalers = upscalers;
+            if (upscalerAntiCheatEverywhere is { } everywhere) settings.UpscalerAntiCheatEverywhere = everywhere;
         });
     }
 
@@ -646,7 +647,8 @@ public sealed class SettingsService
     public string? UpscalerConsent(string gameId)
     {
         lock (_stateGate)
-            return _current.UpscalerAntiCheatConsent.TryGetValue(gameId, out var antiCheat) ? antiCheat : null;
+            return _current.UpscalerAntiCheatEverywhere ? DlssSwapService.AnyAntiCheat
+                : _current.UpscalerAntiCheatConsent.TryGetValue(gameId, out var antiCheat) ? antiCheat : null;
     }
 
     /// <summary>Game sheet > Upscalers: Allow changes stores the anti-cheat shown, Stop allowing removes it.</summary>
@@ -1040,6 +1042,7 @@ public sealed class SettingsService
         AutoUpdateGames = source.AutoUpdateGames,
         AutoUpdateChipset = source.AutoUpdateChipset,
         AutoUpdateUpscalers = source.AutoUpdateUpscalers,
+        UpscalerAntiCheatEverywhere = source.UpscalerAntiCheatEverywhere,
         UpscalerAutoUpdateDefaulted = source.UpscalerAutoUpdateDefaulted,
         KeepAwakeDownloads = source.KeepAwakeDownloads,
         StoreClientsQuiet = source.StoreClientsQuiet,
