@@ -1,6 +1,7 @@
 # Changelog
 
 ## 3.26.0 — November 14, 2026
+- **Lucide icons.** Every icon in Exo and Exo Mouse is now from Lucide, one consistent line family; liked, starred and pinned show filled. _Checked in code only._
 - **GIFs in Discord stay.** A GIF that stumbled once (often while Exo was minimized) turned into a "would not load" line for good; it now tries again, and again when you come back. Imgur GIFs load too. _Checked in code only._
 - **Things line up.** In Discord the panes' titles share one line and every list starts at the same edge (channels, categories, messages, friends); in the PC room the This PC, Updates and Shaders titles sit on one line. _Checked in code only._
 - **Downloads, in one place.** Library › More › Downloads lists what's downloading, what's next and what's paused: pause or stop what runs, move what's next up or down or take it out, resume what's paused, and Pause all until you Resume all. Each game has its own Update automatically switch. _Checked in code only._
