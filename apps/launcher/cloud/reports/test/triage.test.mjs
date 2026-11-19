@@ -16,7 +16,7 @@ import { limiters } from './limiters.mjs'
 import { ALERT_AT, ALERTS_PER_DAY, claimAlert, dailyMessage, digestOf, discordBody, isDiscordWebhook, pruneAlertDays } from '../src/triage.js'
 import { utcDay } from '../src/telemetry-store.js'
 
-const MIGRATIONS = ['0002_telemetry.sql', '0003_crash_index.sql', '0004_crash_days.sql', '0005_alert_days.sql'].map((name) => readFileSync(new URL(`../migrations/${name}`, import.meta.url), 'utf8'))
+const MIGRATIONS = ['0002_telemetry.sql', '0003_crash_index.sql', '0004_crash_days.sql', '0005_alert_days.sql', '0006_github_issues.sql'].map((name) => readFileSync(new URL(`../migrations/${name}`, import.meta.url), 'utf8'))
 const DAY = 24 * 60 * 60 * 1000
 const HOOK = 'https://discord.com/api/webhooks/123456789012345678/tok_En-1'
 const sample = {
@@ -209,13 +209,13 @@ test('claimAlert walks its table: send to the cap, pause once, then hold; a miss
   assert.equal(await claimAlert(without, '2026-11-10'), 'send')
 })
 
-test('with migration 0005 not applied, a new error still mails the team and the daily mail still goes, naming the failed step', async () => {
+test('with migrations 0005 and 0006 not applied, a new error still mails the team and the daily mail still goes, naming the failed steps', async () => {
   const { env, mails } = makeEnv({ db: fakeD1({ migrations: MIGRATIONS.slice(0, 3) }) })
   assert.equal((await send(env)).status, 202)
   assert.equal(mails.length, 1, 'the alert went out')
   await worker.scheduled({}, env)
   assert.equal(mails.length, 2, 'the daily mail went out')
-  assert.match(textOf(mails[1]), /These steps of the daily job failed: alert tally pruning\./)
+  assert.match(textOf(mails[1]), /These steps of the daily job failed: alert tally pruning, issue tally pruning\./)
 })
 
 test('a daily step that throws stops nothing else: the digest still goes, with the step named', async () => {

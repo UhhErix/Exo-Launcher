@@ -20,7 +20,7 @@ import { parseReport, reportInstallId, ReportError } from '../src/validate.js'
 import { limits } from '../src/limits.js'
 import { utcDay } from '../src/telemetry-store.js'
 
-const MIGRATIONS = ['0002_telemetry.sql', '0003_crash_index.sql', '0004_crash_days.sql', '0005_alert_days.sql'].map((name) => readFileSync(new URL(`../migrations/${name}`, import.meta.url), 'utf8'))
+const MIGRATIONS = ['0002_telemetry.sql', '0003_crash_index.sql', '0004_crash_days.sql', '0005_alert_days.sql', '0006_github_issues.sql'].map((name) => readFileSync(new URL(`../migrations/${name}`, import.meta.url), 'utf8'))
 const DAY = 24 * 60 * 60 * 1000
 const INSTALL = '5b0f3c9e-6a2d-4f7e-9c1b-2d8e4a7f0b13'
 const OTHER = '0f1e2d3c-4b5a-4968-8778-6a5b4c3d2e1f'

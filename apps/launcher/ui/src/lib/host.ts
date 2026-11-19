@@ -2647,6 +2647,11 @@ export const host = {
   /** What an error's Copy logs copies: Exo's version, the error, where (a room's name) and the log entries behind it. */
   /** The report for an error's Copy logs, already on Windows' clipboard when copied is true. */
   logsFor: (error: string, area: string) => rawCall<{ ok: boolean; text?: string; copied?: boolean }>('app.logsFor', { error, area }, 15_000),
+  /** Report a problem's Attach logs: the scrubbed log excerpt Send would attach, exactly as it goes. */
+  reportPreview: () => rawCall<{ ok: boolean; excerpt?: string }>('report.preview', {}, 15_000),
+  /** Report a problem's Send: to the team's private tracker through Exo's report service; the issue's number, or a reference. */
+  reportSend: (report: { message: string; excerpt?: string; contact?: string }) =>
+    rawCall<{ ok: boolean; issue?: number | null; ref?: string | null; message?: string | null }>('report.send', report, 45_000),
   repairCache: (scope: 'sizes' | 'upscalers') => rawCall<{ ok: boolean; message?: string }>('app.repairCache', { scope }),
   dlssStatus: (id: string, refresh = false) =>
     rawCall<DlssStatus>('dlss.status', { id, ...(refresh ? { refresh: true } : {}) }, refresh ? 120_000 : 60_000),

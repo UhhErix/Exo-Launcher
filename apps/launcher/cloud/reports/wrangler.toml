@@ -53,6 +53,13 @@ simple = { limit = 5, period = 60 }
 [[send_email]]
 name = "CONTACT_MAIL"
 
+# Issues in the private UhhErix/Exo-Reports repository (src/issues.js): the secret GITHUB_REPORTS_TOKEN, a fine-grained
+# token for that repository alone with Issues read and write (`wrangler secret put GITHUB_REPORTS_TOKEN`). Without it the
+# Worker stores and counts only, and the daily job files the backlog once it is set.
+# Workers AI writes a three-line "likely cause" into a new crash issue, from the scrubbed excerpt (src/issues.js diagnosisOf).
+[ai]
+binding = "AI"
+
 # The dev copy (`wrangler deploy --env dev`): workers.dev, a bucket of its own.
 [env.dev]
 name = "exo-reports-dev"
@@ -93,6 +100,6 @@ database_name = "exo-telemetry"
 database_id = "REPLACE_WITH_RESOURCE_ID"
 migrations_dir = "migrations"
 
-# The retention job: every day at 04:20 UTC (src/telemetry-store.js runRetention).
+# The daily job: every day at 04:20 UTC (src/worker.js scheduled: retention, pruning, and what GitHub was not told yet).
 [triggers]
 crons = []

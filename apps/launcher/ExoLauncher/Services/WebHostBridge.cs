@@ -774,6 +774,8 @@ public sealed partial class WebHostBridge
                 "app.repairCache" => await RepairCacheAsync(paramsEl, hasParams).ConfigureAwait(false),
                 "app.openLogs" => OpenLogsFolder(),
                 "app.logsFor" => await LogsForAsync(paramsEl, hasParams).ConfigureAwait(true),
+                "report.preview" => await ReportPreviewAsync().ConfigureAwait(true),
+                "report.send" => await ReportSendAsync(paramsEl, hasParams, requestToken).ConfigureAwait(true),
                 "app.checkUpdate" => await CheckUpdateAsync(ReadBool(paramsEl, hasParams, "manual") == true, requestToken).ConfigureAwait(true),
                 "app.installUpdate" => await InstallUpdateAsync(requestToken).ConfigureAwait(true),
                 "dlss.status" => await DlssStatusAsync(paramsEl, hasParams, requestToken).ConfigureAwait(true),
@@ -1083,6 +1085,26 @@ public sealed partial class WebHostBridge
         catch (Exception ex) { AppLog.Warn("Copy logs: the clipboard refused the report: " + ex.Message); }
         AppLog.Info($"Logs {(copied ? "copied" : "built")} for an error in {(area.Length == 0 ? "the app" : area)}.");
         return new { ok = true, text, copied };
+    }
+
+    /// <summary>report.preview: the log excerpt Report a problem's Attach logs sends, scrubbed as a crash report's (UserReport.Excerpt).</summary>
+    private async Task<object> ReportPreviewAsync()
+    {
+        var profile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        var excerpt = await Task.Run(() => UserReport.Excerpt(AppLog.RecentLines(), DateTime.UtcNow, _services.AppVersion,
+            Environment.OSVersion.Version.ToString(), Environment.UserName, profile, Environment.MachineName)).ConfigureAwait(true);
+        return new { ok = true, excerpt };
+    }
+
+    /// <summary>
+    /// report.send: Report a problem's Send. The excerpt is the preview the player saw (null with Attach logs off); the host
+    /// scrubs it again before it leaves (UserReport.ToJson). Answers the issue's number in Exo-Reports, or its reference.
+    /// </summary>
+    private async Task<object> ReportSendAsync(JsonElement p, bool hasParams, CancellationToken ct)
+    {
+        var message = ReadString(p, hasParams, "message") ?? "";
+        var result = await UserReport.SendAsync(message, ReadString(p, hasParams, "excerpt"), ReadString(p, hasParams, "contact"), _services.AppVersion, ct).ConfigureAwait(true);
+        return new { ok = result.Ok, issue = result.Issue, @ref = result.Ref, message = result.Message };
     }
 
     private static object OpenLogsFolder()

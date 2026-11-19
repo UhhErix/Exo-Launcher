@@ -266,6 +266,8 @@
     "playtime.riotRefresh": "RiotHoursRefresh",
     "replaced.remove": "{ ok: boolean; message?: string | null; removed: number; left: number; apps: ReplacedApp[] }",
     "replaced.scan": "{ ok: boolean; cleared: number; apps: ReplacedApp[] }",
+    "report.preview": "{ ok: boolean; excerpt?: string }",
+    "report.send": "{ ok: boolean; issue?: number | null; ref?: string | null; message?: string | null }",
     "runtimes.cancel": "{ ok: boolean; message?: string }",
     "runtimes.install": "RuntimesInstallResponse",
     "runtimes.list": "{ ok: boolean; busy?: boolean; items: RuntimeItem[] }",
