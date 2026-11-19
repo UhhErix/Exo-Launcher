@@ -160,12 +160,13 @@ test('a real run stops in its preflight, before it changes anything', (t) => {
   assert.equal(existsSync(join(fx.repo, 'artifacts')), false)
 })
 
-test('the plan checks the change list at the update address, passes the app folder along, and ends with the code backup', (t) => {
+test('the plan checks the change list at the update address, passes the app folder along, and ends with the live check', (t) => {
   const fx = fixture('cinema')
   cleanup(t, fx)
   const { code, out } = run(fx)
   assert.equal(code, 0, out)
   assert.ok(out.includes('WHATIF would check https://updates.getexo.app/v1/cinema/changelog'), out)
   assert.ok(out.includes('WHATIF would add -Payload'), out)
-  assert.ok(out.includes('9. Code backup'), out)
+  assert.ok(out.includes('8. Live check'), out)
+  assert.ok(!out.includes('Code backup'), out)
 })
