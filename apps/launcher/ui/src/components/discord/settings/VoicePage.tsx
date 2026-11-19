@@ -42,10 +42,8 @@ function Devices() {
   if (!audio) return <LoadError error={error} onRetry={() => setRound(r => r + 1)} />
   const device = (side: 'input' | 'output') => {
     const list = side === 'input' ? audio.inputs : audio.outputs
-    // None: say so. One: Default is that one, so it is named, not offered (lib/canUse.ts › devicePicker).
-    const pick = devicePicker(list.length)
-    if (pick === 'none') return <State>{side === 'input' ? 'No microphone found' : 'No speakers found'}</State>
-    if (pick === 'one') return <State>{list[0].name}</State>
+    // None: say so. One or more: keep Default distinct from pinning that device so AudioDevices follows Windows changes.
+    if (list.length === 0) return <State>{side === 'input' ? 'No microphone found' : 'No speakers found'}</State>
     const chosen = (side === 'input' ? audio.input : audio.output) ?? ''
     return (
       <Menu label={side === 'input' ? 'Input device' : 'Output device'} anchor={side === 'input' ? '--exo-dc-in' : '--exo-dc-out'} offset={4}
@@ -292,7 +290,7 @@ function Camera() {
   return (
     <Section title="Camera">
       {cameras.length === 0 ? <Row label="Camera"><State>No camera found</State></Row>
-        : devicePicker(named.length) === 'one' ? <Row label="Camera"><State>{named[0].label || 'Camera'}</State></Row> : (
+        : devicePicker(named.length) === 'one' && (!prefs.cameraId || prefs.cameraId === named[0].deviceId) ? <Row label="Camera"><State>{named[0].label || 'Camera'}</State></Row> : (
         <ChoiceRow<string> label="Camera" detail={named.length === 0 ? 'Test video once to choose' : undefined} value={prefs.cameraId ?? ''}
           onChange={id => setDiscordPrefs({ cameraId: id || null })}
           choices={[{ value: '', label: 'Default' }, ...named.map((c, i) => ({ value: c.deviceId, label: c.label || `Camera ${i + 1}` }))]} />

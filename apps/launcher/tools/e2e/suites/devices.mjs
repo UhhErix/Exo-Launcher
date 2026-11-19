@@ -20,15 +20,27 @@ export async function run(t) {
 
   const grid = await t.shell.waitFor(() => document.querySelectorAll('[data-device-card]').length || null, { timeoutMs: 15000 })
   await run.check('devices', 'grid', 'each device Exo has a page for is a card with its picture that opens it; one with no page (a keyboard, a controller the lab can't read) has no card', async (c) => {
-    if (!grid) c.skip('no devices found on this PC')
+    const listed = await t.host('devices.list')
+    const detected = Array.isArray(listed?.devices) ? listed.devices : []
+    const expected = new Set([
+      ...(detected.some(d => d.kind === 'mouse') ? ['mouse'] : []),
+      ...(detected.some(d => d.kind === 'audio') ? ['audio'] : []),
+      ...detected.filter(d => d.kind === 'controller' && d.lab).map(d => d.id),
+    ])
+    const hidden = detected.filter(d => d.kind === 'keyboard' || (d.kind === 'controller' && !d.lab))
+    if (!grid && expected.size === 0) c.skip('no devices found on this PC')
     await t.shell.waitFor(() => document.querySelectorAll('[data-device-card] .exo-device-card-art > *').length === document.querySelectorAll('[data-device-card]').length || null, { timeoutMs: 15000 })
     // A picture from the catalog loads (or fails) before it is judged; one that fails is a broken picture, not drawn art.
     await t.shell.waitFor(() => [...document.querySelectorAll('[data-device-card] img.exo-device-render')].every(i => i.complete) || null, { timeoutMs: 15000 })
     const cards = await t.shell.eval(`[...document.querySelectorAll('[data-device-card]')].map(card => ({ id: card.dataset.deviceCard, button: card.tagName === 'BUTTON', picture: !!card.querySelector('.exo-device-card-art > *'), render: (img => img ? (img.naturalWidth > 0 ? img.naturalWidth + 'x' + img.naturalHeight : 'broken') : 'drawn')(card.querySelector('.exo-device-card-art img.exo-device-render')), name: card.querySelector('strong')?.textContent ?? '' }))`)
     const head = await t.shell.eval(`document.querySelector('.exo-devices-head')?.innerText ?? ''`)
     c.evidence.cards = cards.map(({ id, picture, render }) => ({ id, picture, render }))
+    c.evidence.detected = detected.map(({ id, kind, lab }) => ({ id, kind, lab }))
     await c.shot('grid', t.shell)
     const failures = []
+    const renderedIds = new Set(cards.map(card => card.id))
+    for (const id of expected) if (!renderedIds.has(id)) failures.push(`expected ${id} card is missing`)
+    for (const d of hidden) if (renderedIds.has(d.id)) failures.push(`${d.name || d.id} (${d.kind}) has a card that opens nothing`)
     for (const card of cards) {
       if (!card.picture) failures.push(`${card.name} has no picture`)
       if (card.render === 'broken') failures.push(`${card.name}'s picture did not load`)

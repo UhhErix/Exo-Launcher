@@ -99,9 +99,11 @@ test("Compress in Properties: no row for a game Exo will never compress, or befo
   for (const state of ['none', 'needsConsent', 'compressed', 'compressing', 'kept'] as const) assert.equal(compressShown({ state }), true, state)
 })
 
-test('"Also in games with anti-cheat" follows the upscaler updates it widens', () => {
+test('"Also in games with anti-cheat" follows the upscaler updates it widens, or stays to revoke consent', () => {
   assert.equal(upscalerAntiCheatShown(true), true)
   assert.equal(upscalerAntiCheatShown(undefined), true, 'on by default')
   assert.equal(upscalerAntiCheatShown(null), true)
   assert.equal(upscalerAntiCheatShown(false), false)
+  assert.equal(upscalerAntiCheatShown(false, false), false)
+  assert.equal(upscalerAntiCheatShown(false, true), true, 'still reachable to turn global consent off')
 })

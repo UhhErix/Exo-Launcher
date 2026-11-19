@@ -52,5 +52,6 @@ export const deviceHasPage = (kind: PeripheralKind, lab: boolean | null | undefi
 /** Properties › Compress: a game Exo will never compress (the PC list leaves it out too) has no row. */
 export const compressShown = (compress: Pick<CompressState, 'state'> | null | undefined) => !!compress && compress.state !== 'refused'
 
-/** "Also in games with anti-cheat" follows the upscaler updates it widens: only while they're on. */
-export const upscalerAntiCheatShown = (autoUpdate: boolean | null | undefined) => autoUpdate !== false
+/** "Also in games with anti-cheat" follows upscaler updates, and stays shown while on so global consent can still be revoked. */
+export const upscalerAntiCheatShown = (autoUpdate: boolean | null | undefined, everywhere?: boolean | null) =>
+  autoUpdate !== false || everywhere === true

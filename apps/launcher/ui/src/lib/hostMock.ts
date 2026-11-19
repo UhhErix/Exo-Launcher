@@ -1779,7 +1779,11 @@ const MOCK_HANDLERS: Record<string, MockHandler> = {
       vramUsed: 5600 + wave * 600, vramTotal: 8192, fan: 1500 + wave * 300, limit: { on: 'temperature', warn: 83, bad: 93 },
     }
   },
-  'gpu.driver': () => ({ ok: true, vendor: 'nvidia', card: 'RTX 3070', installed: '581.42', update: true, latest: { version: '581.57', size: 900_000_000, released: '2026-10-14', kind: 'game' } }),
+  'gpu.driver': () => mockGpu === 'amd'
+    ? { ok: true, vendor: 'amd', card: 'RX 6600', installed: '26.1.1', update: false, latest: null }
+    : mockGpu === 'intel'
+      ? { ok: true, vendor: 'intel', card: 'Arc B580', installed: '32.0.101.6559', update: false, latest: null }
+      : { ok: true, vendor: 'nvidia', card: 'RTX 3070', installed: '581.42', update: true, latest: { version: '581.57', size: 900_000_000, released: '2026-10-14', kind: 'game' } },
   'gpu.game': (p) => {
     if (mockGpu === 'intel' && typeof p?.frameGen === 'string') mockFrameGen = p.frameGen
     return mockGpu === 'intel' ? { ok: true, vendor: 'intel', supported: true, frameGen: mockFrameGen }

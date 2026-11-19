@@ -114,9 +114,6 @@ function cardsFor(devices: Peripheral[], mouse: MouseState | null, wearing: Wear
   const audio = audioCard(devices, wearing)
   return [
     ...mouseCard(devices, mouse),
-    ...devices.filter(device => device.kind === 'keyboard').map((keyboard): Card => ({
-      id: keyboard.id, kind: 'keyboard', name: keyboard.name, status: linked(keyboard), device: keyboard, art: 'keyboard', picture: keyboard,
-    })),
     ...(audio ? [audio] : []),
     ...devices.filter(device => device.kind === 'controller').map((pad): Card => ({
       // "DualSense Edge Wireless Controller" is a DualSense Edge.
