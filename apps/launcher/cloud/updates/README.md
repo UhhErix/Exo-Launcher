@@ -269,10 +269,21 @@ GitHub down, byte ranges, the file-level update and the card, with GitHub, R2 an
 
 ## Deploying
 
-Deploy with `npx wrangler@4.158.0 deploy` from this folder, with the owner's OK. The Worker never asks GitHub: every release a
-live app can ask for, and each app's `CHANGELOG.md`, must be in the bucket before the Worker that serves it is deployed.
+Deploy with `npx wrangler@4.158.0 deploy`, with the owner's OK. `wrangler.toml` here keeps placeholders (no bucket name, routes or
+cron), so deploy from a local copy with the live settings: bucket `exo-releases`, the custom domain `updates.getexo.app`,
+`workers_dev = true`, cron `*/15 * * * *`. The Discord secrets stay on the Worker across deploys. Exo Cinema's releases and its
+`CHANGELOG.md` must be in the bucket before a Worker that serves them is deployed; Exo Launcher's come from GitHub.
 
-Last deployed: version `5fc7bfe7-666a-4c91-bbc0-ccd24a2f8e1f` (2026-11-09, release/3.25.0 base plus the `/v1/cache/` route; the
+Last deployed: version `b6b10016-b31e-4ebe-a506-4fd02af10a65` (2026-11-19, the GitHub reader, `src/github.js`; the version before
+it, `365af797-4e64-4299-9b3b-42edfa87cbb2` of 2026-11-14, is the code of `021b878`, byte for byte). Checked live after it:
+`/v1/launcher/latest` byte-identical to before (v3.26.0, the same ETag, a 304 for it, also on the workers.dev name); the installer
+by HEAD and GET (200, 212,673,653 bytes, SHA-256 `4dab24d7…a0b8`, the same R2 ETag), a byte range with `If-Range` (206, the same
+bytes), the `.sha256`, `whats-new.json` (18 items) and `/v1/launcher/changelog` byte-identical; `/v1/cinema/latest` and
+`/v1/advisories.json` 200; `files.pack` for 3.26.0 and a `.sig` 404; `POST /v1/launcher/announce` with no body 400;
+`_github/launcher.json` in R2 records the check (GitHub answered, v3.26.0). The bindings (R2 and six Discord secrets) and the
+cron are unchanged. `CACHE_SCHEMA` 4.
+
+Before that: version `5fc7bfe7-666a-4c91-bbc0-ccd24a2f8e1f` (2026-11-09, release/3.25.0 base plus the `/v1/cache/` route; the
 version before it, `45905582-35b0-4e7e-85c9-5ee635e144b3` of 2026-11-07, is the live release/3.25.0 code with the Discord card).
 Checked live after it: all 30 pinned binaries (HEAD and GET 200, size and SHA-256 match, immutable cache header, no redirect),
 7 folder listings and 7 tag commits (match), 12 licence files (size and SHA-256 match), and `/v1/launcher/latest`,
