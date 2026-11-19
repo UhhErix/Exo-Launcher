@@ -18,6 +18,7 @@ import { Switch } from '../Switch'
 import { Wait, sample, times } from '../ui/Wait'
 import { Row, Section, State, SwitchRow } from './parts'
 import { SteamLibraryPanel, useSteamLibrary, type SteamLibrary } from './SteamSignInRow'
+import { riotIdShown } from '../../lib/canUse'
 import { ErrorNote } from '../ui/ErrorNote'
 
 export type StoreAction = 'connect' | 'open'
@@ -359,7 +360,7 @@ export const StoresSection = memo(function StoresSection({
             })
           }} />
       ) : null}
-      <RiotIdRow riotId={settings?.riotId?.trim() || ''} onSettings={onSettings} />
+      {riotIdShown(installed.map(store => store.store), settings?.riotId) ? <RiotIdRow riotId={settings?.riotId?.trim() || ''} onSettings={onSettings} /> : null}
       {missing.length > 0 ? (
         <Row label="Get another store" stacked error={getError}>
           <ul className="exo-set-chips" aria-label="Stores not on this PC">

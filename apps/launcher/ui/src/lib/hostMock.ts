@@ -215,6 +215,10 @@ const mockShadersSnapshot = () => ({
 /** `?gpu=amd` or `?gpu=intel` in browser dev: System's profile and a game's frame generation for that GPU instead of a GeForce. */
 const mockGpu = typeof location !== 'undefined' ? new URLSearchParams(location.search).get('gpu') : null
 
+/** `?hdr=none`: a main screen without HDR (PC › Display has no HDR rows). `?pad=bluetooth`: the DualSense Edge over Bluetooth (its cable-only rows go). */
+const mockNoHdr = typeof location !== 'undefined' && new URLSearchParams(location.search).get('hdr') === 'none'
+const mockPadLink = typeof location !== 'undefined' && new URLSearchParams(location.search).get('pad') === 'bluetooth' ? 'bluetooth' as const : 'usb' as const
+
 /** PC > Auto tune on the mock: each read moves a run on one step, ?tune=crashed starts after a crash, ?tune=none has nothing to tune, and the Ryzen row is hidden as on the host (RyzenAvailable is false) unless ?tune=ryzen shows it needing PawnIO or ?tune=pawnio has the driver. */
 const mockTuneFlag = typeof location !== 'undefined' ? new URLSearchParams(location.search).get('tune') : null
 const mockTuneReads: Record<string, number | undefined> = {}
@@ -1659,7 +1663,7 @@ const MOCK_HANDLERS: Record<string, MockHandler> = {
       { id: 'usb-361d-0300-747353800033', kind: 'mouse', name: 'StarlightX Dongle', maker: 'Finalmouse', model: null, connection: 'wireless', role: null, battery: null, color: null, layout: null },
       { id: 'usb-31e3-1342-95be6909a013', kind: 'keyboard', name: 'Wooting 60HE v2', maker: 'Wooting', model: '60', connection: 'usb', role: null, battery: null, color: null, layout: 'ansi-split',
         port: { where: 'chipset', chips: 1, hubs: 0, interrupts: 'msi', better: 'free' }, app: { id: 'wootility', name: 'Wootility', where: 'web' } },
-      { id: 'usb-054c-0df2-41a6f6ff466d', kind: 'controller', name: 'DualSense Edge Wireless Controller', maker: 'Sony', model: 'dualsense-edge', connection: 'usb', role: null, battery: null, color: 'Midnight Black', layout: null, lab: true,
+      { id: 'usb-054c-0df2-41a6f6ff466d', kind: 'controller', name: 'DualSense Edge Wireless Controller', maker: 'Sony', model: 'dualsense-edge', connection: mockPadLink, role: null, battery: null, color: 'Midnight Black', layout: null, lab: true,
         port: { where: 'cpu', chips: 0, hubs: 0, interrupts: 'msi', better: null } },
       { id: '{0.0.0.00000000}.{9709e4ab-6969-4817-ad38-1704eab1c079}', kind: 'audio', name: 'Headphones', maker: null, model: 'headphones', connection: 'jack', role: 'output', battery: null, color: null, layout: null },
       { id: '{0.0.1.00000000}.{0deb347c-90b6-43d6-b549-63e63b1b23a9}', kind: 'audio', name: 'fifine Microphone', maker: 'Fifine', model: 'microphone', connection: 'usb', role: 'input', battery: null, color: null, layout: null },
@@ -1774,7 +1778,7 @@ const MOCK_HANDLERS: Record<string, MockHandler> = {
   'startup.restore': () => mockStartup(null),
   'startup.clean': () => ({ ...mockStartup(null), cleaned: 4 }),
   'stores.quiet': () => ({ ok: true, message: null }),
-  'hdr.state': () => ({ supported: true, on: false, name: 'Mock OLED', peakNits: 1000, calibrated: false, verdict: 'great' }),
+  'hdr.state': () => mockNoHdr ? { supported: false } : ({ supported: true, on: false, name: 'Mock OLED', peakNits: 1000, calibrated: false, verdict: 'great' }),
   'hdr.game': (p) => ({ ok: true, hdr: 'true', mode: typeof p?.mode === 'string' ? p.mode : 'auto' }),
   'game.settings': mockGameSettings,
   // As on the RX 9070 XT of ?gpu=amd.
@@ -1787,7 +1791,7 @@ const MOCK_HANDLERS: Record<string, MockHandler> = {
     ok: true,
     pending: p?.action === 'set' ? { display: 'DISPLAY1', seconds: 15 } : null,
     displays: [{
-      id: 'DISPLAY1', name: 'VG248', main: true, hdr: false, vendor: 'nvidia', refresh: 144, refreshes: [60, 100, 120, 144],
+      id: 'DISPLAY1', name: 'VG248', main: true, hdr: false, vendor: mockGpu === 'amd' || mockGpu === 'intel' ? mockGpu : 'nvidia', refresh: 144, refreshes: [60, 100, 120, 144],
       color: { format: 'rgb', bpc: 8, full: true }, auto: false,
       supported: ['rgb', '444', '422'].flatMap(format => [6, 8].flatMap(bpc =>
         (format === 'rgb' ? [true, false] : [false]).map(full => ({ format, bpc, full })))),
@@ -1816,7 +1820,11 @@ const MOCK_HANDLERS: Record<string, MockHandler> = {
       vramUsed: 5600 + wave * 600, vramTotal: 8192, fan: 1500 + wave * 300, limit: { on: 'temperature', warn: 83, bad: 93 },
     }
   },
-  'gpu.driver': () => ({ ok: true, vendor: 'nvidia', card: 'RTX 3070', installed: '581.42', update: true, latest: { version: '581.57', size: 900_000_000, released: '2026-10-14', kind: 'game' } }),
+  'gpu.driver': () => mockGpu === 'amd'
+    ? { ok: true, vendor: 'amd', card: 'Radeon RX 9070 XT', installed: '26.1.1', update: false, latest: null }
+    : mockGpu === 'intel'
+      ? { ok: true, vendor: 'intel', card: 'Arc B580', installed: '32.0.101.6559', update: false, latest: null }
+      : { ok: true, vendor: 'nvidia', card: 'RTX 3070', installed: '581.42', update: true, latest: { version: '581.57', size: 900_000_000, released: '2026-10-14', kind: 'game' } },
   'gpu.game': (p) => {
     if (mockGpu === 'intel' && typeof p?.frameGen === 'string') mockFrameGen = p.frameGen
     return mockGpu === 'intel' ? { ok: true, vendor: 'intel', supported: true, frameGen: mockFrameGen }

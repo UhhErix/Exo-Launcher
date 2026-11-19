@@ -1,6 +1,6 @@
 # Devices
 
-Devices shows what you plug in: your mouse, what you listen on and your controller, each with its picture. Press a card to open its page. Keyboards are marked Coming soon.
+Devices shows what you plug in: your mouse, what you listen on and your controller, each with its picture. Press a card to open its page.
 
 ## Mouse
 

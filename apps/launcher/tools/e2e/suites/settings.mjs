@@ -49,10 +49,15 @@ export async function run(t) {
     }
     await page(t, 'Library')
     await sleep(400)
+    const stores = await t.host('stores.matrix')
+    const settings = await t.host('settings.get')
+    const riotPresent = Array.isArray(stores) && stores.some(s => s.store === 'riot' && (s.signedIn || s.clientPresent === true || (s.clientPresent === undefined && s.agentPresent)))
+    const wantRiotId = riotPresent || !!settings?.riotId?.trim()
     state.riotIdInStores = await t.shell.eval(`[...document.querySelectorAll('.exo-set-section')].some(s => /^Game stores/.test(s.querySelector('h2')?.textContent.trim() ?? '') && [...s.querySelectorAll('.exo-set-item-label')].some(l => l.textContent.trim() === 'Riot ID'))`)
-    // Keys are gone: no Optional keys section, and Riot ID (a name, not a key) is a row of Game stores.
+    // Keys are gone: no Optional keys section, and Riot ID (a name, not a key) is a row of Game stores when Riot or a saved ID is present.
     if (state.sections.includes('Optional keys')) failures.push('the Optional keys section is still there')
-    if (!state.riotIdInStores) failures.push('Riot ID is not a row of Game stores')
+    if (wantRiotId && !state.riotIdInStores) failures.push('Riot ID is not a row of Game stores')
+    if (!wantRiotId && state.riotIdInStores) failures.push('Riot ID showed with no Riot Client or saved ID')
     if (state.width > state.max + 1) failures.push(`the sheet is ${state.width}px wide, more than ${state.max}px`)
     await c.shot('settings', t.shell)
     failures.push(...await k.look(c, 'settings'))

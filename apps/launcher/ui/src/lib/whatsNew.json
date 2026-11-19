@@ -3,6 +3,11 @@
     "version": "3.26.0",
     "items": [
       {
+        "icon": "ThisPc",
+        "title": "Only what works on your PC",
+        "detail": "Settings your PC, screen or controller can't use are no longer shown, and a choice with only one answer is simply set."
+      },
+      {
         "icon": "Controller",
         "title": "Riot hours like Steam",
         "detail": "A VALORANT or League page shows the hours you played, the same way a Steam game does."

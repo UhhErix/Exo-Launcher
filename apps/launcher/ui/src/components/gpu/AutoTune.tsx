@@ -105,11 +105,11 @@ function TuneRow({ part, name, error, onAct }: {
   )
 }
 
-/** What the row says: what's being tested and how long is left; the value and what was measured; else the warning or why it stopped. */
+/** What the row says: what's being tested and how long is left; the value and what was measured; else why Tune waits, the warning or why it stopped. */
 function tuneDetail(part: TunePart): string | null {
   if (part.state === 'testing') return `${part.testing ?? 'Testing'}${part.minutesLeft ? ` \u00b7 about ${part.minutesLeft} minutes left. Keep Exo open` : ''}`
   if (part.state === 'tuned') return [part.applied, tuneResult(part.before, part.after)].filter(Boolean).join(' \u00b7 ')
-  return part.warning ?? part.note ?? null
+  return part.blocked ?? part.warning ?? part.note ?? null
 }
 
 /** Tune: asks in place before a first run (DESIGN.md \u203a Confirm), its warning on the row; after that Windows' own prompt is the only question. */
