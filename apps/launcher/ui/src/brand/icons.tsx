@@ -9,11 +9,11 @@ export type IconProps = { size?: number; className?: string; filled?: boolean; c
 type Glyph = keyof typeof GLYPHS
 
 /*
- * Tabler (tabler.io/icons, MIT), one family everywhere: Exo, Exo Mouse, setup and first run, the drawn-in checks too. Brand
- * marks (stores, Discord, Spotify, Apple Music, YouTube Music) stay their own. scripts/tabler-map.mjs names the Tabler icon
+ * Lucide (lucide.dev, ISC), one family everywhere: Exo, Exo Mouse, setup and first run, the drawn-in checks too. Brand
+ * marks (stores, Discord, Spotify, Apple Music, YouTube Music) stay their own. scripts/lucide-map.mjs names the Lucide icon
  * for each name here; scripts/icons.mjs writes them into glyphs.ts.
- * - Outline icons on the 24 grid with round ends and joins, a line that follows its size (lineAt).
- * - A toggle that is on (liked, starred, pinned) and the current room show Tabler's -filled form where it has one.
+ * - Lucide's outline icons on the 24 grid with round ends and joins, a line that follows its size (lineAt).
+ * - A toggle that is on (liked, starred, pinned) and the transport are the outline filled; the current room keeps its outline.
  * - One glyph per meaning: two things that mean different things never share an icon, anywhere in Exo (scripts/icons.mjs
  *   stops on two that do).
  */
@@ -29,7 +29,7 @@ const solid = (glyph: Glyph) => (`${glyph}-on` in GLYPHS ? `${glyph}-on` : glyph
 function Svg({ glyph, size, className, style = block }: { glyph: Glyph; size: number; className?: string; style?: CSSProperties }) {
   const [markup, solid] = GLYPHS[glyph]
   return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill={solid ? 'currentColor' : 'none'} stroke={solid ? 'none' : 'currentColor'}
+    <svg width={size} height={size} viewBox="0 0 24 24" fill={solid ? 'currentColor' : 'none'} stroke="currentColor"
       strokeWidth={lineAt(size)} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" className={className} style={style}
       dangerouslySetInnerHTML={{ __html: markup }} />
   )
@@ -68,7 +68,9 @@ function brand(name: string) {
 
 // ── The window and the Bar ──────────────────────────────────────────────────────────────
 export const Minus = icon('minus')
+/** Make the window fill the screen: arrows out. */
 export const Maximize = icon('maximize')
+/** Make the window smaller again: arrows in. */
 export const Restore = icon('restore')
 export const Close = icon('close')
 export const Search = icon('search')
@@ -89,11 +91,11 @@ export const Memory = icon('memory')
 export const Board = icon('board')
 /** A drive: an SSD or a hard drive. */
 export const Drive = icon('drive')
-/** A wired connection. */
+/** A wired connection: the Ethernet port. */
 export const Network = icon('network')
 /** A Wi-Fi connection. */
 export const Wifi = icon('wifi')
-/** Exo's own update. */
+/** Exo's own update (a game's install is Download). */
 export const AppUpdate = icon('app-update')
 /** The Devices room: your mouse. */
 export const Mouse = icon('mouse')
@@ -142,16 +144,18 @@ export const Radio = icon('radio')
 export const Video = icon('video')
 /** A song's music video. */
 export const Movie = icon('movie')
+/** A video, a stream or Music's Immersive filling the screen: the corners out (the window's own Maximize is the arrows). */
 export const FullScreen = icon('full-screen')
 export const ExitFullScreen = icon('exit-full-screen')
 /** A game's cover art. */
 export const Cover = icon('cover')
-/** Exo Shaders: a game's shaders compiled ahead. */
+/** Exo Shaders: a game's shaders compiled ahead (the cube they draw). */
 export const Shaders = icon('shaders')
 
 // ── Music ───────────────────────────────────────────────────────────────────────────────
 export const Play = icon('play')
 export const Pause = icon('pause')
+/** Stop: the solid square (Record is the solid circle). */
 export const Stop = icon('stop')
 export const Next = icon('next')
 export const Previous = icon('previous')
@@ -159,11 +163,13 @@ export const Shuffle = icon('shuffle')
 export const Repeat = icon('repeat')
 export const RepeatOne = icon('repeat-one')
 export const Queue = icon('queue')
-/** Your saved songs. */
+/** Your saved songs: a list of them. */
 export const Songs = icon('songs')
+/** The song playing now: its record. */
 export const NowPlaying = icon('now-playing')
 export const Headphones = icon('headphones')
 export const HeadphonesOff = icon('headphones-off')
+/** Sound on, full: the speaker with its waves. */
 export const Volume = icon('volume')
 export const VolumeLow = icon('volume-low')
 export const VolumeOff = icon('volume-off')
@@ -205,7 +211,7 @@ export const EyeOff = icon('eye-off')
 export const Id = icon('id')
 export const Lock = icon('lock')
 export const Clock = icon('clock')
-/** Discord's Now: what is happening with your friends at the moment. */
+/** Discord's Now: what is happening with your friends at the moment (a lightning bolt). */
 export const Bolt = icon('now')
 /** Something went wrong. */
 export const Alert = icon('alert')
@@ -226,7 +232,7 @@ export const Apps = icon('apps')
 export const Shop = icon('shop')
 /** A Nitro price. */
 export const Nitro = icon('nitro')
-// A server's owner (the crown beside their name) and someone boosting the server (a rocket: the bolt is Now's).
+// A server's owner (the crown beside their name) and someone boosting the server (a rocket: the lightning is Now's).
 export const Crown = icon('crown')
 // Message requests: DMs from people you aren't friends with, waiting for Accept.
 export const Mail = icon('mail')
@@ -251,6 +257,7 @@ export const Burst = icon('burst')
 export const HashLock = marked('hash-lock', 'hash', 'lock-on')
 export const VolumeLock = marked('volume-lock', 'volume-low', 'lock-on')
 export const ZoomIn = icon('zoom-in')
+/** Read a message aloud. */
 export const Speaker = icon('speaker')
 export const ZoomOut = icon('zoom-out')
 
@@ -259,7 +266,7 @@ export const ZoomOut = icon('zoom-out')
 export const Failed = icon('failed')
 /** A permission that's denied. */
 export const Deny = icon('deny')
-/** A permission left to what it inherits. */
+/** A permission left to what it inherits: Discord's gray slash. */
 export const Neutral = icon('neutral')
 /** Remove an item from a list. */
 export const Remove = icon('remove')
@@ -273,8 +280,14 @@ export const FlagsCategory = icon('flags-category')
 export const OnlyYou = icon('only-you')
 /** Stop watching someone's stream. */
 export const StopWatching = icon('stop-watching')
-/** The snip editor's box over what you hide. */
+/** Captures' editor: a Box drawn around something. */
 export const Redact = icon('redact')
+/** Captures' editor: Blur over names and chat, Redo; the viewer's Info, Share and Copy text. */
+export const Blur = icon('blur')
+export const Redo = icon('redo')
+export const Info = icon('info')
+export const Share = icon('share')
+export const ScanText = icon('scan-text')
 /** An end-to-end encrypted call. */
 export const Encrypted = icon('encrypted')
 /** A check still running. */
@@ -285,7 +298,7 @@ export const Server = icon('server')
 export const ThisPc = icon('this-pc')
 /** Put something back to how it started. */
 export const ResetDefault = icon('reset-default')
-/** Stop opening a kind of file with Exo. */
+/** Stop opening a kind of file with Exo: the file, crossed out. */
 export const Unassign = icon('unassign')
 /** A partnered server. */
 export const Partnered = icon('partnered')
@@ -295,7 +308,7 @@ export const Category = icon('category')
 export const ChangeShare = icon('change-share')
 /** How your PC performs. */
 export const Performance = icon('performance')
-/** Calibrate a controller's sticks. */
+/** Calibrate a controller's sticks: find their center. */
 export const Calibrate = icon('calibrate')
 /** The controller in your hands. */
 export const Controller = icon('controller')
@@ -303,9 +316,9 @@ export const Controller = icon('controller')
 export const SelectMany = icon('select-many')
 /** A link's preview that plays. */
 export const LinkPreview = icon('link-preview')
-/** Exo asleep while you play. */
+/** Exo asleep while you play: the moon. */
 export const Suspend = icon('suspend')
-/** Clearing out what's left over. */
+/** Clearing out what's left over: the broom. */
 export const CleanUp = icon('clean-up')
 /** A message forwarded or joined: the arrow in its gutter. */
 export const ArrowRight = icon('arrow-right')

@@ -34,7 +34,6 @@
 @import "./styles/discord-chat.css";
 @import "./styles/discord-media.css";
 @import "./styles/discord-pages.css";
-@import "./styles/discord-play.css";
 @import "./styles/discord-collectibles.css";
 @import "./styles/settings.css";
 @import "./styles/onboarding.css";
@@ -97,7 +96,8 @@ kbd,
   --color-on-bad: #000000;
   --color-card: #000000;
   --color-raised: #000000;
-  --font-sans: "Exoline", "Segoe UI Variable", "Segoe UI", sans-serif;
+  --font-sans: "Goeist", "Exoline", "Segoe UI Variable", "Segoe UI", sans-serif;
+  --font-mono: "Goeist Mono", "Cascadia Mono", Consolas, monospace;
   /* Motion (DESIGN.md › Motion). Two curves: what appears, fades or changes state eases out (fast
      at once, then settling); what travels between two places or changes shape springs (from rest,
      critically damped at 0.9, so it never visibly overshoots: 0.15%, a twentieth of a pixel on a
@@ -179,8 +179,10 @@ body,
      or chip is a white pill with black words, as the primary button is, and its group has no outline of its own (never a
      pill inside a pill); a chosen row in a list is a fill; a picked picture shows its check. */
   --exo-hair: 1px;
-  --exo-line: #2e2e2e;
-  --exo-float-line: var(--exo-line);
+  /* Liquid Glass edges (owner, 2026-11-19: the grey outlines looked stacked and grey; Apple's HIG › Materials): a line is
+     white at a low alpha, so on black it is barely there and two of them side by side never add up to a grey band. */
+  --exo-line: rgb(255 255 255 / 0.07);
+  --exo-float-line: rgb(255 255 255 / 0.055);
   /* Controls (DESIGN.md › Controls): every control on the page (secondary buttons, chips, segment groups,
      fields, labels over art) is small Liquid Glass: a clear fill (--exo-fill) over the glass's blur and tone
      (--exo-control-glass; glass.css lists the controls), with one even hairline all around (--exo-rim,
@@ -197,7 +199,11 @@ body,
   /* One thin even line all the way round, the same 1px on every glass: a dark hairline outside a light one read as a
      thicker outline than everything else's. A lit top, a shaded foot and a bent rim read as one side brighter than the
      other and the sides as concave, at 1080p stepped too. */
-  --glassy-ring: inset 0 0 0 var(--exo-hair) var(--exo-line);
+  /* Glass is lit at its edge like a lens (WWDC25 "Meet Liquid Glass"): brightest along the top, faint down the sides,
+     fainter at the foot, with a soft inner glow under the top edge. No grey ring all the way round. */
+  --glassy-ring: inset 0 var(--exo-hair) 0 rgb(255 255 255 / 0.17), inset var(--exo-hair) 0 0 rgb(255 255 255 / 0.06),
+    inset calc(-1 * var(--exo-hair)) 0 0 rgb(255 255 255 / 0.06), inset 0 calc(-1 * var(--exo-hair)) 0 rgb(255 255 255 / 0.03),
+    inset 0 16px 28px -22px rgb(255 255 255 / 0.1);
   /* Words keep a tight shadow over bright art; a 12px halo around them read as a smudge. */
   --glassy-words: 0 1px 2px rgb(0 0 0 / 0.45);
   /* Small glass casts nothing (a shadow below it alone read as fake); large glass floats in an even halo. */
@@ -262,6 +268,11 @@ body,
   --exo-scrim: rgb(0 0 0 / 0.72);
   /* The scrim one step deeper: what darkens further under the pointer (a video embed's play mark on hover). */
   --exo-scrim-strong: rgb(0 0 0 / 0.9);
+  /* Music's Immersive (Immersive.tsx): the cover's light at this opacity over black, under this dim. Together they keep
+     even white art at sRGB 0.18 at most, so white words hold 13:1, muted 6.6:1 and faint 4.8:1 over it
+     (test/musicImmersive.test.ts reads these two). */
+  --exo-immersive-art: 0.45;
+  --exo-immersive-dim: rgb(0 0 0 / 0.6);
   /* The colour picker's hue bar: the spectrum itself is data, not a theme colour. */
   --exo-hue-spectrum: linear-gradient(to right, #f00, #ff0, #0f0, #0ff, #00f, #f0f, #f00);
   /* Not installed (Library): the cover recedes, darker and drained (the host bakes it into the grid's thumbnail,

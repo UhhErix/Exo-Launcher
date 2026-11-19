@@ -5,6 +5,7 @@ import { Remove } from '../../brand/icons'
 import { host, onHostEvent } from '../../lib/host'
 import { report } from '../../lib/report'
 import { avatarUrl, cdnSize, cdnStep, performanceMode, snowflakeTime, type DiscordBadge, type DiscordConnection, type DiscordGuild, type DiscordProfile, type DiscordProfileExtras, type DiscordUser } from '../../lib/discord'
+import { AboveTip, anchorOf, type TipAnchor } from './AboveTip'
 import { admin } from './admin'
 import { CONNECTION_MARKS } from './connectionMarks'
 import { Icons } from './icons'
@@ -208,12 +209,9 @@ export function ProfileWho({ data, guildId, onName }: { data: Loaded; guildId: s
  * focus in Exo's tip; one with a page (Nitro, boosting, Quests) opens it.
  */
 function Badges({ badges }: { badges: DiscordBadge[] }) {
-  const [tip, setTip] = useState<{ label: string; left: number; top: number } | null>(null)
+  const [tip, setTip] = useState<{ label: string; at: TipAnchor } | null>(null)
   if (!badges.length) return null
-  const show = (badge: DiscordBadge, el: HTMLElement) => {
-    const box = el.getBoundingClientRect()
-    setTip({ label: badge.description, left: box.left + box.width / 2, top: box.top - 8 })
-  }
+  const show = (badge: DiscordBadge, el: HTMLElement) => setTip({ label: badge.description, at: anchorOf(el) })
   return (
     <span className="exo-dc-pf-badges" onPointerLeave={() => setTip(null)}>
       {badges.map(badge => {
@@ -223,7 +221,7 @@ function Badges({ badges }: { badges: DiscordBadge[] }) {
           ? <button key={badge.id} type="button" className="exo-dc-pf-badge" aria-label={badge.description} onClick={() => open(badge.link!)} {...events}>{icon}</button>
           : <span key={badge.id} className="exo-dc-pf-badge" role="img" aria-label={badge.description} tabIndex={0} {...events}>{icon}</span>
       })}
-      {tip ? <span className="exo-dc-tip is-above" role="tooltip" style={{ left: tip.left, top: tip.top }}>{tip.label}</span> : null}
+      {tip ? <AboveTip at={tip.at}>{tip.label}</AboveTip> : null}
     </span>
   )
 }

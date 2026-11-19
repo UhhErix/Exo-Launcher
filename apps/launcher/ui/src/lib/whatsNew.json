@@ -3,14 +3,74 @@
     "version": "3.26.0",
     "items": [
       {
+        "icon": "Mouse",
+        "title": "Sensor angle on the Razer Viper V3 Pro",
+        "detail": "Turn your Viper V3 Pro's sensor angle a degree at a time in Devices, so a natural swipe runs straight across the screen."
+      },
+      {
+        "icon": "Scissors",
+        "title": "Captures, like Photos",
+        "detail": "Your clips and screenshots in one grid by day, with a scrubber to jump through months, chips that combine, and an editor with a tab for each job."
+      },
+      {
+        "icon": "Chats",
+        "title": "Send captures to Discord",
+        "detail": "Share a clip or screenshot straight into a DM or channel; a clip too big for Discord is cut to fit first."
+      },
+      {
+        "icon": "EyeOff",
+        "title": "Blur names, copy text",
+        "detail": "Blur hides names and chat in a screenshot, and Copy text reads words off it on your PC."
+      },
+      {
+        "icon": "Encrypted",
+        "title": "Cloudflare DNS, encrypted",
+        "detail": "Best settings sets Cloudflare's DNS with encryption on, for faster lookups that nobody on the way can read; its switch puts your old DNS back."
+      },
+      {
+        "icon": "Network",
+        "title": "A Network group in Best settings",
+        "detail": "Your adapter's power saving, DNS and Windows' TCP defaults each have their own switch, all set with one Windows prompt, with a ping and lookup check before and after."
+      },
+      {
+        "icon": "Controller",
+        "title": "NBA 2K26 with or without anti-cheat",
+        "detail": "Pick in Properties: without it the game plays offline with frame generation and mods, which are in the game only while you play it from Exo, and back with it Exo takes them out first."
+      },
+      {
+        "icon": "StoreBag",
+        "title": "Steam game details are back",
+        "detail": "Names of games you haven't installed, DLC, betas and languages show again on the current Steam."
+      },
+      {
+        "icon": "MusicNotes",
+        "title": "Music, full window",
+        "detail": "Press F or the full-window button in Music for the cover large, its colours around it and the lyrics big beside it; Esc goes back."
+      },
+      {
+        "icon": "Drive",
+        "title": "Compress games",
+        "detail": "Windows' own compression makes games smaller on disk, and they play as before."
+      },
+      {
+        "icon": "Appearance",
+        "title": "Icons that say what they do",
+        "detail": "Every icon now plainly shows what its button does, in Lucide's light line: Maximize and Restore are arrows out and in, Stop is a square, and liked, starred and pinned show filled."
+      },
+      {
+        "icon": "Chats",
+        "title": "GIFs in Discord stay",
+        "detail": "A GIF, sticker or video that hiccups once tries again instead of turning into a line that says it would not load, and Imgur GIFs load."
+      },
+      {
         "icon": "Chats",
         "title": "Discord, laid out like Discord",
         "detail": "Servers across the top, DMs and Friends on Home, members and profiles always beside the conversation, and mute, deafen and settings by your picture."
       },
       {
         "icon": "Monitor",
-        "title": "Choose your background",
-        "detail": "Settings, General, Background: Pure black, Near black, Dark grey, Windows or Graphite, on every PC you sign in to."
+        "title": "Pure black under Liquid Glass",
+        "detail": "Exo is AMOLED black everywhere, under its frosted glass."
       },
       {
         "icon": "Library",

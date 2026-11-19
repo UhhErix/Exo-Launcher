@@ -1,12 +1,10 @@
-import { spotifyMock } from './spotifyMock'
-import { mockAdmin, mockAppMessages, mockFew, mockFewMessages, mockVoiceNow, mockApps, mockChannels, mockChannelsFor, mockDiscordStatus, mockMessageId, mockFriends, mockHome, mockMembers, mockMessages, mockProfile } from './discordMock'
+import { MOCK_SONG_MS, mockArtwork, spotifyMock } from './spotifyMock'
+import { mockAdmin, mockAppMessages, mockFew, mockFewMessages, mockApps, mockChannels, mockChannelsFor, mockDiscordStatus, mockMessageId, mockFriends, mockHome, mockMembers, mockMessages, mockProfile } from './discordMock'
 /** Browser development fixtures. Dynamically loaded only outside the packaged host. */
-import type { Game, GameProperties, LauncherSettings, InstallProgress, InstalledApp, ReplacedApp, RuntimeItem, StartupItem, StartupState, StoreGift } from './host'
+import type { CompressSettings, CompressState, Game, GameProperties, LauncherSettings, InstallProgress, InstalledApp, ReplacedApp, RuntimeItem, StartupItem, StartupState, StoreGift } from './host'
 import type { CaptureItem } from './capture'
 import type { NoteInfo } from './notes'
 import { emitHostEvent } from './host'
-let mockShareGames = false
-let mockShareReady = false
 // A dev preview's ?pins=g:1,d:2 starts with those pinned to Discord's top bar.
 let mockMusicLevel = 0.6
 let mockBandPins: string[] = (typeof location === 'undefined' ? null : new URLSearchParams(location.search).get('pins'))?.split(',') ?? []
@@ -52,6 +50,20 @@ const MOCK_GAMES: Game[] = [
     deps: ['Steam client'],
     launchNote: '',
     lastPlayedUtc: new Date(Date.now() - 26 * 3600_000).toISOString(),
+  },
+  {
+    // Steam's Play menu offers it without its anti-cheat: Properties › Anti-cheat.
+    id: 'steam:3472040',
+    title: 'NBA 2K26',
+    store: 'steam',
+    installed: true,
+    owned: true,
+    primaryAction: 'play',
+    status: 'Ready',
+    playtimeMinutes: 310,
+    sizeBytes: 140 * 1024 ** 3,
+    deps: ['Steam client'],
+    launchNote: '',
   },
   {
     // One Steam app holding the games bought as its DLC: named by the newest, and found by any of them.
@@ -232,18 +244,39 @@ const mockApply = (step: string, p?: { action?: unknown }) => { if (p?.action ==
 const mockIntelCpu = typeof location !== 'undefined' && new URLSearchParams(location.search).get('cpu') === 'intel'
 
 /**
- * PC › Network in browser dev: an Intel I226-V with Energy-Efficient Ethernet on, which network sets.
- * `?net=fine` has nothing to set, `?net=slow` a link held at 100 Mbps by its cable, `?net=wifi` a Wi-Fi
- * adapter (Exo has nothing to set on Wi-Fi; it holds the radio while a game runs).
+ * Best settings › Network in browser dev: an Intel I226-V with Energy-Efficient Ethernet on, DHCP DNS and Windows' TCP
+ * defaults, so the group has its adapter and Cloudflare DNS items. network sets every item kept on (with a check before
+ * and after), network-on and network-off one item. `?net=fine` has nothing to set on the adapter, `?net=slow` a link held
+ * at 100 Mbps by its cable, `?net=wifi` a Wi-Fi adapter with no IPv6, `?net=tcp` receive window tuning disabled.
  */
 const mockNet = typeof location !== 'undefined' ? new URLSearchParams(location.search).get('net') : null
-let mockNetSet = false
-const mockNetItems = (p?: { action?: unknown }) => {
-  if (p?.action === 'network') mockNetSet = true
-  if (mockNet === 'wifi' || mockNet === 'fine') return []
-  const items: Record<string, unknown>[] = [mockNetSet
-    ? { key: 'network', label: 'Network', detail: "Exo's settings for games", applied: true, canUndo: true }
-    : { key: 'network', label: 'Ethernet', detail: 'Energy-efficient Ethernet on' }]
+const mockNetOn = new Set<string>()
+const mockNetOff = new Set<string>()
+let mockCheck: Record<string, unknown> | null = null
+const mockNetItems = (p?: { action?: unknown; item?: unknown }) => {
+  const offered = [...(mockNet === 'wifi' || mockNet === 'fine' ? [] : ['adapter']), 'dns', ...(mockNet === 'tcp' ? ['tcp'] : [])]
+  const before = { ping: 21, jitter: 4, router: 2, lookup: 38 }
+  if (p?.action === 'network') {
+    for (const key of offered) if (!mockNetOff.has(key)) mockNetOn.add(key)
+    mockCheck = { before, after: { ping: 20, jitter: 4, router: 2, lookup: 11 }, said: 'Lookups fell from 38 ms to 11 ms.' }
+  }
+  if (p?.action === 'netcheck') mockCheck = { before: null, after: before, said: '' }
+  if (typeof p?.item === 'string') {
+    if (p.action === 'network-on') { mockNetOn.add(p.item); mockNetOff.delete(p.item) }
+    if (p.action === 'network-off') { mockNetOn.delete(p.item); mockNetOff.add(p.item) }
+  }
+  const words: Record<string, [string, string, string]> = {
+    adapter: ['Adapter settings for games', 'Energy-efficient Ethernet on.', 'Power saving that drops the link is off.'],
+    dns: ['Cloudflare DNS, encrypted', mockNet === 'wifi' ? 'Faster lookups, and your DNS is private. IPv4 only on Wi-Fi: it has no IPv6.' : 'Faster lookups, and your DNS is private.', ''],
+    tcp: ["Windows' TCP defaults", 'Receive window tuning disabled.', 'Downloads tune their own speed.'],
+  }
+  const items: Record<string, unknown>[] = offered.map(key => {
+    const on = mockNetOn.has(key)
+    const [label, off, set] = words[key]
+    return { key: `net-${key}`, label, detail: on && set ? set : off, applied: on, canUndo: on, off: mockNetOff.has(key) }
+  })
+  const left = offered.filter(key => !mockNetOn.has(key) && !mockNetOff.has(key)).map(key => words[key][0])
+  items.unshift({ key: 'network', label: 'Network', detail: left.length ? left.join(', ') : "Exo's network settings for games", applied: left.length === 0, canUndo: mockNetOn.size > 0 })
   if (mockNet === 'slow') items.push({ key: 'netlink', label: 'Ethernet', detail: '100 Mbps of 2.5 Gbps. Try another cable or router port.' })
   return items
 }
@@ -253,6 +286,11 @@ const mockNetItems = (p?: { action?: unknown }) => {
  * fast path, a worn SATA SSD with bad sectors (the problem case), and a hard drive with games on it. `?drives=fine`
  * shows the same drives with nothing wrong. flush, optimize and all set their row.
  */
+/** A game's compression on the mock host: a 62 GB game a sample says would save 12.4 GB. */
+const mockCompress = (id: string): CompressState => ({
+  state: 'none', percent: null, saved: 0, size: 62e9, estimate: id ? 12.4e9 : null, sampled: !!id, changed: 0, algorithm: null, message: null, antiCheat: null, held: null,
+})
+const mockCompressSettings: CompressSettings = { whileIdle: false, afterUpdates: false, speed: 'balanced' }
 const mockDrivesFine = typeof location !== 'undefined' && new URLSearchParams(location.search).get('drives') === 'fine'
 const mockDriveFixes = { flush: mockDrivesFine, optimize: mockDrivesFine, set: new Set<string>() }
 const MOCK_SAMSUNG = { name: 'Samsung', tool: 'Samsung Magician', url: 'https://semiconductor.samsung.com/consumer-storage/support/tools/' }
@@ -421,7 +459,8 @@ const mockSettings: LauncherSettings = {
     discordNoiseSuppression: true,
     discordQuietWhilePlaying: true,
   autoUpdateChipset: true,
-  autoUpdateUpscalers: false,
+  autoUpdateUpscalers: true,
+  upscalerAntiCheatEverywhere: false,
   keepAwakeDownloads: true,
   storeClientsQuiet: true,
   chipset: mockIntelCpu ? 'intel' : 'amd',
@@ -729,8 +768,12 @@ function mockAbsorbIdSettings(next: Record<string, unknown>) {
 /** Two captures, so Favorite and its chip can be tried without the add-on. */
 const mockClipsFlag = typeof location !== 'undefined' ? new URLSearchParams(location.search).get('clips') : null
 const mockShot = (from: string, to: string) => 'data:image/svg+xml,' + encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="320" height="180"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="${from}"/><stop offset="1" stop-color="${to}"/></linearGradient></defs><rect width="320" height="180" fill="url(#g)"/></svg>`)
+/** A snip to draw on in the browser: a scoreboard with names and a chat line, so Blur and Copy text have something to work on. */
+const mockSnip = 'data:image/svg+xml,' + encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="1920" height="1080"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#14203a"/><stop offset="1" stop-color="#5a2b1a"/></linearGradient></defs><rect width="1920" height="1080" fill="url(#g)"/><g font-family="Segoe UI, sans-serif" fill="#fff"><text x="120" y="200" font-size="72" font-weight="700">VICTORY</text><text x="120" y="320" font-size="40">PlayerOne    24 / 3 / 11</text><text x="120" y="390" font-size="40">NightOwl     18 / 6 / 9</text><text x="120" y="900" font-size="34" fill="#9fd">[Team] NightOwl: gg that last fight was clean</text></g></svg>`)
 const mockCaptures: CaptureItem[] = [
-  { id: 'cap0000000000001', kind: 'image', game: 'Desktop', name: 'Snip 1', created: '2026-10-19T16:08:00Z', size: 120_000, favourite: false, url: '', thumb: null },
+  { id: 'cap0000000000001', kind: 'image', game: 'Desktop', name: 'Snip 1', created: '2026-10-19T16:08:00Z', size: 120_000, favourite: false, url: mockSnip, thumb: mockSnip },
+  { id: 'mock-rivals-snip', kind: 'image', game: 'Marvel Rivals', gameId: 'mock:rivals', name: 'Scoreboard', created: new Date(Date.now() - 2 * 3_600_000).toISOString(), size: 2_400_000, favourite: false, url: mockSnip, thumb: mockSnip },
+  { id: 'mock-lastyear', kind: 'video', game: 'Hades', gameId: 'mock:hades', name: 'First clear', created: new Date(new Date().setFullYear(new Date().getFullYear() - 1)).toISOString(), size: 31_000_000, durationMs: 34_000, favourite: true, url: 'mock-clip.webm', thumb: mockShot('#3a1430', '#d05a8a') },
   { id: 'cap0000000000002', kind: 'video', game: 'Elden Ring', gameId: 'mock:eldenring', name: 'Clip 1', created: '2026-10-18T20:00:00Z', size: 48_000_000, durationMs: 60_000, favourite: false, url: 'mock-clip.webm', thumb: mockShot('#3b2a14', '#a9792c') },
   { id: 'mock-rivals-1', kind: 'video', game: 'Marvel Rivals', gameId: 'mock:rivals', name: 'Triple on Tokyo 2099', created: new Date(Date.now() - 3_600_000).toISOString(), size: 18_400_000, durationMs: 42_000, favourite: true, url: 'mock-clip.webm', thumb: mockShot('#1a2a5a', '#d0452b') },
   { id: 'mock-rivals-2', kind: 'video', game: 'Marvel Rivals', gameId: 'mock:rivals', name: 'Last second capture', created: new Date(Date.now() - 86_400_000).toISOString(), size: 9_700_000, durationMs: 21_000, favourite: false, url: 'mock-clip.webm', thumb: mockShot('#2b1a4a', '#3b9bd0') },
@@ -847,6 +890,7 @@ function mockPropertiesFor(id: string): GameProperties {
     cloudSync: false, language: null, languageChoices: [], beta: null, betaChoices: [], betaCode: false,
     contentLabel: 'DLC', content: null, folder: null, folderChoices: [], moving: null, storeProperties: null,
     ...(game?.store === 'steam' ? STEAM_PROPERTIES : game?.store === 'epic' ? EPIC_PROPERTIES : {}),
+    ...(id === 'steam:3472040' ? { antiCheatLaunch: { value: 'with' as const, detail: 'NBA 2K26 without EAC (offline only)' } } : {}),
   }
   return mockProperties[id]
 }
@@ -866,6 +910,10 @@ function mockSetProperty(params?: Record<string, unknown>) {
   } else if (key === 'launchOptions') next.launchOptions = value
   else if (key === 'language') { next.language = value; message = 'Steam is updating the game.' }
   else if (key === 'storeProperties') message = "Opened in Steam. Its Properties are under the gear on the game's page."
+  else if (key === 'antiCheatLaunch' && current.antiCheatLaunch) {
+    next.antiCheatLaunch = { ...current.antiCheatLaunch, value: value === 'without' ? 'without' : 'with' }
+    message = value === 'without' ? 'Plays offline, without anti-cheat. Frame generation and mods can go in.' : "Plays with anti-cheat. Exo's frame generation came out of the game."
+  }
   mockProperties[id] = next
   return { ok: true, message, properties: next }
 }
@@ -903,7 +951,7 @@ const mockCaptureState = {
 }
 const mockCaptureSettings: Record<string, unknown> = {
   quality: 50, replaySeconds: 60, maxFps: 60, replayMode: 'games',
-  cursor: true, saveReplayKeys: 'Ctrl+Alt+F10', recordKeys: 'Ctrl+Alt+F9', snipKeys: 'Ctrl+Alt+F8', printScreen: false,
+  cursor: true, saveReplayKeys: 'Ctrl+Alt+F10', recordKeys: 'Ctrl+Alt+F9', snipKeys: 'Ctrl+Alt+F8', printScreen: false, afterSnip: 'edit',
   folder: 'C:\\Users\\Player\\Videos\\Exo Captures', keepGb: 0, keepDays: 0, autoShrink: true, callVoices: false,
 }
 
@@ -989,6 +1037,12 @@ async function mockMouseCore(params?: Record<string, unknown>) {
   }
 }
 
+/** The mock's song (spotifyMock › Song 1), playing from the page's start and looping, so the room and Immersive have one. */
+const mockSong = { playing: true, from: 0, since: 0 }
+const mockSongAt = () => (mockSong.from + (mockSong.playing ? performance.now() - mockSong.since : 0)) % MOCK_SONG_MS
+const mockPlayback = () => ({ provider: 'spotify', status: mockSong.playing ? 'playing' : 'paused', title: 'Song 1', artist: 'Artist 1', artworkDataUrl: mockArtwork,
+  positionMs: mockSongAt(), durationMs: MOCK_SONG_MS, positionAgeMs: 0, rate: mockSong.playing ? 1 : 0, canPlay: true, canPause: true, canPrev: true, canNext: true, canSeek: true })
+
 const MOCK_HANDLERS: Record<string, MockHandler> = {
   ...spotifyMock,
   'library.get': mockLibraryGet,
@@ -1019,6 +1073,16 @@ const MOCK_HANDLERS: Record<string, MockHandler> = {
   'game.extras': () => ({ ok: true, achievementsUnlocked: 23, achievementsTotal: 50, driveHeat: { peak: 79, warn: 82, slowedSeconds: 40 } }),
   'game.cancelInstall': mockCancelInstall,
   'game.dequeue': mockOk,
+  'downloads.list': () => ({ ok: true, held: null, pausedByPlayer: false, autoUpdateGames: true, lines: [
+    { gameId: 'mock:eldenring', title: 'Elden Ring', store: 'epic', state: 'running', canPause: true, autoUpdate: true },
+    { gameId: 'mock:hades', title: 'Hades', store: 'gog', state: 'queued', canPause: false, autoUpdate: true },
+    { gameId: 'mock:valorant', title: 'VALORANT', store: 'riot', state: 'queued', canPause: false, autoUpdate: false },
+    { gameId: 'mock:cyberpunk', title: 'Cyberpunk 2077', store: 'gog', state: 'paused', canPause: false, autoUpdate: true },
+  ] }),
+  'downloads.move': mockOk,
+  'downloads.pauseAll': mockOk,
+  'downloads.resumeAll': mockOk,
+  'game.autoUpdate': (params) => ({ ok: true, on: params?.on ?? true }),
   'game.progress': () => mockProgress,
   'stores.auth': () => ({ ok: false, message: 'Browser mock — auth requires host.', requiresUserAction: true }),
   'stores.outages': () => ({ ok: true, outages: [] }),
@@ -1081,6 +1145,13 @@ const MOCK_HANDLERS: Record<string, MockHandler> = {
     return { ok: true }
   },
   'capture.saveImage': () => ({ ok: false, message: 'Mock: no capture add-on.' }),
+  'capture.text': (params) => params?.width !== undefined && Number(params.width) < 4 ? { ok: false, message: 'No text found there.' } : { ok: true, text: ['VICTORY', 'PlayerOne 24 / 3 / 11'].join('\n') },
+  'capture.send': (params) => {
+    const item = mockCaptures.find(entry => entry.id === mockParamId(params))
+    if (!item) return { ok: false, message: 'That capture is gone.' }
+    const channels = Array.isArray(params?.channelIds) ? params.channelIds as string[] : []
+    return { ok: true, sent: channels, item: null }
+  },
   'notes.list': (params) => {
     const query = typeof params?.query === 'string' ? params.query.toLowerCase() : ''
     return { ok: true, notes: [...mockNotes.values()].filter(note => !query || note.text.toLowerCase().includes(query)).map(note => note.info), tabs: [], active: null }
@@ -1127,16 +1198,9 @@ const MOCK_HANDLERS: Record<string, MockHandler> = {
   'friends.badge': () => ({ count: 0 }),
   'discord.status': () => mockDiscordStatus,
   'discord.bandPins': (params?: { pins?: string[] }) => { if (params?.pins) mockBandPins = params.pins; return { ok: true, pins: mockBandPins } },
-  'discord.shareGames': (params?: { on?: boolean }) => { if (params?.on !== undefined) mockShareGames = params.on; return { ok: true, on: mockShareGames } },
-  'discord.shareReady': (params?: { on?: boolean }) => { if (params?.on !== undefined) mockShareReady = params.on; return { ok: true, on: mockShareReady && mockShareGames } },
-  'discord.shareClip': async (params?: { captureId?: string }) => {
-    await new Promise(done => setTimeout(done, 700))
-    return params?.captureId === 'mock-big' ? { ok: false, message: "It's over 25 MB. Shrink it first." } : { ok: true }
-  },
   'discord.signIn': mockOk,
   'discord.signOut': mockOk,
   'discord.home': () => mockHome,
-  'discord.voiceNow': () => ({ rooms: mockVoiceNow }),
   'discord.channels': (params?: { guildId?: string }) => ({ ...mockChannelsFor(params?.guildId ?? ''), hideMuted: mockHideMuted }),
   'discord.admin': mockAdmin,
   'discord.messages': (params?: { before?: string }) => ({ ok: true, messages: params?.before ? [] : (mockFew ? mockFewMessages : [...mockMessages, ...mockAppMessages]).slice().sort((a, b) => (BigInt(b.id) > BigInt(a.id) ? 1 : -1)) }),
@@ -1243,16 +1307,25 @@ const MOCK_HANDLERS: Record<string, MockHandler> = {
   'shell.prepare': () => ({ ok: true }),
   'shell.painted': () => ({ ok: true }),
   'shell.ready': () => ({ ok: true }),
-  'music.playback': () => ({ ok: true, playback: null }),
+  'music.playback': () => ({ ok: true, playback: mockPlayback() }),
   // The mock's music level: a set answers with the level it took (the room's slider follows it).
   'music.volume': (p) => { if (typeof p?.level === 'number') mockMusicLevel = p.level; return { ok: true, level: mockMusicLevel, muted: mockMusicLevel <= 0, source: 'app' } },
-  'music.control': () => ({ ok: false, message: 'Open Exo to control music.' }),
+  'music.control': (p) => {
+    const at = mockSongAt()
+    if (p?.action === 'toggle') { mockSong.playing = !mockSong.playing; mockSong.from = at; mockSong.since = performance.now() }
+    else if (p?.action === 'seek' && typeof p.positionMs === 'number') { mockSong.from = p.positionMs; mockSong.since = performance.now() }
+    else return { ok: false, message: 'Open Exo to control music.' }
+    emitHostEvent('music.playback', mockPlayback())
+    return { ok: true }
+  },
   'deps.list': mockDepsList,
   'replaced.scan': () => ({ ok: true, cleared: 2, apps: MOCK_REPLACED }),
   'apps.list': () => ({ ok: true, programs: MOCK_PROGRAMS }),
-  'apps.tidy': () => ({ ok: true, token: 'mock-tidy', name: 'Programs that are gone', autoCleared: [{ id: 'mock-3', name: 'Old leftovers', cleared: { folders: 1, files: 0, registry: 2, shortcuts: 3, bytes: 310_000_000 } }], items: [
-    { id: 0, kind: 'service', path: 'HKLM\\SYSTEM\\CurrentControlSet\\Services\\OldToolUpdate', bytes: 0, selected: true, note: null, machine: true, from: 'Old Tool' },
-    { id: 1, kind: 'folder', path: 'Program Files\\Old Tool', bytes: 1_204_000_000, selected: false, note: 'Only its name matches', machine: true, from: 'Old Tool' },
+  'apps.tidy': () => ({ ok: true, token: 'mock-tidy', name: 'Programs that are gone', defaults: ['.oldproj', '.oldtool'], autoCleared: [{ id: 'mock-3', name: 'Old leftovers', cleared: { folders: 1, files: 0, registry: 2, shortcuts: 3, bytes: 310_000_000 } }], items: [
+    { id: 0, kind: 'service', path: 'HKLM\\SYSTEM\\CurrentControlSet\\Services\\OldToolUpdate', bytes: 0, selected: true, note: null, certainty: 'certain', because: 'Certain: points into the app’s folder', machine: true, from: 'Old Tool' },
+    { id: 2, kind: 'driver', path: 'HKLM\\SYSTEM\\CurrentControlSet\\Services\\OldToolFilter', bytes: 0, selected: false, note: 'A driver: only take it if no device needs it', certainty: 'certain', because: 'Certain: points into the app’s folder', store: true, machine: true, from: 'Old Tool' },
+    { id: 3, kind: 'registry', path: 'HKLM\\SYSTEM\\CurrentControlSet\\Services\\SharedAccess\\Parameters\\FirewallPolicy\\FirewallRules › {OLD-TOOL-PORT}', bytes: 0, selected: false, note: null, certainty: 'possible', because: 'Possible: in a firewall group with its rules', machine: true, from: 'Old Tool' },
+    { id: 1, kind: 'folder', path: 'Program Files\\Old Tool', bytes: 1_204_000_000, selected: false, note: null, certainty: 'likely', because: 'Likely: named after it', machine: true, from: 'Old Tool' },
   ] }),
   'apps.leave': () => ({ ok: true }),
   'apps.history': () => ({ ok: true, items: [
@@ -1273,14 +1346,38 @@ const MOCK_HANDLERS: Record<string, MockHandler> = {
     return {
       ok: true, token: 'mock', name,
       items: [
-        { id: 0, kind: 'folder', path: `AppData\\Roaming\\${name}`, bytes: 820_000, selected: false, note: 'Only its name matches', machine: false, from: name },
+        { id: 0, kind: 'folder', path: `AppData\\Roaming\\${name}`, bytes: 820_000, selected: false, note: null, certainty: 'likely', because: 'Likely: named after it', machine: false, from: name },
       ],
       auto: true, cleared: { folders: 1, files: 0, registry: 1, shortcuts: 1, bytes: 4_101_200 }, undo: 'mock-1', declined: false,
     }
   },
+  'apps.restorePoint': () => ({ ok: true, made: true, message: null }),
+  'apps.installerCache': () => ({ ok: true, files: 7, bytes: 1_380_000_000 }),
+  'apps.installerCacheClean': () => ({ ok: true, files: 7, bytes: 1_380_000_000, undo: 'mock-1', message: null }),
   'apps.scan': () => ({ ok: false, message: 'Mock: nothing to scan.' }),
   'apps.clean': () => ({ ok: true, cleared: { folders: 1, files: 0, registry: 1, shortcuts: 1, bytes: 4_101_200 }, undo: 'mock-1', left: 0 }),
   'apps.allowEdge': () => ({ ok: true }),
+  'apps.openDefaults': () => ({ ok: true, message: null }),
+  'apps.packages': () => ({
+    ok: true, hidden: 41, items: [
+      { id: 'Microsoft.BingNews_8wekyb3d8bbwe', name: 'Microsoft News', publisher: 'Microsoft Corporation', forMe: true, others: 1, provisioned: true, bloat: 'Comes with Windows; nothing needs it', addBack: false },
+      { id: 'king.com.CandyCrushSaga_kgqvnymyfvs32', name: 'Candy Crush Saga', publisher: 'king.com', forMe: true, others: 0, provisioned: false, bloat: 'Windows installed it as an ad', addBack: false },
+      { id: 'Microsoft.WindowsMaps_8wekyb3d8bbwe', name: 'Windows Maps', publisher: null, forMe: false, others: 0, provisioned: true, bloat: 'Comes with Windows; nothing needs it', addBack: true },
+      { id: 'Microsoft.WindowsCalculator_8wekyb3d8bbwe', name: 'Windows Calculator', publisher: 'Microsoft Corporation', forMe: true, others: 2, provisioned: true, bloat: null, addBack: false },
+    ],
+  }),
+  'apps.packagesPlan': (p) => {
+    const params = (p ?? {}) as { ids?: string[]; everyone?: boolean }
+    return {
+    ok: true, token: 'mock-plan', admin: Boolean(params.everyone),
+    lines: (params.ids ?? []).map(id => params.everyone
+      ? { id, name: id.split('_')[0], does: 'Removed for every account, and new accounts won’t get it, with their data', back: 'Can’t be undone here: only the Microsoft Store brings it back, if it has it', undoable: false }
+      : { id, name: id.split('_')[0], does: 'Removed for you, with its data; new accounts still get it', back: 'Add back puts it back here (its files stay on this PC); its data doesn’t come back', undoable: true }),
+    message: null,
+    }
+  },
+  'apps.packagesRemove': () => ({ ok: true, removed: 1, left: 0, message: null }),
+  'apps.packageAddBack': () => ({ ok: true, store: false, message: null }),
   'replaced.remove': (p) => {
     const id = (p as { id?: string } | undefined)?.id
     MOCK_REPLACED = MOCK_REPLACED.map(app => app.id === id ? { ...app, installed: false, leftovers: 0, bytes: 0, needsAdmin: false, found: NONE_LEFT, cleared: { ...app.found, registry: app.found.registry + 7 } } : app)
@@ -1582,6 +1679,7 @@ const MOCK_HANDLERS: Record<string, MockHandler> = {
           : { key: 'chipset', label, detail: `${from} installed · ${to} installs while you're away` },
         ...mockNetItems(p),
       ],
+      check: mockCheck,
     }
   },
   'system.interrupts': (p) => {
@@ -1610,6 +1708,23 @@ const MOCK_HANDLERS: Record<string, MockHandler> = {
     { id: 'bin', name: 'Recycle Bin', detail: '', bytes: 1.2e9, files: 38, auto: false },
   ], cleaned: { at: new Date(Date.now() - 5 * 3_600_000).toISOString(), bytes: 1.9e9 } }),
   'junk.clean': () => ({ ok: true, bytes: 37.7e9, files: 470 }),
+  'compress.state': (p) => ({ ok: true, compress: mockCompress(String(p?.id ?? '')) }),
+  'compress.list': () => {
+    const games = [
+      { id: 'steam:1091500', title: 'Cyberpunk 2077', compress: mockCompress('steam:1091500') },
+      { id: 'steam:1245620', title: 'ELDEN RING', compress: { ...mockCompress(''), state: 'compressed' as const, saved: 18.3e9, size: 49e9, estimate: null } },
+      { id: 'steam:578080', title: 'PUBG: BATTLEGROUNDS', compress: { ...mockCompress(''), state: 'needsConsent' as const, estimate: 9.1e9, antiCheat: 'BattlEye', message: 'This game uses BattlEye, so Exo compresses it only if you allow it for this game.' } },
+    ].map(game => ({ ...game, eligible: game.compress.state === 'none' }))
+    return { ok: true, games, saved: 18.3e9, potential: 21.4e9, settings: { ...mockCompressSettings } }
+  },
+  'compress.act': (p) => ({ ok: true, message: null, compress: { ...mockCompress(String(p?.id ?? '')), state: p?.action === 'compress' ? 'compressing' : 'none', percent: p?.action === 'compress' ? 0.42 : null } }),
+  'compress.all': () => ({ ok: true, queued: 1, message: null }),
+  'compress.settings': (p) => {
+    if (typeof p?.whileIdle === 'boolean') mockCompressSettings.whileIdle = p.whileIdle
+    if (typeof p?.afterUpdates === 'boolean') mockCompressSettings.afterUpdates = p.afterUpdates
+    if (p?.speed === 'gentle' || p?.speed === 'balanced' || p?.speed === 'fast') mockCompressSettings.speed = p.speed
+    return { ok: true, settings: { ...mockCompressSettings } }
+  },
   'startup.list': () => mockStartup(null),
   'achievements.preview': () => ({ ok: true }),
   'fps.counter': (p) => { const on = p?.on === true; return { on, state: on ? 'on' : 'off', message: null } },

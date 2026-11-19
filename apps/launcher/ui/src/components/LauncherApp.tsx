@@ -82,7 +82,7 @@ import { useLiveLibraryRefresh } from './shell/useLiveLibraryRefresh'
 import { useShellLayout } from './shell/useShellLayout'
 import { useShelves } from './shell/useShelves'
 import { SETTINGS_SEARCH, type SettingsSectionId } from '../lib/settingsSections'
-import { closeCaptures, openCaptures, useCapturesSheet } from '../lib/capture'
+import { openCaptures, useCapturesSheet } from '../lib/capture'
 import { pageGet, pageSet } from '../lib/pageStore'
 import { runNoteCommand, useNoteCommands, watchNotesOpen } from '../lib/notes'
 
@@ -626,6 +626,8 @@ export function LauncherApp() {
   goToViewRef.current = goToView
   // A game's Shaders opens the PC room.
   const openGpu = useCallback(() => goToView('system'), [goToView])
+  // Devices is a page of the PC room: its chip opens it, its back button returns there.
+  const openDevices = useCallback(() => { void goToView('devices') }, [goToView])
   // A newer driver or app found in the background: said once, with where to update it.
   useEffect(() => onHostEvent('versions.new', found => notice({
     id: `versions-${found.id}`,
@@ -649,11 +651,6 @@ export function LauncherApp() {
   // front); Send to Discord opens the Discord room with the file copied.
   const capturesSheet = useCapturesSheet()
   useEffect(() => { if (capturesSheet.open) closeGamePage() }, [capturesSheet.open, capturesSheet.seq, closeGamePage])
-  const sendToDiscord = useCallback(() => {
-    closeCaptures()
-    goToView('friends')
-    notice({ text: 'Copied', tone: 'good' })
-  }, [goToView])
   // A backup that stops while Exo runs is said when it happens (the start reads the same note, once per stop).
   useEffect(() => onHostEvent('backup.stopped', stop => { if (stop?.sentence && stop.since) announceBackupStop(stop.sentence, stop.since) }), [])
   useEffect(() => onHostEvent('discord.open', open => { setPendingOpen(open); goToView('friends') }), [goToView])
@@ -1765,14 +1762,14 @@ export function LauncherApp() {
   ), [under, openedRooms, warming, opening, prewarm, view, games, openLibraryGameFromStore])
   const devicesRoom = useMemo(() => (
     <Room mounted={openedRooms.has('devices')} warm={warming || prewarm === 'devices'} active={under === 'devices'} covered={view === 'settings'} label="Devices" className="relative z-10 flex min-h-0 flex-1 flex-col">
-      <DevicesRoom active={devicesActive} />
+      <DevicesRoom active={devicesActive} onBack={openGpu} />
     </Room>
-  ), [under, view, openedRooms, warming, prewarm, devicesActive])
+  ), [under, view, openedRooms, warming, prewarm, devicesActive, openGpu])
   const systemRoom = useMemo(() => (
     <Room name="system" mounted={openedRooms.has('system')} warm={warming || opening === 'system' || prewarm === 'system'} active={under === 'system'} covered={view === 'settings'} label="PC" className="relative z-10 flex min-h-0 flex-1 flex-col">
-      <Suspense fallback={null}><PcRoom active={view === 'system'} jump={gpuJump} games={games} settings={settings} onSave={saveSettings} /></Suspense>
+      <Suspense fallback={null}><PcRoom active={view === 'system'} jump={gpuJump} games={games} settings={settings} onSave={saveSettings} onDevices={openDevices} /></Suspense>
     </Room>
-  ), [under, openedRooms, warming, opening, prewarm, view, gpuJump, games, settings, saveSettings])
+  ), [under, openedRooms, warming, opening, prewarm, view, gpuJump, games, settings, saveSettings, openDevices])
   const libraryRoom = useMemo(() => sortMode && (
     <Room mounted={openedRooms.has('library')} active={under === 'library'} covered={view === 'settings'} label="Library" className="exo-under-bar relative z-10 flex min-h-0 flex-1">
       <LibraryPane
@@ -1923,7 +1920,7 @@ export function LauncherApp() {
           }}
         /></Suspense>
       </ErrorBoundary>
-      <Suspense fallback={null}><CapturesOverlay games={games} onDiscord={sendToDiscord} /></Suspense>
+      <Suspense fallback={null}><CapturesOverlay games={games} /></Suspense>
       {activateKeySheet}
       <RoomReport room={view} />
       {commandMenu}

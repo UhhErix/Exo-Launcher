@@ -36,8 +36,8 @@ internal static class NetworkDestinations
     internal const string PcGamingWiki = "PCGamingWiki";
     internal const string CoverArt = "Cover art: Steam CDN and Steam store search, Epic store catalog, GOG, Microsoft Store catalog, and the image servers a store's own data points to";
     internal const string CoverCache = "Exo's cover cache (covers.getexo.app, on Exo's Cloudflare account): a game's title and Steam or GOG id, asked for its portrait when Exo has none";
-    internal const string Upscalers = "Vendor upscaler files (NVIDIA DLSS, AMD FidelityFX SDK and Intel XeSS, at pinned versions and each newer release, and DLSS Swapper's archive builds), from Exo's cache (updates.getexo.app, on Exo's Cloudflare account)";
-    internal const string FrameGenMod = "Frame generation mods (DLSSG SM86's and OptiScaler's pinned releases), from Exo's cache (updates.getexo.app, on Exo's Cloudflare account)";
+    internal const string Upscalers = "Vendor upscaler files (NVIDIA DLSS, AMD FidelityFX SDK and Intel XeSS, at pinned versions and each newer release, and DLSS Swapper's archive builds), from the vendors' own GitHub repositories (api.github.com, raw.githubusercontent.com) and DLSS Swapper's download host (dlss-swapper-downloads.beeradmoore.com), and Exo's cache (updates.getexo.app, on Exo's Cloudflare account) when those fail";
+    internal const string FrameGenMod = "Frame generation mods (OptiScaler, MFG Unlocker and DLSSG SM86: each one's newest release), from GitHub (api.github.com, github.com and its release file hosts release-assets.githubusercontent.com and objects.githubusercontent.com), and Exo's cache (updates.getexo.app, on Exo's Cloudflare account) when GitHub fails";
     internal const string StoreRoom = "Store room: Steam store and Steam Web API (store search, ranked lists, game pages), CheapShark (prices from official stores only, and a game's lowest price ever)";
     internal const string StoreTags = "Store room: Steam tag names (IStoreService/GetTagList)";
     internal const string MusicArtwork = "Music artwork (Spotify, YouTube Music and Apple Music image servers)";
@@ -50,13 +50,14 @@ internal static class NetworkDestinations
     internal const string NvidiaDrivers = "NVIDIA (driver lookup and download: `www.nvidia.com`, `gfwsl.geforce.com`, `api-forums.nvidia.com`, `us.download.nvidia.com`, `international.download.nvidia.com`)";
     internal const string DiscordClient = "Exo's own Discord client (discord.com, gateway.discord.gg, remote-auth-gateway.discord.gg, cdn.discordapp.com, Discord's media proxy on discordapp.net, Discord's voice servers on discord.media, Discord's file uploads for apps on discord-attachments-uploads-prd.storage.googleapis.com)";
     internal const string StripeCards = "Stripe's card form in Exo's Discord Shop (js.stripe.com, api.stripe.com, m.stripe.network, hooks.stripe.com), only while you add a card or your bank confirms a payment";
-    internal const string DiscordGifs = "GIF hosts Discord points to (*.klipy.com, *.tenor.com, *.giphy.com)";
+    internal const string DiscordGifs = "GIF hosts Discord points to (*.klipy.com, *.tenor.com, *.giphy.com, i.imgur.com)";
     internal const string SteamAchievementStats = "Steam's global achievement percentages (api.steampowered.com)";
     internal const string DiscordPlayers = "Video and music players in Discord messages (YouTube, Twitch, Vimeo, TikTok, SoundCloud, Spotify, Apple Music)";
     /// <summary>Lucid's updates: off (<c>LucidCompanion.UpdatesAvailable</c>), so no registry entry or PRIVACY.md row names it until the gate is turned on.</summary>
     internal const string LucidUpdates = "Lucid's updates (the newest release of tekkusai/Lucid and its Lucid.exe, from Exo's cache at updates.getexo.app, on Exo's Cloudflare account)";
     internal const string ControllerFirmware = "Sony's controller firmware versions (fwupdater.dl.playstation.net)";
     internal const string WindowsRelease = "Microsoft's Windows release information page (learn.microsoft.com)";
+    internal const string NetworkCheck = "Best settings › Network's connection check (Cloudflare's 1.1.1.1, your router, and Exo's own domain looked up)";
     internal const string AsusBios = "ASUS's BIOS list and, on your press, the BIOS file itself (`www.asus.com`, dlcdnets.asus.com)";
     internal const string SpotifyShareLinks = "Spotify share links (spotify.link, spotify.app.link)";
     internal const string ExoAccount = "Exo account (accounts.getexo.app, on Exo's Cloudflare account)";
@@ -150,7 +151,11 @@ internal static class NetworkDestinations
         new("*.origin.com", CoverArt),
         new("*.blizzard.com", CoverArt),
         new("*.battle.net", CoverArt),
-        // DlssSwapService.Releases, and DlssSwapService.VendorWatch reading each vendor's latest release from Exo's cache.
+        // DlssSwapService.Releases, and DlssSwapService.VendorWatch reading each vendor's latest release: upstream first
+        // (UpstreamSource), Exo's cache when upstream fails.
+        new("api.github.com", Upscalers),
+        new("raw.githubusercontent.com", Upscalers),
+        new("dlss-swapper-downloads.beeradmoore.com", Upscalers),
         new("updates.getexo.app", Upscalers),
         new("www.nvidia.com", NvidiaDrivers),
         new("gfwsl.geforce.com", NvidiaDrivers),
@@ -171,7 +176,12 @@ internal static class NetworkDestinations
         // NetworkDrivers: Realtek's network driver page, for the newest version (opened in the browser to download).
         new("www.realtek.com", RealtekDrivers),
 
-        // DlssSwapService.FrameGen: each mod's newest release from Exo's cache, its file through VerifiedGitHubReleaseDownloader.
+        // DlssSwapService.FrameGen: each mod's newest release from GitHub, its file through VerifiedGitHubReleaseDownloader.Upstream
+        // (github.com redirects to its release file hosts); Exo's cache when GitHub fails.
+        new("api.github.com", FrameGenMod),
+        new("github.com", FrameGenMod),
+        new("release-assets.githubusercontent.com", FrameGenMod),
+        new("objects.githubusercontent.com", FrameGenMod),
         new("updates.getexo.app", FrameGenMod),
 
         // StoreService.
@@ -228,6 +238,7 @@ internal static class NetworkDestinations
         // PcAbout: which Windows version is newest, for PC > Overview's About card.
         new("learn.microsoft.com", WindowsRelease),
         // BiosUpdate: the newest BIOS ASUS lists for an ASUS board or laptop, by its model.
+        new("1.1.1.1", NetworkCheck),
         new("www.asus.com", AsusBios),
         new("dlcdnets.asus.com", AsusBios),
 

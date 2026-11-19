@@ -1,14 +1,14 @@
-// Exo's icons are Tabler (tabler.io/icons, MIT, through @iconify-json/tabler), one family everywhere. scripts/tabler-map.mjs names
-// the Tabler icon for each of Exo's glyph names; this writes them into brand/glyphs.ts, and stops on a name icons.tsx uses with
-// no icon, an icon nothing names, a Tabler name that doesn't exist, or two Exo names sharing one icon.
+// Exo's icons are Lucide (lucide.dev, ISC, through @iconify-json/lucide), one family everywhere (owner, 2026-11-19). scripts/lucide-map.mjs
+// names the Lucide icon for each of Exo's glyph names; this writes them into brand/glyphs.ts, and stops on a name icons.tsx uses with
+// no icon, an icon nothing names, a Lucide name that doesn't exist, or two Exo names sharing one icon.
 // Run it after changing the map: npm run icons (check-only with --check).
 import fs from 'node:fs'
 import path from 'node:path'
 import { createRequire } from 'node:module'
-import { TABLER } from './tabler-map.mjs'
+import { LUCIDE } from './lucide-map.mjs'
 
 const require = createRequire(import.meta.url)
-const tabler = require('@iconify-json/tabler/icons.json').icons
+const lucide = require('@iconify-json/lucide/icons.json').icons
 const brand = path.resolve(import.meta.dirname, '../src/brand')
 const source = fs.readFileSync(path.join(brand, 'icons.tsx'), 'utf8')
 const out = path.join(brand, 'glyphs.ts')
@@ -18,35 +18,40 @@ const named = new Set()
 for (const [, exo, glyph, badge] of source.matchAll(/\b(?:icon\('([a-z0-9-]+)'\)|marked\('[a-z0-9-]+', '([a-z0-9-]+)', '([a-z0-9-]+)'\))/g)) {
   for (const name of [exo, glyph, badge]) if (name) named.add(name)
 }
-const base = name => (name.endsWith('-on') && name.slice(0, -3) in TABLER ? name.slice(0, -3) : name)
-for (const name of named) if (!(base(name) in TABLER)) throw new Error(`icons.tsx names "${name}", which scripts/tabler-map.mjs has no Tabler icon for`)
-for (const name of Object.keys(TABLER)) {
-  if (!named.has(name) && !named.has(name + '-on')) throw new Error(`scripts/tabler-map.mjs maps "${name}", which icons.tsx doesn't name`)
-  if (!tabler[TABLER[name]]) throw new Error(`"${name}" maps to "${TABLER[name]}", which Tabler doesn't have`)
+const base = name => (name.endsWith('-on') && name.slice(0, -3) in LUCIDE ? name.slice(0, -3) : name)
+for (const name of named) if (!(base(name) in LUCIDE)) throw new Error(`icons.tsx names "${name}", which scripts/lucide-map.mjs has no Lucide icon for`)
+for (const name of Object.keys(LUCIDE)) {
+  if (!named.has(name) && !named.has(name + '-on')) throw new Error(`scripts/lucide-map.mjs maps "${name}", which icons.tsx doesn't name`)
+  if (!lucide[LUCIDE[name]]) throw new Error(`"${name}" maps to "${LUCIDE[name]}", which Lucide doesn't have`)
 }
 const used = new Map()
-for (const [name, icon] of Object.entries(TABLER)) {
-  if (used.has(icon)) throw new Error(`${name} and ${used.get(icon)} share the Tabler icon ${icon}`)
+for (const [name, icon] of Object.entries(LUCIDE)) {
+  if (used.has(icon)) throw new Error(`${name} and ${used.get(icon)} share the Lucide icon ${icon}`)
   used.set(icon, name)
 }
 
-// A Tabler icon is its strokes on a 24 grid: its body is the markup inside the <svg>. The solid form is Tabler's -filled
-// (filled alone, no stroke) where it has one, else the line form.
-// The icons with a solid form, for a toggle that is on and the current room.
-// Transport is solid, as every player draws it: Tabler's -filled form is its one drawing.
+// A Lucide icon is its strokes on a 24 grid: its body is the markup inside the <svg>. Lucide draws outlines only, so a solid
+// form is the outline filled as well as stroked (2): a toggle that is on (liked, starred, pinned) and the transport, as every
+// player draws it. The rooms keep their outline when current: the white pill says where you are.
 const SOLID = new Set(['play', 'pause', 'stop', 'next', 'previous', 'record'])
-const ON = new Set(['badge-check', 'bookmark', 'chats', 'heart', 'library', 'lock', 'mouse', 'music', 'pin', 'star', 'store', 'this-pc', 'thumbs-down'])
-const body = icon => tabler[icon].body
-const entries = {}
-for (const name of Object.keys(TABLER).sort()) {
-  entries[name] = [body(TABLER[name]), 0]
-  if (ON.has(name)) {
-    const filled = tabler[TABLER[name] + '-filled']
-    entries[name + '-on'] = filled ? [filled.body, 1] : entries[name]
-  }
+const ON = new Set(['bookmark', 'heart', 'lock', 'pin', 'star', 'thumbs-down'])
+// Lucide writes fill, stroke, its 2px width and the round ends on every element; they would beat the <svg>'s own (icons.tsx),
+// so the line would never follow its size (lineAt) and a solid form would never fill. The <svg> sets them once instead.
+const bare = markup => markup.replace(/ (?:fill="none"|(?:stroke|stroke-width|stroke-linecap|stroke-linejoin)="[^"]*")/g, '')
+// The parts of a solid form that stay a line: the lock's shackle (filled, it would close into a dome).
+const OPEN = { lock: 'M7 11V7' }
+const body = icon => bare(lucide[icon].body)
+const solidBody = name => {
+  const markup = body(LUCIDE[name])
+  return OPEN[name] ? markup.replace(`<path d="${OPEN[name]}`, `<path fill="none" d="${OPEN[name]}`) : markup
 }
-const text = `// Generated by scripts/icons.mjs from scripts/tabler-map.mjs: Tabler's icons (tabler.io/icons, MIT), each [markup, solid]: its
-// strokes on a 24 grid (0), or its filled form (1). Don't edit; run npm run icons.
+const entries = {}
+for (const name of Object.keys(LUCIDE).sort()) {
+  entries[name] = [SOLID.has(name) ? solidBody(name) : body(LUCIDE[name]), SOLID.has(name) ? 2 : 0]
+  if (ON.has(name)) entries[name + '-on'] = [solidBody(name), 2]
+}
+const text = `// Generated by scripts/icons.mjs from scripts/lucide-map.mjs: Lucide's icons (lucide.dev, ISC), each [markup, solid]: its
+// strokes on a 24 grid (0), or the same strokes filled too (2). Don't edit; run npm run icons.
 /** The line on the 24 grid at a size in px: 1.5 up to 24, 1.75 from there, as light as Apple's symbols. */
 export const lineAt = (size: number) => (size >= 24 ? 1.75 : 1.5)
 export const GLYPHS = {
@@ -58,5 +63,5 @@ if (process.argv.includes('--check')) {
   if (current !== text) { console.error('brand/glyphs.ts is out of date: run npm run icons'); process.exit(1) }
 } else {
   fs.writeFileSync(out, text)
-  console.log(`Wrote ${Object.keys(entries).length} icons (${used.size} Tabler) to src/brand/glyphs.ts`)
+  console.log(`Wrote ${Object.keys(entries).length} icons (${used.size} Lucide) to src/brand/glyphs.ts`)
 }

@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import type { MouseLighting, MouseStatus } from '@openmouse/protocol/drivers/mouse-types'
 import {
   RAZER_BUTTON_CONTROLS,
@@ -11,7 +11,8 @@ import {
 import { can } from '../mouse'
 import type { Section } from '../section'
 import { AngleControl } from '../SensorAngle'
-import { ColorField, Dropdown, NumberField, Panel, Row, Segmented, Slider, Switch } from '../ui'
+import type { RazerAngleStatus } from '../razer-angle'
+import { ColorField, Dropdown, NumberField, Panel, Row, Segmented, Slider, Spinner, Switch } from '../ui'
 import './core-extras.css'
 
 /**
@@ -262,22 +263,56 @@ function Sensor(section: Section) {
     )
   }
   if (status.angleTuning != null && !isPulsarPro(status) && status.atkSensorMode == null && can(client, 'setAngleTuning')) {
-    // OpenMouse offers -30 to +30; a wider value set elsewhere shows as it is.
-    const angle = status.angleTuning
-    rows.push(
-      <Row key="at" label="Sensor angle">
-        <AngleControl section={section}>
-          {angle < -30 || angle > 30
-            ? <span className="m-state">{signed(angle)}</span>
-            : <Slider label="Sensor angle" min={-30} max={30} step={1} value={angle} format={signed}
-                onCommit={v => void apply('setAngleTuning', v)} disabled={busy} />}
-        </AngleControl>
-      </Row>,
-    )
+    rows.push(<AngleRow key="at" section={section} angle={status.angleTuning} />)
   }
   if (replacesLiftOff(section)) rows.push(...liftOffRows(section))
   return rows.length ? <Panel title="Sensor">{rows}</Panel> : null
 }
+
+/**
+ * The sensor angle (every brand whose driver sets it in degrees, Razer's Viper V3 Pro through razer-angle.ts): the
+ * slider, a reset to 0 and Measure. The row says for itself how the last change went: a ring while it is written, a
+ * check once the mouse took it, a plain line when it didn't. OpenMouse offers -30 to +30; a wider value set elsewhere
+ * shows as it is.
+ */
+function AngleRow({ section, angle }: { section: Section; angle: number }) {
+  const { status, apply, busy } = section
+  const [state, setState] = useState<'idle' | 'applying' | 'done' | 'failed'>('idle')
+  const timer = useRef(0)
+  useEffect(() => () => window.clearTimeout(timer.current), [])
+  const unread = (status as RazerAngleStatus).razerAngleUnread === true
+  const set = async (v: number) => {
+    window.clearTimeout(timer.current)
+    setState('applying')
+    const took = await apply('setAngleTuning', v)
+    setState(took ? 'done' : 'failed')
+    if (took) timer.current = window.setTimeout(() => setState('idle'), ANGLE_DONE_MS)
+  }
+  return (
+    <>
+      <Row label="Sensor angle" value={unread ? 'Not read from the mouse' : undefined}>
+        <AngleControl section={section}>
+          <span className="cx-angle">
+            {angle < -30 || angle > 30
+              ? <span className="m-state">{signed(angle)}</span>
+              : <Slider label="Sensor angle" min={-30} max={30} step={1} value={angle} format={signed}
+                  onCommit={v => void set(v)} disabled={busy} />}
+            <span className="cx-angle-state" aria-live="polite">
+              {state === 'applying' ? <Spinner label="Applying the sensor angle" />
+                : state === 'done' ? <svg className="m-check is-good" viewBox="0 0 24 24" role="img" aria-label="Applied"><path d="M5 12.5L10 17.5L19.5 8" pathLength="1" /></svg>
+                  : null}
+            </span>
+          </span>
+          <button type="button" className="m-button is-compact" disabled={busy || (angle === 0 && !unread)} onClick={() => void set(0)}>Reset</button>
+        </AngleControl>
+      </Row>
+      {state === 'failed' ? <p className="cx-angle-error" role="alert">Your mouse didn't take the new angle. Try again.</p> : null}
+    </>
+  )
+}
+
+/** How long the check stays after the mouse took an angle. */
+const ANGLE_DONE_MS = 2000
 
 /**
  * Lift-off for mice the generic three-stop row cannot describe: a separate

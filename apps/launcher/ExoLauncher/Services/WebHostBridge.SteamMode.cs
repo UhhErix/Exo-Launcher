@@ -194,8 +194,7 @@ public sealed partial class WebHostBridge
 
     /// <summary>The game's appinfo record (Steam's local copy of its store entry); null when Steam has none.</summary>
     private static SteamKeyValues? FamilyAppInfo(string root, string appId) =>
-        uint.TryParse(appId, out var id) && ReadSharedBytes(Path.Combine(root, "appcache", "appinfo.vdf")) is { } data &&
-        SteamAppInfoNames.ReadApps(data, new HashSet<uint> { id }).TryGetValue(id, out var app) ? app : null;
+        uint.TryParse(appId, out var id) && SteamAppInfoNames.ReadApps(root, new HashSet<uint> { id }).TryGetValue(id, out var app) ? app : null;
 
     private void LaunchLine(GameEntry game, string line) =>
         PostEvent("launch.status", new { gameId = game.Id, ok = true, message = line, phase = "preparing" });

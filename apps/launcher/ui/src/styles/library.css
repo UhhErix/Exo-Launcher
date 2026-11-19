@@ -406,3 +406,119 @@
   margin: 0 4px;
   background: var(--exo-float-line);
 }
+
+/* Downloads (DownloadsSheet.tsx): large glass over the dimmed room, as the Apps sheet. Each line: the game and what it is
+   doing (with a bar while it runs), its Update automatically switch, and its controls, all on one row. */
+.exo-downloads-sheet {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 16px;
+  min-height: 0;
+  padding: 20px 28px 20px;
+  overflow: hidden auto;
+  scrollbar-width: none;
+}
+
+.exo-downloads-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.exo-downloads-note,
+.exo-downloads-empty {
+  margin: 0;
+  color: var(--color-muted);
+  font-size: var(--exo-type-body);
+}
+
+.exo-downloads-group > h3 {
+  margin: 0 0 6px;
+  color: var(--color-muted);
+  font-size: var(--exo-type-small);
+  font-weight: var(--exo-weight-title);
+}
+
+.exo-downloads-group > ul {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.exo-downloads-row {
+  display: grid;
+  /* The controls' column is one width on every row, so each row's switch stands in one line down the sheet. */
+  grid-template-columns: minmax(0, 1fr) auto calc(180px * var(--exo-scale, 1));
+  align-items: center;
+  gap: 16px;
+  min-height: 56px;
+  padding: 8px 12px;
+  border-radius: var(--exo-card-radius);
+}
+
+.exo-downloads-row:hover {
+  background: var(--hover-fill);
+}
+
+.exo-downloads-what {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.exo-downloads-what > strong {
+  overflow: hidden;
+  font-weight: var(--exo-weight-title);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.exo-downloads-what > span:not(.exo-downloads-bar) {
+  overflow: hidden;
+  color: var(--color-muted);
+  font-size: var(--exo-type-small);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.exo-downloads-bar {
+  display: block;
+  height: 3px;
+  margin-top: 4px;
+  border-radius: 999px;
+  background: var(--exo-track);
+  overflow: hidden;
+}
+
+.exo-downloads-bar > span {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: var(--color-fg);
+}
+
+.exo-downloads-auto {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--color-muted);
+  font-size: var(--exo-type-small);
+  white-space: nowrap;
+}
+
+.exo-downloads-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.exo-downloads-actions .exo-set-btn.is-icon {
+  padding-inline: 8px;
+}

@@ -95,10 +95,6 @@ public sealed partial class WebHostBridge
         return DiscordSession.Current is { } session ? session.Cache.Home() : new { me = (object?)null, dms = Array.Empty<object>(), guilds = Array.Empty<object>() };
     }
 
-    // Who is in voice across your servers, from what the connection holds; no request.
-    private static object DiscordVoiceNow() =>
-        new { rooms = DiscordSession.Current?.Cache.VoiceNow() ?? [] };
-
     private static object DiscordChannels(JsonElement p, bool hasParams)
     {
         if (DiscordSession.Current is not { } session || ReadString(p, hasParams, "guildId") is not { } guildId) return new { name = (string?)null, channels = Array.Empty<object>() };

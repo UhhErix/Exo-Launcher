@@ -1,0 +1,86 @@
+name: Publish release to the update mirror
+
+# The apps never ask GitHub for their own updates: they ask updates.getexo.app (Worker exo-updates, R2 bucket
+# exo-releases). When a stable Exo Launcher release is published here, this puts its installer, .sha256, whats-new.json,
+# CHANGELOG.md and launcher/latest.json into the bucket and checks what the address serves, with
+# apps/launcher/cloud/updates/publish-github-release.ps1 (which runs publish-release.ps1, the script a person runs by hand).
+# Run it by hand (Actions > this workflow > Run workflow) for a tag, with "dry_run" for the checks and the plan only.
+#
+# Secrets: CLOUDFLARE_API_TOKEN (Account > Workers R2 Storage > Edit) and CLOUDFLARE_ACCOUNT_ID. Without them the job
+# says so and stops, green. A release published with the default Actions GITHUB_TOKEN does not trigger this workflow.
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag (vX.Y.Z) to put into the update mirror
+        required: true
+        type: string
+      dry_run:
+        description: Checks and plan only; nothing uploaded
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: launcher-release-mirror-${{ github.event.release.tag_name || inputs.tag }}
+  cancel-in-progress: false
+
+jobs:
+  mirror:
+    if: ${{ github.repository == 'UhhErix/Exo-Launcher' && (github.event_name == 'workflow_dispatch' || (!github.event.release.prerelease && !github.event.release.draft)) }}
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - name: Check the tag and the Cloudflare secrets
+        id: ready
+        shell: pwsh
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name || inputs.tag }}
+          HAS_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN != '' }}
+          HAS_ACCOUNT: ${{ secrets.CLOUDFLARE_ACCOUNT_ID != '' }}
+        run: |
+          if ($env:RELEASE_TAG -notmatch '^v\d{1,4}\.\d{1,4}\.\d{1,4}$') {
+            Write-Output "::error::Release tag '$env:RELEASE_TAG' is not vMAJOR.MINOR.PATCH."
+            exit 1
+          }
+          if ($env:HAS_TOKEN -ne 'true' -or $env:HAS_ACCOUNT -ne 'true') {
+            Write-Output "::warning title=Update mirror not published::Repository secrets CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID are not both set, so $env:RELEASE_TAG was NOT put into updates.getexo.app. Add them (RELEASES.md) and run this workflow for $env:RELEASE_TAG, or run publish-release.ps1 by hand."
+            "ready=false" >> $env:GITHUB_OUTPUT
+            exit 0
+          }
+          "ready=true" >> $env:GITHUB_OUTPUT
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        if: steps.ready.outputs.ready == 'true'
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        if: steps.ready.outputs.ready == 'true'
+        with:
+          node-version: '24'
+
+      - name: Publish to the update mirror
+        if: steps.ready.outputs.ready == 'true'
+        shell: pwsh
+        working-directory: apps/launcher
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name || inputs.tag }}
+          DRY_RUN: ${{ inputs.dry_run && 'true' || 'false' }}
+          GH_TOKEN: ${{ github.token }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          WRANGLER_SEND_METRICS: 'false'
+        run: |
+          $publish = @(if ($env:DRY_RUN -ne 'true') { '-Publish' })
+          pwsh -NoProfile -File cloud/updates/publish-github-release.ps1 -Tag $env:RELEASE_TAG @publish
+          if ($LASTEXITCODE -ne 0) {
+            Write-Output "::error title=Update mirror::$env:RELEASE_TAG did not publish or verify on updates.getexo.app; see the log above. latest.json is put back on a failed check."
+            exit 1
+          }

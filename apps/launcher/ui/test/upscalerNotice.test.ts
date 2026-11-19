@@ -8,7 +8,7 @@ import { AUTO_UPSCALERS_DETAIL, AUTO_UPSCALERS_LABEL, newerNotice } from '../src
 
 test('the setting reads as the owner worded it, plainly', () => {
   assert.equal(AUTO_UPSCALERS_LABEL, 'Update DLSS, FSR and XeSS automatically')
-  assert.equal(AUTO_UPSCALERS_DETAIL, 'Exo downloads newer versions from its cache and installs them only if NVIDIA, AMD or Intel signed them.')
+  assert.equal(AUTO_UPSCALERS_DETAIL, 'Newer versions come from NVIDIA, AMD and Intel and go into your games by themselves, only if they signed them.')
 })
 
 test('nothing newer means no notice', () => {

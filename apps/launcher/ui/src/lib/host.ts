@@ -3,7 +3,7 @@ import type { UpdateState } from './updatePhase'
 import { report } from './report'
 import type { MatchSong, MusicPlayback, MusicService, MusicAction } from './music'
 import type { PlayerAction, PlayerActOptions, PlayerRoomState, PlayerView, PlayerViewData, PlayerViewOptions } from './player'
-import type { DiscordChannel, DiscordChannels, DiscordPlace, DiscordEvent, DiscordGuide, DiscordInvite, DiscordMemberSearch, DiscordResource, DiscordRole, DiscordUser, DiscordEmojis, DiscordFriend, DiscordRestricted, DiscordRoleIcon, DiscordSavedMessage, DiscordGif, DiscordFavoriteGif, DiscordMemberList, DiscordProfile, DiscordProfileExtras, DiscordGuildProfile, DiscordStickerGroup, DiscordThread, DiscordPresence, DiscordCallSong, DiscordHome, DiscordReactionEvent, DiscordVoice, DiscordMessage, DiscordMessageEvent, DiscordSignInStep, DiscordState, DiscordStatus, DiscordUnread, DiscordNotice, DiscordForumTag, DiscordForYouItem, DiscordUnreadChannel, DiscordSearchFilters, DiscordShopCatalog, DiscordShopProduct, DiscordPaymentChoice, DiscordShopPrice, DiscordRailItem, DiscordThreadState, DiscordVoiceNow } from './discord'
+import type { DiscordChannel, DiscordChannels, DiscordPlace, DiscordEvent, DiscordGuide, DiscordInvite, DiscordMemberSearch, DiscordResource, DiscordRole, DiscordUser, DiscordEmojis, DiscordFriend, DiscordRestricted, DiscordRoleIcon, DiscordSavedMessage, DiscordGif, DiscordFavoriteGif, DiscordMemberList, DiscordProfile, DiscordProfileExtras, DiscordGuildProfile, DiscordStickerGroup, DiscordThread, DiscordPresence, DiscordCallSong, DiscordHome, DiscordReactionEvent, DiscordVoice, DiscordMessage, DiscordMessageEvent, DiscordSignInStep, DiscordState, DiscordStatus, DiscordUnread, DiscordNotice, DiscordForumTag, DiscordForYouItem, DiscordUnreadChannel, DiscordSearchFilters, DiscordShopCatalog, DiscordShopProduct, DiscordPaymentChoice, DiscordShopPrice, DiscordRailItem, DiscordThreadState } from './discord'
 import type { CaptureExport, CaptureItem, CaptureSettings, CaptureState, ReelEvent } from './capture'
 import type { NoteInfo } from './notes'
 import type { AccountSettings, DiscordAccount, DiscordAccountAction, DiscordClientSettings } from './discordPrefs'
@@ -696,7 +696,7 @@ export type GpuImportAnswer = {
 
 /** System > This PC: one row per setup problem (none when all is well); power switches to Exo's plan for cpu, with Undo; chipset Exo updates (busy while it installs, applied while it waits for a restart, url only after a failed install). */
 export type PcHealthItem = {
-  key: 'ram' | 'rebar' | 'power' | 'chipset' | 'gpusched' | 'gpupref' | 'network' | 'netlink'
+  key: 'ram' | 'rebar' | 'power' | 'chipset' | 'gpusched' | 'gpupref' | 'network' | NetworkItemKey | 'netlink'
   label: string
   detail: string
   url?: string | null
@@ -709,8 +709,16 @@ export type PcHealthItem = {
   current?: boolean
   /** Nothing to do because the maker's newest has a known problem here: the row says so ("… skipped: …") with no button. */
   held?: boolean
+  /** A Network item the player turned off: Best settings leaves it until its switch is on again. */
+  off?: boolean
 }
-export type PcHealth = { ok: boolean; message?: string | null; items: PcHealthItem[] }
+/** Best settings › Network's items (NetworkBest.cs): the adapters' own settings, Cloudflare DNS encrypted, Windows' TCP defaults. */
+export type NetworkItemKey = 'net-adapter' | 'net-dns' | 'net-tcp'
+/** A quick measure of the connection, in ms (null: no answer): ping to 1.1.1.1, its jitter, ping to the router, a DNS lookup. */
+export type NetSample = { ping: number | null; jitter: number | null; router: number | null; lookup: number | null }
+/** The last check: before and after the last press (before null for a check on its own), and what it says. */
+export type NetCheck = { before: NetSample | null; after: NetSample; said: string }
+export type PcHealth = { ok: boolean; message?: string | null; items: PcHealthItem[]; check?: NetCheck | null }
 
 /**
  * PC › Drives (Drives.cs): one physical drive. link: the PCIe generation and lanes negotiated against the drive's own
@@ -1039,6 +1047,39 @@ export interface InstalledApp {
   replaces: string | null
 }
 
+/**
+ * A game's compression (Windows' own file compression, the game reads it as before): what it is doing, what it saved
+ * (bytes on disk), what it might save (`estimate`, read from a sample of its files once `sampled`), and what an update
+ * wrote back uncompressed (`changed`). `antiCheat` is the set the player is asked to allow; `held` why a job waits.
+ */
+export interface CompressState {
+  state: 'none' | 'queued' | 'compressing' | 'uncompressing' | 'paused' | 'compressed' | 'changed' | 'kept' | 'refused' | 'needsConsent'
+  percent: number | null
+  saved: number
+  size: number | null
+  estimate: number | null
+  sampled: boolean
+  changed: number
+  algorithm: string | null
+  message: string | null
+  antiCheat: string | null
+  held: string | null
+}
+
+export type CompressAction = 'compress' | 'uncompress' | 'pause' | 'resume' | 'cancel' | 'allow' | 'deny'
+
+/** Compress games' settings: while idle, again after updates, and the CPU it may use. */
+export interface CompressSettings { whileIdle: boolean; afterUpdates: boolean; speed: 'gentle' | 'balanced' | 'fast' }
+
+/** compress.list: every installed game's compression, the total saved and still to save. */
+export interface CompressList {
+  ok: boolean
+  games: { id: string; title: string; compress: CompressState; eligible: boolean }[]
+  saved: number
+  potential: number
+  settings: CompressSettings
+}
+
 /** One kind of junk on this PC (junk.scan): its size and how many files. */
 export interface JunkItem {
   id: 'temp' | 'crash' | 'thumbs' | 'shaders' | 'exo' | 'bin'
@@ -1099,7 +1140,8 @@ export interface StartupState {
 /** One thing an app left, as the deep clean found it; likely: matched by its name alone. */
 export interface AppLeftover {
   id: number
-  kind: 'folder' | 'file' | 'shortcut' | 'registry' | 'service' | 'task'
+  /** A driver is only ever shown, never selected: a device may still need it. */
+  kind: 'folder' | 'file' | 'shortcut' | 'registry' | 'service' | 'task' | 'driver'
   /** Where it is, by the place's name ("AppData\\Local\\Acme"): never a user's own folder. */
   path: string
   bytes: number
@@ -1107,6 +1149,12 @@ export interface AppLeftover {
   selected: boolean
   /** Why it isn't selected. */
   note: string | null
+  /** How sure Exo is that it's the app's: only certain is ever selected. */
+  certainty: 'certain' | 'likely' | 'possible'
+  /** That certainty and what it rests on: "Certain: inside the app's folder". */
+  because: string
+  /** A driver that goes with its driver store package, saved first (Put back adds it again). */
+  store?: boolean
   machine: boolean
   /** Which program it was left by; empty when only what points at a program that's gone found it. */
   from: string
@@ -1137,6 +1185,34 @@ export interface AppFind {
   declined?: boolean
   /** apps.tidy: what went by itself with the junk while the PC was idle, said once. */
   autoCleared?: { id: string; name: string; cleared: LeftoverSummary }[] | null
+  /** File types Windows still opens with it (".abc"): Windows signs that choice, so only Default apps changes it. */
+  defaults?: string[]
+}
+
+/** A Store or preinstalled app across this PC's accounts (apps.packages); what Windows needs is never listed. */
+export interface WindowsApp {
+  /** Its package family. */
+  id: string
+  name: string
+  publisher: string | null
+  /** Installed for you. */
+  forMe: boolean
+  /** How many other accounts have it. */
+  others: number
+  /** New accounts get it (Windows' image has it). */
+  provisioned: boolean
+  bloat: string | null
+  /** Removed for you, with its files still on this PC: Add back registers it again. */
+  addBack: boolean
+}
+
+/** What removing one does and how it comes back, said before anything goes (apps.packagesPlan). */
+export interface WindowsAppLine {
+  id: string
+  name: string
+  does: string
+  back: string
+  undoable: boolean
 }
 
 export interface ReplacedApp {
@@ -1280,6 +1356,8 @@ export interface LauncherSettings {
   reduceMotion?: boolean
   /** The window always opens maximized; off, it opens as it was when it closed. */
   startMaximized?: boolean
+  /** Settings › General › Open Exo when Windows starts. */
+  startWithWindows?: boolean
   textColour?: 'white' | 'grey' | string
   /** Settings › General › Background (lib/exoTheme.ts › BACKGROUNDS). */
   background?: 'black' | 'near' | 'grey' | 'windows' | 'graphite' | string
@@ -1333,6 +1411,8 @@ export interface LauncherSettings {
   /** This PC's chipset driver (AMD's or Intel's) updates by itself while the PC is idle (default on). */
   autoUpdateChipset?: boolean
   autoUpdateUpscalers?: boolean
+  /** Settings' one-time allow: upscaler files update in games with anti-cheat too (never Riot or Vanguard). */
+  upscalerAntiCheatEverywhere?: boolean
   /** Whose chipset driver this PC has and Exo updates: AMD's on a Ryzen, Intel's on an Intel processor (read-only: shows Keep the AMD or Intel chipset driver up to date). */
   chipset?: 'amd' | 'intel' | null
   /** Store clients (Steam, Epic) stay quiet: their pop-ups and sounds off and kept off; off puts them back as they were (default on). */
@@ -1503,6 +1583,11 @@ export interface InstallResponse {
   missingDependencies?: MissingDependency[]
 }
 
+/** One line of the download manager (LaunchOrchestrator.Queue.cs). */
+export type DownloadLine = { gameId: string; title: string; store: string; state: 'running' | 'queued' | 'paused'; canPause: boolean; autoUpdate: boolean }
+
+export type DownloadsList = { ok: boolean; held?: string | null; pausedByPlayer?: boolean; autoUpdateGames?: boolean; lines?: DownloadLine[]; message?: string }
+
 export interface PausedDownload {
   gameId: string
   title: string
@@ -1582,6 +1667,12 @@ export interface GameProperties {
   steamOverlay?: boolean | null
   /** The game's own shader caches together (0 once cleared); null for a game Exo can't rebuild them for (Call of Duty only for now). */
   shaderCacheBytes?: number | null
+  /**
+   * A Steam game whose Play menu has an entry without its anti-cheat (NBA 2K26's "without EAC (offline only)"): which one
+   * Play starts, and that entry's own words. Without it the game counts as one with no anti-cheat, so frame generation and
+   * mods can go in; back with it, they come out first. Null for every other game.
+   */
+  antiCheatLaunch?: { value: 'with' | 'without'; detail: string } | null
 }
 
 /** The host leaves empty values out: each one a store does not have reads as null here, so its row stays hidden. */
@@ -1595,7 +1686,7 @@ function withNulls(properties: GameProperties): GameProperties {
 
 export type GamePropertyKey =
   | 'launchOptions' | 'cloudSync' | 'language'
-  | 'beta' | 'betaCode' | 'content' | 'folder' | 'storeProperties' | 'throughSteam' | 'steamOverlay' | 'shaders'
+  | 'beta' | 'betaCode' | 'content' | 'folder' | 'storeProperties' | 'throughSteam' | 'steamOverlay' | 'shaders' | 'antiCheatLaunch'
 
 /** Desktop app install (Spotify). */
 type HostRequest = { version: number; id: string; method: string; params?: Record<string, unknown> }
@@ -1720,6 +1811,8 @@ export interface HostEventMap {
   'keys.found': { ok: boolean; message: string; gameId?: string; title?: string }
   /** A runtime Exo offered to install is downloading: bytes so far of total (null when the size is unknown). */
   'deps.progress': { id: string; bytes: number; total: number | null }
+  /** A game's compression moved on (twice a second at most while it works) or ended. */
+  'compress.progress': { id: string; compress: CompressState }
   /** The window was maximized or restored, or the pointer moved over the native maximize button. */
   'shell.window': { maximized: boolean; maximizeHover?: boolean }
   /** Exo's own update is downloading or installing: the step in words and its share (null while it can't be measured). */
@@ -2177,6 +2270,15 @@ export const host = {
   dequeue: (id: string) =>
     rawCall<{ ok: boolean; message?: string; queuedGameIds?: string[]; pausedDownloads?: PausedDownload[] }>('game.dequeue', { id }),
   resumeDownload: (id: string) => rawCall<InstallResponse>('game.resumeDownload', { id }),
+  /** The download manager's list: what runs, the queue in order, what is paused, and why downloads wait. */
+  downloadsList: () => rawCall<DownloadsList>('downloads.list', {}),
+  /** Moves a queued game `by` places (negative is sooner). */
+  downloadsMove: (id: string, by: number) => rawCall<{ ok: boolean; message?: string }>('downloads.move', { id, by }),
+  /** The player's Pause all / Resume all: holds every download Exo runs until resumed. */
+  downloadsPauseAll: () => rawCall<{ ok: boolean; message?: string }>('downloads.pauseAll', {}),
+  downloadsResumeAll: () => rawCall<{ ok: boolean; message?: string }>('downloads.resumeAll', {}),
+  /** A game's Update automatically switch: read without `on`, set with it. */
+  gameAutoUpdate: (id: string, on?: boolean) => rawCall<{ ok: boolean; on?: boolean; message?: string }>('game.autoUpdate', on === undefined ? { id } : { id, on }),
   progress: (id?: string) =>
     rawCall<InstallProgress>('game.progress', id ? { id } : {}),
   /** `handoff`: the store signs in inside its own app, which is now open. Nothing is connected yet. */
@@ -2303,7 +2405,7 @@ export const host = {
   /** Every capture, newest first; with a game id, that game's only. */
   captureList: (gameId?: string | null, limit?: number) =>
     rawCall<{ ok: boolean; items?: CaptureItem[] }>('capture.list', { gameId: gameId ?? null, limit: limit ?? 0 }),
-  captureItem: (id: string, action: 'favourite' | 'unfavourite' | 'delete' | 'reveal' | 'copy' | 'discord' | 'shrink') =>
+  captureItem: (id: string, action: 'favourite' | 'unfavourite' | 'delete' | 'reveal' | 'copy' | 'shrink') =>
     rawCall<{ ok: boolean; message?: string; item?: CaptureItem }>('capture.item', { id, action }),
   /** A lossless trim, or an export preset, between two points (ms). */
   captureEdit: (id: string, preset: CaptureExport, startMs: number, endMs: number) =>
@@ -2312,6 +2414,13 @@ export const host = {
   captureReel: (ids: string[], wait: boolean) =>
     rawCall<{ ok: boolean; message?: string; wait?: boolean }>('capture.reel', { ids, wait }),
   captureReelCancel: () => rawCall<{ ok: boolean }>('capture.reel.cancel'),
+  /** Copy text: Windows' on-device text recognition over a snip, or the part of it given (the snip's own pixels). */
+  captureText: (id: string, area?: { x: number; y: number; width: number; height: number }) =>
+    rawCall<{ ok: boolean; text?: string | null; message?: string | null }>('capture.text', { id, ...(area ?? {}) }, 60_000),
+  /** A capture into up to five Discord conversations through Exo's Discord client; a trimmed or too-large clip goes as its Discord copy
+      (item: that new clip). sent: the conversations it reached, even when a later one failed. */
+  captureSend: (id: string, channelIds: string[], content: string, startMs: number, endMs: number) =>
+    rawCall<{ ok: boolean; message?: string | null; sent?: string[]; item?: CaptureItem | null }>('capture.send', { id, channelIds, content, startMs, endMs }, 15 * 60_000),
   /** The snip editor's PNG (base64) over the snip, then copied. */
   captureSaveImage: (id: string, png: string) =>
     rawCall<{ ok: boolean; message?: string; item?: CaptureItem }>('capture.saveImage', { id, png }, 60_000),
@@ -2385,6 +2494,18 @@ export const host = {
   appsIcons: (ids: string[]) => rawCall<{ ok: boolean; icons: Record<string, string | null> }>('apps.icons', { ids }, 60_000),
   /** Junk on this PC by kind (temp files, crash reports, thumbnails, the Recycle Bin), with sizes; cleaned: Exo's last clean by itself (at: ISO time). */
   junkScan: () => rawCall<{ ok: boolean; items: JunkItem[]; cleaned: { at: string; bytes: number } | null }>('junk.scan', {}, 2 * 60_000),
+  /** A game's compression; `estimate` reads a sample of its files for what it would really save (seconds). */
+  compressState: (id: string, estimate = false) =>
+    rawCall<{ ok: boolean; message?: string; compress?: CompressState }>('compress.state', { id, estimate }, 5 * 60_000),
+  /** Every installed game's compression for PC › Compress games. */
+  compressList: () => rawCall<CompressList>('compress.list', {}, 5 * 60_000),
+  /** Compress, put back, pause, resume, stop; allow or take back the yes for a game with anti-cheat (`antiCheat`: the set shown). */
+  compressAct: (id: string, action: CompressAction, antiCheat?: string) =>
+    rawCall<{ ok: boolean; message?: string | null; compress?: CompressState }>('compress.act', antiCheat ? { id, action, antiCheat } : { id, action }, 60_000),
+  /** Every game worth it, one after another: how many went in the queue. */
+  compressAll: () => rawCall<{ ok: boolean; queued: number; message?: string | null }>('compress.all', {}, 5 * 60_000),
+  compressSettings: (patch: Partial<CompressSettings>) =>
+    rawCall<{ ok: boolean; settings: CompressSettings }>('compress.settings', patch, 10_000),
   /** PC › Apps › Startup: everything that starts at sign-in, and what Exo removed from it. */
   startupList: () => rawCall<StartupState>('startup.list', {}, 60_000),
   /** PC › Updates' BIOS (ASUS): what is staged for EZ Flash; prepare downloads, checks and stages it; restart goes into the BIOS. Each asked in Exo's window. */
@@ -2415,14 +2536,39 @@ export const host = {
   telemetryDelete: () => rawCall<{ ok: boolean; message?: string | null }>('telemetry.delete', {}, 30_000),
   /** The room the page shows (room.opened). */
   telemetryRoom: (room: string) => rawCall<{ ok: true }>('telemetry.track', { room }),
-  /** One uninstalled with its own uninstaller (asked in Exo's window, unless apps.confirm's pass covers it), then what it left cleared by itself. */
-  appsUninstall: (id: string) =>
-    rawCall<AppFind | { ok: false; still?: boolean; message?: string | null }>('apps.uninstall', { id }, 65 * 60_000),
+  /**
+   * One uninstalled with its own uninstaller, then what it left cleared by itself. quiet: one of a run apps.confirm passed,
+   * with its installer's quiet switches where it has them (Windows' prompt still asks for rights).
+   */
+  appsUninstall: (id: string, quiet = false) =>
+    rawCall<AppFind | { ok: false; still?: boolean; message?: string | null }>('apps.uninstall', quiet ? { id, quiet } : { id }, 65 * 60_000),
+  /** A System Restore point before a run, under Windows' prompt; ok only when there is one to go back to. */
+  appsRestorePoint: () => rawCall<{ ok: boolean; made: boolean; message?: string | null }>('apps.restorePoint', {}, 10 * 60_000),
+  /** How many of Windows Installer's cached copies no product or patch needs, and how big (only reads). */
+  appsInstallerCache: () => rawCall<{ ok: true; files: number; bytes: number }>('apps.installerCache', {}, 2 * 60_000),
+  /** Those, found again, to the Recycle Bin under one Windows prompt; undo is the Put back record. */
+  appsInstallerCacheClean: () =>
+    rawCall<{ ok: boolean; files: number; bytes: number; undo?: string | null; message?: string | null }>('apps.installerCacheClean', {}, 10 * 60_000),
   /** What is left of a program whose uninstaller is gone. */
   appsScan: (id: string) => rawCall<AppFind | { ok: false; message?: string | null }>('apps.scan', { id }, 5 * 60_000),
-  /** The chosen items of a find deleted (asked in Exo's window). */
-  appsClean: (token: string, ids: number[]) =>
-    rawCall<{ ok: boolean; cleared?: LeftoverSummary; undo?: string | null; left?: number; message?: string | null }>('apps.clean', { token, ids }, 15 * 60_000),
+  /**
+   * The chosen items of a find deleted (asked in Exo's window). restore: what needs Windows' permission goes only behind a
+   * System Restore point, made in the same prompt.
+   */
+  appsClean: (token: string, ids: number[], restore = false) =>
+    rawCall<{ ok: boolean; cleared?: LeftoverSummary; undo?: string | null; left?: number; message?: string | null }>('apps.clean', { token, ids, restore }, 15 * 60_000),
+  /** Windows' Default apps, for file types an app that's gone still opens. */
+  appsOpenDefaults: () => rawCall<{ ok: boolean; message?: string | null }>('apps.openDefaults', {}, 30_000),
+  /** Store and preinstalled apps across this PC's accounts; hidden: the parts of Windows never offered. */
+  appsPackages: () => rawCall<{ ok: boolean; hidden: number; items: WindowsApp[] }>('apps.packages', {}, 60_000),
+  /** What removing these for you, or for every account, does and whether it comes back; the plan stays with Exo under token. */
+  appsPackagesPlan: (ids: string[], everyone: boolean) =>
+    rawCall<{ ok: boolean; token: string | null; admin: boolean; lines: WindowsAppLine[]; message?: string | null }>('apps.packagesPlan', { ids, everyone }, 60_000),
+  /** That plan carried out: for you with no prompt, for every account under one Windows prompt. */
+  appsPackagesRemove: (token: string) =>
+    rawCall<{ ok: boolean; removed: number; left: number; message?: string | null }>('apps.packagesRemove', { token }, 15 * 60_000),
+  /** One removed for you back from the files still on this PC, else its Microsoft Store page (store: true). */
+  appsPackageAddBack: (id: string) => rawCall<{ ok: boolean; store: boolean; message?: string | null }>('apps.packageAddBack', { id }, 5 * 60_000),
   /** Edge Update may install Edge again (asked in Exo's window): Exo told it not to when Edge was removed. */
   appsAllowEdge: () => rawCall<{ ok: boolean; message?: string | null }>('apps.allowEdge', {}, 5 * 60_000),
   offerDepInstall: (id: string) =>
@@ -2557,7 +2703,6 @@ export const host = {
   appNotify: (title: string, body: string) => rawCall<{ ok: boolean }>('app.notify', { title, body }),
   discordHome: () => rawCall<DiscordHome>('discord.home', {}),
   /** Who is in voice across your servers, from what the connection holds. */
-  discordVoiceNow: () => rawCall<{ rooms: DiscordVoiceNow[] }>('discord.voiceNow', {}),
   /** The server channels with mentions waiting; at most one read of Discord's Mentions per connection. */
   discordChannels: (guildId: string) => rawCall<DiscordChannels>('discord.channels', { guildId }),
   /** 50 messages: the newest, or those before, after or around one; peek reads them without opening the channel (the Inbox's Unreads). */
@@ -2680,14 +2825,7 @@ export const host = {
   /** The user panel's device menus: devices, choices and volumes; with values, saves them. */
   discordAudio: (change: { input?: string; output?: string; inputVolume?: number; outputVolume?: number; soundboardVolume?: number; soundboardMuted?: boolean }) =>
     rawCall<{ inputs: { id: string; name: string }[]; outputs: { id: string; name: string }[]; input: string | null; output: string | null; inputVolume: number; outputVolume: number; soundboardVolume: number; soundboardMuted: boolean }>('discord.audio', change, 15_000),
-  /** Share my games for the account signed in: reads it, or sets it. */
   discordBandPins: (pins?: string[]) => rawCall<{ ok: boolean; pins: string[]; message?: string | null }>('discord.bandPins', pins === undefined ? {} : { pins }),
-  discordShareGames: (on?: boolean) => rawCall<{ ok: boolean; on: boolean; message?: string | null }>('discord.shareGames', on === undefined ? {} : { on }, 30_000),
-  /** Share when I'm getting ready (off until turned on; reads off while Share my games is): friends on Exo see a game installing, building its shaders or ready. */
-  discordShareReady: (on?: boolean) => rawCall<{ ok: boolean; on: boolean; message?: string | null }>('discord.shareReady', on === undefined ? {} : { on }, 30_000),
-  /** Posts one capture (by its id, from capture.list) to a conversation as an attachment; the host reads the file, and refuses what is over 25 MB. */
-  discordShareClip: (channelId: string, captureId: string) =>
-    rawCall<{ ok: boolean; message?: string | null }>('discord.shareClip', { channelId, captureId }, 5 * 60_000),
   /** The account's Discord settings (PreloadedUserSettings, Discord's defaults filled in); with changes, saves them (guildFolders: the whole server list). */
   discordUserSettings: (changes?: Partial<AccountSettings> & { guildFolders?: DiscordRailItem[] }) =>
     rawCall<{ ok: boolean; message?: string | null; values?: AccountSettings | null }>('discord.userSettings', changes ? { changes } : {}, 30_000),
@@ -2866,7 +3004,9 @@ export const host = {
   /** The card maker's own control panel opened as the user (NVIDIA Control Panel, AMD Software, Intel Graphics Software); message names one that isn't installed. */
   gpuControlPanel: () => rawCall<{ ok: boolean; message?: string | null }>('gpu.controlPanel', {}, 20_000),
   /** System > This PC: the checks; apply or undo Exo's power plan; gpusched opens Windows' Graphics settings; gamemode-on/off and gamebar-on (Exo keeps Game Bar off)/off (Exo puts it back) answer ok, and a sentence when Windows didn't take it. */
-  systemHealth: (action?: 'apply' | 'chipset' | 'gpusched' | 'gpupref' | 'gpupref-undo' | 'network' | 'gamemode-on' | 'gamemode-off' | 'gamebar-on' | 'gamebar-off') => rawCall<PcHealth>('system.health', action ? { action } : {}, 35_000),
+  systemHealth: (action?: 'apply' | 'chipset' | 'gpusched' | 'gpupref' | 'gpupref-undo' | 'network' | 'netcheck' | 'gamemode-on' | 'gamemode-off' | 'gamebar-on' | 'gamebar-off') => rawCall<PcHealth>('system.health', action ? { action } : {}, action === 'network' ? 240_000 : 35_000),
+  /** One item of Best settings › Network on (set now, back in Best settings) or off (put back as it was, left out of Best settings). */
+  systemNetwork: (on: boolean, item: 'adapter' | 'dns' | 'tcp') => rawCall<PcHealth>('system.health', { action: on ? 'network-on' : 'network-off', item }, 240_000),
   /** PC › Overview: what this PC is (processor, memory, drives, board, BIOS, Windows, security, connection). */
   systemAbout: () => rawCall<PcAbout>('system.about', {}, 15_000),
   /** PC > Auto tune: what's tunable and where it stands; start, stop or undo one part. Off until pressed. */

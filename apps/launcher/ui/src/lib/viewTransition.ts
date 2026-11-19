@@ -16,6 +16,8 @@ export type Morph = {
   name: string
   from: Element | null | undefined
   to: () => Element | null | undefined
+  /** Its corner turns into the one it lands with as it flies (a disc into a rounded square), instead of keeping its first. */
+  reshape?: boolean
 }
 
 /** The name of a pane that pushes (styles/transitions.css: exo-page). */
@@ -132,9 +134,21 @@ export function pressedBefore(current: string): boolean {
 function cornerOf(element: Element | null | undefined): string {
   for (let node = element, depth = 0; node && depth < 3; node = node.parentElement, depth++) {
     const radius = getComputedStyle(node).borderRadius
-    if (radius && radius !== '0px') return radius
+    if (!radius || radius === '0px') continue
+    // A disc (a square at 999px) stays a disc at any size, and turns into another corner evenly rather than at the last
+    // moment; a pill keeps its px, which keeps it a pill.
+    const box = node.getBoundingClientRect()
+    const disc = Math.abs(box.width - box.height) < 2 && /^[\d.]+px$/.test(radius) && parseFloat(radius) * 2 >= box.width
+    return disc ? '50%' : radius
   }
   return ''
+}
+
+/** A reshaping morph's corner, from the one it started with to the one it lands with, over the flight (styles/transitions.css). */
+function reshape(name: string, to: Element) {
+  const end = cornerOf(to) || '0px'
+  if (corners) corners.textContent += `::view-transition-image-pair(${name}){animation:exo-vt-reshape-${name} var(--dur-flight) var(--ease-spring) both}` +
+    `@keyframes exo-vt-reshape-${name}{to{border-radius:${end}}}`
 }
 
 /** Each morph's art keeps the rounded corner it starts with while it flies. */
@@ -228,6 +242,7 @@ export function transition(update: () => void, options: { kind?: TransitionKind;
       if (!onScreen(to)) continue
       setName(to, morph.name)
       settle(to, morph.name === PANE)
+      if (morph.reshape) reshape(morph.name, to)
       landed.push(to)
     }
     if (kind === 'room') for (const room of document.querySelectorAll('.exo-room:not([hidden], .is-backstage)')) settle(room, false)

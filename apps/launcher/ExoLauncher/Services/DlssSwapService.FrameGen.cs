@@ -134,7 +134,26 @@ public sealed partial class DlssSwapService
     internal bool RecorderClashes(string gameId) =>
         FrameGenFolderFor(gameId) is { } folder && ReadFrameGenManifest(folder) is { Out: false } install && install.Mod == DlssgSm86.Name && File.Exists(Path.Combine(folder, "scskiller.ini"));
 
-    private static FrameGenMod? FrameGenModNamed(string? name) => FrameGenMods.FirstOrDefault(mod => mod.Name == name);
+    private static FrameGenMod? FrameGenModNamed(string? name) =>
+        FrameGenMods.FirstOrDefault(mod => mod.Name == name) ?? LegacyFrameGenMods.FirstOrDefault(mod => mod.Name == name);
+
+    /// <summary>
+    /// Exo Bridge: OptiScaler's fork that an Exo build of mid-November 2026 put into games ("Exo Bridge, a fork of OptiScaler",
+    /// its loader OptiScaler.dll by its own name), whose code went with that build. Exo still knows it as its own, so its record
+    /// isn't forgotten at launch (which left its files in the game for good): the next round takes it out by the record's file
+    /// hashes (<see cref="FrameGenKeepCurrentAsync"/>) and Best settings puts today's mod in. Never installed or updated.
+    /// </summary>
+    internal static readonly FrameGenMod ExoBridgeLegacy = new(
+        "Exo Bridge", "exo", "exo-bridge", NoReleaseAsset(), 0, "OptiScaler.dll", "OptiScaler.ini",
+        ["dxgi.dll", "winmm.dll", "version.dll", "dbghelp.dll", "wininet.dll", "winhttp.dll"],
+        [], ["OptiScaler.log", "dlssg_to_fsr3.log", "fakenvapi.log"], ["RTXMFG-", "RTX40MFG-"], "OptiScaler", new(0, 0, 0));
+
+    internal static readonly FrameGenMod[] LegacyFrameGenMods = [ExoBridgeLegacy];
+
+    private static bool IsLegacy(FrameGenMod mod) => LegacyFrameGenMods.Contains(mod);
+
+    [GeneratedRegex(@"(?!)")]
+    private static partial Regex NoReleaseAsset();
 
     // ------------------------------------------------------------------ the newest release
 
@@ -204,14 +223,59 @@ public sealed partial class DlssSwapService
     /// open decision), so an RTX 20 or 30 takes OptiScaler instead (<see cref="FrameGenGame.NoDlssgHere"/>); adding its row
     /// to <see cref="PinnedFrameGenReleases"/> offers it again, with nothing else to change.
     /// </summary>
-    internal static string? Unoffered(FrameGenMod mod) => Unoffered(mod, PinnedFrameGenReleases);
+    internal static string? Unoffered(FrameGenMod mod) => null;
 
     internal static string? Unoffered(FrameGenMod mod, IEnumerable<(string Repo, FrameGenRelease Release)> pins) =>
         pins.Any(pin => pin.Repo == mod.Repo) ? null : "Not available yet";
 
-    /// <summary>The mod's newest pinned release. No network: the cache is never asked which release is newest.</summary>
-    internal static Task<FrameGenRelease> LatestFrameGenAsync(FrameGenMod mod, CancellationToken ct) =>
-        Task.FromResult(NewestPinnedRelease(mod, PinnedFrameGenReleases));
+    /// <summary>
+    /// The mod's newest release: GitHub's latest release of the mod's repo, when its asset matches the mod's file pattern, size
+    /// limit and a published SHA-256 digest, and is not older than the newest pin. Otherwise (GitHub unreachable, rate limited, an
+    /// asset with no digest) the newest pinned release, which Exo's cache holds.
+    /// </summary>
+    internal static async Task<FrameGenRelease> LatestFrameGenAsync(FrameGenMod mod, CancellationToken ct)
+    {
+        FrameGenRelease? pinned = null;
+        try { pinned = NewestPinnedRelease(mod, PinnedFrameGenReleases); } catch (InvalidDataException) { }
+        try
+        {
+            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            timeout.CancelAfter(TimeSpan.FromSeconds(30));
+            var url = $"https://{UpstreamSource.GitHubApi}/repos/{mod.Owner}/{mod.Repo}/releases/latest";
+            using var response = await UpstreamSource.GetAsync(Http, url, UpstreamSource.IsUpstreamHop, timeout.Token).ConfigureAwait(false);
+            response.EnsureSuccessStatusCode();
+            var text = await ReadCappedTextAsync(await response.Content.ReadAsStreamAsync(timeout.Token).ConfigureAwait(false), 1 << 20, timeout.Token).ConfigureAwait(false);
+            if (text is not null && ParseUpstreamRelease(mod, JsonNode.Parse(text)) is { } latest &&
+                (pinned is null || TagVersion(latest.Tag) >= TagVersion(pinned.Tag)))
+                return latest;
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
+        {
+            AppLog.Info($"{mod.Name}: GitHub's newest release not read ({ex.Message}); using the one Exo pins.");
+        }
+        return pinned ?? throw new InvalidDataException($"{mod.Name} could not be reached and Exo pins no release of it.");
+    }
+
+    /// <summary>
+    /// A GitHub release answer as a mod release Exo takes, or null: not a draft or prerelease, a tag at least the mod's minimum
+    /// and not refused, and exactly one asset matching the mod's file pattern with a size within its limit and a sha256 digest.
+    /// </summary>
+    internal static FrameGenRelease? ParseUpstreamRelease(FrameGenMod mod, JsonNode? release)
+    {
+        if (release is not JsonObject node) return null;
+        if (node["draft"]?.GetValue<bool>() == true || node["prerelease"]?.GetValue<bool>() == true) return null;
+        var tag = node["tag_name"]?.GetValue<string>();
+        if (string.IsNullOrWhiteSpace(tag) || tag.Contains('/') || tag.Contains('\\') || TagVersion(tag) is not { } version || version < mod.Minimum) return null;
+        if (RefusedFrameGenReleases.Contains(mod.Repo + "@" + tag)) return null;
+        if (node["assets"] is not JsonArray assets) return null;
+        var matches = assets.OfType<JsonObject>().Where(asset => asset["name"]?.GetValue<string>() is { } name && mod.Asset.IsMatch(name)).ToList();
+        if (matches.Count != 1) return null;
+        var picked = matches[0];
+        var size = picked["size"]?.GetValue<long>() ?? 0;
+        if (size <= 0 || size > mod.MaxSize) return null;
+        if (VerifiedGitHubReleaseDownloader.ParseSha256Digest(picked["digest"]?.GetValue<string>()) is not { } digest) return null;
+        return new FrameGenRelease(tag, picked["name"]!.GetValue<string>(), size, Convert.ToHexString(digest).ToLowerInvariant());
+    }
 
     private static readonly SemaphoreSlim FrameGenFetch = new(1, 1);
     private static string FrameGenCacheFolder(FrameGenMod mod, string tag) => Path.Combine(PathHelper.AppDataDir, "frame-gen", mod.Repo, tag);
@@ -237,7 +301,7 @@ public sealed partial class DlssSwapService
             var unpack = folder + ".unpack-" + Guid.NewGuid().ToString("N");
             try
             {
-                await VerifiedGitHubReleaseDownloader.Large.DownloadPinnedAsync(
+                await VerifiedGitHubReleaseDownloader.Upstream.DownloadPinnedAsync(
                     new GitHubReleaseAsset(mod.Owner, mod.Repo, release.Tag, release.Asset, release.Size, release.Sha256), archive, IsFrameGenArchive, ct).ConfigureAwait(false);
                 Directory.CreateDirectory(unpack);
                 await UnpackFrameGenAsync(mod, archive, unpack, ct).ConfigureAwait(false);
@@ -796,6 +860,10 @@ public sealed partial class DlssSwapService
     {
         var root = ResolveInstallRoot(game.Path);
         if (root is null || IsWindowsAppsPath(root)) return FrameGenDecide(new(Readable: false));
+        // A game set to "without anti-cheat" between its sessions: Exo holds its mod, which goes in only as Exo starts it.
+        if (AntiCheatCheck.ChoseWithoutAntiCheat(game) && SessionHeldFrameGen(game.Id) is { } held)
+            return new(new("on", Path: held.Mod == OptiScaler.Name ? "fsr" : "dlss", Version: $"{held.Mod} {held.Release}",
+                Note: $"{held.Mod} {held.Release}, in the game only while you play it from Exo"));
         var card = FrameGenCardFor(gpu);
         FrameGenNotes.TryRemove(game.Id, out var note);
         // A card no mod adds to reads nothing unless Exo's install is there to take out.
@@ -1191,11 +1259,7 @@ public sealed partial class DlssSwapService
         {
             var path = Path.Combine(folder, file.Path);
             if (!File.Exists(path)) continue;
-            var loader = file.Path.Equals(install.Loader, StringComparison.OrdinalIgnoreCase);
-            var original = loader ? OriginalName(path) : null;
-            var ours = file.Sha256!.Equals(FileSha256(path), StringComparison.OrdinalIgnoreCase) &&
-                       (!loader || mod == DlssgSm86 && string.IsNullOrEmpty(original) || string.Equals(original, mod.Dll, StringComparison.OrdinalIgnoreCase));
-            if (!ours || ManagerBackedUp(path)) { kept.Add(file.Path); continue; }
+            if (!StillExos(path, file, install, mod, over: false)) { kept.Add(file.Path); continue; }
             ClearReadOnly(path);
             DeletionGate.DeleteFile(path);
         }
@@ -1204,8 +1268,7 @@ public sealed partial class DlssSwapService
         {
             var path = Path.Combine(folder, file.Path);
             if (!File.Exists(path)) continue;
-            var info = new FileInfo(path);
-            if (ManagerBackedUp(path) || over && (info.Length != file.Size || info.LastWriteTimeUtc != file.Written)) { kept.Add(file.Path); continue; }
+            if (!StillExos(path, file, install, mod, over)) { kept.Add(file.Path); continue; }
             ClearReadOnly(path);
             DeletionGate.DeleteFile(path);
         }
@@ -1224,6 +1287,25 @@ public sealed partial class DlssSwapService
         }
         else TryDelete(manifest);
         return (kept, others);
+    }
+
+    /// <summary>
+    /// Whether a file Exo's record lists is still Exo's: a hashed one while its bytes are what Exo wrote (the loader only
+    /// while it is also the mod's own DLL); the settings file unless another mod is over the loader
+    /// (<paramref name="over"/>) and it changed since. Never one a mod manager keeps a backup of.
+    /// </summary>
+    private bool StillExos(string path, FrameGenFile file, FrameGenInstall install, FrameGenMod mod, bool over)
+    {
+        if (ManagerBackedUp(path)) return false;
+        if (file.Sha256 is null)
+        {
+            var info = new FileInfo(path);
+            return !over || info.Length == file.Size && info.LastWriteTimeUtc == file.Written;
+        }
+        var loader = file.Path.Equals(install.Loader, StringComparison.OrdinalIgnoreCase);
+        var original = loader ? OriginalName(path) : null;
+        return file.Sha256.Equals(FileSha256(path), StringComparison.OrdinalIgnoreCase) &&
+               (!loader || mod == DlssgSm86 && string.IsNullOrEmpty(original) || string.Equals(original, mod.Dll, StringComparison.OrdinalIgnoreCase));
     }
 
     /// <summary>
@@ -1286,6 +1368,15 @@ public sealed partial class DlssSwapService
         foreach (var game in games)
         {
             if (FrameGenFolderFor(game.Id) is not { } folder || ReadFrameGenManifest(folder) is not { Out: false } install || FrameGenModNamed(install.Mod) is not { } mod) continue;
+            if (IsLegacy(mod))
+            {
+                // A mod Exo no longer ships: out by its record, and the game goes round again for today's.
+                if (busy(game)) continue;
+                var (ok, message) = FrameGenOff(game);
+                AppLog.Info($"Frame generation in {game.Title}: {mod.Name} {install.Release} is no longer Exo's mod; {(ok ? message : "not taken out: " + message)}");
+                if (ok) FrameGenEverywhereSoon();
+                continue;
+            }
             if (!latest.TryGetValue(mod.Repo, out var release))
             {
                 try { release = await FrameGenLatest(mod, ct).ConfigureAwait(false); }
@@ -1579,9 +1670,14 @@ public sealed partial class DlssSwapService
         var service = new DlssSwapService();
         launcher.GameLaunching += game =>
         {
-            FrameGenStarted[game.Id] = DateTime.UtcNow;
+            // A game started without its anti-cheat: Exo's mod and recorder go in for this session only (SessionMods.cs).
+            try { service.ForSessionAtLaunch(game, SystemSpecs.FrameGenGpu, settings.Shared.FrameGenEverywhere, settings.FrameGenKeptOff, id => settings.SetFrameGenKeptOff(id, true)); }
+            catch (Exception ex) { AppLog.Warn("Frame generation for a session without anti-cheat: " + ex.Message); }
             try { service.FrameGenAtLaunch(game, SystemSpecs.FrameGenGpu); }
             catch (Exception ex) { AppLog.Warn("Frame generation at launch: " + ex.Message); }
+            // The session's clock starts once the mod is ready (a download at Play is not playtime): a first session
+            // under 30 seconds still takes a new release out (FrameGenAfterSession).
+            FrameGenStarted[game.Id] = DateTime.UtcNow;
         };
         launcher.GameSessionCompleted += game => _ = Task.Run(() =>
         {
@@ -1590,8 +1686,27 @@ public sealed partial class DlssSwapService
                 TimeSpan? ran = FrameGenStarted.TryRemove(game.Id, out var at) ? DateTime.UtcNow - at : null;
                 // Best settings' first try failed and came out: it doesn't go back in by itself.
                 if (service.FrameGenAfterSession(game, ran, SystemSpecs.FrameGenGpu)) settings.SetFrameGenKeptOff(game.Id, true);
+                // Started without its anti-cheat: what went in for the session comes out (a successor still running: as it exits).
+                if (AntiCheatCheck.ChoseWithoutAntiCheat(game)) service.TakeOutAfterSession(game, CancellationToken.None).GetAwaiter().GetResult();
             }
             catch (Exception ex) { AppLog.Warn("Frame generation after a session: " + ex.Message); }
+        });
+        // Leftovers of a session without anti-cheat: at Exo's start (it closed or crashed mid-session), after a launch that
+        // never reached the game, and as such a game starts or stops outside an Exo session.
+        void TakeOutIdle(IEnumerable<GameEntry> games) => _ = Task.Run(async () =>
+        {
+            try { await service.TakeOutWhereIdle(games, game => launcher.InExoSession(game.Id), launcher.IsGameBusy, CancellationToken.None).ConfigureAwait(false); }
+            catch (Exception ex) { AppLog.Warn("Frame generation leftovers of a session without anti-cheat: " + ex.Message); }
+        });
+        launcher.GameLaunchFailed += game => TakeOutIdle([game]);
+        launcher.GameRunStateChanged += (id, _) =>
+        {
+            if (!launcher.InExoSession(id) && library.Find(id) is { } game && AntiCheatCheck.ChoseWithoutAntiCheat(game)) TakeOutIdle([game]);
+        };
+        _ = Task.Run(async () =>
+        {
+            try { TakeOutIdle(await library.GetLibraryAsync().ConfigureAwait(false)); }
+            catch (Exception ex) { AppLog.Warn("Frame generation leftovers at start: " + ex.Message); }
         });
         _frameGenUpdates = new Timer(_ =>
         {
@@ -1600,12 +1715,16 @@ public sealed partial class DlssSwapService
             {
                 try
                 {
+                    await service.TakeOutWhereIdle(library.PeekCachedLibrary(), game => launcher.InExoSession(game.Id), launcher.IsGameBusy, CancellationToken.None).ConfigureAwait(false);
                     // Best settings' frame generation first, so a game it goes into is on the newest release with the rest.
                     if (settings.Shared.FrameGenEverywhere)
                         await service.FrameGenEverywhereAsync(library.PeekCachedLibrary(), SystemSpecs.FrameGenGpu, launcher.IsGameBusy, settings.FrameGenKeptOff, CancellationToken.None,
                             id => settings.SetFrameGenKeptOff(id, true)).ConfigureAwait(false);
                     else service.FrameGenEverywhereOff(library.PeekCachedLibrary(), launcher.IsGameBusy);
                     await service.FrameGenKeepCurrentAsync(library.PeekCachedLibrary(), SystemSpecs.FrameGenGpu, launcher.IsGameBusy, CancellationToken.None).ConfigureAwait(false);
+                    // Then the games' own DLSS, FSR and XeSS files, with Update automatically on (DlssSwapService.AutoApply.cs).
+                    if (settings.Shared.AutoUpdateUpscalers)
+                        await service.UpscalersKeepCurrentAsync(library.PeekCachedLibrary(), launcher.IsGameBusy, settings.UpscalerConsent, CancellationToken.None).ConfigureAwait(false);
                 }
                 catch (Exception ex) { AppLog.Warn("Frame generation updates: " + ex.Message); }
                 finally { Volatile.Write(ref _frameGenUpdating, 0); }

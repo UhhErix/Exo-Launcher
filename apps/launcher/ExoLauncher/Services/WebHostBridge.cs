@@ -262,6 +262,7 @@ public sealed partial class WebHostBridge
         _services.Launcher.GameLaunched -= OnGameLaunched;
         _services.Launcher.GameRunStateChanged -= OnGameRunStateChanged;
         _services.Shaders.Changed -= OnShadersChanged;
+        UnwireCompress();
         _services.ShaderPrepare.Changed -= OnShadersChanged;
         ShaderRebuildWatch.Changed -= OnShadersRebuildChanged;
         _services.Store.Changed -= OnStoreChanged;
@@ -554,6 +555,12 @@ public sealed partial class WebHostBridge
                 "game.cancelInstall" => _services.Launcher.Cancel(ReadString(paramsEl, hasParams, "id")),
                 "game.pauseInstall" => _services.Launcher.Pause(ReadString(paramsEl, hasParams, "id") ?? ""),
                 "game.dequeue" => _services.Launcher.Dequeue(ReadString(paramsEl, hasParams, "id") ?? ""),
+                "downloads.list" => DownloadsList(),
+                "downloads.move" => _services.Launcher.MoveQueued(ReadString(paramsEl, hasParams, "id") ?? "",
+                    hasParams && paramsEl.TryGetProperty("by", out var by) && by.ValueKind == JsonValueKind.Number && by.TryGetInt32(out var places) ? Math.Clamp(places, -500, 500) : 0),
+                "downloads.pauseAll" => _services.Launcher.PauseAll(),
+                "downloads.resumeAll" => _services.Launcher.ResumeAll(),
+                "game.autoUpdate" => GameAutoUpdate(paramsEl, hasParams),
                 "game.progress" => GameProgress(paramsEl, hasParams),
                 "stores.auth" => await StoresAuthAsync(paramsEl, hasParams).ConfigureAwait(true),
                 "exoAccount.state" => ExoAccountState(),
@@ -669,6 +676,10 @@ public sealed partial class WebHostBridge
                 "capture.reel" => App.MainAppWindow is { } reelWindow && hasParams
                     ? await Task.Run(() => reelWindow.CaptureReelStart(paramsEl)).ConfigureAwait(true) : new { ok = false },
                 "capture.reel.cancel" => App.MainAppWindow?.CaptureReelCancel() ?? new { ok = false },
+                "capture.text" => App.MainAppWindow is { } textWindow
+                    ? await Task.Run(() => textWindow.CaptureTextAsync(ReadString(paramsEl, hasParams, "id"), ReadDouble(paramsEl, hasParams, "x"), ReadDouble(paramsEl, hasParams, "y"),
+                        ReadDouble(paramsEl, hasParams, "width"), ReadDouble(paramsEl, hasParams, "height"))).ConfigureAwait(true) : new { ok = false },
+                "capture.send" => await CaptureSendAsync(paramsEl, hasParams, requestToken).ConfigureAwait(true),
                 "capture.saveImage" => App.MainAppWindow is { } imageWindow
                     ? await Task.Run(() => imageWindow.CaptureSaveImageAsync(ReadString(paramsEl, hasParams, "id"), ReadString(paramsEl, hasParams, "png"))).ConfigureAwait(true) : new { ok = false },
                 "friends.badge" => App.MainAppWindow?.FriendsBadge() ?? new { count = 0 },
@@ -702,15 +713,28 @@ public sealed partial class WebHostBridge
                 "telemetry.sent" => new { ok = true, payloads = Telemetry.Sent() },
                 "telemetry.delete" => await TelemetryDeleteAsync(requestToken).ConfigureAwait(true),
                 "telemetry.track" => TelemetryTrack(paramsEl, hasParams),
-                "apps.uninstall" => await AppsUninstallAsync(ReadString(paramsEl, hasParams, "id") ?? "", requestToken).ConfigureAwait(true),
+                "apps.uninstall" => await AppsUninstallAsync(ReadString(paramsEl, hasParams, "id") ?? "", ReadBool(paramsEl, hasParams, "quiet") == true, requestToken).ConfigureAwait(true),
+                "apps.restorePoint" => await AppsRestorePointAsync(requestToken).ConfigureAwait(true),
+                "apps.installerCache" => await AppsInstallerCacheAsync().ConfigureAwait(true),
+                "apps.installerCacheClean" => await AppsInstallerCacheCleanAsync(requestToken).ConfigureAwait(true),
                 "apps.scan" => await AppsScanAsync(ReadString(paramsEl, hasParams, "id") ?? "", requestToken).ConfigureAwait(true),
                 "apps.clean" => await AppsCleanAsync(paramsEl, hasParams, requestToken).ConfigureAwait(true),
                 "apps.allowEdge" => await AppsAllowEdgeAsync(requestToken).ConfigureAwait(true),
+                "apps.openDefaults" => AppsOpenDefaults(),
+                "apps.packages" => await AppsPackagesAsync().ConfigureAwait(true),
+                "apps.packagesPlan" => await AppsPackagesPlanAsync(paramsEl, hasParams).ConfigureAwait(true),
+                "apps.packagesRemove" => await AppsPackagesRemoveAsync(paramsEl, hasParams, requestToken).ConfigureAwait(true),
+                "apps.packageAddBack" => await AppsPackageAddBackAsync(ReadString(paramsEl, hasParams, "id") ?? "", requestToken).ConfigureAwait(true),
                 "apps.tidy" => await AppsTidyAsync(ReadBool(paramsEl, hasParams, "fresh") == true).ConfigureAwait(true),
                 "apps.leave" => AppsLeave(paramsEl, hasParams),
                 "apps.history" => await Task.Run(AppsHistory).ConfigureAwait(true),
                 "apps.undo" => await AppsUndoAsync(ReadString(paramsEl, hasParams, "id") ?? "", requestToken).ConfigureAwait(true),
                 "junk.scan" => await JunkScanAsync().ConfigureAwait(true),
+                "compress.state" => await CompressStateAsync(paramsEl, hasParams, requestToken).ConfigureAwait(true),
+                "compress.list" => await CompressListAsync(requestToken).ConfigureAwait(true),
+                "compress.act" => await CompressActAsync(paramsEl, hasParams, requestToken).ConfigureAwait(true),
+                "compress.all" => await CompressAllAsync(requestToken).ConfigureAwait(true),
+                "compress.settings" => CompressSettings(paramsEl, hasParams),
                 "junk.clean" => await JunkCleanAsync(paramsEl, hasParams).ConfigureAwait(true),
                 "startup.list" => await StartupListAsync().ConfigureAwait(true),
                 "bios.update" => await BiosUpdateAsync(paramsEl, hasParams, requestToken).ConfigureAwait(true),
@@ -784,7 +808,6 @@ public sealed partial class WebHostBridge
                 "discord.signOut" => await DiscordSignOutAsync().ConfigureAwait(true),
                 "app.notify" => hasParams ? AppNotify(paramsEl) : new { ok = false },
                 "discord.home" => DiscordHome(),
-                "discord.voiceNow" => DiscordVoiceNow(),
                 "discord.channels" => DiscordChannels(paramsEl, hasParams),
                 "discord.messages" => await DiscordMessagesAsync(paramsEl, hasParams, requestToken).ConfigureAwait(true),
                 "discord.send" => await DiscordSendAsync(paramsEl, hasParams, requestToken).ConfigureAwait(true),
@@ -837,9 +860,6 @@ public sealed partial class WebHostBridge
                 "discord.apps" => await DiscordAppsAsync(paramsEl, hasParams, requestToken).ConfigureAwait(true),
                 "discord.typing" => await DiscordTypingAsync(paramsEl, hasParams, requestToken).ConfigureAwait(true),
                 "discord.userSettings" => await DiscordUserSettingsAsync(paramsEl, hasParams, requestToken).ConfigureAwait(true),
-                "discord.shareGames" => await DiscordShareGamesAsync(paramsEl, hasParams).ConfigureAwait(true),
-                "discord.shareReady" => DiscordShareReady(paramsEl, hasParams),
-                "discord.shareClip" => await DiscordShareClipAsync(paramsEl, hasParams, requestToken).ConfigureAwait(true),
                 "discord.bandPins" => DiscordBandPins(paramsEl, hasParams),
                 "discord.account" => await DiscordAccountAsync(paramsEl, hasParams, requestToken).ConfigureAwait(true),
                 "discord.shop" => await DiscordShopAsync(paramsEl, hasParams, requestToken).ConfigureAwait(true),
@@ -1111,7 +1131,7 @@ public sealed partial class WebHostBridge
         await RecorderOutOfTheWayAsync(game).ConfigureAwait(true);
 
         // Steam can't sign in because its servers are down: Play offers its offline mode instead of waiting on it.
-        // Both Steam checks read its logs, process table and appinfo.vdf: off the UI thread.
+        // Both Steam checks read its logs, process table and appinfo: off the UI thread.
         if (await Task.Run(() => SteamPlayOfflineFirst(game)).ConfigureAwait(true) is { } offlineFirst) return offlineFirst;
 
         // Controller settings wait for Steam's next close while it runs (never closing it).
@@ -2084,6 +2104,7 @@ public sealed partial class WebHostBridge
             whatsNewSeen = s.WhatsNewSeen,
             reduceMotion = s.ReduceMotion,
             startMaximized = s.StartMaximized,
+            startWithWindows = s.StartWithWindows,
             framelessPinTop = s.FramelessPinTop,
             framelessPinSide = s.FramelessPinSide,
             textColour = s.TextColour,
@@ -2114,6 +2135,7 @@ public sealed partial class WebHostBridge
             autoUpdateGames = s.AutoUpdateGames,
             autoUpdateChipset = s.AutoUpdateChipset,
             autoUpdateUpscalers = s.AutoUpdateUpscalers,
+            upscalerAntiCheatEverywhere = s.UpscalerAntiCheatEverywhere,
             keepAwakeDownloads = s.KeepAwakeDownloads,
             storeClientsQuiet = s.StoreClientsQuiet,
             chipset = ChipsetUpdate.ThisPc is { } update && update.Installed() is not null ? update.Vendor : null,
@@ -2137,7 +2159,7 @@ public sealed partial class WebHostBridge
         bool? startMaximized = null;
         bool? framelessPinTop = null, framelessPinSide = null;
         bool? showLibraryTools = null;
-        string? textColour = null, textSize = null, background = null;
+        string? textColour = null, textSize = null;
         string? sort = null, root = null;
         Dictionary<string, string>? preferredGameSources = null;
 
@@ -2203,8 +2225,6 @@ public sealed partial class WebHostBridge
             textColour = tc.GetString();
         if (p.TryGetProperty("textSize", out var tsz) && tsz.ValueKind == JsonValueKind.String)
             textSize = tsz.GetString();
-        if (p.TryGetProperty("background", out var bg) && bg.ValueKind == JsonValueKind.String)
-            background = bg.GetString();
         string? whatsNewSeen = p.TryGetProperty("whatsNewSeen", out var wn) && wn.ValueKind == JsonValueKind.String ? wn.GetString() : null;
         var previousShowLibraryTools = _services.Settings.Current.ShowLibraryTools;
         // Settings validate and commit first; a rejected patch must not leave
@@ -2217,7 +2237,6 @@ public sealed partial class WebHostBridge
             startMaximized: startMaximized,
             textColour: textColour,
             textSize: textSize,
-            background: background,
             framelessPinTop: framelessPinTop,
             framelessPinSide: framelessPinSide,
             showLibraryTools: showLibraryTools,
@@ -2229,12 +2248,12 @@ public sealed partial class WebHostBridge
             whatsNewSeen: whatsNewSeen,
             frameGenEverywhere: frameGenEverywhere);
         if (hdrForGames is not null || hdrSdrGamma is not null) App.MainAppWindow?.SyncHdrSoon();
-        if (background is not null && App.MainAppWindow is { } window) window.DispatcherQueue.TryEnqueue(window.ApplyAppearance);
         if (frameGenEverywhere is not null) DlssSwapService.FrameGenEverywhereSoon();
         if (showLibraryTools is { } tools && tools != previousShowLibraryTools)
             RefreshLibraryAfterToolsToggle();
         ApplyDownloadSettings(p);
         ApplyStoreQuietSetting(p);
+        ApplyStartWithWindowsSetting(p);
         ApplyAchievementSettings(p);
         ApplyFpsCounterSettings(p);
         if (p.TryGetProperty("libraryFolders", out var folders) && folders.ValueKind == JsonValueKind.Array)

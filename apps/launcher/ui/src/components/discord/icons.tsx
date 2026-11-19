@@ -1,5 +1,5 @@
 import type { DiscordChannel } from '../../lib/discord'
-import { Plus, Apps, ArrowRight, At, Award, BadgeCheck, Bell, BellOff, Bolt, Book, Bookmark, Boost, Burst, Calendar, Car, Category, Check, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Clock, Close, Copy, Cover, Crown, Decline, Download, Encrypted, EyeOff, ExitFullScreen, ExternalLink, Failed, FileIcon, Flag, FlagsCategory, Folder, Forum, Forward, FriendAccepted, FullScreen, Controller, Grip, Hash, HashLock, Headphones, HeadphonesOff, Hourglass, Id, Inbox, Leaf, Lightbulb, LinkIcon, ListSearch, Live, Lock, Mail, Megaphone, Members, MessageCircle, Mic, MicOff, More, Movie, MusicNotes, Nitro, OnlyYou, Partnered, Pencil, Pending, Person, Phone, PhoneDown, Pin, Pizza, Poll, Remove, Reply, Rules, SaveImage, Search, Shop, Smile, SmilePlus, Soundboard, Volume, Speaker, Star, StopWatching, Symbols, Threads, Trash, Trophy, Tv, Unread, Upload, UserPlus, Video, ViewReactions, VolumeLock, VolumeOff, ZoomIn, ZoomOut, Signal } from '../../brand/icons'
+import { Plus, Apps, ArrowRight, At, Award, BadgeCheck, Bell, BellOff, Bolt, Book, Bookmark, Boost, Burst, Calendar, Car, Category, Check, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Clock, Close, Copy, Cover, Crown, Decline, Download, Encrypted, EyeOff, ExitFullScreen, ExternalLink, Failed, FileIcon, Flag, FlagsCategory, Folder, Forum, Forward, FriendAccepted, FullScreen, Controller, Grip, Hash, HashLock, Headphones, HeadphonesOff, Hourglass, Id, Inbox, Leaf, Lightbulb, LinkIcon, ListSearch, Live, Lock, Mail, Megaphone, Members, MessageCircle, Mic, MicOff, More, Movie, MusicNotes, Nitro, OnlyYou, Partnered, Pencil, Pending, Person, Phone, PhoneDown, Pin, Pizza, Poll, Remove, Reply, Rules, SaveImage, Search, Shop, Smile, SmilePlus, Soundboard, Volume, Speaker, Star, StopWatching, Symbols, Threads, Trash, Trophy, Tv, Unread, Upload, UserPlus, Video, ViewReactions, VolumeLock, VolumeOff, ZoomIn, ZoomOut, Signal, Stop } from '../../brand/icons'
 
 /** The Discord room's glyphs, in the places Discord's own client puts them, drawn in Exo's set: one glyph per meaning. */
 export const Icons = {
@@ -117,6 +117,8 @@ export const Icons = {
   ZoomOut,
   // A message's Speak Message, and Bookmark Message (saved for later, as the Store's wishlist keeps a game).
   Speak: Speaker,
+  // Stop speaking it: Stop, as everywhere.
+  StopSpeaking: Stop,
   Bookmark,
   Previous: ChevronLeft,
   Next: ChevronRight,

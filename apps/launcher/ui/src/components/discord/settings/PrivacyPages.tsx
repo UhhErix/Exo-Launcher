@@ -8,7 +8,6 @@ import { connectionLabel } from '../profileParts'
 import { ConfirmButton } from '../../ui/ConfirmButton'
 import { ChoiceRow, Row, Section, State, SwitchRow } from '../../settings/parts'
 import { AccountToggle, LinkRow, LoadError, useLoad } from './parts'
-import { useShareGames, useShareReady } from '../ShareGames'
 import { useAccount } from './AccountPages'
 import { ErrorNote } from '../../ui/ErrorNote'
 
@@ -70,8 +69,6 @@ export function PrivacyPage({ guilds }: { guilds: DiscordHome['guilds'] }) {
   return (
     <>
       <Section title="Activity">
-        <ShareGamesRow />
-        <ShareReadyRow />
         <AccountToggle label="Share when I come online" settings={settings} field="notifyFriendsOnComeOnline" />
         <AccountToggle label="Share when I start streaming" settings={settings} field="notifyServerMembersOnGoLive" />
         <ChoiceRow label="Share my activity in new servers" value={activityDefault(settings)} onChange={value => changeAccountSettings({ defaultGuildsActivityRestrictedV2: value })}
@@ -159,25 +156,6 @@ function useAdult() {
 function activityDefault(settings: AccountSettings) {
   if (settings.defaultGuildsActivityRestrictedV2 !== 0) return settings.defaultGuildsActivityRestrictedV2
   return [1, 2, 3][settings.defaultGuildsActivityRestricted] ?? 1
-}
-
-/** Share my games: who hears it, and what it never names. Home's switch (the room's first place) is the same one. */
-function ShareGamesRow() {
-  const { ready, on, set } = useShareGames()
-  return (
-    <SwitchRow label="Share my games with friends on Exo" checked={on} disabled={!ready} onChange={set}
-      detail="Friends who use Exo see the game you opened from Exo; Discord and its apps don't. Games you hide or add yourself are never named." />
-  )
-}
-
-/** Share when I'm getting ready: off until it is turned on, and off again with Share my games, since it rides the same link. */
-function ShareReadyRow() {
-  const games = useShareGames()
-  const { ready, on, set } = useShareReady()
-  return (
-    <SwitchRow label="Share when I'm getting ready" checked={on} disabled={!ready || !games.on} onChange={set}
-      detail="Friends who use Exo see a game you are installing or building shaders for, and when it is ready." />
-  )
 }
 
 /** Discord settings > Connected Apps: your connections, and the apps you've authorized (with Deauthorize). */

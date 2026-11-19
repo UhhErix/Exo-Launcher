@@ -328,7 +328,7 @@ public sealed class AppSettings
     /// <summary>Shell text size: "small", "normal" or "large".</summary>
     public string TextSize { get; set; } = "normal";
     /// <summary>The page's background palette (Settings › General › Background): "black", "near", "grey" (the default), "windows" or "graphite".</summary>
-    public string Background { get; set; } = "grey";
+    public string Background { get; set; } = "black";
     /// <summary>
     /// The choices the page makes and Exo keeps for it (Discord's look and streamer mode, the driver branch, the headphones
     /// worn, the Shaders order, Go Live's quality, ...), by key. Only the keys in <see cref="ExoLauncher.Services.PlayerData.UiPrefKeys"/>
@@ -406,10 +406,6 @@ public sealed class AppSettings
     public bool DiscordEvenVoices { get; set; } = true;
     /// <summary>Game focus: no Discord notifications while a game runs (the unread badge still counts).</summary>
     public bool DiscordQuietWhilePlaying { get; set; } = true;
-    /// <summary>The Discord accounts (user ids) that turned Share my games on, on this PC: friends on Exo see the game they opened from Exo (<see cref="ExoLauncher.Services.DiscordClient.DiscordSession.SharesGames"/>). Off for every account until it is. 3.23.0 made it opt-in again; the 3.22.0 list, DiscordShareGames, shared to Discord and is read by nothing.</summary>
-    public List<string> DiscordGamesShared { get; set; } = [];
-    /// <summary>The Discord accounts (user ids) that turned Share when I'm getting ready on, on this PC: friends on Exo see that a game is installing, building its shaders or ready (<see cref="ExoLauncher.Services.DiscordClient.FriendPrep"/>). Off for every account until it is.</summary>
-    public List<string> DiscordReadyShared { get; set; } = [];
     /// <summary>What each Discord account (by user id) pinned to the room's top bar, in order: "g:id" a server, "d:id" a DM or group DM.</summary>
     public Dictionary<string, List<string>> DiscordBandPins { get; set; } = [];
     /// <summary>Exo's Discord calls: the microphone and speakers chosen (Windows endpoint ids; none is Windows' default) and their volume, 0-200 like Discord's.</summary>
@@ -491,10 +487,23 @@ public sealed class AppSettings
     public bool StoreClientsQuiet { get; set; } = true;
     /// <summary>Games from Epic, GOG and Amazon update by themselves while the PC is idle.</summary>
     public bool AutoUpdateGames { get; set; } = true;
+    /// <summary>Compress games while idle: the games worth it on this PC are compressed by Windows (<see cref="ExoLauncher.Services.GameCompressor"/>) while nobody uses it. Off until the player turns it on.</summary>
+    public bool CompressWhileIdle { get; set; }
+    /// <summary>A compressed game's files an update wrote back are compressed again while the PC is idle. Off until the player turns it on.</summary>
+    public bool RecompressAfterUpdates { get; set; }
+    /// <summary>How much of the processor compressing may use: gentle, balanced or fast (<see cref="ExoLauncher.Services.GameCompression.Threads"/>).</summary>
+    public string CompressSpeed { get; set; } = "balanced";
     /// <summary>This PC's chipset driver (AMD's on a Ryzen, Intel's on an Intel processor) updates by itself while the PC is idle (<see cref="ExoLauncher.Services.ChipsetUpdate"/>).</summary>
     public bool AutoUpdateChipset { get; set; } = true;
-    /// <summary>Newer DLSS, FSR and XeSS files download from Exo's cache by themselves while the PC is idle. Off by default: Exo checks nothing and downloads nothing on its own.</summary>
-    public bool AutoUpdateUpscalers { get; set; }
+    /// <summary>Newer DLSS, FSR and XeSS files download by themselves (from the vendor's own release, Exo's cache when that fails) while the PC is idle. On by default.</summary>
+    public bool AutoUpdateUpscalers { get; set; } = true;
+    /// <summary>
+    /// Settings' one-time allow: the vendors' signed DLSS, FSR and XeSS files update in games with anti-cheat too, at the player's
+    /// risk, without asking per game. Never Riot games, Vanguard or an install Exo can't read; never a frame generation mod.
+    /// </summary>
+    public bool UpscalerAntiCheatEverywhere { get; set; }
+    /// <summary>Set once Exo has turned <see cref="AutoUpdateUpscalers"/> on for a settings file written while it was off by default (3.26 and earlier).</summary>
+    public bool UpscalerAutoUpdateDefaulted { get; set; } = true;
     /// <summary>On a PC with two graphics chips, Windows is asked to run Exo's games on the fast one (<see cref="ExoLauncher.Services.GpuPreference"/>); off until the user turns it on.</summary>
     public bool FastGpuForGames { get; set; }
     /// <summary>Lucid (<see cref="ExoLauncher.Services.LucidCompanion"/>) starts with Exo, out of sight; off until the user turns it on.</summary>
@@ -503,6 +512,8 @@ public sealed class AppSettings
     public bool LucidFollowHeadset { get; set; } = true;
     /// <summary>Apps whose start with Windows Exo turned off (<see cref="ExoLauncher.Helpers.StartupApps"/>); one turned back on stays on.</summary>
     public List<string> StartupHandedToExo { get; set; } = [];
+    /// <summary>Exo opens when Windows starts (the current user's Run key, <see cref="ExoLauncher.Services.StartWithWindows"/>); off until the player turns it on.</summary>
+    public bool StartWithWindows { get; set; }
     /// <summary>Where a separate Lucid.exe was, as earlier versions of Exo found it: used only while it's newer than the one in Exo.</summary>
     public string? LucidPath { get; set; }
     /// <summary>
@@ -534,6 +545,14 @@ public sealed class AppSettings
     public bool FrameGenEverywhere { get; set; }
     /// <summary>Games the player turned Exo's frame generation off in (card ids), which <see cref="FrameGenEverywhere"/> leaves alone.</summary>
     public List<string> FrameGenKeptOff { get; set; } = [];
+    /// <summary>
+    /// Steam games (card ids) set to "Launch without anti-cheat" in Properties: Play starts Steam's own entry without it
+    /// (NBA 2K26's "without EAC (offline only)"), and the game then counts as one without anti-cheat
+    /// (<see cref="ExoLauncher.Services.AntiCheatCheck.WithoutAntiCheatLaunch"/>).
+    /// </summary>
+    public List<string> SteamWithoutAntiCheat { get; set; } = [];
+    /// <summary>Games the player keeps out of Update games automatically (game ids): they update only when the player presses Update.</summary>
+    public List<string> AutoUpdateOff { get; set; } = [];
     /// <summary>
     /// Each installed Steam game's overlay switch as Exo set it, by app id: "on" or "off", with "?" until
     /// Steam has it and "!" once the player changed it in Steam (<see cref="ExoLauncher.Adapters.SteamOverlayConfig.Plan"/>).

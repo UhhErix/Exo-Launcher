@@ -31,6 +31,9 @@ public sealed class AppServices
     private DownloadPolicy? _downloads;
     /// <summary>Temporary files, crash reports, the thumbnail cache and Exo's old backups, cleaned while the PC is idle.</summary>
     private JunkAutoClean? _junk;
+    /// <summary>Compress games: Windows' own file compression for a game's install, by a press or while the PC is idle.</summary>
+    internal GameCompressor Compressor => _compressor ??= new GameCompressor(this);
+    private GameCompressor? _compressor;
     private readonly Lazy<StoreService> _store = new(() => new StoreService(RunningVersion));
     /// <summary>HID devices for the Devices room's mouse module.</summary>
     internal Hid.HidService Hid => _hid.Value;
@@ -195,6 +198,7 @@ public sealed class AppServices
         Store.Start();
         Downloads.Start();
         (_junk = new JunkAutoClean(this)).Start();
+        Compressor.Start();
         // Exo's parts setup didn't fetch (or that no longer match their pins), quietly, when downloads aren't held.
         ExoComponents.FillInBackground(() => Launcher.HoldReason, _lifetime.Token);
         NvidiaTrayIcon.Soon();
@@ -221,8 +225,17 @@ public sealed class AppServices
         });
         RadeonProfileService.Shared.Start(Launcher, () => GpuProfileService.MainScreen("amd"));
         IntelProfileService.Shared.Start(Launcher);
+        // Properties › Anti-cheat: a Steam game the player starts from Steam's entry without its anti-cheat.
+        AntiCheatCheck.ChoseWithoutAntiCheat = game => Settings.SteamWithoutAntiCheat(game.Id);
+        // Its shader recorder goes in only for a session Exo starts, through Exo Shaders' engine (DlssSwapService.SessionMods.cs).
+        DlssSwapService.RecorderSwitch = (id, on, ct) => App.MainAppWindow is { } window
+            ? window.ShadersRecorderSetAsync(id, on, ct)
+            : Task.FromResult<string?>("Exo's window isn't open yet.");
         // Frame generation Exo put into a game: checked as each game starts and ends, and kept on the mod's newest release.
         DlssSwapService.WatchFrameGen(Launcher, Settings, Library);
+        // Open Exo when Windows starts: the Run value follows the switch (an update or a moved install puts its path right).
+        var startWithWindows = Settings.Current.StartWithWindows;
+        _ = Task.Run(() => StartWithWindows.Apply(startWithWindows));
         // Exo no longer runs a G-SYNC recipe: what it set for that goes back.
         _ = Task.Run(CompetitiveSync.RestoreLeftovers);
         _ = Task.Run(GpuProfileService.RetireGsync);
@@ -342,6 +355,7 @@ public sealed class AppServices
         if (_hid.IsValueCreated) _hid.Value.Dispose();
         _downloads?.Dispose();
         _junk?.Dispose();
+        _compressor?.Dispose();
         Achievements.Dispose();
         HiddenStores.Dispose();
         GogAuth.Dispose();

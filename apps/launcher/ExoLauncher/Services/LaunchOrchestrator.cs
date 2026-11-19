@@ -149,6 +149,8 @@ public sealed partial class LaunchOrchestrator
     public event Action<GameEntry>? GameLaunched;
     /// <summary>Just before the store adapter starts a game, on the pool: driver settings that apply from process start go here.</summary>
     internal event Action<GameEntry>? GameLaunching;
+    /// <summary>A launch that <see cref="GameLaunching"/> began and that never reached the game (its session ends with it).</summary>
+    internal event Action<GameEntry>? GameLaunchFailed;
     /// <summary>A store's client waits for the player mid-launch: the sentence for the launch status the page shows.</summary>
     internal event Action<GameEntry, string>? LaunchNotice;
     /// <summary>An exact game id gained or lost its verified process, whether Exo launched it or not.</summary>
@@ -255,6 +257,12 @@ public sealed partial class LaunchOrchestrator
         }
     }
 
+    /// <summary>Exo's own session of the game: from its Play until its watch of the game ends.</summary>
+    internal bool InExoSession(string gameId)
+    {
+        lock (_gate) return _gameSessions.ContainsKey(gameId);
+    }
+
     /// <summary>True while Exo or the game's store is installing or updating it (files may be half-written).</summary>
     public bool IsGameBusy(GameEntry game)
     {
@@ -294,9 +302,10 @@ public sealed partial class LaunchOrchestrator
         var session = new GameSessionState(game);
         lock (_gate)
         {
-            if (_activeJob is not null && (_activeJob.Store == game.Store ||
-                string.Equals(_activeJob.GameId, game.Id, StringComparison.OrdinalIgnoreCase)))
-                return new LaunchResult { Ok = false, Message = "This store is busy installing, updating, or removing a game. Other stores remain available." };
+            // Only the game whose files are being written waits. Playing another game, of any store, while a
+            // download runs is fine (owner, 2026-11-19); the play hold pauses the download where it should.
+            if (_activeJob is not null && string.Equals(_activeJob.GameId, game.Id, StringComparison.OrdinalIgnoreCase))
+                return new LaunchResult { Ok = false, Message = $"{game.Title} is installing or updating. Play it once that finishes." };
             if (!_activeOrLaunchingGames.Add(game.Id))
                 return new LaunchResult { Ok = false, Message = $"{game.Title} is already running or starting." };
             _gameSessions[game.Id] = session;
@@ -694,7 +703,11 @@ public sealed partial class LaunchOrchestrator
                 _ = DisposeQuietGameSessionAsync(quietGameSession, session.Game.Title);
 
             if (!session.LaunchSucceeded)
+            {
+                try { GameLaunchFailed?.Invoke(session.Game); }
+                catch (Exception ex) { AppLog.Debug("Launch-failed listener failed: " + ex.Message); }
                 return;
+            }
             var handlers = GameSessionCompleted?.GetInvocationList();
             if (handlers is null)
                 return;
@@ -1486,6 +1499,18 @@ public sealed partial class LaunchOrchestrator
                 if (held && candidate.DownloadIntent is not null)
                 {
                     waiting.Add(candidate);
+                    continue;
+                }
+                // Its store's signed-in account changed since it was queued: it waits for that account, paused,
+                // instead of reaching the front and being dropped as "account changed".
+                if (candidate.DownloadIntent is { AccountScope.Length: > 0 } intent && !candidate.Outer.IsCancellationRequested &&
+                    Find(intent.Store) is IStoreAccountScope && !CanResumeAccount(intent))
+                {
+                    ParkForAccountLocked(intent);
+                    SaveDownloadIntentsLocked();
+                    PublishDownloadQueueChangedLocked();
+                    candidate.Completion?.TrySetResult(new InstallResult { Ok = false, Message = AccountReason(intent.Store) });
+                    AppLog.Info($"Download account: queued gameId={intent.GameId} waits for its {intent.Store} account.");
                     continue;
                 }
                 if (AdmitQueuedLocked(candidate))

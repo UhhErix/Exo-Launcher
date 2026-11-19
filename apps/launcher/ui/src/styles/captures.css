@@ -116,9 +116,43 @@
 
 /* ── Captures sheet ── */
 .exo-game-overlay-stage:has(> .exo-captures) {
-  width: min(1180px, 100%);
-  height: min(860px, 100%);
-  max-height: min(860px, 100%);
+  width: min(1280px, 100%);
+  height: min(900px, 100%);
+  max-height: min(900px, 100%);
+}
+
+/* The title, big and bold, with the month the grid is on as a quiet chip beside it (Windows Photos' gallery). */
+.exo-captures-head {
+  align-items: center;
+}
+
+.exo-captures-title {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+}
+
+.exo-captures-head .exo-hub-title {
+  font-size: var(--exo-type-page);
+  font-weight: var(--exo-weight-title);
+}
+
+.exo-captures-date {
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: var(--exo-fill);
+  box-shadow: var(--exo-rim);
+  color: var(--color-muted);
+  font-size: calc(12px * var(--exo-scale, 1));
+  white-space: nowrap;
+}
+
+/* The grid and the scrubber on its right edge. */
+.exo-captures-frame {
+  position: relative;
+  display: flex;
+  flex: 1;
+  min-height: 0;
 }
 
 .exo-captures-body {
@@ -128,16 +162,30 @@
   padding: 0 20px 20px;
 }
 
-.exo-captures-chips {
-  align-self: flex-start;
-  margin: 2px 0 14px;
+.exo-captures-frame .exo-captures-body {
+  padding-right: 52px;
 }
 
-.exo-snip-tools {
-  display: flex;
-  flex-wrap: wrap;
+/* The chips stay over the grid as it scrolls, on the page's black. */
+.exo-captures-chips {
+  position: sticky;
+  top: 0;
+  z-index: 2;
   align-items: center;
-  gap: 6px;
+  margin: 0 -52px 0 -20px;
+  padding: 2px 52px 12px 20px;
+  background: var(--color-bg);
+}
+
+.exo-captures-chips-gap {
+  width: 1px;
+  height: 18px;
+  margin: 0 4px;
+  background: var(--exo-float-line);
+}
+
+.exo-captures-reel-btn {
+  margin-inline-start: auto;
 }
 
 /* Nothing saved yet: centered in the sheet, the three ways to capture as pills with their keys. */
@@ -187,29 +235,28 @@
   background: var(--hover-fill);
 }
 
-.exo-captures-group + .exo-captures-group {
-  margin-top: 12px;
-  padding-top: 12px;
-  border-top: 1px solid var(--exo-float-line);
+/* A day: its name, then its captures edge to edge. Days out of view aren't laid out or painted. */
+.exo-captures-day {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 320px;
+  scroll-margin-top: 52px;
 }
 
-.exo-captures-group-head {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-bottom: 8px;
+.exo-captures-day + .exo-captures-day {
+  margin-top: 20px;
 }
 
-.exo-captures-group-head h3 {
-  margin: 0;
+.exo-captures-day h3 {
+  margin: 0 0 8px;
   font-size: calc(13px * var(--exo-scale, 1));
   font-weight: var(--exo-weight-title);
 }
 
+/* Tiles edge to edge with a tight, even gap: no cards, no borders, the pictures are the grid. */
 .exo-captures-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-  gap: 10px;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 3px;
 }
 
 .exo-capture-card {
@@ -222,21 +269,19 @@
   display: block;
   width: 100%;
   aspect-ratio: 16 / 9;
-  /* Thumbnails out of view aren't laid out or painted: a year of captures scrolls as one screen of them. */
-  content-visibility: auto;
   padding: 0;
   overflow: hidden;
   border: 0;
-  border-radius: 10px;
+  border-radius: 4px;
   background: var(--color-bg);
-  outline: 1px solid transparent;
-  outline-offset: 2px;
+  outline: 2px solid transparent;
+  outline-offset: 1px;
   cursor: pointer;
   transition: outline-color var(--dur-quick) var(--ease-out);
 }
 
 @media (hover: hover) and (pointer: fine) {
-  .exo-capture-thumb:hover { outline-color: rgb(var(--exo-ink-rgb) / 0.28); }
+  .exo-capture-thumb:hover { outline-color: rgb(var(--exo-ink-rgb) / 0.4); }
 }
 
 .exo-capture-thumb img,
@@ -254,9 +299,9 @@
   background: var(--exo-tile);
 }
 
-.exo-capture-duration {
+.exo-capture-duration,
+.exo-capture-badge {
   position: absolute;
-  right: 6px;
   bottom: 6px;
   padding: 2px 7px;
   border-radius: 999px;
@@ -267,7 +312,15 @@
   font-variant-numeric: tabular-nums;
 }
 
-/* Delete and Favorite on the card's corner, shown while hovered (a favorite's star stays). */
+.exo-capture-duration {
+  right: 6px;
+}
+
+.exo-capture-badge {
+  left: 6px;
+}
+
+/* Delete and Favorite on the tile's corner, shown while hovered (a favorite's star stays). */
 .exo-capture-corner {
   position: absolute;
   top: 6px;
@@ -306,7 +359,7 @@
   .exo-capture-delete:hover { color: var(--color-bad); }
 }
 
-/* Selecting: a ring on every card, filled on the picked ones. */
+/* Selecting: a ring on every tile, filled on the picked ones. */
 .exo-capture-check {
   position: absolute;
   top: 8px;
@@ -326,28 +379,111 @@
   background: var(--color-fg);
 }
 
-
 .exo-captures-note {
   margin: 0 0 12px;
 }
 
-.exo-capture-meta {
+/* The scrubber: a slim column of months down the grid's right edge, the years in full; the month on screen is lit. */
+.exo-scrub {
+  position: absolute;
+  top: 44px;
+  right: 6px;
+  bottom: 12px;
   display: flex;
-  justify-content: space-between;
-  gap: 8px;
-  margin-top: 6px;
-  color: var(--color-muted);
-  font-size: calc(12px * var(--exo-scale, 1));
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+  width: 40px;
+  overflow: hidden;
+  touch-action: none;
+  user-select: none;
 }
 
-/* One capture, large, with its trim and actions. */
-.exo-capture-detail,
-.exo-snip-editor {
+.exo-scrub > button {
+  flex: none;
+  padding: 1px 6px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--color-muted);
+  font: inherit;
+  font-size: calc(12px * var(--exo-scale, 1));
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+  transition: color var(--dur-quick) var(--ease-out), background-color var(--dur-quick) var(--ease-out);
+}
+
+.exo-scrub > button.is-year {
+  color: var(--color-fg);
+  font-weight: var(--exo-weight-title);
+}
+
+.exo-scrub > button[aria-current="true"] {
+  background: var(--exo-selected);
+  color: var(--color-fg);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .exo-scrub > button:hover { background: var(--hover-fill); color: var(--color-fg); }
+}
+
+/* ── The viewer: the capture edge to edge under a slim bar; Info is a pane on its right, on demand. ── */
+.exo-viewer,
+.exo-editor {
   display: flex;
   flex: 1;
   flex-direction: column;
   min-height: 0;
-  padding: 0 20px 18px;
+  padding: 14px 16px 16px;
+}
+
+.exo-viewer-bar,
+.exo-editor-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.exo-viewer-title {
+  display: grid;
+  margin-left: 6px;
+  line-height: 1.25;
+}
+
+.exo-viewer-title strong {
+  overflow: hidden;
+  font-size: calc(13px * var(--exo-scale, 1));
+  font-weight: var(--exo-weight-title);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.exo-viewer-title span {
+  color: var(--color-muted);
+  font-size: calc(12px * var(--exo-scale, 1));
+}
+
+.exo-editor-icon {
+  min-width: 32px;
+  padding-inline: 8px;
+}
+
+.exo-capture-fav-btn.is-on {
+  color: var(--color-good);
+}
+
+.exo-capture-actions-gap {
+  flex: 1;
+}
+
+.exo-viewer-body,
+.exo-editor-body {
+  display: flex;
+  flex: 1;
+  gap: 12px;
+  min-height: 0;
 }
 
 .exo-capture-stage,
@@ -357,9 +493,9 @@
   flex: 1;
   align-items: center;
   justify-content: center;
+  min-width: 0;
   min-height: 0;
   overflow: hidden;
-  border: 1px solid var(--exo-float-line);
   border-radius: 10px;
   background: var(--color-bg);
 }
@@ -370,6 +506,152 @@
   max-width: 100%;
   max-height: 100%;
   object-fit: contain;
+}
+
+.exo-viewer-info,
+.exo-editor-inspector {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  gap: 14px;
+  width: 292px;
+  padding: 16px;
+  overflow-y: auto;
+  border: 1px solid var(--exo-float-line);
+  border-radius: 10px;
+  background: var(--color-bg);
+}
+
+.exo-viewer-info dl,
+.exo-editor-facts {
+  display: grid;
+  gap: 12px;
+  margin: 0;
+}
+
+.exo-viewer-info dt,
+.exo-editor-facts dt {
+  color: var(--color-muted);
+  font-size: calc(12px * var(--exo-scale, 1));
+}
+
+.exo-viewer-info dd,
+.exo-editor-facts dd {
+  margin: 2px 0 0;
+  overflow-wrap: anywhere;
+  font-size: calc(13px * var(--exo-scale, 1));
+}
+
+/* Discord's picker over the viewer, in Discord's scope for its colors; the scope itself draws nothing. */
+.exo-dc.exo-capture-send {
+  display: contents;
+}
+
+/* ── The editor: the media on the left, one inspector on the right with a tab per intent. ── */
+.exo-editor-tabs {
+  flex-wrap: wrap;
+}
+
+.exo-editor-panel {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.exo-editor-hint {
+  margin: 0;
+  color: var(--color-muted);
+  font-size: calc(12px * var(--exo-scale, 1));
+}
+
+/* Presets as a tidy grid of tiles: the shape it makes above its name (Photos' templates). */
+.exo-editor-tiles {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  width: 100%;
+}
+
+.exo-editor-tile {
+  display: grid;
+  justify-items: center;
+  gap: 4px;
+  padding: 12px 8px 10px;
+  border: 0;
+  border-radius: var(--exo-small-radius);
+  background: var(--exo-fill);
+  box-shadow: var(--exo-rim);
+  color: var(--color-fg);
+  font: inherit;
+  cursor: pointer;
+  transition: background-color var(--dur-quick) var(--ease-out), box-shadow var(--dur-quick) var(--ease-out);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .exo-editor-tile:hover:not(:disabled) { background: var(--hover-fill); }
+}
+
+.exo-editor-tile[aria-pressed="true"] {
+  background: var(--exo-selected);
+  box-shadow: inset 0 0 0 var(--exo-hair) var(--color-fg);
+}
+
+.exo-editor-tile:disabled {
+  cursor: default;
+}
+
+.exo-editor-tile strong {
+  font-size: calc(13px * var(--exo-scale, 1));
+  font-weight: var(--exo-weight-title);
+}
+
+.exo-editor-tile > span:not(.exo-editor-tile-shape) {
+  color: var(--color-muted);
+  font-size: calc(12px * var(--exo-scale, 1));
+}
+
+.exo-editor-tile-shape {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 32px;
+}
+
+.exo-editor-tile-shape > span {
+  max-width: 40px;
+  height: 30px;
+  border: 1.5px solid currentColor;
+  border-radius: 3px;
+}
+
+.exo-editor-tile-shape > span.is-free {
+  width: 36px;
+  height: 26px;
+  border-style: dashed;
+}
+
+/* The picture or the clip takes the room the inspector leaves. */
+.exo-editor-media {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+}
+
+/* The clip and its trim, one column on the left. */
+.exo-clip-media {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+  min-height: 0;
+}
+
+.exo-clip-media .exo-trim {
+  flex: none;
 }
 
 /* A snip zoomed in: a drag moves it; past twice its own size its pixels stay square. */
@@ -407,19 +689,6 @@
   background: var(--exo-fill);
   color: var(--color-fg);
   font-size: calc(13px * var(--exo-scale, 1));
-}
-
-.exo-capture-trim-row {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-top: 12px;
-}
-
-.exo-capture-trim-len {
-  color: var(--color-muted);
-  font-size: calc(12px * var(--exo-scale, 1));
-  font-variant-numeric: tabular-nums;
 }
 
 .exo-trim {
@@ -486,26 +755,6 @@
   outline-offset: 2px;
 }
 
-.exo-capture-actions {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 6px;
-  margin-top: 12px;
-}
-
-.exo-snip-tools {
-  margin: 0 0 12px;
-}
-
-.exo-capture-actions-gap {
-  flex: 1;
-}
-
-.exo-capture-fav-btn.is-on {
-  color: var(--color-good);
-}
-
 .exo-capture-note {
   margin: 10px 0 0;
   color: var(--color-muted);
@@ -538,6 +787,3 @@
   padding-block: 0;
 }
 
-.exo-captures-group-head .exo-set-btn {
-  margin-inline-start: auto;
-}

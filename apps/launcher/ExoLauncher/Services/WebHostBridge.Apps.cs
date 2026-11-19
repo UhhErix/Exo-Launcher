@@ -260,7 +260,67 @@ public sealed partial class WebHostBridge
             skipped.Add(new { id, name = id, reason = "That app isn't on this PC anymore." });
         }
         if (apps.Count == 0) return new { ok = false, message = "None of those can be uninstalled here.", skipped };
+        // The one press for the run: each of these may then go quietly (QuietUninstall), once, within the hour.
+        foreach (var old in QuietPass.Where(pair => DateTime.UtcNow - pair.Value > QuietPassFor).Select(pair => pair.Key).ToList()) QuietPass.TryRemove(old, out _);
+        foreach (var app in apps) QuietPass[app.Id] = DateTime.UtcNow;
         return new { ok = true, ids = apps.Select(app => app.Id).ToArray(), skipped };
+    }
+
+    // apps.confirm's pass: the apps confirmed together, by id, when; apps.uninstall takes one quietly only while it holds.
+    private static readonly ConcurrentDictionary<string, DateTime> QuietPass = new(StringComparer.Ordinal);
+    private static readonly TimeSpan QuietPassFor = TimeSpan.FromHours(1);
+
+    /// <summary>The command a confirmed run uses for <paramref name="program"/>: its quiet one where its installer has one, else its own.</summary>
+    internal static (string Command, QuietUninstall.Kind Kind) UninstallCommand(InstalledProgram program, bool quiet, Func<string, QuietUninstall.Kind> marker)
+    {
+        var plain = program.Uninstall!;
+        if (!quiet) return (plain, QuietUninstall.Kind.Unknown);
+        var entry = new QuietUninstall.Entry(program.Key?[(program.Key.LastIndexOf('\\') + 1)..] ?? "", plain, program.Quiet, program.ProductCode, program.Bundle);
+        return QuietUninstall.Command(entry, marker) is { } command ? (command, QuietUninstall.Detect(entry, marker)) : (plain, QuietUninstall.Kind.Unknown);
+    }
+
+    /// <summary>apps.restorePoint: a System Restore point before a run, under Windows' prompt; ok only when there is one to go back to.</summary>
+    private static async Task<object> AppsRestorePointAsync(CancellationToken ct)
+    {
+        var outcome = await RestorePoint.MakeAsync(steps => ReplacedApps.RemoveAsAdminAsync(steps, ct)).ConfigureAwait(true);
+        return RestorePoint.Problem(outcome) is { } problem
+            ? new { ok = false, made = false, message = (string?)problem }
+            : new { ok = true, made = outcome == RestorePoint.Outcome.Made, message = outcome == RestorePoint.Outcome.Recent ? "Windows keeps one restore point a day: the one from the last day stands." : null };
+    }
+
+    /// <summary>apps.openDefaults: Windows' Default apps, where a file type an app left pointing at itself gets a new default (Windows signs that choice; Exo never writes it).</summary>
+    private static object AppsOpenDefaults()
+    {
+        try
+        {
+            using var _ = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("ms-settings:defaultapps") { UseShellExecute = true });
+            return new { ok = true, message = (string?)null };
+        }
+        catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException)
+        {
+            AppLog.Debug("Apps: Default apps didn't open: " + ex.GetType().Name);
+            return new { ok = false, message = (string?)"Windows' Default apps didn't open." };
+        }
+    }
+
+    /// <summary>apps.installerCache: only reads. How many of Windows Installer's cached copies no product or patch needs, and how big.</summary>
+    private static async Task<object> AppsInstallerCacheAsync()
+    {
+        var found = await Task.Run(InstallerCache.Find).ConfigureAwait(true);
+        return new { ok = true, files = found.Count, bytes = found.Sum(file => file.Bytes) };
+    }
+
+    /// <summary>apps.installerCacheClean: those, found again now, to the Recycle Bin under one Windows prompt, with Put back.</summary>
+    private async Task<object> AppsInstallerCacheCleanAsync(CancellationToken ct)
+    {
+        var done = await InstallerCache.ClearAsync(steps => ReplacedApps.RemoveAsAdminAsync(steps, ct), RemovalHistory.ForThisPc).ConfigureAwait(true);
+        AppsChangedHere();
+        if (done.Declined) return new { ok = false, files = 0, bytes = 0L, undo = (string?)null, message = "Windows' permission was declined: nothing was moved." };
+        return new
+        {
+            ok = done.Left == 0, files = done.Files, bytes = done.Bytes, undo = done.Undo,
+            message = done.Left == 0 ? null : $"{done.Left} {(done.Left == 1 ? "file" : "files")} stayed: in use, or too big for the Recycle Bin.",
+        };
     }
 
     /// <summary>
@@ -282,7 +342,8 @@ public sealed partial class WebHostBridge
         return null;
     }
 
-    private async Task<object> AppsUninstallAsync(string id, CancellationToken ct)
+    /// <param name="quiet">The page runs several confirmed together (apps.confirm): taken only while that pass holds for this one.</param>
+    private async Task<object> AppsUninstallAsync(string id, bool quiet, CancellationToken ct)
     {
         if (!await AppsGate.WaitAsync(0, ct).ConfigureAwait(false)) return new { ok = false, message = "Another app is being removed." };
         try
@@ -292,15 +353,19 @@ public sealed partial class WebHostBridge
             if (!program.Removable) return new { ok = false, message = Why(program) };
             if (AppsKeep.Why(program, await Task.Run(Orphans.KeepNeeds, ct).ConfigureAwait(true)) is { } kept) return new { ok = false, message = kept + ": it stays." };
             var edge = EdgeRemoval.IsEdge(program);
-            // Asked in place on the page (DESIGN.md › Confirm); the uninstaller's own window, or Windows' prompt, follows.
+            var passed = quiet && QuietPass.TryRemove(program.Id, out var at) && DateTime.UtcNow - at < QuietPassFor;
+            // Asked in place on the page (DESIGN.md › Confirm); the uninstaller's own window, or Windows' prompt, follows; in a
+            // confirmed run, its quiet switches where its installer has them (Windows' prompt still asks for rights).
+            var (command, kind) = program.Store || edge ? ("", QuietUninstall.Kind.Unknown)
+                : await Task.Run(() => UninstallCommand(program, passed, QuietUninstall.Marker), ct).ConfigureAwait(true);
             var trail = await Task.Run(() => Orphans.TrailFor(program), ct).ConfigureAwait(true);
             AppsMemory.ForThisPc.Forget([program.Id]);
-            AppLog.Info($"Apps: uninstalling {program.Name} ({(program.Store ? "Store" : program.ProductCode is null ? "own uninstaller" : "MSI")}).");
+            AppLog.Info($"Apps: uninstalling {program.Name} ({(program.Store ? "Store" : program.ProductCode is null ? "own uninstaller" : "MSI")}{(passed ? $", quiet: {QuietUninstall.Name(kind)}" : "")}).");
             return await AutoClear.AfterUninstallAsync<object>(
                 async () =>
                 {
                     if (program.Store) return await new WindowsAppPackages().RemoveAsync(program.PackageFullName!, ct).ConfigureAwait(true) ? null : "Windows didn't remove it.";
-                    return edge ? await EdgeRemoval.RunAsync(program, ct).ConfigureAwait(true) : await UninstallRun.RunAsync(Rooted(program.Uninstall!) ?? program.Uninstall!, TimeSpan.FromMinutes(60), ct).ConfigureAwait(true);
+                    return edge ? await EdgeRemoval.RunAsync(program, ct).ConfigureAwait(true) : await UninstallRun.RunAsync(Rooted(command) ?? command, TimeSpan.FromMinutes(60), ct).ConfigureAwait(true);
                 },
                 () => Task.Run(() => StillThere(program), ct),
                 () => Task.Delay(TimeSpan.FromSeconds(3), ct),
@@ -475,10 +540,17 @@ public sealed partial class WebHostBridge
                 path = scan.Said(pair.Item),
                 bytes = sizes.GetValueOrDefault(pair.Item),
                 selected = pair.Item.Selected,
-                note = pair.Item.Held ?? (pair.Item.Likely ? "Only its name matches" : scan.Stayed.GetValueOrDefault(pair.Item)),
+                note = pair.Item.Held ?? scan.Stayed.GetValueOrDefault(pair.Item),
+                // How sure the scan is that it's the app's, and why: only certain is ever selected.
+                certainty = pair.Item.Sure.ToString().ToLowerInvariant(),
+                because = LeftoverScan.Said(pair.Item.Sure, pair.Item.Because),
+                // A driver that goes with its driver store package (exported first; Put back adds it again).
+                store = pair.Item.Infs is { Count: > 0 },
                 machine = pair.Item.Machine,
                 from = pair.From,
             }),
+            // File types Windows still opens with it: Default apps changes them (Windows signs that choice; Exo never writes it).
+            defaults = scan.Defaults.Take(20).ToArray(),
             // After an uninstall: it cleared by itself, what went, how to put it back, and whether Windows' prompt was declined.
             auto = done is not null,
             cleared = done?.What,
@@ -571,8 +643,11 @@ public sealed partial class WebHostBridge
                 .Select(id => find.Items[id]).ToList() : [];
         if (chosen.Count == 0) return new { ok = false, message = "Nothing was chosen." };
         // No confirm: files go to the Recycle Bin and registry entries to a backup first (Put back); Windows' one prompt asks for Program Files.
+        // restore: what needs that prompt goes only behind a System Restore point, made in the same prompt (a forced uninstall's
+        // clear, a driver and its store package, services and machine entries); what this user may remove needs none.
+        var restore = hasParams && p.TryGetProperty("restore", out var asked) && asked.ValueKind == JsonValueKind.True;
         var scan = new LeftoverScan(LeftoverScan.ThisPc());
-        var done = await Task.Run(() => AutoClear.ClearAsync(scan, find.Name, chosen, steps => ReplacedApps.RemoveAsAdminAsync(steps, ct), RemovalHistory.ForThisPc, DateTime.UtcNow), ct).ConfigureAwait(true);
+        var done = await Task.Run(() => AutoClear.ClearAsync(scan, find.Name, chosen, steps => ReplacedApps.RemoveAsAdminAsync(steps, ct), RemovalHistory.ForThisPc, DateTime.UtcNow, restore: restore), ct).ConfigureAwait(true);
         AppsChangedHere();
         Finds.TryRemove(token, out _);
         AppsMemory.ForThisPc.Forget(find.Remembered);
@@ -585,6 +660,7 @@ public sealed partial class WebHostBridge
             undo = done.Undo,
             left = done.Left.Count,
             message = done.Left.Count == 0 ? null : done.Declined ? "Windows' permission was declined: what needs it stayed."
+                : done.Point is { } point ? point + " Turn off Restore point to clear it without one."
                 : $"{done.Left.Count} {(done.Left.Count == 1 ? "item" : "items")} stayed: {done.Why ?? LeftoverScan.InUse}.",
         };
     }

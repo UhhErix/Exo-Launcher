@@ -1,0 +1,51 @@
+name: Launcher CI
+
+# Every pull request and every push to main: the UI's check (types, host contract, lint, CSS rules, tests) and the .NET
+# tests, on Windows, so auto-merge waits for a green build and not only for CodeQL.
+
+on:
+  # Every pull request, with no path filter: `test` is a required check, so a PR that skipped it could never merge.
+  pull_request:
+  push:
+    branches: [main]
+    paths: ['apps/launcher/**', '.github/workflows/launcher-ci.yml']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: launcher-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: windows-latest
+    timeout-minutes: 45
+    defaults:
+      run:
+        working-directory: apps/launcher
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: |
+            apps/launcher/ui/package-lock.json
+            apps/launcher/mouse/package-lock.json
+
+      - uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
+        with:
+          global-json-file: apps/launcher/global.json
+
+      - name: Install the UI and Exo Mouse
+        run: |
+          npm ci --prefix ui --no-audit --no-fund
+          npm ci --prefix mouse --no-audit --no-fund
+
+      - name: UI check
+        run: npm run -s check --prefix ui
+
+      - name: .NET tests
+        run: dotnet test ExoLauncher.Tests/ExoLauncher.Tests.csproj -p:Platform=x64 -nologo

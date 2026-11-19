@@ -11,6 +11,7 @@ import { useVideoFeed } from '../../lib/discordVideo'
 import { clearGoLiveMessage, startCamera, stopCamera, useCamera, useGoLiveValue } from '../../lib/goLive'
 import { ChevronDown, ChevronUp, Close } from '../../brand/icons'
 import { MyStreamTile, PanelStream, ShareScreen, useStreamTile } from './GoLivePicker'
+import { AboveTip, anchorOf, type TipAnchor } from './AboveTip'
 import { Icons } from './icons'
 import { SoundboardButton } from './Soundboard'
 import { setAudioUser, useAccountSetting } from '../../lib/discordPrefs'
@@ -753,11 +754,8 @@ const CLIPS_ON = 'Someone in this call has clips on'
 
 /** Someone else's clips (or their Exo Capture with the call's voices on) record the call: a red dot, said in a tip. */
 function RecordedDot() {
-  const [tip, setTip] = useState<{ left: number; top: number } | null>(null)
-  const show = (el: HTMLElement) => {
-    const box = el.getBoundingClientRect()
-    setTip({ left: box.left + box.width / 2, top: box.top - 8 })
-  }
+  const [tip, setTip] = useState<TipAnchor | null>(null)
+  const show = (el: HTMLElement) => setTip(anchorOf(el))
   return (
     <>
       <span className="exo-dc-voice-rec" role="img" aria-label={CLIPS_ON} tabIndex={0}
@@ -766,7 +764,7 @@ function RecordedDot() {
         <span className="exo-dc-voice-rec-dot" aria-hidden="true" />
         <span className="exo-dc-voice-rec-text" aria-hidden="true">Clips on</span>
       </span>
-      {tip ? <span className="exo-dc-tip is-above" role="tooltip" style={{ left: tip.left, top: tip.top }}>{CLIPS_ON}</span> : null}
+      {tip ? <AboveTip at={tip}>{CLIPS_ON}</AboveTip> : null}
     </>
   )
 }

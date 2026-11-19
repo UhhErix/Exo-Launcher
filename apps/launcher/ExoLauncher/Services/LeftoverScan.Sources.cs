@@ -11,7 +11,7 @@ namespace ExoLauncher.Services;
 /// </summary>
 internal sealed partial class LeftoverScan
 {
-    private enum KeySource { Path, AppId, Service }
+    private enum KeySource { Path, AppId, Service, Driver }
 
     private sealed record Sources(
         bool Deep,
@@ -19,7 +19,11 @@ internal sealed partial class LeftoverScan
         List<(string Key, string Text, bool Machine, KeySource Kind)> Keys,
         List<(string Path, string Target, bool Machine)> Shortcuts,
         List<(string Path, string Exe)> Tasks,
-        List<(string Key, string? Name, string Target, bool Machine)> Refs);
+        List<(string Key, string? Name, string Target, bool Machine)> Refs)
+    {
+        /// <summary>This user's file-type defaults: each extension and the ProgId its UserChoice (or UserChoiceLatest) names.</summary>
+        internal List<(string Ext, string ProgId)> Choices { get; init; } = [];
+    }
 
     // Windows' records of a program by its path, in a value's name or data: the name cache, compatibility, startup, recent apps.
     private static readonly string[] UserValues =
@@ -46,8 +50,10 @@ internal sealed partial class LeftoverScan
         @"HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\AppCompatFlags\Layers",
         @"HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\SharedDLLs",
         @"HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Installer\Folders",
-        @"HKLM\SYSTEM\CurrentControlSet\Services\SharedAccess\Parameters\FirewallPolicy\FirewallRules",
+        FirewallRules,
     ];
+
+    private const string FirewallRules = @"HKLM\SYSTEM\CurrentControlSet\Services\SharedAccess\Parameters\FirewallPolicy\FirewallRules";
 
     private const string UserAssist = @"HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\UserAssist";
     private const string Notifications = @"HKCU\Software\Microsoft\Windows\CurrentVersion\Notifications\Settings";
@@ -123,6 +129,7 @@ internal sealed partial class LeftoverScan
         }
         ReadSubKeys(Notifications, (name, _) => keys.Add((Notifications + '\\' + name, name, false, KeySource.AppId)));
         var tasks = new List<(string, string)>();
+        var choices = new List<(string, string)>();
         var refs = new List<(string, string?, string, bool)>();
         if (deep)
         {
@@ -147,11 +154,18 @@ internal sealed partial class LeftoverScan
                 });
             }
             const string Services = @"HKLM\SYSTEM\CurrentControlSet\Services";
-            // A driver is never anything's leftover: its Type says kernel, file system or recognizer.
+            // A driver (its Type says kernel, file system or recognizer) only when it loads on demand or later, never one Windows
+            // starts at boot or with the system, nor anti-cheat's (DriverCandidate); it is the app's only when its file lies in
+            // the app's own folder, and even then it is held for a press of its own.
             ReadSubKeys(Services, (name, key) =>
             {
-                if (key.GetValue("Type") is int type && (type & 0xB) != 0) return;
-                if (key.GetValue("ImagePath", null, RegistryValueOptions.DoNotExpandEnvironmentNames) is string image) keys.Add((Services + '\\' + name, image, true, KeySource.Service));
+                if (key.GetValue("ImagePath", null, RegistryValueOptions.DoNotExpandEnvironmentNames) is not string image) return;
+                if (key.GetValue("Type") is int type && (type & 0xB) != 0)
+                {
+                    if (DriverCandidate(type, key.GetValue("Start") as int?, name, image)) keys.Add((Services + '\\' + name, image, true, KeySource.Driver));
+                    return;
+                }
+                keys.Add((Services + '\\' + name, image, true, KeySource.Service));
             });
             foreach (var log in new[] { "Application", "System" })
                 ReadSubKeys($@"{Services}\EventLog\{log}", (name, key) =>
@@ -184,6 +198,12 @@ internal sealed partial class LeftoverScan
                 using var openWith = key.OpenSubKey("OpenWithProgids");
                 foreach (var progIdName in openWith?.GetValueNames() ?? [])
                     if (progIdName.Length > 0) refs.Add(($@"{FileExts}\{ext}\OpenWithProgids", progIdName, progIdName, false));
+                // Only read: Windows signs UserChoice with a hash, and Exo never writes or forges it.
+                foreach (var choice in new[] { "UserChoiceLatest", "UserChoice", @"UserChoiceLatest\ProgId" })
+                {
+                    using var chosen = key.OpenSubKey(choice);
+                    if (chosen?.GetValue("ProgId") is string progId && progId.Length > 0) { choices.Add((ext, progId)); break; }
+                }
             });
             tasks.AddRange(_isTest ? _testTaskList : ReadTasks());
         }
@@ -197,7 +217,7 @@ internal sealed partial class LeftoverScan
             foreach (var link in Matching(full, "*.url", recurse))
                 if (InternetShortcut(link) is { } target) shortcuts.Add((link, target, machine));
         }
-        return new Sources(deep, values, keys, shortcuts, tasks, refs);
+        return new Sources(deep, values, keys, shortcuts, tasks, refs) { Choices = choices };
 
         void Command(string path, RegistryKey key, bool machine)
         {
@@ -205,6 +225,15 @@ internal sealed partial class LeftoverScan
             if (command?.GetValue(null) is string text) keys.Add((path, text, machine, KeySource.Path));
         }
     }
+
+    /// <summary>
+    /// Whether a driver's service may be offered at all: started on demand, automatically or disabled (Start 2, 3, 4; never
+    /// 0 boot or 1 system, which Windows needs to start, nor one with no Start), a kernel or file-system driver (Type 1 or 2,
+    /// never a recognizer), and nothing anti-cheat by its name or its file.
+    /// </summary>
+    internal static bool DriverCandidate(int type, int? start, string name, string image) =>
+        (type & 0x3) != 0 && (type & 0x8) == 0 && start is 2 or 3 or 4 && !AntiCheatIn(name) && !AntiCheatIn(image) && AntiCheatCheck.ForService(name) is null &&
+        !(AntiCheatCheck.ProgramOf(image) is { } file && AntiCheatCheck.ForFile(Path.GetFileName(file)) is not null);
 
     private void ReadValues(string path, List<(string, string, string, bool)> into, bool machine) => ReadValues(path, into, null, machine);
 
@@ -297,7 +326,63 @@ internal sealed partial class LeftoverScan
     }
 
     /// <summary>Whether a task is there: schtasks' exit code, the same in every Windows language.</summary>
-    private static bool TaskExists(string path) => RunHelper(SchTasks, ["/query", "/tn", path], TimeSpan.FromSeconds(10)).ExitCode == 0;
+    internal static bool TaskExists(string path) => RunHelper(SchTasks, ["/query", "/tn", path], TimeSpan.FromSeconds(10)).ExitCode == 0;
+
+    /// <summary>"\Acme\Update" as Task Scheduler's cmdlets name it: its folder ("\Acme\") and its name ("Update"); null for anything else.</summary>
+    internal static (string Folder, string Name)? TaskParts(string path)
+    {
+        if (!path.StartsWith('\\') || path.EndsWith('\\') || path.Any(char.IsControl)) return null;
+        var last = path.LastIndexOf('\\');
+        return (path[..(last + 1)], path[(last + 1)..]);
+    }
+
+    /// <summary>
+    /// The elevated step that writes a scheduled task's definition down (its XML, UTF-16 as Task Scheduler reads it back) before
+    /// it goes, so Put back can register it again. Its names travel encoded, in a script of literals, never through cmd.
+    /// </summary>
+    internal static string? TaskExportStep(string path, string file)
+    {
+        if (TaskParts(path) is not var (folder, name) || file.Any(char.IsControl)) return null;
+        static string Literal(string text) => "'" + text.Replace("'", "''") + "'";
+        var script = $"try{{$x=Export-ScheduledTask -TaskPath {Literal(folder)} -TaskName {Literal(name)} -ErrorAction Stop;" +
+            $"[IO.File]::WriteAllText({Literal(file)},$x,[Text.Encoding]::Unicode)}}catch{{}}";
+        return $"{PowerShell} -NoProfile -NonInteractive -WindowStyle Hidden -EncodedCommand {Convert.ToBase64String(Encoding.Unicode.GetBytes(script))}";
+    }
+
+    /// <summary>
+    /// The elevated step that registers a saved task again, only from the exact bytes checked when Put back was pressed (their
+    /// SHA-256 is in the step), and never over a task that is there again (no -Force).
+    /// </summary>
+    internal static string? TaskImportStep(string path, string file, byte[] checkedBytes)
+    {
+        if (TaskParts(path) is not var (folder, name) || file.Any(char.IsControl)) return null;
+        static string Literal(string text) => "'" + text.Replace("'", "''") + "'";
+        var hash = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(checkedBytes));
+        var script = $"$b=[IO.File]::ReadAllBytes({Literal(file)});" +
+            $"if(([BitConverter]::ToString([Security.Cryptography.SHA256]::Create().ComputeHash($b)) -replace '-','') -ne '{hash}'){{exit 1}};" +
+            $"Register-ScheduledTask -TaskPath {Literal(folder)} -TaskName {Literal(name)} -Xml ([Text.Encoding]::Unicode.GetString($b).TrimStart([char]0xFEFF)) | Out-Null";
+        return $"{PowerShell} -NoProfile -NonInteractive -WindowStyle Hidden -EncodedCommand {Convert.ToBase64String(Encoding.Unicode.GetBytes(script))}";
+    }
+
+    /// <summary>
+    /// Whether a saved task definition is still the one written down: Task Scheduler's XML, and every program it runs is the
+    /// one the task ran when it went. The file sits where this user can write and an administrator registers it, so one
+    /// changed since (another program, or no program at all) is refused rather than trusted.
+    /// </summary>
+    internal static bool TaskStaysInside(string xml, string exe)
+    {
+        try
+        {
+            var document = System.Xml.Linq.XDocument.Parse(xml);
+            if (document.Root?.Name.LocalName != "Task") return false;
+            var actions = document.Descendants().Where(element => element.Parent?.Name.LocalName == "Actions").ToList();
+            if (actions.Count == 0 || actions.Any(action => action.Name.LocalName != "Exec")) return false;
+            var commands = actions.Select(action => action.Elements().FirstOrDefault(element => element.Name.LocalName == "Command")?.Value.Trim().Trim('"')).ToList();
+            return commands.All(command => command is { Length: > 0 } && string.Equals(Environment.ExpandEnvironmentVariables(command),
+                Environment.ExpandEnvironmentVariables(exe.Trim().Trim('"')), StringComparison.OrdinalIgnoreCase));
+        }
+        catch (System.Xml.XmlException) { return false; }
+    }
 
     internal static string PowerShell => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), "WindowsPowerShell", "v1.0", "powershell.exe");
     private static string SchTasks => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), "schtasks.exe");

@@ -50,13 +50,10 @@
 }
 
 :root .exo-dc .exo-dc-embed-desc {
-  display: -webkit-box;
-  overflow: hidden;
+  /* Whole, as Discord shows it: a three-line clamp over its paragraphs cut lines off mid-card with no ellipsis, and the
+     "Full changelog" link with them (e2e discord.geometry). */
   color: var(--color-muted);
   font-size: var(--exo-type-body);
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 3;
-  line-clamp: 3;
 }
 
 :root .exo-dc .exo-dc-embed-desc :is(p, div) {
