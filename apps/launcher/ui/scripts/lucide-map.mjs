@@ -19,7 +19,7 @@ export const LUCIDE = {
   'gallery': 'images', 'gift': 'gift', 'graphics-card': 'gpu', 'grip': 'grip-vertical', 'hash': 'hash', 'heading': 'heading',
   'headphones': 'headphones', 'headphones-off': 'headphone-off', 'heart': 'heart', 'highlighter': 'highlighter',
   'history': 'rotate-ccw-clock', 'home': 'house', 'hourglass': 'hourglass', 'id': 'id-card', 'keyboard': 'keyboard',
-  'image-upload': 'image-up', 'inbox': 'inbox', 'italic': 'italic', 'key': 'key', 'leaf': 'leaf', 'library': 'library',
+  'image-upload': 'image-up', 'inbox': 'inbox', 'filter': 'list-filter', 'italic': 'italic', 'key': 'key', 'leaf': 'leaf', 'library': 'library',
   'lightbulb': 'lightbulb', 'link': 'link', 'link-preview': 'panels-top-left', 'list-search': 'text-search', 'live': 'screen-share',
   'lock': 'lock', 'mail': 'mail', 'maximize': 'maximize-2', 'megaphone': 'megaphone', 'members': 'users', 'memory': 'memory-stick',
   'message': 'message-square', 'mic': 'mic', 'mic-off': 'mic-off', 'minus': 'minus', 'monitor': 'monitor', 'more': 'ellipsis',
