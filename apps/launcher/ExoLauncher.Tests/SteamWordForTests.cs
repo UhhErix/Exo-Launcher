@@ -10,5 +10,5 @@ namespace ExoLauncher.Tests;
 internal static class SteamWordForTests
 {
     [ModuleInitializer]
-    internal static void NoSteamHere() => AntiCheatCheck.SteamSource = new AntiCheatCheck.SteamVacFile(() => null).Word;
+    internal static void NoSteamHere() => AntiCheatCheck.SteamSource = new AntiCheatCheck.SteamVacFile(() => []).Word;
 }

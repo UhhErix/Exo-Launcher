@@ -248,7 +248,7 @@ internal static partial class AntiCheatCheck
         Vac,
         /// <summary>An anti-cheat page or a Deck test about anti-cheat, the anti-cheat not named.</summary>
         Listed,
-        /// <summary>Steam can't say: no app id, appinfo.vdf unreadable or of a format Exo doesn't read, the app not in it.</summary>
+        /// <summary>Steam can't say: no app id, appinfo unreadable or of a format Exo doesn't read, the app not in it.</summary>
         CannotTell,
     }
 
@@ -262,7 +262,11 @@ internal static partial class AntiCheatCheck
     /// <param name="store">The store's anti-cheat (<see cref="ForStore"/>).</param>
     /// <param name="known">The anti-cheat Exo Shaders lists the game's id for (<see cref="KnownGames"/>).</param>
     /// <param name="disk">The walk's phrase: null for nothing found, the names, with <see cref="Unreadable"/> or <see cref="OutOfTime"/> among them when it could not finish.</param>
-    internal static Answer Decide(string? store, string? known, bool installFound, string? disk, string? service, SteamWord steam, string? title)
+    /// <param name="withoutEntry">The player picked the Play-menu entry Steam offers without the anti-cheat
+    /// (<see cref="WithoutAntiCheatLaunch"/>): what the files, title, a known id or Steam's silence say counts for nothing,
+    /// since that entry never starts it. Never Riot or Vanguard, never an install that could not be read, never Valve
+    /// Anti-Cheat (Steam's own, on in every entry), a store's or a service's anti-cheat.</param>
+    internal static Answer Decide(string? store, string? known, bool installFound, string? disk, string? service, SteamWord steam, string? title, bool withoutEntry = false)
     {
         if (store == DlssSwapService.RiotVanguard) return new(Kind.Found, store, "store");
         var names = new SortedSet<string>(StringComparer.Ordinal);
@@ -287,6 +291,9 @@ internal static partial class AntiCheatCheck
         if (unknown is not null) return new(Kind.Unknown, names.ToList(), unknown);
         if (names.Count == 0 && title is not null) Add(title, "title");
         if (steam == SteamWord.CannotTell && !names.Contains(ValveAntiCheat)) Add(PossiblyVacName, "steam");
+        if (withoutEntry && names.Count > 0 && store is null && service is null && steam != SteamWord.Vac &&
+            !names.Contains(ValveAntiCheat) && !names.Contains(DlssSwapService.RiotVanguard))
+            return new(Kind.None, [], WithoutAntiCheatEvidence);
         if (names.Count == 0) return Answer.Clean;
         return new(names.All(name => name == PossiblyVacName) ? Kind.PossiblyVac : Kind.Found, names.ToList(), evidence!);
     }
@@ -314,9 +321,33 @@ internal static partial class AntiCheatCheck
 
     private static Answer FromParts(GameEntry game, string? root, string? walked, IReadOnlyList<(string Name, string ImagePath)> services, Func<uint, SteamWord> steam) =>
         Decide(ForStore(game.Store), KnownGames.GetValueOrDefault(game.Id), root is not null, walked, root is null ? null : ServiceIn(root, services),
-            SteamSays(game, steam), ByTitle(game));
+            SteamSays(game, steam), ByTitle(game), WithoutAntiCheatLaunch(game) is not null);
 
-    /// <summary>Where Steam's word comes from: Steam's own appinfo.vdf, read once per change of the file (<see cref="SteamVacFile"/>).</summary>
+    /// <summary>What decided a clean answer for a game started from Steam's entry without its anti-cheat.</summary>
+    internal const string WithoutAntiCheatEvidence = "launch without anti-cheat";
+
+    /// <summary>The player's pick in Properties: this Steam game starts from Steam's entry without its anti-cheat (settings, wired at start).</summary>
+    internal static Func<GameEntry, bool> ChoseWithoutAntiCheat { get; set; } = _ => false;
+
+    /// <summary>Steam's entry without the anti-cheat for an app id, from its appinfo (<see cref="SteamVacFile.Free"/>).</summary>
+    internal static Func<uint, SteamAppInfoNames.AntiCheatFreeLaunch?> SteamFreeEntry { get; set; } = SteamVacFile.Default.Free;
+
+    /// <summary>
+    /// The entry the game starts from when it starts without its anti-cheat: only a Steam game (never Riot's) the player set
+    /// to "Launch without anti-cheat" whose appinfo still offers the entry; else null, and it starts, and is judged, with it.
+    /// Every place asks this one: Play (which entry), the policy (<see cref="Decide"/>) and frame generation at launch.
+    /// </summary>
+    internal static Func<GameEntry, SteamAppInfoNames.AntiCheatFreeLaunch?> WithoutAntiCheatLaunch { get; set; } = game =>
+        game.Store == StoreKind.Steam && !IsRiot(game) && SteamAppId(game) is { } id && ChoseWithoutAntiCheat(game) ? SteamFreeEntry(id) : null;
+
+    /// <summary>A Steam game's app id: the launch target, else the library id's ("steam:440"); null when it has none.</summary>
+    internal static uint? SteamAppId(GameEntry game)
+    {
+        var text = game.LaunchTarget is { Length: > 0 } target ? target : game.Id.StartsWith("steam:", StringComparison.OrdinalIgnoreCase) ? game.Id[6..] : null;
+        return uint.TryParse(text, out var id) && id != 0 ? id : null;
+    }
+
+    /// <summary>Where Steam's word comes from: Steam's own appinfo, read once per change of its files (<see cref="SteamVacFile"/>).</summary>
     internal static Func<uint, SteamWord> SteamSource { get; set; } = SteamVacFile.Default.Word;
 
     /// <summary>Riot's games: by store, installed under a Riot Games folder, or a Riot program as the game's own.</summary>
@@ -405,9 +436,7 @@ internal static partial class AntiCheatCheck
     internal static SteamWord SteamSays(GameEntry game, Func<uint, SteamWord> steam)
     {
         if (game.Store != StoreKind.Steam) return SteamWord.NotSteam;
-        // Its app id: the launch target, else the library id's ("steam:440").
-        var text = game.LaunchTarget is { Length: > 0 } target ? target : game.Id.StartsWith("steam:", StringComparison.OrdinalIgnoreCase) ? game.Id[6..] : null;
-        if (!uint.TryParse(text, out var id) || id == 0) return SteamWord.CannotTell;
+        if (SteamAppId(game) is not { } id) return SteamWord.CannotTell;
         if (ValveVac.Contains(id)) return SteamWord.Vac;
         return steam(id);
     }
@@ -421,26 +450,28 @@ internal static partial class AntiCheatCheck
     }
 
     /// <summary>
-    /// Steam's appinfo.vdf read whole once per change of its size or time (as Exo Shaders' Vac.cs keeps it), every app's
-    /// word kept from that one parse. A read that fails, or one of a file Steam is still writing (it ends before its last
-    /// record), is tried again after <see cref="RetryAfter"/>, the last good words kept meanwhile; a format Exo doesn't
-    /// read, or a file over <see cref="MaxBytes"/>, says "cannot tell" for every app (possibly Valve Anti-Cheat), never
-    /// unknown. A whole-file failure is logged once.
+    /// Steam's appinfo (its shards, or the one appinfo.vdf of older Steam) read whole once per change of any file's size,
+    /// time or presence (as Exo Shaders' Vac.cs keeps it), every app's word kept from that one parse. A read that fails, a
+    /// file gone between listing and reading, or a file Steam is still writing (it ends before its last record, or a
+    /// record's hash doesn't match) is tried again after <see cref="RetryAfter"/>, the last good words kept meanwhile; a
+    /// format Exo doesn't read, or files over <see cref="MaxBytes"/> together, say "cannot tell" for every app (possibly
+    /// Valve Anti-Cheat), never unknown. A whole-read failure is logged once.
     /// </summary>
-    internal sealed class SteamVacFile(Func<string?> path, Func<DateTime>? now = null, long maxBytes = SteamVacFile.MaxBytes)
+    internal sealed class SteamVacFile(Func<IReadOnlyList<string>> files, Func<DateTime>? now = null, long maxBytes = SteamVacFile.MaxBytes)
     {
         internal const long MaxBytes = 256L * 1024 * 1024;
         internal static readonly TimeSpan RetryAfter = TimeSpan.FromSeconds(30);
-        internal static readonly SteamVacFile Default = new(() => SteamInstallation.ResolveRoot() is { } root ? Path.Combine(root, "appcache", "appinfo.vdf") : null);
+        internal static readonly SteamVacFile Default = new(() => SteamInstallation.ResolveRoot() is { } root ? SteamAppInfoNames.Files(root) : []);
 
         private readonly Lock _gate = new();
         private readonly Func<DateTime> _now = now ?? (() => DateTime.UtcNow);
         private Dictionary<uint, SteamWord> _words = [];
-        private (long Length, long Ticks)? _stamp;
+        private Dictionary<uint, SteamAppInfoNames.AntiCheatFreeLaunch> _free = [];
+        private string? _stamp;
         private DateTime _retryAt;
         private string? _warned;
 
-        /// <summary>How many times the file was parsed (the tests count them).</summary>
+        /// <summary>How many times the files were parsed (the tests count them).</summary>
         internal int Parses { get; private set; }
 
         internal SteamWord Word(uint appId)
@@ -452,64 +483,83 @@ internal static partial class AntiCheatCheck
             }
         }
 
+        /// <summary>The Play-menu entry Steam offers that starts the game without its anti-cheat, or null (<see cref="SteamAppInfoNames.WithoutAntiCheat"/>).</summary>
+        internal SteamAppInfoNames.AntiCheatFreeLaunch? Free(uint appId)
+        {
+            lock (_gate)
+            {
+                Load();
+                return _free.GetValueOrDefault(appId);
+            }
+        }
+
         private void Load()
         {
-            var file = path();
-            (long, long) stamp;
-            try
+            var list = files();
+            if (list.Count == 0)
             {
-                var info = file is null ? null : new FileInfo(file);
-                if (info is not { Exists: true })
+                Fail("Steam's app list isn't there", keepWords: false);
+                return;
+            }
+            var stamp = SteamAppInfoNames.Stamp(list);
+            if (stamp is null)
+            {
+                Fail("Steam's app list can't be read: Steam is rewriting it", keepWords: true);
+                return;
+            }
+            if (_stamp == stamp || _now() < _retryAt) return;
+            var all = new List<byte[]>(list.Count);
+            long total = 0;
+            foreach (var file in list)
+            {
+                byte[] bytes;
+                try
                 {
-                    Fail("Steam's app list isn't there", keepWords: false);
+                    using var stream = new FileStream(file, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+                    total += stream.Length;
+                    if (total > maxBytes)
+                    {
+                        Settle(stamp, [], "Steam's app list is larger than Exo reads");
+                        return;
+                    }
+                    bytes = new byte[stream.Length];
+                    stream.ReadExactly(bytes);
+                }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+                {
+                    Fail("Steam's app list can't be read: " + ex.GetType().Name, keepWords: true);
                     return;
                 }
-                stamp = (info.Length, info.LastWriteTimeUtc.Ticks);
-                if (_stamp == stamp || _now() < _retryAt) return;
-                if (info.Length > maxBytes)
+                if (!SteamAppInfoNames.IsKnownFormat(bytes))
                 {
-                    Settle(stamp, [], "Steam's app list is larger than Exo reads");
+                    Settle(stamp, [], "Steam's app list is of a format Exo doesn't read");
                     return;
                 }
-            }
-            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException)
-            {
-                Fail("Steam's app list can't be read: " + ex.GetType().Name, keepWords: true);
-                return;
-            }
-            byte[] bytes;
-            try
-            {
-                using var stream = new FileStream(file!, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
-                bytes = new byte[stream.Length];
-                stream.ReadExactly(bytes);
-            }
-            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-            {
-                Fail("Steam's app list can't be read: " + ex.GetType().Name, keepWords: true);
-                return;
-            }
-            if (!SteamAppInfoNames.IsKnownFormat(bytes))
-            {
-                Settle(stamp, [], "Steam's app list is of a format Exo doesn't read");
-                return;
+                all.Add(bytes);
             }
             var words = new Dictionary<uint, SteamWord>();
+            var free = new Dictionary<uint, SteamAppInfoNames.AntiCheatFreeLaunch>();
             Parses++;
-            if (!SteamAppInfoNames.EachApp(bytes, (id, app) => words[id] = FromAppInfo(app)))
+            foreach (var bytes in all)
             {
+                if (SteamAppInfoNames.EachApp(bytes, (id, app) =>
+                {
+                    words[id] = FromAppInfo(app);
+                    if (SteamAppInfoNames.WithoutAntiCheat(SteamAppInfoNames.LaunchEntries(app)) is { } entry) free[id] = entry;
+                })) continue;
                 // Steam is writing it: tried again soon, never kept.
                 _retryAt = _now() + RetryAfter;
                 AppLog.Debug("Anti-cheat: Steam's app list ended early; it is read again shortly.");
                 return;
             }
-            Settle(stamp, words, null);
+            Settle(stamp, words, null, free);
         }
 
-        private void Settle((long, long) stamp, Dictionary<uint, SteamWord> words, string? problem)
+        private void Settle(string stamp, Dictionary<uint, SteamWord> words, string? problem, Dictionary<uint, SteamAppInfoNames.AntiCheatFreeLaunch>? free = null)
         {
             _stamp = stamp;
             _words = words;
+            _free = free ?? [];
             _retryAt = default;
             if (problem is not null) Warn(problem);
         }
@@ -519,6 +569,7 @@ internal static partial class AntiCheatCheck
             if (!keepWords)
             {
                 _words = [];
+                _free = [];
                 _stamp = null;
             }
             _retryAt = _now() + RetryAfter;
