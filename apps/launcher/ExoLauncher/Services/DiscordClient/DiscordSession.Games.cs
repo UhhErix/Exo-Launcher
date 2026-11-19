@@ -101,8 +101,8 @@ internal static class FriendGame
 
 /// <summary>
 /// Share my games: the signed-in person's Exo tells their friends' Exo apps which game they opened from Exo, over the
-/// friend link (DiscordSession.FriendLinks.cs). Discord and its apps never hear of it. On for every account unless it
-/// turned this off here; Exo leaves the account's own Share my activity setting alone.
+/// friend link (DiscordSession.FriendLinks.cs). Discord and its apps never hear of it. Always on (owner, 3.26.0: not a
+/// switch); a game you hid or added by hand is never named, and Exo leaves the account's own Share my activity setting alone.
 /// </summary>
 internal sealed partial class DiscordSession
 {
@@ -157,30 +157,4 @@ internal sealed partial class DiscordSession
         return list;
     }
 
-    /// <summary>Whether this account shares its games with friends on Exo: no unless it turned that on, on this PC.</summary>
-    internal bool SharesGames => Cache.Me?.Id is { } id && App.Services.Settings.Shared.DiscordGamesShared.Contains(id, StringComparer.Ordinal);
-
-    /// <summary>
-    /// Share my games for the account signed in. Off: the key leaves your presence first, then every link ends, so no
-    /// friend's Exo can find you and nothing is sent or heard. Nothing on the Discord account changes either way.
-    /// </summary>
-    internal async Task<(bool On, string? Error)> SetShareGamesAsync(bool on)
-    {
-        if (Cache.Me?.Id is not { } id) return (false, "Discord isn't connected.");
-        try
-        {
-            App.Services.Settings.UpdateProfile(s => s.DiscordGamesShared =
-                SettingsService.NormalizeHiddenGames(on ? s.DiscordGamesShared.Append(id) : s.DiscordGamesShared.Where(kept => kept != id)));
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException)
-        {
-            AppLog.Warn("Discord client: Share my games not saved (" + ex.GetType().Name + ").");
-            return (SharesGames, "Exo didn't save that. Try again.");
-        }
-        AppLog.Info("Discord client: Share my games " + (on ? "on." : "off."));
-        // The key goes first, and the links end even if Discord can't be told just now.
-        try { await SendPresenceAsync().ConfigureAwait(false); }
-        finally { SyncLinks(); }
-        return (on, null);
-    }
 }

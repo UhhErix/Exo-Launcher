@@ -1,10 +1,16 @@
-import type { DiscordFriend } from '../../lib/discord'
+import type { DiscordFriend, DiscordPrep } from '../../lib/discord'
 import { Icons } from './icons'
 
 const firstArtist = (state: string | null | undefined) => state?.split(';')[0].trim() ?? null
 
 export function statusWord(status: string | null | undefined) {
   return status === 'idle' ? 'Idle' : status === 'dnd' ? 'Do not disturb' : status === 'offline' || status === 'invisible' || !status ? 'Offline' : 'Online'
+}
+
+/** What a friend's Exo said over the friend link about a game it is getting ready (docs/architecture/chat-rooms.md's words). */
+function prepWords(prep: DiscordPrep): string {
+  if (prep.kind === 'installing') return `Installing ${prep.title}${typeof prep.percent === 'number' ? ` ${prep.percent}%` : ''}`
+  return prep.kind === 'compiling' ? `Compiling shaders for ${prep.title}` : `Ready to play ${prep.title}`
 }
 
 const DOING: Record<number, string | undefined> = { 0: 'Playing', 1: 'Streaming', 2: 'Listening to', 3: 'Watching', 5: 'Competing in' }
@@ -19,6 +25,7 @@ export function doingWords(friend: DiscordFriend | undefined, status: string | n
     return verb ? `${verb} ${what}` : what
   }
   if (activity && !offline) return activity
+  if (friend?.prep && !offline) return prepWords(friend.prep)
   return statusWord(friend?.status ?? status)
 }
 
@@ -26,13 +33,15 @@ const KIND_ICONS: Record<number, typeof Icons.Playing | undefined> = { 0: Icons.
 
 /** The line under a friend: their custom status, else the activity with its icon, else their status. */
 export function ActivityLine({ friend }: { friend: DiscordFriend }) {
-  if (!friend.activity || friend.status === 'offline') return <>{statusWord(friend.status)}</>
+  if (friend.status === 'offline') return <>{statusWord(friend.status)}</>
+  if (!friend.activity) return <>{friend.prep ? prepWords(friend.prep) : statusWord(friend.status)}</>
   const Icon = KIND_ICONS[friend.activityType ?? -1]
   return <span className="exo-dc-activity">{Icon ? <Icon size={14} className="exo-dc-activity-icon" /> : null}{activityWords(friend)}</span>
 }
 
 /** The words of the line, in full (an Active Now card's name for screen readers and its tip): a song says its title and first artist. */
 export function activityWords(friend: DiscordFriend): string {
-  if (!friend.activity || friend.status === 'offline') return statusWord(friend.status)
+  if (friend.status === 'offline') return statusWord(friend.status)
+  if (!friend.activity) return friend.prep ? prepWords(friend.prep) : statusWord(friend.status)
   return friend.activityType === 2 && friend.rich?.details ? [friend.rich.details, firstArtist(friend.rich.state)].filter(Boolean).join(' · ') : friend.activity
 }

@@ -1,12 +1,10 @@
 import { spotifyMock } from './spotifyMock'
-import { mockAdmin, mockAppMessages, mockFew, mockFewMessages, mockVoiceNow, mockApps, mockChannels, mockChannelsFor, mockDiscordStatus, mockMessageId, mockFriends, mockHome, mockMembers, mockMessages, mockProfile } from './discordMock'
+import { mockAdmin, mockAppMessages, mockFew, mockFewMessages, mockApps, mockChannels, mockChannelsFor, mockDiscordStatus, mockMessageId, mockFriends, mockHome, mockMembers, mockMessages, mockProfile } from './discordMock'
 /** Browser development fixtures. Dynamically loaded only outside the packaged host. */
 import type { Game, GameProperties, LauncherSettings, InstallProgress, InstalledApp, ReplacedApp, RuntimeItem, StartupItem, StartupState, StoreGift } from './host'
 import type { CaptureItem } from './capture'
 import type { NoteInfo } from './notes'
 import { emitHostEvent } from './host'
-let mockShareGames = false
-let mockShareReady = false
 // A dev preview's ?pins=g:1,d:2 starts with those pinned to Discord's top bar.
 let mockMusicLevel = 0.6
 let mockBandPins: string[] = (typeof location === 'undefined' ? null : new URLSearchParams(location.search).get('pins'))?.split(',') ?? []
@@ -1035,6 +1033,16 @@ const MOCK_HANDLERS: Record<string, MockHandler> = {
   'game.extras': () => ({ ok: true, achievementsUnlocked: 23, achievementsTotal: 50, driveHeat: { peak: 79, warn: 82, slowedSeconds: 40 } }),
   'game.cancelInstall': mockCancelInstall,
   'game.dequeue': mockOk,
+  'downloads.list': () => ({ ok: true, held: null, pausedByPlayer: false, autoUpdateGames: true, lines: [
+    { gameId: 'mock:eldenring', title: 'Elden Ring', store: 'epic', state: 'running', canPause: true, autoUpdate: true },
+    { gameId: 'mock:hades', title: 'Hades', store: 'gog', state: 'queued', canPause: false, autoUpdate: true },
+    { gameId: 'mock:valorant', title: 'VALORANT', store: 'riot', state: 'queued', canPause: false, autoUpdate: false },
+    { gameId: 'mock:cyberpunk', title: 'Cyberpunk 2077', store: 'gog', state: 'paused', canPause: false, autoUpdate: true },
+  ] }),
+  'downloads.move': mockOk,
+  'downloads.pauseAll': mockOk,
+  'downloads.resumeAll': mockOk,
+  'game.autoUpdate': (params) => ({ ok: true, on: params?.on ?? true }),
   'game.progress': () => mockProgress,
   'stores.auth': () => ({ ok: false, message: 'Browser mock — auth requires host.', requiresUserAction: true }),
   'stores.outages': () => ({ ok: true, outages: [] }),
@@ -1143,16 +1151,9 @@ const MOCK_HANDLERS: Record<string, MockHandler> = {
   'friends.badge': () => ({ count: 0 }),
   'discord.status': () => mockDiscordStatus,
   'discord.bandPins': (params?: { pins?: string[] }) => { if (params?.pins) mockBandPins = params.pins; return { ok: true, pins: mockBandPins } },
-  'discord.shareGames': (params?: { on?: boolean }) => { if (params?.on !== undefined) mockShareGames = params.on; return { ok: true, on: mockShareGames } },
-  'discord.shareReady': (params?: { on?: boolean }) => { if (params?.on !== undefined) mockShareReady = params.on; return { ok: true, on: mockShareReady && mockShareGames } },
-  'discord.shareClip': async (params?: { captureId?: string }) => {
-    await new Promise(done => setTimeout(done, 700))
-    return params?.captureId === 'mock-big' ? { ok: false, message: "It's over 25 MB. Shrink it first." } : { ok: true }
-  },
   'discord.signIn': mockOk,
   'discord.signOut': mockOk,
   'discord.home': () => mockHome,
-  'discord.voiceNow': () => ({ rooms: mockVoiceNow }),
   'discord.channels': (params?: { guildId?: string }) => ({ ...mockChannelsFor(params?.guildId ?? ''), hideMuted: mockHideMuted }),
   'discord.admin': mockAdmin,
   'discord.messages': (params?: { before?: string }) => ({ ok: true, messages: params?.before ? [] : (mockFew ? mockFewMessages : [...mockMessages, ...mockAppMessages]).slice().sort((a, b) => (BigInt(b.id) > BigInt(a.id) ? 1 : -1)) }),
@@ -1294,6 +1295,9 @@ const MOCK_HANDLERS: Record<string, MockHandler> = {
       auto: true, cleared: { folders: 1, files: 0, registry: 1, shortcuts: 1, bytes: 4_101_200 }, undo: 'mock-1', declined: false,
     }
   },
+  'apps.restorePoint': () => ({ ok: true, made: true, message: null }),
+  'apps.installerCache': () => ({ ok: true, files: 7, bytes: 1_380_000_000 }),
+  'apps.installerCacheClean': () => ({ ok: true, files: 7, bytes: 1_380_000_000, undo: 'mock-1', message: null }),
   'apps.scan': () => ({ ok: false, message: 'Mock: nothing to scan.' }),
   'apps.clean': () => ({ ok: true, cleared: { folders: 1, files: 0, registry: 1, shortcuts: 1, bytes: 4_101_200 }, undo: 'mock-1', left: 0 }),
   'apps.allowEdge': () => ({ ok: true }),

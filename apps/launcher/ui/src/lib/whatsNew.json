@@ -4,6 +4,11 @@
     "items": [
       {
         "icon": "Chats",
+        "title": "GIFs in Discord stay",
+        "detail": "A GIF, sticker or video that hiccups once tries again instead of turning into a line that says it would not load, and Imgur GIFs load."
+      },
+      {
+        "icon": "Chats",
         "title": "Discord, laid out like Discord",
         "detail": "Servers across the top, DMs and Friends on Home, members and profiles always beside the conversation, and mute, deafen and settings by your picture."
       },

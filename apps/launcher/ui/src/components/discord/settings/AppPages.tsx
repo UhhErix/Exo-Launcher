@@ -105,10 +105,6 @@ export function ChatPage() {
   useEffect(() => onPerformanceMode(() => setReduced(performanceMode())), [])
   return (
     <>
-      <Section title="Play">
-        <SwitchRow label="Show Play" checked={prefs.playRooms} onChange={on => setDiscordPrefs({ playRooms: on })}
-          detail="Games, Party and Clips beside Home, Messages and Servers." />
-      </Section>
       <Section title="Messages">
         <AccountToggle label="Show images from links" settings={settings} field="inlineEmbedMedia" />
         <AccountToggle label="Show uploaded images" settings={settings} field="inlineAttachmentMedia" />

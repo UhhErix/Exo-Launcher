@@ -12,9 +12,8 @@ import { MemberList } from './MemberList'
 import { PeopleColumn } from './ChatHeader'
 import { InboxButton, MePanel } from './MePanel'
 import { MessagesPane } from './Messages'
-import { FRIENDS, MESSAGES, NOW, PLAY, REQUESTS, SERVERS, SHOP } from './roomPlaces'
+import { FRIENDS, MESSAGES, NOW, REQUESTS, SERVERS, SHOP } from './roomPlaces'
 import { Band, type PlaceTab } from './Band'
-import { PlayPage } from './play/PlayPage'
 import { MessageRequestsPage } from './MessageRequests'
 import { ShopPage } from './ShopPage'
 import { IncomingCall, useDiscordVoice, type VoiceControls, VoiceRoom } from './voice'
@@ -32,7 +31,7 @@ import { MfaHost } from './MfaDialog'
 import { UserSettings } from './UserSettings'
 import type { DiscordSettingsSection } from '../../lib/settingsSections'
 // Discord's settings load the first time they open, not with the room.
-import { startDiscordSettings, useDiscordPrefs, useRoomLook } from '../../lib/discordPrefs'
+import { startDiscordSettings, useRoomLook } from '../../lib/discordPrefs'
 import { prefetchMessages } from './messageCache'
 import { pane, pressedBefore, transition, visible } from '../../lib/viewTransition'
 import { pageGet, pageSet } from '../../lib/pageStore'
@@ -92,7 +91,7 @@ function sameParts<T extends object>(current: T | null | undefined, next: T): T 
 // The conversation a place opens at, read ahead while the pointer rests on its tile or chip.
 function peekPlace(place: string | null) {
   const channelId = place ? lastChannel.get(place) : undefined
-  const text = place === HOME ? ![NOW, FRIENDS, MESSAGES, SERVERS, SHOP, REQUESTS, PLAY].includes(channelId ?? '') : shownLists.get(place ?? '')?.channels.some(c => c.id === channelId && c.kind === 'text')
+  const text = place === HOME ? ![NOW, FRIENDS, MESSAGES, SERVERS, SHOP, REQUESTS].includes(channelId ?? '') : shownLists.get(place ?? '')?.channels.some(c => c.id === channelId && c.kind === 'text')
   prefetchMessages(place && channelId && text ? savedThread(place, channelId)?.id ?? channelId : null)
 }
 
@@ -323,9 +322,6 @@ export function DiscordClient({ active }: { active: boolean }) {
 
   const go = useCallback((next: string) => { if (next !== now.current.place) navigate(next, null) }, [navigate])
   const { tab, full, onTab, serverGo } = usePlaces(place, open, navigate)
-  // Play turned off while it is open (Settings float over the room): back to Home, where the Lobby is.
-  const { playRooms } = useDiscordPrefs()
-  useEffect(() => { if (!playRooms && place === HOME && open === PLAY) navigate(HOME, NOW) }, [playRooms, place, open, navigate])
   // Messages asked for before your conversations were read (or from elsewhere): the newest opens as soon as they are.
   const firstDm = home?.dms.find(d => !d.request && !d.spam)?.id ?? null
   useEffect(() => {
@@ -574,13 +570,13 @@ function usePlaces(place: string, open: string | null, navigate: (to: string, ch
       morph: [pane(visible(PAGE)), { name: 'exo-dc-band', from: band, to: () => band }, { name: 'exo-dc-dock', from: dock, to: () => visible('.exo-dc-dock') }],
     })
   }, [])
-  const onTab = useCallback((to: PlaceTab) => push(() => navigate(HOME, to === 'play' ? PLAY : NOW)), [navigate, push])
+  const onTab = useCallback((to: PlaceTab) => push(() => navigate(HOME, to === 'shop' ? SHOP : NOW)), [navigate, push])
   const serverGo = useCallback((next: string) => {
     if (next !== now.current) push(() => navigate(next, null))
     else navigate(next, null)
   }, [navigate, push])
-  const tab: PlaceTab = place !== HOME ? 'servers' : open === PLAY ? 'play' : 'home'
-  return { tab, full: place !== HOME || open === PLAY, onTab, serverGo }
+  const tab: PlaceTab = place !== HOME ? 'servers' : open === SHOP ? 'shop' : 'home'
+  return { tab, full: place !== HOME, onTab, serverGo }
 }
 
 // Your servers and opening one, for the profiles' Member Since and Mutual Servers.
@@ -731,11 +727,9 @@ function Conversation(props: ConversationProps) {
   return <ConversationIn {...props} />
 }
 
-// The pages of Direct messages' place that are not a conversation: Home, Play, the Shop and Message requests.
-function homePage({ open, home, voice, onPick }: ConversationProps) {
-  const callId = voice.voice.state === 'off' ? null : voice.voice.channelId
+// The pages of Direct messages' place that are not a conversation: Home, the Shop and Message requests.
+function homePage({ open, home, onPick }: ConversationProps) {
   if (open === NOW || open === FRIENDS) return <HomePage onOpenDm={onPick} />
-  if (open === PLAY) return <PlayPage home={home} callId={callId} onOpenDm={onPick} onJoinVoice={(guildId, channelId) => void voice.join(guildId, channelId)} />
   if (open === SHOP) return <ShopPage me={home?.me ?? null} />
   if (open === REQUESTS) return <MessageRequestsPage home={home} onOpenDm={onPick} />
   return null

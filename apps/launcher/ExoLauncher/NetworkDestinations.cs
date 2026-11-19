@@ -51,7 +51,7 @@ internal static class NetworkDestinations
     internal const string NvidiaDrivers = "NVIDIA (driver lookup and download: `www.nvidia.com`, `gfwsl.geforce.com`, `api-forums.nvidia.com`, `us.download.nvidia.com`, `international.download.nvidia.com`)";
     internal const string DiscordClient = "Exo's own Discord client (discord.com, gateway.discord.gg, remote-auth-gateway.discord.gg, cdn.discordapp.com, Discord's media proxy on discordapp.net, Discord's voice servers on discord.media, Discord's file uploads for apps on discord-attachments-uploads-prd.storage.googleapis.com)";
     internal const string StripeCards = "Stripe's card form in Exo's Discord Shop (js.stripe.com, api.stripe.com, m.stripe.network, hooks.stripe.com), only while you add a card or your bank confirms a payment";
-    internal const string DiscordGifs = "GIF hosts Discord points to (*.klipy.com, *.tenor.com, *.giphy.com)";
+    internal const string DiscordGifs = "GIF hosts Discord points to (*.klipy.com, *.tenor.com, *.giphy.com, i.imgur.com)";
     internal const string SteamAchievementStats = "Steam's global achievement percentages (api.steampowered.com)";
     internal const string DiscordPlayers = "Video and music players in Discord messages (YouTube, Twitch, Vimeo, TikTok, SoundCloud, Spotify, Apple Music)";
     /// <summary>Lucid's updates: off (<c>LucidCompanion.UpdatesAvailable</c>), so no registry entry or PRIVACY.md row names it until the gate is turned on.</summary>

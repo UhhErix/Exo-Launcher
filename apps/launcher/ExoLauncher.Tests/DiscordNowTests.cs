@@ -8,8 +8,7 @@ namespace ExoLauncher.Tests;
 /// What the room's Home and Messages rows say from the connection alone, which fail silently when wrong: a spoiler or a raw
 /// mention shown in a list, a blocked person's words on a row, an old page putting an older line over a newer one, a deleted
 /// message's words staying, one row's author on another's; a muted server or an unseen channel listed as waiting, words from
-/// before what was read shown for a new mention; voice rooms in a channel you can't see or the AFK channel, a room of friends
-/// sorted under strangers, a big room sending every face.
+/// before what was read shown for a new mention.
 /// </summary>
 public sealed class DiscordNowTests
 {
@@ -142,29 +141,6 @@ public sealed class DiscordNowTests
     {
         var at = DmOf(Cache(), Dm).GetProperty("lastAt").GetInt64();
         Assert.Equal(1420070400000L, at); // id 100 is the first moment of Discord's epoch, to the millisecond.
-    }
-
-    [Fact]
-    public void VoiceRoomsLeaveOutAfkAndWhatYouCannotSeeAndPutFriendsFirst()
-    {
-        var room = Assert.Single(JsonSerializer.SerializeToElement(Cache().VoiceNow()).EnumerateArray());
-        Assert.Equal(Lobby, room.GetProperty("channelId").GetString());
-        Assert.Equal("Night Raid", room.GetProperty("guild").GetString());
-        Assert.Equal(2, room.GetProperty("count").GetInt32());
-        Assert.Equal(1, room.GetProperty("friends").GetInt32());
-        Assert.Equal(5, room.GetProperty("limit").GetInt32());
-        Assert.Equal(Ada, room.GetProperty("people")[0].GetProperty("id").GetString());
-    }
-
-    [Fact]
-    public void ABigRoomSendsAFewFaces()
-    {
-        var cache = Cache();
-        for (var i = 0; i < 20; i++)
-            Dispatch(cache, "VOICE_STATE_UPDATE", JsonSerializer.Serialize(new { guild_id = Guild, channel_id = Lobby, user_id = (1000 + i).ToString() }));
-        var room = Assert.Single(JsonSerializer.SerializeToElement(cache.VoiceNow()).EnumerateArray());
-        Assert.Equal(22, room.GetProperty("count").GetInt32());
-        Assert.Equal(8, room.GetProperty("people").GetArrayLength());
     }
 
     [Fact]

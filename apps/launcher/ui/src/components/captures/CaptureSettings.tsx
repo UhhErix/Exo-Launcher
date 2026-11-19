@@ -122,7 +122,7 @@ export function CaptureSettingsView() {
 }
 
 /** The capture keys and Print Screen, here and in first-run setup. */
-/** `withIcons`: the first run's rows, each with its Tabler icon; Captures settings draws them without. */
+/** `withIcons`: the first run's rows, each with its Lucide icon; Captures settings draws them without. */
 export function CaptureKeyRows({ state, settings, withIcons = false }: { state: CaptureState | null; settings: CaptureSettings | null; withIcons?: boolean }) {
   return (
     <>
