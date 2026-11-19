@@ -739,6 +739,9 @@ public sealed class SettingsService
         });
     }
 
+    /// <summary>Settings › General › Open Exo when Windows starts.</summary>
+    public void SetStartWithWindows(bool on) => CommitMutation(settings => settings.StartWithWindows = on);
+
     /// <summary>A copy that holds up to 5,000 game ids (512 characters at most), each once.</summary>
     internal static List<string> NormalizeHiddenGames(IEnumerable<string?>? gameIds) =>
         [.. (gameIds ?? []).Where(id => ValidId(id, 512)).Select(id => id!).Distinct(StringComparer.OrdinalIgnoreCase).Take(5_000)];
@@ -1061,6 +1064,7 @@ public sealed class SettingsService
         PlayStationPadSeen = source.PlayStationPadSeen,
         SteamBetaJoined = source.SteamBetaJoined,
         NvidiaDriverBranch = source.NvidiaDriverBranch == "studio" ? "studio" : null,
+        StartWithWindows = source.StartWithWindows,
         StartupHandedToExo = [.. (source.StartupHandedToExo ?? []).Where(id => StartupApps.Known.Any(app => app.Id == id)).Distinct()],
         LucidPath = source.LucidPath is { Length: > 0 and <= 1024 } lucid ? lucid : null,
     };
