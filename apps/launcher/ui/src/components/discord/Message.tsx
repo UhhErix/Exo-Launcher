@@ -6,7 +6,7 @@ import { host } from '../../lib/host'
 import { usePageActive } from '../../lib/pageActivity'
 import { shouldReduceMotion } from '../../lib/motionPreference'
 import { Poll, PollResultLine } from './Poll'
-import { Attachments, fit, MediaFailed, MovingImage, size, sized } from './Attachments'
+import { Attachments, fit, MediaFailed, MovingImage, size, sized, useFailedUntilBack, useMediaRetry } from './Attachments'
 import { LottieSticker } from './LottieSticker'
 import { performanceMode, avatarUrl, cdnSized, cdnStep, displayName, jumpToMessage, openDiscord, type DiscordEmbed, type DiscordInvite, type DiscordMessage } from '../../lib/discord'
 import { Reactions, ReactionsDialog, useNitro } from './Reactions'
@@ -42,6 +42,7 @@ function Gifv({ src, link, box, onFail }: { src: string; link: string; box: { wi
   const active = usePageActive()
   const auto = gifAutoPlay && !performanceMode() && !shouldReduceMotion()
   const video = useRef<HTMLVideoElement>(null)
+  const { attempt, onError } = useMediaRetry(onFail)
   useEffect(() => {
     const el = video.current
     if (!el) return
@@ -49,17 +50,17 @@ function Gifv({ src, link, box, onFail }: { src: string; link: string; box: { wi
     else el.pause()
     // Discord out of sight (Activity) runs only this: the GIF holds instead of looping hidden.
     return () => el.pause()
-  }, [auto, active])
+  }, [auto, active, attempt])
   return (
-    <video ref={video} className="exo-dc-media" src={src} data-dc-link={link} autoPlay={auto && active} loop muted playsInline {...box}
+    <video key={attempt} ref={video} className="exo-dc-media" src={src} data-dc-link={link} autoPlay={auto && active} loop muted playsInline {...box}
       onPointerEnter={event => { if (!auto || !active) void event.currentTarget.play().catch(() => { }) }}
-      onPointerLeave={event => { if (!auto || !active) event.currentTarget.pause() }} onError={onFail} />
+      onPointerLeave={event => { if (!auto || !active) event.currentTarget.pause() }} onError={onError} />
   )
 }
 
 // A bare picture or GIF link, the way Discord shows one: the picture alone; one that would not load is a one-line card.
 function MediaEmbed({ embed }: { embed: DiscordEmbed }) {
-  const [failed, setFailed] = useState(false)
+  const [failed, setFailed] = useFailedUntilBack(false)
   const gif = embed.type === 'gifv'
   const media = gif ? embed.video! : embed.thumbnail!
   const src = media.proxy_url ?? media.url ?? ''
