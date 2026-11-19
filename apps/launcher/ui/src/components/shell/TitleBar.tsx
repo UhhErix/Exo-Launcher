@@ -8,7 +8,6 @@ import { Chats, ThisPc, Library, MusicNotes, Settings, StoreBag } from '../../br
 import { warmMusic, type MusicService } from '../../lib/music'
 import { DiscordBadge } from './DiscordBadge'
 import { MusicMiniPlayer } from './MusicMiniPlayer'
-import { MouseCapsule } from './MouseCapsule'
 import { CaptureButton } from './CaptureButton'
 import { WindowChrome } from '../WindowChrome'
 
@@ -123,7 +122,6 @@ function NavDock({ view, opening, onView, onWarm, onToggleSettings, onNowPlaying
         <RoomNavigation view={view} opening={opening} onView={onView} onWarm={onWarm} />
         <div className="exo-bar-side is-end">
           <MusicMiniPlayer key={music.musicService} service={music.musicService} hidden={view === 'music'} onOpen={onNowPlaying} />
-          <MouseCapsule onOpen={() => onView('devices')} />
         </div>
       </div>
       <div className="exo-bar-end">

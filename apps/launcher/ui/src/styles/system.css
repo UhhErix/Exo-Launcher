@@ -310,26 +310,6 @@
   overflow-x: clip;
 }
 
-.exo-bar-side.is-end > .exo-live:has(.exo-mouse-pill) {
-  flex: none;
-  margin-left: auto;
-}
-
-/* The mouse keeps its own size, so it gives way whole once its slot can't hold it, and first when the song shares
-   the slot and would be squeezed past keeping its title (150px): its battery is on its card
-   in Devices. Before, it ran into Tools (a 1080p screen stood on end, the page 607px wide). */
-@container bar-live (max-width: 240px) {
-  .exo-live:has(.exo-music-mini) ~ .exo-live:has(.exo-mouse-pill) {
-    display: none;
-  }
-}
-
-@container bar-live (max-width: 84px) {
-  .exo-live:has(.exo-mouse-pill) {
-    display: none;
-  }
-}
-
 @container bar-live (max-width: 48px) {
   .exo-live:has(.exo-music-mini) {
     display: none;
@@ -467,11 +447,6 @@
   .exo-bar-search .exo-bar-search-label,
   .exo-mouse-pill .exo-mouse-pill-name {
     display: none;
-  }
-
-  /* A mouse with no battery kept only its padding: an empty capsule. */
-  .exo-mouse-pill .exo-mouse-pill-mark {
-    display: block;
   }
 }
 
