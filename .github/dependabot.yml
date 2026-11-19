@@ -36,7 +36,6 @@ updates:
       - "/apps/launcher/ExoLauncher"
       - "/apps/launcher/ExoLauncher.SteamIpc"
       - "/apps/launcher/ExoLauncher.Tests"
-      - "/apps/launcher/Exo.Identity"
     schedule:
       interval: weekly
     open-pull-requests-limit: 5

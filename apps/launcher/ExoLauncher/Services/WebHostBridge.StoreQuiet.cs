@@ -5,10 +5,8 @@ using ExoLauncher.Helpers;
 namespace ExoLauncher.Services;
 
 /// <summary>
-/// The one switch for the store clients' quiet (storeClientsQuiet in the page's settings, on by default) and the read-only
-/// answer the page gets for it (stores.quiet): one word per client, "applied", "waiting" (it needs the client closed) or
-/// "off". Switching it off puts Steam's and Epic's values back as they were; switching it on applies them again. Steam's
-/// change goes through the one Steam pass (which waits for Steam to close, never closing it), Epic's through
+/// The one switch for the store clients' quiet (storeClientsQuiet in the page's settings, on by default). Switching it
+/// off puts Steam's and Epic's values back as they were; switching it on applies them again. Steam's change goes through the one Steam pass (which waits for Steam to close, never closing it), Epic's through
 /// <see cref="EpicQuietSettings"/>. Neither writes anything the player did not keep: docs/architecture/store-quiet.md.
 /// </summary>
 public sealed partial class WebHostBridge
@@ -38,17 +36,5 @@ public sealed partial class WebHostBridge
                 AppLog.Warn($"Steam: quiet not changed: {ex.Message}");
             }
         });
-    }
-
-    private object StoresQuietForPage(JsonElement p, bool hasParams)
-    {
-        var wanted = _services.Settings.Current.StoreClientsQuiet;
-        string steam;
-        try { steam = SteamInstallation.ResolveRoot() is { } root ? StoreQuietPass.Word(root, wanted) : "off"; }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-        {
-            steam = "waiting";
-        }
-        return new { steam, epic = EpicQuietSettings.Word(EpicQuietWanted()) };
     }
 }

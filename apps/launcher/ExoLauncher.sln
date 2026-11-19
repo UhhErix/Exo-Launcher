@@ -9,8 +9,6 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ExoLauncher.SteamIpc", "Exo
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ExoLauncher.Tests", "ExoLauncher.Tests\ExoLauncher.Tests.csproj", "{65858431-7992-41CA-B471-B4DF562A342C}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Exo.Identity", "Exo.Identity\Exo.Identity.csproj", "{D5D4BF4C-1716-48CB-9DAD-5BDC43D66F7C}"
-EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|x64 = Debug|x64
@@ -57,18 +55,6 @@ Global
 		{65858431-7992-41CA-B471-B4DF562A342C}.Release|Any CPU.Build.0 = Release|Any CPU
 		{65858431-7992-41CA-B471-B4DF562A342C}.Release|x86.ActiveCfg = Release|Any CPU
 		{65858431-7992-41CA-B471-B4DF562A342C}.Release|x86.Build.0 = Release|Any CPU
-		{D5D4BF4C-1716-48CB-9DAD-5BDC43D66F7C}.Debug|x64.ActiveCfg = Debug|x64
-		{D5D4BF4C-1716-48CB-9DAD-5BDC43D66F7C}.Debug|x64.Build.0 = Debug|x64
-		{D5D4BF4C-1716-48CB-9DAD-5BDC43D66F7C}.Debug|Any CPU.ActiveCfg = Debug|x64
-		{D5D4BF4C-1716-48CB-9DAD-5BDC43D66F7C}.Debug|Any CPU.Build.0 = Debug|x64
-		{D5D4BF4C-1716-48CB-9DAD-5BDC43D66F7C}.Debug|x86.ActiveCfg = Debug|x64
-		{D5D4BF4C-1716-48CB-9DAD-5BDC43D66F7C}.Debug|x86.Build.0 = Debug|x64
-		{D5D4BF4C-1716-48CB-9DAD-5BDC43D66F7C}.Release|x64.ActiveCfg = Release|x64
-		{D5D4BF4C-1716-48CB-9DAD-5BDC43D66F7C}.Release|x64.Build.0 = Release|x64
-		{D5D4BF4C-1716-48CB-9DAD-5BDC43D66F7C}.Release|Any CPU.ActiveCfg = Release|x64
-		{D5D4BF4C-1716-48CB-9DAD-5BDC43D66F7C}.Release|Any CPU.Build.0 = Release|x64
-		{D5D4BF4C-1716-48CB-9DAD-5BDC43D66F7C}.Release|x86.ActiveCfg = Release|x64
-		{D5D4BF4C-1716-48CB-9DAD-5BDC43D66F7C}.Release|x86.Build.0 = Release|x64
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

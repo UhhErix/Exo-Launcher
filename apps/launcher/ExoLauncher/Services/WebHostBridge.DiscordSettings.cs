@@ -29,24 +29,6 @@ public sealed partial class WebHostBridge
         return new { ok = values is not null, message = error, values = (object?)values };
     }
 
-    /// <summary>What the account signed in pinned to the room's top bar: reads it, or replaces it with { pins } (at most the limit, each checked).</summary>
-    private static object DiscordBandPins(JsonElement p, bool hasParams)
-    {
-        if (DiscordSession.Current is not { } session) return new { ok = false, pins = Array.Empty<string>(), message = (string?)"Discord isn't connected." };
-        if (!hasParams || !p.TryGetProperty("pins", out var pins) || pins.ValueKind != JsonValueKind.Array)
-            return new { ok = true, pins = session.BandPins.ToArray(), message = (string?)null };
-        try
-        {
-            var next = pins.EnumerateArray().Take(SettingsService.DiscordBandPinsMost * 2).Select(pin => pin.ValueKind == JsonValueKind.String ? pin.GetString() : null);
-            return new { ok = true, pins = session.SetBandPins(next).ToArray(), message = (string?)null };
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException)
-        {
-            AppLog.Warn("Discord client: top bar pins not saved (" + ex.GetType().Name + ").");
-            return new { ok = false, pins = session.BandPins.ToArray(), message = (string?)"Exo didn't save that. Try again." };
-        }
-    }
-
     /// <summary>My Account, Profiles, Data & Privacy, Devices and Connected Apps: one action each.</summary>
     private static async Task<object> DiscordAccountAsync(JsonElement p, bool hasParams, CancellationToken ct)
     {
@@ -494,27 +476,6 @@ public sealed partial class WebHostBridge
     {
         if (ReadString(p, hasParams, "name") is { } name && DiscordSounds.IsSound(name)) DiscordSounds.Play(name, preview: ReadBool(p, hasParams, "preview") == true);
         return new { ok = true };
-    }
-
-    /// <summary>Voice Tune: record (the five parts' seconds), cancel it, keep, forget, or fix what Windows does (unmute, no ducking).</summary>
-    private static async Task<object> DiscordVoiceTuneAsync(JsonElement p, bool hasParams, CancellationToken ct)
-    {
-        // Voice Tune opens the microphone, reads and sets Windows' audio settings and Equalizer APO's files: on the pool,
-        // never the UI thread this is called on.
-        switch (ReadString(p, hasParams, "action"))
-        {
-            case "record":
-                var parts = hasParams && p.TryGetProperty("parts", out var list) && list.ValueKind == JsonValueKind.Array
-                    ? list.EnumerateArray().Select(x => x.TryGetInt32(out var n) ? n : 0).ToArray() : [];
-                return await Task.Run(() => VoiceTune.RecordAsync(parts, ct), ct).ConfigureAwait(true);
-            case "cancel": return await Task.Run(VoiceTune.Cancel, ct).ConfigureAwait(true);
-            case "state": return await Task.Run(VoiceTune.State, ct).ConfigureAwait(true);
-            case "keep": return await Task.Run(VoiceTune.Keep, ct).ConfigureAwait(true);
-            case "forget": return await Task.Run(VoiceTune.Forget, ct).ConfigureAwait(true);
-            case "unmute": return await Task.Run(VoiceTune.Unmute, ct).ConfigureAwait(true);
-            case "noDucking": return await Task.Run(VoiceTune.SetNoDucking, ct).ConfigureAwait(true);
-            default: return new { ok = false, message = "Unknown action." };
-        }
     }
 
     /// <summary>Only My Voice: { action: "learn" } learns the user's voice from the last 15 s of it the live meter or the call heard, whichever heard more; "forget" deletes it.</summary>

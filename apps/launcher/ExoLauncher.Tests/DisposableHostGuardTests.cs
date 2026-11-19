@@ -52,7 +52,6 @@ public sealed class DisposableHostGuardTests
         ("ExoLauncher/Adapters/SteamLoginUsers.cs", "void RestoreAutoLogin("),
         ("ExoLauncher/Adapters/SteamLoginUsers.cs", "bool WriteRemove("),
         ("ExoLauncher/Adapters/SteamLoginUsers.cs", "bool WriteSwitch("),
-        ("ExoLauncher/Services/DiscordClient/Voice/VoiceTune.cs", "object SetNoDucking()"),
         ("ExoLauncher/Helpers/Afmf3Preview.cs", "public void Write(int? value)"),
         ("ExoLauncher/Services/ExoEq.cs", "string? WriteLocked(bool force)"),
         ("ExoLauncher/Services/ExoEq.cs", "void Save(EqStore store)"),
@@ -220,15 +219,6 @@ public sealed class DisposableHostGuardTests
         Assert.Equal(HostMode.Refusal, install.Message);
         Assert.False(update.Ok);
         Assert.Equal(HostMode.Refusal, update.Message);
-    }
-
-    [Fact]
-    public void A_disposable_host_leaves_the_windows_ducking_setting_alone()
-    {
-        using var forced = HostMode.ForceForTest(true);
-        Assert.True(HostMode.IsDisposable);
-        var result = VoiceTune.SetNoDucking();
-        Assert.Equal(HostMode.Refusal, result.GetType().GetProperty("message")!.GetValue(result));
     }
 
     [Fact]

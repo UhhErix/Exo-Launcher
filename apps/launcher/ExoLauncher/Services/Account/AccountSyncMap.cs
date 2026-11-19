@@ -41,7 +41,7 @@ internal static class AccountSyncMap
         "DiscordOthersNoiseSuppression", "DiscordOutputDevice", "DiscordOutputVolume", "DiscordPttDelay",
         "DiscordPushToTalk", "DiscordQuietWhilePlaying", "DiscordSelectedChannelSound",
         "DiscordSensitivity", "DiscordSoundVolume", "DiscordSoundboardMuted", "DiscordSoundboardVolume",
-        "DiscordTaskbarFlash", "DiscordUnreadBadge", "DiscordVoiceFocus", "DiscordBandPins", "DiscordVoiceTunes",
+        "DiscordTaskbarFlash", "DiscordUnreadBadge", "DiscordVoiceFocus", "DiscordVoiceTunes",
         "AutoUpdateOff", "Autopilot", "FastGpuForGames", "FpsCounterPosition", "FrameGenEverywhere", "FrameGenKeptOff", "FramelessMode",
         "FramelessPinSide", "FramelessPinTop", "HdrForGames", "HdrGameModes", "HdrGameScreens", "HdrSdrGamma",
         "HdrSwitchedOn", "HdrSwitchedRamp", "LastPlayed", "LaunchOverrides", "LibraryFolders", "StartLucidWithExo",

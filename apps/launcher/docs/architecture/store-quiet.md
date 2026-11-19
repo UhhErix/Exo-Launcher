@@ -2,7 +2,7 @@
 
 ## What it is
 
-One switch, "store clients stay quiet" (`storeClientsQuiet` in settings, `AppSettings.StoreClientsQuiet`, on by default and synced with the account). On, Exo keeps the store clients' own notifications, sounds and pop-ups off; off, it puts every value back as it was. Only Steam and Epic have a writer today. The page reads one word per client from `stores.quiet` (`{ steam, epic }`, each `applied`, `waiting` or `off`): `waiting` is a change that needs the client closed, `off` is quiet not applied. Turning the switch off or on at `saveSettingsPatch` runs the Steam pass and Epic's hand-off at once. There is no component yet (item G).
+One switch, "store clients stay quiet" (`storeClientsQuiet` in settings, `AppSettings.StoreClientsQuiet`, on by default and synced with the account). On, Exo keeps the store clients' own notifications, sounds and pop-ups off; off, it puts every value back as it was. Only Steam and Epic have a writer today. Turning the switch off or on at `saveSettingsPatch` runs the Steam pass and Epic's hand-off at once. There is no component yet (item G).
 
 ## What Exo writes
 

@@ -39,28 +39,4 @@ public sealed class SettingsCloneTests
         }).ToList();
         Assert.Empty(lost);
     }
-
-    /// <summary>
-    /// Pins to Discord's top bar could fail silently by being lost on save, by a hand-edited or stale file carrying something
-    /// that isn't a server or DM id, by repeats drawing one chip twice, or by growing without end.
-    /// </summary>
-    [Fact]
-    public void Discord_band_pins_survive_a_save_checked_and_bounded()
-    {
-        var source = new AppSettings
-        {
-            DiscordBandPins = new()
-            {
-                ["111"] = ["g:1", "d:2", "g:1", "x:3", "g:", "g:12a", "d:" + new string('9', 40)],
-                ["222"] = [.. Enumerable.Range(0, 100).Select(i => $"g:{i}")],
-                ["333"] = ["nonsense"],
-            },
-        };
-
-        var copy = SettingsService.Clone(source).DiscordBandPins;
-
-        Assert.Equal(["g:1", "d:2"], copy["111"]);
-        Assert.Equal(SettingsService.DiscordBandPinsMost, copy["222"].Count);
-        Assert.False(copy.ContainsKey("333"));
-    }
 }

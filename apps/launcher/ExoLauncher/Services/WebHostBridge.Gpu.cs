@@ -5,7 +5,7 @@ namespace ExoLauncher.Services;
 
 /// <summary>
 /// System > Graphics > Driver and profile. gpu.profile: Exo's profile for this PC (no
-/// action), apply (on Intel, with lowLatency) or undo. gpu.sensors: what the GPU reports right now. gpu.game: whether
+/// action), apply (on Intel, with lowLatency) or undo. gpu.game: whether
 /// Exo turns Fluid Motion Frames on for a game on a Radeon (Exo's decision, nothing to set), or its XeSS frame
 /// generation on Intel (set when "frameGen" is passed).
 /// gpu.import: a Profile Inspector file for the global profile (pick, apply,
@@ -66,38 +66,6 @@ public sealed partial class WebHostBridge
             // Something the profile asks for is not in this driver: no count and no id reach the page, only that.
             skipped = state.Partly,
             features = state.Features?.Select(feature => new { key = feature.Key, label = feature.Label, state = feature.State }).ToList(),
-        };
-    }
-
-    /// <summary>
-    /// The main GPU's readings now, the same shape for a Radeon (ADLX) and a GeForce (NvAPI and NVML); ok false (nothing
-    /// shown) on other GPUs, when the driver can't read them, and while a game runs, without touching the driver: the
-    /// game has it. Intel has none: IGCL's telemetry gives power and load only as running counters to difference, and
-    /// its layout can't be checked on this PC.
-    /// </summary>
-    private static async Task<object> GpuSensorsAsync(CancellationToken ct)
-    {
-        if (GameRunningSignal.Running) return new { ok = false };
-        var sensors = await Task.Run(() => GraphicsService.Vendor() switch
-        {
-            "amd" => Helpers.AmdAdlx.ReadSensors(),
-            "nvidia" => Helpers.NvidiaSensors.Read(),
-            _ => null,
-        }, ct).ConfigureAwait(false);
-        if (sensors is null) return new { ok = false };
-        return new
-        {
-            ok = true,
-            temperature = sensors.TemperatureC,
-            hotspot = sensors.HotspotC,
-            watts = sensors.Watts,
-            clock = sensors.ClockMhz,
-            vramUsed = sensors.VramUsedMb,
-            vramTotal = sensors.VramTotalMb,
-            fan = sensors.FanRpm,
-            usage = sensors.UsagePercent,
-            memoryTemperature = sensors.MemoryC,
-            limit = sensors.Limit is { } limit ? new { on = limit.OnHotspot ? "hotspot" : "temperature", warn = limit.WarnC, bad = limit.BadC } : null,
         };
     }
 

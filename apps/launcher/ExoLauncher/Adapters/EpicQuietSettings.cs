@@ -251,19 +251,6 @@ internal static class EpicQuietSettings
         AppLog.Info("Epic: " + string.Join(", ", quiet.Before.Keys) + " set quieter and lighter while Exo starts it.");
     }
 
-    /// <summary>One word for the page: applied, waiting (a write or an undo needs Epic closed), or off.</summary>
-    internal static string Word(bool wanted)
-    {
-        if (SettingsPath() is not { } path || !File.Exists(BeforePath)) return "off";
-        try
-        {
-            var record = ReadRecord(BeforePath);
-            if (record.Off || !wanted) return "waiting";
-            return Quiet(File.ReadAllText(path), record.Before.Keys.ToHashSet(StringComparer.Ordinal)) is null ? "applied" : "waiting";
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException) { return "waiting"; }
-    }
-
     private static string? SettingsPath()
     {
         var path = EpicLauncherV2.DataDir() is { } dir ? Path.Combine(dir, "settings", "app-settings.json") : null;

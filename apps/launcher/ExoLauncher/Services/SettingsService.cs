@@ -187,7 +187,6 @@ public sealed class SettingsService
         loaded.DiscordVoiceTunes = CopyStrings(loaded.DiscordVoiceTunes);
         loaded.LibraryFolders = NormalizeLibraryFolders(loaded.LibraryFolders);
         loaded.HiddenGames = NormalizeHiddenGames(loaded.HiddenGames);
-        loaded.DiscordBandPins = NormalizeDiscordBandPins(loaded.DiscordBandPins);
         loaded.FrameGenKeptOff = NormalizeHiddenGames(loaded.FrameGenKeptOff);
         loaded.SteamWithoutAntiCheat = NormalizeHiddenGames(loaded.SteamWithoutAntiCheat);
         loaded.AutoUpdateOff = NormalizeHiddenGames(loaded.AutoUpdateOff);
@@ -789,28 +788,6 @@ public sealed class SettingsService
     internal static List<string> NormalizeHiddenGames(IEnumerable<string?>? gameIds) =>
         [.. (gameIds ?? []).Where(id => ValidId(id, 512)).Select(id => id!).Distinct(StringComparer.OrdinalIgnoreCase).Take(5_000)];
 
-    /// <summary>At most this many things pinned to Discord's top bar, for each of at most this many accounts.</summary>
-    internal const int DiscordBandPinsMost = 40;
-    private const int DiscordBandAccountsMost = 16;
-
-    /// <summary>One account's pins as they may be kept: "g:" or "d:" and a Discord id, once each, in their order, up to the limit.</summary>
-    internal static List<string> NormalizeDiscordBandPinList(IEnumerable<string?>? pins) =>
-        [.. (pins ?? []).Where(pin => pin is { Length: > 2 and <= 26 } && pin[0] is 'g' or 'd' && pin[1] == ':' && pin.Skip(2).All(char.IsAsciiDigit))
-            .Select(pin => pin!).Distinct(StringComparer.Ordinal).Take(DiscordBandPinsMost)];
-
-    /// <summary>The pins kept per account: accounts with none go, and the file can't grow without end.</summary>
-    internal static Dictionary<string, List<string>> NormalizeDiscordBandPins(Dictionary<string, List<string>>? all)
-    {
-        var kept = new Dictionary<string, List<string>>(StringComparer.Ordinal);
-        foreach (var (account, pins) in all ?? [])
-        {
-            if (kept.Count >= DiscordBandAccountsMost) break;
-            if (!ValidId(account, 32)) continue;
-            if (NormalizeDiscordBandPinList(pins) is { Count: > 0 } list) kept[account] = list;
-        }
-        return kept;
-    }
-
     /// <summary>Game sheet > HDR: Auto removes the override.</summary>
     public void SetHdrGameMode(string gameId, string mode)
     {
@@ -1041,7 +1018,6 @@ public sealed class SettingsService
         DiscordOnlyMyVoice = source.DiscordOnlyMyVoice,
         DiscordEvenVoices = source.DiscordEvenVoices,
         DiscordQuietWhilePlaying = source.DiscordQuietWhilePlaying,
-        DiscordBandPins = NormalizeDiscordBandPins(source.DiscordBandPins),
         DiscordInputDevice = source.DiscordInputDevice is { Length: > 0 and <= 512 } input ? input : null,
         DiscordOutputDevice = source.DiscordOutputDevice is { Length: > 0 and <= 512 } output ? output : null,
         DiscordInputVolume = Math.Clamp(source.DiscordInputVolume, 0, 200),

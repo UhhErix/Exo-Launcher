@@ -8,30 +8,16 @@ namespace ExoLauncher.Tests;
 /// - a screenshot, the poster or the square box art is taken as the banner;
 /// - the titled key art wins over the clean one;
 /// - a protocol-relative "//store-images..." address is dropped instead of made https;
-/// - a friend's Minecraft or Roblox, known only by name, is looked for on Steam and Epic, which don't have it;
-/// - a modpack's name with Minecraft in it misses because it isn't Minecraft's exact name;
-/// - a game of its own that has the word in its name (Minecraft Dungeons), or only looks like it, gets Minecraft's banner.
+/// - a game the Microsoft Store has no art for is looked for there.
 /// </summary>
 public sealed class MicrosoftStoreArtTests
 {
     [Theory]
-    [InlineData("Minecraft", StoreKind.Minecraft)]
-    [InlineData("  MINECRAFT ", StoreKind.Minecraft)]
-    [InlineData("Minecraft: Java Edition", StoreKind.Minecraft)]
-    [InlineData("Roblox", StoreKind.Roblox)]
-    [InlineData("Medieval Minecraft [FABRIC] 1.19.2", StoreKind.Minecraft)]
-    [InlineData("MINECRAFT with RTX", StoreKind.Minecraft)]
-    [InlineData("Medieval MC [FABRIC] 1.19.2", StoreKind.Epic)]
-    [InlineData("Minecrafter's Tale", StoreKind.Epic)]
-    [InlineData("Minecraft Dungeons", StoreKind.Epic)]
-    [InlineData("Minecraft Legends", StoreKind.Epic)]
-    [InlineData("Minecraft: Story Mode", StoreKind.Epic)]
-    [InlineData("Fortnite", StoreKind.Epic)]
-    public void A_name_gets_the_store_that_has_its_art(string title, StoreKind store)
-    {
-        Assert.Equal(store, CoverArtService.StoreOfTitle(title));
-        Assert.Equal(store != StoreKind.Epic, MicrosoftStoreArt.ProductIdFor(new GameEntry { Id = "title:x", Title = title, Store = store }) is not null);
-    }
+    [InlineData(StoreKind.Minecraft, true)]
+    [InlineData(StoreKind.Roblox, true)]
+    [InlineData(StoreKind.Epic, false)]
+    public void Only_the_games_it_has_art_for_ask_the_Microsoft_Store(StoreKind store, bool asks) =>
+        Assert.Equal(asks, MicrosoftStoreArt.ProductIdFor(new GameEntry { Id = "title:x", Title = "x", Store = store }) is not null);
 
     private const string Catalog = """
         {"Product":{"LocalizedProperties":[{"Images":[

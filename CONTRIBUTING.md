@@ -20,10 +20,9 @@ Everything is under [apps/launcher](apps/launcher).
 | `ExoLauncher/` | The Windows host: WinUI 3 on .NET, with one WebView2 |
 | `ui/` | The app's page: React and Tailwind, talking to the host over JSON-RPC (`ui/src/lib/host.ts`) |
 | `mouse/` | Exo Mouse, the Devices room: a separate AGPL-3.0-or-later program |
-| `Exo.Identity/` | The Exo account's keys, sync and mailbox |
 | `ExoLauncher.SteamIpc/` | The helper every Steam install, update and uninstall goes through |
 | `ExoLauncher.Tests/` | xUnit tests for the host's pure logic |
-| `cloud/`, `relay/` | Exo's own Cloudflare Workers: account, covers, mailbox, reports, updates and the relay |
+| `cloud/`, `relay/` | Exo's own Cloudflare Workers: account, covers, reports, updates and the relay |
 | `setup/`, `voice/` | The installer and the voice libraries (C++) |
 | `tools/` | The end-to-end suite (`tools/e2e`), release and maintenance scripts |
 | `docs/` | Help pages for users; developer detail is in `docs/architecture/` |
@@ -51,7 +50,7 @@ Launcher CI (`.github/workflows/launcher-ci.yml`) runs the UI check and the .NET
 | --- | --- |
 | `ui/` | `npm run check`, `npm run dead` and `npm run build`, in `ui/` |
 | `mouse/` | `npm run check` and `npm run build`, in `mouse/` |
-| The host, `Exo.Identity/` or `ExoLauncher.SteamIpc/` | `dotnet build ExoLauncher.sln -c Release -p:Platform=x64`, then `dotnet test --project ExoLauncher.Tests -c Release -p:Platform=x64` |
+| The host or `ExoLauncher.SteamIpc/` | `dotnet build ExoLauncher.sln -c Release -p:Platform=x64`, then `dotnet test --project ExoLauncher.Tests -c Release -p:Platform=x64` |
 | A Worker in `cloud/` or `relay/` | `npm ci`, then `npm test`, in that folder |
 | `tools/e2e/` | `node --test tools/e2e/lib/*.test.mjs` |
 | Anything you can see in the app | `node tools/e2e/run.mjs --changed` on the installed app ([tools/e2e/README.md](apps/launcher/tools/e2e/README.md)) |

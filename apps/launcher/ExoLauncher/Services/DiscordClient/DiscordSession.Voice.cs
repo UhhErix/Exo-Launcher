@@ -126,15 +126,6 @@ internal sealed partial class DiscordSession
         PublishVoice();
     }
 
-    /// <summary>Voice Tune is listening: in a call and not muted, the user is muted until it's done. Whether it muted.</summary>
-    internal bool MuteForTune()
-    {
-        bool mute;
-        lock (_voiceGate) mute = _voiceChannel is not null && !_muted;
-        if (mute) SetVoice(true, null);
-        return mute;
-    }
-
     internal void SetVoice(bool? muted, bool? deafened)
     {
         bool wasMuted, wasDeafened;

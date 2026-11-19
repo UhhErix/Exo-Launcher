@@ -6,7 +6,7 @@ import { launch, newPage, open, sleep, SHOTS } from './harness.mjs'
 
 const tag = process.argv[2] ?? 'bar'
 await launch()
-const mouse = `import('/src/lib/mouseState.ts').then((m) => { m.publishMouseState({ name: 'Pulsar X2', battery: 82, charging: false, low: false, wireless: true }); m.publishMouseProfile('Valorant') })`
+const mouse = `import('/src/lib/mouseState.ts').then((m) => { m.publishMouseState({ name: 'Pulsar X2', battery: 82, charging: false, low: false, wireless: true }) })`
 for (const [w, h] of [[1920, 1080], [1600, 900], [1280, 720], [1024, 640]]) {
   const p = await newPage('void', w, h)
   await open(p, 'live')
