@@ -48,38 +48,86 @@ internal static class LibraryDiskCache
         }
     }
 
+    private static readonly object SaveGate = new();
+    private static readonly object QueueGate = new();
+    private static (IReadOnlyList<GameEntry> Games, IReadOnlyDictionary<string, string?> Scopes)? _pendingSave;
+    private static Task _activeSave = Task.CompletedTask;
+
+    /// <summary>
+    /// Enqueues a non-blocking coalesced disk cache write on the thread pool: repeated calls before a write finishes keep
+    /// only the newest snapshot, and writes serialize under <see cref="SaveGate"/> so files are never torn.
+    /// </summary>
+    public static void QueueSave(IReadOnlyList<GameEntry> games, IReadOnlyDictionary<string, string?> scopes)
+    {
+        var gamesCopy = games.ToArray();
+        var scopesCopy = new Dictionary<string, string?>(scopes, StringComparer.OrdinalIgnoreCase);
+        lock (QueueGate)
+        {
+            _pendingSave = (gamesCopy, scopesCopy);
+            if (_activeSave.IsCompleted)
+                _activeSave = Task.Run(DrainQueuedSaves);
+        }
+    }
+
+    /// <summary>Waits briefly for an in-flight <see cref="QueueSave"/> write during clean shutdown.</summary>
+    internal static void FlushPending(TimeSpan timeout)
+    {
+        Task active;
+        lock (QueueGate) active = _activeSave;
+        try { active.Wait(timeout); }
+        catch { /* disk cache is best-effort */ }
+    }
+
+    private static void DrainQueuedSaves()
+    {
+        while (true)
+        {
+            (IReadOnlyList<GameEntry> Games, IReadOnlyDictionary<string, string?> Scopes) next;
+            lock (QueueGate)
+            {
+                if (_pendingSave is not { } pending) return;
+                _pendingSave = null;
+                next = pending;
+            }
+            Save(next.Games, next.Scopes);
+        }
+    }
+
     public static void Save(IReadOnlyList<GameEntry> games, IReadOnlyDictionary<string, string?> scopes)
     {
-        string? temp = null;
-        try
+        lock (SaveGate)
         {
-            if (games.Count > MaxGameRows || games.Any(game => game.Variants.Count > MaxVariantsPerGame))
-                throw new InvalidDataException("Library cache row budget exceeded.");
-            var snapshot = new Snapshot
+            string? temp = null;
+            try
             {
-                Version = CurrentVersion,
-                SavedAtUtc = DateTimeOffset.UtcNow,
-                Scopes = scopes.ToDictionary(pair => pair.Key, pair => pair.Value, StringComparer.OrdinalIgnoreCase),
-                Games = games.Select(FromEntry).ToList(),
-            };
-            var path = PathHelper.LibraryCachePath;
-            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-            temp = path + "." + Guid.NewGuid().ToString("N") + ".tmp";
-            using (var output = new FileStream(temp, FileMode.CreateNew, FileAccess.Write, FileShare.None,
-                bufferSize: 64 * 1024, FileOptions.SequentialScan))
-            {
-                using var bounded = new ByteBudgetStream(output, MaxCacheBytes, leaveOpen: true);
-                JsonSerializer.Serialize(bounded, snapshot, JsonOpts);
-                output.Flush(flushToDisk: true);
+                if (games.Count > MaxGameRows || games.Any(game => game.Variants.Count > MaxVariantsPerGame))
+                    throw new InvalidDataException("Library cache row budget exceeded.");
+                var snapshot = new Snapshot
+                {
+                    Version = CurrentVersion,
+                    SavedAtUtc = DateTimeOffset.UtcNow,
+                    Scopes = scopes.ToDictionary(pair => pair.Key, pair => pair.Value, StringComparer.OrdinalIgnoreCase),
+                    Games = games.Select(FromEntry).ToList(),
+                };
+                var path = PathHelper.LibraryCachePath;
+                Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+                temp = path + "." + Guid.NewGuid().ToString("N") + ".tmp";
+                using (var output = new FileStream(temp, FileMode.CreateNew, FileAccess.Write, FileShare.None,
+                    bufferSize: 64 * 1024, FileOptions.SequentialScan))
+                {
+                    using var bounded = new ByteBudgetStream(output, MaxCacheBytes, leaveOpen: true);
+                    JsonSerializer.Serialize(bounded, snapshot, JsonOpts);
+                    output.Flush(flushToDisk: true);
+                }
+                File.Move(temp, path, overwrite: true);
+                temp = null;
             }
-            File.Move(temp, path, overwrite: true);
-            temp = null;
+            catch (Exception ex)
+            {
+                AppLog.Debug("Library disk cache save failed: " + ex.Message);
+            }
+            finally { if (temp is not null) try { DeletionGate.DeleteFile(temp); } catch { } }
         }
-        catch (Exception ex)
-        {
-            AppLog.Debug("Library disk cache save failed: " + ex.Message);
-        }
-        finally { if (temp is not null) try { DeletionGate.DeleteFile(temp); } catch { } }
     }
 
     private static bool ScopesMatch(

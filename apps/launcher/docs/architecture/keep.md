@@ -218,18 +218,6 @@ Each look does what its own rules allow: a Game Mode the player yielded stays th
 
 `system.health` takes four more actions, each answering `ok` and a sentence on failure: `gamemode-on`, `gamemode-off`, `gamebar-on` (Exo keeps Game Bar off) and `gamebar-off` (Exo puts it back and stops). No component calls them yet.
 
-## How another optimizer plugs in
-
-Keep is generic over a domain. `IKeepDomain` (`KeepGameFile.cs`) is what a domain must give the engine, and nothing more (the engine owns the record, the state table, the cause rules and the status):
-
-- `string Name { get; }`: the domain's name, which becomes `KeepEntry.Domain` ("gameFile" today).
-- `IReadOnlyDictionary<string, string>? Read()`: a fresh read of every value the owner holds, by target. Null when it could not be read (locked, unreadable); the engine changes nothing then, and never takes null for "absent".
-- `IReadOnlyDictionary<string, string> Write(IReadOnlyCollection<string> targets)`: works the values out again from what is there now, writes them, reads them back, and returns what each now reads as. A target that did not take is missing from the answer.
-- `IReadOnlyDictionary<string, string> Fingerprint()`: the facts that say the thing was rebuilt (a build, a version, a mark).
-- `string? Default(string target)`: what the thing held by itself, or null when that is unknown.
-
-Today only game settings files go through Keep, and the one implementation is `GameSettings.GameFileDomain`. It is not yet called by anything: the live look in `GameSettings.Keep.cs` still reads and writes the game's files itself, and `GameFileDomain` is the shape a domain takes when the look is moved onto it, alongside the driver profiles, the power plan, registry values and devices (items C and D).
-
 ## Not proven and owed
 
 - Which Call of Duty line moves, and why, is not known. Exo now logs it: every value that moved is one line in app.log, with the file, the line, Exo's value and the value found, when it was written, when it was last seen held, and what else changed since.

@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { SupportedClient } from '@openmouse/protocol/drivers/registry'
 
-/** Every brand's driver: about 1.3 MB, loaded after the page has drawn, once. */
-const registry = () => import('@openmouse/protocol/drivers/registry')
+/** Per-vendor dynamic driver loader: keeps ~1.3 MB of unused mouse protocols out of the initial bundle. */
+const loadRegistry = (devices: readonly HIDDevice[]) =>
+  import('@openmouse/protocol/drivers/registry-lazy').then(m => m.loadRegistryForDevices(devices))
 import type { MouseStatus } from '@openmouse/protocol/drivers/mouse-types'
 import { capabilitiesForFormat } from '@openmouse/protocol/drivers/logitech/onboard-profiles'
 import { exoHid, onHostEvent } from './exo-hid'
@@ -43,7 +44,8 @@ function invoke(client: SupportedClient, method: string, args: unknown[]): Promi
 
 /** The best interface per physical product: receivers and mice expose several, one of which answers. */
 async function findCandidates(): Promise<Candidate[]> {
-  const [devices, drivers] = await Promise.all([exoHid().getDevices(), registry()])
+  const devices = await exoHid().getDevices()
+  const drivers = await loadRegistry(devices)
   const byId = new Map<string, { device: HIDDevice; score: number }[]>()
   for (const device of devices) {
     const score = drivers.clientSupportScore(device)
@@ -115,8 +117,10 @@ export function useMouse() {
   /** The open mouse was opened again since its last good read. */
   const reopened = useRef(false)
   // Hidden until the room says otherwise: Exo starts this frame behind a closed room, and
-  // its first visibility message can land before this listener exists.
-  const [visible, setVisible] = useState(false)
+  // its first visibility message can land before this listener exists. Also pause HID polling when document.hidden.
+  const [roomVisible, setRoomVisible] = useState(false)
+  const [docHidden, setDocHidden] = useState(() => typeof document !== 'undefined' && document.hidden)
+  const visible = roomVisible && !docHidden
   const [wanted, setWanted] = useState<string | null>(null)
   const [scan, setScan] = useState(0)
   /** One connect at a time: a rescan waits for the attempt before it, so two never share the device. */
@@ -124,11 +128,14 @@ export function useMouse() {
 
   // The host says when the room is on screen; arrivals and departures rescan.
   useEffect(() => {
-    onHostEvent('room.visible', data => setVisible(data === true))
+    onHostEvent('room.visible', data => setRoomVisible(data === true))
+    const onVisibility = () => setDocHidden(document.hidden)
+    document.addEventListener('visibilitychange', onVisibility)
     const rescan = () => setScan(n => n + 1)
     exoHid().addEventListener('connect', rescan)
     exoHid().addEventListener('disconnect', rescan)
     return () => {
+      document.removeEventListener('visibilitychange', onVisibility)
       exoHid().removeEventListener('connect', rescan)
       exoHid().removeEventListener('disconnect', rescan)
     }
@@ -158,7 +165,7 @@ export function useMouse() {
       }
       if (!pick) { setState({ phase: 'none', candidates, current: null, brand: '', status: null, error: null, busy: false, readAt: 0 }); return }
       setState({ phase: 'opening', candidates, current: pick, brand: '', status: null, error: null, busy: false, readAt: 0 })
-      const [drivers] = await Promise.all([registry(), loadSaved()])
+      const [drivers] = await Promise.all([loadRegistry([pick.device, ...pick.others]), loadSaved()])
       // The best interface first, then the product's others: the first that opens and answers is the mouse.
       let failed: unknown = null
       for (const device of [pick.device, ...pick.others]) {

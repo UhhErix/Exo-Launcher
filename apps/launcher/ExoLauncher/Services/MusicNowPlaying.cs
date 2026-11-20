@@ -59,6 +59,7 @@ internal sealed class MusicNowPlaying : IDisposable
     private readonly string _page;
     private readonly Func<bool> _frozen;
     private readonly CancellationTokenSource _life = new();
+    private readonly SemaphoreSlim _wake = new(0, 1);
     private State _state = new(false, null, Environment.TickCount64);
     private string? _lastKey;
     private bool _watching;
@@ -85,6 +86,15 @@ internal sealed class MusicNowPlaying : IDisposable
         _frozen = frozen;
     }
 
+    /// <summary>Wakes a backed-off poll immediately when the player wakes or resumes.</summary>
+    internal void Wake()
+    {
+        if (_life.IsCancellationRequested || _wake.CurrentCount > 0) return;
+        try { _wake.Release(); }
+        catch (ObjectDisposedException) { }
+        catch (SemaphoreFullException) { }
+    }
+
     /// A web player in Exo's own WebView2. <paramref name="control"/>
     /// runs transport (a click the user just made in Exo).
     internal static MusicNowPlaying ForWebPage(string service, MusicAppVolume.Evaluate evaluate, Func<bool> frozen,
@@ -100,9 +110,17 @@ internal sealed class MusicNowPlaying : IDisposable
         _ = WatchAsync();
     }
 
+    private async Task PauseAsync(int milliseconds, CancellationToken token)
+    {
+        try { await _wake.WaitAsync(milliseconds, token); }
+        catch (ObjectDisposedException) { }
+    }
+
     private async Task WatchAsync()
     {
         var token = _life.Token;
+        var frozenBackoffMs = 2000;
+        var failureBackoffMs = 1000;
         while (!token.IsCancellationRequested)
         {
             try
@@ -110,7 +128,13 @@ internal sealed class MusicNowPlaying : IDisposable
                 bool frozen;
                 try { frozen = _frozen(); } catch { frozen = false; }
                 if (frozen != _frozenNow) { Volatile.Write(ref _frozenNow, frozen); Raise(); }
-                if (frozen) { await Task.Delay(2000, token); continue; }
+                if (frozen)
+                {
+                    await PauseAsync(frozenBackoffMs, token);
+                    frozenBackoffMs = Math.Min(frozenBackoffMs * 2, 15000);
+                    continue;
+                }
+                frozenBackoffMs = 2000;
                 // While a game runs nobody watches the clock: a playing song is re-anchored as seldom as a paused one
                 // (its own events still answer at once).
                 var window = Current.Track is { Playing: true } && !LeanSignal.Active ? PlayingWindowMs : IdleWindowMs;
@@ -120,18 +144,23 @@ internal sealed class MusicNowPlaying : IDisposable
                 catch (OperationCanceledException) when (token.IsCancellationRequested) { return; }
                 catch { reply = null; }
                 if (token.IsCancellationRequested) return;
-                if (reply is { ValueKind: JsonValueKind.Object } answer) Accept(answer);
+                if (reply is { ValueKind: JsonValueKind.Object } answer)
+                {
+                    failureBackoffMs = 1000;
+                    Accept(answer);
+                }
                 else
                 {
                     Fail();
-                    await Task.Delay(1000, token);
+                    await PauseAsync(failureBackoffMs, token);
+                    failureBackoffMs = Math.Min(failureBackoffMs * 2, 10000);
                 }
             }
             catch (OperationCanceledException) { return; }
             catch
             {
                 Fail();
-                try { await Task.Delay(3000, token); } catch (OperationCanceledException) { return; }
+                try { await PauseAsync(3000, token); } catch (OperationCanceledException) { return; }
             }
         }
     }
@@ -238,21 +267,22 @@ internal sealed class MusicNowPlaying : IDisposable
         catch (Exception) { return null; }
     }
 
-    public void Dispose()
+          public void Dispose()
     {
         _life.Cancel();
+        _wake.Dispose();
         Changed = null;
     }
 
     /// Installed once per document. wait(last, ms) answers { api, k, t } as
     /// soon as the track key differs from the caller's, the position drifts
     /// from the page's own prediction, or the window ends; the app's own
-    /// events wake it, with a one-second in-page check behind them. A player
+    /// events wake it, with an in-page fallback (1 s while playing, 5 s while paused/idle). A player
     /// that cannot be found is looked for again at most every five seconds.
     private const string Wrapper = """
         (function (adapter) {
           var w = window;
-          if (w.__exoNow && w.__exoNow.v === 5) return w.__exoNow;
+          if (w.__exoNow && w.__exoNow.v === 6) return w.__exoNow;
           var handle = null, heard = null, missAt = 0, waiters = [], base = null;
           function wake() { var list = waiters; waiters = []; list.forEach(function (f) { f(); }); }
           function locate() {
@@ -291,10 +321,11 @@ internal sealed class MusicNowPlaying : IDisposable
               var s = read();
               var left = end - Date.now();
               if (s.k !== last || drifted(s) || left <= 0) return mark(s);
-              // A wait that times out takes its waiter back, so the list never grows between events.
+              // Playing tracks check position drift every second; paused/idle players wait up to 5 s (events still wake immediately).
+              var step = s.t && s.t.playing ? 1000 : 5000;
               await new Promise(function (resolve) {
                 var woke = function () { clearTimeout(t); resolve(); };
-                var t = setTimeout(function () { var i = waiters.indexOf(woke); if (i >= 0) waiters.splice(i, 1); resolve(); }, Math.min(left, 1000));
+                var t = setTimeout(function () { var i = waiters.indexOf(woke); if (i >= 0) waiters.splice(i, 1); resolve(); }, Math.min(left, step));
                 waiters.push(woke);
               });
             }
@@ -304,7 +335,7 @@ internal sealed class MusicNowPlaying : IDisposable
             if (!h) return false;
             try { return (await adapter.control(h, action, ms)) !== false; } catch (_) { return false; }
           }
-          return (w.__exoNow = { v: 5, wait: wait, control: control });
+          return (w.__exoNow = { v: 6, wait: wait, control: control });
         })(__ADAPTER__)
         """;
 

@@ -812,13 +812,27 @@ internal static partial class EpicPlaytime
         return result;
     }
 
+    private static Dictionary<string, Dictionary<string, int>>? _persistedScopesCache;
+    private static (string Path, long Length, long WriteTicks) _persistedScopesStamp;
+
     private static Dictionary<string, Dictionary<string, int>> ReadPersistedScopes()
     {
         try
         {
-            return File.Exists(PersistPath)
-                ? ParsePersistedScopes(File.ReadAllText(PersistPath))
-                : new Dictionary<string, Dictionary<string, int>>(StringComparer.Ordinal);
+            var path = PersistPath;
+            var info = new FileInfo(path);
+            if (!info.Exists)
+            {
+                _persistedScopesCache = null;
+                return new Dictionary<string, Dictionary<string, int>>(StringComparer.Ordinal);
+            }
+            var stamp = (path, info.Length, info.LastWriteTimeUtc.Ticks);
+            if (_persistedScopesCache is not null && _persistedScopesStamp == stamp)
+                return _persistedScopesCache;
+            var parsed = ParsePersistedScopes(File.ReadAllText(path));
+            _persistedScopesStamp = stamp;
+            _persistedScopesCache = parsed;
+            return parsed;
         }
         catch (Exception ex)
         {

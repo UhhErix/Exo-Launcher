@@ -8,24 +8,37 @@ namespace ExoLauncher.Services;
 public sealed partial class WebHostBridge
 {
     private int _devicesWatched;
+    private Action? _controllerKnownHandler;
+    private Action? _devicesChangedHandler;
 
     /// <summary>From Exo's start: devices.changed for the room, and an Edge Exo calibrated gets its calibration back.</summary>
     private void WatchDevices()
     {
         if (Interlocked.Exchange(ref _devicesWatched, 1) != 0) return;
-        Peripherals.ControllerKnown += () =>
+        _controllerKnownHandler = () =>
         {
             PostEvent("devices.changed", new { });
             ReapplyCalibrationsSoon();
         };
-        Peripherals.Watch(() =>
+        _devicesChangedHandler = () =>
         {
             PostEvent("devices.changed", new { });
             HideControllerSoundSoon();
             ReapplyCalibrationsSoon();
-        });
+        };
+        Peripherals.ControllerKnown += _controllerKnownHandler;
+        Peripherals.Watch(_devicesChangedHandler);
         HideControllerSoundSoon();
         ReapplyCalibrationsSoon();
+    }
+
+    private void UnwatchDevices()
+    {
+        if (Interlocked.Exchange(ref _devicesWatched, 0) == 0) return;
+        if (Interlocked.Exchange(ref _controllerKnownHandler, null) is { } controllerKnown)
+            Peripherals.ControllerKnown -= controllerKnown;
+        if (Interlocked.Exchange(ref _devicesChangedHandler, null) is { } devicesChanged)
+            Peripherals.Unwatch(devicesChanged);
     }
 
     /// <summary>

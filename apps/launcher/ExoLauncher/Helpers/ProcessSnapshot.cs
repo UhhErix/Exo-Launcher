@@ -27,10 +27,17 @@ internal static class ProcessSnapshot
         SessionAt = 0x64, PrivateBytesAt = 0xC8, ReadBytesAt = 0xE8, WriteBytesAt = 0xF0, EntrySize = 0x100;
 
     private const int SystemProcessInformation = 5, StatusInfoLengthMismatch = unchecked((int)0xC0000004);
+    private static readonly TimeSpan DefaultCacheTtl = TimeSpan.FromMilliseconds(500);
     private static int _bytes = 512 * 1024;
+    private static readonly object CacheGate = new();
+    private static long _cacheExpiresAt;
+    private static IReadOnlyList<ProcessRow>? _cachedRows;
 
     /// <summary>The list now; empty when Windows wouldn't give it.</summary>
-    internal static unsafe List<ProcessRow> Read()
+    internal static List<ProcessRow> Read() => TryRead(out var rows) ? rows : [];
+
+    /// <summary>Reads the kernel's process list without opening handles; returns false if Windows refused.</summary>
+    internal static unsafe bool TryRead(out List<ProcessRow> rows)
     {
         var size = Volatile.Read(ref _bytes);
         for (var attempt = 0; attempt < 4; attempt++)
@@ -46,14 +53,134 @@ internal static class ProcessSnapshot
                         size = Math.Max(buffer.Length, needed) + 64 * 1024;
                         continue;
                     }
-                    if (status < 0 || needed < EntrySize) return [];
+                    if (status < 0 || needed < EntrySize)
+                    {
+                        rows = [];
+                        return false;
+                    }
                     Volatile.Write(ref _bytes, Math.Max(size, needed + 64 * 1024));
-                    return Parse(buffer.AsSpan(0, Math.Min(buffer.Length, needed)), (nint)start);
+                    rows = Parse(buffer.AsSpan(0, Math.Min(buffer.Length, needed)), (nint)start);
+                    return true;
                 }
             }
             finally { ArrayPool<byte>.Shared.Return(buffer); }
         }
-        return [];
+        rows = [];
+        return false;
+    }
+
+    /// <summary>
+    /// Shared short-TTL cached read-only snapshot for burst callers reading PID/name state back to back.
+    /// Returns an immutable array view safe for concurrent enumeration.
+    /// </summary>
+    internal static IReadOnlyList<ProcessRow> ReadCached(TimeSpan? maxAge = null)
+    {
+        var ttlMs = Math.Max(0, (long)(maxAge ?? DefaultCacheTtl).TotalMilliseconds);
+        var now = Environment.TickCount64;
+        lock (CacheGate)
+        {
+            if (_cachedRows is not null && now < _cacheExpiresAt)
+                return _cachedRows;
+        }
+        if (!TryRead(out var rows))
+            return [];
+        var snapshot = rows.ToArray();
+        lock (CacheGate)
+        {
+            _cachedRows = snapshot;
+            _cacheExpiresAt = Environment.TickCount64 + ttlMs;
+        }
+        return snapshot;
+    }
+
+    internal static void InvalidateCache()
+    {
+        lock (CacheGate)
+        {
+            _cachedRows = null;
+            _cacheExpiresAt = 0;
+        }
+    }
+
+    /// <summary>Strips a trailing ".exe" extension from an image filename to match <see cref="System.Diagnostics.Process.ProcessName"/>.</summary>
+    internal static string StripExe(string imageName) =>
+        imageName.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) ? imageName[..^4] : imageName;
+
+    /// <summary>Case-insensitive match allowing either bare stem ("steam") or image filename ("steam.exe").</summary>
+    internal static bool NameEquals(string imageName, string candidate)
+    {
+        if (string.IsNullOrWhiteSpace(imageName) || string.IsNullOrWhiteSpace(candidate)) return false;
+        var a = imageName.AsSpan();
+        var b = candidate.AsSpan();
+        if (a.EndsWith(".exe", StringComparison.OrdinalIgnoreCase)) a = a[..^4];
+        if (b.EndsWith(".exe", StringComparison.OrdinalIgnoreCase)) b = b[..^4];
+        return a.Equals(b, StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>True when any live process matches <paramref name="processName"/> (with or without ".exe").</summary>
+    internal static bool IsRunning(string processName, bool cached = false)
+    {
+        if (string.IsNullOrWhiteSpace(processName)) return false;
+        IReadOnlyList<ProcessRow> rows = cached ? ReadCached() : Read();
+        foreach (var row in rows)
+        {
+            if (row.Pid > 0 && NameEquals(row.Name, processName)) return true;
+        }
+        return false;
+    }
+
+    /// <summary>PIDs of every live process matching <paramref name="processName"/>.</summary>
+    internal static List<int> PidsByName(string processName, bool cached = false)
+    {
+        var pids = new List<int>();
+        if (string.IsNullOrWhiteSpace(processName)) return pids;
+        IReadOnlyList<ProcessRow> rows = cached ? ReadCached() : Read();
+        foreach (var row in rows)
+        {
+            if (row.Pid > 0 && NameEquals(row.Name, processName))
+                pids.Add(row.Pid);
+        }
+        return pids;
+    }
+
+    /// <summary>True when a process with <paramref name="pid"/> appears in the process table.</summary>
+    internal static bool Exists(int pid, bool cached = false)
+    {
+        if (pid <= 0) return false;
+        IReadOnlyList<ProcessRow> rows = cached ? ReadCached() : Read();
+        foreach (var row in rows)
+        {
+            if (row.Pid == pid) return true;
+        }
+        return false;
+    }
+
+    /// <summary>Live (Pid, ProcessNameStem) pairs whose process name is in <paramref name="processNames"/>.</summary>
+    internal static List<(int Pid, string Name)> Running(IEnumerable<string> processNames, bool cached = false)
+    {
+        HashSet<string> wanted;
+        if (processNames is HashSet<string> set && ReferenceEquals(set.Comparer, StringComparer.OrdinalIgnoreCase) &&
+            !set.Any(n => string.IsNullOrWhiteSpace(n) || n.EndsWith(".exe", StringComparison.OrdinalIgnoreCase)))
+        {
+            wanted = set;
+        }
+        else
+        {
+            wanted = new HashSet<string>(
+                processNames.Where(n => !string.IsNullOrWhiteSpace(n)).Select(StripExe),
+                StringComparer.OrdinalIgnoreCase);
+        }
+        var hits = new List<(int, string)>();
+        if (wanted.Count == 0) return hits;
+        IReadOnlyList<ProcessRow> rows = cached ? ReadCached() : Read();
+        foreach (var row in rows)
+        {
+            if (row.Pid <= 0 || string.IsNullOrEmpty(row.Name)) continue;
+            var stem = StripExe(row.Name);
+            if (wanted.Contains(stem))
+                hits.Add((row.Pid, stem));
+        }
+        return hits;
     }
 
     /// <summary>

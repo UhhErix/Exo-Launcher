@@ -73,8 +73,69 @@ function webOptions(action: PlayerAction, options: PlayerActOptions = {}): Playe
   return options
 }
 
+function createWebAdapter(config: {
+  name: string
+  likedName: string
+  features: ReadonlySet<MusicFeature>
+  shortcuts: MusicShortcuts
+  premiumUrl?: string
+  shareUrl?: (uri: string) => string | null
+  newPlaylistName?: (count: number) => string
+  startEngine: () => Promise<{ ok: boolean; state: PlayerRoomState; message?: string }>
+  signInService: MusicAdapter['signIn']
+  readView: MusicAdapter['view']
+  runAct: MusicAdapter['act']
+}): MusicAdapter {
+  // Tracks active room mount epoch so in-flight calls started before leave() drop cleanly without waking a sleeping host.
+  let epoch = 0
+  let inFlightStart: Promise<{ ok: boolean; state: PlayerRoomState; message?: string }> | null = null
+
+  return {
+    name: config.name,
+    likedName: config.likedName,
+    features: config.features,
+    shortcuts: config.shortcuts,
+    premiumUrl: config.premiumUrl,
+    shareUrl: config.shareUrl,
+    newPlaylistName: config.newPlaylistName,
+    start() {
+      if (inFlightStart) return inFlightStart
+      const callEpoch = epoch
+      const pending = config.startEngine()
+        .then(result => (callEpoch === epoch ? result : { ok: false, state: 'loading' as const }))
+        .finally(() => {
+          if (inFlightStart === pending) inFlightStart = null
+        })
+      inFlightStart = pending
+      return pending
+    },
+    signIn: config.signInService,
+    async leave() {
+      epoch += 1
+      inFlightStart = null
+      // Leaving Music for another room keeps active background music playing (AGENTS.md); if nothing plays, avoid waking
+      // a suspended WebView by only reading cached playback state when already idle cleanup is needed.
+      try {
+        const snapshot = await host.musicPlayback()
+        if (snapshot.ok && snapshot.playback && snapshot.playback.status !== 'playing') {
+          // Ensure no residual queued state lingers on the UI adapter after leaving an idle room.
+          epoch += 1
+        }
+      } catch {
+        // Host playback snapshot is best-effort during teardown/unmount.
+      }
+    },
+    async view(view, options) {
+      const callEpoch = epoch
+      const result = await config.readView(view, options)
+      return callEpoch === epoch ? result : { ok: false }
+    },
+    act: config.runAct,
+  }
+}
+
 /** open.spotify.com on Exo's embedded profile, hidden, through its own platform APIs (SpotifyNative.cs). */
-export const spotifyAdapter: MusicAdapter = {
+export const spotifyAdapter: MusicAdapter = createWebAdapter({
   name: 'Spotify',
   likedName: 'Liked Songs',
   features: new Set(['devices', 'jam', 'friends', 'recent', 'addToPlaylist', 'enqueue', 'playNext', 'shows', 'audio', 'editQueue', 'playlists', 'cover',
@@ -83,39 +144,36 @@ export const spotifyAdapter: MusicAdapter = {
   premiumUrl: 'https://www.spotify.com/premium/',
   shareUrl: spotifyShareUrl,
   newPlaylistName: count => `My Playlist #${count + 1}`,
-  start: () => host.spotifyStart(),
-  signIn: () => host.musicSignIn('spotify'),
-  leave: () => Promise.resolve(),
-  view: (view, options) => host.spotifyView(view, options),
+  startEngine: () => host.spotifyStart(),
+  signInService: () => host.musicSignIn('spotify'),
+  readView: (view, options) => host.spotifyView(view, options),
   // Spotify deletes your playlist as its own app does: by taking it out of your library.
-  act: (action, options) => action === 'deletePlaylist' ? host.spotifyAct('like', { uri: options?.uri, on: false }) : host.spotifyAct(action, options),
-}
+  runAct: (action, options) => action === 'deletePlaylist' ? host.spotifyAct('like', { uri: options?.uri, on: false }) : host.spotifyAct(action, options),
+})
 
 /** music.youtube.com on Exo's embedded profile, hidden, through its own InnerTube client (YouTubeMusicNative.cs). */
-export const youtubeAdapter: MusicAdapter = {
+export const youtubeAdapter: MusicAdapter = createWebAdapter({
   name: 'YouTube Music',
   likedName: 'Liked Music',
   features: new Set(['enqueue', 'playNext', 'editQueue', 'addToPlaylist', 'shows', 'explore', 'mix', 'dislike', 'autoplay', 'video', 'related',
     'playlists', 'quality', 'queueLists']),
   shortcuts: 'youtube',
   shareUrl: youtubeShareUrl,
-  start: () => host.ytmusicStart(),
-  signIn: () => host.musicSignIn('youtube'),
-  leave: () => Promise.resolve(),
-  view: (view, options) => host.ytmusicView(view, options),
-  act: (action, options) => host.ytmusicAct(action, webOptions(action, options)),
-}
+  startEngine: () => host.ytmusicStart(),
+  signInService: () => host.musicSignIn('youtube'),
+  readView: (view, options) => host.ytmusicView(view, options),
+  runAct: (action, options) => host.ytmusicAct(action, webOptions(action, options)),
+})
 
 /** music.apple.com on Exo's embedded profile, hidden, through the page's own MusicKit (AppleMusicNative.cs). */
-export const appleAdapter: MusicAdapter = {
+export const appleAdapter: MusicAdapter = createWebAdapter({
   name: 'Apple Music',
   likedName: 'Favorites',
   features: new Set(['recent', 'addToPlaylist', 'enqueue', 'playNext', 'browse', 'radio', 'history', 'autoplay', 'dequeue', 'station', 'library',
     'suggestLess', 'playlists', 'credits', 'quality', 'queueLists']),
   shortcuts: 'music',
-  start: () => host.applemusicStart(),
-  signIn: () => host.musicSignIn('apple'),
-  leave: () => Promise.resolve(),
-  view: (view, options) => host.applemusicView(view, options),
-  act: (action, options) => host.applemusicAct(action, webOptions(action, options)),
-}
+  startEngine: () => host.applemusicStart(),
+  signInService: () => host.musicSignIn('apple'),
+  readView: (view, options) => host.applemusicView(view, options),
+  runAct: (action, options) => host.applemusicAct(action, webOptions(action, options)),
+})

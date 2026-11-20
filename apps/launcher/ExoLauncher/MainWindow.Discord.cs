@@ -76,18 +76,39 @@ public sealed partial class MainWindow
         if (focused) Services.DiscordClient.DiscordSession.ExoFocused();
     }
 
+    private Action<int>? _discordBadgeHandler;
+    private Action? _discordFlashHandler;
+    private Action? _discordAppOpenedHandler;
+    private Action<string, string, string?, string>? _discordOpenedHandler;
+
     private void WireDiscordClient()
     {
         // These are static events that outlive the window, and Window.DispatcherQueue is null once it has closed: the
         // queue itself is kept, and it refuses work after shutdown instead of throwing.
         var queue = DispatcherQueue;
-        Services.DiscordClient.DiscordSession.BadgeChanged += count => queue.Enqueue(() => PublishFriendsBadge(count));
-        Services.DiscordClient.DiscordSession.FlashRequested += () => queue.Enqueue(FlashTaskbar);
-        Services.DiscordClient.DiscordNotifier.AppOpened += () => queue.Enqueue(() => RestoreAndActivate("its notification was pressed"));
-        Services.DiscordClient.DiscordNotifier.Opened += (guildId, channelId, parentId, name) => queue.Enqueue(() =>
+        _discordBadgeHandler = count => queue.Enqueue(() => PublishFriendsBadge(count));
+        _discordFlashHandler = () => queue.Enqueue(FlashTaskbar);
+        _discordAppOpenedHandler = () => queue.Enqueue(() => RestoreAndActivate("its notification was pressed"));
+        _discordOpenedHandler = (guildId, channelId, parentId, name) => queue.Enqueue(() =>
         {
             RestoreAndActivate("a Discord notification was pressed");
             _bridge?.PostDiscordOpen(guildId, channelId, parentId, name);
         });
+        Services.DiscordClient.DiscordSession.BadgeChanged += _discordBadgeHandler;
+        Services.DiscordClient.DiscordSession.FlashRequested += _discordFlashHandler;
+        Services.DiscordClient.DiscordNotifier.AppOpened += _discordAppOpenedHandler;
+        Services.DiscordClient.DiscordNotifier.Opened += _discordOpenedHandler;
+    }
+
+    private void UnwireDiscordClient()
+    {
+        if (Interlocked.Exchange(ref _discordBadgeHandler, null) is { } badge)
+            Services.DiscordClient.DiscordSession.BadgeChanged -= badge;
+        if (Interlocked.Exchange(ref _discordFlashHandler, null) is { } flash)
+            Services.DiscordClient.DiscordSession.FlashRequested -= flash;
+        if (Interlocked.Exchange(ref _discordAppOpenedHandler, null) is { } appOpened)
+            Services.DiscordClient.DiscordNotifier.AppOpened -= appOpened;
+        if (Interlocked.Exchange(ref _discordOpenedHandler, null) is { } opened)
+            Services.DiscordClient.DiscordNotifier.Opened -= opened;
     }
 }

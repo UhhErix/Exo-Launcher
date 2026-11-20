@@ -184,6 +184,8 @@ internal static class UiCallbackScanner
         ("Services/StoreGifts.cs", "NavigationCompleted", "method group, so the -= in finally still matches; Completed's body is wrapped where it is declared"),
         ("Services/WebHostBridge.cs", "WebMessageReceived", "method group, so the -= in Detach still matches; OnMessage's body is wrapped where it is declared"),
         ("Services/WebHostBridge.cs", "NavigationStarting", "method group, so the -= in Detach still matches; OnBridgeNavigationStarting's body is wrapped where it is declared"),
+        ("MainWindow.xaml.cs", "Tick", "method group, so the -= in StopWebViewWindowGuard still matches; OnWebViewWindowGuardTick's body is wrapped where it is declared"),
+        ("Services/WebHostBridge.Gifts.cs", "Tick", "method group, so the -= in StopGiftsTimer still matches; OnGiftsTimerTick's body is wrapped where it is declared"),
     ];
 
     /// <summary>Returns one message per raw callback that is not wrapped and not allowlisted.</summary>

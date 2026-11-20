@@ -23,6 +23,8 @@ internal sealed class DownloadPolicy : IDisposable
     private Timer? _accounts;
     private DateTime _lastUpdateSweep = DateTime.MinValue;
 
+    private bool _accountsArmed;
+
     internal DownloadPolicy(AppServices services) => _services = services;
 
     internal void Start()
@@ -30,12 +32,15 @@ internal sealed class DownloadPolicy : IDisposable
         var launcher = _services.Launcher;
         launcher.GameLaunched += OnGameLaunched;
         launcher.GameSessionCompleted += OnGameEnded;
+        launcher.DownloadQueueChanged += SyncAccountTimer;
+        launcher.ProgressChanged += OnDownloadProgress;
         lock (_gate)
         {
             _tick ??= new Timer(_ => Tick(), null, TimeSpan.FromSeconds(30), TimeSpan.FromMinutes(1));
-            // A switch made in the store's own app is seen within seconds; with nothing downloading, the check reads nothing.
-            _accounts ??= new Timer(_ => CheckAccounts(), null, TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(5));
+            // A switch made in the store's own app is seen within seconds; armed only while downloads exist.
+            _accounts ??= new Timer(_ => CheckAccounts(), null, Timeout.InfiniteTimeSpan, Timeout.InfiniteTimeSpan);
         }
+        SyncAccountTimer();
         Apply();
     }
 
@@ -73,9 +78,35 @@ internal sealed class DownloadPolicy : IDisposable
         (game.SteamAppType?.Trim().ToLowerInvariant() ?? "") is not ("application" or "tool" or "config" or "music" or "video"
             or "series" or "episode" or "hardware" or "advertising" or "dedicated server" or "dedicatedserver" or "dedicated_server");
 
+    private void OnDownloadProgress(InstallProgress _) => SyncAccountTimer();
+
+    private void SyncAccountTimer()
+    {
+        var launcher = _services.Launcher;
+        var active = launcher.IsBusy || launcher.HasQueuedJobs || launcher.PausedDownloads.Count > 0;
+        lock (_gate)
+        {
+            if (_accounts is null || active == _accountsArmed) return;
+            _accountsArmed = active;
+            try
+            {
+                _accounts.Change(
+                    active ? TimeSpan.FromSeconds(5) : Timeout.InfiniteTimeSpan,
+                    active ? TimeSpan.FromSeconds(5) : Timeout.InfiniteTimeSpan);
+            }
+            catch (ObjectDisposedException) { }
+        }
+    }
+
     private void CheckAccounts()
     {
-        try { _services.Launcher.CheckDownloadAccounts(); }
+        var launcher = _services.Launcher;
+        if (!launcher.IsBusy && !launcher.HasQueuedJobs && launcher.PausedDownloads.Count == 0)
+        {
+            SyncAccountTimer();
+            return;
+        }
+        try { launcher.CheckDownloadAccounts(); }
         catch (Exception ex) { AppLog.Debug("Download account check failed: " + ex.Message); }
     }
 
@@ -154,6 +185,21 @@ internal sealed class DownloadPolicy : IDisposable
 
     public void Dispose()
     {
-        lock (_gate) { _tick?.Dispose(); _tick = null; _accounts?.Dispose(); _accounts = null; }
+        var launcher = _services.Launcher;
+        launcher.GameLaunched -= OnGameLaunched;
+        launcher.GameSessionCompleted -= OnGameEnded;
+        launcher.DownloadQueueChanged -= SyncAccountTimer;
+        launcher.ProgressChanged -= OnDownloadProgress;
+        Timer? tick;
+        Timer? accounts;
+        lock (_gate)
+        {
+            _accountsArmed = false;
+            tick = _tick;
+            accounts = _accounts;
+            _tick = _accounts = null;
+        }
+        tick?.Dispose();
+        accounts?.Dispose();
     }
 }

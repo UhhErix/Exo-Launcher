@@ -46,8 +46,24 @@ internal sealed class GameCompressor(AppServices services) : IDisposable
     {
         services.Launcher.GameLaunching += OnGameLaunching;
         services.Launcher.ProgressChanged += OnInstallProgress;
-        _tick ??= new Timer(_ => Tick(), null, TimeSpan.FromMinutes(3), TimeSpan.FromMinutes(2));
-        _watch ??= new Timer(_ => Watch(), null, TimeSpan.FromSeconds(2), TimeSpan.FromSeconds(2));
+        lock (_gate)
+        {
+            _tick ??= new Timer(_ => Tick(), null, TimeSpan.FromMinutes(3), TimeSpan.FromMinutes(2));
+            _watch ??= new Timer(_ => Watch(), null, Timeout.InfiniteTimeSpan, Timeout.InfiniteTimeSpan);
+            if (_job is not null) ArmWatchLocked();
+        }
+    }
+
+    private void ArmWatchLocked()
+    {
+        try { _watch?.Change(TimeSpan.FromSeconds(2), TimeSpan.FromSeconds(2)); }
+        catch (ObjectDisposedException) { }
+    }
+
+    private void PauseWatchLocked()
+    {
+        try { _watch?.Change(Timeout.InfiniteTimeSpan, Timeout.InfiniteTimeSpan); }
+        catch (ObjectDisposedException) { }
     }
 
     // ------------------------------------------------------------------ what the page reads
@@ -278,6 +294,7 @@ internal sealed class GameCompressor(AppServices services) : IDisposable
             _failed.Remove(game.Id);
             var thread = new Thread(() => Run(job)) { IsBackground = true, Priority = ThreadPriority.BelowNormal, Name = "Exo compress" };
             thread.Start();
+            ArmWatchLocked();
         }
         return null;
     }
@@ -374,6 +391,7 @@ internal sealed class GameCompressor(AppServices services) : IDisposable
                 if (_job == job) _job = null;
                 if (job.Failed is { } failed) _failed[id] = failed;
                 if (_queue.Count > 0) { next = _queue[0]; _queue.RemoveAt(0); }
+                if (_job is null && next is null) PauseWatchLocked();
             }
             Changed?.Invoke(id);
             if (next is not null && services.Library.Find(next) is { } game && Begin(game, compress: true) is { } why) AppLog.Info($"Compress: {game.Title} skipped: {why}");
@@ -496,8 +514,15 @@ internal sealed class GameCompressor(AppServices services) : IDisposable
     private void Watch()
     {
         Job? job;
-        lock (_gate) job = _job;
-        if (job is null) return;
+        lock (_gate)
+        {
+            job = _job;
+            if (job is null)
+            {
+                PauseWatchLocked();
+                return;
+            }
+        }
         string? held;
         try
         {
@@ -569,13 +594,17 @@ internal sealed class GameCompressor(AppServices services) : IDisposable
     {
         services.Launcher.GameLaunching -= OnGameLaunching;
         services.Launcher.ProgressChanged -= OnInstallProgress;
-        _tick?.Dispose();
-        _watch?.Dispose();
-        _tick = _watch = null;
+        Timer? tick;
+        Timer? watch;
         lock (_gate)
         {
+            tick = _tick;
+            watch = _watch;
+            _tick = _watch = null;
             _queue.Clear();
             if (_job is { } job) { job.Stop.Cancel(); job.Go.Set(); }
         }
+        tick?.Dispose();
+        watch?.Dispose();
     }
 }

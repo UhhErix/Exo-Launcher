@@ -196,16 +196,12 @@ internal static class RecompInstallations
     {
         var found = new LeftoverScan(LeftoverScan.ThisPc()).ProgramsRun();
         var names = ByExe.Keys.Select(Path.GetFileNameWithoutExtension).ToHashSet(StringComparer.OrdinalIgnoreCase);
-        foreach (var process in Process.GetProcesses())
+        foreach (var row in ExoLauncher.Helpers.ProcessSnapshot.Read())
         {
-            using (process)
-            {
-                try
-                {
-                    if (names.Contains(process.ProcessName) && ProcessHelper.TryGetExecutablePath(process) is { } path) found.Add(path);
-                }
-                catch (InvalidOperationException) { /* it closed */ }
-            }
+            if (row.Pid <= 4) continue;
+            if (names.Contains(ExoLauncher.Helpers.ProcessSnapshot.StripExe(row.Name)) &&
+                ProcessHelper.TryGetExecutablePath(row.Pid) is { } path)
+                found.Add(path);
         }
         return found;
     }

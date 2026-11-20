@@ -20,7 +20,7 @@ public sealed partial class MainWindow
     internal async Task<bool> ConfirmNativeAsync(string title, string body, string action, bool danger = false)
     {
         var answer = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
-        if (!DispatcherQueue.Enqueue(async () => answer.TrySetResult(await ShowConfirmAsync(title, body, action, danger))))
+        if (!DispatcherQueue.EnqueueAsync(async () => answer.TrySetResult(await ShowConfirmAsync(title, body, action, danger)), "Native confirm dialog"))
             return false;
         return await answer.Task.ConfigureAwait(false);
     }

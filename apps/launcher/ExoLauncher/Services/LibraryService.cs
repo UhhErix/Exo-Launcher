@@ -618,8 +618,9 @@ public sealed class LibraryService
             .ToList();
 
         // Store playtime for every title (Steam VDF and Web API, GOG, Epic), else Galaxy, else a tracker.
-        ordered = PlaytimeService.Enrich(ordered, SteamAccountMinutes()).ToList();
-        ordered = EpicPlaytime.Apply(ordered, EpicPlaytime.GetCachedMinutes()).ToList();
+        var epicMinutes = EpicPlaytime.GetCachedMinutes();
+        ordered = PlaytimeService.Enrich(ordered, SteamAccountMinutes(), epicMinutes).ToList();
+        ordered = EpicPlaytime.Apply(ordered, epicMinutes).ToList();
         EpicPlaytime.RefreshCachedMinutes();
 
         // Keep source rows intact through every enrichment step, then project
@@ -662,8 +663,7 @@ public sealed class LibraryService
             : $"{result.Id}:reused"));
         AppLog.Info(
             $"PERF library-scan totalMs={scanStopwatch.ElapsedMilliseconds} force={force.ToString().ToLowerInvariant()} adapters=\"{adapterTimings}\"");
-        try { LibraryDiskCache.Save(_cache, CurrentAccountScopes()); }
-        catch { /* disk cache is best-effort */ }
+        LibraryDiskCache.QueueSave(_cache, CurrentAccountScopes());
         return OverlayUserPrefs(_cache);
     }
 

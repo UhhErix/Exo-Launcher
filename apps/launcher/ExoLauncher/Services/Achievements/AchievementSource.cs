@@ -33,6 +33,21 @@ internal static class AchievementSource
     private static readonly Lock Gate = new();
     private static readonly List<Client> Clients = [];
     private static Timer? _ping;
+    private static bool _pingArmed;
+
+    private static void SyncPingTimerLocked()
+    {
+        var shouldArm = Clients.Count > 0;
+        if (_ping is null || shouldArm == _pingArmed) return;
+        _pingArmed = shouldArm;
+        try
+        {
+            _ping.Change(
+                shouldArm ? TimeSpan.FromSeconds(20) : Timeout.InfiniteTimeSpan,
+                shouldArm ? TimeSpan.FromSeconds(20) : Timeout.InfiniteTimeSpan);
+        }
+        catch (ObjectDisposedException) { }
+    }
 
     private sealed class Client(TcpClient tcp, NetworkStream stream) : IDisposable
     {
@@ -60,8 +75,8 @@ internal static class AchievementSource
             var json = AchievementWatch.Card(unlock, settings.AchievementVolume, settings.ReduceMotion);
             _ = Task.Run(() => Broadcast(Encoding.UTF8.GetBytes($"data: {json}\n\n")));
         };
-        // A comment line every 20 s: OBS keeps the stream open, and a source that went away is noticed and dropped.
-        _ping = new Timer(_ => Broadcast(": ping\n\n"u8.ToArray()), null, TimeSpan.FromSeconds(20), TimeSpan.FromSeconds(20));
+        // A comment line every 20 s only while at least one client listens: keeps OBS open with zero idle wakeups otherwise.
+        _ping = new Timer(_ => Broadcast(": ping\n\n"u8.ToArray()), null, Timeout.InfiniteTimeSpan, Timeout.InfiniteTimeSpan);
         _ = Task.Run(() => AcceptAsync(listener));
         AppLog.Info($"Achievements: OBS browser source at {Url}.");
     }
@@ -73,7 +88,11 @@ internal static class AchievementSource
         foreach (var client in all)
         {
             if (client.Send(bytes)) continue;
-            lock (Gate) Clients.Remove(client);
+            lock (Gate)
+            {
+                Clients.Remove(client);
+                SyncPingTimerLocked();
+            }
             client.Dispose();
         }
     }
@@ -118,6 +137,7 @@ internal static class AchievementSource
                         // retry: how soon OBS reconnects when Exo restarts.
                         if (!client.Send("HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nCache-Control: no-store\r\nConnection: keep-alive\r\n\r\nretry: 3000\n\n"u8.ToArray())) break;
                         Clients.Add(client);
+                        SyncPingTimerLocked();
                         keep = true;
                     }
                     break;

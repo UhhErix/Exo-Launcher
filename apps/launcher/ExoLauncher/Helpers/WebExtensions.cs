@@ -241,7 +241,7 @@ internal static class WebExtensions
         {
             if (requireOwner && context.Owner == 0) continue;
             var completed = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
-            async void Run()
+            async Task RunAsync()
             {
                 try
                 {
@@ -252,8 +252,8 @@ internal static class WebExtensions
                 }
                 catch (Exception error) { completed.TrySetException(error); }
             }
-            if (context.Dispatcher.HasThreadAccess) Run();
-            else if (!context.Dispatcher.Enqueue(Run)) { registration.Targets.Forget(core); continue; }
+            if (context.Dispatcher.HasThreadAccess) _ = RunAsync();
+            else if (!context.Dispatcher.EnqueueAsync(RunAsync, "WebExtension operation")) { registration.Targets.Forget(core); continue; }
             if (await completed.Task) return true;
         }
         return false;

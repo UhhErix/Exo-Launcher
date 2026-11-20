@@ -13,6 +13,7 @@ public sealed partial class WebHostBridge
 {
     // 1 while Equalizer APO's installer runs: two presses never start two installers.
     private static int _apoInstalling;
+    private Action<string, GameRunState>? _eqGameStateChanged;
 
     /// <summary>The library game running now that has a sound of its own in Exo EQ.</summary>
     private void WatchEq()
@@ -28,7 +29,15 @@ public sealed partial class WebHostBridge
                     return (game.Id, game.Title);
             return null;
         };
-        _services.Launcher.GameRunStateChanged += (_, _) => _ = Task.Run(ExoEq.GamesChanged);
+        _eqGameStateChanged = (_, _) => _ = Task.Run(ExoEq.GamesChanged);
+        _services.Launcher.GameRunStateChanged += _eqGameStateChanged;
+    }
+
+    private void UnwatchEq()
+    {
+        if (Interlocked.Exchange(ref _eqGameStateChanged, null) is { } handler)
+            _services.Launcher.GameRunStateChanged -= handler;
+        ExoEq.RunningGame = () => null;
     }
 
     internal static EqCorrection CorrectionOf(AutoEqCatalog.Headphone h, IReadOnlyList<EqFilter> filters) => new()

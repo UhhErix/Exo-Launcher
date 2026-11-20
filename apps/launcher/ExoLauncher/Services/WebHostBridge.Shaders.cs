@@ -155,11 +155,11 @@ public sealed partial class WebHostBridge
             }
             AppLog.Info($"Prepare shaders: {next.Title} starts by itself, the PC is idle.");
             var ask = JsonSerializer.SerializeToElement(new { id = next.Id });
-            window.DispatcherQueue.Enqueue(async () =>
+            window.DispatcherQueue.EnqueueAsync(async () =>
             {
                 try { await ShaderPrepareStartAsync(ask, true, token).ConfigureAwait(true); }
                 catch (Exception error) when (error is not OutOfMemoryException) { AppLog.Warn($"Prepare shaders: {next.Title} did not start: {error.Message}"); }
-            });
+            }, "Shader auto-prepare");
         }
         catch (Exception error) when (error is not OutOfMemoryException) { AppLog.Debug("Prepare shaders: automatic check: " + error.GetType().Name); }
         finally { Volatile.Write(ref _shaderPreparePolling, 0); }

@@ -23,7 +23,9 @@ internal sealed class MusicAppVolume : IDisposable
     private readonly Evaluate _evaluate;
     private readonly string _page;
     private readonly Func<bool> _paused;
+    private readonly Func<bool> _idle;
     private readonly CancellationTokenSource _life = new();
+    private readonly SemaphoreSlim _wake = new(0, 1);
     private bool _watching;
 
     internal string Service { get; }
@@ -34,16 +36,26 @@ internal sealed class MusicAppVolume : IDisposable
     /// Raised off the UI thread when the app's own volume changes.
     internal event Action<double>? Changed;
 
-    private MusicAppVolume(string service, Evaluate evaluate, string adapter, Func<bool> paused)
+    private MusicAppVolume(string service, Evaluate evaluate, string adapter, Func<bool> paused, Func<bool>? idle = null)
     {
         Service = service;
         _evaluate = evaluate;
         _page = Wrapper.Replace("__ADAPTER__", adapter, StringComparison.Ordinal);
         _paused = paused;
+        _idle = idle ?? (static () => false);
     }
 
-    internal static MusicAppVolume ForWebPage(string service, Evaluate evaluate, Func<bool> paused) =>
-        new(service, evaluate, service switch { "apple" => AppleMusicAdapter, "spotify" => SpotifyAdapter, _ => YouTubeMusicAdapter }, paused);
+    internal static MusicAppVolume ForWebPage(string service, Evaluate evaluate, Func<bool> paused, Func<bool>? idle = null) =>
+        new(service, evaluate, service switch { "apple" => AppleMusicAdapter, "spotify" => SpotifyAdapter, _ => YouTubeMusicAdapter }, paused, idle);
+
+    /// <summary>Wakes a backed-off poll immediately when the player wakes or audio resumes.</summary>
+    internal void Wake()
+    {
+        if (_life.IsCancellationRequested || _wake.CurrentCount > 0) return;
+        try { _wake.Release(); }
+        catch (ObjectDisposedException) { }
+        catch (SemaphoreFullException) { }
+    }
 
     /// Apple Music: the page's own MusicKit volume (0–1), the one its own
     /// volume slider sets, and its playbackVolumeDidChange event. MusicKit's volume is the audio's own (linear: 5%
@@ -90,41 +102,63 @@ internal sealed class MusicAppVolume : IDisposable
         _ = WatchAsync();
     }
 
+    private async Task PauseAsync(int milliseconds, CancellationToken token)
+    {
+        try { await _wake.WaitAsync(milliseconds, token); }
+        catch (ObjectDisposedException) { }
+    }
+
     private async Task WatchAsync()
     {
         var token = _life.Token;
+        var pausedBackoffMs = 5000;
+        var nullBackoffMs = 1000;
         while (!token.IsCancellationRequested)
         {
             try
             {
-                if (_paused()) { await Task.Delay(5000, token); continue; }
+                if (_paused() || _idle())
+                {
+                    await PauseAsync(pausedBackoffMs, token);
+                    pausedBackoffMs = Math.Min(pausedBackoffMs * 2, 15000);
+                    continue;
+                }
+                pausedBackoffMs = 5000;
                 var last = Last is { } known ? known.ToString("0.####", CultureInfo.InvariantCulture) : "null";
                 var level = await CallAsync("wait(" + last + "," + (int)WaitWindow.TotalMilliseconds + ")",
                     WaitWindow + CallTimeout, token);
-                // A page that did not answer (not loaded, restarting, suspended while
-                // idle) is retried every second so a wake is picked up quickly.
-                if (level is null) await Task.Delay(1000, token);
+                // A page that did not answer backs off up to 10 s unless Wake() fires sooner.
+                if (level is null)
+                {
+                    await PauseAsync(nullBackoffMs, token);
+                    nullBackoffMs = Math.Min(nullBackoffMs * 2, 10000);
+                }
+                else
+                {
+                    nullBackoffMs = 1000;
+                }
             }
             catch (OperationCanceledException) { return; }
-            catch { try { await Task.Delay(3000, token); } catch (OperationCanceledException) { return; } }
+            catch { try { await PauseAsync(3000, token); } catch (OperationCanceledException) { return; } }
         }
     }
 
     public void Dispose()
     {
         _life.Cancel();
+        _wake.Dispose();
         Changed = null;
     }
 
     /// Installed once per document and reused: read, write, and a wait that
     /// resolves when the level moves away from the caller's last value (or
-    /// after the window), woken by the app's own volume event, with a one-second poll behind it.
+    /// after the window), woken by the app's own volume event, with a 5-second safety fallback behind it.
     /// A write answers with the level asked for and never waits on the app: Spotify's setVolume settles only once its
     /// player has, which it may not while nothing plays, and the wait reports what the level really became.
     internal const string Wrapper = """
         (function (adapter) {
           var w = window;
-          if (w.__exoVolume && w.__exoVolume.v === 4) return w.__exoVolume;
+          if (w.__exoVolume && w.__exoVolume.v === 5) return w.__exoVolume;
           var handle = null, heard = null, waiters = [];
           function wake() { var list = waiters; waiters = []; list.forEach(function (f) { f(); }); }
           function locate() {
@@ -142,15 +176,16 @@ internal sealed class MusicAppVolume : IDisposable
               if (v !== null && (last === null || Math.abs(v - last) > 0.004)) return v;
               var left = end - Date.now();
               if (left <= 0) return v;
-              // A wait that times out takes its waiter back, so the list never grows between events.
+              // App events wake immediately; fallback timer waits 5 s (2 s before first handle/value) instead of spinning at 1 Hz.
+              var step = handle && v !== null ? 5000 : 2000;
               await new Promise(function (resolve) {
                 var woke = function () { clearTimeout(t); resolve(); };
-                var t = setTimeout(function () { var i = waiters.indexOf(woke); if (i >= 0) waiters.splice(i, 1); resolve(); }, Math.min(left, 1000));
+                var t = setTimeout(function () { var i = waiters.indexOf(woke); if (i >= 0) waiters.splice(i, 1); resolve(); }, Math.min(left, step));
                 waiters.push(woke);
               });
             }
           }
-          return (w.__exoVolume = { v: 4, read: read, write: write, wait: wait });
+          return (w.__exoVolume = { v: 5, read: read, write: write, wait: wait });
         })(__ADAPTER__)
         """;
 

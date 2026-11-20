@@ -1,5 +1,3 @@
-import { useEffect, useRef } from 'react'
-
 /**
  * What a list read shows (DESIGN.md › Waits): `loading` until the first answer (its skeleton, never the empty line),
  * `failed` when the read did not answer (why, with Try again, never "nothing here"), `empty` only when the answer said
@@ -42,13 +40,6 @@ export function whenBack(run: () => void, gapMs = 2000, env: ReturnEnv = browser
     env.win.removeEventListener('online', go)
     env.doc.removeEventListener('visibilitychange', go)
   }
-}
-
-/** whenBack for a component: `run` is read when the page comes back, so it may change on every render. */
-export function useWhenBack(run: () => void, enabled = true, gapMs = 2000): void {
-  const latest = useRef(run)
-  useEffect(() => { latest.current = run })
-  useEffect(() => enabled ? whenBack(() => latest.current(), gapMs) : undefined, [enabled, gapMs])
 }
 
 /**
