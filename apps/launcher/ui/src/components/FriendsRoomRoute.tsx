@@ -1,3 +1,4 @@
+import './discord/styles'
 import { isHost } from '../lib/host'
 import { NativeDiscordRoom } from './discord/NativeDiscordRoom'
 

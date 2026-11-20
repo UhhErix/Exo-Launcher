@@ -1,3 +1,4 @@
+import '../../styles/music-room.css'
 import { useEffect, useRef, useState } from 'react'
 import { host, onHostEvent } from '../../lib/host'
 import { rememberSignedIn, wasSignedIn } from '../../lib/music'

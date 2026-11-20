@@ -1,3 +1,4 @@
+import './styles'
 import { sampleFace } from './waits'
 import { useEffect, useState } from 'react'
 import { host } from '../../lib/host'

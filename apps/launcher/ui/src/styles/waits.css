@@ -72,12 +72,14 @@
 :root {
   --skullet-base: rgb(var(--exo-ink-rgb) / 0.07);
   --skullet-highlight: rgb(var(--exo-ink-rgb) / 0.09);
-  --skullet-animation: shimmer;
+  --skullet-animation: pulse;
   --skullet-speed: fast;
   --skullet-radius: 6px;
 }
 
 :root[data-exo-motion="reduce"],
+html[data-exo-inactive="true"] [skullet-layer],
+.exo-room.is-backstage [skullet-layer],
 [data-exo-still] ~ [skullet-layer] {
   --skullet-animation: none;
 }

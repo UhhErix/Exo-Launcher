@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode, type RefObject } from 'react'
+import '../../styles/captures-room.css'
+import { lazy, Suspense, useCallback, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode, type RefObject } from 'react'
 import { GameOverlay } from '../../motion'
 import { Check, ChevronLeft, Close, History, Info, More, Notes, Pencil, Record, Scissors, Settings, Share, Star as StarGlyph, Trash } from '../../brand/icons'
 import { host, onHostEvent, type Game } from '../../lib/host'
@@ -13,7 +14,7 @@ import { CaptureSettingsView } from './CaptureSettings'
 import { ClipEditor, playback, playerKey, useFrameKeys } from './ClipEditor'
 import { NotesView } from './NotesView'
 import { SnipEditor } from './SnipEditor'
-import { SendToDialog } from '../discord/MessageTools'
+const SendToDialog = lazy(() => import('../discord/MessageTools').then((m) => ({ default: m.SendToDialog })))
 import { pane, pressedArt, transition, visible } from '../../lib/viewTransition'
 import { ErrorNote } from '../ui/ErrorNote'
 import { Menu, type MenuItem } from '../ui/Menu'
@@ -389,17 +390,19 @@ function Viewer({ item, game, edit, onStep, onBack, onFavourite, onChanged, onDe
       {sending ? (
         // Inside Discord's scope, so the picker's words take Discord's colors as they do in the room.
         <div className="exo-dc exo-capture-send">
-          <SendToDialog
-            title="Send to"
-            failed="Discord didn’t take it. Try again."
-            send={async (ids, text) => {
-              const result = await host.captureSend(item.id, ids, text, 0, 0)
-              if (result.item) onAdded(result.item)
-              return result
-            }}
-            onSent={names => setNote({ text: names.length ? `Sent to ${names.join(', ')}.` : 'Sent.' })}
-            onClose={() => setSending(false)}
-          />
+          <Suspense fallback={null}>
+            <SendToDialog
+              title="Send to"
+              failed="Discord didn’t take it. Try again."
+              send={async (ids, text) => {
+                const result = await host.captureSend(item.id, ids, text, 0, 0)
+                if (result.item) onAdded(result.item)
+                return result
+              }}
+              onSent={names => setNote({ text: names.length ? `Sent to ${names.join(', ')}.` : 'Sent.' })}
+              onClose={() => setSending(false)}
+            />
+          </Suspense>
         </div>
       ) : null}
     </div>

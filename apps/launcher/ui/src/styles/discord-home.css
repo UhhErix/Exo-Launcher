@@ -503,13 +503,6 @@ main.exo-dc {
   font-size: var(--exo-type-body);
 }
 
-/* The channel list's chosen row is a fill like its hover, the row's own 8px corner — not the glide's glass ring,
-   which read as a bordered box on the wide voice rows. */
-.exo-dc .exo-dc-channels .exo-dc-side-list.exo-glide::before {
-  border-radius: var(--exo-small-radius);
-  background: var(--dc-selected);
-  box-shadow: none;
-}
 /* Names in the rows (channels, conversations, members): body size, medium; a row's second line is small. */
 .exo-dc-channels .exo-dc-item-name, .exo-dc .exo-dc-item.is-dm .exo-dc-item-name, .exo-dc .exo-dc-members .exo-dc-member-name {
   font-size: var(--exo-type-body);
@@ -710,7 +703,7 @@ main.exo-dc {
   padding: 8px 16px 0;
 }
 
-:root:root .exo-dc .exo-dc-compose-panel .exo-dc-input-row:not(.is-attached) {
+:root .exo-dc .exo-dc-compose-panel .exo-dc-input-row:not(.is-attached) {
   min-height: calc(44px * var(--exo-scale, 1));
   padding: 0 8px;
   border-radius: calc(22px * var(--exo-scale, 1));
@@ -741,7 +734,7 @@ main.exo-dc {
   overflow: hidden;
 }
 
-:root:root .exo-dc .exo-dc-stage :is(.exo-dc-chat-head, .exo-dc-side-head, .exo-dc-channels-head) {
+:root .exo-dc .exo-dc-stage :is(.exo-dc-chat-head, .exo-dc-side-head, .exo-dc-channels-head) {
   margin: 0;
   background-image: none;
 }
@@ -769,24 +762,13 @@ main.exo-dc {
 }
 
 /* Nothing in the frame draws a rim of its own. */
-:root:root .exo-dc :is(.exo-dc-foot, .exo-dc-compose-panel, .exo-dc-stage > :is(.exo-dc-chat, .exo-dc-chat-col > .exo-dc-chat), .exo-dc-columns .exo-dc-members, .exo-dc-dm-profile)::before {
+:root .exo-dc :is(.exo-dc-foot, .exo-dc-compose-panel, .exo-dc-stage > :is(.exo-dc-chat, .exo-dc-chat-col > .exo-dc-chat), .exo-dc-columns .exo-dc-members, .exo-dc-dm-profile)::before {
   box-shadow: none !important;
 }
 
 /* ---- Inside the room: one row, one avatar, one card, everywhere ---- */
 
-/* A row in a list (a channel, a conversation, Friends): quiet until it is yours. The chosen one is full ink beside the
-   white marker at the list's edge (the glide's shape here, never a fill or a ring); one with news is full ink and bold
-   with its count, and the dot that sat at the row's edge, where the marker sits, is gone. */
-:root .exo-dc .exo-dc-side-list.exo-glide::before {
-  top: calc((var(--glide-h, 0px) - 16px) / 2);
-  left: calc(-1 * var(--glide-x, 0px) + 4px);
-  width: 3px;
-  height: 16px;
-  border-radius: 999px;
-  background: var(--color-fg);
-  box-shadow: none;
-}
+/* A row in a list (a channel, a conversation, Friends): quiet until it is yours. */
 
 .exo-dc .exo-dc-side-list .exo-dc-item {
   color: var(--color-muted);
@@ -966,7 +948,7 @@ main.exo-dc {
 }
 
 /* The list is one width at home and in a server. */
-:root:root main.exo-dc {
+:root main.exo-dc {
   --dc-left-w: var(--dc-side-w);
 }
 
@@ -981,7 +963,7 @@ main.exo-dc {
   overflow: visible;
 }
 
-:root:root:root .exo-dc > .exo-dc-rail :is(.exo-dc-rail-home, .exo-dc-rail-open) > :is(.exo-dc-side, .exo-dc-channels)::before {
+:root .exo-dc > .exo-dc-rail :is(.exo-dc-rail-home, .exo-dc-rail-open) > :is(.exo-dc-side, .exo-dc-channels)::before {
   content: none;
 }
 
@@ -998,29 +980,4 @@ main.exo-dc {
 
 .exo-dc-rail-open :is(.exo-dc-channels-head, .exo-dc-guild-banner) {
   display: none;
-}
-
-/* Forced colours: the marker and the open server are the system's highlight (a white bar on black is lost there). */
-@media (forced-colors: active) {
-  :root:root .exo-dc .exo-dc-side-list.exo-glide::before {
-    forced-color-adjust: none;
-    background: Highlight;
-  }
-
-  :root .exo-dc .exo-dc-rail-item.is-server[aria-current="true"],
-  :root:root .exo-dc .exo-dc-head-tools .exo-dc-icon-btn[aria-pressed="true"] {
-    forced-color-adjust: none;
-    /* design-disable-next-line exo/control-fill -- forced colours: a token's white is lost, the system's highlight is not */
-    background: Highlight;
-    color: HighlightText;
-  }
-
-  /* A voice room's card, the friends search, the message box and the new-messages pill are drawn with a ring the system
-     drops: a real border keeps their edge. The message box's own rule (the compose panel's, which sets no border) is
-     out-weighed here, as is the pill's. */
-  :root .exo-dc :is(.exo-dc-now-card, .exo-dc-friend-search, .exo-dc-input-row),
-  :root:root:root .exo-dc .exo-dc-compose-panel .exo-dc-input-row:not(.is-attached),
-  :root:root .exo-dc .exo-dc-new-bar {
-    border: 1px solid CanvasText;
-  }
 }

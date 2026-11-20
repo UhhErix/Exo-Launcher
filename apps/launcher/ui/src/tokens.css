@@ -9,40 +9,17 @@
 @import "./styles/progress.css";
 @import "./styles/waits.css";
 @import "./styles/dialog.css";
-@import "./styles/devices.css";
-@import "./styles/apps.css";
-@import "./styles/runtimes.css";
 @import "./styles/home.css";
 @import "./styles/art.css";
 @import "./styles/game-a.css";
 @import "./styles/game-b.css";
-@import "./styles/shaders.css";
-@import "./styles/graphics.css";
-@import "./styles/captures.css";
-@import "./styles/notes.css";
-@import "./styles/store.css";
-@import "./styles/music-player.css";
 @import "./styles/shelf.css";
-@import "./styles/friends-b.css";
-@import "./styles/discord.css";
-@import "./styles/discord-admin.css";
-@import "./styles/discord-golive.css";
-@import "./styles/discord-apps.css";
-@import "./styles/discord-inbox.css";
-@import "./styles/discord-lobby.css";
-@import "./styles/discord-home.css";
-@import "./styles/discord-chat.css";
-@import "./styles/discord-media.css";
-@import "./styles/discord-pages.css";
-@import "./styles/discord-collectibles.css";
 @import "./styles/settings.css";
-@import "./styles/onboarding.css";
+@import "./styles/account.css";
 @import "./styles/icons.css";
 @import "./styles/glass.css";
 @import "./styles/library.css";
 @import "./styles/system.css";
-@import "./styles/discord-settings.css";
-@import "./styles/discord-layout.css";
 @import "./styles/transitions.css";
 @import "./styles/scrollbar.css";
 
@@ -280,6 +257,13 @@ body,
   --exo-tint-base: #000;
 }
 
+@media (prefers-contrast: more), (forced-colors: active) {
+  :root {
+    --exo-control-glass: none;
+    --exo-fill: var(--exo-solid-fill);
+  }
+}
+
 /*
  * Motion (DESIGN.md › Motion): one set of moves for the Library, game pages,
  * Upscalers and Shaders (whose page copies these values). Every one stops
@@ -356,30 +340,31 @@ body,
   isolation: isolate;
 }
 
-.exo-glide::before {
-  content: '';
+.exo-glide > .exo-glide-pill {
   position: absolute;
   top: 0;
   left: 0;
   z-index: -1;
-  width: var(--glide-w, 0);
-  height: var(--glide-h, 0);
+  width: 0;
+  height: 0;
   border-radius: 999px;
   background: var(--color-fg);
-  opacity: var(--glide-o, 0);
-  transform: translate(var(--glide-x, 0), var(--glide-y, 0));
+  opacity: 0;
+  transform-origin: 0 0;
   pointer-events: none;
 }
 
-.exo-glide.is-glide-ready::before {
+.exo-glide.is-glide-ready > .exo-glide-pill {
   transition:
     transform var(--dur-move) var(--ease-spring),
-    width var(--dur-move) var(--ease-spring),
-    height var(--dur-move) var(--ease-spring),
     opacity var(--dur-quick) var(--ease-out);
 }
 
-:root[data-exo-input='key'] .exo-glide.is-glide-ready::before {
+.exo-glide.is-gliding > .exo-glide-pill {
+  will-change: transform;
+}
+
+:root[data-exo-input='key'] .exo-glide.is-glide-ready > .exo-glide-pill {
   transition-duration: 0s;
 }
 
@@ -400,7 +385,6 @@ body,
   transition:
     background-color var(--dur-quick) var(--ease-out) var(--dur-press),
     color var(--dur-quick) var(--ease-out),
-    box-shadow var(--dur-quick) var(--ease-out),
     scale var(--dur-quick) var(--ease-out);
 }
 
@@ -439,7 +423,7 @@ body,
   to { opacity: 1; }
 }
 
-:root[data-exo-motion='reduce'] .exo-glide::before,
+:root[data-exo-motion='reduce'] .exo-glide > .exo-glide-pill,
 :root:is([data-exo-motion='reduce'], [data-exo-input='key']) .exo-glide.is-glide-ready :is([aria-pressed='true'], [aria-checked='true'], [aria-selected='true'], [aria-current]:not([aria-current='false'])) {
   transition: none;
 }
@@ -545,7 +529,9 @@ body,
   html[data-exo-inactive="true"] .exo-working-dots span,
   html[data-exo-inactive="true"] .exo-dc-typing-dots i,
   html[data-exo-inactive="true"] .exo-dc-dn.is-loop :is(.exo-dc-dn-text, .exo-dc-dn-letter),
-  html[data-exo-inactive="true"] .exo-dc-dn.is-loop .exo-dc-dn-text::before {
+  html[data-exo-inactive="true"] .exo-dc-dn.is-loop .exo-dc-dn-text::before,
+  html[data-exo-inactive="true"] .exo-driver-screen,
+  html[data-exo-inactive="true"] .exo-driver-screen-glass {
     animation-play-state: paused !important;
   }
 

@@ -1,3 +1,4 @@
+import '../styles/onboarding-room.css'
 import { scrollToSection } from '../lib/scrollToSection'
 import { useDialogFocus } from '../lib/focusTrap'
 import { Close } from '../brand/icons'

@@ -8,29 +8,45 @@ import { focusWhenActive } from './focusTrap'
  * focus is still nowhere, it gets focus back.
  */
 export function installFocusKeeper(): void {
-  let focused: Element | null = null
-  let parked: Element | null = null
+  let focused: HTMLButtonElement | HTMLInputElement | null = null
+  let parked: HTMLButtonElement | HTMLInputElement | null = null
   const isControl = (node: unknown): node is HTMLButtonElement | HTMLInputElement =>
     node instanceof HTMLButtonElement || node instanceof HTMLInputElement
-  document.addEventListener('focusin', event => { focused = event.target instanceof Element ? event.target : null; parked = null })
-  // A blur caused by disabling keeps the control parked; any other blur (Tab, a
-  // click elsewhere, the window losing focus) is the user moving on.
-  document.addEventListener('focusout', event => {
-    if (isControl(event.target) && event.target.disabled) parked = event.target
-    else { focused = null; parked = null }
-  })
-  new MutationObserver(records => {
+  const observer = new MutationObserver(records => {
     for (const { target } of records) {
       if (!isControl(target)) continue
       if (target.disabled) {
         if (target === focused) parked = target
       } else if (target === parked) {
         parked = null
+        observer.disconnect()
         if (target.isConnected && document.activeElement === document.body) focusWhenActive(target)
       }
     }
-  }).observe(document.body, { subtree: true, attributes: true, attributeFilter: ['disabled'] })
-  document.addEventListener('focusin', event => ringInside(event.target))
+  })
+  const watch = (control: HTMLButtonElement | HTMLInputElement | null) => {
+    observer.disconnect()
+    if (control) observer.observe(control, { attributes: true, attributeFilter: ['disabled'] })
+  }
+  document.addEventListener('focusin', event => {
+    const next = isControl(event.target) ? event.target : null
+    focused = next
+    parked = null
+    watch(next)
+    ringInside(event.target)
+  })
+  // A blur caused by disabling keeps the control parked; any other blur (Tab, a
+  // click elsewhere, the window losing focus) is the user moving on.
+  document.addEventListener('focusout', event => {
+    if (isControl(event.target) && event.target.disabled) {
+      parked = event.target
+      watch(parked)
+    } else {
+      focused = null
+      parked = null
+      observer.disconnect()
+    }
+  })
 }
 
 /**

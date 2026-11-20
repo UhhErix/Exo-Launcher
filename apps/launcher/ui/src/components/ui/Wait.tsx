@@ -24,7 +24,18 @@ export function Wait({ label, className, children }: { label?: string; className
     if (!root || !ghost) return
     const room = root.closest('.exo-room')
     let seen = true
-    const sync = () => ghost.toggleAttribute('data-exo-still', !seen || !pageIsActive() || !!room?.classList.contains('is-backstage'))
+    const sync = () => {
+      const still = document.hidden || !seen || !pageIsActive() || !!room?.classList.contains('is-backstage')
+      ghost.toggleAttribute('data-exo-still', still)
+      const reduced = document.documentElement.dataset.exoMotion === 'reduce'
+      const bones = root.querySelector('[skullet-layer]')?.shadowRoot
+      for (const bone of bones?.children ?? []) {
+        for (const animation of bone.getAnimations()) {
+          if (still || reduced) animation.pause()
+          else if (animation.playState === 'paused') animation.play()
+        }
+      }
+    }
     sync()
     const off = onPageActivityChanged(sync)
     const watch = new IntersectionObserver(([entry]) => { seen = entry.isIntersecting; sync() })

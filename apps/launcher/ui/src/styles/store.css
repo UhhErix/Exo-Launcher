@@ -14,8 +14,8 @@
   display: flex;
   align-items: center;
   gap: 12px;
-  height: 64px;
-  padding: 16px var(--exo-gutter) 16px;
+  height: auto;
+  padding: 10px var(--exo-gutter) 14px;
 }
 
 .exo-store-sale {
@@ -140,8 +140,8 @@
   min-width: 0;
   overflow: hidden;
   padding: 0;
-  border: 1px solid var(--exo-float-line);
-  border-radius: var(--exo-card-radius);
+  border: 0;
+  border-radius: var(--exo-panel-radius);
   background: var(--color-bg);
   color: inherit;
   cursor: pointer;
@@ -377,6 +377,7 @@
   aspect-ratio: 2 / 3;
   margin-bottom: 4px;
   overflow: hidden;
+  border: 0;
   border-radius: var(--exo-card-radius);
   background: var(--color-bg);
 }
@@ -634,9 +635,10 @@ html[data-exo-motion="reduce"] .exo-game-overlay-stage:has(> .exo-sgp) {
 
 .exo-sgp-pill {
   padding: 4px 12px;
-  border: 1px solid var(--exo-line);
+  border: 1px solid transparent;
   border-radius: 999px;
   background: var(--exo-fill);
+  box-shadow: var(--exo-rim);
   color: var(--color-fg);
   font-size: calc(12px * var(--exo-scale, 1));
   font-weight: 500;
@@ -830,9 +832,10 @@ button.exo-sgp-thumb::after {
   gap: 12px;
   min-height: 36px;
   padding: 0 16px;
-  border: 1px solid var(--exo-line);
+  border: 1px solid transparent;
   border-radius: 999px;
   background: var(--exo-fill);
+  box-shadow: var(--exo-rim);
   color: var(--color-fg);
   font-size: calc(13px * var(--exo-scale, 1));
   text-align: left;
@@ -857,6 +860,7 @@ button.exo-sgp-thumb::after {
 .exo-sgp-offer.is-primary {
   border-color: var(--color-fg);
   background: var(--color-fg);
+  box-shadow: none;
   color: var(--color-primary-fg);
 }
 

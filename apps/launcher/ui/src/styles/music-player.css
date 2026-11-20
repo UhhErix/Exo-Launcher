@@ -5,8 +5,8 @@
 .exo-music {
   display: grid;
   flex: 1;
-  grid-template-columns: 304px minmax(0, 1fr) auto;
-  grid-template-rows: minmax(0, 1fr) 72px;
+  grid-template-columns: var(--exo-side-w) minmax(0, 1fr) auto;
+  grid-template-rows: minmax(0, 1fr);
   min-width: 0;
   min-height: 0;
   background: var(--color-bg);
@@ -19,8 +19,11 @@
   flex-direction: column;
   gap: 8px;
   min-height: 0;
-  padding: 12px 12px 0 16px;
-  border-right: 1px solid var(--exo-float-line);
+  padding: var(--exo-panel-pad) var(--exo-panel-pad) 0;
+  border: 0;
+  border-radius: var(--exo-panel-radius);
+  background: var(--exo-float);
+  box-shadow: none;
 }
 
 .exo-music-row {
@@ -451,7 +454,7 @@
   min-height: 240px;
   padding: 24px;
   overflow: hidden;
-  border: 1px solid var(--exo-float-line);
+  border: 0;
   border-radius: var(--exo-card-radius);
 }
 
@@ -678,7 +681,10 @@
   min-height: 0;
   padding: 16px 16px 24px;
   overflow-y: auto;
-  border-left: 1px solid var(--exo-float-line);
+  border: 0;
+  border-radius: var(--exo-panel-radius);
+  background: var(--exo-float);
+  box-shadow: none;
 }
 
 .exo-music-panel .exo-music-track {
@@ -844,8 +850,7 @@
   grid-template-columns: minmax(0, 1fr) auto minmax(max-content, 1fr);
   align-items: center;
   gap: 16px;
-  padding: 0 16px;
-  border-top: 1px solid var(--exo-float-line);
+  padding: 0 12px;
 }
 
 .exo-music-bar-song,

@@ -220,7 +220,7 @@ function Faces({ phase, glyph, lead, rest, working, done }: {
     <span className="exo-action-stack">
       <span className={cn('exo-action-face is-rest', (phase === 'idle' || (phase === 'error' && !glyph)) && 'is-on')}>{lead}{rest}</span>
       <span className={cn('exo-action-face is-pending', phase === 'pending' && 'is-on')} aria-hidden="true">
-        <Spinner size={14} />{working && !glyph ? <Words words={working} /> : null}
+        {phase === 'pending' ? <Spinner size={14} /> : null}{working && !glyph ? <Words words={working} /> : null}
       </span>
       <span className={cn('exo-action-face is-success', phase === 'success' && 'is-on')} aria-hidden="true">
         <svg className="exo-action-check" width="16" height="16" viewBox="0 0 24 24"><path d={CHECK_PATH} pathLength="1" /></svg>

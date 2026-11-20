@@ -2,7 +2,7 @@
    Its shape is in discord-home.css. Exo's look (DESIGN.md): every surface black, structure by hairlines, white ink, the
    white accent where Discord uses blurple, green only for what is on. */
 .exo-dc {
-  --dc-side: var(--color-bg);
+  --dc-side: var(--exo-float);
   --dc-chat: var(--color-bg);
   /* Cards are clear with a hairline: on the page they are its black, on glass they are the glass. Never gray. */
   --dc-raised: transparent;
@@ -134,6 +134,10 @@
   border-radius: 999px;
   background: var(--exo-selected);
   object-fit: cover;
+}
+
+.exo-dc-item img {
+  background: transparent;
 }
 
 .exo-dc-item:hover:not(:disabled) {
@@ -1778,9 +1782,11 @@ video.exo-dc-media {
   height: 28px;
   padding: 0 8px;
   border: 0;
+  border-color: transparent;
   border-radius: var(--exo-small-radius);
   outline: none;
-  background: transparent;
+  background: var(--exo-fill);
+  box-shadow: var(--exo-field-rim);
   color: var(--dc-text);
   font: inherit;
   font-size: var(--exo-type-small);
@@ -2146,8 +2152,10 @@ video.exo-dc-media {
   height: 26px;
   margin-left: 4px;
   padding: 0 6px;
+  border-color: transparent;
   border-radius: 4px;
-  background: transparent;
+  background: var(--exo-fill);
+  box-shadow: var(--exo-field-rim);
   color: var(--dc-muted);
 }
 
@@ -3347,8 +3355,10 @@ video.exo-dc-media {
   height: 36px;
   margin: 8px 0;
   padding: 0 10px;
+  border-color: transparent;
   border-radius: var(--exo-small-radius);
-  background: transparent;
+  background: var(--exo-fill);
+  box-shadow: var(--exo-field-rim);
   color: var(--dc-muted);
 }
 
@@ -4650,12 +4660,10 @@ button.exo-dc-pf-badge {
 .exo-dc .exo-dc-side,
 .exo-dc .exo-dc-members,
 .exo-dc .exo-dc-dm-profile {
-  background: var(--color-bg);
-}
-
-.exo-dc .exo-dc-members,
-.exo-dc .exo-dc-dm-profile {
-  border-left: 1px solid var(--dc-line);
+  border: 0;
+  border-radius: var(--exo-panel-radius);
+  background: var(--exo-float);
+  box-shadow: none;
 }
 
 /* Messages: Exo's hover, a quiet white mark for mentions of you. */
@@ -4741,13 +4749,13 @@ button.exo-dc-pf-badge {
   background: var(--dc-raised);
 }
 
-/* Menus, popovers, pickers, cards and dialogs: 14px. Their material is Exo's (glass.css, system.css). */
-.exo-dc :is(.exo-dc-menu, .exo-dc-popover, .exo-dc-picker, .exo-dc-profile, .exo-dc-modal, .exo-dc-tip) {
+/* Menus and tips: 14px; popovers, pickers, profile cards and dialogs take --exo-panel-radius (system.css). */
+.exo-dc :is(.exo-dc-menu, .exo-dc-tip) {
   border-radius: var(--exo-card-radius);
 }
 
 .exo-dc .exo-dc-menu > button {
-  border-radius: var(--exo-card-radius);
+  border-radius: var(--exo-small-radius);
   transition: background-color var(--dur-quick) var(--ease-out);
 }
 
@@ -4922,12 +4930,6 @@ button.exo-dc-pf-badge {
 
 :root[data-exo-motion="reduce"] .exo-dc-poll-answer.is-result::before {
   transition: none;
-}
-
-/* The selection glides between rows and tabs (Exo's glide), rounded like the rows it sits under. */
-.exo-dc .exo-dc-side-list.exo-glide::before {
-  border-radius: var(--exo-small-radius);
-  background: var(--dc-selected);
 }
 
 .exo-dc .exo-dc-tabs {
