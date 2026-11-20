@@ -26,14 +26,23 @@ public sealed partial class WebHostBridge
     // behind it refreshes it; a read that differs tells the page (apps.changed). An uninstall or a clean here makes the
     // next answer a fresh read (AppsChangedHere), so the page sees an app go the moment it's gone.
     private AnswerCache? _appsAnswer;
+    private Action? _appsAnswerChangedHandler;
 
     private AnswerCache AppsAnswer => LazyInitializer.EnsureInitialized(ref _appsAnswer, () =>
     {
         var cache = new AnswerCache(Path.Combine(PathHelper.AppDataDir, "apps-list.json"), _services.AppVersion,
             () => JsonSerializer.Serialize(AppsRead(), JsonOpts), TimeSpan.FromSeconds(15));
-        cache.Changed += () => PostEvent("apps.changed", new { });
+        _appsAnswerChangedHandler = () => PostEvent("apps.changed", new { });
+        cache.Changed += _appsAnswerChangedHandler;
         return cache;
     });
+
+    private void DetachAppsCache()
+    {
+        if (_appsAnswer is { } cache && _appsAnswerChangedHandler is { } handler)
+            cache.Changed -= handler;
+        _appsAnswerChangedHandler = null;
+    }
 
     private object AppsList()
     {

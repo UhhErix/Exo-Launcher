@@ -17,17 +17,26 @@ public sealed partial class MainWindow
     private System.Threading.Timer? _dlssWatch;
     private int _dlssLooksLeft;
     private readonly HashSet<string> _dlssLogged = new(StringComparer.OrdinalIgnoreCase);
+    private Action<string, GameRunState>? _dlssRunStateHandler;
 
     private void StartDlssCheck()
     {
         if (!NvidiaProfiles.Available) return;
         _dlssWatch = new System.Threading.Timer(_ => LookAtDlss(), null, Timeout.InfiniteTimeSpan, Timeout.InfiniteTimeSpan);
-        App.Services.Launcher.GameRunStateChanged += (gameId, state) =>
+        _dlssRunStateHandler ??= (gameId, state) =>
         {
             if (!state.IsRunning) { lock (_dlssLogged) _dlssLogged.Remove(gameId); return; }
             Volatile.Write(ref _dlssLooksLeft, DlssLooks);
             try { _dlssWatch?.Change(DlssLook, DlssLook); } catch (ObjectDisposedException) { }
         };
+        App.Services.Launcher.GameRunStateChanged += _dlssRunStateHandler;
+    }
+
+    private void StopDlssCheck()
+    {
+        if (Interlocked.Exchange(ref _dlssRunStateHandler, null) is { } handler)
+            App.Services.Launcher.GameRunStateChanged -= handler;
+        Interlocked.Exchange(ref _dlssWatch, null)?.Dispose();
     }
 
     private void LookAtDlss()

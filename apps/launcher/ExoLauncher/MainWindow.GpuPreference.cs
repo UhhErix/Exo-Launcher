@@ -10,7 +10,21 @@ public sealed partial class MainWindow
     /// programs are set in Windows' graphics preferences before the store launches it. Cheap and on this thread, so it is done
     /// before the game exists.
     /// </summary>
-    private void StartGpuPreference() => App.Services.Launcher.GameLaunching += OnGpuLaunching;
+    private bool _gpuPreferenceAttached;
+
+    private void StartGpuPreference()
+    {
+        if (_gpuPreferenceAttached) return;
+        _gpuPreferenceAttached = true;
+        App.Services.Launcher.GameLaunching += OnGpuLaunching;
+    }
+
+    private void StopGpuPreference()
+    {
+        if (!_gpuPreferenceAttached) return;
+        _gpuPreferenceAttached = false;
+        App.Services.Launcher.GameLaunching -= OnGpuLaunching;
+    }
 
     private static void OnGpuLaunching(Models.GameEntry game)
     {

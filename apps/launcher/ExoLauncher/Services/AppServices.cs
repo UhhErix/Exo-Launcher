@@ -239,9 +239,6 @@ public sealed class AppServices
         // Open Exo when Windows starts: the Run value follows the switch (an update or a moved install puts its path right).
         var startWithWindows = Settings.Current.StartWithWindows;
         _ = Task.Run(() => StartWithWindows.Apply(startWithWindows));
-        // Exo no longer runs a G-SYNC recipe: what it set for that goes back.
-        _ = Task.Run(CompetitiveSync.RestoreLeftovers);
-        _ = Task.Run(GpuProfileService.RetireGsync);
         // Share my games: which game you opened from Exo, for your Discord presence when you turned it on.
         DiscordClient.DiscordSession.WatchGames(Launcher, Settings, Library);
         // Share when I'm getting ready: a game installing, building its shaders, or ready, for friends who turned it on.
@@ -272,18 +269,12 @@ public sealed class AppServices
             catch (OperationCanceledException) when (_lifetime.IsCancellationRequested) { return; }
             catch (Exception ex) { AppLog.Debug("Deferred achievements init failed: " + ex.GetType().Name); }
             if (_lifetime.IsCancellationRequested) return;
-            try { LegacyProfileDataCleanup.Run(); }
-            catch (Exception ex) { AppLog.Debug("Legacy data cleanup failed: " + ex.GetType().Name); }
-            try { MouseBridgeRetirement.Run(Settings); }
-            catch (Exception ex) { AppLog.Warn("OpenMouse bridge retirement failed: " + ex.GetType().Name); }
             try { Settings.HandStartupToExo(); }
             catch (Exception ex) { AppLog.Warn("Startup hand-off failed: " + ex.GetType().Name); }
-            try
+            if (!_lifetime.IsCancellationRequested && Settings.Shared.StartupMigrationVersion < CurrentStartupMigrationVersion)
             {
-                await ExoScheduledTaskCleanup.RemoveLeftoversAsync(_lifetime.Token).ConfigureAwait(false);
+                await RunOneTimeStartupMigrationsAsync(_lifetime.Token).ConfigureAwait(false);
             }
-            catch (OperationCanceledException) when (_lifetime.IsCancellationRequested) { }
-            catch (Exception ex) { AppLog.Debug("Deferred state migration failed: " + ex.GetType().Name); }
         }, _lifetime.Token);
         _ = Task.Run(() =>
         {
@@ -359,9 +350,43 @@ public sealed class AppServices
         GogOwnedLibrary.CacheUpdated -= OnGogOwnedLibraryUpdated;
         GogOwnedLibrary.Dispose();
         if (_library.IsValueCreated)
+        {
             Library.DisposeWatchers();
+            LibraryDiskCache.FlushPending(TimeSpan.FromSeconds(2));
+        }
         // Last: app.exit is queued and one send gets up to two seconds, never more.
         Helpers.Telemetry.Exit(clean: true);
+    }
+
+    private const int CurrentStartupMigrationVersion = 1;
+
+    private async Task RunOneTimeStartupMigrationsAsync(CancellationToken ct)
+    {
+        var completedCleanly = true;
+        try { CompetitiveSync.RestoreLeftovers(); }
+        catch (Exception ex) { completedCleanly = false; AppLog.Warn("G-SYNC competitive sync restore failed: " + ex.GetType().Name); }
+        if (File.Exists(CompetitiveSync.StatePath)) completedCleanly = false;
+        try { GpuProfileService.RetireGsync(); }
+        catch (Exception ex) { completedCleanly = false; AppLog.Warn("GPU G-SYNC retire failed: " + ex.GetType().Name); }
+        try { LegacyProfileDataCleanup.Run(); }
+        catch (Exception ex) { completedCleanly = false; AppLog.Debug("Legacy data cleanup failed: " + ex.GetType().Name); }
+        try
+        {
+            MouseBridgeRetirement.Run(Settings);
+            var afterBridge = Settings.Shared;
+            if (afterBridge.MouseBridge is not null || afterBridge.MouseBridgeAppAutostart is not null || afterBridge.MouseBridgeAppPath is not null)
+                completedCleanly = false;
+        }
+        catch (Exception ex) { completedCleanly = false; AppLog.Warn("OpenMouse bridge retirement failed: " + ex.GetType().Name); }
+        try
+        {
+            await ExoScheduledTaskCleanup.RemoveLeftoversAsync(ct).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested) { return; }
+        catch (Exception ex) { completedCleanly = false; AppLog.Debug("Deferred state migration failed: " + ex.GetType().Name); }
+
+        if (completedCleanly && !ct.IsCancellationRequested)
+            Settings.RecordStartupMigrationVersion(CurrentStartupMigrationVersion);
     }
 
     private void OnGogOwnedLibraryUpdated() => RefreshOwnedStore(Models.StoreKind.Gog);

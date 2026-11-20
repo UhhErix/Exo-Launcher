@@ -25,15 +25,44 @@ internal static class GalaxyPlatformTimes
     private static string? _cacheKey;
     private static long _cacheUntil;
 
-    internal static IReadOnlyList<Row> Load()
+    internal static string DatabaseCacheKey(IEnumerable<string> databasePaths)
     {
-        var databases = GogGalaxySqlite.CandidateDatabasePaths().ToArray();
         static string Stamp(string path)
         {
             try { var file = new FileInfo(path); return file.Exists ? $"{path}:{file.Length}:{file.LastWriteTimeUtc.Ticks}" : path + ":missing"; }
             catch { return path + ":unavailable"; }
         }
-        var key = string.Join('|', databases.SelectMany(path => new[] { Stamp(path), Stamp(path + "-wal") }));
+        return string.Join('|', databasePaths.SelectMany(path => new[] { Stamp(path), Stamp(path + "-wal") }));
+    }
+
+    internal static bool TryGetCached(string key, long now, out IReadOnlyList<Row> rows)
+    {
+        lock (CacheGate)
+        {
+            if (_cached is not null && _cacheKey == key && now < _cacheUntil)
+            {
+                rows = _cached;
+                return true;
+            }
+        }
+        rows = Array.Empty<Row>();
+        return false;
+    }
+
+    internal static void SeedCache(string key, long now, IReadOnlyList<Row> rows)
+    {
+        lock (CacheGate)
+        {
+            _cacheKey = key;
+            _cacheUntil = now + 30_000;
+            _cached = rows;
+        }
+    }
+
+    internal static IReadOnlyList<Row> Load()
+    {
+        var databases = GogGalaxySqlite.CandidateDatabasePaths().ToArray();
+        var key = DatabaseCacheKey(databases);
         var now = Environment.TickCount64;
         lock (CacheGate)
         {

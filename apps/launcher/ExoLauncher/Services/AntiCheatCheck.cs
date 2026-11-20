@@ -413,20 +413,26 @@ internal static partial class AntiCheatCheck
     }
 
     /// <summary>An anti-cheat's own program runs now (Easy Anti-Cheat's service, a game's bootstrapper), Vanguard's left out: it runs whatever the game.</summary>
-    internal static bool AntiCheatProcessRunning(Func<IEnumerable<(string Name, string? Path)>>? processes = null) =>
-        (processes ?? RunningProcesses)().Any(process => ForFile(process.Name + ".exe") is { } antiCheat && antiCheat != DlssSwapService.RiotVanguard);
+    internal static bool AntiCheatProcessRunning(Func<IEnumerable<(string Name, string? Path)>>? processes = null)
+    {
+        if (processes is not null)
+            return processes().Any(process => ForFile(process.Name + ".exe") is { } antiCheat && antiCheat != DlssSwapService.RiotVanguard);
+        foreach (var row in ProcessSnapshot.Read())
+        {
+            if (row.Pid <= 4 || string.IsNullOrEmpty(row.Name)) continue;
+            var stem = ProcessSnapshot.StripExe(row.Name);
+            if (ForFile(stem + ".exe") is { } antiCheat && antiCheat != DlssSwapService.RiotVanguard)
+                return true;
+        }
+        return false;
+    }
 
     private static IEnumerable<(string Name, string? Path)> RunningProcesses()
     {
-        foreach (var process in Process.GetProcesses())
+        foreach (var row in ProcessSnapshot.Read())
         {
-            using (process)
-            {
-                string? path = null;
-                try { path = process.MainModule?.FileName; }
-                catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException or NotSupportedException) { }
-                yield return (process.ProcessName, path);
-            }
+            if (row.Pid <= 0 || string.IsNullOrEmpty(row.Name)) continue;
+            yield return (ProcessSnapshot.StripExe(row.Name), Adapters.ProcessHelper.QueryFullProcessImageName(row.Pid));
         }
     }
 

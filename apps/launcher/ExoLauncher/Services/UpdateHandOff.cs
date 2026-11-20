@@ -64,19 +64,11 @@ internal static class UpdateHandOff
     /// <summary>The images of the running Exo Setup processes (by their process name, then their real path).</summary>
     internal static IEnumerable<string?> RunningSetupImages()
     {
-        foreach (var process in System.Diagnostics.Process.GetProcesses())
+        foreach (var row in Helpers.ProcessSnapshot.Read())
         {
-            using (process)
-            {
-                string? image = null;
-                try
-                {
-                    if (process.ProcessName.StartsWith("ExoLauncher-Setup-", StringComparison.OrdinalIgnoreCase))
-                        image = Adapters.ProcessHelper.QueryFullProcessImageName(process.Id);
-                }
-                catch (InvalidOperationException) { }
-                if (image is not null) yield return image;
-            }
+            if (row.Pid <= 4) continue;
+            if (!Helpers.ProcessSnapshot.StripExe(row.Name).StartsWith("ExoLauncher-Setup-", StringComparison.OrdinalIgnoreCase)) continue;
+            if (Adapters.ProcessHelper.QueryFullProcessImageName(row.Pid) is { } image) yield return image;
         }
     }
 

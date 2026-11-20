@@ -166,20 +166,14 @@ internal static class DeletionGate
     /// <summary>The running programs' names, or null when they can't all be read (unknown means keep).</summary>
     private static IReadOnlyCollection<string>? RunningNow()
     {
-        try
+        if (!ProcessSnapshot.TryRead(out var rows)) return null;
+        var names = new List<string>(rows.Count);
+        foreach (var row in rows)
         {
-            var names = new List<string>();
-            foreach (var process in Process.GetProcesses())
-            {
-                try { names.Add(process.ProcessName); }
-                finally { process.Dispose(); }
-            }
-            return names;
+            if (row.Pid > 0 && !string.IsNullOrEmpty(row.Name))
+                names.Add(ProcessSnapshot.StripExe(row.Name));
         }
-        catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception or NotSupportedException or UnauthorizedAccessException)
-        {
-            return null;
-        }
+        return names;
     }
 
     /// <summary>A backup's file name: the Launcher's daily, before-restore and export files (LauncherBackup names them so).</summary>

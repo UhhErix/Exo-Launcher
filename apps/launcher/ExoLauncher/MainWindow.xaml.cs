@@ -146,8 +146,6 @@ public sealed partial class MainWindow : Window
         {
             PrepareWindowClose();
             App.MainAppWindow = null;
-            ForegroundWatcher.WindowActivity -= OnWindowActivityForWebViewGuard;
-            _webViewWindowGuard?.Stop();
         };
         // Before the window first shows, so the front it takes then (or takes when it shouldn't) is seen.
         _foregroundWatcher = ForegroundWatcher.Start(WindowNative.GetWindowHandle(this), inFront =>
@@ -472,11 +470,23 @@ public sealed partial class MainWindow : Window
         AppLog.Info("Shutdown: window cleanup started.");
         _lifetimeCts.Cancel();
         try { _foregroundWatcher?.Dispose(); } catch { }
+        try { ForegroundWatcher.WindowActivity -= OnWindowActivityForWebViewGuard; } catch { }
+        StopWebViewWindowGuard();
+        try { Services.DiscordClient.Voice.LiveAudio.Changed -= OnLiveAudioChanged; } catch { }
+        try { Services.LeanSignal.Changed -= OnLeanChanged; } catch { }
+        UnwireDiscordClient();
         StopHdrForGames();
+        StopGpuPreference();
+        StopSafeModeGuard();
+        StopDlssCheck();
+        StopGameAwake();
         if (_launcherEventsAttached)
         {
             try { App.Services.Launcher.GameLaunched -= OnGameLaunched; } catch { }
             try { App.Services.Launcher.GameSessionCompleted -= OnGameSessionCompleted; } catch { }
+            try { App.Services.Launcher.GameLaunching -= OnGameLaunchingHold; } catch { }
+            try { DetachShellSleepTriggers(); } catch { }
+            _launcherEventsAttached = false;
         }
         try { AppWindow.Changed -= OnAppWindowChanged; } catch { }
         try { _notificationAreaIcon?.Dispose(); } catch { }
@@ -500,7 +510,7 @@ public sealed partial class MainWindow : Window
         // Steam is closed; a running Steam is never closed or waited on for it (the next start settles the record).
         try
         {
-            if (Adapters.SteamOfflineOwed.PutBackWhenSteamClosed(System.Diagnostics.Process.GetProcessesByName("steam").Length > 0))
+            if (Adapters.SteamOfflineOwed.PutBackWhenSteamClosed(Helpers.ProcessSnapshot.IsRunning("steam")))
                 AppLog.Info("Shutdown: Steam goes back online.");
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
@@ -617,8 +627,23 @@ public sealed partial class MainWindow : Window
         if (_webViewWindowGuard is not null) return;
         _webViewWindowGuard = DispatcherQueue.CreateTimer();
         _webViewWindowGuard.Interval = TimeSpan.FromSeconds(1);
-        _webViewWindowGuard.Tick += (_, _) => UiGuard.Run(HideWebViewWindows);
+        _webViewWindowGuard.Tick += OnWebViewWindowGuardTick;
         _webViewWindowGuard.Start();
+    }
+
+    private void OnWebViewWindowGuardTick(Microsoft.UI.Dispatching.DispatcherQueueTimer sender, object args) =>
+        UiGuard.Run(HideWebViewWindows);
+
+    private void StopWebViewWindowGuard()
+    {
+        var guard = Interlocked.Exchange(ref _webViewWindowGuard, null);
+        if (guard is null) return;
+        try
+        {
+            guard.Tick -= OnWebViewWindowGuardTick;
+            guard.Stop();
+        }
+        catch { }
     }
     private void HideWebViewWindows()
     {
@@ -824,6 +849,11 @@ public sealed partial class MainWindow : Window
             WebHost.Source = new Uri(WebViewTrustPolicy.StartUri);
             LogStartupMilestone("webview-navigation-start");
             _webReady = true;
+            var bridge = _bridge;
+            DispatcherQueue.Enqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () =>
+            {
+                if (!_closingWindow) bridge.StartBackgroundMonitors();
+            });
         }
         catch
         {
@@ -875,13 +905,10 @@ public sealed partial class MainWindow : Window
             ? FormattableString.Invariant($"commit {(status.TotalPageFile - status.AvailPageFile) / 1e9:0.0}/{status.TotalPageFile / 1e9:0.0} GB")
             : "commit unknown";
         var rows = new List<(string, long)>();
-        foreach (var process in Process.GetProcesses())
+        foreach (var row in Helpers.ProcessSnapshot.Read())
         {
-            using (process)
-            {
-                try { rows.Add((process.ProcessName, process.PrivateMemorySize64)); }
-                catch { /* gone, or another user's */ }
-            }
+            if (row.Pid > 0 && !string.IsNullOrEmpty(row.Name))
+                rows.Add((Helpers.ProcessSnapshot.StripExe(row.Name), row.PrivateBytes));
         }
         return commit + "; most: " + CommitHolders(rows, 3);
     }

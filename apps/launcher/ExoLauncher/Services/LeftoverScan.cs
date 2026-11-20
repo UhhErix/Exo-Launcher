@@ -437,10 +437,10 @@ internal sealed partial class LeftoverScan
     private static List<string> RunningPrograms()
     {
         var paths = new List<string>();
-        foreach (var process in System.Diagnostics.Process.GetProcesses())
+        foreach (var row in Helpers.ProcessSnapshot.Read())
         {
-            using (process)
-                if (Adapters.ProcessHelper.QueryFullProcessImageName(process.Id) is { Length: > 0 } path) paths.Add(path);
+            if (row.Pid <= 4) continue;
+            if (Adapters.ProcessHelper.QueryFullProcessImageName(row.Pid) is { Length: > 0 } path) paths.Add(path);
         }
         return paths;
     }

@@ -15,12 +15,29 @@ import { signalLevel, signalWord, useMouseAlerts } from './alerts'
 import { useSections } from './layout'
 import { ColorField, Dropdown, NumberField, Panel, Row, Segmented, Select, Slider, Switch, hz } from './ui'
 
+/** Syncs `data-hidden="true"` on `<html>` with `document.hidden` so off-screen CSS animations pause. */
+function useDocumentHiddenSync() {
+  useEffect(() => {
+    const sync = () => {
+      if (document.hidden) document.documentElement.dataset.hidden = 'true'
+      else delete document.documentElement.dataset.hidden
+    }
+    sync()
+    document.addEventListener('visibilitychange', sync)
+    return () => {
+      document.removeEventListener('visibilitychange', sync)
+      delete document.documentElement.dataset.hidden
+    }
+  }, [])
+}
+
 export function App() {
   return <Room mouse={useMouse()} />
 }
 
 /** The room for whatever state the mouse is in; App feeds it the real mouse. */
 export function Room({ mouse }: { mouse: ReturnType<typeof useMouse> }) {
+  useDocumentHiddenSync()
   useMouseAlerts(mouse.phase === 'ready' ? mouse.status : null)
   if (mouse.phase === 'looking' || mouse.phase === 'opening') {
     return <Waiting label={mouse.phase === 'opening' ? `Connecting to ${mouse.current?.name ?? 'your mouse'}` : 'Looking for your mouse'} />
@@ -186,12 +203,24 @@ function ago(ms: number): string {
   return min < 1 ? 'under a minute ago' : min < 60 ? `${min} min ago` : `${Math.round(min / 60)} h ago`
 }
 
-/** The time since the last read, checked every 10 s while the hero is on screen. */
+/** The time since the last read, checked every 10 s while the hero is on screen and visible. */
 function useStale(readAt: number): string | null {
   const [now, setNow] = useState(() => Date.now())
   useEffect(() => {
-    const timer = window.setInterval(() => setNow(Date.now()), 10_000)
-    return () => window.clearInterval(timer)
+    let timer = 0
+    const sync = () => {
+      window.clearInterval(timer)
+      timer = 0
+      if (document.hidden) return
+      setNow(Date.now())
+      timer = window.setInterval(() => setNow(Date.now()), 10_000)
+    }
+    sync()
+    document.addEventListener('visibilitychange', sync)
+    return () => {
+      window.clearInterval(timer)
+      document.removeEventListener('visibilitychange', sync)
+    }
   }, [])
   const age = Math.max(now, readAt) - readAt
   return readAt > 0 && age > STALE_MS ? `Last read ${ago(age)}` : null

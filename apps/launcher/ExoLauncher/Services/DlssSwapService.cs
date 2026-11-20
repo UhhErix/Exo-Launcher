@@ -1542,17 +1542,13 @@ public sealed partial class DlssSwapService
         try
         {
             var prefix = Path.TrimEndingDirectorySeparator(Path.GetFullPath(root)) + Path.DirectorySeparatorChar;
-            foreach (var proc in Process.GetProcesses())
+            foreach (var row in ProcessSnapshot.Read())
             {
-                try
-                {
-                    var exe = ProcessHelper.QueryFullProcessImageName(proc.Id) ?? proc.MainModule?.FileName;
-                    if (!string.IsNullOrWhiteSpace(exe) &&
-                        Path.GetFullPath(exe).StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
-                        return true;
-                }
-                catch { /* access denied / exited */ }
-                finally { proc.Dispose(); }
+                if (row.Pid <= 4) continue;
+                var exe = ProcessHelper.QueryFullProcessImageName(row.Pid);
+                if (!string.IsNullOrWhiteSpace(exe) &&
+                    Path.GetFullPath(exe).StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+                    return true;
             }
         }
         catch { /* process list unavailable */ }

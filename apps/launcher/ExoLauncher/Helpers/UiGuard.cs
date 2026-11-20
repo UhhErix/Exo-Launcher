@@ -37,4 +37,25 @@ internal static class UiGuard
 
     internal static bool Enqueue(this DispatcherQueue queue, DispatcherQueuePriority priority, Action action) =>
         queue.TryEnqueue(priority, () => Run(action));
+
+    /// <summary>
+    /// Posts asynchronous UI work to <paramref name="queue"/> without an <c>async void</c> lambda: exceptions record
+    /// into <see cref="PendingReports"/> and log cleanly instead of crashing the dispatcher with an unhandled async void fault.
+    /// </summary>
+    internal static bool EnqueueAsync(this DispatcherQueue queue, Func<Task> action, string? context = null) =>
+        queue.TryEnqueue(() => _ = RunFireAndForgetAsync(action, context));
+
+    private static async Task RunFireAndForgetAsync(Func<Task> action, string? context)
+    {
+        try
+        {
+            await action();
+        }
+        catch (OperationCanceledException) { }
+        catch (Exception ex)
+        {
+            AppLog.Warn((context ?? "UI async work") + " failed: " + ex.GetType().Name + ": " + ex.Message);
+            try { Record(ex); } catch { }
+        }
+    }
 }

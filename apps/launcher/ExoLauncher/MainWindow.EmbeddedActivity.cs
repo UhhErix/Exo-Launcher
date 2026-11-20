@@ -24,7 +24,10 @@ public sealed partial class MainWindow
         state.MemoryTarget = target;
     }
 
-    private async void SetEmbeddedActivity(CoreWebView2 core, bool active, bool force = false)
+    private void SetEmbeddedActivity(CoreWebView2 core, bool active, bool force = false) =>
+        _ = SetEmbeddedActivityAsync(core, active, force);
+
+    private async Task SetEmbeddedActivityAsync(CoreWebView2 core, bool active, bool force = false)
     {
         if (core is null) return;
         var state = _embeddedActivity.GetOrCreateValue(core);

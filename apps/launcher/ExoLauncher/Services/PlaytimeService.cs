@@ -356,7 +356,8 @@ public static class PlaytimeService
     /// </summary>
     public static IReadOnlyList<GameEntry> Enrich(
         IReadOnlyList<GameEntry> games,
-        IReadOnlyDictionary<string, int>? steamAccountMinutes = null)
+        IReadOnlyDictionary<string, int>? steamAccountMinutes = null,
+        IReadOnlyDictionary<string, int>? epicMinutesOverride = null)
     {
         if (games.Count == 0) return games;
 
@@ -364,13 +365,12 @@ public static class PlaytimeService
         IReadOnlyDictionary<string, SteamPlaytime.Entry> steam = steamRoot is null
             ? new Dictionary<string, SteamPlaytime.Entry>()
             : SteamPlaytime.LoadHours(steamRoot, allAccounts: true);
-        var gogSnapshot = GogPlaytime.LoadSnapshot();
+        var (gogSnapshot, galaxyRows) = LoadGalaxyPlaytimeTogether();
         var gog = gogSnapshot.Minutes;
         var gogLast = gogSnapshot.LastPlayed;
         var riotLast = RiotLastPlayed.LoadAll();
         var epicLast = EpicEglLastPlayed.LoadAll();
         var riotAccount = RiotLedger.AccountKey(RiotIdStore.TryRead());
-        var galaxyRows = GalaxyPlatformTimes.Load();
         Dictionary<string, int> exo;
         Dictionary<string, string> exoLast;
         List<ReportedHours.TitleHours> xboxSeeds;
@@ -382,7 +382,7 @@ public static class PlaytimeService
             xboxSeeds = _xboxSeeds!.Values.ToList();
         }
 
-        var epicMinutes = EpicPlaytime.GetCachedMinutes();
+        var epicMinutes = epicMinutesOverride ?? EpicPlaytime.GetCachedMinutes();
         var now = DateTimeOffset.UtcNow;
         var rows = games.Select(g =>
         {
@@ -489,6 +489,11 @@ public static class PlaytimeService
 
             return row.Game.WithPlaytime(best, effectiveLastPlayed);
         }).ToList();
+    }
+
+    private static (GogPlaytime.Snapshot Gog, IReadOnlyList<GalaxyPlatformTimes.Row> Platform) LoadGalaxyPlaytimeTogether()
+    {
+        return GogPlaytime.LoadWithPlatformTimes();
     }
 
     /// <summary>
@@ -1096,9 +1101,59 @@ internal static class GogPlaytime
     internal const int JsonEntryLimit = 2048, JsonDepthLimit = 3, JsonFileLimit = 256;
     internal const long JsonByteLimit = 16 * 1024 * 1024;
 
-    public static Dictionary<string, int> LoadAll() => new(LoadSnapshot().Minutes, StringComparer.Ordinal);
+    public static Dictionary<string, int> LoadAll() => new(LoadWithPlatformTimes().Gog.Minutes, StringComparer.Ordinal);
 
-    internal static Snapshot LoadSnapshot() => LoadSnapshot(GogGalaxySqlite.CandidateDatabasePaths(), CandidateRoots(), Environment.TickCount64);
+    internal static Snapshot LoadSnapshot() => LoadWithPlatformTimes().Gog;
+
+    internal static (Snapshot Gog, IReadOnlyList<GalaxyPlatformTimes.Row> Platform) LoadWithPlatformTimes()
+    {
+        var databases = GogGalaxySqlite.CandidateDatabasePaths().ToArray();
+        var roots = CandidateRoots().ToArray();
+        var dbKey = GalaxyPlatformTimes.DatabaseCacheKey(databases);
+        var gogKey = dbKey + "|" + string.Join('|', roots);
+        var now = Environment.TickCount64;
+        lock (CacheGate)
+        {
+            if (_cached is not null && _cacheKey == gogKey && now < _cacheUntil &&
+                GalaxyPlatformTimes.TryGetCached(dbKey, now, out var cachedPlatform))
+                return (_cached, cachedPlatform);
+
+            var gogMap = new Dictionary<string, int>(StringComparer.Ordinal);
+            var gogLastPlayed = new Dictionary<string, DateTimeOffset>(StringComparer.Ordinal);
+            var platformRows = new List<GalaxyPlatformTimes.Row>();
+            var sqliteAvailable = false;
+            foreach (var path in databases)
+            {
+                try
+                {
+                    if (!File.Exists(path)) continue;
+                    var combined = GogGalaxySqlite.ReadCombined(path);
+                    sqliteAvailable = true;
+                    foreach (var row in combined.GogTimes)
+                    {
+                        if (!gogMap.TryGetValue(row.ProductId, out var current) || row.Minutes > current)
+                            gogMap[row.ProductId] = row.Minutes;
+                        if (row.LastPlayedUtc is { } last && (!gogLastPlayed.TryGetValue(row.ProductId, out var currentLast) || last > currentLast))
+                            gogLastPlayed[row.ProductId] = last;
+                    }
+                    platformRows.AddRange(combined.PlatformRows);
+                }
+                catch (Exception ex)
+                {
+                    AppLog.Debug("Galaxy hours unreadable: " + ex.GetType().Name);
+                }
+            }
+
+            var gogSnapshot = sqliteAvailable
+                ? new Snapshot(gogMap, gogLastPlayed)
+                : ReadSnapshot(Array.Empty<string>(), roots);
+            _cacheKey = gogKey;
+            _cacheUntil = now + 30_000;
+            _cached = gogSnapshot;
+            GalaxyPlatformTimes.SeedCache(dbKey, now, platformRows);
+            return (gogSnapshot, platformRows);
+        }
+    }
 
     internal static Snapshot LoadSnapshot(IEnumerable<string> databasePaths, IEnumerable<string> jsonRoots, long now)
     {

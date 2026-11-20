@@ -216,12 +216,19 @@ public static partial class CoverArtService
     private static readonly ConcurrentDictionary<string, byte> NoArtLogged = new(StringComparer.OrdinalIgnoreCase);
     private static string TitleMapPath => Path.Combine(CacheRoot, "title-steam-map.json");
 
-    public static IReadOnlyList<GameEntry> WithCovers(IEnumerable<GameEntry> games) =>
-        games.Select(WithCover).ToList();
-
-    public static GameEntry WithCover(GameEntry g)
+    public static IReadOnlyList<GameEntry> WithCovers(IEnumerable<GameEntry> games)
     {
-        var preferred = ResolvePreferredUrl(g);
+        var list = games as IReadOnlyCollection<GameEntry> ?? games.ToList();
+        if (list.Count == 0) return Array.Empty<GameEntry>();
+        var cacheFiles = SnapshotCacheFiles();
+        return list.Select(g => WithCover(g, cacheFiles)).ToList();
+    }
+
+    public static GameEntry WithCover(GameEntry g) => WithCover(g, cacheFiles: null);
+
+    private static GameEntry WithCover(GameEntry g, HashSet<string>? cacheFiles)
+    {
+        var preferred = ResolvePreferredUrl(g, cacheFiles);
 
         if (!string.IsNullOrWhiteSpace(preferred))
         {
@@ -238,13 +245,45 @@ public static partial class CoverArtService
 
         if (!string.IsNullOrWhiteSpace(g.CoverUrl) &&
             g.CoverUrl.StartsWith(VirtualHostOrigin + "/", StringComparison.OrdinalIgnoreCase) &&
-            TryResolveLocalFile(g.CoverUrl) is null)
+            TryResolveLocalFile(g.CoverUrl, cacheFiles) is null)
             return CloneWithCover(g, coverUrl: null, coverSource: null);
 
         if (!string.IsNullOrWhiteSpace(g.CoverUrl) && !IsUiLoadableCoverUrl(g.CoverUrl))
             return CloneWithCover(g, coverUrl: null, coverSource: null);
 
         return g;
+    }
+
+    private static HashSet<string> SnapshotCacheFiles()
+    {
+        var files = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        try
+        {
+            var root = CacheRoot;
+            if (!Directory.Exists(root)) return files;
+            foreach (var entry in Directory.EnumerateFiles(root))
+            {
+                var name = Path.GetFileName(entry);
+                if (!string.IsNullOrEmpty(name)) files.Add(name);
+            }
+        }
+        catch { /* per-file fallback would behave identically when empty/unreadable */ }
+        return files;
+    }
+
+    private static bool ExistsInCacheOrDisk(string path, IReadOnlySet<string>? cacheFiles)
+    {
+        if (cacheFiles is not null && IsInCacheRoot(path))
+            return cacheFiles.Contains(Path.GetFileName(path));
+        return true;
+    }
+
+    private static bool IsInCacheRoot(string path)
+    {
+        var root = Path.TrimEndingDirectorySeparator(CacheRoot);
+        var dir = Path.GetDirectoryName(path);
+        return !string.IsNullOrEmpty(dir) &&
+               string.Equals(Path.TrimEndingDirectorySeparator(dir), root, StringComparison.OrdinalIgnoreCase);
     }
 
     /// <summary>
@@ -384,7 +423,10 @@ public static partial class CoverArtService
     /// <summary>
     /// Best available art for a game: official native cache → validated local folder art.
     /// </summary>
-    public static string? ResolvePreferredUrl(GameEntry g)
+    public static string? ResolvePreferredUrl(GameEntry g) =>
+        ResolvePreferredUrl(g, cacheFiles: null);
+
+    private static string? ResolvePreferredUrl(GameEntry g, HashSet<string>? cacheFiles)
     {
         // Gather every portrait file this game could use, then pick the sharpest.
         // Landscape art has a separate hero_* cache and ResolveWideArtUrl path.
@@ -436,10 +478,10 @@ public static partial class CoverArtService
         if (appId is not null)
             candidates.Add(Path.Combine(CacheRoot, GameIconArt.CacheFileName("steam:" + appId)));
 
-        var best = PickBestArt(candidates);
+        var best = PickBestArt(candidates, cacheFiles);
         if (best is not null)
         {
-            var url = PreferLocalArt(best, Path.GetFileName(best));
+            var url = PreferLocalArt(best, Path.GetFileName(best), cacheFiles);
             if (url is not null) return url;
         }
 
@@ -481,12 +523,14 @@ public static partial class CoverArtService
                         else
                             File.Copy(hit, dest, overwrite: true);
                     }
+                    cacheFiles?.Add(safe);
                     if (!IsPortraitCover(dest))
                     {
                         DiscardIfLandscape(dest);
+                        cacheFiles?.Remove(safe);
                         continue;
                     }
-                    var url = PreferLocalArt(dest, safe);
+                    var url = PreferLocalArt(dest, safe, cacheFiles);
                     if (url is not null) return url;
                 }
                 catch { /* try next */ }
@@ -814,13 +858,16 @@ public static partial class CoverArtService
     /// <summary>
     /// Virtual-host filename for grid tiles (fast JSON). Never inlines posters into RPC.
     /// </summary>
-    public static string? PreferLocalArt(string path, string virtualFileName)
+    public static string? PreferLocalArt(string path, string virtualFileName) =>
+        PreferLocalArt(path, virtualFileName, cacheFiles: null);
+
+    private static string? PreferLocalArt(string path, string virtualFileName, IReadOnlySet<string>? cacheFiles)
     {
         // Prefer a sibling .jpg when the primary file is a huge PNG.
         if (path.EndsWith(".png", StringComparison.OrdinalIgnoreCase))
         {
             var jpgSibling = Path.ChangeExtension(path, ".jpg");
-            if (IsValidImageFile(jpgSibling))
+            if (IsValidImageFile(jpgSibling, cacheFiles))
             {
                 var siblingName = Path.GetFileName(Path.ChangeExtension(virtualFileName, ".jpg"));
                 var siblingUrl = $"{VirtualHostOrigin}/{siblingName}";
@@ -828,7 +875,7 @@ public static partial class CoverArtService
             }
         }
 
-        if (!IsValidImageFile(path)) return null;
+        if (!IsValidImageFile(path, cacheFiles)) return null;
         var safeName = Path.GetFileName(virtualFileName);
         if (string.IsNullOrWhiteSpace(safeName)) return null;
         var url = $"{VirtualHostOrigin}/{safeName}";
@@ -839,7 +886,10 @@ public static partial class CoverArtService
     /// Maps a virtual-host cover URL back to the on-disk cache file so native
     /// surfaces can paint the same poster the library shows.
     /// </summary>
-    public static string? TryResolveLocalFile(string? url)
+    public static string? TryResolveLocalFile(string? url) =>
+        TryResolveLocalFile(url, cacheFiles: null);
+
+    private static string? TryResolveLocalFile(string? url, IReadOnlySet<string>? cacheFiles)
     {
         if (string.IsNullOrWhiteSpace(url)) return null;
         if (url.StartsWith(VirtualHostOrigin + "/", StringComparison.OrdinalIgnoreCase))
@@ -848,6 +898,8 @@ public static partial class CoverArtService
             if (rest.Length == 0 || rest.Contains("..", StringComparison.Ordinal) ||
                 rest.Contains('/') || rest.Contains('\\'))
                 return null;
+            if (cacheFiles is not null)
+                return cacheFiles.Contains(rest) ? Path.Combine(CacheRoot, rest) : null;
             var path = Path.Combine(CacheRoot, rest);
             return File.Exists(path) ? path : null;
         }
@@ -1088,10 +1140,13 @@ public static partial class CoverArtService
     /// Best cover for a tile: the highest-ranked portrait poster. Landscape
     /// hero/header art is reserved for <see cref="ResolveWideArtUrl"/>.
     /// </summary>
-    public static string? PickBestArt(IEnumerable<string> paths)
+    public static string? PickBestArt(IEnumerable<string> paths) =>
+        PickBestArt(paths, cacheFiles: null);
+
+    private static string? PickBestArt(IEnumerable<string> paths, IReadOnlySet<string>? cacheFiles)
     {
         return paths
-            .Where(IsValidImageFile)
+            .Where(path => IsValidImageFile(path, cacheFiles))
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .Where(IsPortraitCover)
             .Where(p => !IsBannerFillPortrait(p))
@@ -1271,11 +1326,15 @@ public static partial class CoverArtService
         }
     }
 
-    public static bool IsValidImageFile(string path)
+    public static bool IsValidImageFile(string path) =>
+        IsValidImageFile(path, cacheFiles: null);
+
+    private static bool IsValidImageFile(string path, IReadOnlySet<string>? cacheFiles)
     {
         try
         {
             if (string.IsNullOrWhiteSpace(path)) return false;
+            if (!ExistsInCacheOrDisk(path, cacheFiles)) return false;
             var info = new FileInfo(path);
             if (!info.Exists) return false;
             var len = info.Length;

@@ -5,63 +5,8 @@ using ExoLauncher.Helpers;
 
 namespace ExoLauncher.Services;
 
-/// <summary>
-/// What every domain Keep holds (the game's own file here; the driver's profiles, the power plan, registry values and
-/// devices in items C and D) gives the engine, and nothing more. The engine owns the record, the state table, the cause rules
-/// and the status; a domain only reads, writes, fingerprints and knows its default.
-/// Read: a fresh read of every value the owner holds, by target; null when it could not be read (locked, unreadable): the
-/// engine changes nothing, and never takes null for "absent". Write: works the values out again from what is there now,
-/// writes them, reads them back and says what each now reads as (a target that did not take is missing from the answer).
-/// Fingerprint: the facts that say the thing was rebuilt (a build, a version, a mark). Default: what the thing holds by
-/// itself, or null when unknown.
-/// </summary>
-internal interface IKeepDomain
-{
-    string Name { get; }
-    IReadOnlyDictionary<string, string>? Read();
-    IReadOnlyDictionary<string, string> Write(IReadOnlyCollection<string> targets);
-    IReadOnlyDictionary<string, string> Fingerprint();
-    string? Default(string target);
-}
-
 internal static partial class GameSettings
 {
-    /// <summary>The game's own settings file as Keep's domain: its lines by file key and line id.</summary>
-    internal sealed class GameFileDomain(Profile profile, string? program) : IKeepDomain
-    {
-        public string Name => "gameFile";
-
-        public IReadOnlyDictionary<string, string>? Read()
-        {
-            if (!TryReadAll(profile, out var files)) return null;
-            return files.SelectMany(open => open.File.Settings.Select(line => (Key: open.Key + line.Id, line.Value)))
-                .GroupBy(pair => pair.Key).ToDictionary(group => group.Key, group => group.First().Value, StringComparer.Ordinal);
-        }
-
-        /// <summary>Writes Exo's value for these lines in the files as they are now, and reads the file again.</summary>
-        public IReadOnlyDictionary<string, string> Write(IReadOnlyCollection<string> targets)
-        {
-            lock (Gate)
-            {
-                if (!TryReadAll(profile, out var files) || files.Count == 0) return new Dictionary<string, string>();
-                var kept = KeptOf(profile.Id);
-                var writes = Edits(files, profile.Groups(files[0].File).Where(g => KeptOn(profile).Contains(g.Id)).ToList(), true, kept, null, only: targets.ToHashSet(StringComparer.Ordinal));
-                if (writes.Count == 0 || Commit(profile, writes, kept) is not Committed.Written) return new Dictionary<string, string>();
-                return Read() ?? new Dictionary<string, string>();
-            }
-        }
-
-        public IReadOnlyDictionary<string, string> Fingerprint()
-        {
-            var facts = new Dictionary<string, string>(profile.Facts?.Invoke() ?? new Dictionary<string, string>(), StringComparer.Ordinal);
-            if (KeepContext.ProgramTime(program) is { } time) facts["program"] = time;
-            return facts;
-        }
-
-        /// <summary>The value the game's own file held before Exo, which Put back returns; null for a line Exo never wrote.</summary>
-        public string? Default(string target) => KeptOf(profile.Id).TryGetValue(target, out var remembered) ? remembered.Was : null;
-    }
-
     // ------------------------------------------------------------------ the record: what Optimize changed and what it keeps on
 
     /// <summary>A line's shape of its file: its setting lines' ids in order, to tell a file the game rebuilt from one it only edited.</summary>
