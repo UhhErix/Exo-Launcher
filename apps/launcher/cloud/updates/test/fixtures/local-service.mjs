@@ -79,8 +79,9 @@ export async function serve(bucket, { port = 0, tamper = null } = {}) {
         res.end()
       } else res.end()
     } catch (error) {
+      console.error(error)
       if (!res.headersSent) res.writeHead(500)
-      res.end(String(error))
+      res.end('Internal server error')
     }
     requests.push({ method: req.method, path: url.pathname, status, bytes: sent })
   })

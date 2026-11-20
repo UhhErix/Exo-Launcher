@@ -104,7 +104,7 @@ const everyStoreSaysNo = (slug) => {
   noGogCatalog()
   epicMissing(slug)
 }
-const storeRequests = () => sent.filter((r) => !r.url.startsWith('https://covers.getexo.app'))
+const storeRequests = () => sent.filter((r) => new URL(r.url).origin !== 'https://covers.getexo.app')
 
 /** The Worker called directly, with some bindings replaced (SELF.fetch cannot change what the Worker is given). */
 const callWorker = async (query, overrides = {}, ip = `198.18.0.${nextAddress++ % 250}`, path = '/v1/cover') => {
@@ -207,7 +207,10 @@ describe('Steam', () => {
     expect(await flagBecomes('miss:title:nine nine nine', '1')).toBe(true)
     const entry = await caches.default.match(new Request('https://covers.getexo.app/__state/miss%3Atitle%3Anine%20nine%20nine'))
     expect(entry.headers.get('Cache-Control')).toBe('public, max-age=3600')
-    const searches = () => storeRequests().filter((r) => !r.url.includes('steamstatic.com')).length
+    const searches = () => storeRequests().filter((r) => {
+      const host = new URL(r.url).hostname
+      return host !== 'steamstatic.com' && !host.endsWith('.steamstatic.com')
+    }).length
     const before = searches()
     const second = await ask('store=steam&id=999&title=Nine%20Nine%20Nine')
     expect(await second.json()).toEqual({ ok: false, miss: true })
@@ -257,10 +260,10 @@ describe('Steam', () => {
     expect(first.headers.get('Retry-After')).toBe('900')
     expect(await flagGet('backoff:steam')).toBe('1')
     // No rule is left for Steam: a second upstream request would fail, and the backoff stops it before it is sent.
-    const before = storeRequests().filter((r) => r.url.startsWith(STEAM)).length
+    const before = storeRequests().filter((r) => new URL(r.url).origin === STEAM).length
     const second = await ask('title=Hades')
     expect(second.status).toBe(503)
-    expect(storeRequests().filter((r) => r.url.startsWith(STEAM)).length).toBe(before)
+    expect(storeRequests().filter((r) => new URL(r.url).origin === STEAM).length).toBe(before)
   })
 })
 

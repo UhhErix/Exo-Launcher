@@ -62,7 +62,23 @@ export class Page {
     return r.result.value
   }
   /** call a function (serialised) in page with JSON args */
-  fn(f, ...args) { return this.eval(`(${f.toString()})(...${JSON.stringify(args)})`) }
+  async fn(f, ...args) {
+    const ctx = await this.send('Runtime.evaluate', { expression: 'globalThis' })
+    if (ctx.exceptionDetails || !ctx.result?.objectId) throw new Error('no globalThis')
+    try {
+      const r = await this.send('Runtime.callFunctionOn', {
+        functionDeclaration: f.toString(),
+        objectId: ctx.result.objectId,
+        arguments: args.map((v) => (v === undefined ? {} : { value: v })),
+        awaitPromise: true,
+        returnByValue: true,
+      })
+      if (r.exceptionDetails) throw new Error(r.exceptionDetails.exception?.description ?? r.exceptionDetails.text)
+      return r.result.value
+    } finally {
+      await this.send('Runtime.releaseObject', { objectId: ctx.result.objectId }).catch(() => {})
+    }
+  }
   async waitFor(f, ...args) { const t0 = Date.now(); const timeout = 20000; while (Date.now() - t0 < timeout) { if (await this.fn(f, ...args)) return true; await sleep(150) } return false }
   async view(w, h, opts = {}) {
     await this.send('Emulation.setDeviceMetricsOverride', { width: w, height: h, deviceScaleFactor: opts.dpr ?? 1, mobile: false })

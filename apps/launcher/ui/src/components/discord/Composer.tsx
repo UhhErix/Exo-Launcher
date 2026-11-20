@@ -681,7 +681,8 @@ function FileThumb({ file }: { file: File }) {
     setUrl(next)
     return () => URL.revokeObjectURL(next)
   }, [file])
-  return url ? <img className="exo-dc-file-thumb" src={url} alt="" draggable={false} /> : null
+  const safeUrl = url && url.startsWith('blob:') ? url : null
+  return safeUrl ? <img className="exo-dc-file-thumb" src={safeUrl} alt="" draggable={false} /> : null
 }
 
 function Suggestions({ suggestions, pick, onPick }: { suggestions: Suggestion[]; pick: number; onPick: (suggestion: Suggestion) => void }) {

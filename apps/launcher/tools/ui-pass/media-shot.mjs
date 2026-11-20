@@ -29,8 +29,8 @@ if (extra.includes('viewer')) {
 }
 for (const [i, e] of extra.filter((x) => x.startsWith('sel:')).entries()) {
   const [sel, n = '0'] = e.slice(4).split('@')
-  await p.eval(`(() => { const x = document.querySelectorAll(${JSON.stringify(sel)})[${n}]; x && x.scrollIntoView({ block: 'center' }) })()`); await sleep(1600)
-  if (extra.includes('hover')) { const r = await p.eval(`(() => { const b = document.querySelectorAll(${JSON.stringify(sel)})[${n}]?.getBoundingClientRect(); return b ? { x: b.x + b.width / 2, y: b.y + b.height / 2 } : null })()`); if (r) { await p.mouse(r.x, r.y, 'move'); await sleep(300) } }
+  await p.fn((s, idx) => { const x = document.querySelectorAll(s)[idx]; x && x.scrollIntoView({ block: 'center' }) }, sel, Number(n)); await sleep(1600)
+  if (extra.includes('hover')) { const r = await p.fn((s, idx) => { const b = document.querySelectorAll(s)[idx]?.getBoundingClientRect(); return b ? { x: b.x + b.width / 2, y: b.y + b.height / 2 } : null }, sel, Number(n)); if (r) { await p.mouse(r.x, r.y, 'move'); await sleep(300) } }
   await shot(`media-sel${i}`)
 }
 console.log(await p.eval(`(() => { const c = ${find}; return c ? c.className + ' ' + c.scrollHeight : 'none' })()`))
