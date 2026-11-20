@@ -382,11 +382,15 @@ public sealed class AppStore(string dataDir)
 
     public const string DevBuildRefusal = "This is a development build: set SCSKILLER_DATA_DIR to a test folder, or SCSKILLER_ALLOW_LIVE_DATA=1 to use your real data.";
 
-    /// <summary>True for a build that would open the real %LOCALAPPDATA%\SCSKiller without being a Velopack install or portable
-    /// package (a repo build, raw publish output). Windows only: the other platforms package without Update.exe.</summary>
-    public static bool RefusesLiveData() => OperatingSystem.IsWindows() && Moved == null
+    /// <summary>True for a build that would open the real %LOCALAPPDATA%\SCSKiller without being a Velopack install, portable
+    /// package, or bundled Exo Shaders engine (a repo build, raw publish output). Windows only: the other platforms package without Update.exe.</summary>
+    public static bool RefusesLiveData() => RefusesLiveData(AppContext.BaseDirectory, ExoBuild.Enabled);
+
+    internal static bool RefusesLiveData(string baseDir, bool exoBuild) => OperatingSystem.IsWindows() && Moved == null
         && Environment.GetEnvironmentVariable("SCSKILLER_ALLOW_LIVE_DATA") != "1"
-        && !InstallRoots(AppContext.BaseDirectory).Any(d => File.Exists(Path.Combine(d, "Update.exe")) || File.Exists(Path.Combine(d, ".portable")));
+        && !(exoBuild && (File.Exists(Path.Combine(baseDir, "ExoShaders.Service.exe"))
+            || InstallRoots(baseDir).Any(d => File.Exists(Path.Combine(d, "ExoShaders.Service.exe")))))
+        && !InstallRoots(baseDir).Any(d => File.Exists(Path.Combine(d, "Update.exe")) || File.Exists(Path.Combine(d, ".portable")));
 
     /// <summary>The portable build's data\. Its first start copies what an earlier portable build kept in <paramref name="local"/>
     /// and leaves that folder as it was, since an installed SCSKiller may share it. data\ counts once it holds

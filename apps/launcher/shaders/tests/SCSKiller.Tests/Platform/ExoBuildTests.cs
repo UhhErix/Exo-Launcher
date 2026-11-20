@@ -54,4 +54,34 @@ public class ExoBuildTests
         using var response = await client.SendAsync(new HttpRequestMessage(HttpMethod.Get, "https://api.scskiller.com/healthz"), default);
         Assert.Single(inner.Sent);
     }
+
+    [Fact]
+    public void Bundled_ExoShaders_engine_allows_live_data_only_in_Exo_builds()
+    {
+        if (!OperatingSystem.IsWindows()) return;
+        var prevDir = Environment.GetEnvironmentVariable("SCSKILLER_DATA_DIR");
+        var prevAllow = Environment.GetEnvironmentVariable("SCSKILLER_ALLOW_LIVE_DATA");
+        var root = Path.Combine(Path.GetTempPath(), "exo-build-test-" + Guid.NewGuid().ToString("N"));
+        var engineDir = Path.Combine(root, "engine");
+        var cliDir = Path.Combine(engineDir, "cli");
+        Directory.CreateDirectory(cliDir);
+        try
+        {
+            Environment.SetEnvironmentVariable("SCSKILLER_DATA_DIR", null);
+            Environment.SetEnvironmentVariable("SCSKILLER_ALLOW_LIVE_DATA", null);
+
+            Assert.True(AppStore.RefusesLiveData(engineDir, exoBuild: true));
+            File.WriteAllText(Path.Combine(engineDir, "ExoShaders.Service.exe"), "");
+
+            Assert.False(AppStore.RefusesLiveData(engineDir, exoBuild: true));
+            Assert.False(AppStore.RefusesLiveData(cliDir, exoBuild: true));
+            Assert.True(AppStore.RefusesLiveData(engineDir, exoBuild: false));
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("SCSKILLER_DATA_DIR", prevDir);
+            Environment.SetEnvironmentVariable("SCSKILLER_ALLOW_LIVE_DATA", prevAllow);
+            Directory.Delete(root, recursive: true);
+        }
+    }
 }

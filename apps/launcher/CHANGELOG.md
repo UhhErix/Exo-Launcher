@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- **Fix Exo Shaders elevated optimize-cache failure (`exit code 1`).** Elevated `scskiller.exe` runs triggered by Exo Shaders inside `addons\shaders\engine\` now recognize the bundled `ExoShaders.Service.exe` in Exo builds instead of refusing live data with exit code 1 before writing `--result`, and early CLI guard exits now always record their reason in `--result`. _Checked in code only._
 - **Latency check.** Best settings › System measures for ten seconds how long your drivers hold the processor (the DPC and interrupt times LatencyMon shows), names the driver with the longest, says plainly whether that's fine for games and audio, and compares it with your check before. It changes nothing; Windows asks permission once. _Checked in code only._
 - **MSI mode that a device can't run is put back.** A device that doesn't start after Device interrupts switched it to MSI mode is named in PC, and Exo puts it back by itself at the next start when Windows doesn't need to ask (Undo does it at once). _Checked in code only._
 

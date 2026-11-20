@@ -64,7 +64,12 @@ RouteFailover.Product = "SCSKiller-CLI";
 if (args.Length == 0 || args[0] is "-h" or "--help" or CliCommands.Help) { Console.WriteLine(Usage); return 0; }
 // before anything reads the data folder: a portable copy's first read copies the installed one's
 if (args[0] is "-v" or "--version" or CliCommands.Version) { if (Stray(1, "--version") is { } stray) return stray; Console.WriteLine(AppVersion.Current); return 0; }
-if (args[0] != "fetch-codecs" && AppStore.RefusesLiveData()) { Console.Error.WriteLine(AppStore.DevBuildRefusal); return 1; }
+if (args[0] != "fetch-codecs" && AppStore.RefusesLiveData())
+{
+    Console.Error.WriteLine(AppStore.DevBuildRefusal);
+    WriteEarlyResult(AppStore.DevBuildRefusal);
+    return 1;
+}
 // The app is handing over to Update.exe, which replaces this folder: start nothing (the scheduled task runs again later).
 // Packaging never reads the app's data folder.
 if (args[0] != "fetch-codecs" && Busy.Applying(AppStore.DefaultDir, DateTimeOffset.UtcNow))
@@ -72,8 +77,7 @@ if (args[0] != "fetch-codecs" && Busy.Applying(AppStore.DefaultDir, DateTimeOffs
     const string busy = "an update is being installed, try again in a minute";
     Console.Error.WriteLine(busy);
     // run elevated by the app, the exit code alone (0, for the scheduled task) would read as done
-    try { if (Opt(Elevated.ResultArg) is { } file) Elevated.WriteResult(file, false, busy); }
-    catch (ArgumentException) { }
+    WriteEarlyResult(busy);
     // 0 for the scheduled task's and the systemd timer's run alone, which would otherwise show a failure
     return args[0] == "rewarm-stale" ? 0 : 1;
 }
@@ -82,6 +86,7 @@ if (args[0] != "fetch-codecs" && args is not ["record", "remove-all", ..] and no
     && AlphaGate.Needed(AppVersion.Current) && !AlphaGate.Passed(AppStore.DefaultDir))
 {
     Console.Error.WriteLine(AlphaGate.Cli);
+    WriteEarlyResult(AlphaGate.Cli);
     return 1;
 }
 int code;
@@ -132,6 +137,12 @@ static int Fail(string message)
     Console.Error.WriteLine("error: " + message);
     Outcome.Message = message;
     return 1;
+}
+
+void WriteEarlyResult(string message)
+{
+    try { if (Opt(Elevated.ResultArg) is { } file) Elevated.WriteResult(file, false, message); }
+    catch (ArgumentException) { }
 }
 
 /// <summary>False (reported as an error) unless the answer is y.</summary>
