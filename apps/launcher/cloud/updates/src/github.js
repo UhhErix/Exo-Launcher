@@ -196,13 +196,17 @@ async function askGitHub(env, state) {
   return release
 }
 
-/** A tag's release from GitHub (any stable tag, not only the newest), kept at the edge CHECK_SECONDS. */
-export async function releaseForTag(tag, env, ctx) {
-  const latest = await latestRelease(env, ctx)
-  if (latest?.tag === tag) return latest
+/** A tag's release from GitHub (any stable tag, not only the newest), kept at the edge CHECK_SECONDS unless `fresh` bypasses the read cache. */
+export async function releaseForTag(tag, env, ctx, { fresh = false } = {}) {
+  if (!fresh) {
+    const latest = await latestRelease(env, ctx)
+    if (latest?.tag === tag) return latest
+  }
   const cache = globalThis.caches?.default
-  const kept = await cache?.match(RELEASE_KEY(tag)).then((r) => r?.json()).catch(() => null)
-  if (kept && now() - kept.at < CHECK_SECONDS * 1000) return kept.release ?? null
+  if (!fresh) {
+    const kept = await cache?.match(RELEASE_KEY(tag)).then((r) => r?.json()).catch(() => null)
+    if (kept && now() - kept.at < CHECK_SECONDS * 1000) return kept.release ?? null
+  }
   const response = await ask(`${API}/repos/${REPO}/releases/tags/${tag}`, { headers: { accept: 'application/vnd.github+json' } })
   let release = null
   try {
@@ -367,8 +371,12 @@ export const PENDING_CARD = (tag) => `_github/announce/${tag}`
  * if it is still the copy just read (an R2 conditional write), and read again when it isn't. Returns
  * { manifest, promoted, release } with manifest null when neither has one.
  */
-export async function promote(env, ctx, { current, maxAge = CHECK_SECONDS } = {}) {
-  const release = await latestRelease(env, ctx, { maxAge })
+export async function promote(env, ctx, { current, maxAge = CHECK_SECONDS, hintTag } = {}) {
+  let release = await latestRelease(env, ctx, { maxAge })
+  if (typeof hintTag === 'string' && TAG.test(hintTag) && (!current || newer(hintTag, current.tag)) && (!release || newer(hintTag, release.tag))) {
+    const hinted = await releaseForTag(hintTag, env, ctx, { fresh: true })
+    if (hinted) release = hinted
+  }
   if (!release || (current && !newer(release.tag, current.tag))) return { manifest: current ?? null, promoted: false }
   const { manifest, error } = await materialize(release, env)
   if (!manifest) {

@@ -77,7 +77,7 @@ test('the card names the product, version and download, and lists the change hig
   const p = cardPayload({ app: 'cinema', version: '1.5.0', highlights: ['Clips play as you open them'], roleId: '', when: WHEN })
   const e = p.embeds[0]
   assert.equal(e.title, 'Exo Cinema 1.5.0')
-  assert.equal(e.description, '• Clips play as you open them\n\nOpen Exo Cinema to update. [Full changelog](https://getexo.app/cinema/changelog)')
+  assert.equal(e.description, '• Clips play as you open them\n\nOpen Exo Cinema to update. [Full changelog](https://getexo.app/cinema/changelog) · [GitHub](https://github.com/UhhErix/Exo-Cinema/releases/tag/v1.5.0)')
   assert.equal(e.url, 'https://getexo.app/cinema/changelog')
   assert.equal(e.color, 0x010101)
   assert.equal(e.timestamp, '2026-11-06T12:00:00Z')
@@ -93,7 +93,7 @@ test('the role ping is in content and allowed, and a launcher card has no downlo
   assert.equal(p.content, `<@&${ROLE}>`)
   assert.deepEqual(p.allowed_mentions.roles, [ROLE])
   const b = cardPayload({ app: 'launcher', version: '3.26.0', highlights: [], roleId: '', when: WHEN })
-  assert.equal(b.embeds[0].description, 'Open Exo Launcher to update. [Full changelog](https://getexo.app/launcher/changelog)')
+  assert.equal(b.embeds[0].description, 'Open Exo Launcher to update. [Full changelog](https://getexo.app/launcher/changelog) · [GitHub](https://github.com/UhhErix/Exo-Launcher/releases/tag/v3.26.0)')
 })
 
 test('only an https Discord webhook URL is accepted', () => {

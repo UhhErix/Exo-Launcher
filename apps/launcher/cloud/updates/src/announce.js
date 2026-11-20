@@ -9,6 +9,7 @@
 // are listed in announce/<app>/cards.json. A second call for a tag that already has its card posts nothing and only finishes
 // that clean-up, so a delete Discord refused is tried again.
 const PRODUCTS = { launcher: 'Exo Launcher', cinema: 'Exo Cinema' }
+const REPOS = { launcher: 'UhhErix/Exo-Launcher', cinema: 'UhhErix/Exo-Cinema' }
 // Discord draws colour 0 as none, so Void black is 0x010101.
 const VOID_BLACK = 0x010101
 const MARK_URL = 'https://getexo.app/brand/discord/exo-logo-512.png'
@@ -40,7 +41,10 @@ export function cardPayload({ app, version, highlights, roleId, when }) {
   const changelog = `https://getexo.app/${app}/changelog`
   // What changed first, then how to get it. No download link (owner, 2026-11-07): the app updates itself.
   const lines = highlights.map((line) => `• ${line}`)
-  lines.push(...(lines.length ? [''] : []), `Open ${product} to update. [Full changelog](${changelog})`)
+  const links = REPOS[app]
+    ? `[Full changelog](${changelog}) · [GitHub](https://github.com/${REPOS[app]}/releases/tag/v${version})`
+    : `[Full changelog](${changelog})`
+  lines.push(...(lines.length ? [''] : []), `Open ${product} to update. ${links}`)
   const description = lines.join('\n')
   const payload = {
     username: `${product} Releases`,

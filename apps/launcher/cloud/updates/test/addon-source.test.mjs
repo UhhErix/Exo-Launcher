@@ -15,7 +15,7 @@ import { join } from 'node:path'
 import { test } from 'node:test'
 import { gunzipSync } from 'node:zlib'
 import { buildTreeArchive, commitOf, entriesOf, launcherRepo, treeAddons, uploadSources } from '../addon-source.mjs'
-import { mergeAddons } from '../source-mirror.mjs'
+import { mergeAddons, validateIndex } from '../source-mirror.mjs'
 
 const git = (repo, ...args) => execFileSync('git', ['-C', repo, ...args], { encoding: 'utf8' })
 
@@ -89,18 +89,23 @@ test('a name or version outside what source.js accepts is refused before anythin
   assert.throws(() => buildTreeArchive(def('.', 'HEAD'), '3.25', 'x'), /outside the shape/)
 })
 
-const release = (version, sha) => ({ version, file: `x-${version}.tar.gz`, bytes: 1, sha256: sha })
+const release = (version, sha, name = 'x') => ({ version, file: `${name}-${version}.tar.gz`, bytes: 1, sha256: sha })
 
 test('the merge keeps add-ons it was not given, adds releases, and refuses a changed archive', () => {
   const live = { addons: [
-    { name: 'nile', title: 'Nile', license: 'GPL-3.0', releases: [release('1.2.0', 'a'.repeat(64))] },
-    { name: 'exo-mouse', title: 'Exo Mouse', license: 'AGPL-3.0-or-later', releases: [release('3.24.4', 'b'.repeat(64))] },
+    { name: 'nile', title: 'Nile', license: 'GPL-3.0', releases: [release('1.2.0', 'a'.repeat(64), 'nile')] },
+    { name: 'exo-mouse', title: 'Exo Mouse', license: 'AGPL-3.0-or-later', releases: [release('3.24.4', 'b'.repeat(64), 'exo-mouse')] },
   ] }
-  const merged = mergeAddons(live, [{ name: 'exo-mouse', title: 'Exo Mouse', license: 'AGPL-3.0-or-later', releases: [release('3.25.0', 'c'.repeat(64))] }])
+  const merged = mergeAddons(live, [{ name: 'exo-mouse', title: 'Exo Mouse', license: 'AGPL-3.0-or-later', releases: [release('3.25.0', 'c'.repeat(64), 'exo-mouse')] }])
   assert.deepEqual(merged.addons.map((a) => a.name), ['nile', 'exo-mouse'])
   assert.deepEqual(merged.addons[1].releases.map((r) => r.version), ['3.24.4', '3.25.0'])
-  assert.throws(() => mergeAddons(live, [{ name: 'exo-mouse', title: 'x', license: 'y', releases: [release('3.24.4', 'd'.repeat(64))] }]), /refused exo-mouse 3.24.4/)
+  assert.throws(() => mergeAddons(live, [{ name: 'exo-mouse', title: 'x', license: 'y', releases: [release('3.24.4', 'd'.repeat(64), 'exo-mouse')] }]), /refused exo-mouse 3.24.4/)
   assert.deepEqual(mergeAddons(null, entriesOf([{ name: 'a', title: 'A', license: 'L', version: '1.0.0', file: 'a-1.0.0.tar.gz', bytes: 2, sha256: 'e'.repeat(64) }])).addons[0].releases[0].file, 'a-1.0.0.tar.gz')
+})
+
+test('a title over 80 characters is refused before upload so exo-site never rejects the index', () => {
+  const longTitle = 'A'.repeat(81)
+  assert.throws(() => validateIndex({ addons: [{ name: 'exo-bridge', title: longTitle, license: 'GPL-3.0', releases: [{ version: '3.27.0', file: 'exo-bridge-3.27.0.tar.gz', bytes: 1, sha256: 'a'.repeat(64) }] }] }), /length must be 1\.\.80/)
 })
 
 test('upload puts the archives first and the merged index last, and refuses a different archive already there', async () => {
@@ -110,7 +115,7 @@ test('upload puts the archives first and the merged index last, and refuses a di
     const sha = (await import('node:crypto')).createHash('sha256').update(bytes).digest('hex')
     writeFileSync(join(dir, 'exo-mouse-3.25.0.tar.gz'), bytes)
     writeFileSync(join(dir, 'entries.json'), JSON.stringify({ addons: [{ name: 'exo-mouse', title: 'Exo Mouse', license: 'AGPL-3.0-or-later', releases: [{ version: '3.25.0', file: 'exo-mouse-3.25.0.tar.gz', bytes: bytes.length, sha256: sha }] }] }))
-    const store = new Map([['source/index.json', Buffer.from(JSON.stringify({ addons: [{ name: 'nile', title: 'Nile', license: 'GPL-3.0', releases: [release('1.2.0', 'a'.repeat(64))] }] }))]])
+    const store = new Map([['source/index.json', Buffer.from(JSON.stringify({ addons: [{ name: 'nile', title: 'Nile', license: 'GPL-3.0', releases: [release('1.2.0', 'a'.repeat(64), 'nile')] }] }))]])
     const order = []
     const io = { get: async (key) => store.get(key) ?? null, put: async (key, value) => { order.push(key); store.set(key, value) } }
     const index = await uploadSources({ dir, io })
