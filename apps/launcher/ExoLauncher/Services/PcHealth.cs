@@ -50,12 +50,28 @@ internal static partial class PcHealth
         NetworkBest.State? Network = null,
         DriverAdvisories.Advisory? ChipsetSkipped = null,
         DriverAdvisories.Advisory? ChipsetAdvised = null,
-        bool? CpuHybridProbe = null);
+        bool? CpuHybridProbe = null,
+        string? BoardMaker = null);
 
     private const byte DimmFormFactor = 0x09; // SMBIOS: a desktop DIMM (SODIMMs are laptops and mini PCs, which seldom offer EXPO/XMP)
 
     // The speeds memory runs at with EXPO/XMP off (JEDEC's DDR4 and DDR5 bins). A kit at any other speed was set by hand.
     private static readonly int[] Jedec = [1333, 1600, 1866, 2133, 2400, 2666, 2933, 3200, 4000, 4400, 4800, 5200, 5600, 6000, 6400];
+
+    /// <summary>Vendor-specific BIOS menu path for EXPO/XMP or Resizable BAR, or null when the board maker is unknown.</summary>
+    internal static string? BiosPath(string? boardMaker, string topic) =>
+        (PcAbout.Maker(boardMaker), topic.Trim().ToLowerInvariant()) switch
+        {
+            ("ASUS", "xmp") => "Ai Tweaker → Ai Overclock Tuner",
+            ("ASUS", "rebar") => "Advanced → PCI Subsystem Settings → Re-Size BAR Support",
+            ("MSI", "xmp") => "OC → A-XMP / EXPO",
+            ("MSI", "rebar") => "Settings → Advanced → PCIe Subsystem Settings",
+            ("Gigabyte", "xmp") => "Tweaker → Extreme Memory Profile (X.M.P.)",
+            ("Gigabyte", "rebar") => "Settings → IO Ports → Above 4G Decoding & Re-Size BAR",
+            ("ASRock", "xmp") => "OC Tweaker → DRAM Configuration",
+            ("ASRock", "rebar") => "Advanced → PCI Configuration → Above 4G Decoding & C.A.M.",
+            _ => null,
+        };
 
     internal static IReadOnlyList<Item> Decide(Reading r)
     {
@@ -63,9 +79,15 @@ internal static partial class PcHealth
         var x3d = ClassOf(r.Cpu, r.CpuHybridProbe) == PowerProfiles.CpuClass.AmdDualCcdX3d;
         var parked = x3d || ClassOf(r.Cpu, r.CpuHybridProbe) == PowerProfiles.CpuClass.AmdDualCcdZen5;
         if (SlowRam(r.Dimms) is { } ram)
-            items.Add(new("ram", "Memory speed", $"Your RAM runs at {ram.Runs} MT/s; it's rated for {ram.Rated}. Turn on EXPO/XMP in the BIOS."));
+        {
+            var hint = BiosPath(r.BoardMaker, "xmp") is { } path ? $" ({path})" : "";
+            items.Add(new("ram", "Memory speed", $"Your RAM runs at {ram.Runs} MT/s; it's rated for {ram.Rated}. Turn on EXPO/XMP in the BIOS{hint}."));
+        }
         if (ReBarOff(r.Gpu))
-            items.Add(new("rebar", "Resizable BAR", "Off. Turn on Resizable BAR in the BIOS."));
+        {
+            var hint = BiosPath(r.BoardMaker, "rebar") is { } path ? $" ({path})" : "";
+            items.Add(new("rebar", "Resizable BAR", $"Off. Turn on Resizable BAR in the BIOS{hint}."));
+        }
         if (r.Power is { } power)
         {
             var cpu = ShortCpu(r.Cpu) ?? "processor";
@@ -368,7 +390,7 @@ internal static partial class PcHealth
         var subject = chipset is null ? null : DriverAdvisories.Chipset(chipset.Vendor, cpu);
         var skipped = subject is null || latest is null || VersionNumber.Same(latest, installed) ? null : DriverAdvisories.Shared.Against(subject, latest);
         var advised = subject is null ? null : DriverAdvisories.Shared.Against(subject, installed);
-        var reading = new Reading(Memory.Value, Gpu.Value, cpu, power.Read(), installed, latest, update, chipsetAuto && installed is not null && !chipset!.WindowsAsks(), HagsOff(scheduling), Hybrid.Value, fastGpuForGames, NetworkBest.Shared.Read(), skipped, advised, CpuHybrid());
+        var reading = new Reading(Memory.Value, Gpu.Value, cpu, power.Read(), installed, latest, update, chipsetAuto && installed is not null && !chipset!.WindowsAsks(), HagsOff(scheduling), Hybrid.Value, fastGpuForGames, NetworkBest.Shared.Read(), skipped, advised, CpuHybrid(), BoardMaker: PcAbout.Maker(PcAbout.Bios.Maker));
         if (Interlocked.Exchange(ref _logged, 1) == 0) AppLog.Info("PC health: " + Describe(reading));
         return reading;
     }
