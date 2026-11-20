@@ -1,10 +1,10 @@
 <p align="center"><img src="docs/media/logo.png" alt="Exo" width="88"></p>
-<h1 align="center">Exo Launcher 3.26</h1>
+<h1 align="center">Exo Launcher 3.27</h1>
 <p align="center"><strong>Every game store, Discord, your music, your captures and your mouse in one app for Windows 11.</strong></p>
 
 <p align="center">
   <a href="https://getexo.app/download/launcher"><strong>Download for Windows 11</strong></a>
-  · <a href="https://getexo.app/launcher/changelog">What's new in 3.26</a>
+  · <a href="https://getexo.app/launcher/changelog">What's new in 3.27</a>
   · <a href="CHANGELOG.md">Changelog</a>
   · <a href="PRIVACY.md">Privacy</a>
   · <a href="LICENSE">License</a>
@@ -14,9 +14,7 @@
 
 ## Release source
 
-This snapshot comes from `release/3.26.0` at `7e1289f`. The recovered
-`VERSION` said `3.25.0`; it was updated here to `3.26.0` to match the
-changelog and published installer.
+Source snapshot for Exo Launcher `3.27.0`.
 
 Exo Capture (`capture/`) is MIT licensed; third-party components
 keep their own licenses.
@@ -25,7 +23,7 @@ First-party source is [MIT licensed](LICENSE).
 
 ## Download
 
-See [release information and installer checksums](../../RELEASES.md).
+See [Exo Launcher 3.27.0](docs/RELEASE_3.27.0.md) or [getexo.app](https://getexo.app/download/launcher) for release downloads.
 Exo Launcher requires Windows 11 x64.
 
 **Open-source parts that ship with Exo** keep their own licenses, and their source is public:
