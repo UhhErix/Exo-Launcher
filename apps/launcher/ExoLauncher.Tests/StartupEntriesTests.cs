@@ -1,4 +1,6 @@
+using ExoLauncher.Helpers;
 using ExoLauncher.Services;
+using Microsoft.Win32;
 
 namespace ExoLauncher.Tests;
 
@@ -75,5 +77,40 @@ public sealed class StartupEntriesTests
     {
         Assert.Equal("Say \\\"hi\\\" C:\\\\Tools", StartupEntries.RegText("Say \"hi\" C:\\Tools"));
         Assert.Equal("hex:03,00,0a,ff", StartupEntries.RegHex([3, 0, 10, 255]));
+    }
+
+    [Fact]
+    public void Restore_enables_entries_disabled_outside_Exo_and_refuses_services()
+    {
+        var host = new FakeStartupHost();
+        host.SetRun(Hive.User, StartupKeys.Run, "Acme", "\"C:\\Acme\\acme.exe\" --tray");
+        host.Set(Hive.User, StartupKeys.Approved + "Run", "Acme", RegValue.Bin(StartupApps.Approved(false, host.UtcNow)));
+        host.AddTask(@"\Acme\Sync", @"C:\Acme\sync.exe", null);
+        host.TaskList[0].Enabled = false;
+        host.Packages.Add(new PackageTaskDecl("Contoso.App_123", "AppTask", "Contoso", "Contoso", "app.exe", ManifestEnabled: true));
+        host.Set(Hive.User, $@"{StartupKeys.Packaged}\Contoso.App_123\AppTask", "State", RegValue.DWord(1));
+        host.AddService("gupdate", @"""C:\Program Files (x86)\Google\Update\GoogleUpdate.exe"" /svc", start: 4);
+
+        Assert.Null(StartupEntries.Restore(host, "run:cu:Acme"));
+        Assert.Equal((byte)2, host.Get(Hive.User, StartupKeys.Approved + "Run", "Acme")!.Bytes![0]);
+
+        Assert.Null(StartupEntries.Restore(host, @"task:\Acme\Sync"));
+        Assert.True(host.TaskList[0].Enabled);
+
+        Assert.Null(StartupEntries.Restore(host, "package:Contoso.App_123!AppTask"));
+        Assert.Equal(2, host.Get(Hive.User, $@"{StartupKeys.Packaged}\Contoso.App_123\AppTask", "State")!.Number);
+
+        Assert.Contains("Services", StartupEntries.Restore(host, "service:gupdate"));
+    }
+
+    [Theory]
+    [InlineData("cmd.exe /c \"C:\\Tool\\run.bat\"", @"C:\Windows\System32\cmd.exe", null)]
+    [InlineData("powershell.exe -WindowStyle Hidden -File x.ps1", @"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe", null)]
+    [InlineData("rundll32.exe shell32.dll,Control_RunDLL", @"C:\Windows\System32\rundll32.exe", null)]
+    [InlineData("\"C:\\Users\\A\\AppData\\Local\\Discord\\Update.exe\" --processStart Discord.exe", @"C:\Users\A\AppData\Local\Discord\Update.exe", "Discord")]
+    [InlineData("\"C:\\Program Files\\Spotify\\Spotify.exe\" --autostart", @"C:\Program Files\Spotify\Spotify.exe", "Spotify")]
+    public void TrackableProcessName_skips_generic_shell_hosts(string command, string program, string? expected)
+    {
+        Assert.Equal(expected, WebHostBridge.TrackableProcessName(command, program));
     }
 }

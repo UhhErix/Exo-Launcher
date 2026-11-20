@@ -40,8 +40,9 @@ public sealed class PlayerChoicesSyncTests : IDisposable
     /// <summary>Every page choice and where it belongs, as the reviewer and the owner decided: only choices about the player sync.</summary>
     public static TheoryData<string, bool> Scopes => new()
     {
-        { "discord", true }, { "discordCamera", false }, { "discordPerformance", true }, { "driverBranch", false },
-        { "wearing", false }, { "shadersOrder", true }, { "goLiveQuality", false }, { "goLivePreview", true }, { "voiceChat", true },
+        { "discord", true }, { "discordCamera", false }, { "discordPerformance", true }, { "discordPinnedDms", true },
+        { "driverBranch", false }, { "wearing", false }, { "shadersOrder", true }, { "goLiveQuality", false },
+        { "goLivePreview", true }, { "voiceChat", true },
     };
 
     [Fact]

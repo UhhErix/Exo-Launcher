@@ -19,9 +19,7 @@ import { LibraryEmpty, LibraryTools, type LibraryRefreshRun } from './LibraryShe
 import { setCoversShining } from '../GameCard'
 import { markShellReady } from '../../lib/shellReady'
 import { LibraryHead } from './LibraryHead'
-import { LibraryScrubber } from './LibraryScrubber'
 import { useLibrarySearch } from './useLibrarySearch'
-import { scrubMarks } from '../../lib/librarySearch'
 import { gamesFriendsPlay, useFriends } from '../../lib/friendsPlaying'
 
 export type LibraryPaneProps = {
@@ -244,7 +242,6 @@ export const LibraryPane = memo(function LibraryPane(props: LibraryPaneProps) {
   const grid = useMemo(() => withFolders(rest, games, folders), [rest, games, folders])
   const search = useLibrarySearch(games, shelfView(showHidden, props.hidden, grid), showHidden)
   const { shelf, found } = search
-  const marks = useMemo(() => scrubMarks(shelf.games, props.sort, isFolderTile), [shelf.games, props.sort])
   // Select mode (More's Select games): null outside it, else the picked games. A press picks a game, Shift a run of them
   // from the last one pressed, Ctrl+A every game; Done or Escape ends it, as does any action, leaving the room or
   // opening a game. Folders and Continue aren't picked.
@@ -504,7 +501,6 @@ export const LibraryPane = memo(function LibraryPane(props: LibraryPaneProps) {
           </div>
         )}
       </main>
-      <LibraryScrubber marks={marks} active={active} covered={overlayOpen} scrollRootRef={props.mainRef} />
       <FriendsPlaying on={search.wantsFriends} games={games} onPlaying={search.setFriendsPlaying} />
       {openTile && active ? (
         <FolderPanel
