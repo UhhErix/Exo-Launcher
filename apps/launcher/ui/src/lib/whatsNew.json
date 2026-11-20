@@ -1,5 +1,60 @@
 [
   {
+    "version": "3.27.0",
+    "items": [
+      {
+        "icon": "Appearance",
+        "title": "Real Liquid Glass & pure black surfaces",
+        "detail": "Top bar Search, Rooms, and Tools wear true backdrop-blur Liquid Glass over pure black rooms with zero-scroll game sheets."
+      },
+      {
+        "icon": "Library",
+        "title": "Zero-scroll game pages",
+        "detail": "Stats, upscalers, shaders, Optimize, HDR, and frame generation sit cleanly inline on every game page with Steam Family badges."
+      },
+      {
+        "icon": "CleanUp",
+        "title": "Redesigned PC › Apps uninstaller",
+        "detail": "Apps rows show Startup, Exo replaces, and Bloat tags inline alongside grouped dependency counts and compact cleanup notices."
+      },
+      {
+        "icon": "Chats",
+        "title": "Discord screen share & Stage channels",
+        "detail": "Share screens smoothly with HDR tonemapping, H.265/H.264 fallback, hot-swappable sources, Stage channels, gift embeds, and Soundboard search."
+      },
+      {
+        "icon": "Headphones",
+        "title": "Automatic Exo EQ & live Audio controls",
+        "detail": "AutoEq curves and per-game sound profiles switch automatically, with reliable Windows Output, Microphone, and Exo Voice controls."
+      },
+      {
+        "icon": "Performance",
+        "title": "Always-on Autopilot & quiet idle",
+        "detail": "Autopilot runs continuously without extra switches, Memory Integrity checks BIOS virtualization, and idle WebView animations pause at rest."
+      },
+      {
+        "icon": "Shaders",
+        "title": "Exo Shaders 1.4.8 & in-repo Capture",
+        "detail": "Bundles SCSKiller 1.4.8 shader improvements alongside Native AOT Exo Capture and polished Liquid Glass FPS overlay readouts."
+      },
+      {
+        "icon": "Controller",
+        "title": "Safer WuWa, Steam overlay & Store opens",
+        "detail": "Wuthering Waves anti-cheat protection, opt-in Steam overlay defaults, reliable Riot/Store launches, and automatic compression budgets."
+      },
+      {
+        "icon": "MusicNotes",
+        "title": "Music player layout polish",
+        "detail": "Refined Music controls and half-screen player sizing so transport and Favorites controls always sit cleanly side by side."
+      },
+      {
+        "icon": "Settings",
+        "title": "Start with Windows & quiet tray launch",
+        "detail": "Set Start with Windows during setup and launch straight to the tray with --startup when signing into Windows."
+      }
+    ]
+  },
+  {
     "version": "3.26.0",
     "items": [
       {
