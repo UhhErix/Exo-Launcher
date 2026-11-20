@@ -331,8 +331,9 @@ function MouseFrame({ shown, visible }: { shown: boolean; visible: boolean }) {
   const sendRail = useCallback(() => {
     const box = frame.current
     if (!box || box.clientWidth === 0) return
-    const gutter = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--exo-gutter')) || 10
-    const scale = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--exo-scale')) || 1
+    const styles = getComputedStyle(document.documentElement)
+    const gutter = parseFloat(styles.getPropertyValue('--exo-gutter')) || 10
+    const scale = parseFloat(styles.getPropertyValue('--exo-scale')) || 1
     postToMouse({ event: 'room.rail', data: railWidth(box.clientWidth - 2 * gutter, scale) })
   }, [])
   useEffect(() => {
@@ -340,7 +341,8 @@ function MouseFrame({ shown, visible }: { shown: boolean; visible: boolean }) {
     const sized = new ResizeObserver(sendRail)
     sized.observe(frame.current)
     return () => sized.disconnect()
-  }, [sendRail, shown])
+  }, [sendRail])
+  useEffect(() => { if (shown) sendRail() }, [shown, sendRail])
   const [load, setLoad] = useState(0)
   const [failed, setFailed] = useState(false)
   // The load whose frame has said anything: it is running from then on, however quiet it goes after (behind a game it

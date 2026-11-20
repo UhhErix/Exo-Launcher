@@ -1,4 +1,5 @@
 using ExoCapture.Capture;
+using ExoCapture.Gpu;
 using ExoCapture.Live;
 using Vortice.DXGI;
 
@@ -36,5 +37,28 @@ public sealed class CaptureReliabilityTests
         Assert.True(CaptureSession.NeedsNewConverter(1920, 1080, Format.B8G8R8A8_UNorm, 2560, 1080, Format.B8G8R8A8_UNorm));
         Assert.True(CaptureSession.NeedsNewConverter(1920, 1080, Format.B8G8R8A8_UNorm, 1920, 1440, Format.B8G8R8A8_UNorm));
         Assert.True(CaptureSession.NeedsNewConverter(1920, 1080, Format.B8G8R8A8_UNorm, 1920, 1080, Format.R16G16B16A16_Float));
+    }
+
+    [Fact]
+    public void CanReuseCursorFrameMatchesIdenticalFramePositionAndShape()
+    {
+        var shapeA = new object();
+        var shapeB = new object();
+
+        Assert.True(DuplicationSource.CanReuseCursorFrame(1000, 10, 20, shapeA, 1000, 10, 20, shapeA));
+        Assert.False(DuplicationSource.CanReuseCursorFrame(1000, 10, 20, shapeA, 1001, 10, 20, shapeA));
+        Assert.False(DuplicationSource.CanReuseCursorFrame(1000, 10, 20, shapeA, 1000, 11, 20, shapeA));
+        Assert.False(DuplicationSource.CanReuseCursorFrame(1000, 10, 20, shapeA, 1000, 10, 21, shapeA));
+        Assert.False(DuplicationSource.CanReuseCursorFrame(1000, 10, 20, shapeA, 1000, 10, 20, shapeB));
+        Assert.False(DuplicationSource.CanReuseCursorFrame(1000, 10, 20, null, 1000, 10, 20, shapeA));
+    }
+
+    [Fact]
+    public void NeedsHdrToSdrToneMapOnlyWhenScRgbConvertedForSdrOutput()
+    {
+        Assert.True(VideoConverter.NeedsHdrToSdrToneMap(Format.R16G16B16A16_Float, hdr: false));
+        Assert.False(VideoConverter.NeedsHdrToSdrToneMap(Format.R16G16B16A16_Float, hdr: true));
+        Assert.False(VideoConverter.NeedsHdrToSdrToneMap(Format.B8G8R8A8_UNorm, hdr: false));
+        Assert.False(VideoConverter.NeedsHdrToSdrToneMap(Format.B8G8R8A8_UNorm, hdr: true));
     }
 }

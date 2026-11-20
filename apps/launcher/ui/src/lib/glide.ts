@@ -88,6 +88,7 @@ export function useGlide<T extends HTMLElement>() {
       void Promise.allSettled(runs.map(run => run.finished)).then(() => { if (id === move) box.classList.remove('is-gliding') })
     }
     const place = () => {
+      if (!box.offsetParent || box.closest('.is-backstage, [hidden]')) return
       const on = box.querySelector<HTMLElement>(SELECTED)
       const pillStyle = pill.style
       if (!on || on.offsetWidth === 0 || on.offsetHeight === 0) {
@@ -162,7 +163,8 @@ export function useGlide<T extends HTMLElement>() {
     // items and stay there: it is placed again when the window comes back and when a transition ends.
     const again = () => requestAnimationFrame(place)
     const shown = () => { if (document.visibilityState === 'visible') again() }
-    const transitions = new MutationObserver(again)
+    const onTransition = () => { if (!document.documentElement.hasAttribute('data-exo-vt')) again() }
+    const transitions = new MutationObserver(onTransition)
     transitions.observe(document.documentElement, { attributes: true, attributeFilter: ['data-exo-vt'] })
     document.addEventListener('visibilitychange', shown)
     window.addEventListener('focus', again)
