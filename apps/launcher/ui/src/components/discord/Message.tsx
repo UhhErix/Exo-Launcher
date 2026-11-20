@@ -8,7 +8,7 @@ import { shouldReduceMotion } from '../../lib/motionPreference'
 import { Poll, PollResultLine } from './Poll'
 import { Attachments, fit, MediaFailed, MovingImage, size, sized, useFailedUntilBack, useMediaRetry } from './Attachments'
 import { LottieSticker } from './LottieSticker'
-import { performanceMode, avatarUrl, cdnSized, cdnStep, displayName, jumpToMessage, openDiscord, type DiscordEmbed, type DiscordInvite, type DiscordMessage } from '../../lib/discord'
+import { performanceMode, avatarUrl, cdnSized, cdnStep, displayName, jumpToMessage, openDiscord, type DiscordEmbed, type DiscordGift, type DiscordInvite, type DiscordMessage } from '../../lib/discord'
 import { Reactions, ReactionsDialog, useNitro } from './Reactions'
 import { EmojiPicker, noteReaction, QuickEmoji, useQuickReactions, type QuickReaction } from './EmojiPicker'
 import { ActionButton, ConfirmButton } from '../ui/ConfirmButton'
@@ -18,7 +18,7 @@ import { SubContext, Submenu } from './UserMenu'
 import { reminderTimes, saveMessage, unsaveMessage, useSaved } from '../../lib/discordSaved'
 import { Play } from '../../brand/icons'
 import { showImage, showProfile } from './extras'
-import { inviteCode, Link, Markdown, MarkdownLine, type MarkdownContext } from './markdown'
+import { giftCode, inviteCode, Link, Markdown, MarkdownLine, type MarkdownContext } from './markdown'
 import { accountSettings, useAccountSetting } from '../../lib/discordPrefs'
 import { clockOf } from '../../lib/discordNow'
 import { EPHEMERAL, LOADING, SILENT } from '../../lib/discordApps'
@@ -517,6 +517,9 @@ function MessageContent({ message, ctx }: { message: Pick<DiscordMessage, 'conte
       {invitesIn(message.content).map(code => (
         <QuietBoundary key={code} label="Discord invite"><InviteCard code={code} mine={!!ctx.meId && message.author?.id === ctx.meId} /></QuietBoundary>
       ))}
+      {giftsIn(message.content).map(code => (
+        <QuietBoundary key={code} label="Discord gift"><GiftCard code={code} channelId={message.channel_id} mine={!!ctx.meId && message.author?.id === ctx.meId} /></QuietBoundary>
+      ))}
     </>
   )
 }
@@ -639,6 +642,95 @@ function InviteCard({ code, mine }: { code: string; mine: boolean }) {
           {invite ? <span className="exo-dc-invite-counts">{count(invite.online, 'Online')}{count(invite.members, 'Members')}</span> : null}
         </span>
         {invite ? <button type="button" className={`exo-set-btn${invite.joined ? '' : ' is-primary'}`} onClick={join}>{invite.joined ? 'Joined' : 'Join'}</button> : null}
+      </div>
+    </div>
+  )
+}
+
+// A message's gift links (discord.gift/code, discord.com/gifts/code), each once, in order.
+function giftsIn(text: string) {
+  return [...new Set((text.match(/https?:\/\/\S+/g) ?? [])
+    .map(url => giftCode(url.replace(/[.,!?;:)\]]+$/, '')))
+    .filter((code): code is string => !!code))]
+}
+
+type GiftRead = DiscordGift | 'invalid' | null
+const gifts = new Map<string, GiftRead>()
+const readingGifts = new Map<string, Promise<GiftRead>>()
+function readGift(code: string) {
+  let read = readingGifts.get(code)
+  if (!read) {
+    read = host.discordServer('gift', { code })
+      .then(result => result.ok && result.gift ? result.gift : result.invalid ? 'invalid' as const : null, () => null)
+      .then(answer => {
+        gifts.set(code, answer)
+        if (!answer) readingGifts.delete(code)
+        while (gifts.size > 200) { const oldest = gifts.keys().next().value!; gifts.delete(oldest); readingGifts.delete(oldest) }
+        return answer
+      })
+    readingGifts.set(code, read)
+  }
+  return read
+}
+
+/** Discord gift card under a message with a Nitro/entitlement gift link: status, sender, and one-click redemption. */
+function GiftCard({ code, channelId, mine }: { code: string; channelId?: string | null; mine: boolean }) {
+  const [gift, setGift] = useState<GiftRead | undefined>(() => gifts.get(code))
+  const [claimBusy, setClaimBusy] = useState(false)
+  const [claimError, setClaimError] = useState<string | null>(null)
+  useEffect(() => {
+    let live = true
+    setGift(gifts.get(code))
+    setClaimError(null)
+    if (!gifts.has(code)) void readGift(code).then(answer => { if (live) setGift(answer) })
+    return () => { live = false }
+  }, [code])
+  if (gift === null) return null
+  if (gift === 'invalid') {
+    return (
+      <div className="exo-dc-jam is-invalid">
+        <p className="exo-dc-jam-label">{mine ? 'You sent a gift link' : 'Discord gift link'}</p>
+        <div className="exo-dc-jam-row">
+          <span className="exo-dc-invite-icon" aria-hidden="true"><Icons.Nitro size={22} /></span>
+          <span className="exo-dc-jam-what"><strong>Gift expired or invalid</strong><span>This gift code can no longer be claimed.</span></span>
+        </div>
+      </div>
+    )
+  }
+  const claimed = gift?.redeemed === true
+  const claim = () => {
+    if (!gift || claimed || claimBusy) return
+    setClaimBusy(true)
+    setClaimError(null)
+    void host.discordServer('redeemGift', { code, ...(channelId ? { channelId } : {}) })
+      .then(result => {
+        setClaimBusy(false)
+        if (result.ok) {
+          const next: DiscordGift = { ...gift, redeemed: true, uses: Math.max(gift.uses + 1, gift.maxUses) }
+          gifts.set(code, next)
+          setGift(next)
+        } else {
+          setClaimError(errorText(result.message, 'Could not claim this gift.'))
+        }
+      }, (error: unknown) => {
+        setClaimBusy(false)
+        setClaimError(errorText(error, 'Could not claim this gift.'))
+      })
+  }
+  return (
+    <div className="exo-dc-jam">
+      <p className="exo-dc-jam-label">{gift?.gifter ? `${gift.gifter} sent a gift` : mine ? 'You sent a gift' : 'You received a gift'}</p>
+      <div className="exo-dc-jam-row">
+        <span className="exo-dc-invite-icon" aria-hidden="true"><Icons.Nitro size={22} /></span>
+        <span className="exo-dc-jam-what">
+          <strong>{gift ? gift.name : 'Checking gift'}</strong>
+          <span>{claimError ?? (claimed ? 'Claimed' : gift ? 'Ready to claim' : '')}</span>
+        </span>
+        {gift ? (
+          <button type="button" className={`exo-set-btn${claimed ? '' : ' is-primary'}`} disabled={claimed || claimBusy} onClick={claim}>
+            {claimed ? 'Claimed' : claimBusy ? 'Claiming…' : 'Accept'}
+          </button>
+        ) : null}
       </div>
     </div>
   )

@@ -1,6 +1,6 @@
 import { Wait } from '../ui/Wait'
 import { CopyLogs, ErrorNote } from '../ui/ErrorNote'
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type CSSProperties } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type CSSProperties, type FormEvent } from 'react'
 import { createPortal, flushSync } from 'react-dom'
 import { host, onHostEvent } from '../../lib/host'
 import { allowHover } from '../../lib/hoverGate'
@@ -23,6 +23,7 @@ import { holdSpring, springHome } from '../../lib/spring'
 import { ChannelNav } from './Channels'
 import { pageGet, pageSet } from '../../lib/pageStore'
 import { errorText } from '../../lib/errorWords'
+import { ConfirmButton } from '../ui/ConfirmButton'
 
 const OFF: DiscordVoice = { state: 'off', guildId: null, channelId: null, muted: false, deafened: false, e2ee: false }
 
@@ -295,15 +296,34 @@ function useWatching(channelId: string, members: DiscordVoiceMember[]) {
   return { watching, big, small, watch, stop, focus }
 }
 
-function StageBanner({ channel, here, meMember, raisingCount, onAction }: {
+function StageBanner({ channel, here, canModerate, meMember, raisingCount, onAction, onManage }: {
   channel: DiscordChannel
   here: boolean
+  canModerate: boolean
   meMember?: DiscordVoiceMember
   raisingCount: number
   onAction: (params: { suppress?: boolean; requestToSpeak?: boolean }) => void
+  onManage: (action: 'stageStart' | 'stageEdit' | 'stageEnd', topic?: string) => Promise<boolean>
 }) {
   const topic = channel.stageTopic ?? channel.topic
   const requested = !!meMember?.requestToSpeak
+  const [editing, setEditing] = useState<'start' | 'edit' | null>(null)
+  const [draft, setDraft] = useState('')
+  const [busy, setBusy] = useState(false)
+  const showForm = canModerate && editing !== null
+  const openEdit = (mode: 'start' | 'edit') => {
+    setDraft(mode === 'edit' ? (channel.stageTopic ?? '') : (channel.topic ?? ''))
+    setEditing(mode)
+  }
+  const submit = async (event: FormEvent) => {
+    event.preventDefault()
+    const clean = draft.trim()
+    if (!clean || busy || !editing) return
+    setBusy(true)
+    const ok = await onManage(editing === 'start' ? 'stageStart' : 'stageEdit', clean)
+    setBusy(false)
+    if (ok) setEditing(null)
+  }
   return (
     <div className="exo-dc-stage-banner" role="region" aria-label="Stage details">
       <div className="exo-dc-stage-info">
@@ -314,20 +334,39 @@ function StageBanner({ channel, here, meMember, raisingCount, onAction }: {
         <strong className="exo-dc-stage-topic">{topic || channel.name}</strong>
         {raisingCount > 0 ? <span className="exo-dc-stage-hands">{raisingCount} waiting to speak</span> : null}
       </div>
-      {here && meMember ? (
+      {showForm ? (
+        <form className="exo-dc-stage-form" onSubmit={e => void submit(e)}>
+          <input className="exo-dc-stage-input" type="text" maxLength={120} placeholder="What’s this stage about?" aria-label="Stage topic" value={draft}
+            disabled={busy} onChange={e => setDraft(e.target.value)} autoFocus />
+          <button type="submit" className="exo-set-btn is-primary" disabled={busy || !draft.trim()}>{editing === 'start' ? 'Start' : 'Save'}</button>
+          <button type="button" className="exo-dc-tab" disabled={busy} onClick={() => setEditing(null)}>Cancel</button>
+        </form>
+      ) : (here && meMember) || canModerate ? (
         <div className="exo-dc-stage-actions">
-          {meMember.suppress ? (
-            <>
-              <button type="button" className="exo-dc-tab" aria-pressed={requested} onClick={() => onAction({ requestToSpeak: !requested })}>
-                {requested ? 'Lower hand' : 'Request to speak'}
-              </button>
-              {channel.canModerateStage ? (
-                <button type="button" className="exo-set-btn is-primary" onClick={() => onAction({ suppress: false })}>Join stage</button>
-              ) : null}
-            </>
-          ) : (
-            <button type="button" className="exo-dc-tab" onClick={() => onAction({ suppress: true })}>Move to audience</button>
-          )}
+          {here && meMember ? (
+            meMember.suppress ? (
+              <>
+                <button type="button" className="exo-dc-tab" aria-pressed={requested} onClick={() => onAction({ requestToSpeak: !requested })}>
+                  {requested ? 'Lower hand' : 'Request to speak'}
+                </button>
+                {channel.canModerateStage ? (
+                  <button type="button" className="exo-set-btn is-primary" onClick={() => onAction({ suppress: false })}>Join stage</button>
+                ) : null}
+              </>
+            ) : (
+              <button type="button" className="exo-dc-tab" onClick={() => onAction({ suppress: true })}>Move to audience</button>
+            )
+          ) : null}
+          {canModerate ? (
+            channel.stageTopic ? (
+              <>
+                <button type="button" className="exo-dc-tab" onClick={() => openEdit('edit')}>Edit topic</button>
+                <ConfirmButton className="exo-dc-tab is-danger" question="End stage?" onConfirm={() => void onManage('stageEnd')}>End stage</ConfirmButton>
+              </>
+            ) : (
+              <button type="button" className="exo-set-btn is-primary" onClick={() => openEdit('start')}>Start stage</button>
+            )
+          ) : null}
         </div>
       ) : null}
     </div>
@@ -408,7 +447,7 @@ function VoiceStageBody({ speakers, channelName, isStage, joining, hasAudience, 
   )
 }
 
-function useStageRoom(channel: DiscordChannel, voice: DiscordVoice, meId: string | null, here: boolean) {
+function useStageRoom(channel: DiscordChannel, voice: DiscordVoice, meId: string | null) {
   const members = channel.members ?? []
   const isStage = channel.type === 13
   const speakers = isStage ? members.filter(m => !m.suppress) : members
@@ -424,11 +463,26 @@ function useStageRoom(channel: DiscordChannel, voice: DiscordVoice, meId: string
       .then(result => { if (!result.ok) setStageError(errorText(result.message, 'Discord didn’t update the stage.')) })
       .catch(() => setStageError('Discord didn’t update the stage.'))
   }
+  const manageStage = async (action: 'stageStart' | 'stageEdit' | 'stageEnd', topic?: string) => {
+    setStageError(null)
+    try {
+      const result = await host.discordVoice(action, { channelId: channel.id, ...(topic ? { topic } : {}) })
+      if (!result.ok) {
+        setStageError(errorText(result.message, 'Discord didn’t update the stage.'))
+        return false
+      }
+      return true
+    } catch (error) {
+      setStageError(errorText(error, 'Discord didn’t update the stage.'))
+      return false
+    }
+  }
   return {
     members, isStage, speakers, audience, meMember, raisingCount, stageError,
     clearStageError: () => setStageError(null),
     runStage,
-    canModerate: here && isStage && channel.canModerateStage === true,
+    manageStage,
+    canModerate: isStage && channel.canModerateStage === true,
   }
 }
 
@@ -444,7 +498,7 @@ export function VoiceRoom({ channel, controls, meId, onJoin, dm = false, chat }:
   const { voice, error } = controls
   const speaking = useSpeaking()
   const here = voice.channelId === channel.id && voice.state !== 'off'
-  const stageRoom = useStageRoom(channel, voice, meId, here)
+  const stageRoom = useStageRoom(channel, voice, meId)
   const liveEnded = useGoLiveValue(live => live.state === 'off' ? live.message : null)
   const [cameraError, setCameraError] = useState<string | null>(null)
   const notes = [error, cameraError, stageRoom.stageError, liveEnded].filter((note): note is string => !!note)
@@ -457,15 +511,23 @@ export function VoiceRoom({ channel, controls, meId, onJoin, dm = false, chat }:
   return (
     <section className={dm ? 'exo-dc-voice-room is-dm' : 'exo-dc-chat exo-dc-voice-room'} aria-label={dm ? `Call with ${channel.name}` : channel.name}>
       {dm ? null : <VoiceHead chat={chat} count={stageRoom.members.length} state={here ? voice.state : null} />}
-      {stageRoom.isStage ? <StageBanner channel={channel} here={here} meMember={stageRoom.meMember} raisingCount={stageRoom.raisingCount} onAction={stageRoom.runStage} /> : null}
+      {stageRoom.isStage ? <StageBanner channel={channel} here={here} canModerate={stageRoom.canModerate} meMember={stageRoom.meMember} raisingCount={stageRoom.raisingCount} onAction={stageRoom.runStage} onManage={stageRoom.manageStage} /> : null}
+      {!stageRoom.isStage && channel.activity ? (
+        <div className="exo-dc-stage-banner" role="status" aria-label={`Active voice activity: ${channel.activity}`}>
+          <div className="exo-dc-stage-info">
+            <span className="exo-dc-stage-badge"><Icons.Playing size={15} /><span>Activity</span></span>
+            <strong className="exo-dc-stage-topic">{channel.activity}</strong>
+          </div>
+        </div>
+      ) : null}
       {big ? <StreamStage key={big.id} member={big} onStop={() => stop(big.id)} onRetry={() => watch(big.id)} membersHidden={membersHidden} onToggleMembers={() => setMembersHidden(h => !h)} /> : null}
       <div ref={stage} className="exo-dc-voice-stage" hidden={!!big && membersHidden} style={{ '--tile-w': `${tileWidth}px` } as CSSProperties}>
         <VoiceStageBody speakers={stageRoom.speakers} channelName={channel.name} isStage={stageRoom.isStage} joining={stageRoom.members.length === 0 && here}
           hasAudience={stageRoom.audience.length > 0} meId={meId} speaking={speaking} audio={audio} here={here} watching={watching}
-          canModerate={stageRoom.canModerate} small={small} myStream={myStream} onWatch={watch}
+          canModerate={here && stageRoom.canModerate} small={small} myStream={myStream} onWatch={watch}
           onDemote={userId => stageRoom.runStage({ userId, suppress: true })} onFocus={focus} onStop={stop} />
       </div>
-      {stageRoom.isStage && stageRoom.audience.length > 0 ? <StageAudience members={stageRoom.audience} canModerate={stageRoom.canModerate} onInvite={userId => stageRoom.runStage({ userId, suppress: false })} /> : null}
+      {stageRoom.isStage && stageRoom.audience.length > 0 ? <StageAudience members={stageRoom.audience} canModerate={here && stageRoom.canModerate} onInvite={userId => stageRoom.runStage({ userId, suppress: false })} /> : null}
       {notes.length > 0 ? (
         <div className="exo-dc-voice-note">
           <ErrorNote message={notes.join(' ')} />

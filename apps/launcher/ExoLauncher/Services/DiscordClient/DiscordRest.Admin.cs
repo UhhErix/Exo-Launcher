@@ -118,6 +118,19 @@ internal sealed partial class DiscordRest
         SendAsync(HttpMethod.Patch, $"guilds/{Id(guildId)}/voice-states/{Id(userId)}",
             new JsonObject { ["channel_id"] = Id(channelId), ["suppress"] = suppress }, ct);
 
+    /// <summary>Starts a live Stage instance on a stage channel with a topic (privacy_level 2 = guild only).</summary>
+    internal Task<Reply> CreateStageInstanceAsync(string channelId, string topic, int privacyLevel, CancellationToken ct) =>
+        SendAsync(HttpMethod.Post, "stage-instances",
+            new JsonObject { ["channel_id"] = Id(channelId), ["topic"] = topic, ["privacy_level"] = privacyLevel }, ct);
+
+    /// <summary>Updates an active Stage instance's topic.</summary>
+    internal Task<Reply> UpdateStageInstanceAsync(string channelId, string topic, CancellationToken ct) =>
+        SendAsync(HttpMethod.Patch, $"stage-instances/{Id(channelId)}", new JsonObject { ["topic"] = topic }, ct);
+
+    /// <summary>Ends an active Stage instance on a stage channel.</summary>
+    internal Task<Reply> DeleteStageInstanceAsync(string channelId, CancellationToken ct) =>
+        SendAsync(HttpMethod.Delete, $"stage-instances/{Id(channelId)}", null, ct);
+
     /// <summary>The user's own nickname on a server.</summary>
     internal Task<Reply> SaveOwnNickAsync(string guildId, string? nick, CancellationToken ct) =>
         SendAsync(HttpMethod.Patch, $"guilds/{Id(guildId)}/members/@me", new JsonObject { ["nick"] = nick }, ct);

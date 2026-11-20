@@ -274,6 +274,7 @@ function VoiceChannel({ channel, voice, open, onPreview, onJoin, onInvite, onEdi
       </button>
       <ChannelTools channel={channel} onInvite={onInvite} onEdit={onEdit} />
       {channel.stageTopic ? <VoiceStatus text={channel.stageTopic} /> : channel.status ? <VoiceStatus text={channel.status} /> : null}
+      {channel.activity ? <VoiceActivity name={channel.activity} /> : null}
       {channel.members?.length ? <VoiceMembers members={channel.members} /> : null}
     </div>
   )
@@ -437,6 +438,15 @@ function VoiceStatus({ text }: { text: string }) {
     <span className="exo-dc-channel-status">
       {parts.map((part, i) => i % 4 === 3 ? <img key={i} src={emojiUrl(part, parts[i - 2] === 'a', 32)} alt={`:${parts[i - 1]}:`} width={14} height={14} draggable={false} />
         : i % 4 === 0 ? part : null)}
+    </span>
+  )
+}
+
+function VoiceActivity({ name }: { name: string }) {
+  return (
+    <span className="exo-dc-channel-status exo-dc-channel-activity" aria-label={`Activity: ${name}`}>
+      <Icons.Playing size={12} />
+      <span>{name}</span>
     </span>
   )
 }
