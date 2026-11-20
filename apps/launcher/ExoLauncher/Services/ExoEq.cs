@@ -18,13 +18,13 @@ internal static class ExoEq
     private static EqStore? _store;
     private static bool _compare;
     private static string? _written, _problem;
-    private static (string Id, string Title)? _game;
+    private static EqActiveGame? _game;
     private static Timer? _night;
 
     internal static string StoreFile => Path.Combine(PathHelper.AppDataDir, "exo-eq.json");
 
-    /// <summary>The library game running now that has a sound of its own, as the host sees it (set at start).</summary>
-    internal static Func<(string Id, string Title)?> RunningGame { get; set; } = () => null;
+    /// <summary>The library game running now and its automatically chosen Exo EQ profile, as the host sees it.</summary>
+    internal static Func<EqActiveGame?> RunningGame { get; set; } = () => null;
 
     /// <summary>The player's EQ as it is now (a copy is not made: change it only through <see cref="Change"/>).</summary>
     internal static EqStore Current { get { lock (Gate) return _store ??= Load(); } }
@@ -34,7 +34,9 @@ internal static class ExoEq
 
     internal static bool Comparing { get { lock (Gate) return _compare; } }
 
-    internal static (string Id, string Title)? Game { get { lock (Gate) return _game; } }
+    internal static EqActiveGame? ActiveGame { get { lock (Gate) return _game; } }
+
+    internal static (string Id, string Title)? Game { get { lock (Gate) return _game is { } g ? (g.Id, g.Title) : null; } }
 
     private static EqStore Load()
     {
@@ -89,14 +91,24 @@ internal static class ExoEq
     {
         try { LucidRetire.Once(); }
         catch (Exception ex) { AppLog.Warn("Exo EQ: taking over from Lucid failed: " + ex.GetType().Name); }
+        lock (Gate)
+        {
+            _store ??= Load();
+            if (!_store.On)
+            {
+                _store.On = true;
+                try { Save(_store); }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
+            }
+        }
         Refresh();
         lock (Gate) WatchNight(_store ??= Load());
     }
 
-    /// <summary>A game started or ended: its own sound goes on, or the output's comes back.</summary>
+    /// <summary>A game started or ended: its automatic sound goes on, or the output's studio reference comes back.</summary>
     internal static void GamesChanged()
     {
-        (string, string)? game = null;
+        EqActiveGame? game = null;
         try { game = RunningGame(); }
         catch (Exception ex) { AppLog.Debug("Exo EQ: reading the running game failed: " + ex.GetType().Name); }
         lock (Gate)
@@ -123,13 +135,27 @@ internal static class ExoEq
         return ExoEqSounds.InHours(now.TimeOfDay, start, end);
     }
 
-    /// <summary>What exo.txt says for <paramref name="store"/> now.</summary>
+    /// <summary>What exo.txt says for <paramref name="store"/> now (legacy overload for explicit test chains).</summary>
     internal static string TextFor(EqStore store, (string Id, string Title)? game, bool night, bool compare)
     {
         if (!store.On) return ExoEqConfig.Text([], "Off: Exo EQ is switched off in Exo.");
         if (compare) return ExoEqConfig.Text([], "Compare: Exo EQ is off while you listen without it.");
         var chains = store.Outputs.OrderBy(o => o.Key, StringComparer.OrdinalIgnoreCase)
             .Select(o => ExoEqSounds.Chain(o.Key.ToLowerInvariant(), o.Value, store, game, night)).ToList();
+        return ExoEqConfig.Text(chains);
+    }
+
+    /// <summary>What exo.txt says for <paramref name="store"/> now, applying <paramref name="activeGame"/> live across configured or active APO outputs.</summary>
+    internal static string TextFor(EqStore store, EqActiveGame? activeGame, bool night, bool compare,
+        (string Guid, string Name)? activeOutput = null, bool desktopFlat = true)
+    {
+        if (!store.On) return ExoEqConfig.Text([], "Off: Exo EQ is switched off in Exo.");
+        if (compare) return ExoEqConfig.Text([], "Compare: Exo EQ is off while you listen without it.");
+        (string Id, string Title)? game = activeGame is { } g ? (g.Id, g.Title) : null;
+        var chains = store.Outputs.OrderBy(o => o.Key, StringComparer.OrdinalIgnoreCase)
+            .Select(o => ExoEqSounds.Chain(o.Key.ToLowerInvariant(), o.Value, store, game, night, activeGame?.Sound, desktopFlat)).ToList();
+        if (activeOutput is { } outNow && !store.Outputs.ContainsKey(outNow.Guid) && activeGame is { Sound: not ExoEqSounds.Flat })
+            chains.Add(ExoEqSounds.Chain(outNow.Guid.ToLowerInvariant(), new EqOutput { Name = outNow.Name }, store, game, night, activeGame.Sound, desktopFlat));
         return ExoEqConfig.Text(chains);
     }
 
@@ -140,7 +166,8 @@ internal static class ExoEq
         {
             var store = _store ??= Load();
             var output = store.Outputs.TryGetValue(guid, out var known) ? known : new EqOutput();
-            return ExoEqSounds.Chain(guid, output, store, _game, NightNow(store, DateTime.Now));
+            (string Id, string Title)? game = _game is { } g ? (g.Id, g.Title) : null;
+            return ExoEqSounds.Chain(guid, output, store, game, NightNow(store, DateTime.Now), _game?.Sound, desktopFlat: true);
         }
     }
 
@@ -148,10 +175,15 @@ internal static class ExoEq
     {
         var store = _store ??= Load();
         if (HostMode.IsDisposable) return null;
-        // Nothing set yet: config.txt is left as the player has it.
-        if (store.Outputs.Count == 0 && store.Games.Count == 0 && _written is null) return null;
+        var playingGuid = EqualizerApo.Playing();
+        var playingOut = playingGuid is not null ? EqualizerApo.Read(playingGuid) : null;
+        // Nothing set yet and no active automatic game profile to play on an APO output: leave config.txt alone.
+        if (store.Outputs.Count == 0 && store.Games.Count == 0 && _written is null
+            && !(_game is { Sound: not ExoEqSounds.Flat } && playingOut is { Apo: true }))
+            return null;
         if (EqualizerApo.ConfigFolder() is not { } folder) return null;
-        var text = TextFor(store, _game, NightNow(store, DateTime.Now), _compare);
+        var activeOutput = playingOut is { Apo: true } && playingGuid is not null ? (playingGuid, playingOut.Name) : ((string, string)?)null;
+        var text = TextFor(store, _game, NightNow(store, DateTime.Now), _compare, activeOutput, desktopFlat: true);
         if (text == _written && !force) return _problem;
         try
         {

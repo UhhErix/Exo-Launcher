@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using ExoLauncher.Helpers;
+using ExoLauncher.Models;
 
 namespace ExoLauncher.Services;
 
@@ -113,7 +114,28 @@ internal sealed partial class SystemTuning(SystemTuning.ISystem system, string p
         bool SetUserDirectXSettings(string? value) => false;
         int[]? MouseParams() => null;
         bool SetMouseParams(int[] values) => false;
+        /// <summary>Installed library games that require Memory Integrity (HVCI), empty in isolated tests unless set.</summary>
+        IReadOnlyList<string> HvciRequiringGames() => [];
     }
+
+    private static readonly HashSet<string> HvciGameKeys = new(StringComparer.Ordinal)
+    {
+        "valorant", "leagueoflegends", "teamfighttactics", "2xko",
+    };
+
+    /// <summary>Installed library games that rely on Riot Vanguard or FACEIT and can require Memory Integrity on.</summary>
+    internal static IReadOnlyList<string> FindHvciRequiringGames(IEnumerable<GameEntry> library) =>
+        [.. library
+            .Where(g => g.Installed && (
+                g.Store == StoreKind.Riot
+                || AntiCheatCheck.IsRiot(g)
+                || HvciGameKeys.Contains(StoreService.TitleKey(g.Title))
+                || (AntiCheatCheck.KeptOrQuick(g) is { Kind: AntiCheatCheck.Kind.Found } ac
+                    && ac.Names.Any(n => n.Equals(DlssSwapService.RiotVanguard, StringComparison.OrdinalIgnoreCase)
+                        || n.Contains("FACEIT", StringComparison.OrdinalIgnoreCase)))))
+            .Select(g => g.Title)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Order(StringComparer.OrdinalIgnoreCase)];
 
     /// <summary>What a service was before Exo set it to Manual.</summary>
     internal sealed record ServiceWas(string Name, int Start, bool Delayed);
@@ -229,20 +251,23 @@ internal sealed partial class SystemTuning(SystemTuning.ISystem system, string p
             items.Add(new(IntegrityKey, "Memory Integrity off", detail, isOff, saved.Kept.ContainsKey(IntegrityKey), false, true, restart, blocked));
         }
 
-        // Non-admin user toggles: Windows Variable Refresh Rate (VRROptimizeEnable=1) and Mouse Acceleration (SPI_SETMOUSE).
+        // Legacy non-admin undo entries only: Autopilot manages mouse acceleration automatically and Windows windowed VRR is retired.
         if (system.SupportsUserHardwareToggles)
         {
-            var vrrOn = HasToken(system.UserDirectXSettings(), VrrToken, "1");
-            items.Add(new(VrrKey, "Windows variable refresh rate",
-                vrrOn ? "Windows lets windowed games use variable refresh rate (no restart needed)." : "Lets DirectX games run with variable refresh rate in borderless and windowed modes (no admin prompt).",
-                vrrOn, saved.Kept.ContainsKey(VrrKey), false, true, false, null, NeedsRestart: false));
+            if (saved.Kept.ContainsKey(VrrKey))
+            {
+                var vrrOn = HasToken(system.UserDirectXSettings(), VrrToken, "1");
+                items.Add(new(VrrKey, "Windows variable refresh rate",
+                    "Windows' windowed VRR setting can cause flicker or stutter; hardware G-SYNC/FreeSync works without it. Put back to restore.",
+                    vrrOn, true, false, true, false, null, NeedsRestart: false));
+            }
 
-            if (system.MouseParams() is { Length: 3 } mp)
+            if (saved.Kept.ContainsKey(MouseAccelKey) && system.MouseParams() is { Length: 3 } mp)
             {
                 var accelOff = mp[2] == 0;
                 items.Add(new(MouseAccelKey, "Disable mouse acceleration",
                     accelOff ? "Enhance pointer precision is off for 1:1 mouse movement (no restart needed)." : "Turns off Windows' Enhance pointer precision so pointer distance matches physical movement (no admin prompt).",
-                    accelOff, saved.Kept.ContainsKey(MouseAccelKey), false, true, false, null, NeedsRestart: false));
+                    accelOff, true, false, true, false, null, NeedsRestart: false));
             }
         }
         return new State(items);
@@ -270,9 +295,11 @@ internal sealed partial class SystemTuning(SystemTuning.ISystem system, string p
         return parts.Count == 0 ? null : string.Join(';', parts) + ";";
     }
 
-    /// <summary>Why Memory Integrity stays on here: an anti-cheat that can require it, a policy, or the firmware lock. Null when Exo may turn it off.</summary>
+    /// <summary>Why Memory Integrity stays on here: an installed game, an anti-cheat that can require it, a policy, or the firmware lock. Null when Exo may turn it off.</summary>
     internal string? IntegrityBlocked()
     {
+        var games = system.HvciRequiringGames();
+        if (games.Count > 0) return $"{Join(games)} require{(games.Count == 1 ? "s" : "")} Memory Integrity (Riot Vanguard / FACEIT), so Autopilot keeps it on.";
         var who = NeedIntegrity.Where(a => system.Exists($@"SYSTEM\CurrentControlSet\Services\{a.Service}")).Select(a => a.Who).Distinct().ToList();
         if (who.Count > 0) return $"{Join(who)} can require Memory Integrity, so Exo leaves it on: games with it may refuse to start without it.";
         if (system.Dword(HvciPolicy, "HypervisorEnforcedCodeIntegrity") is { } policy && policy != 0) return "A policy on this PC turns Memory Integrity on, so Exo leaves it.";

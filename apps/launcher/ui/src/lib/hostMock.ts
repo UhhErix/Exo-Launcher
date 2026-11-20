@@ -7,14 +7,25 @@ import type { NoteInfo } from './notes'
 import { emitHostEvent } from './host'
 let mockMusicLevel = 0.6
 /** PC › Autopilot: Counter-Strike 2 in front now, and two sessions' reports. */
-let mockAutopilotChoices: Pick<AutopilotState, 'on' | 'gamePriority' | 'keepGameMode' | 'coreParking' | 'alwaysDemote' | 'suspend'> = {
+const mockAutopilotChoices: Pick<AutopilotState, 'on' | 'gamePriority' | 'keepGameMode' | 'coreParking' | 'alwaysDemote' | 'suspend'> = {
   on: true, gamePriority: 'above', keepGameMode: false, coreParking: true, alwaysDemote: ['OneDrive'], suspend: [],
 }
 const mockAutopilot = (): AutopilotState => ({
   ...mockAutopilotChoices,
-  gameMode: { off: mockAutopilotChoices.on && !mockAutopilotChoices.keepGameMode, keptOn: mockAutopilotChoices.keepGameMode ? 'you keep it on' : null },
+  on: true,
+  gamePriority: 'above',
+  keepGameMode: false,
+  coreParking: true,
+  gameMode: { off: true, keptOn: null },
+  mouseAccel: { off: true, managed: true },
+  memoryIntegrity: {
+    status: 'unlocked',
+    reason: 'None of your installed games require Memory Integrity. Turning it off can add 5–10% FPS (lowers kernel driver protection; takes a restart).',
+    canUndo: false,
+    needsRestart: true,
+  },
   cpu: 'One CCD: every core shares one cache, so there is nothing to pin',
-  now: mockAutopilotChoices.on ? { game: 'steam:730', did: ['Gave Counter-Strike 2 above normal priority', 'Held back OneDrive, steamwebhelper (efficiency mode, lower priority, low disk and memory priority)'] } : null,
+  now: { game: 'steam:730', did: ['Gave Counter-Strike 2 above normal priority', 'Held back OneDrive, steamwebhelper (efficiency mode, lower priority, low disk and memory priority)'] },
   live: {
     game: 'steam:730', title: 'Counter-Strike 2', seconds: 1260, fps: 287.4, low1: 191.2, low01: 140.6, stutters: 4,
     cpu: 46, gpu: 88, gpuTemp: 71, vramGb: 5.8, vramTotalGb: 8, ramGb: 13.2, ramTotalGb: 32, standbyGb: 9.4, freeGb: 6.1, dpc: 0.6, clock: 112,
@@ -611,8 +622,8 @@ function mockEqState(p?: Record<string, unknown>) {
   return {
     ok: true, message: null,
     apo: { installed, installing: mockApoPressed > 0 && !installed, version: installed ? '1.4.2' : null, onOutput: installed && mockApoOn, restart: false, effectsOff: false, outputs: mockApoOn ? 1 : 0, installerVersion: '1.4.2' },
-    on: mockEq.on, comparing: mockEq.comparing, output: { name: 'Headphones (High Definition Audio Device)' },
-    headphone: mockEq.headphone, sound: mockEq.sound,
+    on: true, comparing: mockEq.comparing, output: { name: 'Headphones (High Definition Audio Device)' },
+    headphone: mockEq.headphone, sound: 'flat',
     custom: [31, 62, 125, 250, 500, 1000, 2000, 4000, 8000, 16000].map((hz, i) => ({ hz, gain: mockEq.custom[i] ?? 0 })),
     preamp: -Math.round((boosts + (mockEq.headphone ? 2.9 : 0)) * 10) / 10,
     playing: null,
@@ -1933,7 +1944,9 @@ const MOCK_HANDLERS: Record<string, MockHandler> = {
   },
   'autopilot.state': mockAutopilot,
   'autopilot.set': (p) => {
-    mockAutopilotChoices = { ...mockAutopilotChoices, ...(p as Partial<typeof mockAutopilotChoices>) }
+    const partial = p as Partial<typeof mockAutopilotChoices>
+    if (Array.isArray(partial.alwaysDemote)) mockAutopilotChoices.alwaysDemote = partial.alwaysDemote
+    if (Array.isArray(partial.suspend)) mockAutopilotChoices.suspend = partial.suspend
     return { ok: true, message: null, state: mockAutopilot() }
   },
   'system.mouseCore': mockMouseCore,

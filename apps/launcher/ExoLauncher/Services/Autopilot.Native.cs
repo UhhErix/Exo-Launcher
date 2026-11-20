@@ -136,24 +136,48 @@ internal static class Autopilot
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Security.SecurityException) { return PowerProfiles.CpuClass.Unknown; }
     });
 
-    internal static AutopilotSettings Settings => App.Services.Settings.Current.Autopilot ?? new();
+    internal static AutopilotSettings LiveSettings(AutopilotSettings? stored)
+    {
+        var copy = (stored ?? new()).Copy();
+        copy.On = true;
+        copy.GamePriority = "above";
+        copy.KeepGameMode = false;
+        copy.CoreParking = true;
+        return copy;
+    }
+
+    internal static AutopilotSettings Settings => LiveSettings(App.Services.Settings.Current.Autopilot);
 
     internal static AutopilotEngine Engine { get; } = new(new AutopilotNative(), Journal, () => Settings, () => Cpu.Value,
         look => new Timer(_ => look(), null, AutopilotEngine.LookEveryMs, AutopilotEngine.LookEveryMs));
 
     internal static AutopilotGameMode GameMode { get; } = new(UserRegistry.Shared, Journal, () => WindowsGameMode.Shared.State, WindowsGameMode.Off, WindowsGameMode.On);
 
+    internal static AutopilotMouseAccel MouseAccel { get; } = new(new NativeMouseAccelSystem(), Journal);
+
     internal static PowerProfiles.CpuClass CpuClass => Cpu.Value;
 
     private static readonly Dictionary<string, IReadOnlyList<string>> LearnedCache = new(StringComparer.Ordinal);
 
-    /// <summary>At Exo's start, after Exo's Game Mode keeper: what a crash left goes back, and Game Mode follows the switch.</summary>
+    /// <summary>At Exo's start, after Exo's Game Mode keeper: what a crash left goes back, and Game Mode and mouse precision follow Autopilot.</summary>
     internal static void Start()
     {
         AutopilotWatch.Shared.Did = Engine.Did;
         try { Engine.Recover(); }
         catch (Exception ex) when (ex is not OutOfMemoryException) { AppLog.Warn("Autopilot: recovery failed: " + ex.GetType().Name); }
         HandGameMode();
+        HandMouseAccel();
+    }
+
+    /// <summary>1:1 mouse movement without pointer acceleration; null when done, else the sentence.</summary>
+    internal static string? HandMouseAccel()
+    {
+        try { return MouseAccel.Apply(); }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            AppLog.Warn("Autopilot: Mouse acceleration: " + ex.GetType().Name);
+            return "Windows didn't turn mouse acceleration off.";
+        }
     }
 
     /// <summary>Game Mode as the switch and the processor want it now; null when done, else the sentence.</summary>
@@ -203,11 +227,12 @@ internal static class Autopilot
         catch (Exception ex) when (ex is not OutOfMemoryException) { AppLog.Warn("Autopilot: ending failed: " + ex.GetType().Name); }
     }
 
-    /// <summary>The uninstaller: every change goes back, Game Mode included, before Exo's own keeper gives its value back.</summary>
+    /// <summary>The uninstaller: every change goes back, Game Mode and mouse acceleration included, before Exo's own keeper gives its value back.</summary>
     internal static void GiveBack()
     {
         Shutdown();
         try { Engine.Recover(); } catch (Exception ex) when (ex is not OutOfMemoryException) { AppLog.Warn("Autopilot: " + ex.GetType().Name); }
         if (GameMode.Held is not null && GameMode.Hand(false) is { } said) AppLog.Warn("Uninstall: Autopilot's Game Mode not put back: " + said);
+        if (MouseAccel.Held is not null && MouseAccel.PutBack() is { } maErr) AppLog.Warn("Uninstall: Autopilot's mouse acceleration not put back: " + maErr);
     }
 }

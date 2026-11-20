@@ -4,7 +4,7 @@ import { report } from '../../lib/report'
 import { usePageActive } from '../../lib/pageActivity'
 import { ChoiceRow, Row, SliderRow, State, SwitchRow } from '../settings/parts'
 import { DevicePage, DevicePanel as Panel } from './DevicePage'
-import { ApoPanel, GamesPanel, HeadphonePanel, NightPanel, SoundPanel, useEq } from './EqPanels'
+import { ApoPanel, HeadphonePanel, NightPanel, SoundPanel, useEq } from './EqPanels'
 import { errorText } from '../../lib/errorWords'
 
 export type AudioLook = 'headphones' | 'iem' | 'headset'
@@ -16,7 +16,7 @@ export type Wearing = { name: string; look: AudioLook; id?: string } | null
  * the left is Exo Mouse's: what you wear, its picture large in its own light, its name and how it's linked, a readout of
  * what Windows plays it through and hears you on, and thanks to AutoEq and Equalizer APO at its foot. Its controls stand
  * in columns beside it, in this order: Exo EQ (Equalizer APO's install while it's missing), which pair it is (one pick:
- * Exo EQ corrects it, and the card's name and picture follow it), the sound, games and Night Shift (devices/EqPanels.tsx).
+ * Exo EQ corrects it, and the card's name and picture follow it), automatic per-game sound, and Night Shift (devices/EqPanels.tsx).
  * Then what Windows has for each (format, volume, mute), changeable here, and how Exo Voice is set, read every few
  * seconds only while it shows.
  */
@@ -41,7 +41,6 @@ export function AudioPage({ name, status, art, output, mic, wearing, onWearing, 
       <ApoPanel eq={eq} />
       {worn ? <HeadphonePanel eq={eq} wearing={wearing} onWearing={onWearing} /> : null}
       {ready ? <SoundPanel eq={eq} /> : null}
-      {ready ? <GamesPanel eq={eq} /> : null}
       {ready ? <NightPanel eq={eq} /> : null}
       {details ? <DetailPanels output={output} mic={mic} details={details} patch={patch} /> : null}
     </DevicePage>

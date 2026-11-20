@@ -1,16 +1,17 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Check, Close } from '../../brand/icons'
-import { host, onHostEvent, type AutopilotChange, type AutopilotLive, type AutopilotPriority, type AutopilotReport, type AutopilotState } from '../../lib/host'
+import { host, onHostEvent, type AutopilotChange, type AutopilotLive, type AutopilotReport, type AutopilotState } from '../../lib/host'
 import { report } from '../../lib/report'
 import { cn } from '../../lib/utils'
-import { ChoiceRow, Row, SwitchRow } from '../settings/parts'
+import { Row, State } from '../settings/parts'
+import { ActionButton, ConfirmButton } from '../ui/ConfirmButton'
 import { Unfold } from '../ui/Unfold'
 
 /** The last state read this run, so the menu shows it at once and reads again behind it. */
 let last: AutopilotState | null = null
 
 /**
- * Autopilot's state: read when the room shows (the chip says whether it is on), when the menu opens, every two seconds while
+ * Autopilot's state: read when the room shows (the chip says its status), when the menu opens, every two seconds while
  * the menu is open (so a game started while open shows live at once), and again when a session's report is kept. Nothing is
  * polled while the menu is closed, so a game in front costs nothing here.
  */
@@ -32,23 +33,17 @@ export function useAutopilot(active: boolean, open: boolean) {
   return { state, setState: put }
 }
 
-/** PC's chip for Autopilot: it opens the menu, green while Autopilot is on. */
+/** PC's chip for Autopilot: always active in green, or amber notice only when Memory Integrity conflicts with installed anti-cheat. */
 export function AutopilotChip({ state, onOpen }: { state: AutopilotState | null; onOpen: () => void }) {
-  const on = state?.on === true
+  const conflict = state?.memoryIntegrity?.status === 'conflict'
   return (
-    <button type="button" className={cn('exo-pc-chip', on && 'is-good')} data-pc-menu="autopilot" aria-haspopup="dialog" onClick={onOpen}>
-      {on ? <Check size={14} /> : null}{on ? 'Autopilot on' : 'Autopilot'}
+    <button type="button" className={cn('exo-pc-chip', conflict ? 'is-bad' : 'is-good')} data-pc-menu="autopilot" aria-haspopup="dialog" onClick={onOpen}>
+      {conflict ? 'Autopilot · Notice' : <><Check size={14} />Autopilot</>}
     </button>
   )
 }
 
-const PRIORITIES: readonly { value: AutopilotPriority; label: string }[] = [
-  { value: 'above', label: 'Above normal' },
-  { value: 'high', label: 'High' },
-  { value: 'normal', label: 'Leave it' },
-]
-
-/** One change, saved; the state the host answers with replaces the menu's. Null when it took, else the sentence. */
+/** Updates Autopilot's per-app rules; the state the host answers with replaces the menu's. */
 async function change(next: AutopilotChange, onState: (state: AutopilotState) => void): Promise<string | null> {
   try {
     const answer = await host.autopilotSet(next)
@@ -60,36 +55,72 @@ async function change(next: AutopilotChange, onState: (state: AutopilotState) =>
   }
 }
 
-/** What the switch says it does, and where Windows Game Mode stands. */
-function switchDetail(state: AutopilotState): string {
-  if (!state.on) return 'Off. While a game runs, Autopilot gives it priority, holds back busy background apps and keeps your cores awake, then puts everything back.'
-  const mode = state.gameMode.off ? 'Windows Game Mode is off: Autopilot does its job.' : state.gameMode.keptOn ? `Windows Game Mode stays on: ${state.gameMode.keptOn}.` : null
-  return ['On while a game runs; everything goes back after.', mode].filter(Boolean).join(' ')
+/** Active always-on protections in concise plain English, plus CPU topology and Windows Game Mode / mouse precision status. */
+function activeSummary(state: AutopilotState): string {
+  const parts = [
+    'Gives your game priority while it runs, throttles background hogs, and keeps cores awake.',
+    state.gameMode.off ? 'Windows Game Mode off.' : state.gameMode.keptOn ? `Windows Game Mode stays on (${state.gameMode.keptOn}).` : null,
+    state.mouseAccel?.off ? 'Mouse acceleration off (1:1).' : null,
+    state.cpu || null,
+  ]
+  return parts.filter(Boolean).join(' ')
 }
 
-/** The switch, what it does for the game running now, and its choices, which stay folded until asked for. */
+/** Always-on Autopilot status, active protections, library-aware Memory Integrity, and any per-app rules. */
 export function AutopilotControls({ state, onState }: { state: AutopilotState | null; onState: (state: AutopilotState) => void }) {
-  const [more, setMore] = useState(false)
   if (!state) return null
   return (
     <div className="exo-pc-menu-rows">
-      <SwitchRow id="autopilot-on" label="Autopilot" detail={switchDetail(state)} checked={state.on} onChange={on => change({ on }, onState)} />
-      {state.on && state.now?.did.length ? <Row label="Doing now" detail={state.now.did.join(' · ')} /> : null}
-      <Row label="Choices" detail={more ? state.cpu : 'Game priority, Windows Game Mode and core parking.'}>
-        <button type="button" className="exo-set-btn is-compact" aria-expanded={more} onClick={() => setMore(open => !open)}>{more ? 'Less' : 'Show'}</button>
+      <Row label="Autopilot" detail={activeSummary(state)}>
+        <State on>Active</State>
       </Row>
-      <Unfold open={more} className="exo-set-list">
-        <ChoiceRow id="autopilot-priority" label="The game's priority" detail="Never realtime. A game with anti-cheat is never opened, so it keeps its own." value={state.gamePriority}
-          choices={PRIORITIES} onChange={gamePriority => change({ gamePriority }, onState)} />
-        <SwitchRow id="autopilot-gamemode" label="Keep Windows Game Mode on" detail="Autopilot turns Game Mode off and does its job. Keep it on to let Windows hold driver installs during play."
-          checked={state.keepGameMode} onChange={keepGameMode => change({ keepGameMode }, onState)} />
-        <SwitchRow id="autopilot-parking" label="Keep every core awake while playing" detail="Only where your power plan parks cores, and never on a dual-CCD X3D, whose AMD driver parks one on purpose."
-          checked={state.coreParking} onChange={coreParking => change({ coreParking }, onState)} />
-        <NameList label="Always held back while playing" names={state.alwaysDemote} onChange={alwaysDemote => change({ alwaysDemote }, onState)} />
-        <NameList label="Paused while playing" names={state.suspend} onChange={suspend => change({ suspend }, onState)} />
-      </Unfold>
+      {state.now?.did.length ? <Row label="Doing now" detail={state.now.did.join(' · ')} /> : null}
+      {state.memoryIntegrity ? <MemoryIntegrityRow integrity={state.memoryIntegrity} onState={onState} /> : null}
+      <NameList label="Always held back while playing" names={state.alwaysDemote} onChange={alwaysDemote => change({ alwaysDemote }, onState)} />
+      <NameList label="Paused while playing" names={state.suspend} onChange={suspend => change({ suspend }, onState)} />
     </div>
   )
+}
+
+function MemoryIntegrityRow({ integrity, onState }: {
+  integrity: NonNullable<AutopilotState['memoryIntegrity']>
+  onState: (state: AutopilotState) => void
+}) {
+  const refresh = () => {
+    void host.autopilotState().then(onState, (e: unknown) => report(e, 'Autopilot.integrity', { level: 'warn' }))
+  }
+  const control = () => {
+    switch (integrity.status) {
+      case 'off':
+        return (
+          <>
+            <State on>Off</State>
+            {integrity.canUndo ? (
+              <ActionButton className="exo-set-btn is-compact" context="Autopilot.integrityOff"
+                onPress={() => host.systemTuning('off', 'integrity')} onDone={refresh}>Restore</ActionButton>
+            ) : null}
+          </>
+        )
+      case 'unlocked':
+        return (
+          <ConfirmButton className="exo-set-btn is-primary" question="Turn off Memory Integrity?" context="Autopilot.integrityOn"
+            onConfirm={() => host.systemTuning('on', 'integrity')} onDone={refresh}>Optimize</ConfirmButton>
+        )
+      case 'pending-off':
+      case 'pending-on':
+        return <State>Restart</State>
+      case 'required':
+        return <State on>Protected</State>
+      case 'conflict':
+        return integrity.canUndo ? (
+          <ConfirmButton className="exo-set-btn is-primary" question="Turn Memory Integrity back on?" context="Autopilot.integrityRestore"
+            onConfirm={() => host.systemTuning('off', 'integrity')} onDone={refresh}>Turn back on</ConfirmButton>
+        ) : <State>Required</State>
+      case 'locked':
+        return <State>Managed</State>
+    }
+  }
+  return <Row label="Memory Integrity" detail={integrity.reason}>{control()}</Row>
 }
 
 /** Apps named in settings: each with Remove; hidden when empty. */

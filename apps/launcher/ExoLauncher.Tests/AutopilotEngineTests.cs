@@ -430,7 +430,7 @@ public sealed class AutopilotEngineTests : IDisposable
         Assert.Contains("AMD", AutopilotGameMode.KeptOnBecause(on, PowerProfiles.CpuClass.AmdDualCcdX3d));
         Assert.Contains("AMD", AutopilotGameMode.KeptOnBecause(on, PowerProfiles.CpuClass.AmdDualCcdZen5));
         Assert.NotNull(AutopilotGameMode.KeptOnBecause(new AutopilotSettings { On = true, KeepGameMode = true }, PowerProfiles.CpuClass.IntelHybrid));
-        Assert.NotNull(AutopilotGameMode.KeptOnBecause(new AutopilotSettings(), PowerProfiles.CpuClass.IntelHybrid));
+        Assert.NotNull(AutopilotGameMode.KeptOnBecause(new AutopilotSettings { On = false }, PowerProfiles.CpuClass.IntelHybrid));
     }
 
     [Fact]
@@ -483,5 +483,112 @@ public sealed class AutopilotEngineTests : IDisposable
         Assert.NotNull(native.Read(Knob.Io, self.Pid, self.CreateTime));
         Assert.NotNull(native.Read(Knob.Eco, self.Pid, self.CreateTime));
         Assert.Null(native.Read(Knob.Priority, self.Pid, self.CreateTime + 1)); // another start time: another process
+    }
+
+    // ---------------------------------------------------------------- always-on & automatic mouse accel
+
+    [Fact]
+    public void LiveSettingsAlwaysForcesBestAutopilotDefaultsAndKeepsAppLists()
+    {
+        var liveFromNull = Autopilot.LiveSettings(null);
+        Assert.True(liveFromNull.On);
+        Assert.Equal("above", liveFromNull.GamePriority);
+        Assert.False(liveFromNull.KeepGameMode);
+        Assert.True(liveFromNull.CoreParking);
+
+        var legacy = new AutopilotSettings
+        {
+            On = false,
+            GamePriority = "normal",
+            KeepGameMode = true,
+            CoreParking = false,
+            AlwaysDemote = ["OneDrive"],
+            Suspend = ["Updater"],
+        };
+        var enforced = Autopilot.LiveSettings(legacy);
+        Assert.True(enforced.On);
+        Assert.Equal("above", enforced.GamePriority);
+        Assert.False(enforced.KeepGameMode);
+        Assert.True(enforced.CoreParking);
+        Assert.Equal(["OneDrive"], enforced.AlwaysDemote);
+        Assert.Equal(["Updater"], enforced.Suspend);
+    }
+
+    private sealed class FakeMouseAccelSystem(int[]? initial) : IMouseAccelSystem
+    {
+        public int[]? Current = initial;
+        public int WriteCalls;
+        public Func<bool>? BeforeWrite;
+
+        public int[]? Read() => Current is null ? null : [.. Current];
+
+        public bool Write(int[] values)
+        {
+            WriteCalls++;
+            if (BeforeWrite is not null && !BeforeWrite()) return false;
+            Current = [.. values];
+            return true;
+        }
+    }
+
+    [Fact]
+    public void MouseAccelTurnsOffWithJournalAndRestoresCleanlyUnlessUserChangedIt()
+    {
+        var journal = new AutopilotJournal(JournalPath);
+        var fake = new FakeMouseAccelSystem([6, 10, 1]);
+        fake.BeforeWrite = () => File.Exists(JournalPath) && File.ReadAllText(JournalPath).Contains($"\"{AutopilotMouseAccel.Kind}\"");
+        var mouse = new AutopilotMouseAccel(fake, journal, _ => { });
+
+        Assert.Null(mouse.Apply());
+        Assert.Equal([0, 0, 0], fake.Current!);
+        Assert.True(mouse.IsOff());
+        Assert.NotNull(mouse.Held);
+        Assert.Equal(1, fake.WriteCalls);
+
+        // If user manually re-enables Windows mouse precision later, Exo respects it because it's already journaled.
+        fake.Current = [6, 10, 1];
+        Assert.Null(mouse.Apply());
+        Assert.Equal([6, 10, 1], fake.Current!);
+        Assert.Equal(1, fake.WriteCalls);
+
+        // PutBack leaves user's manual change untouched while clearing the journal entry.
+        Assert.Null(mouse.PutBack());
+        Assert.Equal([6, 10, 1], fake.Current!);
+        Assert.Null(mouse.Held);
+
+        // Fresh cycle: disabled by Exo, untouched by user -> PutBack restores exact [6, 10, 1].
+        Assert.Null(mouse.Apply());
+        Assert.Equal([0, 0, 0], fake.Current!);
+        Assert.Null(mouse.PutBack());
+        Assert.Equal([6, 10, 1], fake.Current!);
+        Assert.Null(mouse.Held);
+
+        // Already [0, 0, 0] -> no-op, no write, no journal entry.
+        fake.Current = [0, 0, 0];
+        var writesBefore = fake.WriteCalls;
+        Assert.Null(mouse.Apply());
+        Assert.Equal(writesBefore, fake.WriteCalls);
+        Assert.Null(mouse.Held);
+    }
+
+    [Theory]
+    [InlineData(null, false, false, null, null, "off")]
+    [InlineData(true, false, true, null, null, "off")]
+    [InlineData(true, true, true, null, null, "pending-off")]
+    [InlineData(true, false, true, "VALORANT requires Memory Integrity", null, "conflict")]
+    [InlineData(true, false, false, "VALORANT requires Memory Integrity", null, "conflict")]
+    [InlineData(false, false, false, null, null, "unlocked")]
+    [InlineData(false, true, false, null, null, "pending-on")]
+    [InlineData(false, false, false, null, "VALORANT requires Memory Integrity", "required")]
+    [InlineData(false, false, false, null, "Memory Integrity is locked on in this PC's firmware, so Exo leaves it.", "locked")]
+    public void DescribeMemoryIntegrityCoversAllStates(bool? itemOn, bool restart, bool canUndo, string? liveBlocked, string? itemBlocked, string expectedStatus)
+    {
+        var items = itemOn is { } on
+            ? new[] { new SystemTuning.Item(SystemTuning.IntegrityKey, "Memory Integrity off", "detail", on, canUndo, false, true, restart, itemBlocked) }
+            : [];
+        var dto = JsonSerializer.SerializeToElement(WebHostBridge.DescribeMemoryIntegrity(new SystemTuning.State(items), liveBlocked));
+        Assert.Equal(expectedStatus, dto.GetProperty("status").GetString());
+        if (expectedStatus == "conflict")
+            Assert.Equal(canUndo, dto.GetProperty("canUndo").GetBoolean());
     }
 }

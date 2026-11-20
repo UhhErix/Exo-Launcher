@@ -97,15 +97,15 @@ internal sealed class EqStore
 /// </summary>
 internal static class ExoEqSounds
 {
-    internal const string Flat = "flat", Bass = "bass", Vocal = "vocal", Footsteps = "footsteps", Custom = "custom";
+    internal const string Flat = "flat", Bass = "bass", Vocal = "vocal", Footsteps = "footsteps", Cinematic = "cinematic", Custom = "custom";
 
-    internal static readonly string[] All = [Flat, Bass, Vocal, Footsteps, Custom];
+    internal static readonly string[] All = [Flat, Bass, Vocal, Footsteps, Cinematic, Custom];
 
     internal static bool Known(string? sound) => sound is not null && All.Contains(sound);
 
     internal static string Name(string sound) => sound switch
     {
-        Bass => "Bass", Vocal => "Vocal", Footsteps => "Footsteps", Custom => "Custom", _ => "Flat",
+        Bass => "Bass", Vocal => "Vocal", Footsteps => "Footsteps", Cinematic => "Immersion", Custom => "Custom", _ => "Flat",
     };
 
     /// <summary>The graphic bands of the page's Custom sound, at Q 1.41 (an octave each).</summary>
@@ -119,6 +119,7 @@ internal static class ExoEqSounds
         Bass => [new(EqKind.LowShelf, 105, 4, 0.71)],
         Vocal => [Pk(200, -2, 0.8), Pk(1800, 2, 1), Pk(3500, 1.5, 1.4)],
         Footsteps => [new(EqKind.LowShelf, 120, -4, 0.71), Pk(300, -1.5, 1), Pk(2200, 3, 1), Pk(4500, 3.5, 1.2), new(EqKind.HighShelf, 10000, -1.5, 0.71)],
+        Cinematic => [new(EqKind.LowShelf, 95, 2.5, 0.71), Pk(280, -1, 1), new(EqKind.HighShelf, 8000, 1.5, 0.71)],
         Custom => [.. custom.Select(b => b.Filter).Where(f => Math.Abs(f.Gain) >= 0.05)],
         _ => [],
     };
@@ -133,8 +134,8 @@ internal static class ExoEqSounds
     internal static TimeSpan? Clock(string text) =>
         TimeSpan.TryParseExact(text, @"hh\:mm", CultureInfo.InvariantCulture, out var time) && time.TotalHours < 24 ? time : null;
 
-    /// <summary>What an output plays now: its correction, then the running game's sound or its own, then Night Shift.</summary>
-    internal static EqChain Chain(string guid, EqOutput output, EqStore store, (string Id, string Title)? game, bool night)
+    /// <summary>What an output plays now: its correction, then the running game's automatic or saved sound or its own, then Night Shift.</summary>
+    internal static EqChain Chain(string guid, EqOutput output, EqStore store, (string Id, string Title)? game, bool night, string? autoSound = null, bool desktopFlat = false)
     {
         var notes = new List<string>();
         var filters = new List<EqFilter>();
@@ -144,13 +145,22 @@ internal static class ExoEqSounds
             notes.Add($"{headphone.Name}: correction from AutoEq (MIT), measured by {headphone.Source}");
             filters.AddRange(headphone.Filters.Select(f => f.Filter));
         }
-        var sound = output.Sound;
-        if (game is { } playing && store.Games.TryGetValue(playing.Id, out var own))
+        string sound;
+        if (autoSound is { } auto && Known(auto))
+        {
+            sound = auto;
+            if (game is { } playing) notes.Add($"Sound: {Name(sound)}, for {playing.Title}");
+        }
+        else if (game is { } playing && store.Games.TryGetValue(playing.Id, out var own))
         {
             sound = own;
             notes.Add($"Sound: {Name(sound)}, for {playing.Title}");
         }
-        else if (sound != Flat) notes.Add("Sound: " + Name(sound));
+        else
+        {
+            sound = desktopFlat ? Flat : output.Sound;
+            if (sound != Flat) notes.Add("Sound: " + Name(sound));
+        }
         filters.AddRange(Filters(sound, store.Custom));
         if (night)
         {

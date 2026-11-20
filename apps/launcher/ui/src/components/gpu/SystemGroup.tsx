@@ -5,7 +5,6 @@ import { report } from '../../lib/report'
 import { trimStop } from '../../lib/utils'
 import { Switch } from '../Switch'
 import { Row } from '../settings/parts'
-import { ConfirmButton } from '../ui/ConfirmButton'
 import { Spinner } from '../ui/Spinner'
 import { systemItemCanPutBack } from './systemGroupModel'
 
@@ -30,7 +29,10 @@ const ICONS: Record<TuningKey, ReactNode> = {
 export function SystemGroup({ tuning, onTuning }: { tuning: Tuning | null; onTuning: (next: Tuning) => void }) {
   const [busy, setBusy] = useState<TuningKey | null>(null)
   const [error, setError] = useState<{ key: TuningKey; text: string } | null>(null)
-  if (!tuning || tuning.items.length === 0) return null
+  const visibleItems = tuning?.items.filter(item =>
+    item.key !== 'integrity' && item.key !== 'mouseAccel' && (item.key !== 'vrr' || item.canUndo),
+  ) ?? []
+  if (visibleItems.length === 0) return null
 
   const run = async (item: TuningItem, on: boolean) => {
     if (busy) return
@@ -50,9 +52,9 @@ export function SystemGroup({ tuning, onTuning }: { tuning: Tuning | null; onTun
   return (
     <section className="exo-pc-menu-rows" aria-labelledby="pc-best-system">
       <h3 id="pc-best-system" className="exo-pc-best-group">System</h3>
-      {tuning.items.map(item => {
+      {visibleItems.map(item => {
         const id = `pc-best-sys-${item.key}`
-        const detail = item.off ? 'Off: Use best settings leaves it as it is.' : item.optIn && !item.on && !item.blocked && item.key !== 'integrity' ? `${item.detail} Only this switch sets it.` : item.detail
+        const detail = item.off ? 'Off: Use best settings leaves it as it is.' : item.optIn && !item.on && !item.blocked ? `${item.detail} Only this switch sets it.` : item.detail
         return (
           <Row key={item.key} label={item.label} labelId={id} icon={ICONS[item.key]} detail={detail}
             error={error?.key === item.key ? error.text : null}>
@@ -60,16 +62,14 @@ export function SystemGroup({ tuning, onTuning }: { tuning: Tuning | null; onTun
             {systemItemCanPutBack(item) ? (
               <button type="button" className="exo-set-btn is-compact" disabled={!!busy} onClick={() => void run(item, false)}>Put back</button>
             ) : null}
-            {item.key === 'integrity' && !item.on ? (
-              <ConfirmButton className="exo-set-btn is-danger" danger disabled={!!busy || !!item.blocked} question="Turn it off?" onConfirm={() => void run(item, true)}>Turn off</ConfirmButton>
-            ) : (
+            {item.key === 'vrr' ? null : (
               <Switch checked={item.on} disabled={!!busy || (!item.on && !!item.blocked)} labelledBy={id}
                 onChange={on => void run(item, on)} />
             )}
           </Row>
         )
       })}
-      {tuning.restart ? <p className="exo-pc-best-note">Restart Windows to finish.</p> : null}
+      {tuning?.restart ? <p className="exo-pc-best-note">Restart Windows to finish.</p> : null}
     </section>
   )
 }
