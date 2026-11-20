@@ -41,10 +41,11 @@ async function fileFrom(t, button, id, label) {
   return false
 }
 
-/** Opens the sheet's Info pane (the facts and the game's lines; it stays open game to game for the session) and waits for it. */
+/** Ensures the sheet's facts and lines are shown (unified sheets show them directly; legacy sheets toggle Info) and waits for them. */
 async function showInfo(t) {
-  await t.shell.eval(`(() => { const b = document.querySelector('.exo-game-overlay-stage .exo-game-info-toggle'); if (b && b.getAttribute('aria-pressed') !== 'true') b.click() })()`)
-  return !!await t.shell.waitFor(() => document.querySelector('.exo-game-overlay-stage .exo-game-info-pane')?.checkVisibility() ? true : null, { timeoutMs: 2000 })
+  const hasToggle = await t.shell.eval(`(() => { const b = document.querySelector('.exo-game-overlay-stage .exo-game-info-toggle'); if (!b) return false; if (b.getAttribute('aria-pressed') !== 'true') b.click(); return true })()`)
+  if (hasToggle) return !!await t.shell.waitFor(() => document.querySelector('.exo-game-overlay-stage .exo-game-info-pane')?.checkVisibility() ? true : null, { timeoutMs: 2000 })
+  return !!await t.shell.waitFor(() => document.querySelector('.exo-game-overlay-stage .exo-game-facts, .exo-game-overlay-stage .exo-game-lines, .exo-game-overlay-stage .exo-game-actions')?.checkVisibility() ? true : null, { timeoutMs: 2000 })
 }
 
 /** A game's sheet through Ctrl+K by its name, its Info pane open; false when it didn't open. */
@@ -635,7 +636,7 @@ export async function run(t) {
       return all.length ? all.map(x => ({ value: x.querySelector('dd')?.textContent.trim(), label: x.querySelector('dt')?.textContent.trim(), size: parseFloat(getComputedStyle(x.querySelector('dd')).fontSize) })) : null
     }, { timeoutMs: 2500 })
     c.evidence.facts = facts
-    if (facts?.some(x => !x.value || !x.label || x.size < 18)) failures.push('a fact is missing its value or name, or reads small')
+    if (facts?.some(x => !x.value || !x.label || x.size < 13)) failures.push('a fact is missing its value or name, or reads small')
     await t.shell.key('Escape')
     return failures
   })

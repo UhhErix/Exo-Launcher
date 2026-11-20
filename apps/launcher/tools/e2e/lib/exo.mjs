@@ -20,6 +20,7 @@ export const GUARDED = ['settings.json', 'web-client-preferences.json', 'window-
  */
 export const TEST_INSTANCE = process.env.EXO_E2E_TEST_INSTANCE === '1'
 const TEST_SCRIPT = fileURLToPath(new URL('../../test-instance.ps1', import.meta.url))
+const WIN_SCRIPT = fileURLToPath(new URL('./win.ps1', import.meta.url))
 const TEST_EXE = fileURLToPath(new URL('../../ExoLauncher/bin/x64/Debug/net10.0-windows10.0.26100.0/win-x64/ExoLauncher.exe', import.meta.url))
 const TEST_FOLDER = process.env.EXO_E2E_TEST_FOLDER || join(process.env.TEMP, 'exo-e2e-test-instance')
 let test = null // { pid, port, dataDir } of the test instance this run started
@@ -48,9 +49,8 @@ export async function close(timeoutSec = 40) {
     await sleep(800)
     return
   }
-  await pwsh(`foreach ($p in Get-Process ExoLauncher -ErrorAction SilentlyContinue | Where-Object Path -eq '${EXE}') {
-    if (-not $p.CloseMainWindow()) { throw 'Exo did not accept a normal close' }
-    if (-not $p.WaitForExit(${timeoutSec * 1000})) { throw 'Exo did not exit in ${timeoutSec} s' } }`)
+  await new Promise((resolve, reject) =>
+    execFile('pwsh', ['-NoProfile', '-NonInteractive', '-File', WIN_SCRIPT, '-Command', 'close', '-W', String(timeoutSec)], { windowsHide: true, timeout: Math.max(90000, timeoutSec * 1000 + 15000) }, (e, out, err) => e ? reject(new Error((err || e.message).trim())) : resolve(out.trim())))
   await sleep(800)
 }
 

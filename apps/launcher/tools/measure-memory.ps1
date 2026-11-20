@@ -24,6 +24,28 @@ public static class ExoResourceWindows {
     [DllImport("user32.dll")] private static extern IntPtr GetWindow(IntPtr window, uint command);
     [DllImport("user32.dll")] private static extern uint GetWindowThreadProcessId(IntPtr window, out uint pid);
     [DllImport("user32.dll")] private static extern IntPtr GetForegroundWindow();
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)] private static extern int GetClassName(IntPtr window, System.Text.StringBuilder text, int maxCount);
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)] private static extern int GetWindowText(IntPtr window, System.Text.StringBuilder text, int maxCount);
+    [DllImport("user32.dll")] private static extern bool IsWindowVisible(IntPtr window);
+    public static IntPtr MainWindow(int targetPid, IntPtr fallback) {
+        IntPtr exact = IntPtr.Zero, visible = IntPtr.Zero, any = IntPtr.Zero;
+        var cls = new System.Text.StringBuilder(128);
+        var title = new System.Text.StringBuilder(256);
+        EnumWindows((window, state) => {
+            GetWindowThreadProcessId(window, out var pid);
+            if ((int)pid != targetPid) return true;
+            cls.Clear();
+            GetClassName(window, cls, cls.Capacity);
+            if (cls.ToString() != "WinUIDesktopWin32WindowClass") return true;
+            if (any == IntPtr.Zero) any = window;
+            if (visible == IntPtr.Zero && IsWindowVisible(window)) visible = window;
+            title.Clear();
+            GetWindowText(window, title, title.Capacity);
+            if (title.ToString() == "Exo Launcher") { exact = window; return false; }
+            return true;
+        }, IntPtr.Zero);
+        return exact != IntPtr.Zero ? exact : (visible != IntPtr.Zero ? visible : (any != IntPtr.Zero ? any : fallback));
+    }
     public static uint ForegroundProcess() {
         GetWindowThreadProcessId(GetForegroundWindow(), out var pid);
         return pid;
@@ -47,7 +69,8 @@ public static class ExoResourceWindows {
 $hosts = @(Get-Process ExoLauncher -ErrorAction Stop | Where-Object { -not $ExoProcessId -or $_.Id -eq $ExoProcessId })
 if ($hosts.Count -ne 1) { throw 'Select one running Exo instance with -ExoProcessId.' }
 $main = $hosts[0]
-if ($main.MainWindowHandle -eq [IntPtr]::Zero) { throw 'Exo has no main window; wait until startup completes.' }
+$mainWindow = [ExoResourceWindows]::MainWindow($main.Id, $main.MainWindowHandle)
+if ($mainWindow -eq [IntPtr]::Zero) { throw 'Exo has no main window; wait until startup completes.' }
 $mainStarted = $main.StartTime.ToUniversalTime().Ticks
 $all = @(Get-CimInstance Win32_Process | Select-Object ProcessId, ParentProcessId, Name, ExecutablePath, CreationDate)
 $byId = @{}
@@ -75,7 +98,7 @@ $issues = [Collections.Generic.List[string]]::new()
 $membership = @{}
 $membership[$main.Id] = 'exo'
 $keys = @{ 'Discord.exe' = 'discord' }
-$owned = @([ExoResourceWindows]::OwnedProcesses($main.MainWindowHandle) | Sort-Object -Unique)
+$owned = @([ExoResourceWindows]::OwnedProcesses($mainWindow) | Sort-Object -Unique)
 $hostedTrees = [Collections.Generic.HashSet[int]]::new()
 foreach ($rootId in $owned) {
     $root = $byId[[int]$rootId]
@@ -147,7 +170,8 @@ $rows = @($after | ForEach-Object {
     })
 $main.Refresh()
 if ($main.HasExited -or $main.StartTime.ToUniversalTime().Ticks -ne $mainStarted) { throw 'Exo exited or restarted during measurement.' }
-$ownedAfter = @([ExoResourceWindows]::OwnedProcesses($main.MainWindowHandle) | Sort-Object -Unique)
+$mainWindowAfter = [ExoResourceWindows]::MainWindow($main.Id, $main.MainWindowHandle)
+$ownedAfter = @([ExoResourceWindows]::OwnedProcesses($mainWindowAfter) | Sort-Object -Unique)
 if (($owned -join ',') -ne ($ownedAfter -join ',')) { $issues.Add('Owned windows changed during measurement; repeat in a stable room.') }
 $allAfter = @(Get-CimInstance Win32_Process | Select-Object ProcessId, ParentProcessId, CreationDate)
 foreach ($entry in $allAfter) {

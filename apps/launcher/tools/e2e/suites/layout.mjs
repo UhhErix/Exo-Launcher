@@ -82,7 +82,7 @@ export async function run(t) {
     return walk(t, c, [
       [`game-sheet`, async () => { await click(() => [...document.querySelectorAll('.exo-game-grid button[data-game-id]')].find(b => !b.closest('.exo-folder-tile'))); return wait(() => !!document.querySelector('.exo-game-overlay-stage .exo-game-title')) }, () => k.closeAll()],
       [`add-menu`, async () => { await click(visible, '.exo-library-more'); return wait(() => [...document.querySelectorAll('[role="menu"]')].some(m => m.getBoundingClientRect().width)) }, () => k.closeAll()],
-      [`sort-menu`, async () => { await click(visible, '.exo-shelf-sort-trigger'); return wait(() => [...document.querySelectorAll('[role="menu"]')].some(m => m.getBoundingClientRect().width)) }, () => k.closeAll()],
+      [`sort-menu`, async () => { await click(visible, 'main.exo-library-pane button[aria-label^="Sort library"]'); return wait(() => [...document.querySelectorAll('[role="menu"]')].some(m => m.getBoundingClientRect().width)) }, () => k.closeAll()],
       [`ctrl-k`, async () => { await t.shell.key('k', { ctrl: true }); if (!await wait(() => document.activeElement?.getAttribute('role') === 'combobox', 3000)) return false; await t.shell.type('a'); return wait(() => document.querySelectorAll('[role="dialog"] [role="option"]').length > 2, 4000) }, () => k.closeAll()],
     ])
   }, { shell: t.shell })
@@ -121,14 +121,17 @@ export async function run(t) {
     return walk(t, c, [
       [`music-search`, async () => { if (!await k.fill(field, 'lofi')) return false; await t.shell.key('Enter'); return wait(() => document.querySelectorAll('.exo-music-row, .exo-music-card').length > 3, 12000) },
         async () => { await k.fill(field, ''); await click(() => [...document.querySelectorAll('.exo-music-side button, nav button')].find(b => b.textContent.trim() === 'Home')); await sleep(800) }],
-      [`music-playlist`, async () => { await click(() => document.querySelector('.exo-music-card .exo-music-card-open, .exo-music-card button')); return wait(() => document.querySelectorAll('.exo-music-row').length > 2 && !!document.querySelector('.exo-music-header-text'), 12000) }],
+      [`music-playlist`, async () => {
+        if (!await click(() => document.querySelector('.exo-music-library-row[data-kind="playlist"]'))) return notHere('no playlist in your library')
+        return wait(() => document.querySelectorAll('.exo-music-main .exo-music-tracks > li').length > 2 && !!document.querySelector('.exo-music-main .exo-music-header-text'), 12000)
+      }, async () => { await click(() => document.querySelector('.exo-music-back') ?? [...document.querySelectorAll('.exo-music-side button')].find(b => b.textContent.trim() === 'Home')); await sleep(600) }],
       ...panels.map(p => [`music-${p.toLowerCase().replace(/\W+/g, '-')}`,
         async () => click((l) => document.querySelector(`.exo-music-bar .exo-music-toggle[aria-label="${l}"]`), p),
         async () => { await click((l) => document.querySelector(`.exo-music-bar .exo-music-toggle[aria-label="${l}"]`), p); await sleep(400) }]),
       // Jam, Friend activity, Devices and Sound wait in More.
       ...['Jam', 'Friend activity', 'Devices', 'Sound'].map(p => [`music-${p.toLowerCase().replace(/\W+/g, '-')}`,
         async () => {
-          if (!await click(() => document.querySelector('.exo-music-bar [aria-label="More panels"]'))) return false
+          if (!await click(() => document.querySelector('.exo-music-bar button[aria-label^="More panels"]'))) return false
           await sleep(200)
           // Jam and Friend activity are Spotify's: another service's More has no such line.
           if (!await t.shell.call((l) => [...document.querySelectorAll('[role^="menuitem"]')].some(b => b.textContent.trim() === l), p)) return notHere(`this music service has no ${p}`)
