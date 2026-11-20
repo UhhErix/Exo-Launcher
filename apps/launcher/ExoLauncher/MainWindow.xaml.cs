@@ -37,7 +37,6 @@ public sealed partial class MainWindow : Window
     private bool _closingWindow;
     private Task? _ensureWebTask;
     private Microsoft.UI.Dispatching.DispatcherQueueTimer? _webViewWindowGuard;
-    private Windows.Foundation.TypedEventHandler<Microsoft.UI.Dispatching.DispatcherQueueTimer, object>? _webViewWindowGuardTick;
 
     public MainWindow()
     {
@@ -628,10 +627,12 @@ public sealed partial class MainWindow : Window
         if (_webViewWindowGuard is not null) return;
         _webViewWindowGuard = DispatcherQueue.CreateTimer();
         _webViewWindowGuard.Interval = TimeSpan.FromSeconds(1);
-        _webViewWindowGuardTick = (_, _) => UiGuard.Run(HideWebViewWindows);
-        _webViewWindowGuard.Tick += _webViewWindowGuardTick;
+        _webViewWindowGuard.Tick += OnWebViewWindowGuardTick;
         _webViewWindowGuard.Start();
     }
+
+    private void OnWebViewWindowGuardTick(Microsoft.UI.Dispatching.DispatcherQueueTimer sender, object args) =>
+        UiGuard.Run(HideWebViewWindows);
 
     private void StopWebViewWindowGuard()
     {
@@ -639,8 +640,7 @@ public sealed partial class MainWindow : Window
         if (guard is null) return;
         try
         {
-            if (_webViewWindowGuardTick is { } tick) guard.Tick -= tick;
-            _webViewWindowGuardTick = null;
+            guard.Tick -= OnWebViewWindowGuardTick;
             guard.Stop();
         }
         catch { }
