@@ -105,6 +105,7 @@ export function UpscalersTab({ active, games, onCount }: {
   // The games Update all took on, so its bar counts them off and its words stay what was pressed.
   const [batch, setBatch] = useState<string[]>([])
   const [pass, setPass] = useState(0)
+  const [scanFailed, setScanFailed] = useState(0)
   const scanned = useRef<{ key: string; at: number } | null>(null)
   const live = useRef(true)
   useEffect(() => {
@@ -127,7 +128,9 @@ export function UpscalersTab({ active, games, onCount }: {
     scanned.current = { key, at: Date.now() }
     let current = true
     setChecked(0)
+    setScanFailed(0)
     const found: Need[] = []
+    let failed = 0
     let cursor = 0
     const worker = async () => {
       while (current && cursor < copies.length) {
@@ -135,13 +138,17 @@ export function UpscalersTab({ active, games, onCount }: {
         try {
           const need = needOf(copy, await loadUpscalerStatus(copy.id))
           if (need) found.push(need)
-        } catch (error) { report(error, 'UpscalersSheet.status', { level: 'warn' }) }
+        } catch (error) {
+          failed += 1
+          report(error, 'UpscalersSheet.status', { level: 'warn' })
+        }
         if (current) setChecked(value => value + 1)
       }
     }
     void Promise.all(Array.from({ length: Math.min(4, Math.max(1, copies.length)) }, worker)).then(() => {
       if (!current) return
       const order = new Map(copies.map((copy, index) => [copy.id, index]))
+      setScanFailed(failed)
       setNeeds(found.sort((a, b) => (order.get(a.copy.id) ?? 0) - (order.get(b.copy.id) ?? 0)))
       // A read after Update all: a game still listed that failed keeps why; one that updated starts fresh.
       setRuns(value => Object.fromEntries(Object.entries(value).filter(([, run]) => run.kind === 'done' && !run.ok)))
@@ -254,6 +261,13 @@ export function UpscalersTab({ active, games, onCount }: {
       <div className="exo-upscalers-body">
         {needs === null ? (
           <Progress value={total ? checked / total : null} label={`Checking upscalers · ${checked} of ${total} ${total === 1 ? 'game' : 'games'}`} />
+        ) : listed.length === 0 && scanFailed > 0 ? (
+          <div className="exo-upscalers-clear">
+            <p className="exo-upscalers-card-note is-bad" role="alert">
+              Could not check {scanFailed} {scanFailed === 1 ? 'game' : 'games'}.
+            </p>
+            <button type="button" className="exo-set-btn" onClick={() => { setNeeds(null); setScanFailed(0); setPass(value => value + 1) }}>Try again</button>
+          </div>
         ) : listed.length === 0 ? (
           <AllCurrent />
         ) : (

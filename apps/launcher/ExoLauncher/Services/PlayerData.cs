@@ -253,6 +253,7 @@ internal static class PlayerData
         new("nvidia-drivers.json", "NvidiaDriverService", Why.Cache, "NVIDIA's driver list as fetched"),
         new("offers.json", "WindowsUpdateDrivers", Why.Cache, "drivers Windows Update offers, read again"),
         new("runtimes-graphics.json", "DependencyService", Why.Cache, "the graphics runtimes found on this PC"),
+        new("dotnet-releases.json", "DependencyService", Why.Cache, "Microsoft's .NET release list as fetched"),
         new("status-v2.json", "DlssSwapService", Why.Cache, "the upscaler files' status as checked"),
         new("steam-app-types.json", "SteamStoreAppTypes", Why.Cache, "which Steam apps are games, demos or tools"),
         new("steam-family.json", "SteamFamilyShares", Why.Cache, "Steam family-shared games as read: ids, names and owners' account ids"),

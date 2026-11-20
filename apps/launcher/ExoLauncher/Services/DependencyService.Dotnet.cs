@@ -19,7 +19,7 @@ public sealed partial class DependencyService
 
     private const string ReleaseIndex = "https://builds.dotnet.microsoft.com/dotnet/release-metadata/releases-index.json";
     /// <summary>Microsoft's .NET release list, read at most every 6 hours and retried as every version check is (<see cref="LatestCache{T}"/>).</summary>
-    private static readonly LatestCache<Dictionary<string, DotnetRelease>> Dotnet = new(".NET's release list", TimeSpan.FromHours(6));
+    private static readonly LatestCache<Dictionary<string, DotnetRelease>> Dotnet = new(".NET's release list", TimeSpan.FromHours(6), "dotnet-releases.json");
 
     /// <summary>What was read of .NET's releases last, without asking (null: nothing yet; the catalog's versions stand in).</summary>
     private static IReadOnlyDictionary<string, DotnetRelease>? DotnetKept() => Dotnet.Kept("releases");
@@ -110,7 +110,7 @@ public sealed partial class DependencyService
     /// </summary>
     private static async Task<IReadOnlyDictionary<string, DotnetRelease>?> DotnetForPageAsync(CancellationToken ct)
     {
-        try { return await DotnetReleasesAsync(CancellationToken.None).WaitAsync(TimeSpan.FromMilliseconds(1500), ct).ConfigureAwait(false); }
+        try { return await DotnetReleasesAsync(CancellationToken.None).WaitAsync(TimeSpan.FromMilliseconds(250), ct).ConfigureAwait(false); }
         catch (TimeoutException) { return DotnetKept(); }
     }
 

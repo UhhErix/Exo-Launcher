@@ -230,16 +230,18 @@ export function Composer({ channelId, guildId, users, placeholder, disabled, rep
   }, [guildId])
 
   // Mention from the person menu: it goes in at the end as @name, ready to type after.
+  const applyMention = useRef<(event: Event) => void>(() => { })
+  applyMention.current = (event: Event) => {
+    const { id, name } = (event as CustomEvent<{ id: string; name: string }>).detail
+    mentions.current.set(`@${name}`, `<@${id}>`)
+    setText(current => `${current}${current && !/\s$/.test(current) ? ' ' : ''}@${name} `)
+    box.current?.focus()
+  }
   useEffect(() => {
-    const mention = (event: Event) => {
-      const { id, name } = (event as CustomEvent<{ id: string; name: string }>).detail
-      mentions.current.set(`@${name}`, `<@${id}>`)
-      setText(current => `${current}${current && !/\s$/.test(current) ? ' ' : ''}@${name} `)
-      box.current?.focus()
-    }
+    const mention = (event: Event) => applyMention.current(event)
     window.addEventListener('exo-dc-mention', mention)
     return () => window.removeEventListener('exo-dc-mention', mention)
-  })
+  }, [])
 
   // The box grows with its text, up to 240 px, again whenever its width changes (the window resized). A key that adds
   // to a line with room left measures once and writes nothing; only a new line or a deletion sizes it again (each

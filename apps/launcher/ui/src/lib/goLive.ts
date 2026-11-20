@@ -237,10 +237,11 @@ export async function goLivePreview(source: string | null, width: number): Promi
 /** Goes live with a source; resolves with why it couldn't, or null. */
 export async function startGoLive(choice: GoLiveChoice): Promise<string | null> {
   listenHost()
-  setGoLive({ state: 'connecting', stats: null, message: null, viewers: [] })
+  const wasLive = goLive.state === 'live'
+  if (!wasLive) setGoLive({ state: 'connecting', stats: null, message: null, viewers: [] })
   const answer = await host.discordGoLive('start', choice).catch(() => null)
   if (answer?.ok) return null
-  setGoLive({ state: 'off' })
+  if (!wasLive) setGoLive({ state: 'off' })
   return errorText(answer?.message, 'Discord didn\'t start the stream. Try again.')
 }
 

@@ -64,7 +64,10 @@ function driverDetail(state: DriverState, vendor: Vendor, progress: DriverProgre
   if (starting) return 'Starting the update'
   if (progress && WORKING.has(progress.stage))
     return `${progress.message ?? STAGE[progress.stage]}${progress.stage === 'downloading' ? downloaded(progress.percent, latest?.size) : ''}`
-  if (progress?.stage === 'done' || progress?.stage === 'failed') return trimStop(progress.message) || STAGE[progress.stage]
+  if (progress?.stage === 'done' || progress?.stage === 'failed') {
+    const msg = trimStop(progress.message) || STAGE[progress.stage]
+    return state.installed && !msg.includes(state.installed) ? `${state.installed} · ${msg}` : msg
+  }
   return restingDetail(state, vendor)
 }
 

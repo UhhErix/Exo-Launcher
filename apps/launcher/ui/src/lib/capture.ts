@@ -70,7 +70,7 @@ export type CaptureItem = {
   derived?: boolean
 }
 
-export type CaptureExport = 'trim' | 'discord' | 'youtube' | 'vertical'
+export type CaptureExport = 'trim' | 'discord' | 'youtube' | 'vertical' | 'gif' | 'webm'
 
 /** capture.reel: a highlight reel waiting for a game to end, working (percent), done (item), stopped by the user, or failed (message; wait: a game is why). */
 export type ReelEvent = { state: 'waiting' | 'working' | 'done' | 'stopped' | 'failed'; percent: number; message?: string | null; wait: boolean; item?: CaptureItem | null }

@@ -80,6 +80,24 @@ public sealed partial class WebHostBridge
         }
     }
 
+    private static readonly Lock ShopCacheGate = new();
+    private static readonly TimeSpan ShopCacheTtl = TimeSpan.FromMinutes(5);
+    private static DiscordSession? _shopCatalogSession;
+    private static DateTime _shopCatalogUntil;
+    private static JsonElement? _shopCatalogBody;
+    private static JsonElement? _shopOwnedBody;
+
+    private static void InvalidateShopCatalog()
+    {
+        lock (ShopCacheGate)
+        {
+            _shopCatalogSession = null;
+            _shopCatalogUntil = default;
+            _shopCatalogBody = null;
+            _shopOwnedBody = null;
+        }
+    }
+
     /// <summary>
     /// Discord's Shop: the catalog with what the account owns (Discord's own shapes), one product (a profile
     /// effect's layers), or equipping an owned decoration, nameplate or profile effect (skuId null takes it off).
@@ -91,9 +109,24 @@ public sealed partial class WebHostBridge
         switch (ReadString(p, hasParams, "action"))
         {
             case "catalog":
+                lock (ShopCacheGate)
+                {
+                    if (ReferenceEquals(_shopCatalogSession, session) && DateTime.UtcNow < _shopCatalogUntil && _shopCatalogBody is not null)
+                        return new { ok = true, message = (string?)null, catalog = _shopCatalogBody, owned = _shopOwnedBody };
+                }
                 var categories = rest.ShopCategoriesAsync(ct);
                 var owned = await rest.CollectiblesPurchasesAsync(ct).ConfigureAwait(false);
                 var catalog = await categories.ConfigureAwait(false);
+                if (catalog.Error is null && catalog.Body is not null)
+                {
+                    lock (ShopCacheGate)
+                    {
+                        _shopCatalogSession = session;
+                        _shopCatalogUntil = DateTime.UtcNow + ShopCacheTtl;
+                        _shopCatalogBody = catalog.Body;
+                        _shopOwnedBody = owned.Body;
+                    }
+                }
                 return new { ok = catalog.Error is null, message = catalog.Error, catalog = catalog.Body, owned = owned.Body };
             case "product" when ReadString(p, hasParams, "skuId") is { } sku:
                 var product = await rest.CollectiblesProductAsync(sku, ct).ConfigureAwait(false);
@@ -149,12 +182,17 @@ public sealed partial class WebHostBridge
             case "buy" when ReadString(p, hasParams, "skuId") is { } buySku && ReadString(p, hasParams, "paymentSourceId") is { } buySource
                 && ReadString(p, hasParams, "currency") is { Length: 3 } currency && currency.All(char.IsAsciiLetterLower)
                 && hasParams && p.TryGetProperty("amount", out var amountEl) && amountEl.TryGetInt64(out var amount) && amount is > 0 and <= 100_000:
-                return await DiscordBuyAsync(rest, buySku, buySource, amount, currency, ct).ConfigureAwait(false);
+                var bought = await DiscordBuyAsync(rest, buySku, buySource, amount, currency, ct).ConfigureAwait(false);
+                InvalidateShopCatalog();
+                return bought;
             case "equip" when ReadString(p, hasParams, "kind") is "decoration" or "nameplate" or "effect":
                 var kind = ReadString(p, hasParams, "kind")!;
                 var skuId = ReadString(p, hasParams, "skuId");
-                if (kind != "effect") return Done(await rest.EquipAsync(kind, skuId, ct).ConfigureAwait(false));
-                return await EquipEffectAsync(session, skuId, ct).ConfigureAwait(false);
+                var equipped = kind != "effect"
+                    ? Done(await rest.EquipAsync(kind, skuId, ct).ConfigureAwait(false))
+                    : await EquipEffectAsync(session, skuId, ct).ConfigureAwait(false);
+                InvalidateShopCatalog();
+                return equipped;
             default: return new { ok = false, message = (string?)null };
         }
     }

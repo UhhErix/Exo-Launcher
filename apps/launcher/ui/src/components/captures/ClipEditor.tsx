@@ -168,6 +168,8 @@ const SAVED: Record<CaptureExport, string> = {
   discord: 'Saved a copy for Discord, under 10 MB.',
   youtube: 'Saved a full-quality copy.',
   vertical: 'Saved a vertical copy.',
+  gif: 'Saved a GIF copy.',
+  webm: 'Saved a WebM copy.',
 }
 
 /**

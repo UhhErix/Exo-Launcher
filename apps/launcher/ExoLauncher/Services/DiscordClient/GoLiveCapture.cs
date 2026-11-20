@@ -130,21 +130,22 @@ internal sealed class GoLiveCapture : IAsyncDisposable
         var capture = new GoLiveCapture(addon, pipe);
         addon.Event += capture.OnAddon;
         new Thread(capture.Read) { IsBackground = true, Name = "Exo Go Live frames" }.Start();
+        var startTask = addon.CallAsync("stream.start", new JsonObject
+        {
+            ["window"] = (long)source.Window,
+            ["monitor"] = (long)source.Monitor,
+            ["width"] = plan.Width,
+            ["height"] = plan.Height,
+            ["fps"] = plan.Fps,
+            ["bitrate"] = plan.Bitrate,
+            ["codec"] = hevc ? "hevc" : "h264",
+            ["allowFallback"] = allowFallback,
+            ["cursor"] = true,
+            ["pipe"] = (long)remote,
+        }, ct);
         try
         {
-            var reply = await addon.CallAsync("stream.start", new JsonObject
-            {
-                ["window"] = (long)source.Window,
-                ["monitor"] = (long)source.Monitor,
-                ["width"] = plan.Width,
-                ["height"] = plan.Height,
-                ["fps"] = plan.Fps,
-                ["bitrate"] = plan.Bitrate,
-                ["codec"] = hevc ? "hevc" : "h264",
-                ["allowFallback"] = allowFallback,
-                ["cursor"] = true,
-                ["pipe"] = (long)remote,
-            }, ct).WaitAsync(TimeSpan.FromSeconds(10), ct).ConfigureAwait(false);
+            var reply = await startTask.WaitAsync(TimeSpan.FromSeconds(10), ct).ConfigureAwait(false);
             int Read(string name, int fallback) => reply?[name] is JsonValue v && v.TryGetValue<double>(out var n) ? (int)n : fallback;
             capture._id = Read("id", 0);
             capture.Width = Read("width", plan.Width);
@@ -157,12 +158,26 @@ internal sealed class GoLiveCapture : IAsyncDisposable
         }
         catch (Exception ex) when (ex is InvalidOperationException or TimeoutException or OperationCanceledException)
         {
+            if (ex is TimeoutException or OperationCanceledException && capture._id == 0)
+                _ = CleanupLateStartAsync(addon, startTask);
             if (ex.Message.Contains("0x80070422", StringComparison.OrdinalIgnoreCase))
                 CaptureServiceHealth.MarkServiceDisabled();
             AppLog.Info("Discord video: Go Live capture did not start: " + ex.Message);
             await capture.DisposeAsync().ConfigureAwait(false);
             return (null, Explain(ex));
         }
+    }
+
+    private static async Task CleanupLateStartAsync(CaptureAddon addon, Task<JsonNode?> startTask)
+    {
+        try
+        {
+            var reply = await startTask.ConfigureAwait(false);
+            if (reply?["id"] is JsonValue val && val.TryGetValue<double>(out var rawId) && (int)rawId is > 0 and var lateId)
+                await addon.CallAsync("stream.stop", new JsonObject { ["id"] = lateId }, CancellationToken.None)
+                    .WaitAsync(TimeSpan.FromSeconds(3)).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or TimeoutException or OperationCanceledException) { }
     }
 
     /// <summary>
