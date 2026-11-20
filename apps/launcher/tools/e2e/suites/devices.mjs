@@ -19,7 +19,7 @@ export async function run(t) {
   await k.nav('Devices')
 
   const grid = await t.shell.waitFor(() => document.querySelectorAll('[data-device-card]').length || null, { timeoutMs: 15000 })
-  await run.check('devices', 'grid', 'each device Exo has a page for is a card with its picture that opens it; one with no page (a keyboard, a controller the lab can't read) has no card', async (c) => {
+  await run.check('devices', 'grid', "each device Exo has a page for is a card with its picture that opens it; one with no page (a keyboard, a controller the lab can't read) has no card", async (c) => {
     const listed = await t.host('devices.list')
     const detected = Array.isArray(listed?.devices) ? listed.devices : []
     const expected = new Set([

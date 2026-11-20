@@ -25,9 +25,8 @@ if (Test-Path -LiteralPath $installedAddons) {
     }
 }
 $targets = @(Get-Process ExoLauncher -ErrorAction SilentlyContinue | Where-Object { $_.Path -eq (Join-Path $app 'ExoLauncher.exe') })
-foreach ($process in $targets) {
-    if (-not $process.CloseMainWindow()) { throw 'Exo did not accept a normal close. Exit Exo before swapping.' }
-    if (-not $process.WaitForExit(20000)) { throw 'Exo has not finished releasing hosted apps. Swap canceled; no processes were killed.' }
+if ($targets.Count) {
+    & (Join-Path $PSScriptRoot 'e2e\lib\win.ps1') -Command close -W 20 | Out-Null
 }
 # The Lucid an installed Exo before 3.26 hosts (addons\lucid in the app folder, or addons\lucid-current in its data folder)
 # stays running when that Exo exits, and would stop the swap below. Asked to close, then ended if it won't, only when it is

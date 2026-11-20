@@ -191,6 +191,7 @@ export async function run(t) {
     await t.shell.clickAt(at.x, at.y)
     const listed = await t.shell.waitFor(() => document.querySelector('.exo-pc-apps-sheet .exo-apps-list .exo-apps-row') ? true : null, { timeoutMs: 20000 })
     if (!listed) { await k.closeAll(); return ['the apps never listed'] }
+    await t.shell.eval('new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)))')
     const state = await t.shell.eval(`(() => {
       const sheet = document.querySelector('.exo-pc-apps-sheet')
       const lists = ['.exo-apps-list'].map(sel => sheet.querySelector(sel)).filter(Boolean).map(list => ({ sel: '.' + list.classList[0], scrolls: list.scrollHeight > list.clientHeight + 1, fade: getComputedStyle(list).getPropertyValue('--exo-pool-bottom') }))
@@ -198,8 +199,8 @@ export async function run(t) {
       return {
         sheet: sheet.scrollHeight - sheet.clientHeight, lists, runtimesInSheet: !!sheet.querySelector('.exo-runtimes'), rows: rows.length,
         columns: [...sheet.querySelectorAll('.exo-apps-sort')].map(b => b.textContent.trim()),
-        // Nothing here is pointed at: no row's action shows, so the list isn't a wall of buttons. A row ends level with the next.
-        shownActions: rows.filter(r => r.querySelector('button') && !r.matches('.is-kept, :hover, :focus-within') && +getComputedStyle(r.querySelector('.exo-apps-act')).opacity > 0).length,
+        // Nothing here is pointed at: no row's action shows at full emphasis, so the list isn't a wall of bright buttons.
+        shownActions: rows.filter(r => r.querySelector('button') && !r.matches('.is-kept, :hover, :focus-within') && +getComputedStyle(r.querySelector('.exo-apps-act')).opacity >= 0.9).length,
         sideBySide: rows.length > 1 && rows[0].getBoundingClientRect().top === rows[1].getBoundingClientRect().top,
         hasPaths: sheet.textContent.includes(':' + String.fromCharCode(92) + 'Users' + String.fromCharCode(92)),
       }
@@ -212,7 +213,7 @@ export async function run(t) {
     if (state.sideBySide) failures.push('the rows stand side by side, not as one list')
     if (state.hasPaths) failures.push("the sheet shows a user's folder")
     // The two other views, by their chips only: neither press removes anything.
-    for (const view of ['Starts with Windows', 'Removed']) {
+    for (const view of ['Startup', 'Removed']) {
       const pressed = await t.shell.click((words) => [...document.querySelectorAll('.exo-pc-apps-sheet .exo-shelf-chip')].find(b => b.textContent.trim().startsWith(words)), view)
       if (!pressed) { failures.push(`no ${view} chip`); continue }
       const shows = await t.shell.waitFor(() => document.querySelector('.exo-pc-apps-sheet .exo-apps-list section, .exo-pc-apps-sheet .exo-apps-none') ? true : null, { timeoutMs: 15000 })

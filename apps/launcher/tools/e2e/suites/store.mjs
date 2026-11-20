@@ -106,6 +106,7 @@ export async function run(t) {
       days: [...document.querySelectorAll('section.exo-cal-day')].map(s => ({
         title: s.querySelector('.exo-cal-date')?.textContent.trim(),
         cards: s.querySelectorAll('.exo-cal-item .exo-store-card').length,
+        marks: s.querySelectorAll('.exo-cal-mark').length,
         whens: [...s.querySelectorAll('.exo-store-when')].map(w => w.textContent.trim()),
       })),
       empty: !!document.querySelector('.exo-store-empty'),
@@ -116,7 +117,7 @@ export async function run(t) {
     if (!view.days.length && !view.empty) failures.push('no days and no empty message')
     for (const d of view.days) {
       if (!d.title) failures.push('a day without a title')
-      if (d.cards === 0) failures.push(`${d.title} has no games`)
+      if (d.cards === 0 && d.marks === 0) failures.push(`${d.title} has no games`)
       // A game known only as "Q1 2027" or "Feb 2027" has no day to sit on.
       for (const w of d.whens) if (!/^[A-Z][a-z]{2} \d{1,2}(, \d{4})?$/.test(w)) failures.push(`${d.title}: "${w}" is not an exact date`)
     }

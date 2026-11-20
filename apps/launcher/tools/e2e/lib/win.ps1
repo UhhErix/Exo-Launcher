@@ -11,6 +11,7 @@
   move -X <x> -Y <y>         The real cursor to a screen point (hover).
   place -X -Y -W -H          Restores Exo's window and puts it at that rectangle.
   maximize | restore         Exo's window.
+  close -W <seconds>         Asks any running installed Exo to close (WM_CLOSE) and waits up to <seconds> for exit.
   proc                       Exo and the WebView2 processes under it: CPU seconds and memory.
   udp                        UDP endpoints Exo holds (a voice call holds some).
   shown -Name <process>      That process's windows a person could see: visible, not minimized or cloaked, on a monitor.
@@ -27,8 +28,9 @@ param(
 )
 $ErrorActionPreference = 'Stop'
 
-Add-Type -AssemblyName System.Drawing
-Add-Type @'
+if (-not ('ExoWin' -as [type])) {
+    Add-Type -AssemblyName System.Drawing
+    Add-Type @'
 using System;
 using System.Collections.Generic;
 using System.Runtime.InteropServices;
@@ -94,6 +96,25 @@ public static class ExoWin {
     }
     return null;
   }
+  [DllImport("user32.dll", CharSet = CharSet.Unicode)] public static extern int GetClassName(IntPtr h, System.Text.StringBuilder s, int n);
+  /** Exo's WinUI main window HWND; .NET Process.MainWindowHandle can pick auxiliary UAC/IME windows on Win11 26H2. */
+  public static IntPtr MainWindow(int targetPid, IntPtr fallback) {
+    IntPtr exact = IntPtr.Zero, visible = IntPtr.Zero, any = IntPtr.Zero;
+    var cls = new System.Text.StringBuilder(128);
+    var title = new System.Text.StringBuilder(256);
+    EnumWindows((h, l) => {
+      uint pid; GetWindowThreadProcessId(h, out pid);
+      if ((int)pid != targetPid) return true;
+      cls.Clear(); GetClassName(h, cls, cls.Capacity);
+      if (cls.ToString() != "WinUIDesktopWin32WindowClass") return true;
+      if (any == IntPtr.Zero) any = h;
+      if (visible == IntPtr.Zero && IsWindowVisible(h)) visible = h;
+      title.Clear(); GetWindowText(h, title, title.Capacity);
+      if (title.ToString() == "Exo Launcher") { exact = h; return false; }
+      return true;
+    }, IntPtr.Zero);
+    return exact != IntPtr.Zero ? exact : (visible != IntPtr.Zero ? visible : (any != IntPtr.Zero ? any : fallback));
+  }
   public static List<IntPtr> Monitors() {
     var list = new List<IntPtr>();
     EnumDisplayMonitors(IntPtr.Zero, IntPtr.Zero, (IntPtr h, IntPtr dc, ref RECT r, IntPtr d) => { list.Add(h); return true; }, IntPtr.Zero);
@@ -101,15 +122,24 @@ public static class ExoWin {
   }
 }
 '@
+}
 # Per-monitor DPI aware v2: every rectangle and point in physical pixels.
 [ExoWin]::SetProcessDpiAwarenessContext([IntPtr](-4)) | Out-Null
 
+function Get-ExoHwnd($p) {
+    $h = [ExoWin]::MainWindow($p.Id, $p.MainWindowHandle)
+    if ($h -eq [IntPtr]::Zero) { throw 'Exo has no window' }
+    $h
+}
+
 function Get-ExoWindow {
     $exe = Join-Path $env:LOCALAPPDATA 'ExoLauncher\app\ExoLauncher.exe'
-    $p = Get-Process ExoLauncher -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowHandle -ne 0 -and $_.Path -eq $exe } | Select-Object -First 1
-    if (-not $p) { $p = Get-Process ExoLauncher -ErrorAction SilentlyContinue | Where-Object MainWindowHandle -ne 0 | Select-Object -First 1 }
-    if (-not $p) { throw 'Exo has no window' }
-    $p
+    $procs = @(Get-Process ExoLauncher -ErrorAction SilentlyContinue)
+    $ordered = @($procs | Where-Object { $_.Path -eq $exe }) + @($procs | Where-Object { $_.Path -ne $exe })
+    foreach ($p in $ordered) {
+        if ([ExoWin]::MainWindow($p.Id, $p.MainWindowHandle) -ne [IntPtr]::Zero) { return $p }
+    }
+    throw 'Exo has no window'
 }
 
 function Monitor-Info([IntPtr]$m) {
@@ -124,7 +154,7 @@ function Monitor-Info([IntPtr]$m) {
 }
 
 function Window-Info($p) {
-    $h = $p.MainWindowHandle
+    $h = Get-ExoHwnd $p
     $c = New-Object ExoWin+RECT; [ExoWin]::GetClientRect($h, [ref]$c) | Out-Null
     $o = New-Object ExoWin+POINT; [ExoWin]::ClientToScreen($h, [ref]$o) | Out-Null
     [ordered]@{
@@ -137,7 +167,7 @@ function Window-Info($p) {
 }
 
 function Bring-Front($p) {
-    $h = $p.MainWindowHandle
+    $h = Get-ExoHwnd $p
     if ([ExoWin]::IsIconic($h)) { [ExoWin]::ShowWindow($h, 9) | Out-Null }
     # Windows lets a process take the foreground right after a key press of its own: a tap of Alt, then the switch.
     [ExoWin]::keybd_event(0x12, 0, 0, [UIntPtr]::Zero); [ExoWin]::keybd_event(0x12, 0, 2, [UIntPtr]::Zero)
@@ -160,11 +190,11 @@ switch ($Command) {
     }
     'click' {
         # Only onto Exo's own window: another window over it at that point (a game, another app's full screen) takes no click.
-        $exo = Get-ExoWindow; $at = New-Object ExoWin+POINT; $at.X = $X; $at.Y = $Y
+        $exo = Get-ExoWindow; $exoHwnd = Get-ExoHwnd $exo; $at = New-Object ExoWin+POINT; $at.X = $X; $at.Y = $Y
         $top = [ExoWin]::GetAncestor([ExoWin]::WindowFromPoint($at), 2); [uint32]$owner = 0
         [ExoWin]::GetWindowThreadProcessId($top, [ref]$owner) | Out-Null
         $title = New-Object System.Text.StringBuilder 256; [ExoWin]::GetWindowText($top, $title, 256) | Out-Null
-        $ours = ($top -eq $exo.MainWindowHandle) -or (((Get-Process -Id $owner -ErrorAction SilentlyContinue).ProcessName -eq 'msedgewebview2') -and ($title.ToString() -eq 'Exo Launcher'))
+        $ours = ($top -eq $exoHwnd) -or (((Get-Process -Id $owner -ErrorAction SilentlyContinue).ProcessName -eq 'msedgewebview2') -and ($title.ToString() -eq 'Exo Launcher'))
         if (-not $ours) { [ordered]@{ ok = $false; why = 'the window there is ' + (Get-Process -Id $owner -ErrorAction SilentlyContinue).ProcessName } | ConvertTo-Json -Compress; break }
         $was = New-Object ExoWin+POINT; [ExoWin]::GetCursorPos([ref]$was) | Out-Null
         [ExoWin]::SetCursorPos($X, $Y) | Out-Null; Start-Sleep -Milliseconds 80
@@ -174,14 +204,24 @@ switch ($Command) {
     }
     'move' { [ExoWin]::SetCursorPos($X, $Y) | Out-Null; '{"ok":true}' }
     'place' {
-        $p = Get-ExoWindow; $h = $p.MainWindowHandle
+        $p = Get-ExoWindow; $h = Get-ExoHwnd $p
         [ExoWin]::ShowWindow($h, 9) | Out-Null; Start-Sleep -Milliseconds 200
         [ExoWin]::SetWindowPos($h, [IntPtr]::Zero, $X, $Y, $W, $H, 0x0014) | Out-Null   # no z-order change, no activate
         Start-Sleep -Milliseconds 300
         Window-Info $p | ConvertTo-Json -Depth 5 -Compress
     }
-    'maximize' { $p = Get-ExoWindow; [ExoWin]::ShowWindow($p.MainWindowHandle, 3) | Out-Null; Start-Sleep -Milliseconds 400; Window-Info $p | ConvertTo-Json -Depth 5 -Compress }
-    'restore' { $p = Get-ExoWindow; [ExoWin]::ShowWindow($p.MainWindowHandle, 9) | Out-Null; Start-Sleep -Milliseconds 400; Window-Info $p | ConvertTo-Json -Depth 5 -Compress }
+    'maximize' { $p = Get-ExoWindow; [ExoWin]::ShowWindow((Get-ExoHwnd $p), 3) | Out-Null; Start-Sleep -Milliseconds 400; Window-Info $p | ConvertTo-Json -Depth 5 -Compress }
+    'restore' { $p = Get-ExoWindow; [ExoWin]::ShowWindow((Get-ExoHwnd $p), 9) | Out-Null; Start-Sleep -Milliseconds 400; Window-Info $p | ConvertTo-Json -Depth 5 -Compress }
+    'close' {
+        $exe = Join-Path $env:LOCALAPPDATA 'ExoLauncher\app\ExoLauncher.exe'
+        $timeoutSec = if ($W -gt 0) { $W } else { 40 }
+        foreach ($p in @(Get-Process ExoLauncher -ErrorAction SilentlyContinue | Where-Object Path -eq $exe)) {
+            $h = [ExoWin]::MainWindow($p.Id, $p.MainWindowHandle)
+            if ($h -eq [IntPtr]::Zero -or -not [ExoWin]::PostMessage($h, 0x0010, [IntPtr]::Zero, [IntPtr]::Zero)) { throw 'Exo did not accept a normal close' }
+            if (-not $p.WaitForExit($timeoutSec * 1000)) { throw "Exo did not exit in $timeoutSec s" }
+        }
+        '{"ok":true}'
+    }
     'proc' {
         $exo = Get-ExoWindow
         $all = Get-CimInstance Win32_Process -Property ProcessId, ParentProcessId, Name
