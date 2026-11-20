@@ -188,6 +188,23 @@ public partial class AppTests : IDisposable
     }
 
     [Fact]
+    public void Elevated_cli_dev_build_refusal_writes_result_file()
+    {
+        if (!OperatingSystem.IsWindows() || Elevated.CliExe() is not { } cli) return;
+        var file = Path.Combine(_root, "dev-refusal.json");
+        var psi = new ProcessStartInfo(cli, ["nvidia-auto-shader", "medium", Elevated.YesArg, Elevated.ResultArg, file]) { RedirectStandardError = true, RedirectStandardOutput = true };
+        psi.Environment.Remove("SCSKILLER_DATA_DIR");
+        psi.Environment.Remove("SCSKILLER_ALLOW_LIVE_DATA");
+        using var p = Process.Start(psi)!;
+        p.StandardOutput.ReadToEnd();
+        p.StandardError.ReadToEnd();
+        p.WaitForExit();
+        Assert.Equal(1, p.ExitCode);
+        Assert.True(File.Exists(file), "the CLI wrote no --result file on dev-build refusal");
+        Assert.Equal(new Elevated.Result(false, AppStore.DevBuildRefusal), Elevated.ReadResult(file, p.ExitCode));
+    }
+
+    [Fact]
     public async Task Anti_cheat_appearing_while_the_recorder_installs_takes_it_out_again()
     {
         var mod = Path.Combine(_exeDir, "d3d12.dll");   // a mod the recorder chains to: put back as it was
