@@ -794,6 +794,10 @@
   min-width: 0;
 }
 
+.exo-dc-friends-tools > .exo-dc-friend-search {
+  margin: 0;
+}
+
 :root .exo-dc .exo-dc-friends .exo-dc-friend-list {
   padding: 4px 0 0;
 }

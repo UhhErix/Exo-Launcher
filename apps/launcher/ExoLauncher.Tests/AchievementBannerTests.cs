@@ -141,4 +141,14 @@ public sealed class AchievementBannerTests
         Assert.Contains("banner.ready", page, StringComparison.Ordinal);
         Assert.DoesNotContain("art.remove()", page, StringComparison.Ordinal);
     }
+
+    [Fact]
+    public void Banner_page_wires_host_with_load_and_dom_ready_fallbacks()
+    {
+        var page = BannerPage();
+        Assert.Contains("wireHost", page, StringComparison.Ordinal);
+        Assert.Contains("DOMContentLoaded", page, StringComparison.Ordinal);
+        Assert.Contains("'load'", page, StringComparison.Ordinal);
+        Assert.Contains("banner.ready", page, StringComparison.Ordinal);
+    }
 }

@@ -216,7 +216,7 @@ export async function run(t) {
     for (const game of games) {
       const state = await t.host('game.settings', { id: game.id })
       if (state?.ok && state.supported) found ??= { game, state }
-      else if (state?.ok && game.installed) other ??= game
+      else if (state?.ok && game.installed) other ??= { game, state }
       if (found && other) break
     }
     if (!found) c.skip('no game here that Exo has best settings for')
@@ -230,7 +230,11 @@ export async function run(t) {
     const open = (title) => openByName(t, title)
     const line = () => { const s = document.querySelector('.exo-game-overlay-stage section.exo-game-line[aria-label="Optimize"]'); const b = s?.querySelector('button'); const w = s?.querySelector('.exo-game-line-word'); return s && { word: w?.textContent.trim() ?? '', good: w?.classList.contains('is-good') ?? false, color: w ? getComputedStyle(w).color : '', disabled: b?.disabled ?? false, visible: s.checkVisibility() } }
     if (!await open(game.title)) { await k.closeAll(); return [`Ctrl+K did not open ${game.title}`] }
-    const shown = await t.shell.waitFor(() => { const s = document.querySelector('.exo-game-overlay-stage section.exo-game-line[aria-label="Optimize"] .exo-game-line-word'); return s?.textContent.trim() ? true : null }, { timeoutMs: 5000 }) && await t.shell.eval(`(${line})()`)
+    const shown = await t.shell.waitFor(() => {
+      const s = document.querySelector('.exo-game-overlay-stage section.exo-game-line[aria-label="Optimize"] .exo-game-line-word')
+      const txt = s?.textContent.trim() ?? ''
+      return txt && !/^Checking\b/i.test(txt) ? true : null
+    }, { timeoutMs: 8000 }) && await t.shell.eval(`(${line})()`)
     c.evidence.line = shown
     const failures = []
     if (!shown) failures.push(`${game.title}'s sheet has no Optimize line`)
@@ -252,11 +256,20 @@ export async function run(t) {
     }
     await k.closeAll()
     if (other) {
-      c.evidence.other = other.title
-      if (!await open(other.title)) failures.push(`Ctrl+K did not open ${other.title}`)
+      c.evidence.other = other.game.title
+      if (!await open(other.game.title)) failures.push(`Ctrl+K did not open ${other.game.title}`)
       else {
-        await sleep(800)
-        if (await t.shell.eval(`!!document.querySelector('.exo-game-overlay-stage section.exo-game-line[aria-label="Optimize"]')`)) failures.push(`${other.title} shows Optimize without best settings`)
+        const wantOther = other.state.note ?? 'Not supported in this game'
+        const got = await t.shell.waitFor(() => {
+          const s = document.querySelector('.exo-game-overlay-stage section.exo-game-line[aria-label="Optimize"]')
+          const txt = s?.querySelector('.exo-game-line-word')?.textContent.trim() ?? ''
+          return txt && !/^Checking\b/i.test(txt) ? { word: txt, action: !!s?.querySelector('button.exo-game-line-row') } : null
+        }, { timeoutMs: 8000 })
+        if (!got) failures.push(`${other.game.title} has no settled Optimize reading`)
+        else {
+          if (got.action) failures.push(`${other.game.title} shows actionable Optimize without best settings`)
+          if (got.word !== wantOther) failures.push(`${other.game.title} Optimize reads "${got.word}", expected "${wantOther}"`)
+        }
       }
       await k.closeAll()
     }
@@ -281,7 +294,7 @@ export async function run(t) {
     for (const game of games) {
       const state = await t.host('dlss.frameGen', { id: game.id })
       if (state?.ok && state.state !== 'hidden') found ??= { game, state }
-      else if (state?.ok) hidden ??= game
+      else if (state?.ok) hidden ??= { game, state }
       if (found && hidden) break
     }
     if (!found) c.skip('no game here gets a Frame generation line on this graphics card')
@@ -314,11 +327,23 @@ export async function run(t) {
     }
     await k.closeAll()
     if (hidden) {
-      c.evidence.hidden = hidden.title
-      if (!await openByName(t, hidden.title)) failures.push(`Ctrl+K did not open ${hidden.title}`)
-      else {
+      c.evidence.hidden = hidden.game.title
+      if (!await openByName(t, hidden.game.title)) failures.push(`Ctrl+K did not open ${hidden.game.title}`)
+      else if (hidden.state.reason === 'card') {
         await sleep(1500)
-        if (await t.shell.eval(`!!document.querySelector('.exo-game-overlay-stage section.exo-game-line[aria-label="Frame generation"]')`)) failures.push(`${hidden.title} shows Frame generation where the host has none`)
+        if (await t.shell.eval(`!!document.querySelector('.exo-game-overlay-stage section.exo-game-line[aria-label="Frame generation"]')`)) failures.push(`${hidden.game.title} shows Frame generation where the host has none`)
+      } else {
+        const wantHidden = hidden.state.reason === 'unread' ? 'Could not check' : 'Not supported in this game'
+        const got = await t.shell.waitFor(() => {
+          const s = document.querySelector('.exo-game-overlay-stage section.exo-game-line[aria-label="Frame generation"]')
+          const txt = s?.querySelector('.exo-game-line-word')?.textContent.trim() ?? ''
+          return txt && !/^Checking\b/i.test(txt) ? { word: txt, controls: s?.querySelectorAll('button, [role="switch"]').length ?? 0 } : null
+        }, { timeoutMs: 8000 })
+        if (!got) failures.push(`${hidden.game.title} has no settled Frame generation reading`)
+        else {
+          if (got.controls) failures.push(`${hidden.game.title} Frame generation has ${got.controls} controls`)
+          if (got.word !== wantHidden) failures.push(`${hidden.game.title} Frame generation reads "${got.word}", expected "${wantHidden}"`)
+        }
       }
       await k.closeAll()
     }
