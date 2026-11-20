@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 3.28.0 — November 20, 2026
 - **Decoupled `IHostTransport`, ACL-hardened Named Pipe transport, and Rune ADR.** Extracts `WebView2` coupling out of `WebHostBridge` behind `IHostTransport` (`WebViewHostTransport` and `NamedPipeHostTransport` with current-user SID ACL and 4 MiB NDJSON framing) and records `docs/decisions/2026-11-20-native-ui-rune.md` targeting `anomalyco/rune` (`wgpu` DX12). _Checked in code only._
 - **Exo AI real-time optimization core & consolidated PC room.** Unifies Best Settings, Autopilot, Auto-Tune, and anti-cheat-safe user-mode NVML GPU fan curves inside Exo AI with silent non-elevated background optimization and 30-minute idle drift checks, upgrades Autopilot to a 2000 ms / 0.25-core look with alt-tab priority/1 ms timer restoration, collapses already-optimal setup steps, consolidates PC top chips to Exo AI, Apps, Storage, and Devices, and merges Upscalers + vendor control panels into Graphics. _Checked in code only._
 - **Real Liquid Glass, clean icons, Discord DM pinning & Apps/Startup fixes.** Restores authentic blurred AMOLED Liquid Glass across page controls and panels, reverts cluttered UI icon swaps while keeping Goeist, removes the Library scroll scrubber, adds synced 1:1 & group DM pinning in Discord, and fixes Apps layout sizing, Startup list refreshing on reopen, re-enabling Task Manager-disabled entries (`Turn on`), grouped duplicate entry errors, and shell-host memory inflation. _Checked in code only._
