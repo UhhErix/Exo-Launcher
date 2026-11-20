@@ -77,6 +77,32 @@ const sha256 = (bytes) => createHash('sha256').update(bytes).digest('hex')
  * that addon-source.mjs publishes are not this script's to drop), a release already listed must have the same file bytes
  * (a changed archive is refused, never replaced), and a new release is added. Either side may be null or empty.
  */
+/** Validates an index against getexo.app /source/index.json schema constraints so malformed titles/versions fail before upload. */
+export function validateIndex(index) {
+  const NAME = /^[a-z0-9-]{1,40}$/
+  const VERSION = /^\d{1,4}\.\d{1,4}\.\d{1,4}(?:-[0-9A-Za-z.]{1,20})?$/
+  const SHA256 = /^[0-9a-f]{64}$/
+  const MAX_BYTES = 10 * 1024 * 1024 * 1024
+  const isText = (value, max) => typeof value === 'string' && value.trim() !== '' && value.length <= max && !/[<>]/.test(value)
+  if (!index || typeof index !== 'object' || Array.isArray(index) || !Array.isArray(index.addons)) throw new Error('index.addons must be an array')
+  if (index.addons.length > 20) throw new Error(`index exceeds 20 addons (${index.addons.length})`)
+  for (const addon of index.addons) {
+    if (!addon || typeof addon !== 'object' || !Array.isArray(addon.releases)) throw new Error('invalid addon entry in index')
+    if (!NAME.test(addon.name)) throw new Error(`invalid addon name: ${addon.name}`)
+    if (!isText(addon.title, 80)) throw new Error(`invalid addon title (${addon.name}): length must be 1..80 without <>`)
+    if (!isText(addon.license, 80)) throw new Error(`invalid addon license (${addon.name}): length must be 1..80 without <>`)
+    if (addon.releases.length > 100) throw new Error(`${addon.name} exceeds 100 releases`)
+    for (const r of addon.releases) {
+      if (!r || typeof r !== 'object') throw new Error(`invalid release in ${addon.name}`)
+      if (!VERSION.test(r.version)) throw new Error(`invalid release version in ${addon.name}: ${r.version}`)
+      if (r.file !== `${addon.name}-${r.version}.tar.gz`) throw new Error(`invalid release file in ${addon.name}: ${r.file}`)
+      if (!Number.isSafeInteger(r.bytes) || r.bytes < 0 || r.bytes > MAX_BYTES) throw new Error(`invalid release bytes in ${addon.name}`)
+      if (!SHA256.test(r.sha256)) throw new Error(`invalid release sha256 in ${addon.name}`)
+    }
+  }
+  return index
+}
+
 export function mergeAddons(existing, added) {
   const merged = new Map((existing?.addons ?? []).map((addon) => [addon.name, { ...addon, releases: [...addon.releases] }]))
   for (const addon of added) {
@@ -125,7 +151,8 @@ export async function publishSources({ sources, io, log = () => {} }) {
     addons.get(src.name).releases.push({ version: src.version, file: src.file, bytes, sha256: digest })
   }
   const live = await io.get('source/index.json')
-  const index = Buffer.from(JSON.stringify(mergeAddons(live ? JSON.parse(live.toString('utf8')) : null, [...addons.values()]), null, 2))
+  const merged = validateIndex(mergeAddons(live ? JSON.parse(live.toString('utf8')) : null, [...addons.values()]))
+  const index = Buffer.from(JSON.stringify(merged, null, 2))
   await io.put('source/index.json', index, 'application/json')
   log(`uploaded  source/index.json ${index.length}`)
   return { index: JSON.parse(index.toString('utf8')), manifest }

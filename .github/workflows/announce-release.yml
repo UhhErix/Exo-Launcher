@@ -49,13 +49,15 @@ jobs:
                   except (UnicodeError, ValueError):
                       raise SystemExit(f'Cloudflare returned HTTP {code} without a valid announcement response.')
 
-          # Until the mirror serves the tag the Worker answers 409 not-live: ask again, for up to 20 minutes.
-          for attempt in range(40):
+          # Until the mirror serves the tag the Worker answers 409 not-live: ask with progressive backoff, for ~20 minutes.
+          delays = [5, 5, 10, 10, 15, 20]
+          for attempt in range(44):
               code, result = ask()
               if not (code == 409 and isinstance(result, dict) and result.get('status') == 'not-live'):
                   break
-              print(f'The mirror does not serve {tag} yet (try {attempt + 1} of 40); asking again in 30 seconds.')
-              time.sleep(30)
+              wait = delays[attempt] if attempt < len(delays) else 30
+              print(f'The mirror does not serve {tag} yet (try {attempt + 1} of 44); asking again in {wait} seconds.')
+              time.sleep(wait)
 
           status = result.get('status') if isinstance(result, dict) else None
           if code == 200 and status in ('posted', 'already'):

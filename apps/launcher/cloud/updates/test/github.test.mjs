@@ -595,6 +595,24 @@ test('the announce route promotes a release GitHub has just published, so the wo
   assert.equal(JSON.parse(mirror.text('launcher/latest.json')).tag, 'v3.27.0')
 })
 
+test('the announce route promotes the announced tag immediately even while GitHub /releases/latest still names the previous tag, while refusing drafts and older tags', async () => {
+  const mirror = r2()
+  seed(mirror, 'v3.26.0')
+  const rel26 = release('v3.26.0')
+  const rel27 = release('v3.27.0')
+  const draft28 = release('v3.28.0')
+  draft28.json.draft = true
+  use(github({ latest: rel26, tags: { 'v3.27.0': rel27, 'v3.28.0': draft28 }, trees: { 'v3.27.0': tree('3.27.0'), 'v3.28.0': tree('3.28.0') } }))
+  // Warm the GitHub check with v3.26.0 so /releases/latest is cached/stale.
+  assert.equal((await ask('/v1/launcher/latest', { MIRROR: mirror })).json().tag, 'v3.26.0')
+  const rejectedDraft = await ask('/v1/launcher/announce', { MIRROR: mirror }, { method: 'POST', body: JSON.stringify({ tag: 'v3.28.0' }) })
+  assert.equal(rejectedDraft.response.status, 409)
+  assert.equal(rejectedDraft.json().status, 'not-live')
+  const promoted = await ask('/v1/launcher/announce', { MIRROR: mirror }, { method: 'POST', body: JSON.stringify({ tag: 'v3.27.0' }) })
+  assert.equal(promoted.json().status, 'no-webhook')
+  assert.equal(JSON.parse(mirror.text('launcher/latest.json')).tag, 'v3.27.0')
+})
+
 // ---- the cron -------------------------------------------------------------------------------------------------------
 test('the cron promotes a new release and copies its installer and pack into R2', async () => {
   const mirror = r2()

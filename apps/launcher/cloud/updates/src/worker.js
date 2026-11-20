@@ -92,11 +92,11 @@ export default {
  * The launcher's manifest for /latest: GitHub's newest stable release when it is newer than the mirror's and checks out
  * (github.js promote), else the mirror's launcher/latest.json. GitHub down, slow or refusing: the mirror's answer, as before.
  */
-async function launcherManifest(env, ctx, { maxAge } = {}) {
+async function launcherManifest(env, ctx, { maxAge, hintTag } = {}) {
   const current = await readManifest('launcher', env)
   if (!env.MIRROR) return current
   try {
-    const result = await promote(env, ctx, { current, ...(maxAge ? { maxAge } : {}) })
+    const result = await promote(env, ctx, { current, ...(maxAge ? { maxAge } : {}), ...(hintTag ? { hintTag } : {}) })
     if (result.promoted) ctx?.waitUntil?.(afterPromote(result.release, result.manifest, env).catch(() => {}))
     return validManifest('launcher', result.manifest) ? result.manifest : current
   } catch {
@@ -158,9 +158,9 @@ async function announceRoute(app, request, env, ctx) {
   }
   if (typeof body?.tag !== 'string' || !TAG.test(body.tag)) return reply({ status: 'bad-request' }, 400)
   try {
-    // A launcher release just published on GitHub is promoted here (GitHub asked if it wasn't in the last 30 seconds), so the
-    // announce workflow's retries find it within a minute, not after the five-minute check.
-    if (app === 'launcher') await launcherManifest(env, ctx, { maxAge: 30 })
+    // A launcher release just published on GitHub is promoted here (asking the announced tag directly when GitHub's
+    // /latest listing is still catching up), so the announce workflow finds it on the first call when ready.
+    if (app === 'launcher') await launcherManifest(env, ctx, { maxAge: 30, hintTag: body.tag })
     const result = await announce({ app, tag: body.tag, announce: body.announce !== false, env, mirror: env.MIRROR })
     return reply({ status: result.status }, ANNOUNCE_STATUS[result.status] ?? 200)
   } catch {

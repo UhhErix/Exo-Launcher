@@ -31,7 +31,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { gunzipSync, gzipSync } from 'node:zlib'
-import { mergeAddons, realIo, SOURCE_BUCKET } from './source-mirror.mjs'
+import { mergeAddons, realIo, SOURCE_BUCKET, validateIndex } from './source-mirror.mjs'
 
 const NAME = /^[a-z0-9-]{1,40}$/
 const VERSION = /^\d{1,4}\.\d{1,4}\.\d{1,4}(?:-[0-9A-Za-z.]{1,20})?$/
@@ -168,7 +168,7 @@ export async function uploadSources({ dir, io, log = () => {} }) {
   }
   // The index last, so it only ever names archives that are there; the add-ons already listed (the tools) stay.
   const live = await io.get('source/index.json')
-  const index = mergeAddons(live ? JSON.parse(live.toString('utf8')) : null, entries.addons)
+  const index = validateIndex(mergeAddons(live ? JSON.parse(live.toString('utf8')) : null, entries.addons))
   await io.put('source/index.json', Buffer.from(JSON.stringify(index, null, 2)), 'application/json')
   log(`uploaded  source/index.json (${index.addons.map((a) => a.name).join(', ')})`)
   return index
