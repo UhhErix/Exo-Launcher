@@ -29,9 +29,18 @@ internal sealed class ForegroundWatcher : IDisposable
     private const uint InputForMs = 1500;
 
     /// Exo must not take the front at start when: EXO_NO_ACTIVATE=1 (a restart while someone plays, an install
-    /// script's, a test copy); a game runs (another Exo Launcher's GameRunning signal is set); or the window in front
-    /// fills its whole screen (a game or video in full screen). Started any other way, Exo comes to the front as asked.
-    internal static readonly bool StartedQuiet = Environment.GetEnvironmentVariable("EXO_NO_ACTIVATE") == "1" || GameSignalled() || FullScreenInFront();
+    /// script's, a test copy); --startup (launched silently at Windows sign-in); a game runs (another Exo Launcher's
+    /// GameRunning signal is set); or the window in front fills its whole screen (a game or video in full screen).
+    /// Started any other way, Exo comes to the front as asked.
+    internal static readonly bool StartedQuiet = Environment.GetEnvironmentVariable("EXO_NO_ACTIVATE") == "1" || HasStartupArg(Environment.GetCommandLineArgs()) || GameSignalled() || FullScreenInFront();
+
+    /// <summary>True when started at Windows sign-in via the Run value's --startup argument.</summary>
+    internal static bool HasStartupArg(IReadOnlyList<string> args)
+    {
+        foreach (var arg in args)
+            if (string.Equals(arg, "--startup", StringComparison.OrdinalIgnoreCase)) return true;
+        return false;
+    }
 
     private static bool GameSignalled()
     {

@@ -1,5 +1,6 @@
 import { useEffect, useState, type ComponentType, type ReactNode } from 'react'
 import { Board, Cpu, Drive, GraphicsCard, Memory, Monitor, Network, ThisPc as ThisPcIcon, type IconProps, Wifi } from '../../brand/icons'
+import { biosVendorHints } from '../../lib/biosHints'
 import { host, type DriveInfo, type GpuProfile, type KeepStatus, type PcAbout, type PcHealth } from '../../lib/host'
 import { driveName } from '../../lib/partNames'
 import { report } from '../../lib/report'
@@ -194,6 +195,7 @@ function Fact({ part, menu, onMenu }: { part: Part; menu?: PcPartMenu; onMenu: (
  */
 export function BoardRows({ about }: { about: PcAbout | null }) {
   const [error, setError] = useState<{ to: 'bios' | 'recovery'; text: string } | null>(null)
+  const hints = biosVendorHints(about?.motherboard)
   const go = (to: 'bios' | 'recovery') => {
     setError(null)
     host.biosUpdate(to).then(answer => { if (!answer.ok) setError({ to, text: trimStop(answer.message ?? '') || 'Didn’t restart' }) },
@@ -205,8 +207,8 @@ export function BoardRows({ about }: { about: PcAbout | null }) {
     <>
       <Row label="BIOS" detail={about?.bios ? joined([about.bios, month(about.biosDate)], ', ') : undefined} error={error?.to === 'bios' ? error.text : null}>{restart('bios')}</Row>
       <Row label="Recovery" error={error?.to === 'recovery' ? error.text : null}>{restart('recovery')}</Row>
-      {about?.secureBoot != null ? <Row label="Secure Boot">{on(about.secureBoot)}</Row> : null}
-      {about?.tpm ? <Row label="TPM"><State on={about.tpm !== 'None'}>{about.tpm}</State></Row> : null}
+      {about?.secureBoot != null ? <Row label="Secure Boot" detail={about.secureBoot === false && hints ? `BIOS: ${hints.secureBoot}` : undefined}>{on(about.secureBoot)}</Row> : null}
+      {about?.tpm ? <Row label="TPM" detail={about.tpm === 'None' && hints ? `BIOS: ${hints.tpm}` : undefined}><State on={about.tpm !== 'None'}>{about.tpm}</State></Row> : null}
       {about?.memoryIntegrity != null ? <Row label="Memory integrity">{on(about.memoryIntegrity)}</Row> : null}
     </>
   )

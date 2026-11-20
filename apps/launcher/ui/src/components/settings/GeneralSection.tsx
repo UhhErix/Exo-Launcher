@@ -82,10 +82,15 @@ const PREVIEWS = ['common', 'rare', 'epic', 'legendary', 'completion'] as const
  */
 function AchievementRows({ settings, disabled, save }: { settings: LauncherSettings | null; disabled: boolean; save: SaveSettings }) {
   const [volumeError, setVolumeError] = useState<string | null>(null)
+  const [previewError, setPreviewError] = useState<string | null>(null)
   const [shown, setShown] = useState(0)
   const preview = () => {
+    setPreviewError(null)
     setShown(n => n + 1)
-    host.achievementsPreview(PREVIEWS[shown % PREVIEWS.length]).catch((error: unknown) => report(error, 'Settings.achievementsPreview'))
+    host.achievementsPreview(PREVIEWS[shown % PREVIEWS.length]).catch((error: unknown) => {
+      report(error, 'Settings.achievementsPreview')
+      setPreviewError(errorText(error, 'Could not show the preview banner.'))
+    })
   }
   return (
     <Section id="achievements" title="Achievements">
@@ -93,7 +98,7 @@ function AchievementRows({ settings, disabled, save }: { settings: LauncherSetti
         onChange={value => save({ achievementBanners: value })} />
       <SliderRow label="Banner sound" min={0} max={100} step={5} value={settings?.achievementVolume ?? 60} disabled={disabled} error={volumeError}
         render={volume => volume === 0 ? 'Off' : `${volume}%`} onCommit={volume => void save({ achievementVolume: volume }).then(setVolumeError)} />
-      <Row label="Preview banner">
+      <Row label="Preview banner" error={previewError}>
         <button type="button" className="exo-set-btn" disabled={disabled} onClick={preview}>Show</button>
       </Row>
       <CopyRow label="OBS browser source" text={OBS_SOURCE} />

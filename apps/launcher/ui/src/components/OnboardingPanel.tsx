@@ -338,11 +338,16 @@ export function OnboardingPanel({
     }
   }
 
-  /** HDR for HDR games, Best settings' one step that is a setting. */
+  /** HDR for HDR games, Best settings' one step that is a setting, and setup switches. */
   async function saveSettings(patch: Partial<LauncherSettings>) {
-    const next = await saveSettingsPatch(patch)
-    setLocalSettings(next)
-    return true
+    try {
+      const next = await saveSettingsPatch(patch)
+      setLocalSettings(next)
+      return true
+    } catch (error) {
+      report(error, 'OnboardingPanel.saveSettings')
+      return false
+    }
   }
 
   /** Use best settings: each step left, in turn, its row turning its ring; then this PC is read again for the checks. */

@@ -31,8 +31,12 @@ export function PcStep({ steps, running, landed, failed, settings, onSave }: {
         </Row>
       ))}
       {settings ? (
-        <SwitchRow id="ob-auto-upscalers" label={AUTO_UPSCALERS_LABEL} detail={AUTO_UPSCALERS_DETAIL} checked={settings.autoUpdateUpscalers !== false}
-          onChange={async on => await onSave({ autoUpdateUpscalers: on }) ? null : 'Not saved. Try again.'} />
+        <>
+          <SwitchRow id="ob-auto-upscalers" label={AUTO_UPSCALERS_LABEL} detail={AUTO_UPSCALERS_DETAIL} checked={settings.autoUpdateUpscalers !== false}
+            onChange={async on => await onSave({ autoUpdateUpscalers: on }) ? null : 'Not saved. Try again.'} />
+          <SwitchRow id="ob-start-with-windows" label="Open Exo when Windows starts" detail="Starts quietly in the background when you sign in." checked={settings.startWithWindows === true}
+            onChange={async on => await onSave({ startWithWindows: on }) ? null : 'Not saved. Try again.'} />
+        </>
       ) : null}
     </div>
   )
