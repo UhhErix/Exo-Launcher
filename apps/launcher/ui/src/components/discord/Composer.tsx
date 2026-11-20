@@ -672,17 +672,31 @@ function ModifyAttachment({ file, spoiler, onSave, onClose }: { file: File; spoi
 /** The pictures a chip previews: plain bitmaps, never an SVG (a document of its own). */
 const PREVIEWED = new Set(['image/png', 'image/jpeg', 'image/gif', 'image/webp', 'image/avif', 'image/bmp'])
 
-// A picture's preview in its chip, freed when the chip goes.
+// A picture's preview rendered safely onto a canvas, avoiding DOM object-URL sinks.
 function FileThumb({ file }: { file: File }) {
-  const [url, setUrl] = useState<string | null>(null)
+  const canvasRef = useRef<HTMLCanvasElement | null>(null)
+  const previewable = PREVIEWED.has(file.type)
+
   useEffect(() => {
-    if (!PREVIEWED.has(file.type)) return
-    const next = URL.createObjectURL(file)
-    setUrl(next)
-    return () => URL.revokeObjectURL(next)
-  }, [file])
-  const safeUrl = url && url.startsWith('blob:') ? url : null
-  return safeUrl ? <img className="exo-dc-file-thumb" src={safeUrl} alt="" draggable={false} /> : null
+    if (!previewable || typeof createImageBitmap !== 'function') return
+    let cancelled = false
+    createImageBitmap(file).then((bitmap) => {
+      const canvas = canvasRef.current
+      if (cancelled || !canvas) {
+        bitmap.close()
+        return
+      }
+      const scale = Math.min(1, 320 / Math.max(bitmap.width, bitmap.height, 1))
+      canvas.width = Math.max(1, Math.round(bitmap.width * scale))
+      canvas.height = Math.max(1, Math.round(bitmap.height * scale))
+      canvas.getContext('2d')?.drawImage(bitmap, 0, 0, canvas.width, canvas.height)
+      bitmap.close()
+    }).catch(() => {})
+    return () => { cancelled = true }
+  }, [file, previewable])
+
+  if (!previewable) return null
+  return <canvas ref={canvasRef} className="exo-dc-file-thumb" aria-hidden="true" />
 }
 
 function Suggestions({ suggestions, pick, onPick }: { suggestions: Suggestion[]; pick: number; onPick: (suggestion: Suggestion) => void }) {
