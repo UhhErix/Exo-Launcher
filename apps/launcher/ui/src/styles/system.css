@@ -718,7 +718,7 @@
   flex: none;
 }
 
-@media (max-width: 900px) {
+@media (max-width: 1080px) {
   .exo-music {
     --exo-side-w: 216px;
   }

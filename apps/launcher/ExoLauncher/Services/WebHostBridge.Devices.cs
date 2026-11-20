@@ -45,6 +45,16 @@ public sealed partial class WebHostBridge
     /// audio.read: the output's and microphone's format, volume and mute as Windows has them, and how Exo Voice is set, for
     /// the audio page (asked again every few seconds only while it shows). Read only.
     /// </summary>
+    private static AudioDetails.Endpoint? ReadAudioEndpoint(string id)
+    {
+        try { return AudioDetails.Read(id); }
+        catch (Exception ex) when (ex is System.Runtime.InteropServices.COMException or InvalidCastException or ArgumentException or UnauthorizedAccessException)
+        {
+            Helpers.AppLog.Warn("Audio: Windows didn't answer: " + ex.GetType().Name);
+            return null;
+        }
+    }
+
     private object AudioRead(System.Text.Json.JsonElement p, bool hasParams)
     {
         var s = _services.Settings.Current;
@@ -52,8 +62,8 @@ public sealed partial class WebHostBridge
         return new
         {
             ok = true,
-            output = Given("output") is { } output ? AudioDetails.Read(output) : null,
-            mic = Given("mic") is { } mic ? AudioDetails.Read(mic) : null,
+            output = Given("output") is { } output ? ReadAudioEndpoint(output) : null,
+            mic = Given("mic") is { } mic ? ReadAudioEndpoint(mic) : null,
             voice = new
             {
                 custom = s.DiscordInputProfile == "custom",

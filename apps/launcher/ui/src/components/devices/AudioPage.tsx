@@ -81,13 +81,14 @@ function useAudioDetails(output: string | null, mic: string | null, visible: boo
     setDetails(last => last?.[which] ? { ...last, [which]: { ...last[which], ...next } } : last)
   }, [])
   useEffect(() => {
-    if (!visible || !shown) return
+    if (!visible) return
     let current = true
     const read = () => {
       const began = changes.current
       return host.audioRead(output, mic).then(next => { if (current && next.ok && began === changes.current) setDetails(next) }, (error: unknown) => report(error, 'AudioPage.details', { level: 'warn' }))
     }
     void read()
+    if (!shown) return () => { current = false }
     const again = window.setInterval(() => void read(), 3000)
     return () => { current = false; window.clearInterval(again) }
   }, [output, mic, visible, shown])
