@@ -31,7 +31,7 @@ internal sealed partial class Host
         "recorder.install", "recorder.uninstall", "recorder.set", "recorder.auto", "recorder.alongside", "recorder.offline", "recorder.startOffline",
         "recorder.startRisk", "recorder.clear", "game.verify", "sharing.signIn", "sharing.cancelSignIn", "sharing.refresh", "sharing.signOut", "sharing.setUpload", "game.clearCache", "game.putBackKept", "game.dropKept", "game.play",
         "games.remove", "games.hide", "cache.delete", "cache.freeOldDriver", "driver.setCacheLimit", "driver.setAutoShader",
-        "driver.setCleanupGuard", "game.asdUndo", "ba.start", "ba.launch", "ba.continue", "ba.recordAfterAgain", "ba.cancel",
+        "driver.setCleanupGuard", "asd.refresh", "game.asdUndo", "ba.start", "ba.launch", "ba.continue", "ba.recordAfterAgain", "ba.cancel",
         "game.setTraversal", "settings.setTraversal",   // a recorder's scskiller.ini is written in the game's folder
     ];
 
@@ -41,14 +41,14 @@ internal sealed partial class Host
         "settings.set", "game.setApi", "game.setNewShaders", "game.setCareful", "game.setRayTracing", "game.setMaximum",
         "game.setLeftOutOfAddAll", "game.compileMax", "queue.addWhenIdle", "driverStale.whenIdle", "library.addAllRecommended",
         "recorder.install", "recorder.uninstall", "recorder.alongside", "recorder.offline", "recorder.startOffline",
-        "recorder.checkRisk", "recorder.startRisk", "driver.setAutoShader",
+        "recorder.checkRisk", "recorder.startRisk",
     ];
 
     /// <summary>Methods that don't name a game: they don't wait for the first scan's list (<see cref="_firstList"/>).</summary>
     private static readonly HashSet<string> NoGameNeeded =
     [
         "snapshot", "ui.visible", "exitWhenIdle", "shutdown", "logs.subscribe", "whatsNew", "whatsNew.atStart", "settings.get",
-        "policy.preview", "app.dismissGpuNotice", "scan", "exo.library", "cache.refreshSizes", "cache.inventory", "recorder.auto",
+        "policy.preview", "app.dismissGpuNotice", "scan", "exo.library", "cache.refreshSizes", "cache.inventory", "recorder.auto", "asd.refresh",
         "sharing.status", "sharing.signIn", "sharing.cancelSignIn", "sharing.refresh", "sharing.signOut", "sharing.setUpload",
     ];
 
@@ -200,9 +200,11 @@ internal sealed partial class Host
                 k.MoveInQueue(p.ReqStr("id"), p.ReqInt("index"));
                 return Ok;
             case "queue.start":
+                SetIdleBoost(p.Bool("idle") ?? false);
                 CompileQueue();
                 return Ok;
             case "queue.pause":
+                SetIdleBoost(false);
                 UserPausedOrResumed(resumed: false);
                 k.PauseQueue();
                 return Ok;
@@ -211,6 +213,7 @@ internal sealed partial class Host
                 k.ResumeQueue();
                 return Ok;
             case "queue.stop":
+                SetIdleBoost(false);
                 k.StopQueue();
                 return Ok;
             case "driverStale.compileNow":
@@ -713,6 +716,9 @@ internal sealed partial class Host
                 return await SetAutoShader(p.ReqStr("level"));
             case "driver.setCleanupGuard":
                 return await SetCleanupGuard(p.ReqBool("on"));
+            case "asd.refresh":
+                _k.TriggerLocalAsdRefresh(p.Bool("driverUpdated") ?? false);
+                return Ok;
         }
         throw new ServiceError($"unknown method '{method}'");
     }

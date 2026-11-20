@@ -190,6 +190,17 @@ internal static partial class GameHdr
         UnrealSaved(project, game).SelectMany(saved => ((string[])["Windows", "WindowsNoEditor", "WinGDK", "WindowsClient"])
             .Select(platform => Path.Combine(saved, "Config", platform, "GameUserSettings.ini"))).FirstOrDefault(File.Exists);
 
+    /// <summary>Every existing <c>Engine.ini</c> under each Unreal project's <c>Saved\Config</c> folders.</summary>
+    internal static IEnumerable<string> UnrealEngineIniFiles(GameEntry game) =>
+        string.IsNullOrEmpty(game.Path) || !Directory.Exists(game.Path)
+            ? []
+            : UnrealProjects(game.Path)
+                .SelectMany(project => UnrealSaved(project, game))
+                .SelectMany(saved => ((string[])["Windows", "WindowsNoEditor", "WinGDK", "WindowsClient"])
+                    .Select(platform => Path.Combine(saved, "Config", platform, "Engine.ini")))
+                .Where(File.Exists)
+                .Distinct(StringComparer.OrdinalIgnoreCase);
+
     private static List<string> SettingsFiles(GameEntry game)
     {
         var install = game.Path!;

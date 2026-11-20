@@ -59,6 +59,33 @@ try {
     Assert-Case 'a damaged archive stops the build' {
         Expand-SourceArchive $bad (Join-Path $dir 'x')
     } $true 'Could not extract'
+    $ignoredRoot = Join-Path $PSScriptRoot 'third_party'
+    $ignoredHadRoot = Test-Path -LiteralPath $ignoredRoot
+    $ignoredTree = Join-Path $ignoredRoot ('patch-check-' + [guid]::NewGuid().ToString('N').Substring(0, 6))
+    Assert-Case 'a patch applies inside an ignored voice folder' {
+        try {
+            New-Item -ItemType Directory -Force -Path (Join-Path $ignoredTree 'sub') | Out-Null
+            Set-Content -LiteralPath (Join-Path $ignoredTree 'sub\hello.txt') -Value 'before' -NoNewline
+            $patch = Join-Path $dir 'change.patch'
+            Set-Content -LiteralPath $patch -Value @(
+                'diff --git a/sub/hello.txt b/sub/hello.txt'
+                '--- a/sub/hello.txt'
+                '+++ b/sub/hello.txt'
+                '@@ -1 +1 @@'
+                '-before'
+                '+after'
+            )
+            Apply-SourcePatch $ignoredTree $patch
+            if ((Get-Content -LiteralPath (Join-Path $ignoredTree 'sub\hello.txt') -Raw).Trim() -ne 'after') {
+                throw 'patch did not apply'
+            }
+        } finally {
+            Remove-Item -LiteralPath $ignoredTree -Recurse -Force -ErrorAction SilentlyContinue
+            if (-not $ignoredHadRoot -and (Test-Path -LiteralPath $ignoredRoot) -and -not (Get-ChildItem -LiteralPath $ignoredRoot -Force)) {
+                Remove-Item -LiteralPath $ignoredRoot -Force -ErrorAction SilentlyContinue
+            }
+        }
+    } $false
 } finally {
     Remove-Item -LiteralPath $dir -Recurse -Force -ErrorAction SilentlyContinue
 }

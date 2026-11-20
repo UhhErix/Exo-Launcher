@@ -55,9 +55,12 @@ public sealed class ProtocolTests
 
         JsonObject unknown = await s.Reply(s.Send("nope"));
         Assert.Equal("unknown method 'nope'", (string?)unknown["error"]);
-        // Safe mode refuses what would compile or record.
-        foreach (string method in new[] { "game.compile", "queue.start", "recorder.set" })
-            Assert.Equal("not available in safe mode", (string?)(await s.Reply(s.Send(method, new JsonObject { ["id"] = "steam:1", ["on"] = true })))["error"]);
+        // Safe mode refuses what would compile, record, or mutate driver/ASD state.
+        foreach (string method in new[] { "game.compile", "queue.start", "recorder.set", "asd.refresh" })
+            Assert.Equal("not available in safe mode", (string?)(await s.Reply(s.Send(method, new JsonObject { ["id"] = "steam:1", ["on"] = true, ["idle"] = true })))["error"]);
+
+        // driver.setAutoShader is no longer refused as policy-owned.
+        Assert.NotEqual("Exo Shaders sets this itself: there is no option for it", (string?)(await s.Reply(s.Send("driver.setAutoShader", new JsonObject { ["level"] = "medium" })))["error"]);
 
         // A line that isn't JSON gets an answer with a null id.
         s.Write("{not json");

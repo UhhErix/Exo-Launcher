@@ -18,7 +18,7 @@ internal sealed partial class ScsKillerStatus : IDisposable
     /// <param name="EngineId">The engine's own id for the game (it can differ from Exo's), for game.compile.</param>
     internal sealed record Status(string State, string? Reason, DateTimeOffset? WarmedAt, string? Driver, string? EngineId = null);
 
-    private sealed record Listed(string Id, string Name, string InstallDir, string Status, string Reason, DateTimeOffset? WarmedAt, string? Driver);
+    internal sealed record Listed(string Id, string Name, string InstallDir, string Status, string Reason, DateTimeOffset? WarmedAt, string? Driver, string? EngineFamily = null, string? ExePath = null);
 
     private readonly object _gate = new();
     private FileSystemWatcher? _watcher;
@@ -110,19 +110,82 @@ internal sealed partial class ScsKillerStatus : IDisposable
         {
             if (Directory.Exists(Path.Combine(root, "Engine", "Binaries"))) return true;
             foreach (var dir in Directory.EnumerateDirectories(root))
-                if (Directory.Exists(Path.Combine(dir, "Binaries", "Win64")) || Directory.Exists(Path.Combine(dir, "Engine", "Binaries")))
+                if (Directory.Exists(Path.Combine(dir, "Binaries", "Win64"))
+                    || Directory.Exists(Path.Combine(dir, "Binaries", "WinGDK"))
+                    || Directory.Exists(Path.Combine(dir, "Engine", "Binaries")))
                     return true;
+            if (GameHdr.UnrealProjects(root).Count > 0) return true;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
         return false;
     }
 
-    /// <summary>The engine's entry for an Exo game: the same id, else the same name, in the same install.</summary>
-    private Listed? Match(GameEntry game)
+    internal static bool SupportsFirstLaunchPrepare(string? root, string? engineFamily = null)
     {
-        var list = ReadList();
-        return list.FirstOrDefault(g => g.Id.Equals(game.Id, StringComparison.OrdinalIgnoreCase) && SameInstall(g.InstallDir, game.Path))
-               ?? list.FirstOrDefault(g => NameKey(g.Name) == NameKey(game.Title) && SameInstall(g.InstallDir, game.Path));
+        if (engineFamily is { Length: > 0 } && (
+            engineFamily.Equals("Unreal", StringComparison.OrdinalIgnoreCase)
+            || engineFamily.Equals("RE Engine", StringComparison.OrdinalIgnoreCase)
+            || engineFamily.Equals("Frostbite", StringComparison.OrdinalIgnoreCase)
+            || engineFamily.Equals("Stingray", StringComparison.OrdinalIgnoreCase)
+            || engineFamily.Equals("Dawn", StringComparison.OrdinalIgnoreCase)))
+            return true;
+        if (string.IsNullOrWhiteSpace(root) || !Directory.Exists(root)) return false;
+        if (LooksUnreal(root)) return true;
+        try
+        {
+            if (File.Exists(Path.Combine(root, "re_chunk_000.pak"))) return true;
+            if (Directory.Exists(Path.Combine(root, "Data", "Win32"))
+                && Directory.EnumerateFiles(Path.Combine(root, "Data"), "*.toc", SearchOption.TopDirectoryOnly).Any())
+                return true;
+            if (Directory.Exists(Path.Combine(root, "data"))
+                && File.Exists(Path.Combine(root, "settings", "settings.ini"))
+                && Directory.EnumerateFiles(root, "*stingray*.dll", SearchOption.TopDirectoryOnly).Any())
+                return true;
+            if (Directory.Exists(Path.Combine(root, "Engine"))
+                && Directory.EnumerateFiles(root, "*dawn*.dll", SearchOption.AllDirectories).Any())
+                return true;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
+        return false;
+    }
+
+    internal string? EngineFamilyOf(GameEntry game) => Match(game)?.EngineFamily;
+
+    internal bool SupportsFirstLaunchPrepare(GameEntry game) =>
+        SupportsFirstLaunchPrepare(game.Path, EngineFamilyOf(game));
+
+    /// <summary>The engine's entry for an Exo game: the same id, else the same name, else the same exe in the install.</summary>
+    private Listed? Match(GameEntry game) => Match(ReadList(), game);
+
+    internal static Listed? Match(IReadOnlyList<Listed> list, GameEntry game) =>
+        list.FirstOrDefault(g => g.Id.Equals(game.Id, StringComparison.OrdinalIgnoreCase) && SameInstall(g.InstallDir, game.Path))
+        ?? list.FirstOrDefault(g => NameKey(g.Name) == NameKey(game.Title) && SameInstall(g.InstallDir, game.Path))
+        ?? MatchByExe(list, game);
+
+    private static Listed? MatchByExe(IReadOnlyList<Listed> list, GameEntry game)
+    {
+        var target = game.LaunchTarget is { Length: > 0 } t && t.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) ? NormalizePath(t) : null;
+        if (target is not null)
+        {
+            var exact = list.FirstOrDefault(g => SameInstall(g.InstallDir, game.Path) && string.Equals(NormalizePath(g.ExePath), target, StringComparison.OrdinalIgnoreCase));
+            if (exact is not null) return exact;
+            var targetName = Path.GetFileName(target);
+            var byName = list.Where(g => SameInstall(g.InstallDir, game.Path) && string.Equals(Path.GetFileName(g.ExePath), targetName, StringComparison.OrdinalIgnoreCase)).ToList();
+            if (byName.Count == 1) return byName[0];
+        }
+        if (!string.IsNullOrWhiteSpace(game.Path))
+        {
+            var under = list.Where(g => SameInstall(g.InstallDir, game.Path) && !string.IsNullOrWhiteSpace(g.ExePath) && PathHelper.IsUnderRoot(g.ExePath, game.Path)).ToList();
+            if (under.Count == 1) return under[0];
+        }
+        return null;
+    }
+
+    private static string? NormalizePath(string? path)
+    {
+        if (string.IsNullOrWhiteSpace(path)) return null;
+        try { return Path.TrimEndingDirectorySeparator(Path.GetFullPath(path)); }
+        catch (Exception ex) when (ex is ArgumentException or NotSupportedException or PathTooLongException) { return null; }
     }
 
     private IReadOnlyList<Listed> ReadList()
@@ -140,9 +203,10 @@ internal sealed partial class ScsKillerStatus : IDisposable
                 foreach (var state in array.EnumerateArray())
                 {
                     if (!state.TryGetProperty("Game", out var game) || Text(game, "Id") is not { } id) continue;
+                    string? engineFamily = state.TryGetProperty("Engine", out var eng) ? Text(eng, "Family") : null;
                     games.Add(new Listed(id, Text(game, "Name") ?? id, Text(game, "InstallDir") ?? "",
                         Text(state, "Status") ?? "Unsupported", Text(state, "StatusReason") ?? "",
-                        Date(Text(state, "WarmedAt")), Text(state, "WarmedDriverVersion")));
+                        Date(Text(state, "WarmedAt")), Text(state, "WarmedDriverVersion"), engineFamily, Text(game, "ExePath")));
                 }
             lock (_gate) _list = (written, games);
             return games;

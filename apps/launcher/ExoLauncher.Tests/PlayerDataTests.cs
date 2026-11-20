@@ -247,6 +247,7 @@ public sealed class PlayerDataTests : IDisposable
         ["game-settings/cs2.original.cfg"] = Utf8("fps_max 0\r\n"),
         ["startup-removed.json"] = Utf8("""[{"id":"task:\\Foo","name":"Foo"}]"""),
         ["shader-rebuild.json"] = Utf8("""{"Driver":"32.0.15.7270","State":3,"Queue":["steam:1"],"StalledStarts":0,"ReadyAtStart":0,"Ready":0}"""),
+        ["unreal-shader-ini.json"] = Utf8("""{"Files":{"games/Engine.ini":{"GameId":"steam:1","AddedSection":true,"HadTrailingNewLine":true}}}"""),
         ["startup-guard.json"] = Utf8("""{"Version":1,"Items":[{"Id":"task:\\Foo","Mechanism":"task","State":0,"Since":"2026-11-01T00:00:00+00:00","Comebacks":[]}]}"""),
         ["startup-removed/task-0f.xml"] = Utf8("<?xml version=\"1.0\"?><Task><Principals><Principal><UserId>PC-A\\Player One</UserId></Principal></Principals><Actions><Exec><Command>C:\\Users\\Player One\\foo.exe</Command></Exec></Actions></Task>"),
     };

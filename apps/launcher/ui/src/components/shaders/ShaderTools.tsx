@@ -86,6 +86,10 @@ export function ShadersSection() {
       setError(message(caught, 'The shader engine did not answer.'))
     })
   }
+  const autoShader = snap?.app.gpu?.vendor === 'nvidia' ? snap?.app.cache?.autoShader : null
+  const autoShaderIsOff = autoShader?.startsWith('Now: Off')
+  const autoShaderNeedsRepair = autoShader?.includes("isn't set up")
+  const autoShaderCanToggle = !!autoShader && !autoShader.startsWith("Couldn't")
   return (
     <Section id="shaders" title="Shaders">
       <Row label="First launches while you’re away">
@@ -99,6 +103,16 @@ export function ShadersSection() {
           <Row label="Record games to improve compiles" detail="Adds a small d3d12.dll to each game’s folder" error={error}>
             <Switch checked={!!snap?.recorder?.auto} label="Record games to improve compiles" onChange={on => run('recorder.auto', { on })} />
           </Row>
+          {autoShader ? (
+            <Row label="NVIDIA Auto Shader Compilation" detail={autoShader}>
+              {autoShaderCanToggle ? (
+                <button type="button" className="exo-set-btn"
+                  onClick={() => run('driver.setAutoShader', { level: autoShaderNeedsRepair || autoShaderIsOff ? 'medium' : 'off' })}>
+                  {autoShaderNeedsRepair ? 'Repair' : autoShaderIsOff ? 'Turn on' : 'Turn off'}
+                </button>
+              ) : null}
+            </Row>
+          ) : null}
           <Row label="Games">
             <button type="button" className="exo-set-btn" aria-expanded={games} onClick={() => setGames(open => !open)}>{games ? 'Hide' : 'Show'}</button>
           </Row>

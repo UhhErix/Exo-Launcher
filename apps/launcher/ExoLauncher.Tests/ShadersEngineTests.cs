@@ -27,7 +27,7 @@ public sealed partial class ShadersEngineTests
         return "";
     }
 
-    [GeneratedRegex("""CallAsync\("([a-zA-Z.]+)"|"(snapshot|ui\.visible|scan|queue\.[a-zA-Z]+|game\.[a-zA-Z]+|recorder\.[a-zA-Z]+|exo\.library|exitWhenIdle|shutdown)""")]
+    [GeneratedRegex("""CallAsync\("([a-zA-Z.]+)"|"(snapshot|ui\.visible|scan|queue\.[a-zA-Z]+|game\.[a-zA-Z]+|recorder\.[a-zA-Z]+|driver\.[a-zA-Z]+|cache\.[a-zA-Z]+|asd\.[a-zA-Z]+|exo\.library|exitWhenIdle|shutdown)""")]
     private static partial Regex HostMethod();
 
     [GeneratedRegex("""case "([a-zA-Z.]+)":""")]

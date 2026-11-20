@@ -58,7 +58,14 @@ public sealed partial class ScsKiller
 
     /// <summary>A rebuild runs now (<see cref="RefreshLocalAsd"/>): only while the PC is idle, it stops the moment it isn't.</summary>
     public bool LocalAsdBuilding => Volatile.Read(ref _asdBuilding) == 1;
-    int _asdBuilding;
+    public bool LocalAsdPending => Volatile.Read(ref _asdPendingWork) == 1;
+    int _asdBuilding, _asdPendingWork;
+
+    public void TriggerLocalAsdRefresh(bool driverUpdated = false)
+    {
+        if (!OperatingSystem.IsWindows() || !AsdInstaller.Present()) return;
+        _ = Task.Run(() => RefreshLocalAsd(driverUpdated));
+    }
 
     /// <summary>The adapter of <paramref name="gpu"/> as the compiler lists it, when its driver has a compiler plugin; null
     /// otherwise (or the compiler can't be had).</summary>
@@ -183,6 +190,7 @@ public sealed partial class ScsKiller
                 while (Volatile.Read(ref _listed) == 0) await Task.Delay(Poll);   // the first scan's list: the games to look at
                 if (!LocalAsdDue()) return;
             }
+            Volatile.Write(ref _asdPendingWork, 1);
             while (Compiling || QueueRunning || !UserIdle || _playing.Count > 0) await Task.Delay(Poll);
             RedetectGpu();
             var gpu = Snapshot().Gpu;
@@ -197,7 +205,11 @@ public sealed partial class ScsKiller
                 await RebuildLocalAsdWhileIdle(game, gpu.DriverVersion);
         }
         catch (Exception e) { Log?.Report($"precompiled shaders: refresh stopped ({e.Message})"); }
-        finally { Volatile.Write(ref _asdRefreshing, 0); }
+        finally
+        {
+            Volatile.Write(ref _asdPendingWork, 0);
+            Volatile.Write(ref _asdRefreshing, 0);
+        }
     }
 
     /// <summary>The game's database rebuilt for <paramref name="driver"/> while the PC is idle: the moment it isn't (input,

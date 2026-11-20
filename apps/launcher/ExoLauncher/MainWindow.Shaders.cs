@@ -68,10 +68,11 @@ public sealed partial class MainWindow
         var ids = new System.Text.Json.Nodes.JsonArray();
         foreach (var id in engineIds) ids.Add(id);
         await addon.CallAsync("queue.add", new System.Text.Json.Nodes.JsonObject { ["ids"] = ids }, ct, "the new driver").ConfigureAwait(false);
-        await addon.CallAsync("queue.start", null, ct, "the new driver").ConfigureAwait(false);
+        await addon.CallAsync("queue.start", new System.Text.Json.Nodes.JsonObject { ["idle"] = true }, ct, "the new driver").ConfigureAwait(false);
         // A queue this rebuild paused earlier goes on; one that was never paused answers with an error, which is nothing.
         try { await addon.CallAsync("queue.resume", null, ct).ConfigureAwait(false); }
         catch (InvalidOperationException) { }
+        await RefreshLocalAsdAsync(addon, driverUpdated: true, ct).ConfigureAwait(false);
         return true;
     }
 
@@ -83,7 +84,20 @@ public sealed partial class MainWindow
     {
         if (ShadersAddon is not { } addon) return false;
         await addon.CallAsync("scan", null, ct, "new or updated games").ConfigureAwait(false);
+        await RefreshLocalAsdAsync(addon, driverUpdated: false, ct).ConfigureAwait(false);
         return true;
+    }
+
+    private static async Task RefreshLocalAsdAsync(Services.ShadersAddon addon, bool driverUpdated, CancellationToken ct)
+    {
+        try
+        {
+            await addon.CallAsync("asd.refresh", new System.Text.Json.Nodes.JsonObject { ["driverUpdated"] = driverUpdated }, ct).ConfigureAwait(false);
+        }
+        catch (InvalidOperationException)
+        {
+            // Older engine without asd.refresh.
+        }
     }
 
     /// <summary>The rebuild pauses the engine's compile (the PC came into use). Nothing when the engine does not run.</summary>

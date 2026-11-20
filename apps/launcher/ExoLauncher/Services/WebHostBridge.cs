@@ -1210,6 +1210,8 @@ public sealed partial class WebHostBridge
         }
 
         await RecorderOutOfTheWayAsync(game).ConfigureAwait(true);
+        if (ScsKillerStatus.LooksUnreal(game.Path))
+            await Task.Run(() => UnrealShaderIni.Apply(game, _dlss.AntiCheatAnswer(game, _bridgeLifetime.Token), () => _services.Launcher.GetGameRunState(game).IsRunning)).ConfigureAwait(true);
 
         // Steam can't sign in because its servers are down: Play offers its offline mode instead of waiting on it.
         // Both Steam checks read its logs, process table and appinfo: off the UI thread.
