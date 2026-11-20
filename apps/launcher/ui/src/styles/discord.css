@@ -2042,7 +2042,7 @@ video.exo-dc-media {
 }
 
 .exo-dc .exo-dc-me-pair > .exo-dc-me-caret {
-  width: 14px;
+  width: 16px;
   height: 32px;
   padding: 0;
   border-radius: var(--exo-small-radius);
