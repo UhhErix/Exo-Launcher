@@ -370,6 +370,18 @@ internal sealed partial class DiscordRest : IDisposable
     internal Task<Reply> JoinInviteAsync(string code, CancellationToken ct) =>
         SendAsync(HttpMethod.Post, $"invites/{Uri.EscapeDataString(code)}", new JsonObject(), ct);
 
+    /// <summary>Reads a Discord gift code's plan, application, uses, and gifter for its message card.</summary>
+    internal Task<Reply> GiftInfoAsync(string code, CancellationToken ct) =>
+        SendAsync(HttpMethod.Get, $"entitlements/gift-codes/{Uri.EscapeDataString(code)}?with_application=true&with_subscription_plan=true", null, ct);
+
+    /// <summary>Redeems a Discord gift code (optionally attributing the channel it was posted in).</summary>
+    internal Task<Reply> RedeemGiftAsync(string code, string? channelId, CancellationToken ct)
+    {
+        var body = new JsonObject();
+        if (channelId is { Length: > 0 }) body["channel_id"] = Id(channelId);
+        return SendAsync(HttpMethod.Post, $"entitlements/gift-codes/{Uri.EscapeDataString(code)}/redeem", body, ct);
+    }
+
     internal Task<Reply> LeaveGuildAsync(string guildId, CancellationToken ct) =>
         SendAsync(HttpMethod.Delete, $"users/@me/guilds/{Id(guildId)}", new JsonObject { ["lurking"] = false }, ct);
 

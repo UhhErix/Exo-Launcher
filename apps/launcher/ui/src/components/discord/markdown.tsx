@@ -1,6 +1,7 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { openLink } from '../../lib/music'
 import { jumpToMessage, openDiscord, type DiscordRoleIcon, type DiscordUser } from '../../lib/discord'
+import { giftCode } from '../../lib/discordGift'
 import { accountSettings } from '../../lib/discordPrefs'
 import { host } from '../../lib/host'
 import { useLinkGuard } from '../ui/useLinkGuard'
@@ -220,6 +221,8 @@ const INVITE_LINK = /^https?:\/\/(?:www\.)?(?:discord\.gg|(?:(?:ptb|canary)\.)?d
 
 /** An invite link's code; null for any other link. */
 export const inviteCode = (url: string) => INVITE_LINK.exec(url)?.[1] ?? null
+
+export { giftCode }
 
 function follow(url: string, onLookalike: (brand: string) => void) {
   const invite = inviteCode(url)

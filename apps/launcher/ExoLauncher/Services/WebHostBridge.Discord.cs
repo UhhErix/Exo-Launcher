@@ -304,6 +304,42 @@ public sealed partial class WebHostBridge
                     stageReply = await session.Rest.SetOwnStageStateAsync(DiscordRest.Id(stageGuild), DiscordRest.Id(stageChannel), suppress, rts, ct).ConfigureAwait(false);
                 }
                 return new { ok = stageReply.Error is null, message = stageReply.Error, voice = session.VoiceStatus() };
+            case "stageStart":
+                {
+                    if (ReadString(p, hasParams, "channelId") is not { Length: > 0 } startChannel)
+                        return new { ok = false, message = "Choose a stage channel first." };
+                    var startTopic = (ReadString(p, hasParams, "topic") ?? "").Trim();
+                    if (startTopic.Length is < 1 or > 120)
+                        return new { ok = false, message = "Enter a stage topic (up to 120 characters)." };
+                    var cid = DiscordRest.Id(startChannel);
+                    if (!session.Cache.CanModerateStage(cid))
+                        return new { ok = false, message = "You can't moderate this stage." };
+                    var startReply = await session.Rest.CreateStageInstanceAsync(cid, startTopic, 2, ct).ConfigureAwait(false);
+                    return new { ok = startReply.Error is null, message = startReply.Error, voice = session.VoiceStatus() };
+                }
+            case "stageEdit":
+                {
+                    if (ReadString(p, hasParams, "channelId") is not { Length: > 0 } editChannel)
+                        return new { ok = false, message = "Choose a stage channel first." };
+                    var editTopic = (ReadString(p, hasParams, "topic") ?? "").Trim();
+                    if (editTopic.Length is < 1 or > 120)
+                        return new { ok = false, message = "Enter a stage topic (up to 120 characters)." };
+                    var cid = DiscordRest.Id(editChannel);
+                    if (!session.Cache.CanModerateStage(cid))
+                        return new { ok = false, message = "You can't moderate this stage." };
+                    var editReply = await session.Rest.UpdateStageInstanceAsync(cid, editTopic, ct).ConfigureAwait(false);
+                    return new { ok = editReply.Error is null, message = editReply.Error, voice = session.VoiceStatus() };
+                }
+            case "stageEnd":
+                {
+                    if (ReadString(p, hasParams, "channelId") is not { Length: > 0 } endChannel)
+                        return new { ok = false, message = "Choose a stage channel first." };
+                    var cid = DiscordRest.Id(endChannel);
+                    if (!session.Cache.CanModerateStage(cid))
+                        return new { ok = false, message = "You can't moderate this stage." };
+                    var endReply = await session.Rest.DeleteStageInstanceAsync(cid, ct).ConfigureAwait(false);
+                    return new { ok = endReply.Error is null, message = endReply.Error, voice = session.VoiceStatus() };
+                }
         }
         return new { ok = true, voice = session.VoiceStatus() };
     }
@@ -794,6 +830,14 @@ public sealed partial class WebHostBridge
             // Discord says the invite is unknown or expired, so the card says so.
             case "invite" when InviteCode(ReadString(p, hasParams, "invite")) is { } info:
                 return await DiscordInviteAsync(session, info, ct).ConfigureAwait(false);
+            case "gift" when GiftCode(ReadString(p, hasParams, "code")) is { } giftCode:
+                return await DiscordGiftAsync(session, giftCode, ct).ConfigureAwait(false);
+            case "redeemGift" when GiftCode(ReadString(p, hasParams, "code")) is { } redeemCode:
+                {
+                    var giftChannel = ReadString(p, hasParams, "channelId");
+                    reply = await session.Rest.RedeemGiftAsync(redeemCode, giftChannel is { Length: > 0 } gc ? gc : null, ct).ConfigureAwait(false);
+                    return new { ok = reply.Error is null, message = reply.Error };
+                }
             // A server tag's card: the server's public profile, which Discord shows for any server, joined or not.
             case "profile" when ReadString(p, hasParams, "guildId") is { } profiled:
                 reply = await session.Rest.GuildProfileAsync(DiscordRest.Id(profiled), ct).ConfigureAwait(false);
@@ -919,6 +963,46 @@ public sealed partial class WebHostBridge
                 verified = features.Contains("VERIFIED"), partnered = features.Contains("PARTNERED"),
                 online = Count(body, "approximate_presence_count"), members = Count(body, "approximate_member_count"),
                 joined = guildId is not null && session.Cache.InGuild(guildId),
+            },
+        };
+    }
+
+    private static async Task<object> DiscordGiftAsync(DiscordSession session, string code, CancellationToken ct)
+    {
+        var reply = await session.Rest.GiftInfoAsync(code, ct).ConfigureAwait(false);
+        var body = reply.Body is { ValueKind: JsonValueKind.Object } b ? b : default;
+        if (reply.Error is not null || body.ValueKind != JsonValueKind.Object)
+        {
+            var invalid = (body.ValueKind == JsonValueKind.Object && body.TryGetProperty("code", out var c) && c.TryGetInt32(out var n) && n is 10038 or 50050)
+                || (reply.Error?.Contains("unknown", StringComparison.OrdinalIgnoreCase) == true)
+                || (reply.Error?.Contains("expired", StringComparison.OrdinalIgnoreCase) == true);
+            return new { ok = false, message = reply.Error, invalid };
+        }
+        static JsonElement Part(JsonElement e, string name) => e.ValueKind == JsonValueKind.Object && e.TryGetProperty(name, out var v) && v.ValueKind == JsonValueKind.Object ? v : default;
+        static string? Text(JsonElement e, string name) => e.ValueKind == JsonValueKind.Object && e.TryGetProperty(name, out var v) && v.ValueKind == JsonValueKind.String ? v.GetString() : null;
+        static int? Count(JsonElement e, string name) => e.ValueKind == JsonValueKind.Object && e.TryGetProperty(name, out var v) && v.TryGetInt32(out var n) ? n : null;
+        var parsedCode = Text(body, "code") ?? code;
+        var name = Text(Part(body, "subscription_plan"), "name")
+            ?? Text(Part(Part(body, "store_listing"), "sku"), "name")
+            ?? Text(Part(body, "application"), "name")
+            ?? "Discord Gift";
+        var uses = Count(body, "uses") ?? 0;
+        var maxUses = Count(body, "max_uses") ?? 1;
+        var redeemed = (body.TryGetProperty("redeemed", out var rd) && rd.ValueKind == JsonValueKind.True) || (maxUses > 0 && uses >= maxUses);
+        var user = Part(body, "user");
+        var gifter = Text(user, "global_name") ?? Text(user, "username");
+        return new
+        {
+            ok = true,
+            gift = new
+            {
+                code = parsedCode,
+                name,
+                uses,
+                maxUses,
+                redeemed,
+                expiresAt = Text(body, "expires_at"),
+                gifter,
             },
         };
     }
@@ -1083,6 +1167,17 @@ public sealed partial class WebHostBridge
         if (string.IsNullOrEmpty(text)) return null;
         var code = text.Contains('/') ? text[(text.LastIndexOf('/') + 1)..] : text;
         return code.Length is > 1 and <= 32 && code.All(c => char.IsAsciiLetterOrDigit(c) || c == '-') ? code : null;
+    }
+
+    // discord.gift/<code>, discord.com/gifts/<code>, discordapp.com/gifts/<code>, or a bare gift code.
+    internal static string? GiftCode(string? gift)
+    {
+        var text = gift?.Trim();
+        if (string.IsNullOrEmpty(text)) return null;
+        text = text.Split(['?', '#'], 2)[0].TrimEnd('/');
+        if (text.Contains("..", StringComparison.Ordinal) || text.Contains('\\')) return null;
+        var code = text.Contains('/') ? text[(text.LastIndexOf('/') + 1)..] : text;
+        return code.Length is >= 8 and <= 48 && code.All(c => char.IsAsciiLetterOrDigit(c) || c == '-') ? code : null;
     }
 
     private static async Task<object> DiscordProfileAsync(JsonElement p, bool hasParams, CancellationToken ct)

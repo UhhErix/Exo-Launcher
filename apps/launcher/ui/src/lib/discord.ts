@@ -152,6 +152,8 @@ export type DiscordChannel = {
   /** A stage channel's live topic and whether you can invite/demote speakers. */
   stageTopic?: string | null
   canModerateStage?: boolean
+  /** A voice channel's active Embedded Activity name, read-only. */
+  activity?: string | null
   /** A category the user collapsed (kept in their Discord settings). */
   collapsed?: boolean
   /** A Server Guide resource (Discord lists it in the guide, not the channel lists). */
@@ -229,6 +231,17 @@ export type DiscordInvite = {
   online?: number | null
   members?: number | null
   joined: boolean
+}
+
+/** A Discord gift code preview from entitlements/gift-codes. */
+export type DiscordGift = {
+  code: string
+  name: string
+  uses: number
+  maxUses: number
+  redeemed: boolean
+  expiresAt?: string | null
+  gifter?: string | null
 }
 
 export type DiscordGuide = {

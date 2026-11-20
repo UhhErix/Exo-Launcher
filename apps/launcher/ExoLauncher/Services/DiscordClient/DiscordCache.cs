@@ -117,6 +117,8 @@ internal sealed partial class DiscordCache
         public Dictionary<string, VoiceMember> Voice = [];
         // Live Stage topics keyed by channel id.
         public Dictionary<string, string> StageTopics = [];
+        // Read-only voice channel Embedded Activity names keyed by channel id.
+        public Dictionary<string, string> VoiceActivities = [];
     }
 
     private sealed record Emoji(string Id, string Name, bool Animated, bool Available);
@@ -444,9 +446,23 @@ internal sealed partial class DiscordCache
                         eguild.Emojis = ReadEmojis(d);
                     break;
                 case "READY_SUPPLEMENTAL":
-                    if (d.TryGetProperty("merged_presences", out var mp)) ApplyMergedPresences(mp);
-                    events.Add(("discord.changed", new { guildId = (string?)null, friends = true }));
-                    break;
+                    {
+                        if (d.TryGetProperty("merged_presences", out var mp)) ApplyMergedPresences(mp);
+                        foreach (var suppGuild in Array(d, "guilds"))
+                        {
+                            if (Str(suppGuild, "id") is not { } suppGuildId || !_guilds.TryGetValue(suppGuildId, out var suppGuildObj)) continue;
+                            if (!suppGuild.TryGetProperty("embedded_activities", out _)) continue;
+                            var suppPrev = suppGuildObj.VoiceActivities.Count > 0 ? new Dictionary<string, string>(suppGuildObj.VoiceActivities) : null;
+                            suppGuildObj.VoiceActivities.Clear();
+                            foreach (var suppAct in Array(suppGuild, "embedded_activities")) ApplyEmbeddedActivity(suppGuildObj, suppAct);
+                            var suppChanged = suppPrev is null
+                                ? suppGuildObj.VoiceActivities.Count > 0
+                                : suppPrev.Count != suppGuildObj.VoiceActivities.Count || suppPrev.Any(kv => !suppGuildObj.VoiceActivities.TryGetValue(kv.Key, out var cur) || cur != kv.Value);
+                            if (suppChanged) events.Add(("discord.changed", new { guildId = suppGuildId, voice = true }));
+                        }
+                        events.Add(("discord.changed", new { guildId = (string?)null, friends = true }));
+                        break;
+                    }
                 case "PRESENCE_UPDATE":
                     if ((Str(d, "guild_id") is null || Watched(PresenceUser(d))) && ApplyPresence(d) is { } presenceUser)
                         events.Add(("discord.presence", PresenceEvent(presenceUser)));
@@ -565,6 +581,15 @@ internal sealed partial class DiscordCache
                         events.Add(("discord.changed", new { guildId = delStageGuildId }));
                     }
                     break;
+                case "EMBEDDED_ACTIVITY_UPDATE":
+                case "EMBEDDED_ACTIVITY_UPDATE_V2":
+                    {
+                        var actGuildId = Str(d, "guild_id")
+                            ?? (d.TryGetProperty("location", out var actLoc) && actLoc.ValueKind == JsonValueKind.Object ? Str(actLoc, "guild_id") : null);
+                        if (actGuildId is not null && _guilds.TryGetValue(actGuildId, out var actGuild) && ApplyEmbeddedActivity(actGuild, d))
+                            events.Add(("discord.changed", new { guildId = actGuildId, voice = true }));
+                        break;
+                    }
                 case "USER_GUILD_SETTINGS_UPDATE":
                     ApplyGuildSettings(d);
                     events.Add(("discord.changed", new { guildId = Str(d, "guild_id") }));
@@ -894,6 +919,7 @@ internal sealed partial class DiscordCache
                         canSetStatus = IsVoice(c.Type) && (perms & SetVoiceStatus) != 0,
                         stageTopic = c.Type == 13 && guild.StageTopics.TryGetValue(c.Id, out var stageTopic) ? stageTopic : null,
                         canModerateStage = c.Type == 13 && (perms & (MuteMembers | MoveMembers | ManageChannels)) != 0,
+                        activity = IsVoice(c.Type) && guild.VoiceActivities.TryGetValue(c.Id, out var voiceActivity) ? voiceActivity : null,
                     });
                 }
             }
@@ -1248,6 +1274,36 @@ internal sealed partial class DiscordCache
             return (perms & ManageChannels) != 0 && clearing
                 || (perms & SetVoiceStatus) != 0 && Me is not null && guild.Voice.GetValueOrDefault(Me.Id)?.ChannelId == channelId;
         }
+    }
+
+    /// <summary>Whether the user holds Mute Members, Move Members, or Manage Channels on a Stage channel.</summary>
+    internal bool CanModerateStage(string channelId)
+    {
+        lock (_gate)
+            return Find(channelId) is { Type: 13 } c && (Perms(c) & (MuteMembers | MoveMembers | ManageChannels)) != 0;
+    }
+
+    private static bool ApplyEmbeddedActivity(Guild guild, JsonElement item)
+    {
+        var channelId = Str(item, "channel_id")
+            ?? (item.TryGetProperty("location", out var loc) && loc.ValueKind == JsonValueKind.Object ? Str(loc, "channel_id") : null);
+        if (string.IsNullOrEmpty(channelId)) return false;
+
+        var name = (item.TryGetProperty("embedded_activity", out var embedded) && embedded.ValueKind == JsonValueKind.Object ? Str(embedded, "name") : null)
+            ?? (item.TryGetProperty("activity", out var activity) && activity.ValueKind == JsonValueKind.Object ? Str(activity, "name") : null)
+            ?? Str(item, "name");
+
+        var userCount = item.TryGetProperty("users", out var users) && users.ValueKind == JsonValueKind.Array ? users.GetArrayLength()
+            : item.TryGetProperty("participants", out var parts) && parts.ValueKind == JsonValueKind.Array ? parts.GetArrayLength()
+            : string.IsNullOrWhiteSpace(name) ? 0 : 1;
+
+        if (string.IsNullOrWhiteSpace(name) || userCount <= 0)
+            return guild.VoiceActivities.Remove(channelId);
+
+        var trimmed = name.Trim();
+        if (guild.VoiceActivities.TryGetValue(channelId, out var prev) && prev == trimmed) return false;
+        guild.VoiceActivities[channelId] = trimmed;
+        return true;
     }
 
     /// <summary>
@@ -2246,6 +2302,15 @@ internal sealed partial class DiscordCache
         guild.StageTopics = g.TryGetProperty("stage_instances", out _)
             ? Array(g, "stage_instances").Select(s => (Channel: Str(s, "channel_id"), Topic: Str(s, "topic"))).Where(s => s.Channel is not null && s.Topic is not null).ToDictionary(s => s.Channel!, s => s.Topic!)
             : existing?.StageTopics ?? [];
+        if (g.TryGetProperty("embedded_activities", out _))
+        {
+            guild.VoiceActivities = [];
+            foreach (var act in Array(g, "embedded_activities")) ApplyEmbeddedActivity(guild, act);
+        }
+        else
+        {
+            guild.VoiceActivities = existing?.VoiceActivities ?? [];
+        }
         guild.Channels = g.TryGetProperty("channels", out _)
             ? Array(g, "channels").Select(c => ReadChannel(c, guild.Id)).ToDictionary(c => c.Id)
             : existing?.Channels ?? [];

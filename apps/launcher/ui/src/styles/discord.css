@@ -6910,6 +6910,31 @@ button.exo-dc-poll-answer:hover:not(:disabled) {
   gap: 8px;
 }
 
+.exo-dc-stage-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  flex: 1 1 260px;
+}
+
+.exo-dc-stage-input {
+  flex: 1 1 180px;
+  min-width: 160px;
+  max-width: 320px;
+  height: 32px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: var(--exo-row-radius);
+  outline: none;
+  background: var(--exo-fill);
+  box-shadow: var(--exo-rim);
+  color: var(--dc-text);
+  font: inherit;
+  font-size: var(--exo-type-body);
+}
+
 .exo-dc-stage-audience {
   display: grid;
   gap: 8px;
@@ -7273,6 +7298,18 @@ button.exo-dc-poll-answer:hover:not(:disabled) {
   display: inline-block;
   margin: 0 2px;
   vertical-align: -2px;
+}
+
+.exo-dc-channel-activity {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--color-good);
+}
+
+.exo-dc-channel-activity > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* A message request's conversation: Discord's line and Ignore / Accept DM where the composer goes; in Message Requests,
