@@ -27,6 +27,8 @@ internal sealed partial class Host
     /// </summary>
     public static int PolicyThreads(int cpus) => Math.Max(1, cpus - Math.Max(1, cpus / 4));
 
+    public static int PolicyIdleThreads(int cpus) => Math.Max(1, cpus - 1);
+
     /// <summary>
     /// The compile's memory budget: a quarter of the RAM, at least 4 GB, and never less than
     /// the engine's Auto (which gives a quarter from 64 GB of RAM since 1.3.0). Auto gives
@@ -37,11 +39,18 @@ internal sealed partial class Host
     /// </summary>
     public static int PolicyMemoryGB() => Math.Max(Math.Clamp(ScsKiller.RamGB() / 4, 4, 16), ScsKiller.AutoCompileMemoryGB());
 
+    public static int PolicyIdleMemoryGB() => Math.Max(Math.Clamp(ScsKiller.RamGB() / 3, 6, 24), PolicyMemoryGB());
+
+    private volatile bool _idleBoost;
+
     /// <summary>The fixed settings, from what the engine has now (fields the policy doesn't own are kept).</summary>
-    public Settings PolicySettings(Settings s)
+    public Settings PolicySettings(Settings s) => PolicySettings(s, null);
+
+    public Settings PolicySettings(Settings s, bool? idleBoost)
     {
         int cpus = Environment.ProcessorCount;
-        int threads = PolicyThreads(cpus);
+        bool boosted = idleBoost ?? _idleBoost;
+        int threads = boosted ? PolicyIdleThreads(cpus) : PolicyThreads(cpus);
         Settings defaults = AppStore.DefaultSettings;
         return s with
         {
@@ -50,7 +59,7 @@ internal sealed partial class Host
             BackgroundThreads = Math.Min(defaults.BackgroundThreads, threads),
             Priority = WarmPriority.BelowNormal,
             PauseWhileGaming = true,
-            MaxCompileMemoryGB = PolicyMemoryGB(),
+            MaxCompileMemoryGB = boosted ? PolicyIdleMemoryGB() : PolicyMemoryGB(),
             MaximumPlans = false,        // Maximum is decided per game (PolicyGame)
             CompileRayTracing = true,
             HddMode = false,             // never every drive: HddDrives names the hard disks the games are on
@@ -179,6 +188,32 @@ internal sealed partial class Host
         RequestPolicy();
     }
 
+    public void SetIdleBoost(bool on)
+    {
+        bool changedFlag = _idleBoost != on;
+        _idleBoost = on;
+        if (_opt.Safe || (!on && !changedFlag)) return;
+        _settingsGate.Wait();
+        bool changed = false;
+        try
+        {
+            Settings was = _k.Settings;
+            Settings s = PolicySettings(was, on);
+            if (s != was)
+            {
+                _k.Settings = s;
+                _blocked.Clear();
+                changed = true;
+                _log.Report($"[exo] {(on ? "idle boost" : "foreground")} settings applied: " + Changed(was, s));
+            }
+        }
+        finally
+        {
+            _settingsGate.Release();
+        }
+        if (changed) MarkState();
+    }
+
     private void ApplyPolicy()
     {
         ScsKiller k = _k;
@@ -260,7 +295,7 @@ internal sealed partial class Host
     public object PolicyPreview()
     {
         Settings was = _k.Settings;
-        Settings s = PolicySettings(was);
+        Settings s = PolicySettings(was, idleBoost: false);
         return new
         {
             applies = !_opt.Safe,

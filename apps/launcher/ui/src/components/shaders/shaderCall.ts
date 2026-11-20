@@ -40,11 +40,39 @@ export type Snapshot = {
   app: {
     scanning?: boolean
     readyCount?: number
-    /** Windows' Advanced Shader Delivery on this PC: works, else the one thing it needs ("Needs Gaming Services …"). */
+    gpu?: {
+      name?: string
+      vendor?: string
+      vendorName?: string
+      driver?: string
+      driverLine?: string
+      shaderDelivery?: { works: boolean; text: string } | null
+      windowsCleanup?: { kept: boolean; canUndo: boolean; text: string } | null
+    }
+    cache?: {
+      usedText?: string
+      limitCurrent?: string
+      isDriverDefault?: boolean
+      warn?: string | null
+      off?: string | null
+      configurable?: boolean
+      largest?: boolean
+      oldDriver?: number
+      oldDriverNote?: string | null
+      amdDx12?: { used: number; text: string; percent: number } | null
+      autoShader?: string | null
+    } | null
   }
 }
 
 export const call = (method: string, params?: unknown) => host.shadersCall(method, params ?? {})
-  .then(reply => { if (!reply.ok) throw new Error(reply.message || 'The shader engine did not answer.'); return reply.result })
+  .then(reply => {
+    if (!reply.ok) throw new Error(reply.message || 'The shader engine did not answer.')
+    const res = reply.result as { ok?: boolean; text?: string } | null | undefined
+    if (res && typeof res === 'object' && res.ok === false) {
+      throw new Error(res.text || 'The shader engine could not apply this setting.')
+    }
+    return reply.result
+  })
 
 export const message = (error: unknown, fallback: string) => error instanceof Error && error.message ? error.message : fallback

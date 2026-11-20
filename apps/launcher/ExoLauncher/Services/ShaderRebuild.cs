@@ -292,7 +292,13 @@ internal sealed class ShaderRebuild(
         }
         if (action.HasFlag(RebuildAction.Queue))
         {
-            if (ev == RebuildEvent.DriverChanged) record.GaveUp = [];
+            if (ev == RebuildEvent.DriverChanged)
+            {
+                record.GaveUp = [];
+                if (!installing() && idle() && !compiling() && Waiting(record).Count == 0 && scan?.Invoke() == true &&
+                    installed?.Invoke() is { Length: > 0 } currentGames)
+                    record.Scanned = currentGames;
+            }
             var games = Order(Waiting(record));
             var was = record.Driver;
             record.Driver = id;

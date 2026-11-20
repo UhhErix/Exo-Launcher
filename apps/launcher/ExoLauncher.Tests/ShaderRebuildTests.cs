@@ -472,6 +472,35 @@ public sealed class ShaderRebuildTests
     }
 
     [Fact]
+    public void ADriverChangeWithEmptyStaleScansFirstWhenIdle()
+    {
+        var scanned = false;
+        var started = new List<IReadOnlyList<string>>();
+        var stale = new List<RebuildGame>();
+        var record = new ShaderRebuild.Record { Driver = Old };
+        var rebuild = new ShaderRebuild(
+            () => New,
+            () => false,
+            () => true,
+            () => stale,
+            () => false,
+            ids => { started.Add(ids); return true; },
+            () => { },
+            () => record,
+            _ => true,
+            _ => { },
+            () => new DateTime(2026, 11, 10, 12, 0, 0, DateTimeKind.Utc),
+            () => "hash-1",
+            () => { scanned = true; stale.Add(new RebuildGame("steam:1", "Game One", 100, null)); return true; });
+
+        rebuild.Tick(settled: true);
+
+        Assert.True(scanned);
+        Assert.Equal(["steam:1"], record.Queue);
+        Assert.Equal(["steam:1"], Assert.Single(started));
+    }
+
+    [Fact]
     public void TheRecordRoundTripsThroughItsFile()
     {
         var folder = Directory.CreateTempSubdirectory("exo-rebuild-").FullName;

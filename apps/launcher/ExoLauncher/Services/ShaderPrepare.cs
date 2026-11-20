@@ -143,8 +143,10 @@ internal sealed class ShaderPrepare(Func<LaunchOrchestrator> launcherOf)
     }
 
     /// Why this game can't be prepared at all: the sheet shows no line.
-    internal static bool Eligible(GameEntry game, AntiCheatCheck.Answer antiCheat) =>
-        AntiCheatCheck.Allows(game, antiCheat, AntiCheatCheck.Change.ShaderPrepare) && GameProcessRegistry.SupportsGameProcessControl(game.Store) && ScsKillerStatus.LooksUnreal(game.Path);
+    internal static bool Eligible(GameEntry game, AntiCheatCheck.Answer antiCheat, string? engineFamily = null) =>
+        AntiCheatCheck.Allows(game, antiCheat, AntiCheatCheck.Change.ShaderPrepare)
+        && GameProcessRegistry.SupportsGameProcessControl(game.Store)
+        && ScsKillerStatus.SupportsFirstLaunchPrepare(game.Path, engineFamily);
 
     /// After the game was started: watches it to the end, off the caller. False when a run is already going.
     internal bool Start(GameEntry game, Action? onEnd = null)

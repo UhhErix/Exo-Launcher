@@ -62,14 +62,15 @@ public sealed partial class WebHostBridge
     private int _shaderPreparePolling;
     // Whether a game can be prepared, from the kept answer (walked again when the game changes or after ten minutes);
     // each start, the automatic one included, reads it fresh (ShaderPrepareStartAsync).
-    private static bool ShaderPrepareEligible(Models.GameEntry game) => ShaderPrepare.Eligible(game, AntiCheatCheck.Cached(game));
+    private bool ShaderPrepareEligible(Models.GameEntry game) =>
+        ShaderPrepare.Eligible(game, AntiCheatCheck.Cached(game), _services.Shaders.EngineFamilyOf(game));
 
     /// <summary>The Shaders page's first-launch posters: the installed games Prepare may start, and each one's state.</summary>
     private async Task<object> ShaderPrepareGamesAsync(CancellationToken ct)
     {
         var library = _services.Library.PeekCachedLibrary();
         var games = await Task.Run(() => library
-            .Where(game => game.Installed && ScsKillerStatus.LooksUnreal(game.Path) && ShaderPrepareEligible(game))
+            .Where(game => game.Installed && ShaderPrepareEligible(game))
             .OrderBy(game => game.Title, StringComparer.CurrentCultureIgnoreCase)
             .Select(game =>
             {
@@ -85,7 +86,7 @@ public sealed partial class WebHostBridge
     {
         if (HostMode.IsDisposable) return new { ok = false, message = (string?)HostMode.Refusal };
         var game = await FindGameAsync(ReadString(p, hasParams, "id"), ct).ConfigureAwait(true);
-        if (game is null || !await Task.Run(() => ShaderPrepare.Eligible(game, _dlss.AntiCheatAnswer(game, ct)), ct).ConfigureAwait(true))
+        if (game is null || !await Task.Run(() => ShaderPrepare.Eligible(game, _dlss.AntiCheatAnswer(game, ct), _services.Shaders.EngineFamilyOf(game)), ct).ConfigureAwait(true))
             return new { ok = false, message = (string?)"Not for this game" };
         var library = _services.Library.PeekCachedLibrary();
         if (await Task.Run(() => _services.Launcher.GetGameRunStates(library).Values.Any(run => run.IsRunning), ct).ConfigureAwait(true))
@@ -137,7 +138,7 @@ public sealed partial class WebHostBridge
             var prepare = _services.ShaderPrepare;
             if (prepare.Busy || !prepare.Auto || !PcIdle.Now(() => _services.Launcher.AnyGameRunning || LeanSignal.Active)) return;
             var token = _bridgeLifetime.Token;
-            var next = _services.Library.PeekCachedLibrary().FirstOrDefault(game => game.Installed && ScsKillerStatus.LooksUnreal(game.Path) &&
+            var next = _services.Library.PeekCachedLibrary().FirstOrDefault(game => game.Installed &&
                 ShaderPrepareEligible(game) && ShaderPrepare.WantsAuto(prepare.StateOf(game).State, game.PlaytimeMinutes));
             if (App.MainAppWindow is not { } window) return;
             if (next is null)

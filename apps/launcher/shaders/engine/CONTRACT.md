@@ -167,7 +167,7 @@ The methods that set these options are refused with `"Exo Shaders sets this itse
 `settings.set`, `game.setApi`, `game.setNewShaders`, `game.setCareful`, `game.setRayTracing`, `game.setMaximum`,
 `game.setLeftOutOfAddAll`, `game.compileMax`, `queue.addWhenIdle`, `driverStale.whenIdle`, `library.addAllRecommended`,
 `recorder.install`, `recorder.uninstall`, `recorder.alongside`, `recorder.offline`,
-`recorder.startOffline`, `recorder.checkRisk`, `recorder.startRisk`, `driver.setAutoShader`.
+`recorder.startOffline`, `recorder.checkRisk`, `recorder.startRisk`.
 
 ## Snapshot
 
@@ -509,7 +509,7 @@ runs: the moment one fails, the work pauses (a compile) or stops to start over l
 | `queue.removeMany` | `{ids?: string[]}` | bulk remove waiting/finished items (not the running one); no `ids` = "Clear queue" |
 | `queue.clearFinished` | – | remove finished items |
 | `queue.move` | `{id, index}` | move a waiting item to 0-based `index` among waiting items (0 = "Move to top") |
-| `queue.start` | – | "Compile queue": idle-waiting items become normal and the queue starts |
+| `queue.start` | `{idle?: boolean}` | "Compile queue": idle-waiting items become normal and the queue starts. `idle: true` boosts threads to `cpus - 1` and compile memory to `clamp(ram/3, 6, 24)` GB until paused, stopped, or drained |
 | `queue.pause` / `queue.resume` | – | pause/resume the running compile (the user's choice wins over the pause while gaming until the games close) |
 | `queue.stop` | – | stop the running compile (it keeps what's compiled; add it again to continue) |
 | `driverStale.compileNow` | `{ids?: string[]}` | toast "Compile now" (default: the driver-stale games) |
@@ -713,7 +713,9 @@ type Inventory = {
 | `settings.get` | – | `Settings` (read-only: the settings policy sets them, `traversal` aside) |
 | `settings.setTraversal` | `{mode: "off" \| "all"}` | `Settings`: the traversal stutter fix for every game it applies to, or none (games' own overrides stay). Every recorder's scskiller.ini is written again. Refused in `--safe`. |
 | `driver.setCacheLimit` | `{index}` (`settings.meta.cacheSizes`) | NVIDIA shader cache size. Runs the bundled CLI elevated (Windows asks for administrator permission), as the app does. `{ok: true, text}` / `{ok: false, text}` (`"Cancelled."` when UAC is declined). Confirm first with `CACHE_LIMIT_CONFIRM`. |
+| `driver.setAutoShader` | `{level: "off" \| "low" \| "medium" \| "high"}` | NVIDIA Auto Shader Compilation (`NvOSC.exe -register` / `-deregister` + DRS `0x00EAD189`, elevated). Refused in `--safe`. |
 | `driver.setCleanupGuard` | `{on: boolean}` | `on`: Windows' automatic cleanup (SilentCleanup, Storage Service) no longer runs the DirectX Shader Cache handler, which can empty D3DSCache, where NVIDIA from 621 keeps compiled pipelines; `off`: undo. Upstream's `D3DSCache.KeepFromCleanup`: sets that handler's `Autorun` to 0 and keeps the value before it beside it (`SCSKillerAutorun`), which `off` puts back (1 when none was kept). Kept = `Autorun` reads 0 (`D3DSCache.CleanupKept`). Runs the bundled CLI elevated (`shader-cleanup keep\|allow`; `cleanup-guard on\|off` is its older name). `{ok, text}` as `driver.setCacheLimit`. |
+| `asd.refresh` | `{driverUpdated?: boolean}` | Triggers a background Local ASD refresh while idle (cleans dead registrations, adopts store SODBs, rebuilds stale PSDBs). Refused in `--safe`. |
 
 ## GameDetail (`game.detail`)
 

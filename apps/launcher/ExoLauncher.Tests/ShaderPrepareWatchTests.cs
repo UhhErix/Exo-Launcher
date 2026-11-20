@@ -105,4 +105,54 @@ public sealed class ShaderPrepareWatchTests
         var watch = new ShaderPrepareWatch(Start);
         Assert.Equal(Verdict.TooLong, watch.Next(MaxSeconds, Start + 900 * Mb, 0.9));
     }
+
+    [Fact]
+    public void DetectsUnrealWinGdkAndBroadPrepareEngines()
+    {
+        var root = Directory.CreateTempSubdirectory("exo-engine-detect-").FullName;
+        try
+        {
+            var gdk = Path.Combine(root, "ue", "GameA", "Binaries", "WinGDK");
+            Directory.CreateDirectory(gdk);
+            Assert.True(ScsKillerStatus.LooksUnreal(Path.Combine(root, "ue")));
+            Assert.True(ScsKillerStatus.SupportsFirstLaunchPrepare(Path.Combine(root, "ue")));
+
+            var re = Path.Combine(root, "re");
+            Directory.CreateDirectory(re);
+            File.WriteAllBytes(Path.Combine(re, "re_chunk_000.pak"), [1, 2, 3]);
+            Assert.True(ScsKillerStatus.SupportsFirstLaunchPrepare(re));
+
+            var fb = Path.Combine(root, "frostbite");
+            Directory.CreateDirectory(Path.Combine(fb, "Data", "Win32"));
+            File.WriteAllBytes(Path.Combine(fb, "Data", "layout.toc"), [1]);
+            Assert.True(ScsKillerStatus.SupportsFirstLaunchPrepare(fb));
+
+            Assert.True(ScsKillerStatus.SupportsFirstLaunchPrepare(Path.Combine(root, "empty"), "Dawn"));
+            Assert.False(ScsKillerStatus.SupportsFirstLaunchPrepare(Path.Combine(root, "empty")));
+
+            var exeMatchDir = Path.Combine(root, "exematch");
+            Directory.CreateDirectory(exeMatchDir);
+            var exePath = Path.Combine(exeMatchDir, "Game-Win64-Shipping.exe");
+            File.WriteAllBytes(exePath, [1]);
+            var listed = new[]
+            {
+                new ScsKillerStatus.Listed("other:99", "Different Localized Name", exeMatchDir, "Ready", "", null, null, "Unreal", exePath),
+            };
+            var matched = ScsKillerStatus.Match(listed, new Models.GameEntry
+            {
+                Id = "exo:local-1",
+                Title = "Completely Different Title",
+                Store = Models.StoreKind.Local,
+                Installed = true,
+                Path = exeMatchDir,
+                LaunchTarget = exePath,
+            });
+            Assert.NotNull(matched);
+            Assert.Equal("other:99", matched.Id);
+        }
+        finally
+        {
+            DeletionGate.DeleteDirectory(root, recursive: true);
+        }
+    }
 }

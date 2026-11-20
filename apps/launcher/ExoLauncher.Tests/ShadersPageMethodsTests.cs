@@ -15,7 +15,20 @@ public sealed partial class ShadersPageMethodsTests
     [Fact]
     public void Only_what_you_press_starts_the_engine()
     {
-        Assert.Equal(["game.compile", "game.diagnostics", "queue.add", "queue.resume", "queue.start", "recorder.auto", "recorder.set", "scan"], ShadersAddon.StartMethods.Order(StringComparer.Ordinal));
+        Assert.Equal([
+            "cache.freeOldDriver",
+            "driver.setAutoShader",
+            "driver.setCacheLimit",
+            "driver.setCleanupGuard",
+            "game.compile",
+            "game.diagnostics",
+            "queue.add",
+            "queue.resume",
+            "queue.start",
+            "recorder.auto",
+            "recorder.set",
+            "scan",
+        ], ShadersAddon.StartMethods.Order(StringComparer.Ordinal));
         Assert.True(ShadersAddon.StartMethods.IsSubsetOf(ShadersAddon.PageMethods));
     }
 
@@ -50,6 +63,6 @@ public sealed partial class ShadersPageMethodsTests
     }
 
     /// <summary>An engine method in the page's source: call('snapshot'), or a step of run(): ['queue.add', ...] / [cond ? 'queue.resume' : 'queue.pause'].</summary>
-    [GeneratedRegex(@"(?:call\(|run\(|\[|\? |: )'((?:snapshot|scan|ui\.[a-z]+|queue\.[a-z]+|game\.[a-z]+|recorder\.[a-z]+))'")]
+    [GeneratedRegex(@"(?:call\(|run\(|\[|\? |: )'((?:snapshot|scan|ui\.[a-zA-Z]+|queue\.[a-zA-Z]+|game\.[a-zA-Z]+|recorder\.[a-zA-Z]+|driver\.[a-zA-Z]+|cache\.[a-zA-Z]+))'")]
     private static partial Regex EngineMethod();
 }

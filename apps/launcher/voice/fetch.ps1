@@ -42,6 +42,20 @@ function Expand-SourceArchive([string]$archive, [string]$dir) {
     if ($LASTEXITCODE) { throw "Could not extract $archive." }
 }
 
+# Applies a unified diff patch inside an extracted source tree. Stopping git directory discovery at the tree's parent
+# prevents parent repos (with .gitignore rules for voice/third_party or voice/build) from silently skipping every file.
+function Apply-SourcePatch([string]$dir, [string]$patch) {
+    $prev = $env:GIT_CEILING_DIRECTORIES
+    $env:GIT_CEILING_DIRECTORIES = Split-Path -Parent ([IO.Path]::GetFullPath($dir))
+    try {
+        git -C $dir apply --ignore-whitespace $patch
+        if ($LASTEXITCODE) { throw "$(Split-Path -Leaf $patch) does not apply to $dir." }
+    } finally {
+        if ($null -eq $prev) { Remove-Item Env:GIT_CEILING_DIRECTORIES -ErrorAction SilentlyContinue }
+        else { $env:GIT_CEILING_DIRECTORIES = $prev }
+    }
+}
+
 # Extracts a verified archive into $dir, then applies Exo's patches in order. It runs again only when the archive or a
 # patch changed (marker .exo-pin in $dir), so an unchanged source keeps its timestamps and the build reuses its output.
 function Initialize-Source([string]$archive, [string]$sha256, [string]$dir, [string[]]$patches) {
@@ -50,8 +64,7 @@ function Initialize-Source([string]$archive, [string]$sha256, [string]$dir, [str
     if ((Test-Path -LiteralPath $marker) -and ((Get-Content -LiteralPath $marker -Raw).Trim() -eq $stamp)) { return }
     Expand-SourceArchive $archive $dir
     foreach ($patch in $patches) {
-        git -C $dir apply --ignore-whitespace $patch
-        if ($LASTEXITCODE) { throw "$(Split-Path -Leaf $patch) does not apply to $dir." }
+        Apply-SourcePatch $dir $patch
     }
     Set-Content -LiteralPath $marker -Value $stamp -NoNewline
 }

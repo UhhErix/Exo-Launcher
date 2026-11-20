@@ -964,6 +964,41 @@
   min-height: 0;
 }
 
+.exo-shaders-cache {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.exo-shaders-cache-alert,
+.exo-shaders-cache-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.exo-shaders-cache-alert {
+  padding: 8px 12px;
+  border-radius: var(--exo-small-radius);
+  border: var(--exo-hair) solid var(--exo-line);
+  background: var(--color-surface-3);
+  color: var(--color-warn);
+  font-size: var(--exo-type-small);
+}
+
+.exo-shaders-cache-meta {
+  color: var(--color-muted);
+  font-size: var(--exo-type-small);
+}
+
+.exo-shaders-cache-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 /* The list scrolls, so it clips at its padding: 12px each side and on top (pulled back out by the margin, so the
    posters sit where they did and line up with the title) holds the live ring, the focus ring and the drop bar of the
    edge posters, and the first row's ring while its poster lifts on hover (4px of ring and 3px of lift). */

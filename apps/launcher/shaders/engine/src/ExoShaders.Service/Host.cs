@@ -317,6 +317,7 @@ internal sealed partial class Host
         }
         if (structural)
         {
+            if (_idleBoost && !_k.QueueRunning && !_k.Compiling) SetIdleBoost(false);
             if (_k.Compiling) _ = StopVerify();   // the check and a compile must not run together: a second process of an exe name gets its own cache files
             MarkState();
             if (q.Stage is QueueStage.Done or QueueStage.Failed or QueueStage.Stopped) RequestCacheInfo(force: false);

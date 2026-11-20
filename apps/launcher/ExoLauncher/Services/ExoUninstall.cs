@@ -130,6 +130,7 @@ internal static class ExoUninstall
         ExoComponents.RemoveAll();
         // Exo EQ's file and its Include line leave Equalizer APO's config; the player's own lines stay.
         ExoEq.Remove();
+        UnrealShaderIni.RestoreAll();
         var app = AppContext.BaseDirectory.TrimEnd('\\');
         var scan = new LeftoverScan(LeftoverScan.ThisPc());
         var found = scan.Find(new Trail("Exo Launcher")

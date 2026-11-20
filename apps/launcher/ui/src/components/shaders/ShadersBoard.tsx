@@ -219,6 +219,7 @@ export function ShadersBoard({ active, games }: { active: boolean; games: readon
   return (
     <div ref={setRoot} className="exo-shaders-board">
       <Actions snap={snap} view={view} estimates={estimates} busy={busy} run={run} />
+      <CacheStrip snap={snap} busy={busy} run={run} />
       {error || failed ? <ErrorNote className="exo-shaders-error" message={error ?? failed} /> : null}
       {posters.length === 0 && !snap.app.scanning ? <p className="exo-shaders-empty">{snap.games.length ? 'Every game is compiled' : 'No games found'}</p> : null}
       <Posters
@@ -314,6 +315,75 @@ function Actions({ snap, view, estimates, busy, run }: {
       </button>
       <QueueButtons queue={queue} working={working} readyIds={readyIds} busy={busy} run={run} />
     </SectionActions>
+  )
+}
+
+function cacheSteps(snap: Snapshot): Step[] {
+  const { cache, gpu } = snap.app
+  if (gpu?.vendor !== 'nvidia') return []
+  const steps: Step[] = []
+  if (cache?.configurable && !cache.largest && !cache.off) steps.push(['driver.setCacheLimit', { index: 12 }])
+  if (gpu.windowsCleanup && !gpu.windowsCleanup.kept) steps.push(['driver.setCleanupGuard', { on: true }])
+  return steps
+}
+
+function cacheMetaText(snap: Snapshot) {
+  const { cache, gpu } = snap.app
+  const cacheText = cache?.amdDx12?.text
+    ?? (cache?.usedText ? `Cache: ${cache.usedText}${cache.limitCurrent ? ` · ${cache.limitCurrent}` : ''}` : null)
+  const deliveryText = gpu?.shaderDelivery?.text ? `Shader Delivery: ${gpu.shaderDelivery.text}` : null
+  return [cacheText, deliveryText].filter(Boolean).join(' · ')
+}
+
+function cacheStripState(snap: Snapshot) {
+  const cache = snap.app.cache
+  return {
+    off: cache?.off ?? null,
+    oldDriverNote: cache?.oldDriverNote ?? null,
+    steps: cacheSteps(snap),
+    meta: cacheMetaText(snap),
+  }
+}
+
+/** Calm cache & Windows Shader Delivery status strip above the posters: surfaces 1-click optimizations only when needed. */
+function CacheStrip({ snap, busy, run }: {
+  snap: Snapshot
+  busy: string | null
+  run: (key: string, ...steps: Step[]) => void
+}) {
+  const { off, oldDriverNote, steps, meta } = cacheStripState(snap)
+  if (!off && !oldDriverNote && steps.length === 0 && !meta) return null
+  return (
+    <div className="exo-shaders-cache">
+      {off ? (
+        <div className="exo-shaders-cache-alert">
+          <span>{off}</span>
+          <button type="button" className="exo-set-btn is-primary" disabled={busy !== null}
+            onClick={() => run('cache-limit', ['driver.setCacheLimit', { index: 12 }])}>
+            Set Unlimited
+          </button>
+        </div>
+      ) : null}
+      <div className="exo-shaders-cache-row">
+        {meta ? <span className="exo-shaders-cache-meta">{meta}</span> : <span />}
+        <div className="exo-shaders-cache-actions">
+          {steps.length > 0 ? (
+            <button type="button" className="exo-set-btn" disabled={busy !== null}
+              onClick={() => run('optimize-cache', ...steps)}>
+              {busy === 'optimize-cache' ? <Spinner label="Optimizing cache" /> : null}
+              Optimize shader cache
+            </button>
+          ) : null}
+          {oldDriverNote ? (
+            <button type="button" className="exo-set-btn" disabled={busy !== null}
+              onClick={() => run('free-old', ['cache.freeOldDriver'])}>
+              {busy === 'free-old' ? <Spinner label="Freeing old cache" /> : null}
+              Free old cache ({oldDriverNote})
+            </button>
+          ) : null}
+        </div>
+      </div>
+    </div>
   )
 }
 

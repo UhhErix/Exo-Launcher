@@ -31,6 +31,7 @@ internal sealed class ShadersAddon : IDisposable
     {
         "snapshot", "ui.visible", "scan", "queue.add", "queue.move", "queue.remove", "queue.start", "queue.pause", "queue.resume",
         "queue.stop", "game.compile", "game.diagnostics", "recorder.auto", "recorder.set",
+        "driver.setCacheLimit", "driver.setCleanupGuard", "cache.freeOldDriver", "driver.setAutoShader",
     };
 
     /// <summary>
@@ -41,6 +42,7 @@ internal sealed class ShadersAddon : IDisposable
     internal static readonly IReadOnlySet<string> StartMethods = new HashSet<string>(StringComparer.Ordinal)
     {
         "scan", "game.compile", "queue.add", "queue.start", "queue.resume", "game.diagnostics", "recorder.auto", "recorder.set",
+        "driver.setCacheLimit", "driver.setCleanupGuard", "cache.freeOldDriver", "driver.setAutoShader",
     };
 
     /// <summary>An add-on installed beside Exo's data (a newer or development build) wins over the copy that ships in Exo's app folder.</summary>
