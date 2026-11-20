@@ -901,6 +901,42 @@ export type AutopilotState = {
 }
 export type AutopilotChange = Partial<Pick<AutopilotState, 'on' | 'gamePriority' | 'keepGameMode' | 'coreParking' | 'alwaysDemote' | 'suspend'>>
 
+export type ExoAiFanPreset = 'auto' | 'quiet' | 'balanced' | 'performance'
+
+export type ExoAiState = {
+  autoApplyBestSettings: boolean
+  backgroundDriftCheck: boolean
+  lastCheckUtc: string | null
+  autoApplied: string[]
+  needsAttention: string[]
+  gaming: {
+    active: boolean
+    gameId: string | null
+    gameTitle: string | null
+    demotedCount: number
+    timerResActive: boolean
+    altTabbed: boolean
+    lookEveryMs: number
+    hogCores: number
+  }
+  fans: {
+    supported: boolean
+    preset: ExoAiFanPreset
+    tempC: number | null
+    fanPercent: number | null
+    targetPercent: number | null
+    fanCount: number
+    note: string | null
+  }
+}
+
+export type ExoAiChange = {
+  autoApplyBestSettings?: boolean
+  backgroundDriftCheck?: boolean
+  fanPreset?: ExoAiFanPreset
+  runNow?: boolean
+}
+
 /** System > This PC > Interrupts: one PCI device, its interrupt now (msi, line, or none when it isn't running) and what Optimize does to it. */
 export type InterruptDevice = {
   id: string
@@ -3026,6 +3062,10 @@ export const host = {
   autopilotState: () => rawCall<AutopilotState>('autopilot.state', {}, 15_000),
   /** One change to Autopilot: the switch (Windows Game Mode follows it at once) or a choice. message: what Windows didn't take. */
   autopilotSet: (change: AutopilotChange) => rawCall<{ ok: boolean; message?: string | null; state: AutopilotState }>('autopilot.set', change, 15_000),
+  /** PC › Exo AI: unified safe background optimization, Autopilot telemetry, and NVML GPU fan curves. */
+  exoAiState: () => rawCall<ExoAiState>('exoAi.state', {}, 15_000),
+  /** Update Exo AI settings or run a non-elevated background optimization check now. */
+  exoAiSet: (change: ExoAiChange) => rawCall<ExoAiState & { ok: boolean; message?: string | null }>('exoAi.set', change, 15_000),
   /** System > This PC > Interrupts: the devices; apply switches every one that can to MSI mode, undo puts all back, revert one. Waits on Windows' permission prompt. */
   /** Best settings › System: the items; apply sets every Best settings item that's on, on and off one item, latency runs the ten-second latency check. Waits on Windows' permission prompt (and a restore point). */
   systemTuning: (action?: 'apply' | 'on' | 'off' | 'latency', item?: TuningKey) =>

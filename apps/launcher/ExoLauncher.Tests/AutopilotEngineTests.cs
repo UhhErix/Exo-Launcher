@@ -44,6 +44,9 @@ public sealed class AutopilotEngineTests : IDisposable
         internal bool Battery;
         internal bool JournalHadEntryAtEveryWrite = true;
         internal readonly HashSet<int> Refuse = [];
+        internal int HighResBeginCalls;
+        internal int HighResEndCalls;
+        internal bool HighResActive;
 
         internal void Add(int pid, string name, long cpu = 0, int session = Session, int priority = AutopilotRules.Normal)
         {
@@ -89,6 +92,8 @@ public sealed class AutopilotEngineTests : IDisposable
 
         public Guid? ActiveScheme() => Scheme;
         public bool OnBattery() => Battery;
+        public void BeginHighResTimer() { HighResBeginCalls++; HighResActive = true; }
+        public void EndHighResTimer() { HighResEndCalls++; HighResActive = false; }
     }
 
     private sealed class FakeTimer : IDisposable
@@ -590,5 +595,55 @@ public sealed class AutopilotEngineTests : IDisposable
         Assert.Equal(expectedStatus, dto.GetProperty("status").GetString());
         if (expectedStatus == "conflict")
             Assert.Equal(canUndo, dto.GetProperty("canUndo").GetBoolean());
+    }
+
+    [Fact]
+    public void AltTabRestoresPrioritiesAndTimerThenReacquiresOnRefocus()
+    {
+        Assert.Equal(2000, AutopilotEngine.LookEveryMs);
+        Assert.Equal(0.25, AutopilotRules.HogCores);
+
+        var pc = Pc();
+        var (engine, _) = Engine(pc, new AutopilotSettings { On = true, AlwaysDemote = ["updater"], Suspend = ["chrome"] });
+        engine.Follow(TheGame());
+
+        Assert.Equal(AutopilotRules.AboveNormal, pc.Values[(Knob.Priority, Game)]);
+        Assert.Equal(AutopilotRules.BelowNormal, pc.Values[(Knob.Priority, 200)]);
+        Assert.Equal(1, pc.HighResBeginCalls);
+        Assert.True(pc.HighResActive);
+        Assert.Equal(100u, pc.Parking);
+        Assert.Equal(1, pc.Values[(Knob.Suspended, 207)]);
+
+        // First alt-tab look keeps protection active (hysteresis of 2 ticks = 4 seconds).
+        pc.FrontPid = 207;
+        engine.Look();
+        Assert.Equal(AutopilotRules.AboveNormal, pc.Values[(Knob.Priority, Game)]);
+        Assert.True(pc.HighResActive);
+        Assert.False(engine.Snapshot().AltTabbed);
+
+        // Second alt-tab tick releases process priorities + 1 ms timer while preserving session power/suspend.
+        engine.Look();
+        Assert.Equal(AutopilotRules.Normal, pc.Values[(Knob.Priority, Game)]);
+        Assert.Equal(AutopilotRules.Normal, pc.Values[(Knob.Priority, 200)]);
+        Assert.False(pc.HighResActive);
+        Assert.Equal(1, pc.HighResEndCalls);
+        Assert.True(engine.Snapshot().AltTabbed);
+        Assert.Equal(100u, pc.Parking);
+        Assert.Equal(1, pc.Values[(Knob.Suspended, 207)]);
+
+        // Refocusing the game re-acquires the 1 ms timer and re-boosts priorities.
+        pc.FrontPid = Game;
+        engine.Look();
+        Assert.Equal(AutopilotRules.AboveNormal, pc.Values[(Knob.Priority, Game)]);
+        Assert.Equal(AutopilotRules.BelowNormal, pc.Values[(Knob.Priority, 200)]);
+        Assert.True(pc.HighResActive);
+        Assert.Equal(2, pc.HighResBeginCalls);
+        Assert.False(engine.Snapshot().AltTabbed);
+
+        engine.End();
+        Assert.False(pc.HighResActive);
+        Assert.Equal(2, pc.HighResEndCalls);
+        Assert.Equal(50u, pc.Parking);
+        Assert.Equal(0, pc.Values[(Knob.Suspended, 207)]);
     }
 }

@@ -496,6 +496,7 @@ public sealed partial class MainWindow : Window
         try { AchievementBanner.Shutdown(); } catch { }
         try { Services.FpsCounter.Shutdown(); } catch { }
         try { Services.Autopilot.Shutdown(); } catch { }
+        try { Services.ExoAiCoordinator.Shared.Shutdown(); } catch { }
         // The hosted sessions close side
         // by side under one bounded wait.
         CloseMusicWeb();

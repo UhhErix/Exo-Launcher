@@ -20,16 +20,6 @@ export function useCompressList(active: boolean) {
   return { list, read, setList }
 }
 
-/** The chip: what compression could still save, else what it saved; nothing before the list is read or with neither. */
-export function CompressChip({ list, onOpen }: { list: CompressList | null; onOpen: () => void }) {
-  if (!list || (list.potential <= 0 && list.saved <= 0)) return null
-  return (
-    <button type="button" className="exo-pc-chip" data-pc-menu="compress" aria-haspopup="dialog" onClick={onOpen}>
-      {list.potential > 0 ? `Compress · ${formatSize(list.potential)}` : `Saved ${formatSize(list.saved)}`}
-    </button>
-  )
-}
-
 /**
  * PC › Compress games: Windows' own file compression for the games worth it (games read it as before), what it saved,
  * Compress all, the two idle switches and how much of the processor it may use, then each game with its own control.

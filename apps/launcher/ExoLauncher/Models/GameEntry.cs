@@ -401,6 +401,8 @@ public sealed class AppSettings
     public bool FpsCounterHideOverBuiltIn { get; set; }
     /// <summary>Autopilot (<see cref="ExoLauncher.Services.Autopilot"/>): one switch, off until the player turns it on, and its tucked-away choices.</summary>
     public AutopilotSettings Autopilot { get; set; } = new();
+    /// <summary>Exo AI coordinator preferences (<see cref="ExoLauncher.Services.ExoAiCoordinator"/>): background safe optimization and GPU fan curves.</summary>
+    public ExoAiSettings ExoAi { get; set; } = new();
     /// <summary>HDR on for the screen an HDR game is on while it runs, back off after (System > Graphics > HDR). On by default:
     /// it only acts on games whose verdict says they output HDR (<see cref="ExoLauncher.Services.GameHdr"/>). A settings file
     /// that never recorded it gets the default; one that did keeps its choice.</summary>
@@ -649,5 +651,31 @@ public sealed class AutopilotSettings
         On = On, GamePriority = GamePriority is "high" or "normal" ? GamePriority : "above", KeepGameMode = KeepGameMode, CoreParking = CoreParking,
         AlwaysDemote = [.. (AlwaysDemote ?? []).Where(name => !string.IsNullOrWhiteSpace(name)).Distinct(StringComparer.OrdinalIgnoreCase).Take(200)],
         Suspend = [.. (Suspend ?? []).Where(name => !string.IsNullOrWhiteSpace(name)).Distinct(StringComparer.OrdinalIgnoreCase).Take(50)],
+    };
+}
+
+/// <summary>Exo AI coordinator preferences: silent safe background tuning and GPU fan curve preset.</summary>
+public sealed class ExoAiSettings
+{
+    /// <summary>Automatically apply safe non-elevated Best Settings in the background when idle.</summary>
+    public bool AutoApplyBestSettings { get; set; } = true;
+    /// <summary>Periodically re-check safe settings for Windows/driver drift while idle.</summary>
+    public bool BackgroundDriftCheck { get; set; } = true;
+    /// <summary>GPU fan curve preset: auto (driver default), quiet, balanced, or performance.</summary>
+    public string FanPreset { get; set; } = "auto";
+
+    internal ExoAiSettings Copy() => new()
+    {
+        AutoApplyBestSettings = AutoApplyBestSettings,
+        BackgroundDriftCheck = BackgroundDriftCheck,
+        FanPreset = NormalizePreset(FanPreset),
+    };
+
+    internal static string NormalizePreset(string? value) => value?.Trim().ToLowerInvariant() switch
+    {
+        "quiet" => "quiet",
+        "balanced" => "balanced",
+        "performance" => "performance",
+        _ => "auto",
     };
 }

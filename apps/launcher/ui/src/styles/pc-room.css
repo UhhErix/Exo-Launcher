@@ -416,55 +416,6 @@
   border-top: 1px solid var(--exo-float-line);
 }
 
-/* The Upscalers sheet: every game's upscalers, as large glass over the dimmed room, its games scrolling under its name;
-   as tall as what it holds, up to 1000px. */
-.exo-game-overlay-stage:has(> .exo-pc-upscalers-sheet) {
-  width: min(1480px, 100%);
-  max-height: min(1000px, 100%);
-}
-
-/* Its name with the sheet's one action (Update all, or Check again) at the line's right end
-   (DESIGN.md › Panels), then the games scrolling under them on the same edges. */
-.exo-pc-upscalers-sheet {
-  display: grid;
-  flex: 1;
-  grid-template-columns: minmax(0, 1fr) auto;
-  grid-template-rows: auto minmax(0, 1fr);
-  gap: 16px 12px;
-  min-height: 0;
-  padding: 20px 28px 0;
-}
-
-.exo-pc-upscalers-sheet > .exo-upscalers {
-  display: contents;
-}
-
-.exo-pc-upscalers-sheet > h2 {
-  align-self: center;
-}
-
-.exo-pc-upscalers-sheet .exo-gpu-bar {
-  grid-area: 1 / 2;
-  min-height: 32px;
-  margin: 0;
-}
-
-/* 4px of room each side for a card's focus ring, hung outside the sheet's edge so the covers line up with its name. */
-.exo-pc-upscalers-sheet .exo-upscalers-body {
-  grid-area: 2 / 1 / 3 / -1;
-  margin: 0 -4px;
-  padding: 6px 4px 20px;
-  overscroll-behavior: contain;
-}
-
-/* A sheet's name, as Settings' and Captures': the title size, no hairline under it. */
-.exo-pc-upscalers-sheet > h2 {
-  margin: 0;
-  color: var(--color-fg);
-  font-size: calc(20px * var(--exo-scale, 1));
-  font-weight: 650;
-}
-
 /* The Apps sheet: Exo's uninstaller, its list scrolling under its head and fading into the sheet's foot (exo-shell.css › Infinity pool). */
 .exo-game-overlay-stage:has(> .exo-pc-apps-sheet) {
   width: min(1140px, calc(100% - 32px));
@@ -529,4 +480,74 @@
 .exo-autopilot-details li.is-quiet {
   color: var(--color-muted);
   font-size: calc(12px * var(--exo-scale, 1));
+}
+
+.exo-pc-best-done-toggle {
+  margin-top: 8px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--color-muted);
+  font: inherit;
+  font-size: calc(12px * var(--exo-scale, 1));
+  cursor: pointer;
+}
+
+.exo-pc-best-done-toggle:hover {
+  color: var(--color-fg);
+}
+
+.exo-ai-status {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  margin-bottom: 12px;
+  border: 1px solid var(--exo-float-line);
+  border-radius: var(--radius);
+  background: var(--glassy-overlay);
+}
+
+.exo-ai-status.is-gaming {
+  border-color: var(--color-good);
+}
+
+.exo-ai-status-copy {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.exo-ai-status-title {
+  color: var(--color-fg);
+  font-size: calc(13px * var(--exo-scale, 1));
+  font-weight: var(--exo-weight-title);
+}
+
+.exo-ai-status-detail {
+  color: var(--color-muted);
+  font-size: calc(12px * var(--exo-scale, 1));
+}
+
+.exo-ai-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.exo-ai-pill {
+  padding: 4px 10px;
+  border: 1px solid var(--exo-float-line);
+  border-radius: 999px;
+  color: var(--color-muted);
+  font-size: calc(12px * var(--exo-scale, 1));
+}
+
+.exo-storage-section {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
 }
