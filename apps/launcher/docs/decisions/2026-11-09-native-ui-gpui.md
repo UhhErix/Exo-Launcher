@@ -1,7 +1,7 @@
 # The UI moves to GPUI on `exo-gpui`
 
 - Decided by: owner, 2026-11-09
-- Status: in force
+- Status: superseded by [2026-11-20](2026-11-20-native-ui-rune.md)
 - Rule: AGENTS.md › Stack
 - Plan: `..\misc\gpui-foundation\PLAN.md`
 

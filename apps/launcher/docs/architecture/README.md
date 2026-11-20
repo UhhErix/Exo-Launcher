@@ -2,8 +2,9 @@
 
 Exo is a Windows 11 launcher: one UI over official store clients, which stay installed
 where the vendor put them and become invisible backends. Exo does not replace their
-ownership checks or DRM. This page maps the shipping React/WebView2 runtime, not the
-planned GPUI UI migration described in [AGENTS.md](../../AGENTS.md).
+ownership checks or DRM. This page maps the shipping React/WebView2 runtime; the
+planned Rune (`anomalyco/rune`) native UI migration is described in [AGENTS.md](../../AGENTS.md)
+and [host-transport.md](host-transport.md).
 
 Paths below are relative to `apps/launcher/` unless marked as installed paths.
 For the detailed runtime notes, read [Exo Launcher architecture](../../ARCHITECTURE.md).
@@ -121,6 +122,7 @@ status and dates matter.
 - [Discord video](discord-video.md): cameras, Go Live and screen sharing.
 - [Display best settings](display-best-settings.md): display-setting evidence and research.
 - [GPU profiles](gpu-profiles.md): NVIDIA global profile rules and implementation.
+- [Host transport](host-transport.md): `IHostTransport` abstraction, `WebViewHostTransport`, and ACL-hardened `NamedPipeHostTransport` NDJSON framing.
 - [Keep](keep.md): recording, checking and restoring values Exo writes.
 - [Launcher tuning](launcher-tuning.md): hidden store clients and download tuning.
 - [Liquid Glass](liquid-glass.md): material decisions, rendering and legibility.

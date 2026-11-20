@@ -19,7 +19,7 @@ public sealed partial class WebHostBridge
 {
     private readonly AppServices _services;
     private readonly DispatcherQueue _queue;
-    private CoreWebView2? _web;
+    private IHostTransport? _transport;
     private readonly DlssSwapService _dlss = new();
     private readonly FolderArtStore _folderArt = new();
     private readonly CancellationTokenSource _bridgeLifetime = new();
@@ -270,22 +270,32 @@ public sealed partial class WebHostBridge
     public void Attach(CoreWebView2 web)
     {
         ObjectDisposedException.ThrowIf(_detached, this);
+        Attach(new WebViewHostTransport(web, _queue));
+    }
+
+    public void Attach(IHostTransport transport)
+    {
+        ObjectDisposedException.ThrowIf(_detached, this);
         HangWatchdog.PageAttached();
         _services.GogAuth.AttachDispatcher(_queue);
         _services.EpicAuth.AttachDispatcher(_queue);
-        _web = web;
-        web.WebMessageReceived += OnMessage;
-        web.NavigationStarting += OnBridgeNavigationStarting;
+        if (Interlocked.Exchange(ref _transport, transport) is { } previous)
+        {
+            previous.MessageReceived -= OnMessage;
+            previous.SessionReset -= OnTransportReset;
+            try { previous.Detach(); } catch { }
+        }
+        transport.MessageReceived += OnMessage;
+        transport.SessionReset += OnTransportReset;
     }
 
-    private void OnBridgeNavigationStarting(CoreWebView2 sender, CoreWebView2NavigationStartingEventArgs e) => UiGuard.Run(() =>
+    private void OnTransportReset() => UiGuard.Run(() =>
     {
-        if (e.Cancel) return;
         _rpcRequests.CancelAll();
-        // A new page has none of the rows the last push carried.
+        // A new session has none of the rows the last push carried.
         Volatile.Write(ref _libraryPushedHash, null);
         try { Interlocked.Exchange(ref _keyWatchCts, null)?.Cancel(); } catch { }
-        // A reloaded page never turns off the controller's live view it asked for (60 events a second, up to 10 minutes).
+        // A reloaded session never turns off the controller's live view it asked for (60 events a second, up to 10 minutes).
         StopWatch(Interlocked.Exchange(ref _controllerWatch, null));
     });
 
@@ -296,12 +306,12 @@ public sealed partial class WebHostBridge
         try { _bridgeLifetime.Cancel(); } catch { }
         try { Interlocked.Exchange(ref _keyWatchCts, null)?.Cancel(); } catch { }
         StopWatch(Interlocked.Exchange(ref _controllerWatch, null));
-        if (_web is not null)
+        if (Interlocked.Exchange(ref _transport, null) is { } transport)
         {
-            try { _web.WebMessageReceived -= OnMessage; } catch { }
-            try { _web.NavigationStarting -= OnBridgeNavigationStarting; } catch { }
+            transport.MessageReceived -= OnMessage;
+            transport.SessionReset -= OnTransportReset;
+            try { transport.Detach(); } catch { }
         }
-        _web = null;
         SteamPendingSettings.Detach(this);
         if (_updaterStateChanged is { } updaterChanged) _services.Updater.StateChanged -= updaterChanged;
         _updaterStateChanged = null;
@@ -536,22 +546,9 @@ public sealed partial class WebHostBridge
         });
     }
 
-    private void OnMessage(CoreWebView2 sender, CoreWebView2WebMessageReceivedEventArgs e) => UiGuard.Run(() =>
+    private void OnMessage(string raw) => UiGuard.Run(() =>
     {
-        if (_detached) return;
-        if (!WebViewTrustPolicy.IsTrustedBridgeSource(e.Source))
-        {
-            AppLog.Warn("Blocked a privileged WebView message from an untrusted origin.");
-            return;
-        }
-
-        string? raw = null;
-        try { raw = e.TryGetWebMessageAsString(); } catch { }
-        if (string.IsNullOrWhiteSpace(raw))
-        {
-            try { raw = e.WebMessageAsJson; } catch { return; }
-        }
-        if (string.IsNullOrWhiteSpace(raw)) return;
+        if (_detached || string.IsNullOrWhiteSpace(raw)) return;
         _ = HandleAsync(FromPage(raw));
     });
 
@@ -3276,19 +3273,9 @@ public sealed partial class WebHostBridge
     {
         try
         {
-            var web = _web;
-            if (web is null) return;
-            json = ToPage(json);
-
-            void Send()
-            {
-                try { web.PostWebMessageAsJson(json); } catch { }
-            }
-
-            if (!_queue.HasThreadAccess)
-                _queue.Enqueue(Send);
-            else
-                Send();
+            var transport = _transport;
+            if (transport is null || _detached) return;
+            transport.PostJson(ToPage(json));
         }
         catch { }
     }
