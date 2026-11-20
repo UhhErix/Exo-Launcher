@@ -5,7 +5,7 @@ import { pageGet, pageRemove, pageSet, type PageKey } from './pageStore.ts'
  * brings them back. Only these keys exist (the host refuses any other, PlayerData.UiPrefs, where each says whether it syncs
  * to the player's other PCs or stays on this one); this page's own storage holds only a copy for the first frame.
  */
-export const UI_PREF_KEYS = ['discord', 'discordCamera', 'discordPerformance', 'driverBranch', 'wearing', 'shadersOrder', 'goLiveQuality', 'goLivePreview', 'voiceChat'] as const
+export const UI_PREF_KEYS = ['discord', 'discordCamera', 'discordPerformance', 'discordPinnedDms', 'driverBranch', 'wearing', 'shadersOrder', 'goLiveQuality', 'goLivePreview', 'voiceChat'] as const
 export type UiPrefKey = (typeof UI_PREF_KEYS)[number]
 
 /** Where an older Exo kept each choice in this page's own storage, and how it was written there. */

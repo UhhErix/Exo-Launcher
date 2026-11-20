@@ -5,7 +5,7 @@
  * Genres and modes come from Steam's own record of each game (Game.tags); a game Steam knows nothing about has none,
  * so a genre search leaves it out rather than guessing. No React, no host calls.
  */
-import type { Game, SortMode } from './host'
+import type { Game } from './host'
 import { storeLabel } from './storeLabel.ts'
 
 /** On this PC: installed, or preloaded for its release (host.ts › isPreloaded). */
@@ -276,54 +276,4 @@ export function matchesQuery(game: Game, query: LibraryQuery, context: MatchCont
 /** Nothing typed but spaces and filler: no search at all. */
 export function isEmptyQuery(query: LibraryQuery): boolean {
   return !query.filters.length && !query.words.length && query.minHours == null && query.maxHours == null && !query.big && !query.small
-}
-
-/** The scrubber's marks: where each group of the current sort starts in the grid, and what it reads. */
-export type ScrubMark = { label: string; index: number }
-
-const DAY = 86_400_000
-
-function recentGroup(game: Game, now: number): string {
-  const ago = now - playedAt(game)
-  if (!Number.isFinite(ago)) return 'Never'
-  return ago < DAY ? 'Today' : ago < 7 * DAY ? 'This week' : ago < 31 * DAY ? 'This month' : ago < 365 * DAY ? 'This year' : 'Earlier'
-}
-
-function playedGroup(game: Game): string {
-  const hours = (game.playtimeMinutes ?? 0) / 60
-  return hours >= 100 ? '100+ hr' : hours >= 50 ? '50+ hr' : hours >= 10 ? '10+ hr' : hours >= 1 ? '1+ hr' : hours > 0 ? 'Under 1 hr' : 'Not played'
-}
-
-function sizeGroup(game: Game): string {
-  const gb = (game.sizeBytes ?? 0) / 1024 ** 3
-  return gb >= 100 ? '100+ GB' : gb >= 50 ? '50+ GB' : gb >= 10 ? '10+ GB' : gb > 0 ? 'Under 10 GB' : 'Unknown'
-}
-
-function letterGroup(game: Game): string {
-  const first = fold(game.title).charAt(0).toUpperCase()
-  return /[A-Z]/.test(first) ? first : '#'
-}
-
-/** Each sort's groups, as the scrubber names them. */
-const GROUPS: Record<SortMode, (game: Game, now: number) => string> = {
-  name: letterGroup,
-  recent: recentGroup,
-  played: playedGroup,
-  size: sizeGroup,
-  store: game => storeLabel(game.store),
-  installed: game => onPc(game) ? 'Installed' : 'Not installed',
-}
-
-/**
- * The first place of each group in `items` (the grid as drawn), skipping what isn't a game (`skip`: a folder's card).
- * One group, or none, is no index at all.
- */
-export function scrubMarks(items: readonly Game[], sort: SortMode, skip: (game: Game) => boolean = () => false, now = Date.now()): ScrubMark[] {
-  const marks: ScrubMark[] = []
-  items.forEach((game, index) => {
-    if (skip(game)) return
-    const label = (GROUPS[sort] ?? letterGroup)(game, now)
-    if (marks.at(-1)?.label !== label) marks.push({ label, index })
-  })
-  return marks.length > 1 ? marks : []
 }

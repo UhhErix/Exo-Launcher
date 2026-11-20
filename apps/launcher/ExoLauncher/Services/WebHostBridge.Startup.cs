@@ -93,18 +93,31 @@ public sealed partial class WebHostBridge
     private static string? AppOf(string program) => Volatile.Read(ref _lastPrograms)?.Programs.FirstOrDefault(app =>
         !app.Store && app.Location is { } folder && InstalledPrograms.Own(folder) && program.StartsWith(folder.TrimEnd('\\') + '\\', StringComparison.OrdinalIgnoreCase))?.Id;
 
+    private static readonly HashSet<string> GenericShellHosts = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "cmd", "powershell", "pwsh", "rundll32", "svchost", "wscript", "cscript",
+        "conhost", "explorer", "msiexec", "dllhost", "taskhostw", "backgroundtaskhost", "regsvr32", "schtasks",
+    };
+
+    /// <summary>Executable name without extension to sample RAM for, or null for generic Windows shell hosts.</summary>
+    internal static string? TrackableProcessName(string command, string? program)
+    {
+        if (program is null) return null;
+        var names = Helpers.StartupApps.ExecutableNames(command);
+        var name = Path.GetFileNameWithoutExtension(names.Count > 0 ? names[^1] : program);
+        return string.IsNullOrEmpty(name) || GenericShellHosts.Contains(name) ? null : name;
+    }
+
     /// <summary>
     /// The memory each running entry's program holds now (private bytes, all its processes), by entry id: what it costs
-    /// while a game runs. The program a launcher hands off to counts (Discord behind Update.exe), never a Store app's.
+    /// while a game runs. The program a launcher hands off to counts (Discord behind Update.exe), never a Store app's or a shared Windows shell host's.
     /// </summary>
     private static Dictionary<string, long> Running(IReadOnlyList<StartupEntry> entries)
     {
         var memory = new Dictionary<string, long>(StringComparer.Ordinal);
         foreach (var entry in entries.Where(entry => entry.Enabled && entry.Program is not null))
         {
-            var names = Helpers.StartupApps.ExecutableNames(entry.Command);
-            var name = Path.GetFileNameWithoutExtension(names.Count > 0 ? names[^1] : entry.Program!);
-            if (string.IsNullOrEmpty(name)) continue;
+            if (TrackableProcessName(entry.Command, entry.Program) is not { } name) continue;
             long bytes = 0;
             foreach (var process in Process.GetProcessesByName(name))
             {

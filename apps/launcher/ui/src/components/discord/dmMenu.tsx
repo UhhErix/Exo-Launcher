@@ -1,5 +1,6 @@
 import { host } from '../../lib/host'
 import { useAccountSettings } from '../../lib/discordPrefs'
+import { isDmPinned, togglePinDm } from '../../lib/discordPins'
 import { MUTE_FOR } from './ChatHeader'
 import { Icons } from './icons'
 import { Submenu } from './UserMenu'
@@ -59,9 +60,19 @@ export function DmCopyId({ dm, onClose }: { dm?: DmInfo; onClose: () => void }) 
   return <button type="button" role="menuitem" onClick={() => { void navigator.clipboard.writeText(dm.id).catch(() => { }); onClose() }}><Icons.CopyId size={16} />Copy channel ID</button>
 }
 
-/** The person menu on a DM row: Mark As Read first, Close DM after the person's rows, Mute @user before Copy. */
+/** Pin or unpin a DM or group DM to the top of Direct messages. */
+export function DmPinItem({ dm, onDone }: { dm: DmInfo; onDone: Done }) {
+  const pinned = isDmPinned(dm.id)
+  return (
+    <button type="button" role="menuitem" onClick={() => { togglePinDm(dm.id); onDone({ ok: true }) }}>
+      <Icons.Pin size={16} />{pinned ? 'Unpin DM' : 'Pin DM'}
+    </button>
+  )
+}
+
+/** The person menu on a DM row: Mark As Read and Pin DM first, Close DM after the person's rows, Mute @user before Copy. */
 export function DmLead({ dm, onDone }: { dm?: DmInfo; onDone: Done }) {
-  return dm ? <><DmReadItem dm={dm} onDone={onDone} /><span className="exo-dc-menu-line" role="separator" /></> : null
+  return dm ? <><DmReadItem dm={dm} onDone={onDone} /><DmPinItem dm={dm} onDone={onDone} /><span className="exo-dc-menu-line" role="separator" /></> : null
 }
 
 export function DmClose({ dm, onDone }: { dm?: DmInfo; onDone: Done }) {

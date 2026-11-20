@@ -128,6 +128,7 @@ internal static class PlayerData
         new("goLiveQuality", Syncs: false, "Go Live's resolution and rate, which fit this PC's screen and upload"),
         new("goLivePreview", Syncs: true, "whether the player's own stream shows as a tile: a look"),
         new("voiceChat", Syncs: true, "whether the call's chat panel shows: a look"),
+        new("discordPinnedDms", Syncs: true, "pinned Discord DM channel ids, in pinned order"),
     ];
 
     internal static readonly string[] UiPrefKeys = [.. UiPrefs.Select(pref => pref.Key)];

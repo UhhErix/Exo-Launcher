@@ -98,6 +98,15 @@ function sorted(list: InstalledApp[], sort: Sort, back: boolean): InstalledApp[]
  * the next uninstall (the idle sweep is off: JunkAutoClean.OrphansBySelf). One line says what went, with Put back; what needs Windows' permission waits for a press or
  * the next uninstall's prompt. What goes can come back from Removed. Startup and Removed are the list's two other views.
  */
+/** Merge freshly loaded icon data URIs without overwriting cached icons with null. */
+function mergeIcons(current: Record<string, string | null>, incoming: Record<string, string | null>): Record<string, string | null> {
+  const merged = { ...current }
+  for (const [id, icon] of Object.entries(incoming)) {
+    if (icon || !(id in merged)) merged[id] = icon
+  }
+  return merged
+}
+
 export function AppsPanel({ active }: { active: boolean }) {
   const [programs, setPrograms] = useState<InstalledApp[] | null>(null)
   const [edgeRemoved, setEdgeRemoved] = useState(false)
@@ -125,10 +134,10 @@ export function AppsPanel({ active }: { active: boolean }) {
       const result = await host.appsList()
       setPrograms(result.programs)
       setEdgeRemoved(Boolean(result.edgeRemoved))
-      const missing = result.programs.map(app => app.id).filter(id => !(id in known))
+      const missing = result.programs.map(app => app.id).filter(id => !(id in known) || !known[id])
       for (let from = 0; from < missing.length; from += 100) {
         const chunk = await host.appsIcons(missing.slice(from, from + 100))
-        setIcons(current => ({ ...current, ...chunk.icons }))
+        setIcons(current => mergeIcons(current, chunk.icons))
       }
     } catch (error) {
       report(error, 'AppsPanel.list')
@@ -873,38 +882,47 @@ function InstallerCacheRow({ active, busy, onChanged }: { active: boolean; busy:
 
 type Startup = ReturnType<typeof useStartup>
 
-/** Everything that starts when you sign in, read once for the sheet: the Apps list says which of its apps do, and Startup shows them all. */
+/** Everything that starts when you sign in, refreshed whenever Apps opens. */
 function useStartup(active: boolean) {
   const [state, setState] = useState<StartupState | null>(null)
   const [icons, setIcons] = useState<Record<string, string | null>>({})
   const [errors, setErrors] = useState<Record<string, string>>({})
-  const read = useRef(false)
 
   async function take(next: StartupState) {
     setState(next)
     const wanted = next.items.map(item => item.icon).filter((icon): icon is string => !!icon)
-    if (wanted.length > 0) setIcons((await host.appsIcons(wanted)).icons)
+    if (wanted.length > 0) {
+      const chunk = await host.appsIcons(wanted)
+      setIcons(current => mergeIcons(current, chunk.icons))
+    }
   }
 
   useEffect(() => {
-    if (!active || read.current) return
-    read.current = true
-    host.startupList().then(next => void take(next), (error: unknown) => report(error, 'AppsPanel.startup'))
+    if (!active) return
+    let live = true
+    host.startupList().then(next => { if (live) void take(next) }, (error: unknown) => report(error, 'AppsPanel.startup'))
+    return () => { live = false }
   }, [active])
 
   const tell = (id: string, text: string) => setErrors(current => ({ ...current, [id]: text }))
   // The row's button (ActionButton) shows the work; the list takes the answer after its check (`settle`), or at once on a refusal.
   const settle = (value: unknown) => { const next = value as StartupState | null; if (next) void take(next) }
 
-  // One row may stand for several entries with one name (a game's two tracking values, Edge's two updaters): each goes.
+  // One row may stand for several entries with one name (a game's two tracking values, Edge's two updaters): act on each and report any failure.
   async function change(ids: string[], restore: boolean) {
-    tell(ids[0], '')
+    for (const one of ids) tell(one, '')
     let next: StartupState | null = null
+    const failures: string[] = []
     for (const one of ids) {
       next = restore ? await host.startupRestore(one) : await host.startupRemove(one)
-      if (!next.ok) break
+      if (!next.ok) {
+        const message = next.message || (restore ? 'It wasn’t turned on. Try again.' : 'It wasn’t turned off. Try again.')
+        failures.push(message)
+        tell(one, message)
+      }
     }
-    if (next && !next.ok) await take(next)
+    if (next) await take(next)
+    if (failures.length > 0) return { ...(next ?? { ok: false }), ok: false, message: failures[0] }
     return next
   }
 
@@ -962,15 +980,24 @@ function StartupView({ startup, query }: { startup: Startup; query: string }) {
       {!words && items.length === 0 ? <p className="exo-apps-none">Nothing starts with Windows</p> : null}
       {items.length > 0 ? (
         <section aria-label="Starts with Windows">
-          {items.map(item => (
-            <Line key={item.id} name={item.name} icon={<AppIcon name={item.name} icon={item.icon ? icons[item.icon] ?? null : null} />} detail={startupDetail(item)}
-              used={!item.enabled ? 'Off' : null} amount={size(item.memory)} error={errors[item.id] || undefined}>
-              {item.locked || item.readOnly ? null : (
-                <ActionButton className="exo-set-btn is-compact" context="AppsPanel.startupRemove" fallback="It wasn’t turned off. Try again." why="none"
-                  onPress={() => change(item.ids, false)} onFailed={failure => tell(item.id, failure.text)} onDone={settle}>Turn off</ActionButton>
-              )}
-            </Line>
-          ))}
+          {items.map(item => {
+            const rowError = item.ids.map(id => errors[id]).find(Boolean)
+            const turningOn = !item.enabled
+            return (
+              <Line key={item.id} name={item.name} icon={<AppIcon name={item.name} icon={item.icon ? icons[item.icon] ?? null : null} />} detail={startupDetail(item)}
+                used={turningOn ? 'Off' : null} amount={size(item.memory)} error={rowError}>
+                {item.locked || item.readOnly ? null : (
+                  <ActionButton className="exo-set-btn is-compact"
+                    context={turningOn ? 'AppsPanel.startupRestore' : 'AppsPanel.startupRemove'}
+                    fallback={turningOn ? 'It wasn’t turned on. Try again.' : 'It wasn’t turned off. Try again.'}
+                    why="none"
+                    onPress={() => change(item.ids, turningOn)}
+                    onFailed={failure => tell(item.id, failure.text)}
+                    onDone={settle}>{turningOn ? 'Turn on' : 'Turn off'}</ActionButton>
+                )}
+              </Line>
+            )
+          })}
         </section>
       ) : null}
       {removed.length > 0 ? (

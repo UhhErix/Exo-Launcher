@@ -105,6 +105,25 @@ internal static partial class StartupEntries
             : [new SetReg(place.Hive, place.Key, rest, null)];
     }
 
+    /// <summary>The changes that turn <paramref name="id"/> back on when it was disabled outside Exo (e.g. Task Manager); null when Exo shouldn't guess.</summary>
+    internal static IReadOnlyList<StartupChange>? OnChanges(IStartupHost host, string id)
+    {
+        var (kind, rest) = Split(id);
+        var on = RegValue.Bin(StartupApps.Approved(true, host.UtcNow));
+        if (kind is "folder:cu" or "folder:lm")
+            return [new SetReg(kind == "folder:lm" ? Hive.Machine : Hive.User, StartupKeys.Approved + "StartupFolder", rest, on)];
+        if (kind == "task") return CmdSafe(rest) && rest.Length > 0 ? [new SetTask(rest, On: true)] : null;
+        if (kind == "package")
+        {
+            var (family, task) = FamilyAndTask(rest);
+            return family.Length == 0 || task.Length == 0 ? null : [new SetReg(Hive.User, $@"{StartupKeys.Packaged}\{family}\{task}", "State", RegValue.DWord(2))];
+        }
+        // Services vary between Automatic and Manual, so Exo never guesses an external service's start type.
+        if (kind == "service") return null;
+        if (PlaceOf(kind) is not { ReadOnly: false, ApprovedKey: { } approved } place) return null;
+        return [new SetReg(place.Hive, StartupKeys.Approved + approved, rest, on)];
+    }
+
     private static (string Family, string Task) FamilyAndTask(string rest)
     {
         var bang = rest.IndexOf('!');
@@ -437,7 +456,23 @@ internal static partial class StartupEntries
 
     internal static string? RestoreLocked(IStartupHost host, string id, bool elevate)
     {
-        if (Kept(host).FirstOrDefault(item => item.Id == id) is not { } kept) return "Exo has nothing to put back for it.";
+        if (Kept(host).FirstOrDefault(item => item.Id == id) is not { } kept)
+        {
+            if (ReadAll(host).FirstOrDefault(entry => entry.Id == id) is not { } entry) return "Exo has nothing to put back for it.";
+            if (entry.Enabled) return null;
+            if (entry.Locked) return "Exo can't change this startup entry.";
+            if (Split(id).Kind == "service") return "Exo can't put this one back, so turn it on in Windows' Services.";
+            if (entry.ReadOnly) return "Exo can't change this startup entry.";
+            if (OnChanges(host, id) is not { } changes) return "Exo can't turn this one back on.";
+            var onApplied = host.Apply(changes, elevate);
+            if (Unverified(host, changes) is not null)
+            {
+                AppLog.Warn($"Startup: {entry.Name} not turned on: {onApplied.Error ?? "it was not as expected afterwards"}");
+                return onApplied is { Declined: true, Error: { } declinedWhy } ? declinedWhy : $"{entry.Name} wasn't turned on. Try again.";
+            }
+            AppLog.Info($"Startup: turned on {entry.Name} ({id}).");
+            return null;
+        }
         var (done, error, applied, _) = PutBackMany(host, [kept], elevate);
         if (done.Count > 0)
         {

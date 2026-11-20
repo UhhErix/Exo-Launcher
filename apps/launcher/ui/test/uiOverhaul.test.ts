@@ -12,6 +12,7 @@ const titleBar = read('../src/components/shell/TitleBar.tsx')
 const appsPanel = read('../src/components/apps/AppsPanel.tsx')
 const appsCss = read('../src/styles/apps.css')
 const glassCss = read('../src/styles/glass.css')
+const tokensCss = read('../src/tokens.css')
 
 test('GamePage removes the side drawer and renders GameStats, GameLines, and GameShared inline', () => {
   assert.doesNotMatch(gamePage, /exo-game-info-pane|exo-game-info-toggle|is-info/)
@@ -39,9 +40,13 @@ test('AppsPanel uses concise tab labels and content-visibility optimization in a
   assert.match(appsCss, /content-visibility:\s*auto/)
 })
 
-test('glass.css does not apply backdrop-filter to static black-surface controls', () => {
-  const blurBlock = /\/\* True media-overlay plates[\s\S]*?\{[\s\S]*?backdrop-filter:/m.exec(glassCss)?.[0] ?? ''
+test('Liquid Glass renders real backdrop-filter blur over AMOLED black surfaces without fake gradient sheens', () => {
+  assert.match(tokensCss, /--glassy-overlay:\s*rgb\(0 0 0 \/ 0\.36\)/)
+  assert.doesNotMatch(tokensCss, /--glassy-fresnel-rim|--glassy-control-sheen|--exo-surface-control/)
+  assert.doesNotMatch(glassCss, /--glassy-fresnel-rim|--glassy-control-sheen|--exo-surface-control|mask-composite/)
+  const blurBlock = /:where\(([\s\S]*?)\n\)\s*\{\s*backdrop-filter:\s*var\(--exo-control-glass\);/m.exec(glassCss)?.[1] ?? ''
   assert.ok(blurBlock.length > 0)
-  assert.doesNotMatch(blurBlock, /\.exo-set-btn|\.exo-pc-chip|\.exo-field\b/)
-  assert.match(glassCss, /background-image:\s*var\(--exo-surface-control\)/)
+  assert.match(blurBlock, /\.exo-set-btn:not\(\.is-primary\)/)
+  assert.match(blurBlock, /\.exo-pc-chip/)
+  assert.match(blurBlock, /\.exo-field\b/)
 })

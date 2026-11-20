@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { matchesFilters, matchesQuery, parseLibraryQuery, scrubMarks } from '../src/lib/librarySearch.ts'
+import { matchesFilters, matchesQuery, parseLibraryQuery } from '../src/lib/librarySearch.ts'
 
 const game = (over: Record<string, unknown>) => ({ id: 'x', title: 'X', store: 'steam', installed: true, status: '', deps: [], launchNote: '', ...over }) as never
 const forza = game({ id: 'forza', title: 'Forza Horizon 5', tags: ['racing', 'multiplayer', 'co-op'], playtimeMinutes: 0 })
@@ -36,11 +36,4 @@ test('filters in a group widen, groups narrow', () => {
   assert.deepEqual(all.filter(g => matchesFilters(g, [...stores, { kind: 'installed' }])).map(g => (g as { id: string }).id), ['forza', 'halo'])
   assert.equal(matchesFilters(forza, [{ kind: 'friends' }], { friendsPlaying: new Set(['forza']) }), true)
   assert.equal(matchesFilters(dirt, [{ kind: 'friends' }], { friendsPlaying: new Set(['forza']) }), false)
-})
-
-test('the scrubber marks where each group starts, and one group is no index', () => {
-  const sorted = [game({ title: '1979' }), game({ title: 'Alan Wake' }), game({ title: 'Apex' }), game({ title: 'Control' })]
-  assert.deepEqual(scrubMarks(sorted, 'name'), [{ label: '#', index: 0 }, { label: 'A', index: 1 }, { label: 'C', index: 3 }])
-  assert.deepEqual(scrubMarks([game({ title: 'Apex' }), game({ title: 'Alan' })], 'name'), [])
-  assert.deepEqual(scrubMarks(all, 'installed').map(m => m.label), ['Installed', 'Not installed', 'Installed'])
 })

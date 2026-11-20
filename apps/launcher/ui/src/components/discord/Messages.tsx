@@ -6,7 +6,8 @@ import { Avatar } from './presence'
 import { ConfirmButton } from '../ui/ConfirmButton'
 import { EditGroup } from './GroupDm'
 import { SubContext } from './UserMenu'
-import { dmData, DmCopyId, DmMuteItem, DmReadItem } from './dmMenu'
+import { dmData, DmCopyId, DmMuteItem, DmPinItem, DmReadItem } from './dmMenu'
+import { onPinnedDms, partitionPinnedDms, readPinnedDms } from '../../lib/discordPins'
 import { useDismiss } from '../../lib/dismiss'
 import { ErrorNote } from '../ui/ErrorNote'
 import { peek, REQUESTS, unpeek } from './roomPlaces'
@@ -26,6 +27,8 @@ export function MessagesPane({ home, open, onPick }: {
   const [query, setQuery] = useState('')
   const [starting, setStarting] = useState(false)
   const [finding, setFinding] = useState(false)
+  const [pinnedIds, setPinnedIds] = useState<string[]>(() => readPinnedDms())
+  useEffect(() => onPinnedDms(() => setPinnedIds(readPinnedDms())), [])
   // Closing the find field gives focus back to its glyph, not to the page.
   const findButton = useRef<HTMLButtonElement>(null)
   const refocus = useRef(false)
@@ -37,6 +40,7 @@ export function MessagesPane({ home, open, onPick }: {
   const q = query.trim().toLowerCase()
   // Message requests and spam wait under Message Requests, as in Discord, not among your DMs.
   const dms = (home?.dms ?? []).filter(d => !d.request && !d.spam && (!q || d.name.toLowerCase().includes(q)))
+  const { pinned, unpinned } = partitionPinnedDms(dms, pinnedIds)
   const requests = (home?.dms ?? []).filter(d => d.request && !d.spam).length
   const anyRequests = requests > 0 || (home?.dms ?? []).some(d => d.spam)
   const unread = (home?.dms ?? []).filter(d => d.unread && !d.muted && !d.request && !d.spam).length
@@ -62,10 +66,30 @@ export function MessagesPane({ home, open, onPick }: {
       </header>
       <div className="exo-dc-side-list">
         {anyRequests || open === REQUESTS ? <RequestsRow requests={requests} current={open === REQUESTS} onPick={() => onPick(REQUESTS)} /> : null}
-        {dms.map(d => <DmRow key={d.id} dm={d} current={d.id === open} onPick={pick} />)}
-        {!home ? <p className="exo-dc-note">Loading</p> : dms.length === 0 ? <p className="exo-dc-note">{q ? 'No conversation by that name.' : 'No conversations yet.'}</p> : null}
+        <DmSections dms={dms} pinned={pinned} unpinned={unpinned} open={open} home={home} query={q} onPick={pick} />
       </div>
     </nav>
+  )
+}
+
+function DmSections({ dms, pinned, unpinned, open, home, query, onPick }: {
+  dms: readonly DiscordDm[]
+  pinned: readonly DiscordDm[]
+  unpinned: readonly DiscordDm[]
+  open: string | null
+  home: DiscordHome | null
+  query: string
+  onPick: (id: string) => void
+}) {
+  if (!home) return <p className="exo-dc-note">Loading</p>
+  if (dms.length === 0) return <p className="exo-dc-note">{query ? 'No conversation by that name.' : 'No conversations yet.'}</p>
+  return (
+    <>
+      {pinned.length > 0 ? <p className="exo-dc-dm-pin-label">Pinned</p> : null}
+      {pinned.map(d => <DmRow key={d.id} dm={d} current={d.id === open} pinned onPick={onPick} />)}
+      {pinned.length > 0 && unpinned.length > 0 ? <p className="exo-dc-dm-pin-label">Direct messages</p> : null}
+      {unpinned.map(d => <DmRow key={d.id} dm={d} current={d.id === open} pinned={false} onPick={onPick} />)}
+    </>
   )
 }
 
@@ -81,7 +105,7 @@ function RequestsRow({ requests, current, onPick }: { requests: number; current:
   )
 }
 
-const DmRow = memo(function DmRow({ dm, current, onPick }: { dm: DiscordDm; current: boolean; onPick: (id: string) => void }) {
+const DmRow = memo(function DmRow({ dm, current, pinned, onPick }: { dm: DiscordDm; current: boolean; pinned: boolean; onPick: (id: string) => void }) {
   // A group's right-click menu, with Leave group (a 1:1 DM's is the person menu, with Close DM).
   const [menu, setMenu] = useState<{ x: number; y: number } | null>(null)
   const close = () => void host.discordChannel(dm.id, 'close').catch(() => { })
@@ -100,6 +124,7 @@ const DmRow = memo(function DmRow({ dm, current, onPick }: { dm: DiscordDm; curr
           {said ? <span className="exo-dc-item-sub">{said}</span> : null}
         </span>
         <span className="exo-dc-item-meta">
+          {pinned ? <Icons.Pin size={12} className="exo-dc-dm-pin-icon" aria-hidden="true" /> : null}
           {dm.lastAt ? <time className="exo-dc-item-time">{rowTime(dm.lastAt)}</time> : null}
           {dm.mentions ? <span className="exo-dc-badge" aria-hidden="true">{dm.mentions > 99 ? '99+' : dm.mentions}</span>
             : dm.unread && !dm.muted ? <span className="exo-dc-item-dot" aria-hidden="true" /> : null}
@@ -130,6 +155,7 @@ function GroupDmMenu({ dm, x, y, onLeave, onClose }: { dm: DiscordDm; x: number;
     <SubContext.Provider value={{ open: sub, show: setSub }}>
     <div ref={box} className="exo-dc-menu exo-dc-channel-menu exo-dc-gdm-menu" role="menu" aria-label={dm.name} style={{ left: x, top: y }}>
       <DmReadItem dm={info} onDone={done} />
+      <DmPinItem dm={info} onDone={done} />
       <span className="exo-dc-menu-line" role="separator" />
       <DmMuteItem dm={info} label="Mute conversation" onDone={done} />
       <button type="button" role="menuitem" onClick={() => setEditing(true)}>Edit group</button>
