@@ -7,8 +7,23 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
-import { BAR_REVEAL_PX, IMMERSIVE_KEY, barMayHide, contrastOver, immersiveWasOn, rememberImmersive, wakesBar, withImmersiveKey } from '../src/components/music/immersiveRules.ts'
+import { BAR_REVEAL_PX, IMMERSIVE_KEY, barMayHide, immersiveWasOn, rememberImmersive, wakesBar, withImmersiveKey } from '../src/components/music/immersiveRules.ts'
 import { immersiveVolumeAction, nextImmersiveVolume } from '../src/lib/musicVolume.ts'
+
+/** The ambient light's art, darkened: the art's opacity over black, then the dim over it (tokens.css › Immersive). */
+type Ambient = { art: number; dim: number }
+
+function luminance(value: number): number {
+  return value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4
+}
+
+function brightestAmbient({ art, dim }: Ambient): number {
+  return luminance(art * (1 - dim))
+}
+
+function contrastOver(ambient: Ambient, word: number): number {
+  return (luminance(word) + 0.05) / (brightestAmbient(ambient) + 0.05)
+}
 
 const tokens = readFileSync(new URL('../src/tokens.css', import.meta.url), 'utf8')
 const token = (name: string) => new RegExp(`--${name}:\\s*([^;]+);`).exec(tokens)?.[1]?.trim()

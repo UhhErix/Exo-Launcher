@@ -36,25 +36,3 @@ export function wakesBar(event: BarWake): boolean {
 export function barMayHide(state: { hovered: boolean; focused: boolean; open: boolean }): boolean {
   return !state.hovered && !state.focused && !state.open
 }
-
-/** The ambient light's art, darkened: the art's opacity over black, then the dim over it (tokens.css › Immersive). */
-export type Ambient = { art: number; dim: number }
-
-/** WCAG relative luminance of an sRGB channel value 0 to 1, the same on every channel (grey). */
-function luminance(value: number): number {
-  const linear = value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4
-  return linear
-}
-
-/**
- * The lightest the ambient light can be under the words: white art at full strength, drawn at the art's opacity over
- * black, under the dim (an sRGB blend, as the browser composites). Its luminance, for a contrast ratio.
- */
-export function brightestAmbient({ art, dim }: Ambient): number {
-  return luminance(art * (1 - dim))
-}
-
-/** Contrast of a grey word (its sRGB value 0 to 1) over the brightest the ambient light can be. */
-export function contrastOver(ambient: Ambient, word: number): number {
-  return (luminance(word) + 0.05) / (brightestAmbient(ambient) + 0.05)
-}

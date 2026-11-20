@@ -1864,6 +1864,7 @@ const MOCK_HANDLERS: Record<string, MockHandler> = {
     if ((p as { on?: boolean }).on) emitHostEvent('controller.state', { id: (p as { id: string }).id, lx: 128, ly: 125, rx: 128, ry: 130, l2: 0, r2: 186, profile: 1, stopL: 0, stopR: 0, battery: 85, charging: true, extras: 0x40 })
     return { ok: true }
   },
+  'steamInput.state': () => ({ ok: true, steam: false, native: 0, translated: 0 }),
   'audio.read': () => ({
     ok: true,
     output: mockEndpoint(OUTPUT_ID),
