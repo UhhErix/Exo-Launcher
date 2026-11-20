@@ -1,4 +1,5 @@
 using System.Buffers;
+using System.Buffers.Binary;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 
@@ -182,17 +183,28 @@ internal static class BackgroundTrim
                         continue;
                     }
                     if (status < 0) return table;
+                    var validLen = needed > 0 && needed <= buffer.Length ? needed : buffer.Length;
                     Volatile.Write(ref _tableBytes, Math.Max(size, needed + 64 * 1024));
                     // SYSTEM_PROCESS_INFORMATION (x64): NextEntryOffset at 0, ImageName (UNICODE_STRING) at 0x38,
                     // UniqueProcessId at 0x50, InheritedFromUniqueProcessId at 0x58. The name points into the buffer.
-                    for (var entry = start; ; )
+                    const int minStructSize = 0x60;
+                    var bufStart = (nuint)start;
+                    var bufEnd = bufStart + (nuint)validLen;
+                    var span = buffer.AsSpan(0, validLen);
+                    for (var offset = 0; offset >= 0 && offset <= span.Length - minStructSize; )
                     {
-                        var name = *(char**)(entry + 0x40);
-                        table.Add(((int)*(nint*)(entry + 0x50), (int)*(nint*)(entry + 0x58),
-                            name == null ? "" : new string(name, 0, *(ushort*)(entry + 0x38) / 2)));
-                        var next = *(int*)entry;
-                        if (next == 0) break;
-                        entry += next;
+                        var entry = span.Slice(offset, minStructSize);
+                        var nameBytes = BinaryPrimitives.ReadUInt16LittleEndian(entry.Slice(0x38, 2));
+                        var nameAddr = (nuint)BinaryPrimitives.ReadUInt64LittleEndian(entry.Slice(0x40, 8));
+                        var pid = (int)BinaryPrimitives.ReadInt64LittleEndian(entry.Slice(0x50, 8));
+                        var ppid = (int)BinaryPrimitives.ReadInt64LittleEndian(entry.Slice(0x58, 8));
+                        var imageName = nameAddr >= bufStart && nameAddr < bufEnd && nameBytes > 0 && nameBytes <= bufEnd - nameAddr
+                            ? new string((char*)nameAddr, 0, nameBytes / 2)
+                            : "";
+                        table.Add((pid, ppid, imageName));
+                        var next = BinaryPrimitives.ReadInt32LittleEndian(entry);
+                        if (next <= 0 || next > span.Length - offset) break;
+                        offset += next;
                     }
                 }
                 return table;

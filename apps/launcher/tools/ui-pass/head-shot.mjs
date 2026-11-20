@@ -18,7 +18,7 @@ await p.clickSel('.exo-dc-people-pill', 0).catch(e => console.log('pill', e.mess
 await p.clickSel('.exo-dc-head-search-glyph', 0).catch(e => console.log('glyph', e.message)); await sleep(500); console.log(JSON.stringify(await p.eval(`(()=>{const m=document.querySelector('.exo-dc-search-menu');const c=getComputedStyle(m);return [c.position,c.top,c.bottom,c.transform,c.maxHeight,m.children.length,m.getBoundingClientRect().height]})()`))); await shot('chat-server-search')
 await p.eval(`document.activeElement?.blur()`); await sleep(500); await shot('chat-server-search-closed')
 const more = '.exo-dc-chat-head button[aria-label="More"]'
-const item = (label) => p.eval(`(()=>{const b=[...document.querySelectorAll('.exo-dc-chat-head .exo-dc-menu [role^=menuitem]')].find(x=>x.textContent.startsWith(${JSON.stringify(label)}));b?.click();return !!b})()`)
+const item = (label) => p.fn((l) => { const b = [...document.querySelectorAll('.exo-dc-chat-head .exo-dc-menu [role^=menuitem]')].find((x) => x.textContent.startsWith(l)); b?.click(); return !!b }, label)
 await p.eval(`document.activeElement?.blur()`)
 await p.clickSel(more, 0).catch(e => console.log('more', e.message)); await sleep(500); await shot('head-more-server')
 console.log('focus', await p.eval(`document.activeElement?.textContent`))

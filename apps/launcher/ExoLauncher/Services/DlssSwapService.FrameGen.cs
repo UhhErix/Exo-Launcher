@@ -358,6 +358,8 @@ public sealed partial class DlssSwapService
     {
         if (archive.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))
         {
+            var unpackRoot = Path.GetFullPath(unpack);
+            if (!unpackRoot.EndsWith(Path.DirectorySeparatorChar)) unpackRoot += Path.DirectorySeparatorChar;
             using var zip = ZipFile.OpenRead(archive);
             foreach (var entry in zip.Entries)
             {
@@ -366,7 +368,8 @@ public sealed partial class DlssSwapService
                 var named = mod.Files.Any(spec => spec.Source.Equals(name, StringComparison.OrdinalIgnoreCase));
                 if (!named && !PayloadMember(mod, name)) continue;
                 if (entry.Length > mod.MaxSize) continue;
-                var to = Path.Combine(unpack, name);
+                var to = Path.GetFullPath(Path.Combine(unpackRoot, name));
+                if (!to.StartsWith(unpackRoot, StringComparison.OrdinalIgnoreCase)) continue;
                 Directory.CreateDirectory(Path.GetDirectoryName(to)!);
                 entry.ExtractToFile(to, overwrite: false);
             }

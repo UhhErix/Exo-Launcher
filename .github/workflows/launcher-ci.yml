@@ -18,6 +18,41 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  ui-and-cloud:
+    name: UI & Cloud Workers
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: apps/launcher
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: |
+            apps/launcher/ui/package-lock.json
+            apps/launcher/cloud/updates/package-lock.json
+            apps/launcher/cloud/account/package-lock.json
+            apps/launcher/cloud/covers/package-lock.json
+
+      - name: UI check
+        run: |
+          npm ci --prefix ui --no-audit --no-fund
+          npm run -s check --prefix ui
+
+      - name: Cloud Worker tests
+        run: |
+          npm ci --prefix cloud/updates --no-audit --no-fund
+          npm test --prefix cloud/updates
+          npm ci --prefix cloud/account --no-audit --no-fund
+          npm test --prefix cloud/account
+          npm test --prefix cloud/reports
+          npm ci --prefix cloud/covers --no-audit --no-fund
+          npm test --prefix cloud/covers
+
   test:
     runs-on: windows-latest
     timeout-minutes: 45
@@ -39,13 +74,17 @@ jobs:
         with:
           global-json-file: apps/launcher/global.json
 
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.nuget/packages
+          key: ${{ runner.os }}-nuget-${{ hashFiles('apps/launcher/**/*.csproj', 'apps/launcher/global.json') }}
+          restore-keys: |
+            ${{ runner.os }}-nuget-
+
       - name: Install the UI and Exo Mouse
         run: |
           npm ci --prefix ui --no-audit --no-fund
           npm ci --prefix mouse --no-audit --no-fund
-
-      - name: UI check
-        run: npm run -s check --prefix ui
 
       - name: .NET tests
         run: dotnet test ExoLauncher.Tests/ExoLauncher.Tests.csproj -p:Platform=x64 -nologo
