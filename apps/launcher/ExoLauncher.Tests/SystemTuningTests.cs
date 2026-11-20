@@ -115,6 +115,8 @@ public sealed class SystemTuningTests : IDisposable
         public string? ReadAnswer(string answer, bool keep = false) => keep ? _answers.GetValueOrDefault(answer) : _answers.Remove(answer, out var text) ? text : null;
         public bool PointStanding => Standing;
         public void PointMade(RestorePoint.Outcome outcome) { }
+        public Queue<LatencyTrace.Answer?> Checks { get; } = new();
+        public Task<LatencyTrace.Answer?> Latency() => Task.FromResult(Checks.Dequeue());
 
         /// <summary>A PC a tweak tool went over: forced HPET, Background services, no page file, the server cache.</summary>
         public void Tweaked()
@@ -622,4 +624,46 @@ public sealed class SystemTuningTests : IDisposable
         Assert.NotNull(refusal);
         Assert.Empty(_system.Runs);
     }
+
+    // ---- The latency check ----
+
+    private static LatencyTrace.Result Check(double dpc, string driver, double isr = 20) =>
+        new(DateTimeOffset.UtcNow, 10, 5000, 900, dpc, driver, isr, "USBXHCI.SYS", []);
+
+    [Fact]
+    public async Task The_latency_check_keeps_the_last_two_and_compares_them()
+    {
+        _system.Checks.Enqueue(new(Check(1412, "ndis.sys"), null));
+        _system.Checks.Enqueue(new(Check(300, "nvlddmkm.sys"), null));
+        _system.Checks.Enqueue(new(Check(310, "nvlddmkm.sys"), null));
+        Assert.Null(await Make().LatencyAsync());
+        var first = Make().Latency();
+        Assert.Null(first.Before);
+        Assert.Contains("ndis.sys held the processor for 1412 µs", first.Said, StringComparison.Ordinal);
+        Assert.Null(await Make().LatencyAsync());
+        Assert.Contains("fell from 1412 µs to 300 µs", Make().Latency().Said, StringComparison.Ordinal);
+        Assert.Null(await Make().LatencyAsync());
+        var third = Make().Latency();
+        Assert.Equal(300, third.Before!.DpcMaxUs);
+        Assert.Contains("About the same", third.Said, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task A_declined_or_failed_check_keeps_the_last_one()
+    {
+        _system.Checks.Enqueue(new(Check(200, "nvlddmkm.sys"), null));
+        _system.Checks.Enqueue(null);
+        _system.Checks.Enqueue(new(null, "Windows' permission is needed to measure."));
+        await Make().LatencyAsync();
+        Assert.Contains("declined", await Make().LatencyAsync(), StringComparison.Ordinal);
+        Assert.Equal("Windows' permission is needed to measure.", await Make().LatencyAsync());
+        Assert.Equal(200, Make().Latency().After!.DpcMaxUs);
+    }
+
+    [Theory]
+    [InlineData(120, "fine for games and audio")]
+    [InlineData(700, "close to where audio can crackle")]
+    [InlineData(2400, "long enough for audio to crackle")]
+    public void The_check_says_what_the_longest_run_means(double us, string words) =>
+        Assert.Contains(words, LatencySaid(null, Check(us, "x.sys")), StringComparison.Ordinal);
 }

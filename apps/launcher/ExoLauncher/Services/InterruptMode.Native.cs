@@ -31,6 +31,9 @@ internal sealed partial class InterruptMode
     /// </summary>
     internal static async Task<(FollowUp Next, string? Problem)> FollowUpAsync(string why, bool now, CancellationToken ct = default)
     {
+        // A device that didn't start in MSI mode goes back first, by itself when Windows won't ask; when it would, PC says so
+        // (Verify) and Undo or the device's Revert puts it back with one prompt.
+        if (!ElevatedCommands.WindowsAsks() && ThisPc.PutBackFailed() is { } failed) AppLog.Warn("Interrupts: " + failed);
         var lapsed = ThisPc.Lapsed();
         var next = Next(lapsed.Count, lapsed.Count > 0 && ElevatedCommands.WindowsAsks());
         if (next == FollowUp.None) return (next, null);

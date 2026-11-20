@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+- **Latency check.** Best settings › System measures for ten seconds how long your drivers hold the processor (the DPC and interrupt times LatencyMon shows), names the driver with the longest, says plainly whether that's fine for games and audio, and compares it with your check before. It changes nothing; Windows asks permission once. _Checked in code only._
+- **MSI mode that a device can't run is put back.** A device that doesn't start after Device interrupts switched it to MSI mode is named in PC, and Exo puts it back by itself at the next start when Windows doesn't need to ask (Undo does it at once). _Checked in code only._
+
 ## 3.27.0 — November 20, 2026
 - **Liquid Glass overhaul, zero-scroll game sheet, and redesigned Apps room.** Top bar capsules wear true backdrop-blur Liquid Glass over pure black surfaces while static page controls avoid idle GPU readbacks, game pages display stats and lines inline without scrolling, and PC › Apps adds inline status tags (`Startup`, `Exo replaces`, `Bloat`), grouped dependency counts, and compact actionable notices (`#72`, `#81`, `#86`). _Verified: end-to-end._
 - **Discord screen sharing, Stage & activity parity, and UI fixes.** Screen share capture handles disabled WGC caching cleanly with hardware cursor composition, HDR tonemapping, H.265-to-H.264 fallback, and source hot-swapping; adds Stage instances, gift embeds, voice activity status, Nitro soundboard search/volume, keyboard shortcuts, and widens the Me quick-menu caret to 16px (`#74`, `#82`, `#85`, `#88`). _Verified: end-to-end._

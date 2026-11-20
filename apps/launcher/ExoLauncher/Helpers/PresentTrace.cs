@@ -435,6 +435,8 @@ internal sealed unsafe partial class PresentTrace : IDisposable, IFrameTrace
         [FieldOffset(56)] public uint MaximumBuffers;
         [FieldOffset(64)] public uint LogFileMode;
         [FieldOffset(68)] public uint FlushTimerSeconds;
+        /// <summary>The kernel's event groups a system logger session records (<see cref="LatencyTrace"/>).</summary>
+        [FieldOffset(72)] public uint EnableFlags;
         [FieldOffset(88)] public uint EventsLost;
         [FieldOffset(100)] public uint RealTimeBuffersLost;
         [FieldOffset(116)] public uint LoggerNameOffset;
@@ -458,6 +460,8 @@ internal sealed unsafe partial class PresentTrace : IDisposable, IFrameTrace
         [FieldOffset(16)] public long TimeStamp;
         [FieldOffset(24)] public uint ProviderFirst;
         [FieldOffset(40)] public ushort Id;
+        /// <summary>A classic kernel event's kind (<see cref="LatencyTrace"/>).</summary>
+        [FieldOffset(45)] public byte Opcode;
         [FieldOffset(86)] public ushort UserDataLength;
         [FieldOffset(96)] public byte* UserData;
     }

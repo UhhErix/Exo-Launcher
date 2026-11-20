@@ -116,6 +116,8 @@ internal sealed partial class SystemTuning(SystemTuning.ISystem system, string p
         bool SetMouseParams(int[] values) => false;
         /// <summary>Installed library games that require Memory Integrity (HVCI), empty in isolated tests unless set.</summary>
         IReadOnlyList<string> HvciRequiringGames() => [];
+        /// <summary>The latency check, run elevated (Windows asks): its answer, or null when the prompt was declined or it didn't run.</summary>
+        Task<LatencyTrace.Answer?> Latency();
     }
 
     private static readonly HashSet<string> HvciGameKeys = new(StringComparer.Ordinal)
@@ -152,7 +154,7 @@ internal sealed partial class SystemTuning(SystemTuning.ISystem system, string p
     /// What Exo keeps: the items the player turned off, what each changed item held, when each was last changed (a restart
     /// finishes it), and items a press found nothing to change for (the HPET Windows picks itself on this PC).
     /// </summary>
-    internal sealed record Saved(List<string> Off, Dictionary<string, Was> Kept, Dictionary<string, DateTimeOffset> Changed, List<string> Native);
+    internal sealed record Saved(List<string> Off, Dictionary<string, Was> Kept, Dictionary<string, DateTimeOffset> Changed, List<string> Native, List<LatencyTrace.Result>? Latency = null);
 
     /// <summary>
     /// One item: <paramref name="On"/> Exo's setting is in place; <paramref name="Restart"/> it was changed (or put back) since
@@ -632,6 +634,56 @@ internal sealed partial class SystemTuning(SystemTuning.ISystem system, string p
         return Save(saved) ? null : "Exo couldn't save your choice.";
     }
 
+    /// <summary>The last two latency checks (the one before, then the last), and what the last says.</summary>
+    internal (LatencyTrace.Result? Before, LatencyTrace.Result? After, string Said) Latency()
+    {
+        var list = Load().Latency ?? [];
+        var after = list.LastOrDefault();
+        var before = list.Count > 1 ? list[^2] : null;
+        return (before, after, after is null ? "" : LatencySaid(before, after));
+    }
+
+    /// <summary>Runs the latency check (Windows asks; ten seconds) and keeps it beside the one before. Null when done, else the line to show.</summary>
+    internal async Task<string?> LatencyAsync()
+    {
+        if (!_gate.Wait(0)) return Busy;
+        try
+        {
+            var answer = await system.Latency().ConfigureAwait(false);
+            if (answer is null) return Logged("Windows' permission was declined, so nothing was measured.");
+            if (answer.Result is not { } result) return Logged(answer.Problem ?? "The check didn't finish.");
+            var saved = Load();
+            var list = (saved.Latency ?? []).TakeLast(1).Append(result).ToList();
+            Save(saved with { Latency = list });
+            AppLog.Info($"System best settings: latency check: DPC {result.DpcMaxUs} µs ({result.DpcDriver}), ISR {result.IsrMaxUs} µs ({result.IsrDriver}), {result.Dpcs} DPCs and {result.Isrs} ISRs in {result.Seconds:0.#} s.");
+            return null;
+        }
+        finally { _gate.Release(); }
+    }
+
+    /// <summary>
+    /// Under 500 µs is fine (LatencyMon's green); over 1000 µs is where audio drops out. Microsoft's guidance for a driver's
+    /// own routine is far below both (an ISR under 25 µs, a DPC under 100 µs), so a driver past them is the one to update.
+    /// </summary>
+    internal const double Fine = 500, Long = 1000;
+
+    /// <summary>
+    /// The check in words: the longest run and its driver against what's fine, and against the check before only where the
+    /// change is past the noise (a fifth and 50 µs).
+    /// </summary>
+    internal static string LatencySaid(LatencyTrace.Result? before, LatencyTrace.Result after)
+    {
+        var worst = after.DpcMaxUs >= after.IsrMaxUs ? (Us: after.DpcMaxUs, Driver: after.DpcDriver) : (Us: after.IsrMaxUs, Driver: after.IsrDriver);
+        var said = worst.Us < Fine ? "Drivers hand the processor back quickly: fine for games and audio."
+            : worst.Us < Long ? $"{worst.Driver ?? "A driver"} held the processor for {Math.Round(worst.Us)} µs: fine for games, close to where audio can crackle."
+            : $"{worst.Driver ?? "A driver"} held the processor for {Math.Round(worst.Us)} µs: long enough for audio to crackle or a frame to slip. An update of that driver is the usual fix.";
+        if (before is null) return said;
+        var was = Math.Max(before.DpcMaxUs, before.IsrMaxUs);
+        var change = worst.Us - was;
+        if (Math.Abs(change) < 50 || Math.Abs(change) < was / 5) return said + " About the same as the check before.";
+        return said + $" The longest run {(change < 0 ? "fell" : "rose")} from {Math.Round(was)} µs to {Math.Round(worst.Us)} µs since the check before.";
+    }
+
     private static bool SameStrings(string[]? a, string[]? b) => a is null ? b is null : b is not null && a.SequenceEqual(b, StringComparer.OrdinalIgnoreCase);
 
     /// <summary>The lines that put back what <paramref name="was"/> recorded; null when the record holds something Exo wouldn't write.</summary>
@@ -740,10 +792,10 @@ internal sealed partial class SystemTuning(SystemTuning.ISystem system, string p
         try
         {
             if (File.Exists(path) && JsonSerializer.Deserialize<Saved>(File.ReadAllText(path)) is { } saved)
-                return saved with { Off = saved.Off ?? [], Kept = saved.Kept ?? [], Changed = saved.Changed ?? [], Native = saved.Native ?? [] };
+                return saved with { Off = saved.Off ?? [], Kept = saved.Kept ?? [], Changed = saved.Changed ?? [], Native = saved.Native ?? [], Latency = saved.Latency ?? [] };
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException or NotSupportedException) { AppLog.Debug("System best settings: the record couldn't be read: " + ex.GetType().Name); }
-        return new Saved([], [], [], []);
+        return new Saved([], [], [], [], []);
     }
 
     private bool Save(Saved saved)

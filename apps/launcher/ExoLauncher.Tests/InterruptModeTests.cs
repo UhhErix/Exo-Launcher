@@ -434,4 +434,41 @@ public sealed class InterruptModeTests : IDisposable
         Assert.False(mode.Read().Devices.Single(r => r.Token == Token(Net)).Changed);
         Assert.True(mode.Read().CanUndo);
     }
+
+    // ---- A device that didn't start ----
+
+    [Fact]
+    public void ADeviceThatDidntStartInMsiModeIsSaidAndPutBack()
+    {
+        var (mode, devices, writer) = Make(GpuOnLine(), Xhci(Usb1));
+        Assert.Null(mode.Apply());
+        // Before the restart nothing is put back: Windows hasn't tried yet.
+        Assert.Null(mode.PutBackFailed());
+        Restart(devices);
+        devices.Devices[0] = devices.Devices[0] with { Problem = 10 }; // CM_PROB_FAILED_START
+        var said = mode.Read().Result;
+        Assert.NotNull(said);
+        Assert.Contains("graphics card didn't start in MSI mode", said, StringComparison.Ordinal);
+        Assert.DoesNotContain("didn't switch", said, StringComparison.Ordinal);
+
+        var calls = writer.Calls.Count;
+        Assert.Null(mode.PutBackFailed());
+        var back = writer.Calls[calls];
+        Assert.All(back, w => Assert.Equal(Gpu, w.Id));
+        Assert.Contains(back, w => w.Name == MsiName && w.Value is null);
+        // The USB controller that started stays switched.
+        Assert.Equal(1, devices.Devices.Single(d => d.Id == Usb1).MsiValue);
+    }
+
+    [Fact]
+    public void ADeviceTheUserDisabledIsNotAFailure()
+    {
+        var (mode, devices, _) = Make(GpuOnLine());
+        Assert.Null(mode.Apply());
+        Restart(devices);
+        devices.Devices[0] = devices.Devices[0] with { Problem = 22 };
+        var backup = System.Text.Json.JsonSerializer.Deserialize<Backup>(File.ReadAllText(BackupPath))!;
+        Assert.Empty(Failed(devices.Devices, backup));
+        Assert.Null(mode.PutBackFailed());
+    }
 }

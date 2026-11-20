@@ -26,6 +26,26 @@ already done elsewhere in Exo is not done twice (see the last table).
 Every key and value written is a constant in `SystemTuning.cs` (the allowlist). Services are the two names in `Trimmed`;
 a record naming anything else is refused (`Revert` returns null). Page file lines written back must match `SafeText`.
 
+## Latency check
+
+The group's last row, read-only: `ExoLauncher.exe --latency-check <answer file>` runs elevated by the press (Windows asks
+once) and records ten seconds of the kernel's DPC and interrupt events in a system logger session of its own name ("Exo
+Latency Check", `EVENT_TRACE_SYSTEM_LOGGER_MODE`, so it never takes the NT Kernel Logger from LatencyMon or xperf).
+`Helpers/LatencyTrace.cs` reads PerfInfo's DPC (66, 68, 69) and ISR (67, 50) events: a routine's run is the event's raw QPC
+time minus its `InitialTime`, as LatencyMon and xperf compute it, and its routine address names the driver
+(`EnumDeviceDrivers`, real bases only for an administrator). The answer is the longest DPC and ISR with their drivers'
+file names and the five drivers with the longest runs, kept beside the check before (`exo-system-tuning.json`'s `Latency`),
+and said against LatencyMon's bands (under 500 µs fine, over 1000 µs audio drops) and the check before, only where the
+change is past the noise (a fifth and 50 µs). Microsoft's own guidance for a driver is far below either (an ISR under 25 µs,
+a DPC under 100 µs).
+
+## MSI mode that didn't start
+
+Device interrupts (`InterruptMode`) never picks a device with a problem, so a device Exo switched that Windows reports with
+a problem after the restart (anything but CM_PROB_DISABLED, the user's own) didn't start in MSI mode: some drivers break in
+it. PC says so (`Verify`), and at Exo's next start or a driver install it is put back by itself when Windows won't ask
+(`PutBackFailed`), else Undo or the device's Revert does it with one prompt.
+
 ## TrustedInstaller
 
 Not needed, so not built. Every key written is writable by Administrators (checked on a Windows 11 26300 PC with

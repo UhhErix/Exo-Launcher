@@ -20,9 +20,10 @@ test('an off item that keeps an undo record offers Put back', () => {
   assert.equal(systemItemCanPutBack({ on: false, canUndo: false }), false)
 })
 
-test('SystemGroup renders Put back via systemItemCanPutBack, calls host.systemTuning directly, and OnboardingPanel passes tuning to bestSteps', () => {
+test('SystemGroup renders Put back via systemItemCanPutBack, calls host.systemTuning directly (including latency check), and OnboardingPanel passes tuning to bestSteps', () => {
   assert.match(groupSource, /systemItemCanPutBack\(item\)/)
-  assert.match(groupSource, /await host\.systemTuning\(on \? 'on' : 'off', item\.key\)/)
+  assert.match(groupSource, /host\.systemTuning\(on \? 'on' : 'off', item\.key\)/)
+  assert.match(groupSource, /host\.systemTuning\('latency'\)/)
   assert.match(groupSource, /onClick=\{\(\) => void run\(item, false\)\}>Put back</)
   assert.match(onboardingSource, /host\.systemTuning\(\)/)
   assert.match(onboardingSource, /bestSteps\(gpu, health, screen, settings, saveSettings, drives, tuning\)/)

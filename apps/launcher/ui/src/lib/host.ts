@@ -708,7 +708,11 @@ export type TuningKey = 'timer' | 'scheduling' | 'pagefile' | 'cache' | 'capture
  * restart, a change (either way) waits on a restart; needsRestart, whether changing it requires a restart; blocked, why Exo won't change it here (an anti-cheat, a policy).
  */
 export type TuningItem = { key: TuningKey; label: string; detail: string; on: boolean; canUndo: boolean; off: boolean; optIn: boolean; restart: boolean; needsRestart?: boolean; blocked: string | null }
-export type Tuning = { ok: boolean; message?: string | null; applied: boolean; restart: boolean; items: TuningItem[] }
+/** A latency check: the longest DPC and ISR a driver ran in ten seconds, in µs, and the driver's file name. */
+export type LatencySample = { at: string; dpcUs: number; dpcDriver: string | null; isrUs: number; isrDriver: string | null }
+/** The last check, the one before it (null for the first), and what it says. */
+export type LatencyCheck = { before: LatencySample | null; after: LatencySample; said: string }
+export type Tuning = { ok: boolean; message?: string | null; applied: boolean; restart: boolean; latency?: LatencyCheck | null; items: TuningItem[] }
 
 /**
  * PC › Drives (Drives.cs): one physical drive. link: the PCIe generation and lanes negotiated against the drive's own
@@ -3023,8 +3027,8 @@ export const host = {
   /** One change to Autopilot: the switch (Windows Game Mode follows it at once) or a choice. message: what Windows didn't take. */
   autopilotSet: (change: AutopilotChange) => rawCall<{ ok: boolean; message?: string | null; state: AutopilotState }>('autopilot.set', change, 15_000),
   /** System > This PC > Interrupts: the devices; apply switches every one that can to MSI mode, undo puts all back, revert one. Waits on Windows' permission prompt. */
-  /** Best settings › System: the items; apply sets every Best settings item that's on, on and off one item. Waits on Windows' permission prompt and a restore point. */
-  systemTuning: (action?: 'apply' | 'on' | 'off', item?: TuningKey) =>
+  /** Best settings › System: the items; apply sets every Best settings item that's on, on and off one item, latency runs the ten-second latency check. Waits on Windows' permission prompt (and a restore point). */
+  systemTuning: (action?: 'apply' | 'on' | 'off' | 'latency', item?: TuningKey) =>
     rawCall<Tuning>('system.tuning', action ? { action, ...(item ? { item } : {}) } : {}, 240_000),
   systemInterrupts: (action?: 'apply' | 'undo' | 'revert' | 'reapply', device?: string) =>
     rawCall<Interrupts>('system.interrupts', action ? { action, ...(device ? { device } : {}) } : {}, 120_000),

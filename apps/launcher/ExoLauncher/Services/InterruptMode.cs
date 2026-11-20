@@ -315,21 +315,53 @@ internal sealed partial class InterruptMode(InterruptMode.IDevices devices, Inte
         return new Row(Token(d.Id), d.Name, Kind(d), d.Mode, plan, reason, entry is { Reverted: false });
     }
 
-    /// <summary>After the restart: only what didn't take (what didn't switch, what Windows or a driver put back); what worked says nothing.</summary>
+    /// <summary>
+    /// After the restart: only what didn't take (a device that didn't start since the switch, what didn't switch, what Windows
+    /// or a driver put back); what worked says nothing.
+    /// </summary>
     internal static string? Verify(IReadOnlyList<Device> list, Backup backup)
     {
+        var failed = Failed(list, backup);
         var stuck = new List<string>();
         var undone = new List<string>();
-        foreach (var e in backup.Devices.Where(e => !e.Reverted))
+        foreach (var e in backup.Devices.Where(e => !e.Reverted && !failed.Contains(e)))
         {
             var d = list.FirstOrDefault(x => Same(x.Id, e.Id));
             if (!e.WroteMsi) { if (d?.Priority != High) undone.Add(e.Kind); }
             else if (d?.Mode != Mode.Msi) (d is null || d.MsiValue != 1 ? undone : stuck).Add(e.Kind);
         }
         var parts = new List<string>();
+        if (failed.Count > 0) parts.Add($"Your {Phrase(failed.Select(e => e.Kind).ToList())} didn't start in MSI mode: Exo puts {(failed.Count == 1 ? "it" : "them")} back (Undo does it now).");
         if (stuck.Count > 0) parts.Add($"Your {Phrase(stuck)} didn't switch: {(stuck.Count == 1 ? "its driver keeps" : "their drivers keep")} a shared line.");
         if (undone.Count > 0) parts.Add($"Windows or a driver update put your {Phrase(undone)} back.");
         return parts.Count == 0 ? null : string.Join(' ', parts);
+    }
+
+    /// <summary>
+    /// The devices Exo switched to MSI mode that Windows now reports with a problem (it didn't start: some drivers break in MSI
+    /// mode). Decide never picks a device that had a problem before, so a problem now is the switch's.
+    /// </summary>
+    internal static List<Entry> Failed(IReadOnlyList<Device> list, Backup backup) =>
+        backup.Devices.Where(e => !e.Reverted && e.WroteMsi && list.FirstOrDefault(d => Same(d.Id, e.Id)) is { Problem: not 0 and not Disabled }).ToList();
+
+    private const uint Disabled = 22; // CM_PROB_DISABLED: the user turned the device off, which isn't the switch failing
+
+    /// <summary>
+    /// After a restart, every device that didn't start in MSI mode put back as it was (one step Windows may ask for). Null when
+    /// done or nothing failed, else the line to show.
+    /// </summary>
+    internal string? PutBackFailed()
+    {
+        List<Entry> failed;
+        using (_gate.EnterScope())
+        {
+            var backup = Load();
+            if (backup is null || backup.WrittenAt > bootTime()) return null;
+            failed = Failed(devices.List(), backup);
+        }
+        if (failed.Count == 0) return null;
+        AppLog.Warn($"Interrupts: {failed.Count} device(s) didn't start in MSI mode; putting them back.");
+        return failed.Select(e => Undo(Token(e.Id))).OfType<string>().FirstOrDefault();
     }
 
     /// <summary>"graphics card and 3 USB controllers": each kind once, counted, in the order first seen.</summary>
