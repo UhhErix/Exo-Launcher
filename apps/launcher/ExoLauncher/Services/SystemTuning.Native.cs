@@ -101,6 +101,36 @@ internal sealed partial class SystemTuning
 
         public void PointMade(RestorePoint.Outcome outcome) => RestorePoint.Noted(outcome, DateTime.UtcNow);
 
+        public async Task<LatencyTrace.Answer?> Latency()
+        {
+            if (HostMode.IsDisposable || Environment.ProcessPath is not { } exo) return null;
+            var answer = Path.Combine(Path.GetTempPath(), $"exo-{Guid.NewGuid():N}.latency.json");
+            try
+            {
+                using var process = Process.Start(new ProcessStartInfo(exo, $"{LatencyTrace.Flag} \"{answer}\"")
+                {
+                    UseShellExecute = true,
+                    Verb = "runas",
+                    WindowStyle = ProcessWindowStyle.Hidden,
+                    WorkingDirectory = Environment.SystemDirectory,
+                });
+                if (process is null) return null;
+                using var wait = new CancellationTokenSource(TimeSpan.FromMinutes(1));
+                await process.WaitForExitAsync(wait.Token).ConfigureAwait(false);
+                return File.Exists(answer) ? System.Text.Json.JsonSerializer.Deserialize<LatencyTrace.Answer>(await File.ReadAllTextAsync(answer).ConfigureAwait(false)) : new(null, "The check didn't finish.");
+            }
+            catch (System.ComponentModel.Win32Exception ex) when (ex.NativeErrorCode == 1223) { return null; }
+            catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException or OperationCanceledException or IOException or System.Text.Json.JsonException)
+            {
+                AppLog.Warn("Latency check: " + ex.Message);
+                return new(null, "The check didn't finish.");
+            }
+            finally
+            {
+                if (File.Exists(answer)) DeletionGate.DeleteFile(answer);
+            }
+        }
+
         public bool SupportsUserHardwareToggles => true;
 
         public string? UserDirectXSettings()

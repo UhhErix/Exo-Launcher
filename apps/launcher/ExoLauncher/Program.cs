@@ -52,6 +52,12 @@ public static class Program
                 Environment.ExitCode = Services.AutoTuneWorker.Run(args);
                 return;
             }
+            // Best settings › System's latency check, elevated by its press (no window): ten seconds of tracing, one answer file.
+            if (args.Contains(Helpers.LatencyTrace.Flag, StringComparer.OrdinalIgnoreCase))
+            {
+                Environment.ExitCode = Helpers.LatencyTrace.Run(args);
+                return;
+            }
             // Exo's setup, once Exo is installed: Exo's parts fetched and verified, with progress for its window (no window here).
             if (args.Contains("--fetch-components", StringComparer.OrdinalIgnoreCase))
             {

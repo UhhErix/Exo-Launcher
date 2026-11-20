@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from 'react'
-import { Clock, Cpu, GraphicsCard, Lock, Memory, Mouse, Server } from '../../brand/icons'
-import { host, type Tuning, type TuningItem, type TuningKey } from '../../lib/host'
+import { Clock, Cpu, GraphicsCard, Lock, Memory, Mouse, Performance, Server } from '../../brand/icons'
+import { host, type LatencyCheck, type LatencySample, type Tuning, type TuningItem, type TuningKey } from '../../lib/host'
 import { report } from '../../lib/report'
 import { trimStop } from '../../lib/utils'
 import { Switch } from '../Switch'
@@ -24,30 +24,32 @@ const ICONS: Record<TuningKey, ReactNode> = {
  * Best settings › System (SystemTuning.cs): each item with its own switch (on: set now, in one Windows prompt with a restore
  * point first; off: put back exactly as it was). Use best settings sets only the Windows defaults a tweak changed; Services
  * and Memory Integrity are set here only, and Memory Integrity asks once more, since it lowers the PC's protection. A change
- * that waits on a restart says so.
+ * that waits on a restart says so. Latency check measures, read-only, how long drivers hold the processor (ten seconds,
+ * one Windows prompt), against the check before.
  */
 export function SystemGroup({ tuning, onTuning }: { tuning: Tuning | null; onTuning: (next: Tuning) => void }) {
-  const [busy, setBusy] = useState<TuningKey | null>(null)
-  const [error, setError] = useState<{ key: TuningKey; text: string } | null>(null)
-  const visibleItems = tuning?.items.filter(item =>
+  const [busy, setBusy] = useState<TuningKey | 'latency' | null>(null)
+  const [error, setError] = useState<{ key: TuningKey | 'latency'; text: string } | null>(null)
+  if (!tuning) return null
+  const visibleItems = tuning.items.filter(item =>
     item.key !== 'integrity' && item.key !== 'mouseAccel' && (item.key !== 'vrr' || item.canUndo),
-  ) ?? []
-  if (visibleItems.length === 0) return null
+  )
 
-  const run = async (item: TuningItem, on: boolean) => {
+  const call = async (key: TuningKey | 'latency', ask: () => Promise<Tuning>) => {
     if (busy) return
-    setBusy(item.key)
+    setBusy(key)
     setError(null)
     try {
-      const next = await host.systemTuning(on ? 'on' : 'off', item.key)
+      const next = await ask()
       onTuning(next)
-      if (!next.ok) setError({ key: item.key, text: trimStop(next.message) || 'Not changed. Try again.' })
+      if (!next.ok) setError({ key, text: trimStop(next.message) || (key === 'latency' ? 'Not measured. Try again.' : 'Not changed. Try again.') })
     } catch (e) {
-      report(e, `SystemGroup.${item.key}`)
-      setError({ key: item.key, text: 'Not changed. Try again.' })
+      report(e, `SystemGroup.${key}`)
+      setError({ key, text: key === 'latency' ? 'Not measured. Try again.' : 'Not changed. Try again.' })
     }
     setBusy(null)
   }
+  const run = (item: TuningItem, on: boolean) => call(item.key, () => host.systemTuning(on ? 'on' : 'off', item.key))
 
   return (
     <section className="exo-pc-menu-rows" aria-labelledby="pc-best-system">
@@ -69,7 +71,26 @@ export function SystemGroup({ tuning, onTuning }: { tuning: Tuning | null; onTun
           </Row>
         )
       })}
-      {tuning?.restart ? <p className="exo-pc-best-note">Restart Windows to finish.</p> : null}
+      <Row label="Latency check" icon={<Performance size={16} />} detail={<LatencyWords check={tuning.latency ?? null} />}
+        error={error?.key === 'latency' ? error.text : null}>
+        <button type="button" className="exo-set-btn" disabled={!!busy} aria-busy={busy === 'latency'}
+          onClick={() => void call('latency', () => host.systemTuning('latency'))}>
+          {busy === 'latency' ? <Spinner label="Measuring for ten seconds" /> : null}Check
+        </button>
+      </Row>
+      {tuning.restart ? <p className="exo-pc-best-note">Restart Windows to finish.</p> : null}
     </section>
   )
+}
+
+/** The check in words: the longest runs and their drivers, then what they mean (and how they compare with the check before). */
+function LatencyWords({ check }: { check: LatencyCheck | null }) {
+  if (!check) return <>How long drivers hold the processor, measured for ten seconds. Changes nothing.</>
+  return <>{sample(check.after)}. {check.said}</>
+}
+
+/** "Longest DPC 318 µs (nvlddmkm.sys), interrupt 41 µs (USBXHCI.SYS)". */
+function sample(s: LatencySample): string {
+  const dpc = `Longest DPC ${s.dpcUs} µs${s.dpcDriver ? ` (${s.dpcDriver})` : ''}`
+  return s.isrUs > 0 ? `${dpc}, interrupt ${s.isrUs} µs${s.isrDriver ? ` (${s.isrDriver})` : ''}` : dpc
 }

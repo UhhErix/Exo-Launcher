@@ -405,7 +405,23 @@ const mockNetItems = (p?: { action?: unknown; item?: unknown }) => {
 const mockTuningVanguard = typeof location !== 'undefined' && new URLSearchParams(location.search).get('tuning') === 'vanguard'
 const mockTuningOn = new Set<string>()
 const mockTuningOff = new Set<string>()
+let mockLatency: Record<string, unknown>[] = []
+/** The latency check on the mock host: a slow network driver first, then a fine check that compares with it. */
+const mockLatencyCheck = (p?: { action?: unknown }) => {
+  if (p?.action === 'latency') {
+    const first = mockLatency.length === 0
+    mockLatency = [...mockLatency.slice(-1), { at: new Date().toISOString(), dpcUs: first ? 1412 : 318, dpcDriver: first ? 'ndis.sys' : 'nvlddmkm.sys', isrUs: first ? 64 : 41, isrDriver: 'USBXHCI.SYS' }]
+  }
+  return mockLatency.length === 0 ? null : {
+    before: mockLatency.length > 1 ? mockLatency[0] : null,
+    after: mockLatency[mockLatency.length - 1],
+    said: mockLatency.length > 1
+      ? 'Drivers hand the processor back quickly: fine for games and audio. The longest run fell from 1412 µs to 318 µs since the check before.'
+      : 'ndis.sys held the processor for 1412 µs: long enough for audio to crackle or a frame to slip. An update of that driver is the usual fix.',
+  }
+}
 const mockTuning = (p?: { action?: unknown; item?: unknown }) => {
+  const latency = mockLatencyCheck(p)
   const defaults = ['timer', 'pagefile']
   if (p?.action === 'apply') for (const key of defaults) if (!mockTuningOff.has(key)) mockTuningOn.add(key)
   const blocked = mockTuningVanguard ? 'Riot Vanguard (VALORANT, League of Legends) can require Memory Integrity, so Exo leaves it on: games with it may refuse to start without it.' : null
@@ -427,7 +443,7 @@ const mockTuning = (p?: { action?: unknown; item?: unknown }) => {
     return { key, label, detail: restart ? 'Restart to finish.' : detail, on, canUndo: on, off: mockTuningOff.has(key), optIn, restart, needsRestart, blocked: key === 'integrity' ? blocked : null }
   })
   const message = p?.item === 'integrity' && p.action === 'on' && blocked ? blocked : null
-  return { ok: !message, message, applied: defaults.every(key => mockTuningOn.has(key) || mockTuningOff.has(key)), restart: items.some(i => i.restart), items }
+  return { ok: !message, message, applied: defaults.every(key => mockTuningOn.has(key) || mockTuningOff.has(key)), restart: items.some(i => i.restart), latency, items }
 }
 
 /**
