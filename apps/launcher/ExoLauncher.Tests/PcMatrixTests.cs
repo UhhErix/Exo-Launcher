@@ -459,7 +459,7 @@ public sealed class PcMatrixTests
         var radeon = Regex.Match(r.Card, @"\bRX (\d)\d{3}") is { Success: true } rx ? rx.Groups[1].Value[0] - '0' : 0;
         var arc = Regex.IsMatch(r.Card, @"Arc\(TM\) [AB]\d{3}");
         if (rows.Contains("rebar") != (!integrated && (series >= 30 || radeon >= 6 || arc))) yield return "Resizable BAR row on a card without it, or missing";
-        if (rows.Contains("gpusched") != (!integrated && (series >= 40 || radeon >= 7))) yield return "GPU scheduling row on a card without frame generation, or missing";
+        if (rows.Contains("gpusched") != (!integrated && (series >= 30 || radeon >= 7))) yield return "GPU scheduling row on a card without frame generation, or missing";
         if (rows.Contains("gpupref") != (two is not null)) yield return "graphics for games row without two chips, or missing";
     }
 

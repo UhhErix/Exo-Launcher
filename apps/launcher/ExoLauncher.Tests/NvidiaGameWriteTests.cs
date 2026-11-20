@@ -48,13 +48,16 @@ public sealed class NvidiaGameWriteTests
     private static IDisposable Rig(Fake fake, out string folder)
     {
         var previous = NvidiaProfiles.ForGameSeam;
+        var priorData = Environment.GetEnvironmentVariable(PathHelper.DataDirOverrideVariable);
         NvidiaProfiles.ForGameSeam = (_, ids, writes) => fake.Answer(ids, writes);
         var made = Path.Combine(Path.GetTempPath(), "exo-nvidia-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(made);
-        folder = made;
+        Environment.SetEnvironmentVariable(PathHelper.DataDirOverrideVariable, made);
+        folder = Path.Combine(made, "game-settings");
         return new Seam(() =>
         {
             NvidiaProfiles.ForGameSeam = previous;
+            Environment.SetEnvironmentVariable(PathHelper.DataDirOverrideVariable, priorData);
             try { DeletionGate.DeleteDirectory(made, recursive: true); } catch (IOException) { }
         });
     }
