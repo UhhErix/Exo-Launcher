@@ -79,18 +79,17 @@
   padding: 0;
 }
 
-/* The game's lines (Upscalers, Shaders, Optimize, HDR, frame generation): one row each, like an iOS Settings row
-   (name, reading, then a chevron to its PC page, or the row's own control, at the right edge), hairlines between, so
-   the page stays short. A line that opens something is a button whose hover fill reaches 10px past the text on both
-   sides, so the text lines up with the page; a reading (.is-reading) sits in the same places and lights nothing. Every
-   line is one height whatever it holds (a word, a choice, a button): its word ends in an ellipsis and its control never
-   wraps under it, so the page is the same size for every game. */
+/* The game's lines (Upscalers, Shaders, Optimize, HDR, frame generation) sit directly inside the unified sheet
+   in a compact 2-column grid so nothing scrolls on a 1080p screen. */
 .exo-game-lines {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0 16px;
   margin-top: 16px;
 }
 
 .exo-game-line {
-  height: 49px;
+  height: 42px;
   border-top: 1px solid var(--exo-line);
   padding: 2px 0;
 }
@@ -98,11 +97,11 @@
 .exo-game-line-row {
   display: flex;
   align-items: center;
-  gap: 12px;
-  width: calc(100% + 20px);
-  height: 44px;
-  margin: 0 -10px;
-  padding: 0 10px;
+  gap: 8px;
+  width: calc(100% + 16px);
+  height: 38px;
+  margin: 0 -8px;
+  padding: 0 8px;
   border: 0;
   border-radius: 10px;
   background: transparent;
@@ -116,7 +115,7 @@
   display: flex;
   flex-wrap: nowrap;
   align-items: center;
-  gap: 0 12px;
+  gap: 0 8px;
 }
 
 .exo-game-line.has-control .exo-game-line-row {
@@ -144,10 +143,8 @@
   color: var(--color-muted);
 }
 
-/* As wide as the longest name ("Fluid Motion Frames"), in the name's own em, so every reading starts on one edge at any text size. */
 .exo-game-line-name {
   flex: none;
-  width: 10.5em;
   white-space: nowrap;
   color: var(--color-fg);
   font-size: calc(13px * var(--exo-scale, 1));
@@ -190,17 +187,17 @@
 }
 
 .exo-game-stats {
-  margin-top: 22px;
-  padding-top: 18px;
+  margin-top: 16px;
+  padding-top: 14px;
   border-top: 1px solid var(--exo-float-line);
   text-align: left;
 }
 
-/* The facts: a value you read from your chair, its name quiet under it, wrapping with their room kept. */
+/* The facts: compact readable figures in one clean horizontal row. */
 .exo-game-facts {
   display: flex;
   flex-wrap: wrap;
-  gap: 16px 40px;
+  gap: 12px 28px;
   margin: 0;
 }
 
@@ -215,7 +212,7 @@
   grid-row: 1;
   margin: 0;
   color: var(--color-fg);
-  font-size: calc(20px * var(--exo-scale, 1));
+  font-size: var(--exo-type-read);
   font-weight: 500;
   line-height: 1.25;
   white-space: nowrap;
@@ -228,8 +225,23 @@
   font-weight: 500;
 }
 
+.exo-game-shared {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 24px;
+  padding: 0 10px;
+  border-radius: 999px;
+  background-color: var(--exo-surface-card);
+  box-shadow: inset 0 0 0 var(--exo-hair) var(--exo-line);
+  color: var(--color-muted);
+  font-size: var(--exo-type-small);
+  font-weight: 500;
+  white-space: nowrap;
+}
+
 .exo-game-drive {
-  margin: 14px 0 0;
+  margin: 10px 0 0;
   color: var(--color-warn);
   font-size: calc(13px * var(--exo-scale, 1));
   line-height: 1.4;
@@ -278,24 +290,16 @@
 
 
 
-/* The game sheet (DESIGN.md › Game sheet): one size for every game, whatever its PC support, the hero (cover, name, one
-   line of hours, Play, Properties, Info) the whole of it. Info widens the sheet on the spring and the pane beside the
-   hero holds the facts, the game's lines and the cover tools, scrolling what doesn't fit; the hero never moves.
-   The stage is a size container, so the pane takes the cover's room in a narrow window. */
+/* The game sheet: unified single-surface card holding cover, metadata, Play/Properties, stats, and 2-column lines with no side drawer. */
 .exo-game-overlay-stage:has(> .exo-game-page) {
   container-type: inline-size;
-  width: min(880px, 100%);
-  height: min(calc(360px + 56px), 100%);
-}
-
-.exo-game-overlay-stage:has(> .exo-game-page.is-info) {
-  width: min(1280px, 100%);
+  width: min(980px, calc(100% - 32px));
+  height: auto;
+  max-height: min(640px, calc(100% - 32px));
 }
 
 .exo-game-page .exo-game-page-inner {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  grid-template-rows: minmax(0, 1fr);
+  display: block;
 }
 
 .exo-game-page .exo-game-page-layout {
@@ -304,104 +308,16 @@
   overscroll-behavior: contain;
 }
 
-/* The two facts people open a game for, under its name: hours and when last played. */
-.exo-game-glance {
-  margin: 8px 0 0;
-  color: var(--color-muted);
-  font-size: calc(13px * var(--exo-scale, 1));
-  font-weight: 500;
-}
-
 .exo-game-page .exo-game-actions {
-  margin-top: 20px;
+  margin-top: 16px;
 }
 
-.exo-game-info-toggle[aria-pressed="true"] {
-  background-color: var(--exo-selected);
-}
-
-/* Something in Info to know (the drive ran hot): a small Warn dot on its button. */
-.exo-game-info-toggle.has-note::after {
-  content: "";
-  position: absolute;
-  top: 9px;
-  right: 9px;
-  width: 6px;
-  height: 6px;
-  border-radius: 999px;
-  background: var(--color-warn);
-}
-
-.exo-game-info-toggle {
-  position: relative;
-}
-
-.exo-game-info-pane {
-  position: relative;
-  z-index: 1;
-  width: 400px;
-  min-height: 0;
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  padding: 28px 28px 28px 24px;
-  border-left: 1px solid var(--exo-float-line);
-  opacity: 1;
-  translate: 0 0;
-  transition: opacity var(--dur-base) var(--ease-out), translate var(--dur-move) var(--ease-spring);
-}
-
-@starting-style {
-  .exo-game-info-pane {
-    opacity: 0;
-    translate: 12px 0;
-  }
-}
-
-html[data-exo-motion="reduce"] .exo-game-info-pane {
-  translate: none;
-}
-
-/* In the pane the facts stack two across and the lines run its width: the first section has no rule above it. */
-.exo-game-info-pane .exo-game-stats {
-  margin-top: 0;
-  padding-top: 0;
-  border-top: 0;
-}
-
-.exo-game-info-pane .exo-game-facts {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 18px 16px;
-}
-
-.exo-game-info-pane .exo-game-lines {
-  margin-top: 20px;
-}
-
-/* A line's name takes its own width here and its reading may take a second line, so nothing is cut short. */
-.exo-game-info-pane .exo-game-line-name {
-  width: 8.75em;
-}
-
-.exo-game-info-pane .exo-game-line-word {
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-  line-clamp: 2;
-  white-space: normal;
-}
-
-.exo-game-info-pane .exo-game-tools {
-  margin-top: 20px;
-}
-
-/* A narrow sheet: with Info open the pane takes the cover's room, so the name, Play and the facts stay side by side. */
-@container (max-width: 1040px) {
-  .exo-game-page.is-info .exo-game-cover-col {
-    display: none;
+@container (max-width: 720px) {
+  .exo-game-page .exo-game-page-layout {
+    grid-template-columns: minmax(0, 1fr);
   }
 
-  .exo-game-page.is-info .exo-game-page-layout {
+  .exo-game-lines {
     grid-template-columns: minmax(0, 1fr);
   }
 }

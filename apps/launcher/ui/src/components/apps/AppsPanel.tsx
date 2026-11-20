@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { Check, ChevronDown, ChevronUp } from '../../brand/icons'
+import { Check, ChevronDown, ChevronUp, Close, Search } from '../../brand/icons'
 import { cleanOutcome } from '../../lib/junkClean'
 import { host, onHostEvent, type AppFind, type AppLeftover, type InstalledApp, type JunkItem, type LeftoverSummary, type RemovalRecord, type StartupItem, type StartupState, type WindowsApp, type WindowsAppLine } from '../../lib/host'
 import { report } from '../../lib/report'
@@ -296,11 +296,12 @@ export function AppsPanel({ active }: { active: boolean }) {
 
   const searching = query.trim().length > 0
   const pressSort = (by: Sort) => setSort(current => current.by === by ? { by, back: !current.back } : { by, back: false })
+  const headFacts = [mainApps.length > 0 ? `${mainApps.length} apps` : null, total > 0 ? size(total) : null].filter(Boolean).join(' · ')
 
   return (
     <div className="exo-apps">
       <Head view={view} onView={setView} query={query} onQuery={setQuery}
-        facts={total > 0 ? size(total) : undefined} />
+        facts={headFacts || undefined} />
       {view === 'apps' ? (
         <Columns knowsUse={knowsUse} sort={sort} onSort={pressSort} run={run} picked={picked} busy={busy !== null}
           restore={restoreFirst} onRestore={setRestoreFirst}
@@ -411,9 +412,9 @@ function Parts({ count: how, searching, children }: { count: number; searching: 
   if (how === 0) return null
   return (
     <section aria-label="Needed by Windows, games or Exo">
-      {searching ? <h3 className="exo-apps-group">Needed by Windows, games or Exo</h3> : (
+      {searching ? <h3 className="exo-apps-group">Needed by Windows, games or Exo ({how})</h3> : (
         <button type="button" className="exo-apps-more" aria-expanded={open} onClick={() => setOpen(value => !value)}>
-          <span>Needed by Windows, games or Exo</span>
+          <span>Needed by Windows, games or Exo ({how})</span>
           {open ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
         </button>
       )}
@@ -423,14 +424,28 @@ function Parts({ count: how, searching, children }: { count: number; searching: 
 }
 
 function Head({ view, onView, query, onQuery, facts }: { view: View; onView: (next: View) => void; query: string; onQuery: (next: string) => void; facts?: string }) {
-  const views: { id: View; label: string }[] = [{ id: 'apps', label: 'Apps' }, { id: 'windows', label: 'Windows apps' }, { id: 'startup', label: 'Starts with Windows' }, { id: 'removed', label: 'Removed' }]
+  const views: { id: View; label: string }[] = [{ id: 'apps', label: 'Apps' }, { id: 'windows', label: 'Windows' }, { id: 'startup', label: 'Startup' }, { id: 'removed', label: 'Removed' }]
   return (
     <div className="exo-apps-head">
       <h2 id="pc-apps-title">Apps{facts ? <span className="exo-apps-facts">{facts}</span> : null}</h2>
       <div className="exo-shelf-chips" role="group" aria-label="What to show">
         {views.map(choice => <button key={choice.id} type="button" className="exo-shelf-chip" aria-pressed={view === choice.id} onClick={() => onView(choice.id)}>{choice.label}</button>)}
       </div>
-      <input type="search" className="exo-field" value={query} placeholder="Search" aria-label="Search apps" onChange={event => onQuery(event.target.value)} />
+      <label className="exo-apps-search">
+        <Search size={14} />
+        <input type="search" value={query} placeholder="Search" aria-label="Search apps" onChange={event => onQuery(event.target.value)}
+          onKeyDown={event => {
+            if (event.key !== 'Escape' || !query) return
+            event.preventDefault()
+            event.stopPropagation()
+            onQuery('')
+          }} />
+        {query ? (
+          <button type="button" className="exo-apps-search-clear" aria-label="Clear search" onClick={() => onQuery('')}>
+            <Close size={12} />
+          </button>
+        ) : null}
+      </label>
     </div>
   )
 }
@@ -446,10 +461,13 @@ function SortHead({ label, by, sort, onSort, end }: { label: string; by: Sort; s
   )
 }
 
-/** A row of the list: its icon, its name over one line of detail, the columns, and what can be done with it, shown when pointed at. */
-function Line({ icon, name, detail, used, amount, error, showUsed, keep, children }: {
+type AppTag = { text: string; tone?: 'warn' | 'good' }
+
+/** A row of the list: its icon, its name with optional status tags over one line of detail, the columns, and what can be done with it. */
+function Line({ icon, name, tags, detail, used, amount, error, showUsed, keep, children }: {
   icon?: ReactNode
   name: string
+  tags?: AppTag[]
   detail?: ReactNode
   used?: string | null
   amount?: string
@@ -463,7 +481,14 @@ function Line({ icon, name, detail, used, amount, error, showUsed, keep, childre
     <div className={`exo-apps-row${showUsed === false ? ' is-short' : ''}${keep ? ' is-kept' : ''}`}>
       <span className="exo-apps-icon">{icon}</span>
       <div className="exo-apps-copy">
-        <span className="exo-apps-name">{name}</span>
+        <span className="exo-apps-title">
+          <span className="exo-apps-name">{name}</span>
+          {tags?.length ? (
+            <span className="exo-apps-tags">
+              {tags.map(tag => <span key={tag.text} className={tag.tone ? `exo-apps-tag is-${tag.tone}` : 'exo-apps-tag'}>{tag.text}</span>)}
+            </span>
+          ) : null}
+        </span>
         {detail ? <span className="exo-apps-detail">{detail}</span> : null}
       </div>
       {showUsed === false ? null : <span className="exo-apps-used">{used}</span>}
@@ -494,11 +519,15 @@ function AppLine({ app, icon, starts, showUsed, error, working, disabled, picked
   onUninstall: () => Promise<{ ok: boolean; message?: string | null; settle: () => void }>
   onFailed: (why: string) => void
 }) {
+  const tags: AppTag[] = [
+    ...(starts ? [{ text: 'Startup' }] : []),
+    ...(app.replaces ? [{ text: 'Exo replaces', tone: 'good' as const }] : app.bloat ? [{ text: 'Bloat', tone: 'warn' as const }] : []),
+  ]
   const detail = working
     ? (app.replaces ? `Removing ${app.name}` : app.uninstaller ? 'Finish in its window' : 'Looking for what it left')
-    : [!app.uninstaller ? 'Its uninstaller is gone' : null, whatItIs(app), starts ? 'Starts with Windows' : null].filter(Boolean).join(' · ')
+    : [!app.uninstaller ? 'No uninstaller' : null, whatItIs(app)].filter(Boolean).join(' · ')
   return (
-    <Line icon={<AppIcon name={app.name} icon={icon} />} name={app.name} detail={detail} used={lastUsed(app)} amount={size(app.bytes)} error={error} showUsed={showUsed} keep={working || picked !== null}>
+    <Line icon={<AppIcon name={app.name} icon={icon} />} name={app.name} tags={tags} detail={detail} used={lastUsed(app)} amount={size(app.bytes)} error={error} showUsed={showUsed} keep={working || picked !== null}>
       {picked !== null ? (
         <button type="button" className={picked ? 'exo-apps-pick is-picked' : 'exo-apps-pick'} aria-pressed={picked} aria-label={`Pick ${app.name}`} onClick={onPick}>
           {picked ? <Check size={12} /> : null}

@@ -467,9 +467,9 @@
 
 /* The Apps sheet: Exo's uninstaller, its list scrolling under its head and fading into the sheet's foot (exo-shell.css › Infinity pool). */
 .exo-game-overlay-stage:has(> .exo-pc-apps-sheet) {
-  width: min(1080px, 100%);
-  height: min(1000px, 100%);
-  max-height: min(1000px, 100%);
+  width: min(1140px, calc(100% - 32px));
+  height: min(860px, calc(100% - 32px));
+  max-height: calc(100% - 32px);
 }
 
 .exo-pc-apps-sheet {

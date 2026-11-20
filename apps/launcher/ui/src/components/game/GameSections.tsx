@@ -1,8 +1,20 @@
 
 import { CompanyLogo } from '../../brand/CompanyLogo'
+import { Members } from '../../brand/icons'
 import type { DriveHeat, Game, GameVariant } from '../../lib/host'
 import { formatRelativeLastPlayed, formatSize, storeLabel, formatPlayed } from '../../lib/utils'
 import type { Achievements } from './useGameDetails'
+
+/** Steam Family provenance badge shown inline next to the store beside the game title. */
+export function GameShared({ selected }: { selected: Game }) {
+  if (!selected.familyShared) return null
+  return (
+    <span className="exo-game-shared">
+      <Members size={12} />
+      {selected.sharedBy ? `Shared by ${selected.sharedBy}` : 'Steam Family'}
+    </span>
+  )
+}
 
 /** The title with the store it belongs to beside it. */
 export function GameHeader({ selected, children }: { selected: Game; children?: React.ReactNode }) {
@@ -107,14 +119,11 @@ export function GameStats({
   const last = formatRelativeLastPlayed(source?.lastPlayedUtc ?? selected.lastPlayedUtc)
   const size = formatSize(selected.sizeBytes)
   const known = (value: string) => value !== '—'
-  // A Steam Family game says whose it is: the member's name, or the family when Steam names nobody.
-  const sharedBy = selected.familyShared ? (selected.sharedBy || 'Steam Family') : null
   // Stale first: what is known shows at once, and nothing stands in for the extras while they load.
-  if (!shownAny([played, last, size, sharedBy ?? '—'].filter(known).length, achievements, driveHeat)) return null
+  if (!shownAny([played, last, size].filter(known).length, achievements, driveHeat)) return null
   return (
     <div className="exo-game-stats" aria-busy={loading || undefined}>
       <dl className="exo-game-facts">
-        {sharedBy && <Fact label="Shared by" value={sharedBy} />}
         {known(played) && <Fact label="Played" value={played} />}
         {known(last) && <Fact label="Last played" value={last} />}
         {known(size) && <Fact label={selected.installed ? 'Storage' : 'Size'} value={size} />}

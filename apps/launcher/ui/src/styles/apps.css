@@ -37,23 +37,70 @@
   font-variant-numeric: tabular-nums;
 }
 
-.exo-apps-head .exo-field {
+.exo-apps-search {
+  display: inline-flex;
   flex: 0 1 240px;
+  align-items: center;
+  gap: 8px;
+  height: 32px;
   margin-inline-start: auto;
+  padding: 0 10px;
+  border-radius: 999px;
+  background-color: var(--exo-fill);
+  background-image: var(--exo-surface-control);
+  box-shadow: var(--exo-field-rim);
+  color: var(--color-muted);
+}
+
+.exo-apps-search > input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  color: var(--color-fg);
+  font: inherit;
+  font-size: var(--exo-type-body);
+  outline: none;
+}
+
+.exo-apps-search > input::-webkit-search-cancel-button {
+  -webkit-appearance: none;
+}
+
+.exo-apps-search:focus-within {
+  box-shadow: inset 0 0 0 var(--exo-hair) var(--color-fg);
+}
+
+.exo-apps-search-clear {
+  display: inline-grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--color-muted);
+  cursor: pointer;
+}
+
+.exo-apps-search-clear:hover {
+  background: var(--hover-fill);
+  color: var(--color-fg);
 }
 
 /* The columns over the list, on the same grid as its rows. */
 .exo-apps-columns,
 .exo-apps-row {
   display: grid;
-  grid-template-columns: 24px minmax(0, 1fr) var(--exo-apps-used) var(--exo-apps-size) var(--exo-apps-act);
+  grid-template-columns: 28px minmax(0, 1fr) var(--exo-apps-used) var(--exo-apps-size) var(--exo-apps-act);
   align-items: center;
   column-gap: 12px;
 }
 
 .exo-apps-columns.is-short,
 .exo-apps-row.is-short {
-  grid-template-columns: 24px minmax(0, 1fr) var(--exo-apps-size) var(--exo-apps-act);
+  grid-template-columns: 28px minmax(0, 1fr) var(--exo-apps-size) var(--exo-apps-act);
 }
 
 .exo-apps-columns {
@@ -123,11 +170,13 @@
   overscroll-behavior: contain;
 }
 
-/* A row: one hairline above, a little lift under the pointer, what can be done with it shown then. */
+/* A row: one hairline above, a little lift under the pointer, content-visibility for zero-hitch scrolling. */
 .exo-apps-row {
   min-height: 52px;
   padding: 6px 8px;
   border-top: 1px solid var(--exo-float-line);
+  content-visibility: auto;
+  contain-intrinsic-size: auto 52px;
   transition: background-color var(--dur-quick) var(--ease-out);
 }
 
@@ -140,18 +189,19 @@
 .exo-apps-icon {
   display: inline-grid;
   place-items: center;
-  width: 24px;
-  height: 24px;
+  width: 28px;
+  height: 28px;
   overflow: hidden;
-  border-radius: 6px;
+  border-radius: var(--exo-small-radius);
+  background-color: var(--exo-surface-icon);
   color: var(--exo-glass-panel-secondary);
   font-size: calc(12px * var(--exo-scale, 1));
   font-weight: var(--exo-weight-title);
 }
 
 .exo-apps-icon > img {
-  width: 24px;
-  height: 24px;
+  width: 20px;
+  height: 20px;
   object-fit: contain;
 }
 
@@ -159,6 +209,38 @@
   display: grid;
   gap: 2px;
   min-width: 0;
+}
+
+.exo-apps-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.exo-apps-tags {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 4px;
+}
+
+.exo-apps-tag {
+  padding: 2px 7px;
+  border-radius: 999px;
+  background-color: var(--exo-surface-icon);
+  color: var(--color-muted);
+  font-size: var(--exo-type-label);
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.exo-apps-tag.is-warn {
+  color: var(--color-warn);
+}
+
+.exo-apps-tag.is-good {
+  color: var(--color-good);
 }
 
 .exo-apps-name {
@@ -202,7 +284,8 @@
 .exo-apps-act {
   display: flex;
   justify-content: flex-end;
-  visibility: hidden;
+  opacity: 0.48;
+  transition: opacity var(--dur-quick) var(--ease-out);
 }
 
 .exo-apps-row:hover .exo-apps-act,
@@ -210,7 +293,7 @@
 .exo-apps-row.is-kept .exo-apps-act,
 .exo-apps-act:has([data-exo-armed]),
 .exo-apps-act:has(.exo-action:not([data-action="idle"])) {
-  visibility: visible;
+  opacity: 1;
 }
 
 .exo-apps-error {
@@ -245,7 +328,13 @@
   outline-offset: 2px;
 }
 
-/* What's ready: each its words and its one press, on the list's edge. */
+/* Actionable notices: a crisp 2-column compact card grid so notices never push the app list off screen. */
+.exo-apps-ready {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
 .exo-apps-ready:empty {
   display: none;
 }
@@ -256,8 +345,18 @@
   align-items: center;
   gap: 4px 16px;
   min-height: 52px;
-  padding: 8px;
-  border-top: 1px solid var(--exo-float-line);
+  padding: 10px 12px;
+  border-radius: var(--exo-card-radius);
+  background-color: var(--exo-surface-card);
+  box-shadow: inset 0 0 0 var(--exo-hair) var(--exo-float-line);
+}
+
+.exo-apps-ready > .exo-apps-ready-row:only-child,
+.exo-apps-ready > .exo-apps-ready-row:has(+ .exo-apps-filter),
+.exo-apps-ready > .exo-apps-ready-row:has(+ .exo-apps-items),
+.exo-apps-ready > .exo-apps-filter,
+.exo-apps-ready > .exo-apps-items {
+  grid-column: 1 / -1;
 }
 
 .exo-apps-ready-act {

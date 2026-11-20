@@ -34,6 +34,7 @@
 .exo-nav-btn.is-on {
   color: var(--color-primary-fg);
   background: var(--color-fg);
+  text-shadow: none;
 }
 
 /* Gear and window controls share the tab's height and pill. */
@@ -52,12 +53,13 @@
   border-radius: 999px;
   background: transparent;
   color: var(--color-muted);
-  transition: color var(--dur-quick) var(--ease-out), background-color var(--dur-quick) var(--ease-out), scale var(--dur-quick) var(--ease-out);
+  transition: color var(--dur-quick) var(--ease-out), background-color var(--dur-quick) var(--ease-out), transform var(--dur-press) var(--ease-out);
 }
 
 .exo-settings-btn.is-on {
   color: var(--color-primary-fg);
   background: var(--color-fg);
+  text-shadow: none;
 }
 
 /* Maximize is Windows' own region (snap layouts); the host reports its hover. */
@@ -113,12 +115,18 @@
 /* The Rooms and the tools are bare on the Bar: no outline of their own, the current room a white pill. */
 .exo-titlebar .exo-top-rooms {
   gap: 2px;
+  padding: 0 3px;
 }
 
 .exo-titlebar .exo-titlebar-tools {
   display: flex;
   align-items: center;
   gap: 2px;
+}
+
+.exo-nav-btn:active:not(:disabled),
+.exo-settings-btn:active:not(:disabled) {
+  transform: scale(0.97);
 }
 
 .exo-titlebar .exo-titlebar-actions {

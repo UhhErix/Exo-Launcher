@@ -82,7 +82,7 @@ function NavTab({ label, Icon, active, opening = false, badge, onOpen, onWarm }:
 function RoomNavigation({ view, opening, onView, onWarm }: Pick<TitleBarProps, 'view' | 'opening' | 'onView' | 'onWarm'>) {
   const glide = useGlide<HTMLElement>()
   return (
-    <nav ref={glide} className="exo-top-rooms exo-glide" aria-label="Rooms">
+    <nav ref={glide} className="exo-glass exo-top-rooms exo-glide" aria-label="Rooms">
       {NAV_TABS.map((tab) => (
         <NavTab
           key={tab.id}
@@ -115,6 +115,7 @@ function NavDock({ view, opening, onView, onWarm, onToggleSettings, onNowPlaying
         <button ref={search} type="button" className="exo-glass exo-bar-search" onClick={onSearch} aria-label="Search Exo" aria-keyshortcuts="Control+K">
           <ExoMark size={18} className="exo-brand-logo" />
           <span className="exo-bar-search-label">Search</span>
+          <kbd className="exo-bar-kbd" aria-hidden="true">Ctrl K</kbd>
         </button>
       </div>
       <div className="exo-bar-center">
@@ -125,7 +126,7 @@ function NavDock({ view, opening, onView, onWarm, onToggleSettings, onNowPlaying
         </div>
       </div>
       <div className="exo-bar-end">
-        <div className="exo-titlebar-tools">
+        <div className="exo-glass exo-titlebar-tools">
           {/* Capture, then Settings (and Ctrl+, as ever). */}
           <CaptureButton />
           <Button
