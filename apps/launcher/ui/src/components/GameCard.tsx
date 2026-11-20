@@ -187,7 +187,8 @@ export const GameCard = memo(function GameCard({
  * its hours and storage, which the Game already carries.
  */
 function TilePlate({ game }: { game: Game }) {
-  const facts = [formatPlayed(game.playtimeMinutes), formatSize(game.sizeBytes)].filter(fact => fact !== '—')
+  const shared = game.familyShared ? (game.sharedBy ? `Shared by ${game.sharedBy}` : 'Steam Family') : null
+  const facts = [shared, formatPlayed(game.playtimeMinutes), formatSize(game.sizeBytes)].filter((fact): fact is string => !!fact && fact !== '—')
   return (
     <span className="exo-tile-plate" aria-hidden="true">
       <strong>{game.title}</strong>

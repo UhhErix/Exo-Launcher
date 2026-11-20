@@ -363,21 +363,25 @@
 .exo-game-page-layout {
   display: grid;
   grid-template-columns: 240px minmax(0, 1fr);
-  align-items: center;
+  align-items: start;
   flex-shrink: 0;
   gap: 28px;
   min-height: 100%;
   padding: 28px 32px;
 }
 
-/* The cover column: the cover alone, centred on the page's height, so the space above it and below it match. */
+/* The cover column: cover and optional cover actions for non-installed games. */
 .exo-game-cover-col {
-  position: sticky;
-  top: 28px;
   display: flex;
   flex-direction: column;
   align-items: center;
   width: 240px;
+}
+
+.exo-game-cover-col .exo-game-tools {
+  justify-content: center;
+  margin-top: 12px;
+  gap: 6px;
 }
 
 .exo-game-detail-cover {

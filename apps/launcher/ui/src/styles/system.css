@@ -384,6 +384,18 @@
   text-align: left;
 }
 
+.exo-bar-kbd {
+  font-family: var(--font-mono);
+  font-size: var(--exo-type-label);
+  color: var(--color-muted);
+  opacity: 0.78;
+  white-space: nowrap;
+}
+
+.exo-bar-search:active:not(:disabled) {
+  transform: scale(0.97);
+}
+
 /* A live capsule fills no more than its slot. Nothing live: nothing drawn. */
 .exo-live {
   position: relative;
@@ -451,6 +463,7 @@
   }
 
   .exo-bar-search .exo-bar-search-label,
+  .exo-bar-search .exo-bar-kbd,
   .exo-mouse-pill .exo-mouse-pill-name {
     display: none;
   }

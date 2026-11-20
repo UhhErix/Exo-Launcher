@@ -171,9 +171,9 @@ body,
      tight shadow (--glassy-words). */
   --glassy-rim: 0 0 0 var(--exo-hair) rgb(0 0 0 / 0.55);
   /* Seamless curved 1px Fresnel specular rim (155deg top-left light + soft bottom-right bounce) rendered via mask-composite on ::before. */
-  --glassy-fresnel-rim: linear-gradient(155deg, rgb(255 255 255 / 0.28) 0%, rgb(255 255 255 / 0.08) 38%, rgb(255 255 255 / 0.04) 68%, rgb(255 255 255 / 0.14) 100%);
+  --glassy-fresnel-rim: linear-gradient(155deg, rgb(255 255 255 / 0.34) 0%, rgb(255 255 255 / 0.08) 36%, rgb(255 255 255 / 0.03) 66%, rgb(255 255 255 / 0.16) 100%);
   /* Uniform hairline + inner top specular glow for non-masked frames and controls (replaces segmented 4-direction inset borders). */
-  --glassy-ring: inset 0 0 0 var(--exo-hair) rgb(255 255 255 / 0.11), inset 0 var(--exo-hair) 0 rgb(255 255 255 / 0.08),
+  --glassy-ring: inset 0 0 0 var(--exo-hair) rgb(255 255 255 / 0.12), inset 0 var(--exo-hair) 0 rgb(255 255 255 / 0.09),
     inset 0 14px 24px -20px rgb(255 255 255 / 0.12);
   /* Words keep a tight shadow over bright art; a 12px halo around them read as a smudge. */
   --glassy-words: 0 1px 2px rgb(0 0 0 / 0.45);
@@ -181,17 +181,21 @@ body,
   --glassy-shadow: 0 0 0 transparent;
   --glassy-shadow-raised: 0 2px 8px rgb(0 0 0 / 0.45), 0 18px 48px rgb(0 0 0 / 0.65);
   /* Delicate top-lit sheen for Small Glass / Controls; panes keep none on Void so black panes never turn gray on black. */
-  --glassy-control-sheen: linear-gradient(180deg, rgb(255 255 255 / 0.055) 0%, transparent 55%);
+  --glassy-control-sheen: linear-gradient(180deg, rgb(255 255 255 / 0.085) 0%, rgb(255 255 255 / 0.015) 52%, transparent 100%);
   --glassy-sheen: none;
+  /* GPU-free specular fill for static page-level controls and subtle cards on Void black (avoids unneeded backdrop-filter readback). */
+  --exo-surface-control: linear-gradient(180deg, rgb(255 255 255 / 0.075) 0%, rgb(255 255 255 / 0.025) 100%);
+  --exo-surface-card: rgb(255 255 255 / 0.035);
+  --exo-surface-icon: rgb(255 255 255 / 0.06);
   /* Liquid glass optical tiers:
-     1. Small Glass / Controls: crisp blur(12px) brightness(0.68) saturate(1.85) + delicate 180deg top-lit sheen.
-     2. Large Glass / Panels / Menus / Popovers / Sheets: rgb(0 0 0 / 0.44) + blur(20px) brightness(0.60) saturate(1.75), >= 4.8:1 secondary text even over white art.
+     1. Small Glass / Controls: crisp blur(16px) brightness(0.76) saturate(1.9) + delicate 180deg top-lit sheen.
+     2. Large Glass / Panels / Menus / Popovers / Sheets: rgb(10 10 14 / 0.62) + blur(24px) brightness(0.72) saturate(1.85).
      3. Media Plates / Badges over Art: rgb(0 0 0 / 0.32) + blur(12px) brightness(0.42) saturate(1.65). */
-  --glassy-overlay: rgb(0 0 0 / 0.44);
-  --glassy-overlay-tone: brightness(0.6) saturate(1.75);
+  --glassy-overlay: rgb(10 10 14 / 0.62);
+  --glassy-overlay-tone: brightness(0.72) saturate(1.85);
   --glassy-plate: rgb(0 0 0 / 0.32);
   --exo-fill: transparent;
-  --exo-control-glass: blur(12px) brightness(0.68) saturate(1.85);
+  --exo-control-glass: blur(16px) brightness(0.76) saturate(1.9);
   /* Immersive transport toggles and volume capsule: luminous Liquid Glass over ambient cover light. */
   --exo-immersive-glass: blur(18px) brightness(0.78) saturate(1.9);
   --exo-immersive-fill: rgb(255 255 255 / 0.06);

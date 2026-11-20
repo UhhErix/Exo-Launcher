@@ -98,7 +98,7 @@
   /* Glassy's floating layer: Apple's dark material, frosted on the element itself, lit at its rim. */
   background-color: var(--glassy-overlay);
   background-image: var(--glassy-sheen);
-  backdrop-filter: blur(20px) var(--glassy-overlay-tone);
+  backdrop-filter: blur(24px) var(--glassy-overlay-tone);
   box-shadow: var(--glassy-ring), var(--glassy-rim), var(--glassy-shadow-raised);
 }
 
@@ -112,7 +112,7 @@
 /* A sheet holds a page of words over the dimmed room: it frosts deeper than a menu, so the room behind shows as color
    and never as shapes behind its words. */
 .exo-glass.is-panel {
-  backdrop-filter: blur(20px) var(--glassy-overlay-tone);
+  backdrop-filter: blur(24px) var(--glassy-overlay-tone);
 }
 
 /* A hovered row or control on glass lifts the glass under it, so its secondary words go full ink there, as a
@@ -125,31 +125,30 @@ button.exo-glass:hover {
   --dc-muted: var(--color-fg);
 }
 
-/* Every control on the page is small glass: clear (--exo-fill) over the glass's blur and tone (--exo-control-glass,
-   tokens.css) under its one even rim. Listed by hand: every rule in the styles that paints a control with --exo-fill
-   is here, and a control that is not listed is clear, with no blur. :where(), so a control that is glass of its own
-   (a lens, a light tone) keeps its own. */
+/* True media-overlay plates and live floating controls run real backdrop-filter blur over dynamic artwork or video. */
 :where(
-  .exo-capture-rec, .exo-captures-way, .exo-capture-duration, .exo-capture-corner-btn, .exo-capture-check, .exo-snip-text,
-  .exo-dc-inline-input, .exo-dc-tri, .exo-dc-command-field, .exo-dc-cv-button:not(.is-primary), .exo-dc-cv-select-field,
-  .exo-dc-golive-seg, .exo-dc-segments, .exo-dc-unread-mark, .exo-dc-foryou-mark, .exo-dc-alt-tag, .exo-dc-alt,
-  .exo-dc-settings-keybind-keys, .exo-dc-time-chip, .exo-dc-hidden-label, .exo-dc-call button, .exo-dc-msg-actions,
-  .exo-dc-quick-row > button, .exo-dc-round-btn, .exo-dc-lightbox-tools, .exo-dc-lightbox .exo-dc-lightbox-step,
-  .exo-dc-lightbox-count, .exo-dc-tag-chip, .exo-dc-forum-title, .exo-dc-gif-badge, .exo-dc-pf-more, .exo-dc-pf-badges,
-  .exo-dc-pf-roles li, .exo-dc-pf-role-add-btn, .exo-dc-pf-activity, .exo-dc-pf-note, .exo-dc-pf-connection,
-  .exo-dc-input-row, .exo-dc-compose-bar, .exo-dc-files, .exo-dc-reaction, .exo-dc-tag, .exo-dc-modal-input,
-  .exo-dc-tab.is-raised, .exo-dc-new-bar, .exo-dc-voice-tile-name, .exo-dc-voice-btn, .exo-dc-watch, .exo-dc-stream-name,
-  .exo-dc-poll-answer, .exo-dc-audio, .exo-dc-sound, .exo-dc-stream-sound, .exo-dc-guild-tag, .exo-dc-tag-card-icon,
-  .exo-dc-band-step, .exo-dc-find, .exo-dc-search, .exo-dc-friend-search, .exo-dc-picker-search,
-  .exo-setup-row, .exo-setup-badge, .exo-game-status, .exo-badge, .exo-tile-plate,
-  .exo-music-sort, .exo-music-back, .exo-music-recent-open, .exo-music-top-open, .exo-music-name input,
-  .exo-music-jam-join input, .exo-music-mood, .exo-music-sheet-field :is(input, textarea),
-  .exo-ob-discord, .exo-pc-chip, .exo-store-hero-tag, .exo-store-badge, .exo-sgp-pill, .exo-sgp-offer,
-  .exo-game-sources, .exo-upscalers-family, .exo-store-search, .exo-music-search, .exo-library-search,
-  .exo-library-chip, .exo-scrubber, .exo-field, .exo-shelf-sort-menu .exo-menu-find,
-  .exo-set-btn:not(.is-primary), .exo-game-tool, .exo-shelf-sort-trigger, .exo-library-more, .exo-game-close
+  .exo-badge, .exo-tile-plate, .exo-scrubber, .exo-store-badge, .exo-store-mark, .exo-continue-text,
+  .exo-sgp-pill, .exo-store-hero-tag, .exo-store-hero-name, .exo-capture-rec, .exo-capture-duration,
+  .exo-capture-corner-btn, .exo-capture-check, .exo-snip-text, .exo-game-status,
+  .exo-dc-alt-tag, .exo-dc-alt, .exo-dc-hidden-label, .exo-dc-voice-tile-name, .exo-dc-watch,
+  .exo-dc-stream-name, .exo-dc-stream-sound, .exo-dc-lightbox-tools, .exo-dc-lightbox .exo-dc-lightbox-step,
+  .exo-dc-lightbox-count, .exo-dc-msg-actions, .exo-dc-call button
 ) {
   backdrop-filter: var(--exo-control-glass);
+}
+
+/* Static page-level controls sitting over pure black surfaces use a crisp GPU-free specular gradient instead of expensive
+   backdrop-filter readbacks on every hover and scroll frame. */
+:where(
+  .exo-set-btn:not(.is-primary), .exo-game-tool, .exo-shelf-sort-trigger, .exo-library-more, .exo-game-close,
+  .exo-pc-chip, .exo-library-chip, .exo-field, .exo-library-search, .exo-store-search, .exo-music-search,
+  .exo-game-sources, .exo-upscalers-family, .exo-setup-row, .exo-setup-badge, .exo-captures-way, .exo-ob-discord,
+  .exo-music-sort, .exo-music-back, .exo-music-recent-open, .exo-music-top-open, .exo-music-mood,
+  .exo-dc-inline-input, .exo-dc-tri, .exo-dc-command-field, .exo-dc-cv-button:not(.is-primary), .exo-dc-cv-select-field,
+  .exo-dc-golive-seg, .exo-dc-segments, .exo-dc-input-row, .exo-dc-compose-bar, .exo-dc-find, .exo-dc-search,
+  .exo-dc-friend-search, .exo-dc-picker-search
+) {
+  background-image: var(--exo-surface-control);
 }
 
 /* Mid view transition (a room switching, a page opening from its cover) Chromium draws the Bar and what flies from a
@@ -322,7 +321,7 @@ button.exo-glass:hover {
 
 :root .exo-game-overlay-stage.exo-game-overlay-stage::before {
   background-color: var(--glassy-overlay);
-  backdrop-filter: blur(20px) var(--glassy-overlay-tone);
+  backdrop-filter: blur(24px) var(--glassy-overlay-tone);
 }
 
 /* A sheet's art wash (a game's, a store page's) lies over its glass layer and hid the rim drawn there wherever the
