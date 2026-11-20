@@ -265,6 +265,15 @@ internal sealed class GoLive : IDisposable
         }
     }
 
+    /// <summary>True when sampled BGRA pixels are empty or all black RGB (hardware-accelerated PrintWindow blind spot).</summary>
+    internal static bool IsAllBlack(ReadOnlySpan<byte> bgra)
+    {
+        if (bgra.Length < 4) return true;
+        for (var i = 0; i + 2 < bgra.Length; i += 64)
+            if (bgra[i] != 0 || bgra[i + 1] != 0 || bgra[i + 2] != 0) return false;
+        return bgra[bgra.Length - 4] == 0 && bgra[bgra.Length - 3] == 0 && bgra[bgra.Length - 2] == 0;
+    }
+
     /// <summary>Captures an open window into a top-down BGRA DIB via PrintWindow(PW_RENDERFULLCONTENT) so occluded pickers don't cover it.</summary>
     internal static unsafe (byte[] Pixels, int Width, int Height)? GrabWindowViaPrint(nint hwnd)
     {
@@ -298,6 +307,7 @@ internal sealed class GoLive : IDisposable
             Win32.GdiFlush();
             var raw = new byte[wr.Width * wr.Height * 4];
             Marshal.Copy((nint)bits, raw, 0, raw.Length);
+            if (IsAllBlack(raw)) return null;
             for (var i = 3; i < raw.Length; i += 4) raw[i] = 255;
             if (fb is { } frame &&
                 frame.Left >= wr.Left && frame.Top >= wr.Top &&

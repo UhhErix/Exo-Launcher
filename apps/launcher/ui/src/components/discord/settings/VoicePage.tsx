@@ -150,13 +150,20 @@ function speechTime(seconds: number): string {
  * learned again from the next 15 seconds (with Only My Voice off, Forget deletes it and nothing is learned).
  */
 function OnlyMyVoice({ settings, save }: { settings: DiscordClientSettings; save: Save }) {
+  const [error, setError] = useState<string | null>(null)
   const learned = settings.myVoiceLearned === true
-  const startOver = () => void host.discordMyVoice('forget').then(() => save({})).catch(() => { })
+  const startOver = () => {
+    setError(null)
+    void host.discordMyVoice('forget').then(
+      () => save({}),
+      () => setError("Exo couldn't reset your voiceprint. Try again.")
+    )
+  }
   return (
     <>
       <SwitchRow label="Only my voice" checked={settings.onlyMyVoice} onChange={value => save({ onlyMyVoice: value })} />
       {settings.onlyMyVoice || learned ? (
-        <Row label="Your voice">
+        <Row label="Your voice" error={error}>
           <State>{learned ? speechTime(settings.myVoiceSeconds ?? 0) : 'Learning'}</State>
           {learned ? <button type="button" className="exo-set-btn" onClick={startOver}>{settings.onlyMyVoice ? 'Start over' : 'Forget'}</button> : null}
         </Row>
@@ -170,9 +177,11 @@ function HearYourVoice() {
   const [on, setOn] = useState(false)
   const [speakers, setSpeakers] = useState(false)
   useEffect(() => () => { setOn(false); setSpeakers(false); void host.discordMicMonitor(false).catch(() => { }) }, [])
-  const toggle = (value: boolean) => {
-    void host.discordMicMonitor(value).then(r => { setOn(r.on); setSpeakers(r.on && !r.onHead) }).catch(() => { })
-  }
+  const toggle = (value: boolean) =>
+    host.discordMicMonitor(value).then(
+      r => { setOn(r.on); setSpeakers(r.on && !r.onHead); return null },
+      () => "Exo couldn't change microphone playback. Try again."
+    )
   return (
     <SwitchRow label="Hear your voice" checked={on} onChange={toggle}
       detail={speakers ? 'Speakers echo into the mic: use headphones' : undefined} />

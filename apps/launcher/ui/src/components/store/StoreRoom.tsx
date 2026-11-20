@@ -60,7 +60,7 @@ export function StoreRoom({ active, games, onOpenGame }: {
   const [lastPage, setLastPage] = useState<StoreTile | null>(remembered.lastPage)
   useEffect(() => { remembered.tab = tab; remembered.query = query; remembered.page = page; remembered.lastPage = lastPage },
     [tab, query, page, lastPage])
-  if (page && page !== lastPage) setLastPage(page)
+  useEffect(() => { if (page) setLastPage(page) }, [page])
   // A search sent here from elsewhere (a friend's game you don't have): taken once the room is up, or at once when it is.
   useEffect(() => {
     const search = (text: string) => { setPage(null); setQuery(text) }

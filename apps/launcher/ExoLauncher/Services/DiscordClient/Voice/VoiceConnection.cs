@@ -1113,10 +1113,25 @@ internal sealed class VoiceConnection : IAsyncDisposable
     // what everyone can play): true for H.265. Only Go Live follows it; a call's camera is always H.264.
     private volatile bool _hevc;
 
+    /// <summary>Go Live: the codec currently selected for outgoing video (true: H.265, false: H.264).</summary>
+    internal bool IsHevc => _hevc;
+
+    /// <summary>Falls back from H.265 to H.264 when the local encoder could not start HEVC.</summary>
+    internal void FallbackToH264()
+    {
+        EncodesH265 = false;
+        if (_hevc)
+        {
+            _hevc = false;
+            _describedKeyframe = false;
+            if (_videoSsrc != 0) _dave?.AssignSsrc(_videoSsrc, Dave.CodecH264);
+        }
+    }
+
     /// <summary>Go Live: the server picked the stream's codec (true: H.265), at the start and whenever it changes it.</summary>
     internal event Action<bool>? CodecChosen;
 
-    private void UseCodec(JsonElement d)
+    internal void UseCodec(JsonElement d)
     {
         if (!_screen || !d.TryGetProperty("video_codec", out var codec) || codec.ValueKind != JsonValueKind.String) return;
         var hevc = codec.GetString() == "H265" && EncodesH265;

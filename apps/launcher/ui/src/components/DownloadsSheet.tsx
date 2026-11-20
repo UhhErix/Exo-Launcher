@@ -4,6 +4,7 @@ import { host, onHostEvent, type DownloadLine, type DownloadsList, type InstallP
 import { report } from '../lib/report'
 import { GameOverlay } from '../motion'
 import { Switch } from './Switch'
+import { ErrorNote } from './ui/ErrorNote'
 
 /** "18.4 MB/s", "740 KB/s". */
 function speed(bytesPerSecond?: number | null) {
@@ -23,9 +24,13 @@ export function DownloadsSheet({ open, onClose }: { open: boolean; onClose: () =
   const [list, setList] = useState<DownloadsList | null>(null)
   const [progress, setProgress] = useState<InstallProgress | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
 
   const read = useCallback(() => {
-    host.downloadsList().then(setList, (e: unknown) => report(e, 'DownloadsSheet.list'))
+    host.downloadsList().then(
+      next => { setList(next); setError(null) },
+      (e: unknown) => { report(e, 'DownloadsSheet.list'); setError("Exo couldn't load your downloads. Try again.") }
+    )
   }, [])
 
   useEffect(() => {
@@ -43,7 +48,20 @@ export function DownloadsSheet({ open, onClose }: { open: boolean; onClose: () =
   // One press at a time per game; the list is read again after each.
   const act = async (key: string, run: () => Promise<unknown>) => {
     setBusy(key)
-    try { await run() } catch (e) { report(e, 'DownloadsSheet.act') } finally { setBusy(null); read() }
+    setError(null)
+    try {
+      const res = await run()
+      if (res && typeof res === 'object' && 'ok' in res && (res as { ok?: boolean }).ok === false) {
+        const msg = (res as { message?: string | null }).message
+        setError(msg || 'That download action failed. Try again.')
+      }
+    } catch (e) {
+      report(e, 'DownloadsSheet.act')
+      setError('That download action failed. Try again.')
+    } finally {
+      setBusy(null)
+      read()
+    }
   }
 
   const lines = list?.lines ?? []
@@ -66,6 +84,12 @@ export function DownloadsSheet({ open, onClose }: { open: boolean; onClose: () =
             </button>
           )}
         </header>
+        {error ? (
+          <ErrorNote className="exo-downloads-note" message={error}>
+            {error}{' '}
+            {list === null ? <button type="button" className="exo-set-btn" onClick={read}>Try again</button> : null}
+          </ErrorNote>
+        ) : null}
         {list?.held && !list.pausedByPlayer ? <p className="exo-downloads-note">{list.held}</p> : null}
         {list && lines.length === 0 ? <p className="exo-downloads-empty">Nothing is downloading.</p> : null}
 

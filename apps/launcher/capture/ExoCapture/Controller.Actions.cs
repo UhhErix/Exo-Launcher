@@ -170,23 +170,72 @@ internal sealed partial class Controller
             var rect = Win32.MonitorInfo(monitor).Monitor;
             var gpu = GpuFor(monitor);
             using var source = new DuplicationSource(gpu, monitor, 0, hdr: true, "(screen)");
-            if (source.Grab() is not { } texture) continue;
-            var pixels = gpu.Read(texture, out var w, out var h, out var bpp);
-            byte[] sdr;
-            if (bpp == 8)
+            if (source.Grab() is { } texture)
             {
-                using var output = DuplicationSource.OutputOf(gpu, monitor, out var description);
-                var white = Imaging.SdrWhiteNits(monitor);
-                var peak = description.MaxLuminance > 0 ? description.MaxLuminance : 1000;
-                hdr.Add((monitor, rect, pixels, white, peak));
-                sdr = Imaging.ToneMap(pixels, w, h, white, peak);
+                var pixels = gpu.Read(texture, out var w, out var h, out var bpp);
+                byte[] sdr;
+                if (bpp == 8)
+                {
+                    using var output = DuplicationSource.OutputOf(gpu, monitor, out var description);
+                    var white = Imaging.SdrWhiteNits(monitor);
+                    var peak = description.MaxLuminance > 0 ? description.MaxLuminance : 1000;
+                    hdr.Add((monitor, rect, pixels, white, peak));
+                    sdr = Imaging.ToneMap(pixels, w, h, white, peak);
+                }
+                else sdr = pixels;
+                CopyMonitorBgra(bgra, screen, rect, sdr, w, h);
             }
-            else sdr = pixels;
-            var copyW = Math.Min(w, rect.Width);
-            for (var y = 0; y < Math.Min(h, rect.Height); y++)
-                Buffer.BlockCopy(sdr, y * w * 4, bgra, ((rect.Top - screen.Top + y) * screen.Width + rect.Left - screen.Left) * 4, copyW * 4);
+            else if (GrabMonitorGdi(rect) is { } gdi)
+            {
+                CopyMonitorBgra(bgra, screen, rect, gdi, rect.Width, rect.Height);
+            }
         }
         return new Frozen(screen, bgra, hdr);
+    }
+
+    private static void CopyMonitorBgra(byte[] bgra, Win32.RECT screen, Win32.RECT rect, byte[] sdr, int w, int h)
+    {
+        var copyW = Math.Min(w, rect.Width);
+        for (var y = 0; y < Math.Min(h, rect.Height); y++)
+            Buffer.BlockCopy(sdr, y * w * 4, bgra, ((rect.Top - screen.Top + y) * screen.Width + rect.Left - screen.Left) * 4, copyW * 4);
+    }
+
+    private static unsafe byte[]? GrabMonitorGdi(Win32.RECT rect)
+    {
+        if (rect.Width < 2 || rect.Height < 2) return null;
+        var screenDc = Win32.GetDC(0);
+        if (screenDc == 0) return null;
+        nint memDc = 0, dib = 0, oldObj = 0;
+        try
+        {
+            memDc = Win32.CreateCompatibleDC(screenDc);
+            if (memDc == 0) return null;
+            var bi = new Win32.BITMAPINFOHEADER
+            {
+                Size = (uint)sizeof(Win32.BITMAPINFOHEADER),
+                Width = rect.Width,
+                Height = -rect.Height,
+                Planes = 1,
+                BitCount = 32,
+                Compression = 0,
+            };
+            void* bits;
+            dib = Win32.CreateDIBSection(screenDc, &bi, 0, &bits, 0, 0);
+            if (dib == 0 || bits is null) return null;
+            oldObj = Win32.SelectObject(memDc, dib);
+            if (!Win32.CopyBits(memDc, 0, 0, rect.Width, rect.Height, screenDc, rect.Left, rect.Top, 0x00CC0020)) return null;
+            var raw = new byte[rect.Width * rect.Height * 4];
+            System.Runtime.InteropServices.Marshal.Copy((nint)bits, raw, 0, raw.Length);
+            for (var i = 3; i < raw.Length; i += 4) raw[i] = 255;
+            return raw;
+        }
+        finally
+        {
+            if (oldObj != 0 && memDc != 0) Win32.SelectObject(memDc, oldObj);
+            if (dib != 0) Win32.DeleteObject(dib);
+            if (memDc != 0) Win32.DeleteDC(memDc);
+            Win32.ReleaseDC(0, screenDc);
+        }
     }
 
     private JsonNode Snip()
@@ -200,7 +249,7 @@ internal sealed partial class Controller
             var own = (uint)Environment.ProcessId;
             var windows = Win32.TopWindows()
                 .Where(w => Win32.Shown(w) && Win32.ProcessOf(w) != own && Win32.ClassName(w) is not ("Progman" or "WorkerW"))
-                .Select(w => (w, Win32.FrameBounds(w)!.Value)).ToList();
+                .Select(w => (w, Bounds: Win32.FrameBounds(w))).Where(x => x.Bounds is not null).Select(x => (x.w, x.Bounds!.Value)).ToList();
             var done = new TaskCompletionSource<SnipChoice?>(TaskCreationOptions.RunContinuationsAsynchronously);
             _ui.Invoke(() => new SnipOverlay(_ui, frozen.Screen, frozen.Bgra, windows, choice => done.TrySetResult(choice)).Show());
             if (!done.Task.Wait(TimeSpan.FromMinutes(5)) || done.Task.Result is not { } chosen) return State();

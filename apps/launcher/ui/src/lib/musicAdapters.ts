@@ -111,13 +111,13 @@ function createWebAdapter(config: {
     },
     signIn: config.signInService,
     async leave() {
-      epoch += 1
+      const leaveEpoch = ++epoch
       inFlightStart = null
       // Leaving Music for another room keeps active background music playing (AGENTS.md); if nothing plays, avoid waking
       // a suspended WebView by only reading cached playback state when already idle cleanup is needed.
       try {
         const snapshot = await host.musicPlayback()
-        if (snapshot.ok && snapshot.playback && snapshot.playback.status !== 'playing') {
+        if (epoch === leaveEpoch && snapshot.ok && snapshot.playback && snapshot.playback.status !== 'playing') {
           // Ensure no residual queued state lingers on the UI adapter after leaving an idle room.
           epoch += 1
         }

@@ -197,6 +197,15 @@ public sealed partial class WebHostBridge
     /// through the same flow. A Radeon or an Intel GPU gets the same row from <see cref="GpuDriverUpdate"/>, for the vendor
     /// whose GPU Exo talks to (else the first one Windows lists).
     /// </summary>
+    private static readonly TimeSpan DriverReadBudget = TimeSpan.FromMilliseconds(500);
+
+    private static async Task<T?> WithReadBudgetAsync<T>(Func<CancellationToken, Task<T?>> fetch, bool waitFull, CancellationToken ct) where T : class
+    {
+        if (waitFull) return await fetch(ct).ConfigureAwait(false);
+        try { return await fetch(CancellationToken.None).WaitAsync(DriverReadBudget, ct).ConfigureAwait(false); }
+        catch (TimeoutException) { return null; }
+    }
+
     private async Task<object> GpuDriverAsync(JsonElement p, bool hasParams, CancellationToken ct)
     {
         Action<NvidiaDriverService.Progress> post = progress => PostEvent("gpu.driver", DriverProgress(progress));
@@ -211,17 +220,24 @@ public sealed partial class WebHostBridge
         var vendor = GpuDriverUpdate.Updating
             ?? (NvidiaDriverService.Current.Stage is "downloading" or "unpacking" or "waiting" or "installing" ? "nvidia" : null)
             ?? GraphicsService.Vendor() ?? GraphicsService.Vendors(GpuCapability.Adapters()).FirstOrDefault();
-        await DriverAdvisories.Shared.RefreshAsync(ct).ConfigureAwait(false);
-        if (vendor is "amd" or "intel") return await VendorDriverAsync(vendor, ReadString(p, hasParams, "action") == "update", ct).ConfigureAwait(false);
+        var action = ReadString(p, hasParams, "action");
+        var update = action == "update";
+        var waitForNetwork = update || action == "goback";
+        if (waitForNetwork) await DriverAdvisories.Shared.RefreshAsync(ct).ConfigureAwait(false);
+        else
+        {
+            try { await DriverAdvisories.Shared.RefreshAsync(CancellationToken.None).WaitAsync(DriverReadBudget, ct).ConfigureAwait(false); }
+            catch (TimeoutException) { }
+        }
+        if (vendor is "amd" or "intel") return await VendorDriverAsync(vendor, update, waitForNetwork, ct).ConfigureAwait(false);
         if (vendor != "nvidia") return new { ok = true, vendor = (string?)null };
         var card = NvidiaDriverService.Card();
         var workstation = card is not null && NvidiaDriverService.Workstation(card);
-        var action = ReadString(p, hasParams, "action");
-        var update = action == "update";
         var studio = ReadString(p, hasParams, "branch") == "studio";
         // The version watch tells of the branch the row shows.
         if (studio != (_services.Settings.Current.NvidiaDriverBranch == "studio")) _services.Settings.UpdateProfile(s => s.NvidiaDriverBranch = studio ? "studio" : null);
-        var latest = await NvidiaDriverService.LatestAsync(studio ? "studio" : "game", ct, fresh: update).ConfigureAwait(false);
+        var branch = studio ? "studio" : "game";
+        var latest = await WithReadBudgetAsync(token => NvidiaDriverService.LatestAsync(branch, token, fresh: update), waitForNetwork, ct).ConfigureAwait(false);
         var installed = NvidiaDriverService.Installed();
         var laptop = card?.Contains("Laptop", StringComparison.OrdinalIgnoreCase) == true;
         var subject = DriverAdvisories.Gpu("nvidia", card);
@@ -260,10 +276,10 @@ public sealed partial class WebHostBridge
     /// The row on a Radeon or an Intel GPU: AMD's or Intel's newest driver for the card (no Game Ready or Studio choice).
     /// Software: AMD Software's minimal view installs with the driver (the card runs Fluid Motion Frames, which needs it).
     /// </summary>
-    private static async Task<object> VendorDriverAsync(string vendor, bool update, CancellationToken ct)
+    private static async Task<object> VendorDriverAsync(string vendor, bool update, bool waitForNetwork, CancellationToken ct)
     {
         var card = GpuDriverUpdate.Card(vendor);
-        var newest = await GpuDriverUpdate.LatestAsync(vendor, ct, fresh: update).ConfigureAwait(false);
+        var newest = await WithReadBudgetAsync(token => GpuDriverUpdate.LatestAsync(vendor, token, fresh: update), waitForNetwork, ct).ConfigureAwait(false);
         var installed = card is null ? null : GpuDriverUpdate.Installed(vendor, card);
         var subject = DriverAdvisories.Gpu(vendor, card);
         // AMD's and Intel's lists give only their newest, so one with a known problem here isn't offered at all.

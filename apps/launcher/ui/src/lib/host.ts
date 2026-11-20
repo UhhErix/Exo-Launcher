@@ -2419,8 +2419,8 @@ export const host = {
   captureStatus: () => rawCall<{ ok: boolean; state?: CaptureState; settings?: CaptureSettings }>('capture.status'),
   captureSettings: (patch: Partial<CaptureSettings>) =>
     rawCall<{ ok: boolean; message?: string | null; state?: CaptureState; settings?: CaptureSettings }>('capture.settings', patch),
-  /** saveReplay, record (start or stop), snip, openFolder. */
-  captureAct: (action: 'saveReplay' | 'record' | 'snip' | 'openFolder') =>
+  /** saveReplay, record (start or stop), snip, screenshot, openFolder. */
+  captureAct: (action: 'saveReplay' | 'record' | 'snip' | 'screenshot' | 'openFolder') =>
     rawCall<{ ok: boolean; message?: string; state?: CaptureState }>('capture.act', { action }),
   /** Every capture, newest first; with a game id, that game's only. */
   captureList: (gameId?: string | null, limit?: number) =>

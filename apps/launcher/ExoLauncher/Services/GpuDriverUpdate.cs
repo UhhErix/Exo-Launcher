@@ -79,9 +79,15 @@ internal static partial class GpuDriverUpdate
     /// which AMD's display INF writes, so a driver from Windows Update has it too) or Intel's driver version
     /// (DriverVersion "32.0.101.9150", the version Intel's pages list). Read fresh: current the moment an install ends.
     /// </summary>
+    internal static string? PickInstalledValue(string vendor, string? radeonSoftwareVersion, string? driverVersion)
+    {
+        var radeon = string.IsNullOrWhiteSpace(radeonSoftwareVersion) ? null : radeonSoftwareVersion.Trim();
+        var driver = string.IsNullOrWhiteSpace(driverVersion) ? null : driverVersion.Trim();
+        return vendor == "amd" ? radeon ?? driver : driver;
+    }
+
     internal static string? Installed(string vendor, string card)
     {
-        var value = vendor == "amd" ? "RadeonSoftwareVersion" : "DriverVersion";
         var provider = vendor == "amd" ? "Advanced Micro Devices" : "Intel";
         string? fallback = null;
         try
@@ -91,9 +97,13 @@ internal static partial class GpuDriverUpdate
             foreach (var name in display.GetSubKeyNames().Where(name => name.Length == 4 && name.All(char.IsAsciiDigit)))
             {
                 using var adapter = display.OpenSubKey(name);
-                if (adapter?.GetValue(value) is not string text || text.Trim().Length == 0) continue;
-                if (adapter.GetValue("DriverDesc") is string desc && string.Equals(desc.Trim(), card, StringComparison.OrdinalIgnoreCase)) return text.Trim();
-                if (adapter.GetValue("ProviderName") is string maker && maker.Contains(provider, StringComparison.OrdinalIgnoreCase)) fallback ??= text.Trim();
+                if (adapter is null) continue;
+                var picked = PickInstalledValue(vendor,
+                    adapter.GetValue("RadeonSoftwareVersion") as string,
+                    adapter.GetValue("DriverVersion") as string);
+                if (picked is null) continue;
+                if (adapter.GetValue("DriverDesc") is string desc && string.Equals(desc.Trim(), card, StringComparison.OrdinalIgnoreCase)) return picked;
+                if (adapter.GetValue("ProviderName") is string maker && maker.Contains(provider, StringComparison.OrdinalIgnoreCase)) fallback ??= picked;
             }
         }
         catch (Exception ex) when (ex is System.Security.SecurityException or UnauthorizedAccessException or IOException) { }

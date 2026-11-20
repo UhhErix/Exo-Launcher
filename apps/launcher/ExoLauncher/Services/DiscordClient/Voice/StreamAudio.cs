@@ -286,28 +286,57 @@ internal sealed unsafe class StreamAudio(uint app = 0) : IDisposable
         return (child, parent) => BackgroundTrim.StartedBefore((int)child, (int)parent, started);
     }
 
+    private static void ReleaseCom(object? com)
+    {
+        if (com is not null && Marshal.IsComObject(com)) Marshal.ReleaseComObject(com);
+    }
+
     /// <summary>Every app with a sound session on a speaker that's plugged in, and what a screen's sound does with each (<see cref="Decide"/>).</summary>
     private static Plan AppsPlaying(uint root, IReadOnlySet<uint> failed)
     {
         var pids = new HashSet<uint>();
         var enumerator = (IMMDeviceEnumerator)new MMDeviceEnumeratorComObject();
+        IMMDeviceCollection? devices = null;
         try
         {
-            if (enumerator.EnumAudioEndpoints(EDataFlow.ERender, DeviceStateActive, out var devices) != 0) return new Plan([], [], [], []);
+            if (enumerator.EnumAudioEndpoints(EDataFlow.ERender, DeviceStateActive, out devices) != 0) return new Plan([], [], [], []);
             devices.GetCount(out var count);
             var iid = typeof(IAudioSessionManager2).GUID;
             for (var d = 0; d < count; d++)
             {
-                if (devices.Item(d, out var device) != 0 || device.Activate(ref iid, ClsctxAll, 0, out var manager) != 0) continue;
-                if (((IAudioSessionManager2)manager).GetSessionEnumerator(out var sessions) != 0) continue;
-                sessions.GetCount(out var n);
-                for (var i = 0; i < n; i++)
-                    if (sessions.GetSession(i, out var control) == 0 && control is IAudioSessionControl2 session
-                        && session.GetState(out var state) == 0 && state != 2 /* expired */ && session.GetProcessId(out var pid) == 0 && pid != 0)
-                        pids.Add(pid);
+                IMMDevice? device = null;
+                object? manager = null;
+                IAudioSessionEnumerator? sessions = null;
+                try
+                {
+                    if (devices.Item(d, out device) != 0 || device.Activate(ref iid, ClsctxAll, 0, out manager) != 0) continue;
+                    if (((IAudioSessionManager2)manager).GetSessionEnumerator(out sessions) != 0) continue;
+                    sessions.GetCount(out var n);
+                    for (var i = 0; i < n; i++)
+                    {
+                        IAudioSessionControl? control = null;
+                        try
+                        {
+                            if (sessions.GetSession(i, out control) == 0 && control is IAudioSessionControl2 session
+                                && session.GetState(out var state) == 0 && state != 2 /* expired */ && session.GetProcessId(out var pid) == 0 && pid != 0)
+                                pids.Add(pid);
+                        }
+                        finally { ReleaseCom(control); }
+                    }
+                }
+                finally
+                {
+                    ReleaseCom(sessions);
+                    ReleaseCom(manager);
+                    ReleaseCom(device);
+                }
             }
         }
-        finally { Marshal.ReleaseComObject(enumerator); }
+        finally
+        {
+            ReleaseCom(devices);
+            ReleaseCom(enumerator);
+        }
         return Decide(pids, Snapshot(), (uint)Environment.ProcessId, Reused(), failed, root);
     }
 

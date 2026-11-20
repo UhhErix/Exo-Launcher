@@ -24,9 +24,11 @@ let lastAccounts: StoreAccounts | null = null
 export function useStoreAccounts(active: boolean) {
   const [accounts, setAccounts] = useState<StoreAccounts | null>(lastAccounts)
   const reload = useCallback(async () => {
-    const next = await host.accountsList().catch(() => null)
-    lastAccounts = next
-    setAccounts(next)
+    const next = await host.accountsList().catch((e: unknown) => { report(e, 'StoreAccounts.list', { level: 'warn' }); return null })
+    if (next !== null) {
+      lastAccounts = next
+      setAccounts(next)
+    }
   }, [])
   useEffect(() => { if (active || lastAccounts === null) void reload() }, [active, reload])
   return { accounts, reload }

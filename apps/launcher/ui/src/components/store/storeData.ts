@@ -226,7 +226,7 @@ function settle(card: HTMLElement) {
 }
 function dwell(card: HTMLElement) {
   dwelling.set(card, window.setTimeout(() => {
-    if (card.closest('.is-backstage')) { dwell(card); return }
+    if (card.closest('.is-backstage')) { settle(card); return }
     settle(card)
     seen?.unobserve(card)
     const appId = card.dataset.warm

@@ -321,7 +321,7 @@ function GoLiveSettings({ source, onBack, onClose, onLive }: { source: GoLiveSou
   }, [])
   const [starting, setStarting] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const preview = usePicture(source.id, 960, 250, source.thumb ?? null)
+  const preview = usePicture(source.id, 960, 1000, source.thumb ?? null)
   const go = async () => {
     setStarting(true)
     setError(null)

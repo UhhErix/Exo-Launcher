@@ -253,6 +253,11 @@ button.exo-glass:hover {
   backdrop-filter: none !important;
 }
 
+:root[data-exo-vt] :is(.exo-system-panel::before, .exo-dc-side::before, .exo-music-side::before,
+  .exo-music-panel::before, .exo-game-overlay-stage::before, .exo-device-card.exo-glass.is-panel) {
+  backdrop-filter: none !important;
+}
+
 /* Glass hides the page from glass inside it (a backdrop root), so a control on a menu, a dialog or a Bar
    capsule is clear on the glass it sits on, its one line only (an 8% lift there read as fake gray). Panes and
    sheets keep their glass in a layer under their content, so the controls on them stay glass. */

@@ -18,7 +18,7 @@ internal sealed unsafe class SnipOverlay : UiThread.IWindow
     private readonly List<(nint Hwnd, Win32.RECT Rect)> _windows;
     private readonly Action<SnipChoice?> _done;
     private nint _hwnd, _brightDc, _dimDc, _bright, _dim, _backDc, _back;
-    private bool _down, _dragging, _finished;
+    private bool _down, _dragging, _finished, _ready;
     private Win32.POINT _start, _at;
     private Win32.RECT? _selection;
     private nint _hoverWindow;
@@ -70,6 +70,7 @@ internal sealed unsafe class SnipOverlay : UiThread.IWindow
         Win32.ShowWindow(_hwnd, Win32.SW_SHOW);
         Win32.SetForegroundWindow(_hwnd);
         Win32.SetFocus(_hwnd);
+        _ready = true;
         Win32.POINT cursor;
         Win32.GetCursorPos(&cursor);
         _at = cursor;
@@ -151,6 +152,7 @@ internal sealed unsafe class SnipOverlay : UiThread.IWindow
                 else if ((int)w == Win32.VK_RETURN) Finish(Whole(_at));
                 return 0;
             case Win32.WM_KILLFOCUS:
+                if (_ready) Finish(null);
                 return 0;
             case Win32.WM_ERASEBKGND:
                 return 1;

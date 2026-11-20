@@ -589,7 +589,7 @@ public sealed partial class MainWindow
             catch (Exception ex) { return CaptureFailure("Captures folder", ex); }
         }
         if (CaptureAddon is not { } addon) return new { ok = false, message = "Exo Capture is not installed." };
-        var method = action switch { "saveReplay" => "replay.save", "record" => "record.toggle", "snip" => "snip", _ => null };
+        var method = action switch { "saveReplay" => "replay.save", "record" => "record.toggle", "snip" => "snip", "screenshot" => "screenshot", _ => null };
         if (method is null) return new { ok = false, message = "Unknown action." };
         try
         {
@@ -614,7 +614,7 @@ public sealed partial class MainWindow
 
     // ------------------------------------------------------------------ the captures folder
 
-    private static readonly string[] CaptureExtensions = [".mp4", ".png"];
+    private static readonly string[] CaptureExtensions = [".mp4", ".png", ".gif", ".webm"];
 
     /// <summary>FNV-1a of the full path's UTF-8: the item id and the thumbnail's name (the add-on works it out the same way).</summary>
     private static string CaptureId(string fullPath)
@@ -678,7 +678,8 @@ public sealed partial class MainWindow
             CaptureMeta? meta;
             lock (_captureGate) CaptureIndex.TryGetValue(relative, out meta);
             var folder = relative.Split(Path.DirectorySeparatorChar)[0];
-            var image = info.Extension.Equals(".png", StringComparison.OrdinalIgnoreCase);
+            var image = info.Extension.Equals(".png", StringComparison.OrdinalIgnoreCase)
+                || info.Extension.Equals(".gif", StringComparison.OrdinalIgnoreCase);
             var url = LocalFileHost.Url(CaptureMediaHost, string.Join('/', relative.Split(Path.DirectorySeparatorChar).Select(Uri.EscapeDataString)));
             var thumb = File.Exists(Path.Combine(CaptureThumbs, id + ".jpg"))
                 ? LocalFileHost.Url(CaptureThumbHost, id + ".jpg?v=") + info.LastWriteTimeUtc.Ticks.ToString("x")
@@ -770,7 +771,7 @@ public sealed partial class MainWindow
         {
             JsonNode? result;
             if (preset is null or "trim") result = await addon.CallAsync("trim", parameters, CancellationToken.None).ConfigureAwait(true);
-            else if (preset is "discord" or "youtube" or "vertical")
+            else if (preset is "discord" or "youtube" or "vertical" or "gif" or "webm")
             {
                 parameters["preset"] = preset;
                 result = await addon.CallAsync("export", parameters, CancellationToken.None).ConfigureAwait(true);

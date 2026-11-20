@@ -39,13 +39,25 @@ export function useEq(output?: string, visible = true) {
   const [state, setState] = useState<EqState | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
   const [error, setError] = useState<{ row: string; text: string } | null>(null)
+  const [loadError, setLoadError] = useState<string | null>(null)
+  const [round, setRound] = useState(0)
   const newest = useRef(0)
   const active = usePageActive()
   useEffect(() => {
     let live = true
-    host.eq('state', { output }).then(next => { if (live) setState(next) }, (cause: unknown) => report(cause, 'Eq.state'))
+    host.eq('state', { output }).then(
+      next => { if (live) { setState(next); setLoadError(null) } },
+      (cause: unknown) => {
+        report(cause, 'Eq.state')
+        if (live) setLoadError(errorText(cause, "Exo EQ didn't load. Try again."))
+      }
+    )
     return () => { live = false }
-  }, [output])
+  }, [output, round])
+  const retry = useCallback(() => {
+    setLoadError(null)
+    setRound(value => value + 1)
+  }, [])
   // Equalizer APO's own windows (its installer, the Device Selector) change what the page shows: read until they're done.
   const waiting = state !== null && (state.apo.installing || (state.apo.installed && !state.apo.onOutput))
   useEffect(() => {
@@ -75,7 +87,7 @@ export function useEq(output?: string, visible = true) {
     return problem
   }, [output])
   const errorFor = (row: string) => error?.row === row ? error.text : null
-  return { state, busy, act, errorFor }
+  return { state, busy, act, errorFor, loadError, retry }
 }
 
 export type Eq = ReturnType<typeof useEq>
@@ -83,7 +95,16 @@ export type Eq = ReturnType<typeof useEq>
 /** Equalizer APO: its install, then whatever keeps it from playing on this output. Nothing once it plays here. */
 export function ApoPanel({ eq }: { eq: Eq }) {
   const state = eq.state
-  if (!state) return null
+  if (!state) {
+    if (!eq.loadError) return null
+    return (
+      <Panel title="Exo EQ">
+        <Row label="Exo EQ couldn't load" error={eq.loadError}>
+          <button type="button" className="exo-set-btn" onClick={eq.retry}>Try again</button>
+        </Row>
+      </Panel>
+    )
+  }
   const apo = state.apo
   const output = state.output?.name ?? 'this output'
   if (!apo.installed) {

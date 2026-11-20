@@ -23,7 +23,9 @@ internal sealed class CaptureSession : IDisposable
     internal readonly SessionOptions Options;
     internal readonly long Epoch = Win32.Now();
     private IFrameSource _source;
-    private readonly VideoConverter? _converter;
+    private VideoConverter? _converter;
+    private int _convWidth, _convHeight;
+    private Format _convFormat;
     private readonly ID3D11Texture2D? _last;
     private VideoEncoder? _encoder;
     internal readonly SoundMixer? Sound;
@@ -73,6 +75,9 @@ internal sealed class CaptureSession : IDisposable
             _encoder = OpenEncoder(codecs, Hdr);
             if (Hdr && _encoder.Choice.Codec == Codec.H264) Hdr = false;
             var inFormat = source.Hdr ? Format.R16G16B16A16_Float : Format.B8G8R8A8_UNorm;
+            _convWidth = source.Width;
+            _convHeight = source.Height;
+            _convFormat = inFormat;
             _converter = new VideoConverter(gpu, source.Width, source.Height, inFormat, Width, Height, Hdr ? Format.P010 : Format.NV12, Hdr);
             _last = gpu.Texture(Width, Height, Hdr ? Format.P010 : Format.NV12);
             if (options.Sound) Sound = new SoundMixer(Epoch, (track, aac, time) => Deliver(new Packet(track, aac, time, true)));
@@ -96,6 +101,9 @@ internal sealed class CaptureSession : IDisposable
         var perPixel = 0.1 * Math.Pow(2, (Math.Clamp(quality, 0, 100) - 50) / 25.0) * (codec switch { Codec.H264 => 1.5, Codec.Av1 => 0.8, _ => 1.0 });
         return (int)Math.Clamp(width * (double)height * fps * perPixel, 2_000_000, 150_000_000);
     }
+
+    internal static bool NeedsNewConverter(int curW, int curH, Format curFormat, int nextW, int nextH, Format nextFormat) =>
+        curW != nextW || curH != nextH || curFormat != nextFormat;
 
     private VideoEncoder OpenEncoder(Codec[] codecs, bool hdr)
     {
@@ -224,6 +232,15 @@ internal sealed class CaptureSession : IDisposable
                     if (f.Time != lastTime) { lastFrame = Win32.Now(); lastTime = f.Time; }
                     try
                     {
+                        var desc = f.Texture.Description;
+                        if (NeedsNewConverter(_convWidth, _convHeight, _convFormat, (int)desc.Width, (int)desc.Height, desc.Format))
+                        {
+                            _converter?.Dispose();
+                            _convWidth = (int)desc.Width;
+                            _convHeight = (int)desc.Height;
+                            _convFormat = desc.Format;
+                            _converter = new VideoConverter(Gpu, _convWidth, _convHeight, _convFormat, Width, Height, Hdr ? Format.P010 : Format.NV12, Hdr);
+                        }
                         _converter!.Convert(f.Texture, _last!, f.Crop, f.Flip);
                         if (_wantShot) lock (_shotGate) { KeepForShot(f); _wantShot = false; _shotReady.Set(); }
                         have = true;

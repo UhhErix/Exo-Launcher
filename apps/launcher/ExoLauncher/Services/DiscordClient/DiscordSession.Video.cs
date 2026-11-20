@@ -230,7 +230,7 @@ internal sealed partial class DiscordSession
                 }
                 if (hevc && ReferenceEquals(_live, live))
                 {
-                    live.EncodesH265 = false;
+                    live.FallbackToH264();
                     AppLog.Info($"Discord video: H.265 did not start ({error ?? "unsupported"}); continuing in H.264.");
                     var (h264, h264Err) = await GoLiveCapture.StartAsync(s.Addon, s.Source, s.Plan with { Bitrate = bitrate }, CancellationToken.None, hevc: false, allowFallback: true).ConfigureAwait(false);
                     if (h264 is not null)
