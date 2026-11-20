@@ -1,5 +1,35 @@
 [
   {
+    "version": "3.28.0",
+    "items": [
+      {
+        "icon": "Performance",
+        "title": "Exo AI real-time core & unified PC tuning",
+        "detail": "Silently keeps safe Best Settings aligned in the background, adds anti-cheat-safe NVML GPU fan curves, upgrades Autopilot to 2s checks with alt-tab 1 ms timer restore, and consolidates This PC into Exo AI, Apps, Storage, and Devices."
+      },
+      {
+        "icon": "Appearance",
+        "title": "Authentic AMOLED Liquid Glass & clean icons",
+        "detail": "Restores true backdrop-blur Liquid Glass over pure black surfaces without synthetic gradient sheens, restores clean icons while keeping Goeist, and removes the Library scroll scrubber."
+      },
+      {
+        "icon": "Chats",
+        "title": "Synced Discord DM pinning",
+        "detail": "Pin 1:1 and group DMs directly from conversation headers or context menus, synced cleanly across your signed-in Exo account."
+      },
+      {
+        "icon": "CleanUp",
+        "title": "Apps & Startup reliability fixes",
+        "detail": "Refreshes Startup state on reopen, supports re-enabling Task Manager-disabled entries inline, groups duplicate startup errors, and filters shell-host memory inflation."
+      },
+      {
+        "icon": "Shaders",
+        "title": "Reliable elevated Shaders optimization & Latency check",
+        "detail": "Fixes elevated Optimize Cache failures, adds 10-second DPC latency checks under System tuning, and automatically reverts failing MSI device modes."
+      }
+    ]
+  },
+  {
     "version": "3.27.0",
     "items": [
       {
