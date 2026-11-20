@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { allowHover, resetHoverGate, suppressHover } from '../src/lib/hoverGate.ts'
+import { allowHover, extendHoverSuppression, resetHoverGate, suppressHover } from '../src/lib/hoverGate.ts'
 
 test('hover is allowed at rest and suppressed cleanly across room transitions until grace expires', () => {
   resetHoverGate()
@@ -44,5 +44,39 @@ test('real pointer movement past jitter threshold clears suppression immediately
   } finally {
     if (prevWindow === undefined) delete (globalThis as { window?: unknown }).window
     else (globalThis as { window: unknown }).window = prevWindow
+    resetHoverGate()
+  }
+})
+
+test('extendHoverSuppression does not re-suppress after genuine pointer movement mid-transition', () => {
+  resetHoverGate()
+  const listeners = new Map<string, Array<(e: { clientX: number; clientY: number }) => void>>()
+  const prevWindow = (globalThis as { window?: unknown }).window
+  ;(globalThis as { window: unknown }).window = {
+    addEventListener(type: string, fn: (e: { clientX: number; clientY: number }) => void) {
+      const list = listeners.get(type) ?? []
+      list.push(fn)
+      listeners.set(type, list)
+    },
+  }
+  try {
+    suppressHover(450, 3000)
+    for (const fn of listeners.get('pointerdown') ?? []) fn({ clientX: 40, clientY: 80 })
+    for (const fn of listeners.get('pointermove') ?? []) fn({ clientX: 240, clientY: 80 })
+    assert.equal(allowHover({ pointerType: 'mouse', clientX: 240, clientY: 80 }, 3100), true)
+
+    // Transition ends at 3160ms: extendHoverSuppression must not lock hover at the destination cursor position.
+    extendHoverSuppression(180, 3160)
+    assert.equal(allowHover({ pointerType: 'mouse', clientX: 240, clientY: 80 }, 3165), true)
+
+    // If the cursor stayed stationary during the transition, extendHoverSuppression keeps it suppressed.
+    suppressHover(450, 4000)
+    extendHoverSuppression(180, 4440)
+    assert.equal(allowHover({ pointerType: 'mouse', clientX: 240, clientY: 80 }, 4500), false)
+    assert.equal(allowHover({ pointerType: 'mouse', clientX: 240, clientY: 80 }, 4620), true)
+  } finally {
+    if (prevWindow === undefined) delete (globalThis as { window?: unknown }).window
+    else (globalThis as { window: unknown }).window = prevWindow
+    resetHoverGate()
   }
 })

@@ -1,5 +1,5 @@
 import { flushSync } from 'react-dom'
-import { suppressHover } from './hoverGate'
+import { extendHoverSuppression, suppressHover } from './hoverGate'
 import { fromKeyboard, shouldReduceMotion } from './motionPreference'
 import { report } from './report'
 
@@ -287,7 +287,7 @@ export function transition(update: () => void, options: { kind?: TransitionKind;
     for (const element of landed) setName(element, '')
     for (const morph of morphs) setName(morph.from, '')
     clearNamed()
-    suppressHover(180)
+    extendHoverSuppression(180)
     if (running !== view) return
     running = null
     delete root.dataset.exoVt

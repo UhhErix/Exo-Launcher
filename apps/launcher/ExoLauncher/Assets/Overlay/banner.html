@@ -238,10 +238,20 @@
     showing = false
   }
 
-  if (source) new EventSource('/achievements/events').onmessage = e => { try { queue.push(JSON.parse(e.data)); show() } catch { /* not a banner */ } }
-  else if (window.chrome?.webview) {
+  let wired = false
+  function wireHost() {
+    if (wired || !window.chrome?.webview) return wired
+    wired = true
     window.chrome.webview.addEventListener('message', e => { queue.push(e.data); show() })
     window.chrome.webview.postMessage({ type: 'banner.ready' })
+    return true
+  }
+  if (source) new EventSource('/achievements/events').onmessage = e => { try { queue.push(JSON.parse(e.data)); show() } catch { /* not a banner */ } }
+  else if (!wireHost()) {
+    const retry = setInterval(() => { if (wireHost()) clearInterval(retry) }, 20)
+    window.addEventListener('DOMContentLoaded', () => { if (wireHost()) clearInterval(retry) }, { once: true })
+    window.addEventListener('load', () => { if (wireHost()) clearInterval(retry) }, { once: true })
+    setTimeout(() => clearInterval(retry), 10000)
   }
 </script>
 </body>

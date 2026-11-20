@@ -493,6 +493,7 @@ public sealed partial class MainWindow : Window
         try { _bridge?.Detach(); } catch { }
         AppLog.Info("Shutdown: bridge detached.");
         try { Services.GameRunningSignal.Clear(); } catch { }
+        try { AchievementBanner.Shutdown(); } catch { }
         try { Services.FpsCounter.Shutdown(); } catch { }
         try { Services.Autopilot.Shutdown(); } catch { }
         // The hosted sessions close side

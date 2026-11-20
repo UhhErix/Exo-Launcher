@@ -93,6 +93,17 @@ internal static class AchievementBanner
         _overlay = null;
     }
 
+    internal static void Shutdown()
+    {
+        _wait?.Dispose();
+        _wait = null;
+        _close?.Dispose();
+        _close = null;
+        Waiting.Clear();
+        _overlay?.Dispose();
+        _overlay = null;
+    }
+
     /// <summary>A 16-bit WAV (the 44-byte header of tools/make-achievement-sounds.mjs) with its samples at this volume, 0 to 100; the source stays as it was.</summary>
     internal static byte[] AtVolume(byte[] wav, int percent)
     {
@@ -111,6 +122,7 @@ internal static class AchievementBanner
     {
         private const string Host = "overlay.exo-launcher.local";
         private IntPtr _hwnd;
+        private IntPtr _ownerHwnd;
         private Windows.UI.Composition.Compositor? _compositor;
         private Windows.UI.Composition.Desktop.DesktopWindowTarget? _target;
         private Windows.UI.Composition.ContainerVisual? _root;
@@ -142,6 +154,7 @@ internal static class AchievementBanner
             overlay._controller.ShouldDetectMonitorScaleChanges = false;
             overlay._controller.RootVisualTarget = overlay._root;
             var core = overlay._controller.CoreWebView2;
+            core.Settings.IsWebMessageEnabled = true;
             core.Settings.AreDevToolsEnabled = false;
             core.Settings.AreDefaultContextMenusEnabled = false;
             core.Settings.IsStatusBarEnabled = false;
@@ -151,11 +164,11 @@ internal static class AchievementBanner
             // Size the visual and WebView2 bounds before navigating so the first frame lays out at full dimensions.
             overlay._root.Size = new System.Numerics.Vector2(width, height);
             overlay._controller.Bounds = new Windows.Foundation.Rect(0, 0, width, height);
+            overlay._controller.IsVisible = true;
             // The page says when its listener is attached (banner.ready) and when a banner sound is due.
             core.WebMessageReceived += (_, e) => UiGuard.Run(() => overlay.OnWebMessage(e.WebMessageAsJson));
             core.NavigationCompleted += (_, e) => UiGuard.Run(() => overlay.OnNavigationCompleted(e.IsSuccess));
             core.Navigate($"https://{Host}/banner.html");
-            overlay._controller.IsVisible = true;
             return overlay;
         }
 
@@ -271,10 +284,16 @@ internal static class AchievementBanner
                 if (RegisterClassEx(ref cls) == 0) throw new InvalidOperationException("The banner window class wasn't registered.");
                 _registered = true;
             }
+            // Owned by an unshown tool window so GetWindow(GW_OWNER) != 0 and .NET Process.MainWindowHandle skips the overlay.
+            _ownerHwnd = CreateWindowEx(0x00000080, "ExoAchievementBanner", "", 0x80000000, 0, 0, 0, 0, IntPtr.Zero, IntPtr.Zero, instance, IntPtr.Zero);
             // Topmost, tool (no taskbar), no activation, click-through, no redirection bitmap (the compositor draws it).
             const uint ex = 0x00000008 | 0x00000080 | 0x08000000 | 0x00000020 | 0x00200000;
-            _hwnd = CreateWindowEx(ex, "ExoAchievementBanner", "Exo achievement", 0x80000000, 0, 0, _width, _height, IntPtr.Zero, IntPtr.Zero, instance, IntPtr.Zero);
-            if (_hwnd == IntPtr.Zero) throw new InvalidOperationException("The banner window wasn't made.");
+            _hwnd = CreateWindowEx(ex, "ExoAchievementBanner", "Exo achievement", 0x80000000, 0, 0, _width, _height, _ownerHwnd, IntPtr.Zero, instance, IntPtr.Zero);
+            if (_hwnd == IntPtr.Zero)
+            {
+                if (_ownerHwnd != IntPtr.Zero) { DestroyWindow(_ownerHwnd); _ownerHwnd = IntPtr.Zero; }
+                throw new InvalidOperationException("The banner window wasn't made.");
+            }
         }
 
         public void Dispose()
@@ -291,6 +310,8 @@ internal static class AchievementBanner
             _compositor = null;
             if (_hwnd != IntPtr.Zero) DestroyWindow(_hwnd);
             _hwnd = IntPtr.Zero;
+            if (_ownerHwnd != IntPtr.Zero) DestroyWindow(_ownerHwnd);
+            _ownerHwnd = IntPtr.Zero;
         }
 
         /// <summary>Windows.UI.Composition needs a Windows.System dispatcher queue on its thread; WinUI's own isn't one.</summary>
@@ -326,7 +347,7 @@ internal static class AchievementBanner
         [DllImport("CoreMessaging.dll")] private static extern int CreateDispatcherQueueController(DispatcherQueueOptions options, out IntPtr controller);
         [DllImport("user32.dll", CharSet = CharSet.Unicode)] private static extern ushort RegisterClassEx(ref WndClassEx cls);
         [DllImport("user32.dll", CharSet = CharSet.Unicode)] private static extern IntPtr CreateWindowEx(uint ex, string cls, string name, uint style, int x, int y, int w, int h, IntPtr parent, IntPtr menu, IntPtr instance, IntPtr param);
-        [DllImport("user32.dll")] private static extern IntPtr DefWindowProc(IntPtr hwnd, uint msg, IntPtr w, IntPtr l);
+        [DllImport("user32.dll", CharSet = CharSet.Unicode)] private static extern IntPtr DefWindowProc(IntPtr hwnd, uint msg, IntPtr w, IntPtr l);
         [DllImport("user32.dll")] private static extern bool DestroyWindow(IntPtr hwnd);
         [DllImport("user32.dll")] private static extern bool SetWindowPos(IntPtr hwnd, IntPtr after, int x, int y, int w, int h, uint flags);
         [DllImport("user32.dll")] private static extern IntPtr GetForegroundWindow();
