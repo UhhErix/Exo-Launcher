@@ -1,4 +1,6 @@
 using System.Runtime.InteropServices;
+using DCommon = Vortice.DCommon;
+using D2D = Vortice.Direct2D1;
 using Vortice.Direct3D;
 using Vortice.Direct3D11;
 using Vortice.DXGI;
@@ -160,8 +162,21 @@ internal sealed class VideoConverter : IDisposable
     private readonly GpuDevice _gpu;
     private readonly ID3D11VideoProcessorEnumerator _enumerator;
     private readonly ID3D11VideoProcessor _processor;
+    private readonly D2D.ID2D1Device? _d2dDevice;
+    private readonly D2D.ID2D1DeviceContext? _d2dContext;
+    private readonly D2D.ID2D1Effect? _toneMapEffect;
+    private readonly ID3D11Texture2D? _sdrToneTarget;
     internal readonly int InWidth, InHeight, OutWidth, OutHeight;
     internal readonly Format OutFormat;
+
+    internal static bool NeedsHdrToSdrToneMap(Format inFormat, bool hdr) =>
+        inFormat == Format.R16G16B16A16_Float && !hdr;
+
+    private static unsafe void SetToneMapFloat(D2D.ID2D1Effect effect, D2D.HDRToneMapProperties prop, float value) =>
+        effect.SetValue((uint)prop, D2D.PropertyType.Float, &value, sizeof(float));
+
+    private static unsafe void SetToneMapEnum(D2D.ID2D1Effect effect, D2D.HDRToneMapProperties prop, int value) =>
+        effect.SetValue((uint)prop, D2D.PropertyType.Enum, &value, sizeof(int));
 
     internal VideoConverter(GpuDevice gpu, int inWidth, int inHeight, Format inFormat, int outWidth, int outHeight, Format outFormat, bool hdr)
     {
@@ -181,8 +196,36 @@ internal sealed class VideoConverter : IDisposable
         _enumerator = gpu.VideoDevice.CreateVideoProcessorEnumerator(content);
         _processor = gpu.VideoDevice.CreateVideoProcessor(_enumerator, 0);
         var vc = gpu.VideoContext;
-        // What the input is: scRGB from an HDR screen, sRGB from capture, or a decoded clip's YCbCr (studio range; PQ and BT.2020 when 10-bit HDR).
-        var inSpace = inFormat switch
+        var toneMapped = false;
+        if (NeedsHdrToSdrToneMap(inFormat, hdr))
+        {
+            try
+            {
+                using var dxgiDevice = gpu.Device.QueryInterface<IDXGIDevice>();
+                _d2dDevice = D2D.D2D1.D2D1CreateDevice(dxgiDevice, new D2D.CreationProperties { ThreadingMode = D2D.ThreadingMode.MultiThreaded, Options = D2D.DeviceContextOptions.None });
+                _d2dContext = _d2dDevice.CreateDeviceContext(D2D.DeviceContextOptions.None);
+                _toneMapEffect = new D2D.ID2D1Effect(_d2dContext.CreateEffect(D2D.EffectGuids.HdrToneMap));
+                SetToneMapFloat(_toneMapEffect, D2D.HDRToneMapProperties.InputMaxLuminance, 1000f);
+                SetToneMapFloat(_toneMapEffect, D2D.HDRToneMapProperties.OutputMaxLuminance, 250f);
+                SetToneMapEnum(_toneMapEffect, D2D.HDRToneMapProperties.DisplayMode, (int)D2D.HDRToneMapDisplayMode.Sdr);
+                _sdrToneTarget = gpu.Texture(inWidth, inHeight, Format.B8G8R8A8_UNorm);
+                toneMapped = true;
+            }
+            catch (Exception ex) when (ex is SharpGen.Runtime.SharpGenException or CaptureException)
+            {
+                Host.Log("HDR tone map unavailable, using direct converter: " + ex.Message);
+                _toneMapEffect?.Dispose();
+                _toneMapEffect = null;
+                _d2dContext?.Dispose();
+                _d2dContext = null;
+                _d2dDevice?.Dispose();
+                _d2dDevice = null;
+                _sdrToneTarget?.Dispose();
+                _sdrToneTarget = null;
+            }
+        }
+        // What the input is: scRGB from an HDR screen (tone-mapped to BGRA8 when output is SDR), sRGB from capture, or a decoded clip's YCbCr.
+        var inSpace = toneMapped ? ColorSpaceType.RgbFullG22NoneP709 : inFormat switch
         {
             Format.R16G16B16A16_Float => ColorSpaceType.RgbFullG10NoneP709,
             Format.P010 => ColorSpaceType.YcbcrStudioG2084LeftP2020,
@@ -221,13 +264,42 @@ internal sealed class VideoConverter : IDisposable
         var srcDesc = source.Description;
         var src = crop ?? new RawRect(0, 0, (int)srcDesc.Width, (int)srcDesc.Height);
         var dest = fill ? new RawRect(0, 0, OutWidth, OutHeight) : Fit(src.Right - src.Left, src.Bottom - src.Top, OutWidth, OutHeight);
-        using var input = _gpu.VideoDevice.CreateVideoProcessorInputView(source, _enumerator, new VideoProcessorInputViewDescription
+        var vpSource = source;
+        var vpSlice = slice;
+        if (_d2dContext is not null && _toneMapEffect is not null && _sdrToneTarget is not null
+            && srcDesc.Format == Format.R16G16B16A16_Float && srcDesc.ArraySize == 1 && slice == 0
+            && srcDesc.Width == _sdrToneTarget.Description.Width && srcDesc.Height == _sdrToneTarget.Description.Height)
+        {
+            using var srcSurface = source.QueryInterface<IDXGISurface>();
+            using var dstSurface = _sdrToneTarget.QueryInterface<IDXGISurface>();
+            using var srcBitmap = _d2dContext.CreateBitmapFromDxgiSurface(srcSurface,
+                new D2D.BitmapProperties1(new DCommon.PixelFormat(Format.R16G16B16A16_Float, DCommon.AlphaMode.Ignore), 96, 96, D2D.BitmapOptions.None));
+            using var dstBitmap = _d2dContext.CreateBitmapFromDxgiSurface(dstSurface,
+                new D2D.BitmapProperties1(new DCommon.PixelFormat(Format.B8G8R8A8_UNorm, DCommon.AlphaMode.Ignore), 96, 96, D2D.BitmapOptions.Target));
+            using var output = _toneMapEffect.Output;
+            _toneMapEffect.SetInput(0, srcBitmap, true);
+            _d2dContext.Target = dstBitmap;
+            try
+            {
+                _d2dContext.BeginDraw();
+                _d2dContext.DrawImage(output);
+                _d2dContext.EndDraw(out _, out _).CheckError();
+            }
+            finally
+            {
+                _d2dContext.Target = null;
+                _toneMapEffect.SetInput(0, null, true);
+            }
+            vpSource = _sdrToneTarget;
+            vpSlice = 0;
+        }
+        using var input = _gpu.VideoDevice.CreateVideoProcessorInputView(vpSource, _enumerator, new VideoProcessorInputViewDescription
         {
             FourCC = 0,
             ViewDimension = VideoProcessorInputViewDimension.Texture2D,
-            Texture2D = new Texture2DVideoProcessorInputView { MipSlice = 0, ArraySlice = slice },
+            Texture2D = new Texture2DVideoProcessorInputView { MipSlice = 0, ArraySlice = vpSlice },
         });
-        using var output = _gpu.VideoDevice.CreateVideoProcessorOutputView(target, _enumerator, new VideoProcessorOutputViewDescription
+        using var outputView = _gpu.VideoDevice.CreateVideoProcessorOutputView(target, _enumerator, new VideoProcessorOutputViewDescription
         {
             ViewDimension = VideoProcessorOutputViewDimension.Texture2D,
         });
@@ -236,11 +308,15 @@ internal sealed class VideoConverter : IDisposable
         vc.VideoProcessorSetOutputTargetRect(_processor, true, new RawRect(0, 0, OutWidth, OutHeight));
         vc.VideoProcessorSetStreamMirror(_processor, 0, flip, false, flip);
         var stream = new VideoProcessorStream { Enable = true, InputSurface = input };
-        vc.VideoProcessorBlt(_processor, output, 0, 1, [stream]).CheckError();
+        vc.VideoProcessorBlt(_processor, outputView, 0, 1, [stream]).CheckError();
     }
 
     public void Dispose()
     {
+        _toneMapEffect?.Dispose();
+        _d2dContext?.Dispose();
+        _d2dDevice?.Dispose();
+        _sdrToneTarget?.Dispose();
         _processor.Dispose();
         _enumerator.Dispose();
     }

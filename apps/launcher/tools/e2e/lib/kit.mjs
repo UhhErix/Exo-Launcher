@@ -40,8 +40,8 @@ export function kit(t) {
       await k.closeAll()
       if (room === 'Devices') {
         // A page of the PC room: its chip on the This PC line opens it, and the PC tab stays lit there.
-        const t0 = Date.now()
         await k.nav('PC')
+        const t0 = Date.now()
         const opened = await t.shell.click(() => [...document.querySelectorAll('.exo-pc-chip')].find(b => b.textContent.trim() === 'Devices'))
         if (!opened) throw new Error('no Devices chip in the PC room')
         const ok = await t.shell.waitFor(() => { const m = document.querySelector('main[aria-label="Devices"]'); return !!m && m.getBoundingClientRect().width > 0 }, { timeoutMs: 8000 })

@@ -27,7 +27,15 @@ internal sealed class DuplicationSource : IFrameSource
     private ID3D11Texture2D? _patchStaging;
     private int _patchW, _patchH;
     private bool _patchHdr;
+    private long _lastCursorFrameTime = long.MinValue;
+    private int _lastCursorX, _lastCursorY;
+    private object? _lastCursorShape;
+    private uint _lastCursorW, _lastCursorH;
+    private Format _lastCursorFormat;
     private bool _disposed;
+
+    internal static bool CanReuseCursorFrame(long lastTime, int lastX, int lastY, object? lastShape, long frameTime, int x, int y, object? shape) =>
+        lastTime == frameTime && lastX == x && lastY == y && ReferenceEquals(lastShape, shape) && shape is not null;
 
     public string Kind { get; }
     public int Width => _shared.Width;
@@ -97,7 +105,6 @@ internal sealed class DuplicationSource : IFrameSource
                 try
                 {
                     var next = Duplicator.Open(_gpu, currentMonitor, _wantHdr);
-                    if (next.Hdr != _shared.Hdr) { next.Release(); return null; }
                     _shared.Release();
                     _shared = next;
                     _monitor = currentMonitor;
@@ -111,14 +118,19 @@ internal sealed class DuplicationSource : IFrameSource
         }
         if (_shared.Latest(out var pointer) is not { } frame) return null;
         var texture = _cursor && pointer is { Visible: true, Shape: not null }
-            ? CompositeCursor(frame.Texture, pointer.X, pointer.Y, pointer.Shape)
+            ? CompositeCursor(frame.Texture, frame.Time, pointer.X, pointer.Y, pointer.Shape)
             : frame.Texture;
         return crop is { } c ? new Frame(texture, frame.Time, c, frame.Flip) : new Frame(texture, frame.Time, frame.Crop, frame.Flip);
     }
 
-    private ID3D11Texture2D CompositeCursor(ID3D11Texture2D source, int cursorX, int cursorY, PointerShape shape)
+    private ID3D11Texture2D CompositeCursor(ID3D11Texture2D source, long frameTime, int cursorX, int cursorY, PointerShape shape)
     {
         var desc = source.Description;
+        if (_cursorTarget is not null
+            && CanReuseCursorFrame(_lastCursorFrameTime, _lastCursorX, _lastCursorY, _lastCursorShape, frameTime, cursorX, cursorY, shape)
+            && _lastCursorW == desc.Width && _lastCursorH == desc.Height && _lastCursorFormat == desc.Format)
+            return _cursorTarget;
+
         var w = (int)desc.Width;
         var h = (int)desc.Height;
         if (_cursorTarget is null || _cursorTarget.Description.Width != desc.Width || _cursorTarget.Description.Height != desc.Height || _cursorTarget.Description.Format != desc.Format)
@@ -129,7 +141,12 @@ internal sealed class DuplicationSource : IFrameSource
         _gpu.Context.CopyResource(_cursorTarget, source);
 
         var shapeH = shape.Type == PointerMonochrome ? shape.Height / 2 : shape.Height;
-        if (shape.Width <= 0 || shapeH <= 0) return _cursorTarget;
+        if (shape.Width <= 0 || shapeH <= 0)
+        {
+            (_lastCursorFrameTime, _lastCursorX, _lastCursorY, _lastCursorShape, _lastCursorW, _lastCursorH, _lastCursorFormat) =
+                (frameTime, cursorX, cursorY, shape, desc.Width, desc.Height, desc.Format);
+            return _cursorTarget;
+        }
 
         var left = Math.Max(0, cursorX);
         var top = Math.Max(0, cursorY);
@@ -137,7 +154,12 @@ internal sealed class DuplicationSource : IFrameSource
         var bottom = Math.Min(h, cursorY + shapeH);
         var pw = right - left;
         var ph = bottom - top;
-        if (pw <= 0 || ph <= 0) return _cursorTarget;
+        if (pw <= 0 || ph <= 0)
+        {
+            (_lastCursorFrameTime, _lastCursorX, _lastCursorY, _lastCursorShape, _lastCursorW, _lastCursorH, _lastCursorFormat) =
+                (frameTime, cursorX, cursorY, shape, desc.Width, desc.Height, desc.Format);
+            return _cursorTarget;
+        }
 
         var hdr = desc.Format == Format.R16G16B16A16_Float;
         if (_patchStaging is null || _patchW < pw || _patchH < ph || _patchHdr != hdr)
@@ -163,6 +185,8 @@ internal sealed class DuplicationSource : IFrameSource
         finally { _gpu.Context.Unmap(_patchStaging, 0); }
 
         _gpu.Context.CopySubresourceRegion(_cursorTarget, 0, (uint)left, (uint)top, 0, _patchStaging, 0, new Box(0, 0, 0, pw, ph, 1));
+        (_lastCursorFrameTime, _lastCursorX, _lastCursorY, _lastCursorShape, _lastCursorW, _lastCursorH, _lastCursorFormat) =
+            (frameTime, cursorX, cursorY, shape, desc.Width, desc.Height, desc.Format);
         return _cursorTarget;
     }
 
@@ -264,6 +288,11 @@ internal sealed class DuplicationSource : IFrameSource
         _cursorTarget = null;
         _patchStaging?.Dispose();
         _patchStaging = null;
+        _lastCursorFrameTime = long.MinValue;
+        _lastCursorX = _lastCursorY = 0;
+        _lastCursorShape = null;
+        _lastCursorW = _lastCursorH = 0;
+        _lastCursorFormat = default;
     }
 
     /// <summary>One picture of the whole monitor now (the snip's frozen screen).</summary>

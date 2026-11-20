@@ -205,6 +205,10 @@ export function Room({ name, mounted, active, covered = false, warm = false, lab
   useLayoutEffect(() => {
     const room = frame.current
     if (!active || !room) return
+    if (!floating && document.documentElement.dataset.exoVt === 'room') {
+      arrived.current = true
+      return
+    }
     if (arrived.current) {
       for (const animation of room.getAnimations({ subtree: true })) {
         if (!(animation instanceof CSSAnimation) || !ENTRANCES.has(animation.animationName)) continue
