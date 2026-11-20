@@ -1,4 +1,4 @@
-#Requires -Version 7.0
+﻿#Requires -Version 7.0
 <#
 .SYNOPSIS
     Releases one Exo app: version bump, release build, update mirror, exo-site deploy, live check.
@@ -146,7 +146,8 @@ try {
     Require (Test-WhatsNew (Join-Path $RepoPath $Info.WhatsNew)) "$($Info.WhatsNew) has an entry for $Version"
     $siteOk = Test-Path -LiteralPath (Join-Path $SitePath 'package.json')
     Require $siteOk "exo-site beside the app repo ($SitePath)"
-    if ($siteOk) { Invoke-Tool 'exo-site tests (npm test)' 'npm.cmd' @('test') $SitePath -ReadOnly }
+    $npmCmd = if ($IsLinux -or $IsMacOS) { 'npm' } else { 'npm.cmd' }
+    if ($siteOk) { Invoke-Tool 'exo-site tests (npm test)' $npmCmd @('test') $SitePath -ReadOnly }
 
     Step "2. Set VERSION to $Version$(if ($Info.Docs) { ', then write the release page' })"
     if ($WhatIfPreference) {
