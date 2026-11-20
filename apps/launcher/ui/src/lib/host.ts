@@ -279,14 +279,14 @@ export type ControllerState = {
 }
 
 /** Exo EQ's sounds over the correction. */
-export type EqSound = 'flat' | 'bass' | 'vocal' | 'footsteps' | 'custom'
+export type EqSound = 'flat' | 'bass' | 'vocal' | 'footsteps' | 'cinematic' | 'custom'
 /** A headphone AutoEq has a correction for: its result's folder (id), who measured it, and its kind. */
 export type EqHeadphone = { id: string; name: string; source: string; form: 'in-ear' | 'earbud' | 'over-ear' }
 /**
  * Exo EQ for one output (the one the page shows): Equalizer APO here and on it, the switch and Compare, the headphones
- * and sound on this output, the Custom sound's ten bands, the preamp its chain gets, the game playing now with its own
- * sound, the games with a sound, the library to add from, Night Shift, the other outputs that have an EQ, a headset
- * the output's name suggests, and whether Lucid's EQ block still plays.
+ * and sound on this output, the Custom sound's ten bands, the preamp its chain gets, the game playing now with its
+ * automatic profile, the games with a sound, the library to add from, Night Shift, the other outputs that have an EQ, a
+ * headset the output's name suggests, and whether Lucid's EQ block still plays.
  */
 export type EqState = {
   ok: boolean
@@ -299,7 +299,7 @@ export type EqState = {
   sound: EqSound
   custom: { hz: number; gain: number }[]
   preamp: number
-  playing: { id: string; title: string; sound: EqSound | null } | null
+  playing: { id: string; title: string; sound: EqSound | null; label?: string; reason?: string } | null
   games: { id: string; title: string; sound: EqSound }[]
   library: { id: string; title: string }[]
   night: { on: boolean; start: string; end: string; sync: boolean; now: boolean }
@@ -879,15 +879,18 @@ export type AutopilotReport = {
   /** Seconds in which ISLC's rule (free memory under 1 GB, a standby list of 1 GB or more) would have purged. */
   islcSeconds: number
 }
+export type AutopilotMemoryIntegrityStatus = 'off' | 'unlocked' | 'pending-off' | 'pending-on' | 'required' | 'conflict' | 'locked'
 export type AutopilotPriority = 'above' | 'high' | 'normal'
 /**
- * PC › Autopilot: the switch and its choices (the game's priority, Windows Game Mode kept on, cores kept awake, the apps always held
- * back and the apps paused while playing); where Game Mode stands (off: Autopilot turned it off; keptOn: why it stays on with
- * Autopilot on); the processor's cache layout in words; what Autopilot does for the game running now; the live line and the reports.
+ * PC › Autopilot: always active with Exo's best settings, mouse acceleration managed automatically, library-aware Memory
+ * Integrity status, Windows Game Mode state, the processor's cache layout, what Autopilot does for the game running now,
+ * the live line and the session reports.
  */
 export type AutopilotState = {
   on: boolean; gamePriority: AutopilotPriority; keepGameMode: boolean; coreParking: boolean; alwaysDemote: string[]; suspend: string[]
   gameMode: { off: boolean; keptOn?: string | null }
+  mouseAccel?: { off: boolean; managed: boolean }
+  memoryIntegrity?: { status: AutopilotMemoryIntegrityStatus; reason: string; canUndo: boolean; needsRestart: boolean }
   cpu: string
   now?: { game: string; did: string[] } | null
   live: AutopilotLive | null; reports: AutopilotReport[]

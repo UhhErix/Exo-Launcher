@@ -5,7 +5,7 @@ import { errorText } from '../../lib/errorWords'
 import { pageIsActive, usePageActive } from '../../lib/pageActivity'
 import { report } from '../../lib/report'
 import { Choice } from '../settings/Choice'
-import { ChoiceRow, Row, SliderRow, State, SwitchRow } from '../settings/parts'
+import { Row, State, SwitchRow } from '../settings/parts'
 import { Spinner } from '../ui/Spinner'
 import { Wait, sample, times } from '../ui/Wait'
 import { DevicePanel as Panel } from './DevicePage'
@@ -14,20 +14,11 @@ import type { Wearing } from './AudioPage'
 /**
  * Exo EQ on your audio's page: Exo's own headphone EQ, written for Equalizer APO, which plays it the moment it changes.
  * Panels: Equalizer APO (its install and anything keeping it from this output), Headphones (AutoEq's correction for the
- * pair, which also names the hero's card), Sound (the switch, Compare, the sound and Custom's bands), Games (a sound of
- * their own while they run) and Night Shift. Everything is for the output Windows plays on; each output keeps its own.
+ * pair, which also names the hero's card), Sound (always-on automatic per-game curve with Compare bypass), and Night Shift.
  */
 
-const SOUNDS: { value: EqSound; label: string }[] = [
-  { value: 'flat', label: 'Flat' },
-  { value: 'bass', label: 'Bass' },
-  { value: 'vocal', label: 'Vocal' },
-  { value: 'footsteps', label: 'Footsteps' },
-  { value: 'custom', label: 'Custom' },
-]
-
 const SOUND_WORDS: Record<EqSound, string> = {
-  flat: 'Flat', bass: 'Bass', vocal: 'Vocal', footsteps: 'Footsteps', custom: 'Custom',
+  flat: 'Reference', bass: 'Bass', vocal: 'Vocal', footsteps: 'Footsteps', cinematic: 'Immersion', custom: 'Custom',
 }
 
 /** Night Shift's times, every half hour. */
@@ -222,60 +213,37 @@ function HeadphonePicker({ picked, busy, error, onPick }: { picked: EqHeadphone 
   )
 }
 
-/** The switch with Compare beside it, the sound, Custom's ten bands and the headroom the chain takes. */
+/** Always-on Exo EQ status with live Compare bypass and automatic per-game curve indicator. */
 export function SoundPanel({ eq }: { eq: Eq }) {
   const state = eq.state
   if (!state) return null
-  const gains = state.custom.map(band => band.gain)
-  const setBand = (at: number, gain: number) => void eq.act('custom', 'custom', { gains: gains.map((value, i) => i === at ? gain : value) })
+  const activeSound = state.playing?.sound ?? state.sound
+  const activeLabel = state.playing?.label ?? SOUND_WORDS[activeSound]
   const compare = (
-    <button type="button" className="exo-set-btn" aria-pressed={state.comparing} disabled={!state.on || eq.busy === 'compare'}
+    <button type="button" className="exo-set-btn" aria-pressed={state.comparing} disabled={eq.busy === 'compare'}
       onClick={() => void eq.act('compare', 'compare', { on: !state.comparing })}>{state.comparing ? 'Back to EQ' : 'Compare'}</button>
   )
+  const detail = state.comparing
+    ? 'Bypassed while you compare without EQ'
+    : state.playing?.title
+      ? `${activeLabel} for ${state.playing.title}${state.playing.reason ? ` — ${state.playing.reason}` : ''}`
+      : 'Automatic per-game profiles · Studio reference on desktop, switches live for every game.'
   const others = state.others.map(o => `${o.name}: ${[o.headphone, o.sound === 'flat' ? null : SOUND_WORDS[o.sound]].filter(Boolean).join(', ')}`).join('; ')
   return (
     <Panel title="Sound">
-      <SwitchRow id="eq-on" label="Exo EQ" detail={state.comparing ? 'Off while you compare' : state.playing?.sound ? `${SOUND_WORDS[state.playing.sound]} for ${state.playing.title}` : undefined}
-        checked={state.on} onChange={on => eq.act('on', 'on', { on })}>
+      <Row label="Exo EQ" labelId="eq-on" detail={detail} error={eq.errorFor('compare')}>
+        <State on={!state.comparing}>{state.comparing ? 'Bypassed' : activeLabel}</State>
         {compare}
-      </SwitchRow>
-      <ChoiceRow<EqSound> id="eq-sound" label="Sound" value={state.sound} choices={SOUNDS} disabled={!state.on}
-        onChange={sound => eq.act('sound', 'sound', { sound })} />
-      {state.sound === 'custom' ? state.custom.map((band, i) => (
-        <SliderRow key={band.hz} label={band.hz >= 1000 ? `${band.hz / 1000} kHz` : `${band.hz} Hz`} min={-12} max={12} step={0.5} value={band.gain}
-          render={value => `${value > 0 ? '+' : ''}${value.toFixed(1)} dB`} disabled={!state.on} error={i === 0 ? eq.errorFor('custom') : null} onCommit={gain => setBand(i, gain)} />
-      )) : null}
+      </Row>
+      <Row label="Game profiles" labelId="eq-auto" detail="Shooters → Footsteps · Story & RPG → Vocal · Action & Racing → Immersion · Rhythm & desktop → Reference.">
+        <State on>Auto</State>
+      </Row>
       {state.preamp < 0 ? (
         <Row label="Headroom" labelId="eq-preamp" detail="Exo lowers the level this much, so the boosts never clip.">
           <State>{`${state.preamp.toFixed(1)} dB`}</State>
         </Row>
       ) : null}
       {others ? <Row label="Other outputs" labelId="eq-others" detail={others}><State>Saved</State></Row> : null}
-    </Panel>
-  )
-}
-
-/** Games with a sound of their own: on as the game starts, the output's own back once it exits. */
-export function GamesPanel({ eq }: { eq: Eq }) {
-  const state = eq.state
-  if (!state) return null
-  const choices = [...SOUNDS.filter(s => s.value !== 'custom' || state.custom.some(b => b.gain !== 0)), { value: '' as const, label: 'Remove' }]
-  return (
-    <Panel title="Games">
-      {state.games.map(game => (
-        <Row key={game.id} label={game.title} labelId={`eq-game-${game.id}`} error={eq.errorFor(`game-${game.id}`)}
-          detail={state.playing?.id === game.id ? 'Playing now' : undefined}>
-          <Choice label={`${game.title}'s sound`} value={game.sound} choices={choices}
-            onChange={sound => void eq.act(`game-${game.id}`, 'game', { game: game.id, sound: sound === '' ? null : sound as EqSound })} />
-        </Row>
-      ))}
-      {state.library.length ? (
-        <Row label={state.games.length ? 'Add a game' : 'A sound for a game'} labelId="eq-game-add" error={eq.errorFor('game-add')}
-          detail={state.games.length ? undefined : 'Footsteps for a shooter, Vocal for a story: on while it runs.'}>
-          <Choice label="Add a game" value="" choices={[{ value: '', label: 'Pick a game' }, ...state.library.map(g => ({ value: g.id, label: g.title }))]}
-            onChange={id => { if (id) void eq.act('game-add', 'game', { game: id, sound: 'footsteps' }) }} />
-        </Row>
-      ) : null}
     </Panel>
   )
 }

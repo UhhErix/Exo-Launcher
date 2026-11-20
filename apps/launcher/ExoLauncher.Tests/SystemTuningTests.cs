@@ -66,6 +66,8 @@ public sealed class SystemTuningTests : IDisposable
         public bool SetUserDirectXSettings(string? value) { DirectXUser = value; return true; }
         public int[]? MouseParams() => [.. Mouse];
         public bool SetMouseParams(int[] values) { Mouse = [.. values]; return true; }
+        public IReadOnlyList<string> HvciGames { get; set; } = [];
+        public IReadOnlyList<string> HvciRequiringGames() => HvciGames;
 
         private readonly List<string> _issued = [];
         private readonly Dictionary<string, string> _answers = [];
@@ -574,28 +576,50 @@ public sealed class SystemTuningTests : IDisposable
     }
 
     [Fact]
-    public async Task Vrr_and_mouse_accel_run_without_admin_and_put_back_exactly()
+    public async Task Vrr_and_mouse_accel_are_omitted_on_fresh_pc_and_legacy_vrr_puts_back_cleanly()
     {
         _system.SupportsUserHardwareToggles = true;
         _system.DirectXUser = "SwapEffectUpgradeEnable=1;";
         _system.Mouse = [6, 10, 1];
 
         var tuning = Make();
-        Assert.Null(await tuning.ApplyAsync([VrrKey, MouseAccelKey]));
-        Assert.Empty(_system.Runs);
-        Assert.Equal("SwapEffectUpgradeEnable=1;VRROptimizeEnable=1;", _system.DirectXUser);
-        Assert.Equal([0, 0, 0], _system.Mouse);
+        var fresh = tuning.Read().Items;
+        Assert.DoesNotContain(fresh, i => i.Key == VrrKey);
+        Assert.DoesNotContain(fresh, i => i.Key == MouseAccelKey);
 
-        var items = Make().Read().Items;
-        var vrr = items.Single(i => i.Key == VrrKey);
-        var mouse = items.Single(i => i.Key == MouseAccelKey);
+        // Legacy record from an earlier Exo version that had applied VRR: still offered for Put back and restores cleanly without admin.
+        File.WriteAllText(SavedPath, """{"Off":[],"Kept":{"vrr":{"Strings":["SwapEffectUpgradeEnable=1;"],"Absent":false}},"Changed":{},"Native":[]}""");
+        _system.DirectXUser = "SwapEffectUpgradeEnable=1;VRROptimizeEnable=1;";
+
+        var legacy = Make().Read().Items;
+        var vrr = Assert.Single(legacy, i => i.Key == VrrKey);
         Assert.True(vrr.On && vrr.CanUndo && !vrr.Restart && !vrr.NeedsRestart);
-        Assert.True(mouse.On && mouse.CanUndo && !mouse.Restart && !mouse.NeedsRestart);
 
-        Assert.Null(await tuning.TurnOffAsync(VrrKey));
+        Assert.Null(await Make().TurnOffAsync(VrrKey));
         Assert.Equal("SwapEffectUpgradeEnable=1;", _system.DirectXUser);
-        Assert.Null(await tuning.TurnOffAsync(MouseAccelKey));
-        Assert.Equal([6, 10, 1], _system.Mouse);
+        Assert.Empty(_system.Runs);
+        Assert.DoesNotContain(Make().Read().Items, i => i.Key == VrrKey);
+    }
+
+    [Fact]
+    public async Task Installed_vanguard_or_faceit_game_blocks_disabling_memory_integrity_even_before_service_runs()
+    {
+        _system.Dwords[(Hvci, "Enabled")] = 1;
+        _system.Running = true;
+        var games = FindHvciRequiringGames([
+            new ExoLauncher.Models.GameEntry { Id = "riot:valorant", Title = "VALORANT", Store = ExoLauncher.Models.StoreKind.Riot, Installed = true },
+            new ExoLauncher.Models.GameEntry { Id = "riot:2xko", Title = "2XKO", Store = ExoLauncher.Models.StoreKind.Riot, Installed = false },
+            new ExoLauncher.Models.GameEntry { Id = "steam:730", Title = "Counter-Strike 2", Store = ExoLauncher.Models.StoreKind.Steam, Installed = true },
+        ]);
+        Assert.Equal(["VALORANT"], games);
+
+        _system.HvciGames = games;
+        var blocked = Make().Read().Items.Single(i => i.Key == IntegrityKey);
+        Assert.NotNull(blocked.Blocked);
+        Assert.Contains("VALORANT", blocked.Blocked, StringComparison.Ordinal);
+
+        var refusal = await Make().ApplyAsync([IntegrityKey]);
+        Assert.NotNull(refusal);
         Assert.Empty(_system.Runs);
     }
 }

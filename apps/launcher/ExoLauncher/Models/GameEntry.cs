@@ -628,11 +628,11 @@ public sealed class DiscordKeybind
     public List<int> Keys { get; set; } = [];
 }
 
-/// <summary>Autopilot's switch and choices (PC › Autopilot). The defaults are what Autopilot does when it is simply turned on.</summary>
+/// <summary>Autopilot's switch and choices (PC › Autopilot). Always active with Exo's best settings while a game runs.</summary>
 public sealed class AutopilotSettings
 {
-    /// <summary>The one switch. Off until the player turns it on.</summary>
-    public bool On { get; set; }
+    /// <summary>Always on by default so Autopilot actively protects every game session.</summary>
+    public bool On { get; set; } = true;
     /// <summary>The game's processes: above (the default), high, or normal (left alone). Never realtime.</summary>
     public string GamePriority { get; set; } = "above";
     /// <summary>Keep Windows Game Mode on although Autopilot covers it (the player's override).</summary>

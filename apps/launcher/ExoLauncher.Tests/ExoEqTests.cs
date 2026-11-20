@@ -271,4 +271,57 @@ public sealed class ExoEqTests
         // Truncated or missing tags return null cleanly.
         Assert.Null(ExoEq.NightLightSchedule([0x43, 0x42, 0x01, 0x00]));
     }
+
+    [Theory]
+    [InlineData("Counter-Strike 2", ExoLauncher.Models.StoreKind.Steam, ExoEqSounds.Footsteps, "Footsteps")]
+    [InlineData("VALORANT", ExoLauncher.Models.StoreKind.Riot, ExoEqSounds.Footsteps, "Footsteps")]
+    [InlineData("Call of Duty: Black Ops 6", ExoLauncher.Models.StoreKind.Steam, ExoEqSounds.Footsteps, "Footsteps")]
+    [InlineData("Baldur's Gate 3", ExoLauncher.Models.StoreKind.Steam, ExoEqSounds.Vocal, "Vocal")]
+    [InlineData("Cyberpunk 2077", ExoLauncher.Models.StoreKind.Gog, ExoEqSounds.Vocal, "Vocal")]
+    [InlineData("Elden Ring", ExoLauncher.Models.StoreKind.Steam, ExoEqSounds.Cinematic, "Immersion")]
+    [InlineData("Forza Horizon 5", ExoLauncher.Models.StoreKind.Xbox, ExoEqSounds.Cinematic, "Immersion")]
+    [InlineData("Rocket League", ExoLauncher.Models.StoreKind.Epic, ExoEqSounds.Cinematic, "Immersion")]
+    [InlineData("osu!", ExoLauncher.Models.StoreKind.Local, ExoEqSounds.Flat, "Reference")]
+    [InlineData("League of Legends", ExoLauncher.Models.StoreKind.Riot, ExoEqSounds.Flat, "Reference")]
+    public void Automatic_profiles_classify_known_titles(string title, ExoLauncher.Models.StoreKind store, string expectedSound, string expectedLabel)
+    {
+        var game = new ExoLauncher.Models.GameEntry { Id = "g:1", Title = title, Store = store, Installed = true };
+        var profile = ExoEqProfiles.Resolve(game);
+        Assert.Equal(expectedSound, profile.Sound);
+        Assert.Equal(expectedLabel, profile.Label);
+    }
+
+    [Fact]
+    public void Automatic_profiles_use_steam_tags_and_wiki_for_unlisted_titles()
+    {
+        var unknown = new ExoLauncher.Models.GameEntry { Id = "steam:999999", Title = "Unlisted Indie Title", Store = ExoLauncher.Models.StoreKind.Steam, Installed = true };
+        Assert.False(ExoEqProfiles.HasKnownSignal(unknown, null, null));
+        Assert.Equal(ExoEqSounds.Flat, ExoEqProfiles.Resolve(unknown).Sound);
+
+        Assert.Equal(ExoEqSounds.Footsteps, ExoEqProfiles.Resolve(unknown, steamTags: [1663, 1775]).Sound);
+        Assert.Equal(ExoEqSounds.Vocal, ExoEqProfiles.Resolve(unknown, steamTags: [1742, 122]).Sound);
+        Assert.Equal(ExoEqSounds.Cinematic, ExoEqProfiles.Resolve(unknown, steamTags: [699, 19]).Sound);
+        Assert.Equal(ExoEqSounds.Flat, ExoEqProfiles.Resolve(unknown, steamTags: [1752, 19]).Sound);
+
+        var tacticalWiki = new GameWiki.Facts(["Multiplayer"], ["tactical shooter"], "false", true, ["dx12"]);
+        var rpgWiki = new GameWiki.Facts(["Singleplayer"], ["rpg"], "false", true, ["dx11"]);
+        var racerWiki = new GameWiki.Facts(["Singleplayer"], ["racing"], "false", true, ["dx12"]);
+        Assert.Equal(ExoEqSounds.Footsteps, ExoEqProfiles.Resolve(unknown, wiki: tacticalWiki).Sound);
+        Assert.Equal(ExoEqSounds.Vocal, ExoEqProfiles.Resolve(unknown, wiki: rpgWiki).Sound);
+        Assert.Equal(ExoEqSounds.Cinematic, ExoEqProfiles.Resolve(unknown, wiki: racerWiki).Sound);
+    }
+
+    [Fact]
+    public void Automatic_game_eq_writes_live_on_apo_output_even_with_empty_store_and_returns_flat_after()
+    {
+        var emptyStore = new EqStore();
+        var activeGame = new EqActiveGame("steam:730", "Counter-Strike 2", ExoEqSounds.Footsteps, "Footsteps", "Cuts explosion rumble");
+        var whilePlaying = ExoEq.TextFor(emptyStore, activeGame, night: false, compare: false, activeOutput: (Phones, "Headphones"), desktopFlat: true);
+        Assert.Contains("Device: " + Phones, whilePlaying, StringComparison.Ordinal);
+        Assert.Contains("Filter:", whilePlaying, StringComparison.Ordinal);
+        Assert.NotEmpty(ExoEqSounds.Filters(ExoEqSounds.Cinematic, []));
+
+        var desktop = ExoEq.TextFor(emptyStore, activeGame: null, night: false, compare: false, activeOutput: (Phones, "Headphones"), desktopFlat: true);
+        Assert.DoesNotContain("Filter:", desktop, StringComparison.Ordinal);
+    }
 }

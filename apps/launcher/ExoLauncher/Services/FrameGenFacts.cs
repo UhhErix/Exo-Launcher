@@ -70,6 +70,10 @@ internal static class FrameGenFacts
     internal static FluidMotionFrames.Game ForLaunch(GameEntry game) =>
         WithinAsync(game, LaunchWait, CancellationToken.None).GetAwaiter().GetResult();
 
+    /// <summary>Cached Steam tags for <paramref name="game"/> without performing any network request.</summary>
+    internal static IReadOnlyList<int> CachedTags(string gameId, string title) =>
+        Kept(gameId)?.Tags ?? StoreService.OffSteamTagsFor(title) ?? [];
+
     private static async Task<T?> Quietly<T>(Func<Task<T?>> work)
     {
         try { return await work().ConfigureAwait(false); }

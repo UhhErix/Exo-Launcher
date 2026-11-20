@@ -32,6 +32,8 @@ public sealed partial class WebHostBridge
             alwaysDemote = settings.AlwaysDemote,
             suspend = settings.Suspend,
             gameMode = new { off = Autopilot.GameMode.Held is not null, keptOn = settings.On ? keptOn : null },
+            mouseAccel = new { off = Autopilot.MouseAccel.IsOff(), managed = Autopilot.MouseAccel.Held is not null },
+            memoryIntegrity = DescribeMemoryIntegrity(SystemTuning.Shared.Read(), SystemTuning.Shared.IntegrityBlocked()),
             cpu = CcdText.Value,
             now = game is null ? null : new { game, did = Autopilot.Engine.Did(game) },
             live = AutopilotLive(),
@@ -39,36 +41,57 @@ public sealed partial class WebHostBridge
         };
     }
 
-    /// <summary>One change: on, gamePriority (above, high, normal), keepGameMode, coreParking, alwaysDemote or suspend (app names). Answers the state, with a sentence when Windows didn't take Game Mode.</summary>
+    internal static object DescribeMemoryIntegrity(SystemTuning.State state, string? blocked)
+    {
+        var item = state.Items.FirstOrDefault(i => i.Key == SystemTuning.IntegrityKey);
+        if (item is null)
+            return new { status = "off", reason = "Off on this PC for best gaming performance.", canUndo = false, needsRestart = false };
+        if (item.On)
+        {
+            if (item.Restart)
+                return new { status = "pending-off", reason = "Off after you restart Windows.", canUndo = item.CanUndo, needsRestart = true };
+            if (blocked is not null)
+                return new { status = "conflict", reason = blocked, canUndo = item.CanUndo, needsRestart = false };
+            return new { status = "off", reason = "Off for +5–10% FPS. None of your installed games require it.", canUndo = item.CanUndo, needsRestart = false };
+        }
+        if (item.Restart)
+            return new { status = "pending-on", reason = "Back on after you restart Windows.", canUndo = false, needsRestart = true };
+        if (item.Blocked is not null)
+        {
+            var isLocked = item.Blocked.Contains("policy", StringComparison.OrdinalIgnoreCase)
+                || item.Blocked.Contains("firmware", StringComparison.OrdinalIgnoreCase);
+            return new { status = isLocked ? "locked" : "required", reason = item.Blocked, canUndo = false, needsRestart = false };
+        }
+        return new
+        {
+            status = "unlocked",
+            reason = "None of your installed games require Memory Integrity. Turning it off can add 5–10% FPS (lowers kernel driver protection; takes a restart).",
+            canUndo = false,
+            needsRestart = true,
+        };
+    }
+
+    /// <summary>Updates per-app demote/suspend lists while keeping Autopilot always active with Exo's best settings.</summary>
     private object AutopilotSet(JsonElement p, bool hasParams)
     {
-        bool? Flag(string name) => hasParams && p.TryGetProperty(name, out var v) && v.ValueKind is JsonValueKind.True or JsonValueKind.False ? v.GetBoolean() : null;
         List<string>? Names(string name) => hasParams && p.TryGetProperty(name, out var v) && v.ValueKind == JsonValueKind.Array
             ? [.. v.EnumerateArray().Where(item => item.ValueKind == JsonValueKind.String).Select(item => AutopilotSafety.Bare(item.GetString())).Where(item => item.Length is > 0 and <= 128)]
             : null;
-        var on = Flag("on");
-        var priority = ReadString(p, hasParams, "gamePriority");
-        var keep = Flag("keepGameMode");
-        var parking = Flag("coreParking");
         var demote = Names("alwaysDemote");
         var suspend = Names("suspend");
         _services.Settings.UpdateProfile(s =>
         {
-            var next = (s.Autopilot ?? new()).Copy();
-            if (on is { } o) next.On = o;
-            if (priority is "above" or "high" or "normal") next.GamePriority = priority;
-            if (keep is { } k) next.KeepGameMode = k;
-            if (parking is { } c) next.CoreParking = c;
+            var next = Autopilot.LiveSettings(s.Autopilot);
             if (demote is not null) next.AlwaysDemote = demote;
             // An app on the safety list is never paused, whatever the page sent.
             if (suspend is not null) next.Suspend = [.. suspend.Where(name => AutopilotSafety.WhyLeftAlone(name) is null)];
             s.Autopilot = next.Copy();
         });
-        if (on == false) Autopilot.Shutdown();
-        var message = on is not null || keep is not null ? Autopilot.HandGameMode() : null;
-        if (on == true) ArmRunStatePoll(RunStateDebounce);
-        AppLog.Info($"Autopilot: {(on is { } now ? now ? "on" : "off" : "a choice changed")}.");
-        return new { ok = message is null, message, state = AutopilotState() };
+        Autopilot.HandGameMode();
+        Autopilot.HandMouseAccel();
+        ArmRunStatePoll(RunStateDebounce);
+        AppLog.Info("Autopilot: app rules updated.");
+        return new { ok = true, message = (string?)null, state = AutopilotState() };
     }
 
     private static object? AutopilotLive()

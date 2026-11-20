@@ -90,6 +90,7 @@ public sealed class DisposableHostGuardTests
         ("ExoLauncher/Services/GpuPreference.cs", "public void Delete(string program)"),
         ("ExoLauncher/Services/SystemTuning.Native.cs", "public bool SetUserDirectXSettings(string? value)"),
         ("ExoLauncher/Services/SystemTuning.Native.cs", "public bool SetMouseParams(int[] values)"),
+        ("ExoLauncher/Services/AutopilotMouseAccel.cs", "public bool Write(int[] values)"),
         ("ExoLauncher/Services/InstalledAppsEntry.cs", "internal static void Refresh(string version)"),
         ("ExoLauncher/Services/WindowsGameMode.cs", "internal GameModeLook LookReport(bool windowsUpdated = false)"),
         ("ExoLauncher/Services/WindowsGameMode.cs", "internal string? Deliver(GameModeEvent ev)"),

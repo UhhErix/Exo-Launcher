@@ -151,5 +151,7 @@ internal sealed partial class SystemTuning
             if (HostMode.IsDisposable || values.Length != 3) return false;
             return SystemParametersInfo(SpiSetMouse, 0, values, SpiFUpdateIniFileAndSendChange);
         }
+
+        public IReadOnlyList<string> HvciRequiringGames() => FindHvciRequiringGames(App.Services.Library.PeekCachedLibrary());
     }
 }

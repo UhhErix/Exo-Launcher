@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Text.Json;
 
 namespace ExoLauncher.Services;
@@ -5,28 +6,46 @@ namespace ExoLauncher.Services;
 /// <summary>
 /// eq: Exo EQ on Devices › your audio (<see cref="ExoEq"/>), for the output the page shows (output: its endpoint id). Its
 /// state, and: install (Equalizer APO from SourceForge, checked, one Windows prompt), devices (APO's Device Selector),
-/// sound-settings (Windows' Sound, for audio enhancements), headphone (id, or null for none), sound, custom (ten graphic
-/// gains), compare (on), on (on), game (game, sound or null), night (on, start, end, sync), lucid-off.
+/// sound-settings (Windows' Sound, for audio enhancements), headphone (id, or null for none), compare (on), night
+/// (on, start, end, sync), lucid-off. Game profiles are automatic per running game.
 /// eq.headphones lists AutoEq's models (fetched the first time, then kept a week).
 /// </summary>
 public sealed partial class WebHostBridge
 {
     // 1 while Equalizer APO's installer runs: two presses never start two installers.
     private static int _apoInstalling;
+    private readonly ConcurrentDictionary<string, byte> _eqGatheredGames = new(StringComparer.OrdinalIgnoreCase);
     private Action<string, GameRunState>? _eqGameStateChanged;
 
-    /// <summary>The library game running now that has a sound of its own in Exo EQ.</summary>
+    /// <summary>The library game running now, mapped automatically to its Exo EQ profile.</summary>
     private void WatchEq()
     {
         ExoEq.RunningGame = () =>
         {
-            var games = ExoEq.Current.Games;
-            if (games.Count == 0) return null;
             var running = MainWindow.RunningLibraryGames();
+            if (running.Count == 0) return null;
             var library = _services.Library.PeekCachedLibrary();
             foreach (var id in running.Keys)
-                if (games.ContainsKey(id) && library.FirstOrDefault(g => string.Equals(g.Id, id, StringComparison.OrdinalIgnoreCase)) is { } game)
-                    return (game.Id, game.Title);
+            {
+                if (library.FirstOrDefault(g => string.Equals(g.Id, id, StringComparison.OrdinalIgnoreCase)) is not { } game) continue;
+                var tags = FrameGenFacts.CachedTags(game.Id, game.Title);
+                var wiki = GameWiki.CachedFacts(game.Id);
+                if (!ExoEqProfiles.HasKnownSignal(game, tags, wiki) && _eqGatheredGames.TryAdd(game.Id, 1))
+                {
+                    _ = Task.Run(async () =>
+                    {
+                        try
+                        {
+                            await FrameGenFacts.GatherAsync(game, _bridgeLifetime.Token).ConfigureAwait(false);
+                            ExoEq.GamesChanged();
+                        }
+                        catch (OperationCanceledException) { }
+                        catch (Exception ex) { AppLog.Debug("Exo EQ: background genre lookup failed: " + ex.GetType().Name); }
+                    });
+                }
+                var profile = ExoEqProfiles.Resolve(game, tags, wiki);
+                return new EqActiveGame(game.Id, game.Title, profile.Sound, profile.Label, profile.Summary);
+            }
             return null;
         };
         _eqGameStateChanged = (_, _) => _ = Task.Run(ExoEq.GamesChanged);
@@ -97,8 +116,7 @@ public sealed partial class WebHostBridge
                 message = ExoEq.Compare(ReadBool(p, hasParams, "on") == true);
                 break;
             case "on":
-                var on = ReadBool(p, hasParams, "on") == true;
-                message = ExoEq.Change(store => store.On = on);
+                message = ExoEq.Change(store => store.On = true);
                 break;
             case "game" when ReadString(p, hasParams, "game") is { Length: > 0 } game:
                 var gameSound = ReadString(p, hasParams, "sound");
@@ -157,14 +175,16 @@ public sealed partial class WebHostBridge
                 outputs = folder is null ? 0 : EqualizerApo.OutputsWithApo(),
                 installerVersion = EqualizerApo.Installer.Version,
             },
-            on = store.On,
+            on = true,
             comparing = ExoEq.Comparing,
             output = guid is null ? null : new { name = output?.Name ?? own?.Name },
             headphone = own?.Headphone is { } h ? new { id = h.Id, name = h.Name, source = h.Source, form = h.Form } : null,
-            sound = own?.Sound ?? ExoEqSounds.Flat,
+            sound = ExoEq.ActiveGame?.Sound ?? ExoEqSounds.Flat,
             custom = ExoEqSounds.Graphic.Select((hz, i) => new { hz, gain = store.Custom.FirstOrDefault(b => Math.Abs(b.Hz - hz) < 0.5)?.Gain ?? 0 }).ToArray(),
             preamp = chain is null ? 0 : ExoEqConfig.Preamp([.. chain.Filters]),
-            playing = ExoEq.Game is { } game ? new { id = game.Id, title = game.Title, sound = store.Games.GetValueOrDefault(game.Id) } : null,
+            playing = ExoEq.ActiveGame is { } activeGame
+                ? new { id = activeGame.Id, title = activeGame.Title, sound = activeGame.Sound, label = activeGame.Label, reason = activeGame.Summary }
+                : null,
             games = store.Games.Select(g => new { id = g.Key, title = library.FirstOrDefault(e => string.Equals(e.Id, g.Key, StringComparison.OrdinalIgnoreCase))?.Title, sound = g.Value })
                 .Where(g => g.title is not null).OrderBy(g => g.title, StringComparer.OrdinalIgnoreCase).ToArray(),
             library = library.Where(g => g.Installed && !store.Games.ContainsKey(g.Id)).OrderBy(g => g.Title, StringComparer.OrdinalIgnoreCase)
