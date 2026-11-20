@@ -118,6 +118,7 @@ public sealed partial class WebHostBridge
         KeepShadersPrepared();
         WatchVersions();
         WatchEq();
+        ExoAiCoordinator.Shared.Start(() => _services.Settings.Current);
         _ = Task.Run(() => EpicQuietSettings.HandToExo(EpicQuietWanted()));
     }
 
@@ -956,6 +957,8 @@ public sealed partial class WebHostBridge
                 "system.tune" => await Task.Run(() => AutoTuneService.Act(ReadString(paramsEl, hasParams, "action"), ReadString(paramsEl, hasParams, "part"), ReadString(paramsEl, hasParams, "mode"))).ConfigureAwait(false),
                 "autopilot.state" => await Task.Run(AutopilotState).ConfigureAwait(false),
                 "autopilot.set" => await Task.Run(() => AutopilotSet(paramsEl, hasParams)).ConfigureAwait(false),
+                "exoAi.state" => await Task.Run(ExoAiState).ConfigureAwait(false),
+                "exoAi.set" => await Task.Run(() => ExoAiSet(paramsEl, hasParams)).ConfigureAwait(false),
                 "system.interrupts" => await SystemInterruptsAsync(paramsEl, hasParams, requestToken).ConfigureAwait(false),
                 "system.tuning" => await SystemTuningAsync(paramsEl, hasParams, requestToken).ConfigureAwait(false),
                 "system.mouseCore" => await SystemMouseCoreAsync(paramsEl, hasParams, requestToken).ConfigureAwait(false),

@@ -1314,6 +1314,47 @@ const mockSongAt = () => (mockSong.from + (mockSong.playing ? performance.now() 
 const mockPlayback = () => ({ provider: 'spotify', status: mockSong.playing ? 'playing' : 'paused', title: 'Song 1', artist: 'Artist 1', artworkDataUrl: mockArtwork, artworkUrl: null,
   positionMs: mockSongAt(), durationMs: MOCK_SONG_MS, positionAgeMs: 0, rate: mockSong.playing ? 1 : 0, canPlay: true, canPause: true, canPrev: true, canNext: true, canSeek: true })
 
+const mockExoAiPref: {
+  autoApplyBestSettings: boolean
+  backgroundDriftCheck: boolean
+  fanPreset: 'auto' | 'quiet' | 'balanced' | 'performance'
+  lastCheckUtc: string | null
+} = {
+  autoApplyBestSettings: true,
+  backgroundDriftCheck: true,
+  fanPreset: 'auto',
+  lastCheckUtc: null,
+}
+
+const mockExoAi = () => ({
+  autoApplyBestSettings: mockExoAiPref.autoApplyBestSettings,
+  backgroundDriftCheck: mockExoAiPref.backgroundDriftCheck,
+  lastCheckUtc: mockExoAiPref.lastCheckUtc,
+  autoApplied: mockExoAiPref.autoApplyBestSettings
+    ? ['Exo power plan active', 'Windows Game Mode managed by Autopilot', 'Pointer acceleration off']
+    : [],
+  needsAttention: [] as string[],
+  gaming: {
+    active: false,
+    gameId: null as string | null,
+    gameTitle: null as string | null,
+    demotedCount: 0,
+    timerResActive: false,
+    altTabbed: false,
+    lookEveryMs: 2000,
+    hogCores: 0.25,
+  },
+  fans: {
+    supported: true,
+    preset: mockExoAiPref.fanPreset,
+    tempC: 48,
+    fanPercent: mockExoAiPref.fanPreset === 'auto' ? 35 : 50,
+    targetPercent: mockExoAiPref.fanPreset === 'auto' ? null : 50,
+    fanCount: 2,
+    note: null as string | null,
+  },
+})
+
 const MOCK_HANDLERS: Record<string, MockHandler> = {
   ...spotifyMock,
   'library.get': mockLibraryGet,
@@ -1958,6 +1999,17 @@ const MOCK_HANDLERS: Record<string, MockHandler> = {
         { id: 'a3', name: 'Standard NVM Express Controller', kind: 'storage controller', mode: 'msi', plan: 'skip', reason: 'Left alone: Windows starts from the drive behind it', changed: false },
       ],
     }
+  },
+  'exoAi.state': () => mockExoAi(),
+  'exoAi.set': (p) => {
+    const patch = (p ?? {}) as { autoApplyBestSettings?: boolean; backgroundDriftCheck?: boolean; fanPreset?: string; runNow?: boolean }
+    if (typeof patch.autoApplyBestSettings === 'boolean') mockExoAiPref.autoApplyBestSettings = patch.autoApplyBestSettings
+    if (typeof patch.backgroundDriftCheck === 'boolean') mockExoAiPref.backgroundDriftCheck = patch.backgroundDriftCheck
+    if (patch.fanPreset === 'auto' || patch.fanPreset === 'quiet' || patch.fanPreset === 'balanced' || patch.fanPreset === 'performance') {
+      mockExoAiPref.fanPreset = patch.fanPreset
+    }
+    if (patch.runNow) mockExoAiPref.lastCheckUtc = new Date().toISOString()
+    return { ok: true, message: null, ...mockExoAi() }
   },
   'autopilot.state': mockAutopilot,
   'autopilot.set': (p) => {

@@ -1,29 +1,26 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
-import { Check } from '../../brand/icons'
-import { host, type AutoTune, type DisplayState, type DriverState, type DrivesState, type Game, type GpuProfile, type HdrState, type Interrupts, type LauncherSettings, type PcAbout, type PcHealth, type Tuning } from '../../lib/host'
+import { Drive } from '../../brand/icons'
+import { host, type AutoTune, type CompressList, type DisplayState, type DriverState, type DrivesState, type Game, type GpuProfile, type HdrState, type Interrupts, type LauncherSettings, type PcAbout, type PcHealth, type Tuning } from '../../lib/host'
 import { useHdrState } from '../../lib/hdr'
 import { report } from '../../lib/report'
-import { cn } from '../../lib/utils'
-import { GameOverlay } from '../../motion'
-import { SwitchRow } from '../settings/parts'
+import { cn, formatSize } from '../../lib/utils'
+import { Group, Row, State, SwitchRow } from '../settings/parts'
 import { ShadersBoard } from '../shaders/ShadersBoard'
+import { ActionButton } from '../ui/ConfirmButton'
 import { Popover } from '../ui/Dialog'
 import { UpscalersTab } from '../upscalers/UpscalersSheet'
-import { AutopilotChip, AutopilotControls, AutopilotReports, useAutopilot } from './Autopilot'
-import { AutoTuneChip, AutoTuneRows, useTuneReads } from './AutoTune'
-import { BestSetup, bestSteps } from './BestSetup'
-import { NetworkGroup } from './NetworkGroup'
-import { SystemGroup } from './SystemGroup'
-import { CompressChip, CompressGames, useCompressList } from './CompressGames'
+import { useAutopilot } from './Autopilot'
+import { useTuneReads } from './AutoTune'
+import { bestSteps } from './BestSetup'
+import { CompressGames, useCompressList } from './CompressGames'
 import { BestScreenRows, DisplayRows, HdrRows } from './DisplayTab'
 import { DriverRow, savedBranch } from './DriverRow'
 import { DriversSection } from './DriversSection'
-import { InterruptRows } from './InterruptRows'
+import { ExoAiChip, ExoAiPanel, useExoAi } from './ExoAiPanel'
 import { AppsChip, AppsSheet, useAppsSummary } from './PcApps'
 import { BoardRows, ThisPc, type PcPartMenu } from './PcOverview'
 import { ProfileRows } from './ProfileTab'
 import { SectionSlot } from './SectionHead'
-import { SetupRows } from './ThisPcTab'
 import type { PcLink } from './pcSections'
 import { gpuOffers } from '../../lib/canUse'
 import '../../styles/pc-room.css'
@@ -107,7 +104,7 @@ function stillToSet(state: PcState, hdr: HdrState | null, settings: LauncherSett
   return steps + setup + screens + irq
 }
 
-type Menu = 'best' | 'tune' | 'compress' | 'autopilot' | PcPartMenu
+type Menu = 'exo-ai' | 'storage' | PcPartMenu
 
 /**
  * The PC room (DESIGN.md › PC): one page, no scrolling on a 1080p screen. This PC leads, its name with its chips at the
@@ -129,8 +126,6 @@ export function PcRoom({ active, jump, games, settings, onSave, onDevices }: {
   const hdr = useHdrState(active)
   const [menu, setMenu] = useState<Menu | null>(null)
   const [appsOpen, setAppsOpen] = useState(false)
-  const [upscalersOpen, setUpscalersOpen] = useState(false)
-  const [upscalers, setUpscalers] = useState<number | null>(null)
   // A new number reads the apps again (after the sheet closes, after junk is cleaned).
   const [appsRead, setAppsRead] = useState(0)
   const apps = useAppsSummary(active, appsRead)
@@ -142,9 +137,11 @@ export function PcRoom({ active, jump, games, settings, onSave, onDevices }: {
   const setProfile = useCallback((next: GpuProfile) => put('profile', next), [put])
   const setDriver = useCallback((next: DriverState) => put('driver', next), [put])
   const setDisplay = useCallback((next: DisplayState) => put('display', next), [put])
+  const setDrives = useCallback((next: DrivesState) => put('drives', next), [put])
   const setTune = useCallback((next: AutoTune) => put('tune', next), [put])
-  useTuneReads(active, state.tune, menu === 'tune', setTune)
-  const autopilot = useAutopilot(active, menu === 'autopilot')
+  useTuneReads(active, state.tune, menu === 'exo-ai', setTune)
+  const autopilot = useAutopilot(active, menu === 'exo-ai')
+  const exoAi = useExoAi(active, menu === 'exo-ai')
   const openApps = () => setAppsOpen(true)
   const readApps = () => setAppsRead(n => n + 1)
   const closeMenu = useCallback(() => setMenu(null), [])
@@ -158,9 +155,18 @@ export function PcRoom({ active, jump, games, settings, onSave, onDevices }: {
     // The control panel's link waits for the card to be known: it opens a different app per maker.
     if (jump.tab === 'control' && !vendor) return
     handled.current = jump
-    // On a GeForce the control panel is Exo's own: the card's menu and the screen's.
-    const opens: Partial<Record<PcLink, Menu>> = { graphics: 'graphics', display: 'display', board: 'board', control: 'graphics', performance: 'best', compress: 'compress', autopilot: 'autopilot' }
-    // AMD's and Intel's control panels are their own apps (the chip opens them): the link opens that app, not NVIDIA's menu.
+    const opens: Partial<Record<PcLink, Menu>> = {
+      graphics: 'graphics',
+      upscalers: 'graphics',
+      control: 'graphics',
+      display: 'display',
+      board: 'board',
+      performance: 'exo-ai',
+      autopilot: 'exo-ai',
+      drives: 'storage',
+      compress: 'storage',
+    }
+    // AMD's and Intel's control panels are their own apps: the link opens that app, not NVIDIA's menu.
     if (jump.tab === 'control' && vendor && vendor !== 'nvidia') {
       host.gpuControlPanel().catch((e: unknown) => report(e, 'PcRoom.controlPanelLink'))
       return
@@ -171,36 +177,19 @@ export function PcRoom({ active, jump, games, settings, onSave, onDevices }: {
       setMenu(wanted)
       return
     }
-    // Apps and Upscalers are sheets; the network and the drives are parts of This PC: their links land on the hero.
     if (jump.tab === 'apps') { setAppsOpen(true); return }
-    if (jump.tab === 'upscalers') { setUpscalersOpen(true); return }
-    if (jump.tab === 'overview' || jump.tab === 'network' || jump.tab === 'drives') { scroller.scrollTop = 0; return }
+    if (jump.tab === 'overview' || jump.tab === 'network') { scroller.scrollTop = 0; return }
     scroller.querySelector(`[data-pc-part="${jump.tab}"]`)?.scrollIntoView({ block: 'start' })
   }, [active, jump, vendor])
 
   const chips = (
     <>
-      <BestChip left={stillToSet(state, hdr, settings, onSave)} onOpen={() => setMenu('best')} />
-      <AutopilotChip state={autopilot.state} onOpen={() => setMenu('autopilot')} />
-      <button type="button" className={cn('exo-pc-chip', upscalers === 0 ? 'is-good' : upscalers ? 'is-bad' : null)} onClick={() => setUpscalersOpen(true)}>
-        {upscalers === 0 ? <Check size={14} /> : null}Upscalers{upscalers ? ` · ${upscalers}` : null}
-      </button>
+      <ExoAiChip state={exoAi.state} left={stillToSet(state, hdr, settings, onSave)} tune={state.tune} onOpen={() => setMenu('exo-ai')} />
       <AppsChip summary={apps} onOpen={openApps} />
-      <CompressChip list={compress.list} onOpen={() => setMenu('compress')} />
+      <StorageChip drives={state.drives} list={compress.list} onOpen={() => setMenu('storage')} />
       {onDevices ? <button type="button" className="exo-pc-chip" onClick={onDevices}>Devices</button> : null}
-      <AutoTuneChip tune={state.tune} onOpen={() => setMenu('tune')} />
-      <MakerPanel vendor={vendor} />
     </>
   )
-
-  // The menus that are one part each, by name: the room places whichever is open.
-  const plainMenus: Partial<Record<Menu, { title: string; body: () => ReactNode }>> = {
-    autopilot: { title: 'Autopilot', body: () => <><AutopilotControls state={autopilot.state} onState={autopilot.setState} /><AutopilotReports state={autopilot.state} /></> },
-    tune: { title: 'Auto tune', body: () => <AutoTuneRows tune={state.tune} profile={state.profile} about={state.about} onTune={setTune} /> },
-    compress: { title: 'Compress games', body: () => <CompressGames list={compress.list} onList={compress.setList} onRead={compress.read} /> },
-    board: { title: 'Motherboard', body: () => <div className="exo-pc-menu-rows"><BoardRows about={state.about} /></div> },
-  }
-  const plain = menu ? plainMenus[menu] : undefined
 
   return (
     <main ref={room} className="exo-pc" aria-label="PC">
@@ -217,27 +206,44 @@ export function PcRoom({ active, jump, games, settings, onSave, onDevices }: {
         <ShadersBoard active={active} games={games} />
       </Section>
 
-      {menu === 'best' ? (
-        <PcMenu title="Best settings" onClose={closeMenu}>
-          <BestSetup profile={state.profile} health={state.health} tuning={state.tuning} drives={state.drives} screen={hdr} settings={settings} onSave={onSave} onRead={read} />
-          <div className="exo-pc-menu-rows">
-            <BestScreenRows display={state.display} onDisplay={setDisplay} />
-            <SetupRows place="needs" active={active} health={state.health} onHealth={setHealth} />
-            <InterruptRows place="needs" state={state.interrupts} onState={setInterrupts} />
-            <SetupRows place="section" active={active} health={state.health} onHealth={setHealth} />
-            <InterruptRows place="section" state={state.interrupts} onState={setInterrupts} />
-          </div>
-          <NetworkGroup health={state.health} onHealth={setHealth} />
-          <SystemGroup tuning={state.tuning} onTuning={setTuning} />
+      {menu === 'exo-ai' ? (
+        <PcMenu title="Exo AI" onClose={closeMenu}>
+          <ExoAiPanel
+            active={active}
+            exoAi={exoAi.state}
+            onExoAi={exoAi.setState}
+            autopilot={autopilot.state}
+            onAutopilot={autopilot.setState}
+            state={state}
+            hdr={hdr}
+            settings={settings}
+            onSave={onSave}
+            onTune={setTune}
+            onBestRead={async () => { await read(); exoAi.refresh() }}
+            onDisplay={setDisplay}
+            onHealth={setHealth}
+            onInterrupts={setInterrupts}
+            onTuning={setTuning}
+          />
         </PcMenu>
       ) : null}
-      {plain ? <PcMenu title={plain.title} onClose={closeMenu}>{plain.body()}</PcMenu> : null}
+      {menu === 'storage' ? (
+        <PcMenu title="Storage" onClose={closeMenu}>
+          <StorageSheet drives={state.drives} onDrives={setDrives} list={compress.list} onList={compress.setList} onRead={compress.read} />
+        </PcMenu>
+      ) : null}
+      {menu === 'board' ? (
+        <PcMenu title="Motherboard" onClose={closeMenu}>
+          <div className="exo-pc-menu-rows"><BoardRows about={state.about} /></div>
+        </PcMenu>
+      ) : null}
       {menu === 'graphics' ? (
         <PcMenu title="Graphics" onClose={closeMenu}>
           <div className="exo-pc-menu-rows">
             <DriverRow active={active} state={state.driver} onState={setDriver} />
             <ProfileRows place="needs" profile={state.profile} onProfile={setProfile} />
             <ProfileRows place="section" profile={state.profile} onProfile={setProfile} />
+            <MakerPanelRow vendor={vendor} />
             {settings?.frameGenEverywhereCard ? (
               <SwitchRow
                 id="set-frame-gen-everywhere"
@@ -248,6 +254,9 @@ export function PcRoom({ active, jump, games, settings, onSave, onDevices }: {
               />
             ) : null}
           </div>
+          <Group id="graphics-upscalers" title="Upscalers">
+            <UpscalersTab active={active && menu === 'graphics'} games={games} />
+          </Group>
         </PcMenu>
       ) : null}
       {menu === 'display' ? (
@@ -261,24 +270,90 @@ export function PcRoom({ active, jump, games, settings, onSave, onDevices }: {
       ) : null}
 
       <AppsSheet open={appsOpen} onClose={() => { setAppsOpen(false); readApps() }} />
-      <GameOverlay open={upscalersOpen} keep label="Upscalers"
-        scrim={<button type="button" className="exo-game-overlay-scrim" aria-label="Close" tabIndex={-1} onClick={() => setUpscalersOpen(false)} />}>
-        <section className="exo-pc-upscalers-sheet" aria-labelledby="pc-upscalers-title">
-          <h2 id="pc-upscalers-title">Upscalers</h2>
-          <UpscalersTab active={active} games={games} onCount={setUpscalers} />
-        </section>
-      </GameOverlay>
     </main>
   )
 }
 
-/** Best settings: green once all is set, else how many things are left, in Bad; nothing until the room has read enough to say. */
-function BestChip({ left, onOpen }: { left: number | null; onOpen: () => void }) {
-  if (left === null) return null
+function StorageChip({ drives, list, onOpen }: { drives: DrivesState | null; list: CompressList | null; onOpen: () => void }) {
+  const needsFix = drives?.fixes.some(fix => !fix.applied) ?? false
+  const hasBadDrive = drives?.drives.some(drive => drive.verdicts.some(v => v.bad)) ?? false
+  const potential = list?.potential ?? 0
+  const saved = list?.saved ?? 0
+
+  let label = 'Storage'
+  let tone: 'is-good' | 'is-bad' | null = null
+  if (hasBadDrive || needsFix) {
+    label = 'Storage · Needs check'
+    tone = 'is-bad'
+  } else if (potential > 0) {
+    label = `Storage · ${formatSize(potential)}`
+  } else if (saved > 0) {
+    label = `Storage · ${formatSize(saved)}`
+    tone = 'is-good'
+  }
+
   return (
-    <button type="button" className={cn('exo-pc-chip', left === 0 ? 'is-good' : 'is-bad')} data-pc-menu="best" aria-haspopup="dialog" onClick={onOpen}>
-      {left === 0 ? <><Check size={14} />Best settings on</> : `${left} ${left === 1 ? 'thing' : 'things'} left to set`}
+    <button type="button" className={cn('exo-pc-chip', tone)} data-pc-menu="storage" aria-haspopup="dialog" onClick={onOpen}>
+      <Drive size={14} />
+      {label}
     </button>
+  )
+}
+
+function StorageSheet({ drives, onDrives, list, onList, onRead }: {
+  drives: DrivesState | null
+  onDrives: (next: DrivesState) => void
+  list: CompressList | null
+  onList: (next: CompressList) => void
+  onRead: () => void
+}) {
+  return (
+    <div className="exo-storage-section">
+      {drives && (drives.drives.length > 0 || drives.fixes.length > 0) ? (
+        <Group id="storage-drives" title="Drives">
+          {drives.drives.map(drive => {
+            const letters = drive.volumes.map(v => `${v.letter}:`).join(', ')
+            const freeGb = Math.round(drive.volumes.reduce((sum, v) => sum + v.freeGb, 0))
+            const bad = drive.verdicts.some(v => v.bad)
+            const detail = [
+              drive.kind,
+              drive.volumes.length > 0 ? `${freeGb} GB free` : null,
+              drive.temperature?.now != null ? `${drive.temperature.now} °C` : null,
+              ...drive.verdicts.filter(v => v.bad).map(v => v.text),
+            ].filter(Boolean).join(' · ')
+            return (
+              <Row key={drive.id} label={[letters, drive.model].filter(Boolean).join(' · ') || drive.kind} detail={detail}>
+                <State on={!bad}>{bad ? 'Check' : 'Healthy'}</State>
+              </Row>
+            )
+          })}
+          {drives.fixes.map(fix => (
+            <Row key={fix.key} label={fix.label} detail={fix.detail}>
+              {fix.applied ? (
+                <State on>{fix.restart ? 'After restart' : 'Optimal'}</State>
+              ) : (
+                <ActionButton
+                  className="exo-set-btn"
+                  timeoutMs={15_000}
+                  why="none"
+                  context={`Storage.fix.${fix.key}`}
+                  onPress={async () => {
+                    const next = await host.systemDrives(fix.key)
+                    onDrives(next)
+                    return next
+                  }}
+                >
+                  Apply
+                </ActionButton>
+              )}
+            </Row>
+          ))}
+        </Group>
+      ) : null}
+      <Group id="storage-compress" title="Compress games">
+        <CompressGames list={list} onList={onList} onRead={onRead} />
+      </Group>
+    </div>
   )
 }
 
@@ -300,8 +375,8 @@ function PcMenu({ title, onClose, children }: { title: string; onClose: () => vo
 
 const PANEL: Record<Exclude<NonNullable<GpuProfile['vendor']>, 'nvidia'>, string> = { amd: 'AMD Software', intel: 'Intel Graphics' }
 
-/** A Radeon's or an Intel card's own control panel, for what Exo doesn't set; what stopped it opening, in its place. None on a GeForce (Exo is its panel). */
-function MakerPanel({ vendor }: { vendor: GpuProfile['vendor'] }) {
+/** A Radeon's or an Intel card's own control panel, surfaced inside Graphics for vendor-specific settings. */
+function MakerPanelRow({ vendor }: { vendor: GpuProfile['vendor'] }) {
   const [error, setError] = useState<string | null>(null)
   if (!vendor || vendor === 'nvidia' || !gpuOffers(vendor).makerPanel) return null
   const name = PANEL[vendor]
@@ -310,7 +385,11 @@ function MakerPanel({ vendor }: { vendor: GpuProfile['vendor'] }) {
     host.gpuControlPanel().then(result => { if (!result.ok) setError(errorText(result.message, `${name} didn't open.`)) },
       (e: unknown) => { report(e, 'PcRoom.controlPanel'); setError(`${name} didn't open.`) })
   }
-  return <button type="button" className={cn('exo-pc-chip', error && 'is-bad')} onClick={open}>{error ?? name}</button>
+  return (
+    <Row label={name} detail="Open your GPU maker's own control panel" error={error}>
+      <button type="button" className="exo-set-btn" onClick={open}>Open</button>
+    </Row>
+  )
 }
 
 /**

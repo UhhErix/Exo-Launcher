@@ -35,6 +35,10 @@ internal interface IAutopilotSystem
     bool PowerWrite(Guid scheme, Guid subgroup, Guid setting, uint value);
     Guid? ActiveScheme();
     bool OnBattery();
+    /// <summary>Acquires 1 ms system timer resolution while a game runs in foreground (winmm timeBeginPeriod).</summary>
+    void BeginHighResTimer() { }
+    /// <summary>Releases 1 ms system timer resolution (winmm timeEndPeriod).</summary>
+    void EndHighResTimer() { }
 }
 
 /// <summary>
@@ -161,7 +165,7 @@ internal static class AutopilotRules
     internal const int MemoryLow = 2, MemoryNormal = 5;
 
     /// <summary>A background app using this many cores on average between two looks is held back while the game is in front.</summary>
-    internal const double HogCores = 0.5;
+    internal const double HogCores = 0.25;
 
     /// <summary>At most this many processes are held back in one session.</summary>
     internal const int MaxDemoted = 48;
@@ -237,10 +241,13 @@ internal sealed record CcdLayout(int Caches, ulong VCacheMask, long VCacheBytes)
 /// given another program's value back; realtime priority; an anti-cheat, sound or call process touched; the app the player
 /// is using demoted; core parking changed on a dual-CCD X3D (AMD's driver parks the second CCD itself) or on battery.
 /// </summary>
+internal sealed record ExoAiAutopilotSnapshot(bool IsGaming, string? GameId, string? GameTitle, int DemotedCount, bool TimerResActive, bool AltTabbed);
+
 internal sealed class AutopilotEngine(IAutopilotSystem system, AutopilotJournal journal, Func<AutopilotSettings> settings,
     Func<PowerProfiles.CpuClass> cpuClass, Func<Action, IDisposable> startTimer, Action<string>? logLine = null, int? self = null)
 {
-    internal const int LookEveryMs = 5000;
+    internal const int LookEveryMs = 2000;
+    internal const int AltTabReleaseTicks = 2;
 
     private readonly Action<string> log = logLine ?? AppLog.Info;
     private readonly Lock _gate = new();
@@ -255,10 +262,19 @@ internal sealed class AutopilotEngine(IAutopilotSystem system, AutopilotJournal 
     private readonly HashSet<string> _demotedNames = new(StringComparer.OrdinalIgnoreCase);
     private readonly HashSet<string> _pausedNames = new(StringComparer.OrdinalIgnoreCase);
     private string? _gameSaid, _parkingSaid;
+    private bool _timerActive;
+    private int _altTabTicks;
+    private bool _altTabbed;
 
     internal string? Game
     {
         get { lock (_gate) return _game?.Id; }
+    }
+
+    internal ExoAiAutopilotSnapshot Snapshot()
+    {
+        lock (_gate)
+            return new(_game is not null, _game?.Id, _game?.Title, _demoted.Count, _timerActive, _altTabbed);
     }
 
     /// <summary>What it did for the game (for the session's report), in the player's words.</summary>
@@ -341,6 +357,28 @@ internal sealed class AutopilotEngine(IAutopilotSystem system, AutopilotJournal 
         }
     }
 
+    private void AcquireTimerLocked()
+    {
+        if (_timerActive) return;
+        system.BeginHighResTimer();
+        _timerActive = true;
+    }
+
+    private void ReleaseTimerLocked()
+    {
+        if (!_timerActive) return;
+        system.EndHighResTimer();
+        _timerActive = false;
+    }
+
+    private void RestoreProcessEntriesLocked(bool includePowerAndSuspended)
+    {
+        var entries = journal.Entries
+            .Where(entry => !entry.Held && (includePowerAndSuspended || (entry.Kind != "Power" && entry.Kind != nameof(Knob.Suspended))))
+            .ToList();
+        foreach (var entry in entries) PutBack(entry);
+    }
+
     private void StartLocked(AutopilotGame game)
     {
         _game = game;
@@ -351,6 +389,8 @@ internal sealed class AutopilotEngine(IAutopilotSystem system, AutopilotJournal 
         (_gameSaid, _parkingSaid) = (null, null);
         _cpu = [];
         _cpuAt = 0;
+        _altTabTicks = 0;
+        _altTabbed = false;
         _session = system.Processes().FirstOrDefault(row => row.Pid == _self).Session;
         log($"Autopilot: {game.Title} started.");
         Parking();
@@ -363,13 +403,16 @@ internal sealed class AutopilotEngine(IAutopilotSystem system, AutopilotJournal 
     {
         _timer?.Dispose();
         _timer = null;
-        var entries = journal.Entries.Where(entry => !entry.Held).ToList();
-        foreach (var entry in entries) PutBack(entry);
+        ReleaseTimerLocked();
+        _altTabTicks = 0;
+        _altTabbed = false;
+        var count = journal.Entries.Count(entry => !entry.Held);
+        RestoreProcessEntriesLocked(includePowerAndSuspended: true);
         if (_game is not null)
         {
             _did.Clear();
             _did.AddRange(Summary());
-            log($"Autopilot: {_game.Title} ended; {entries.Count} changes put back.");
+            log($"Autopilot: {_game.Title} ended; {count} changes put back.");
         }
         _game = null;
     }
@@ -386,8 +429,32 @@ internal sealed class AutopilotEngine(IAutopilotSystem system, AutopilotJournal 
         var before = _cpu;
         (_cpu, _cpuAt) = (cpu, now);
 
-        // The game: its own processes, as they start.
         var tree = game.Tree as IReadOnlySet<int> ?? game.Tree.ToHashSet();
+        var front = system.Front();
+        var inFront = tree.Contains(front);
+
+        if (!inFront)
+        {
+            // Keep brief switches uninterrupted, then restore priorities and 1 ms timer if the player stays alt-tabbed.
+            if (++_altTabTicks >= AltTabReleaseTicks && !_altTabbed)
+            {
+                _altTabbed = true;
+                ReleaseTimerLocked();
+                RestoreProcessEntriesLocked(includePowerAndSuspended: false);
+                _demoted.Clear();
+            }
+            return;
+        }
+
+        _altTabTicks = 0;
+        if (_altTabbed)
+        {
+            _altTabbed = false;
+            _demoted.Clear();
+        }
+        AcquireTimerLocked();
+
+        // The game: its own processes, as they start or when focus returns from alt-tab.
         if (AutopilotRules.GamePriority(options.GamePriority, game.MayTouchGame) is { } wanted)
         {
             var set = 0;
@@ -399,8 +466,6 @@ internal sealed class AutopilotEngine(IAutopilotSystem system, AutopilotJournal 
         else _gameSaid ??= game.MayTouchGame ? null : $"Left {game.Title} itself alone: it runs with anti-cheat, so Exo doesn't open it";
 
         // Background apps: named, learned or hogging, while the game is in front.
-        var front = system.Front();
-        if (!tree.Contains(front)) return;
         var named = new HashSet<string>(options.AlwaysDemote.Concat(game.Learned).Select(AutopilotSafety.Bare), StringComparer.OrdinalIgnoreCase);
         foreach (var row in rows)
         {

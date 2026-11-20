@@ -1036,6 +1036,7 @@ public sealed class SettingsService
         FpsCounterItems = FpsItems.Clean(source.FpsCounterItems),
         FpsCounterHideOverBuiltIn = source.FpsCounterHideOverBuiltIn,
         Autopilot = (source.Autopilot ?? new()).Copy(),
+        ExoAi = (source.ExoAi ?? new()).Copy(),
         HdrForGames = source.HdrForGames,
         HdrSdrGamma = source.HdrSdrGamma,
         DiscordNoiseSuppression = source.DiscordNoiseSuppression,

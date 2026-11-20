@@ -186,6 +186,8 @@
     "exoAccount.signOut": "ExoAccountOutcome",
     "exoAccount.state": "{ signedIn: boolean; email?: string | null; accountId?: string | null; accountAsked: boolean }",
     "exoAccount.sync": "{ signedIn: boolean /** A recovery code was issued and not yet typed back: the account sheet stays up until it is. */ codePending: boolean /** Signed out because the service ended this PC's session (another PC removed it, a password changed elsewhere). */ sessionEnded: boolean email?: string | null accountId?: string | null accountAsked: boolean sync: { lastSyncAt: string | null; pending: number; held: { key: string; reason: string }[]; signedOut: boolean; pushStopped: boolean } }",
+    "exoAi.set": "ExoAiState & { ok: boolean; message?: string | null }",
+    "exoAi.state": "ExoAiState",
     "fps.counter": "{ on: boolean; state: 'off' | 'on' | 'signout'; message: string | null }",
     "friends.badge": "{ count: number }",
     "game.autoUpdate": "{ ok: boolean; on?: boolean; message?: string }",

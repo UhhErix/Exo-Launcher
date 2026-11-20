@@ -1,8 +1,6 @@
 import { useEffect, useState } from 'react'
-import { Check } from '../../brand/icons'
 import { host, type AutoTune, type AutoTuneMode, type GpuProfile, type PcAbout, type TuneMeasure, type TunePart } from '../../lib/host'
 import { report } from '../../lib/report'
-import { cn } from '../../lib/utils'
 import { Choice } from '../settings/Choice'
 import { Row, State } from '../settings/parts'
 import { ActionButton, ConfirmButton } from '../ui/ConfirmButton'
@@ -34,18 +32,6 @@ export function useTuneReads(active: boolean, tune: AutoTune | null, open: boole
     const timer = window.setInterval(() => { host.systemTune().then(onTune, (e: unknown) => report(e, 'AutoTune.read', { level: 'warn' })) }, 3000)
     return () => window.clearInterval(timer)
   }, [active, testing, open, onTune])
-}
-
-/** PC's chip for Auto tune: nothing on a PC with nothing to tune. Green once a part is tuned; off until pressed, so it never counts as something left to set. */
-export function AutoTuneChip({ tune, onOpen }: { tune: AutoTune | null; onOpen: () => void }) {
-  if (!tune?.parts.length) return null
-  const tuned = tune.parts.some(part => part.state === 'tuned')
-  const testing = tune.parts.some(part => part.state === 'testing')
-  return (
-    <button type="button" className={cn('exo-pc-chip', tuned && 'is-good')} data-pc-menu="tune" aria-haspopup="dialog" onClick={onOpen}>
-      {tuned ? <Check size={14} /> : null}{testing ? 'Testing' : tuned ? 'Tuned' : 'Auto tune'}
-    </button>
-  )
 }
 
 /** Auto tune's menu: one row per part Exo can tune on this PC. Names come from what the room already read. */

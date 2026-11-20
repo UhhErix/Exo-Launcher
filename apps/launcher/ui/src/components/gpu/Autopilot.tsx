@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Check, Close } from '../../brand/icons'
+import { Close } from '../../brand/icons'
 import { host, onHostEvent, type AutopilotChange, type AutopilotLive, type AutopilotReport, type AutopilotState } from '../../lib/host'
 import { report } from '../../lib/report'
 import { cn } from '../../lib/utils'
@@ -31,16 +31,6 @@ export function useAutopilot(active: boolean, open: boolean) {
   }), [])
   const put = useCallback((next: AutopilotState) => { last = next; setState(next) }, [])
   return { state, setState: put }
-}
-
-/** PC's chip for Autopilot: always active in green, or amber notice only when Memory Integrity conflicts with installed anti-cheat. */
-export function AutopilotChip({ state, onOpen }: { state: AutopilotState | null; onOpen: () => void }) {
-  const conflict = state?.memoryIntegrity?.status === 'conflict'
-  return (
-    <button type="button" className={cn('exo-pc-chip', conflict ? 'is-bad' : 'is-good')} data-pc-menu="autopilot" aria-haspopup="dialog" onClick={onOpen}>
-      {conflict ? 'Autopilot · Notice' : <><Check size={14} />Autopilot</>}
-    </button>
-  )
 }
 
 /** Updates Autopilot's per-app rules; the state the host answers with replaces the menu's. */

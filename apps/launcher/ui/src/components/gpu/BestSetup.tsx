@@ -158,24 +158,35 @@ export function BestSetup({ profile, health, tuning, drives, screen, settings, o
     return words ? { ok: false, message: words } : { ok: true }
   }
 
+  const [showDone, setShowDone] = useState(false)
   if (!profile || !health || steps.length === 0) return null
+  const pendingSteps = steps.filter(step => !step.done)
+  const doneSteps = steps.filter(step => step.done)
+  const visibleSteps = showDone ? steps : pendingSteps
   return (
     <section className="exo-pc-best" aria-label="Steps">
-      {steps.some(step => !step.done) ? (
+      {pendingSteps.length > 0 ? (
         <SectionActions>
           <ActionButton className="exo-set-btn is-primary" timeoutMs={null} why="none" context="BestSetup.run" onPress={run}>Use best settings</ActionButton>
         </SectionActions>
       ) : null}
-      <ul className="exo-pc-best-steps">
-        {steps.map(step => (
-          <li key={step.key}>
-            <span>{step.what}</span>
-            {running === step.key ? <Spinner label={`Setting ${step.what}`} />
-              : step.done ? <BestCheck landed={landed.has(step.key)} />
-                : <span className="exo-best-miss" role="img" aria-label="Not set"><Failed size={14} /></span>}
-          </li>
-        ))}
-      </ul>
+      {visibleSteps.length > 0 ? (
+        <ul className="exo-pc-best-steps">
+          {visibleSteps.map(step => (
+            <li key={step.key}>
+              <span>{step.what}</span>
+              {running === step.key ? <Spinner label={`Setting ${step.what}`} />
+                : step.done ? <BestCheck landed={landed.has(step.key)} />
+                  : <span className="exo-best-miss" role="img" aria-label="Not set"><Failed size={14} /></span>}
+            </li>
+          ))}
+        </ul>
+      ) : null}
+      {doneSteps.length > 0 ? (
+        <button type="button" className="exo-pc-best-done-toggle" onClick={() => setShowDone(v => !v)}>
+          {doneSteps.length} already optimal · {showDone ? 'Hide' : 'Show'}
+        </button>
+      ) : null}
       {error ? <ErrorNote message={error} /> : null}
     </section>
   )
