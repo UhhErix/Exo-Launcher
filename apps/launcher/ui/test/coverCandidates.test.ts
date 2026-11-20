@@ -17,6 +17,7 @@ import {
 describe('coverUrlPolicy', () => {
   it('filters unsafe and rejected URLs and excludes fresh wide misses', () => {
     const missUrl = 'https://cdn.cloudflare.steamstatic.com/steam/apps/570/library_hero.jpg'
+    const rejectedHeroUrl = 'https://evil.example.com/banner.jpg'
     recordWideMiss(missUrl)
     const afterMiss = buildWideArtCandidates(
       {
@@ -27,13 +28,13 @@ describe('coverUrlPolicy', () => {
         variants: undefined,
         artRevision: 2,
         includes: undefined,
-        heroUrl: 'https://evil.example.com/banner.jpg',
+        heroUrl: rejectedHeroUrl,
       },
       '570',
       null,
     )
     assert.equal(afterMiss.some((c) => c.url === missUrl), false)
-    assert.equal(afterMiss.some((c) => c.url.includes('evil.example.com')), false)
+    assert.equal(afterMiss.some((c) => c.url === rejectedHeroUrl), false)
     assert.equal(afterMiss.at(-1)?.derived, true)
     assert.equal(afterMiss.at(-1)?.url, 'https://covers.exo-launcher.local/570.jpg?rev=2')
 
