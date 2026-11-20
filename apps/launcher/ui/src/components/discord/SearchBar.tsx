@@ -8,6 +8,7 @@ import type { MarkdownContext } from './markdown'
 import { Result, useOutside } from './results'
 import { ErrorNote } from '../ui/ErrorNote'
 import { errorText } from '../../lib/errorWords'
+import { observePopupsIn } from '../../lib/menuFit'
 
 /** Discord's search filters, as typed in its search bar (during: is also on:). */
 type FilterKey = 'from' | 'mentions' | 'has' | 'before' | 'during' | 'after' | 'in' | 'pinned' | 'authorType'
@@ -196,7 +197,9 @@ export function SearchBox({ channel, guildId, place, ctx, onSearch, onClear }: {
     onSearch(filtersOf(all, rest))
   }
 
+  const searchMenuRef = useRef<HTMLDivElement>(null)
   const open = focused && suggestions.items.length > 0
+  useEffect(() => (open && searchMenuRef.current ? observePopupsIn(searchMenuRef.current) : undefined), [open])
   const keyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
     const picked = open ? suggestions.items[at] : undefined
     if (open && (event.key === 'ArrowDown' || event.key === 'ArrowUp')) {
@@ -230,7 +233,7 @@ export function SearchBox({ channel, guildId, place, ctx, onSearch, onClear }: {
         ) : <Icons.Search size={16} />}
       </label>
       {open ? (
-        <div className="exo-dc-menu exo-dc-search-menu" role="listbox" aria-label={suggestions.title} onMouseDown={event => event.preventDefault()}>
+        <div ref={searchMenuRef} className="exo-dc-menu exo-dc-search-menu" role="listbox" aria-label={suggestions.title} onMouseDown={event => event.preventDefault()}>
           <p className="exo-dc-menu-head">{suggestions.title}</p>
           {suggestions.items.map((item, i) => (
             <button key={item.text + i} type="button" role="option" aria-selected={i === at} className={i === at ? 'is-active' : undefined}

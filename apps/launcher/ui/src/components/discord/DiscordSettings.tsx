@@ -1,3 +1,4 @@
+import './styles'
 import { useEffect, useLayoutEffect, useRef } from 'react'
 import { useDiscordHome, type DiscordHome } from '../../lib/discord'
 import { loadAccountSettings } from '../../lib/discordPrefs'

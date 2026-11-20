@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type RefObject } from 'react'
+import { observePopupsIn } from './menuFit'
 // Its press hand-off (a press mid-transition goes on to what is under the pointer) is registered first, so the
 // press read here is the handed-on one, aimed at a real element rather than the page root.
 import './viewTransition'
@@ -160,7 +161,9 @@ export function useDismiss(ref: RefObject<Element | null>, onClose: (() => void)
     const layer: Layer = { ref, close, modal, seq: at, opener: recent?.closest(TRIGGER) ?? null }
     layers.push(layer)
     changed()
+    const stopMenuFit = !modal && ref.current ? observePopupsIn(ref.current) : null
     return () => {
+      stopMenuFit?.()
       layers.splice(layers.indexOf(layer), 1)
       changed()
     }

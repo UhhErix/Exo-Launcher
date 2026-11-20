@@ -2,6 +2,7 @@
 // what it drew from the record's first state, so this file is drawn as plain React.
 'use no memo'
 
+import '../../styles/captures-room.css'
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useReducer, useRef, useState, type ClipboardEvent as ReactClipboardEvent, type DragEvent as ReactDragEvent, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent, type RefObject } from 'react'
 import { ArrowDown, ArrowUp, Bold, BulletList, Checklist, Close, CodeIcon, FileText, FolderOpen, Gallery, Heading, ImageUpload, Italic, LinkIcon, More, Pencil, Pin, Plus, ReplaceIcon, SaveFile, Search, Strike, Trash, Unassign } from '../../brand/icons'
 import { closeCaptures } from '../../lib/capture'

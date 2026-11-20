@@ -119,16 +119,13 @@
   /* A horizontal drag is the notice's own (the swipe away); a vertical one still scrolls. */
   touch-action: pan-y;
   animation: exo-notice-in var(--dur-move) var(--ease-out) backwards;
-  transition: grid-template-rows var(--dur-move) var(--ease-out), margin-top var(--dur-move) var(--ease-out),
-    opacity var(--dur-base) var(--ease-out), translate var(--dur-move) var(--ease-out);
+  transition: opacity var(--dur-base) var(--ease-out), translate var(--dur-move) var(--ease-out);
 }
 
 /* Under the finger it follows at once; let go and it settles or goes. */
 .exo-notice-slot[data-drag] { transition: none; user-select: none; }
 
 .exo-notice-slot.is-leaving {
-  grid-template-rows: 0fr;
-  margin-top: 0;
   opacity: 0;
   pointer-events: none;
 }
@@ -192,6 +189,28 @@ button.exo-notice-main:focus-visible {
 
 .exo-notice.is-good .exo-notice-glyph { color: var(--color-good); }
 .exo-notice.is-bad .exo-notice-glyph { color: var(--color-bad); }
+
+/* Fallback styling for Discord notification avatars before discord-room.css loads lazily. */
+.exo-notice-main > .exo-dc-avatar-wrap {
+  position: relative;
+  display: grid;
+  flex: none;
+  place-items: center;
+  border-radius: 999px;
+  background: var(--exo-selected);
+}
+
+.exo-notice-main > .exo-dc-avatar-wrap img {
+  width: 100%;
+  height: 100%;
+  border-radius: 999px;
+  object-fit: cover;
+}
+
+.exo-notice-main .exo-dc-initials {
+  font-size: var(--exo-type-body);
+  font-weight: var(--exo-weight-title);
+}
 
 .exo-notice-text {
   display: grid;
@@ -367,4 +386,60 @@ html[data-exo-motion="reduce"] .exo-notice-slot { transition: none; }
 
 .exo-report-send.is-sent:disabled {
   opacity: 1;
+}
+
+/* Shared hub sheet shell (CapturesSheet, NotesView, PcRoom). */
+.exo-game-overlay-stage:has(> .exo-hub) {
+  width: min(1320px, 100%);
+  height: min(1040px, 100%);
+  max-height: min(1040px, 100%);
+}
+
+.exo-hub {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+  border: 1px solid var(--exo-line);
+  border-radius: var(--exo-card-radius);
+  background: transparent;
+  color: var(--color-fg);
+  overflow: hidden;
+}
+
+.exo-hub-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 18px 20px 10px;
+}
+
+.exo-hub-title {
+  margin: 0;
+  font-size: calc(20px * var(--exo-scale, 1));
+  font-weight: 650;
+}
+
+.exo-hub-sub {
+  margin: 4px 0 0;
+  color: var(--color-muted);
+  font-size: calc(12px * var(--exo-scale, 1));
+}
+
+.exo-hub-head-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.exo-hub .exo-game-close {
+  position: static;
+  inset: auto;
+}
+
+.exo-hub:focus {
+  outline: none;
 }

@@ -147,7 +147,6 @@ img[data-exo-broken] {
     color var(--dur-quick) var(--ease-out),
     border-color var(--dur-quick) var(--ease-out),
     background-color var(--dur-quick) var(--ease-out),
-    box-shadow var(--dur-quick) var(--ease-out),
     opacity var(--dur-quick) var(--ease-out),
     scale var(--dur-quick) var(--ease-out);
 }
@@ -272,8 +271,12 @@ img[data-exo-broken] {
   transition-delay: var(--dur-wait);
 }
 
+.exo-action:not(.is-pending) .exo-action-face.is-pending .exo-spinner {
+  animation: none;
+}
+
 .exo-action.is-pending .exo-action-face.is-pending .exo-spinner {
-  animation: exo-spin 0.8s linear infinite;
+  animation: exo-wait-in 0s backwards, exo-spin 0.8s linear infinite;
 }
 
 .exo-action-words::before {
@@ -425,6 +428,28 @@ html[data-exo-motion="reduce"] .exo-action-face {
   opacity: 0;
   pointer-events: none;
   contain: strict;
+}
+
+/* Pause infinite CSS animations and timed room loops while a room sits backstage. */
+.exo-room.is-backstage .exo-store-hero-time,
+.exo-room.is-backstage .exo-progress-fill,
+.exo-room.is-backstage .exo-progress-fill::after,
+.exo-room.is-backstage .exo-spin,
+.exo-room.is-backstage .exo-working-dots span,
+.exo-room.is-backstage .exo-dc-typing-dots i,
+.exo-room.is-backstage .exo-dc-dn.is-loop :is(.exo-dc-dn-text, .exo-dc-dn-letter),
+.exo-room.is-backstage .exo-dc-dn.is-loop .exo-dc-dn-text::before,
+.exo-room.is-backstage .exo-driver-screen,
+.exo-room.is-backstage .exo-driver-screen-glass {
+  animation-play-state: paused !important;
+}
+
+.exo-room.is-backstage .exo-spinner {
+  animation-play-state: running, paused !important;
+}
+
+.exo-room.is-backstage .exo-shine::after {
+  animation-play-state: paused, running !important;
 }
 
 /* A room comes up from black over 120ms the first time it shows, under a cover that fades away (the room itself

@@ -1,3 +1,4 @@
+import '../styles/devices-room.css'
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react'
 import { ChevronLeft, Refresh } from '../brand/icons'
 import { host, onHostEvent, type Peripheral } from '../lib/host'

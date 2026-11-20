@@ -1186,20 +1186,20 @@
 }
 
 .exo-dc .exo-dc-dock {
-  --dock-cap: var(--dc-dock-h);
   display: flex;
   flex: none;
   flex-direction: column;
   min-width: 0;
   overflow: hidden;
+  transform-origin: 50% 100%;
 }
 
 .exo-dc .exo-dc-dock:empty {
   display: none;
 }
 
-/* The rows grow up from the foot's fixed bottom edge as a call starts, and shrink back into it as it ends: the same motion
-   token as the lists' room (discord-home.css), so the panel and what it leaves clear move together. Nothing under Reduce motion. */
+/* The rows slide up from the foot's fixed bottom edge as a call starts, and back down as it ends using
+   composite-only transform and opacity. Nothing under Reduce motion. */
 .exo-dc .exo-dc-dock:not(:empty, .is-closing) {
   animation: exo-dc-dock-in var(--dur-move) var(--ease-out) backwards;
 }
@@ -1210,13 +1210,13 @@
 }
 
 @keyframes exo-dc-dock-in {
-  from { max-height: 0; opacity: 0; }
-  to { max-height: var(--dock-cap); opacity: 1; }
+  from { opacity: 0; transform: translate3d(0, 10px, 0) scaleY(0.96); }
+  to { opacity: 1; transform: translate3d(0, 0, 0) scaleY(1); }
 }
 
 @keyframes exo-dc-dock-out {
-  from { max-height: var(--dock-cap); opacity: 1; }
-  to { max-height: 0; opacity: 0; }
+  from { opacity: 1; transform: translate3d(0, 0, 0) scaleY(1); }
+  to { opacity: 0; transform: translate3d(0, 10px, 0) scaleY(0.96); }
 }
 
 html[data-exo-motion="reduce"] .exo-dc .exo-dc-dock {
@@ -1302,6 +1302,6 @@ html[data-exo-motion="reduce"] .exo-shaders-slot.is-after::after {
 }
 
 /* Keyboard focus where its control's list or capsule would cut the ring (lib/focusKeeper.ts): the ring sits inside. */
-:root:root [data-exo-ring="inside"]:focus-visible {
+html:root [data-exo-ring="inside"]:focus-visible {
   outline-offset: -2px;
 }

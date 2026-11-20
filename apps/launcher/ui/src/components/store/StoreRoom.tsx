@@ -1,3 +1,4 @@
+import '../../styles/store-room.css'
 import { Wait, sample, times } from '../ui/Wait'
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import { Bookmark, CHECK_PATH, ChevronLeft, ChevronRight, Close, Refresh, Search } from '../../brand/icons'

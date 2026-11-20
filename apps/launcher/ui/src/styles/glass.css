@@ -130,100 +130,24 @@ button.exo-glass:hover {
    is here, and a control that is not listed is clear, with no blur. :where(), so a control that is glass of its own
    (a lens, a light tone) keeps its own. */
 :where(
-  .exo-capture-rec,
-  .exo-captures-way,
-  .exo-capture-duration,
-  .exo-capture-corner-btn,
-  .exo-capture-check,
-  .exo-snip-text,
-  .exo-dc-inline-input,
-  .exo-dc-tri,
-  .exo-dc-command-field,
-  .exo-dc-cv-button:not(.is-primary),
-  .exo-dc-cv-select-field,
-  .exo-dc .exo-dc-golive-seg,
-  .exo-dc-segments,
-  .exo-dc-unread-mark,
-  .exo-dc-foryou-mark,
-  .exo-dc-alt-tag,
-  .exo-dc-alt,
-  .exo-dc-settings-keybind-keys,
-  .exo-dc-time-chip,
-  .exo-dc-hidden-label,
-  .exo-dc-call button,
-  .exo-dc-msg-actions,
-  .exo-dc-quick-row > button,
-  .exo-dc-round-btn,
-  .exo-dc-lightbox-tools,
-  .exo-dc-lightbox .exo-dc-lightbox-step,
-  .exo-dc-lightbox-count,
-  .exo-dc-tag-chip,
-  .exo-dc-forum-title,
-  .exo-dc-gif-badge,
-  .exo-dc-pf-more,
-  .exo-dc-pf-badges,
-  .exo-dc-pf-roles li,
-  .exo-dc-pf-role-add-btn,
-  .exo-dc-pf-activity,
-  .exo-dc-pf-note,
-  .exo-dc-pf-connection,
-  .exo-dc .exo-dc-input-row,
-  .exo-dc .exo-dc-compose-bar,
-  .exo-dc .exo-dc-files,
-  .exo-dc .exo-dc-reaction,
-  .exo-dc .exo-dc-tag,
-  .exo-dc .exo-dc-modal-input,
-  .exo-dc .exo-dc-tab.is-raised,
-  .exo-dc-new-bar,
-  .exo-dc-voice-tile-name,
-  .exo-dc-voice-btn,
-  .exo-dc-watch,
-  .exo-dc-stream-name,
-  .exo-dc-poll-answer,
-  .exo-dc-audio,
-  .exo-dc-sound,
-  .exo-dc-stream-sound,
-  .exo-dc-guild-tag,
-  .exo-dc-tag-card-icon,
-  .exo-dc-band-step,
-  .exo-setup-row,
-  .exo-setup-badge,
-  .exo-game-status,
-  .exo-badge,
-  .exo-tile-plate,
-  .exo-music-sort,
-  .exo-music-back,
-  .exo-music-recent-open,
-  .exo-music-top-open,
-  .exo-music-name input,
-  .exo-music-jam-join input,
-  .exo-music-mood,
-  .exo-music-sheet-field :is(input, textarea),
-  .exo-ob-discord,
-  .exo-pc-chip,
-  .exo-store-hero-tag,
-  .exo-store-badge,
-  .exo-sgp-pill,
-  .exo-sgp-offer,
-  .exo-game-sources,
-  .exo-upscalers-family,
-  .exo-store-search,
-  .exo-music-search,
-  .exo-library-search,
-  .exo-library-chip,
-  .exo-scrubber,
-  .exo-field,
-  .exo-shelf-sort-menu .exo-menu-find,
-  .exo-dc :is(.exo-dc-tab.is-raised, .exo-dc-reaction),
-  .exo-dc-find,
-  .exo-dc-search,
-  .exo-dc-friend-search,
-  .exo-dc :is(.exo-dc-find, .exo-dc-search, .exo-dc-friend-search, .exo-dc-picker-search, .exo-dc-modal-input, .exo-dc-input-row:not(.is-attached)),
-  .exo-set-btn:not(.is-primary),
-  .exo-game-tool,
-  .exo-shelf-sort-trigger,
-  .exo-library-more,
-  .exo-game-close
+  .exo-capture-rec, .exo-captures-way, .exo-capture-duration, .exo-capture-corner-btn, .exo-capture-check, .exo-snip-text,
+  .exo-dc-inline-input, .exo-dc-tri, .exo-dc-command-field, .exo-dc-cv-button:not(.is-primary), .exo-dc-cv-select-field,
+  .exo-dc-golive-seg, .exo-dc-segments, .exo-dc-unread-mark, .exo-dc-foryou-mark, .exo-dc-alt-tag, .exo-dc-alt,
+  .exo-dc-settings-keybind-keys, .exo-dc-time-chip, .exo-dc-hidden-label, .exo-dc-call button, .exo-dc-msg-actions,
+  .exo-dc-quick-row > button, .exo-dc-round-btn, .exo-dc-lightbox-tools, .exo-dc-lightbox .exo-dc-lightbox-step,
+  .exo-dc-lightbox-count, .exo-dc-tag-chip, .exo-dc-forum-title, .exo-dc-gif-badge, .exo-dc-pf-more, .exo-dc-pf-badges,
+  .exo-dc-pf-roles li, .exo-dc-pf-role-add-btn, .exo-dc-pf-activity, .exo-dc-pf-note, .exo-dc-pf-connection,
+  .exo-dc-input-row, .exo-dc-compose-bar, .exo-dc-files, .exo-dc-reaction, .exo-dc-tag, .exo-dc-modal-input,
+  .exo-dc-tab.is-raised, .exo-dc-new-bar, .exo-dc-voice-tile-name, .exo-dc-voice-btn, .exo-dc-watch, .exo-dc-stream-name,
+  .exo-dc-poll-answer, .exo-dc-audio, .exo-dc-sound, .exo-dc-stream-sound, .exo-dc-guild-tag, .exo-dc-tag-card-icon,
+  .exo-dc-band-step, .exo-dc-find, .exo-dc-search, .exo-dc-friend-search, .exo-dc-picker-search,
+  .exo-setup-row, .exo-setup-badge, .exo-game-status, .exo-badge, .exo-tile-plate,
+  .exo-music-sort, .exo-music-back, .exo-music-recent-open, .exo-music-top-open, .exo-music-name input,
+  .exo-music-jam-join input, .exo-music-mood, .exo-music-sheet-field :is(input, textarea),
+  .exo-ob-discord, .exo-pc-chip, .exo-store-hero-tag, .exo-store-badge, .exo-sgp-pill, .exo-sgp-offer,
+  .exo-game-sources, .exo-upscalers-family, .exo-store-search, .exo-music-search, .exo-library-search,
+  .exo-library-chip, .exo-scrubber, .exo-field, .exo-shelf-sort-menu .exo-menu-find,
+  .exo-set-btn:not(.is-primary), .exo-game-tool, .exo-shelf-sort-trigger, .exo-library-more, .exo-game-close
 ) {
   backdrop-filter: var(--exo-control-glass);
 }
@@ -242,13 +166,13 @@ button.exo-glass:hover {
 /* Badges over cover art (Update, In library, a cover's name while it's pointed at, the wishlist mark, a pick's Similar to, a store page's tags, the Store's
    featured tags and its banner's title plate, a capture's length and corner buttons, a picture's ALT and spoiler labels), Continue's title plate and More over
    its banner (clear glass at a control's dim left a title over white art at 2.5:1), and the labels and controls over a call's video (a tile's name,
-   Watch Stream, a stream's name and buttons), the image viewer's tools, steps and count, and the Exo Profile's buttons over its banner: a deeper dim than a control on the page, so their small words and glyphs
+   Watch Stream, a stream's name and buttons), and the image viewer's tools, steps and count: a deeper dim than a control on the page, so their small words and glyphs
    keep 4.5:1 over the brightest art or a white page shared. */
 :is(.exo-badge, .exo-tile-plate, .exo-scrubber, .exo-store-badge, .exo-store-mark, .exo-continue-text,
   .exo-sgp-pill, .exo-store-hero-tag, .exo-store-hero-name, .exo-capture-duration,
   .exo-capture-corner-btn, .exo-dc-alt-tag, .exo-dc-alt, .exo-dc-hidden-label, .exo-dc-voice-tile-name, .exo-dc-watch,
   .exo-dc-stream-bar :is(.exo-dc-stream-tools > .exo-dc-voice-btn, .exo-dc-stream-name, .exo-dc-stream-sound),
-  .exo-dc-lightbox-tools, .exo-dc-lightbox-step, .exo-dc-lightbox-count, .exo-profile-page-actions .exo-set-btn:not(.is-primary)) {
+  .exo-dc-lightbox-tools, .exo-dc-lightbox-step, .exo-dc-lightbox-count) {
   --exo-fill: var(--glassy-plate);
   --exo-control-glass: blur(12px) brightness(0.42) saturate(1.65);
   background-color: var(--glassy-plate);
@@ -358,6 +282,23 @@ button.exo-glass:hover {
   --exo-float: transparent;
   isolation: isolate;
   background-color: transparent;
+
+  &::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    border-radius: inherit;
+    pointer-events: none;
+    /* Glassy's standard surface in CSS's own functions (an SVG blur on a layer behind content drew white bands
+       and blocks along the pane's edges in Chromium): clear frost with a little light in it and its sheen, lit at
+       its rim. */
+    --exo-fill: var(--glassy-pane);
+    background-color: var(--exo-fill);
+    background-image: var(--glassy-sheen);
+    backdrop-filter: blur(10px) var(--glassy-pane-tone);
+    box-shadow: var(--glassy-ring), var(--glassy-rim);
+  }
 }
 
 /* That isolation keeps a menu opened in the pane (a channel's right-click menu) inside it, under what comes after
@@ -367,26 +308,6 @@ button.exo-glass:hover {
   .exo-dc .exo-dc-profile, .exo-music-side, .exo-music-panel, .exo-system-panel,
   .exo-gift):has(:is(.exo-dc-menu, .exo-dc-popover, .exo-dc-picker, .exo-dc-tip, .exo-dc-suggest, .exo-dc-soundboard-pop, [role="menu"], [role="dialog"])) {
   z-index: 50;
-}
-
-:root :is(.exo-dc .exo-dc-side, .exo-dc .exo-dc-members, .exo-dc .exo-dc-dm-profile, .exo-dc .exo-dc-voice-split > .exo-dc-chat-col > .exo-dc-chat:not(.exo-dc-voice-room), .exo-dc .exo-dc-compose-panel,
-  .exo-dc .exo-dc-guide-side, .exo-dc .exo-dc-foot,
-  .exo-dc .exo-dc-profile, .exo-music-side, .exo-music-panel, .exo-system-panel, .exo-gift,
-  .exo-game-overlay-stage)::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  z-index: -1;
-  border-radius: inherit;
-  pointer-events: none;
-  /* Glassy's standard surface in CSS's own functions (an SVG blur on a layer behind content drew white bands
-     and blocks along the pane's edges in Chromium): clear frost with a little light in it and its sheen, lit at
-     its rim. */
-  --exo-fill: var(--glassy-pane);
-  background-color: var(--exo-fill);
-  background-image: var(--glassy-sheen);
-  backdrop-filter: blur(10px) var(--glassy-pane-tone);
-  box-shadow: var(--glassy-ring), var(--glassy-rim);
 }
 
 /* A game's sheet and a store page hold a page of words: the thicker glass of the other sheets (Settings, Properties),
@@ -428,11 +349,6 @@ button.exo-glass:hover {
 }
 
 @media (prefers-contrast: more), (forced-colors: active) {
-  :root:root:root {
-    --exo-control-glass: none;
-    --exo-fill: var(--exo-solid-fill);
-  }
-
   :root :is(.exo-dc .exo-dc-side, .exo-dc .exo-dc-members, .exo-dc .exo-dc-dm-profile, .exo-dc .exo-dc-voice-split > .exo-dc-chat-col > .exo-dc-chat:not(.exo-dc-voice-room), .exo-dc .exo-dc-compose-panel,
   .exo-dc .exo-dc-guide-side, .exo-dc .exo-dc-foot,
   .exo-dc .exo-dc-profile, .exo-music-side, .exo-music-panel, .exo-system-panel, .exo-gift,

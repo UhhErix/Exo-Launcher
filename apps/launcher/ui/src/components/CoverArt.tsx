@@ -1,10 +1,7 @@
-import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties, type RefObject } from 'react'
-import type { Game } from '../lib/host'
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type RefObject } from 'react'
 import { cn } from '../lib/utils'
 import { artSteamAppId } from '../lib/library'
-import { observeNearViewport } from '../lib/nearViewport'
-import { cachedCoverUrl, coverThumbWidth, dimThumbUrl, isDimThumbUrl, isThumbUrl, thumbUrl, useCoverThumbWidth } from '../lib/coverThumb'
-import { onPageActivityChanged, pageIsVisible } from '../lib/pageActivity'
+import { isDimThumbUrl, thumbUrl, useCoverThumbWidth } from '../lib/coverThumb'
 import {
   coverBitmapFit,
   isHeroShaped,
@@ -13,606 +10,44 @@ import {
   shouldArmCoverTimeout,
   shouldKeepCoverBitmap,
 } from '../lib/coverFit'
+import {
+  type ArtCandidate,
+  type ArtGame,
+  artTimeoutMs,
+  cacheKey,
+  clearWideMiss,
+  type CoverGame,
+  forgetLoadedUrl,
+  getRememberedLoadedUrl,
+  isIconCover,
+  portraitArtCandidates,
+  posterCacheKey,
+  recordWideMiss,
+  rememberedCandidateUrl,
+  rememberedIndex,
+  rememberLoadedUrl,
+  wideArtCandidates,
+  withAttempt,
+} from '../lib/coverCandidates'
+import {
+  preloadInitialCoverArt,
+  preloadLibraryArtwork,
+  useCoverPageVisible,
+  useNearViewport,
+  useRetryOnReturn,
+} from './coverBitmap'
 
-/**
- * Cover art: gradient + title underneath; image after onLoad.
- * Native CoverArtService owns source selection. Library tiles stay portrait.
- * Steam app ids still resolve library_600x900 / library_capsule when coverUrl is empty.
- * Wide surfaces take store landscape art — Steam library_hero, or the hero file
- * the native warm caches for Epic / GOG / Riot — and fall back to the portrait
- * cover blurred into a wash rather than stretching a poster across a banner.
- */
-
-/** First-screen posters at the default 1400×900 library grid (~7×3 plus slack). */
-export const VISIBLE_COVER_PREFETCH = 14
-
-/** A URL plus whether it needs the wash (portrait art standing in for a banner). */
-type ArtCandidate = { url: string; derived: boolean }
-
-type ArtGame = Pick<Game, 'id' | 'coverUrl' | 'coverSource' | 'launchTarget' | 'variants' | 'artRevision' | 'includes'> & { heroUrl?: string | null }
-type CoverGame = Pick<Game, 'id' | 'title' | 'coverUrl' | 'coverSource' | 'store' | 'launchTarget' | 'variants' | 'artRevision' | 'includes'>
-
-const COVER_CACHE_ORIGIN = 'https://covers.exo-launcher.local'
-
-/** Survives grid remounts so covers don't flash to the title plate. Key includes fit. */
-const loadedUrlByKey = new Map<string, string>()
-/** Keys include artRevision, so refetches mint new keys; cap the map so a
- * long session cannot grow it forever. Oldest-inserted entries go first. */
-const LOADED_URL_MAX_ENTRIES = 4096
-
-function rememberLoadedUrl(key: string, url: string): void {
-  if (!loadedUrlByKey.has(key) && loadedUrlByKey.size >= LOADED_URL_MAX_ENTRIES) {
-    const oldest = loadedUrlByKey.keys().next().value
-    if (oldest !== undefined) loadedUrlByKey.delete(oldest)
-  }
-  loadedUrlByKey.set(key, url)
-}
-
-/**
- * Wide URLs that failed, and when. Keeps a remount off a dead URL without making
- * the miss permanent — the native cover warm may cache real hero art later.
- */
-const wideMissAtMs = new Map<string, number>()
-const WIDE_MISS_TTL_MS = 10_000
-const WIDE_MISS_MAX_ENTRIES = 1024
-
-function cacheKey(gameId: string, fit: 'poster' | 'full' | 'wash', artRevision?: number) {
-  return `${gameId}::${fit}::${artRevision ?? 0}`
-}
-
-/** Revalidate only Exo-owned cache URLs; official CDN URLs keep their stable identity. */
-function withArtRevision(url: string, artRevision?: number): string {
-  if (!artRevision || !url.startsWith(`${COVER_CACHE_ORIGIN}/`)) return url
-  return `${url}${url.includes('?') ? '&' : '?'}rev=${artRevision}`
-}
-
-/** Read during render (HeroWash's candidates), so it only reads: a stale entry goes when its art lands or the map is full. */
-function isFreshWideMiss(url: string): boolean {
-  const at = wideMissAtMs.get(url)
-  return at !== undefined && Date.now() - at < WIDE_MISS_TTL_MS
-}
-
-/** Official Steam portrait posters (library_600x900 / library_capsule) — never heroes. */
-function isOfficialSteamPortraitCdn(url: string): boolean {
-  const hostOk =
-    httpsHostIs(url, 'steamstatic.com') || httpsHostIs(url, 'steamcdn-a.akamaihd.net')
-  if (!hostOk) return false
-  if (
-    url.includes('library_hero') ||
-    url.includes('header.jpg') ||
-    url.includes('capsule_231') ||
-    url.includes('capsule_184') ||
-    url.includes('capsule_616') ||
-    url.includes('capsule_sm')
-  )
-    return false
-  return (
-    url.includes('library_600x900') ||
-    url.includes('library_capsule') ||
-    url.includes('portrait.png') ||
-    url.includes('library_600x900_schinese')
-  )
-}
-
-function isOfficialSteamHeroCdn(url: string): boolean {
-  const hostOk =
-    httpsHostIs(url, 'steamstatic.com') || httpsHostIs(url, 'steamcdn-a.akamaihd.net')
-  return hostOk && url.includes('library_hero')
-}
-
-function isOfficialSteamHeaderCdn(url: string): boolean {
-  const hostOk =
-    httpsHostIs(url, 'steamstatic.com') || httpsHostIs(url, 'steamcdn-a.akamaihd.net')
-  return hostOk && (
-    url.includes('/header.jpg') ||
-    url.includes('/header_2x.jpg') ||
-    url.includes('capsule_616x353')
-  )
-}
-
-/** Vendor CDNs whose art may be shown as-is (https, default port, host or subdomain). */
-const SAFE_COVER_HOSTS: readonly string[] = [
-  'gog-statics.com',
-  'ddragon.leagueoflegends.com',
-  'riotgames.com',
-  'playvalorant.com',
-  'leagueoflegends.com',
-  'store-images.s-microsoft.com',
-  'images-eds-ssl.xboxlive.com',
-  'ubisoft.com',
-  'ubi.com',
-  'ea.com',
-  'origin.com',
-  'blizzard.com',
-  'battle.net',
-  'cdn.akamai.steamstatic.com',
-]
-
-function isSafeCoverUrl(url: string | null | undefined, allowHero = false): url is string {
-  if (!url) return false
-  if (url.startsWith('data:image/') || url.startsWith(`${COVER_CACHE_ORIGIN}/`)) return true
-  if (isOfficialSteamPortraitCdn(url) || isOfficialEpicPortraitCdn(url)) return true
-  if (allowHero && (isOfficialSteamHeroCdn(url) || isOfficialSteamHeaderCdn(url))) return true
-  return SAFE_COVER_HOSTS.some((host) => httpsHostIs(url, host))
-}
-
-function isIconCover(url: string | null | undefined, coverSource?: string | null): boolean {
-  if (coverSource === 'icon') return true
-  if (!url) return false
-  return /\/icon_[^/?#]+\.png(?:$|[?#])/i.test(url)
-}
-
-/** 1920-wide first: it fills any hero Exo draws and arrives in half the time of the 2x. */
-function steamHeroUrlsForApp(appId: string): string[] {
-  const base = `https://cdn.cloudflare.steamstatic.com/steam/apps/${appId}`
-  return [`${base}/library_hero.jpg`, `${base}/library_hero_2x.jpg`]
-}
-
-/** Official Steam portraits. Local cache first — classic 600x900 404s on newer apps. */
-function steamPortraitUrlsForApp(appId: string, artRevision?: number): { remote: string[]; cache: (string | null)[] } {
-  const base = `https://cdn.cloudflare.steamstatic.com/steam/apps/${appId}`
-  return {
-    remote: [
-      `${base}/library_600x900_2x.jpg`,
-      `${base}/library_600x900.jpg`,
-      `${base}/library_capsule.jpg`,
-    ],
-    cache: [
-      cachedArt(`${appId}_2x.jpg`, artRevision),
-      cachedArt(`${appId}.jpg`, artRevision),
-      cachedArt(`steam_${appId}.jpg`, artRevision),
-    ],
-  }
-}
-
-function steamHeroUrls(
-  game: Pick<Game, 'id' | 'coverUrl' | 'launchTarget' | 'variants' | 'includes'>,
-): string[] {
-  const appId = artSteamAppId(game)
-  return appId ? steamHeroUrlsForApp(appId) : []
-}
-
-/**
- * Mirrors CoverArtService.SanitizeId, which maps `char.IsLetterOrDigit` over
- * UTF-16 code units: Unicode letters and decimal digits survive, everything
- * else — including each half of a surrogate pair — becomes one underscore.
- * A looser regex here (`\p{N}`, or `/u` collapsing a surrogate pair to a single
- * replacement) yields a different filename than the host wrote, and the banner
- * silently falls back forever.
- */
-function sanitizeCacheId(gameId: string): string {
-  let out = ''
-  for (let i = 0; i < gameId.length; i += 1) {
-    const unit = gameId[i]
-    out += /[\p{L}\p{Nd}]/u.test(unit) ? unit : '_'
-  }
-  return out
-}
-
-/**
- * Cache file the native cover warm writes landscape store art into (Epic wide
- * key images, GOG background, Riot splash, Steam hero). Mirrors
- * CoverArtService.WideArtFileName, so no extra bridge field is needed.
- */
-function wideCacheUrl(gameId: string, artRevision?: number): string | null {
-  return cachedArt(`hero_${sanitizeCacheId(gameId)}.jpg`, artRevision)
-}
-
-/** A cache file the page names itself, at this run's address; null before the host has given it. */
-function cachedArt(name: string, artRevision?: number): string | null {
-  const url = cachedCoverUrl(name)
-  return url ? withArtRevision(url, artRevision) : null
-}
-
-/**
- * Landscape art for one title, best first: the native cache, then Steam's
- * remote heroes, then the portrait cover as a blurred wash.
- * The list is finite, so the chain always reaches a terminal state.
- */
-export function wideArtCandidates(game: ArtGame): ArtCandidate[] {
-  const list: ArtCandidate[] = []
-  const push = (url: string | null | undefined, derived: boolean) => {
-    if (!url || !isSafeCoverUrl(url, true) || isRejectedCoverUrl(url, true)) return
-    if (isIconCover(url, game.coverSource)) return
-    if (!derived && isFreshWideMiss(url)) return
-    if (list.some((candidate) => candidate.url === url)) return
-    list.push({ url, derived })
-  }
-  push(wideCacheUrl(game.includes?.[0] ? `steam:${game.includes[0].appId}` : game.id, game.artRevision), false)
-  for (const hero of steamHeroUrls(game)) push(hero, false)
-  push(game.heroUrl, false)
-  const appId = artSteamAppId(game)
-  if (appId) {
-    const base = `https://cdn.cloudflare.steamstatic.com/steam/apps/${appId}`
-    push(`${base}/header.jpg`, false)
-    push(`${base}/capsule_616x353.jpg`, false)
-  }
-  push(game.coverUrl ? withArtRevision(game.coverUrl, game.artRevision) : null, true)
-  return list
-}
-
-function httpsHostIs(url: string, host: string): boolean {
-  try {
-    const parsed = new URL(url)
-    return parsed.protocol === 'https:' &&
-      (parsed.port === '' || parsed.port === '443') &&
-      (parsed.hostname === host || parsed.hostname.endsWith(`.${host}`))
-  } catch {
-    return false
-  }
-}
-
-function isOfficialEpicPortraitCdn(url: string): boolean {
-  try {
-    const parsed = new URL(url)
-    return parsed.protocol === 'https:' &&
-      (parsed.hostname === 'cdn1.epicgames.com' || parsed.hostname === 'cdn2.unrealengine.com')
-  } catch {
-    return false
-  }
-}
-
-/** Tiny store capsules / known landscape CDN names — never show on 2:3 tiles. */
-function isRejectedCoverUrl(url: string, allowHero: boolean): boolean {
-  // Hero candidates are allowed only on wide surfaces. This includes the
-  // native Exo `hero_<id>.jpg` cache as well as Steam's library_hero CDN art.
-  if (allowHero && /(?:^|[/_])hero[_./-]/i.test(url)) return false
-  if (allowHero && isOfficialSteamHeaderCdn(url)) return false
-  return (
-    /(?:^|[/_])hero[_./-]/i.test(url) ||
-    /(?:^|[/_])banner[_./-]/i.test(url) ||
-    /(?:^|[/_])header(?:\.[a-z0-9]+|$)/i.test(url) ||
-    url.includes('capsule_231') ||
-    url.includes('capsule_184') ||
-    url.includes('capsule_sm') ||
-    url.includes('capsule_616') ||
-    url.includes('library_hero') ||
-    url.includes('product_card') ||
-    (url.includes('product_tile') && !/product_tile_256(?!0)/.test(url))
-  )
-}
-
-function pushUnique(list: ArtCandidate[], url: string | null | undefined, allowHero: boolean) {
-  if (!url || list.some((candidate) => candidate.url === url)) return
-  if (!isSafeCoverUrl(url, allowHero) || isRejectedCoverUrl(url, allowHero)) return
-  list.push({ url, derived: false })
-}
-
-function portraitFallbacks(raw: string | null | undefined): string[] {
-  if (!raw) return []
-  const list: string[] = []
-  list.push(raw)
-  if (raw.includes('library_600x900_2x')) {
-    list.push(raw.replace('library_600x900_2x', 'library_600x900'))
-  }
-  return list
-}
-
-/**
- * Grid cards pass a thumbnail width; each of Exo's cached files is then tried
- * as its thumbnail and, right after, as itself. A thumbnail that is slow (its
- * first scale, a busy host) falls back to the same art at full size, never to
- * a smaller poster further down the ladder.
- */
-function portraitArtCandidates(game: Pick<CoverGame, 'coverUrl' | 'artRevision'>, appId: string | null, thumb: number | null = null, dim = false): ArtCandidate[] {
-  const list: ArtCandidate[] = []
-  const raw = game.coverUrl ? withArtRevision(game.coverUrl, game.artRevision) : null
-  if (raw && isSafeCoverUrl(raw) && !isRejectedCoverUrl(raw, false)) {
-    for (const url of portraitFallbacks(raw)) pushUnique(list, url, false)
-  }
-  if (appId) {
-    const steam = steamPortraitUrlsForApp(appId, game.artRevision)
-    for (const url of steam.cache) pushUnique(list, url, false)
-    for (const url of steam.remote) pushUnique(list, url, false)
-    const base = `https://cdn.cloudflare.steamstatic.com/steam/apps/${appId}`
-    pushSteamStoreBitmap(list, `${base}/header.jpg`)
-    pushSteamStoreBitmap(list, `${base}/capsule_616x353.jpg`)
-  }
-  if (thumb == null) return list
-  return list.flatMap((candidate) => {
-    const small = thumbUrl(candidate.url, thumb)
-    if (small === candidate.url) return [candidate]
-    return dim ? [{ ...candidate, url: dimThumbUrl(candidate.url, thumb) }, { ...candidate, url: small }, candidate]
-               : [{ ...candidate, url: small }, candidate]
-  })
-}
-
-/** Landscape store bitmaps only after every portrait URL has been tried. */
-function pushSteamStoreBitmap(list: ArtCandidate[], url: string) {
-  if (list.some((candidate) => candidate.url === url)) return
-  try {
-    const parsed = new URL(url)
-    const host = parsed.hostname
-    if (parsed.protocol !== 'https:') return
-    if (!(host === 'steamstatic.com' || host.endsWith('.steamstatic.com') || host === 'steamcdn-a.akamaihd.net')) return
-  } catch {
-    return
-  }
-  list.push({ url, derived: true })
-}
-
-function artTimeoutMs(url: string): number {
-  // The host answers every thumbnail (404 when the cover is gone); the first
-  // request for a cover scales it, so give it time rather than skip to other art.
-  if (isThumbUrl(url)) return 2000
-  // The full file is usually the fallback for a slow thumbnail: give it time
-  // to arrive rather than drop to a smaller poster.
-  if (url.startsWith(`${COVER_CACHE_ORIGIN}/`)) return 1500
-  if (
-    url.includes('library_600x900') ||
-    url.includes('library_capsule') ||
-    url.includes('portrait.png')
-  )
-    return 800
-  return 1200
-}
-
-type BitmapSize = { naturalWidth: number; naturalHeight: number }
-const pendingBitmaps = new Map<string, Promise<BitmapSize | null>>()
-
-function loadBitmap(url: string, timeoutMs: number): Promise<BitmapSize | null> {
-  const existing = pendingBitmaps.get(url)
-  if (existing) return existing
-  const loading = new Promise<BitmapSize | null>((resolve) => {
-    const image = new Image()
-    let settled = false
-    const finish = (value: BitmapSize | null) => {
-      if (settled) return
-      settled = true
-      window.clearTimeout(timeout)
-      image.onload = null
-      image.onerror = null
-      if (!value) image.removeAttribute('src')
-      resolve(value)
-    }
-    const timeout = window.setTimeout(() => finish(null), timeoutMs)
-    image.decoding = 'async'
-    image.onload = () => {
-      if (settled) return
-      const decoded = typeof image.decode === 'function' ? image.decode() : Promise.resolve()
-      void decoded.catch(() => undefined).then(() => finish({ naturalWidth: image.naturalWidth, naturalHeight: image.naturalHeight }))
-    }
-    image.onerror = () => finish(null)
-    image.src = url
-  })
-  const pending = loading.finally(() => { if (pendingBitmaps.get(url) === pending) pendingBitmaps.delete(url) })
-  pendingBitmaps.set(url, pending)
-  return pending
-}
-
-/** Decode the first screen's posters before the boot mark yields to the shell. */
-export async function preloadInitialCoverArt(games: readonly CoverGame[], limit = VISIBLE_COVER_PREFETCH, signal?: AbortSignal): Promise<void> {
-  if (typeof window === 'undefined' || typeof Image === 'undefined') return
-  const unique = Array.from(new Map(games.map((game) => [game.id, game])).values()).slice(0, limit)
-  const thumb = coverThumbWidth()
-  await Promise.all(unique.map(async (game) => {
-    const candidates = portraitArtCandidates(game, artSteamAppId(game), thumb)
-    if (rememberedIndex(cacheKey(game.id, 'poster', game.artRevision), candidates) >= 0) return
-    // Only the card's own art (its thumbnail, then that file). Anything further
-    // down is the card's call: a warm that timed out on a busy host used to pin
-    // the 300 px poster as this card's remembered art.
-    const own = isThumbUrl(candidates[0]?.url ?? '') ? 2 : 1
-    for (let index = 0; index < Math.min(own, candidates.length); index += 1) {
-      if (signal?.aborted) return
-      const candidate = candidates[index]
-      const image = await loadBitmap(candidate.url, artTimeoutMs(candidate.url))
-      if (!image) continue
-      const icon = isIconCover(candidate.url, game.coverSource)
-      if (!shouldKeepCoverBitmap(image.naturalWidth, image.naturalHeight, {
-        icon,
-        derived: candidate.derived,
-        lastCandidate: index + 1 >= candidates.length,
-      })) continue
-      rememberLoadedUrl(cacheKey(game.id, 'poster', game.artRevision), candidate.url)
-      return
-    }
-  }))
-}
-
-/**
- * Warm both posters and detail backgrounds for the complete library. A game with no cover has no banner on disk either
- * (the Add portable game tile, a Riot game the host has found no art for yet): nothing to ask for.
- */
-export async function preloadLibraryArtwork(games: readonly CoverGame[], concurrency = 6, signal?: AbortSignal): Promise<void> {
-  const unique = Array.from(new Map(games.filter((game) => game.coverUrl).map((game) => [game.id, game])).values())
-  let cursor = 0
-  await Promise.all(Array.from({ length: Math.min(concurrency, unique.length) }, async () => {
-    // Only while Exo is on screen: minimized, nothing it warms would be drawn.
-    while (cursor < unique.length && !signal?.aborted && pageIsVisible()) {
-      const game = unique[cursor++]
-      await Promise.all([
-        preloadInitialCoverArt([game], 1, signal),
-        (async () => {
-          const candidates = wideArtCandidates(game)
-          if (rememberedIndex(cacheKey(game.id, 'wash', game.artRevision), candidates) >= 0) return
-          for (const candidate of candidates) {
-            if (signal?.aborted || !pageIsVisible()) return
-            const bitmap = await loadBitmap(candidate.url, artTimeoutMs(candidate.url))
-            if (!bitmap || (!candidate.derived && !isWideBitmap(bitmap.naturalWidth, bitmap.naturalHeight))) continue
-            rememberLoadedUrl(cacheKey(game.id, 'wash', game.artRevision), candidate.url)
-            break
-          }
-        })(),
-      ])
-    }
-  }))
-}
-
-/** Lazy tiles only start their fallback ladder once they are near the viewport. */
-function useNearViewport(
-  ref: RefObject<HTMLElement | null>,
-  eager: boolean,
-  resetKey: string,
-): boolean {
-  const [near, setNear] = useState(eager)
-  useEffect(() => {
-    if (eager) {
-      setNear(true)
-      return
-    }
-    setNear(false)
-    const element = ref.current
-    if (!element || typeof IntersectionObserver === 'undefined') {
-      setNear(true)
-      return
-    }
-    return observeNearViewport(element, () => setNear(true))
-  }, [eager, ref, resetKey])
-  return near
-}
-
-function rememberedIndex(key: string, candidates: ArtCandidate[]): number {
-  const hit = loadedUrlByKey.get(key)
-  return hit ? candidates.findIndex((c) => c.url === hit) : -1
-}
-
-/** The remembered URL, but only while it is still one of this card's candidates. */
-function rememberedCandidateUrl(key: string, candidates: ArtCandidate[]): string | null {
-  const hit = loadedUrlByKey.get(key)
-  return hit && candidates.some((entry) => entry.url === hit) ? hit : null
-}
-
-/** Keyed on what the art depends on, not the card object a library refresh replaces.
- * The sheet's large cover keeps the full file; everything else draws at card size. */
-function usePortraitCandidates(game: CoverGame, large: boolean, dim = false): ArtCandidate[] {
-  const gridThumb = useCoverThumbWidth()
-  const thumb = large ? null : gridThumb
-  const { coverUrl, artRevision } = game
-  const appId = artSteamAppId(game)
-  // The host bakes the dark dim into the thumbnail; --exo-not-installed is the fallback when it is not.
-  const baked = dim
-  return useMemo(() => portraitArtCandidates({ coverUrl, artRevision }, appId, thumb, baked), [coverUrl, artRevision, appId, thumb, baked])
-}
-
-/** Grid cards and the sheet's full-size cover remember their bitmaps separately. */
-function posterCacheKey(game: CoverGame, large?: boolean): string {
-  return cacheKey(game.id, large ? 'full' : 'poster', game.artRevision)
-}
-
-/** Every card's page listener, through one pair on the document (lib/pageActivity), not one per card. */
-const pageListeners = new Set<() => void>()
-let stopWatchingPage: (() => void) | null = null
-
-function watchPage(listener: () => void): () => void {
-  pageListeners.add(listener)
-  stopWatchingPage ??= onPageActivityChanged(() => { for (const each of pageListeners) each() })
-  return () => {
-    pageListeners.delete(listener)
-    if (pageListeners.size > 0) return
-    stopWatchingPage?.()
-    stopWatchingPage = null
-  }
-}
-
-/**
- * Whether Exo is on screen (not hidden or minimized). A minimized window loads
- * nothing (lazy images wait for layout that a hidden page never runs) but its
- * timers still fire, so a fallback timer armed while hidden walked every card
- * down its ladder to the title plate.
- */
-function useCoverPageVisible(): boolean {
-  return useSyncExternalStore(watchPage, pageIsVisible, () => true)
-}
-
-/** A card waiting to try its art again: whether it is in view, and whether it left view since it was armed. */
-type ReturnWatch = { inView: boolean; wasOut: boolean; done: boolean; fire: () => void }
-/** One observer and one pair of window listeners for every card waiting to try again. */
-const returnWatches = new Map<Element, ReturnWatch>()
-let returnObserver: IntersectionObserver | null = null
-
-function onReturnShown() {
-  if (!pageIsVisible()) return
-  for (const watch of returnWatches.values()) if (watch.inView) watch.fire()
-}
-
-function watchReturn(element: Element, watch: ReturnWatch): () => void {
-  if (!returnObserver) {
-    returnObserver = new IntersectionObserver((entries) => {
-      for (const entry of entries) {
-        const each = returnWatches.get(entry.target)
-        if (!each) continue
-        each.inView = entry.isIntersecting
-        if (!each.inView) each.wasOut = true
-        else if (each.wasOut) each.fire()
-      }
-    })
-    document.addEventListener('visibilitychange', onReturnShown)
-    window.addEventListener('focus', onReturnShown)
-  }
-  returnWatches.set(element, watch)
-  returnObserver.observe(element)
-  return () => {
-    if (returnWatches.get(element) !== watch) return
-    returnWatches.delete(element)
-    returnObserver?.unobserve(element)
-    if (returnWatches.size > 0) return
-    returnObserver?.disconnect()
-    returnObserver = null
-    document.removeEventListener('visibilitychange', onReturnShown)
-    window.removeEventListener('focus', onReturnShown)
-  }
-}
-
-/**
- * A card that ran out of art (or stands on a landscape stand-in) tries again,
- * once each time it comes back into view or the window is shown or focused
- * again: a host that was busy or a file mid-rewrite is not a reason to show the
- * title plate or a banner for the rest of the session.
- */
-function useRetryOnReturn(armed: boolean, ref: RefObject<HTMLElement | null>, retry: () => void): void {
-  const retryLatest = useRef(retry)
-  /** Set when the effect is torn down while still armed: the Library room was hidden (Activity). */
-  const leftArmed = useRef(false)
-  useEffect(() => { retryLatest.current = retry })
-  useEffect(() => {
-    const element = ref.current
-    if (!armed || !element || typeof IntersectionObserver === 'undefined') return
-    const watch: ReturnWatch = {
-      inView: false,
-      // Coming back from another room re-runs this effect; that return counts
-      // like scrolling the card back into view.
-      wasOut: leftArmed.current,
-      done: false,
-      fire: () => {
-        if (watch.done) return
-        watch.done = true
-        retryLatest.current()
-      },
-    }
-    leftArmed.current = false
-    const stop = watchReturn(element, watch)
-    return () => {
-      leftArmed.current = !watch.done
-      stop()
-    }
-  }, [armed, ref])
-}
-
-/** A retry must reach the host again, not a cached miss; only Exo's own origins ignore the query. */
-function withAttempt(url: string, attempt: number): string {
-  if (!attempt || !(url.startsWith(`${COVER_CACHE_ORIGIN}/`) || isThumbUrl(url))) return url
-  return `${url}${url.includes('?') ? '&' : '?'}retry=${attempt}`
-}
+export { preloadInitialCoverArt, preloadLibraryArtwork, wideArtCandidates }
 
 /** Where this card is on its fallback ladder, for one key and one candidate list. */
 type Ladder = { id: string; idx: number; failed: boolean; attempt: number }
 
-/**
- * Starts on the art this card last decoded, unless that was a landscape stand-in:
- * a Steam account switch shows new titles before their posters are cached, and a
- * ladder that started on the header again never reached the poster that landed.
- */
 function freshLadder(id: string, key: string, candidates: ArtCandidate[], attempt: number): Ladder {
   const remembered = rememberedIndex(key, candidates)
   return { id, idx: remembered >= 0 && !candidates[remembered].derived ? remembered : 0, failed: false, attempt }
 }
 
-/**
- * How a cover's picture decodes. The game sheet's cover is where a card's art lands as it flies in (a View
- * Transition's new picture is live), so it decodes with its frame: async could leave the flight a blank frame.
- * Every other cover (the grid's hundreds) decodes off the frame.
- */
-const decodingFor = (large: boolean | undefined) => large ? 'sync' : 'async'
+const decodingFor = (large: boolean | undefined) => (large ? 'sync' : 'async')
 
 function GridBitmap({ url, large }: { url: string | null; large?: boolean }) {
   return url ? <img src={url} alt="" className="exo-cover-front" data-under="" draggable={false} decoding={decodingFor(large)} /> : null
@@ -628,11 +63,14 @@ function currentCoverFit(metrics: CoverFit | null, url: string | null, icon: boo
   return metrics?.url === url ? metrics.fit : 'cover'
 }
 
-/**
- * New art (a refresh, a sharper thumbnail, a custom cover) restarts the ladder
- * from what this card already decoded. Adjusted during render, so no frame
- * pairs the new list with the old rung.
- */
+function usePortraitCandidates(game: CoverGame, large: boolean, dim = false): ArtCandidate[] {
+  const gridThumb = useCoverThumbWidth()
+  const thumb = large ? null : gridThumb
+  const { coverUrl, artRevision } = game
+  const appId = artSteamAppId(game)
+  return useMemo(() => portraitArtCandidates({ coverUrl, artRevision }, appId, thumb, dim), [coverUrl, artRevision, appId, thumb, dim])
+}
+
 function useCoverLadder(key: string, candidates: ArtCandidate[]) {
   const ladderId = `${key}\n${candidates[0]?.url ?? ''}`
   const [stored, setLadder] = useState(() => freshLadder(ladderId, key, candidates, 0))
@@ -651,11 +89,6 @@ function useCoverLadder(key: string, candidates: ArtCandidate[]) {
   return { ...ladder, advance, retry }
 }
 
-/**
- * A stale native cache URL can stay pending in WebView2 instead of firing
- * error, so a card that has waited long enough moves to the next candidate.
- * Only while the page is shown: a hidden page loads nothing.
- */
 function useCoverTimeout(url: string | null, armed: boolean, imageRef: RefObject<HTMLImageElement | null>, advance: () => void): void {
   const pageVisible = useCoverPageVisible()
   useEffect(() => {
@@ -680,11 +113,15 @@ function coverFrame({ key, candidates, idx, failed, attempt, loadedUrl, fallback
   const safeUrl = (candidates[idx] ?? candidates[0])?.url ?? null
   const displayUrl = safeUrl && !failed ? safeUrl : rememberedCandidateUrl(key, candidates)
   const src = displayUrl ? withAttempt(displayUrl, attempt) : null
-  const loaded = !!displayUrl && (loadedUrl === displayUrl || loadedUrlByKey.get(key) === displayUrl)
+  const loaded = !!displayUrl && (loadedUrl === displayUrl || getRememberedLoadedUrl(key) === displayUrl)
   const underlay = !loaded && fallbackSrc !== src ? fallbackSrc : null
   return { safeUrl, displayUrl, src, loaded, underlay }
 }
 
+/**
+ * Cover art: gradient + title underneath; image after onLoad.
+ * Library tiles stay portrait while large surfaces prefer high-res posters.
+ */
 export function CoverArt({
   game,
   className,
@@ -696,11 +133,8 @@ export function CoverArt({
   game: CoverGame
   className?: string
   large?: boolean
-  /** Eagerly fetch a small set of likely-next art while its page is hidden. */
   preload?: boolean
-  /** Not installed: the host-dimmed thumbnail leads, and `undim` shows the plain one over it. */
   dim?: boolean
-  /** The card holding a dim cover is hovered or focused (GameCard knows; one listener at React's root, none per card). */
   undim?: boolean
 }) {
   const key = posterCacheKey(game, large)
@@ -709,32 +143,34 @@ export function CoverArt({
   const { idx, failed, attempt, advance, retry } = useCoverLadder(key, candidates)
 
   const [loadedUrl, setLoadedUrl] = useState<string | null>(null)
-  /** The last bitmap this card decoded; it stays up while new art loads, so a card never blanks. */
-  const [shownSrc, setShownSrc] = useState<string | null>(() => loadedUrlByKey.get(key) ?? null)
+  const [shownSrc, setShownSrc] = useState<string | null>(() => getRememberedLoadedUrl(key) ?? null)
   const [bitmapFit, setBitmapFit] = useState<CoverFit | null>(null)
   const imageRef = useRef<HTMLImageElement>(null)
   const coverRef = useRef<HTMLDivElement>(null)
   const nearViewport = useNearViewport(coverRef, eager, game.id)
   const lastCandidate = idx + 1 >= candidates.length
   const { safeUrl, displayUrl, src, loaded, underlay } = coverFrame({
-    key, candidates, idx, failed, attempt, loadedUrl,
-    fallbackSrc: shownSrc ?? (large ? loadedUrlByKey.get(posterCacheKey(game)) ?? null : null),
+    key,
+    candidates,
+    idx,
+    failed,
+    attempt,
+    loadedUrl,
+    fallbackSrc: shownSrc ?? (large ? getRememberedLoadedUrl(posterCacheKey(game)) ?? null : null),
   })
   const icon = isIconCover(displayUrl, game.coverSource)
 
   useCoverTimeout(
     safeUrl,
-    !failed && loadedUrlByKey.get(key) !== safeUrl && shouldArmCoverTimeout({ eager, visible: nearViewport }),
+    !failed && getRememberedLoadedUrl(key) !== safeUrl && shouldArmCoverTimeout({ eager, visible: nearViewport }),
     imageRef,
     advance,
   )
-  // A landscape stand-in is a card that ran out of posters, not its art.
   useRetryOnReturn(failed || (loaded && !!candidates[idx]?.derived), coverRef, retry)
 
-  /** Give up on the current URL: try the next one, or settle on the plate. */
   function rejectCurrent() {
     if (displayUrl !== safeUrl) return
-    if (lastCandidate && loadedUrlByKey.get(key) === safeUrl) loadedUrlByKey.delete(key)
+    if (lastCandidate && getRememberedLoadedUrl(key) === safeUrl) forgetLoadedUrl(key)
     advance()
   }
 
@@ -742,7 +178,7 @@ export function CoverArt({
     const acceptedUrl = displayUrl
     const acceptedSrc = src
     try {
-      if (loadedUrlByKey.get(key) !== acceptedUrl) await el.decode()
+      if (getRememberedLoadedUrl(key) !== acceptedUrl) await el.decode()
     } catch { }
     if (imageRef.current !== el || !el.isConnected || !acceptedUrl) return
     const ok = shouldKeepCoverBitmap(el.naturalWidth, el.naturalHeight, {
@@ -756,16 +192,12 @@ export function CoverArt({
     }
     rememberLoadedUrl(key, acceptedUrl)
     const fit = coverBitmapFit(el.naturalWidth, el.naturalHeight, icon)
-    setBitmapFit(previous => previous?.url === acceptedUrl && previous.fit === fit ? previous : { url: acceptedUrl, fit })
+    setBitmapFit((previous) => previous?.url === acceptedUrl && previous.fit === fit ? previous : { url: acceptedUrl, fit })
     setLoadedUrl(acceptedUrl)
     setShownSrc(acceptedSrc)
   }
   const acceptLatest = useRef(acceptCover)
   acceptLatest.current = acceptCover
-  // Stable, so React calls it when the image mounts, not on every commit.
-  // Leaving the Library for another room hides it (Activity) and React detaches
-  // refs while the image stays in the page; a bitmap that finished loading then
-  // was dropped and the card drew nothing until the room was shown again.
   const attachImage = useCallback((el: HTMLImageElement | null) => {
     if (imageRef.current === el || (!el && imageRef.current?.isConnected)) return
     imageRef.current = el
@@ -796,12 +228,6 @@ export function CoverArt({
   )
 }
 
-/**
- * The plain thumbnail over a dim card's, mounted on the card's first hover/focus
- * and kept mounted after, fading in with the same 160ms the filter used. Only
- * loads when the dim thumbnail won: a failed one already drew the plain art under
- * the old CSS filter, whose own hover rule still undims it.
- */
 function CoverFaces({ coverKey, src, dim, undim, loaded, icon, eager, large, fit, attachImage, onLoad, onError }: {
   coverKey: string
   src: string | null
@@ -816,7 +242,6 @@ function CoverFaces({ coverKey, src, dim, undim, loaded, icon, eager, large, fit
   onLoad: (el: HTMLImageElement) => void
   onError: () => void
 }) {
-  // Armed on the first hover or focus and kept, so later hovers only fade it. Adjusted during render: no frame misses it.
   const [undimArmed, setUndimArmed] = useState(false)
   if (undim && !undimArmed) setUndimArmed(true)
   return (
@@ -863,12 +288,7 @@ function UndimCover({ src, undimArmed, undim, fit }: {
 }
 
 /**
- * Wide store art behind the game sheet. Real
- * landscape art wins; a portrait cover is blurred into a wash instead of being
- * stretched; a title with no art at all renders nothing and keeps the monogram
- * surface underneath. With `poster`, a washed portrait also stands sharp in front
- * of its wash: a Continue card is the art itself, and a game still downloading
- * (no wide art yet) read as one blur.
+ * Wide store art behind the game sheet and Continue banners, falling back to a blurred portrait wash.
  */
 export function HeroWash({
   game,
@@ -880,17 +300,13 @@ export function HeroWash({
   game: ArtGame
   className?: string
   poster?: boolean
-  /** The blurred copy behind letterboxed art. The game sheet's wash hides it (art.css), so it draws none. */
   fill?: boolean
-  /** Exo's cached files at this thumbnail width (coverThumb › bannerThumbWidth), so a small banner decodes no 1920px hero. */
   thumb?: number | null
 }) {
   const key = cacheKey(game.id, 'wash', game.artRevision)
-  const candidates = useMemo(() => wideArtCandidates(game).map(c => ({ ...c, url: thumbUrl(c.url, thumb) })), [game, thumb])
+  const candidates = useMemo(() => wideArtCandidates(game).map((c) => ({ ...c, url: thumbUrl(c.url, thumb) })), [game, thumb])
   const primary = candidates[0]?.url ?? ''
 
-  // Reset before the image mounts. A cached 404 can fire before effects, so a
-  // mount effect that resets idx to zero would erase its fallback advancement.
   return <HeroWashImage key={`${key}:${primary}`} imageCacheKey={key} candidates={candidates} className={className} poster={poster} fill={fill} />
 }
 
@@ -901,7 +317,7 @@ function HeroWashImage({ imageCacheKey: key, candidates, className, poster, fill
   poster: boolean
   fill: boolean
 }) {
-  const cachedHit = loadedUrlByKey.get(key)
+  const cachedHit = getRememberedLoadedUrl(key)
   const cachedIdx = cachedHit ? candidates.findIndex((c) => c.url === cachedHit) : -1
   const [idx, setIdx] = useState(cachedIdx >= 0 ? cachedIdx : 0)
   const [ok, setOk] = useState(cachedIdx >= 0)
@@ -912,7 +328,6 @@ function HeroWashImage({ imageCacheKey: key, candidates, className, poster, fill
   const candidate = candidates[idx]
   if (!candidate) return null
 
-  // Exactly one step per failure, and the list is finite: no retry loop.
   const advance = () => setIdx((i) => i + 1)
 
   const applyWashMetrics = (img: HTMLImageElement) => {
@@ -922,12 +337,11 @@ function HeroWashImage({ imageCacheKey: key, candidates, className, poster, fill
     const wide = isWideBitmap(img.naturalWidth, img.naturalHeight)
     const hero = isHeroShaped(img.naturalWidth, img.naturalHeight)
     if (!candidate.derived) {
-      // Store art that turned out portrait would stretch here — skip it.
       if (!wide) {
         advance()
         return
       }
-      wideMissAtMs.delete(candidate.url)
+      clearWideMiss(candidate.url)
       rememberLoadedUrl(key, candidate.url)
       setWashed(false)
       setLetterbox(!hero)
@@ -938,12 +352,8 @@ function HeroWashImage({ imageCacheKey: key, candidates, className, poster, fill
       advance()
       return
     }
-    // Hero-only covers are already landscape: real art, worth remembering.
-    // A poster only ever gets washed, and is never memoised — the native
-    // warm may cache real banner art for this title at any point.
     if (wide) rememberLoadedUrl(key, candidate.url)
     setWashed(!wide)
-    // 16:9 (and any non-hero landscape) still letterboxes; only portraits wash.
     setLetterbox(wide && !hero)
     setOk(true)
   }
@@ -974,21 +384,11 @@ function HeroWashImage({ imageCacheKey: key, candidates, className, poster, fill
         draggable={false}
         decoding="async"
         ref={(el) => {
-          // Cached bitmaps can skip onLoad in WebView2 after a remount.
-          // Re-apply after the effect clears letterbox on a cache hit.
           if (el && el.complete && el.naturalWidth > 0) applyWashMetrics(el)
         }}
         onLoad={(e) => applyWashMetrics(e.currentTarget)}
         onError={() => {
-          if (!candidate.derived) {
-            // Moved to the end, so the oldest miss is the one that goes when the map is full.
-            wideMissAtMs.delete(candidate.url)
-            if (wideMissAtMs.size >= WIDE_MISS_MAX_ENTRIES) {
-              const oldest = wideMissAtMs.keys().next().value
-              if (oldest !== undefined) wideMissAtMs.delete(oldest)
-            }
-            wideMissAtMs.set(candidate.url, Date.now())
-          }
+          if (!candidate.derived) recordWideMiss(candidate.url)
           advance()
         }}
       />

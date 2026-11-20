@@ -99,37 +99,73 @@ function fit(el: HTMLElement) {
 }
 
 const sizes = new ResizeObserver(entries => entries.forEach(entry => fit(entry.target as HTMLElement)))
-const seen = new WeakSet<Element>()
+const popoverCleanups = new WeakMap<HTMLElement, () => void>()
 
-/** Starts keeping every popup inside the window (main.tsx). */
-export function installMenuFit() {
-  // A native popover opens without any attribute change: its origin is read as it opens.
-  document.addEventListener('toggle', event => {
-    if ((event as Event & { newState?: string }).newState === 'open' && event.target instanceof HTMLElement) originFromAnchor(event.target)
-  }, true)
-  // A popup that moves without changing size (a tooltip on the next target, a picker that changes side) is measured again.
-  const moves = new MutationObserver(records => {
-    // Each popup is measured once a batch: a class and a style change together are one move, and measuring it again
-    // would read the page's layout after the first measure's own write.
+function trackPopupElement(el: HTMLElement, watched: Set<HTMLElement>, attrObserver: MutationObserver, frames: Set<number>): void {
+  if (watched.has(el)) return
+  watched.add(el)
+  fit(el)
+  const frame = requestAnimationFrame(() => {
+    frames.delete(frame)
+    if (el.isConnected) fit(el)
+  })
+  frames.add(frame)
+  sizes.observe(el)
+  attrObserver.observe(el, { attributes: true, attributeFilter: ['style', 'class'] })
+}
+
+/**
+ * Fits and watches active popups within `root` (the open menu/popover/dialog subtree) without a
+ * document-wide observer. Returns a cleanup function that detaches all observers on unmount/close.
+ */
+export function observePopupsIn(root: Element): () => void {
+  const watched = new Set<HTMLElement>()
+  const frames = new Set<number>()
+  const attrObserver = new MutationObserver(records => {
     const changed = new Set<HTMLElement>()
     for (const record of records) {
-      if (record.type === 'attributes') { changed.add(record.target as HTMLElement); continue }
-      record.addedNodes.forEach(node => {
-        if (!(node instanceof HTMLElement)) return
-        const found = [...(node.matches(POPUPS) ? [node] : []), ...node.querySelectorAll<HTMLElement>(POPUPS)]
-        for (const el of found) {
-          if (seen.has(el)) continue
-          seen.add(el)
-          // Placed now, before it is drawn, and again once what opened it has settled (a hover bar that moved);
-          // measured again when its size changes (its content loads).
-          fit(el)
-          requestAnimationFrame(() => fit(el))
-          sizes.observe(el)
-          moves.observe(el, { attributes: true, attributeFilter: ['style', 'class'] })
-        }
-      })
+      if (record.target instanceof HTMLElement) changed.add(record.target)
     }
     changed.forEach(fit)
   })
-  moves.observe(document.body, { childList: true, subtree: true })
+  const attachTree = (node: Element) => {
+    if (node instanceof HTMLElement && node.matches(POPUPS)) trackPopupElement(node, watched, attrObserver, frames)
+    for (const child of node.querySelectorAll<HTMLElement>(POPUPS)) trackPopupElement(child, watched, attrObserver, frames)
+  }
+  attachTree(root)
+  const childObserver = new MutationObserver(records => {
+    for (const record of records) {
+      record.addedNodes.forEach(node => {
+        if (node instanceof Element) attachTree(node)
+      })
+    }
+  })
+  childObserver.observe(root, { childList: true, subtree: true })
+  return () => {
+    for (const frame of frames) cancelAnimationFrame(frame)
+    frames.clear()
+    childObserver.disconnect()
+    attrObserver.disconnect()
+    for (const el of watched) sizes.unobserve(el)
+    watched.clear()
+  }
+}
+
+/** Starts keeping every native popover inside the window (main.tsx); mounted popups are observed via `observePopupsIn`. */
+export function installMenuFit() {
+  document.addEventListener('toggle', event => {
+    if (!(event.target instanceof HTMLElement)) return
+    const state = (event as Event & { newState?: string }).newState
+    if (state === 'open') {
+      const style = getComputedStyle(event.target)
+      if (style.getPropertyValue('position-anchor').startsWith('--')) originFromAnchor(event.target)
+      else {
+        popoverCleanups.get(event.target)?.()
+        popoverCleanups.set(event.target, observePopupsIn(event.target))
+      }
+    } else if (state === 'closed') {
+      popoverCleanups.get(event.target)?.()
+      popoverCleanups.delete(event.target)
+    }
+  }, true)
 }

@@ -40,7 +40,7 @@
 }
 
 /* Chosen (pressed) is white with black content, as everything chosen is. */
-:root:root .exo-dc .exo-dc-chat-head .exo-dc-head-tools :is(.exo-dc-icon-btn, .exo-dc-people-pill)[aria-pressed="true"] {
+:root .exo-dc .exo-dc-chat-head .exo-dc-head-tools :is(.exo-dc-icon-btn, .exo-dc-people-pill)[aria-pressed="true"] {
   background: var(--color-fg);
   color: var(--color-primary-fg);
 }
@@ -70,8 +70,8 @@
   margin: 0;
 }
 
-:root:root .exo-dc .exo-dc-stage:has(> .exo-dc-columns:not(.is-over)) :is(.exo-dc-chat, .exo-dc-chat-col) > .exo-dc-chat-head,
-:root:root .exo-dc .exo-dc-stage:has(> .exo-dc-columns:not(.is-over)) .exo-dc-chat-head {
+:root .exo-dc .exo-dc-stage:has(> .exo-dc-columns:not(.is-over)) :is(.exo-dc-chat, .exo-dc-chat-col) > .exo-dc-chat-head,
+:root .exo-dc .exo-dc-stage:has(> .exo-dc-columns:not(.is-over)) .exo-dc-chat-head {
   padding-right: 16px;
 }
 

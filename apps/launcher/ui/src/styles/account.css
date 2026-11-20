@@ -1,0 +1,165 @@
+/* Accounts outside first run: the Home banner, the sheet, and Settings > Account. */
+.exo-account-banner {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  align-items: center;
+  justify-content: space-between;
+  max-width: 720px;
+  margin: 0 var(--exo-gutter) 16px;
+  padding: 8px 12px 8px 16px;
+  border-radius: var(--exo-card-radius);
+}
+
+/* The banner's place while it is not yet known whether it shows (AccountShell › bannerShownBefore). */
+.exo-account-banner-hold {
+  height: calc(52px * var(--exo-scale, 1));
+  margin: 0 var(--exo-gutter) 16px;
+}
+
+.exo-account-banner-text {
+  margin: 0;
+  color: var(--color-fg);
+  font-size: calc(13px * var(--exo-scale, 1));
+}
+
+.exo-account-banner-actions {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+}
+
+.exo-account-sheet-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  margin-top: 16px;
+}
+
+.exo-account-page,
+.exo-account-stack {
+  display: grid;
+  gap: 24px;
+}
+
+.exo-account-group {
+  display: grid;
+  gap: 8px;
+  padding-top: 16px;
+  border-top: 1px solid var(--exo-line);
+}
+
+.exo-account-group-title {
+  margin: 0;
+  color: var(--color-fg);
+  font-size: calc(13px * var(--exo-scale, 1));
+  font-weight: var(--exo-weight-title);
+}
+
+.exo-account-facts {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 4px 16px;
+  margin: 0;
+  color: var(--color-fg);
+  font-size: calc(13px * var(--exo-scale, 1));
+}
+
+.exo-account-facts dt {
+  color: var(--color-muted);
+}
+
+.exo-account-facts dd {
+  margin: 0;
+}
+
+.exo-account-list {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.exo-account-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 48px;
+  padding: 8px 12px;
+  border-radius: 12px;
+  color: var(--color-fg);
+  font-size: calc(13px * var(--exo-scale, 1));
+}
+
+.exo-account-row:hover {
+  background-color: var(--hover-fill);
+}
+
+.exo-account-inline {
+  display: flex;
+  gap: 8px;
+}
+
+.exo-account-held {
+  margin: 0;
+  padding-left: 18px;
+  color: var(--color-fg);
+  font-size: calc(12px * var(--exo-scale, 1));
+}
+
+.exo-account-hint {
+  margin: 0;
+  color: var(--color-muted);
+  font-size: calc(12px * var(--exo-scale, 1));
+}
+
+.exo-account-lede {
+  margin: 0 0 8px;
+  color: var(--color-muted);
+  font-size: calc(13px * var(--exo-scale, 1));
+}
+
+.exo-account-panel {
+  display: grid;
+  gap: 8px;
+  max-width: 560px;
+}
+
+.exo-account-head {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.exo-account-head .exo-set-section-head {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.exo-account-sheet-logo {
+  display: block;
+  margin: 0 auto 16px;
+}
+
+.exo-account-sheet-points {
+  display: grid;
+  gap: 8px;
+  margin: 0 0 8px;
+  padding-left: 18px;
+  color: var(--color-fg);
+  font-size: calc(13px * var(--exo-scale, 1));
+}
+
+.exo-account-sync-line {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  margin: 8px 0 0;
+  color: var(--color-muted);
+  font-size: calc(12px * var(--exo-scale, 1));
+}

@@ -75,7 +75,7 @@
   box-shadow: none;
 }
 
-:root:root .exo-dc .exo-dc-voice-split > .exo-dc-chat-col > :is(.exo-dc-chat, .exo-dc-compose-panel)::before {
+:root .exo-dc .exo-dc-voice-split > .exo-dc-chat-col > :is(.exo-dc-chat, .exo-dc-compose-panel)::before {
   box-shadow: none !important;
 }
 
@@ -95,7 +95,7 @@
   box-shadow: none;
 }
 
-:root:root .exo-dc :is(.exo-dc-group-members, .exo-dc-chat-col .exo-dc-members, .exo-dc-voice-room.is-dm)::before {
+:root .exo-dc :is(.exo-dc-group-members, .exo-dc-chat-col .exo-dc-members, .exo-dc-voice-room.is-dm)::before {
   box-shadow: none !important;
 }
 
@@ -192,7 +192,7 @@
 }
 
 /* A conversation's person: a column on the black, no panel, no line down its edge. The card inside keeps its banner. */
-:root:root .exo-dc .exo-dc-dm-profile.exo-dc-pf {
+:root .exo-dc .exo-dc-dm-profile.exo-dc-pf {
   height: 100%;
   margin: 0;
   border: 0;
@@ -201,7 +201,7 @@
   box-shadow: none;
 }
 
-:root:root .exo-dc :is(.exo-dc-members, .exo-dc-dm-profile) {
+:root .exo-dc :is(.exo-dc-members, .exo-dc-dm-profile) {
   border-left: 0;
 }
 
@@ -306,6 +306,6 @@
 }
 
 /* ---- Sign-in: the code's card is one line on black ---- */
-:root:root .exo-dc-qr {
+:root .exo-dc-qr {
   background: transparent;
 }

@@ -1,3 +1,4 @@
+import './styles'
 import { RowsWait } from './waits'
 import { useEffect, useRef, useState } from 'react'
 import { Close, Deny, Neutral, Plus } from '../../brand/icons'

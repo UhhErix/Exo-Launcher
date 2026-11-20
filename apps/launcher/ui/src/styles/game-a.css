@@ -286,15 +286,10 @@
   container-type: inline-size;
   width: min(880px, 100%);
   height: min(calc(360px + 56px), 100%);
-  transition: width var(--dur-move) var(--ease-spring);
 }
 
 .exo-game-overlay-stage:has(> .exo-game-page.is-info) {
   width: min(1280px, 100%);
-}
-
-html[data-exo-motion="reduce"] .exo-game-overlay-stage:has(> .exo-game-page) {
-  transition: none;
 }
 
 .exo-game-page .exo-game-page-inner {

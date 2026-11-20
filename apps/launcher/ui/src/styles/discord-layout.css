@@ -3,7 +3,7 @@
    page beside it: Home's blocks, a conversation, a server's people. Every panel is the page's black inside the one
    hairline at the panel radius; what you are in is the white pill. */
 
-:root:root:root main.exo-dc {
+:root main.exo-dc {
   --dc-pane-w: clamp(calc(280px * var(--exo-scale, 1)), 24vw, calc(400px * var(--exo-scale, 1)));
   --dc-people-w: clamp(calc(224px * var(--exo-scale, 1)), 18vw, calc(300px * var(--exo-scale, 1)));
   --dc-row-h: calc(52px * var(--exo-scale, 1));
@@ -16,7 +16,7 @@
 }
 
 /* In a server the channels are a narrower column, the same width as its people, so the conversation sits centred. */
-:root:root:root main.exo-dc:has(> .exo-dc-body[data-place="server"]) {
+:root main.exo-dc:has(> .exo-dc-body[data-place="server"]) {
   --dc-pane-w: var(--dc-people-w);
 }
 
@@ -263,7 +263,7 @@
   padding-left: 4px;
 }
 
-:root:root .exo-dc .exo-dc-band-end > .exo-dc-inbox-anchor {
+:root .exo-dc .exo-dc-band-end > .exo-dc-inbox-anchor {
   position: relative;
   inset: auto;
 }
@@ -297,7 +297,7 @@
   background: var(--exo-float);
 }
 
-:root:root .exo-dc .exo-dc-pane > :is(.exo-dc-side, .exo-dc-channels) {
+:root .exo-dc .exo-dc-pane > :is(.exo-dc-side, .exo-dc-channels) {
   display: flex;
   flex: 1 1 auto;
   flex-direction: column;
@@ -309,11 +309,11 @@
   box-shadow: none;
 }
 
-:root:root .exo-dc .exo-dc-pane > :is(.exo-dc-side, .exo-dc-channels)::before {
+:root .exo-dc .exo-dc-pane > :is(.exo-dc-side, .exo-dc-channels)::before {
   content: none;
 }
 
-:root:root .exo-dc .exo-dc-pane :is(.exo-dc-side, .exo-dc-channels) > .exo-dc-side-list {
+:root .exo-dc .exo-dc-pane :is(.exo-dc-side, .exo-dc-channels) > .exo-dc-side-list {
   flex: 1 1 auto;
   gap: 2px;
   height: auto;
@@ -367,12 +367,12 @@
 }
 
 /* A row in the panel (a conversation, Message requests, a channel): a pill, quiet until it is yours. */
-:root:root .exo-dc .exo-dc-pane .exo-dc-item {
+:root .exo-dc .exo-dc-pane .exo-dc-item {
   border-radius: 999px;
 }
 
 
-:root:root:root .exo-dc .exo-dc-pane .exo-dc-item[aria-current="true"] {
+:root .exo-dc .exo-dc-pane .exo-dc-item[aria-current="true"] {
   background: var(--color-fg);
   color: var(--color-bg);
   --color-muted: var(--exo-line);
@@ -380,17 +380,17 @@
   --color-faint: var(--exo-line);
 }
 
-:root:root:root .exo-dc .exo-dc-pane .exo-dc-item[aria-current="true"] :is(svg, .exo-dc-item-name, .exo-dc-item-sub, .exo-dc-item-time) {
+:root .exo-dc .exo-dc-pane .exo-dc-item[aria-current="true"] :is(svg, .exo-dc-item-name, .exo-dc-item-sub, .exo-dc-item-time) {
   color: inherit;
 }
 
-:root:root:root .exo-dc .exo-dc-pane .exo-dc-item[aria-current="true"] .exo-dc-badge {
+:root .exo-dc .exo-dc-pane .exo-dc-item[aria-current="true"] .exo-dc-badge {
   box-shadow: 0 0 0 2px var(--color-fg);
 }
 
 /* Conversations: 52px, the face 36, the name over what was said, the time over its count or dot. */
-:root:root .exo-dc .exo-dc-dms .exo-dc-item.is-dm,
-:root:root .exo-dc .exo-dc-dms .exo-dc-item.is-big {
+:root .exo-dc .exo-dc-dms .exo-dc-item.is-dm,
+:root .exo-dc .exo-dc-dms .exo-dc-item.is-big {
   display: flex;
   align-items: center;
   gap: 12px;
@@ -400,14 +400,14 @@
   padding: 0 14px 0 8px;
 }
 
-:root:root .exo-dc .exo-dc-dms .exo-dc-item-names {
+:root .exo-dc .exo-dc-dms .exo-dc-item-names {
   display: grid;
   flex: 1 1 auto;
   min-width: 0;
   line-height: 1.3;
 }
 
-:root:root .exo-dc .exo-dc-dms .exo-dc-item-name {
+:root .exo-dc .exo-dc-dms .exo-dc-item-name {
   overflow: hidden;
   font-size: var(--exo-type-body);
   font-weight: var(--exo-weight-control);
@@ -415,11 +415,11 @@
   text-overflow: ellipsis;
 }
 
-:root:root .exo-dc .exo-dc-dms .exo-dc-item.is-unread .exo-dc-item-name {
+:root .exo-dc .exo-dc-dms .exo-dc-item.is-unread .exo-dc-item-name {
   font-weight: var(--exo-weight-title);
 }
 
-:root:root .exo-dc .exo-dc-dms .exo-dc-item-sub {
+:root .exo-dc .exo-dc-dms .exo-dc-item-sub {
   overflow: hidden;
   color: var(--color-muted);
   font-size: var(--exo-type-small);
@@ -427,15 +427,15 @@
   text-overflow: ellipsis;
 }
 
-:root:root .exo-dc .exo-dc-dms .exo-dc-item.is-unread:not([aria-current="true"]) .exo-dc-item-sub {
+:root .exo-dc .exo-dc-dms .exo-dc-item.is-unread:not([aria-current="true"]) .exo-dc-item-sub {
   color: var(--color-fg);
 }
 
-:root:root .exo-dc .exo-dc-dms .exo-dc-item.is-muted:not([aria-current="true"]) {
+:root .exo-dc .exo-dc-dms .exo-dc-item.is-muted:not([aria-current="true"]) {
   color: var(--color-faint);
 }
 
-:root:root .exo-dc .exo-dc-dms .exo-dc-item-meta {
+:root .exo-dc .exo-dc-dms .exo-dc-item-meta {
   display: flex;
   flex: none;
   flex-direction: column;
@@ -479,7 +479,7 @@
 }
 
 /* A server's channels: its head and banner on top, then its rows. */
-:root:root .exo-dc .exo-dc-pane .exo-dc-channels-head {
+:root .exo-dc .exo-dc-pane .exo-dc-channels-head {
   display: flex;
   height: var(--dc-head-h);
   margin: 0;
@@ -487,11 +487,11 @@
   border-radius: 0;
 }
 
-:root:root .exo-dc .exo-dc-pane .exo-dc-channels-head .exo-dc-channels-head-main {
+:root .exo-dc .exo-dc-pane .exo-dc-channels-head .exo-dc-channels-head-main {
   font-size: var(--exo-type-read);
 }
 
-:root:root .exo-dc .exo-dc-pane .exo-dc-guild-banner {
+:root .exo-dc .exo-dc-pane .exo-dc-guild-banner {
   display: block;
   width: 100%;
   margin-bottom: 6px;
@@ -500,7 +500,7 @@
   object-fit: cover;
 }
 
-:root:root .exo-dc .exo-dc-channels .exo-dc-item {
+:root .exo-dc .exo-dc-channels .exo-dc-item {
   min-height: calc(34px * var(--exo-scale, 1));
   /* Its icon 16px in, on the line the pane's head, categories and DMs keep. */
   padding-inline: 8px;
@@ -527,7 +527,7 @@
   box-shadow: inset 0 calc(-1 * var(--exo-hair)) 0 var(--exo-line);
 }
 
-:root:root .exo-dc .exo-dc-you > .exo-dc-dock > :is(.exo-dc-voice, .exo-dc-jam) {
+:root .exo-dc .exo-dc-you > .exo-dc-dock > :is(.exo-dc-voice, .exo-dc-jam) {
   margin: 0;
   border: 0;
   border-radius: 0;
@@ -535,7 +535,7 @@
   box-shadow: none;
 }
 
-:root:root .exo-dc .exo-dc-you > .exo-dc-me {
+:root .exo-dc .exo-dc-you > .exo-dc-me {
   position: relative;
   display: flex;
   align-items: center;
@@ -548,7 +548,7 @@
   box-shadow: none;
 }
 
-:root:root .exo-dc .exo-dc-you .exo-dc-me-who {
+:root .exo-dc .exo-dc-you .exo-dc-me-who {
   display: flex;
   flex: 1 1 auto;
   align-items: center;
@@ -567,18 +567,18 @@
 }
 
 @media (hover: hover) and (pointer: fine) {
-  :root:root .exo-dc .exo-dc-you .exo-dc-me-who:hover {
+  :root .exo-dc .exo-dc-you .exo-dc-me-who:hover {
     background: var(--hover-fill);
   }
 }
 
-:root:root .exo-dc .exo-dc-you .exo-dc-me-text {
+:root .exo-dc .exo-dc-you .exo-dc-me-text {
   display: grid;
   min-width: 0;
   line-height: 1.3;
 }
 
-:root:root .exo-dc .exo-dc-you .exo-dc-me-text > b {
+:root .exo-dc .exo-dc-you .exo-dc-me-text > b {
   overflow: hidden;
   font-size: var(--exo-type-body);
   font-weight: var(--exo-weight-title);
@@ -586,7 +586,7 @@
   text-overflow: ellipsis;
 }
 
-:root:root .exo-dc .exo-dc-you .exo-dc-me-text > span {
+:root .exo-dc .exo-dc-you .exo-dc-me-text > span {
   overflow: hidden;
   color: var(--color-muted);
   font-size: var(--exo-type-small);
@@ -594,7 +594,7 @@
   text-overflow: ellipsis;
 }
 
-:root:root .exo-dc .exo-dc-you .exo-dc-me > .exo-dc-icon-btn {
+:root .exo-dc .exo-dc-you .exo-dc-me > .exo-dc-icon-btn {
   flex: none;
   width: 32px;
   height: 32px;
@@ -603,7 +603,7 @@
 }
 
 /* Your menu opens upward from you, inside the panel's width. */
-:root:root .exo-dc .exo-dc-you .exo-dc-me > .exo-dc-menu {
+:root .exo-dc .exo-dc-you .exo-dc-me > .exo-dc-menu {
   position: absolute;
   top: auto;
   right: auto;
@@ -629,7 +629,7 @@
 }
 
 /* Every page but Home is one panel; Home lays out panels of its own. */
-:root:root .exo-dc .exo-dc-view > :not(.exo-dc-home, .exo-dc-beside, .exo-dc-fit-probe, .exo-dc-voice-split) {
+:root .exo-dc .exo-dc-view > :not(.exo-dc-home, .exo-dc-beside, .exo-dc-fit-probe, .exo-dc-voice-split) {
   margin: 0;
   overflow: hidden;
   border-radius: var(--exo-panel-radius);
@@ -637,12 +637,12 @@
 }
 
 /* A call beside its chat: two panels. */
-:root:root .exo-dc .exo-dc-view > .exo-dc-voice-split {
+:root .exo-dc .exo-dc-view > .exo-dc-voice-split {
   display: flex;
   gap: var(--exo-gap);
 }
 
-:root:root .exo-dc .exo-dc-view > .exo-dc-voice-split > * {
+:root .exo-dc .exo-dc-view > .exo-dc-voice-split > * {
   flex: 1 1 0;
   min-width: 0;
   margin: 0;
@@ -652,12 +652,12 @@
 }
 
 /* The conversation: its head, its messages, the message box at its foot; one panel. */
-:root:root .exo-dc .exo-dc-view .exo-dc-chat-col {
+:root .exo-dc .exo-dc-view .exo-dc-chat-col {
   display: flex;
   flex-direction: column;
 }
 
-:root:root .exo-dc .exo-dc-view .exo-dc-chat-col > .exo-dc-chat {
+:root .exo-dc .exo-dc-view .exo-dc-chat-col > .exo-dc-chat {
   flex: 1 1 auto;
   min-height: 0;
   margin: 0;
@@ -667,7 +667,7 @@
   box-shadow: none;
 }
 
-:root:root .exo-dc .exo-dc-view .exo-dc-chat-col > .exo-dc-compose-panel {
+:root .exo-dc .exo-dc-view .exo-dc-chat-col > .exo-dc-compose-panel {
   flex: none;
   margin: 0;
   border: 0;
@@ -676,7 +676,7 @@
   box-shadow: none;
 }
 
-:root:root .exo-dc .exo-dc-view .exo-dc-chat-head {
+:root .exo-dc .exo-dc-view .exo-dc-chat-head {
   height: var(--dc-head-h);
   min-height: var(--dc-head-h);
   margin: 0;
@@ -698,7 +698,7 @@
   background: var(--exo-float);
 }
 
-:root:root .exo-dc .exo-dc-beside > * {
+:root .exo-dc .exo-dc-beside > * {
   flex: 1 1 auto;
   width: auto;
   min-height: 0;
@@ -794,28 +794,28 @@
   min-width: 0;
 }
 
-:root:root .exo-dc .exo-dc-friends .exo-dc-friend-list {
+:root .exo-dc .exo-dc-friends .exo-dc-friend-list {
   padding: 4px 0 0;
 }
 
-:root:root .exo-dc .exo-dc-friends .exo-dc-friend-grid {
+:root .exo-dc .exo-dc-friends .exo-dc-friend-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(calc(280px * var(--exo-scale, 1)), 1fr));
   gap: 2px 8px;
 }
 
-:root:root .exo-dc .exo-dc-friends .exo-dc-friend {
+:root .exo-dc .exo-dc-friends .exo-dc-friend {
   min-height: var(--dc-row-h);
   padding: 0 4px 0 8px;
   border-radius: 999px;
 }
 
-:root:root .exo-dc .exo-dc-friends .exo-dc-side-label {
+:root .exo-dc .exo-dc-friends .exo-dc-side-label {
   margin: 10px 8px 4px;
 }
 
 @media (width < 900px) {
-  :root:root:root main.exo-dc {
+  :root main.exo-dc {
     --dc-pane-w: calc(240px * var(--exo-scale, 1));
   }
 }
@@ -826,7 +826,7 @@ html[data-exo-motion="reduce"] .exo-dc-band-place {
 
 @media (forced-colors: active) {
   .exo-dc-band-place.is-chosen,
-  :root:root:root .exo-dc .exo-dc-pane .exo-dc-item[aria-current="true"] {
+  :root .exo-dc .exo-dc-pane .exo-dc-item[aria-current="true"] {
     forced-color-adjust: none;
     background: Highlight;
     color: HighlightText;
@@ -886,7 +886,7 @@ html[data-exo-motion="reduce"] .exo-dc-band-place {
 }
 
 /* The call's controls say what they do: a glyph and its word, a 40px pill each. */
-:root:root .exo-dc .exo-dc-voice-bar .exo-dc-voice-btn:has(> .exo-dc-voice-word) {
+:root .exo-dc .exo-dc-voice-bar .exo-dc-voice-btn:has(> .exo-dc-voice-word) {
   display: inline-flex;
   flex-direction: row;
   align-items: center;
@@ -914,7 +914,7 @@ html[data-exo-motion="reduce"] .exo-dc-band-place {
     display: none;
   }
 
-  :root:root .exo-dc .exo-dc-voice-bar .exo-dc-voice-btn:has(> .exo-dc-voice-word) {
+  :root .exo-dc .exo-dc-voice-bar .exo-dc-voice-btn:has(> .exo-dc-voice-word) {
     width: 40px;
     padding: 0;
   }
@@ -922,20 +922,20 @@ html[data-exo-motion="reduce"] .exo-dc-band-place {
 
 /* A friend's name ends inside its row: a styled name's last letter (a slant, a flourish) kept inside the box, and a long
    one cut with an ellipsis rather than running into the next column. */
-:root:root .exo-dc .exo-dc-friends .exo-dc-friend-names {
+:root .exo-dc .exo-dc-friends .exo-dc-friend-names {
   min-width: 0;
   overflow: hidden;
 }
 
 /* A friend's status line ends in an ellipsis in a narrow card, as the name does. */
-:root:root .exo-dc .exo-dc-friends .exo-dc-friend-names > :not(strong) {
+:root .exo-dc .exo-dc-friends .exo-dc-friend-names > :not(strong) {
   display: block;
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
 }
 
-:root:root .exo-dc .exo-dc-friends .exo-dc-friend-names > strong {
+:root .exo-dc .exo-dc-friends .exo-dc-friend-names > strong {
   display: flex;
   align-items: center;
   gap: 4px;
@@ -943,14 +943,14 @@ html[data-exo-motion="reduce"] .exo-dc-band-place {
 }
 
 /* The name gives way before its server tag: a plain name is bare text, so it is held in a box that can shrink. */
-:root:root .exo-dc .exo-dc-friends .exo-dc-friend-name {
+:root .exo-dc .exo-dc-friends .exo-dc-friend-name {
   min-width: 0;
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
 }
 
-:root:root .exo-dc .exo-dc-friends .exo-dc-friend-names .exo-dc-dn {
+:root .exo-dc .exo-dc-friends .exo-dc-friend-names .exo-dc-dn {
   min-width: 0;
   overflow: hidden;
   padding-inline-end: 0.2em;
@@ -959,43 +959,43 @@ html[data-exo-motion="reduce"] .exo-dc-band-place {
 }
 
 /* A channel category is a row you can hit: 28px tall, its add button 24px. */
-:root:root .exo-dc .exo-dc-pane .exo-dc-category {
+:root .exo-dc .exo-dc-pane .exo-dc-category {
   min-height: 28px;
 }
 
-:root:root .exo-dc .exo-dc-pane .exo-dc-category-add {
+:root .exo-dc .exo-dc-pane .exo-dc-category-add {
   width: 24px;
   height: 24px;
 }
 
 /* Inside the frame, the panels are the frame's own (one hairline each): a list, the people, a person, the message box
    or a server guide's side drawn as a pane of their own (glass.css › Panes) would put a second line inside the first. */
-:root:root:root .exo-dc :is(.exo-dc-pane, .exo-dc-beside, .exo-dc-view) :is(.exo-dc-side, .exo-dc-channels, .exo-dc-members, .exo-dc-dm-profile, .exo-dc-profile, .exo-dc-compose-panel, .exo-dc-chat, .exo-dc-guide-side)::before {
+:root .exo-dc :is(.exo-dc-pane, .exo-dc-beside, .exo-dc-view) :is(.exo-dc-side, .exo-dc-channels, .exo-dc-members, .exo-dc-dm-profile, .exo-dc-profile, .exo-dc-compose-panel, .exo-dc-chat, .exo-dc-guide-side)::before {
   content: none;
 }
 
 /* What is new in a server reads at a glance: an unread channel is full white and bold with a white mark at the row's
    left edge; one read is quiet grey and regular; a muted one quieter still. The open one is the white pill. */
-:root:root .exo-dc .exo-dc-channels .exo-dc-item:not([aria-current="true"]) {
+:root .exo-dc .exo-dc-channels .exo-dc-item:not([aria-current="true"]) {
   position: relative;
   color: var(--color-faint);
   font-weight: var(--exo-weight-body);
 }
 
-:root:root .exo-dc .exo-dc-channels .exo-dc-item:not([aria-current="true"]) :is(.exo-dc-item-name, svg) {
+:root .exo-dc .exo-dc-channels .exo-dc-item:not([aria-current="true"]) :is(.exo-dc-item-name, svg) {
   color: inherit;
 }
 
-:root:root:root .exo-dc .exo-dc-channels .exo-dc-item.is-unread:not([aria-current="true"]):not(.is-muted) {
+:root .exo-dc .exo-dc-channels .exo-dc-item.is-unread:not([aria-current="true"]):not(.is-muted) {
   color: var(--color-fg);
   font-weight: var(--exo-weight-title);
 }
 
-:root:root:root .exo-dc .exo-dc-channels .exo-dc-item.is-unread:not([aria-current="true"]):not(.is-muted) .exo-dc-item-name {
+:root .exo-dc .exo-dc-channels .exo-dc-item.is-unread:not([aria-current="true"]):not(.is-muted) .exo-dc-item-name {
   font-weight: var(--exo-weight-title);
 }
 
-:root:root:root .exo-dc .exo-dc-channels .exo-dc-item.is-unread:not([aria-current="true"]):not(.is-muted)::before {
+:root .exo-dc .exo-dc-channels .exo-dc-item.is-unread:not([aria-current="true"]):not(.is-muted)::before {
   position: absolute;
   top: 50%;
   left: -6px;
@@ -1007,28 +1007,28 @@ html[data-exo-motion="reduce"] .exo-dc-band-place {
   translate: 0 -50%;
 }
 
-:root:root .exo-dc .exo-dc-channels .exo-dc-item.is-muted:not([aria-current="true"]) {
+:root .exo-dc .exo-dc-channels .exo-dc-item.is-muted:not([aria-current="true"]) {
   color: color-mix(in srgb, var(--color-muted) 70%, #000);
   opacity: 1;
 }
 
 @media (hover: hover) and (pointer: fine) {
-  :root:root .exo-dc .exo-dc-channels .exo-dc-item:not([aria-current="true"]):hover {
+  :root .exo-dc .exo-dc-channels .exo-dc-item:not([aria-current="true"]):hover {
     color: var(--color-fg);
   }
 }
 
 /* The message box: a 48px pill of its own, 16px in from the panel's sides and foot, so its edge never meets the panel's.
    What sits above it (a reply, files, who is typing) keeps the same inset. */
-:root:root:root .exo-dc .exo-dc-view .exo-dc-chat-col > .exo-dc-compose-panel {
+:root .exo-dc .exo-dc-view .exo-dc-chat-col > .exo-dc-compose-panel {
   padding: 8px 16px 16px;
 }
 
-:root:root:root .exo-dc .exo-dc-view .exo-dc-compose-panel > .exo-dc-compose {
+:root .exo-dc .exo-dc-view .exo-dc-compose-panel > .exo-dc-compose {
   padding: 0;
 }
 
-:root:root:root:root .exo-dc .exo-dc-view .exo-dc-compose-panel .exo-dc-input-row:not(.is-attached) {
+:root .exo-dc .exo-dc-view .exo-dc-compose-panel .exo-dc-input-row:not(.is-attached) {
   min-height: calc(48px * var(--exo-scale, 1));
   padding: 0 8px 0 12px;
   border-radius: calc(24px * var(--exo-scale, 1));
@@ -1037,18 +1037,18 @@ html[data-exo-motion="reduce"] .exo-dc-band-place {
 /* Every panel of the frame is edged as the rest of Exo is: the one hairline ring (--glassy-ring, a device pixel at any
    display scale), drawn over what the panel holds so nothing inside it (the message box, a list's fill) covers it. A
    CSS border rounds up to a whole pixel at 125% and 150% and read thicker than the app's other lines. */
-:root:root .exo-dc :is(.exo-dc-band, .exo-dc-pane, .exo-dc-block, .exo-dc-beside:not(.is-over),
+:root .exo-dc :is(.exo-dc-band, .exo-dc-pane, .exo-dc-block, .exo-dc-beside:not(.is-over),
   .exo-dc-view > :not(.exo-dc-home, .exo-dc-beside, .exo-dc-fit-probe, .exo-dc-voice-split), .exo-dc-view > .exo-dc-voice-split > *) {
   position: relative;
   border: 0;
   box-shadow: none;
 }
 
-:root:root .exo-dc .exo-dc-beside.is-over {
+:root .exo-dc .exo-dc-beside.is-over {
   border: 0;
 }
 
-:root:root .exo-dc :is(.exo-dc-band, .exo-dc-pane, .exo-dc-block, .exo-dc-beside,
+:root .exo-dc :is(.exo-dc-band, .exo-dc-pane, .exo-dc-block, .exo-dc-beside,
   .exo-dc-view > :not(.exo-dc-home, .exo-dc-beside, .exo-dc-fit-probe, .exo-dc-voice-split), .exo-dc-view > .exo-dc-voice-split > *)::after {
   position: absolute;
   inset: 0;
@@ -1060,7 +1060,7 @@ html[data-exo-motion="reduce"] .exo-dc-band-place {
 }
 
 /* Send, right of the emoji: a 32px white disc with an up arrow, quiet (the line only) until there is something to send. */
-:root:root .exo-dc .exo-dc-input-row .exo-dc-send {
+:root .exo-dc .exo-dc-input-row .exo-dc-send {
   display: grid;
   flex: none;
   place-items: center;
@@ -1077,7 +1077,7 @@ html[data-exo-motion="reduce"] .exo-dc-band-place {
   transition: background-color var(--dur-quick) var(--ease-out);
 }
 
-:root:root .exo-dc .exo-dc-input-row .exo-dc-send:disabled {
+:root .exo-dc .exo-dc-input-row .exo-dc-send:disabled {
   background: transparent;
   color: var(--color-muted);
   box-shadow: var(--glassy-ring);
@@ -1085,11 +1085,29 @@ html[data-exo-motion="reduce"] .exo-dc-band-place {
 }
 
 @media (hover: hover) and (pointer: fine) {
-  :root:root .exo-dc .exo-dc-input-row .exo-dc-send:not(:disabled):hover {
+  :root .exo-dc .exo-dc-input-row .exo-dc-send:not(:disabled):hover {
     background: var(--exo-primary-hover);
   }
 }
 
 html[data-exo-motion="reduce"] .exo-dc-send {
   transition: none;
+}
+
+/* Forced colours: the open server and pressed chat-head tools take the system's highlight, and inputs/pills keep a border. */
+@media (forced-colors: active) {
+  :root .exo-dc .exo-dc-rail-item.is-server[aria-current="true"],
+  :root .exo-dc .exo-dc-chat-head .exo-dc-head-tools :is(.exo-dc-icon-btn, .exo-dc-people-pill)[aria-pressed="true"],
+  :root .exo-dc .exo-dc-head-tools .exo-dc-icon-btn[aria-pressed="true"] {
+    forced-color-adjust: none;
+    /* design-disable-next-line exo/control-fill -- forced colours: a token's white is lost, the system's highlight is not */
+    background: Highlight;
+    color: HighlightText;
+  }
+
+  :root .exo-dc :is(.exo-dc-now-card, .exo-dc-friend-search, .exo-dc-input-row),
+  :root .exo-dc .exo-dc-view .exo-dc-compose-panel .exo-dc-input-row:not(.is-attached),
+  :root .exo-dc .exo-dc-new-bar {
+    border: 1px solid CanvasText;
+  }
 }

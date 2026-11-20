@@ -1,3 +1,4 @@
+import '../discord/styles'
 import { memo, useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useGoLive } from '../../lib/goLive'
