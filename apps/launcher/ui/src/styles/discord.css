@@ -4764,6 +4764,18 @@ button.exo-dc-pf-badge {
   color: var(--dc-text);
 }
 
+.exo-dc .exo-dc-menu > button.exo-set-btn.is-primary:not(:disabled) {
+  justify-content: center;
+  background: var(--color-fg);
+  color: var(--color-primary-fg);
+  text-align: center;
+}
+
+.exo-dc .exo-dc-menu > button.exo-set-btn.is-primary:hover:not(:disabled) {
+  background: var(--exo-primary-hover);
+  color: var(--color-primary-fg);
+}
+
 /* A menu row that does its work in place (ActionButton): its faces fill the row, its words start where every row's
    do with its glyph at the end, and the ring or the check takes the glyph's place at the end while the words that say
    what is happening ("Saved to Downloads") stay where the row's were. */

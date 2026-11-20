@@ -63,7 +63,17 @@ export function textItems() {
     if (op < 0.05) continue
     const rects = []; for (const n of e.childNodes) if (n.nodeType === 3 && n.textContent.trim()) { const r = document.createRange(); r.selectNodeContents(n); rects.push(r.getBoundingClientRect()) }
     const b = { left: Math.min(...rects.map((x) => x.left)), top: Math.min(...rects.map((x) => x.top)), right: Math.max(...rects.map((x) => x.right)), bottom: Math.max(...rects.map((x) => x.bottom)) }
-    const x0 = Math.max(0, b.left), x1 = Math.min(innerWidth, b.right), y0 = Math.max(0, b.top), y1 = Math.min(innerHeight, b.bottom)
+    let x0 = Math.max(0, b.left), x1 = Math.min(innerWidth, b.right), y0 = Math.max(0, b.top), y1 = Math.min(innerHeight, b.bottom)
+    for (let n = e; n && n.nodeType === 1; n = n.parentElement) {
+      const ns = n === e ? cs : getComputedStyle(n)
+      const cx = ns.overflowX === 'hidden' || ns.overflowX === 'clip' || ns.overflowX === 'scroll' || ns.overflowX === 'auto'
+      const cy = ns.overflowY === 'hidden' || ns.overflowY === 'clip' || ns.overflowY === 'scroll' || ns.overflowY === 'auto'
+      if (cx || cy) {
+        const nr = n.getBoundingClientRect()
+        if (cx) { x0 = Math.max(x0, nr.left); x1 = Math.min(x1, nr.right) }
+        if (cy) { y0 = Math.max(y0, nr.top); y1 = Math.min(y1, nr.bottom) }
+      }
+    }
     if (x1 - x0 < 3 || y1 - y0 < 3) continue
     const top = document.elementFromPoint((x0 + x1) / 2, (y0 + y1) / 2)
     if (!top || !(e === top || e.contains(top) || top.contains(e))) continue

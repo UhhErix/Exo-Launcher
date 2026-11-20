@@ -194,6 +194,13 @@ img[data-exo-broken] {
   opacity: 0.4;
 }
 
+.exo-set-btn.is-primary:disabled {
+  opacity: 1;
+  border-color: transparent;
+  background: var(--exo-fill);
+  color: var(--color-faint);
+}
+
 @media (hover: hover) and (pointer: fine) {
   :is(.exo-set-btn, .exo-game-tool, .exo-shelf-sort-trigger, .exo-library-more, .exo-game-close):hover:not(:disabled) {
     background-color: var(--hover-fill);

@@ -64,7 +64,7 @@ export function allowHover(event?: { pointerType?: string; clientX?: number; cli
   return false
 }
 
-/** Resets gate state for tests. */
+/** @internal Resets gate state for tests. */
 export function resetHoverGate() {
   blockedUntil = 0
   lastPointer = null
