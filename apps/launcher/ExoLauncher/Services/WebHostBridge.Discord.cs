@@ -29,21 +29,10 @@ public sealed partial class WebHostBridge
     // again in the page, a third bigger than the video itself.
     private void PostVideoFrame(object note, byte[] frame)
     {
-        var web = _web;
-        if (web is null || frame.Length == 0) return;
+        var transport = _transport;
+        if (transport is null || _detached || frame.Length == 0) return;
         var json = JsonSerializer.Serialize(note);
-        void Send()
-        {
-            try
-            {
-                using var buffer = web.Environment.CreateSharedBuffer((ulong)frame.Length);
-                using (var stream = System.IO.WindowsRuntimeStreamExtensions.AsStreamForWrite(buffer.OpenStream(), 0)) stream.Write(frame);
-                web.PostSharedBufferToScript(buffer, Microsoft.Web.WebView2.Core.CoreWebView2SharedBufferAccess.ReadOnly, json);
-            }
-            catch { }
-        }
-        if (!_queue.HasThreadAccess) _queue.Enqueue(Send);
-        else Send();
+        transport.PostBinaryFrame(json, frame);
     }
 
     /// <summary>A Discord notification was clicked: the room opens that conversation (a thread in its channel).</summary>

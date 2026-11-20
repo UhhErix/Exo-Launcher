@@ -182,8 +182,8 @@ internal static class UiCallbackScanner
         ("MainWindow.ConnectedApps.cs", "NavigationStarting", "method group, so the -= at unsubscribe still matches; Navigation's body is wrapped where it is declared"),
         ("MainWindow.ConnectedApps.cs", "ProcessFailed", "method group, so the -= at unsubscribe still matches; Failed's body is wrapped where it is declared"),
         ("Services/StoreGifts.cs", "NavigationCompleted", "method group, so the -= in finally still matches; Completed's body is wrapped where it is declared"),
-        ("Services/WebHostBridge.cs", "WebMessageReceived", "method group, so the -= in Detach still matches; OnMessage's body is wrapped where it is declared"),
-        ("Services/WebHostBridge.cs", "NavigationStarting", "method group, so the -= in Detach still matches; OnBridgeNavigationStarting's body is wrapped where it is declared"),
+        ("Services/WebViewHostTransport.cs", "WebMessageReceived", "method group, so the -= in Detach still matches; OnWebMessageReceived's body is wrapped where it is declared"),
+        ("Services/WebViewHostTransport.cs", "NavigationStarting", "method group, so the -= in Detach still matches; OnNavigationStarting's body is wrapped where it is declared"),
         ("MainWindow.xaml.cs", "Tick", "method group, so the -= in StopWebViewWindowGuard still matches; OnWebViewWindowGuardTick's body is wrapped where it is declared"),
         ("Services/WebHostBridge.Gifts.cs", "Tick", "method group, so the -= in StopGiftsTimer still matches; OnGiftsTimerTick's body is wrapped where it is declared"),
     ];
