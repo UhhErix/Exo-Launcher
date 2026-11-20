@@ -604,6 +604,8 @@ public sealed class AppSettings
     public bool SteamBetaJoined { get; set; }
     /// <summary>The NVIDIA driver branch the driver row last showed ("studio"; null: Game Ready), for the version watch.</summary>
     public string? NvidiaDriverBranch { get; set; }
+    /// <summary>One-time startup cleanup/migration watermark already completed on this PC.</summary>
+    public int StartupMigrationVersion { get; set; }
 }
 
 /// <summary>User-supplied launch extras for one library id.</summary>

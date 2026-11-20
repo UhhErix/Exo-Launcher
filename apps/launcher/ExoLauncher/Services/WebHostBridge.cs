@@ -25,6 +25,9 @@ public sealed partial class WebHostBridge
     private readonly CancellationTokenSource _bridgeLifetime = new();
     private readonly BridgeRequestRegistry _rpcRequests = new();
     private bool _detached;
+    private int _backgroundMonitorsStarted;
+    private Action<UpdateFlow.State>? _updaterStateChanged;
+    private Action? _libraryAntiCheatWarm;
 
     private CancellationTokenSource? _keyWatchCts;
     private int _libraryPushScheduled;
@@ -62,7 +65,8 @@ public sealed partial class WebHostBridge
         _windowWatch = new GameWindowWatch(pid => ProcessHelper.TryGetExecutablePath((int)pid),
             new GameFolderSet(() => InstalledGames().Select(game => game.Path!).ToArray()));
         // The update's state as the host holds it (UpdateFlow): the UI draws the update from this alone.
-        _services.Updater.StateChanged += state => PostEvent("app.updateState", new { state = UpdateStateName(state) });
+        _updaterStateChanged = state => PostEvent("app.updateState", new { state = UpdateStateName(state) });
+        _services.Updater.StateChanged += _updaterStateChanged;
         _services.Launcher.ProgressChanged += OnProgress;
         _services.Launcher.DownloadQueueChanged += OnDownloadQueueChanged;
         _services.Launcher.GameSessionCompleted += OnGameSessionCompleted;
@@ -77,7 +81,8 @@ public sealed partial class WebHostBridge
         _services.Store.SaleFound += OnStoreSale;
         _services.Library.LibraryUpdated += OnLibraryUpdated;
         // Play and Properties find each installed game's anti-cheat answer kept, walked behind everything else.
-        _services.Library.LibraryUpdated += () => AntiCheatCheck.Warm(_services.Library.PeekCachedLibrary());
+        _libraryAntiCheatWarm = () => AntiCheatCheck.Warm(_services.Library.PeekCachedLibrary());
+        _services.Library.LibraryUpdated += _libraryAntiCheatWarm;
         _services.Library.LibraryUpdated += FollowSteamTransfers;
         _services.Library.LibraryUpdated += SteamOverlaySoon;
         InstalledSizeCache.MeasurementUpdated += OnLibraryUpdated;
@@ -99,6 +104,15 @@ public sealed partial class WebHostBridge
         _services.Launcher.GameSessionCompleted += SteamOnlineAfterFamily;
         _services.Launcher.GameLaunching += ApplyGameProfile;
         _services.Launcher.LaunchNotice += OnLaunchNotice;
+    }
+
+    /// <summary>
+    /// Starts background peripheral, Steam client, shader prepare, version check, and EQ watchers after
+    /// WebView navigation begins so constructor work stays off the critical first-paint path.
+    /// </summary>
+    internal void StartBackgroundMonitors()
+    {
+        if (_detached || Interlocked.Exchange(ref _backgroundMonitorsStarted, 1) != 0) return;
         WatchDevices();
         KeepSteamClientCurrent();
         KeepShadersPrepared();
@@ -287,10 +301,14 @@ public sealed partial class WebHostBridge
             try { _web.NavigationStarting -= OnBridgeNavigationStarting; } catch { }
         }
         _web = null;
+        SteamPendingSettings.Detach(this);
+        if (_updaterStateChanged is { } updaterChanged) _services.Updater.StateChanged -= updaterChanged;
+        _updaterStateChanged = null;
         _services.Launcher.ProgressChanged -= OnProgress;
         _services.Launcher.DownloadQueueChanged -= OnDownloadQueueChanged;
         _services.Launcher.GameSessionCompleted -= OnGameSessionCompleted;
         _services.Launcher.GameSessionCompleted -= ReapplyCalibrationsAfter;
+        _services.Launcher.GameSessionCompleted -= SteamOnlineAfterFamily;
         _services.Launcher.GameLaunching -= ApplyGameProfile;
         _services.Launcher.LaunchNotice -= OnLaunchNotice;
         _services.Launcher.GameLaunched -= OnGameLaunched;
@@ -304,6 +322,8 @@ public sealed partial class WebHostBridge
         _services.Achievements.SummaryChanged -= OnAchievementsChanged;
         _services.Store.SaleFound -= OnStoreSale;
         _services.Library.LibraryUpdated -= OnLibraryUpdated;
+        if (_libraryAntiCheatWarm is { } warmHandler) _services.Library.LibraryUpdated -= warmHandler;
+        _libraryAntiCheatWarm = null;
         _services.Library.LibraryUpdated -= FollowSteamTransfers;
         _services.Library.LibraryUpdated -= SteamOverlaySoon;
         InstalledSizeCache.MeasurementUpdated -= OnLibraryUpdated;
@@ -329,7 +349,15 @@ public sealed partial class WebHostBridge
             DiscordClient.DiscordSession.Event -= PostEvent;
             DiscordClient.DiscordSession.VideoFrame -= PostVideoFrame;
         }
-        try { _giftsTimer?.Stop(); } catch { }
+        StopGiftsTimer();
+        DetachAppsCache();
+        UnwatchDevices();
+        UnwatchEq();
+        Interlocked.Exchange(ref _versionWatch, null)?.Dispose();
+        Interlocked.Exchange(ref _steamClientPoll, null)?.Dispose();
+        Interlocked.Exchange(ref _shaderPreparePoll, null)?.Dispose();
+        Interlocked.Exchange(ref _steamOutagePoll, null)?.Dispose();
+        StopPendingWriteCheck();
         if (SteamSignIn.SteamWebsiteToken.Fetch == SteamWebsiteTokenAsync) SteamSignIn.SteamWebsiteToken.Fetch = null;
         _runStatePoll?.Dispose();
         _runStatePoll = null;

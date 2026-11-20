@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Text;
+using ExoLauncher.Helpers;
 using ExoLauncher.Models;
 
 namespace ExoLauncher.Adapters;
@@ -61,6 +62,13 @@ internal static class ProcessHelper
     internal static string? TryGetExecutablePath(int processId)
     {
         if (processId <= 0) return null;
+        try
+        {
+            var viaQuery = QueryFullProcessImageName(processId);
+            if (!string.IsNullOrWhiteSpace(viaQuery))
+                return Path.GetFullPath(viaQuery);
+        }
+        catch { /* fall through */ }
         try
         {
             using var process = Process.GetProcessById(processId);
@@ -364,23 +372,16 @@ internal static class ProcessHelper
     private static void CloseProcesses(string[] processNames, Func<Process, bool> accept)
     {
         var pids = new HashSet<int>();
-        foreach (var name in processNames)
+        foreach (var (pid, _) in Helpers.ProcessSnapshot.Running(processNames))
         {
             try
             {
-                foreach (var p in Process.GetProcessesByName(name))
-                {
-                    try
-                    {
-                        if (p.HasExited) continue;
-                        if (!accept(p)) continue;
-                        pids.Add(p.Id);
-                        // Soft close — never kill anti-cheat services.
-                        p.CloseMainWindow();
-                    }
-                    catch { /* ignore */ }
-                    finally { p.Dispose(); }
-                }
+                using var p = Process.GetProcessById(pid);
+                if (p.HasExited) continue;
+                if (!accept(p)) continue;
+                pids.Add(p.Id);
+                // Soft close — never kill anti-cheat services.
+                p.CloseMainWindow();
             }
             catch { /* ignore */ }
         }
@@ -476,42 +477,20 @@ internal static class ProcessHelper
     /// <summary>A process of this name is running and its program is under the store client's install folder.</summary>
     internal static bool IsStoreClientRunning(StoreKind store, string processName)
     {
-        Process[] processes = [];
-        try
+        foreach (var pid in Helpers.ProcessSnapshot.PidsByName(processName))
         {
-            processes = Process.GetProcessesByName(processName);
-            return processes.Any(process =>
+            try
             {
-                try { return !process.HasExited && StoreClientIdentity.BelongsTo(store, TryGetExecutablePath(process)); }
-                catch { return false; }
-            });
+                if (StoreClientIdentity.BelongsTo(store, TryGetExecutablePath(pid)))
+                    return true;
+            }
+            catch { /* exited / denied */ }
         }
-        catch { return false; }
-        finally { foreach (var process in processes) process.Dispose(); }
+        return false;
     }
 
-    public static bool IsProcessRunning(string processName)
-    {
-        Process[] processes = [];
-        try
-        {
-            processes = Process.GetProcessesByName(processName);
-            return processes.Any(process =>
-            {
-                try { return !process.HasExited; }
-                catch { return false; }
-            });
-        }
-        catch
-        {
-            return false;
-        }
-        finally
-        {
-            foreach (var process in processes)
-                process.Dispose();
-        }
-    }
+    public static bool IsProcessRunning(string processName) =>
+        Helpers.ProcessSnapshot.IsRunning(processName);
 
     internal static bool IsPathUnderRoot(string processPath, string root)
     {
@@ -563,23 +542,15 @@ internal static class ProcessHelper
         if (string.IsNullOrWhiteSpace(installRoot) || !Directory.Exists(installRoot))
             return result;
 
-        try
+        foreach (var row in Helpers.ProcessSnapshot.Read())
         {
-            foreach (var process in Process.GetProcesses())
-            {
-                try
-                {
-                    if (process.HasExited || ignored.Contains(process.ProcessName) ||
-                        IsNonGameProcessName(process.ProcessName)) continue;
-                    var module = TryGetExecutablePath(process);
-                    if (!string.IsNullOrWhiteSpace(module) && IsPathUnderRoot(module, installRoot))
-                        result.Add(process.Id);
-                }
-                catch { /* process exited during inspection */ }
-                finally { process.Dispose(); }
-            }
+            if (row.Pid <= 4) continue;
+            var name = Helpers.ProcessSnapshot.StripExe(row.Name);
+            if (ignored.Contains(name) || IsNonGameProcessName(name)) continue;
+            var module = TryGetExecutablePath(row.Pid);
+            if (!string.IsNullOrWhiteSpace(module) && IsPathUnderRoot(module, installRoot))
+                result.Add(row.Pid);
         }
-        catch { /* enumeration race */ }
 
         return result;
     }
@@ -908,6 +879,7 @@ internal static class ProcessHelper
         HashSet<string> ignored,
         IReadOnlySet<int>? excludedProcessIds = null)
     {
+        var rows = Helpers.ProcessSnapshot.Read();
         if (processNames is { Count: > 0 })
         {
             var requireInstallRoot = !string.IsNullOrWhiteSpace(installRoot) &&
@@ -916,26 +888,19 @@ internal static class ProcessHelper
             {
                 if (string.IsNullOrWhiteSpace(name) || ignored.Contains(name) ||
                     IsNonGameProcessName(name)) continue;
-                try
+                foreach (var row in rows)
                 {
-                    foreach (var proc in Process.GetProcessesByName(name))
+                    if (row.Pid <= 4 || !Helpers.ProcessSnapshot.NameEquals(row.Name, name)) continue;
+                    if (excludedProcessIds?.Contains(row.Pid) ?? false) continue;
+                    if (requireInstallRoot)
                     {
-                        try
-                        {
-                            if (proc.HasExited || (excludedProcessIds?.Contains(proc.Id) ?? false)) continue;
-                            if (requireInstallRoot)
-                            {
-                                var module = TryGetExecutablePath(proc);
-                                if (string.IsNullOrWhiteSpace(module) ||
-                                    !IsPathUnderRoot(module, installRoot!))
-                                    continue;
-                            }
-                            return proc.Id;
-                        }
-                        finally { proc.Dispose(); }
+                        var module = TryGetExecutablePath(row.Pid);
+                        if (string.IsNullOrWhiteSpace(module) ||
+                            !IsPathUnderRoot(module, installRoot!))
+                            continue;
                     }
+                    return row.Pid;
                 }
-                catch { /* */ }
             }
 
             // A caller that supplied exact executable names asked for those
@@ -947,24 +912,18 @@ internal static class ProcessHelper
         if (string.IsNullOrWhiteSpace(installRoot) || !Directory.Exists(installRoot))
             return null;
 
-        try
+        foreach (var row in rows)
         {
-            foreach (var process in Process.GetProcesses())
-            {
-                try
-                {
-                    if (ignored.Contains(process.ProcessName) ||
-                        IsNonGameProcessName(process.ProcessName) ||
-                        (excludedProcessIds?.Contains(process.Id) ?? false)) continue;
-                    var module = TryGetExecutablePath(process);
-                    if (!string.IsNullOrWhiteSpace(module) &&
-                        IsPathUnderRoot(module, installRoot))
-                        return process.Id;
-                }
-                finally { process.Dispose(); }
-            }
+            if (row.Pid <= 4) continue;
+            var name = Helpers.ProcessSnapshot.StripExe(row.Name);
+            if (ignored.Contains(name) ||
+                IsNonGameProcessName(name) ||
+                (excludedProcessIds?.Contains(row.Pid) ?? false)) continue;
+            var module = TryGetExecutablePath(row.Pid);
+            if (!string.IsNullOrWhiteSpace(module) &&
+                IsPathUnderRoot(module, installRoot))
+                return row.Pid;
         }
-        catch { /* enumeration race */ }
 
         return null;
     }

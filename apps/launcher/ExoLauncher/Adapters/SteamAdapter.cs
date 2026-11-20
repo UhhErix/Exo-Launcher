@@ -62,7 +62,7 @@ public sealed class SteamAdapter : IStoreAdapter, IInstalledSteamManifestSource,
         var accountScope = GetActiveAccountScope();
         var activeAccount = SteamPlaytime.LoadActiveAccount(steamRoot);
         // Ownership below is the active account's; only hours may span accounts.
-        var hours = SteamPlaytime.LoadHours(steamRoot, allAccounts: true);
+        var hours = SteamPlaytime.LoadHours(steamRoot, activeAccount?.AccountId, allAccounts: true);
         IReadOnlySet<string>? authoritativeOwnedAppIds = null;
         IReadOnlySet<string>? previouslyVerified = null;
         IReadOnlySet<string>? webApiOwned = null;
@@ -191,21 +191,35 @@ public sealed class SteamAdapter : IStoreAdapter, IInstalledSteamManifestSource,
             }
         }
 
+        var manifests = new List<(string SteamApps, string Acf)>();
         foreach (var lib in CollectLibraryFolders(steamRoot))
         {
             ct.ThrowIfCancellationRequested();
             var steamApps = Path.Combine(lib, "steamapps");
             if (!Directory.Exists(steamApps)) continue;
-
             foreach (var acf in Directory.EnumerateFiles(steamApps, "appmanifest_*.acf"))
+                manifests.Add((steamApps, acf));
+        }
+
+        if (manifests.Count > 0)
+        {
+            var entries = new (string AppId, GameEntry Entry)?[manifests.Count];
+            var indices = Enumerable.Range(0, manifests.Count);
+            await Parallel.ForEachAsync(indices, new ParallelOptions
             {
+                CancellationToken = ct,
+                MaxDegreeOfParallelism = Math.Clamp(Environment.ProcessorCount, 2, 8),
+            }, (index, token) =>
+            {
+                token.ThrowIfCancellationRequested();
+                var (steamApps, acf) = manifests[index];
                 try
                 {
                     var manifest = File.ReadAllText(acf);
                     var fields = SteamProtocol.ParseAcfFields(manifest);
                     if (!SteamProtocol.TryParseAppManifest(fields, out var appId, out var name, out var installDir, out var size)
                         || appId is null || name is null)
-                        continue;
+                        return ValueTask.CompletedTask;
 
                     var path = string.IsNullOrWhiteSpace(installDir)
                         ? null
@@ -216,7 +230,7 @@ public sealed class SteamAdapter : IStoreAdapter, IInstalledSteamManifestSource,
                     // tiles. Tools and soundtracks stay until LibraryService
                     // applies Show tools.
                     if (IsAlwaysHiddenSteamEntry(appId, name, installDir))
-                        continue;
+                        return ValueTask.CompletedTask;
 
                     string? steamType = null;
                     string? parentAppId = null;
@@ -232,7 +246,7 @@ public sealed class SteamAdapter : IStoreAdapter, IInstalledSteamManifestSource,
                     var stateFlags = fields.GetValueOrDefault("StateFlags");
                     var installed = SteamStateFlags.IsInstalledPresence(pathExists, stateFlags, fields.GetValueOrDefault("buildid"));
                     if (!CatalogHygiene.KeepSteamType(steamType, showTools: true, installed: installed))
-                        continue;
+                        return ValueTask.CompletedTask;
                     long? bytesToDownload = null;
                     long? bytesDownloaded = null;
                     if (long.TryParse(fields.GetValueOrDefault("BytesToDownload"), out var btd) && btd > 0)
@@ -271,9 +285,8 @@ public sealed class SteamAdapter : IStoreAdapter, IInstalledSteamManifestSource,
                             ? (installed ? (updateAvailable ? "Update" : "Ready") : preloaded ? "Preloaded" : "Not installed")
                             : "Buy again";
 
-                    presentAppIds.Add(appId);
                     var includes = SteamGameHubs.Includes(appId, name, heldInHubs, manifest);
-                    games.Add(new GameEntry
+                    entries[index] = (appId, new GameEntry
                     {
                         Id = "steam:" + appId,
                         Title = includes?[0].Title ?? name,
@@ -314,6 +327,14 @@ public sealed class SteamAdapter : IStoreAdapter, IInstalledSteamManifestSource,
                     });
                 }
                 catch { /* skip corrupt manifests */ }
+                return ValueTask.CompletedTask;
+            }).ConfigureAwait(false);
+
+            foreach (var entry in entries)
+            {
+                if (entry is not var (appId, game)) continue;
+                presentAppIds.Add(appId);
+                games.Add(game);
             }
         }
 
@@ -1512,22 +1533,13 @@ public sealed class SteamAdapter : IStoreAdapter, IInstalledSteamManifestSource,
         if (string.IsNullOrWhiteSpace(installPath) || !Directory.Exists(installPath))
             return processIds;
 
-        try
+        foreach (var row in ProcessSnapshot.Read())
         {
-            foreach (var process in Process.GetProcesses())
-            {
-                try
-                {
-                    if (process.HasExited) continue;
-                    var path = ProcessHelper.TryGetExecutablePath(process);
-                    if (!string.IsNullOrWhiteSpace(path) && SteamProcessPath.IsWithinInstall(installPath, path))
-                        processIds.Add(process.Id);
-                }
-                catch { /* access denied / process exit */ }
-                finally { process.Dispose(); }
-            }
+            if (row.Pid <= 4) continue;
+            var path = ProcessHelper.TryGetExecutablePath(row.Pid);
+            if (!string.IsNullOrWhiteSpace(path) && SteamProcessPath.IsWithinInstall(installPath, path))
+                processIds.Add(row.Pid);
         }
-        catch { /* enumeration race */ }
 
         return processIds;
     }
@@ -1539,26 +1551,19 @@ public sealed class SteamAdapter : IStoreAdapter, IInstalledSteamManifestSource,
     {
         if (string.IsNullOrWhiteSpace(installPath) || !Directory.Exists(installPath))
             return null;
-        try
+        foreach (var row in ProcessSnapshot.Read())
         {
-            foreach (var p in Process.GetProcesses())
-            {
-                try
-                {
-                    var path = ProcessHelper.TryGetExecutablePath(p);
-                    if (string.IsNullOrWhiteSpace(path)) continue;
-                    var eligible = processIdsBeforeLaunch is null
-                        ? SteamProcessPath.IsEligibleGameProcess(p.Id, p.ProcessName, path, installPath)
-                        : SteamProcessPath.IsEligibleNewGameProcess(
-                            p.Id, p.ProcessName, path, installPath, processIdsBeforeLaunch);
-                    if (!p.HasExited && eligible)
-                        return p.Id;
-                }
-                catch { /* access denied */ }
-                finally { p.Dispose(); }
-            }
+            if (row.Pid <= 4) continue;
+            var path = ProcessHelper.TryGetExecutablePath(row.Pid);
+            if (string.IsNullOrWhiteSpace(path)) continue;
+            var name = ProcessSnapshot.StripExe(row.Name);
+            var eligible = processIdsBeforeLaunch is null
+                ? SteamProcessPath.IsEligibleGameProcess(row.Pid, name, path, installPath)
+                : SteamProcessPath.IsEligibleNewGameProcess(
+                    row.Pid, name, path, installPath, processIdsBeforeLaunch);
+            if (eligible)
+                return row.Pid;
         }
-        catch { /* */ }
         return null;
     }
 

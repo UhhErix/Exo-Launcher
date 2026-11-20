@@ -36,21 +36,63 @@ public sealed partial class MainWindow
     // While you're in a call and Exo's Music room plays nothing: another app's song, read every 3 s, for your call.
     private Timer? _otherMusicTimer;
     private bool _sharingOtherMusic;
+    private Action? _otherMusicCallHandler;
+    private Action<MediaSessionService.Snapshot>? _playbackChangedHandler;
+    private int _otherMusicRunning;
 
     /// <summary>
     /// The song your call's Exo apps see when it comes from another player on this PC (the Spotify app, Apple Music, a
     /// browser's YouTube Music): your Music room's song wins while it plays; another app's is read while you're in a call,
     /// and goes when it stops (your Music room's own, paused or none, is said again).
     /// </summary>
-    private void StartOtherMusic() => _otherMusicTimer ??= new Timer(_ => _ = ShareOtherMusicAsync(), null, 3000, 3000);
+    private void StartOtherMusic()
+    {
+        if (_otherMusicTimer is not null) return;
+        _otherMusicTimer = new Timer(_ => _ = ShareOtherMusicAsync(), null, Timeout.InfiniteTimeSpan, Timeout.InfiniteTimeSpan);
+        _otherMusicCallHandler = () => ReevaluateOtherMusicTimer();
+        Services.DiscordClient.DiscordSession.CallStateChanged += _otherMusicCallHandler;
+        ReevaluateOtherMusicTimer();
+    }
+
+    private void ReevaluateOtherMusicTimer()
+    {
+        var timer = _otherMusicTimer;
+        if (timer is null || _musicWebClosed || _closingWindow) return;
+        var shouldPoll = Services.DiscordClient.DiscordSession.Current is { InCall: true }
+            && _mediaSessions?.Current is not { Status: "playing" };
+        if (shouldPoll)
+        {
+            if (Interlocked.Exchange(ref _otherMusicRunning, 1) == 0)
+            {
+                try { timer.Change(TimeSpan.Zero, TimeSpan.FromSeconds(3)); }
+                catch (ObjectDisposedException) { }
+            }
+        }
+        else if (Interlocked.Exchange(ref _otherMusicRunning, 0) == 1 || _sharingOtherMusic)
+        {
+            try { timer.Change(Timeout.InfiniteTimeSpan, Timeout.InfiniteTimeSpan); }
+            catch (ObjectDisposedException) { }
+            if (_sharingOtherMusic) _ = ShareOtherMusicAsync();
+        }
+    }
 
     private async Task ShareOtherMusicAsync()
     {
         try
         {
-            if (Services.DiscordClient.DiscordSession.Current is not { InCall: true } session) { _sharingOtherMusic = false; return; }
+            if (Services.DiscordClient.DiscordSession.Current is not { InCall: true } session)
+            {
+                _sharingOtherMusic = false;
+                ReevaluateOtherMusicTimer();
+                return;
+            }
             var room = _mediaSessions?.Current;
-            if (room is { Status: "playing" }) { _sharingOtherMusic = false; return; }
+            if (room is { Status: "playing" })
+            {
+                _sharingOtherMusic = false;
+                ReevaluateOtherMusicTimer();
+                return;
+            }
             var other = await MediaSessions.OtherMusicAsync().ConfigureAwait(false);
             if (other is not null)
             {
@@ -84,11 +126,12 @@ public sealed partial class MainWindow
     {
         var sessions = new MediaSessionService();
         StartOtherMusic();
-        sessions.PlaybackChanged += snapshot =>
+        _playbackChangedHandler = snapshot =>
             DispatcherQueue.Enqueue(() =>
             {
                 if (_closingWindow) return;
                 ReevaluateShellSleep();
+                ReevaluateOtherMusicTimer();
                 if (snapshot.Provider != _musicWebService) return;
                 if (snapshot.Status == "playing") ApplyPendingMusicVolume();
                 // Your song for the Exo apps in your Discord call (through the call relay, end-to-end encrypted), never for Discord.
@@ -98,6 +141,7 @@ public sealed partial class MainWindow
                     snapshot.Status, snapshot.Title, snapshot.Artist, snapshot.PositionMs, snapshot.DurationMs, snapshot.TrackId), snapshot.CapturedAt);
                 PublishMusicPlayback(snapshot);
             });
+        sessions.PlaybackChanged += _playbackChangedHandler;
         return sessions;
     }
 
@@ -269,9 +313,13 @@ public sealed partial class MainWindow
             current.Dispose();
         }
         if (!MusicWebPolicy.IsService(_musicWebService) || !_musicWebReady || _musicWeb?.CoreWebView2 is not { } core) return null;
-        var link = MusicAppVolume.ForWebPage(_musicWebService!, MusicWebEvaluate(core), paused: () => MusicWebSuspended(core));
+        var link = MusicAppVolume.ForWebPage(
+            _musicWebService!,
+            MusicWebEvaluate(core),
+            paused: () => MusicWebSuspended(core),
+            idle: () => WindowIsHiddenOrMinimized() && !Volatile.Read(ref _musicWebAudio));
         _musicAppVolume = link;
-        link.Changed += changed => DispatcherQueue.Enqueue(async () =>
+        link.Changed += changed => DispatcherQueue.EnqueueAsync(async () =>
         {
             if (!ReferenceEquals(_musicAppVolume, link)) return;
             // The page answers again: a level chosen while it could not lands now.
@@ -290,7 +338,7 @@ public sealed partial class MainWindow
             }
             _musicVolumeYours = (link.Service, changed);
             PublishMusicVolume(changed);
-        });
+        }, "Music volume update");
         link.Watch();
         return link;
     }
@@ -455,6 +503,11 @@ public sealed partial class MainWindow
             view.Visibility = Visibility.Visible;
             if (core.IsSuspended) core.Resume();
             SetWebViewMemoryTarget(core, CoreWebView2MemoryUsageTargetLevel.Normal);
+            _musicNowPlaying?.Wake();
+            _musicAppVolume?.Wake();
+            // Always re-arm the idle-suspend countdown after waking so hovers, room switches, or paused transport
+            // controls do not leave the background Music WebView rendering indefinitely when nothing plays.
+            ApplyMusicMemoryTarget();
         }
         catch { /* Navigation/recreation reports its own recovery state. */ }
     }
@@ -514,8 +567,18 @@ public sealed partial class MainWindow
         ResetMusicWebView();
         _musicNowPlaying?.Dispose();
         _musicNowPlaying = null;
+        if (_otherMusicCallHandler is not null)
+        {
+            Services.DiscordClient.DiscordSession.CallStateChanged -= _otherMusicCallHandler;
+            _otherMusicCallHandler = null;
+        }
         _otherMusicTimer?.Dispose();
+        _otherMusicTimer = null;
+        if (_mediaSessions is not null && _playbackChangedHandler is not null)
+            _mediaSessions.PlaybackChanged -= _playbackChangedHandler;
+        _playbackChangedHandler = null;
         _mediaSessions?.Dispose();
+        _mediaSessions = null;
     }
 
     private void ApplyMusicMemoryTarget()

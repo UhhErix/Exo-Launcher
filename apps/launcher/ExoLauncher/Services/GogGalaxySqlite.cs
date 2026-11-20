@@ -29,6 +29,76 @@ internal static class GogGalaxySqlite
         return true;
     }
 
+    internal sealed record CombinedData(IReadOnlyList<GameTime> GogTimes, IReadOnlyList<GalaxyPlatformTimes.Row> PlatformRows);
+
+    /// <summary>
+    /// Reads GOG game times and non-GOG Galaxy platform times from a single SQLite transaction so a library scan opens
+    /// galaxy-2.0.db once instead of twice.
+    /// </summary>
+    internal static CombinedData ReadCombined(string databasePath)
+    {
+        using var snapshot = OpenSnapshot(databasePath);
+        var lastPlayedByGogId = new Dictionary<string, DateTimeOffset>(StringComparer.Ordinal);
+        var lastPlayedByReleaseKey = new Dictionary<string, DateTimeOffset>(StringComparer.OrdinalIgnoreCase);
+        foreach (var row in snapshot.ReadTable("LastPlayedDates"))
+        {
+            var rawKey = Value(row, "gameReleaseKey", "releaseKey");
+            if (!TryParseStamp(Value(row, "lastPlayedDate", "lastPlayed"), out var when) || rawKey is null) continue;
+            if (TryParseReleaseKey(rawKey, out var id) && (!lastPlayedByGogId.TryGetValue(id, out var gogCurrent) || when > gogCurrent))
+                lastPlayedByGogId[id] = when;
+            if (!lastPlayedByReleaseKey.TryGetValue(rawKey, out var relCurrent) || when > relCurrent)
+                lastPlayedByReleaseKey[rawKey] = when;
+        }
+
+        var gogRows = new List<GameTime>();
+        var platformMinutes = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        foreach (var row in snapshot.ReadTable("GameTimes"))
+        {
+            var key = Value(row, "releaseKey", "release_key", "gameReleaseKey", "game_release_key", "productId", "product_id", "gameId", "game_id");
+            var minutesText = Value(row, "minutesInGame", "minutes", "time", "timePlayed", "time_played", "playtime");
+            if (!int.TryParse(minutesText, NumberStyles.Integer, CultureInfo.InvariantCulture, out var minutes) ||
+                minutes is <= 0 or >= 100_000_000) continue;
+
+            if (TryParseReleaseKey(key, out var productId))
+            {
+                DateTimeOffset? last = null;
+                var stamp = Value(row, "lastPlayed", "lastPlayedUtc", "last_played", "last_played_time", "lastSession", "last_session");
+                if (TryParseStamp(stamp, out var parsed)) last = parsed;
+                else if (lastPlayedByGogId.TryGetValue(productId, out var dated)) last = dated;
+                gogRows.Add(new GameTime(productId, minutes, last));
+            }
+            else if (GalaxyPlatformTimes.TryParseReleaseKey(key, out var platform, out _) && platform != "gog")
+            {
+                if (!platformMinutes.TryGetValue(key!, out var current) || minutes > current)
+                    platformMinutes[key!] = minutes;
+            }
+        }
+
+        if (platformMinutes.Count == 0)
+            return new CombinedData(gogRows, Array.Empty<GalaxyPlatformTimes.Row>());
+
+        var titles = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
+        foreach (var (releaseKey, value) in snapshot.ReadTitlePieces())
+        {
+            if (!platformMinutes.ContainsKey(releaseKey) || GalaxyPlatformTimes.ParseTitle(value) is not { } title) continue;
+            if (!titles.TryGetValue(releaseKey, out var list)) titles[releaseKey] = list = [];
+            if (!list.Contains(title, StringComparer.Ordinal)) list.Add(title);
+        }
+
+        var platformRows = platformMinutes.Select(pair =>
+        {
+            GalaxyPlatformTimes.TryParseReleaseKey(pair.Key, out var platform, out var id);
+            return new GalaxyPlatformTimes.Row(
+                platform,
+                id,
+                pair.Value,
+                lastPlayedByReleaseKey.TryGetValue(pair.Key, out var last) ? last : null,
+                titles.TryGetValue(pair.Key, out var list) ? list : Array.Empty<string>());
+        }).ToList();
+
+        return new CombinedData(gogRows, platformRows);
+    }
+
     internal static IReadOnlyList<GameTime> ReadGameTimes(string databasePath)
     {
         using var snapshot = OpenSnapshot(databasePath);

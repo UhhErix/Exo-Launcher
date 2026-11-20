@@ -310,7 +310,10 @@ internal static partial class Peripherals
             if (_debounce is not null) return;
             _debounce = new Timer(_ =>
             {
-                foreach (var each in _changed!.GetInvocationList())
+                Delegate[]? handlers;
+                lock (WatchGate) handlers = _changed?.GetInvocationList();
+                if (handlers is null) return;
+                foreach (var each in handlers)
                 {
                     try { ((Action)each)(); }
                     catch (Exception ex) { AppLog.Debug("Devices: change handler failed: " + ex.Message); }
@@ -335,6 +338,12 @@ internal static partial class Peripherals
                 AppLog.Info($"Devices: audio device notifications unavailable (0x{ex.HResult:X8}).");
             }
         }
+    }
+
+    /// <summary>Stops notifying <paramref name="changed"/> on device or audio changes.</summary>
+    internal static void Unwatch(Action changed)
+    {
+        lock (WatchGate) _changed -= changed;
     }
 
     private static void Poke()

@@ -11,7 +11,19 @@ public sealed partial class MainWindow
     /// controller doesn't always ask Windows to stay awake itself. One Windows power request, named for Exo in
     /// powercfg /requests, held from the first game's start to the last one's end.
     /// </summary>
-    private void StartGameAwake() => App.Services.Launcher.GameRunStateChanged += (_, _) => Task.Run(SyncGameAwake);
+    private Action<string, Services.GameRunState>? _gameAwakeHandler;
+
+    private void StartGameAwake()
+    {
+        _gameAwakeHandler ??= (_, _) => Task.Run(SyncGameAwake);
+        App.Services.Launcher.GameRunStateChanged += _gameAwakeHandler;
+    }
+
+    private void StopGameAwake()
+    {
+        if (Interlocked.Exchange(ref _gameAwakeHandler, null) is { } handler)
+            App.Services.Launcher.GameRunStateChanged -= handler;
+    }
 
     private static readonly Lock GameAwakeGate = new();
     private static nint _gameAwake;

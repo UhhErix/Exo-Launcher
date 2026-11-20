@@ -700,18 +700,17 @@ internal sealed partial class ReplacedApps
     {
         var folders = app.Paths.Select(_scan.Expand).Where(Directory.Exists).Select(folder => folder.TrimEnd('\\') + '\\').ToList();
         if (folders.Count == 0) return;
-        foreach (var process in Process.GetProcesses())
+        foreach (var row in ProcessSnapshot.Read())
         {
-            using (process)
+            if (row.Pid <= 4) continue;
+            var exe = Adapters.ProcessHelper.QueryFullProcessImageName(row.Pid);
+            if (exe is null || !folders.Any(folder => exe.StartsWith(folder, StringComparison.OrdinalIgnoreCase))) continue;
+            try
             {
-                try
-                {
-                    var exe = process.MainModule?.FileName;
-                    if (exe is null || !folders.Any(folder => exe.StartsWith(folder, StringComparison.OrdinalIgnoreCase))) continue;
-                    if (ProcessTermination.Kill(process, entireProcessTree: true)) process.WaitForExit(5000);
-                }
-                catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException or NotSupportedException) { }
+                using var process = Process.GetProcessById(row.Pid);
+                if (ProcessTermination.Kill(process, entireProcessTree: true)) process.WaitForExit(5000);
             }
+            catch (Exception ex) when (ex is ArgumentException or System.ComponentModel.Win32Exception or InvalidOperationException or NotSupportedException) { }
         }
     }
 

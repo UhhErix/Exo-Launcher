@@ -865,6 +865,10 @@ public sealed class SettingsService
         settings.MouseBridgeAppPath = null;
     });
 
+    /// <summary>Records the completed one-time startup migration watermark on this PC.</summary>
+    internal void RecordStartupMigrationVersion(int version) =>
+        TryCommitMutation(settings => settings.StartupMigrationVersion = Math.Max(settings.StartupMigrationVersion, version), out _);
+
     public void RecordLaunch(string gameId)
     {
         if (string.IsNullOrWhiteSpace(gameId)) return;
@@ -1102,6 +1106,7 @@ public sealed class SettingsService
         PlayStationPadSeen = source.PlayStationPadSeen,
         SteamBetaJoined = source.SteamBetaJoined,
         NvidiaDriverBranch = source.NvidiaDriverBranch == "studio" ? "studio" : null,
+        StartupMigrationVersion = Math.Max(0, source.StartupMigrationVersion),
         StartWithWindows = source.StartWithWindows,
         StartupHandedToExo = [.. (source.StartupHandedToExo ?? []).Where(id => StartupApps.Known.Any(app => app.Id == id)).Distinct()],
     };

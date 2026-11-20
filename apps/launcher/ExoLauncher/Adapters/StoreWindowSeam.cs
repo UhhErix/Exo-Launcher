@@ -147,29 +147,6 @@ internal sealed class Win32StoreProcesses : IStoreProcesses
     /// Live PIDs whose process name is in <paramref name="processNames"/>. Looking each name up on its own snapshots the
     /// whole process table once per name; one snapshot per pass keeps that cost flat.
     /// </summary>
-    public IReadOnlyList<(int ProcessId, string Name)> Running(IEnumerable<string> processNames)
-    {
-        var wanted = processNames as HashSet<string> is { } set && ReferenceEquals(set.Comparer, StringComparer.OrdinalIgnoreCase)
-            ? set
-            : new HashSet<string>(processNames, StringComparer.OrdinalIgnoreCase);
-        var hits = new List<(int, string)>();
-        if (wanted.Count == 0) return hits;
-
-        Process[] all;
-        try { all = Process.GetProcesses(); }
-        catch { return hits; }
-
-        foreach (var process in all)
-        {
-            try
-            {
-                var name = process.ProcessName;
-                if (wanted.Contains(name) && !process.HasExited)
-                    hits.Add((process.Id, name));
-            }
-            catch { /* process exited during inspection */ }
-            finally { process.Dispose(); }
-        }
-        return hits;
-    }
+    public IReadOnlyList<(int ProcessId, string Name)> Running(IEnumerable<string> processNames) =>
+        Helpers.ProcessSnapshot.Running(processNames);
 }

@@ -59,22 +59,45 @@ internal static partial class SteamPlaytime
     public static IReadOnlyDictionary<string, Entry> LoadHours(string steamRoot, bool allAccounts) =>
         LoadHours(steamRoot, ResolveActiveAccountId(steamRoot, ReadRegistryActiveAccountId()), allAccounts);
 
+    private static string? _mergedHoursKey;
+    private static IReadOnlyDictionary<string, Entry>? _mergedHours;
+
     internal static IReadOnlyDictionary<string, Entry> LoadHours(string steamRoot, string? activeAccountId, bool allAccounts)
     {
         var active = string.IsNullOrWhiteSpace(steamRoot) ? null : LoadAccount(steamRoot, activeAccountId);
         IReadOnlyDictionary<string, Entry> activeOnly = active?.Entries ?? new Dictionary<string, Entry>(StringComparer.Ordinal);
         if (!allAccounts || string.IsNullOrWhiteSpace(steamRoot)) return activeOnly;
+        var root = NormalizeRoot(steamRoot);
         var maps = new List<IReadOnlyDictionary<string, Entry>>();
+        var stampBuilder = new StringBuilder(root.Length + 64);
+        stampBuilder.Append(root);
         try
         {
-            foreach (var dir in Directory.EnumerateDirectories(Path.Combine(NormalizeRoot(steamRoot), "userdata")))
+            foreach (var dir in Directory.EnumerateDirectories(Path.Combine(root, "userdata")))
             {
                 if (!IsSafeAccountId(Path.GetFileName(dir))) continue;
-                if (LoadAccountEntries(Path.Combine(dir, "config", "localconfig.vdf")) is { } map) maps.Add(map);
+                var config = Path.Combine(dir, "config", "localconfig.vdf");
+                var info = new FileInfo(config);
+                if (!info.Exists) continue;
+                stampBuilder.Append('|').Append(dir).Append(':').Append(info.Length).Append(':').Append(info.LastWriteTimeUtc.Ticks);
+                if (LoadAccountEntries(config, info) is { } map) maps.Add(map);
             }
         }
         catch { /* userdata unreadable: the active account alone */ }
-        return maps.Count == 0 ? activeOnly : MergeAccounts(maps);
+        if (maps.Count == 0) return activeOnly;
+        var key = stampBuilder.ToString();
+        lock (Gate)
+        {
+            if (_mergedHours is not null && string.Equals(_mergedHoursKey, key, StringComparison.OrdinalIgnoreCase))
+                return _mergedHours;
+        }
+        var merged = MergeAccounts(maps);
+        lock (Gate)
+        {
+            _mergedHoursKey = key;
+            _mergedHours = merged;
+        }
+        return merged;
     }
 
     /// <summary>Per game: the sum of each account's minutes and the latest last played.</summary>
@@ -103,9 +126,9 @@ internal static partial class SteamPlaytime
         new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>One account's entries, re-parsed only when Steam rewrote its file.</summary>
-    private static IReadOnlyDictionary<string, Entry>? LoadAccountEntries(string config)
+    private static IReadOnlyDictionary<string, Entry>? LoadAccountEntries(string config, FileInfo? existingInfo = null)
     {
-        var info = new FileInfo(config);
+        var info = existingInfo ?? new FileInfo(config);
         if (!info.Exists) return null;
         var stamp = (info.Length, info.LastWriteTimeUtc.Ticks);
         lock (Gate)

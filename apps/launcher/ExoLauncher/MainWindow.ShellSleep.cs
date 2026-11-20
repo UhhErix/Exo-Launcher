@@ -74,6 +74,12 @@ public sealed partial class MainWindow
         App.Services.Launcher.DownloadQueueChanged += ReevaluateShellSleep;
     }
 
+    private void DetachShellSleepTriggers()
+    {
+        Services.DiscordClient.DiscordSession.CallStateChanged -= ReevaluateShellSleep;
+        App.Services.Launcher.DownloadQueueChanged -= ReevaluateShellSleep;
+    }
+
     private async Task SleepShellAsync(CancellationTokenSource cancel)
     {
         var hidPage = false;

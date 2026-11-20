@@ -8,6 +8,7 @@ public sealed partial class WebHostBridge
     private static readonly TimeSpan GiftsFresh = TimeSpan.FromMinutes(30);
     private readonly StoreGifts _gifts = new();
     private Microsoft.UI.Dispatching.DispatcherQueueTimer? _giftsTimer;
+    private Windows.Foundation.TypedEventHandler<Microsoft.UI.Dispatching.DispatcherQueueTimer, object>? _giftsTimerTick;
     private DateTimeOffset _giftsReadAt;
     private bool _giftsReading;
 
@@ -22,14 +23,28 @@ public sealed partial class WebHostBridge
         {
             _giftsTimer = _queue.CreateTimer();
             _giftsTimer.Interval = GiftsFresh;
-            _giftsTimer.Tick += (_, _) => UiGuard.Run(() =>
+            _giftsTimerTick = (_, _) => UiGuard.Run(() =>
             {
                 if (App.MainAppWindow?.WindowIsActive == true && !_services.Launcher.AnyGameRunning) _ = ReadGiftsAsync();
             });
+            _giftsTimer.Tick += _giftsTimerTick;
             _giftsTimer.Start();
         }
         if (force || DateTimeOffset.UtcNow - _giftsReadAt > GiftsFresh) _ = ReadGiftsAsync();
         return GiftsDto(_gifts.Last);
+    }
+
+    private void StopGiftsTimer()
+    {
+        var timer = Interlocked.Exchange(ref _giftsTimer, null);
+        if (timer is null) return;
+        try
+        {
+            if (_giftsTimerTick is { } tick) timer.Tick -= tick;
+            _giftsTimerTick = null;
+            timer.Stop();
+        }
+        catch { }
     }
 
     /// <summary>Reads both stores again and tells the page. UI thread only.</summary>

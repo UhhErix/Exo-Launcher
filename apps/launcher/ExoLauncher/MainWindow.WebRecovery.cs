@@ -214,12 +214,12 @@ public sealed partial class MainWindow
     {
         if (App.MainAppWindow is not { } window) return Task.CompletedTask;
         var done = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        if (!window.DispatcherQueue.Enqueue(async () =>
+        if (!window.DispatcherQueue.EnqueueAsync(async () =>
             {
                 try { await work(window); }
                 catch (Exception ex) { AppLog.Warn("webview-reload after a driver: " + ex.Message); }
                 finally { done.TrySetResult(); }
-            }))
+            }, "WebView driver reload"))
             return Task.CompletedTask;
         return Task.WhenAny(done.Task, Task.Delay(PageBackWait + TimeSpan.FromSeconds(5)));
     }

@@ -17,6 +17,9 @@ internal static class SteamPendingSettings
     /// <summary>Called once, when the bridge starts: the one that answers for the waiting values.</summary>
     internal static void Attach(WebHostBridge bridge) => _bridge = bridge;
 
+    /// <summary>Detaches <paramref name="bridge"/> when it shuts down or is replaced.</summary>
+    internal static void Detach(WebHostBridge bridge) => Interlocked.CompareExchange(ref _bridge, null, bridge);
+
     /// <summary>
     /// Writes what waited before Exo starts Steam. Steam is not running here (every start made is made with it closed),
     /// so the write lands in the files Steam is about to read. A failure never keeps Steam from starting.

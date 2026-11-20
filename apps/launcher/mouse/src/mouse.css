@@ -1534,6 +1534,13 @@ button:focus-visible, input:focus-visible, select:focus-visible {
   :root:not([data-exo-motion]) :is(.m-select, .m-button, .m-link):active:not(:disabled) { scale: none; }
 }
 
+/* Pause active animations whenever the frame is hidden so WebView2 stops ticking off-screen. */
+:root[data-hidden='true'] *,
+:root[data-hidden='true'] *::before,
+:root[data-hidden='true'] *::after {
+  animation-play-state: paused !important;
+}
+
 /* Windows' contrast themes: a plain outlined bar in the system's colors. */
 @media (forced-colors: active) {
   .m-progress-track {

@@ -13,26 +13,40 @@ public sealed partial class MainWindow
     /// starts one; and once as Exo starts, for a game that ended while Exo was closed. Each marker it clears is evidence for
     /// Keep that the session after it may have reset the settings.
     /// </summary>
+    private Action<Models.GameEntry>? _safeModeLaunchingHandler;
+    private Action<string, GameRunState>? _safeModeRunStateHandler;
+
     private void StartSafeModeGuard()
     {
-        App.Services.Launcher.GameLaunching += game => ClearSafeModeMarker(game, "starts");
-        App.Services.Launcher.GameRunStateChanged += (gameId, state) =>
+        _safeModeLaunchingHandler ??= game => ClearSafeModeMarker(game, "starts");
+        _safeModeRunStateHandler ??= (gameId, state) =>
         {
             if (state.IsRunning || App.Services.Library.Find(gameId) is not { } game) return;
             _ = GuardMarkerAsync(game, "ended");
         };
+        App.Services.Launcher.GameLaunching += _safeModeLaunchingHandler;
+        App.Services.Launcher.GameRunStateChanged += _safeModeRunStateHandler;
         _ = Task.Run(async () =>
         {
             try
             {
                 // After the start's own work.
-                await Task.Delay(TimeSpan.FromSeconds(15)).ConfigureAwait(false);
+                await Task.Delay(TimeSpan.FromSeconds(15), _lifetimeCts.Token).ConfigureAwait(false);
                 foreach (var game in await App.Services.Library.GetLibraryAsync().ConfigureAwait(false))
-                    if (game.Installed && !string.IsNullOrEmpty(game.Path) && File.Exists(Path.Combine(game.Path, "__cod")))
+                    if (!_closingWindow && game.Installed && !string.IsNullOrEmpty(game.Path) && File.Exists(Path.Combine(game.Path, "__cod")))
                         await GuardMarkerAsync(game, "was found as Exo started").ConfigureAwait(false);
             }
+            catch (OperationCanceledException) when (_closingWindow) { }
             catch (Exception ex) { AppLog.Warn($"Safe mode: the look as Exo started failed: {ex.GetType().Name}"); }
         });
+    }
+
+    private void StopSafeModeGuard()
+    {
+        if (Interlocked.Exchange(ref _safeModeLaunchingHandler, null) is { } launching)
+            App.Services.Launcher.GameLaunching -= launching;
+        if (Interlocked.Exchange(ref _safeModeRunStateHandler, null) is { } runState)
+            App.Services.Launcher.GameRunStateChanged -= runState;
     }
 
     private static async Task GuardMarkerAsync(Models.GameEntry game, string when)

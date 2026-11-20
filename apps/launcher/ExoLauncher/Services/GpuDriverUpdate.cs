@@ -457,26 +457,15 @@ internal static partial class GpuDriverUpdate
     private static string? AmdInstallerRunning(string unpacked)
     {
         var root = Adapters.ProcessHelper.RootPrefix(unpacked);
-        var processes = Process.GetProcesses();
-        try
+        foreach (var row in Helpers.ProcessSnapshot.Read())
         {
-            foreach (var process in processes)
-            {
-                try
-                {
-                    var name = process.ProcessName;
-                    if (AmdInstallers.Contains(name, StringComparer.OrdinalIgnoreCase)) return name;
-                    if (root is not null && Adapters.ProcessHelper.QueryFullProcessImageName(process.Id) is { } path
-                        && path.StartsWith(root, StringComparison.OrdinalIgnoreCase)) return name;
-                }
-                catch (InvalidOperationException) { /* exited meanwhile */ }
-            }
-            return null;
+            if (row.Pid <= 4 || string.IsNullOrEmpty(row.Name)) continue;
+            var name = Helpers.ProcessSnapshot.StripExe(row.Name);
+            if (AmdInstallers.Contains(name, StringComparer.OrdinalIgnoreCase)) return name;
+            if (root is not null && Adapters.ProcessHelper.QueryFullProcessImageName(row.Pid) is { } path
+                && path.StartsWith(root, StringComparison.OrdinalIgnoreCase)) return name;
         }
-        finally
-        {
-            foreach (var process in processes) process.Dispose();
-        }
+        return null;
     }
 
     /// <summary>AMD's install log as it is now (AMD may still be writing it), or null.</summary>

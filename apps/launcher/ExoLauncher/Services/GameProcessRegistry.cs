@@ -398,16 +398,19 @@ internal sealed class GameProcessRegistry
             }
             catch { _launched.TryRemove(game.Id, out _); }
         }
-        foreach (var process in Process.GetProcesses())
+        foreach (var row in Helpers.ProcessSnapshot.Read())
         {
+            if (row.Pid <= 4) continue;
+            var name = Helpers.ProcessSnapshot.StripExe(row.Name);
+            if (IsReservedProcessName(name)) continue;
+            if (matches.Any(match => match.ProcessId == row.Pid)) continue;
             try
             {
-                if (TryReadEligibleIdentity(game, process, out var identity) &&
-                    !matches.Any(match => match.ProcessId == identity.ProcessId))
+                using var process = Process.GetProcessById(row.Pid);
+                if (TryReadEligibleIdentity(game, process, out var identity, byId: true))
                     matches.Add(identity);
             }
             catch { /* process exited or module inspection was denied */ }
-            finally { process.Dispose(); }
         }
         return matches;
     }
