@@ -411,7 +411,7 @@ internal sealed partial class NetworkBest(NetworkTune tune, NetworkBest.ISystem 
     internal const string Prelude =
         "$ErrorActionPreference='SilentlyContinue'\n$r=0\n" +
         "function C($l){$i=New-Object Diagnostics.ProcessStartInfo;$i.FileName=[Environment]::SystemDirectory+'\\cmd.exe';$i.Arguments='/d /s /c \"'+$l+'\"';$i.UseShellExecute=$false;$i.CreateNoWindow=$true;$p=[Diagnostics.Process]::Start($i);$p.WaitForExit()}\n" +
-        "function T{foreach($n in 1..25){Clear-DnsClientCache;if(Resolve-DnsName getexo.app -Type A -DnsOnly -QuickTimeout){return $true};Start-Sleep -Milliseconds 800};return $false}\n";
+        "function T{foreach($n in 1..25){Clear-DnsClientCache;if(Resolve-DnsName getexo.app -Type A -DnsOnly -QuickTimeout){return $true};if((Resolve-DnsName one.one.one.one -Type A -DnsOnly -QuickTimeout) -or (Resolve-DnsName dns.msftncsi.com -Type A -DnsOnly -QuickTimeout) -or (Resolve-DnsName one.one.one.one -Server 1.1.1.1 -Type A -DnsOnly -QuickTimeout)){return $true};Start-Sleep -Milliseconds 800};return $false}\n";
 
     /// <summary>One item: its lines, then the lookup check; when it fails, the lines that put it back and its bit in $r.</summary>
     internal static void Step(StringBuilder script, string key, IEnumerable<string> set, IEnumerable<string> back)

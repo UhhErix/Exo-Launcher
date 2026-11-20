@@ -93,17 +93,52 @@ internal static class BuiltInFps
 internal static class FpsCounter
 {
     private static readonly Lock Gate = new();
+    private static readonly HashSet<string> NonGameShellProcesses = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "explorer", "shellexperiencehost", "searchhost", "startmenuexperiencehost", "lockapp", "logonui",
+        "dwm", "taskmgr", "applicationframehost", "chrome", "msedge", "firefox", "brave", "opera", "vivaldi",
+        "discord", "spotify", "obs64", "obs32", "streamlabs obs",
+    };
 
     private static volatile PresentTrace? _trace;
     private static volatile HashSet<int> _tree = [];
+    private static volatile LaunchOrchestrator? _launcher;
+    private static volatile GameEntry[] _followedGames = [];
     private static volatile string _position = "right";
     private static volatile List<string> _items = [];
     private static FpsOverlay? _overlay;
     private static Sampler? _sampler;
     private static bool _refused;
+    private static int _refusedError;
+    private static int _retryAttempt;
+    private static long _lastRescanAt;
+    private static int _rescanning;
+    private static int _lastForegroundPid;
 
-    /// <summary>When to look again: twice a second over the game; slowly under exclusive full screen, which no window can show over and which sends no word when it ends; away from the game, not until the front changes.</summary>
+    /// <summary>When to look again: twice a second over the game; slowly under exclusive full screen; light backoff on transient null foreground while a game runs; away from the game, wait until foreground changes.</summary>
     internal static uint LookAfter(bool frontIsGame, bool exclusiveFullScreen) => !frontIsGame ? 0u : exclusiveFullScreen ? 2000u : 500u;
+
+    /// <summary>Keeps a light 750 ms poll when foreground transiently reports null while a game runs instead of killing the timer.</summary>
+    internal static uint LookAfter(bool frontIsGame, bool exclusiveFullScreen, bool transientNullForeground) =>
+        !frontIsGame && transientNullForeground ? 750u : LookAfter(frontIsGame, exclusiveFullScreen);
+
+    /// <summary>Never suppress the overlay on QUNS_RUNNING_D3D_FULL_SCREEN (3): modern flip-model / borderless games still report it while topmost Composition overlays display cleanly.</summary>
+    internal static bool SuppressesForNotificationState(int notificationState) => false;
+
+    /// <summary>Opt-in check for whether built-in-FPS suppression applies when the player enabled it and selected no extra items.</summary>
+    internal static bool ShouldSuppressOverlay(bool hideOverBuiltIn, GameEntry game, IEnumerable<string>? items) =>
+        hideOverBuiltIn && BuiltInFps.Has(game) && FpsItems.Clean(items).Count == 0;
+
+    /// <summary>How long to wait before retrying ETW startup: 10 minutes for access denied, or 2s -> 5s -> 15s -> 60s for transient errors.</summary>
+    internal static long RetryDelayMs(int error, int failureAttempt) => error == PresentTrace.AccessDenied
+        ? RetryRightsAfterMs
+        : failureAttempt switch
+        {
+            <= 1 => 2_000L,
+            2 => 5_000L,
+            3 => 15_000L,
+            _ => 60_000L,
+        };
 
     /// <summary>What a followed game's frames are wanted for: the overlay, and the session recorder (which needs no overlay).</summary>
     internal readonly record struct Wanted(bool Overlay, bool Recorder)
@@ -112,8 +147,8 @@ internal static class FpsCounter
     }
 
     /// <summary>
-    /// The overlay when its switch is on, except over a game that shows its own FPS and has no extra items; the recorder for every
-    /// game it records (<see cref="SessionRecorderHost.Records"/>), whatever the overlay does. The trace runs for either.
+    /// The overlay when its switch is on, except when explicitly configured to hide over a built-in counter with no extra items;
+    /// the recorder for every game it records (<see cref="SessionRecorderHost.Records"/>), whatever the overlay does. The trace runs for either.
     /// </summary>
     internal static Wanted Wants(bool overlaySetting, bool builtInFpsWithNoItems, bool recordsThisGame) => new(overlaySetting && !builtInFpsWithNoItems, recordsThisGame);
 
@@ -129,6 +164,43 @@ internal static class FpsCounter
         _ = Task.Run(PresentTrace.StopStale);
     }
 
+    /// <summary>Matches the foreground PID to the followed game by PID tree, executable / install folder, or full-screen GameRunningSignal fallback.</summary>
+    internal static bool ForegroundMatchesGame(int frontPid, IReadOnlySet<int> tree, string? frontExePath, IReadOnlyList<GameEntry> games, bool gameRunningSignal, bool frontIsFullScreen, int selfPid)
+    {
+        if (frontPid <= 0 || frontPid == selfPid) return false;
+        if (tree.Contains(frontPid)) return true;
+        var procName = string.IsNullOrWhiteSpace(frontExePath) ? null : Path.GetFileNameWithoutExtension(frontExePath);
+        if (!string.IsNullOrWhiteSpace(procName) && GameProcessRegistry.IsReservedProcessName(procName)) return false;
+        if (!string.IsNullOrWhiteSpace(frontExePath))
+        {
+            foreach (var game in games)
+            {
+                if (!string.IsNullOrWhiteSpace(procName) && GameProcessRegistry.IsEligibleExecutableForStop(game, procName, frontExePath))
+                    return true;
+                if (!string.IsNullOrWhiteSpace(game.Path)
+                    && Adapters.ProcessHelper.IsPathUnderRoot(frontExePath, game.Path)
+                    && !Adapters.ProcessHelper.IsInHelperFolder(frontExePath, game.Path))
+                    return true;
+                if (!string.IsNullOrWhiteSpace(game.LaunchTarget) && IsExecutableMatch(frontExePath, game.LaunchTarget))
+                    return true;
+            }
+        }
+        if (gameRunningSignal && frontIsFullScreen && (string.IsNullOrWhiteSpace(procName) || !NonGameShellProcesses.Contains(procName)))
+            return true;
+        return false;
+    }
+
+    private static bool IsExecutableMatch(string frontExePath, string launchTarget)
+    {
+        try
+        {
+            if (File.Exists(launchTarget) || launchTarget.Contains('\\') || launchTarget.Contains('/'))
+                return string.Equals(Path.GetFullPath(frontExePath), Path.GetFullPath(launchTarget), StringComparison.OrdinalIgnoreCase);
+            return string.Equals(Path.GetFileName(frontExePath), Path.GetFileName(launchTarget), StringComparison.OrdinalIgnoreCase);
+        }
+        catch { return false; }
+    }
+
     /// <summary>From the run-state poll, off the window's thread: the games verified running, staged ones already left out.</summary>
     internal static void Follow(LaunchOrchestrator launcher, IEnumerable<GameEntry> running)
     {
@@ -136,51 +208,74 @@ internal static class FpsCounter
         var games = running.ToArray();
         lock (Gate)
         {
-            if (games.Length == 0)
+            var signalFallback = games.Length == 0 && settings.FpsCounter && GameRunningSignal.Running && launcher.AnyGameRunning;
+            if (games.Length == 0 && !signalFallback)
             {
                 EndGame();
                 return;
             }
-            // A second game runs: the one in front, else the first.
+            _launcher = launcher;
+            _followedGames = games;
             var front = (int)ForegroundWatcher.ForegroundProcess();
-            var trees = games.Select(game => (game, tree: launcher.GameProcesses(game))).ToArray();
-            var (followed, tree) = Array.Find(trees, entry => entry.tree.Contains(front));
-            if (followed is null) (followed, tree) = trees[0];
-            var wanted = Wants(settings.FpsCounter, BuiltInFps.Has(followed) && FpsItems.Clean(settings.FpsCounterItems).Count == 0, SessionRecorderHost.Records(followed));
+            GameEntry? followed = null;
+            IReadOnlyList<int> tree = [];
+            if (games.Length > 0)
+            {
+                var trees = games.Select(game => (game, tree: launcher.GameProcesses(game))).ToArray();
+                (followed, tree) = Array.Find(trees, entry => entry.tree.Contains(front));
+                if (followed is null) (followed, tree) = trees[0];
+            }
+            else if (front > 0)
+            {
+                tree = [front];
+            }
+            var suppressBuiltIn = followed is not null && ShouldSuppressOverlay(settings.FpsCounterHideOverBuiltIn, followed, settings.FpsCounterItems);
+            var wanted = Wants(settings.FpsCounter, suppressBuiltIn, followed is not null && SessionRecorderHost.Records(followed));
             if (!wanted.Trace)
             {
-                // The game shows its own FPS and ours would add nothing to it, or the switch is off and nothing records it: no trace.
+                // Explicitly opted into hiding over a built-in counter and nothing records it, or the switch is off.
                 EndGame();
                 return;
             }
             if (_trace is null)
             {
-                if (_refused && Environment.TickCount64 - _refusedAt < RetryRightsAfterMs)
+                var waitMs = RetryDelayMs(_refusedError, _retryAttempt);
+                if (_refused && Environment.TickCount64 - _refusedAt < waitMs)
                 {
-                    if (wanted.Recorder) SessionRecorderHost.Shared.NoRights(followed, tree);
+                    if (wanted.Recorder && followed is not null) SessionRecorderHost.Shared.NoRights(followed, tree);
                     return;
                 }
                 _trace = PresentTrace.Start(out var error);
                 if (_trace is null)
                 {
-                    // The same answer until something changes it, which the switch notices, or ten minutes.
                     _refused = true;
+                    _refusedError = error;
+                    _retryAttempt = error == PresentTrace.AccessDenied ? 1 : _retryAttempt + 1;
                     _refusedAt = Environment.TickCount64;
-                    AppLog.Info($"FPS counter: Windows wouldn't start the trace ({error}).");
-                    if (wanted.Recorder) SessionRecorderHost.Shared.NoRights(followed, tree);
+                    AppLog.Info($"FPS counter: Windows wouldn't start the trace ({error}); retry in {RetryDelayMs(error, _retryAttempt) / 1000} s.");
+                    if (wanted.Recorder && followed is not null) SessionRecorderHost.Shared.NoRights(followed, tree);
                     return;
                 }
                 _refused = false;
-                AppLog.Info($"FPS counter: counting {followed.Title}.");
+                _refusedError = 0;
+                _retryAttempt = 0;
+                AppLog.Info($"FPS counter: counting {followed?.Title ?? "active game"}.");
             }
-            _trace.Watch(tree);
-            var changed = !_tree.SetEquals(tree);
-            if (changed) _tree = [.. tree];
+            var merged = new HashSet<int>(tree);
+            foreach (var existing in _tree)
+            {
+                // Preserve any foreground game PID promoted between polls if still alive in followed games.
+                if (!merged.Contains(existing) && existing == _lastForegroundPid) merged.Add(existing);
+            }
+            int[] watched = [.. merged];
+            _trace.Watch(watched);
+            var changed = !_tree.SetEquals(watched);
+            if (changed) _tree = merged;
             Remember(settings);
             if (!wanted.Overlay) CloseOverlay();
             else if (_overlay is null) _overlay = new FpsOverlay(NextLook, () => _position);
             else if (changed) _overlay.Refresh();
-            if (wanted.Recorder) SessionRecorderHost.Shared.Follow(_trace, followed, tree);
+            if (wanted.Recorder && followed is not null) SessionRecorderHost.Shared.Follow(_trace, followed, watched);
             else SessionRecorderHost.Shared.End(_trace);
         }
     }
@@ -211,19 +306,34 @@ internal static class FpsCounter
         lock (Gate) CloseOverlay();
     }
 
+    /// <summary>Pure status resolution so transient AccessDenied never clears the player's saved switch setting.</summary>
+    internal static (bool On, string State, string? Message) StatusOf(bool settingOn, Func<int> probe, Func<bool> inPerfLogUsers)
+    {
+        if (!settingOn) return (false, "off", null);
+        var error = probe();
+        if (error != PresentTrace.AccessDenied) return (true, "on", null);
+        if (inPerfLogUsers()) return (true, "signout", null);
+        return (false, "off", null);
+    }
+
     /// <summary>The setting's own state. Off; on and able to count (<c>on</c>); or on and waiting for the next sign-in (<c>signout</c>).</summary>
     internal static (bool On, string State, string? Message) Status()
     {
-        if (!App.Services.Settings.Current.FpsCounter) return (false, "off", null);
+        var settingOn = App.Services.Settings.Current.FpsCounter;
+        if (!settingOn) return (false, "off", null);
         lock (Gate)
         {
             var error = _trace is not null ? PresentTrace.Ok : PresentTrace.Probe();
-            if (error == PresentTrace.Ok) _refused = false;
+            if (error == PresentTrace.Ok)
+            {
+                _refused = false;
+                _refusedError = 0;
+                _retryAttempt = 0;
+            }
             if (error != PresentTrace.AccessDenied) return (true, "on", null);
         }
         if (WindowsIdentity.GetCurrent().User?.Value is { } user && PresentTrace.InPerformanceLogUsers(user)) return (true, "signout", null);
-        // Its permission went: it asks again next time it is turned on.
-        App.Services.Settings.UpdateProfile(settings => settings.FpsCounter = false);
+        // Never overwrite settings.FpsCounter = false on transient AccessDenied; keep the user's preference intact.
         return (false, "off", null);
     }
 
@@ -267,7 +377,7 @@ internal static class FpsCounter
     private static (bool, string, string?) TurnOn(string state)
     {
         App.Services.Settings.UpdateProfile(settings => settings.FpsCounter = true);
-        if (state == "on") lock (Gate) _refused = false;
+        if (state == "on") lock (Gate) { _refused = false; _refusedError = 0; _retryAttempt = 0; }
         return (true, state, null);
     }
 
@@ -292,11 +402,37 @@ internal static class FpsCounter
     {
         var items = _items;
         if (_trace is not { } trace) return new(null, 0);
-        var front = (int)ForegroundWatcher.ForegroundProcess();
-        var frontIsGame = _tree.Contains(front);
-        var exclusive = frontIsGame && ExclusiveFullScreen();
-        var next = LookAfter(frontIsGame, exclusive);
-        if (!frontIsGame || exclusive)
+        var tree = _tree;
+        var games = _followedGames;
+        var frontHwnd = GetForegroundWindow();
+        uint rawFrontPid = 0;
+        if (frontHwnd != IntPtr.Zero) GetWindowThreadProcessId(frontHwnd, out rawFrontPid);
+        var front = (int)rawFrontPid;
+        var frontChanged = front != Interlocked.Exchange(ref _lastForegroundPid, front);
+        var frontIsGame = tree.Contains(front);
+        if (!frontIsGame && front > 0)
+        {
+            var exePath = Adapters.ProcessHelper.TryGetExecutablePath(front);
+            frontIsGame = ForegroundMatchesGame(
+                front,
+                tree,
+                exePath,
+                games,
+                GameRunningSignal.Running,
+                IsWindowFullScreen(frontHwnd),
+                Environment.ProcessId);
+            if (frontIsGame)
+            {
+                HashSet<int> expanded = [.. tree, front];
+                _tree = expanded;
+                trace.Watch([.. expanded]);
+            }
+            if (frontChanged || !frontIsGame) ScheduleRescan();
+        }
+        // Never suppress on QUNS_RUNNING_D3D_FULL_SCREEN (3): modern flip-model / borderless fullscreen allows topmost Composition overlays.
+        var transientNullFront = front == 0 && (tree.Count > 0 || games.Length > 0 || GameRunningSignal.Running);
+        var next = LookAfter(frontIsGame, exclusiveFullScreen: false, transientNullForeground: transientNullFront);
+        if (!frontIsGame)
         {
             trace.Run(PresentTrace.ForOverlay, false);
             _sampler?.Dispose();
@@ -311,19 +447,68 @@ internal static class FpsCounter
         return new(new(reading.Fps, FpsItems.Text(items, reading.Fps, reading.Low, sample, DateTime.Now)), next);
     }
 
-    /// <summary>A game holds the screen in exclusive full screen, which no window can show over.</summary>
-    private static bool ExclusiveFullScreen() => SHQueryUserNotificationState(out var state) == 0 && state == 3; // QUNS_RUNNING_D3D_FULL_SCREEN
+    /// <summary>Re-scans followed games' process trees off the overlay thread when foreground shifts to an unrecognized PID.</summary>
+    private static void ScheduleRescan()
+    {
+        var now = Environment.TickCount64;
+        if (now - Volatile.Read(ref _lastRescanAt) < 250) return;
+        if (Interlocked.Exchange(ref _rescanning, 1) == 1) return;
+        Volatile.Write(ref _lastRescanAt, now);
+        _ = Task.Run(() =>
+        {
+            try
+            {
+                lock (Gate)
+                {
+                    if (_trace is not { } trace || _launcher is not { } launcher || _followedGames is not { Length: > 0 } games) return;
+                    HashSet<int> merged = [.. _tree];
+                    foreach (var game in games)
+                        foreach (var pid in launcher.GameProcesses(game))
+                            merged.Add(pid);
+                    if (merged.SetEquals(_tree)) return;
+                    int[] watched = [.. merged];
+                    _tree = merged;
+                    trace.Watch(watched);
+                }
+            }
+            catch (Exception ex) { AppLog.Debug("FPS counter rescan: " + ex.Message); }
+            finally { Volatile.Write(ref _rescanning, 0); }
+        });
+    }
+
+    private static bool IsWindowFullScreen(IntPtr hwnd)
+    {
+        if (hwnd == IntPtr.Zero || !GetWindowRect(hwnd, out var rect)) return false;
+        var monitor = MonitorFromWindow(hwnd, 2 /* MONITOR_DEFAULTTONEAREST */);
+        if (monitor == IntPtr.Zero) return false;
+        var info = new MonitorInfo { Size = Marshal.SizeOf<MonitorInfo>() };
+        return GetMonitorInfoW(monitor, ref info)
+            && rect.Left <= info.Monitor.Left && rect.Top <= info.Monitor.Top
+            && rect.Right >= info.Monitor.Right && rect.Bottom >= info.Monitor.Bottom;
+    }
 
     private static void EndGame()
     {
         // The session recorder reads the last frames and saves before the trace goes.
         SessionRecorderHost.Shared.End(_trace);
-        if (_trace is not { } trace) return;
+        if (_trace is not { } trace)
+        {
+            _followedGames = [];
+            _tree = [];
+            _refused = false;
+            _refusedError = 0;
+            _retryAttempt = 0;
+            return;
+        }
         _trace = null;
         // The overlay first: its thread reads the trace, and it closes the sampler with the game gone.
         CloseOverlayIfIdle();
         trace.Dispose();
+        _followedGames = [];
         _tree = [];
+        _refused = false;
+        _refusedError = 0;
+        _retryAttempt = 0;
     }
 
     private static void CloseOverlayIfIdle()
@@ -427,7 +612,17 @@ internal static class FpsCounter
     [StructLayout(LayoutKind.Sequential)]
     private struct MemoryStatus { public uint Length, MemoryLoad; public ulong TotalPhys, AvailPhys, TotalPageFile, AvailPageFile, TotalVirtual, AvailVirtual, AvailExtendedVirtual; }
 
-    [DllImport("shell32.dll")] private static extern int SHQueryUserNotificationState(out int state);
+    [StructLayout(LayoutKind.Sequential)]
+    private struct NativeRect { public int Left, Top, Right, Bottom; }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct MonitorInfo { public int Size; public NativeRect Monitor, Work; public uint Flags; }
+
+    [DllImport("user32.dll")] private static extern IntPtr GetForegroundWindow();
+    [DllImport("user32.dll")] private static extern uint GetWindowThreadProcessId(IntPtr hwnd, out uint processId);
+    [DllImport("user32.dll")] private static extern bool GetWindowRect(IntPtr hwnd, out NativeRect rect);
+    [DllImport("user32.dll")] private static extern IntPtr MonitorFromWindow(IntPtr hwnd, uint flags);
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)] private static extern bool GetMonitorInfoW(IntPtr monitor, ref MonitorInfo info);
     [DllImport("kernel32.dll")] private static extern bool GetSystemTimes(out long idle, out long kernel, out long user);
     [DllImport("kernel32.dll")] private static extern bool GlobalMemoryStatusEx(ref MemoryStatus status);
 }

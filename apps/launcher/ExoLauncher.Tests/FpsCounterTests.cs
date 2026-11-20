@@ -723,4 +723,112 @@ public sealed class FpsCounterTests
         Chunk("IDAT", raw.ToArray());
         Chunk("IEND", []);
     }
+
+    // ---------------------------------------------------------------- P3-4 Liquid Glass and reliability
+
+    [Fact]
+    public void PresentSlots_Supports64ProcessesWithLruEviction()
+    {
+        Assert.Equal(64, PresentSlots.MaxProcesses);
+        var slots = new PresentSlots(Frequency);
+        slots.Watch(Enumerable.Range(1, 64));
+        var last = Feed(slots, 5, PresentKind.Api, 60);
+        // Adding a 65th+ idle batch evicts least-recently-used idle slots while preserving the active renderer PID 5.
+        slots.Watch(Enumerable.Range(1, 70));
+        Assert.Equal(64, slots.TrackedCount);
+        Assert.Equal(60, slots.Read(last, 5).Fps);
+    }
+
+    [Fact]
+    public void BuiltInFps_IsOptInAndDoesNotSuppressOverlayByDefault()
+    {
+        var game = new ExoLauncher.Models.GameEntry { Id = "riot:valorant", Title = "VALORANT", Store = ExoLauncher.Models.StoreKind.Riot };
+        Assert.True(BuiltInFps.Has(game));
+        Assert.False(FpsCounter.ShouldSuppressOverlay(hideOverBuiltIn: false, game, []));
+        Assert.True(FpsCounter.ShouldSuppressOverlay(hideOverBuiltIn: true, game, []));
+        Assert.False(FpsCounter.ShouldSuppressOverlay(hideOverBuiltIn: true, game, [FpsItems.Low]));
+    }
+
+    [Fact]
+    public void ForegroundMatchesGame_UsesTreeExeInstallDirAndGameRunningSignalFallback()
+    {
+        var game = new ExoLauncher.Models.GameEntry
+        {
+            Id = "steam:1172470",
+            Title = "Apex Legends",
+            Store = ExoLauncher.Models.StoreKind.Steam,
+            Path = @"C:\Games\Apex",
+            LaunchTarget = @"C:\Games\Apex\r5apex.exe",
+        };
+        HashSet<int> tree = [100];
+        HashSet<int> emptyTree = [];
+
+        Assert.True(FpsCounter.ForegroundMatchesGame(100, tree, null, [game], false, false, selfPid: 999));
+        Assert.False(FpsCounter.ForegroundMatchesGame(999, tree, @"C:\Games\Apex\r5apex.exe", [game], true, true, selfPid: 999));
+        Assert.True(FpsCounter.ForegroundMatchesGame(202, tree, @"C:\Games\Apex\r5apex_dx12.exe", [game], false, false, selfPid: 999));
+        Assert.False(FpsCounter.ForegroundMatchesGame(203, tree, @"C:\Games\Apex\EasyAntiCheat.exe", [game], true, true, selfPid: 999));
+        Assert.True(FpsCounter.ForegroundMatchesGame(303, emptyTree, null, [game], gameRunningSignal: true, frontIsFullScreen: true, selfPid: 999));
+        Assert.False(FpsCounter.ForegroundMatchesGame(304, emptyTree, @"C:\Windows\explorer.exe", [game], gameRunningSignal: true, frontIsFullScreen: true, selfPid: 999));
+    }
+
+    [Fact]
+    public void NotificationState_DoesNotSuppressOnQunsRunningD3dFullScreen()
+    {
+        Assert.False(FpsCounter.SuppressesForNotificationState(3));
+    }
+
+    [Fact]
+    public void LookAfter_KeepsLightTimerOnTransientNullForegroundWhileGameRuns()
+    {
+        Assert.InRange(FpsCounter.LookAfter(frontIsGame: false, exclusiveFullScreen: false, transientNullForeground: true), 500u, 1000u);
+        Assert.Equal(0u, FpsCounter.LookAfter(frontIsGame: false, exclusiveFullScreen: false, transientNullForeground: false));
+    }
+
+    [Fact]
+    public void RetryDelayMs_UsesExponentialBackoffForTransientErrorsAndTenMinutesForAccessDenied()
+    {
+        Assert.Equal(2_000L, FpsCounter.RetryDelayMs(8, 1));
+        Assert.Equal(5_000L, FpsCounter.RetryDelayMs(8, 2));
+        Assert.Equal(15_000L, FpsCounter.RetryDelayMs(8, 3));
+        Assert.Equal(60_000L, FpsCounter.RetryDelayMs(8, 4));
+        Assert.Equal(60_000L, FpsCounter.RetryDelayMs(8, 5));
+        Assert.Equal(10 * 60 * 1000L, FpsCounter.RetryDelayMs(PresentTrace.AccessDenied, 1));
+    }
+
+    [Fact]
+    public void StatusOf_ReportsStatesCleanlyOnAccessDenied()
+    {
+        Assert.Equal((false, "off", null), FpsCounter.StatusOf(true, () => PresentTrace.AccessDenied, () => false));
+        Assert.Equal((true, "signout", null), FpsCounter.StatusOf(true, () => PresentTrace.AccessDenied, () => true));
+        Assert.Equal((true, "on", null), FpsCounter.StatusOf(true, () => PresentTrace.Ok, () => false));
+        Assert.Equal((false, "off", null), FpsCounter.StatusOf(false, () => PresentTrace.Ok, () => false));
+    }
+
+    [Fact]
+    public void PresentTrace_KernelStartsSoonerAndFlushesImmediatelyForVulkan()
+    {
+        long clock = Seconds(100);
+        var flushes = 0;
+        var kernelOn = false;
+        var trace = PresentTrace.ForTest(() => { }, () => { }, on => kernelOn = on, () => clock, () => flushes++);
+        trace.Run(PresentTrace.ForOverlay, true);
+        clock = Seconds(101.6);
+        trace.Read(10);
+        Assert.True(kernelOn);
+        Assert.Equal(1, flushes);
+    }
+
+    [Fact]
+    public void LiquidGlassSpec_DefinesBackdropBlurSaturationTintFresnelAndFallbacks()
+    {
+        var spec = FpsOverlay.GlassSpec.LiquidGlass;
+        Assert.InRange(spec.BlurRadius, 10f, 12f);
+        Assert.Equal(1.7f, spec.Saturation, 2);
+        Assert.Equal(0x73000000u, spec.TintArgb);
+        Assert.Equal(new byte[] { 77, 26, 10, 36 }, spec.FresnelAlphas);
+        Assert.Equal(new float[] { 0.00f, 0.35f, 0.68f, 1.00f }, spec.FresnelStops);
+        Assert.True(FpsOverlay.CanUseLiquidGlass(highContrast: false, backdropSupported: true));
+        Assert.False(FpsOverlay.CanUseLiquidGlass(highContrast: true, backdropSupported: true));
+        Assert.False(FpsOverlay.CanUseLiquidGlass(highContrast: false, backdropSupported: false));
+    }
 }

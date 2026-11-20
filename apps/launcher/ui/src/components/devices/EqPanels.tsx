@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { Search } from '../../brand/icons'
 import { host, type EqAction, type EqHeadphone, type EqSound, type EqState } from '../../lib/host'
 import { errorText } from '../../lib/errorWords'
+import { pageIsActive, usePageActive } from '../../lib/pageActivity'
 import { report } from '../../lib/report'
 import { Choice } from '../settings/Choice'
 import { ChoiceRow, Row, SliderRow, State, SwitchRow } from '../settings/parts'
@@ -43,11 +44,12 @@ export const wearingOfEq = (headphone: EqHeadphone): Wearing =>
 type Params = Parameters<typeof host.eq>[1]
 
 /** Exo EQ's state for this output, read again when Windows' output changes; a change answers with the new state. */
-export function useEq(output?: string) {
+export function useEq(output?: string, visible = true) {
   const [state, setState] = useState<EqState | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
   const [error, setError] = useState<{ row: string; text: string } | null>(null)
   const newest = useRef(0)
+  const active = usePageActive()
   useEffect(() => {
     let live = true
     host.eq('state', { output }).then(next => { if (live) setState(next) }, (cause: unknown) => report(cause, 'Eq.state'))
@@ -56,10 +58,12 @@ export function useEq(output?: string) {
   // Equalizer APO's own windows (its installer, the Device Selector) change what the page shows: read until they're done.
   const waiting = state !== null && (state.apo.installing || (state.apo.installed && !state.apo.onOutput))
   useEffect(() => {
-    if (!waiting) return
-    const again = window.setInterval(() => void host.eq('state', { output }).then(setState, () => {}), 4000)
+    if (!waiting || !visible || !active || !pageIsActive()) return
+    const again = window.setInterval(() => {
+      if (pageIsActive()) void host.eq('state', { output }).then(setState, () => {})
+    }, 4000)
     return () => window.clearInterval(again)
-  }, [waiting, output])
+  }, [waiting, visible, active, output])
 
   /** One press: the new state, and what went wrong (also shown under its row), or null. */
   const act = useCallback(async (row: string, action: EqAction, params: Params = {}): Promise<string | null> => {

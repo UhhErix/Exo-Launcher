@@ -1,3 +1,4 @@
+using System.Buffers.Binary;
 using System.Security.Cryptography;
 using System.Text;
 using ExoLauncher.Helpers;
@@ -107,17 +108,92 @@ public static class AchievementIconCache
         }
     }
 
-    /// <summary>The icon kept last, so a preview looks like the real thing; else the one that ships.</summary>
-    internal static string? Sample()
+    /// <summary>The icon kept last that decodes at 64x64 or larger, so a preview looks like the real thing; else the one that ships.</summary>
+    internal static string? Sample() => SampleFrom(Folder) ?? Bundled();
+
+    internal static string? SampleFrom(string folder)
     {
         try
         {
-            var kept = new DirectoryInfo(Folder);
-            if (kept.Exists && kept.EnumerateFiles().Where(f => f.Extension.Length == 0).MaxBy(f => f.LastWriteTimeUtc) is { } newest && DataUri(File.ReadAllBytes(newest.FullName)) is { } picture)
-                return picture;
+            var kept = new DirectoryInfo(folder);
+            if (!kept.Exists) return null;
+            foreach (var file in kept.EnumerateFiles().Where(f => f.Extension.Length == 0).OrderByDescending(f => f.LastWriteTimeUtc))
+            {
+                try
+                {
+                    var bytes = File.ReadAllBytes(file.FullName);
+                    if (Dimensions(bytes) is { Width: >= 64, Height: >= 64 } && DataUri(bytes) is { } picture)
+                        return picture;
+                }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
+            }
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { AppLog.Debug("Achievements: no kept icon: " + ex.Message); }
-        return Bundled();
+        return null;
+    }
+
+    /// <summary>Reads pixel dimensions from PNG, GIF, WebP or JPEG headers; null when malformed or unknown.</summary>
+    internal static (int Width, int Height)? Dimensions(ReadOnlySpan<byte> b)
+    {
+        if (b.Length >= 24 && b.StartsWith((ReadOnlySpan<byte>)[0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]) && b[12..16].SequenceEqual("IHDR"u8))
+        {
+            var w = BinaryPrimitives.ReadInt32BigEndian(b[16..20]);
+            var h = BinaryPrimitives.ReadInt32BigEndian(b[20..24]);
+            return w > 0 && h > 0 ? (w, h) : null;
+        }
+        if (b.Length >= 10 && b.StartsWith("GIF8"u8))
+        {
+            var w = BinaryPrimitives.ReadUInt16LittleEndian(b[6..8]);
+            var h = BinaryPrimitives.ReadUInt16LittleEndian(b[8..10]);
+            return w > 0 && h > 0 ? (w, h) : null;
+        }
+        if (b.Length >= 30 && b.StartsWith("RIFF"u8) && b[8..12].SequenceEqual("WEBP"u8))
+        {
+            var chunk = b[12..16];
+            if (chunk.SequenceEqual("VP8 "u8) && b[23] == 0x9D && b[24] == 0x01 && b[25] == 0x2A)
+            {
+                var w = BinaryPrimitives.ReadUInt16LittleEndian(b[26..28]) & 0x3FFF;
+                var h = BinaryPrimitives.ReadUInt16LittleEndian(b[28..30]) & 0x3FFF;
+                return w > 0 && h > 0 ? (w, h) : null;
+            }
+            if (chunk.SequenceEqual("VP8L"u8) && b[20] == 0x2F)
+            {
+                var bits = BinaryPrimitives.ReadUInt32LittleEndian(b[21..25]);
+                var w = (int)(bits & 0x3FFF) + 1;
+                var h = (int)((bits >> 14) & 0x3FFF) + 1;
+                return w > 0 && h > 0 ? (w, h) : null;
+            }
+            if (chunk.SequenceEqual("VP8X"u8))
+            {
+                var w = 1 + (b[24] | (b[25] << 8) | (b[26] << 16));
+                var h = 1 + (b[27] | (b[28] << 8) | (b[29] << 16));
+                return w > 0 && h > 0 ? (w, h) : null;
+            }
+            return null;
+        }
+        if (b.Length >= 4 && b.StartsWith((ReadOnlySpan<byte>)[0xFF, 0xD8, 0xFF]))
+        {
+            var pos = 2;
+            while (pos + 3 < b.Length)
+            {
+                while (pos < b.Length && b[pos] == 0xFF) pos++;
+                if (pos >= b.Length) break;
+                var marker = b[pos++];
+                if (marker is 0xD9 or 0xDA) break;
+                if (marker is 0xD8 or 0x01 || (marker is >= 0xD0 and <= 0xD7)) continue;
+                if (pos + 2 > b.Length) break;
+                var len = BinaryPrimitives.ReadUInt16BigEndian(b[pos..(pos + 2)]);
+                if (len < 2 || pos + len > b.Length) break;
+                if (marker is >= 0xC0 and <= 0xCF && marker is not (0xC4 or 0xC8 or 0xCC) && len >= 7)
+                {
+                    var h = BinaryPrimitives.ReadUInt16BigEndian(b[(pos + 3)..(pos + 5)]);
+                    var w = BinaryPrimitives.ReadUInt16BigEndian(b[(pos + 5)..(pos + 7)]);
+                    return w > 0 && h > 0 ? (w, h) : null;
+                }
+                pos += len;
+            }
+        }
+        return null;
     }
 
     /// <summary>The picture that ships: a preview's on a new PC, and a game's with no icon and no art.</summary>

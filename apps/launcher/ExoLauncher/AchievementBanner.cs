@@ -119,6 +119,7 @@ internal static class AchievementBanner
         private static bool _registered;
         private readonly int _width, _height;
         private bool _loaded;
+        private Timer? _readyFallback;
         private readonly Queue<string> _pending = new();
 
         private Overlay(int width, int height) { _width = width; _height = height; }
@@ -147,9 +148,12 @@ internal static class AchievementBanner
             core.Settings.IsZoomControlEnabled = false;
             core.SetVirtualHostNameToFolderMapping(Host, Path.Combine(AppContext.BaseDirectory, "Assets", "Overlay"), CoreWebView2HostResourceAccessKind.DenyCors);
             core.NavigationStarting += (_, e) => UiGuard.Run(() => { if (!e.Uri.StartsWith($"https://{Host}/", StringComparison.Ordinal)) e.Cancel = true; });
-            // The page says when its banner's sound is due; the host holds the sounds and the volume.
-            core.WebMessageReceived += (_, e) => UiGuard.Run(() => PlaySound(e.WebMessageAsJson));
-            core.NavigationCompleted += (_, _) => UiGuard.Run(() => { overlay._loaded = true; while (overlay._pending.Count > 0) core.PostWebMessageAsJson(overlay._pending.Dequeue()); });
+            // Size the visual and WebView2 bounds before navigating so the first frame lays out at full dimensions.
+            overlay._root.Size = new System.Numerics.Vector2(width, height);
+            overlay._controller.Bounds = new Windows.Foundation.Rect(0, 0, width, height);
+            // The page says when its listener is attached (banner.ready) and when a banner sound is due.
+            core.WebMessageReceived += (_, e) => UiGuard.Run(() => overlay.OnWebMessage(e.WebMessageAsJson));
+            core.NavigationCompleted += (_, e) => UiGuard.Run(() => overlay.OnNavigationCompleted(e.IsSuccess));
             core.Navigate($"https://{Host}/banner.html");
             overlay._controller.IsVisible = true;
             return overlay;
@@ -175,6 +179,44 @@ internal static class AchievementBanner
             if (_controller is null) return;
             _controller.RasterizationScale = scale;
             _controller.Bounds = new Windows.Foundation.Rect(0, 0, width, height);
+        }
+
+        private void OnWebMessage(string json)
+        {
+            try
+            {
+                using var doc = JsonDocument.Parse(json);
+                if (doc.RootElement.TryGetProperty("type", out var type) && type.GetString() == "banner.ready")
+                {
+                    MarkReady();
+                    return;
+                }
+            }
+            catch (Exception ex) when (ex is JsonException or InvalidOperationException) { }
+            PlaySound(json);
+        }
+
+        private void OnNavigated(bool isSuccess)
+        {
+            if (!isSuccess)
+            {
+                AppLog.Warn("Achievements: banner navigation failed.");
+                return;
+            }
+            if (_loaded) return;
+            _readyFallback ??= new Timer(_ => App.MainAppWindow?.DispatcherQueue.Enqueue(MarkReady), null, TimeSpan.FromSeconds(2), Timeout.InfiniteTimeSpan);
+        }
+
+        internal void OnNavigationCompleted(bool isSuccess) => OnNavigated(isSuccess);
+
+        private void MarkReady()
+        {
+            if (_loaded) return;
+            _loaded = true;
+            _readyFallback?.Dispose();
+            _readyFallback = null;
+            if (_controller?.CoreWebView2 is not { } core) return;
+            while (_pending.Count > 0) core.PostWebMessageAsJson(_pending.Dequeue());
         }
 
         /// <summary>Plays the sound the page asked for ({"sound":"epic"}, by tier) on Windows' default output, at the volume in Settings.</summary>
@@ -237,6 +279,8 @@ internal static class AchievementBanner
 
         public void Dispose()
         {
+            _readyFallback?.Dispose();
+            _readyFallback = null;
             try { _controller?.Close(); } catch (COMException) { }
             _controller = null;
             _target?.Dispose();

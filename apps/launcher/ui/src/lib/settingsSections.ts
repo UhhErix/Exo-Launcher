@@ -47,7 +47,7 @@ export const SETTINGS_PAGES = [
     sections: ['achievements', 'fps'],
     keywords: [
       'in game', 'achievements', 'achievement banners', 'banners in games', 'unlock', 'trophy', 'banner sound', 'achievement sound', 'preview banner', 'obs browser source',
-      'fps counter', 'frame rate', 'frames per second', 'overlay', '1% low', 'frame time', 'gpu use', 'gpu temperature', 'cpu use', 'vram', 'ram', 'battery', 'mouse battery', 'headset battery', 'time of day', 'position',
+      'fps counter', 'frame rate', 'frames per second', 'overlay', 'built-in fps', '1% low', 'frame time', 'gpu use', 'gpu temperature', 'cpu use', 'vram', 'ram', 'battery', 'mouse battery', 'headset battery', 'time of day', 'position',
     ],
   },
   {

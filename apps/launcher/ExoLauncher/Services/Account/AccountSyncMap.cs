@@ -19,7 +19,7 @@ internal static class AccountSyncMap
     [
         "AchievementBanners", "AchievementVolume", "AntiCheatSafeMode", "AutoInstallRedistributables", "AutoUpdateGames",
         "Background", "CloseStoreClientsAfterLaunch", "ControllerSound", "DownloadHoursEnd", "DownloadHoursStart", "FpsCounter",
-        "FpsCounterItems", "HiddenGames", "KeepAwakeDownloads", "LibraryShowInstalled", "LibraryShowOwned",
+        "FpsCounterHideOverBuiltIn", "FpsCounterItems", "HiddenGames", "KeepAwakeDownloads", "LibraryShowInstalled", "LibraryShowOwned",
         "MinimizeWhilePlaying", "PauseDownloadsWhilePlaying", "ReduceMotion", "ShowLibraryTools", "SortMode",
         "StoreClientsQuiet", "TextColour", "TextSize", "UiPrefs",
     ];
@@ -46,7 +46,7 @@ internal static class AccountSyncMap
         "AutoUpdateOff", "Autopilot", "FastGpuForGames", "FpsCounterPosition", "FrameGenEverywhere", "FrameGenKeptOff", "FramelessMode",
         "FramelessPinSide", "FramelessPinTop", "HdrForGames", "HdrGameModes", "HdrGameScreens", "HdrSdrGamma",
         "HdrSwitchedOn", "HdrSwitchedRamp", "LastPlayed", "LaunchOverrides", "LibraryFolders", "StartLucidWithExo",
-        "MouseBridge", "MouseBridgeAppAutostart", "MouseBridgeAppPath", "NvidiaColor", "NvidiaDriverBranch",
+        "MouseBridge", "MouseBridgeAppAutostart", "MouseBridgeAppPath", "NvidiaColor", "NvidiaDriverBranch", "NvidiaGsync", "NvidiaLowLatency",
         "AccountAsked", "OnboardingComplete", "PlayStationPadSeen", "PreferredGameSources", "Recent", "RtxVideoDriver", "RtxVideoHdr",
         "RtxVideoSuperResolution", "SdrGammaBefore", "SmoothMotion", "StartMaximized", "StartWithWindows", "StartupHandedToExo", "SteamBetaJoined",
         "SteamInput", "SteamOverlay", "SteamOverlayPrior", "SteamShortcuts", "SteamWithoutAntiCheat", "ThroughSteam", "UpscalerAntiCheatConsent", "UpscalerAntiCheatEverywhere", "UpscalerAutoUpdateDefaulted", "CustomCoverImages",

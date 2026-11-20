@@ -68,6 +68,10 @@ internal static unsafe class NvidiaVideo
         }
     }
 
+    /// <summary>True when a readback value satisfies what was written: Video HDR reports any non-zero value when enabled.</summary>
+    internal static bool MatchesReadback(int component, int value, int? now) =>
+        now is { } current && (component == VideoHdr ? (current != 0) == (value != 0) : current == value);
+
     /// <summary>
     /// Sets a component the way NVIDIA Control Panel does (the active video device first, busy answers tried again) and
     /// reads it back for a second; null when it took and stayed, else a plain line.
@@ -113,11 +117,12 @@ internal static unsafe class NvidiaVideo
         for (var i = 0; i < 10; i++)
         {
             now = Read(gdiName, component);
-            took |= now == value;
-            if (took && now != value) break;
+            var matched = MatchesReadback(component, value, now);
+            took |= matched;
+            if (took && !matched) break;
             Thread.Sleep(100);
         }
-        if (now == value) return null;
+        if (MatchesReadback(component, value, now)) return null;
         AppLog.Info($"Display: RTX Video component {component} set to {value} reads back {now?.ToString() ?? "nothing"}{(took ? " after it took" : "")}; kept: {Kept()}.");
         return took
             ? "Another program changed RTX Video right after Exo set it."

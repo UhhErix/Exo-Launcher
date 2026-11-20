@@ -235,9 +235,23 @@ export async function run(t) {
       const art = document.querySelector('.card .art'), card = document.querySelector('.card.in')
       return art?.complete && art.naturalWidth >= 64 && card ? { src: art.src.slice(0, 11), width: art.naturalWidth, name: card.querySelector('.name').textContent, moves: card.getAnimations().length, font: document.fonts.check('600 16px Goeist') } : null
     }, { timeoutMs: 8000 })
+    const diag = seen ? null : await overlay.eval(`(() => {
+      const stage = document.getElementById('stage')
+      const card = document.querySelector('.card')
+      const art = document.querySelector('.card .art')
+      return {
+        stageHtml: stage ? stage.innerHTML.slice(0, 400) : null,
+        cardClass: card ? card.className : null,
+        artSrc: art ? art.src.slice(0, 48) : null,
+        complete: art ? art.complete : null,
+        naturalWidth: art ? art.naturalWidth : null,
+        naturalHeight: art ? art.naturalHeight : null,
+      }
+    })()`).catch(() => null)
     overlay.close()
     c.evidence.banner = seen
-    if (!seen) return ['the banner never had a loaded picture']
+    if (diag) c.evidence.bannerDiag = diag
+    if (!seen) return [diag ? `the banner never had a loaded picture (${JSON.stringify(diag)})` : 'the banner never had a loaded picture']
     const failures = []
     if (seen.src !== 'data:image/') failures.push(`picture from ${seen.src}`)
     if (!seen.name) failures.push('no name')

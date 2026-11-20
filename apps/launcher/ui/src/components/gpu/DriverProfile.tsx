@@ -15,8 +15,8 @@ const LOW_LATENCY = [
 
 export const PROFILE_ROW = 'Exo’s driver profile'
 
-/** The latency choice beside Use: an Intel GPU's Low latency mode. */
-export type LatencyChoice = { lowLatency?: IntelLowLatency }
+/** The latency/VRR choice beside Use on Intel or NVIDIA. */
+export type LatencyChoice = { lowLatency?: IntelLowLatency | 'ultra'; vrr?: boolean }
 
 /**
  * PC › Graphics › Driver and profile on a Radeon or an Intel GPU: Exo's profile through the GPU's own driver (a Radeon's

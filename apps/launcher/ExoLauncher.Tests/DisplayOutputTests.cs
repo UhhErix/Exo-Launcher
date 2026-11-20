@@ -15,15 +15,50 @@ public sealed class DisplayOutputTests
 
     // The main screen runs at its highest rate; any other at 60 Hz (or the rate it has closest to it), never higher.
     [Fact]
-    public void OnlyTheMainScreenTakesItsHighestRefresh()
+    public void EveryScreenTakesItsHighestRefresh()
     {
         int[] rates = [60, 100, 120, 144, 165];
         Assert.Equal(165, DisplayOutput.BestRefresh(main: true, rates, 60));
-        Assert.Equal(60, DisplayOutput.BestRefresh(main: false, rates, 165));
-        Assert.Equal(60, DisplayOutput.BestRefresh(main: false, [59, 60, 75], 75));
-        Assert.Equal(59, DisplayOutput.BestRefresh(main: false, [50, 59, 144], 144));
-        Assert.Equal(75, DisplayOutput.BestRefresh(main: false, [75, 144], 144));
+        Assert.Equal(165, DisplayOutput.BestRefresh(main: false, rates, 60));
+        Assert.Equal(144, DisplayOutput.BestRefresh(main: false, [50, 59, 144], 60));
+        Assert.Equal(75, DisplayOutput.BestRefresh(main: false, [59, 60, 75], 60));
         Assert.Equal(144, DisplayOutput.BestRefresh(main: false, [], 144));
+    }
+
+    [Theory]
+    [InlineData(60000u, 1001u, 59, "59.94 Hz")]
+    [InlineData(120000u, 1001u, 119, "119.88 Hz")]
+    [InlineData(24000u, 1001u, 23, "23.98 Hz")]
+    [InlineData(165000u, 1000u, 165, "165 Hz")]
+    [InlineData(144000u, 1000u, 144, "144 Hz")]
+    [InlineData(0u, 0u, 60, "60 Hz")]
+    public void RationalRefreshFormatsCleanly(uint num, uint den, int fallbackHz, string expected)
+    {
+        var exact = WindowsHdr.ExactRefreshHz(num, den);
+        Assert.Equal(expected, DisplayOutput.FormatRefreshLabel(exact, fallbackHz));
+    }
+
+    [Fact]
+    public void LinkRetrainBackoffStopsOnceSettledAndCapsAtMaxWait()
+    {
+        var polls = 0;
+        var slept = 0;
+        Assert.True(DisplayOutput.WaitForRefreshSettle(() => ++polls >= 3 ? 165 : 60, 165, ms => slept += ms, 3000));
+        Assert.Equal(150 + 250 + 400, slept);
+
+        var capped = 0;
+        Assert.False(DisplayOutput.WaitForRefreshSettle(() => 60, 165, ms => capped += ms, 3000));
+        Assert.Equal(3000, capped);
+    }
+
+    [Fact]
+    public void MonitorDdcClampsLevelsAndHandlesMissingMonitorGracefully()
+    {
+        Assert.Equal(0u, MonitorDdc.ClampLevel(-10, 0, 100));
+        Assert.Equal(100u, MonitorDdc.ClampLevel(200, 0, 100));
+        Assert.Equal(45u, MonitorDdc.ClampLevel(45, 10, 90));
+        Assert.Equal(50u, MonitorDdc.ClampLevel(25, 50, 50));
+        Assert.Null(MonitorDdc.Read("\\\\.\\DISPLAY_MISSING_99"));
     }
 
     // What an RTX 3070 reported for a 1080p 144 Hz DisplayPort screen.

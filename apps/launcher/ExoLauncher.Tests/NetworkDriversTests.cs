@@ -294,6 +294,39 @@ public sealed class NetworkDriversTests : IDisposable
         Assert.Equal(item.Subject, Assert.Single(host.Asked));
     }
 
+    [Fact]
+    public async Task Intel_302_http_downgrade_upgrades_to_https_and_redirect_loops_stop()
+    {
+        var seen = new List<string>();
+        using var ok = await NetworkDrivers.SendWithRedirectsAsync((req, _) =>
+        {
+            seen.Add(req.RequestUri!.AbsoluteUri);
+            if (seen.Count == 1)
+            {
+                var redir = new HttpResponseMessage(System.Net.HttpStatusCode.Redirect);
+                redir.Headers.Location = new Uri("http://www.intel.com/content/www/us/en/download/706171/intel-network-adapter-driver-for-windows-server-2022.html");
+                return Task.FromResult(redir);
+            }
+            return Task.FromResult(new HttpResponseMessage(System.Net.HttpStatusCode.OK) { Content = new StringContent("ok") });
+        }, NetworkDrivers.IntelWiredPage, null, CancellationToken.None);
+
+        Assert.Equal(System.Net.HttpStatusCode.OK, ok.StatusCode);
+        Assert.Equal([
+            NetworkDrivers.IntelWiredPage,
+            "https://www.intel.com/content/www/us/en/download/706171/intel-network-adapter-driver-for-windows-server-2022.html",
+        ], seen);
+
+        var loopCount = 0;
+        await Assert.ThrowsAsync<HttpRequestException>(() => NetworkDrivers.SendWithRedirectsAsync((req, _) =>
+        {
+            loopCount++;
+            var redir = new HttpResponseMessage(System.Net.HttpStatusCode.Redirect);
+            redir.Headers.Location = new Uri("https://www.intel.com/content/www/us/en/download/706171/intel-network-adapter-driver-for-windows-11.html");
+            return Task.FromResult(redir);
+        }, NetworkDrivers.IntelWiredPage, null, CancellationToken.None));
+        Assert.Equal(1, loopCount);
+    }
+
     /// <summary>A zip shaped as Intel's: a readme, then the W11 INF (UTF-16 with its BOM, as Intel's are) deflated.</summary>
     private static (byte[] Zip, string Name) PackageZip(string inf)
     {

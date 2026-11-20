@@ -54,10 +54,10 @@ public sealed partial class WebHostBridge
             if ((group is not null || all) && on is { } turnOn)
             {
                 if (running) return new { ok = false, message = $"Close {profile.Title} first." };
-                if (GameSettings.ApplyWithNvidia(game, profile, group, all, turnOn) is { } refused)
+                if (GameSettings.ApplyWithNvidia(game, profile, group, all, turnOn, includePerGamePower: true) is { } refused)
                     return new { ok = false, message = refused };
             }
-            var summary = GameSettings.InspectState(game, profile);
+            var summary = GameSettings.InspectState(game, profile, includePerGamePower: true);
             var groups = summary.Groups?.Select(state => new { id = state.Id, label = state.Label, on = state.On, exo = state.Exo }).ToList();
             bool? smoothMotionState = supportsSmooth ? _services.Settings.SmoothMotionEnabled(game.Id) : null;
             return new

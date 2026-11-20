@@ -1,17 +1,26 @@
+using System.Globalization;
+using System.Numerics;
 using System.Runtime.InteropServices;
 using ExoLauncher.Helpers;
+using Microsoft.Graphics.Canvas.Effects;
+using Windows.Foundation;
+using Windows.Graphics;
+using Windows.Graphics.DirectX;
+using Windows.UI;
+using Windows.UI.Composition;
+using Windows.UI.Composition.Desktop;
+using WinRT;
 
 namespace ExoLauncher;
 
 /// <summary>
-/// The FPS counter over the game: one small pill in off the top of the game's screen ("142 FPS"), in its corner or its
-/// middle: Goeist on a black plate inside Exo's Liquid Glass edge. Drawn by plain GDI on a layered window on a thread of its
-/// own, with no WebView2, since it stays open for the whole session. It never takes focus or a click, and stays out of
-/// recordings and streams (WDA_EXCLUDEFROMCAPTURE) where Windows allows that. Nothing touches the game. It looks twice a
-/// second at most and only then if asked to (<see cref="Look"/>); away from the game it has no timer and sleeps until
-/// Windows says the front changed. A redraw happens only when its text changes, replacing the old picture in one call, so
-/// nothing flickers. <see cref="Services.FpsCounter"/> says what to show, and null hides it. It is sRGB like the desktop, so
-/// on an HDR screen Windows shows it at the screen's SDR white.
+/// The FPS counter over the game: one small pill off the top of the game's screen ("142 FPS"), in its corner or its
+/// middle: Goeist tabular figures over Exo's Liquid Glass material. Drawn via DirectComposition
+/// (<see cref="Windows.UI.Composition"/> Host Backdrop blur + saturation + dark legibility tint, diagonal Fresnel rim,
+/// outer hairline separation, rounded pill geometric clip, and a DirectWrite Goeist drawing surface) with a safe GDI
+/// <see cref="UpdateLayeredWindow"/> fallback when backdrop composition is unavailable or High Contrast is enabled.
+/// Never takes focus or clicks, excludes itself from captures (<c>WDA_EXCLUDEFROMCAPTURE</c>), and re-asserts
+/// <c>HWND_TOPMOST</c> if a game rises above it in Z-order.
 /// </summary>
 internal sealed unsafe class FpsOverlay : IDisposable
 {
@@ -21,9 +30,32 @@ internal sealed unsafe class FpsOverlay : IDisposable
     /// <summary>What to show, and when to look again: 0 is when the front changes or something says so.</summary>
     internal readonly record struct Look(Line? Line, uint NextMs);
 
-    private const uint RefreshMessage = 0x8001, EventSystemForeground = 0x0003;
+    /// <summary>Pure spec of the Liquid Glass material so tests can verify blur, saturation, tint and Fresnel stops.</summary>
+    internal readonly record struct GlassSpec(
+        float BlurRadius,
+        float Saturation,
+        uint TintArgb,
+        uint OuterHairlineArgb,
+        float[] FresnelStops,
+        byte[] FresnelAlphas)
+    {
+        internal static GlassSpec LiquidGlass { get; } = new(
+            BlurRadius: 11.0f,
+            Saturation: 1.7f,
+            TintArgb: 0x73000000u,         // argb(115, 0, 0, 0) dark legibility tint
+            OuterHairlineArgb: 0x52000000u,// outer hairline dark separation
+            FresnelStops: [0.00f, 0.35f, 0.68f, 1.00f],
+            FresnelAlphas: [77, 26, 10, 36]); // 30% -> 10% -> 4% -> 14%
+    }
+
+    private const uint RefreshMessage = 0x8001, EventSystemForeground = 0x0003, WmThemeChanged = 0x031A;
+    private const uint WsExLayered = 0x00080000, WsExNoRedirectionBitmap = 0x00200000;
+    private const uint WsExTransparent = 0x00000020, WsExTopmost = 0x00000008, WsExToolWindow = 0x00000080, WsExNoActivate = 0x08000000;
+    private const uint SpiGetHighContrast = 0x0042, HcfHighContrastOn = 0x0001;
+    private const uint GwHwndPrev = 3, SwpNoSize = 0x0001, SwpNoMove = 0x0002, SwpNoActivate = 0x0010, SwpShowWindow = 0x0040;
+    private const int GwlExStyle = -20;
     private const int Padding = 10, Height = 24, Margin = 8, FontPixels = 13, ForegroundOutOfContext = 0;
-    // The plate is black at 78%: at half alpha white numbers were lost over a bright sky.
+    // GDI fallback plate at 78% black + edge highlight.
     private const byte CapsuleAlpha = 199, NumberInk = 255, RestInk = 191;
     private const double EdgeTop = 0.17, EdgeFoot = 0.03;
     private const uint TextQuality = 4; // ANTIALIASED_QUALITY: gray, hinted to the pixel grid, so stems stay sharp at any scale.
@@ -41,7 +73,8 @@ internal sealed unsafe class FpsOverlay : IDisposable
     private readonly Thread _thread;
     private readonly ManualResetEventSlim _ready = new();
     private IntPtr _hwnd, _hook;
-    private bool _shown, _failed;
+    private bool _shown, _failed, _usingGlass;
+    private GlassHost? _glass;
     private Line? _drawn;
     private double _drawnScale;
     private string _drawnPosition = "";
@@ -311,13 +344,38 @@ internal sealed unsafe class FpsOverlay : IDisposable
         }
     }
 
+    /// <summary>True when Liquid Glass backdrop composition may be used (no Windows High Contrast and backdrop supported).</summary>
+    internal static bool CanUseLiquidGlass(bool highContrast, bool backdropSupported) => !highContrast && backdropSupported;
+
+    /// <summary>Whether the overlay window should be re-promoted above the foreground window.</summary>
+    internal static bool NeedsTopmostReassert(IntPtr overlayHwnd, IntPtr foregroundHwnd)
+    {
+        if (overlayHwnd == IntPtr.Zero) return false;
+        if ((GetWindowLongPtrW(overlayHwnd, GwlExStyle).ToInt64() & WsExTopmost) == 0) return true;
+        if (foregroundHwnd == IntPtr.Zero) return false;
+        var prev = overlayHwnd;
+        for (var i = 0; i < 64; i++)
+        {
+            prev = GetWindow(prev, GwHwndPrev);
+            if (prev == IntPtr.Zero) break;
+            if (prev == foregroundHwnd) return true;
+        }
+        return false;
+    }
+
+    private static bool IsHighContrast()
+    {
+        var hc = new HighContrast { Size = Marshal.SizeOf<HighContrast>() };
+        return SystemParametersInfoW(SpiGetHighContrast, (uint)hc.Size, ref hc, 0) && (hc.Flags & HcfHighContrastOn) != 0;
+    }
+
     // ---------------------------------------------------------------- the window
 
     private void Run()
     {
         try
         {
-            MakeWindow();
+            InitializeWindowAndGlass();
             _frontChanged ??= (_, _, _, _, _, _, _) => _current?.Tick();
             _hook = SetWinEventHook(EventSystemForeground, EventSystemForeground, IntPtr.Zero, _frontChanged, 0, 0, ForegroundOutOfContext);
             _ready.Set();
@@ -331,13 +389,43 @@ internal sealed unsafe class FpsOverlay : IDisposable
         finally
         {
             if (_hook != IntPtr.Zero) UnhookWinEvent(_hook);
+            _glass?.Dispose();
+            _glass = null;
             if (_current == this) _current = null;
             _hwnd = IntPtr.Zero;
             _ready.Set();
         }
     }
 
-    private void MakeWindow()
+    private void InitializeWindowAndGlass()
+    {
+        _glass?.Dispose();
+        _glass = null;
+        _usingGlass = false;
+        if (_hwnd != IntPtr.Zero)
+        {
+            DestroyWindow(_hwnd);
+            _hwnd = IntPtr.Zero;
+            _shown = false;
+            _drawn = null;
+        }
+        if (CanUseLiquidGlass(IsHighContrast(), backdropSupported: true))
+        {
+            MakeWindow(noRedirectionBitmap: true);
+            _glass = GlassHost.TryCreate(_hwnd, Path.Combine(AppContext.BaseDirectory, "Assets", "Fonts", "Goeist-Variable.ttf"));
+            if (_glass is not null)
+            {
+                _usingGlass = true;
+                return;
+            }
+            AppLog.Info("FPS counter: Host Backdrop Liquid Glass unavailable; falling back to layered capsule.");
+            DestroyWindow(_hwnd);
+            _hwnd = IntPtr.Zero;
+        }
+        MakeWindow(noRedirectionBitmap: false);
+    }
+
+    private void MakeWindow(bool noRedirectionBitmap)
     {
         var instance = GetModuleHandleW(null);
         if (_proc is null)
@@ -347,8 +435,8 @@ internal sealed unsafe class FpsOverlay : IDisposable
             if (RegisterClassExW(ref type) == 0) throw new InvalidOperationException("The counter's window class wasn't registered.");
         }
         _current = this;
-        // Layered, click-through, topmost, tool (no taskbar), no activation; a plain popup.
-        const uint exStyle = 0x00080000 | 0x00000020 | 0x00000008 | 0x00000080 | 0x08000000;
+        var modeEx = noRedirectionBitmap ? WsExNoRedirectionBitmap : WsExLayered;
+        var exStyle = modeEx | WsExTransparent | WsExTopmost | WsExToolWindow | WsExNoActivate;
         _hwnd = CreateWindowExW(exStyle, ClassName, "Exo FPS counter", 0x80000000, 0, 0, 1, 1, IntPtr.Zero, IntPtr.Zero, instance, IntPtr.Zero);
         if (_hwnd == IntPtr.Zero) throw new InvalidOperationException("The counter's window wasn't made.");
         if (!SetWindowDisplayAffinity(_hwnd, 0x11 /* WDA_EXCLUDEFROMCAPTURE */)) AppLog.Info("FPS counter: Windows wouldn't keep it out of captures here.");
@@ -360,8 +448,17 @@ internal sealed unsafe class FpsOverlay : IDisposable
         {
             case 0x0084: return new IntPtr(-1); // WM_NCHITTEST: HTTRANSPARENT
             case 0x0021: return new IntPtr(3); // WM_MOUSEACTIVATE: MA_NOACTIVATE
+            case WmThemeChanged:
+                if (_current is { } overlay && overlay._usingGlass == IsHighContrast())
+                {
+                    overlay.InitializeWindowAndGlass();
+                    overlay.Tick();
+                }
+                return IntPtr.Zero;
             case 0x0010: DestroyWindow(hwnd); return IntPtr.Zero; // WM_CLOSE
-            case 0x0002: PostQuitMessage(0); return IntPtr.Zero; // WM_DESTROY
+            case 0x0002:
+                if (_current?._hwnd == hwnd) PostQuitMessage(0);
+                return IntPtr.Zero; // WM_DESTROY
             case 0x0113: case RefreshMessage: _current?.Tick(); return IntPtr.Zero; // WM_TIMER
             default: return DefWindowProcW(hwnd, message, w, l);
         }
@@ -372,6 +469,7 @@ internal sealed unsafe class FpsOverlay : IDisposable
     {
         try
         {
+            if (_usingGlass && IsHighContrast()) InitializeWindowAndGlass();
             var look = _read();
             if (look.NextMs != _timerMs)
             {
@@ -397,31 +495,565 @@ internal sealed unsafe class FpsOverlay : IDisposable
         _shown = false;
     }
 
+    private void EnsureTopmost(IntPtr foreground)
+    {
+        if (!NeedsTopmostReassert(_hwnd, foreground)) return;
+        SetWindowPos(_hwnd, new IntPtr(-1), 0, 0, 0, 0, SwpNoSize | SwpNoMove | SwpNoActivate | SwpShowWindow);
+    }
+
     private void Show(Line line)
     {
-        if (_shown && _drawn == line && _position() == _drawnPosition && MonitorFromWindow(GetForegroundWindow(), 2) == _drawnMonitor) return;
-        var monitor = MonitorFromWindow(GetForegroundWindow(), 2 /* MONITOR_DEFAULTTONEAREST */);
+        var foreground = GetForegroundWindow();
+        var monitor = MonitorFromWindow(foreground, 2 /* MONITOR_DEFAULTTONEAREST */);
+        var position = _position();
+        if (_shown && _drawn == line && position == _drawnPosition && monitor == _drawnMonitor)
+        {
+            EnsureTopmost(foreground);
+            return;
+        }
         var info = new MonitorInfo { Size = Marshal.SizeOf<MonitorInfo>() };
         if (!GetMonitorInfoW(monitor, ref info)) { Hide(); return; }
         var scale = GetDpiForMonitor(monitor, 0 /* MDT_EFFECTIVE_DPI */, out var dpi, out _) == 0 && dpi > 0 ? dpi / 96.0 : 1;
-        var position = _position();
-
-        // A screen with another scale measures the text again.
         var margin = MarginAt(scale);
-        using var capsule = Draw(line, scale, _drawnScale == scale ? MinWidth(_width, _drawn, line) : 0, info.Monitor.Right - info.Monitor.Left - margin * 2);
+        var maxWidth = info.Monitor.Right - info.Monitor.Left - margin * 2;
+        var minWidth = _drawnScale == scale ? MinWidth(_width, _drawn, line) : 0;
+
+        if (_usingGlass && _glass is { } glass)
+        {
+            if (!glass.Render(line, scale, minWidth, maxWidth, out var width, out var height))
+            {
+                // Device reset or rendering failure: degrade seamlessly to GDI layered fallback.
+                InitializeWindowAndGlass();
+            }
+            else
+            {
+                _width = width;
+                var (x, y) = Place(position, info.Monitor.Left, info.Monitor.Top, info.Monitor.Right, width, margin);
+                SetWindowPos(_hwnd, new IntPtr(-1), x, y, width, height, SwpNoActivate | SwpShowWindow);
+                (_drawn, _drawnScale, _drawnPosition, _drawnMonitor) = (line, scale, position, monitor);
+                _shown = true;
+                return;
+            }
+        }
+
+        // GDI layered fallback path (High Contrast or backdrop composition unavailable).
+        using var capsule = Draw(line, scale, minWidth, maxWidth);
         _width = capsule.Width;
-        var (x, y) = Place(position, info.Monitor.Left, info.Monitor.Top, info.Monitor.Right, capsule.Width, margin);
-        var at = new Point { X = x, Y = y };
+        var (fx, fy) = Place(position, info.Monitor.Left, info.Monitor.Top, info.Monitor.Right, capsule.Width, margin);
+        var at = new Point { X = fx, Y = fy };
         var source = new Point();
         var size = new Size { Width = capsule.Width, Height = capsule.Height };
         var blend = new BlendFunction { Op = 0, SourceConstantAlpha = 255, AlphaFormat = 1 /* AC_SRC_ALPHA */ };
         if (!UpdateLayeredWindow(_hwnd, IntPtr.Zero, ref at, ref size, capsule.Dc, ref source, 0, ref blend, 2 /* ULW_ALPHA */))
             throw new InvalidOperationException($"UpdateLayeredWindow failed ({Marshal.GetLastPInvokeError()}).");
         (_drawn, _drawnScale, _drawnPosition, _drawnMonitor) = (line, scale, position, monitor);
-        if (_shown) return;
-        // SWP_NOSIZE | SWP_NOMOVE | SWP_NOACTIVATE | SWP_SHOWWINDOW, on top of whatever else is topmost.
-        SetWindowPos(_hwnd, new IntPtr(-1), 0, 0, 0, 0, 0x0001 | 0x0002 | 0x0010 | 0x0040);
+        if (!_shown || NeedsTopmostReassert(_hwnd, foreground))
+            SetWindowPos(_hwnd, new IntPtr(-1), 0, 0, 0, 0, SwpNoSize | SwpNoMove | SwpNoActivate | SwpShowWindow);
         _shown = true;
+    }
+
+    // ---------------------------------------------------------------- Liquid Glass Composition host
+
+    private sealed class GlassHost : IDisposable
+    {
+        private const uint D3D11SdkVersion = 7, D3DDriverHardware = 1, D3D11CreateDeviceBgraSupport = 0x20;
+        private const uint DWriteFactoryTypeShared = 0, TagTabularFigures = 0x6D756E74u;
+        private static readonly Guid IidDxgiDevice = new("54ec77fa-1377-44e6-8c32-88fd5f44c84c");
+        private static readonly Guid IidD2D1Factory1 = new("bb12d362-daee-4b9a-aa1d-14ba401cfa1f");
+        private static readonly Guid IidD2D1DeviceContext = new("e8f7fe7a-191c-466d-ad95-975678bda998");
+        private static readonly Guid IidDWriteFactory5 = new("958DB99A-BE2A-4F09-AF7D-65189803D1D3");
+
+        private readonly Compositor _compositor;
+        private readonly DesktopWindowTarget _target;
+        private readonly ContainerVisual _root;
+        private readonly CompositionRoundedRectangleGeometry _clipGeo, _outerGeo, _rimGeo;
+        private readonly SpriteVisual _backdropVisual, _tintVisual, _textVisual;
+        private readonly ShapeVisual _rimVisual;
+        private readonly CompositionGraphicsDevice _graphicsDevice;
+        private readonly CompositionDrawingSurface _surface;
+        private readonly CompositionSurfaceBrush _surfaceBrush;
+
+        private IntPtr _d3dDevice, _d2dFactory, _d2dDevice, _dwriteFactory, _fontCollection, _typography;
+        private int _renderedWidth, _renderedHeight;
+
+        private GlassHost(
+            Compositor compositor,
+            DesktopWindowTarget target,
+            ContainerVisual root,
+            CompositionRoundedRectangleGeometry clipGeo,
+            CompositionRoundedRectangleGeometry outerGeo,
+            CompositionRoundedRectangleGeometry rimGeo,
+            SpriteVisual backdropVisual,
+            SpriteVisual tintVisual,
+            ShapeVisual rimVisual,
+            SpriteVisual textVisual,
+            CompositionGraphicsDevice graphicsDevice,
+            CompositionDrawingSurface surface,
+            CompositionSurfaceBrush surfaceBrush,
+            IntPtr d3dDevice,
+            IntPtr d2dFactory,
+            IntPtr d2dDevice,
+            IntPtr dwriteFactory,
+            IntPtr fontCollection,
+            IntPtr typography)
+        {
+            _compositor = compositor;
+            _target = target;
+            _root = root;
+            _clipGeo = clipGeo;
+            _outerGeo = outerGeo;
+            _rimGeo = rimGeo;
+            _backdropVisual = backdropVisual;
+            _tintVisual = tintVisual;
+            _rimVisual = rimVisual;
+            _textVisual = textVisual;
+            _graphicsDevice = graphicsDevice;
+            _surface = surface;
+            _surfaceBrush = surfaceBrush;
+            _d3dDevice = d3dDevice;
+            _d2dFactory = d2dFactory;
+            _d2dDevice = d2dDevice;
+            _dwriteFactory = dwriteFactory;
+            _fontCollection = fontCollection;
+            _typography = typography;
+        }
+
+        internal static GlassHost? TryCreate(IntPtr hwnd, string fontPath)
+        {
+            IntPtr d3dDevice = IntPtr.Zero, dxgiDevice = IntPtr.Zero, d2dFactory = IntPtr.Zero, d2dDevice = IntPtr.Zero;
+            IntPtr dwriteFactory = IntPtr.Zero, fontCollection = IntPtr.Zero, typography = IntPtr.Zero;
+            try
+            {
+                EnsureDispatcherQueue();
+                var compositor = new Compositor();
+                var desktopInterop = (ICompositorDesktopInterop)Marshal.GetObjectForIUnknown(((IWinRTObject)compositor).NativeObject.ThisPtr);
+                desktopInterop.CreateDesktopWindowTarget(hwnd, true, out var targetPtr);
+                var target = DesktopWindowTarget.FromAbi(targetPtr);
+
+                var spec = GlassSpec.LiquidGlass;
+                var hostBackdrop = compositor.CreateHostBackdropBrush();
+                using var saturation = new SaturationEffect
+                {
+                    Saturation = spec.Saturation,
+                    Source = new CompositionEffectSourceParameter("backdrop"),
+                };
+                using var blur = new GaussianBlurEffect
+                {
+                    BlurAmount = spec.BlurRadius,
+                    Optimization = EffectOptimization.Balanced,
+                    BorderMode = EffectBorderMode.Hard,
+                    Source = saturation,
+                };
+                using var effectFactory = compositor.CreateEffectFactory(blur);
+                var backdropBrush = effectFactory.CreateBrush();
+                backdropBrush.SetSourceParameter("backdrop", hostBackdrop);
+
+                var d3dHr = D3D11CreateDevice(IntPtr.Zero, D3DDriverHardware, IntPtr.Zero, D3D11CreateDeviceBgraSupport, IntPtr.Zero, 0, D3D11SdkVersion, out d3dDevice, out _, out _);
+                if (d3dHr < 0) return null;
+                var iidDxgi = IidDxgiDevice;
+                if (Marshal.QueryInterface(d3dDevice, in iidDxgi, out dxgiDevice) < 0) return null;
+                var iidD2D = IidD2D1Factory1;
+                if (D2D1CreateFactory(0 /* SINGLE_THREADED */, ref iidD2D, IntPtr.Zero, out d2dFactory) < 0) return null;
+                if (CreateD2DDevice(d2dFactory, dxgiDevice, out d2dDevice) < 0) return null;
+
+                var compInterop = (ICompositorInterop)Marshal.GetObjectForIUnknown(((IWinRTObject)compositor).NativeObject.ThisPtr);
+                compInterop.CreateGraphicsDevice(Marshal.GetObjectForIUnknown(d2dDevice), out var gfxPtr);
+                var graphicsDevice = CompositionGraphicsDevice.FromAbi(gfxPtr);
+                var surface = graphicsDevice.CreateDrawingSurface(new Windows.Foundation.Size(64, Height), DirectXPixelFormat.B8G8R8A8UIntNormalized, DirectXAlphaMode.Premultiplied);
+                var surfaceBrush = compositor.CreateSurfaceBrush(surface);
+                surfaceBrush.BitmapInterpolationMode = CompositionBitmapInterpolationMode.NearestNeighbor;
+
+                var iidDW = IidDWriteFactory5;
+                if (DWriteCreateFactory(DWriteFactoryTypeShared, ref iidDW, out dwriteFactory) < 0) return null;
+                fontCollection = TryLoadFontCollection(dwriteFactory, fontPath);
+                if (CreateTypography(dwriteFactory, out typography) < 0) return null;
+                AddFontFeature(typography, new FontFeature(TagTabularFigures, 1));
+
+                var root = compositor.CreateContainerVisual();
+                var clipGeo = compositor.CreateRoundedRectangleGeometry();
+                root.Clip = compositor.CreateGeometricClip(clipGeo);
+                target.Root = root;
+
+                var backdropVisual = compositor.CreateSpriteVisual();
+                backdropVisual.Brush = backdropBrush;
+
+                var tintVisual = compositor.CreateSpriteVisual();
+                tintVisual.Brush = compositor.CreateColorBrush(Argb(spec.TintArgb));
+
+                var rimVisual = compositor.CreateShapeVisual();
+                var outerGeo = compositor.CreateRoundedRectangleGeometry();
+                var outerShape = compositor.CreateSpriteShape(outerGeo);
+                outerShape.StrokeThickness = 1.0f;
+                outerShape.StrokeBrush = compositor.CreateColorBrush(Argb(spec.OuterHairlineArgb));
+
+                var rimGeo = compositor.CreateRoundedRectangleGeometry();
+                var rimShape = compositor.CreateSpriteShape(rimGeo);
+                rimShape.StrokeThickness = 1.0f;
+                var fresnelBrush = compositor.CreateLinearGradientBrush();
+                fresnelBrush.MappingMode = CompositionMappingMode.Relative;
+                fresnelBrush.StartPoint = Vector2.Zero;
+                fresnelBrush.EndPoint = Vector2.One;
+                for (var i = 0; i < spec.FresnelStops.Length; i++)
+                    fresnelBrush.ColorStops.Add(compositor.CreateColorGradientStop(spec.FresnelStops[i], Windows.UI.Color.FromArgb(spec.FresnelAlphas[i], 255, 255, 255)));
+                rimShape.StrokeBrush = fresnelBrush;
+                rimVisual.Shapes.Add(outerShape);
+                rimVisual.Shapes.Add(rimShape);
+
+                var textVisual = compositor.CreateSpriteVisual();
+                textVisual.Brush = surfaceBrush;
+
+                root.Children.InsertAtTop(backdropVisual);
+                root.Children.InsertAtTop(tintVisual);
+                root.Children.InsertAtTop(rimVisual);
+                root.Children.InsertAtTop(textVisual);
+
+                Marshal.Release(dxgiDevice);
+                return new GlassHost(
+                    compositor, target, root, clipGeo, outerGeo, rimGeo,
+                    backdropVisual, tintVisual, rimVisual, textVisual,
+                    graphicsDevice, surface, surfaceBrush,
+                    d3dDevice, d2dFactory, d2dDevice, dwriteFactory, fontCollection, typography);
+            }
+            catch (Exception ex) when (ex is ExternalException or InvalidOperationException or NotSupportedException or UnauthorizedAccessException)
+            {
+                AppLog.Debug("FPS counter Liquid Glass init: " + ex.Message);
+                ReleaseCom(ref typography);
+                ReleaseCom(ref fontCollection);
+                ReleaseCom(ref dwriteFactory);
+                ReleaseCom(ref d2dDevice);
+                ReleaseCom(ref d2dFactory);
+                ReleaseCom(ref dxgiDevice);
+                ReleaseCom(ref d3dDevice);
+                return null;
+            }
+        }
+
+        internal bool Render(Line line, double scale, int minWidth, int maxWidth, out int widthPx, out int heightPx)
+        {
+            widthPx = 0;
+            heightPx = Math.Max(1, (int)Math.Round(Height * scale));
+            var paddingPx = Math.Max(1, (int)Math.Round(Padding * scale));
+            var fontSize = (float)(FontPixels * scale);
+
+            var digits = line.Fps.ToString(CultureInfo.InvariantCulture);
+            var textFormat = IntPtr.Zero;
+            var dcPtr = IntPtr.Zero;
+            var whiteBrush = IntPtr.Zero;
+            var mutedBrush = IntPtr.Zero;
+            var finalLayout = IntPtr.Zero;
+            try
+            {
+                if (CreateTextFormat(_dwriteFactory, RegularFace, _fontCollection, 400, fontSize, out textFormat) < 0)
+                    return false;
+                var tail = " FPS" + Fit(line.Items, candidate => paddingPx * 2 + MeasureWidth(digits + " FPS" + candidate, textFormat), maxWidth);
+                var fullText = digits + tail;
+                if (CreateTextLayout(_dwriteFactory, fullText, textFormat, Math.Max(1f, maxWidth), heightPx, out finalLayout) < 0)
+                    return false;
+                ConfigureLayout(finalLayout, digits.Length, fullText.Length);
+                if (GetLayoutMetrics(finalLayout, out var metrics) < 0) return false;
+
+                var textWidth = (int)Math.Ceiling(metrics.WidthIncludingTrailingWhitespace);
+                widthPx = Math.Min(maxWidth, Math.Max(minWidth, paddingPx * 2 + textWidth));
+
+                var sizeVec = new Vector2(widthPx, heightPx);
+                _root.Size = sizeVec;
+                _backdropVisual.Size = sizeVec;
+                _tintVisual.Size = sizeVec;
+                _rimVisual.Size = sizeVec;
+                _textVisual.Size = sizeVec;
+
+                var radius = heightPx / 2.0f;
+                _clipGeo.Size = sizeVec;
+                _clipGeo.CornerRadius = new Vector2(radius, radius);
+
+                _outerGeo.Offset = new Vector2(0.5f, 0.5f);
+                _outerGeo.Size = new Vector2(Math.Max(1f, widthPx - 1f), Math.Max(1f, heightPx - 1f));
+                _outerGeo.CornerRadius = new Vector2(Math.Max(0.5f, radius - 0.5f), Math.Max(0.5f, radius - 0.5f));
+
+                _rimGeo.Offset = new Vector2(1.5f, 1.5f);
+                _rimGeo.Size = new Vector2(Math.Max(1f, widthPx - 3f), Math.Max(1f, heightPx - 3f));
+                _rimGeo.CornerRadius = new Vector2(Math.Max(0.5f, radius - 1.5f), Math.Max(0.5f, radius - 1.5f));
+
+                var surfaceInterop = (ICompositionDrawingSurfaceInterop)Marshal.GetObjectForIUnknown(((IWinRTObject)_surface).NativeObject.ThisPtr);
+                if (_renderedWidth != widthPx || _renderedHeight != heightPx)
+                {
+                    surfaceInterop.Resize(new SizeInt32(widthPx, heightPx));
+                    _renderedWidth = widthPx;
+                    _renderedHeight = heightPx;
+                }
+
+                var iidDc = IidD2D1DeviceContext;
+                surfaceInterop.BeginDraw(IntPtr.Zero, ref iidDc, out dcPtr, out var offset);
+                try
+                {
+                    SetDpi(dcPtr, 96f, 96f);
+                    SetTextAntialiasMode(dcPtr, 2 /* D2D1_TEXT_ANTIALIAS_MODE_GRAYSCALE */);
+                    var translate = new D2D1Matrix3x2(1f, 0f, 0f, 1f, offset.X, offset.Y);
+                    SetTransform(dcPtr, ref translate);
+                    var clear = new D2D1ColorF(0f, 0f, 0f, 0f);
+                    Clear(dcPtr, ref clear);
+
+                    var white = new D2D1ColorF(1f, 1f, 1f, 1f);
+                    var muted = new D2D1ColorF(1f, 1f, 1f, RestInk / 255f);
+                    if (CreateSolidColorBrush(dcPtr, ref white, out whiteBrush) < 0
+                        || CreateSolidColorBrush(dcPtr, ref muted, out mutedBrush) < 0)
+                        return false;
+
+                    SetDrawingEffect(finalLayout, whiteBrush, new DWriteTextRange(0, (uint)digits.Length));
+                    if (fullText.Length > digits.Length)
+                        SetDrawingEffect(finalLayout, mutedBrush, new DWriteTextRange((uint)digits.Length, (uint)(fullText.Length - digits.Length)));
+
+                    var originX = (widthPx - metrics.WidthIncludingTrailingWhitespace) * 0.5f;
+                    var originY = (heightPx - metrics.Height) * 0.5f;
+                    DrawTextLayout(dcPtr, new D2D1Point2F(originX, originY), finalLayout, whiteBrush, 0);
+
+                    var identity = new D2D1Matrix3x2(1f, 0f, 0f, 1f, 0f, 0f);
+                    SetTransform(dcPtr, ref identity);
+                }
+                finally
+                {
+                    surfaceInterop.EndDraw();
+                }
+                return true;
+            }
+            catch (ExternalException ex)
+            {
+                AppLog.Debug("FPS counter Liquid Glass draw failed: " + ex.Message);
+                return false;
+            }
+            finally
+            {
+                ReleaseCom(ref finalLayout);
+                ReleaseCom(ref mutedBrush);
+                ReleaseCom(ref whiteBrush);
+                ReleaseCom(ref dcPtr);
+                ReleaseCom(ref textFormat);
+            }
+        }
+
+        private int MeasureWidth(string text, IntPtr textFormat)
+        {
+            var layout = IntPtr.Zero;
+            try
+            {
+                if (CreateTextLayout(_dwriteFactory, text, textFormat, 4096f, 256f, out layout) < 0) return 0;
+                var digits = text.TakeWhile(char.IsAsciiDigit).Count();
+                ConfigureLayout(layout, digits, text.Length);
+                return GetLayoutMetrics(layout, out var metrics) >= 0 ? (int)Math.Ceiling(metrics.WidthIncludingTrailingWhitespace) : 0;
+            }
+            finally
+            {
+                ReleaseCom(ref layout);
+            }
+        }
+
+        private void ConfigureLayout(IntPtr layout, int digitCount, int totalLength)
+        {
+            if (totalLength <= 0) return;
+            SetTypography(layout, _typography, new DWriteTextRange(0, (uint)totalLength));
+            if (digitCount > 0) SetFontWeight(layout, 600 /* DWRITE_FONT_WEIGHT_SEMI_BOLD */, new DWriteTextRange(0, (uint)digitCount));
+        }
+
+        public void Dispose()
+        {
+            ReleaseCom(ref _typography);
+            ReleaseCom(ref _fontCollection);
+            ReleaseCom(ref _dwriteFactory);
+            ReleaseCom(ref _d2dDevice);
+            ReleaseCom(ref _d2dFactory);
+            ReleaseCom(ref _d3dDevice);
+            _surfaceBrush.Dispose();
+            _surface.Dispose();
+            _graphicsDevice.Dispose();
+            _target.Dispose();
+            _compositor.Dispose();
+        }
+
+        private static Windows.UI.Color Argb(uint argb) => Windows.UI.Color.FromArgb(
+            (byte)(argb >> 24), (byte)(argb >> 16), (byte)(argb >> 8), (byte)argb);
+
+        private static void EnsureDispatcherQueue()
+        {
+            var options = new DispatcherQueueOptions { Size = Marshal.SizeOf<DispatcherQueueOptions>(), ThreadType = 2, ApartmentType = 2 };
+            var hr = CreateDispatcherQueueController(options, out _);
+            // S_OK or RPC_E_WRONG_THREAD/already created on this thread are safe.
+            if (hr < 0 && unchecked((uint)hr) != 0x80070057 && unchecked((uint)hr) != 0x8001010E)
+                Marshal.ThrowExceptionForHR(hr);
+        }
+
+        private static IntPtr TryLoadFontCollection(IntPtr dwriteFactory5, string fontPath)
+        {
+            if (!File.Exists(fontPath)) return IntPtr.Zero;
+            IntPtr fontFile = IntPtr.Zero, builder = IntPtr.Zero, fontSet = IntPtr.Zero, collection = IntPtr.Zero;
+            try
+            {
+                if (CreateFontFileReference(dwriteFactory5, fontPath, out fontFile) < 0) return IntPtr.Zero;
+                if (CreateFontSetBuilder(dwriteFactory5, out builder) < 0) return IntPtr.Zero;
+                if (AddFontFile(builder, fontFile) < 0) return IntPtr.Zero;
+                if (CreateFontSet(builder, out fontSet) < 0) return IntPtr.Zero;
+                if (CreateFontCollectionFromFontSet(dwriteFactory5, fontSet, out collection) < 0) return IntPtr.Zero;
+                return collection;
+            }
+            finally
+            {
+                ReleaseCom(ref fontSet);
+                ReleaseCom(ref builder);
+                ReleaseCom(ref fontFile);
+            }
+        }
+
+        private static void ReleaseCom(ref IntPtr ptr)
+        {
+            if (ptr == IntPtr.Zero) return;
+            Marshal.Release(ptr);
+            ptr = IntPtr.Zero;
+        }
+
+        // ---- Raw COM vtable calls verified against Windows SDK 10.0.26100.0 ----
+
+        private static nint Slot(IntPtr comPtr, int index) => (*((nint**)comPtr))[index];
+
+        private static int CreateD2DDevice(IntPtr factory1, IntPtr dxgiDevice, out IntPtr d2dDevice)
+        {
+            fixed (IntPtr* p = &d2dDevice)
+                return ((delegate* unmanaged[Stdcall]<IntPtr, IntPtr, IntPtr*, int>)Slot(factory1, 17))(factory1, dxgiDevice, p);
+        }
+
+        private static void SetDpi(IntPtr dc, float dpiX, float dpiY) =>
+            ((delegate* unmanaged[Stdcall]<IntPtr, float, float, void>)Slot(dc, 51))(dc, dpiX, dpiY);
+
+        private static void SetTextAntialiasMode(IntPtr dc, uint mode) =>
+            ((delegate* unmanaged[Stdcall]<IntPtr, uint, void>)Slot(dc, 34))(dc, mode);
+
+        private static void SetTransform(IntPtr dc, ref D2D1Matrix3x2 matrix)
+        {
+            fixed (D2D1Matrix3x2* m = &matrix)
+                ((delegate* unmanaged[Stdcall]<IntPtr, D2D1Matrix3x2*, void>)Slot(dc, 30))(dc, m);
+        }
+
+        private static void Clear(IntPtr dc, ref D2D1ColorF color)
+        {
+            fixed (D2D1ColorF* c = &color)
+                ((delegate* unmanaged[Stdcall]<IntPtr, D2D1ColorF*, void>)Slot(dc, 47))(dc, c);
+        }
+
+        private static int CreateSolidColorBrush(IntPtr dc, ref D2D1ColorF color, out IntPtr brush)
+        {
+            fixed (D2D1ColorF* c = &color)
+            fixed (IntPtr* b = &brush)
+                return ((delegate* unmanaged[Stdcall]<IntPtr, D2D1ColorF*, IntPtr, IntPtr*, int>)Slot(dc, 8))(dc, c, IntPtr.Zero, b);
+        }
+
+        private static void DrawTextLayout(IntPtr dc, D2D1Point2F origin, IntPtr layout, IntPtr brush, uint options) =>
+            ((delegate* unmanaged[Stdcall]<IntPtr, D2D1Point2F, IntPtr, IntPtr, uint, void>)Slot(dc, 28))(dc, origin, layout, brush, options);
+
+        private static int CreateFontFileReference(IntPtr factory, string path, out IntPtr fontFile)
+        {
+            fixed (char* p = path)
+            fixed (IntPtr* f = &fontFile)
+                return ((delegate* unmanaged[Stdcall]<IntPtr, char*, IntPtr, IntPtr*, int>)Slot(factory, 7))(factory, p, IntPtr.Zero, f);
+        }
+
+        private static int CreateTextFormat(IntPtr factory, string family, IntPtr collection, uint weight, float size, out IntPtr textFormat)
+        {
+            fixed (char* fam = family)
+            fixed (char* loc = "en-US")
+            fixed (IntPtr* tf = &textFormat)
+                return ((delegate* unmanaged[Stdcall]<IntPtr, char*, IntPtr, uint, uint, uint, float, char*, IntPtr*, int>)Slot(factory, 15))(
+                    factory, fam, collection, weight, 0 /* NORMAL */, 5 /* NORMAL */, size, loc, tf);
+        }
+
+        private static int CreateTypography(IntPtr factory, out IntPtr typography)
+        {
+            fixed (IntPtr* t = &typography)
+                return ((delegate* unmanaged[Stdcall]<IntPtr, IntPtr*, int>)Slot(factory, 16))(factory, t);
+        }
+
+        private static int CreateTextLayout(IntPtr factory, string text, IntPtr format, float maxWidth, float maxHeight, out IntPtr layout)
+        {
+            fixed (char* s = text)
+            fixed (IntPtr* l = &layout)
+                return ((delegate* unmanaged[Stdcall]<IntPtr, char*, uint, IntPtr, float, float, IntPtr*, int>)Slot(factory, 18))(
+                    factory, s, (uint)text.Length, format, maxWidth, maxHeight, l);
+        }
+
+        private static int CreateFontCollectionFromFontSet(IntPtr factory3, IntPtr fontSet, out IntPtr collection)
+        {
+            fixed (IntPtr* c = &collection)
+                return ((delegate* unmanaged[Stdcall]<IntPtr, IntPtr, IntPtr*, int>)Slot(factory3, 37))(factory3, fontSet, c);
+        }
+
+        private static int CreateFontSetBuilder(IntPtr factory5, out IntPtr builder1)
+        {
+            fixed (IntPtr* b = &builder1)
+                return ((delegate* unmanaged[Stdcall]<IntPtr, IntPtr*, int>)Slot(factory5, 43))(factory5, b);
+        }
+
+        private static int AddFontFile(IntPtr builder1, IntPtr fontFile) =>
+            ((delegate* unmanaged[Stdcall]<IntPtr, IntPtr, int>)Slot(builder1, 7))(builder1, fontFile);
+
+        private static int CreateFontSet(IntPtr builder, out IntPtr fontSet)
+        {
+            fixed (IntPtr* s = &fontSet)
+                return ((delegate* unmanaged[Stdcall]<IntPtr, IntPtr*, int>)Slot(builder, 6))(builder, s);
+        }
+
+        private static int AddFontFeature(IntPtr typography, FontFeature feature) =>
+            ((delegate* unmanaged[Stdcall]<IntPtr, FontFeature, int>)Slot(typography, 3))(typography, feature);
+
+        private static int SetFontWeight(IntPtr layout, uint weight, DWriteTextRange range) =>
+            ((delegate* unmanaged[Stdcall]<IntPtr, uint, DWriteTextRange, int>)Slot(layout, 32))(layout, weight, range);
+
+        private static int SetDrawingEffect(IntPtr layout, IntPtr effect, DWriteTextRange range) =>
+            ((delegate* unmanaged[Stdcall]<IntPtr, IntPtr, DWriteTextRange, int>)Slot(layout, 38))(layout, effect, range);
+
+        private static int SetTypography(IntPtr layout, IntPtr typography, DWriteTextRange range) =>
+            ((delegate* unmanaged[Stdcall]<IntPtr, IntPtr, DWriteTextRange, int>)Slot(layout, 40))(layout, typography, range);
+
+        private static int GetLayoutMetrics(IntPtr layout, out DWriteTextMetrics metrics)
+        {
+            fixed (DWriteTextMetrics* m = &metrics)
+                return ((delegate* unmanaged[Stdcall]<IntPtr, DWriteTextMetrics*, int>)Slot(layout, 60))(layout, m);
+        }
+
+        [ComImport, Guid("29E691FA-4567-4DCA-B319-D0F207EB6807"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+        private interface ICompositorDesktopInterop
+        {
+            void CreateDesktopWindowTarget(IntPtr hwnd, [MarshalAs(UnmanagedType.Bool)] bool isTopmost, out IntPtr target);
+            void EnsureOnThread(uint threadId);
+        }
+
+        [ComImport, Guid("25297D5C-3AD4-4C9C-B5CF-E36A38512330"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+        private interface ICompositorInterop
+        {
+            void CreateCompositionSurfaceForHandle(IntPtr swapChain, out IntPtr result);
+            void CreateCompositionSurfaceForSwapChain([MarshalAs(UnmanagedType.IUnknown)] object swapChain, out IntPtr result);
+            void CreateGraphicsDevice([MarshalAs(UnmanagedType.IUnknown)] object renderingDevice, out IntPtr result);
+        }
+
+        [ComImport, Guid("FD04E6E3-FE0C-4C3C-AB19-A07601A576EE"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+        private interface ICompositionDrawingSurfaceInterop
+        {
+            void BeginDraw(IntPtr updateRect, ref Guid iid, out IntPtr updateObject, out Point updateOffset);
+            void EndDraw();
+            void Resize(SizeInt32 sizePixels);
+            void Scroll(IntPtr scrollRect, IntPtr clipRect, int offsetX, int offsetY);
+            void ResumeDraw();
+            void SuspendDraw();
+        }
+
+        [StructLayout(LayoutKind.Sequential)] private readonly struct DispatcherQueueOptions { public int Size { get; init; } public int ThreadType { get; init; } public int ApartmentType { get; init; } }
+        [StructLayout(LayoutKind.Sequential)] private readonly struct FontFeature(uint nameTag, uint parameter) { public readonly uint NameTag = nameTag, Parameter = parameter; }
+        [StructLayout(LayoutKind.Sequential)] private readonly struct DWriteTextRange(uint start, uint length) { public readonly uint StartPosition = start, Length = length; }
+        [StructLayout(LayoutKind.Sequential)] private struct DWriteTextMetrics { public float Left, Top, Width, WidthIncludingTrailingWhitespace, Height, LayoutWidth, LayoutHeight; public uint MaxBidiReorderingDepth, LineCount; }
+        [StructLayout(LayoutKind.Sequential)] private readonly struct D2D1ColorF(float r, float g, float b, float a) { public readonly float R = r, G = g, B = b, A = a; }
+        [StructLayout(LayoutKind.Sequential)] private readonly struct D2D1Point2F(float x, float y) { public readonly float X = x, Y = y; }
+        [StructLayout(LayoutKind.Sequential)] private readonly struct D2D1Matrix3x2(float m11, float m12, float m21, float m22, float m31, float m32) { public readonly float M11 = m11, M12 = m12, M21 = m21, M22 = m22, M31 = m31, M32 = m32; }
+
+        [DllImport("CoreMessaging.dll")] private static extern int CreateDispatcherQueueController(DispatcherQueueOptions options, out IntPtr controller);
+        [DllImport("d3d11.dll")] private static extern int D3D11CreateDevice(IntPtr adapter, uint driverType, IntPtr software, uint flags, IntPtr featureLevels, uint featureLevelCount, uint sdkVersion, out IntPtr device, out uint featureLevel, out IntPtr immediateContext);
+        [DllImport("d2d1.dll")] private static extern int D2D1CreateFactory(uint factoryType, ref Guid iid, IntPtr options, out IntPtr factory);
+        [DllImport("dwrite.dll")] private static extern int DWriteCreateFactory(uint factoryType, ref Guid iid, out IntPtr factory);
     }
 
     // ---------------------------------------------------------------- native
@@ -445,6 +1077,8 @@ internal sealed unsafe class FpsOverlay : IDisposable
     [StructLayout(LayoutKind.Sequential)] private struct BitmapInfoHeader { public int Size, Width, Height; public short Planes, BitCount; public int Compression, SizeImage, XPels, YPels, Used, Important; }
     [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
     private struct TextMetric { public int TextHeight, Ascent, Descent, InternalLeading, ExternalLeading, AveCharWidth, MaxCharWidth, Weight, Overhang, DigitizedAspectX, DigitizedAspectY; public char First, Last, Default, Break; public byte Italic, Underlined, StruckOut, PitchAndFamily, Charset; }
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+    private struct HighContrast { public int Size; public uint Flags; public IntPtr DefaultScheme; }
 
     [DllImport("gdi32.dll", CharSet = CharSet.Unicode)] private static extern int AddFontResourceExW(string path, uint flags, IntPtr reserved);
     [DllImport("gdi32.dll")] private static extern IntPtr CreateCompatibleDC(IntPtr dc);
@@ -477,6 +1111,9 @@ internal sealed unsafe class FpsOverlay : IDisposable
     [DllImport("user32.dll", SetLastError = true)] private static extern bool UpdateLayeredWindow(IntPtr hwnd, IntPtr screen, ref Point at, ref Size size, IntPtr source, ref Point sourceAt, uint key, ref BlendFunction blend, uint flags);
     [DllImport("user32.dll")] private static extern bool SetWindowDisplayAffinity(IntPtr hwnd, uint affinity);
     [DllImport("user32.dll")] private static extern IntPtr GetForegroundWindow();
+    [DllImport("user32.dll")] private static extern IntPtr GetWindow(IntPtr hwnd, uint cmd);
+    [DllImport("user32.dll", EntryPoint = "GetWindowLongPtrW")] private static extern IntPtr GetWindowLongPtrW(IntPtr hwnd, int index);
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)] private static extern bool SystemParametersInfoW(uint action, uint param, ref HighContrast highContrast, uint winIni);
     [DllImport("user32.dll")] private static extern IntPtr MonitorFromWindow(IntPtr hwnd, uint flags);
     [DllImport("user32.dll", CharSet = CharSet.Unicode)] private static extern bool GetMonitorInfoW(IntPtr monitor, ref MonitorInfo info);
     [DllImport("shcore.dll")] private static extern int GetDpiForMonitor(IntPtr monitor, int kind, out uint x, out uint y);

@@ -214,14 +214,42 @@ public sealed class GpuProfileTests
     [InlineData(10)]
     [InlineData(30)]
     [InlineData(50)]
-    public void EveryProfileIsPerformanceFirst(int series)
+    public void GlobalProfileKeepsNormalPowerAndQualityTextureFiltering(int series)
     {
         var profile = Profile(series);
-        Assert.Equal(1u, profile[0x1057EB71]);      // power: prefer maximum performance
-        Assert.Equal(0x14u, profile[0x00CE2691]);   // texture filtering: High performance
-        Assert.Equal(3u, profile[0x00EAD189]);      // compile shaders while idle: High
-        Assert.Null(profile[0x10D2BB16]);           // anisotropic filtering stays the game's own
-        Assert.Null(profile[0x000F00BA]);           // Resizable BAR: NVIDIA's per-game list, old switch
-        Assert.Null(profile[0x000BFA21]);           // and the v2 switch (616.56+)
+        Assert.Equal(0u, profile[GpuProfile.PowerManagement]);          // global power: Normal (Prefer max performance runs per-game)
+        Assert.Equal(0u, profile[GpuProfile.TextureFilteringQuality]);  // texture filtering: Quality
+        Assert.Equal(3u, profile[0x00EAD189]);                          // compile shaders while idle: High
+        Assert.Null(profile[0x10D2BB16]);                               // anisotropic filtering stays the game's own
+        Assert.Null(profile[0x000F00BA]);                               // Resizable BAR: NVIDIA's per-game list, old switch
+        Assert.Null(profile[0x000BFA21]);                               // and the v2 switch (616.56+)
+    }
+
+    [Fact]
+    public void GsyncStaysOnForVrrDisplaysAndSupportsLowLatencyChoicesAndDetails()
+    {
+        var vrrWrites = GpuProfile.Nvidia(new GpuProfile.Variant(30, Vrr: true, LowLatency: GpuProfile.LowLatencyUltra), 40, Every, Nothing);
+        Assert.Equal(1u, vrrWrites[GpuProfile.GsyncFeature]);
+        Assert.Equal(1u, vrrWrites[GpuProfile.GsyncGlobalMode]);
+        Assert.Equal(1u, vrrWrites[GpuProfile.GsyncAppMode]);
+        Assert.Equal(1u, vrrWrites[GpuProfile.VrrControl]);
+        Assert.Equal(2u, vrrWrites[LowLatency]);
+        Assert.Equal(1u, vrrWrites[UltraLowLatency]);
+        Assert.Equal(1u, vrrWrites[PreRendered]);
+        Assert.Null(vrrWrites[GpuProfile.ShaderCacheSize]); // < 50 GB free defaults shader cache
+
+        var offWrites = GpuProfile.Nvidia(new GpuProfile.Variant(30, Vrr: false, LowLatency: GpuProfile.LowLatencyOff), 100, Every, Nothing);
+        Assert.Equal(0u, offWrites[LowLatency]);
+        Assert.Equal(0u, offWrites[UltraLowLatency]);
+        Assert.Null(offWrites[PreRendered]);
+
+        // Readback infers Low Latency even when EnumAvailableSettingIds omits legacy CPL/ULL ids.
+        Assert.Equal(GpuProfile.LowLatencyOn, GpuProfile.InferNvidiaLowLatency(new Dictionary<uint, uint?> { [PreRendered] = 1u }));
+        Assert.Equal(GpuProfile.LowLatencyUltra, GpuProfile.InferNvidiaLowLatency(new Dictionary<uint, uint?> { [LowLatency] = 2u }));
+
+        var details = GpuProfile.NvidiaDetails(new GpuProfile.Variant(30, Vrr: true, LowLatency: GpuProfile.LowLatencyOn), 40, vrrWrites, vrrWrites, [], rebar: true);
+        Assert.Equal("On", details.Single(d => d.Key == "rebar").Value);
+        Assert.Contains("Less than 50 GB free", details.Single(d => d.Key == "shaderCache").Note);
+        Assert.Equal("Full screen", details.Single(d => d.Key == "gsync").Value);
     }
 }

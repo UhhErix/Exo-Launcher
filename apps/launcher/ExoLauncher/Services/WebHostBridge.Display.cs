@@ -36,6 +36,9 @@ public sealed partial class WebHostBridge
             case "override":
                 message = SetScalingOverride(p, hasParams);
                 break;
+            case "ddc":
+                lock (_displayGate) message = SetDdc(p, hasParams);
+                break;
         }
         return DisplayState(message);
     });
@@ -53,14 +56,17 @@ public sealed partial class WebHostBridge
             displays = screens.Select((screen, index) =>
             {
                 var best = BestFor(screen);
+                var ddc = MonitorDdc.Read(screen.Gdi);
                 return new
                 {
                     id = DisplayId(screen.Gdi),
                     name = DisplayOutput.ScreenName(screen.Name, screen.Raw.DevicePath, index + 1),
                     main = screen.Main,
                     hdr = screen.Hdr,
+                    hdrSupported = screen.Raw.Supported,
                     vendor = screen.Vendor,
                     refresh = screen.Refresh,
+                    refreshLabel = DisplayOutput.FormatRefreshLabel(screen.Raw.RefreshHz, screen.Refresh),
                     refreshes = screen.Refreshes,
                     color = screen.Color,
                     auto = screen.Auto,
@@ -73,6 +79,15 @@ public sealed partial class WebHostBridge
                         && (best.Scaling is null || best.Scaling == screen.Scaling) && (best.Override is null || best.Override == screen.Override)
                         && !(WantsVideoHdr(screen.Hdr, screen.NvId, videoHdr) && videoHdr == 0),
                     adjust = ColorState(screen),
+                    ddc = ddc is null ? null : new
+                    {
+                        brightness = ddc.Brightness,
+                        brightnessMin = ddc.BrightnessMin,
+                        brightnessMax = ddc.BrightnessMax,
+                        contrast = ddc.Contrast,
+                        contrastMin = ddc.ContrastMin,
+                        contrastMax = ddc.ContrastMax,
+                    },
                     scaling = screen.Scaling is { } code
                         ? NvidiaScaling.FromCode(code) is { } s ? new { mode = s.Mode, gpu = s.OnGpu, over = screen.Override } : new { mode = "default", gpu = true, over = screen.Override }
                         : null,
@@ -97,11 +112,10 @@ public sealed partial class WebHostBridge
     internal static bool WantsVideoHdr(bool hdr, uint? nvId, int? videoHdr) => hdr && nvId is not null && videoHdr is not null;
 
     /// <summary>
-    /// The best a screen takes: its best refresh rate (<see cref="DisplayOutput.BestRefresh"/>: the main screen's highest,
-    /// 60 Hz on any other), then the deepest color the link carries at that rate, and where the driver has
-    /// them (NVIDIA; AMD and Intel scaling isn't in Exo) No scaling performed on the GPU, overriding what
-    /// games ask for: the picture is never stretched or blurred. Scaling and Override are null where the
-    /// driver doesn't say.
+    /// The best a screen takes: its highest usable refresh rate (<see cref="DisplayOutput.BestRefresh"/>), then the deepest
+    /// color the link carries at that rate, and where the driver has them (NVIDIA; AMD and Intel scaling isn't in Exo)
+    /// No scaling performed on the GPU, overriding what games ask for: the picture is never stretched or blurred.
+    /// Scaling and Override are null where the driver doesn't say.
     /// The refresh rate comes first and the color fits it, never the other way: a smooth refresh is what a game feels,
     /// and an SDR desktop at 8-bit with the GPU's dithering shows no banding, so 10-bit is worth only what the link has
     /// left at the best rate (1440p 170 Hz over DisplayPort 1.2 has room for 8-bit only). Colors are read at the current
@@ -170,15 +184,29 @@ public sealed partial class WebHostBridge
             var id = ReadString(p, hasParams, "display");
             var raw = WindowsHdr.All().FirstOrDefault(screen => DisplayId(screen.GdiName) == id);
             if (raw is null) return "That screen is not connected.";
+
+            var hdrChanged = false;
+            if (ReadBool(p, hasParams, "hdr") is { } wantHdr)
+            {
+                if (!raw.Supported) return "This screen does not support HDR.";
+                if (wantHdr != raw.Enabled)
+                {
+                    if (!WindowsHdr.Set(raw, wantHdr)) return "Windows did not change HDR on this screen.";
+                    hdrChanged = true;
+                    WaitForHdrToggle(raw.DevicePath, wantHdr);
+                    raw = Reread(raw);
+                }
+            }
+
             var before = ReadScreen(raw, WindowsHdr.PrimaryGdiName());
             var best = ReadBool(p, hasParams, "best") == true;
 
             var refresh = best ? BestFor(before).Refresh : (int?)ReadDouble(p, hasParams, "refresh") ?? before.Refresh;
             if (refresh != before.Refresh && !before.Refreshes.Contains(refresh)) return $"This screen has no {refresh} Hz mode.";
             if (refresh != before.Refresh && DisplayOutput.SetRefresh(before.Gdi, refresh) is { } refreshError) return refreshError;
-            // The driver answers for the new mode once the screen has settled on it.
-            if (refresh != before.Refresh) Thread.Sleep(1000);
-            var now = refresh != before.Refresh ? ReadScreen(Reread(raw), null) : before;
+            // Poll with progressive backoff (up to 3 s) until the driver settles on the new mode after link retrain.
+            if (refresh != before.Refresh) DisplayOutput.WaitForRefreshSettle(() => DisplayOutput.CurrentRefresh(before.Gdi), refresh, Thread.Sleep, 3000);
+            var now = refresh != before.Refresh ? ReadScreen(Reread(raw), WindowsHdr.PrimaryGdiName()) : before;
 
             OutputColor? wanted = null;
             string? message = null;
@@ -203,7 +231,7 @@ public sealed partial class WebHostBridge
                 // takes at the new rate and pick again once.
                 if (message is not null && message != DisplayOutput.NotKept && best && refresh != before.Refresh)
                 {
-                    now = ReadScreen(Reread(raw), null);
+                    now = ReadScreen(Reread(raw), WindowsHdr.PrimaryGdiName());
                     var retry = DisplayOutput.BestColor(now.Supported, refresh, now.Caps?.PanelBpc).Color;
                     if (retry is null || (retry == now.Color && !now.Auto)) { message = null; wanted = null; }
                     else if (retry != wanted) { wanted = retry; message = WriteColor(now, retry); }
@@ -241,19 +269,51 @@ public sealed partial class WebHostBridge
             }
             // Best also turns on RTX Video HDR on a screen running HDR (it's global on the card, and kept across driver installs).
             var videoHdrOn = false;
-            if (message is null && best && NvidiaVideo.AnyScreen() is { } videoGdi && WantsVideoHdr(now.Hdr, now.NvId, NvidiaVideo.Read(videoGdi, NvidiaVideo.VideoHdr))
-                && NvidiaVideo.Read(videoGdi, NvidiaVideo.VideoHdr) == 0)
+            if (message is null && best && NvidiaVideo.AnyScreen() is { } videoGdi)
             {
-                message = NvidiaVideo.Write(videoGdi, NvidiaVideo.VideoHdr, 5) ?? KeepVideo(s => s.RtxVideoHdr = true);
-                videoHdrOn = message is null;
-                if (videoHdrOn) AppLog.Info("Display: RTX Video HDR on, for a screen running HDR.");
+                var currentVideoHdr = NvidiaVideo.Read(videoGdi, NvidiaVideo.VideoHdr);
+                if (WantsVideoHdr(now.Hdr, now.NvId, currentVideoHdr) && currentVideoHdr == 0)
+                {
+                    message = NvidiaVideo.Write(videoGdi, NvidiaVideo.VideoHdr, 5) ?? KeepVideo(s => s.RtxVideoHdr = true);
+                    videoHdrOn = message is null;
+                    if (videoHdrOn) AppLog.Info("Display: RTX Video HDR on, for a screen running HDR.");
+                }
             }
-            if (refresh == before.Refresh && !colorChanged && scalingTo is null && !overrideOn) return message;
+            if (refresh == before.Refresh && !colorChanged && scalingTo is null && !overrideOn && !videoHdrOn)
+            {
+                if (hdrChanged) AppLog.Info($"Display: HDR {(raw.Enabled ? "on" : "off")} on {DisplayId(before.Gdi)}.");
+                return message;
+            }
             // A new refresh rate is saved as Windows' own, so it holds after a restart.
             if (refresh != before.Refresh) message ??= DisplayOutput.SaveRefresh(before.Gdi);
             AppLog.Info($"Display: changed {DisplayId(before.Gdi)} to {refresh} Hz{(wanted is null ? "" : ", " + DisplayOutput.Label(wanted))}.");
             return message;
         }
+    }
+
+    /// <summary>Polls Windows HDR state briefly until the toggle settles (up to 1.5 s) so the reply reflects the new state.</summary>
+    private static void WaitForHdrToggle(string devicePath, bool wantOn)
+    {
+        var until = Environment.TickCount64 + 1500;
+        while (Environment.TickCount64 < until)
+        {
+            var reported = WindowsHdr.All().FirstOrDefault(s => string.Equals(s.DevicePath, devicePath, StringComparison.OrdinalIgnoreCase))?.Enabled;
+            if (reported == wantOn) return;
+            Thread.Sleep(150);
+        }
+    }
+
+    private static string? SetDdc(JsonElement p, bool hasParams)
+    {
+        if (HostMode.IsDisposable) return HostMode.Refusal;
+        var id = ReadString(p, hasParams, "display");
+        var raw = WindowsHdr.All().FirstOrDefault(screen => DisplayId(screen.GdiName) == id);
+        if (raw is null) return "That screen is not connected.";
+        if (ReadDouble(p, hasParams, "brightness") is { } brightness)
+            return MonitorDdc.SetBrightness(raw.GdiName, (int)Math.Round(brightness));
+        if (ReadDouble(p, hasParams, "contrast") is { } contrast)
+            return MonitorDdc.SetContrast(raw.GdiName, (int)Math.Round(contrast));
+        return null;
     }
 
     /// <summary>The screen as Windows has it now (its link's pixel rate changes with the refresh rate).</summary>
@@ -320,7 +380,7 @@ public sealed partial class WebHostBridge
         for (var tries = 0; tries < 4; tries++)
         {
             var remembered = DisplayLink.Memory.Shared.Failed(LinkKey(screen.Raw), color, screen.Raw.PixelRate, screen.Raw.Connector == "hdmi");
-            screen = ReadScreen(Reread(raw), null);
+            screen = ReadScreen(Reread(raw), WindowsHdr.PrimaryGdiName());
             AppLog.Info($"Display: {DisplayId(screen.Gdi)} ({screen.Raw.Connector}) took {DisplayOutput.Label(color)} at {screen.Refresh} Hz but runs {(screen.Color is { } now ? DisplayOutput.Label(now) : "something else")}"
                 + (remembered ? $"; not offered again past {DisplayLink.Needs(color, screen.Raw.PixelRate, screen.Raw.Connector == "hdmi"):0.0} Gbps on this link." : "."));
             if (!best || DisplayOutput.BestColor(screen.Supported, refresh, screen.Caps?.PanelBpc).Color is not { } next || next == color || next == screen.Color) break;

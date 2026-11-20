@@ -160,7 +160,13 @@ internal sealed partial class NetworkBest
             }
         }
 
-        public bool Online() => Lookup() is not null;
+        public bool Online() => Lookup() is not null || Resolves("one.one.one.one") || Resolves("dns.msftncsi.com");
+
+        private static bool Resolves(string host)
+        {
+            try { return Dns.GetHostAddressesAsync(host).Wait(TimeSpan.FromSeconds(3)); }
+            catch (AggregateException) { return false; }
+        }
 
         public Sample Measure()
         {

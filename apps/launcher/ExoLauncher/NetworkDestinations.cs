@@ -248,6 +248,7 @@ internal static class NetworkDestinations
         new("learn.microsoft.com", WindowsRelease),
         // BiosUpdate: the newest BIOS ASUS lists for an ASUS board or laptop, by its model.
         new("1.1.1.1", NetworkCheck),
+        new("dns.msftncsi.com", NetworkCheck),
         new("www.asus.com", AsusBios),
         new("dlcdnets.asus.com", AsusBios),
 

@@ -18,8 +18,29 @@ Set-Location $repo
 $version = (Get-Content VERSION -Raw).Trim()
 # This release's What's New, uploaded beside the installer as whats-new.json: the build before it shows these items
 # while it offers the update (AppUpdateService.ParseWhatsNew checks the file).
-$whatsNew = @(Get-Content ui\src\lib\whatsNew.json -Raw | ConvertFrom-Json) | Where-Object version -EQ $version | Select-Object -First 1
+$whatsNew = @(Get-Content ui\src\lib\whatsNew.json -Raw | ConvertFrom-Json | ForEach-Object { $_ }) | Where-Object { $_.version -eq $version } | Select-Object -First 1
 if (-not $whatsNew) { throw "ui\src\lib\whatsNew.json has no entry for $version." }
+$whatsNewItems = @($whatsNew.items)
+if ($whatsNewItems.Count -lt 1 -or $whatsNewItems.Count -gt 30) {
+    throw "ui\src\lib\whatsNew.json entry for $version must have 1 to 30 items (got $($whatsNewItems.Count))."
+}
+for ($i = 0; $i -lt $whatsNewItems.Count; $i++) {
+    $entry = $whatsNewItems[$i]
+    if ($entry.icon -isnot [string] -or $entry.icon -notmatch '^[A-Za-z]{1,32}$') {
+        throw "ui\src\lib\whatsNew.json ($version) item $i has invalid icon '$($entry.icon)'."
+    }
+    foreach ($field in @(@{ Name = 'title'; Max = 80 }, @{ Name = 'detail'; Max = 240 })) {
+        $value = $entry.($field.Name)
+        if ($value -isnot [string] -or [string]::IsNullOrWhiteSpace($value) -or $value.Length -gt $field.Max -or
+            ($value.ToCharArray() | Where-Object { [char]::IsControl($_) })) {
+            throw "ui\src\lib\whatsNew.json ($version) item $i $($field.Name) failed length/control validation (max $($field.Max))."
+        }
+    }
+}
+$whatsNewJson = $whatsNew | ConvertTo-Json -Depth 4
+if ($whatsNewJson.Length -gt 65536 -or [Text.Encoding]::UTF8.GetByteCount($whatsNewJson) -gt 65536) {
+    throw "ui\src\lib\whatsNew.json ($version) exceeds the 65536-byte limit."
+}
 
 # The release gate: the telemetry and crash-report tests (what may leave this PC, and in what shape) and the UI's tests,
 # run before anything is built or published.

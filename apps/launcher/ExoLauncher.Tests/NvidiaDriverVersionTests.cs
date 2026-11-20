@@ -1,3 +1,4 @@
+using ExoLauncher.Helpers;
 using ExoLauncher.Services;
 using Xunit;
 
@@ -22,4 +23,37 @@ public sealed class NvidiaDriverVersionTests
     [InlineData("32.0.16.17700")]
     public void Not_a_driver_version_reads_as_nothing(string windows) =>
         Assert.Null(NvidiaDriverService.FromWindowsVersion(windows));
+
+    [Fact]
+    public void OsId_SelectsWindows11AndWindows10()
+    {
+        Assert.Equal(135, NvidiaDriverService.OsId(new Version(10, 0, 22631, 0)));
+        Assert.Equal(135, NvidiaDriverService.OsId(new Version(10, 0, 22000, 0)));
+        Assert.Equal(57, NvidiaDriverService.OsId(new Version(10, 0, 19045, 0)));
+    }
+
+    [Fact]
+    public void PickNvidiaSubkeyMatch_PrefersActiveDxgiDeviceId()
+    {
+        var entries = new (string?, string?, string?)[]
+        {
+            ("Intel", @"PCI\VEN_8086&DEV_4680", "31.0.101.5590"),
+            ("NVIDIA", @"PCI\VEN_10DE&DEV_1C03", "31.0.15.3623"),
+            ("NVIDIA", @"PCI\VEN_10DE&DEV_2484", "32.0.16.1742"),
+        };
+        Assert.Equal("32.0.16.1742", NvidiaDriverService.PickNvidiaSubkeyMatch(entries, 0x2484));
+        Assert.Equal("31.0.15.3623", NvidiaDriverService.PickNvidiaSubkeyMatch(entries, null));
+    }
+
+    [Fact]
+    public void NvidiaVideo_MatchesVideoHdrNonZeroReadback()
+    {
+        Assert.True(NvidiaVideo.MatchesReadback(NvidiaVideo.VideoHdr, 5, 1));
+        Assert.True(NvidiaVideo.MatchesReadback(NvidiaVideo.VideoHdr, 5, 5));
+        Assert.False(NvidiaVideo.MatchesReadback(NvidiaVideo.VideoHdr, 5, 0));
+        Assert.True(NvidiaVideo.MatchesReadback(NvidiaVideo.VideoHdr, 0, 0));
+        Assert.False(NvidiaVideo.MatchesReadback(NvidiaVideo.VideoHdr, 5, null));
+        Assert.True(NvidiaVideo.MatchesReadback(NvidiaVideo.SuperResolution, 4, 4));
+        Assert.False(NvidiaVideo.MatchesReadback(NvidiaVideo.SuperResolution, 4, 1));
+    }
 }

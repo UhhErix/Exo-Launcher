@@ -203,6 +203,8 @@ public sealed class PcHealthTests
     }
 
     [Theory]
+    [InlineData("NVIDIA GeForce RTX 3070")]
+    [InlineData("NVIDIA GeForce RTX 3080")]
     [InlineData("NVIDIA GeForce RTX 4070 SUPER")]
     [InlineData("NVIDIA GeForce RTX 5080")]
     [InlineData("AMD Radeon RX 7800 XT")]
@@ -215,8 +217,7 @@ public sealed class PcHealthTests
     }
 
     [Theory]
-    [InlineData("NVIDIA GeForce RTX 3070", false)]   // no frame generation to hold back
-    [InlineData("NVIDIA RTX 4000 Ada Generation", false)] // a workstation card, not a GeForce 40
+    [InlineData("NVIDIA RTX 4000 Ada Generation", false)] // a workstation card, not a GeForce 30-50
     [InlineData("NVIDIA GeForce RTX 4070", true)]    // integrated: shared memory, nothing to say
     public void GpuSchedulingIsLeftAloneWhereItDoesntMatter(string gpu, bool uma) =>
         Assert.DoesNotContain(PcHealth.Decide(ThisPc() with { Gpu = new PcHealth.GpuBar(gpu, uma, true), HagsOff = true }), i => i.Key == "gpusched");
@@ -396,4 +397,12 @@ public sealed class PcHealthTests
     [InlineData("AMD Ryzen 9 9900X3D 12-Core Processor")]
     public void ADualCcdX3dOnBalancedShowsNothing(string cpu) =>
         Assert.DoesNotContain(PcHealth.Decide(ThisPc() with { Cpu = cpu, Power = Plan(PowerPlan.Balanced, Guid.Empty, cpu: X3dBalancedLimits) }), item => item.Key == "power");
+
+    [Fact]
+    public void CpuHybridProbeFlowsThroughDescribeAndClassOf()
+    {
+        var baseReading = ThisPc() with { Cpu = "Intel(R) Core(TM) i5-12400", Power = Plan(PowerPlan.Balanced, Guid.Empty) };
+        Assert.Contains("class intel-hybrid", PcHealth.Describe(baseReading with { CpuHybridProbe = true }));
+        Assert.Contains("class intel", PcHealth.Describe(baseReading with { CpuHybridProbe = false }));
+    }
 }

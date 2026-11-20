@@ -100,5 +100,56 @@ internal sealed partial class SystemTuning
         public bool PointStanding => RestorePoint.StandingNow;
 
         public void PointMade(RestorePoint.Outcome outcome) => RestorePoint.Noted(outcome, DateTime.UtcNow);
+
+        public bool SupportsUserHardwareToggles => true;
+
+        public string? UserDirectXSettings()
+        {
+            try
+            {
+                using var k = Registry.CurrentUser.OpenSubKey(DirectXUserPrefs);
+                return k?.GetValue(DirectXGlobalSettings) as string;
+            }
+            catch (Exception ex) when (ex is System.Security.SecurityException or UnauthorizedAccessException or IOException) { return null; }
+        }
+
+        public bool SetUserDirectXSettings(string? value)
+        {
+            if (HostMode.IsDisposable) return false;
+            try
+            {
+                if (value is null)
+                {
+                    using var k = Registry.CurrentUser.OpenSubKey(DirectXUserPrefs, writable: true);
+                    k?.DeleteValue(DirectXGlobalSettings, throwOnMissingValue: false);
+                }
+                else
+                {
+                    using var k = Registry.CurrentUser.CreateSubKey(DirectXUserPrefs);
+                    k.SetValue(DirectXGlobalSettings, value, RegistryValueKind.String);
+                }
+                return true;
+            }
+            catch (Exception ex) when (ex is System.Security.SecurityException or UnauthorizedAccessException or IOException) { return false; }
+        }
+
+        private const uint SpiGetMouse = 0x0003;
+        private const uint SpiSetMouse = 0x0004;
+        private const uint SpiFUpdateIniFileAndSendChange = 0x0003;
+
+        [DllImport("user32.dll", SetLastError = true)]
+        private static extern bool SystemParametersInfo(uint uiAction, uint uiParam, [In, Out] int[] pvParam, uint fWinIni);
+
+        public int[]? MouseParams()
+        {
+            var values = new int[3];
+            return SystemParametersInfo(SpiGetMouse, 0, values, 0) ? values : null;
+        }
+
+        public bool SetMouseParams(int[] values)
+        {
+            if (HostMode.IsDisposable || values.Length != 3) return false;
+            return SystemParametersInfo(SpiSetMouse, 0, values, SpiFUpdateIniFileAndSendChange);
+        }
     }
 }

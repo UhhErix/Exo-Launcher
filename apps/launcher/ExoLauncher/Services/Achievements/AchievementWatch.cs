@@ -227,6 +227,7 @@ internal static class AchievementWatch
     {
         game = unlock.Game, name = unlock.Name, description = unlock.Description,
         icon = unlock.Icon?.StartsWith("data:image/", StringComparison.Ordinal) == true ? unlock.Icon : null,
+        fallback = unlock.GameId == "preview" ? AchievementIconCache.Bundled() : null,
         percent = unlock.Percent, rarity = unlock.Rarity, unlocked = unlock.Done, total = unlock.Total, completed = unlock.Completed,
         volume = Math.Clamp(volumePercent, 0, 100) / 100.0, reduce = reduceMotion,
     });

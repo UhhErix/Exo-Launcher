@@ -94,12 +94,85 @@ internal static class EqualizerApo
             if (properties?.GetValue(Adapter) is string { Length: > 0 } adapter) name = $"{name} ({adapter})";
             var apo = fx is not null && fx.GetValueNames().Any(value => VoiceTune.NamesEqualizerApo(fx.GetValue(value)));
             var effectsOff = (properties?.GetValue(NoEffects) ?? fx?.GetValue(NoEffects)) is int off && off != 0;
+            var keyId = guid.ToLowerInvariant();
+            var fxWritten = fx is null ? null : Written(fx);
             var started = DateTime.UtcNow - TimeSpan.FromMilliseconds(Environment.TickCount64);
-            var restart = apo && fx is not null && Written(fx) is { } at && at > started;
-            return new Output(guid.ToLowerInvariant(), name, endpoint.GetValue("DeviceState") is int state && state == 1, apo, restart, effectsOff);
+            var audioStarted = AudioServiceStartedUtc();
+            var selectorUtc = Volatile.Read(ref _selectorTriggeredTicks) is > 0 and var t ? new DateTime(t, DateTimeKind.Utc) : (DateTime?)null;
+            var settled = _settledApoOutputs.ContainsKey(keyId) && !(selectorUtc is { } sel && fxWritten is { } w && w >= sel);
+            var restart = NeedsRestart(apo, fxWritten, started, audioStarted, settled);
+            if (apo && !restart) _settledApoOutputs[keyId] = 0;
+            return new Output(keyId, name, endpoint.GetValue("DeviceState") is int state && state == 1, apo, restart, effectsOff);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Security.SecurityException) { return null; }
     }
+
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, byte> _settledApoOutputs = new(StringComparer.OrdinalIgnoreCase);
+    private static long _selectorTriggeredTicks;
+
+    /// <summary>
+    /// True only when APO was just added and neither Windows nor <c>Audiosrv</c> has restarted since the FxProperties write.
+    /// Guards against Windows Fast Startup stale <c>TickCount64</c>, <c>DeviceSelector</c>'s own audio-service restart option,
+    /// initial audio-service startup writes (+15 s grace), and post-boot format/spatial writes on already-active APO outputs.
+    /// </summary>
+    internal static bool NeedsRestart(bool apo, DateTime? fxWrittenUtc, DateTime bootStartedUtc, DateTime? audioServiceStartedUtc, bool alreadySettled = false)
+    {
+        if (!apo || fxWrittenUtc is not { } written || alreadySettled) return false;
+        var reference = audioServiceStartedUtc is { } svc && svc > bootStartedUtc
+            ? svc + TimeSpan.FromSeconds(15)
+            : bootStartedUtc;
+        return written > reference;
+    }
+
+    private static DateTime? AudioServiceStartedUtc()
+    {
+        var scm = OpenSCManagerW(null, null, 0x0001);
+        if (scm == IntPtr.Zero) return null;
+        try
+        {
+            var svc = OpenServiceW(scm, "Audiosrv", 0x0004);
+            if (svc == IntPtr.Zero) return null;
+            try
+            {
+                if (!QueryServiceStatusEx(svc, 0, out var ssp, Marshal.SizeOf<ServiceStatusProcess>(), out _) || ssp.ProcessId == 0)
+                    return null;
+                NtQuerySystemInformation(5, IntPtr.Zero, 0, out var len);
+                if (len <= 0) len = 256 * 1024;
+                var size = len + 65536;
+                var buf = Marshal.AllocHGlobal(size);
+                try
+                {
+                    if (NtQuerySystemInformation(5, buf, size, out _) != 0) return null;
+                    var cur = buf;
+                    while (true)
+                    {
+                        var next = (uint)Marshal.ReadInt32(cur, 0);
+                        var pid = (uint)Marshal.ReadIntPtr(cur, 0x50).ToInt64();
+                        if (pid == ssp.ProcessId)
+                        {
+                            var ft = Marshal.ReadInt64(cur, 0x20);
+                            return ft > 0 ? DateTime.FromFileTimeUtc(ft) : null;
+                        }
+                        if (next == 0) break;
+                        cur = IntPtr.Add(cur, (int)next);
+                    }
+                    return null;
+                }
+                finally { Marshal.FreeHGlobal(buf); }
+            }
+            finally { CloseServiceHandle(svc); }
+        }
+        finally { CloseServiceHandle(scm); }
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct ServiceStatusProcess { public uint ServiceType, CurrentState, ControlsAccepted, Win32ExitCode, ServiceSpecificExitCode, CheckPoint, WaitHint, ProcessId, ServiceFlags; }
+
+    [DllImport("advapi32.dll", CharSet = CharSet.Unicode)] private static extern IntPtr OpenSCManagerW(string? machine, string? db, uint access);
+    [DllImport("advapi32.dll", CharSet = CharSet.Unicode)] private static extern IntPtr OpenServiceW(IntPtr scm, string name, uint access);
+    [DllImport("advapi32.dll")] private static extern bool QueryServiceStatusEx(IntPtr svc, int infoLevel, out ServiceStatusProcess status, int bufSize, out int bytesNeeded);
+    [DllImport("advapi32.dll")] private static extern bool CloseServiceHandle(IntPtr handle);
+    [DllImport("ntdll.dll")] private static extern int NtQuerySystemInformation(int infoClass, IntPtr buffer, int length, out int returned);
 
     /// <summary>Whether any output has APO on it.</summary>
     internal static int OutputsWithApo()
@@ -131,6 +204,7 @@ internal static class EqualizerApo
         if (!File.Exists(selector)) return "Equalizer APO's Device Selector is missing. Install Equalizer APO again.";
         try
         {
+            Volatile.Write(ref _selectorTriggeredTicks, DateTime.UtcNow.Ticks);
             using var _ = Process.Start(new ProcessStartInfo(selector) { UseShellExecute = true, WorkingDirectory = folder });
             return null;
         }
@@ -213,6 +287,7 @@ internal static class EqualizerApo
                 if (setup.ExitCode != 0) { AppLog.Warn("Exo EQ: Equalizer APO's installer ended with " + setup.ExitCode); return "Equalizer APO's installer stopped. Try again."; }
             }
             AppLog.Info("Exo EQ: Equalizer APO " + Installer.Version + " installed.");
+            Volatile.Write(ref _selectorTriggeredTicks, DateTime.UtcNow.Ticks);
             return InstallFolder() is null ? "Equalizer APO's installer finished, but Equalizer APO isn't there. Try again." : null;
         }
         catch (Exception ex) when (ex is HttpRequestException or IOException or UnauthorizedAccessException or TaskCanceledException or Win32Exception)

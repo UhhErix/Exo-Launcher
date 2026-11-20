@@ -155,7 +155,7 @@ internal enum PresentKind { None, Api, Kernel }
 /// </summary>
 internal sealed class PresentSlots(long frequency)
 {
-    internal const int MaxProcesses = 16;
+    internal const int MaxProcesses = 64;
     private readonly long _apiCovers = (long)(FpsWindow.StallSeconds * frequency);
     private readonly long _sameFlip = frequency / 4000;
 
@@ -164,15 +164,31 @@ internal sealed class PresentSlots(long frequency)
         internal readonly int Pid = pid;
         internal readonly FpsWindow Window = new(frequency);
         internal long LastApi = long.MinValue / 2, LastKernel = long.MinValue / 2;
+        internal long LastUsed;
     }
 
     private Slot[] _slots = [];
+    private long _useCounter;
 
-    /// <summary>Which processes count from now on; a process kept keeps its frames.</summary>
+    /// <summary>How many processes are currently tracked in slots (tests).</summary>
+    internal int TrackedCount => Volatile.Read(ref _slots).Length;
+
+    /// <summary>Which processes count from now on; a process kept keeps its frames, evicting least-recently-used over <see cref="MaxProcesses"/>.</summary>
     internal void Watch(IEnumerable<int> pids)
     {
         var old = Volatile.Read(ref _slots);
-        Volatile.Write(ref _slots, pids.Distinct().Take(MaxProcesses)
+        var distinct = pids.Distinct().ToArray();
+        IEnumerable<int> chosen = distinct;
+        if (distinct.Length > MaxProcesses)
+        {
+            chosen = distinct
+                .Select((pid, index) => (pid, index, lastUsed: Array.Find(old, slot => slot.Pid == pid)?.LastUsed ?? -1L))
+                .OrderByDescending(item => item.lastUsed)
+                .ThenBy(item => item.index)
+                .Take(MaxProcesses)
+                .Select(item => item.pid);
+        }
+        Volatile.Write(ref _slots, chosen
             .Select(pid => Array.Find(old, slot => slot.Pid == pid) ?? new Slot(pid, frequency)).ToArray());
     }
 
@@ -191,6 +207,7 @@ internal sealed class PresentSlots(long frequency)
                 if (ticks - slot.LastApi < _apiCovers || ticks - slot.LastKernel < _sameFlip) return;
                 slot.LastKernel = ticks;
             }
+            Volatile.Write(ref slot.LastUsed, Interlocked.Increment(ref _useCounter));
             slot.Window.Add(ticks);
             return;
         }

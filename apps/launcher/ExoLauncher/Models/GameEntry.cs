@@ -397,6 +397,8 @@ public sealed class AppSettings
     public string FpsCounterPosition { get; set; } = "right";
     /// <summary>What it shows after the FPS (<see cref="ExoLauncher.Services.FpsItems"/>); nothing until switched on.</summary>
     public List<string> FpsCounterItems { get; set; } = [];
+    /// <summary>Opt-in suppression when a known game can show its own built-in FPS counter and no extra items are chosen. Off by default.</summary>
+    public bool FpsCounterHideOverBuiltIn { get; set; }
     /// <summary>Autopilot (<see cref="ExoLauncher.Services.Autopilot"/>): one switch, off until the player turns it on, and its tucked-away choices.</summary>
     public AutopilotSettings Autopilot { get; set; } = new();
     /// <summary>HDR on for the screen an HDR game is on while it runs, back off after (System > Graphics > HDR). On by default:
@@ -474,6 +476,10 @@ public sealed class AppSettings
     public int? RtxVideoSuperResolution { get; set; }
     public bool? RtxVideoHdr { get; set; }
     public string? RtxVideoDriver { get; set; }
+    /// <summary>NVIDIA global profile G-SYNC choice (null = follow main screen's VRR capability).</summary>
+    public bool? NvidiaGsync { get; set; }
+    /// <summary>NVIDIA global profile low-latency mode ("off", "on", "ultra"; null = "on").</summary>
+    public string? NvidiaLowLatency { get; set; }
     /// <summary>System > Graphics > HDR > SDR looks right in HDR: by screen device path, the advanced-color profile the
     /// screen had before Exo's SDR gamma 2.2 one ("" for none), put back when HDR goes off.</summary>
     public Dictionary<string, string> SdrGammaBefore { get; set; } = new(StringComparer.OrdinalIgnoreCase);

@@ -252,4 +252,23 @@ public sealed class ExoEqTests
     [InlineData("{0.0.0.00000000}.{11111111-2222-3333-4444-55555555555Z}", null)]
     [InlineData(null, null)]
     public void An_endpoint_id_gives_its_device_id(string? endpoint, string? guid) => Assert.Equal(guid, EqualizerApo.GuidOf(endpoint));
+
+    [Fact]
+    public void Night_light_schedule_parses_cloudstore_protobuf_tags_at_any_offset()
+    {
+        // Real CloudStore settings payload with 5-byte varint timestamp before inner 43 42 01 00 payload (21:00 to 07:00).
+        byte[] real = Convert.FromHexString("434201000A0201002A06CC93EFD7062A2B0E1543420100CA140E1500CA1E0E0700CA3200CA3C0000000000");
+        Assert.Equal((new TimeSpan(21, 0, 0), new TimeSpan(7, 0, 0)), ExoEq.NightLightSchedule(real));
+
+        // Shifted offset with extra fields + non-zero minutes (22:30 to 06:45).
+        byte[] shifted = Convert.FromHexString("434201000A0201002A0A01020304050607080943420100CA0A02CA140E161ECA1E0E062DCF28801C00000000");
+        Assert.Equal((new TimeSpan(22, 30, 0), new TimeSpan(6, 45, 0)), ExoEq.NightLightSchedule(shifted));
+
+        // Zero-minute byte omitted right before 0xCA tag (21:00 to 07:00).
+        byte[] compact = Convert.FromHexString("43420100CA140E15CA1E0E07CA3200");
+        Assert.Equal((new TimeSpan(21, 0, 0), new TimeSpan(7, 0, 0)), ExoEq.NightLightSchedule(compact));
+
+        // Truncated or missing tags return null cleanly.
+        Assert.Null(ExoEq.NightLightSchedule([0x43, 0x42, 0x01, 0x00]));
+    }
 }

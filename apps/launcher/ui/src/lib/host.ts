@@ -443,14 +443,27 @@ export type HdrState = {
 /** What a screen's cable carries: format (rgb, or YCbCr 444/422/420), bits per color, Full or Limited range (YCbCr is always Limited). */
 export type OutputColor = { format: 'rgb' | '444' | '422' | '420'; bpc: number; full: boolean }
 
+export type DdcLevels = {
+  brightness: number | null
+  brightnessMin: number
+  brightnessMax: number
+  contrast: number | null
+  contrastMin: number
+  contrastMax: number
+}
+
 /** One screen in System > Display: refresh rates (Windows) and output color (its GPU's driver; vendor null when Exo can't reach it). */
 export type DisplayScreen = {
   id: string
   name: string
   main: boolean
   hdr: boolean
+  /** True when the panel accepts Windows HDR, even if HDR is currently turned off. */
+  hdrSupported?: boolean
   vendor: 'nvidia' | 'amd' | 'intel' | null
   refresh: number
+  /** Exact QueryDisplayConfig refresh label for the active mode (e.g. "59.94 Hz" or "165 Hz"). */
+  refreshLabel?: string | null
   refreshes: number[]
   color: OutputColor | null
   /** The driver picks the color itself (NVIDIA's default color settings). */
@@ -464,6 +477,8 @@ export type DisplayScreen = {
   isBest: boolean
   /** Color sliders; nvidia is "Use NVIDIA color settings" (null on AMD, which has no such choice). Null when the driver has none. */
   adjust: { nvidia: boolean | null; controls: ColorControl[] } | null
+  /** DDC/CI hardware monitor brightness and contrast controls when the monitor supports MCCS. */
+  ddc?: DdcLevels | null
   /** NVIDIA scaling: the mode and whether the GPU (else the screen) scales; null off NVIDIA. */
   /** over: "Override the scaling mode set by games and programs" (null when the driver doesn't say). */
   scaling: { mode: ScalingMode | 'default'; gpu: boolean; over: boolean | null } | null
@@ -518,8 +533,10 @@ export type DisplayChange = {
   display: string; best?: boolean; refresh?: number; format?: string; bpc?: number; full?: boolean
   /** The driver's own color settings (NVIDIA "Use default color settings"). */
   auto?: boolean
-  /** action 'video': RTX Video Super resolution (0-5) or HDR. */
+  /** action 'video': RTX Video Super resolution (0-5) or HDR; action 'set': Windows per-display HDR toggle. */
   superResolution?: number; hdr?: boolean
+  /** action 'ddc': monitor hardware brightness or contrast over DDC/CI. */
+  brightness?: number; contrast?: number
   /** action 'override': the screen's scaling overrides what games ask for. */
   override?: boolean
   scaling?: ScalingMode; scalingGpu?: boolean
@@ -585,6 +602,7 @@ export type GraphicsRow = {
 
 /** One AMD or Intel setting to set by hand, in plain words, next to what their driver holds (only when Exo can't reach their driver). */
 export type GpuProfileItem = { key: string; label: string; value: string; why: string; current?: string | null }
+export type GpuProfileSetting = { key: string; label: string; value: string; current?: string | null; state: string; note?: string | null }
 
 /**
  * System > Graphics > Driver and profile: Exo's global profile for this PC's GeForce series, G-SYNC or No G-SYNC,
@@ -607,8 +625,16 @@ export type GpuProfile = {
   driverUpdated: boolean
   /** Set by hand (manual) only. */
   items: GpuProfileItem[]
-  /** Intel: Low latency mode on, on with boost, or off. */
-  lowLatency?: IntelLowLatency | null
+  /** Intel/NVIDIA: Low latency mode choice or live readback. */
+  lowLatency?: IntelLowLatency | 'ultra' | null
+  /** NVIDIA: live/target G-SYNC / VRR enabled state. */
+  vrrEnabled?: boolean | null
+  /** Resizable BAR capability/status from Direct3D 12 upload heaps. */
+  rebar?: boolean | null
+  /** Free gigabytes on the shader cache drive (%LOCALAPPDATA%). */
+  cacheFreeGb?: number | null
+  /** NVIDIA: per-setting breakdown with live values and driver/space notes. */
+  details?: GpuProfileSetting[] | null
   /** Radeon and Intel: what the profile does, in one line. */
   summary?: string | null
   /** True when at least one of the profile's settings is not in this driver: it was skipped or refused, so the page never shows the whole profile as on. */
@@ -676,12 +702,12 @@ export type NetCheck = { before: NetSample | null; after: NetSample; said: strin
 export type PcHealth = { ok: boolean; message?: string | null; items: PcHealthItem[]; check?: NetCheck | null }
 
 /** Best settings › System's items (SystemTuning.cs): Windows defaults a tweak changed (Best settings) and two opt-ins (their own switch only). */
-export type TuningKey = 'timer' | 'scheduling' | 'pagefile' | 'cache' | 'services' | 'integrity'
+export type TuningKey = 'timer' | 'scheduling' | 'pagefile' | 'cache' | 'captureService' | 'services' | 'integrity' | 'vrr' | 'mouseAccel'
 /**
  * One item: on, Exo's setting is in place; off, the player turned a Best settings item off; optIn, only its own switch sets it;
- * restart, a change (either way) waits on a restart; blocked, why Exo won't change it here (an anti-cheat, a policy).
+ * restart, a change (either way) waits on a restart; needsRestart, whether changing it requires a restart; blocked, why Exo won't change it here (an anti-cheat, a policy).
  */
-export type TuningItem = { key: TuningKey; label: string; detail: string; on: boolean; canUndo: boolean; off: boolean; optIn: boolean; restart: boolean; blocked: string | null }
+export type TuningItem = { key: TuningKey; label: string; detail: string; on: boolean; canUndo: boolean; off: boolean; optIn: boolean; restart: boolean; needsRestart?: boolean; blocked: string | null }
 export type Tuning = { ok: boolean; message?: string | null; applied: boolean; restart: boolean; items: TuningItem[] }
 
 /**
@@ -1390,6 +1416,8 @@ export interface LauncherSettings {
   fpsCounterPosition?: string
   /** What it shows after the FPS, each off until switched on. */
   fpsCounterItems?: string[]
+  /** Opt-in suppression when a game can show its own FPS counter and no extra stats are enabled (default off). */
+  fpsCounterHideOverBuiltIn?: boolean
   /** Hours sum every Steam account and every Epic account on this PC. Off keeps a shared PC separate. */
   /** HDR on for the main screen while a game that supports it runs, back off after. */
   hdrForGames?: boolean
@@ -2953,14 +2981,14 @@ export const host = {
   discordApps: (channelId: string, action: 'commands' | 'run' | 'autocomplete' | 'component' | 'modal' | 'dismiss', params: Record<string, unknown> = {}) =>
     rawCall<{ ok: boolean; message?: string | null; nonce?: string | null; commands?: AppCommand[]; applications?: AppInfo[] }>('discord.apps', { channelId, action, ...params }, 60_000),
   gpuDriver: (action: 'state' | 'update' | 'goback' = 'state', branch: 'game' | 'studio' = 'game') => rawCall<DriverState>('gpu.driver', { action, branch }, 60_000),
-  gpuDisplay: (action: 'state' | 'set' | 'adjust' | 'video' | 'override' = 'state', change?: DisplayChange) =>
+  gpuDisplay: (action: 'state' | 'set' | 'adjust' | 'video' | 'override' | 'ddc' = 'state', change?: DisplayChange) =>
     rawCall<DisplayState>('gpu.display', { action, ...(change ?? {}) }, 30_000),
   /**
    * System > Graphics > Driver and profile: Exo's global profile for this PC; apply it (an
    * Intel GPU's with its Low latency choice), backing up what it replaces, or undo it.
    */
-  gpuProfile: (action?: 'apply' | 'undo', latency?: { lowLatency?: IntelLowLatency }) =>
-    rawCall<GpuProfile>('gpu.profile', action ? { action, ...(action === 'apply' ? latency : {}) } : {}, 30_000),
+  gpuProfile: (action?: 'apply' | 'undo', options?: { lowLatency?: IntelLowLatency | 'ultra'; vrr?: boolean }) =>
+    rawCall<GpuProfile>('gpu.profile', action ? { action, ...(action === 'apply' ? options : {}) } : {}, 30_000),
   /** PC › Drives: every drive and the fix rows; `space` adds what fills each drive (slow the first time); an action sets or undoes a fix, Windows asking once. */
   systemDrives: (action?: DriveAction, space = false) =>
     rawCall<DrivesState>('system.drives', { ...(action ? { action } : {}), ...(space ? { space: true } : {}) }, 75_000),

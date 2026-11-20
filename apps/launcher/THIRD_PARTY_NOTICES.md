@@ -26,6 +26,7 @@ Exo EQ (the headphone EQ on your audio's page) is Exo's own code. It plays throu
 | --- | --- | --- |
 | .NET runtime (self-contained) | 10 | MIT |
 | Windows App SDK (WinUI) | 2.x | Microsoft Software License Terms |
+| [Win2D](https://github.com/microsoft/Win2D) (`Microsoft.Graphics.Win2D`), backdrop blur and saturation effects in the FPS overlay | 1.4.0 | MIT |
 | Microsoft Edge WebView2 SDK | 1.0.4314.35 | BSD-3-Clause |
 | [sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx) C API (`sherpa-onnx-c-api.dll`) with [ONNX Runtime](https://github.com/microsoft/onnxruntime) (`onnxruntime.dll`), from the org.k2fsa.sherpa.onnx.runtime.win-x64 package, for Only My Voice | 2.0.1 (ONNX Runtime 1.31.1, from the Microsoft.ML.OnnxRuntime package) | Apache-2.0 (sherpa-onnx), MIT (ONNX Runtime) |
 | Microsoft.Data.Sqlite | 10.0.15 | MIT |

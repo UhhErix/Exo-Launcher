@@ -48,13 +48,16 @@ public sealed class NvidiaGameWriteTests
     private static IDisposable Rig(Fake fake, out string folder)
     {
         var previous = NvidiaProfiles.ForGameSeam;
+        var priorData = Environment.GetEnvironmentVariable(PathHelper.DataDirOverrideVariable);
         NvidiaProfiles.ForGameSeam = (_, ids, writes) => fake.Answer(ids, writes);
         var made = Path.Combine(Path.GetTempPath(), "exo-nvidia-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(made);
-        folder = made;
+        Environment.SetEnvironmentVariable(PathHelper.DataDirOverrideVariable, made);
+        folder = Path.Combine(made, "game-settings");
         return new Seam(() =>
         {
             NvidiaProfiles.ForGameSeam = previous;
+            Environment.SetEnvironmentVariable(PathHelper.DataDirOverrideVariable, priorData);
             try { DeletionGate.DeleteDirectory(made, recursive: true); } catch (IOException) { }
         });
     }
@@ -123,6 +126,19 @@ public sealed class NvidiaGameWriteTests
 
         // And no backup is kept for a profile that did not take: Optimize never reads it as set.
         Assert.False(File.Exists(Path.Combine(folder, "t.nvidia.json")));
+    }
+
+    [Fact]
+    public void OptimizeAppliesPerGamePreferMaximumPerformance()
+    {
+        var fake = new Fake();
+        fake.Held[GpuProfile.PowerManagement] = 1u;
+        fake.Held[SrPreset] = 11u;
+        using var rig = Rig(fake, out _);
+        var game = Game() with { Nvidia = new("", _ => [Value(SrPreset, 11)]) };
+        Assert.Null(GameSettings.SetNvidia(Entry(), game, AFile(), on: true, includePerGamePower: true));
+        Assert.Equal(1u, fake.LastWrites![GpuProfile.PowerManagement]);
+        Assert.Equal(11u, fake.LastWrites[SrPreset]);
     }
 }
 

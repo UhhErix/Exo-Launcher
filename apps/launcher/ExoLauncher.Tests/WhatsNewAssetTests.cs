@@ -97,4 +97,20 @@ public sealed class WhatsNewAssetTests
         Assert.Null(AppUpdateService.ParseWhatsNew(Notes(items: $"[{{ \"icon\": \"Sliders\", \"title\": \"T\", \"detail\": {deep} }}]"), "v3.15.0"));
     }
 
+    [Fact]
+    public void BundledWhatsNewReleasesAllPassReleaseParser()
+    {
+        var path = Repo.PathOf("ui", "src", "lib", "whatsNew.json");
+        using var doc = System.Text.Json.JsonDocument.Parse(File.ReadAllText(path));
+        var entries = doc.RootElement.EnumerateArray().ToList();
+        Assert.NotEmpty(entries);
+        foreach (var entry in entries)
+        {
+            var version = entry.GetProperty("version").GetString();
+            Assert.False(string.IsNullOrWhiteSpace(version));
+            var parsed = AppUpdateService.ParseWhatsNew(entry.GetRawText(), "v" + version);
+            Assert.True(parsed is not null, $"ui/src/lib/whatsNew.json entry {version} failed AppUpdateService.ParseWhatsNew validation.");
+        }
+    }
+
 }
