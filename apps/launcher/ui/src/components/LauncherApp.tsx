@@ -635,7 +635,7 @@ export function LauncherApp() {
   ), [view, opening, openRoomFromBar, warmRoom, openNowPlaying, toggleSettings, musicService, island, openSearch])
 
   const settingsRoom = useMemo(() => settings && (
-    <Room mounted={openedRooms.has('settings')} warm={warming} active={view === 'settings'} label="Settings" className="exo-set-room" onBackdrop={toggleSettings}>
+    <Room mounted={openedRooms.has('settings')} warm={warming} active={view === 'settings'} label="Settings" className="exo-set-room">
       <SettingsPanel
         active={view === 'settings'}
         onClose={toggleSettings}

@@ -101,64 +101,25 @@
   position: absolute;
   inset: var(--exo-titlebar-h, 52px) 0 0;
   z-index: 40;
-  display: grid;
-  place-items: center;
-  padding: 24px;
-  background: var(--exo-scrim);
-  animation: exo-scrim-in var(--dur-base) var(--ease-out) backwards;
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  background: var(--color-bg);
 }
 
-/* Settings, Properties and Discord's settings: one width, as tall as what they hold up to 960px. */
-.exo-set-room > .exo-settings,
 .exo-dc-settings {
   width: min(820px, calc(100vw - 48px));
   max-height: min(880px, 100%);
 }
 
-/* Settings keeps one size whatever page is open (its sidebar beside a page that scrolls inside it): sized by its
-   content, it grew and shrank with every page. */
-.exo-set-room > .exo-settings {
-  height: min(calc(880px * var(--exo-scale, 1)), 100%);
-  max-height: none;
-  overflow: hidden;
-  border-radius: var(--exo-sheet-radius);
-  background: transparent;
-  animation: exo-sheet-in var(--dur-move) var(--ease-out) backwards;
-}
-
-/* A sheet or dialog settles in from the middle, where it stays (DESIGN.md › Motion › Appear). */
-/* By its size alone: a dialog fading whole would hide the room from the glass on its buttons until it landed. The same
-   move as exo-sheet-in under its own name: a room coming back finishes its entrances, exo-float-in among them
-   (BootGate.tsx › ENTRANCES), while a floating room (Settings, on exo-sheet-in) keeps its open motion each time. */
 @keyframes exo-float-in {
   from { scale: 0.98; }
 }
 
-/* A glass sheet settles in by its size alone while its glass and its words fade (glass.css › Sheets): a sheet
-   fading whole would hide the page from its glass until it landed. */
 @keyframes exo-sheet-in {
   from { scale: 0.98; }
 }
 
-/* Close is the open move run back: the sheet settles out by size, the scrim clears by color. Neither fades whole,
-   so the glass keeps the room until the sheet is gone. */
-.exo-set-room.is-leaving {
-  animation: exo-scrim-out var(--dur-move) var(--ease-out) forwards;
-}
-
-.exo-set-room.is-leaving > .exo-settings {
-  animation: exo-sheet-out var(--dur-move) var(--ease-out) forwards;
-}
-
-@keyframes exo-sheet-out {
-  to { scale: 0.98; }
-}
-
-@keyframes exo-scrim-out {
-  to { background-color: transparent; }
-}
-
-/* A scrim darkens in by its color, not its opacity, for the same reason: the glass over it sees the room at once. */
 @keyframes exo-scrim-in {
   from { background-color: transparent; }
 }

@@ -1,13 +1,13 @@
 import '../styles/onboarding-room.css'
 import { scrollToSection } from '../lib/scrollToSection'
-import { useDialogFocus } from '../lib/focusTrap'
-import { Close, Download, Info, Library, MusicNotes, Sliders, Trophy } from '../brand/icons'
-import { memo, useCallback, useEffect, useRef, useState, type ComponentType } from 'react'
+import { ChevronLeft, Close, Download, Info, Library, MusicNotes, Search, Sliders, Trophy } from '../brand/icons'
+import { memo, useCallback, useEffect, useMemo, useRef, useState, type ComponentType } from 'react'
 import {
   host,
   type LauncherSettings,
   type StoreStatus,
 } from '../lib/host'
+import { searchSettings, type SettingsIndexEntry } from '../lib/settingsIndex'
 import { saveSettingsPatch } from '../lib/settingsSave'
 import {
   SETTINGS_PAGES,
@@ -94,11 +94,11 @@ export const SettingsPanel = memo(function SettingsPanel({
     settingsRef.current = settings
   }, [settings])
   const scrollRef = useRef<HTMLDivElement | null>(null)
-  // Tab stays in the open settings (the Bar behind it is dimmed) and focus returns to the gear that opened it.
   const root = useRef<HTMLElement>(null)
-  useDialogFocus(root, active)
   const paneRef = useCallback((node: HTMLDivElement | null) => { scrollRef.current = node }, [])
   const [page, setPage] = useState<SettingsPageId>(() => section ? settingsPageOf(section.id) : pageForRoom(room))
+  const [searchQuery, setSearchQuery] = useState('')
+  const [jumpTarget, setJumpTarget] = useState<{ entry: SettingsIndexEntry; nonce: number } | null>(null)
   const [storeNotes, setStoreNotes] = useState<Record<string, StoreNote | undefined>>({})
   /** A store row's result: a plain line, or (error) a failure under the row; an empty text clears it. */
   const storeStatus = useCallback((store: string, text: string, error = false) => {
@@ -230,6 +230,19 @@ export const SettingsPanel = memo(function SettingsPanel({
     }
   }, [startStoreAction, finishStoreAction, storeStatus])
 
+  const searchHits = useMemo(() => searchSettings(searchQuery), [searchQuery])
+  useEffect(() => {
+    if (!active) setSearchQuery('')
+  }, [active])
+  useSettingsEscape(active, searchQuery, () => setSearchQuery(''), onClose)
+  useSettingsSearchJump(scrollRef, page, jumpTarget, useCallback(() => setJumpTarget(null), []))
+
+  const selectSearchHit = useCallback((entry: SettingsIndexEntry) => {
+    setSearchQuery('')
+    setPage(entry.page)
+    setJumpTarget({ entry, nonce: Date.now() })
+  }, [])
+
   const pageTitle = SETTINGS_PAGES.find(each => each.page === page)?.label
 
   const pageBody = (() => {
@@ -295,15 +308,148 @@ export const SettingsPanel = memo(function SettingsPanel({
 
   return (
     <main ref={root} className="exo-settings" aria-labelledby="exo-settings-title">
-      <span className="exo-glass is-panel exo-sheet-glass" aria-hidden="true" />
-      <nav className="exo-settings-nav" aria-labelledby="exo-settings-title">
-        <h2 id="exo-settings-title" className="exo-settings-nav-title">Settings</h2>
-        <ul>
+      <SettingsSidebar
+        page={page}
+        searchQuery={searchQuery}
+        hits={searchHits}
+        onSearch={setSearchQuery}
+        onSelectPage={show}
+        onSelectHit={selectSearchHit}
+        onClose={onClose}
+      />
+      <div className="exo-settings-main">
+        <div className="exo-settings-scroll" ref={paneRef} data-room-scroll>
+          <div className="exo-settings-inner">
+            <h2 id="exo-settings-page-title" className="exo-settings-page-title">{pageTitle}</h2>
+            {pageBody}
+          </div>
+        </div>
+      </div>
+    </main>
+  )
+})
+
+function findJumpRow(container: HTMLElement, entry: SettingsIndexEntry): HTMLElement | null {
+  const labels = container.querySelectorAll<HTMLElement>('.exo-set-item-label')
+  for (const label of labels) {
+    const text = label.textContent?.trim() ?? ''
+    if (text === entry.label || (entry.label === 'Exo Launcher' && text.startsWith('Exo Launcher'))) {
+      return label.closest<HTMLElement>('.exo-set-item') ?? label
+    }
+  }
+  return entry.sectionId ? container.querySelector<HTMLElement>(`#set-${entry.sectionId}`) : null
+}
+
+function useSettingsSearchJump(
+  scrollRef: { current: HTMLDivElement | null },
+  page: SettingsPageId,
+  jumpTarget: { entry: SettingsIndexEntry; nonce: number } | null,
+  onDone: () => void,
+) {
+  const timerRef = useRef(0)
+  useEffect(() => () => window.clearTimeout(timerRef.current), [])
+  useEffect(() => {
+    if (!jumpTarget || page !== jumpTarget.entry.page) return
+    const frame = window.requestAnimationFrame(() => {
+      const container = scrollRef.current
+      if (!container) return
+      const target = findJumpRow(container, jumpTarget.entry)
+      if (!target) { onDone(); return }
+      const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches || document.documentElement.dataset.exoMotion === 'reduce'
+      target.scrollIntoView({ block: 'center', behavior: reduced ? 'auto' : 'smooth' })
+      const control = target.querySelector<HTMLElement>('button, input, [role="switch"], select, [tabindex]:not([tabindex="-1"])')
+      if (control) control.focus({ preventScroll: true })
+      else {
+        target.tabIndex = -1
+        target.focus({ preventScroll: true })
+      }
+      for (const prev of container.querySelectorAll('.exo-set-item.is-highlight')) prev.classList.remove('is-highlight')
+      target.classList.add('is-highlight')
+      window.clearTimeout(timerRef.current)
+      timerRef.current = window.setTimeout(() => target.classList.remove('is-highlight'), 1800)
+      onDone()
+    })
+    return () => window.cancelAnimationFrame(frame)
+  }, [scrollRef, page, jumpTarget, onDone])
+}
+
+function useSettingsEscape(active: boolean, searchQuery: string, onClear: () => void, onClose?: () => void) {
+  useEffect(() => {
+    if (!active || !onClose) return
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape' || event.defaultPrevented) return
+      if (document.querySelector('[popover]:popover-open') || (event.target as Element | null)?.closest?.('[data-exo-armed]')) return
+      event.preventDefault()
+      if (searchQuery) { onClear(); return }
+      onClose()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [active, searchQuery, onClear, onClose])
+}
+
+function SettingsSidebar({
+  page,
+  searchQuery,
+  hits,
+  onSearch,
+  onSelectPage,
+  onSelectHit,
+  onClose,
+}: {
+  page: SettingsPageId
+  searchQuery: string
+  hits: readonly SettingsIndexEntry[]
+  onSearch: (query: string) => void
+  onSelectPage: (page: SettingsPageId) => void
+  onSelectHit: (entry: SettingsIndexEntry) => void
+  onClose?: () => void
+}) {
+  const searching = searchQuery.trim().length > 0
+  return (
+    <nav className="exo-settings-nav" aria-labelledby="exo-settings-title">
+      {onClose ? (
+        <button type="button" className="exo-glass exo-game-back exo-settings-back" onClick={onClose}>
+          <ChevronLeft size={16} />
+          Back
+        </button>
+      ) : null}
+      <h2 id="exo-settings-title" className="exo-settings-nav-title">Settings</h2>
+      <label className="exo-settings-search">
+        <Search size={15} />
+        <input
+          type="search"
+          value={searchQuery}
+          placeholder="Search settings"
+          aria-label="Search settings"
+          onChange={event => onSearch(event.target.value)}
+        />
+        {searchQuery ? (
+          <button type="button" className="exo-settings-search-clear" aria-label="Clear settings search" onClick={() => onSearch('')}>
+            <Close size={13} />
+          </button>
+        ) : null}
+      </label>
+      {searching ? (
+        hits.length > 0 ? (
+          <ul className="exo-settings-hits" role="listbox" aria-label="Matching settings">
+            {hits.map(hit => (
+              <li key={hit.id}>
+                <button type="button" className="exo-settings-hit" onClick={() => onSelectHit(hit)}>
+                  <span className="exo-settings-hit-label">{hit.label}</span>
+                  <span className="exo-settings-hit-page">{hit.pageLabel}</span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        ) : <p className="exo-settings-hits-empty">No matching settings</p>
+      ) : (
+        <ul className="exo-settings-nav-pages">
           {SETTINGS_PAGES.map(({ page: id, label }) => {
             const Icon = PAGE_ICONS[id]
             return (
               <li key={id}>
-                <button type="button" aria-current={page === id ? 'page' : undefined} onClick={() => show(id)}>
+                <button type="button" aria-current={page === id ? 'page' : undefined} onClick={() => onSelectPage(id)}>
                   <Icon size={15} />
                   <span>{label}</span>
                 </button>
@@ -311,14 +457,7 @@ export const SettingsPanel = memo(function SettingsPanel({
             )
           })}
         </ul>
-      </nav>
-      <div className="exo-settings-main">
-        {onClose ? <button type="button" className="exo-props-close exo-settings-close" aria-label="Close settings" onClick={onClose}><Close size={16} /></button> : null}
-        <div className="exo-settings-scroll" ref={paneRef} data-room-scroll>
-          <h2 id="exo-settings-page-title" className="exo-settings-page-title">{pageTitle}</h2>
-          {pageBody}
-        </div>
-      </div>
-    </main>
+      )}
+    </nav>
   )
-})
+}

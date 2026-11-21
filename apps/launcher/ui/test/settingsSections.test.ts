@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { DISCORD_SETTINGS, SETTINGS_PAGES, SETTINGS_SEARCH, discordPageOf, settingsPageOf, type SettingsSectionId } from '../src/lib/settingsSections.ts'
+import { searchSettings } from '../src/lib/settingsIndex.ts'
 
 const SRC = join(import.meta.dirname, '..', 'src')
 const read = (rel: string) => readFileSync(join(SRC, rel), 'utf8')
@@ -76,4 +77,14 @@ test('every row keeps a Ctrl+K keyword, so search still finds it', () => {
     const lower = label.toLowerCase()
     assert.ok(keywords.some(word => lower.includes(word)), `no Ctrl+K keyword covers the row "${label}"`)
   }
+})
+
+test('SettingsPanel is a full-page searchable room without exo-sheet-glass and searchSettings indexes rows', () => {
+  const settingsPanel = read('components/SettingsPanel.tsx')
+  assert.match(settingsPanel, /Search settings/)
+  assert.doesNotMatch(settingsPanel, /exo-sheet-glass/)
+  assert.deepEqual(searchSettings(''), [])
+  assert.ok(searchSettings('riot hours').some(hit => hit.page === 'library' && hit.label === 'Riot hours'))
+  assert.ok(searchSettings('fps').some(hit => hit.page === 'ingame' && hit.label === 'Show FPS counter'))
+  assert.ok(searchSettings('backup').some(hit => hit.page === 'general' && hit.sectionId === 'backups'))
 })

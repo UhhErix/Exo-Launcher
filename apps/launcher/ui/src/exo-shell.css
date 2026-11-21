@@ -75,7 +75,7 @@ img[data-exo-broken] {
   transition: opacity var(--dur-move) var(--ease-out);
 }
 
-:root:has(:is(.exo-game-overlay-scrim, .exo-dc-lightbox, .exo-set-room, .exo-folder-back, .exo-folder-sheet-back, .exo-whats-new-back, .exo-dc-settings-backdrop):not([hidden], [hidden] *, [style*="display: none"] *, .is-backstage, .is-backstage *)) .exo-titlebar::after {
+:root:has(:is(.exo-game-overlay-scrim, .exo-dc-lightbox, .exo-folder-back, .exo-folder-sheet-back, .exo-whats-new-back, .exo-dc-settings-backdrop):not([hidden], [hidden] *, [style*="display: none"] *, .is-backstage, .is-backstage *)) .exo-titlebar::after {
   opacity: 1;
 }
 
@@ -563,12 +563,7 @@ html[data-exo-motion="reduce"] *::after {
    alone on the base time, so it doesn't snap into being (fades replace movement; they don't go with it);
    a warning's red still flashes. Nothing slides, grows, springs or loops. Rooms and pages crossfade in
    transitions.css. */
-html[data-exo-motion="reduce"] .exo-set-room.is-leaving,
-html[data-exo-motion="reduce"] .exo-set-room.is-leaving > .exo-settings {
-  animation: exo-fade-out var(--dur-base) var(--ease-out) forwards !important;
-}
-
-html[data-exo-motion="reduce"] :is(.exo-set-room, .exo-set-room > .exo-settings, .exo-dc-settings-backdrop, .exo-dc-settings,
+html[data-exo-motion="reduce"] :is(.exo-dc-settings-backdrop, .exo-dc-settings,
   .exo-game-overlay-stage, .exo-notice-slot:not(.is-leaving),
   .exo-whats-new-back, .exo-whats-new, .exo-folder-back, .exo-folder-panel, .exo-folder-sheet-back, .exo-folder-sheet,
   .exo-dc .exo-dc-profile, .exo-confirm-label.is-in) {
