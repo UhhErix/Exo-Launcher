@@ -133,6 +133,62 @@ internal sealed partial class SystemTuning
 
         public bool SupportsUserHardwareToggles => true;
 
+        public IReadOnlyList<string> NvidiaDisplayClassKeys()
+        {
+            var found = new List<string>();
+            try
+            {
+                using var root = Open(DisplayClassRoot);
+                if (root is null) return found;
+                foreach (var sub in root.GetSubKeyNames())
+                {
+                    if (sub.Length != 4 || !sub.All(char.IsAsciiDigit)) continue;
+                    try
+                    {
+                        using var adapter = root.OpenSubKey(sub);
+                        var provider = adapter?.GetValue("ProviderName") as string;
+                        var matchId = adapter?.GetValue("MatchingDeviceId") as string;
+                        if ((provider is not null && provider.Contains("NVIDIA", StringComparison.OrdinalIgnoreCase))
+                            || (matchId is not null && matchId.Contains("VEN_10DE", StringComparison.OrdinalIgnoreCase)))
+                            found.Add($@"{DisplayClassRoot}\{sub}");
+                    }
+                    catch (Exception ex) when (ex is System.Security.SecurityException or UnauthorizedAccessException or IOException) { }
+                }
+            }
+            catch (Exception ex) when (ex is System.Security.SecurityException or UnauthorizedAccessException or IOException) { }
+            return found;
+        }
+
+        public int? UserDword(string key, string name)
+        {
+            try
+            {
+                using var k = Registry.CurrentUser.OpenSubKey(key);
+                return k?.GetValue(name) is int value ? value : null;
+            }
+            catch (Exception ex) when (ex is System.Security.SecurityException or UnauthorizedAccessException or IOException) { return null; }
+        }
+
+        public bool SetUserDword(string key, string name, int? value)
+        {
+            if (HostMode.IsDisposable) return false;
+            try
+            {
+                if (value is null)
+                {
+                    using var k = Registry.CurrentUser.OpenSubKey(key, writable: true);
+                    k?.DeleteValue(name, throwOnMissingValue: false);
+                }
+                else
+                {
+                    using var k = Registry.CurrentUser.CreateSubKey(key);
+                    k.SetValue(name, value.Value, RegistryValueKind.DWord);
+                }
+                return true;
+            }
+            catch (Exception ex) when (ex is System.Security.SecurityException or UnauthorizedAccessException or IOException) { return false; }
+        }
+
         public string? UserDirectXSettings()
         {
             try

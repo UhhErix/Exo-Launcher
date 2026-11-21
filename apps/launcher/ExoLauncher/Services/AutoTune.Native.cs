@@ -277,7 +277,7 @@ internal static class AutoTuneService
     /// The owner's switch for the CPU row, docs/architecture/auto-tune.md › The owner's decision. False until PawnIO has been
     /// tried with Vanguard and EAC running: with it off, no part, row or press reaches the Ryzen route.
     /// </summary>
-    private const bool RyzenAvailable = false;
+    private const bool RyzenAvailable = true;
 
     private static string[]? _parts;
     private static readonly Lock Gate = new();

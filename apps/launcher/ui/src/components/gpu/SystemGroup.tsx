@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from 'react'
-import { Clock, Cpu, GraphicsCard, Lock, Memory, Mouse, Performance, Server } from '../../brand/icons'
+import { Clock, Cpu, EyeOff, GraphicsCard, Lock, Memory, Monitor, Mouse, Performance, Server } from '../../brand/icons'
 import { host, type LatencyCheck, type LatencySample, type Tuning, type TuningItem, type TuningKey } from '../../lib/host'
 import { report } from '../../lib/report'
 import { trimStop } from '../../lib/utils'
@@ -14,6 +14,8 @@ const ICONS: Record<TuningKey, ReactNode> = {
   pagefile: <Memory size={16} />,
   cache: <Memory size={16} />,
   captureService: <Server size={16} />,
+  vrrLfc: <Monitor size={16} />,
+  privacy: <EyeOff size={16} />,
   services: <Server size={16} />,
   integrity: <Lock size={16} />,
   vrr: <GraphicsCard size={16} />,

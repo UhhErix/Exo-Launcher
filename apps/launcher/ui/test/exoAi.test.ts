@@ -8,14 +8,16 @@ const pcRoom = read('../src/components/gpu/PcRoom.tsx')
 const exoAiPanel = read('../src/components/gpu/ExoAiPanel.tsx')
 const bestSetup = read('../src/components/gpu/BestSetup.tsx')
 
-test('PcRoom consolidates top chips to Exo AI, Apps, and Storage while Devices lives in TitleBar and Upscalers merges into Graphics', () => {
+test('PcRoom exposes Auto Tune, Exo AI, Apps, and Storage chips while Devices lives in TitleBar and Upscalers merges into Graphics', () => {
+  assert.match(pcRoom, /<AutoTuneChip\b/)
+  assert.match(pcRoom, /<AutoTuneOverlay\b/)
   assert.match(pcRoom, /<ExoAiChip\b/)
   assert.match(pcRoom, /<AppsChip\b/)
   assert.match(pcRoom, /<StorageChip\b/)
   assert.doesNotMatch(pcRoom, />Devices</)
   assert.match(read('../src/components/shell/TitleBar.tsx'), /id:\s*'devices'/)
 
-  assert.doesNotMatch(pcRoom, /BestChip|AutopilotChip|AutoTuneChip|CompressChip|upscalersOpen/)
+  assert.doesNotMatch(pcRoom, /BestChip|AutopilotChip|CompressChip|upscalersOpen/)
   assert.match(pcRoom, /<PcMenu title="Graphics"[\s\S]*?<MakerPanelRow[\s\S]*?<UpscalersTab/)
   assert.match(pcRoom, /<PcMenu title="Storage"[\s\S]*?<StorageSheet/)
 })
