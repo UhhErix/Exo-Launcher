@@ -1,72 +1,3 @@
-.exo-auto-tune {
-  position: fixed;
-  inset: var(--exo-titlebar-h, 52px) 0 0;
-  z-index: 30;
-  display: flex;
-  flex-direction: column;
-  padding: 12px var(--exo-gutter) 20px;
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  background: var(--color-bg);
-  color: var(--color-fg);
-}
-
-.exo-at-shell {
-  display: flex;
-  flex: 1;
-  flex-direction: column;
-  gap: 16px;
-  width: min(1320px, 100%);
-  margin: 0 auto;
-  min-height: 0;
-}
-
-.exo-at-top {
-  display: flex;
-  flex: none;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  padding: 4px 0;
-}
-
-.exo-at-top-left {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  min-width: 0;
-}
-
-.exo-at-back {
-  gap: 6px;
-  padding-inline: 12px 14px;
-}
-
-.exo-at-heading {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  min-width: 0;
-}
-
-.exo-at-title {
-  margin: 0;
-  color: var(--color-fg);
-  font-size: var(--exo-type-page);
-  font-weight: 650;
-  line-height: 1.15;
-}
-
-.exo-at-sub {
-  margin: 0;
-  color: var(--color-muted);
-  font-size: var(--exo-type-small);
-  line-height: 1.35;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 .exo-at-run {
   display: inline-flex;
   flex: none;
@@ -100,22 +31,6 @@
   cursor: default;
 }
 
-.exo-at-grid {
-  display: grid;
-  grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
-  gap: var(--exo-gutter);
-  align-items: start;
-  min-height: 0;
-}
-
-.exo-at-panel {
-  padding-bottom: 16px;
-}
-
-.exo-at-progress {
-  padding: 14px 0 4px;
-}
-
 .exo-at-stages {
   list-style: none;
   margin: 0;
@@ -125,11 +40,18 @@
 }
 
 .exo-at-stage {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 12px;
   min-height: 50px;
-  padding: 10px 0;
+  padding: 10px 10px;
+  border-radius: var(--exo-row-radius);
+  transition: background-color var(--dur-base) var(--ease-out);
+}
+
+.exo-at-stage[data-status="active"] {
+  background: var(--exo-surface-card);
 }
 
 .exo-at-stage + .exo-at-stage {
@@ -152,6 +74,7 @@
 
 .exo-at-stage.is-done .exo-at-stage-marker {
   color: var(--color-good);
+  animation: exo-at-pop var(--dur-base) var(--ease-spring) both;
 }
 
 .exo-at-stage.is-warn .exo-at-stage-marker {
@@ -214,10 +137,6 @@
   flex: none;
   border-radius: 999px;
   background: var(--color-good);
-}
-
-.exo-at-overrides {
-  width: min(620px, calc(100vw - 24px));
 }
 
 .exo-at-hw-list {
@@ -321,10 +240,708 @@
   font-size: var(--exo-type-body);
 }
 
-@media (max-width: 900px) {
-  .exo-at-grid {
-    grid-template-columns: 1fr;
+.exo-at-cine {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  background: var(--color-bg);
+  color: var(--color-fg);
+  animation: exo-at-room-in var(--dur-move) var(--ease-out) both;
+}
+
+.exo-at-cine-bg {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.exo-at-cine-spot {
+  position: absolute;
+  left: 50%;
+  top: 46%;
+  width: 680px;
+  height: 680px;
+  margin-left: -340px;
+  margin-top: -340px;
+  border-radius: 50%;
+  background: radial-gradient(circle, color-mix(in srgb, var(--color-fg) 9%, transparent) 0%, color-mix(in srgb, var(--color-fg) 3%, transparent) 42%, transparent 72%);
+  opacity: 0.55;
+  transform: scale(0.92);
+  will-change: transform, opacity;
+}
+
+.exo-at-cine.is-working .exo-at-cine-spot {
+  animation: exo-at-spot-breathe 2.6s var(--ease-in-out) infinite alternate;
+}
+
+.exo-at-cine.is-done .exo-at-cine-spot {
+  background: radial-gradient(circle, color-mix(in srgb, var(--color-good) 16%, transparent) 0%, color-mix(in srgb, var(--color-good) 5%, transparent) 44%, transparent 74%);
+  animation: exo-at-crest-bloom var(--dur-flight) var(--ease-out) both;
+}
+
+.exo-at-cine.is-warn .exo-at-cine-spot {
+  background: radial-gradient(circle, color-mix(in srgb, var(--color-warn) 14%, transparent) 0%, transparent 70%);
+}
+
+.exo-at-cine-beam {
+  position: absolute;
+  left: -15%;
+  right: -15%;
+  top: -120px;
+  height: 220px;
+  background: linear-gradient(180deg, transparent 0%, color-mix(in srgb, var(--color-fg) 5%, transparent) 50%, transparent 100%);
+  opacity: 0;
+  transform: translateY(-20vh);
+  will-change: transform, opacity;
+}
+
+.exo-at-cine.is-working .exo-at-cine-beam {
+  opacity: 1;
+  animation: exo-at-beam-sweep 3.4s linear infinite;
+}
+
+.exo-at-cine.is-working .exo-at-cine-beam.is-second {
+  opacity: 0.7;
+  animation: exo-at-beam-sweep 5.1s linear infinite reverse;
+}
+
+.exo-at-cine-sparks {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  transition: opacity var(--dur-move) var(--ease-out);
+}
+
+.exo-at-cine.is-working .exo-at-cine-sparks {
+  opacity: 1;
+}
+
+.exo-at-spark {
+  position: absolute;
+  left: 50%;
+  top: 52%;
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: var(--color-fg);
+  opacity: 0;
+  will-change: transform, opacity;
+}
+
+.exo-at-cine.is-working .exo-at-spark.is-s1 {
+  margin-left: -140px;
+  animation: exo-at-spark-float 2.9s var(--ease-out) 0s infinite;
+}
+
+.exo-at-cine.is-working .exo-at-spark.is-s2 {
+  margin-left: -82px;
+  animation: exo-at-spark-float 3.4s var(--ease-out) 0.6s infinite;
+}
+
+.exo-at-cine.is-working .exo-at-spark.is-s3 {
+  margin-left: -26px;
+  animation: exo-at-spark-float 2.5s var(--ease-out) 1.1s infinite;
+}
+
+.exo-at-cine.is-working .exo-at-spark.is-s4 {
+  margin-left: 38px;
+  animation: exo-at-spark-float 3.1s var(--ease-out) 0.3s infinite;
+}
+
+.exo-at-cine.is-working .exo-at-spark.is-s5 {
+  margin-left: 96px;
+  animation: exo-at-spark-float 2.8s var(--ease-out) 1.5s infinite;
+}
+
+.exo-at-cine.is-working .exo-at-spark.is-s6 {
+  margin-left: 148px;
+  animation: exo-at-spark-float 3.6s var(--ease-out) 0.9s infinite;
+}
+
+.exo-at-cine.is-working .exo-at-spark.is-s7 {
+  margin-left: -112px;
+  animation: exo-at-spark-float 3.2s var(--ease-out) 1.8s infinite;
+}
+
+.exo-at-cine.is-working .exo-at-spark.is-s8 {
+  margin-left: 68px;
+  animation: exo-at-spark-float 2.7s var(--ease-out) 2.1s infinite;
+}
+
+.exo-at-cine-rail {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: var(--color-fg);
+  opacity: 0.72;
+  transition: transform var(--dur-move) var(--ease-out), background-color var(--dur-base) var(--ease-out), opacity var(--dur-base) var(--ease-out);
+  will-change: transform;
+}
+
+.exo-at-cine-rail.is-top {
+  top: 0;
+  transform-origin: left center;
+}
+
+.exo-at-cine-rail.is-bottom {
+  bottom: 0;
+  transform-origin: right center;
+}
+
+.exo-at-cine.is-done .exo-at-cine-rail {
+  background: var(--color-good);
+  opacity: 0.85;
+}
+
+.exo-at-cine.is-warn .exo-at-cine-rail {
+  background: var(--color-warn);
+}
+
+.exo-at-cine-body {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  width: min(560px, calc(100% - 48px));
+  text-align: center;
+  animation: exo-at-rise var(--dur-move) var(--ease-out) both;
+}
+
+.exo-at-hero-stage {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 196px;
+  height: 196px;
+  margin-bottom: 4px;
+}
+
+.exo-at-hero-halo {
+  position: absolute;
+  inset: 24px;
+  border-radius: 50%;
+  background: radial-gradient(circle, color-mix(in srgb, var(--color-fg) 22%, transparent) 0%, transparent 72%);
+  transform: scale(0.9);
+  opacity: 0.45;
+  will-change: transform, opacity;
+  animation: exo-at-halo-pulse 2.2s var(--ease-in-out) infinite alternate;
+}
+
+.exo-at-pulse-wave {
+  position: absolute;
+  inset: 14px;
+  border-radius: 50%;
+  border: 1px solid color-mix(in srgb, var(--color-fg) 26%, transparent);
+  opacity: 0;
+  transform: scale(0.74);
+  will-change: transform, opacity;
+  animation: exo-at-pulse-wave 2.8s var(--ease-out) infinite;
+}
+
+.exo-at-pulse-wave.is-delayed {
+  animation-delay: 1.4s;
+}
+
+.exo-at-ring {
+  position: absolute;
+  border-radius: 50%;
+  border: 1px solid transparent;
+  will-change: transform;
+}
+
+.exo-at-ring.is-inner {
+  inset: 28px;
+  border-top-color: color-mix(in srgb, var(--color-fg) 65%, transparent);
+  border-right-color: color-mix(in srgb, var(--color-fg) 20%, transparent);
+  animation: exo-at-spin 2.2s linear infinite;
+}
+
+.exo-at-ring.is-mid {
+  inset: 14px;
+  border-top-color: color-mix(in srgb, var(--color-fg) 24%, transparent);
+  border-bottom-color: color-mix(in srgb, var(--color-fg) 48%, transparent);
+  animation: exo-at-spin-rev 3.6s linear infinite;
+}
+
+.exo-at-ring.is-outer {
+  inset: 0;
+  border-style: dashed;
+  border-color: color-mix(in srgb, var(--color-fg) 18%, transparent);
+  animation: exo-at-spin 6.4s linear infinite;
+}
+
+.exo-at-glyph-wrap {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 96px;
+  height: 96px;
+  color: var(--color-fg);
+  animation: exo-at-glyph-in var(--dur-flight) var(--ease-spring) both;
+}
+
+.exo-at-svg {
+  color: var(--color-fg);
+}
+
+.exo-at-svg-frame,
+.exo-at-svg-pins {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.exo-at-svg-pins {
+  opacity: 0.45;
+}
+
+.exo-at-cine.is-working .exo-at-svg-pins {
+  animation: exo-at-pins-glow 1.5s var(--ease-in-out) infinite alternate;
+}
+
+.exo-at-svg-core,
+.exo-at-svg-glass {
+  fill: currentColor;
+  opacity: 0.14;
+}
+
+.exo-at-cine.is-working .exo-at-svg-core,
+.exo-at-cine.is-working .exo-at-svg-glass {
+  animation: exo-at-core-glow 1.5s var(--ease-in-out) infinite alternate;
+}
+
+.exo-at-svg-scan {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.75;
+  stroke-linecap: round;
+  opacity: 0.72;
+}
+
+.exo-at-cine.is-working .exo-at-svg-scan {
+  animation: exo-at-scan-line 1.6s var(--ease-in-out) infinite alternate;
+}
+
+.exo-at-done-burst {
+  position: absolute;
+  inset: 16px;
+  border-radius: 50%;
+  border: 2px solid var(--color-good);
+  opacity: 0;
+  animation: exo-at-done-burst var(--dur-flight) var(--ease-out) both;
+}
+
+.exo-at-cine.is-warn .exo-at-done-burst {
+  border-color: var(--color-warn);
+}
+
+.exo-at-done-ring {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 96px;
+  height: 96px;
+  border-radius: 50%;
+  color: var(--color-good);
+  box-shadow: inset 0 0 0 2px var(--color-good), 0 0 32px color-mix(in srgb, var(--color-good) 28%, transparent);
+  animation: exo-at-pop var(--dur-flight) var(--ease-spring) both;
+}
+
+.exo-at-done-ring.is-warn {
+  color: var(--color-warn);
+  box-shadow: inset 0 0 0 2px var(--color-warn), 0 0 28px color-mix(in srgb, var(--color-warn) 24%, transparent);
+}
+
+.exo-at-done-icon {
+  display: inline-flex;
+  animation: exo-at-pop var(--dur-move) var(--ease-spring) both;
+  animation-delay: 90ms;
+}
+
+.exo-at-cine-meta {
+  color: var(--color-muted);
+  font-size: var(--exo-type-label);
+  font-weight: var(--exo-weight-control);
+  font-variant-numeric: tabular-nums;
+}
+
+.exo-at-cine-title {
+  margin: 0;
+  color: var(--color-fg);
+  font-size: var(--exo-type-title);
+  font-weight: 650;
+  line-height: 1.25;
+  animation: exo-at-step-in var(--dur-move) var(--ease-out) both;
+}
+
+.exo-at-cine-step {
+  margin: 0;
+  min-height: 20px;
+  color: var(--color-muted);
+  font-size: var(--exo-type-body);
+  font-variant-numeric: tabular-nums;
+  animation: exo-at-step-in var(--dur-move) var(--ease-out) both;
+}
+
+.exo-at-cine-body > .exo-progress {
+  width: 100%;
+  margin-top: 6px;
+}
+
+.exo-at-milestones {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px 16px;
+  margin: 4px 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--exo-type-small);
+  color: var(--color-muted);
+}
+
+.exo-at-milestones li {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  opacity: 0.45;
+  transition: opacity var(--dur-quick) var(--ease-out), color var(--dur-quick) var(--ease-out), transform var(--dur-base) var(--ease-out);
+}
+
+.exo-at-milestones li.is-active {
+  opacity: 1;
+  color: var(--color-fg);
+  transform: translateY(-1px);
+}
+
+.exo-at-milestones li.is-done {
+  opacity: 0.94;
+  color: var(--color-good);
+}
+
+.exo-at-milestones li.is-warn {
+  opacity: 0.94;
+  color: var(--color-warn);
+}
+
+.exo-at-milestone-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.exo-at-milestones li.is-active .exo-at-milestone-dot {
+  box-shadow: 0 0 8px var(--color-fg);
+}
+
+.exo-at-cine-results {
+  display: grid;
+  gap: 7px;
+  width: 100%;
+  margin: 8px 0 0;
+  padding: 12px 14px;
+  list-style: none;
+  border-radius: var(--exo-card-radius);
+  background: var(--exo-surface-card);
+  border: var(--exo-hair) solid var(--exo-float-line);
+  font-size: var(--exo-type-small);
+  text-align: left;
+  animation: exo-at-rise var(--dur-move) var(--ease-out) both;
+}
+
+.exo-at-cine-results li {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  color: var(--color-fg);
+}
+
+.exo-at-cine-results li svg {
+  flex: none;
+  margin-top: 2px;
+  color: var(--color-good);
+}
+
+.exo-at-cine-results li.is-warn svg {
+  color: var(--color-warn);
+}
+
+.exo-at-cine-results-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.exo-at-cine-results-name {
+  font-weight: var(--exo-weight-title);
+  color: var(--color-fg);
+}
+
+.exo-at-cine-results-detail {
+  color: var(--color-muted);
+}
+
+.exo-at-cine-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 8px;
+  animation: exo-at-rise var(--dur-move) var(--ease-out) both;
+  animation-delay: 80ms;
+}
+
+.exo-at-cine-error {
+  flex-basis: 100%;
+  margin: 0;
+  color: var(--color-bad);
+  font-size: var(--exo-type-small);
+}
+
+@keyframes exo-at-room-in {
+  from {
+    opacity: 0;
+    transform: scale(0.988) translateY(8px);
   }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes exo-at-rise {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes exo-at-step-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes exo-at-glyph-in {
+  from {
+    opacity: 0;
+    transform: scale(0.84);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes exo-at-pop {
+  0% {
+    transform: scale(0.82);
+    opacity: 0.45;
+  }
+  65% {
+    transform: scale(1.07);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+@keyframes exo-at-done-burst {
+  from {
+    opacity: 0.9;
+    transform: scale(0.65);
+  }
+  to {
+    opacity: 0;
+    transform: scale(1.42);
+  }
+}
+
+@keyframes exo-at-spot-breathe {
+  from {
+    transform: scale(0.9);
+    opacity: 0.42;
+  }
+  to {
+    transform: scale(1.08);
+    opacity: 0.72;
+  }
+}
+
+@keyframes exo-at-crest-bloom {
+  0% {
+    opacity: 0;
+    transform: scale(0.82);
+  }
+  50% {
+    opacity: 0.92;
+    transform: scale(1.05);
+  }
+  100% {
+    opacity: 0.62;
+    transform: scale(1);
+  }
+}
+
+@keyframes exo-at-beam-sweep {
+  from {
+    transform: translateY(-20vh);
+  }
+  to {
+    transform: translateY(120vh);
+  }
+}
+
+@keyframes exo-at-spark-float {
+  0% {
+    opacity: 0;
+    transform: translateY(22px) scale(0.6);
+  }
+  25% {
+    opacity: 0.85;
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-130px) scale(1.1);
+  }
+}
+
+@keyframes exo-at-halo-pulse {
+  from {
+    transform: scale(0.88);
+    opacity: 0.3;
+  }
+  to {
+    transform: scale(1.12);
+    opacity: 0.74;
+  }
+}
+
+@keyframes exo-at-pulse-wave {
+  0% {
+    opacity: 0.6;
+    transform: scale(0.72);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.28);
+  }
+}
+
+@keyframes exo-at-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes exo-at-spin-rev {
+  to {
+    transform: rotate(-360deg);
+  }
+}
+
+@keyframes exo-at-pins-glow {
+  from {
+    opacity: 0.3;
+  }
+  to {
+    opacity: 0.95;
+  }
+}
+
+@keyframes exo-at-core-glow {
+  from {
+    opacity: 0.1;
+  }
+  to {
+    opacity: 0.52;
+  }
+}
+
+@keyframes exo-at-scan-line {
+  from {
+    transform: translateY(-4px);
+    opacity: 0.3;
+  }
+  to {
+    transform: translateY(4px);
+    opacity: 0.95;
+  }
+}
+
+html[data-exo-inactive="true"] .exo-at-cine-spot,
+html[data-exo-inactive="true"] .exo-at-cine-beam,
+html[data-exo-inactive="true"] .exo-at-spark,
+html[data-exo-inactive="true"] .exo-at-hero-halo,
+html[data-exo-inactive="true"] .exo-at-pulse-wave,
+html[data-exo-inactive="true"] .exo-at-ring,
+html[data-exo-inactive="true"] .exo-at-svg-pins,
+html[data-exo-inactive="true"] .exo-at-svg-core,
+html[data-exo-inactive="true"] .exo-at-svg-glass,
+html[data-exo-inactive="true"] .exo-at-svg-scan {
+  animation-play-state: paused;
+}
+
+:root[data-exo-motion="reduce"] .exo-at-stage.is-done .exo-at-stage-marker,
+:root[data-exo-motion="reduce"] .exo-at-cine,
+:root[data-exo-motion="reduce"] .exo-at-cine-body,
+:root[data-exo-motion="reduce"] .exo-at-cine-spot,
+:root[data-exo-motion="reduce"] .exo-at-hero-halo,
+:root[data-exo-motion="reduce"] .exo-at-pulse-wave,
+:root[data-exo-motion="reduce"] .exo-at-ring,
+:root[data-exo-motion="reduce"] .exo-at-glyph-wrap,
+:root[data-exo-motion="reduce"] .exo-at-svg-pins,
+:root[data-exo-motion="reduce"] .exo-at-svg-core,
+:root[data-exo-motion="reduce"] .exo-at-svg-glass,
+:root[data-exo-motion="reduce"] .exo-at-svg-scan,
+:root[data-exo-motion="reduce"] .exo-at-done-burst,
+:root[data-exo-motion="reduce"] .exo-at-done-ring,
+:root[data-exo-motion="reduce"] .exo-at-done-icon,
+:root[data-exo-motion="reduce"] .exo-at-cine-title,
+:root[data-exo-motion="reduce"] .exo-at-cine-step,
+:root[data-exo-motion="reduce"] .exo-at-cine-results,
+:root[data-exo-motion="reduce"] .exo-at-cine-foot {
+  animation: none;
+}
+
+:root[data-exo-motion="reduce"] .exo-at-stage,
+:root[data-exo-motion="reduce"] .exo-at-cine-rail,
+:root[data-exo-motion="reduce"] .exo-at-milestones li {
+  transition: none;
+}
+
+:root[data-exo-motion="reduce"] .exo-at-cine-beam,
+:root[data-exo-motion="reduce"] .exo-at-cine-sparks {
+  display: none;
+  animation: none;
+}
+
+:root[data-exo-motion="reduce"] .exo-at-svg-core,
+:root[data-exo-motion="reduce"] .exo-at-svg-glass {
+  opacity: 0.25;
 }
 
 :root[data-exo-motion="reduce"] .exo-at-run {
@@ -333,6 +950,45 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .exo-at-stage.is-done .exo-at-stage-marker,
+  .exo-at-cine,
+  .exo-at-cine-body,
+  .exo-at-cine-spot,
+  .exo-at-hero-halo,
+  .exo-at-pulse-wave,
+  .exo-at-ring,
+  .exo-at-glyph-wrap,
+  .exo-at-svg-pins,
+  .exo-at-svg-core,
+  .exo-at-svg-glass,
+  .exo-at-svg-scan,
+  .exo-at-done-burst,
+  .exo-at-done-ring,
+  .exo-at-done-icon,
+  .exo-at-cine-title,
+  .exo-at-cine-step,
+  .exo-at-cine-results,
+  .exo-at-cine-foot {
+    animation: none;
+  }
+
+  .exo-at-stage,
+  .exo-at-cine-rail,
+  .exo-at-milestones li {
+    transition: none;
+  }
+
+  .exo-at-cine-beam,
+  .exo-at-cine-sparks {
+    display: none;
+    animation: none;
+  }
+
+  .exo-at-svg-core,
+  .exo-at-svg-glass {
+    opacity: 0.25;
+  }
+
   .exo-at-run {
     scale: none;
     transition: none;

@@ -58,7 +58,7 @@ internal static partial class GameSettings
     /// What Exo set in a game's profile and what the game's own values were before (null: none of its own); FileInFolder (the
     /// file NVIDIA matches beside the program) lets Exo make the profile again after a clean driver install removed it.
     /// </summary>
-    internal sealed record NvidiaBackup(string Title, string Exe, string? Profile, Dictionary<uint, uint?> Before, List<NvidiaValue> Set, string? FileInFolder = null);
+    internal sealed record NvidiaBackup(string Title, string Exe, string? Profile, Dictionary<uint, uint?> Before, List<NvidiaValue> Set, string? FileInFolder = null, List<uint>? Skipped = null);
 
     private static string NvidiaBackupPath(Profile profile) => Path.Combine(Folder, profile.Id + ".nvidia.json");
 
@@ -88,16 +88,32 @@ internal static partial class GameSettings
         var backup = LoadNvidia(profile);
         if (wanted.Count == 0) return null;
         var state = NvidiaProfiles.ForGameLive(program, wanted.Select(v => v.Id).ToList());
-        return new GroupState(NvidiaGroup, NvidiaLabel(wanted), GroupOn(state, wanted, out _), backup is not null);
+        var skipped = EffectiveSkipped(state, wanted, backup);
+        return new GroupState(NvidiaGroup, NvidiaLabel(wanted), GroupOn(state, wanted, out _, skipped), backup is not null);
+    }
+
+    private static HashSet<uint> EffectiveSkipped(NvidiaProfiles.GameState state, IReadOnlyList<NvidiaValue> wanted, NvidiaBackup? backup)
+    {
+        HashSet<uint> skipped = [.. state.Skipped ?? []];
+        if (backup?.Skipped is { Count: > 0 } savedSkipped) skipped.UnionWith(savedSkipped);
+        if (backup is { Set.Count: > 0 })
+        {
+            foreach (var value in wanted)
+            {
+                if (backup.Set.All(s => s.Id != value.Id) && state.After.GetValueOrDefault(value.Id) is null)
+                    skipped.Add(value.Id);
+            }
+        }
+        return skipped;
     }
 
     /// <summary>
     /// Whether the group is on: every setting the driver would take reads back as Exo set it, and at least one was written.
     /// A setting the driver skipped is not one it can be on for, so it is neither a reason for off nor for on.
     /// </summary>
-    private static bool GroupOn(NvidiaProfiles.GameState state, IReadOnlyList<NvidiaValue> wanted, out bool allSkipped)
+    private static bool GroupOn(NvidiaProfiles.GameState state, IReadOnlyList<NvidiaValue> wanted, out bool allSkipped, IReadOnlyCollection<uint>? extraSkipped = null)
     {
-        var skipped = state.Skipped ?? [];
+        HashSet<uint> skipped = [.. state.Skipped ?? [], .. extraSkipped ?? []];
         var written = wanted.Where(value => !skipped.Contains(value.Id)).ToList();
         allSkipped = written.Count == 0;
         return state.Ok && written.Count > 0 && written.All(value => state.After.GetValueOrDefault(value.Id) == value.Value);
@@ -132,7 +148,8 @@ internal static partial class GameSettings
             // Only what the driver took is kept as Exo's: a skipped setting was never written, so it is never put back or checked.
             var taken = wanted.Where(value => state.Skipped?.Contains(value.Id) is not true).ToList();
             foreach (var value in taken) before.TryAdd(value.Id, state.Before.GetValueOrDefault(value.Id));
-            SaveNvidia(profile, new NvidiaBackup(profile.Title, program.Exe, state.Profile, before, [.. taken], program.FileInFolder));
+            var skipped = state.Skipped is { Count: > 0 } ? state.Skipped.ToList() : null;
+            SaveNvidia(profile, new NvidiaBackup(profile.Title, program.Exe, state.Profile, before, [.. taken], program.FileInFolder, skipped));
             return null;
         }
     }

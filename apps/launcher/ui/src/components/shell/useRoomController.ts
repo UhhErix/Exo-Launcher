@@ -22,6 +22,8 @@ const LAZY_ROOMS: ReadonlyMap<View, (() => Promise<unknown>) | null> = new Map<V
   ['store', () => import('../store/StoreRoom')],
   ['friends', () => import('../FriendsRoomRoute')],
   ['music', () => import('../music/NativeMusicRoom')],
+  ['exo-ai', () => import('../gpu/ExoAiRoom')],
+  ['apps', () => import('../apps/AppsRoom')],
   ['system', () => import('../gpu/PcRoom')],
 ])
 
@@ -80,6 +82,7 @@ function useBootPreload(
           import('../DevicesRoom'),
           import('../SettingsPanel').then((module) => module.preloadSettingsRoom()),
           import('./GameSheet'),
+          import('../gpu/ExoAiRoom'),
           import('../gpu/PcRoom'),
           import('../blocks/command-menu-1'),
         ]),
@@ -97,7 +100,7 @@ function useIdleRooms(
 ) {
   useEffect(() => {
     if (booting) return
-    const order: View[] = ['store', 'friends', 'system']
+    const order: View[] = ['store', 'friends', 'exo-ai', 'apps', 'system']
     let idle = 0
     const next = () => {
       const room = order.shift()

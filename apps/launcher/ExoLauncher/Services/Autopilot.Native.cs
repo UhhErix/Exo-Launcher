@@ -123,15 +123,28 @@ internal sealed class AutopilotNative : IAutopilotSystem
     [DllImport("ntdll.dll")] private static extern int NtResumeProcess(nint process);
     [DllImport("winmm.dll")] private static extern uint timeBeginPeriod(uint uPeriod);
     [DllImport("winmm.dll")] private static extern uint timeEndPeriod(uint uPeriod);
+    [DllImport("ntdll.dll")] private static extern int NtQueryTimerResolution(out uint minimum, out uint maximum, out uint current);
+    [DllImport("ntdll.dll")] private static extern int NtSetTimerResolution(uint desired, [MarshalAs(UnmanagedType.U1)] bool setResolution, out uint current);
 
     private readonly object _timerLock = new();
     private bool _highResTimer;
+    private uint _ntTimerResolution;
 
     public void BeginHighResTimer()
     {
         lock (_timerLock)
         {
             if (_highResTimer) return;
+            if (NtQueryTimerResolution(out _, out var maxRes, out _) == 0)
+            {
+                var target = maxRes > 0 ? Math.Max(maxRes, 5000u) : 5000u;
+                if (NtSetTimerResolution(target, true, out _) == 0)
+                {
+                    _ntTimerResolution = target;
+                    _highResTimer = true;
+                    return;
+                }
+            }
             if (timeBeginPeriod(1) == 0) _highResTimer = true;
         }
     }
@@ -141,7 +154,15 @@ internal sealed class AutopilotNative : IAutopilotSystem
         lock (_timerLock)
         {
             if (!_highResTimer) return;
-            _ = timeEndPeriod(1);
+            if (_ntTimerResolution != 0)
+            {
+                _ = NtSetTimerResolution(_ntTimerResolution, false, out _);
+                _ntTimerResolution = 0;
+            }
+            else
+            {
+                _ = timeEndPeriod(1);
+            }
             _highResTimer = false;
         }
     }

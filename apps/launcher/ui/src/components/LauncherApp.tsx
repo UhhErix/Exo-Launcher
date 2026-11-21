@@ -45,7 +45,7 @@ import { AccountOverlays, useAccountShell } from './account/AccountShell'
 import { updateSheetShown } from '../lib/accountPrompt'
 import { bootGate, BootSplash, Room } from './shell/BootGate'
 import { ErrorBoundary } from './shell/ErrorBoundary'
-import type { PcLink } from './gpu/pcSections'
+import { pcLinkRoom, type PcLink } from './gpu/pcSections'
 import { LibraryPane } from './shell/LibraryPane'
 import { TitleBar, type View } from './shell/TitleBar'
 import { savedMusicService, saveMusicService, type MusicService } from '../lib/music'
@@ -82,6 +82,8 @@ const StoreRoom = lazy(() => import('./store/StoreRoom').then((m) => ({ default:
 const CommandMenu = lazy(() => import('./blocks/command-menu-1'))
 const GameSheet = lazy(() => import('./shell/GameSheet').then((m) => ({ default: m.GameSheet })))
 const PcRoom = lazy(() => import('./gpu/PcRoom').then((m) => ({ default: m.PcRoom })))
+const ExoAiRoom = lazy(() => import('./gpu/ExoAiRoom').then((m) => ({ default: m.ExoAiRoom })))
+const AppsRoom = lazy(() => import('./apps/AppsRoom').then((m) => ({ default: m.AppsRoom })))
 const ActivateKeySheet = lazy(() => import('./ActivateKeySheet').then((m) => ({ default: m.ActivateKeySheet })))
 const WhatsNewSheet = lazy(() => import('./shell/WhatsNewSheet').then((m) => ({ default: m.WhatsNewSheet })))
 const UpdateSheet = lazy(() => import('./shell/WhatsNewSheet').then((m) => ({ default: m.UpdateSheet })))
@@ -654,6 +656,18 @@ export function LauncherApp() {
     </Room>
   ), [under, view, openedRooms, warming, prewarm, devicesActive])
 
+  const exoAiRoom = useMemo(() => (
+    <Room name="exo-ai" mounted={openedRooms.has('exo-ai')} warm={warming || opening === 'exo-ai' || prewarm === 'exo-ai'} active={under === 'exo-ai'} covered={view === 'settings'} label="Exo AI" className="relative z-10 flex min-h-0 flex-1 flex-col">
+      <Suspense fallback={null}><ExoAiRoom active={view === 'exo-ai'} games={games} settings={settings} onSave={saveSettings} /></Suspense>
+    </Room>
+  ), [under, openedRooms, warming, opening, prewarm, view, games, settings, saveSettings])
+
+  const appsRoom = useMemo(() => (
+    <Room name="apps" mounted={openedRooms.has('apps')} warm={warming || opening === 'apps' || prewarm === 'apps'} active={under === 'apps'} covered={view === 'settings'} label="Apps" className="relative z-10 flex min-h-0 flex-1 flex-col">
+      <Suspense fallback={null}><AppsRoom active={view === 'apps'} /></Suspense>
+    </Room>
+  ), [under, openedRooms, warming, opening, prewarm, view])
+
   const systemRoom = useMemo(() => (
     <Room name="system" mounted={openedRooms.has('system')} warm={warming || opening === 'system' || prewarm === 'system'} active={under === 'system'} covered={view === 'settings'} label="PC" className="relative z-10 flex min-h-0 flex-1 flex-col">
       <Suspense fallback={null}><PcRoom active={view === 'system'} jump={gpuJump} games={games} settings={settings} onSave={saveSettings} /></Suspense>
@@ -765,6 +779,8 @@ export function LauncherApp() {
       {friendsRoom}
       {musicRoom}
       {storeRoom}
+      {exoAiRoom}
+      {appsRoom}
       {systemRoom}
       {devicesRoom}
       {libraryRoom}
@@ -789,8 +805,13 @@ export function LauncherApp() {
           onOpenSystem={(page) => {
             if (actions.holdsGame(displayedGame) || !displayedGame) return
             closeGamePage()
-            setGpuJump({ tab: page })
-            void openGpu()
+            const target = pcLinkRoom(page)
+            if (target === 'system') {
+              setGpuJump({ tab: page })
+              void openGpu()
+            } else {
+              void goToView(target)
+            }
           }}
           onDequeue={() => void actions.onDequeue()}
           hdrForGames={settings.hdrForGames === true}

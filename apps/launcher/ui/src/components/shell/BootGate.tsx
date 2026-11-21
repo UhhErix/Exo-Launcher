@@ -145,7 +145,7 @@ function Onboarding({ stores, onSettings, onStores, onComplete, onAddFolder, ove
 }
 
 /** Rooms LauncherApp gives back while hidden (its sweep); only these keep scroll. */
-export const EJECTABLE_ROOMS: readonly View[] = ['store', 'system', 'settings']
+export const EJECTABLE_ROOMS: readonly View[] = ['store', 'exo-ai', 'apps', 'system', 'settings']
 
 /** Where each of those rooms' scroller sat when it was last scrolled, so an
  *  unmounted room comes back where it was. Scroll events fire only on the

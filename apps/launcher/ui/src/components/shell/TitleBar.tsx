@@ -4,7 +4,7 @@ import { Spinner } from '../ui/Spinner'
 import { useGlide } from '../../lib/glide'
 import { useLens } from '../../lib/glass'
 import { ExoMark } from '../../brand/ExoMark'
-import { Chats, ThisPc, Library, Mouse, MusicNotes, Settings, StoreBag } from '../../brand/icons'
+import { Apps, Burst, Chats, ThisPc, Library, Mouse, MusicNotes, Settings, StoreBag } from '../../brand/icons'
 import { warmMusic, type MusicService } from '../../lib/music'
 import { DiscordBadge } from './DiscordBadge'
 import { MusicMiniPlayer } from './MusicMiniPlayer'
@@ -12,7 +12,7 @@ import { CaptureButton } from './CaptureButton'
 import { WindowChrome } from '../WindowChrome'
 
 export type View =
-  'library' | 'store' | 'friends' | 'music' | 'system' | 'devices' | 'settings'
+  'library' | 'store' | 'friends' | 'music' | 'devices' | 'exo-ai' | 'apps' | 'system' | 'settings'
 
 const NAV_TABS: ReadonlyArray<{
   id: View
@@ -24,6 +24,8 @@ const NAV_TABS: ReadonlyArray<{
     { id: 'friends', label: 'Discord', Icon: Chats },
     { id: 'music', label: 'Music', Icon: MusicNotes },
     { id: 'devices', label: 'Devices', Icon: Mouse },
+    { id: 'exo-ai', label: 'Exo AI', Icon: Burst },
+    { id: 'apps', label: 'Apps', Icon: Apps },
     { id: 'system', label: 'PC', Icon: ThisPc },
   ]
 
@@ -116,7 +118,6 @@ function NavDock({ view, opening, onView, onWarm, onToggleSettings, onNowPlaying
         <button ref={search} type="button" className="exo-glass exo-bar-search" onClick={onSearch} aria-label="Search Exo" aria-keyshortcuts="Control+K">
           <ExoMark size={18} className="exo-brand-logo" />
           <span className="exo-bar-search-label">Search</span>
-          <kbd className="exo-bar-kbd" aria-hidden="true">Ctrl K</kbd>
         </button>
       </div>
       <div className="exo-bar-center">

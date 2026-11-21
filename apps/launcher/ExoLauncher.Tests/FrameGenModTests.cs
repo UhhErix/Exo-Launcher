@@ -293,8 +293,8 @@ public sealed partial class FrameGenModTests : IDisposable
     [InlineData(null)]
     public void CardsNoModAddsToGetNothing(string? gpu) => Assert.Null(FrameGenCardFor(gpu));
 
-    private static FrameGenGame Game(bool dlssg = true, int? major = 310, bool own = false, int? streamline = 2, bool vulkan = false, bool noDlssg = false) =>
-        new(@"C:\Game", @"C:\Game\Game.exe", dlssg, major, own, streamline, vulkan, null, null, null, noDlssg);
+    private static FrameGenGame Game(bool dlssg = true, int? major = 310, bool own = false, int? streamline = 2, bool vulkan = false, bool noDlssg = false, string? antiCheat = null) =>
+        new(@"C:\Game", @"C:\Game\Game.exe", dlssg, major, own, streamline, vulkan, null, antiCheat, null, noDlssg);
 
     [Theory]
     [InlineData(null, null)]
@@ -2177,5 +2177,24 @@ public sealed partial class FrameGenModTests : IDisposable
         Assert.Equal(new Version(0, 9, 4), TagVersion("v0.9.4"));
         Assert.Equal(new Version(2, 0), TagVersion("2"));
         Assert.Null(TagVersion("nightly"));
+    }
+
+    [Fact]
+    public void AntiCheatGameWithOwnFrameGenReportsNativeOnRtx30InsteadOfRefusingMod()
+    {
+        var rtx30 = FrameGenCardFor(Rtx3070);
+        Assert.Equal("native", FrameGenPath(rtx30, Game(own: true, antiCheat: AntiCheatCheck.Ace)));
+
+        UnrealGame();
+        Put(@"AntiCheatExpert\ACE-CORE.sys", Pe(300));
+        Put(@"Engine\Plugins\Runtime\Intel\XeSS\Binaries\ThirdParty\Win64\libxess_fg.dll", Pe(500));
+        var before = Snapshot();
+        var service = Service(dlssgOffered: true);
+
+        var status = State(service, Rtx3070);
+        Assert.Equal("native", status.State);
+        Assert.Null(status.AntiCheat);
+        Assert.Equal(FrameGenNext.Nothing, Next(service, Rtx3070));
+        Assert.Equal(before, Snapshot());
     }
 }

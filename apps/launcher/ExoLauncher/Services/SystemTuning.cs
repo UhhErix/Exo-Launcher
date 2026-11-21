@@ -46,6 +46,8 @@ internal sealed partial class SystemTuning(SystemTuning.ISystem system, string p
         TimerKey, SchedulingKey, PagefileKey, CacheKey, CaptureServiceKey, VrrLfcKey, PrivacyKey,
         TasksKey, WinFeaturesKey, OsOverheadKey,
         KernelLatencyKey, UsbPowerKey, AiTelemetryKey, StorageFsKey, GamingUxKey, AmdGpuPowerKey, HagsKey,
+        MpoOffKey, HibernateOffKey, BackgroundAppsKey, SvcHostSplitKey, GpuPstateKey, CpuMitigationsKey,
+        BootLatencyKey, MemCompressionKey,
     ];
 
     internal static readonly (string Path, string Label)[] TrimmedTasks =
@@ -98,7 +100,6 @@ internal sealed partial class SystemTuning(SystemTuning.ISystem system, string p
     internal static readonly string[] OptIn =
     [
         ServicesKey, IntegrityKey, VrrKey, MouseAccelKey,
-        MpoOffKey, HibernateOffKey, BackgroundAppsKey, SvcHostSplitKey, GpuPstateKey, CpuMitigationsKey,
     ];
 
     internal static readonly string[] Keys = [.. Defaults, .. OptIn];
@@ -140,6 +141,10 @@ internal sealed partial class SystemTuning(SystemTuning.ISystem system, string p
         ("diagnosticshub.standardcollector.service", "Diagnostics Hub Standard Collector"),
         ("WdiServiceHost", "Diagnostic Service Host"),
         ("WdiSystemHost", "Diagnostic System Host"),
+        ("SysMain", "SysMain (Superfetch)"),
+        ("WSearch", "Windows Search Indexer"),
+        ("DPS", "Diagnostic Policy Service"),
+        ("DusmSvc", "Data Usage"),
     ];
 
     /// <summary>Anti-cheats that can require Memory Integrity on, by their service, and who they are.</summary>
@@ -292,7 +297,7 @@ internal sealed partial class SystemTuning(SystemTuning.ISystem system, string p
         // Scheduling: Programs, or anything that gives the foreground a longer, boosted turn (takes effect immediately, no restart).
         var separation = system.Dword(PriorityControl, Separation);
         var programs = separation is not { } v || ForegroundFirst(v);
-        if (!programs || saved.Kept.ContainsKey(SchedulingKey))
+        if ((!system.SupportsDeepPlaybook && !programs) || saved.Kept.ContainsKey(SchedulingKey))
             items.Add(new(SchedulingKey, "Windows' scheduling for programs", programs ? "The game in front gets the longer turn on the processor." : "Set to favor background work, so the game in front gets no longer turn than anything behind it.",
                 programs, saved.Kept.ContainsKey(SchedulingKey), off.Contains(SchedulingKey), false, false, null, NeedsRestart: false));
 
@@ -509,7 +514,7 @@ internal sealed partial class SystemTuning(SystemTuning.ISystem system, string p
     internal async Task<string?> ApplyPlaybookAsync()
     {
         if (!_gate.Wait(0)) return Busy;
-        try { return Logged(await ApplyNowAsync(null, includeServices: true).ConfigureAwait(false)); }
+        try { return Logged(await ApplyNowAsync(null, includePlaybookExtras: true).ConfigureAwait(false)); }
         finally { _gate.Release(); }
     }
 
@@ -527,7 +532,7 @@ internal sealed partial class SystemTuning(SystemTuning.ISystem system, string p
         return said;
     }
 
-    private async Task<string?> ApplyNowAsync(IReadOnlyCollection<string>? only, bool includeServices = false)
+    private async Task<string?> ApplyNowAsync(IReadOnlyCollection<string>? only, bool includePlaybookExtras = false)
     {
         if (only is not null && only.Any(k => !Keys.Contains(k))) return "Exo doesn't know that setting.";
         var saved = Settled();
@@ -539,7 +544,7 @@ internal sealed partial class SystemTuning(SystemTuning.ISystem system, string p
             if (!Save(saved)) return "Exo couldn't save your choice, so nothing changed.";
         }
         var state = StateOf(saved);
-        var asked = state.Items.Where(i => !i.On && (only?.Contains(i.Key) ?? ((!i.OptIn || (includeServices && i.Key == ServicesKey)) && !i.Off && !saved.Off.Contains(i.Key)))).ToList();
+        var asked = state.Items.Where(i => !i.On && (only?.Contains(i.Key) ?? ((!i.OptIn || (includePlaybookExtras && (i.Key == ServicesKey || i.Key == IntegrityKey))) && !i.Off && !saved.Off.Contains(i.Key)))).ToList();
         if (asked.FirstOrDefault(i => i.Blocked is not null) is { } held && only is not null) return held.Blocked;
         var wanted = asked.Where(i => i.Blocked is null).Select(i => i.Key).ToList();
         if (wanted.Count == 0) return null;
@@ -547,7 +552,7 @@ internal sealed partial class SystemTuning(SystemTuning.ISystem system, string p
         var lines = new List<string>();
         var kept = new Dictionary<string, Was>(saved.Kept);
         var said = new List<string>();
-        string? clockWas = null, clockAfter = null;
+        string? clockWas = null, clockAfter = null, bcdWas = null, bcdAfter = null, mmWas = null, mmAfter = null;
         List<string> tasksAttempted = [];
         List<uint> winFeaturesAttempted = [];
         foreach (var key in wanted)
@@ -705,6 +710,16 @@ internal sealed partial class SystemTuning(SystemTuning.ISystem system, string p
                 case BackgroundAppsKey:
                     PrepareDeepNonAdminBackup(key, kept);
                     break;
+                case BootLatencyKey:
+                    bcdWas = system.Answer();
+                    bcdAfter = system.Answer();
+                    lines.AddRange(BootLatencyLines(bcdWas, bcdAfter));
+                    break;
+                case MemCompressionKey:
+                    mmWas = system.Answer();
+                    mmAfter = system.Answer();
+                    lines.Add(MemCompressionDisableLine(mmWas, mmAfter));
+                    break;
                 default:
                     if (IsDeepPlaybookKey(key))
                         PrepareDeepKey(key, kept, lines, out _);
@@ -721,6 +736,11 @@ internal sealed partial class SystemTuning(SystemTuning.ISystem system, string p
 
         if (lines.Count > 0)
         {
+            if (includePlaybookExtras)
+            {
+                lines.Add($"{Tool("ipconfig.exe")} /flushdns");
+                lines.Add(StandbyPurger.ElevatedPurgeLine());
+            }
             // A restore point in the same step, first (one Windows keeps from the last day stands for it). Exo's own record is the
             // way back for each item, so a PC with System Restore off still gets the change, and is told there's no point.
             var point = system.PointStanding ? null : system.Answer();
@@ -728,6 +748,8 @@ internal sealed partial class SystemTuning(SystemTuning.ISystem system, string p
             if (!await system.Admin(steps).ConfigureAwait(false))
             {
                 if (clockWas is not null) { system.ReadAnswer(clockWas); system.ReadAnswer(clockAfter!); }
+                if (bcdWas is not null) { system.ReadAnswer(bcdWas); system.ReadAnswer(bcdAfter!); }
+                if (mmWas is not null) { system.ReadAnswer(mmWas); system.ReadAnswer(mmAfter!); }
                 if (point is not null) system.ReadAnswer(point);
                 Save(prior);
                 return "Windows' permission was declined, so nothing changed.";
@@ -877,6 +899,35 @@ internal sealed partial class SystemTuning(SystemTuning.ISystem system, string p
                     after = Drop(after, prior, key);
                     said.Add("Windows didn't turn Memory Integrity off.");
                     break;
+                case BootLatencyKey:
+                {
+                    if (SettleBootLatency(system.ReadAnswer(bcdWas!), system.ReadAnswer(bcdAfter!)) is { } bootPrior)
+                    {
+                        var nextKept = new Dictionary<string, Was>(after.Kept) { [BootLatencyKey] = new Was(Strings: bootPrior) };
+                        var nextChanged = new Dictionary<string, DateTimeOffset>(after.Changed) { [BootLatencyKey] = now() };
+                        after = after with { Kept = nextKept, Changed = nextChanged };
+                    }
+                    else
+                    {
+                        after = Drop(after, prior, key);
+                        said.Add("Windows didn't apply boot latency settings.");
+                    }
+                    break;
+                }
+                case MemCompressionKey:
+                {
+                    if (SettleMemCompression(system.ReadAnswer(mmWas!), system.ReadAnswer(mmAfter!)) is { } mmRecord)
+                    {
+                        var nextKept = new Dictionary<string, Was>(after.Kept) { [MemCompressionKey] = new Was(Strings: mmRecord) };
+                        after = after with { Kept = nextKept };
+                    }
+                    else
+                    {
+                        after = Drop(after, prior, key);
+                        said.Add("Windows didn't disable memory compression.");
+                    }
+                    break;
+                }
                 default:
                     if (IsDeepPlaybookKey(key) && !IsNonAdminKey(key))
                         VerifyDeepApplied(key, ref after, prior, said);
@@ -959,36 +1010,59 @@ internal sealed partial class SystemTuning(SystemTuning.ISystem system, string p
             }
             if (TryTurnOffDeepNonAdmin(key, was, saved) is { } deepNonAdminResult) return deepNonAdminResult;
             if (key == GamingUxKey || key == BackgroundAppsKey) return null;
-            if (Revert(key, was, system.SelfExePath()) is not { } lines) return "Exo's record of this setting couldn't be read, so nothing changed.";
-            // The timer's BCD value can't be read without administrator rights: the same step reads it back after setting it.
-            var check = key == TimerKey ? system.Answer() : null;
-            if (check is not null) lines = [.. lines, TimerRead(check)];
-            if (!await system.Admin(lines).ConfigureAwait(false))
+            if (key == MemCompressionKey)
             {
-                if (check is not null) system.ReadAnswer(check);
-                return "Windows' permission was declined, so nothing changed.";
+                if (was.Strings is not [var mmTok] || (mmTok != "was=true" && mmTok != "was=false"))
+                    return "Exo's record of this setting couldn't be read, so nothing changed.";
+                if (mmTok == "was=true")
+                {
+                    var mmCheck = system.Answer();
+                    if (!await system.Admin([MemCompressionEnableLine(mmCheck)]).ConfigureAwait(false))
+                    {
+                        system.ReadAnswer(mmCheck);
+                        return "Windows' permission was declined, so nothing changed.";
+                    }
+                    if (!string.Equals(system.ReadAnswer(mmCheck)?.Trim(), "True", StringComparison.OrdinalIgnoreCase))
+                        return "Windows didn't put it back. Try again.";
+                }
+                var keptMm = new Dictionary<string, Was>(saved.Kept);
+                keptMm.Remove(key);
+                saved = saved with { Kept = keptMm };
             }
-            var back = key switch
+            else
             {
-                SchedulingKey => system.Dword(PriorityControl, Separation) == was.Value,
-                PagefileKey => SameStrings(system.Strings(MemoryManagement, PagingFiles), was.Strings),
-                CacheKey => system.Dword(MemoryManagement, LargeSystemCache) == was.Value,
-                CaptureServiceKey => was.Services is [var cs] && system.Service(cs.Name) is { } nowCs && nowCs.Start == cs.Start,
-                VrrLfcKey => VerifyVrrLfcReverted(was),
-                TasksKey => VerifyTasksReverted(was),
-                WinFeaturesKey => VerifyWinFeaturesReverted(was),
-                OsOverheadKey => VerifyOsOverheadReverted(was),
-                ServicesKey => was.Services!.All(s => system.Service(s.Name) is { } now && now.Start == s.Start && now.Delayed == s.Delayed),
-                IntegrityKey => system.Dword(Hvci, "Enabled") == was.Value,
-                _ when IsDeepPlaybookKey(key) => VerifyDeepReverted(key, was),
-                _ => Forced(system.ReadAnswer(check!)) == true,
-            };
-            if (!back) return "Windows didn't put it back. Try again.";
-            var kept = new Dictionary<string, Was>(saved.Kept);
-            kept.Remove(key);
-            var changed = new Dictionary<string, DateTimeOffset>(saved.Changed);
-            if (key is not (SchedulingKey or CaptureServiceKey or TasksKey)) changed[key] = now();
-            saved = saved with { Kept = kept, Changed = changed };
+                if (Revert(key, was, system.SelfExePath()) is not { } lines) return "Exo's record of this setting couldn't be read, so nothing changed.";
+                // The timer's BCD value can't be read without administrator rights: the same step reads it back after setting it.
+                var check = key is TimerKey or BootLatencyKey ? system.Answer() : null;
+                if (check is not null) lines = [.. lines, TimerRead(check)];
+                if (!await system.Admin(lines).ConfigureAwait(false))
+                {
+                    if (check is not null) system.ReadAnswer(check);
+                    return "Windows' permission was declined, so nothing changed.";
+                }
+                var back = key switch
+                {
+                    SchedulingKey => system.Dword(PriorityControl, Separation) == was.Value,
+                    PagefileKey => SameStrings(system.Strings(MemoryManagement, PagingFiles), was.Strings),
+                    CacheKey => system.Dword(MemoryManagement, LargeSystemCache) == was.Value,
+                    CaptureServiceKey => was.Services is [var cs] && system.Service(cs.Name) is { } nowCs && nowCs.Start == cs.Start,
+                    VrrLfcKey => VerifyVrrLfcReverted(was),
+                    TasksKey => VerifyTasksReverted(was),
+                    WinFeaturesKey => VerifyWinFeaturesReverted(was),
+                    OsOverheadKey => VerifyOsOverheadReverted(was),
+                    BootLatencyKey => system.ReadAnswer(check!)?.Contains(ReadOk, StringComparison.Ordinal) == true,
+                    ServicesKey => was.Services!.All(s => system.Service(s.Name) is { } now && now.Start == s.Start && now.Delayed == s.Delayed),
+                    IntegrityKey => system.Dword(Hvci, "Enabled") == was.Value,
+                    _ when IsDeepPlaybookKey(key) => VerifyDeepReverted(key, was),
+                    _ => Forced(system.ReadAnswer(check!)) == true,
+                };
+                if (!back) return "Windows didn't put it back. Try again.";
+                var kept = new Dictionary<string, Was>(saved.Kept);
+                kept.Remove(key);
+                var changed = new Dictionary<string, DateTimeOffset>(saved.Changed);
+                if (key is not (SchedulingKey or CaptureServiceKey or TasksKey)) changed[key] = now();
+                saved = saved with { Kept = kept, Changed = changed };
+            }
         }
         else if (OptIn.Contains(key)) return "Exo didn't change this, so there's nothing to put back.";
         if ((Defaults.Contains(key) || key == ServicesKey) && !saved.Off.Contains(key)) saved = saved with { Off = [.. saved.Off, key] };
@@ -1280,6 +1354,9 @@ internal sealed partial class SystemTuning(SystemTuning.ISystem system, string p
 
     [GeneratedRegex(@"^[A-Za-z0-9 _.-]+$", RegexOptions.CultureInvariant)]
     internal static partial Regex SafeSzPattern();
+
+    [GeneratedRegex(@"^[A-Za-z0-9_.-]+$", RegexOptions.CultureInvariant)]
+    internal static partial Regex SafeBcdTokenPattern();
 
     private static string? Said(List<string> said) => said.Count == 0 ? null : string.Join(" ", said);
 

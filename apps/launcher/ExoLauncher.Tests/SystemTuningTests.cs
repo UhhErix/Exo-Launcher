@@ -89,6 +89,11 @@ public sealed class SystemTuningTests : IDisposable
         public long TotalMemoryKb() => TotalMemKb;
         public bool SupportsDeepPlaybook { get; set; }
         public int FthFlushedCount { get; private set; }
+        public int DnsFlushedCount { get; private set; }
+        public int StandbyPurgedCount { get; private set; }
+        public Dictionary<string, string> BcdFlags { get; } = new(StringComparer.OrdinalIgnoreCase);
+        public bool MemoryCompressionOn { get; set; } = true;
+        public bool MmRefuses { get; set; }
         public Dictionary<(string, string), string> StringValues { get; } = new();
         public string? StringValue(string key, string name) => StringValues.TryGetValue((key, name), out var v) ? v : null;
         public Dictionary<(string, string), string> UserStrings { get; } = new();
@@ -120,24 +125,92 @@ public sealed class SystemTuningTests : IDisposable
         public bool? IntegrityRunning() => Running;
         public DateTimeOffset Boot() => BootAt;
 
+        private static string? DecodeEncodedPs(string line)
+        {
+            const string marker = " -EncodedCommand ";
+            var at = line.IndexOf(marker, StringComparison.OrdinalIgnoreCase);
+            if (at < 0) return null;
+            var token = line[(at + marker.Length)..].Trim();
+            var space = token.IndexOf(' ');
+            if (space > 0) token = token[..space];
+            return System.Text.Encoding.Unicode.GetString(Convert.FromBase64String(token));
+        }
+
         public Task<bool> Admin(IReadOnlyList<string> lines)
         {
             Runs.Add(lines);
             if (!Accept) return Task.FromResult(false);
+            var matchedPaths = new HashSet<string>(StringComparer.Ordinal);
             foreach (var line in lines)
             {
                 var path = _issued.FirstOrDefault(p => line.Contains($"\"{p}\"", StringComparison.Ordinal));
+                if (path is not null) matchedPaths.Add(path);
                 if (line.Contains("/enum {current}", StringComparison.Ordinal))
-                    _answers[path!] = BcdFails ? "" : (Clock ? "useplatformclock        Yes\r\n" : "") + "identifier              {current}\r\n" + ReadOk + "\r\n";
+                {
+                    var sb = new System.Text.StringBuilder();
+                    if (!BcdFails)
+                    {
+                        if (Clock) sb.AppendLine("useplatformclock        Yes");
+                        foreach (var kv in BcdFlags)
+                            sb.AppendLine($"{kv.Key}        {kv.Value}");
+                        sb.AppendLine("identifier              {current}");
+                        sb.AppendLine(ReadOk);
+                    }
+                    _answers[path!] = sb.ToString();
+                }
                 else if (line.Contains("/deletevalue {current} useplatformclock", StringComparison.Ordinal))
                 {
                     // Behind findstr: only when the read before found the value.
                     if (_answers.GetValueOrDefault(path!)?.Contains("useplatformclock", StringComparison.Ordinal) == true && !BcdRefuses) Clock = false;
                 }
                 else if (line.Contains("/set {current} useplatformclock true", StringComparison.Ordinal)) { if (!BcdRefuses) Clock = true; }
+                else if (line.Contains("bcdedit.exe", StringComparison.OrdinalIgnoreCase) && line.Contains("/set {current} ", StringComparison.OrdinalIgnoreCase))
+                {
+                    var marker = "/set {current} ";
+                    var parts = line[(line.IndexOf(marker, StringComparison.OrdinalIgnoreCase) + marker.Length)..].Trim().Split(' ', 2, StringSplitOptions.RemoveEmptyEntries);
+                    if (parts.Length == 2 && !BcdRefuses) BcdFlags[parts[0]] = parts[1];
+                }
+                else if (line.Contains("bcdedit.exe", StringComparison.OrdinalIgnoreCase) && line.Contains("/deletevalue {current} ", StringComparison.OrdinalIgnoreCase))
+                {
+                    var marker = "/deletevalue {current} ";
+                    var flag = line[(line.IndexOf(marker, StringComparison.OrdinalIgnoreCase) + marker.Length)..].Trim().Split(' ', 2)[0];
+                    if (!BcdRefuses) BcdFlags.Remove(flag);
+                }
+                else if (line.Contains("ipconfig.exe", StringComparison.OrdinalIgnoreCase) && line.Contains("/flushdns", StringComparison.OrdinalIgnoreCase))
+                {
+                    DnsFlushedCount++;
+                }
+                else if (DecodeEncodedPs(line) is { } ps)
+                {
+                    if (ps.Contains("Disable-MMAgent", StringComparison.Ordinal))
+                    {
+                        var psPaths = _issued.Where(p => ps.Contains($"'{p.Replace("'", "''")}'", StringComparison.Ordinal) || ps.Contains(p, StringComparison.Ordinal)).ToList();
+                        foreach (var p in psPaths) matchedPaths.Add(p);
+                        if (psPaths.Count == 2)
+                        {
+                            _answers[psPaths[0]] = MemoryCompressionOn ? "True" : "False";
+                            if (!MmRefuses) MemoryCompressionOn = false;
+                            _answers[psPaths[1]] = MemoryCompressionOn ? "True" : "False";
+                        }
+                    }
+                    else if (ps.Contains("Enable-MMAgent", StringComparison.Ordinal))
+                    {
+                        var psPaths = _issued.Where(p => ps.Contains($"'{p.Replace("'", "''")}'", StringComparison.Ordinal) || ps.Contains(p, StringComparison.Ordinal)).ToList();
+                        foreach (var p in psPaths) matchedPaths.Add(p);
+                        if (psPaths.Count == 1)
+                        {
+                            if (!MmRefuses) MemoryCompressionOn = true;
+                            _answers[psPaths[0]] = MemoryCompressionOn ? "True" : "False";
+                        }
+                    }
+                    else if (ps.Contains("MemoryPurgeStandbyList", StringComparison.Ordinal) || ps.Contains("ExoStandbyPurge", StringComparison.Ordinal))
+                    {
+                        StandbyPurgedCount++;
+                    }
+                }
             }
             // The restore point's answer: the one fresh path no line names (its step is encoded).
-            foreach (var fresh in _issued.Where(p => _seen.Add(p) && !lines.Any(l => l.Contains($"\"{p}\"", StringComparison.Ordinal))))
+            foreach (var fresh in _issued.Where(p => _seen.Add(p) && !matchedPaths.Contains(p)))
                 _answers[fresh] = PointWord;
             OnRun?.Invoke(lines);
             if (Closes) throw new OperationCanceledException("Exo closed");
@@ -563,7 +636,7 @@ public sealed class SystemTuningTests : IDisposable
         Assert.Null(Revert(PagefileKey, new Was(Strings: ["%TEMP%\\x"])));
         Assert.NotNull(Revert(PagefileKey, new Was(Strings: [@"C:\pagefile.sys 16384 32768", @"D:\pagefile.sys 0 0"])));
         Assert.NotNull(Revert(PagefileKey, new Was(Strings: [""])));
-        Assert.All(Trimmed, s => Assert.DoesNotContain(s.Name, new[] { "WinDefend", "Audiosrv", "BFE", "XblAuthManager", "GamingServices", "CaptureService", "GraphicsPerfSvc", "wuauserv", "WSearch", "vgc", "vgk", "BEService", "EasyAntiCheat", "FACEIT", "FACEITService" }));
+        Assert.All(Trimmed, s => Assert.DoesNotContain(s.Name, new[] { "WinDefend", "Audiosrv", "BFE", "XblAuthManager", "GamingServices", "CaptureService", "GraphicsPerfSvc", "wuauserv", "vgc", "vgk", "BEService", "EasyAntiCheat", "FACEIT", "FACEITService" }));
     }
 
     [Theory]
@@ -992,7 +1065,7 @@ public sealed class SystemTuningTests : IDisposable
     }
 
     [Fact]
-    public async Task Apply_playbook_batches_defaults_and_services_in_one_uac_prompt_and_never_touches_hvci()
+    public async Task Apply_playbook_batches_defaults_and_services_and_unblocked_hvci_in_one_uac_prompt_and_respects_anticheat()
     {
         _system.Tweaked();
         _system.SupportsScheduledTasks = true;
@@ -1000,6 +1073,8 @@ public sealed class SystemTuningTests : IDisposable
         _system.SupportsOsOverhead = true;
         _system.Tasks[TrimmedTasks[0].Path] = true;
         _system.Services["DiagTrack"] = (2, false);
+        _system.Services["SysMain"] = (2, false);
+        _system.Keys.Add(@"SYSTEM\CurrentControlSet\Services\vgk");
         _system.Dwords[(Hvci, "Enabled")] = 1;
         _system.OnRun = _system.Take;
 
@@ -1008,14 +1083,24 @@ public sealed class SystemTuningTests : IDisposable
         var batch = _system.Runs[0];
         Assert.Contains(batch, l => l.Contains("powershell.exe", StringComparison.OrdinalIgnoreCase));
         Assert.Contains(batch, l => l.Contains("sc.exe config DiagTrack start= demand", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(batch, l => l.Contains("sc.exe config SysMain start= demand", StringComparison.OrdinalIgnoreCase));
         Assert.Contains(batch, l => l.Contains("schtasks.exe", StringComparison.OrdinalIgnoreCase));
         Assert.Contains(batch, l => l.Contains(WindowsFeatures.Flag, StringComparison.Ordinal));
         Assert.Contains(batch, l => l.Contains("PowerThrottlingOff", StringComparison.Ordinal));
+        Assert.Contains(batch, l => l.Contains("/flushdns", StringComparison.OrdinalIgnoreCase));
+        Assert.Equal(1, _system.DnsFlushedCount);
+        Assert.Equal(1, _system.StandbyPurgedCount);
         Assert.DoesNotContain(batch, l => l.Contains("HypervisorEnforcedCodeIntegrity", StringComparison.Ordinal));
 
         var items = Make().Read().Items;
         Assert.True(items.Single(i => i.Key == ServicesKey).On);
         Assert.False(items.Single(i => i.Key == IntegrityKey).On);
+        Assert.NotNull(items.Single(i => i.Key == IntegrityKey).Blocked);
+
+        _system.Keys.Remove(@"SYSTEM\CurrentControlSet\Services\vgk");
+        _system.Dwords[(Hvci, "Enabled")] = 1;
+        Assert.Null(await Make().ApplyPlaybookAsync());
+        Assert.Equal(0, _system.Dwords[(Hvci, "Enabled")]);
     }
 
     [Fact]
@@ -1194,36 +1279,55 @@ public sealed class SystemTuningTests : IDisposable
     }
 
     [Fact]
-    public async Task Deep_opt_in_overrides_never_run_in_playbook_and_each_applies_and_reverts_cleanly()
+    public async Task All_deep_playbook_tweaks_run_together_in_playbook_and_each_reverts_cleanly()
     {
         var nvidiaAdapter = $@"{DisplayClassRoot}\0000";
+        var amdAdapter = $@"{DisplayClassRoot}\0001";
         _system.SupportsDeepPlaybook = true;
         _system.NvidiaKeys.Add(nvidiaAdapter);
-        _system.TotalMemKb = 67_108_864L;
+        _system.AmdKeys.Add(amdAdapter);
+        _system.TotalMemKb = 33_554_432L;
+        _system.MemoryCompressionOn = true;
         _system.Dwords[(PowerControlKey, HibernateEnabledValue)] = 1;
         _system.Dwords[(SessionPowerKey, HiberbootEnabledValue)] = 1;
         _system.Dwords[(ControlKey, SvcHostSplitValue)] = 3_670_016;
+        _system.BcdFlags["tscsyncpolicy"] = "Default";
         _system.OnRun = _system.Take;
 
         Assert.Null(await Make().ApplyPlaybookAsync());
-        Assert.False(_system.Dwords.ContainsKey((DwmKey, OverlayTestModeValue)));
-        Assert.Equal(1, _system.Dwords[(PowerControlKey, HibernateEnabledValue)]);
-        Assert.False(_system.UserDwords.ContainsKey((BackgroundAppsSpecs[0].Key, BackgroundAppsSpecs[0].Name)));
-        Assert.Equal(3_670_016, _system.Dwords[(ControlKey, SvcHostSplitValue)]);
-        Assert.False(_system.Dwords.ContainsKey((nvidiaAdapter, "DisableDynamicPstate")));
-        Assert.False(_system.Dwords.ContainsKey((MemoryManagement, FeatureOverrideValue)));
+        Assert.Single(_system.Runs);
+        Assert.Equal(5, _system.Dwords[(DwmKey, OverlayTestModeValue)]);
+        Assert.Equal(0, _system.Dwords[(DwmKey, OverlayMinFpsValue)]);
+        Assert.Equal(0, _system.Dwords[(PowerControlKey, HibernateEnabledValue)]);
+        Assert.Equal(1, _system.UserDwords[(BackgroundAppsSpecs[0].Key, BackgroundAppsSpecs[0].Name)]);
+        Assert.Equal(33_554_432, _system.Dwords[(ControlKey, SvcHostSplitValue)]);
+        Assert.Equal(1, _system.Dwords[(nvidiaAdapter, "DisableDynamicPstate")]);
+        Assert.Equal(1, _system.Dwords[(nvidiaAdapter, "DisableASyncPstates")]);
+        Assert.Equal(1, _system.Dwords[(nvidiaAdapter, RmGpsPerCpuDpcValue)]);
+        Assert.Equal(1, _system.Dwords[(GraphicsDriversKey, RmGpsPerCpuDpcValue)]);
+        Assert.Equal(1, _system.Dwords[(amdAdapter, "PP_SclkDeepSleepDisable")]);
+        Assert.Equal(3, _system.Dwords[(MemoryManagement, FeatureOverrideValue)]);
+        Assert.Equal(1, _system.Dwords[(MemoryManagement, DisablePagingExecValue)]);
+        Assert.Equal(2, _system.Dwords[(FileSystemKey, NtfsMemoryUsageValue)]);
+        Assert.Equal("True", _system.StringValues[(MmcssGamesKey, "Latency Sensitive")]);
+        Assert.Equal("0", _system.UserStrings[(@"Control Panel\Keyboard", "KeyboardDelay")]);
+        Assert.Equal("yes", _system.BcdFlags["disabledynamictick"], ignoreCase: true);
+        Assert.Equal("enhanced", _system.BcdFlags["tscsyncpolicy"], ignoreCase: true);
+        Assert.Equal("enable", _system.BcdFlags["x2apicpolicy"], ignoreCase: true);
+        Assert.False(_system.MemoryCompressionOn);
 
-        string[] deepOptIns = [MpoOffKey, HibernateOffKey, BackgroundAppsKey, SvcHostSplitKey, GpuPstateKey, CpuMitigationsKey];
-        foreach (var optKey in deepOptIns)
+        string[] deepKeys =
+        [
+            MpoOffKey, HibernateOffKey, BackgroundAppsKey, SvcHostSplitKey,
+            GpuPstateKey, CpuMitigationsKey, BootLatencyKey, MemCompressionKey,
+        ];
+        foreach (var deepKey in deepKeys)
         {
-            var before = Make().Read().Items.Single(i => i.Key == optKey);
-            Assert.True(before.OptIn);
-            Assert.False(before.On);
-            Assert.Null(await Make().ApplyAsync([optKey]));
-            var after = Make().Read().Items.Single(i => i.Key == optKey);
-            Assert.True(after.On && after.CanUndo);
-            Assert.Null(await Make().TurnOffAsync(optKey));
-            var reverted = Make().Read().Items.Single(i => i.Key == optKey);
+            var applied = Make().Read().Items.Single(i => i.Key == deepKey);
+            Assert.False(applied.OptIn);
+            Assert.True(applied.On && applied.CanUndo);
+            Assert.Null(await Make().TurnOffAsync(deepKey));
+            var reverted = Make().Read().Items.Single(i => i.Key == deepKey);
             Assert.False(reverted.On);
             Assert.False(reverted.CanUndo);
         }
@@ -1232,7 +1336,37 @@ public sealed class SystemTuningTests : IDisposable
         Assert.Equal(1, _system.Dwords[(SessionPowerKey, HiberbootEnabledValue)]);
         Assert.Equal(3_670_016, _system.Dwords[(ControlKey, SvcHostSplitValue)]);
         Assert.False(_system.Dwords.ContainsKey((DwmKey, OverlayTestModeValue)));
+        Assert.False(_system.Dwords.ContainsKey((DwmKey, OverlayMinFpsValue)));
         Assert.False(_system.Dwords.ContainsKey((nvidiaAdapter, "DisableDynamicPstate")));
+        Assert.False(_system.Dwords.ContainsKey((nvidiaAdapter, RmGpsPerCpuDpcValue)));
+        Assert.False(_system.Dwords.ContainsKey((GraphicsDriversKey, RmGpsPerCpuDpcValue)));
+        Assert.False(_system.Dwords.ContainsKey((amdAdapter, "PP_SclkDeepSleepDisable")));
         Assert.False(_system.Dwords.ContainsKey((MemoryManagement, FeatureOverrideValue)));
+        Assert.False(_system.BcdFlags.ContainsKey("disabledynamictick"));
+        Assert.Equal("Default", _system.BcdFlags["tscsyncpolicy"]);
+        Assert.False(_system.BcdFlags.ContainsKey("x2apicpolicy"));
+        Assert.True(_system.MemoryCompressionOn);
+
+        Assert.Null(Revert(BootLatencyKey, new Was(Strings: ["badflag=Yes"])));
+        Assert.Null(Revert(BootLatencyKey, new Was(Strings: ["disabledynamictick=bad val"])));
+        Assert.Null(Revert(GpuPstateKey, new Was(Strings: [@"SOFTWARE\Evil|DisableDynamicPstate=d:1"])));
+    }
+
+    [Fact]
+    public async Task Mem_compression_that_was_already_off_reverts_without_elevated_prompt()
+    {
+        _system.SupportsDeepPlaybook = true;
+        _system.TotalMemKb = 33_554_432L;
+        _system.MemoryCompressionOn = false;
+        _system.OnRun = _system.Take;
+
+        Assert.Null(await Make().ApplyAsync([MemCompressionKey]));
+        var runsAfterApply = _system.Runs.Count;
+        Assert.True(Make().Read().Items.Single(i => i.Key == MemCompressionKey).On);
+
+        Assert.Null(await Make().TurnOffAsync(MemCompressionKey));
+        Assert.Equal(runsAfterApply, _system.Runs.Count);
+        Assert.False(_system.MemoryCompressionOn);
+        Assert.False(Make().Read().Items.Single(i => i.Key == MemCompressionKey).On);
     }
 }

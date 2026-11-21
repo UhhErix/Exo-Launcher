@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Text;
 
 namespace ExoLauncher.Services;
 
@@ -16,10 +17,16 @@ internal sealed partial class SystemTuning
         BackgroundAppsKey = "backgroundApps",
         SvcHostSplitKey = "svcHostSplit",
         GpuPstateKey = "gpuPstate",
-        CpuMitigationsKey = "cpuMitigations";
+        CpuMitigationsKey = "cpuMitigations",
+        BootLatencyKey = "bootLatency",
+        MemCompressionKey = "memCompression";
 
     internal const string KernelSessionKey = @"SYSTEM\CurrentControlSet\Control\Session Manager\kernel",
         GlobalTimerValue = "GlobalTimerResolutionRequests",
+        DistributeTimersValue = "DistributeTimers",
+        CoalescingTimerValue = "CoalescingTimerInterval",
+        DisablePagingExecValue = "DisablePagingExecutive",
+        ClearPageFileValue = "ClearPageFileAtShutdown",
         MmcssKey = @"SOFTWARE\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile",
         MmcssGamesKey = @"SOFTWARE\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile\Tasks\Games",
         FthKey = @"SOFTWARE\Microsoft\FTH",
@@ -29,10 +36,13 @@ internal sealed partial class SystemTuning
         FileSystemKey = @"SYSTEM\CurrentControlSet\Control\FileSystem",
         LastAccessValue = "NtfsDisableLastAccessUpdate",
         ShortNamesValue = "NtfsDisable8dot3NameCreation",
+        NtfsMemoryUsageValue = "NtfsMemoryUsage",
         GraphicsDriversKey = @"SYSTEM\CurrentControlSet\Control\GraphicsDrivers",
         HwSchModeValue = "HwSchMode",
         DwmKey = @"SOFTWARE\Microsoft\Windows\Dwm",
         OverlayTestModeValue = "OverlayTestMode",
+        OverlayMinFpsValue = "OverlayMinFPS",
+        RmGpsPerCpuDpcValue = "RmGpsPsEnablePerCpuCoreDpc",
         PowerControlKey = @"SYSTEM\CurrentControlSet\Control\Power",
         HibernateEnabledValue = "HibernateEnabled",
         SessionPowerKey = @"SYSTEM\CurrentControlSet\Control\Session Manager\Power",
@@ -43,19 +53,34 @@ internal sealed partial class SystemTuning
         FeatureOverrideMaskValue = "FeatureSettingsOverrideMask",
         SwapEffectToken = "SwapEffectUpgradeEnable";
 
-    internal sealed record HklmSpec(string Key, string Name, int? Dword = null, string? Sz = null, bool DesktopOnly = false, bool AcceptLowTwoBitsBit0 = false);
+    internal sealed record HklmSpec(string Key, string Name, int? Dword = null, string? Sz = null, bool DesktopOnly = false, bool AcceptLowTwoBitsBit0 = false, long MinMemoryKb = 0);
 
     internal sealed record HkcuDwordSpec(string Key, string Name, int Target);
+
+    internal sealed record HkcuStringSpec(string Key, string Name, string Target);
+
+    internal static readonly (string Flag, string Target)[] BootLatencyFlags =
+    [
+        ("disabledynamictick", "Yes"),
+        ("tscsyncpolicy", "Enhanced"),
+        ("x2apicpolicy", "Enable"),
+    ];
 
     internal static readonly HklmSpec[] KernelLatencySpecs =
     [
         new(KernelSessionKey, GlobalTimerValue, Dword: 1, DesktopOnly: true),
+        new(KernelSessionKey, DistributeTimersValue, Dword: 1, DesktopOnly: true),
+        new(SessionPowerKey, CoalescingTimerValue, Dword: 0, DesktopOnly: true),
+        new(PriorityControl, Separation, Dword: 38),
         new(MmcssKey, "SystemResponsiveness", Dword: 10),
         new(MmcssGamesKey, "GPU Priority", Dword: 8),
         new(MmcssGamesKey, "Priority", Dword: 6),
         new(MmcssGamesKey, "Scheduling Category", Sz: "High"),
         new(MmcssGamesKey, "SFIO Priority", Sz: "High"),
+        new(MmcssGamesKey, "Latency Sensitive", Sz: "True"),
         new(FthKey, "Enabled", Dword: 0),
+        new(MemoryManagement, DisablePagingExecValue, Dword: 1, MinMemoryKb: 8_388_608L),
+        new(MemoryManagement, ClearPageFileValue, Dword: 0, MinMemoryKb: 8_388_608L),
     ];
 
     internal static readonly string[] UsbHubPowerValues =
@@ -85,6 +110,7 @@ internal sealed partial class SystemTuning
     [
         new(FileSystemKey, LastAccessValue, Dword: 1, AcceptLowTwoBitsBit0: true),
         new(FileSystemKey, ShortNamesValue, Dword: 1),
+        new(FileSystemKey, NtfsMemoryUsageValue, Dword: 2, MinMemoryKb: 8_388_608L),
     ];
 
     internal static readonly HklmSpec[] HagsSpecs =
@@ -95,6 +121,7 @@ internal sealed partial class SystemTuning
     internal static readonly HklmSpec[] MpoOffSpecs =
     [
         new(DwmKey, OverlayTestModeValue, Dword: 5),
+        new(DwmKey, OverlayMinFpsValue, Dword: 0),
     ];
 
     internal static readonly HklmSpec[] CpuMitigationsSpecs =
@@ -108,6 +135,13 @@ internal sealed partial class SystemTuning
         new(@"Software\Microsoft\Multimedia\Audio", "UserDuckingPreference", 3),
         new(@"System\GameConfigStore", "GameDVR_Enabled", 0),
         new(@"SOFTWARE\Microsoft\Windows\CurrentVersion\GameDVR", "AppCaptureEnabled", 0),
+    ];
+
+    internal static readonly HkcuStringSpec[] GamingUxStringSpecs =
+    [
+        new(@"Control Panel\Keyboard", "KeyboardDelay", "0"),
+        new(@"Control Panel\Keyboard", "KeyboardSpeed", "31"),
+        new(@"Control Panel\Desktop", "MenuShowDelay", "0"),
     ];
 
     internal static readonly HkcuDwordSpec GamingUxNvidiaTelemetrySpec =
@@ -128,18 +162,72 @@ internal sealed partial class SystemTuning
 
     internal static bool IsDeepPlaybookKey(string key) => key is KernelLatencyKey or UsbPowerKey or AiTelemetryKey
         or StorageFsKey or GamingUxKey or AmdGpuPowerKey or HagsKey or MpoOffKey or HibernateOffKey
-        or BackgroundAppsKey or SvcHostSplitKey or GpuPstateKey or CpuMitigationsKey;
+        or BackgroundAppsKey or SvcHostSplitKey or GpuPstateKey or CpuMitigationsKey or BootLatencyKey or MemCompressionKey;
 
     internal static bool IsNonAdminKey(string key) => key is VrrKey or MouseAccelKey or PrivacyKey or GamingUxKey or BackgroundAppsKey;
 
     internal static bool DoesNotNeedRestartOnApply(string key) =>
-        key is TimerKey or SchedulingKey or CaptureServiceKey or PrivacyKey or TasksKey or GamingUxKey or BackgroundAppsKey or VrrKey or MouseAccelKey;
+        key is TimerKey or SchedulingKey or CaptureServiceKey or PrivacyKey or TasksKey or GamingUxKey or BackgroundAppsKey or MemCompressionKey or VrrKey or MouseAccelKey;
 
     internal static string? TokenValue(string? data, string name) =>
         (data ?? "").Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
             .FirstOrDefault(part => part.StartsWith(name + "=", StringComparison.OrdinalIgnoreCase)) is { } match
             ? match[(name.Length + 1)..]
             : null;
+
+    internal static IReadOnlyList<string> BootLatencyLines(string wasPath, string afterPath) =>
+    [
+        TimerRead(wasPath),
+        .. BootLatencyFlags.Select(f => $"{Tool("bcdedit.exe")} /set {{current}} {f.Flag} {f.Target.ToLowerInvariant()}"),
+        TimerRead(afterPath),
+    ];
+
+    internal static string MemCompressionDisableLine(string wasPath, string afterPath)
+    {
+        var w = Quoted(wasPath).Replace("'", "''", StringComparison.Ordinal);
+        var a = Quoted(afterPath).Replace("'", "''", StringComparison.Ordinal);
+        var script = $"$c=(Get-MMAgent).MemoryCompression;[IO.File]::WriteAllText('{w}',$c.ToString());if($c){{Disable-MMAgent -MemoryCompression}};$a=(Get-MMAgent).MemoryCompression;[IO.File]::WriteAllText('{a}',$a.ToString())";
+        return $"{LeftoverScan.PowerShell} -NoProfile -NonInteractive -WindowStyle Hidden -EncodedCommand {Convert.ToBase64String(Encoding.Unicode.GetBytes(script))}";
+    }
+
+    internal static string MemCompressionEnableLine(string checkPath)
+    {
+        var c = Quoted(checkPath).Replace("'", "''", StringComparison.Ordinal);
+        var script = $"Enable-MMAgent -MemoryCompression;$a=(Get-MMAgent).MemoryCompression;[IO.File]::WriteAllText('{c}',$a.ToString())";
+        return $"{LeftoverScan.PowerShell} -NoProfile -NonInteractive -WindowStyle Hidden -EncodedCommand {Convert.ToBase64String(Encoding.Unicode.GetBytes(script))}";
+    }
+
+    private static string? ExtractBcdFlagValue(string bcdOutput, string flag)
+    {
+        foreach (var line in bcdOutput.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries))
+        {
+            var trimmed = line.Trim();
+            if (!trimmed.StartsWith(flag, StringComparison.OrdinalIgnoreCase)) continue;
+            var rest = trimmed[flag.Length..];
+            if (rest.Length == 0 || !char.IsWhiteSpace(rest[0])) continue;
+            return rest.Trim();
+        }
+        return null;
+    }
+
+    internal static string[]? SettleBootLatency(string? rawWas, string? rawAfter)
+    {
+        if (rawWas is null || rawAfter is null) return null;
+        if (!rawWas.Contains(ReadOk, StringComparison.Ordinal) || !rawAfter.Contains(ReadOk, StringComparison.Ordinal)) return null;
+        foreach (var (flag, target) in BootLatencyFlags)
+            if (!string.Equals(ExtractBcdFlagValue(rawAfter, flag), target, StringComparison.OrdinalIgnoreCase))
+                return null;
+        return BootLatencyFlags
+            .Select(f => $"{f.Flag}={(ExtractBcdFlagValue(rawWas, f.Flag) is { } prev && SafeBcdTokenPattern().IsMatch(prev) ? prev : "absent")}")
+            .ToArray();
+    }
+
+    internal static string[]? SettleMemCompression(string? rawWas, string? rawAfter)
+    {
+        if (rawWas is null || rawAfter is null) return null;
+        if (!string.Equals(rawAfter.Trim(), "False", StringComparison.OrdinalIgnoreCase)) return null;
+        return [string.Equals(rawWas.Trim(), "True", StringComparison.OrdinalIgnoreCase) ? "was=true" : "was=false"];
+    }
 
     private static bool SpecMatches(ISystem system, HklmSpec spec)
     {
@@ -151,20 +239,24 @@ internal sealed partial class SystemTuning
             : val == spec.Dword;
     }
 
-    private IReadOnlyList<HklmSpec> ActiveHklmSpecs(string key, bool laptop) => key switch
+    private IReadOnlyList<HklmSpec> ActiveHklmSpecs(string key, bool laptop)
     {
-        KernelLatencyKey => [.. KernelLatencySpecs.Where(s => !s.DesktopOnly || !laptop)],
-        UsbPowerKey => laptop ? [] : BuildUsbPowerSpecs(),
-        AiTelemetryKey => AiTelemetrySpecs,
-        StorageFsKey => StorageFsSpecs,
-        AmdGpuPowerKey => laptop ? [] : BuildAmdPowerSpecs(),
-        HagsKey => HagsSpecs,
-        MpoOffKey => MpoOffSpecs,
-        SvcHostSplitKey => BuildSvcHostSpecs(),
-        GpuPstateKey => laptop ? [] : BuildGpuPstateSpecs(),
-        CpuMitigationsKey => CpuMitigationsSpecs,
-        _ => [],
-    };
+        var memKb = system.TotalMemoryKb();
+        return key switch
+        {
+            KernelLatencyKey => [.. KernelLatencySpecs.Where(s => (!s.DesktopOnly || !laptop) && (s.MinMemoryKb == 0 || memKb >= s.MinMemoryKb))],
+            UsbPowerKey => laptop ? [] : BuildUsbPowerSpecs(),
+            AiTelemetryKey => AiTelemetrySpecs,
+            StorageFsKey => [.. StorageFsSpecs.Where(s => s.MinMemoryKb == 0 || memKb >= s.MinMemoryKb)],
+            AmdGpuPowerKey => laptop ? [] : BuildAmdPowerSpecs(),
+            HagsKey => HagsSpecs,
+            MpoOffKey => MpoOffSpecs,
+            SvcHostSplitKey => BuildSvcHostSpecs(memKb),
+            GpuPstateKey => laptop ? [] : BuildGpuPstateSpecs(),
+            CpuMitigationsKey => CpuMitigationsSpecs,
+            _ => [],
+        };
+    }
 
     private IReadOnlyList<HklmSpec> BuildUsbPowerSpecs()
     {
@@ -190,9 +282,8 @@ internal sealed partial class SystemTuning
         return list;
     }
 
-    private IReadOnlyList<HklmSpec> BuildSvcHostSpecs()
+    private static IReadOnlyList<HklmSpec> BuildSvcHostSpecs(long kb)
     {
-        var kb = system.TotalMemoryKb();
         if (kb < 4_194_304L) return [];
         var target = (int)Math.Clamp(kb, 4_194_304L, 268_435_456L);
         return [new(ControlKey, SvcHostSplitValue, Dword: target)];
@@ -201,13 +292,23 @@ internal sealed partial class SystemTuning
     private IReadOnlyList<HklmSpec> BuildGpuPstateSpecs()
     {
         var list = new List<HklmSpec>();
-        foreach (var k in system.NvidiaDisplayClassKeys().Where(x => NvidiaClassKeyPattern().IsMatch(x)))
+        var nvidiaKeys = system.NvidiaDisplayClassKeys().Where(x => NvidiaClassKeyPattern().IsMatch(x)).ToList();
+        foreach (var k in nvidiaKeys)
+        {
             list.Add(new(k, "DisableDynamicPstate", Dword: 1, DesktopOnly: true));
+            list.Add(new(k, "DisableASyncPstates", Dword: 1, DesktopOnly: true));
+            list.Add(new(k, RmGpsPerCpuDpcValue, Dword: 1, DesktopOnly: true));
+        }
+        if (nvidiaKeys.Count > 0)
+            list.Add(new(GraphicsDriversKey, RmGpsPerCpuDpcValue, Dword: 1, DesktopOnly: true));
         foreach (var k in system.AmdDisplayClassKeys().Where(x => NvidiaClassKeyPattern().IsMatch(x)))
         {
             list.Add(new(k, "DisablePowerGating", Dword: 1, DesktopOnly: true));
             list.Add(new(k, "PP_GPUPowerDownEnabled", Dword: 0, DesktopOnly: true));
             list.Add(new(k, "DisableDynamicPstate", Dword: 1, DesktopOnly: true));
+            list.Add(new(k, "DisableVCEPowerGating", Dword: 1, DesktopOnly: true));
+            list.Add(new(k, "DisableVceClockGating", Dword: 1, DesktopOnly: true));
+            list.Add(new(k, "PP_SclkDeepSleepDisable", Dword: 1, DesktopOnly: true));
         }
         return list;
     }
@@ -224,12 +325,14 @@ internal sealed partial class SystemTuning
     {
         if (!HasToken(system.UserDirectXSettings(), SwapEffectToken, "1")) return false;
         if (!ActiveGamingUxDwords().All(s => system.UserDword(s.Key, s.Name) == s.Target)) return false;
+        if (!GamingUxStringSpecs.All(s => string.Equals(system.UserString(s.Key, s.Name), s.Target, StringComparison.OrdinalIgnoreCase))) return false;
         return AccessibilityHotkeyKeys.All(k => AccessibilityHotkeyOff(system.UserString(k, "Flags")));
     }
 
     private void ReadDeepPlaybookItems(Saved saved, Func<string, bool> pending, Func<string, string, string> tell, List<Item> items)
     {
         var laptop = system.IsLaptop();
+        var memKb = system.TotalMemoryKb();
         var off = saved.Off;
 
         void AddHklmDefault(string key, string label, string onDetail, string offDetail, bool forceShow = true)
@@ -238,29 +341,18 @@ internal sealed partial class SystemTuning
             var kept = saved.Kept.ContainsKey(key);
             var isPend = pending(key);
             if ((specs.Count == 0 || !forceShow) && !kept && !isPend) return;
-            var allSet = specs.Count > 0 && specs.All(s => SpecMatches(system, s));
-            items.Add(new(key, label, tell(key, allSet ? onDetail : offDetail),
-                allSet || (isPend && kept), kept, off.Contains(key), false, isPend));
-        }
-
-        void AddHklmOptIn(string key, string label, string onDetail, string offDetail)
-        {
-            var specs = ActiveHklmSpecs(key, laptop);
-            var kept = saved.Kept.ContainsKey(key);
-            var isPend = pending(key);
-            if (specs.Count == 0 && !kept && !isPend) return;
             var allSet = key == SvcHostSplitKey
                 ? (specs.Count == 1 && system.Dword(ControlKey, SvcHostSplitValue) is { } cur && cur >= specs[0].Dword!.Value)
                 : specs.Count > 0 && specs.All(s => SpecMatches(system, s));
             items.Add(new(key, label, tell(key, allSet ? onDetail : offDetail),
-                allSet || (isPend && kept), kept, false, true, isPend));
+                allSet || (isPend && kept), kept, off.Contains(key), false, isPend));
         }
 
         AddHklmDefault(
             KernelLatencyKey,
-            "Kernel timer, MMCSS & FTH latency tuning",
-            laptop ? "MMCSS game scheduling priority high and Fault Tolerant Heap off." : "Global timer resolution requests on, MMCSS game priority high, and FTH off.",
-            laptop ? "Sets MMCSS game scheduling priority high and turns off Fault Tolerant Heap. Takes a restart." : "Enables global timer resolution requests for games, boosts MMCSS game priority, and turns off FTH. Takes a restart.");
+            "Kernel timer, MMCSS, scheduling & FTH latency tuning",
+            laptop ? "Win32PrioritySeparation 0x26, MMCSS game priority high, and FTH off." : "Global timer resolution, DistributeTimers, Win32PrioritySeparation 0x26, MMCSS, and FTH off.",
+            laptop ? "Tunes thread scheduling (0x26), MMCSS game priority, kernel paging, and FTH. Takes a restart." : "Enables global timer resolution, DistributeTimers, thread scheduling (0x26), MMCSS, kernel paging, and FTH off. Takes a restart.");
 
         if (!laptop || saved.Kept.ContainsKey(UsbPowerKey) || pending(UsbPowerKey))
             AddHklmDefault(
@@ -278,18 +370,18 @@ internal sealed partial class SystemTuning
 
         AddHklmDefault(
             StorageFsKey,
-            "NTFS last-access & 8.3 short names off",
-            "NTFS last-access timestamp writes and legacy 8.3 filename generation are disabled.",
-            "Turns off NTFS last-access directory writes and legacy 8.3 short-name generation to trim disk overhead. Takes a restart.");
+            "NTFS last-access, 8.3 short names & memory usage",
+            "NTFS last-access writes and 8.3 short names are disabled with raised NTFS pool.",
+            "Turns off NTFS last-access directory writes and 8.3 short names, and raises NTFS memory pool on 8 GB+ PCs. Takes a restart.");
 
         var uxOn = IsGamingUxApplied();
         var uxKept = saved.Kept.ContainsKey(GamingUxKey);
         items.Add(new(
             GamingUxKey,
-            "Windowed optimizations, Game DVR & hotkey traps off",
+            "Windowed optimizations, Game DVR, input delay & hotkeys",
             uxOn
-                ? "Windowed swap-effect upgrades on; Game DVR, voice call ducking, and Sticky/Filter/Toggle hotkey traps off (no restart needed)."
-                : "Turns on DirectX windowed game optimizations and disables background Game DVR, call volume ducking, and Shift hotkey popups (no admin prompt).",
+                ? "Windowed swap-effect upgrades and zero keyboard/menu delay on; Game DVR, ducking, and hotkey traps off (no restart needed)."
+                : "Enables DirectX windowed optimizations and zero keyboard/menu delay; disables Game DVR, voice ducking, and Shift hotkey traps (no admin prompt).",
             uxOn, uxKept, off.Contains(GamingUxKey), false, false, null, NeedsRestart: false));
 
         if (!laptop && BuildAmdPowerSpecs().Count > 0 || saved.Kept.ContainsKey(AmdGpuPowerKey) || pending(AmdGpuPowerKey))
@@ -301,19 +393,18 @@ internal sealed partial class SystemTuning
                 forceShow: !laptop && BuildAmdPowerSpecs().Count > 0);
 
         var hagsVal = system.Dword(GraphicsDriversKey, HwSchModeValue);
-        var hagsShow = hagsVal == 1 || saved.Kept.ContainsKey(HagsKey) || pending(HagsKey);
-        if (hagsShow)
+        if (hagsVal == 1 || saved.Kept.ContainsKey(HagsKey) || pending(HagsKey))
             AddHklmDefault(
                 HagsKey,
                 "Hardware-accelerated GPU scheduling",
                 "Hardware-accelerated GPU scheduling (HAGS) is enabled.",
                 "Hardware-accelerated GPU scheduling was turned off; restores it on for lower frame presentation overhead. Takes a restart.");
 
-        AddHklmOptIn(
+        AddHklmDefault(
             MpoOffKey,
             "Multiplane Overlay (MPO) off",
             "Desktop Window Manager Multiplane Overlay is disabled.",
-            "Fixes flicker or micro-stutter on mixed-refresh multi-monitor setups; keep off unless you hit stutter. Takes a restart.");
+            "Disables DWM Multiplane Overlay to prevent mixed-refresh frame pacing stutter and black screens. Takes a restart.");
 
         var hibKept = saved.Kept.ContainsKey(HibernateOffKey);
         var hibPend = pending(HibernateOffKey);
@@ -325,7 +416,7 @@ internal sealed partial class SystemTuning
                 HibernateOffKey,
                 "Hibernation & Fast Startup off",
                 tell(HibernateOffKey, hibOff ? "Hibernation and Fast Startup are off for clean kernel boots and free drive space." : "Reclaims hiberfil.sys drive space and ensures clean kernel boots on desktop PCs. Takes a restart."),
-                hibOff || (hibPend && hibKept), hibKept, false, true, hibPend));
+                hibOff || (hibPend && hibKept), hibKept, off.Contains(HibernateOffKey), false, hibPend));
         }
 
         var bgOn = BackgroundAppsSpecs.All(s => system.UserDword(s.Key, s.Name) == s.Target);
@@ -335,26 +426,43 @@ internal sealed partial class SystemTuning
             "Background Store apps off",
             bgOn
                 ? "Microsoft Store background tasks are paused (no restart needed)."
-                : "Stops Microsoft Store apps running silently in the background (may pause Phone Link or Mail notifications; no restart needed).",
-            bgOn, bgKept, false, true, false, null, NeedsRestart: false));
+                : "Stops Microsoft Store apps running silently in the background (no admin prompt).",
+            bgOn, bgKept, off.Contains(BackgroundAppsKey), false, false, null, NeedsRestart: false));
 
-        AddHklmOptIn(
+        AddHklmDefault(
             SvcHostSplitKey,
             "Consolidate service hosts",
             "Service host split threshold matches system RAM to consolidate svchost processes.",
             "Merges dozens of svchost.exe processes into shared hosts to lower background process overhead. Takes a restart.");
 
-        AddHklmOptIn(
+        AddHklmDefault(
             GpuPstateKey,
             "Force max GPU clocks (no P-state drops)",
             "Dynamic GPU P-state downclocking is disabled for steady desktop clock speeds.",
-            "Stops desktop GPU clock-ramp micro-stutters by disabling dynamic P-states (raises idle power and heat). Takes a restart.");
+            "Stops desktop GPU clock-ramp micro-stutters by disabling dynamic P-states and power gating. Takes a restart.");
 
-        AddHklmOptIn(
+        AddHklmDefault(
             CpuMitigationsKey,
             "CPU Spectre/Meltdown mitigations off",
-            "OS CPU Spectre/Meltdown mitigations are disabled. Turn off to restore protection.",
-            "Less secure: disables OS Spectre/Meltdown mitigations for extra CPU throughput on a dedicated gaming PC. Takes a restart.");
+            "OS CPU Spectre/Meltdown mitigations are disabled.",
+            "Disables OS CPU Spectre/Meltdown mitigations for maximum CPU throughput on gaming PCs. Takes a restart.");
+
+        var bootKept = saved.Kept.ContainsKey(BootLatencyKey);
+        var bootPend = pending(BootLatencyKey);
+        if (!laptop || bootKept || bootPend)
+            items.Add(new(
+                BootLatencyKey,
+                "BCD dynamic tick off, Enhanced TSC & x2APIC",
+                tell(BootLatencyKey, bootKept ? "Boot Configuration Data enforces disabledynamictick, Enhanced TSC sync, and x2APIC." : "Sets BCD disabledynamictick=yes, tscsyncpolicy=Enhanced, and x2apicpolicy=Enable on desktop PCs. Takes a restart."),
+                bootKept, bootKept, off.Contains(BootLatencyKey), false, bootPend));
+
+        var mmKept = saved.Kept.ContainsKey(MemCompressionKey);
+        if (memKb >= 16_777_216L || mmKept)
+            items.Add(new(
+                MemCompressionKey,
+                "Windows Memory Compression off",
+                mmKept ? "Windows Memory Compression is off on 16 GB+ RAM (no restart needed)." : "Disables Memory Compression CPU overhead on 16 GB+ RAM gaming systems (no restart needed).",
+                mmKept, mmKept, off.Contains(MemCompressionKey), false, false, null, NeedsRestart: false));
     }
 
     private void PrepareDeepKey(string key, Dictionary<string, Was> kept, List<string> lines, out List<HklmSpec> recordedSpecs)
@@ -389,7 +497,17 @@ internal sealed partial class SystemTuning
             var prevDw = system.Dword(s.Key, s.Name);
             return prevDw is { } d ? $"{s.Key}|{s.Name}=d:{d.ToString(CultureInfo.InvariantCulture)}" : $"{s.Key}|{s.Name}=absent";
         }).ToArray();
-        kept.TryAdd(key, new Was(Strings: priorEntries));
+        if (kept.TryGetValue(key, out var existing) && existing.Strings is { Length: > 0 } prevList)
+        {
+            var have = prevList.Select(ParseTaggedEntry).OfType<(string SubKey, string Name, char Kind, string? Value)>()
+                .Select(r => (r.SubKey, r.Name)).ToHashSet();
+            var merged = prevList.Concat(priorEntries.Where(e => ParseTaggedEntry(e) is { } p && !have.Contains((p.SubKey, p.Name)))).ToArray();
+            kept[key] = existing with { Strings = merged };
+        }
+        else
+        {
+            kept[key] = new Was(Strings: priorEntries);
+        }
 
         foreach (var s in specs)
         {
@@ -415,6 +533,8 @@ internal sealed partial class SystemTuning
             var dxOk = system.SetUserDirectXSettings(WithToken(system.UserDirectXSettings(), SwapEffectToken, "1"))
                 && HasToken(system.UserDirectXSettings(), SwapEffectToken, "1");
             var dwOk = ActiveGamingUxDwords().All(s => system.UserDword(s.Key, s.Name) == s.Target || (system.SetUserDword(s.Key, s.Name, s.Target) && system.UserDword(s.Key, s.Name) == s.Target));
+            var szOk = GamingUxStringSpecs.All(s => string.Equals(system.UserString(s.Key, s.Name), s.Target, StringComparison.OrdinalIgnoreCase)
+                || (system.SetUserString(s.Key, s.Name, s.Target) && string.Equals(system.UserString(s.Key, s.Name), s.Target, StringComparison.OrdinalIgnoreCase)));
             var axOk = true;
             foreach (var axKey in AccessibilityHotkeyKeys)
             {
@@ -429,7 +549,7 @@ internal sealed partial class SystemTuning
                     }
                 }
             }
-            if (!dxOk || !dwOk || !axOk)
+            if (!dxOk || !dwOk || !szOk || !axOk)
             {
                 after = Drop(after, prior, key);
                 said.Add("Windows didn't apply all gaming UX settings.");
@@ -459,6 +579,11 @@ internal sealed partial class SystemTuning
                 var prev = system.UserDword(s.Key, s.Name);
                 entries.Add(prev is { } p ? $"{s.Key}|{s.Name}=d:{p.ToString(CultureInfo.InvariantCulture)}" : $"{s.Key}|{s.Name}=absent");
             }
+            foreach (var s in GamingUxStringSpecs)
+            {
+                var prev = system.UserString(s.Key, s.Name);
+                entries.Add(prev is not null ? $"{s.Key}|{s.Name}=s:{prev}" : $"{s.Key}|{s.Name}=absent");
+            }
             foreach (var axKey in AccessibilityHotkeyKeys)
             {
                 var prev = system.UserString(axKey, "Flags");
@@ -487,7 +612,7 @@ internal sealed partial class SystemTuning
         string? dxTokenBefore = null;
         bool hasDx = false;
         var dwReverts = new List<(string Key, string Name, int? Value)>();
-        var axReverts = new List<(string Key, string Name, string? Value)>();
+        var szReverts = new List<(string Key, string Name, string? Value)>();
         foreach (var entry in entries)
         {
             if (entry.StartsWith("dx=", StringComparison.Ordinal))
@@ -509,10 +634,11 @@ internal sealed partial class SystemTuning
                 else if (kind == 'd' && int.TryParse(rawVal, NumberStyles.Integer, CultureInfo.InvariantCulture, out var dv)) dwReverts.Add((subKey, name, dv));
                 else return "Exo's record of this setting couldn't be read, so nothing changed.";
             }
-            else if (name == "Flags" && AccessibilityHotkeyKeys.Contains(subKey))
+            else if ((name == "Flags" && AccessibilityHotkeyKeys.Contains(subKey))
+                || GamingUxStringSpecs.Any(s => s.Key == subKey && s.Name == name))
             {
-                if (kind == 'a') axReverts.Add((subKey, name, null));
-                else if (kind == 's' && rawVal is not null) axReverts.Add((subKey, name, rawVal));
+                if (kind == 'a') szReverts.Add((subKey, name, null));
+                else if (kind == 's' && rawVal is not null) szReverts.Add((subKey, name, rawVal));
                 else return "Exo's record of this setting couldn't be read, so nothing changed.";
             }
             else
@@ -531,8 +657,8 @@ internal sealed partial class SystemTuning
         foreach (var dw in dwReverts)
             if (!system.SetUserDword(dw.Key, dw.Name, dw.Value))
                 return "Windows didn't put it back. Try again.";
-        foreach (var ax in axReverts)
-            if (!system.SetUserString(ax.Key, ax.Name, ax.Value))
+        foreach (var sz in szReverts)
+            if (!system.SetUserString(sz.Key, sz.Name, sz.Value))
                 return "Windows didn't put it back. Try again.";
         return CompleteNonAdminTurnOff(saved, key);
     }
@@ -618,17 +744,42 @@ internal sealed partial class SystemTuning
         StorageFsKey => StorageFsSpecs.Any(s => s.Key == subKey && s.Name == valName),
         AmdGpuPowerKey => NvidiaClassKeyPattern().IsMatch(subKey) && valName is "EnableULPS" or "EnableAspmL0s" or "EnableAspmL1",
         HagsKey => GraphicsDriversKey == subKey && HwSchModeValue == valName,
-        MpoOffKey => DwmKey == subKey && OverlayTestModeValue == valName,
+        MpoOffKey => DwmKey == subKey && (OverlayTestModeValue == valName || OverlayMinFpsValue == valName),
         SvcHostSplitKey => ControlKey == subKey && SvcHostSplitValue == valName,
-        GpuPstateKey => NvidiaClassKeyPattern().IsMatch(subKey) && valName is "DisableDynamicPstate" or "DisablePowerGating" or "PP_GPUPowerDownEnabled",
+        GpuPstateKey => (GraphicsDriversKey == subKey && RmGpsPerCpuDpcValue == valName)
+            || (NvidiaClassKeyPattern().IsMatch(subKey)
+                && (valName is "DisableDynamicPstate" or "DisableASyncPstates" or "DisablePowerGating" or "PP_GPUPowerDownEnabled" or "DisableVCEPowerGating" or "DisableVceClockGating" or "PP_SclkDeepSleepDisable"
+                    || valName == RmGpsPerCpuDpcValue)),
         CpuMitigationsKey => CpuMitigationsSpecs.Any(s => s.Key == subKey && s.Name == valName),
         HibernateOffKey => (subKey == PowerControlKey && valName == HibernateEnabledValue)
             || (subKey == SessionPowerKey && valName == HiberbootEnabledValue),
         _ => false,
     };
 
+    private static IReadOnlyList<string>? RevertBootLatency(Was was)
+    {
+        if (was.Strings is not { Length: > 0 } entries) return null;
+        var lines = new List<string>(entries.Length);
+        foreach (var entry in entries)
+        {
+            var eq = entry.IndexOf('=');
+            if (eq <= 0 || eq >= entry.Length - 1) return null;
+            var flag = entry[..eq];
+            if (!BootLatencyFlags.Any(f => f.Flag.Equals(flag, StringComparison.OrdinalIgnoreCase))) return null;
+            var raw = entry[(eq + 1)..];
+            if (raw == "absent")
+                lines.Add($"{Tool("bcdedit.exe")} /deletevalue {{current}} {flag}");
+            else if (SafeBcdTokenPattern().IsMatch(raw))
+                lines.Add($"{Tool("bcdedit.exe")} /set {{current}} {flag} {raw}");
+            else
+                return null;
+        }
+        return lines;
+    }
+
     private static IReadOnlyList<string>? RevertDeepKey(string key, Was was)
     {
+        if (key == BootLatencyKey) return RevertBootLatency(was);
         if (was.Strings is not { Length: > 0 } entries) return null;
         if (key == HibernateOffKey)
         {

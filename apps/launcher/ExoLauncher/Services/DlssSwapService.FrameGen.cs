@@ -629,7 +629,7 @@ public sealed partial class DlssSwapService
     internal static string? FrameGenPath(FrameGenCard? card, FrameGenGame game)
     {
         if (card is null || card.MultiFrame || card.DlssFrameGen) return null;
-        if (card.Dlssg && game.DlssFrameGen && !game.Vulkan && game.Streamline is >= 2 && game.DlssgMajor >= 310 && !game.NoDlssgHere)
+        if (game.AntiCheat is null && card.Dlssg && game.DlssFrameGen && !game.Vulkan && game.Streamline is >= 2 && game.DlssgMajor >= 310 && !game.NoDlssgHere)
             return "dlss";
         if (game.OwnFrameGen) return "native";
         return game.DlssFrameGen ? "fsr" : null;

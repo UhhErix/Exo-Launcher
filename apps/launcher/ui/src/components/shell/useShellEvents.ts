@@ -18,7 +18,7 @@ import { dismissNotice, notify as notice } from '../../lib/notify'
 import { pageGet, pageSet } from '../../lib/pageStore'
 import { report } from '../../lib/report'
 import type { SettingsSectionId } from '../../lib/settingsSections'
-import type { PcLink } from '../gpu/pcSections'
+import { pcLinkRoom, type PcLink } from '../gpu/pcSections'
 import type { View } from './TitleBar'
 import type { ActionStatus } from './useActionStatus'
 
@@ -253,8 +253,9 @@ export function useShellHostEvents({
       primary: true,
       onPress: () => {
         dismissNotice(`versions-${found.id}`)
-        setGpuJump({ tab: found.page })
-        void goToView('system')
+        const room = pcLinkRoom(found.page)
+        setGpuJump(room === 'system' ? { tab: found.page } : null)
+        void goToView(room)
       },
     },
   })), [goToView, setGpuJump])
@@ -267,7 +268,12 @@ export function useShellHostEvents({
 
   useEffect(() => {
     const open = ({ room, part }: { room: 'pc' | 'library' | null; part: string | null }) => {
-      if (room === 'pc') { void goToView('system'); setGpuJump({ tab: (part ?? 'overview') as PcLink }) }
+      if (room === 'pc') {
+        const link = (part ?? 'overview') as PcLink
+        const target = pcLinkRoom(link)
+        void goToView(target)
+        setGpuJump(target === 'system' ? { tab: link } : null)
+      }
       else if (room === 'library') void goToView('library')
     }
     host.appPendingOpen().then(open, (error: unknown) => report(error, 'LauncherApp.pendingOpen', { level: 'warn' }))
@@ -275,7 +281,12 @@ export function useShellHostEvents({
   }, [goToView, setGpuJump])
 
   useEffect(() => {
-    const open = (event: Event) => { setGpuJump({ tab: (event as CustomEvent<PcLink>).detail }); void goToView('system') }
+    const open = (event: Event) => {
+      const link = (event as CustomEvent<PcLink>).detail
+      const target = pcLinkRoom(link)
+      setGpuJump(target === 'system' ? { tab: link } : null)
+      void goToView(target)
+    }
     window.addEventListener('exo-open-pc', open)
     return () => window.removeEventListener('exo-open-pc', open)
   }, [goToView, setGpuJump])

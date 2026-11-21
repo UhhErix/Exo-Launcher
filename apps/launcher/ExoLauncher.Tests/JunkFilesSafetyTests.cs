@@ -30,7 +30,13 @@ public sealed class JunkFilesSafetyTests : IDisposable
             MakeFile("Local", "imput", "Helium", "User Data", "Default", "DawnGraphiteCache", "data_0"),
             MakeFile("Local", "Microsoft", "Edge", "User Data", "Default", "Code Cache", "wasm", "a.wasm"),
             MakeFile("Local", "Vivaldi", "User Data", "ShaderCache", "data_0"),
+            MakeFile("Local", "Google", "Chrome", "User Data", "Default", "Service Worker", "CacheStorage", "c.bin"),
+            MakeFile("Local", "Google", "Chrome", "User Data", "Default", "Service Worker", "ScriptCache", "s.bin"),
             MakeFile("Roaming", "Opera Software", "Opera GX Stable", "GPUCache", "data_0"),
+            MakeFile("Roaming", "Opera Software", "Opera Stable", "GPUCache", "data_0"),
+            MakeFile("Local", "Mozilla", "Firefox", "Profiles", "abc.default-release", "cache2", "f1"),
+            MakeFile("Local", "Mozilla", "Firefox", "Profiles", "abc.default-release", "startupCache", "s1.bin"),
+            MakeFile("Local", "zen", "Profiles", "xyz.Default", "cache2", "f2"),
         };
 
         var sensitive = new[]
@@ -41,6 +47,10 @@ public sealed class JunkFilesSafetyTests : IDisposable
             MakeFile("Local", "Google", "Chrome", "User Data", "Default", "Preferences"),
             MakeFile("Local", "imput", "Helium", "User Data", "Default", "Network", "Cookies"),
             MakeFile("Roaming", "Opera Software", "Opera GX Stable", "Local Extension Settings", "ext.ldb"),
+            MakeFile("Local", "Mozilla", "Firefox", "Profiles", "abc.default-release", "cookies.sqlite"),
+            MakeFile("Local", "Mozilla", "Firefox", "Profiles", "abc.default-release", "logins.json"),
+            MakeFile("Local", "Mozilla", "Firefox", "Profiles", "abc.default-release", "key4.db"),
+            MakeFile("Local", "zen", "Profiles", "xyz.Default", "cookies.sqlite"),
         };
 
         var found = JunkFiles.BrowserCacheFolders(local, roaming);
@@ -48,7 +58,9 @@ public sealed class JunkFilesSafetyTests : IDisposable
         foreach (var path in sensitive) Assert.DoesNotContain(path, found);
         Assert.DoesNotContain(found, f => f.Contains("Cookies", StringComparison.OrdinalIgnoreCase)
             || f.Contains("Login Data", StringComparison.OrdinalIgnoreCase)
-            || f.Contains("Local Storage", StringComparison.OrdinalIgnoreCase));
+            || f.Contains("Local Storage", StringComparison.OrdinalIgnoreCase)
+            || f.Contains("logins.json", StringComparison.OrdinalIgnoreCase)
+            || f.Contains("key4.db", StringComparison.OrdinalIgnoreCase));
     }
 
     [Fact]
@@ -70,6 +82,11 @@ public sealed class JunkFilesSafetyTests : IDisposable
             MakeFile("Local", "Battle.net", "BrowserCache", "GPUCache", "data_0"),
             MakeFile("Common", "Blizzard Entertainment", "Battle.net", "Cache", "c.bin"),
             MakeFile("Local", "Ubisoft Game Launcher", "cache", "http2", "h.bin"),
+            MakeFile("Local", "Spotify", "Data", "s.bin"),
+            MakeFile("Local", "Spotify", "Browser", "Cache", "c.bin"),
+            MakeFile("Local", "Electronic Arts", "EA Desktop", "cache", "e.bin"),
+            MakeFile("Local", "Riot Games", "Riot Client", "Logs", "r.log"),
+            MakeFile("Common", "GOG.com", "Galaxy", "webcache", "g.bin"),
             MakeFile("Roaming", "discord", "Cache", "Cache_Data", "f_003"),
         };
 
@@ -80,6 +97,7 @@ public sealed class JunkFilesSafetyTests : IDisposable
             MakeFile("Local", "Steam", "htmlcache", "Default", "Network", "Cookies"),
             MakeFile("Local", "EpicGamesLauncher", "Saved", "webcache_4430", "Cookies"),
             MakeFile("Local", "Battle.net", "BrowserCache", "Cookies"),
+            MakeFile("Local", "Spotify", "Users", "me-user", "prefs"),
             MakeFile("PF86", "Steam", "steamapps", "appmanifest_730.acf"),
             MakeFile("PF86", "Steam", "userdata", "123", "config.vdf"),
             MakeFile("Roaming", "discord", "Local Storage", "leveldb", "0001.ldb"),
@@ -93,5 +111,27 @@ public sealed class JunkFilesSafetyTests : IDisposable
         Assert.DoesNotContain(found, f => f.EndsWith(@"Steam\htmlcache", StringComparison.OrdinalIgnoreCase));
         Assert.DoesNotContain(found, f => f.EndsWith("webcache_4430", StringComparison.OrdinalIgnoreCase));
         Assert.DoesNotContain(found, f => f.EndsWith("BrowserCache", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public void Extra_crash_files_and_update_cache_folders_include_dumps_and_delivery_optimization()
+    {
+        var windir = Path.Combine(_root, "Windows");
+        var common = Path.Combine(_root, "Common");
+        MakeFile("Windows", "Minidump", "010126-1000-01.dmp");
+        MakeFile("Windows", "Minidump", "notes.txt");
+        MakeFile("Windows", "MEMORY.DMP");
+        MakeFile("Windows", "explorer.exe");
+
+        var dumps = JunkFiles.ExtraCrashFiles(windir).Select(f => f.Name).ToList();
+        Assert.Contains("010126-1000-01.dmp", dumps);
+        Assert.Contains("MEMORY.DMP", dumps);
+        Assert.DoesNotContain("notes.txt", dumps);
+        Assert.DoesNotContain("explorer.exe", dumps);
+
+        var updates = JunkFiles.UpdateCacheFolders(windir, common).ToList();
+        Assert.Contains(Path.Combine(windir, @"SoftwareDistribution\Download"), updates);
+        Assert.Contains(Path.Combine(windir, @"ServiceProfiles\NetworkService\AppData\Local\Microsoft\Windows\DeliveryOptimization\Cache"), updates);
+        Assert.Contains(Path.Combine(common, @"Microsoft\Windows\DeliveryOptimization\Cache"), updates);
     }
 }

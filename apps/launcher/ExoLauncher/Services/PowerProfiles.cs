@@ -54,6 +54,7 @@ internal static class PowerProfiles
     // Never below base clock, so a frame's first work doesn't wait for a ramp: High performance's value, and what Windows'
     // own Game Mode and LowLatency profiles set while they run (Microsoft PPM docs); every top-ten plan in AlchemyTweaks' test.
     private static readonly Value MinState = new("Minimum processor state", Processor, new("893dee8e-2bef-41e0-89c6-b55d0929964c"), 100);
+    private static readonly Value MaxState = new("Maximum processor state", Processor, new("bc5038f7-23e0-4960-96da-33abaf5935ec"), 100);
     // Energy performance preference 0: the processor's own clock logic favors performance (Microsoft: 0 programs the EPP
     // register to 0; its server tuning guide's setting for latency); High performance's value.
     private static readonly Value Epp = new("Energy performance preference", Processor, new("36687f9e-e3a5-4dbf-b1dc-15eb381c6863"), 0);
@@ -64,6 +65,7 @@ internal static class PowerProfiles
     // Core parking off: every core stays awake, so a game's new thread never waits for one to unpark (Microsoft: 100 turns
     // parking off; High performance's value).
     private static readonly Value MinCores = new("Core parking min cores", Processor, new("0cc5b647-c1df-4637-891a-dec35c318583"), 100);
+    private static readonly Value MaxCores = new("Core parking max cores", Processor, new("ea062031-0e34-4ff1-9b6d-eb1059334028"), 100);
     // Idle states stay on (0): with them off three of four plans placed last in AlchemyTweaks' test, 13-14% fewer frames.
     private static readonly Value IdleOn = new("Processor idle disable", Processor, new("5d76a2ca-e8c0-402f-a133-2158492d58ad"), 0);
 
@@ -121,16 +123,16 @@ internal static class PowerProfiles
     private static readonly Value[] Devices = [PcieLink, UsbSuspend, Usb3Link, NvmeLatency, NvmeLatency2, AhciLink, AhciAdaptive, DiskOff, WifiPower];
 
     /// <summary>The measured latency baseline: single-CCD Ryzen, Zen 2 to 4 dual-CCD Ryzen (no Game Mode parking), Intel up to 11th gen, and any desktop processor Exo doesn't know.</summary>
-    private static readonly Value[] Baseline = [MinState, Epp, BoostMode, BoostPolicy, MinCores, IdleOn, .. Devices];
+    private static readonly Value[] Baseline = [MinState, MaxState, Epp, BoostMode, BoostPolicy, MinCores, MaxCores, IdleOn, .. Devices];
 
     /// <summary>
     /// Dual-CCD Ryzen whose AMD driver parks the second CCD in Game Mode (X3D, and Zen 5's 9900X and 9950X): the
     /// baseline, but minimum state and core parking stay as Balanced has them, so the driver can park it.
     /// </summary>
-    private static readonly Value[] DualCcdParked = [EppParked, BoostMode, BoostPolicy, IdleOn, .. Devices];
+    private static readonly Value[] DualCcdParked = [MaxState, EppParked, BoostMode, BoostPolicy, IdleOn, .. Devices];
 
     /// <summary>Intel hybrid: P-cores at EPP 0 and never parked; E-cores and Balanced's heterogeneous policies as they are, for Thread Director.</summary>
-    private static readonly Value[] Hybrid = [EppPerformant, MinCoresPerformant, IdleOn, .. Devices];
+    private static readonly Value[] Hybrid = [MaxState, EppPerformant, BoostMode, BoostPolicy, MinCoresPerformant, IdleOn, .. Devices];
 
     /// <summary>
     /// This class's settings. A laptop gets them on AC only (battery keeps Balanced's) and no sleep changes; a laptop

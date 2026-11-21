@@ -9,7 +9,7 @@ import { Row, State } from '../settings/parts'
 import { ConfirmButton } from '../ui/ConfirmButton'
 import { Meter } from '../ui/Meter'
 import { Wait, sample, times } from '../ui/Wait'
-import type { PcState } from './PcRoom'
+import type { PcState } from './usePcState'
 
 /**
  * One part of the PC: what it is, in a line beside its glyph (its name, `label`, is for screen readers). A drive adds its
@@ -155,7 +155,7 @@ export function ThisPc({ state, chips, onMenu }: {
     <div className="exo-pc-about">
       <div className="exo-pc-about-line">
         <h1 className="exo-pc-about-name">{about?.name || profile?.gpu || driver?.card || 'This PC'}</h1>
-        <div className="exo-pc-chips">{chips}</div>
+        {chips ? <div className="exo-pc-chips">{chips}</div> : null}
       </div>
       {known.length > 0 ? (
         <ul className="exo-pc-facts">

@@ -1,0 +1,30 @@
+.exo-apps-room {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  padding: 12px var(--exo-gutter) 20px;
+  background: var(--color-bg);
+  color: var(--color-fg);
+}
+
+.exo-apps-room-shell {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  width: min(1440px, 100%);
+  margin: 0 auto;
+}
+
+.exo-apps-room-surface {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  padding: 22px 26px 8px;
+  overflow: hidden;
+}

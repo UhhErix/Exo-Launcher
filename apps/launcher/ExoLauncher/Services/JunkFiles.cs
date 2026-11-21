@@ -22,18 +22,20 @@ internal static partial class JunkFiles
     private static string Roaming => Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
     private static string ProgramFilesX86 => Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86);
     private static string Common => Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData);
+    private static string Windir => Environment.GetFolderPath(Environment.SpecialFolder.Windows);
 
-    private static (string Id, string Name, string Detail, Func<IEnumerable<string>> Folders, string Pattern, bool OldOnly)[] Kinds =>
+    private static (string Id, string Name, string Detail, Func<IEnumerable<string>> Folders, string[] Patterns, bool OldOnly)[] Kinds =>
     [
-        ("temp", "Temporary files", "Left by installers and apps, a day old or more", () => [Path.GetTempPath(), Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "Temp")], "*", true),
-        ("crash", "Crash dumps and error reports", "Kept after an app or game crashed", () =>
+        ("temp", "Temporary files", "Left by installers and apps, a day old or more", () => [Path.GetTempPath(), Path.Combine(Windir, "Temp")], ["*"], true),
+        ("crash", "Crash dumps and error reports", "Kept after an app, game, or Windows crash", () =>
         [
             Path.Combine(Local, "CrashDumps"), Path.Combine(Local, @"Microsoft\Windows\WER\ReportArchive"), Path.Combine(Local, @"Microsoft\Windows\WER\ReportQueue"),
             Path.Combine(Common, @"Microsoft\Windows\WER\ReportArchive"), Path.Combine(Common, @"Microsoft\Windows\WER\ReportQueue"),
-        ], "*", false),
-        ("thumbs", "Thumbnail cache", "Picture previews Explorer makes again as you browse", () => [Path.Combine(Local, @"Microsoft\Windows\Explorer")], "thumbcache_*.db", false),
-        ("browsers", "Browser caches", "Disposable web and GPU caches for Brave, Chrome, Helium, Edge, Vivaldi, and Opera GX (keeps logins and cookies)", () => BrowserCacheFolders(Local, Roaming), "*", false),
-        ("launchers", "Game launcher caches", "Disposable web caches and logs for Steam, Epic, Battle.net, Ubisoft, and Discord (keeps games and logins)", () => LauncherCacheFolders(Local, Roaming, ProgramFilesX86, Common), "*", false),
+        ], ["*"], false),
+        ("thumbs", "Thumbnail and icon cache", "Picture and icon previews Explorer makes again as you browse", () => [Path.Combine(Local, @"Microsoft\Windows\Explorer")], ["thumbcache_*.db", "iconcache_*.db"], false),
+        ("updates", "Windows Update and Delivery caches", "Old update downloads and Delivery Optimization cache files", () => UpdateCacheFolders(Windir, Common), ["*"], true),
+        ("browsers", "Browser caches", "Disposable web, GPU, and worker caches for Chromium, Firefox, Zen, and Opera browsers (keeps logins and cookies)", () => BrowserCacheFolders(Local, Roaming), ["*"], false),
+        ("launchers", "Game launcher and app caches", "Disposable web caches and logs for Steam, Epic, Battle.net, Ubisoft, EA, Riot, GOG, Spotify, and Discord (keeps games and logins)", () => LauncherCacheFolders(Local, Roaming, ProgramFilesX86, Common), ["*"], false),
     ];
 
     private static readonly string[] ChromiumProfileCacheLeaves =
@@ -47,6 +49,8 @@ internal static partial class JunkFiles
         "GrShaderCache",
         "GraphiteDawnCache",
         "ShaderCache",
+        @"Service Worker\CacheStorage",
+        @"Service Worker\ScriptCache",
     ];
 
     private static readonly string[] ChromiumUserDataRoots =
@@ -105,10 +109,27 @@ internal static partial class JunkFiles
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
         }
-        foreach (var operaRoot in new[] { Path.Combine(local, @"Opera Software\Opera GX Stable"), Path.Combine(roaming, @"Opera Software\Opera GX Stable") })
+        foreach (var operaRoot in new[]
+        {
+            Path.Combine(local, @"Opera Software\Opera GX Stable"),
+            Path.Combine(roaming, @"Opera Software\Opera GX Stable"),
+            Path.Combine(local, @"Opera Software\Opera Stable"),
+            Path.Combine(roaming, @"Opera Software\Opera Stable"),
+        })
         {
             if (SafeExistingDirectory(operaRoot))
                 AddExistingCacheLeaves(operaRoot, ChromiumProfileCacheLeaves, folders);
+        }
+        foreach (var geckoProfiles in new[] { Path.Combine(local, @"Mozilla\Firefox\Profiles"), Path.Combine(local, @"zen\Profiles") })
+        {
+            if (!SafeExistingDirectory(geckoProfiles)) continue;
+            try
+            {
+                foreach (var profile in Directory.EnumerateDirectories(geckoProfiles))
+                    if (SafeExistingDirectory(profile))
+                        AddExistingCacheLeaves(profile, ["cache2", "startupCache"], folders);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
         }
         return folders.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
     }
@@ -122,6 +143,11 @@ internal static partial class JunkFiles
             Path.Combine(local, @"EpicGamesLauncher\Saved\Logs"),
             Path.Combine(common, @"Blizzard Entertainment\Battle.net\Cache"),
             Path.Combine(local, @"Ubisoft Game Launcher\cache\http2"),
+            Path.Combine(local, @"Spotify\Data"),
+            Path.Combine(local, @"Spotify\Browser\Cache"),
+            Path.Combine(local, @"Electronic Arts\EA Desktop\cache"),
+            Path.Combine(local, @"Riot Games\Riot Client\Logs"),
+            Path.Combine(common, @"GOG.com\Galaxy\webcache"),
         ];
         foreach (var path in fixedPaths)
             if (SafeExistingDirectory(path)) folders.Add(path);
@@ -157,7 +183,7 @@ internal static partial class JunkFiles
         {
             long bytes = 0;
             var files = 0;
-            foreach (var file in FilesOf(kind.Folders(), kind.Pattern, kind.OldOnly)) { bytes += file.Length; files++; }
+            foreach (var file in FilesOfKind(kind.Id, kind.Folders(), kind.Patterns, kind.OldOnly)) { bytes += file.Length; files++; }
             return files > 0 ? new Found(kind.Id, kind.Name, kind.Detail, bytes, files) : null;
         })).ToArray();
         var backups = Task.Run(DriveSpace.ExoOld);
@@ -263,7 +289,7 @@ internal static partial class JunkFiles
         long bytes = 0;
         var files = 0;
         var folders = chosen.Folders().ToList();
-        foreach (var file in FilesOf(folders, chosen.Pattern, chosen.OldOnly).ToList())
+        foreach (var file in FilesOfKind(id, folders, chosen.Patterns, chosen.OldOnly).ToList())
         {
             var length = file.Length;
             if (!DeletionGate.Clean(file.FullName, null, out _))
@@ -279,13 +305,52 @@ internal static partial class JunkFiles
         return (bytes, files);
     }
 
+    internal static IEnumerable<string> UpdateCacheFolders(string windir, string common) =>
+    [
+        Path.Combine(windir, @"SoftwareDistribution\Download"),
+        Path.Combine(windir, @"ServiceProfiles\NetworkService\AppData\Local\Microsoft\Windows\DeliveryOptimization\Cache"),
+        Path.Combine(common, @"Microsoft\Windows\DeliveryOptimization\Cache"),
+    ];
+
+    private static IEnumerable<FileInfo> FilesOfKind(string id, IEnumerable<string> folders, string[] patterns, bool oldOnly)
+    {
+        foreach (var file in FilesOf(folders, patterns, oldOnly)) yield return file;
+        if (id != "crash") yield break;
+        foreach (var dump in ExtraCrashFiles(Windir)) yield return dump;
+    }
+
+    internal static IEnumerable<FileInfo> ExtraCrashFiles(string windir)
+    {
+        var minidumpDir = Path.Combine(windir, "Minidump");
+        if (SafeExistingDirectory(minidumpDir))
+        {
+            List<FileInfo> dumps = [];
+            try
+            {
+                dumps = [.. new DirectoryInfo(minidumpDir).EnumerateFiles("*.dmp", new EnumerationOptions { IgnoreInaccessible = true, AttributesToSkip = FileAttributes.ReparsePoint | FileAttributes.System })];
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
+            foreach (var dump in dumps) yield return dump;
+        }
+        var memoryDmp = Path.Combine(windir, "MEMORY.DMP");
+        FileInfo? kernelDump = null;
+        try
+        {
+            if (File.Exists(memoryDmp) && (File.GetAttributes(memoryDmp) & FileAttributes.ReparsePoint) == 0)
+                kernelDump = new FileInfo(memoryDmp);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
+        if (kernelDump is not null) yield return kernelDump;
+    }
+
     /// <summary>
     /// The files of a kind. Temporary files (<paramref name="oldOnly"/>) go by folder: a folder anything wrote to in the
     /// last day is some tool's work in progress (a build, a setup waiting for a restart) and stays whole; loose files go by age.
     /// </summary>
-    private static IEnumerable<FileInfo> FilesOf(IEnumerable<string> folders, string pattern, bool oldOnly)
+    private static IEnumerable<FileInfo> FilesOf(IEnumerable<string> folders, string[] patterns, bool oldOnly)
     {
         var options = new EnumerationOptions { RecurseSubdirectories = true, IgnoreInaccessible = true, AttributesToSkip = FileAttributes.ReparsePoint | FileAttributes.System };
+        var looseOptions = new EnumerationOptions { IgnoreInaccessible = true, AttributesToSkip = options.AttributesToSkip };
         var cutoff = DateTime.UtcNow - Fresh;
         bool Old(FileInfo file) => file.LastWriteTimeUtc < cutoff && file.LastAccessTimeUtc < cutoff;
         foreach (var folder in folders.Distinct(StringComparer.OrdinalIgnoreCase).Where(Directory.Exists))
@@ -294,11 +359,14 @@ internal static partial class JunkFiles
             try
             {
                 var root = new DirectoryInfo(folder);
-                if (!oldOnly) files = [.. root.EnumerateFiles(pattern, options)];
+                if (!oldOnly)
+                {
+                    files = [.. patterns.SelectMany(p => root.EnumerateFiles(p, options))];
+                }
                 else
                 {
-                    files = [.. root.EnumerateFiles(pattern, new EnumerationOptions { IgnoreInaccessible = true, AttributesToSkip = options.AttributesToSkip }).Where(Old)];
-                    foreach (var sub in root.EnumerateDirectories("*", new EnumerationOptions { IgnoreInaccessible = true, AttributesToSkip = options.AttributesToSkip }))
+                    files = [.. patterns.SelectMany(p => root.EnumerateFiles(p, looseOptions)).Where(Old)];
+                    foreach (var sub in root.EnumerateDirectories("*", looseOptions))
                     {
                         var inside = sub.EnumerateFiles("*", options).ToList();
                         if (inside.All(Old)) files.AddRange(inside);

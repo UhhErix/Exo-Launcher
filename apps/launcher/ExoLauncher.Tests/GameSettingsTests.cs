@@ -716,6 +716,8 @@ public sealed class GameSettingsTests
         var dataDir = Path.Combine(root, "data");
         var prevData = Environment.GetEnvironmentVariable(PathHelper.DataDirOverrideVariable);
         var prevSeam = NvidiaProfiles.ForGameSeam;
+        var prevBusy = GameSettings.BusySeam.Value;
+        GameSettings.BusySeam.Value = _ => false;
         try
         {
             var win64 = Path.Combine(gameDir, "Client", "Binaries", "Win64");
@@ -766,6 +768,85 @@ public sealed class GameSettingsTests
         }
         finally
         {
+            GameSettings.BusySeam.Value = prevBusy;
+            NvidiaProfiles.ForGameSeam = prevSeam;
+            Environment.SetEnvironmentVariable(PathHelper.DataDirOverrideVariable, prevData);
+            try { DeletionGate.DeleteDirectory(root, recursive: true); } catch (IOException) { }
+        }
+    }
+
+    [Fact]
+    public void WutheringWavesOptimizeStaysAppliedWhenDriverSkipsUnsupportedSettingAndRecoversLegacyBackup()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "exo-wuwa-skip-" + Guid.NewGuid().ToString("N"));
+        var gameDir = Path.Combine(root, "game");
+        var dataDir = Path.Combine(root, "data");
+        var prevData = Environment.GetEnvironmentVariable(PathHelper.DataDirOverrideVariable);
+        var prevSeam = NvidiaProfiles.ForGameSeam;
+        var prevBusy = GameSettings.BusySeam.Value;
+        GameSettings.BusySeam.Value = _ => false;
+        try
+        {
+            var win64 = Path.Combine(gameDir, "Client", "Binaries", "Win64");
+            Directory.CreateDirectory(win64);
+            Directory.CreateDirectory(dataDir);
+            System.IO.File.WriteAllBytes(Path.Combine(win64, "Client-Win64-Shipping.exe"), []);
+            System.IO.File.WriteAllBytes(Path.Combine(win64, "Client-Win64-ShippingBase.dll"), []);
+            Environment.SetEnvironmentVariable(PathHelper.DataDirOverrideVariable, dataDir);
+
+            var driverHeld = new Dictionary<uint, uint?>();
+            NvidiaProfiles.ForGameSeam = (_, ids, writes) =>
+            {
+                List<uint> skipped = [];
+                if (writes is not null)
+                {
+                    foreach (var (id, val) in writes)
+                    {
+                        if (id == GpuProfile.ModelPresetProfile)
+                        {
+                            skipped.Add(id);
+                            continue;
+                        }
+                        if (val is { } v) driverHeld[id] = v;
+                        else driverHeld.Remove(id);
+                    }
+                }
+                var after = ids.ToDictionary(id => id, id => driverHeld.GetValueOrDefault(id));
+                return new NvidiaProfiles.GameState(true, null, "Wuthering Waves", new Dictionary<uint, uint?>(), after, skipped);
+            };
+
+            var game = new GameEntry { Id = "steam:3513350", Title = "Wuthering Waves", Store = StoreKind.Steam, Installed = true, Path = gameDir };
+            var rtx3070 = new GameSettings.Pc("nvidia", null, 8, Gpu: "NVIDIA GeForce RTX 3070");
+            var profile = GameSettings.For(game, rtx3070)!;
+
+            Assert.Null(GameSettings.ApplyWithNvidia(game, profile, null, all: true, on: true, includePerGamePower: true));
+            Assert.False(driverHeld.ContainsKey(GpuProfile.ModelPresetProfile));
+            Assert.Equal(GameSettings.Standing.Applied, GameSettings.InspectState(game, profile, includePerGamePower: true).Standing);
+
+            var backupPath = Path.Combine(dataDir, "game-settings", "wuwa.nvidia.json");
+            var legacySet = profile.Nvidia!.Values(GameSettings.EmptyFile)
+                .Where(v => v.Id != GpuProfile.ModelPresetProfile)
+                .Append(GameSettings.PerGamePowerPerformance)
+                .ToList();
+            var legacyJson = System.Text.Json.JsonSerializer.Serialize(new
+            {
+                Title = "Wuthering Waves",
+                Exe = Path.Combine(win64, "Client-Win64-Shipping.exe"),
+                Profile = "Wuthering Waves",
+                Before = legacySet.ToDictionary(v => v.Id, _ => (uint?)null),
+                Set = legacySet,
+                FileInFolder = "Client-Win64-ShippingBase.dll",
+            });
+            System.IO.File.WriteAllText(backupPath, legacyJson);
+            Assert.Equal(GameSettings.Standing.Applied, GameSettings.InspectState(game, profile, includePerGamePower: true).Standing);
+
+            Assert.Null(GameSettings.ApplyWithNvidia(game, profile, null, all: true, on: false, includePerGamePower: true));
+            Assert.Empty(driverHeld);
+            Assert.Equal(GameSettings.Standing.Off, GameSettings.InspectState(game, profile, includePerGamePower: true).Standing);
+        }
+        finally
+        {
+            GameSettings.BusySeam.Value = prevBusy;
             NvidiaProfiles.ForGameSeam = prevSeam;
             Environment.SetEnvironmentVariable(PathHelper.DataDirOverrideVariable, prevData);
             try { DeletionGate.DeleteDirectory(root, recursive: true); } catch (IOException) { }
