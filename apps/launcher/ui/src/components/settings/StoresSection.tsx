@@ -265,11 +265,7 @@ function RiotIdRow({ riotId, onSettings }: { riotId: string; onSettings: (next: 
   )
 }
 
-function trackerUrlFor(riotId: string): string {
-  const hash = riotId.indexOf('#')
-  if (hash <= 0) return 'https://tracker.gg/valorant'
-  return `https://tracker.gg/valorant/profile/riot/${encodeURIComponent(riotId.slice(0, hash))}%23${encodeURIComponent(riotId.slice(hash + 1))}/overview`
-}
+const RIOT_PRIVACY_URL = 'https://privacy.riotgames.com'
 
 function formatBaselineHours(minutes: number | null | undefined): string {
   if (!minutes || minutes <= 0) return ''
@@ -285,6 +281,17 @@ function parseHoursInput(raw: string): number | null {
   return n
 }
 
+function baselineSummaryParts(baseline: RiotBaseline | null): string[] {
+  const entries: Array<[string, number | null | undefined]> = [
+    ['VALORANT', baseline?.valorantMinutes],
+    ['League', baseline?.leagueMinutes],
+    ['TFT', baseline?.tftMinutes],
+    ['LoR', baseline?.lorMinutes],
+    ['2XKO', baseline?.twoXkoMinutes],
+  ]
+  return entries.filter(([, mins]) => !!mins && mins > 0).map(([name, mins]) => `${name} ${formatBaselineHours(mins)} h`)
+}
+
 function RiotBaselineRow({
   riotId,
   baseline,
@@ -294,22 +301,65 @@ function RiotBaselineRow({
   baseline: RiotBaseline | null
   onSettings: (next: LauncherSettings) => void
 }) {
-  const hasSaved = !!(baseline?.valorantMinutes || baseline?.leagueMinutes)
-  const [editing, setEditing] = useState(!hasSaved)
+  const summaryParts = baselineSummaryParts(baseline)
+  const [editing, setEditing] = useState(false)
   const [valorant, setValorant] = useState(() => formatBaselineHours(baseline?.valorantMinutes))
   const [league, setLeague] = useState(() => formatBaselineHours(baseline?.leagueMinutes))
+  const [tft, setTft] = useState(() => formatBaselineHours(baseline?.tftMinutes))
   const [busy, setBusy] = useState(false)
   const [note, setNote] = useState<Note>(null)
 
   const syncFromSaved = () => {
     setValorant(formatBaselineHours(baseline?.valorantMinutes))
     setLeague(formatBaselineHours(baseline?.leagueMinutes))
+    setTft(formatBaselineHours(baseline?.tftMinutes))
   }
 
   const parsedValorant = parseHoursInput(valorant)
   const parsedLeague = parseHoursInput(league)
-  const invalid = Number.isNaN(parsedValorant) || Number.isNaN(parsedLeague)
-  const ready = !invalid && (parsedValorant !== null || parsedLeague !== null)
+  const parsedTft = parseHoursInput(tft)
+  const invalid = Number.isNaN(parsedValorant) || Number.isNaN(parsedLeague) || Number.isNaN(parsedTft)
+  const ready = !invalid && (parsedValorant !== null || parsedLeague !== null || parsedTft !== null)
+
+  async function refreshSettings() {
+    const read = await readSettings()
+    if (read) onSettings(read)
+  }
+
+  async function syncHours() {
+    setBusy(true)
+    setNote(null)
+    try {
+      const result = await host.riotHoursRefresh(riotId)
+      await refreshSettings()
+      if (!result.ok) {
+        setNote({ text: result.message ?? 'Riot hours could not be synced.', error: true })
+        return { ok: true }
+      }
+      setNote({ text: result.message ?? 'Riot hours synced.', error: false })
+      return { ok: true }
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function importExport() {
+    setBusy(true)
+    setNote(null)
+    try {
+      const result = await host.importRiotExport(riotId)
+      if (result.cancelled) return { ok: true }
+      await refreshSettings()
+      if (!result.ok) {
+        setNote({ text: result.message ?? 'Riot data export could not be imported.', error: true })
+        return { ok: true }
+      }
+      setNote({ text: result.message ?? 'Riot data export imported.', error: false })
+      return { ok: true }
+    } finally {
+      setBusy(false)
+    }
+  }
 
   async function saveBaseline() {
     if (!ready) return { ok: false, message: 'Enter starting hours greater than zero.' }
@@ -320,9 +370,9 @@ function RiotBaselineRow({
         riotId,
         ...(parsedValorant !== null ? { valorantHours: parsedValorant } : {}),
         ...(parsedLeague !== null ? { leagueHours: parsedLeague } : {}),
+        ...(parsedTft !== null ? { tftHours: parsedTft } : {}),
       })
-      const read = await readSettings()
-      if (read) onSettings(read)
+      await refreshSettings()
       return result
     } finally {
       setBusy(false)
@@ -336,22 +386,22 @@ function RiotBaselineRow({
   }
 
   const failed = (error: PlainError) => setNote({ text: error.text, error: true })
-  const summaryParts = [
-    baseline?.valorantMinutes ? `VALORANT ${formatBaselineHours(baseline.valorantMinutes)} h` : null,
-    baseline?.leagueMinutes ? `League ${formatBaselineHours(baseline.leagueMinutes)} h` : null,
-  ].filter(Boolean)
 
   const detail = note && !note.error
     ? note.text
-    : (
-      <>
-        tracker.gg blocks automated imports. Add hours you played before Exo so new sessions add onto them.{' '}
-        <button type="button" className="exo-set-link" onClick={() => void host.openUrl(trackerUrlFor(riotId))}>Open tracker.gg</button>
-      </>
-    )
+    : editing
+      ? (
+        <>
+          Need day-one history?{' '}
+          <button type="button" className="exo-set-link" onClick={() => void host.openUrl(RIOT_PRIVACY_URL)}>Request Riot data export</button>
+        </>
+      )
+      : summaryParts.length > 0
+        ? summaryParts.join(' · ')
+        : undefined
 
   return (
-    <Row label="Starting hours" detail={detail} error={note?.error ? note.text : null}>
+    <Row label="Riot hours" detail={detail} error={note?.error ? note.text : null}>
       {editing ? (
         <form className="exo-set-key-form" onSubmit={event => { event.preventDefault(); event.currentTarget.querySelector<HTMLButtonElement>('.exo-action:not(:disabled)')?.click() }}>
           <input type="number" min="0.5" max="166666" step="0.5" className="exo-field is-short" value={valorant}
@@ -360,16 +410,22 @@ function RiotBaselineRow({
           <input type="number" min="0.5" max="166666" step="0.5" className="exo-field is-short" value={league}
             placeholder="League (h)" aria-label="League of Legends starting hours" disabled={busy}
             onChange={event => setLeague(event.target.value)} />
+          <input type="number" min="0.5" max="166666" step="0.5" className="exo-field is-short" value={tft}
+            placeholder="TFT (h)" aria-label="Teamfight Tactics starting hours" disabled={busy}
+            onChange={event => setTft(event.target.value)} />
           <ActionButton className="exo-set-btn" disabled={!ready || busy} context="StoresSection.riotBaseline"
             fallback="Starting hours could not be saved. Try again." why="none"
             onFailed={failed} onPress={saveBaseline} onDone={savedBaseline}>Save</ActionButton>
-          {hasSaved ? (
-            <button type="button" className="exo-set-btn" disabled={busy} onClick={() => { syncFromSaved(); setEditing(false) }}>Cancel</button>
-          ) : null}
+          <button type="button" className="exo-set-btn" disabled={busy} onClick={() => { syncFromSaved(); setEditing(false) }}>Cancel</button>
         </form>
       ) : (
         <>
-          <State on>{summaryParts.join(' · ')}</State>
+          <ActionButton className="exo-set-btn" disabled={busy} context="StoresSection.riotSync"
+            fallback="Riot hours could not be synced." why="none"
+            onFailed={failed} onPress={syncHours}>Sync hours</ActionButton>
+          <ActionButton className="exo-set-btn" disabled={busy} context="StoresSection.riotExport"
+            fallback="Riot data export could not be imported." why="none"
+            onFailed={failed} onPress={importExport}>Import export</ActionButton>
           <button type="button" className="exo-set-btn" disabled={busy} onClick={() => { syncFromSaved(); setNote(null); setEditing(true) }}>Edit</button>
         </>
       )}

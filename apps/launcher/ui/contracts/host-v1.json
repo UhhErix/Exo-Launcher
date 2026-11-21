@@ -260,6 +260,7 @@
     "notes.session": "{ ok: boolean }",
     "notes.spell": "{ ok: boolean; wrong?: boolean; suggestions?: string[] }",
     "notes.textFiles": "{ ok: boolean; offered: boolean; isDefault: boolean; message?: string | null }",
+    "playtime.importRiotExport": "RiotExportImport",
     "playtime.riotRefresh": "RiotHoursRefresh",
     "playtime.setRiotBaseline": "{ ok: boolean; message?: string; baseline?: RiotBaseline | null }",
     "replaced.remove": "{ ok: boolean; message?: string | null; removed: number; left: number; apps: ReplacedApp[] }",

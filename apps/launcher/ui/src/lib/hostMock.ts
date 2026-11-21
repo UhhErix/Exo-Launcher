@@ -1420,22 +1420,31 @@ const MOCK_HANDLERS: Record<string, MockHandler> = {
     MOCK_STEAM_ACCOUNT = null
     return { ok: true }
   },
-  // What tracker.gg answers apps now (TrackerGgPlaytime.BlockedMessage): a browser check, so nothing is imported.
   'playtime.riotRefresh': () => ({
     ok: false,
     profilePrivate: false,
-    message: "tracker.gg now blocks apps from reading its profiles, so Exo can't import your Riot hours from it. Exo still counts every session you play.",
+    unconfigured: true,
+    message: "Automatic Riot sync isn't configured on Exo's server yet. You can import a Riot data export or enter starting hours.",
     profileUrl: 'https://tracker.gg/valorant',
+    baseline: mockSettings.riotBaseline,
+  }),
+  'playtime.importRiotExport': () => ({
+    ok: false,
+    cancelled: true,
+    message: null,
+    baseline: mockSettings.riotBaseline,
   }),
   'playtime.setRiotBaseline': (params) => {
     const current = mockSettings.riotBaseline ?? {}
-    const valorant = typeof params?.valorantHours === 'number' && params.valorantHours > 0
-      ? Math.round(params.valorantHours * 60)
-      : current.valorantMinutes ?? null
-    const league = typeof params?.leagueHours === 'number' && params.leagueHours > 0
-      ? Math.round(params.leagueHours * 60)
-      : current.leagueMinutes ?? null
-    mockSettings.riotBaseline = { valorantMinutes: valorant, leagueMinutes: league }
+    const pick = (hours: unknown, prev: number | null | undefined) =>
+      typeof hours === 'number' && hours > 0 ? Math.round(hours * 60) : prev ?? null
+    mockSettings.riotBaseline = {
+      valorantMinutes: pick(params?.valorantHours, current.valorantMinutes),
+      leagueMinutes: pick(params?.leagueHours, current.leagueMinutes),
+      tftMinutes: pick(params?.tftHours, current.tftMinutes),
+      lorMinutes: pick(params?.lorHours, current.lorMinutes),
+      twoXkoMinutes: pick(params?.twoXkoHours, current.twoXkoMinutes),
+    }
     return { ok: true, message: 'Starting hours saved.', baseline: mockSettings.riotBaseline }
   },
   'web.preferences.get': () => ({ microphone: 'ask', camera: 'ask', clipboard: 'ask', notifications: 'ask' }),

@@ -1,0 +1,6 @@
+{
+  "totalBudgetMs": 18000,
+  "upstreamTimeoutMs": 4000,
+  "maxMatchesPerGame": 300,
+  "maxMatchFetchPerRequest": 60
+}

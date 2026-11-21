@@ -1509,16 +1509,31 @@ export type ChromeLayout = {
 export type RiotBaseline = {
   valorantMinutes?: number | null
   leagueMinutes?: number | null
+  tftMinutes?: number | null
+  lorMinutes?: number | null
+  twoXkoMinutes?: number | null
 }
 
 export type RiotHoursRefresh = {
   ok: boolean
   profilePrivate?: boolean
   skipped?: boolean
+  partial?: boolean
+  unconfigured?: boolean
   message?: string
   valorantMinutes?: number | null
   leagueMinutes?: number | null
+  tftMinutes?: number | null
   profileUrl?: string
+  baseline?: RiotBaseline | null
+}
+
+export type RiotExportImport = {
+  ok: boolean
+  cancelled?: boolean
+  message?: string | null
+  matchCounts?: Record<string, number>
+  baseline?: RiotBaseline | null
 }
 
 /** The Game clients card's read: Epic's launcher layout, Steam's branch, and whether the card is due (an old Epic, Steam not on Beta, or a branch that can't be read). */
@@ -2674,8 +2689,22 @@ export const host = {
     rawCall<RiotHoursRefresh>(
       'playtime.riotRefresh',
       riotId ? { riotId } : {},
+      30_000,
     ),
-  setRiotBaseline: (baseline: { valorantHours?: number; leagueHours?: number; riotId?: string }) =>
+  importRiotExport: (riotId?: string) =>
+    rawCall<RiotExportImport>(
+      'playtime.importRiotExport',
+      riotId ? { riotId } : {},
+      120_000,
+    ),
+  setRiotBaseline: (baseline: {
+    valorantHours?: number
+    leagueHours?: number
+    tftHours?: number
+    lorHours?: number
+    twoXkoHours?: number
+    riotId?: string
+  }) =>
     rawCall<{ ok: boolean; message?: string; baseline?: RiotBaseline | null }>(
       'playtime.setRiotBaseline',
       baseline,

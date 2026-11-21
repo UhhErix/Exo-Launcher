@@ -175,6 +175,7 @@ public sealed class AppServices
         if (Interlocked.Exchange(ref _deferredServicesStarted, 1) != 0) return;
         Shaders.Start();
         StartStartupGuard();
+        _ = Task.Run(() => PlaytimeService.TryAutoSeedRiotHoursAsync(() => Library.RefreshDerivedStateAsync(CancellationToken.None)));
         // Today's backup of the device-only data, once a day (a second start the same day writes nothing). Only once setup is
         // done: that closes the restore offer for this install, so a fresh install's own first backup is never offered back.
         if (Settings.Current.OnboardingComplete)

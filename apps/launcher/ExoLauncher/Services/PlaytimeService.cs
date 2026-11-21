@@ -49,6 +49,42 @@ public static class PlaytimeService
     private static Dictionary<string, List<Span>>? _countedSteam;
     private static DateTimeOffset? _steamLogReadTo;
     private static int _steamBackfilling;
+    private static readonly ConcurrentDictionary<string, byte> AutoSeededRiotAccounts = new(StringComparer.Ordinal);
+
+    internal static async Task<bool> TryAutoSeedRiotHoursAsync(Func<Task>? onSeeded = null, CancellationToken ct = default)
+    {
+        if (HostMode.TestRun || HostMode.IsDisposable) return false;
+        var riotId = RiotIdStore.TryRead();
+        if (riotId is null) return false;
+        var account = RiotLedger.AccountKey(riotId);
+        if (account is null || RiotLedger.HasSeed(account)) return false;
+        if (!AutoSeededRiotAccounts.TryAdd(account, 0)) return false;
+
+        try
+        {
+            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            timeout.CancelAfter(RiotHoursClient.RequestTimeout);
+            var result = await RiotHoursClient.LoadAsync(riotId, timeout.Token).ConfigureAwait(false);
+            if (!result.Ok) return false;
+            var now = DateTimeOffset.UtcNow;
+            var importedAt = result.LatestMatchUtc() is { } latest && latest <= now ? latest : now;
+            if (!RiotLedger.SeedIfHigher(account, result.ToSeeds(), importedAt, RiotLedger.CloudSource))
+                return false;
+            AppLog.Info("Riot hours synced automatically for " + result.Readings.Count + " game(s).");
+            if (onSeeded is not null)
+                await onSeeded().ConfigureAwait(false);
+            return true;
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            AppLog.Debug("Automatic Riot hours sync skipped: " + ex.GetType().Name);
+            return false;
+        }
+    }
 
     // The play sessions this PC counted or was credited for (SessionKey), saved in playtime.json: a pulled entry for one is never added again.
     private static HashSet<string>? _syncedSessions;
@@ -164,6 +200,7 @@ public static class PlaytimeService
             _checkpointTimer = null;
             ActiveSessions.Clear();
             SessionCheckpoints.Clear();
+            AutoSeededRiotAccounts.Clear();
             _exoMinutes = null;
             _exoLastPlayed = null;
             _xboxSeeds = null;

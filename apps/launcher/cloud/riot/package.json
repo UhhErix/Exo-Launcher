@@ -1,0 +1,16 @@
+{
+  "name": "exo-riot",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test test/aggregate.test.mjs && vitest run"
+  },
+  "engines": {
+    "node": ">=22.13"
+  },
+  "devDependencies": {
+    "@cloudflare/vitest-plugin": "1.8.5",
+    "vitest": "5.1.1",
+    "wrangler": "4.165.0"
+  }
+}
