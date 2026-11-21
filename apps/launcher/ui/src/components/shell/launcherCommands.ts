@@ -15,7 +15,6 @@ import {
   Refresh,
   Settings,
   StoreBag,
-  ThisPc,
 } from '../../brand/icons'
 import type { Game } from '../../lib/host'
 import { gameSearchKeywords } from '../../lib/library'
@@ -35,7 +34,6 @@ const NAV_COMMANDS: Readonly<Record<string, View>> = {
   'nav-music': 'music',
   'nav-exo-ai': 'exo-ai',
   'nav-apps': 'apps',
-  'nav-system': 'system',
   'nav-devices': 'devices',
   'nav-settings': 'settings',
 }
@@ -58,17 +56,16 @@ export function buildShellCommands({
     { id: 'nav-store', group: 'Go to', title: 'Store', icon: StoreBag },
     { id: 'nav-friends', group: 'Go to', title: 'Discord', icon: Chats, keywords: ['home', 'friends', 'messages', 'dms', 'servers', 'playing', 'voice'] },
     { id: 'nav-music', group: 'Go to', title: 'Music', icon: MusicNotes },
-    { id: 'nav-exo-ai', group: 'Go to', title: 'Exo AI', icon: Burst, keywords: ['auto tune', 'specs', 'overclock', 'undervolt', 'autopilot', 'system tuning', 'park control', 'islc', 'standby list'] },
+    { id: 'nav-exo-ai', group: 'Go to', title: 'Exo AI', icon: Burst, keywords: ['auto tune', 'specs', 'overclock', 'undervolt', 'autopilot', 'system tuning', 'shaders', 'updates', 'drivers', 'storage', 'park control', 'islc', 'standby list'] },
     { id: 'nav-apps', group: 'Go to', title: 'Apps', icon: Apps, keywords: ['uninstall', 'programs', 'bloat', 'startup'] },
-    { id: 'nav-system', group: 'Go to', title: 'PC', icon: ThisPc },
     { id: 'nav-devices', group: 'Go to', title: 'Devices', icon: Mouse },
     { id: 'nav-settings', group: 'Go to', title: 'Settings', icon: Settings },
     ...PC_SECTIONS.map((section): Command => ({
       id: `pc-${section.id}`,
       group: 'Go to',
       title: section.label,
-      detail: 'PC',
-      icon: ThisPc,
+      detail: section.id === 'apps' ? 'Apps' : 'Exo AI',
+      icon: section.id === 'apps' ? Apps : Burst,
       searchOnly: true,
       keywords: section.keywords,
     })),
@@ -156,7 +153,7 @@ export function executeShellCommand(
   const section = PC_SECTIONS.find((entry) => `pc-${entry.id}` === command.id)
   if (section) {
     const room = pcLinkRoom(section.id)
-    deps.setGpuJump(room === 'system' ? { tab: section.id } : null)
+    deps.setGpuJump(room === 'exo-ai' ? { tab: section.id } : null)
     void deps.goToView(room)
     return
   }

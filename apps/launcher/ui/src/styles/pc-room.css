@@ -2,63 +2,12 @@
 @import "./graphics.css";
 @import "./shaders.css";
 
-/* PC (gpu/PcRoom.tsx; DESIGN.md › PC): one page on a 1080p screen, no scrolling. On the left This PC (a pane of glass
-   with the PC's name large and its chips at the line's right end, its parts as a readout on hairlines), Updates under it; on the right Shaders, the window's full height. Updates and Shaders each
-   scroll in their own pane. A small window stacks them and the room scrolls as one. Each section is a pane of glass
-   (glass.css › .exo-system-panel) with its name inside it in the rooms' title size, as This PC's is. Loaded with the room's code, so the first paint carries none of it. */
-.exo-pc {
-  --exo-pc-space: 20px;
-  display: grid;
-  flex: 1;
-  grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
-  grid-template-rows: minmax(0, 1fr);
-  gap: var(--exo-gutter);
-  min-width: 0;
-  min-height: 0;
-  padding: 12px var(--exo-gutter) 20px;
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  scroll-padding-top: 12px;
-  background: var(--color-bg);
-  color: var(--color-fg);
-}
-
-/* Rows a little tighter than Settings' 62px: a tool room of many short rows (DESIGN.md › Grammar › Rows). */
-.exo-pc .exo-set-item,
 .exo-pc-menu .exo-set-item {
   padding: 9px 0;
 }
 
-/* The left column: This PC as tall as its parts, Updates the rest. */
-.exo-pc-main {
-  display: flex;
-  flex-direction: column;
-  gap: var(--exo-pc-space);
-  min-width: 0;
-  min-height: 0;
-}
-
-.exo-pc-main > .exo-pc-hero {
-  flex: none;
-}
-
-.exo-pc-main > .exo-pc-section {
-  flex: 1;
-}
-
-/* Nothing to show: only the title line ("Up to date"), not a box filling the column. */
-.exo-pc-main > .exo-pc-section:has(> .exo-pc-pane:empty) {
-  flex: none;
-}
-
-.exo-pc .exo-pc-section > .exo-pc-pane:empty {
+.exo-pc-section > .exo-pc-pane:empty {
   display: none;
-}
-
-/* This PC: its name with the chips at the line's right end; its parts under them. */
-.exo-pc .exo-pc-hero {
-  padding: 22px 24px 8px;
-  min-width: 0;
 }
 
 .exo-pc-about {
@@ -217,31 +166,24 @@
   color: var(--color-bad);
 }
 
-/* A section: a pane of glass with its name inside at the top over a hairline, as This PC's is, then what it holds. The
-   name's line is a control's height, so a control on it lines up with it. A section fills its column's height and what
-   it holds scrolls on its own under the name. */
-.exo-pc .exo-pc-section {
+.exo-pc-section {
   position: relative;
   display: flex;
   flex-direction: column;
   min-width: 0;
   min-height: 0;
-  /* 22px down, as the This PC panel: a section's title centres on the line 'Erix-PC' does beside it. */
-  padding: 22px 0 4px;
+  padding: 18px 0 4px;
   scroll-margin-top: 12px;
 }
 
-/* A section's title line: its name, and its actions at the right end (SectionHead.tsx), a control's height. */
-.exo-pc .exo-pc-section-head {
+.exo-pc-section-head {
   display: flex;
   flex: none;
   align-items: center;
   gap: 12px;
-  /* A control's height above its 12px foot, with or without a control in it (border-box: 32px alone let a head with no button
-     shrink to its words, so Shaders' title sat 3px above Updates'). */
-  min-height: 44px;
+  min-height: 40px;
   margin: 0 24px;
-  padding-bottom: 12px;
+  padding-bottom: 10px;
 }
 
 .exo-pc-section-actions {
@@ -260,7 +202,7 @@
   font-variant-numeric: tabular-nums;
 }
 
-.exo-pc .exo-pc-section-head > h2 {
+.exo-pc-section-head > h2 {
   flex: none;
   margin: 0;
   color: var(--color-fg);
@@ -269,23 +211,21 @@
   line-height: 1.25;
 }
 
-.exo-pc .exo-pc-pane {
+.exo-pc-pane {
   padding: 4px 24px;
 }
 
-.exo-pc .exo-pc-pane > .exo-set-item:first-child {
+.exo-pc-pane > .exo-set-item:first-child {
   border-top: 0;
 }
 
-/* Updates and Shaders fill their column, each pane scrolling on its own. */
-.exo-pc .exo-pc-section > .exo-pc-pane {
+.exo-pc-section > .exo-pc-pane {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
   overscroll-behavior: contain;
 }
 
-/* PC › Updates: the game runtimes under the drivers and Windows, under their own quiet heading. */
 .exo-pc-updates-part {
   display: flex;
   flex-direction: column;
@@ -301,34 +241,8 @@
   font-weight: var(--exo-weight-title);
 }
 
-/* Shaders in its pane: the bar and the posters with the pane's own margin all round. */
-.exo-pc .exo-pc-section.is-shaders > .exo-pc-pane {
-  padding: 18px 24px;
-}
-
-/* A small window: the parts stack and the room scrolls as one, each pane as tall as what it holds. */
-@media (max-width: 1279px), (max-height: 799px) {
-  .exo-pc {
-    display: flex;
-    flex-direction: column;
-  }
-
-  .exo-pc > * {
-    flex: none;
-  }
-
-  .exo-pc > .exo-pc-section > .exo-pc-pane,
-  .exo-pc-main > .exo-pc-section > .exo-pc-pane {
-    overflow: visible;
-  }
-
-  /* Stacked, the pane is as tall as its posters, so posters sized to fit the pane (useFit) would change the size they
-     were fitted to, every frame: the plain grid here. */
-  .exo-pc .exo-shaders-posters.is-fit {
-    grid-template-columns: repeat(auto-fill, minmax(112px, 1fr));
-    justify-content: normal;
-    padding-bottom: 24px;
-  }
+.exo-pc-section.is-shaders > .exo-pc-pane {
+  padding: 16px 24px;
 }
 
 /* A part's menu (PcRoom.tsx › PcMenu), hung from the part that opened it: its name with its action beside it (Use best

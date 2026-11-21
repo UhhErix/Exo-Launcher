@@ -18,6 +18,7 @@ export type UpscalerFilesProps = {
  */
 export function UpscalerFiles({ status, scanState = 'ready', onOpen }: UpscalerFilesProps) {
   const word = scanState === 'loading' ? null : upscalerLineWord(upscalerView(status), scanFailure(scanState, status))
+  if (scanState === 'ready' && word?.text === 'Not supported in this game') return null
   return <GameLine name="Upscalers" word={word} onOpen={onOpen} />
 }
 

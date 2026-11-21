@@ -17,8 +17,9 @@ const systemGroupSrc = read('../src/components/gpu/SystemGroup.tsx')
 const pcRoomCss = read('../src/styles/pc-room.css')
 const titleBarSrc = read('../src/components/shell/TitleBar.tsx')
 const systemCss = read('../src/styles/system.css')
+const gameSheetSrc = read('../src/components/shell/GameSheet.tsx')
 
-test('ExoAiRoom and AutoTuneCinema run all 6 safe stages, expose zero Overrides, and use native Exo Void rooms', () => {
+test('ExoAiRoom and AutoTuneCinema run all 6 safe stages, expose zero Overrides, and use full-width Void rooms', () => {
   for (const id of ['cooling', 'graphics', 'system', 'bloat', 'cleanup', 'drivers']) {
     assert.match(stagesSrc, new RegExp(`id:\\s*'${id}'`))
   }
@@ -34,15 +35,20 @@ test('ExoAiRoom and AutoTuneCinema run all 6 safe stages, expose zero Overrides,
   assert.match(exoAiRoomSrc, /host\.appsPackages\(\)/)
   assert.match(exoAiRoomSrc, /className="exo-ai-room"/)
   assert.match(exoAiRoomSrc, /<ThisPc\b/)
+  assert.match(exoAiRoomSrc, /<ShadersBoard\b/)
+  assert.match(exoAiRoomSrc, /<DriversSection\b/)
   assert.match(exoAiRoomSrc, /<AutoTuneCinema\b/)
-  assert.match(exoAiRoomSrc, /<ExoAiFooter\b/)
-  assert.doesNotMatch(exoAiRoomSrc, /role="tablist"|exo-at-bg-glow|exo-at-bg-grid|exo-at-orbit|exo-at-reactor-card|Include bloat app removal|Overrides|overridesOpen/)
+  assert.match(exoAiRoomSrc, /Auto Tune complete/)
+  assert.doesNotMatch(exoAiRoomSrc, /role="tablist"|exo-at-bg-glow|exo-at-bg-grid|exo-at-orbit|exo-at-reactor-card|Include bloat app removal|Overrides|overridesOpen|<SystemGroup\b|<AutopilotControls\b/)
 
   assert.match(appsRoomSrc, /className="exo-apps-room"/)
   assert.match(appsRoomSrc, /<AppsPanel\b/)
+  assert.match(gameSheetSrc, /className="exo-game-room"/)
+  assert.doesNotMatch(gameSheetSrc, /<GameOverlay\b/)
 
   assert.match(titleBarSrc, /id:\s*'exo-ai',\s*label:\s*'Exo AI'/)
   assert.match(titleBarSrc, /id:\s*'apps',\s*label:\s*'Apps'/)
+  assert.doesNotMatch(titleBarSrc, /id:\s*'system',\s*label:\s*'PC'/)
 
   assert.match(cinemaSrc, /exo-at-cine/)
   assert.match(cinemaSrc, /exo-at-hero-stage/)
@@ -51,6 +57,7 @@ test('ExoAiRoom and AutoTuneCinema run all 6 safe stages, expose zero Overrides,
   assert.match(cinemaSrc, /useHoldWindow/)
   assert.match(cinemaSrc, /<Progress\b/)
   assert.match(cinemaSrc, /Restart now/)
+  assert.doesNotMatch(cinemaSrc, /exo-at-cine-rail|exo-at-cine-beam|exo-at-cine-sparks/)
 
   assert.doesNotMatch(exoAiSrc, /Overrides|<Popover\b|Checking every 30m|Applied automatically|Watching in background|<details/)
 
@@ -62,14 +69,15 @@ test('ExoAiRoom and AutoTuneCinema run all 6 safe stages, expose zero Overrides,
 
   assert.match(exoAiRoomCss, /var\(--color-bg\)/)
   assert.match(exoAiRoomCss, /var\(--exo-type-page\)/)
+  assert.match(exoAiRoomCss, /width:\s*100%/)
   assert.match(appsRoomCss, /var\(--color-bg\)/)
+  assert.match(appsRoomCss, /width:\s*100%/)
   assert.match(overlayCss, /var\(--color-bg\)/)
   assert.match(overlayCss, /:root\[data-exo-motion="reduce"\]/)
   assert.match(overlayCss, /html\[data-exo-inactive="true"\]/)
   assert.match(overlayCss, /@keyframes exo-at-room-in/)
   assert.match(overlayCss, /@keyframes exo-at-spin/)
-  assert.match(overlayCss, /@keyframes exo-at-beam-sweep/)
-  assert.doesNotMatch(overlayCss, /exo-at-bg-glow|exo-at-bg-grid|exo-at-orbit|exo-at-reactor-card|exo-at-overrides/)
+  assert.doesNotMatch(overlayCss, /exo-at-beam-sweep|exo-at-cine-rail|exo-at-cine-beam|exo-at-cine-sparks|exo-at-bg-glow|exo-at-bg-grid|exo-at-orbit|exo-at-reactor-card|exo-at-overrides/)
   assert.match(pcRoomCss, /\.exo-pc-chip:has\(> svg:first-child\)/)
   assert.doesNotMatch(pcRoomCss, /\.exo-ai-status|\.exo-ai-pills|\.exo-ai-pill|\.exo-storage-section/)
   assert.doesNotMatch(titleBarSrc, /Ctrl K|exo-bar-kbd/)

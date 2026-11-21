@@ -55,24 +55,24 @@ function stageReadySummary(
   const driverVersion = state.driver?.update ? state.driver.latest?.version : null
   const bloatCount = bloatApps.length
   const bloatSummary = bloatCount === 0
-    ? 'No preinstalled bloat Store apps detected'
-    : `Remove ${bloatCount} preinstalled bloat app${bloatCount === 1 ? '' : 's'} (keeps Xbox, Store & games)`
+    ? 'No bloatware found'
+    : `Remove ${bloatCount} preinstalled bloat app${bloatCount === 1 ? '' : 's'}`
 
   return {
     cooling: powerDone && fanReady
-      ? 'Exo power plan, 0.5 ms kernel timer & GPU fan curve active'
-      : 'Apply Exo power plan, 0.5 ms timer, ISLC standby purge & fan curve',
+      ? 'Exo power plan, 0.5 ms timer & Autopilot active'
+      : 'Exo power plan, 0.5 ms timer, standby purge & Autopilot',
     graphics: graphicsPending
-      ? 'Optimize driver profile, best refresh rate, HDR & frame generation'
-      : 'Graphics profile and display output at optimal defaults',
+      ? 'Driver profile, refresh rate, HDR & frame generation'
+      : 'Graphics profile and display at best defaults',
     system: systemPending
-      ? 'Apply all deep Windows 11 tweaks (kernel timer, BCD, memory, GPU P-states & DPC, MPO, HVCI, USB, MSI interrupts & network)'
-      : 'Full deep Windows 11 playbook, interrupts, services & network optimal',
+      ? 'Windows 11 gaming tweaks, MSI interrupts & network'
+      : 'Windows 11 tweaks, MSI interrupts & network optimal',
     bloat: bloatSummary,
-    cleanup: 'Clear Windows Update, browser, crash dump & launcher caches (keeps cookies & logins)',
+    cleanup: 'Windows Update, browser, crash dump & launcher caches',
     drivers: driverVersion
-      ? `Update ready (${driverVersion}) in PC Updates`
-      : 'Check graphics & chipset driver status',
+      ? `Driver update ready (${driverVersion})`
+      : 'Graphics & chipset drivers up to date',
   }
 }
 
@@ -85,12 +85,12 @@ export function initialAutoTuneStages(
 ): AutoTuneStageState[] {
   const detail = stageReadySummary(state, exoAi, hdr, settings, bloatApps)
   return [
-    { id: 'cooling', label: 'Power plan & Autopilot', status: 'idle', detail: detail.cooling },
-    { id: 'graphics', label: 'Graphics, display & HDR', status: 'idle', detail: detail.graphics },
-    { id: 'system', label: 'Deep Windows 11 playbook, MSI interrupts & network', status: 'idle', detail: detail.system },
-    { id: 'bloat', label: 'Preinstalled bloat apps', status: 'idle', detail: detail.bloat },
-    { id: 'cleanup', label: 'Temporary & launcher caches', status: 'idle', detail: detail.cleanup },
-    { id: 'drivers', label: 'Graphics & chipset drivers', status: 'idle', detail: detail.drivers },
+    { id: 'cooling', label: 'Power & Autopilot', status: 'idle', detail: detail.cooling },
+    { id: 'graphics', label: 'Graphics & display', status: 'idle', detail: detail.graphics },
+    { id: 'system', label: 'System, interrupts & network', status: 'idle', detail: detail.system },
+    { id: 'bloat', label: 'Preinstalled apps', status: 'idle', detail: detail.bloat },
+    { id: 'cleanup', label: 'Temporary caches', status: 'idle', detail: detail.cleanup },
+    { id: 'drivers', label: 'Drivers & updates', status: 'idle', detail: detail.drivers },
   ]
 }
 
@@ -219,7 +219,7 @@ async function runBloatStage(
   }
   return {
     status: 'done',
-    detail: `${removal.removed} bloat app${removal.removed === 1 ? '' : 's'} removed (Add back available in PC › Apps)`,
+    detail: `${removal.removed} bloat app${removal.removed === 1 ? '' : 's'} removed (restore anytime in Apps)`,
   }
 }
 
@@ -243,7 +243,7 @@ async function runDriversStage(state: PcState, onRefresh: () => Promise<void>): 
   const hasGpuUpdate = !!(state.driver?.update && state.driver.latest?.version)
   const hasChipsetUpdate = !!(chipset && !chipset.applied && !chipset.current && !chipset.held)
   if (hasGpuUpdate || hasChipsetUpdate) {
-    return { status: 'done', detail: 'Driver updates available in PC Updates' }
+    return { status: 'done', detail: 'Driver updates ready in Updates' }
   }
   return { status: 'done', detail: 'Graphics & chipset drivers up to date' }
 }

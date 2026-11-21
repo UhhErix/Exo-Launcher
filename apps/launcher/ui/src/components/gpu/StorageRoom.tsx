@@ -248,7 +248,7 @@ export function StorageRoom({
           <div className="exo-st-top-left">
             <button ref={backRef} type="button" className="exo-set-btn exo-st-back" onClick={onClose}>
               <ChevronLeft size={16} />
-              PC
+              Exo AI
             </button>
             <div className="exo-st-heading">
               <h1 id="exo-storage-title" className="exo-st-title">Storage</h1>

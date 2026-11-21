@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { CHECK_PATH } from '../brand/icons'
+import { CHECK_PATH, ChevronLeft } from '../brand/icons'
 import { hostedBuyUrl, resolvePrimaryAction, type Game, type GameVariant, type InstallProgress } from '../lib/host'
 import { transferForGame } from '../lib/library'
 import { installProgressLabel, transferPercent } from '../lib/utils'
@@ -77,6 +77,7 @@ export type GamePageProps = {
   /** Properties over the page (its tool, or the card menu's Properties). */
   propertiesOpen: boolean
   onPropertiesOpen: (open: boolean) => void
+  onBack?: () => void
 }
 
 /**
@@ -165,6 +166,7 @@ export function GamePage({
   onHdrForGames,
   propertiesOpen,
   onPropertiesOpen,
+  onBack,
 }: GamePageProps) {
   const { installedActions, artworkEnabled } = pageFlags(selected)
   const details = useGameDetails(selected)
@@ -176,15 +178,31 @@ export function GamePage({
   const selectedProgress = transferForGame(progress, selected)
   const hostLocked = busy || !!selectedProgress?.isActive
   const sources = sourceVariants(selected)
-  // Done (DESIGN.md › Motion) on the cover when a download lands installed; while it runs, the pill carries the bar.
   const downloading = !!selectedProgress?.isActive
   const finished = useJustFinished(downloading, isCurrent(selected))
 
   return (
     <article className="exo-game-page exo-enter">
       <div className="exo-game-page-wash" aria-hidden>
-        <HeroWash game={artworkView} fill={false} />
+        <HeroWash game={artworkView} fill />
       </div>
+      <header className="exo-game-room-bar">
+        {onBack ? (
+          <button type="button" className="exo-set-btn exo-game-back" onClick={onBack}>
+            <ChevronLeft size={16} />
+            Library
+          </button>
+        ) : <span />}
+        <div className="exo-game-room-meta">
+          <GameStore
+            selected={selected}
+            sources={sources}
+            locked={hostLocked || manageBusy}
+            onSelectSource={onSelectSource}
+          />
+          <GameShared selected={selected} />
+        </div>
+      </header>
       <div className="exo-game-page-inner">
         <div className="exo-game-page-layout">
           <div className="exo-game-cover-col">
@@ -202,15 +220,7 @@ export function GamePage({
           </div>
           <div className="exo-game-page-body">
             <div className="exo-game-info">
-              <GameHeader selected={selected}>
-                <GameStore
-                  selected={selected}
-                  sources={sources}
-                  locked={hostLocked || manageBusy}
-                  onSelectSource={onSelectSource}
-                />
-                <GameShared selected={selected} />
-              </GameHeader>
+              <GameHeader selected={selected} />
               <div className="exo-game-actions">
                 <PrimaryAction
                   selected={selected}
@@ -242,12 +252,12 @@ export function GamePage({
                 )}
               </div>
               <GameStats selected={selected} sources={sources} achievements={details.achievements} driveHeat={details.driveHeat} loading={details.loading} />
-              {installedActions && (
-                <GameLines selected={selected} details={details} onOpenSystem={onOpenSystem} hdrForGames={hdrForGames} onHdrForGames={onHdrForGames} />
-              )}
             </div>
           </div>
         </div>
+        {installedActions && (
+          <GameLines selected={selected} details={details} onOpenSystem={onOpenSystem} hdrForGames={hdrForGames} onHdrForGames={onHdrForGames} />
+        )}
       </div>
       <LiveStatus selected={selected} busy={busy} progress={selectedProgress} statusMsg={statusMsg} />
     </article>

@@ -254,7 +254,7 @@ export function useShellHostEvents({
       onPress: () => {
         dismissNotice(`versions-${found.id}`)
         const room = pcLinkRoom(found.page)
-        setGpuJump(room === 'system' ? { tab: found.page } : null)
+        setGpuJump(room === 'exo-ai' ? { tab: found.page } : null)
         void goToView(room)
       },
     },
@@ -272,7 +272,7 @@ export function useShellHostEvents({
         const link = (part ?? 'overview') as PcLink
         const target = pcLinkRoom(link)
         void goToView(target)
-        setGpuJump(target === 'system' ? { tab: link } : null)
+        setGpuJump(target === 'exo-ai' ? { tab: link } : null)
       }
       else if (room === 'library') void goToView('library')
     }
@@ -284,7 +284,7 @@ export function useShellHostEvents({
     const open = (event: Event) => {
       const link = (event as CustomEvent<PcLink>).detail
       const target = pcLinkRoom(link)
-      setGpuJump(target === 'system' ? { tab: link } : null)
+      setGpuJump(target === 'exo-ai' ? { tab: link } : null)
       void goToView(target)
     }
     window.addEventListener('exo-open-pc', open)

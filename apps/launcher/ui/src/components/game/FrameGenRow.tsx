@@ -89,9 +89,8 @@ export function FrameGenModRow({ gameId }: { gameId: string }) {
     return () => { live = false }
   }, [gameId])
 
-  if (!state) return <GameReading name="Frame generation" word={null} waiting />
+  if (!state) return null
   if (!state.ok) return <GameReading name="Frame generation" word={{ text: 'Could not check', bad: true }} />
-  // A card no mod adds to: nothing on this PC can change it, so the line hides.
-  if (state.state === 'hidden' && state.reason === 'card') return null
+  if (state.state === 'hidden') return null
   return <GameReading name="Frame generation" word={frameGenWord(state)} />
 }

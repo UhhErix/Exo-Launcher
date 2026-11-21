@@ -4,7 +4,7 @@ import { Spinner } from '../ui/Spinner'
 import { useGlide } from '../../lib/glide'
 import { useLens } from '../../lib/glass'
 import { ExoMark } from '../../brand/ExoMark'
-import { Apps, Burst, Chats, ThisPc, Library, Mouse, MusicNotes, Settings, StoreBag } from '../../brand/icons'
+import { Apps, Burst, Chats, Library, Mouse, MusicNotes, Settings, StoreBag } from '../../brand/icons'
 import { warmMusic, type MusicService } from '../../lib/music'
 import { DiscordBadge } from './DiscordBadge'
 import { MusicMiniPlayer } from './MusicMiniPlayer'
@@ -12,7 +12,7 @@ import { CaptureButton } from './CaptureButton'
 import { WindowChrome } from '../WindowChrome'
 
 export type View =
-  'library' | 'store' | 'friends' | 'music' | 'devices' | 'exo-ai' | 'apps' | 'system' | 'settings'
+  'library' | 'store' | 'friends' | 'music' | 'devices' | 'exo-ai' | 'apps' | 'settings'
 
 const NAV_TABS: ReadonlyArray<{
   id: View
@@ -26,7 +26,6 @@ const NAV_TABS: ReadonlyArray<{
     { id: 'devices', label: 'Devices', Icon: Mouse },
     { id: 'exo-ai', label: 'Exo AI', Icon: Burst },
     { id: 'apps', label: 'Apps', Icon: Apps },
-    { id: 'system', label: 'PC', Icon: ThisPc },
   ]
 
 /** The rooms in tab order: Ctrl+1 is the first. */
