@@ -196,13 +196,23 @@
   animation: none;
 }
 
+.exo-music-main-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.exo-music-main-head .exo-music-search {
+  flex: 0 1 260px;
+  width: min(260px, 100%);
+  margin-inline-start: auto;
+}
+
 .exo-music-back {
-  position: sticky;
-  top: 0;
-  z-index: 2;
+  flex: none;
   width: 32px;
   height: 32px;
-  margin-bottom: 8px;
   padding: 0;
   justify-content: center;
   background: var(--exo-fill);

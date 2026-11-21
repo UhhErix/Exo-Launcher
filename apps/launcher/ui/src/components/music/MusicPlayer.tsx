@@ -170,6 +170,13 @@ export function MusicPlayer({ adapter, service, active, nowPlaying }: { adapter:
   })
 
   const search = query.trim()
+  const searchBox = (
+    <label className="exo-music-search">
+      <Search size={16} />
+      <input ref={searchField} type="search" value={query} placeholder="Search" aria-label={`Search ${adapter.name}`}
+        onChange={event => setQuery(event.target.value)} onKeyDown={event => { if (event.key === 'Escape') setQuery('') }} />
+    </label>
+  )
   return (
     <PlayerContext.Provider value={value}>
       {reveal.covered ? <MusicWait name={adapter.name} leaving={reveal.ready} onLeft={reveal.uncover} /> : null}
@@ -187,14 +194,9 @@ export function MusicPlayer({ adapter, service, active, nowPlaying }: { adapter:
               <Icon size={16} /> {name}
             </button>
           ))}
-          <label className="exo-music-search">
-            <Search size={16} />
-            <input ref={searchField} type="search" value={query} placeholder="Search" aria-label={`Search ${adapter.name}`}
-              onChange={event => setQuery(event.target.value)} onKeyDown={event => { if (event.key === 'Escape') setQuery('') }} />
-          </label>
           <Library current={search ? undefined : page.uri} onSettled={reveal.library} />
         </nav>
-        <Main page={page} query={search} depth={stack.length} artFrom={artFrom} canBack={!search && stack.length > 1} onSettled={reveal.page}
+        <Main page={page} query={search} depth={stack.length} artFrom={artFrom} canBack={!search && stack.length > 1} searchBar={searchBox} onSettled={reveal.page}
           onBack={() => setStack(previous => previous.length > 1 ? previous.slice(0, -1) : previous)} />
         {panel ? (
           <aside className="exo-music-panel exo-motion-switch" key={panel} aria-label={panelName(panel)}>
@@ -268,13 +270,14 @@ function viewFor(page: Page, query: string, filter: string): [PlayerView, Player
 }
 
 /** The middle column. The page on screen stays until the next one has loaded, then the new one fades in. */
-function Main({ page, query, depth, artFrom, canBack, onSettled, onBack }: {
+function Main({ page, query, depth, artFrom, canBack, searchBar, onSettled, onBack }: {
   page: Page
   query: string
   /** How deep the page is, so a page further in pushes forward and one back pushes back. */
   depth: number
   artFrom: { current: Element | null }
   canBack: boolean
+  searchBar: ReactNode
   /** The first page is in (Home with its recent grid), or failed: the room may show. */
   onSettled: () => void
   onBack: () => void
@@ -330,8 +333,11 @@ function Main({ page, query, depth, artFrom, canBack, onSettled, onBack }: {
   useEffect(() => { if (error || songs || shown && (shown.query || shown.page.view !== 'home')) onSettled() }, [error, songs, shown, onSettled])
   return (
     <div className="exo-music-main" ref={scroller}>
+      <div className="exo-music-main-head">
+        {canBack ? <button type="button" className="exo-set-btn exo-music-back" onClick={onBack} aria-label="Back"><ChevronLeft size={18} /></button> : null}
+        {searchBar}
+      </div>
       {!songs && !error && (!shown || !fresh) ? <PageWait first={!shown} query={settled} name={adapter.name} /> : null}
-      {canBack ? <button type="button" className="exo-set-btn exo-music-back" onClick={onBack} aria-label="Back"><ChevronLeft size={18} /></button> : null}
       {error && !songs ? <ErrorNote className="exo-music-error" message={error} /> : null}
       {songs ? (
         <div key="songs" className="exo-motion-switch"><SongsPage scroller={scroller} /></div>

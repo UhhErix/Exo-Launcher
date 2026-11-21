@@ -37,11 +37,10 @@ export function MusicWait({ name, leaving = false, onLeft }: { name: string; lea
       <div className="exo-music-side" aria-hidden="true">
         <Wait>
           {times(2, i => <span className="exo-music-row exo-music-nav"><svg width="16" height="16" /><span>{sample(i + 5)}</span></span>)}
-          <span className="exo-music-search" skullet-block="" />
           <ul className="exo-music-library">{times(12, i => <li className="exo-music-library-item"><span className="exo-music-row exo-music-library-row">{art}<span className="exo-music-row-text"><span className="exo-music-row-title">{sample(i)}</span><span className="exo-music-row-sub">{sample(i + 2)}</span></span></span></li>)}</ul>
         </Wait>
       </div>
-      <div className="exo-music-main exo-music-cover-page" aria-hidden="true"><Wait><HomeSample /></Wait></div>
+      <div className="exo-music-main exo-music-cover-page" aria-hidden="true"><Wait><div className="exo-music-main-head"><span className="exo-music-search" skullet-block="" /></div><HomeSample /></Wait></div>
       <div className="exo-glass exo-music-bar" aria-hidden="true">
         <Wait><div className="exo-music-bar-song"><span className="exo-music-art exo-music-bar-art" skullet-block="" /><span className="exo-music-row-text"><span className="exo-music-row-title">{sample(0)}</span><span className="exo-music-row-sub">{sample(2)}</span></span></div></Wait>
         <Wait><div className="exo-music-bar-controls"><span className="exo-music-bar-play" skullet-block="" /></div></Wait>
