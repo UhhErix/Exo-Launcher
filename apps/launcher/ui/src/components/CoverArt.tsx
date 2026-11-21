@@ -246,6 +246,16 @@ function CoverFaces({ coverKey, src, dim, undim, loaded, icon, eager, large, fit
   if (undim && !undimArmed) setUndimArmed(true)
   return (
     <>
+      {src && fit === 'contain' && !icon && loaded ? (
+        <img
+          src={src}
+          alt=""
+          className="exo-cover-front exo-cover-backdrop-fill"
+          draggable={false}
+          decoding="async"
+          aria-hidden="true"
+        />
+      ) : null}
       {src && (
         <img
           key={`${coverKey}:${src}`}

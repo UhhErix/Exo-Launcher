@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
+import { Close } from '../../brand/icons'
 import { host, type DlssRunResult, type DlssStatus, type Game, type GameProperties, type GamePropertyKey } from '../../lib/host'
 import { useDialogFocus } from '../../lib/focusTrap'
 import { useDismiss } from '../../lib/dismiss'
@@ -273,7 +274,16 @@ export function PropertiesSheet({ game, artwork, upscalers: upscalerStatus, onUp
     <div className="exo-props-back exo-portal">
       <div ref={dialog} className="exo-props" role="dialog" aria-modal="true" aria-label={`Properties of ${game.title}`} tabIndex={-1}>
         <span className="exo-glass is-panel exo-sheet-glass" aria-hidden="true" />
-        {props?.running ? <header className="exo-props-head"><State>Playing</State></header> : null}
+        <header className="exo-props-head">
+          <div className="exo-props-head-copy">
+            <h2>{game.title}</h2>
+            <span>Properties</span>
+            {props?.running ? <State>Playing</State> : null}
+          </div>
+          <button type="button" className="exo-props-close" aria-label="Close properties" onClick={onClose}>
+            <Close size={16} />
+          </button>
+        </header>
         <div className="exo-props-pane">
           {rows ? (
             <div className="exo-settings-layout">
