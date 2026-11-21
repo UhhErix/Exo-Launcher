@@ -7,7 +7,7 @@ import { useJustFinished } from '../lib/useJustFinished'
 import { formatSize, installProgressLabel, storeLabel, transferPercent } from '../lib/utils'
 import { CoverArt, HeroWash } from './CoverArt'
 import { FrameGenModRow, FrameGenRow } from './game/FrameGenRow'
-import { GameHeader, GameMetaLine, GameShared, GameStats, GameStore } from './game/GameSections'
+import { GameHeader, GameShared, GameStats, GameStore } from './game/GameSections'
 import { HdrRow } from './game/HdrRow'
 import { ArtworkStrip, GameActions } from './game/ManageStrip'
 import { OptimizeLine } from './game/OptimizeLine'
@@ -91,7 +91,7 @@ function GameLines({ selected, details, onOpenSystem, hdrForGames, onHdrForGames
   details: ReturnType<typeof useGameDetails>
 } & Pick<GamePageProps, 'onOpenSystem' | 'hdrForGames' | 'onHdrForGames'>) {
   return (
-    <section className="exo-game-panel" aria-labelledby="exo-game-tuning-title">
+    <section className="exo-glass is-panel exo-game-panel" aria-labelledby="exo-game-tuning-title">
       <header className="exo-game-panel-head">
         <h2 id="exo-game-tuning-title">Performance &amp; graphics</h2>
       </header>
@@ -128,7 +128,7 @@ function GameManagePanel({
   const size = formatSize(selected.sizeBytes)
   const store = selected.isAddPortable ? 'Local folder' : storeLabel(selected.store)
   return (
-    <section className="exo-game-panel" aria-labelledby="exo-game-manage-title">
+    <section className="exo-glass is-panel exo-game-panel" aria-labelledby="exo-game-manage-title">
       <header className="exo-game-panel-head">
         <h2 id="exo-game-manage-title">Manage &amp; files</h2>
       </header>
@@ -152,7 +152,6 @@ function GameManagePanel({
         <div className="exo-game-manage-row">
           <div className="exo-game-manage-copy">
             <span>Properties &amp; content</span>
-            <small>Launch options, DLC, betas &amp; verify files</small>
           </div>
           <button type="button" className="exo-set-btn is-compact" onClick={() => onPropertiesOpen(true)}>
             <Sliders size={14} />
@@ -162,7 +161,6 @@ function GameManagePanel({
         <div className="exo-game-manage-row">
           <div className="exo-game-manage-copy">
             <span>Artwork</span>
-            <small>Replace cover art or restore store default</small>
           </div>
           <button type="button" className="exo-set-btn is-compact" onClick={() => onPropertiesOpen(true)}>
             <ImageUpload size={14} />
@@ -182,7 +180,7 @@ function GameCapturesPanel({
   onStatus: (msg: string | null, sticky?: boolean) => void
 }) {
   return (
-    <section className="exo-game-panel" aria-labelledby="exo-game-captures-title">
+    <section className="exo-glass is-panel exo-game-panel" aria-labelledby="exo-game-captures-title">
       <header className="exo-game-panel-head">
         <h2 id="exo-game-captures-title">Captures</h2>
         <button
@@ -214,7 +212,6 @@ function GameCapturesPanel({
         <div className="exo-game-manage-row">
           <div className="exo-game-manage-copy">
             <span>No captures yet</span>
-            <small>Clips and screenshots for this game appear here</small>
           </div>
           <button
             type="button"
@@ -305,76 +302,80 @@ export function GamePage({
       <div className="exo-game-page-wash" aria-hidden>
         <HeroWash game={artworkView} fill />
       </div>
-      <header className="exo-game-room-bar">
-        {onBack ? (
-          <button type="button" className="exo-glass exo-game-back" onClick={onBack}>
-            <ChevronLeft size={16} />
-            Library
-          </button>
-        ) : <span />}
-        <div className="exo-game-room-meta">
-          <GameShared selected={selected} />
-          <div className="exo-glass exo-game-store-pill">
-            <GameStore
-              selected={selected}
-              sources={sources}
-              locked={hostLocked || manageBusy}
-              onSelectSource={onSelectSource}
-            />
-          </div>
-        </div>
-      </header>
       <div className="exo-game-page-inner">
-        <div className="exo-game-page-layout">
-          <div className="exo-game-cover-col">
-            <div className="exo-game-detail-cover">
-              <CoverArt game={artworkView} large preload />
-              {finished && (
-                <span className="exo-game-cover-motion exo-motion-done" aria-hidden="true">
-                  <svg className="exo-motion-check" viewBox="0 0 24 24"><path d={CHECK_PATH} pathLength="1" /></svg>
-                </span>
-              )}
-            </div>
-            {artworkEnabled && !installedActions && (
-              <ArtworkStrip selected={selected} coverSource={artworkView.coverSource} locked={hostLocked} onArtwork={setArtworkGame} onStatus={onStatus} />
-            )}
+        <div className="exo-game-stage">
+          <div className="exo-game-stage-art" aria-hidden>
+            <HeroWash game={artworkView} fill />
           </div>
-          <div className="exo-game-page-body">
-            <div className="exo-game-info">
-              <GameHeader selected={selected} />
-              <GameMetaLine selected={selected} downloading={downloading} />
-              <div className="exo-game-actions">
-                <PrimaryAction
+          <header className="exo-game-room-bar">
+            {onBack ? (
+              <button type="button" className="exo-glass exo-game-back" onClick={onBack}>
+                <ChevronLeft size={16} />
+                Library
+              </button>
+            ) : <span />}
+            <div className="exo-game-room-meta">
+              <GameShared selected={selected} />
+              <div className="exo-glass exo-game-store-pill">
+                <GameStore
                   selected={selected}
-                  action={action}
-                  buyUrl={buyUrl}
-                  busy={busy}
-                  statusMsg={statusMsg}
-                  progress={selectedProgress}
-                  queued={queued}
-                  onPrimary={onPrimary}
-                  onStop={onStop}
-                  onCancel={onCancel}
-                  onDequeue={onDequeue}
+                  sources={sources}
+                  locked={hostLocked || manageBusy}
+                  onSelectSource={onSelectSource}
                 />
-                {installedActions && (
-                  <GameActions
-                    selected={selected}
-                    coverSource={artworkView.coverSource}
-                    locked={hostLocked}
-                    upscalers={details.dlss}
-                    onUpscalersChanged={() => void details.refreshDlss(false)}
-                    onStatus={onStatus}
-                    onArtwork={setArtworkGame}
-                    onUninstalled={onUninstalled}
-                    onBusyChange={setManageBusy}
-                    propertiesOpen={propertiesOpen}
-                    onPropertiesOpen={onPropertiesOpen}
-                  />
-                )}
               </div>
             </div>
-            <GameStats selected={selected} sources={sources} achievements={details.achievements} driveHeat={details.driveHeat} loading={details.loading} />
+          </header>
+          <div className="exo-game-page-layout">
+            <div className="exo-game-cover-col">
+              <div className="exo-game-detail-cover">
+                <CoverArt game={artworkView} large preload />
+                {finished && (
+                  <span className="exo-game-cover-motion exo-motion-done" aria-hidden="true">
+                    <svg className="exo-motion-check" viewBox="0 0 24 24"><path d={CHECK_PATH} pathLength="1" /></svg>
+                  </span>
+                )}
+              </div>
+              {artworkEnabled && !installedActions && (
+                <ArtworkStrip selected={selected} coverSource={artworkView.coverSource} locked={hostLocked} onArtwork={setArtworkGame} onStatus={onStatus} />
+              )}
+            </div>
+            <div className="exo-game-page-body">
+              <div className="exo-game-info">
+                <GameHeader selected={selected} />
+                <div className="exo-game-actions">
+                  <PrimaryAction
+                    selected={selected}
+                    action={action}
+                    buyUrl={buyUrl}
+                    busy={busy}
+                    statusMsg={statusMsg}
+                    progress={selectedProgress}
+                    queued={queued}
+                    onPrimary={onPrimary}
+                    onStop={onStop}
+                    onCancel={onCancel}
+                    onDequeue={onDequeue}
+                  />
+                  {installedActions && (
+                    <GameActions
+                      selected={selected}
+                      coverSource={artworkView.coverSource}
+                      locked={hostLocked}
+                      upscalers={details.dlss}
+                      onUpscalersChanged={() => void details.refreshDlss(false)}
+                      onStatus={onStatus}
+                      onArtwork={setArtworkGame}
+                      onUninstalled={onUninstalled}
+                      onBusyChange={setManageBusy}
+                      propertiesOpen={propertiesOpen}
+                      onPropertiesOpen={onPropertiesOpen}
+                    />
+                  )}
+                </div>
+              </div>
+              <GameStats selected={selected} sources={sources} achievements={details.achievements} driveHeat={details.driveHeat} loading={details.loading} />
+            </div>
           </div>
         </div>
         {installedActions && (

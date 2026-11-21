@@ -132,6 +132,7 @@ export function executeShellCommand(
 ): void {
   const navView = NAV_COMMANDS[command.id]
   if (navView) {
+    deps.setGpuJump(null)
     void deps.goToView(navView)
     return
   }

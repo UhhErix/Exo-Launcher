@@ -121,8 +121,7 @@ function HardwareRow({ part, name, error, onAct, onSettled, onFailed }: {
   const tuneLabel = isCpu ? 'Tune CPU' : 'Tune GPU'
   const testingLabel = `${part.testing ?? 'Testing'}${part.minutesLeft ? ` · about ${part.minutesLeft} min left` : ''}`
   const metrics = part.state === 'tuned' ? tuneMetrics(part.applied, part.before, part.after) : []
-  const fallbackDetail = part.blocked
-    ?? (part.state === 'crashed' ? 'Returned to stock after instability' : 'Measures stock and applies max stable headroom')
+  const fallbackDetail = part.blocked ?? (part.state === 'crashed' ? 'Returned to stock after instability' : null)
 
   return (
     <div className="exo-at-hw-row">
@@ -157,9 +156,9 @@ function HardwareRow({ part, name, error, onAct, onSettled, onFailed }: {
             </div>
           ))}
         </div>
-      ) : (
+      ) : fallbackDetail ? (
         <p className="exo-at-hw-detail">{fallbackDetail}</p>
-      )}
+      ) : null}
 
       {error ? <ErrorNote className="exo-set-error" message={error} /> : null}
     </div>

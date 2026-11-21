@@ -1,8 +1,8 @@
 import '../styles/onboarding-room.css'
 import { scrollToSection } from '../lib/scrollToSection'
 import { useDialogFocus } from '../lib/focusTrap'
-import { Close } from '../brand/icons'
-import { memo, useCallback, useEffect, useRef, useState } from 'react'
+import { Close, Download, Info, Library, MusicNotes, Sliders, Trophy } from '../brand/icons'
+import { memo, useCallback, useEffect, useRef, useState, type ComponentType } from 'react'
 import {
   host,
   type LauncherSettings,
@@ -24,6 +24,15 @@ import { AccountSection } from './settings/AccountSection'
 import { ShadersSection } from './shaders/ShaderTools'
 import { StoresSection, type StoreAction, type StoreNote } from './settings/StoresSection'
 import { errorText } from '../lib/errorWords'
+
+const PAGE_ICONS: Record<SettingsPageId, ComponentType<{ size?: number }>> = {
+  general: Sliders,
+  library: Library,
+  downloads: Download,
+  ingame: Trophy,
+  music: MusicNotes,
+  about: Info,
+}
 
 export async function preloadSettingsRoom() {
   await preloadAppsSection()
@@ -259,20 +268,10 @@ export const SettingsPanel = memo(function SettingsPanel({
           <AppsSection />
         </div>
       )
-      case 'account': return (
-        <div className="exo-settings-layout" key="account">
-          <AccountSection />
-        </div>
-      )
       case 'general': return (
         <div className="exo-settings-layout" key="general">
           <GeneralSection settings={settings} onSave={saveWithReason} />
           <BackupSection />
-        </div>
-      )
-      case 'privacy': return (
-        <div className="exo-settings-layout" key="privacy">
-          <PrivacySection />
         </div>
       )
       case 'about': return (
@@ -287,6 +286,8 @@ export const SettingsPanel = memo(function SettingsPanel({
             onCheckUpdate={onCheckUpdate}
             onInstallUpdate={onInstallUpdate}
           />
+          <AccountSection />
+          <PrivacySection />
         </div>
       )
     }
@@ -298,11 +299,17 @@ export const SettingsPanel = memo(function SettingsPanel({
       <nav className="exo-settings-nav" aria-labelledby="exo-settings-title">
         <h2 id="exo-settings-title" className="exo-settings-nav-title">Settings</h2>
         <ul>
-          {SETTINGS_PAGES.map(({ page: id, label }) => (
-            <li key={id}>
-              <button type="button" aria-current={page === id ? 'page' : undefined} onClick={() => show(id)}>{label}</button>
-            </li>
-          ))}
+          {SETTINGS_PAGES.map(({ page: id, label }) => {
+            const Icon = PAGE_ICONS[id]
+            return (
+              <li key={id}>
+                <button type="button" aria-current={page === id ? 'page' : undefined} onClick={() => show(id)}>
+                  <Icon size={15} />
+                  <span>{label}</span>
+                </button>
+              </li>
+            )
+          })}
         </ul>
       </nav>
       <div className="exo-settings-main">

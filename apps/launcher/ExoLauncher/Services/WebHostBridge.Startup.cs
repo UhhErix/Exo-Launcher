@@ -38,7 +38,8 @@ public sealed partial class WebHostBridge
 
     private static (object[] items, object[] removed) StartupLists()
     {
-        var entries = StartupEntries.Read();
+        var (entries, presentIds) = StartupEntries.ReadWithPresent(StartupEntries.Host);
+        var shownIds = new HashSet<string>(entries.Select(entry => entry.Id), StringComparer.OrdinalIgnoreCase);
         var memory = Running(entries);
         var items = entries.Select(entry =>
         {
@@ -70,20 +71,22 @@ public sealed partial class WebHostBridge
                 app = entry.Program is { } started ? AppOf(started) : null,
             };
         }).ToArray();
-        var removed = StartupEntries.Kept().Select(item =>
-        {
-            var icon = item.Program is { } program && File.Exists(program) ? "startup:" + item.Id : null;
-            if (icon is not null) IconFiles[icon] = item.Program;
-            return (object)new
+        var removed = StartupEntries.Kept()
+            .Where(item => !shownIds.Contains(item.Id) && (!item.ValueKept || presentIds.Contains(item.Id)))
+            .Select(item =>
             {
-                id = item.Id,
-                name = item.Name,
-                at = item.At.ToString("o", System.Globalization.CultureInfo.InvariantCulture),
-                // Removed by an older Exo although it is one Exo never turns off: it can be put back, and is locked from now on.
-                locked = StartupGuard.LockOf(StartupEntries.Host, item) != LockKind.None,
-                icon,
-            };
-        }).ToArray();
+                var icon = item.Program is { } program && File.Exists(program) ? "startup:" + item.Id : null;
+                if (icon is not null) IconFiles[icon] = item.Program;
+                return (object)new
+                {
+                    id = item.Id,
+                    name = item.Name,
+                    at = item.At.ToString("o", System.Globalization.CultureInfo.InvariantCulture),
+                    // Removed by an older Exo although it is one Exo never turns off: it can be put back, and is locked from now on.
+                    locked = StartupGuard.LockOf(StartupEntries.Host, item) != LockKind.None,
+                    icon,
+                };
+            }).ToArray();
         return (items, removed);
     }
 

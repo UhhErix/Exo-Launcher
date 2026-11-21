@@ -35,8 +35,9 @@ test('TitleBar applies exo-glass across Search, Rooms, and Tools capsules', () =
 })
 
 test('AppsPanel uses concise tab labels and content-visibility optimization in apps.css', () => {
-  assert.match(appsPanel, /\{ id: 'windows', label: 'Windows' \}/)
+  assert.match(appsPanel, /\{ id: 'apps', label: 'Apps' \}/)
   assert.match(appsPanel, /\{ id: 'startup', label: 'Startup' \}/)
+  assert.doesNotMatch(appsPanel, /id:\s*'windows'/)
   assert.match(appsCss, /content-visibility:\s*auto/)
 })
 

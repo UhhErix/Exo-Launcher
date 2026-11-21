@@ -287,14 +287,11 @@
 
 .exo-game-page-wash {
   position: absolute;
-  top: 0;
-  right: 0;
-  left: 0;
-  height: min(64vh, 660px);
+  inset: 0;
   z-index: 0;
   overflow: hidden;
   pointer-events: none;
-  background: radial-gradient(ellipse 80% 85% at 58% 22%, color-mix(in srgb, var(--color-fg) 8%, var(--color-bg)) 0%, var(--color-bg) 76%);
+  background: radial-gradient(ellipse 80% 75% at 52% 18%, color-mix(in srgb, var(--color-fg) 8%, var(--color-bg)) 0%, var(--color-bg) 82%);
 }
 
 .exo-game-page-wash::after {
@@ -302,49 +299,93 @@
   position: absolute;
   inset: 0;
   z-index: 1;
-  background:
-    linear-gradient(180deg, color-mix(in srgb, var(--color-bg) 42%, transparent) 0%, color-mix(in srgb, var(--color-bg) 10%, transparent) 24%, color-mix(in srgb, var(--color-bg) 58%, transparent) 72%, var(--color-bg) 100%),
-    linear-gradient(90deg, color-mix(in srgb, var(--color-bg) 64%, transparent) 0%, color-mix(in srgb, var(--color-bg) 22%, transparent) 46%, transparent 84%);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--color-bg) 22%, transparent) 0%, color-mix(in srgb, var(--color-bg) 42%, transparent) 52%, color-mix(in srgb, var(--color-bg) 70%, transparent) 100%);
 }
 
 .exo-game-page-wash .exo-now-wash-img {
   z-index: 0;
   object-fit: cover;
-  object-position: center 20%;
+  object-position: center 22%;
   opacity: 0;
   width: 100%;
   height: 100%;
+  filter: blur(44px) saturate(1.55) brightness(0.72);
+  transform: scale(1.16) translateZ(0);
   transition: opacity var(--dur-base) var(--ease-out);
   position: absolute;
   inset: 0;
 }
 
 .exo-game-page-wash .exo-now-wash-img.is-on {
-  opacity: 0.92;
-}
-
-.exo-game-page-wash .exo-now-wash-img.is-letterbox {
-  object-fit: cover;
-  object-position: center;
+  opacity: 0.78;
 }
 
 .exo-game-page-wash .exo-now-wash-img.is-letterbox.is-on {
-  opacity: 0.72;
+  opacity: 0.7;
 }
 
 .exo-game-page-wash .exo-now-wash-img.exo-cover-derived.is-on {
-  opacity: 0.64;
-  filter: blur(28px) saturate(1.24) brightness(0.78);
-  transform: scale(1.16) translateZ(0);
-}
-
-.exo-game-page-wash .exo-now-wash-img.exo-cover-fill {
-  object-position: center;
-  opacity: 0;
+  opacity: 0.62;
 }
 
 .exo-game-page-wash .exo-now-wash-img.exo-cover-fill.is-on {
-  opacity: 0.48;
+  opacity: 0.54;
+}
+
+.exo-game-stage {
+  position: relative;
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 24px;
+  min-height: clamp(310px, 42vh, 420px);
+  padding: 18px 20px 22px;
+  overflow: hidden;
+  border-radius: var(--exo-panel-radius);
+  background: var(--exo-surface-card);
+  box-shadow: var(--exo-glass-rim), var(--exo-lift-shadow);
+}
+
+.exo-game-stage-art {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  pointer-events: none;
+  background: radial-gradient(ellipse 80% 90% at 56% 28%, var(--exo-surface-raised) 0%, var(--color-bg) 82%);
+}
+
+.exo-game-stage-art::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--color-bg) 28%, transparent) 0%, transparent 32%, color-mix(in srgb, var(--color-bg) 52%, transparent) 72%, color-mix(in srgb, var(--color-bg) 90%, transparent) 100%),
+    linear-gradient(90deg, color-mix(in srgb, var(--color-bg) 62%, transparent) 0%, color-mix(in srgb, var(--color-bg) 22%, transparent) 44%, transparent 78%);
+}
+
+.exo-game-stage-art .exo-now-wash-img {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center 22%;
+  opacity: 0;
+  transition: opacity var(--dur-base) var(--ease-out);
+}
+
+.exo-game-stage-art .exo-now-wash-img.is-on {
+  opacity: 1;
+}
+
+.exo-game-stage-art .exo-now-wash-img.exo-cover-derived.is-on {
+  opacity: 0.62;
+  filter: blur(26px) saturate(1.25) brightness(0.8);
+  transform: scale(1.16) translateZ(0);
 }
 
 .exo-game-page {
@@ -369,7 +410,7 @@
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: calc(var(--exo-titlebar-h, 52px) + 12px) var(--exo-game-edge) 0;
+  padding: 0;
 }
 
 .exo-game-back {
@@ -423,10 +464,10 @@
   justify-content: flex-start;
   flex: 1;
   min-height: 0;
-  gap: 24px;
+  gap: 16px;
   overflow-y: auto;
   overscroll-behavior: contain;
-  padding: clamp(72px, 13vh, 148px) var(--exo-game-edge) 32px;
+  padding: calc(var(--exo-titlebar-h, 52px) + 10px) var(--exo-game-edge) 24px;
 }
 
 .exo-game-close {
@@ -437,29 +478,31 @@
 }
 
 .exo-game-page-layout {
+  position: relative;
+  z-index: 2;
   display: grid;
-  grid-template-columns: 184px minmax(0, 1fr);
+  grid-template-columns: 148px minmax(0, 1fr);
   align-items: end;
   flex-shrink: 0;
-  gap: 28px;
+  gap: 24px;
 }
 
 .exo-game-cover-col {
   display: flex;
   flex-direction: column;
   align-items: center;
-  width: 184px;
+  width: 148px;
 }
 
 .exo-game-cover-col .exo-game-tools {
   justify-content: center;
-  margin-top: 12px;
+  margin-top: 10px;
   gap: 6px;
 }
 
 .exo-game-detail-cover {
   position: relative;
-  width: 184px;
+  width: 148px;
   aspect-ratio: 2 / 3;
   overflow: hidden;
   border-radius: var(--exo-card-radius);

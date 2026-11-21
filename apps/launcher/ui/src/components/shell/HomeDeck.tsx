@@ -1,9 +1,8 @@
 import { memo, useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import { Apps, Close, More, Play, Search } from '../../brand/icons'
-import { useGlide } from '../../lib/glide'
 import { host, resolvePrimaryAction, shelfAction, type Game, type InstallProgress } from '../../lib/host'
 import { shouldReduceMotion } from '../../lib/motionPreference'
-import { formatPlayed, formatRelativeLastPlayed, installVerb, storeLabel, transferShare } from '../../lib/utils'
+import { installVerb, transferShare } from '../../lib/utils'
 import { CoverArt, HeroWash } from '../CoverArt'
 import { GameLogo } from '../GameLogo'
 import { Progress } from '../ui/Progress'
@@ -42,27 +41,6 @@ function primaryVerb(game: Game): string {
   return 'Play'
 }
 
-function heroMetaParts(game: Game, working: boolean): string[] {
-  const last = formatRelativeLastPlayed(game.lastPlayedUtc)
-  const played = formatPlayed(game.playtimeMinutes)
-  const first = working
-    ? 'Downloading'
-    : game.isRunning
-      ? 'Playing now'
-      : last !== '—'
-        ? `Played ${last.toLowerCase()}`
-        : played !== '—'
-          ? `${played} played`
-          : null
-  const state = game.updateAvailable
-    ? 'Update ready'
-    : game.installed
-      ? 'Installed'
-      : 'Not installed'
-  const store = game.isAddPortable ? null : storeLabel(game.store)
-  return [first, state, store].filter((part): part is string => !!part)
-}
-
 function HeroLockup({
   game,
   transfer,
@@ -81,7 +59,6 @@ function HeroLockup({
   onMenu: (at: GameMenuAt) => void
 }) {
   const working = !!transfer?.isActive
-  const parts = heroMetaParts(game, working)
   const verb = primaryVerb(game)
   return (
     <section className="exo-home-hero" aria-label={game.title}>
@@ -91,13 +68,6 @@ function HeroLockup({
         imgClass="exo-home-logo"
         titleClass="exo-home-title"
       />
-      <p className="exo-home-meta tabular-nums">
-        {parts.map((part, index) => (
-          <span key={part} className={index === 0 && game.isRunning ? 'is-good' : undefined}>
-            {part}
-          </span>
-        ))}
-      </p>
       <div className="exo-home-actions">
         <button
           type="button"
@@ -172,7 +142,7 @@ function PosterCard({
           onMenu(menuAt(game, event))
         }}
       >
-        <CoverArt game={game} preload className="exo-deck-poster" />
+        <CoverArt game={game} large preload className="exo-deck-poster" />
         {game.isRunning ? <span className="exo-deck-pill is-good">Playing</span> : null}
         {!game.isRunning && game.updateAvailable ? <span className="exo-deck-pill is-warn">Update</span> : null}
       </button>
@@ -251,60 +221,6 @@ function InlineSearch({
   )
 }
 
-function DeckBar({
-  tab,
-  onTab,
-  updatesCount,
-  query,
-  onQuery,
-  searchOpen,
-  onSearchOpenChange,
-  tools,
-}: {
-  tab: LibraryTab
-  onTab: (next: LibraryTab) => void
-  updatesCount: number
-  query: string
-  onQuery: (next: string) => void
-  searchOpen: boolean
-  onSearchOpenChange: (open: boolean) => void
-  tools: ReactNode
-}) {
-  const tabsGlide = useGlide<HTMLDivElement>()
-  const tabs: ReadonlyArray<{ id: LibraryTab; label: string; count?: number }> = [
-    { id: 'home', label: 'Recent' },
-    { id: 'installed', label: 'Installed' },
-    ...(updatesCount > 0 ? [{ id: 'updates' as const, label: 'Updates', count: updatesCount }] : []),
-    { id: 'all', label: 'All games' },
-  ]
-  return (
-    <div className="exo-home-bar">
-      <div ref={tabsGlide} className="exo-glass exo-shelf-chips exo-glide exo-home-tabs" role="group" aria-label="Library view">
-        {tabs.map((item) => (
-          <button
-            key={item.id}
-            type="button"
-            className="exo-shelf-chip"
-            aria-pressed={tab === item.id}
-            onClick={() => onTab(item.id)}
-          >
-            <span>{item.label}</span>
-            {item.count != null ? <span className="exo-library-tab-count has-updates tabular-nums">{item.count}</span> : null}
-          </button>
-        ))}
-      </div>
-      <div className="exo-home-bar-tools">
-        <GiftsPill />
-        <InlineSearch query={query} open={searchOpen} onQuery={onQuery} onOpenChange={onSearchOpenChange} />
-        <button type="button" className="exo-glass exo-home-icon-btn" aria-label="All games grid" onClick={() => onTab('all')}>
-          <Apps size={15} />
-        </button>
-        {tools}
-      </div>
-    </div>
-  )
-}
-
 export const HomeDeck = memo(function HomeDeck({
   tab,
   onTab,
@@ -313,7 +229,6 @@ export const HomeDeck = memo(function HomeDeck({
   searchOpen,
   onSearchOpenChange,
   games,
-  updatesCount,
   active,
   blocked,
   transferFor,
@@ -373,35 +288,40 @@ export const HomeDeck = memo(function HomeDeck({
 
   return (
     <div className="exo-home-deck">
-      <div className="exo-home-backdrop" aria-hidden="true">
-        {focused ? <HeroWash key={focused.id} game={focused} fill /> : null}
+      <div className="exo-home-ambient" aria-hidden="true">
+        {focused ? <HeroWash key={`amb:${focused.id}`} game={focused} fill /> : null}
       </div>
 
-      {focused ? (
-        <HeroLockup
-          game={focused}
-          transfer={transferFor(focused)}
-          starting={focused.id === startingId}
-          onPlay={() => onPlay(focused)}
-          onOpen={() => onOpen(focused)}
-          onProperties={() => onProperties(focused)}
-          onMenu={onMenu}
-        />
-      ) : (
-        <div className="exo-home-hero" />
-      )}
+      <div className="exo-home-stage">
+        <div className="exo-home-stage-art" aria-hidden="true">
+          {focused ? <HeroWash key={focused.id} game={focused} fill /> : null}
+        </div>
+        <div className="exo-home-stage-foot">
+          {focused ? (
+            <HeroLockup
+              game={focused}
+              transfer={transferFor(focused)}
+              starting={focused.id === startingId}
+              onPlay={() => onPlay(focused)}
+              onOpen={() => onOpen(focused)}
+              onProperties={() => onProperties(focused)}
+              onMenu={onMenu}
+            />
+          ) : (
+            <div className="exo-home-hero" />
+          )}
+          <div className="exo-home-bar-tools">
+            <GiftsPill />
+            <InlineSearch query={query} open={searchOpen} onQuery={onQuery} onOpenChange={onSearchOpenChange} />
+            <button type="button" className="exo-glass exo-home-icon-btn" aria-label="All games grid" onClick={() => onTab('all')}>
+              <Apps size={15} />
+            </button>
+            {tools}
+          </div>
+        </div>
+      </div>
 
       <div className="exo-home-lower">
-        <DeckBar
-          tab={tab}
-          onTab={onTab}
-          updatesCount={updatesCount}
-          query={query}
-          onQuery={onQuery}
-          searchOpen={searchOpen}
-          onSearchOpenChange={onSearchOpenChange}
-          tools={tools}
-        />
         {games.length > 0 ? (
           <div ref={trackRef} className="exo-deck-track" role="region" aria-label="Games">
             {games.map((item) => (

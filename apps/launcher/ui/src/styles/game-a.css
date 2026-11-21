@@ -97,7 +97,7 @@
 
 .exo-game-workspace {
   display: grid;
-  grid-template-columns: minmax(0, 1.45fr) minmax(300px, 1fr);
+  grid-template-columns: minmax(0, 1.38fr) minmax(320px, 1fr);
   align-items: start;
   gap: 16px;
 }
@@ -110,14 +110,12 @@
 }
 
 .exo-game-panel {
-  --exo-panel-pad: 22px;
+  --exo-panel-pad: 20px;
   display: flex;
   flex-direction: column;
   min-width: 0;
   overflow: hidden;
   border-radius: var(--exo-panel-radius);
-  background: var(--exo-surface-card);
-  box-shadow: var(--exo-rim);
 }
 
 .exo-game-panel-head {
@@ -125,7 +123,7 @@
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 18px var(--exo-panel-pad) 14px;
+  padding: 15px var(--exo-panel-pad) 12px;
 }
 
 .exo-game-panel-head h2 {
@@ -148,8 +146,8 @@
 .exo-game-line {
   display: flex;
   align-items: center;
-  min-height: 62px;
-  padding: 8px var(--exo-panel-pad);
+  min-height: 52px;
+  padding: 6px var(--exo-panel-pad);
   border-top: var(--exo-hair) solid var(--exo-float-line);
 }
 
@@ -241,8 +239,8 @@
   align-items: center;
   justify-content: space-between;
   gap: 14px;
-  min-height: 60px;
-  padding: 10px var(--exo-panel-pad);
+  min-height: 52px;
+  padding: 8px var(--exo-panel-pad);
   border-top: var(--exo-hair) solid var(--exo-float-line);
 }
 
@@ -343,54 +341,6 @@
   align-items: center;
   gap: 8px 12px;
   min-width: 0;
-}
-
-.exo-game-meta {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  min-height: 22px;
-  margin: 10px 0 0;
-  color: var(--color-muted);
-  font-size: var(--exo-type-body);
-  font-weight: var(--exo-weight-control);
-}
-
-.exo-game-meta-state {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-}
-
-.exo-game-meta-dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: var(--color-faint);
-}
-
-.exo-game-meta-state.is-good {
-  color: var(--color-good);
-  font-weight: var(--exo-weight-title);
-}
-
-.exo-game-meta-state.is-good .exo-game-meta-dot {
-  background: var(--color-good);
-}
-
-.exo-game-meta-state.is-warn {
-  color: var(--color-warn);
-  font-weight: var(--exo-weight-title);
-}
-
-.exo-game-meta-state.is-warn .exo-game-meta-dot {
-  background: var(--color-warn);
-}
-
-.exo-game-meta-part::before {
-  content: "·";
-  margin: 0 10px;
-  color: var(--color-faint);
 }
 
 .exo-game-stats {

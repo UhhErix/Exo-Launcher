@@ -601,6 +601,7 @@ export function LauncherApp() {
       if (s.overlayOpen) s.closeGamePage()
       const idx = ROOM_ORDER.indexOf(s.under)
       const next = ROOM_ORDER[(idx < 0 ? 0 : idx + delta + ROOM_ORDER.length) % ROOM_ORDER.length]
+      setGpuJump(null)
       void s.goToView(next)
     },
     onSearchToggle: () => setCommandOpen(open => !open),
@@ -613,12 +614,17 @@ export function LauncherApp() {
     },
   }), [])
 
+  const openRoomFromBar = useCallback((next: View) => {
+    setGpuJump(null)
+    return goToView(next)
+  }, [goToView])
+
   const island = useMemo(() => <ExoIsland inDiscord={view === 'friends'} onOpenDiscord={openDiscordRoom} />, [view, openDiscordRoom])
   const titleBar = useMemo(() => (
     <TitleBar
       view={view}
       opening={opening}
-      onView={goToView}
+      onView={openRoomFromBar}
       onWarm={warmRoom}
       onNowPlaying={openNowPlaying}
       onToggleSettings={toggleSettings}
@@ -626,7 +632,7 @@ export function LauncherApp() {
       island={island}
       onSearch={openSearch}
     />
-  ), [view, opening, goToView, warmRoom, openNowPlaying, toggleSettings, musicService, island, openSearch])
+  ), [view, opening, openRoomFromBar, warmRoom, openNowPlaying, toggleSettings, musicService, island, openSearch])
 
   const settingsRoom = useMemo(() => settings && (
     <Room mounted={openedRooms.has('settings')} warm={warming} active={view === 'settings'} label="Settings" className="exo-set-room" onBackdrop={toggleSettings}>

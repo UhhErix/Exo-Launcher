@@ -76,30 +76,29 @@ span.exo-error-note {
   min-height: 0;
 }
 
-/* The page's title, level with the sheet's in the sidebar, clear of the close. */
 .exo-settings-page-title {
   margin: 0;
-  padding: 20px 64px 0 32px;
+  padding: 22px 64px 0 32px;
   color: var(--color-fg);
-  font-size: calc(20px * var(--exo-scale, 1));
+  font-size: var(--exo-type-page);
   font-weight: 650;
+  letter-spacing: -0.02em;
 }
 
 .exo-settings-main .exo-settings-layout,
 .exo-settings-main .exo-dc-settings-page {
-  padding-top: 18px;
+  padding-top: 16px;
 }
 
-/* A 28px press (the glyph is 16px and sits where it did: 6px less in from the corner). */
 .exo-settings-close {
   position: absolute;
-  top: 10px;
-  right: 10px;
+  top: 14px;
+  right: 14px;
   z-index: 1;
   display: grid;
   place-items: center;
-  width: 28px;
-  height: 28px;
+  width: 30px;
+  height: 30px;
   padding: 0;
 }
 
@@ -108,47 +107,40 @@ span.exo-error-note {
   min-width: 0;
   min-height: 0;
   overflow-y: auto;
-  scroll-padding-top: 26px;
-  /* A short fade where the sheet scrolls on: the last row stops above it, with the layout's 32px bottom padding. */
+  scroll-padding-top: 24px;
   mask-image: linear-gradient(to bottom, #000 calc(100% - 28px), transparent);
 }
 
-/* The one column: its sections 28px apart. */
 .exo-settings-layout {
   display: flex;
   flex-direction: column;
-  gap: 28px;
+  gap: 22px;
   min-width: 0;
-  padding: 26px 32px 32px;
+  padding: 20px 32px 32px;
 }
-
-/* ── Sections and rows ── */
 
 .exo-set-section-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  min-height: 32px;
+  min-height: 28px;
   margin: 0 0 8px;
 }
 
 .exo-set-section-head h2 {
   margin: 0;
   color: var(--color-fg);
-  font-size: calc(13px * var(--exo-scale, 1));
+  font-size: var(--exo-type-body);
   font-weight: var(--exo-weight-title);
 }
 
-/* A search or deep link moves focus here so Tab continues inside the section; a heading is not a control. */
 .exo-set-section-head h2:focus {
   outline: none;
 }
 
-/* A named group of rows inside a section (Accounts and keys › Game stores, Captures' settings): its name over a
-   hairline, a gap before the next. */
 .exo-set-group + .exo-set-group {
-  margin-top: 28px;
+  margin-top: 22px;
 }
 
 .exo-set-group-head {
@@ -156,15 +148,35 @@ span.exo-error-note {
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  min-height: 32px;
-  margin: 0 0 4px;
+  min-height: 28px;
+  margin: 0 0 8px;
 }
 
 .exo-set-group-head h3 {
   margin: 0;
   color: var(--color-fg);
-  font-size: calc(13px * var(--exo-scale, 1));
+  font-size: var(--exo-type-body);
   font-weight: var(--exo-weight-title);
+}
+
+.exo-settings .exo-set-list {
+  overflow: hidden;
+  border-radius: var(--exo-card-radius);
+  background: color-mix(in srgb, var(--color-fg) 4%, transparent);
+  box-shadow: inset 0 0 0 var(--exo-hair) var(--exo-float-line);
+}
+
+.exo-settings .exo-set-section-head,
+.exo-settings .exo-set-group-head {
+  padding-inline: 2px;
+}
+
+.exo-settings .exo-set-item {
+  padding: 12px 18px;
+}
+
+.exo-settings .exo-set-list > .exo-set-item:first-child {
+  border-top: 0;
 }
 
 .exo-set-item {
@@ -334,14 +346,13 @@ span.exo-error-note {
 
 /* ── Sidebar (SettingsPanel; lib/settingsSections.ts) ── */
 
-/* Each name a page; Discord's own under Discord while it's open. */
 .exo-settings-nav {
   display: flex;
   flex: none;
   flex-direction: column;
-  gap: 12px;
-  width: calc(232px * var(--exo-scale, 1));
-  padding: 20px 12px;
+  gap: 14px;
+  width: calc(228px * var(--exo-scale, 1));
+  padding: 22px 12px;
   overflow-y: auto;
   border-right: 1px solid var(--exo-float-line);
 }
@@ -350,50 +361,52 @@ span.exo-error-note {
   margin: 0;
   padding: 0 12px;
   color: var(--color-fg);
-  font-size: calc(20px * var(--exo-scale, 1));
+  font-size: var(--exo-type-page);
   font-weight: 650;
+  letter-spacing: -0.02em;
 }
 
 .exo-settings-nav ul {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 3px;
   margin: 0;
   padding: 0;
   list-style: none;
 }
 
 .exo-settings-nav button {
+  display: flex;
+  align-items: center;
+  gap: 10px;
   width: 100%;
-  min-height: 34px;
+  min-height: 36px;
   padding: 0 12px;
   border: 0;
-  border-radius: 10px;
+  border-radius: var(--exo-small-radius);
   position: relative;
   background: transparent;
   color: var(--color-muted);
-  font-size: calc(13px * var(--exo-scale, 1));
-  font-weight: 500;
+  font-size: var(--exo-type-body);
+  font-weight: var(--exo-weight-control);
   text-align: left;
   transition: background-color var(--dur-quick) var(--ease-out), color var(--dur-quick) var(--ease-out);
 }
 
-/* The open page: full ink and a white marker at the row's edge. No fill and no outline. */
+.exo-settings-nav button svg {
+  flex: none;
+  opacity: 0.78;
+}
+
 .exo-settings-nav button[aria-current="page"] {
+  background: var(--exo-selected);
+  box-shadow: var(--exo-rim);
   color: var(--color-fg);
   font-weight: var(--exo-weight-title);
 }
 
-.exo-settings-nav button[aria-current="page"]::before {
-  content: "";
-  position: absolute;
-  top: 50%;
-  left: 0;
-  width: 3px;
-  height: 16px;
-  border-radius: 999px;
-  background: var(--color-fg);
-  translate: 0 -50%;
+.exo-settings-nav button[aria-current="page"] svg {
+  opacity: 1;
 }
 
 @media (hover: hover) and (pointer: fine) {

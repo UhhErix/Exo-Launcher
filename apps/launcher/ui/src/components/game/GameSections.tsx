@@ -29,32 +29,6 @@ export function GameHeader({ selected, children }: { selected: Game; children?: 
   )
 }
 
-export function GameMetaLine({ selected, downloading }: { selected: Game; downloading: boolean }) {
-  const status = downloading
-    ? { text: 'Downloading', tone: 'is-warn' }
-    : selected.isRunning
-      ? { text: 'Playing now', tone: 'is-good' }
-      : selected.updateAvailable
-        ? { text: 'Update ready', tone: 'is-warn' }
-        : selected.installed
-          ? { text: 'Installed', tone: 'is-good' }
-          : { text: 'Not installed', tone: '' }
-  const store = selected.isAddPortable ? null : storeLabel(selected.store)
-  const size = formatSize(selected.sizeBytes)
-  const parts = [store, size !== '—' ? size : null].filter((p): p is string => !!p)
-  return (
-    <p className="exo-game-meta tabular-nums">
-      <span className={`exo-game-meta-state${status.tone ? ` ${status.tone}` : ''}`}>
-        <span className="exo-game-meta-dot" aria-hidden="true" />
-        {status.text}
-      </span>
-      {parts.map((part) => (
-        <span key={part} className="exo-game-meta-part">{part}</span>
-      ))}
-    </p>
-  )
-}
-
 export function GameStore({
   selected,
   sources,

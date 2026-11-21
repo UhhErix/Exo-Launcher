@@ -113,4 +113,28 @@ public sealed class StartupEntriesTests
     {
         Assert.Equal(expected, WebHostBridge.TrackableProcessName(command, program));
     }
+
+    [Fact]
+    public void ReadWithPresent_includes_disabled_packaged_tasks_and_tracks_present_ids()
+    {
+        var host = new FakeStartupHost();
+        host.SetRun(Hive.User, StartupKeys.Run, "Wooting", "\"C:\\Wooting\\wooting.exe\"");
+        host.Packages.Add(new PackageTaskDecl("Claude_abc", "ClaudeStartup", "Claude", "Anthropic", "claude.exe", ManifestEnabled: false));
+        host.Packages.Add(new PackageTaskDecl("Term_abc", "StartTask", "Terminal", "Microsoft", "wt.exe", ManifestEnabled: true));
+        host.Set(Hive.User, $@"{StartupKeys.Packaged}\Term_abc\StartTask", "State", RegValue.DWord(0));
+        host.Packages.Add(new PackageTaskDecl("Policy_abc", "PolicyTask", "PolicyApp", "Vendor", "p.exe", ManifestEnabled: true));
+        host.Set(Hive.User, $@"{StartupKeys.Packaged}\Policy_abc\PolicyTask", "State", RegValue.DWord(3));
+
+        var (entries, present) = StartupEntries.ReadWithPresent(host);
+        var claude = Assert.Single(entries, e => e.Id == "package:Claude_abc!ClaudeStartup");
+        Assert.False(claude.Enabled);
+        Assert.False(claude.ReadOnly);
+        var term = Assert.Single(entries, e => e.Id == "package:Term_abc!StartTask");
+        Assert.False(term.Enabled);
+        var policy = Assert.Single(entries, e => e.Id == "package:Policy_abc!PolicyTask");
+        Assert.False(policy.Enabled);
+        Assert.True(policy.ReadOnly);
+        Assert.Contains("run:cu:Wooting", present);
+        Assert.DoesNotContain("run:lm:Ghost", present);
+    }
 }

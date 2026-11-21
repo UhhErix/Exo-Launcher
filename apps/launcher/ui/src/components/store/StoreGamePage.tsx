@@ -1,6 +1,6 @@
 import { Wait, sample, times } from '../ui/Wait'
 import { useCallback, useEffect, useState } from 'react'
-import { ArrowRight, Bookmark, Check, CHECK_PATH, ExternalLink, Failed, Library, Play } from '../../brand/icons'
+import { ArrowRight, Bookmark, Check, CHECK_PATH, ChevronLeft, ExternalLink, Failed, Library, Play } from '../../brand/icons'
 import { host, type Game, type StoreGame, type StoreOffer, type StoreOtherOffers, type StoreRecentReviews, type StoreTile } from '../../lib/host'
 import { report } from '../../lib/report'
 import { Spinner } from '../ui/Spinner'
@@ -31,17 +31,16 @@ type Shown = { kind: 'trailer'; index: number } | { kind: 'shot'; index: number 
  * its size from the first frame (placeholders until the details land), so nothing moves when they do; what arrives
  * fades in where it belongs. Steam's part comes first; the other launchers fill in when they answer.
  */
-export function StoreGamePage({ seed, onScreen, owned, like, onOpenLike, wished, onWish, onOpenLibrary }: {
+export function StoreGamePage({ seed, onScreen, owned, like, onOpenLike, wished, onWish, onOpenLibrary, onBack }: {
   seed: StoreTile
-  /** The Store room is on screen: a trailer plays only then. */
   onScreen: boolean
   owned: boolean
-  /** The closest game of yours it is like, when that is why it was picked. */
   like?: Game
   onOpenLike: (game: Game) => void
   wished: boolean
   onWish: (on: boolean) => void
   onOpenLibrary: () => void
+  onBack?: () => void
 }) {
   const game = useStoreGame(seed.appId)
   const { offers: others } = useOtherOffers(seed.appId)
@@ -50,6 +49,14 @@ export function StoreGamePage({ seed, onScreen, owned, like, onOpenLike, wished,
   const data = game.data
   return (
     <section className="exo-sgp" aria-labelledby="exo-sgp-title" tabIndex={-1} data-autofocus>
+      {onBack ? (
+        <header className="exo-sgp-bar">
+          <button type="button" className="exo-glass exo-sgp-back" onClick={onBack}>
+            <ChevronLeft size={16} />
+            Store
+          </button>
+        </header>
+      ) : null}
       <div className="exo-sgp-body">
         <div className="exo-sgp-left">
           <Media game={game} onScreen={onScreen} />

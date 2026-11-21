@@ -182,7 +182,7 @@ function triggerBack(onBackFallback: () => void) {
     popovers[popovers.length - 1].hidePopover()
     return
   }
-  const subBack = document.querySelector<HTMLElement>('.exo-devices-back button, .exo-music-back, .exo-st-back')
+  const subBack = document.querySelector<HTMLElement>('.exo-devices-back button, .exo-music-back, .exo-st-back, .exo-sgp-back')
   if (subBack && isVisibleElement(subBack)) {
     subBack.click()
     requestAnimationFrame(() => focusRoomPrimary())

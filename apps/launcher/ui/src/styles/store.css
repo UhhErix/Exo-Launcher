@@ -516,33 +516,38 @@
   margin: 0;
 }
 
-/* A game's page: the media with Details under it, and beside it the logo and tags, buying, About and the
-   requirements. It takes nearly the whole room, in one layout for every game (StoreGamePage.tsx). */
-.exo-game-overlay:has(.exo-sgp) {
-  padding: 12px 16px;
+.exo-store-shelf-layer {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
 }
 
-.exo-game-overlay-stage:has(> .exo-sgp) {
-  width: min(1880px, 100%);
-  height: min(1120px, 100%);
-  max-height: min(1120px, 100%);
-  /* Glass settles in by its size alone: a sheet fading whole would hide the page from its glass. */
-  animation: exo-sheet-in var(--dur-move) var(--ease-out) backwards;
+.exo-store-shelf-layer[hidden] {
+  display: none;
 }
 
-html[data-exo-motion="reduce"] .exo-game-overlay-stage:has(> .exo-sgp) {
-  animation: none;
+.exo-store-page-room {
+  position: relative;
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  width: 100%;
+  min-width: 0;
+  min-height: 0;
+  padding-top: var(--exo-titlebar-h, 52px);
+  background: var(--color-bg);
 }
 
-/* The stage draws the page's one hairline and radius. */
 .exo-sgp {
   position: relative;
   display: flex;
+  flex: 1;
   flex-direction: column;
-  height: 100%;
+  min-height: 0;
   overflow: hidden;
-  border-radius: inherit;
-  background: transparent;
+  background: var(--color-bg);
   color: var(--color-fg);
 }
 
@@ -550,27 +555,53 @@ html[data-exo-motion="reduce"] .exo-game-overlay-stage:has(> .exo-sgp) {
   outline: none;
 }
 
-/* One layout for every game: the media on the left, a column of fixed width on the right. Every block has its place
-   and size before the details land, so nothing moves when they do. */
+.exo-sgp-bar {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px var(--exo-gutter) 0;
+}
+
+.exo-sgp-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 34px;
+  padding: 0 14px 0 10px;
+  border: 0;
+  border-radius: 999px;
+  color: var(--color-fg);
+  font: inherit;
+  font-size: var(--exo-type-body);
+  font-weight: var(--exo-weight-control);
+  cursor: pointer;
+  transition: transform var(--dur-press) var(--ease-out), background-color var(--dur-quick) var(--ease-out);
+}
+
+.exo-sgp-back:active {
+  transform: scale(0.97);
+}
+
 .exo-sgp-body {
-  --exo-sgp-side: clamp(380px, 30%, 520px);
+  --exo-sgp-side: clamp(380px, 31%, 540px);
   position: relative;
   display: grid;
   flex: 1;
   grid-template-columns: minmax(0, 1fr) var(--exo-sgp-side);
   gap: 24px;
   min-height: 0;
-  padding: 32px;
+  padding: 16px var(--exo-gutter) 24px;
 }
 
 @media (max-width: 1100px), (max-height: 720px) {
   .exo-sgp-body {
     gap: 16px;
-    padding: 16px;
+    padding: 14px var(--exo-gutter) 16px;
   }
 }
 
-/* The media, then Details: the media is 16:9 at the column's width, smaller only when the window is too short. */
 .exo-sgp-left {
   display: flex;
   flex-direction: column;
@@ -580,7 +611,6 @@ html[data-exo-motion="reduce"] .exo-game-overlay-stage:has(> .exo-sgp) {
   container-type: inline-size;
 }
 
-/* The column on the right: what is not the description keeps its size; a short window scrolls it. */
 .exo-sgp-side {
   display: flex;
   flex-direction: column;
@@ -594,13 +624,11 @@ html[data-exo-motion="reduce"] .exo-game-overlay-stage:has(> .exo-sgp) {
   flex: none;
 }
 
-/* The logo (or the name), then the tags as solid pills, clear of Close. */
 .exo-sgp-head {
   display: flex;
   flex-direction: column;
   justify-content: flex-end;
   gap: 12px;
-  padding-right: 40px;
 }
 
 /* The logo's slot: 80px, the same for every logo, so the tags never move. */

@@ -7,7 +7,6 @@ import { host, onHostEvent, type Game, type StoreHome, type StoreTile } from '..
 import { onPageActivityChanged, pageIsActive } from '../../lib/pageActivity'
 import { report } from '../../lib/report'
 import { useGlide } from '../../lib/glide'
-import { GameOverlay } from '../../motion'
 import { onScreen, pane, pressedArt, transition, visible } from '../../lib/viewTransition'
 import { useTopOnChange } from '../../lib/topOnChange'
 import { onStoreSearch, takeStoreSearch } from '../../lib/storeSearch'
@@ -41,11 +40,9 @@ function arriveStyle(i: number): CSSProperties {
  * they play woven in. Search and a wishlist
  * sit above; a game opens its own page.
  */
-/** A game's page's viewer (its trailer or screenshot, or their placeholder): where its card's art flies to and back from. */
-const PAGE_ART = '.exo-game-overlay-stage .exo-sgp-stage'
+const PAGE_ART = '.exo-store-page-room .exo-sgp-stage'
 
-/** What a hidden-unmounted Store comes back to (BootGate's roomScroll keeps the scroll). */
-const remembered = { tab: 'home' as Tab, query: '', page: null as StoreTile | null, lastPage: null as StoreTile | null }
+const remembered = { tab: 'home' as Tab, query: '', page: null as StoreTile | null }
 
 export function StoreRoom({ active, games, onOpenGame }: {
   active: boolean
@@ -56,19 +53,14 @@ export function StoreRoom({ active, games, onOpenGame }: {
   const [tab, setTab] = useState<Tab>(remembered.tab)
   const [query, setQuery] = useState(remembered.query)
   const [page, setPage] = useState<StoreTile | null>(remembered.page)
-  // The closing fade keeps showing the game that was open.
-  const [lastPage, setLastPage] = useState<StoreTile | null>(remembered.lastPage)
-  useEffect(() => { remembered.tab = tab; remembered.query = query; remembered.page = page; remembered.lastPage = lastPage },
-    [tab, query, page, lastPage])
-  useEffect(() => { if (page) setLastPage(page) }, [page])
-  // A search sent here from elsewhere (a friend's game you don't have): taken once the room is up, or at once when it is.
+  useEffect(() => { remembered.tab = tab; remembered.query = query; remembered.page = page },
+    [tab, query, page])
   useEffect(() => {
     const search = (text: string) => { setPage(null); setQuery(text) }
     const waiting = takeStoreSearch()
     if (waiting) search(waiting)
     return onStoreSearch(text => { takeStoreSearch(); search(text) })
   }, [])
-  const shownPage = page ?? lastPage
   const owned = useOwned(games)
   const home = useHome()
   const wish = useWishlist()
@@ -79,22 +71,28 @@ export function StoreRoom({ active, games, onOpenGame }: {
   const scroller = useRef<HTMLDivElement>(null)
   useTopOnChange(scroller, `${view}|${hits.query}`)
 
-  // The card's art flies into the page's viewer and back on close, the page coming up under it, as a game's page does
-  // in Library. Flown into the whole window, the window's glass was captured on its own and stood in as a flat tint,
-  // then blinked into glass as it landed. Opened from elsewhere, the page floats in.
   const artFrom = useRef<Element | null>(null)
   const openPage = useCallback((tile: StoreTile) => {
     const from = pressedArt()
     artFrom.current = from
     void transition(() => setPage(tile), { kind: 'morph', morph: { name: 'exo-store-art', from, to: () => visible(PAGE_ART) } })
   }, [])
-  const closePage = () => {
+  const closePage = useCallback(() => {
     const to = artFrom.current
     void transition(() => setPage(null), { kind: 'morph', back: true, morph: { name: 'exo-store-art', from: visible(PAGE_ART), to: () => onScreen(to) ? to : null } })
-  }
+  }, [])
 
-  // A game's wishlist mark follows the wishlist as it is now: the shelves, the banner and the calendar were read with the
-  // wishlist of their moment, so a game added since showed none. Their own word stands only until the wishlist is read.
+  useEffect(() => {
+    if (!active || !page) return
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape' || event.defaultPrevented) return
+      event.preventDefault()
+      closePage()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [active, page, closePage])
+
   const withWish = useCallback((tile: StoreTile): StoreTile => {
     const wished = wish.loaded ? wish.ids.has(tile.appId) : !!tile.wished
     return wished === !!tile.wished ? tile : { ...tile, wished }
@@ -105,45 +103,48 @@ export function StoreRoom({ active, games, onOpenGame }: {
     <StoreCard key={tile.appId} tile={withWish(tile)} owned={owned(tile.appId, tile.name)} onOpen={openPage} onLibrary={openOwned} arrive={arrive ? index : undefined} />
   ), [owned, openPage, openOwned, withWish])
 
-  const shownOwned = shownPage ? owned(shownPage.appId, shownPage.name) : undefined
+  const shownOwned = page ? owned(page.appId, page.name) : undefined
   const [openError, setOpenError] = useState<string | null>(null)
   const status = viewStatus(view, { hits, home, wish, openError })
 
   return (
     <main className="exo-store" aria-label="Store" data-room-scroll>
       <h1 className="sr-only">Store</h1>
-      <header className="exo-store-top">
-        <StoreTools view={view} query={query} refreshing={home.refreshing}
-          onTab={next => void transition(() => { setTab(next); setQuery(''); setOpenError(null) }, { kind: 'push', back: next === 'home', morph: pane(scroller.current) })} onQuery={setQuery} onRefresh={() => void home.load(true)}>
-          <p className="exo-store-status" role="status">{status}</p>
-          {steamSale ? <span className="exo-store-sale">{steamSale}</span> : null}
-        </StoreTools>
-      </header>
+      <div className="exo-store-shelf-layer" hidden={!!page}>
+        <header className="exo-store-top">
+          <StoreTools view={view} query={query} refreshing={home.refreshing}
+            onTab={next => void transition(() => { setTab(next); setQuery(''); setOpenError(null) }, { kind: 'push', back: next === 'home', morph: pane(scroller.current) })} onQuery={setQuery} onRefresh={() => void home.load(true)}>
+            <p className="exo-store-status" role="status">{status}</p>
+            {steamSale ? <span className="exo-store-sale">{steamSale}</span> : null}
+          </StoreTools>
+        </header>
 
-      <div ref={scroller} className="exo-store-scroll">
-        <div key={view} className="exo-motion-switch">
-          {view === 'search' ? <Results hits={hits} card={card} onClear={() => setQuery('')} />
-            : view === 'wishlist' ? <Wishlist wish={wish} owned={owned} card={card} />
-              : <Discover games={games} home={home.data} error={home.error} retrying={home.loading} onRetry={() => void home.load(false)} card={card} withWish={withWish} onOpen={openPage}
-                  still={!!page || !active} shining={home.refreshing} />}
+        <div ref={scroller} className="exo-store-scroll">
+          <div key={view} className="exo-motion-switch">
+            {view === 'search' ? <Results hits={hits} card={card} onClear={() => setQuery('')} />
+              : view === 'wishlist' ? <Wishlist wish={wish} owned={owned} card={card} />
+                : <Discover games={games} home={home.data} error={home.error} retrying={home.loading} onRetry={() => void home.load(false)} card={card} withWish={withWish} onOpen={openPage}
+                    still={!!page || !active} shining={home.refreshing} />}
+          </div>
         </div>
       </div>
 
-      <GameOverlay open={!!page} label={shownPage?.name ?? 'Game'} scrim={<button type="button" className="exo-game-overlay-scrim" aria-label="Close" tabIndex={-1} onClick={closePage} />}>
-        {shownPage ? (
+      {page ? (
+        <div className="exo-store-page-room exo-enter" role="region" aria-label={page.name}>
           <StoreGamePage
-            key={shownPage.appId}
-            seed={shownPage}
+            key={page.appId}
+            seed={page}
             onScreen={active}
             owned={!!shownOwned}
-            like={shownPage.wished ? undefined : shownPage.similarTo?.flatMap(id => games.find(game => game.id === id) ?? [])[0]}
+            like={page.wished ? undefined : page.similarTo?.flatMap(id => games.find(game => game.id === id) ?? [])[0]}
             onOpenLike={game => { setPage(null); onOpenGame(game.title) }}
-            wished={wish.ids.has(shownPage.appId)}
-            onWish={on => void wish.set(shownPage, on)}
+            wished={wish.ids.has(page.appId)}
+            onWish={on => void wish.set(page, on)}
             onOpenLibrary={() => { if (shownOwned) openOwned(shownOwned) }}
+            onBack={closePage}
           />
-        ) : null}
-      </GameOverlay>
+        </div>
+      ) : null}
     </main>
   )
 }
