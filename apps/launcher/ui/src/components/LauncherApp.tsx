@@ -47,7 +47,9 @@ import { bootGate, BootSplash, Room } from './shell/BootGate'
 import { ErrorBoundary } from './shell/ErrorBoundary'
 import { pcLinkRoom, type PcLink } from './gpu/pcSections'
 import { LibraryPane } from './shell/LibraryPane'
-import { TitleBar, type View } from './shell/TitleBar'
+import { ROOM_ORDER, TitleBar, type View } from './shell/TitleBar'
+import { GamepadBar } from './shell/GamepadBar'
+import { installGamepadNav } from '../lib/gamepadNav'
 import { savedMusicService, saveMusicService, type MusicService } from '../lib/music'
 import { loadUiPrefs } from '../lib/uiPrefs'
 import { ShellNotices } from './shell/ShellNotices'
@@ -590,6 +592,26 @@ export function LauncherApp() {
   const sortMode = settings ? librarySortMode(settings.sortMode) : null
   const openDiscordRoom = useCallback(() => goToView('friends'), [goToView])
   const openSearch = useCallback(() => setCommandOpen(true), [])
+  const gamepadState = useRef({ view, under, overlayOpen, commandOpen, goToView, closeGamePage, toggleSettings })
+  gamepadState.current = { view, under, overlayOpen, commandOpen, goToView, closeGamePage, toggleSettings }
+  useEffect(() => installGamepadNav({
+    onRoomStep: (delta) => {
+      const s = gamepadState.current
+      if (s.commandOpen) setCommandOpen(false)
+      if (s.overlayOpen) s.closeGamePage()
+      const idx = ROOM_ORDER.indexOf(s.under)
+      const next = ROOM_ORDER[(idx < 0 ? 0 : idx + delta + ROOM_ORDER.length) % ROOM_ORDER.length]
+      void s.goToView(next)
+    },
+    onSearchToggle: () => setCommandOpen(open => !open),
+    onSettingsToggle: () => gamepadState.current.toggleSettings(),
+    onBackFallback: () => {
+      const s = gamepadState.current
+      if (s.commandOpen) setCommandOpen(false)
+      else if (s.overlayOpen) s.closeGamePage()
+      else if (s.view === 'settings') s.toggleSettings()
+    },
+  }), [])
 
   const island = useMemo(() => <ExoIsland inDiscord={view === 'friends'} onOpenDiscord={openDiscordRoom} />, [view, openDiscordRoom])
   const titleBar = useMemo(() => (
@@ -821,6 +843,7 @@ export function LauncherApp() {
       <Suspense fallback={null}><WhatsNewSheet releases={whatsNew} update={update} onClose={closeWhatsNew} /></Suspense>
       <AccountOverlays shell={accountShell} />
       <Suspense fallback={null}><UpdateSheet update={update} shown={updateSheetShown(booting, accountShell.sheetOpen)} /></Suspense>
+      <GamepadBar view={view} overlayOpen={overlayOpen} />
     </div>
   )
 }

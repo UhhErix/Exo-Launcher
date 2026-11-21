@@ -1,25 +1,25 @@
-import { useState } from 'react'
-import { CHECK_PATH, ChevronLeft } from '../brand/icons'
-import { hostedBuyUrl, resolvePrimaryAction, type Game, type GameVariant, type InstallProgress } from '../lib/host'
+import { useEffect, useState } from 'react'
+import { Capture, CHECK_PATH, ChevronLeft, FolderOpen, ImageUpload, Sliders } from '../brand/icons'
+import type { CaptureItem } from '../lib/capture'
+import { host, hostedBuyUrl, resolvePrimaryAction, type Game, type GameVariant, type InstallProgress } from '../lib/host'
 import { transferForGame } from '../lib/library'
-import { installProgressLabel, transferPercent } from '../lib/utils'
+import { useJustFinished } from '../lib/useJustFinished'
+import { formatSize, installProgressLabel, storeLabel, transferPercent } from '../lib/utils'
 import { CoverArt, HeroWash } from './CoverArt'
-import { GameHeader, GameShared, GameStats, GameStore } from './game/GameSections'
-import { HdrRow } from './game/HdrRow'
 import { FrameGenModRow, FrameGenRow } from './game/FrameGenRow'
-import { OptimizeLine } from './game/OptimizeLine'
+import { GameHeader, GameMetaLine, GameShared, GameStats, GameStore } from './game/GameSections'
+import { HdrRow } from './game/HdrRow'
 import { ArtworkStrip, GameActions } from './game/ManageStrip'
+import { OptimizeLine } from './game/OptimizeLine'
 import { PrimaryAction } from './game/PrimaryAction'
 import { ShaderPrecompile } from './game/ShaderPrecompile'
 import { useGameDetails } from './game/useGameDetails'
-import { useJustFinished } from '../lib/useJustFinished'
 import { UpscalerFiles } from './UpscalerFiles'
 
 function isNoiseStatus(message: string): boolean {
   return /^(canceled\.?|uninstalled\.?|removed\.?|installed\.?|up to date\.?|running|(removing|uninstalling) .+…)$/i.test(message.trim())
 }
 
-/** Which sections a card gets. A portable "Add folder" tile gets none of them. */
 function pageFlags(selected: Game) {
   const portable = !!selected.isAddPortable
   const storePage = !selected.owned && !selected.installed && !portable
@@ -28,12 +28,6 @@ function pageFlags(selected: Game) {
   return { storePage, installedActions, artworkEnabled }
 }
 
-/**
- * A just-mutated cover painted over the card until the host's own revision
- * catches up, then dropped so the library copy is the single source again.
- * Dropped during render (another source picked, or the revision caught up), so
- * no frame pairs the page with a cover that is no longer its own.
- */
 function useArtworkOverride(selected: Game, selectionKey: string): [Game, (game: Game) => void] {
   const [art, setArt] = useState<{ key: string; game: Game } | null>(null)
   const live = art && art.key === selectionKey && (selected.artRevision ?? 0) < (art.game.artRevision ?? 0) ? art.game : null
@@ -44,7 +38,6 @@ function useArtworkOverride(selected: Game, selectionKey: string): [Game, (game:
   return [view, (game: Game) => setArt({ key: selectionKey, game })]
 }
 
-/** Installed with nothing left to update: where a finished download or update lands. */
 function isCurrent(selected: Game): boolean {
   return !!selected.installed && resolvePrimaryAction(selected) !== 'update'
 }
@@ -54,38 +47,43 @@ function sourceVariants(selected: Game): GameVariant[] | null {
   return sources.length > 1 ? sources : null
 }
 
+function useGameCaptures(gameId: string, enabled: boolean): CaptureItem[] {
+  const [items, setItems] = useState<CaptureItem[]>([])
+  useEffect(() => {
+    if (!enabled) {
+      setItems([])
+      return
+    }
+    let alive = true
+    void host.captureList(gameId, 4).then((res) => {
+      if (alive) setItems(res.ok && res.items ? res.items.slice(0, 4) : [])
+    }).catch(() => {
+      if (alive) setItems([])
+    })
+    return () => { alive = false }
+  }, [gameId, enabled])
+  return items
+}
+
 export type GamePageProps = {
   selected: Game
   busy: boolean
   statusMsg: string | null
   progress: InstallProgress | null
-  /** Waiting in Exo's download queue. */
   queued?: boolean
   onPrimary: () => void
   onStop: () => void
   onCancel: () => void
   onDequeue?: () => void
-  /** Opens the PC room's Graphics page, Upscalers sheet, or Shaders. */
   onOpenSystem?: (page: 'graphics' | 'shaders' | 'upscalers') => void
-  /** Switches the exact store entry behind a grouped library card. */
   onSelectSource?: (id: string) => void
   onStatus: (msg: string | null, sticky?: boolean) => void
   onUninstalled: () => void
-  /** System > HDR > HDR for HDR games, and turning it on from the HDR row. */
   hdrForGames: boolean
   onHdrForGames: () => Promise<boolean>
-  /** Properties over the page (its tool, or the card menu's Properties). */
   propertiesOpen: boolean
   onPropertiesOpen: (open: boolean) => void
   onBack?: () => void
-}
-
-function GameStatusPill({ selected, downloading }: { selected: Game; downloading: boolean }) {
-  if (downloading) return <span className="exo-game-eyebrow is-warn"><span className="exo-game-eyebrow-dot" aria-hidden="true" />Downloading</span>
-  if (selected.isRunning) return <span className="exo-game-eyebrow is-good"><span className="exo-game-eyebrow-dot" aria-hidden="true" />Playing now</span>
-  if (selected.updateAvailable) return <span className="exo-game-eyebrow is-warn"><span className="exo-game-eyebrow-dot" aria-hidden="true" />Update ready</span>
-  if (selected.installed) return <span className="exo-game-eyebrow is-good"><span className="exo-game-eyebrow-dot" aria-hidden="true" />Installed</span>
-  return <span className="exo-game-eyebrow"><span className="exo-game-eyebrow-dot" aria-hidden="true" />Not installed</span>
 }
 
 function GameLines({ selected, details, onOpenSystem, hdrForGames, onHdrForGames }: {
@@ -93,11 +91,10 @@ function GameLines({ selected, details, onOpenSystem, hdrForGames, onHdrForGames
   details: ReturnType<typeof useGameDetails>
 } & Pick<GamePageProps, 'onOpenSystem' | 'hdrForGames' | 'onHdrForGames'>) {
   return (
-    <section className="exo-game-tuning" aria-label="Game tuning">
-      <div className="exo-game-tuning-head">
-        <h2>Game Tuning</h2>
-        <span className="exo-game-tuning-rule" aria-hidden="true" />
-      </div>
+    <section className="exo-game-panel" aria-labelledby="exo-game-tuning-title">
+      <header className="exo-game-panel-head">
+        <h2 id="exo-game-tuning-title">Performance &amp; graphics</h2>
+      </header>
       <div className="exo-game-lines">
         {onOpenSystem && (
           <>
@@ -119,7 +116,124 @@ function GameLines({ selected, details, onOpenSystem, hdrForGames, onHdrForGames
   )
 }
 
-/** Live status for screen readers while something is happening to this title. */
+function GameManagePanel({
+  selected,
+  onPropertiesOpen,
+  onStatus,
+}: {
+  selected: Game
+  onPropertiesOpen: (open: boolean) => void
+  onStatus: (msg: string | null, sticky?: boolean) => void
+}) {
+  const size = formatSize(selected.sizeBytes)
+  const store = selected.isAddPortable ? 'Local folder' : storeLabel(selected.store)
+  return (
+    <section className="exo-game-panel" aria-labelledby="exo-game-manage-title">
+      <header className="exo-game-panel-head">
+        <h2 id="exo-game-manage-title">Manage &amp; files</h2>
+      </header>
+      <div className="exo-game-manage-rows">
+        <div className="exo-game-manage-row">
+          <div className="exo-game-manage-copy">
+            <span>Install folder</span>
+            <small className="tabular-nums">{size !== '—' ? `${size} · ${store}` : store}</small>
+          </div>
+          <button
+            type="button"
+            className="exo-set-btn is-compact"
+            onClick={() => {
+              void host.openFolder(selected.id).catch(() => onStatus('Could not open the folder.', true))
+            }}
+          >
+            <FolderOpen size={14} />
+            Open
+          </button>
+        </div>
+        <div className="exo-game-manage-row">
+          <div className="exo-game-manage-copy">
+            <span>Properties &amp; content</span>
+            <small>Launch options, DLC, betas &amp; verify files</small>
+          </div>
+          <button type="button" className="exo-set-btn is-compact" onClick={() => onPropertiesOpen(true)}>
+            <Sliders size={14} />
+            Open
+          </button>
+        </div>
+        <div className="exo-game-manage-row">
+          <div className="exo-game-manage-copy">
+            <span>Artwork</span>
+            <small>Replace cover art or restore store default</small>
+          </div>
+          <button type="button" className="exo-set-btn is-compact" onClick={() => onPropertiesOpen(true)}>
+            <ImageUpload size={14} />
+            Manage
+          </button>
+        </div>
+      </div>
+    </section>
+  )
+}
+
+function GameCapturesPanel({
+  captures,
+  onStatus,
+}: {
+  captures: CaptureItem[]
+  onStatus: (msg: string | null, sticky?: boolean) => void
+}) {
+  return (
+    <section className="exo-game-panel" aria-labelledby="exo-game-captures-title">
+      <header className="exo-game-panel-head">
+        <h2 id="exo-game-captures-title">Captures</h2>
+        <button
+          type="button"
+          className="exo-set-btn is-compact"
+          onClick={() => {
+            void host.captureAct('openFolder').catch(() => onStatus('Could not open captures folder.', true))
+          }}
+        >
+          Folder
+        </button>
+      </header>
+      {captures.length > 0 ? (
+        <div className="exo-game-captures-grid">
+          {captures.map((item) => (
+            <button
+              key={item.id}
+              type="button"
+              className="exo-game-capture-tile"
+              onClick={() => void host.captureAct('openFolder').catch(() => { })}
+              aria-label={item.name}
+            >
+              <img src={item.thumb || item.url} alt="" draggable={false} decoding="async" />
+              {item.kind === 'video' ? <span className="exo-game-capture-badge">Clip</span> : null}
+            </button>
+          ))}
+        </div>
+      ) : (
+        <div className="exo-game-manage-row">
+          <div className="exo-game-manage-copy">
+            <span>No captures yet</span>
+            <small>Clips and screenshots for this game appear here</small>
+          </div>
+          <button
+            type="button"
+            className="exo-set-btn is-compact"
+            onClick={() => {
+              void host.captureAct('screenshot').then((res) => {
+                onStatus(res.ok ? 'Screenshot saved.' : res.message ?? 'Could not take screenshot.', !res.ok)
+              }).catch(() => onStatus('Could not take screenshot.', true))
+            }}
+          >
+            <Capture size={14} />
+            Capture
+          </button>
+        </div>
+      )}
+    </section>
+  )
+}
+
 function LiveStatus({
   selected,
   busy,
@@ -127,8 +241,6 @@ function LiveStatus({
   statusMsg,
 }: Pick<GamePageProps, 'selected' | 'busy' | 'statusMsg'> & { progress: InstallProgress | null }) {
   if (progress) {
-    // Phase and quarter steps only: every byte tick would be read aloud. The
-    // pill's progressbar carries the exact figure for anyone who asks.
     const percent = transferPercent(progress)
     return (
       <span className="sr-only" role="status" aria-live="polite" aria-atomic="true">
@@ -147,8 +259,6 @@ function LiveStatus({
     )
   }
   if (!statusMsg || isNoiseStatus(statusMsg)) return null
-  // A pill floating at the foot of the page: it fades in over the page and
-  // clears on its own, so a message never pushes the page around.
   return (
     <p key={statusMsg} className="exo-game-status exo-motion-switch" aria-live="polite">
       <span>{statusMsg}</span>
@@ -178,6 +288,7 @@ export function GamePage({
 }: GamePageProps) {
   const { installedActions, artworkEnabled } = pageFlags(selected)
   const details = useGameDetails(selected)
+  const captures = useGameCaptures(selected.id, installedActions)
   const [manageBusy, setManageBusy] = useState(false)
   const [artworkView, setArtworkGame] = useArtworkOverride(selected, details.selectionKey)
 
@@ -230,8 +341,8 @@ export function GamePage({
           </div>
           <div className="exo-game-page-body">
             <div className="exo-game-info">
-              <GameStatusPill selected={selected} downloading={downloading} />
               <GameHeader selected={selected} />
+              <GameMetaLine selected={selected} downloading={downloading} />
               <div className="exo-game-actions">
                 <PrimaryAction
                   selected={selected}
@@ -262,12 +373,18 @@ export function GamePage({
                   />
                 )}
               </div>
-              <GameStats selected={selected} sources={sources} achievements={details.achievements} driveHeat={details.driveHeat} loading={details.loading} />
             </div>
+            <GameStats selected={selected} sources={sources} achievements={details.achievements} driveHeat={details.driveHeat} loading={details.loading} />
           </div>
         </div>
         {installedActions && (
-          <GameLines selected={selected} details={details} onOpenSystem={onOpenSystem} hdrForGames={hdrForGames} onHdrForGames={onHdrForGames} />
+          <div className="exo-game-workspace">
+            <GameLines selected={selected} details={details} onOpenSystem={onOpenSystem} hdrForGames={hdrForGames} onHdrForGames={onHdrForGames} />
+            <div className="exo-game-aside">
+              <GameManagePanel selected={selected} onPropertiesOpen={onPropertiesOpen} onStatus={onStatus} />
+              <GameCapturesPanel captures={captures} onStatus={onStatus} />
+            </div>
+          </div>
         )}
       </div>
       <LiveStatus selected={selected} busy={busy} progress={selectedProgress} statusMsg={statusMsg} />

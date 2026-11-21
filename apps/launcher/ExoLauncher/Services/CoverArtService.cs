@@ -916,8 +916,12 @@ public static partial class CoverArtService
 
     private static IReadOnlyList<string> SteamHeroCdnUrls(string appId) =>
     [
+        $"https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/{appId}/library_hero_2x.jpg",
+        $"https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/{appId}/library_hero.jpg",
         $"https://cdn.cloudflare.steamstatic.com/steam/apps/{appId}/library_hero_2x.jpg",
         $"https://cdn.cloudflare.steamstatic.com/steam/apps/{appId}/library_hero.jpg",
+        $"https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/{appId}/page_bg_raw.jpg",
+        $"https://cdn.cloudflare.steamstatic.com/steam/apps/{appId}/page_bg_raw.jpg",
     ];
 
     /// <summary>
@@ -943,6 +947,15 @@ public static partial class CoverArtService
         if (size is null) return false;
         var (w, h) = size.Value;
         if (w < 400 || h < 140) return false;
+        return w / (double)h >= MinWideAspect;
+    }
+
+    public static bool IsFullResHeroArt(string path)
+    {
+        var size = ReadImageSize(path);
+        if (size is null) return false;
+        var (w, h) = size.Value;
+        if (w < 960 || h < 420) return false;
         return w / (double)h >= MinWideAspect;
     }
 
@@ -2429,22 +2442,18 @@ public static partial class CoverArtService
         if (!requested && !ShouldWarmWideArt(g)) return false;
 
         var dest = Path.Combine(CacheRoot, WideArtFileName(g));
-        if (IsValidImageFile(dest) && IsWideArt(dest)) return true;
-        // A leftover that is not landscape would stretch across every banner.
-        TryDelete(dest);
+        if (IsValidImageFile(dest) && IsFullResHeroArt(dest)) return true;
+        if (!IsValidImageFile(dest) || !IsWideArt(dest)) TryDelete(dest);
 
         try
         {
-            // Steam's own hero art: the local client cache is free, the CDN is one hop.
             var appId = CardArtAppId(g) ?? MappedSteamAppId(g);
             if (appId is not null)
             {
                 if (TryImportSteamLibraryHero(appId, dest)) return true;
-                // Games from about 2024 on keep their art only under hashed store_item_assets paths: the classic
-                // /steam/apps/<id>/library_hero.jpg 404s (Phantom Blade Zero's did), so the item service names them first.
                 if (await TryDownloadWideAsync(http, await ResolveSteamWideUrlsAsync(http, appId, cancellationToken).ConfigureAwait(false), dest, cancellationToken).ConfigureAwait(false) ||
                     await TryDownloadWideAsync(http, SteamHeroCdnUrls(appId), dest, cancellationToken).ConfigureAwait(false) ||
-                    TryImportSteamLibraryHero(appId, dest, ["library_header_2x.jpg", "library_header.jpg", "header.jpg"]))
+                    TryImportSteamLibraryHero(appId, dest, ["library_header_2x.jpg"]))
                     return true;
             }
 
@@ -2510,14 +2519,39 @@ public static partial class CoverArtService
         string dest,
         CancellationToken cancellationToken)
     {
-        foreach (var url in urls)
+        var temp = dest + ".hero-tmp." + Guid.NewGuid().ToString("N");
+        string? fallback = null;
+        try
         {
-            if (string.IsNullOrWhiteSpace(url)) continue;
-            if (!await TryDownloadAnyAsync(http, [url], dest, cancellationToken).ConfigureAwait(false)) continue;
-            if (IsWideArt(dest)) return true;
-            TryDelete(dest);
+            foreach (var url in urls)
+            {
+                if (string.IsNullOrWhiteSpace(url)) continue;
+                if (!await TryDownloadAnyAsync(http, [url], temp, cancellationToken).ConfigureAwait(false)) continue;
+                if (IsFullResHeroArt(temp))
+                {
+                    File.Move(temp, dest, overwrite: true);
+                    return true;
+                }
+                if (fallback is null && IsWideArt(temp) && !(IsValidImageFile(dest) && IsWideArt(dest)))
+                {
+                    fallback = dest + ".hero-fb." + Guid.NewGuid().ToString("N");
+                    File.Move(temp, fallback, overwrite: true);
+                    continue;
+                }
+                TryDelete(temp);
+            }
+            if (fallback is not null && File.Exists(fallback))
+            {
+                File.Move(fallback, dest, overwrite: true);
+                return true;
+            }
+            return false;
         }
-        return false;
+        finally
+        {
+            TryDelete(temp);
+            if (fallback is not null) TryDelete(fallback);
+        }
     }
 
     /// <summary>
@@ -3598,20 +3632,16 @@ public static partial class CoverArtService
             assets.GetValueOrDefault("asset_url_format") is not { } format)
             return Array.Empty<string>();
         var list = new List<string>();
-        foreach (var kind in new[] { "library_hero_2x", "library_hero", "header_2x", "header", "main_capsule_2x", "main_capsule" })
+        foreach (var kind in new[] { "raw_page_background", "library_hero_2x", "library_hero", "page_background", "screenshot_0", "screenshot_1", "header_2x", "main_capsule_2x" })
             if (assets.TryGetValue(kind, out var file))
                 foreach (var prefix in SteamLibraryCapsuleCdnPrefixes)
                     list.Add(prefix + format.Replace("${FILENAME}", file, StringComparison.Ordinal));
         return list;
     }
 
-    /// <summary>
-    /// Steam's item service (IStoreBrowseService/GetItems) for one app: its asset file names by kind, with the
-    /// asset_url_format they go into; null when it doesn't answer or knows no assets.
-    /// </summary>
     private static async Task<Dictionary<string, string>?> SteamItemAssetsAsync(HttpClient http, string appId, CancellationToken cancellationToken)
     {
-        var input = $"{{\"ids\":[{{\"appid\":{appId}}}],\"context\":{{\"language\":\"english\",\"country_code\":\"US\",\"steam_realm\":1}},\"data_request\":{{\"include_assets\":true}}}}";
+        var input = $"{{\"ids\":[{{\"appid\":{appId}}}],\"context\":{{\"language\":\"english\",\"country_code\":\"US\",\"steam_realm\":1}},\"data_request\":{{\"include_assets\":true,\"include_screenshots\":true}}}}";
         var url =
             "https://api.steampowered.com/IStoreBrowseService/GetItems/v1/?input_json="
             + Uri.EscapeDataString(input);
@@ -3630,21 +3660,33 @@ public static partial class CoverArtService
             var names = new Dictionary<string, string>(StringComparer.Ordinal);
             foreach (var asset in assets.EnumerateObject())
                 if (asset.Value.ValueKind == JsonValueKind.String && asset.Value.GetString() is { Length: > 0 } value) names[asset.Name] = value;
+            if (item.TryGetProperty("screenshots", out var shots) &&
+                shots.TryGetProperty("all_ages_screenshots", out var allAges) &&
+                allAges.ValueKind == JsonValueKind.Array)
+            {
+                var idx = 0;
+                foreach (var shot in allAges.EnumerateArray())
+                {
+                    if (idx >= 2) break;
+                    if (shot.TryGetProperty("filename", out var fn) && fn.ValueKind == JsonValueKind.String && fn.GetString() is { Length: > 0 } path)
+                    {
+                        names[$"screenshot_{idx}"] = path;
+                        idx++;
+                    }
+                }
+            }
             return names;
         }
         return null;
     }
 
-    /// <summary>
-    /// A banner for a game shown wide before it's installed (a download sits in Continue): library warms fetch them for
-    /// installed games only. True when one was cached just now.
-    /// </summary>
     public static async Task<bool> WarmBannerAsync(GameEntry game, CancellationToken cancellationToken)
     {
-        if (ResolveWideArtUrl(game) is not null) return false;
+        var dest = Path.Combine(CacheRoot, WideArtFileName(game));
+        if (IsValidImageFile(dest) && IsFullResHeroArt(dest)) return false;
         var gate = ArtworkOperationGates.GetOrAdd(game.Id, _ => new SemaphoreSlim(1, 1));
         await gate.WaitAsync(cancellationToken).ConfigureAwait(false);
-        try { return ResolveWideArtUrl(game) is null && await WarmWideArtAsync(CoverHttp, game, requested: true, cancellationToken).ConfigureAwait(false); }
+        try { return !(IsValidImageFile(dest) && IsFullResHeroArt(dest)) && await WarmWideArtAsync(CoverHttp, game, requested: true, cancellationToken).ConfigureAwait(false); }
         finally { gate.Release(); }
     }
 

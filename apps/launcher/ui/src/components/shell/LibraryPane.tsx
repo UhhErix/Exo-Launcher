@@ -281,6 +281,7 @@ export const LibraryPane = memo(function LibraryPane(props: LibraryPaneProps) {
   const { onOpen, folders, onFolders, overlayOpen: covered, hiddenIds, onHidden } = props
   const [tab, setTab] = useState<LibraryTab>('home')
   const [focusSearch, setFocusSearch] = useState(false)
+  const [homeSearchOpen, setHomeSearchOpen] = useState(false)
   const [showHidden, setShowHidden] = useState(false)
   const { playing, games } = props
   const installedGames = useMemo(() => games.filter(game => game.installed), [games])
@@ -292,17 +293,24 @@ export const LibraryPane = memo(function LibraryPane(props: LibraryPaneProps) {
     showHidden,
   )
   const { shelf, found } = search
+  const showingHome = !props.empty && tab !== 'all' && !showHidden
   const deckGames = useMemo(() => {
+    if (search.query.trim()) {
+      return shelf.games.filter((item): item is Game => !isFolderTile(item))
+    }
     if (tab === 'installed') return installedGames
     if (tab === 'updates') return updateGames
     return playing.length ? playing : games.slice(0, 20)
-  }, [tab, installedGames, updateGames, playing, games])
-  const showingHome = !props.empty && tab !== 'all' && !showHidden && search.browsing
+  }, [search.query, shelf.games, tab, installedGames, updateGames, playing, games])
   const openSearchView = useCallback(() => {
+    if (showingHome) {
+      setHomeSearchOpen(true)
+      return
+    }
     setShowHidden(false)
     setTab('all')
     setFocusSearch(true)
-  }, [])
+  }, [showingHome])
   useEffect(() => {
     if (!active || covered) return
     const onKey = (event: KeyboardEvent) => {
@@ -344,6 +352,7 @@ export const LibraryPane = memo(function LibraryPane(props: LibraryPaneProps) {
   const switchTab = useCallback((next: LibraryTab) => {
     setTab(next)
     setFocusSearch(false)
+    setHomeSearchOpen(false)
     setShowHidden(false)
     setPicked(null)
     if (next !== 'all') search.clear()
@@ -560,7 +569,10 @@ export const LibraryPane = memo(function LibraryPane(props: LibraryPaneProps) {
           <HomeDeck
             tab={tab}
             onTab={switchTab}
-            onSearchOpen={openSearchView}
+            query={search.query}
+            onQuery={search.setQuery}
+            searchOpen={homeSearchOpen}
+            onSearchOpenChange={setHomeSearchOpen}
             games={deckGames}
             updatesCount={updateGames.length}
             active={active && !covered}

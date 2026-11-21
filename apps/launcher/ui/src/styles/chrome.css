@@ -144,6 +144,66 @@
   width: 100%;
 }
 
+.exo-gamepad-bar {
+  position: fixed;
+  right: var(--exo-gutter);
+  bottom: var(--exo-gutter);
+  z-index: 45;
+  display: inline-flex;
+  align-items: center;
+  gap: 14px;
+  height: 36px;
+  padding: 0 14px;
+  border-radius: 999px;
+  color: var(--color-fg);
+  pointer-events: none;
+  user-select: none;
+}
+
+.exo-gamepad-hint {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--color-muted);
+  font-size: var(--exo-type-small);
+  font-weight: var(--exo-weight-control);
+  white-space: nowrap;
+}
+
+.exo-gamepad-key {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--color-fg);
+  color: var(--color-primary-fg);
+  font-family: var(--font-sans);
+  font-size: var(--exo-type-label);
+  font-weight: var(--exo-weight-title);
+  line-height: 1;
+}
+
+:root[data-exo-gamepad] :is(button, a, input, select, textarea, [tabindex]):focus {
+  outline: 2px solid var(--color-fg);
+  outline-offset: 2px;
+}
+
+:root[data-exo-gamepad] .exo-deck-card-btn:focus {
+  outline: 2px solid var(--color-fg);
+  outline-offset: 3px;
+}
+
+:root[data-exo-gamepad] .exo-home-lower {
+  padding-bottom: 54px;
+}
+
+:root[data-exo-gamepad] :is(.exo-game-page-inner, .exo-store-scroll, .exo-ai-room, .exo-apps-room, .exo-devices, .exo-settings-scroll, .exo-music-main) {
+  padding-bottom: 64px;
+}
+
 /* Menu rows; their size, corners and type are every menu's (system.css › Menus). */
 .exo-menu-item {
   position: relative;
@@ -153,7 +213,11 @@
   width: 100%;
   background: transparent;
   user-select: none;
-  transition: background-color var(--dur-quick) var(--ease-out);
+  transition: background-color var(--dur-quick) var(--ease-out), transform var(--dur-press) var(--ease-out);
+}
+
+.exo-menu-item:active:not([aria-disabled="true"]) {
+  transform: scale(0.985);
 }
 
 /* Focus lights a row only from the keyboard: a menu opened with the mouse focuses its first row too, which then

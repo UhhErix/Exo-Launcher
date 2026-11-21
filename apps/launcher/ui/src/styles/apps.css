@@ -21,12 +21,13 @@
 
 .exo-apps-head > h2 {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   gap: 10px;
   margin: 0;
   color: var(--color-fg);
   font-size: calc(20px * var(--exo-scale, 1));
   font-weight: 650;
+  line-height: 1.1;
   white-space: nowrap;
 }
 
@@ -104,7 +105,7 @@
 
 .exo-apps-columns {
   min-height: 32px;
-  padding-inline: 8px;
+  padding-inline: 0;
 }
 
 .exo-apps-sort {
@@ -173,7 +174,7 @@
 /* A row: one hairline above, a little lift under the pointer, content-visibility for zero-hitch scrolling. */
 .exo-apps-row {
   min-height: 52px;
-  padding: 6px 8px;
+  padding: 6px 0;
   border-top: 1px solid var(--exo-float-line);
   content-visibility: auto;
   contain-intrinsic-size: auto 52px;
@@ -344,11 +345,10 @@
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   gap: 4px 16px;
-  min-height: 46px;
-  padding: 10px 14px;
-  border-radius: var(--exo-card-radius);
-  background-color: var(--exo-surface-card);
-  box-shadow: inset 0 0 0 var(--exo-hair) var(--exo-float-line);
+  min-height: 50px;
+  padding: 10px 0;
+  border-top: var(--exo-hair) solid var(--exo-float-line);
+  background: transparent;
 }
 
 .exo-apps-ready-act {
