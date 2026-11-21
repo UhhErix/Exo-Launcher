@@ -45,6 +45,7 @@ internal sealed partial class SystemTuning(SystemTuning.ISystem system, string p
     [
         TimerKey, SchedulingKey, PagefileKey, CacheKey, CaptureServiceKey, VrrLfcKey, PrivacyKey,
         TasksKey, WinFeaturesKey, OsOverheadKey,
+        KernelLatencyKey, UsbPowerKey, AiTelemetryKey, StorageFsKey, GamingUxKey, AmdGpuPowerKey, HagsKey,
     ];
 
     internal static readonly (string Path, string Label)[] TrimmedTasks =
@@ -61,6 +62,9 @@ internal sealed partial class SystemTuning(SystemTuning.ISystem system, string p
         (@"\Microsoft\Windows\Windows Error Reporting\QueueReporting", "Error Reporting Queue"),
         (@"\Microsoft\Windows\Maps\MapsToastTask", "Maps Toast Task"),
         (@"\Microsoft\Windows\Maps\MapsUpdateTask", "Maps Update Task"),
+        (@"\Microsoft\Windows\Power Efficiency Diagnostics\AnalyzeSystem", "Power Efficiency Diagnostics"),
+        (@"\Microsoft\Windows\Diagnosis\Scheduled", "Scheduled Diagnostics"),
+        (@"\Microsoft\Windows\Maintenance\WinSAT", "Windows System Assessment"),
     ];
 
     internal sealed record OsOverheadEntry(string Key, string Name, int Target, bool DesktopOnly);
@@ -91,7 +95,11 @@ internal sealed partial class SystemTuning(SystemTuning.ISystem system, string p
     ];
 
     /// <summary>The items only their own switch sets.</summary>
-    internal static readonly string[] OptIn = [ServicesKey, IntegrityKey, VrrKey, MouseAccelKey];
+    internal static readonly string[] OptIn =
+    [
+        ServicesKey, IntegrityKey, VrrKey, MouseAccelKey,
+        MpoOffKey, HibernateOffKey, BackgroundAppsKey, SvcHostSplitKey, GpuPstateKey, CpuMitigationsKey,
+    ];
 
     internal static readonly string[] Keys = [.. Defaults, .. OptIn];
 
@@ -129,6 +137,9 @@ internal sealed partial class SystemTuning(SystemTuning.ISystem system, string p
         ("Fax", "Fax"),
         ("Wisvc", "Windows Insider Service"),
         ("WMPNetworkSvc", "Windows Media Player Network Sharing"),
+        ("diagnosticshub.standardcollector.service", "Diagnostics Hub Standard Collector"),
+        ("WdiServiceHost", "Diagnostic Service Host"),
+        ("WdiSystemHost", "Diagnostic System Host"),
     ];
 
     /// <summary>Anti-cheats that can require Memory Integrity on, by their service, and who they are.</summary>
@@ -192,6 +203,13 @@ internal sealed partial class SystemTuning(SystemTuning.ISystem system, string p
         string? SelfExePath() => null;
         bool SupportsOsOverhead => false;
         bool IsLaptop() => false;
+        bool SupportsDeepPlaybook => false;
+        string? StringValue(string key, string name) => null;
+        string? UserString(string key, string name) => null;
+        bool SetUserString(string key, string name, string? value) => false;
+        IReadOnlyList<string> UsbRootHubKeys() => [];
+        IReadOnlyList<string> AmdDisplayClassKeys() => [];
+        long TotalMemoryKb() => 0;
     }
 
     private static readonly HashSet<string> HvciGameKeys = new(StringComparer.Ordinal)
@@ -373,6 +391,9 @@ internal sealed partial class SystemTuning(SystemTuning.ISystem system, string p
                     overheadOn || (Pending(OsOverheadKey) && overheadKept), overheadKept, off.Contains(OsOverheadKey), false, Pending(OsOverheadKey)));
             }
         }
+
+        if (system.SupportsDeepPlaybook)
+            ReadDeepPlaybookItems(saved, Pending, Tell, items);
 
         // Memory Integrity: shown while it's on (or Exo turned it off).
         var enabled = system.Dword(Hvci, "Enabled");
@@ -680,14 +701,22 @@ internal sealed partial class SystemTuning(SystemTuning.ISystem system, string p
                         kept.TryAdd(key, new Was(Strings: [mp[0].ToString(), mp[1].ToString(), mp[2].ToString()]));
                     break;
                 }
+                case GamingUxKey:
+                case BackgroundAppsKey:
+                    PrepareDeepNonAdminBackup(key, kept);
+                    break;
+                default:
+                    if (IsDeepPlaybookKey(key))
+                        PrepareDeepKey(key, kept, lines, out _);
+                    break;
             }
         }
-        var nonAdminKeys = wanted.Where(k => k is VrrKey or MouseAccelKey or PrivacyKey).ToList();
+        var nonAdminKeys = wanted.Where(IsNonAdminKey).ToList();
         if (lines.Count == 0 && nonAdminKeys.Count == 0) return Said(said);
 
         // Recorded before anything changes, so a crash or a step cut short still has the way back.
         var changed = new Dictionary<string, DateTimeOffset>(saved.Changed);
-        foreach (var key in wanted.Where(k => k is not (TimerKey or SchedulingKey or CaptureServiceKey or PrivacyKey or TasksKey or VrrKey or MouseAccelKey) && kept.ContainsKey(k))) changed[key] = now();
+        foreach (var key in wanted.Where(k => !DoesNotNeedRestartOnApply(k) && kept.ContainsKey(k))) changed[key] = now();
         if (!Save(saved with { Kept = kept, Changed = changed })) return "Your current settings couldn't be saved for Undo, so nothing changed.";
 
         if (lines.Count > 0)
@@ -741,6 +770,10 @@ internal sealed partial class SystemTuning(SystemTuning.ISystem system, string p
                     after = Drop(after, prior, key);
                     said.Add("Windows didn't turn off all ad and suggestion settings.");
                 }
+            }
+            else if (IsDeepPlaybookKey(key))
+            {
+                ApplyDeepNonAdmin(key, ref after, prior, said);
             }
         }
 
@@ -844,6 +877,10 @@ internal sealed partial class SystemTuning(SystemTuning.ISystem system, string p
                     after = Drop(after, prior, key);
                     said.Add("Windows didn't turn Memory Integrity off.");
                     break;
+                default:
+                    if (IsDeepPlaybookKey(key) && !IsNonAdminKey(key))
+                        VerifyDeepApplied(key, ref after, prior, said);
+                    break;
             }
         }
         // The probe goes only once what it settled is saved; until then the record saved before the step still names it.
@@ -920,6 +957,8 @@ internal sealed partial class SystemTuning(SystemTuning.ISystem system, string p
                 var offPrivacy = saved.Off.Contains(key) ? saved.Off : [.. saved.Off, key];
                 return Save(saved with { Kept = keptPrivacy, Off = offPrivacy }) ? null : "Exo couldn't save your choice.";
             }
+            if (TryTurnOffDeepNonAdmin(key, was, saved) is { } deepNonAdminResult) return deepNonAdminResult;
+            if (key == GamingUxKey || key == BackgroundAppsKey) return null;
             if (Revert(key, was, system.SelfExePath()) is not { } lines) return "Exo's record of this setting couldn't be read, so nothing changed.";
             // The timer's BCD value can't be read without administrator rights: the same step reads it back after setting it.
             var check = key == TimerKey ? system.Answer() : null;
@@ -941,6 +980,7 @@ internal sealed partial class SystemTuning(SystemTuning.ISystem system, string p
                 OsOverheadKey => VerifyOsOverheadReverted(was),
                 ServicesKey => was.Services!.All(s => system.Service(s.Name) is { } now && now.Start == s.Start && now.Delayed == s.Delayed),
                 IntegrityKey => system.Dword(Hvci, "Enabled") == was.Value,
+                _ when IsDeepPlaybookKey(key) => VerifyDeepReverted(key, was),
                 _ => Forced(system.ReadAnswer(check!)) == true,
             };
             if (!back) return "Windows didn't put it back. Try again.";
@@ -950,7 +990,7 @@ internal sealed partial class SystemTuning(SystemTuning.ISystem system, string p
             if (key is not (SchedulingKey or CaptureServiceKey or TasksKey)) changed[key] = now();
             saved = saved with { Kept = kept, Changed = changed };
         }
-        else if (key is IntegrityKey or ServicesKey or VrrKey or MouseAccelKey) return "Exo didn't change this, so there's nothing to put back.";
+        else if (OptIn.Contains(key)) return "Exo didn't change this, so there's nothing to put back.";
         if ((Defaults.Contains(key) || key == ServicesKey) && !saved.Off.Contains(key)) saved = saved with { Off = [.. saved.Off, key] };
         return Save(saved) ? null : "Exo couldn't save your choice.";
     }
@@ -1025,6 +1065,7 @@ internal sealed partial class SystemTuning(SystemTuning.ISystem system, string p
             ? list.Select(s => Sc(s.Name, s.Start switch { 2 => s.Delayed ? "delayed-auto" : "auto", 3 => "demand", 4 => "disabled", _ => "auto" })).ToList()
             : null,
         IntegrityKey => [was.Absent ? RegDelete(Hvci, "Enabled") : RegDword(Hvci, "Enabled", was.Value ?? 1)],
+        _ when IsDeepPlaybookKey(key) && !IsNonAdminKey(key) => RevertDeepKey(key, was),
         _ => null,
     };
 
@@ -1203,16 +1244,22 @@ internal sealed partial class SystemTuning(SystemTuning.ISystem system, string p
         : read.Contains(ReadOk, StringComparison.Ordinal) ? false
         : null;
 
-    internal static string RegDword(string key, string name, int value) =>
-        $"{Tool("reg.exe")} add \"HKLM\\{key}\" /v {name} /t REG_DWORD /d {value} /f";
+    internal static string RegDword(string key, string name, int value) => value < 0
+        ? RegDwordHex(key, name, unchecked((uint)value))
+        : $"{Tool("reg.exe")} add \"HKLM\\{key}\" /v {RegValueName(name)} /t REG_DWORD /d {value} /f";
 
     internal static string RegDwordHex(string key, string name, uint value) =>
-        $"{Tool("reg.exe")} add \"HKLM\\{key}\" /v {name} /t REG_DWORD /d 0x{value:X8} /f";
+        $"{Tool("reg.exe")} add \"HKLM\\{key}\" /v {RegValueName(name)} /t REG_DWORD /d 0x{value:X8} /f";
+
+    internal static string RegSz(string key, string name, string value) =>
+        $"{Tool("reg.exe")} add \"HKLM\\{key}\" /v {RegValueName(name)} /t REG_SZ /d \"{value}\" /f";
 
     internal static string RegStrings(string key, string name, IReadOnlyList<string> values) =>
-        $"{Tool("reg.exe")} add \"HKLM\\{key}\" /v {name} /t REG_MULTI_SZ /d \"{string.Join("\\0", values)}\" /f";
+        $"{Tool("reg.exe")} add \"HKLM\\{key}\" /v {RegValueName(name)} /t REG_MULTI_SZ /d \"{string.Join("\\0", values)}\" /f";
 
-    internal static string RegDelete(string key, string name) => $"{Tool("reg.exe")} delete \"HKLM\\{key}\" /v {name} /f";
+    internal static string RegDelete(string key, string name) => $"{Tool("reg.exe")} delete \"HKLM\\{key}\" /v {RegValueName(name)} /f";
+
+    private static string RegValueName(string name) => name.Contains(' ', StringComparison.Ordinal) ? $"\"{name}\"" : name;
 
     internal static string Sc(string service, string start) => $"{Tool("sc.exe")} config {service} start= {start}";
 
@@ -1227,6 +1274,12 @@ internal sealed partial class SystemTuning(SystemTuning.ISystem system, string p
 
     [GeneratedRegex(@"^SYSTEM\\CurrentControlSet\\Control\\Class\\\{4d36e968-e325-11ce-bfc1-08002be10318\}\\\d{4}$", RegexOptions.CultureInvariant | RegexOptions.IgnoreCase)]
     internal static partial Regex NvidiaClassKeyPattern();
+
+    [GeneratedRegex(@"^SYSTEM\\CurrentControlSet\\Enum\\USB\\ROOT_HUB[A-Za-z0-9_]*\\[A-Za-z0-9&_#-]+\\Device Parameters$", RegexOptions.CultureInvariant | RegexOptions.IgnoreCase)]
+    internal static partial Regex UsbRootHubKeyPattern();
+
+    [GeneratedRegex(@"^[A-Za-z0-9 _.-]+$", RegexOptions.CultureInvariant)]
+    internal static partial Regex SafeSzPattern();
 
     private static string? Said(List<string> said) => said.Count == 0 ? null : string.Join(" ", said);
 
