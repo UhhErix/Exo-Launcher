@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { Check, ChevronDown, ChevronUp, Close, Search } from '../../brand/icons'
 import { cleanOutcome } from '../../lib/junkClean'
-import { host, onHostEvent, type AppFind, type AppLeftover, type InstalledApp, type JunkItem, type LeftoverSummary, type RemovalRecord, type StartupItem, type StartupState, type WindowsApp, type WindowsAppLine } from '../../lib/host'
+import { host, onHostEvent, type AppFind, type AppLeftover, type InstalledApp, type JunkItem, type LeftoverSummary, type StartupItem, type StartupState, type WindowsApp, type WindowsAppLine } from '../../lib/host'
 import { report } from '../../lib/report'
 import { ActionButton, ConfirmButton } from '../ui/ConfirmButton'
 import { errorText, type PlainError } from '../../lib/errorWords'
@@ -11,7 +11,7 @@ import { Wait, sample, times } from '../ui/Wait'
 import { Spinner } from '../ui/Spinner'
 import { ArtImg } from '../ui/ArtImg'
 
-type View = 'apps' | 'windows' | 'startup' | 'removed'
+type View = 'apps' | 'windows' | 'startup'
 type Sort = 'name' | 'used' | 'size'
 type Removed = { id: string; name: string; find?: AppFind; message?: string }
 
@@ -109,7 +109,6 @@ function mergeIcons(current: Record<string, string | null>, incoming: Record<str
 
 export function AppsPanel({ active }: { active: boolean }) {
   const [programs, setPrograms] = useState<InstalledApp[] | null>(null)
-  const [edgeRemoved, setEdgeRemoved] = useState(false)
   const [icons, setIcons] = useState<Record<string, string | null>>({})
   const [view, setView] = useState<View>('apps')
   const [query, setQuery] = useState('')
@@ -131,7 +130,6 @@ export function AppsPanel({ active }: { active: boolean }) {
     try {
       const result = await host.appsList()
       setPrograms(result.programs)
-      setEdgeRemoved(Boolean(result.edgeRemoved))
       const missing = result.programs.map(app => app.id).filter(id => !(id in known) || !known[id])
       for (let from = 0; from < missing.length; from += 100) {
         const chunk = await host.appsIcons(missing.slice(from, from + 100))
@@ -205,7 +203,6 @@ export function AppsPanel({ active }: { active: boolean }) {
     }
     const next = await host.appsList()
     setPrograms(next.programs)
-    setEdgeRemoved(Boolean(next.edgeRemoved))
   }
 
   /**
@@ -332,10 +329,8 @@ export function AppsPanel({ active }: { active: boolean }) {
           </>
         ) : view === 'windows' ? (
           <WindowsAppsView active={active} query={query} onChanged={() => void load(iconsNow.current)} />
-        ) : view === 'startup' ? (
-          <StartupView startup={startup} query={query} />
         ) : (
-          <RemovedView active={active} edgeRemoved={edgeRemoved} disabled={busy !== null} onEdgeAllowed={() => setEdgeRemoved(false)} onChanged={() => { void load(iconsNow.current); void readTidy(true) }} />
+          <StartupView startup={startup} query={query} />
         )}
       </div>
     </div>
@@ -415,7 +410,7 @@ function Parts({ count: how, searching, children }: { count: number; searching: 
 }
 
 function Head({ view, onView, query, onQuery, facts }: { view: View; onView: (next: View) => void; query: string; onQuery: (next: string) => void; facts?: string }) {
-  const views: { id: View; label: string }[] = [{ id: 'apps', label: 'Apps' }, { id: 'windows', label: 'Windows' }, { id: 'startup', label: 'Startup' }, { id: 'removed', label: 'Removed' }]
+  const views: { id: View; label: string }[] = [{ id: 'apps', label: 'Apps' }, { id: 'windows', label: 'Windows' }, { id: 'startup', label: 'Startup' }]
   return (
     <div className="exo-apps-head">
       <h2 id="pc-apps-title">Apps{facts ? <span className="exo-apps-facts">{facts}</span> : null}</h2>
@@ -1231,48 +1226,5 @@ function PackagePlan({ plan, onRemove, onRemoved, onFailed, onBack }: {
         ))}
       </ul>
     </section>
-  )
-}
-
-// ---- removed ----
-
-/** What Exo removed from this PC, newest first, and Put back where what was cleared can still come back. Edge, once removed here, waits to be allowed again. */
-function RemovedView({ active, edgeRemoved, disabled, onEdgeAllowed, onChanged }: { active: boolean; edgeRemoved: boolean; disabled: boolean; onEdgeAllowed: () => void; onChanged: () => void }) {
-  const [items, setItems] = useState<RemovalRecord[] | null>(null)
-  const [errors, setErrors] = useState<Record<string, string | null>>({})
-  const read = () => host.appsHistory().then(result => setItems(result.items), (error: unknown) => { report(error, 'AppsPanel.history'); setItems(current => current ?? []) })
-  useEffect(() => { if (active) void read() }, [active])
-  const tell = (id: string, text: string | null) => setErrors(current => ({ ...current, [id]: text }))
-  const reread = () => { void read().then(onChanged) }
-
-  if (!items) return <Wait label="Reading what Exo removed">{sampleLines(4)}</Wait>
-  if (items.length === 0 && !edgeRemoved) return <p className="exo-apps-none">Nothing removed yet</p>
-  return (
-    <section aria-label="Removed">
-      {edgeRemoved ? <EdgeRow busy={disabled} onAllowed={onEdgeAllowed} /> : null}
-      {items.map(item => {
-        const what = item.cleared && (item.cleared.folders + item.cleared.files + item.cleared.registry + item.cleared.shortcuts) > 0 ? said(item.cleared) : null
-        const when = fullDay.format(new Date(item.at))
-        return (
-          <Line key={item.id} name={item.name} detail={[when, item.undone ? 'Put back' : what && `Cleared ${what}`].filter(Boolean).join(' · ')} error={errors[item.id] ?? null} keep>
-            {item.canPutBack ? (
-              <ActionButton className="exo-set-btn is-compact" context="AppsPanel.undo" fallback="It wasn’t put back. Try again." why="none" timeoutMs={null}
-                onPress={() => { tell(item.id, null); return host.appsUndo(item.id) }} onFailed={failure => { tell(item.id, failure.text); reread() }} onDone={reread}>Put back</ActionButton>
-            ) : null}
-          </Line>
-        )
-      })}
-    </section>
-  )
-}
-
-/** Edge, removed here: Edge Update is told not to install it again until Allow again (no confirm: removing it blocks it again). */
-function EdgeRow({ busy, onAllowed }: { busy: boolean; onAllowed: () => void }) {
-  const [error, setError] = useState<string | null>(null)
-  return (
-    <Line name="Microsoft Edge" detail="Won’t install itself again" error={error} keep>
-      <ActionButton className="exo-set-btn is-compact" disabled={busy} context="AppsPanel.allowEdge" fallback="Windows didn’t allow it. Try again." why="none"
-        onPress={() => { setError(null); return host.appsAllowEdge() }} onFailed={failure => setError(failure.text)} onDone={onAllowed}>Allow again</ActionButton>
-    </Line>
   )
 }

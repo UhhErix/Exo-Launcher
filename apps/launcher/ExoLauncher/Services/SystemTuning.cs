@@ -37,10 +37,40 @@ internal sealed partial class SystemTuning(SystemTuning.ISystem system, string p
 {
     internal const string TimerKey = "timer", SchedulingKey = "scheduling", PagefileKey = "pagefile", CacheKey = "cache",
         CaptureServiceKey = "captureService", VrrLfcKey = "vrrLfc", PrivacyKey = "privacy",
+        TasksKey = "tasks", WinFeaturesKey = "winFeatures", OsOverheadKey = "osOverhead",
         ServicesKey = "services", IntegrityKey = "integrity", VrrKey = "vrr", MouseAccelKey = "mouseAccel";
 
     /// <summary>The items Use best settings sets: each only puts back a Windows default a tweak changed.</summary>
-    internal static readonly string[] Defaults = [TimerKey, SchedulingKey, PagefileKey, CacheKey, CaptureServiceKey, VrrLfcKey, PrivacyKey];
+    internal static readonly string[] Defaults =
+    [
+        TimerKey, SchedulingKey, PagefileKey, CacheKey, CaptureServiceKey, VrrLfcKey, PrivacyKey,
+        TasksKey, WinFeaturesKey, OsOverheadKey,
+    ];
+
+    internal static readonly (string Path, string Label)[] TrimmedTasks =
+    [
+        (@"\Microsoft\Windows\Customer Experience Improvement Program\Consolidator", "Customer Experience Consolidator"),
+        (@"\Microsoft\Windows\Customer Experience Improvement Program\UsbCeip", "USB CEIP Telemetry"),
+        (@"\Microsoft\Windows\Application Experience\Microsoft Compatibility Appraiser", "Compatibility Appraiser"),
+        (@"\Microsoft\Windows\Application Experience\Microsoft Compatibility Appraiser Exp", "Compatibility Appraiser Exp"),
+        (@"\Microsoft\Windows\Application Experience\ProgramDataUpdater", "Program Data Updater"),
+        (@"\Microsoft\Windows\Autochk\Proxy", "Autochk Proxy"),
+        (@"\Microsoft\Windows\DiskDiagnostic\Microsoft-Windows-DiskDiagnosticDataCollector", "Disk Diagnostic Data Collector"),
+        (@"\Microsoft\Windows\Feedback\Siuf\DmClient", "Feedback SIUF Client"),
+        (@"\Microsoft\Windows\Feedback\Siuf\DmClientOnScenarioDownload", "Feedback SIUF Scenario Download"),
+        (@"\Microsoft\Windows\Windows Error Reporting\QueueReporting", "Error Reporting Queue"),
+        (@"\Microsoft\Windows\Maps\MapsToastTask", "Maps Toast Task"),
+        (@"\Microsoft\Windows\Maps\MapsUpdateTask", "Maps Update Task"),
+    ];
+
+    internal sealed record OsOverheadEntry(string Key, string Name, int Target, bool DesktopOnly);
+
+    internal static readonly OsOverheadEntry[] OsOverheadSettings =
+    [
+        new(@"SYSTEM\CurrentControlSet\Control\Power\PowerThrottling", "PowerThrottlingOff", 1, DesktopOnly: true),
+        new(@"SOFTWARE\Policies\Microsoft\Windows\DeliveryOptimization", "DODownloadMode", 0, DesktopOnly: false),
+        new(@"SOFTWARE\Policies\Microsoft\Dsh", "AllowNewsAndInterests", 0, DesktopOnly: false),
+    ];
 
     internal const string DisplayClassRoot = @"SYSTEM\CurrentControlSet\Control\Class\{4d36e968-e325-11ce-bfc1-08002be10318}";
     internal const string VrrFrameSplitBehavior = "vrrFrameSplitBehavior";
@@ -91,6 +121,14 @@ internal sealed partial class SystemTuning(SystemTuning.ISystem system, string p
     [
         ("MapsBroker", "Downloaded Maps Manager"),
         ("PcaSvc", "Program Compatibility Assistant Service"),
+        ("DiagTrack", "Connected User Experiences and Telemetry"),
+        ("dmwappushservice", "WAP Push Message Routing"),
+        ("WerSvc", "Windows Error Reporting"),
+        ("RemoteRegistry", "Remote Registry"),
+        ("RetailDemo", "Retail Demo"),
+        ("Fax", "Fax"),
+        ("Wisvc", "Windows Insider Service"),
+        ("WMPNetworkSvc", "Windows Media Player Network Sharing"),
     ];
 
     /// <summary>Anti-cheats that can require Memory Integrity on, by their service, and who they are.</summary>
@@ -140,6 +178,20 @@ internal sealed partial class SystemTuning(SystemTuning.ISystem system, string p
         IReadOnlyList<string> HvciRequiringGames() => [];
         /// <summary>The latency check, run elevated (Windows asks): its answer, or null when the prompt was declined or it didn't run.</summary>
         Task<LatencyTrace.Answer?> Latency();
+        bool SupportsScheduledTasks => false;
+        bool? ScheduledTaskEnabled(string taskPath) => null;
+        IReadOnlyDictionary<string, bool> ScheduledTasks(IEnumerable<string> taskPaths)
+        {
+            var found = new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase);
+            foreach (var path in taskPaths)
+                if (ScheduledTaskEnabled(path) is { } on) found[path] = on;
+            return found;
+        }
+        bool SupportsWinFeatures => false;
+        WindowsFeatures.FeatureSnapshot? WinFeature(uint featureId) => null;
+        string? SelfExePath() => null;
+        bool SupportsOsOverhead => false;
+        bool IsLaptop() => false;
     }
 
     private static readonly HashSet<string> HvciGameKeys = new(StringComparer.Ordinal)
@@ -274,6 +326,54 @@ internal sealed partial class SystemTuning(SystemTuning.ISystem system, string p
                 vrrLfcOn || (Pending(VrrLfcKey) && vrrLfcKept), vrrLfcKept, off.Contains(VrrLfcKey), false, Pending(VrrLfcKey)));
         }
 
+        if (system.SupportsScheduledTasks)
+        {
+            var taskStates = system.ScheduledTasks(TrimmedTasks.Select(t => t.Path));
+            var enabledCount = TrimmedTasks.Count(t => taskStates.TryGetValue(t.Path, out var isOn) && isOn);
+            var tasksKept = saved.Kept.ContainsKey(TasksKey);
+            if (enabledCount > 0 || tasksKept)
+            {
+                var detail = enabledCount == 0
+                    ? "CEIP, Compatibility Appraiser, Feedback, Error Reporting, and Maps tasks are disabled (no restart needed)."
+                    : $"{enabledCount} telemetry and background task{(enabledCount == 1 ? "" : "s")} enabled (CEIP, Appraiser, Feedback, WER, Maps); disabling reduces background wakeups.";
+                items.Add(new(TasksKey, "Telemetry & background scheduled tasks", detail,
+                    enabledCount == 0, tasksKept, off.Contains(TasksKey), false, false, null, NeedsRestart: false));
+            }
+        }
+
+        if (system.SupportsWinFeatures)
+        {
+            var snapshots = WindowsFeatures.LowLatencyProfileIds.Select(id => system.WinFeature(id) ?? new WindowsFeatures.FeatureSnapshot(id, null, null, null, null)).ToList();
+            var pendingFeatures = snapshots.Count(s => !WindowsFeatures.IsEnabledByOsOrUser(s));
+            var winFeatKept = saved.Kept.ContainsKey(WinFeaturesKey);
+            if (pendingFeatures > 0 || winFeatKept || Pending(WinFeaturesKey))
+            {
+                var allEnabled = pendingFeatures == 0;
+                var detail = Tell(WinFeaturesKey, allEnabled
+                    ? "Low Latency Profile feature flags are enabled."
+                    : "Enables Windows 11 Low Latency Profile feature flags via ntdll feature control. Takes a restart.");
+                items.Add(new(WinFeaturesKey, "Windows 11 Low Latency Profile", detail,
+                    allEnabled || (Pending(WinFeaturesKey) && winFeatKept), winFeatKept, off.Contains(WinFeaturesKey), false, Pending(WinFeaturesKey)));
+            }
+        }
+
+        if (system.SupportsOsOverhead)
+        {
+            var laptop = system.IsLaptop();
+            var overheadEntries = OsOverheadSettings.Where(e => !e.DesktopOnly || !laptop).ToList();
+            var overheadOn = overheadEntries.All(e => system.Dword(e.Key, e.Name) == e.Target);
+            var overheadKept = saved.Kept.ContainsKey(OsOverheadKey);
+            if (!overheadOn || overheadKept || Pending(OsOverheadKey))
+            {
+                var label = laptop ? "P2P updates & Widgets off" : "Power throttling, P2P updates & Widgets off";
+                var detail = Tell(OsOverheadKey, overheadOn
+                    ? (laptop ? "Delivery Optimization P2P and background Widgets feeds are off." : "Power throttling, Delivery Optimization P2P, and background Widgets feeds are off.")
+                    : (laptop ? "Turns off Delivery Optimization P2P uploads and background Widgets/News feeds. Takes a restart." : "Turns off desktop power throttling, Delivery Optimization P2P uploads, and background Widgets/News feeds. Takes a restart."));
+                items.Add(new(OsOverheadKey, label, detail,
+                    overheadOn || (Pending(OsOverheadKey) && overheadKept), overheadKept, off.Contains(OsOverheadKey), false, Pending(OsOverheadKey)));
+            }
+        }
+
         // Memory Integrity: shown while it's on (or Exo turned it off).
         var enabled = system.Dword(Hvci, "Enabled");
         var running = system.IntegrityRunning();
@@ -385,6 +485,13 @@ internal sealed partial class SystemTuning(SystemTuning.ISystem system, string p
         finally { _gate.Release(); }
     }
 
+    internal async Task<string?> ApplyPlaybookAsync()
+    {
+        if (!_gate.Wait(0)) return Busy;
+        try { return Logged(await ApplyNowAsync(null, includeServices: true).ConfigureAwait(false)); }
+        finally { _gate.Release(); }
+    }
+
     /// <summary>Turns one item off: puts back what Exo recorded and keeps it out of Best settings until it's on again.</summary>
     internal async Task<string?> TurnOffAsync(string key)
     {
@@ -399,7 +506,7 @@ internal sealed partial class SystemTuning(SystemTuning.ISystem system, string p
         return said;
     }
 
-    private async Task<string?> ApplyNowAsync(IReadOnlyCollection<string>? only)
+    private async Task<string?> ApplyNowAsync(IReadOnlyCollection<string>? only, bool includeServices = false)
     {
         if (only is not null && only.Any(k => !Keys.Contains(k))) return "Exo doesn't know that setting.";
         var saved = Settled();
@@ -411,7 +518,7 @@ internal sealed partial class SystemTuning(SystemTuning.ISystem system, string p
             if (!Save(saved)) return "Exo couldn't save your choice, so nothing changed.";
         }
         var state = StateOf(saved);
-        var asked = state.Items.Where(i => !i.On && (only?.Contains(i.Key) ?? (!i.OptIn && !i.Off))).ToList();
+        var asked = state.Items.Where(i => !i.On && (only?.Contains(i.Key) ?? ((!i.OptIn || (includeServices && i.Key == ServicesKey)) && !i.Off && !saved.Off.Contains(i.Key)))).ToList();
         if (asked.FirstOrDefault(i => i.Blocked is not null) is { } held && only is not null) return held.Blocked;
         var wanted = asked.Where(i => i.Blocked is null).Select(i => i.Key).ToList();
         if (wanted.Count == 0) return null;
@@ -420,6 +527,8 @@ internal sealed partial class SystemTuning(SystemTuning.ISystem system, string p
         var kept = new Dictionary<string, Was>(saved.Kept);
         var said = new List<string>();
         string? clockWas = null, clockAfter = null;
+        List<string> tasksAttempted = [];
+        List<uint> winFeaturesAttempted = [];
         foreach (var key in wanted)
         {
             switch (key)
@@ -492,6 +601,57 @@ internal sealed partial class SystemTuning(SystemTuning.ISystem system, string p
                     kept.TryAdd(key, new Was(Strings: priorEntries));
                     break;
                 }
+                case TasksKey:
+                {
+                    var taskStates = system.ScheduledTasks(TrimmedTasks.Select(t => t.Path));
+                    tasksAttempted = TrimmedTasks.Where(t => taskStates.TryGetValue(t.Path, out var isOn) && isOn).Select(t => t.Path).ToList();
+                    if (tasksAttempted.Count > 0)
+                    {
+                        var existing = kept.TryGetValue(key, out var old) ? old.Strings ?? [] : [];
+                        var merged = existing.Concat(tasksAttempted.Where(p => !existing.Contains(p, StringComparer.OrdinalIgnoreCase))).ToArray();
+                        kept[key] = new Was(Strings: merged);
+                        lines.AddRange(tasksAttempted.Select(p => SchTasksChange(p, disable: true)));
+                    }
+                    break;
+                }
+                case WinFeaturesKey:
+                {
+                    if (system.SelfExePath() is not { Length: > 0 } selfExe)
+                    {
+                        said.Add("Exo couldn't locate its own executable to set Windows 11 feature flags.");
+                        continue;
+                    }
+                    var snapshots = WindowsFeatures.LowLatencyProfileIds.Select(id => system.WinFeature(id) ?? new WindowsFeatures.FeatureSnapshot(id, null, null, null, null)).ToList();
+                    var toEnable = snapshots.Where(s => !WindowsFeatures.IsEnabledByOsOrUser(s)).ToList();
+                    if (toEnable.Count > 0)
+                    {
+                        winFeaturesAttempted = toEnable.Select(s => s.Id).ToList();
+                        var existing = kept.TryGetValue(key, out var old) ? old.Strings ?? [] : [];
+                        var existingIds = existing.Select(ParseWinFeatureRecord).OfType<(uint Id, bool Absent, uint State, uint Options)>().Select(r => r.Id).ToHashSet();
+                        var additions = toEnable.Where(s => !existingIds.Contains(s.Id)).Select(s =>
+                            s.UserBootState is { } st
+                                ? string.Create(System.Globalization.CultureInfo.InvariantCulture, $"{s.Id}={st}:{s.UserBootOptions ?? 0}")
+                                : string.Create(System.Globalization.CultureInfo.InvariantCulture, $"{s.Id}=absent"));
+                        kept[key] = new Was(Strings: [.. existing, .. additions]);
+                        lines.Add(WinFeaturesCmd(selfExe, winFeaturesAttempted.Select(id => string.Create(System.Globalization.CultureInfo.InvariantCulture, $"{id}=2:0"))));
+                    }
+                    break;
+                }
+                case OsOverheadKey:
+                {
+                    var laptop = system.IsLaptop();
+                    var entries = OsOverheadSettings.Where(e => !e.DesktopOnly || !laptop).ToList();
+                    var priorEntries = entries.Select(e =>
+                    {
+                        var prev = system.Dword(e.Key, e.Name);
+                        return prev is { } p ? $"{e.Key}|{e.Name}={p.ToString(System.Globalization.CultureInfo.InvariantCulture)}" : $"{e.Key}|{e.Name}=absent";
+                    }).ToArray();
+                    kept.TryAdd(key, new Was(Strings: priorEntries));
+                    foreach (var entry in entries)
+                        if (system.Dword(entry.Key, entry.Name) != entry.Target)
+                            lines.Add(RegDword(entry.Key, entry.Name, entry.Target));
+                    break;
+                }
                 case ServicesKey:
                 {
                     var now = Trimmed.Select(s => (s.Name, Start: system.Service(s.Name))).Where(s => s.Start is { Start: 2 })
@@ -527,7 +687,7 @@ internal sealed partial class SystemTuning(SystemTuning.ISystem system, string p
 
         // Recorded before anything changes, so a crash or a step cut short still has the way back.
         var changed = new Dictionary<string, DateTimeOffset>(saved.Changed);
-        foreach (var key in wanted.Where(k => k is not (TimerKey or SchedulingKey or CaptureServiceKey or PrivacyKey or VrrKey or MouseAccelKey) && kept.ContainsKey(k))) changed[key] = now();
+        foreach (var key in wanted.Where(k => k is not (TimerKey or SchedulingKey or CaptureServiceKey or PrivacyKey or TasksKey or VrrKey or MouseAccelKey) && kept.ContainsKey(k))) changed[key] = now();
         if (!Save(saved with { Kept = kept, Changed = changed })) return "Your current settings couldn't be saved for Undo, so nothing changed.";
 
         if (lines.Count > 0)
@@ -638,6 +798,48 @@ internal sealed partial class SystemTuning(SystemTuning.ISystem system, string p
                     }
                     break;
                 }
+                case TasksKey when tasksAttempted.Count > 0:
+                {
+                    var taskStates = system.ScheduledTasks(tasksAttempted);
+                    var still = tasksAttempted.Where(p => taskStates.TryGetValue(p, out var isOn) && isOn).ToHashSet(StringComparer.OrdinalIgnoreCase);
+                    if (still.Count > 0)
+                    {
+                        var prevPaths = prior.Kept.GetValueOrDefault(key)?.Strings?.ToHashSet(StringComparer.OrdinalIgnoreCase) ?? [];
+                        var keptPaths = (after.Kept[key].Strings ?? []).Where(p => !still.Contains(p) || prevPaths.Contains(p)).ToArray();
+                        after = keptPaths.Length == 0 ? Drop(after, prior, key) : after with { Kept = new(after.Kept) { [key] = new Was(Strings: keptPaths) } };
+                        said.Add("Windows didn't disable all telemetry scheduled tasks.");
+                    }
+                    break;
+                }
+                case WinFeaturesKey when winFeaturesAttempted.Count > 0:
+                {
+                    var still = winFeaturesAttempted.Where(id => system.WinFeature(id) is not { } snap || !WindowsFeatures.IsEnabledByOsOrUser(snap)).ToHashSet();
+                    if (still.Count > 0)
+                    {
+                        var prevIds = (prior.Kept.GetValueOrDefault(key)?.Strings ?? [])
+                            .Select(ParseWinFeatureRecord)
+                            .OfType<(uint Id, bool Absent, uint State, uint Options)>()
+                            .Select(r => r.Id)
+                            .ToHashSet();
+                        var keptEntries = (after.Kept[key].Strings ?? [])
+                            .Where(entry => ParseWinFeatureRecord(entry) is { } rec && (!still.Contains(rec.Id) || prevIds.Contains(rec.Id)))
+                            .ToArray();
+                        after = keptEntries.Length == 0 ? Drop(after, prior, key) : after with { Kept = new(after.Kept) { [key] = new Was(Strings: keptEntries) } };
+                        said.Add("Windows didn't enable all Low Latency Profile feature flags.");
+                    }
+                    break;
+                }
+                case OsOverheadKey:
+                {
+                    var laptop = system.IsLaptop();
+                    var entries = OsOverheadSettings.Where(e => !e.DesktopOnly || !laptop);
+                    if (entries.Any(e => system.Dword(e.Key, e.Name) != e.Target))
+                    {
+                        after = Drop(after, prior, key);
+                        said.Add("Windows didn't apply all OS overhead settings.");
+                    }
+                    break;
+                }
                 case IntegrityKey when system.Dword(Hvci, "Enabled") == 1:
                     after = Drop(after, prior, key);
                     said.Add("Windows didn't turn Memory Integrity off.");
@@ -718,7 +920,7 @@ internal sealed partial class SystemTuning(SystemTuning.ISystem system, string p
                 var offPrivacy = saved.Off.Contains(key) ? saved.Off : [.. saved.Off, key];
                 return Save(saved with { Kept = keptPrivacy, Off = offPrivacy }) ? null : "Exo couldn't save your choice.";
             }
-            if (Revert(key, was) is not { } lines) return "Exo's record of this setting couldn't be read, so nothing changed.";
+            if (Revert(key, was, system.SelfExePath()) is not { } lines) return "Exo's record of this setting couldn't be read, so nothing changed.";
             // The timer's BCD value can't be read without administrator rights: the same step reads it back after setting it.
             var check = key == TimerKey ? system.Answer() : null;
             if (check is not null) lines = [.. lines, TimerRead(check)];
@@ -734,6 +936,9 @@ internal sealed partial class SystemTuning(SystemTuning.ISystem system, string p
                 CacheKey => system.Dword(MemoryManagement, LargeSystemCache) == was.Value,
                 CaptureServiceKey => was.Services is [var cs] && system.Service(cs.Name) is { } nowCs && nowCs.Start == cs.Start,
                 VrrLfcKey => VerifyVrrLfcReverted(was),
+                TasksKey => VerifyTasksReverted(was),
+                WinFeaturesKey => VerifyWinFeaturesReverted(was),
+                OsOverheadKey => VerifyOsOverheadReverted(was),
                 ServicesKey => was.Services!.All(s => system.Service(s.Name) is { } now && now.Start == s.Start && now.Delayed == s.Delayed),
                 IntegrityKey => system.Dword(Hvci, "Enabled") == was.Value,
                 _ => Forced(system.ReadAnswer(check!)) == true,
@@ -742,11 +947,11 @@ internal sealed partial class SystemTuning(SystemTuning.ISystem system, string p
             var kept = new Dictionary<string, Was>(saved.Kept);
             kept.Remove(key);
             var changed = new Dictionary<string, DateTimeOffset>(saved.Changed);
-            if (key is not (SchedulingKey or CaptureServiceKey)) changed[key] = now();
+            if (key is not (SchedulingKey or CaptureServiceKey or TasksKey)) changed[key] = now();
             saved = saved with { Kept = kept, Changed = changed };
         }
         else if (key is IntegrityKey or ServicesKey or VrrKey or MouseAccelKey) return "Exo didn't change this, so there's nothing to put back.";
-        if (Defaults.Contains(key) && !saved.Off.Contains(key)) saved = saved with { Off = [.. saved.Off, key] };
+        if ((Defaults.Contains(key) || key == ServicesKey) && !saved.Off.Contains(key)) saved = saved with { Off = [.. saved.Off, key] };
         return Save(saved) ? null : "Exo couldn't save your choice.";
     }
 
@@ -803,7 +1008,7 @@ internal sealed partial class SystemTuning(SystemTuning.ISystem system, string p
     private static bool SameStrings(string[]? a, string[]? b) => a is null ? b is null : b is not null && a.SequenceEqual(b, StringComparer.OrdinalIgnoreCase);
 
     /// <summary>The lines that put back what <paramref name="was"/> recorded; null when the record holds something Exo wouldn't write.</summary>
-    internal static IReadOnlyList<string>? Revert(string key, Was was) => key switch
+    internal static IReadOnlyList<string>? Revert(string key, Was was, string? selfExe = null) => key switch
     {
         TimerKey => was.Clock ? [$"{Tool("bcdedit.exe")} /set {{current}} useplatformclock true"] : [],
         SchedulingKey => [was.Absent ? RegDelete(PriorityControl, Separation) : RegDword(PriorityControl, Separation, was.Value ?? Programs)],
@@ -813,12 +1018,121 @@ internal sealed partial class SystemTuning(SystemTuning.ISystem system, string p
             ? [Sc(cs.Name, cs.Start switch { 2 => cs.Delayed ? "delayed-auto" : "auto", 3 => "demand", 4 => "disabled", _ => "demand" })]
             : null,
         VrrLfcKey => RevertVrrLfc(was),
+        TasksKey => RevertTasks(was),
+        WinFeaturesKey => RevertWinFeatures(was, selfExe),
+        OsOverheadKey => RevertOsOverhead(was),
         ServicesKey => was.Services is { } list && list.All(s => Trimmed.Any(t => t.Name == s.Name))
             ? list.Select(s => Sc(s.Name, s.Start switch { 2 => s.Delayed ? "delayed-auto" : "auto", 3 => "demand", 4 => "disabled", _ => "auto" })).ToList()
             : null,
         IntegrityKey => [was.Absent ? RegDelete(Hvci, "Enabled") : RegDword(Hvci, "Enabled", was.Value ?? 1)],
         _ => null,
     };
+
+    private static string SchTasksChange(string taskPath, bool disable) =>
+        $"{Tool("schtasks.exe")} /Change /TN \"{taskPath}\" {(disable ? "/Disable" : "/Enable")}";
+
+    private static string WinFeaturesCmd(string selfExe, IEnumerable<string> tokens) =>
+        $"call \"{Quoted(selfExe)}\" {WindowsFeatures.Flag} set {string.Join(' ', tokens)}";
+
+    private static IReadOnlyList<string>? RevertTasks(Was was)
+    {
+        if (was.Strings is not { Length: > 0 } paths) return null;
+        if (paths.Any(p => !TrimmedTasks.Any(t => t.Path.Equals(p, StringComparison.OrdinalIgnoreCase)))) return null;
+        return paths.Select(p => SchTasksChange(p, disable: false)).ToList();
+    }
+
+    private bool VerifyTasksReverted(Was was)
+    {
+        if (was.Strings is not { Length: > 0 } paths) return false;
+        var states = system.ScheduledTasks(paths);
+        return paths.All(p => !states.TryGetValue(p, out var enabled) || enabled);
+    }
+
+    private static (uint Id, bool Absent, uint State, uint Options)? ParseWinFeatureRecord(string entry)
+    {
+        var eq = entry.IndexOf('=');
+        if (eq <= 0 || eq >= entry.Length - 1) return null;
+        if (!uint.TryParse(entry[..eq], System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var id)) return null;
+        if (!WindowsFeatures.LowLatencyProfileIds.Contains(id)) return null;
+        var spec = entry[(eq + 1)..];
+        if (spec == "absent") return (id, true, 0u, 0u);
+        var colon = spec.IndexOf(':');
+        if (colon <= 0 || colon >= spec.Length - 1) return null;
+        if (!uint.TryParse(spec[..colon], System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var state) || state > WindowsFeatures.StateEnabled) return null;
+        if (!uint.TryParse(spec[(colon + 1)..], System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var opts) || opts > 1u) return null;
+        return (id, false, state, opts);
+    }
+
+    private static IReadOnlyList<string>? RevertWinFeatures(Was was, string? selfExe)
+    {
+        if (string.IsNullOrWhiteSpace(selfExe) || was.Strings is not { Length: > 0 } entries) return null;
+        var tokens = new List<string>(entries.Length);
+        foreach (var entry in entries)
+        {
+            if (ParseWinFeatureRecord(entry) is not { } rec) return null;
+            tokens.Add(rec.Absent
+                ? string.Create(System.Globalization.CultureInfo.InvariantCulture, $"{rec.Id}=reset")
+                : string.Create(System.Globalization.CultureInfo.InvariantCulture, $"{rec.Id}={rec.State}:{rec.Options}"));
+        }
+        return [WinFeaturesCmd(selfExe, tokens)];
+    }
+
+    private bool VerifyWinFeaturesReverted(Was was)
+    {
+        if (was.Strings is not { Length: > 0 } entries) return false;
+        foreach (var entry in entries)
+        {
+            if (ParseWinFeatureRecord(entry) is not { } rec) return false;
+            var snap = system.WinFeature(rec.Id);
+            if (rec.Absent)
+            {
+                if (snap?.UserBootState is not null) return false;
+            }
+            else if (snap?.UserBootState != (int)rec.State)
+            {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private static (string SubKey, string Name, int? Value)? ParseOsOverheadRecord(string entry)
+    {
+        var eq = entry.LastIndexOf('=');
+        var bar = eq > 0 ? entry[..eq].LastIndexOf('|') : -1;
+        if (bar <= 0 || eq <= bar + 1) return null;
+        var subKey = entry[..bar];
+        var valName = entry[(bar + 1)..eq];
+        if (!OsOverheadSettings.Any(s => s.Key == subKey && s.Name == valName)) return null;
+        var rawVal = entry[(eq + 1)..];
+        if (rawVal == "absent") return (subKey, valName, null);
+        return int.TryParse(rawVal, System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out var prevVal)
+            ? (subKey, valName, prevVal)
+            : null;
+    }
+
+    private static IReadOnlyList<string>? RevertOsOverhead(Was was)
+    {
+        if (was.Strings is not { Length: > 0 } entries) return null;
+        var list = new List<string>(entries.Length);
+        foreach (var entry in entries)
+        {
+            if (ParseOsOverheadRecord(entry) is not { } rec) return null;
+            list.Add(rec.Value is { } v ? RegDword(rec.SubKey, rec.Name, v) : RegDelete(rec.SubKey, rec.Name));
+        }
+        return list;
+    }
+
+    private bool VerifyOsOverheadReverted(Was was)
+    {
+        if (was.Strings is not { Length: > 0 } entries) return false;
+        foreach (var entry in entries)
+        {
+            if (ParseOsOverheadRecord(entry) is not { } rec) return false;
+            if (system.Dword(rec.SubKey, rec.Name) != rec.Value) return false;
+        }
+        return true;
+    }
 
     private static IReadOnlyList<string>? RevertVrrLfc(Was was)
     {

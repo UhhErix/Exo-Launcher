@@ -239,5 +239,86 @@ internal sealed partial class SystemTuning
         }
 
         public IReadOnlyList<string> HvciRequiringGames() => FindHvciRequiringGames(App.Services.Library.PeekCachedLibrary());
+
+        public bool SupportsScheduledTasks => true;
+
+        public bool? ScheduledTaskEnabled(string taskPath)
+        {
+            var found = ScheduledTasks([taskPath]);
+            return found.TryGetValue(taskPath, out var enabled) ? enabled : null;
+        }
+
+        public IReadOnlyDictionary<string, bool> ScheduledTasks(IEnumerable<string> taskPaths)
+        {
+            var results = new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase);
+            object? service = null;
+            try
+            {
+                var type = Type.GetTypeFromProgID("Schedule.Service");
+                if (type is null) return results;
+                service = Activator.CreateInstance(type);
+                if (service is null) return results;
+                _ = type.InvokeMember("Connect", System.Reflection.BindingFlags.InvokeMethod, null, service, null, System.Globalization.CultureInfo.InvariantCulture);
+
+                var folders = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);
+                foreach (var fullPath in taskPaths)
+                {
+                    var slash = fullPath.LastIndexOf('\\');
+                    if (slash < 0 || slash >= fullPath.Length - 1) continue;
+                    var folderPath = slash == 0 ? @"\" : fullPath[..slash];
+                    var taskName = fullPath[(slash + 1)..];
+                    if (!folders.TryGetValue(folderPath, out var folder))
+                    {
+                        try
+                        {
+                            folder = service.GetType().InvokeMember("GetFolder", System.Reflection.BindingFlags.InvokeMethod, null, service, [folderPath], System.Globalization.CultureInfo.InvariantCulture);
+                            if (folder is not null) folders[folderPath] = folder;
+                        }
+                        catch (Exception ex) when (ex is System.Reflection.TargetInvocationException or COMException)
+                        {
+                            continue;
+                        }
+                    }
+                    if (folder is null) continue;
+                    object? task = null;
+                    try
+                    {
+                        task = folder.GetType().InvokeMember("GetTask", System.Reflection.BindingFlags.InvokeMethod, null, folder, [taskName], System.Globalization.CultureInfo.InvariantCulture);
+                        if (task is not null)
+                        {
+                            var raw = task.GetType().InvokeMember("Enabled", System.Reflection.BindingFlags.GetProperty, null, task, null, System.Globalization.CultureInfo.InvariantCulture);
+                            if (raw is bool enabled) results[fullPath] = enabled;
+                        }
+                    }
+                    catch (Exception ex) when (ex is System.Reflection.TargetInvocationException or COMException)
+                    {
+                    }
+                    finally
+                    {
+                        if (task is not null && Marshal.IsComObject(task)) Marshal.FinalReleaseComObject(task);
+                    }
+                }
+                foreach (var folder in folders.Values)
+                    if (Marshal.IsComObject(folder)) Marshal.FinalReleaseComObject(folder);
+            }
+            catch (Exception ex) when (ex is COMException or System.Reflection.TargetInvocationException or UnauthorizedAccessException or InvalidOperationException)
+            {
+            }
+            finally
+            {
+                if (service is not null && Marshal.IsComObject(service)) Marshal.FinalReleaseComObject(service);
+            }
+            return results;
+        }
+
+        public bool SupportsWinFeatures => true;
+
+        public WindowsFeatures.FeatureSnapshot? WinFeature(uint featureId) => WindowsFeatures.Query(featureId);
+
+        public string? SelfExePath() => Environment.ProcessPath;
+
+        public bool SupportsOsOverhead => true;
+
+        public bool IsLaptop() => PcHealth.ThisPcIsLaptop();
     }
 }

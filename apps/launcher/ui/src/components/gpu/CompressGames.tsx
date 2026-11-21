@@ -4,6 +4,7 @@ import { report } from '../../lib/report'
 import { formatSize } from '../../lib/utils'
 import { Row, State, SwitchRow } from '../settings/parts'
 import { ConfirmButton } from '../ui/ConfirmButton'
+import { Progress } from '../ui/Progress'
 import { CompressActions, compressWords, stopped } from '../game/CompressRow'
 
 /** Every game's compression, read when the room opens and kept current by compress.progress. */
@@ -60,11 +61,15 @@ export function CompressGames({ list, onList, onRead }: { list: CompressList | n
       </Row>
       <SwitchRow id="compress-idle" label="Compress while idle" checked={settings.whileIdle} onChange={value => save({ whileIdle: value })} />
       <SwitchRow id="compress-again" label="Compress again after updates" checked={settings.afterUpdates} onChange={value => save({ afterUpdates: value })} />
-      {shown.map(game => (
-        <Row key={game.id} label={game.title} detail={compressWords(game.compress)} error={stopped(game.compress)}>
-          <CompressActions compress={game.compress} locked={false} act={action => act(game.id, action, game.compress)} />
-        </Row>
-      ))}
+      {shown.map(game => {
+        const working = (game.compress.state === 'compressing' || game.compress.state === 'uncompressing') && !game.compress.held
+        return (
+          <Row key={game.id} label={game.title} detail={compressWords(game.compress)} error={stopped(game.compress)}>
+            {working ? <Progress size="small" value={game.compress.percent} label={`Compressing ${game.title}`} /> : null}
+            <CompressActions compress={game.compress} locked={false} act={action => act(game.id, action, game.compress)} />
+          </Row>
+        )
+      })}
     </div>
   )
 }

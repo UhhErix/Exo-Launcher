@@ -693,7 +693,7 @@ export type NetCheck = { before: NetSample | null; after: NetSample; said: strin
 export type PcHealth = { ok: boolean; message?: string | null; items: PcHealthItem[]; check?: NetCheck | null }
 
 /** Best settings › System's items (SystemTuning.cs): Windows defaults a tweak changed (Best settings) and two opt-ins (their own switch only). */
-export type TuningKey = 'timer' | 'scheduling' | 'pagefile' | 'cache' | 'captureService' | 'vrrLfc' | 'privacy' | 'services' | 'integrity' | 'vrr' | 'mouseAccel'
+export type TuningKey = 'timer' | 'scheduling' | 'pagefile' | 'cache' | 'captureService' | 'vrrLfc' | 'privacy' | 'tasks' | 'winFeatures' | 'osOverhead' | 'services' | 'integrity' | 'vrr' | 'mouseAccel'
 /**
  * One item: on, Exo's setting is in place; off, the player turned a Best settings item off; optIn, only its own switch sets it;
  * restart, a change (either way) waits on a restart; needsRestart, whether changing it requires a restart; blocked, why Exo won't change it here (an anti-cheat, a policy).
@@ -3054,7 +3054,7 @@ export const host = {
   exoAiSet: (change: ExoAiChange) => rawCall<ExoAiState & { ok: boolean; message?: string | null }>('exoAi.set', change, 15_000),
   /** System > This PC > Interrupts: the devices; apply switches every one that can to MSI mode, undo puts all back, revert one. Waits on Windows' permission prompt. */
   /** Best settings › System: the items; apply sets every Best settings item that's on, on and off one item, latency runs the ten-second latency check. Waits on Windows' permission prompt (and a restore point). */
-  systemTuning: (action?: 'apply' | 'on' | 'off' | 'latency', item?: TuningKey) =>
+  systemTuning: (action?: 'apply' | 'playbook' | 'on' | 'off' | 'latency', item?: TuningKey) =>
     rawCall<Tuning>('system.tuning', action ? { action, ...(item ? { item } : {}) } : {}, 240_000),
   systemInterrupts: (action?: 'apply' | 'undo' | 'revert' | 'reapply', device?: string) =>
     rawCall<Interrupts>('system.interrupts', action ? { action, ...(device ? { device } : {}) } : {}, 120_000),

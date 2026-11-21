@@ -3,8 +3,9 @@ import { report } from '../../lib/report'
 import { formatSize, trimStop } from '../../lib/utils'
 import type { PcState } from './PcRoom'
 
-export type AutoTuneStageId = 'cooling' | 'graphics' | 'system' | 'cleanup' | 'drivers'
-export type AutoTuneStageStatus = 'idle' | 'active' | 'done' | 'warn'
+type AutoTuneStageId = 'cooling' | 'graphics' | 'system' | 'bloat' | 'cleanup' | 'drivers'
+type AutoTuneStageStatus = 'idle' | 'active' | 'done' | 'warn'
+
 export type AutoTuneStageState = {
   id: AutoTuneStageId
   label: string
@@ -12,33 +13,12 @@ export type AutoTuneStageState = {
   detail: string
 }
 
-function stageReadySummary(
-  state: PcState,
-  exoAi: ExoAiState | null,
-  hdr: HdrState | null,
-  settings: LauncherSettings | null,
-): Record<AutoTuneStageId, string> {
-  const powerDone = Boolean(state.health?.items.find(item => item.key === 'power')?.applied)
-  const fanReady = Boolean(exoAi?.fans.supported)
-  const graphicsPending = hasGraphicsWork(state, hdr, settings)
-  const systemPending = hasSystemWork(state)
-  const driverVersion = state.driver?.update ? state.driver.latest?.version : null
-  return {
-    cooling: powerDone && fanReady
-      ? 'Exo power plan & automatic GPU fan curve active'
-      : 'Apply power plan, Autopilot & automatic NVML GPU fan curve',
-    graphics: graphicsPending
-      ? 'Optimize driver profile, best screen mode, HDR & frame generation'
-      : 'Graphics profile and display output at optimal defaults',
-    system: systemPending
-      ? 'Apply NVIDIA VRR LFC multiplier, reversible ad privacy, network & drive health'
-      : 'Windows defaults, NVIDIA VRR LFC & network already optimal',
-    cleanup: 'Clear disposable browser, launcher & Windows caches (keeps cookies & logins)',
-    drivers: driverVersion
-      ? `Update ready (${driverVersion}) in PC Updates`
-      : 'Check graphics & chipset driver status',
-  }
+export type BloatAppInfo = {
+  id: string
+  name: string
 }
+
+const PLAYBOOK_IGNORED = new Set(['integrity', 'vrr', 'mouseAccel'])
 
 function hasGraphicsWork(state: PcState, hdr: HdrState | null, settings: LauncherSettings | null): boolean {
   const profileTodo = state.profile?.status === 'ready' || state.profile?.status === 'changed'
@@ -49,10 +29,48 @@ function hasGraphicsWork(state: PcState, hdr: HdrState | null, settings: Launche
 }
 
 function hasSystemWork(state: PcState): boolean {
-  const sysTodo = (state.tuning?.items ?? []).some(i => !i.optIn && !i.off && !i.blocked && !i.on)
+  const sysTodo = (state.tuning?.items ?? []).some(i => !PLAYBOOK_IGNORED.has(i.key) && !i.off && !i.blocked && !i.on)
   const netTodo = state.health?.items.find(i => i.key === 'network')?.applied === false
   const driveTodo = (state.drives?.fixes ?? []).some(f => !f.applied)
   return sysTodo || netTodo || driveTodo
+}
+
+function stageReadySummary(
+  state: PcState,
+  exoAi: ExoAiState | null,
+  hdr: HdrState | null,
+  settings: LauncherSettings | null,
+  bloatApps: readonly BloatAppInfo[],
+  removeBloat: boolean,
+): Record<AutoTuneStageId, string> {
+  const powerDone = Boolean(state.health?.items.find(item => item.key === 'power')?.applied)
+  const fanReady = Boolean(exoAi?.fans.supported)
+  const graphicsPending = hasGraphicsWork(state, hdr, settings)
+  const systemPending = hasSystemWork(state)
+  const driverVersion = state.driver?.update ? state.driver.latest?.version : null
+  const bloatCount = bloatApps.length
+  const bloatSummary = bloatCount === 0
+    ? 'No preinstalled bloat Store apps detected'
+    : removeBloat
+      ? `Remove ${bloatCount} preinstalled bloat app${bloatCount === 1 ? '' : 's'} (keeps Xbox, Store & games)`
+      : `Optional · ${bloatCount} bloat app${bloatCount === 1 ? '' : 's'} found (toggle to include)`
+
+  return {
+    cooling: powerDone && fanReady
+      ? 'Exo power plan & automatic GPU fan curve active'
+      : 'Apply Exo power plan, Autopilot & automatic fan curve',
+    graphics: graphicsPending
+      ? 'Optimize driver profile, best refresh rate, HDR & frame generation'
+      : 'Graphics profile and display output at optimal defaults',
+    system: systemPending
+      ? 'Apply Windows 11 Low Latency flags, telemetry services, tasks, VRR LFC & network'
+      : 'Windows 11 playbook, services, tasks & network optimal',
+    bloat: bloatSummary,
+    cleanup: 'Clear disposable browser, launcher & Windows caches (keeps cookies & logins)',
+    drivers: driverVersion
+      ? `Update ready (${driverVersion}) in PC Updates`
+      : 'Check graphics & chipset driver status',
+  }
 }
 
 export function initialAutoTuneStages(
@@ -60,13 +78,16 @@ export function initialAutoTuneStages(
   exoAi: ExoAiState | null,
   hdr: HdrState | null,
   settings: LauncherSettings | null,
+  bloatApps: readonly BloatAppInfo[] = [],
+  removeBloat = false,
 ): AutoTuneStageState[] {
-  const detail = stageReadySummary(state, exoAi, hdr, settings)
+  const detail = stageReadySummary(state, exoAi, hdr, settings, bloatApps, removeBloat)
   return [
-    { id: 'cooling', label: 'Cooling, power & Exo AI', status: 'idle', detail: detail.cooling },
-    { id: 'graphics', label: 'Graphics, display & frame delivery', status: 'idle', detail: detail.graphics },
-    { id: 'system', label: 'Windows, privacy, VRR LFC & network', status: 'idle', detail: detail.system },
-    { id: 'cleanup', label: 'Browser, launcher & temp caches', status: 'idle', detail: detail.cleanup },
+    { id: 'cooling', label: 'Power plan & Autopilot', status: 'idle', detail: detail.cooling },
+    { id: 'graphics', label: 'Graphics, display & HDR', status: 'idle', detail: detail.graphics },
+    { id: 'system', label: 'Windows 11 playbook & network', status: 'idle', detail: detail.system },
+    { id: 'bloat', label: 'Preinstalled bloat apps', status: 'idle', detail: detail.bloat },
+    { id: 'cleanup', label: 'Temporary & launcher caches', status: 'idle', detail: detail.cleanup },
     { id: 'drivers', label: 'Graphics & chipset drivers', status: 'idle', detail: detail.drivers },
   ]
 }
@@ -78,11 +99,14 @@ export async function runAutoTuneStage(
   settings: LauncherSettings | null,
   onSave: (patch: Partial<LauncherSettings>) => Promise<boolean>,
   onRefresh: () => Promise<void>,
+  bloatApps: readonly BloatAppInfo[] = [],
+  removeBloat = false,
 ): Promise<{ status: AutoTuneStageStatus; detail: string }> {
   try {
     if (id === 'cooling') return await runCoolingStage(state)
     if (id === 'graphics') return await runGraphicsStage(state, hdr, settings, onSave)
     if (id === 'system') return await runSystemStage(state)
+    if (id === 'bloat') return await runBloatStage(bloatApps, removeBloat)
     if (id === 'cleanup') return await runCleanupStage()
     return await runDriversStage(state, onRefresh)
   } catch (e) {
@@ -101,7 +125,7 @@ async function runCoolingStage(state: PcState): Promise<{ status: AutoTuneStageS
   if (!ai.ok && ai.message) return { status: 'warn', detail: trimStop(ai.message) }
   return {
     status: 'done',
-    detail: ai.fans.supported ? 'Exo power plan, Autopilot & automatic NVML fans active' : 'Exo power plan & Autopilot active',
+    detail: ai.fans.supported ? 'Exo power plan, Autopilot & automatic GPU fans active' : 'Exo power plan & Autopilot active',
   }
 }
 
@@ -148,9 +172,9 @@ async function runGraphicsStage(
 async function runSystemStage(state: PcState): Promise<{ status: AutoTuneStageStatus; detail: string }> {
   const problems: string[] = []
   let needsRestart = false
-  const pendingTuning = state.tuning?.items.some(i => !i.optIn && !i.off && !i.blocked && !i.on) ?? false
+  const pendingTuning = state.tuning?.items.some(i => !PLAYBOOK_IGNORED.has(i.key) && !i.off && !i.blocked && !i.on) ?? false
   if (pendingTuning) {
-    const next = await host.systemTuning('apply')
+    const next = await host.systemTuning('playbook')
     if (next.restart) needsRestart = true
     if (!next.ok && next.message) problems.push(trimStop(next.message))
   }
@@ -167,7 +191,29 @@ async function runSystemStage(state: PcState): Promise<{ status: AutoTuneStageSt
   if (problems.length > 0) return { status: 'warn', detail: problems.join(' · ') }
   return {
     status: 'done',
-    detail: needsRestart ? 'Windows privacy, VRR LFC & network applied (restart to finish)' : 'Windows privacy, VRR LFC, network & drives optimal',
+    detail: needsRestart
+      ? 'Windows 11 playbook, services, tasks & network applied (restart to finish)'
+      : 'Windows 11 playbook, services, tasks, network & drives optimal',
+  }
+}
+
+async function runBloatStage(
+  bloatApps: readonly BloatAppInfo[],
+  removeBloat: boolean,
+): Promise<{ status: AutoTuneStageStatus; detail: string }> {
+  if (bloatApps.length === 0) return { status: 'done', detail: 'No bloat Store apps installed' }
+  if (!removeBloat) return { status: 'done', detail: `Skipped (optional) · ${bloatApps.length} found` }
+  const plan = await host.appsPackagesPlan(bloatApps.map(b => b.id), false)
+  if (!plan.ok || !plan.token) {
+    return { status: 'done', detail: plan.message ? trimStop(plan.message) : 'Nothing to remove' }
+  }
+  const removal = await host.appsPackagesRemove(plan.token)
+  if (!removal.ok && removal.removed === 0) {
+    return { status: 'warn', detail: removal.message ? trimStop(removal.message) : 'Bloat removal could not finish' }
+  }
+  return {
+    status: 'done',
+    detail: `${removal.removed} bloat app${removal.removed === 1 ? '' : 's'} removed (Add back available in PC › Apps)`,
   }
 }
 

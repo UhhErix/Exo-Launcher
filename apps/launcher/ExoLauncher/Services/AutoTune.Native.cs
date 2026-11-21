@@ -217,7 +217,7 @@ internal static class AutoTuneWorker
         var at = Array.FindIndex(args, arg => arg.Equals(Flag, StringComparison.OrdinalIgnoreCase));
         var action = args.ElementAtOrDefault(at + 1);
         var id = args.ElementAtOrDefault(at + 2) ?? "";
-        var mode = args.ElementAtOrDefault(at + 3) is "faster" ? "faster" : "cooler";
+        var mode = "faster";
         if (action is not ("start" or "undo") || id is not ("nvidia" or "radeon" or "ryzen")) return 2;
         using var one = new Mutex(false, OneWorker, out var first);
         if (!first) return 3;
@@ -283,13 +283,26 @@ internal static class AutoTuneService
     private static readonly Lock Gate = new();
     private static EventWaitHandle? _stop;
 
+    internal static string[] PreviewParts(IReadOnlyList<string> adapters, string? processorIdentifier, string? cpuName, bool isLaptop)
+    {
+        if (isLaptop) return [];
+        var found = new List<string>();
+        var vendor = GraphicsService.Vendors(adapters).FirstOrDefault();
+        if (vendor is "nvidia") found.Add("nvidia");
+        else if (vendor is "amd") found.Add("radeon");
+        if (RyzenAvailable && TuneRyzen.Generation(processorIdentifier, cpuName) is not null) found.Add("ryzen");
+        return [.. found];
+    }
+
+    private static string[] PreviewParts() =>
+        PreviewParts(GpuCapability.Adapters(), Environment.GetEnvironmentVariable("PROCESSOR_IDENTIFIER"), PcHealth.CpuName(), PcHealth.ThisPcIsLaptop());
+
     private static string[] Parts()
     {
         lock (Gate)
         {
             if (_parts is { } known) return known;
-            // The driver isn't touched during a game; asked again next time.
-            if (GameRunningSignal.Running) return [];
+            if (GameRunningSignal.Running) return PreviewParts();
             if (PcHealth.ThisPcIsLaptop()) return _parts = [];
             var found = new List<string>();
             if (GraphicsService.Vendor() is "nvidia" && TuneNvidia.Supported()) found.Add("nvidia");
@@ -331,7 +344,7 @@ internal static class AutoTuneService
         if (action is null || part is null || !Parts().Contains(part)) return Answer(null);
         return Answer(action switch
         {
-            "start" => Start(part, mode is "cooler" ? "cooler" : "faster"),
+            "start" => Start(part, "faster"),
             "stop" => Stop(),
             "undo" => Undo(part),
             _ => null,
@@ -434,7 +447,7 @@ internal static class TuneView
             id,
             state = !driverReady ? "needs-driver" : testing ? "testing" : state.Applied > 0 ? "tuned" : state.Phase is "crashed" ? "crashed" : "ready",
             modes = false,
-            mode = state.Mode.Length > 0 ? state.Mode : "faster",
+            mode = "faster",
             testing = testing ? state.Testing is > 0 ? "Testing " + Say(id, state.Testing.Value) : "Measuring at stock" : null,
             minutesLeft = testing && state.SecondsLeft is { } left ? (left + 59) / 60 : (int?)null,
             applied = state.Applied > 0 ? Say(id, state.Applied) : null,

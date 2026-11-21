@@ -26,3 +26,7 @@ test('WindowsAppsView auto-selects Every account when picked packages are not fo
   assert.match(appsPanel, /const needsAllAccounts = \(/)
   assert.match(appsPanel, /setEveryone\(result\.admin\)/)
 })
+
+test('AppsPanel omits the Removed section and Edge history view', () => {
+  assert.doesNotMatch(appsPanel, /RemovedView|EdgeRow|id:\s*'removed'|Nothing removed yet/)
+})
