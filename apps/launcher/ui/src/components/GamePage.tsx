@@ -1,12 +1,12 @@
-import { useEffect, useState } from 'react'
-import { Capture, CHECK_PATH, ChevronLeft, FolderOpen, ImageUpload, Sliders } from '../brand/icons'
-import type { CaptureItem } from '../lib/capture'
-import { host, hostedBuyUrl, resolvePrimaryAction, type Game, type GameVariant, type InstallProgress } from '../lib/host'
+import { useState } from 'react'
+import { CHECK_PATH, ChevronLeft } from '../brand/icons'
+import { hostedBuyUrl, resolvePrimaryAction, type Game, type GameVariant, type InstallProgress } from '../lib/host'
 import { transferForGame } from '../lib/library'
 import { useJustFinished } from '../lib/useJustFinished'
-import { formatSize, installProgressLabel, storeLabel, transferPercent } from '../lib/utils'
+import { installProgressLabel, transferPercent } from '../lib/utils'
 import { CoverArt, HeroWash } from './CoverArt'
 import { FrameGenModRow, FrameGenRow } from './game/FrameGenRow'
+import { GamePropertiesPanel } from './game/GameProperties'
 import { GameHeader, GameShared, GameStats, GameStore } from './game/GameSections'
 import { HdrRow } from './game/HdrRow'
 import { ArtworkStrip, GameActions } from './game/ManageStrip'
@@ -45,24 +45,6 @@ function isCurrent(selected: Game): boolean {
 function sourceVariants(selected: Game): GameVariant[] | null {
   const sources = selected.variants ?? []
   return sources.length > 1 ? sources : null
-}
-
-function useGameCaptures(gameId: string, enabled: boolean): CaptureItem[] {
-  const [items, setItems] = useState<CaptureItem[]>([])
-  useEffect(() => {
-    if (!enabled) {
-      setItems([])
-      return
-    }
-    let alive = true
-    void host.captureList(gameId, 4).then((res) => {
-      if (alive) setItems(res.ok && res.items ? res.items.slice(0, 4) : [])
-    }).catch(() => {
-      if (alive) setItems([])
-    })
-    return () => { alive = false }
-  }, [gameId, enabled])
-  return items
 }
 
 export type GamePageProps = {
@@ -112,121 +94,6 @@ function GameLines({ selected, details, onOpenSystem, hdrForGames, onHdrForGames
         <OptimizeLine key={'optimize' + details.selectionKey} gameId={selected.id} />
         <FrameGenRow key={'framegen' + details.selectionKey} gameId={selected.id} />
       </div>
-    </section>
-  )
-}
-
-function GameManagePanel({
-  selected,
-  onPropertiesOpen,
-  onStatus,
-}: {
-  selected: Game
-  onPropertiesOpen: (open: boolean) => void
-  onStatus: (msg: string | null, sticky?: boolean) => void
-}) {
-  const size = formatSize(selected.sizeBytes)
-  const store = selected.isAddPortable ? 'Local folder' : storeLabel(selected.store)
-  return (
-    <section className="exo-glass is-panel exo-game-panel" aria-labelledby="exo-game-manage-title">
-      <header className="exo-game-panel-head">
-        <h2 id="exo-game-manage-title">Manage &amp; files</h2>
-      </header>
-      <div className="exo-game-manage-rows">
-        <div className="exo-game-manage-row">
-          <div className="exo-game-manage-copy">
-            <span>Install folder</span>
-            <small className="tabular-nums">{size !== '—' ? `${size} · ${store}` : store}</small>
-          </div>
-          <button
-            type="button"
-            className="exo-set-btn is-compact"
-            onClick={() => {
-              void host.openFolder(selected.id).catch(() => onStatus('Could not open the folder.', true))
-            }}
-          >
-            <FolderOpen size={14} />
-            Open
-          </button>
-        </div>
-        <div className="exo-game-manage-row">
-          <div className="exo-game-manage-copy">
-            <span>Properties &amp; content</span>
-          </div>
-          <button type="button" className="exo-set-btn is-compact" onClick={() => onPropertiesOpen(true)}>
-            <Sliders size={14} />
-            Open
-          </button>
-        </div>
-        <div className="exo-game-manage-row">
-          <div className="exo-game-manage-copy">
-            <span>Artwork</span>
-          </div>
-          <button type="button" className="exo-set-btn is-compact" onClick={() => onPropertiesOpen(true)}>
-            <ImageUpload size={14} />
-            Manage
-          </button>
-        </div>
-      </div>
-    </section>
-  )
-}
-
-function GameCapturesPanel({
-  captures,
-  onStatus,
-}: {
-  captures: CaptureItem[]
-  onStatus: (msg: string | null, sticky?: boolean) => void
-}) {
-  return (
-    <section className="exo-glass is-panel exo-game-panel" aria-labelledby="exo-game-captures-title">
-      <header className="exo-game-panel-head">
-        <h2 id="exo-game-captures-title">Captures</h2>
-        <button
-          type="button"
-          className="exo-set-btn is-compact"
-          onClick={() => {
-            void host.captureAct('openFolder').catch(() => onStatus('Could not open captures folder.', true))
-          }}
-        >
-          Folder
-        </button>
-      </header>
-      {captures.length > 0 ? (
-        <div className="exo-game-captures-grid">
-          {captures.map((item) => (
-            <button
-              key={item.id}
-              type="button"
-              className="exo-game-capture-tile"
-              onClick={() => void host.captureAct('openFolder').catch(() => { })}
-              aria-label={item.name}
-            >
-              <img src={item.thumb || item.url} alt="" draggable={false} decoding="async" />
-              {item.kind === 'video' ? <span className="exo-game-capture-badge">Clip</span> : null}
-            </button>
-          ))}
-        </div>
-      ) : (
-        <div className="exo-game-manage-row">
-          <div className="exo-game-manage-copy">
-            <span>No captures yet</span>
-          </div>
-          <button
-            type="button"
-            className="exo-set-btn is-compact"
-            onClick={() => {
-              void host.captureAct('screenshot').then((res) => {
-                onStatus(res.ok ? 'Screenshot saved.' : res.message ?? 'Could not take screenshot.', !res.ok)
-              }).catch(() => onStatus('Could not take screenshot.', true))
-            }}
-          >
-            <Capture size={14} />
-            Capture
-          </button>
-        </div>
-      )}
     </section>
   )
 }
@@ -285,7 +152,6 @@ export function GamePage({
 }: GamePageProps) {
   const { installedActions, artworkEnabled } = pageFlags(selected)
   const details = useGameDetails(selected)
-  const captures = useGameCaptures(selected.id, installedActions)
   const [manageBusy, setManageBusy] = useState(false)
   const [artworkView, setArtworkGame] = useArtworkOverride(selected, details.selectionKey)
 
@@ -355,19 +221,7 @@ export function GamePage({
                     onDequeue={onDequeue}
                   />
                   {installedActions && (
-                    <GameActions
-                      selected={selected}
-                      coverSource={artworkView.coverSource}
-                      locked={hostLocked}
-                      upscalers={details.dlss}
-                      onUpscalersChanged={() => void details.refreshDlss(false)}
-                      onStatus={onStatus}
-                      onArtwork={setArtworkGame}
-                      onUninstalled={onUninstalled}
-                      onBusyChange={setManageBusy}
-                      propertiesOpen={propertiesOpen}
-                      onPropertiesOpen={onPropertiesOpen}
-                    />
+                    <GameActions selected={selected} onStatus={onStatus} />
                   )}
                 </div>
               </div>
@@ -378,10 +232,20 @@ export function GamePage({
         {installedActions && (
           <div className="exo-game-workspace">
             <GameLines selected={selected} details={details} onOpenSystem={onOpenSystem} hdrForGames={hdrForGames} onHdrForGames={onHdrForGames} />
-            <div className="exo-game-aside">
-              <GameManagePanel selected={selected} onPropertiesOpen={onPropertiesOpen} onStatus={onStatus} />
-              <GameCapturesPanel captures={captures} onStatus={onStatus} />
-            </div>
+            <GamePropertiesPanel
+              key={details.selectionKey}
+              game={selected}
+              coverSource={artworkView.coverSource}
+              locked={hostLocked}
+              upscalers={details.dlss}
+              onUpscalersChanged={() => void details.refreshDlss(false)}
+              onStatus={onStatus}
+              onArtwork={setArtworkGame}
+              onUninstalled={onUninstalled}
+              onBusyChange={setManageBusy}
+              propertiesOpen={propertiesOpen}
+              onPropertiesOpen={onPropertiesOpen}
+            />
           </div>
         )}
       </div>
