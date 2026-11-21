@@ -44,9 +44,8 @@ export function HdrRow({ gameId, hdrForGames, onHdrForGames }: {
     return () => { live = false }
   }, [gameId, screen?.supported])
 
-  // Always a line, like every other: shining while read, and said plainly when this screen has no HDR.
-  if (!screen || (screen.supported && !game)) return <GameReading name="HDR" word={null} waiting />
-  if (!screen.supported) return <GameReading name="HDR" word={{ text: 'This screen can’t show HDR' }} />
+  if (!screen || (screen.supported && !game)) return null
+  if (!screen.supported) return null
   if (!game?.ok) return <GameReading name="HDR" word={{ text: 'Could not check', bad: true }} />
   const mode = game.mode ?? 'auto'
   const pick = (next: string) => {
@@ -62,11 +61,10 @@ export function HdrRow({ gameId, hdrForGames, onHdrForGames }: {
       .finally(() => setBusy(false))
   }
   const off = !hdrForGames && mode !== 'off'
-  // Why Exo judges the game as it does, in plain words; with HDR for HDR games off, nothing switches whatever the verdict.
   const why = game.reason ?? ''
   const word: LineWord | null = error
     ? { text: error, bad: true }
-    : off ? { text: [why, 'HDR for HDR games is off.'].filter(Boolean).join(' ') }
+    : off ? { text: why || 'Off' }
     : why ? { text: why } : null
   return (
     <GameReading name="HDR" word={word}>

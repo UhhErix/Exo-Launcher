@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { Alert, Bolt, Check } from '../../brand/icons'
 import {
   host,
@@ -14,23 +14,24 @@ import {
   type Tuning,
 } from '../../lib/host'
 import { useHdrState } from '../../lib/hdr'
+import { pageGet, pageSet } from '../../lib/pageStore'
 import { report } from '../../lib/report'
 import { cn } from '../../lib/utils'
+import { ShadersBoard } from '../shaders/ShadersBoard'
 import { Spinner } from '../ui/Spinner'
-import { useAutopilot, AutopilotControls, AutopilotReports } from './Autopilot'
+import { useAutopilot } from './Autopilot'
 import { AutoTuneRows, useTuneReads } from './AutoTune'
 import { AutoTuneCinema } from './AutoTuneCinema'
-import { bestSteps, BestSetup } from './BestSetup'
+import { bestSteps } from './BestSetup'
 import { useCompressList } from './CompressGames'
-import { ExoAiFooter, useExoAi } from './ExoAiPanel'
-import { InterruptRows } from './InterruptRows'
-import { NetworkGroup } from './NetworkGroup'
+import { DriversSection } from './DriversSection'
+import { useExoAi } from './ExoAiPanel'
+import { useAppsSummary } from './PcApps'
 import { ThisPc, type PcPartMenu } from './PcOverview'
 import { PcPartMenus, StorageChip } from './PcPartMenus'
 import { SectionSlot } from './SectionHead'
 import { StorageRoom } from './StorageRoom'
-import { SystemGroup } from './SystemGroup'
-import { SetupRows } from './ThisPcTab'
+import type { PcLink } from './pcSections'
 import { usePcState, type PcState } from './usePcState'
 import {
   initialAutoTuneStages,
@@ -38,8 +39,25 @@ import {
   type AutoTuneStageState,
   type BloatAppInfo,
 } from './autoTuneStages'
+import '../../styles/pc-room.css'
 import '../../styles/auto-tune-overlay.css'
 import '../../styles/exo-ai-room.css'
+
+const AUTOTUNE_DONE_KEY = 'exo.autoTune.completedAt'
+
+function readCompletedAt(): number | null {
+  try {
+    const raw = pageGet(AUTOTUNE_DONE_KEY)
+    const parsed = raw ? Number(raw) : NaN
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : null
+  } catch {
+    return null
+  }
+}
+
+function writeCompletedAt(now: number) {
+  try { pageSet(AUTOTUNE_DONE_KEY, String(now)) } catch { return }
+}
 
 function countPendingAutoTune(
   state: PcState,
@@ -52,13 +70,6 @@ function countPendingAutoTune(
     .filter(s => !s.done).length
   const screens = state.display?.displays.filter(screen => !screen.isBest).length ?? 0
   return steps + screens
-}
-
-function hardwareLine(state: PcState): string {
-  const gpu = state.profile?.gpu || state.about?.graphics || state.driver?.card
-  const cpu = state.about?.processor
-  const ram = state.about?.memoryGb ? `${state.about.memoryGb} GB RAM` : null
-  return [gpu, cpu, ram].filter(Boolean).join(' · ') || 'PC optimization & hardware tuning'
 }
 
 function anyRestartRequired(stages: readonly AutoTuneStageState[], state: PcState): boolean {
@@ -74,57 +85,12 @@ function StageMarker({ status, label }: { status: AutoTuneStageState['status']; 
   return <span className="exo-at-stage-marker"><span className="exo-at-stage-dot" /></span>
 }
 
-function AiPanel({
-  id,
-  title,
-  badge,
-  className,
-  children,
-}: {
-  id: string
-  title: string
-  badge?: ReactNode
-  className?: string
-  children: ReactNode
-}) {
-  const [slot, setSlot] = useState<HTMLElement | null>(null)
-  return (
-    <section className={cn('exo-system-panel exo-ai-panel', className)} aria-labelledby={id}>
-      <header className="exo-ai-panel-head">
-        <h2 id={id}>{title}</h2>
-        <div className="exo-ai-panel-right">
-          {badge}
-          <div ref={setSlot} className="exo-pc-section-actions" />
-        </div>
-      </header>
-      <SectionSlot.Provider value={slot}>
-        <div className="exo-ai-panel-body">{children}</div>
-      </SectionSlot.Provider>
-    </section>
-  )
-}
-
-function PlaybookBadge({
-  running,
-  pending,
-}: {
-  running: boolean
-  pending: number | null
-}) {
-  if (running) return <span className="exo-ai-badge is-live">Optimizing…</span>
-  if (pending != null && pending > 0) {
-    return <span className="exo-ai-badge is-pending">{pending} ready</span>
-  }
-  if (pending === 0) return <span className="exo-ai-badge is-good">All set</span>
-  return null
-}
-
 function LiveHeaderStatus({ exoAi, tune }: { exoAi: ExoAiState | null; tune: AutoTune | null }) {
   const gaming = exoAi?.gaming.active ?? false
   const testing = tune?.parts.some(part => part.state === 'testing') ?? false
-  let text = 'Active'
+  let text = 'Autopilot active'
   if (gaming) text = exoAi?.gaming.gameTitle ? `Boosting ${exoAi.gaming.gameTitle}` : 'Boosting game'
-  else if (testing) text = 'Hardware calibration active'
+  else if (testing) text = 'Calibrating hardware'
 
   return (
     <span className={cn('exo-ai-live', (gaming || testing) && 'is-active')}>
@@ -134,45 +100,41 @@ function LiveHeaderStatus({ exoAi, tune }: { exoAi: ExoAiState | null; tune: Aut
   )
 }
 
-function AutoTunePlaybookPanel({
-  stages,
+function PlaybookBadge({
   running,
+  complete,
   pending,
-  exoAi,
 }: {
-  stages: readonly AutoTuneStageState[]
   running: boolean
+  complete: boolean
   pending: number | null
-  exoAi: ExoAiState | null
 }) {
+  if (running) return <span className="exo-ai-badge is-live">Optimizing…</span>
+  if (complete) return <span className="exo-ai-badge is-good">Auto Tune complete</span>
+  if (pending != null && pending > 0) return <span className="exo-ai-badge is-pending">{pending} ready</span>
+  return null
+}
+
+function RightSection({
+  id,
+  title,
+  children,
+}: {
+  id: 'drivers' | 'shaders'
+  title: string
+  children: ReactNode
+}) {
+  const [slot, setSlot] = useState<HTMLElement | null>(null)
   return (
-    <AiPanel
-      id="exo-ai-playbook-title"
-      title="Auto Tune"
-      badge={<PlaybookBadge running={running} pending={pending} />}
-    >
-      <ul className="exo-at-stages">
-        {stages.map(stage => (
-          <li
-            key={stage.id}
-            data-status={stage.status}
-            className={cn(
-              'exo-at-stage',
-              stage.status === 'active' && 'is-active',
-              stage.status === 'done' && 'is-done',
-              stage.status === 'warn' && 'is-warn',
-            )}
-          >
-            <StageMarker status={stage.status} label={stage.label} />
-            <div className="exo-at-stage-copy">
-              <span className="exo-at-stage-title">{stage.label}</span>
-              <span className="exo-at-stage-detail">{stage.detail}</span>
-            </div>
-          </li>
-        ))}
-      </ul>
-      <ExoAiFooter exoAi={exoAi} />
-    </AiPanel>
+    <section className={cn('exo-system-panel exo-pc-section', `is-${id}`)} data-pc-part={id} aria-labelledby={`exo-ai-${id}-title`}>
+      <header className="exo-pc-section-head">
+        <h2 id={`exo-ai-${id}-title`}>{title}</h2>
+        <div ref={setSlot} className="exo-pc-section-actions" />
+      </header>
+      <SectionSlot.Provider value={slot}>
+        <div className="exo-pc-pane">{children}</div>
+      </SectionSlot.Provider>
+    </section>
   )
 }
 
@@ -196,6 +158,7 @@ function useAutoTunePipeline({
   const abortedRef = useRef(false)
   const [running, setRunning] = useState(false)
   const [finished, setFinished] = useState(false)
+  const [completedAt, setCompletedAt] = useState<number | null>(() => readCompletedAt())
   const [bloatApps, setBloatApps] = useState<BloatAppInfo[]>([])
   const [stages, setStages] = useState<AutoTuneStageState[]>(() =>
     initialAutoTuneStages(state, exoAi, hdr, settings),
@@ -229,10 +192,12 @@ function useAutoTunePipeline({
     const initial = initialAutoTuneStages(state, exoAi, hdr, settings, bloatApps)
     setStages(initial)
 
+    let warned = false
     for (const item of initial) {
       if (abortedRef.current) break
       setStages(current => current.map(s => s.id === item.id ? { ...s, status: 'active' } : s))
       const result = await runAutoTuneStage(item.id, state, hdr, settings, onSave, refreshAll, bloatApps)
+      if (result.status === 'warn') warned = true
       if (abortedRef.current) break
       setStages(current => current.map(s => s.id === item.id ? { ...s, status: result.status, detail: result.detail } : s))
     }
@@ -240,25 +205,81 @@ function useAutoTunePipeline({
     if (!abortedRef.current) {
       setRunning(false)
       setFinished(true)
+      if (!warned) {
+        const now = Date.now()
+        writeCompletedAt(now)
+        setCompletedAt(now)
+      }
     }
   }, [running, state, exoAi, hdr, settings, bloatApps, onSave, refreshAll])
 
-  return { stages, running, finished, setFinished, startPipeline }
+  return { stages, running, finished, completedAt, setFinished, startPipeline }
+}
+
+function useExoAiJump({
+  active,
+  jump,
+  vendor,
+  room,
+  onStorage,
+  onMenu,
+}: {
+  active: boolean
+  jump: { tab: PcLink } | null
+  vendor: GpuProfile['vendor'] | null
+  room: React.RefObject<HTMLElement | null>
+  onStorage: () => void
+  onMenu: (menu: PcPartMenu) => void
+}) {
+  const handled = useRef<typeof jump>(null)
+  useLayoutEffect(() => {
+    const scroller = room.current
+    if (!active || !jump || handled.current === jump || !scroller) return
+    if (jump.tab === 'control' && !vendor) return
+    handled.current = jump
+    if (jump.tab === 'drives' || jump.tab === 'compress') { onStorage(); return }
+    const opens: Partial<Record<PcLink, PcPartMenu>> = {
+      graphics: 'graphics',
+      upscalers: 'graphics',
+      control: 'graphics',
+      display: 'display',
+      board: 'board',
+    }
+    if (jump.tab === 'control' && vendor && vendor !== 'nvidia') {
+      host.gpuControlPanel().catch((e: unknown) => report(e, 'ExoAiRoom.controlPanelLink'))
+      return
+    }
+    const wanted = opens[jump.tab]
+    if (wanted) {
+      scroller.querySelector<HTMLElement>(`[data-pc-menu="${wanted}"]`)?.focus({ preventScroll: true })
+      onMenu(wanted)
+      return
+    }
+    if (jump.tab === 'overview' || jump.tab === 'performance' || jump.tab === 'autopilot' || jump.tab === 'network') {
+      scroller.scrollTop = 0
+      return
+    }
+    scroller.querySelector(`[data-pc-part="${jump.tab}"]`)?.scrollIntoView({ block: 'start' })
+  }, [active, jump, vendor, room, onStorage, onMenu])
 }
 
 export function ExoAiRoom({
   active,
+  jump = null,
   games,
   settings,
   onSave,
 }: {
   active: boolean
+  jump?: { tab: PcLink } | null
   games: readonly Game[]
   settings: LauncherSettings | null
   onSave: (patch: Partial<LauncherSettings>) => Promise<boolean>
 }) {
+  const room = useRef<HTMLElement>(null)
   const { state, put, read } = usePcState(active)
   const hdr = useHdrState(active)
+  const apps = useAppsSummary(active, 0)
   const [menu, setMenu] = useState<PcPartMenu | null>(null)
   const [storageOpen, setStorageOpen] = useState(false)
 
@@ -272,9 +293,23 @@ export function ExoAiRoom({
   const setTune = useCallback((next: AutoTune) => put('tune', next), [put])
 
   useTuneReads(active, state.tune, active, setTune)
-  const autopilot = useAutopilot(active, active)
+  const autopilot = useAutopilot(active, menu === 'board')
   const exoAi = useExoAi(active, active)
   const compress = useCompressList(active)
+
+  const openStorage = useCallback(() => {
+    setMenu(null)
+    setStorageOpen(true)
+  }, [])
+
+  useExoAiJump({
+    active,
+    jump,
+    vendor: state.profile?.vendor ?? null,
+    room,
+    onStorage: openStorage,
+    onMenu: setMenu,
+  })
 
   const refreshAll = useCallback(async () => {
     await read()
@@ -296,76 +331,111 @@ export function ExoAiRoom({
     [state, hdr, settings, onSave],
   )
 
+  const isComplete = !pipeline.running && (
+    pipeline.completedAt !== null
+    || (pending === 0 && state.profile !== null && state.health !== null)
+  )
+
   const needsRestart = anyRestartRequired(pipeline.stages, state)
   const compressList: CompressList | null = compress.list
+  const hasHardwareParts = (state.tune?.parts.length ?? 0) > 0
 
   return (
-    <main className="exo-ai-room" aria-label="Exo AI">
+    <main ref={room} className="exo-ai-room" aria-label="Exo AI">
       <div className="exo-ai-shell">
         <header className="exo-ai-head">
-          <div className="exo-ai-head-copy">
-            <div className="exo-ai-title-row">
-              <h1 className="exo-ai-title">Exo AI</h1>
-              <LiveHeaderStatus exoAi={exoAi.state} tune={state.tune} />
-            </div>
-            <p className="exo-ai-sub">{hardwareLine(state)}</p>
+          <div className="exo-ai-title-row">
+            <h1 className="exo-ai-title">Exo AI</h1>
+            <LiveHeaderStatus exoAi={exoAi.state} tune={state.tune} />
           </div>
           <div className="exo-ai-head-actions">
-            <StorageChip drives={state.drives} list={compressList} onOpen={() => setStorageOpen(true)} />
-            <button
-              type="button"
-              className="exo-at-run"
-              disabled={pipeline.running}
-              onClick={() => void pipeline.startPipeline()}
-            >
-              {pipeline.running ? <Spinner label="Optimizing PC" /> : <Bolt size={15} />}
-              {pipeline.running ? 'Optimizing PC' : 'Run Auto Tune'}
-            </button>
+            <StorageChip drives={state.drives} list={compressList} onOpen={openStorage} />
+            {isComplete ? (
+              <div className="exo-ai-complete-group">
+                <span className="exo-ai-complete">
+                  <Check size={15} />
+                  Auto Tune complete
+                </span>
+                <button
+                  type="button"
+                  className="exo-set-btn"
+                  disabled={pipeline.running}
+                  onClick={() => void pipeline.startPipeline()}
+                >
+                  Run again
+                </button>
+              </div>
+            ) : (
+              <button
+                type="button"
+                className="exo-at-run"
+                disabled={pipeline.running}
+                onClick={() => void pipeline.startPipeline()}
+              >
+                {pipeline.running ? <Spinner label="Optimizing PC" /> : <Bolt size={15} />}
+                {pipeline.running ? 'Optimizing PC' : 'Run Auto Tune'}
+              </button>
+            )}
           </div>
         </header>
 
         <div className="exo-ai-grid">
           <div className="exo-ai-col">
-            <AutoTunePlaybookPanel
-              stages={pipeline.stages}
-              running={pipeline.running}
-              pending={pending}
-              exoAi={exoAi.state}
-            />
-
-            <AiPanel id="exo-ai-hw-title" title="Overclock & undervolt">
-              <AutoTuneRows tune={state.tune} profile={state.profile} about={state.about} onTune={setTune} />
-            </AiPanel>
-
-            <AiPanel id="exo-ai-autopilot-title" title="Autopilot">
-              <AutopilotControls state={autopilot.state} onState={autopilot.setState} />
-              <AutopilotReports state={autopilot.state} />
-            </AiPanel>
-          </div>
-
-          <div className="exo-ai-col">
-            <section className="exo-system-panel exo-ai-specs" aria-label="PC specifications">
-              <ThisPc state={state} chips={null} onMenu={setMenu} />
+            <section className="exo-system-panel exo-ai-panel" aria-labelledby="exo-ai-playbook-title">
+              <header className="exo-ai-panel-head">
+                <h2 id="exo-ai-playbook-title">Auto Tune</h2>
+                <PlaybookBadge running={pipeline.running} complete={isComplete} pending={pending} />
+              </header>
+              <ul className="exo-at-stages">
+                {pipeline.stages.map(stage => {
+                  const stageStatus = isComplete && stage.status === 'idle' ? 'done' : stage.status
+                  return (
+                    <li
+                      key={stage.id}
+                      data-status={stageStatus}
+                      className={cn(
+                        'exo-at-stage',
+                        stageStatus === 'active' && 'is-active',
+                        stageStatus === 'done' && 'is-done',
+                        stageStatus === 'warn' && 'is-warn',
+                      )}
+                    >
+                      <StageMarker status={stageStatus} label={stage.label} />
+                      <div className="exo-at-stage-copy">
+                        <span className="exo-at-stage-title">{stage.label}</span>
+                        <span className="exo-at-stage-detail">{stage.detail}</span>
+                      </div>
+                    </li>
+                  )
+                })}
+              </ul>
+              {hasHardwareParts ? (
+                <div className="exo-ai-hw-wrap">
+                  <AutoTuneRows tune={state.tune} profile={state.profile} about={state.about} onTune={setTune} />
+                </div>
+              ) : null}
             </section>
 
-            <AiPanel id="exo-ai-tuning-title" title="System tuning">
-              <BestSetup
-                profile={state.profile}
+            <section className="exo-system-panel exo-ai-specs" data-pc-part="overview" aria-label="This PC">
+              <ThisPc state={state} chips={null} onMenu={setMenu} />
+            </section>
+          </div>
+
+          <div className="exo-ai-col is-right">
+            <RightSection id="drivers" title="Updates">
+              <DriversSection
+                active={active}
+                driver={state.driver}
+                onDriver={setDriver}
                 health={state.health}
-                tuning={state.tuning}
-                drives={state.drives}
-                screen={hdr}
-                settings={settings}
-                onSave={onSave}
-                onRead={refreshAll}
+                onHealth={setHealth}
+                about={state.about}
+                runtimes={apps?.runtimes ?? null}
               />
-              <SetupRows place="needs" active={active} health={state.health} onHealth={setHealth} />
-              <InterruptRows place="needs" state={state.interrupts} onState={setInterrupts} />
-              <SetupRows place="section" active={active} health={state.health} onHealth={setHealth} />
-              <InterruptRows place="section" state={state.interrupts} onState={setInterrupts} />
-              <SystemGroup tuning={state.tuning} onTuning={setTuning} />
-              <NetworkGroup health={state.health} onHealth={setHealth} />
-            </AiPanel>
+            </RightSection>
+            <RightSection id="shaders" title="Shaders">
+              <ShadersBoard active={active} games={games} />
+            </RightSection>
           </div>
         </div>
       </div>

@@ -34,6 +34,7 @@ const KEYS = {
   'exo.backupStopTold': 'local',
   // A driver install's progress across a page reload in this run.
   'exo.driverInstall': 'session',
+  'exo.autoTune.completedAt': 'local',
 } as const
 
 export type PageKey = keyof typeof KEYS

@@ -57,10 +57,9 @@ export function OptimizeLine({ gameId }: { gameId: string }) {
     return () => { live = false; offRun(); offAgain(); offHeld() }
   }, [gameId])
 
-  // Always a line, like every other: shining while read, and said plainly when the game has no best settings.
-  if (!state) return <GameReading name="Optimize" word={null} waiting />
+  if (!state) return null
   if (!state.ok) return <GameReading name="Optimize" word={{ text: 'Could not check', bad: true }} />
-  if (!state.supported) return <GameReading name="Optimize" word={{ text: state.note ?? 'Not supported in this game' }} />
+  if (!state.supported) return null
   const applied = state.standing === 'applied' || state.standing === 'partly'
   const applySettings = (payload: { group?: string; all?: boolean; on?: boolean; mode?: string; smoothMotion?: boolean }, nextOn: boolean, context: string) => {
     setWorking(true)

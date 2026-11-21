@@ -31,15 +31,17 @@ export function GameLine({ name, word, state, external, action, disabled, confir
   onOpen: () => void
 }) {
   const ask = useConfirmInPlace<HTMLButtonElement>(confirm ?? '', onOpen)
-  const where = action ? null : external ? 'open in browser' : 'open in PC'
+  const where = action ? null : external ? 'open in browser' : 'open in Exo AI'
   return (
     <section className={control ? 'exo-game-line has-control' : 'exo-game-line'} aria-label={name} data-state={state}>
       <button ref={ask.ref} type="button" className={ask.className ? `exo-game-line-row exo-confirm ${ask.className}` : 'exo-game-line-row'}
         aria-label={[name, ask.armed ? confirm : word?.text, where].filter(Boolean).join(', ')} disabled={disabled} onClick={confirm ? ask.press : onOpen}>
-        <span className="exo-game-line-name">{name}</span>
-        <span className={`exo-game-line-word${word?.good ? ' is-good' : ''}${word?.bad ? ' is-bad' : ''}`}>
-          {ask.armed && confirm ? <ConfirmLabel armed question={confirm}>{null}</ConfirmLabel>
-            : !word ? <WaitWord label={`Checking ${name.toLowerCase()}`} /> : word.working ? <WorkingWord word={word.text} /> : word.text}
+        <span className="exo-game-line-copy">
+          <span className="exo-game-line-name">{name}</span>
+          <span className={`exo-game-line-word${word?.good ? ' is-good' : ''}${word?.bad ? ' is-bad' : ''}`}>
+            {ask.armed && confirm ? <ConfirmLabel armed question={confirm}>{null}</ConfirmLabel>
+              : !word ? <WaitWord label={`Checking ${name.toLowerCase()}`} /> : word.working ? <WorkingWord word={word.text} /> : word.text}
+          </span>
         </span>
         {action ? null : external ? <ExternalLink size={16} /> : <ChevronRight size={16} />}
       </button>
@@ -58,9 +60,11 @@ export function GameReading({ name, word, waiting, children }: { name: string; w
   return (
     <section className="exo-game-line" aria-label={name}>
       <div className="exo-game-line-row is-reading">
-        <span className="exo-game-line-name">{name}</span>
-        <span className={`exo-game-line-word${word?.good ? ' is-good' : ''}${word?.bad ? ' is-bad' : ''}`} role={word?.bad ? 'alert' : undefined}>
-          {waiting && !word ? <WaitWord label={`Checking ${name.toLowerCase()}`} /> : word?.working ? <WorkingWord word={word.text} /> : word?.text}
+        <span className="exo-game-line-copy">
+          <span className="exo-game-line-name">{name}</span>
+          <span className={`exo-game-line-word${word?.good ? ' is-good' : ''}${word?.bad ? ' is-bad' : ''}`} role={word?.bad ? 'alert' : undefined}>
+            {waiting && !word ? <WaitWord label={`Checking ${name.toLowerCase()}`} /> : word?.working ? <WorkingWord word={word.text} /> : word?.text}
+          </span>
         </span>
         {children}
       </div>

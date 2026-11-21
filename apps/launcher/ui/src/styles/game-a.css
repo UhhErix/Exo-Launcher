@@ -79,31 +79,43 @@
   padding: 0;
 }
 
-/* The game's lines (Upscalers, Shaders, Optimize, HDR, frame generation) sit directly inside the unified sheet
-   in a compact 2-column grid so nothing scrolls on a 1080p screen. */
 .exo-game-lines {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0 16px;
-  margin-top: 16px;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 12px;
+  margin-top: 0;
+  padding-top: 20px;
+  border-top: var(--exo-hair) solid var(--exo-float-line);
+}
+
+.exo-game-lines:empty {
+  display: none;
 }
 
 .exo-game-line {
-  height: 42px;
-  border-top: 1px solid var(--exo-line);
-  padding: 2px 0;
+  display: flex;
+  align-items: center;
+  min-height: 68px;
+  padding: 10px 16px;
+  border: 0;
+  border-radius: var(--exo-card-radius);
+  background: var(--exo-surface-card);
+  box-shadow: inset 0 0 0 var(--exo-hair) var(--exo-float-line);
 }
 
 .exo-game-line-row {
   display: flex;
+  flex: 1;
   align-items: center;
-  gap: 8px;
-  width: calc(100% + 16px);
-  height: 38px;
-  margin: 0 -8px;
-  padding: 0 8px;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+  width: 100%;
+  min-height: 46px;
+  margin: 0;
+  padding: 4px 6px;
   border: 0;
-  border-radius: 10px;
+  border-radius: var(--exo-small-radius);
   background: transparent;
   color: var(--color-muted);
   line-height: normal;
@@ -111,11 +123,19 @@
   transition: background-color var(--dur-quick) var(--ease-out), color var(--dur-quick) var(--ease-out);
 }
 
+.exo-game-line-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
 .exo-game-line.has-control {
   display: flex;
   flex-wrap: nowrap;
   align-items: center;
-  gap: 0 8px;
+  gap: 0 12px;
 }
 
 .exo-game-line.has-control .exo-game-line-row {
@@ -134,8 +154,6 @@
   background: var(--exo-pressed);
 }
 
-/* A line that is its own action, done or not doable now (Optimize while it is Applied or the game runs): it reads as
-   itself, not dimmed, and does nothing under the pointer. */
 .exo-game-line-row:disabled {
   opacity: 1;
   cursor: default;
@@ -147,16 +165,15 @@
   flex: none;
   white-space: nowrap;
   color: var(--color-fg);
-  font-size: calc(13px * var(--exo-scale, 1));
-  font-weight: 500;
+  font-size: var(--exo-type-body);
+  font-weight: var(--exo-weight-title);
 }
 
 .exo-game-line-word {
-  flex: 1 1 auto;
   min-width: 0;
   overflow: hidden;
   color: var(--color-muted);
-  font-size: calc(12px * var(--exo-scale, 1));
+  font-size: var(--exo-type-small);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -171,9 +188,11 @@
 
 .exo-game-title {
   min-width: 0;
-  font-size: calc(28px * var(--exo-scale, 1));
+  margin: 0;
+  font-size: var(--exo-type-first-run);
   font-weight: 650;
-  line-height: 1.05;
+  line-height: 1.08;
+  letter-spacing: -0.02em;
   color: var(--color-fg);
   overflow-wrap: anywhere;
 }
@@ -187,24 +206,23 @@
 }
 
 .exo-game-stats {
-  margin-top: 16px;
-  padding-top: 14px;
-  border-top: 1px solid var(--exo-float-line);
+  margin-top: 18px;
+  padding-top: 16px;
+  border-top: var(--exo-hair) solid var(--exo-float-line);
   text-align: left;
 }
 
-/* The facts: compact readable figures in one clean horizontal row. */
 .exo-game-facts {
   display: flex;
   flex-wrap: wrap;
-  gap: 12px 28px;
+  gap: 12px 36px;
   margin: 0;
 }
 
 .exo-game-fact {
   display: grid;
   align-content: start;
-  gap: 2px;
+  gap: 3px;
   min-width: 0;
 }
 
@@ -212,17 +230,17 @@
   grid-row: 1;
   margin: 0;
   color: var(--color-fg);
-  font-size: var(--exo-type-read);
-  font-weight: 500;
-  line-height: 1.25;
+  font-size: var(--exo-type-title);
+  font-weight: var(--exo-weight-title);
+  line-height: 1.2;
   white-space: nowrap;
 }
 
 .exo-game-fact dt {
   grid-row: 2;
   color: var(--color-muted);
-  font-size: calc(12px * var(--exo-scale, 1));
-  font-weight: 500;
+  font-size: var(--exo-type-small);
+  font-weight: var(--exo-weight-control);
 }
 
 .exo-game-shared {
@@ -290,31 +308,14 @@
 
 
 
-/* The game sheet: unified single-surface card holding cover, metadata, Play/Properties, stats, and 2-column lines with no side drawer. */
-.exo-game-overlay-stage:has(> .exo-game-page) {
-  container-type: inline-size;
-  width: min(1440px, calc(100% - 40px));
-  height: min(860px, calc(100% - 80px));
-  max-height: calc(100% - 80px);
-}
-
-.exo-game-page .exo-game-page-inner {
-  display: block;
-}
-
-.exo-game-page .exo-game-page-layout {
-  min-height: 0;
-  overflow-y: auto;
-  overscroll-behavior: contain;
-}
-
 .exo-game-page .exo-game-actions {
   margin-top: 16px;
 }
 
-@container (max-width: 720px) {
+@media (max-width: 760px) {
   .exo-game-page .exo-game-page-layout {
     grid-template-columns: minmax(0, 1fr);
+    align-items: start;
   }
 
   .exo-game-lines {

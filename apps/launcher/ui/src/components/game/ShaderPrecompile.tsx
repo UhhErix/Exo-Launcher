@@ -22,12 +22,13 @@ const SHADERS_RELEASES = 'https://getexo.app/source'
  */
 export function ShaderPrecompile({ gameId, onOpenShaders }: ShaderPrecompileProps) {
   const status = useShaderStatus(gameId)
-  const noApp = status?.state === 'noApp'
+  if (!status || status.state === 'unsupported') return null
+  const noApp = status.state === 'noApp'
   return (
     <GameLine
       name="Shaders"
       word={wordFor(status)}
-      state={status?.state ?? 'loading'}
+      state={status.state}
       external={noApp}
       onOpen={() => { if (noApp) void host.openUrl(SHADERS_RELEASES); else onOpenShaders(gameId) }}
     />

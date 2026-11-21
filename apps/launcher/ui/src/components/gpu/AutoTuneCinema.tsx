@@ -21,8 +21,6 @@ const SHORT_LABELS: Record<AutoTuneStageId, string> = {
   drivers: 'Drivers',
 }
 
-const SPARKS = ['is-s1', 'is-s2', 'is-s3', 'is-s4', 'is-s5', 'is-s6', 'is-s7', 'is-s8'] as const
-
 function CoolingGlyph() {
   return (
     <svg className="exo-at-svg" viewBox="0 0 64 64" width="76" height="76" aria-hidden="true">
@@ -262,12 +260,11 @@ function deriveCineState(
   const activeStage = activeIndex >= 0 ? stages[activeIndex] : undefined
   const activeId: AutoTuneStageId = activeStage?.id ?? stages[0]?.id ?? 'cooling'
   const percent = finished ? 100 : Math.round((completedCount / total) * 100)
-  const scale = finished ? 1 : Math.max(0.08, completedCount / total)
   const copy = deriveCineCopy(activeStage, running, hasWarn, needsRestart, activeIndex, completedCount, total)
   const phase = running ? 'running' : finished ? 'done' : 'idle'
   const progressValue = running ? completedCount / total : 1
   const progressTone: 'done' | undefined = finished && !hasWarn ? 'done' : undefined
-  return { completedCount, hasWarn, activeId, percent, scale, ...copy, phase, progressValue, progressTone }
+  return { completedCount, hasWarn, activeId, percent, ...copy, phase, progressValue, progressTone }
 }
 
 export function AutoTuneCinema({
@@ -288,7 +285,7 @@ export function AutoTuneCinema({
   const screenRef = useRef<HTMLDivElement>(null)
   useHoldWindow(screenRef, true, running ? null : onExit)
 
-  const { hasWarn, activeId, percent, scale, stageCounter, headline, detailText, phase, progressValue, progressTone } =
+  const { hasWarn, activeId, percent, stageCounter, headline, detailText, phase, progressValue, progressTone } =
     deriveCineState(stages, running, finished, needsRestart)
 
   return createPortal(
@@ -308,13 +305,6 @@ export function AutoTuneCinema({
     >
       <div className="exo-at-cine-bg" aria-hidden="true">
         <div className="exo-at-cine-spot" />
-        <div className="exo-at-cine-beam" />
-        <div className="exo-at-cine-beam is-second" />
-        <div className="exo-at-cine-sparks">
-          {SPARKS.map(cls => <span key={cls} className={cn('exo-at-spark', cls)} />)}
-        </div>
-        <div className="exo-at-cine-rail is-top" style={{ transform: `scaleX(${scale})` }} />
-        <div className="exo-at-cine-rail is-bottom" style={{ transform: `scaleX(${scale})` }} />
       </div>
 
       <div className="exo-at-cine-body">

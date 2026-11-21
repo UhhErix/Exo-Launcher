@@ -81,7 +81,6 @@ const DevicesRoom = lazy(() => import('./DevicesRoom').then((m) => ({ default: m
 const StoreRoom = lazy(() => import('./store/StoreRoom').then((m) => ({ default: m.StoreRoom })))
 const CommandMenu = lazy(() => import('./blocks/command-menu-1'))
 const GameSheet = lazy(() => import('./shell/GameSheet').then((m) => ({ default: m.GameSheet })))
-const PcRoom = lazy(() => import('./gpu/PcRoom').then((m) => ({ default: m.PcRoom })))
 const ExoAiRoom = lazy(() => import('./gpu/ExoAiRoom').then((m) => ({ default: m.ExoAiRoom })))
 const AppsRoom = lazy(() => import('./apps/AppsRoom').then((m) => ({ default: m.AppsRoom })))
 const ActivateKeySheet = lazy(() => import('./ActivateKeySheet').then((m) => ({ default: m.ActivateKeySheet })))
@@ -410,7 +409,6 @@ export function LauncherApp() {
     openGamePage,
   })
 
-  const openGpu = useCallback(() => goToView('system'), [goToView])
   const openNowPlaying = useCallback(() => void goToView('music',
     { name: 'exo-music-now', from: visible('.exo-mini-cover'), to: () => visible('.exo-music-now > .exo-music-art') },
     () => setNowPlaying((n) => n + 1)), [goToView])
@@ -658,21 +656,15 @@ export function LauncherApp() {
 
   const exoAiRoom = useMemo(() => (
     <Room name="exo-ai" mounted={openedRooms.has('exo-ai')} warm={warming || opening === 'exo-ai' || prewarm === 'exo-ai'} active={under === 'exo-ai'} covered={view === 'settings'} label="Exo AI" className="relative z-10 flex min-h-0 flex-1 flex-col">
-      <Suspense fallback={null}><ExoAiRoom active={view === 'exo-ai'} games={games} settings={settings} onSave={saveSettings} /></Suspense>
+      <Suspense fallback={null}><ExoAiRoom active={view === 'exo-ai'} jump={gpuJump} games={games} settings={settings} onSave={saveSettings} /></Suspense>
     </Room>
-  ), [under, openedRooms, warming, opening, prewarm, view, games, settings, saveSettings])
+  ), [under, openedRooms, warming, opening, prewarm, view, gpuJump, games, settings, saveSettings])
 
   const appsRoom = useMemo(() => (
     <Room name="apps" mounted={openedRooms.has('apps')} warm={warming || opening === 'apps' || prewarm === 'apps'} active={under === 'apps'} covered={view === 'settings'} label="Apps" className="relative z-10 flex min-h-0 flex-1 flex-col">
       <Suspense fallback={null}><AppsRoom active={view === 'apps'} /></Suspense>
     </Room>
   ), [under, openedRooms, warming, opening, prewarm, view])
-
-  const systemRoom = useMemo(() => (
-    <Room name="system" mounted={openedRooms.has('system')} warm={warming || opening === 'system' || prewarm === 'system'} active={under === 'system'} covered={view === 'settings'} label="PC" className="relative z-10 flex min-h-0 flex-1 flex-col">
-      <Suspense fallback={null}><PcRoom active={view === 'system'} jump={gpuJump} games={games} settings={settings} onSave={saveSettings} /></Suspense>
-    </Room>
-  ), [under, openedRooms, warming, opening, prewarm, view, gpuJump, games, settings, saveSettings])
 
   const libraryRoom = useMemo(() => sortMode && (
     <Room mounted={openedRooms.has('library')} active={under === 'library'} covered={view === 'settings'} label="Library" className="exo-under-bar relative z-10 flex min-h-0 flex-1">
@@ -781,13 +773,12 @@ export function LauncherApp() {
       {storeRoom}
       {exoAiRoom}
       {appsRoom}
-      {systemRoom}
       {devicesRoom}
       {libraryRoom}
       <ErrorBoundary
         label="Game sheet"
         onReset={closeGamePage}
-        className="fixed inset-x-0 bottom-0 top-[var(--exo-titlebar-h,52px)] z-[80] bg-(--exo-scrim)"
+        className="fixed inset-x-0 bottom-0 top-[var(--exo-titlebar-h,52px)] z-[30] bg-bg"
       >
         <Suspense fallback={null}><GameSheet
           game={displayedGame}
@@ -806,12 +797,8 @@ export function LauncherApp() {
             if (actions.holdsGame(displayedGame) || !displayedGame) return
             closeGamePage()
             const target = pcLinkRoom(page)
-            if (target === 'system') {
-              setGpuJump({ tab: page })
-              void openGpu()
-            } else {
-              void goToView(target)
-            }
+            setGpuJump(target === 'exo-ai' ? { tab: page } : null)
+            void goToView(target)
           }}
           onDequeue={() => void actions.onDequeue()}
           hdrForGames={settings.hdrForGames === true}
