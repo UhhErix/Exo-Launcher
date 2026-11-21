@@ -13,9 +13,7 @@ Run from `apps\launcher\cloud\riot` after review.
 
    Answer **No** if Wrangler offers to edit `wrangler.toml` automatically.
 
-3. Put the KV namespace ID into `wrangler.toml`, replacing `REPLACE_WITH_RESOURCE_ID`, and add the custom domain route:
-
-       routes = [{ pattern = "riot.getexo.app", custom_domain = true }]
+3. Put the KV namespace ID into `wrangler.toml`, replacing `REPLACE_WITH_RESOURCE_ID` (`routes` for `riot.getexo.app` is already set).
 
 4. Check rate-limit namespaces `5101`, `5102`, and `5103` are unused on the Cloudflare account.
 

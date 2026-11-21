@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using ExoLauncher.Adapters;
+using ExoLauncher.Adapters.Riot;
 using ExoLauncher.Helpers;
 using ExoLauncher.Models;
 using ExoLauncher.Ui;
@@ -1961,36 +1962,52 @@ public sealed partial class WebHostBridge
     {
         var riotId = RiotIdStore.Normalize(typedId) ?? (typedId is null ? RiotIdStore.TryRead() : null);
         if (riotId is null)
-            return new { ok = false, profilePrivate = false, message = "Save a Riot ID first (Name#TAG)." };
+            return new { ok = false, profilePrivate = false, source = (string?)null, clientNeeded = false, message = "Save a Riot ID first (Name#TAG)." };
         var account = RiotLedger.AccountKey(riotId)!;
 
         if (typedId is not null) RiotIdStore.Save(riotId);
 
         if (Interlocked.CompareExchange(ref _riotHoursRefreshing, 1, 0) != 0)
-            return new { ok = false, profilePrivate = false, message = "Hours refresh is already running." };
+            return new { ok = false, profilePrivate = false, source = (string?)null, clientNeeded = false, message = "Hours refresh is already running." };
 
         try
         {
             using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
-            timeout.CancelAfter(RiotHoursClient.RequestTimeout);
-            var result = await RiotHoursClient.LoadAsync(riotId, timeout.Token).ConfigureAwait(false);
-            if (!result.Ok)
+            timeout.CancelAfter(TimeSpan.FromSeconds(45));
+
+            var local = await RiotLocalMatchHistory.SyncAsync(account, ct: timeout.Token).ConfigureAwait(false);
+            var cloud = await RiotHoursClient.LoadAsync(riotId, timeout.Token).ConfigureAwait(false);
+
+            var cloudWrote = false;
+            if (cloud.Ok)
             {
+                var now = DateTimeOffset.UtcNow;
+                var importedAt = cloud.LatestMatchUtc() is { } latest && latest <= now ? latest : now;
+                cloudWrote = RiotLedger.SeedIfHigher(account, cloud.ToSeeds(), importedAt, RiotLedger.CloudSource);
+            }
+
+            if (!local.Ok && !cloud.Ok)
+            {
+                var clientNeeded = !local.ClientAvailable && (cloud.Unconfigured || cloud.TransientFailure);
+                var message = clientNeeded
+                    ? "Open Riot Client (signed in) and press Sync hours again, or import your Riot data export."
+                    : local.AuthorizationRejected
+                        ? "Riot denied local match history lookup. Try importing your Riot data export instead."
+                        : cloud.Message;
                 return new
                 {
                     ok = false,
                     profilePrivate = false,
-                    unconfigured = result.Unconfigured,
-                    message = result.Message,
+                    unconfigured = cloud.Unconfigured,
+                    source = (string?)null,
+                    clientNeeded,
+                    message,
                     profileUrl = TrackerGgPlaytime.ProfilePageUrl(riotId),
                     baseline = RiotBaselineFor(riotId),
                 };
             }
 
-            var seeds = result.ToSeeds();
-            var now = DateTimeOffset.UtcNow;
-            var importedAt = result.LatestMatchUtc() is { } latest && latest <= now ? latest : now;
-            var wrote = RiotLedger.SeedIfHigher(account, seeds, importedAt, RiotLedger.CloudSource);
+            var wrote = local.SeedUpdated || cloudWrote;
             if (wrote)
             {
                 try
@@ -2003,26 +2020,37 @@ public sealed partial class WebHostBridge
                 }
             }
 
-            result.Readings.TryGetValue("riot:valorant", out var val);
-            result.Readings.TryGetValue("riot:league_of_legends", out var lol);
-            result.Readings.TryGetValue("riot:teamfighttactics", out var tft);
+            var baselines = RiotLedger.Baselines(account);
+            baselines.TryGetValue("riot:valorant", out var valMinutes);
+            baselines.TryGetValue("riot:league_of_legends", out var lolMinutes);
+            baselines.TryGetValue("riot:teamfighttactics", out var tftMinutes);
+            var source = local.SeedUpdated || (local.Ok && !cloudWrote) ? "local" : "cloud";
+            var okMessage = !wrote
+                ? "Your saved Riot hours are already up to date."
+                : source == "local"
+                    ? local.Message
+                    : cloud.Message;
+
             return new
             {
                 ok = true,
                 skipped = !wrote,
                 profilePrivate = false,
-                partial = result.Readings.Values.Any(r => r.Partial),
-                message = wrote ? result.Message : "Your saved Riot hours are already at or above the synced match total.",
-                valorantMinutes = val?.Minutes > 0 ? val.Minutes : (int?)null,
-                leagueMinutes = lol?.Minutes > 0 ? lol.Minutes : (int?)null,
-                tftMinutes = tft?.Minutes > 0 ? tft.Minutes : (int?)null,
+                partial = cloud.Ok ? cloud.Readings.Values.Any(r => r.Partial) : local.Seeds.Values.Any(s => s.Partial),
+                unconfigured = false,
+                source,
+                clientNeeded = false,
+                message = okMessage,
+                valorantMinutes = valMinutes > 0 ? valMinutes : (int?)null,
+                leagueMinutes = lolMinutes > 0 ? lolMinutes : (int?)null,
+                tftMinutes = tftMinutes > 0 ? tftMinutes : (int?)null,
                 profileUrl = TrackerGgPlaytime.ProfilePageUrl(riotId),
                 baseline = RiotBaselineFor(riotId),
             };
         }
         catch (OperationCanceledException)
         {
-            return new { ok = false, profilePrivate = false, message = "Exo's Riot hours service did not answer in time." };
+            return new { ok = false, profilePrivate = false, source = (string?)null, clientNeeded = false, message = "Riot hours sync did not answer in time." };
         }
         finally
         {

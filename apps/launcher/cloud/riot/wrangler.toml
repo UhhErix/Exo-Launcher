@@ -5,7 +5,7 @@ workers_dev = false
 preview_urls = false
 send_metrics = false
 
-routes = []
+routes = [{ pattern = "riot.getexo.app", custom_domain = true }]
 
 [observability]
 enabled = false

@@ -3,6 +3,7 @@ using System.Collections.Concurrent;
 using System.Globalization;
 using System.Text.Json;
 using ExoLauncher.Adapters;
+using ExoLauncher.Adapters.Riot;
 using ExoLauncher.Helpers;
 using ExoLauncher.Models;
 
@@ -57,23 +58,38 @@ public static class PlaytimeService
         var riotId = RiotIdStore.TryRead();
         if (riotId is null) return false;
         var account = RiotLedger.AccountKey(riotId);
-        if (account is null || RiotLedger.HasSeed(account)) return false;
-        if (!AutoSeededRiotAccounts.TryAdd(account, 0)) return false;
+        if (account is null) return false;
 
+        var wrote = false;
         try
         {
             using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
-            timeout.CancelAfter(RiotHoursClient.RequestTimeout);
-            var result = await RiotHoursClient.LoadAsync(riotId, timeout.Token).ConfigureAwait(false);
-            if (!result.Ok) return false;
-            var now = DateTimeOffset.UtcNow;
-            var importedAt = result.LatestMatchUtc() is { } latest && latest <= now ? latest : now;
-            if (!RiotLedger.SeedIfHigher(account, result.ToSeeds(), importedAt, RiotLedger.CloudSource))
-                return false;
-            AppLog.Info("Riot hours synced automatically for " + result.Readings.Count + " game(s).");
-            if (onSeeded is not null)
+            timeout.CancelAfter(TimeSpan.FromSeconds(45));
+            var local = await RiotLocalMatchHistory.SyncAsync(account, ct: timeout.Token).ConfigureAwait(false);
+            if (local.SeedUpdated)
+            {
+                wrote = true;
+                AppLog.Info("Riot hours synced locally for " + local.Seeds.Count + " game(s).");
+            }
+
+            if (!RiotLedger.HasSeed(account) && AutoSeededRiotAccounts.TryAdd(account, 0))
+            {
+                var result = await RiotHoursClient.LoadAsync(riotId, timeout.Token).ConfigureAwait(false);
+                if (result.Ok)
+                {
+                    var now = DateTimeOffset.UtcNow;
+                    var importedAt = result.LatestMatchUtc() is { } latest && latest <= now ? latest : now;
+                    if (RiotLedger.SeedIfHigher(account, result.ToSeeds(), importedAt, RiotLedger.CloudSource))
+                    {
+                        wrote = true;
+                        AppLog.Info("Riot hours synced automatically for " + result.Readings.Count + " game(s).");
+                    }
+                }
+            }
+
+            if (wrote && onSeeded is not null)
                 await onSeeded().ConfigureAwait(false);
-            return true;
+            return wrote;
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
@@ -82,7 +98,7 @@ public static class PlaytimeService
         catch (Exception ex)
         {
             AppLog.Debug("Automatic Riot hours sync skipped: " + ex.GetType().Name);
-            return false;
+            return wrote;
         }
     }
 
@@ -162,6 +178,24 @@ public static class PlaytimeService
             AccountSyncHooks.PlaySessionEnded(gameId, start, end, MinutesOf(end - start));
             RiotLedger.End(gameId, end);
             SaveExo_NoLock();
+        }
+        if (gameId.StartsWith("riot:", StringComparison.OrdinalIgnoreCase) &&
+            !HostMode.TestRun &&
+            !HostMode.IsDisposable &&
+            RiotLedger.AccountKey(RiotIdStore.TryRead()) is { } riotAccount)
+        {
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    await Task.Delay(TimeSpan.FromMinutes(3)).ConfigureAwait(false);
+                    await RiotLocalMatchHistory.SyncAsync(riotAccount).ConfigureAwait(false);
+                }
+                catch (Exception ex)
+                {
+                    AppLog.Debug("Riot local post-session sync skipped: " + ex.GetType().Name);
+                }
+            });
         }
     }
 

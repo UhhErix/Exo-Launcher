@@ -1520,6 +1520,8 @@ export type RiotHoursRefresh = {
   skipped?: boolean
   partial?: boolean
   unconfigured?: boolean
+  source?: 'local' | 'cloud' | null
+  clientNeeded?: boolean
   message?: string
   valorantMinutes?: number | null
   leagueMinutes?: number | null

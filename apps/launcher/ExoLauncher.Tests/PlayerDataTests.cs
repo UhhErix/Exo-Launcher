@@ -221,6 +221,7 @@ public sealed class PlayerDataTests : IDisposable
         ["reported-hours.json"] = Utf8("""{"xbox":[]}"""),
         ["riot-ledger/" + "012345" + "6789ab" + "cdef01" + "23" + ".jsonl"] = Utf8("""{"schema":1,"kind":"play","game":"riot:valorant","key":"a","minutes":5}""" + "\n"),
         ["riot-id.txt"] = Utf8("Erix#EUW"),
+        ["riot-matches.json"] = Utf8("{\"" + "012345" + "6789ab" + "cdef01" + "23" + "\":{\"riot:valorant|m1\":{\"s\":2400,\"m\":\"competitive\",\"t\":1760000000000}}}"),
         ["exo-imported-lifetime.json"] = Utf8("{\"accountKey\":\"" + "012345" + "6789ab" + "cdef01" + "23" + "\",\"minutes\":{\"riot:valorant\":600}}"),
         ["replaced.json"] = Utf8("""{"removed":["nvidia-app"]}"""),
         ["window-placement.json"] = Utf8("""{"x":10,"y":20}"""),

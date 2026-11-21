@@ -3,6 +3,7 @@ using System.Net;
 using System.Text;
 using System.Text.Json;
 using ExoLauncher.Adapters;
+using ExoLauncher.Adapters.Riot;
 using ExoLauncher.Helpers;
 using ExoLauncher.Services;
 
@@ -206,6 +207,140 @@ public sealed class RiotHoursSyncTests
             Environment.SetEnvironmentVariable(PathHelper.DataDirOverrideVariable, prev);
             if (Directory.Exists(dir)) DeletionGate.DeleteDirectory(dir, recursive: true);
         }
+    }
+
+    [Theory]
+    [InlineData("na", "na")]
+    [InlineData("latam", "na")]
+    [InlineData("br", "na")]
+    [InlineData("eu", "eu")]
+    [InlineData("euw1", "eu")]
+    [InlineData("ap", "ap")]
+    [InlineData("kr", "kr")]
+    [InlineData(null, "na")]
+    public void LocalShardMappingMatchesRiotRegions(string? region, string expected) =>
+        Assert.Equal(expected, RiotLocalMatchHistory.MapValorantShard(region));
+
+    [Fact]
+    public void LocalParsersReadPdHistoryDetailsLcuAndTftDeduplicatingMatches()
+    {
+        var history = RiotLocalMatchHistory.ParsePdHistory("""
+            {
+              "Subject": "puuid-1",
+              "BeginIndex": 0,
+              "EndIndex": 2,
+              "Total": 42,
+              "History": [
+                { "MatchID": "val-101", "GameStartTime": 1760000000000, "QueueID": "competitive" },
+                { "MatchID": "val-102", "GameStartTime": 1760100000000, "QueueID": "unrated" }
+              ]
+            }
+            """);
+        Assert.Equal(42, history.Total);
+        Assert.Equal(["val-101", "val-102"], history.MatchIds);
+
+        var detail = RiotLocalMatchHistory.ParsePdMatchDetail("""
+            {
+              "matchInfo": {
+                "matchId": "val-101",
+                "gameLengthMillis": 2400000,
+                "gameStartMillis": 1760000000000,
+                "queueID": "competitive"
+              }
+            }
+            """, "fallback");
+        Assert.NotNull(detail);
+        Assert.Equal("riot:valorant", detail!.Value.Game);
+        Assert.Equal("val-101", detail.Value.MatchId);
+        Assert.Equal(2400, detail.Value.Match.Seconds);
+        Assert.Equal("competitive", detail.Value.Match.Mode);
+
+        var lol = RiotLocalMatchHistory.ParseLcuLeagueMatches("""
+            {
+              "games": {
+                "games": [
+                  { "gameId": 9001, "gameDuration": 1800, "queueId": 420, "gameCreation": 1760200000000 },
+                  { "gameId": 9002, "gameDuration": 1200, "queueId": 450, "gameCreation": 1760300000000 }
+                ]
+              }
+            }
+            """);
+        Assert.Equal(2, lol.Count);
+        Assert.Equal("ranked solo", lol[0].Match.Mode);
+        Assert.Equal("aram", lol[1].Match.Mode);
+
+        var tft = RiotLocalMatchHistory.ParseLcuTftMatches("""
+            {
+              "games": [
+                {
+                  "metadata": { "match_id": "NA1_TFT_77" },
+                  "json": { "game_length": 2100, "game_datetime": 1760400000000 }
+                }
+              ]
+            }
+            """);
+        Assert.Single(tft);
+        Assert.Equal("riot:teamfighttactics", tft[0].Game);
+        Assert.Equal("NA1_TFT_77", tft[0].MatchId);
+        Assert.Equal(2100, tft[0].Match.Seconds);
+    }
+
+    [Fact]
+    public void LocalCacheUnionDeduplicatesAndSeedsWithLatestMatchTimestamp()
+    {
+        var dir = Path.Combine(Path.GetTempPath(), "exo-riot-union-" + Guid.NewGuid().ToString("N"));
+        var prev = Environment.GetEnvironmentVariable(PathHelper.DataDirOverrideVariable);
+        try
+        {
+            Directory.CreateDirectory(dir);
+            Environment.SetEnvironmentVariable(PathHelper.DataDirOverrideVariable, dir);
+            RiotLedger.ForgetLoaded();
+            var account = RiotLedger.AccountKey("Player#NA1")!;
+
+            var d1 = RiotLocalMatchHistory.ParsePdMatchDetail("""
+                {"matchInfo":{"matchId":"v-1","gameLengthMillis":2400000,"gameStartMillis":1760000000000,"queueID":"competitive"}}
+                """, "v-1")!.Value;
+            var d2 = RiotLocalMatchHistory.ParsePdMatchDetail("""
+                {"matchInfo":{"matchId":"v-2","gameLengthMillis":1800000,"gameStartMillis":1760200000000,"queueID":"unrated"}}
+                """, "v-2")!.Value;
+            var lol = RiotLocalMatchHistory.ParseLcuLeagueMatches("""
+                {"games":{"games":[{"gameId":55,"gameDuration":1800,"queueId":420,"gameCreation":1760100000000}]}}
+                """);
+
+            var cache = new Dictionary<string, RiotLocalMatchHistory.CachedMatch>(StringComparer.Ordinal);
+            var firstAdded = RiotLocalMatchHistory.MergeMatches(cache, [d1, duplicate(d1), d2]);
+            var secondAdded = RiotLocalMatchHistory.MergeMatches(cache, [d1, .. lol]);
+            Assert.Equal(2, firstAdded);
+            Assert.Equal(1, secondAdded);
+
+            var (seeds, latest) = RiotLocalMatchHistory.Summarize(cache);
+            Assert.Equal(70, seeds["riot:valorant"].Minutes);
+            Assert.Equal(40, seeds["riot:valorant"].Modes!["competitive"]);
+            Assert.Equal(30, seeds["riot:valorant"].Modes!["unrated"]);
+            Assert.Equal(30, seeds["riot:league_of_legends"].Minutes);
+            Assert.Equal(DateTimeOffset.FromUnixTimeMilliseconds(1760200000000), latest);
+
+            Assert.True(RiotLedger.SeedIfHigher(account, seeds, latest!.Value, RiotLedger.LocalSource));
+
+            var beforeMatchEnd = latest.Value.AddHours(-2);
+            var afterMatchEnd = latest.Value.AddMinutes(10);
+            RiotLedger.Begin(account, "riot:valorant", beforeMatchEnd);
+            RiotLedger.End("riot:valorant", beforeMatchEnd.AddMinutes(15));
+            RiotLedger.Begin(account, "riot:valorant", afterMatchEnd);
+            RiotLedger.End("riot:valorant", afterMatchEnd.AddMinutes(25));
+
+            Assert.Equal(95, RiotLedger.Totals(account, "riot:valorant"));
+            Assert.Equal(30, RiotLedger.Totals(account, "riot:league_of_legends"));
+        }
+        finally
+        {
+            RiotLedger.ForgetLoaded();
+            Environment.SetEnvironmentVariable(PathHelper.DataDirOverrideVariable, prev);
+            if (Directory.Exists(dir)) DeletionGate.DeleteDirectory(dir, recursive: true);
+        }
+
+        static (string Game, string MatchId, RiotLocalMatchHistory.CachedMatch Match) duplicate(
+            (string Game, string MatchId, RiotLocalMatchHistory.CachedMatch Match) src) => src;
     }
 
     private static void WriteZipEntry(ZipArchive archive, string name, string content)

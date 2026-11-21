@@ -28,6 +28,7 @@ internal static partial class RiotLedger
     internal const string TrackerSource = "tracker.gg";
     internal const string ManualSource = "manual";
     internal const string CloudSource = "exo-riot";
+    internal const string LocalSource = "riot-local";
     internal const string ExportSource = "riot-export";
 
     /// <summary>

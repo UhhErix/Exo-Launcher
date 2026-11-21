@@ -333,7 +333,8 @@ function RiotBaselineRow({
       const result = await host.riotHoursRefresh(riotId)
       await refreshSettings()
       if (!result.ok) {
-        setNote({ text: result.message ?? 'Riot hours could not be synced.', error: true })
+        const neutral = !!(result.unconfigured || result.clientNeeded)
+        setNote({ text: result.message ?? 'Riot hours could not be synced.', error: !neutral })
         return { ok: true }
       }
       setNote({ text: result.message ?? 'Riot hours synced.', error: false })

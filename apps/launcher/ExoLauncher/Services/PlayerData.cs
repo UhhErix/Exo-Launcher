@@ -78,6 +78,7 @@ internal static class PlayerData
         new("riot-ledger/*.jsonl", Shape.JsonLines, Large, Sync.Log + " (riot-ledger)", ["riot-ledger/unassigned.jsonl@RiotLedger"],
             Match: @"^riot-ledger/(?:[0-9a-f]{20}|unassigned)\.jsonl\z"),
         new("riot-id.txt", Shape.RiotId, 1024, Sync.Choice + " (riot-id)", ["riot-id.txt@RiotIdStore"]),
+        new("riot-matches.json", Shape.JsonObject, Large, Sync.ThisPc + ": accumulated Riot match durations read on this PC", ["riot-matches.json@RiotLocalMatchHistory"]),
         new("exo-imported-lifetime.json", Shape.JsonObject, Small, Sync.ThisPc + ": the tracker.gg hours from before the ledger, which become a Riot ID's ledger seed when that ID is used", ["exo-imported-lifetime.json@RiotLedger"]),
         new("window-placement.json", Shape.JsonObject, Small, Sync.ThisPc + ": the window's place on this PC's screens", ["window-placement.json@WindowPlacementStore"]),
         new("notes/notes.json", Shape.JsonObject, Small, Sync.ThisPc + ": notes are not synced yet", ["notes/notes.json@NoteStore"]),
