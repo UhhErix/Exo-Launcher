@@ -229,4 +229,60 @@ public sealed class AppUpdateServiceTests
     [InlineData("nothex  ExoLauncher-Setup.exe", null)]
     public void ParsesSha256Files(string text, string? expected) =>
         Assert.Equal(expected, AppUpdateService.ParseSha256File(text, "ExoLauncher-Setup.exe"));
+
+    [Fact]
+    public async Task CleansUpUnstagedInstallersAndOldTempsImmediately()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "exo-updclean-" + Guid.NewGuid().ToString("N"));
+        var updates = Path.Combine(root, "updates");
+        Directory.CreateDirectory(updates);
+        try
+        {
+            var stub = new Stub(_ => null);
+#pragma warning disable RS0030
+            using var http = new HttpClient(stub);
+#pragma warning restore RS0030
+            var clock = new FixedClock(DateTimeOffset.UtcNow);
+            var service = new AppUpdateService(http, updates, clock) { AppFolder = Path.Combine(root, "app") };
+            await service.WaitForCleanupForTestAsync();
+
+            var activeFile = $"ExoLauncher-Setup-{Guid.NewGuid():N}.exe";
+            var staleFile = $"ExoLauncher-Setup-{Guid.NewGuid():N}.exe";
+            var partialFile = $"ExoLauncher-Setup-{Guid.NewGuid():N}.partial";
+            var oldTmp = "staged-update.json.tmp-" + Guid.NewGuid().ToString("N");
+            var freshTmp = "staged-update.json.tmp-" + Guid.NewGuid().ToString("N");
+
+            File.WriteAllText(Path.Combine(updates, activeFile), "staged");
+            File.WriteAllText(Path.Combine(updates, staleFile), "stale");
+            File.WriteAllText(Path.Combine(updates, partialFile), "partial");
+            File.WriteAllText(Path.Combine(updates, oldTmp), "old");
+            File.WriteAllText(Path.Combine(updates, freshTmp), "fresh");
+
+            var now = clock.GetUtcNow().UtcDateTime;
+            File.SetLastWriteTimeUtc(Path.Combine(updates, staleFile), now - TimeSpan.FromSeconds(5));
+            File.SetLastWriteTimeUtc(Path.Combine(updates, oldTmp), now - TimeSpan.FromMinutes(3));
+            File.SetLastWriteTimeUtc(Path.Combine(updates, freshTmp), now - TimeSpan.FromSeconds(30));
+
+            File.WriteAllText(
+                Path.Combine(updates, "staged-update.json"),
+                $$"""{"schema":1,"version":"3.28.0","sha256":"{{Hash}}","size":6,"file":"{{activeFile}}","starts":0}""");
+
+            service.CleanupUpdateArtifactsNow();
+
+            Assert.True(File.Exists(Path.Combine(updates, activeFile)));
+            Assert.False(File.Exists(Path.Combine(updates, staleFile)));
+            Assert.False(File.Exists(Path.Combine(updates, partialFile)));
+            Assert.False(File.Exists(Path.Combine(updates, oldTmp)));
+            Assert.True(File.Exists(Path.Combine(updates, freshTmp)));
+        }
+        finally
+        {
+            try { ExoLauncher.Helpers.DeletionGate.DeleteDirectory(root, true); } catch { }
+        }
+    }
+
+    private sealed class FixedClock(DateTimeOffset now) : TimeProvider
+    {
+        public override DateTimeOffset GetUtcNow() => now;
+    }
 }

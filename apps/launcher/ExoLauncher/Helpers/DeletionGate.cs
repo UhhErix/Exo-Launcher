@@ -35,7 +35,7 @@ internal static class DeletionGate
     /// Why a delete of <paramref name="path"/> is refused, or null when it may go. <paramref name="clean"/>: a cleaner's delete
     /// (see the class summary). <paramref name="owners"/>: program names (no .exe) that hold the files; any running refuses.
     /// </summary>
-    internal static string? Refusal(string path, bool clean, IReadOnlyCollection<string>? owners, Policy policy)
+    internal static string? Refusal(string path, bool clean, IReadOnlyCollection<string>? owners, Policy policy, bool allowAppBrowserFiles = false)
     {
         string full;
         try { full = Path.TrimEndingDirectorySeparator(Path.GetFullPath(path ?? "")); }
@@ -47,7 +47,8 @@ internal static class DeletionGate
 
         // The name rule is for the cleaners. Exo's own user-started features (a Riot account swap clears the client's sign-in
         // folders; a retired WebView2 profile goes) are Owned deletes and keep their own rules.
-        if (clean && KeptBy(full, DeletionProtections.KeptSegments))
+        var patterns = allowAppBrowserFiles ? DeletionProtections.HardKeptSegments : DeletionProtections.KeptSegments;
+        if (clean && KeptBy(full, patterns))
             return "Exo keeps this: it holds sign-in data, a credential or a game save.";
 
         var shader = policy.ShaderRoots.Any(root => Within(full, root)) || KeptBy(full, DeletionProtections.ShaderSegments);
@@ -71,11 +72,11 @@ internal static class DeletionGate
     }
 
     /// <summary>A cleaner's verdict on a file or folder, whole: <see cref="Refusal"/>, plus a folder holding a kept item. Null when it may go.</summary>
-    internal static string? Check(string path, IReadOnlyCollection<string>? owners = null, Policy? policy = null)
+    internal static string? Check(string path, IReadOnlyCollection<string>? owners = null, Policy? policy = null, bool allowAppBrowserFiles = false)
     {
         policy ??= Live;
-        if (Refusal(path, clean: true, owners, policy) is { } why) return why;
-        if (Directory.Exists(path) && SubtreeKept(path))
+        if (Refusal(path, clean: true, owners, policy, allowAppBrowserFiles) is { } why) return why;
+        if (Directory.Exists(path) && SubtreeKept(path, allowAppBrowserFiles))
             return "Exo keeps part of this: a sign-in file, a credential or a save is inside it.";
         return null;
     }
@@ -84,9 +85,9 @@ internal static class DeletionGate
     /// A cleaner's delete of a file or a folder (whole, recursively). False with <paramref name="why"/> when refused, or when a
     /// file in it fails; true when it is gone (or was never there).
     /// </summary>
-    internal static bool Clean(string path, IReadOnlyCollection<string>? owners, out string? why, Policy? policy = null)
+    internal static bool Clean(string path, IReadOnlyCollection<string>? owners, out string? why, Policy? policy = null, bool allowAppBrowserFiles = false)
     {
-        why = Check(path, owners, policy);
+        why = Check(path, owners, policy, allowAppBrowserFiles);
         if (why is not null) return false;
         if (!File.Exists(path) && !Directory.Exists(path)) return true;
         try
@@ -226,13 +227,14 @@ internal static class DeletionGate
     }
 
     /// <summary>True when a folder holds a kept item anywhere inside it (no folder link is followed).</summary>
-    private static bool SubtreeKept(string folder)
+    private static bool SubtreeKept(string folder, bool allowAppBrowserFiles = false)
     {
+        var patterns = allowAppBrowserFiles ? DeletionProtections.HardKeptSegments : DeletionProtections.KeptSegments;
         try
         {
             var options = new EnumerationOptions { RecurseSubdirectories = true, IgnoreInaccessible = true, AttributesToSkip = FileAttributes.ReparsePoint };
             foreach (var entry in new DirectoryInfo(folder).EnumerateFileSystemInfos("*", options))
-                if (KeptBy(entry.FullName, DeletionProtections.KeptSegments)) return true;
+                if (KeptBy(entry.FullName, patterns)) return true;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { return true; }
         return false;

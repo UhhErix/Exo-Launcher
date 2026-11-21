@@ -394,7 +394,7 @@ public sealed partial class MainWindow
                 _ = Task.Run(EnforceCaptureLimits);
                 // A snip opens in the page's editor, Exo in front for it, unless After a snip is Copy only; one taken over
                 // the game leaves the game in front (Exo Capture said it was saved) and waits in Captures.
-                var edit = Services.CaptureShare.OpensEditor(kind, data["inGame"]?.GetValue<bool>() == true, CaptureConfig.AfterSnip);
+                var edit = Services.CaptureShare.OpensEditor(kind, data["inGame"]?.GetValue<bool>() == true, "edit");
                 if (ItemFor(path) is { } item) _bridge?.PostCaptureEvent("capture.saved", new { item, edit });
                 if (kind != "snip") ScheduleShrink(Services.CaptureShrink.Settle + TimeSpan.FromSeconds(5));
                 if (edit) DispatcherQueue.Enqueue(() => RestoreAndActivate("a snip opens in the editor"));

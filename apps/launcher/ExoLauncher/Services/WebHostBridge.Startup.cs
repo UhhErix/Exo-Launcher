@@ -70,13 +70,19 @@ public sealed partial class WebHostBridge
                 app = entry.Program is { } started ? AppOf(started) : null,
             };
         }).ToArray();
-        var removed = StartupEntries.Kept().Select(item => (object)new
+        var removed = StartupEntries.Kept().Select(item =>
         {
-            id = item.Id,
-            name = item.Name,
-            at = item.At.ToString("o", System.Globalization.CultureInfo.InvariantCulture),
-            // Removed by an older Exo although it is one Exo never turns off: it can be put back, and is locked from now on.
-            locked = StartupGuard.LockOf(StartupEntries.Host, item) != LockKind.None,
+            var icon = item.Program is { } program && File.Exists(program) ? "startup:" + item.Id : null;
+            if (icon is not null) IconFiles[icon] = item.Program;
+            return (object)new
+            {
+                id = item.Id,
+                name = item.Name,
+                at = item.At.ToString("o", System.Globalization.CultureInfo.InvariantCulture),
+                // Removed by an older Exo although it is one Exo never turns off: it can be put back, and is locked from now on.
+                locked = StartupGuard.LockOf(StartupEntries.Host, item) != LockKind.None,
+                icon,
+            };
         }).ToArray();
         return (items, removed);
     }

@@ -144,13 +144,13 @@ public sealed class ExoAiTests
         coordinator.RunDriftCheck();
         Assert.Equal(1, applyCalls);
 
-        // When AutoApplyBestSettings is off, RunNow still updates attention items without applying safe tweaks.
+        // Even if legacy settings had AutoApplyBestSettings off, safe optimization stays automated at runtime.
         gaming = false;
         settings.ExoAi.AutoApplyBestSettings = false;
         timestamp = timestamp.AddMinutes(5);
         var after = coordinator.RunNow();
-        Assert.Equal(1, applyCalls);
-        Assert.Empty(after.AutoApplied);
+        Assert.Equal(2, applyCalls);
+        Assert.Equal(["Exo power plan active"], after.AutoApplied);
         Assert.Equal(["Memory speed"], after.NeedsAttention);
 
         coordinator.Shutdown();

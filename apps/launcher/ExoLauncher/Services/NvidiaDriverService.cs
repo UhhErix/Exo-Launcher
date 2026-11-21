@@ -40,10 +40,10 @@ internal static partial class NvidiaDriverService
     private static readonly HttpClient Http = ExoHttp.Create(TimeSpan.FromMinutes(30));
     private static readonly Lock Gate = new();
     /// <summary>
-    /// Hotfixes aren't offered for now: 621.12 left Phantom Blade Zero flickering, and its studio still pointed players at
-    /// a WHQL driver after it. The forum and server lookups stay, for when they're offered again.
+    /// Hotfixes are offered on Game Ready for current branches (Turing+); <see cref="DriverAdvisories"/> holds back any
+    /// individual version with a known problem on this PC.
     /// </summary>
-    private const bool OfferHotfixes = false;
+    internal const bool OfferHotfixes = true;
     /// <summary>The newest driver per card and branch, so the header's Game Ready read and the row's Studio read don't evict each other.
     /// Kept on disk too, so a restart doesn't ask NVIDIA again (PRIVACY.md: at most once an hour).</summary>
     private static readonly LatestCache<Latest> Drivers = new("NVIDIA's driver list", TimeSpan.FromHours(1), "nvidia-drivers.json");
@@ -151,6 +151,11 @@ internal static partial class NvidiaDriverService
 
     private static string Plain(string name) => name.Replace("NVIDIA ", "", StringComparison.OrdinalIgnoreCase).Replace(" GPU", "", StringComparison.OrdinalIgnoreCase).Trim();
 
+    /// <summary>Whether Game Ready lookup for this card also checks NVIDIA's GeForce hotfix releases.</summary>
+    internal static bool ChecksHotfix(string card, bool workstation, bool studio, string? hardwareId) =>
+        OfferHotfixes && !workstation && !studio && CurrentBranches(hardwareId)
+        && card.Contains("GeForce", StringComparison.OrdinalIgnoreCase);
+
     /// <summary>The newest driver for this card on the branch (game or studio; a workstation card has one), from NVIDIA (cached an hour); null when it can't tell.</summary>
     /// <remarks>An answer older than the hour shows at once while NVIDIA is asked again (System's first showing never
     /// waits on the network; the row reads again each time it shows); <paramref name="fresh"/> (an update) waits for it.
@@ -162,8 +167,8 @@ internal static partial class NvidiaDriverService
         var workstation = Workstation(card);
         var studio = !workstation && branch == "studio";
         var hardwareId = NvidiaAdapter("MatchingDeviceId");
-        var hotfix = OfferHotfixes && !workstation && !studio && CurrentBranches(hardwareId);
-        var key = card + "|" + hardwareId + "|" + (workstation ? "workstation" : studio ? "studio" : "game");
+        var hotfix = ChecksHotfix(card, workstation, studio, hardwareId);
+        var key = card + "|" + hardwareId + "|" + (workstation ? "workstation" : studio ? "studio" : hotfix ? "game|hf" : "game");
         return Drivers.GetAsync(key, lookup => FetchAsync(card, workstation, studio, hotfix, lookup), ct, fresh);
     }
 
@@ -267,19 +272,29 @@ internal static partial class NvidiaDriverService
             AppLog.Info("Driver: NVIDIA's hotfix announcements could not be read: " + ex.Message);
         }
         var known = newest is not null && (gameReady is null || Compare(newest.Version, gameReady) > 0) ? newest.Version : gameReady;
-        if (known is not null && await HotfixOnServerAsync(known, ct).ConfigureAwait(false) is { } posted) newest = posted;
+        if (known is not null)
+        {
+            try
+            {
+                if (await HotfixOnServerAsync(known, ct).ConfigureAwait(false) is { } posted) newest = posted;
+            }
+            catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException && !ct.IsCancellationRequested)
+            {
+                AppLog.Info("Driver: NVIDIA's hotfix server check could not be read: " + ex.Message);
+            }
+        }
         return newest is not null && (gameReady is null || Compare(newest.Version, gameReady) > 0) ? newest : null;
     }
 
     /// <summary>
     /// A hotfix newer than <paramref name="newest"/> on NVIDIA's download server: each package name a hotfix could take is
-    /// asked for its headers only (nothing downloads), newest first, eight at a time, until one is there. At most every
+    /// asked for its headers only (nothing downloads), newest first, 16 at a time, until one is there. At most every
     /// six hours per version (<see cref="ServerHotfixes"/>), so at most ~130 small requests a quarter of a day.
     /// </summary>
     private static Task<Latest?> HotfixOnServerAsync(string newest, CancellationToken ct) =>
         ServerHotfixes.GetAsync(newest, async lookup =>
         {
-            foreach (var batch in HotfixCandidates(newest).Chunk(8))
+            foreach (var batch in HotfixCandidates(newest).Chunk(16))
             {
                 var answers = await Task.WhenAll(batch.Select(version => HotfixPackageAsync(version, lookup))).ConfigureAwait(false);
                 if (answers.FirstOrDefault(a => a is not null) is not { } hit) continue;
@@ -312,7 +327,12 @@ internal static partial class NvidiaDriverService
     {
         using var request = new HttpRequestMessage(HttpMethod.Head, HotfixUrl(version));
         using var response = await Http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, ct).ConfigureAwait(false);
-        if (!response.IsSuccessStatusCode || response.Content.Headers.ContentLength is not { } size || size < 100_000_000) return null;
+        if (!response.IsSuccessStatusCode)
+        {
+            ServerHotfixes.SlowDown(response);
+            return null;
+        }
+        if (response.Content.Headers.ContentLength is not { } size || size < 100_000_000) return null;
         var released = response.Content.Headers.LastModified?.ToString("ddd MMM d, yyyy", CultureInfo.InvariantCulture);
         return new Latest(version, HotfixUrl(version), size, released, "hotfix");
     }

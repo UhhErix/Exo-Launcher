@@ -90,15 +90,14 @@ the deploy and the token.
 - **GitHub down never fails a report.** The report is in R2 and answered 202 before GitHub is called (8 seconds at most a
   call). What GitHub did not take stays pending in D1 (`crash_groups.pending`, `issue_queue`) and the daily job sends it,
   at most 100 groups and 100 messages a run, stopping at the first failure.
-- **Before the token** (`GITHUB_REPORTS_TOKEN` not set) nothing reaches GitHub and the team is told as before GitHub
-  (`src/triage.js`): the first report of an error type in a version, and its 10th, 100th and 1000th, mail the team (the
-  contact form's binding and address, `CONTACT_MAIL` to `CONTACT_TO`) and post to the private Discord channel when the
-  secret `DISCORD_WEBHOOK_REPORTS` is set; at most 50 a UTC day (`alert_days`, `migrations/0005_alert_days.sql`), and the
-  daily job mails yesterday's groups. A Report a problem message is mailed and posted the same way (the player's words
-  cut to 1,500 characters, the contact, the reference and its R2 key). Groups and messages are still recorded, and the
-  daily job files the backlog as issues once the token is set (a group already past 10 reports is labelled, not
-  commented); from then on no alert, digest or message is mailed or posted. The Discord channel and its webhook can be
-  removed after that; the Worker no longer uses them.
+- **Before the token** (`GITHUB_REPORTS_TOKEN` not set) nothing reaches GitHub and the team is told in Discord
+  (`src/triage.js`, never by email): the first report of an error type in a version, and its 10th, 100th and 1000th, post
+  to the private Discord channel when the secret `DISCORD_WEBHOOK_REPORTS` is set; at most 50 a UTC day (`alert_days`,
+  `migrations/0005_alert_days.sql`), and the daily job posts yesterday's groups to Discord. A Report a problem message is
+  posted to Discord the same way (the player's words cut to 1,500 characters, the contact, the reference and its R2 key).
+  `CONTACT_MAIL` is reserved strictly for `/v1/contact`. Groups and messages are still recorded, and the daily job files
+  the backlog as issues once the token is set (a group already past 10 reports is labelled, not commented); from then on no
+  alert, digest or message is posted to Discord.
 - **Counted** as before in `crash_days` (`migrations/0004_crash_days.sql`) by app, version, error type and UTC day, for
   `triage.mjs`. The daily job removes counts and cap tallies older than 90 days.
 - **From this PC.** `node triage.mjs [--days 7] [--app launcher] [--version 3.26.0] [--show 3]` lists the groups, what is
@@ -127,8 +126,8 @@ and `installId` (optional, as a crash report).
   removes it; then filed at once as one issue in Exo-Reports, labelled `app:…`, `kind:user-report`, `v<version>` and `new`.
   The message sits in a code block and the contact in a code span, so neither mentions anyone; the title drops `@` and `#`.
 - Answers `202 {"issue": 123}` when filed, or `202 {"ref": "1a2b3c4d"}` when it waits (no token, GitHub down or the day's
-  cap; the daily job files it, at most 500 waiting; with no token it is also mailed and posted, as under **Before the
-  token**), and `400`, `403` (any `Origin`: only the apps send), `405`, `413`,
+  cap; the daily job files it, at most 500 waiting; with no token it is also posted to Discord as under **Before the
+  token**, never emailed), and `400`, `403` (any `Origin`: only the apps send), `405`, `413`,
   `415`, `422`, `429` (the same per-install, per-network and ceiling limits as crash reports), `503`.
 - The issue itself is not removed by Delete my data; the team deletes one on request.
 

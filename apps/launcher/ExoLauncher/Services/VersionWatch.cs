@@ -25,11 +25,6 @@ internal static class VersionWatch
     {
         var found = new List<Found>();
         if (await DriverAsync(settings, ct).ConfigureAwait(false) is { } driver) found.Add(driver);
-        // A chipset driver Exo installs while you're away (the default) needs no word from it; one with a known problem none at all.
-        if (!settings.AutoUpdateChipset && ChipsetUpdate.ThisPc is { } chipset && await chipset.LatestAsync().WaitAsync(ct).ConfigureAwait(false) is { } package
-            && PcHealth.ChipsetBehind(chipset.Installed(), package.Version)
-            && DriverAdvisories.Shared.Against(DriverAdvisories.Chipset(chipset.Vendor, PcHealth.CpuName()), package.Version) is null)
-            found.Add(new Found("chipset", PcHealth.ChipsetVendor(PcHealth.CpuName()) == "intel" ? "Intel chipset driver" : "AMD chipset driver", package.Version, chipset.Installed(), "drivers"));
         return found;
     }
 
@@ -42,9 +37,17 @@ internal static class VersionWatch
         {
             if (GpuDriverUpdate.Card(vendor) is not { } card || await GpuDriverUpdate.LatestAsync(vendor, ct).ConfigureAwait(false) is not { } newest) return null;
             var have = GpuDriverUpdate.Installed(vendor, card);
-            return have is not null && GpuDriverUpdate.Newer(newest.Version, have) && advisories.Against(DriverAdvisories.Gpu(vendor, card), newest.Version) is null
-                ? new Found("driver." + vendor, vendor == "amd" ? "AMD Software: Adrenalin Edition" : "Intel graphics driver", newest.Version, have, "drivers")
-                : null;
+            if (have is null || !GpuDriverUpdate.Newer(newest.Version, have) || advisories.Against(DriverAdvisories.Gpu(vendor, card), newest.Version) is not null)
+                return null;
+            var label = vendor == "amd"
+                ? newest.Kind switch
+                {
+                    "hotfix" => "AMD Software: Adrenalin hotfix",
+                    "optional" => "AMD Software: Adrenalin optional driver",
+                    _ => "AMD Software: Adrenalin Edition",
+                }
+                : newest.Kind == "hotfix" ? "Intel hotfix graphics driver" : "Intel graphics driver";
+            return new Found("driver." + vendor, label, newest.Version, have, "drivers");
         }
         if (vendor != "nvidia") return null;
         var latest = await NvidiaDriverService.LatestAsync(settings.NvidiaDriverBranch == "studio" ? "studio" : "game", ct).ConfigureAwait(false);

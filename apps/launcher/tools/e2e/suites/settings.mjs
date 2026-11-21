@@ -111,6 +111,8 @@ export async function run(t) {
 
   await run.check('settings', 'switches', 'every switch in Downloads turns and turns back', async (c) => {
     if (!await t.shell.eval(`!!document.querySelector('.exo-settings')?.checkVisibility()`) && !await open(t)) return ['Settings did not open']
+    await page(t, 'Downloads')
+    await sleep(300)
     const ids = await t.shell.eval(`[...document.querySelectorAll('.exo-settings button[role="switch"]')].filter(b => { const sec = b.closest('section'); return /^Downloads/.test(sec?.querySelector('h2, h3')?.textContent.trim() ?? '') }).map((b, i) => b.id || ('#' + i))`)
     c.metric('switches', ids.length)
     const failures = []
@@ -129,41 +131,40 @@ export async function run(t) {
     return failures
   })
 
-  // First run's Update DLSS, FSR and XeSS automatically (onboarding/PcStep.tsx) and this one in Downloads are one setting,
-  // saved the one way (lib/settingsSave.ts): turned off here, it is still off after Exo restarts, then it goes back on.
-  await run.check('settings', 'upscalers-kept', 'Update DLSS, FSR and XeSS automatically, turned off, stays off after a restart', async (c) => {
+  // Settings › Downloads › Update games automatically stays off across a restart, then turns back on.
+  await run.check('settings', 'downloads-kept', 'Update games automatically, turned off, stays off after a restart', async (c) => {
     if (t.quick || t.run.meta.attach) c.skip(t.quick ? 'quick run' : 'attached: Exo is not restarted')
-    const sw = () => document.querySelector('#set-auto-upscalers')
+    const sw = () => document.querySelector('[role="switch"][aria-labelledby="set-auto-update"]')
     const reopen = async () => {
       if (!await t.shell.eval(`!!document.querySelector('.exo-settings')?.checkVisibility()`) && !await open(t)) return false
       if (!await page(t, 'Downloads')) return false
-      return !!await t.shell.waitFor(() => !!document.querySelector('#set-auto-upscalers'), { timeoutMs: 5000 })
+      return !!await t.shell.waitFor(() => !!document.querySelector('[role="switch"][aria-labelledby="set-auto-update"]'), { timeoutMs: 5000 })
     }
-    if (!await reopen()) return ['no Update DLSS, FSR and XeSS automatically switch in Settings › Downloads']
-    const was = (await t.host('settings.get'))?.autoUpdateUpscalers !== false
+    if (!await reopen()) return ['no Update games automatically switch in Settings › Downloads']
+    const was = (await t.host('settings.get'))?.autoUpdateGames !== false
     c.evidence.was = was
     const failures = []
     try {
       if (was) {
         await t.shell.click(sw)
-        if (!await t.shell.waitFor(() => document.querySelector('#set-auto-upscalers')?.getAttribute('aria-checked') === 'false', { timeoutMs: 3000 })) return ['the switch did not turn off']
+        if (!await t.shell.waitFor(() => document.querySelector('[role="switch"][aria-labelledby="set-auto-update"]')?.getAttribute('aria-checked') === 'false', { timeoutMs: 3000 })) return ['the switch did not turn off']
         await sleep(500)
       }
       await t.relaunch({})
-      const saved = (await t.host('settings.get'))?.autoUpdateUpscalers
+      const saved = (await t.host('settings.get'))?.autoUpdateGames
       c.evidence.afterRestart = saved
       if (saved !== false) failures.push(`after a restart the setting is ${saved}, not off`)
       if (!await reopen()) return [...failures, 'Settings › Downloads did not open after the restart']
-      const shown = await t.shell.eval(`document.querySelector('#set-auto-upscalers')?.getAttribute('aria-checked')`)
+      const shown = await t.shell.eval(`document.querySelector('[role="switch"][aria-labelledby="set-auto-update"]')?.getAttribute('aria-checked')`)
       if (shown !== 'false') failures.push(`after a restart the switch shows ${shown}, not off`)
-      await c.shot('upscalers-kept', t.shell)
+      await c.shot('downloads-kept', t.shell)
     } finally {
       // Back as it was: on, through the switch, or through the host if the page can't.
-      if (was && (await t.host('settings.get').catch(() => null))?.autoUpdateUpscalers === false) {
+      if (was && (await t.host('settings.get').catch(() => null))?.autoUpdateGames === false) {
         if (await reopen().catch(() => false)) await t.shell.click(sw).catch(() => {})
-        if (!await t.shell.waitFor(() => document.querySelector('#set-auto-upscalers')?.getAttribute('aria-checked') === 'true', { timeoutMs: 3000 }).catch(() => false)) {
+        if (!await t.shell.waitFor(() => document.querySelector('[role="switch"][aria-labelledby="set-auto-update"]')?.getAttribute('aria-checked') === 'true', { timeoutMs: 3000 }).catch(() => false)) {
           failures.push('the switch did not turn back on')
-          await t.host('settings.set', { autoUpdateUpscalers: true }).catch(() => {})
+          await t.host('settings.set', { autoUpdateGames: true }).catch(() => {})
         }
       }
     }

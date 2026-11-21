@@ -611,13 +611,13 @@ function useHistory(channelId: string, meId: string | null, scroller: React.RefO
     }
   }, [])
 
-  // A new look (text size, spacing, compact) changes every message's height: stay at the bottom if there.
-  const { fontSize, groupSpacing } = useDiscordPrefs()
+  // A new look (text size, compact) changes every message's height: stay at the bottom if there.
+  const { fontSize } = useDiscordPrefs()
   const compact = useAccountSetting('messageDisplayCompact')
   useLayoutEffect(() => {
     const el = scroller.current
     if (el && pinned.current) { el.scrollTop = el.scrollHeight; selfTop.current = el.scrollTop }
-  }, [fontSize, groupSpacing, compact, scroller])
+  }, [fontSize, compact, scroller])
 
   const loadEdge = useCallback(async (where: 'older' | 'newer', retry: boolean) => {
     const real = messages.filter(m => !m.pending)

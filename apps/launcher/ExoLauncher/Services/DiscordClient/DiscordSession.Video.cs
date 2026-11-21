@@ -96,7 +96,7 @@ internal sealed partial class DiscordSession
                 existingLive.ReplaceSoundshare(newSound);
                 existingLive.FollowServer(nextCapture.Bitrate, Math.Max(nextCapture.Bitrate, _liveMost));
                 _ = existingLive.SetVideoAsync(nextCapture.Width, nextCapture.Height, nextCapture.Fps, Math.Max(nextCapture.Bitrate, _liveMost));
-                if (!nextCapture.Hevc) existingLive.EncodesH265 = nextCapture.HevcSupported && App.Services.Settings.Shared.DiscordGoLiveHevc;
+                if (!nextCapture.Hevc) existingLive.EncodesH265 = nextCapture.HevcSupported;
                 nextCapture.Keyframe();
                 Event?.Invoke("discord.golive", new { state = "live", title = source.Title });
                 AppLog.Info($"Discord video: changed shared source to {source.Title} ({nextCapture.Width}x{nextCapture.Height}, {nextCapture.Fps} fps).");
@@ -297,7 +297,7 @@ internal sealed partial class DiscordSession
             AppLog.Info("Discord video: connecting your stream.");
             live = new VoiceConnection(_liveEndpoint, _liveServer, channel, Cache.Me.Id, _voiceSession, _liveToken, listening: true, screen: true)
             {
-                EncodesH265 = _liveCapture?.HevcSupported == true && App.Services.Settings.Shared.DiscordGoLiveHevc,
+                EncodesH265 = _liveCapture?.HevcSupported == true,
             };
             _live = live;
             (title, sound) = (_liveTitle, _liveSound);

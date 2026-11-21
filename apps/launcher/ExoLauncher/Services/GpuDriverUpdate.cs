@@ -30,8 +30,8 @@ namespace ExoLauncher.Services;
 internal static partial class GpuDriverUpdate
 {
     /// <summary>
-    /// Vendor is amd or intel. Kind is recommended or optional (AMD's own labels), or intel. Sha512 is what Intel's page lists,
-    /// and Page is Intel's page, which shows Intel's license.
+    /// Vendor is amd or intel. Kind is recommended, optional or hotfix (AMD's own labels), or intel / hotfix (Intel non-WHQL
+    /// or hotfix). Sha512 is what Intel's page lists, and Page is Intel's page, which shows Intel's license.
     /// </summary>
     internal sealed record Latest(string Vendor, string Version, string Url, long Size, string? Released, string Kind, string? Sha512 = null, string? Page = null);
 
@@ -121,7 +121,7 @@ internal static partial class GpuDriverUpdate
         SweepUnpacked(vendor);
         if (Card(vendor) is not { } card) return null;
         var cpu = PcHealth.CpuName();
-        var key = $"{vendor}|{card}|{cpu}";
+        var key = $"{vendor}|{card}|{cpu}|hf";
         return await Drivers.GetAsync(key, lookup => FetchAsync(vendor, card, cpu, lookup), ct, fresh).ConfigureAwait(false);
     }
 
@@ -129,8 +129,9 @@ internal static partial class GpuDriverUpdate
     private static async Task<Latest?> FetchAsync(string vendor, string card, string? cpu, CancellationToken ct)
     {
         Task<string> Get(string url) => GetTextAsync(vendor, url, ct);
+        Task<string?> TryGet(string url) => TryGetTextAsync(vendor, url, ct);
         var latest = vendor == "amd"
-            ? await AmdLatestAsync(card, cpu, Get).ConfigureAwait(false)
+            ? await AmdLatestAsync(card, cpu, Get, TryGet).ConfigureAwait(false)
             : await IntelLatestAsync(card, cpu, Get).ConfigureAwait(false);
         if (latest is null) AppLog.Info($"Driver: {Maker(vendor)}'s pages name no driver for {card}{(cpu is null ? "" : " with " + cpu)}.");
         return latest;
@@ -158,6 +159,16 @@ internal static partial class GpuDriverUpdate
         using var request = Request(vendor, url);
         using var response = await Http.SendAsync(request, ct).ConfigureAwait(false);
         Drivers.SlowDown(response);
+        response.EnsureSuccessStatusCode();
+        return await response.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
+    }
+
+    internal static async Task<string?> TryGetTextAsync(string vendor, string url, CancellationToken ct)
+    {
+        using var request = Request(vendor, url);
+        using var response = await Http.SendAsync(request, ct).ConfigureAwait(false);
+        Drivers.SlowDown(response);
+        if (response.StatusCode == HttpStatusCode.NotFound) return null;
         response.EnsureSuccessStatusCode();
         return await response.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
     }

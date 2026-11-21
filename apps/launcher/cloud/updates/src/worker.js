@@ -98,6 +98,7 @@ async function launcherManifest(env, ctx, { maxAge, hintTag } = {}) {
   try {
     const result = await promote(env, ctx, { current, ...(maxAge ? { maxAge } : {}), ...(hintTag ? { hintTag } : {}) })
     if (result.promoted) ctx?.waitUntil?.(afterPromote(result.release, result.manifest, env).catch(() => {}))
+    else if (result.release) ctx?.waitUntil?.(fillLarge(result.release, result.manifest, env).catch(() => {}))
     return validManifest('launcher', result.manifest) ? result.manifest : current
   } catch {
     return current

@@ -124,24 +124,21 @@ public sealed partial class DlssSwapService
     {
         try
         {
-            // The setting decides what a pass may fetch. On: the DLLs and archives download and verify. Off (the default): only the small
-            // answers (each vendor's newest release, the Swapper catalog) are read, and a newer version is listed for the user to download.
-            var download = App.Services.Settings.Current.AutoUpdateUpscalers;
+            // Always download and verify newer signed vendor and Swapper upscalers automatically.
             var used = CurrentDetectionCache().FileNames();
-            var found = new List<AvailableUpscaler>();
             Directory.CreateDirectory(CacheRoot);
             File.WriteAllText(WatchedCheckedPath, "");
             foreach (var sdk in VendorSdks)
             {
                 if (!sdk.Files.Any(used.Contains)) continue;
-                try { if (download) await WatchVendorAsync(sdk, used).ConfigureAwait(false); else await CheckVendorAsync(sdk, found).ConfigureAwait(false); }
+                try { await WatchVendorAsync(sdk, used).ConfigureAwait(false); }
                 catch (Exception ex) { AppLog.Info($"{sdk.Name} releases not checked (the ones Exo has still apply): {ex.Message}"); }
             }
-            try { if (download) await WatchSwapperCatalogAsync(used).ConfigureAwait(false); else await CheckSwapperCatalogAsync(used, found).ConfigureAwait(false); }
+            try { await WatchSwapperCatalogAsync(used).ConfigureAwait(false); }
             catch (Exception ex) { AppLog.Info("DLSS Swapper archives not checked (the ones Exo has still apply): " + ex.Message); }
-            SaveAvailable(found);
+            SaveAvailable([]);
             // Newer files arrived: the games move to them shortly, not at the next six-hour round.
-            if (download) FrameGenEverywhereSoon();
+            FrameGenEverywhereSoon();
         }
         catch (Exception ex) { AppLog.Info("Upscaler releases not checked: " + ex.Message); }
     }
@@ -181,34 +178,6 @@ public sealed partial class DlssSwapService
     }
 
     private static string FamilyOf(VendorSdk sdk) => sdk.Name switch { "DLSS" => "DLSS", "FSR SDK" => "FSR", _ => "XeSS" };
-
-    private static string FamilyOfFile(string file) => file.StartsWith("nvngx_", StringComparison.Ordinal) ? "DLSS" : "XeSS";
-
-    /// <summary>The setting-off check: the vendor's newest release, one small answer. A tag newer than every known one is listed; nothing is downloaded.</summary>
-    private static async Task CheckVendorAsync(VendorSdk sdk, List<AvailableUpscaler> found)
-    {
-        using var timeout = new CancellationTokenSource(TimeSpan.FromMinutes(2));
-        var api = $"https://{VerifiedGitHubReleaseDownloader.CacheHost}/v1/cache/" + sdk.Repo;
-        var tag = (await GetCacheJsonAsync(api + "/releases/latest", timeout.Token).ConfigureAwait(false))?["tag_name"]?.GetValue<string>();
-        if (tag is null || TryParseVersion(tag.TrimStart('v', 'V')) is not { } version || version.Major < sdk.MinMajor || version <= NewestKnown(sdk)) return;
-        found.Add(new AvailableUpscaler(FamilyOf(sdk), TrimVersion(tag.TrimStart('v', 'V'))!));
-    }
-
-    /// <summary>The setting-off check for DLSS Swapper: the catalog (one small answer), listing the newest archive per file that a scanned game ships and that is not refused.</summary>
-    private static async Task CheckSwapperCatalogAsync(IReadOnlySet<string> used, List<AvailableUpscaler> found)
-    {
-        using var timeout = new CancellationTokenSource(TimeSpan.FromMinutes(2));
-        var entries = await ReadCatalogEntriesAsync(timeout.Token).ConfigureAwait(false);
-        if (entries is null) return;
-        var refused = LoadRefusals();
-        var now = DateTime.UtcNow;
-        foreach (var file in SwapperFiles.Where(name => used.Contains(name)))
-        {
-            var known = AllReleases.Where(pin => pin.FileName.Equals(file, StringComparison.OrdinalIgnoreCase)).Select(pin => pin.Version).ToList();
-            if (SwapperChoices(entries, used, known, refused, now, file) is { Count: > 0 } choices)
-                found.Add(new AvailableUpscaler(FamilyOfFile(file), choices[0].Version));
-        }
-    }
 
     /// <summary>
     /// The release check for one DLL: the vendor's own rule, except XeSS, whose DLL major differs from its SDK tag (3.0.2 ships libxess.dll 2.0.2.68).

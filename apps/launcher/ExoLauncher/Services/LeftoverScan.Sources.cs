@@ -13,6 +13,12 @@ internal sealed partial class LeftoverScan
 {
     private enum KeySource { Path, AppId, Service, Driver }
 
+    private static readonly HashSet<string> ProtectedSecurityServices = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "WinDefend", "WdNisSvc", "WdNisDrv", "WdFilter", "WdBoot", "MDCoreSvc",
+        "Sense", "SecurityHealthService", "wscsvc", "MsSecFlt", "MsSecCore", "MsSecWfp",
+    };
+
     private sealed record Sources(
         bool Deep,
         List<(string Key, string Name, string Text, bool Machine)> Values,
@@ -159,7 +165,10 @@ internal sealed partial class LeftoverScan
             // the app's own folder, and even then it is held for a press of its own.
             ReadSubKeys(Services, (name, key) =>
             {
+                if (key.GetValue("LaunchProtected") is int lp && lp > 0) return;
+                if (ProtectedSecurityServices.Contains(name)) return;
                 if (key.GetValue("ImagePath", null, RegistryValueOptions.DoNotExpandEnvironmentNames) is not string image) return;
+                if (image.Contains("Windows Defender", StringComparison.OrdinalIgnoreCase)) return;
                 if (key.GetValue("Type") is int type && (type & 0xB) != 0)
                 {
                     if (DriverCandidate(type, key.GetValue("Start") as int?, name, image)) keys.Add((Services + '\\' + name, image, true, KeySource.Driver));

@@ -281,4 +281,59 @@ public sealed class StartupLocksTests
             foreach (var match in item.Match.Where(match => match.EndsWith(".exe", StringComparison.Ordinal)))
                 Assert.Equal(LockKind.None, StartupLocks.Classify(host, new LockCandidate(item.Name, match, @"C:\Program Files\X\" + match), item));
     }
+
+    [Fact]
+    public void AnEmptySuccessfulSecurityListCountsAsKnownAndAllowsRemove()
+    {
+        var real = new RealStartupHost();
+        real.SecurityRead = () => ([], true, null);
+        real.EnsureSecurityReady(TimeSpan.FromSeconds(5));
+        Assert.True(real.SecurityKnown);
+
+        var host = Host();
+        host.SecurityKnown = true;
+        host.SetRun(Hive.User, StartupKeys.Run, "UnknownApp", "\"C:\\Program Files\\Acme\\acme.exe\"");
+        host.MissingPrograms.Add(@"C:\Program Files\Acme\acme.exe");
+        using var _ = StartupEntries.UseHost(host);
+
+        Assert.Null(StartupEntries.Remove(host, "run:cu:UnknownApp"));
+        Assert.Null(host.Get(Hive.User, StartupKeys.Run, "UnknownApp"));
+        Assert.Empty(StartupEntries.Kept(host));
+    }
+
+    [Fact]
+    public void MissingStartupItemsDeletePermanentlyAcrossRunFolderAndTaskWithoutLooping()
+    {
+        var host = Host();
+        var deadExe = @"C:\Program Files\RemovedApp\removed.exe";
+        host.MissingPrograms.Add(deadExe);
+
+        // Missing Run entry (with existing StartupApproved mark)
+        host.SetRun(Hive.User, StartupKeys.Run, "RemovedApp", $"\"{deadExe}\"");
+        host.Set(Hive.User, StartupKeys.Approved + "Run", "RemovedApp", RegValue.Bin(FakeStartupHost.On()));
+
+        // Missing Startup folder shortcut
+        var shortcutPath = Path.Combine(host.FolderPath(false), "RemovedApp.lnk");
+        host.UserFolder.Add(new FolderFile("RemovedApp.lnk", deadExe));
+        host.Files[shortcutPath] = [1, 2, 3];
+        host.Set(Hive.User, StartupKeys.Approved + "StartupFolder", "RemovedApp.lnk", RegValue.Bin(FakeStartupHost.On()));
+
+        // Missing scheduled task
+        host.AddTask(@"\RemovedAppTask", deadExe, enabled: true);
+
+        using var _ = StartupEntries.UseHost(host);
+        var (removed, error) = StartupEntries.Clean(host);
+        Assert.Equal(3, removed);
+        Assert.Null(error);
+        Assert.Null(host.Get(Hive.User, StartupKeys.Run, "RemovedApp"));
+        Assert.Null(host.Get(Hive.User, StartupKeys.Approved + "Run", "RemovedApp"));
+        Assert.False(host.FileExists(shortcutPath));
+        Assert.Null(host.Get(Hive.User, StartupKeys.Approved + "StartupFolder", "RemovedApp.lnk"));
+        Assert.DoesNotContain(host.TaskList, t => t.Path == @"\RemovedAppTask");
+        Assert.Empty(StartupEntries.Kept(host));
+
+        // Second Clean finds nothing left (no infinite "removed 3 of 3" loop).
+        var (again, _) = StartupEntries.Clean(host);
+        Assert.Equal(0, again);
+    }
 }

@@ -14,10 +14,10 @@ public sealed partial class MainWindow
     private int _shrinkRunning;
     private string? _shrinkPath;
 
-    /// <summary>Sooner or later, once: after a recording is saved, a game ends, the setting turns on or Exo Capture starts.</summary>
+    /// <summary>Sooner or later, once: after a recording is saved, a game ends, or Exo Capture starts.</summary>
     private void ScheduleShrink(TimeSpan delay)
     {
-        if (!CaptureConfig.AutoShrink || !Services.CaptureAddon.Present) return;
+        if (!Services.CaptureAddon.Present) return;
         _ = Task.Run(async () =>
         {
             try
@@ -67,7 +67,7 @@ public sealed partial class MainWindow
         {
             while (!_closingWindow)
             {
-                if (only is null && (!CaptureConfig.AutoShrink || OnBattery())) return;
+                if (only is null && OnBattery()) return;
                 var relative = only ?? NextShrink(asked);
                 if (relative is null) return;
                 var path = Path.Combine(CaptureFolder, relative);

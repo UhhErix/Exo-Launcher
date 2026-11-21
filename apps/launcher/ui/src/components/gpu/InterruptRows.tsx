@@ -48,15 +48,15 @@ export function InterruptRows({ place, state, onState }: { place: PcPlace; state
   const detail = interruptDetail(state)
   return (
     <>
-      <Row label="Interrupts (MSI mode)" detail={detail} error={error}>
+      <Row label="Hardware interrupts" detail={detail} error={error}>
         {state.restart ? <State on>Restart to finish</State> : null}
-        {needs ? button('apply', 'Optimize interrupts', true) : null}
-        {state.canUndo ? button('undo', 'Undo all') : null}
-        <button type="button" className="exo-set-btn" aria-expanded={open} onClick={() => setOpen(!open)}>{open ? 'Hide devices' : 'Devices'}</button>
+        {needs ? button('apply', 'Optimize', true) : null}
+        {state.canUndo ? button('undo', 'Undo') : null}
+        <button type="button" className="exo-set-btn" aria-expanded={open} onClick={() => setOpen(!open)}>{open ? 'Hide' : 'Devices'}</button>
       </Row>
       {open && state.devices.map(device => (
         <Row key={device.id} label={device.name} detail={[`${device.kind[0].toUpperCase()}${device.kind.slice(1)}`, PLAN[device.plan]].filter(Boolean).join(' · ')}>
-          {device.changed ? button('revert', 'Revert', false, device.id) : <State on={device.mode === 'msi'}>{MODE[device.mode]}</State>}
+          {device.changed ? button('revert', 'Undo', false, device.id) : <State on={device.mode === 'msi'}>{MODE[device.mode]}</State>}
         </Row>
       ))}
     </>

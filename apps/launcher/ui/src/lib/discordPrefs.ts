@@ -263,29 +263,17 @@ export function accountSettings(): AccountSettings {
 export type DiscordPrefs = {
   /** Text size in chat, px (Discord's 12, 14, 15, 16, 18, 20, 24). */
   fontSize: number
-  /** Space Between Message Groups, px (0, 4, 8, 16, 24); null is Discord's default for the display (16 cozy, 0 compact), drawn as Exo draws it. */
-  groupSpacing: number | null
   /** Zoom level, percent (Discord's 50 to 200). */
   zoom: number
-  /** Saturation, 0 to 1. */
-  saturation: number
-  desaturateUserColors: boolean
   roleStyle: 'username' | 'dot' | 'hidden'
-  underlineLinks: boolean
-  ttsRate: number
   streamerMode: boolean
-  streamerHidePersonal: boolean
-  streamerHideInvites: boolean
-  streamerDisableSounds: boolean
-  streamerDisableNotifications: boolean
   /** The camera for video calls (a browser device id), or the default. */
   cameraId: string | null
 }
 
 const PREFS_DEFAULTS: DiscordPrefs = {
-  fontSize: 16, groupSpacing: null, zoom: 100, saturation: 1, desaturateUserColors: false, roleStyle: 'username',
-  underlineLinks: false, ttsRate: 1, streamerMode: false, streamerHidePersonal: true, streamerHideInvites: true,
-  streamerDisableSounds: true, streamerDisableNotifications: true, cameraId: null,
+  fontSize: 16, zoom: 100, roleStyle: 'username',
+  streamerMode: false, cameraId: null,
 }
 
 const prefsListeners = new Set<() => void>()
@@ -344,35 +332,31 @@ type RoomLook = { style: CSSProperties } & Record<`data-${string}`, string | und
 function roomLook(): RoomLook {
   const a = account
   const p = prefs
-  const key = [a.messageDisplayCompact, a.displayCompactAvatars, p.zoom, p.fontSize, p.groupSpacing, p.saturation, p.desaturateUserColors, p.roleStyle, p.underlineLinks, textScale()].join()
+  const key = [a.messageDisplayCompact, p.zoom, p.fontSize, p.roleStyle, textScale()].join()
   if (look?.key === key) return look.value
   const value: RoomLook = {
     style: {
       zoom: p.zoom === 100 ? undefined : p.zoom / 100,
       '--exo-dc-chat-scale': textScale() * (p.fontSize / 16),
-      '--exo-dc-group-gap': p.groupSpacing === null ? undefined : `${p.groupSpacing}px`,
-      '--exo-dc-saturation': p.saturation,
     } as CSSProperties,
-    'data-compact': a.messageDisplayCompact ? (a.displayCompactAvatars ? 'avatars' : 'true') : undefined,
-    'data-saturation': p.saturation < 1 ? (p.desaturateUserColors ? 'all' : 'ui') : undefined,
+    'data-compact': a.messageDisplayCompact ? 'true' : undefined,
     'data-role-style': p.roleStyle === 'username' ? undefined : p.roleStyle,
-    'data-underline-links': p.underlineLinks ? 'true' : undefined,
   }
   look = { key, value }
   return value
 }
 
-/** The Discord room's attributes for Accessibility and Appearance: compact messages, chat text size, spacing, zoom, saturation, role colors, link underlines. */
+/** The Discord room's attributes for Accessibility and Appearance: compact messages, chat text size, zoom, role colors. */
 export function useRoomLook(): RoomLook {
   return useSyncExternalStore(subscribeLook, roomLook)
 }
 
-/** Streamer Mode as it applies right now (turned on, or streaming software open): whether to hide personal information and invite links. */
+/** Streamer Mode as it applies right now (turned on, or streaming software open): hides personal information and invite links. */
 export function useStreamerHides(): { personal: boolean; invites: boolean } {
   const p = useDiscordPrefs()
   const streaming = useStreamingOpen()
   const on = p.streamerMode || streaming
-  return { personal: on && p.streamerHidePersonal, invites: on && p.streamerHideInvites }
+  return { personal: on, invites: on }
 }
 
 // The host shows notifications and plays Discord's sounds, so it hears what Streamer Mode silences. Streaming software
@@ -382,8 +366,8 @@ function syncStreamerMode() {
   syncedStreaming = streamingOpen()
   const on = prefs.streamerMode || syncedStreaming
   void host.discordClientSettings({
-    streamerQuiet: on && prefs.streamerDisableNotifications,
-    streamerSilent: on && prefs.streamerDisableSounds,
+    streamerQuiet: on,
+    streamerSilent: on,
   }).catch(() => { })
 }
 
@@ -452,9 +436,8 @@ export function mediaFilter(flags: number | null | undefined, where: MediaPlace,
 
 // A /tts message in the conversation on screen, read out as Discord does ("name said text"), at the chosen rate.
 function speak(name: string, text: string) {
-  if (!account.enableTtsCommand || !text || (prefs.streamerMode && prefs.streamerDisableSounds) || !('speechSynthesis' in window)) return
+  if (!account.enableTtsCommand || !text || prefs.streamerMode || !('speechSynthesis' in window)) return
   const utterance = new SpeechSynthesisUtterance(`${name} said ${text}`)
-  utterance.rate = prefs.ttsRate
   window.speechSynthesis.speak(utterance)
 }
 

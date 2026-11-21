@@ -187,6 +187,151 @@ internal static partial class PcHealth
         return null;
     }
 
+    /// <summary>True when a dual-GPU PC has the primary display attached to the power-saving GPU and not the high-performance GPU.</summary>
+    internal static unsafe bool ReadPrimaryOnIntegrated()
+    {
+        try
+        {
+            var factoryIid = new Guid("c1b6694f-ff09-44a9-b03c-77900a0a1d17"); // IDXGIFactory6
+            if (CreateDXGIFactory2(0, in factoryIid, out var factory) < 0) return false;
+            try
+            {
+                var low = FirstAdapterHandle(factory, 1 /* DXGI_GPU_PREFERENCE_MINIMUM_POWER */);
+                var high = FirstAdapterHandle(factory, 2 /* DXGI_GPU_PREFERENCE_HIGH_PERFORMANCE */);
+                try
+                {
+                    if (low.Handle == IntPtr.Zero || high.Handle == IntPtr.Zero || low.Luid == high.Luid) return false;
+                    return HasPrimaryMonitorOutput(low.Handle) && !HasPrimaryMonitorOutput(high.Handle);
+                }
+                finally
+                {
+                    if (low.Handle != IntPtr.Zero) Marshal.Release(low.Handle);
+                    if (high.Handle != IntPtr.Zero) Marshal.Release(high.Handle);
+                }
+            }
+            finally { Marshal.Release(factory); }
+        }
+        catch (Exception ex) when (ex is DllNotFoundException or EntryPointNotFoundException or SEHException) { return false; }
+    }
+
+    private static unsafe (IntPtr Handle, long Luid) FirstAdapterHandle(IntPtr factory, int preference)
+    {
+        var adapterIid = new Guid("29038f61-3839-4626-91fd-086879011a05"); // IDXGIAdapter1
+        var byPreference = (delegate* unmanaged[Stdcall]<IntPtr, uint, int, Guid*, IntPtr*, int>)(*(IntPtr**)factory)[29];
+        for (uint i = 0; i < 8; i++)
+        {
+            IntPtr adapter;
+            if (byPreference(factory, i, preference, &adapterIid, &adapter) < 0) return default;
+            AdapterDesc1 desc;
+            var getDesc1 = (delegate* unmanaged[Stdcall]<IntPtr, AdapterDesc1*, int>)(*(IntPtr**)adapter)[10];
+            if (getDesc1(adapter, &desc) < 0 || (desc.Flags & 2) != 0)
+            {
+                Marshal.Release(adapter);
+                continue;
+            }
+            return (adapter, desc.AdapterLuid);
+        }
+        return default;
+    }
+
+    private static unsafe bool HasPrimaryMonitorOutput(IntPtr adapter)
+    {
+        var enumOutputs = (delegate* unmanaged[Stdcall]<IntPtr, uint, IntPtr*, int>)(*(IntPtr**)adapter)[7]; // IDXGIAdapter::EnumOutputs
+        for (uint i = 0; i < 16; i++)
+        {
+            IntPtr output;
+            if (enumOutputs(adapter, i, &output) < 0) break;
+            try
+            {
+                DxgiOutputDesc desc;
+                var getDesc = (delegate* unmanaged[Stdcall]<IntPtr, DxgiOutputDesc*, int>)(*(IntPtr**)output)[7]; // IDXGIOutput::GetDesc
+                if (getDesc(output, &desc) < 0 || desc.AttachedToDesktop == 0 || desc.Monitor == IntPtr.Zero) continue;
+                var info = new MonitorInfo { cbSize = (uint)Marshal.SizeOf<MonitorInfo>() };
+                if (GetMonitorInfoW(desc.Monitor, ref info) && (info.dwFlags & 1 /* MONITORINFOF_PRIMARY */) != 0)
+                    return true;
+            }
+            finally { Marshal.Release(output); }
+        }
+        return false;
+    }
+
+    /// <summary>Reads current and maximum PCIe link widths of the active discrete GPU via cfgmgr32, or null when unreadable.</summary>
+    internal static PcieLink? ReadGpuPcie(string? mainGpuName)
+    {
+        try
+        {
+            var displayClass = new Guid("1ca05180-a699-450a-9a0c-de4fbe3ddd89"); // GUID_DISPLAY_DEVICE_ARRIVAL
+            if (CM_Get_Device_Interface_List_SizeW(out var chars, in displayClass, IntPtr.Zero, 0) != 0 || chars < 2)
+                return null;
+            var buf = new char[chars];
+            if (CM_Get_Device_Interface_ListW(in displayClass, IntPtr.Zero, buf, chars, 0) != 0)
+                return null;
+
+            PcieLink? fallback = null;
+            foreach (var iface in new string(buf).Split('\0', StringSplitOptions.RemoveEmptyEntries))
+            {
+                var inst = ReadInterfaceString(iface, in DevPkeyDeviceInstanceId);
+                if (string.IsNullOrWhiteSpace(inst) || !inst.StartsWith(@"PCI\", StringComparison.OrdinalIgnoreCase)) continue;
+                if (CM_Locate_DevNodeW(out var devInst, inst, 0) != 0) continue;
+                var name = ReadDevNodeString(devInst, in DevPkeyDeviceFriendlyName)
+                    ?? ReadDevNodeString(devInst, in DevPkeyDeviceDesc);
+                if (string.IsNullOrWhiteSpace(name) || !GraphicsService.Discrete(name)) continue;
+                if (ReadDevNodeU32(devInst, in DevPkeyPciCurrentLinkWidth) is not { } cur
+                    || ReadDevNodeU32(devInst, in DevPkeyPciMaxLinkWidth) is not { } max
+                    || cur == 0 || max == 0) continue;
+                var link = new PcieLink(name, cur, max);
+                if (!string.IsNullOrWhiteSpace(mainGpuName)
+                    && (name.Contains(mainGpuName, StringComparison.OrdinalIgnoreCase)
+                        || mainGpuName.Contains(name, StringComparison.OrdinalIgnoreCase)))
+                    return link;
+                fallback ??= link;
+            }
+            return fallback;
+        }
+        catch (Exception ex) when (ex is DllNotFoundException or EntryPointNotFoundException or SEHException)
+        {
+            AppLog.Debug("PC health: PCIe link width couldn't be asked: " + ex.Message);
+            return null;
+        }
+    }
+
+    private static string? ReadInterfaceString(string iface, in DevPropKey key)
+    {
+        uint size = 0;
+        var cr = CM_Get_Device_Interface_PropertyW(iface, in key, out var type, null, ref size, 0);
+        if (cr != 0x1A /* CR_BUFFER_SMALL */ || size is < 2 or > 4096) return null;
+        var bytes = new byte[size];
+        if (CM_Get_Device_Interface_PropertyW(iface, in key, out type, bytes, ref size, 0) != 0 || type != 18 /* DEVPROP_TYPE_STRING */)
+            return null;
+        return System.Text.Encoding.Unicode.GetString(bytes, 0, (int)size).TrimEnd('\0').Trim();
+    }
+
+    private static string? ReadDevNodeString(uint devInst, in DevPropKey key)
+    {
+        uint size = 0;
+        var cr = CM_Get_DevNode_PropertyW(devInst, in key, out var type, null, ref size, 0);
+        if (cr != 0x1A /* CR_BUFFER_SMALL */ || size is < 2 or > 4096) return null;
+        var bytes = new byte[size];
+        if (CM_Get_DevNode_PropertyW(devInst, in key, out type, bytes, ref size, 0) != 0 || type != 18 /* DEVPROP_TYPE_STRING */)
+            return null;
+        return System.Text.Encoding.Unicode.GetString(bytes, 0, (int)size).TrimEnd('\0').Trim();
+    }
+
+    private static uint? ReadDevNodeU32(uint devInst, in DevPropKey key)
+    {
+        var bytes = new byte[4];
+        var size = 4u;
+        if (CM_Get_DevNode_PropertyW(devInst, in key, out var type, bytes, ref size, 0) != 0 || type != 7 /* DEVPROP_TYPE_UINT32 */ || size != 4)
+            return null;
+        return BitConverter.ToUInt32(bytes, 0);
+    }
+
+    private static readonly DevPropKey DevPkeyDeviceInstanceId = new(new("78c34fc8-104a-4aca-9ea4-524d52996e57"), 256);
+    private static readonly DevPropKey DevPkeyDeviceDesc = new(new("a45c254e-df1c-4efd-8020-67d146a850e0"), 2);
+    private static readonly DevPropKey DevPkeyDeviceFriendlyName = new(new("a45c254e-df1c-4efd-8020-67d146a850e0"), 14);
+    private static readonly DevPropKey DevPkeyPciMaxLinkWidth = new(new("3ab22e31-8264-4b4e-9af5-a8d2d8e33e62"), 9);
+    private static readonly DevPropKey DevPkeyPciCurrentLinkWidth = new(new("3ab22e31-8264-4b4e-9af5-a8d2d8e33e62"), 10);
+
     /// <summary>CPUID leaf 7's hybrid flag (EDX bit 15: P- and E-cores); null when CPUID can't be asked.</summary>
     private static bool? CpuHybrid()
     {
@@ -401,6 +546,54 @@ internal static partial class PcHealth
 
     [DllImport("powrprof.dll")]
     private static extern uint PowerGetEffectiveOverlayScheme(out Guid overlay);
+
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+    private unsafe struct DxgiOutputDesc
+    {
+        public fixed char DeviceName[32];
+        public int Left, Top, Right, Bottom;
+        public int AttachedToDesktop;
+        public uint Rotation;
+        public IntPtr Monitor;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct MonitorRect { public int Left, Top, Right, Bottom; }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct MonitorInfo
+    {
+        public uint cbSize;
+        public MonitorRect rcMonitor;
+        public MonitorRect rcWork;
+        public uint dwFlags;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private readonly struct DevPropKey(Guid fmtid, uint pid)
+    {
+        public readonly Guid Fmtid = fmtid;
+        public readonly uint Pid = pid;
+    }
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool GetMonitorInfoW(IntPtr hMonitor, ref MonitorInfo lpmi);
+
+    [DllImport("cfgmgr32.dll", CharSet = CharSet.Unicode)]
+    private static extern uint CM_Get_Device_Interface_List_SizeW(out uint pulLen, in Guid interfaceClassGuid, IntPtr pDeviceID, uint ulFlags);
+
+    [DllImport("cfgmgr32.dll", CharSet = CharSet.Unicode)]
+    private static extern uint CM_Get_Device_Interface_ListW(in Guid interfaceClassGuid, IntPtr pDeviceID, [Out] char[] buffer, uint bufferLen, uint ulFlags);
+
+    [DllImport("cfgmgr32.dll", CharSet = CharSet.Unicode)]
+    private static extern uint CM_Get_Device_Interface_PropertyW(string pszDeviceInterface, in DevPropKey propertyKey, out uint propertyType, [Out] byte[]? propertyBuffer, ref uint propertyBufferSize, uint ulFlags);
+
+    [DllImport("cfgmgr32.dll", CharSet = CharSet.Unicode)]
+    private static extern uint CM_Locate_DevNodeW(out uint pdnDevInst, string pDeviceID, uint ulFlags);
+
+    [DllImport("cfgmgr32.dll", CharSet = CharSet.Unicode)]
+    private static extern uint CM_Get_DevNode_PropertyW(uint dnDevInst, in DevPropKey propertyKey, out uint propertyType, [Out] byte[]? propertyBuffer, ref uint propertyBufferSize, uint ulFlags);
 
     [DllImport("powrprof.dll")]
     private static extern uint PowerSetActiveOverlayScheme(Guid overlay);

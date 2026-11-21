@@ -885,7 +885,6 @@ function mockGpuProfile(p?: Record<string, unknown>) {
 
 /** Shaders per demo game, as the Exo Shaders engine would list them. */
 let mockPrepareRunning = false
-let mockPrepareAuto = true
 
 function mockShadersStatus(params?: Record<string, unknown>) {
   const id = String(params?.id ?? '')
@@ -1873,7 +1872,6 @@ const MOCK_HANDLERS: Record<string, MockHandler> = {
   },
   'shaders.status': mockShadersStatus,
   'shaders.prepare.games': () => ({ ok: true, games: MOCK_GAMES.filter(game => game.installed).slice(0, 2).map((game, at) => ({ id: game.id, title: at ? game.title : 'A Very Long Unreal Game Name: The Definitive Remastered Edition', state: mockPrepareRunning && !at ? 'running' : 'ready', message: null })) }),
-  'shaders.prepare.auto': (p) => { if (typeof p?.on === 'boolean') { mockPrepareAuto = p.on; emitHostEvent('shaders.changed', {}) } return { ok: true, auto: mockPrepareAuto } },
   'shaders.prepare.start': () => { mockPrepareRunning = true; emitHostEvent('shaders.changed', {}); return { ok: true, message: null } },
   'shaders.prepare.cancel': () => { mockPrepareRunning = false; emitHostEvent('shaders.changed', {}); return { ok: true } },
   eq: (p) => mockEqState(p),
@@ -2089,7 +2087,6 @@ const MOCK_HANDLERS: Record<string, MockHandler> = {
       },
     }],
   }),
-  'gpu.import': () => ({ ok: false, cancelled: true, undo: null }),
   'gpu.controlPanel': () => ({ ok: true }),
   'gpu.driver': () => mockGpu === 'amd'
     ? { ok: true, vendor: 'amd', card: 'Radeon RX 9070 XT', installed: '26.1.1', update: false, latest: null }

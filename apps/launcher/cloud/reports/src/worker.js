@@ -43,9 +43,9 @@ export default {
   // The daily job (wrangler.toml [triggers]): aggregates and removes raw events older than 90 days, crash index rows older
   // than the 30-day lifecycle of their objects, and old counts and tallies. With GITHUB_REPORTS_TOKEN set, whatever GitHub
   // has not been told yet goes (src/issues.js flush: groups and Report a problem messages kept while GitHub was down, capped
-  // or the token was not set) and nothing is mailed: GitHub's own notifications tell the team. Without the token,
-  // yesterday's crash digest goes to the team by mail and Discord (src/triage.js), as before GitHub. Each step runs on its
-  // own: one that throws stops nothing else, and without the token it is named in the mail, which always goes.
+  // or the token was not set) and nothing goes to Discord: GitHub's own notifications tell the team. Without the token,
+  // yesterday's crash digest goes to the team in Discord (src/triage.js), never by email. Each step runs on its own: one
+  // that throws stops nothing else, and without the token it is named in the Discord message, which always goes.
   async scheduled(controller, env) {
     if (!env.TELEMETRY) return
     const now = Date.now()
@@ -74,7 +74,7 @@ export default {
 
 /**
  * Counts a stored report (src/triage.js) and files or updates its group's issue (src/issues.js). Until GITHUB_REPORTS_TOKEN
- * is set, the team is told as before GitHub: by mail and Discord when the group is new in its version or has grown tenfold;
+ * is set, the team is told in Discord when the group is new in its version or has grown tenfold (never by email);
  * the group is still recorded, so the daily job files it once the token is set. It runs after the answer and never fails a
  * report: with no D1 (the dev copy), no token, a failed send or GitHub down, the report is still stored.
  */
@@ -95,16 +95,15 @@ async function triage(env, report, key, day) {
 }
 
 /**
- * One message to the team before GitHub (no GITHUB_REPORTS_TOKEN): by mail (the contact form's own binding and address),
- * and to Discord when its webhook is set.
+ * One message to the team before GitHub (no GITHUB_REPORTS_TOKEN): sent to Discord when its webhook is set (never emailed;
+ * CONTACT_MAIL is reserved strictly for POST /v1/contact).
  */
 async function tellTeam(env, { subject, text }) {
-  const sends = [mail(env, { subject, text })]
-  if (isDiscordWebhook(env.DISCORD_WEBHOOK_REPORTS)) {
-    const post = env.fetcher ?? ((...args) => fetch(...args))
-    sends.push(post(env.DISCORD_WEBHOOK_REPORTS, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(discordBody({ subject, text })) }))
-  }
-  await Promise.allSettled(sends)
+  if (!isDiscordWebhook(env.DISCORD_WEBHOOK_REPORTS)) return
+  const post = env.fetcher ?? ((...args) => fetch(...args))
+  await Promise.allSettled([
+    post(env.DISCORD_WEBHOOK_REPORTS, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(discordBody({ subject, text })) }),
+  ])
 }
 
 async function receive(request, env, ctx) {
@@ -198,7 +197,7 @@ async function receiveUserReport(request, env) {
   }
 
   // Filed now when GitHub takes it, so the player sees the issue's number; otherwise kept for the daily job. Without the
-  // token the team is told by mail and Discord as well, and the issue is filed once the token is set.
+  // token the team is told in Discord as well, and the issue is filed once the token is set.
   const gh = gitHubOf(env)
   let issue = null
   if (gh && env.TELEMETRY) {

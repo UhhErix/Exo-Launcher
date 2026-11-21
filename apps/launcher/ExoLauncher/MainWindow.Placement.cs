@@ -20,12 +20,10 @@ public sealed partial class MainWindow
             return;
         }
         var saved = WindowPlacementStore.Load();
-        var startMaximized = App.Services.Settings.Current.StartMaximized;
         if (saved is null)
         {
             TryCenterOnScreen();
             RememberWindowPlacement();
-            if (startMaximized && !ForegroundWatcher.StartedQuiet && AppWindow.Presenter is OverlappedPresenter first) first.Maximize();
             return;
         }
         try
@@ -36,7 +34,6 @@ public sealed partial class MainWindow
             AppWindow.Move(new PointInt32(area.WorkArea.X, area.WorkArea.Y));
             var work = area.WorkArea;
             var restored = WindowPlacementStore.Fit(saved, work.X, work.Y, work.Width, work.Height, GetWindowScale());
-            if (startMaximized) restored = restored with { Maximized = true };
             AppWindow.MoveAndResize(new RectInt32(restored.X, restored.Y, restored.Width, restored.Height));
             _normalPlacement = restored;
             _persistedPlacement = saved;

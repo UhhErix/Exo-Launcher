@@ -123,8 +123,6 @@ export function AppsPanel({ active }: { active: boolean }) {
   // Select: the apps picked to uninstall together (null: not selecting), and how far a run of them has got.
   const [picked, setPicked] = useState<Set<string> | null>(null)
   const [run, setRun] = useState<{ at: number; of: number } | null>(null)
-  // A System Restore point before a run of picked apps (Windows asks first); on until turned off for this sheet.
-  const [restoreFirst, setRestoreFirst] = useState(true)
   const startup = useStartup(active)
   const read = useRef(false)
 
@@ -252,7 +250,7 @@ export function AppsPanel({ active }: { active: boolean }) {
    * Several, asked once in place, then each in turn, quietly where its installer allows; a restore point first when asked
    * for (no restore point, nothing goes). One line after says how many went.
    */
-  async function uninstallMany(ids: string[], restore = false) {
+  async function uninstallMany(ids: string[]) {
     if (ids.length === 0 || busy || run || !programs) return
     setError('many', null)
     try {
@@ -263,13 +261,11 @@ export function AppsPanel({ active }: { active: boolean }) {
         setError('many', errorText(agreed.message, 'Nothing was removed.'))
         return
       }
-      if (restore) {
-        setRun({ at: 0, of: agreed.ids.length })
-        const point = await host.appsRestorePoint()
-        if (!point.ok) {
-          setError('many', errorText(point.message, 'No restore point was made. Nothing was removed.'))
-          return
-        }
+      setRun({ at: 0, of: agreed.ids.length })
+      const point = await host.appsRestorePoint()
+      if (!point.ok && point.declined) {
+        setError('many', errorText(point.message, 'Windows’ permission was declined. Nothing was removed.'))
+        return
       }
       setPicked(null)
       const chosen = agreed.ids.map(id => programs.find(app => app.id === id)).filter((app): app is InstalledApp => !!app)
@@ -313,8 +309,7 @@ export function AppsPanel({ active }: { active: boolean }) {
         facts={headFacts || undefined} />
       {view === 'apps' ? (
         <Columns knowsUse={knowsUse} sort={sort} onSort={pressSort} run={run} picked={picked} busy={busy !== null}
-          restore={restoreFirst} onRestore={setRestoreFirst}
-          onUninstallPicked={ids => void uninstallMany(ids, restoreFirst)} onSelect={() => setPicked(current => current ? null : new Set())} />
+          onUninstallPicked={ids => void uninstallMany(ids)} onSelect={() => setPicked(current => current ? null : new Set())} />
       ) : null}
       {errors.many ? <ErrorNote className="exo-set-error" message={errors.many} /> : null}
       {/* The list scrolls under the head and fades into the sheet's foot. */}
@@ -323,9 +318,8 @@ export function AppsPanel({ active }: { active: boolean }) {
           <>
             {!searching && !onlyUnused ? (
               <Ready active={active} programs={programs} removed={removed} tidy={tidy} wentByItself={wentByItself} busy={busy !== null || run !== null} startup={startup}
-                restore={restoreFirst} onRestore={setRestoreFirst}
                 onLeaveRemoved={id => setRemoved(current => current.filter(item => item.id !== id))} onLeaveTidy={() => setTidy(null)}
-                onChanged={() => { void load(iconsNow.current); void readTidy(true) }} onUninstallMany={ids => void uninstallMany(ids, restoreFirst)} onShowUnused={() => { setOnlyUnused(true); setSort({ by: 'size', back: false }) }} />
+                onChanged={() => { void load(iconsNow.current); void readTidy(true) }} onUninstallMany={ids => void uninstallMany(ids)} onShowUnused={() => { setOnlyUnused(true); setSort({ by: 'size', back: false }) }} />
             ) : null}
             {onlyUnused ? (
               <div className="exo-apps-filter">
@@ -352,15 +346,13 @@ export function AppsPanel({ active }: { active: boolean }) {
  * The columns over the list: what sorts it, and Select at the end, where a row's action is. With apps picked: Restore point
  * (a System Restore point first, Windows asks) and Uninstall, asked in place; the run goes quietly where each installer allows.
  */
-function Columns({ knowsUse, sort, onSort, run, picked, busy, restore, onRestore, onUninstallPicked, onSelect }: {
+function Columns({ knowsUse, sort, onSort, run, picked, busy, onUninstallPicked, onSelect }: {
   knowsUse: boolean
   sort: { by: Sort; back: boolean }
   onSort: (by: Sort) => void
   run: { at: number; of: number } | null
   picked: Set<string> | null
   busy: boolean
-  restore?: boolean
-  onRestore?: (on: boolean) => void
   onUninstallPicked: (ids: string[]) => void
   onSelect: () => void
 }) {
@@ -375,7 +367,7 @@ function Columns({ knowsUse, sort, onSort, run, picked, busy, restore, onRestore
       <div className={wide ? 'exo-apps-select is-wide' : 'exo-apps-select'}>
         {run ? <RunStatus run={run} /> : (
           <>
-            {picked && picked.size > 0 ? <PickedActions picked={picked} busy={busy} restore={restore} onRestore={onRestore} onUninstallPicked={onUninstallPicked} /> : null}
+            {picked && picked.size > 0 ? <PickedActions picked={picked} busy={busy} onUninstallPicked={onUninstallPicked} /> : null}
             <button type="button" className="exo-set-btn is-compact" aria-pressed={picked !== null} onClick={onSelect}>{picked ? 'Cancel' : 'Select'}</button>
           </>
         )}
@@ -389,29 +381,19 @@ function RunStatus({ run }: { run: { at: number; of: number } }) {
   const making = run.at === 0
   return (
     <span className="exo-apps-run" role="status">
-      <Spinner label={making ? 'Making a restore point' : `Uninstalling ${run.at} of ${run.of}`} />{making ? 'Restore point' : `${run.at} of ${run.of}`}
+      <Spinner label={making ? 'Preparing uninstall' : `Uninstalling ${run.at} of ${run.of}`} />{making ? 'Preparing…' : `${run.at} of ${run.of}`}
     </span>
   )
 }
 
-/** With apps picked: Restore point (a System Restore point first, Windows asks) and Uninstall, asked in place. */
-function PickedActions({ picked, busy, restore, onRestore, onUninstallPicked }: {
+/** With apps picked: Uninstall, asked in place (automatic daily restore point behind Windows' prompt). */
+function PickedActions({ picked, busy, onUninstallPicked }: {
   picked: Set<string>
   busy: boolean
-  restore?: boolean
-  onRestore?: (on: boolean) => void
   onUninstallPicked: (ids: string[]) => void
 }) {
   return (
-    <>
-      {onRestore ? (
-        <>
-          <span className="exo-apps-run" id="apps-restore-first">Restore point</span>
-          <Switch checked={restore ?? false} onChange={onRestore} labelledBy="apps-restore-first" disabled={busy} />
-        </>
-      ) : null}
-      <ConfirmButton className="exo-set-btn is-compact is-danger" danger disabled={busy} question={`Uninstall ${picked.size}?`} onConfirm={() => onUninstallPicked([...picked])}>Uninstall {picked.size}</ConfirmButton>
-    </>
+    <ConfirmButton className="exo-set-btn is-compact is-danger" danger disabled={busy} question={`Uninstall ${picked.size}?`} onConfirm={() => onUninstallPicked([...picked])}>Uninstall {picked.size}</ConfirmButton>
   )
 }
 
@@ -473,7 +455,7 @@ function SortHead({ label, by, sort, onSort, end }: { label: string; by: Sort; s
 type AppTag = { text: string; tone?: 'warn' | 'good' }
 
 /** A row of the list: its icon, its name with optional status tags over one line of detail, the columns, and what can be done with it. */
-function Line({ icon, name, tags, detail, used, amount, error, showUsed, keep, children }: {
+function Line({ icon, name, tags, detail, used, amount, error, showUsed, keep, startup, children }: {
   icon?: ReactNode
   name: string
   tags?: AppTag[]
@@ -484,10 +466,11 @@ function Line({ icon, name, tags, detail, used, amount, error, showUsed, keep, c
   showUsed?: boolean
   /** The action stays in view: it is what the row is for, or it is at work. */
   keep?: boolean
+  startup?: boolean
   children?: ReactNode
 }) {
   return (
-    <div className={`exo-apps-row${showUsed === false ? ' is-short' : ''}${keep ? ' is-kept' : ''}`}>
+    <div className={`exo-apps-row${showUsed === false ? ' is-short' : ''}${keep ? ' is-kept' : ''}${startup ? ' is-startup' : ''}`}>
       <span className="exo-apps-icon">{icon}</span>
       <div className="exo-apps-copy">
         <span className="exo-apps-title">
@@ -582,11 +565,8 @@ function AppAction({ app, disabled, onUninstall, onFailed }: {
 
 // ---- what's ready ----
 
-function Ready({ active, programs, removed, tidy, wentByItself, busy, startup, restore, onRestore, onLeaveRemoved, onLeaveTidy, onChanged, onUninstallMany, onShowUnused }: {
+function Ready({ active, programs, removed, tidy, wentByItself, busy, startup, onLeaveRemoved, onLeaveTidy, onChanged, onUninstallMany, onShowUnused }: {
   active: boolean
-  /** A System Restore point first wherever Windows' permission is asked (the Remove rows, a clear of what needs it). */
-  restore: boolean
-  onRestore: (on: boolean) => void
   programs: InstalledApp[]
   removed: Removed[]
   tidy: AppFind | null
@@ -606,18 +586,18 @@ function Ready({ active, programs, removed, tidy, wentByItself, busy, startup, r
   return (
     <section className="exo-apps-ready" aria-label="Ready for you">
       {removed.map(item => item.find
-        ? <GoneRow key={item.id} name={item.name} find={item.find} onLeave={() => onLeaveRemoved(item.id)} onChanged={onChanged} busy={busy} restore={restore} onRestore={onRestore} />
+        ? <GoneRow key={item.id} name={item.name} find={item.find} onLeave={() => onLeaveRemoved(item.id)} onChanged={onChanged} busy={busy} />
         : <ReadyRow key={item.id} title={item.message ?? `${item.name} is gone`} done />)}
       {wentByItself.map(item => <ClearedRow key={item.id} line={`${item.name}: ${clearedLine(item.cleared)}`} undo={item.id} onChanged={onChanged} />)}
-      {tidy ? <FindRow find={tidy} title="Left by programs that are gone" names waiting onLeave={onLeaveTidy} onChanged={onChanged} busy={busy} restore={restore} onRestore={onRestore} /> : null}
+      {tidy ? <FindRow find={tidy} title="Left by programs that are gone" names waiting onLeave={onLeaveTidy} onChanged={onChanged} busy={busy} /> : null}
       {replaced.length > 0 ? (
         <ReadyRow title={`Exo does the job of ${names(replaced.map(app => app.name))}`} detail={size(replaced.reduce((sum, app) => sum + (app.bytes ?? 0), 0))}>
-          <ConfirmButton className="exo-set-btn is-danger" danger disabled={busy} question={restore ? `Restore point, then remove ${replaced.length}?` : `Remove ${replaced.length}?`} onConfirm={() => onUninstallMany(replaced.map(app => app.id))}>Remove {replaced.length}</ConfirmButton>
+          <ConfirmButton className="exo-set-btn is-danger" danger disabled={busy} question={`Remove ${replaced.length}?`} onConfirm={() => onUninstallMany(replaced.map(app => app.id))}>Remove {replaced.length}</ConfirmButton>
         </ReadyRow>
       ) : null}
       {bloat.length > 0 ? (
         <ReadyRow title={count(bloat.length, 'app you didn’t ask for', 'apps you didn’t ask for')} detail={names(bloat.map(app => app.name))}>
-          <ConfirmButton className="exo-set-btn is-danger" danger disabled={busy} question={restore ? `Restore point, then uninstall ${bloat.length}?` : `Uninstall ${bloat.length}?`} onConfirm={() => onUninstallMany(bloat.map(app => app.id))}>Remove {bloat.length}</ConfirmButton>
+          <ConfirmButton className="exo-set-btn is-danger" danger disabled={busy} question={`Uninstall ${bloat.length}?`} onConfirm={() => onUninstallMany(bloat.map(app => app.id))}>Remove {bloat.length}</ConfirmButton>
         </ReadyRow>
       ) : null}
       {unneeded > 0 ? (
@@ -679,14 +659,14 @@ function ClearedRow({ line, undo, onChanged }: { line: string; undo: string | nu
  * What's still there says why under it: Windows' permission declined (a press asks again), or not this program's to take.
  * Where something went wrong, or for a look at what's left of a program with no uninstaller, it's only found, for a press.
  */
-function GoneRow({ name, find, onLeave, onChanged, busy, restore, onRestore }: { name: string; find: AppFind; onLeave: () => void; onChanged: () => void; busy: boolean; restore: boolean; onRestore: (on: boolean) => void }) {
-  if (!find.auto) return <FindRow find={find} title={`What’s left of ${name}`} onLeave={onLeave} onChanged={onChanged} busy={busy} restore={restore} onRestore={onRestore} />
+function GoneRow({ name, find, onLeave, onChanged, busy }: { name: string; find: AppFind; onLeave: () => void; onChanged: () => void; busy: boolean }) {
+  if (!find.auto) return <FindRow find={find} title={`What’s left of ${name}`} onLeave={onLeave} onChanged={onChanged} busy={busy} />
   const went = find.cleared && find.cleared.folders + find.cleared.files + find.cleared.registry + find.cleared.shortcuts > 0 ? find.cleared : null
   const line = went ? `${name} is gone. ${clearedLine(went)}` : find.items.length > 0 ? `${name} is gone.` : `${name} is gone, and left nothing behind.`
   return (
     <>
       <ClearedRow line={line} undo={find.undo} onChanged={onChanged} />
-      {find.items.length > 0 ? <FindRow find={find} title={find.declined ? 'Windows’ permission was declined' : 'Left behind on purpose'} onLeave={onLeave} onChanged={onChanged} busy={busy} restore={restore} onRestore={onRestore} /> : null}
+      {find.items.length > 0 ? <FindRow find={find} title={find.declined ? 'Windows’ permission was declined' : 'Remaining files'} onLeave={onLeave} onChanged={onChanged} busy={busy} /> : null}
       {find.items.length === 0 ? <DefaultsRow name={name} types={find.defaults ?? []} /> : null}
     </>
   )
@@ -697,7 +677,7 @@ function GoneRow({ name, find, onLeave, onChanged, busy, restore, onRestore }: {
  * and not be asked again. Nothing here needs a question: files go to the Recycle Bin and entries to a saved copy first, and once
  * cleared, Put back is right here.
  */
-function FindRow({ find, title, names: showNames, waiting, onLeave, onChanged, busy, restore, onRestore }: {
+function FindRow({ find, title, names: showNames, waiting, onLeave, onChanged, busy }: {
   find: AppFind
   title: string
   names?: boolean
@@ -705,9 +685,6 @@ function FindRow({ find, title, names: showNames, waiting, onLeave, onChanged, b
   onLeave: () => void
   onChanged: () => void
   busy: boolean
-  /** What needs Windows' permission goes only behind a restore point, made in the same prompt. */
-  restore: boolean
-  onRestore: (on: boolean) => void
 }) {
   const [picks, setPicks] = useState(() => new Set(find.items.filter(item => item.selected).map(item => item.id)))
   const [open, setOpen] = useState(false)
@@ -718,7 +695,7 @@ function FindRow({ find, title, names: showNames, waiting, onLeave, onChanged, b
   /** The button's ring, then its check, then what went (and Put back) in its place; a refusal shows under the row. */
   async function clear() {
     setError(null)
-    const result = await host.appsClean(find.token, [...picks], restore && chosen.some(item => item.machine))
+    const result = await host.appsClean(find.token, [...picks])
     // Some went before it stopped: what went shows, with the reason.
     if (!result.ok && result.cleared) { setCleared({ what: result.cleared, undo: result.undo ?? null }); onChanged() }
     return result
@@ -733,23 +710,16 @@ function FindRow({ find, title, names: showNames, waiting, onLeave, onChanged, b
   const defaults = <DefaultsRow name={showNames ? 'apps that are gone' : find.name} types={find.defaults ?? []} />
   if (cleared) return <><ClearedRow line={clearedLine(cleared.what)} undo={cleared.undo} onChanged={onChanged} />{defaults}</>
   if (find.items.length === 0) return <><ReadyRow title={title} done />{defaults}</>
-  const needsPermission = chosen.some(item => item.machine)
   return (
     <>
       <ReadyRow title={title} error={error ?? undefined} detail={findDetail(find, showNames, waiting)}>
         {picks.size > 0 ? (
           <ActionButton className="exo-set-btn is-primary" disabled={busy} context="AppsPanel.clean" fallback="Nothing was deleted. Try again." why="none"
-            onPress={clear} onFailed={failure => setError(failure.text)} onDone={cleanedUp}>Clear {chosen.length}</ActionButton>
+            onPress={clear} onFailed={failure => setError(failure.text)} onDone={cleanedUp}>Clean up {chosen.length}</ActionButton>
         ) : null}
         <button type="button" className="exo-set-btn" aria-expanded={open} onClick={() => setOpen(value => !value)}>{open ? 'Hide' : 'Review'}</button>
         <button type="button" className="exo-set-btn" onClick={() => { void host.appsLeave(find.token); onLeave() }}>Leave</button>
       </ReadyRow>
-      {open && needsPermission ? (
-        <div className="exo-apps-filter">
-          <span id={`apps-restore-${find.token}`}>Restore point first</span>
-          <Switch checked={restore} onChange={onRestore} labelledBy={`apps-restore-${find.token}`} />
-        </div>
-      ) : null}
       {open ? (
         <ul className="exo-apps-items">
           {find.items.map(item => (
@@ -890,7 +860,10 @@ function useStartup(active: boolean) {
 
   async function take(next: StartupState) {
     setState(next)
-    const wanted = next.items.map(item => item.icon).filter((icon): icon is string => !!icon)
+    const wanted = [
+      ...next.items.map(item => item.icon),
+      ...next.removed.map(item => item.icon),
+    ].filter((icon): icon is string => !!icon)
     if (wanted.length > 0) {
       const chunk = await host.appsIcons(wanted)
       setIcons(current => mergeIcons(current, chunk.icons))
@@ -963,52 +936,124 @@ function byName<T extends { id: string; name: string }>(list: T[]): (T & { ids: 
 }
 
 /**
- * Starts with Windows: the Run keys, the Startup folders, Store apps and tasks run at sign-in, each with the memory it holds now
- * and what stops without it. Turn off takes it out of startup for good, so an app that writes itself back stays off (Windows
- * asks first for one that's every user's); what Exo turned off waits below with Put back. Exo itself and anti-cheat have no button.
+ * Starts with Windows: three clear groups — Broken (app removed), Starts with Windows (On / Required), and Turned off
+ * (unified Exo-disabled + externally-disabled entries, each with a full-opacity switch to turn back on).
  */
 function StartupView({ startup, query }: { startup: Startup; query: string }) {
   const { state, icons, errors, tell, settle, change } = startup
+  const [toggling, setToggling] = useState<string | null>(null)
   if (!state) return <Wait label="Reading what starts with Windows">{sampleLines(5)}</Wait>
   const words = query.trim().toLowerCase()
   const matches = (text: string) => !words || text.toLowerCase().includes(words)
   const items = byName(state.items.filter(item => matches(`${item.name} ${item.publisher ?? ''} ${item.command}`)))
   const removed = byName(state.removed.filter(item => matches(item.name)))
-  if (words && items.length + removed.length === 0) return <p className="exo-apps-none">Nothing matches</p>
+
+  const brokenItems = items.filter(item => item.missing)
+  const onItems = items.filter(item => !item.missing && item.enabled)
+  type OffRow =
+    | { kind: 'item'; id: string; ids: string[]; name: string; icon: string | null; detail: string; amount: string; locked: boolean }
+    | { kind: 'removed'; id: string; ids: string[]; name: string; icon: string | null; detail: string }
+  const offRows: OffRow[] = [
+    ...items.filter(item => !item.missing && !item.enabled).map(item => ({
+      kind: 'item' as const,
+      id: item.id,
+      ids: item.ids,
+      name: item.name,
+      icon: item.icon ?? null,
+      detail: startupDetail(item),
+      amount: size(item.memory),
+      locked: item.locked || item.readOnly,
+    })),
+    ...removed.map(rem => ({
+      kind: 'removed' as const,
+      id: rem.id,
+      ids: rem.ids,
+      name: rem.name,
+      icon: rem.icon ?? null,
+      detail: `Turned off ${fullDay.format(new Date(rem.at))}`,
+    })),
+  ].sort((a, b) => a.name.localeCompare(b.name))
+
+  const toggle = async (rowId: string, ids: string[], restore: boolean) => {
+    setToggling(rowId)
+    try { await change(ids, restore) }
+    finally { setToggling(null) }
+  }
+
+  const removeAllBroken = async () => {
+    const allIds = brokenItems.flatMap(item => item.ids)
+    return await change(allIds, false)
+  }
+
+  if (words && brokenItems.length + onItems.length + offRows.length === 0) return <p className="exo-apps-none">Nothing matches</p>
+  if (!words && brokenItems.length + onItems.length + offRows.length === 0) return <p className="exo-apps-none">Nothing starts with Windows</p>
+
   return (
     <>
-      {!words && items.length === 0 ? <p className="exo-apps-none">Nothing starts with Windows</p> : null}
-      {items.length > 0 ? (
-        <section aria-label="Starts with Windows">
-          {items.map(item => {
+      {brokenItems.length > 0 ? (
+        <section aria-label="Broken startup items">
+          <div className="exo-apps-group-head">
+            <h3 className="exo-apps-group">Broken ({brokenItems.length})</h3>
+            {brokenItems.length > 1 ? (
+              <ActionButton className="exo-set-btn is-compact" context="AppsPanel.startupCleanBroken" fallback="Could not remove broken items." why="none"
+                onPress={removeAllBroken} onFailed={failure => tell('broken', failure.text)} onDone={settle}>Clean up broken</ActionButton>
+            ) : null}
+          </div>
+          {brokenItems.map(item => {
             const rowError = item.ids.map(id => errors[id]).find(Boolean)
-            const turningOn = !item.enabled
             return (
-              <Line key={item.id} name={item.name} icon={<AppIcon name={item.name} icon={item.icon ? icons[item.icon] ?? null : null} />} detail={startupDetail(item)}
-                used={turningOn ? 'Off' : null} amount={size(item.memory)} error={rowError}>
-                {item.locked || item.readOnly ? null : (
-                  <ActionButton className="exo-set-btn is-compact"
-                    context={turningOn ? 'AppsPanel.startupRestore' : 'AppsPanel.startupRemove'}
-                    fallback={turningOn ? 'It wasn’t turned on. Try again.' : 'It wasn’t turned off. Try again.'}
-                    why="none"
-                    onPress={() => change(item.ids, turningOn)}
-                    onFailed={failure => tell(item.id, failure.text)}
-                    onDone={settle}>{turningOn ? 'Turn on' : 'Turn off'}</ActionButton>
+              <Line key={item.id} startup name={item.name} icon={<AppIcon name={item.name} icon={item.icon ? icons[item.icon] ?? null : null} />}
+                tags={[{ text: 'App removed', tone: 'warn' }]} detail="Its app was uninstalled · safe to remove" showUsed={false} error={rowError}>
+                <ActionButton className="exo-set-btn is-compact"
+                  context="AppsPanel.startupRemove"
+                  fallback="It wasn’t removed. Try again."
+                  why="none"
+                  onPress={() => change(item.ids, false)}
+                  onFailed={failure => tell(item.id, failure.text)}
+                  onDone={settle}>Remove</ActionButton>
+              </Line>
+            )
+          })}
+        </section>
+      ) : null}
+
+      {onItems.length > 0 ? (
+        <section aria-label="Starts with Windows">
+          <h3 className="exo-apps-group">Starts with Windows ({onItems.length})</h3>
+          {onItems.map(item => {
+            const rowError = item.ids.map(id => errors[id]).find(Boolean)
+            const required = item.locked || item.readOnly
+            return (
+              <Line key={item.id} startup name={item.name} icon={<AppIcon name={item.name} icon={item.icon ? icons[item.icon] ?? null : null} />}
+                tags={required ? [{ text: 'Required' }] : [{ text: 'On', tone: 'good' }]} detail={startupDetail(item)}
+                amount={size(item.memory)} showUsed={false} error={rowError}>
+                {required ? <span className="exo-apps-tag">Required</span> : (
+                  <Switch checked={true} disabled={toggling !== null} label={`Turn off ${item.name}`}
+                    onChange={() => void toggle(item.id, item.ids, false)} />
                 )}
               </Line>
             )
           })}
         </section>
       ) : null}
-      {removed.length > 0 ? (
+
+      {offRows.length > 0 ? (
         <section aria-label="Turned off">
-          <h3 className="exo-apps-group">Turned off</h3>
-          {removed.map(item => (
-            <Line key={item.id} name={item.name} detail={fullDay.format(new Date(item.at))} error={errors[item.id] || undefined} keep>
-              <ActionButton className="exo-set-btn is-compact" context="AppsPanel.startupRestore" fallback="It wasn’t put back. Try again." why="none"
-                onPress={() => change(item.ids, true)} onFailed={failure => tell(item.id, failure.text)} onDone={settle}>Put back</ActionButton>
-            </Line>
-          ))}
+          <h3 className="exo-apps-group">Turned off ({offRows.length})</h3>
+          {offRows.map(row => {
+            const rowError = row.ids.map(id => errors[id]).find(Boolean)
+            const locked = row.kind === 'item' && row.locked
+            return (
+              <Line key={row.id} startup name={row.name} icon={<AppIcon name={row.name} icon={row.icon ? icons[row.icon] ?? null : null} />}
+                tags={[{ text: 'Off' }]} detail={row.detail}
+                amount={row.kind === 'item' ? row.amount : ''} showUsed={false} error={rowError}>
+                {locked ? <span className="exo-apps-tag">Required</span> : (
+                  <Switch checked={false} disabled={toggling !== null} label={`Turn on ${row.name}`}
+                    onChange={() => void toggle(row.id, row.ids, true)} />
+                )}
+              </Line>
+            )
+          })}
         </section>
       ) : null}
     </>

@@ -14,8 +14,8 @@ namespace ExoLauncher.Services;
 /// </summary>
 public sealed partial class AppUpdateService
 {
-    private const int MaxRetainedInstallers = 2;
-    private static readonly TimeSpan InstallerRetentionAge = TimeSpan.FromDays(14);
+    private const int MaxRetainedInstallers = 0;
+    private static readonly TimeSpan InstallerRetentionAge = TimeSpan.Zero;
     private static readonly HttpClient SharedHttp = CreateClient();
     /// <summary>The pack's byte ranges: no automatic decompression, so a range is exactly the bytes asked for.</summary>
     private static readonly HttpClient SharedRangeHttp = CreateClient(decompress: false);
@@ -545,6 +545,13 @@ public sealed partial class AppUpdateService
     {
         // The updates folder is the installed Exo's (not the data folder): a test instance deletes nothing there.
         if (HostMode.IsDisposable) return;
+        CleanupUpdateArtifactsNow();
+    }
+
+    internal Task WaitForCleanupForTestAsync() => _cleanup;
+
+    internal void CleanupUpdateArtifactsNow()
+    {
         try
         {
             if (!Directory.Exists(_updatesDirectory))
@@ -552,6 +559,7 @@ public sealed partial class AppUpdateService
 
             // A cancelled or stalled update leaves its partial download (up to 512 MB); it is cleaned here, not only by the next one.
             ResumableDownload.CleanupAbandoned(_updatesDirectory);
+            var keptInstaller = ReadStaged(_updatesDirectory)?.File;
             var installers = new List<FileInfo>();
             foreach (var path in Directory.EnumerateFiles(_updatesDirectory, "ExoLauncher-Setup-*", SearchOption.TopDirectoryOnly))
             {
@@ -566,6 +574,10 @@ public sealed partial class AppUpdateService
                     TryDeleteOwnedArtifact(path);
                     continue;
                 }
+
+                if (keptInstaller is not null &&
+                    string.Equals(Path.GetFileName(path), keptInstaller, StringComparison.OrdinalIgnoreCase))
+                    continue;
 
                 try { installers.Add(new FileInfo(path)); }
                 catch { /* cleanup is best effort */ }
@@ -582,6 +594,19 @@ public sealed partial class AppUpdateService
                 if (age >= InstallerRetentionAge || index >= MaxRetainedInstallers)
                     TryDeleteOwnedArtifact(ordered[index].FullName);
             }
+
+            foreach (var tmp in Directory.EnumerateFiles(_updatesDirectory, "*.tmp-*", SearchOption.TopDirectoryOnly))
+            {
+                try
+                {
+                    if ((File.GetAttributes(tmp) & FileAttributes.ReparsePoint) == 0 &&
+                        now - File.GetLastWriteTimeUtc(tmp) > TimeSpan.FromMinutes(2))
+                        DeletionGate.DeleteFile(tmp);
+                }
+                catch { /* cleanup is best effort */ }
+            }
+
+            RemoveStaleDeltaFolders(TimeSpan.FromMinutes(2));
         }
         catch (Exception ex)
         {

@@ -9,19 +9,27 @@ namespace ExoLauncher.Helpers;
 /// </summary>
 internal static class DeletionProtections
 {
-    /// <summary>Sign-in data, credentials, SSH keys and game saves, by the names they carry (case-insensitive, consecutive).</summary>
-    internal static readonly string[][] KeptSegments =
+    /// <summary>Hard-protected paths (SSH keys, credentials, Vault, game saves) that even app uninstaller cleanup never removes.</summary>
+    internal static readonly string[][] HardKeptSegments =
     [
         [".ssh"],
         ["Credentials"],
         ["Vault"],
-        ["Cookies"],
-        ["Login Data"],
-        ["Local State"],
         ["SaveGames"],
         ["Saved Games"],
         ["My Games"],
     ];
+
+    /// <summary>Browser/Chromium state files kept from generic junk sweeps, allowed during reversible uninstall cleanup.</summary>
+    internal static readonly string[][] BrowserSessionSegments =
+    [
+        ["Cookies"],
+        ["Login Data"],
+        ["Local State"],
+    ];
+
+    /// <summary>Sign-in data, credentials, SSH keys and game saves, by the names they carry (case-insensitive, consecutive).</summary>
+    internal static readonly string[][] KeptSegments = [.. HardKeptSegments, .. BrowserSessionSegments];
 
     /// <summary>Folders never deleted by anyone: Exo's backups in Documents.</summary>
     internal static IReadOnlyList<string> KeptRoots => [Path.Combine(Documents, "Exo", "Backups")];

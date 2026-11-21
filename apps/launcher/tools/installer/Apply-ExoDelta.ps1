@@ -1,4 +1,4 @@
-# The file-level update's swap (ExoLauncher › AppUpdateService.Delta): Exo built the new app folder beside the installed one
+﻿# The file-level update's swap (ExoLauncher › AppUpdateService.Delta): Exo built the new app folder beside the installed one
 # (app.incoming-<id>, every file checked against the release's files.json) and Setup's own files beside that
 # (app.incoming-<id>setup), started this, and closed. This does what Exo's installer does after it copies its files, with
 # the installer's own scripts: closes what is left of Exo and Lucid, checks the new folder against its payload list, swaps
@@ -136,8 +136,22 @@ try { Move-ExoSetupFiles $paths } catch { Write-Warning "Setup's files were not 
 try { Set-ExoUninstallEntry $paths.app $Version } catch { Write-Warning "Apps & features was not updated: $($_.Exception.Message)" }
 $failed = Join-Path $UpdatesDirectory 'delta-failed.json'
 try { if ([IO.File]::Exists($failed)) { [IO.File]::Delete($failed) } } catch { }
+# Clean old setup installers, .partial downloads, and prior apply-* folders immediately after swap.
+if ([IO.Directory]::Exists($UpdatesDirectory)) {
+    foreach ($f in [IO.DirectoryInfo]::new($UpdatesDirectory).GetFiles('ExoLauncher-Setup-*')) {
+        try { $f.Delete() } catch { }
+    }
+    foreach ($d in [IO.DirectoryInfo]::new($UpdatesDirectory).GetDirectories('apply-*')) {
+        if (-not [StringComparer]::OrdinalIgnoreCase.Equals($d.FullName.TrimEnd('\'), $PSScriptRoot.TrimEnd('\'))) {
+            try { Remove-Item -LiteralPath $d.FullName -Recurse -Force } catch { }
+        }
+    }
+}
 & (Join-Path $PSHOME 'powershell.exe') -NoProfile -NonInteractive -WindowStyle Hidden -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot 'Clean-ExoInstall.ps1') -InstallRoot $paths.root | Out-Null
 # As Setup does at the end of a silent update: the new Exo comes forward (a second start hands over to the running one).
 Start-ExoApp $paths.app
 $engine.Dispose()
+# Remove this apply-* helper folder once PowerShell finishes running it.
+$selfFolder = $PSScriptRoot
+Start-Process -FilePath (Join-Path $env:SystemRoot 'System32\cmd.exe') -ArgumentList @('/c', "ping -n 3 127.0.0.1 >nul & rmdir /s /q `"$selfFolder`"") -WindowStyle Hidden -ErrorAction SilentlyContinue | Out-Null
 exit 0

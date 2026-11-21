@@ -199,14 +199,14 @@
   --exo-scale: var(--exo-dc-chat-scale, 1);
 }
 
-/* Space Between Message Groups, when chosen. */
+/* Space between message groups. */
 .exo-dc .exo-dc-msg:not(.is-grouped) {
-  margin-top: var(--exo-dc-group-gap, 16px);
+  margin-top: 16px;
 }
 
-/* Compact: time, name and message on one line; avatars only when Show user avatars is on. */
+/* Compact: time, name and message on one line. */
 .exo-dc[data-compact] .exo-dc-msg:not(.is-grouped) {
-  margin-top: var(--exo-dc-group-gap, 0px);
+  margin-top: 0px;
 }
 
 .exo-dc[data-compact] .exo-dc-msg {
@@ -220,12 +220,6 @@
 
 .exo-dc[data-compact="true"] .exo-dc-msg-row > .exo-dc-avatar {
   display: none;
-}
-
-.exo-dc[data-compact="avatars"] .exo-dc-msg-row > .exo-dc-avatar {
-  width: 16px;
-  height: 16px;
-  margin: 3px 6px 0 0;
 }
 
 .exo-dc[data-compact] .exo-dc-msg-body {
@@ -261,20 +255,6 @@
   border-radius: 999px;
   background: var(--exo-dc-role);
   vertical-align: middle;
-}
-
-.exo-dc[data-saturation="all"] .exo-dc-name[style] {
-  filter: saturate(var(--exo-dc-saturation, 1));
-}
-
-/* Saturation on the room's own colors (what is on, what is wrong, a mention). */
-.exo-dc[data-saturation] {
-  --color-good: oklch(from var(--exo-good-base) l calc(c * var(--exo-dc-saturation, 1)) h);
-  --color-bad: oklch(from var(--exo-bad-base) l calc(c * var(--exo-dc-saturation, 1)) h);
-}
-
-.exo-dc[data-underline-links] .exo-dc-link {
-  text-decoration: underline;
 }
 
 /* Set your status: the emoji field, then the words filling the row; a custom emoji inline in its line. */

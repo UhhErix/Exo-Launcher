@@ -42,5 +42,5 @@ test('BoardRows shows BIOS paths when Secure Boot is off or TPM is None, and Ach
 
   assert.match(generalSectionSource, /const \[previewError, setPreviewError\] = useState<string \| null>\(null\)/)
   assert.match(generalSectionSource, /setPreviewError\(errorText\(error,\s*'Could not show the preview banner\.'\)\)/)
-  assert.match(generalSectionSource, /<Row label="Preview banner" error=\{previewError\}>/)
+  assert.match(generalSectionSource, /<Row label="Test pop-up" error=\{previewError\}>/)
 })

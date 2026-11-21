@@ -785,7 +785,7 @@ internal sealed partial class LeftoverScan
         if (item.IsKey || item.Kind == LeftoverKind.Task) return null;
         var path = item.Path.TrimEnd('\\');
         if (!Directory.Exists(path) && !File.Exists(path)) return null;
-        if (DeletionGate.Check(path) is { } kept) return kept;
+        if (DeletionGate.Check(path, allowAppBrowserFiles: true) is { } kept) return kept;
         var root = Root(path);
         for (var step = path; step.Length > root.Length + 1; step = Path.GetDirectoryName(step) ?? root)
             if (IsLink(step)) return Linked;
@@ -838,7 +838,9 @@ internal sealed partial class LeftoverScan
             {
                 if (!Directory.Exists(item.Path) && !File.Exists(item.Path)) return true;
                 var why = Recycler(item.Path);
-                return !Directory.Exists(item.Path) && !File.Exists(item.Path) || Stay(item, why ?? NotRecycled);
+                var deleted = !Directory.Exists(item.Path) && !File.Exists(item.Path);
+                if (deleted && item.Kind == LeftoverKind.Shortcut) PruneEmptyStartMenuFolder(item.Path);
+                return deleted || Stay(item, why ?? NotRecycled);
             }
             var (hive, sub) = Hive(item.Path);
             if (item.Value is null)
@@ -1100,6 +1102,28 @@ internal sealed partial class LeftoverScan
 
     // ---- the Recycle Bin ----
 
+    private void PruneEmptyStartMenuFolder(string shortcutPath)
+    {
+        try
+        {
+            var parent = Path.GetDirectoryName(shortcutPath);
+            if (string.IsNullOrEmpty(parent) || !Directory.Exists(parent)) return;
+            var fullParent = Path.TrimEndingDirectorySeparator(Path.GetFullPath(parent));
+            foreach (var raw in new[] { Expand(Programs), Expand("{CommonPrograms}") })
+            {
+                if (string.IsNullOrWhiteSpace(raw) || raw.Contains('{', StringComparison.Ordinal)) continue;
+                var fullRoot = Path.TrimEndingDirectorySeparator(Path.GetFullPath(raw));
+                if (fullParent.StartsWith(fullRoot + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase) &&
+                    !Directory.EnumerateFileSystemEntries(fullParent).Any())
+                {
+                    DeletionGate.DeleteDirectory(fullParent, recursive: false);
+                    return;
+                }
+            }
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException) { }
+    }
+
     /// <summary>
     /// To the Recycle Bin, quietly: null when it went, else why it stayed. Told not to ask, Windows deletes for good what
     /// its bin can't take, so that is looked at first (<see cref="RecycleBinRefuses(string)"/>) and stays.
@@ -1107,13 +1131,13 @@ internal sealed partial class LeftoverScan
     private static string? Recycle(string path)
     {
         if (RecycleBinRefuses(path) is { } why) return why;
-        return DeletionNative.SendToRecycleBin(path, clean: true) ? null : NotRecycled;
+        return DeletionNative.SendToRecycleBin(path, clean: true, allowAppBrowserFiles: true) ? null : NotRecycled;
     }
 
     // Tests: for good (a junction goes on its own; Directory.Delete never follows one).
     private static string? ForGood(string path)
     {
-        return DeletionGate.Clean(path, null, out var why) ? null : why;
+        return DeletionGate.Clean(path, null, out var why, allowAppBrowserFiles: true) ? null : why;
     }
 
     /// <summary>

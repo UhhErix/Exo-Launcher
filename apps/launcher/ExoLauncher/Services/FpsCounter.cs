@@ -229,7 +229,7 @@ internal static class FpsCounter
             {
                 tree = [front];
             }
-            var suppressBuiltIn = followed is not null && ShouldSuppressOverlay(settings.FpsCounterHideOverBuiltIn, followed, settings.FpsCounterItems);
+            var suppressBuiltIn = followed is not null && ShouldSuppressOverlay(true, followed, settings.FpsCounterItems);
             var wanted = Wants(settings.FpsCounter, suppressBuiltIn, followed is not null && SessionRecorderHost.Records(followed));
             if (!wanted.Trace)
             {

@@ -24,6 +24,13 @@ internal static class AutoClear
     /// <summary>What goes by itself after an uninstall here.</summary>
     internal static List<Leftover> Its(IEnumerable<Leftover> found) => found.Where(item => item.Selected).ToList();
 
+    /// <summary>
+    /// What goes by itself after an explicit user uninstall: selected items plus exact-name leftovers
+    /// (!Loose) that aren't held and aren't drivers. Keeps AutoClear.Its() strict for idle/other callers.
+    /// </summary>
+    internal static List<Leftover> ForUserUninstall(IEnumerable<Leftover> found) =>
+        found.Where(item => item.Selected || (!item.Loose && item.Held is null && item.Kind != LeftoverKind.Driver)).ToList();
+
     /// <summary>What goes by itself after an uninstall outside Exo: no Windows prompt out of nowhere.</summary>
     internal static List<Leftover> ItsWithoutAsking(IEnumerable<Leftover> found) => found.Where(item => item.Selected && !item.Machine).ToList();
 
@@ -66,7 +73,7 @@ internal static class AutoClear
     /// .reg, which Put back undoes.
     /// </summary>
     internal static async Task<Cleared> ClearAsync(LeftoverScan scan, string name, IReadOnlyList<Leftover> chosen, Func<IReadOnlyList<string>, Task<bool>>? admin, RemovalHistory history, DateTime now, bool automatic = false,
-        bool restore = false)
+        bool restore = false, bool requireRestorePoint = true)
     {
         var sizes = LeftoverScan.Sizes(chosen);
         var backup = scan.Backup(name, chosen);
@@ -95,10 +102,11 @@ internal static class AutoClear
             }
             if (commands.Count > 0)
             {
-                var (ran, made) = restore ? await RestorePoint.BehindAsync(commands, admin).ConfigureAwait(false) : (await admin(commands).ConfigureAwait(false), null);
+                var (ran, made) = restore ? await RestorePoint.BehindAsync(commands, admin, requireRestorePoint).ConfigureAwait(false) : (await admin(commands).ConfigureAwait(false), null);
                 if (ran)
                 {
-                    if (made is { } outcome && RestorePoint.Problem(outcome) is { } problem) point = problem.Replace("Nothing was removed.", "What needs Windows' permission stayed.", StringComparison.Ordinal);
+                    if (requireRestorePoint && made is { } outcome && RestorePoint.Problem(outcome) is { } problem)
+                        point = problem.Replace("Nothing was removed.", "What needs Windows' permission stayed.", StringComparison.Ordinal);
                     removed.AddRange(machine.Where(item => !scan.Exists(item)));
                     tasks.AddRange(saving.Where(pair => removed.Contains(pair.Item) && File.Exists(pair.Task.File)).Select(pair => pair.Task));
                     // A driver's store package, exported before it went: Put back adds it again.

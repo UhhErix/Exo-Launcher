@@ -560,6 +560,31 @@ test('a pack hash GitHub contradicts, or a files.json for another version, refus
   })
 })
 
+test('same-tag delta backfill adds filesJson and filesPack to latest.json without re-announcing', async () => {
+  const mirror = r2()
+  seed(mirror, 'v3.27.0')
+  const rel = deltaRelease('v3.27.0')
+  use(github({ latest: rel, trees: { 'v3.27.0': tree('3.27.0') } }))
+  const env = { MIRROR: mirror, DISCORD_WEBHOOK_LAUNCHER: 'https://discord.com/api/webhooks/1/abc' }
+  let posted = 0
+  const prevFetch = globalThis.fetch
+  globalThis.fetch = async (url, init) => {
+    if (new URL(String(url)).hostname === 'discord.com') {
+      posted++
+      return Response.json({ id: '123456789012345678' })
+    }
+    return prevFetch(url, init)
+  }
+  const { json } = await ask('/v1/launcher/latest', env)
+  const body = json()
+  assert.equal(body.tag, 'v3.27.0')
+  assert.equal(body.files.filesJson, `${ORIGIN}/v1/launcher/download/v3.27.0/files.json`)
+  assert.equal(body.files.filesPack, `${ORIGIN}/v1/launcher/download/v3.27.0/files.pack`)
+  assert.equal(posted, 0)
+  assert.ok(!mirror.objects.has('_github/announce/v3.27.0'))
+  assert.equal(mirror.text('launcher/v3.27.0/files.pack'), '0123456789abcdefghij')
+})
+
 // ---- the release card -----------------------------------------------------------------------------------------------
 test('the first sight of a new release posts its card once; later polls and the announce workflow post nothing more', async () => {
   const mirror = r2()

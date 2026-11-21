@@ -298,10 +298,6 @@
   font-size: calc(13px * var(--exo-scale, 1));
   font-weight: var(--exo-weight-title);
 }
-.exo-ob-tile-detail {
-  color: var(--color-muted);
-  font-size: calc(12px * var(--exo-scale, 1));
-}
 .exo-ob-code {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
@@ -344,44 +340,8 @@
 .exo-ob-foot {
   margin-bottom: 32px;
 }
-.exo-ob-done {
-  display: grid;
-  justify-items: center;
-  gap: 24px;
-  padding-top: 24px;
-}
-.exo-ob-check {
-  color: var(--color-fg);
-}
-.exo-ob-check-path {
-  stroke: currentColor;
-  /* The icons' line from 24px (lineAt): Lucide's check at 48px. */
-  stroke-width: 1.75;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-  stroke-dasharray: 1;
-  stroke-dashoffset: 1;
-  animation: exo-ob-draw var(--dur-flight) var(--ease-out) forwards;
-}
 @keyframes exo-ob-draw {
   to { stroke-dashoffset: 0; }
-}
-.exo-ob-summary {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 12px;
-  width: min(100%, 600px);
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-.exo-ob-summary li {
-  display: grid;
-  gap: 4px;
-  min-height: 64px;
-  padding: 12px 16px;
-  border: 1px solid var(--exo-line);
-  border-radius: 12px;
 }
 /* First run, SPEC-v2 layout: the column is centred between the progress bar (top) and the footer (bottom), every step
    has a faint "Step N of M" label over a 36 px title, and only the welcome step uses the display size. The footer sits

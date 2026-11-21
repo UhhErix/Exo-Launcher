@@ -6,7 +6,7 @@ import { Row, SliderRow, State, SwitchRow } from '../settings/parts'
 import { Choice } from '../settings/Choice'
 import { Spinner } from '../ui/Spinner'
 import { ActionButton } from '../ui/ConfirmButton'
-import { gpuOffers, hdrShown, isChoice } from '../../lib/canUse'
+import { hdrShown, isChoice } from '../../lib/canUse'
 
 const FORMATS: { id: OutputColor['format']; label: string }[] = [
   { id: 'rgb', label: 'RGB' },
@@ -26,7 +26,7 @@ function Busy({ on, label, children }: { on: boolean; label: string; children: R
   return <span className="exo-display-busy">{on ? <Spinner label={label} /> : null}{children}</span>
 }
 
-type Action = 'set' | 'adjust' | 'video' | 'override' | 'ddc'
+type Action = 'set' | 'adjust' | 'video' | 'ddc'
 
 /**
  * One display change at a time, for the rows that make it: the row whose change is being written (null when none) and
@@ -74,7 +74,7 @@ export function BestScreenRows({ display, onDisplay }: { display: DisplayState |
         <Row key={screen.id} label={several ? `Best for ${screen.name}` : 'Best for this screen'} detail={bestLine(screen.best)} error={errors[screen.id] ?? null}>
           <ActionButton className="exo-set-btn is-primary" why="none" context="DisplayRows.set" fallback="Not changed. Try again."
             onPress={use(screen.id)} onFailed={failure => setErrors(current => ({ ...current, [screen.id]: failure.text }))}
-            onDone={next => onDisplay(next as DisplayState)}>Use</ActionButton>
+            onDone={next => onDisplay(next as DisplayState)}>Use best settings</ActionButton>
         </Row>
       ))}
     </>
@@ -126,8 +126,7 @@ export function DisplayRows({ display, onDisplay }: { display: DisplayState | nu
         />
       )}
       {screen.scaling && (
-        <ScalingRows scaling={screen.scaling} busy={busy} errorFor={errorFor} onSet={set}
-          onOverride={on => busy ? Promise.resolve(null) : run('override', { display: screen.id, override: on }, 'override')} />
+        <ScalingRows scaling={screen.scaling} busy={busy} errorFor={errorFor} onSet={set} />
       )}
       {screen.adjust && (
         <ColorRows
@@ -164,17 +163,10 @@ export function HdrRows({ screen, settings, onSave }: {
       </Row>
       <SwitchRow
         id="set-hdr-games"
-        label="HDR for HDR games"
+        label="Auto-enable HDR for HDR games"
         checked={settings?.hdrForGames === true}
         disabled={!settings}
         onChange={async value => await onSave({ hdrForGames: value }) ? null : 'Not saved. Try again.'}
-      />
-      <SwitchRow
-        id="set-hdr-sdr-gamma"
-        label="SDR looks right in HDR"
-        checked={settings?.hdrSdrGamma !== false}
-        disabled={!settings}
-        onChange={async value => await onSave({ hdrSdrGamma: value }) ? null : 'Not saved. Try again.'}
       />
       <Row label="HDR calibration">
         {screen.calibrated
@@ -220,29 +212,6 @@ function colorText(control: ColorControl, value: number) {
   return control.key === 'gamma' ? (value / 100).toFixed(2) : `${value}${control.unit}`
 }
 
-/** NVIDIA Control Panel's "Use default color settings" (the driver picks) or "Use NVIDIA color settings" (format, depth, range below). */
-function OutputColorRow({ auto, color, busy, error, onSet }: {
-  auto: boolean
-  color: OutputColor
-  busy: string | null
-  error: string | null
-  onSet: (key: string, change: Omit<DisplayChange, 'display'>) => void
-}) {
-  return (
-    <Row label="Output color" detail={auto ? describe(color) : undefined} error={error}>
-      <Busy on={busy === 'policy'} label="Changing the output color">
-        <Choice
-          label="Output color"
-          value={auto ? 'default' : 'nvidia'}
-          choices={[{ value: 'default', label: 'Default' }, { value: 'nvidia', label: 'NVIDIA settings' }]}
-          disabled={!!busy}
-          onChange={value => onSet('policy', value === 'default' ? { auto: true } : { format: color.format, bpc: color.bpc, full: color.full })}
-        />
-      </Busy>
-    </Row>
-  )
-}
-
 const SUPER_RESOLUTION = [
   { value: '0', label: 'Off' },
   { value: '5', label: 'Auto' },
@@ -268,17 +237,17 @@ function VideoRows({ video, hdrScreen, busy, error, onVideo }: {
   return (
     <>
       {video.superResolution !== null && (
-        <Row label="RTX Video Super Resolution" error={error?.key === 'vsr' ? error.text : null}>
-          <Busy on={busy === 'vsr'} label="Changing RTX Video Super Resolution">
-            <Choice label="RTX Video Super Resolution" value={String(video.superResolution)} choices={SUPER_RESOLUTION} disabled={!!busy}
+        <Row label="Video upscaling" error={error?.key === 'vsr' ? error.text : null}>
+          <Busy on={busy === 'vsr'} label="Changing video upscaling">
+            <Choice label="Video upscaling" value={String(video.superResolution)} choices={SUPER_RESOLUTION} disabled={!!busy}
               onChange={value => onVideo('vsr', { superResolution: Number(value) })} />
           </Busy>
         </Row>
       )}
       {video.hdr !== null && (hdrScreen || video.hdr > 0) && (
-        <Row label="RTX Video HDR" error={error?.key === 'vhdr' ? error.text : null}>
-          <Busy on={busy === 'vhdr'} label="Changing RTX Video HDR">
-            <Choice label="RTX Video HDR" value={video.hdr > 0 ? 'on' : 'off'} choices={[{ value: 'off', label: 'Off' }, { value: 'on', label: 'On' }]} disabled={!!busy}
+        <Row label="Video HDR" error={error?.key === 'vhdr' ? error.text : null}>
+          <Busy on={busy === 'vhdr'} label="Changing video HDR">
+            <Choice label="Video HDR" value={video.hdr > 0 ? 'on' : 'off'} choices={[{ value: 'off', label: 'Off' }, { value: 'on', label: 'On' }]} disabled={!!busy}
               onChange={value => onVideo('vhdr', { hdr: value === 'on' })} />
           </Busy>
         </Row>
@@ -294,36 +263,20 @@ const SCALING: { value: ScalingMode; label: string }[] = [
   { value: 'integer', label: 'Integer scaling' },
 ]
 
-/** NVIDIA Control Panel's Adjust desktop size and position > Scaling: the mode, and where it runs (integer runs on the GPU). */
-function ScalingRows({ scaling, busy, errorFor, onSet, onOverride }: {
+/** NVIDIA Control Panel's Adjust desktop size and position > Scaling mode. */
+function ScalingRows({ scaling, busy, errorFor, onSet }: {
   scaling: NonNullable<DisplayScreen['scaling']>
   busy: string | null
   errorFor: (key: string) => string | null
   onSet: (key: string, change: Omit<DisplayChange, 'display'>) => void
-  onOverride: (on: boolean) => Promise<string | null>
 }) {
   return (
-    <>
-      <Row label="Scaling" error={errorFor('scaling')}>
-        <Busy on={busy === 'scaling'} label="Changing the scaling">
-          <Choice label="Scaling" value={scaling.mode} choices={SCALING} disabled={!!busy}
-            onChange={mode => onSet('scaling', { scaling: mode as ScalingMode, scalingGpu: scaling.gpu })} />
-        </Busy>
-      </Row>
-      {scaling.mode !== 'integer' && scaling.mode !== 'default' && (
-        <Row label="Perform scaling on" error={errorFor('scalingOn')}>
-          <Busy on={busy === 'scalingOn'} label="Changing where scaling runs">
-            <Choice label="Perform scaling on" value={scaling.gpu ? 'gpu' : 'display'}
-              choices={[{ value: 'gpu', label: 'GPU' }, { value: 'display', label: 'Display' }]} disabled={!!busy}
-              onChange={on => onSet('scalingOn', { scaling: scaling.mode as ScalingMode, scalingGpu: on === 'gpu' })} />
-          </Busy>
-        </Row>
-      )}
-      {scaling.over !== null && (
-        <SwitchRow id="display-override" label="Override the scaling set by games"
-          checked={scaling.over} disabled={!!busy} onChange={onOverride} />
-      )}
-    </>
+    <Row label="Scaling" error={errorFor('scaling')}>
+      <Busy on={busy === 'scaling'} label="Changing the scaling">
+        <Choice label="Scaling" value={scaling.mode} choices={SCALING} disabled={!!busy}
+          onChange={mode => onSet('scaling', { scaling: mode as ScalingMode, scalingGpu: scaling.gpu })} />
+      </Busy>
+    </Row>
   )
 }
 
@@ -398,9 +351,8 @@ function ScreenRows({ screen, busy, error, onSet }: {
           </Busy>
         </Row>
       )}
-      {gpuOffers(screen.vendor).outputColor && color && <OutputColorRow auto={screen.auto} color={color} busy={busy} error={errorFor('policy')} onSet={onSet} />}
       {/* Without the screen's graphics driver only the refresh rate changes here. */}
-      {!screen.vendor || !color || screen.auto ? null : (
+      {!screen.vendor || !color ? null : (
         <>
           {isChoice(formats) && (
             <Row label="Color format" error={errorFor('format')}>

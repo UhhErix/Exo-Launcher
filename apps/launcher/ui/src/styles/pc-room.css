@@ -482,21 +482,6 @@
   font-size: calc(12px * var(--exo-scale, 1));
 }
 
-.exo-pc-best-done-toggle {
-  margin-top: 8px;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  color: var(--color-muted);
-  font: inherit;
-  font-size: calc(12px * var(--exo-scale, 1));
-  cursor: pointer;
-}
-
-.exo-pc-best-done-toggle:hover {
-  color: var(--color-fg);
-}
-
 .exo-ai-status {
   display: flex;
   align-items: center;

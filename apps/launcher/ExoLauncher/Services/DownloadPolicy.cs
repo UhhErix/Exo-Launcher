@@ -47,15 +47,13 @@ internal sealed class DownloadPolicy : IDisposable
     /// <summary>The settings changed: holds follow them at once.</summary>
     internal void Apply()
     {
-        var settings = _services.Settings.Current;
-        if (!settings.PauseDownloadsWhilePlaying) _services.Launcher.Release(Playing);
-        ApplyHours(settings);
+        ApplyHours(_services.Settings.Current);
     }
 
     private void OnGameLaunched(GameEntry game)
     {
         // Only a game holds downloads: an application or tool started from the Library does not.
-        if (_services.Settings.Current.PauseDownloadsWhilePlaying && HoldsDownloads(game))
+        if (HoldsDownloads(game))
             _services.Launcher.Hold(Playing, $"Downloads are paused while you play {game.Title}.");
     }
 
@@ -118,7 +116,7 @@ internal sealed class DownloadPolicy : IDisposable
             if (!GamePlaying()) _services.Launcher.Release(Playing);
             ApplyHours(settings);
             if (settings.AutoUpdateGames) SweepUpdates();
-            if (settings.AutoUpdateChipset) UpdateChipset();
+            UpdateChipset();
         }
         catch (Exception ex)
         {

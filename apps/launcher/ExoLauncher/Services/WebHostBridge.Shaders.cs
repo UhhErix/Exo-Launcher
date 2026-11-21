@@ -110,13 +110,6 @@ public sealed partial class WebHostBridge
         return new { ok = true };
     }
 
-    /// <summary>Whether automatic runs are on, and with on, turns them on or off. Settings reads this at every start, on a page nobody has open yet.</summary>
-    private object ShaderPrepareAuto(JsonElement p, bool hasParams)
-    {
-        if (ReadBool(p, hasParams, "on") is { } on) _services.ShaderPrepare.SetAuto(on);
-        return new { ok = true, auto = _services.ShaderPrepare.Auto };
-    }
-
     private void KeepShadersPrepared()
     {
         if (HostMode.IsDisposable) return;
@@ -136,7 +129,7 @@ public sealed partial class WebHostBridge
         try
         {
             var prepare = _services.ShaderPrepare;
-            if (prepare.Busy || !prepare.Auto || !PcIdle.Now(() => _services.Launcher.AnyGameRunning || LeanSignal.Active)) return;
+            if (prepare.Busy || !PcIdle.Now(() => _services.Launcher.AnyGameRunning || LeanSignal.Active)) return;
             var token = _bridgeLifetime.Token;
             var next = _services.Library.PeekCachedLibrary().FirstOrDefault(game => game.Installed &&
                 ShaderPrepareEligible(game) && ShaderPrepare.WantsAuto(prepare.StateOf(game).State, game.PlaytimeMinutes));

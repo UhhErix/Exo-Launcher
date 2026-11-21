@@ -323,7 +323,7 @@ public sealed partial class MainWindow
     /// screen in HDR is still without it.</summary>
     private bool SyncSdrGamma()
     {
-        var on = App.Services.Settings.Shared.HdrSdrGamma;
+        const bool on = true;
         var done = true;
         foreach (var screen in WindowsHdr.All())
         {

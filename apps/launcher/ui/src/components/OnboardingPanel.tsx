@@ -13,16 +13,13 @@ import {
   type Tuning,
 } from '../lib/host'
 import { loadSettingsOrFail, saveSettingsPatch } from '../lib/settingsSave'
-import { useCapture } from '../lib/capture'
 import { useHdrState } from '../lib/hdr'
 import { stayFor } from '../lib/notify'
 import { Button } from './ui/Button'
 import { SegmentedProgress } from './onboarding/SegmentedProgress'
-import { DoneStep } from './onboarding/DoneStep'
 import { RestoreStep } from './onboarding/RestoreStep'
 import { LeavingStep, useLeavingStep } from './onboarding/useLeavingStep'
 import { Spinner } from './ui/Spinner'
-import { CaptureStep } from './onboarding/CaptureStep'
 import { ClientsStep, useClientsStatus, useInstallerLong } from './clients/ClientsCard'
 import { clientsOffered, footerHidden, footerNext } from '../lib/clients'
 import { CleanupStep } from './onboarding/CleanupStep'
@@ -74,7 +71,7 @@ function backShown(index: number, id: StepId, accountScreen: AccountScreen): boo
 }
 
 /** Steps with nothing to offer on this PC are left out; the one on screen stays, so it never drops from under the user. */
-function visibleSteps(offers: Record<'restore' | 'clients' | 'capture' | 'cleanup', boolean>, current: StepId) {
+function visibleSteps(offers: Record<'restore' | 'clients' | 'cleanup', boolean>, current: StepId) {
   return STEPS.filter(item => item.id === current || !(item.id in offers) || offers[item.id as keyof typeof offers])
 }
 
@@ -150,7 +147,6 @@ export function OnboardingPanel({
   const [bestRan, setBestRan] = useState(false)
   const [landed, setLanded] = useState<ReadonlySet<BestKey>>(() => new Set())
   const [bestFailed, setBestFailed] = useState<Partial<Record<BestKey, string>>>({})
-  const capture = useCapture()
   // The apps Exo replaces; opening setup first clears what removed ones left in this user's folders.
   const [replaced, setReplaced] = useState<ReplacedApp[] | null>(null)
   // Junk past a gigabyte (old shader caches, mostly) is Clean up's too, with its one Clean.
@@ -160,7 +156,7 @@ export function OnboardingPanel({
   const cleanupOffered = cleanupHas(replaced ?? undefined, junk)
   const best = pcRead ? bestSteps(gpu, health, screen, settings, saveSettings, drives, tuning) : null
   const bestLeft = !!best?.some(item => !item.done)
-  const steps = visibleSteps({ restore: restoreOffer !== null, clients: clientsOffered(clients, clientsFailed), capture: capture.state?.present !== false, cleanup: cleanupOffered }, step)
+  const steps = visibleSteps({ restore: restoreOffer !== null, clients: clientsOffered(clients, clientsFailed), cleanup: cleanupOffered }, step)
   const index = Math.max(0, steps.findIndex(item => item.id === step))
   const current = steps[index]
   const next = footerNext(current.id, clients, clientsLater, clientsFailed, restoring, installerLong)
@@ -362,6 +358,7 @@ export function OnboardingPanel({
     setBestFailed(failed)
     setBestRan(true)
     setBestBusy(false)
+    if (Object.keys(failed).length === 0) await finish()
   }
 
   async function finish() {
@@ -381,7 +378,6 @@ export function OnboardingPanel({
   // One renderer per step, looked up rather than chained.
   const body: Record<StepId, () => ReactNode> = {
     welcome: () => null,
-    done: () => <DoneStep />,
     restore: () => (restoreOffer ? <RestoreStep offer={restoreOffer} busy={restoring} onBusy={setRestoring} onRefused={() => setRestoreHeld(true)} /> : null),
     // One account state with the shell's gate (useAccount): a sign-in here, or Continue without an account, is not asked again after setup.
     account: () => <AccountStep onScreen={state => setAccountScreen(state.screen)} onDone={() => { void refreshAccount(); accountFinished() }} onLater={() => { continueWithoutAccount(); accountFinished() }} />,
@@ -404,7 +400,6 @@ export function OnboardingPanel({
     ),
     apps: () => <AppsStep onFeedback={setFeedback} />,
     discord: () => <DiscordStep />,
-    capture: () => <CaptureStep />,
     pc: () => <PcStep steps={best} running={running} landed={landed} failed={bestFailed} settings={settings} onSave={saveSettings} />,
     cleanup: () => <CleanupStep apps={replaced ?? []} onApps={setReplaced} junk={junk}
       onCleaned={() => void host.junkScan().then(({ items }) => setJunk(items), (error: unknown) => report(error, 'OnboardingPanel.junkScan', { level: 'warn' }))} />,
@@ -440,7 +435,7 @@ export function OnboardingPanel({
             feedback={feedback}
             index={index}
             last={last}
-            busy={completing || bestBusy || (junkScanning && waitsForJunkScan(step, capture.state?.present !== false))}
+            busy={completing || bestBusy || (junkScanning && waitsForJunkScan(step))}
             inline={current.id === 'account'}
             backShown={backShown(index, current.id, accountScreen)}
             // Best settings asks first: Use best settings runs it, Not now goes on without it.
@@ -489,7 +484,7 @@ function Footer({ feedback, index, last, busy, inline, backShown, offer, nextBlo
   onBack: () => void
   onNext: () => void
 }) {
-  const label = offer ? 'Use best settings' : nextLabel ?? (last ? 'Open library' : index === 0 ? 'Get started' : 'Continue')
+  const label = offer ? 'Optimize & open Exo' : nextLabel ?? (last ? 'Open Exo' : index === 0 ? 'Get started' : 'Continue')
   return (
     <footer className={`exo-ob-foot${index === 0 ? ' is-welcome' : ''}`}>
       <p className={`exo-ob-note${feedback?.error ? ' is-error' : ''}`} role={feedback?.error ? 'alert' : 'status'} aria-live="polite">
@@ -497,7 +492,7 @@ function Footer({ feedback, index, last, busy, inline, backShown, offer, nextBlo
       </p>
       <div className="exo-ob-actions">
         {backShown ? <Button variant="ghost" isDisabled={busy} onPress={onBack}>Back</Button> : null}
-        {offer ? <Button variant="ghost" isDisabled={busy} onPress={onNext}>Not now</Button> : null}
+        {offer ? <Button variant="ghost" isDisabled={busy} onPress={onNext}>Skip for now</Button> : null}
         {inline ? null : (
           <Button variant={quiet ? 'ghost' : 'primary'} className="exo-ob-cta" isDisabled={busy || nextBlocked} onPress={offer ? onBest : onNext}>
             {working ? <Spinner label={working} /> : null}

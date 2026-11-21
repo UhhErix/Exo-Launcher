@@ -89,12 +89,46 @@ public sealed class GpuDriverUpdateTests
         $"""<div class="accordion-collapse collapse"><div class="accordion-body">{string.Concat(articles)}</div></div></div>""";
 
     [Fact]
-    public void AmdNewerOptionalWinsAndSaysSo()
+    public void AmdNewerOptionalAndHotfixWinAndSaySo()
     {
-        var html = AmdSection("Windows 11 - 64-Bit Edition",
+        var optionalHtml = AmdSection("Windows 11 - 64-Bit Edition",
             AmdArticle("Adrenalin 26.10.1 WHQL (Recommended)", "whql-26.10.1.exe"),
             AmdArticle("Adrenalin 26.10.2 (Optional)", "26.10.2.exe"));
-        Assert.Equal(("26.10.2", "optional"), (GpuDriverUpdate.AmdDriver(html)?.Version, GpuDriverUpdate.AmdDriver(html)?.Kind));
+        Assert.Equal(("26.10.2", "optional"), (GpuDriverUpdate.AmdDriver(optionalHtml)?.Version, GpuDriverUpdate.AmdDriver(optionalHtml)?.Kind));
+
+        var hotfixHtml = AmdSection("Windows 11 - 64-Bit Edition",
+            AmdArticle("Adrenalin 26.11.2 WHQL (Recommended)", "whql-26.11.2.exe"),
+            AmdArticle("Adrenalin 26.11.2.1 Hotfix", "26.11.2.1-hotfix.exe"));
+        Assert.Equal(("26.11.2.1", "hotfix"), (GpuDriverUpdate.AmdDriver(hotfixHtml)?.Version, GpuDriverUpdate.AmdDriver(hotfixHtml)?.Kind));
+    }
+
+    private static string AmdReleaseNoteHtml(string title, string file, string date = "2026-11-12", string compatBody = "<tr><td>AMD Radeon RX 9070 / 9060 Series</td></tr><tr><td>AMD Ryzen Processors with Radeon Graphics</td></tr>") =>
+        $"""<html><head><title>{title}</title><meta property="og:updated_time" content="{date}T10:32:53-0600"/></head><body>""" +
+        $"""<a href="https://drivers.amd.com/drivers/{file}">Download</a>""" +
+        $"""<h2><a id="Compatibility"></a>Radeon Product Compatibility</h2><table><tbody>{compatBody}</tbody></table>""" +
+        $"""<h2>Compatible Operating Systems</h2></body></html>""";
+
+    [Fact]
+    public async Task AmdReleaseNotesDetectNewerOptionalAndHotfixAndGateCompatibility()
+    {
+        var candidates = GpuDriverUpdate.AmdReleaseNoteUrls("26.10.1");
+        Assert.Contains("https://www.amd.com/en/resources/support-articles/release-notes/RN-RAD-WIN-26-10-2.html", candidates);
+        Assert.Contains("https://www.amd.com/en/resources/support-articles/release-notes/RN-RAD-WIN-26-10-1-1.html", candidates);
+        Assert.Contains("https://www.amd.com/en/resources/support-articles/release-notes/RN-RAD-WIN-26-11-1.html", candidates);
+
+        var noteHtml = AmdReleaseNoteHtml(
+            "AMD Software: Adrenalin Edition 26.11.1 Hotfix Driver Release Notes",
+            "amd-software-adrenalin-edition-26.11.1-win11-c.exe");
+        var compatibleCard = GpuDriverUpdate.AmdReleaseNote(noteHtml, "AMD Radeon RX 9070 XT", null, "https://drivers.amd.com/drivers/whql-amd-software-adrenalin-edition-26.10.1-win11-b.exe");
+        Assert.Equal(("26.11.1", "hotfix", "2026-11-12T00:00:00"), (compatibleCard?.Version, compatibleCard?.Kind, compatibleCard?.Released));
+        Assert.NotNull(GpuDriverUpdate.AmdReleaseNote(noteHtml, "AMD Radeon 780M Graphics", "AMD Ryzen 7 7840HS w/ Radeon 780M Graphics"));
+        Assert.Null(GpuDriverUpdate.AmdReleaseNote(noteHtml, "Radeon RX 580 Series", null));
+        Assert.Null(GpuDriverUpdate.AmdReleaseNote(noteHtml, "AMD Radeon(TM) Graphics", "12th Gen Intel(R) Core(TM) i7-12700K"));
+
+        Task<string> Get(string url) => Task.FromResult(url == GpuDriverUpdate.AmdSelector ? Page("amd-drivers") : Page("amd-radeon-rx-9070-xt"));
+        Task<string?> TryGet(string url) => Task.FromResult<string?>(url.EndsWith("RN-RAD-WIN-26-11-1.html", StringComparison.Ordinal) ? noteHtml : null);
+        var resolved = await GpuDriverUpdate.AmdLatestAsync("AMD Radeon RX 9070 XT", null, Get, TryGet);
+        Assert.Equal(("26.11.1", "hotfix"), (resolved?.Version, resolved?.Kind));
     }
 
     [Fact]
@@ -185,6 +219,38 @@ public sealed class GpuDriverUpdateTests
     {
         var html = Page("intel-arc-785597").Replace("gfx_win_101.9150.exe", "gfx_win_101.9034.exe", StringComparison.Ordinal);
         Assert.Null(GpuDriverUpdate.IntelDriver(html, GpuDriverUpdate.IntelPages[0]));
+    }
+
+    [Fact]
+    public async Task IntelNonWhqlHotfixDetectsKindAndPicksNewerListedVersion()
+    {
+        // Real WHQL fixture includes the generic "WHQL and non-WHQL Certified" disclaimer text and must still stay "intel".
+        Assert.Equal("intel", GpuDriverUpdate.IntelDriver(Page("intel-arc-785597"), GpuDriverUpdate.IntelPages[0])?.Kind);
+
+        var hotfixPage = Page("intel-arc-785597")
+            .Replace("Graphics Driver 32.0.101.9150 WHQL Certified", "Graphics Driver 32.0.101.9180 Non-WHQL", StringComparison.Ordinal)
+            .Replace("ReleaseNotes__101.9150_WHQL.pdf", "ReleaseNotes_101.9180_Non-WHQL.pdf", StringComparison.Ordinal)
+            .Replace("gfx_win_101.9150.exe", "gfx_win_101.9180_hotfix.exe", StringComparison.Ordinal);
+        var hotfix = GpuDriverUpdate.IntelDriver(hotfixPage, "https://www.intel.com/content/www/us/en/download/785597/999999/intel-arc-graphics-windows.html");
+        Assert.Equal(("32.0.101.9180", "hotfix"), (hotfix?.Version, hotfix?.Kind));
+
+        var mainWithNewerRow = Page("intel-arc-785597").Replace(
+            "32.0.101.9034",
+            "32.0.101.9180",
+            StringComparison.Ordinal);
+        var hotfixUrl = "https://www.intel.com/content/www/us/en/download/785597/929959/intel-arc-graphics-windows.html";
+        var pickedOption = await GpuDriverUpdate.IntelLatestAsync("Intel(R) Arc(TM) B580 Graphics", null, url => Task.FromResult(url == hotfixUrl ? hotfixPage : mainWithNewerRow));
+        Assert.Equal(("32.0.101.9180", "hotfix", hotfixUrl), (pickedOption?.Version, pickedOption?.Kind, pickedOption?.Page));
+
+        var mainWithTableRow = Page("intel-arc-785597") + """
+            <table><tr>
+              <td data-label="Version">32.0.101.9180 Non-WHQL</td>
+              <td data-label="Release Date">11/20/2026</td>
+              <td data-label="Link"><a href="/content/www/us/en/download/785597/929959/intel-arc-graphics-windows.html">Link</a></td>
+            </tr></table>
+            """;
+        var pickedTable = await GpuDriverUpdate.IntelLatestAsync("Intel(R) Arc(TM) B580 Graphics", null, url => Task.FromResult(url == hotfixUrl ? hotfixPage : mainWithTableRow));
+        Assert.Equal(("32.0.101.9180", "hotfix", hotfixUrl), (pickedTable?.Version, pickedTable?.Kind, pickedTable?.Page));
     }
 
     [Fact]

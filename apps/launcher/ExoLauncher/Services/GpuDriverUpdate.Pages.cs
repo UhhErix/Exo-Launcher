@@ -20,27 +20,70 @@ internal static partial class GpuDriverUpdate
         "https://www.intel.com/content/www/us/en/download/776137/intel-7th-10th-gen-processor-graphics-windows.html",
     ];
 
-    /// <summary>The selector, then the card's (or processor's) page: two requests, each through <paramref name="get"/>.</summary>
-    internal static async Task<Latest?> AmdLatestAsync(string card, string? cpu, Func<string, Task<string>> get)
+    /// <summary>
+    /// The selector, then the card's (or processor's) page, plus AMD's newest optional/hotfix release notes when newer:
+    /// two requests through <paramref name="get"/>, then optional release-note probes through <paramref name="tryGet"/>.
+    /// </summary>
+    internal static async Task<Latest?> AmdLatestAsync(string card, string? cpu, Func<string, Task<string>> get, Func<string, Task<string?>>? tryGet = null)
     {
         var page = AmdProductPage(AmdProducts(await get(AmdSelector).ConfigureAwait(false)), card, cpu);
-        return page is null ? null : AmdDriver(await get(page).ConfigureAwait(false));
+        if (page is null) return null;
+        var found = AmdDriver(await get(page).ConfigureAwait(false));
+        if (tryGet is null || found is null || found.Url.Contains("vega-polaris", StringComparison.OrdinalIgnoreCase)) return found;
+        var candidates = await Task.WhenAll(AmdReleaseNoteUrls(found.Version).Select(async url =>
+        {
+            try
+            {
+                var html = await tryGet(url).ConfigureAwait(false);
+                return html is null ? null : AmdReleaseNote(html, card, cpu, found.Url);
+            }
+            catch (HttpRequestException) { return null; }
+        })).ConfigureAwait(false);
+        foreach (var candidate in candidates)
+            if (candidate is not null && VersionNumber.Compare(candidate.Version, found.Version) > 0) found = candidate;
+        return found;
     }
 
     /// <summary>
     /// Intel's page for this PC, read through <paramref name="get"/> one at a time until one fits: every Arc (a card, or
     /// built into a Core Ultra) is on Intel's Arc driver, whose list names its cards with their memory ("Arc™ A770 Graphics
-    /// (8GB)") and the older pages list none; any other GPU is on the first page that names the card or the processor.
+    /// (8GB)") and the older pages list none; any other GPU is on the first page that names the card or the processor. When
+    /// that page's version table lists a newer Non-WHQL/hotfix build than the headline download, follow that row's page.
     /// </summary>
     internal static async Task<Latest?> IntelLatestAsync(string card, string? cpu, Func<string, Task<string>> get)
     {
-        if (card.Contains("Arc", StringComparison.OrdinalIgnoreCase)) return IntelDriver(await get(IntelPages[0]).ConfigureAwait(false), IntelPages[0]);
-        foreach (var page in IntelPages)
+        string? matchedHtml = null, matchedPage = null;
+        if (card.Contains("Arc", StringComparison.OrdinalIgnoreCase))
         {
-            var html = await get(page).ConfigureAwait(false);
-            if (IntelCovers(html, card, cpu)) return IntelDriver(html, page);
+            matchedPage = IntelPages[0];
+            matchedHtml = await get(matchedPage).ConfigureAwait(false);
         }
-        return null;
+        else
+        {
+            foreach (var page in IntelPages)
+            {
+                var html = await get(page).ConfigureAwait(false);
+                if (IntelCovers(html, card, cpu)) { matchedHtml = html; matchedPage = page; break; }
+            }
+        }
+        if (matchedHtml is null || matchedPage is null) return null;
+        var best = IntelDriver(matchedHtml, matchedPage);
+        if (best is null) return null;
+        var newerRow = IntelListedVersions(matchedHtml)
+            .Where(row => VersionNumber.Newer(row.Version, best.Version))
+            .OrderByDescending(row => row.Version, VersionNumber.Order)
+            .FirstOrDefault();
+        if (newerRow.Url is { } rowUrl)
+        {
+            try
+            {
+                if (IntelDriver(await get(rowUrl).ConfigureAwait(false), rowUrl) is { } listed
+                    && VersionNumber.Compare(listed.Version, best.Version) > 0)
+                    best = listed;
+            }
+            catch (HttpRequestException) { }
+        }
+        return best;
     }
 
     /// <summary>Every product AMD's selector lists, its title and its driver page, from the JSON the page carries in an attribute.</summary>
@@ -73,7 +116,7 @@ internal static partial class GpuDriverUpdate
 
     /// <summary>
     /// The newest AMD Software: Adrenalin Edition a card's or processor's page links in its Windows 11 section, or null.
-    /// AMD labels each Recommended (WHQL) or Optional. A PRO card's page also lists AMD Software: PRO Edition, which is left out.
+    /// AMD labels each Recommended (WHQL), Optional or Hotfix. A PRO card's page also lists AMD Software: PRO Edition, which is left out.
     /// </summary>
     internal static Latest? AmdDriver(string html)
     {
@@ -82,7 +125,8 @@ internal static partial class GpuDriverUpdate
         foreach (Match article in AmdArticle().Matches(section))
         {
             var body = article.Groups[1].Value;
-            if (!AmdTitle().Match(body).Groups[1].Value.Contains("Adrenalin", StringComparison.OrdinalIgnoreCase)) continue;
+            var title = WebUtility.HtmlDecode(AmdTitle().Match(body).Groups[1].Value);
+            if (!title.Contains("Adrenalin", StringComparison.OrdinalIgnoreCase)) continue;
             var fields = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             foreach (Match field in AmdField().Matches(body)) fields.TryAdd(field.Groups[1].Value.Trim(), WebUtility.HtmlDecode(field.Groups[2].Value).Trim());
             var revision = fields.GetValueOrDefault("Revision Number") ?? "";
@@ -90,14 +134,97 @@ internal static partial class GpuDriverUpdate
             var link = AmdLink().Match(body);
             if (!version.Success || !link.Success) continue;
             var date = DateTime.TryParseExact(fields.GetValueOrDefault("Release Date"), "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var day) ? day : (DateTime?)null;
-            var found = new Latest("amd", version.Groups[1].Value, link.Groups[1].Value, Bytes(fields.GetValueOrDefault("File Size")), Day(date),
-                revision.Contains("Optional", StringComparison.OrdinalIgnoreCase) ? "optional" : "recommended");
+            var kind = AmdReleaseKind(revision + " " + title);
+            var found = new Latest("amd", version.Groups[1].Value, link.Groups[1].Value, Bytes(fields.GetValueOrDefault("File Size")), Day(date), kind);
             // The newest wins; between two of one version, AMD's recommended one.
-            if (newest is null || Version.Parse(found.Version) > Version.Parse(newest.Version)
-                || (Version.Parse(found.Version) == Version.Parse(newest.Version) && found.Kind == "recommended"))
+            var cmp = newest is null ? 1 : VersionNumber.Compare(found.Version, newest.Version);
+            if (cmp > 0 || (cmp == 0 && found.Kind == "recommended"))
                 newest = found;
         }
         return newest;
+    }
+
+    private static string AmdReleaseKind(string label) =>
+        label.Contains("Hotfix", StringComparison.OrdinalIgnoreCase) ? "hotfix"
+        : label.Contains("Optional", StringComparison.OrdinalIgnoreCase) || label.Contains("Preview", StringComparison.OrdinalIgnoreCase) || label.Contains("Beta", StringComparison.OrdinalIgnoreCase) ? "optional"
+        : "recommended";
+
+    /// <summary>
+    /// Candidate AMD release-note URLs for optional/hotfix releases newer than <paramref name="version"/> (next month's .1/.2,
+    /// same month's next two minor drops, and a 4-part point hotfix).
+    /// </summary>
+    internal static IReadOnlyList<string> AmdReleaseNoteUrls(string version)
+    {
+        var raw = version.Split('.');
+        if (raw.Length is < 3 or > 4) return [];
+        var nums = new int[raw.Length];
+        for (var i = 0; i < raw.Length; i++)
+            if (!int.TryParse(raw[i], NumberStyles.None, CultureInfo.InvariantCulture, out nums[i])) return [];
+        var (yy, m, p) = (nums[0], nums[1], nums[2]);
+        var q = nums.Length > 3 ? nums[3] : 0;
+        var (nextYy, nextM) = m == 12 ? (yy + 1, 1) : (yy, m + 1);
+        const string Root = "https://www.amd.com/en/resources/support-articles/release-notes/RN-RAD-WIN-";
+        return
+        [
+            $"{Root}{nextYy}-{nextM}-2.html",
+            $"{Root}{nextYy}-{nextM}-1.html",
+            $"{Root}{yy}-{m}-{p + 2}.html",
+            $"{Root}{yy}-{m}-{p + 1}.html",
+            $"{Root}{yy}-{m}-{p}-{(q > 0 ? q + 1 : 1)}.html",
+        ];
+    }
+
+    /// <summary>
+    /// An Adrenalin optional/hotfix driver read from AMD's release-notes article for <paramref name="card"/>/<paramref name="cpu"/>,
+    /// failing closed unless the article's title, Radeon Product Compatibility table and Windows 11 full package match.
+    /// </summary>
+    internal static Latest? AmdReleaseNote(string html, string card, string? cpu, string? preferredUrl = null)
+    {
+        var titleMatch = AmdHtmlTitle().Match(html);
+        if (!titleMatch.Success) return null;
+        var title = WebUtility.HtmlDecode(titleMatch.Groups[1].Value).Trim();
+        if (!title.Contains("Adrenalin", StringComparison.OrdinalIgnoreCase)
+            || title.Contains("PRO Edition", StringComparison.OrdinalIgnoreCase)
+            || title.Contains("Linux", StringComparison.OrdinalIgnoreCase))
+            return null;
+        var version = AmdVersion().Match(title);
+        if (!version.Success || !AmdReleaseNoteCovers(html, card, cpu)) return null;
+        var links = AmdLink().Matches(html).Select(m => m.Groups[1].Value)
+            .Where(u => !u.Contains("minimalsetup", StringComparison.OrdinalIgnoreCase)
+                && !u.Contains("_web.exe", StringComparison.OrdinalIgnoreCase)
+                && (u.Contains("win11", StringComparison.OrdinalIgnoreCase) || u.Contains("win10-win11", StringComparison.OrdinalIgnoreCase)))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        if (links.Count == 0) return null;
+        var suffix = preferredUrl is null ? Match.Empty : AmdPackageSuffix().Match(preferredUrl);
+        var url = (suffix.Success ? links.FirstOrDefault(u => u.EndsWith(suffix.Value, StringComparison.OrdinalIgnoreCase)) : null)
+            ?? links.FirstOrDefault(u => u.EndsWith("-c.exe", StringComparison.OrdinalIgnoreCase))
+            ?? links[0];
+        var metaDate = AmdMetaDate().Match(html);
+        var day = metaDate.Success && DateTime.TryParseExact(metaDate.Groups[1].Value, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var parsed) ? parsed : (DateTime?)null;
+        return new Latest("amd", version.Groups[1].Value, url, 0, Day(day), AmdReleaseKind(title));
+    }
+
+    /// <summary>Whether an AMD release-notes page's Radeon Product Compatibility section lists the user's card or Ryzen/Athlon iGPU.</summary>
+    internal static bool AmdReleaseNoteCovers(string html, string card, string? cpu)
+    {
+        var start = html.IndexOf("id=\"Compatibility\"", StringComparison.OrdinalIgnoreCase);
+        if (start < 0) start = html.IndexOf("Radeon Product Compatibility", StringComparison.OrdinalIgnoreCase);
+        if (start < 0) return false;
+        var end = html.IndexOf("Compatible Operating Systems", start, StringComparison.OrdinalIgnoreCase);
+        if (end < 0) end = html.IndexOf("Packaged Contents", start, StringComparison.OrdinalIgnoreCase);
+        if (end < 0 || end <= start) return false;
+        var compat = WebUtility.HtmlDecode(html[start..end]);
+        var discrete = AmdDiscreteModel().Match(card);
+        if (discrete.Success)
+        {
+            var token = discrete.Groups.Cast<Group>().Skip(1).FirstOrDefault(g => g.Success)?.Value;
+            return !string.IsNullOrEmpty(token) && Regex.IsMatch(compat, $@"(?<![\w-]){Regex.Escape(token)}(?![\w-])", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+        }
+        if (string.IsNullOrWhiteSpace(cpu)) return false;
+        if (cpu.Contains("Ryzen", StringComparison.OrdinalIgnoreCase)) return compat.Contains("Ryzen", StringComparison.OrdinalIgnoreCase);
+        if (cpu.Contains("Athlon", StringComparison.OrdinalIgnoreCase)) return compat.Contains("Athlon", StringComparison.OrdinalIgnoreCase);
+        return false;
     }
 
     /// <summary>The page's part under the accordion header naming the OS ("Windows 11 - 64-Bit Edition"), or null.</summary>
@@ -137,19 +264,46 @@ internal static partial class GpuDriverUpdate
     /// <summary>
     /// The driver an Intel page offers: the version it installs, its gfx_win installer (whose name carries the version's last
     /// two parts: gfx_win_101.9150.exe is 32.0.101.9150), the size and SHA-512 listed beside it, and the page's date.
+    /// Non-WHQL / Beta / Hotfix pages classify as Kind "hotfix"; WHQL pages stay "intel".
     /// </summary>
     internal static Latest? IntelDriver(string html, string page)
     {
         var link = IntelLink().Match(html);
-        var version = IntelVersion().Match(html);
-        if (!link.Success || !version.Success || !version.Groups[1].Value.EndsWith("." + link.Groups[1].Value, StringComparison.Ordinal)) return null;
+        var version = IntelVersion().Match(html) is { Success: true } hv ? hv.Groups[1].Value
+            : IntelDownloadVersion().Match(html) is { Success: true } mv ? mv.Groups[1].Value : null;
+        if (!link.Success || version is null || !version.EndsWith("." + link.Groups[1].Value, StringComparison.Ordinal)) return null;
         var details = html[link.Index..];
         var size = IntelSize().Match(details);
         var sha = IntelSha().Match(details);
         var date = IntelDate().Match(html);
         var day = date.Success && DateTime.TryParseExact(date.Groups[1].Value, "M/d/yyyy", CultureInfo.InvariantCulture, DateTimeStyles.None, out var parsed) ? parsed : (DateTime?)null;
-        return new Latest("intel", version.Groups[1].Value, link.Value, Bytes(size.Success ? size.Groups[1].Value : null), Day(day), "intel",
+        var kind = IntelNonWhql(html, version) ? "hotfix" : "intel";
+        return new Latest("intel", version, link.Value, Bytes(size.Success ? size.Groups[1].Value : null), Day(day), kind,
             sha.Success ? sha.Groups[1].Value.ToLowerInvariant() : null, page);
+    }
+
+    /// <summary>Whether an Intel download page is for a Non-WHQL / Hotfix / Beta build (ignoring Intel's generic FAQ disclaimer text).</summary>
+    internal static bool IntelNonWhql(string html, string version) =>
+        IntelNonWhqlNotes().IsMatch(html)
+        || Regex.IsMatch(html, $@"(?:Graphics Driver|Version)\s+{Regex.Escape(version)}\s+(?:Non-WHQL|Hotfix|Beta)\b",
+            RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+
+    /// <summary>Every version row listed in Intel's previous/available versions table or selector on a download page, with its absolute Intel URL.</summary>
+    internal static IReadOnlyList<(string Version, string Url)> IntelListedVersions(string html)
+    {
+        var list = new List<(string Version, string Url)>();
+        static string Abs(string href) => href.StartsWith("https://", StringComparison.OrdinalIgnoreCase) ? href : "https://www.intel.com" + href;
+        foreach (var row in html.Split("<tr", StringSplitOptions.None).Skip(1))
+        {
+            var end = row.IndexOf("</tr>", StringComparison.OrdinalIgnoreCase);
+            var cell = end > 0 ? row[..end] : row;
+            var ver = IntelTableVersion().Match(cell);
+            var link = IntelTableLink().Match(cell);
+            if (ver.Success && link.Success) list.Add((ver.Groups[1].Value, Abs(link.Groups[1].Value)));
+        }
+        foreach (Match option in IntelOptionVersion().Matches(html))
+            list.Add((option.Groups[2].Value, Abs(option.Groups[1].Value)));
+        return list;
     }
 
     /// <summary>
@@ -210,20 +364,44 @@ internal static partial class GpuDriverUpdate
     [GeneratedRegex(@"<strong>\s*([^<]+?)\s*</strong>\s*<p>\s*([^<]*?)\s*</p>", RegexOptions.IgnoreCase)]
     private static partial Regex AmdField();
 
-    [GeneratedRegex(@"Adrenalin\s+(\d+\.\d+\.\d+)\b", RegexOptions.IgnoreCase)]
+    [GeneratedRegex(@"Adrenalin\s+(?:Edition\s+)?(\d+\.\d+\.\d+(?:\.\d+)?)\b", RegexOptions.IgnoreCase)]
     private static partial Regex AmdVersion();
 
     [GeneratedRegex(@"href=""(https://drivers\.amd\.com/drivers/[^""]+?\.exe)""", RegexOptions.IgnoreCase)]
     private static partial Regex AmdLink();
 
+    [GeneratedRegex(@"<title>(.*?)</title>", RegexOptions.Singleline | RegexOptions.IgnoreCase)]
+    private static partial Regex AmdHtmlTitle();
+
+    [GeneratedRegex(@"-[a-z]\.exe$", RegexOptions.IgnoreCase)]
+    private static partial Regex AmdPackageSuffix();
+
+    [GeneratedRegex(@"<meta\s+[^>]*property=""og:updated_time""[^>]*content=""(\d{4}-\d{2}-\d{2})", RegexOptions.IgnoreCase)]
+    private static partial Regex AmdMetaDate();
+
+    [GeneratedRegex(@"\b(?:RX\s+(Vega\s+\d+|[0-9]{3,4}[A-Z]?)|PRO\s+([WR]\d{3,4}[A-Z]?)|R[579]\s+(\d{3,4})|HD\s+(\d{4})|(VII))\b", RegexOptions.IgnoreCase)]
+    private static partial Regex AmdDiscreteModel();
+
     [GeneratedRegex(@"other-valid-products-panel__product\b[^>]*>\s*<a[^>]*>([^<]+)</a>", RegexOptions.IgnoreCase)]
     private static partial Regex IntelProduct();
 
-    [GeneratedRegex(@"https://downloadmirror\.intel\.com/\d+/gfx_win_(\d+\.\d+)\.exe", RegexOptions.IgnoreCase)]
+    [GeneratedRegex(@"https://downloadmirror\.intel\.com/\d+/gfx_win_(\d+\.\d+)(?:_[\w.-]+)?\.exe", RegexOptions.IgnoreCase)]
     private static partial Regex IntelLink();
 
     [GeneratedRegex(@"Graphics Driver (\d+\.\d+\.\d+\.\d+)")]
     private static partial Regex IntelVersion();
+
+    [GeneratedRegex(@"ReleaseNotes_+[^""'\s<>]*Non-WHQL\.pdf", RegexOptions.IgnoreCase)]
+    private static partial Regex IntelNonWhqlNotes();
+
+    [GeneratedRegex(@"<td\s+data-label=""Version"">\s*[^<]*?\b(\d+\.\d+\.\d+\.\d+)\b", RegexOptions.IgnoreCase)]
+    private static partial Regex IntelTableVersion();
+
+    [GeneratedRegex(@"href=""((?:https://www\.intel\.com)?/content/www/us/en/download/\d+/\d+/[^""]+)""", RegexOptions.IgnoreCase)]
+    private static partial Regex IntelTableLink();
+
+    [GeneratedRegex(@"<option\b[^>]*value=""((?:https://www\.intel\.com)?/content/www/us/en/download/\d+/\d+/[^""]+)""[^>]*>[^<]*?\b(\d+\.\d+\.\d+\.\d+)\b[^<]*</option>", RegexOptions.Singleline | RegexOptions.IgnoreCase)]
+    private static partial Regex IntelOptionVersion();
 
     [GeneratedRegex(@"Size:\s*([\d.]+\s*[KMG]B)", RegexOptions.IgnoreCase)]
     private static partial Regex IntelSize();

@@ -497,8 +497,8 @@ export type DriverInstallStep = { phase: 'waiting' | 'installing' | 'reloading' 
 
 /**
  * System > Graphics > Driver and profile's driver row: the installed driver and the newest one for this card, from the
- * vendor whose GPU Exo talks to (null: none it can update). NVIDIA's is Game Ready or Studio; AMD's is AMD Software:
- * Adrenalin Edition, recommended or optional; Intel's is its graphics driver.
+ * vendor whose GPU Exo talks to (null: none it can update). NVIDIA's is Game Ready, hotfix or Studio; AMD's is AMD Software:
+ * Adrenalin Edition, recommended, optional or hotfix; Intel's is its graphics driver or hotfix.
  */
 export type DriverState = {
   ok: boolean
@@ -666,18 +666,9 @@ export type GpuGame = {
   frameGen?: IntelFrameGen
 }
 
-/** A Profile Inspector import. pick: the file's settings in plain words (nothing written yet). undo: the last import Undo puts back. */
-export type GpuImportAnswer = {
-  ok: boolean
-  message?: string | null
-  cancelled?: boolean
-  preview?: { profile: string; items: { label: string; value: string }[]; unknown: number; leftOut: number } | null
-  undo?: { profile: string; count: number } | null
-}
-
 /** System > This PC: one row per setup problem (none when all is well); power switches to Exo's plan for cpu, with Undo; chipset Exo updates (busy while it installs, applied while it waits for a restart, url only after a failed install). */
 export type PcHealthItem = {
-  key: 'ram' | 'rebar' | 'power' | 'chipset' | 'gpusched' | 'gpupref' | 'network' | NetworkItemKey | 'netlink'
+  key: 'ram' | 'rebar' | 'power' | 'chipset' | 'gpusched' | 'gpupref' | 'pcie' | 'gpucable' | 'network' | NetworkItemKey | 'netlink'
   label: string
   detail: string
   url?: string | null
@@ -1201,7 +1192,7 @@ export interface StartupState {
   ok: boolean
   message: string | null
   items: StartupItem[]
-  removed: { id: string; name: string; at: string; /** Exo never turns it off, so it can only be put back. */ locked: boolean }[]
+  removed: { id: string; name: string; at: string; /** Exo never turns it off, so it can only be put back. */ locked: boolean; icon?: string | null }[]
   /** Windows' own telemetry tasks on now: not listed, Clean up turns them off too (nothing to put back). */
   extras?: number
   /** startup.clean: how many it took out. */
@@ -2603,7 +2594,7 @@ export const host = {
   appsUninstall: (id: string, quiet = false) =>
     rawCall<AppFind | { ok: false; still?: boolean; message?: string | null }>('apps.uninstall', quiet ? { id, quiet } : { id }, 65 * 60_000),
   /** A System Restore point before a run, under Windows' prompt; ok only when there is one to go back to. */
-  appsRestorePoint: () => rawCall<{ ok: boolean; made: boolean; message?: string | null }>('apps.restorePoint', {}, 10 * 60_000),
+  appsRestorePoint: () => rawCall<{ ok: boolean; made: boolean; declined?: boolean; message?: string | null }>('apps.restorePoint', {}, 10 * 60_000),
   /** How many of Windows Installer's cached copies no product or patch needs, and how big (only reads). */
   appsInstallerCache: () => rawCall<{ ok: true; files: number; bytes: number }>('apps.installerCache', {}, 2 * 60_000),
   /** Those, found again, to the Recycle Bin under one Windows prompt; undo is the Put back record. */
@@ -2612,11 +2603,11 @@ export const host = {
   /** What is left of a program whose uninstaller is gone. */
   appsScan: (id: string) => rawCall<AppFind | { ok: false; message?: string | null }>('apps.scan', { id }, 5 * 60_000),
   /**
-   * The chosen items of a find deleted (asked in Exo's window). restore: what needs Windows' permission goes only behind a
-   * System Restore point, made in the same prompt.
+   * The chosen items of a find deleted (asked in Exo's window), automatically guarded by a daily System Restore point
+   * when machine-wide changes need Windows' permission.
    */
-  appsClean: (token: string, ids: number[], restore = false) =>
-    rawCall<{ ok: boolean; cleared?: LeftoverSummary; undo?: string | null; left?: number; message?: string | null }>('apps.clean', { token, ids, restore }, 15 * 60_000),
+  appsClean: (token: string, ids: number[]) =>
+    rawCall<{ ok: boolean; cleared?: LeftoverSummary; undo?: string | null; left?: number; message?: string | null }>('apps.clean', { token, ids }, 15 * 60_000),
   /** Windows' Default apps, for file types an app that's gone still opens. */
   appsOpenDefaults: () => rawCall<{ ok: boolean; message?: string | null }>('apps.openDefaults', {}, 30_000),
   /** Store and preinstalled apps across this PC's accounts; hidden: the parts of Windows never offered. */
@@ -2735,8 +2726,6 @@ export const host = {
   dlssDownloadNewer: () => rawCall<{ ok: boolean; message?: string | null }>('dlss.downloadNewer', {}, 10 * 60_000),
   shadersStatus: (id: string) => rawCall<ShaderStatus>('shaders.status', { id }),
   shadersPrepareGames: () => rawCall<{ ok: boolean; games: ShaderPrepareGame[] }>('shaders.prepare.games'),
-  /** Whether automatic runs are on; with `on`, sets it first. */
-  shadersPrepareAuto: (on?: boolean) => rawCall<{ ok: boolean; auto: boolean }>('shaders.prepare.auto', { on }),
   shadersPrepareStart: (id: string) => rawCall<{ ok: boolean; message?: string | null }>('shaders.prepare.start', { id }, 10 * 60_000),
   shadersPrepareCancel: (id: string) => rawCall<{ ok: boolean; message?: string | null }>('shaders.prepare.cancel', { id }),
   hdrState: () => rawCall<HdrState>('hdr.state', {}),
@@ -3044,9 +3033,6 @@ export const host = {
   /** Game sheet: a game's driver frame generation (a Radeon's Fluid Motion Frames, Intel's XeSS override); with a change, sets it for the game. */
   gpuAfmf3: (on?: boolean) => rawCall<Afmf3State>('gpu.afmf3', on === undefined ? {} : { on }, 30_000),
   gpuGame: (id: string, change?: { frameGen?: IntelFrameGen }) => rawCall<GpuGame>('gpu.game', { id, ...change }, 30_000),
-  /** A Profile Inspector import to the global profile: pick a .nip (waits for the picker), apply, undo, cancel, or state. */
-  gpuImport: (action: 'pick' | 'apply' | 'undo' | 'cancel' | 'state') =>
-    rawCall<GpuImportAnswer>('gpu.import', { action }, action === 'pick' ? 10 * 60_000 : 30_000),
   /** The card maker's own control panel opened as the user (NVIDIA Control Panel, AMD Software, Intel Graphics Software); message names one that isn't installed. */
   gpuControlPanel: () => rawCall<{ ok: boolean; message?: string | null }>('gpu.controlPanel', {}, 20_000),
   /** System > This PC: the checks; apply or undo Exo's power plan; gpusched opens Windows' Graphics settings; gamemode-on/off and gamebar-on (Exo keeps Game Bar off)/off (Exo puts it back) answer ok, and a sentence when Windows didn't take it. */

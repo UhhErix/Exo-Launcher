@@ -200,3 +200,27 @@ test('putting the old latest.json back is tried again before it says to do it by
   assert.doesNotMatch(r.out, /by hand/)
   assert.equal(readFileSync(join(fx.bucket, 'launcher', 'latest.json'), 'utf8'), before)
 })
+
+test('a launcher release with files.json and files.pack uploads them and includes delta checks in latest.json', { timeout: 120_000 }, async (t) => {
+  const fx = fixture(t)
+  const filesJson = JSON.stringify({ schema: 1, version: '9.9.9', installer: 'a'.repeat(64), files: [] })
+  const filesPack = 'delta-pack-bytes'
+  writeFileSync(join(fx.dir, 'files.json'), filesJson)
+  writeFileSync(join(fx.dir, 'files.pack'), filesPack)
+  writeFileSync(join(fx.dir, 'files.pack.sha256'), `${sha(filesPack)} *files.pack\n`)
+  const base = await standIn(t, fx.bucket)
+  const r = await publish(fx, base)
+  assert.equal(r.code, 0, r.out)
+  assert.deepEqual(puts(fx), [
+    `put launcher/v9.9.9/${SETUP}`,
+    `put launcher/v9.9.9/${SETUP}.sha256`,
+    'put launcher/v9.9.9/whats-new.json',
+    'put launcher/v9.9.9/files.json',
+    'put launcher/v9.9.9/files.pack',
+    'put launcher/v9.9.9/files.pack.sha256',
+    'put launcher/latest.json',
+  ])
+  const manifest = JSON.parse(readFileSync(join(fx.bucket, 'launcher', 'latest.json'), 'utf8'))
+  assert.equal(manifest.files.filesJson.sha256, sha(filesJson))
+  assert.equal(manifest.files.filesPack.sha256, sha(filesPack))
+})

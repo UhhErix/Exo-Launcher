@@ -74,17 +74,14 @@ internal static class RestorePoint
         return [Step(answer), .. steps.Select(step => $"findstr /x \"made recent\" \"{quoted}\" >nul && ({step})")];
     }
 
-    /// <summary>
-    /// Runs <paramref name="steps"/> as administrator behind a restore point (<see cref="Gated"/>), or as they are when Exo made
-    /// one in the last day. Ran: Windows' prompt was accepted; Point: the restore point's outcome (null: the one made earlier stood).
-    /// </summary>
-    internal static async Task<(bool Ran, Outcome? Point)> BehindAsync(IReadOnlyList<string> steps, Func<IReadOnlyList<string>, Task<bool>> admin)
+    internal static async Task<(bool Ran, Outcome? Point)> BehindAsync(IReadOnlyList<string> steps, Func<IReadOnlyList<string>, Task<bool>> admin, bool requireRestorePoint = true)
     {
         if (StandingNow) return (await admin(steps).ConfigureAwait(false), null);
         var answer = Path.Combine(Path.GetTempPath(), $"exo-{Guid.NewGuid():N}.restore");
         try
         {
-            if (!await admin(Gated(answer, steps)).ConfigureAwait(false)) return (false, Outcome.Declined);
+            var batch = requireRestorePoint ? Gated(answer, steps) : [Step(answer), .. steps];
+            if (!await admin(batch).ConfigureAwait(false)) return (false, Outcome.Declined);
             var outcome = Read(File.Exists(answer) ? await File.ReadAllTextAsync(answer).ConfigureAwait(false) : null);
             Noted(outcome, DateTime.UtcNow);
             AppLog.Info($"Apps: restore point before a clear: {outcome}.");

@@ -489,10 +489,13 @@ public sealed partial class AppUpdateService
     }
 
     private static readonly Regex StaleDeltaFolder = new(@"^app\.incoming-[0-9a-f]{32}(setup)?\z", RegexOptions.CultureInvariant);
+    private static readonly Regex StaleFailedFolder = new(@"^app\.failed-[0-9a-f]{32}\z", RegexOptions.CultureInvariant);
 
-    /// <summary>Staging folders an earlier file-level try left (a crash, power loss), and swap scripts older than an hour.</summary>
-    private void RemoveStaleDeltaFolders()
+    /// <summary>Staging/failed folders left by an earlier update, apply-* swap folders, and old health receipts.</summary>
+    private void RemoveStaleDeltaFolders(TimeSpan? applyMaxAge = null)
     {
+        var maxApplyAge = applyMaxAge ?? TimeSpan.FromMinutes(2);
+        var now = _timeProvider.GetUtcNow().UtcDateTime;
         void Remove(DirectoryInfo folder)
         {
             if ((folder.Attributes & FileAttributes.ReparsePoint) != 0) return;
@@ -501,12 +504,22 @@ public sealed partial class AppUpdateService
         }
         try
         {
-            if (Directory.Exists(InstallFolder))
-                foreach (var folder in new DirectoryInfo(InstallFolder).EnumerateDirectories("app.incoming-*"))
-                    if (StaleDeltaFolder.IsMatch(folder.Name)) Remove(folder);
+            var root = InstallFolder;
+            if (Directory.Exists(root))
+            {
+                foreach (var folder in new DirectoryInfo(root).EnumerateDirectories("app.incoming-*"))
+                    if (StaleDeltaFolder.IsMatch(folder.Name) && now - folder.CreationTimeUtc > TimeSpan.FromMinutes(5))
+                        Remove(folder);
+                foreach (var folder in new DirectoryInfo(root).EnumerateDirectories("app.failed-*"))
+                    if (StaleFailedFolder.IsMatch(folder.Name) && now - folder.CreationTimeUtc > TimeSpan.FromHours(1))
+                        Remove(folder);
+                foreach (var file in new DirectoryInfo(root).EnumerateFiles("update-health-*.json"))
+                    if ((file.Attributes & FileAttributes.ReparsePoint) == 0 && now - file.LastWriteTimeUtc > TimeSpan.FromDays(1))
+                        try { DeletionGate.DeleteFile(file.FullName); } catch { }
+            }
             if (Directory.Exists(_updatesDirectory))
                 foreach (var folder in new DirectoryInfo(_updatesDirectory).EnumerateDirectories("apply-*"))
-                    if (DateTime.UtcNow - folder.CreationTimeUtc > TimeSpan.FromHours(1)) Remove(folder);
+                    if (now - folder.CreationTimeUtc > maxApplyAge) Remove(folder);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { AppLog.Debug("Update: old staging folders not looked at: " + ex.GetType().Name); }
     }

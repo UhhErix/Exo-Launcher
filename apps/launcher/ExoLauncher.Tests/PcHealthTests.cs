@@ -405,4 +405,33 @@ public sealed class PcHealthTests
         Assert.Contains("class intel-hybrid", PcHealth.Describe(baseReading with { CpuHybridProbe = true }));
         Assert.Contains("class intel", PcHealth.Describe(baseReading with { CpuHybridProbe = false }));
     }
+
+    [Fact]
+    public void GpuPcieWidthBelowMaxWarnsOnlyOnDesktop()
+    {
+        var x8On16 = new PcHealth.PcieLink("NVIDIA GeForce RTX 4080", CurrentWidth: 8, MaxWidth: 16);
+        var x16On16 = new PcHealth.PcieLink("NVIDIA GeForce RTX 4080", CurrentWidth: 16, MaxWidth: 16);
+        var x8On8 = new PcHealth.PcieLink("NVIDIA GeForce RTX 4060", CurrentWidth: 8, MaxWidth: 8);
+
+        var flagged = Assert.Single(PcHealth.Decide(ThisPc() with { GpuPcie = x8On16, Laptop = false }), i => i.Key == "pcie");
+        Assert.Equal("Graphics card slot", flagged.Label);
+        Assert.Contains("PCIe x8 instead of x16", flagged.Detail);
+
+        Assert.DoesNotContain(PcHealth.Decide(ThisPc() with { GpuPcie = x16On16, Laptop = false }), i => i.Key == "pcie");
+        Assert.DoesNotContain(PcHealth.Decide(ThisPc() with { GpuPcie = x8On8, Laptop = false }), i => i.Key == "pcie");
+        Assert.DoesNotContain(PcHealth.Decide(ThisPc() with { GpuPcie = x8On16, Laptop = true }), i => i.Key == "pcie");
+    }
+
+    [Fact]
+    public void PrimaryDisplayOnIntegratedGpuWarnsOnlyOnDesktopHybrid()
+    {
+        var hybrid = new PcHealth.HybridGpu("AMD Radeon(TM) Graphics", "NVIDIA GeForce RTX 4080");
+        var warned = Assert.Single(PcHealth.Decide(ThisPc() with { Hybrid = hybrid, PrimaryOnIntegrated = true, Laptop = false }), i => i.Key == "gpucable");
+        Assert.Equal("Display cable", warned.Label);
+        Assert.Contains("plugged into the motherboard (AMD Radeon(TM) Graphics)", warned.Detail);
+        Assert.Contains("NVIDIA GeForce RTX 4080", warned.Detail);
+
+        Assert.DoesNotContain(PcHealth.Decide(ThisPc() with { Hybrid = hybrid, PrimaryOnIntegrated = true, Laptop = true }), i => i.Key == "gpucable");
+        Assert.DoesNotContain(PcHealth.Decide(ThisPc() with { Hybrid = null, PrimaryOnIntegrated = true, Laptop = false }), i => i.Key == "gpucable");
+    }
 }

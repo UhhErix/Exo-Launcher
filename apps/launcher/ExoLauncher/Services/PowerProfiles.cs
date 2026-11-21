@@ -47,6 +47,7 @@ internal static class PowerProfiles
     internal static readonly Guid Disk = new("0012ee47-9041-4b5d-9b77-535fba8b1442");
     internal static readonly Guid Sleep = new("238c9fa8-0aad-41ed-83f4-97be242c8f20");
     internal static readonly Guid Display = new("7516b95f-f776-4464-8c53-06167f40cc99");
+    internal static readonly Guid Wireless = new("19cbb8fa-5279-450e-9fac-8a3d5fedd0c1");
 
     // ---- Processor ----
 
@@ -86,6 +87,8 @@ internal static class PowerProfiles
     private static readonly Value AhciAdaptive = new("AHCI Link Power Management - Adaptive", Disk, new("dab60367-53fe-4fbc-825e-521d069d2456"), 0);
     // Disks never spin down (a game's next load doesn't wait for a hard drive to spin up); Ultimate Performance's value.
     private static readonly Value DiskOff = new("Turn off hard disk after", Disk, new("6738e2c4-e8a5-4a42-b16a-e040e769756e"), 0);
+    // Wi-Fi adapter power saving off on AC (Maximum Performance = 0), so wireless doesn't enter power-saving sleep mid-game; battery keeps Balanced's.
+    private static readonly Value WifiPower = new("Wireless Adapter Power Saving Mode", Wireless, new("12bbebe6-58d6-4636-95bb-3217ef867c1a"), 0);
 
     // ---- Display ----
 
@@ -100,6 +103,7 @@ internal static class PowerProfiles
     // that doesn't hold the PC awake itself keeps going.
     private static readonly Value SleepOff = new("Sleep after", Sleep, new("29f6c1db-86da-48c5-9fdb-f2b67b1f44da"), 0, Dc: true);
     private static readonly Value HibernateOff = new("Hibernate after", Sleep, new("9d7815a6-7ee4-497e-8888-515a05f02364"), 0, Dc: true);
+    private static readonly Value WakeTimersOff = new("Allow wake timers", Sleep, new("bd3b718a-0680-4d9d-8ab2-e1d2b4ac806d"), 0, Dc: true);
 
     // ---- Intel hybrid: efficiency class 1 is the faster class (P-cores), class 0 the E-cores ----
     // (Windows: a higher EfficiencyClass is faster; HeteroIncreaseThreshold unparks class 1 cores as class 0 fills.)
@@ -114,7 +118,7 @@ internal static class PowerProfiles
     // Best performance's own preference (10): low, but leaving AMD's driver room to park the second CCD in games.
     private static readonly Value EppParked = Epp with { Ac = 10 };
 
-    private static readonly Value[] Devices = [PcieLink, UsbSuspend, Usb3Link, NvmeLatency, NvmeLatency2, AhciLink, AhciAdaptive, DiskOff];
+    private static readonly Value[] Devices = [PcieLink, UsbSuspend, Usb3Link, NvmeLatency, NvmeLatency2, AhciLink, AhciAdaptive, DiskOff, WifiPower];
 
     /// <summary>The measured latency baseline: single-CCD Ryzen, Zen 2 to 4 dual-CCD Ryzen (no Game Mode parking), Intel up to 11th gen, and any desktop processor Exo doesn't know.</summary>
     private static readonly Value[] Baseline = [MinState, Epp, BoostMode, BoostPolicy, MinCores, IdleOn, .. Devices];
@@ -142,6 +146,6 @@ internal static class PowerProfiles
             _ => Baseline,
         };
         if (values.Length == 0) return new Profile(cpu, laptop, values);
-        return new Profile(cpu, laptop, laptop ? [.. values, DisplayOn with { Dc = false }] : [.. values, DisplayOn, SleepOff, HibernateOff]);
+        return new Profile(cpu, laptop, laptop ? [.. values, DisplayOn with { Dc = false }] : [.. values, DisplayOn, SleepOff, HibernateOff, WakeTimersOff]);
     }
 }

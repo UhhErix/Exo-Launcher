@@ -216,6 +216,7 @@ internal static partial class StartupEntries
                 DeleteTask task => (tasks ??= host.Tasks(wait)).All(t => !string.Equals(t.Path, task.Path, StringComparison.OrdinalIgnoreCase)),
                 CreateTask task => (tasks ??= host.Tasks(wait)).Any(t => string.Equals(t.Path, task.Path, StringComparison.OrdinalIgnoreCase)),
                 MoveFile move => !host.FileExists(move.From) && host.FileExists(move.To),
+                DeleteFile del => !host.FileExists(del.Path),
                 _ => true,
             };
             if (!ok) return change;
@@ -231,6 +232,7 @@ internal static partial class StartupEntries
     internal static string? Remove(IStartupHost host, string id)
     {
         if (HostMode.IsDisposable) return HostMode.Refusal;
+        host.EnsureSecurityReady(TimeSpan.FromSeconds(5));
         lock (Gate)
         {
             if (ReadAll(host).FirstOrDefault(entry => entry.Id == id) is not { } entry)
@@ -286,12 +288,25 @@ internal static partial class StartupEntries
         var removal = new Removal(entry.Id, entry.Name, now, WasOn: entry.Enabled) { Fingerprint = entry.Fingerprint, Program = entry.Program };
         if (kind == "task" && entry.Missing)
         {
-            // A task whose program is gone is deleted, its definition kept in Exo's folder for Put back.
+            // A task whose program is gone is deleted for good (no Put back).
             if (!CmdSafe(rest) || rest.Length == 0) return ([], null, "Exo can't remove this task.");
-            if (host.TaskXml(rest) is not { } xml) return ([], null, $"{entry.Name} wasn't removed.");
-            var file = Path.Combine(KeptFolder(host), $"task-{Guid.NewGuid():N}.xml");
-            host.WriteBytes(file, xml);
-            return ([new DeleteTask(rest)], removal with { Kept = file }, null);
+            return ([new DeleteTask(rest)], removal, null);
+        }
+        if (entry.Missing)
+        {
+            if (kind is "folder:cu" or "folder:lm")
+            {
+                var machine = kind == "folder:lm";
+                var filePath = Path.Combine(host.FolderPath(machine), rest);
+                if (!CmdSafe(filePath)) return ([], null, "Exo can't remove this one.");
+                return ([new DeleteFile(filePath), new SetReg(machine ? Hive.Machine : Hive.User, StartupKeys.Approved + "StartupFolder", rest, null)], removal, null);
+            }
+            if (PlaceOf(kind) is { ReadOnly: false } missingPlace)
+            {
+                var regChanges = new List<StartupChange> { new SetReg(missingPlace.Hive, missingPlace.Key, rest, null) };
+                if (missingPlace.ApprovedKey is { } a) regChanges.Add(new SetReg(missingPlace.Hive, StartupKeys.Approved + a, rest, null));
+                return (regChanges, removal, null);
+            }
         }
         if (OffChanges(host, entry.Id) is not { } changes) return ([], null, "Exo can't remove this one.");
         if (kind == "task") return (changes, entry.Enabled ? removal : removal with { WasOn = false }, null);
@@ -337,6 +352,7 @@ internal static partial class StartupEntries
     internal static (int Removed, string? Error) Clean(IStartupHost host)
     {
         if (HostMode.IsDisposable) return (0, HostMode.Refusal);
+        host.EnsureSecurityReady(TimeSpan.FromSeconds(5));
         lock (Gate)
         {
             var all = ReadAll(host);
