@@ -92,14 +92,14 @@
 .exo-apps-columns,
 .exo-apps-row {
   display: grid;
-  grid-template-columns: 28px minmax(0, 1fr) var(--exo-apps-used) var(--exo-apps-size) var(--exo-apps-act);
+  grid-template-columns: 28px minmax(0, 1fr) var(--exo-apps-used) var(--exo-apps-size) minmax(var(--exo-apps-act), auto);
   align-items: center;
   column-gap: 12px;
 }
 
 .exo-apps-columns.is-short,
 .exo-apps-row.is-short {
-  grid-template-columns: 28px minmax(0, 1fr) var(--exo-apps-size) var(--exo-apps-act);
+  grid-template-columns: 28px minmax(0, 1fr) var(--exo-apps-size) minmax(var(--exo-apps-act), auto);
 }
 
 .exo-apps-columns {
@@ -332,7 +332,7 @@
 /* Actionable notices: a crisp 2-column compact card grid so notices never push the app list off screen. */
 .exo-apps-ready {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
   gap: 8px;
 }
 

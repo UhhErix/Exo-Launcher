@@ -293,9 +293,9 @@
 /* The game sheet: unified single-surface card holding cover, metadata, Play/Properties, stats, and 2-column lines with no side drawer. */
 .exo-game-overlay-stage:has(> .exo-game-page) {
   container-type: inline-size;
-  width: min(980px, calc(100% - 32px));
-  height: auto;
-  max-height: min(640px, calc(100% - 32px));
+  width: min(1440px, calc(100% - 40px));
+  height: min(860px, calc(100% - 80px));
+  max-height: calc(100% - 80px);
 }
 
 .exo-game-page .exo-game-page-inner {

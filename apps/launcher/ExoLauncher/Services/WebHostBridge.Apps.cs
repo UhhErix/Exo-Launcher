@@ -656,8 +656,15 @@ public sealed partial class WebHostBridge
         var scan = new LeftoverScan(LeftoverScan.ThisPc());
         var done = await Task.Run(() => AutoClear.ClearAsync(scan, find.Name, chosen, steps => ReplacedApps.RemoveAsAdminAsync(steps, ct), RemovalHistory.ForThisPc, DateTime.UtcNow, restore: true, requireRestorePoint: false), ct).ConfigureAwait(true);
         AppsChangedHere();
-        Finds.TryRemove(token, out _);
-        AppsMemory.ForThisPc.Forget(find.Remembered);
+        if (done.Left.Count == 0)
+        {
+            Finds.TryRemove(token, out _);
+            AppsMemory.ForThisPc.Forget(find.Remembered);
+        }
+        else
+        {
+            Finds[token] = (find.Name, find.Items, DateTime.UtcNow, find.Remembered);
+        }
         lock (AppsGate) _tidy = null;
         AppLog.Info($"Apps: cleared {done.Removed.Count} of what {find.Name} left; {done.Left.Count} stayed{(done.Why is null ? "" : $" ({done.Why})")}.");
         return new

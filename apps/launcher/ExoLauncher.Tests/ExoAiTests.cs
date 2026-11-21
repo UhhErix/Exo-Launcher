@@ -41,7 +41,9 @@ public sealed class ExoAiTests
     [Fact]
     public void FanCurvesEvaluatePresetsHysteresisAndSafetyClamps()
     {
-        Assert.Null(ExoAiFans.EvaluateCurve("auto", 75));
+        Assert.Equal(48, ExoAiFans.EvaluateCurve("auto", 55));
+        Assert.Equal(100, ExoAiFans.EvaluateCurve("auto", 85));
+        Assert.Equal(90, ExoAiFans.EvaluateCurve("auto", 78, lastTargetPct: 90, lastTempC: 80));
         Assert.Equal("auto", ExoAiSettings.NormalizePreset("unknown-preset"));
         Assert.Equal("performance", ExoAiSettings.NormalizePreset(" Performance "));
 
@@ -86,7 +88,22 @@ public sealed class ExoAiTests
             Assert.Contains(0, refusal.Restored);
         }
 
-        // Switching to auto and calling Shutdown both restore every touched fan.
+        var autoRefusal = new FakeFanBackend
+        {
+            FanCount = 2,
+            TempC = 65,
+            OnSet = (idx, _) => idx == 1 ? new(false, false, true, "Needs admin") : new(true, false, false, null),
+        };
+        using (var fans = new ExoAiFans(() => autoRefusal))
+        {
+            var status = fans.SetPreset("auto");
+            Assert.False(status.Supported);
+            Assert.Null(status.Note);
+            Assert.Null(status.TargetPercent);
+            Assert.Contains(0, autoRefusal.Restored);
+        }
+
+        // Auto actively drives adaptive fan targets and Shutdown restores every touched fan.
         var working = new FakeFanBackend { FanCount = 2, TempC = 70 };
         using (var fans = new ExoAiFans(() => working))
         {
@@ -95,13 +112,14 @@ public sealed class ExoAiTests
             Assert.Equal(72, status.TargetPercent);
             Assert.Equal([(0, 72), (1, 72)], working.Applied);
 
+            working.Applied.Clear();
             var autoStatus = fans.SetPreset("auto");
             Assert.Equal("auto", autoStatus.Preset);
-            Assert.Null(autoStatus.TargetPercent);
-            Assert.Equal([0, 1], working.Restored.OrderBy(i => i).ToArray());
+            Assert.True(autoStatus.Supported);
+            Assert.Equal(72, autoStatus.TargetPercent);
+            Assert.Equal([(0, 72), (1, 72)], working.Applied);
 
             working.Restored.Clear();
-            fans.SetPreset("performance");
             fans.Shutdown();
             Assert.Equal([0, 1], working.Restored.OrderBy(i => i).ToArray());
             Assert.True(working.Disposed);

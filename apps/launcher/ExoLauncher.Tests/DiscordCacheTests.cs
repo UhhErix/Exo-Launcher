@@ -529,4 +529,57 @@ public sealed class DiscordCacheTests
         Assert.Equal(["Moderators", "Game Mods"], roles);
         Assert.Empty(JsonSerializer.SerializeToElement(cache.FindRoles("1", "every", 5)).EnumerateArray());
     }
+
+    [Fact]
+    public void NotesSeedFromReadyUpdateOnGatewayEventsAndStayCapped()
+    {
+        var cache = Load("""
+            {
+              "session_id": "s",
+              "user": { "id": "100", "username": "me" },
+              "guilds": [],
+              "private_channels": [],
+              "read_state": { "entries": [] },
+              "notes": { "201": "hello", "202": "" }
+            }
+            """);
+
+        Assert.True(cache.TryGetNote("201", out var n201));
+        Assert.Equal("hello", n201);
+        Assert.True(cache.TryGetNote("202", out var n202));
+        Assert.Null(n202);
+        Assert.False(cache.TryGetNote("203", out _));
+
+        cache.SetNote("203", null);
+        Assert.True(cache.TryGetNote("203", out var n203));
+        Assert.Null(n203);
+
+        using var update = JsonDocument.Parse("""{ "id": "201", "note": "updated" }""");
+        cache.Apply("USER_NOTE_UPDATE", update.RootElement);
+        Assert.True(cache.TryGetNote("201", out var updated));
+        Assert.Equal("updated", updated);
+
+        using var cleared = JsonDocument.Parse("""{ "id": "201", "note": "" }""");
+        cache.Apply("USER_NOTE_UPDATE", cleared.RootElement);
+        Assert.True(cache.TryGetNote("201", out var afterClear));
+        Assert.Null(afterClear);
+
+        for (var i = 0; i < 600; i++)
+            cache.SetNote($"cap-{i}", "v");
+        Assert.True(cache.TryGetNote("cap-599", out var latest));
+        Assert.Equal("v", latest);
+        Assert.False(cache.TryGetNote("201", out _));
+
+        using var nextReady = JsonDocument.Parse("""
+            {
+              "session_id": "s2",
+              "user": { "id": "100", "username": "me" },
+              "guilds": [],
+              "private_channels": [],
+              "read_state": { "entries": [] }
+            }
+            """);
+        cache.LoadReady(nextReady.RootElement);
+        Assert.False(cache.TryGetNote("cap-599", out _));
+    }
 }

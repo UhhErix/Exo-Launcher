@@ -130,7 +130,7 @@ public sealed partial class WebHostBridge
         var (color, why) = DisplayOutput.BestColor(colors, screen.Refresh, screen.Caps?.PanelBpc);
         if (refresh != screen.Refresh && screen.Supported.Count > 0)
             why = $"Color checked at {screen.Refresh} Hz; Exo checks it again at {refresh} Hz when you use it." + (why is null ? "" : " " + why);
-        return (refresh, color, why, screen.Scaling is null ? null : NvidiaScaling.ToCode(new("none", true)), screen.Override is null ? null : true);
+        return (refresh, color, why, screen.Scaling is null ? null : NvidiaScaling.ToCode(new("aspect", true)), screen.Override is null ? null : true);
     }
 
     /// <summary>"Override the scaling mode set by games and programs" (NVIDIA): applies at once, nothing on screen changes until a game asks.</summary>
@@ -267,19 +267,27 @@ public sealed partial class WebHostBridge
                 message = NvidiaScaling.WriteOverride(overId, true);
                 overrideOn = message is null;
             }
-            // Best also turns on RTX Video HDR on a screen running HDR (it's global on the card, and kept across driver installs).
+            // Best also turns on RTX Video Super Resolution (Auto) and RTX Video HDR on HDR displays.
             var videoHdrOn = false;
+            var videoSrOn = false;
             if (message is null && best && NvidiaVideo.AnyScreen() is { } videoGdi)
             {
+                var currentSr = NvidiaVideo.Read(videoGdi, NvidiaVideo.SuperResolution);
+                if (currentSr == 0)
+                {
+                    message = NvidiaVideo.Write(videoGdi, NvidiaVideo.SuperResolution, 5) ?? KeepVideo(s => s.RtxVideoSuperResolution = 5);
+                    videoSrOn = message is null;
+                    if (videoSrOn) AppLog.Info("Display: RTX Video Super Resolution Auto on.");
+                }
                 var currentVideoHdr = NvidiaVideo.Read(videoGdi, NvidiaVideo.VideoHdr);
-                if (WantsVideoHdr(now.Hdr, now.NvId, currentVideoHdr) && currentVideoHdr == 0)
+                if (message is null && WantsVideoHdr(now.Hdr, now.NvId, currentVideoHdr) && currentVideoHdr == 0)
                 {
                     message = NvidiaVideo.Write(videoGdi, NvidiaVideo.VideoHdr, 5) ?? KeepVideo(s => s.RtxVideoHdr = true);
                     videoHdrOn = message is null;
                     if (videoHdrOn) AppLog.Info("Display: RTX Video HDR on, for a screen running HDR.");
                 }
             }
-            if (refresh == before.Refresh && !colorChanged && scalingTo is null && !overrideOn && !videoHdrOn)
+            if (refresh == before.Refresh && !colorChanged && scalingTo is null && !overrideOn && !videoHdrOn && !videoSrOn)
             {
                 if (hdrChanged) AppLog.Info($"Display: HDR {(raw.Enabled ? "on" : "off")} on {DisplayId(before.Gdi)}.");
                 return message;

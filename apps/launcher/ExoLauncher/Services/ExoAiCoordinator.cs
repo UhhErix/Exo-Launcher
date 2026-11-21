@@ -171,13 +171,12 @@ internal sealed class ExoAiCoordinator : IDisposable
         }
     }
 
-    private void ApplyFanPreset(string preset)
+    private void ApplyFanPreset(string _preset)
     {
-        var norm = ExoAiSettings.NormalizePreset(preset);
-        var status = Fans.SetPreset(norm);
+        var status = Fans.SetPreset("auto");
         lock (_gate)
         {
-            if (norm == "auto" || !status.Supported)
+            if (!status.Supported)
             {
                 _fanTimer?.Dispose();
                 _fanTimer = null;

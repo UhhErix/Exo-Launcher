@@ -280,3 +280,23 @@ test('the route answers 400 to a body it cannot read, 413 to a long body, and po
     globalThis.fetch = originalFetch
   }
 })
+
+test('announce retries once on Discord 429 with short retry_after and returns posted', async () => {
+  let attempts = 0
+  const fetcher = async () => {
+    attempts += 1
+    if (attempts === 1) {
+      return new Response(JSON.stringify({ retry_after: 0.01 }), {
+        status: 429,
+        headers: { 'content-type': 'application/json' },
+      })
+    }
+    return new Response(JSON.stringify({ id: '500000000000000009' }), {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    })
+  }
+  const result = await announce({ app: 'cinema', tag: 'v1.5.0', announce: true, env: env(), mirror, fetcher, now: WHEN })
+  assert.equal(result.status, 'posted')
+  assert.equal(attempts, 2)
+})

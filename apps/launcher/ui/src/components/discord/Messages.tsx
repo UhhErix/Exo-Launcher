@@ -14,6 +14,9 @@ import { peek, REQUESTS, unpeek } from './roomPlaces'
 import { rowTime } from '../../lib/discordNow'
 import { mentionsSaid } from './Band'
 import { errorText } from '../../lib/errorWords'
+import { newestMessages } from './messageCache'
+
+const hydratedDms = new Set<string>()
 
 /** Home's rows at the top of the room's one list (Rail.tsx): Now, Friends, Message requests while any wait, then the Conversations
     label (find and New conversation) and the newest eight conversations, each with what was said last (the rest under All
@@ -48,6 +51,22 @@ export function MessagesPane({ home, open, onPick }: {
   const picking = useRef(onPick)
   picking.current = onPick
   const pick = useCallback((id: string) => picking.current(id), [])
+  const startedHydration = useRef(false)
+  useEffect(() => {
+    if (!home || startedHydration.current) return
+    const missing = [...pinned, ...unpinned].filter(d => !d.line && !hydratedDms.has(d.id)).slice(0, 12)
+    if (missing.length === 0) return
+    startedHydration.current = true
+    let cancelled = false
+    void (async () => {
+      for (const dm of missing) {
+        if (cancelled) return
+        hydratedDms.add(dm.id)
+        await newestMessages(dm.id, true).catch(() => { })
+      }
+    })()
+    return () => { cancelled = true }
+  }, [home, pinned, unpinned])
   return (
     <nav className="exo-dc-side exo-dc-dms" aria-label="Direct messages" onPointerOver={peek} onPointerLeave={unpeek}>
       <header className="exo-dc-pane-head">
@@ -86,9 +105,9 @@ function DmSections({ dms, pinned, unpinned, open, home, query, onPick }: {
   return (
     <>
       {pinned.length > 0 ? <p className="exo-dc-dm-pin-label">Pinned</p> : null}
-      {pinned.map(d => <DmRow key={d.id} dm={d} current={d.id === open} pinned onPick={onPick} />)}
+      {pinned.map(d => <DmRow key={d.id} dm={d} current={d.id === open} onPick={onPick} />)}
       {pinned.length > 0 && unpinned.length > 0 ? <p className="exo-dc-dm-pin-label">Direct messages</p> : null}
-      {unpinned.map(d => <DmRow key={d.id} dm={d} current={d.id === open} pinned={false} onPick={onPick} />)}
+      {unpinned.map(d => <DmRow key={d.id} dm={d} current={d.id === open} onPick={onPick} />)}
     </>
   )
 }
@@ -105,7 +124,7 @@ function RequestsRow({ requests, current, onPick }: { requests: number; current:
   )
 }
 
-const DmRow = memo(function DmRow({ dm, current, pinned, onPick }: { dm: DiscordDm; current: boolean; pinned: boolean; onPick: (id: string) => void }) {
+const DmRow = memo(function DmRow({ dm, current, onPick }: { dm: DiscordDm; current: boolean; onPick: (id: string) => void }) {
   // A group's right-click menu, with Leave group (a 1:1 DM's is the person menu, with Close DM).
   const [menu, setMenu] = useState<{ x: number; y: number } | null>(null)
   const close = () => void host.discordChannel(dm.id, 'close').catch(() => { })
@@ -124,7 +143,6 @@ const DmRow = memo(function DmRow({ dm, current, pinned, onPick }: { dm: Discord
           {said ? <span className="exo-dc-item-sub">{said}</span> : null}
         </span>
         <span className="exo-dc-item-meta">
-          {pinned ? <Icons.Pin size={12} className="exo-dc-dm-pin-icon" aria-hidden="true" /> : null}
           {dm.lastAt ? <time className="exo-dc-item-time">{rowTime(dm.lastAt)}</time> : null}
           {dm.mentions ? <span className="exo-dc-badge" aria-hidden="true">{dm.mentions > 99 ? '99+' : dm.mentions}</span>
             : dm.unread && !dm.muted ? <span className="exo-dc-item-dot" aria-hidden="true" /> : null}

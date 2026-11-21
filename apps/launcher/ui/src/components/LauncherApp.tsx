@@ -409,7 +409,6 @@ export function LauncherApp() {
   })
 
   const openGpu = useCallback(() => goToView('system'), [goToView])
-  const openDevices = useCallback(() => { void goToView('devices') }, [goToView])
   const openNowPlaying = useCallback(() => void goToView('music',
     { name: 'exo-music-now', from: visible('.exo-mini-cover'), to: () => visible('.exo-music-now > .exo-music-art') },
     () => setNowPlaying((n) => n + 1)), [goToView])
@@ -651,15 +650,15 @@ export function LauncherApp() {
 
   const devicesRoom = useMemo(() => (
     <Room mounted={openedRooms.has('devices')} warm={warming || prewarm === 'devices'} active={under === 'devices'} covered={view === 'settings'} label="Devices" className="relative z-10 flex min-h-0 flex-1 flex-col">
-      <DevicesRoom active={devicesActive} onBack={openGpu} />
+      <DevicesRoom active={devicesActive} />
     </Room>
-  ), [under, view, openedRooms, warming, prewarm, devicesActive, openGpu])
+  ), [under, view, openedRooms, warming, prewarm, devicesActive])
 
   const systemRoom = useMemo(() => (
     <Room name="system" mounted={openedRooms.has('system')} warm={warming || opening === 'system' || prewarm === 'system'} active={under === 'system'} covered={view === 'settings'} label="PC" className="relative z-10 flex min-h-0 flex-1 flex-col">
-      <Suspense fallback={null}><PcRoom active={view === 'system'} jump={gpuJump} games={games} settings={settings} onSave={saveSettings} onDevices={openDevices} /></Suspense>
+      <Suspense fallback={null}><PcRoom active={view === 'system'} jump={gpuJump} games={games} settings={settings} onSave={saveSettings} /></Suspense>
     </Room>
-  ), [under, openedRooms, warming, opening, prewarm, view, gpuJump, games, settings, saveSettings, openDevices])
+  ), [under, openedRooms, warming, opening, prewarm, view, gpuJump, games, settings, saveSettings])
 
   const libraryRoom = useMemo(() => sortMode && (
     <Room mounted={openedRooms.has('library')} active={under === 'library'} covered={view === 'settings'} label="Library" className="exo-under-bar relative z-10 flex min-h-0 flex-1">

@@ -12,7 +12,9 @@ import '../../styles/driver-install.css'
 import { errorText } from '../../lib/errorWords'
 
 type Phase = 'starting' | 'downloading' | 'unpacking' | 'waiting' | 'installing' | 'reloading' | 'restoring' | 'done' | 'failed'
+type InstallKind = 'gpu' | 'chipset'
 type Install = {
+  kind: InstallKind
   phase: Phase
   /** The vendor ("NVIDIA") and the version going in ("621.12"), for the title. */
   name: string | null
@@ -28,10 +30,25 @@ type Install = {
 
 /** The order an install goes through: a progress event never takes it back a step. */
 const ORDER: Phase[] = ['starting', 'downloading', 'unpacking', 'waiting', 'installing', 'reloading', 'restoring', 'done', 'failed']
-const WORDS: Record<Exclude<Phase, 'done' | 'failed'>, string> = {
+const WORDS_GPU: Record<Exclude<Phase, 'done' | 'failed'>, string> = {
   starting: 'Starting the update', downloading: 'Downloading the driver', unpacking: 'Unpacking the driver', waiting: 'Waiting to install',
   installing: 'Installing the driver', reloading: 'Reloading the graphics driver', restoring: 'Putting your settings back',
 }
+const WORDS_CHIPSET: Record<Exclude<Phase, 'done' | 'failed'>, string> = {
+  starting: 'Starting the chipset update', downloading: 'Downloading the chipset package', unpacking: 'Unpacking the chipset installer', waiting: 'Waiting to install',
+  installing: 'Installing the CPU & chipset drivers', reloading: 'Applying chipset updates', restoring: 'Verifying system devices',
+}
+const GPU_MILESTONES: ReadonlyArray<{ phase: Phase; label: string }> = [
+  { phase: 'downloading', label: 'Download' },
+  { phase: 'unpacking', label: 'Prepare' },
+  { phase: 'installing', label: 'Install' },
+  { phase: 'restoring', label: 'Restore' },
+]
+const CHIPSET_MILESTONES: ReadonlyArray<{ phase: Phase; label: string }> = [
+  { phase: 'starting', label: 'Prepare' },
+  { phase: 'installing', label: 'Install' },
+  { phase: 'done', label: 'Verify' },
+]
 const VENDOR: Record<string, string> = { nvidia: 'NVIDIA', amd: 'AMD', intel: 'Intel' }
 /** Kept through a page reload (the host reloads the page once the driver is in, and on a page that stops drawing), so the screen comes back at once. */
 const KEPT = 'exo.driverInstall'
@@ -52,14 +69,22 @@ function put(next: Install | null) {
 
 /** A step from the host: a later phase takes over; done and failed always land. */
 function advance(phase: Phase, change: Partial<Install>) {
-  const base: Install = current ?? { phase, name: null, version: null, share: null, size: null, message: null, restored: [], notRestored: [] }
+  const base: Install = current ?? { kind: change.kind ?? 'gpu', phase, name: null, version: null, share: null, size: null, message: null, restored: [], notRestored: [] }
   if (current && phase !== 'failed' && ORDER.indexOf(phase) < ORDER.indexOf(current.phase)) return
   put({ ...base, ...change, phase })
 }
 
 /** The driver row's Update, pressed: the screen comes up at once, before the host's first step. */
-export function driverInstallStarted(name: string, version: string, size?: number | null) {
-  put({ phase: 'starting', name, version, share: null, size: size ?? null, message: null, restored: [], notRestored: [] })
+export function driverInstallStarted(name: string, version: string, size?: number | null, kind: InstallKind = 'gpu') {
+  put({ kind, phase: 'starting', name, version, share: null, size: size ?? null, message: null, restored: [], notRestored: [] })
+}
+
+export function driverInstallPhase(phase: Phase, change: Partial<Install> = {}) {
+  advance(phase, { kind: 'chipset', ...change })
+}
+
+export function driverInstallDismiss() {
+  put(null)
 }
 
 /** The update didn't start (the row says why): the screen goes. */
@@ -73,19 +98,22 @@ const STAGE: Partial<Record<DriverProgress['stage'], Phase>> = {
 
 /** The download's words: "Downloading the driver · 420 MB of 1.0 GB" when its size is known (its percent follows them). */
 function downloadWords(install: Install) {
-  if (install.share === null || !install.size) return WORDS.downloading
+  const base = install.kind === 'chipset' ? WORDS_CHIPSET.downloading : WORDS_GPU.downloading
+  if (install.share === null || !install.size) return base
   const mb = (bytes: number) => bytes >= 1e9 ? `${(bytes / 1e9).toFixed(1)} GB` : `${Math.round(bytes / 1e6)} MB`
-  return `${WORDS.downloading} · ${mb(install.size * install.share)} of ${mb(install.size)}`
+  return `${base} · ${mb(install.size * install.share)} of ${mb(install.size)}`
 }
 
 /** The host's steps, as they come: the download and install from gpu.driver, the rest from gpu.driverInstall. */
 function listen() {
   const offProgress = onHostEvent('gpu.driver', progress => {
+    if (current?.kind === 'chipset') return
     const phase = STAGE[progress.stage]
     if (phase) advance(phase, { share: progress.stage === 'downloading' ? progress.percent / 100 : null, message: progress.message })
     else if (progress.stage === 'failed' && current) advance('failed', { message: progress.message })
   })
   const offStep = onHostEvent('gpu.driverInstall', step => {
+    if (current?.kind === 'chipset') return
     advance(step.phase, {
       version: step.version ?? current?.version ?? null,
       message: step.message ?? null,
@@ -102,7 +130,16 @@ function recover() {
   let kept: Install | null
   try { kept = JSON.parse(pageGet(KEPT) ?? 'null') as Install | null } catch { kept = null }
   if (!kept) return
-  put(kept)
+  put({ ...kept, kind: kept.kind ?? 'gpu' })
+  if (kept.kind === 'chipset') {
+    host.systemHealth().then(health => {
+      const item = health.items.find(entry => entry.key === 'chipset')
+      if (!item || item.busy) advance('installing', { kind: 'chipset', name: item?.label ?? current?.name ?? null })
+      else if (item.applied || item.current) advance('done', { kind: 'chipset', name: item.label })
+      else advance('failed', { kind: 'chipset', message: item.detail ?? 'Windows kept the chipset driver you had.' })
+    }, (error: unknown) => report(error, 'DriverInstallOverlay.chipsetRecover', { level: 'warn' }))
+    return
+  }
   host.gpuDriver('state').then(state => {
     const phase = state.progress ? STAGE[state.progress.stage] : undefined
     if (phase) advance(phase, { name: current?.name ?? (state.vendor ? VENDOR[state.vendor] : null) })
@@ -113,6 +150,51 @@ function recover() {
 
 const ended = (phase: Phase) => phase === 'done' || phase === 'failed'
 const named = (install: Install) => [install.name, install.version].filter(Boolean).join(' ')
+
+function useChipsetPoll(kind: InstallKind, working: boolean) {
+  useEffect(() => {
+    if (kind !== 'chipset' || !working) return
+    const timer = window.setInterval(() => {
+      host.systemHealth().then(health => {
+        if (current?.kind !== 'chipset' || ended(current.phase)) return
+        const item = health.items.find(entry => entry.key === 'chipset')
+        if (!item) return
+        if (item.busy) advance('installing', { kind: 'chipset', name: item.label })
+        else if (item.applied || item.current) advance('done', { kind: 'chipset', name: item.label })
+        else if (current.phase === 'installing') advance('failed', { kind: 'chipset', message: item.detail ?? 'Windows kept the chipset driver you had.' })
+      }, (error: unknown) => report(error, 'DriverInstallOverlay.chipsetPoll', { level: 'warn' }))
+    }, 3000)
+    return () => window.clearInterval(timer)
+  }, [kind, working])
+}
+
+function InstallStage({ phase, kind }: { phase: Phase; kind: InstallKind }) {
+  const working = !ended(phase)
+  const stageState = phase === 'done' ? ' is-done' : phase === 'failed' ? ' is-failed' : ''
+  return (
+    <div className={`exo-driver-stage${stageState}`}>
+      {working ? <span className="exo-driver-halo" aria-hidden="true" /> : null}
+      {working ? <span className="exo-driver-orbit" aria-hidden="true" /> : null}
+      {working ? <span className="exo-driver-orbit is-outer" aria-hidden="true" /> : null}
+      {phase === 'done'
+        ? <span className="exo-driver-install-done" aria-hidden="true"><Check size={36} /></span>
+        : kind === 'chipset' ? <Processor /> : <Screen />}
+    </div>
+  )
+}
+
+function InstallFoot({ install, onHide }: { install: Install; onHide: () => void }) {
+  return (
+    <div className="exo-driver-install-foot">
+      {install.phase === 'waiting' ? <button type="button" className="exo-set-btn" onClick={onHide}>Hide until it installs</button> : null}
+      {install.phase === 'failed' ? <CopyLogs error={install.message ?? 'Driver install failed'} /> : null}
+      {install.phase === 'done' ? <RestartChoice /> : null}
+      {install.phase === 'failed' ? (
+        <button ref={focusWhenActive} type="button" className="exo-set-btn is-primary" onClick={() => put(null)}>Close</button>
+      ) : null}
+    </div>
+  )
+}
 
 /**
  * The driver screen (DESIGN.md › PC): while a graphics driver goes in, from the Update press through done or failed, one
@@ -130,7 +212,9 @@ export function DriverInstallOverlay() {
   useEffect(() => { recover(); return listen() }, [])
 
   const phase = install?.phase ?? null
+  const kind = install?.kind ?? 'gpu'
   const working = phase !== null && !ended(phase)
+  useChipsetPoll(kind, working)
   const shown = install !== null && !(aside && phase === 'waiting')
   if (aside && phase !== 'waiting') setAside(false)
   // Everything under it is inert and keys go nowhere else (Ctrl+K, a room's number); Escape closes it once it's over.
@@ -140,16 +224,9 @@ export function DriverInstallOverlay() {
   return createPortal(
     <div ref={screen} className={`exo-portal exo-driver-install${working ? ' is-working' : ''}`} role="alertdialog" aria-modal="true" aria-labelledby="exo-driver-install-title" aria-busy={working}>
       <div className="exo-driver-install-body">
-        {install.phase === 'done' ? <span className="exo-driver-install-done" aria-hidden="true"><Check size={36} /></span> : <Screen />}
+        <InstallStage phase={install.phase} kind={kind} />
         {ended(install.phase) ? <Ended install={install} /> : <Working install={install} />}
-        <div className="exo-driver-install-foot">
-          {install.phase === 'waiting' ? <button type="button" className="exo-set-btn" onClick={() => setAside(true)}>Hide until it installs</button> : null}
-          {install.phase === 'failed' ? <CopyLogs error={install.message ?? 'Driver install failed'} /> : null}
-          {install.phase === 'done' ? <RestartChoice /> : null}
-          {install.phase === 'failed' ? (
-            <button ref={focusWhenActive} type="button" className="exo-set-btn is-primary" onClick={() => put(null)}>Close</button>
-          ) : null}
-        </div>
+        <InstallFoot install={install} onHide={() => setAside(true)} />
       </div>
     </div>,
     document.body,
@@ -158,13 +235,29 @@ export function DriverInstallOverlay() {
 
 /** While it works: the driver and its version, the step in words (what holds it, while it waits), and the Exo bar. */
 function Working({ install }: { install: Install }) {
-  const step = install.phase === 'downloading' ? downloadWords(install) : WORDS[install.phase as keyof typeof WORDS]
+  const words = install.kind === 'chipset' ? WORDS_CHIPSET : WORDS_GPU
+  const step = install.phase === 'downloading' ? downloadWords(install) : words[install.phase as keyof typeof WORDS_GPU]
   const share = install.phase === 'downloading' ? install.share : null
+  const milestones = install.kind === 'chipset' ? CHIPSET_MILESTONES : GPU_MILESTONES
+  const at = ORDER.indexOf(install.phase)
   return (
     <>
-      <h2 id="exo-driver-install-title">{named(install) || 'Graphics driver'}</h2>
+      <h2 id="exo-driver-install-title">{named(install) || (install.kind === 'chipset' ? 'CPU & chipset drivers' : 'Graphics driver')}</h2>
       <p className="exo-driver-install-step" role="status">{install.phase === 'waiting' && install.message ? install.message : <ProgressWords words={step} value={share} />}</p>
       <Progress size="large" value={share} label={step} />
+      <ul className="exo-driver-steps" aria-hidden="true">
+        {milestones.map(m => {
+          const stepAt = ORDER.indexOf(m.phase)
+          const done = at > stepAt
+          const active = at === stepAt || (install.kind === 'gpu' && install.phase === 'reloading' && m.phase === 'installing')
+          return (
+            <li key={m.label} className={done ? 'is-done' : active ? 'is-active' : undefined}>
+              <span className="exo-driver-step-dot" />
+              <span>{m.label}</span>
+            </li>
+          )
+        })}
+      </ul>
     </>
   )
 }
@@ -172,12 +265,15 @@ function Working({ install }: { install: Install }) {
 /** Once it's over: Driver updated with what Exo put back, or what went wrong and what to do. */
 function Ended({ install }: { install: Install }) {
   const failed = install.phase === 'failed'
+  const fallbackName = install.kind === 'chipset' ? 'The chipset drivers didn’t install' : 'The driver didn’t install'
+  const doneTitle = install.kind === 'chipset' ? 'Chipset drivers updated' : 'Driver updated'
+  const retryHint = install.kind === 'chipset' ? 'Windows kept the driver you had. Try the update again from PC › Updates.' : 'Windows kept the driver you had. Try the update again from PC › Graphics.'
   return (
     <>
-      <h2 id="exo-driver-install-title">{failed ? 'The driver didn’t install' : 'Driver updated'}</h2>
+      <h2 id="exo-driver-install-title">{failed ? fallbackName : doneTitle}</h2>
       {named(install) ? <p className="exo-driver-install-step">{named(install)}</p> : null}
       {failed
-        ? <p className="exo-driver-install-error" role="alert">{install.message || 'Windows kept the driver you had. Try the update again from PC › Graphics.'}</p>
+        ? <p className="exo-driver-install-error" role="alert">{install.message || retryHint}</p>
         : <Outcome install={install} />}
     </>
   )
@@ -231,10 +327,20 @@ function RestartChoice() {
 /** A screen that dims and lights again, slowly, as the real one may during the install; still under Reduce motion. */
 function Screen() {
   return (
-    <svg className="exo-driver-screen" viewBox="0 0 64 50" width="88" height="69" aria-hidden="true">
+    <svg className="exo-driver-screen" viewBox="0 0 64 50" width="84" height="66" aria-hidden="true">
       <rect className="exo-driver-screen-glass" x="5" y="4" width="54" height="34" rx="4" />
       <rect className="exo-driver-screen-frame" x="5" y="4" width="54" height="34" rx="4" />
       <path className="exo-driver-screen-frame" d="M24 46h16M32 38v8" />
+    </svg>
+  )
+}
+
+function Processor() {
+  return (
+    <svg className="exo-driver-cpu" viewBox="0 0 64 64" width="76" height="76" aria-hidden="true">
+      <path className="exo-driver-cpu-pins" d="M22 6v6M32 6v6M42 6v6M22 52v6M32 52v6M42 52v6M6 22h6M6 32h6M6 42h6M52 22h6M52 32h6M52 42h6" />
+      <rect className="exo-driver-screen-frame" x="14" y="14" width="36" height="36" rx="5" />
+      <rect className="exo-driver-cpu-die" x="23" y="23" width="18" height="18" rx="3" />
     </svg>
   )
 }

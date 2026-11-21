@@ -41,6 +41,7 @@ export type PcState = {
 
 /** What the room last read, for this run: it shows at once the next time the room opens and is read again behind it. */
 const last: PcState = { about: null, profile: null, driver: null, health: null, interrupts: null, tuning: null, display: null, drives: null, tune: null }
+let lastReadAt = 0
 
 /**
  * This PC, its card, driver, setup, interrupts and screens: read each time the room shows and when Exo's window comes
@@ -54,6 +55,7 @@ function usePcState(active: boolean) {
     setState(current => current[key] === value ? current : { ...current, [key]: value })
   }, [])
   const read = useCallback(async () => {
+    lastReadAt = Date.now()
     const one = <K extends keyof PcState>(key: K, call: () => Promise<PcState[K]>) =>
       call().then(value => put(key, value), (error: unknown) => report(error, `PcRoom.${key}`, { level: 'warn' }))
     await Promise.all([
@@ -76,10 +78,19 @@ function usePcState(active: boolean) {
   }, [put])
   useEffect(() => {
     if (!active) return
-    const again = () => { void read() }
-    again()
+    if (Date.now() - lastReadAt >= 45_000) void read()
+    let focusTimer: number | undefined
+    const again = () => {
+      window.clearTimeout(focusTimer)
+      focusTimer = window.setTimeout(() => {
+        if (Date.now() - lastReadAt >= 45_000) void read()
+      }, 250)
+    }
     window.addEventListener('focus', again)
-    return () => window.removeEventListener('focus', again)
+    return () => {
+      window.clearTimeout(focusTimer)
+      window.removeEventListener('focus', again)
+    }
   }, [active, read])
   return { state, put, read }
 }
@@ -112,10 +123,8 @@ type Menu = 'exo-ai' | 'storage' | PcPartMenu
  * card, the screen and the board open their own menus. Under it Updates, and beside both Shaders, each scrolling in its
  * own pane. What is set or up to date shows nothing. `jump` opens what a game's link, a notice or Ctrl+K asks for.
  */
-export function PcRoom({ active, jump, games, settings, onSave, onDevices }: {
+export function PcRoom({ active, jump, games, settings, onSave }: {
   active: boolean
-  /** Devices: your mouse, keyboard, audio and controllers, a page of this room. */
-  onDevices?: () => void
   jump: { tab: PcLink } | null
   games: readonly Game[]
   settings: LauncherSettings | null
@@ -187,7 +196,6 @@ export function PcRoom({ active, jump, games, settings, onSave, onDevices }: {
       <ExoAiChip state={exoAi.state} left={stillToSet(state, hdr, settings, onSave)} tune={state.tune} onOpen={() => setMenu('exo-ai')} />
       <AppsChip summary={apps} onOpen={openApps} />
       <StorageChip drives={state.drives} list={compress.list} onOpen={() => setMenu('storage')} />
-      {onDevices ? <button type="button" className="exo-pc-chip" onClick={onDevices}>Devices</button> : null}
     </>
   )
 

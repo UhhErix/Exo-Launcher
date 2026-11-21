@@ -486,15 +486,6 @@
   font-weight: var(--exo-weight-title);
 }
 
-.exo-dc-dm-pin-icon {
-  flex: none;
-  color: var(--color-muted);
-}
-
-.exo-dc-item[aria-current="true"] .exo-dc-dm-pin-icon {
-  color: var(--color-bg);
-}
-
 /* A server's channels: its head and banner on top, then its rows. */
 :root .exo-dc .exo-dc-pane .exo-dc-channels-head {
   display: flex;

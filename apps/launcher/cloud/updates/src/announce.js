@@ -169,7 +169,7 @@ async function claimedCards(mirror, app) {
 /** One DELETE to Discord; the status, or 0 when the request itself failed. */
 async function remove(fetcher, url) {
   try {
-    return (await fetcher(url, { method: 'DELETE' })).status
+    return (await fetcher(url, { method: 'DELETE', signal: AbortSignal.timeout(10_000) })).status
   } catch {
     return 0
   }
@@ -186,15 +186,28 @@ async function readJson(mirror, key) {
 
 /** One request to Discord; the parsed JSON on success, null on any failure. Errors are not returned: they can carry the URL. */
 async function send(fetcher, url, method, body) {
-  try {
-    const response = await fetcher(url, {
-      method,
-      headers: { 'content-type': 'application/json' },
-      body: body === undefined ? undefined : JSON.stringify(body),
-    })
-    if (!response.ok) return null
-    return await response.json().catch(() => ({}))
-  } catch {
-    return null
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      const response = await fetcher(url, {
+        method,
+        headers: { 'content-type': 'application/json' },
+        body: body === undefined ? undefined : JSON.stringify(body),
+        signal: AbortSignal.timeout(10_000),
+      })
+      if (response.status === 429 && attempt === 0) {
+        const limited = await response.json().catch(() => null)
+        const retryAfter = Number(limited?.retry_after)
+        if (Number.isFinite(retryAfter) && retryAfter >= 0 && retryAfter <= 5) {
+          const waitMs = Math.min(5000, Math.ceil(retryAfter * 1000))
+          if (waitMs > 0) await new Promise((resolve) => setTimeout(resolve, waitMs))
+          continue
+        }
+      }
+      if (!response.ok) return null
+      return await response.json().catch(() => ({}))
+    } catch {
+      return null
+    }
   }
+  return null
 }

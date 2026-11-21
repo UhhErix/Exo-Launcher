@@ -1,9 +1,8 @@
 import { useState, type ReactNode } from 'react'
-import { host, type ColorControl, type DisplayChange, type DisplayScreen, type DisplayState, type HdrState, type LauncherSettings, type OutputColor, type ScalingMode } from '../../lib/host'
+import { host, type ColorControl, type DisplayChange, type DisplayScreen, type DisplayState, type HdrState, type LauncherSettings, type OutputColor } from '../../lib/host'
 import { report } from '../../lib/report'
 import { GraphicsControl } from '../graphics/GraphicsControl'
 import { Row, SliderRow, State, SwitchRow } from '../settings/parts'
-import { Choice } from '../settings/Choice'
 import { Spinner } from '../ui/Spinner'
 import { ActionButton } from '../ui/ConfirmButton'
 import { hdrShown, isChoice } from '../../lib/canUse'
@@ -116,18 +115,6 @@ export function DisplayRows({ display, onDisplay }: { display: DisplayState | nu
         <DdcRows ddc={screen.ddc} busy={busy} errorFor={errorFor}
           onDdc={(key, value) => { if (!busy) void run('ddc', { display: screen.id, [key]: value }, key === 'brightness' ? 'ddcBrightness' : 'ddcContrast') }} />
       )}
-      {display.video && (
-        <VideoRows
-          video={display.video}
-          hdrScreen={display.displays.some(item => item.hdr)}
-          busy={busy}
-          error={error}
-          onVideo={(key, change) => { if (!busy) void run('video', { display: screen.id, ...change }, key) }}
-        />
-      )}
-      {screen.scaling && (
-        <ScalingRows scaling={screen.scaling} busy={busy} errorFor={errorFor} onSet={set} />
-      )}
       {screen.adjust && (
         <ColorRows
           key={screen.id}
@@ -212,83 +199,11 @@ function colorText(control: ColorControl, value: number) {
   return control.key === 'gamma' ? (value / 100).toFixed(2) : `${value}${control.unit}`
 }
 
-const SUPER_RESOLUTION = [
-  { value: '0', label: 'Off' },
-  { value: '5', label: 'Auto' },
-  { value: '1', label: 'Quality 1' },
-  { value: '2', label: 'Quality 2' },
-  { value: '3', label: 'Quality 3' },
-  { value: '4', label: 'Quality 4' },
-]
-
-/**
- * NVIDIA Control Panel's RTX video enhancement: Super resolution (Auto or quality 1-4, higher looks
- * sharper and costs more of the GPU) and RTX Video HDR. Shown only where the card has them, and RTX Video HDR only
- * while a screen runs HDR (it does nothing on the others) or while it's on; they change video in browsers and players
- * only, so they apply at once.
- */
-function VideoRows({ video, hdrScreen, busy, error, onVideo }: {
-  video: NonNullable<DisplayState['video']>
-  hdrScreen: boolean
-  busy: string | null
-  error: { key: string; text: string } | null
-  onVideo: (key: string, change: Omit<DisplayChange, 'display'>) => void
-}) {
-  return (
-    <>
-      {video.superResolution !== null && (
-        <Row label="Video upscaling" error={error?.key === 'vsr' ? error.text : null}>
-          <Busy on={busy === 'vsr'} label="Changing video upscaling">
-            <Choice label="Video upscaling" value={String(video.superResolution)} choices={SUPER_RESOLUTION} disabled={!!busy}
-              onChange={value => onVideo('vsr', { superResolution: Number(value) })} />
-          </Busy>
-        </Row>
-      )}
-      {video.hdr !== null && (hdrScreen || video.hdr > 0) && (
-        <Row label="Video HDR" error={error?.key === 'vhdr' ? error.text : null}>
-          <Busy on={busy === 'vhdr'} label="Changing video HDR">
-            <Choice label="Video HDR" value={video.hdr > 0 ? 'on' : 'off'} choices={[{ value: 'off', label: 'Off' }, { value: 'on', label: 'On' }]} disabled={!!busy}
-              onChange={value => onVideo('vhdr', { hdr: value === 'on' })} />
-          </Busy>
-        </Row>
-      )}
-    </>
-  )
-}
-
-const SCALING: { value: ScalingMode; label: string }[] = [
-  { value: 'aspect', label: 'Aspect ratio' },
-  { value: 'full', label: 'Full-screen' },
-  { value: 'none', label: 'No scaling' },
-  { value: 'integer', label: 'Integer scaling' },
-]
-
-/** NVIDIA Control Panel's Adjust desktop size and position > Scaling mode. */
-function ScalingRows({ scaling, busy, errorFor, onSet }: {
-  scaling: NonNullable<DisplayScreen['scaling']>
-  busy: string | null
-  errorFor: (key: string) => string | null
-  onSet: (key: string, change: Omit<DisplayChange, 'display'>) => void
-}) {
-  return (
-    <Row label="Scaling" error={errorFor('scaling')}>
-      <Busy on={busy === 'scaling'} label="Changing the scaling">
-        <Choice label="Scaling" value={scaling.mode} choices={SCALING} disabled={!!busy}
-          onChange={mode => onSet('scaling', { scaling: mode as ScalingMode, scalingGpu: scaling.gpu })} />
-      </Busy>
-    </Row>
-  )
-}
-
-/**
- * "165 Hz, RGB 10-bit, full range, no scaling on the GPU". The host's why follows only where the
- * cable or port holds the screen off RGB, the one case it says how to fix.
- */
 function bestLine(best: DisplayScreen['best']) {
   const line = [
     `${best.refresh} Hz`,
     best.color ? describe(best.color) : null,
-    best.scaling ? 'no scaling on the GPU' : null,
+    best.scaling ? 'aspect ratio on the GPU' : null,
     best.videoHdr ? 'RTX Video HDR on' : null,
   ].filter(Boolean).join(', ')
   return best.why && best.color && best.color.format !== 'rgb' ? `${line}. ${best.why}` : line
