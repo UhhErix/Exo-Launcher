@@ -110,20 +110,6 @@ export function useCoverThumbWidth(): number | null {
   return useSyncExternalStore(subscribe, coverThumbWidth, () => null)
 }
 
-/** The narrowest wide art a banner is sized for: 16:9 store art; Steam's heroes (about 3:1) are wider still. */
-const BANNER_ART_ASPECT = 16 / 9
-
-/**
- * The thumbnail width (thumbUrl's ?w=) that covers a `width` by `height` CSS px banner with wide art at device pixels,
- * or null when the original is the right size. The host sizes a thumbnail for a 2:3 card, so for wide art its height is
- * 1.5 times the asked width; that height covers the banner's, and its width the banner's for art 16:9 or wider.
- */
-export function bannerThumbWidth(width: number, height: number, devicePixelRatio: number): number | null {
-  const tall = Math.max(height, width / BANNER_ART_ASPECT) * Math.max(1, devicePixelRatio)
-  const asked = Math.max(THUMB_MIN, Math.ceil(tall / 1.5 / THUMB_STEP) * THUMB_STEP)
-  return asked > THUMB_MAX ? null : asked
-}
-
 /** Exo's cached cover URL as its grid thumbnail (the same token and name on the thumbnail host); other URLs pass through. */
 export function thumbUrl(url: string, width: number | null): string {
   if (width == null || !url.startsWith(`${COVER_ORIGIN}/`)) return url

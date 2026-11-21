@@ -1,11 +1,12 @@
 
+import { useState } from 'react'
 import { CompanyLogo } from '../../brand/CompanyLogo'
 import { Members } from '../../brand/icons'
 import type { DriveHeat, Game, GameVariant } from '../../lib/host'
+import { artSteamAppId } from '../../lib/library'
 import { formatRelativeLastPlayed, formatSize, storeLabel, formatPlayed } from '../../lib/utils'
 import type { Achievements } from './useGameDetails'
 
-/** Steam Family provenance badge shown inline next to the store beside the game title. */
 export function GameShared({ selected }: { selected: Game }) {
   if (!selected.familyShared) return null
   return (
@@ -16,11 +17,33 @@ export function GameShared({ selected }: { selected: Game }) {
   )
 }
 
-/** The title with the store it belongs to beside it. */
 export function GameHeader({ selected, children }: { selected: Game; children?: React.ReactNode }) {
+  const appId = artSteamAppId(selected)
+  const [failed, setFailed] = useState(false)
+  const [logoKey, setLogoKey] = useState(selected.id)
+  if (logoKey !== selected.id) {
+    setLogoKey(selected.id)
+    setFailed(false)
+  }
+  const logoSrc = appId && !failed
+    ? `https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/${appId}/logo.png`
+    : null
   return (
     <div className="exo-game-title-row">
-      <h1 className="exo-game-title">{selected.title}</h1>
+      {logoSrc ? (
+        <h1 className="exo-game-logo-wrap">
+          <img
+            src={logoSrc}
+            alt={selected.title}
+            className="exo-game-logo"
+            draggable={false}
+            decoding="async"
+            onError={() => setFailed(true)}
+          />
+        </h1>
+      ) : (
+        <h1 className="exo-game-title">{selected.title}</h1>
+      )}
       {children}
     </div>
   )

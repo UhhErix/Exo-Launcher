@@ -280,6 +280,7 @@ export const LibraryPane = memo(function LibraryPane(props: LibraryPaneProps) {
   const [menu, setMenu] = useState<GameMenuAt | null>(null)
   const { onOpen, folders, onFolders, overlayOpen: covered, hiddenIds, onHidden } = props
   const [tab, setTab] = useState<LibraryTab>('home')
+  const [focusSearch, setFocusSearch] = useState(false)
   const [showHidden, setShowHidden] = useState(false)
   const { playing, games } = props
   const installedGames = useMemo(() => games.filter(game => game.installed), [games])
@@ -291,8 +292,27 @@ export const LibraryPane = memo(function LibraryPane(props: LibraryPaneProps) {
     showHidden,
   )
   const { shelf, found } = search
-  const homeDeckGames = playing.length ? playing : games.slice(0, 8)
-  const showingHome = !props.empty && tab === 'home' && !showHidden && search.browsing && homeDeckGames.length > 0
+  const deckGames = useMemo(() => {
+    if (tab === 'installed') return installedGames
+    if (tab === 'updates') return updateGames
+    return playing.length ? playing : games.slice(0, 20)
+  }, [tab, installedGames, updateGames, playing, games])
+  const showingHome = !props.empty && tab !== 'all' && !showHidden && search.browsing
+  const openSearchView = useCallback(() => {
+    setShowHidden(false)
+    setTab('all')
+    setFocusSearch(true)
+  }, [])
+  useEffect(() => {
+    if (!active || covered) return
+    const onKey = (event: KeyboardEvent) => {
+      if (event.defaultPrevented || !(event.ctrlKey || event.metaKey) || event.key.toLowerCase() !== 'f' || event.shiftKey || event.altKey) return
+      event.preventDefault()
+      openSearchView()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [active, covered, openSearchView])
   const [picked, setPicked] = useState<ReadonlySet<string> | null>(null)
   const anchor = useRef<string | null>(null)
   const selectMode = useCallback((on: boolean) => {
@@ -323,9 +343,10 @@ export const LibraryPane = memo(function LibraryPane(props: LibraryPaneProps) {
   }, [tab])
   const switchTab = useCallback((next: LibraryTab) => {
     setTab(next)
+    setFocusSearch(false)
     setShowHidden(false)
     setPicked(null)
-    if (next === 'home') search.clear()
+    if (next !== 'all') search.clear()
   }, [search])
   const resetScroll = useRef(false)
   useEffect(() => {
@@ -489,7 +510,7 @@ export const LibraryPane = memo(function LibraryPane(props: LibraryPaneProps) {
   // Library keeps them (the pane is inert under it), so the shelf's header never changes height.
   const tools = useMemo(() => active ? (
     <LibraryTools selecting={selecting} onSelecting={selectMode} sort={sort} onSort={onSort} hidden={showHidden} onHidden={hiddenView}
-      onActivateKey={onActivateKey} onNewFolder={() => newFolder()} onAddGame={onAddGame} refreshing={refreshing} onRefresh={runRefresh} showSort={!showingHome} />
+      onActivateKey={onActivateKey} onNewFolder={() => newFolder()} onAddGame={onAddGame} refreshing={refreshing} onRefresh={runRefresh} showSort={!showingHome} compact={showingHome} />
   ) : null, [active, selecting, selectMode, sort, onSort, showHidden, hiddenView, onActivateKey, newFolder, onAddGame, refreshing, runRefresh, showingHome])
   return (
     <div className="relative z-10 flex min-h-0 min-w-0 flex-1">
@@ -499,24 +520,26 @@ export const LibraryPane = memo(function LibraryPane(props: LibraryPaneProps) {
         inert={overlayOpen ? true : undefined}
         style={cardWidth == null ? undefined : { '--exo-card-w': `${cardWidth}px` } as CSSProperties}
       >
-        <LibraryHead
-          empty={props.empty}
-          tab={tab}
-          onTab={switchTab}
-          total={games.length}
-          installedCount={installedGames.length}
-          updatesCount={updateGames.length}
-          found={found}
-          query={search.query}
-          onQuery={next => { if (showHidden && next) setShowHidden(false); if (tab === 'home' && next) setTab('all'); search.setQuery(next) }}
-          understood={search.read.understood}
-          filters={search.filters}
-          options={search.options}
-          onFilter={filter => { if (showHidden) setShowHidden(false); if (tab === 'home') setTab('all'); search.toggleFilter(filter) }}
-          onClear={search.clear}
-          onWarmFilters={search.wantFriends}
-          tools={tools}
-        />
+        {!showingHome ? (
+          <LibraryHead
+            empty={props.empty}
+            tab={tab}
+            onTab={switchTab}
+            total={games.length}
+            updatesCount={updateGames.length}
+            found={found}
+            query={search.query}
+            onQuery={next => { if (showHidden && next) setShowHidden(false); search.setQuery(next) }}
+            understood={search.read.understood}
+            filters={search.filters}
+            options={search.options}
+            onFilter={filter => { if (showHidden) setShowHidden(false); search.toggleFilter(filter) }}
+            onClear={search.clear}
+            onWarmFilters={search.wantFriends}
+            tools={tools}
+            autoFocusSearch={focusSearch}
+          />
+        ) : null}
         <LibraryRefreshNotice
           empty={props.empty}
           error={props.error}
@@ -535,7 +558,11 @@ export const LibraryPane = memo(function LibraryPane(props: LibraryPaneProps) {
           />
         ) : showingHome ? (
           <HomeDeck
-            games={homeDeckGames}
+            tab={tab}
+            onTab={switchTab}
+            onSearchOpen={openSearchView}
+            games={deckGames}
+            updatesCount={updateGames.length}
             active={active && !covered}
             blocked={blocked}
             transferFor={props.transferFor}
@@ -544,6 +571,7 @@ export const LibraryPane = memo(function LibraryPane(props: LibraryPaneProps) {
             onPlay={props.onPlay}
             onProperties={props.onProperties}
             onMenu={openMenu}
+            tools={tools}
           />
         ) : (
           <div className="flex min-h-0 min-w-0 w-full flex-1 flex-col">

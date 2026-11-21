@@ -612,7 +612,7 @@
 /* Feel: every capsule control gives way a little under the press (never on hover): in over 90ms, back
    over 120ms (each control's own transition list carries `scale`; DESIGN.md › Motion › Press). The
    individual property, so a press never fights a control's own transform. */
-:is(.exo-set-btn, .exo-game-tool, .exo-shelf-sort-trigger, .exo-library-more, .exo-home-room-btn, .exo-home-more-btn, .exo-home-step, .exo-gifts-pill,
+:is(.exo-set-btn, .exo-game-tool, .exo-shelf-sort-trigger, .exo-library-more, .exo-home-details-btn, .exo-home-more-btn, .exo-home-icon-btn, .exo-gifts-pill,
   .exo-bar-search, .exo-nav-btn, .exo-settings-btn, .exo-shelf-chip,
   .exo-play, .exo-dc-tab, .exo-music-bar-play, .exo-island-btn, .exo-mini-play, .exo-game-close, .exo-dc-cv-button,
   .exo-dc-voice-btn, .exo-dc-voice-join, .exo-dc-watch, .button, .exo-capture-btn, .exo-mouse-pill, .exo-dc-server, .exo-dc-place, .exo-dc-place-chip, .exo-dc-round-btn,
@@ -1263,7 +1263,7 @@ html[data-exo-motion="reduce"] .exo-dc .exo-dc-dock {
 }
 
 /* Reduce motion: presses and hovers change color only, nothing moves. */
-html[data-exo-motion="reduce"] :is(.exo-set-btn, .exo-game-tool, .exo-shelf-sort-trigger, .exo-library-more, .exo-home-room-btn, .exo-home-more-btn, .exo-home-step, .exo-gifts-pill,
+html[data-exo-motion="reduce"] :is(.exo-set-btn, .exo-game-tool, .exo-shelf-sort-trigger, .exo-library-more, .exo-home-details-btn, .exo-home-more-btn, .exo-home-icon-btn, .exo-gifts-pill,
   .exo-bar-search, .exo-nav-btn, .exo-settings-btn, .exo-shelf-chip,
   .exo-play, .exo-dc-tab, .exo-music-bar-play, .exo-island-btn, .exo-mini-play, .exo-game-close, .exo-dc-voice-btn,
   .exo-dc-voice-join, .exo-dc-watch, .exo-dc-cv-button, .exo-capture-btn, .exo-mouse-pill, .exo-dc-server, .exo-dc-place, .exo-dc-place-chip, .exo-dc-round-btn, .exo-sgp-offer, .exo-dc-round-btn):active:not(:disabled),

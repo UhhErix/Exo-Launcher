@@ -23,7 +23,7 @@ function isShelfGame(game: Game, transferId: string | null, showTools: boolean):
   return game.store === 'local'
 }
 
-const CONTINUE_MAX = 8
+const CONTINUE_MAX = 20
 
 function continueOrder(games: Game[], transferId: string | null): Game[] {
   const played = (game: Game) => (game.lastPlayedUtc ? Date.parse(game.lastPlayedUtc) : 0)

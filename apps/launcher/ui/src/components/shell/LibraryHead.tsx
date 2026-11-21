@@ -3,7 +3,6 @@ import { Close, Filter, Search } from '../../brand/icons'
 import { useDismissOnAncestorScroll } from '../../lib/dismiss'
 import { useGlide } from '../../lib/glide'
 import { filterKey, filterLabel, type LibraryFilter } from '../../lib/librarySearch'
-import { GiftsPill } from './GiftsShelf'
 
 export type FilterOption = { section: string; filter: LibraryFilter; disabled?: boolean }
 export type LibraryTab = 'home' | 'installed' | 'all' | 'updates'
@@ -13,7 +12,6 @@ export function LibraryHead({
   tab,
   onTab,
   total,
-  installedCount,
   updatesCount,
   found,
   query,
@@ -25,12 +23,12 @@ export function LibraryHead({
   onClear,
   onWarmFilters,
   tools,
+  autoFocusSearch = false,
 }: {
   empty: boolean
   tab: LibraryTab
   onTab: (next: LibraryTab) => void
   total: number
-  installedCount: number
   updatesCount: number
   found: readonly unknown[] | null
   query: string
@@ -42,40 +40,27 @@ export function LibraryHead({
   onClear: () => void
   onWarmFilters: () => void
   tools: ReactNode
+  autoFocusSearch?: boolean
 }) {
   const field = useRef<HTMLInputElement>(null)
   const tabsGlide = useGlide<HTMLDivElement>()
-  const isHome = tab === 'home'
   useEffect(() => {
-    const onKey = (event: KeyboardEvent) => {
-      if (event.defaultPrevented || !(event.ctrlKey || event.metaKey) || event.key.toLowerCase() !== 'f' || event.shiftKey || event.altKey) return
-      const room = document.querySelector('[data-log-area="library"]')
-      if (!room || room.hasAttribute('hidden') || room.classList.contains('is-backstage')) return
-      event.preventDefault()
-      if (isHome) {
-        onTab('all')
-        requestAnimationFrame(() => {
-          field.current?.focus()
-          field.current?.select()
-        })
-        return
-      }
+    if (!autoFocusSearch) return
+    requestAnimationFrame(() => {
       field.current?.focus()
       field.current?.select()
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [isHome, onTab])
+    })
+  }, [autoFocusSearch])
   if (empty) return <h1 className="sr-only">Library</h1>
   const tabs: ReadonlyArray<{ id: LibraryTab; label: string; count?: number }> = [
-    { id: 'home', label: 'Home' },
-    { id: 'installed', label: 'Installed', count: installedCount },
-    { id: 'all', label: 'All Games', count: total },
-    { id: 'updates', label: 'Updates', count: updatesCount },
+    { id: 'home', label: 'Recent' },
+    { id: 'installed', label: 'Installed' },
+    ...(updatesCount > 0 ? [{ id: 'updates' as const, label: 'Updates', count: updatesCount }] : []),
+    { id: 'all', label: 'All games' },
   ]
   return (
     <>
-      <header className={`exo-library-head${isHome ? ' is-home' : ''}`}>
+      <header className="exo-library-head">
         <div className="exo-library-tabs-wrap">
           <h1 className="sr-only">Library</h1>
           <div ref={tabsGlide} className="exo-glass exo-shelf-chips exo-glide exo-library-tabs" role="group" aria-label="Library view">
@@ -89,51 +74,47 @@ export function LibraryHead({
               >
                 <span>{item.label}</span>
                 {item.count != null ? (
-                  <span className={`exo-library-tab-count tabular-nums${item.id === 'updates' && item.count > 0 ? ' has-updates' : ''}`}>
-                    {item.count.toLocaleString('en-US')}
-                  </span>
+                  <span className="exo-library-tab-count has-updates tabular-nums">{item.count}</span>
                 ) : null}
               </button>
             ))}
           </div>
-          {!isHome && found != null ? (
+          {found != null ? (
             <span className="exo-library-chip tabular-nums">
               {`${found.length.toLocaleString('en-US')} of ${total.toLocaleString('en-US')}`}
             </span>
           ) : null}
         </div>
-        {!isHome ? (
-          <label className="exo-library-search">
-            <Search size={16} />
-            <input
-              ref={field}
-              type="search"
-              value={query}
-              placeholder="Search your games"
-              aria-label="Search your games"
-              spellCheck={false}
-              autoComplete="off"
-              onChange={event => onQuery(event.target.value)}
-              onKeyDown={event => {
-                if (event.key !== 'Escape' || !query) return
-                event.preventDefault()
-                event.stopPropagation()
-                onQuery('')
-              }}
-            />
-            {query ? (
-              <button type="button" className="exo-library-search-clear" aria-label="Clear search" onClick={() => { onQuery(''); field.current?.focus() }}>
-                <Close size={14} />
-              </button>
-            ) : null}
-          </label>
-        ) : null}
+        <label className="exo-library-search">
+          <Search size={16} />
+          <input
+            ref={field}
+            type="search"
+            value={query}
+            placeholder="Search your games"
+            aria-label="Search your games"
+            spellCheck={false}
+            autoComplete="off"
+            onChange={event => onQuery(event.target.value)}
+            onKeyDown={event => {
+              if (event.key !== 'Escape' || !query) return
+              event.preventDefault()
+              event.stopPropagation()
+              onQuery('')
+            }}
+          />
+          {query ? (
+            <button type="button" className="exo-library-search-clear" aria-label="Clear search" onClick={() => { onQuery(''); field.current?.focus() }}>
+              <Close size={14} />
+            </button>
+          ) : null}
+        </label>
         <div className="exo-library-tools">
-          {isHome ? <GiftsPill /> : <FilterPopover filters={filters} options={options} onFilter={onFilter} onClear={onClear} onWarm={onWarmFilters} />}
+          <FilterPopover filters={filters} options={options} onFilter={onFilter} onClear={onClear} onWarm={onWarmFilters} />
           {tools}
         </div>
       </header>
-      {!isHome && (filters.length || understood.length) ? (
+      {filters.length || understood.length ? (
         <div className="exo-library-chips" role="group" aria-label="Filters">
           {understood.map(word => <span key={'q:' + word} className="exo-library-chip is-understood"><Search size={12} />{word}</span>)}
           {filters.map(filter => (
