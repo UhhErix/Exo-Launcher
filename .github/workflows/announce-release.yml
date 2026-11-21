@@ -23,7 +23,7 @@ jobs:
           import os
           import re
           import time
-          from urllib.error import HTTPError
+          from urllib.error import HTTPError, URLError
           from urllib.request import Request, urlopen
 
           tag = os.environ['RELEASE_TAG']
@@ -41,6 +41,8 @@ jobs:
                   response = urlopen(request, timeout=20)
               except HTTPError as error:
                   response = error
+              except (URLError, TimeoutError, OSError):
+                  return 0, {'status': 'transient'}
 
               with response:
                   code = response.code
@@ -53,10 +55,11 @@ jobs:
           delays = [5, 5, 10, 10, 15, 20]
           for attempt in range(44):
               code, result = ask()
-              if not (code == 409 and isinstance(result, dict) and result.get('status') == 'not-live'):
+              retrying = code == 0 or (code == 409 and isinstance(result, dict) and result.get('status') == 'not-live')
+              if not retrying:
                   break
               wait = delays[attempt] if attempt < len(delays) else 30
-              print(f'The mirror does not serve {tag} yet (try {attempt + 1} of 44); asking again in {wait} seconds.')
+              print(f'Retryable response for {tag} (HTTP {code}, try {attempt + 1} of 44); asking again in {wait} seconds.')
               time.sleep(wait)
 
           status = result.get('status') if isinstance(result, dict) else None
