@@ -1,8 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Bolt, Performance } from '../../brand/icons'
+import { Bolt } from '../../brand/icons'
 import {
   host,
-  type AutoTune,
   type AutopilotState,
   type DisplayState,
   type DrivesState,
@@ -11,7 +10,6 @@ import {
   type HdrState,
   type Interrupts,
   type LauncherSettings,
-  type PcAbout,
   type PcHealth,
   type Tuning,
 } from '../../lib/host'
@@ -22,7 +20,6 @@ import { Group, Row, State } from '../settings/parts'
 import { ActionButton } from '../ui/ConfirmButton'
 import { ErrorNote } from '../ui/ErrorNote'
 import { AutopilotControls, AutopilotReports } from './Autopilot'
-import { AutoTuneRows } from './AutoTune'
 import { BestSetup } from './BestSetup'
 import { BestScreenRows } from './DisplayTab'
 import { InterruptRows } from './InterruptRows'
@@ -31,7 +28,7 @@ import type { PcState } from './PcRoom'
 import { SystemGroup } from './SystemGroup'
 import { SetupRows } from './ThisPcTab'
 
-/** Polls unified Exo AI status when PC room is visible, and faster while Exo AI is open. */
+/** Polls unified Exo AI status when PC room is visible, and faster while Auto Tune is open. */
 export function useExoAi(active: boolean, open: boolean) {
   const [state, setState] = useState<ExoAiState | null>(null)
   const visible = usePageVisible()
@@ -46,41 +43,6 @@ export function useExoAi(active: boolean, open: boolean) {
     return () => window.clearInterval(timer)
   }, [active, open, visible, refresh])
   return { state, setState, refresh }
-}
-
-/** The unified Exo AI top chip in This PC, folding Best Settings, Autopilot, Auto-Tune, and Fans into one entry. */
-export function ExoAiChip({ state, left, tune, onOpen }: {
-  state: ExoAiState | null
-  left: number | null
-  tune: AutoTune | null
-  onOpen: () => void
-}) {
-  const gaming = state?.gaming.active ?? false
-  const testing = tune?.parts.some(part => part.state === 'testing') ?? false
-  const tuned = tune?.parts.some(part => part.state === 'tuned') ?? false
-  let label = 'Exo AI'
-  let tone: 'is-good' | 'is-bad' | null = null
-
-  if (gaming) {
-    label = state?.gaming.gameTitle ? `Exo AI · ${state.gaming.gameTitle}` : 'Exo AI · Active'
-    tone = 'is-good'
-  } else if (testing) {
-    label = 'Exo AI · Tuning'
-    tone = 'is-good'
-  } else if (left != null && left > 0) {
-    label = `Exo AI · ${left} to check`
-    tone = 'is-bad'
-  } else if (state?.autoApplyBestSettings || tuned || (state?.fans.preset && state.fans.preset !== 'auto')) {
-    label = 'Exo AI'
-    tone = 'is-good'
-  }
-
-  return (
-    <button type="button" className={cn('exo-pc-chip', tone)} data-pc-menu="exo-ai" aria-haspopup="dialog" onClick={onOpen}>
-      <Performance size={14} />
-      {label}
-    </button>
-  )
 }
 
 function formatFanDetail(fans: ExoAiState['fans'] | undefined): string {
@@ -145,7 +107,7 @@ function ExoAiCoreGroup({ exoAi }: { exoAi: ExoAiState | null }) {
   )
 }
 
-/** Unified Exo AI optimization hub: background core, NVML GPU fans, Auto-Tune, Autopilot, and Best Settings. */
+/** Unified Exo AI panel embedded inside Auto Tune: background core, NVML GPU fans, Autopilot & collapsible overrides. */
 export function ExoAiPanel({
   active,
   exoAi,
@@ -156,13 +118,11 @@ export function ExoAiPanel({
   hdr,
   settings,
   onSave,
-  onTune,
   onBestRead,
   onDisplay,
   onHealth,
   onInterrupts,
   onTuning,
-  onOpenAutoTune,
 }: {
   active: boolean
   exoAi: ExoAiState | null
@@ -173,13 +133,11 @@ export function ExoAiPanel({
   hdr: HdrState | null
   settings: LauncherSettings | null
   onSave: (patch: Partial<LauncherSettings>) => Promise<boolean>
-  onTune: (next: AutoTune) => void
   onBestRead: () => Promise<void>
   onDisplay: (next: DisplayState) => void
   onHealth: (next: PcHealth) => void
   onInterrupts: (next: Interrupts) => void
   onTuning: (next: Tuning) => void
-  onOpenAutoTune?: () => void
 }) {
   const [error, setError] = useState<string | null>(null)
 
@@ -196,7 +154,6 @@ export function ExoAiPanel({
   const health: PcHealth | null = state.health
   const tuning: Tuning | null = state.tuning
   const drives: DrivesState | null = state.drives
-  const about: PcAbout | null = state.about
 
   return (
     <>
@@ -212,41 +169,35 @@ export function ExoAiPanel({
         </Row>
       </Group>
 
-      {(state.tune?.parts.length ?? 0) > 0 || onOpenAutoTune ? (
-        <Group id="exo-ai-tune" title="Auto-Tune">
-          {onOpenAutoTune ? (
-            <Row label="Auto Tune studio" detail="One-click optimization across cooling, display, privacy, VRR LFC, caches & silicon">
-              <button type="button" className="exo-set-btn" onClick={onOpenAutoTune}>Open</button>
-            </Row>
-          ) : null}
-          <AutoTuneRows tune={state.tune} profile={profile} about={about} onTune={onTune} />
-        </Group>
-      ) : null}
-
       <Group id="exo-ai-autopilot" title="Autopilot">
         <AutopilotControls state={autopilot} onState={onAutopilot} />
         <AutopilotReports state={autopilot} />
       </Group>
 
-      <Group id="exo-ai-best" title="Best Settings">
-        <BestSetup
-          profile={profile}
-          health={health}
-          tuning={tuning}
-          drives={drives}
-          screen={hdr}
-          settings={settings}
-          onSave={onSave}
-          onRead={onBestRead}
-        />
-        <BestScreenRows display={state.display} onDisplay={onDisplay} />
-        <SetupRows place="needs" active={active} health={health} onHealth={onHealth} />
-        <InterruptRows place="needs" state={state.interrupts} onState={onInterrupts} />
-        <SetupRows place="section" active={active} health={health} onHealth={onHealth} />
-        <InterruptRows place="section" state={state.interrupts} onState={onInterrupts} />
-        <NetworkGroup health={health} onHealth={onHealth} />
-        <SystemGroup tuning={tuning} onTuning={onTuning} />
-      </Group>
+      <details className="exo-at-details" open={Boolean(tuning?.restart)}>
+        <summary className="exo-at-details-summary">Manual overrides &amp; undo</summary>
+        <div className="exo-at-details-body">
+          <Group id="exo-ai-best" title="Best Settings &amp; Undo">
+            <BestSetup
+              profile={profile}
+              health={health}
+              tuning={tuning}
+              drives={drives}
+              screen={hdr}
+              settings={settings}
+              onSave={onSave}
+              onRead={onBestRead}
+            />
+            <BestScreenRows display={state.display} onDisplay={onDisplay} />
+            <SetupRows place="needs" active={active} health={health} onHealth={onHealth} />
+            <InterruptRows place="needs" state={state.interrupts} onState={onInterrupts} />
+            <SetupRows place="section" active={active} health={health} onHealth={onHealth} />
+            <InterruptRows place="section" state={state.interrupts} onState={onInterrupts} />
+            <NetworkGroup health={health} onHealth={onHealth} />
+            <SystemGroup tuning={tuning} onTuning={onTuning} />
+          </Group>
+        </div>
+      </details>
     </>
   )
 }

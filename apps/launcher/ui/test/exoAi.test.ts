@@ -8,12 +8,13 @@ const pcRoom = read('../src/components/gpu/PcRoom.tsx')
 const exoAiPanel = read('../src/components/gpu/ExoAiPanel.tsx')
 const bestSetup = read('../src/components/gpu/BestSetup.tsx')
 
-test('PcRoom exposes Auto Tune, Exo AI, Apps, and Storage chips while Devices lives in TitleBar and Upscalers merges into Graphics', () => {
+test('PcRoom exposes 3 chips (Auto Tune, Apps, Storage) while Exo AI lives inside Auto Tune and Devices lives in TitleBar', () => {
   assert.match(pcRoom, /<AutoTuneChip\b/)
   assert.match(pcRoom, /<AutoTuneOverlay\b/)
-  assert.match(pcRoom, /<ExoAiChip\b/)
   assert.match(pcRoom, /<AppsChip\b/)
   assert.match(pcRoom, /<StorageChip\b/)
+  assert.doesNotMatch(pcRoom, /<ExoAiChip\b/)
+  assert.doesNotMatch(pcRoom, /<PcMenu title="Exo AI"/)
   assert.doesNotMatch(pcRoom, />Devices</)
   assert.match(read('../src/components/shell/TitleBar.tsx'), /id:\s*'devices'/)
 
@@ -22,9 +23,9 @@ test('PcRoom exposes Auto Tune, Exo AI, Apps, and Storage chips while Devices li
   assert.match(pcRoom, /<PcMenu title="Storage"[\s\S]*?<StorageSheet/)
 })
 
-test('PcRoom preserves legacy PcLink jump routing into Exo AI, Storage, and Graphics', () => {
-  assert.match(pcRoom, /performance:\s*'exo-ai'/)
-  assert.match(pcRoom, /autopilot:\s*'exo-ai'/)
+test('PcRoom routes legacy performance and autopilot links into Auto Tune tabs while keeping Storage and Graphics links', () => {
+  assert.match(pcRoom, /jump\.tab === 'performance'[\s\S]*?openAutoTune\('studio'\)/)
+  assert.match(pcRoom, /jump\.tab === 'autopilot'[\s\S]*?openAutoTune\('exo-ai'\)/)
   assert.match(pcRoom, /drives:\s*'storage'/)
   assert.match(pcRoom, /compress:\s*'storage'/)
   assert.match(pcRoom, /upscalers:\s*'graphics'/)
@@ -33,13 +34,13 @@ test('PcRoom preserves legacy PcLink jump routing into Exo AI, Storage, and Grap
   assert.match(pcRoom, /jump\.tab === 'apps'/)
 })
 
-test('ExoAiPanel runs automatic GPU fan cooling without manual toggles or preset pickers', () => {
-  assert.doesNotMatch(exoAiPanel, /exo-ai-auto-apply|exo-ai-drift|Always apply best settings silently|Background drift check|FAN_PRESET_CHOICES|exo-ai-fan-preset/)
+test('ExoAiPanel stays streamlined inside Auto Tune with automatic cooling, Autopilot, and collapsible overrides', () => {
+  assert.doesNotMatch(exoAiPanel, /exo-ai-auto-apply|exo-ai-drift|Always apply best settings silently|Background drift check|FAN_PRESET_CHOICES|exo-ai-fan-preset|<AutoTuneRows\b/)
   assert.match(exoAiPanel, /Watching in background/)
   assert.match(exoAiPanel, /label="GPU fans"/)
   assert.match(exoAiPanel, /Automatic/)
-  assert.match(exoAiPanel, /<AutoTuneRows\b/)
   assert.match(exoAiPanel, /<AutopilotControls\b/)
+  assert.match(exoAiPanel, /<details className="exo-at-details"/)
   assert.match(exoAiPanel, /<BestSetup\b/)
 })
 
