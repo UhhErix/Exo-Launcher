@@ -11,7 +11,7 @@
 import assert from 'node:assert/strict'
 import { createHash } from 'node:crypto'
 import { afterEach, beforeEach, test } from 'node:test'
-import { CHECK_SECONDS, STATE_KEY, compactRelease, fill, parseSha256File } from '../src/github.js'
+import { CHECK_SECONDS, STATE_KEY, compactRelease, fill, isGitHubApiUrl, parseSha256File } from '../src/github.js'
 
 const worker = (await import('../src/worker.js')).default
 const ORIGIN = 'https://updates.test'
@@ -846,4 +846,12 @@ test('a changelog whose three promotion writes failed is reconciled on the next 
   await worker.scheduled({}, { MIRROR: mirror }, tick2)
   await tick2.settle()
   assert.equal(mirror.text('launcher/CHANGELOG.md'), '## 3.28.0 — newer\n')
+})
+
+test('isGitHubApiUrl only matches exact https://api.github.com host', () => {
+  assert.equal(isGitHubApiUrl('https://api.github.com/repos/UhhErix/Exo-Launcher/releases/latest'), true)
+  assert.equal(isGitHubApiUrl('https://api.github.com:443/repos/UhhErix/Exo-Launcher/releases/latest'), true)
+  assert.equal(isGitHubApiUrl('https://api.github.com.evil.com/repos/UhhErix/Exo-Launcher'), false)
+  assert.equal(isGitHubApiUrl('http://api.github.com/repos/UhhErix/Exo-Launcher'), false)
+  assert.equal(isGitHubApiUrl('not-a-url'), false)
 })

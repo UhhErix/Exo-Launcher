@@ -65,10 +65,19 @@ async function sha256Of(bytes) {
   return hex(await crypto.subtle.digest('SHA-256', bytes))
 }
 
+export function isGitHubApiUrl(url) {
+  try {
+    const parsed = new URL(url)
+    return parsed.protocol === 'https:' && parsed.hostname === 'api.github.com' && (parsed.port === '' || parsed.port === '443')
+  } catch {
+    return false
+  }
+}
+
 /** A request to GitHub with a time limit; null when it fails or takes too long. Sends GitHub API headers only to api.github.com. */
 async function ask(url, init = {}) {
   const signal = typeof AbortSignal.timeout === 'function' ? AbortSignal.timeout(ASK_MS) : undefined
-  const baseHeaders = url.startsWith(API) ? HEADERS : AGENT
+  const baseHeaders = isGitHubApiUrl(url) ? HEADERS : AGENT
   try {
     return await fetch(url, { ...init, headers: { ...baseHeaders, ...(init.headers ?? {}) }, signal })
   } catch {
