@@ -36,6 +36,8 @@ const ICONS: Record<TuningKey, ReactNode> = {
   svcHostSplit: <Memory size={16} />,
   gpuPstate: <GraphicsCard size={16} />,
   cpuMitigations: <Lock size={16} />,
+  bootLatency: <Bolt size={16} />,
+  memCompression: <Memory size={16} />,
 }
 
 /**

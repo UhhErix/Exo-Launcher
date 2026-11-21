@@ -693,7 +693,7 @@ export type NetCheck = { before: NetSample | null; after: NetSample; said: strin
 export type PcHealth = { ok: boolean; message?: string | null; items: PcHealthItem[]; check?: NetCheck | null }
 
 /** Best settings › System's items (SystemTuning.cs): Windows defaults a tweak changed (Best settings) and two opt-ins (their own switch only). */
-export type TuningKey = 'timer' | 'scheduling' | 'pagefile' | 'cache' | 'captureService' | 'vrrLfc' | 'privacy' | 'tasks' | 'winFeatures' | 'osOverhead' | 'kernelLatency' | 'usbPower' | 'aiTelemetry' | 'storageFs' | 'gamingUx' | 'amdGpuPower' | 'hags' | 'services' | 'integrity' | 'vrr' | 'mouseAccel' | 'mpoOff' | 'hibernateOff' | 'backgroundApps' | 'svcHostSplit' | 'gpuPstate' | 'cpuMitigations'
+export type TuningKey = 'timer' | 'scheduling' | 'pagefile' | 'cache' | 'captureService' | 'vrrLfc' | 'privacy' | 'tasks' | 'winFeatures' | 'osOverhead' | 'kernelLatency' | 'usbPower' | 'aiTelemetry' | 'storageFs' | 'gamingUx' | 'amdGpuPower' | 'hags' | 'mpoOff' | 'hibernateOff' | 'backgroundApps' | 'svcHostSplit' | 'gpuPstate' | 'cpuMitigations' | 'bootLatency' | 'memCompression' | 'services' | 'integrity' | 'vrr' | 'mouseAccel'
 /**
  * One item: on, Exo's setting is in place; off, the player turned a Best settings item off; optIn, only its own switch sets it;
  * restart, a change (either way) waits on a restart; needsRestart, whether changing it requires a restart; blocked, why Exo won't change it here (an anti-cheat, a policy).

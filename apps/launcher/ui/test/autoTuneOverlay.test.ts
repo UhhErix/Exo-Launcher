@@ -11,6 +11,8 @@ const stagesSrc = read('../src/components/gpu/autoTuneStages.ts')
 const overlayCss = read('../src/styles/auto-tune-overlay.css')
 const systemGroupSrc = read('../src/components/gpu/SystemGroup.tsx')
 const pcRoomCss = read('../src/styles/pc-room.css')
+const titleBarSrc = read('../src/components/shell/TitleBar.tsx')
+const systemCss = read('../src/styles/system.css')
 
 test('AutoTuneOverlay runs all 6 safe stages, uses native Exo surfaces, and eliminates AI slop', () => {
   for (const id of ['cooling', 'graphics', 'system', 'bloat', 'cleanup', 'drivers']) {
@@ -19,6 +21,8 @@ test('AutoTuneOverlay runs all 6 safe stages, uses native Exo surfaces, and elim
   assert.match(stagesSrc, /host\.gpuDisplay\('set', \{ display: screen\.id, best: true \}\)/)
   assert.match(stagesSrc, /host\.systemTuning\('playbook'\)/)
   assert.match(stagesSrc, /host\.systemInterrupts\(/)
+  assert.match(stagesSrc, /item\.key !== 'vrr' && item\.key !== 'mouseAccel'/)
+  assert.doesNotMatch(stagesSrc, /removeBloat|Skipped \(optional\)/)
   assert.match(stagesSrc, /item\.id !== 'bin'/)
   assert.match(stagesSrc, /if \(clean\.message\)[\s\S]*status:\s*'done'/)
   assert.doesNotMatch(stagesSrc, /clean\.message[\s\S]*status:\s*'warn'/)
@@ -27,7 +31,10 @@ test('AutoTuneOverlay runs all 6 safe stages, uses native Exo surfaces, and elim
   assert.match(overlaySrc, /className="exo-system-panel exo-at-panel"/)
   assert.match(overlaySrc, /<Progress\b/)
   assert.match(overlaySrc, /<ExoAiFooter\b/)
-  assert.doesNotMatch(overlaySrc, /role="tablist"|exo-at-bg-glow|exo-at-bg-grid|exo-at-orbit|exo-at-reactor-card/)
+  assert.match(overlaySrc, /data-tune-phase=\{phase\}/)
+  assert.match(overlaySrc, /exo-at-stage-fx/)
+  assert.match(overlaySrc, /exo-at-cinema/)
+  assert.doesNotMatch(overlaySrc, /role="tablist"|exo-at-bg-glow|exo-at-bg-grid|exo-at-orbit|exo-at-reactor-card|Include bloat app removal|<Switch\b/)
 
   assert.match(exoAiSrc, /<Popover\b/)
   assert.doesNotMatch(exoAiSrc, /Checking every 30m|Applied automatically|Watching in background|<details/)
@@ -41,9 +48,13 @@ test('AutoTuneOverlay runs all 6 safe stages, uses native Exo surfaces, and elim
   assert.match(overlayCss, /var\(--color-bg\)/)
   assert.match(overlayCss, /var\(--exo-type-page\)/)
   assert.match(overlayCss, /:root\[data-exo-motion="reduce"\]/)
+  assert.match(overlayCss, /@keyframes exo-at-room-in/)
+  assert.match(overlayCss, /@keyframes exo-at-sweep-run/)
   assert.doesNotMatch(overlayCss, /exo-at-bg-glow|exo-at-bg-grid|exo-at-orbit|exo-at-reactor-card/)
   assert.match(pcRoomCss, /\.exo-pc-chip:has\(> svg:first-child\)/)
   assert.doesNotMatch(pcRoomCss, /\.exo-ai-status|\.exo-ai-pills|\.exo-ai-pill|\.exo-storage-section/)
+  assert.doesNotMatch(titleBarSrc, /Ctrl K|exo-bar-kbd/)
+  assert.doesNotMatch(systemCss, /\.exo-bar-kbd/)
 })
 
 test('SystemGroup maps icons for playbook tuning keys', () => {
@@ -65,4 +76,6 @@ test('SystemGroup maps icons for playbook tuning keys', () => {
   assert.match(systemGroupSrc, /svcHostSplit:\s*<Memory/)
   assert.match(systemGroupSrc, /gpuPstate:\s*<GraphicsCard/)
   assert.match(systemGroupSrc, /cpuMitigations:\s*<Lock/)
+  assert.match(systemGroupSrc, /bootLatency:\s*<Bolt/)
+  assert.match(systemGroupSrc, /memCompression:\s*<Memory/)
 })

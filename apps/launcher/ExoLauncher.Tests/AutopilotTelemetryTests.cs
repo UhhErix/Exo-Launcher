@@ -313,4 +313,42 @@ public sealed class AutopilotTelemetryTests : IDisposable
         Assert.Equal(["updater"], AutopilotReports.LearnedFor(reports, "g" + (59 % 3)));
         Assert.True(new FileInfo(path).Length < 256 * 1024);
     }
+
+    [Fact]
+    public void Watch_purges_standby_memory_on_islc_threshold_with_cooldown_only_in_front()
+    {
+        var clock = new DateTime(2026, 11, 21, 12, 0, 0, DateTimeKind.Utc);
+        var currentSecond = Calm() with { Free = 2L << 30, Standby = 4L << 30 };
+        var purges = 0;
+        var watch = new AutopilotWatch(
+            () => new CustomSampler(() => currentSecond),
+            _ => true,
+            () => clock,
+            () => { purges++; return true; });
+
+        watch.Second("g1", "Game", true, Frames(7, 10), [1]);
+        Assert.Equal(0, purges);
+
+        currentSecond = Calm() with { Free = 512L << 20, Standby = 2L << 30 };
+        watch.Second("g1", "Game", false, [], [1]);
+        Assert.Equal(0, purges);
+
+        watch.Second("g1", "Game", true, Frames(7, 10), [1]);
+        Assert.Equal(1, purges);
+
+        clock = clock.AddSeconds(10);
+        watch.Second("g1", "Game", true, Frames(7, 10), [1]);
+        Assert.Equal(1, purges);
+
+        clock = clock.AddSeconds(25);
+        watch.Second("g1", "Game", true, Frames(7, 10), [1]);
+        Assert.Equal(2, purges);
+        watch.End();
+    }
+
+    private sealed class CustomSampler(Func<SystemSecond?> read) : ISystemSampler
+    {
+        public SystemSecond? Read(IReadOnlyCollection<int> gameTree) => read();
+        public void Dispose() { }
+    }
 }

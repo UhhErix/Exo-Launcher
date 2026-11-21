@@ -23,12 +23,13 @@ internal sealed record AutopilotReport(string Game, string Title, DateTime Start
 /// is none); the sampler left open after the game (it closes on <see cref="End"/> and when the game goes behind); a report
 /// lost because the file is held (it is held in memory and saved at the next end).
 /// </summary>
-internal sealed class AutopilotWatch(Func<ISystemSampler?> open, Func<AutopilotReport, bool> save, Func<DateTime> now)
+internal sealed class AutopilotWatch(Func<ISystemSampler?> open, Func<AutopilotReport, bool> save, Func<DateTime> now, Func<bool>? purgeStandby = null)
 {
     /// <summary>A session needs this much of frames in front to get a report.</summary>
     internal const double ReportSeconds = 60;
+    internal static readonly TimeSpan StandbyPurgeCooldown = TimeSpan.FromSeconds(30);
 
-    internal static AutopilotWatch Shared { get; } = new(AutopilotSampler.Open, report => AutopilotReports.Add(AutopilotReports.DefaultPath, report, DateTime.UtcNow), () => DateTime.UtcNow);
+    internal static AutopilotWatch Shared { get; } = new(AutopilotSampler.Open, report => AutopilotReports.Add(AutopilotReports.DefaultPath, report, DateTime.UtcNow), () => DateTime.UtcNow, StandbyPurger.TryPurge);
 
     /// <summary>A report was kept; the bridge tells the page.</summary>
     internal static event Action<AutopilotReport>? Reported;
@@ -41,6 +42,7 @@ internal sealed class AutopilotWatch(Func<ISystemSampler?> open, Func<AutopilotR
     private ISystemSampler? _sampler;
     private string? _game, _title;
     private DateTime _started;
+    private DateTime? _lastStandbyPurge;
     private AutopilotReport? _pending;
 
     /// <summary>What is shown live: the game, the session's frames so far and the last second's numbers. Null with no game.</summary>
@@ -75,6 +77,17 @@ internal sealed class AutopilotWatch(Func<ISystemSampler?> open, Func<AutopilotR
             try { system = (_sampler ??= open())?.Read(tree); }
             catch (Exception ex) when (ex is not OutOfMemoryException) { AppLog.Debug("Autopilot: a read failed: " + ex.GetType().Name); }
             _analyzer.Add(framesMs, system);
+            if (purgeStandby is not null && system is { Free: { } free, Standby: { } standby }
+                && free < StutterAnalyzer.IslcBytes && standby >= StutterAnalyzer.IslcBytes)
+            {
+                var utc = now();
+                if (_lastStandbyPurge is not { } prev || utc - prev >= StandbyPurgeCooldown)
+                {
+                    _lastStandbyPurge = utc;
+                    if (purgeStandby())
+                        AppLog.Info("Autopilot: purged standby memory list (free < 1 GB, standby >= 1 GB).");
+                }
+            }
         }
     }
 

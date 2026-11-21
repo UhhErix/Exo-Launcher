@@ -127,10 +127,12 @@ public sealed class PowerPlanTests : IDisposable
         Assert.Equal(new Dictionary<string, uint>
         {
             ["Minimum processor state"] = 100,
+            ["Maximum processor state"] = 100,
             ["Energy performance preference"] = 0,
             ["Boost mode"] = 2,
             ["Boost policy"] = 100,
             ["Core parking min cores"] = 100,
+            ["Core parking max cores"] = 100,
             ["Processor idle disable"] = 0,
             ["PCIe Link State Power Management"] = 0,
             ["USB selective suspend"] = 0,
@@ -177,6 +179,9 @@ public sealed class PowerPlanTests : IDisposable
     {
         var profile = PowerProfiles.For(Class.IntelHybrid, laptop: false);
         var values = profile.Values.ToDictionary(v => v.Setting, v => v.Ac);
+        Assert.Equal(100u, values[new Guid("bc5038f7-23e0-4960-96da-33abaf5935ec")]);
+        Assert.Equal(2u, values[new Guid("be337238-0d82-4146-a960-4f3749d470c7")]);
+        Assert.Equal(100u, values[new Guid("45bcc044-d885-43e2-8605-ee0ec6e96b59")]);
         // Efficiency class 1 (the ...64/...84 settings) is the P-cores: EPP 0, never parked.
         Assert.Equal(0u, values[new Guid("36687f9e-e3a5-4dbf-b1dc-15eb381c6864")]);
         Assert.Equal(100u, values[new Guid("0cc5b647-c1df-4637-891a-dec35c318584")]);

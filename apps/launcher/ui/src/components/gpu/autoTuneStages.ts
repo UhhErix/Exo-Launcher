@@ -18,7 +18,7 @@ export type BloatAppInfo = {
   name: string
 }
 
-const isPlaybookItem = (item: TuningItem) => (!item.optIn || item.key === 'services') && !item.off && !item.blocked
+const isPlaybookItem = (item: TuningItem) => item.key !== 'vrr' && item.key !== 'mouseAccel' && !item.off && !item.blocked
 
 function hasInterruptsWork(state: PcState): boolean {
   const interrupts = state.interrupts
@@ -47,7 +47,6 @@ function stageReadySummary(
   hdr: HdrState | null,
   settings: LauncherSettings | null,
   bloatApps: readonly BloatAppInfo[],
-  removeBloat: boolean,
 ): Record<AutoTuneStageId, string> {
   const powerDone = Boolean(state.health?.items.find(item => item.key === 'power')?.applied)
   const fanReady = Boolean(exoAi?.fans.supported)
@@ -57,22 +56,20 @@ function stageReadySummary(
   const bloatCount = bloatApps.length
   const bloatSummary = bloatCount === 0
     ? 'No preinstalled bloat Store apps detected'
-    : removeBloat
-      ? `Remove ${bloatCount} preinstalled bloat app${bloatCount === 1 ? '' : 's'} (keeps Xbox, Store & games)`
-      : `Optional · ${bloatCount} bloat app${bloatCount === 1 ? '' : 's'} found (toggle to include)`
+    : `Remove ${bloatCount} preinstalled bloat app${bloatCount === 1 ? '' : 's'} (keeps Xbox, Store & games)`
 
   return {
     cooling: powerDone && fanReady
-      ? 'Exo power plan & automatic GPU fan curve active'
-      : 'Apply Exo power plan, Autopilot & automatic fan curve',
+      ? 'Exo power plan, 0.5 ms kernel timer & GPU fan curve active'
+      : 'Apply Exo power plan, 0.5 ms timer, ISLC standby purge & fan curve',
     graphics: graphicsPending
       ? 'Optimize driver profile, best refresh rate, HDR & frame generation'
       : 'Graphics profile and display output at optimal defaults',
     system: systemPending
-      ? 'Apply Windows 11 deep playbook (kernel timer, MMCSS, USB, AI/telemetry, NTFS, MSI interrupts, network)'
-      : 'Windows 11 deep playbook, interrupts, services & network optimal',
+      ? 'Apply all deep Windows 11 tweaks (kernel timer, BCD, memory, GPU P-states & DPC, MPO, HVCI, USB, MSI interrupts & network)'
+      : 'Full deep Windows 11 playbook, interrupts, services & network optimal',
     bloat: bloatSummary,
-    cleanup: 'Clear disposable browser, launcher & Windows caches (keeps cookies & logins)',
+    cleanup: 'Clear Windows Update, browser, crash dump & launcher caches (keeps cookies & logins)',
     drivers: driverVersion
       ? `Update ready (${driverVersion}) in PC Updates`
       : 'Check graphics & chipset driver status',
@@ -85,13 +82,12 @@ export function initialAutoTuneStages(
   hdr: HdrState | null,
   settings: LauncherSettings | null,
   bloatApps: readonly BloatAppInfo[] = [],
-  removeBloat = false,
 ): AutoTuneStageState[] {
-  const detail = stageReadySummary(state, exoAi, hdr, settings, bloatApps, removeBloat)
+  const detail = stageReadySummary(state, exoAi, hdr, settings, bloatApps)
   return [
     { id: 'cooling', label: 'Power plan & Autopilot', status: 'idle', detail: detail.cooling },
     { id: 'graphics', label: 'Graphics, display & HDR', status: 'idle', detail: detail.graphics },
-    { id: 'system', label: 'Windows 11 deep playbook, interrupts & network', status: 'idle', detail: detail.system },
+    { id: 'system', label: 'Deep Windows 11 playbook, MSI interrupts & network', status: 'idle', detail: detail.system },
     { id: 'bloat', label: 'Preinstalled bloat apps', status: 'idle', detail: detail.bloat },
     { id: 'cleanup', label: 'Temporary & launcher caches', status: 'idle', detail: detail.cleanup },
     { id: 'drivers', label: 'Graphics & chipset drivers', status: 'idle', detail: detail.drivers },
@@ -106,13 +102,12 @@ export async function runAutoTuneStage(
   onSave: (patch: Partial<LauncherSettings>) => Promise<boolean>,
   onRefresh: () => Promise<void>,
   bloatApps: readonly BloatAppInfo[] = [],
-  removeBloat = false,
 ): Promise<{ status: AutoTuneStageStatus; detail: string }> {
   try {
     if (id === 'cooling') return await runCoolingStage(state)
     if (id === 'graphics') return await runGraphicsStage(state, hdr, settings, onSave)
     if (id === 'system') return await runSystemStage(state)
-    if (id === 'bloat') return await runBloatStage(bloatApps, removeBloat)
+    if (id === 'bloat') return await runBloatStage(bloatApps)
     if (id === 'cleanup') return await runCleanupStage()
     return await runDriversStage(state, onRefresh)
   } catch (e) {
@@ -205,17 +200,15 @@ async function runSystemStage(state: PcState): Promise<{ status: AutoTuneStageSt
   return {
     status: 'done',
     detail: needsRestart
-      ? 'Windows 11 deep playbook, interrupts & network applied (restart to finish)'
-      : 'Windows 11 deep playbook, interrupts, services & network optimal',
+      ? 'Full deep Windows 11 playbook, interrupts & network applied (restart to finish)'
+      : 'Full deep Windows 11 playbook, interrupts, services & network optimal',
   }
 }
 
 async function runBloatStage(
   bloatApps: readonly BloatAppInfo[],
-  removeBloat: boolean,
 ): Promise<{ status: AutoTuneStageStatus; detail: string }> {
   if (bloatApps.length === 0) return { status: 'done', detail: 'No bloat Store apps installed' }
-  if (!removeBloat) return { status: 'done', detail: `Skipped (optional) · ${bloatApps.length} found` }
   const plan = await host.appsPackagesPlan(bloatApps.map(b => b.id), false)
   if (!plan.ok || !plan.token) {
     return { status: 'done', detail: plan.message ? trimStop(plan.message) : 'Nothing to remove' }

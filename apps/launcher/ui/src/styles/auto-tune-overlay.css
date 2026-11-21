@@ -9,9 +9,73 @@
   overscroll-behavior: contain;
   background: var(--color-bg);
   color: var(--color-fg);
+  animation: exo-at-room-in var(--dur-move) var(--ease-out) both;
+}
+
+.exo-at-stage-fx {
+  position: fixed;
+  inset: var(--exo-titlebar-h, 52px) 0 0;
+  z-index: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.exo-at-horizon {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  transform-origin: left center;
+  background: var(--color-fg);
+  opacity: 0;
+  transition: transform var(--dur-move) var(--ease-out), opacity var(--dur-base) var(--ease-out), background-color var(--dur-base) var(--ease-out);
+  will-change: transform, opacity;
+}
+
+.exo-auto-tune[data-tune-phase="running"] .exo-at-horizon {
+  opacity: 0.72;
+}
+
+.exo-auto-tune[data-tune-phase="done"] .exo-at-horizon {
+  opacity: 0.65;
+  background: var(--color-good);
+}
+
+.exo-at-sweep {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  height: 220px;
+  background: linear-gradient(180deg, transparent 0%, color-mix(in srgb, var(--color-fg) 6%, transparent) 52%, transparent 100%);
+  opacity: 0;
+  transform: translateY(-100%);
+  transition: opacity var(--dur-move) var(--ease-out);
+  will-change: transform, opacity;
+}
+
+.exo-auto-tune[data-tune-phase="running"] .exo-at-sweep {
+  opacity: 1;
+  animation: exo-at-sweep-run 2.4s linear infinite;
+}
+
+.exo-at-crest {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--color-good) 11%, transparent) 0%, transparent 44%);
+  opacity: 0;
+  transform: scaleY(0.85);
+  transform-origin: top center;
+}
+
+.exo-auto-tune[data-tune-phase="done"] .exo-at-crest {
+  animation: exo-at-crest-in var(--dur-flight) var(--ease-out) both;
 }
 
 .exo-at-shell {
+  position: relative;
+  z-index: 1;
   display: flex;
   flex: 1;
   flex-direction: column;
@@ -28,6 +92,7 @@
   justify-content: space-between;
   gap: 16px;
   padding: 4px 0;
+  animation: exo-at-rise var(--dur-move) var(--ease-out) both;
 }
 
 .exo-at-top-left {
@@ -110,10 +175,62 @@
 
 .exo-at-panel {
   padding-bottom: 16px;
+  animation: exo-at-rise var(--dur-move) var(--ease-out) both;
+  animation-delay: 55ms;
 }
 
-.exo-at-progress {
-  padding: 14px 0 4px;
+.exo-at-panel:nth-child(2) {
+  animation-delay: 105ms;
+}
+
+.exo-at-cinema {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px 0 6px;
+  animation: exo-at-rise var(--dur-base) var(--ease-out) both;
+}
+
+.exo-at-cinema-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.exo-at-cinema-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.exo-at-cinema-step {
+  color: var(--color-muted);
+  font-size: var(--exo-type-label);
+  font-weight: var(--exo-weight-control);
+  font-variant-numeric: tabular-nums;
+}
+
+.exo-at-cinema-title {
+  color: var(--color-fg);
+  font-size: var(--exo-type-body);
+  font-weight: var(--exo-weight-title);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.exo-at-cinema-pct {
+  flex: none;
+  color: var(--color-fg);
+  font-size: var(--exo-type-title);
+  font-weight: var(--exo-weight-title);
+  font-variant-numeric: tabular-nums;
+}
+
+.exo-auto-tune[data-tune-phase="done"] .exo-at-cinema-pct {
+  color: var(--color-good);
 }
 
 .exo-at-stages {
@@ -125,11 +242,50 @@
 }
 
 .exo-at-stage {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 12px;
   min-height: 50px;
-  padding: 10px 0;
+  padding: 10px 8px 10px 14px;
+  border-radius: var(--exo-row-radius);
+  transition: background-color var(--dur-base) var(--ease-out);
+}
+
+.exo-at-stage::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 10px;
+  bottom: 10px;
+  width: 2px;
+  border-radius: 999px;
+  background: var(--color-fg);
+  transform: scaleY(0);
+  transform-origin: center;
+  opacity: 0;
+  transition: transform var(--dur-base) var(--ease-out), opacity var(--dur-base) var(--ease-out), background-color var(--dur-base) var(--ease-out);
+}
+
+.exo-at-stage[data-status="active"] {
+  background: var(--exo-surface-card);
+}
+
+.exo-at-stage[data-status="active"]::before {
+  transform: scaleY(1);
+  opacity: 1;
+}
+
+.exo-at-stage[data-status="done"]::before {
+  transform: scaleY(1);
+  opacity: 0.55;
+  background: var(--color-good);
+}
+
+.exo-at-stage[data-status="warn"]::before {
+  transform: scaleY(1);
+  opacity: 0.7;
+  background: var(--color-warn);
 }
 
 .exo-at-stage + .exo-at-stage {
@@ -152,6 +308,7 @@
 
 .exo-at-stage.is-done .exo-at-stage-marker {
   color: var(--color-good);
+  animation: exo-at-pop var(--dur-base) var(--ease-spring) both;
 }
 
 .exo-at-stage.is-warn .exo-at-stage-marker {
@@ -327,12 +484,113 @@
   }
 }
 
+@keyframes exo-at-room-in {
+  from {
+    opacity: 0;
+    transform: scale(0.988) translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes exo-at-rise {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes exo-at-sweep-run {
+  from {
+    transform: translateY(-100%);
+  }
+  to {
+    transform: translateY(100vh);
+  }
+}
+
+@keyframes exo-at-crest-in {
+  0% {
+    opacity: 0;
+    transform: scaleY(0.85);
+  }
+  45% {
+    opacity: 1;
+    transform: scaleY(1);
+  }
+  100% {
+    opacity: 0.28;
+    transform: scaleY(1);
+  }
+}
+
+@keyframes exo-at-pop {
+  0% {
+    transform: scale(0.82);
+    opacity: 0.5;
+  }
+  65% {
+    transform: scale(1.08);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+:root[data-exo-motion="reduce"] .exo-auto-tune,
+:root[data-exo-motion="reduce"] .exo-at-top,
+:root[data-exo-motion="reduce"] .exo-at-panel,
+:root[data-exo-motion="reduce"] .exo-at-cinema,
+:root[data-exo-motion="reduce"] .exo-at-crest,
+:root[data-exo-motion="reduce"] .exo-at-stage.is-done .exo-at-stage-marker {
+  animation: none;
+}
+
+:root[data-exo-motion="reduce"] .exo-at-horizon,
+:root[data-exo-motion="reduce"] .exo-at-stage,
+:root[data-exo-motion="reduce"] .exo-at-stage::before {
+  transition: none;
+}
+
+:root[data-exo-motion="reduce"] .exo-at-sweep {
+  display: none;
+  animation: none;
+}
+
 :root[data-exo-motion="reduce"] .exo-at-run {
   scale: none;
   transition: none;
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .exo-auto-tune,
+  .exo-at-top,
+  .exo-at-panel,
+  .exo-at-cinema,
+  .exo-at-crest,
+  .exo-at-stage.is-done .exo-at-stage-marker {
+    animation: none;
+  }
+
+  .exo-at-horizon,
+  .exo-at-stage,
+  .exo-at-stage::before {
+    transition: none;
+  }
+
+  .exo-at-sweep {
+    display: none;
+    animation: none;
+  }
+
   .exo-at-run {
     scale: none;
     transition: none;

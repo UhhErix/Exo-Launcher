@@ -116,7 +116,6 @@ function NavDock({ view, opening, onView, onWarm, onToggleSettings, onNowPlaying
         <button ref={search} type="button" className="exo-glass exo-bar-search" onClick={onSearch} aria-label="Search Exo" aria-keyshortcuts="Control+K">
           <ExoMark size={18} className="exo-brand-logo" />
           <span className="exo-bar-search-label">Search</span>
-          <kbd className="exo-bar-kbd" aria-hidden="true">Ctrl K</kbd>
         </button>
       </div>
       <div className="exo-bar-center">

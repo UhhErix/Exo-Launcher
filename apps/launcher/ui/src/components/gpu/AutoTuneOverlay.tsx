@@ -16,7 +16,6 @@ import {
 } from '../../lib/host'
 import { report } from '../../lib/report'
 import { cn } from '../../lib/utils'
-import { Switch } from '../Switch'
 import { Progress } from '../ui/Progress'
 import { Spinner } from '../ui/Spinner'
 import { AutoTuneRows } from './AutoTune'
@@ -92,6 +91,25 @@ function hardwareLine(state: PcState): string {
   return [gpu, cpu].filter(Boolean).join(' · ') || 'Maximum performance PC & hardware tuning'
 }
 
+function computeTuneProgress(stages: readonly AutoTuneStageState[], running: boolean, finished: boolean) {
+  const completedCount = stages.filter(s => s.status === 'done' || s.status === 'warn').length
+  const hasWarn = stages.some(s => s.status === 'warn')
+  const activeStage = stages.find(s => s.status === 'active')
+  const activeIndex = stages.findIndex(s => s.status === 'active')
+  const phase = running ? 'running' : finished ? 'done' : 'idle'
+  const ratio = stages.length > 0 ? completedCount / stages.length : 0
+  const percent = finished ? 100 : Math.round(ratio * 100)
+  const stageCounter = running && activeIndex >= 0 ? `Stage ${activeIndex + 1} of ${stages.length}` : `${completedCount} of ${stages.length} stages`
+  const progressLabel = running
+    ? (activeStage ? activeStage.label : 'Optimizing PC')
+    : hasWarn
+      ? 'Finished with notes'
+      : 'Optimization complete'
+  const ctaLabel = running ? 'Optimizing PC' : finished ? 'Run Again' : 'Run Auto Tune'
+  const horizonScale = running ? Math.max(0.08, ratio) : finished ? 1 : 0
+  return { completedCount, hasWarn, phase, percent, stageCounter, progressLabel, ctaLabel, horizonScale }
+}
+
 export function AutoTuneOverlay({
   active,
   open,
@@ -135,7 +153,6 @@ export function AutoTuneOverlay({
   const [finished, setFinished] = useState(false)
   const [overridesOpen, setOverridesOpen] = useState(initialOverrides)
   const [bloatApps, setBloatApps] = useState<BloatAppInfo[]>([])
-  const [removeBloat, setRemoveBloat] = useState(false)
   const [stages, setStages] = useState<AutoTuneStageState[]>(() => initialAutoTuneStages(state, exoAi, hdr, settings))
 
   useEffect(() => {
@@ -154,8 +171,8 @@ export function AutoTuneOverlay({
 
   useEffect(() => {
     if (!open || !active || running || finished) return
-    setStages(initialAutoTuneStages(state, exoAi, hdr, settings, bloatApps, removeBloat))
-  }, [open, active, running, finished, state, exoAi, hdr, settings, bloatApps, removeBloat])
+    setStages(initialAutoTuneStages(state, exoAi, hdr, settings, bloatApps))
+  }, [open, active, running, finished, state, exoAi, hdr, settings, bloatApps])
 
   const handleClose = useCallback(() => {
     abortedRef.current = true
@@ -183,13 +200,13 @@ export function AutoTuneOverlay({
     abortedRef.current = false
     setRunning(true)
     setFinished(false)
-    const initial = initialAutoTuneStages(state, exoAi, hdr, settings, bloatApps, removeBloat)
+    const initial = initialAutoTuneStages(state, exoAi, hdr, settings, bloatApps)
     setStages(initial)
 
     for (const item of initial) {
       if (abortedRef.current) break
       setStages(current => current.map(s => s.id === item.id ? { ...s, status: 'active' } : s))
-      const result = await runAutoTuneStage(item.id, state, hdr, settings, onSave, onRefresh, bloatApps, removeBloat)
+      const result = await runAutoTuneStage(item.id, state, hdr, settings, onSave, onRefresh, bloatApps)
       if (abortedRef.current) break
       setStages(current => current.map(s => s.id === item.id ? { ...s, status: result.status, detail: result.detail } : s))
     }
@@ -198,19 +215,11 @@ export function AutoTuneOverlay({
       setRunning(false)
       setFinished(true)
     }
-  }, [running, state, exoAi, hdr, settings, bloatApps, removeBloat, onSave, onRefresh])
+  }, [running, state, exoAi, hdr, settings, bloatApps, onSave, onRefresh])
 
   if (!open || !active) return null
 
-  const completedCount = stages.filter(s => s.status === 'done' || s.status === 'warn').length
-  const hasWarn = stages.some(s => s.status === 'warn')
-  const activeStage = stages.find(s => s.status === 'active')
-  const progressLabel = running
-    ? (activeStage ? activeStage.label : 'Optimizing PC')
-    : hasWarn
-      ? 'Finished with notes'
-      : 'Optimization complete'
-  const ctaLabel = running ? 'Optimizing PC' : finished ? 'Run Again' : 'Run Auto Tune'
+  const { completedCount, hasWarn, phase, percent, stageCounter, progressLabel, ctaLabel, horizonScale } = computeTuneProgress(stages, running, finished)
 
   return createPortal(
     <div
@@ -219,7 +228,16 @@ export function AutoTuneOverlay({
       aria-modal="true"
       aria-labelledby="exo-auto-tune-title"
       data-log-area="PC"
+      data-tune-phase={phase}
     >
+      <div className="exo-at-stage-fx" aria-hidden="true">
+        <div
+          className="exo-at-horizon"
+          style={{ transform: `scaleX(${horizonScale})` }}
+        />
+        <div className="exo-at-sweep" />
+        <div className="exo-at-crest" />
+      </div>
       <div className="exo-at-shell">
         <header className="exo-at-top">
           <div className="exo-at-top-left">
@@ -242,13 +260,19 @@ export function AutoTuneOverlay({
           <section className="exo-system-panel exo-at-panel" aria-labelledby="exo-at-pc-title">
             <h2 id="exo-at-pc-title">PC optimization</h2>
             {running || finished ? (
-              <div className="exo-at-progress">
+              <div className="exo-at-cinema">
+                <div className="exo-at-cinema-head">
+                  <div className="exo-at-cinema-copy">
+                    <span className="exo-at-cinema-step">{stageCounter}</span>
+                    <span className="exo-at-cinema-title">{progressLabel}</span>
+                  </div>
+                  <span className="exo-at-cinema-pct">{percent}%</span>
+                </div>
                 <Progress
                   size="large"
                   value={running ? completedCount / stages.length : 1}
                   label={progressLabel}
                   tone={finished && !hasWarn ? 'done' : undefined}
-                  caption
                 />
               </div>
             ) : null}
@@ -256,6 +280,7 @@ export function AutoTuneOverlay({
               {stages.map(stage => (
                 <li
                   key={stage.id}
+                  data-status={stage.status}
                   className={cn(
                     'exo-at-stage',
                     stage.status === 'active' && 'is-active',
@@ -268,14 +293,6 @@ export function AutoTuneOverlay({
                     <span className="exo-at-stage-title">{stage.label}</span>
                     <span className="exo-at-stage-detail">{stage.detail}</span>
                   </div>
-                  {stage.id === 'bloat' && bloatApps.length > 0 ? (
-                    <Switch
-                      checked={removeBloat}
-                      disabled={running}
-                      label="Include bloat app removal"
-                      onChange={setRemoveBloat}
-                    />
-                  ) : null}
                 </li>
               ))}
             </ul>
