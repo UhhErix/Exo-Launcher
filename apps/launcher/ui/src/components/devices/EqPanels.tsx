@@ -200,7 +200,8 @@ function HeadphonePicker({ picked, busy, error, onPick }: { picked: EqHeadphone 
     setOpen(false)
     setQuery('')
   }
-  const detail = busy ? 'Downloading its correction' : picked ? `${picked.name}, measured by ${picked.source}` : 'None: pick yours for its correction'
+  const target = picked?.form === 'over-ear' ? 'Harman OE' : 'JM-1 / IEF 2025'
+  const detail = busy ? 'Downloading its correction' : picked ? `${picked.name} · ${picked.source} · ${target}` : 'None: pick yours for its correction'
   return (
     <>
       <Row label="Correction" labelId="eq-headphone" detail={detail} error={failed && open ? "AutoEq's list didn't load. Check your connection, then try again." : error}>

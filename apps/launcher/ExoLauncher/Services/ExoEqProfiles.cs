@@ -16,9 +16,9 @@ internal sealed record EqActiveGame(string Id, string Title, string Sound, strin
 internal static class ExoEqProfiles
 {
     private static readonly EqGameProfile Reference = new(ExoEqSounds.Flat, "Reference", "Studio neutral balance for rhythm, strategy, and timing");
-    private static readonly EqGameProfile Footsteps = new(ExoEqSounds.Footsteps, "Footsteps", "Cuts explosion rumble and lifts 2–4.5 kHz footsteps & reloads");
-    private static readonly EqGameProfile Vocal = new(ExoEqSounds.Vocal, "Vocal", "Clears lower-mid mud and brings dialogue & narrative detail forward");
-    private static readonly EqGameProfile Immersion = new(ExoEqSounds.Cinematic, "Immersion", "Adds warm sub-bass punch and spatial air without muddying mids");
+    private static readonly EqGameProfile Footsteps = new(ExoEqSounds.Footsteps, "Footsteps", "Cuts explosion rumble, lifts 1.1–4.2 kHz steps & reloads, tames 7.5 kHz gun crack");
+    private static readonly EqGameProfile Vocal = new(ExoEqSounds.Vocal, "Vocal", "Clears lower-mid mud, brings dialogue forward, and tames harsh sibilance");
+    private static readonly EqGameProfile Immersion = new(ExoEqSounds.Cinematic, "Immersion", "Deep 75 Hz sub-bass impact and open spatial air without muddying mids");
 
     private static readonly (string[] Exact, string[] Prefixes, EqGameProfile Profile)[] TitleBuckets =
     [
@@ -33,14 +33,14 @@ internal static class ExoEqProfiles
         ),
         (
             [
-                "counterstrike2", "counterstrikeglobaloffensive", "valorant", "apexlegends", "fortnite",
+                "counterstrike2", "counterstrikeglobaloffensive", "cs2", "valorant", "apexlegends", "fortnite",
                 "pubgbattlegrounds", "playerunknownsbattlegrounds", "pubg", "overwatch", "overwatch2", "marvelrivals",
                 "thefinals", "deadlock", "escapefromtarkov", "arenabreakoutinfinite", "huntshowdown1896", "huntshowdown",
                 "deltaforce", "haloinfinite", "halothemasterchiefcollection", "teamfortress2", "splitgate", "splitgate2",
-                "xdefiant", "spectredivide", "strinova", "arcraiders", "rust", "dayz", "hellletloose", "squad",
+                "xdefiant", "spectredivide", "strinova", "arcraiders", "marathon", "rust", "dayz", "hellletloose", "squad",
                 "insurgencysandstorm", "readyornot", "grayzonewarfare", "bodycam", "destiny2", "paladins", "fragpunk",
                 "warzone", "titanfall2", "quakechampions", "quakelive", "krunker", "ironsight", "combatmaster",
-                "sniperelite5", "scum", "arma3", "armareforger", "payday2", "payday3", "left4dead2", "gtfo",
+                "sniperelite5", "scum", "arma3", "armareforger", "payday2", "payday3", "left4dead2", "gtfo", "mechabreak",
             ],
             [
                 "callofduty", "battlefield", "tomclancysrainbowsix", "rainbowsix", "counterstrike",
@@ -50,11 +50,12 @@ internal static class ExoEqProfiles
         ),
         (
             [
-                "cyberpunk2077", "discoelysium", "metaphorrefantazio", "clairobscurexpedition33", "starfield", "skyrim",
-                "hogwartslegacy", "avowed", "outerwilds", "firewatch", "whatremainsofedithfinch", "pentiment",
+                "cyberpunk2077", "discoelysium", "metaphorrefantazio", "clairobscurexpedition33", "expedition33", "starfield", "skyrim",
+                "hogwartslegacy", "avowed", "outerwilds", "firewatch", "whatremainsofedithfinch", "pentiment", "fable",
                 "slaytheprincess", "road96", "oxenfree", "heavyrain", "beyondtwosouls", "untildawn", "thequarry",
-                "ittakestwo", "splitfiction", "awayout", "tellmewhy", "control", "quantumbreak", "deathstranding",
-                "horizonzerodawn", "horizonforbiddenwest", "ghostoftsushima", "bioshock", "prey", "uncharted",
+                "ittakestwo", "splitfiction", "awayout", "tellmewhy", "control", "quantumbreak", "deathstranding", "deathstranding2",
+                "horizonzerodawn", "horizonforbiddenwest", "ghostoftsushima", "ghostofyotei", "bioshock", "prey", "uncharted",
+                "mafiatheoldcountry",
             ],
             [
                 "baldursgate", "thewitcher", "reddeadredemption", "thelastofus", "godofwar", "masseffect", "persona",
@@ -69,16 +70,16 @@ internal static class ExoEqProfiles
         ),
         (
             [
-                "eldenring", "sekiro", "liesofp", "blackmythwukong", "wutheringwaves", "genshinimpact",
+                "eldenring", "eldenringnightreign", "sekiro", "liesofp", "blackmythwukong", "wutheringwaves", "genshinimpact",
                 "honkaistarrail", "zenlesszonezero", "helldivers2", "iracing", "beamng", "rocketleague",
                 "streetfighter6", "tekken8", "mortalkombat1", "2xko", "dragonballfighterz", "brawlhalla", "hollowknight",
-                "hades", "hades2", "deadcells", "celeste", "cuphead", "returnal", "narakabladepoint", "naraka",
-                "warframe", "lastepoch", "lostark", "worldofwarcraft", "guildwars2", "blackdesert", "crimsondesert",
-                "phantombladezero", "hellisus", "stellarblade", "palworld", "valheim", "enshrouded", "subnautica",
-                "nomanssky", "elitedangerous", "starcitizen", "microsoftflightsimulator", "warthunder", "worldoftanks",
-                "worldofwarships", "phasmophobia", "lethalcompany", "repo", "contentwarning", "deadbydaylight",
-                "alienisolation", "deadspace", "daysgone", "seaofthieves", "chivalry2", "mordhau", "forhonor", "sifu",
-                "pacificdrive", "snowrunner", "eurotrucksimulator2", "americantrucksimulator",
+                "hollowknightsilksong", "silksong", "hades", "hades2", "hadesii", "deadcells", "celeste", "cuphead", "returnal",
+                "narakabladepoint", "naraka", "warframe", "lastepoch", "lostark", "worldofwarcraft", "guildwars2", "blackdesert",
+                "crimsondesert", "chronoodyssey", "phantombladezero", "hellisus", "stellarblade", "palworld", "valheim",
+                "enshrouded", "subnautica", "subnautica2", "nomanssky", "elitedangerous", "starcitizen", "microsoftflightsimulator",
+                "warthunder", "worldoftanks", "worldofwarships", "phasmophobia", "lethalcompany", "repo", "contentwarning",
+                "deadbydaylight", "alienisolation", "deadspace", "daysgone", "seaofthieves", "chivalry2", "mordhau", "forhonor",
+                "sifu", "pacificdrive", "snowrunner", "eurotrucksimulator2", "americantrucksimulator", "doomthedarkages",
             ],
             [
                 "darksouls", "armoredcore", "monsterhunter", "doom", "devilmaycry", "bayonetta", "ninjagaiden", "forza",
@@ -93,7 +94,7 @@ internal static class ExoEqProfiles
         (
             [
                 "leagueoflegends", "teamfighttactics", "dota2", "smite", "smite2", "hearthstone", "balatro",
-                "slaythespire", "minecraft", "terraria", "stardewvalley", "factorio", "satisfactory",
+                "slaythespire", "slaythespire2", "minecraft", "terraria", "stardewvalley", "factorio", "satisfactory",
                 "dysonsphereprogram", "btd6", "bloonstd6", "amongus", "roblox", "vrchat", "vampiresurvivors",
                 "brotato", "runescape", "oldschoolrunescape", "albiononline", "eveonline",
             ],

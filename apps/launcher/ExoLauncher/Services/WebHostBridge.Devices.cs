@@ -155,5 +155,8 @@ public sealed partial class WebHostBridge
         }
     }
 
-    private static Peripherals.Peripheral Labbed(Peripherals.Peripheral card) => card.Kind == "controller" ? card with { Lab = ControllerLab.FamilyOf(card) is not null } : card;
+    private static Peripherals.Peripheral Labbed(Peripherals.Peripheral card) =>
+        card.Kind == "controller" ? card with { Lab = ControllerLab.FamilyOf(card) is not null }
+        : card.Kind == "keyboard" ? card with { Lab = WootingKeyboard.IsSupported(card) }
+        : card;
 }

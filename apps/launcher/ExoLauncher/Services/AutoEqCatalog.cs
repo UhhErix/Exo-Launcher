@@ -129,7 +129,8 @@ internal static class AutoEqCatalog
     {
         "headset", "headphones", "headphone", "earphone", "earphones", "speakers", "speaker", "wireless", "gaming", "game", "chat",
         "stereo", "usb", "audio", "pro", "x", "the", "and", "with", "hands", "free", "bluetooth", "le", "high", "definition", "device",
-        "digital", "output", "realtek", "r", "anc", "on", "off", "mode",
+        "digital", "output", "realtek", "r", "anc", "on", "off", "mode", "dongle", "dac", "amp", "receiver", "lightspeed",
+        "hyperspeed", "slipstream", "sonar", "dts", "spatial", "sound", "24g", "24ghz", "usbaudio",
     };
 
     /// <summary>

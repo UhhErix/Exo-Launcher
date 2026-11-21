@@ -361,8 +361,7 @@ internal static partial class Peripherals
     internal static string? WootingSize(int pid) => (pid & 0xFFF0) switch
     {
         0x1300 or 0x1310 or 0x1320 or 0x1340 => "60",
-        0x1100 => "tkl",
-        0x1400 => "tkl",
+        0x1100 or 0x1400 or 0x1410 => "tkl",
         0x1200 or 0x1210 or 0x1220 or 0x1230 => "full",
         _ => null,
     };

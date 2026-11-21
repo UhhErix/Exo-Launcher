@@ -17,6 +17,26 @@ internal sealed partial class NetworkTune
     {
         public bool Portable() => PcHealth.ThisPcIsLaptop();
 
+        public RssPlan? RssPlan()
+        {
+            try
+            {
+                const int specifiedPolicy = 4;
+                var topology = MouseCore.Sampler.ReadTopology();
+                ulong reserved = 0;
+                foreach (var dev in new InterruptMode.NativeDevices().List())
+                {
+                    if (dev.Policy == specifiedPolicy && dev.Override is { Length: > 0 } && dev.BaseClass != 0x02)
+                        reserved |= MouseCore.Bits(dev.Override);
+                }
+                return PickRssPlan(topology, reserved);
+            }
+            catch (Exception ex) when (ex is InvalidOperationException or UnauthorizedAccessException or System.ComponentModel.Win32Exception)
+            {
+                return null;
+            }
+        }
+
         /// <summary>Every Ethernet or Wi-Fi adapter that's connected and is a PCI or USB device (no virtual switches, VPNs or debuggers).</summary>
         public IReadOnlyList<Adapter> List()
         {
@@ -37,7 +57,7 @@ internal sealed partial class NetworkTune
                     if (key.GetValue("NetCfgInstanceId") is not string guid || !up.TryGetValue(guid, out var nic)) continue;
                     if (key.GetValue("DeviceInstanceID") is not string device || !DeviceId().IsMatch(device)) continue;
                     list.Add(new Adapter(name, nic.Name, nic.Description, device, nic.NetworkInterfaceType == NetworkInterfaceType.Wireless80211,
-                        Math.Max(0, nic.Speed), ReadParams(key)));
+                        Math.Max(0, nic.Speed), ReadParams(key, device)));
                 }
             }
             return list;
@@ -49,7 +69,9 @@ internal sealed partial class NetworkTune
             try
             {
                 using var adapter = Registry.LocalMachine.OpenSubKey($@"{ClassKey}\{key}");
-                return adapter is null ? null : ReadParams(adapter);
+                if (adapter is null) return null;
+                var device = adapter.GetValue("DeviceInstanceID") as string;
+                return ReadParams(adapter, device);
             }
             catch (Exception ex) when (ex is System.Security.SecurityException or UnauthorizedAccessException or IOException) { return null; }
         }
@@ -78,13 +100,21 @@ internal sealed partial class NetworkTune
         }
 
         /// <summary>Each Ndi\Params keyword: the adapter's own value beside it, the driver's default, and its enum's values with their names.</summary>
-        private static Dictionary<string, Param> ReadParams(RegistryKey adapter)
+        private static Dictionary<string, Param> ReadParams(RegistryKey adapter, string? deviceId = null)
         {
             var result = new Dictionary<string, Param>(StringComparer.OrdinalIgnoreCase);
             try
             {
                 var pnp = adapter.GetValue(PnpCapabilitiesKey);
                 result[PnpCapabilitiesKey] = new Param(pnp is int n ? n.ToString(System.Globalization.CultureInfo.InvariantCulture) : null, "0", new Dictionary<string, string>());
+                if (!string.IsNullOrEmpty(deviceId) && deviceId.StartsWith(@"PCI\", StringComparison.OrdinalIgnoreCase) && DeviceId().IsMatch(deviceId))
+                {
+                    using var aff = Registry.LocalMachine.OpenSubKey($@"SYSTEM\CurrentControlSet\Enum\{deviceId}\Device Parameters\Interrupt Management\Affinity Policy");
+                    var pol = aff?.GetValue("DevicePolicy") is int p ? p.ToString(System.Globalization.CultureInfo.InvariantCulture) : null;
+                    var ov = aff?.GetValue("AssignmentSetOverride") is byte[] bytes && bytes.Length == 8 ? Convert.ToHexString(bytes) : null;
+                    result[NicPolicyKey] = new Param(pol, null, new Dictionary<string, string>());
+                    result[NicMaskKey] = new Param(ov, null, new Dictionary<string, string>());
+                }
                 using var parameters = adapter.OpenSubKey(@"Ndi\Params");
                 if (parameters is null) return result;
                 foreach (var keyword in parameters.GetSubKeyNames())
@@ -128,9 +158,26 @@ internal sealed partial class NetworkTune
     {
         if (!KeyName().IsMatch(adapter.Key) || !DeviceId().IsMatch(adapter.DeviceId)) return null;
         var key = $"\"HKLM\\{ClassKey}\\{adapter.Key}\"";
+        var affKey = $"\"HKLM\\SYSTEM\\CurrentControlSet\\Enum\\{adapter.DeviceId}\\Device Parameters\\Interrupt Management\\Affinity Policy\"";
         var lines = new List<string>();
         foreach (var (keyword, value) in values)
         {
+            if (keyword.Equals(NicPolicyKey, StringComparison.OrdinalIgnoreCase))
+            {
+                if (value is not null && !NumberValue().IsMatch(value)) return null;
+                lines.Add(value is null
+                    ? $"\"{reg}\" delete {affKey} /v \"DevicePolicy\" /f /reg:64"
+                    : $"\"{reg}\" add {affKey} /v \"DevicePolicy\" /t REG_DWORD /d {value} /f /reg:64");
+                continue;
+            }
+            if (keyword.Equals(NicMaskKey, StringComparison.OrdinalIgnoreCase))
+            {
+                if (value is not null && !HexMaskValue().IsMatch(value)) return null;
+                lines.Add(value is null
+                    ? $"\"{reg}\" delete {affKey} /v \"AssignmentSetOverride\" /f /reg:64"
+                    : $"\"{reg}\" add {affKey} /v \"AssignmentSetOverride\" /t REG_BINARY /d {value} /f /reg:64");
+                continue;
+            }
             if (!KeywordName().IsMatch(keyword) || value is not null && !NumberValue().IsMatch(value)) return null;
             var regType = keyword.Equals(PnpCapabilitiesKey, StringComparison.OrdinalIgnoreCase) ? "REG_DWORD" : "REG_SZ";
             lines.Add(value is null

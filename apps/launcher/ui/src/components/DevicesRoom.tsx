@@ -11,11 +11,11 @@ import { transition, visible } from '../lib/viewTransition'
 import { DeviceArt, type ArtKind } from './devices/art'
 import { AudioPage, type Wearing } from './devices/AudioPage'
 import { ControllerPage } from './devices/ControllerPage'
+import { KeyboardPage } from './devices/KeyboardPage'
 import { portShort } from './devices/ports'
 import { railWidth } from './devices/rail'
 import { readWearing, saveWearing } from './devices/wearing'
 import { onUiPrefs } from '../lib/uiPrefs'
-import { UsbMap } from './devices/UsbMap'
 import { ErrorState } from './ui/ErrorState'
 import { deviceHasPage } from '../lib/canUse'
 
@@ -87,6 +87,9 @@ export function DevicesRoom({ active }: { active: boolean }) {
           <ControllerPage card={current.device} name={current.name} status={current.status} art={<Picture card={current} url={pictures[current.id]} wash />}
             visible={active && onScreen} />
         ) : null}
+        {current?.kind === 'keyboard' && current.device ? (
+          <KeyboardPage card={current.device} name={current.name} status={current.status} art={<Picture card={current} url={pictures[current.id]} wash />} />
+        ) : null}
         <MouseFrame shown={page === 'mouse'} visible={active && foreground && page === 'mouse'} />
       </div>
     </main>
@@ -111,9 +114,12 @@ function cardsFor(devices: Peripheral[], mouse: MouseState | null, wearing: Wear
   const audio = audioCard(devices, wearing)
   return [
     ...mouseCard(devices, mouse),
+    ...devices.filter(device => device.kind === 'keyboard').map((kb): Card => ({
+      id: kb.id, kind: 'keyboard', name: kb.name, status: linked(kb), device: kb,
+      art: 'keyboard', picture: kb,
+    })),
     ...(audio ? [audio] : []),
     ...devices.filter(device => device.kind === 'controller').map((pad): Card => ({
-      // "DualSense Edge Wireless Controller" is a DualSense Edge.
       id: pad.id, kind: 'controller', name: pad.name.replace(/\s+(wireless\s+)?controller$/i, '') || pad.name, status: linked(pad), device: pad,
       art: 'controller', picture: pad,
     })),
@@ -190,15 +196,10 @@ const turn = (i: number) => ({ '--i': i } as CSSProperties)
 function Overview({ hidden, cards, pictures, known, failed, scanning, rise, onRescan, onOpen }: {
   hidden: boolean; cards: Card[]; pictures: Record<string, string | null>; known: boolean; failed: boolean; scanning: boolean; rise: boolean; onRescan: () => void; onOpen: (id: string) => void
 }) {
-  const [usbMap, setUsbMap] = useState(false)
-  // Each card reads what you'd open a page for: its battery and link, and which USB it's on, green where it's best for the
-  // device, red where it isn't. A red one says what to do when there's something to do: a free port on the processor's
-  // own USB, or a hub to take out of the way. Cards update as plugs move, so nothing needs a mode to watch them.
   const tagOf = (card: Card) => {
     const port = card.device?.port
     const short = port ? portShort(port) : null
     if (!port || !short) return null
-    // A mouse, keyboard or controller is best on the processor's own USB with no hub; sound doesn't care where.
     const good = card.kind === 'audio' || port.where === 'cpu' && !port.hubs
     const text = good ? short : port.better === 'free' ? 'Move to CPU USB' : port.better === 'hub' ? 'Plug in without the hub' : short
     return { text, good }
@@ -206,11 +207,8 @@ function Overview({ hidden, cards, pictures, known, failed, scanning, rise, onRe
   return (
     <section className="exo-devices-overview" aria-label="Devices" hidden={hidden}>
       <header className="exo-devices-head">
-        {/* Nothing found only once Windows has been asked: the first list takes a moment. */}
         <h1>{cards.length === 0 && known && !failed ? 'No devices to set up' : 'Devices'}</h1>
         <div className="exo-devices-head-end">
-          <button type="button" className="exo-set-btn" aria-expanded={usbMap} onClick={() => setUsbMap(true)}>USB map</button>
-          {usbMap ? <UsbMap onClose={() => setUsbMap(false)} /> : null}
           <button type="button" className="exo-set-btn" disabled={scanning} onClick={onRescan}>
             <Refresh size={16} className={scanning ? 'exo-spin' : undefined} />Rescan
           </button>
