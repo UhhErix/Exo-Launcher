@@ -43,9 +43,9 @@
   position: relative;
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
   min-height: 50px;
-  padding: 10px 10px;
+  padding: 10px 0;
   border-radius: var(--exo-row-radius);
   transition: background-color var(--dur-base) var(--ease-out);
 }
@@ -63,8 +63,8 @@
   flex: none;
   align-items: center;
   justify-content: center;
-  width: 20px;
-  height: 20px;
+  width: 16px;
+  height: 16px;
   color: var(--color-muted);
 }
 

@@ -35,7 +35,7 @@
   grid-template-rows: auto 1fr;
   gap: 16px;
   min-height: 100%;
-  padding: 12px var(--exo-gutter) var(--exo-gutter);
+  padding: 16px clamp(16px, 2vw, 24px) clamp(16px, 2vw, 24px);
 }
 
 /* Kept while a device's page shows (DevicesRoom), hidden. */

@@ -1,11 +1,11 @@
 import { memo, useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
-import { Apps, More, Play, Search } from '../../brand/icons'
+import { Apps, Close, More, Play, Search } from '../../brand/icons'
 import { useGlide } from '../../lib/glide'
-import { resolvePrimaryAction, shelfAction, type Game, type InstallProgress } from '../../lib/host'
-import { artSteamAppId } from '../../lib/library'
+import { host, resolvePrimaryAction, shelfAction, type Game, type InstallProgress } from '../../lib/host'
 import { shouldReduceMotion } from '../../lib/motionPreference'
 import { formatPlayed, formatRelativeLastPlayed, installVerb, storeLabel, transferShare } from '../../lib/utils'
 import { CoverArt, HeroWash } from '../CoverArt'
+import { GameLogo } from '../GameLogo'
 import { Progress } from '../ui/Progress'
 import { WorkingWord } from '../ui/WorkingWord'
 import { menuAt, type GameMenuAt } from './GameMenu'
@@ -15,7 +15,10 @@ import type { LibraryTab } from './LibraryHead'
 export type HomeDeckProps = {
   tab: LibraryTab
   onTab: (next: LibraryTab) => void
-  onSearchOpen: () => void
+  query: string
+  onQuery: (next: string) => void
+  searchOpen: boolean
+  onSearchOpenChange: (open: boolean) => void
   games: Game[]
   updatesCount: number
   active: boolean
@@ -60,27 +63,6 @@ function heroMetaParts(game: Game, working: boolean): string[] {
   return [first, state, store].filter((part): part is string => !!part)
 }
 
-function GameLogo({ game }: { game: Game }) {
-  const appId = artSteamAppId(game)
-  const [failed, setFailed] = useState(false)
-  if (!appId || failed) {
-    return <h1 className="exo-home-title">{game.title}</h1>
-  }
-  const src = `https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/${appId}/logo.png`
-  return (
-    <h1 className="exo-home-logo-wrap">
-      <img
-        src={src}
-        alt={game.title}
-        className="exo-home-logo"
-        draggable={false}
-        decoding="async"
-        onError={() => setFailed(true)}
-      />
-    </h1>
-  )
-}
-
 function HeroLockup({
   game,
   transfer,
@@ -103,7 +85,12 @@ function HeroLockup({
   const verb = primaryVerb(game)
   return (
     <section className="exo-home-hero" aria-label={game.title}>
-      <GameLogo key={game.id} game={game} />
+      <GameLogo
+        game={game}
+        wrapClass="exo-home-identity"
+        imgClass="exo-home-logo"
+        titleClass="exo-home-title"
+      />
       <p className="exo-home-meta tabular-nums">
         {parts.map((part, index) => (
           <span key={part} className={index === 0 && game.isRunning ? 'is-good' : undefined}>
@@ -178,6 +165,7 @@ function PosterCard({
         data-vt-art
         aria-pressed={isActive}
         aria-label={isActive ? `Open ${game.title}` : `Select ${game.title}`}
+        onFocus={onHover}
         onClick={() => (isActive ? onOpen() : onSelect())}
         onContextMenu={(event) => {
           event.preventDefault()
@@ -195,17 +183,91 @@ function PosterCard({
   )
 }
 
+function InlineSearch({
+  query,
+  open,
+  onQuery,
+  onOpenChange,
+}: {
+  query: string
+  open: boolean
+  onQuery: (next: string) => void
+  onOpenChange: (open: boolean) => void
+}) {
+  const inputRef = useRef<HTMLInputElement>(null)
+  const expanded = open || query.length > 0
+
+  useEffect(() => {
+    if (open) requestAnimationFrame(() => inputRef.current?.focus())
+  }, [open])
+
+  if (!expanded) {
+    return (
+      <button
+        type="button"
+        className="exo-glass exo-home-icon-btn"
+        aria-label="Search library"
+        onClick={() => onOpenChange(true)}
+      >
+        <Search size={15} />
+      </button>
+    )
+  }
+
+  return (
+    <label className="exo-glass exo-home-search">
+      <Search size={14} className="exo-home-search-ico" aria-hidden="true" />
+      <input
+        ref={inputRef}
+        type="search"
+        value={query}
+        placeholder="Filter games…"
+        aria-label="Filter library"
+        onChange={(event) => onQuery(event.target.value)}
+        onKeyDown={(event) => {
+          if (event.key !== 'Escape') return
+          event.preventDefault()
+          event.stopPropagation()
+          onQuery('')
+          onOpenChange(false)
+        }}
+        onBlur={() => {
+          if (!query.trim()) onOpenChange(false)
+        }}
+      />
+      <button
+        type="button"
+        className="exo-home-search-clear"
+        aria-label="Close search"
+        onMouseDown={(event) => event.preventDefault()}
+        onClick={() => {
+          onQuery('')
+          onOpenChange(false)
+        }}
+      >
+        <Close size={13} />
+      </button>
+    </label>
+  )
+}
+
 function DeckBar({
   tab,
   onTab,
   updatesCount,
-  onSearchOpen,
+  query,
+  onQuery,
+  searchOpen,
+  onSearchOpenChange,
   tools,
 }: {
   tab: LibraryTab
   onTab: (next: LibraryTab) => void
   updatesCount: number
-  onSearchOpen: () => void
+  query: string
+  onQuery: (next: string) => void
+  searchOpen: boolean
+  onSearchOpenChange: (open: boolean) => void
   tools: ReactNode
 }) {
   const tabsGlide = useGlide<HTMLDivElement>()
@@ -233,9 +295,7 @@ function DeckBar({
       </div>
       <div className="exo-home-bar-tools">
         <GiftsPill />
-        <button type="button" className="exo-glass exo-home-icon-btn" aria-label="Search library" onClick={onSearchOpen}>
-          <Search size={15} />
-        </button>
+        <InlineSearch query={query} open={searchOpen} onQuery={onQuery} onOpenChange={onSearchOpenChange} />
         <button type="button" className="exo-glass exo-home-icon-btn" aria-label="All games grid" onClick={() => onTab('all')}>
           <Apps size={15} />
         </button>
@@ -248,7 +308,10 @@ function DeckBar({
 export const HomeDeck = memo(function HomeDeck({
   tab,
   onTab,
-  onSearchOpen,
+  query,
+  onQuery,
+  searchOpen,
+  onSearchOpenChange,
   games,
   updatesCount,
   active,
@@ -265,6 +328,14 @@ export const HomeDeck = memo(function HomeDeck({
   const trackRef = useRef<HTMLDivElement>(null)
   const activeIdx = Math.max(0, games.findIndex((item) => item.id === focusedId))
   const focused = games[activeIdx] ?? games[0] ?? null
+
+  useEffect(() => {
+    if (!active || !focused || focused.isAddPortable) return
+    const timer = window.setTimeout(() => {
+      void host.gameExtras(focused.id).catch(() => { })
+    }, 240)
+    return () => window.clearTimeout(timer)
+  }, [active, focused])
 
   const focusAndReveal = useCallback((id: string) => {
     setFocusedId(id)
@@ -298,6 +369,8 @@ export const HomeDeck = memo(function HomeDeck({
     return () => window.removeEventListener('keydown', onKey)
   }, [active, blocked, games.length, step])
 
+  const trimmedQuery = query.trim()
+
   return (
     <div className="exo-home-deck">
       <div className="exo-home-backdrop" aria-hidden="true">
@@ -319,7 +392,16 @@ export const HomeDeck = memo(function HomeDeck({
       )}
 
       <div className="exo-home-lower">
-        <DeckBar tab={tab} onTab={onTab} updatesCount={updatesCount} onSearchOpen={onSearchOpen} tools={tools} />
+        <DeckBar
+          tab={tab}
+          onTab={onTab}
+          updatesCount={updatesCount}
+          query={query}
+          onQuery={onQuery}
+          searchOpen={searchOpen}
+          onSearchOpenChange={onSearchOpenChange}
+          tools={tools}
+        />
         {games.length > 0 ? (
           <div ref={trackRef} className="exo-deck-track" role="region" aria-label="Games">
             {games.map((item) => (
@@ -336,9 +418,14 @@ export const HomeDeck = memo(function HomeDeck({
             ))}
           </div>
         ) : (
-          <p className="exo-home-empty">
-            {tab === 'updates' ? 'Everything is up to date.' : 'No installed games yet.'}
-          </p>
+          <div className="exo-home-empty">
+            <p>{trimmedQuery ? `No games match “${trimmedQuery}”.` : tab === 'updates' ? 'Everything is up to date.' : 'No installed games yet.'}</p>
+            {trimmedQuery ? (
+              <button type="button" className="exo-set-btn" onClick={() => { onQuery(''); onSearchOpenChange(false) }}>
+                Clear search
+              </button>
+            ) : null}
+          </div>
         )}
       </div>
     </div>

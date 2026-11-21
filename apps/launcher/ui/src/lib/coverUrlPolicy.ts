@@ -125,7 +125,7 @@ function isOfficialSteamPortraitCdn(url: string): boolean {
 
 function isOfficialSteamHeroCdn(url: string): boolean {
   const hostOk = httpsHostIs(url, 'steamstatic.com') || httpsHostIs(url, 'steamcdn-a.akamaihd.net')
-  return hostOk && url.includes('library_hero')
+  return hostOk && (url.includes('library_hero') || url.includes('page_bg_raw') || url.includes('page_bg_generated'))
 }
 
 function isOfficialSteamHeaderCdn(url: string): boolean {
@@ -211,15 +211,20 @@ export function buildWideArtCandidates(
   }
   push(wideCache, false)
   if (appId) {
-    const base = `https://cdn.cloudflare.steamstatic.com/steam/apps/${appId}`
-    push(`${base}/library_hero.jpg`, false)
-    push(`${base}/library_hero_2x.jpg`, false)
+    const fastly = `https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/${appId}`
+    const cloudflare = `https://cdn.cloudflare.steamstatic.com/steam/apps/${appId}`
+    push(`${fastly}/library_hero_2x.jpg`, false)
+    push(`${fastly}/library_hero.jpg`, false)
+    push(`${cloudflare}/library_hero_2x.jpg`, false)
+    push(`${cloudflare}/library_hero.jpg`, false)
+    push(`${fastly}/page_bg_raw.jpg`, false)
+    push(`${cloudflare}/page_bg_raw.jpg`, false)
   }
   push(game.heroUrl, false)
   if (appId) {
     const base = `https://cdn.cloudflare.steamstatic.com/steam/apps/${appId}`
-    push(`${base}/header.jpg`, false)
-    push(`${base}/capsule_616x353.jpg`, false)
+    push(`${base}/header.jpg`, true)
+    push(`${base}/capsule_616x353.jpg`, true)
   }
   push(game.coverUrl ? withArtRevision(game.coverUrl, game.artRevision) : null, true)
   return list
@@ -246,12 +251,20 @@ export function buildPortraitArtCandidates(
     }
   }
   if (appId) {
+    const fastly = `https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/${appId}`
     const base = `https://cdn.cloudflare.steamstatic.com/steam/apps/${appId}`
     for (const url of steamCacheUrls) pushUnique(url)
-    for (const url of [`${base}/library_600x900_2x.jpg`, `${base}/library_600x900.jpg`, `${base}/library_capsule.jpg`]) {
+    for (const url of [
+      `${fastly}/library_600x900_2x.jpg`,
+      `${fastly}/library_600x900.jpg`,
+      `${fastly}/library_capsule.jpg`,
+      `${base}/library_600x900_2x.jpg`,
+      `${base}/library_600x900.jpg`,
+      `${base}/library_capsule.jpg`,
+    ]) {
       pushUnique(url)
     }
-    for (const storeUrl of [`${base}/header.jpg`, `${base}/capsule_616x353.jpg`]) {
+    for (const storeUrl of [`${fastly}/header.jpg`, `${base}/header.jpg`, `${base}/capsule_616x353.jpg`]) {
       if (!list.some((candidate) => candidate.url === storeUrl)) list.push({ url: storeUrl, derived: true })
     }
   }

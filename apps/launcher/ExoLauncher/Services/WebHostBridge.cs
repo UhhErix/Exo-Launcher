@@ -1774,6 +1774,7 @@ public sealed partial class WebHostBridge
         var game = _services.Library.Find(gameId!);
         if (game is null)
             return new { ok = false, message = "Game not found." };
+        if (_bannerAsked.Add(game.Id)) _ = WarmBannerAsync(game.Id);
 
         // Cached counts only; a played game with none (or old ones) is read in
         // the background and pushed as game.achievements.

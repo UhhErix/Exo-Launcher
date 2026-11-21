@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Sliders } from '../../brand/icons'
+import { FolderOpen, Sliders } from '../../brand/icons'
 import { host, type DlssStatus, type Game } from '../../lib/host'
 import { formatSize } from '../../lib/utils'
 import { ConfirmButton } from '../ui/ConfirmButton'
@@ -92,8 +92,19 @@ export function GameActions({
 
   return (
     <>
-      <button type="button" className="exo-game-tool exo-game-side is-icon" aria-label="Properties" aria-haspopup="dialog" onClick={() => onPropertiesOpen(true)}>
-        <Sliders size={16} />
+      <button type="button" className="exo-glass exo-game-tool exo-game-side" aria-label="Properties" aria-haspopup="dialog" onClick={() => onPropertiesOpen(true)}>
+        <Sliders size={15} />
+        <span>Properties</span>
+      </button>
+      <button
+        type="button"
+        className="exo-glass exo-game-tool exo-game-side is-icon"
+        aria-label="Open folder"
+        onClick={() => {
+          void host.openFolder(selected.id).catch((error: unknown) => onStatus(errorText(error, 'Could not open the folder.'), true))
+        }}
+      >
+        <FolderOpen size={15} />
       </button>
       {propertiesOpen && (
         <PropertiesSheet

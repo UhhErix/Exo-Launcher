@@ -65,8 +65,8 @@ export function isWideBitmap(width: number, height: number): boolean {
  * Shorter landscape assets still use the contained wash path.
  */
 export function isHeroShaped(width: number, height: number): boolean {
-  if (height < 1) return false
-  return width / height >= 2.5
+  if (height < 360 || width < 800) return false
+  return width / height >= 1.35
 }
 
 /** Smallest bitmap worth washing behind a banner. Below this it is a spacer, not art. */

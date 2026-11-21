@@ -1,10 +1,8 @@
-
-import { useState } from 'react'
 import { CompanyLogo } from '../../brand/CompanyLogo'
 import { Members } from '../../brand/icons'
 import type { DriveHeat, Game, GameVariant } from '../../lib/host'
-import { artSteamAppId } from '../../lib/library'
-import { formatRelativeLastPlayed, formatSize, storeLabel, formatPlayed } from '../../lib/utils'
+import { formatPlayed, formatRelativeLastPlayed, formatSize, storeLabel } from '../../lib/utils'
+import { GameLogo } from '../GameLogo'
 import type { Achievements } from './useGameDetails'
 
 export function GameShared({ selected }: { selected: Game }) {
@@ -18,41 +16,45 @@ export function GameShared({ selected }: { selected: Game }) {
 }
 
 export function GameHeader({ selected, children }: { selected: Game; children?: React.ReactNode }) {
-  const appId = artSteamAppId(selected)
-  const [failed, setFailed] = useState(false)
-  const [logoKey, setLogoKey] = useState(selected.id)
-  if (logoKey !== selected.id) {
-    setLogoKey(selected.id)
-    setFailed(false)
-  }
-  const logoSrc = appId && !failed
-    ? `https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/${appId}/logo.png`
-    : null
   return (
     <div className="exo-game-title-row">
-      {logoSrc ? (
-        <h1 className="exo-game-logo-wrap">
-          <img
-            src={logoSrc}
-            alt={selected.title}
-            className="exo-game-logo"
-            draggable={false}
-            decoding="async"
-            onError={() => setFailed(true)}
-          />
-        </h1>
-      ) : (
-        <h1 className="exo-game-title">{selected.title}</h1>
-      )}
+      <GameLogo
+        game={selected}
+        wrapClass="exo-game-identity"
+        imgClass="exo-game-logo"
+        titleClass="exo-game-title"
+      />
       {children}
     </div>
   )
 }
 
-/**
- * The store the game belongs to, beside its name: the store's mark and name, or one pill
- * to switch between the stores you own it on.
- */
+export function GameMetaLine({ selected, downloading }: { selected: Game; downloading: boolean }) {
+  const status = downloading
+    ? { text: 'Downloading', tone: 'is-warn' }
+    : selected.isRunning
+      ? { text: 'Playing now', tone: 'is-good' }
+      : selected.updateAvailable
+        ? { text: 'Update ready', tone: 'is-warn' }
+        : selected.installed
+          ? { text: 'Installed', tone: 'is-good' }
+          : { text: 'Not installed', tone: '' }
+  const store = selected.isAddPortable ? null : storeLabel(selected.store)
+  const size = formatSize(selected.sizeBytes)
+  const parts = [store, size !== '—' ? size : null].filter((p): p is string => !!p)
+  return (
+    <p className="exo-game-meta tabular-nums">
+      <span className={`exo-game-meta-state${status.tone ? ` ${status.tone}` : ''}`}>
+        <span className="exo-game-meta-dot" aria-hidden="true" />
+        {status.text}
+      </span>
+      {parts.map((part) => (
+        <span key={part} className="exo-game-meta-part">{part}</span>
+      ))}
+    </p>
+  )
+}
+
 export function GameStore({
   selected,
   sources,
@@ -90,37 +92,33 @@ export function GameStore({
   return (
     <div className="exo-game-store">
       <span className="exo-game-store-name">
-        <CompanyLogo company={selected.store.toLowerCase()} size={20} />
+        <CompanyLogo company={selected.store.toLowerCase()} size={18} />
         {storeLabel(selected.store)}
       </span>
     </div>
   )
 }
 
-/** The drive in the last session, said only when its heat slowed the game: no readings, the one thing that happened. */
 const driveSlowed = (heat: DriveHeat | null) => !!heat && heat.slowedSeconds > 0
 
-/** One fact: its value large enough to read from your chair, its name quiet under it. */
-function Fact({ label, value }: { label: string; value: string }) {
+function Fact({ label, value, pct }: { label: string; value: string; pct?: number }) {
   return (
     <div className="exo-game-fact">
       <dd className="tabular-nums">{value}</dd>
       <dt>{label}</dt>
+      {pct != null ? (
+        <span className="exo-game-fact-bar" aria-hidden="true">
+          <span style={{ width: `${Math.min(100, Math.max(0, pct))}%` }} />
+        </span>
+      ) : null}
     </div>
   )
 }
 
-/** Whether the stats hold anything to show: a known number, an achievement or a drive reading. */
 function shownAny(known: number, achievements: Achievements | null, driveHeat: DriveHeat | null) {
   return known > 0 || !!achievements || driveSlowed(driveHeat)
 }
 
-/**
- * What people open a game page for: time played, last played, storage and achievements, each its own fact with room
- * around it. A fact Exo doesn't know is left out. A Riot game shows its lifetime hours as Played, as a Steam game does
- * (the Riot ID's ledger: starting hours plus Exo's tracked sessions), and nothing more. The drive is said under
- * them, only when its heat slowed the game.
- */
 export function GameStats({
   selected,
   sources,
@@ -134,23 +132,20 @@ export function GameStats({
   driveHeat: DriveHeat | null
   loading?: boolean
 }) {
-  // Source chips name one store. Use that store's hours, not the grouped
-  // card total — the default chip matches the card id, so reading
-  // selected.playtimeMinutes showed Epic+Steam while Epic looked selected.
   const source = sources?.find((variant) => variant.id === selected.id)
   const played = formatPlayed(source?.playtimeMinutes ?? selected.playtimeMinutes)
   const last = formatRelativeLastPlayed(source?.lastPlayedUtc ?? selected.lastPlayedUtc)
   const size = formatSize(selected.sizeBytes)
   const known = (value: string) => value !== '—'
-  // Stale first: what is known shows at once, and nothing stands in for the extras while they load.
   if (!shownAny([played, last, size].filter(known).length, achievements, driveHeat)) return null
+  const achPct = achievements && achievements.total > 0 ? Math.round((achievements.unlocked / achievements.total) * 100) : undefined
   return (
     <div className="exo-game-stats" aria-busy={loading || undefined}>
-      <dl className="exo-game-facts">
+      <dl className="exo-glass exo-game-facts">
         {known(played) && <Fact label="Played" value={played} />}
         {known(last) && <Fact label="Last played" value={last} />}
         {known(size) && <Fact label={selected.installed ? 'Storage' : 'Size'} value={size} />}
-        {achievements && <Fact label="Achievements" value={`${achievements.unlocked} of ${achievements.total}`} />}
+        {achievements && <Fact label="Achievements" value={`${achievements.unlocked} / ${achievements.total}`} pct={achPct} />}
       </dl>
       {driveSlowed(driveHeat) && <p className="exo-game-drive">Your drive ran hot and slowed this game.</p>}
     </div>
