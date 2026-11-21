@@ -91,10 +91,12 @@ internal static class ExoEqConfig
     /// The preamp that keeps the chain from clipping: minus its highest boost, rounded away from zero to 0.1 dB (0 when the
     /// chain only cuts).
     /// </summary>
+    internal const double HeadroomMarginDb = 0.5;
+
     internal static double Preamp(IReadOnlyList<EqFilter> filters)
     {
         var peak = Peak(filters);
-        return peak <= 0.005 ? 0 : -Math.Ceiling(Math.Round(peak, 6) * 10) / 10;
+        return peak <= 0.005 ? 0 : -(Math.Ceiling(Math.Round(peak, 6) * 10) / 10 + HeadroomMarginDb);
     }
 
     // ------------------------------------------------------------------ exo.txt

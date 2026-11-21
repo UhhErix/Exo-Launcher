@@ -85,7 +85,7 @@ public sealed class ExoEqTests
     {
         var store = Store();
         var phones = ExoEqSounds.Chain(Phones, store.Outputs[Phones], store, null, night: false);
-        Assert.Equal([new(EqKind.Peak, 3000, -2, 2), new(EqKind.LowShelf, 105, 4, 0.71)], phones.Filters);
+        Assert.Equal([new(EqKind.Peak, 3000, -2, 2), .. ExoEqSounds.Filters(ExoEqSounds.Bass, [])], phones.Filters);
         Assert.Empty(ExoEqSounds.Chain(Speakers, store.Outputs[Speakers], store, null, night: false).Filters);
         var text = ExoEq.TextFor(store, null, night: false, compare: false);
         Assert.Contains("Device: " + Phones, text, StringComparison.Ordinal);
@@ -323,5 +323,52 @@ public sealed class ExoEqTests
 
         var desktop = ExoEq.TextFor(emptyStore, activeGame: null, night: false, compare: false, activeOutput: (Phones, "Headphones"), desktopFlat: true);
         Assert.DoesNotContain("Filter:", desktop, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Iem_corrections_apply_jm1_refinement_while_over_ear_stays_harman()
+    {
+        var store = new EqStore();
+        var iemOutput = new EqOutput
+        {
+            Name = "IEM DAC",
+            Headphone = new EqCorrection
+            {
+                Id = "crinacle/711 in-ear/Moondrop Blessing 3",
+                Name = "Moondrop Blessing 3",
+                Source = "crinacle",
+                Form = "in-ear",
+                Filters = [new EqBand { Type = "PK", Hz = 1000, Gain = 1.0, Q = 1.0 }],
+            },
+        };
+        var overEarOutput = new EqOutput
+        {
+            Name = "Headphones",
+            Headphone = new EqCorrection
+            {
+                Id = "oratory1990/over-ear/Sennheiser HD 600",
+                Name = "Sennheiser HD 600",
+                Source = "oratory1990",
+                Form = "over-ear",
+                Filters = [new EqBand { Type = "PK", Hz = 1000, Gain = 1.0, Q = 1.0 }],
+            },
+        };
+
+        var iemChain = ExoEqSounds.Chain(Phones, iemOutput, store, null, night: false);
+        var overEarChain = ExoEqSounds.Chain(Phones, overEarOutput, store, null, night: false);
+
+        Assert.Equal(1 + ExoEqSounds.IemNaturalTarget.Count, iemChain.Filters.Count);
+        Assert.Contains(iemChain.Notes, n => n.Contains("JM-1", StringComparison.Ordinal));
+        Assert.Single(overEarChain.Filters);
+        Assert.DoesNotContain(overEarChain.Notes, n => n.Contains("JM-1", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Footsteps_profile_cuts_rumble_lifts_step_band_and_tames_sibilance()
+    {
+        var filters = ExoEqSounds.Filters(ExoEqSounds.Footsteps, []);
+        Assert.True(ExoEqConfig.Response(filters, 60) < -3.0);
+        Assert.True(ExoEqConfig.Response(filters, 2600) > 1.5);
+        Assert.True(ExoEqConfig.Response(filters, 7500) < -1.0);
     }
 }

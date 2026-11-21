@@ -43,7 +43,7 @@ export const riotIdShown = (stores: readonly string[], riotId: string | null | u
 
 /** Devices: a card opens a page Exo has for it (Exo Mouse, the Controller Lab's pads, audio); one with no page isn't drawn. */
 export const deviceHasPage = (kind: PeripheralKind, lab: boolean | null | undefined) =>
-  kind !== 'keyboard' && (kind !== 'controller' || lab === true)
+  (kind !== 'keyboard' && kind !== 'controller') || lab === true
 
 /** Properties › Compress: a game Exo will never compress (the PC list leaves it out too) has no row. */
 export const compressShown = (compress: Pick<CompressState, 'state'> | null | undefined) => !!compress && compress.state !== 'refused'

@@ -64,6 +64,7 @@ internal sealed partial class NetworkTune(NetworkTune.IAdapters adapters, Networ
         IReadOnlyDictionary<string, Param>? Params(string key);
         /// <summary>A PC with a battery (a laptop or handheld moves around, so its Wi-Fi keeps roaming).</summary>
         bool Portable();
+        RssPlan? RssPlan() => null;
     }
 
     internal interface IWriter
@@ -101,6 +102,41 @@ internal sealed partial class NetworkTune(NetworkTune.IAdapters adapters, Networ
     ];
 
     internal const string PnpCapabilitiesKey = "PnPCapabilities";
+    internal const string NicPolicyKey = "ExoNicDevicePolicy";
+    internal const string NicMaskKey = "ExoNicAffinityMask";
+    internal const string RssBaseProcKey = "*RssBaseProcNumber";
+    internal const string RssMaxProcKey = "*RssMaxProcNumber";
+    internal const string MaxRssProcessorsKey = "*MaxRssProcessors";
+
+    internal sealed record RssPlan(int BaseCpu, int MaxCpu, int MaxProcessors, ulong AffinityMask)
+    {
+        internal string MaskHex => Convert.ToHexString(BitConverter.GetBytes(AffinityMask));
+    }
+
+    internal static RssPlan? PickRssPlan(MouseCore.Topology? topology, ulong reservedMask = 0)
+    {
+        if (topology is null || topology.Logical < 6 || topology.Logical > 64 || topology.Cores.Count < 4) return null;
+        var top = topology.Cores.Max(c => c.Efficiency);
+        var fast = topology.Cores
+            .Where(c => c.Efficiency == top && !c.Threads.Contains(0) && !c.Threads.Any(t => (reservedMask & (1UL << t)) != 0))
+            .OrderBy(c => c.Threads.Min())
+            .ToList();
+        if (fast.Count < 2) return null;
+
+        var caches = topology.L3
+            .Where(l => fast.Any(c => c.Threads.Any(t => (l.Mask & (1UL << t)) != 0)))
+            .ToList();
+        var pool = fast;
+        if (caches.Count > 1)
+        {
+            var secondary = fast.Where(c => c.Threads.Any(t => (caches[^1].Mask & (1UL << t)) != 0)).ToList();
+            if (secondary.Count >= 2) pool = secondary;
+        }
+
+        var chosen = pool.TakeLast(2).Select(c => c.Threads.Min()).OrderBy(x => x).ToArray();
+        var mask = (1UL << chosen[0]) | (1UL << chosen[1]);
+        return new RssPlan(chosen[0], chosen[1], 2, mask);
+    }
 
     private static readonly long Gigabit = 1_000_000_000;
 
@@ -108,14 +144,14 @@ internal sealed partial class NetworkTune(NetworkTune.IAdapters adapters, Networ
     {
         var list = adapters.List();
         var portable = adapters.Portable();
-        var pending = list.Select(a => (Adapter: a, Rules: Decide(a, portable))).Where(p => p.Rules.Count > 0).ToList();
+        var rssPlan = portable ? null : adapters.RssPlan();
+        var pending = list.Select(a => (Adapter: a, Rules: Decide(a, portable, rssPlan))).Where(p => p.Rules.Count > 0).ToList();
         var backup = Load();
         var applied = pending.Count == 0 && backup is { Adapters.Count: > 0 } && backup.Adapters.Any(e => list.Any(a => a.Key == e.Key));
         return new State(pending, applied, SlowLink(list));
     }
 
-    /// <summary>What Exo would set on an adapter: each rule its driver offers, accepting the value, and not already there; one value per keyword.</summary>
-    internal static IReadOnlyList<Rule> Decide(Adapter adapter, bool portable)
+    internal static IReadOnlyList<Rule> Decide(Adapter adapter, bool portable, RssPlan? rssPlan = null)
     {
         var rules = Rules.Where(r => r.Wireless == adapter.Wireless && !(r.DesktopOnly && portable))
             .Select(r => adapter.Params.TryGetValue(r.Keyword, out var p) ? Wanted(r, p) : null).OfType<Rule>()
@@ -123,11 +159,45 @@ internal sealed partial class NetworkTune(NetworkTune.IAdapters adapters, Networ
         if (!portable && adapter.Params.TryGetValue(PnpCapabilitiesKey, out var pnp))
         {
             var cur = uint.TryParse(pnp.Now, NumberStyles.None, CultureInfo.InvariantCulture, out var parsed) ? parsed : 0u;
-            // Bit 0x10 disables "Allow the computer to turn off this device to save power"; 0x08 suppresses wake-on-LAN reset on desktop NICs.
             if ((cur & 0x10) == 0)
                 rules.Add(new Rule(PnpCapabilitiesKey, (cur | 0x18).ToString(CultureInfo.InvariantCulture), "adapter power management on", adapter.Wireless, DesktopOnly: true));
         }
+        if (!portable && !adapter.Wireless && rssPlan is not null && adapter.DeviceId.StartsWith(@"PCI\", StringComparison.OrdinalIgnoreCase))
+            AddRssRules(adapter, rssPlan, rules);
         return rules;
+    }
+
+    private static void AddRssRules(Adapter adapter, RssPlan plan, List<Rule> rules)
+    {
+        if (adapter.Params.TryGetValue(RssBaseProcKey, out var rssBase))
+        {
+            var wantBase = plan.BaseCpu.ToString(CultureInfo.InvariantCulture);
+            if ((rssBase.Allowed.Count == 0 || rssBase.Allowed.ContainsKey(wantBase)) && rssBase.Now != wantBase)
+                rules.Add(new Rule(RssBaseProcKey, wantBase, "Ethernet RSS sharing Core 0", Wireless: false, DesktopOnly: true));
+        }
+        if (adapter.Params.TryGetValue(RssMaxProcKey, out var rssMax))
+        {
+            var wantMax = plan.MaxCpu.ToString(CultureInfo.InvariantCulture);
+            if ((rssMax.Allowed.Count == 0 || rssMax.Allowed.ContainsKey(wantMax)) && rssMax.Now != wantMax)
+                rules.Add(new Rule(RssMaxProcKey, wantMax, "Ethernet RSS sharing Core 0", Wireless: false, DesktopOnly: true));
+        }
+        if (adapter.Params.TryGetValue(MaxRssProcessorsKey, out var rssCount))
+        {
+            var wantCount = plan.MaxProcessors.ToString(CultureInfo.InvariantCulture);
+            if ((rssCount.Allowed.Count == 0 || rssCount.Allowed.ContainsKey(wantCount)) && rssCount.Now != wantCount)
+                rules.Add(new Rule(MaxRssProcessorsKey, wantCount, "Ethernet RSS sharing Core 0", Wireless: false, DesktopOnly: true));
+        }
+        if (adapter.Params.TryGetValue(NicPolicyKey, out var policy) && adapter.Params.TryGetValue(NicMaskKey, out var mask))
+        {
+            var customPinned = policy.Value == "4" && !string.IsNullOrEmpty(mask.Value) && !mask.Value.Equals(plan.MaskHex, StringComparison.OrdinalIgnoreCase);
+            if (!customPinned)
+            {
+                if (policy.Value != "4")
+                    rules.Add(new Rule(NicPolicyKey, "4", "Ethernet interrupts sharing Core 0", Wireless: false, DesktopOnly: true));
+                if (!string.Equals(mask.Value, plan.MaskHex, StringComparison.OrdinalIgnoreCase))
+                    rules.Add(new Rule(NicMaskKey, plan.MaskHex, "Ethernet interrupts sharing Core 0", Wireless: false, DesktopOnly: true));
+            }
+        }
     }
 
     /// <summary>The rule as it would write here, or null: a listed value not already set, or a number below the driver's own default.</summary>
@@ -276,6 +346,9 @@ internal sealed partial class NetworkTune(NetworkTune.IAdapters adapters, Networ
 
     [GeneratedRegex(@"^-?\d{1,10}$")]
     internal static partial Regex NumberValue();
+
+    [GeneratedRegex(@"^[0-9A-Fa-f]{16}$")]
+    internal static partial Regex HexMaskValue();
 
     [GeneratedRegex(@"^(?:PCI|USB)\\[A-Z0-9_&]+\\[A-Z0-9_&]+$", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     internal static partial Regex DeviceId();

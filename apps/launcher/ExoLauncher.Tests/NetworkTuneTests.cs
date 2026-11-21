@@ -234,4 +234,64 @@ public sealed class NetworkTuneTests : IDisposable
         Assert.Null(tune.Undo());
         Assert.Equal(("0000", PnpCapabilitiesKey, (string?)null), writer.Written[^1]);
     }
+
+    [Fact]
+    public void PickRssPlan_SelectsDedicatedUpperPhysicalCoresAndPrefersSecondaryCcd()
+    {
+        var quad = new MouseCore.Topology([new([0], 1), new([1], 1), new([2], 1), new([3], 1)], [new(0xFUL, 16)], 4);
+        Assert.Null(PickRssPlan(quad));
+
+        var hex = new MouseCore.Topology(
+            [new([0, 1], 1), new([2, 3], 1), new([4, 5], 1), new([6, 7], 1), new([8, 9], 1), new([10, 11], 1)],
+            [new(0xFFFUL, 32)],
+            12);
+        var hexPlan = PickRssPlan(hex)!;
+        Assert.Equal((8, 10, 2, (1UL << 8) | (1UL << 10)), (hexPlan.BaseCpu, hexPlan.MaxCpu, hexPlan.MaxProcessors, hexPlan.AffinityMask));
+
+        var avoidMouse = PickRssPlan(hex, 1UL << 10)!;
+        Assert.Equal((6, 8), (avoidMouse.BaseCpu, avoidMouse.MaxCpu));
+
+        var dualCcd = new MouseCore.Topology(
+            [new([0, 1], 1), new([2, 3], 1), new([4, 5], 1), new([6, 7], 1), new([8, 9], 1), new([10, 11], 1), new([12, 13], 1), new([14, 15], 1)],
+            [new(0x00FFUL, 96), new(0xFF00UL, 32)],
+            16);
+        var dualPlan = PickRssPlan(dualCcd)!;
+        Assert.Equal((12, 14), (dualPlan.BaseCpu, dualPlan.MaxCpu));
+    }
+
+    [Fact]
+    public void DecideAndCommands_IsolateEthernetRssAndPciAffinitySafely()
+    {
+        var plan = new RssPlan(8, 10, 2, (1UL << 8) | (1UL << 10));
+        var adapter = Ethernet(new(StringComparer.OrdinalIgnoreCase)
+        {
+            [RssBaseProcKey] = new("0", "0", new Dictionary<string, string>()),
+            [RssMaxProcKey] = new("11", "11", new Dictionary<string, string>()),
+            [MaxRssProcessorsKey] = new("4", "4", new Dictionary<string, string> { ["2"] = "2", ["4"] = "4" }),
+            [NicPolicyKey] = new(null, null, new Dictionary<string, string>()),
+            [NicMaskKey] = new(null, null, new Dictionary<string, string>()),
+        });
+
+        var desktopRules = Decide(adapter, portable: false, plan);
+        Assert.Contains(desktopRules, r => r.Keyword == RssBaseProcKey && r.To == "8");
+        Assert.Contains(desktopRules, r => r.Keyword == RssMaxProcKey && r.To == "10");
+        Assert.Contains(desktopRules, r => r.Keyword == MaxRssProcessorsKey && r.To == "2");
+        Assert.Contains(desktopRules, r => r.Keyword == NicPolicyKey && r.To == "4");
+        Assert.Contains(desktopRules, r => r.Keyword == NicMaskKey && r.To == plan.MaskHex);
+
+        Assert.Empty(Decide(adapter, portable: true, plan));
+
+        var custom = Ethernet(new(StringComparer.OrdinalIgnoreCase)
+        {
+            [NicPolicyKey] = new("4", null, new Dictionary<string, string>()),
+            [NicMaskKey] = new("0000000000000004", null, new Dictionary<string, string>()),
+        });
+        Assert.Empty(Decide(custom, portable: false, plan));
+
+        var lines = NetworkTune.Commands("reg.exe", "pnputil.exe", adapter, [(NicPolicyKey, "4"), (NicMaskKey, plan.MaskHex), (NicMaskKey, null)])!;
+        Assert.Contains(@"\Device Parameters\Interrupt Management\Affinity Policy"" /v ""DevicePolicy"" /t REG_DWORD /d 4", lines[0]);
+        Assert.Contains($@"\Device Parameters\Interrupt Management\Affinity Policy"" /v ""AssignmentSetOverride"" /t REG_BINARY /d {plan.MaskHex}", lines[1]);
+        Assert.Contains($@"delete ""HKLM\SYSTEM\CurrentControlSet\Enum\{adapter.DeviceId}\Device Parameters\Interrupt Management\Affinity Policy"" /v ""AssignmentSetOverride"" /f /reg:64", lines[2]);
+        Assert.Null(NetworkTune.Commands("reg.exe", "pnputil.exe", adapter, [(NicMaskKey, "NOT_HEX")]));
+    }
 }

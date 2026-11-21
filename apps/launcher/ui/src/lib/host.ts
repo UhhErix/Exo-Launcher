@@ -184,10 +184,25 @@ export type PeripheralPort = {
 export type CpuPorts = { free: number; total: number; freeTypeC: boolean }
 /** AMD's unreleased Fluid Motion Frames 3: offer, show the switch; on, the value is set; note, one line once AMD has released it. */
 export type Afmf3State = { ok: boolean; message?: string | null; offer: boolean; on: boolean; note?: string | null }
-/** A device on the USB map, as its hub reports it. speed: USB_DEVICE_SPEED, 0 low to 3 super; hubs on its way, and the last one's name; interval: the fastest it asks to be polled (µs), for what you play with. */
-export type UsbMapDevice = { name: string; kind?: string | null; speed: number | null; hubs: number; interval?: number | null; hub?: string | null }
-/** A USB controller on the map. where: cpu, chipset, addin, dock or unknown, an estimate from its PCI ids; interrupts: msi or line. */
-export type UsbMapController = { name: string; where: string; interrupts?: string | null; devices: UsbMapDevice[] }
+export type KeyboardProfileSlot = { index: number; name: string }
+export type KeyboardRead = {
+  ok: boolean
+  message?: string | null
+  model: string
+  hallEffect: boolean
+  maxScanHz: number
+  firmware: string | null
+  layout: string | null
+  activeProfile: number
+  profiles: KeyboardProfileSlot[]
+  actuationMm: number | null
+  rapidTrigger: boolean | null
+  rapidTriggerMm: number | null
+  tachyon: boolean | null
+  canWrite: boolean
+  wootilityInstalled: boolean
+  backgroundServiceRunning: boolean
+}
 
 /** The Controller Lab (DualSense and DualSense Edge): what sits between the controller and games. */
 export type ControllerLayers = {
@@ -2916,8 +2931,12 @@ export const host = {
   /** AutoEq's headphones (fetched the first time, then kept a week). */
   eqHeadphones: () => rawCall<{ ok: boolean; headphones: EqHeadphone[] }>('eq.headphones', {}, 30_000),
   /** Devices: the mouse, keyboards, audio and controllers on this PC (devices.changed says when one comes or goes). */
-  devicesUsbMap: () => rawCall<{ ok: boolean; message?: string; controllers: UsbMapController[] }>('devices.usbMap', {}, 15_000),
   devicesList: () => rawCall<{ ok: boolean; devices: Peripheral[]; cpuPorts?: CpuPorts | null }>('devices.list', {}, 15_000),
+  keyboardRead: (id: string) => rawCall<KeyboardRead>('keyboard.read', { id }, 15_000),
+  keyboardProfile: (id: string, slot: number) => rawCall<KeyboardRead>('keyboard.profile', { id, slot }, 15_000),
+  keyboardSettings: (id: string, patch: { actuationMm?: number; rapidTrigger?: boolean; rapidTriggerMm?: number; tachyon?: boolean }) =>
+    rawCall<KeyboardRead>('keyboard.settings', { id, ...patch }, 15_000),
+  keyboardOpenApp: () => rawCall<{ ok: boolean }>('keyboard.openApp', {}, 10_000),
   controllerRead: (id: string) => rawCall<ControllerRead>('controller.read', { id }, 30_000),
   /** The output's and microphone's format, volume and mute, and how Exo Voice is set. */
   audioRead: (output: string | null, mic: string | null) => rawCall<AudioRead>('audio.read', { output, mic }),

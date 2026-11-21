@@ -79,7 +79,9 @@ test('Devices draws a card only where it opens a page', () => {
   assert.equal(deviceHasPage('controller', true), true, 'a pad the Controller Lab reads')
   assert.equal(deviceHasPage('controller', false), false, "one it can't")
   assert.equal(deviceHasPage('controller', undefined), false)
-  assert.equal(deviceHasPage('keyboard', true), false)
+  assert.equal(deviceHasPage('keyboard', true), true)
+  assert.equal(deviceHasPage('keyboard', false), false)
+  assert.equal(deviceHasPage('keyboard', undefined), false)
 })
 
 test('the Riot ID row needs the Riot Client, or an ID already saved', () => {

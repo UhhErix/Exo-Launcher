@@ -32,7 +32,7 @@ public sealed class ExoEqConfigTests
             "Channel: all\r\n" +
             "# Headphones (USB Audio)\r\n" +
             "# Sennheiser HD 600: correction from AutoEq (MIT), measured by oratory1990\r\n" +
-            "Preamp: -5.5 dB\r\n" +
+            "Preamp: -6.0 dB\r\n" +
             "Filter: ON LSC Fc 105 Hz Gain 5.5 dB Q 0.70\r\n" +
             "Filter: ON PK Fc 2000 Hz Gain -2.3 dB Q 1.41\r\n" +
             "Device: all\r\n" +
@@ -72,16 +72,12 @@ public sealed class ExoEqConfigTests
     [Fact]
     public void The_guard_reads_the_whole_curve()
     {
-        // Two +3 dB peaks on one frequency reach +6 dB together.
-        Assert.Equal(-6.0, ExoEqConfig.Preamp([new(EqKind.Peak, 1000, 3, 1), new(EqKind.Peak, 1000, 3, 1)]));
-        // A shelf reaches its full gain.
-        Assert.Equal(-4.0, ExoEqConfig.Preamp([new(EqKind.LowShelf, 105, 4, 0.71)]));
-        // Only cuts: no headroom taken.
+        Assert.Equal(-6.5, ExoEqConfig.Preamp([new(EqKind.Peak, 1000, 3, 1), new(EqKind.Peak, 1000, 3, 1)]));
+        Assert.Equal(-4.5, ExoEqConfig.Preamp([new(EqKind.LowShelf, 105, 4, 0.71)]));
         Assert.Equal(0.0, ExoEqConfig.Preamp([new(EqKind.Peak, 1000, -6, 1), new(EqKind.HighShelf, 8000, -3, 0.71)]));
         Assert.Equal(0.0, ExoEqConfig.Preamp([]));
-        // A cut next to a boost lowers the peak: the guard is less than the sum of the boosts.
         var near = ExoEqConfig.Preamp([new(EqKind.Peak, 1000, 4, 2), new(EqKind.Peak, 1100, -4, 2)]);
-        Assert.InRange(near, -4.0, -0.1);
+        Assert.InRange(near, -4.5, -0.6);
     }
 
     [Fact]

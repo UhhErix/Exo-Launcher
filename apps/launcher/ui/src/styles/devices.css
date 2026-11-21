@@ -722,15 +722,8 @@
   font-size: calc(13px * var(--exo-scale, 1));
 }
 
-/* The USB map (UsbMap.tsx): wider than a question, and its list scrolls in a short window. */
-.exo-dialog.exo-usb-map {
-  width: min(640px, calc(100vw - 24px));
-  max-height: calc(100vh - 96px);
+.exo-kb-presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
 }
-
-.exo-usb-map .exo-dialog-body {
-  min-height: 0;
-  overflow-y: auto;
-}
-
-.exo-usb-map-group + .exo-usb-map-group { margin-top: 12px; }

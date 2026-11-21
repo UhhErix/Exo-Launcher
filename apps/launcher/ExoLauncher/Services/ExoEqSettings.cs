@@ -113,13 +113,22 @@ internal static class ExoEqSounds
 
     private static EqFilter Pk(double hz, double gain, double q) => new(EqKind.Peak, hz, gain, q);
 
-    /// <summary>Each sound's filters. Footsteps lowers the rumble of explosions and lifts the 2 to 5 kHz of steps and reloads.</summary>
+    internal static readonly IReadOnlyList<EqFilter> IemNaturalTarget =
+    [
+        Pk(190, 1.5, 0.85),
+        Pk(3400, -2.0, 1.35),
+        Pk(5200, -1.0, 2.0),
+    ];
+
+    internal static bool UsesIemRefinement(EqCorrection? headphone) =>
+        headphone is { Filters.Count: > 0 } && headphone.Form is "in-ear" or "earbud";
+
     internal static IReadOnlyList<EqFilter> Filters(string sound, IReadOnlyList<EqBand> custom) => sound switch
     {
-        Bass => [new(EqKind.LowShelf, 105, 4, 0.71)],
-        Vocal => [Pk(200, -2, 0.8), Pk(1800, 2, 1), Pk(3500, 1.5, 1.4)],
-        Footsteps => [new(EqKind.LowShelf, 120, -4, 0.71), Pk(300, -1.5, 1), Pk(2200, 3, 1), Pk(4500, 3.5, 1.2), new(EqKind.HighShelf, 10000, -1.5, 0.71)],
-        Cinematic => [new(EqKind.LowShelf, 95, 2.5, 0.71), Pk(280, -1, 1), new(EqKind.HighShelf, 8000, 1.5, 0.71)],
+        Bass => [new(EqKind.LowShelf, 90, 4.0, 0.71), Pk(250, -1.0, 1.1)],
+        Vocal => [new(EqKind.LowShelf, 85, -1.5, 0.71), Pk(210, -1.8, 0.9), Pk(1500, 1.5, 1.0), Pk(3100, 1.8, 1.3), Pk(6800, -1.2, 2.0)],
+        Footsteps => [new(EqKind.LowShelf, 105, -5.0, 0.71), Pk(260, -2.0, 1.1), Pk(1150, 1.5, 1.2), Pk(2600, 2.8, 1.15), Pk(4200, 2.0, 1.4), Pk(7500, -2.0, 1.8), new(EqKind.HighShelf, 11000, -1.5, 0.71)],
+        Cinematic => [new(EqKind.LowShelf, 75, 3.0, 0.71), Pk(240, -1.2, 1.0), Pk(2200, 0.8, 1.0), new(EqKind.HighShelf, 9000, 1.5, 0.71)],
         Custom => [.. custom.Select(b => b.Filter).Where(f => Math.Abs(f.Gain) >= 0.05)],
         _ => [],
     };
@@ -144,6 +153,11 @@ internal static class ExoEqSounds
         {
             notes.Add($"{headphone.Name}: correction from AutoEq (MIT), measured by {headphone.Source}");
             filters.AddRange(headphone.Filters.Select(f => f.Filter));
+            if (UsesIemRefinement(headphone))
+            {
+                notes.Add("Target refinement: JM-1 / IEF 2025 natural IEM balance");
+                filters.AddRange(IemNaturalTarget);
+            }
         }
         string sound;
         if (autoSound is { } auto && Known(auto))
