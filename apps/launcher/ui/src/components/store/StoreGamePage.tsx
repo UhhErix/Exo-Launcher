@@ -1,7 +1,7 @@
 import { Wait, sample, times } from '../ui/Wait'
-import { useCallback, useEffect, useState } from 'react'
-import { ArrowRight, Bookmark, Check, CHECK_PATH, ChevronLeft, ExternalLink, Failed, Library, Play } from '../../brand/icons'
-import { host, type Game, type StoreGame, type StoreOffer, type StoreOtherOffers, type StoreRecentReviews, type StoreTile } from '../../lib/host'
+import { useCallback, useEffect, useState, type ReactNode } from 'react'
+import { ArrowRight, Bookmark, Check, CHECK_PATH, ChevronLeft, ExternalLink, Failed, Play } from '../../brand/icons'
+import { host, type StoreGame, type StoreOffer, type StoreOtherOffers, type StoreRecentReviews, type StoreTile } from '../../lib/host'
 import { report } from '../../lib/report'
 import { Spinner } from '../ui/Spinner'
 import { Price } from './StoreCard'
@@ -31,16 +31,15 @@ type Shown = { kind: 'trailer'; index: number } | { kind: 'shot'; index: number 
  * its size from the first frame (placeholders until the details land), so nothing moves when they do; what arrives
  * fades in where it belongs. Steam's part comes first; the other launchers fill in when they answer.
  */
-export function StoreGamePage({ seed, onScreen, owned, like, onOpenLike, wished, onWish, onOpenLibrary, onBack }: {
+export function StoreGamePage({ seed, onScreen, owned, wished, onWish, onOpenLibrary, onBack, more }: {
   seed: StoreTile
   onScreen: boolean
   owned: boolean
-  like?: Game
-  onOpenLike: (game: Game) => void
   wished: boolean
   onWish: (on: boolean) => void
   onOpenLibrary: () => void
   onBack?: () => void
+  more?: ReactNode
 }) {
   const game = useStoreGame(seed.appId)
   const { offers: others } = useOtherOffers(seed.appId)
@@ -48,7 +47,7 @@ export function StoreGamePage({ seed, onScreen, owned, like, onOpenLike, wished,
   const name = game.data?.name ?? seed.name
   const data = game.data
   return (
-    <section className="exo-sgp" aria-labelledby="exo-sgp-title" tabIndex={-1} data-autofocus>
+    <section className="exo-sgp" aria-labelledby="exo-sgp-title" tabIndex={-1} data-autofocus data-room-scroll>
       {onBack ? (
         <header className="exo-sgp-bar">
           <button type="button" className="exo-glass exo-sgp-back" onClick={onBack}>
@@ -57,22 +56,25 @@ export function StoreGamePage({ seed, onScreen, owned, like, onOpenLike, wished,
           </button>
         </header>
       ) : null}
+      <header className="exo-sgp-header">
+        <div className="exo-sgp-head">
+          <HeroLogo key={seed.appId} appId={seed.appId} name={name} />
+          <h2 id="exo-sgp-title" className="sr-only">{name}</h2>
+          <Pills tags={data?.tags ?? null} />
+        </div>
+        <BuyPanel game={data} loading={!data && !game.error} others={others} seed={seed} owned={owned} wished={wished} onWish={onWish} onOpenLibrary={onOpenLibrary} />
+      </header>
       <div className="exo-sgp-body">
         <div className="exo-sgp-left">
           <Media game={game} onScreen={onScreen} />
-          <Facts game={data} recent={recent} />
-        </div>
-        <div className="exo-sgp-side">
-          <div className="exo-sgp-head">
-            <HeroLogo key={seed.appId} appId={seed.appId} name={name} />
-            <h2 id="exo-sgp-title" className="sr-only">{name}</h2>
-            <Pills tags={data?.tags ?? null} />
-          </div>
-          <BuyPanel game={data} loading={!data && !game.error} others={others} seed={seed} owned={owned} like={like} onOpenLike={onOpenLike} wished={wished} onWish={onWish} onOpenLibrary={onOpenLibrary} />
           <About text={data ? data.description ?? '' : null} />
-          <Specs specs={data ? data.specs ?? [] : null} fit={data?.fit ?? null} />
         </div>
+        <aside className="exo-sgp-side">
+          <Facts game={data} recent={recent} />
+          <Specs specs={data ? data.specs ?? [] : null} fit={data?.fit ?? null} />
+        </aside>
       </div>
+      {more ? <footer className="exo-sgp-more">{more}</footer> : null}
     </section>
   )
 }
@@ -111,14 +113,12 @@ function HeroLogo({ appId, name }: { appId: string; name: string }) {
  * the room). A game you own, installed or not, has none of the buying: Library, which opens it there, and Wishlist only
  * while it is still on the wishlist, so it can come off.
  */
-function BuyPanel({ game, loading, others, seed, owned, like, onOpenLike, wished, onWish, onOpenLibrary }: {
+function BuyPanel({ game, loading, others, seed, owned, wished, onWish, onOpenLibrary }: {
   game: StoreGame | null
   loading: boolean
   others: StoreOffer[] | null
   seed: StoreTile
   owned: boolean
-  like?: Game
-  onOpenLike: (game: Game) => void
   wished: boolean
   onWish: (on: boolean) => void
   onOpenLibrary: () => void
@@ -160,7 +160,6 @@ function BuyPanel({ game, loading, others, seed, owned, like, onOpenLike, wished
           onClick={() => { setOpening(true); open(ggDealsUrl(game?.name ?? seed.name)).finally(() => setOpening(false)) }}>
           {opening ? <Spinner label="Opening GG.deals" /> : <ExternalLink size={14} />}GG.deals
         </button>
-        {like ? <button type="button" className="exo-game-tool exo-sgp-like" onClick={() => onOpenLike(like)}><Library size={14} /><span>Similar to {like.title}</span></button> : null}
       </div>
       {others?.length ? (
         <div className="exo-sgp-others">
