@@ -299,9 +299,6 @@ export function GamePage({
 
   return (
     <article className="exo-game-page exo-enter">
-      <div className="exo-game-page-wash" aria-hidden>
-        <HeroWash game={artworkView} fill />
-      </div>
       <div className="exo-game-page-inner">
         <div className="exo-game-stage">
           <div className="exo-game-stage-art" aria-hidden>

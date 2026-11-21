@@ -288,10 +288,6 @@ export const HomeDeck = memo(function HomeDeck({
 
   return (
     <div className="exo-home-deck">
-      <div className="exo-home-ambient" aria-hidden="true">
-        {focused ? <HeroWash key={`amb:${focused.id}`} game={focused} fill /> : null}
-      </div>
-
       <div className="exo-home-stage">
         <div className="exo-home-stage-art" aria-hidden="true">
           {focused ? <HeroWash key={focused.id} game={focused} fill /> : null}

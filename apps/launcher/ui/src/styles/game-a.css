@@ -100,6 +100,7 @@
   grid-template-columns: minmax(0, 1.38fr) minmax(320px, 1fr);
   align-items: start;
   gap: 16px;
+  padding: 0 var(--exo-game-edge);
 }
 
 .exo-game-aside {

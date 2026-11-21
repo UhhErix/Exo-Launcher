@@ -22,39 +22,9 @@
   flex: 1;
   flex-direction: column;
   justify-content: flex-end;
-  gap: 14px;
+  gap: 8px;
   min-width: 0;
   min-height: 0;
-  padding-top: calc(var(--exo-titlebar-h, 52px) + 10px);
-}
-
-.exo-home-ambient {
-  position: fixed;
-  top: 0;
-  right: 0;
-  left: 0;
-  height: min(74vh, 760px);
-  z-index: 0;
-  overflow: hidden;
-  pointer-events: none;
-  opacity: 0.42;
-  mask-image: linear-gradient(180deg, #000 0%, #000 45%, transparent 100%);
-}
-
-.exo-home-ambient .exo-now-wash-img {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  filter: blur(56px) saturate(1.45) brightness(0.62);
-  transform: scale(1.18) translateZ(0);
-  opacity: 0;
-  transition: opacity var(--dur-move) var(--ease-out);
-}
-
-.exo-home-ambient .exo-now-wash-img.is-on {
-  opacity: 1;
 }
 
 .exo-home-stage {
@@ -64,13 +34,10 @@
   flex: 1;
   flex-direction: column;
   justify-content: flex-end;
-  margin: 0 var(--exo-home-edge);
-  min-height: 260px;
-  max-height: clamp(320px, 57vh, 590px);
+  width: 100%;
+  min-height: 280px;
   overflow: hidden;
-  border-radius: var(--exo-panel-radius);
-  background: var(--exo-surface-card);
-  box-shadow: var(--exo-glass-rim), var(--exo-lift-shadow);
+  background: var(--color-bg);
 }
 
 .exo-home-stage-art {
@@ -79,7 +46,7 @@
   z-index: 0;
   overflow: hidden;
   pointer-events: none;
-  background: radial-gradient(ellipse 80% 90% at 56% 30%, var(--exo-surface-raised) 0%, var(--color-bg) 82%);
+  background: radial-gradient(ellipse 80% 90% at 56% 30%, var(--exo-surface-card) 0%, var(--color-bg) 82%);
 }
 
 .exo-home-stage-art::after {
@@ -88,8 +55,8 @@
   inset: 0;
   z-index: 1;
   background:
-    linear-gradient(180deg, transparent 0%, transparent 40%, color-mix(in srgb, var(--color-bg) 52%, transparent) 74%, color-mix(in srgb, var(--color-bg) 90%, transparent) 100%),
-    linear-gradient(90deg, color-mix(in srgb, var(--color-bg) 62%, transparent) 0%, color-mix(in srgb, var(--color-bg) 22%, transparent) 38%, transparent 72%);
+    linear-gradient(180deg, color-mix(in srgb, var(--color-bg) 26%, transparent) 0%, transparent 18%, transparent 48%, color-mix(in srgb, var(--color-bg) 56%, transparent) 78%, var(--color-bg) 100%),
+    linear-gradient(90deg, color-mix(in srgb, var(--color-bg) 62%, transparent) 0%, color-mix(in srgb, var(--color-bg) 20%, transparent) 36%, transparent 70%);
 }
 
 .exo-home-stage-art .exo-now-wash-img {
@@ -121,7 +88,7 @@
   align-items: flex-end;
   justify-content: space-between;
   gap: 20px;
-  padding: 24px 28px;
+  padding: calc(var(--exo-titlebar-h, 52px) + 12px) var(--exo-home-edge) 16px;
   min-width: 0;
 }
 
