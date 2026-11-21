@@ -133,7 +133,11 @@ internal sealed partial class SystemTuning
 
         public bool SupportsUserHardwareToggles => true;
 
-        public IReadOnlyList<string> NvidiaDisplayClassKeys()
+        public IReadOnlyList<string> NvidiaDisplayClassKeys() => DisplayClassKeys("NVIDIA", null, "VEN_10DE");
+
+        public IReadOnlyList<string> AmdDisplayClassKeys() => DisplayClassKeys("AMD", "Advanced Micro Devices", "VEN_1002");
+
+        private IReadOnlyList<string> DisplayClassKeys(string providerA, string? providerB, string vendorToken)
         {
             var found = new List<string>();
             try
@@ -148,8 +152,9 @@ internal sealed partial class SystemTuning
                         using var adapter = root.OpenSubKey(sub);
                         var provider = adapter?.GetValue("ProviderName") as string;
                         var matchId = adapter?.GetValue("MatchingDeviceId") as string;
-                        if ((provider is not null && provider.Contains("NVIDIA", StringComparison.OrdinalIgnoreCase))
-                            || (matchId is not null && matchId.Contains("VEN_10DE", StringComparison.OrdinalIgnoreCase)))
+                        if ((provider is not null && (provider.Contains(providerA, StringComparison.OrdinalIgnoreCase)
+                                || (providerB is not null && provider.Contains(providerB, StringComparison.OrdinalIgnoreCase))))
+                            || (matchId is not null && matchId.Contains(vendorToken, StringComparison.OrdinalIgnoreCase)))
                             found.Add($@"{DisplayClassRoot}\{sub}");
                     }
                     catch (Exception ex) when (ex is System.Security.SecurityException or UnauthorizedAccessException or IOException) { }
@@ -159,17 +164,29 @@ internal sealed partial class SystemTuning
             return found;
         }
 
-        public int? UserDword(string key, string name)
+        public string? StringValue(string key, string name) => HklmValue<string>(key, name);
+
+        private T? HklmValue<T>(string key, string name) where T : class
         {
             try
             {
-                using var k = Registry.CurrentUser.OpenSubKey(key);
-                return k?.GetValue(name) is int value ? value : null;
+                using var k = Open(key);
+                return k?.GetValue(name) as T;
             }
             catch (Exception ex) when (ex is System.Security.SecurityException or UnauthorizedAccessException or IOException) { return null; }
         }
 
-        public bool SetUserDword(string key, string name, int? value)
+        private static T? ReadUserKey<T>(string key, string name, Func<object?, T?> convert)
+        {
+            try
+            {
+                using var k = Registry.CurrentUser.OpenSubKey(key);
+                return convert(k?.GetValue(name));
+            }
+            catch (Exception ex) when (ex is System.Security.SecurityException or UnauthorizedAccessException or IOException) { return default; }
+        }
+
+        private static bool WriteUserKey(string key, string name, object? value, RegistryValueKind kind)
         {
             if (HostMode.IsDisposable) return false;
             try
@@ -182,12 +199,20 @@ internal sealed partial class SystemTuning
                 else
                 {
                     using var k = Registry.CurrentUser.CreateSubKey(key);
-                    k.SetValue(name, value.Value, RegistryValueKind.DWord);
+                    k.SetValue(name, value, kind);
                 }
                 return true;
             }
             catch (Exception ex) when (ex is System.Security.SecurityException or UnauthorizedAccessException or IOException) { return false; }
         }
+
+        public int? UserDword(string key, string name) => ReadUserKey<int?>(key, name, static v => v is int i ? i : null);
+
+        public string? UserString(string key, string name) => ReadUserKey(key, name, static v => v as string);
+
+        public bool SetUserDword(string key, string name, int? value) => WriteUserKey(key, name, value, RegistryValueKind.DWord);
+
+        public bool SetUserString(string key, string name, string? value) => WriteUserKey(key, name, value, RegistryValueKind.String);
 
         public string? UserDirectXSettings()
         {
@@ -320,5 +345,38 @@ internal sealed partial class SystemTuning
         public bool SupportsOsOverhead => true;
 
         public bool IsLaptop() => PcHealth.ThisPcIsLaptop();
+
+        public bool SupportsDeepPlaybook => true;
+
+        public IReadOnlyList<string> UsbRootHubKeys()
+        {
+            var found = new List<string>();
+            try
+            {
+                using var usb = Open(UsbEnumRoot);
+                if (usb is null) return found;
+                foreach (var hub in usb.GetSubKeyNames())
+                {
+                    if (!hub.StartsWith("ROOT_HUB", StringComparison.OrdinalIgnoreCase)) continue;
+                    try
+                    {
+                        using var hubKey = usb.OpenSubKey(hub);
+                        if (hubKey is null) continue;
+                        foreach (var instance in hubKey.GetSubKeyNames())
+                        {
+                            var rel = $@"{UsbEnumRoot}\{hub}\{instance}\Device Parameters";
+                            if (!UsbRootHubKeyPattern().IsMatch(rel)) continue;
+                            using var dp = Open(rel);
+                            if (dp is not null) found.Add(rel);
+                        }
+                    }
+                    catch (Exception ex) when (ex is System.Security.SecurityException or UnauthorizedAccessException or IOException) { }
+                }
+            }
+            catch (Exception ex) when (ex is System.Security.SecurityException or UnauthorizedAccessException or IOException) { }
+            return found;
+        }
+
+        public long TotalMemoryKb() => GC.GetGCMemoryInfo().TotalAvailableMemoryBytes / 1024L;
     }
 }

@@ -19,10 +19,23 @@ const ICONS: Record<TuningKey, ReactNode> = {
   tasks: <Clock size={16} />,
   winFeatures: <Bolt size={16} />,
   osOverhead: <Performance size={16} />,
+  kernelLatency: <Cpu size={16} />,
+  usbPower: <Mouse size={16} />,
+  aiTelemetry: <EyeOff size={16} />,
+  storageFs: <Server size={16} />,
+  gamingUx: <Performance size={16} />,
+  amdGpuPower: <GraphicsCard size={16} />,
+  hags: <Monitor size={16} />,
   services: <Server size={16} />,
   integrity: <Lock size={16} />,
   vrr: <GraphicsCard size={16} />,
   mouseAccel: <Mouse size={16} />,
+  mpoOff: <Monitor size={16} />,
+  hibernateOff: <Clock size={16} />,
+  backgroundApps: <Bolt size={16} />,
+  svcHostSplit: <Memory size={16} />,
+  gpuPstate: <GraphicsCard size={16} />,
+  cpuMitigations: <Lock size={16} />,
 }
 
 /**

@@ -1,4 +1,4 @@
-import { host, type ExoAiState, type HdrState, type LauncherSettings } from '../../lib/host'
+import { host, type ExoAiState, type HdrState, type LauncherSettings, type TuningItem } from '../../lib/host'
 import { report } from '../../lib/report'
 import { formatSize, trimStop } from '../../lib/utils'
 import type { PcState } from './PcRoom'
@@ -18,7 +18,13 @@ export type BloatAppInfo = {
   name: string
 }
 
-const PLAYBOOK_IGNORED = new Set(['integrity', 'vrr', 'mouseAccel'])
+const isPlaybookItem = (item: TuningItem) => (!item.optIn || item.key === 'services') && !item.off && !item.blocked
+
+function hasInterruptsWork(state: PcState): boolean {
+  const interrupts = state.interrupts
+  if (!interrupts || interrupts.restart) return false
+  return Boolean(interrupts.reset || interrupts.devices.some(d => d.plan === 'change'))
+}
 
 function hasGraphicsWork(state: PcState, hdr: HdrState | null, settings: LauncherSettings | null): boolean {
   const profileTodo = state.profile?.status === 'ready' || state.profile?.status === 'changed'
@@ -29,10 +35,10 @@ function hasGraphicsWork(state: PcState, hdr: HdrState | null, settings: Launche
 }
 
 function hasSystemWork(state: PcState): boolean {
-  const sysTodo = (state.tuning?.items ?? []).some(i => !PLAYBOOK_IGNORED.has(i.key) && !i.off && !i.blocked && !i.on)
+  const sysTodo = (state.tuning?.items ?? []).some(i => isPlaybookItem(i) && !i.on)
   const netTodo = state.health?.items.find(i => i.key === 'network')?.applied === false
   const driveTodo = (state.drives?.fixes ?? []).some(f => !f.applied)
-  return sysTodo || netTodo || driveTodo
+  return sysTodo || netTodo || driveTodo || hasInterruptsWork(state)
 }
 
 function stageReadySummary(
@@ -63,8 +69,8 @@ function stageReadySummary(
       ? 'Optimize driver profile, best refresh rate, HDR & frame generation'
       : 'Graphics profile and display output at optimal defaults',
     system: systemPending
-      ? 'Apply Windows 11 Low Latency flags, telemetry services, tasks, VRR LFC & network'
-      : 'Windows 11 playbook, services, tasks & network optimal',
+      ? 'Apply Windows 11 deep playbook (kernel timer, MMCSS, USB, AI/telemetry, NTFS, MSI interrupts, network)'
+      : 'Windows 11 deep playbook, interrupts, services & network optimal',
     bloat: bloatSummary,
     cleanup: 'Clear disposable browser, launcher & Windows caches (keeps cookies & logins)',
     drivers: driverVersion
@@ -85,7 +91,7 @@ export function initialAutoTuneStages(
   return [
     { id: 'cooling', label: 'Power plan & Autopilot', status: 'idle', detail: detail.cooling },
     { id: 'graphics', label: 'Graphics, display & HDR', status: 'idle', detail: detail.graphics },
-    { id: 'system', label: 'Windows 11 playbook & network', status: 'idle', detail: detail.system },
+    { id: 'system', label: 'Windows 11 deep playbook, interrupts & network', status: 'idle', detail: detail.system },
     { id: 'bloat', label: 'Preinstalled bloat apps', status: 'idle', detail: detail.bloat },
     { id: 'cleanup', label: 'Temporary & launcher caches', status: 'idle', detail: detail.cleanup },
     { id: 'drivers', label: 'Graphics & chipset drivers', status: 'idle', detail: detail.drivers },
@@ -169,31 +175,38 @@ async function runGraphicsStage(
     : { status: 'done', detail: 'Driver profile, best refresh & output scaling applied' }
 }
 
+async function runSystemStep<T extends { ok: boolean; message?: string | null }>(
+  run: () => Promise<T>,
+  problems: string[],
+  hasRestart: (res: T) => boolean,
+): Promise<boolean> {
+  const next = await run()
+  if (!next.ok && next.message) problems.push(trimStop(next.message))
+  return hasRestart(next)
+}
+
 async function runSystemStage(state: PcState): Promise<{ status: AutoTuneStageStatus; detail: string }> {
   const problems: string[] = []
   let needsRestart = false
-  const pendingTuning = state.tuning?.items.some(i => !PLAYBOOK_IGNORED.has(i.key) && !i.off && !i.blocked && !i.on) ?? false
-  if (pendingTuning) {
-    const next = await host.systemTuning('playbook')
-    if (next.restart) needsRestart = true
-    if (!next.ok && next.message) problems.push(trimStop(next.message))
+  if (state.tuning?.items.some(i => isPlaybookItem(i) && !i.on)) {
+    needsRestart = await runSystemStep(() => host.systemTuning('playbook'), problems, res => res.restart) || needsRestart
   }
-  const network = state.health?.items.find(i => i.key === 'network')
-  if (network && !network.applied) {
-    const next = await host.systemHealth('network')
-    if (!next.ok && next.message) problems.push(trimStop(next.message))
+  if (hasInterruptsWork(state)) {
+    const action = state.interrupts?.reset ? 'reapply' : 'apply'
+    needsRestart = await runSystemStep(() => host.systemInterrupts(action), problems, res => res.restart) || needsRestart
+  }
+  if (state.health?.items.find(i => i.key === 'network')?.applied === false) {
+    await runSystemStep(() => host.systemHealth('network'), problems, () => false)
   }
   if (state.drives?.fixes.some(f => !f.applied)) {
-    const next = await host.systemDrives('all')
-    if (next.fixes.some(f => f.restart)) needsRestart = true
-    if (!next.ok && next.message) problems.push(trimStop(next.message))
+    needsRestart = await runSystemStep(() => host.systemDrives('all'), problems, res => res.fixes.some(f => f.restart)) || needsRestart
   }
   if (problems.length > 0) return { status: 'warn', detail: problems.join(' · ') }
   return {
     status: 'done',
     detail: needsRestart
-      ? 'Windows 11 playbook, services, tasks & network applied (restart to finish)'
-      : 'Windows 11 playbook, services, tasks, network & drives optimal',
+      ? 'Windows 11 deep playbook, interrupts & network applied (restart to finish)'
+      : 'Windows 11 deep playbook, interrupts, services & network optimal',
   }
 }
 

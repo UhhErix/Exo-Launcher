@@ -81,6 +81,24 @@ public sealed class SystemTuningTests : IDisposable
         public IReadOnlyList<string> HvciRequiringGames() => HvciGames;
         public List<string> NvidiaKeys { get; } = [];
         public IReadOnlyList<string> NvidiaDisplayClassKeys() => NvidiaKeys;
+        public List<string> AmdKeys { get; } = [];
+        public IReadOnlyList<string> AmdDisplayClassKeys() => AmdKeys;
+        public List<string> UsbHubKeys { get; } = [];
+        public IReadOnlyList<string> UsbRootHubKeys() => UsbHubKeys;
+        public long TotalMemKb { get; set; }
+        public long TotalMemoryKb() => TotalMemKb;
+        public bool SupportsDeepPlaybook { get; set; }
+        public int FthFlushedCount { get; private set; }
+        public Dictionary<(string, string), string> StringValues { get; } = new();
+        public string? StringValue(string key, string name) => StringValues.TryGetValue((key, name), out var v) ? v : null;
+        public Dictionary<(string, string), string> UserStrings { get; } = new();
+        public string? UserString(string key, string name) => UserStrings.TryGetValue((key, name), out var v) ? v : null;
+        public bool SetUserString(string key, string name, string? value)
+        {
+            if (value is null) UserStrings.Remove((key, name));
+            else UserStrings[(key, name)] = value;
+            return true;
+        }
         public Dictionary<(string, string), int> UserDwords { get; } = new();
         public int? UserDword(string key, string name) => UserDwords.TryGetValue((key, name), out var v) ? v : null;
         public bool SetUserDword(string key, string name, int? value)
@@ -148,6 +166,20 @@ public sealed class SystemTuningTests : IDisposable
             Dwords[(MemoryManagement, LargeSystemCache)] = 1;
         }
 
+        private static (string Name, string Tail) ParseRegValueToken(string afterKey)
+        {
+            var marker = " /v ";
+            var at = afterKey.IndexOf(marker, StringComparison.Ordinal);
+            var span = afterKey[(at + marker.Length)..];
+            if (span.StartsWith('"'))
+            {
+                var close = span.IndexOf('"', 1);
+                return (span[1..close], span[(close + 1)..]);
+            }
+            var space = span.IndexOf(' ');
+            return space < 0 ? (span, "") : (span[..space], span[space..]);
+        }
+
         /// <summary>Windows taking every line it ran (registry and service lines, as reg.exe and sc.exe would).</summary>
         public void Take(IReadOnlyList<string> lines)
         {
@@ -155,13 +187,24 @@ public sealed class SystemTuningTests : IDisposable
             {
                 if (line.Contains(" add ", StringComparison.Ordinal) && line.Contains("REG_DWORD", StringComparison.Ordinal))
                 {
-                    var key = line.Split('"')[1][5..];
-                    var name = line.Split(" /v ")[1].Split(' ')[0];
-                    var rawVal = line.Split(" /d ")[1].Split(' ')[0];
+                    var q1 = line.IndexOf('"');
+                    var q2 = line.IndexOf('"', q1 + 1);
+                    var key = line[(q1 + 1)..q2][5..];
+                    var (name, rest) = ParseRegValueToken(line[(q2 + 1)..]);
+                    var rawVal = rest.Split(" /d ")[1].Split(' ')[0];
                     var parsed = rawVal.StartsWith("0x", StringComparison.OrdinalIgnoreCase)
                         ? unchecked((int)uint.Parse(rawVal[2..], System.Globalization.NumberStyles.HexNumber, System.Globalization.CultureInfo.InvariantCulture))
                         : int.Parse(rawVal, System.Globalization.CultureInfo.InvariantCulture);
                     Dwords[(key, name)] = parsed;
+                }
+                else if (line.Contains(" add ", StringComparison.Ordinal) && line.Contains("REG_SZ", StringComparison.Ordinal))
+                {
+                    var q1 = line.IndexOf('"');
+                    var q2 = line.IndexOf('"', q1 + 1);
+                    var key = line[(q1 + 1)..q2][5..];
+                    var (name, rest) = ParseRegValueToken(line[(q2 + 1)..]);
+                    var rawData = rest.Split(" /d \"")[1].Split("\" /f")[0];
+                    StringValues[(key, name)] = rawData;
                 }
                 else if (line.Contains("REG_MULTI_SZ", StringComparison.Ordinal))
                 {
@@ -170,10 +213,25 @@ public sealed class SystemTuningTests : IDisposable
                 }
                 else if (line.Contains(" delete ", StringComparison.Ordinal))
                 {
-                    var key = line.Split('"')[1][5..];
-                    var name = line.Split(" /v ")[1].Split(' ')[0];
+                    var q1 = line.IndexOf('"');
+                    var q2 = line.IndexOf('"', q1 + 1);
+                    var key = line[(q1 + 1)..q2][5..];
+                    var (name, _) = ParseRegValueToken(line[(q2 + 1)..]);
                     Dwords.Remove((key, name));
                     Multi.Remove((key, name));
+                    StringValues.Remove((key, name));
+                }
+                else if (line.Contains("powercfg.exe", StringComparison.OrdinalIgnoreCase) && line.EndsWith("/h off", StringComparison.OrdinalIgnoreCase))
+                {
+                    Dwords[(PowerControlKey, HibernateEnabledValue)] = 0;
+                }
+                else if (line.Contains("powercfg.exe", StringComparison.OrdinalIgnoreCase) && line.EndsWith("/h on", StringComparison.OrdinalIgnoreCase))
+                {
+                    Dwords[(PowerControlKey, HibernateEnabledValue)] = 1;
+                }
+                else if (line.Contains("FthSysprepSpecialize", StringComparison.Ordinal))
+                {
+                    FthFlushedCount++;
                 }
                 else if (line.Contains(" config ", StringComparison.Ordinal))
                 {
@@ -966,5 +1024,215 @@ public sealed class SystemTuningTests : IDisposable
         var native = new NativeSystem();
         var states = native.ScheduledTasks(TrimmedTasks.Select(t => t.Path));
         Assert.NotNull(states);
+    }
+
+    [Fact]
+    public async Task Kernel_latency_applies_global_timer_mmcss_and_fth_on_desktop_skips_timer_on_laptop_and_reverts_cleanly()
+    {
+        _system.SupportsDeepPlaybook = true;
+        _system.Dwords[(MmcssKey, "SystemResponsiveness")] = 20;
+        _system.Dwords[(MmcssGamesKey, "GPU Priority")] = 2;
+        _system.Dwords[(MmcssGamesKey, "Priority")] = 2;
+        _system.StringValues[(MmcssGamesKey, "Scheduling Category")] = "Medium";
+        _system.StringValues[(MmcssGamesKey, "SFIO Priority")] = "Normal";
+        _system.Dwords[(FthKey, "Enabled")] = 1;
+        _system.OnRun = _system.Take;
+
+        Assert.Null(await Make().ApplyAsync([KernelLatencyKey]));
+        Assert.Equal(1, _system.Dwords[(KernelSessionKey, GlobalTimerValue)]);
+        Assert.Equal(10, _system.Dwords[(MmcssKey, "SystemResponsiveness")]);
+        Assert.Equal(8, _system.Dwords[(MmcssGamesKey, "GPU Priority")]);
+        Assert.Equal(6, _system.Dwords[(MmcssGamesKey, "Priority")]);
+        Assert.Equal("High", _system.StringValues[(MmcssGamesKey, "Scheduling Category")]);
+        Assert.Equal("High", _system.StringValues[(MmcssGamesKey, "SFIO Priority")]);
+        Assert.Equal(0, _system.Dwords[(FthKey, "Enabled")]);
+        Assert.Equal(1, _system.FthFlushedCount);
+
+        var applied = Make().Read().Items.Single(i => i.Key == KernelLatencyKey);
+        Assert.True(applied.On && applied.CanUndo && applied.Restart);
+
+        Assert.Null(await Make().TurnOffAsync(KernelLatencyKey));
+        Assert.False(_system.Dwords.ContainsKey((KernelSessionKey, GlobalTimerValue)));
+        Assert.Equal(20, _system.Dwords[(MmcssKey, "SystemResponsiveness")]);
+        Assert.Equal("Medium", _system.StringValues[(MmcssGamesKey, "Scheduling Category")]);
+        Assert.Equal("Normal", _system.StringValues[(MmcssGamesKey, "SFIO Priority")]);
+        Assert.Equal(1, _system.Dwords[(FthKey, "Enabled")]);
+
+        DeletionGate.DeleteFile(SavedPath);
+        _system.Laptop = true;
+        Assert.Null(await Make().ApplyAsync([KernelLatencyKey]));
+        Assert.False(_system.Dwords.ContainsKey((KernelSessionKey, GlobalTimerValue)));
+        Assert.Equal(10, _system.Dwords[(MmcssKey, "SystemResponsiveness")]);
+        Assert.Null(Revert(KernelLatencyKey, new Was(Strings: [@"SOFTWARE\Evil|Key=d:1"])));
+    }
+
+    [Fact]
+    public async Task Usb_power_disables_root_hub_sleep_on_desktop_omits_on_laptop_and_reverts_exact_prior_values()
+    {
+        var hub = $@"{UsbEnumRoot}\ROOT_HUB30\5&2bce96aa&0&0\Device Parameters";
+        _system.SupportsDeepPlaybook = true;
+        _system.UsbHubKeys.Add(hub);
+        _system.UsbHubKeys.Add(@"SOFTWARE\Malicious\Injected");
+        _system.Dwords[(hub, "EnhancedPowerManagementEnabled")] = 1;
+        _system.OnRun = _system.Take;
+
+        Assert.Null(await Make().ApplyAsync([UsbPowerKey]));
+        Assert.Equal(0, _system.Dwords[(UsbSurpriseKey, UsbSurpriseValue)]);
+        Assert.Equal(0, _system.Dwords[(hub, "EnhancedPowerManagementEnabled")]);
+        Assert.Equal(0, _system.Dwords[(hub, "AllowIdleIrpInD3")]);
+        Assert.Equal(0, _system.Dwords[(hub, "SelectiveSuspendEnabled")]);
+        Assert.False(_system.Dwords.ContainsKey((@"SOFTWARE\Malicious\Injected", "EnhancedPowerManagementEnabled")));
+
+        Assert.Null(await Make().TurnOffAsync(UsbPowerKey));
+        Assert.False(_system.Dwords.ContainsKey((UsbSurpriseKey, UsbSurpriseValue)));
+        Assert.Equal(1, _system.Dwords[(hub, "EnhancedPowerManagementEnabled")]);
+        Assert.False(_system.Dwords.ContainsKey((hub, "AllowIdleIrpInD3")));
+        Assert.False(_system.Dwords.ContainsKey((hub, "SelectiveSuspendEnabled")));
+
+        DeletionGate.DeleteFile(SavedPath);
+        _system.Laptop = true;
+        Assert.DoesNotContain(Make().Read().Items, i => i.Key == UsbPowerKey);
+        Assert.Null(Revert(UsbPowerKey, new Was(Strings: [$@"{UsbEnumRoot}\ROOT_HUB30\foo\Device Parameters|EvilValue=d:0"])));
+    }
+
+    [Fact]
+    public async Task Ai_telemetry_and_storage_fs_apply_and_revert_while_respecting_win11_last_access_bit()
+    {
+        _system.SupportsDeepPlaybook = true;
+        _system.Dwords[(FileSystemKey, LastAccessValue)] = unchecked((int)0x80000001u);
+        _system.Dwords[(FileSystemKey, ShortNamesValue)] = 2;
+        _system.Dwords[(AiTelemetrySpecs[4].Key, AiTelemetrySpecs[4].Name)] = 3;
+        _system.OnRun = _system.Take;
+
+        Assert.Null(await Make().ApplyAsync([AiTelemetryKey, StorageFsKey]));
+        foreach (var spec in AiTelemetrySpecs)
+            Assert.Equal(spec.Dword!.Value, _system.Dwords[(spec.Key, spec.Name)]);
+        Assert.Equal(unchecked((int)0x80000001u), _system.Dwords[(FileSystemKey, LastAccessValue)]);
+        Assert.Equal(1, _system.Dwords[(FileSystemKey, ShortNamesValue)]);
+
+        Assert.Null(await Make().TurnOffAsync(AiTelemetryKey));
+        Assert.Equal(3, _system.Dwords[(AiTelemetrySpecs[4].Key, AiTelemetrySpecs[4].Name)]);
+        Assert.False(_system.Dwords.ContainsKey((AiTelemetrySpecs[0].Key, AiTelemetrySpecs[0].Name)));
+
+        Assert.Null(await Make().TurnOffAsync(StorageFsKey));
+        Assert.Equal(unchecked((int)0x80000001u), _system.Dwords[(FileSystemKey, LastAccessValue)]);
+        Assert.Equal(2, _system.Dwords[(FileSystemKey, ShortNamesValue)]);
+
+        _system.Dwords[(FileSystemKey, LastAccessValue)] = unchecked((int)0x80000000u);
+        DeletionGate.DeleteFile(SavedPath);
+        Assert.Null(await Make().ApplyAsync([StorageFsKey]));
+        Assert.Equal(1, _system.Dwords[(FileSystemKey, LastAccessValue)]);
+        Assert.Null(await Make().TurnOffAsync(StorageFsKey));
+        Assert.Equal(unchecked((int)0x80000000u), _system.Dwords[(FileSystemKey, LastAccessValue)]);
+    }
+
+    [Fact]
+    public async Task Gaming_ux_applies_without_uac_preserves_other_directx_tokens_and_clears_sticky_key_hotkey_bit()
+    {
+        _system.SupportsDeepPlaybook = true;
+        _system.NvidiaKeys.Add($@"{DisplayClassRoot}\0000");
+        _system.DirectXUser = "VRROptimizeEnable=1;";
+        _system.UserDwords[(@"Software\Microsoft\Multimedia\Audio", "UserDuckingPreference")] = 1;
+        _system.UserStrings[(@"Control Panel\Accessibility\StickyKeys", "Flags")] = "510";
+        _system.UserStrings[(@"Control Panel\Accessibility\Keyboard Response", "Flags")] = "122";
+        _system.UserStrings[(@"Control Panel\Accessibility\ToggleKeys", "Flags")] = "62";
+
+        var before = Make().Read().Items.Single(i => i.Key == GamingUxKey);
+        Assert.False(before.On);
+        Assert.False(before.NeedsRestart);
+
+        Assert.Null(await Make().ApplyAsync([GamingUxKey]));
+        Assert.Empty(_system.Runs);
+        Assert.True(HasToken(_system.DirectXUser, "VRROptimizeEnable", "1"));
+        Assert.True(HasToken(_system.DirectXUser, SwapEffectToken, "1"));
+        Assert.Equal(3, _system.UserDwords[(@"Software\Microsoft\Multimedia\Audio", "UserDuckingPreference")]);
+        Assert.Equal(0, _system.UserDwords[(GamingUxNvidiaTelemetrySpec.Key, GamingUxNvidiaTelemetrySpec.Name)]);
+        Assert.Equal("506", _system.UserStrings[(@"Control Panel\Accessibility\StickyKeys", "Flags")]);
+        Assert.Equal("122", _system.UserStrings[(@"Control Panel\Accessibility\Keyboard Response", "Flags")]);
+        Assert.Equal("58", _system.UserStrings[(@"Control Panel\Accessibility\ToggleKeys", "Flags")]);
+
+        var after = Make().Read().Items.Single(i => i.Key == GamingUxKey);
+        Assert.True(after.On && after.CanUndo && !after.Restart);
+
+        Assert.Null(await Make().TurnOffAsync(GamingUxKey));
+        Assert.True(HasToken(_system.DirectXUser, "VRROptimizeEnable", "1"));
+        Assert.False(HasToken(_system.DirectXUser, SwapEffectToken, "1"));
+        Assert.Equal(1, _system.UserDwords[(@"Software\Microsoft\Multimedia\Audio", "UserDuckingPreference")]);
+        Assert.Equal("510", _system.UserStrings[(@"Control Panel\Accessibility\StickyKeys", "Flags")]);
+        Assert.Equal("62", _system.UserStrings[(@"Control Panel\Accessibility\ToggleKeys", "Flags")]);
+        Assert.False(_system.UserDwords.ContainsKey((GamingUxNvidiaTelemetrySpec.Key, GamingUxNvidiaTelemetrySpec.Name)));
+    }
+
+    [Fact]
+    public async Task Amd_gpu_power_and_hags_gate_by_hardware_and_revert_cleanly()
+    {
+        var amdAdapter = $@"{DisplayClassRoot}\0001";
+        _system.SupportsDeepPlaybook = true;
+        _system.AmdKeys.Add(amdAdapter);
+        _system.Dwords[(amdAdapter, "EnableULPS")] = 1;
+        _system.OnRun = _system.Take;
+
+        Assert.DoesNotContain(Make().Read().Items, i => i.Key == HagsKey);
+        _system.Dwords[(GraphicsDriversKey, HwSchModeValue)] = 1;
+        Assert.Contains(Make().Read().Items, i => i.Key == HagsKey && !i.On);
+
+        Assert.Null(await Make().ApplyAsync([AmdGpuPowerKey, HagsKey]));
+        Assert.Equal(0, _system.Dwords[(amdAdapter, "EnableULPS")]);
+        Assert.Equal(0, _system.Dwords[(amdAdapter, "EnableAspmL0s")]);
+        Assert.Equal(0, _system.Dwords[(amdAdapter, "EnableAspmL1")]);
+        Assert.Equal(2, _system.Dwords[(GraphicsDriversKey, HwSchModeValue)]);
+
+        Assert.Null(await Make().TurnOffAsync(AmdGpuPowerKey));
+        Assert.Null(await Make().TurnOffAsync(HagsKey));
+        Assert.Equal(1, _system.Dwords[(amdAdapter, "EnableULPS")]);
+        Assert.False(_system.Dwords.ContainsKey((amdAdapter, "EnableAspmL0s")));
+        Assert.Equal(1, _system.Dwords[(GraphicsDriversKey, HwSchModeValue)]);
+
+        DeletionGate.DeleteFile(SavedPath);
+        _system.Laptop = true;
+        Assert.DoesNotContain(Make().Read().Items, i => i.Key == AmdGpuPowerKey);
+    }
+
+    [Fact]
+    public async Task Deep_opt_in_overrides_never_run_in_playbook_and_each_applies_and_reverts_cleanly()
+    {
+        var nvidiaAdapter = $@"{DisplayClassRoot}\0000";
+        _system.SupportsDeepPlaybook = true;
+        _system.NvidiaKeys.Add(nvidiaAdapter);
+        _system.TotalMemKb = 67_108_864L;
+        _system.Dwords[(PowerControlKey, HibernateEnabledValue)] = 1;
+        _system.Dwords[(SessionPowerKey, HiberbootEnabledValue)] = 1;
+        _system.Dwords[(ControlKey, SvcHostSplitValue)] = 3_670_016;
+        _system.OnRun = _system.Take;
+
+        Assert.Null(await Make().ApplyPlaybookAsync());
+        Assert.False(_system.Dwords.ContainsKey((DwmKey, OverlayTestModeValue)));
+        Assert.Equal(1, _system.Dwords[(PowerControlKey, HibernateEnabledValue)]);
+        Assert.False(_system.UserDwords.ContainsKey((BackgroundAppsSpecs[0].Key, BackgroundAppsSpecs[0].Name)));
+        Assert.Equal(3_670_016, _system.Dwords[(ControlKey, SvcHostSplitValue)]);
+        Assert.False(_system.Dwords.ContainsKey((nvidiaAdapter, "DisableDynamicPstate")));
+        Assert.False(_system.Dwords.ContainsKey((MemoryManagement, FeatureOverrideValue)));
+
+        string[] deepOptIns = [MpoOffKey, HibernateOffKey, BackgroundAppsKey, SvcHostSplitKey, GpuPstateKey, CpuMitigationsKey];
+        foreach (var optKey in deepOptIns)
+        {
+            var before = Make().Read().Items.Single(i => i.Key == optKey);
+            Assert.True(before.OptIn);
+            Assert.False(before.On);
+            Assert.Null(await Make().ApplyAsync([optKey]));
+            var after = Make().Read().Items.Single(i => i.Key == optKey);
+            Assert.True(after.On && after.CanUndo);
+            Assert.Null(await Make().TurnOffAsync(optKey));
+            var reverted = Make().Read().Items.Single(i => i.Key == optKey);
+            Assert.False(reverted.On);
+            Assert.False(reverted.CanUndo);
+        }
+
+        Assert.Equal(1, _system.Dwords[(PowerControlKey, HibernateEnabledValue)]);
+        Assert.Equal(1, _system.Dwords[(SessionPowerKey, HiberbootEnabledValue)]);
+        Assert.Equal(3_670_016, _system.Dwords[(ControlKey, SvcHostSplitValue)]);
+        Assert.False(_system.Dwords.ContainsKey((DwmKey, OverlayTestModeValue)));
+        Assert.False(_system.Dwords.ContainsKey((nvidiaAdapter, "DisableDynamicPstate")));
+        Assert.False(_system.Dwords.ContainsKey((MemoryManagement, FeatureOverrideValue)));
     }
 }
