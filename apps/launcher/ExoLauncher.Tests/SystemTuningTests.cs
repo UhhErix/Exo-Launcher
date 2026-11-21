@@ -68,6 +68,16 @@ public sealed class SystemTuningTests : IDisposable
         public bool SetMouseParams(int[] values) { Mouse = [.. values]; return true; }
         public IReadOnlyList<string> HvciGames { get; set; } = [];
         public IReadOnlyList<string> HvciRequiringGames() => HvciGames;
+        public List<string> NvidiaKeys { get; } = [];
+        public IReadOnlyList<string> NvidiaDisplayClassKeys() => NvidiaKeys;
+        public Dictionary<(string, string), int> UserDwords { get; } = new();
+        public int? UserDword(string key, string name) => UserDwords.TryGetValue((key, name), out var v) ? v : null;
+        public bool SetUserDword(string key, string name, int? value)
+        {
+            if (value is null) UserDwords.Remove((key, name));
+            else UserDwords[(key, name)] = value.Value;
+            return true;
+        }
 
         private readonly List<string> _issued = [];
         private readonly Dictionary<string, string> _answers = [];
@@ -136,7 +146,11 @@ public sealed class SystemTuningTests : IDisposable
                 {
                     var key = line.Split('"')[1][5..];
                     var name = line.Split(" /v ")[1].Split(' ')[0];
-                    Dwords[(key, name)] = int.Parse(line.Split(" /d ")[1].Split(' ')[0], System.Globalization.CultureInfo.InvariantCulture);
+                    var rawVal = line.Split(" /d ")[1].Split(' ')[0];
+                    var parsed = rawVal.StartsWith("0x", StringComparison.OrdinalIgnoreCase)
+                        ? unchecked((int)uint.Parse(rawVal[2..], System.Globalization.NumberStyles.HexNumber, System.Globalization.CultureInfo.InvariantCulture))
+                        : int.Parse(rawVal, System.Globalization.CultureInfo.InvariantCulture);
+                    Dwords[(key, name)] = parsed;
                 }
                 else if (line.Contains("REG_MULTI_SZ", StringComparison.Ordinal))
                 {
@@ -666,4 +680,74 @@ public sealed class SystemTuningTests : IDisposable
     [InlineData(2400, "long enough for audio to crackle")]
     public void The_check_says_what_the_longest_run_means(double us, string words) =>
         Assert.Contains(words, LatencySaid(null, Check(us, "x.sys")), StringComparison.Ordinal);
+
+    [Fact]
+    public async Task Nvidia_vrr_lfc_applies_hex_dword_with_restore_point_and_reverts_cleanly()
+    {
+        var adapter = $@"{DisplayClassRoot}\0000";
+        _system.NvidiaKeys.Add(adapter);
+        _system.Dwords[(adapter, VrrFrameSplitBehavior)] = unchecked((int)0x80000055u);
+        _system.OnRun = lines => _system.Take(lines);
+
+        var initial = Make().Read().Items.Single(i => i.Key == VrrLfcKey);
+        Assert.False(initial.On);
+        Assert.False(initial.OptIn);
+        Assert.True(initial.NeedsRestart);
+
+        Assert.Null(await Make().ApplyAsync());
+        Assert.Contains(_system.Runs[0], l => l.Contains("0x80010055", StringComparison.Ordinal) && !l.Contains("-2147", StringComparison.Ordinal));
+        Assert.Equal(VrrLfcLowestMultiplier, _system.Dwords[(adapter, VrrFrameSplitBehavior)]);
+        var applied = Make().Read().Items.Single(i => i.Key == VrrLfcKey);
+        Assert.True(applied.On);
+        Assert.True(applied.CanUndo);
+        Assert.True(applied.Restart);
+
+        Assert.Null(await Make().TurnOffAsync(VrrLfcKey));
+        Assert.Contains(_system.Runs[^1], l => l.Contains("0x80000055", StringComparison.Ordinal));
+        Assert.Equal(unchecked((int)0x80000055u), _system.Dwords[(adapter, VrrFrameSplitBehavior)]);
+
+        _system.Dwords.Remove((adapter, VrrFrameSplitBehavior));
+        DeletionGate.DeleteFile(SavedPath);
+        Assert.Null(await Make().ApplyAsync([VrrLfcKey]));
+        Assert.Equal(VrrLfcLowestMultiplier, _system.Dwords[(adapter, VrrFrameSplitBehavior)]);
+        Assert.Null(await Make().TurnOffAsync(VrrLfcKey));
+        Assert.False(_system.Dwords.ContainsKey((adapter, VrrFrameSplitBehavior)));
+    }
+
+    [Fact]
+    public void Vrr_lfc_is_omitted_without_nvidia_and_revert_rejects_unlisted_keys()
+    {
+        Assert.DoesNotContain(Make().Read().Items, i => i.Key == VrrLfcKey);
+        Assert.Null(Revert(VrrLfcKey, new Was(Strings: [@"SOFTWARE\Microsoft\Windows Defender=0x00000000"])));
+        Assert.NotNull(Revert(VrrLfcKey, new Was(Strings: [$@"{DisplayClassRoot}\0001=absent"])));
+    }
+
+    [Fact]
+    public async Task Privacy_applies_without_uac_or_restart_and_restores_exact_prior_values()
+    {
+        _system.SupportsUserHardwareToggles = true;
+        _system.UserDwords[(@"Software\Microsoft\Windows\CurrentVersion\AdvertisingInfo", "Enabled")] = 1;
+        _system.UserDwords[(@"Software\Microsoft\Windows\CurrentVersion\Search", "BingSearchEnabled")] = 1;
+
+        var initial = Make().Read().Items.Single(i => i.Key == PrivacyKey);
+        Assert.False(initial.On);
+        Assert.False(initial.OptIn);
+        Assert.False(initial.NeedsRestart);
+
+        Assert.Null(await Make().ApplyAsync());
+        Assert.Empty(_system.Runs);
+        foreach (var entry in PrivacySettings)
+            Assert.Equal(entry.Target, _system.UserDwords[(entry.Key, entry.Name)]);
+
+        var applied = Make().Read().Items.Single(i => i.Key == PrivacyKey);
+        Assert.True(applied.On);
+        Assert.True(applied.CanUndo);
+        Assert.False(applied.Restart);
+
+        Assert.Null(await Make().TurnOffAsync(PrivacyKey));
+        Assert.Empty(_system.Runs);
+        Assert.Equal(1, _system.UserDwords[(@"Software\Microsoft\Windows\CurrentVersion\AdvertisingInfo", "Enabled")]);
+        Assert.Equal(1, _system.UserDwords[(@"Software\Microsoft\Windows\CurrentVersion\Search", "BingSearchEnabled")]);
+        Assert.False(_system.UserDwords.ContainsKey((@"Software\Microsoft\Windows\CurrentVersion\Privacy", "TailoredExperiencesWithDiagnosticDataEnabled")));
+    }
 }

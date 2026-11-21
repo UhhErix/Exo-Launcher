@@ -17,6 +17,7 @@ import { BestScreenRows, DisplayRows, HdrRows } from './DisplayTab'
 import { DriverRow, savedBranch } from './DriverRow'
 import { DriversSection } from './DriversSection'
 import { ExoAiChip, ExoAiPanel, useExoAi } from './ExoAiPanel'
+import { AutoTuneChip, AutoTuneOverlay } from './AutoTuneOverlay'
 import { AppsChip, AppsSheet, useAppsSummary } from './PcApps'
 import { BoardRows, ThisPc, type PcPartMenu } from './PcOverview'
 import { ProfileRows } from './ProfileTab'
@@ -134,6 +135,7 @@ export function PcRoom({ active, jump, games, settings, onSave }: {
   const { state, put, read } = usePcState(active)
   const hdr = useHdrState(active)
   const [menu, setMenu] = useState<Menu | null>(null)
+  const [autoTuneOpen, setAutoTuneOpen] = useState(false)
   const [appsOpen, setAppsOpen] = useState(false)
   // A new number reads the apps again (after the sheet closes, after junk is cleaned).
   const [appsRead, setAppsRead] = useState(0)
@@ -148,9 +150,10 @@ export function PcRoom({ active, jump, games, settings, onSave }: {
   const setDisplay = useCallback((next: DisplayState) => put('display', next), [put])
   const setDrives = useCallback((next: DrivesState) => put('drives', next), [put])
   const setTune = useCallback((next: AutoTune) => put('tune', next), [put])
-  useTuneReads(active, state.tune, menu === 'exo-ai', setTune)
+  useTuneReads(active, state.tune, menu === 'exo-ai' || autoTuneOpen, setTune)
   const autopilot = useAutopilot(active, menu === 'exo-ai')
   const exoAi = useExoAi(active, menu === 'exo-ai')
+  const openAutoTune = useCallback(() => { setMenu(null); setAutoTuneOpen(true) }, [])
   const openApps = () => setAppsOpen(true)
   const readApps = () => setAppsRead(n => n + 1)
   const closeMenu = useCallback(() => setMenu(null), [])
@@ -193,6 +196,7 @@ export function PcRoom({ active, jump, games, settings, onSave }: {
 
   const chips = (
     <>
+      <AutoTuneChip state={state} hdr={hdr} settings={settings} onOpen={openAutoTune} />
       <ExoAiChip state={exoAi.state} left={stillToSet(state, hdr, settings, onSave)} tune={state.tune} onOpen={() => setMenu('exo-ai')} />
       <AppsChip summary={apps} onOpen={openApps} />
       <StorageChip drives={state.drives} list={compress.list} onOpen={() => setMenu('storage')} />
@@ -232,6 +236,7 @@ export function PcRoom({ active, jump, games, settings, onSave }: {
             onHealth={setHealth}
             onInterrupts={setInterrupts}
             onTuning={setTuning}
+            onOpenAutoTune={openAutoTune}
           />
         </PcMenu>
       ) : null}
@@ -277,6 +282,17 @@ export function PcRoom({ active, jump, games, settings, onSave }: {
         </PcMenu>
       ) : null}
 
+      <AutoTuneOverlay
+        open={autoTuneOpen}
+        onClose={() => setAutoTuneOpen(false)}
+        state={state}
+        exoAi={exoAi.state}
+        hdr={hdr}
+        settings={settings}
+        onSave={onSave}
+        onTune={setTune}
+        onRefresh={async () => { await read(); exoAi.refresh() }}
+      />
       <AppsSheet open={appsOpen} onClose={() => { setAppsOpen(false); readApps() }} />
     </main>
   )

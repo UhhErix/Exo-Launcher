@@ -19,6 +19,8 @@ internal static partial class JunkFiles
     private static readonly TimeSpan Fresh = TimeSpan.FromDays(1);
 
     private static string Local => Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+    private static string Roaming => Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+    private static string ProgramFilesX86 => Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86);
     private static string Common => Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData);
 
     private static (string Id, string Name, string Detail, Func<IEnumerable<string>> Folders, string Pattern, bool OldOnly)[] Kinds =>
@@ -30,7 +32,115 @@ internal static partial class JunkFiles
             Path.Combine(Common, @"Microsoft\Windows\WER\ReportArchive"), Path.Combine(Common, @"Microsoft\Windows\WER\ReportQueue"),
         ], "*", false),
         ("thumbs", "Thumbnail cache", "Picture previews Explorer makes again as you browse", () => [Path.Combine(Local, @"Microsoft\Windows\Explorer")], "thumbcache_*.db", false),
+        ("browsers", "Browser caches", "Disposable web and GPU caches for Brave, Chrome, Helium, Edge, Vivaldi, and Opera GX (keeps logins and cookies)", () => BrowserCacheFolders(Local, Roaming), "*", false),
+        ("launchers", "Game launcher caches", "Disposable web caches and logs for Steam, Epic, Battle.net, Ubisoft, and Discord (keeps games and logins)", () => LauncherCacheFolders(Local, Roaming, ProgramFilesX86, Common), "*", false),
     ];
+
+    private static readonly string[] ChromiumProfileCacheLeaves =
+    [
+        @"Cache\Cache_Data",
+        @"Code Cache\js",
+        @"Code Cache\wasm",
+        "GPUCache",
+        "DawnGraphiteCache",
+        "DawnWebGPUCache",
+        "GrShaderCache",
+        "GraphiteDawnCache",
+        "ShaderCache",
+    ];
+
+    private static readonly string[] ChromiumUserDataRoots =
+    [
+        @"BraveSoftware\Brave-Browser\User Data",
+        @"Google\Chrome\User Data",
+        @"imput\Helium\User Data",
+        @"Helium\User Data",
+        @"Microsoft\Edge\User Data",
+        @"Vivaldi\User Data",
+    ];
+
+    private static bool SafeExistingDirectory(string path)
+    {
+        if (!Directory.Exists(path)) return false;
+        try { return (File.GetAttributes(path) & FileAttributes.ReparsePoint) == 0; }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { return false; }
+    }
+
+    private static void AddExistingCacheLeaves(string profileDir, IReadOnlyList<string> leaves, List<string> target)
+    {
+        foreach (var leaf in leaves)
+        {
+            var candidate = Path.Combine(profileDir, leaf);
+            if (SafeExistingDirectory(candidate)) target.Add(candidate);
+        }
+    }
+
+    internal static IReadOnlyList<string> BrowserCacheFolders(string local, string roaming)
+    {
+        var folders = new List<string>();
+        foreach (var rel in ChromiumUserDataRoots)
+        {
+            var userData = Path.Combine(local, rel);
+            if (!SafeExistingDirectory(userData)) continue;
+            AddExistingCacheLeaves(userData, ["GrShaderCache", "GraphiteDawnCache", "ShaderCache"], folders);
+            try
+            {
+                foreach (var sub in Directory.EnumerateDirectories(userData))
+                {
+                    if (!SafeExistingDirectory(sub)) continue;
+                    var name = Path.GetFileName(sub);
+                    if (name.Equals("Default", StringComparison.OrdinalIgnoreCase)
+                        || name.StartsWith("Profile ", StringComparison.OrdinalIgnoreCase))
+                        AddExistingCacheLeaves(sub, ChromiumProfileCacheLeaves, folders);
+                }
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
+        }
+        foreach (var operaRoot in new[] { Path.Combine(local, @"Opera Software\Opera GX Stable"), Path.Combine(roaming, @"Opera Software\Opera GX Stable") })
+        {
+            if (SafeExistingDirectory(operaRoot))
+                AddExistingCacheLeaves(operaRoot, ChromiumProfileCacheLeaves, folders);
+        }
+        return folders.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+    }
+
+    internal static IReadOnlyList<string> LauncherCacheFolders(string local, string roaming, string programFilesX86, string common)
+    {
+        var folders = new List<string>();
+        string[] fixedPaths =
+        [
+            Path.Combine(local, @"Steam\htmlcache\Cache\Cache_Data"),
+            Path.Combine(local, @"Steam\htmlcache\Code Cache"),
+            Path.Combine(local, @"Steam\htmlcache\GPUCache"),
+            Path.Combine(programFilesX86, @"Steam\appcache\httpcache"),
+            Path.Combine(local, @"EpicGamesLauncher\Saved\Logs"),
+            Path.Combine(local, @"Battle.net\BrowserCache"),
+            Path.Combine(common, @"Blizzard Entertainment\Battle.net\Cache"),
+            Path.Combine(local, @"Ubisoft Game Launcher\cache\http2"),
+        ];
+        foreach (var path in fixedPaths)
+            if (SafeExistingDirectory(path)) folders.Add(path);
+
+        var epicSaved = Path.Combine(local, @"EpicGamesLauncher\Saved");
+        if (SafeExistingDirectory(epicSaved))
+        {
+            try
+            {
+                foreach (var sub in Directory.EnumerateDirectories(epicSaved, "webcache*"))
+                    if (SafeExistingDirectory(sub)) folders.Add(sub);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
+        }
+
+        string[] discordLeaves = [@"Cache\Cache_Data", @"Code Cache\js", @"Code Cache\wasm", "GPUCache", "DawnGraphiteCache", "DawnWebGPUCache"];
+        foreach (var channel in new[] { "discord", "discordptb", "discordcanary" })
+        {
+            var discordRoot = Path.Combine(roaming, channel);
+            if (SafeExistingDirectory(discordRoot))
+                AddExistingCacheLeaves(discordRoot, discordLeaves, folders);
+        }
+        return folders.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+    }
 
     /// <summary>How much of each kind there is now, the Recycle Bin last; kinds with nothing are left out. The kinds walk different folders, so they are counted side by side.</summary>
     internal static List<Found> Scan()

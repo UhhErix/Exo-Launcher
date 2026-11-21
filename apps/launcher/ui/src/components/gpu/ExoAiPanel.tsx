@@ -162,6 +162,7 @@ export function ExoAiPanel({
   onHealth,
   onInterrupts,
   onTuning,
+  onOpenAutoTune,
 }: {
   active: boolean
   exoAi: ExoAiState | null
@@ -178,6 +179,7 @@ export function ExoAiPanel({
   onHealth: (next: PcHealth) => void
   onInterrupts: (next: Interrupts) => void
   onTuning: (next: Tuning) => void
+  onOpenAutoTune?: () => void
 }) {
   const [error, setError] = useState<string | null>(null)
 
@@ -210,8 +212,13 @@ export function ExoAiPanel({
         </Row>
       </Group>
 
-      {(state.tune?.parts.length ?? 0) > 0 ? (
+      {(state.tune?.parts.length ?? 0) > 0 || onOpenAutoTune ? (
         <Group id="exo-ai-tune" title="Auto-Tune">
+          {onOpenAutoTune ? (
+            <Row label="Auto Tune studio" detail="One-click optimization across cooling, display, privacy, VRR LFC, caches & silicon">
+              <button type="button" className="exo-set-btn" onClick={onOpenAutoTune}>Open</button>
+            </Row>
+          ) : null}
           <AutoTuneRows tune={state.tune} profile={profile} about={about} onTune={onTune} />
         </Group>
       ) : null}

@@ -105,6 +105,11 @@
   transition: background-color var(--dur-quick) var(--ease-out);
 }
 
+.exo-pc-chip:has(> svg:first-child) {
+  padding-left: 10px;
+  padding-right: 12px;
+}
+
 .exo-pc-chip:hover {
   background: var(--hover-fill);
 }

@@ -693,7 +693,7 @@ export type NetCheck = { before: NetSample | null; after: NetSample; said: strin
 export type PcHealth = { ok: boolean; message?: string | null; items: PcHealthItem[]; check?: NetCheck | null }
 
 /** Best settings › System's items (SystemTuning.cs): Windows defaults a tweak changed (Best settings) and two opt-ins (their own switch only). */
-export type TuningKey = 'timer' | 'scheduling' | 'pagefile' | 'cache' | 'captureService' | 'services' | 'integrity' | 'vrr' | 'mouseAccel'
+export type TuningKey = 'timer' | 'scheduling' | 'pagefile' | 'cache' | 'captureService' | 'vrrLfc' | 'privacy' | 'services' | 'integrity' | 'vrr' | 'mouseAccel'
 /**
  * One item: on, Exo's setting is in place; off, the player turned a Best settings item off; optIn, only its own switch sets it;
  * restart, a change (either way) waits on a restart; needsRestart, whether changing it requires a restart; blocked, why Exo won't change it here (an anti-cheat, a policy).
@@ -1144,7 +1144,7 @@ export interface CompressList {
 
 /** One kind of junk on this PC (junk.scan): its size and how many files. */
 export interface JunkItem {
-  id: 'temp' | 'crash' | 'thumbs' | 'shaders' | 'exo' | 'bin'
+  id: 'temp' | 'crash' | 'thumbs' | 'shaders' | 'exo' | 'browsers' | 'launchers' | 'bin'
   name: string
   detail: string
   bytes: number

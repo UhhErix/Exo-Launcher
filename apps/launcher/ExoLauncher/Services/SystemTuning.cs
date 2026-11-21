@@ -36,10 +36,29 @@ namespace ExoLauncher.Services;
 internal sealed partial class SystemTuning(SystemTuning.ISystem system, string path, Func<DateTimeOffset> now)
 {
     internal const string TimerKey = "timer", SchedulingKey = "scheduling", PagefileKey = "pagefile", CacheKey = "cache",
-        CaptureServiceKey = "captureService", ServicesKey = "services", IntegrityKey = "integrity", VrrKey = "vrr", MouseAccelKey = "mouseAccel";
+        CaptureServiceKey = "captureService", VrrLfcKey = "vrrLfc", PrivacyKey = "privacy",
+        ServicesKey = "services", IntegrityKey = "integrity", VrrKey = "vrr", MouseAccelKey = "mouseAccel";
 
     /// <summary>The items Use best settings sets: each only puts back a Windows default a tweak changed.</summary>
-    internal static readonly string[] Defaults = [TimerKey, SchedulingKey, PagefileKey, CacheKey, CaptureServiceKey];
+    internal static readonly string[] Defaults = [TimerKey, SchedulingKey, PagefileKey, CacheKey, CaptureServiceKey, VrrLfcKey, PrivacyKey];
+
+    internal const string DisplayClassRoot = @"SYSTEM\CurrentControlSet\Control\Class\{4d36e968-e325-11ce-bfc1-08002be10318}";
+    internal const string VrrFrameSplitBehavior = "vrrFrameSplitBehavior";
+    internal const uint VrrLfcLowestMultiplierUnsigned = 0x80010055u;
+    internal const int VrrLfcLowestMultiplier = unchecked((int)VrrLfcLowestMultiplierUnsigned);
+
+    internal static readonly (string Key, string Name, int Target)[] PrivacySettings =
+    [
+        (@"Software\Microsoft\Windows\CurrentVersion\AdvertisingInfo", "Enabled", 0),
+        (@"Software\Microsoft\Windows\CurrentVersion\Privacy", "TailoredExperiencesWithDiagnosticDataEnabled", 0),
+        (@"Software\Microsoft\Windows\CurrentVersion\ContentDeliveryManager", "SubscribedContent-338389Enabled", 0),
+        (@"Software\Microsoft\Windows\CurrentVersion\ContentDeliveryManager", "SubscribedContent-338393Enabled", 0),
+        (@"Software\Microsoft\Windows\CurrentVersion\ContentDeliveryManager", "SubscribedContent-353694Enabled", 0),
+        (@"Software\Microsoft\Windows\CurrentVersion\ContentDeliveryManager", "SubscribedContent-353696Enabled", 0),
+        (@"Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced", "Start_IrisRecommendations", 0),
+        (@"Software\Microsoft\Windows\CurrentVersion\SearchSettings", "IsDynamicSearchBoxEnabled", 0),
+        (@"Software\Microsoft\Windows\CurrentVersion\Search", "BingSearchEnabled", 0),
+    ];
 
     /// <summary>The items only their own switch sets.</summary>
     internal static readonly string[] OptIn = [ServicesKey, IntegrityKey, VrrKey, MouseAccelKey];
@@ -114,6 +133,9 @@ internal sealed partial class SystemTuning(SystemTuning.ISystem system, string p
         bool SetUserDirectXSettings(string? value) => false;
         int[]? MouseParams() => null;
         bool SetMouseParams(int[] values) => false;
+        IReadOnlyList<string> NvidiaDisplayClassKeys() => [];
+        int? UserDword(string key, string name) => null;
+        bool SetUserDword(string key, string name, int? value) => false;
         /// <summary>Installed library games that require Memory Integrity (HVCI), empty in isolated tests unless set.</summary>
         IReadOnlyList<string> HvciRequiringGames() => [];
         /// <summary>The latency check, run elevated (Windows asks): its answer, or null when the prompt was declined or it didn't run.</summary>
@@ -240,6 +262,18 @@ internal sealed partial class SystemTuning(SystemTuning.ISystem system, string p
                 captureDisabled ? "Disabled by a tweak, which breaks Windows screen capture and Game Bar. Sets it back to Manual." : "Set to Manual so Windows starts it when needed.",
                 !captureDisabled, captureKept, off.Contains(CaptureServiceKey), false, false, null, NeedsRestart: false));
 
+        var nvidiaAdapters = system.NvidiaDisplayClassKeys().Where(k => NvidiaClassKeyPattern().IsMatch(k)).ToList();
+        var vrrLfcKept = saved.Kept.ContainsKey(VrrLfcKey);
+        if (nvidiaAdapters.Count > 0 || vrrLfcKept || Pending(VrrLfcKey))
+        {
+            var vrrLfcOn = nvidiaAdapters.Count > 0 && nvidiaAdapters.All(k => system.Dword(k, VrrFrameSplitBehavior) == VrrLfcLowestMultiplier);
+            var detail = Tell(VrrLfcKey, vrrLfcOn
+                ? "Uses the lowest refresh-rate multiplier during G-SYNC/VRR LFC to reduce flicker and stutter."
+                : "Sets NVIDIA G-SYNC/VRR LFC to the lowest refresh-rate multiplier to reduce flicker and micro-stutter. Takes a restart.");
+            items.Add(new(VrrLfcKey, "NVIDIA VRR LFC lowest multiplier", detail,
+                vrrLfcOn || (Pending(VrrLfcKey) && vrrLfcKept), vrrLfcKept, off.Contains(VrrLfcKey), false, Pending(VrrLfcKey)));
+        }
+
         // Memory Integrity: shown while it's on (or Exo turned it off).
         var enabled = system.Dword(Hvci, "Enabled");
         var running = system.IntegrityRunning();
@@ -256,6 +290,15 @@ internal sealed partial class SystemTuning(SystemTuning.ISystem system, string p
         // Legacy non-admin undo entries only: Autopilot manages mouse acceleration automatically and Windows windowed VRR is retired.
         if (system.SupportsUserHardwareToggles)
         {
+            var privacyOn = PrivacySettings.All(s => system.UserDword(s.Key, s.Name) == s.Target);
+            var privacyKept = saved.Kept.ContainsKey(PrivacyKey);
+            if (!privacyOn || privacyKept)
+                items.Add(new(PrivacyKey, "Windows ad & suggestion noise off",
+                    privacyOn
+                        ? "Advertising ID, Start tips, Settings suggestions, Search highlights, and Bing Start search are off (no restart needed)."
+                        : "Turns off Windows Advertising ID, Start/Settings tips, Search highlights, and Bing Start search without touching security or Defender (no admin prompt).",
+                    privacyOn, privacyKept, off.Contains(PrivacyKey), false, false, null, NeedsRestart: false));
+
             if (saved.Kept.ContainsKey(VrrKey))
             {
                 var vrrOn = HasToken(system.UserDirectXSettings(), VrrToken, "1");
@@ -423,6 +466,32 @@ internal sealed partial class SystemTuning(SystemTuning.ISystem system, string p
                     }
                     break;
                 }
+                case VrrLfcKey:
+                {
+                    var adapters = system.NvidiaDisplayClassKeys().Where(k => NvidiaClassKeyPattern().IsMatch(k)).ToList();
+                    if (adapters.Count > 0)
+                    {
+                        var priorEntries = adapters.Select(k =>
+                        {
+                            var prev = system.Dword(k, VrrFrameSplitBehavior);
+                            return prev is { } p ? $"{k}=0x{unchecked((uint)p):X8}" : $"{k}=absent";
+                        }).ToArray();
+                        kept.TryAdd(key, new Was(Strings: priorEntries));
+                        foreach (var adapter in adapters)
+                            lines.Add(RegDwordHex(adapter, VrrFrameSplitBehavior, VrrLfcLowestMultiplierUnsigned));
+                    }
+                    break;
+                }
+                case PrivacyKey:
+                {
+                    var priorEntries = PrivacySettings.Select(s =>
+                    {
+                        var prev = system.UserDword(s.Key, s.Name);
+                        return prev is { } p ? $"{s.Key}|{s.Name}={p.ToString(System.Globalization.CultureInfo.InvariantCulture)}" : $"{s.Key}|{s.Name}=absent";
+                    }).ToArray();
+                    kept.TryAdd(key, new Was(Strings: priorEntries));
+                    break;
+                }
                 case ServicesKey:
                 {
                     var now = Trimmed.Select(s => (s.Name, Start: system.Service(s.Name))).Where(s => s.Start is { Start: 2 })
@@ -453,12 +522,12 @@ internal sealed partial class SystemTuning(SystemTuning.ISystem system, string p
                 }
             }
         }
-        var nonAdminKeys = wanted.Where(k => k is VrrKey or MouseAccelKey).ToList();
+        var nonAdminKeys = wanted.Where(k => k is VrrKey or MouseAccelKey or PrivacyKey).ToList();
         if (lines.Count == 0 && nonAdminKeys.Count == 0) return Said(said);
 
         // Recorded before anything changes, so a crash or a step cut short still has the way back.
         var changed = new Dictionary<string, DateTimeOffset>(saved.Changed);
-        foreach (var key in wanted.Where(k => k is not (TimerKey or SchedulingKey or CaptureServiceKey or VrrKey or MouseAccelKey) && kept.ContainsKey(k))) changed[key] = now();
+        foreach (var key in wanted.Where(k => k is not (TimerKey or SchedulingKey or CaptureServiceKey or PrivacyKey or VrrKey or MouseAccelKey) && kept.ContainsKey(k))) changed[key] = now();
         if (!Save(saved with { Kept = kept, Changed = changed })) return "Your current settings couldn't be saved for Undo, so nothing changed.";
 
         if (lines.Count > 0)
@@ -504,6 +573,15 @@ internal sealed partial class SystemTuning(SystemTuning.ISystem system, string p
                     said.Add("Windows didn't turn mouse acceleration off.");
                 }
             }
+            else if (key == PrivacyKey)
+            {
+                var ok = PrivacySettings.All(s => system.SetUserDword(s.Key, s.Name, s.Target) && system.UserDword(s.Key, s.Name) == s.Target);
+                if (!ok)
+                {
+                    after = Drop(after, prior, key);
+                    said.Add("Windows didn't turn off all ad and suggestion settings.");
+                }
+            }
         }
 
         // Read back: what didn't take keeps no record, so Off never "puts back" a change that never happened.
@@ -539,6 +617,16 @@ internal sealed partial class SystemTuning(SystemTuning.ISystem system, string p
                     after = Drop(after, prior, key);
                     said.Add("Windows didn't restore Screen Capture Service.");
                     break;
+                case VrrLfcKey:
+                {
+                    var adapters = system.NvidiaDisplayClassKeys().Where(k => NvidiaClassKeyPattern().IsMatch(k)).ToList();
+                    if (adapters.Count > 0 && !adapters.All(k => system.Dword(k, VrrFrameSplitBehavior) == VrrLfcLowestMultiplier))
+                    {
+                        after = Drop(after, prior, key);
+                        said.Add("Windows didn't take the NVIDIA VRR LFC setting.");
+                    }
+                    break;
+                }
                 case ServicesKey:
                 {
                     var still = Trimmed.Where(s => system.Service(s.Name) is { Start: 2 }).Select(s => s.Name).ToHashSet();
@@ -603,6 +691,33 @@ internal sealed partial class SystemTuning(SystemTuning.ISystem system, string p
                 saved = saved with { Kept = keptMouse };
                 return Save(saved) ? null : "Exo couldn't save your choice.";
             }
+            if (key == PrivacyKey)
+            {
+                if (was.Strings is not { Length: > 0 } entries) return "Exo's record of this setting couldn't be read, so nothing changed.";
+                var parsed = new List<(string SubKey, string Name, int? Value)>(entries.Length);
+                foreach (var entry in entries)
+                {
+                    var eq = entry.LastIndexOf('=');
+                    var bar = eq > 0 ? entry[..eq].LastIndexOf('|') : -1;
+                    if (bar <= 0 || eq <= bar + 1) return "Exo's record of this setting couldn't be read, so nothing changed.";
+                    var subKey = entry[..bar];
+                    var valName = entry[(bar + 1)..eq];
+                    if (!PrivacySettings.Any(s => s.Key == subKey && s.Name == valName))
+                        return "Exo's record of this setting couldn't be read, so nothing changed.";
+                    var rawVal = entry[(eq + 1)..];
+                    if (rawVal == "absent") parsed.Add((subKey, valName, null));
+                    else if (int.TryParse(rawVal, System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out var prevVal))
+                        parsed.Add((subKey, valName, prevVal));
+                    else return "Exo's record of this setting couldn't be read, so nothing changed.";
+                }
+                foreach (var item in parsed)
+                    if (!system.SetUserDword(item.SubKey, item.Name, item.Value))
+                        return "Windows didn't put it back. Try again.";
+                var keptPrivacy = new Dictionary<string, Was>(saved.Kept);
+                keptPrivacy.Remove(key);
+                var offPrivacy = saved.Off.Contains(key) ? saved.Off : [.. saved.Off, key];
+                return Save(saved with { Kept = keptPrivacy, Off = offPrivacy }) ? null : "Exo couldn't save your choice.";
+            }
             if (Revert(key, was) is not { } lines) return "Exo's record of this setting couldn't be read, so nothing changed.";
             // The timer's BCD value can't be read without administrator rights: the same step reads it back after setting it.
             var check = key == TimerKey ? system.Answer() : null;
@@ -618,6 +733,7 @@ internal sealed partial class SystemTuning(SystemTuning.ISystem system, string p
                 PagefileKey => SameStrings(system.Strings(MemoryManagement, PagingFiles), was.Strings),
                 CacheKey => system.Dword(MemoryManagement, LargeSystemCache) == was.Value,
                 CaptureServiceKey => was.Services is [var cs] && system.Service(cs.Name) is { } nowCs && nowCs.Start == cs.Start,
+                VrrLfcKey => VerifyVrrLfcReverted(was),
                 ServicesKey => was.Services!.All(s => system.Service(s.Name) is { } now && now.Start == s.Start && now.Delayed == s.Delayed),
                 IntegrityKey => system.Dword(Hvci, "Enabled") == was.Value,
                 _ => Forced(system.ReadAnswer(check!)) == true,
@@ -696,12 +812,54 @@ internal sealed partial class SystemTuning(SystemTuning.ISystem system, string p
         CaptureServiceKey => was.Services is [var cs] && cs.Name == CaptureServiceName
             ? [Sc(cs.Name, cs.Start switch { 2 => cs.Delayed ? "delayed-auto" : "auto", 3 => "demand", 4 => "disabled", _ => "demand" })]
             : null,
+        VrrLfcKey => RevertVrrLfc(was),
         ServicesKey => was.Services is { } list && list.All(s => Trimmed.Any(t => t.Name == s.Name))
             ? list.Select(s => Sc(s.Name, s.Start switch { 2 => s.Delayed ? "delayed-auto" : "auto", 3 => "demand", 4 => "disabled", _ => "auto" })).ToList()
             : null,
         IntegrityKey => [was.Absent ? RegDelete(Hvci, "Enabled") : RegDword(Hvci, "Enabled", was.Value ?? 1)],
         _ => null,
     };
+
+    private static IReadOnlyList<string>? RevertVrrLfc(Was was)
+    {
+        if (was.Strings is not { Length: > 0 } entries) return null;
+        var list = new List<string>(entries.Length);
+        foreach (var entry in entries)
+        {
+            var idx = entry.LastIndexOf('=');
+            if (idx <= 0) return null;
+            var adapter = entry[..idx];
+            if (!NvidiaClassKeyPattern().IsMatch(adapter)) return null;
+            var val = entry[(idx + 1)..];
+            if (val == "absent") list.Add(RegDelete(adapter, VrrFrameSplitBehavior));
+            else if (val.StartsWith("0x", StringComparison.OrdinalIgnoreCase)
+                && uint.TryParse(val[2..], System.Globalization.NumberStyles.AllowHexSpecifier, System.Globalization.CultureInfo.InvariantCulture, out var parsed))
+                list.Add(RegDwordHex(adapter, VrrFrameSplitBehavior, parsed));
+            else return null;
+        }
+        return list;
+    }
+
+    private bool VerifyVrrLfcReverted(Was was)
+    {
+        if (was.Strings is not { Length: > 0 } entries) return false;
+        foreach (var entry in entries)
+        {
+            var idx = entry.LastIndexOf('=');
+            if (idx <= 0) return false;
+            var adapter = entry[..idx];
+            var val = entry[(idx + 1)..];
+            if (val == "absent")
+            {
+                if (system.Dword(adapter, VrrFrameSplitBehavior) is not null) return false;
+            }
+            else if (!val.StartsWith("0x", StringComparison.OrdinalIgnoreCase)
+                || !uint.TryParse(val[2..], System.Globalization.NumberStyles.AllowHexSpecifier, System.Globalization.CultureInfo.InvariantCulture, out var parsed)
+                || system.Dword(adapter, VrrFrameSplitBehavior) != unchecked((int)parsed))
+                return false;
+        }
+        return true;
+    }
 
     /// <summary>
     /// The timer's lines: bcdedit's entry for this Windows into <paramref name="was"/>; the value removed only when it's there;
@@ -734,6 +892,9 @@ internal sealed partial class SystemTuning(SystemTuning.ISystem system, string p
     internal static string RegDword(string key, string name, int value) =>
         $"{Tool("reg.exe")} add \"HKLM\\{key}\" /v {name} /t REG_DWORD /d {value} /f";
 
+    internal static string RegDwordHex(string key, string name, uint value) =>
+        $"{Tool("reg.exe")} add \"HKLM\\{key}\" /v {name} /t REG_DWORD /d 0x{value:X8} /f";
+
     internal static string RegStrings(string key, string name, IReadOnlyList<string> values) =>
         $"{Tool("reg.exe")} add \"HKLM\\{key}\" /v {name} /t REG_MULTI_SZ /d \"{string.Join("\\0", values)}\" /f";
 
@@ -749,6 +910,9 @@ internal sealed partial class SystemTuning(SystemTuning.ISystem system, string p
     /// <summary>A page file line Exo writes back as it was: a drive or ?, a path, sizes; nothing cmd or reg reads specially.</summary>
     [GeneratedRegex(@"^([A-Za-z?]:\\[^""%^&|<>\r\n\\]*(\\[^""%^&|<>\r\n\\]+)*( \d+ \d+)?)?$", RegexOptions.CultureInvariant)]
     internal static partial Regex SafeText();
+
+    [GeneratedRegex(@"^SYSTEM\\CurrentControlSet\\Control\\Class\\\{4d36e968-e325-11ce-bfc1-08002be10318\}\\\d{4}$", RegexOptions.CultureInvariant | RegexOptions.IgnoreCase)]
+    internal static partial Regex NvidiaClassKeyPattern();
 
     private static string? Said(List<string> said) => said.Count == 0 ? null : string.Join(" ", said);
 
