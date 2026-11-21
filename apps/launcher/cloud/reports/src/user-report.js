@@ -1,28 +1,18 @@
 import { APPS, ReportError, personalIn, reportInstallId } from './validate.js'
 import { limits } from './limits.js'
 
-/**
- * A Report a problem message (POST /v1/user-report, README.md › Report a problem): what the player wrote, the scrubbed log
- * excerpt when they left Attach logs on, and a contact when they gave one. Strict like a crash report: an unknown field,
- * a wrong type or a value outside its shape refuses it, and the excerpt must hold nothing personal (422). The message and
- * the contact are the player's own words, sent on purpose to a private repository, so they are checked for shape only.
- */
-
 export const USER_FIELDS = ['app', 'version', 'osBuild', 'message', 'excerpt', 'contact']
 export const userLimits = {
   messageChars: 4000,
   contactChars: 200,
-  // A 4000-character message and an 8192-character excerpt in UTF-8, plus the rest.
   bodyBytes: 48 * 1024,
 }
 
 const VERSION = /^\d{1,4}\.\d{1,4}\.\d{1,4}$/
 const OS_BUILD = /^\d{1,5}\.\d{1,6}(\.\d{1,6}){0,2}$/
 const CONTROL = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/
-// A line break of any kind: CR, LF, and the Unicode line and paragraph separators.
 const LINE_BREAK = new RegExp('[' + String.fromCharCode(10, 13, 0x2028, 0x2029) + ']')
 
-/** The message, checked: { app, version, osBuild, message, excerpt, contact } with excerpt '' and contact null when absent. */
 export function parseUserReport(value) {
   if (value === null || typeof value !== 'object' || Array.isArray(value)) throw new ReportError('Not a report')
   for (const key of Object.keys(value)) if (!USER_FIELDS.includes(key) && key !== 'installId') throw new ReportError('Unknown field')

@@ -1,7 +1,6 @@
 import type { FormEvent, KeyboardEvent } from 'react'
 import { Button } from '../ui/Button'
 
-/** Sign in to an existing account. A lock counts down and keeps Sign in disabled until it ends (CLIENT.md 4.2). */
 export function SignInForm({ email, password, onEmail, onPassword, error, lockedSeconds, busy, onSubmit, onBack, onKeyDown, onForgot }: {
   email: string
   password: string

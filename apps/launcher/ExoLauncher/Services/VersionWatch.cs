@@ -4,23 +4,14 @@ using ExoLauncher.Models;
 
 namespace ExoLauncher.Services;
 
-/// <summary>
-/// New versions of what this PC runs, found without opening the page that has them: the graphics driver (NVIDIA's Game
-/// Ready, Studio or hotfix on the branch the driver row last showed, AMD's or Intel's), the chipset driver when Exo
-/// doesn't install it by itself. Each check is the one its own row uses, with its sources and cache; this only
-/// asks on Exo's clock (<see cref="WebHostBridge"/>'s version watch). Each version is told once: version-watch.json keeps
-/// the last one told per item, so a restart doesn't tell it again and the next one does.
-/// </summary>
 internal static class VersionWatch
 {
-    /// <summary>A newer version than the one installed. Page is where its update is: drivers (PC › Drivers) or devices.</summary>
     internal sealed record Found(string Id, string Name, string Version, string? Installed, string Page);
 
     private static readonly Lock Gate = new();
     private static Dictionary<string, string>? _told;
     private static string ToldPath => Path.Combine(PathHelper.AppDataDir, "version-watch.json");
 
-    /// <summary>Everything with a newer version out now; a check that can't tell (offline, no such hardware) adds nothing.</summary>
     internal static async Task<List<Found>> FindAsync(AppSettings settings, CancellationToken ct)
     {
         var found = new List<Found>();
@@ -31,7 +22,6 @@ internal static class VersionWatch
     private static async Task<Found?> DriverAsync(AppSettings settings, CancellationToken ct)
     {
         var vendor = GraphicsService.Vendor() ?? GraphicsService.Vendors(GpuCapability.Adapters()).FirstOrDefault();
-        // A version with a known problem on this PC is never news (DriverAdvisories).
         var advisories = DriverAdvisories.Shared;
         if (vendor is "amd" or "intel")
         {
@@ -65,7 +55,6 @@ internal static class VersionWatch
         return new Found("driver.nvidia", name, latest.Version, installed, "drivers");
     }
 
-    /// <summary>True the first time a version is found for its item (and remembers it); false once it was told.</summary>
     internal static bool FirstTime(Found found)
     {
         lock (Gate)

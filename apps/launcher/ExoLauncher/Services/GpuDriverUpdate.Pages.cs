@@ -5,14 +5,11 @@ using System.Text.RegularExpressions;
 
 namespace ExoLauncher.Services;
 
-/// <summary>Reading AMD's and Intel's driver pages: which page is this PC's, and the driver it offers; and Intel's chipset package.</summary>
 internal static partial class GpuDriverUpdate
 {
-    /// <summary>AMD's driver selector: its product list (every card and processor, with its driver page) rides in the page.</summary>
     internal const string AmdSelector = "https://www.amd.com/en/support/download/drivers.html";
     private const string AmdPages = "https://www.amd.com/en/support/downloads/drivers.html/";
 
-    /// <summary>Intel's driver pages, newest family first: Arc and Core Ultra, 11th–14th Gen (and their Atom, Pentium and Celeron), 7th–10th Gen.</summary>
     internal static readonly string[] IntelPages =
     [
         "https://www.intel.com/content/www/us/en/download/785597/intel-arc-graphics-windows.html",
@@ -20,10 +17,6 @@ internal static partial class GpuDriverUpdate
         "https://www.intel.com/content/www/us/en/download/776137/intel-7th-10th-gen-processor-graphics-windows.html",
     ];
 
-    /// <summary>
-    /// The selector, then the card's (or processor's) page, plus AMD's newest optional/hotfix release notes when newer:
-    /// two requests through <paramref name="get"/>, then optional release-note probes through <paramref name="tryGet"/>.
-    /// </summary>
     internal static async Task<Latest?> AmdLatestAsync(string card, string? cpu, Func<string, Task<string>> get, Func<string, Task<string?>>? tryGet = null)
     {
         var page = AmdProductPage(AmdProducts(await get(AmdSelector).ConfigureAwait(false)), card, cpu);
@@ -44,12 +37,6 @@ internal static partial class GpuDriverUpdate
         return found;
     }
 
-    /// <summary>
-    /// Intel's page for this PC, read through <paramref name="get"/> one at a time until one fits: every Arc (a card, or
-    /// built into a Core Ultra) is on Intel's Arc driver, whose list names its cards with their memory ("Arc™ A770 Graphics
-    /// (8GB)") and the older pages list none; any other GPU is on the first page that names the card or the processor. When
-    /// that page's version table lists a newer Non-WHQL/hotfix build than the headline download, follow that row's page.
-    /// </summary>
     internal static async Task<Latest?> IntelLatestAsync(string card, string? cpu, Func<string, Task<string>> get)
     {
         string? matchedHtml = null, matchedPage = null;
@@ -86,7 +73,6 @@ internal static partial class GpuDriverUpdate
         return best;
     }
 
-    /// <summary>Every product AMD's selector lists, its title and its driver page, from the JSON the page carries in an attribute.</summary>
     internal static IReadOnlyList<(string Title, string Url)> AmdProducts(string html)
     {
         var at = html.IndexOf("data-component=\"coveo-browse-documentation\"", StringComparison.Ordinal);
@@ -103,10 +89,6 @@ internal static partial class GpuDriverUpdate
         return list;
     }
 
-    /// <summary>
-    /// The card's driver page among AMD's products: the graphics product named as the card is, else (an integrated GPU,
-    /// which Windows names "AMD Radeon(TM) Graphics" or "AMD Radeon 780M Graphics") its processor's page. Only AMD's own pages.
-    /// </summary>
     internal static string? AmdProductPage(IReadOnlyList<(string Title, string Url)> products, string card, string? cpu)
     {
         string? Find(string kind, string? name) => Named(name) is not { } plain ? null
@@ -114,10 +96,6 @@ internal static partial class GpuDriverUpdate
         return Find("graphics", card) ?? Find("processors", cpu is null ? null : AmdCpuTail().Replace(cpu, ""));
     }
 
-    /// <summary>
-    /// The newest AMD Software: Adrenalin Edition a card's or processor's page links in its Windows 11 section, or null.
-    /// AMD labels each Recommended (WHQL), Optional or Hotfix. A PRO card's page also lists AMD Software: PRO Edition, which is left out.
-    /// </summary>
     internal static Latest? AmdDriver(string html)
     {
         if (AmdSection(html, "Windows 11") is not { } section) return null;
@@ -136,7 +114,6 @@ internal static partial class GpuDriverUpdate
             var date = DateTime.TryParseExact(fields.GetValueOrDefault("Release Date"), "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var day) ? day : (DateTime?)null;
             var kind = AmdReleaseKind(revision + " " + title);
             var found = new Latest("amd", version.Groups[1].Value, link.Groups[1].Value, Bytes(fields.GetValueOrDefault("File Size")), Day(date), kind);
-            // The newest wins; between two of one version, AMD's recommended one.
             var cmp = newest is null ? 1 : VersionNumber.Compare(found.Version, newest.Version);
             if (cmp > 0 || (cmp == 0 && found.Kind == "recommended"))
                 newest = found;
@@ -149,10 +126,6 @@ internal static partial class GpuDriverUpdate
         : label.Contains("Optional", StringComparison.OrdinalIgnoreCase) || label.Contains("Preview", StringComparison.OrdinalIgnoreCase) || label.Contains("Beta", StringComparison.OrdinalIgnoreCase) ? "optional"
         : "recommended";
 
-    /// <summary>
-    /// Candidate AMD release-note URLs for optional/hotfix releases newer than <paramref name="version"/> (next month's .1/.2,
-    /// same month's next two minor drops, and a 4-part point hotfix).
-    /// </summary>
     internal static IReadOnlyList<string> AmdReleaseNoteUrls(string version)
     {
         var raw = version.Split('.');
@@ -174,10 +147,6 @@ internal static partial class GpuDriverUpdate
         ];
     }
 
-    /// <summary>
-    /// An Adrenalin optional/hotfix driver read from AMD's release-notes article for <paramref name="card"/>/<paramref name="cpu"/>,
-    /// failing closed unless the article's title, Radeon Product Compatibility table and Windows 11 full package match.
-    /// </summary>
     internal static Latest? AmdReleaseNote(string html, string card, string? cpu, string? preferredUrl = null)
     {
         var titleMatch = AmdHtmlTitle().Match(html);
@@ -205,7 +174,6 @@ internal static partial class GpuDriverUpdate
         return new Latest("amd", version.Groups[1].Value, url, 0, Day(day), AmdReleaseKind(title));
     }
 
-    /// <summary>Whether an AMD release-notes page's Radeon Product Compatibility section lists the user's card or Ryzen/Athlon iGPU.</summary>
     internal static bool AmdReleaseNoteCovers(string html, string card, string? cpu)
     {
         var start = html.IndexOf("id=\"Compatibility\"", StringComparison.OrdinalIgnoreCase);
@@ -227,7 +195,6 @@ internal static partial class GpuDriverUpdate
         return false;
     }
 
-    /// <summary>The page's part under the accordion header naming the OS ("Windows 11 - 64-Bit Edition"), or null.</summary>
     private static string? AmdSection(string html, string os)
     {
         foreach (var part in html.Split("class=\"accordion-item\"", StringSplitOptions.None).Skip(1))
@@ -235,7 +202,6 @@ internal static partial class GpuDriverUpdate
         return null;
     }
 
-    /// <summary>Whether an Intel driver page lists the card ("Intel® Arc™ B580 Graphics") or the processor ("Intel® Core™ i7-12700K Processor (25M Cache, …)").</summary>
     internal static bool IntelCovers(string html, string card, string? cpu)
     {
         var products = IntelProducts(html);
@@ -245,14 +211,9 @@ internal static partial class GpuDriverUpdate
         return products.Any(product => exact.IsMatch(product));
     }
 
-    /// <summary>The products an Intel driver page says it is for.</summary>
     internal static IReadOnlyList<string> IntelProducts(string html) =>
         IntelProduct().Matches(html).Select(match => WebUtility.HtmlDecode(match.Groups[1].Value).Trim()).Where(name => name.Length > 0).Distinct().ToList();
 
-    /// <summary>
-    /// The processor's model as Intel's product lists write it ("i7-12700K", "155H", "N100"): the last part of its name with a
-    /// number in it, before " CPU @ 2.90GHz". Null without one.
-    /// </summary>
     internal static string? IntelCpuModel(string? cpu)
     {
         if (cpu is null) return null;
@@ -261,11 +222,6 @@ internal static partial class GpuDriverUpdate
             .LastOrDefault(part => part.Length >= 3 && part.Any(char.IsAsciiDigit) && !Ordinal().IsMatch(part));
     }
 
-    /// <summary>
-    /// The driver an Intel page offers: the version it installs, its gfx_win installer (whose name carries the version's last
-    /// two parts: gfx_win_101.9150.exe is 32.0.101.9150), the size and SHA-512 listed beside it, and the page's date.
-    /// Non-WHQL / Beta / Hotfix pages classify as Kind "hotfix"; WHQL pages stay "intel".
-    /// </summary>
     internal static Latest? IntelDriver(string html, string page)
     {
         var link = IntelLink().Match(html);
@@ -282,13 +238,11 @@ internal static partial class GpuDriverUpdate
             sha.Success ? sha.Groups[1].Value.ToLowerInvariant() : null, page);
     }
 
-    /// <summary>Whether an Intel download page is for a Non-WHQL / Hotfix / Beta build (ignoring Intel's generic FAQ disclaimer text).</summary>
     internal static bool IntelNonWhql(string html, string version) =>
         IntelNonWhqlNotes().IsMatch(html)
         || Regex.IsMatch(html, $@"(?:Graphics Driver|Version)\s+{Regex.Escape(version)}\s+(?:Non-WHQL|Hotfix|Beta)\b",
             RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
 
-    /// <summary>Every version row listed in Intel's previous/available versions table or selector on a download page, with its absolute Intel URL.</summary>
     internal static IReadOnlyList<(string Version, string Url)> IntelListedVersions(string html)
     {
         var list = new List<(string Version, string Url)>();
@@ -306,11 +260,6 @@ internal static partial class GpuDriverUpdate
         return list;
     }
 
-    /// <summary>
-    /// The package Intel's Chipset Device Software page offers (<see cref="ChipsetUpdate"/>): the version the page is for
-    /// (its DownloadVersion), its SetupChipset.exe on Intel's download server (not the release notes or a zip of the INF
-    /// files), and the SHA-256 listed in that download's own details. Null when the page names no installer or version.
-    /// </summary>
     internal static ChipsetUpdate.Package? IntelChipset(string html)
     {
         var version = IntelDownloadVersion().Match(html);
@@ -321,10 +270,8 @@ internal static partial class GpuDriverUpdate
         return new(version.Groups[1].Value, link.Value, sha.Success ? sha.Groups[1].Value.ToLowerInvariant() : null);
     }
 
-    /// <summary>A date the page shows, as the row reads it: the day, at local midnight.</summary>
     private static string? Day(DateTime? day) => day?.ToString("yyyy-MM-dd'T'00:00:00", CultureInfo.InvariantCulture);
 
-    /// <summary>"887 MB", "862.6 MB", "1.2 GB" as bytes, as the pages count them (1 MB = 1,000,000); 0 when it can't tell.</summary>
     internal static long Bytes(string? size)
     {
         var match = size is null ? Match.Empty : SizeText().Match(size);
@@ -332,13 +279,8 @@ internal static partial class GpuDriverUpdate
         return (long)(value * match.Groups[2].Value.ToUpperInvariant() switch { "GB" => 1e9, "MB" => 1e6, _ => 1e3 });
     }
 
-    /// <summary>A product name to compare: no maker, marks, "Graphics" or "Series", lower case ("AMD Radeon™ RX 9070 XT" and "AMD Radeon RX 9070 XT" are "radeon rx 9070 xt").</summary>
     internal static string Plain(string name) => Spaces().Replace(Noise().Replace(name, " "), " ").Trim().ToLowerInvariant();
 
-    /// <summary>
-    /// The name to look for, or null when it names no model: "AMD Radeon(TM) Graphics" ("radeon") or "Intel(R) UHD Graphics"
-    /// ("uhd") would match a page for some other chip.
-    /// </summary>
     private static string? Named(string? name) =>
         name is null || Plain(name) is not { Length: > 0 } plain || (!plain.Any(char.IsAsciiDigit) && !plain.Contains(' ')) ? null : plain;
 
@@ -348,7 +290,6 @@ internal static partial class GpuDriverUpdate
     [GeneratedRegex("data-json=\"([^\"]*)\"")]
     private static partial Regex DataJson();
 
-    // " w/ Radeon 780M Graphics", " with Radeon Graphics", " 8-Core Processor", " Processor".
     [GeneratedRegex(@"\s+(?:w/|with)\s.*$|\s+\d+-Core\s+Processor.*$|\s+Processor\b.*$", RegexOptions.IgnoreCase)]
     private static partial Regex AmdCpuTail();
 
@@ -421,7 +362,6 @@ internal static partial class GpuDriverUpdate
     [GeneratedRegex(@"SHA256:\s*([0-9a-fA-F]{64})\b")]
     private static partial Regex IntelSha256();
 
-    // " CPU @ 2.90GHz", " @ 1.10GHz", " CPU".
     [GeneratedRegex(@"\s+(?:CPU\b.*|@.*)$", RegexOptions.IgnoreCase)]
     private static partial Regex IntelCpuTail();
 
@@ -434,7 +374,6 @@ internal static partial class GpuDriverUpdate
     [GeneratedRegex(@"([\d.]+)\s*([KMG]B)", RegexOptions.IgnoreCase)]
     private static partial Regex SizeText();
 
-    // Marks (and AMD's page's U+FFFD and zero-width spaces), makers, and the words a name may or may not carry.
     [GeneratedRegex(@"\((?:R|TM)\)|[®™�​]|\b(?:AMD|ATI|Intel|Series|Graphics)\b", RegexOptions.IgnoreCase)]
     private static partial Regex Noise();
 

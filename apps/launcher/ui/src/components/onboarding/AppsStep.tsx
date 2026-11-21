@@ -54,10 +54,8 @@ export function AppsStep({ onFeedback }: { onFeedback: (feedback: Feedback) => v
 
   return (
     <>
-      {/* One tab stop, arrows move and choose (the radio pattern). */}
       <div className="exo-step-tiles" role="radiogroup" aria-label="Music service" onKeyDown={onServiceKey}>
         {SERVICES.map(({ id, label, Icon }) => (
-          // Not disabled while saving: a disabled tile would drop the focus the arrows just moved.
           <StepTile key={id} icon={<Icon size={22} />} title={label} radio selected={service === id} tabIndex={id === current ? 0 : -1}
             ariaDisabled={saving} onPress={() => void choose(id)} />
         ))}

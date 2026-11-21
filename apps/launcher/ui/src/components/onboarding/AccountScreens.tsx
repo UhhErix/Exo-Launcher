@@ -3,7 +3,6 @@ import { Button } from '../ui/Button'
 
 type Keys = (event: KeyboardEvent<HTMLElement>) => void
 
-/** The choice: create or sign in. After a session the service ended, it says so in one sentence. */
 export function ChooseScreen({ ended, onCreate, onSignIn, onKeyDown }: { ended: boolean; onCreate: () => void; onSignIn: () => void; onKeyDown: Keys }) {
   return (
     <div className="exo-ob-account" onKeyDown={onKeyDown}>
@@ -33,10 +32,6 @@ export function OfflineScreen({ onLater, onTryAgain, onSignOut, onKeyDown }: { o
   )
 }
 
-/**
- * A recovery code was issued and never typed back: the password makes a new one. It is never a dead end: Forgot your
- * password? resets it with a saved code, and Sign out of this PC goes back to Create or Sign in. A lock counts down.
- */
 export function NewCodeForm({ password, onPassword, error, busy, lockedSeconds, onSubmit, onForgot, onSignOut, onKeyDown }: {
   password: string; onPassword: (value: string) => void; error: string | null; busy: boolean; lockedSeconds: number
   onSubmit: (event: FormEvent) => void; onForgot: () => void; onSignOut: () => void; onKeyDown: Keys

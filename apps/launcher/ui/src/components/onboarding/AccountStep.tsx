@@ -14,27 +14,21 @@ const MIN_PASSWORD = 12
 const UNEXPECTED = "Exo's account service didn't answer. Try again in a moment."
 
 interface AccountStepProps {
-  /** The account exists and its recovery code, if one was issued, was typed back: the step is done. */
   onDone: () => void
-  /** Continue without an account while offline: the gate asks again when the service answers. */
   onLater: () => void
-  /** Every move of the step's screen table (lib/accountFlow.ts): setup shows its Back only on the choice. */
   onScreen?: (state: FlowState) => void
 }
 
-/** Escape goes back to the choice from a form; never from the code, a new code or the choice itself. */
 function accountEscape(event: KeyboardEvent<HTMLElement>, screen: AccountScreen, back: () => void) {
   if (event.key !== 'Escape' || !['create', 'signin', 'reset', 'offline'].includes(screen)) return
   event.preventDefault()
   back()
 }
 
-/** The lock countdown in m:ss. */
 function lockedLeft(lockedUntil: number | null, now: number): number {
   return lockedUntil === null ? 0 : Math.max(0, Math.ceil((lockedUntil - now) / 1000))
 }
 
-/** What an answer moves the table to. */
 function answerOf(outcome: ExoAccountOutcome, expectsCode: boolean): Extract<FlowEvent, { type: 'answer' }>['result'] {
   if (!outcome.ok) return outcome.offline ? 'offline' : 'refused'
   if (!expectsCode) return 'signedIn'
@@ -53,7 +47,6 @@ export function AccountStep({ onDone, onLater, onScreen }: AccountStepProps) {
   const [code, setCode] = useState<string | null>(null)
   const [takenSignIn, setTakenSignIn] = useState(false)
   const offlineFrom = useRef<'create' | 'signin' | 'reset' | 'newCode'>('create')
-  // Where Back on the reset form goes: Sign in, or the new-code step it was opened from.
   const resetFrom = useRef<'signin' | 'newCode'>('signin')
 
   function dispatch(event: FlowEvent) {
@@ -61,15 +54,12 @@ export function AccountStep({ onDone, onLater, onScreen }: AccountStepProps) {
     dispatchFlow(event)
   }
 
-  // The callers pass new functions each render: the effects read the latest through refs and run on the table's moves only.
   const latest = useRef({ onDone, onScreen })
   useEffect(() => { latest.current = { onDone, onScreen } })
   useEffect(() => { latest.current.onScreen?.(flow) }, [flow])
   useEffect(() => { if (flow.screen === 'signedIn') latest.current.onDone() }, [flow.screen])
-  // The state read after the step mounted: a code issued and never typed back makes a new one first.
   useEffect(() => { if (overview?.codePending && screen === 'choose') dispatch({ type: 'open', to: 'newCode' }) }, [overview?.codePending, screen])
 
-  // The lock countdown: the button stays disabled until Retry-After runs out (CLIENT.md 4.2).
   useEffect(() => {
     if (lockedUntil === null) return
     const timer = window.setInterval(() => setNow(Date.now()), 250)
@@ -92,12 +82,10 @@ export function AccountStep({ onDone, onLater, onScreen }: AccountStepProps) {
     setErrors({ form: outcome.message })
   }
 
-  /** One request from a form: busy while it runs, then the answer moves the table. */
   async function send(from: 'create' | 'signin' | 'reset' | 'newCode', call: () => Promise<ExoAccountOutcome>, expectsCode: boolean) {
     if (flow.busy || locked) return
     dispatch({ type: 'submit' })
     try {
-      // Counted while on its way, and its code on screen from the moment it lands (the sheet holds itself on both).
       const outcome = await sendAccountRequest(call)
       if (!outcome.ok) screenFailed(outcome)
       else { setPassword(''); setCode(outcome.recoveryCode ?? null) }
@@ -121,7 +109,6 @@ export function AccountStep({ onDone, onLater, onScreen }: AccountStepProps) {
     void send('signin', () => host.exoAccountSignIn(email, password), false)
   }
 
-  /** Sign out of this PC from the new-code step: the session goes, and the step starts at the choice again. */
   async function signOut() {
     if (flow.busy) return
     try {
@@ -188,7 +175,6 @@ export function AccountStep({ onDone, onLater, onScreen }: AccountStepProps) {
   )
 }
 
-/** Where Try again goes from offline: the form that found it, or Sign in after an address that is taken. */
 function offlineBack(from: 'create' | 'signin' | 'reset' | 'newCode', takenSignIn: boolean): 'create' | 'signin' | 'reset' | 'newCode' {
   return from === 'create' && takenSignIn ? 'signin' : from
 }

@@ -3,10 +3,45 @@
 // smaller components instead of raising the budget.
 // React Compiler runs at build (oxc-transform-react). Compiler-only lint rules
 // stay off: this app mirrors props into refs on purpose.
+import fs from 'node:fs'
+import path from 'node:path'
 import js from '@eslint/js'
 import reactHooks from 'eslint-plugin-react-hooks'
 import globals from 'globals'
 import tseslint from 'typescript-eslint'
+import { APP_ROOT, RATCHET_PATH, isAllowedComment } from '../tools/check-comments.mjs'
+
+const RATCHET_FILES = new Set(
+  fs.existsSync(RATCHET_PATH)
+    ? Object.keys(JSON.parse(fs.readFileSync(RATCHET_PATH, 'utf8')).files ?? {})
+    : [],
+)
+
+const EXO_PLUGIN = {
+  rules: {
+    'no-comments': {
+      meta: { type: 'problem', schema: [] },
+      create(context) {
+        const rel = path.relative(APP_ROOT, path.resolve(context.filename)).replaceAll('\\', '/')
+        if (RATCHET_FILES.has(rel)) return {}
+        const sourceCode = context.sourceCode
+        return {
+          Program() {
+            for (const comment of sourceCode.getAllComments()) {
+              const raw = sourceCode.text.slice(comment.range[0], comment.range[1])
+              if (!isAllowedComment(raw, comment.loc.start.line)) {
+                context.report({
+                  loc: comment.loc,
+                  message: 'Comments are banned in unbaselined/cleaned files; express intent in code, move design rationale to docs/adr/, or file an issue.',
+                })
+              }
+            }
+          },
+        }
+      },
+    },
+  },
+}
 
 export const COMPLEXITY_BUDGET = 20
 
@@ -84,8 +119,9 @@ export default tseslint.config(
       ecmaVersion: 2023,
       globals: { ...globals.browser, ...globals.es2023 },
     },
-    plugins: { 'react-hooks': reactHooks },
+    plugins: { 'react-hooks': reactHooks, exo: EXO_PLUGIN },
     rules: {
+      'exo/no-comments': 'error',
       'react-hooks/rules-of-hooks': 'error',
       'react-hooks/exhaustive-deps': 'error',
       complexity: ['error', { max: COMPLEXITY_BUDGET }],

@@ -43,6 +43,11 @@ jobs:
           npm ci --prefix ui --no-audit --no-fund
           npm run -s check --prefix ui
 
+      - name: Comment ratchet
+        run: |
+          node --test tools/check-comments.test.mjs
+          node tools/check-comments.mjs
+
       - name: Cloud Worker tests
         run: |
           npm ci --prefix cloud/updates --no-audit --no-fund

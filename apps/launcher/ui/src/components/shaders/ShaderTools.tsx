@@ -5,14 +5,9 @@ import { Switch } from '../Switch'
 import { Row, Section } from '../settings/parts'
 import { call, message, type Snapshot } from './shaderCall'
 
-/**
- * Settings › Library › Shaders: only the opt-in DLL recorder switch. First-launch compilation runs automatically
- * when you are away, and NVIDIA's cache setting is automated.
- */
 export function ShadersSection() {
   const [snap, setSnap] = useState<Snapshot | null>(null)
   const [error, setError] = useState<string | null>(null)
-  // Recording is Exo Shaders' own: without the add-on its row goes (unknown until asked: shown).
   const [present, setPresent] = useState(true)
   const read = useCallback(() => call('snapshot').then(next => setSnap(next as Snapshot | null)).catch((caught: unknown) => report(caught, 'ShaderTools.snapshot', { level: 'warn' })), [])
   useEffect(() => {

@@ -1,4 +1,3 @@
-// Order per AGENTS.md: Welcome, then the Exo account (required, no skip while the service answers), then Game clients.
 export const STEPS = [
   { id: 'welcome', title: 'Welcome to Exo' },
   { id: 'account', title: 'Exo account' },
@@ -18,18 +17,10 @@ export type MissingRuntime = { id: string; name: string }
 
 const JUNK_SCAN_STEPS: ReadonlySet<StepId> = new Set<StepId>(['discord', 'cleanup', 'pc'])
 
-/**
- * Setup's junk scan (seconds on a busy PC) runs once, when setup reaches Discord: the step before Clean up's, the only
- * one that can lead into it. It does not run on mount, so a PC that never gets there never pays for it.
- */
 export function junkScanDue(step: StepId, alreadyStarted: boolean): boolean {
   return !alreadyStarted && JUNK_SCAN_STEPS.has(step)
 }
 
-/**
- * Continue waits while the scan runs only on Discord (which leads straight into Clean up), so Clean up is never
- * skipped by a race and no earlier step waits.
- */
 export function waitsForJunkScan(step: StepId): boolean {
   return step === 'discord'
 }

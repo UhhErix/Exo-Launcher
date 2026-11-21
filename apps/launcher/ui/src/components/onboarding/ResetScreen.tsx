@@ -1,11 +1,6 @@
 import { useState, type FormEvent, type KeyboardEvent } from 'react'
 import { Button } from '../ui/Button'
 
-/**
- * Reset your password (CLIENT.md 4.1 E): email, the recovery code, and a new password. The account step sends it and
- * shows the new recovery code once (lib/accountFlow.ts), so the code screen is held like a sign-up's. Every PC signed in
- * to the account signs in again; the data stays.
- */
 export function ResetScreen({ initialEmail, busy, error, onSubmit, onBack, onKeyDown }: {
   initialEmail: string
   busy: boolean

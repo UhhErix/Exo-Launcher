@@ -1,9 +1,3 @@
-/**
- * The GitHub REST calls the Worker makes (README.md › Issues), all on one private repository. The token is the secret
- * GITHUB_REPORTS_TOKEN: a fine-grained token for that repository alone with Issues read and write. Without it there is no
- * client and the Worker only stores and counts. Nothing but issues, their comments and labels is touched.
- */
-
 export const REPO = 'UhhErix/Exo-Reports'
 const API = 'https://api.github.com'
 const TIMEOUT_MS = 8000
@@ -15,7 +9,6 @@ export class GitHubError extends Error {
   }
 }
 
-/** A client for REPO, or null when the token is not set (the Worker then files nothing). `env.fetcher` replaces fetch in tests. */
 export function gitHubOf(env) {
   const token = env.GITHUB_REPORTS_TOKEN
   if (typeof token !== 'string' || token.trim() === '') return null
@@ -49,7 +42,6 @@ export function gitHubOf(env) {
     updateIssue: (number, fields) => call('PATCH', `/issues/${number}`, fields),
     comment: (number, body) => call('POST', `/issues/${number}/comments`, { body }),
     addLabels: (number, labels) => call('POST', `/issues/${number}/labels`, { labels }),
-    /** Makes a label; one that already exists (422) is fine. */
     async ensureLabel(name, color = 'ededed') {
       try {
         await call('POST', '/labels', { name, color })

@@ -4,17 +4,11 @@ import type { LauncherSettings } from '../../lib/host'
 import { Wait, sample, times } from '../ui/Wait'
 import { Spinner } from '../ui/Spinner'
 
-/**
- * First run's last step, Best settings for this PC: the same steps as the PC room's (gpu/BestSetup.tsx), each a row that
- * turns its ring while it runs and takes a green check once set.
- */
 export function PcStep({ steps, running, landed, failed, settings, onSave }: {
-  /** Null while this PC is still being read. */
   steps: BestStep[] | null
   running: BestKey | null
   landed: ReadonlySet<BestKey>
   failed: Partial<Record<BestKey, string>>
-  /** Null until the settings are read; the switch waits for them. */
   settings: LauncherSettings | null
   onSave: (patch: Partial<LauncherSettings>) => Promise<boolean>
 }) {

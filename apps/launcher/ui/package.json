@@ -8,7 +8,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build && npm --prefix ../mouse run build && node scripts/build-cache.mjs record",
-    "check": "npm run -s typecheck && npm run -s contracts && npm run -s lint && npm run -s lint:css && npm run -s css:prune:check && npm run -s test",
+    "check": "npm run -s typecheck && npm run -s contracts && npm run -s lint && npm run -s lint:css && npm run -s css:prune:check && npm run -s test && node ../tools/check-comments.mjs",
     "typecheck": "tsc -p tsconfig.app.json --noEmit",
     "crawl": "node ../tools/ui-pass/crawl.mjs",
     "contracts": "node scripts/check-host-contract.mjs",

@@ -33,6 +33,7 @@ These fail the build or `check`. Fix the code, not the check; an exception goes 
 | No native `title=` tooltips | ESLint `no-restricted-syntax` on lowercase JSX elements (`ui/`, `mouse/`); `Button` drops `title` from its props |
 | One switch: an on/off is `components/Switch.tsx`; no native checkbox or radio and no hand-made `role="switch"` or `role="checkbox"` | ESLint `no-restricted-syntax` (`SWITCH_RULES` in `ui/eslint.config.js`; files still waiting are listed there with why) |
 | One button set: `.exo-set-btn` (`.is-primary`, `.is-danger`, `.is-compact`) for every button, `<Button variant="primary">` for a page's lone primary, `<Button variant="ghost">` for a quiet one; no raw `.button--*`, `.exo-ghost-btn` or retired chip classes | ESLint `BUTTON_RULES` in `ui/eslint.config.js`; `Button`'s `variant` takes only `primary` and `ghost` |
+| No prose comments in code: cleaned/new files allow 0 comments (only machine directives such as `// Generated from `, `design-disable-next-line`, `eslint-disable`, `@ts-*`, license headers); legacy files follow the shrinking ratchet; record excuses as GitHub issues and non-obvious design rationale in `docs/adr/` | `tools/check-comments.mjs` + `tools/comments-ratchet.json`, ESLint `exo/no-comments` in `ui/eslint.config.js`, and `/delete-comment` skill |
 
 ## Stack (shipping now)
 
