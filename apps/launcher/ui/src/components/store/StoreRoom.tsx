@@ -3,6 +3,7 @@ import { Wait, sample, times } from '../ui/Wait'
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import { Bookmark, CHECK_PATH, ChevronLeft, ChevronRight, Close, Refresh, Search } from '../../brand/icons'
 import { shouldReduceMotion } from '../../lib/motionPreference'
+import { useTrackArrows } from '../../lib/useTrackArrows'
 import { host, onHostEvent, type Game, type StoreHome, type StoreTile } from '../../lib/host'
 import { onPageActivityChanged, pageIsActive } from '../../lib/pageActivity'
 import { report } from '../../lib/report'
@@ -303,31 +304,14 @@ function HeroLogo({ tile }: { tile: StoreTile }) {
 
 /** A shelf: one horizontal row, scrolled by its arrows (a page at a time) or the wheel. Arrows change only when an edge is reached or left. */
 function Row({ id, title, count, shining, children }: { id: string; title: string; count: number; shining: boolean; children: ReactNode }) {
-  const track = useRef<HTMLDivElement>(null)
-  const [edges, setEdges] = useState({ start: true, end: false })
-  const measure = useCallback(() => {
-    const el = track.current
-    if (!el) return
-    const start = el.scrollLeft < 4
-    const end = el.scrollLeft + el.clientWidth >= el.scrollWidth - 4
-    setEdges(e => e.start === start && e.end === end ? e : { start, end })
-  }, [])
-  useEffect(() => {
-    measure()
-    const el = track.current
-    if (!el) return
-    const observer = new ResizeObserver(measure)
-    observer.observe(el)
-    return () => observer.disconnect()
-  }, [measure, count])
-  const page = (dir: 1 | -1) => track.current?.scrollBy({ left: dir * track.current.clientWidth * 0.9, behavior: shouldReduceMotion() ? 'auto' : 'smooth' })
+  const { trackRef: track, edges, measure, page } = useTrackArrows<HTMLDivElement>(count)
   return (
     <section className={`exo-store-row${shining ? ' exo-shine' : ''}`} aria-labelledby={`exo-store-${id}`}>
       <div className="exo-shelf-head">
         <h2 id={`exo-store-${id}`} className="exo-shelf-title">{title}</h2>
         <span className="exo-store-arrows">
-          <button type="button" className="exo-set-btn" aria-label={`Back in ${title}`} disabled={edges.start} onClick={() => page(-1)}><ChevronLeft size={14} /></button>
-          <button type="button" className="exo-set-btn" aria-label={`More ${title}`} disabled={edges.end} onClick={() => page(1)}><ChevronRight size={14} /></button>
+          <button type="button" className="exo-set-btn" aria-label={`Back in ${title}`} disabled={edges.start} onClick={() => page(-1, 0.9)}><ChevronLeft size={14} /></button>
+          <button type="button" className="exo-set-btn" aria-label={`More ${title}`} disabled={edges.end} onClick={() => page(1, 0.9)}><ChevronRight size={14} /></button>
         </span>
       </div>
       <div ref={track} className="exo-store-track" onScroll={measure}>{children}</div>

@@ -1,7 +1,8 @@
 import { memo, useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
-import { Apps, Close, More, Play, Search } from '../../brand/icons'
+import { Apps, ChevronLeft, ChevronRight, Close, More, Play, Search } from '../../brand/icons'
 import { host, resolvePrimaryAction, shelfAction, type Game, type InstallProgress } from '../../lib/host'
 import { shouldReduceMotion } from '../../lib/motionPreference'
+import { useTrackArrows } from '../../lib/useTrackArrows'
 import { installVerb, transferShare } from '../../lib/utils'
 import { CoverArt, HeroWash } from '../CoverArt'
 import { GameLogo } from '../GameLogo'
@@ -12,21 +13,18 @@ import { GiftsPill } from './GiftsShelf'
 import type { LibraryTab } from './LibraryHead'
 
 export type HomeDeckProps = {
-  tab: LibraryTab
   onTab: (next: LibraryTab) => void
   query: string
   onQuery: (next: string) => void
   searchOpen: boolean
   onSearchOpenChange: (open: boolean) => void
   games: Game[]
-  updatesCount: number
   active: boolean
   blocked: boolean
   transferFor: (game: Game) => InstallProgress | null
   startingId: string | null
   onOpen: (game: Game) => void
   onPlay: (game: Game) => void
-  onProperties: (game: Game) => void
   onMenu: (at: GameMenuAt) => void
   tools: ReactNode
 }
@@ -47,16 +45,12 @@ function HeroLockup({
   starting,
   onPlay,
   onOpen,
-  onProperties,
-  onMenu,
 }: {
   game: Game
   transfer: InstallProgress | null
   starting: boolean
   onPlay: () => void
   onOpen: () => void
-  onProperties: () => void
-  onMenu: (at: GameMenuAt) => void
 }) {
   const working = !!transfer?.isActive
   const verb = primaryVerb(game)
@@ -86,17 +80,11 @@ function HeroLockup({
             </>
           )}
         </button>
-        <button type="button" className="exo-glass exo-home-details-btn" onClick={onOpen}>
-          Details
-        </button>
         <button
           type="button"
           className="exo-glass exo-home-more-btn"
-          aria-label={`Options for ${game.title}`}
-          onClick={(event) => {
-            if (game.installed) onProperties()
-            else onMenu(menuAt(game, event))
-          }}
+          aria-label={`Details for ${game.title}`}
+          onClick={onOpen}
         >
           <More size={16} />
         </button>
@@ -222,7 +210,6 @@ function InlineSearch({
 }
 
 export const HomeDeck = memo(function HomeDeck({
-  tab,
   onTab,
   query,
   onQuery,
@@ -235,12 +222,11 @@ export const HomeDeck = memo(function HomeDeck({
   startingId,
   onOpen,
   onPlay,
-  onProperties,
   onMenu,
   tools,
 }: HomeDeckProps) {
   const [focusedId, setFocusedId] = useState<string | null>(() => games[0]?.id ?? null)
-  const trackRef = useRef<HTMLDivElement>(null)
+  const { trackRef, edges, measure, page } = useTrackArrows<HTMLDivElement>(games.length, { wheel: true })
   const activeIdx = Math.max(0, games.findIndex((item) => item.id === focusedId))
   const focused = games[activeIdx] ?? games[0] ?? null
 
@@ -258,7 +244,7 @@ export const HomeDeck = memo(function HomeDeck({
       const card = trackRef.current?.querySelector<HTMLElement>(`[data-deck-id="${CSS.escape(id)}"]`)
       card?.scrollIntoView({ behavior: shouldReduceMotion() ? 'instant' : 'smooth', inline: 'nearest', block: 'nearest' })
     })
-  }, [])
+  }, [trackRef])
 
   const step = useCallback((delta: number) => {
     if (games.length < 2) return
@@ -300,8 +286,6 @@ export const HomeDeck = memo(function HomeDeck({
               starting={focused.id === startingId}
               onPlay={() => onPlay(focused)}
               onOpen={() => onOpen(focused)}
-              onProperties={() => onProperties(focused)}
-              onMenu={onMenu}
             />
           ) : (
             <div className="exo-home-hero" />
@@ -319,23 +303,39 @@ export const HomeDeck = memo(function HomeDeck({
 
       <div className="exo-home-lower">
         {games.length > 0 ? (
-          <div ref={trackRef} className="exo-deck-track" role="region" aria-label="Games">
-            {games.map((item) => (
-              <PosterCard
-                key={item.id}
-                game={item}
-                isActive={focused?.id === item.id}
-                transfer={transferFor(item)}
-                onHover={() => setFocusedId(item.id)}
-                onSelect={() => focusAndReveal(item.id)}
-                onOpen={() => onOpen(item)}
-                onMenu={onMenu}
-              />
-            ))}
+          <div
+            className="exo-deck-rail"
+            data-can-prev={!edges.start || undefined}
+            data-can-next={!edges.end || undefined}
+          >
+            {!edges.start ? (
+              <button type="button" className="exo-glass exo-deck-arrow is-prev" aria-label="Previous games" onClick={() => page(-1, 0.8)}>
+                <ChevronLeft size={16} />
+              </button>
+            ) : null}
+            <div ref={trackRef} className="exo-deck-track" role="region" aria-label="Games" onScroll={measure}>
+              {games.map((item) => (
+                <PosterCard
+                  key={item.id}
+                  game={item}
+                  isActive={focused?.id === item.id}
+                  transfer={transferFor(item)}
+                  onHover={() => setFocusedId(item.id)}
+                  onSelect={() => focusAndReveal(item.id)}
+                  onOpen={() => onOpen(item)}
+                  onMenu={onMenu}
+                />
+              ))}
+            </div>
+            {!edges.end ? (
+              <button type="button" className="exo-glass exo-deck-arrow is-next" aria-label="Next games" onClick={() => page(1, 0.8)}>
+                <ChevronRight size={16} />
+              </button>
+            ) : null}
           </div>
         ) : (
           <div className="exo-home-empty">
-            <p>{trimmedQuery ? `No games match “${trimmedQuery}”.` : tab === 'updates' ? 'Everything is up to date.' : 'No installed games yet.'}</p>
+            <p>{trimmedQuery ? `No games match “${trimmedQuery}”.` : 'No games yet.'}</p>
             {trimmedQuery ? (
               <button type="button" className="exo-set-btn" onClick={() => { onQuery(''); onSearchOpenChange(false) }}>
                 Clear search

@@ -243,26 +243,12 @@ function LibraryRefreshNotice({
   )
 }
 
-function shelfView(tab: LibraryTab, showHidden: boolean, hidden: Game[], allGrid: Game[], installed: Game[], updates: Game[]) {
+function shelfView(showHidden: boolean, hidden: Game[], allGrid: Game[]) {
   if (showHidden) {
     return {
       heading: 'Hidden games',
       games: hidden,
       note: hidden.length ? null : 'No hidden games',
-    }
-  }
-  if (tab === 'installed') {
-    return {
-      heading: 'Installed',
-      games: installed,
-      note: installed.length ? null : 'No installed games yet',
-    }
-  }
-  if (tab === 'updates') {
-    return {
-      heading: 'Updates',
-      games: updates,
-      note: updates.length ? null : 'Everything is up to date',
     }
   }
   return {
@@ -284,12 +270,10 @@ export const LibraryPane = memo(function LibraryPane(props: LibraryPaneProps) {
   const [homeSearchOpen, setHomeSearchOpen] = useState(false)
   const [showHidden, setShowHidden] = useState(false)
   const { playing, games } = props
-  const installedGames = useMemo(() => games.filter(game => game.installed), [games])
-  const updateGames = useMemo(() => games.filter(game => game.updateAvailable), [games])
   const grid = useMemo(() => withFolders(games, games, folders), [games, folders])
   const search = useLibrarySearch(
     games,
-    shelfView(tab, showHidden, props.hidden, grid, installedGames, updateGames),
+    shelfView(showHidden, props.hidden, grid),
     showHidden,
   )
   const { shelf, found } = search
@@ -298,10 +282,8 @@ export const LibraryPane = memo(function LibraryPane(props: LibraryPaneProps) {
     if (search.query.trim()) {
       return shelf.games.filter((item): item is Game => !isFolderTile(item))
     }
-    if (tab === 'installed') return installedGames
-    if (tab === 'updates') return updateGames
     return playing.length ? playing : games.slice(0, 20)
-  }, [search.query, shelf.games, tab, installedGames, updateGames, playing, games])
+  }, [search.query, shelf.games, playing, games])
   const openSearchView = useCallback(() => {
     if (showingHome) {
       setHomeSearchOpen(true)
@@ -532,10 +514,8 @@ export const LibraryPane = memo(function LibraryPane(props: LibraryPaneProps) {
         {!showingHome ? (
           <LibraryHead
             empty={props.empty}
-            tab={tab}
-            onTab={switchTab}
+            onBack={() => switchTab('home')}
             total={games.length}
-            updatesCount={updateGames.length}
             found={found}
             query={search.query}
             onQuery={next => { if (showHidden && next) setShowHidden(false); search.setQuery(next) }}
@@ -567,21 +547,18 @@ export const LibraryPane = memo(function LibraryPane(props: LibraryPaneProps) {
           />
         ) : showingHome ? (
           <HomeDeck
-            tab={tab}
             onTab={switchTab}
             query={search.query}
             onQuery={search.setQuery}
             searchOpen={homeSearchOpen}
             onSearchOpenChange={setHomeSearchOpen}
             games={deckGames}
-            updatesCount={updateGames.length}
             active={active && !covered}
             blocked={blocked}
             transferFor={props.transferFor}
             startingId={props.startingId}
             onOpen={onOpen}
             onPlay={props.onPlay}
-            onProperties={props.onProperties}
             onMenu={openMenu}
             tools={tools}
           />

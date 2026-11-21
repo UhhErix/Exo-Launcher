@@ -147,7 +147,7 @@ function moveFocus(dir: Direction) {
 function cycleSubTabs(delta: -1 | 1) {
   const scope = resolveActiveScope()
   if (!scope) return
-  const group = scope.querySelector<HTMLElement>('.exo-home-tabs, .exo-library-tabs, .exo-store-top .exo-shelf-chips, .exo-dc-tabs, .exo-settings-nav, .exo-shelf-chips, [role="tablist"]')
+  const group = scope.querySelector<HTMLElement>('.exo-home-tabs, .exo-store-top .exo-shelf-chips, .exo-dc-tabs, .exo-settings-nav, .exo-shelf-chips, [role="tablist"]')
   if (!group || !isVisibleElement(group)) return
   const buttons = [...group.querySelectorAll<HTMLElement>('button:not(:disabled), [role="tab"]:not([aria-disabled="true"])')].filter(isVisibleElement)
   if (buttons.length < 2) return
@@ -182,20 +182,11 @@ function triggerBack(onBackFallback: () => void) {
     popovers[popovers.length - 1].hidePopover()
     return
   }
-  const subBack = document.querySelector<HTMLElement>('.exo-devices-back button, .exo-music-back, .exo-st-back, .exo-sgp-back')
+  const subBack = document.querySelector<HTMLElement>('.exo-devices-back button, .exo-music-back, .exo-st-back, .exo-sgp-back, .exo-library-back')
   if (subBack && isVisibleElement(subBack)) {
     subBack.click()
     requestAnimationFrame(() => focusRoomPrimary())
     return
-  }
-  const allGamesTabs = document.querySelector<HTMLElement>('.exo-library-tabs')
-  if (allGamesTabs && isVisibleElement(allGamesTabs)) {
-    const recent = allGamesTabs.querySelector<HTMLElement>('button')
-    if (recent && recent.getAttribute('aria-pressed') !== 'true') {
-      recent.click()
-      requestAnimationFrame(() => focusRoomPrimary())
-      return
-    }
   }
   const wasSettings = !!document.querySelector('.exo-set-room:not([hidden]):not(.is-leaving)')
   const esc = new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true })
@@ -231,7 +222,7 @@ function triggerConfirm() {
 function triggerViewOptions() {
   const scope = resolveActiveScope()
   if (!scope) return
-  const optionsBtn = scope.querySelector<HTMLElement>('.exo-home-more-btn, .exo-game-tool[aria-label="Properties"], .exo-library-tabs button:last-child')
+  const optionsBtn = scope.querySelector<HTMLElement>('.exo-home-more-btn, .exo-game-tool[aria-label="Properties"]')
   if (optionsBtn && isVisibleElement(optionsBtn)) optionsBtn.click()
 }
 
