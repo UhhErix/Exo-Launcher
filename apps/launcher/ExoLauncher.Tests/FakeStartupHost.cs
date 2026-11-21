@@ -122,6 +122,7 @@ internal sealed class FakeStartupHost : IStartupHost
     private bool NeedsWindows(StartupChange change) => change switch
     {
         SetReg { Hive: Hive.Machine } => true,
+        DeleteFile del when del.Path.StartsWith(FolderPath(true), StringComparison.OrdinalIgnoreCase) => true,
         // `schtasks /change` as the user fails for a task an installer made with administrator rights.
         SetTask task => AdminTasks.Contains(task.Path),
         _ => false,
@@ -147,6 +148,11 @@ internal sealed class FakeStartupHost : IStartupHost
                 break;
             case MoveFile move:
                 if (Files.Remove(move.From, out var bytes)) Files[move.To] = bytes;
+                break;
+            case DeleteFile del:
+                Files.Remove(del.Path);
+                UserFolder.RemoveAll(f => Path.Combine(FolderPath(false), f.Name).Equals(del.Path, StringComparison.OrdinalIgnoreCase));
+                CommonFolder.RemoveAll(f => Path.Combine(FolderPath(true), f.Name).Equals(del.Path, StringComparison.OrdinalIgnoreCase));
                 break;
         }
     }
@@ -177,6 +183,7 @@ internal sealed class FakeStartupHost : IStartupHost
         ? System.Text.Encoding.UTF8.GetBytes(t.Program + "|" + t.Arguments) : null;
 
     public IReadOnlyList<FolderFile> FolderFiles(bool machine) => machine ? CommonFolder : UserFolder;
+    public string FolderPath(bool machine) => machine ? @"C:\ProgramData\Microsoft\Windows\Start Menu\Programs\Startup" : @"C:\fake-user\AppData\Roaming\Microsoft\Windows\Start Menu\Programs\Startup";
     public IReadOnlyList<PackageTaskDecl> PackageTasks() => Packages;
     public string? Foreground() => ForegroundProgram;
 
@@ -204,6 +211,7 @@ internal sealed class FakeStartupHost : IStartupHost
     bool IStartupHost.SecurityKnown => SecurityKnown;
 
     public IReadOnlyList<string> SecurityPrograms() => Security;
+    public void EnsureSecurityReady(TimeSpan timeout) { }
 
     // ---- files ----
 
@@ -233,7 +241,9 @@ internal sealed class FakeStartupHost : IStartupHost
     public byte[]? ReadBytes(string path) => Files.GetValueOrDefault(path);
     public void WriteBytes(string path, byte[] bytes) => Files[path] = bytes;
     public void DeleteFile(string path) => Files.Remove(path);
-    public bool FileExists(string path) => Files.ContainsKey(path);
+    public bool FileExists(string path) => Files.ContainsKey(path)
+        || UserFolder.Any(f => Path.Combine(FolderPath(false), f.Name).Equals(path, StringComparison.OrdinalIgnoreCase))
+        || CommonFolder.Any(f => Path.Combine(FolderPath(true), f.Name).Equals(path, StringComparison.OrdinalIgnoreCase));
 
     /// <summary>Whether a file's drive is a local fixed one: on by default; a test answers false for a network share.</summary>
     internal Func<string, bool> DriveFixed { get; set; } = _ => true;

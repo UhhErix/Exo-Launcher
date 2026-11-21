@@ -31,7 +31,7 @@ internal sealed class JunkAutoClean(AppServices services) : IDisposable
     /// <summary>The kinds that go each week, after the day's: "bin-old" is the Recycle Bin's month-old items, never all of it.</summary>
     internal static readonly IReadOnlyList<string> WeeklyKinds = ["bin-old"];
 
-    internal static readonly TimeSpan Every = TimeSpan.FromDays(1), Weekly = TimeSpan.FromDays(7), BackupKept = TimeSpan.FromDays(3), BinKept = TimeSpan.FromDays(30);
+    internal static readonly TimeSpan Every = TimeSpan.FromDays(1), Weekly = TimeSpan.FromDays(7), BackupKept = TimeSpan.FromDays(1), BinKept = TimeSpan.FromDays(30);
     internal const long Big = 1_000_000_000;
 
     /// <summary>A kind that goes by itself; every other one (the whole Recycle Bin), and any added later, waits for a press.</summary>

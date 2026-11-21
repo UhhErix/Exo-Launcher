@@ -11,10 +11,6 @@ export function gpuOffers(vendor: GpuVendor | null | undefined, workstation = fa
   return {
     /** NVIDIA's Game Ready or Studio beside Update; an RTX / Quadro card gets the one Enterprise driver. */
     driverType: vendor === 'nvidia' && !workstation,
-    /** NVIDIA Control Panel's Default or NVIDIA color settings. */
-    outputColor: vendor === 'nvidia',
-    /** NVIDIA Profile Inspector's file brought into Exo's profile. */
-    profileImport: vendor === 'nvidia',
     /** Intel's Low latency choice on Exo's profile row. */
     lowLatency: vendor === 'intel',
     /** AMD's Fluid Motion Frames 3 preview (its row still asks the driver). */
@@ -51,7 +47,3 @@ export const deviceHasPage = (kind: PeripheralKind, lab: boolean | null | undefi
 
 /** Properties › Compress: a game Exo will never compress (the PC list leaves it out too) has no row. */
 export const compressShown = (compress: Pick<CompressState, 'state'> | null | undefined) => !!compress && compress.state !== 'refused'
-
-/** "Also in games with anti-cheat" follows upscaler updates, and stays shown while on so global consent can still be revoked. */
-export const upscalerAntiCheatShown = (autoUpdate: boolean | null | undefined, everywhere?: boolean | null) =>
-  autoUpdate !== false || everywhere === true

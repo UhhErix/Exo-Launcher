@@ -158,11 +158,9 @@ export function BestSetup({ profile, health, tuning, drives, screen, settings, o
     return words ? { ok: false, message: words } : { ok: true }
   }
 
-  const [showDone, setShowDone] = useState(false)
   if (!profile || !health || steps.length === 0) return null
   const pendingSteps = steps.filter(step => !step.done)
-  const doneSteps = steps.filter(step => step.done)
-  const visibleSteps = showDone ? steps : pendingSteps
+  if (pendingSteps.length === 0 && !error) return null
   return (
     <section className="exo-pc-best" aria-label="Steps">
       {pendingSteps.length > 0 ? (
@@ -170,9 +168,9 @@ export function BestSetup({ profile, health, tuning, drives, screen, settings, o
           <ActionButton className="exo-set-btn is-primary" timeoutMs={null} why="none" context="BestSetup.run" onPress={run}>Use best settings</ActionButton>
         </SectionActions>
       ) : null}
-      {visibleSteps.length > 0 ? (
+      {pendingSteps.length > 0 ? (
         <ul className="exo-pc-best-steps">
-          {visibleSteps.map(step => (
+          {pendingSteps.map(step => (
             <li key={step.key}>
               <span>{step.what}</span>
               {running === step.key ? <Spinner label={`Setting ${step.what}`} />
@@ -181,11 +179,6 @@ export function BestSetup({ profile, health, tuning, drives, screen, settings, o
             </li>
           ))}
         </ul>
-      ) : null}
-      {doneSteps.length > 0 ? (
-        <button type="button" className="exo-pc-best-done-toggle" onClick={() => setShowDone(v => !v)}>
-          {doneSteps.length} already optimal · {showDone ? 'Hide' : 'Show'}
-        </button>
       ) : null}
       {error ? <ErrorNote message={error} /> : null}
     </section>

@@ -6,12 +6,6 @@ import { Button } from '../ui/Button'
 import { RECOVERY_CODE_LENGTH, normalizeRecoveryCode, recoveryCodeConfirmed } from './accountCode'
 import { errorText } from '../../lib/errorWords'
 
-/**
- * The recovery code, shown once (CLIENT.md 4.1 C): six groups of four, Copy, Save as text file, and a typed confirmation.
- * Continue stays disabled until the typed text reads back as the same 24 characters. Continue tells the host the code was
- * confirmed (the session stops waiting on it) and reads the account state again before the screen goes, so nothing that
- * hosts it can close under it first. While it shows, the account gate leaves this code to it (recoveryCodeShown).
- */
 export function RecoveryCodeScreen({ code, onDone, onKeyDown }: { code: string; onDone: () => void; onKeyDown: (event: KeyboardEvent<HTMLElement>) => void }) {
   const [typed, setTyped] = useState('')
   const [note, setNote] = useState<string | null>(null)
@@ -28,7 +22,6 @@ export function RecoveryCodeScreen({ code, onDone, onKeyDown }: { code: string; 
       if (!answer.ok) throw new Error('The code was not marked as confirmed.')
       await refreshAccount()
     } catch (error) {
-      // The code stays on screen: leaving now would bring a new code at the next start for a code the player saved.
       report(error, 'RecoveryCodeScreen.confirm', { level: 'warn' })
       setFailed(true)
       setFinishing(false)

@@ -199,4 +199,20 @@ public sealed class DeletionGateTests : IDisposable
         Assert.NotNull(DeletionGate.Refusal(documents, clean: true, owners: null, Policy()));
         Assert.Null(DeletionGate.Refusal(Path.Combine(documents, "Other"), clean: true, owners: null, Policy()));
     }
+
+    [Fact]
+    public void Browser_session_files_are_kept_from_junk_clean_but_allowed_for_uninstall_recycle()
+    {
+        var folder = Path.Combine(_root, "Temp", "UninstalledElectronApp");
+        var cookies = File(@"Temp\UninstalledElectronApp\Cookies");
+        File(@"Temp\UninstalledElectronApp\Local State");
+        var ssh = File(@"Temp\UninstalledElectronApp\.ssh\id_ed25519");
+
+        Assert.NotNull(DeletionGate.Check(cookies, policy: Policy(), allowAppBrowserFiles: false));
+        Assert.NotNull(DeletionGate.Check(folder, policy: Policy(), allowAppBrowserFiles: false));
+        Assert.Null(DeletionGate.Check(cookies, policy: Policy(), allowAppBrowserFiles: true));
+        // Even with allowAppBrowserFiles: true, SSH keys / credentials / game saves inside a folder remain blocked.
+        Assert.NotNull(DeletionGate.Check(ssh, policy: Policy(), allowAppBrowserFiles: true));
+        Assert.NotNull(DeletionGate.Check(folder, policy: Policy(), allowAppBrowserFiles: true));
+    }
 }

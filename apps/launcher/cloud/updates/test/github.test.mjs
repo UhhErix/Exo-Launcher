@@ -11,7 +11,7 @@
 import assert from 'node:assert/strict'
 import { createHash } from 'node:crypto'
 import { afterEach, beforeEach, test } from 'node:test'
-import { CHECK_SECONDS, STATE_KEY, compactRelease, fill, parseSha256File } from '../src/github.js'
+import { CHECK_SECONDS, STATE_KEY, compactRelease, fill, isGitHubApiUrl, parseSha256File } from '../src/github.js'
 
 const worker = (await import('../src/worker.js')).default
 const ORIGIN = 'https://updates.test'
@@ -560,6 +560,31 @@ test('a pack hash GitHub contradicts, or a files.json for another version, refus
   })
 })
 
+test('same-tag delta backfill adds filesJson and filesPack to latest.json without re-announcing', async () => {
+  const mirror = r2()
+  seed(mirror, 'v3.27.0')
+  const rel = deltaRelease('v3.27.0')
+  use(github({ latest: rel, trees: { 'v3.27.0': tree('3.27.0') } }))
+  const env = { MIRROR: mirror, DISCORD_WEBHOOK_LAUNCHER: 'https://discord.com/api/webhooks/1/abc' }
+  let posted = 0
+  const prevFetch = globalThis.fetch
+  globalThis.fetch = async (url, init) => {
+    if (new URL(String(url)).hostname === 'discord.com') {
+      posted++
+      return Response.json({ id: '123456789012345678' })
+    }
+    return prevFetch(url, init)
+  }
+  const { json } = await ask('/v1/launcher/latest', env)
+  const body = json()
+  assert.equal(body.tag, 'v3.27.0')
+  assert.equal(body.files.filesJson, `${ORIGIN}/v1/launcher/download/v3.27.0/files.json`)
+  assert.equal(body.files.filesPack, `${ORIGIN}/v1/launcher/download/v3.27.0/files.pack`)
+  assert.equal(posted, 0)
+  assert.ok(!mirror.objects.has('_github/announce/v3.27.0'))
+  assert.equal(mirror.text('launcher/v3.27.0/files.pack'), '0123456789abcdefghij')
+})
+
 // ---- the release card -----------------------------------------------------------------------------------------------
 test('the first sight of a new release posts its card once; later polls and the announce workflow post nothing more', async () => {
   const mirror = r2()
@@ -821,4 +846,12 @@ test('a changelog whose three promotion writes failed is reconciled on the next 
   await worker.scheduled({}, { MIRROR: mirror }, tick2)
   await tick2.settle()
   assert.equal(mirror.text('launcher/CHANGELOG.md'), '## 3.28.0 — newer\n')
+})
+
+test('isGitHubApiUrl only matches exact https://api.github.com host', () => {
+  assert.equal(isGitHubApiUrl('https://api.github.com/repos/UhhErix/Exo-Launcher/releases/latest'), true)
+  assert.equal(isGitHubApiUrl('https://api.github.com:443/repos/UhhErix/Exo-Launcher/releases/latest'), true)
+  assert.equal(isGitHubApiUrl('https://api.github.com.evil.com/repos/UhhErix/Exo-Launcher'), false)
+  assert.equal(isGitHubApiUrl('http://api.github.com/repos/UhhErix/Exo-Launcher'), false)
+  assert.equal(isGitHubApiUrl('not-a-url'), false)
 })

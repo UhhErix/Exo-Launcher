@@ -17,7 +17,8 @@ const API = 'https://api.github.com'
 const RAW = 'https://raw.githubusercontent.com'
 const TAG = /^v\d{1,4}\.\d{1,4}\.\d{1,4}$/
 const SHA256 = /^[0-9a-f]{64}$/
-const HEADERS = { 'user-agent': 'exo-updates (+https://getexo.app)', 'x-github-api-version': '2022-11-28' }
+const AGENT = { 'user-agent': 'exo-updates (+https://getexo.app)' }
+const HEADERS = { ...AGENT, 'x-github-api-version': '2022-11-28' }
 /** GitHub is asked about the newest release at most this often, all edges together. */
 export const CHECK_SECONDS = 300
 /** The check's state: when GitHub was last asked, its ETag, and the release it named. */
@@ -64,11 +65,21 @@ async function sha256Of(bytes) {
   return hex(await crypto.subtle.digest('SHA-256', bytes))
 }
 
-/** A request to GitHub with a time limit; null when it fails or takes too long. */
+export function isGitHubApiUrl(url) {
+  try {
+    const parsed = new URL(url)
+    return parsed.protocol === 'https:' && parsed.hostname === 'api.github.com' && (parsed.port === '' || parsed.port === '443')
+  } catch {
+    return false
+  }
+}
+
+/** A request to GitHub with a time limit; null when it fails or takes too long. Sends GitHub API headers only to api.github.com. */
 async function ask(url, init = {}) {
   const signal = typeof AbortSignal.timeout === 'function' ? AbortSignal.timeout(ASK_MS) : undefined
+  const baseHeaders = isGitHubApiUrl(url) ? HEADERS : AGENT
   try {
-    return await fetch(url, { ...init, headers: { ...HEADERS, ...(init.headers ?? {}) }, signal })
+    return await fetch(url, { ...init, headers: { ...baseHeaders, ...(init.headers ?? {}) }, signal })
   } catch {
     return null
   }
@@ -231,12 +242,22 @@ export function parseSha256File(content, names) {
 }
 
 /** A GitHub asset's bytes, held to its recorded size and, when GitHub recorded one, its SHA-256. */
+async function assetBytesDetail(asset, limit) {
+  if (!asset || asset.size > limit) return { bytes: null, reason: asset ? `size=${asset.size}>${limit}` : 'missing' }
+  const response = await ask(asset.url)
+  if (!response) return { bytes: null, reason: 'net' }
+  if (response.status !== 200) {
+    await response.body?.cancel().catch(() => {})
+    return { bytes: null, reason: `status=${response.status}` }
+  }
+  const bytes = await bytesOf(response, limit)
+  if (!bytes || bytes.byteLength !== asset.size) return { bytes: null, reason: `len=${bytes?.byteLength ?? 'null'}/${asset.size}` }
+  if (asset.sha256 && (await sha256Of(bytes)) !== asset.sha256) return { bytes: null, reason: 'digest-mismatch' }
+  return { bytes, reason: null }
+}
+
 async function assetBytes(asset, limit) {
-  if (!asset || asset.size > limit) return null
-  const bytes = await bytesOf(await ask(asset.url), limit)
-  if (!bytes || bytes.byteLength !== asset.size) return null
-  if (asset.sha256 && (await sha256Of(bytes)) !== asset.sha256) return null
-  return bytes
+  return (await assetBytesDetail(asset, limit)).bytes
 }
 
 /** A file from the tag's committed tree, through raw.githubusercontent.com. */
@@ -284,9 +305,10 @@ export async function materialize(release, env) {
   if (assets.setup.size <= 0 || assets.setup.size > MAX_FILE_BYTES) return { error: `${tag}'s installer size is out of range` }
   // GitHub's own SHA-256 of the upload is the check that doesn't come from the release's files: no digest, no release.
   if (!assets.setup.sha256) return { error: `GitHub recorded no SHA-256 for ${tag}'s installer` }
-  const shaBytes = await assetBytes(assets.sha256, LIMITS.sha256)
+  const shaResult = await assetBytesDetail(assets.sha256, LIMITS.sha256)
+  const shaBytes = shaResult.bytes
   const hash = shaBytes ? parseSha256File(text(shaBytes), [assets.setup.name, NAMES.setup]) : null
-  if (!hash) return { error: `${tag}'s .sha256 could not be read or does not name the installer` }
+  if (!hash) return { error: `${tag}'s .sha256 could not be read (${shaResult.reason ?? 'bad-parse'}) or does not name the installer` }
   if (assets.setup.sha256 !== hash) return { error: `${tag}'s .sha256 is not GitHub's digest of the installer` }
 
   // What the apps read is "<hash>  ExoLauncher-Setup.exe", as Build-Release writes it: the name the app asks for.
@@ -337,6 +359,30 @@ export async function materialize(release, env) {
   return { manifest: { schema: 2, app: 'launcher', tag, version, files } }
 }
 
+/** Backfills files.json + files.pack for an already-promoted release whose setup digest already matches the mirror. */
+async function materializeDelta(release, current, env) {
+  const tag = release.tag
+  const assets = assetsOf(release)
+  if (!assets.filesJson || !assets.filesPack) return { error: `${tag} has no delta assets` }
+  if (!assets.setup?.sha256 || assets.setup.sha256 !== current.files?.setup?.sha256) {
+    return { error: `${tag}'s installer digest differs from mirror` }
+  }
+  const delta = await deltaFiles(assets, tag)
+  if (delta.error) return delta
+  const listBytes = await putOnce(env.MIRROR, `launcher/${tag}/${NAMES.filesJson}`, delta.list, 'application/json; charset=utf-8')
+  if (!listBytes) return { error: `${tag}'s files.json could not be written to the mirror` }
+  return {
+    manifest: {
+      ...current,
+      files: {
+        ...current.files,
+        filesJson: await check(NAMES.filesJson, listBytes),
+        filesPack: { name: NAMES.filesPack, size: assets.filesPack.size, sha256: delta.packSha256 },
+      },
+    },
+  }
+}
+
 /** files.json's bytes and the pack's SHA-256, each checked against what GitHub recorded. */
 async function deltaFiles(assets, tag) {
   if (!assets.filesJson.sha256 || !assets.filesPack.sha256) return { error: `${tag}'s files.json or files.pack has no GitHub digest` }
@@ -377,7 +423,35 @@ export async function promote(env, ctx, { current, maxAge = CHECK_SECONDS, hintT
     const hinted = await releaseForTag(hintTag, env, ctx, { fresh: true })
     if (hinted) release = hinted
   }
-  if (!release || (current && !newer(release.tag, current.tag))) return { manifest: current ?? null, promoted: false }
+  const sameTagNeedsDelta = Boolean(
+    release && current && release.tag === current.tag && current.schema === 2 &&
+    !current.files?.filesJson && assetsOf(release).filesJson && assetsOf(release).filesPack
+  )
+  if (!release || (current && !newer(release.tag, current.tag) && !sameTagNeedsDelta)) return { manifest: current ?? null, promoted: false }
+  if (sameTagNeedsDelta) {
+    const { manifest: deltaManifest, error: deltaError } = await materializeDelta(release, current, env)
+    if (!deltaManifest) {
+      console.warn(`GitHub delta backfill skipped: ${deltaError}.`)
+      return { manifest: current ?? null, promoted: false }
+    }
+    const mirror = env.MIRROR
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const object = await mirror.get('launcher/latest.json')
+      const seen = object ? await object.json().catch(() => null) : null
+      if (!seen || seen.tag !== release.tag) return { manifest: seen ?? current, promoted: false }
+      if (seen.files?.filesJson && seen.files?.filesPack) return { manifest: seen, promoted: false }
+      const updated = {
+        ...seen,
+        files: { ...seen.files, filesJson: deltaManifest.files.filesJson, filesPack: deltaManifest.files.filesPack },
+      }
+      const written = await mirror.put('launcher/latest.json', JSON.stringify(updated), {
+        httpMetadata: { contentType: 'application/json' },
+        onlyIf: { etagMatches: object.etag },
+      })
+      if (written) return { manifest: updated, promoted: false, release }
+    }
+    return { manifest: current ?? null, promoted: false }
+  }
   const { manifest, error } = await materialize(release, env)
   if (!manifest) {
     console.warn(`GitHub release not offered: ${error}.`)

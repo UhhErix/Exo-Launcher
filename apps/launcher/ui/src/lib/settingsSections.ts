@@ -16,8 +16,7 @@ export const SETTINGS_PAGES = [
     label: 'General',
     sections: [],
     keywords: [
-      'dark mode', 'amoled', 'pure black', 'text size', 'reduce motion', 'animation', 'start maximized', 'startup', 'start with windows', 'startup behaviour', 'window',
-      'keep pc awake', 'keep awake', 'awake', 'sleep', 'downloads and shader warming',
+      'dark mode', 'amoled', 'pure black', 'text size', 'reduce motion', 'animation', 'startup', 'start with windows', 'startup behaviour', 'window',
     ],
   },
   {
@@ -29,7 +28,7 @@ export const SETTINGS_PAGES = [
       'xbox sign in', 'offline mode', 'steam offline', 'go offline', 'go online', 'get another store',
       'riot id', 'xbox time played',
       'tools and soundtracks', 'show tools and soundtracks', 'soundtracks', 'tools', 'servers', 'sdks',
-      'shaders', 'exo shaders', 'shader warming',
+      'shaders', 'exo shaders', 'shader pre-compiling',
     ],
   },
   {
@@ -37,8 +36,8 @@ export const SETTINGS_PAGES = [
     label: 'Downloads',
     sections: ['downloads'],
     keywords: [
-      'downloads', 'install folder', 'download hours', 'pause downloads while playing', 'update games automatically', 'automatic updates',
-      'chipset driver', 'amd chipset', 'intel chipset',
+      'downloads', 'install folder', 'download hours', 'update games automatically', 'automatic updates',
+      'anti-cheat', 'dlss', 'fsr', 'xess',
     ],
   },
   {
@@ -46,8 +45,8 @@ export const SETTINGS_PAGES = [
     label: 'In game',
     sections: ['achievements', 'fps'],
     keywords: [
-      'in game', 'achievements', 'achievement banners', 'banners in games', 'unlock', 'trophy', 'banner sound', 'achievement sound', 'preview banner', 'obs browser source',
-      'fps counter', 'frame rate', 'frames per second', 'overlay', 'built-in fps', '1% low', 'frame time', 'gpu use', 'gpu temperature', 'cpu use', 'vram', 'ram', 'battery', 'mouse battery', 'headset battery', 'time of day', 'position',
+      'in game', 'achievements', 'pop-ups', 'achievement pop-ups', 'unlock', 'trophy', 'pop-up sound', 'test pop-up', 'obs overlay url',
+      'fps counter', 'frame rate', 'frames per second', 'overlay', '1% low', 'frame time', 'gpu use', 'gpu temperature', 'cpu use', 'vram', 'ram', 'battery', 'mouse battery', 'headset battery', 'time of day', 'position',
     ],
   },
   {
@@ -88,13 +87,13 @@ export const DISCORD_SETTINGS = [
     id: 'voice',
     label: 'Voice and video',
     parts: ['voice'],
-    keywords: ['voice', 'video', 'microphone', 'speaker', 'soundboard', 'noise suppression', 'only my voice', 'hear your voice', 'push to talk', 'attenuation', 'camera', 'echo cancellation', 'input sensitivity'],
+    keywords: ['voice', 'video', 'microphone', 'speaker', 'soundboard', 'voice cleanup', 'noise suppression', 'only my voice', 'test microphone', 'push to talk', 'attenuation', 'camera', 'echo cancellation', 'input sensitivity'],
   },
   {
     id: 'chat',
     label: 'Chat',
     parts: ['chat'],
-    keywords: ['play', 'party', 'game rooms', 'clips', 'chat', 'embeds', 'link previews', 'reactions', 'spoilers', 'emoticons', 'stickers', 'text size in chat', 'compact', 'zoom', 'saturation', 'role colors', 'reduced motion', 'gifs', 'text-to-speech', 'tts', 'image descriptions', 'streamer mode', 'developer mode', 'accessibility'],
+    keywords: ['play', 'party', 'game rooms', 'clips', 'chat', 'embeds', 'link previews', 'reactions', 'spoilers', 'text size in chat', 'compact', 'zoom', 'role colors', 'reduced motion', 'gifs', 'text-to-speech', 'tts', 'streamer mode', 'developer mode', 'accessibility'],
   },
   {
     id: 'notifications',

@@ -199,4 +199,39 @@ public sealed class NetworkTuneTests : IDisposable
     public void Names_JoinsDistinctNames() =>
         Assert.Equal("energy-efficient Ethernet on and network buffers shrunk",
             Names([new("*EEE", "0", "energy-efficient Ethernet on", false), new("EEE", "0", "energy-efficient Ethernet on", false), new("*ReceiveBuffers", "1024", "network buffers shrunk", false)]));
+
+    [Fact]
+    public void Decide_SetsPnpCapabilitiesBitmaskOnDesktopsAndSkipsLaptops()
+    {
+        var unset = Ethernet(new(StringComparer.OrdinalIgnoreCase) { [PnpCapabilitiesKey] = new(null, "0", new Dictionary<string, string>()) });
+        var zero = Ethernet(new(StringComparer.OrdinalIgnoreCase) { [PnpCapabilitiesKey] = new("0", "0", new Dictionary<string, string>()) });
+        var bits4 = Ethernet(new(StringComparer.OrdinalIgnoreCase) { [PnpCapabilitiesKey] = new("4", "0", new Dictionary<string, string>()) });
+        var already = Ethernet(new(StringComparer.OrdinalIgnoreCase) { [PnpCapabilitiesKey] = new("24", "0", new Dictionary<string, string>()) });
+
+        Assert.Equal("24", Assert.Single(Decide(unset, portable: false)).To);
+        Assert.Equal("24", Assert.Single(Decide(zero, portable: false)).To);
+        Assert.Equal("28", Assert.Single(Decide(bits4, portable: false)).To);
+        Assert.Empty(Decide(already, portable: false));
+        Assert.Empty(Decide(zero, portable: true));
+    }
+
+    [Fact]
+    public void Commands_UsesRegDwordForPnpCapabilitiesAndRestoresOrDeletesOnUndo()
+    {
+        var adapter = Ethernet(new(StringComparer.OrdinalIgnoreCase)
+        {
+            ["*EEE"] = P("1", "1", "0", "1"),
+            [PnpCapabilitiesKey] = new(null, "0", new Dictionary<string, string>()),
+        });
+        var lines = NetworkTune.Commands("reg.exe", "pnputil.exe", adapter, [("*EEE", "0"), (PnpCapabilitiesKey, "24"), (PnpCapabilitiesKey, null)])!;
+        Assert.Contains("/v \"*EEE\" /t REG_SZ /d 0", lines[0]);
+        Assert.Contains($"/v \"{PnpCapabilitiesKey}\" /t REG_DWORD /d 24", lines[1]);
+        Assert.Contains($"delete \"HKLM\\{ClassKey}\\0000\" /v \"{PnpCapabilitiesKey}\" /f /reg:64", lines[2]);
+
+        var (tune, _, writer) = Make(Ethernet(new(StringComparer.OrdinalIgnoreCase) { [PnpCapabilitiesKey] = new(null, "0", new Dictionary<string, string>()) }));
+        Assert.Null(tune.Apply());
+        Assert.Contains(("0000", PnpCapabilitiesKey, "24"), writer.Written);
+        Assert.Null(tune.Undo());
+        Assert.Equal(("0000", PnpCapabilitiesKey, (string?)null), writer.Written[^1]);
+    }
 }

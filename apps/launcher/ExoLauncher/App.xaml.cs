@@ -13,7 +13,7 @@ public partial class App : Application
     {
         InitializeComponent();
         Services.Initialize();
-        Helpers.KeepAwake.SettingOn = () => Services.Settings.Current.KeepAwakeDownloads;
+        Helpers.KeepAwake.SettingOn = () => true;
         AppDomain.CurrentDomain.ProcessExit += (_, _) => Helpers.KeepAwake.Shared.ReleaseAll();
         UnhandledException += (_, e) =>
         {

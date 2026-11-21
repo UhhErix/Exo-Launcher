@@ -48,8 +48,8 @@ function fakeD1({ failOn = null, migrations = MIGRATIONS } = {}) {
   }
 }
 
-/** The Worker's env with a mail binding and a Discord that record what they were given. */
-function makeEnv({ db = fakeD1(), withDb = true, hook, mailFails = false } = {}) {
+/** The Worker's env with a mail binding and a Discord webhook that record what they were given. */
+function makeEnv({ db = fakeD1(), withDb = true, hook = HOOK, hookFails = false } = {}) {
   const objects = new Map()
   const mails = []
   const posts = []
@@ -57,9 +57,13 @@ function makeEnv({ db = fakeD1(), withDb = true, hook, mailFails = false } = {})
     REPORTS: { async put(key, body) { objects.set(key, body) }, async delete() {} },
     ...limiters().bindings,
     CONTACT_TO: 'team@example.test',
-    CONTACT_MAIL: { async send(message) { if (mailFails) throw new Error('mail is down'); mails.push(message) } },
+    CONTACT_MAIL: { async send(message) { mails.push(message) } },
     EmailMessage: class { constructor(from, to, raw) { Object.assign(this, { from, to, raw }) } },
-    fetcher: async (url, init) => { posts.push({ url, body: JSON.parse(init.body) }); return new Response(null, { status: 204 }) },
+    fetcher: async (url, init) => {
+      if (hookFails) throw new Error('discord is down')
+      posts.push({ url, body: JSON.parse(init.body) })
+      return new Response(null, { status: 204 })
+    },
   }
   if (withDb) env.TELEMETRY = db
   if (hook) env.DISCORD_WEBHOOK_REPORTS = hook
@@ -70,39 +74,41 @@ const send = (env, body = sample) => worker.fetch(new Request('https://reports.g
   method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
 }), env)
 
-const subjectOf = (message) => /^Subject: (.*)$/m.exec(message.raw)[1]
-const textOf = (message) => Buffer.from(message.raw.split('\r\n\r\n')[1].replace(/\r\n/g, ''), 'base64').toString('utf8')
+const contentOf = (post) => post.body.content
 
-test('the first report of an error in a version tells the team once, with what broke and its excerpt', async () => {
-  const { env, mails, objects } = makeEnv()
+test('the first report of an error in a version tells the team once in Discord only (never emails), with what broke and its excerpt', async () => {
+  const { env, mails, posts, objects } = makeEnv()
   assert.equal((await send(env)).status, 202)
   assert.equal(objects.size, 1)
-  assert.equal(mails.length, 1)
-  assert.equal(mails[0].to, 'team@example.test')
-  assert.equal(subjectOf(mails[0]), 'Exo Launcher 3.26.0: HostCallFailed (new error)')
-  assert.match(textOf(mails[0]), /RPC library\.get: NullReferenceException/)
-  assert.match(textOf(mails[0]), /Windows 10\.0\.26300\.1/)
+  assert.equal(mails.length, 0)
+  assert.equal(posts.length, 1)
+  assert.equal(posts[0].url, HOOK)
+  assert.match(contentOf(posts[0]), /^\*\*Exo Launcher 3\.26\.0: HostCallFailed \(new error\)\*\*/)
+  assert.match(contentOf(posts[0]), /RPC library\.get: NullReferenceException/)
+  assert.match(contentOf(posts[0]), /Windows 10\.0\.26300\.1/)
 })
 
 test('later reports of the same error stay quiet until the 10th', async () => {
-  const { env, mails } = makeEnv()
+  const { env, mails, posts } = makeEnv()
   for (let i = 0; i < 9; i++) await send(env)
-  assert.equal(mails.length, 1, 'reports 2 to 9 tell nobody')
+  assert.equal(posts.length, 1, 'reports 2 to 9 tell nobody')
   await send(env)
-  assert.equal(mails.length, 2)
-  assert.equal(subjectOf(mails[1]), 'Exo Launcher 3.26.0: HostCallFailed (10 reports)')
+  assert.equal(posts.length, 2)
+  assert.match(contentOf(posts[1]), /^\*\*Exo Launcher 3\.26\.0: HostCallFailed \(10 reports\)\*\*/)
+  assert.equal(mails.length, 0)
   assert.deepEqual(ALERT_AT, [1, 10, 100, 1000])
 })
 
 test('the same error in another version, and another error in this one, are new groups', async () => {
-  const { env, mails } = makeEnv()
+  const { env, mails, posts } = makeEnv()
   await send(env)
   await send(env, { ...sample, version: '3.26.1' })
   await send(env, { ...sample, errorType: 'UiError' })
-  assert.deepEqual(mails.map(subjectOf), [
-    'Exo Launcher 3.26.0: HostCallFailed (new error)',
-    'Exo Launcher 3.26.1: HostCallFailed (new error)',
-    'Exo Launcher 3.26.0: UiError (new error)',
+  assert.equal(mails.length, 0)
+  assert.deepEqual(posts.map((p) => contentOf(p).split('\n')[0]), [
+    '**Exo Launcher 3.26.0: HostCallFailed (new error)**',
+    '**Exo Launcher 3.26.1: HostCallFailed (new error)**',
+    '**Exo Launcher 3.26.0: UiError (new error)**',
   ])
 })
 
@@ -118,26 +124,30 @@ test('a group is a count and a sample key: nothing about the sender', async () =
   assert.match(rows[0].sample_key, /^reports\/\d{4}-\d{2}-\d{2}\/[0-9a-f-]{36}\.json$/)
 })
 
-test('the dev copy (no D1), a failed count and a failed mail all still store the report and answer 202', async () => {
+test('the dev copy (no D1), a failed count and a failed Discord send all still store the report and answer 202', async () => {
   const dev = makeEnv({ withDb: false })
   assert.equal((await send(dev.env)).status, 202)
+  assert.equal(dev.posts.length, 0)
   assert.equal(dev.mails.length, 0)
   assert.equal(dev.objects.size, 1)
 
   const broken = makeEnv({ db: fakeD1({ failOn: 'crash_days' }) })
   assert.equal((await send(broken.env)).status, 202)
   assert.equal(broken.objects.size, 1)
+  assert.equal(broken.posts.length, 0)
   assert.equal(broken.mails.length, 0)
 
-  const noMail = makeEnv({ mailFails: true })
-  assert.equal((await send(noMail.env)).status, 202)
-  assert.equal(noMail.objects.size, 1)
+  const noHook = makeEnv({ hookFails: true })
+  assert.equal((await send(noHook.env)).status, 202)
+  assert.equal(noHook.objects.size, 1)
+  assert.equal(noHook.mails.length, 0)
 })
 
-test('with a Discord webhook the alert is posted there too; anything that is not a Discord webhook gets nothing', async () => {
+test('with a Discord webhook the alert is posted there only; anything that is not a Discord webhook gets nothing and never emails', async () => {
   const withHook = makeEnv({ hook: HOOK })
   await send(withHook.env)
   assert.equal(withHook.posts.length, 1)
+  assert.equal(withHook.mails.length, 0)
   assert.equal(withHook.posts[0].url, HOOK)
   assert.match(withHook.posts[0].body.content, /^\*\*Exo Launcher 3\.26\.0: HostCallFailed \(new error\)\*\*/)
   assert.deepEqual(withHook.posts[0].body.allowed_mentions, { parse: [] })
@@ -145,7 +155,7 @@ test('with a Discord webhook the alert is posted there too; anything that is not
   const elsewhere = makeEnv({ hook: 'https://evil.example/api/webhooks/1/tok' })
   await send(elsewhere.env)
   assert.equal(elsewhere.posts.length, 0)
-  assert.equal(elsewhere.mails.length, 1, 'mail still goes')
+  assert.equal(elsewhere.mails.length, 0, 'never sends email for error reports')
   for (const url of ['http://discord.com/api/webhooks/1/tok', 'https://discord.com.evil.example/api/webhooks/1/tok', '', undefined]) assert.equal(isDiscordWebhook(url), false, String(url))
 })
 
@@ -172,23 +182,25 @@ test("the digest lists yesterday's groups, most reports first, and marks the one
   assert.equal(await digestOf(db, now + 2 * DAY), null, 'a day with no reports sends no digest')
 })
 
-test('the daily job mails the digest and removes counts older than 90 days', async () => {
-  const { env, db, mails } = makeEnv()
+test('the daily job posts the digest to Discord (never emails) and removes counts older than 90 days', async () => {
+  const { env, db, mails, posts } = makeEnv()
   const day = (ago) => utcDay(Date.now() - ago * DAY)
   const add = (d, count) => db.sql.prepare('INSERT INTO crash_days (app, version, error_type, day, count, sample_key) VALUES (?, ?, ?, ?, ?, ?)').run('cinema', '2.0.0', 'Hang', d, count, 'reports/x.json')
   add(day(1), 4)
   add(day(120), 9)
   await worker.scheduled({}, env)
-  assert.equal(mails.length, 1)
-  assert.match(subjectOf(mails[0]), /^Exo errors, \d{4}-\d{2}-\d{2}: 4 in 1 group$/)
+  assert.equal(mails.length, 0)
+  assert.equal(posts.length, 1)
+  assert.match(contentOf(posts[0]), /^\*\*Exo errors, \d{4}-\d{2}-\d{2}: 4 in 1 group\*\*/)
   assert.deepEqual(db.sql.prepare('SELECT day FROM crash_days').all().map((row) => row.day), [day(1)])
 })
 
-test('invented error types cannot mail without end: at most ALERTS_PER_DAY alerts a UTC day, and the digest still counts every group', async () => {
-  const { env, db, mails } = makeEnv()
+test('invented error types cannot alert without end: at most ALERTS_PER_DAY alerts a UTC day, and the digest still counts every group', async () => {
+  const { env, db, mails, posts } = makeEnv()
   for (let i = 0; i < ALERTS_PER_DAY + 25; i++) assert.equal((await send(env, { ...sample, errorType: `Invented${i}Error` })).status, 202)
-  assert.equal(mails.length, ALERTS_PER_DAY + 1, 'the cap, then one mail that alerts are paused')
-  assert.match(subjectOf(mails.at(-1)), /alerts paused for today/)
+  assert.equal(mails.length, 0)
+  assert.equal(posts.length, ALERTS_PER_DAY + 1, 'the cap, then one message that alerts are paused')
+  assert.match(contentOf(posts.at(-1)), /alerts paused for today/)
   const groups = db.sql.prepare('SELECT count(*) AS n FROM crash_days').get().n
   assert.equal(groups, ALERTS_PER_DAY + 25)
   // The next UTC day starts a new count; the daily job removes tallies older than 90 days.
@@ -209,25 +221,27 @@ test('claimAlert walks its table: send to the cap, pause once, then hold; a miss
   assert.equal(await claimAlert(without, '2026-11-10'), 'send')
 })
 
-test('with migrations 0005 and 0006 not applied, a new error still mails the team and the daily mail still goes, naming the failed steps', async () => {
-  const { env, mails } = makeEnv({ db: fakeD1({ migrations: MIGRATIONS.slice(0, 3) }) })
+test('with migrations 0005 and 0006 not applied, a new error still alerts Discord and the daily digest still goes, naming the failed steps', async () => {
+  const { env, mails, posts } = makeEnv({ db: fakeD1({ migrations: MIGRATIONS.slice(0, 3) }) })
   assert.equal((await send(env)).status, 202)
-  assert.equal(mails.length, 1, 'the alert went out')
+  assert.equal(posts.length, 1, 'the alert went to Discord')
   await worker.scheduled({}, env)
-  assert.equal(mails.length, 2, 'the daily mail went out')
-  assert.match(textOf(mails[1]), /These steps of the daily job failed: alert tally pruning, issue tally pruning\./)
+  assert.equal(posts.length, 2, 'the daily digest went to Discord')
+  assert.equal(mails.length, 0)
+  assert.match(contentOf(posts[1]), /These steps of the daily job failed: alert tally pruning, issue tally pruning\./)
 })
 
-test('a daily step that throws stops nothing else: the digest still goes, with the step named', async () => {
+test('a daily step that throws stops nothing else: the digest still goes to Discord, with the step named', async () => {
   const db = fakeD1({ failOn: 'DELETE FROM crash_index' })
   const yesterday = utcDay(Date.now() - DAY)
   db.sql.prepare("INSERT INTO crash_days (app, version, error_type, day, count, sample_key) VALUES ('launcher', '3.26.0', 'UiError', ?, 4, 'k')").run(yesterday)
-  const { env, mails } = makeEnv({ db })
+  const { env, mails, posts } = makeEnv({ db })
   await worker.scheduled({}, env)
-  assert.equal(mails.length, 1)
-  assert.match(subjectOf(mails[0]), /^Exo errors, .*: 4 in 1 group$/)
-  assert.match(textOf(mails[0]), /UiError/)
-  assert.match(textOf(mails[0]), /These steps of the daily job failed: crash index pruning\./)
+  assert.equal(mails.length, 0)
+  assert.equal(posts.length, 1)
+  assert.match(contentOf(posts[0]), /^\*\*Exo errors, .*: 4 in 1 group\*\*/)
+  assert.match(contentOf(posts[0]), /UiError/)
+  assert.match(contentOf(posts[0]), /These steps of the daily job failed: crash index pruning\./)
 })
 
 test('the digest says how many alerts were held back yesterday', async () => {
@@ -235,12 +249,13 @@ test('the digest says how many alerts were held back yesterday', async () => {
   const yesterday = utcDay(Date.now() - DAY)
   db.sql.prepare("INSERT INTO crash_days (app, version, error_type, day, count, sample_key) VALUES ('launcher', '3.26.0', 'UiError', ?, 1, 'k')").run(yesterday)
   db.sql.prepare('INSERT INTO alert_days (day, sent) VALUES (?, ?)').run(yesterday, ALERTS_PER_DAY + 7)
-  const { env, mails } = makeEnv({ db })
+  const { env, mails, posts } = makeEnv({ db })
   await worker.scheduled({}, env)
-  assert.match(textOf(mails[0]), /7 alerts were held back by the daily cap/)
+  assert.equal(mails.length, 0)
+  assert.match(contentOf(posts[0]), /7 alerts were held back by the daily cap/)
 })
 
-test('the daily message: nothing to say is no mail; a failure alone still mails', () => {
+test('the daily message: nothing to say is no alert; a failure alone still alerts', () => {
   assert.equal(dailyMessage(null, [], 0, '2026-11-09'), null)
   const failure = dailyMessage(null, ['digest'], 0, '2026-11-09')
   assert.equal(failure.subject, 'Exo errors, 2026-11-09: the daily job had a problem')

@@ -38,6 +38,8 @@ internal sealed record DeleteTask(string Path) : StartupChange;
 internal sealed record CreateTask(string Path, string XmlFile) : StartupChange;
 /// <summary>A file moved (an older Exo kept a removed Startup shortcut in its own folder; Put back moves it home).</summary>
 internal sealed record MoveFile(string From, string To) : StartupChange;
+/// <summary>A Startup folder file deleted permanently because its target app is gone.</summary>
+internal sealed record DeleteFile(string Path) : StartupChange;
 /// <summary>The machine's own values of one hand-over, left undone together as one request for permission: the changes those are.</summary>
 internal sealed record MachineValues(IReadOnlyList<StartupChange> Values) : StartupChange;
 
@@ -81,6 +83,7 @@ internal interface IStartupHost
     IReadOnlyList<TaskInfo> Tasks(TimeSpan? wait = null);
     byte[]? TaskXml(string path);
     IReadOnlyList<FolderFile> FolderFiles(bool machine);
+    string FolderPath(bool machine);
     IReadOnlyList<PackageTaskDecl> PackageTasks();
     /// <summary>The program in front of the others, as its file name without .exe in lower case; null when unknown.</summary>
     string? Foreground();
@@ -90,9 +93,10 @@ internal interface IStartupHost
     string? Signer(string path);
     /// <summary>The programs of every security product Windows Security lists (antivirus, firewall, anti-spyware).</summary>
     IReadOnlyList<string> SecurityPrograms();
+    void EnsureSecurityReady(TimeSpan timeout);
     /// <summary>
-    /// Whether <see cref="SecurityPrograms"/> was read successfully and had something to say: false until it has, and
-    /// while Exo can't check this PC's security software no item it can't vouch for is turned off.
+    /// Whether <see cref="SecurityPrograms"/> was read successfully: false until a CIM read succeeds.
+    /// While Exo can't check this PC's security software no item it can't vouch for is turned off.
     /// </summary>
     bool SecurityKnown { get; }
     string? ReadFile(string path);
@@ -202,6 +206,10 @@ internal sealed class RealStartupHost : IStartupHost
                     try { Directory.CreateDirectory(Path.GetDirectoryName(move.To)!); File.Move(move.From, move.To, overwrite: true); }
                     catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { Raised($"move /y \"{move.From}\" \"{move.To}\"", move); }
                     break;
+                case DeleteFile del when StartupEntries.CmdSafe(del.Path):
+                    try { if (File.Exists(del.Path)) DeletionGate.DeleteFile(del.Path); }
+                    catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { Raised($"del /f /q \"{del.Path}\"", del); }
+                    break;
                 case DeleteTask task when StartupEntries.CmdSafe(task.Path):
                     if (Schtasks(["/delete", "/tn", task.Path, "/f"], out _, null) != 0) Raised($"\"{schtasks}\" /delete /tn \"{task.Path}\" /f", task);
                     break;
@@ -286,9 +294,11 @@ internal sealed class RealStartupHost : IStartupHost
 
     public byte[]? TaskXml(string path) => StartupEntries.CmdSafe(path) && Schtasks(["/query", "/tn", path, "/xml", "ONE"], out var xml, null) == 0 && xml.Length > 0 ? xml : null;
 
+    public string FolderPath(bool machine) => Environment.GetFolderPath(machine ? Environment.SpecialFolder.CommonStartup : Environment.SpecialFolder.Startup);
+
     public IReadOnlyList<FolderFile> FolderFiles(bool machine)
     {
-        var folder = Environment.GetFolderPath(machine ? Environment.SpecialFolder.CommonStartup : Environment.SpecialFolder.Startup);
+        var folder = FolderPath(machine);
         if (string.IsNullOrEmpty(folder) || !Directory.Exists(folder)) return [];
         try
         {
@@ -383,7 +393,7 @@ internal sealed class RealStartupHost : IStartupHost
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { throw new IOException("its time could not be read", ex); }
     }
 
-    private readonly Lock _gate = new();
+    private readonly object _gate = new();
     private (DateTime At, IReadOnlyList<string> Programs)? _security;
     private bool _securityKnown;
     private bool _reading;
@@ -431,6 +441,21 @@ internal sealed class RealStartupHost : IStartupHost
         return programs ?? [];
     }
 
+    public void EnsureSecurityReady(TimeSpan timeout)
+    {
+        _ = SecurityPrograms();
+        var deadline = DateTime.UtcNow + timeout;
+        lock (_gate)
+        {
+            while (_reading)
+            {
+                var left = deadline - DateTime.UtcNow;
+                if (left <= TimeSpan.Zero) break;
+                Monitor.Wait(_gate, left);
+            }
+        }
+    }
+
     /// <summary>One read, in the background: its answer is kept, and said once when it failed.</summary>
     private void ReadSecurity()
     {
@@ -440,9 +465,10 @@ internal sealed class RealStartupHost : IStartupHost
         { read = ([], false, ex.Message); }
         lock (_gate)
         {
-            _securityKnown = read.Worked && read.Programs.Count > 0;
+            _securityKnown = read.Worked;
             _security = (SecurityClock(), read.Programs);
             _reading = false;
+            Monitor.PulseAll(_gate);
         }
         if (!_securityKnown)
             AppLog.Warn("Startup: this PC's security software could not be listed" + (read.Why is { Length: > 0 } reason ? ": " + reason : "")
@@ -664,7 +690,7 @@ internal sealed class RealStartupHost : IStartupHost
 /// </summary>
 internal sealed class SignerCache(Func<string, string?> read, Func<string, DateTime> written)
 {
-    private readonly Lock _gate = new();
+    private readonly object _gate = new();
     private readonly Dictionary<string, (DateTime Stamp, string? Signer)> _known = new(StringComparer.OrdinalIgnoreCase);
 
     internal string? Of(string path)

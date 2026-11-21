@@ -14,16 +14,12 @@ test('the junk scan does not run while setup is on its first steps', () => {
 })
 
 test('the junk scan starts once, when setup reaches Discord or any step after it', () => {
-  for (const step of ['discord', 'capture', 'cleanup', 'pc'] as const) {
+  for (const step of ['discord', 'cleanup', 'pc'] as const) {
     assert.equal(junkScanDue(step, false), true, step)
     assert.equal(junkScanDue(step, true), false, `${step} after it started`)
   }
 })
 
-test('Continue waits only on the step that leads straight into Clean up', () => {
-  // Captures shown: Captures waits, Discord does not (its Continue goes to Captures, which is always there).
-  assert.deepEqual(ids.filter(step => waitsForJunkScan(step, true)), ['capture'])
-  // Captures left out: Discord's Continue goes straight to Clean up, so Discord waits instead.
-  assert.equal(waitsForJunkScan('discord', false), true)
-  assert.equal(waitsForJunkScan('discord', true), false)
+test('Continue waits only on Discord (which leads straight into Clean up)', () => {
+  assert.deepEqual(ids.filter(step => waitsForJunkScan(step)), ['discord'])
 })

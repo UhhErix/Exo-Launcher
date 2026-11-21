@@ -140,9 +140,11 @@ public sealed class PowerPlanTests : IDisposable
             ["AHCI Link Power Management - HIPM/DIPM"] = 0,
             ["AHCI Link Power Management - Adaptive"] = 0,
             ["Turn off hard disk after"] = 0,
+            ["Wireless Adapter Power Saving Mode"] = 0,
             ["Turn off display after"] = 1800,
             ["Sleep after"] = 0,
             ["Hibernate after"] = 0,
+            ["Allow wake timers"] = 0,
         }, values);
     }
 
@@ -807,5 +809,16 @@ public sealed class PowerPlanTests : IDisposable
         game = false;
         Assert.Null(plan.Auto(ThisPc));
         Assert.Equal(boost.Ac, windows.Written[(exo, boost.Setting, false)]);
+    }
+
+    [Fact]
+    public void LaptopGetsWifiPerformanceOnAcOnlyAndNoWakeTimersOrSleepOverrides()
+    {
+        var laptop = PowerProfiles.For(Class.AmdSingleCcd, laptop: true).Values;
+        var wifi = Assert.Single(laptop, v => v.Name == "Wireless Adapter Power Saving Mode");
+        Assert.Equal(0u, wifi.Ac);
+        Assert.False(wifi.Dc);
+        Assert.DoesNotContain(laptop, v => v.Name == "Allow wake timers");
+        Assert.DoesNotContain(laptop, v => v.Name == "Sleep after");
     }
 }

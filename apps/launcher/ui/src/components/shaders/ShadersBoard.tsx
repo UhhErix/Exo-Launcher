@@ -15,15 +15,8 @@ import { rebase, stale } from './snapshotOrder'
 import { ArtImg } from '../ui/ArtImg'
 import { errorText } from '../../lib/errorWords'
 
-/** The board before the engine has ever run: no games read yet, nothing queued. */
 const NEVER_RAN: Snapshot = { rev: 0, games: [], queue: { waiting: [], running: false, paused: false, canStart: false }, app: {} }
 
-/**
- * The engine's state: the last one it left when it exited, read without starting it (Exo answers the board from that
- * while the engine is stopped). Only Refresh and Compile start the engine; while it runs its own events keep the board
- * live (a state event is the whole snapshot, a progress event the queue), and once it exits, soon after its work ends,
- * the board goes back to the state it left.
- */
 function useShaderEngine(shown: boolean) {
   const [snap, setSnap] = useState<Snapshot | null>(null)
   const [missing, setMissing] = useState(false)
@@ -33,7 +26,6 @@ function useShaderEngine(shown: boolean) {
     report(error, 'ShadersBoard.snapshot', { level: 'warn' })
     setFailed(message(error, 'The shader engine did not answer.'))
   }), [take])
-  // Once with the room, as it's first built: the last state, so the board is filled by the time it's scrolled to.
   useEffect(() => {
     let live = true
     void host.shadersAddon().then(status => {
@@ -46,12 +38,10 @@ function useShaderEngine(shown: boolean) {
   useEffect(() => {
     if (!shown) return
     let live = true
-    // The engine may have exited and started again since the board last showed.
     setSnap(rebase)
     void host.shadersAddon().then(status => {
       if (!live) return
       if (!status.present) { setMissing(true); return }
-      // Neither starts the engine: a running one sends its states again, a stopped one's last state is read.
       void call('ui.visible', { visible: true }).catch(() => { })
       void read()
     }).catch(() => { if (live) setMissing(true) })
@@ -62,7 +52,6 @@ function useShaderEngine(shown: boolean) {
         setSnap(prev => prev && next.rev > prev.rev ? { ...prev, rev: next.rev, queue: next.queue } : prev)
       } else if (name === 'ready') { setSnap(rebase); void read() }
       else if (name === 'addon') {
-        // Started (Refresh, Compile): its board. Exited: the state it left replaces its last live one.
         const state = (data as { state?: string } | null)?.state
         if (state === 'starting') return
         if (state !== 'running') setSnap(rebase)
@@ -78,7 +67,6 @@ function useShaderEngine(shown: boolean) {
   return { snap, missing, failed, read }
 }
 
-/** On screen: its room shown, Exo not hidden or minimized, and the board in (or near) the room's view. */
 function useShown(element: HTMLElement | null, active: boolean) {
   const visible = usePageVisible()
   const [near, setNear] = useState(false)
@@ -91,11 +79,6 @@ function useShown(element: HTMLElement | null, active: boolean) {
   return active && visible && near
 }
 
-/**
- * How long each game takes to compile on this PC: the engine's live estimate (learned per game in the plan
- * check a scan starts, before anything is compiled), with the host's rough sizing for the games the engine
- * has none for yet (read again when a compile ends or a scan changes the list).
- */
 function useEstimates(active: boolean, key: string, games: readonly ShaderGame[] | undefined) {
   const [seconds, setSeconds] = useState<Record<string, number>>({})
   useEffect(() => {
@@ -115,7 +98,6 @@ function savedOrder(): string[] {
   return Array.isArray(saved) ? saved.filter((id): id is string => typeof id === 'string') : []
 }
 
-/** The games you dragged, in the order you put them: Compile queues them first, the rest fastest first. Kept in Exo's settings. */
 function useSavedOrder() {
   const [order, setOrder] = useState<string[]>(savedOrder)
   useEffect(() => onUiPrefs(() => setOrder(savedOrder())), [])
@@ -128,7 +110,6 @@ function useSavedOrder() {
 
 const norm = (value: string) => value.toLowerCase().replace(/[^a-z0-9]/g, '')
 
-/** Exo's own cover for an engine game: the same id, else the same folder, else the same title. */
 function coverFinder(games: readonly Game[]) {
   const installed = games.filter(game => game.installed && game.coverUrl)
   const byId = new Map(installed.map(game => [game.id, game]))
@@ -142,13 +123,6 @@ function coverFinder(games: readonly Game[]) {
   }
 }
 
-/**
- * PC › Graphics › Shaders, in Exo itself: games are scanned when you press Refresh (and as Compile starts the engine), and
- * only those that still need compiling show, each as its poster with its state; Compile queues every ready game in the
- * order shown, and the queue plays out live on the posters (the one compiling first, with its progress, then the rest).
- * The waiting and ready posters drag (or move with Ctrl and the arrow keys) into the order to compile. Nothing starts
- * on its own: opening the board shows the engine's last state, and the engine runs only for Refresh and Compile.
- */
 export function ShadersBoard({ active, games }: { active: boolean; games: readonly Game[] }) {
   const [root, setRoot] = useState<HTMLElement | null>(null)
   const shown = useShown(root, active)
@@ -158,7 +132,6 @@ export function ShadersBoard({ active, games }: { active: boolean; games: readon
   const [busy, setBusy] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [order, saveOrder] = useSavedOrder()
-  // The order a drop asked the engine for, shown until the engine's next snapshot has it.
   const [pending, setPending] = useState<string[] | null>(null)
   const [moved, setMoved] = useState('')
   const estimates = useEstimates(active, `${snap?.games.length ?? 0}:${snap?.queue.finished?.length ?? 0}:${snap?.app.scanning ? 1 : 0}`, snap?.games)
@@ -178,8 +151,6 @@ export function ShadersBoard({ active, games }: { active: boolean; games: readon
       <Posters posters={prepare.posters} lane={[]} onMove={() => { }} render={game => <PreparePoster item={prepare.byPoster.get(game.id)} cover={cover(game)} />} />
     </div>
   )
-  // Before the first snapshot: its shimmer while it is read, else why it failed and Try again. The same element as the
-  // board's, so its observer (useShown) doesn't see it leave the screen when the snapshot comes.
   if (!snap) return (
     <div ref={setRoot} className="exo-shaders-board" aria-busy={failed ? undefined : true}>
       {failed
@@ -196,12 +167,10 @@ export function ShadersBoard({ active, games }: { active: boolean; games: readon
   const { lane, waitingIds } = view
   const posters = [...view.posters, ...prepare.without(view.posters)]
 
-  /** Puts a lane poster at a new place: the engine's queue for a waiting game, the saved order for a ready one. */
   const move = (id: string, target: number) => {
     const waiting = waitingIds.length
     const from = lane.indexOf(id)
     if (from < 0) return
-    // A waiting game stays among the waiting; a ready one dropped among them joins the queue there.
     const to = Math.max(0, Math.min(from < waiting ? waiting - 1 : lane.length - 1, target))
     if (to === from) return
     const next = lane.filter(other => other !== id)
@@ -252,18 +221,12 @@ export function ShadersBoard({ active, games }: { active: boolean; games: readon
 type Step = [string, unknown?]
 type View = ReturnType<typeof arrange>
 
-/**
- * The board's order: the compiling game, then the lane (the waiting games in the engine's order, then the ready ones:
- * those you dragged where you put them, the rest by how long each takes here, shortest first, so the most games are
- * done soonest; what Compile queues), then everything else by its state.
- */
 function arrange(snap: Snapshot, order: string[], pending: string[] | null, estimates: Record<string, Estimate>) {
   const current = snap.queue.current ?? null
   const byId = new Map(snap.games.map(game => [game.id, game]))
   const waitingIds = snap.queue.waiting.map(item => item.id).filter(id => id !== current?.id)
   const inQueue = new Set([current?.id, ...waitingIds])
   const saved = new Map(order.map((id, index) => [id, index]))
-  // A game with no estimate yet goes after those with one; Infinity less Infinity is NaN, which falls to the next rule.
   const time = (id: string) => estimates[id]?.seconds ?? Infinity
   const readyIds = snap.games
     .filter(game => game.inAddAllReady && !inQueue.has(game.id))
@@ -273,19 +236,16 @@ function arrange(snap: Snapshot, order: string[], pending: string[] | null, esti
   const engineLane = [...waitingIds, ...readyIds]
   const lane = pending && pending.length === engineLane.length && pending.every(id => engineLane.includes(id)) ? pending : engineLane
   const inLane = new Set(lane)
-  // Only what still needs doing: compiled games and ones the engine can't build stay out of the way.
   const rest = snap.games.filter(game => !inQueue.has(game.id) && !inLane.has(game.id) && (!!game.error || game.tone === 'warn' || game.tone === 'primary')).sort((a, b) => rank(a) - rank(b))
   const posters = [current ? byId.get(current.id) : undefined, ...lane.map(id => byId.get(id)), ...rest].filter((game): game is ShaderGame => !!game)
   return { byId, waitingIds, readyIds: lane.filter(id => !waitingIds.includes(id)), lane, posters }
 }
 
-/** Ctrl and an arrow key move a poster one place, Ctrl+Home and Ctrl+End to either end of the lane. */
 function reorderKey(event: KeyboardEvent<HTMLButtonElement>, at: number, last: number): number | undefined {
   if (!event.ctrlKey || event.altKey || event.metaKey) return undefined
   return ({ ArrowLeft: at - 1, ArrowUp: at - 1, ArrowRight: at + 1, ArrowDown: at + 1, Home: 0, End: last } as Record<string, number>)[event.key]
 }
 
-/** On Shaders' title line, as every PC section has them (SectionHead.tsx): the time it takes or leaves, Refresh (a scan for games), and Compile or Pause and Stop. */
 function Actions({ snap, view, estimates, busy, run }: {
   snap: Snapshot
   view: View
@@ -302,7 +262,6 @@ function Actions({ snap, view, estimates, busy, run }: {
   const left = working ? waitingIds.length + (current ? 1 : 0) : lane.length
   const games = left ? `${left} ${left === 1 ? 'game' : 'games'}` : null
   const rebuild = useRebuild()
-  // After a driver change Exo compiles the games again by itself: said while it has games left, in place of the count.
   const forDriver = rebuild && rebuild.state !== 'idle' && rebuild.state !== 'done'
     ? `Getting ready for the new driver · ${rebuild.ready} of ${rebuild.total} games` : null
   return (
@@ -345,7 +304,6 @@ function cacheStripState(snap: Snapshot) {
   }
 }
 
-/** Calm cache & Windows Shader Delivery status strip above the posters: surfaces 1-click optimizations only when needed. */
 function CacheStrip({ snap, busy, run }: {
   snap: Snapshot
   busy: string | null
@@ -387,7 +345,6 @@ function CacheStrip({ snap, busy, run }: {
   )
 }
 
-/** Where the rebuild after a driver change stands: read once, then as the host says it moved. */
 function useRebuild() {
   const [rebuild, setRebuild] = useState<ShaderRebuild | null>(null)
   useEffect(() => {
@@ -399,7 +356,6 @@ function useRebuild() {
   return rebuild
 }
 
-/** Compile, or Pause (Resume) and Stop while it works; each carries the ring while the engine answers. */
 function QueueButtons({ queue, working, readyIds, busy, run }: {
   queue: Queue
   working: boolean
@@ -430,16 +386,10 @@ function QueueButtons({ queue, working, readyIds, busy, run }: {
 type Drop = 'before' | 'after' | 'lifted' | null
 type Dragging = { id: string; pointer: number; x: number; y: number; to: number | null }
 
-/** The posters' gaps (system.css › .exo-shaders-posters) and the widest a poster grows. */
 const GAP_X = 16
 const GAP_Y = 20
 const WIDEST = 240
 
-/**
- * The columns and poster width that show all `count` posters largest within `width` by `height`: each column count's
- * poster is the narrower of what the width and the height allow, never wider than WIDEST nor narrower than 112px, and
- * the largest wins (5 columns a few pixels too tall beat 6 by shrinking a little). No columns when none fit.
- */
 function fitFor(count: number, width: number, height: number, words: number) {
   let best = { columns: 0, wide: 0 }
   for (let c = 1; c <= count; c++) {
@@ -448,27 +398,20 @@ function fitFor(count: number, width: number, height: number, words: number) {
     if (wide < 112) break
     const rows = Math.ceil(count / c)
     const size = Math.floor(Math.min(wide, ((height - (rows - 1) * GAP_Y) / rows - words) / 1.5))
-    // A tie goes to more columns: the same posters with less space left between them.
     if (size >= 112 && size >= best.wide) best = { columns: c, wide: size }
   }
   return best
 }
 
-/**
- * The posters as large as Shaders' pane lets every one of them show at once (fitFor); with more games than fit at the smallest size the pane scrolls as before (auto-fill at 112px). Measured again
- * whenever the pane or the number of games changes.
- */
 function useFit(list: React.RefObject<HTMLUListElement | null>, count: number) {
   useLayoutEffect(() => {
     const ul = list.current
     const pane = ul?.closest<HTMLElement>('.exo-pc-pane')
     if (!ul || !pane || count === 0) return
     const fit = () => {
-      // The pane's height under the bar, less the list's own padding (12px over, 8px under once it fits).
       const height = pane.clientHeight - parseFloat(getComputedStyle(pane).paddingBottom) - (ul.getBoundingClientRect().top - pane.getBoundingClientRect().top) - 20
       const first = ul.querySelector<HTMLElement>('li')
       const art = first?.querySelector<HTMLElement>('.exo-shaders-art')
-      // The name and state under a poster: two or three lines.
       const words = first && art ? first.offsetHeight - art.offsetHeight : 50
       const { columns, wide } = fitFor(count, ul.clientWidth - 24, height, words)
       ul.style.setProperty('--exo-shaders-columns', columns ? String(columns) : null)
@@ -482,12 +425,6 @@ function useFit(list: React.RefObject<HTMLUListElement | null>, count: number) {
   }, [list, count])
 }
 
-/**
- * The poster grid, with pointer dragging of the lane's posters: past a few pixels a press becomes a
- * drag, a white bar shows where it will land, the list scrolls at its edges, and the click that ends
- * a drag does nothing else.
- */
-/** The posters before the first read, fitted to the pane as the real list is, so nothing moves when they land. */
 function PostersWait() {
   const list = useRef<HTMLUListElement>(null)
   useFit(list, 8)
@@ -510,12 +447,10 @@ function Posters({ posters, lane, onMove, render }: {
   useFit(list, posters.length)
   const [drag, setDrag] = useState<Dragging | null>(null)
   const dragged = useRef(false)
-  /** The lane posters' boxes, measured once as a drag starts; re-measured only if the room scrolls mid-drag. */
   const rects = useRef<DOMRect[] | null>(null)
   const measureLane = () => {
     rects.current = Array.from(list.current?.querySelectorAll<HTMLElement>('[data-lane]') ?? []).map(item => item.getBoundingClientRect())
   }
-  /** Where in the lane the pointer would drop: before the first poster it is ahead of, else after the last. */
   const slotAt = (x: number, y: number) => {
     const items = rects.current ?? []
     const index = items.findIndex(box => y < box.top || (y <= box.bottom && x < box.left + box.width / 2))
@@ -530,11 +465,10 @@ function Posters({ posters, lane, onMove, render }: {
     if (!drag || event.pointerId !== drag.pointer) return
     if (drag.to === null) {
       if (Math.hypot(event.clientX - drag.x, event.clientY - drag.y) < 6) return
-      try { event.currentTarget.setPointerCapture(event.pointerId) } catch { /* a pointer already up; the drag still follows the list */ }
+      try { event.currentTarget.setPointerCapture(event.pointerId) } catch {}
       dragged.current = true
       measureLane()
     }
-    // Shaders' pane scrolls the list; near its top or bottom edge it scrolls on.
     const scroller = list.current?.closest<HTMLElement>('.exo-pc-pane') ?? list.current
     const box = scroller?.getBoundingClientRect()
     if (box && scroller) {
@@ -578,16 +512,10 @@ function Posters({ posters, lane, onMove, render }: {
   )
 }
 
-/** How far a rough estimate may be off either way: another driver's, another game's or a default rate stands in. */
 const ROUGH = 1.5
 
-/** A time in seconds as the least and the most it may take; learned: this PC's own compiles of the games taught it. */
 type Span = { low: number; high: number; learned: boolean }
 
-/**
- * An estimate as a span: a learned one is its time, a rough one spreads by ROUGH, and a stale game's
- * runs from its new pipelines alone to every one (its cache may no longer hold the rest).
- */
 function spanOf({ seconds, lowSeconds, learned }: Estimate, share = 1): Span {
   const sure = learned && lowSeconds === undefined
   return {
@@ -597,10 +525,6 @@ function spanOf({ seconds, lowSeconds, learned }: Estimate, share = 1): Span {
   }
 }
 
-/**
- * What is left of the queue: the compiling game's time left at its live rate (else its share of
- * its estimate), then each game after it. Unknown games make the total a floor.
- */
 function queueTime(current: QueueItem | null, after: string[], estimates: Record<string, Estimate>) {
   const total: Span = { low: 0, high: 0, learned: true }
   let unknown = 0
@@ -619,7 +543,6 @@ function queueTime(current: QueueItem | null, after: string[], estimates: Record
   return { ...total, floor: unknown > 0 }
 }
 
-/** "about 2 h 10 min left" when this PC's own compiles taught every time; else what it may take as a rounded range. */
 function eta({ low, high, learned, floor }: Span & { floor: boolean }, running: boolean) {
   if (high <= 0) return null
   const left = running ? ' left' : ''
@@ -629,7 +552,6 @@ function eta({ low, high, learned, floor }: Span & { floor: boolean }, running: 
   return `about ${roundSpan(high).span}${left}`
 }
 
-/** Seconds as the board says them, rounded to what an estimate can promise: "under a minute", "15 min", "2 h 10 min". */
 function roundSpan(seconds: number) {
   const minutes = seconds / 60
   const step = minutes < 10 ? 1 : minutes < 60 ? 5 : minutes < 600 ? 10 : 60
@@ -637,7 +559,6 @@ function roundSpan(seconds: number) {
   return { rounded, span: seconds < 60 ? 'under a minute' : minuteText(rounded) }
 }
 
-/** A rough time as a rounded range: "under a minute", "up to 6 min", "15–30 min", "1–2 h", "1 h–2 h 30 min". */
 function rangeText(low: number, high: number) {
   if (high < 60) return 'under a minute'
   const minutes = high / 60
@@ -650,16 +571,11 @@ function rangeText(low: number, high: number) {
   return bottom % 60 === 0 && top % 60 === 0 ? `${bottom / 60}–${top / 60}\u00a0h` : `${minuteText(bottom)}–${minuteText(top)}`
 }
 
-/** Whole minutes as words. A number keeps its unit on its line (no-break spaces): a poster's narrow caption broke "50" from "min". */
 function minuteText(minutes: number) {
   const h = Math.floor(minutes / 60), m = minutes % 60
   return h ? (m ? `${h}\u00a0h ${m}\u00a0min` : `${h}\u00a0h`) : `${m}\u00a0min`
 }
 
-/**
- * A game's compile time on its poster: "about 25 min" when this PC's compiles of it taught it, else a rounded range. One
- * piece on the narrow caption (no-break spaces, a word joiner each side of the dash): it wrapped as "15–" over "30 min".
- */
 function timeText(estimate: Estimate) {
   const { low, high, learned } = spanOf(estimate)
   const text = !learned ? rangeText(low, high) : high < 60 ? 'under a minute' : `about ${roundSpan(high).span}`
@@ -672,18 +588,15 @@ function rank(game: ShaderGame) {
   return 3000
 }
 
-/** What a click compiles when it isn't the plain Compile, in the engine's words ("Compile without ray tracing (partial)", "Compile carefully"); else null. */
 function otherCompile(game: ShaderGame) {
   const text = game.actions?.compileText
   return text && text !== 'Compile' && text.startsWith('Compile') ? text : null
 }
 
-/** How far the compiling game is, 0 to 1, or null while the engine hasn't said. */
 function fraction(current: QueueItem) {
   return typeof current.percent === 'number' ? current.percent / 100 : null
 }
 
-/** The poster's state: how far it is while it compiles, its place in the queue, how long it takes, else its state. */
 function posterLine(game: ShaderGame, current: QueueItem | null, place: number | undefined, estimate: Estimate | undefined) {
   if (current) return typeof current.percent === 'number' ? <ProgressWords words="Compiling" value={fraction(current)} /> : current.stageText ?? 'Compiling'
   const time = estimate && (place || game.inAddAllReady) ? timeText(estimate) : null
@@ -691,10 +604,6 @@ function posterLine(game: ShaderGame, current: QueueItem | null, place: number |
   return time ?? game.statusText ?? ''
 }
 
-/**
- * Unreal games' first launch, which the engine can't do ahead of time: on the same grid, with the same covers, for every
- * game that still needs it. Automatic runs them while nobody is using the PC; a press runs one now (ShaderPrepare.cs).
- */
 function usePrepare(shown: boolean) {
   const [items, setItems] = useState<ShaderPrepareGame[]>([])
   const read = useCallback(() => host.shadersPrepareGames()
@@ -710,7 +619,6 @@ function usePrepare(shown: boolean) {
   return {
     posters,
     byPoster: new Map(waiting.map(item => [`prepare:${item.id}`, item])),
-    /** One poster per game: a game the engine still has to compile shows only its compile, and its first launch comes after. */
     without: (others: readonly ShaderGame[]) => {
       const names = new Set(others.map(game => norm(game.name)))
       const dirs = new Set(others.map(game => game.installDir?.toLowerCase()).filter(Boolean))
@@ -725,10 +633,6 @@ function prepareWord(item: ShaderPrepareGame) {
   return item.message ?? 'First launch'
 }
 
-/**
- * While it runs, a press stops watching and leaves the game open. Otherwise a press opens the game, so it asks first.
- * A game can take a minute to open before its run begins, and the poster says so all that time.
- */
 function PreparePoster({ item, cover }: { item: ShaderPrepareGame | undefined; cover: string | null }) {
   const [failed, setFailed] = useState<string | null>(null)
   const [opening, setOpening] = useState(false)
@@ -764,7 +668,6 @@ function Poster({ game, cover, current, estimate, place, orderable, drop, error,
   game: ShaderGame
   cover: string | null
   current: QueueItem | null
-  /** How long it takes to compile here, for a game Compile would queue or has queued. */
   estimate: Estimate | undefined
   place: number | undefined
   orderable: boolean

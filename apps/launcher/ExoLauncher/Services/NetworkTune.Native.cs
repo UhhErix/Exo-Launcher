@@ -83,6 +83,8 @@ internal sealed partial class NetworkTune
             var result = new Dictionary<string, Param>(StringComparer.OrdinalIgnoreCase);
             try
             {
+                var pnp = adapter.GetValue(PnpCapabilitiesKey);
+                result[PnpCapabilitiesKey] = new Param(pnp is int n ? n.ToString(System.Globalization.CultureInfo.InvariantCulture) : null, "0", new Dictionary<string, string>());
                 using var parameters = adapter.OpenSubKey(@"Ndi\Params");
                 if (parameters is null) return result;
                 foreach (var keyword in parameters.GetSubKeyNames())
@@ -130,9 +132,10 @@ internal sealed partial class NetworkTune
         foreach (var (keyword, value) in values)
         {
             if (!KeywordName().IsMatch(keyword) || value is not null && !NumberValue().IsMatch(value)) return null;
+            var regType = keyword.Equals(PnpCapabilitiesKey, StringComparison.OrdinalIgnoreCase) ? "REG_DWORD" : "REG_SZ";
             lines.Add(value is null
                 ? $"\"{reg}\" delete {key} /v \"{keyword}\" /f /reg:64"
-                : $"\"{reg}\" add {key} /v \"{keyword}\" /t REG_SZ /d {value} /f /reg:64");
+                : $"\"{reg}\" add {key} /v \"{keyword}\" /t {regType} /d {value} /f /reg:64");
         }
         lines.Add($"\"{pnputil}\" /restart-device \"{adapter.DeviceId}\"");
         return lines;

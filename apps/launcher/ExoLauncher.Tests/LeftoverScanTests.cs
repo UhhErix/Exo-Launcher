@@ -731,6 +731,44 @@ public sealed class LeftoverScanTests : IDisposable
         Assert.All(steps, step => Assert.True(step.Length < 7800, $"{step.Length} long"));
     }
 
+    [Fact]
+    public void FindDeadSkipsProtectedSecurityServicesAndDeletePrunesEmptyStartMenuFolderAndCookies()
+    {
+        // Protected / Defender PPL services with missing binary paths must never be flagged as dead leftovers.
+        using (var ppl = Key("HKLM", @"SYSTEM\CurrentControlSet\Services\CustomPplSvc"))
+        {
+            ppl.SetValue("ImagePath", Place("ProgramFiles", @"MissingSecurity\guard.exe"));
+            ppl.SetValue("Type", 0x10, RegistryValueKind.DWord);
+            ppl.SetValue("LaunchProtected", 2, RegistryValueKind.DWord);
+        }
+        using (var defender = Key("HKLM", @"SYSTEM\CurrentControlSet\Services\WinDefend"))
+        {
+            defender.SetValue("ImagePath", Place("ProgramFiles", @"Windows Defender\MsMpEng.exe"));
+            defender.SetValue("Type", 0x10, RegistryValueKind.DWord);
+        }
+
+        var dead = Scan().FindDead([]);
+        Assert.DoesNotContain(dead, d => d.Path.EndsWith(@"\CustomPplSvc", StringComparison.OrdinalIgnoreCase)
+            || d.Path.EndsWith(@"\WinDefend", StringComparison.OrdinalIgnoreCase));
+
+        // Start Menu shortcut deletion prunes its empty app subfolder, leaving Programs root intact.
+        var shortcut = File_("AppData", @"Microsoft\Windows\Start Menu\Programs\AcmeSuite\Acme.lnk");
+        var appMenuFolder = Path.GetDirectoryName(shortcut)!;
+        var programsRoot = Path.GetDirectoryName(appMenuFolder)!;
+        var scan = Scan();
+        var shortcutItem = new Leftover(shortcut, false, null, false, As: LeftoverKind.Shortcut);
+        Assert.True(scan.Delete(shortcutItem));
+        Assert.False(Directory.Exists(appMenuFolder));
+        Assert.True(Directory.Exists(programsRoot));
+
+        // Uninstalled app folder containing Electron Cookies/Local State is cleared on uninstall cleanup, while .ssh remains blocked.
+        var appDataDir = Path.Combine(Place("AppData", "UninstalledChat"), "");
+        File_("AppData", @"UninstalledChat\Cookies");
+        File_("AppData", @"UninstalledChat\Local State");
+        Assert.True(scan.Delete(new Leftover(appDataDir.TrimEnd('\\'), false, null, false)));
+        Assert.False(Directory.Exists(appDataDir));
+    }
+
     private static void Cmd(string command)
     {
         using var cmd = Process.Start(new ProcessStartInfo("cmd.exe", "/d /c " + command)

@@ -1,9 +1,3 @@
-// Exo's reports service (README.md). POST /v1/report stores one crash report the Launcher, Cinema or Browser sent, in R2
-// under the UTC date, and files or updates its error group's issue in the private UhhErix/Exo-Reports repository
-// (src/issues.js). POST /v1/user-report does the same for a Report a problem message, one issue each. POST /v1/telemetry stores scrubbed app events in D1, and /v1/telemetry/delete removes one install's
-// events; a daily cron job writes aggregates and removes raw events after 90 days. Nothing about the sender is kept: no IP
-// address is written (CF-Connecting-IP is read only as a rate limiter's key, `admitted` below), no user agent, no cookie, no
-// id the client makes beyond the install ID the telemetry envelope carries. Logs are off (wrangler.toml).
 import { limits, telemetryLimits } from './limits.js'
 import { ReportError, parseReport, reportInstallId } from './validate.js'
 import { TelemetryError, parseBatch, parseDelete } from './telemetry.js'
@@ -16,7 +10,6 @@ import { gitHubOf } from './github.js'
 import { parseUserReport, userLimits } from './user-report.js'
 
 const HOUR_MS = 60 * 60 * 1000
-// The contact form's page is the only browser that may post (src/contact.js, README.md › Contact).
 const SITE = 'https://getexo.app'
 const CONTACT_FROM = 'contact@getexo.app'
 const APP_NAMES = { launcher: 'Launcher', cinema: 'Cinema', browser: 'Browser', other: 'Other' }
@@ -40,12 +33,6 @@ export default {
     return new Response('Not found', { status: 404 })
   },
 
-  // The daily job (wrangler.toml [triggers]): aggregates and removes raw events older than 90 days, crash index rows older
-  // than the 30-day lifecycle of their objects, and old counts and tallies. With GITHUB_REPORTS_TOKEN set, whatever GitHub
-  // has not been told yet goes (src/issues.js flush: groups and Report a problem messages kept while GitHub was down, capped
-  // or the token was not set) and nothing is mailed: GitHub's own notifications tell the team. Without the token,
-  // yesterday's crash digest goes to the team by mail and Discord (src/triage.js), as before GitHub. Each step runs on its
-  // own: one that throws stops nothing else, and without the token it is named in the mail, which always goes.
   async scheduled(controller, env) {
     if (!env.TELEMETRY) return
     const now = Date.now()
@@ -72,12 +59,6 @@ export default {
   },
 }
 
-/**
- * Counts a stored report (src/triage.js) and files or updates its group's issue (src/issues.js). Until GITHUB_REPORTS_TOKEN
- * is set, the team is told as before GitHub: by mail and Discord when the group is new in its version or has grown tenfold;
- * the group is still recorded, so the daily job files it once the token is set. It runs after the answer and never fails a
- * report: with no D1 (the dev copy), no token, a failed send or GitHub down, the report is still stored.
- */
 async function triage(env, report, key, day) {
   if (!env.TELEMETRY) return
   const withGitHub = gitHubOf(env) !== null
@@ -88,23 +69,16 @@ async function triage(env, report, key, day) {
       if (does === 'send') await tellTeam(env, alertOf(report, total))
       else if (does === 'pause') await tellTeam(env, pausedAlert(day))
     }
-  } catch {
-    // Logs are off; the report is in R2 and the daily job reads the counts that did land.
-  }
+  } catch {}
   await fileCrash(env, report, key, day)
 }
 
-/**
- * One message to the team before GitHub (no GITHUB_REPORTS_TOKEN): by mail (the contact form's own binding and address),
- * and to Discord when its webhook is set.
- */
 async function tellTeam(env, { subject, text }) {
-  const sends = [mail(env, { subject, text })]
-  if (isDiscordWebhook(env.DISCORD_WEBHOOK_REPORTS)) {
-    const post = env.fetcher ?? ((...args) => fetch(...args))
-    sends.push(post(env.DISCORD_WEBHOOK_REPORTS, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(discordBody({ subject, text })) }))
-  }
-  await Promise.allSettled(sends)
+  if (!isDiscordWebhook(env.DISCORD_WEBHOOK_REPORTS)) return
+  const post = env.fetcher ?? ((...args) => fetch(...args))
+  await Promise.allSettled([
+    post(env.DISCORD_WEBHOOK_REPORTS, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(discordBody({ subject, text })) }),
+  ])
 }
 
 async function receive(request, env, ctx) {
@@ -130,7 +104,6 @@ async function receive(request, env, ctx) {
   const day = utcDay(Date.now())
   const key = `${limits.prefix}${day}/${crypto.randomUUID()}.json`
 
-  // A report with an install ID is indexed first, so a delete can always find it; if the index is down, nothing is stored.
   if (installId !== null) {
     if (!env.TELEMETRY) return new Response('Unavailable', { status: 503 })
     try {
@@ -151,13 +124,6 @@ async function receive(request, env, ctx) {
   return new Response(null, { status: 202 })
 }
 
-/**
- * POST /v1/user-report: one Report a problem message (src/user-report.js). Stored in R2 like a crash report (under
- * reports/, so the same 30-day rule expires it, and indexed by install so Delete my data removes it), then filed as an issue
- * at once when GitHub takes it. Answers 202 with { issue } (its number in Exo-Reports) or { ref } (8 hex, when it waits for
- * the daily job), 400, 403 (any Origin: only the apps send), 405, 413, 415, 422 (the excerpt holds personal data), 429 and
- * 503 (no index for an install ID).
- */
 async function receiveUserReport(request, env) {
   if (request.headers.has('Origin')) return empty(403)
   if (!isJson(request.headers.get('Content-Type'))) return new Response('JSON only', { status: 415 })
@@ -197,8 +163,6 @@ async function receiveUserReport(request, env) {
     throw error
   }
 
-  // Filed now when GitHub takes it, so the player sees the issue's number; otherwise kept for the daily job. Without the
-  // token the team is told by mail and Discord as well, and the issue is filed once the token is set.
   const gh = gitHubOf(env)
   let issue = null
   if (gh && env.TELEMETRY) {
@@ -209,10 +173,6 @@ async function receiveUserReport(request, env) {
   return Response.json(issue === null ? { ref } : { issue }, { status: 202 })
 }
 
-/**
- * The telemetry endpoints. Every refusal is an empty answer with its status (no field named, no detail): a bad batch 400,
- * a browser Origin 403, too big 413, over a limit 429, D1 unavailable 503 (the apps keep the batch and retry on 5xx).
- */
 async function telemetry(request, env, path) {
   if (request.headers.has('Origin')) return empty(403)
   if (!env.TELEMETRY) return empty(503)
@@ -238,7 +198,6 @@ async function receiveTelemetry(env, request, value, now) {
 
   if (!(await admitted(env, request, 'telemetry', new Set(rows.map((row) => row.install_id))))) return empty(429)
 
-  // The per-install cap per hour, in code. Best effort: the count and the insert are two statements, so a burst can pass it.
   const perInstall = new Map()
   for (const row of rows) perInstall.set(row.install_id, (perInstall.get(row.install_id) ?? 0) + 1)
   for (const [installId, incoming] of perInstall) {
@@ -254,37 +213,20 @@ async function deleteTelemetry(env, request, value) {
   const installId = parseDelete(value)
   if (!(await admitted(env, request, 'delete', [installId]))) return empty(429)
   await deleteInstall(env.TELEMETRY, installId)
-  // The install's crash reports: their R2 objects, then their index rows. A failure answers 503 and a retry finishes it.
   await deleteCrashReports(env.TELEMETRY, env.REPORTS, installId)
   return empty(204)
 }
 
 const empty = (status) => new Response(null, { status })
 
-/**
- * The rate limits of /v1/report, /v1/telemetry and /v1/telemetry/delete (wrangler.toml [[ratelimits]]), counted by
- * Cloudflare at the edge; the Worker stores neither key. Each install has its own count per route, so any number of players
- * online at once never share one; the sender's network has a larger count per route as the backstop, so one sender making
- * up install IDs is still stopped. A crash report from an old client carries no install ID and meets the network's alone.
- * A high cost ceiling per route comes last (REPORTS_CEILING), so senders spread over many addresses cannot run up writes,
- * deletes and alert mails without bound, and a request refused by its own install or network never spends it. The network is
- * asked first, so a batch padded with made-up IDs costs one refused call; the first refusal stops, and a refused request
- * stores nothing.
- */
 async function admitted(env, request, route, installIds) {
   if (!(await env.REPORTS_PER_NETWORK.limit({ key: `${route}:${networkOf(request.headers.get('CF-Connecting-IP'))}` })).success) return false
   for (const id of installIds) {
     if (!(await env.REPORTS_PER_INSTALL.limit({ key: `${route}:${id}` })).success) return false
   }
-  // Last, the cost ceiling for everyone on this route: a request one of the counts above refused never spends it.
   return (await env.REPORTS_CEILING.limit({ key: route })).success
 }
 
-/**
- * The sender's network as a limiter key: an IPv4 address as it is, an IPv6 address as its /64 (one home or phone gets a
- * whole /64, so a single address would let one sender rotate past the limit), an IPv4-mapped one as its IPv4. No address
- * (a local run): one shared key.
- */
 export function networkOf(ip) {
   if (!ip) return 'unknown'
   if (!ip.includes(':')) return ip
@@ -296,13 +238,6 @@ export function networkOf(ip) {
   return `${groups.slice(0, 4).map((g) => g.replace(/^0+(?=.)/, '')).join(':')}::/64`
 }
 
-/**
- * POST /v1/contact: one message from the help page. Stored in R2 under contact/<UTC date>/<id>.json (the address only
- * when one was given), then emailed to the owner if the send_email binding and CONTACT_TO are set. The rate limit is
- * keyed by the sender's IP address, the one place it is read: the key is held by Cloudflare's limiter and nowhere else.
- * Answers: 202 stored (or a honeypot hit, which looks the same), 400 with { field, problem } naming a rule, 403 for any
- * origin but getexo.app, 405, 413, 415, 429, 503 when R2 is absent (the dev copy).
- */
 async function contact(request, env) {
   if (request.headers.get('Origin') !== SITE) return empty(403)
   const cors = { 'Access-Control-Allow-Origin': SITE, Vary: 'Origin' }
@@ -323,7 +258,6 @@ async function contact(request, env) {
     if (error instanceof ContactError) return Response.json({ field: error.field, problem: error.problem }, { status: 400, headers: cors })
     return new Response(null, { status: 400, headers: cors })
   }
-  // A bot that filled the honeypot gets the same answer as a stored message, and nothing is kept or sent.
   if (message.spam) return new Response(null, { status: 202, headers: cors })
 
   const ip = request.headers.get('CF-Connecting-IP') ?? 'unknown'
@@ -332,12 +266,10 @@ async function contact(request, env) {
 
   const { spam, ...stored } = message
   await env.REPORTS.put(`contact/${utcDay(Date.now())}/${crypto.randomUUID()}.json`, JSON.stringify(stored), { httpMetadata: { contentType: 'application/json' } })
-  // The message is kept before the email is tried: an email that fails loses nothing, so the answer is still 202.
   await notify(env, stored).catch(() => {})
   return new Response(null, { status: 202, headers: cors })
 }
 
-/** Emails the owner through the send_email binding (CONTACT_MAIL) to CONTACT_TO. Plain text; the subject holds the app's name only. */
 function notify(env, { app, email, message }) {
   return mail(env, {
     subject: `Exo contact: ${APP_NAMES[app]}`,
@@ -346,7 +278,6 @@ function notify(env, { app, email, message }) {
   })
 }
 
-/** One plain-text mail to the owner (CONTACT_MAIL to CONTACT_TO); nothing is sent where either is absent (the dev copy). */
 async function mail(env, { subject, text, replyTo }) {
   if (!env.CONTACT_MAIL || !env.CONTACT_TO) return
   const EmailMessage = env.EmailMessage ?? (await import('cloudflare:email')).EmailMessage
@@ -373,7 +304,6 @@ function isJson(type) {
   return type !== null && /^application\/json(;|$)/i.test(type.trim())
 }
 
-/** The body as text, or null once it passes `max` bytes (the rest is never read). */
 async function readCapped(request, max) {
   if (!request.body) return ''
   const reader = request.body.getReader()

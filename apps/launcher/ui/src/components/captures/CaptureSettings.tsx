@@ -1,5 +1,4 @@
-import { useState, type KeyboardEvent, type ReactNode } from 'react'
-import { History, Record, Scissors } from '../../brand/icons'
+import { useState, type KeyboardEvent } from 'react'
 import { host } from '../../lib/host'
 import { Slider } from '../ui/Slider'
 import { clock, keysLabel, saveCaptureSettings as save, useCapture, type CaptureSettings, type CaptureState } from '../../lib/capture'
@@ -50,13 +49,12 @@ function comboOf(event: KeyboardEvent): string | null {
 }
 
 /** A hotkey: press Change, then the keys; Escape keeps the old ones. */
-function HotkeyRow({ label, field, settings, ok, disabled, icon }: {
+function HotkeyRow({ label, field, settings, ok, disabled }: {
   label: string
   field: Keys
   settings: CaptureSettings | null
   ok: boolean
   disabled: boolean
-  icon?: ReactNode
 }) {
   const [listening, setListening] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -72,7 +70,7 @@ function HotkeyRow({ label, field, settings, ok, disabled, icon }: {
     setError(await save({ [field]: combo }))
   }
   return (
-    <Row label={label} labelId={id} icon={icon} error={error ?? (!ok ? 'Another app already uses these keys. Pick others.' : null)}>
+    <Row label={label} labelId={id} error={error ?? (!ok ? 'Another app already uses these keys. Pick others.' : null)}>
       <button
         type="button"
         className={`exo-set-btn exo-capture-hotkey${listening ? ' is-listening' : ''}`}
@@ -116,22 +114,19 @@ export function CaptureSettingsView() {
       </Group>
       <Group id="capture-storage" title="Storage">
         <StorageRows settings={settings} />
-        <ShrinkRow settings={settings} />
       </Group>
     </div>
   )
 }
 
-/** The capture keys and Print Screen, here and in first-run setup. */
-/** `withIcons`: the first run's rows, each with its Lucide icon; Captures settings draws them without. */
-export function CaptureKeyRows({ state, settings, withIcons = false }: { state: CaptureState | null; settings: CaptureSettings | null; withIcons?: boolean }) {
+/** The capture keys and Print Screen. */
+export function CaptureKeyRows({ state, settings }: { state: CaptureState | null; settings: CaptureSettings | null }) {
   return (
     <>
-      <HotkeyRow label="Save replay" field="saveReplayKeys" settings={settings} ok={state?.hotkeys.saveReplay ?? true} disabled={!settings} icon={withIcons ? <History size={18} /> : undefined} />
-      <HotkeyRow label="Record" field="recordKeys" settings={settings} ok={state?.hotkeys.record ?? true} disabled={!settings} icon={withIcons ? <Record size={18} /> : undefined} />
-      <HotkeyRow label="Snip" field="snipKeys" settings={settings} ok={state?.hotkeys.snip ?? true} disabled={!settings} icon={withIcons ? <Scissors size={18} /> : undefined} />
+      <HotkeyRow label="Save replay" field="saveReplayKeys" settings={settings} ok={state?.hotkeys.saveReplay ?? true} disabled={!settings} />
+      <HotkeyRow label="Record" field="recordKeys" settings={settings} ok={state?.hotkeys.record ?? true} disabled={!settings} />
+      <HotkeyRow label="Snip" field="snipKeys" settings={settings} ok={state?.hotkeys.snip ?? true} disabled={!settings} />
       <PrintScreenRow state={state} settings={settings} />
-      {withIcons ? null : <AfterSnipRow settings={settings} />}
     </>
   )
 }
@@ -174,15 +169,17 @@ function ReplayRows({ state, settings }: { state: CaptureState | null; settings:
           onChange={value => void save({ replayMode: value as CaptureSettings['replayMode'] }).then(errors.set('mode'))}
         />
       </Row>
-      <Row label="Replay length" labelId="set-capture-length" detail={[retained, limit].filter(Boolean).join(' · ')} error={errors.of('length')}>
-        <Choice
-          label="Replay length"
-          value={String(settings?.replaySeconds ?? 60)}
-          choices={LENGTHS}
-          disabled={disabled}
-          onChange={value => void save({ replaySeconds: Number(value) }).then(errors.set('length'))}
-        />
-      </Row>
+      {settings?.replayMode !== 'off' ? (
+        <Row label="Replay length" labelId="set-capture-length" detail={[retained, limit].filter(Boolean).join(' · ')} error={errors.of('length')}>
+          <Choice
+            label="Replay length"
+            value={String(settings?.replaySeconds ?? 60)}
+            choices={LENGTHS}
+            disabled={disabled}
+            onChange={value => void save({ replaySeconds: Number(value) }).then(errors.set('length'))}
+          />
+        </Row>
+      ) : null}
       <Row label="Frame rate" labelId="set-capture-fps" error={errors.of('fps')}>
         <Choice
           label="Frame rate"
@@ -229,43 +226,15 @@ function PrintScreenRow({ state, settings }: { state: CaptureState | null; setti
   )
 }
 
-const AFTER_SNIP = [
-  { value: 'edit', label: 'Open the editor' },
-  { value: 'copy', label: 'Copy only' },
-] as const
-
-/** After a snip: it is always copied and saved; the editor opens unless Copy only (never over a game). */
-function AfterSnipRow({ settings }: { settings: CaptureSettings | null }) {
-  const [error, setError] = useState<string | null>(null)
-  return (
-    <Row label="After a snip" labelId="set-capture-after" error={error}>
-      <Choice label="After a snip" value={settings?.afterSnip ?? 'edit'} choices={AFTER_SNIP} disabled={!settings}
-        onChange={value => void save({ afterSnip: value as CaptureSettings['afterSnip'] }).then(setError)} />
-    </Row>
-  )
-}
-
 /** Off (the default), a capture leaves the call out; on, Exo tells everyone in the call, as Discord's clips do. */
 function CallVoicesRow({ settings }: { settings: CaptureSettings | null }) {
   return (
     <SwitchRow
       id="set-capture-call"
-      label="Record the call's voices"
+      label="Record voice chat"
       checked={settings?.callVoices === true}
       disabled={!settings}
       onChange={value => save({ callVoices: value })}
-    />
-  )
-}
-
-function ShrinkRow({ settings }: { settings: CaptureSettings | null }) {
-  return (
-    <SwitchRow
-      id="set-capture-shrink"
-      label="Make recordings smaller"
-      checked={settings?.autoShrink !== false}
-      disabled={!settings}
-      onChange={value => save({ autoShrink: value })}
     />
   )
 }
@@ -299,15 +268,15 @@ function StorageRows({ settings }: { settings: CaptureSettings | null }) {
   }
   return (
     <>
-      <Row label="Save folder" detail={settings?.folder} error={errors.of('folder')}>
+      <Row label="Save to" detail={settings?.folder} error={errors.of('folder')}>
         <button type="button" className="exo-set-btn" disabled={disabled} onClick={() => void openFolder()}>Open</button>
         <button type="button" className="exo-set-btn" disabled={disabled || picking} onClick={() => void browse()}>Change</button>
       </Row>
-      <Row label="Keep up to" labelId="set-capture-gb" error={errors.of('gb')}>
-        <Choice label="Keep up to" value={String(settings?.keepGb ?? 0)} choices={KEEP_GB} disabled={disabled} onChange={value => void save({ keepGb: Number(value) }).then(errors.set('gb'))} />
+      <Row label="Max storage" labelId="set-capture-gb" error={errors.of('gb')}>
+        <Choice label="Max storage" value={String(settings?.keepGb ?? 0)} choices={KEEP_GB} disabled={disabled} onChange={value => void save({ keepGb: Number(value) }).then(errors.set('gb'))} />
       </Row>
-      <Row label="Delete after" labelId="set-capture-days" error={errors.of('days')}>
-        <Choice label="Delete after" value={String(settings?.keepDays ?? 0)} choices={KEEP_DAYS} disabled={disabled} onChange={value => void save({ keepDays: Number(value) }).then(errors.set('days'))} />
+      <Row label="Auto-delete after" labelId="set-capture-days" error={errors.of('days')}>
+        <Choice label="Auto-delete after" value={String(settings?.keepDays ?? 0)} choices={KEEP_DAYS} disabled={disabled} onChange={value => void save({ keepDays: Number(value) }).then(errors.set('days'))} />
       </Row>
     </>
   )

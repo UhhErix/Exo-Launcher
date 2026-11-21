@@ -47,22 +47,22 @@ export async function run(t) {
     if (updates?.empty && updates.height > 80) failures.push(`Updates is up to date with nothing in it, yet ${updates.height}px tall`)
     const shape = await t.shell.eval(`({
       nav: !!document.querySelector('.exo-pc .exo-room-nav'),
-      status: document.querySelector('.exo-pc [data-pc-menu="best"]')?.textContent?.trim() ?? '',
+      status: document.querySelector('.exo-pc [data-pc-menu="exo-ai"]')?.textContent?.trim() ?? '',
       sections: [...document.querySelectorAll('.exo-pc [data-pc-part]')].filter(s => s.checkVisibility()).map(s => s.dataset.pcPart),
       room: (() => { const r = document.querySelector('.exo-pc'); return { scroll: r.scrollHeight, height: r.clientHeight, width: innerWidth, tall: innerHeight } })(),
     })`)
     c.evidence.shape = shape
     if (shape.nav) failures.push('the room still has a page list')
-    // Best settings sits on the PC's line: on, or how many things are left, never a lone word.
-    if (!/^Best settings on$|^\d+ things? left to set$/.test(shape.status)) failures.push(`Best settings beside the name reads "${shape.status || 'nothing'}"`)
+    if (!/^Exo AI(?: · .+)?$/.test(shape.status)) failures.push(`Exo AI chip beside the name reads "${shape.status || 'nothing'}"`)
     for (const id of ['overview', 'drivers', 'shaders']) if (!shape.sections.includes(id)) failures.push(`no ${id} section`)
     // On a 1080p window the whole room is one page: nothing to scroll.
     if (shape.room.width >= 1280 && shape.room.tall >= 800 && shape.room.scroll > shape.room.height + 1) failures.push(`the room scrolls ${shape.room.scroll - shape.room.height}px on a ${shape.room.width}x${shape.room.tall} window`)
-    // Its menu names every step this PC has, set or not (3.17.2 showed only "Set" on a PC with all set).
-    if (await t.shell.call(openMenu, 'best')) {
-      const steps = await t.shell.waitFor(() => { const li = [...document.querySelectorAll('.exo-pc-menu .exo-pc-best-steps li')]; return li.length ? li.map(l => l.textContent.trim()) : null }, { timeoutMs: 5000 })
+    if (await t.shell.call(openMenu, 'exo-ai')) {
+      const statusTitle = await t.shell.waitFor(() => document.querySelector('.exo-pc-menu .exo-ai-status-title')?.textContent?.trim() || null, { timeoutMs: 5000 })
+      const steps = await t.shell.eval(`[...document.querySelectorAll('.exo-pc-menu .exo-pc-best-steps li')].map(l => l.textContent.trim())`)
+      c.evidence.exoAiStatus = statusTitle
       c.evidence.bestSteps = steps
-      if (!steps) failures.push('Best settings opens with no step named')
+      if (!statusTitle) failures.push('Exo AI opens with no status banner')
       const tuningState = await t.host('system.tuning')
       c.evidence.systemTuning = tuningState
       if (!tuningState?.ok) failures.push('system.tuning did not answer ok')
@@ -85,7 +85,7 @@ export async function run(t) {
       await c.shot('best-settings', t.shell)
       await t.shell.key('Escape')
       await sleep(300)
-    } else failures.push("no Best settings on the PC's line")
+    } else failures.push("no Exo AI chip on the PC's line")
     failures.push(...await k.look(c, 'overview'))
     return failures
   })

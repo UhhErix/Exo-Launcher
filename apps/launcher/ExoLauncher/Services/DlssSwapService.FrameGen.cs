@@ -1748,9 +1748,8 @@ public sealed partial class DlssSwapService
                             id => settings.SetFrameGenKeptOff(id, true)).ConfigureAwait(false);
                     else service.FrameGenEverywhereOff(library.PeekCachedLibrary(), launcher.IsGameBusy);
                     await service.FrameGenKeepCurrentAsync(library.PeekCachedLibrary(), SystemSpecs.FrameGenGpu, launcher.IsGameBusy, CancellationToken.None).ConfigureAwait(false);
-                    // Then the games' own DLSS, FSR and XeSS files, with Update automatically on (DlssSwapService.AutoApply.cs).
-                    if (settings.Shared.AutoUpdateUpscalers)
-                        await service.UpscalersKeepCurrentAsync(library.PeekCachedLibrary(), launcher.IsGameBusy, settings.UpscalerConsent, CancellationToken.None).ConfigureAwait(false);
+                    // Then the games' own DLSS, FSR and XeSS files (DlssSwapService.AutoApply.cs).
+                    await service.UpscalersKeepCurrentAsync(library.PeekCachedLibrary(), launcher.IsGameBusy, settings.UpscalerConsent, CancellationToken.None).ConfigureAwait(false);
                 }
                 catch (Exception ex) { AppLog.Warn("Frame generation updates: " + ex.Message); }
                 finally { Volatile.Write(ref _frameGenUpdating, 0); }

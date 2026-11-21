@@ -100,6 +100,8 @@ internal sealed partial class NetworkTune(NetworkTune.IAdapters adapters, Networ
         new("ThroughputBoosterEnabled", "0", "Throughput Booster on", Wireless: true),
     ];
 
+    internal const string PnpCapabilitiesKey = "PnPCapabilities";
+
     private static readonly long Gigabit = 1_000_000_000;
 
     internal State Read()
@@ -113,10 +115,20 @@ internal sealed partial class NetworkTune(NetworkTune.IAdapters adapters, Networ
     }
 
     /// <summary>What Exo would set on an adapter: each rule its driver offers, accepting the value, and not already there; one value per keyword.</summary>
-    internal static IReadOnlyList<Rule> Decide(Adapter adapter, bool portable) =>
-        Rules.Where(r => r.Wireless == adapter.Wireless && !(r.DesktopOnly && portable))
+    internal static IReadOnlyList<Rule> Decide(Adapter adapter, bool portable)
+    {
+        var rules = Rules.Where(r => r.Wireless == adapter.Wireless && !(r.DesktopOnly && portable))
             .Select(r => adapter.Params.TryGetValue(r.Keyword, out var p) ? Wanted(r, p) : null).OfType<Rule>()
             .DistinctBy(r => r.Keyword, StringComparer.OrdinalIgnoreCase).ToList();
+        if (!portable && adapter.Params.TryGetValue(PnpCapabilitiesKey, out var pnp))
+        {
+            var cur = uint.TryParse(pnp.Now, NumberStyles.None, CultureInfo.InvariantCulture, out var parsed) ? parsed : 0u;
+            // Bit 0x10 disables "Allow the computer to turn off this device to save power"; 0x08 suppresses wake-on-LAN reset on desktop NICs.
+            if ((cur & 0x10) == 0)
+                rules.Add(new Rule(PnpCapabilitiesKey, (cur | 0x18).ToString(CultureInfo.InvariantCulture), "adapter power management on", adapter.Wireless, DesktopOnly: true));
+        }
+        return rules;
+    }
 
     /// <summary>The rule as it would write here, or null: a listed value not already set, or a number below the driver's own default.</summary>
     private static Rule? Wanted(Rule rule, Param p)

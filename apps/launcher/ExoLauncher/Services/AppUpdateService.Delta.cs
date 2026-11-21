@@ -8,36 +8,15 @@ using ExoLauncher.Helpers;
 
 namespace ExoLauncher.Services;
 
-/// <summary>
-/// The file-level update: when the update address lists a release's files.json and files.pack (AppFiles), Exo compares
-/// that list with the files it is running from, downloads only the files that changed (byte ranges of the pack, several at
-/// once), checks every file of the new folder against its SHA-256, and builds that folder beside the installed one from
-/// hard links to the unchanged files plus the new ones. Exo then closes and tools/installer/Apply-ExoDelta.ps1 swaps the
-/// folders as Setup does (app.previous kept until the new build reports a healthy start, Complete-ExoUpdate.ps1), updates
-/// Apps &amp; features and opens the new Exo.
-///
-/// The full installer is used instead whenever any of this can't be trusted or done: no list for the release, Exo isn't
-/// running from its installed folder, the installed copy wasn't put there by an installer that records its revision, the
-/// release's installer changed (it may do something outside the app folder), a game runs (a kept installer is how an update
-/// waits for one), the last file-level try at this version failed, the changed files aren't smaller than the installer, or
-/// any request, range, file or check fails. Ways it could fail, tested in AppFilesTests and AppUpdateDeltaTests: a list
-/// from another host or for another version is used; a range the server didn't send as asked is read; one changed file
-/// is missed (a stale hash cache); the old folder is touched before the swap; or a failure leaves the staging folder behind.
-/// </summary>
 public sealed partial class AppUpdateService
 {
     internal const string DeltaFailedName = "delta-failed.json";
-    /// <summary>In the updates folder: the files an interrupted file-level try downloaded and checked, each named by its SHA-256.</summary>
     internal const string DeltaPartsFolder = "delta-parts";
-    /// <summary>The installer records its revision here (tools/ExoLauncher.nsi); a delta needs the same one in files.json.</summary>
     internal const string InstallerRevisionValue = "ExoInstaller";
     private const string UninstallKey = @"Software\Microsoft\Windows\CurrentVersion\Uninstall\ExoLauncher";
     private const int RangesAtOnce = 4;
     private static readonly TimeSpan RangeStall = TimeSpan.FromSeconds(60);
 
-    /// <param name="ManifestUrl">files.json on the update address, as Exo builds it.</param>
-    /// <param name="ManifestSize">From the address's checks, when it gives them.</param>
-    /// <param name="PackSize">The pack's size and SHA-256 from the address's checks, held to what files.json says.</param>
     internal sealed record DeltaOffer(string ManifestUrl, string PackUrl, long? ManifestSize = null, string? ManifestSha256 = null,
         long? PackSize = null, string? PackSha256 = null);
 
@@ -47,31 +26,20 @@ public sealed partial class AppUpdateService
         internal long FetchRawBytes => Fetch.Sum(e => e.Size);
     }
 
-    /// <summary>What the swap script is started with.</summary>
     internal sealed record DeltaApply(string InstallRoot, string Incoming, string Setup, string Version, string UpdatesDirectory, int ProcessId);
 
-    /// <summary>The folder Exo runs from (the installed app folder for a real install).</summary>
     internal string AppFolder { get; init; } = Path.TrimEndingDirectorySeparator(AppContext.BaseDirectory);
 
-    /// <summary>Apps &amp; features' entry for Exo: where it installed the app and its installer revision (null when not there).</summary>
     internal Func<(string? Location, string? Revision)> InstalledSetup { get; init; } = ReadInstalledSetup;
 
-    /// <summary>Starts Apply-ExoDelta.ps1, which waits for Exo to close; false when Windows did not start it.</summary>
     internal Func<DeltaApply, bool> StartDeltaApply { get; init; } = RunDeltaApply;
 
-    /// <summary>Hard-links a file (a copy when Windows can't link it).</summary>
     internal Action<string, string> LinkOrCopy { get; init; } = DefaultLinkOrCopy;
 
     private readonly HttpClient _rangeHttp;
     private readonly Lock _planGate = new();
     private (string Tag, Task<DeltaPlan> Plan)? _plan;
 
-    /// <summary>
-    /// The files.json and files.pack the update address lists for <paramref name="tag"/>, as URLs Exo builds itself
-    /// (<c>/v1/launcher/&lt;tag&gt;/files.json</c> or <c>/v1/launcher/download/&lt;tag&gt;/files.json</c>): the answer's own URL
-    /// only says which of the two it serves (the exo-updates Worker names them files.filesJson and files.filesPack). Its checks
-    /// (checks.filesJson, checks.filesPack) may give each one's size and SHA-256. Null when either file is missing.
-    /// </summary>
     internal static DeltaOffer? ReadDeltaOffer(JsonElement root, string tag)
     {
         if (!root.TryGetProperty("files", out var files)) return null;
@@ -87,7 +55,6 @@ public sealed partial class AppUpdateService
         var (packSize, packSha) = Check(root, long.MaxValue, "filesPack", "pack", AppFiles.PackName);
         return new DeltaOffer(manifest, pack, size, sha, packSize, packSha);
 
-        // Both or neither: a size without a valid digest (or the reverse) is not taken.
         static (long?, string?) Check(JsonElement root, long max, params string[] keys)
         {
             if (!root.TryGetProperty("checks", out var checks) || checks.ValueKind != JsonValueKind.Object) return (null, null);
@@ -116,11 +83,6 @@ public sealed partial class AppUpdateService
         return null;
     }
 
-    /// <summary>
-    /// Why this install can't take a file-level update (the installer is used), or null when it can. Before files.json is read:
-    /// Exo must run from <c>&lt;install folder&gt;\app</c>, Apps &amp; features must name that folder and an installer revision,
-    /// and the last file-level try must not have been for this version.
-    /// </summary>
     internal static string? DeltaRefusal(string appFolder, string installFolder, (string? Location, string? Revision) setup, string? failedVersion, string offered)
     {
         static string Full(string path) => Path.TrimEndingDirectorySeparator(Path.GetFullPath(path));
@@ -138,7 +100,6 @@ public sealed partial class AppUpdateService
         return null;
     }
 
-    /// <summary>Why this list can't be used for this install (the installer is used), or null.</summary>
     internal static string? PlanRefusal(DeltaPlan plan, string offered, string? installedRevision, long? installerBytes)
     {
         if (plan.Manifest.Version != Normalize(offered)) return "files.json is for another version";
@@ -147,7 +108,6 @@ public sealed partial class AppUpdateService
         return null;
     }
 
-    /// <summary>The version whose last file-level try failed after Exo closed (Apply-ExoDelta.ps1 writes it); null when none.</summary>
     internal string? DeltaFailedVersion
     {
         get
@@ -163,7 +123,6 @@ public sealed partial class AppUpdateService
         }
     }
 
-    /// <summary>Starts working out what changed for this release in the background (the update was found), so Update now starts at once.</summary>
     private void PrepareDelta(string version, DeltaOffer offer)
     {
         if (HostMode.IsDisposable || DeltaRefusal(AppFolder, InstallFolder, InstalledSetup(), DeltaFailedVersion, version) is not null) return;
@@ -182,7 +141,6 @@ public sealed partial class AppUpdateService
         }
     }
 
-    /// <summary>files.json from the address (checked against the address's size and SHA-256 when it gives them), then the installed folder hashed and compared.</summary>
     internal async Task<DeltaPlan> PlanDeltaAsync(string version, DeltaOffer offer, CancellationToken ct)
     {
         byte[] json;
@@ -209,10 +167,6 @@ public sealed partial class AppUpdateService
         return new DeltaPlan(manifest, reuse, fetch);
     }
 
-    /// <summary>
-    /// The file-level update, up to Exo closing for the swap. Null (said in the log) when the installer is to be used instead;
-    /// a cancel by the user propagates. Nothing in the installed app folder is changed here.
-    /// </summary>
     private async Task<CheckResult?> TryDeltaAsync(CheckResult check, DeltaOffer offer, IProgress<(string status, double? percent)>? progress, CancellationToken ct)
     {
         var offered = check.RemoteVersion;
@@ -256,12 +210,10 @@ public sealed partial class AppUpdateService
                 Directory.CreateDirectory(Path.GetDirectoryName(dest)!);
                 LinkOrCopy(Path.Combine(AppFolder, entry.Path.Replace('/', '\\')), dest);
             }
-            // NSIS writes its uninstaller into the app folder after the swap; it is the same while the installer revision is.
             var uninstaller = Path.Combine(AppFolder, "Uninstall.exe");
             if (File.Exists(uninstaller) && !plan.Manifest.Files.Any(f => f.Path.Equals("Uninstall.exe", StringComparison.OrdinalIgnoreCase)))
                 File.Copy(uninstaller, Path.Combine(setupFolder, "Uninstall.exe"));
 
-            // Files an interrupted try already downloaded and checked come back first; only the rest is asked for.
             var remaining = ResumeFromParts(parts, plan.Fetch, Target, fetched);
             if (remaining.Count < plan.Fetch.Count)
                 AppLog.Info($"Update {offered}: {plan.Fetch.Count - remaining.Count} files kept from the last try.");
@@ -323,11 +275,6 @@ public sealed partial class AppUpdateService
         return path;
     }
 
-    /// <summary>
-    /// The files an interrupted try downloaded and checked, kept in the updates folder by SHA-256 (<see cref="KeepParts"/>):
-    /// each one this plan needs is read again against its SHA-256 and copied into the new folder; the rest of the folder is
-    /// removed. The files still to download.
-    /// </summary>
     internal static List<AppFiles.Entry> ResumeFromParts(string parts, IReadOnlyList<AppFiles.Entry> fetch, Func<AppFiles.Entry, string> target,
         System.Collections.Concurrent.ConcurrentDictionary<string, AppFiles.Entry> fetched)
     {
@@ -351,7 +298,6 @@ public sealed partial class AppUpdateService
                 File.Copy(kept, target(entry), overwrite: true);
                 fetched[entry.Path] = entry;
             }
-            // Anything else in the folder belongs to another version's try.
             foreach (var file in Directory.EnumerateFiles(parts))
                 if (!good.TryGetValue(Path.GetFileName(file), out var used) || !used) DeletionGate.DeleteFile(file);
         }
@@ -370,7 +316,6 @@ public sealed partial class AppUpdateService
         return Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(stream));
     }
 
-    /// <summary>After a try that did not reach the swap: the files it downloaded and checked, kept by SHA-256 for the next try.</summary>
     internal static void KeepParts(string parts, IEnumerable<AppFiles.Entry> fetched, Func<AppFiles.Entry, string> target)
     {
         try
@@ -396,7 +341,6 @@ public sealed partial class AppUpdateService
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { AppLog.Debug("Update: the last try's files stay for now: " + ex.GetType().Name); }
     }
 
-    /// <summary>The changed files: merged byte ranges of the pack, <see cref="RangesAtOnce"/> at a time, each tried up to three times.</summary>
     private async Task DownloadChangedAsync(string packUrl, long packSize, IReadOnlyList<AppFiles.Entry> files, Func<AppFiles.Entry, string> target,
         System.Collections.Concurrent.ConcurrentDictionary<string, AppFiles.Entry> fetched,
         IProgress<(string status, double? percent)>? progress, CancellationToken ct)
@@ -464,7 +408,6 @@ public sealed partial class AppUpdateService
                 var gap = new AppFiles.ExactStream(counting, entry.Offset - position);
                 await gap.CopyToAsync(Stream.Null, stall.Token).ConfigureAwait(false);
             }
-            // A file asked for again (its range is retried) counts as fetched only once it checks out again.
             fetched.TryRemove(entry.Path, out _);
             await AppFiles.WriteVerifiedAsync(counting, entry, target(entry), stall.Token).ConfigureAwait(false);
             fetched[entry.Path] = entry;
@@ -472,7 +415,6 @@ public sealed partial class AppUpdateService
         }
     }
 
-    /// <summary>Every file of the new folder, linked or downloaded, read again and checked against files.json; nothing else is in it.</summary>
     private static async Task VerifyStagedAsync(AppFiles.Manifest manifest, string staging, string setupFolder, Func<AppFiles.Entry, string> target, CancellationToken ct)
     {
         await Parallel.ForEachAsync(manifest.Files, new ParallelOptions { MaxDegreeOfParallelism = 4, CancellationToken = ct }, async (entry, token) =>
@@ -489,10 +431,12 @@ public sealed partial class AppUpdateService
     }
 
     private static readonly Regex StaleDeltaFolder = new(@"^app\.incoming-[0-9a-f]{32}(setup)?\z", RegexOptions.CultureInvariant);
+    private static readonly Regex StaleFailedFolder = new(@"^app\.failed-[0-9a-f]{32}\z", RegexOptions.CultureInvariant);
 
-    /// <summary>Staging folders an earlier file-level try left (a crash, power loss), and swap scripts older than an hour.</summary>
-    private void RemoveStaleDeltaFolders()
+    private void RemoveStaleDeltaFolders(TimeSpan? applyMaxAge = null)
     {
+        var maxApplyAge = applyMaxAge ?? TimeSpan.FromMinutes(2);
+        var now = _timeProvider.GetUtcNow().UtcDateTime;
         void Remove(DirectoryInfo folder)
         {
             if ((folder.Attributes & FileAttributes.ReparsePoint) != 0) return;
@@ -501,12 +445,22 @@ public sealed partial class AppUpdateService
         }
         try
         {
-            if (Directory.Exists(InstallFolder))
-                foreach (var folder in new DirectoryInfo(InstallFolder).EnumerateDirectories("app.incoming-*"))
-                    if (StaleDeltaFolder.IsMatch(folder.Name)) Remove(folder);
+            var root = InstallFolder;
+            if (Directory.Exists(root))
+            {
+                foreach (var folder in new DirectoryInfo(root).EnumerateDirectories("app.incoming-*"))
+                    if (StaleDeltaFolder.IsMatch(folder.Name) && now - folder.CreationTimeUtc > TimeSpan.FromMinutes(5))
+                        Remove(folder);
+                foreach (var folder in new DirectoryInfo(root).EnumerateDirectories("app.failed-*"))
+                    if (StaleFailedFolder.IsMatch(folder.Name) && now - folder.CreationTimeUtc > TimeSpan.FromHours(1))
+                        Remove(folder);
+                foreach (var file in new DirectoryInfo(root).EnumerateFiles("update-health-*.json"))
+                    if ((file.Attributes & FileAttributes.ReparsePoint) == 0 && now - file.LastWriteTimeUtc > TimeSpan.FromDays(1))
+                        try { DeletionGate.DeleteFile(file.FullName); } catch {}
+            }
             if (Directory.Exists(_updatesDirectory))
                 foreach (var folder in new DirectoryInfo(_updatesDirectory).EnumerateDirectories("apply-*"))
-                    if (DateTime.UtcNow - folder.CreationTimeUtc > TimeSpan.FromHours(1)) Remove(folder);
+                    if (now - folder.CreationTimeUtc > maxApplyAge) Remove(folder);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { AppLog.Debug("Update: old staging folders not looked at: " + ex.GetType().Name); }
     }
@@ -547,7 +501,6 @@ public sealed partial class AppUpdateService
         if (!CreateHardLink(target, source, IntPtr.Zero)) File.Copy(source, target);
     }
 
-    /// <summary>The scripts the swap runs, from the installer's own folder (tools/installer), embedded in Exo.</summary>
     private static readonly string[] DeltaScripts = ["Apply-ExoDelta.ps1", "Complete-ExoUpdate.ps1", "Verify-Payload.ps1", "Close-ExoLauncher.ps1", "Clean-ExoInstall.ps1"];
 
     private static bool RunDeltaApply(DeltaApply apply)
@@ -566,7 +519,6 @@ public sealed partial class AppUpdateService
             FileName = Path.Combine(Environment.SystemDirectory, @"WindowsPowerShell\v1.0\powershell.exe"),
             UseShellExecute = false,
             CreateNoWindow = true,
-            // Never the app folder: the script renames it.
             WorkingDirectory = folder,
             ErrorDialog = false,
         };
@@ -580,7 +532,6 @@ public sealed partial class AppUpdateService
         return process is not null;
     }
 
-    /// <summary>A read-only stream that tells how many bytes went through it.</summary>
     private sealed class CountingStream(Stream inner, Action<long> counted) : Stream
     {
         public override bool CanRead => true;

@@ -1,16 +1,15 @@
 // What this PC can use (src/lib/canUse.ts), on simulated PCs. `npm test` (Node's runner).
 //
-// How it could fail: a GeForce-only row (Game Ready or Studio, Output color, Profile Inspector) shows on a Radeon or an
+// How it could fail: a GeForce-only row (Game Ready or Studio) shows on a Radeon or an
 // Intel GPU, or AMD's and Intel's rows on a GeForce; an RTX workstation card is offered Game Ready; a PC whose card Exo
 // can't reach gets any maker's row; HDR rows show on a screen without HDR, or vanish while the probe hasn't answered
 // and then never return; a setting with one possible value is drawn as a menu; a controller over Bluetooth keeps rows
 // it can't send; a one-device menu offers Default and that same device; a keyboard card that opens nothing comes back;
-// the Riot ID row shows with no Riot Client, or hides an ID the player saved; a refused game keeps its Compress row;
-// "Also in games with anti-cheat" shows while the upscaler updates it widens are off.
+// the Riot ID row shows with no Riot Client, or hides an ID the player saved; a refused game keeps its Compress row.
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import {
-  compressShown, devicePicker, deviceHasPage, gpuOffers, hdrShown, isChoice, padSettable, riotIdShown, upscalerAntiCheatShown,
+  compressShown, devicePicker, deviceHasPage, gpuOffers, hdrShown, isChoice, padSettable, riotIdShown,
 } from '../src/lib/canUse.ts'
 
 /** Simulated PCs: what each probe answers on them. */
@@ -24,24 +23,21 @@ const PCS = {
 
 test('NVIDIA-only rows show on a GeForce and nowhere else', () => {
   const on = gpuOffers(PCS.desktopNvidia.vendor, PCS.desktopNvidia.workstation)
-  assert.deepEqual(on, { driverType: true, outputColor: true, profileImport: true, lowLatency: false, afmf3: false, makerPanel: false })
+  assert.deepEqual(on, { driverType: true, lowLatency: false, afmf3: false, makerPanel: false })
   for (const pc of [PCS.desktopAmd, PCS.laptopIntel, PCS.unknownGpu]) {
     const offers = gpuOffers(pc.vendor, pc.workstation)
     assert.equal(offers.driverType, false, `${pc.vendor}: no Game Ready or Studio`)
-    assert.equal(offers.outputColor, false, `${pc.vendor}: no NVIDIA color settings`)
-    assert.equal(offers.profileImport, false, `${pc.vendor}: no Profile Inspector`)
   }
 })
 
 test('an RTX workstation card has one driver: no Game Ready or Studio choice', () => {
   const offers = gpuOffers(PCS.rtxWorkstation.vendor, PCS.rtxWorkstation.workstation)
   assert.equal(offers.driverType, false)
-  assert.equal(offers.outputColor, true)
 })
 
 test("AMD's and Intel's rows are each their own maker's", () => {
-  assert.deepEqual(gpuOffers('amd'), { driverType: false, outputColor: false, profileImport: false, lowLatency: false, afmf3: true, makerPanel: true })
-  assert.deepEqual(gpuOffers('intel'), { driverType: false, outputColor: false, profileImport: false, lowLatency: true, afmf3: false, makerPanel: true })
+  assert.deepEqual(gpuOffers('amd'), { driverType: false, lowLatency: false, afmf3: true, makerPanel: true })
+  assert.deepEqual(gpuOffers('intel'), { driverType: false, lowLatency: true, afmf3: false, makerPanel: true })
 })
 
 test("a PC whose card Exo can't reach gets no maker's rows at all", () => {
@@ -97,13 +93,4 @@ test("Compress in Properties: no row for a game Exo will never compress, or befo
   assert.equal(compressShown({ state: 'refused' }), false)
   assert.equal(compressShown(null), false)
   for (const state of ['none', 'needsConsent', 'compressed', 'compressing', 'kept'] as const) assert.equal(compressShown({ state }), true, state)
-})
-
-test('"Also in games with anti-cheat" follows the upscaler updates it widens, or stays to revoke consent', () => {
-  assert.equal(upscalerAntiCheatShown(true), true)
-  assert.equal(upscalerAntiCheatShown(undefined), true, 'on by default')
-  assert.equal(upscalerAntiCheatShown(null), true)
-  assert.equal(upscalerAntiCheatShown(false), false)
-  assert.equal(upscalerAntiCheatShown(false, false), false)
-  assert.equal(upscalerAntiCheatShown(false, true), true, 'still reachable to turn global consent off')
 })

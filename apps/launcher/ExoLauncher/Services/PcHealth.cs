@@ -35,6 +35,9 @@ internal static partial class PcHealth
     /// <summary>A PC with two graphics chips: the one Windows picks to save power, and the one it picks for performance.</summary>
     internal sealed record HybridGpu(string PowerSaving, string HighPerformance);
 
+    /// <summary>A discrete graphics card's active and maximum PCIe link widths (e.g. running at x8 on an x16 slot).</summary>
+    internal sealed record PcieLink(string AdapterName, uint CurrentWidth, uint MaxWidth);
+
     internal sealed record Reading(
         IReadOnlyList<Dimm> Dimms,
         GpuBar? Gpu,
@@ -51,7 +54,10 @@ internal static partial class PcHealth
         DriverAdvisories.Advisory? ChipsetSkipped = null,
         DriverAdvisories.Advisory? ChipsetAdvised = null,
         bool? CpuHybridProbe = null,
-        string? BoardMaker = null);
+        string? BoardMaker = null,
+        PcieLink? GpuPcie = null,
+        bool Laptop = false,
+        bool PrimaryOnIntegrated = false);
 
     private const byte DimmFormFactor = 0x09; // SMBIOS: a desktop DIMM (SODIMMs are laptops and mini PCs, which seldom offer EXPO/XMP)
 
@@ -114,6 +120,10 @@ internal static partial class PcHealth
             items.Add(r.FastGpuForGames
                 ? new("gpupref", "Graphics for games", $"Your games run on the {two.HighPerformance}, not the {two.PowerSaving}.", Applied: true, CanUndo: true)
                 : new("gpupref", "Graphics for games", $"Windows may run games on the {two.PowerSaving}, not the {two.HighPerformance}."));
+        if (!r.Laptop && r.GpuPcie is { CurrentWidth: > 0, MaxWidth: >= 8 } pcie && pcie.CurrentWidth < pcie.MaxWidth)
+            items.Add(new("pcie", "Graphics card slot", $"Running at PCIe x{pcie.CurrentWidth} instead of x{pcie.MaxWidth}. Move the card to the top PCIe x16 slot or reseat it."));
+        if (!r.Laptop && r.Hybrid is { } hybrid && r.PrimaryOnIntegrated)
+            items.Add(new("gpucable", "Display cable", $"Your main monitor is plugged into the motherboard ({hybrid.PowerSaving}) instead of your {hybrid.HighPerformance}. Move the cable to the graphics card for full performance."));
         if (r.Network is { } net) items.AddRange(Network(net));
         return items;
     }
@@ -344,6 +354,7 @@ internal static partial class PcHealth
     private static readonly Lazy<IReadOnlyList<Dimm>> Memory = new(() => ParseDimms(Smbios.Value), LazyThreadSafetyMode.ExecutionAndPublication);
     private static readonly Lazy<HybridGpu?> Hybrid = new(ReadHybrid, LazyThreadSafetyMode.ExecutionAndPublication);
     private static readonly Lazy<GpuBar?> Gpu = new(() => WithSmartAccessMemory(ReadGpu()), LazyThreadSafetyMode.ExecutionAndPublication);
+    private static readonly Lazy<PcieLink?> GpuPcie = new(() => ReadGpuPcie(Gpu.Value?.Name), LazyThreadSafetyMode.ExecutionAndPublication);
 
     /// <summary>The SMBIOS table, read once; PC › Overview reads the processor and memory from it too (<see cref="PcAbout"/>).</summary>
     internal static byte[] SmbiosRaw() => Smbios.Value;
@@ -390,7 +401,9 @@ internal static partial class PcHealth
         var subject = chipset is null ? null : DriverAdvisories.Chipset(chipset.Vendor, cpu);
         var skipped = subject is null || latest is null || VersionNumber.Same(latest, installed) ? null : DriverAdvisories.Shared.Against(subject, latest);
         var advised = subject is null ? null : DriverAdvisories.Shared.Against(subject, installed);
-        var reading = new Reading(Memory.Value, Gpu.Value, cpu, power.Read(), installed, latest, update, chipsetAuto && installed is not null && !chipset!.WindowsAsks(), HagsOff(scheduling), Hybrid.Value, fastGpuForGames, NetworkBest.Shared.Read(), skipped, advised, CpuHybrid(), BoardMaker: PcAbout.Maker(PcAbout.Bios.Maker));
+        var laptop = ThisPcIsLaptop();
+        var primaryOnIntegrated = !laptop && Hybrid.Value is not null && ReadPrimaryOnIntegrated();
+        var reading = new Reading(Memory.Value, Gpu.Value, cpu, power.Read(), installed, latest, update, chipsetAuto && installed is not null && !chipset!.WindowsAsks(), HagsOff(scheduling), Hybrid.Value, fastGpuForGames, NetworkBest.Shared.Read(), skipped, advised, CpuHybrid(), BoardMaker: PcAbout.Maker(PcAbout.Bios.Maker), GpuPcie: GpuPcie.Value, Laptop: laptop, PrimaryOnIntegrated: primaryOnIntegrated);
         if (Interlocked.Exchange(ref _logged, 1) == 0) AppLog.Info("PC health: " + Describe(reading));
         return reading;
     }
@@ -403,7 +416,7 @@ internal static partial class PcHealth
         var bar = r.Gpu is null ? "GPU not read" : $"{r.Gpu.Name}: {(r.Gpu.Uma ? "shared memory" : r.Gpu.UploadHeap switch { true => "Resizable BAR on", false => "Resizable BAR off", null => "Resizable BAR unknown" })}";
         var plan = r.Power is null ? "plan not read"
             : $"plan {r.Power.Active} overlay {r.Power.Overlay}{(r.Power.Exo ? " (Exo's)" : "")} class {PowerProfiles.Keys[ClassOf(r.Cpu, r.CpuHybridProbe)]} max {r.Power.Cpu?.MaxState?.ToString() ?? "-"}% boost {r.Power.Cpu?.BoostMode?.ToString() ?? "-"} min cores {r.Power.Cpu?.MinCores?.ToString() ?? "-"}%";
-        return $"{ram}; {bar}; {plan}; chipset {r.ChipsetInstalled ?? "-"} (newest {r.ChipsetLatest ?? "-"}{(r.ChipsetUpdate is { } u ? $", update {u.Phase} {u.Version}" : "")}); GPU scheduling {(r.HagsOff ? "off" : "on or left to Windows")}; {(r.Hybrid is { } two ? $"two graphics chips ({two.PowerSaving} and {two.HighPerformance}), games on {(r.FastGpuForGames ? "the fast one by Exo" : "Windows' pick")}" : "one graphics chip")}; network {(r.Network is { } n ? $"{string.Join(", ", n.Items.Select(i => $"{i.Key} {(i.Off ? "off" : i.On ? "on" : "to set")}"))}{(n.Tune.SlowLink is { } s ? $", slow link {NetworkTune.Speed(s.Adapter.LinkBps)}" : "")}" : "not read")}.";
+        return $"{ram}; {bar}{(r.GpuPcie is { } pcie ? $" (PCIe x{pcie.CurrentWidth}/x{pcie.MaxWidth})" : "")}; {plan}; chipset {r.ChipsetInstalled ?? "-"} (newest {r.ChipsetLatest ?? "-"}{(r.ChipsetUpdate is { } u ? $", update {u.Phase} {u.Version}" : "")}); GPU scheduling {(r.HagsOff ? "off" : "on or left to Windows")}; {(r.Hybrid is { } two ? $"two graphics chips ({two.PowerSaving} and {two.HighPerformance}{(r.PrimaryOnIntegrated ? ", primary on integrated" : "")}), games on {(r.FastGpuForGames ? "the fast one by Exo" : "Windows' pick")}" : "one graphics chip")}; network {(r.Network is { } n ? $"{string.Join(", ", n.Items.Select(i => $"{i.Key} {(i.Off ? "off" : i.On ? "on" : "to set")}"))}{(n.Tune.SlowLink is { } s ? $", slow link {NetworkTune.Speed(s.Adapter.LinkBps)}" : "")}" : "not read")}.";
     }
 
     private static readonly Lazy<string?> Processor = new(ReadCpuName, LazyThreadSafetyMode.ExecutionAndPublication);

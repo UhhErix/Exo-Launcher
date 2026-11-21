@@ -88,7 +88,6 @@ function Sounds({ client, save }: { client: DiscordClientSettings | null; save: 
 }
 
 const FONT_SIZES = [12, 14, 15, 16, 18, 20, 24]
-const GROUP_SPACINGS = [0, 4, 8, 16, 24]
 const ZOOMS = [50, 67, 75, 80, 90, 100, 110, 125, 150, 175, 200]
 
 /** A slider over Discord's own stops (font sizes, spacings, zoom levels): it moves stop to stop. */
@@ -112,9 +111,6 @@ export function ChatPage() {
         <AccountToggle label="Show reactions" settings={settings} field="renderReactions" />
         <ChoiceRow label="Show spoilers" value={settings.renderSpoilers} onChange={value => changeAccountSettings({ renderSpoilers: value })}
           choices={[{ value: 'ON_CLICK', label: 'On click' }, { value: 'ALWAYS', label: 'Always' }, { value: 'IF_MODERATOR', label: 'On servers I moderate' }]} />
-        <AccountToggle label="Show image descriptions" settings={settings} field="viewImageDescriptions" />
-        <AccountToggle label="Turn emoticons into emoji" settings={settings} field="convertEmoticons" />
-        <AccountToggle label="Suggest stickers as I type" settings={settings} field="includeStickersInAutocomplete" />
         <AccountToggle label="Developer Mode" settings={settings} field="developerMode" />
       </Section>
       <Section title="Display">
@@ -123,18 +119,6 @@ export function ChatPage() {
         <ChoiceRow label="Message density" value={settings.messageDisplayCompact ? 'compact' : 'default'}
           onChange={value => changeAccountSettings({ messageDisplayCompact: value === 'compact' })}
           choices={[{ value: 'default', label: 'Default' }, { value: 'compact', label: 'Compact' }]} />
-        {settings.messageDisplayCompact ? (
-          <SwitchRow label="Show avatars in compact mode" checked={settings.displayCompactAvatars}
-            onChange={value => changeAccountSettings({ displayCompactAvatars: value })} />
-        ) : null}
-        <StopsRow label="Space between message groups" stops={GROUP_SPACINGS}
-          value={prefs.groupSpacing ?? (settings.messageDisplayCompact ? 0 : 16)} unit="px"
-          onCommit={v => setDiscordPrefs({ groupSpacing: v })} />
-        <SwitchRow label="Underline links" checked={prefs.underlineLinks} onChange={value => setDiscordPrefs({ underlineLinks: value })} />
-        <SliderRow label="Saturation" min={0} max={1} step={0.05} value={prefs.saturation} render={v => `${Math.round(v * 100)}%`} onCommit={v => setDiscordPrefs({ saturation: v })} />
-        {prefs.saturation < 1 ? (
-          <SwitchRow label="Saturation on custom colors" checked={prefs.desaturateUserColors} onChange={value => setDiscordPrefs({ desaturateUserColors: value })} />
-        ) : null}
         <ChoiceRow label="Role colors" value={prefs.roleStyle} onChange={value => setDiscordPrefs({ roleStyle: value })}
           choices={[{ value: 'username', label: 'In names' }, { value: 'dot', label: 'Next to names' }, { value: 'hidden', label: 'Hidden' }]} />
         <ChoiceRow label="Time format" value={String(settings.timestampHourCycle)} onChange={value => void changeAccountSettings({ timestampHourCycle: Number(value) })}
@@ -149,15 +133,10 @@ export function ChatPage() {
       </Section>
       <Section title="Text-to-speech">
         <AccountToggle label="/tts command" settings={settings} field="enableTtsCommand" />
-        <SliderRow label="Speed" min={0.5} max={2} step={0.25} value={prefs.ttsRate}
-          render={v => `x${v.toFixed(2)}`} onCommit={v => setDiscordPrefs({ ttsRate: v })} />
       </Section>
       <Section title="Streamer Mode">
-        <SwitchRow label="Streamer Mode" checked={prefs.streamerMode} onChange={value => setDiscordPrefs({ streamerMode: value })} />
-        <SwitchRow label="Hide personal information" checked={prefs.streamerHidePersonal} onChange={value => setDiscordPrefs({ streamerHidePersonal: value })} />
-        <SwitchRow label="Hide invite links" checked={prefs.streamerHideInvites} onChange={value => setDiscordPrefs({ streamerHideInvites: value })} />
-        <SwitchRow label="Turn off sounds" checked={prefs.streamerDisableSounds} onChange={value => setDiscordPrefs({ streamerDisableSounds: value })} />
-        <SwitchRow label="Turn off notifications" checked={prefs.streamerDisableNotifications} onChange={value => setDiscordPrefs({ streamerDisableNotifications: value })} />
+        <SwitchRow label="Streamer Mode" detail="Hides personal info, invite links, sounds, and notifications while streaming"
+          checked={prefs.streamerMode} onChange={value => setDiscordPrefs({ streamerMode: value })} />
       </Section>
     </>
   )

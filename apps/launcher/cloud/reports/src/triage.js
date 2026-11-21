@@ -1,28 +1,13 @@
 import { utcDay } from './telemetry-store.js'
 
-/**
- * Triage (README.md, "Triage"): so a crash is worked on the day it happens, not when someone thinks to look. Every stored
- * crash report is counted in D1 (`crash_days`, migrations/0004_crash_days.sql) by app, version, error type and UTC day. The
- * first report of an error in a version, and its 10th, 100th and 1000th, tell the team at once; a digest follows the daily
- * job. A group holds a count and one sample's key: no install ID, no time finer than the day.
- *
- * The alerts and the digest (mail, and the private Discord channel when its webhook is set) are the fallback until the
- * secret GITHUB_REPORTS_TOKEN is set (README.md › Issues): with the token the team is told through GitHub issues
- * (src/issues.js) and nothing here is mailed; the counts are kept either way, for `node triage.mjs`.
- */
-
 const DAY_MS = 24 * 60 * 60 * 1000
-/** A group's totals that tell the team: a new error in a version, then each tenfold. */
 export const ALERT_AT = [1, 10, 100, 1000]
-/** Counts older than this are removed by the daily job (the raw events' own age). */
 export const KEEP_DAYS = 90
 const APP_NAMES = { launcher: 'Exo Launcher', cinema: 'Exo Cinema', browser: 'Exo Browser' }
 const EXCERPT_CHARS = 1500
 const DIGEST_ROWS = 30
-/** Alert mails a UTC day at most (migrations/0005_alert_days.sql); past it the digest still lists every group. */
 export const ALERTS_PER_DAY = 50
 
-/** Counts one stored report. Returns the group's total for its version, across days. */
 export async function countReport(db, report, key, day) {
   await db.prepare(
     'INSERT INTO crash_days (app, version, error_type, day, count, sample_key) VALUES (?, ?, ?, ?, 1, ?) '
@@ -33,18 +18,6 @@ export async function countReport(db, report, key, day) {
   return Number(row?.total ?? 0)
 }
 
-/**
- * What one alert that is due does today (migrations/0005_alert_days.sql), counted up in one statement so racing reports
- * cannot both take the last place:
- *
- * | the day's alerts so far, this one included | does                                                        |
- * | ------------------------------------------ | ----------------------------------------------------------- |
- * | 1 to ALERTS_PER_DAY                        | 'send': the alert goes                                      |
- * | ALERTS_PER_DAY + 1                         | 'pause': one mail says alerts are paused for today          |
- * | more                                       | 'hold': nothing goes; the digest counts what was held back  |
- * | the count cannot be read or written        | 'send': a missing table (0005 not applied) or a failed      |
- * |                                            | write never silences an alert                               |
- */
 export async function claimAlert(db, day) {
   let sent
   try {
@@ -59,7 +32,6 @@ export async function claimAlert(db, day) {
   return sent === ALERTS_PER_DAY + 1 ? 'pause' : 'hold'
 }
 
-/** The one mail at the first alert past the day's cap. */
 export function pausedAlert(day) {
   return {
     subject: `Exo errors, ${day}: alerts paused for today`,
@@ -67,7 +39,6 @@ export function pausedAlert(day) {
   }
 }
 
-/** How many alerts the day held back past its cap; 0 when none, or when the tally cannot be read. */
 export async function heldBack(db, day) {
   try {
     const row = await db.prepare('SELECT sent FROM alert_days WHERE day = ?').bind(day).first()
@@ -77,10 +48,6 @@ export async function heldBack(db, day) {
   }
 }
 
-/**
- * The daily mail: the digest (or a line that it could not be made), what was held back, and every step of the daily job
- * that failed, so a broken step is heard about instead of stopping the mail. Null only when there is nothing to say.
- */
 export function dailyMessage(digest, failed, held, day) {
   const lines = []
   if (held > 0) lines.push(`${held} ${held === 1 ? 'alert was' : 'alerts were'} held back by the daily cap; every group is listed above.`)
@@ -91,7 +58,6 @@ export function dailyMessage(digest, failed, held, day) {
     text: `${digest?.text ?? ''}${lines.length ? (digest ? '\n' : '') + lines.join('\n') + '\n' : ''}`,
   }
 }
-/** The message for a group that reached `total`: what broke, where, and the end of its (already scrubbed) excerpt. */
 export function alertOf(report, total) {
   const app = APP_NAMES[report.app] ?? report.app
   const what = total === 1 ? 'new error' : `${total} reports`
@@ -102,10 +68,6 @@ export function alertOf(report, total) {
   }
 }
 
-/**
- * The message for one Report a problem message before GitHub (src/user-report.js): who sent what, in the player's own
- * words cut to EXCERPT_CHARS, the contact when given, and the reference and R2 key to read the rest (its log included).
- */
 export function userAlertOf(report, key) {
   const app = APP_NAMES[report.app] ?? report.app
   const message = report.message.length > EXCERPT_CHARS ? report.message.slice(0, EXCERPT_CHARS) + '…' : report.message
@@ -116,7 +78,6 @@ export function userAlertOf(report, key) {
   }
 }
 
-/** Yesterday's groups, most reports first, as the digest's text; null when there were none. */
 export async function digestOf(db, now) {
   const day = utcDay(now - DAY_MS)
   const { results } = await db.prepare(
@@ -130,17 +91,14 @@ export async function digestOf(db, now) {
   return { subject: `Exo errors, ${day}: ${sum} in ${results.length} ${results.length === 1 ? 'group' : 'groups'}`, text: `${lines.join('\n')}\n` }
 }
 
-/** The daily job: counts older than KEEP_DAYS go. */
 export async function pruneCrashDays(db, now) {
   await db.prepare('DELETE FROM crash_days WHERE day < ?').bind(utcDay(now - KEEP_DAYS * DAY_MS)).run()
 }
 
-/** The daily job: alert tallies older than KEEP_DAYS go (a step of its own, so a missing 0005 stops nothing else). */
 export async function pruneAlertDays(db, now) {
   await db.prepare('DELETE FROM alert_days WHERE day < ?').bind(utcDay(now - KEEP_DAYS * DAY_MS)).run()
 }
 
-/** True only for an https Discord webhook on the default port, with no user info. */
 export function isDiscordWebhook(url) {
   if (typeof url !== 'string') return false
   let parsed
@@ -153,7 +111,6 @@ export function isDiscordWebhook(url) {
     && ['discord.com', 'discordapp.com'].includes(parsed.hostname) && /^\/api\/webhooks\/\d+\/[\w-]+\/?$/.test(parsed.pathname)
 }
 
-/** The Discord message for an alert: its subject in bold and the text in a code block, inside Discord's 2000 characters. */
 export function discordBody({ subject, text }) {
   const room = 1900 - subject.length
   const body = text.length > room ? '…' + text.slice(-room) : text

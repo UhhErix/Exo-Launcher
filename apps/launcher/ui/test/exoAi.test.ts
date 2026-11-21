@@ -30,10 +30,10 @@ test('PcRoom preserves legacy PcLink jump routing into Exo AI, Storage, and Grap
   assert.match(pcRoom, /jump\.tab === 'apps'/)
 })
 
-test('ExoAiPanel unifies background core, fan curves, Auto-Tune, Autopilot, and Best Settings', () => {
-  assert.match(exoAiPanel, /Always apply best settings silently/)
-  assert.match(exoAiPanel, /Background drift check/)
-  assert.match(exoAiPanel, /GPU fan curve/)
+test('ExoAiPanel unifies fan curves, Auto-Tune, Autopilot, and Best Settings without background toggles', () => {
+  assert.doesNotMatch(exoAiPanel, /exo-ai-auto-apply|exo-ai-drift|Always apply best settings silently|Background drift check/)
+  assert.match(exoAiPanel, /Watching in background/)
+  assert.match(exoAiPanel, /GPU fan speed/)
   assert.match(exoAiPanel, /value:\s*'quiet'/)
   assert.match(exoAiPanel, /value:\s*'balanced'/)
   assert.match(exoAiPanel, /value:\s*'performance'/)
@@ -42,8 +42,8 @@ test('ExoAiPanel unifies background core, fan curves, Auto-Tune, Autopilot, and 
   assert.match(exoAiPanel, /<BestSetup\b/)
 })
 
-test('BestSetup collapses already-optimal steps while keeping systemTuningNeedsRestart', () => {
+test('BestSetup hides already-optimal steps while keeping systemTuningNeedsRestart', () => {
   assert.match(bestSetup, /systemTuningNeedsRestart\(items\)/)
-  assert.match(bestSetup, /exo-pc-best-done-toggle/)
-  assert.match(bestSetup, /already optimal/)
+  assert.match(bestSetup, /pendingSteps/)
+  assert.doesNotMatch(bestSetup, /exo-pc-best-done-toggle|already optimal/)
 })

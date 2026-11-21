@@ -33,7 +33,7 @@ public sealed partial class WebHostBridge
             _ when IsWindowsSideAction(action) => await Task.Run(() => WindowsSideAction(action, WindowsGameMode.Shared, WindowsGameBar.Shared), ct).ConfigureAwait(false),
             _ => null,
         };
-        var reading = await Task.Run(() => PcHealth.ReadAsync(PowerPlan.Shared, _services.Settings.Current.AutoUpdateChipset, _services.Settings.Current.FastGpuForGames, ct), ct).ConfigureAwait(false);
+        var reading = await Task.Run(() => PcHealth.ReadAsync(PowerPlan.Shared, true, _services.Settings.Current.FastGpuForGames, ct), ct).ConfigureAwait(false);
         var decided = PcHealth.Decide(reading).ToList();
         return new
         {

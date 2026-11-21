@@ -8,51 +8,20 @@ using Microsoft.Win32;
 
 namespace ExoLauncher.Services;
 
-/// <summary>
-/// System > Graphics > Driver and profile's driver row: the newest NVIDIA Game Ready driver for this PC's card, and a
-/// one-click update that installs only the driver. docs/architecture/nvidia-driver-install.md has the
-/// research (NVIDIA's lookup endpoints, the package format, what NVCleanstall and Nexus do).
-///
-/// 1. Check: NVIDIA's product list maps the card's name to its series and product ids (a GeForce card to a
-///    GeForce series, a laptop to a notebook series, a workstation card to an NVIDIA RTX / Quadro series,
-///    never a data center one), then NVIDIA's driver list gives the newest DCH driver for the chosen branch:
-///    Game Ready or Studio on GeForce, NVIDIA's recommended RTX Enterprise driver on a workstation card. On
-///    Game Ready, a GeForce hotfix driver (announced on NVIDIA's GeForce forums) wins when it is newer and the card
-///    runs NVIDIA's current branches (<see cref="CurrentBranches"/>); Maxwell, Pascal and Volta stopped at release 580,
-///    and NVIDIA's list gives them its last driver for them. Cached an hour, so a driver NVIDIA puts out today shows the same day.
-/// 2. Update, after the user's consent: download from NVIDIA; verify NVIDIA's Authenticode signature and the
-///    size; unpack only the driver and NVIDIA's installer (on a laptop also the platform controllers, and HDMI/DP audio
-///    while a screen on the card plays sound: <see cref="DisplayAudio()"/>) with
-///    Windows' own tar, so nothing else (NVIDIA app, telemetry, containers, ShadowPlay, FrameView, PhysX) is ever
-///    installed: of 617.42's 3.7 GB unpacked, Display.Driver's 2.8 GB, NVI2's 27 MB and HDAudio's 1.2 MB; check setup.exe's signature; run NVIDIA's setup as a silent clean install as
-///    administrator (Windows asks); confirm the new version; put Exo's GPU profile back.
-/// Never touches a file NVIDIA signed, never re-signs, never writes driver tweaks. Waits while a game runs or a Discord call is on.
-/// A Radeon or an Intel GPU gets the same row from <see cref="GpuDriverUpdate"/>.
-/// </summary>
 internal static partial class NvidiaDriverService
 {
-    /// <summary>Kind is game, studio, hotfix, security (NVIDIA's security update for a card Game Ready drivers left) or workstation.</summary>
     internal sealed record Latest(string Version, string Url, long Size, string? Released, string Kind);
 
-    /// <summary>Where an update stands; Stage is idle, downloading, unpacking, waiting (for a game to close), installing, done or failed.</summary>
     internal sealed record Progress(string Stage, int Percent, string? Message);
 
     private static readonly HttpClient Http = ExoHttp.Create(TimeSpan.FromMinutes(30));
     private static readonly Lock Gate = new();
-    /// <summary>
-    /// Hotfixes aren't offered for now: 621.12 left Phantom Blade Zero flickering, and its studio still pointed players at
-    /// a WHQL driver after it. The forum and server lookups stay, for when they're offered again.
-    /// </summary>
-    private const bool OfferHotfixes = false;
-    /// <summary>The newest driver per card and branch, so the header's Game Ready read and the row's Studio read don't evict each other.
-    /// Kept on disk too, so a restart doesn't ask NVIDIA again (PRIVACY.md: at most once an hour).</summary>
+    internal const bool OfferHotfixes = true;
     private static readonly LatestCache<Latest> Drivers = new("NVIDIA's driver list", TimeSpan.FromHours(1), "nvidia-drivers.json");
-    /// <summary>What NVIDIA's download server had of hotfixes newer than a version: asked at most every six hours per version.</summary>
     private static readonly LatestCache<Latest> ServerHotfixes = new("NVIDIA's hotfix packages", TimeSpan.FromHours(6));
     private static Progress _progress = new("idle", 0, null);
     private static Task? _running;
 
-    /// <summary>Fires on every change of <see cref="Current"/>.</summary>
     internal static event Action<Progress>? Changed;
 
     internal static Progress Current { get { lock (Gate) return _progress; } }
@@ -64,21 +33,14 @@ internal static partial class NvidiaDriverService
         Changed?.Invoke(next);
     }
 
-    /// <summary>"617.42" from NvAPI's 61742, or null without an NVIDIA driver.</summary>
     internal static string? Installed() => WindowsDriverVersion()
         ?? (NvidiaProfiles.DriverVersion() is { } v and > 0 ? $"{v / 100}.{v % 100:00}" : null);
 
-    /// <summary>
-    /// The NVIDIA display driver as Windows records it, current the moment an install finishes (NvAPI in this process
-    /// keeps answering for the driver it loaded with until Exo restarts). Null when Windows has no NVIDIA display driver.
-    /// </summary>
     internal static string? WindowsDriverVersion() => NvidiaAdapter("DriverVersion") is { } version ? FromWindowsVersion(version) : null;
 
-    /// <summary>NVIDIA AjaxDriverService OS id: 135 on Windows 11 (build 22000+), 57 on Windows 10.</summary>
     internal static int OsId(Version? osVersion = null) =>
         (osVersion ?? Environment.OSVersion.Version).Build >= 22000 ? 135 : 57;
 
-    /// <summary>Picks the active DXGI NVIDIA adapter subkey value when its PCI device id matches, else falls back to the first NVIDIA entry.</summary>
     internal static string? PickNvidiaSubkeyMatch(IEnumerable<(string? Provider, string? MatchingDeviceId, string? Value)> entries, uint? activeDeviceId)
     {
         string? fallback = null;
@@ -93,7 +55,6 @@ internal static partial class NvidiaDriverService
         return fallback;
     }
 
-    /// <summary>A value Windows records for the active NVIDIA display driver (DriverVersion, MatchingDeviceId), or null without one.</summary>
     private static string? NvidiaAdapter(string value)
     {
         try
@@ -114,11 +75,6 @@ internal static partial class NvidiaDriverService
         return null;
     }
 
-    /// <summary>
-    /// Whether NVIDIA's current driver branches support the card, by the hardware id Windows matched its driver to
-    /// ("pci\ven_10de&amp;dev_2484", an RTX 3070): Turing (device 1E00) and newer. Maxwell, Pascal and Volta (and older)
-    /// stopped at release 580, so a hotfix from a newer branch won't install on them. An unknown card gets no hotfix.
-    /// </summary>
     internal static bool CurrentBranches(string? hardwareId) =>
         hardwareId is not null && DeviceId().Match(hardwareId) is { Success: true } match
         && int.Parse(match.Groups[1].Value, NumberStyles.HexNumber, CultureInfo.InvariantCulture) >= 0x1E00;
@@ -126,7 +82,6 @@ internal static partial class NvidiaDriverService
     [System.Text.RegularExpressions.GeneratedRegex(@"ven_10de&dev_([0-9a-f]{4})", System.Text.RegularExpressions.RegexOptions.IgnoreCase)]
     private static partial System.Text.RegularExpressions.Regex DeviceId();
 
-    /// <summary>Windows' 32.0.16.1770 is NVIDIA's 617.70: the last five digits of its last two parts.</summary>
     internal static string? FromWindowsVersion(string version)
     {
         var parts = version.Split('.');
@@ -137,10 +92,8 @@ internal static partial class NvidiaDriverService
         return $"{int.Parse(tail[..3], CultureInfo.InvariantCulture)}.{tail[3..]}";
     }
 
-    /// <summary>The NVIDIA card's name as Windows has it ("NVIDIA GeForce RTX 3070"), or null.</summary>
     internal static string? Card() => GpuCapability.Adapters().FirstOrDefault(adapter => GraphicsService.Vendors([adapter]).Contains("nvidia"));
 
-    /// <summary>Whether the card is a workstation one (NVIDIA RTX / Quadro): it gets NVIDIA's RTX Enterprise driver, no branch choice.</summary>
     internal static bool Workstation(string card)
     {
         if (card.Contains("GeForce", StringComparison.OrdinalIgnoreCase)) return false;
@@ -151,10 +104,10 @@ internal static partial class NvidiaDriverService
 
     private static string Plain(string name) => name.Replace("NVIDIA ", "", StringComparison.OrdinalIgnoreCase).Replace(" GPU", "", StringComparison.OrdinalIgnoreCase).Trim();
 
-    /// <summary>The newest driver for this card on the branch (game or studio; a workstation card has one), from NVIDIA (cached an hour); null when it can't tell.</summary>
-    /// <remarks>An answer older than the hour shows at once while NVIDIA is asked again (System's first showing never
-    /// waits on the network; the row reads again each time it shows); <paramref name="fresh"/> (an update) waits for it.
-    /// Kept, retried and slowed down as every version check is (<see cref="LatestCache{T}"/>).</remarks>
+    internal static bool ChecksHotfix(string card, bool workstation, bool studio, string? hardwareId) =>
+        OfferHotfixes && !workstation && !studio && CurrentBranches(hardwareId)
+        && card.Contains("GeForce", StringComparison.OrdinalIgnoreCase);
+
     internal static Task<Latest?> LatestAsync(string branch, CancellationToken ct, bool fresh = false)
     {
         SweepUnpacked();
@@ -162,12 +115,11 @@ internal static partial class NvidiaDriverService
         var workstation = Workstation(card);
         var studio = !workstation && branch == "studio";
         var hardwareId = NvidiaAdapter("MatchingDeviceId");
-        var hotfix = OfferHotfixes && !workstation && !studio && CurrentBranches(hardwareId);
-        var key = card + "|" + hardwareId + "|" + (workstation ? "workstation" : studio ? "studio" : "game");
+        var hotfix = ChecksHotfix(card, workstation, studio, hardwareId);
+        var key = card + "|" + hardwareId + "|" + (workstation ? "workstation" : studio ? "studio" : hotfix ? "game|hf" : "game");
         return Drivers.GetAsync(key, lookup => FetchAsync(card, workstation, studio, hotfix, lookup), ct, fresh);
     }
 
-    /// <summary>Asks NVIDIA for the card's newest driver on the branch (a failure throws: the cache keeps the last answer).</summary>
     private static async Task<Latest?> FetchAsync(string card, bool workstation, bool studio, bool hotfix, CancellationToken ct)
     {
         Latest? latest = null;
@@ -175,7 +127,6 @@ internal static partial class NvidiaDriverService
         if (products.Count == 0) AppLog.Info($"Driver: NVIDIA lists no product named \"{Plain(card)}\".");
         foreach (var (series, product) in products)
         {
-            // Studio drivers are listed without NVIDIA's WHQL flag; betas are skipped either way.
             var url = "https://gfwsl.geforce.com/services_toolkit/services/com/nvidia/services/AjaxDriverService.php?func=DriverManualLookup" +
                 $"&psid={series}&pfid={product}&osID={OsId()}&languageCode=1033&isWHQL={(studio ? 0 : 1)}&dch=1&upCRD={(studio ? 1 : 0)}&sort1=0&numberOfResults=3";
             using var doc = JsonDocument.Parse(await GetTextAsync(url, ct).ConfigureAwait(false));
@@ -190,7 +141,6 @@ internal static partial class NvidiaDriverService
                 var released = info.TryGetProperty("ReleaseDateTime", out var r) ? r.GetString() : null;
                 var size = info.TryGetProperty("DownloadURLFileSize", out var sz) && double.TryParse(sz.GetString()?.Split(' ')[0],
                     System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var mb) ? (long)(mb * 1_000_000) : 0;
-                // A card NVIDIA's Game Ready drivers left (GTX 10 series and older) gets its security updates instead.
                 var security = info.TryGetProperty("Name", out var n) && n.GetString()?.Contains("Security", StringComparison.OrdinalIgnoreCase) == true;
                 if (latest is null || Compare(version, latest.Version) > 0)
                     latest = new Latest(version, download, size, released, workstation ? "workstation" : studio ? "studio" : security ? "security" : "game");
@@ -202,7 +152,6 @@ internal static partial class NvidiaDriverService
         return latest;
     }
 
-    /// <summary>A page from NVIDIA. A 429 or 503 makes Exo leave NVIDIA alone for its Retry-After (else an hour, at most a day).</summary>
     private static async Task<string> GetTextAsync(string url, CancellationToken ct)
     {
         using var response = await Http.GetAsync(url, ct).ConfigureAwait(false);
@@ -211,11 +160,6 @@ internal static partial class NvidiaDriverService
         return await response.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
     }
 
-    /// <summary>
-    /// The card's (series, product) ids. NVIDIA lists one card under several series (desktop, notebook,
-    /// data center): keep the series of the card's own kind, by the series' product type (1 GeForce, 3 NVIDIA
-    /// RTX / Quadro) and whether it is a notebook series.
-    /// </summary>
     private static async Task<List<(string Series, string Product)>> ProductsAsync(string card, CancellationToken ct)
     {
         var name = Plain(card);
@@ -236,20 +180,12 @@ internal static partial class NvidiaDriverService
             .Select(v => (Series: (string?)v.Attribute("ParentID") ?? "", Product: (string?)v.Element("Value") ?? ""))
             .Where(v => v.Product.Length > 0 && series.ContainsKey(v.Series))
             .ToList();
-        // A laptop's own notebook series when NVIDIA has one, else whatever matched; a desktop never takes a notebook series.
         var own = found.Where(v => series[v.Series] == laptop).ToList();
         return own.Count > 0 || !laptop ? own : found;
     }
 
     private const string ForumsApi = "https://api-forums.nvidia.com/forums-api/1.0";
 
-    /// <summary>
-    /// The newest GeForce hotfix driver newer than the Game Ready one (<paramref name="gameReady"/>); null when there is none
-    /// or it can't be read. Two places, as either can be late: NVIDIA's GeForce forums, where NVIDIA announces every hotfix
-    /// (its support site's list misses some, such as 617.70; the newest few topics NVIDIA's own staff opened are read for
-    /// NVIDIA's download link, which names the version), and NVIDIA's download server itself (the forum's search showed
-    /// nothing of 621.12 the day it came out). Hotfixes are GeForce-only and one package covers desktops and laptops.
-    /// </summary>
     private static async Task<Latest?> HotfixAsync(string card, string? gameReady, CancellationToken ct)
     {
         if (!card.Contains("GeForce", StringComparison.OrdinalIgnoreCase)) return null;
@@ -267,19 +203,24 @@ internal static partial class NvidiaDriverService
             AppLog.Info("Driver: NVIDIA's hotfix announcements could not be read: " + ex.Message);
         }
         var known = newest is not null && (gameReady is null || Compare(newest.Version, gameReady) > 0) ? newest.Version : gameReady;
-        if (known is not null && await HotfixOnServerAsync(known, ct).ConfigureAwait(false) is { } posted) newest = posted;
+        if (known is not null)
+        {
+            try
+            {
+                if (await HotfixOnServerAsync(known, ct).ConfigureAwait(false) is { } posted) newest = posted;
+            }
+            catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException && !ct.IsCancellationRequested)
+            {
+                AppLog.Info("Driver: NVIDIA's hotfix server check could not be read: " + ex.Message);
+            }
+        }
         return newest is not null && (gameReady is null || Compare(newest.Version, gameReady) > 0) ? newest : null;
     }
 
-    /// <summary>
-    /// A hotfix newer than <paramref name="newest"/> on NVIDIA's download server: each package name a hotfix could take is
-    /// asked for its headers only (nothing downloads), newest first, eight at a time, until one is there. At most every
-    /// six hours per version (<see cref="ServerHotfixes"/>), so at most ~130 small requests a quarter of a day.
-    /// </summary>
     private static Task<Latest?> HotfixOnServerAsync(string newest, CancellationToken ct) =>
         ServerHotfixes.GetAsync(newest, async lookup =>
         {
-            foreach (var batch in HotfixCandidates(newest).Chunk(8))
+            foreach (var batch in HotfixCandidates(newest).Chunk(16))
             {
                 var answers = await Task.WhenAll(batch.Select(version => HotfixPackageAsync(version, lookup))).ConfigureAwait(false);
                 if (answers.FirstOrDefault(a => a is not null) is not { } hit) continue;
@@ -289,10 +230,6 @@ internal static partial class NvidiaDriverService
             return null;
         }, ct);
 
-    /// <summary>
-    /// The versions a hotfix newer than this one could take, newest first: the start of the next hundred (595.97's hotfix
-    /// was 596.02), then the rest of its own (616.64's was 616.86).
-    /// </summary>
     internal static List<string> HotfixCandidates(string newest)
     {
         var parts = newest.Split('.');
@@ -303,21 +240,23 @@ internal static partial class NvidiaDriverService
         return candidates;
     }
 
-    /// <summary>NVIDIA's download link for a GeForce hotfix (one package for desktops and laptops).</summary>
     internal static string HotfixUrl(string version) =>
         $"https://international.download.nvidia.com/Windows/{version}hf/{version}-desktop-notebook-win10-win11-64bit-international-dch.hf.exe";
 
-    /// <summary>The hotfix package for a version when NVIDIA's server has one (a driver's hundreds of MB), from its headers.</summary>
     private static async Task<Latest?> HotfixPackageAsync(string version, CancellationToken ct)
     {
         using var request = new HttpRequestMessage(HttpMethod.Head, HotfixUrl(version));
         using var response = await Http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, ct).ConfigureAwait(false);
-        if (!response.IsSuccessStatusCode || response.Content.Headers.ContentLength is not { } size || size < 100_000_000) return null;
+        if (!response.IsSuccessStatusCode)
+        {
+            ServerHotfixes.SlowDown(response);
+            return null;
+        }
+        if (response.Content.Headers.ContentLength is not { } size || size < 100_000_000) return null;
         var released = response.Content.Headers.LastModified?.ToString("ddd MMM d, yyyy", CultureInfo.InvariantCulture);
         return new Latest(version, HotfixUrl(version), size, released, "hotfix");
     }
 
-    /// <summary>The forum search's topics that NVIDIA staff opened with "hotfix" in the title, newest first.</summary>
     internal static List<long> HotfixTopics(string searchJson)
     {
         using var doc = JsonDocument.Parse(searchJson);
@@ -340,7 +279,6 @@ internal static partial class NvidiaDriverService
         return topics.OrderByDescending(t => t.Created).Select(t => t.Id).Distinct().ToList();
     }
 
-    /// <summary>The newest hotfix download a forum topic's first post links to, or null.</summary>
     internal static Latest? HotfixIn(string topicJson)
     {
         using var doc = JsonDocument.Parse(topicJson);
@@ -359,18 +297,10 @@ internal static partial class NvidiaDriverService
     [System.Text.RegularExpressions.GeneratedRegex(@"https://(?:international|us)\.download\.nvidia\.com/Windows/(\d{3}\.\d{2})hf/[\w.-]+\.hf\.exe")]
     private static partial System.Text.RegularExpressions.Regex HotfixLink();
 
-    /// <summary>Compares "617.42"-style versions, as every version check does (<see cref="VersionNumber"/>).</summary>
     internal static int Compare(string a, string b) => VersionNumber.Compare(a, b);
 
-    /// <summary>Why an update can't start now (a game, a Discord call, an Exo Shaders compile: <see cref="GpuDriverUpdate.Busy"/>), or null.</summary>
     internal static string? Blocked() => _running is { IsCompleted: false } ? "A driver update is already running." : GpuDriverUpdate.Busy();
 
-    /// <summary>Starts the update (the user consented); progress comes through <see cref="Changed"/>.</summary>
-    /// <summary>
-    /// An earlier Game Ready driver to go back to (a game's advisory names it): NVIDIA's download for it, named as the
-    /// newest's is with the version swapped (desktop or notebook, as the card), else the desktop package. Its size is
-    /// unknown until NVIDIA answers; the install checks NVIDIA's signature and the version as for any other.
-    /// </summary>
     internal static Latest At(string version, Latest? newest, bool laptop) =>
         new(version, newest is { Kind: "game" } n && n.Url.StartsWith("https://us.download.nvidia.com/Windows/", StringComparison.OrdinalIgnoreCase)
                 ? n.Url.Replace(n.Version, version, StringComparison.Ordinal)
@@ -380,11 +310,8 @@ internal static partial class NvidiaDriverService
     internal static string? Start(Latest latest)
     {
         var card = Card();
-        // Laptops keep NVIDIA's platform controllers (Dynamic Boost, power sharing with the CPU).
         var laptop = card?.Contains("Laptop", StringComparison.OrdinalIgnoreCase) == true;
-        // Checked again right before installing: a version with a known problem on this PC never goes in.
         if (DriverAdvisories.Shared.Refuse(DriverAdvisories.Gpu("nvidia", card), latest.Version) is { } advised) return advised;
-        // HDMI or DisplayPort audio goes in only while a screen on this card plays sound.
         var audio = DisplayAudio();
         lock (Gate)
         {
@@ -394,11 +321,6 @@ internal static partial class NvidiaDriverService
         return null;
     }
 
-    /// <summary>
-    /// Whether a screen on an NVIDIA card plays sound now: an active render endpoint (DeviceState's low bits 1, not 4 not
-    /// present or 8 unplugged) on NVIDIA's HD audio function (HDAUDIO\FUNC_01&amp;VEN_10DE). Windows lists each one under
-    /// MMDevices\Audio\Render with its device id in property {b3f8fa53-0004-438e-9003-51a46e139bfc},2 ("{1}.HDAUDIO\…").
-    /// </summary>
     internal static bool DisplayAudio(IEnumerable<(int State, string? Device)> endpoints) =>
         endpoints.Any(e => (e.State & 0xF) == 1 && e.Device?.Contains(@"HDAUDIO\FUNC_01&VEN_10DE", StringComparison.OrdinalIgnoreCase) == true);
 
@@ -431,14 +353,12 @@ internal static partial class NvidiaDriverService
         var folder = Path.Combine(Root, latest.Version);
         var package = Path.Combine(folder, Path.GetFileName(new Uri(latest.Url).LocalPath));
         var unpacked = Path.Combine(folder, "unpacked");
-        // The page's driver screen follows the install from its first wait; a failure before that stays on the row.
         var stepped = false;
         void Step(string phase, string? message, DriverRestore.Outcome? outcome = null)
         {
             stepped = true;
             DriverInstallSignal.Report(new(phase, latest.Version, message, outcome?.Restored, outcome?.NotRestored));
         }
-        // Exo's interrupt values written in the installer's own elevated step, and the backup to go back to if it never ran.
         InterruptMode.Chain? interrupts = null;
         var ran = false;
         try
@@ -449,13 +369,9 @@ internal static partial class NvidiaDriverService
             if (!AuthenticodeVerifier.HasPublisher(package, "NVIDIA Corporation"))
                 throw new InvalidDataException("The download isn't signed by NVIDIA.");
 
-            // Only the driver is ever unpacked: everything else in NVIDIA's package stays in the archive.
             Report("unpacking", 0, "Unpacking the driver");
             if (Directory.Exists(unpacked)) DeletionGate.DeleteDirectory(unpacked, true);
             Directory.CreateDirectory(unpacked);
-            // setup.cfg's manifest checks for the NVIDIA app's license, privacy and consent texts even when the app
-            // isn't installed (missing, setup quits with 0x80070003): unpack those texts, never NvApp.nvi, so the app
-            // itself is never offered to setup.
             string[] keep = ["setup.exe", "setup.cfg", "EULA.txt", "ListDevices.txt", "Display.Driver", "NVI2", .. laptop ? new[] { "NVPCF" } : [], .. audio ? new[] { "HDAudio" } : [],
                 "NvApp/Unified_EULA", "NvApp/PrivacyPolicy", "NvApp/FunctionalConsent_*"];
             var unpackInfo = new ProcessStartInfo(Path.Combine(Environment.SystemDirectory, "tar.exe")) { UseShellExecute = false, CreateNoWindow = true };
@@ -469,23 +385,14 @@ internal static partial class NvidiaDriverService
             if (!File.Exists(setup) || !Directory.Exists(Path.Combine(unpacked, "Display.Driver"))) throw new InvalidDataException("The driver package didn't unpack.");
             if (!AuthenticodeVerifier.HasPublisher(setup, "NVIDIA Corporation")) throw new InvalidDataException("NVIDIA's installer isn't signed by NVIDIA.");
 
-            // A clean install blanks the screen for a moment, the driver swap crashes a shader compile and the driver's
-            // reload ends a Discord call: a game, a compile or a call started during the download is waited out first.
             await GpuDriverUpdate.WaitQuietAsync(GpuDriverUpdate.HoldingAsync, reason => { Report("waiting", 0, reason); Step("waiting", reason); }, TimeSpan.FromSeconds(5)).ConfigureAwait(false);
-            // How the screens are now, to put back what the clean install resets.
             var screens = DriverRestore.Snapshot();
 
-            // Windows asks for permission unless its settings let Exo go ahead without asking.
             Report("installing", 0, "Installing the driver. Your screens go black for a moment");
             Step("installing", "Installing the driver. Your screens go black for a moment");
-            // Always clean: nothing of an earlier install (its settings, its leftovers) carries over.
             const string args = "-s -clean -noreboot -noeula -nofinish -nosplash";
             AppLog.Info($"Driver: clean install of {latest.Version} ({string.Join(", ", keep.Skip(4).Where(item => !item.StartsWith("NvApp/", StringComparison.Ordinal)))}).");
-            // The installer rewrites the graphics card's interrupt keys from its INF: while Exo's interrupt choice stands, its
-            // values are written again right after setup, in the same elevated step, so Windows asks once.
             interrupts = InterruptMode.ThisPc.ForDriverInstall();
-            // Setup provisions the Control Panel again: when the user removed NVIDIA App and Control Panel in Clean up, it
-            // comes out of Windows' image in the same step (the restoring step removes the rest).
             var extras = ReplacedApps.ForThisPc().DriverStepCommands();
             var chained = ChainedArguments(setup, unpacked, args, [.. interrupts.Lines, .. extras]);
             if (chained is null || interrupts.Lines.Count == 0)
@@ -519,7 +426,6 @@ internal static partial class NvidiaDriverService
                 return;
             }
             Step("reloading", "Loading the new driver");
-            // Windows records the new driver as setup finishes; give it a few seconds before reading.
             var installed = Installed();
             for (var waited = 0; waited < 15 && exit == 0 && (installed is null || Compare(installed, latest.Version) != 0); waited++)
             {
@@ -527,7 +433,6 @@ internal static partial class NvidiaDriverService
                 installed = Installed();
             }
             AppLog.Info($"Driver: NVIDIA setup exited {exit}; driver now {installed ?? "unknown"}.");
-            // The install reset the display adapter under Exo's own page: it reloads before the settings go back.
             await MainWindow.ReloadAfterDriverInstallAsync().ConfigureAwait(false);
             if (exit != 0 || installed is null || Compare(installed, latest.Version) != 0)
             {
@@ -536,14 +441,10 @@ internal static partial class NvidiaDriverService
                 return;
             }
 
-            // NvAPI in this process still points at the driver that was removed: load it again for the new one.
             NvidiaProfiles.Reinitialize();
             Drivers.Clear();
-            // The interrupt values went in after the driver restarted the card: they take at the next restart.
             if (interrupts is not null) InterruptMode.ThisPc.Written();
-            // Done before the profile is read: while the stage says installing, GpuProfileService answers "being installed".
             Report("done", 100, $"Driver {latest.Version} installed");
-            // A clean install resets driver profiles, RTX Video, the desktop color and the screens' modes: Exo's go back.
             Step("restoring", "Putting your settings back");
             Step("done", $"Driver {latest.Version} installed",
                 await DriverRestore.AfterInstallAsync("nvidia", screens, interruptsChained: interrupts is not null).ConfigureAwait(false));
@@ -558,20 +459,11 @@ internal static partial class NvidiaDriverService
         }
         finally
         {
-            // The elevated step never ran (declined, or it failed to start): the interrupt backup goes back to before it.
             if (interrupts is not null && !ran) InterruptMode.ThisPc.Rollback(interrupts);
-            // The unpacked driver (about 3 GB) goes however it ended: done, refused, stopped or failed. The installer stays for next time.
             TryDelete(unpacked);
         }
     }
 
-    /// <summary>
-    /// NVIDIA's setup and the lines after it (interrupts' reg.exe lines, Clean up's removals) in one cmd.exe run as
-    /// administrator, so Windows asks once: start /wait runs setup in its folder and waits for it, its exit code is kept
-    /// (delayed expansion), each line runs (the installer has just rewritten the card's keys from its INF), and cmd exits
-    /// with setup's code. Null when a path holds a character cmd would read inside quotes with delayed expansion on (then
-    /// setup runs alone, as before).
-    /// </summary>
     internal static string? ChainedArguments(string setup, string folder, string args, IReadOnlyList<string> lines)
     {
         if (lines.Count == 0 || setup.IndexOfAny(CmdSpecial) >= 0 || folder.IndexOfAny(CmdSpecial) >= 0) return null;
@@ -610,13 +502,11 @@ internal static partial class NvidiaDriverService
         }
         catch
         {
-            // A half file is not kept: nothing would check it, and it holds the disk.
             try { DeletionGate.DeleteFile(partial); } catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
             throw;
         }
     }
 
-    /// <summary>Keeps this version's and the one before's installers (the way back), removes older ones.</summary>
     private static void Prune(string keepVersion)
     {
         try
@@ -627,7 +517,6 @@ internal static partial class NvidiaDriverService
         catch (Exception ex) { AppLog.Debug("Driver: pruning old installers: " + ex.Message); }
     }
 
-    /// <summary>Unpacked drivers left by an install that ended before cleaning up (an older Exo, a crash), while none is running.</summary>
     private static void SweepUnpacked()
     {
         lock (Gate) if (_running is { IsCompleted: false }) return;

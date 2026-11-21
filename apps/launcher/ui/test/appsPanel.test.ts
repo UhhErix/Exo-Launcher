@@ -12,10 +12,12 @@ test('AppsPanel uses flex column layout without hardcoded grid rows', () => {
   assert.match(appsCss, /\.exo-apps-list\s*\{[\s\S]*?flex:\s*1 1 0;/m)
 })
 
-test('Startup view refreshes on reopen, handles Turn on/Turn off states, and preserves cached icons', () => {
+test('Startup view refreshes on reopen, groups Broken / On / Off with Switch toggles, and preserves cached icons', () => {
   assert.match(appsPanel, /function mergeIcons\(/)
   assert.doesNotMatch(appsPanel, /function useStartup\(active: boolean\)[\s\S]*?if \(!active \|\| read\.current\) return/m)
-  assert.match(appsPanel, /const turningOn = !item\.enabled/)
-  assert.match(appsPanel, /\{turningOn \? 'Turn on' : 'Turn off'\}/)
+  assert.match(appsPanel, /Starts with Windows/)
+  assert.match(appsPanel, /Turned off/)
+  assert.match(appsPanel, /Clean up broken/)
+  assert.match(appsPanel, /<Switch checked=\{true\}[\s\S]*?onChange=\{\(\) => void toggle\(item\.id, item\.ids, false\)\}/)
   assert.match(appsPanel, /item\.ids\.map\(id => errors\[id\]\)\.find\(Boolean\)/)
 })

@@ -6,9 +6,6 @@ import { CompanyLogo } from '../../brand/CompanyLogo'
 import { Row, State } from '../settings/parts'
 import { Wait } from '../ui/Wait'
 
-/**
- * First run's Discord: Exo's own client, signed in with Discord's phone QR code (or already signed in). Skipping is fine; the Discord room offers the same code later.
- */
 export function DiscordStep() {
   const [signedIn, setSignedIn] = useState<boolean | null>(null)
 

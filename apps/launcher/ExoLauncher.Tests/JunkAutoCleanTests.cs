@@ -53,14 +53,14 @@ public sealed class JunkAutoCleanTests
     }
 
     [Fact]
-    public void A_backup_goes_three_days_after_it_became_one()
+    public void A_backup_goes_one_day_after_it_became_one()
     {
         // app.previous: its folder was made long ago; it became a backup when today's app arrived.
         var arrived = Now.AddHours(-2);
         Assert.False(JunkAutoClean.BackupOld(made: Now.AddDays(-40), arrived, Now));
-        Assert.True(JunkAutoClean.BackupOld(made: Now.AddDays(-40), Now.AddDays(-3), Now));
+        Assert.True(JunkAutoClean.BackupOld(made: Now.AddDays(-40), Now.AddDays(-1), Now));
         // app.incoming: an update that never finished, made after the running app.
-        Assert.False(JunkAutoClean.BackupOld(made: Now.AddDays(-1), Now.AddDays(-10), Now));
-        Assert.True(JunkAutoClean.BackupOld(made: Now.AddDays(-4), Now.AddDays(-10), Now));
+        Assert.False(JunkAutoClean.BackupOld(made: Now.AddHours(-12), Now.AddDays(-10), Now));
+        Assert.True(JunkAutoClean.BackupOld(made: Now.AddDays(-1), Now.AddDays(-10), Now));
     }
 }

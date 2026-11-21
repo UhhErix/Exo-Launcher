@@ -31,9 +31,9 @@ internal static partial class DeletionNative
     /// Sends a file or folder to the Recycle Bin, quietly, on an STA thread. False when the gate refuses it or Windows keeps it.
     /// Exo asked first: no confirmation, progress or sound of Windows' own.
     /// </summary>
-    internal static bool SendToRecycleBin(string path, bool clean = false)
+    internal static bool SendToRecycleBin(string path, bool clean = false, bool allowAppBrowserFiles = false)
     {
-        if (DeletionGate.Refusal(path, clean, owners: null, DeletionGate.Live) is not null) return false;
+        if (DeletionGate.Refusal(path, clean, owners: null, DeletionGate.Live, allowAppBrowserFiles) is not null) return false;
         var done = false;
         var thread = new Thread(() =>
         {

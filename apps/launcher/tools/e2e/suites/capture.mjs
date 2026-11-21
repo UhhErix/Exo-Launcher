@@ -9,7 +9,7 @@ export async function run(t) {
   const { run, k } = t
   const rounds = t.quick ? 3 : 5
 
-  await run.check('capture', 'settings', 'Capture settings opens from Captures, Make recordings smaller as saved', async (c) => {
+  await run.check('capture', 'settings', 'Capture settings opens from Captures, Record voice chat as saved', async (c) => {
     const status = await t.host('capture.status')
     if (!status?.state?.present || !status?.settings) c.skip('Exo Capture is not installed or did not answer')
     await k.closeAll()
@@ -21,7 +21,7 @@ export async function run(t) {
       await t.shell.click((l) => [...document.querySelectorAll('.exo-capture-menu [role="menuitem"]')].find(i => i.textContent.includes(l)), label)
       return null
     }
-    const shrink = () => t.shell.waitFor(() => { const s = document.querySelector('.exo-captures [role="switch"][aria-labelledby="set-capture-shrink"]'); return s?.checkVisibility() ? s.getAttribute('aria-checked') : null }, { timeoutMs: 5000 })
+    const callSwitch = () => t.shell.waitFor(() => { const s = document.querySelector('.exo-captures [role="switch"][aria-labelledby="set-capture-call"]'); return s?.checkVisibility() ? s.getAttribute('aria-checked') : null }, { timeoutMs: 5000 })
     const title = () => t.shell.eval(`document.getElementById('exo-captures-title')?.textContent.trim() ?? null`)
     const button = (l) => [...document.querySelectorAll('.exo-captures .exo-hub-head-actions button')].find(b => b.textContent.trim() === l)
     const failures = []
@@ -30,50 +30,48 @@ export async function run(t) {
     if (!await t.shell.waitFor(() => document.getElementById('exo-captures-title')?.textContent.trim() === 'Captures', { timeoutMs: 5000 }))
       return ['Captures did not open']
     await t.shell.click(button, 'Settings')
-    const fromMenu = await shrink()
-    c.evidence.saved = status.settings.autoShrink
-    c.evidence.fromMenu = fromMenu
+    const call = await callSwitch()
+    c.evidence.fromMenu = call
     await c.shot('capture-settings', t.shell)
-    if (fromMenu === null) failures.push('Captures did not open Settings with Make recordings smaller')
-    else if (String(status.settings.autoShrink !== false) !== fromMenu) failures.push(`the switch shows ${fromMenu}, the saved setting is ${status.settings.autoShrink}`)
-    // Record the call's voices, read and never changed: as saved, and with it off, no replay or recording holds the call.
-    const call = await t.shell.eval(`document.querySelector('.exo-captures [role="switch"][aria-labelledby="set-capture-call"]')?.getAttribute('aria-checked') ?? null`)
+    // Record voice chat, read and never changed: as saved, and with it off, no replay or recording holds the call.
     c.evidence.callVoices = { saved: status.settings.callVoices, shown: call, holdsCall: status.state.holdsCall, buffering: status.state.buffering, recording: status.state.recording }
-    if (call !== String(status.settings.callVoices === true)) failures.push(`Record the call's voices shows ${call}, the saved setting is ${status.settings.callVoices}`)
-    if (status.settings.callVoices !== true && status.state.holdsCall) failures.push("a replay or recording holds the call's voices with Record the call's voices off")
-    // Replay length names the saved length and offers up to 10 minutes: opened and shut, never changed. A menu fills its
-    // items the first time it opens, a frame after it shows, so wait for them.
-    const lengths = { 30: '30 s', 60: '1 min', 120: '2 min', 300: '5 min', 600: '10 min' }
-    const trigger = () => document.querySelector('.exo-captures button[aria-label^="Replay length,"]')
-    const length = await t.shell.eval(`document.querySelector('.exo-captures button[aria-label^="Replay length,"]')?.getAttribute('aria-label') ?? null`)
-    const savedLength = lengths[status.settings.replaySeconds ?? 60] ?? 'Set elsewhere'
-    c.evidence.length = length
-    const current = await t.host('capture.status')
-    const limit = current?.state?.replayLimitSeconds
-    if (limit != null && current.settings?.replayMode !== 'off' && limit < current.settings?.replaySeconds) {
-      const detail = await t.shell.eval(`document.querySelector('#set-capture-length + .exo-set-item-detail')?.textContent.trim() ?? null`)
-      c.evidence.replayLimit = { seconds: limit, detail }
-      if (!detail?.includes('Up to ' + Math.floor(limit / 60) + ':' + String(limit % 60).padStart(2, '0') + ' on this PC'))
-        failures.push('Replay length does not show the shorter host limit')
-    }
-    if (length !== `Replay length, ${savedLength}`) failures.push(`Replay length reads "${length}", the saved length is ${savedLength}`)
-    else {
-      await t.shell.click(trigger)
-      const offered = await t.shell.waitFor(() => { const m = document.querySelector('[role="menu"][aria-label="Replay length"]'); const items = m?.checkVisibility() ? [...m.querySelectorAll('[role^="menuitem"]')].map(i => i.textContent.trim()) : []; return items.length ? items : null }, { timeoutMs: 3000 })
-      c.evidence.lengths = offered
-      if (!offered?.includes('10 min')) failures.push(`Replay length offers ${offered?.join(', ') ?? 'nothing'}, not 10 min`)
-      await t.shell.click(trigger)
-      if (!await t.shell.waitFor(() => !document.querySelector('[role="menu"][aria-label="Replay length"]')?.checkVisibility() || null, { timeoutMs: 2000 })) await t.shell.key('Escape')
-      await sleep(300)
+    if (call === null) failures.push('Captures did not open Settings with Record voice chat')
+    else if (call !== String(status.settings.callVoices === true)) failures.push(`Record voice chat shows ${call}, the saved setting is ${status.settings.callVoices}`)
+    if (status.settings.callVoices !== true && status.state.holdsCall) failures.push("a replay or recording holds the call's voices with Record voice chat off")
+    // Replay length names the saved length and offers up to 10 minutes (hidden while Instant replay is Off).
+    if (status.settings?.replayMode !== 'off') {
+      const lengths = { 30: '30 s', 60: '1 min', 120: '2 min', 300: '5 min', 600: '10 min' }
+      const trigger = () => document.querySelector('.exo-captures button[aria-label^="Replay length,"]')
+      const length = await t.shell.eval(`document.querySelector('.exo-captures button[aria-label^="Replay length,"]')?.getAttribute('aria-label') ?? null`)
+      const savedLength = lengths[status.settings.replaySeconds ?? 60] ?? 'Set elsewhere'
+      c.evidence.length = length
+      const current = await t.host('capture.status')
+      const limit = current?.state?.replayLimitSeconds
+      if (limit != null && limit < current.settings?.replaySeconds) {
+        const detail = await t.shell.eval(`document.querySelector('#set-capture-length + .exo-set-item-detail')?.textContent.trim() ?? null`)
+        c.evidence.replayLimit = { seconds: limit, detail }
+        if (!detail?.includes('Up to ' + Math.floor(limit / 60) + ':' + String(limit % 60).padStart(2, '0') + ' on this PC'))
+          failures.push('Replay length does not show the shorter host limit')
+      }
+      if (length !== `Replay length, ${savedLength}`) failures.push(`Replay length reads "${length}", the saved length is ${savedLength}`)
+      else {
+        await t.shell.click(trigger)
+        const offered = await t.shell.waitFor(() => { const m = document.querySelector('[role="menu"][aria-label="Replay length"]'); const items = m?.checkVisibility() ? [...m.querySelectorAll('[role^="menuitem"]')].map(i => i.textContent.trim()) : []; return items.length ? items : null }, { timeoutMs: 3000 })
+        c.evidence.lengths = offered
+        if (!offered?.includes('10 min')) failures.push(`Replay length offers ${offered?.join(', ') ?? 'nothing'}, not 10 min`)
+        await t.shell.click(trigger)
+        if (!await t.shell.waitFor(() => !document.querySelector('[role="menu"][aria-label="Replay length"]')?.checkVisibility() || null, { timeoutMs: 2000 })) await t.shell.key('Escape')
+        await sleep(300)
+      }
     }
     // All captures goes back to the list; the sheet's own Capture settings comes again.
     await t.shell.click(button, 'All captures')
     if (!await t.shell.waitFor(() => document.getElementById('exo-captures-title')?.textContent.trim() === 'Captures', { timeoutMs: 3000 })) failures.push(`All captures left ${await title()} up`)
     await sleep(300)
     await t.shell.click(button, 'Settings')
-    const fromSheet = await shrink()
+    const fromSheet = await callSwitch()
     c.evidence.fromSheet = fromSheet
-    if (fromSheet === null) failures.push("the sheet's Settings did not show Make recordings smaller")
+    if (fromSheet === null) failures.push("the sheet's Settings did not show Record voice chat")
     await k.closeAll()
     return failures
   })
@@ -83,6 +81,7 @@ export async function run(t) {
     if (!status?.state?.present) c.skip('Exo Capture is not installed')
     await k.closeAll()
     await k.nav('Library')
+    const mark = await t.exo.logMark()
     const gc = () => t.shell.s.send('HeapProfiler.collectGarbage').catch(() => {})
     // One round first, so the editor's code and the add-on are warm in what is measured.
     const round = async () => {
@@ -96,12 +95,12 @@ export async function run(t) {
       const shown = await waiter.done
       if (!shown.shown) return { error: 'the snip overlay never showed' }
       const editor = await t.shell.waitFor(() => {
-        const canvas = document.querySelector('.exo-snip-editor canvas')
+        const canvas = document.querySelector('.exo-editor[aria-label="Edit snip"] canvas')
         const frame = canvas?.parentElement
         return canvas && canvas.width > 1 ? { width: canvas.width, height: canvas.height, frame: [frame.clientWidth, frame.clientHeight], dpr: devicePixelRatio } : null
       }, { timeoutMs: 15000 })
       const newest = (await t.host('capture.list', { limit: 1 }))?.items?.[0]
-      if (editor) await t.shell.eval(`[...document.querySelectorAll('.exo-snip-editor button')].find(b => b.textContent === 'Cancel')?.click()`)
+      if (editor) await t.shell.eval(`[...document.querySelectorAll('.exo-editor[aria-label="Edit snip"] button')].find(b => b.textContent === 'Cancel')?.click()`)
       await k.closeAll()
       if (newest && Date.parse(newest.created) >= started - 2000) await t.host('capture.item', { id: newest.id, action: 'delete' })
       return editor ? { ms: shown.at - started, editor } : { error: 'the snip did not open in the editor' }
@@ -121,7 +120,7 @@ export async function run(t) {
     }
     await gc(); await sleep(1500)
     const after = await k.metrics(), procAfter = await t.win.proc()
-    const lines = await t.exo.logSince(t.logMark)
+    const lines = await t.exo.logSince(mark)
     const crashed = lines.filter(l => l.text.startsWith('webview-process-failed'))
     const sorted = [...times].sort((a, b) => a - b), median = sorted[Math.floor(sorted.length / 2)] ?? 0
     const heap = (after.JSHeapUsedSize - before.JSHeapUsedSize) / 1048576

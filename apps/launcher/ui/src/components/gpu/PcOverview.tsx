@@ -39,13 +39,20 @@ const windowsName = (release: Release) =>
 
 /** What this PC is made of, in the parts a player asks after, by name. The rest of each lives where it is acted on. */
 function parts(state: PcState, kept: KeepStatus['pc']): Part[] {
-  const { about } = state
+  const { about, health } = state
   const release = about ? releaseOf(about) : null
+  const pcieWarn = health?.items.find(item => item.key === 'pcie')?.detail
+  const cableWarn = health?.items.find(item => item.key === 'gpucable')?.detail
+  const gpuWords = keptWords(kept)
   return [
     { label: 'Processor', icon: Cpu, value: about?.processor },
-    { label: 'Graphics', icon: GraphicsCard, value: cardName(state), ...keptWords(kept) },
+    {
+      label: 'Graphics', icon: GraphicsCard, value: cardName(state),
+      ...gpuWords,
+      ...(!gpuWords.note && pcieWarn ? { note: pcieWarn, tone: 'is-warn' as const } : {}),
+    },
     { label: 'Memory', icon: Memory, value: about?.memoryGb ? joined([`${about.memoryGb} GB`, about.memoryType]) : null },
-    { label: 'Screen', icon: Monitor, value: screenName(state.profile) },
+    { label: 'Screen', icon: Monitor, value: screenName(state.profile), note: cableWarn, tone: cableWarn ? 'is-warn' as const : null },
     ...(about ? [board(about), network(about, state.health)] : []),
     { label: 'Windows', icon: ThisPcIcon, value: release ? windowsName(release) : null },
     ...(state.drives?.drives.map(drivePart) ?? []),

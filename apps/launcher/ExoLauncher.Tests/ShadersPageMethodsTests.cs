@@ -17,16 +17,13 @@ public sealed partial class ShadersPageMethodsTests
     {
         Assert.Equal([
             "cache.freeOldDriver",
-            "driver.setAutoShader",
             "driver.setCacheLimit",
             "driver.setCleanupGuard",
             "game.compile",
-            "game.diagnostics",
             "queue.add",
             "queue.resume",
             "queue.start",
             "recorder.auto",
-            "recorder.set",
             "scan",
         ], ShadersAddon.StartMethods.Order(StringComparer.Ordinal));
         Assert.True(ShadersAddon.StartMethods.IsSubsetOf(ShadersAddon.PageMethods));

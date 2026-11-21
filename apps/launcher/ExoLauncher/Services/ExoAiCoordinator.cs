@@ -104,9 +104,8 @@ internal sealed class ExoAiCoordinator : IDisposable
 
     internal void NotifySettings(ExoAiSettings settings)
     {
-        var copy = settings.Copy();
-        ApplyFanPreset(copy.FanPreset);
-        if (copy.AutoApplyBestSettings) RunSafeCheck(force: true);
+        ApplyFanPreset(settings.FanPreset);
+        RunSafeCheck(force: true);
     }
 
     internal ExoAiSnapshot RunNow()
@@ -117,14 +116,13 @@ internal sealed class ExoAiCoordinator : IDisposable
 
     internal ExoAiSnapshot Snapshot()
     {
-        var settings = (_getSettings?.Invoke() ?? new ExoAiSettings()).Copy();
         var gaming = _autopilotSnapshot();
         var fanStatus = Fans.ReadStatus();
         lock (_gate)
         {
             return new ExoAiSnapshot(
-                settings.AutoApplyBestSettings,
-                settings.BackgroundDriftCheck,
+                true,
+                true,
                 _lastCheckUtc?.ToString("O"),
                 [.. _autoApplied],
                 [.. _needsAttention],
@@ -150,23 +148,17 @@ internal sealed class ExoAiCoordinator : IDisposable
 
     internal void RunDriftCheck()
     {
-        var settings = (_getSettings?.Invoke() ?? new ExoAiSettings()).Copy();
-        if (!settings.AutoApplyBestSettings && !settings.BackgroundDriftCheck) return;
         if (_isGaming()) return;
         RunSafeCheck(force: false);
     }
 
     private void RunSafeCheck(bool force)
     {
-        var settings = (_getSettings?.Invoke() ?? new ExoAiSettings()).Copy();
         if (!force && _isGaming()) return;
 
         IReadOnlyList<string> applied = [];
-        if (settings.AutoApplyBestSettings)
-        {
-            try { applied = _applySafe(); }
-            catch (Exception ex) when (ex is not OutOfMemoryException) { AppLog.Warn("ExoAI: safe optimization failed: " + ex.GetType().Name); }
-        }
+        try { applied = _applySafe(); }
+        catch (Exception ex) when (ex is not OutOfMemoryException) { AppLog.Warn("ExoAI: safe optimization failed: " + ex.GetType().Name); }
         IReadOnlyList<string> attention = [];
         try { attention = _readAttention(); }
         catch (Exception ex) when (ex is not OutOfMemoryException) { AppLog.Debug("ExoAI: attention scan failed: " + ex.GetType().Name); }

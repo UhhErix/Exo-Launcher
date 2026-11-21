@@ -853,7 +853,6 @@ public sealed partial class WebHostBridge
                 // Windows' administrator prompt blocks the thread that asks until it is answered.
                 "shaders.status" => await ShadersStatusAsync(paramsEl, hasParams, requestToken).ConfigureAwait(false),
                 "shaders.prepare.games" => await ShaderPrepareGamesAsync(requestToken).ConfigureAwait(false),
-                "shaders.prepare.auto" => await Task.Run(() => ShaderPrepareAuto(paramsEl, hasParams)).ConfigureAwait(false),
                 "shaders.prepare.start" => await ShaderPrepareStartAsync(paramsEl, hasParams, requestToken).ConfigureAwait(true),
                 "shaders.prepare.cancel" => ShaderPrepareCancel(paramsEl, hasParams),
                 "shaders.estimates" => await ShadersEstimatesAsync(requestToken).ConfigureAwait(false),
@@ -947,7 +946,6 @@ public sealed partial class WebHostBridge
                 "gpu.profile" => await GpuDeadlineAsync(GpuProfileAsync(paramsEl, hasParams, requestToken), TimeSpan.FromSeconds(25), requestToken).ConfigureAwait(false),
                 "gpu.afmf3" => await GpuDeadlineAsync(GpuAfmf3Async(paramsEl, hasParams, requestToken), TimeSpan.FromSeconds(25), requestToken).ConfigureAwait(false),
                 "gpu.game" => await GpuDeadlineAsync(GpuGameAsync(paramsEl, hasParams, requestToken), TimeSpan.FromSeconds(25), requestToken).ConfigureAwait(false),
-                "gpu.import" => await GpuImportAsync(paramsEl, hasParams, requestToken).ConfigureAwait(true),
                 "gpu.controlPanel" => await GpuDeadlineAsync(Task.Run(GpuControlPanel.Open, requestToken), TimeSpan.FromSeconds(15), requestToken).ConfigureAwait(true),
                 "system.health" => await GpuDeadlineAsync(SystemHealthAsync(paramsEl, hasParams, requestToken), TimeSpan.FromSeconds(30), requestToken).ConfigureAwait(false),
                 "system.about" => await SystemAboutAsync(requestToken).ConfigureAwait(false),
@@ -1024,7 +1022,7 @@ public sealed partial class WebHostBridge
         method.StartsWith("game.", StringComparison.Ordinal) && method is not "game.get" ||
         method.Contains("install", StringComparison.OrdinalIgnoreCase) ||
         method.Contains("Update", StringComparison.Ordinal) && method is not "app.checkUpdate" ||
-        method is "shell.pickFolder" or "shell.pickProgram" or "library.refresh" or "dlss.restore" or "library.refreshAll" or "gpu.import";
+        method is "shell.pickFolder" or "shell.pickProgram" or "library.refresh" or "dlss.restore" or "library.refreshAll";
     private int _libraryTimingLogged;
 
     private async Task<object> LibraryGetAsync(JsonElement p, bool hasParams, bool force = false, bool full = false)

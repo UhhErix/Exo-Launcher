@@ -81,7 +81,10 @@ function restingDetail(state: DriverState, vendor: Vendor) {
   if (!state.latest && !state.skipped) {
     return `${installed} · ${vendor === 'nvidia' ? "NVIDIA's driver list couldn't be reached" : `${VENDOR[vendor].name}'s newest driver for this card couldn't be found`}`
   }
-  if (state.latest) return state.update ? `${installed} → ${state.latest.version}` : `${installed} · Up to date`
+  if (state.latest) {
+    const tag = state.latest.kind === 'hotfix' ? ' (hotfix)' : state.latest.kind === 'optional' ? ' (optional)' : ''
+    return state.update ? `${installed} → ${state.latest.version}${tag}` : `${installed} · Up to date`
+  }
   return installed
 }
 
@@ -221,8 +224,8 @@ function DriverConsent({ vendor, software, latest, title, onCancel, onInstall }:
   const { name, restores } = VENDOR[vendor]
   const { installs, leavesOut } = vendor === 'amd' && software ? AMD_SOFTWARE : VENDOR[vendor]
   const link = (url: string, label: string) => <button type="button" className="exo-set-link" onClick={() => void host.openUrl(url)}>{label}</button>
-  const version = vendor === 'amd' ? `AMD Software: Adrenalin Edition ${latest.version}${latest.kind === 'optional' ? ' (optional)' : ''}`
-    : vendor === 'intel' ? `Intel's graphics driver ${latest.version}, driver only`
+  const version = vendor === 'amd' ? `AMD Software: Adrenalin Edition ${latest.version}${latest.kind === 'hotfix' ? ' (hotfix)' : latest.kind === 'optional' ? ' (optional)' : ''}`
+    : vendor === 'intel' ? `Intel's graphics driver ${latest.version}${latest.kind === 'hotfix' ? ' (hotfix)' : ''}, driver only`
       : `NVIDIA ${KIND[latest.kind]} ${latest.version}, driver only`
   return (
     <ConfirmDialog title={title} action="Install" form onConfirm={onInstall} onClose={onCancel}>

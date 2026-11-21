@@ -4,8 +4,6 @@ import { Spinner } from '../ui/Spinner'
 import { report } from '../../lib/report'
 import { errorText } from '../../lib/errorWords'
 import { ChoiceRow, CopyRow, Row, Section, SliderRow, SwitchRow } from './parts'
-import { upscalerAntiCheatShown } from '../../lib/canUse'
-import { AUTO_UPSCALERS_DETAIL, AUTO_UPSCALERS_LABEL } from '../../lib/upscalerNotice'
 
 /** Null when the save took, else why not. */
 type SaveSettings = (patch: Partial<LauncherSettings>) => Promise<string | null>
@@ -28,12 +26,8 @@ export const GeneralSection = memo(function GeneralSection({ settings, onSave: s
         onChange={value => save({ textSize: value })} />
       <SwitchRow id="set-reduce-motion" label="Reduce motion" checked={settings?.reduceMotion === true} disabled={disabled}
         onChange={value => save({ reduceMotion: value })} />
-      <SwitchRow id="set-start-maximized" label="Start maximized" checked={settings?.startMaximized === true} disabled={disabled}
-        onChange={value => save({ startMaximized: value })} />
       <SwitchRow id="set-start-with-windows" label="Open Exo when Windows starts" checked={settings?.startWithWindows === true} disabled={disabled}
         onChange={value => save({ startWithWindows: value })} />
-      <SwitchRow id="set-keep-awake" label="Keep PC awake during downloads and shader warming" checked={settings?.keepAwakeDownloads !== false} disabled={disabled}
-        onChange={value => save({ keepAwakeDownloads: value })} />
     </Section>
   )
 })
@@ -94,14 +88,14 @@ function AchievementRows({ settings, disabled, save }: { settings: LauncherSetti
   }
   return (
     <Section id="achievements" title="Achievements">
-      <SwitchRow id="set-achievement-banners" label="Banners in games" checked={settings?.achievementBanners !== false} disabled={disabled}
+      <SwitchRow id="set-achievement-banners" label="Show achievement pop-ups" checked={settings?.achievementBanners !== false} disabled={disabled}
         onChange={value => save({ achievementBanners: value })} />
-      <SliderRow label="Banner sound" min={0} max={100} step={5} value={settings?.achievementVolume ?? 60} disabled={disabled} error={volumeError}
+      <SliderRow label="Pop-up sound" min={0} max={100} step={5} value={settings?.achievementVolume ?? 60} disabled={disabled} error={volumeError}
         render={volume => volume === 0 ? 'Off' : `${volume}%`} onCommit={volume => void save({ achievementVolume: volume }).then(setVolumeError)} />
-      <Row label="Preview banner" error={previewError}>
+      <Row label="Test pop-up" error={previewError}>
         <button type="button" className="exo-set-btn" disabled={disabled} onClick={preview}>Show</button>
       </Row>
-      <CopyRow label="OBS browser source" text={OBS_SOURCE} />
+      <CopyRow label="OBS overlay URL" text={OBS_SOURCE} />
     </Section>
   )
 }
@@ -137,13 +131,14 @@ function FpsRows({ settings, disabled, save }: { settings: LauncherSettings | nu
     host.fpsCounter().then(next => { if (live) setState(next) }, (error: unknown) => report(error, 'Settings.fpsCounter'))
     return () => { live = false }
   }, [])
+  const fpsOn = state ? state.on : settings?.fpsCounter === true
   return (
     <Section id="fps" title="FPS counter">
       <SwitchRow
         id="set-fps-counter"
-        label="FPS counter in games"
+        label="Show FPS counter"
         detail={state?.state === 'signout' ? 'Sign out to finish' : undefined}
-        checked={state ? state.on : settings?.fpsCounter === true}
+        checked={fpsOn}
         disabled={disabled}
         onChange={async value => {
           const next = await host.fpsCounter(value)
@@ -151,32 +146,28 @@ function FpsRows({ settings, disabled, save }: { settings: LauncherSettings | nu
           return next.message
         }}
       />
-      <ChoiceRow
-        id="set-fps-position"
-        label="Position"
-        value={settings?.fpsCounterPosition ?? 'right'}
-        choices={FPS_POSITIONS}
-        disabled={disabled}
-        onChange={value => save({ fpsCounterPosition: value })}
-      />
-      <SwitchRow
-        id="set-fps-hide-builtin"
-        label="Hide in games with built-in FPS"
-        detail="Only hides when no extra stats below are turned on"
-        checked={settings?.fpsCounterHideOverBuiltIn === true}
-        disabled={disabled}
-        onChange={value => save({ fpsCounterHideOverBuiltIn: value })}
-      />
-      {FPS_ITEMS.map(({ id, label }) => (
-        <SwitchRow
-          key={id}
-          id={`set-fps-${id}`}
-          label={label}
-          checked={items.includes(id)}
-          disabled={disabled}
-          onChange={value => save({ fpsCounterItems: value ? [...items, id] : items.filter(item => item !== id) })}
-        />
-      ))}
+      {fpsOn ? (
+        <>
+          <ChoiceRow
+            id="set-fps-position"
+            label="Position"
+            value={settings?.fpsCounterPosition ?? 'right'}
+            choices={FPS_POSITIONS}
+            disabled={disabled}
+            onChange={value => save({ fpsCounterPosition: value })}
+          />
+          {FPS_ITEMS.map(({ id, label }) => (
+            <SwitchRow
+              key={id}
+              id={`set-fps-${id}`}
+              label={label}
+              checked={items.includes(id)}
+              disabled={disabled}
+              onChange={value => save({ fpsCounterItems: value ? [...items, id] : items.filter(item => item !== id) })}
+            />
+          ))}
+        </>
+      ) : null}
     </Section>
   )
 }
@@ -197,11 +188,7 @@ export function DownloadsSection({ settings, disabled, save }: { settings: Launc
     defaultInstallRoot,
     downloadHoursStart = null,
     downloadHoursEnd = null,
-    pauseDownloadsWhilePlaying,
     autoUpdateGames,
-    chipset,
-    autoUpdateChipset,
-    autoUpdateUpscalers,
     upscalerAntiCheatEverywhere,
   }: Partial<LauncherSettings> = settings ?? {}
   const root = defaultInstallRoot?.trim() || null
@@ -241,20 +228,10 @@ export function DownloadsSection({ settings, disabled, save }: { settings: Launc
           const pick = HOURS.find(h => h.value === value)
           return pick ? save({ downloadHoursStart: pick.start, downloadHoursEnd: pick.end }) : undefined
         }} />
-      <SwitchRow id="set-pause-playing" label="Pause downloads while playing" checked={pauseDownloadsWhilePlaying !== false} disabled={disabled}
-        onChange={value => save({ pauseDownloadsWhilePlaying: value })} />
       <SwitchRow id="set-auto-update" label="Update games automatically" checked={autoUpdateGames !== false} disabled={disabled}
         onChange={value => save({ autoUpdateGames: value })} />
-      {chipset ? (
-        <SwitchRow id="set-auto-chipset" label={`Update the ${chipset === 'amd' ? 'AMD' : 'Intel'} chipset driver automatically`}
-          checked={autoUpdateChipset !== false} disabled={disabled} onChange={value => save({ autoUpdateChipset: value })} />
-      ) : null}
-      <SwitchRow id="set-auto-upscalers" label={AUTO_UPSCALERS_LABEL} detail={AUTO_UPSCALERS_DETAIL}
-        checked={autoUpdateUpscalers !== false} disabled={disabled} onChange={value => save({ autoUpdateUpscalers: value })} />
-      {upscalerAntiCheatShown(autoUpdateUpscalers, upscalerAntiCheatEverywhere) ? (
-        <SwitchRow id="set-upscalers-anticheat" label="Also in games with anti-cheat" detail="In automatic and Update all runs. Can risk a ban. Never Riot games or Vanguard."
-          checked={upscalerAntiCheatEverywhere === true} disabled={disabled} onChange={value => save({ upscalerAntiCheatEverywhere: value })} />
-      ) : null}
+      <SwitchRow id="set-upscalers-anticheat" label="Update DLSS, FSR and XeSS in anti-cheat games" detail="May carry a ban risk. Never touches Riot games or Vanguard."
+        checked={upscalerAntiCheatEverywhere === true} disabled={disabled} onChange={value => save({ upscalerAntiCheatEverywhere: value })} />
     </Section>
   )
 }

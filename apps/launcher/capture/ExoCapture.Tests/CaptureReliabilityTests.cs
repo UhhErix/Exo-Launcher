@@ -61,4 +61,36 @@ public sealed class CaptureReliabilityTests
         Assert.False(VideoConverter.NeedsHdrToSdrToneMap(Format.B8G8R8A8_UNorm, hdr: false));
         Assert.False(VideoConverter.NeedsHdrToSdrToneMap(Format.B8G8R8A8_UNorm, hdr: true));
     }
+
+    [Fact]
+    public void TryGrabOrFallbackFallsBackOnCaptureExceptionOrFalseAndSkipsOnSuccess()
+    {
+        var fallbackCalls = 0;
+        var logs = new List<string>();
+
+        var okPrimary = Controller.TryGrabOrFallback(
+            () => true,
+            () => { fallbackCalls++; return true; },
+            logs.Add);
+        Assert.True(okPrimary);
+        Assert.Equal(0, fallbackCalls);
+        Assert.Empty(logs);
+
+        var okFalse = Controller.TryGrabOrFallback(
+            () => false,
+            () => { fallbackCalls++; return true; },
+            logs.Add);
+        Assert.True(okFalse);
+        Assert.Equal(1, fallbackCalls);
+        Assert.Empty(logs);
+
+        var okException = Controller.TryGrabOrFallback(
+            () => throw new CaptureException("capture the screen (0x80070005)"),
+            () => { fallbackCalls++; return true; },
+            logs.Add);
+        Assert.True(okException);
+        Assert.Equal(2, fallbackCalls);
+        Assert.Single(logs);
+        Assert.Contains("0x80070005", logs[0]);
+    }
 }

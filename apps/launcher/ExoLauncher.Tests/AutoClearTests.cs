@@ -390,6 +390,18 @@ public sealed class AutoClearTests : IDisposable
     }
 
     [Fact]
+    public void UserUninstallTakesExactNameLeftoversWhileIdleAndItsStayStrict()
+    {
+        var exactFolder = new Leftover(Place("AppData", "Acme Paint"), false, null, false, Likely: true) { Loose = false };
+        var looseTemp = new Leftover(Path.Combine(_root, "Temp", "Acme"), false, null, false, Likely: true) { Loose = true };
+        var driver = new Leftover(@"HKLM\SYSTEM\CurrentControlSet\Services\AcmeDrv", true, null, true, Likely: false, As: LeftoverKind.Driver) { Held = LeftoverScan.DriverHeld };
+
+        Assert.Empty(AutoClear.Its([exactFolder, looseTemp, driver]));
+        var picked = AutoClear.ForUserUninstall([exactFolder, looseTemp, driver]);
+        Assert.Equal([exactFolder], picked);
+    }
+
+    [Fact]
     public void ARowIsOnlyForWhatOnePressWouldTake()
     {
         var byName = new Leftover(Place("AppData", "Old Tool"), false, null, false, Likely: true, As: LeftoverKind.Folder);

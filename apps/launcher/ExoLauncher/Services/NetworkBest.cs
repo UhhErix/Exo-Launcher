@@ -25,9 +25,8 @@ namespace ExoLauncher.Services;
 /// TCPNoDelay (games run on UDP or set TCP_NODELAY themselves; TCPNoDelay isn't a value TCP/IP reads), ECN (Windows'
 /// default), Delivery Optimization (internet peers are opt-in, its uploads back off by themselves (LEDBAT), and the
 /// choice can't be read without administrator rights), Wi-Fi band, roaming and MIMO power save (the user's router and
-/// room decide; Exo stops scans during a game instead, <see cref="WifiGameMode"/>), the adapters' "allow the computer to
-/// turn off this device" (documented for Windows 7 only and not kept on 10 and 11), and never network discovery, NetBIOS,
-/// SMB or IPv6. Turning an item's switch off puts back exactly what it recorded and keeps it out of Best settings until
+/// room decide; Exo stops scans during a game instead, <see cref="WifiGameMode"/>), and never network discovery, NetBIOS,
+/// SMB or IPv6 (desktop adapters also set <c>PnPCapabilities</c> to stop Windows powering down the NIC). Turning an item's switch off puts back exactly what it recorded and keeps it out of Best settings until
 /// the switch is on again.
 /// </summary>
 internal sealed partial class NetworkBest(NetworkTune tune, NetworkBest.ISystem system, string path, Func<DateTimeOffset> now)

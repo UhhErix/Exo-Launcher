@@ -88,7 +88,8 @@ public static class ExoWin {
   public static long[] SnipShown(int timeoutMs) {
     var clock = System.Diagnostics.Stopwatch.StartNew();
     while (clock.ElapsedMilliseconds < timeoutMs) {
-      IntPtr h = FindWindow("ExoCapturePopup", "Exo Capture snip");
+      IntPtr h = FindWindow("ExoCaptureSnip", "Exo Capture snip");
+      if (h == IntPtr.Zero) h = FindWindow("ExoCapturePopup", "Exo Capture snip");
       int cloaked = 1;
       if (h != IntPtr.Zero && IsWindowVisible(h) && DwmGetWindowAttribute(h, 14, out cloaked, 4) == 0 && cloaked == 0)
         return new long[] { DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(), h.ToInt64() };

@@ -70,7 +70,6 @@ function Devices() {
 
 function Microphone({ settings, save }: { settings: DiscordClientSettings; save: Save }) {
   const live = useMicLevel()
-  const [showExoControls, setShowExoControls] = useState(false)
   const exoOn = settings.noiseSuppression && settings.noiseSuppressionKind !== 'standard'
   const ptt = settings.keybinds.find(k => k.action === 'PUSH_TO_TALK')
   const setPtt = (keys: number[]) => {
@@ -84,14 +83,7 @@ function Microphone({ settings, save }: { settings: DiscordClientSettings; save:
       <HearYourVoice />
       <NoiseSuppression settings={settings} save={save} live={live} />
       <OnlyMyVoice settings={settings} save={save} />
-      {exoOn ? (
-        <Row label="Voice controls" detail="Exo Voice tunes noise suppression, leveling, echo cancellation, and input sensitivity automatically.">
-          <button type="button" className="exo-set-btn" aria-expanded={showExoControls} onClick={() => setShowExoControls(v => !v)}>
-            {showExoControls ? 'Hide' : 'Customize'}
-          </button>
-        </Row>
-      ) : null}
-      {!exoOn || showExoControls ? (
+      {!exoOn ? (
         <>
           <SwitchRow label="Noise suppression for others" checked={settings.othersNoiseSuppression} onChange={value => save({ othersNoiseSuppression: value })} />
           <SwitchRow label="Even out voices" checked={settings.evenVoices} onChange={value => save({ evenVoices: value })} />
@@ -131,7 +123,7 @@ function NoiseSuppression({ settings, save, live }: { settings: DiscordClientSet
     { value: 'none', label: 'None' },
   ]
   return (
-    <ChoiceRow label="Noise suppression" value={value} choices={choices} detail={live ? NOT_RUNNING[live.stages.suppression] : undefined}
+    <ChoiceRow label="Voice cleanup" value={value} choices={choices} detail={live ? NOT_RUNNING[live.stages.suppression] : undefined}
       onChange={next => void save(next === 'none' ? { noiseSuppression: false } : { noiseSuppression: true, noiseSuppressionKind: next })} />
   )
 }
@@ -183,7 +175,7 @@ function HearYourVoice() {
       () => "Exo couldn't change microphone playback. Try again."
     )
   return (
-    <SwitchRow label="Hear your voice" checked={on} onChange={toggle}
+    <SwitchRow label="Test microphone" checked={on} onChange={toggle}
       detail={speakers ? 'Speakers echo into the mic: use headphones' : undefined} />
   )
 }
@@ -274,10 +266,14 @@ function useMicLevel() {
 
 function Attenuation({ settings, save }: { settings: DiscordClientSettings; save: Save }) {
   return (
-    <Section title="Attenuation">
-      <SliderRow label="Attenuation strength" min={0} max={100} value={settings.attenuation} render={v => `${v}%`} onCommit={v => void save({ attenuation: v })} />
-      <SwitchRow label="When I speak" checked={settings.attenuateSelf} disabled={settings.attenuation === 0} onChange={value => save({ attenuateSelf: value })} />
-      <SwitchRow label="When others speak" checked={settings.attenuateOthers} disabled={settings.attenuation === 0} onChange={value => save({ attenuateOthers: value })} />
+    <Section title="Lower other apps while talking">
+      <SliderRow label="Amount" min={0} max={100} value={settings.attenuation} render={v => v === 0 ? 'Off' : `${v}%`} onCommit={v => void save({ attenuation: v })} />
+      {settings.attenuation > 0 ? (
+        <>
+          <SwitchRow label="When I speak" checked={settings.attenuateSelf} onChange={value => save({ attenuateSelf: value })} />
+          <SwitchRow label="When others speak" checked={settings.attenuateOthers} onChange={value => save({ attenuateOthers: value })} />
+        </>
+      ) : null}
     </Section>
   )
 }
@@ -360,12 +356,6 @@ function ScreenShare({ settings, save }: { settings: DiscordClientSettings; save
           updateGoLiveDefault(Number(resolution), next)
           void save({ goLiveFps: next })
         }}
-      />
-      <SwitchRow
-        label="Hardware HEVC (H.265)"
-        detail="Uses HEVC when your GPU supports it and everyone watching can decode it."
-        checked={settings.goLiveHevc !== false}
-        onChange={value => void save({ goLiveHevc: value })}
       />
     </Section>
   )

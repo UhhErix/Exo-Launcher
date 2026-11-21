@@ -160,6 +160,19 @@ internal sealed partial class Controller
     /// <summary>The screens as they are this moment: one SDR picture of the virtual screen, and each HDR screen's own FP16 picture.</summary>
     internal sealed record Frozen(Win32.RECT Screen, byte[] Bgra, List<(nint Monitor, Win32.RECT Rect, byte[] Half, float White, float Peak)> Hdr);
 
+    internal static bool TryGrabOrFallback(Func<bool> tryPrimary, Func<bool> tryFallback, Action<string>? log = null)
+    {
+        try
+        {
+            if (tryPrimary()) return true;
+        }
+        catch (CaptureException ex)
+        {
+            log?.Invoke("Snip duplication fallback: " + ex.Message);
+        }
+        return tryFallback();
+    }
+
     private Frozen Freeze()
     {
         var screen = Win32.VirtualScreen();
@@ -169,26 +182,32 @@ internal sealed partial class Controller
         {
             var rect = Win32.MonitorInfo(monitor).Monitor;
             var gpu = GpuFor(monitor);
-            using var source = new DuplicationSource(gpu, monitor, 0, hdr: true, "(screen)");
-            if (source.Grab() is { } texture)
-            {
-                var pixels = gpu.Read(texture, out var w, out var h, out var bpp);
-                byte[] sdr;
-                if (bpp == 8)
+            TryGrabOrFallback(
+                () =>
                 {
-                    using var output = DuplicationSource.OutputOf(gpu, monitor, out var description);
-                    var white = Imaging.SdrWhiteNits(monitor);
-                    var peak = description.MaxLuminance > 0 ? description.MaxLuminance : 1000;
-                    hdr.Add((monitor, rect, pixels, white, peak));
-                    sdr = Imaging.ToneMap(pixels, w, h, white, peak);
-                }
-                else sdr = pixels;
-                CopyMonitorBgra(bgra, screen, rect, sdr, w, h);
-            }
-            else if (GrabMonitorGdi(rect) is { } gdi)
-            {
-                CopyMonitorBgra(bgra, screen, rect, gdi, rect.Width, rect.Height);
-            }
+                    using var source = new DuplicationSource(gpu, monitor, 0, hdr: true, "(screen)");
+                    if (source.Grab() is not { } texture) return false;
+                    var pixels = gpu.Read(texture, out var w, out var h, out var bpp);
+                    byte[] sdr;
+                    if (bpp == 8)
+                    {
+                        using var output = DuplicationSource.OutputOf(gpu, monitor, out var description);
+                        var white = Imaging.SdrWhiteNits(monitor);
+                        var peak = description.MaxLuminance > 0 ? description.MaxLuminance : 1000;
+                        hdr.Add((monitor, rect, pixels, white, peak));
+                        sdr = Imaging.ToneMap(pixels, w, h, white, peak);
+                    }
+                    else sdr = pixels;
+                    CopyMonitorBgra(bgra, screen, rect, sdr, w, h);
+                    return true;
+                },
+                () =>
+                {
+                    if (GrabMonitorGdi(rect) is not { } gdi) return false;
+                    CopyMonitorBgra(bgra, screen, rect, gdi, rect.Width, rect.Height);
+                    return true;
+                },
+                Host.Log);
         }
         return new Frozen(screen, bgra, hdr);
     }

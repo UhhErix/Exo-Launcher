@@ -13,16 +13,13 @@ import {
   type Tuning,
 } from '../lib/host'
 import { loadSettingsOrFail, saveSettingsPatch } from '../lib/settingsSave'
-import { useCapture } from '../lib/capture'
 import { useHdrState } from '../lib/hdr'
 import { stayFor } from '../lib/notify'
 import { Button } from './ui/Button'
 import { SegmentedProgress } from './onboarding/SegmentedProgress'
-import { DoneStep } from './onboarding/DoneStep'
 import { RestoreStep } from './onboarding/RestoreStep'
 import { LeavingStep, useLeavingStep } from './onboarding/useLeavingStep'
 import { Spinner } from './ui/Spinner'
-import { CaptureStep } from './onboarding/CaptureStep'
 import { ClientsStep, useClientsStatus, useInstallerLong } from './clients/ClientsCard'
 import { clientsOffered, footerHidden, footerNext } from '../lib/clients'
 import { CleanupStep } from './onboarding/CleanupStep'
@@ -55,26 +52,22 @@ function checkOnboardingStoresOnce(): Promise<StoreStatus[]> {
   return onboardingStoreCheck
 }
 
-/** Runtimes the host reports as absent and is able to offer for install. */
 function missingInstallableRuntimes(result: { items?: DependencyItem[] | null }): MissingRuntime[] {
   return (result.items ?? [])
     .filter((item) => item.status.toLowerCase() !== 'present' && item.canOfferInstall)
     .map((item) => ({ id: item.id, name: item.name }))
 }
 
-/** Clean up has something: an app Exo does the job of (or what a removed one left), or junk past a gigabyte. */
 function cleanupHas(apps: ReplacedApp[] | undefined, junk: JunkItem[]) {
   return !!apps?.some(app => app.installed || app.leftovers > 0) || junkWorth(junk)
 }
 
 
-/** Back shows on every step after Welcome; on the account step only while its own screens are at the choice. */
 function backShown(index: number, id: StepId, accountScreen: AccountScreen): boolean {
   return index > 0 && (id !== 'account' || accountScreen === 'choose')
 }
 
-/** Steps with nothing to offer on this PC are left out; the one on screen stays, so it never drops from under the user. */
-function visibleSteps(offers: Record<'restore' | 'clients' | 'capture' | 'cleanup', boolean>, current: StepId) {
+function visibleSteps(offers: Record<'restore' | 'clients' | 'cleanup', boolean>, current: StepId) {
   return STEPS.filter(item => item.id === current || !(item.id in offers) || offers[item.id as keyof typeof offers])
 }
 
@@ -83,7 +76,6 @@ export interface OnboardingPanelProps {
   onSettings: (next: LauncherSettings) => void
   onStores: (next: StoreStatus[]) => void
   onComplete: () => Promise<void>
-  /** Return false when the picker was canceled. Void and true mean the library changed. */
   onAddFolder?: () => boolean | void | Promise<boolean | void>
 }
 
@@ -95,39 +87,28 @@ export function OnboardingPanel({
   onAddFolder,
 }: OnboardingPanelProps) {
   const [step, setStep] = useState<StepId>('welcome')
-  // The daily backup the restore step offers (null: none, or not read yet; the step is left out then).
   const [restoreOffer, setRestoreOffer] = useState<{ day: string; device: string; files: number } | null>(null)
-  // The restore is running, or done and restarting: Start fresh waits on it.
   const [restoring, setRestoring] = useState(false)
-  // The restore is in and Exo could not restart: the step holds with its message, and the footer is not shown (no Start fresh, no Continue).
   const [restoreHeld, setRestoreHeld] = useState(false)
-  // First-run setup is up: a usable start (an update's startup check).
   useEffect(markShellReady, [])
   useEffect(() => {
     host.backupStatus().then(status => setRestoreOffer(status.offer), (error: unknown) => report(error, 'OnboardingPanel.backupStatus', { level: 'warn' }))
   }, [])
   const stageRef = useRef<HTMLElement>(null)
   const leavingStep = useLeavingStep(stageRef)
-  /** 1 going forward, -1 back: which side the next step slides in from. */
   const [direction, setDirection] = useState(1)
   const [feedback, setFeedback] = useState<Feedback | null>(null)
-  /** A failed sign in or open, under its store's row. */
   const [storeErrors, setStoreErrors] = useState<Record<string, string | undefined>>({})
   const [storeCheckState, setStoreCheckState] = useState<StoreCheckState>('checking')
-  /** Bumped by Try again after a failed check. */
   const [storeCheckAt, setStoreCheckAt] = useState(0)
   const [storeBusy, setStoreBusy] = useState<Record<string, boolean | undefined>>({})
   const [folderBusy, setFolderBusy] = useState(false)
   const [completing, setCompleting] = useState(false)
   const [missingRuntimes, setMissingRuntimes] = useState<MissingRuntime[]>([])
   const [runtimeBusy, setRuntimeBusy] = useState(false)
-  // The Game clients card: Epic's launcher layout and Steam's branch, read as setup opens.
   const { status: clients, setStatus: setClients, failed: clientsFailed, failures: clientsFailures, checking: clientsChecking, recheck: recheckClients } = useClientsStatus()
-  // Continue for now, after a failed Fix: setup may go on, and the card returns on the next start.
   const [clientsLater, setClientsLater] = useState(false)
-  // Epic's installer running 30 s: setup offers Continue for now rather than waiting on it.
   const installerLong = useInstallerLong(clients)
-  // The account step owns its own screens and its own primary button (the footer stays out of it).
   const [accountScreen, setAccountScreen] = useState<AccountScreen>('choose')
   const { overview: account } = useAccount()
   const runtimeBusyRef = useRef(false)
@@ -135,8 +116,6 @@ export function OnboardingPanel({
   const headingRef = useRef<HTMLHeadingElement>(null)
   const focusPending = useRef(false)
 
-  // Best settings for this PC: what the PC room's Best settings lists (gpu/BestSetup.tsx), read as setup opens so it is
-  // there by the last step. Null until the card's profile and the PC's setup have answered.
   const [gpu, setGpu] = useState<GpuProfile | null>(null)
   const [health, setHealth] = useState<PcHealth | null>(null)
   const [drives, setDrives] = useState<DrivesState | null>(null)
@@ -144,23 +123,19 @@ export function OnboardingPanel({
   const [pcRead, setPcRead] = useState(false)
   const [settings, setLocalSettings] = useState<LauncherSettings | null>(null)
   const screen = useHdrState(false)
-  /** The step at work, whether Use best settings has run, the steps it set (their checks draw in) and why any failed. */
   const [running, setRunning] = useState<BestKey | null>(null)
   const [bestBusy, setBestBusy] = useState(false)
   const [bestRan, setBestRan] = useState(false)
   const [landed, setLanded] = useState<ReadonlySet<BestKey>>(() => new Set())
   const [bestFailed, setBestFailed] = useState<Partial<Record<BestKey, string>>>({})
-  const capture = useCapture()
-  // The apps Exo replaces; opening setup first clears what removed ones left in this user's folders.
   const [replaced, setReplaced] = useState<ReplacedApp[] | null>(null)
-  // Junk past a gigabyte (old shader caches, mostly) is Clean up's too, with its one Clean.
   const [junk, setJunk] = useState<JunkItem[]>([])
   const [junkScanning, setJunkScanning] = useState(false)
   const junkStarted = useRef(false)
   const cleanupOffered = cleanupHas(replaced ?? undefined, junk)
   const best = pcRead ? bestSteps(gpu, health, screen, settings, saveSettings, drives, tuning) : null
   const bestLeft = !!best?.some(item => !item.done)
-  const steps = visibleSteps({ restore: restoreOffer !== null, clients: clientsOffered(clients, clientsFailed), capture: capture.state?.present !== false, cleanup: cleanupOffered }, step)
+  const steps = visibleSteps({ restore: restoreOffer !== null, clients: clientsOffered(clients, clientsFailed), cleanup: cleanupOffered }, step)
   const index = Math.max(0, steps.findIndex(item => item.id === step))
   const current = steps[index]
   const next = footerNext(current.id, clients, clientsLater, clientsFailed, restoring, installerLong)
@@ -171,7 +146,6 @@ export function OnboardingPanel({
     host.replacedScan(true).then(({ apps }) => setReplaced(apps), (error: unknown) => report(error, 'OnboardingPanel.replacedScan'))
   }, [])
 
-  // The junk scan waits until setup reaches the steps that can lead into Clean up (see junkScanDue), then runs once.
   useEffect(() => {
     if (!junkScanDue(step, junkStarted.current)) return
     junkStarted.current = true
@@ -236,20 +210,17 @@ export function OnboardingPanel({
     return () => window.cancelAnimationFrame(frame)
   }, [step])
 
-  // A confirmation passes as a notice does; an error stays until the next action.
   useEffect(() => {
     if (!feedback || feedback.error) return
     const timer = window.setTimeout(() => setFeedback(null), stayFor({ text: feedback.message }))
     return () => window.clearTimeout(timer)
   }, [feedback])
 
-  /** The account step is over (signed in, or continued offline): an upgrader is not asked again, and setup goes on. */
   function accountFinished() {
     void host.exoAccountMarkAsked().catch((error: unknown) => report(error, 'OnboardingPanel.markAsked', { level: 'warn' }))
     go(steps[index + 1].id)
   }
 
-  // Setup resumed on a PC that is already signed in, with no code left to confirm: the account step is not asked again.
   useEffect(() => {
     if (step === 'account' && setupSkipsAccount(account, accountScreen)) accountFinished()
   })
@@ -314,7 +285,6 @@ export function OnboardingPanel({
     setRuntimeBusy(true)
     setFeedback(null)
     try {
-      // All of them in one install: Windows asks once.
       const result = await host.runtimesInstall('missing', missingRuntimes.map((item) => item.id))
       const failures = result.results.filter(item => item.outcome === 'failed').map(item => `${item.name}: ${item.message}`)
       if (!result.ok && failures.length === 0 && result.message && !result.canceled) failures.push(result.message)
@@ -338,7 +308,6 @@ export function OnboardingPanel({
     }
   }
 
-  /** HDR for HDR games, Best settings' one step that is a setting, and setup switches. */
   async function saveSettings(patch: Partial<LauncherSettings>) {
     try {
       const next = await saveSettingsPatch(patch)
@@ -350,7 +319,6 @@ export function OnboardingPanel({
     }
   }
 
-  /** Use best settings: each step left, in turn, its row turning its ring; then this PC is read again for the checks. */
   async function runBestSettings() {
     if (bestBusy || !best) return
     setBestBusy(true)
@@ -362,6 +330,7 @@ export function OnboardingPanel({
     setBestFailed(failed)
     setBestRan(true)
     setBestBusy(false)
+    if (Object.keys(failed).length === 0) await finish()
   }
 
   async function finish() {
@@ -378,12 +347,9 @@ export function OnboardingPanel({
     }
   }
 
-  // One renderer per step, looked up rather than chained.
   const body: Record<StepId, () => ReactNode> = {
     welcome: () => null,
-    done: () => <DoneStep />,
     restore: () => (restoreOffer ? <RestoreStep offer={restoreOffer} busy={restoring} onBusy={setRestoring} onRefused={() => setRestoreHeld(true)} /> : null),
-    // One account state with the shell's gate (useAccount): a sign-in here, or Continue without an account, is not asked again after setup.
     account: () => <AccountStep onScreen={state => setAccountScreen(state.screen)} onDone={() => { void refreshAccount(); accountFinished() }} onLater={() => { continueWithoutAccount(); accountFinished() }} />,
     clients: () => <ClientsStep status={clients} failed={clientsFailed} failures={clientsFailures} checking={clientsChecking} onStatus={setClients} onLater={() => setClientsLater(true)} onRecheck={recheckClients} />,
     stores: () => (
@@ -404,7 +370,6 @@ export function OnboardingPanel({
     ),
     apps: () => <AppsStep onFeedback={setFeedback} />,
     discord: () => <DiscordStep />,
-    capture: () => <CaptureStep />,
     pc: () => <PcStep steps={best} running={running} landed={landed} failed={bestFailed} settings={settings} onSave={saveSettings} />,
     cleanup: () => <CleanupStep apps={replaced ?? []} onApps={setReplaced} junk={junk}
       onCleaned={() => void host.junkScan().then(({ items }) => setJunk(items), (error: unknown) => report(error, 'OnboardingPanel.junkScan', { level: 'warn' }))} />,
@@ -440,12 +405,10 @@ export function OnboardingPanel({
             feedback={feedback}
             index={index}
             last={last}
-            busy={completing || bestBusy || (junkScanning && waitsForJunkScan(step, capture.state?.present !== false))}
+            busy={completing || bestBusy || (junkScanning && waitsForJunkScan(step))}
             inline={current.id === 'account'}
             backShown={backShown(index, current.id, accountScreen)}
-            // Best settings asks first: Use best settings runs it, Not now goes on without it.
             offer={current.id === 'pc' && bestLeft && !bestRan}
-            // The clients step is required: Continue waits until Fix has brought this PC up to them.
             nextBlocked={next.blocked}
             nextLabel={next.label}
             quiet={next.quiet}
@@ -453,7 +416,6 @@ export function OnboardingPanel({
             onBest={() => void runBestSettings()}
             onBack={() => go(steps[index - 1].id)}
             onNext={() => {
-              // Continuing past the restore offer is "start fresh": this install is not offered the backup again.
               if (next.defers) setClientsLater(true)
               if (current.id === 'restore') host.backupDecline().catch((error: unknown) => report(error, 'OnboardingPanel.decline', { level: 'warn' }))
               if (last) void finish()
@@ -466,30 +428,23 @@ export function OnboardingPanel({
   )
 }
 
-/** The note on the left; Back (and Not now while Best settings is offered) and the one white button on the right. */
 function Footer({ feedback, index, last, busy, inline, backShown, offer, nextBlocked, nextLabel, quiet, working, onBest, onBack, onNext }: {
   feedback: Feedback | null
   index: number
   last: boolean
   busy: boolean
-  /** The step draws its own primary button (the account step): the footer keeps only Back. */
   inline: boolean
   backShown: boolean
-  /** Best settings has steps left: the white button runs them and Not now goes on without them. */
   offer: boolean
-  /** The white button waits (the clients step, until its check passes). */
   nextBlocked: boolean
-  /** The white button's words when they are not the step's default (the restore offer: Start fresh). */
   nextLabel?: string
-  /** The step's one primary is elsewhere on it (the restore offer's Restore, a check's Try again): the footer's button is quiet. */
   quiet: boolean
-  /** What the white button is doing while it works. */
   working: string | null
   onBest: () => void
   onBack: () => void
   onNext: () => void
 }) {
-  const label = offer ? 'Use best settings' : nextLabel ?? (last ? 'Open library' : index === 0 ? 'Get started' : 'Continue')
+  const label = offer ? 'Optimize & open Exo' : nextLabel ?? (last ? 'Open Exo' : index === 0 ? 'Get started' : 'Continue')
   return (
     <footer className={`exo-ob-foot${index === 0 ? ' is-welcome' : ''}`}>
       <p className={`exo-ob-note${feedback?.error ? ' is-error' : ''}`} role={feedback?.error ? 'alert' : 'status'} aria-live="polite">
@@ -497,7 +452,7 @@ function Footer({ feedback, index, last, busy, inline, backShown, offer, nextBlo
       </p>
       <div className="exo-ob-actions">
         {backShown ? <Button variant="ghost" isDisabled={busy} onPress={onBack}>Back</Button> : null}
-        {offer ? <Button variant="ghost" isDisabled={busy} onPress={onNext}>Not now</Button> : null}
+        {offer ? <Button variant="ghost" isDisabled={busy} onPress={onNext}>Skip for now</Button> : null}
         {inline ? null : (
           <Button variant={quiet ? 'ghost' : 'primary'} className="exo-ob-cta" isDisabled={busy || nextBlocked} onPress={offer ? onBest : onNext}>
             {working ? <Spinner label={working} /> : null}

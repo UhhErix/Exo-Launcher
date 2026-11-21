@@ -1,15 +1,10 @@
-// The upscaler update setting's words and the newer-upscaler notice (src/lib/upscalerNotice.ts). `npm test` (Node's runner).
+// The newer-upscaler notice (src/lib/upscalerNotice.ts). `npm test` (Node's runner).
 //
-// How it could fail: the setting's label or line drifts from what the owner asked for; a notice is shown when nothing is newer; the
-// notice's text names the wrong family or repeats one; its button does not run the download; two families read as one.
+// How it could fail: a notice is shown when nothing is newer; the notice's text names the wrong family or repeats one;
+// its button does not run the download; two families read as one.
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { AUTO_UPSCALERS_DETAIL, AUTO_UPSCALERS_LABEL, newerNotice } from '../src/lib/upscalerNotice.ts'
-
-test('the setting reads as the owner worded it, plainly', () => {
-  assert.equal(AUTO_UPSCALERS_LABEL, 'Update DLSS, FSR and XeSS automatically')
-  assert.equal(AUTO_UPSCALERS_DETAIL, 'Newer versions come from NVIDIA, AMD and Intel and go into your games by themselves, only if they signed them.')
-})
+import { newerNotice } from '../src/lib/upscalerNotice.ts'
 
 test('nothing newer means no notice', () => {
   assert.equal(newerNotice([], () => assert.fail('no download without a notice')), null)

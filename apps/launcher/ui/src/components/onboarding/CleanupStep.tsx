@@ -10,7 +10,6 @@ function size(bytes: number): string {
   return bytes > 0 ? `${Math.max(1, Math.round(bytes / 1e3))} KB` : ''
 }
 
-/** "3 folders (1.2 GB), 9 registry entries and 2 shortcuts": what an app left, or what was cleared of it. */
 function said(left: LeftoverSummary): string {
   const count = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`
   const parts: string[] = []
@@ -23,12 +22,6 @@ function said(left: LeftoverSummary): string {
   return parts.length < 2 ? parts.join('') : `${parts.slice(0, -1).join(', ')} and ${parts[parts.length - 1]}`
 }
 
-/**
- * First run's clean up: the apps Exo does the job of, each removed on request as Revo Uninstaller does it: its own
- * uninstaller, then a deep clean of what it leaves (folders, registry entries, shortcuts, and what Windows keeps about it).
- * Nothing goes without a press; what removed apps left in this user's folders was already cleared when setup opened.
- * Then junk past a gigabyte (old shader caches, mostly), as PC › Needs you has it.
- */
 export function CleanupStep({ apps, onApps, junk, onCleaned }: {
   apps: ReplacedApp[]
   onApps: (next: ReplacedApp[]) => void
@@ -43,16 +36,12 @@ export function CleanupStep({ apps, onApps, junk, onCleaned }: {
   )
 }
 
-/** One row per replaced app on this PC, with Remove (or Clear, for what a removed one left) as PC › Apps has it. */
 function ReplacedAppRows({ apps, onApps, empty }: { apps: ReplacedApp[]; onApps: (next: ReplacedApp[]) => void; empty: boolean }) {
   const [busy, setBusy] = useState<string | null>(null)
   const [errors, setErrors] = useState<Record<string, string | undefined>>({})
-  // The apps there when the step opened (or cleared as it opened) stay listed, a removed one marked Removed.
   const [listed] = useState(() => new Set(apps.filter(app => app.installed || app.leftovers > 0 || app.cleared).map(app => app.id)))
   const shown = apps.filter(app => listed.has(app.id))
 
-  // The button says it in itself (ConfirmButton): its ring, then its check, and only then does the row say Removed; a
-  // refusal turns it Bad with the reason under the row.
   async function remove(app: ReplacedApp) {
     setBusy(app.id)
     setErrors(current => ({ ...current, [app.id]: undefined }))
@@ -72,7 +61,6 @@ function ReplacedAppRows({ apps, onApps, empty }: { apps: ReplacedApp[]; onApps:
       {shown.map(app => {
         const gone = !app.installed && app.leftovers === 0
         const amount = size(app.bytes)
-        // What a Clear will delete says so before it asks; what is done needs no word beyond Removed.
         const detail = !app.installed && !gone ? `Left behind: ${said(app.found)}` : undefined
         return (
           <Row key={app.id} label={app.name} detail={detail} error={errors[app.id]}>

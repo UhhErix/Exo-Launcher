@@ -30,19 +30,19 @@ internal sealed class ShadersAddon : IDisposable
     internal static readonly IReadOnlySet<string> PageMethods = new HashSet<string>(StringComparer.Ordinal)
     {
         "snapshot", "ui.visible", "scan", "queue.add", "queue.move", "queue.remove", "queue.start", "queue.pause", "queue.resume",
-        "queue.stop", "game.compile", "game.diagnostics", "recorder.auto", "recorder.set",
-        "driver.setCacheLimit", "driver.setCleanupGuard", "cache.freeOldDriver", "driver.setAutoShader",
+        "queue.stop", "game.compile", "recorder.auto",
+        "driver.setCacheLimit", "driver.setCleanupGuard", "cache.freeOldDriver",
     };
 
     /// <summary>
     /// The page's methods that start a stopped engine: Refresh (scan), Compile (game.compile; queue.add then queue.start;
-    /// queue.resume), and what you press on the page for recording and how compiles did. Every other
+    /// queue.resume), and what you press on the page for recording and shader cache settings. Every other
     /// one is answered without it: the board from the last state it left, the rest as done.
     /// </summary>
     internal static readonly IReadOnlySet<string> StartMethods = new HashSet<string>(StringComparer.Ordinal)
     {
-        "scan", "game.compile", "queue.add", "queue.start", "queue.resume", "game.diagnostics", "recorder.auto", "recorder.set",
-        "driver.setCacheLimit", "driver.setCleanupGuard", "cache.freeOldDriver", "driver.setAutoShader",
+        "scan", "game.compile", "queue.add", "queue.start", "queue.resume", "recorder.auto",
+        "driver.setCacheLimit", "driver.setCleanupGuard", "cache.freeOldDriver",
     };
 
     /// <summary>An add-on installed beside Exo's data (a newer or development build) wins over the copy that ships in Exo's app folder.</summary>

@@ -8,34 +8,10 @@ using Microsoft.Win32;
 
 namespace ExoLauncher.Services;
 
-/// <summary>
-/// System > Graphics > Driver and profile's driver row on a Radeon or an Intel GPU, as <see cref="NvidiaDriverService"/> is
-/// on a GeForce. Built without either GPU to try it on: the pages, packages and switches below were read from AMD's and
-/// Intel's own files (October 22, 2026), and each install step is checked in code and tests only.
-///
-/// 1. Check: neither vendor has a version feed, so Exo reads their download pages, as <see cref="PcHealth"/> reads AMD's
-///    chipset page. AMD: the driver selector's product list names the card's page (an integrated GPU's is its
-///    processor's), whose Windows 11 section links the newest AMD Software: Adrenalin Edition. Intel: an Arc is on Intel's
-///    Arc driver page; any other GPU on the first of the Arc, 11th–14th Gen and 7th–10th Gen pages whose product list names
-///    the card or the processor. Cached an hour.
-/// 2. Update, after the user's consent: download from the vendor; check its signature (and on Intel the SHA-512 its page
-///    lists); wait while a game runs or a Discord call is on (the driver swap crashes the game and its reload ends the
-///    call); run the vendor's own silent install as administrator (Windows asks); wait for its real end (AMD's installer
-///    hands its work to other processes: <see cref="AmdInstallState"/>); read its result and the new version; reload Exo's page, whose display
-///    adapter the install reset (<see cref="MainWindow.ReloadAfterDriverInstallAsync"/>); put Exo's settings back. AMD's package is unpacked with Windows' tar and its Bin64\ATISetup.exe runs (<see cref="AmdArguments"/>);
-///    Intel's package runs itself (<see cref="IntelArguments"/>). Each installs the least Exo's features need: AMD's
-///    minimal view or driver only, Intel's driver without its extras (IGCL's ControlLib.dll comes with the driver).
-/// Never restarts the PC: a restart the driver needs is said on the row.
-/// </summary>
 internal static partial class GpuDriverUpdate
 {
-    /// <summary>
-    /// Vendor is amd or intel. Kind is recommended or optional (AMD's own labels), or intel. Sha512 is what Intel's page lists,
-    /// and Page is Intel's page, which shows Intel's license.
-    /// </summary>
     internal sealed record Latest(string Vendor, string Version, string Url, long Size, string? Released, string Kind, string? Sha512 = null, string? Page = null);
 
-    /// <summary>How an install ended: Ok, or not with Message saying why.</summary>
     internal sealed record Ending(bool Ok, string Message);
 
     internal const string AmdPublisher = "Advanced Micro Devices";
@@ -44,13 +20,11 @@ internal static partial class GpuDriverUpdate
 
     private static readonly HttpClient Http = ExoHttp.Create(TimeSpan.FromMinutes(30), new HttpClientHandler { AutomaticDecompression = DecompressionMethods.All });
     private static readonly Lock Gate = new();
-    /// <summary>The newest driver per vendor, card and processor, kept an hour on disk too, as every version check is (<see cref="LatestCache{T}"/>).</summary>
     private static readonly LatestCache<Latest> Drivers = new("AMD's and Intel's driver pages", TimeSpan.FromHours(1), "gpu-drivers.json");
     private static NvidiaDriverService.Progress _progress = new("idle", 0, null);
     private static Task? _running;
     private static string? _vendor;
 
-    /// <summary>Fires on every change of <see cref="Current"/>: the progress the NVIDIA row shows, on the same gpu.driver event.</summary>
     internal static event Action<NvidiaDriverService.Progress>? Changed;
 
     internal static NvidiaDriverService.Progress Current { get { lock (Gate) return _progress; } }
@@ -64,21 +38,11 @@ internal static partial class GpuDriverUpdate
 
     internal static string Maker(string vendor) => vendor == "amd" ? "AMD" : "Intel";
 
-    /// <summary>The vendor's GPU the row is for, as Windows names it (<see cref="Pick"/>).</summary>
     internal static string? Card(string vendor) => Pick(vendor, GpuCapability.Adapters());
 
-    /// <summary>
-    /// With two of one vendor's GPUs (a Ryzen's Radeon Graphics beside a Radeon card, an Intel GPU beside an Arc card), the
-    /// card: a Radeon RX or PRO, an Arc A or B (<see cref="GraphicsService.Discrete"/>).
-    /// </summary>
     internal static string? Pick(string vendor, IEnumerable<string> adapters) =>
         adapters.Where(name => GraphicsService.Vendors([name]).Contains(vendor)).OrderByDescending(GraphicsService.Discrete).FirstOrDefault();
 
-    /// <summary>
-    /// The installed driver as Windows records it for the card: AMD Software's version (RadeonSoftwareVersion "26.10.1",
-    /// which AMD's display INF writes, so a driver from Windows Update has it too) or Intel's driver version
-    /// (DriverVersion "32.0.101.9150", the version Intel's pages list). Read fresh: current the moment an install ends.
-    /// </summary>
     internal static string? PickInstalledValue(string vendor, string? radeonSoftwareVersion, string? driverVersion)
     {
         var radeon = string.IsNullOrWhiteSpace(radeonSoftwareVersion) ? null : radeonSoftwareVersion.Trim();
@@ -110,37 +74,28 @@ internal static partial class GpuDriverUpdate
         return fallback;
     }
 
-    /// <summary>Whether <paramref name="latest"/> is newer than <paramref name="installed"/> by number ("26.10.1" after "26.9.2"); without an installed version, it is.</summary>
     internal static bool Newer(string latest, string? installed) => VersionNumber.Newer(latest, installed);
 
-    /// <summary>The newest driver for this PC's card from its vendor's pages (cached an hour); null when there is none or it can't tell.</summary>
-    /// <remarks>An answer older than the hour shows at once while the pages are read again; <paramref name="fresh"/> (an
-    /// update) waits for them.</remarks>
     internal static async Task<Latest?> LatestAsync(string vendor, CancellationToken ct, bool fresh = false)
     {
         SweepUnpacked(vendor);
         if (Card(vendor) is not { } card) return null;
         var cpu = PcHealth.CpuName();
-        var key = $"{vendor}|{card}|{cpu}";
+        var key = $"{vendor}|{card}|{cpu}|hf";
         return await Drivers.GetAsync(key, lookup => FetchAsync(vendor, card, cpu, lookup), ct, fresh).ConfigureAwait(false);
     }
 
-    /// <summary>Reads the vendor's pages for the card's newest driver (a failure throws: the cache keeps the last answer).</summary>
     private static async Task<Latest?> FetchAsync(string vendor, string card, string? cpu, CancellationToken ct)
     {
         Task<string> Get(string url) => GetTextAsync(vendor, url, ct);
+        Task<string?> TryGet(string url) => TryGetTextAsync(vendor, url, ct);
         var latest = vendor == "amd"
-            ? await AmdLatestAsync(card, cpu, Get).ConfigureAwait(false)
+            ? await AmdLatestAsync(card, cpu, Get, TryGet).ConfigureAwait(false)
             : await IntelLatestAsync(card, cpu, Get).ConfigureAwait(false);
         if (latest is null) AppLog.Info($"Driver: {Maker(vendor)}'s pages name no driver for {card}{(cpu is null ? "" : " with " + cpu)}.");
         return latest;
     }
 
-    /// <summary>
-    /// A request as each site lets one through. AMD's holds a request without a browser-style agent open until it times
-    /// out (as the chipset page read found), and its download server wants www.amd.com as the referring page. Intel's
-    /// turns browser-style and bare agents away and lets through one that names itself with a link, as crawlers do.
-    /// </summary>
     internal static HttpRequestMessage Request(string vendor, string url)
     {
         var request = new HttpRequestMessage(HttpMethod.Get, url);
@@ -162,31 +117,30 @@ internal static partial class GpuDriverUpdate
         return await response.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
     }
 
-    /// <summary>
-    /// Why a display driver install waits, or null: a game runs (the driver swap would crash it), a Discord call is on (the
-    /// reload ends it), or Exo Shaders compiles a game (the swap would crash the compile). Asked again every few seconds, so
-    /// the install starts by itself once none holds it. A Refresh or a status read of Exo Shaders never holds it.
-    /// </summary>
+    internal static async Task<string?> TryGetTextAsync(string vendor, string url, CancellationToken ct)
+    {
+        using var request = Request(vendor, url);
+        using var response = await Http.SendAsync(request, ct).ConfigureAwait(false);
+        Drivers.SlowDown(response);
+        if (response.StatusCode == HttpStatusCode.NotFound) return null;
+        response.EnsureSuccessStatusCode();
+        return await response.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
+    }
+
     internal static async Task<string?> HoldingAsync() =>
         GameRunning() ? "Waiting for your game to close"
         : DiscordClient.DiscordSession.Current?.InCall == true ? "Waiting for your Discord call to end"
         : ShadersAddon.Live is { } shaders && await shaders.CompilingAsync(CancellationToken.None).ConfigureAwait(false) ? "Waiting for Exo Shaders to finish compiling"
         : null;
 
-    /// <summary>Why a display driver update can't start now, or null. NVIDIA's row asks the same. An Exo Shaders compile doesn't refuse it: the install waits for it (<see cref="HoldingAsync"/>).</summary>
     internal static string? Busy() =>
         GameRunning() ? "Close your game first."
         : DiscordClient.DiscordSession.Current?.InCall == true ? "Leave your Discord call first."
         : null;
 
-    /// <summary>
-    /// The free reads first: while a game is known to run, an install waiting on it (every 5 s) never walks the process
-    /// table. Only when they see none is the table read, so a game started a moment ago still holds the install.
-    /// </summary>
     private static bool GameRunning() =>
         App.Services.Launcher.AnyGameRunning || LeanSignal.Active || MainWindow.RunningLibraryGames().Count > 0;
 
-    /// <summary>Returns once <paramref name="holding"/> says nothing, calling <paramref name="waiting"/> with each new reason it gives meanwhile.</summary>
     internal static async Task WaitQuietAsync(Func<Task<string?>> holding, Action<string> waiting, TimeSpan poll, CancellationToken ct = default)
     {
         string? said = null;
@@ -197,17 +151,13 @@ internal static partial class GpuDriverUpdate
         }
     }
 
-    /// <summary>Why an update can't start now, or null.</summary>
     internal static string? Blocked() => _running is { IsCompleted: false } ? "A driver update is already running." : Busy();
 
-    /// <summary>The vendor whose update is running, or null: mid-install, Windows may list no GPU of that vendor at all.</summary>
     internal static string? Updating { get { lock (Gate) return _running is { IsCompleted: false } ? _vendor : null; } }
 
-    /// <summary>Starts the update (the user consented); progress comes through <see cref="Changed"/>.</summary>
     internal static string? Start(Latest latest)
     {
         if (Card(latest.Vendor) is not { } card) return "Exo can't find the graphics card.";
-        // Checked again right before installing: a version with a known problem on this PC never goes in.
         if (DriverAdvisories.Shared.Refuse(DriverAdvisories.Gpu(latest.Vendor, card), latest.Version) is { } advised) return advised;
         lock (Gate)
         {
@@ -218,30 +168,10 @@ internal static partial class GpuDriverUpdate
         return null;
     }
 
-    /// <summary>
-    /// AMD's switches, run on Bin64\ATISetup.exe (its help, read from 26.10.1's package on 2026-10-29; Setup.exe's own list
-    /// has no -view): -INSTALL installs silently; -LOG writes the result as "[ResponseResult] ResultCode =N"
-    /// (<see cref="AmdResult"/>); no -BOOT, so Exo never restarts the PC. The smallest install Exo's features keep: ADLX
-    /// (Exo's Radeon page: Anti-Lag, Chill, sharpening, Fluid Motion Frames' switch) comes with the display driver
-    /// (gpuopen.com/manuals/adlx: "installed with the display driver"), but Fluid Motion Frames adds frames only while AMD
-    /// Software runs. So a card that runs it (<see cref="FluidMotionFrames.Runs"/>) gets -view:2, "Minimal View" (AMD
-    /// Software without recording, streaming, tuning or the overlay: amd.com DH3-039), and any other card -DRIVERONLY
-    /// ("Installs only the driver packages, skips all applications"). Checked in code only: no Radeon here.
-    /// </summary>
     internal static string AmdArguments(string log, bool software) => $"-INSTALL {(software ? "-VIEW:2" : "-DRIVERONLY")} -LOG \"{log}\"";
 
-    /// <summary>
-    /// Intel's switches (installation_readme.txt in Intel's package): over whatever version is there (so Reinstall works),
-    /// without the extras (Intel Graphics Software, Driver &amp; Support Assistant, GameAssist, oneAPI Level Zero and a data
-    /// collection service), silent, -s last as Intel's examples have it. Exo's Intel page needs only ControlLib.dll, which
-    /// the display driver's own INF copies to System32 (iigd_dch.inf, ControlApi_Gpu.Copy64_Ext). Not --fresh: it removes
-    /// every older Intel driver, and an Intel GPU beside an Arc card runs on another of Intel's packages. No -b: Exo never
-    /// restarts the PC. Intel's package is a WinRAR SFX whose setup hands its whole command line to Installer.exe (Windows'
-    /// tar can't unpack it), and WinRAR's own -s keeps its window hidden too.
-    /// </summary>
     internal const string IntelArguments = "--overwrite --noExtras -s";
 
-    /// <summary>AMD's result from its install log: 0 done, 1 failed, 2 done with a restart to come; null when it wrote none.</summary>
     internal static int? AmdResult(string? log)
     {
         if (log is null) return null;
@@ -251,12 +181,6 @@ internal static partial class GpuDriverUpdate
         return match.Success && int.TryParse(match.Groups[1].Value, out var code) ? code : null;
     }
 
-    /// <summary>
-    /// How an install ended, from the vendor's own answer and the version Windows now has: a driver at the new version is
-    /// installed whatever the installer said; AMD's 2 and Intel's 2 and 14 (restart) or 17 and 18 (shut down) are done once
-    /// the PC restarts (the new version may only show then); anything else is a stop, said as plainly as the code allows.
-    /// Intel's codes are its readme's.
-    /// </summary>
     internal static Ending Outcome(Latest latest, int exitCode, int? amdResult, string? installed)
     {
         var amd = latest.Vendor == "amd";
@@ -282,7 +206,6 @@ internal static partial class GpuDriverUpdate
             });
     }
 
-    /// <summary>The AMD Software version an unpacked AMD package installs (Config\InstallManifest.json's BuildInfo), or null.</summary>
     internal static string? AmdPackageVersion(string? manifest)
     {
         if (manifest is null) return null;
@@ -306,7 +229,6 @@ internal static partial class GpuDriverUpdate
         var package = Path.Combine(folder, Path.GetFileName(new Uri(latest.Url).LocalPath));
         var unpacked = Path.Combine(folder, "unpacked");
         var log = Path.Combine(folder, "install.log");
-        // The page's driver screen follows the install from its first wait; a failure before that stays on the row.
         var stepped = false;
         void Step(string phase, string? message, DriverRestore.Outcome? outcome = null)
         {
@@ -315,7 +237,6 @@ internal static partial class GpuDriverUpdate
         }
         try
         {
-            // One installer per vendor stays on disk (about 1 GB): an older one goes.
             if (Directory.Exists(Root(vendor)))
                 foreach (var old in Directory.EnumerateDirectories(Root(vendor)).Where(old => !string.Equals(old, folder, StringComparison.OrdinalIgnoreCase)).ToList())
                     TryDelete(old);
@@ -338,13 +259,10 @@ internal static partial class GpuDriverUpdate
                 arguments = AmdArguments(log, FluidMotionFrames.Runs(card));
             }
 
-            // The driver swap crashes a game or a shader compile and its reload ends a call: one started during the download is waited out.
             await WaitQuietAsync(HoldingAsync, reason => { Report("waiting", 0, reason); Step("waiting", reason); }, TimeSpan.FromSeconds(5)).ConfigureAwait(false);
-            // How the screens are now, to put back what the install resets.
             var screens = DriverRestore.Snapshot();
             var before = Installed(vendor, card);
 
-            // Windows asks for permission unless its settings let Exo go ahead without asking.
             Report("installing", 0, "Installing the driver. Your screens go black for a moment");
             Step("installing", "Installing the driver. Your screens go black for a moment");
             AppLog.Info($"Driver: installing {maker} {latest.Version} over {before ?? "no driver"} for {card}: {Path.GetFileName(installer)} {arguments}");
@@ -365,7 +283,6 @@ internal static partial class GpuDriverUpdate
             Step("reloading", "Loading the new driver");
             if (vendor == "amd") await WaitAmdInstallAsync(unpacked, log, card, before, latest.Version).ConfigureAwait(false);
             var result = vendor == "amd" ? AmdResult(ReadLog(log)) : null;
-            // Windows records the new driver as the install finishes; give it a few seconds before reading.
             var installed = Installed(vendor, card);
             for (var waited = 0; waited < 15 && !Same(installed, latest.Version); waited++)
             {
@@ -374,7 +291,6 @@ internal static partial class GpuDriverUpdate
             }
             var end = Outcome(latest, exit, result, installed);
             AppLog.Info($"Driver: {maker}'s installer exited {exit}{(result is { } code ? $", result {code}" : "")}; driver now {installed ?? "unknown"}: {end.Message}.");
-            // The install reset the display adapter under Exo's own page: it reloads before the settings go back.
             await MainWindow.ReloadAfterDriverInstallAsync().ConfigureAwait(false);
             if (!end.Ok)
             {
@@ -383,10 +299,7 @@ internal static partial class GpuDriverUpdate
                 return;
             }
             Drivers.Clear();
-            // Done before the profile is read: while the stage says installing, GpuProfileService answers "being installed".
             Report("done", 100, end.Message);
-            // A new driver can reset its settings: Exo's profile (ADLX loads the new driver's library for each call), the
-            // screens and interrupts go back.
             Step("restoring", "Putting your settings back");
             Step("done", end.Message, await DriverRestore.AfterInstallAsync(vendor, screens, interruptsChained: false).ConfigureAwait(false));
         }
@@ -399,7 +312,6 @@ internal static partial class GpuDriverUpdate
         }
         finally
         {
-            // The unpacked driver (about 3 GB) goes however it ended. The installer stays for a reinstall.
             TryDelete(unpacked);
         }
     }
@@ -408,18 +320,10 @@ internal static partial class GpuDriverUpdate
 
     internal enum AmdWait { Waiting, Ended, Stopped, TimedOut }
 
-    /// <summary>A hand-off between AMD's processes leaves a gap; the driver also settles in Windows after the last one.</summary>
     internal static readonly TimeSpan AmdSettle = TimeSpan.FromSeconds(20);
-    /// <summary>With no result and no new version, nothing of AMD's for this long means it stopped.</summary>
     internal static readonly TimeSpan AmdGiveUp = TimeSpan.FromMinutes(2);
     internal static readonly TimeSpan AmdLimit = TimeSpan.FromHours(1);
 
-    /// <summary>
-    /// Where AMD's install is, after its installer returned: from whether one of its processes runs, whether it finished
-    /// (its log's result, or Windows has the new version), how long none of them has run and how long it has been. Ended
-    /// once it finished and nothing ran for <see cref="AmdSettle"/>; Stopped when nothing ran for <see cref="AmdGiveUp"/>
-    /// without it finishing; TimedOut after <see cref="AmdLimit"/>, running or not.
-    /// </summary>
     internal static AmdWait AmdInstallState(bool running, bool finished, TimeSpan quiet, TimeSpan elapsed) =>
         elapsed >= AmdLimit ? AmdWait.TimedOut
         : running ? AmdWait.Waiting
@@ -427,17 +331,8 @@ internal static partial class GpuDriverUpdate
         : quiet >= AmdGiveUp ? AmdWait.Stopped
         : AmdWait.Waiting;
 
-    /// <summary>
-    /// AMD's install, by name wherever it runs from: Bin64's ATISetup.exe (Setup.exe hands the install to it), AMD Software's
-    /// installer and splash, the older install manager and the cleanup utility; and Windows' drvinst.exe, which puts a
-    /// driver in. Anything else running from the unpacked package counts too.
-    /// </summary>
     private static readonly string[] AmdInstallers = ["ATISetup", "AMDSoftwareInstaller", "AMDSplashScreen", "InstallManagerApp", "AMDCleanupUtility", "drvinst"];
 
-    /// <summary>
-    /// AMD's installer can return before its install ends (Setup.exe did), and the display adapter resets after that: the restoring step and
-    /// the page's reload wait for the real end (<see cref="AmdInstallState"/>), polled every 2 s, each process seen logged.
-    /// </summary>
     private static async Task WaitAmdInstallAsync(string unpacked, string log, string card, string? before, string version)
     {
         var clock = Stopwatch.StartNew();
@@ -463,7 +358,6 @@ internal static partial class GpuDriverUpdate
         }
     }
 
-    /// <summary>The name of one of AMD's install processes running now (<see cref="AmdInstallers"/>), or null.</summary>
     private static string? AmdInstallerRunning(string unpacked)
     {
         var root = Adapters.ProcessHelper.RootPrefix(unpacked);
@@ -478,7 +372,6 @@ internal static partial class GpuDriverUpdate
         return null;
     }
 
-    /// <summary>AMD's install log as it is now (AMD may still be writing it), or null.</summary>
     private static string? ReadLog(string log)
     {
         try
@@ -491,7 +384,6 @@ internal static partial class GpuDriverUpdate
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { return null; }
     }
 
-    /// <summary>The package is the vendor's: signed by them and, where the page lists one, the same SHA-512.</summary>
     private static bool Genuine(Latest latest, string path)
     {
         if (!File.Exists(path) || !AuthenticodeVerifier.HasPublisher(path, latest.Vendor == "amd" ? AmdPublisher : IntelPublisher)) return false;
@@ -541,7 +433,6 @@ internal static partial class GpuDriverUpdate
 
     internal static string DownloadHost(string vendor) => vendor == "amd" ? "drivers.amd.com" : "downloadmirror.intel.com";
 
-    /// <summary>AMD's package (a 7-Zip archive behind a signed stub) unpacked whole with Windows' tar: AMD's full install reads all of it.</summary>
     private static async Task UnpackAsync(string package, string unpacked)
     {
         TryDelete(unpacked);
@@ -553,7 +444,6 @@ internal static partial class GpuDriverUpdate
         if (unpack.ExitCode != 0 || !File.Exists(Path.Combine(unpacked, "Setup.exe"))) throw new InvalidDataException("The driver package didn't unpack.");
     }
 
-    /// <summary>Unpacked drivers left by an install that ended before cleaning up (a crash), while none is running.</summary>
     private static void SweepUnpacked(string vendor)
     {
         lock (Gate) if (_running is { IsCompleted: false }) return;

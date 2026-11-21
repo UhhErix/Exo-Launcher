@@ -8,9 +8,6 @@ namespace ExoLauncher.Services;
 /// action), apply (on Intel, with lowLatency) or undo. gpu.game: whether
 /// Exo turns Fluid Motion Frames on for a game on a Radeon (Exo's decision, nothing to set), or its XeSS frame
 /// generation on Intel (set when "frameGen" is passed).
-/// gpu.import: a Profile Inspector file for the global profile (pick, apply,
-/// undo, cancel, state). The file's path stays here: the page gets its
-/// profile name and the settings in plain words.
 /// </summary>
 public sealed partial class WebHostBridge
 {
@@ -117,72 +114,6 @@ public sealed partial class WebHostBridge
 
     /// <summary>How long the game sheet waits for a game's facts before reading Fluid Motion Frames from what is kept.</summary>
     private static readonly TimeSpan FactsWait = TimeSpan.FromSeconds(8);
-
-    private async Task<object> GpuImportAsync(JsonElement p, bool hasParams, CancellationToken ct)
-    {
-        static object? Undo() => GraphicsService.ImportUndo() is { } undo ? new { profile = undo.Profile, count = undo.Count } : null;
-        var action = ReadString(p, hasParams, "action");
-        switch (action)
-        {
-            case "pick":
-                var path = await PickProfileFileAsync().ConfigureAwait(false);
-                if (path is null) return new { ok = false, cancelled = true, undo = Undo() };
-                var preview = await Task.Run(() => GraphicsService.PreviewImport(path), ct).ConfigureAwait(false);
-                return new
-                {
-                    ok = preview.Ok,
-                    cancelled = false,
-                    message = preview.Message,
-                    preview = preview.Ok ? new
-                    {
-                        profile = preview.ProfileName,
-                        items = preview.Items.Select(item => new { label = item.Label, value = item.Value }).ToList(),
-                        unknown = preview.Unknown,
-                        leftOut = preview.LeftOut + preview.NotInDriver,
-                    } : null,
-                    undo = Undo(),
-                };
-            case "apply":
-            case "undo":
-                var done = await Task.Run(() => action == "apply" ? GraphicsService.ApplyImport() : GraphicsService.UndoImport(), ct).ConfigureAwait(false);
-                return new { ok = done.Ok, message = done.Message, undo = Undo() };
-            case "cancel":
-                GraphicsService.CancelImport();
-                return new { ok = true, undo = Undo() };
-            case "state":
-                return new { ok = true, undo = Undo() };
-            default:
-                return new { ok = false, message = "Unknown action." };
-        }
-    }
-
-    /// <summary>A .nip file picked in Windows' file picker, or null.</summary>
-    private async Task<string?> PickProfileFileAsync()
-    {
-        var tcs = new TaskCompletionSource<string?>();
-        async Task Run()
-        {
-            try
-            {
-                if (App.MainAppWindow is not { } window) { tcs.TrySetResult(null); return; }
-                var picker = new Windows.Storage.Pickers.FileOpenPicker();
-                WinRT.Interop.InitializeWithWindow.Initialize(picker, WinRT.Interop.WindowNative.GetWindowHandle(window));
-                picker.SuggestedStartLocation = Windows.Storage.Pickers.PickerLocationId.Downloads;
-                picker.ViewMode = Windows.Storage.Pickers.PickerViewMode.List;
-                picker.FileTypeFilter.Add(".nip");
-                var file = await picker.PickSingleFileAsync();
-                tcs.TrySetResult(file?.Path);
-            }
-            catch (Exception ex)
-            {
-                Helpers.AppLog.Warn("Profile picker failed: " + ex.Message);
-                tcs.TrySetResult(null);
-            }
-        }
-        if (!_queue.HasThreadAccess) _queue.Enqueue(() => _ = Run());
-        else _ = Run();
-        return await tcs.Task.ConfigureAwait(false);
-    }
 
     // Set once: the first two gpu.driver calls (the header and the driver row) run on the pool together.
     private Action<NvidiaDriverService.Progress>? _driverEvents;

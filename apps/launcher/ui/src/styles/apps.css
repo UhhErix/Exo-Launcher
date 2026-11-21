@@ -291,6 +291,7 @@
 .exo-apps-row:hover .exo-apps-act,
 .exo-apps-row:focus-within .exo-apps-act,
 .exo-apps-row.is-kept .exo-apps-act,
+.exo-apps-row.is-startup .exo-apps-act,
 .exo-apps-act:has([data-exo-armed]),
 .exo-apps-act:has(.exo-action:not([data-action="idle"])) {
   opacity: 1;
@@ -422,6 +423,20 @@
   color: var(--color-fg);
   font-size: calc(13px * var(--exo-scale, 1));
   font-weight: var(--exo-weight-title);
+}
+
+.exo-apps-group-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0 0 6px;
+  padding-inline: 8px;
+}
+
+.exo-apps-group-head > .exo-apps-group {
+  margin: 0;
+  padding-inline: 0;
 }
 
 /* What Windows, games and Exo need: a row of its own that opens under itself. */

@@ -1,0 +1,24 @@
+# ADR-0013: Delta self-updates, AutoClear consent boundaries, and GPU driver installs
+
+## Status
+
+Accepted — 2026-11-20. Extracted from design comments in `AppUpdateService.Delta.cs`, `AutoClear.cs`, `VersionWatch.cs`, `GpuDriverUpdate.cs`, `GpuDriverUpdate.Pages.cs`, and `NvidiaDriverService.cs`.
+
+## Context
+
+Exo Launcher updates itself in place, uninstalls bloated vendor apps/leftovers safely, monitors GPU/chipset driver releases, and installs minimal display driver packages across NVIDIA, AMD, and Intel hardware without breaking anti-cheat, active games, Discord calls, or dual-GPU setups.
+
+## Decision
+
+1. **File-level delta self-updates with full-installer fallback (`AppUpdateService.Delta.cs`):** When a release exposes verified `files.json` + `files.pack`, Exo compares against the live `app\` directory, reuses verified cached parts from prior interrupted attempts (`KeepParts` keyed by SHA-256), range-downloads only changed byte spans in parallel chunks (up to 3 retries per range), hard-links unchanged files into a staging directory, verifies every file's SHA-256 against `files.json`, preserves NSIS's uninstaller when the installer revision matches, and invokes embedded `tools/installer/Apply-ExoDelta.ps1` + `Complete-ExoUpdate.ps1`. Any untrusted condition—missing manifest, non-installed execution path, changed installer revision, running game, prior failed delta attempt on the same tag, delta larger than the installer, or hash/range mismatch—falls back cleanly to the full NSIS installer.
+2. **`AutoClear` consent and rollback rules (`AutoClear.cs`):** Pressing Uninstall grants consent to clear `Selected` leftovers and exact-name non-held, non-driver leftovers (`!Loose`) after the vendor uninstaller exits cleanly; files go to the Recycle Bin, registry entries export to `.reg` backups, and driver store packages export before removal so `Put back` can undo them. Background orphan cleanup while idle (`JunkAutoClean`) never triggers UAC prompts; elevated orphan items wait until the next user-initiated elevated uninstall, gated behind a System Restore point (`RestorePoint.Gated`).
+3. **Pre-install safety gates and driver preservation (`NvidiaDriverService.cs`, `GpuDriverUpdate.cs`):** Display driver installations never reboot automatically (`-BOOT` / `-b` omitted) and wait until no game is running, no Discord call is active, and no Exo Shaders compile is running (checking cheap cached flags before walking process tables). Before applying changes, Exo snapshots screen modes and GPU/interrupt profiles, reloads the WebView/display adapter after install (`MainWindow.ReloadAfterDriverInstallAsync`), reinitializes in-process NvAPI (`NvidiaProfiles.Reinitialize()`), and restores Exo's profiles and screen modes; failed or canceled elevations roll back interrupt registry backups, while the unpacked ~3 GB staging folder always deletes and only recent installers stay cached for rollback.
+4. **Vendor-specific discovery, hotfixes, and minimal payloads:**
+   - **NVIDIA (`NvidiaDriverService.cs`, `VersionWatch.cs`):** Distinguishes desktop, notebook, and RTX/Quadro workstation series; restricts Game Ready hotfix checks to Turing+ (`dev >= 0x1E00`) current branches while serving release-580 security updates to Maxwell/Pascal/Volta; unpacks only `Display.Driver`, `NVI2` (including NVIDIA app legal texts required by `setup.cfg` without `NvApp.nvi` so error `0x80070003` does not trigger), laptop platform controllers, and `HDAudio` only when an active NVIDIA HD Audio render endpoint exists.
+   - **AMD (`GpuDriverUpdate.cs`, `GpuDriverUpdate.Pages.cs`):** Scrapes AMD's product selector and Windows 11 download/release-note pages with a browser-style User-Agent and `www.amd.com` Referer; unpacks via Windows `tar` and runs `Bin64\ATISetup.exe -INSTALL` with `-view:2` (Minimal View) for Fluid Motion Frames cards or `-DRIVERONLY` otherwise, then polls multi-process handoffs (`ATISetup`, installers, `drvinst.exe`) until settled.
+   - **Intel (`GpuDriverUpdate.cs`, `GpuDriverUpdate.Pages.cs`):** Queries Intel download pages (Arc/Core Ultra, 11th–14th Gen, 7th–10th Gen) with a crawler-style User-Agent including follow-up Non-WHQL/hotfix rows, verifies Authenticode and SHA-512, and invokes the WinRAR SFX silently (`-s`) without extras or `--fresh` (preserving sibling Intel iGPU/Arc drivers).
+   - **Advisories & deduplication (`VersionWatch.cs`):** Versions flagged in `DriverAdvisories` are suppressed from pre-install prompts and `version-watch.json` remembers notified versions so restarts do not re-alert.
+
+## Consequences
+
+- `NvidiaDriverService.ChainedArguments`, client-side ~130-candidate hotfix CDN HEAD probing, and fixed 15x1s post-install registry `Task.Delay` loops are known compromises tracked in GitHub issues [#104](https://github.com/UhhErix/Exo-Launcher/issues/104), [#103](https://github.com/UhhErix/Exo-Launcher/issues/103), and [#106](https://github.com/UhhErix/Exo-Launcher/issues/106).

@@ -407,6 +407,15 @@ try {
     # never disagrees with the bucket. The same bytes again are left as they are.
     Step "Files already under $Bucket/$App/$Tag/ (read only)"
     $tagFiles = [ordered]@{ $Setup = $installer; "$Setup.sha256" = $shaFile; 'whats-new.json' = $notesFile }
+    $deltaJsonFile = Join-Path $Dir 'files.json'
+    $deltaPackFile = Join-Path $Dir 'files.pack'
+    $deltaPackShaFile = Join-Path $Dir 'files.pack.sha256'
+    $hasDelta = $App -eq 'launcher' -and (Test-Path -LiteralPath $deltaJsonFile -PathType Leaf) -and (Test-Path -LiteralPath $deltaPackFile -PathType Leaf)
+    if ($hasDelta) {
+        $tagFiles['files.json'] = $deltaJsonFile
+        $tagFiles['files.pack'] = $deltaPackFile
+        if (Test-Path -LiteralPath $deltaPackShaFile -PathType Leaf) { $tagFiles['files.pack.sha256'] = $deltaPackShaFile }
+    }
     $toUpload = [System.Collections.Generic.List[string]]::new()
     foreach ($entry in $tagFiles.GetEnumerator()) {
         $there = Join-Path $work ('there-' + $entry.Key)
@@ -417,25 +426,37 @@ try {
     }
     if ($Failures.Count) { throw "$Tag already holds other files; nothing uploaded." }
 
-    # The manifest (schema 2): the tag and each of the three files' name, size and SHA-256, so an app checks its download
+    # The manifest (schema 2): the tag and each file's name, size and SHA-256, so an app checks its download
     # against what the release says, and the Worker serves the same.
     $notesSize = (Get-Item -LiteralPath $notesFile).Length
     $notesHash = Get-FileSha256 $notesFile
     $shaSize = (Get-Item -LiteralPath $shaFile).Length
     $shaHash = Get-FileSha256 $shaFile
+    $manifestFiles = [ordered]@{
+        setup = [ordered]@{ name = $Setup; size = $size; sha256 = $actual }
+        sha256 = [ordered]@{ name = "$Setup.sha256"; size = $shaSize; sha256 = $shaHash }
+        whatsNew = [ordered]@{ name = 'whats-new.json'; size = $notesSize; sha256 = $notesHash }
+    }
+    $deltaJsonHash = ''
+    $deltaPackHash = ''
+    $deltaPackSize = 0L
+    if ($hasDelta) {
+        $deltaJsonSize = (Get-Item -LiteralPath $deltaJsonFile).Length
+        $deltaJsonHash = Get-FileSha256 $deltaJsonFile
+        $deltaPackSize = (Get-Item -LiteralPath $deltaPackFile).Length
+        $deltaPackHash = Get-FileSha256 $deltaPackFile
+        $manifestFiles['filesJson'] = [ordered]@{ name = 'files.json'; size = $deltaJsonSize; sha256 = $deltaJsonHash }
+        $manifestFiles['filesPack'] = [ordered]@{ name = 'files.pack'; size = $deltaPackSize; sha256 = $deltaPackHash }
+    }
     $manifest = [ordered]@{
         schema = 2
         app = $App
         tag = $Tag
         version = $Version
-        files = [ordered]@{
-            setup = [ordered]@{ name = $Setup; size = $size; sha256 = $actual }
-            sha256 = [ordered]@{ name = "$Setup.sha256"; size = $shaSize; sha256 = $shaHash }
-            whatsNew = [ordered]@{ name = 'whats-new.json'; size = $notesSize; sha256 = $notesHash }
-        }
+        files = $manifestFiles
     }
     [System.IO.File]::WriteAllText($latestFile, ($manifest | ConvertTo-Json -Depth 5))
-    $types = @{ $Setup = 'application/octet-stream'; "$Setup.sha256" = 'text/plain'; 'whats-new.json' = 'application/json' }
+    $types = @{ $Setup = 'application/octet-stream'; "$Setup.sha256" = 'text/plain'; 'whats-new.json' = 'application/json'; 'files.json' = 'application/json; charset=utf-8'; 'files.pack' = 'application/octet-stream'; 'files.pack.sha256' = 'text/plain' }
 
     if ($WhatIfPreference) {
         Step 'Plan (WhatIf: nothing uploaded)'
@@ -468,6 +489,12 @@ try {
         $servedNotesVersion = ''
         try { $servedNotesVersion = [string](ConvertFrom-Json $notesServed.Text).version } catch { $servedNotesVersion = '' }
         Check "served whats-new.json is for $Version" ($servedNotesVersion -eq $Version) "serves '$servedNotesVersion'"
+        if ($hasDelta) {
+            $deltaJsonServed = Get-ServedSha256 "$Base/v1/$App/download/$Tag/files.json"
+            Check 'files.json answers 200 with no redirect and matching SHA-256' ($deltaJsonServed.Status -eq 200 -and -not $deltaJsonServed.Location -and $deltaJsonServed.Hash -eq $deltaJsonHash) "status $($deltaJsonServed.Status)"
+            $deltaPackServed = Get-ServedSha256 "$Base/v1/$App/download/$Tag/files.pack"
+            Check 'files.pack answers 200 with no redirect and matching SHA-256' ($deltaPackServed.Status -eq 200 -and -not $deltaPackServed.Location -and $deltaPackServed.Hash -eq $deltaPackHash -and $deltaPackServed.Bytes -eq $deltaPackSize) "status $($deltaPackServed.Status)"
+        }
         if ($Failures.Count) { throw "not live: $App/latest.json was not touched, nothing pruned: $($Failures -join '; ')." }
 
         $fileLevel = $false

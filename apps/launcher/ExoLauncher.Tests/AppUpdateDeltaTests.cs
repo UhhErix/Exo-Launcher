@@ -577,4 +577,55 @@ public sealed class AppUpdateDeltaTests : IDisposable
         var badName = apply with { Incoming = Path.Combine(apply.InstallRoot, "app.incoming-123"), Setup = Path.Combine(apply.InstallRoot, "app.incoming-123setup") };
         Assert.ThrowsAny<Exception>(() => Swap(badName, "3.27.0"));
     }
+
+    [Fact]
+    public async Task CleansUpStaleDeltaStagingFailedApplyAndOldHealthFiles()
+    {
+        var installRoot = Path.Combine(_root, "delta-clean");
+        var appFolder = Path.Combine(installRoot, "app");
+        var updates = Path.Combine(installRoot, "updates");
+        Directory.CreateDirectory(appFolder);
+        Directory.CreateDirectory(updates);
+
+        var oldIncoming = Path.Combine(installRoot, "app.incoming-" + new string('a', 32));
+        var freshIncoming = Path.Combine(installRoot, "app.incoming-" + new string('b', 32));
+        var oldFailed = Path.Combine(installRoot, "app.failed-" + new string('c', 32));
+        var freshFailed = Path.Combine(installRoot, "app.failed-" + new string('d', 32));
+        var oldApply = Path.Combine(updates, "apply-" + new string('e', 32));
+        var freshApply = Path.Combine(updates, "apply-" + new string('f', 32));
+        var oldHealth = Path.Combine(installRoot, "update-health-1.json");
+        var freshHealth = Path.Combine(installRoot, "update-health-2.json");
+
+        foreach (var dir in new[] { oldIncoming, freshIncoming, oldFailed, freshFailed, oldApply, freshApply })
+            Directory.CreateDirectory(dir);
+        File.WriteAllText(oldHealth, "{}");
+        File.WriteAllText(freshHealth, "{}");
+
+        var now = DateTime.UtcNow;
+        Directory.SetCreationTimeUtc(oldIncoming, now - TimeSpan.FromMinutes(10));
+        Directory.SetCreationTimeUtc(freshIncoming, now - TimeSpan.FromMinutes(1));
+        Directory.SetCreationTimeUtc(oldFailed, now - TimeSpan.FromHours(2));
+        Directory.SetCreationTimeUtc(freshFailed, now - TimeSpan.FromMinutes(10));
+        Directory.SetCreationTimeUtc(oldApply, now - TimeSpan.FromMinutes(5));
+        Directory.SetCreationTimeUtc(freshApply, now - TimeSpan.FromSeconds(30));
+        File.SetLastWriteTimeUtc(oldHealth, now - TimeSpan.FromDays(2));
+        File.SetLastWriteTimeUtc(freshHealth, now - TimeSpan.FromHours(2));
+
+        var service = new AppUpdateService(ExoHttp.Create(TimeSpan.FromMinutes(1)), updates, TimeProvider.System)
+        {
+            AppFolder = appFolder,
+            InstallFolder = installRoot,
+        };
+        await service.WaitForCleanupForTestAsync();
+        service.CleanupUpdateArtifactsNow();
+
+        Assert.False(Directory.Exists(oldIncoming));
+        Assert.True(Directory.Exists(freshIncoming));
+        Assert.False(Directory.Exists(oldFailed));
+        Assert.True(Directory.Exists(freshFailed));
+        Assert.False(Directory.Exists(oldApply));
+        Assert.True(Directory.Exists(freshApply));
+        Assert.False(File.Exists(oldHealth));
+        Assert.True(File.Exists(freshHealth));
+    }
 }

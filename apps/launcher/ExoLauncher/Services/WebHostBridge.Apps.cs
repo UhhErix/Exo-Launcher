@@ -293,8 +293,8 @@ public sealed partial class WebHostBridge
     {
         var outcome = await RestorePoint.MakeAsync(steps => ReplacedApps.RemoveAsAdminAsync(steps, ct)).ConfigureAwait(true);
         return RestorePoint.Problem(outcome) is { } problem
-            ? new { ok = false, made = false, message = (string?)problem }
-            : new { ok = true, made = outcome == RestorePoint.Outcome.Made, message = outcome == RestorePoint.Outcome.Recent ? "Windows keeps one restore point a day: the one from the last day stands." : null };
+            ? new { ok = false, made = false, declined = outcome == RestorePoint.Outcome.Declined, message = (string?)problem }
+            : new { ok = true, made = outcome == RestorePoint.Outcome.Made, declined = false, message = outcome == RestorePoint.Outcome.Recent ? "Windows keeps one restore point a day: the one from the last day stands." : null };
     }
 
     /// <summary>apps.openDefaults: Windows' Default apps, where a file type an app left pointing at itself gets a new default (Windows signs that choice; Exo never writes it).</summary>
@@ -651,12 +651,10 @@ public sealed partial class WebHostBridge
             ? list.EnumerateArray().Where(id => id.ValueKind == JsonValueKind.Number).Select(id => id.GetInt32()).Where(id => id >= 0 && id < find.Items.Count).Distinct()
                 .Select(id => find.Items[id]).ToList() : [];
         if (chosen.Count == 0) return new { ok = false, message = "Nothing was chosen." };
-        // No confirm: files go to the Recycle Bin and registry entries to a backup first (Put back); Windows' one prompt asks for Program Files.
-        // restore: what needs that prompt goes only behind a System Restore point, made in the same prompt (a forced uninstall's
-        // clear, a driver and its store package, services and machine entries); what this user may remove needs none.
-        var restore = hasParams && p.TryGetProperty("restore", out var asked) && asked.ValueKind == JsonValueKind.True;
+        // No confirm: files go to the Recycle Bin and registry entries to a backup first (Put back); Windows' one prompt asks for machine-wide items
+        // and automatically creates a daily restore point in the same UAC prompt when needed.
         var scan = new LeftoverScan(LeftoverScan.ThisPc());
-        var done = await Task.Run(() => AutoClear.ClearAsync(scan, find.Name, chosen, steps => ReplacedApps.RemoveAsAdminAsync(steps, ct), RemovalHistory.ForThisPc, DateTime.UtcNow, restore: restore), ct).ConfigureAwait(true);
+        var done = await Task.Run(() => AutoClear.ClearAsync(scan, find.Name, chosen, steps => ReplacedApps.RemoveAsAdminAsync(steps, ct), RemovalHistory.ForThisPc, DateTime.UtcNow, restore: true, requireRestorePoint: false), ct).ConfigureAwait(true);
         AppsChangedHere();
         Finds.TryRemove(token, out _);
         AppsMemory.ForThisPc.Forget(find.Remembered);
@@ -669,7 +667,6 @@ public sealed partial class WebHostBridge
             undo = done.Undo,
             left = done.Left.Count,
             message = done.Left.Count == 0 ? null : done.Declined ? "Windows' permission was declined: what needs it stayed."
-                : done.Point is { } point ? point + " Turn off Restore point to clear it without one."
                 : $"{done.Left.Count} {(done.Left.Count == 1 ? "item" : "items")} stayed: {done.Why ?? LeftoverScan.InUse}.",
         };
     }
@@ -685,7 +682,7 @@ public sealed partial class WebHostBridge
         var (found, chosen) = await Task.Run(() =>
         {
             var items = scan.Find(trail, deep: true);
-            return (items, AutoClear.WithWaiting(AutoClear.Its(items), AutoClear.Waiting(Orphans.Read(scan).Found)));
+            return (items, AutoClear.WithWaiting(AutoClear.ForUserUninstall(items), AutoClear.Waiting(Orphans.Read(scan).Found)));
         }, ct).ConfigureAwait(true);
         var done = await Task.Run(() => AutoClear.ClearAsync(scan, name, chosen, steps => ReplacedApps.RemoveAsAdminAsync(steps, ct), RemovalHistory.ForThisPc, DateTime.UtcNow), ct).ConfigureAwait(true);
         lock (AppsGate) _tidy = null;

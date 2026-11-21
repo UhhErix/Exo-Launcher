@@ -19,7 +19,7 @@ import {
 } from '../../lib/host'
 import { report } from '../../lib/report'
 import { cn } from '../../lib/utils'
-import { ChoiceRow, Group, Row, SwitchRow } from '../settings/parts'
+import { ChoiceRow, Group, Row } from '../settings/parts'
 import { ActionButton } from '../ui/ConfirmButton'
 import { ErrorNote } from '../ui/ErrorNote'
 import { AutopilotControls, AutopilotReports } from './Autopilot'
@@ -33,7 +33,7 @@ import { SystemGroup } from './SystemGroup'
 import { SetupRows } from './ThisPcTab'
 
 const FAN_PRESET_CHOICES: readonly { value: ExoAiFanPreset; label: string }[] = [
-  { value: 'auto', label: 'Automatic (VBIOS)' },
+  { value: 'auto', label: 'Automatic' },
   { value: 'quiet', label: 'Quiet' },
   { value: 'balanced', label: 'Balanced' },
   { value: 'performance', label: 'Performance' },
@@ -90,15 +90,15 @@ export function ExoAiChip({ state, left, tune, onOpen }: {
 }
 
 function formatFanDetail(fans: ExoAiState['fans'] | undefined): string {
-  if (!fans) return 'Anti-cheat safe user-mode NVML fan control; restores VBIOS on shutdown'
+  if (!fans) return 'Automatic GPU fan control; restores defaults on exit'
   if (fans.note) return fans.note
   const parts: string[] = []
   if (fans.tempC != null) parts.push(`${fans.tempC} °C`)
   if (fans.fanPercent != null) parts.push(`${fans.fanPercent}%`)
   if (fans.targetPercent != null && fans.preset !== 'auto') parts.push(`target ${fans.targetPercent}%`)
   if (fans.fanCount > 0) parts.push(`${fans.fanCount} ${fans.fanCount === 1 ? 'fan' : 'fans'}`)
-  if (parts.length === 0) return 'Anti-cheat safe user-mode NVML fan control; restores VBIOS on shutdown'
-  return `${parts.join(' · ')} · user-mode NVML`
+  if (parts.length === 0) return 'Automatic GPU fan control; restores defaults on exit'
+  return parts.join(' · ')
 }
 
 function formatCoreDetail(exoAi: ExoAiState | null): string {
@@ -108,21 +108,15 @@ function formatCoreDetail(exoAi: ExoAiState | null): string {
     const parts = [`${sec}s · ${cores} cores`]
     if (exoAi.gaming.timerResActive) parts.push('1 ms timer')
     if (exoAi.gaming.altTabbed) parts.push('Alt-tab paused')
-    if (exoAi.gaming.demotedCount > 0) parts.push(`${exoAi.gaming.demotedCount} demoted`)
+    if (exoAi.gaming.demotedCount > 0) parts.push(`${exoAi.gaming.demotedCount} background apps slowed`)
     return parts.join(' · ')
   }
-  const parts = [`Idle loop (${sec}s · ${cores} cores)`]
-  if (exoAi?.backgroundDriftCheck ?? true) parts.push('30m drift check')
-  return parts.join(' · ')
+  return `Checking every 30m · ${sec}s loop · ${cores} cores`
 }
 
 function ExoAiStatusBanner({ exoAi, onCheckNow }: { exoAi: ExoAiState | null; onCheckNow: () => Promise<unknown> }) {
   const gaming = exoAi?.gaming.active ?? false
-  const title = gaming
-    ? `Protecting ${exoAi?.gaming.gameTitle ?? 'active game'}`
-    : (exoAi?.autoApplyBestSettings ?? true)
-      ? 'Exo AI watching in background'
-      : 'Exo AI passive'
+  const title = gaming ? `Boosting ${exoAi?.gaming.gameTitle ?? 'active game'}` : 'Watching in background'
   return (
     <div className={cn('exo-ai-status', gaming && 'is-gaming')}>
       <Bolt size={16} />
@@ -137,25 +131,12 @@ function ExoAiStatusBanner({ exoAi, onCheckNow }: { exoAi: ExoAiState | null; on
   )
 }
 
-function ExoAiCoreGroup({ exoAi, onApply }: { exoAi: ExoAiState | null; onApply: (change: ExoAiChange) => Promise<string | null> }) {
+function ExoAiCoreGroup({ exoAi }: { exoAi: ExoAiState | null }) {
   const applied = exoAi?.autoApplied ?? []
   const attention = exoAi?.needsAttention ?? []
+  if (applied.length === 0 && attention.length === 0) return null
   return (
-    <Group id="exo-ai-core" title="Real-Time Core">
-      <SwitchRow
-        id="exo-ai-auto-apply"
-        label="Always apply best settings silently"
-        detail="Keeps safe Windows power plan, Game Mode, and pointer acceleration optimal without UAC prompts"
-        checked={exoAi?.autoApplyBestSettings ?? true}
-        onChange={autoApplyBestSettings => onApply({ autoApplyBestSettings })}
-      />
-      <SwitchRow
-        id="exo-ai-drift"
-        label="Background drift check"
-        detail="Re-verifies non-elevated Windows settings every 30 minutes while no game runs"
-        checked={exoAi?.backgroundDriftCheck ?? true}
-        onChange={backgroundDriftCheck => onApply({ backgroundDriftCheck })}
-      />
+    <Group id="exo-ai-core" title="Applied automatically">
       {applied.length > 0 ? (
         <div className="exo-ai-pills" aria-label="Managed automatically">
           {applied.map(item => (
@@ -164,7 +145,7 @@ function ExoAiCoreGroup({ exoAi, onApply }: { exoAi: ExoAiState | null; onApply:
         </div>
       ) : null}
       {attention.length > 0 ? (
-        <Row label="Admin items waiting" detail={attention.join(' · ')} />
+        <Row label="Needs admin approval" detail={attention.join(' · ')} />
       ) : null}
     </Group>
   )
@@ -237,12 +218,12 @@ export function ExoAiPanel({
     <>
       <ExoAiStatusBanner exoAi={exoAi} onCheckNow={runNow} />
       {error ? <ErrorNote message={error} /> : null}
-      <ExoAiCoreGroup exoAi={exoAi} onApply={apply} />
+      <ExoAiCoreGroup exoAi={exoAi} />
 
       <Group id="exo-ai-fans" title="Cooling">
         <ChoiceRow<ExoAiFanPreset>
           id="exo-ai-fan-preset"
-          label="GPU fan curve"
+          label="GPU fan speed"
           detail={formatFanDetail(exoAi?.fans)}
           value={exoAi?.fans.preset ?? 'auto'}
           choices={FAN_PRESET_CHOICES}
