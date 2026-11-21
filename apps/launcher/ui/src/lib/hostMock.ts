@@ -2167,13 +2167,6 @@ const MOCK_HANDLERS: Record<string, MockHandler> = {
       { appId: '2358720', name: 'Black Myth: Wukong', soon: true, when: 'Dec 12', discount: 0 },
     ] }],
   }),
-  'store.calendar': () => ({
-    ok: true, at: new Date().toISOString(), interests: ['Roguelike', 'Co-op'],
-    days: [{ date: new Date().toISOString().slice(0, 10), entries: [
-      { tile: MOCK_STORE_TILE, wished: true, earlyAccess: false, why: ['On your wishlist', 'Like Roguelike and Co-op'] },
-      { tile: MOCK_OWNED_TILE, wished: false, earlyAccess: false, why: [] },
-    ] }],
-  }),
   'store.search': () => ({ ok: true, items: [MOCK_STORE_TILE, MOCK_OWNED_TILE] }),
   'store.open': () => ({ ok: true }),
   'store.gameOffers': () => ({ ok: true, offers: [

@@ -19,7 +19,7 @@ const ADD_ITEMS = [
  * bar's Done, or Escape, ends it), Downloads, and Refresh library, while the covers shine. Add, the room's one primary,
  * adds a folder, a game's .exe or a key.
  */
-export function LibraryTools({ selecting, onSelecting, sort, onSort, hidden, onHidden, onActivateKey, onNewFolder, onAddGame, refreshing, onRefresh }: {
+export function LibraryTools({ selecting, onSelecting, sort, onSort, hidden, onHidden, onActivateKey, onNewFolder, onAddGame, refreshing, onRefresh, showSort = true, compact = false }: {
   selecting: boolean
   onSelecting: (on: boolean) => void
   sort: SortMode
@@ -27,41 +27,44 @@ export function LibraryTools({ selecting, onSelecting, sort, onSort, hidden, onH
   hidden: boolean
   onHidden: (hidden: boolean) => void
   onActivateKey: () => void
-  /** A Library folder: its name, color and games (FolderSheet). */
   onNewFolder: () => void
-  /** A game's own .exe. */
   onAddGame: () => void
   refreshing: boolean
   onRefresh: () => void
+  showSort?: boolean
+  compact?: boolean
 }) {
   const [downloads, setDownloads] = useState(false)
-  const actions: Record<string, () => void> = { 'new-folder': onNewFolder, game: onAddGame, key: onActivateKey, select: () => onSelecting(true), refresh: onRefresh, downloads: () => setDownloads(true) }
+  const actions: Record<string, () => void> = { 'new-folder': onNewFolder, game: onAddGame, key: onActivateKey, select: () => onSelecting(true), refresh: onRefresh, downloads: () => setDownloads(true), hidden: () => onHidden(!hidden) }
   return (
     <>
       <DownloadsSheet open={downloads} onClose={() => setDownloads(false)} />
-      <Menu
-        label="Sort library"
-        anchor="--exo-sort-menu"
-        offset={4}
-        triggerClassName="exo-shelf-sort-trigger"
-        trigger={<>{SORT_LABELS[sort]}<ChevronDown size={12} /></>}
-        items={[
-          ...SORT_ITEMS.map(item => ({ ...item, on: item.id === sort })),
-          { id: 'all', label: 'All games', section: 'Show', on: !hidden },
-          { id: 'hidden', label: 'Hidden games', section: 'Show', on: hidden },
-        ]}
-        onAction={(id) => id === 'all' || id === 'hidden' ? onHidden(id === 'hidden') : onSort(id as SortMode)}
-      />
+      {showSort ? (
+        <Menu
+          label="Sort library"
+          anchor="--exo-sort-menu"
+          offset={4}
+          triggerClassName="exo-shelf-sort-trigger"
+          trigger={<>{SORT_LABELS[sort]}<ChevronDown size={12} /></>}
+          items={[
+            ...SORT_ITEMS.map(item => ({ ...item, on: item.id === sort })),
+            { id: 'all', label: 'All games', section: 'Show', on: !hidden },
+            { id: 'hidden', label: 'Hidden games', section: 'Show', on: hidden },
+          ]}
+          onAction={(id) => id === 'all' || id === 'hidden' ? onHidden(id === 'hidden') : onSort(id as SortMode)}
+        />
+      ) : null}
       <Menu
         label="More"
         anchor="--exo-library-more"
         offset={8}
-        triggerClassName="exo-library-more"
+        triggerClassName={compact ? 'exo-glass exo-home-icon-btn' : 'exo-library-more'}
         trigger={<More size={16} />}
         items={[
           ...(selecting ? [] : [{ id: 'select', label: 'Select games', icon: <SelectMany size={16} /> }]),
           { id: 'downloads', label: 'Downloads', icon: <Download size={16} /> },
           { id: 'refresh', label: 'Refresh library', icon: <Refresh size={16} />, disabled: refreshing },
+          ...(compact ? [{ id: 'hidden', label: 'Hidden games' }] : []),
         ]}
         onAction={id => actions[id]?.()}
       />
@@ -69,8 +72,8 @@ export function LibraryTools({ selecting, onSelecting, sort, onSort, hidden, onH
         label="Add"
         anchor="--exo-library-add"
         offset={8}
-        triggerClassName="exo-set-btn is-primary exo-library-add"
-        trigger={<><Plus size={16} />Add</>}
+        triggerClassName={compact ? 'exo-glass exo-home-icon-btn' : 'exo-set-btn is-primary exo-library-add'}
+        trigger={compact ? <Plus size={16} /> : <><Plus size={16} />Add</>}
         items={ADD_ITEMS}
         onAction={id => actions[id]?.()}
       />

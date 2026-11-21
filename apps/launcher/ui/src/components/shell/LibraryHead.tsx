@@ -1,55 +1,84 @@
 import { useEffect, useId, useRef, useState, type ReactNode } from 'react'
 import { Close, Filter, Search } from '../../brand/icons'
 import { useDismissOnAncestorScroll } from '../../lib/dismiss'
+import { useGlide } from '../../lib/glide'
 import { filterKey, filterLabel, type LibraryFilter } from '../../lib/librarySearch'
 
-/** One row of the Filter menu: the filter it sets, under its section. */
 export type FilterOption = { section: string; filter: LibraryFilter; disabled?: boolean }
+export type LibraryTab = 'home' | 'installed' | 'all' | 'updates'
 
-/**
- * The Library's head (DESIGN.md › Library): the room's name with one quiet chip of how many games, the search in the
- * middle, then Filter, the sort, More and Add at the right (Add the one primary). Under it, only while any is set, the
- * filters as chips, each removed by its ×, and what the search understood.
- */
-export function LibraryHead({ empty, total, found, query, onQuery, understood, filters, options, onFilter, onClear, onWarmFilters, tools }: {
-  /** No games yet (or none could be read): only the room's name, for screen readers, over the empty state. */
+export function LibraryHead({
+  empty,
+  tab,
+  onTab,
+  total,
+  updatesCount,
+  found,
+  query,
+  onQuery,
+  understood,
+  filters,
+  options,
+  onFilter,
+  onClear,
+  onWarmFilters,
+  tools,
+  autoFocusSearch = false,
+}: {
   empty: boolean
+  tab: LibraryTab
+  onTab: (next: LibraryTab) => void
   total: number
-  /** The games the search and filters leave, or null with neither. */
+  updatesCount: number
   found: readonly unknown[] | null
   query: string
   onQuery: (query: string) => void
-  /** The words the search read as filters ("Racing", "Not played"). */
   understood: string[]
   filters: LibraryFilter[]
   options: FilterOption[]
   onFilter: (filter: LibraryFilter) => void
   onClear: () => void
-  /** The Filter menu is about to open (pointed at or focused): what it lists that costs a read (friends) is read now. */
   onWarmFilters: () => void
-  /** Sort, More and Add. */
   tools: ReactNode
+  autoFocusSearch?: boolean
 }) {
   const field = useRef<HTMLInputElement>(null)
-  // Ctrl+F finds in the Library, as in any list; the Bar's Ctrl+K stays the one for everything.
+  const tabsGlide = useGlide<HTMLDivElement>()
   useEffect(() => {
-    const onKey = (event: KeyboardEvent) => {
-      if (event.defaultPrevented || !(event.ctrlKey || event.metaKey) || event.key.toLowerCase() !== 'f' || event.shiftKey || event.altKey) return
-      const input = field.current
-      if (!input?.checkVisibility()) return
-      event.preventDefault()
-      input.focus()
-      input.select()
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [])
+    if (!autoFocusSearch) return
+    requestAnimationFrame(() => {
+      field.current?.focus()
+      field.current?.select()
+    })
+  }, [autoFocusSearch])
   if (empty) return <h1 className="sr-only">Library</h1>
+  const tabs: ReadonlyArray<{ id: LibraryTab; label: string; count?: number }> = [
+    { id: 'home', label: 'Recent' },
+    { id: 'installed', label: 'Installed' },
+    ...(updatesCount > 0 ? [{ id: 'updates' as const, label: 'Updates', count: updatesCount }] : []),
+    { id: 'all', label: 'All games' },
+  ]
   return (
     <>
       <header className="exo-library-head">
-        <div className="exo-library-name">
-          <h1>Library</h1>
+        <div className="exo-library-tabs-wrap">
+          <h1 className="sr-only">Library</h1>
+          <div ref={tabsGlide} className="exo-glass exo-shelf-chips exo-glide exo-library-tabs" role="group" aria-label="Library view">
+            {tabs.map(item => (
+              <button
+                key={item.id}
+                type="button"
+                className="exo-shelf-chip"
+                aria-pressed={tab === item.id}
+                onClick={() => onTab(item.id)}
+              >
+                <span>{item.label}</span>
+                {item.count != null ? (
+                  <span className="exo-library-tab-count has-updates tabular-nums">{item.count}</span>
+                ) : null}
+              </button>
+            ))}
+          </div>
           {found != null ? (
             <span className="exo-library-chip tabular-nums">
               {`${found.length.toLocaleString('en-US')} of ${total.toLocaleString('en-US')}`}

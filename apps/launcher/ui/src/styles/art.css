@@ -276,10 +276,7 @@
 
 .exo-game-room {
   position: fixed;
-  top: var(--exo-titlebar-h, 52px);
-  right: 0;
-  bottom: 0;
-  left: 0;
+  inset: 0;
   z-index: 30;
   display: flex;
   flex-direction: column;
@@ -293,11 +290,11 @@
   top: 0;
   right: 0;
   left: 0;
-  height: min(68vh, 660px);
+  height: min(74vh, 760px);
   z-index: 0;
   overflow: hidden;
   pointer-events: none;
-  background: radial-gradient(ellipse 72% 85% at 24% 20%, var(--exo-surface-card) 0%, var(--color-bg) 78%);
+  background: radial-gradient(ellipse 80% 85% at 58% 22%, color-mix(in srgb, var(--color-fg) 8%, var(--color-bg)) 0%, var(--color-bg) 76%);
 }
 
 .exo-game-page-wash::after {
@@ -306,8 +303,8 @@
   inset: 0;
   z-index: 1;
   background:
-    linear-gradient(180deg, color-mix(in srgb, var(--color-bg) 36%, transparent) 0%, color-mix(in srgb, var(--color-bg) 6%, transparent) 24%, color-mix(in srgb, var(--color-bg) 60%, transparent) 72%, var(--color-bg) 100%),
-    linear-gradient(90deg, color-mix(in srgb, var(--color-bg) 52%, transparent) 0%, color-mix(in srgb, var(--color-bg) 18%, transparent) 46%, transparent 82%);
+    linear-gradient(180deg, color-mix(in srgb, var(--color-bg) 48%, transparent) 0%, color-mix(in srgb, var(--color-bg) 12%, transparent) 22%, color-mix(in srgb, var(--color-bg) 62%, transparent) 68%, var(--color-bg) 100%),
+    linear-gradient(90deg, color-mix(in srgb, var(--color-bg) 62%, transparent) 0%, color-mix(in srgb, var(--color-bg) 20%, transparent) 46%, transparent 84%);
 }
 
 .exo-game-page-wash .exo-now-wash-img {
@@ -323,7 +320,7 @@
 }
 
 .exo-game-page-wash .exo-now-wash-img.is-on {
-  opacity: 0.84;
+  opacity: 0.88;
 }
 
 .exo-game-page-wash .exo-now-wash-img.is-letterbox {
@@ -332,12 +329,12 @@
 }
 
 .exo-game-page-wash .exo-now-wash-img.is-letterbox.is-on {
-  opacity: 0.68;
+  opacity: 0.72;
 }
 
 .exo-game-page-wash .exo-now-wash-img.exo-cover-derived.is-on {
-  opacity: 0.62;
-  filter: blur(28px) saturate(1.2) brightness(0.76);
+  opacity: 0.68;
+  filter: blur(28px) saturate(1.24) brightness(0.8);
   transform: scale(1.16) translateZ(0);
 }
 
@@ -347,7 +344,7 @@
 }
 
 .exo-game-page-wash .exo-now-wash-img.exo-cover-fill.is-on {
-  opacity: 0.45;
+  opacity: 0.48;
 }
 
 .exo-game-page {
@@ -371,14 +368,22 @@
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 12px var(--exo-gutter) 0;
+  padding: calc(var(--exo-titlebar-h, 52px) + 12px) var(--exo-gutter) 0;
 }
 
 .exo-game-back {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
-  padding-left: 10px;
+  gap: 6px;
+  height: 34px;
+  padding: 0 14px 0 10px;
+  border: 0;
+  border-radius: 999px;
+  color: var(--color-fg);
+  font: inherit;
+  font-size: var(--exo-type-body);
+  font-weight: var(--exo-weight-control);
+  cursor: pointer;
 }
 
 .exo-game-room-meta {
@@ -386,6 +391,22 @@
   align-items: center;
   gap: 10px;
   min-width: 0;
+}
+
+.exo-game-store-pill {
+  display: inline-flex;
+  align-items: center;
+  height: 34px;
+  padding: 0 12px;
+  border-radius: 999px;
+}
+
+.exo-game-store-pill:has(.exo-game-sources) {
+  padding: 3px;
+}
+
+.exo-game-store-pill:empty {
+  display: none;
 }
 
 .exo-game-page-inner {
@@ -396,10 +417,10 @@
   justify-content: flex-start;
   flex: 1;
   min-height: 0;
-  gap: 28px;
+  gap: 32px;
   overflow-y: auto;
   overscroll-behavior: contain;
-  padding: clamp(92px, 16vh, 176px) var(--exo-gutter) 28px;
+  padding: clamp(118px, 21vh, 232px) var(--exo-gutter) 36px;
 }
 
 .exo-game-close {
@@ -414,7 +435,7 @@
   grid-template-columns: 224px minmax(0, 1fr);
   align-items: end;
   flex-shrink: 0;
-  gap: 32px;
+  gap: 36px;
 }
 
 .exo-game-cover-col {
@@ -435,8 +456,8 @@
   width: 224px;
   aspect-ratio: 2 / 3;
   overflow: hidden;
-  border-radius: var(--exo-card-radius);
-  background: var(--color-bg);
+  border-radius: var(--exo-panel-radius);
+  background: var(--exo-surface-card);
   box-shadow: var(--exo-lift-shadow);
 }
 

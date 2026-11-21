@@ -360,18 +360,6 @@ export type StoreHome = {
   shelves?: { id: string; title: string; items: StoreTile[] }[]
 }
 
-/** One game on the Store calendar: why it is there for this PC (wishlist, tags of what is played). */
-export type StoreCalendarEntry = { tile: StoreTile; wished: boolean; earlyAccess: boolean; why: string[] }
-
-/** The Store calendar: games by release day (local), the last two weeks and the next six; interests are the tags the played games point to. */
-export type StoreCalendar = {
-  ok: boolean
-  message?: string
-  at?: string
-  interests?: string[]
-  days?: { date: string; entries: StoreCalendarEntry[] }[]
-}
-
 /** An official launcher that sells the game (Steam, Epic Games Store, GOG, Ubisoft Store), price in cents of currency; outside the US CheapShark's rows carry none. Steam's row has Steam's text. */
 export type StoreOffer = { store: string; name: string; final?: number | null; initial?: number | null; discount: number; currency?: string | null; priceText?: string | null; wasText?: string | null; url: string }
 
@@ -3086,8 +3074,6 @@ export const host = {
     rawCall<MouseCore>('system.mouseCore', action ? { action } : {}, action ? 120_000 : 15_000),
   /** The saved home page at once (refreshed behind it); refresh waits for a fresh one. */
   storeHome: (refresh = false) => rawCall<StoreHome>('store.home', refresh ? { refresh: true } : {}, 45_000),
-  /** Games by release day, ordered by the wishlist and the tags of what is played; ok false when Steam's lists could not be read. */
-  storeCalendar: () => rawCall<StoreCalendar>('store.calendar', {}, 45_000),
   /**
    * typed: the Store room's search as you type; a newer typed search replaces it (ok false, no message). Without it a
    * lookup (does the Store sell this title?) that never replaces the search you typed.

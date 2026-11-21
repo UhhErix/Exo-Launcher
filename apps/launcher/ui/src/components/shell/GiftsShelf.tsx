@@ -1,5 +1,6 @@
-import { memo, useEffect, useState } from 'react'
+import { memo, useEffect, useId, useRef, useState } from 'react'
 import { Gift } from '../../brand/icons'
+import { useDismissOnAncestorScroll } from '../../lib/dismiss'
 import { host, onHostEvent, type StoreGift } from '../../lib/host'
 import type { PlainError } from '../../lib/errorWords'
 import { ActionButton, ConfirmButton } from '../ui/ConfirmButton'
@@ -8,26 +9,48 @@ import { ArtImg } from '../ui/ArtImg'
 
 const keyOf = (gift: StoreGift) => `${gift.store}:${gift.id}`
 
-/**
- * Gifts (DESIGN.md › Library): games someone sent you on Steam or Epic, waiting to be accepted. Shows only while
- * one waits. Accept adds the game to your library (the store is read again, so it appears); Decline asks first,
- * since the sender is refunded. Each button says how it went (its ring, then its check), and then the gift leaves.
- */
-export const GiftsShelf = memo(function GiftsShelf() {
+export const GiftsPill = memo(function GiftsPill() {
   const gifts = useGifts()
-  // An answered gift leaves at once, before the store's next read drops it.
   const [answered, setAnswered] = useState<ReadonlySet<string>>(() => new Set())
   const shown = gifts.filter(gift => !answered.has(keyOf(gift)))
+  const id = useId()
+  const triggerRef = useRef<HTMLButtonElement>(null)
+  const popRef = useRef<HTMLDivElement>(null)
+  const [open, setOpen] = useState(false)
+  useDismissOnAncestorScroll(open, triggerRef, popRef, () => popRef.current?.hidePopover())
   if (shown.length === 0) return null
   return (
-    <section className="exo-gifts" aria-labelledby="exo-gifts-title">
-      <h2 className="exo-section-title" id="exo-gifts-title">Gifts</h2>
-      <ul className="exo-gifts-row">
-        {shown.map(gift => (
-          <GiftCard key={keyOf(gift)} gift={gift} onDone={() => setAnswered(all => new Set(all).add(keyOf(gift)))} />
-        ))}
-      </ul>
-    </section>
+    <>
+      <button
+        ref={triggerRef}
+        type="button"
+        className="exo-glass exo-gifts-pill"
+        style={{ anchorName: '--exo-gifts-pill' }}
+        aria-haspopup="dialog"
+        popoverTarget={id}
+      >
+        <span className="exo-gifts-dot" aria-hidden="true" />
+        <Gift size={14} />
+        <span className="tabular-nums">{shown.length} {shown.length === 1 ? 'Gift' : 'Gifts'}</span>
+      </button>
+      <div
+        ref={popRef}
+        id={id}
+        popover="auto"
+        role="dialog"
+        aria-label="Gifts"
+        className="exo-shelf-sort-menu exo-gifts-popover"
+        style={{ positionAnchor: '--exo-gifts-pill', marginTop: 6 }}
+        onToggle={event => setOpen(event.newState === 'open')}
+      >
+        <div className="exo-menu-section" role="presentation">Gifts waiting</div>
+        <ul className="exo-gifts-row">
+          {shown.map(gift => (
+            <GiftCard key={keyOf(gift)} gift={gift} onDone={() => setAnswered(all => new Set(all).add(keyOf(gift)))} />
+          ))}
+        </ul>
+      </div>
+    </>
   )
 })
 

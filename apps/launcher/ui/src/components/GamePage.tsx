@@ -80,34 +80,42 @@ export type GamePageProps = {
   onBack?: () => void
 }
 
-/**
- * The game's lines, one row each, their names, readings and controls on shared edges, every row the same height: Upscalers
- * and Shaders (each opening its part of PC › Graphics), Frame generation, HDR and Optimize. The set is the same for every
- * game: a line the game doesn't support stays and says so, so the page never grows or shrinks with what a game has. Last,
- * the driver's own frame generation, on a PC whose AMD or Intel driver has it (the same for every game on that PC).
- */
+function GameStatusPill({ selected, downloading }: { selected: Game; downloading: boolean }) {
+  if (downloading) return <span className="exo-game-eyebrow is-warn"><span className="exo-game-eyebrow-dot" aria-hidden="true" />Downloading</span>
+  if (selected.isRunning) return <span className="exo-game-eyebrow is-good"><span className="exo-game-eyebrow-dot" aria-hidden="true" />Playing now</span>
+  if (selected.updateAvailable) return <span className="exo-game-eyebrow is-warn"><span className="exo-game-eyebrow-dot" aria-hidden="true" />Update ready</span>
+  if (selected.installed) return <span className="exo-game-eyebrow is-good"><span className="exo-game-eyebrow-dot" aria-hidden="true" />Installed</span>
+  return <span className="exo-game-eyebrow"><span className="exo-game-eyebrow-dot" aria-hidden="true" />Not installed</span>
+}
+
 function GameLines({ selected, details, onOpenSystem, hdrForGames, onHdrForGames }: {
   selected: Game
   details: ReturnType<typeof useGameDetails>
 } & Pick<GamePageProps, 'onOpenSystem' | 'hdrForGames' | 'onHdrForGames'>) {
   return (
-    <div className="exo-game-lines">
-      {onOpenSystem && (
-        <>
-          <UpscalerFiles
-            key={'upscalers' + details.selectionKey}
-            status={details.dlss}
-            scanState={!details.dlss ? 'loading' : details.dlss.ok === false ? 'failed' : 'ready'}
-            onOpen={() => onOpenSystem('upscalers')}
-          />
-          <ShaderPrecompile key={'shaders' + details.selectionKey} gameId={selected.id} onOpenShaders={() => onOpenSystem('shaders')} />
-        </>
-      )}
-      <FrameGenModRow key={'framegenmod' + details.selectionKey} gameId={selected.id} />
-      <HdrRow key={'hdr' + details.selectionKey} gameId={selected.id} hdrForGames={hdrForGames} onHdrForGames={onHdrForGames} />
-      <OptimizeLine key={'optimize' + details.selectionKey} gameId={selected.id} />
-      <FrameGenRow key={'framegen' + details.selectionKey} gameId={selected.id} />
-    </div>
+    <section className="exo-game-tuning" aria-label="Game tuning">
+      <div className="exo-game-tuning-head">
+        <h2>Game Tuning</h2>
+        <span className="exo-game-tuning-rule" aria-hidden="true" />
+      </div>
+      <div className="exo-game-lines">
+        {onOpenSystem && (
+          <>
+            <UpscalerFiles
+              key={'upscalers' + details.selectionKey}
+              status={details.dlss}
+              scanState={!details.dlss ? 'loading' : details.dlss.ok === false ? 'failed' : 'ready'}
+              onOpen={() => onOpenSystem('upscalers')}
+            />
+            <ShaderPrecompile key={'shaders' + details.selectionKey} gameId={selected.id} onOpenShaders={() => onOpenSystem('shaders')} />
+          </>
+        )}
+        <FrameGenModRow key={'framegenmod' + details.selectionKey} gameId={selected.id} />
+        <HdrRow key={'hdr' + details.selectionKey} gameId={selected.id} hdrForGames={hdrForGames} onHdrForGames={onHdrForGames} />
+        <OptimizeLine key={'optimize' + details.selectionKey} gameId={selected.id} />
+        <FrameGenRow key={'framegen' + details.selectionKey} gameId={selected.id} />
+      </div>
+    </section>
   )
 }
 
@@ -188,19 +196,21 @@ export function GamePage({
       </div>
       <header className="exo-game-room-bar">
         {onBack ? (
-          <button type="button" className="exo-set-btn exo-game-back" onClick={onBack}>
+          <button type="button" className="exo-glass exo-game-back" onClick={onBack}>
             <ChevronLeft size={16} />
             Library
           </button>
         ) : <span />}
         <div className="exo-game-room-meta">
-          <GameStore
-            selected={selected}
-            sources={sources}
-            locked={hostLocked || manageBusy}
-            onSelectSource={onSelectSource}
-          />
           <GameShared selected={selected} />
+          <div className="exo-glass exo-game-store-pill">
+            <GameStore
+              selected={selected}
+              sources={sources}
+              locked={hostLocked || manageBusy}
+              onSelectSource={onSelectSource}
+            />
+          </div>
         </div>
       </header>
       <div className="exo-game-page-inner">
@@ -220,6 +230,7 @@ export function GamePage({
           </div>
           <div className="exo-game-page-body">
             <div className="exo-game-info">
+              <GameStatusPill selected={selected} downloading={downloading} />
               <GameHeader selected={selected} />
               <div className="exo-game-actions">
                 <PrimaryAction

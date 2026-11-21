@@ -152,9 +152,9 @@ function useLibraryFolders(
 const isSurfaceActive = (view: View, room: View, blockers: readonly boolean[]) => view === room && !blockers.some(Boolean)
 const activeTransferId = (progress: InstallProgress | null) => progress?.isActive ? progress.gameId : null
 const shellNotice = (status: ActionStatus) => (status.gameId === null && status.message ? { message: status.message, tone: status.tone, sticky: status.sticky } : null)
-const isBanner = (art: Element | null | undefined) => !!art?.closest('.exo-continue-card')
+const isBanner = (art: Element | null | undefined) => !!art?.closest('.exo-deck-card')
 function setAway(art: Element | null | undefined, away: boolean) {
-  ;(art?.closest('.exo-continue-card') ?? art)?.toggleAttribute('data-exo-away', away)
+  ;(art?.closest('.exo-deck-card') ?? art)?.toggleAttribute('data-exo-away', away)
 }
 
 export function LauncherApp() {
@@ -540,7 +540,7 @@ export function LauncherApp() {
   const openCard = useCallback((game: Game) => {
     setActiveGameId(game.id)
     const art = pressedArt()
-    const from = isBanner(art) ? art?.closest('.exo-continue-card') ?? art : art
+    const from = isBanner(art) ? art?.closest('.exo-deck-card') ?? art : art
     setAway(gameArtFrom.current, false)
     gameArtFrom.current = from
     void transition(() => { openGamePage(game.id, 'pointer', { game }); setAway(from, true) }, {
@@ -778,7 +778,7 @@ export function LauncherApp() {
       <ErrorBoundary
         label="Game sheet"
         onReset={closeGamePage}
-        className="fixed inset-x-0 bottom-0 top-[var(--exo-titlebar-h,52px)] z-[30] bg-bg"
+        className="fixed inset-0 z-[30] bg-bg"
       >
         <Suspense fallback={null}><GameSheet
           game={displayedGame}

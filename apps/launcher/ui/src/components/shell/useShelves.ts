@@ -23,15 +23,23 @@ function isShelfGame(game: Game, transferId: string | null, showTools: boolean):
   return game.store === 'local'
 }
 
-// Continue's three banners; All games leaves out exactly these, so every game shows in one place or the other.
-const CONTINUE_MAX = 3
+const CONTINUE_MAX = 20
 
 function continueOrder(games: Game[], transferId: string | null): Game[] {
-  const rank = (game: Game) => game.isRunning ? 0 : isInstallingGame(game, transferId) ? 1 : 2
   const played = (game: Game) => (game.lastPlayedUtc ? Date.parse(game.lastPlayedUtc) : 0)
-  return games
-    .filter(game => game.isRunning || isInstallingGame(game, transferId) || (game.installed && played(game) > 0))
-    .sort((a, b) => rank(a) - rank(b) || played(b) - played(a))
+  const rank = (game: Game) => {
+    if (game.isRunning) return 0
+    if (isInstallingGame(game, transferId)) return 1
+    if (game.installed && played(game) > 0) return 2
+    if (game.installed) return 3
+    return 4
+  }
+  return [...games]
+    .sort((a, b) =>
+      rank(a) - rank(b)
+      || played(b) - played(a)
+      || (b.playtimeMinutes ?? 0) - (a.playtimeMinutes ?? 0)
+      || a.title.localeCompare(b.title))
     .slice(0, CONTINUE_MAX)
 }
 
