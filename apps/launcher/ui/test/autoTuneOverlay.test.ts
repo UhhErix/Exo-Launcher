@@ -4,17 +4,21 @@ import { readFileSync } from 'node:fs'
 
 const read = (rel: string) => readFileSync(new URL(rel, import.meta.url), 'utf8')
 
-const overlaySrc = read('../src/components/gpu/AutoTuneOverlay.tsx')
+const exoAiRoomSrc = read('../src/components/gpu/ExoAiRoom.tsx')
+const appsRoomSrc = read('../src/components/apps/AppsRoom.tsx')
+const cinemaSrc = read('../src/components/gpu/AutoTuneCinema.tsx')
 const autoTuneSrc = read('../src/components/gpu/AutoTune.tsx')
 const exoAiSrc = read('../src/components/gpu/ExoAiPanel.tsx')
 const stagesSrc = read('../src/components/gpu/autoTuneStages.ts')
 const overlayCss = read('../src/styles/auto-tune-overlay.css')
+const exoAiRoomCss = read('../src/styles/exo-ai-room.css')
+const appsRoomCss = read('../src/styles/apps-room.css')
 const systemGroupSrc = read('../src/components/gpu/SystemGroup.tsx')
 const pcRoomCss = read('../src/styles/pc-room.css')
 const titleBarSrc = read('../src/components/shell/TitleBar.tsx')
 const systemCss = read('../src/styles/system.css')
 
-test('AutoTuneOverlay runs all 6 safe stages, uses native Exo surfaces, and eliminates AI slop', () => {
+test('ExoAiRoom and AutoTuneCinema run all 6 safe stages, expose zero Overrides, and use native Exo Void rooms', () => {
   for (const id of ['cooling', 'graphics', 'system', 'bloat', 'cleanup', 'drivers']) {
     assert.match(stagesSrc, new RegExp(`id:\\s*'${id}'`))
   }
@@ -27,17 +31,28 @@ test('AutoTuneOverlay runs all 6 safe stages, uses native Exo surfaces, and elim
   assert.match(stagesSrc, /if \(clean\.message\)[\s\S]*status:\s*'done'/)
   assert.doesNotMatch(stagesSrc, /clean\.message[\s\S]*status:\s*'warn'/)
 
-  assert.match(overlaySrc, /host\.appsPackages\(\)/)
-  assert.match(overlaySrc, /className="exo-system-panel exo-at-panel"/)
-  assert.match(overlaySrc, /<Progress\b/)
-  assert.match(overlaySrc, /<ExoAiFooter\b/)
-  assert.match(overlaySrc, /data-tune-phase=\{phase\}/)
-  assert.match(overlaySrc, /exo-at-stage-fx/)
-  assert.match(overlaySrc, /exo-at-cinema/)
-  assert.doesNotMatch(overlaySrc, /role="tablist"|exo-at-bg-glow|exo-at-bg-grid|exo-at-orbit|exo-at-reactor-card|Include bloat app removal|<Switch\b/)
+  assert.match(exoAiRoomSrc, /host\.appsPackages\(\)/)
+  assert.match(exoAiRoomSrc, /className="exo-ai-room"/)
+  assert.match(exoAiRoomSrc, /<ThisPc\b/)
+  assert.match(exoAiRoomSrc, /<AutoTuneCinema\b/)
+  assert.match(exoAiRoomSrc, /<ExoAiFooter\b/)
+  assert.doesNotMatch(exoAiRoomSrc, /role="tablist"|exo-at-bg-glow|exo-at-bg-grid|exo-at-orbit|exo-at-reactor-card|Include bloat app removal|Overrides|overridesOpen/)
 
-  assert.match(exoAiSrc, /<Popover\b/)
-  assert.doesNotMatch(exoAiSrc, /Checking every 30m|Applied automatically|Watching in background|<details/)
+  assert.match(appsRoomSrc, /className="exo-apps-room"/)
+  assert.match(appsRoomSrc, /<AppsPanel\b/)
+
+  assert.match(titleBarSrc, /id:\s*'exo-ai',\s*label:\s*'Exo AI'/)
+  assert.match(titleBarSrc, /id:\s*'apps',\s*label:\s*'Apps'/)
+
+  assert.match(cinemaSrc, /exo-at-cine/)
+  assert.match(cinemaSrc, /exo-at-hero-stage/)
+  assert.match(cinemaSrc, /exo-at-ring/)
+  assert.match(cinemaSrc, /exo-at-milestones/)
+  assert.match(cinemaSrc, /useHoldWindow/)
+  assert.match(cinemaSrc, /<Progress\b/)
+  assert.match(cinemaSrc, /Restart now/)
+
+  assert.doesNotMatch(exoAiSrc, /Overrides|<Popover\b|Checking every 30m|Applied automatically|Watching in background|<details/)
 
   assert.match(autoTuneSrc, /<Progress\b/)
   assert.doesNotMatch(autoTuneSrc, /Cooler|label="Goal"/)
@@ -45,12 +60,16 @@ test('AutoTuneOverlay runs all 6 safe stages, uses native Exo surfaces, and elim
   assert.match(autoTuneSrc, /Tune GPU/)
   assert.match(autoTuneSrc, /Tune CPU/)
 
+  assert.match(exoAiRoomCss, /var\(--color-bg\)/)
+  assert.match(exoAiRoomCss, /var\(--exo-type-page\)/)
+  assert.match(appsRoomCss, /var\(--color-bg\)/)
   assert.match(overlayCss, /var\(--color-bg\)/)
-  assert.match(overlayCss, /var\(--exo-type-page\)/)
   assert.match(overlayCss, /:root\[data-exo-motion="reduce"\]/)
+  assert.match(overlayCss, /html\[data-exo-inactive="true"\]/)
   assert.match(overlayCss, /@keyframes exo-at-room-in/)
-  assert.match(overlayCss, /@keyframes exo-at-sweep-run/)
-  assert.doesNotMatch(overlayCss, /exo-at-bg-glow|exo-at-bg-grid|exo-at-orbit|exo-at-reactor-card/)
+  assert.match(overlayCss, /@keyframes exo-at-spin/)
+  assert.match(overlayCss, /@keyframes exo-at-beam-sweep/)
+  assert.doesNotMatch(overlayCss, /exo-at-bg-glow|exo-at-bg-grid|exo-at-orbit|exo-at-reactor-card|exo-at-overrides/)
   assert.match(pcRoomCss, /\.exo-pc-chip:has\(> svg:first-child\)/)
   assert.doesNotMatch(pcRoomCss, /\.exo-ai-status|\.exo-ai-pills|\.exo-ai-pill|\.exo-storage-section/)
   assert.doesNotMatch(titleBarSrc, /Ctrl K|exo-bar-kbd/)

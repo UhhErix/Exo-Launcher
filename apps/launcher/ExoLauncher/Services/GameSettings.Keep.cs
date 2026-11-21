@@ -55,7 +55,8 @@ internal static partial class GameSettings
     /// (<see cref="HelperRunning"/> says which helper it is). The launcher's helpers (<see cref="Profile.Helpers"/>) can run
     /// while the game does not, and a write as they start makes the game write its older values back at exit, which reads as a reset.
     /// </summary>
-    internal static bool Busy(Profile profile) => Running(profile) || HelperRunning(profile) is not null;
+    internal static AsyncLocal<Func<Profile, bool>?> BusySeam { get; } = new();
+    internal static bool Busy(Profile profile) => BusySeam.Value is { } seam ? seam(profile) : Running(profile) || HelperRunning(profile) is not null;
 
 
     /// <summary>

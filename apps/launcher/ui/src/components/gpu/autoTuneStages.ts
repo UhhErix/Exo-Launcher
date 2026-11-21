@@ -1,7 +1,7 @@
 import { host, type ExoAiState, type HdrState, type LauncherSettings, type TuningItem } from '../../lib/host'
 import { report } from '../../lib/report'
 import { formatSize, trimStop } from '../../lib/utils'
-import type { PcState } from './PcRoom'
+import type { PcState } from './usePcState'
 
 type AutoTuneStageId = 'cooling' | 'graphics' | 'system' | 'bloat' | 'cleanup' | 'drivers'
 type AutoTuneStageStatus = 'idle' | 'active' | 'done' | 'warn'

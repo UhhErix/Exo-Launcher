@@ -1,5 +1,7 @@
 import {
   AppUpdate,
+  Apps,
+  Burst,
   Chats,
   Close,
   Controller,
@@ -22,7 +24,7 @@ import { runNoteCommand } from '../../lib/notes'
 import { SETTINGS_SEARCH, type SettingsSectionId } from '../../lib/settingsSections'
 import { sortGames } from '../../lib/utils'
 import type { Command } from '../blocks/command-menu-1'
-import { PC_SECTIONS, type PcLink } from '../gpu/pcSections'
+import { PC_SECTIONS, pcLinkRoom, type PcLink } from '../gpu/pcSections'
 import { runPaletteExtra } from './paletteExtras'
 import type { View } from './TitleBar'
 
@@ -31,6 +33,8 @@ const NAV_COMMANDS: Readonly<Record<string, View>> = {
   'nav-store': 'store',
   'nav-friends': 'friends',
   'nav-music': 'music',
+  'nav-exo-ai': 'exo-ai',
+  'nav-apps': 'apps',
   'nav-system': 'system',
   'nav-devices': 'devices',
   'nav-settings': 'settings',
@@ -54,6 +58,8 @@ export function buildShellCommands({
     { id: 'nav-store', group: 'Go to', title: 'Store', icon: StoreBag },
     { id: 'nav-friends', group: 'Go to', title: 'Discord', icon: Chats, keywords: ['home', 'friends', 'messages', 'dms', 'servers', 'playing', 'voice'] },
     { id: 'nav-music', group: 'Go to', title: 'Music', icon: MusicNotes },
+    { id: 'nav-exo-ai', group: 'Go to', title: 'Exo AI', icon: Burst, keywords: ['auto tune', 'specs', 'overclock', 'undervolt', 'autopilot', 'system tuning', 'park control', 'islc', 'standby list'] },
+    { id: 'nav-apps', group: 'Go to', title: 'Apps', icon: Apps, keywords: ['uninstall', 'programs', 'bloat', 'startup'] },
     { id: 'nav-system', group: 'Go to', title: 'PC', icon: ThisPc },
     { id: 'nav-devices', group: 'Go to', title: 'Devices', icon: Mouse },
     { id: 'nav-settings', group: 'Go to', title: 'Settings', icon: Settings },
@@ -149,8 +155,9 @@ export function executeShellCommand(
   }
   const section = PC_SECTIONS.find((entry) => `pc-${entry.id}` === command.id)
   if (section) {
-    deps.setGpuJump({ tab: section.id })
-    void deps.goToView('system')
+    const room = pcLinkRoom(section.id)
+    deps.setGpuJump(room === 'system' ? { tab: section.id } : null)
+    void deps.goToView(room)
     return
   }
   const setting = SETTINGS_SEARCH.find((entry) => entry.id === command.id)

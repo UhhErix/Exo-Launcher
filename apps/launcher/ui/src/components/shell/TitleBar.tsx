@@ -4,7 +4,7 @@ import { Spinner } from '../ui/Spinner'
 import { useGlide } from '../../lib/glide'
 import { useLens } from '../../lib/glass'
 import { ExoMark } from '../../brand/ExoMark'
-import { Chats, ThisPc, Library, Mouse, MusicNotes, Settings, StoreBag } from '../../brand/icons'
+import { Apps, Burst, Chats, ThisPc, Library, Mouse, MusicNotes, Settings, StoreBag } from '../../brand/icons'
 import { warmMusic, type MusicService } from '../../lib/music'
 import { DiscordBadge } from './DiscordBadge'
 import { MusicMiniPlayer } from './MusicMiniPlayer'
@@ -12,7 +12,7 @@ import { CaptureButton } from './CaptureButton'
 import { WindowChrome } from '../WindowChrome'
 
 export type View =
-  'library' | 'store' | 'friends' | 'music' | 'system' | 'devices' | 'settings'
+  'library' | 'store' | 'friends' | 'music' | 'devices' | 'exo-ai' | 'apps' | 'system' | 'settings'
 
 const NAV_TABS: ReadonlyArray<{
   id: View
@@ -24,6 +24,8 @@ const NAV_TABS: ReadonlyArray<{
     { id: 'friends', label: 'Discord', Icon: Chats },
     { id: 'music', label: 'Music', Icon: MusicNotes },
     { id: 'devices', label: 'Devices', Icon: Mouse },
+    { id: 'exo-ai', label: 'Exo AI', Icon: Burst },
+    { id: 'apps', label: 'Apps', Icon: Apps },
     { id: 'system', label: 'PC', Icon: ThisPc },
   ]
 

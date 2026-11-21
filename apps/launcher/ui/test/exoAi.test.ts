@@ -5,46 +5,61 @@ import { readFileSync } from 'node:fs'
 const read = (rel: string) => readFileSync(new URL(rel, import.meta.url), 'utf8')
 
 const pcRoom = read('../src/components/gpu/PcRoom.tsx')
+const exoAiRoom = read('../src/components/gpu/ExoAiRoom.tsx')
+const pcPartMenus = read('../src/components/gpu/PcPartMenus.tsx')
+const appsRoom = read('../src/components/apps/AppsRoom.tsx')
 const exoAiPanel = read('../src/components/gpu/ExoAiPanel.tsx')
 const bestSetup = read('../src/components/gpu/BestSetup.tsx')
 const storageRoom = read('../src/components/gpu/StorageRoom.tsx')
+const titleBar = read('../src/components/shell/TitleBar.tsx')
+const pcSections = read('../src/components/gpu/pcSections.ts')
 
-test('PcRoom exposes 3 chips and routes Auto Tune and Storage to native full-screen rooms', () => {
-  assert.match(pcRoom, /<AutoTuneChip\b/)
-  assert.match(pcRoom, /<AutoTuneOverlay\b/)
-  assert.match(pcRoom, /<AppsChip\b/)
+test('Top-bar rooms divide Exo AI, Apps, and PC cleanly without modal bloat', () => {
+  assert.match(titleBar, /id:\s*'devices'/)
+  assert.match(titleBar, /id:\s*'exo-ai',\s*label:\s*'Exo AI'/)
+  assert.match(titleBar, /id:\s*'apps',\s*label:\s*'Apps'/)
+  assert.match(titleBar, /id:\s*'system',\s*label:\s*'PC'/)
+
+  assert.match(exoAiRoom, /<ThisPc\b/)
+  assert.match(exoAiRoom, /<AutoTuneCinema\b/)
+  assert.match(exoAiRoom, /<AutoTuneRows\b/)
+  assert.match(exoAiRoom, /<StorageChip\b/)
+  assert.match(exoAiRoom, /<StorageRoom\b/)
+  assert.match(exoAiRoom, /<PcPartMenus\b/)
+
+  assert.match(appsRoom, /<AppsPanel\b/)
+
+  assert.match(pcRoom, /<DriversSection\b/)
+  assert.match(pcRoom, /<ShadersBoard\b/)
   assert.match(pcRoom, /<StorageChip\b/)
   assert.match(pcRoom, /<StorageRoom\b/)
-  assert.doesNotMatch(pcRoom, /<ExoAiChip\b|<PcMenu title="Exo AI"|<PcMenu title="Storage"|>Devices</)
-  assert.match(read('../src/components/shell/TitleBar.tsx'), /id:\s*'devices'/)
+  assert.match(pcRoom, /<PcPartMenus\b/)
+  assert.doesNotMatch(pcRoom, /<AutoTuneOverlay\b|<AppsSheet\b|<AutoTuneChip\b|<AppsChip\b/)
 
-  assert.doesNotMatch(pcRoom, /BestChip|AutopilotChip|CompressChip|upscalersOpen|StorageSheet/)
-  assert.match(pcRoom, /<PcMenu title="Graphics"[\s\S]*?<MakerPanelRow[\s\S]*?<UpscalersTab/)
+  assert.match(pcPartMenus, /<PcMenu title="Graphics"[\s\S]*?<MakerPanelRow[\s\S]*?<UpscalersTab/)
   assert.match(storageRoom, /className="exo-storage-room"/)
   assert.match(storageRoom, /<CompressGames\b/)
 })
 
-test('PcRoom routes legacy performance, autopilot, drives, and compress links cleanly', () => {
-  assert.match(pcRoom, /jump\.tab === 'performance'[\s\S]*?openAutoTune\(false\)/)
-  assert.match(pcRoom, /jump\.tab === 'autopilot'[\s\S]*?openAutoTune\(true\)/)
+test('pcLinkRoom and PcRoom route legacy links to Exo AI, Apps, Storage, and part menus cleanly', () => {
+  assert.match(pcSections, /if \(tab === 'apps'\) return 'apps'/)
+  assert.match(pcSections, /if \(tab === 'performance' \|\| tab === 'autopilot' \|\| tab === 'overview' \|\| tab === 'network'\) return 'exo-ai'/)
   assert.match(pcRoom, /jump\.tab === 'drives' \|\| jump\.tab === 'compress'[\s\S]*?openStorage\(\)/)
   assert.match(pcRoom, /upscalers:\s*'graphics'/)
   assert.match(pcRoom, /graphics:\s*'graphics'/)
   assert.match(pcRoom, /control:\s*'graphics'/)
-  assert.match(pcRoom, /jump\.tab === 'apps'/)
 })
 
-test('ExoAiPanel stays a 1-line status footer with on-demand Overrides popover', () => {
-  assert.doesNotMatch(exoAiPanel, /exo-ai-auto-apply|exo-ai-drift|Always apply best settings silently|Background drift check|FAN_PRESET_CHOICES|exo-ai-fan-preset|<AutoTuneRows\b|<details|Checking every 30m|Applied automatically|Watching in background/)
+test('ExoAiRoom and ExoAiPanel keep zero Overrides clutter and host Auto Tune controls', () => {
+  assert.doesNotMatch(exoAiPanel, /Overrides|<Popover\b|exo-ai-auto-apply|exo-ai-drift|Always apply best settings silently|Background drift check|FAN_PRESET_CHOICES|exo-ai-fan-preset|<AutoTuneRows\b|<details|Checking every 30m|Applied automatically|Watching in background/)
+  assert.doesNotMatch(exoAiRoom, /Overrides|<Popover\b/)
   assert.match(exoAiPanel, /ExoAiFooter/)
   assert.match(exoAiPanel, /Exo AI · Active/)
-  assert.match(exoAiPanel, /Overrides/)
-  assert.match(exoAiPanel, /<Popover\b/)
-  assert.match(exoAiPanel, /<AutopilotControls\b/)
-  assert.match(exoAiPanel, /<BestSetup\b/)
-  assert.match(exoAiPanel, /<SystemGroup\b/)
-  assert.match(exoAiPanel, /<NetworkGroup\b/)
-  assert.match(exoAiPanel, /<InterruptRows\b/)
+  assert.match(exoAiRoom, /<AutopilotControls\b/)
+  assert.match(exoAiRoom, /<BestSetup\b/)
+  assert.match(exoAiRoom, /<SystemGroup\b/)
+  assert.match(exoAiRoom, /<NetworkGroup\b/)
+  assert.match(exoAiRoom, /<InterruptRows\b/)
 })
 
 test('BestSetup hides already-optimal steps while keeping systemTuningNeedsRestart', () => {

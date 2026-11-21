@@ -28,3 +28,9 @@ export const PC_SECTIONS: readonly { id: PcLink; label: string; keywords: readon
   { id: 'compress', label: 'Compress games', keywords: ['compress', 'compress games', 'compression', 'compactgui', 'compact', 'compact os', 'wof', 'lzx', 'xpress', 'free up space', 'save space', 'shrink games', 'smaller games', 'uncompress'] },
   { id: 'apps', label: 'Apps', keywords: ['apps', 'uninstall', 'programs', 'remove', 'leftovers', 'left behind', 'clean up', 'junk', 'bloatware', 'uninstaller', 'startup', 'startup apps', 'start with windows', 'starts with windows', 'autostart', 'run at startup', 'boot apps', 'recycle bin', 'temp files', 'unused apps', 'last used', 'removed', 'put back', 'undo uninstall', 'broken apps'] },
 ]
+
+export function pcLinkRoom(tab: PcLink): 'exo-ai' | 'apps' | 'system' {
+  if (tab === 'apps') return 'apps'
+  if (tab === 'performance' || tab === 'autopilot' || tab === 'overview' || tab === 'network') return 'exo-ai'
+  return 'system'
+}

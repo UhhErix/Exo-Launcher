@@ -1,4 +1,3 @@
-@import "./apps.css";
 @import "./runtimes.css";
 @import "./graphics.css";
 @import "./shaders.css";
@@ -419,27 +418,6 @@
 
 .exo-pc-best-steps li + li {
   border-top: 1px solid var(--exo-float-line);
-}
-
-/* The Apps sheet: Exo's uninstaller, its list scrolling under its head and fading into the sheet's foot (exo-shell.css › Infinity pool). */
-.exo-game-overlay-stage:has(> .exo-pc-apps-sheet) {
-  width: min(1140px, calc(100% - 32px));
-  height: min(860px, calc(100% - 32px));
-  max-height: calc(100% - 32px);
-}
-
-.exo-pc-apps-sheet {
-  display: grid;
-  flex: 1;
-  min-height: 0;
-  padding: 20px 28px 0;
-}
-
-.exo-pc-apps-part {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-  min-height: 0;
 }
 
 /* PC › Autopilot (gpu/Autopilot.tsx): a report opens in place under its row, its findings and what was done as plain lines on hairlines. */
