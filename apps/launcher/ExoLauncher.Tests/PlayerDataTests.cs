@@ -235,6 +235,7 @@ public sealed class PlayerDataTests : IDisposable
         ["mouse/presets.json"] = Utf8("""{"hits-presets":[{"name":"Fast"}]}"""),
         ["controllers/games.json"] = Utf8("""[{"game":"steam:1","layout":"xbox"}]"""),
         ["controllers/054c_0ce6.json"] = Utf8("""{"original":{"deadzone":4}}"""),
+        ["keyboard-backups/wooting-1340-20261110-120000.json"] = Utf8("""{"schemaVersion":1,"model":"Wooting 60HE v2","productId":4928,"activeProfile":0,"profiles":[]}"""),
         ["exo-eq.json"] = Utf8("""{"version":1,"on":true}"""),
         ["frame-gen/games.json"] = Utf8("""{"steam:1":{"on":true,"wrote":["C:\\Users\\Player One\\Games\\x\\dlssg.dll"]}}"""),
         ["keep.json"] = Utf8("""{"version":1,"games":{"cs2":{"entries":{"fps_max":{"target":"fps_max","intended":"0"}}}}}"""),

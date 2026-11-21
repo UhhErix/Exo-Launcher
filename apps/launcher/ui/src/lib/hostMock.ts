@@ -2010,6 +2010,64 @@ const MOCK_HANDLERS: Record<string, MockHandler> = {
     }
   },
   'keyboard.openApp': () => ({ ok: true }),
+  'keyboard.backup': () => ({
+    ok: true,
+    message: null,
+    created: {
+      fileName: 'wooting-1342-20261121-161500.json',
+      model: 'Wooting 60HE v2',
+      productId: 0x1342,
+      firmware: '2.15.0',
+      createdUtc: new Date().toISOString(),
+      profileCount: 4,
+    },
+    backups: [
+      {
+        fileName: 'wooting-1342-20261121-161500.json',
+        model: 'Wooting 60HE v2',
+        productId: 0x1342,
+        firmware: '2.15.0',
+        createdUtc: new Date().toISOString(),
+        profileCount: 4,
+      },
+    ],
+  }),
+  'keyboard.backups': () => ({
+    ok: true,
+    backups: [
+      {
+        fileName: 'wooting-1342-20261121-160000.json',
+        model: 'Wooting 60HE v2',
+        productId: 0x1342,
+        firmware: '2.15.0',
+        createdUtc: '2026-11-21T16:00:00.000Z',
+        profileCount: 4,
+      },
+    ],
+  }),
+  'keyboard.restore': () => ({
+    ok: true,
+    message: null,
+    model: 'Wooting 60HE v2',
+    hallEffect: true,
+    maxScanHz: 8000,
+    firmware: '2.15.0',
+    layout: 'ANSI · Split spacebar',
+    activeProfile: 1,
+    profiles: [
+      { index: 0, name: 'Digital' },
+      { index: 1, name: 'FPS' },
+      { index: 2, name: 'Typing' },
+      { index: 3, name: 'Rapid' },
+    ],
+    actuationMm: 0.4,
+    rapidTrigger: true,
+    rapidTriggerMm: 0.15,
+    tachyon: true,
+    canWrite: true,
+    wootilityInstalled: true,
+    backgroundServiceRunning: true,
+  }),
   'devices.list': () => ({
     ok: true,
     devices: [

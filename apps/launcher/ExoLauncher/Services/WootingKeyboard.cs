@@ -1,5 +1,8 @@
+using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Text;
+using System.Text.Json;
+using System.Text.RegularExpressions;
 using ExoLauncher.Helpers;
 using ExoLauncher.Services.Hid;
 using Microsoft.Win32.SafeHandles;
@@ -7,7 +10,7 @@ using static ExoLauncher.Services.Hid.HidInterop;
 
 namespace ExoLauncher.Services;
 
-internal static class WootingKeyboard
+internal static partial class WootingKeyboard
 {
     internal const int VendorId = 0x31E3;
     internal const byte MagicSingle = 0xD0;
@@ -282,6 +285,15 @@ internal static class WootingKeyboard
             }
 
             var profileReply = QueryProfileFeature(path, multi, CmdGetKeyboardProfile, active);
+#if DEBUG
+            if (Environment.GetEnvironmentVariable("EXO_KB_PROBE") == "1"
+                && profileReply is { Length: > 0 }
+                && DecodeReplyBody(profileReply, CmdGetKeyboardProfile, multi) is { Length: > 0 } probeBody)
+            {
+                AppLog.Info($"KB_PROBE model={modelName} slot={active} multi={multi} totalLen={probeBody.Length}");
+                ProbeProtoTree(probeBody, "root", 0);
+            }
+#endif
             var settings = profileReply is { Length: > 0 } ? DecodeKeyboardProfile(profileReply, multi) : null;
             var layout = card.Layout;
             if (layout is null && QueryFeature(path, multi, CmdGetDeviceConfig, 0) is { Length: > 0 } cfgReply)
@@ -362,6 +374,9 @@ internal static class WootingKeyboard
                 var current = currentReply is { Length: > 0 } ? DecodeKeyboardProfile(currentReply, multi) : null;
                 if (current is null)
                     return Read(card) with { Ok = false, Message = "Couldn't read the active profile before saving." };
+
+                if (card.ProductId is { } pid && ModelOf(pid) is { } model)
+                    EnsureAutoBackupLocked(card, model.Name, pid, path, multi);
 
                 var patched = PatchKeyboardProfile(current.RawBody, actuationMm, rapidTrigger, rapidTriggerMm, tachyon);
                 var output = EncodeProfileOutputReport(OutSetKeyboardBase, active, save: true, patched, multi);

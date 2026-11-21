@@ -91,6 +91,7 @@ internal static class PlayerData
         new("mouse/presets.json", Shape.JsonObject, 512 * 1024, Sync.ThisPc + ": presets are for the mouse on this PC", ["presets.json@WebHostBridge"]),
         new("controllers/games.json", Shape.JsonArray, Small, Sync.ThisPc + ": per-game controller settings for the pads on this PC", ["controllers/games.json@ControllerLab"]),
         new("controllers/*.json", Shape.JsonObject, Small, Sync.ThisPc + ": a pad's own memory (its factory calibration) is kept where the pad was read", []),
+        new("keyboard-backups/*.json", Shape.JsonObject, Small, Sync.ThisPc + ": Wooting keyboard profile backups saved on this PC", []),
         new("exo-eq.json", Shape.JsonObject, Small, Sync.ThisPc + ": Exo EQ's outputs are this PC's audio devices, by Windows' ids for them", ["exo-eq.json@ExoEq"]),
         new("game-settings/window-modes.json", Shape.JsonObject, Small, Sync.ThisPc + ": each game's window mode, which fits this PC's screens", ["window-modes.json@GameSettings"]),
         new("game-settings/*.json", Shape.Json, Small, Sync.ThisPc + ": what Optimize changed in this PC's game files, to put back", ["kept.json@GameSettings", ".on.json@GameSettings", ".nvidia.json@GameSettings", "game-settings/sync.json@CompetitiveSync"], OfThisMachine: true),

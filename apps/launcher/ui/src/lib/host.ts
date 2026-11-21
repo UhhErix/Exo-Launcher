@@ -185,6 +185,20 @@ export type CpuPorts = { free: number; total: number; freeTypeC: boolean }
 /** AMD's unreleased Fluid Motion Frames 3: offer, show the switch; on, the value is set; note, one line once AMD has released it. */
 export type Afmf3State = { ok: boolean; message?: string | null; offer: boolean; on: boolean; note?: string | null }
 export type KeyboardProfileSlot = { index: number; name: string }
+export type KeyboardBackupSummary = {
+  fileName: string
+  model: string
+  productId: number
+  firmware: string | null
+  createdUtc: string
+  profileCount: number
+}
+export type KeyboardBackupResult = {
+  ok: boolean
+  message?: string | null
+  created?: KeyboardBackupSummary | null
+  backups: KeyboardBackupSummary[]
+}
 export type KeyboardRead = {
   ok: boolean
   message?: string | null
@@ -2956,6 +2970,9 @@ export const host = {
   keyboardSettings: (id: string, patch: { actuationMm?: number; rapidTrigger?: boolean; rapidTriggerMm?: number; tachyon?: boolean }) =>
     rawCall<KeyboardRead>('keyboard.settings', { id, ...patch }, 15_000),
   keyboardOpenApp: () => rawCall<{ ok: boolean }>('keyboard.openApp', {}, 10_000),
+  keyboardBackup: (id: string) => rawCall<KeyboardBackupResult>('keyboard.backup', { id }, 30_000),
+  keyboardBackups: (id: string) => rawCall<{ ok: boolean; backups: KeyboardBackupSummary[] }>('keyboard.backups', { id }, 10_000),
+  keyboardRestore: (id: string, fileName: string) => rawCall<KeyboardRead>('keyboard.restore', { id, fileName }, 30_000),
   controllerRead: (id: string) => rawCall<ControllerRead>('controller.read', { id }, 30_000),
   /** The output's and microphone's format, volume and mute, and how Exo Voice is set. */
   audioRead: (output: string | null, mic: string | null) => rawCall<AudioRead>('audio.read', { output, mic }),

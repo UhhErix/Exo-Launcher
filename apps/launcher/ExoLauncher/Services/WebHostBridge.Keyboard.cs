@@ -41,6 +41,47 @@ public sealed partial class WebHostBridge
     private static object KeyboardOpenApp() =>
         new { ok = WootingKeyboard.LaunchWootility() };
 
+    private object KeyboardBackup(JsonElement p, bool hasParams)
+    {
+        if (FindWootingKeyboard(p, hasParams) is not { } card)
+            return new { ok = false, message = "Wooting keyboard not connected.", backups = Array.Empty<object>() };
+        var res = WootingKeyboard.Backup(card);
+        return new
+        {
+            ok = res.Ok,
+            message = res.Message,
+            created = res.Created is null ? null : FormatBackupSummary(res.Created),
+            backups = res.Backups.Select(FormatBackupSummary).ToList(),
+        };
+    }
+
+    private object KeyboardBackups(JsonElement p, bool hasParams)
+    {
+        var card = FindWootingKeyboard(p, hasParams);
+        var backups = WootingKeyboard.ListBackups(card);
+        return new { ok = true, backups = backups.Select(FormatBackupSummary).ToList() };
+    }
+
+    private object KeyboardRestore(JsonElement p, bool hasParams)
+    {
+        if (FindWootingKeyboard(p, hasParams) is not { } card)
+            return new { ok = false, message = "Wooting keyboard not connected." };
+        var fileName = ReadString(p, hasParams, "fileName");
+        if (string.IsNullOrWhiteSpace(fileName))
+            return new { ok = false, message = "Missing backup file name." };
+        return FormatKeyboardRead(WootingKeyboard.RestoreBackup(card, fileName));
+    }
+
+    private static object FormatBackupSummary(WootingKeyboard.KeyboardBackupSummary b) => new
+    {
+        fileName = b.FileName,
+        model = b.Model,
+        productId = b.ProductId,
+        firmware = b.Firmware,
+        createdUtc = b.CreatedUtc,
+        profileCount = b.ProfileCount,
+    };
+
     private static object FormatKeyboardRead(WootingKeyboard.KeyboardRead r) => new
     {
         ok = r.Ok,
