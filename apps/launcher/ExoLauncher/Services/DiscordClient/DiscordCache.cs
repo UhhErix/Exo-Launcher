@@ -137,6 +137,8 @@ internal sealed partial class DiscordCache
     private readonly Dictionary<string, Guild> _guilds = [];
     private readonly Dictionary<string, Channel> _private = [];
     private readonly Dictionary<string, User> _users = [];
+    private const int NoteCap = 500;
+    private readonly Dictionary<string, string?> _notes = [];
     private readonly Dictionary<string, (string? Last, int Mentions)> _read = [];
     private readonly HashSet<string> _muted = [];
     // When a timed mute ends (mute_config.end_time): server or channel id -> end. Past its end it no longer mutes, as in Discord.
@@ -238,7 +240,15 @@ internal sealed partial class DiscordCache
                 _read[Str(entry, "id") ?? ""] = (Str(entry, "last_message_id"), Int(entry, "mention_count"));
             }
             foreach (var entry in Entries(d, "user_guild_settings")) ApplyGuildSettings(entry);
-            _relationships.Clear(); _blocked.Clear(); _ignored.Clear(); _presence.Clear(); _exoGames.Clear(); _exoPrep.Clear(); _linkPeersChanged = true;
+            _relationships.Clear(); _blocked.Clear(); _ignored.Clear(); _presence.Clear(); _exoGames.Clear(); _exoPrep.Clear(); _notes.Clear(); _linkPeersChanged = true;
+            if (d.TryGetProperty("notes", out var readyNotes) && readyNotes.ValueKind == JsonValueKind.Object)
+            {
+                foreach (var entry in readyNotes.EnumerateObject())
+                {
+                    if (_notes.Count >= NoteCap) break;
+                    _notes[entry.Name] = entry.Value.ValueKind == JsonValueKind.String && entry.Value.GetString() is { Length: > 0 } nv ? nv : null;
+                }
+            }
             foreach (var r in Array(d, "relationships"))
             {
                 if (r.TryGetProperty("user", out var ru) && ru.ValueKind == JsonValueKind.Object) Remember(ReadUser(ru));
@@ -509,6 +519,10 @@ internal sealed partial class DiscordCache
                         if (d.TryGetProperty("mfa_enabled", out _)) MfaEnabled = Bool(d, "mfa_enabled");
                         events.Add(("discord.changed", new { guildId = (string?)null }));
                     }
+                    break;
+                case "USER_NOTE_UPDATE":
+                    if (Str(d, "id") is { } noteUser)
+                        StoreNote(noteUser, Str(d, "note") is { Length: > 0 } nv ? nv : null);
                     break;
                 case "USER_SETTINGS_UPDATE":
                     // The server list changed here or in another Discord app.
@@ -2544,6 +2558,23 @@ internal sealed partial class DiscordCache
     internal (string Name, string? Avatar) Person(string userId)
     {
         lock (_gate) return (_users.GetValueOrDefault(userId)?.Name ?? "Someone", Avatar(userId));
+    }
+
+    internal bool TryGetNote(string userId, out string? note)
+    {
+        lock (_gate) return _notes.TryGetValue(userId, out note);
+    }
+
+    internal void SetNote(string userId, string? note)
+    {
+        lock (_gate) StoreNote(userId, note);
+    }
+
+    private void StoreNote(string userId, string? note)
+    {
+        if (!_notes.ContainsKey(userId) && _notes.Count >= NoteCap && _notes.Keys.FirstOrDefault() is { } oldest)
+            _notes.Remove(oldest);
+        _notes[userId] = note;
     }
 
     private string? Avatar(string userId) =>

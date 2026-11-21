@@ -2862,8 +2862,8 @@ export const host = {
    */
   discordAdmin: (action: string, params: Record<string, unknown> = {}) =>
     rawCall<{ ok: boolean; message?: string | null; data?: unknown; mfa?: { id: string; methods: string[] } | null }>('discord.admin', { action, ...params }, 60_000),
-  discordProfile: (userId: string, guildId: string | null) =>
-    rawCall<{ ok: boolean; message?: string | null; profile?: DiscordProfile | null; extras?: DiscordProfileExtras | null; note?: string | null }>('discord.profile', { userId, ...(guildId ? { guildId } : {}) }, 30_000),
+  discordProfile: (userId: string, guildId: string | null, includeNote = true) =>
+    rawCall<{ ok: boolean; message?: string | null; profile?: DiscordProfile | null; extras?: DiscordProfileExtras | null; note?: string | null }>('discord.profile', { userId, ...(guildId ? { guildId } : {}), ...(includeNote ? {} : { includeNote: false }) }, 30_000),
   /** A profile's Note (only visible to you), saved on Discord. */
   discordSaveNote: (userId: string, note: string) =>
     rawCall<{ ok: boolean; message?: string | null }>('discord.profile', { userId, note }, 30_000),

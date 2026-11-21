@@ -162,7 +162,7 @@ function useMentioned(id: string, known: DiscordUser | undefined, guildId: strin
     let live = true
     let request = looking.get(id)
     if (!request) {
-      request = host.discordProfile(id, guildId)
+      request = host.discordProfile(id, guildId, false)
         .then(res => (res.ok && res.profile?.user ? res.profile.user as DiscordUser : null))
         .catch(() => null)
         .then(user => {

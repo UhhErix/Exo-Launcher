@@ -59,7 +59,7 @@ internal static class GameCompression
     };
 
     internal const long GB = 1L << 30;
-    internal static readonly TimeSpan Settled = TimeSpan.FromDays(30);
+    internal static readonly TimeSpan Settled = TimeSpan.FromDays(14);
 
     /// <summary>The algorithm for this game on this PC (the rules in the class summary).</summary>
     internal static Algorithm Choose(long installBytes, int logicalCores, bool hardDrive, DateTime newestWriteUtc, DateTime nowUtc)
@@ -67,7 +67,8 @@ internal static class GameCompression
         if (logicalCores <= 4) return Algorithm.Xpress4K;
         var settled = nowUtc - newestWriteUtc >= Settled;
         if (hardDrive) return installBytes >= 10 * GB && logicalCores >= 8 && settled ? Algorithm.Lzx : Algorithm.Xpress16K;
-        return installBytes >= 30 * GB && logicalCores >= 12 && settled ? Algorithm.Lzx : Algorithm.Xpress8K;
+        if (installBytes >= 15 * GB && logicalCores >= 8 && settled) return Algorithm.Lzx;
+        return logicalCores >= 8 ? Algorithm.Xpress16K : Algorithm.Xpress8K;
     }
 
     /// <summary>Automatic CPU budget: 1 thread on HDD, capped low while idle so background compression stays unnoticeable, higher when triggered explicitly.</summary>

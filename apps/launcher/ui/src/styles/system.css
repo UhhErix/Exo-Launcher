@@ -1001,11 +1001,6 @@
   font-size: var(--exo-type-small);
 }
 
-.exo-shaders-cache-meta {
-  color: var(--color-muted);
-  font-size: var(--exo-type-small);
-}
-
 .exo-shaders-cache-actions {
   display: flex;
   align-items: center;

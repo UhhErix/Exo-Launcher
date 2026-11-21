@@ -181,6 +181,28 @@ public sealed class UninstallerDepthTests : IDisposable
         Assert.Equal("Candy Crush Saga", StorePackages.Pretty("king.com.CandyCrushSaga"));
     }
 
+    [Fact]
+    public void PlanPromotesToEveryAccountOnlyWhenNothingPickedIsForCurrentUser()
+    {
+        var forMe = new StorePackage("Microsoft.BingNews_8wekyb3d8bbwe", "Microsoft.BingNews", "News", null, "Microsoft.BingNews_4.55.1.0_x64__8wekyb3d8bbwe", 0, "Microsoft.BingNews_4.55.1.0_neutral_~_8wekyb3d8bbwe");
+        var provisionedOnly = new StorePackage("Clipchamp.Clipchamp_yxz26nhyzhsrt", "Clipchamp.Clipchamp", "Clipchamp", null, null, 1, "Clipchamp.Clipchamp_3.0.0.0_neutral_~_yxz26nhyzhsrt");
+        var packages = new[] { forMe, provisionedOnly };
+
+        var (promoted, everyonePromoted) = StorePackages.Plan(packages, new HashSet<string>([provisionedOnly.Family]), everyone: false);
+        Assert.True(everyonePromoted);
+        Assert.Single(promoted);
+        Assert.Equal(provisionedOnly.Family, promoted[0].Family);
+
+        var (keptMine, everyoneKeptMine) = StorePackages.Plan(packages, new HashSet<string>([forMe.Family, provisionedOnly.Family]), everyone: false);
+        Assert.False(everyoneKeptMine);
+        Assert.Single(keptMine);
+        Assert.Equal(forMe.Family, keptMine[0].Family);
+
+        var (empty, everyoneEmpty) = StorePackages.Plan(packages, new HashSet<string>(["Missing.App_8wekyb3d8bbwe"]), everyone: false);
+        Assert.Empty(empty);
+        Assert.False(everyoneEmpty);
+    }
+
     // ---- restore points ----
 
     [Fact]

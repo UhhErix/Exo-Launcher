@@ -155,7 +155,7 @@ internal sealed partial class DiscordRest : IDisposable
     }
 
     /// <summary>Discord's answer, or why not; Mfa when Discord wants the person to verify first (<see cref="FinishMfaAsync"/>).</summary>
-    internal sealed record Reply(JsonElement? Body, string? Error, MfaAsk? Mfa = null);
+    internal sealed record Reply(JsonElement? Body, string? Error, MfaAsk? Mfa = null, HttpStatusCode Status = 0);
 
     /// <summary>50 messages: the newest, or those before, after or around one (a jump to a message).</summary>
     internal Task<Reply> MessagesAsync(string channelId, string? before, CancellationToken ct, string? after = null, string? around = null) =>
@@ -563,7 +563,7 @@ internal sealed partial class DiscordRest : IDisposable
 
     /// <summary>The profile's Note (only visible to you); Discord answers 404 when there is none.</summary>
     internal Task<Reply> NoteAsync(string userId, CancellationToken ct) =>
-        SendAsync(HttpMethod.Get, $"users/@me/notes/{Id(userId)}", null, ct);
+        SendAsync(HttpMethod.Get, $"users/@me/notes/{Id(userId)}", null, ct, retryRateLimit: false, quietNotFound: true);
 
     internal Task<Reply> SaveNoteAsync(string userId, string note, CancellationToken ct) =>
         SendAsync(HttpMethod.Put, $"users/@me/notes/{Id(userId)}", new JsonObject { ["note"] = note }, ct);
@@ -613,7 +613,7 @@ internal sealed partial class DiscordRest : IDisposable
     // reason: the Audit Log's reason (X-Audit-Log-Reason); content: a form other than a message's (made again on a retry);
     // mfaToken: the verified check's token, on the one retry after Discord asked for it.
     private async Task<Reply> SendAsync(HttpMethod method, string path, JsonNode? body, CancellationToken ct, IReadOnlyList<Upload>? files = null,
-        string? reason = null, Func<HttpContent>? content = null, string? mfaToken = null)
+        string? reason = null, Func<HttpContent>? content = null, string? mfaToken = null, bool retryRateLimit = true, bool quietNotFound = false)
     {
         for (var attempt = 0; ; attempt++)
         {
@@ -670,19 +670,20 @@ internal sealed partial class DiscordRest : IDisposable
                     }
                     return new Reply(null, path.Contains("members-search", StringComparison.Ordinal) ? MembersIndexing : "Discord is still getting these messages ready to search. Try again in a moment.");
                 }
-                if (response.IsSuccessStatusCode) return new Reply(json, null);
-                if (response.StatusCode == HttpStatusCode.TooManyRequests && attempt < 2 &&
+                if (response.IsSuccessStatusCode) return new Reply(json, null, Status: response.StatusCode);
+                if (retryRateLimit && response.StatusCode == HttpStatusCode.TooManyRequests && attempt < 2 &&
                     json is { ValueKind: JsonValueKind.Object } limited &&
                     limited.TryGetProperty("retry_after", out var after) && after.TryGetDouble(out var seconds) && seconds <= 10)
                 {
                     await Task.Delay(TimeSpan.FromSeconds(seconds + 0.1), ct).ConfigureAwait(false);
                     continue;
                 }
-                AppLog.Info($"Discord client: {method} {Route(path)} answered {(int)response.StatusCode}.");
+                if (!(quietNotFound && response.StatusCode == HttpStatusCode.NotFound))
+                    AppLog.Info($"Discord client: {method} {Route(path)} answered {(int)response.StatusCode}.");
                 // Discord wants the person to verify first: the request waits here for the code (once; a second ask is refused, as Discord's client does).
                 if (mfaToken is null && ReadMfa(response.StatusCode, json) is { } challenge)
                     return AskMfa(challenge, json, (token, again) => SendAsync(method, path, body, again, files, reason, content, token));
-                return new Reply(json, ErrorLine(response.StatusCode, json));
+                return new Reply(json, ErrorLine(response.StatusCode, json), Status: response.StatusCode);
             }
         }
     }

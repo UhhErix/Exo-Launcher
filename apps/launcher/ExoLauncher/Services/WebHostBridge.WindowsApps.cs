@@ -43,16 +43,16 @@ public sealed partial class WebHostBridge
             ? list.EnumerateArray().Where(id => id.ValueKind == JsonValueKind.String).Select(id => id.GetString()!).Take(100).ToHashSet(StringComparer.OrdinalIgnoreCase) : [];
         var everyone = hasParams && p.TryGetProperty("everyone", out var all) && all.ValueKind == JsonValueKind.True;
         var (packages, _) = await Task.Run(StorePackages.Read).ConfigureAwait(true);
-        var chosen = packages.Where(package => ids.Contains(package.Family) && StorePackages.Line(package, everyone) is not null).ToList();
+        var (chosen, effectiveEveryone) = StorePackages.Plan(packages, ids, everyone);
         if (chosen.Count == 0)
-            return new { ok = false, token = (string?)null, admin = false, lines = Array.Empty<PackageLine>(), message = (string?)(everyone ? "None of those can be removed here." : "None of those are installed for you: choose Every account.") };
+            return new { ok = false, token = (string?)null, admin = false, lines = Array.Empty<PackageLine>(), message = (string?)"None of those can be removed here." };
         foreach (var old in PackagePlans.Where(pair => DateTime.UtcNow - pair.Value.At > TimeSpan.FromMinutes(30)).Select(pair => pair.Key).ToList()) PackagePlans.TryRemove(old, out _);
         var token = Guid.NewGuid().ToString("N");
-        PackagePlans[token] = (chosen, everyone, DateTime.UtcNow);
+        PackagePlans[token] = (chosen, effectiveEveryone, DateTime.UtcNow);
         return new
         {
-            ok = true, token, admin = everyone,
-            lines = chosen.Select(package => StorePackages.Line(package, everyone)!).Select(line => new { id = line.Id, name = line.Name, does = line.Does, back = line.Back, undoable = line.Undoable }),
+            ok = true, token, admin = effectiveEveryone,
+            lines = chosen.Select(package => StorePackages.Line(package, effectiveEveryone)!).Select(line => new { id = line.Id, name = line.Name, does = line.Does, back = line.Back, undoable = line.Undoable }),
             message = (string?)null,
         };
     }

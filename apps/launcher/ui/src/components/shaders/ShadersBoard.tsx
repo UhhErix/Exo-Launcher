@@ -10,7 +10,6 @@ import { Spinner } from '../ui/Spinner'
 import { ErrorNote } from '../ui/ErrorNote'
 import { SectionActions } from '../gpu/SectionHead'
 import { call, message, type Estimate, type Queue, type QueueItem, type ShaderGame, type Snapshot } from './shaderCall'
-import { ConfirmLabel, useConfirmInPlace } from '../ui/ConfirmButton'
 import { rebase, stale } from './snapshotOrder'
 import { ArtImg } from '../ui/ArtImg'
 import { errorText } from '../../lib/errorWords'
@@ -188,7 +187,7 @@ export function ShadersBoard({ active, games }: { active: boolean; games: readon
   return (
     <div ref={setRoot} className="exo-shaders-board">
       <Actions snap={snap} view={view} estimates={estimates} busy={busy} run={run} />
-      <CacheStrip snap={snap} busy={busy} run={run} />
+      <CacheStrip snap={snap} busy={busy} run={run} onRefresh={read} />
       {error || failed ? <ErrorNote className="exo-shaders-error" message={error ?? failed} /> : null}
       {posters.length === 0 && !snap.app.scanning ? <p className="exo-shaders-empty">{snap.games.length ? 'Every game is compiled' : 'No games found'}</p> : null}
       <Posters
@@ -286,31 +285,37 @@ function cacheSteps(snap: Snapshot): Step[] {
   return steps
 }
 
-function cacheMetaText(snap: Snapshot) {
-  const { cache, gpu } = snap.app
-  const cacheText = cache?.amdDx12?.text
-    ?? (cache?.usedText ? `Cache: ${cache.usedText}${cache.limitCurrent ? ` · ${cache.limitCurrent}` : ''}` : null)
-  const deliveryText = gpu?.shaderDelivery?.text ? `Shader Delivery: ${gpu.shaderDelivery.text}` : null
-  return [cacheText, deliveryText].filter(Boolean).join(' · ')
-}
-
 function cacheStripState(snap: Snapshot) {
   const cache = snap.app.cache
   return {
     off: cache?.off ?? null,
     oldDriverNote: cache?.oldDriverNote ?? null,
     steps: cacheSteps(snap),
-    meta: cacheMetaText(snap),
   }
 }
 
-function CacheStrip({ snap, busy, run }: {
+function CacheStrip({ snap, busy, run, onRefresh }: {
   snap: Snapshot
   busy: string | null
   run: (key: string, ...steps: Step[]) => void
+  onRefresh: () => Promise<void>
 }) {
-  const { off, oldDriverNote, steps, meta } = cacheStripState(snap)
-  if (!off && !oldDriverNote && steps.length === 0 && !meta) return null
+  const { off, oldDriverNote, steps } = cacheStripState(snap)
+  const autoRanRef = useRef(false)
+  const mountedRef = useRef(true)
+  useEffect(() => () => { mountedRef.current = false }, [])
+  useEffect(() => {
+    if (autoRanRef.current || busy !== null || steps.length === 0) return
+    autoRanRef.current = true
+    void (async () => {
+      let applied = false
+      for (const [method, params] of steps) {
+        await call(method, params).then(() => { applied = true }, () => { })
+      }
+      if (mountedRef.current && applied) void onRefresh()
+    })()
+  }, [busy, onRefresh, steps])
+  if (!off && !oldDriverNote) return null
   return (
     <div className="exo-shaders-cache">
       {off ? (
@@ -322,25 +327,18 @@ function CacheStrip({ snap, busy, run }: {
           </button>
         </div>
       ) : null}
-      <div className="exo-shaders-cache-row">
-        {meta ? <span className="exo-shaders-cache-meta">{meta}</span> : <span />}
-        <div className="exo-shaders-cache-actions">
-          {steps.length > 0 ? (
-            <button type="button" className="exo-set-btn" disabled={busy !== null}
-              onClick={() => run('optimize-cache', ...steps)}>
-              {busy === 'optimize-cache' ? <Spinner label="Optimizing cache" /> : null}
-              Optimize shader cache
-            </button>
-          ) : null}
-          {oldDriverNote ? (
+      {oldDriverNote ? (
+        <div className="exo-shaders-cache-row">
+          <span />
+          <div className="exo-shaders-cache-actions">
             <button type="button" className="exo-set-btn" disabled={busy !== null}
               onClick={() => run('free-old', ['cache.freeOldDriver'])}>
               {busy === 'free-old' ? <Spinner label="Freeing old cache" /> : null}
               Free old cache ({oldDriverNote})
             </button>
-          ) : null}
+          </div>
         </div>
-      </div>
+      ) : null}
     </div>
   )
 }
@@ -637,7 +635,9 @@ function PreparePoster({ item, cover }: { item: ShaderPrepareGame | undefined; c
   const [failed, setFailed] = useState<string | null>(null)
   const [opening, setOpening] = useState(false)
   const running = item?.state === 'running'
-  if (opening && (running || item?.state === 'failed')) setOpening(false)
+  useEffect(() => {
+    if (opening && (running || item?.state === 'failed' || item?.state === 'prepared')) setOpening(false)
+  }, [opening, running, item?.state])
   const run = () => {
     if (!item) return
     setFailed(null)
@@ -646,18 +646,17 @@ function PreparePoster({ item, cover }: { item: ShaderPrepareGame | undefined; c
       .then(result => { if (!result.ok) { setOpening(false); setFailed(errorText(result.message, 'Could not start')) } })
       .catch((error: unknown) => { report(error, 'ShadersBoard.prepareRun'); setOpening(false); setFailed('Could not start') })
   }
-  const ask = useConfirmInPlace<HTMLButtonElement>('Opens the game, then closes it', run)
   if (!item) return null
   return (
     <div className={`exo-shaders-poster is-${running || opening ? 'live' : 'muted'}`}>
-      <button ref={ask.ref} type="button" onClick={running ? run : opening ? undefined : ask.press}
+      <button type="button" disabled={opening} onClick={run}
         aria-label={running ? `Stop watching ${item.title}` : `Run ${item.title}'s first launch`}>
         <span className="exo-shaders-art">
           <ArtImg src={cover} loading="lazy" decoding="async" draggable={false} fallback={<span className="exo-shaders-art-name">{item.title}</span>} />
         </span>
         <span className="exo-shaders-name">{item.title}</span>
         <span className={`exo-shaders-state${failed ? ' is-bad' : ''}`}>
-          {ask.armed ? <ConfirmLabel armed question="Opens the game, then closes it">{null}</ConfirmLabel> : opening ? 'Opening the game' : failed ?? prepareWord(item)}
+          {opening ? <><Spinner label="Opening game" />Opening…</> : failed ?? prepareWord(item)}
         </span>
       </button>
     </div>

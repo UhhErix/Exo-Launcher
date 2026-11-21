@@ -46,7 +46,10 @@ test('Liquid Glass renders real backdrop-filter blur over AMOLED black surfaces 
   assert.doesNotMatch(glassCss, /--glassy-fresnel-rim|--glassy-control-sheen|--exo-surface-control|mask-composite/)
   const blurBlock = /:where\(([\s\S]*?)\n\)\s*\{\s*backdrop-filter:\s*var\(--exo-control-glass\);/m.exec(glassCss)?.[1] ?? ''
   assert.ok(blurBlock.length > 0)
-  assert.match(blurBlock, /\.exo-set-btn:not\(\.is-primary\)/)
-  assert.match(blurBlock, /\.exo-pc-chip/)
-  assert.match(blurBlock, /\.exo-field\b/)
+  assert.match(blurBlock, /\.exo-badge\b/)
+  assert.match(blurBlock, /\.exo-game-close\b/)
+  assert.match(blurBlock, /\.exo-dc-msg-actions\b/)
+  assert.doesNotMatch(blurBlock, /\.exo-set-btn/)
+  assert.doesNotMatch(blurBlock, /\.exo-pc-chip/)
+  assert.doesNotMatch(blurBlock, /\.exo-field\b/)
 })

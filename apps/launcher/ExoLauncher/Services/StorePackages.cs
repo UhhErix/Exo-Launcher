@@ -161,6 +161,17 @@ internal static partial class StorePackages
             "Can't be undone here: only the Microsoft Store brings it back, if it has it", false);
     }
 
+    internal static (List<StorePackage> Chosen, bool Everyone) Plan(IReadOnlyList<StorePackage> packages, IReadOnlySet<string> ids, bool everyone)
+    {
+        var chosen = packages.Where(package => ids.Contains(package.Family) && Line(package, everyone) is not null).ToList();
+        if (chosen.Count == 0 && !everyone)
+        {
+            var allAccounts = packages.Where(package => ids.Contains(package.Family) && Line(package, true) is not null).ToList();
+            if (allAccounts.Count > 0) return (allAccounts, true);
+        }
+        return (chosen, everyone);
+    }
+
     /// <summary>
     /// The elevated step that removes a package for every account and from Windows' image. Its names travel encoded, as
     /// literals, and only names a package can have reach it; null for anything else.
