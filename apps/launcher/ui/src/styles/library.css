@@ -8,64 +8,201 @@
   font-weight: var(--exo-weight-title);
 }
 
-/* Continue: the games you are playing, big, landscape, Play one click away. */
-.exo-continue {
-  position: relative;
-  padding: 0 var(--exo-gutter) 22px;
-}
-
-/* Up to three equal banners, each filled edge to edge with its game's wide art. All games leaves out exactly these
-   (shell/useShelves.ts), so none is ever hidden here. */
-.exo-continue-row {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 12px;
-  margin-top: 12px;
-  height: clamp(200px, 28vh, 300px);
-}
-
-/* A narrow window (half a screen, a portrait screen): two banners a row, one at the narrowest, each wide enough for its
-   name, Play and More. Three across under about 1180px cut a name to its first word ("Rocket ..." at 960px). */
-@media (max-width: 1180px) {
-  .exo-continue-row {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    grid-auto-rows: clamp(160px, 18vh, 220px);
-    height: auto;
-  }
-
-  /* An odd count leaves no hole: the first (the game you're playing, or played last) takes the whole first row. */
-  .exo-continue-row:is([data-count='1'], [data-count='3']) > :first-child {
-    grid-column: 1 / -1;
-  }
-}
-
-@media (max-width: 640px) {
-  .exo-continue-row {
-    grid-template-columns: minmax(0, 1fr);
-  }
-}
-
-.exo-continue-card {
-  position: relative;
-  min-width: 0;
+.exo-library-pane.is-home {
+  display: flex;
+  flex-direction: column;
   overflow: hidden;
-  border-radius: var(--exo-panel-radius);
-  background: var(--exo-float);
-  /* No hairline: art has none (system.css drops it too); the edge is the art's own. */
-  transition: box-shadow var(--dur-base) var(--ease-out);
+  padding-top: 10px;
 }
 
-.exo-continue-open {
+.exo-home-deck {
+  position: relative;
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  justify-content: space-between;
+  min-width: 0;
+  min-height: 0;
+}
+
+.exo-home-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  pointer-events: none;
+  background: radial-gradient(ellipse 75% 80% at 50% 24%, var(--exo-surface-card) 0%, var(--color-bg) 78%);
+}
+
+.exo-home-backdrop::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--color-bg) 44%, transparent) 0%, color-mix(in srgb, var(--color-bg) 16%, transparent) 28%, color-mix(in srgb, var(--color-bg) 68%, transparent) 68%, var(--color-bg) 96%),
+    linear-gradient(90deg, color-mix(in srgb, var(--color-bg) 58%, transparent) 0%, color-mix(in srgb, var(--color-bg) 16%, transparent) 50%, color-mix(in srgb, var(--color-bg) 40%, transparent) 100%);
+}
+
+.exo-home-backdrop .exo-now-wash-img {
   position: absolute;
   inset: 0;
   z-index: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center 22%;
+  opacity: 0;
+  transition: opacity var(--dur-move) var(--ease-out);
+}
+
+.exo-home-backdrop .exo-now-wash-img.is-on {
+  opacity: 0.78;
+}
+
+.exo-home-backdrop .exo-now-wash-img.exo-cover-derived.is-on {
+  opacity: 0.56;
+  filter: blur(28px) saturate(1.25) brightness(0.8);
+  transform: scale(1.16) translateZ(0);
+}
+
+.exo-home-stage {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin: auto 0;
+  padding: 12px var(--exo-gutter) 0;
+  min-width: 0;
+}
+
+.exo-home-stage-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 0 2px;
+}
+
+.exo-home-stage-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--color-muted);
+  font-size: var(--exo-type-small);
+  font-weight: var(--exo-weight-title);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.exo-home-stage-count {
+  color: var(--color-faint);
+  font-weight: var(--exo-weight-control);
+  letter-spacing: normal;
+  text-transform: none;
+}
+
+.exo-home-nav {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.exo-home-step {
+  display: inline-grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
   padding: 0;
   border: 0;
-  background: none;
+  border-radius: 999px;
+  color: var(--color-fg);
   cursor: pointer;
 }
 
-.exo-continue-art {
+.exo-deck-track {
+  display: flex;
+  align-items: flex-end;
+  gap: 16px;
+  padding: 10px 4px 14px;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+}
+
+.exo-deck-track::-webkit-scrollbar {
+  display: none;
+}
+
+.exo-deck-card {
+  position: relative;
+  flex: none;
+  width: clamp(168px, 11.4vw, 204px);
+  height: clamp(252px, 28vh, 304px);
+  overflow: hidden;
+  border-radius: var(--exo-panel-radius);
+  background: var(--exo-surface-card);
+  opacity: 0.78;
+  transition:
+    width var(--dur-move) var(--ease-spring),
+    transform var(--dur-base) var(--ease-out),
+    opacity var(--dur-base) var(--ease-out);
+}
+
+.exo-deck-card.is-active {
+  width: clamp(430px, 31vw, 540px);
+  opacity: 1;
+  transform: translateY(-6px);
+  outline: 2px solid var(--color-fg);
+  outline-offset: 2px;
+  box-shadow: var(--exo-lift-shadow);
+}
+
+.exo-deck-card.is-playing:not(.is-active) {
+  outline: 1px solid var(--color-good);
+  outline-offset: 2px;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .exo-deck-card:not(.is-active):hover {
+    opacity: 1;
+    transform: translateY(-3px);
+  }
+}
+
+.exo-deck-card-btn {
+  position: relative;
+  display: block;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--color-fg);
+  text-align: left;
+  cursor: pointer;
+}
+
+.exo-deck-card-btn:focus-visible {
+  outline: none;
+}
+
+.exo-deck-card:has(.exo-deck-card-btn:focus-visible) {
+  outline: 2px solid var(--color-fg);
+  outline-offset: 3px;
+}
+
+.exo-deck-media {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  background: var(--exo-surface-card);
+}
+
+.exo-deck-art,
+.exo-deck-poster {
   position: absolute;
   inset: 0;
   width: 100%;
@@ -73,146 +210,263 @@
   object-fit: cover;
 }
 
-/* The art is shown whole, never faded or dimmed: the title sits on glass (.exo-continue-text), as Play and More do. */
-.exo-continue-scrim {
-  position: absolute;
-  inset: 0;
-}
-
-/* A card keeps its own surface and edge: with no art (or art still loading) Play and the title plate sit inside it. */
-.exo-continue-card:not(:has(.exo-now-wash-img.is-on)) {
-  box-shadow: inset 0 0 0 var(--exo-hair) var(--exo-float-line);
-}
-
-.exo-continue-card:has(.exo-now-wash-img.is-on) {
-  background: transparent;
-}
-
-/* A game with only its poster (one still downloading has no wide art yet): the poster stands whole and sharp in front
-   of its own wash, rather than the card being one blur. */
-.exo-continue-scrim .exo-now-wash-poster {
+.exo-deck-media .exo-now-wash-poster {
   position: absolute;
   top: 14px;
   left: 50%;
   z-index: 1;
-  height: calc(100% - 28px);
   width: auto;
+  height: calc(100% - 28px);
   border-radius: var(--exo-card-radius);
   transform: translateX(-50%);
   pointer-events: none;
 }
 
-/* The art and the scrim paint over the open button, so its own ring never showed: the ring is the card's, outside its edge
-   (as a tile's is), like every other stop. */
-.exo-continue-card .exo-continue-open:focus-visible {
-  outline: none;
-}
-.exo-continue-card:has(.exo-continue-open:focus-visible) {
-  outline: 2px solid var(--color-fg);
-  outline-offset: 2px;
-}
-
-.exo-continue-card.is-playing {
-  box-shadow: 0 0 0 var(--exo-hair) var(--color-good);
-}
-
-.exo-continue-info {
+.exo-deck-scrim {
   position: absolute;
-  right: 18px;
-  bottom: 16px;
-  left: 20px;
-  z-index: 2;
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 12px;
+  inset: 0;
+  z-index: 1;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--color-bg) 18%, transparent) 0%, transparent 38%, color-mix(in srgb, var(--color-bg) 88%, transparent) 100%);
   pointer-events: none;
 }
 
-/* The title and its line on a plate of small glass, sized to the words. */
-/* The plate gives way before Play does: on a narrow card the words shorten and Play stays inside the card's edge. */
-.exo-continue-text {
-  display: grid;
-  flex: 0 1 auto;
-  gap: 1px;
-  min-width: 0;
-  max-width: min(100%, 420px);
-  padding: 7px 14px 8px;
-  border-radius: var(--exo-card-radius);
+.exo-deck-top {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  left: 12px;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  pointer-events: none;
 }
 
-.exo-continue-text strong {
-  overflow: hidden;
-  font-size: calc(20px * var(--exo-scale, 1));
+.exo-deck-badges {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.exo-deck-pill {
+  display: inline-flex;
+  align-items: center;
+  height: 22px;
+  padding: 0 10px;
+  border-radius: 999px;
+  font-size: var(--exo-type-label);
   font-weight: var(--exo-weight-title);
   white-space: nowrap;
-  text-overflow: ellipsis;
 }
 
-.exo-continue-text span {
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-  color: var(--color-muted);
-  font-size: calc(13px * var(--exo-scale, 1));
-  font-weight: 500;
+.exo-deck-pill.is-good {
+  background: var(--color-good);
+  color: var(--color-on-good);
 }
 
-.exo-continue-text span.is-good {
-  color: var(--color-good);
+.exo-deck-pill.is-warn {
+  background: var(--color-warn);
+  color: var(--color-on-good);
 }
 
-/* Play is solid ink like the game sheet's (.exo-play): the one thing to press on the tile, over any art. The title's
-   plate stays glass. */
-.exo-continue-play {
+.exo-deck-store {
   display: inline-flex;
-  flex: none;
-  pointer-events: auto;
   align-items: center;
-  gap: 8px;
-  height: 40px;
-  padding: 0 20px 0 16px;
+  height: 24px;
+  padding: 0 10px;
+  border-radius: 999px;
+  color: var(--color-fg);
+  font-size: var(--exo-type-label);
+  font-weight: var(--exo-weight-control);
+  white-space: nowrap;
+}
+
+.exo-deck-caption {
+  position: absolute;
+  right: 14px;
+  bottom: 14px;
+  left: 14px;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  pointer-events: none;
+}
+
+.exo-deck-sub {
+  overflow: hidden;
+  color: var(--color-muted);
+  font-size: var(--exo-type-small);
+  font-weight: var(--exo-weight-control);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.exo-deck-name {
+  overflow: hidden;
+  color: var(--color-fg);
+  font-size: var(--exo-type-body);
+  font-weight: var(--exo-weight-title);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.exo-deck-card.is-active .exo-deck-name {
+  font-size: var(--exo-type-title);
+}
+
+.exo-home-foot {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px 24px;
+  padding: 16px var(--exo-gutter) 28px;
+}
+
+.exo-home-foot-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  flex: 1 1 320px;
+}
+
+.exo-home-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 14px;
+  font-size: var(--exo-type-small);
+  font-weight: var(--exo-weight-control);
+}
+
+.exo-home-status.is-good {
+  color: var(--color-good);
+  font-weight: var(--exo-weight-title);
+}
+
+.exo-home-status.is-warn {
+  color: var(--color-warn);
+  font-weight: var(--exo-weight-title);
+}
+
+.exo-home-status.is-muted {
+  color: var(--color-muted);
+}
+
+.exo-home-meta-item {
+  position: relative;
+  color: var(--color-muted);
+}
+
+.exo-home-meta-item::before {
+  content: "·";
+  margin-right: 14px;
+  color: var(--color-faint);
+}
+
+.exo-home-title {
+  margin: 0;
+  overflow: hidden;
+  color: var(--color-fg);
+  font-size: var(--exo-type-first-run);
+  font-weight: var(--exo-weight-title);
+  letter-spacing: -0.025em;
+  line-height: 1.06;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.exo-home-actions {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 10px;
+}
+
+.exo-home-play {
+  min-width: 144px;
+}
+
+.exo-home-room-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 44px;
+  padding: 0 18px;
   border: 0;
   border-radius: 999px;
-  background: var(--color-fg);
-  color: var(--color-primary-fg);
+  color: var(--color-fg);
   font: inherit;
-  font-size: calc(13px * var(--exo-scale, 1));
-  font-weight: var(--exo-weight-title);
+  font-size: var(--exo-type-body);
+  font-weight: var(--exo-weight-control);
   cursor: pointer;
-  transition: background-color var(--dur-quick) var(--ease-out), scale var(--dur-quick) var(--ease-out);
 }
 
-/* Starting: busy, not unavailable, so it stays at full strength saying Preparing (at 60% its words went see-through
-   over the art). */
-.exo-continue-play:disabled {
-  cursor: default;
+.exo-home-more-btn {
+  display: inline-grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  color: var(--color-fg);
+  cursor: pointer;
 }
 
-/* Gifts: one card per gift waiting on a store, its wide art, who sent it, their words, Accept and Decline. */
-.exo-gifts {
-  padding: 0 var(--exo-gutter) 22px;
+.exo-gifts-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 32px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 999px;
+  color: var(--color-fg);
+  font: inherit;
+  font-size: var(--exo-type-small);
+  font-weight: var(--exo-weight-control);
+  cursor: pointer;
+}
+
+.exo-gifts-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--color-good);
+}
+
+.exo-shelf-sort-menu.exo-gifts-popover {
+  width: min(560px, calc(100vw - 2 * var(--exo-gutter)));
+  max-height: min(70vh, 520px);
+  padding: 6px 12px 12px;
 }
 
 .exo-gifts-row {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(min(100%, 520px), 1fr));
-  gap: 10px;
-  margin: 12px 0 0;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 8px;
+  margin: 6px 0 0;
   padding: 0;
   list-style: none;
 }
 
 .exo-gift {
   display: grid;
-  grid-template-columns: 176px minmax(0, 1fr) auto;
+  grid-template-columns: 112px minmax(0, 1fr) auto;
   align-items: center;
-  gap: 16px;
-  min-height: 99px;
-  padding: 10px 16px 10px 10px;
+  gap: 12px;
+  min-height: 76px;
+  padding: 8px 10px 8px 8px;
   border-radius: var(--exo-card-radius);
   background: var(--exo-float);
-  box-shadow: none; /* the edge is the glass layer's one line (glass.css) */
+  box-shadow: none;
 }
 
 .exo-gift-art {
@@ -523,31 +777,52 @@
   padding-inline: 8px;
 }
 
-/* The Library's head (LibraryHead.tsx): the room's name and one quiet chip on the left, the search on the true middle,
-   Filter, sort, More and Add (the one primary) on the right, on the grid's 10px edge. Three columns, the outer two equal,
-   so the search stays centred whatever the tools' width. */
 .exo-library-head {
+  position: relative;
+  z-index: 4;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(220px, 440px) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr) minmax(220px, 380px) minmax(0, 1fr);
   align-items: center;
   gap: 16px;
-  padding: 6px var(--exo-gutter) 20px;
+  padding: 6px var(--exo-gutter) 16px;
 }
 
-.exo-library-name {
+.exo-library-head.is-home {
+  grid-template-columns: minmax(0, 1fr) auto;
+  padding-bottom: 8px;
+}
+
+.exo-library-tabs-wrap {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
   min-width: 0;
 }
 
-.exo-library-name h1 {
-  margin: 0;
-  color: var(--color-fg);
-  font-size: var(--exo-type-page);
+.exo-library-tabs {
+  height: 34px;
+  padding: 3px;
+}
+
+.exo-library-tab-count {
+  color: var(--color-faint);
+  font-size: var(--exo-type-label);
+  font-weight: var(--exo-weight-control);
+}
+
+.exo-shelf-chip[aria-pressed="true"] .exo-library-tab-count {
+  color: var(--color-primary-fg);
+  opacity: 0.7;
+}
+
+.exo-library-tab-count.has-updates {
+  color: var(--color-warn);
   font-weight: var(--exo-weight-title);
-  line-height: 1;
-  white-space: nowrap;
+}
+
+.exo-shelf-chip[aria-pressed="true"] .exo-library-tab-count.has-updates {
+  color: var(--color-primary-fg);
+  opacity: 1;
 }
 
 .exo-library-chip {

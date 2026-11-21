@@ -136,7 +136,7 @@ button.exo-glass:hover {
    its banner (clear glass at a control's dim left a title over white art at 2.5:1), and the labels and controls over a call's video (a tile's name,
    Watch Stream, a stream's name and buttons), and the image viewer's tools, steps and count: a deeper dim than a control on the page, so their small words and glyphs
    keep 4.5:1 over the brightest art or a white page shared. */
-:is(.exo-badge, .exo-tile-plate, .exo-store-badge, .exo-store-mark, .exo-continue-text,
+:is(.exo-badge, .exo-tile-plate, .exo-store-badge, .exo-store-mark, .exo-deck-store,
   .exo-sgp-pill, .exo-store-hero-tag, .exo-store-hero-name, .exo-capture-duration,
   .exo-capture-corner-btn, .exo-dc-alt-tag, .exo-dc-alt, .exo-dc-hidden-label, .exo-dc-voice-tile-name, .exo-dc-watch,
   .exo-dc-stream-bar :is(.exo-dc-stream-tools > .exo-dc-voice-btn, .exo-dc-stream-name, .exo-dc-stream-sound),

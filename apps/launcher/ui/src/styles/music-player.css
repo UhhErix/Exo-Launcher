@@ -151,8 +151,11 @@
   position: relative;
   min-width: 0;
   min-height: 0;
-  padding: 24px 32px 32px;
+  padding: 20px 24px 108px;
   overflow-y: auto;
+  border-radius: var(--exo-panel-radius);
+  background: var(--exo-float);
+  box-shadow: var(--glassy-ring);
   container: music-page / inline-size;
 }
 
@@ -242,14 +245,22 @@
   font-weight: var(--exo-weight-title);
 }
 
-/* Recently played: up to eight compact tiles above Home's shelves, four across as Spotify lays them, so they fill
-   their rows (auto-fill left four tiles in six columns, the right third empty). A column is never under a quarter, so
-   never more than four; in a narrow window (half a screen) never under 200px either, so fewer and wider, each name
-   readable ("Lik..." four across at 960px). */
 .exo-music-recent {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(max(200px, calc(25% - 6px)), 1fr));
-  gap: 8px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+@container music-page (max-width: 920px) {
+  .exo-music-recent {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@container music-page (max-width: 520px) {
+  .exo-music-recent {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 
 .exo-music-recent-tile {
@@ -1706,6 +1717,7 @@ html[data-exo-motion="reduce"] .exo-music-lyrics.is-synced li.is-active span.is-
   height: var(--exo-immersive-art-size);
   margin-bottom: 8px;
   border-radius: var(--exo-panel-radius);
+  box-shadow: var(--exo-lift-shadow);
 }
 
 .exo-music-immersive-text {

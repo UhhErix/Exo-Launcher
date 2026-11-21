@@ -1,91 +1,139 @@
 import { useEffect, useId, useRef, useState, type ReactNode } from 'react'
 import { Close, Filter, Search } from '../../brand/icons'
 import { useDismissOnAncestorScroll } from '../../lib/dismiss'
+import { useGlide } from '../../lib/glide'
 import { filterKey, filterLabel, type LibraryFilter } from '../../lib/librarySearch'
+import { GiftsPill } from './GiftsShelf'
 
-/** One row of the Filter menu: the filter it sets, under its section. */
 export type FilterOption = { section: string; filter: LibraryFilter; disabled?: boolean }
+export type LibraryTab = 'home' | 'installed' | 'all' | 'updates'
 
-/**
- * The Library's head (DESIGN.md › Library): the room's name with one quiet chip of how many games, the search in the
- * middle, then Filter, the sort, More and Add at the right (Add the one primary). Under it, only while any is set, the
- * filters as chips, each removed by its ×, and what the search understood.
- */
-export function LibraryHead({ empty, total, found, query, onQuery, understood, filters, options, onFilter, onClear, onWarmFilters, tools }: {
-  /** No games yet (or none could be read): only the room's name, for screen readers, over the empty state. */
+export function LibraryHead({
+  empty,
+  tab,
+  onTab,
+  total,
+  installedCount,
+  updatesCount,
+  found,
+  query,
+  onQuery,
+  understood,
+  filters,
+  options,
+  onFilter,
+  onClear,
+  onWarmFilters,
+  tools,
+}: {
   empty: boolean
+  tab: LibraryTab
+  onTab: (next: LibraryTab) => void
   total: number
-  /** The games the search and filters leave, or null with neither. */
+  installedCount: number
+  updatesCount: number
   found: readonly unknown[] | null
   query: string
   onQuery: (query: string) => void
-  /** The words the search read as filters ("Racing", "Not played"). */
   understood: string[]
   filters: LibraryFilter[]
   options: FilterOption[]
   onFilter: (filter: LibraryFilter) => void
   onClear: () => void
-  /** The Filter menu is about to open (pointed at or focused): what it lists that costs a read (friends) is read now. */
   onWarmFilters: () => void
-  /** Sort, More and Add. */
   tools: ReactNode
 }) {
   const field = useRef<HTMLInputElement>(null)
-  // Ctrl+F finds in the Library, as in any list; the Bar's Ctrl+K stays the one for everything.
+  const tabsGlide = useGlide<HTMLDivElement>()
+  const isHome = tab === 'home'
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if (event.defaultPrevented || !(event.ctrlKey || event.metaKey) || event.key.toLowerCase() !== 'f' || event.shiftKey || event.altKey) return
-      const input = field.current
-      if (!input?.checkVisibility()) return
+      const room = document.querySelector('[data-log-area="library"]')
+      if (!room || room.hasAttribute('hidden') || room.classList.contains('is-backstage')) return
       event.preventDefault()
-      input.focus()
-      input.select()
+      if (isHome) {
+        onTab('all')
+        requestAnimationFrame(() => {
+          field.current?.focus()
+          field.current?.select()
+        })
+        return
+      }
+      field.current?.focus()
+      field.current?.select()
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [])
+  }, [isHome, onTab])
   if (empty) return <h1 className="sr-only">Library</h1>
+  const tabs: ReadonlyArray<{ id: LibraryTab; label: string; count?: number }> = [
+    { id: 'home', label: 'Home' },
+    { id: 'installed', label: 'Installed', count: installedCount },
+    { id: 'all', label: 'All Games', count: total },
+    { id: 'updates', label: 'Updates', count: updatesCount },
+  ]
   return (
     <>
-      <header className="exo-library-head">
-        <div className="exo-library-name">
-          <h1>Library</h1>
-          {found != null ? (
+      <header className={`exo-library-head${isHome ? ' is-home' : ''}`}>
+        <div className="exo-library-tabs-wrap">
+          <h1 className="sr-only">Library</h1>
+          <div ref={tabsGlide} className="exo-glass exo-shelf-chips exo-glide exo-library-tabs" role="group" aria-label="Library view">
+            {tabs.map(item => (
+              <button
+                key={item.id}
+                type="button"
+                className="exo-shelf-chip"
+                aria-pressed={tab === item.id}
+                onClick={() => onTab(item.id)}
+              >
+                <span>{item.label}</span>
+                {item.count != null ? (
+                  <span className={`exo-library-tab-count tabular-nums${item.id === 'updates' && item.count > 0 ? ' has-updates' : ''}`}>
+                    {item.count.toLocaleString('en-US')}
+                  </span>
+                ) : null}
+              </button>
+            ))}
+          </div>
+          {!isHome && found != null ? (
             <span className="exo-library-chip tabular-nums">
               {`${found.length.toLocaleString('en-US')} of ${total.toLocaleString('en-US')}`}
             </span>
           ) : null}
         </div>
-        <label className="exo-library-search">
-          <Search size={16} />
-          <input
-            ref={field}
-            type="search"
-            value={query}
-            placeholder="Search your games"
-            aria-label="Search your games"
-            spellCheck={false}
-            autoComplete="off"
-            onChange={event => onQuery(event.target.value)}
-            onKeyDown={event => {
-              if (event.key !== 'Escape' || !query) return
-              event.preventDefault()
-              event.stopPropagation()
-              onQuery('')
-            }}
-          />
-          {query ? (
-            <button type="button" className="exo-library-search-clear" aria-label="Clear search" onClick={() => { onQuery(''); field.current?.focus() }}>
-              <Close size={14} />
-            </button>
-          ) : null}
-        </label>
+        {!isHome ? (
+          <label className="exo-library-search">
+            <Search size={16} />
+            <input
+              ref={field}
+              type="search"
+              value={query}
+              placeholder="Search your games"
+              aria-label="Search your games"
+              spellCheck={false}
+              autoComplete="off"
+              onChange={event => onQuery(event.target.value)}
+              onKeyDown={event => {
+                if (event.key !== 'Escape' || !query) return
+                event.preventDefault()
+                event.stopPropagation()
+                onQuery('')
+              }}
+            />
+            {query ? (
+              <button type="button" className="exo-library-search-clear" aria-label="Clear search" onClick={() => { onQuery(''); field.current?.focus() }}>
+                <Close size={14} />
+              </button>
+            ) : null}
+          </label>
+        ) : null}
         <div className="exo-library-tools">
-          <FilterPopover filters={filters} options={options} onFilter={onFilter} onClear={onClear} onWarm={onWarmFilters} />
+          {isHome ? <GiftsPill /> : <FilterPopover filters={filters} options={options} onFilter={onFilter} onClear={onClear} onWarm={onWarmFilters} />}
           {tools}
         </div>
       </header>
-      {filters.length || understood.length ? (
+      {!isHome && (filters.length || understood.length) ? (
         <div className="exo-library-chips" role="group" aria-label="Filters">
           {understood.map(word => <span key={'q:' + word} className="exo-library-chip is-understood"><Search size={12} />{word}</span>)}
           {filters.map(filter => (

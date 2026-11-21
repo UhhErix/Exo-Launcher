@@ -381,20 +381,16 @@ body,
    group armed). Once armed, the chosen item hands its hover fill to the glide over the move: it holds the fill for a
    press's beat, then lets it go on the quick time as the glide lands, so a pressed row never goes empty; while the
    fill travels no other row shows a hover fill, so the two never overlap. Its words and press keep their own times. */
-.exo-glide :is([aria-pressed='true'], [aria-checked='true'], [aria-selected='true'], [aria-current]:not([aria-current='false'])) {
-  background-color: transparent !important;
-}
-
-/* On the white pill the words are black. A list of rows keeps its ink: its chosen row is a fill, not the pill. */
-.exo-glide:not(.exo-dc-side-list) :is([aria-pressed='true'], [aria-checked='true'], [aria-selected='true'], [aria-current]:not([aria-current='false'])) {
-  color: var(--color-primary-fg) !important;
-}
-
 .exo-glide.is-glide-ready :is([aria-pressed='true'], [aria-checked='true'], [aria-selected='true'], [aria-current]:not([aria-current='false'])) {
+  background-color: transparent !important;
   transition:
     background-color var(--dur-quick) var(--ease-out) var(--dur-press),
     color var(--dur-quick) var(--ease-out),
     scale var(--dur-quick) var(--ease-out);
+}
+
+.exo-glide:not(.exo-dc-side-list) :is([aria-pressed='true'], [aria-checked='true'], [aria-selected='true'], [aria-current]:not([aria-current='false'])) {
+  color: var(--color-primary-fg) !important;
 }
 
 .exo-glide.is-gliding :is(button, a, label, [role='tab'], [role='radio'], [role='option']):hover {

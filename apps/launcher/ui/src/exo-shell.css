@@ -206,7 +206,7 @@ img[data-exo-broken] {
     background-color: var(--hover-fill);
   }
 
-  :is(.exo-set-btn.is-primary, .exo-play, .exo-continue-play):hover:not(:disabled) {
+  :is(.exo-set-btn.is-primary, .exo-play):hover:not(:disabled) {
     background-color: var(--exo-primary-hover);
   }
 }

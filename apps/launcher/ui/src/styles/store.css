@@ -122,7 +122,6 @@
   transform: scale(1.2);
 }
 
-/* The big games: banner left, the list right. */
 .exo-store-hero {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(220px, 300px);
@@ -131,8 +130,10 @@
   container-type: inline-size;
 }
 
-/* 96:31 of its column (the hero's width less the 300px list and the gap), never under 260px tall. As an
-   aspect-ratio with a min-height, a narrow window widened it to 805px, under the list. */
+.exo-store-hero.is-single {
+  grid-template-columns: minmax(0, 1fr);
+}
+
 .exo-store-hero-stage {
   position: relative;
   display: block;
@@ -145,6 +146,10 @@
   background: var(--color-bg);
   color: inherit;
   cursor: pointer;
+}
+
+.exo-store-hero.is-single .exo-store-hero-stage {
+  height: max(300px, min(52vh, calc(100cqw * 29 / 96)));
 }
 
 .exo-store-hero-art,
@@ -1148,55 +1153,6 @@ button.exo-sgp-thumb::after {
     height: auto;
     width: 84px;
   }
-}
-
-/* The calendar's days flow side by side, each as wide as its games (StoreRoom.tsx › Calendar): a day with one game
-   takes one card's room, not a row, and a busy day wraps its own games. */
-.exo-cal-days {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 28px 32px;
-  padding: 8px var(--exo-gutter) 32px;
-}
-
-.exo-cal-day {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  min-width: 0;
-  max-width: 100%;
-}
-
-.exo-cal-date {
-  margin: 0;
-  padding-bottom: 8px;
-  border-bottom: 1px solid var(--exo-float-line);
-  color: var(--color-fg);
-  font-size: calc(13px * var(--exo-scale, 1));
-  font-weight: var(--exo-weight-title);
-  white-space: nowrap;
-}
-
-.exo-cal-games {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 16px 12px;
-}
-
-.exo-cal-item {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  width: 132px;
-  min-width: 0;
-}
-
-/* Under a game (Early Access), and under a date (a Steam sale's first or last day). */
-.exo-cal-why,
-.exo-cal-mark {
-  margin: 0;
-  color: var(--color-muted);
-  font-size: calc(12px * var(--exo-scale, 1));
 }
 
 .exo-store-hero-tags {

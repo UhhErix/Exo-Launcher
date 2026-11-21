@@ -19,7 +19,7 @@ const ADD_ITEMS = [
  * bar's Done, or Escape, ends it), Downloads, and Refresh library, while the covers shine. Add, the room's one primary,
  * adds a folder, a game's .exe or a key.
  */
-export function LibraryTools({ selecting, onSelecting, sort, onSort, hidden, onHidden, onActivateKey, onNewFolder, onAddGame, refreshing, onRefresh }: {
+export function LibraryTools({ selecting, onSelecting, sort, onSort, hidden, onHidden, onActivateKey, onNewFolder, onAddGame, refreshing, onRefresh, showSort = true }: {
   selecting: boolean
   onSelecting: (on: boolean) => void
   sort: SortMode
@@ -27,31 +27,32 @@ export function LibraryTools({ selecting, onSelecting, sort, onSort, hidden, onH
   hidden: boolean
   onHidden: (hidden: boolean) => void
   onActivateKey: () => void
-  /** A Library folder: its name, color and games (FolderSheet). */
   onNewFolder: () => void
-  /** A game's own .exe. */
   onAddGame: () => void
   refreshing: boolean
   onRefresh: () => void
+  showSort?: boolean
 }) {
   const [downloads, setDownloads] = useState(false)
   const actions: Record<string, () => void> = { 'new-folder': onNewFolder, game: onAddGame, key: onActivateKey, select: () => onSelecting(true), refresh: onRefresh, downloads: () => setDownloads(true) }
   return (
     <>
       <DownloadsSheet open={downloads} onClose={() => setDownloads(false)} />
-      <Menu
-        label="Sort library"
-        anchor="--exo-sort-menu"
-        offset={4}
-        triggerClassName="exo-shelf-sort-trigger"
-        trigger={<>{SORT_LABELS[sort]}<ChevronDown size={12} /></>}
-        items={[
-          ...SORT_ITEMS.map(item => ({ ...item, on: item.id === sort })),
-          { id: 'all', label: 'All games', section: 'Show', on: !hidden },
-          { id: 'hidden', label: 'Hidden games', section: 'Show', on: hidden },
-        ]}
-        onAction={(id) => id === 'all' || id === 'hidden' ? onHidden(id === 'hidden') : onSort(id as SortMode)}
-      />
+      {showSort ? (
+        <Menu
+          label="Sort library"
+          anchor="--exo-sort-menu"
+          offset={4}
+          triggerClassName="exo-shelf-sort-trigger"
+          trigger={<>{SORT_LABELS[sort]}<ChevronDown size={12} /></>}
+          items={[
+            ...SORT_ITEMS.map(item => ({ ...item, on: item.id === sort })),
+            { id: 'all', label: 'All games', section: 'Show', on: !hidden },
+            { id: 'hidden', label: 'Hidden games', section: 'Show', on: hidden },
+          ]}
+          onAction={(id) => id === 'all' || id === 'hidden' ? onHidden(id === 'hidden') : onSort(id as SortMode)}
+        />
+      ) : null}
       <Menu
         label="More"
         anchor="--exo-library-more"

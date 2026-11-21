@@ -39,8 +39,7 @@
   align-items: center;
   gap: 8px;
   min-width: 0;
-  /* Room for the marks that sit past a face's edge. */
-  padding: 4px 6px;
+  padding: 6px 8px;
   overflow: auto hidden;
   overscroll-behavior: contain;
   scrollbar-width: none;
@@ -151,7 +150,7 @@
 
 :root .exo-dc .exo-dc-band-place > .exo-dc-badge {
   position: absolute;
-  top: 0;
+  top: 2px;
   left: calc(4px + 44px * var(--exo-scale, 1) - 14px);
   box-shadow: 0 0 0 2px var(--color-bg);
 }
@@ -813,13 +812,15 @@
 :root .exo-dc .exo-dc-friends .exo-dc-friend-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(calc(280px * var(--exo-scale, 1)), 1fr));
-  gap: 2px 8px;
+  gap: 8px 10px;
 }
 
 :root .exo-dc .exo-dc-friends .exo-dc-friend {
   min-height: var(--dc-row-h);
-  padding: 0 4px 0 8px;
-  border-radius: 999px;
+  padding: 8px 10px 8px 12px;
+  border-radius: var(--exo-card-radius);
+  background: var(--exo-surface-card);
+  box-shadow: var(--exo-rim);
 }
 
 :root .exo-dc .exo-dc-friends .exo-dc-side-label {

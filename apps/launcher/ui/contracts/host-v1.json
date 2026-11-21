@@ -310,7 +310,6 @@
     "steam.signInQr": "SteamSignInStep",
     "steam.signOut": "{ ok: boolean }",
     "steamInput.state": "{ ok: boolean; steam: boolean; native: number; translated: number }",
-    "store.calendar": "StoreCalendar",
     "store.game": "StoreGame",
     "store.gameOffers": "StoreOtherOffers",
     "store.gameReviews": "StoreRecentReviews",

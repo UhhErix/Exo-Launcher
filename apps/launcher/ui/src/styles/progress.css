@@ -108,8 +108,7 @@
   opacity: 1;
 }
 
-/* On a filled primary the bar takes the primary's words' color: the page's ink is the fill itself. */
-:is(.exo-play, .exo-set-btn.is-primary, .exo-continue-play, .button--primary) > .exo-progress {
+:is(.exo-play, .exo-set-btn.is-primary, .button--primary) > .exo-progress {
   --exo-progress-ink: currentColor;
 }
 

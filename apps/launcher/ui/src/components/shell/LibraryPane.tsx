@@ -1,10 +1,8 @@
 import { CopyLogs } from '../ui/ErrorNote'
 import { lazy, memo, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent, type RefObject } from 'react'
-import { ContinueRow } from './ContinueRow'
+import { HomeDeck } from './HomeDeck'
 import { FolderPanel } from './FolderPanel'
-// The new-folder sheet (with its cropper) loads the first time one opens, not at startup.
 const FolderSheet = lazy(() => import('./FolderSheet').then(m => ({ default: m.FolderSheet })))
-import { GiftsShelf } from './GiftsShelf'
 import { GameMenu, type GameMenuAt } from './GameMenu'
 import { LibrarySelectBar } from './LibrarySelectBar'
 import { type Game, type InstallProgress, type LibraryFolder, type SortMode } from '../../lib/host'
@@ -18,7 +16,7 @@ import { BrowseShelf } from '../BrowseShelf'
 import { LibraryEmpty, LibraryTools, type LibraryRefreshRun } from './LibraryShelf'
 import { setCoversShining } from '../GameCard'
 import { markShellReady } from '../../lib/shellReady'
-import { LibraryHead } from './LibraryHead'
+import { LibraryHead, type LibraryTab } from './LibraryHead'
 import { useLibrarySearch } from './useLibrarySearch'
 import { gamesFriendsPlay, useFriends } from '../../lib/friendsPlaying'
 
@@ -189,10 +187,9 @@ function dissolve(card: Element | null | undefined, done: () => void) {
 /** A grid card's tile, while it is mounted. */
 const gridTile = (id: string) => document.querySelector(`.exo-library-pane .exo-windowed-game-grid [data-game-id="${CSS.escape(id)}"]`)?.closest('.exo-tile')
 
-const paneClass = (overlayOpen: boolean, selecting: boolean) =>
-  `exo-library-pane min-w-0 flex-1${overlayOpen ? ' is-overlay-open' : ''}${selecting ? ' is-selecting' : ''}`
+const paneClass = (overlayOpen: boolean, selecting: boolean, isHome: boolean) =>
+  `exo-library-pane min-w-0 flex-1${overlayOpen ? ' is-overlay-open' : ''}${selecting ? ' is-selecting' : ''}${isHome ? ' is-home' : ''}`
 
-/** Reads the friends list while mounted (only once the Filter menu or a search asks for it) and says which games here they play. */
 function FriendsReader({ games, onPlaying }: { games: Game[]; onPlaying: (ids: ReadonlySet<string>) => void }) {
   const { friends } = useFriends()
   useEffect(() => onPlaying(gamesFriendsPlay(friends, games)), [friends, games, onPlaying])
@@ -201,7 +198,6 @@ function FriendsReader({ games, onPlaying }: { games: Game[]; onPlaying: (ids: R
 
 const FriendsPlaying = ({ on, ...rest }: { on: boolean } & Parameters<typeof FriendsReader>[0]) => on ? <FriendsReader {...rest} /> : null
 
-/** Under the grid: why it is empty, and with a search, the way back. */
 function ShelfNote({ note, searching, onClear }: { note: string | null; searching: boolean; onClear: () => void }) {
   if (!note) return null
   return (
@@ -212,14 +208,67 @@ function ShelfNote({ note, searching, onClear }: { note: string | null; searchin
   )
 }
 
-/** The grid's heading, cards and a note under them: All games (folders first), or Hidden games only. */
-function shelfView(showHidden: boolean, hidden: Game[], grid: Game[]) {
-  return showHidden ? {
-    heading: 'Hidden games', games: hidden,
-    note: hidden.length ? null : 'No hidden games',
-  } : {
-    heading: 'All games', games: grid,
-    note: grid.length === 0 && hidden.length > 0 ? 'Every game is hidden' : null,
+function LibraryRefreshNotice({
+  empty,
+  error,
+  refreshError,
+  refreshing,
+  onRetry,
+  onRefresh,
+}: {
+  empty: boolean
+  error: string | null
+  refreshError: string | null
+  refreshing: boolean
+  onRetry: () => void
+  onRefresh: () => void
+}) {
+  if (empty) return null
+  if (error) {
+    return (
+      <div className="exo-library-refresh-error" role="status">
+        <span>Showing saved games. Exo could not refresh them.</span>
+        <button type="button" className="exo-set-btn" onClick={onRetry}>Try again</button>
+        <CopyLogs error={error} />
+      </div>
+    )
+  }
+  if (!refreshError || refreshing) return null
+  return (
+    <div className="exo-library-refresh-error" role="alert">
+      <span>Exo could not refresh the library.</span>
+      <button type="button" className="exo-set-btn" onClick={onRefresh}>Try again</button>
+      <CopyLogs error={refreshError} />
+    </div>
+  )
+}
+
+function shelfView(tab: LibraryTab, showHidden: boolean, hidden: Game[], allGrid: Game[], installed: Game[], updates: Game[]) {
+  if (showHidden) {
+    return {
+      heading: 'Hidden games',
+      games: hidden,
+      note: hidden.length ? null : 'No hidden games',
+    }
+  }
+  if (tab === 'installed') {
+    return {
+      heading: 'Installed',
+      games: installed,
+      note: installed.length ? null : 'No installed games yet',
+    }
+  }
+  if (tab === 'updates') {
+    return {
+      heading: 'Updates',
+      games: updates,
+      note: updates.length ? null : 'Everything is up to date',
+    }
+  }
+  return {
+    heading: 'All games',
+    games: allGrid,
+    note: allGrid.length === 0 && hidden.length > 0 ? 'Every game is hidden' : null,
   }
 }
 
@@ -230,24 +279,27 @@ export const LibraryPane = memo(function LibraryPane(props: LibraryPaneProps) {
   const [refreshing, runRefresh, refreshError] = useRefresh(props.onRefresh)
   const [menu, setMenu] = useState<GameMenuAt | null>(null)
   const { onOpen, folders, onFolders, overlayOpen: covered, hiddenIds, onHidden } = props
-  // Library › Hidden games (the sort menu's Show section): only the games you hid, each with Unhide. Not saved: the
-  // Library opens on All games.
+  const [tab, setTab] = useState<LibraryTab>('home')
   const [showHidden, setShowHidden] = useState(false)
-  // A game in Continue sits there only: All games lists the rest, its folders first as one card each.
   const { playing, games } = props
-  const rest = useMemo(() => {
-    const shown = new Set(playing.map(game => game.id))
-    return shown.size ? games.filter(game => !shown.has(game.id)) : games
-  }, [playing, games])
-  const grid = useMemo(() => withFolders(rest, games, folders), [rest, games, folders])
-  const search = useLibrarySearch(games, shelfView(showHidden, props.hidden, grid), showHidden)
+  const installedGames = useMemo(() => games.filter(game => game.installed), [games])
+  const updateGames = useMemo(() => games.filter(game => game.updateAvailable), [games])
+  const grid = useMemo(() => withFolders(games, games, folders), [games, folders])
+  const search = useLibrarySearch(
+    games,
+    shelfView(tab, showHidden, props.hidden, grid, installedGames, updateGames),
+    showHidden,
+  )
   const { shelf, found } = search
-  // Select mode (More's Select games): null outside it, else the picked games. A press picks a game, Shift a run of them
-  // from the last one pressed, Ctrl+A every game; Done or Escape ends it, as does any action, leaving the room or
-  // opening a game. Folders and Continue aren't picked.
+  const homeDeckGames = playing.length ? playing : games.slice(0, 8)
+  const showingHome = !props.empty && tab === 'home' && !showHidden && search.browsing && homeDeckGames.length > 0
   const [picked, setPicked] = useState<ReadonlySet<string> | null>(null)
   const anchor = useRef<string | null>(null)
-  const selectMode = useCallback((on: boolean) => { setPicked(on ? new Set() : null); anchor.current = null }, [])
+  const selectMode = useCallback((on: boolean) => {
+    if (on && tab === 'home') setTab('all')
+    setPicked(on ? new Set() : null)
+    anchor.current = null
+  }, [tab])
   const pickable = useMemo(() => shelf.games.filter(game => !isFolderTile(game)), [shelf.games])
   const pickedGames = useMemo(() => picked ? pickable.filter(game => picked.has(game.id)) : [], [picked, pickable])
   const selecting = !!picked
@@ -264,14 +316,22 @@ export const LibraryPane = memo(function LibraryPane(props: LibraryPaneProps) {
       return next
     })
   }, [pickable])
-  // Switching between All games and Hidden games starts the pick again.
-  const hiddenView = useCallback((on: boolean) => { setShowHidden(on); setPicked(current => current && new Set()) }, [])
-  // Reset scroll to the top when the list's filter, sort, view or search query changes.
+  const hiddenView = useCallback((on: boolean) => {
+    if (on && tab === 'home') setTab('all')
+    setShowHidden(on)
+    setPicked(current => current && new Set())
+  }, [tab])
+  const switchTab = useCallback((next: LibraryTab) => {
+    setTab(next)
+    setShowHidden(false)
+    setPicked(null)
+    if (next === 'home') search.clear()
+  }, [search])
   const resetScroll = useRef(false)
   useEffect(() => {
     if (!resetScroll.current) { resetScroll.current = true; return }
     if (props.mainRef.current) props.mainRef.current.scrollTop = 0
-  }, [props.mainRef, showHidden, sort, search.query, search.filters])
+  }, [props.mainRef, tab, showHidden, sort, search.query, search.filters])
   // The open folder; a new `rename` key opens it again with its name ready to type.
   const [open, setOpen] = useState<{ id: string; rename: number } | null>(null)
   const openTile = useMemo(() => open ? grid.find((item): item is FolderTile => isFolderTile(item) && item.folder.id === open.id) : undefined, [open, grid])
@@ -429,43 +489,42 @@ export const LibraryPane = memo(function LibraryPane(props: LibraryPaneProps) {
   // Library keeps them (the pane is inert under it), so the shelf's header never changes height.
   const tools = useMemo(() => active ? (
     <LibraryTools selecting={selecting} onSelecting={selectMode} sort={sort} onSort={onSort} hidden={showHidden} onHidden={hiddenView}
-      onActivateKey={onActivateKey} onNewFolder={() => newFolder()} onAddGame={onAddGame} refreshing={refreshing} onRefresh={runRefresh} />
-  ) : null, [active, selecting, selectMode, sort, onSort, showHidden, hiddenView, onActivateKey, newFolder, onAddGame, refreshing, runRefresh])
+      onActivateKey={onActivateKey} onNewFolder={() => newFolder()} onAddGame={onAddGame} refreshing={refreshing} onRefresh={runRefresh} showSort={!showingHome} />
+  ) : null, [active, selecting, selectMode, sort, onSort, showHidden, hiddenView, onActivateKey, newFolder, onAddGame, refreshing, runRefresh, showingHome])
   return (
     <div className="relative z-10 flex min-h-0 min-w-0 flex-1">
       <main
         ref={props.mainRef}
-        className={paneClass(overlayOpen, selecting)}
+        className={paneClass(overlayOpen, selecting, showingHome)}
         inert={overlayOpen ? true : undefined}
         style={cardWidth == null ? undefined : { '--exo-card-w': `${cardWidth}px` } as CSSProperties}
       >
         <LibraryHead
           empty={props.empty}
+          tab={tab}
+          onTab={switchTab}
           total={games.length}
+          installedCount={installedGames.length}
+          updatesCount={updateGames.length}
           found={found}
           query={search.query}
-          onQuery={next => { if (showHidden && next) setShowHidden(false); search.setQuery(next) }}
+          onQuery={next => { if (showHidden && next) setShowHidden(false); if (tab === 'home' && next) setTab('all'); search.setQuery(next) }}
           understood={search.read.understood}
           filters={search.filters}
           options={search.options}
-          onFilter={filter => { if (showHidden) setShowHidden(false); search.toggleFilter(filter) }}
+          onFilter={filter => { if (showHidden) setShowHidden(false); if (tab === 'home') setTab('all'); search.toggleFilter(filter) }}
           onClear={search.clear}
           onWarmFilters={search.wantFriends}
           tools={tools}
         />
-        {!props.empty && props.error ? (
-          <div className="exo-library-refresh-error" role="status">
-            <span>Showing saved games. Exo could not refresh them.</span>
-            <button type="button" className="exo-set-btn" onClick={props.onRetry}>Try again</button>
-            <CopyLogs error={props.error} />
-          </div>
-        ) : !props.empty && refreshError && !refreshing ? (
-          <div className="exo-library-refresh-error" role="alert">
-            <span>Exo could not refresh the library.</span>
-            <button type="button" className="exo-set-btn" onClick={runRefresh}>Try again</button>
-            <CopyLogs error={refreshError} />
-          </div>
-        ) : null}
+        <LibraryRefreshNotice
+          empty={props.empty}
+          error={props.error}
+          refreshError={refreshError}
+          refreshing={refreshing}
+          onRetry={props.onRetry}
+          onRefresh={runRefresh}
+        />
         {props.empty ? (
           <LibraryEmpty
             error={props.error}
@@ -474,28 +533,36 @@ export const LibraryPane = memo(function LibraryPane(props: LibraryPaneProps) {
             onActivateKey={props.onActivateKey}
             onStoreSettings={props.onStoreSettings}
           />
+        ) : showingHome ? (
+          <HomeDeck
+            games={homeDeckGames}
+            active={active && !covered}
+            blocked={blocked}
+            transferFor={props.transferFor}
+            startingId={props.startingId}
+            onOpen={onOpen}
+            onPlay={props.onPlay}
+            onProperties={props.onProperties}
+            onMenu={openMenu}
+          />
         ) : (
           <div className="flex min-h-0 min-w-0 w-full flex-1 flex-col">
-            <div className="contents" hidden={!search.browsing}>
-              <ContinueRow games={props.playing} transferFor={props.transferFor} startingId={props.startingId} onOpen={onOpen} onPlay={props.onPlay} onMenu={openMenu} />
-              <GiftsShelf />
-            </div>
             <div className="exo-library-grid">
-            <BrowseShelf
-              heading={shelf.heading}
-              games={shelf.games}
-              selectedId={props.selectedId}
-              activeGameId={props.activeGameId}
-              onActiveGameChange={props.onActiveGameChange}
-              onSelect={select}
-              onMenu={openMenu}
-              onMoveFolder={moveTo}
-              transferFor={props.transferFor}
-              queuedIds={props.queuedIds}
-              pickedIds={picked}
-              scrollRootRef={props.mainRef}
-              cardWidth={cardWidth}
-            />
+              <BrowseShelf
+                heading={shelf.heading}
+                games={shelf.games}
+                selectedId={props.selectedId}
+                activeGameId={props.activeGameId}
+                onActiveGameChange={props.onActiveGameChange}
+                onSelect={select}
+                onMenu={openMenu}
+                onMoveFolder={moveTo}
+                transferFor={props.transferFor}
+                queuedIds={props.queuedIds}
+                pickedIds={picked}
+                scrollRootRef={props.mainRef}
+                cardWidth={cardWidth}
+              />
             </div>
             <ShelfNote note={shelf.note} searching={!!found} onClear={search.clear} />
           </div>

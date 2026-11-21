@@ -166,6 +166,9 @@ export function useGlide<T extends HTMLElement>() {
     const onTransition = () => { if (!document.documentElement.hasAttribute('data-exo-vt')) again() }
     const transitions = new MutationObserver(onTransition)
     transitions.observe(document.documentElement, { attributes: true, attributeFilter: ['data-exo-vt'] })
+    const room = box.closest('.exo-room')
+    const roomObserver = room ? new MutationObserver(again) : null
+    if (room && roomObserver) roomObserver.observe(room, { attributes: true, attributeFilter: ['class', 'hidden'] })
     document.addEventListener('visibilitychange', shown)
     window.addEventListener('focus', again)
     return () => {
@@ -176,6 +179,7 @@ export function useGlide<T extends HTMLElement>() {
       attributes.disconnect()
       sizes.disconnect()
       transitions.disconnect()
+      roomObserver?.disconnect()
       document.removeEventListener('visibilitychange', shown)
       window.removeEventListener('focus', again)
     }

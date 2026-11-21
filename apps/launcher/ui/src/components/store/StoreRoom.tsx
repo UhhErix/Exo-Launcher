@@ -3,7 +3,7 @@ import { Wait, sample, times } from '../ui/Wait'
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import { Bookmark, CHECK_PATH, ChevronLeft, ChevronRight, Close, Refresh, Search } from '../../brand/icons'
 import { shouldReduceMotion } from '../../lib/motionPreference'
-import { host, onHostEvent, type Game, type StoreCalendar, type StoreHome, type StoreTile } from '../../lib/host'
+import { host, onHostEvent, type Game, type StoreHome, type StoreTile } from '../../lib/host'
 import { onPageActivityChanged, pageIsActive } from '../../lib/pageActivity'
 import { report } from '../../lib/report'
 import { useGlide } from '../../lib/glide'
@@ -14,11 +14,11 @@ import { onStoreSearch, takeStoreSearch } from '../../lib/storeSearch'
 import { Spinner } from '../ui/Spinner'
 import { SteamImage, StoreCard, useWarm } from './StoreCard'
 import { StoreGamePage } from './StoreGamePage'
-import { artSources, localDay, steamArt, steamSaleMarks, steamSaleNow, useOwned, useWishlist } from './storeData'
+import { artSources, steamArt, steamSaleNow, useOwned, useWishlist } from './storeData'
 import { ErrorState } from '../ui/ErrorState'
 import { errorText } from '../../lib/errorWords'
 
-type Tab = 'home' | 'calendar' | 'wishlist'
+type Tab = 'home' | 'wishlist'
 /** A card at its place in the view; arrive: the view is showing its items for the first time. */
 type CardFn = (tile: StoreTile, index: number, arrive: boolean) => ReactNode
 
@@ -75,7 +75,6 @@ export function StoreRoom({ active, games, onOpenGame }: {
   const hits = useSearch(query)
   const searching = query.trim().length >= 2
   const view = searching ? 'search' : tab
-  const calendar = useCalendar(view === 'calendar')
 
   const scroller = useRef<HTMLDivElement>(null)
   useTopOnChange(scroller, `${view}|${hits.query}`)
@@ -108,8 +107,7 @@ export function StoreRoom({ active, games, onOpenGame }: {
 
   const shownOwned = shownPage ? owned(shownPage.appId, shownPage.name) : undefined
   const [openError, setOpenError] = useState<string | null>(null)
-  // With nothing else to show, an error reads in the view itself, with Retry; over a page on screen, here.
-  const status = viewStatus(view, { hits, home, calendar, wish, openError })
+  const status = viewStatus(view, { hits, home, wish, openError })
 
   return (
     <main className="exo-store" aria-label="Store" data-room-scroll>
@@ -126,7 +124,6 @@ export function StoreRoom({ active, games, onOpenGame }: {
         <div key={view} className="exo-motion-switch">
           {view === 'search' ? <Results hits={hits} card={card} onClear={() => setQuery('')} />
             : view === 'wishlist' ? <Wishlist wish={wish} owned={owned} card={card} />
-              : view === 'calendar' ? <Calendar cal={calendar} card={card} />
               : <Discover games={games} home={home.data} error={home.error} retrying={home.loading} onRetry={() => void home.load(false)} card={card} withWish={withWish} onOpen={openPage}
                   still={!!page || !active} shining={home.refreshing} />}
         </div>
@@ -151,17 +148,14 @@ export function StoreRoom({ active, games, onOpenGame }: {
   )
 }
 
-/** The line in the top bar: the view on screen's error, once that view has something to show (before, the view says it itself). */
 function viewStatus(view: string, s: {
   hits: ReturnType<typeof useSearch>
   home: ReturnType<typeof useHome>
-  calendar: ReturnType<typeof useCalendar>
   wish: ReturnType<typeof useWishlist>
   openError: string | null
 }): string | null {
   if (view === 'search') return s.hits.items ? s.hits.error : null
   if (view === 'home') return s.home.data ? s.home.error ?? s.openError : null
-  if (view === 'calendar') return s.calendar.data ? s.calendar.error : null
   return s.wish.loaded ? s.wish.error : null
 }
 
@@ -228,8 +222,9 @@ function Hero({ items, games, onOpen, still, shining, arrive }: { items: StoreTi
   }, [at, items, count])
   const current = items[at]
   const warm = useWarm(current.appId, current.art)
+  const single = count <= 1
   return (
-    <section className="exo-store-hero" aria-label="Featured" onMouseEnter={() => setHovered(true)} onMouseLeave={() => setHovered(false)}
+    <section className={`exo-store-hero${single ? ' is-single' : ''}`} aria-label="Featured" onMouseEnter={() => setHovered(true)} onMouseLeave={() => setHovered(false)}
       onFocus={e => setFocused(e.target.matches(':focus-visible'))}
       onBlur={e => { if (!e.currentTarget.contains(e.relatedTarget)) setFocused(false) }}>
       <HeroLight tile={current} />
@@ -240,16 +235,17 @@ function Hero({ items, games, onOpen, still, shining, arrive }: { items: StoreTi
           <HeroLogo key={current.appId} tile={current} />
         </span>
       </button>
-      <ol className="exo-store-hero-list">
-        {items.map((t, i) => (
-          <li key={t.appId} className={arrive ? 'exo-motion-arrive' : undefined} style={arrive ? arriveStyle(i) : undefined}>
-            <HeroPick tile={t} on={i === at} onPick={() => i === at ? onOpen(t) : setIndex(i)} />
-            {/* The featured game's time, filling until the next one (held while you point at the banner); its end turns the banner. */}
-            {i === at && turns ? <span key={at} className={`exo-store-hero-time${paused ? ' is-held' : ''}`} aria-hidden="true" data-exo-timer=""
-              onAnimationEnd={() => setIndex((at + 1) % count)} /> : null}
-          </li>
-        ))}
-      </ol>
+      {!single ? (
+        <ol className="exo-store-hero-list">
+          {items.map((t, i) => (
+            <li key={t.appId} className={arrive ? 'exo-motion-arrive' : undefined} style={arrive ? arriveStyle(i) : undefined}>
+              <HeroPick tile={t} on={i === at} onPick={() => i === at ? onOpen(t) : setIndex(i)} />
+              {i === at && turns ? <span key={at} className={`exo-store-hero-time${paused ? ' is-held' : ''}`} aria-hidden="true" data-exo-timer=""
+                onAnimationEnd={() => setIndex((at + 1) % count)} /> : null}
+            </li>
+          ))}
+        </ol>
+      ) : null}
     </section>
   )
 }
@@ -398,100 +394,6 @@ function Wishlist({ wish, owned, card }: {
   )
 }
 
-/** A calendar day as a person says it: Today, Tomorrow, Yesterday, else the weekday and date. */
-function dayLabel(iso: string): string {
-  const [year, month, date] = iso.split('-').map(Number)
-  const day = new Date(year, month - 1, date)
-  const today = new Date()
-  today.setHours(0, 0, 0, 0)
-  const away = Math.round((day.getTime() - today.getTime()) / 86_400_000)
-  if (away === 0) return 'Today'
-  if (away === 1) return 'Tomorrow'
-  if (away === -1) return 'Yesterday'
-  return day.toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' })
-}
-
-/**
- * The calendar: what came out in the last two weeks and what is dated in the next six, a day at a time, the wishlist
- * first and then games like the ones played most.
- */
-function Calendar({ cal, card }: { cal: ReturnType<typeof useCalendar>; card: CardFn }) {
-  const arrive = useArrive('calendar', !!cal.data)
-  if (!cal.data) return cal.error ? <Unreachable message={cal.error} busy={cal.loading} onRetry={() => void cal.load()} /> : <GridWait label="Loading the calendar" />
-  const shown = (cal.data.days ?? []).filter(d => d.entries.length > 0)
-  // Coming up first, from today; then what came out lately, the newest first.
-  const now = new Date()
-  const today = localDay(now)
-  // Steam's sales on their first and last day ahead, as far as the calendar reaches (a day of their own when no game
-  // falls on it).
-  const marks = steamSaleMarks(today, localDay(new Date(now.getFullYear(), now.getMonth(), now.getDate() + 42)))
-  const markedOnly = [...marks.keys()].filter(date => !shown.some(d => d.date === date)).map(date => ({ date, entries: [] }))
-  const ahead: typeof shown = [...shown.filter(d => d.date >= today), ...markedOnly].sort((a, b) => a.date.localeCompare(b.date))
-  const past = shown.filter(d => d.date < today).reverse()
-  let before = 0
-  const place = (list: typeof shown) => list.map(d => { const start = before; before += d.entries.length; return { ...d, start } })
-  const groups = [{ id: 'ahead', title: 'Coming up', days: place(ahead) }, { id: 'past', title: 'Out recently', days: place(past) }].filter(g => g.days.length)
-  if (groups.length === 0) return <div className="exo-store-empty"><p>No dated releases to show right now</p></div>
-  return (
-    <>
-      {groups.map(group => (
-        <section key={group.id} aria-labelledby={`exo-cal-${group.id}`}>
-          <div className="exo-shelf-head"><h2 id={`exo-cal-${group.id}`} className="exo-shelf-title">{group.title}</h2></div>
-          {/* Days flow side by side, each as wide as its games, so a day with one game never takes a whole row. */}
-          <div className="exo-cal-days">
-            {group.days.map(day => (
-              <section key={day.date} className="exo-cal-day" aria-labelledby={`exo-cal-${day.date}`}>
-                <h3 id={`exo-cal-${day.date}`} className="exo-cal-date">{dayLabel(day.date)}</h3>
-                {marks.get(day.date)?.map(m => <p key={m} className="exo-cal-mark">{m}</p>)}
-                {day.entries.length ? (
-                  <div className="exo-cal-games">
-                    {day.entries.map((e, i) => (
-                      <div key={e.tile.appId} className="exo-cal-item">
-                        {/* The day says when; the card needs no date of its own. */}
-                        {card({ ...e.tile, wished: e.wished, soon: false }, Math.min(day.start + i, 24), arrive)}
-                        {e.earlyAccess ? <p className="exo-cal-why">Early Access</p> : null}
-                      </div>
-                    ))}
-                  </div>
-                ) : null}
-              </section>
-            ))}
-          </div>
-        </section>
-      ))}
-    </>
-  )
-}
-
-/**
- * The calendar from the host, asked for each time the tab shows (the host keeps Steam's lists half an hour, so this is
- * cheap and a wishlist change reorders it); the last answer stays up while a newer one is on its way, and a slow answer
- * that a newer one replaced is dropped.
- */
-function useCalendar(active: boolean) {
-  const [data, setData] = useState<StoreCalendar | null>(null)
-  const [error, setError] = useState<string | null>(null)
-  const [loading, setLoading] = useState(false)
-  const latest = useRef(0)
-  const load = useCallback(async () => {
-    const mine = ++latest.current
-    setLoading(true)
-    try {
-      const res = await host.storeCalendar()
-      if (mine !== latest.current) return
-      if (res.ok) { setData(res); setError(null) } else setError(errorText(res.message, 'Exo couldn’t reach the store. Try again.'))
-    } catch (e) {
-      report(e, 'Store.calendar')
-      if (mine === latest.current) setError('The store could not be reached. Check your connection and try again.')
-    } finally {
-      if (mine === latest.current) setLoading(false)
-    }
-  }, [])
-  useEffect(() => { if (active) void load() }, [active, load])
-  useEffect(() => onHostEvent('store.changed', e => { if (active && e?.what === 'wishlist') void load() }), [active, load])
-  return { data, error, loading, load }
-}
-
 /** A poster on its way: the card's own parts. */
 const sampleCard = (i: number) => (
   <div className="exo-store-card-slot"><button type="button" className="exo-store-card"><span className="exo-store-poster" skullet-block="" /><span className="exo-store-card-title">{sample(i)}</span><span className="exo-store-meta"><span className="exo-store-when">$00.00</span></span></button></div>
@@ -606,9 +508,8 @@ function StoreTools({ view, query, refreshing, onTab, onQuery, onRefresh, childr
   const searchField = useRef<HTMLInputElement>(null)
   return (
     <>
-      <div ref={chipGlide} className="exo-shelf-chips exo-glide" role="group" aria-label="Store view">
+      <div ref={chipGlide} className="exo-glass exo-shelf-chips exo-glide" role="group" aria-label="Store view">
         <button type="button" className="exo-shelf-chip" aria-pressed={view === 'home'} onClick={() => onTab('home')}>Discover</button>
-        <button type="button" className="exo-shelf-chip" aria-pressed={view === 'calendar'} onClick={() => onTab('calendar')}>Calendar</button>
         <button type="button" className="exo-shelf-chip" aria-pressed={view === 'wishlist'} onClick={() => onTab('wishlist')}>
           Wishlist
         </button>

@@ -116,25 +116,6 @@ export function steamSaleNow(now = Date.now()): string | null {
   return null
 }
 
-/** A day as the calendar keys it: the local date, yyyy-mm-dd. */
-export function localDay(at: Date): string {
-  return `${at.getFullYear()}-${String(at.getMonth() + 1).padStart(2, '0')}-${String(at.getDate()).padStart(2, '0')}`
-}
-
-/** The calendar's marks between two local days (yyyy-mm-dd, both in): each Steam sale's first and last day. */
-export function steamSaleMarks(first: string, last: string): Map<string, string[]> {
-  const marks = new Map<string, string[]>()
-  const mark = (at: string, words: string) => {
-    const day = localDay(new Date(at))
-    if (day >= first && day <= last) marks.set(day, [...(marks.get(day) ?? []), words])
-  }
-  for (const sale of STEAM_SALES) {
-    mark(sale.from, `${sale.name} starts`)
-    mark(sale.to, `${sale.name} ends`)
-  }
-  return marks
-}
-
 // A game's page, asked for once: a card on screen warms it, the click then draws the same answer at once.
 const GAME_KEEP_MS = 10 * 60_000
 /** Each entry holds a whole game's page; a long browse is capped or it would hold them all. Oldest-inserted go first. */
