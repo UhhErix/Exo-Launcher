@@ -3,7 +3,6 @@ import { host, type GpuProfile } from '../../lib/host'
 import { trimStop } from '../../lib/utils'
 import { changedLine, DriverProfile, PROFILE_ROW, ProfileButtons, type LatencyChoice } from './DriverProfile'
 import { Row, State } from '../settings/parts'
-import { Switch } from '../Switch'
 import type { PlainError } from '../../lib/errorWords'
 import type { PcPlace } from './ThisPcTab'
 import { gpuOffers } from '../../lib/canUse'
@@ -73,34 +72,16 @@ function NvidiaRow({ profile, error, onAct, onSettled, onFailed }: {
   onSettled: (next: unknown) => void
   onFailed: (failure: PlainError) => void
 }) {
-  const [vrrBusy, setVrrBusy] = useState(false)
-  const vrr = profile.vrrEnabled ?? profile.screen.vrr
   const apply = nvidiaApplyLabel(profile.status)
   const showApplied = profile.status === 'applied'
   const rowError = error ?? (profile.ok ? null : trimStop(profile.message) || 'The driver did not answer. Try again.')
 
   const act = (action: 'apply' | 'undo') =>
-    onAct(action, action === 'apply' ? { lowLatency: 'on', ...(profile.screen.vrr ? { vrr } : {}) } : undefined)
-
-  const toggleVrr = async (next: boolean) => {
-    if (vrrBusy) return
-    setVrrBusy(true)
-    try {
-      const res = await onAct('apply', { lowLatency: 'on', vrr: next })
-      if ((res as GpuProfile).ok) onSettled(res)
-    } catch (e) {
-      onFailed({ text: trimStop(e instanceof Error ? e.message : String(e)) || 'Not changed. Try again.', detail: null })
-    } finally {
-      setVrrBusy(false)
-    }
-  }
+    onAct(action, action === 'apply' ? { lowLatency: 'on', ...(profile.screen.vrr ? { vrr: true } : {}) } : undefined)
 
   return (
     <Row label={PROFILE_ROW} detail={changedLine(profile)} error={rowError}>
       {showApplied ? <State on>Applied</State> : null}
-      {profile.screen.vrr ? (
-        <Switch label="G-SYNC" checked={vrr} disabled={vrrBusy} onChange={next => void toggleVrr(next)} />
-      ) : null}
       {(apply || profile.canUndo || showApplied)
         ? <ProfileButtons apply={apply} undo={!!profile.canUndo} onAct={act} onSettled={onSettled} onFailed={onFailed} />
         : null}
@@ -110,9 +91,8 @@ function NvidiaRow({ profile, error, onAct, onSettled, onFailed }: {
 
 /** Resizable BAR status, feature states, skipped warning, and < 50 GB shader cache note. */
 function NvidiaDetails({ profile }: { profile: GpuProfile }) {
-  const features = profile.features ?? []
-  const lowFreeSpace = typeof profile.cacheFreeGb === 'number' && profile.cacheFreeGb < 50
-  if (features.length === 0 && profile.rebar == null && !profile.skipped && !lowFreeSpace) return null
+  const features = (profile.features ?? []).filter(feature => feature.state !== 'unavailable')
+  if (features.length === 0 && profile.rebar == null) return null
   return (
     <>
       {profile.rebar != null && (
@@ -123,20 +103,10 @@ function NvidiaDetails({ profile }: { profile: GpuProfile }) {
       {features.map(feature => (
         <Row key={feature.key} label={feature.label}>
           <State on={feature.state === 'on'}>
-            {feature.state === 'on' ? 'On' : feature.state === 'unavailable' ? 'Unavailable on this driver' : 'Off'}
+            {feature.state === 'on' ? 'On' : 'Off'}
           </State>
         </Row>
       ))}
-      {lowFreeSpace && (
-        <p className="exo-graphics-import-extra">
-          Shader cache stays at driver default because under 50 GB is free on the cache drive ({profile.cacheFreeGb} GB free).
-        </p>
-      )}
-      {profile.skipped && (
-        <p className="exo-graphics-import-extra">
-          Some driver settings were skipped because this driver version did not list them.
-        </p>
-      )}
     </>
   )
 }
@@ -146,7 +116,6 @@ function ManualProfile({ profile }: { profile: GpuProfile }) {
   const same = (a: string, b: string) => a.toLowerCase() === b.toLowerCase()
   return (
     <>
-      {profile.message && <p className="exo-hub-sub">{profile.message}</p>}
       {profile.items.map(item => (
         <Row key={item.key} label={item.label}>
           <State on={!!item.current && same(item.current, item.value)}>

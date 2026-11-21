@@ -105,11 +105,53 @@
 
 /* The screen: its frame in the ink, its glass dimming and lighting slowly while the driver goes in, as the real screen
    may. A loop that breathes (ease-in-out), on the shine's 1.6s, resting while Exo is in the background. */
-.exo-driver-screen {
+.exo-driver-stage {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 124px;
+  height: 124px;
+  margin-bottom: 4px;
+}
+
+.exo-driver-halo {
+  position: absolute;
+  inset: 14px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgb(var(--exo-ink-rgb) / 0.16) 0%, transparent 72%);
+  transform: scale(0.92);
+  opacity: 0.4;
+  will-change: transform, opacity;
+  animation: exo-driver-halo 2.2s var(--ease-in-out) infinite alternate;
+}
+
+.exo-driver-orbit {
+  position: absolute;
+  inset: 6px;
+  border-radius: 50%;
+  border: 1px solid transparent;
+  border-top-color: rgb(var(--exo-ink-rgb) / 0.42);
+  border-right-color: rgb(var(--exo-ink-rgb) / 0.14);
+  will-change: transform;
+  animation: exo-driver-orbit 2.8s linear infinite;
+}
+
+.exo-driver-orbit.is-outer {
+  inset: -4px;
+  border-top-color: rgb(var(--exo-ink-rgb) / 0.16);
+  border-right-color: transparent;
+  border-bottom-color: rgb(var(--exo-ink-rgb) / 0.3);
+  animation: exo-driver-orbit-rev 4.2s linear infinite;
+}
+
+.exo-driver-screen,
+.exo-driver-cpu {
+  position: relative;
   color: var(--color-fg);
 }
 
-.exo-driver-screen-frame {
+.exo-driver-screen-frame,
+.exo-driver-cpu-pins {
   fill: none;
   stroke: currentColor;
   stroke-width: 2;
@@ -117,13 +159,60 @@
   stroke-linejoin: round;
 }
 
-.exo-driver-screen-glass {
-  fill: currentColor;
-  opacity: 0.08;
+.exo-driver-cpu-pins {
+  opacity: 0.55;
 }
 
-.exo-driver-install.is-working .exo-driver-screen-glass {
+.exo-driver-screen-glass,
+.exo-driver-cpu-die {
+  fill: currentColor;
+  opacity: 0.1;
+}
+
+.exo-driver-install.is-working .exo-driver-screen-glass,
+.exo-driver-install.is-working .exo-driver-cpu-die {
   animation: exo-driver-screen 1.6s var(--ease-in-out) infinite alternate;
+}
+
+.exo-driver-install.is-working .exo-driver-cpu-pins {
+  animation: exo-driver-pins 1.6s var(--ease-in-out) infinite alternate;
+}
+
+.exo-driver-steps {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 14px;
+  margin: 4px 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: calc(12px * var(--exo-scale, 1));
+  color: var(--color-muted);
+}
+
+.exo-driver-steps li {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  opacity: 0.55;
+  transition: opacity var(--dur-quick) var(--ease-out), color var(--dur-quick) var(--ease-out);
+}
+
+.exo-driver-steps li.is-active {
+  opacity: 1;
+  color: var(--color-fg);
+}
+
+.exo-driver-steps li.is-done {
+  opacity: 0.92;
+  color: var(--color-good);
+}
+
+.exo-driver-step-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
 }
 
 @keyframes exo-driver-screen {
@@ -131,15 +220,42 @@
   to { opacity: 0.45; }
 }
 
-html[data-exo-inactive="true"] .exo-driver-screen-glass {
+@keyframes exo-driver-pins {
+  from { opacity: 0.35; }
+  to { opacity: 0.9; }
+}
+
+@keyframes exo-driver-halo {
+  from { transform: scale(0.88); opacity: 0.3; }
+  to { transform: scale(1.1); opacity: 0.72; }
+}
+
+@keyframes exo-driver-orbit {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes exo-driver-orbit-rev {
+  to { transform: rotate(-360deg); }
+}
+
+html[data-exo-inactive="true"] .exo-driver-screen-glass,
+html[data-exo-inactive="true"] .exo-driver-cpu-die,
+html[data-exo-inactive="true"] .exo-driver-cpu-pins,
+html[data-exo-inactive="true"] .exo-driver-halo,
+html[data-exo-inactive="true"] .exo-driver-orbit {
   animation-play-state: paused;
 }
 
 :root[data-exo-motion="reduce"] .exo-driver-install-body,
-:root[data-exo-motion="reduce"] .exo-driver-screen-glass {
+:root[data-exo-motion="reduce"] .exo-driver-screen-glass,
+:root[data-exo-motion="reduce"] .exo-driver-cpu-die,
+:root[data-exo-motion="reduce"] .exo-driver-cpu-pins,
+:root[data-exo-motion="reduce"] .exo-driver-halo,
+:root[data-exo-motion="reduce"] .exo-driver-orbit {
   animation: none;
 }
 
-:root[data-exo-motion="reduce"] .exo-driver-screen-glass {
+:root[data-exo-motion="reduce"] .exo-driver-screen-glass,
+:root[data-exo-motion="reduce"] .exo-driver-cpu-die {
   opacity: 0.25;
 }

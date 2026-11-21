@@ -143,7 +143,7 @@ export function DriverRow({ active, state, onState, ask }: { active: boolean; st
     setError(null)
     setStarting(true)
     // The driver screen covers Exo from the press until the driver is in and Exo's settings are back.
-    if (state?.vendor) driverInstallStarted(VENDOR[state.vendor].name, latest.version, latest.size)
+    if (state?.vendor) driverInstallStarted(VENDOR[state.vendor].name, latest.version, latest.size, 'gpu')
     try {
       const answer = await host.gpuDriver(back ? 'goback' : 'update', branch)
       if (!answer.ok) {

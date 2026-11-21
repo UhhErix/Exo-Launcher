@@ -6,8 +6,6 @@ import {
   type AutopilotState,
   type DisplayState,
   type DrivesState,
-  type ExoAiChange,
-  type ExoAiFanPreset,
   type ExoAiState,
   type GpuProfile,
   type HdrState,
@@ -17,9 +15,10 @@ import {
   type PcHealth,
   type Tuning,
 } from '../../lib/host'
+import { usePageVisible } from '../../lib/pageActivity'
 import { report } from '../../lib/report'
 import { cn } from '../../lib/utils'
-import { ChoiceRow, Group, Row } from '../settings/parts'
+import { Group, Row, State } from '../settings/parts'
 import { ActionButton } from '../ui/ConfirmButton'
 import { ErrorNote } from '../ui/ErrorNote'
 import { AutopilotControls, AutopilotReports } from './Autopilot'
@@ -32,25 +31,20 @@ import type { PcState } from './PcRoom'
 import { SystemGroup } from './SystemGroup'
 import { SetupRows } from './ThisPcTab'
 
-const FAN_PRESET_CHOICES: readonly { value: ExoAiFanPreset; label: string }[] = [
-  { value: 'auto', label: 'Automatic' },
-  { value: 'quiet', label: 'Quiet' },
-  { value: 'balanced', label: 'Balanced' },
-  { value: 'performance', label: 'Performance' },
-]
-
 /** Polls unified Exo AI status when PC room is visible, and faster while Exo AI is open. */
 export function useExoAi(active: boolean, open: boolean) {
   const [state, setState] = useState<ExoAiState | null>(null)
+  const visible = usePageVisible()
   const refresh = useCallback(() => {
     host.exoAiState().then(setState, (e: unknown) => report(e, 'ExoAi.state', { level: 'warn' }))
   }, [])
   useEffect(() => {
     if (!active && !open) return
     refresh()
-    const timer = window.setInterval(refresh, open ? 4000 : 15000)
+    const intervalMs = visible ? (open ? 5000 : 15000) : 30000
+    const timer = window.setInterval(refresh, intervalMs)
     return () => window.clearInterval(timer)
-  }, [active, open, refresh])
+  }, [active, open, visible, refresh])
   return { state, setState, refresh }
 }
 
@@ -95,7 +89,7 @@ function formatFanDetail(fans: ExoAiState['fans'] | undefined): string {
   const parts: string[] = []
   if (fans.tempC != null) parts.push(`${fans.tempC} °C`)
   if (fans.fanPercent != null) parts.push(`${fans.fanPercent}%`)
-  if (fans.targetPercent != null && fans.preset !== 'auto') parts.push(`target ${fans.targetPercent}%`)
+  if (fans.targetPercent != null) parts.push(`target ${fans.targetPercent}%`)
   if (fans.fanCount > 0) parts.push(`${fans.fanCount} ${fans.fanCount === 1 ? 'fan' : 'fans'}`)
   if (parts.length === 0) return 'Automatic GPU fan control; restores defaults on exit'
   return parts.join(' · ')
@@ -187,18 +181,6 @@ export function ExoAiPanel({
 }) {
   const [error, setError] = useState<string | null>(null)
 
-  const apply = async (change: ExoAiChange): Promise<string | null> => {
-    setError(null)
-    try {
-      const next = await host.exoAiSet(change)
-      onExoAi(next)
-      return next.ok ? null : (next.message ?? "Couldn't update Exo AI.")
-    } catch (e: unknown) {
-      report(e, 'ExoAiPanel.set')
-      return "Couldn't update Exo AI."
-    }
-  }
-
   const runNow = async () => {
     setError(null)
     const next = await host.exoAiSet({ runNow: true })
@@ -221,20 +203,18 @@ export function ExoAiPanel({
       <ExoAiCoreGroup exoAi={exoAi} />
 
       <Group id="exo-ai-fans" title="Cooling">
-        <ChoiceRow<ExoAiFanPreset>
-          id="exo-ai-fan-preset"
-          label="GPU fan speed"
-          detail={formatFanDetail(exoAi?.fans)}
-          value={exoAi?.fans.preset ?? 'auto'}
-          choices={FAN_PRESET_CHOICES}
-          disabled={exoAi ? !exoAi.fans.supported : false}
-          onChange={fanPreset => apply({ fanPreset })}
-        />
+        <Row label="GPU fans" detail={formatFanDetail(exoAi?.fans)}>
+          <State on={!!exoAi?.fans.supported}>
+            {exoAi?.fans.supported ? 'Automatic' : 'Hardware VBIOS'}
+          </State>
+        </Row>
       </Group>
 
-      <Group id="exo-ai-tune" title="Auto-Tune">
-        <AutoTuneRows tune={state.tune} profile={profile} about={about} onTune={onTune} />
-      </Group>
+      {(state.tune?.parts.length ?? 0) > 0 ? (
+        <Group id="exo-ai-tune" title="Auto-Tune">
+          <AutoTuneRows tune={state.tune} profile={profile} about={about} onTune={onTune} />
+        </Group>
+      ) : null}
 
       <Group id="exo-ai-autopilot" title="Autopilot">
         <AutopilotControls state={autopilot} onState={onAutopilot} />

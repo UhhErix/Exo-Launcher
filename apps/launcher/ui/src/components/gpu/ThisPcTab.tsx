@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react'
 import { host, type PcHealth, type PcHealthItem } from '../../lib/host'
 import { report } from '../../lib/report'
 import type { PlainError } from '../../lib/errorWords'
+import { trimStop } from '../../lib/utils'
+import { driverInstallPhase, driverInstallStarted, driverInstallStopped } from '../shell/DriverInstallOverlay'
 import { ActionButton } from '../ui/ConfirmButton'
 import { Row } from '../settings/parts'
 import { Spinner } from '../ui/Spinner'
@@ -44,9 +46,25 @@ export function SetupRows({ place, active, health, onHealth }: {
   // The pressed button shows the work (ActionButton); the rows take the answer after its check, or at once on a refusal.
   const act = async (action: HealthAction) => {
     setError(null)
-    const next = await host.systemHealth(action)
-    if (!next.ok) onHealth(next)
-    return next
+    if (action === 'chipset') {
+      const chip = health?.items.find(item => item.key === 'chipset')
+      driverInstallStarted(chip?.label || 'CPU & chipset drivers', '', null, 'chipset')
+    }
+    try {
+      const next = await host.systemHealth(action)
+      if (!next.ok) onHealth(next)
+      if (action === 'chipset') {
+        const chip = next.items.find(item => item.key === 'chipset')
+        if (!next.ok) driverInstallPhase('failed', { message: trimStop(next.message) || 'The chipset driver didn’t update.' })
+        else if (chip?.busy) driverInstallPhase('installing', { name: chip.label })
+        else if (chip?.applied || chip?.current) driverInstallPhase('done', { name: chip.label })
+        else driverInstallStopped()
+      }
+      return next
+    } catch (e) {
+      if (action === 'chipset') driverInstallPhase('failed', { message: 'The chipset driver didn’t update.' })
+      throw e
+    }
   }
   const press = (action: HealthAction): Press => ({
     onPress: () => act(action), onDone: next => onHealth(next as PcHealth), onFailed: failure => setError({ key: ROW[action], text: failure.text }),

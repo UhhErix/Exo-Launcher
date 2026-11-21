@@ -21,3 +21,8 @@ test('Startup view refreshes on reopen, groups Broken / On / Off with Switch tog
   assert.match(appsPanel, /<Switch checked=\{true\}[\s\S]*?onChange=\{\(\) => void toggle\(item\.id, item\.ids, false\)\}/)
   assert.match(appsPanel, /item\.ids\.map\(id => errors\[id\]\)\.find\(Boolean\)/)
 })
+
+test('WindowsAppsView auto-selects Every account when picked packages are not for this user', () => {
+  assert.match(appsPanel, /const needsAllAccounts = \(/)
+  assert.match(appsPanel, /setEveryone\(result\.admin\)/)
+})

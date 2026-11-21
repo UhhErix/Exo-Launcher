@@ -1172,28 +1172,56 @@ public sealed partial class WebHostBridge
     private static async Task<object> DiscordProfileAsync(JsonElement p, bool hasParams, CancellationToken ct)
     {
         if (DiscordSession.Current is not { } session || ReadString(p, hasParams, "userId") is not { } user) return new { ok = false };
+        var id = DiscordRest.Id(user);
         var guild = ReadString(p, hasParams, "guildId") is { Length: > 0 } g ? DiscordRest.Id(g) : null;
         if (ReadBool(p, hasParams, "mutualFriends") == true)
         {
-            var friends = await session.Rest.MutualFriendsAsync(DiscordRest.Id(user), ct).ConfigureAwait(false);
+            var friends = await session.Rest.MutualFriendsAsync(id, ct).ConfigureAwait(false);
             return new { ok = friends.Error is null, message = friends.Error, friends = friends.Body };
         }
         if (ReadString(p, hasParams, "note") is { } text)
         {
             if (text.Length > 256) return new { ok = false, message = "Notes can be up to 256 characters." };
-            var saved = await session.Rest.SaveNoteAsync(DiscordRest.Id(user), text, ct).ConfigureAwait(false);
+            var saved = await session.Rest.SaveNoteAsync(id, text, ct).ConfigureAwait(false);
+            if (saved.Error is null) session.Cache.SetNote(id, text.Length == 0 ? null : text);
             return new { ok = saved.Error is null, message = saved.Error };
         }
-        var noteReply = session.Rest.NoteAsync(DiscordRest.Id(user), ct);
-        var reply = await session.Rest.ProfileAsync(DiscordRest.Id(user), guild, ct).ConfigureAwait(false);
-        var note = await noteReply.ConfigureAwait(false);
+        var includeNote = ReadBool(p, hasParams, "includeNote") != false;
+        string? noteText = null;
+        var hasCachedNote = includeNote && session.Cache.TryGetNote(id, out noteText);
+        using var noteCts = includeNote && !hasCachedNote ? CancellationTokenSource.CreateLinkedTokenSource(ct) : null;
+        Task<DiscordRest.Reply>? noteTask = null;
+        if (noteCts is not null)
+        {
+            noteCts.CancelAfter(TimeSpan.FromMilliseconds(1500));
+            noteTask = session.Rest.NoteAsync(id, noteCts.Token);
+        }
+        var reply = await session.Rest.ProfileAsync(id, guild, ct).ConfigureAwait(false);
+        if (noteTask is not null)
+        {
+            try
+            {
+                var note = await noteTask.ConfigureAwait(false);
+                if (note.Status == System.Net.HttpStatusCode.OK)
+                {
+                    noteText = note.Body is { ValueKind: JsonValueKind.Object } n && n.TryGetProperty("note", out var nt) && nt.GetString() is { Length: > 0 } s ? s : null;
+                    session.Cache.SetNote(id, noteText);
+                }
+                else if (note.Status == System.Net.HttpStatusCode.NotFound)
+                {
+                    noteText = null;
+                    session.Cache.SetNote(id, null);
+                }
+            }
+            catch (OperationCanceledException) when (!ct.IsCancellationRequested) { }
+        }
         return new
         {
             ok = reply.Error is null,
             message = reply.Error,
             profile = reply.Error is null ? reply.Body : null,
-            extras = session.Cache.ProfileOn(DiscordRest.Id(user), guild, reply.Body),
-            note = note.Body is { ValueKind: JsonValueKind.Object } n && n.TryGetProperty("note", out var nt) ? nt.GetString() : null,
+            extras = session.Cache.ProfileOn(id, guild, reply.Body),
+            note = noteText,
         };
     }
 

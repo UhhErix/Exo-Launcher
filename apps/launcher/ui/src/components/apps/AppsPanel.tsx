@@ -1077,6 +1077,9 @@ function whereItIs(app: WindowsApp): string {
  * on this PC) or Every account (one Windows prompt; can't be undone here). Review shows what each removal does and how it
  * comes back before anything goes. A restore point doesn't bring Store apps back, so none is made here.
  */
+const needsAllAccounts = (ids: Set<string>, list: readonly WindowsApp[]) =>
+  ids.size > 0 && !list.some(app => ids.has(app.id) && app.forMe)
+
 function WindowsAppsView({ active, query, onChanged }: { active: boolean; query: string; onChanged: () => void }) {
   const [state, setState] = useState<{ items: WindowsApp[]; hidden: number } | null>(null)
   const [picked, setPicked] = useState<Set<string> | null>(null)
@@ -1096,7 +1099,10 @@ function WindowsAppsView({ active, query, onChanged }: { active: boolean; query:
     setError('plan', null)
     const result = await host.appsPackagesPlan([...picked], everyone)
     if (result.ok && !result.token) return { ok: false, message: 'Nothing there can be removed that way.' }
-    if (result.ok && result.token) setPlan({ token: result.token, admin: result.admin, lines: result.lines })
+    if (result.ok && result.token) {
+      setEveryone(result.admin)
+      setPlan({ token: result.token, admin: result.admin, lines: result.lines })
+    }
     return result
   }
 
@@ -1104,16 +1110,18 @@ function WindowsAppsView({ active, query, onChanged }: { active: boolean; query:
   async function remove() {
     if (!plan) return { ok: false }
     setError('plan', null)
+    const forAll = plan.admin
     const result = await host.appsPackagesRemove(plan.token)
     if (!result.ok) {
-      if (result.removed > 0) setDone(`Removed ${count(result.removed, 'app', 'apps')} ${everyone ? 'for every account' : 'for you'}.`)
+      if (result.removed > 0) setDone(`Removed ${count(result.removed, 'app', 'apps')} ${forAll ? 'for every account' : 'for you'}.`)
       await read()
     }
     return result
   }
   const removed = (value: unknown) => {
     const result = value as Awaited<ReturnType<typeof host.appsPackagesRemove>>
-    if (result.removed > 0) setDone(`Removed ${count(result.removed, 'app', 'apps')} ${everyone ? 'for every account' : 'for you'}.`)
+    const forAll = plan?.admin ?? everyone
+    if (result.removed > 0) setDone(`Removed ${count(result.removed, 'app', 'apps')} ${forAll ? 'for every account' : 'for you'}.`)
     setPlan(null)
     setPicked(null)
     void read().then(onChanged)
@@ -1133,17 +1141,26 @@ function WindowsAppsView({ active, query, onChanged }: { active: boolean; query:
   const words = query.trim().toLowerCase()
   const items = state.items.filter(app => !words || `${app.name} ${app.publisher ?? ''}`.toLowerCase().includes(words))
   const bloat = state.items.filter(app => app.bloat && (app.forMe || app.provisioned))
-  const pick = (id: string) => setPicked(current => {
-    const next = new Set(current)
-    if (!next.delete(id)) next.add(id)
-    return next
-  })
+  const pick = (id: string) => {
+    setPlan(null)
+    setPicked(current => {
+      const next = new Set(current)
+      if (!next.delete(id)) next.add(id)
+      if (needsAllAccounts(next, state.items)) setEveryone(true)
+      return next
+    })
+  }
   return (
     <>
       {done ? <ReadyRow title={done} done /> : null}
       {!words && !picked && bloat.length > 0 ? (
         <ReadyRow title={count(bloat.length, 'Windows app you didn’t ask for', 'Windows apps you didn’t ask for')} detail={names(bloat.map(app => app.name))}>
-          <button type="button" className="exo-set-btn" onClick={() => { setPicked(new Set(bloat.map(app => app.id))); setPlan(null) }}>Pick them</button>
+          <button type="button" className="exo-set-btn" onClick={() => {
+            const next = new Set(bloat.map(app => app.id))
+            setPicked(next)
+            setPlan(null)
+            if (needsAllAccounts(next, state.items)) setEveryone(true)
+          }}>Pick them</button>
         </ReadyRow>
       ) : null}
       <div className="exo-apps-filter">
@@ -1179,7 +1196,6 @@ function WindowsAppsView({ active, query, onChanged }: { active: boolean; query:
         ))}
         {items.length === 0 ? <p className="exo-apps-none">{words ? 'No Windows apps match' : 'No Windows apps to remove'}</p> : null}
       </section>
-      {state.hidden > 0 && !words ? <p className="exo-apps-none">{count(state.hidden, 'part of Windows isn’t', 'parts of Windows aren’t')} offered: Windows, Store apps, games or Exo need {state.hidden === 1 ? 'it' : 'them'}.</p> : null}
     </>
   )
 }

@@ -75,8 +75,10 @@ public sealed partial class WebHostBridge
             .Select(game =>
             {
                 var (state, message) = _services.ShaderPrepare.StateOf(game);
-                return new { id = game.Id, title = game.Title, installDir = game.Path, state, message };
+                return (game, state, message);
             })
+            .Where(item => item.state is "running" or "stale" or "failed" || (item.state == "ready" && item.game.PlaytimeMinutes is null or 0))
+            .Select(item => new { id = item.game.Id, title = item.game.Title, installDir = item.game.Path, state = item.state, message = item.message })
             .ToList(), ct).ConfigureAwait(false);
         return new { ok = true, games };
     }

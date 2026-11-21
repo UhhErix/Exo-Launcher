@@ -5,6 +5,7 @@
 // lose to an old engine's higher ones (the board never updates after a restart).
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
 import { rebase, stale, type Snapshot } from '../src/components/shaders/snapshotOrder.ts'
 
 const idle = { running: false, paused: false, canStart: false, waiting: [] }
@@ -36,4 +37,11 @@ test('rebase drops a board\'s rev to 0 so a new engine\'s revs (counted from 1) 
   assert.equal(rebase(snap(7, [game])).games.length, 1)
   assert.equal(rebase(snap(0, [game])).rev, 0)
   assert.equal(rebase(null), null)
+})
+
+test('ShadersBoard CacheStrip silently applies background cache steps without optimize-cache error banners', () => {
+  const shadersBoard = readFileSync(new URL('../src/components/shaders/ShadersBoard.tsx', import.meta.url), 'utf8')
+  assert.doesNotMatch(shadersBoard, /run\('optimize-cache'/)
+  assert.match(shadersBoard, /for \(const \[method, params\] of steps\)/)
+  assert.match(shadersBoard, /call\(method, params\)\.then\(/)
 })

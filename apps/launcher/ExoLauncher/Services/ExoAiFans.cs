@@ -32,6 +32,7 @@ internal sealed record FanStatus(
 internal sealed class ExoAiFans : IDisposable
 {
     private const int DownwardHysteresisC = 3;
+    private static readonly (int TempC, int Percent)[] AutoCurve = [(40, 35), (55, 48), (68, 68), (78, 86), (85, 100)];
     private static readonly (int TempC, int Percent)[] QuietCurve = [(40, 30), (60, 42), (75, 65), (82, 85), (86, 100)];
     private static readonly (int TempC, int Percent)[] BalancedCurve = [(40, 35), (55, 50), (70, 72), (80, 90), (85, 100)];
     private static readonly (int TempC, int Percent)[] PerformanceCurve = [(35, 45), (50, 65), (65, 82), (75, 95), (82, 100)];
@@ -52,12 +53,12 @@ internal sealed class ExoAiFans : IDisposable
     internal static int? EvaluateCurve(string preset, int tempC, int? lastTargetPct = null, int? lastTempC = null)
     {
         var norm = Models.ExoAiSettings.NormalizePreset(preset);
-        if (norm == "auto") return null;
         var curve = norm switch
         {
             "quiet" => QuietCurve,
+            "balanced" => BalancedCurve,
             "performance" => PerformanceCurve,
-            _ => BalancedCurve,
+            _ => AutoCurve,
         };
         var raw = Interpolate(curve, tempC);
         var clamped = ApplySafetyClamp(tempC, raw);
@@ -106,13 +107,6 @@ internal sealed class ExoAiFans : IDisposable
             _preset = Models.ExoAiSettings.NormalizePreset(preset);
             _note = null;
             _blocked = false;
-            if (_preset == "auto")
-            {
-                RestoreAllAutoLocked();
-                _lastTargetPct = null;
-                _lastTempC = null;
-                return ReadStatusLocked();
-            }
             _lastTargetPct = null;
             _lastTempC = null;
             TickLocked();
@@ -127,11 +121,11 @@ internal sealed class ExoAiFans : IDisposable
 
     private void TickLocked()
     {
-        if (_preset == "auto" || _blocked) return;
+        if (_blocked) return;
         var backend = EnsureBackendLocked();
         if (!backend.IsAvailable)
         {
-            _note = backend.UnavailableReason ?? "Custom fan curves are only available on supported NVIDIA GPUs.";
+            _note = _preset == "auto" ? null : backend.UnavailableReason ?? "Custom fan curves are only available on supported NVIDIA GPUs.";
             _blocked = true;
             return;
         }
@@ -139,7 +133,7 @@ internal sealed class ExoAiFans : IDisposable
         var fanCount = Math.Max(0, backend.ReadFanCount());
         if (fanCount == 0)
         {
-            _note = "This GPU doesn't expose software fan control.";
+            _note = _preset == "auto" ? null : "This GPU doesn't expose software fan control.";
             _blocked = true;
             return;
         }
@@ -156,10 +150,11 @@ internal sealed class ExoAiFans : IDisposable
             var res = backend.SetFanPercent(i, target.Value);
             if (!res.Ok)
             {
-                _note = res.Message ?? (res.NeedsAdmin
+                _note = _preset == "auto" ? null : res.Message ?? (res.NeedsAdmin
                     ? "Your NVIDIA driver needs administrator permission to adjust fan speeds."
                     : "This card doesn't allow custom software fan curves.");
                 _blocked = true;
+                _lastTargetPct = null;
                 RestoreAllAutoLocked();
                 return;
             }

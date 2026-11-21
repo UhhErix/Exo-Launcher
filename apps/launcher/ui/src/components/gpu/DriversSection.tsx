@@ -12,6 +12,7 @@ import { Spinner } from '../ui/Spinner'
 import { DriverRow } from './DriverRow'
 import { SectionActions } from './SectionHead'
 import { SetupRows } from './ThisPcTab'
+import { driverInstallDismiss, driverInstallPhase, driverInstallStarted, driverInstallStopped } from '../shell/DriverInstallOverlay'
 
 /** The row's one line: the known problem with what runs, in a few words. Versions are not shown: the button says what it does. */
 function problem(item: DriverEntry) {
@@ -76,6 +77,40 @@ function planCount(plan: Plan | null, steps: Record<string, DriverStep>, phase: 
  * controller's firmware, a newer Windows, then the game runtimes. A vendor's app is its own row with its own Install, never
  * in Update all. Read each time the room shows.
  */
+async function runChipsetStep(
+  chipLabel: string,
+  hasGpu: boolean,
+  onHealth: (next: PcHealth) => void,
+  onError: (msg: string) => void,
+): Promise<'busy' | 'done'> {
+  driverInstallStarted(chipLabel, '', null, 'chipset')
+  try {
+    const answer = await host.systemHealth('chipset')
+    onHealth(answer)
+    const updated = answer.items.find(item => item.key === 'chipset')
+    if (!answer.ok) {
+      const msg = trimStop(answer.message) || 'The chipset driver didn’t update.'
+      onError(msg)
+      driverInstallPhase('failed', { message: msg })
+      return 'done'
+    }
+    if (updated?.busy) {
+      driverInstallPhase('installing', { name: updated.label })
+      return 'busy'
+    }
+    if (updated && (updated.applied || updated.current)) {
+      if (hasGpu) driverInstallDismiss()
+      else driverInstallPhase('done', { name: updated.label })
+    } else {
+      driverInstallStopped()
+    }
+  } catch (e) {
+    report(e, 'DriversSection.chipset')
+    driverInstallPhase('failed', { message: 'The chipset driver didn’t update.' })
+  }
+  return 'done'
+}
+
 export function DriversSection({ active, driver, onDriver, health, onHealth, about, runtimes }: {
   active: boolean
   driver: DriverState | null
@@ -114,13 +149,19 @@ export function DriversSection({ active, driver, onDriver, health, onHealth, abo
   // After the catalog's batch: the chipset (it installs on its own; the effect below goes on once it's in), then the
   // graphics driver's consent, whose install covers Exo until it's done.
   const next = useCallback(async (from: Phase) => {
+    if (from === 'chipset') {
+      if (gpuNeeds(driver)) driverInstallDismiss()
+      else {
+        const chip = healthRef.current?.items.find(item => item.key === 'chipset')
+        if (chip && (chip.applied || chip.current)) driverInstallPhase('done', { name: chip.label })
+      }
+    }
     if (from === 'catalog' && chipsetNeeds(healthRef.current)) {
-      try {
-        const answer = await host.systemHealth('chipset')
-        onHealth(answer)
-        if (!answer.ok) setError(trimStop(answer.message) || 'The chipset driver didn’t update.')
-        if (answer.ok && answer.items.some(item => item.key === 'chipset' && item.busy)) { setPhase('chipset'); return }
-      } catch (e) { report(e, 'DriversSection.chipset') }
+      const chip = healthRef.current?.items.find(item => item.key === 'chipset')
+      if (await runChipsetStep(chip?.label || 'CPU & chipset drivers', gpuNeeds(driver), onHealth, setError) === 'busy') {
+        setPhase('chipset')
+        return
+      }
     }
     setPhase(null)
     if (gpuNeeds(driver)) setAskGpu(n => n + 1)

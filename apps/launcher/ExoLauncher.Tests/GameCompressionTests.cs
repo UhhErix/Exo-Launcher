@@ -36,11 +36,12 @@ public sealed class GameCompressionTests
     [Fact]
     public void Xpress8k_by_default_lzx_only_for_big_settled_games_on_a_strong_cpu()
     {
-        Assert.Equal(Algorithm.Xpress8K, Choose(20 * GB, 16, false, Old, Now));
-        Assert.Equal(Algorithm.Lzx, Choose(60 * GB, 16, false, Old, Now));
-        // Written last week: still being patched, so no LZX on the SSD.
-        Assert.Equal(Algorithm.Xpress8K, Choose(60 * GB, 16, false, Now.AddDays(-7), Now));
-        Assert.Equal(Algorithm.Xpress8K, Choose(60 * GB, 8, false, Old, Now));
+        Assert.Equal(Algorithm.Lzx, Choose(20 * GB, 16, false, Old, Now));
+        Assert.Equal(Algorithm.Lzx, Choose(60 * GB, 16, false, Now.AddDays(-14), Now));
+        Assert.Equal(Algorithm.Xpress16K, Choose(10 * GB, 16, false, Old, Now));
+        Assert.Equal(Algorithm.Xpress16K, Choose(60 * GB, 16, false, Now.AddDays(-7), Now));
+        Assert.Equal(Algorithm.Lzx, Choose(60 * GB, 8, false, Old, Now));
+        Assert.Equal(Algorithm.Xpress8K, Choose(60 * GB, 6, false, Old, Now));
         Assert.Equal(Algorithm.Xpress4K, Choose(60 * GB, 4, false, Old, Now));
     }
 
