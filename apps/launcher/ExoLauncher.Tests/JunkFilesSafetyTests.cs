@@ -62,10 +62,12 @@ public sealed class JunkFilesSafetyTests : IDisposable
         var expected = new[]
         {
             MakeFile("Local", "Steam", "htmlcache", "Cache", "Cache_Data", "f_001"),
+            MakeFile("Local", "Steam", "htmlcache", "Default", "Cache", "Cache_Data", "f_002"),
+            MakeFile("Local", "Steam", "htmlcache", "GrShaderCache", "data_0"),
             MakeFile("PF86", "Steam", "appcache", "httpcache", "f_002"),
-            MakeFile("Local", "EpicGamesLauncher", "Saved", "webcache_4430", "data_0"),
+            MakeFile("Local", "EpicGamesLauncher", "Saved", "webcache_4430", "Cache", "Cache_Data", "data_0"),
             MakeFile("Local", "EpicGamesLauncher", "Saved", "Logs", "Epic.log"),
-            MakeFile("Local", "Battle.net", "BrowserCache", "data_0"),
+            MakeFile("Local", "Battle.net", "BrowserCache", "GPUCache", "data_0"),
             MakeFile("Common", "Blizzard Entertainment", "Battle.net", "Cache", "c.bin"),
             MakeFile("Local", "Ubisoft Game Launcher", "cache", "http2", "h.bin"),
             MakeFile("Roaming", "discord", "Cache", "Cache_Data", "f_003"),
@@ -73,6 +75,11 @@ public sealed class JunkFilesSafetyTests : IDisposable
 
         var sensitive = new[]
         {
+            MakeFile("Local", "Steam", "htmlcache", "Local State"),
+            MakeFile("Local", "Steam", "htmlcache", "Default", "Login Data"),
+            MakeFile("Local", "Steam", "htmlcache", "Default", "Network", "Cookies"),
+            MakeFile("Local", "EpicGamesLauncher", "Saved", "webcache_4430", "Cookies"),
+            MakeFile("Local", "Battle.net", "BrowserCache", "Cookies"),
             MakeFile("PF86", "Steam", "steamapps", "appmanifest_730.acf"),
             MakeFile("PF86", "Steam", "userdata", "123", "config.vdf"),
             MakeFile("Roaming", "discord", "Local Storage", "leveldb", "0001.ldb"),
@@ -83,5 +90,8 @@ public sealed class JunkFilesSafetyTests : IDisposable
         foreach (var path in expected) Assert.Contains(path, found);
         foreach (var path in sensitive) Assert.DoesNotContain(path, found);
         Assert.DoesNotContain(found, f => f.Contains("ExoLauncher", StringComparison.OrdinalIgnoreCase));
+        Assert.DoesNotContain(found, f => f.EndsWith(@"Steam\htmlcache", StringComparison.OrdinalIgnoreCase));
+        Assert.DoesNotContain(found, f => f.EndsWith("webcache_4430", StringComparison.OrdinalIgnoreCase));
+        Assert.DoesNotContain(found, f => f.EndsWith("BrowserCache", StringComparison.OrdinalIgnoreCase));
     }
 }

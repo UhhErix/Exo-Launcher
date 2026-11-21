@@ -75,6 +75,15 @@ internal static partial class JunkFiles
         }
     }
 
+    private static void AddCefCacheLeaves(string root, List<string> target)
+    {
+        if (!SafeExistingDirectory(root)) return;
+        AddExistingCacheLeaves(root, ChromiumProfileCacheLeaves, target);
+        var defaultProfile = Path.Combine(root, "Default");
+        if (SafeExistingDirectory(defaultProfile))
+            AddExistingCacheLeaves(defaultProfile, ChromiumProfileCacheLeaves, target);
+    }
+
     internal static IReadOnlyList<string> BrowserCacheFolders(string local, string roaming)
     {
         var folders = new List<string>();
@@ -109,17 +118,16 @@ internal static partial class JunkFiles
         var folders = new List<string>();
         string[] fixedPaths =
         [
-            Path.Combine(local, @"Steam\htmlcache\Cache\Cache_Data"),
-            Path.Combine(local, @"Steam\htmlcache\Code Cache"),
-            Path.Combine(local, @"Steam\htmlcache\GPUCache"),
             Path.Combine(programFilesX86, @"Steam\appcache\httpcache"),
             Path.Combine(local, @"EpicGamesLauncher\Saved\Logs"),
-            Path.Combine(local, @"Battle.net\BrowserCache"),
             Path.Combine(common, @"Blizzard Entertainment\Battle.net\Cache"),
             Path.Combine(local, @"Ubisoft Game Launcher\cache\http2"),
         ];
         foreach (var path in fixedPaths)
             if (SafeExistingDirectory(path)) folders.Add(path);
+
+        AddCefCacheLeaves(Path.Combine(local, @"Steam\htmlcache"), folders);
+        AddCefCacheLeaves(Path.Combine(local, @"Battle.net\BrowserCache"), folders);
 
         var epicSaved = Path.Combine(local, @"EpicGamesLauncher\Saved");
         if (SafeExistingDirectory(epicSaved))
@@ -127,7 +135,7 @@ internal static partial class JunkFiles
             try
             {
                 foreach (var sub in Directory.EnumerateDirectories(epicSaved, "webcache*"))
-                    if (SafeExistingDirectory(sub)) folders.Add(sub);
+                    AddCefCacheLeaves(sub, folders);
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
         }

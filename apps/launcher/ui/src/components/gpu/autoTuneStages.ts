@@ -178,9 +178,11 @@ async function runCleanupStage(): Promise<{ status: AutoTuneStageStatus; detail:
   const clean = await host.junkClean(ids)
   if (!clean.ok) return { status: 'warn', detail: clean.message ? trimStop(clean.message) : 'Cleanup could not finish' }
   const freed = clean.bytes > 0 ? `${formatSize(clean.bytes)} freed` : 'Temp and browser caches checked'
-  return clean.message
-    ? { status: 'warn', detail: `${freed} · ${trimStop(clean.message)}` }
-    : { status: 'done', detail: `${freed} across ${clean.files} files (cookies & logins kept)` }
+  if (clean.message) {
+    const suffix = clean.bytes > 0 ? 'in-use files skipped (cookies & logins kept)' : 'caches clean · in-use files skipped'
+    return { status: 'done', detail: `${freed} · ${suffix}` }
+  }
+  return { status: 'done', detail: `${freed} across ${clean.files} files (cookies & logins kept)` }
 }
 
 async function runDriversStage(state: PcState, onRefresh: () => Promise<void>): Promise<{ status: AutoTuneStageStatus; detail: string }> {

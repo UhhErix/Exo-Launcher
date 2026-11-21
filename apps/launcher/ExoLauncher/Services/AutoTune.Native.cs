@@ -331,7 +331,7 @@ internal static class AutoTuneService
         if (action is null || part is null || !Parts().Contains(part)) return Answer(null);
         return Answer(action switch
         {
-            "start" => Start(part, mode is "faster" ? "faster" : "cooler"),
+            "start" => Start(part, mode is "cooler" ? "cooler" : "faster"),
             "stop" => Stop(),
             "undo" => Undo(part),
             _ => null,
@@ -433,8 +433,8 @@ internal static class TuneView
         {
             id,
             state = !driverReady ? "needs-driver" : testing ? "testing" : state.Applied > 0 ? "tuned" : state.Phase is "crashed" ? "crashed" : "ready",
-            modes = id != "ryzen",
-            mode = state.Mode.Length > 0 ? state.Mode : "cooler",
+            modes = false,
+            mode = state.Mode.Length > 0 ? state.Mode : "faster",
             testing = testing ? state.Testing is > 0 ? "Testing " + Say(id, state.Testing.Value) : "Measuring at stock" : null,
             minutesLeft = testing && state.SecondsLeft is { } left ? (left + 59) / 60 : (int?)null,
             applied = state.Applied > 0 ? Say(id, state.Applied) : null,
