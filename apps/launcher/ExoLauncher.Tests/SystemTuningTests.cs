@@ -60,6 +60,17 @@ public sealed class SystemTuningTests : IDisposable
         public string PointWord { get; set; } = "made";
         public bool Standing { get; set; }
         public bool SupportsUserHardwareToggles { get; set; }
+        public bool SupportsScheduledTasks { get; set; }
+        public Dictionary<string, bool> Tasks { get; } = new(StringComparer.OrdinalIgnoreCase);
+        public bool? ScheduledTaskEnabled(string taskPath) => Tasks.TryGetValue(taskPath, out var on) ? on : null;
+        public bool SupportsWinFeatures { get; set; }
+        public Dictionary<uint, WindowsFeatures.FeatureSnapshot> Features { get; } = new();
+        public WindowsFeatures.FeatureSnapshot? WinFeature(uint featureId) => Features.TryGetValue(featureId, out var snap) ? snap : null;
+        public string? SelfExe { get; set; } = @"C:\ExoLauncher\ExoLauncher.exe";
+        public string? SelfExePath() => SelfExe;
+        public bool SupportsOsOverhead { get; set; }
+        public bool Laptop { get; set; }
+        public bool IsLaptop() => Laptop;
         public string? DirectXUser { get; set; }
         public int[] Mouse { get; set; } = [6, 10, 1];
         public string? UserDirectXSettings() => DirectXUser;
@@ -169,6 +180,42 @@ public sealed class SystemTuningTests : IDisposable
                     var parts = line.Split(' ');
                     var name = parts[^3];
                     Services[name] = parts[^1] switch { "demand" => (3, false), "delayed-auto" => (2, true), "auto" => (2, false), _ => (4, false) };
+                }
+                else if (line.Contains("schtasks.exe", StringComparison.OrdinalIgnoreCase) && line.Contains(" /Change ", StringComparison.OrdinalIgnoreCase))
+                {
+                    var path = line.Split('"')[1];
+                    if (line.EndsWith("/Disable", StringComparison.OrdinalIgnoreCase)) Tasks[path] = false;
+                    else if (line.EndsWith("/Enable", StringComparison.OrdinalIgnoreCase)) Tasks[path] = true;
+                }
+                else if (line.Contains(WindowsFeatures.Flag, StringComparison.OrdinalIgnoreCase))
+                {
+                    var marker = $"{WindowsFeatures.Flag} set ";
+                    var at = line.IndexOf(marker, StringComparison.OrdinalIgnoreCase);
+                    if (at >= 0)
+                    {
+                        var ops = WindowsFeatures.ParseOps(line[(at + marker.Length)..].Split(' ', StringSplitOptions.RemoveEmptyEntries));
+                        if (ops is not null)
+                        {
+                            foreach (var op in ops)
+                            {
+                                Features.TryGetValue(op.Id, out var prev);
+                                if (op.Reset)
+                                    Features[op.Id] = new WindowsFeatures.FeatureSnapshot(
+                                        op.Id,
+                                        prev?.EffectivePriority is not null and not WindowsFeatures.PriorityUser ? prev.EffectiveState : null,
+                                        prev?.EffectivePriority is not null and not WindowsFeatures.PriorityUser ? prev.EffectivePriority : null,
+                                        null,
+                                        null);
+                                else
+                                    Features[op.Id] = new WindowsFeatures.FeatureSnapshot(
+                                        op.Id,
+                                        op.EnabledState,
+                                        WindowsFeatures.PriorityUser,
+                                        (int)op.EnabledState,
+                                        (int)op.EnabledStateOptions);
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -458,7 +505,7 @@ public sealed class SystemTuningTests : IDisposable
         Assert.Null(Revert(PagefileKey, new Was(Strings: ["%TEMP%\\x"])));
         Assert.NotNull(Revert(PagefileKey, new Was(Strings: [@"C:\pagefile.sys 16384 32768", @"D:\pagefile.sys 0 0"])));
         Assert.NotNull(Revert(PagefileKey, new Was(Strings: [""])));
-        Assert.All(Trimmed, s => Assert.DoesNotContain(s.Name, new[] { "WinDefend", "Audiosrv", "BFE", "XblAuthManager", "CaptureService", "GraphicsPerfSvc", "wuauserv", "WSearch", "vgc", "BEService", "EasyAntiCheat" }));
+        Assert.All(Trimmed, s => Assert.DoesNotContain(s.Name, new[] { "WinDefend", "Audiosrv", "BFE", "XblAuthManager", "GamingServices", "CaptureService", "GraphicsPerfSvc", "wuauserv", "WSearch", "vgc", "vgk", "BEService", "EasyAntiCheat", "FACEIT", "FACEITService" }));
     }
 
     [Theory]
@@ -749,5 +796,175 @@ public sealed class SystemTuningTests : IDisposable
         Assert.Equal(1, _system.UserDwords[(@"Software\Microsoft\Windows\CurrentVersion\AdvertisingInfo", "Enabled")]);
         Assert.Equal(1, _system.UserDwords[(@"Software\Microsoft\Windows\CurrentVersion\Search", "BingSearchEnabled")]);
         Assert.False(_system.UserDwords.ContainsKey((@"Software\Microsoft\Windows\CurrentVersion\Privacy", "TailoredExperiencesWithDiagnosticDataEnabled")));
+    }
+
+    [Fact]
+    public async Task Expanded_services_trim_only_automatic_entries_and_restore_exact_start_types()
+    {
+        _system.Services["DiagTrack"] = (2, true);
+        _system.Services["WerSvc"] = (2, false);
+        _system.Services["RemoteRegistry"] = (4, false);
+        _system.Services["MapsBroker"] = (3, false);
+        _system.OnRun = _system.Take;
+
+        Assert.Null(await Make().ApplyAsync([ServicesKey]));
+        Assert.Equal((3, false), _system.Services["DiagTrack"]);
+        Assert.Equal((3, false), _system.Services["WerSvc"]);
+        Assert.Equal((4, false), _system.Services["RemoteRegistry"]);
+        Assert.Equal((3, false), _system.Services["MapsBroker"]);
+
+        Assert.Null(await Make().TurnOffAsync(ServicesKey));
+        Assert.Equal((2, true), _system.Services["DiagTrack"]);
+        Assert.Equal((2, false), _system.Services["WerSvc"]);
+        Assert.Equal((4, false), _system.Services["RemoteRegistry"]);
+    }
+
+    [Fact]
+    public async Task Scheduled_tasks_disable_and_restore_cleanly_while_rejecting_unlisted_paths()
+    {
+        _system.SupportsScheduledTasks = true;
+        var ceip = TrimmedTasks[0].Path;
+        var wer = TrimmedTasks[9].Path;
+        var maps = TrimmedTasks[10].Path;
+        _system.Tasks[ceip] = true;
+        _system.Tasks[wer] = true;
+        _system.Tasks[maps] = false;
+        _system.OnRun = _system.Take;
+
+        var initial = Make().Read().Items.Single(i => i.Key == TasksKey);
+        Assert.False(initial.On);
+        Assert.False(initial.NeedsRestart);
+        Assert.Contains("2 telemetry", initial.Detail, StringComparison.Ordinal);
+
+        Assert.Null(await Make().ApplyAsync());
+        Assert.False(_system.Tasks[ceip]);
+        Assert.False(_system.Tasks[wer]);
+        Assert.False(_system.Tasks[maps]);
+
+        var applied = Make().Read().Items.Single(i => i.Key == TasksKey);
+        Assert.True(applied.On);
+        Assert.True(applied.CanUndo);
+        Assert.False(applied.Restart);
+
+        Assert.Null(await Make().TurnOffAsync(TasksKey));
+        Assert.True(_system.Tasks[ceip]);
+        Assert.True(_system.Tasks[wer]);
+        Assert.False(_system.Tasks[maps]);
+
+        Assert.Null(Revert(TasksKey, new Was(Strings: [@"\Microsoft\Windows\Defender\Windows Defender Scheduled Scan"])));
+        Assert.NotNull(Revert(TasksKey, new Was(Strings: [ceip])));
+    }
+
+    [Fact]
+    public void Windows_features_abi_obfuscation_and_allowlist_match_windows_11()
+    {
+        Assert.Equal(12, System.Runtime.InteropServices.Marshal.SizeOf<WindowsFeatures.RtlFeatureConfiguration>());
+        Assert.Equal(32, System.Runtime.InteropServices.Marshal.SizeOf<WindowsFeatures.RtlFeatureConfigurationUpdate>());
+        Assert.Equal(1853569164u, WindowsFeatures.ObfuscateId(48433719u));
+
+        Assert.Null(WindowsFeatures.ParseOps(["123456=2:0"]));
+        Assert.Null(WindowsFeatures.ParseOps(["48433719=9:0"]));
+        Assert.Null(WindowsFeatures.ParseOps(["48433719=2:5"]));
+        var ops = WindowsFeatures.ParseOps(["48433719=2:0", "60716524=reset"]);
+        Assert.NotNull(ops);
+        Assert.Equal(2, ops.Count);
+        Assert.Equal((48433719u, false, 2u, 0u), (ops[0].Id, ops[0].Reset, ops[0].EnabledState, ops[0].EnabledStateOptions));
+        Assert.Equal((60716524u, true, 0u, 0u), (ops[1].Id, ops[1].Reset, ops[1].EnabledState, ops[1].EnabledStateOptions));
+    }
+
+    [Fact]
+    public async Task Windows_features_skip_os_enabled_and_revert_exact_prior_state()
+    {
+        _system.SupportsWinFeatures = true;
+        _system.Features[48433719u] = new WindowsFeatures.FeatureSnapshot(48433719u, 1u, WindowsFeatures.PriorityUser, 1, 0);
+        _system.Features[58989092u] = new WindowsFeatures.FeatureSnapshot(58989092u, 2u, 15u, null, null);
+        _system.Features[60716524u] = new WindowsFeatures.FeatureSnapshot(60716524u, null, null, null, null);
+        _system.Features[61391826u] = new WindowsFeatures.FeatureSnapshot(61391826u, null, null, null, null);
+        _system.OnRun = _system.Take;
+
+        Assert.Null(await Make().ApplyAsync());
+        var cmdLine = Assert.Single(_system.Runs[0], l => l.Contains(WindowsFeatures.Flag, StringComparison.Ordinal));
+        Assert.StartsWith("call \"", cmdLine, StringComparison.Ordinal);
+        Assert.Contains("48433719=2:0", cmdLine, StringComparison.Ordinal);
+        Assert.Contains("60716524=2:0", cmdLine, StringComparison.Ordinal);
+        Assert.Contains("61391826=2:0", cmdLine, StringComparison.Ordinal);
+        Assert.DoesNotContain("58989092", cmdLine, StringComparison.Ordinal);
+
+        var applied = Make().Read().Items.Single(i => i.Key == WinFeaturesKey);
+        Assert.True(applied.On && applied.CanUndo && applied.Restart);
+
+        Assert.Null(await Make().TurnOffAsync(WinFeaturesKey));
+        var revertLine = Assert.Single(_system.Runs[^1], l => l.Contains(WindowsFeatures.Flag, StringComparison.Ordinal));
+        Assert.Contains("48433719=1:0", revertLine, StringComparison.Ordinal);
+        Assert.Contains("60716524=reset", revertLine, StringComparison.Ordinal);
+        Assert.Contains("61391826=reset", revertLine, StringComparison.Ordinal);
+        Assert.Equal(1, _system.Features[48433719u].UserBootState);
+        Assert.Null(_system.Features[60716524u].UserBootState);
+        Assert.Null(_system.Features[61391826u].UserBootState);
+        Assert.Equal(2u, _system.Features[58989092u].EffectiveState);
+
+        Assert.Null(Revert(WinFeaturesKey, new Was(Strings: ["99999999=2:0"]), _system.SelfExe));
+    }
+
+    [Fact]
+    public async Task Os_overhead_applies_desktop_power_throttling_and_skips_it_on_laptop()
+    {
+        _system.SupportsOsOverhead = true;
+        _system.Dwords[(@"SOFTWARE\Policies\Microsoft\Windows\DeliveryOptimization", "DODownloadMode")] = 3;
+        _system.OnRun = _system.Take;
+
+        Assert.Null(await Make().ApplyAsync());
+        Assert.Equal(1, _system.Dwords[(@"SYSTEM\CurrentControlSet\Control\Power\PowerThrottling", "PowerThrottlingOff")]);
+        Assert.Equal(0, _system.Dwords[(@"SOFTWARE\Policies\Microsoft\Windows\DeliveryOptimization", "DODownloadMode")]);
+        Assert.Equal(0, _system.Dwords[(@"SOFTWARE\Policies\Microsoft\Dsh", "AllowNewsAndInterests")]);
+
+        Assert.Null(await Make().TurnOffAsync(OsOverheadKey));
+        Assert.False(_system.Dwords.ContainsKey((@"SYSTEM\CurrentControlSet\Control\Power\PowerThrottling", "PowerThrottlingOff")));
+        Assert.Equal(3, _system.Dwords[(@"SOFTWARE\Policies\Microsoft\Windows\DeliveryOptimization", "DODownloadMode")]);
+        Assert.False(_system.Dwords.ContainsKey((@"SOFTWARE\Policies\Microsoft\Dsh", "AllowNewsAndInterests")));
+
+        DeletionGate.DeleteFile(SavedPath);
+        _system.Runs.Clear();
+        _system.Laptop = true;
+        Assert.Null(await Make().ApplyAsync([OsOverheadKey]));
+        Assert.False(_system.Dwords.ContainsKey((@"SYSTEM\CurrentControlSet\Control\Power\PowerThrottling", "PowerThrottlingOff")));
+        Assert.Equal(0, _system.Dwords[(@"SOFTWARE\Policies\Microsoft\Windows\DeliveryOptimization", "DODownloadMode")]);
+
+        Assert.Null(Revert(OsOverheadKey, new Was(Strings: [@"SOFTWARE\Microsoft\Windows Defender|DisableAntiSpyware=1"])));
+    }
+
+    [Fact]
+    public async Task Apply_playbook_batches_defaults_and_services_in_one_uac_prompt_and_never_touches_hvci()
+    {
+        _system.Tweaked();
+        _system.SupportsScheduledTasks = true;
+        _system.SupportsWinFeatures = true;
+        _system.SupportsOsOverhead = true;
+        _system.Tasks[TrimmedTasks[0].Path] = true;
+        _system.Services["DiagTrack"] = (2, false);
+        _system.Dwords[(Hvci, "Enabled")] = 1;
+        _system.OnRun = _system.Take;
+
+        Assert.Null(await Make().ApplyPlaybookAsync());
+        Assert.Single(_system.Runs);
+        var batch = _system.Runs[0];
+        Assert.Contains(batch, l => l.Contains("powershell.exe", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(batch, l => l.Contains("sc.exe config DiagTrack start= demand", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(batch, l => l.Contains("schtasks.exe", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(batch, l => l.Contains(WindowsFeatures.Flag, StringComparison.Ordinal));
+        Assert.Contains(batch, l => l.Contains("PowerThrottlingOff", StringComparison.Ordinal));
+        Assert.DoesNotContain(batch, l => l.Contains("HypervisorEnforcedCodeIntegrity", StringComparison.Ordinal));
+
+        var items = Make().Read().Items;
+        Assert.True(items.Single(i => i.Key == ServicesKey).On);
+        Assert.False(items.Single(i => i.Key == IntegrityKey).On);
+    }
+
+    [Fact]
+    public void Native_scheduled_tasks_reader_queries_windows_without_throwing()
+    {
+        var native = new NativeSystem();
+        var states = native.ScheduledTasks(TrimmedTasks.Select(t => t.Path));
+        Assert.NotNull(states);
     }
 }

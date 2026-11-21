@@ -558,4 +558,49 @@ public sealed class AutoTuneTests : IDisposable
         Assert.Contains("FACEIT", TuneView.NeedsDriver);
         Assert.Contains("stays loaded", TuneView.NeedsDriver);
     }
+
+    [Fact]
+    public void PreviewPartsStaysVisibleWithoutTouchingDrivers()
+    {
+        Assert.Equal(["nvidia", "ryzen"], AutoTuneService.PreviewParts(
+            ["NVIDIA GeForce RTX 3070"],
+            "AMD64 Family 25 Model 33 Stepping 2",
+            "AMD Ryzen 5 5600X 6-Core Processor",
+            isLaptop: false));
+
+        Assert.Equal(["radeon"], AutoTuneService.PreviewParts(
+            ["AMD Radeon RX 7800 XT"],
+            "Intel64 Family 6 Model 183 Stepping 1",
+            "Intel Core i9-13900K",
+            isLaptop: false));
+
+        Assert.Empty(AutoTuneService.PreviewParts(
+            ["Intel(R) Arc(TM) A770 Graphics"],
+            "AMD64 Family 25 Model 33 Stepping 2",
+            "AMD Ryzen 7 5800X3D 8-Core Processor",
+            isLaptop: false));
+
+        Assert.Empty(AutoTuneService.PreviewParts(
+            ["NVIDIA GeForce RTX 4070 Laptop GPU"],
+            "AMD64 Family 25 Model 97 Stepping 2",
+            "AMD Ryzen 9 7945HX",
+            isLaptop: true));
+    }
+
+    [Fact]
+    public void TuneViewBlocksStartWhileGameRunsAndForcesFasterMode()
+    {
+        var saved = new TunePartState { Phase = "idle", Mode = "cooler" };
+        var gpu = System.Text.Json.JsonSerializer.SerializeToElement(TuneView.Of("nvidia", saved, driverReady: true, cores: 0, gameRunning: true));
+        Assert.Equal("ready", gpu.GetProperty("state").GetString());
+        Assert.False(gpu.GetProperty("modes").GetBoolean());
+        Assert.Equal("faster", gpu.GetProperty("mode").GetString());
+        Assert.Equal("Close your game first.", gpu.GetProperty("blocked").GetString());
+
+        var cpu = System.Text.Json.JsonSerializer.SerializeToElement(TuneView.Of("ryzen", saved, driverReady: false, cores: 6, gameRunning: true));
+        Assert.Equal("needs-driver", cpu.GetProperty("state").GetString());
+        Assert.False(cpu.GetProperty("modes").GetBoolean());
+        Assert.Equal("faster", cpu.GetProperty("mode").GetString());
+        Assert.Equal("Close your game first.", cpu.GetProperty("blocked").GetString());
+    }
 }

@@ -4,14 +4,13 @@ import { host, type AutoTune, type CompressList, type DisplayState, type DriverS
 import { useHdrState } from '../../lib/hdr'
 import { report } from '../../lib/report'
 import { cn, formatSize } from '../../lib/utils'
-import { Group, Row, State, SwitchRow } from '../settings/parts'
+import { Group, Row, SwitchRow } from '../settings/parts'
 import { ShadersBoard } from '../shaders/ShadersBoard'
-import { ActionButton } from '../ui/ConfirmButton'
 import { Popover } from '../ui/Dialog'
 import { UpscalersTab } from '../upscalers/UpscalersSheet'
 import { useAutopilot } from './Autopilot'
 import { useTuneReads } from './AutoTune'
-import { CompressGames, useCompressList } from './CompressGames'
+import { useCompressList } from './CompressGames'
 import { BestScreenRows, DisplayRows, HdrRows } from './DisplayTab'
 import { DriverRow, savedBranch } from './DriverRow'
 import { DriversSection } from './DriversSection'
@@ -21,6 +20,7 @@ import { AppsChip, AppsSheet, useAppsSummary } from './PcApps'
 import { BoardRows, ThisPc, type PcPartMenu } from './PcOverview'
 import { ProfileRows } from './ProfileTab'
 import { SectionSlot } from './SectionHead'
+import { StorageRoom } from './StorageRoom'
 import type { PcLink } from './pcSections'
 import { gpuOffers } from '../../lib/canUse'
 import '../../styles/pc-room.css'
@@ -95,7 +95,7 @@ function usePcState(active: boolean) {
   return { state, put, read }
 }
 
-type Menu = 'storage' | PcPartMenu
+type Menu = PcPartMenu
 
 /**
  * The PC room (DESIGN.md › PC): one page, no scrolling on a 1080p screen. This PC leads, its name with its chips at the
@@ -115,7 +115,8 @@ export function PcRoom({ active, jump, games, settings, onSave }: {
   const hdr = useHdrState(active)
   const [menu, setMenu] = useState<Menu | null>(null)
   const [autoTuneOpen, setAutoTuneOpen] = useState(false)
-  const [autoTuneTab, setAutoTuneTab] = useState<'studio' | 'exo-ai'>('studio')
+  const [autoTuneOverrides, setAutoTuneOverrides] = useState(false)
+  const [storageOpen, setStorageOpen] = useState(false)
   const [appsOpen, setAppsOpen] = useState(false)
   // A new number reads the apps again (after the sheet closes, after junk is cleaned).
   const [appsRead, setAppsRead] = useState(0)
@@ -133,10 +134,16 @@ export function PcRoom({ active, jump, games, settings, onSave }: {
   useTuneReads(active, state.tune, autoTuneOpen, setTune)
   const autopilot = useAutopilot(active, autoTuneOpen)
   const exoAi = useExoAi(active, autoTuneOpen)
-  const openAutoTune = useCallback((tab: 'studio' | 'exo-ai' = 'studio') => {
+  const openAutoTune = useCallback((withOverrides = false) => {
     setMenu(null)
-    setAutoTuneTab(tab)
+    setStorageOpen(false)
+    setAutoTuneOverrides(withOverrides)
     setAutoTuneOpen(true)
+  }, [])
+  const openStorage = useCallback(() => {
+    setMenu(null)
+    setAutoTuneOpen(false)
+    setStorageOpen(true)
   }, [])
   const openApps = () => setAppsOpen(true)
   const readApps = () => setAppsRead(n => n + 1)
@@ -151,16 +158,15 @@ export function PcRoom({ active, jump, games, settings, onSave }: {
     // The control panel's link waits for the card to be known: it opens a different app per maker.
     if (jump.tab === 'control' && !vendor) return
     handled.current = jump
-    if (jump.tab === 'performance') { openAutoTune('studio'); return }
-    if (jump.tab === 'autopilot') { openAutoTune('exo-ai'); return }
+    if (jump.tab === 'performance') { openAutoTune(false); return }
+    if (jump.tab === 'autopilot') { openAutoTune(true); return }
+    if (jump.tab === 'drives' || jump.tab === 'compress') { openStorage(); return }
     const opens: Partial<Record<PcLink, Menu>> = {
       graphics: 'graphics',
       upscalers: 'graphics',
       control: 'graphics',
       display: 'display',
       board: 'board',
-      drives: 'storage',
-      compress: 'storage',
     }
     // AMD's and Intel's control panels are their own apps: the link opens that app, not NVIDIA's menu.
     if (jump.tab === 'control' && vendor && vendor !== 'nvidia') {
@@ -176,13 +182,13 @@ export function PcRoom({ active, jump, games, settings, onSave }: {
     if (jump.tab === 'apps') { setAppsOpen(true); return }
     if (jump.tab === 'overview' || jump.tab === 'network') { scroller.scrollTop = 0; return }
     scroller.querySelector(`[data-pc-part="${jump.tab}"]`)?.scrollIntoView({ block: 'start' })
-  }, [active, jump, vendor, openAutoTune])
+  }, [active, jump, vendor, openAutoTune, openStorage])
 
   const chips = (
     <>
-      <AutoTuneChip state={state} exoAi={exoAi.state} hdr={hdr} settings={settings} onOpen={() => openAutoTune('studio')} />
+      <AutoTuneChip state={state} exoAi={exoAi.state} hdr={hdr} settings={settings} onOpen={() => openAutoTune(false)} />
       <AppsChip summary={apps} onOpen={openApps} />
-      <StorageChip drives={state.drives} list={compress.list} onOpen={() => setMenu('storage')} />
+      <StorageChip drives={state.drives} list={compress.list} onOpen={openStorage} />
     </>
   )
 
@@ -201,11 +207,6 @@ export function PcRoom({ active, jump, games, settings, onSave }: {
         <ShadersBoard active={active} games={games} />
       </Section>
 
-      {menu === 'storage' ? (
-        <PcMenu title="Storage" onClose={closeMenu}>
-          <StorageSheet drives={state.drives} onDrives={setDrives} list={compress.list} onList={compress.setList} onRead={compress.read} />
-        </PcMenu>
-      ) : null}
       {menu === 'board' ? (
         <PcMenu title="Motherboard" onClose={closeMenu}>
           <div className="exo-pc-menu-rows"><BoardRows about={state.about} /></div>
@@ -246,11 +247,10 @@ export function PcRoom({ active, jump, games, settings, onSave }: {
       <AutoTuneOverlay
         active={active}
         open={autoTuneOpen}
-        initialTab={autoTuneTab}
-        onClose={() => setAutoTuneOpen(false)}
+        initialOverrides={autoTuneOverrides}
+        onClose={() => { setAutoTuneOpen(false); setAutoTuneOverrides(false) }}
         state={state}
         exoAi={exoAi.state}
-        onExoAi={exoAi.setState}
         autopilot={autopilot.state}
         onAutopilot={autopilot.setState}
         hdr={hdr}
@@ -262,6 +262,16 @@ export function PcRoom({ active, jump, games, settings, onSave }: {
         onInterrupts={setInterrupts}
         onTuning={setTuning}
         onRefresh={async () => { await read(); exoAi.refresh() }}
+      />
+      <StorageRoom
+        active={active}
+        open={storageOpen}
+        onClose={() => setStorageOpen(false)}
+        drives={state.drives}
+        onDrives={setDrives}
+        list={compress.list}
+        onList={compress.setList}
+        onReadCompress={compress.read}
       />
       <AppsSheet open={appsOpen} onClose={() => { setAppsOpen(false); readApps() }} />
     </main>
@@ -291,63 +301,6 @@ function StorageChip({ drives, list, onOpen }: { drives: DrivesState | null; lis
       <Drive size={14} />
       {label}
     </button>
-  )
-}
-
-function StorageSheet({ drives, onDrives, list, onList, onRead }: {
-  drives: DrivesState | null
-  onDrives: (next: DrivesState) => void
-  list: CompressList | null
-  onList: (next: CompressList) => void
-  onRead: () => void
-}) {
-  return (
-    <div className="exo-storage-section">
-      {drives && (drives.drives.length > 0 || drives.fixes.length > 0) ? (
-        <Group id="storage-drives" title="Drives">
-          {drives.drives.map(drive => {
-            const letters = drive.volumes.map(v => `${v.letter}:`).join(', ')
-            const freeGb = Math.round(drive.volumes.reduce((sum, v) => sum + v.freeGb, 0))
-            const bad = drive.verdicts.some(v => v.bad)
-            const detail = [
-              drive.kind,
-              drive.volumes.length > 0 ? `${freeGb} GB free` : null,
-              drive.temperature?.now != null ? `${drive.temperature.now} °C` : null,
-              ...drive.verdicts.filter(v => v.bad).map(v => v.text),
-            ].filter(Boolean).join(' · ')
-            return (
-              <Row key={drive.id} label={[letters, drive.model].filter(Boolean).join(' · ') || drive.kind} detail={detail}>
-                <State on={!bad}>{bad ? 'Check' : 'Healthy'}</State>
-              </Row>
-            )
-          })}
-          {drives.fixes.map(fix => (
-            <Row key={fix.key} label={fix.label} detail={fix.detail}>
-              {fix.applied ? (
-                <State on>{fix.restart ? 'After restart' : 'Optimal'}</State>
-              ) : (
-                <ActionButton
-                  className="exo-set-btn"
-                  timeoutMs={15_000}
-                  why="none"
-                  context={`Storage.fix.${fix.key}`}
-                  onPress={async () => {
-                    const next = await host.systemDrives(fix.key)
-                    onDrives(next)
-                    return next
-                  }}
-                >
-                  Apply
-                </ActionButton>
-              )}
-            </Row>
-          ))}
-        </Group>
-      ) : null}
-      <Group id="storage-compress" title="Compress games">
-        <CompressGames list={list} onList={onList} onRead={onRead} />
-      </Group>
-    </div>
   )
 }
 
