@@ -1084,6 +1084,18 @@ impl AppState {
             self.discord.add_friend_open = false;
             return true;
         }
+        if self.room == Room::Discord && self.discord.chat.editing.is_some() {
+            self.discord.chat.editing = None;
+            return true;
+        }
+        if self.room == Room::Discord && self.discord.chat.drawer != crate::discord_chat_state::ChatDrawer::None {
+            self.discord.chat.drawer = crate::discord_chat_state::ChatDrawer::None;
+            return true;
+        }
+        if self.room == Room::Discord && self.discord.chat.reply_to.is_some() {
+            self.discord.chat.reply_to = None;
+            return true;
+        }
         if self.media.open_capture_id.is_some() {
             self.close_capture_item();
             return true;

@@ -1,3 +1,4 @@
+use crate::discord_chat;
 use crate::discord_state::{DiscordHomeTab, DiscordPlace};
 use crate::state::{AppState, Room};
 use exo_kit::{
@@ -92,7 +93,7 @@ fn lift_role_color(raw: Option<&str>, offline: bool) -> Color {
     )
 }
 
-fn avatar_box(
+pub(crate) fn avatar_box(
     s: &AppState,
     url: Option<&str>,
     name: &str,
@@ -2098,48 +2099,45 @@ fn channel_or_dm_stage(s: &AppState, scale: f32) -> El {
                         ),
                 )
                 .child(
-                    if in_call {
-                        glass_button("dc-dm-leave", "End call", Some(icon_phone_off(13.0, bad())))
-                    } else {
-                        glass_button("dc-dm-call", "Voice call", Some(icon_phone(13.0, FG)))
-                    }
-                    .on_press(move |s: &mut AppState| {
-                        if in_call {
-                            s.leave_discord_voice();
-                        } else {
-                            s.join_discord_voice(None, &dm_id);
-                        }
-                    }),
+                    row()
+                        .gap(6.0)
+                        .center_y()
+                        .child(discord_chat::header_tools(s))
+                        .child(
+                            if in_call {
+                                glass_button(
+                                    "dc-dm-leave",
+                                    "End call",
+                                    Some(icon_phone_off(13.0, bad())),
+                                )
+                            } else {
+                                glass_button(
+                                    "dc-dm-call",
+                                    "Voice call",
+                                    Some(icon_phone(13.0, FG)),
+                                )
+                            }
+                            .on_press(move |s: &mut AppState| {
+                                if in_call {
+                                    s.leave_discord_voice();
+                                } else {
+                                    s.join_discord_voice(None, &dm_id);
+                                }
+                            }),
+                        ),
                 );
 
-            let body = col()
-                .grow(1.0)
-                .w_full()
-                .px(24.0).py(24.0)
-                .gap(12.0)
-                .justify_end()
-                .child(avatar_box(
-                    s,
-                    dm.avatar.as_deref(),
-                    &dm.name,
-                    64.0,
-                    if dm.group { 18.0 } else { 32.0 },
-                    dm.status.as_deref(),
-                    false,
-                    scale,
-                ))
-                .child(text(dm.name.clone()).font(type_page()).color(FG))
-                .child(
-                    text(
-                        dm.line
-                            .clone()
-                            .unwrap_or_else(|| "Conversation ready for Phase 5b live timeline & composer.".into()),
-                    )
-                    .font(type_body())
-                    .color(fg_muted())
-                    .w_full()
-                    .wrap(),
-                );
+            let chat_body = discord_chat::timeline_and_composer(
+                s,
+                &dm.id,
+                format!("Message {}…", dm.name),
+                dm.name.clone(),
+                dm.subtitle
+                    .clone()
+                    .unwrap_or_else(|| "This is the start of your conversation.".into()),
+                true,
+                scale,
+            );
 
             col()
                 .key("dc-dm-stage")
@@ -2148,16 +2146,7 @@ fn channel_or_dm_stage(s: &AppState, scale: f32) -> El {
                 .h_full()
                 .gap(GAP)
                 .child(header)
-                .child(
-                    col()
-                        .grow(1.0)
-                        .w_full()
-                        .min_h(0.0)
-                        .radius(RADIUS_PANEL)
-                        .fill(pane_surface())
-                        .border(1.0, hairline())
-                        .child(body),
-                )
+                .child(chat_body)
         }
         DiscordPlace::Servers => {
             let Some(ch) = s.discord.active_channel() else {
@@ -2230,9 +2219,11 @@ fn channel_or_dm_stage(s: &AppState, scale: f32) -> El {
                         }
                     }),
                 );
+            } else {
+                header = header.child(discord_chat::header_tools(s));
             }
 
-            let stage_body = if is_voice {
+            let stage_pane = if is_voice {
                 let mut tiles = row().w_full().gap(14.0).flex_wrap().justify_center();
                 if let Some(ref members) = ch.members {
                     for m in members {
@@ -2282,37 +2273,31 @@ fn channel_or_dm_stage(s: &AppState, scale: f32) -> El {
                 col()
                     .grow(1.0)
                     .w_full()
-                    .px(24.0).py(24.0)
-                    .gap(16.0)
-                    .center()
-                    .child(tiles)
-            } else {
-                col()
-                    .grow(1.0)
-                    .w_full()
-                    .px(24.0).py(24.0)
-                    .gap(10.0)
-                    .justify_end()
+                    .min_h(0.0)
+                    .radius(RADIUS_PANEL)
+                    .fill(pane_surface())
+                    .border(1.0, hairline())
                     .child(
-                        el().size(48.0, 48.0)
-                            .radius(14.0)
-                            .fill(subtle_fill())
-                            .border(1.0, glass_rim())
+                        col()
+                            .grow(1.0)
+                            .w_full()
+                            .px(24.0).py(24.0)
+                            .gap(16.0)
                             .center()
-                            .child(icon_hash(22.0, FG)),
+                            .child(tiles),
                     )
-                    .child(text(format!("Welcome to #{}", ch.name)).font(type_page()).color(FG))
-                    .child(
-                        text(
-                            ch.topic
-                                .clone()
-                                .unwrap_or_else(|| "Channel timeline, markdown, embeds, and composer connect in Phase 5b.".into()),
-                        )
-                        .font(type_body())
-                        .color(fg_muted())
-                        .w_full()
-                        .wrap(),
-                    )
+            } else {
+                discord_chat::timeline_and_composer(
+                    s,
+                    &ch.id,
+                    format!("Message #{}…", ch.name),
+                    format!("Welcome to #{}", ch.name),
+                    ch.topic
+                        .clone()
+                        .unwrap_or_else(|| format!("This is the start of the #{} channel.", ch.name)),
+                    ch.can_send != Some(false),
+                    scale,
+                )
             };
 
             col()
@@ -2322,16 +2307,7 @@ fn channel_or_dm_stage(s: &AppState, scale: f32) -> El {
                 .h_full()
                 .gap(GAP)
                 .child(header)
-                .child(
-                    col()
-                        .grow(1.0)
-                        .w_full()
-                        .min_h(0.0)
-                        .radius(RADIUS_PANEL)
-                        .fill(pane_surface())
-                        .border(1.0, hairline())
-                        .child(stage_body),
-                )
+                .child(stage_pane)
         }
         DiscordPlace::Home => el(),
     }
@@ -2602,7 +2578,9 @@ pub fn view(s: &AppState, scale: f32) -> El {
                 .gap(GAP)
                 .child(messages_left_rail(s, scale))
                 .child(channel_or_dm_stage(s, scale));
-            if let Some(panel) = right_members_panel(s, scale) {
+            if let Some(drawer) = discord_chat::chat_drawer_panel(s, scale) {
+                r = r.child(drawer);
+            } else if let Some(panel) = right_members_panel(s, scale) {
                 r = r.child(panel);
             }
             r
@@ -2618,7 +2596,9 @@ pub fn view(s: &AppState, scale: f32) -> El {
                     .gap(GAP)
                     .child(server_left_rail(s, guild, scale))
                     .child(channel_or_dm_stage(s, scale));
-                if let Some(panel) = right_members_panel(s, scale) {
+                if let Some(drawer) = discord_chat::chat_drawer_panel(s, scale) {
+                    r = r.child(drawer);
+                } else if let Some(panel) = right_members_panel(s, scale) {
                     r = r.child(panel);
                 }
                 r

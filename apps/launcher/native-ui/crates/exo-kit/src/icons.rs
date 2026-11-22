@@ -670,3 +670,89 @@ pub fn icon_chevron_right(size: f32, color: Color) -> El {
     strokes(size, &[&[[9.0, 6.0], [15.0, 12.0], [9.0, 18.0]]], color)
 }
 
+pub fn icon_send(size: f32, color: Color) -> El {
+    strokes(
+        size,
+        &[
+            &[[20.5, 4.0], [11.0, 13.5]],
+            &[[20.5, 4.0], [14.0, 20.5], [10.5, 13.5], [3.5, 10.0], [20.5, 4.0]],
+        ],
+        color,
+    )
+}
+
+pub fn icon_reply(size: f32, color: Color) -> El {
+    strokes(
+        size,
+        &[
+            &[[9.0, 7.0], [4.0, 12.0], [9.0, 17.0]],
+            &[[4.0, 12.0], [15.5, 12.0], [19.0, 15.0], [20.0, 19.0]],
+        ],
+        color,
+    )
+}
+
+pub fn icon_pin(size: f32, color: Color) -> El {
+    strokes(
+        size,
+        &[
+            &[[12.0, 16.5], [12.0, 21.5]],
+            &[[6.0, 16.5], [18.0, 16.5]],
+            &[[8.5, 4.5], [15.5, 4.5], [14.5, 11.5], [17.5, 16.5], [6.5, 16.5], [9.5, 11.5], [8.5, 4.5]],
+        ],
+        color,
+    )
+}
+
+pub fn icon_smile(size: f32, color: Color) -> El {
+    let ring = circle_pts(12.0, 12.0, 8.5, 24);
+    let shape = Shape::new()
+        .view_box(24.0, 24.0)
+        .stroke(ring, 1.8, color)
+        .stroke(vec![[8.5, 14.5], [10.5, 16.5], [13.5, 16.5], [15.5, 14.5]], 1.8, color)
+        .stroke(vec![[9.0, 9.5], [9.2, 9.5]], 2.2, color)
+        .stroke(vec![[15.0, 9.5], [15.2, 9.5]], 2.2, color);
+    canvas(shape).size(size, size)
+}
+
+pub fn icon_paperclip(size: f32, color: Color) -> El {
+    strokes(
+        size,
+        &[&[
+            [20.0, 10.5],
+            [11.5, 19.0],
+            [7.5, 19.0],
+            [5.0, 16.5],
+            [5.0, 12.5],
+            [13.5, 4.0],
+            [16.5, 4.0],
+            [18.5, 6.0],
+            [18.5, 9.0],
+            [10.5, 17.0],
+            [8.5, 17.0],
+            [8.5, 15.0],
+            [15.5, 8.0],
+        ]],
+        color,
+    )
+}
+
+pub fn icon_edit(size: f32, color: Color) -> El {
+    strokes(
+        size,
+        &[
+            &[[4.5, 19.5], [9.0, 18.5], [19.0, 8.5], [15.5, 5.0], [5.5, 15.0], [4.5, 19.5]],
+            &[[13.5, 7.0], [17.0, 10.5]],
+        ],
+        color,
+    )
+}
+
+pub fn icon_plus(size: f32, color: Color) -> El {
+    strokes(
+        size,
+        &[&[[12.0, 5.0], [12.0, 19.0]], &[[5.0, 12.0], [19.0, 12.0]]],
+        color,
+    )
+}
+

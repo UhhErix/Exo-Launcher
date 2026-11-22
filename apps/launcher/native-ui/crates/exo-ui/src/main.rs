@@ -1,5 +1,8 @@
 mod captures;
 mod discord;
+mod discord_chat;
+mod discord_chat_state;
+mod discord_md;
 mod discord_state;
 mod game_page;
 mod gamepad;
@@ -517,6 +520,9 @@ fn main() {
                         exo_rpc::HostEvent::DiscordSpeaking { user_id, speaking } => {
                             s.handle_discord_speaking(&user_id, speaking);
                         }
+                        exo_rpc::HostEvent::DiscordMessage(ev) => s.handle_discord_message(ev),
+                        exo_rpc::HostEvent::DiscordReaction(ev) => s.handle_discord_reaction(ev),
+                        exo_rpc::HostEvent::DiscordTyping(ev) => s.handle_discord_typing(ev),
                         exo_rpc::HostEvent::DevicesChanged => {
                             if s.room == state::Room::Pc && s.pc.pc_tab == pc_state::PcTab::Devices {
                                 s.load_pc_devices();
@@ -836,5 +842,71 @@ mod tests {
         });
         rt.frame(7.0 / 60.0);
         assert!(rt.find("dc-signin-card").is_some());
+    }
+
+    #[test]
+    fn phase5b_discord_virtual_timeline_markdown_send_react_pins_and_search() {
+        let mut rt = Runtime::new(
+            AppState::default(),
+            shell::view,
+            (1280.0, 800.0),
+            Env::new(true, 1.0),
+        );
+        rt.update(|s, _| {
+            s.switch_room(Room::Discord);
+            s.open_discord_guild("g-exo");
+        });
+        rt.frame(0.0);
+        assert!(rt.find("dc-composer").is_some());
+        let blurs = rt
+            .instances
+            .iter()
+            .filter(|i| i.params[1] == KIND_BACKDROP_BLUR)
+            .count();
+        assert!(blurs <= 4, "Discord chat exceeded MAX_BACKDROP_BLURS=4: {blurs}");
+
+        let before_count = rt
+            .state
+            .discord
+            .chat
+            .messages_by_channel
+            .get("ch-general")
+            .map(|v| v.len())
+            .unwrap_or(0);
+        rt.update(|s, _| {
+            s.discord.chat.composer.text = "Hello **Rune** `virtual_rows`!".into();
+        });
+        rt.frame(1.0 / 60.0);
+        let (sx, sy) = rt.find("dc-composer-send").expect("Composer send button");
+        rt.pointer_down(sx, sy);
+        rt.pointer_up(sx, sy);
+        rt.frame(2.0 / 60.0);
+        let after_count = rt
+            .state
+            .discord
+            .chat
+            .messages_by_channel
+            .get("ch-general")
+            .map(|v| v.len())
+            .unwrap_or(0);
+        assert_eq!(after_count, before_count + 1);
+
+        let (px, py) = rt.find("dc-hdr-pins").expect("Pins drawer trigger");
+        rt.pointer_down(px, py);
+        rt.pointer_up(px, py);
+        rt.frame(3.0 / 60.0);
+        assert!(rt.find("dc-pins-drawer").is_some());
+
+        let (qx, qy) = rt.find("dc-hdr-search").expect("Search drawer trigger");
+        rt.pointer_down(qx, qy);
+        rt.pointer_up(qx, qy);
+        rt.frame(4.0 / 60.0);
+        assert!(rt.find("dc-search-drawer").is_some());
+        rt.update(|s, _| {
+            s.discord.chat.search_input.text = "DX12".into();
+            s.run_discord_search();
+        });
+        rt.frame(5.0 / 60.0);
+        assert!(rt.state.discord.chat.search_total >= 1);
     }
 }
