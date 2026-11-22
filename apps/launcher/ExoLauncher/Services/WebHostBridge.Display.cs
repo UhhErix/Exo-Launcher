@@ -5,7 +5,48 @@ namespace ExoLauncher.Services;
 
 public sealed partial class WebHostBridge
 {
+    private static readonly TimeSpan DisplayCacheTtl = TimeSpan.FromSeconds(15);
     private readonly Lock _displayGate = new();
+    private TtlReadCache<object>? _displayCache;
+
+    private TtlReadCache<object> DisplayCache => _displayCache ??= new(
+        DisplayCacheTtl,
+        () => ReadDisplayStateAsync(null),
+        fingerprint: ReadDisplaySignature);
+
+    internal static string ReadDisplaySignature() =>
+        BuildDisplaySignature(WindowsHdr.PrimaryGdiName(), WindowsHdr.All());
+
+    internal static string BuildDisplaySignature(string? primary, IReadOnlyList<WindowsHdr.Screen> screens)
+    {
+        var head = primary ?? "";
+        var sb = new System.Text.StringBuilder(head.Length + screens.Count * 96);
+        sb.Append(head);
+        foreach (var s in screens)
+        {
+            sb.Append('|').Append(s.Adapter.HighPart).Append(':').Append(s.Adapter.LowPart)
+              .Append(':').Append(s.Target).Append(':').Append(s.Source)
+              .Append(':').Append(s.GdiName).Append(':').Append(s.DevicePath)
+              .Append(':').Append(s.Supported ? '1' : '0').Append(s.Enabled ? '1' : '0')
+              .Append(':').Append(s.PixelRate).Append(':').Append(BitConverter.DoubleToInt64Bits(s.RefreshHz))
+              .Append(':').Append(s.Connector);
+        }
+        return sb.ToString();
+    }
+
+    internal static async Task<MonitorDdc.Levels?[]> ReadAllDdcAsync(
+        IReadOnlyList<string> gdiNames, Func<string, MonitorDdc.Levels?> reader)
+    {
+        if (gdiNames.Count == 0) return [];
+        if (gdiNames.Count == 1) return [await Task.Run(() => reader(gdiNames[0])).ConfigureAwait(false)];
+        var tasks = new Task<MonitorDdc.Levels?>[gdiNames.Count];
+        for (var i = 0; i < gdiNames.Count; i++)
+        {
+            var gdi = gdiNames[i];
+            tasks[i] = Task.Run(() => reader(gdi));
+        }
+        return await Task.WhenAll(tasks).ConfigureAwait(false);
+    }
 
     /// <summary>One active screen: its GPU, the refresh rates and colors it takes, and what its link carries now.</summary>
     private sealed record DisplayScreen(string Gdi, string Name, bool Main, bool Hdr, string? Vendor, uint? NvId, uint Target,
@@ -18,45 +59,54 @@ public sealed partial class WebHostBridge
     /// "auto": the driver's own color settings) and keeps it at once. "adjust" sets the color sliders
     /// (<see cref="SetColor"/>), which apply at once too.
     /// </summary>
-    private Task<object> GpuDisplayAsync(JsonElement p, bool hasParams) => Task.Run(() =>
+    private async Task<object> GpuDisplayAsync(JsonElement p, bool hasParams, CancellationToken ct)
     {
         var action = ReadString(p, hasParams, "action") ?? "state";
-        string? message = null;
-        switch (action)
-        {
-            case "set":
-                message = SetDisplay(p, hasParams);
-                break;
-            case "adjust":
-                lock (_displayGate) message = SetColor(p, hasParams);
-                break;
-            case "video":
-                message = SetVideo(p, hasParams);
-                break;
-            case "override":
-                message = SetScalingOverride(p, hasParams);
-                break;
-            case "ddc":
-                lock (_displayGate) message = SetDdc(p, hasParams);
-                break;
-        }
-        return DisplayState(message);
-    });
+        var force = ReadBool(p, hasParams, "force") == true;
+        if (action == "state")
+            return await DisplayCache.GetAsync(force, ct).ConfigureAwait(false);
 
-    private object DisplayState(string? message)
+        var affectsProfile = action is "set" or "video" or "override";
+        var gen = DisplayCache.BeginMutation();
+        if (affectsProfile) _profileCache?.Invalidate();
+        var message = await Task.Run(() => action switch
+        {
+            "set" => SetDisplay(p, hasParams),
+            "adjust" => RunLocked(() => SetColor(p, hasParams)),
+            "video" => SetVideo(p, hasParams),
+            "override" => SetScalingOverride(p, hasParams),
+            "ddc" => RunLocked(() => SetDdc(p, hasParams)),
+            _ => (string?)null,
+        }, ct).ConfigureAwait(false);
+        var state = await ReadDisplayStateAsync(message).ConfigureAwait(false);
+        if (message is null) DisplayCache.CompleteMutation(gen, state);
+        if (affectsProfile) _profileCache?.Invalidate();
+        return state;
+    }
+
+    private string? RunLocked(Func<string?> work)
+    {
+        lock (_displayGate) return work();
+    }
+
+    private Task<object> ReadDisplayStateAsync(string? message) => Task.Run(async () =>
     {
         var primary = WindowsHdr.PrimaryGdiName();
-        var screens = WindowsHdr.All().Select(screen => ReadScreen(screen, primary)).ToList();
+        var rawScreens = WindowsHdr.All();
+        var ddcTask = ReadAllDdcAsync(rawScreens.Select(s => s.GdiName).ToArray(), MonitorDdc.Read);
+        var screens = rawScreens.Select(screen => ReadScreen(screen, primary)).ToList();
         var nvidia = screens.FirstOrDefault(screen => screen.NvId is not null)?.Gdi;
         var videoHdr = nvidia is null ? null : NvidiaVideo.Read(nvidia, NvidiaVideo.VideoHdr);
-        return new
+        var superRes = nvidia is null ? null : NvidiaVideo.Read(nvidia, NvidiaVideo.SuperResolution);
+        var ddcLevels = await ddcTask.ConfigureAwait(false);
+        return (object)new
         {
             ok = message is null,
             message,
             displays = screens.Select((screen, index) =>
             {
                 var best = BestFor(screen);
-                var ddc = MonitorDdc.Read(screen.Gdi);
+                var ddc = index < ddcLevels.Length ? ddcLevels[index] : null;
                 return new
                 {
                     id = DisplayId(screen.Gdi),
@@ -97,11 +147,11 @@ public sealed partial class WebHostBridge
             // RTX Video is global on the card: read through any screen it drives.
             video = nvidia is null ? null : new
             {
-                superResolution = NvidiaVideo.Read(nvidia, NvidiaVideo.SuperResolution),
+                superResolution = superRes,
                 hdr = videoHdr,
             },
         };
-    }
+    });
 
     /// <summary>
     /// A screen running Windows HDR on an RTX card that has RTX Video HDR: the best has it on, so video that isn't HDR

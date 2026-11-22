@@ -2,11 +2,167 @@ using Windows.Media.Control;
 
 namespace ExoLauncher.Services;
 
-internal sealed class HeadlessMusicService
+internal sealed class HeadlessMusicService : IDisposable
 {
+    private const int PushDebounceMs = 150;
+    private readonly Lock _gate = new();
     private Task<GlobalSystemMediaTransportControlsSessionManager?>? _managerTask;
+    private GlobalSystemMediaTransportControlsSessionManager? _manager;
+    private GlobalSystemMediaTransportControlsSession? _hookedSession;
+    private Action<string, object?>? _publishEvent;
+    private Func<bool>? _suppressed;
+    private Timer? _debounceTimer;
+    private int _pushRunning;
+    private int _pushPending;
+    private bool _lastHadPlayback;
+    private bool _attached;
     private double _lastVolume = 0.75;
     private bool _lastMuted;
+
+    internal void Attach(Action<string, object?> publishEvent, Func<bool> suppressed)
+    {
+        lock (_gate)
+        {
+            _publishEvent = publishEvent;
+            _suppressed = suppressed;
+            if (_attached) return;
+            _attached = true;
+            _debounceTimer ??= new Timer(_ => _ = FlushPushAsync(), null, Timeout.Infinite, Timeout.Infinite);
+        }
+        _ = WireGsmtcAsync();
+    }
+
+    internal void Detach()
+    {
+        GlobalSystemMediaTransportControlsSessionManager? mgr;
+        GlobalSystemMediaTransportControlsSession? session;
+        Timer? timer;
+        lock (_gate)
+        {
+            _attached = false;
+            _publishEvent = null;
+            _suppressed = null;
+            mgr = _manager;
+            _manager = null;
+            session = _hookedSession;
+            _hookedSession = null;
+            timer = _debounceTimer;
+            _debounceTimer = null;
+        }
+        if (session is not null) UnhookSession(session);
+        if (mgr is not null)
+        {
+            try { mgr.CurrentSessionChanged -= OnCurrentSessionChanged; } catch { }
+        }
+        try { timer?.Dispose(); } catch { }
+    }
+
+    private async Task WireGsmtcAsync()
+    {
+        var mgr = await GetManagerAsync().ConfigureAwait(false);
+        if (mgr is null) return;
+        GlobalSystemMediaTransportControlsSession? initial;
+        lock (_gate)
+        {
+            if (!_attached) return;
+            if (!ReferenceEquals(_manager, mgr))
+            {
+                _manager = mgr;
+                try { mgr.CurrentSessionChanged += OnCurrentSessionChanged; } catch { }
+            }
+            initial = SelectSession(mgr);
+            ReplaceHookedSessionLocked(initial);
+        }
+        SchedulePush();
+    }
+
+    private void OnCurrentSessionChanged(GlobalSystemMediaTransportControlsSessionManager sender, CurrentSessionChangedEventArgs args)
+    {
+        lock (_gate)
+        {
+            if (!_attached) return;
+            ReplaceHookedSessionLocked(SelectSession(sender));
+        }
+        SchedulePush();
+    }
+
+    private void OnSessionChanged(GlobalSystemMediaTransportControlsSession sender, object args) => SchedulePush();
+
+    private void ReplaceHookedSessionLocked(GlobalSystemMediaTransportControlsSession? next)
+    {
+        if (ReferenceEquals(_hookedSession, next)) return;
+        if (_hookedSession is { } prev) UnhookSession(prev);
+        _hookedSession = next;
+        if (next is not null)
+        {
+            try
+            {
+                next.MediaPropertiesChanged += OnSessionChanged;
+                next.PlaybackInfoChanged += OnSessionChanged;
+                next.TimelinePropertiesChanged += OnSessionChanged;
+            }
+            catch { }
+        }
+    }
+
+    private void UnhookSession(GlobalSystemMediaTransportControlsSession session)
+    {
+        try
+        {
+            session.MediaPropertiesChanged -= OnSessionChanged;
+            session.PlaybackInfoChanged -= OnSessionChanged;
+            session.TimelinePropertiesChanged -= OnSessionChanged;
+        }
+        catch { }
+    }
+
+    private void SchedulePush()
+    {
+        lock (_gate)
+        {
+            if (!_attached || _debounceTimer is null) return;
+            try { _debounceTimer.Change(PushDebounceMs, Timeout.Infinite); } catch { }
+        }
+    }
+
+    private async Task FlushPushAsync()
+    {
+        Volatile.Write(ref _pushPending, 1);
+        if (Interlocked.Exchange(ref _pushRunning, 1) != 0) return;
+        try
+        {
+            while (Interlocked.Exchange(ref _pushPending, 0) != 0)
+            {
+                Action<string, object?>? publish;
+                Func<bool>? suppressed;
+                lock (_gate)
+                {
+                    if (!_attached) return;
+                    publish = _publishEvent;
+                    suppressed = _suppressed;
+                }
+                if (publish is null || suppressed?.Invoke() == true) continue;
+                var dto = await BuildPlaybackDtoAsync().ConfigureAwait(false);
+                var hasPlayback = dto is not null;
+                if (!ShouldPublishPlaybackTransition(hasPlayback, ref _lastHadPlayback)) continue;
+                try { publish("music.playback", dto); } catch { }
+            }
+        }
+        catch { }
+        finally
+        {
+            Interlocked.Exchange(ref _pushRunning, 0);
+            if (Volatile.Read(ref _pushPending) != 0)
+                _ = FlushPushAsync();
+        }
+    }
+
+    internal static bool ShouldPublishPlaybackTransition(bool hasPlayback, ref bool lastHadPlayback)
+    {
+        if (!hasPlayback && !lastHadPlayback) return false;
+        lastHadPlayback = hasPlayback;
+        return true;
+    }
 
     private Task<GlobalSystemMediaTransportControlsSessionManager?> GetManagerAsync() =>
         _managerTask ??= LoadManagerAsync();
@@ -23,10 +179,8 @@ internal sealed class HeadlessMusicService
         }
     }
 
-    private async Task<GlobalSystemMediaTransportControlsSession?> ActiveSessionAsync()
+    private static GlobalSystemMediaTransportControlsSession? SelectSession(GlobalSystemMediaTransportControlsSessionManager mgr)
     {
-        var mgr = await GetManagerAsync().ConfigureAwait(false);
-        if (mgr is null) return null;
         var current = mgr.GetCurrentSession();
         if (current is not null) return current;
         var sessions = mgr.GetSessions();
@@ -35,12 +189,18 @@ internal sealed class HeadlessMusicService
             ?? sessions.FirstOrDefault();
     }
 
-    internal async Task<object> PlaybackAsync()
+    private async Task<GlobalSystemMediaTransportControlsSession?> ActiveSessionAsync()
+    {
+        var mgr = await GetManagerAsync().ConfigureAwait(false);
+        return mgr is null ? null : SelectSession(mgr);
+    }
+
+    private async Task<object?> BuildPlaybackDtoAsync()
     {
         try
         {
             var session = await ActiveSessionAsync().ConfigureAwait(false);
-            if (session is null) return new { ok = true, playback = (object?)null };
+            if (session is null) return null;
             var media = await session.TryGetMediaPropertiesAsync();
             var info = session.GetPlaybackInfo();
             var timeline = session.GetTimelineProperties();
@@ -51,35 +211,37 @@ internal sealed class HeadlessMusicService
                 _ => "stopped",
             };
             var title = media?.Title?.Trim() ?? "";
-            if (title.Length == 0) return new { ok = true, playback = (object?)null };
+            if (title.Length == 0) return null;
             var controls = info?.Controls;
             var durationMs = timeline?.EndTime.TotalMilliseconds is > 0 ? (long)timeline.EndTime.TotalMilliseconds : (long?)null;
             var posMs = timeline?.Position.TotalMilliseconds is >= 0 ? (long)timeline.Position.TotalMilliseconds : (long?)null;
             return new
             {
-                ok = true,
-                playback = new
-                {
-                    provider = DetectProvider(session.SourceAppUserModelId),
-                    source = "session",
-                    status,
-                    title,
-                    artist = media?.Artist?.Trim() ?? "",
-                    album = media?.AlbumTitle?.Trim() ?? "",
-                    positionMs = posMs,
-                    durationMs,
-                    canPlay = controls?.IsPlayEnabled == true,
-                    canPause = controls?.IsPauseEnabled == true,
-                    canPrev = controls?.IsPreviousEnabled == true,
-                    canNext = controls?.IsNextEnabled == true,
-                    canSeek = controls?.IsPlaybackPositionEnabled == true,
-                },
+                provider = DetectProvider(session.SourceAppUserModelId),
+                source = "session",
+                status,
+                title,
+                artist = media?.Artist?.Trim() ?? "",
+                album = media?.AlbumTitle?.Trim() ?? "",
+                positionMs = posMs,
+                durationMs,
+                canPlay = controls?.IsPlayEnabled == true,
+                canPause = controls?.IsPauseEnabled == true,
+                canPrev = controls?.IsPreviousEnabled == true,
+                canNext = controls?.IsNextEnabled == true,
+                canSeek = controls?.IsPlaybackPositionEnabled == true,
             };
         }
         catch
         {
-            return new { ok = true, playback = (object?)null };
+            return null;
         }
+    }
+
+    internal async Task<object> PlaybackAsync()
+    {
+        var playback = await BuildPlaybackDtoAsync().ConfigureAwait(false);
+        return new { ok = true, playback };
     }
 
     internal async Task<object> ControlAsync(string? action, double? positionMs)
@@ -99,6 +261,7 @@ internal sealed class HeadlessMusicService
                 "seek" when positionMs is >= 0 => await session.TryChangePlaybackPositionAsync((long)(positionMs.Value * 10_000)),
                 _ => false,
             };
+            if (ok) SchedulePush();
             return new { ok, message = ok ? null : "The active media player declined that control." };
         }
         catch
@@ -120,7 +283,7 @@ internal sealed class HeadlessMusicService
         });
     }
 
-    private static string DetectProvider(string? appId)
+    internal static string DetectProvider(string? appId)
     {
         var lower = (appId ?? "").ToLowerInvariant();
         if (lower.Contains("spotify")) return "spotify";
@@ -128,4 +291,6 @@ internal sealed class HeadlessMusicService
         if (lower.Contains("youtube") || lower.Contains("ytmusic")) return "youtube";
         return "system";
     }
+
+    public void Dispose() => Detach();
 }

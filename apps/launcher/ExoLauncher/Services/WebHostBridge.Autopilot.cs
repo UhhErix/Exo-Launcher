@@ -23,6 +23,8 @@ public sealed partial class WebHostBridge
         var settings = Autopilot.Settings;
         var keptOn = AutopilotGameMode.KeptOnBecause(settings, Autopilot.CpuClass);
         var game = Autopilot.Engine.Game;
+        var integrityItem = SystemTuning.Shared.ReadMemoryIntegrityOnly();
+        var integrityBlocked = integrityItem is { On: true, Restart: false } ? SystemTuning.Shared.IntegrityBlocked() : null;
         return new
         {
             on = settings.On,
@@ -33,7 +35,7 @@ public sealed partial class WebHostBridge
             suspend = settings.Suspend,
             gameMode = new { off = Autopilot.GameMode.Held is not null, keptOn = settings.On ? keptOn : null },
             mouseAccel = new { off = Autopilot.MouseAccel.IsOff(), managed = Autopilot.MouseAccel.Held is not null },
-            memoryIntegrity = DescribeMemoryIntegrity(SystemTuning.Shared.Read(), SystemTuning.Shared.IntegrityBlocked()),
+            memoryIntegrity = DescribeMemoryIntegrity(integrityItem, integrityBlocked),
             cpu = CcdText.Value,
             now = game is null ? null : new { game, did = Autopilot.Engine.Did(game) },
             live = AutopilotLive(),
@@ -41,9 +43,11 @@ public sealed partial class WebHostBridge
         };
     }
 
-    internal static object DescribeMemoryIntegrity(SystemTuning.State state, string? blocked)
+    internal static object DescribeMemoryIntegrity(SystemTuning.State state, string? blocked) =>
+        DescribeMemoryIntegrity(state.Items.FirstOrDefault(i => i.Key == SystemTuning.IntegrityKey), blocked);
+
+    internal static object DescribeMemoryIntegrity(SystemTuning.Item? item, string? blocked)
     {
-        var item = state.Items.FirstOrDefault(i => i.Key == SystemTuning.IntegrityKey);
         if (item is null)
             return new { status = "off", reason = "Off on this PC for best gaming performance.", canUndo = false, needsRestart = false };
         if (item.On)
@@ -150,5 +154,11 @@ public sealed partial class WebHostBridge
         islcSeconds = r.IslcSeconds,
     };
 
-    private void OnAutopilotReported(AutopilotReport report) => PostEvent("autopilot.report", new { game = report.Game, title = report.Title });
+    private void OnAutopilotReported(AutopilotReport report)
+    {
+        AutopilotReports.InvalidateCache(AutopilotReports.DefaultPath);
+        PostEvent("autopilot.report", new { game = report.Game, title = report.Title });
+    }
+
+    private void OnAutopilotLiveChanged() => PostEvent("autopilot.live", AutopilotLive());
 }

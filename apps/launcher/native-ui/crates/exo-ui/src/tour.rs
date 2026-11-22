@@ -1,7 +1,8 @@
 use crate::state::{AppState, Room};
 use exo_kit::{
     BG, FG, RADIUS_PILL, SPRING_BASE, SPRING_QUICK, fg_muted, glass_button, glass_panel, hairline,
-    icon_sparkles, primary_button, type_body, type_small, type_title,
+    icon_sparkles, modal_card_transition, modal_scrim_transition, primary_button, type_body,
+    type_small, type_title,
 };
 use rune::{Color, El, col, el, row, text};
 
@@ -43,9 +44,9 @@ pub const STEPS: [TourStep; 8] = [
         room: Room::Music,
     },
     TourStep {
-        title: "This PC & Exo AI",
-        body: "Keep Windows tuned automatically, monitor live frame telemetry, manage Startup apps and drives, and tune Wooting keyboards and audio.",
-        room: Room::Pc,
+        title: "Exo AI, Devices & Apps",
+        body: "Keep Windows tuned automatically, compile shaders, manage Startup apps, and configure your mice, keyboards, and controllers.",
+        room: Room::ExoAi,
     },
     TourStep {
         title: "You're ready to play",
@@ -62,24 +63,27 @@ pub fn view(s: &AppState) -> El {
     let is_first = idx == 0;
     let is_last = idx + 1 >= STEPS.len();
 
-    let dots = row().gap(4.0).center_y().children((0..STEPS.len()).map(|i| {
-        let active = i == idx;
-        el().key(format!("tour-dot-{i}"))
-            .role("button")
-            .label(format!("Step {}", i + 1))
-            .focusable(true)
-            .hit()
-            .press_on_down()
-            .size(22.0, 22.0)
-            .center()
-            .on_press(move |s: &mut AppState| s.jump_tour(i))
-            .child(
-                el().size(if active { 16.0 } else { 6.0 }, 6.0)
-                    .radius(3.0)
-                    .fill(if active { FG } else { Color::WHITE.alpha(0.28) })
-                    .motion(SPRING_QUICK),
-            )
-    }));
+    let dots = row()
+        .gap(4.0)
+        .center_y()
+        .children((0..STEPS.len()).map(|i| {
+            let active = i == idx;
+            el().key(format!("tour-dot-{i}"))
+                .role("button")
+                .label(format!("Step {}", i + 1))
+                .focusable(true)
+                .hit()
+                .press_on_down()
+                .size(22.0, 22.0)
+                .center()
+                .on_press(move |s: &mut AppState| s.jump_tour(i))
+                .child(
+                    el().size(if active { 16.0 } else { 6.0 }, 6.0)
+                        .radius(3.0)
+                        .fill(if active { FG } else { Color::WHITE.alpha(0.28) })
+                        .motion(SPRING_QUICK),
+                )
+        }));
 
     let body = col()
         .w_full()
@@ -118,8 +122,20 @@ pub fn view(s: &AppState) -> El {
                         .child(text("Skip").font(type_small()).color(fg_muted())),
                 ),
         )
-        .child(text(step.title).font(type_title()).color(FG).w_full().wrap())
-        .child(text(step.body).font(type_body()).color(fg_muted()).w_full().wrap());
+        .child(
+            text(step.title)
+                .font(type_title())
+                .color(FG)
+                .w_full()
+                .wrap(),
+        )
+        .child(
+            text(step.body)
+                .font(type_body())
+                .color(fg_muted())
+                .w_full()
+                .wrap(),
+        );
 
     let mut nav = row().gap(8.0).center_y();
     if !is_first {
@@ -151,6 +167,7 @@ pub fn view(s: &AppState) -> El {
 
     let card = glass_panel("exo-tour-card", 460.0)
         .motion(SPRING_BASE)
+        .transition(modal_card_transition())
         .child(body)
         .child(el().w_full().h(1.0).fill(hairline()))
         .child(footer);
@@ -158,6 +175,7 @@ pub fn view(s: &AppState) -> El {
     el().key("tour-scrim")
         .pin(Some(0.0), Some(0.0), Some(0.0), Some(0.0))
         .fill(BG.alpha(0.50))
+        .transition(modal_scrim_transition())
         .child(
             col()
                 .w_full()

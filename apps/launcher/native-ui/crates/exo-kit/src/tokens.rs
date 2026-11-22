@@ -1,11 +1,27 @@
 use rune::color::srgb_decode;
 use rune::{Color, Spring, TextStyle};
+use std::sync::atomic::{AtomicU32, Ordering};
 
 pub const GOEIST_FONT: &[u8] =
     include_bytes!("../../../../ExoLauncher/Assets/Fonts/Goeist-Variable.ttf");
 
 pub const FONTS: &[&[u8]] = &[GOEIST_FONT];
 pub const FONT_FAMILIES: (&str, &str) = ("Goeist", "ui-monospace");
+
+static TEXT_SCALE_BITS: AtomicU32 = AtomicU32::new(1.0_f32.to_bits());
+
+pub fn set_text_scale(scale: f32) {
+    let clamped = scale.clamp(0.75, 1.5);
+    TEXT_SCALE_BITS.store(clamped.to_bits(), Ordering::Relaxed);
+}
+
+pub fn text_scale() -> f32 {
+    f32::from_bits(TEXT_SCALE_BITS.load(Ordering::Relaxed))
+}
+
+pub fn scaled(px: f32) -> f32 {
+    px * text_scale()
+}
 
 pub fn srgb(r: u8, g: u8, b: u8, a: f32) -> Color {
     Color {
@@ -51,19 +67,51 @@ pub fn bad() -> Color {
 }
 
 pub fn glass_control_fill() -> Color {
-    hex(0x141416, 0.64)
+    BG.alpha(0.52)
 }
 
 pub fn glass_panel_fill() -> Color {
-    hex(0x0a0a0c, 0.90)
+    BG.alpha(0.76)
+}
+
+pub fn glass_still_control_fill() -> Color {
+    BG.alpha(0.78)
+}
+
+pub fn glass_still_panel_fill() -> Color {
+    BG.alpha(0.90)
+}
+
+pub fn glass_outer_edge() -> Color {
+    BG.alpha(0.68)
+}
+
+pub fn glass_specular_sheen() -> [(f32, Color); 2] {
+    [(0.0, Color::WHITE.alpha(0.09)), (0.32, TRANSPARENT)]
+}
+
+pub fn glass_rim_top() -> Color {
+    Color::WHITE.alpha(0.28)
+}
+
+pub fn glass_rim_bottom() -> Color {
+    Color::WHITE.alpha(0.06)
 }
 
 pub fn glass_rim() -> Color {
-    Color::WHITE.alpha(0.11)
+    Color::WHITE.alpha(0.09)
+}
+
+pub fn card_border() -> Color {
+    Color::WHITE.alpha(0.08)
 }
 
 pub fn hairline() -> Color {
     Color::WHITE.alpha(0.07)
+}
+
+pub fn float_line() -> Color {
+    Color::WHITE.alpha(0.055)
 }
 
 pub fn hover_fill() -> Color {
@@ -71,7 +119,23 @@ pub fn hover_fill() -> Color {
 }
 
 pub fn pressed_fill() -> Color {
-    Color::WHITE.alpha(0.16)
+    Color::WHITE.alpha(0.133)
+}
+
+pub fn selected_fill() -> Color {
+    Color::WHITE.alpha(0.15)
+}
+
+pub fn track_fill() -> Color {
+    Color::WHITE.alpha(0.17)
+}
+
+pub fn scrim_fill() -> Color {
+    BG.alpha(0.72)
+}
+
+pub fn surface_card() -> Color {
+    Color::WHITE.alpha(0.035)
 }
 
 pub fn subtle_fill() -> Color {
@@ -84,10 +148,10 @@ pub const RADIUS_PANEL: f32 = 18.0;
 pub const RADIUS_SHEET: f32 = 24.0;
 pub const RADIUS_PILL: f32 = 999.0;
 pub const GAP: f32 = 10.0;
-pub const TITLEBAR_HEIGHT: f32 = 54.0;
+pub const TITLEBAR_HEIGHT: f32 = 52.0;
 
-pub const GLASS_CONTROL_SIGMA: f32 = 12.0;
-pub const GLASS_PANEL_SIGMA: f32 = 22.0;
+pub const GLASS_CONTROL_SIGMA: f32 = 14.0;
+pub const GLASS_PANEL_SIGMA: f32 = 24.0;
 pub const PRESS_SCALE: f32 = 0.97;
 
 pub const SPRING_PRESS: Spring = Spring::new(0.09, 0.0);
@@ -97,29 +161,37 @@ pub const SPRING_MOVE: Spring = Spring::new(0.22, 0.0);
 pub const SPRING_FLIGHT: Spring = Spring::new(0.30, 0.0);
 
 pub fn type_label() -> TextStyle {
-    TextStyle::new(10.0, 500.0)
+    TextStyle::new(scaled(10.0), 500.0)
 }
 
 pub fn type_small() -> TextStyle {
-    TextStyle::new(12.0, 400.0)
+    TextStyle::new(scaled(12.0), 400.0)
 }
 
 pub fn type_body() -> TextStyle {
-    TextStyle::new(13.0, 400.0)
+    TextStyle::new(scaled(13.0), 400.0)
 }
 
 pub fn type_control() -> TextStyle {
-    TextStyle::new(13.0, 500.0)
+    TextStyle::new(scaled(13.0), 500.0)
 }
 
 pub fn type_section() -> TextStyle {
-    TextStyle::new(13.0, 600.0)
+    TextStyle::new(scaled(13.0), 600.0)
+}
+
+pub fn type_read() -> TextStyle {
+    TextStyle::new(scaled(15.0), 400.0)
 }
 
 pub fn type_title() -> TextStyle {
-    TextStyle::new(20.0, 650.0)
+    TextStyle::new(scaled(20.0), 600.0)
 }
 
 pub fn type_page() -> TextStyle {
-    TextStyle::new(28.0, 650.0)
+    TextStyle::new(scaled(28.0), 650.0)
+}
+
+pub fn type_first_run() -> TextStyle {
+    TextStyle::new(scaled(32.0), 700.0).letter_spacing(-0.025)
 }

@@ -61,7 +61,7 @@ pub fn start_polling(on_action: impl Fn(GamepadAction) + Send + 'static) {
             if module.is_null() {
                 return;
             }
-            let proc = unsafe { GetProcAddress(module, b"XInputGetState\0".as_ptr()) };
+            let proc = unsafe { GetProcAddress(module, c"XInputGetState".as_ptr().cast::<u8>()) };
             let Some(raw_fn) = proc else {
                 return;
             };

@@ -1,4 +1,5 @@
 use serde::Deserialize;
+use std::collections::HashMap;
 
 #[derive(Debug, Clone, Default, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -36,13 +37,35 @@ pub struct SystemAbout {
     #[serde(default)]
     pub ok: bool,
     #[serde(default)]
+    pub name: Option<String>,
+    #[serde(default)]
+    pub processor: Option<String>,
+    #[serde(default)]
     pub cpu: Option<String>,
+    #[serde(default)]
+    pub graphics: Option<String>,
     #[serde(default)]
     pub gpu: Option<String>,
     #[serde(default)]
+    pub memory_gb: Option<f64>,
+    #[serde(default)]
+    pub memory_type: Option<String>,
+    #[serde(default)]
     pub ram_gb: Option<f64>,
     #[serde(default)]
+    pub motherboard: Option<String>,
+    #[serde(default)]
+    pub windows: Option<String>,
+    #[serde(default)]
+    pub windows_version: Option<String>,
+    #[serde(default)]
     pub os: Option<String>,
+    #[serde(default)]
+    pub network: Option<String>,
+    #[serde(default)]
+    pub network_mbps: Option<f64>,
+    #[serde(default)]
+    pub display: Option<String>,
     #[serde(default)]
     pub version: Option<String>,
 }
@@ -269,6 +292,53 @@ pub struct HdrState {
 
 #[derive(Debug, Clone, Default, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct ShaderEstimate {
+    #[serde(default)]
+    pub seconds: f64,
+    #[serde(default)]
+    pub low_seconds: Option<f64>,
+    #[serde(default)]
+    pub learned: bool,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ShaderSnapGame {
+    #[serde(default)]
+    pub id: String,
+    #[serde(default)]
+    pub name: String,
+    #[serde(default)]
+    pub install_dir: Option<String>,
+    #[serde(default)]
+    pub status_text: Option<String>,
+    #[serde(default)]
+    pub tone: Option<String>,
+    #[serde(default)]
+    pub queued: bool,
+    #[serde(default)]
+    pub compiling: bool,
+    #[serde(default)]
+    pub percent: Option<f64>,
+    #[serde(default)]
+    pub estimate: Option<ShaderEstimate>,
+    #[serde(default)]
+    pub in_add_all_ready: bool,
+    #[serde(default)]
+    pub error: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ShadersSnapshot {
+    #[serde(default)]
+    pub rev: u64,
+    #[serde(default)]
+    pub games: Vec<ShaderSnapGame>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ShadersAddonStatus {
     #[serde(default)]
     pub ok: bool,
@@ -278,6 +348,41 @@ pub struct ShadersAddonStatus {
     pub state: Option<String>,
     #[serde(default)]
     pub message: Option<String>,
+    #[serde(default)]
+    pub snapshot: Option<ShadersSnapshot>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ShadersEstimatesReply {
+    #[serde(default)]
+    pub ok: bool,
+    #[serde(default)]
+    pub seconds: HashMap<String, f64>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EqHeadphone {
+    #[serde(default)]
+    pub id: String,
+    #[serde(default)]
+    pub name: String,
+    #[serde(default)]
+    pub source: String,
+    #[serde(default)]
+    pub form: String,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EqStateReply {
+    #[serde(default)]
+    pub ok: bool,
+    #[serde(default)]
+    pub on: bool,
+    #[serde(default)]
+    pub headphone: Option<EqHeadphone>,
 }
 
 #[derive(Debug, Clone, Default, Deserialize)]
@@ -297,6 +402,8 @@ pub struct InstalledAppItem {
     pub store: bool,
     #[serde(default)]
     pub removable: bool,
+    #[serde(default)]
+    pub care: Option<String>,
     #[serde(default)]
     pub kept: Option<String>,
     #[serde(default)]
@@ -523,6 +630,17 @@ pub struct DrivesReply {
 
 #[derive(Debug, Clone, Default, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct PeripheralPort {
+    #[serde(default)]
+    pub r#where: Option<String>,
+    #[serde(default)]
+    pub better: Option<String>,
+    #[serde(default)]
+    pub hubs: i32,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct PeripheralCard {
     #[serde(default)]
     pub id: String,
@@ -531,17 +649,27 @@ pub struct PeripheralCard {
     #[serde(default)]
     pub name: String,
     #[serde(default)]
+    pub maker: Option<String>,
+    #[serde(default)]
+    pub model: Option<String>,
+    #[serde(default)]
     pub brand: Option<String>,
     #[serde(default)]
     pub role: Option<String>,
     #[serde(default)]
     pub connection: Option<String>,
     #[serde(default)]
-    pub battery: Option<i32>,
+    pub battery: Option<f64>,
     #[serde(default)]
     pub polling_hz: Option<i32>,
     #[serde(default)]
     pub wooting: bool,
+    #[serde(default)]
+    pub color: Option<String>,
+    #[serde(default)]
+    pub layout: Option<String>,
+    #[serde(default)]
+    pub port: Option<PeripheralPort>,
 }
 
 #[derive(Debug, Clone, Default, Deserialize)]
@@ -551,6 +679,46 @@ pub struct DevicesListReply {
     pub ok: bool,
     #[serde(default)]
     pub devices: Vec<PeripheralCard>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DevicesImageReply {
+    #[serde(default)]
+    pub ok: bool,
+    #[serde(default)]
+    pub url: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AppsIconsReply {
+    #[serde(default)]
+    pub ok: bool,
+    #[serde(default)]
+    pub icons: HashMap<String, Option<String>>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ShaderPrepareGame {
+    #[serde(default)]
+    pub id: String,
+    #[serde(default)]
+    pub title: String,
+    #[serde(default)]
+    pub state: String,
+    #[serde(default)]
+    pub message: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ShadersPrepareGamesReply {
+    #[serde(default)]
+    pub ok: bool,
+    #[serde(default)]
+    pub games: Vec<ShaderPrepareGame>,
 }
 
 #[derive(Debug, Clone, Default, Deserialize)]

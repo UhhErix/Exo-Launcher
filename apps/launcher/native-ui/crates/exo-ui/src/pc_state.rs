@@ -2,13 +2,14 @@ use exo_rpc::{
     AppsListReply, AudioEndpoint, AudioReadReply, AudioVoiceInfo, AutopilotLive,
     AutopilotMemoryIntegrity, AutopilotReport, AutopilotState, DevicesListReply, DriveFix,
     DriveGameEntry, DriveHealth, DriveInfo, DriveLink, DriveSpaceBreakdown, DriveTemp,
-    DriveVerdict, DriveVolume, DrivesReply, ExoAccountState, ExoAiFans, ExoAiGaming, ExoAiState,
-    HdrState, InstalledAppItem, KeyboardBackupSummary, KeyboardProfileSlot,
-    KeyboardReadReply, LatencyReport, LatencySample, PeripheralCard, ShadersAddonStatus,
-    StartupItem, StartupListReply, SystemAbout, SystemTuningState, TuningItem, UpdateCheckReply,
-    UpdateProgress,
+    DriveVerdict, DriveVolume, DrivesReply, EqHeadphone, ExoAccountState, ExoAiFans, ExoAiGaming,
+    ExoAiState, HdrState, InstalledAppItem, KeyboardBackupSummary, KeyboardProfileSlot,
+    KeyboardReadReply, LatencyReport, LatencySample, PeripheralCard, ShaderPrepareGame,
+    ShaderSnapGame, ShadersAddonStatus, StartupItem, StartupListReply, SystemAbout,
+    SystemTuningState, TuningItem, UpdateCheckReply, UpdateProgress,
 };
 use rune::TextEdit;
+use std::collections::HashMap;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SettingsSection {
@@ -40,17 +41,6 @@ impl SettingsSection {
             Self::About => "set-sec-about",
         }
     }
-
-    pub fn label(self) -> &'static str {
-        match self {
-            Self::General => "General",
-            Self::Account => "Account & Sync",
-            Self::Appearance => "Appearance & Overlay",
-            Self::Graphics => "Graphics & HDR",
-            Self::Updates => "Updates",
-            Self::About => "About & Tour",
-        }
-    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -61,39 +51,10 @@ pub enum PcTab {
     Devices,
 }
 
-impl PcTab {
-    pub const ALL: [Self; 4] = [Self::ExoAi, Self::Apps, Self::Storage, Self::Devices];
-
-    pub fn key(self) -> &'static str {
-        match self {
-            Self::ExoAi => "pc-tab-ai",
-            Self::Apps => "pc-tab-apps",
-            Self::Storage => "pc-tab-storage",
-            Self::Devices => "pc-tab-devices",
-        }
-    }
-
-    pub fn label(self) -> &'static str {
-        match self {
-            Self::ExoAi => "Exo AI",
-            Self::Apps => "Apps",
-            Self::Storage => "Storage",
-            Self::Devices => "Devices",
-        }
-    }
-}
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AppsSubTab {
     Installed,
     Startup,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum AppsFilter {
-    All,
-    Bloat,
-    Removable,
 }
 
 pub struct SettingsAndPcState {
@@ -115,7 +76,6 @@ pub struct SettingsAndPcState {
     pub latency_running: bool,
 
     pub apps_sub_tab: AppsSubTab,
-    pub apps_filter: AppsFilter,
     pub apps_query: TextEdit,
     pub apps_list: Option<AppsListReply>,
     pub startup_list: Option<StartupListReply>,
@@ -131,6 +91,20 @@ pub struct SettingsAndPcState {
     pub keyboard: Option<KeyboardReadReply>,
     pub keyboard_backups: Vec<KeyboardBackupSummary>,
     pub devices_loading: bool,
+    pub device_images: HashMap<String, String>,
+    pub eq_headphone: Option<EqHeadphone>,
+    pub selected_device_id: Option<String>,
+    pub app_icons: HashMap<String, String>,
+    pub shader_games: Vec<ShaderPrepareGame>,
+    pub shader_snap_games: Vec<ShaderSnapGame>,
+    pub shader_estimates: HashMap<String, f64>,
+    pub gpu_short_name: Option<String>,
+    pub screen_label: Option<String>,
+    pub compress_potential_bytes: u64,
+    pub compress_saved_bytes: u64,
+    pub exo_ai_storage_open: bool,
+    pub armed_uninstall: Option<(String, u64)>,
+    pub armed_uninstall_seq: u64,
 }
 
 impl SettingsAndPcState {
@@ -158,10 +132,21 @@ impl SettingsAndPcState {
             installing_update: false,
             system_about: Some(SystemAbout {
                 ok: true,
+                name: Some("Exo PC".into()),
+                processor: Some("AMD Ryzen 7 7800X3D".into()),
                 cpu: Some("AMD Ryzen 7 7800X3D".into()),
+                graphics: Some("NVIDIA GeForce RTX 3070".into()),
                 gpu: Some("NVIDIA GeForce RTX 3070".into()),
+                memory_gb: Some(32.0),
+                memory_type: Some("DDR5".into()),
                 ram_gb: Some(32.0),
+                motherboard: Some("ASUS ROG STRIX B650E".into()),
+                windows: Some("Windows 11".into()),
+                windows_version: Some("24H2".into()),
                 os: Some("Windows 11 Pro 24H2".into()),
+                network: Some("Ethernet".into()),
+                network_mbps: Some(2500.0),
+                display: Some("240 Hz".into()),
                 version: Some("3.29.0".into()),
             }),
             pc_tab: PcTab::ExoAi,
@@ -312,10 +297,10 @@ impl SettingsAndPcState {
                 present: true,
                 state: Some("idle".into()),
                 message: Some("16 games precompiled".into()),
+                snapshot: None,
             }),
             latency_running: false,
             apps_sub_tab: AppsSubTab::Installed,
-            apps_filter: AppsFilter::All,
             apps_query: TextEdit::default(),
             apps_list: Some(AppsListReply {
                 ok: true,
@@ -329,6 +314,7 @@ impl SettingsAndPcState {
                         bytes: Some(412 * 1024 * 1024),
                         store: false,
                         removable: true,
+                        care: None,
                         kept: None,
                         bloat: None,
                         last_opened: Some("2026-11-21".into()),
@@ -341,6 +327,7 @@ impl SettingsAndPcState {
                         bytes: Some(1_180 * 1024 * 1024),
                         store: false,
                         removable: true,
+                        care: None,
                         kept: None,
                         bloat: Some("Heavy background telemetry services; Exo replaces lighting & fan curves.".into()),
                         last_opened: Some("2026-07-04".into()),
@@ -353,6 +340,7 @@ impl SettingsAndPcState {
                         bytes: Some(465 * 1024 * 1024),
                         store: false,
                         removable: true,
+                        care: None,
                         kept: None,
                         bloat: None,
                         last_opened: Some("2026-11-22".into()),
@@ -365,6 +353,7 @@ impl SettingsAndPcState {
                         bytes: Some(48 * 1024 * 1024),
                         store: false,
                         removable: false,
+                        care: Some("runtime".into()),
                         kept: Some("Required by 19 installed games.".into()),
                         bloat: None,
                         last_opened: None,
@@ -510,10 +499,11 @@ impl SettingsAndPcState {
                         name: "Wooting 60HE+".into(),
                         brand: Some("Wooting".into()),
                         role: Some("Hall-Effect 8000 Hz".into()),
-                        connection: Some("USB-C Direct CPU".into()),
+                        connection: Some("usb".into()),
                         battery: None,
                         polling_hz: Some(8000),
                         wooting: true,
+                        ..Default::default()
                     },
                     PeripheralCard {
                         id: "dev:mouse".into(),
@@ -521,10 +511,11 @@ impl SettingsAndPcState {
                         name: "Logitech G PRO X SUPERLIGHT 2".into(),
                         brand: Some("Logitech".into()),
                         role: Some("Gaming mouse".into()),
-                        connection: Some("LIGHTSPEED 4K".into()),
-                        battery: Some(82),
+                        connection: Some("wireless".into()),
+                        battery: Some(0.82),
                         polling_hz: Some(4000),
                         wooting: false,
+                        ..Default::default()
                     },
                     PeripheralCard {
                         id: "dev:out".into(),
@@ -532,10 +523,11 @@ impl SettingsAndPcState {
                         name: "Sennheiser HD 660S2 (DAC)".into(),
                         brand: Some("Sennheiser".into()),
                         role: Some("output".into()),
-                        connection: Some("USB Audio".into()),
+                        connection: Some("jack".into()),
                         battery: None,
                         polling_hz: None,
                         wooting: false,
+                        ..Default::default()
                     },
                     PeripheralCard {
                         id: "dev:mic".into(),
@@ -543,10 +535,11 @@ impl SettingsAndPcState {
                         name: "Shure MV7 USB Microphone".into(),
                         brand: Some("Shure".into()),
                         role: Some("mic".into()),
-                        connection: Some("USB Audio".into()),
+                        connection: Some("usb".into()),
                         battery: None,
                         polling_hz: None,
                         wooting: false,
+                        ..Default::default()
                     },
                 ],
             }),
@@ -599,6 +592,45 @@ impl SettingsAndPcState {
                 profile_count: 4,
             }],
             devices_loading: false,
+            device_images: HashMap::new(),
+            eq_headphone: None,
+            selected_device_id: None,
+            app_icons: HashMap::new(),
+            shader_games: vec![
+                ShaderPrepareGame {
+                    id: "demo:cyberpunk".into(),
+                    title: "Cyberpunk 2077".into(),
+                    state: "ready".into(),
+                    message: Some("1–3 min".into()),
+                },
+                ShaderPrepareGame {
+                    id: "demo:elden".into(),
+                    title: "Elden Ring".into(),
+                    state: "ready".into(),
+                    message: Some("2–5 min".into()),
+                },
+                ShaderPrepareGame {
+                    id: "demo:bg3".into(),
+                    title: "Baldur's Gate 3".into(),
+                    state: "ready".into(),
+                    message: Some("5–15 min".into()),
+                },
+                ShaderPrepareGame {
+                    id: "demo:hd2".into(),
+                    title: "Helldivers 2".into(),
+                    state: "ready".into(),
+                    message: Some("up to 15 min".into()),
+                },
+            ],
+            shader_snap_games: Vec::new(),
+            shader_estimates: HashMap::new(),
+            gpu_short_name: None,
+            screen_label: None,
+            compress_potential_bytes: 0,
+            compress_saved_bytes: 0,
+            exo_ai_storage_open: false,
+            armed_uninstall: None,
+            armed_uninstall_seq: 0,
         }
     }
 
@@ -620,7 +652,6 @@ impl SettingsAndPcState {
             shaders: None,
             latency_running: false,
             apps_sub_tab: AppsSubTab::Installed,
-            apps_filter: AppsFilter::All,
             apps_query: TextEdit::default(),
             apps_list: None,
             startup_list: None,
@@ -634,24 +665,38 @@ impl SettingsAndPcState {
             keyboard: None,
             keyboard_backups: Vec::new(),
             devices_loading: false,
+            device_images: HashMap::new(),
+            eq_headphone: None,
+            selected_device_id: None,
+            app_icons: HashMap::new(),
+            shader_games: Vec::new(),
+            shader_snap_games: Vec::new(),
+            shader_estimates: HashMap::new(),
+            gpu_short_name: None,
+            screen_label: None,
+            compress_potential_bytes: 0,
+            compress_saved_bytes: 0,
+            exo_ai_storage_open: false,
+            armed_uninstall: None,
+            armed_uninstall_seq: 0,
         }
     }
 }
 
 pub fn format_bytes(bytes: u64) -> String {
-    const KB: f64 = 1024.0;
-    const MB: f64 = KB * 1024.0;
-    const GB: f64 = MB * 1024.0;
-    const TB: f64 = GB * 1024.0;
+    const KB: f64 = 1_000.0;
+    const MB: f64 = 1_000_000.0;
+    const GB: f64 = 1_000_000_000.0;
+    const TB: f64 = 1_000_000_000_000.0;
     let b = bytes as f64;
     if b >= TB {
-        format!("{:.2} TB", b / TB)
+        format!("{:.1} TB", b / TB)
     } else if b >= GB {
         format!("{:.1} GB", b / GB)
     } else if b >= MB {
-        format!("{:.0} MB", b / MB)
+        format!("{:.0} MB", (b / MB).round())
     } else if b >= KB {
-        format!("{:.0} KB", b / KB)
+        format!("{:.0} KB", (b / KB).round())
     } else {
         format!("{bytes} B")
     }

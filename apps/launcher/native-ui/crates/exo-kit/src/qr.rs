@@ -19,12 +19,42 @@ struct VersionSpec {
 }
 
 const SPECS: &[VersionSpec] = &[
-    VersionSpec { version: 1, data_bytes: 19, ec_per_block: 7, blocks: 1 },
-    VersionSpec { version: 2, data_bytes: 34, ec_per_block: 10, blocks: 1 },
-    VersionSpec { version: 3, data_bytes: 55, ec_per_block: 15, blocks: 1 },
-    VersionSpec { version: 4, data_bytes: 80, ec_per_block: 20, blocks: 1 },
-    VersionSpec { version: 5, data_bytes: 108, ec_per_block: 26, blocks: 1 },
-    VersionSpec { version: 6, data_bytes: 136, ec_per_block: 18, blocks: 2 },
+    VersionSpec {
+        version: 1,
+        data_bytes: 19,
+        ec_per_block: 7,
+        blocks: 1,
+    },
+    VersionSpec {
+        version: 2,
+        data_bytes: 34,
+        ec_per_block: 10,
+        blocks: 1,
+    },
+    VersionSpec {
+        version: 3,
+        data_bytes: 55,
+        ec_per_block: 15,
+        blocks: 1,
+    },
+    VersionSpec {
+        version: 4,
+        data_bytes: 80,
+        ec_per_block: 20,
+        blocks: 1,
+    },
+    VersionSpec {
+        version: 5,
+        data_bytes: 108,
+        ec_per_block: 26,
+        blocks: 1,
+    },
+    VersionSpec {
+        version: 6,
+        data_bytes: 136,
+        ec_per_block: 18,
+        blocks: 2,
+    },
 ];
 
 pub fn encode_qr(text: &str) -> Option<QrMatrix> {
@@ -55,7 +85,11 @@ pub fn encode_qr(text: &str) -> Option<QrMatrix> {
     }
     let mut pad_idx = 0usize;
     while data.len() < spec.data_bytes {
-        data.push(if pad_idx % 2 == 0 { 0xEC } else { 0x11 });
+        data.push(if pad_idx.is_multiple_of(2) {
+            0xEC
+        } else {
+            0x11
+        });
         pad_idx += 1;
     }
 
@@ -149,10 +183,7 @@ pub fn qr_code_view(data: &str, size: f32) -> El {
                     let x1 = (x + quiet) as f32;
                     let y0 = (y + quiet) as f32;
                     let y1 = y0 + 1.0;
-                    shape = shape.fill(
-                        vec![[x0, y0], [x1, y0], [x1, y1], [x0, y1]],
-                        Color::BLACK,
-                    );
+                    shape = shape.fill(vec![[x0, y0], [x1, y0], [x1, y1], [x0, y1]], Color::BLACK);
                 } else {
                     x += 1;
                 }
@@ -221,10 +252,8 @@ fn place_finder(modules: &mut [bool], function: &mut [bool], size: usize, x0: us
             if x < 0 || y < 0 || x >= size as i32 || y >= size as i32 {
                 continue;
             }
-            let dark = dx >= 0
-                && dx <= 6
-                && dy >= 0
-                && dy <= 6
+            let dark = (0..=6).contains(&dx)
+                && (0..=6).contains(&dy)
                 && (dx == 0
                     || dx == 6
                     || dy == 0
