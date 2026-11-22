@@ -1,3 +1,4 @@
+use crate::discord_state::DiscordState;
 use crate::gamepad::GamepadAction;
 use crate::media_state::MediaState;
 use crate::pc_state::SettingsAndPcState;
@@ -80,16 +81,6 @@ impl Room {
 
     pub const fn from_index(i: usize) -> Self {
         Self::ALL[i % Self::ALL.len()]
-    }
-
-    pub const fn next_phase_note(self) -> &'static str {
-        match self {
-            Room::Library | Room::Store => "",
-            Room::Discord => "Scheduled for Phase 5 (DMs, servers, virtualized messages, voice & D3D12 video).",
-            Room::Music => "Scheduled for Phase 4 (Native Music room & mini-player over host DRM players).",
-            Room::Pc => "Scheduled for Phase 3 (Exo AI, Apps, Storage, and Devices).",
-            Room::Settings => "Scheduled for Phase 3 (Settings sidebar, search, Riot sync, and delta updates).",
-        }
     }
 }
 
@@ -214,6 +205,7 @@ pub struct AppState {
     pub settings: LauncherSettings,
     pub pc: SettingsAndPcState,
     pub media: MediaState,
+    pub discord: DiscordState,
     pub art_base: ArtBase,
     pub notice: Option<String>,
     pub refreshing: bool,
@@ -297,6 +289,7 @@ impl AppState {
             },
             pc: SettingsAndPcState::demo(),
             media: MediaState::demo(),
+            discord: DiscordState::demo(),
             art_base: ArtBase::default(),
             notice: None,
             refreshing: false,
@@ -349,6 +342,7 @@ impl AppState {
             settings: LauncherSettings::default(),
             pc: SettingsAndPcState::empty_for_host(),
             media: MediaState::empty_for_host(),
+            discord: DiscordState::empty(),
             art_base: ArtBase::default(),
             notice: Some("Connecting to Exo host…".into()),
             refreshing: true,
@@ -403,6 +397,20 @@ impl AppState {
         }
     }
 
+    #[cfg(windows)]
+    pub fn call_host_async<R, F>(&self, method: &str, params: serde_json::Value, on_done: F)
+    where
+        R: exo_rpc::DeserializeOwned + Send + 'static,
+        F: FnOnce(&mut AppState, Result<R, String>) + Send + 'static,
+    {
+        if let (Some(rpc), Some(handle)) = (self.rpc.clone(), self.handle.clone()) {
+            rpc.call::<_, R>(method, &params, move |res| {
+                let mapped = res.map_err(|e| e.to_string());
+                handle.update(move |s, _| on_done(s, mapped));
+            });
+        }
+    }
+
     pub fn switch_room(&mut self, room: Room) {
         self.room = room;
         self.open_game_id = None;
@@ -413,6 +421,8 @@ impl AppState {
         }
         if room == Room::Store && self.store_home.is_none() && !self.store_loading {
             self.load_store_home(false);
+        } else if room == Room::Discord {
+            self.load_discord_room();
         } else if room == Room::Music {
             self.load_music_room();
         } else if room == Room::Settings {
@@ -1064,6 +1074,14 @@ impl AppState {
         }
         if self.props_open {
             self.props_open = false;
+            return true;
+        }
+        if self.room == Room::Discord && self.discord.status_menu_open {
+            self.discord.status_menu_open = false;
+            return true;
+        }
+        if self.room == Room::Discord && self.discord.add_friend_open {
+            self.discord.add_friend_open = false;
             return true;
         }
         if self.media.open_capture_id.is_some() {
