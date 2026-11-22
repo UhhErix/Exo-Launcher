@@ -24,6 +24,10 @@ public sealed class AppServices
     private ShadersHostService? _shadersHost;
     internal HdrHostService HdrHost => _hdrHost ??= new HdrHostService(this, _lifetime.Token);
     private HdrHostService? _hdrHost;
+    internal HeadlessCaptureService HeadlessCapture => _headlessCapture ??= new HeadlessCaptureService(this);
+    private HeadlessCaptureService? _headlessCapture;
+    internal HeadlessMusicService HeadlessMusic => _headlessMusic ??= new HeadlessMusicService();
+    private HeadlessMusicService? _headlessMusic;
 
     /// <summary>The Shaders page's Prepare, for Unreal games.</summary>
     internal ShaderPrepare ShaderPrepare => _shaderPrepare ??= new ShaderPrepare(() => Launcher);
@@ -341,6 +345,7 @@ public sealed class AppServices
         if (_hid.IsValueCreated) _hid.Value.Dispose();
         _hdrHost?.Stop();
         _shadersHost?.Dispose();
+        _headlessCapture?.Dispose();
         _downloads?.Dispose();
         _junk?.Dispose();
         _compressor?.Dispose();

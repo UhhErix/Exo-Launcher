@@ -1,4 +1,4 @@
-use crate::{game_page, key_modal, library, palette, pc, settings, store, tour};
+use crate::{captures, game_page, key_modal, library, music, palette, pc, settings, store, tour};
 use crate::state::{AppState, HostStatus, Room};
 use exo_kit::{
     BG, FG, GAP, GLASS_CONTROL_SIGMA, PRESS_SCALE, PRIMARY_FG, RADIUS_PANEL, RADIUS_PILL, bad,
@@ -145,18 +145,23 @@ pub fn view(s: &AppState, cx: &mut Cx<AppState>) -> El {
         .child(nav)
         .child(row().gap(8.0).center_y().child(search).child(status_capsule(s)));
 
-    let page = match s.room {
-        Room::Library => {
-            if let Some(game) = s.open_game() {
-                game_page::view(s, game, scale)
-            } else {
-                library::view(s, scale)
+    let page = if s.media.captures_open {
+        captures::view(s, scale)
+    } else {
+        match s.room {
+            Room::Library => {
+                if let Some(game) = s.open_game() {
+                    game_page::view(s, game, scale)
+                } else {
+                    library::view(s, scale)
+                }
             }
+            Room::Store => store::view(s, scale),
+            Room::Music => music::view(s, scale),
+            Room::Pc => pc::view(s),
+            Room::Settings => settings::view(s),
+            other => placeholder_room(other),
         }
-        Room::Store => store::view(s, scale),
-        Room::Pc => pc::view(s),
-        Room::Settings => settings::view(s),
-        other => placeholder_room(other),
     };
 
     let scroller = col()
@@ -175,6 +180,9 @@ pub fn view(s: &AppState, cx: &mut Cx<AppState>) -> El {
 
     if s.gamepad_connected {
         root = root.child(gamepad_prompt_bar());
+    }
+    if let Some(mini) = music::mini_player(s, scale) {
+        root = root.child(mini);
     }
     if s.tour_step.is_some() {
         root = root.child(tour::view(s));

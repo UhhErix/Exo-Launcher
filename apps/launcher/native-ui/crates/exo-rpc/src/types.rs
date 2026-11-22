@@ -521,6 +521,10 @@ pub struct ArtBase {
     pub devices_dir: Option<String>,
     #[serde(default)]
     pub notes_dir: Option<String>,
+    #[serde(default)]
+    pub captures_dir: Option<String>,
+    #[serde(default)]
+    pub capture_thumbs_dir: Option<String>,
 }
 
 impl ArtBase {
@@ -544,6 +548,43 @@ impl ArtBase {
         } else {
             None
         }
+    }
+
+    pub fn resolve_capture_thumb(&self, thumb_url: &str) -> Option<PathBuf> {
+        if let Some(rest) = thumb_url.strip_prefix("https://capture-thumbs.exo-launcher.local/") {
+            let root = self.capture_thumbs_dir.as_deref()?;
+            let leaf = rest.split('?').next().unwrap_or(rest).rsplit('/').next()?;
+            let decoded = percent_decode_simple(leaf)?;
+            if !is_safe_leaf(&decoded) {
+                return None;
+            }
+            let p = Path::new(root).join(decoded);
+            return p.is_file().then_some(p);
+        }
+        self.resolve_capture_file(thumb_url)
+    }
+
+    pub fn resolve_capture_file(&self, media_url: &str) -> Option<PathBuf> {
+        let root = self.captures_dir.as_deref()?;
+        let rest = media_url.strip_prefix("https://captures.exo-launcher.local/")?;
+        let without_query = rest.split('?').next().unwrap_or(rest);
+        let mut path = PathBuf::from(root);
+        let mut parts = 0usize;
+        for seg in without_query.split('/') {
+            if seg.is_empty() {
+                continue;
+            }
+            let decoded = percent_decode_simple(seg)?;
+            if !is_safe_leaf(&decoded) {
+                return None;
+            }
+            path.push(decoded);
+            parts += 1;
+        }
+        if parts == 0 || !path.is_file() {
+            return None;
+        }
+        Some(path)
     }
 }
 
@@ -594,6 +635,7 @@ pub enum HostEvent {
     LibraryUpdated(LibraryPayload),
     InstallProgress(InstallProgress),
     UpdateProgress(crate::pc_types::UpdateProgress),
+    MusicPlayback(Option<crate::media_types::MusicPlayback>),
     DevicesChanged,
     AppsChanged,
     Raw { event: String, data: Value },
