@@ -132,6 +132,7 @@ internal sealed partial class RuneHostSession
 
     internal static int Run(Options options)
     {
+        SystemSpecs.WarmInBackground();
         WebViewRuntimeLocator.ClearStaleBrowserFolderPin();
         var services = App.Services;
         services.Initialize();
@@ -155,6 +156,7 @@ internal sealed partial class RuneHostSession
         using var stop = new ManualResetEventSlim(false);
         bridge.RequestHostShutdown = () => stop.Set();
         bridge.Attach(transport);
+        transport.Start();
         services.HdrHost.Start();
         bridge.StartBackgroundMonitors();
         AppLog.Info($"RuneHostSession: listening on {transport.FullPipePath} (spawnUi={options.SpawnUi})");

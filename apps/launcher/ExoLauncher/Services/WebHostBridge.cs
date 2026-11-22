@@ -25,6 +25,7 @@ public sealed partial class WebHostBridge
     private readonly FolderArtStore _folderArt = new();
     private readonly CancellationTokenSource _bridgeLifetime = new();
     private readonly BridgeRequestRegistry _rpcRequests = new();
+    private readonly EarlyCancelTracker _earlyCancels = new();
     private bool _detached;
     private int _backgroundMonitorsStarted;
     private Action<UpdateFlow.State>? _updaterStateChanged;
@@ -62,6 +63,7 @@ public sealed partial class WebHostBridge
     {
         _services = services;
         _queue = queue;
+        SystemSpecs.WarmInBackground();
         // The adapter and the store opener start Steam without the bridge at hand; the waiting settings go in first.
         SteamPendingSettings.Attach(this);
         SteamSignIn.SteamWebsiteToken.Fetch = SteamWebsiteTokenAsync;
@@ -295,6 +297,7 @@ public sealed partial class WebHostBridge
     private void OnTransportReset() => UiGuard.Run(() =>
     {
         _rpcRequests.CancelAll();
+        _earlyCancels.Clear();
         // A new session has none of the rows the last push carried.
         Volatile.Write(ref _libraryPushedHash, null);
         try { Interlocked.Exchange(ref _keyWatchCts, null)?.Cancel(); } catch { }
@@ -554,7 +557,7 @@ public sealed partial class WebHostBridge
     private void OnMessage(string raw) => UiGuard.Run(() =>
     {
         if (_detached || string.IsNullOrWhiteSpace(raw)) return;
-        _ = HandleAsync(FromPage(raw));
+        _ = HandleAsync(InboundForTransport(_transport, raw));
     });
 
     private async Task HandleAsync(string raw)
@@ -585,12 +588,17 @@ public sealed partial class WebHostBridge
             if (method == "rpc.cancel")
             {
                 var target = ReadString(paramsEl, hasParams, "requestId");
-                if (target is { Length: > 0 and <= 128 }) _rpcRequests.Cancel(target);
+                if (target is { Length: > 0 and <= 128 })
+                {
+                    _earlyCancels.Record(target);
+                    if (_rpcRequests.Cancel(target)) _earlyCancels.Consume(target);
+                }
                 return;
             }
             // Any Discord request means the page wants Discord's events (calls, video), not only Home or sign-in.
             if (method.StartsWith("discord.", StringComparison.Ordinal)) DiscordEvents();
             scope = _rpcRequests.Begin(id, method, _bridgeLifetime.Token);
+            if (_earlyCancels.Consume(id)) throw new OperationCanceledException();
             var requestToken = scope?.Token ?? _bridgeLifetime.Token;
             requestToken.ThrowIfCancellationRequested();
 
@@ -2384,6 +2392,7 @@ public sealed partial class WebHostBridge
         // framelessMode, theme, copyPortableIntoLibrary, allowResize,
         // checkForUpdates, libraryShowInstalled, libraryShowOwned.
         var musicService = WebClientPreferences.EffectiveMusicService(WebClientPreferences.Read().MusicService);
+        var riotId = RiotIdStore.TryRead();
         return new
         {
             appVersion = _services.AppVersion,
@@ -2403,8 +2412,8 @@ public sealed partial class WebHostBridge
             preferredGameSources = s.PreferredGameSources,
             recent = s.Recent,
             onboardingComplete = s.OnboardingComplete,
-            riotId = RiotIdStore.TryRead(),
-            riotBaseline = RiotBaselineFor(RiotIdStore.TryRead()),
+            riotId,
+            riotBaseline = RiotBaselineFor(riotId),
             showLibraryTools = s.ShowLibraryTools,
             achievementBanners = s.AchievementBanners,
             achievementVolume = s.AchievementVolume,
@@ -2414,7 +2423,7 @@ public sealed partial class WebHostBridge
             fpsCounterHideOverBuiltIn = s.FpsCounterHideOverBuiltIn,
             hdrForGames = s.HdrForGames,
             frameGenEverywhere = s.FrameGenEverywhere,
-            frameGenEverywhereCard = DlssSwapService.FrameGenEverywhereCard(SystemSpecs.FrameGenGpu) is not null,
+            frameGenEverywhereCard = DlssSwapService.FrameGenEverywhereCard(SystemSpecs.FastFrameGenGpu) is not null,
             hdrSdrGamma = s.HdrSdrGamma,
             discordNoiseSuppression = s.DiscordNoiseSuppression,
             discordQuietWhilePlaying = s.DiscordQuietWhilePlaying,
@@ -3445,15 +3454,59 @@ public sealed partial class WebHostBridge
     internal static string FromPage(string raw) =>
         LocalFileHost.WithoutToken(LocalFileHost.WithoutToken(raw, CoverArtService.VirtualHost), CoverArtService.ThumbnailHost);
 
+    internal static string OutboundForTransport(IHostTransport transport, string json) =>
+        transport is NamedPipeHostTransport ? json : ToPage(json);
+
+    internal static string InboundForTransport(IHostTransport? transport, string raw) =>
+        transport is NamedPipeHostTransport ? raw : FromPage(raw);
+
     private void PostSerialized(string json)
     {
         try
         {
             var transport = _transport;
             if (transport is null || _detached) return;
-            transport.PostJson(ToPage(json));
+            transport.PostJson(OutboundForTransport(transport, json));
         }
         catch { }
+    }
+
+    internal sealed class EarlyCancelTracker
+    {
+        private const int MaxEntries = 256;
+        private readonly long _ttlMs;
+        private readonly Func<long> _clockMs;
+        private readonly ConcurrentDictionary<string, long> _pending = new(StringComparer.Ordinal);
+
+        internal EarlyCancelTracker(long ttlMs = 5_000, Func<long>? clockMs = null)
+        {
+            _ttlMs = ttlMs;
+            _clockMs = clockMs ?? (() => Environment.TickCount64);
+        }
+
+        internal void Record(string id)
+        {
+            var now = _clockMs();
+            if (_pending.Count >= MaxEntries) Prune(now);
+            if (_pending.Count >= MaxEntries) _pending.Clear();
+            _pending[id] = now;
+        }
+
+        internal bool Consume(string id)
+        {
+            if (!_pending.TryRemove(id, out var at)) return false;
+            return _clockMs() - at <= _ttlMs;
+        }
+
+        internal void Clear() => _pending.Clear();
+
+        private void Prune(long now)
+        {
+            foreach (var pair in _pending)
+            {
+                if (now - pair.Value > _ttlMs) _pending.TryRemove(pair.Key, out _);
+            }
+        }
     }
 
     /// <summary>A Windows notification from Exo's own UI, when it is in the background: a short title and line.</summary>
