@@ -1139,7 +1139,7 @@
     "ExoLauncher/Services/WebHostBridge.FrameGen.cs": 4,
     "ExoLauncher/Services/WebHostBridge.GameSettings.cs": 9,
     "ExoLauncher/Services/WebHostBridge.Gifts.cs": 15,
-    "ExoLauncher/Services/WebHostBridge.Gpu.cs": 44,
+    "ExoLauncher/Services/WebHostBridge.Gpu.cs": 42,
     "ExoLauncher/Services/WebHostBridge.Hdr.cs": 9,
     "ExoLauncher/Services/WebHostBridge.Hid.cs": 15,
     "ExoLauncher/Services/WebHostBridge.Interrupts.cs": 7,
