@@ -179,8 +179,6 @@ internal static class UiCallbackScanner
         ("Helpers/ExoConnectedTheme.cs", "PointerExited", "XAML Button pointer event (UIElement), not an AppSDK source"),
         ("MainWindow.Confirm.cs", "PointerEntered", "XAML Button pointer event (UIElement), not an AppSDK source"),
         ("MainWindow.Confirm.cs", "PointerExited", "XAML Button pointer event (UIElement), not an AppSDK source"),
-        ("MainWindow.ConnectedApps.cs", "NavigationStarting", "method group, so the -= at unsubscribe still matches; Navigation's body is wrapped where it is declared"),
-        ("MainWindow.ConnectedApps.cs", "ProcessFailed", "method group, so the -= at unsubscribe still matches; Failed's body is wrapped where it is declared"),
         ("Services/StoreGifts.cs", "NavigationCompleted", "method group, so the -= in finally still matches; Completed's body is wrapped where it is declared"),
         ("Services/WebViewHostTransport.cs", "WebMessageReceived", "method group, so the -= in Detach still matches; OnWebMessageReceived's body is wrapped where it is declared"),
         ("Services/WebViewHostTransport.cs", "NavigationStarting", "method group, so the -= in Detach still matches; OnNavigationStarting's body is wrapped where it is declared"),

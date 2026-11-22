@@ -260,15 +260,12 @@ public sealed partial class WebHostBridge
         RequestRunStateScan();
     }
 
-    private static async Task<object> SaveWebPreferencesAsync(JsonElement patch)
+    private async Task<object> SaveWebPreferencesAsync(JsonElement patch)
     {
         var preferences = WebClientPreferences.Save(patch);
-        if (App.MainAppWindow is { } window)
-        {
-            if (preferences.MusicService is { } service) window.SelectMusicService(service);
-            if (new[] { "microphone", "camera", "clipboard", "notifications" }.Any(key => patch.TryGetProperty(key, out _)))
-                await window.ResetWebPermissionGrantsAsync();
-        }
+        if (preferences.MusicService is { } service) _services.MusicEngine.SelectService(service);
+        if (new[] { "microphone", "camera", "clipboard", "notifications" }.Any(key => patch.TryGetProperty(key, out _)))
+            await _services.MusicEngine.ResetPermissionGrantsAsync().ConfigureAwait(false);
         return preferences;
     }
 
@@ -284,6 +281,7 @@ public sealed partial class WebHostBridge
         HangWatchdog.PageAttached();
         _services.GogAuth.AttachDispatcher(_queue);
         _services.EpicAuth.AttachDispatcher(_queue);
+        _services.MusicEngine.Attach(_queue, PostEvent);
         if (Interlocked.Exchange(ref _transport, transport) is { } previous)
         {
             previous.MessageReceived -= OnMessage;
@@ -688,56 +686,45 @@ public sealed partial class WebHostBridge
                 "shell.prepare" => App.MainAppWindow is { } prepareWindow
                     ? await prepareWindow.PrepareConnectedRoomsAsync()
                     : new { ok = false },
-                "music.playback" => App.MainAppWindow is { } pbWindow
-                    ? pbWindow.MusicPlayback()
+                "music.playback" => _services.MusicEngine.IsActive || App.MainAppWindow is not null
+                    ? await _services.MusicEngine.PlaybackAsync().ConfigureAwait(false)
                     : await _services.HeadlessMusic.PlaybackAsync().ConfigureAwait(false),
                 "music.match" => hasParams ? MusicMatch.Answer(paramsEl) : new { ok = false, message = "Nothing to match." },
-                "music.control" => App.MainAppWindow is { } controlWindow
-                    ? await controlWindow.ControlMusicAsync(ReadString(paramsEl, hasParams, "action"),
-                        ReadDouble(paramsEl, hasParams, "positionMs")).ConfigureAwait(true)
+                "music.control" => _services.MusicEngine.IsActive || App.MainAppWindow is not null
+                    ? await _services.MusicEngine.ControlAsync(ReadString(paramsEl, hasParams, "action"),
+                        ReadDouble(paramsEl, hasParams, "positionMs")).ConfigureAwait(false)
                     : await _services.HeadlessMusic.ControlAsync(ReadString(paramsEl, hasParams, "action"),
                         ReadDouble(paramsEl, hasParams, "positionMs")).ConfigureAwait(false),
-                "music.volume" => App.MainAppWindow is { } volumeWindow
-                    ? await volumeWindow.MusicVolumeAsync(ReadDouble(paramsEl, hasParams, "level"),
-                        ReadBool(paramsEl, hasParams, "muted")).ConfigureAwait(true)
+                "music.volume" => _services.MusicEngine.IsActive || App.MainAppWindow is not null
+                    ? await _services.MusicEngine.VolumeAsync(ReadDouble(paramsEl, hasParams, "level"),
+                        ReadBool(paramsEl, hasParams, "muted")).ConfigureAwait(false)
                     : await _services.HeadlessMusic.VolumeAsync(ReadDouble(paramsEl, hasParams, "level"),
                         ReadBool(paramsEl, hasParams, "muted")).ConfigureAwait(false),
-                "spotify.start" => App.MainAppWindow is { } spotifyWindow
-                    ? await spotifyWindow.WebMusicStartAsync("spotify").ConfigureAwait(true)
-                    : new { ok = false, state = "error", message = "The app window is unavailable." },
+                "spotify.start" => await _services.MusicEngine.StartAsync("spotify").ConfigureAwait(false),
                 "spotify.link" => await SpotifyLinks.LinkAsync(ReadString(paramsEl, hasParams, "url")).ConfigureAwait(true),
-                "spotify.view" => App.MainAppWindow is { } spotifyViewWindow
-                    ? await spotifyViewWindow.SpotifyViewAsync(ReadString(paramsEl, hasParams, "view"),
-                        ReadString(paramsEl, hasParams, "uri"), ReadString(paramsEl, hasParams, "query"),
-                        (int)(ReadDouble(paramsEl, hasParams, "offset") ?? 0)).ConfigureAwait(true)
-                    : new { ok = false, message = "The app window is unavailable." },
-                "spotify.act" => App.MainAppWindow is { } spotifyActWindow
-                    ? await spotifyActWindow.SpotifyActAsync(ReadString(paramsEl, hasParams, "action"),
-                        ReadString(paramsEl, hasParams, "uri"), ReadString(paramsEl, hasParams, "context"),
-                        ReadDouble(paramsEl, hasParams, "index") is { } index ? (int)index : null,
-                        ReadBool(paramsEl, hasParams, "on"), ReadString(paramsEl, hasParams, "uid"),
-                        ReadString(paramsEl, hasParams, "query"), ReadString(paramsEl, hasParams, "name"),
-                        ReadString(paramsEl, hasParams, "description"), ReadString(paramsEl, hasParams, "image")).ConfigureAwait(true)
-                    : new { ok = false, message = "The app window is unavailable." },
-                "ytmusic.start" or "applemusic.start" => App.MainAppWindow is { } webMusicWindow
-                    ? await webMusicWindow.WebMusicStartAsync(method == "ytmusic.start" ? "youtube" : "apple").ConfigureAwait(true)
-                    : new { ok = false, state = "error", message = "The app window is unavailable." },
-                "ytmusic.view" or "applemusic.view" => App.MainAppWindow is { } webMusicViewWindow
-                    ? await webMusicViewWindow.WebMusicViewAsync(method == "ytmusic.view" ? "youtube" : "apple", ReadString(paramsEl, hasParams, "view"),
-                        ReadString(paramsEl, hasParams, "uri"), ReadString(paramsEl, hasParams, "query"),
-                        (int)(ReadDouble(paramsEl, hasParams, "offset") ?? 0)).ConfigureAwait(true)
-                    : new { ok = false, message = "The app window is unavailable." },
-                "ytmusic.act" or "applemusic.act" => App.MainAppWindow is { } webMusicActWindow
-                    ? await webMusicActWindow.WebMusicActAsync(method == "ytmusic.act" ? "youtube" : "apple", ReadString(paramsEl, hasParams, "action"),
-                        ReadString(paramsEl, hasParams, "uri"), ReadString(paramsEl, hasParams, "context"),
-                        ReadDouble(paramsEl, hasParams, "index") is { } webIndex ? (int)webIndex : null,
-                        ReadBool(paramsEl, hasParams, "on"), ReadString(paramsEl, hasParams, "uid"),
-                        ReadString(paramsEl, hasParams, "query"), ReadString(paramsEl, hasParams, "text")).ConfigureAwait(true)
-                    : new { ok = false, message = "The app window is unavailable." },
-                "music.signIn" => App.MainAppWindow is { } signInWindow
-                    ? await signInWindow.MusicSignInAsync(ReadString(paramsEl, hasParams, "service")).ConfigureAwait(true)
-                    : new { ok = false, message = "The app window is unavailable." },
-                "music.warm" => App.MainAppWindow?.WarmMusic() ?? new { ok = false },
+                "spotify.view" => await _services.MusicEngine.SpotifyViewAsync(ReadString(paramsEl, hasParams, "view"),
+                    ReadString(paramsEl, hasParams, "uri"), ReadString(paramsEl, hasParams, "query"),
+                    (int)(ReadDouble(paramsEl, hasParams, "offset") ?? 0)).ConfigureAwait(false),
+                "spotify.act" => await _services.MusicEngine.SpotifyActAsync(ReadString(paramsEl, hasParams, "action"),
+                    ReadString(paramsEl, hasParams, "uri"), ReadString(paramsEl, hasParams, "context"),
+                    ReadDouble(paramsEl, hasParams, "index") is { } index ? (int)index : null,
+                    ReadBool(paramsEl, hasParams, "on"), ReadString(paramsEl, hasParams, "uid"),
+                    ReadString(paramsEl, hasParams, "query"), ReadString(paramsEl, hasParams, "name"),
+                    ReadString(paramsEl, hasParams, "description"), ReadString(paramsEl, hasParams, "image")).ConfigureAwait(false),
+                "ytmusic.start" or "applemusic.start" => await _services.MusicEngine.StartAsync(
+                    method == "ytmusic.start" ? "youtube" : "apple").ConfigureAwait(false),
+                "ytmusic.view" or "applemusic.view" => await _services.MusicEngine.WebMusicViewAsync(
+                    method == "ytmusic.view" ? "youtube" : "apple", ReadString(paramsEl, hasParams, "view"),
+                    ReadString(paramsEl, hasParams, "uri"), ReadString(paramsEl, hasParams, "query"),
+                    (int)(ReadDouble(paramsEl, hasParams, "offset") ?? 0)).ConfigureAwait(false),
+                "ytmusic.act" or "applemusic.act" => await _services.MusicEngine.WebMusicActAsync(
+                    method == "ytmusic.act" ? "youtube" : "apple", ReadString(paramsEl, hasParams, "action"),
+                    ReadString(paramsEl, hasParams, "uri"), ReadString(paramsEl, hasParams, "context"),
+                    ReadDouble(paramsEl, hasParams, "index") is { } webIndex ? (int)webIndex : null,
+                    ReadBool(paramsEl, hasParams, "on"), ReadString(paramsEl, hasParams, "uid"),
+                    ReadString(paramsEl, hasParams, "query"), ReadString(paramsEl, hasParams, "text")).ConfigureAwait(false),
+                "music.signIn" => await _services.MusicEngine.SignInAsync(ReadString(paramsEl, hasParams, "service")).ConfigureAwait(false),
+                "music.warm" => await _services.MusicEngine.WarmAsync().ConfigureAwait(false),
                 "shaders.addon" => await Task.Run(_services.ShadersHost.Status).ConfigureAwait(true),
                 "shaders.call" => await _services.ShadersHost.CallAsync(ReadString(paramsEl, hasParams, "method"),
                         hasParams && paramsEl.TryGetProperty("params", out var shadersParams) ? System.Text.Json.Nodes.JsonNode.Parse(shadersParams.GetRawText()) : null,
@@ -2396,6 +2383,7 @@ public sealed partial class WebHostBridge
         // autoInstallRedistributables, minimizeWhilePlaying, antiCheatSafeMode,
         // framelessMode, theme, copyPortableIntoLibrary, allowResize,
         // checkForUpdates, libraryShowInstalled, libraryShowOwned.
+        var musicService = WebClientPreferences.EffectiveMusicService(WebClientPreferences.Read().MusicService);
         return new
         {
             appVersion = _services.AppVersion,
@@ -2408,7 +2396,8 @@ public sealed partial class WebHostBridge
             textColour = s.TextColour,
             textSize = s.TextSize,
             background = s.Background,
-            uiPrefs = s.UiPrefs,
+            musicService,
+            uiPrefs = WebClientPreferences.BuildSettingsUiPrefs(s.UiPrefs, musicService),
             sortMode = s.SortMode,
             defaultInstallRoot = s.DefaultInstallRoot,
             preferredGameSources = s.PreferredGameSources,
@@ -2574,11 +2563,37 @@ public sealed partial class WebHostBridge
             // A deleted folder's picture, and a removed or replaced one, goes with it.
             _folderArt.DeleteUnreferenced(kept.Select(folder => folder.Art));
         }
+        string? requestedMusicService = p.TryGetProperty("musicService", out var musicServiceProp) && musicServiceProp.ValueKind == JsonValueKind.String
+            ? musicServiceProp.GetString()
+            : null;
         if (p.TryGetProperty("uiPrefs", out var uiPrefs) && uiPrefs.ValueKind == JsonValueKind.Object)
-            _services.Settings.SetUiPrefs(uiPrefs.EnumerateObject().ToDictionary(pref => pref.Name, pref => pref.Value, StringComparer.Ordinal));
+        {
+            var (fromUiPrefs, remaining) = WebClientPreferences.ExtractMusicServiceFromUiPrefs(uiPrefs);
+            requestedMusicService ??= fromUiPrefs;
+            if (remaining.Count > 0) _services.Settings.SetUiPrefs(remaining);
+        }
         // A choice the page kept before Exo did, moved once: it never counts as a newer change than the account's.
         if (p.TryGetProperty("uiPrefsMoved", out var moved) && moved.ValueKind == JsonValueKind.Object)
-            foreach (var pref in moved.EnumerateObject()) _services.Settings.MoveUiPref(pref.Name, pref.Value);
+        {
+            foreach (var pref in moved.EnumerateObject())
+            {
+                if (pref.Name is WebClientPreferences.UiPrefMusicServiceKey or "musicService")
+                {
+                    if (pref.Value.ValueKind == JsonValueKind.String && WebClientPreferences.Read().MusicService is null &&
+                        WebClientPreferences.TryNormalizeMusicService(pref.Value.GetString()) is { } movedService)
+                        WebClientPreferences.ApplySyncedMusicService(movedService);
+                    continue;
+                }
+                _services.Settings.MoveUiPref(pref.Name, pref.Value);
+            }
+        }
+        if (requestedMusicService is not null)
+        {
+            var normalized = WebClientPreferences.TryNormalizeMusicService(requestedMusicService)
+                ?? throw new UserFacingException("Choose a music service.");
+            WebClientPreferences.SaveMusicService(normalized);
+            _services.MusicEngine.SelectService(normalized);
+        }
         if (p.TryGetProperty("hiddenGames", out var hidden) && hidden.ValueKind == JsonValueKind.Array)
             _services.Settings.SetHiddenGames(hidden.EnumerateArray().Where(id => id.ValueKind == JsonValueKind.String).Select(id => id.GetString()));
 
