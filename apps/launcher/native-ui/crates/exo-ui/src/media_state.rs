@@ -1,38 +1,35 @@
 use crate::state::{AppState, HostStatus};
 use exo_rpc::{
     ActionResult, CaptureItem, CaptureListReply, CaptureLiveState, CaptureSettingsDto,
-    CaptureStatusReply, METHOD_APPLEMUSIC_START, METHOD_CAPTURE_ACT, METHOD_CAPTURE_EDIT,
-    METHOD_CAPTURE_ITEM, METHOD_CAPTURE_LIST, METHOD_CAPTURE_SETTINGS, METHOD_CAPTURE_STATUS,
-    METHOD_MUSIC_CONTROL, METHOD_MUSIC_PLAYBACK, METHOD_MUSIC_SIGN_IN, METHOD_MUSIC_VOLUME,
-    METHOD_SPOTIFY_START, METHOD_YTMUSIC_START, MusicPlayback, MusicPlaybackReply,
-    MusicVolumeReply,
+    CaptureStatusReply, METHOD_APPLEMUSIC_ACT, METHOD_APPLEMUSIC_START, METHOD_APPLEMUSIC_VIEW,
+    METHOD_CAPTURE_ACT, METHOD_CAPTURE_EDIT, METHOD_CAPTURE_ITEM, METHOD_CAPTURE_LIST,
+    METHOD_CAPTURE_SETTINGS, METHOD_CAPTURE_STATUS, METHOD_MUSIC_CONTROL, METHOD_MUSIC_PLAYBACK,
+    METHOD_MUSIC_SIGN_IN, METHOD_MUSIC_VOLUME, METHOD_SPOTIFY_ACT, METHOD_SPOTIFY_START,
+    METHOD_SPOTIFY_VIEW, METHOD_YTMUSIC_ACT, METHOD_YTMUSIC_START, METHOD_YTMUSIC_VIEW,
+    MusicPlayback, MusicPlaybackReply, MusicVolumeReply, PlayerCard, PlayerOption, PlayerSection,
+    PlayerStartReply, PlayerViewData, PlayerViewReply,
 };
-use rune::Player;
+use rune::{Player, TextEdit};
 use serde_json::json;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MusicService {
-    System,
     Spotify,
     Apple,
     YouTube,
 }
 
 impl MusicService {
-    pub const ALL: [Self; 4] = [Self::System, Self::Spotify, Self::Apple, Self::YouTube];
-
-    pub fn key(self) -> &'static str {
-        match self {
-            Self::System => "music-svc-system",
-            Self::Spotify => "music-svc-spotify",
-            Self::Apple => "music-svc-apple",
-            Self::YouTube => "music-svc-youtube",
+    pub fn from_pref(pref: Option<&str>) -> Self {
+        match pref.map(|s| s.trim().to_ascii_lowercase()).as_deref() {
+            Some("apple") | Some("cider") => Self::Apple,
+            Some("youtube") | Some("ytmusic") => Self::YouTube,
+            _ => Self::Spotify,
         }
     }
 
     pub fn id(self) -> &'static str {
         match self {
-            Self::System => "system",
             Self::Spotify => "spotify",
             Self::Apple => "apple",
             Self::YouTube => "youtube",
@@ -41,12 +38,89 @@ impl MusicService {
 
     pub fn label(self) -> &'static str {
         match self {
-            Self::System => "System Media",
             Self::Spotify => "Spotify",
             Self::Apple => "Apple Music",
             Self::YouTube => "YouTube Music",
         }
     }
+
+    pub fn liked_name(self) -> &'static str {
+        match self {
+            Self::Apple => "Favorite Songs",
+            Self::YouTube => "Liked Music",
+            Self::Spotify => "Liked Songs",
+        }
+    }
+
+    pub fn has_browse(self) -> bool {
+        self == Self::Apple
+    }
+
+    pub fn has_radio(self) -> bool {
+        self == Self::Apple
+    }
+
+    pub fn has_explore(self) -> bool {
+        self == Self::YouTube
+    }
+
+    pub fn has_recent(self) -> bool {
+        matches!(self, Self::Apple | Self::Spotify)
+    }
+
+    pub fn start_method(self) -> Option<&'static str> {
+        match self {
+            Self::Spotify => Some(METHOD_SPOTIFY_START),
+            Self::Apple => Some(METHOD_APPLEMUSIC_START),
+            Self::YouTube => Some(METHOD_YTMUSIC_START),
+        }
+    }
+
+    pub fn view_method(self) -> Option<&'static str> {
+        match self {
+            Self::Spotify => Some(METHOD_SPOTIFY_VIEW),
+            Self::Apple => Some(METHOD_APPLEMUSIC_VIEW),
+            Self::YouTube => Some(METHOD_YTMUSIC_VIEW),
+        }
+    }
+
+    pub fn act_method(self) -> Option<&'static str> {
+        match self {
+            Self::Spotify => Some(METHOD_SPOTIFY_ACT),
+            Self::Apple => Some(METHOD_APPLEMUSIC_ACT),
+            Self::YouTube => Some(METHOD_YTMUSIC_ACT),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum MusicNav {
+    Home,
+    Songs,
+    Browse,
+    Radio,
+    Explore,
+    Search,
+    Collection {
+        uri: String,
+        kind: String,
+        title: String,
+    },
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MusicPanel {
+    NowPlaying,
+    Queue,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum MusicRoomState {
+    Loading,
+    Running,
+    SignedOut,
+    NotPremium,
+    Error(String),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -59,12 +133,32 @@ pub enum CaptureFilter {
 
 pub struct MediaState {
     pub music_service: MusicService,
+    pub music_room_state: MusicRoomState,
+    pub music_nav: MusicNav,
+    pub music_history: Vec<MusicNav>,
+    pub music_panel: Option<MusicPanel>,
     pub music_immersion: bool,
     pub playback: Option<MusicPlayback>,
     pub music_volume: f64,
     pub music_muted: bool,
+    pub music_shuffle: bool,
+    pub music_repeat: i32,
+    pub music_can_shuffle: bool,
+    pub music_can_repeat: bool,
+    pub music_liked: bool,
+    pub music_track_uri: String,
+    pub music_library: Vec<PlayerCard>,
+    pub music_library_filters: Vec<PlayerOption>,
+    pub music_library_filter: String,
+    pub music_recent: Vec<PlayerCard>,
+    pub music_home_sections: Vec<PlayerSection>,
+    pub music_page_data: Option<PlayerViewData>,
+    pub music_queue_data: Option<PlayerViewData>,
+    pub music_search_edit: TextEdit,
 
     pub captures_open: bool,
+    pub captures_settings_open: bool,
+    pub capture_popover_open: bool,
     pub capture_filter: CaptureFilter,
     pub capture_game_filter: Option<String>,
     pub capture_status: Option<CaptureStatusReply>,
@@ -81,10 +175,14 @@ pub struct MediaState {
 impl MediaState {
     pub fn demo() -> Self {
         Self {
-            music_service: MusicService::Spotify,
+            music_service: MusicService::Apple,
+            music_room_state: MusicRoomState::Running,
+            music_nav: MusicNav::Home,
+            music_history: Vec::new(),
+            music_panel: None,
             music_immersion: false,
             playback: Some(MusicPlayback {
-                provider: "spotify".into(),
+                provider: "apple".into(),
                 source: "session".into(),
                 status: "playing".into(),
                 title: "Midnight City".into(),
@@ -102,7 +200,173 @@ impl MediaState {
             }),
             music_volume: 0.78,
             music_muted: false,
+            music_shuffle: false,
+            music_repeat: 0,
+            music_can_shuffle: true,
+            music_can_repeat: true,
+            music_liked: false,
+            music_track_uri: String::new(),
+            music_library: vec![
+                PlayerCard {
+                    uri: "am:liked".into(),
+                    kind: "collection".into(),
+                    title: "Favorite Songs".into(),
+                    subtitle: "Playlist".into(),
+                    image: String::new(),
+                    url: None,
+                    pinned: false,
+                    owned: true,
+                },
+                PlayerCard {
+                    uri: "am:playlist:demo1".into(),
+                    kind: "playlist".into(),
+                    title: "peak".into(),
+                    subtitle: "Playlist".into(),
+                    image: String::new(),
+                    url: None,
+                    pinned: false,
+                    owned: true,
+                },
+                PlayerCard {
+                    uri: "am:playlist:demo2".into(),
+                    kind: "playlist".into(),
+                    title: "Peak".into(),
+                    subtitle: "Playlist".into(),
+                    image: String::new(),
+                    url: None,
+                    pinned: false,
+                    owned: true,
+                },
+            ],
+            music_library_filters: vec![
+                PlayerOption {
+                    id: "all".into(),
+                    name: "All".into(),
+                },
+                PlayerOption {
+                    id: "playlists".into(),
+                    name: "Playlists".into(),
+                },
+                PlayerOption {
+                    id: "albums".into(),
+                    name: "Albums".into(),
+                },
+                PlayerOption {
+                    id: "artists".into(),
+                    name: "Artists".into(),
+                },
+            ],
+            music_library_filter: "all".into(),
+            music_recent: vec![
+                PlayerCard {
+                    uri: "am:album:r1".into(),
+                    kind: "album".into(),
+                    title: "Peak".into(),
+                    subtitle: String::new(),
+                    image: String::new(),
+                    ..Default::default()
+                },
+                PlayerCard {
+                    uri: "am:album:r2".into(),
+                    kind: "album".into(),
+                    title: "The Way I Are".into(),
+                    subtitle: String::new(),
+                    image: String::new(),
+                    ..Default::default()
+                },
+                PlayerCard {
+                    uri: "am:album:r3".into(),
+                    kind: "album".into(),
+                    title: "Favorite Songs".into(),
+                    subtitle: String::new(),
+                    image: String::new(),
+                    ..Default::default()
+                },
+                PlayerCard {
+                    uri: "am:album:r4".into(),
+                    kind: "album".into(),
+                    title: "The Eminem Show".into(),
+                    subtitle: String::new(),
+                    image: String::new(),
+                    ..Default::default()
+                },
+                PlayerCard {
+                    uri: "am:album:r5".into(),
+                    kind: "album".into(),
+                    title: "Hurry Up, We're Dreaming".into(),
+                    subtitle: String::new(),
+                    image: String::new(),
+                    ..Default::default()
+                },
+                PlayerCard {
+                    uri: "am:album:r6".into(),
+                    kind: "album".into(),
+                    title: "Currents".into(),
+                    subtitle: String::new(),
+                    image: String::new(),
+                    ..Default::default()
+                },
+                PlayerCard {
+                    uri: "am:album:r7".into(),
+                    kind: "album".into(),
+                    title: "Random Access Memories".into(),
+                    subtitle: String::new(),
+                    image: String::new(),
+                    ..Default::default()
+                },
+                PlayerCard {
+                    uri: "am:album:r8".into(),
+                    kind: "album".into(),
+                    title: "Discovery".into(),
+                    subtitle: String::new(),
+                    image: String::new(),
+                    ..Default::default()
+                },
+            ],
+            music_home_sections: vec![PlayerSection {
+                title: "Best New Songs".into(),
+                more: None,
+                items: vec![
+                    PlayerCard {
+                        uri: "am:album:s1".into(),
+                        kind: "album".into(),
+                        title: "Midnight City".into(),
+                        subtitle: "M83".into(),
+                        image: String::new(),
+                        ..Default::default()
+                    },
+                    PlayerCard {
+                        uri: "am:album:s2".into(),
+                        kind: "album".into(),
+                        title: "Let It Happen".into(),
+                        subtitle: "Tame Impala".into(),
+                        image: String::new(),
+                        ..Default::default()
+                    },
+                    PlayerCard {
+                        uri: "am:album:s3".into(),
+                        kind: "album".into(),
+                        title: "Instant Crush".into(),
+                        subtitle: "Daft Punk".into(),
+                        image: String::new(),
+                        ..Default::default()
+                    },
+                    PlayerCard {
+                        uri: "am:album:s4".into(),
+                        kind: "album".into(),
+                        title: "Resonance".into(),
+                        subtitle: "HOME".into(),
+                        image: String::new(),
+                        ..Default::default()
+                    },
+                ],
+            }],
+            music_page_data: None,
+            music_queue_data: None,
+            music_search_edit: TextEdit::new(""),
             captures_open: false,
+            captures_settings_open: false,
+            capture_popover_open: false,
             capture_filter: CaptureFilter::All,
             capture_game_filter: None,
             capture_status: Some(CaptureStatusReply {
@@ -111,7 +375,9 @@ impl MediaState {
                 folder: Some("Videos\\Exo Captures".into()),
                 state: Some(CaptureLiveState {
                     replay: true,
+                    buffering: true,
                     recording: false,
+                    recording_ms: None,
                     present: true,
                 }),
                 settings: Some(CaptureSettingsDto {
@@ -196,12 +462,32 @@ impl MediaState {
 
     pub fn empty_for_host() -> Self {
         Self {
-            music_service: MusicService::System,
+            music_service: MusicService::Spotify,
+            music_room_state: MusicRoomState::Loading,
+            music_nav: MusicNav::Home,
+            music_history: Vec::new(),
+            music_panel: None,
             music_immersion: false,
             playback: None,
             music_volume: 0.75,
             music_muted: false,
+            music_shuffle: false,
+            music_repeat: 0,
+            music_can_shuffle: false,
+            music_can_repeat: false,
+            music_liked: false,
+            music_track_uri: String::new(),
+            music_library: Vec::new(),
+            music_library_filters: Vec::new(),
+            music_library_filter: "all".into(),
+            music_recent: Vec::new(),
+            music_home_sections: Vec::new(),
+            music_page_data: None,
+            music_queue_data: None,
+            music_search_edit: TextEdit::new(""),
             captures_open: false,
+            captures_settings_open: false,
+            capture_popover_open: false,
             capture_filter: CaptureFilter::All,
             capture_game_filter: None,
             capture_status: None,
@@ -215,13 +501,44 @@ impl MediaState {
             trim_end_pct: 1.0,
         }
     }
+
+    pub fn apply_player_state(&mut self, data: &PlayerViewData) {
+        if let Some(ref uri) = data.track_uri {
+            self.music_track_uri = uri.clone();
+        }
+        if let Some(sh) = data.shuffle {
+            self.music_shuffle = sh;
+        }
+        if let Some(rep) = data.repeat {
+            self.music_repeat = rep;
+        }
+        if let Some(cs) = data.can_shuffle {
+            self.music_can_shuffle = cs;
+        }
+        if let Some(cr) = data.can_repeat {
+            self.music_can_repeat = cr;
+        }
+        if let Some(lk) = data.liked {
+            self.music_liked = lk;
+        }
+    }
 }
 
 impl AppState {
+    pub fn sync_music_service_from_settings(&mut self) {
+        let pref = self
+            .settings
+            .ui_prefs
+            .get("exo.musicWebService")
+            .and_then(|v| v.as_str());
+        self.media.music_service = MusicService::from_pref(pref);
+    }
+
     pub fn load_music_room(&mut self) {
         if self.status == HostStatus::Standalone {
             return;
         }
+        self.sync_music_service_from_settings();
         #[cfg(windows)]
         if let (Some(rpc), Some(handle)) = (self.rpc.clone(), self.handle.clone()) {
             let h1 = handle.clone();
@@ -230,9 +547,10 @@ impl AppState {
                     h1.update(move |s, _| s.media.playback = reply.playback);
                 }
             });
+            let h2 = handle.clone();
             rpc.call::<_, MusicVolumeReply>(METHOD_MUSIC_VOLUME, &json!({}), move |res| {
                 if let Ok(v) = res {
-                    handle.update(move |s, _| {
+                    h2.update(move |s, _| {
                         if let Some(lvl) = v.level {
                             s.media.music_volume = lvl;
                         }
@@ -240,27 +558,278 @@ impl AppState {
                     });
                 }
             });
+            if let Some(start_method) = self.media.music_service.start_method() {
+                let h3 = handle.clone();
+                rpc.call::<_, PlayerStartReply>(start_method, &json!({}), move |res| {
+                    h3.update(move |s, _| match res {
+                        Ok(reply) if reply.ok && reply.state == "running" => {
+                            s.media.music_room_state = MusicRoomState::Running;
+                            s.load_music_views();
+                        }
+                        Ok(reply) if reply.state == "signedOut" => {
+                            s.media.music_room_state = MusicRoomState::SignedOut;
+                        }
+                        Ok(reply) if reply.state == "notPremium" => {
+                            s.media.music_room_state = MusicRoomState::NotPremium;
+                        }
+                        Ok(reply) if reply.state == "loading" => {
+                            s.media.music_room_state = MusicRoomState::Loading;
+                        }
+                        Ok(reply) => {
+                            s.media.music_room_state = MusicRoomState::Error(
+                                reply
+                                    .message
+                                    .unwrap_or_else(|| "Unable to start music engine.".into()),
+                            );
+                        }
+                        Err(err) => {
+                            s.media.music_room_state = MusicRoomState::Error(err.to_string());
+                        }
+                    });
+                });
+            }
         }
     }
 
-    pub fn select_music_service(&mut self, svc: MusicService) {
-        self.media.music_service = svc;
+    pub fn load_music_views(&mut self) {
         if self.status == HostStatus::Standalone {
             return;
         }
-        let method = match svc {
-            MusicService::Spotify => Some(METHOD_SPOTIFY_START),
-            MusicService::Apple => Some(METHOD_APPLEMUSIC_START),
-            MusicService::YouTube => Some(METHOD_YTMUSIC_START),
-            MusicService::System => None,
+        let Some(view_method) = self.media.music_service.view_method() else {
+            return;
+        };
+        let has_recent = self.media.music_service.has_recent();
+        #[cfg(windows)]
+        if let (Some(rpc), Some(handle)) = (self.rpc.clone(), self.handle.clone()) {
+            let h_lib = handle.clone();
+            rpc.call::<_, PlayerViewReply>(
+                view_method,
+                &json!({ "view": "library" }),
+                move |res| {
+                    if let Ok(reply) = res
+                        && reply.ok
+                        && let Some(data) = reply.data
+                    {
+                        h_lib.update(move |s, _| {
+                            s.media.music_library = data.items;
+                            if !data.filters.is_empty() {
+                                s.media.music_library_filters = data.filters;
+                            }
+                            if let Some(f) = data.filter {
+                                s.media.music_library_filter = f;
+                            }
+                        });
+                    }
+                },
+            );
+            let h_home = handle.clone();
+            rpc.call::<_, PlayerViewReply>(view_method, &json!({ "view": "home" }), move |res| {
+                if let Ok(reply) = res
+                    && reply.ok
+                    && let Some(data) = reply.data
+                {
+                    h_home.update(move |s, _| {
+                        s.media.music_home_sections = data.sections;
+                    });
+                }
+            });
+            if has_recent {
+                let h_rec = handle.clone();
+                rpc.call::<_, PlayerViewReply>(
+                    view_method,
+                    &json!({ "view": "recent" }),
+                    move |res| {
+                        if let Ok(reply) = res
+                            && reply.ok
+                            && let Some(data) = reply.data
+                        {
+                            h_rec.update(move |s, _| {
+                                s.media.music_recent = data.items;
+                            });
+                        }
+                    },
+                );
+            }
+            let h_pl = handle.clone();
+            rpc.call::<_, PlayerViewReply>(view_method, &json!({ "view": "player" }), move |res| {
+                if let Ok(reply) = res
+                    && reply.ok
+                    && let Some(data) = reply.data
+                {
+                    h_pl.update(move |s, _| {
+                        s.media.apply_player_state(&data);
+                    });
+                }
+            });
+        }
+    }
+
+    pub fn music_open_nav(&mut self, nav: MusicNav) {
+        if self.media.music_nav != nav {
+            let prev = self.media.music_nav.clone();
+            self.media.music_history.push(prev);
+            self.media.music_nav = nav.clone();
+            self.media.music_page_data = None;
+        }
+        self.load_music_current_nav();
+    }
+
+    pub fn music_go_back(&mut self) {
+        if let Some(prev) = self.media.music_history.pop() {
+            self.media.music_nav = prev;
+            self.media.music_page_data = None;
+            self.load_music_current_nav();
+        }
+    }
+
+    fn load_music_current_nav(&mut self) {
+        if self.status == HostStatus::Standalone {
+            return;
+        }
+        let Some(view_method) = self.media.music_service.view_method() else {
+            return;
+        };
+        let params = match &self.media.music_nav {
+            MusicNav::Home => {
+                self.load_music_views();
+                return;
+            }
+            MusicNav::Songs => json!({ "view": "songs" }),
+            MusicNav::Browse => json!({ "view": "browse" }),
+            MusicNav::Radio => json!({ "view": "radio" }),
+            MusicNav::Explore => json!({ "view": "explore" }),
+            MusicNav::Search => {
+                let q = self.media.music_search_edit.text.trim().to_string();
+                if q.is_empty() {
+                    return;
+                }
+                json!({ "view": "search", "query": q })
+            }
+            MusicNav::Collection { uri, kind, .. } => {
+                let v = match kind.as_str() {
+                    "album" => "album",
+                    "artist" => "artist",
+                    "collection" => "songs",
+                    _ => "playlist",
+                };
+                if v == "songs" {
+                    json!({ "view": "songs" })
+                } else {
+                    json!({ "view": v, "uri": uri })
+                }
+            }
         };
         #[cfg(windows)]
-        if let (Some(m), Some(rpc), Some(handle)) = (method, self.rpc.clone(), self.handle.clone()) {
-            rpc.call_raw(m, &json!({}), move |_| {
+        if let (Some(rpc), Some(handle)) = (self.rpc.clone(), self.handle.clone()) {
+            rpc.call::<_, PlayerViewReply>(view_method, &params, move |res| {
+                if let Ok(reply) = res
+                    && reply.ok
+                    && let Some(data) = reply.data
+                {
+                    handle.update(move |s, _| {
+                        s.media.music_page_data = Some(data);
+                    });
+                }
+            });
+        }
+    }
+
+    pub fn music_open_card(&mut self, uri: String, kind: String, title: String) {
+        if kind == "track" {
+            self.music_play_uri(&uri, None, None);
+        } else {
+            self.music_open_nav(MusicNav::Collection { uri, kind, title });
+        }
+    }
+
+    pub fn music_play_uri(&mut self, uri: &str, context: Option<&str>, index: Option<usize>) {
+        if self.status == HostStatus::Standalone {
+            return;
+        }
+        let Some(act_method) = self.media.music_service.act_method() else {
+            return;
+        };
+        let mut body = json!({ "action": "play", "uri": uri });
+        if let Some(ctx) = context {
+            body["context"] = json!(ctx);
+        }
+        if let Some(idx) = index {
+            body["index"] = json!(idx);
+        }
+        #[cfg(windows)]
+        if let (Some(rpc), Some(handle)) = (self.rpc.clone(), self.handle.clone()) {
+            rpc.call::<_, ActionResult>(act_method, &body, move |_| {
                 handle.update(|s, _| s.load_music_room());
             });
-        } else {
-            self.load_music_room();
+        }
+    }
+
+    pub fn music_toggle_shuffle(&mut self) {
+        let next = !self.media.music_shuffle;
+        self.media.music_shuffle = next;
+        if let Some(act_method) = self.media.music_service.act_method() {
+            #[cfg(windows)]
+            if let Some(rpc) = self.rpc.clone() {
+                rpc.call_raw(
+                    act_method,
+                    &json!({ "action": "shuffle", "on": next }),
+                    |_| {},
+                );
+            }
+        }
+    }
+
+    pub fn music_cycle_repeat(&mut self) {
+        let next = (self.media.music_repeat + 1) % 3;
+        self.media.music_repeat = next;
+        if let Some(act_method) = self.media.music_service.act_method() {
+            #[cfg(windows)]
+            if let Some(rpc) = self.rpc.clone() {
+                rpc.call_raw(
+                    act_method,
+                    &json!({ "action": "repeat", "index": next }),
+                    |_| {},
+                );
+            }
+        }
+    }
+
+    pub fn music_toggle_panel(&mut self, panel: MusicPanel) {
+        if self.media.music_panel == Some(panel) {
+            self.media.music_panel = None;
+            return;
+        }
+        self.media.music_panel = Some(panel);
+        if panel == MusicPanel::Queue {
+            self.load_music_queue();
+        }
+    }
+
+    pub fn load_music_queue(&mut self) {
+        if self.status == HostStatus::Standalone {
+            return;
+        }
+        let Some(view_method) = self.media.music_service.view_method() else {
+            return;
+        };
+        #[cfg(windows)]
+        if let (Some(rpc), Some(handle)) = (self.rpc.clone(), self.handle.clone()) {
+            rpc.call::<_, PlayerViewReply>(view_method, &json!({ "view": "queue" }), move |res| {
+                if let Ok(reply) = res
+                    && reply.ok
+                    && let Some(data) = reply.data
+                {
+                    handle.update(move |s, _| {
+                        s.media.music_queue_data = Some(data);
+                    });
+                }
+            });
+        }
+    }
+
+    pub fn music_submit_search(&mut self) {
+        if !self.media.music_search_edit.text.trim().is_empty() {
+            self.music_open_nav(MusicNav::Search);
         }
     }
 
@@ -268,7 +837,11 @@ impl AppState {
         if let Some(ref mut pb) = self.media.playback {
             match action {
                 "toggle" => {
-                    pb.status = if pb.is_playing() { "paused".into() } else { "playing".into() };
+                    pb.status = if pb.is_playing() {
+                        "paused".into()
+                    } else {
+                        "playing".into()
+                    };
                 }
                 "play" => pb.status = "playing".into(),
                 "pause" => pb.status = "paused".into(),
@@ -317,18 +890,24 @@ impl AppState {
         let svc = self.media.music_service.id();
         #[cfg(windows)]
         if let (Some(rpc), Some(handle)) = (self.rpc.clone(), self.handle.clone()) {
-            rpc.call::<_, ActionResult>(METHOD_MUSIC_SIGN_IN, &json!({ "service": svc }), move |res| {
-                if let Ok(r) = res
-                    && let Some(msg) = r.message
-                {
-                    handle.update(move |s, _| s.notice = Some(msg));
-                }
-            });
+            rpc.call::<_, ActionResult>(
+                METHOD_MUSIC_SIGN_IN,
+                &json!({ "service": svc }),
+                move |res| {
+                    if let Ok(r) = res
+                        && let Some(msg) = r.message
+                    {
+                        handle.update(move |s, _| s.notice = Some(msg));
+                    }
+                },
+            );
         }
     }
 
     pub fn open_captures(&mut self, game_id: Option<String>) {
         self.media.captures_open = true;
+        self.media.captures_settings_open = false;
+        self.media.capture_popover_open = false;
         self.media.capture_game_filter = game_id;
         self.media.open_capture_id = None;
         self.media.clip_player = None;
@@ -337,6 +916,7 @@ impl AppState {
 
     pub fn close_captures(&mut self) {
         self.media.captures_open = false;
+        self.media.captures_settings_open = false;
         self.media.open_capture_id = None;
         self.media.clip_player = None;
     }
@@ -418,18 +998,23 @@ impl AppState {
     }
 
     pub fn capture_act(&mut self, action: &str) {
+        self.media.capture_popover_open = false;
         #[cfg(windows)]
         if let (Some(rpc), Some(handle)) = (self.rpc.clone(), self.handle.clone()) {
-            rpc.call::<_, ActionResult>(METHOD_CAPTURE_ACT, &json!({ "action": action }), move |res| {
-                handle.update(move |s, _| {
-                    if let Ok(r) = res
-                        && let Some(msg) = r.message
-                    {
-                        s.notice = Some(msg);
-                    }
-                    s.load_captures();
-                });
-            });
+            rpc.call::<_, ActionResult>(
+                METHOD_CAPTURE_ACT,
+                &json!({ "action": action }),
+                move |res| {
+                    handle.update(move |s, _| {
+                        if let Ok(r) = res
+                            && let Some(msg) = r.message
+                        {
+                            s.notice = Some(msg);
+                        }
+                        s.load_captures();
+                    });
+                },
+            );
         }
     }
 

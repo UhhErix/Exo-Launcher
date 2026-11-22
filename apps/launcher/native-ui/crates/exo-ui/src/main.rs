@@ -361,6 +361,14 @@ fn load_live_state_sync(pipe: &str, scene: Option<&str>) -> AppState {
             }
         }
         Some("music") => {
+            if let Ok(set) = client.call_blocking::<_, exo_rpc::LauncherSettings>(
+                exo_rpc::METHOD_SETTINGS_GET,
+                &serde_json::json!({}),
+                Duration::from_secs(5),
+            ) {
+                state.settings = set;
+                state.sync_music_service_from_settings();
+            }
             if let Ok(pb) = client.call_blocking::<_, exo_rpc::MusicPlaybackReply>(
                 exo_rpc::METHOD_MUSIC_PLAYBACK,
                 &serde_json::json!({}),
@@ -377,6 +385,122 @@ fn load_live_state_sync(pipe: &str, scene: Option<&str>) -> AppState {
                     state.media.music_volume = lvl;
                 }
                 state.media.music_muted = vol.muted;
+            }
+            if let Some(start_m) = state.media.music_service.start_method() {
+                let mut running = false;
+                for _ in 0..24 {
+                    match client.call_blocking::<_, exo_rpc::PlayerStartReply>(
+                        start_m,
+                        &serde_json::json!({}),
+                        Duration::from_secs(6),
+                    ) {
+                        Ok(reply) if reply.ok && reply.state == "running" => {
+                            state.media.music_room_state = media_state::MusicRoomState::Running;
+                            running = true;
+                            break;
+                        }
+                        Ok(reply) if reply.state == "loading" => {
+                            state.media.music_room_state = media_state::MusicRoomState::Loading;
+                            std::thread::sleep(Duration::from_millis(500));
+                        }
+                        Ok(reply) if reply.state == "signedOut" => {
+                            state.media.music_room_state = media_state::MusicRoomState::SignedOut;
+                            break;
+                        }
+                        Ok(reply) if reply.state == "notPremium" => {
+                            state.media.music_room_state = media_state::MusicRoomState::NotPremium;
+                            break;
+                        }
+                        Ok(reply) => {
+                            state.media.music_room_state = media_state::MusicRoomState::Error(
+                                reply.message.unwrap_or_default(),
+                            );
+                            break;
+                        }
+                        Err(_) => break,
+                    }
+                }
+                if running && let Some(view_m) = state.media.music_service.view_method() {
+                    if let Ok(r) = client.call_blocking::<_, exo_rpc::PlayerViewReply>(
+                        view_m,
+                        &serde_json::json!({ "view": "library" }),
+                        Duration::from_secs(8),
+                    ) && r.ok
+                        && let Some(data) = r.data
+                    {
+                        state.media.music_library = data.items;
+                        if !data.filters.is_empty() {
+                            state.media.music_library_filters = data.filters;
+                        }
+                        if let Some(f) = data.filter {
+                            state.media.music_library_filter = f;
+                        }
+                    }
+                    if let Ok(r) = client.call_blocking::<_, exo_rpc::PlayerViewReply>(
+                        view_m,
+                        &serde_json::json!({ "view": "home" }),
+                        Duration::from_secs(10),
+                    ) && r.ok
+                        && let Some(data) = r.data
+                    {
+                        state.media.music_home_sections = data.sections;
+                    }
+                    if state.media.music_service.has_recent()
+                        && let Ok(r) = client.call_blocking::<_, exo_rpc::PlayerViewReply>(
+                            view_m,
+                            &serde_json::json!({ "view": "recent" }),
+                            Duration::from_secs(8),
+                        )
+                        && r.ok
+                        && let Some(data) = r.data
+                    {
+                        state.media.music_recent = data.items;
+                    }
+                    if let Ok(r) = client.call_blocking::<_, exo_rpc::PlayerViewReply>(
+                        view_m,
+                        &serde_json::json!({ "view": "player" }),
+                        Duration::from_secs(6),
+                    ) && r.ok
+                        && let Some(data) = r.data
+                    {
+                        state.media.apply_player_state(&data);
+                    }
+                    if let Some(ref cache_dir) = state.remote_cache_dir {
+                        let mut urls: Vec<String> = Vec::new();
+                        let mut push_url = |u: &str| {
+                            if !u.is_empty() && !urls.iter().any(|x| x == u) {
+                                urls.push(u.to_string());
+                            }
+                        };
+                        if let Some(ref pb) = state.media.playback
+                            && let Some(ref u) = pb.artwork_url
+                        {
+                            push_url(u);
+                        }
+                        for c in state.media.music_library.iter().take(16) {
+                            push_url(&c.image);
+                        }
+                        for c in state.media.music_recent.iter().take(8) {
+                            push_url(&c.image);
+                        }
+                        for sec in state.media.music_home_sections.iter().take(4) {
+                            for c in sec.items.iter().take(8) {
+                                push_url(&c.image);
+                            }
+                        }
+                        let chunks = urls.chunks((urls.len() / 6).max(1));
+                        std::thread::scope(|scope| {
+                            for chunk in chunks {
+                                scope.spawn(move || {
+                                    for url in chunk {
+                                        let _ =
+                                            exo_rpc::remote_art::fetch_cached_image(url, cache_dir);
+                                    }
+                                });
+                            }
+                        });
+                    }
+                }
             }
         }
         Some("captures") => {

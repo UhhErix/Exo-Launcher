@@ -34,8 +34,8 @@ pub use discord_types::{
 pub use media_types::{
     CaptureItem, CaptureListReply, CaptureLiveState, CaptureSettingsDto, CaptureStatusReply,
     MusicPlayback, MusicPlaybackReply, MusicVolumeReply, PlayerAlbumRef, PlayerArtist, PlayerCard,
-    PlayerHeader, PlayerSection, PlayerStartReply, PlayerTrack, PlayerViewData, PlayerViewReply,
-    format_duration_ms,
+    PlayerHeader, PlayerLink, PlayerOption, PlayerSection, PlayerStartReply, PlayerTrack,
+    PlayerViewData, PlayerViewReply, format_duration_ms,
 };
 pub use pc_types::{
     AppsIconsReply, AppsListReply, AudioEndpoint, AudioReadReply, AudioVoiceInfo, AutopilotLive,
