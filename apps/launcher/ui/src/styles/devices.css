@@ -782,7 +782,7 @@
 .exo-kb-map-wrap {
   display: grid;
   gap: 12px;
-  padding: 10px 14px 14px;
+  padding: 12px 0 8px;
 }
 
 .exo-kb-board {
@@ -952,7 +952,7 @@
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 10px 14px;
+  padding: 10px 0;
   border-bottom: 1px solid rgb(var(--exo-ink-rgb) / 0.08);
 }
 
@@ -980,7 +980,7 @@
 
 .exo-kb-backups-empty {
   margin: 0;
-  padding: 10px 14px 14px;
+  padding: 10px 0 8px;
   color: var(--color-muted);
   font-size: calc(12px * var(--exo-scale, 1));
   line-height: 1.45;
