@@ -74,6 +74,19 @@ impl Room {
             Room::Settings => "nav-settings",
         }
     }
+
+    pub const fn tab_index(self) -> usize {
+        match self {
+            Room::Library => 0,
+            Room::Store => 1,
+            Room::Discord => 2,
+            Room::Music => 3,
+            Room::Devices => 4,
+            Room::ExoAi => 5,
+            Room::Apps => 6,
+            Room::Settings => 7,
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -164,9 +177,31 @@ pub struct NoticeItem {
     pub drag_vx: f32,
 }
 
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum MiniBarSlot {
+    #[default]
+    Inline,
+    BelowTools,
+    Hidden,
+}
+
+impl MiniBarSlot {
+    pub fn from_width(w: f32) -> Self {
+        if w >= 1760.0 {
+            Self::Inline
+        } else if w >= 1180.0 {
+            Self::BelowTools
+        } else {
+            Self::Hidden
+        }
+    }
+}
+
 pub struct AppState {
     pub room: Room,
     pub prev_room: Room,
+    pub room_dir: f32,
+    pub mini_bar_slot: MiniBarSlot,
     pub library_all_games: bool,
     pub library_search_open: bool,
     pub library_search: TextEdit,
@@ -243,6 +278,8 @@ impl AppState {
         Self {
             room: Room::Library,
             prev_room: Room::Library,
+            room_dir: 1.0,
+            mini_bar_slot: MiniBarSlot::Inline,
             library_all_games: false,
             library_search_open: false,
             library_search: TextEdit::default(),
@@ -338,6 +375,8 @@ impl AppState {
         Self {
             room: Room::Library,
             prev_room: Room::Library,
+            room_dir: 1.0,
+            mini_bar_slot: MiniBarSlot::Inline,
             library_all_games: false,
             library_search_open: false,
             library_search: TextEdit::default(),
@@ -494,6 +533,13 @@ impl AppState {
     }
 
     pub fn switch_room(&mut self, room: Room) {
+        if room != self.room {
+            self.room_dir = if room.tab_index() >= self.room.tab_index() {
+                1.0
+            } else {
+                -1.0
+            };
+        }
         if self.room != Room::Settings && room == Room::Settings {
             self.prev_room = self.room;
         }

@@ -1,17 +1,34 @@
-use crate::state::{AppState, Room};
+use crate::state::{AppState, MiniBarSlot, Room};
 use crate::{
     captures, discord, game_page, key_modal, library, music, notice, palette, pc, settings, store,
     tour,
 };
 use exo_kit::{
-    BG, FG, GAP, GLASS_CONTROL_SIGMA, PRESS_SCALE, PRIMARY_FG, RADIUS_PILL, SPRING_QUICK,
-    TRANSPARENT, bad, exo_mark, fg_muted, glass_capsule_opt, glass_control_fill, glass_outer_edge,
-    glass_rim_bottom, glass_rim_top, glass_specular_sheen, glass_still_control_fill, good,
-    hover_fill, icon_camera, icon_chat, icon_close, icon_gamepad, icon_grid, icon_library,
-    icon_maximize, icon_minimize, icon_mouse, icon_music, icon_settings, icon_sparkles, icon_store,
-    nav_tab, pressed_fill, scrim_fill, selected_fill, set_text_scale, type_body, type_small,
+    BG, FG, GAP, GLASS_CONTROL_SIGMA, PRESS_SCALE, PRIMARY_FG, RADIUS_PILL, SPRING_MOVE,
+    SPRING_QUICK, TRANSPARENT, bad, exo_mark, fg_muted, glass_capsule_opt, glass_control_fill,
+    glass_outer_edge, glass_rim_bottom, glass_rim_top, glass_specular_sheen,
+    glass_still_control_fill, good, hover_fill, icon_camera, icon_chat, icon_close, icon_gamepad,
+    icon_grid, icon_library, icon_maximize, icon_minimize, icon_mouse, icon_music, icon_settings,
+    icon_sparkles, icon_store, modal_scrim_transition, nav_tab, pressed_fill, scrim_fill,
+    selected_fill, set_text_scale, type_body, type_small,
 };
-use rune::{Cx, El, MAX_BACKDROP_BLURS, ScrollSpec, col, el, row, text};
+use rune::{Cx, El, MAX_BACKDROP_BLURS, ScrollSpec, SpringPair, Transition, col, el, row, text};
+
+fn mini_player_transition() -> Transition {
+    let enter = Transition::offset(0.0, -8.0)
+        .combined(Transition::scale(0.96))
+        .combined(Transition::opacity());
+    let exit = Transition::offset(0.0, -6.0)
+        .combined(Transition::scale(0.98))
+        .combined(Transition::opacity());
+    Transition::asymmetric(enter, exit).springs(SpringPair::new(SPRING_MOVE, SPRING_QUICK))
+}
+
+fn room_transition(dir: f32) -> Transition {
+    let enter = Transition::offset(12.0 * dir, 0.0).combined(Transition::opacity());
+    let exit = Transition::offset(-12.0 * dir, 0.0).combined(Transition::opacity());
+    Transition::asymmetric(enter, exit).springs(SpringPair::new(SPRING_MOVE, SPRING_QUICK))
+}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct BlurBudget {
@@ -42,7 +59,8 @@ impl BlurBudget {
             || s.open_game_id.is_some()
             || s.store_game.is_some();
         let transport_visible = s.room == Room::Music && !s.media.music_immersion;
-        let mini_visible = s.room != Room::Music
+        let mini_visible = s.mini_bar_slot != MiniBarSlot::Hidden
+            && s.room != Room::Music
             && s.media.open_capture_id.is_none()
             && s.media.playback.as_ref().is_some_and(|p| p.has_track());
         let mut used = usize::from(transport_visible) + usize::from(mini_visible);
@@ -313,13 +331,22 @@ pub fn view(s: &AppState, cx: &mut Cx<AppState>) -> El {
             .child(win_btn("win-close", "Close", icon_close(16.0, fg_muted())));
     }
 
-    let mini = music::mini_player(s, scale).map(|m| {
-        if budget.mini_player {
-            m
-        } else {
-            m.backdrop_blur(0.0).fill(glass_still_control_fill())
-        }
-    });
+    let mini = (s.mini_bar_slot != MiniBarSlot::Hidden)
+        .then(|| music::mini_player(s, scale))
+        .flatten()
+        .map(|m| {
+            let m = if budget.mini_player {
+                m
+            } else {
+                m.backdrop_blur(0.0).fill(glass_still_control_fill())
+            };
+            m.transition(mini_player_transition())
+        });
+    let (mini_inline, mini_below) = match s.mini_bar_slot {
+        MiniBarSlot::Inline => (mini, None),
+        MiniBarSlot::BelowTools => (None, mini),
+        MiniBarSlot::Hidden => (None, None),
+    };
 
     let right_pin = if insets.trailing > 0.0 { 4.0 } else { GAP };
 
@@ -340,6 +367,14 @@ pub fn view(s: &AppState, cx: &mut Cx<AppState>) -> El {
         .window_drag()
         .pin(Some(0.0), Some(0.0), Some(0.0), None)
         .h(52.0)
+        .on_layout(|s: &mut AppState, r| {
+            if r[2] > 0.0 {
+                let slot = MiniBarSlot::from_width(r[2]);
+                if s.mini_bar_slot != slot {
+                    s.mini_bar_slot = slot;
+                }
+            }
+        })
         .child(
             row()
                 .pin(Some(GAP), Some(8.0), None, None)
@@ -353,21 +388,38 @@ pub fn view(s: &AppState, cx: &mut Cx<AppState>) -> El {
                 .h(36.0)
                 .justify_center()
                 .center_y()
-                .gap(GAP)
-                .child(nav)
-                .children(mini),
+                .child(nav),
         )
         .child(
             row()
                 .pin(None, Some(8.0), Some(right_pin), None)
                 .h(36.0)
                 .center_y()
+                .gap(8.0)
+                .children(mini_inline)
                 .child(tools),
         )
         .children(has_modal_scrim.then(|| {
-            el().pin(Some(0.0), Some(0.0), Some(0.0), Some(0.0))
+            el().key("top-bar-scrim")
+                .pin(Some(0.0), Some(0.0), Some(0.0), Some(0.0))
                 .fill(scrim_fill())
+                .transition(modal_scrim_transition())
         }));
+
+    let room_key = if s.media.captures_open {
+        "room-captures"
+    } else {
+        match s.room {
+            Room::Library => "room-library",
+            Room::Store => "room-store",
+            Room::Discord => "room-discord",
+            Room::Music => "room-music",
+            Room::Devices => "room-devices",
+            Room::ExoAi => "room-exo-ai",
+            Room::Apps => "room-apps",
+            Room::Settings => "room-settings",
+        }
+    };
 
     let full_bleed_home = !s.media.captures_open
         && s.room == Room::Library
@@ -403,7 +455,7 @@ pub fn view(s: &AppState, cx: &mut Cx<AppState>) -> El {
         };
 
         col()
-            .key("room-scroll")
+            .key(format!("{room_key}-scroll"))
             .w_full()
             .h_full()
             .scroll(ScrollSpec {
@@ -412,16 +464,32 @@ pub fn view(s: &AppState, cx: &mut Cx<AppState>) -> El {
             .child(page)
     };
 
+    let room_stage = el()
+        .key(room_key)
+        .pin(Some(0.0), Some(0.0), Some(0.0), Some(0.0))
+        .transition(room_transition(s.room_dir))
+        .child(content);
+
     let mut root = el()
         .w_full()
         .h_full()
         .fill(BG)
-        .child(content)
+        .child(room_stage)
         .child(top_fade)
         .child(top_bar);
 
+    if let Some(mini_card) = mini_below {
+        root = root.child(
+            row()
+                .pin(None, Some(52.0), Some(right_pin), None)
+                .h(36.0)
+                .center_y()
+                .child(mini_card),
+        );
+    }
+
     if s.capture_menu_open {
-        root = root.child(captures::popover(s));
+        root = root.child(captures::popover(s).transition(modal_scrim_transition()));
     }
     if s.gamepad_connected {
         root = root.child(gamepad_prompt_bar());

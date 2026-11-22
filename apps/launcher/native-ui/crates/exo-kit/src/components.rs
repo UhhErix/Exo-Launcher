@@ -1,12 +1,29 @@
 use crate::tokens::{
     BG, FG, GLASS_CONTROL_SIGMA, GLASS_PANEL_SIGMA, PRESS_SCALE, PRIMARY_FG, RADIUS_CARD,
-    RADIUS_PANEL, RADIUS_PILL, SPRING_MOVE, SPRING_QUICK, TRANSPARENT, bad, fg_muted,
+    RADIUS_PANEL, RADIUS_PILL, SPRING_BASE, SPRING_MOVE, SPRING_QUICK, TRANSPARENT, bad, fg_muted,
     glass_control_fill, glass_outer_edge, glass_panel_fill, glass_rim, glass_rim_bottom,
     glass_rim_top, glass_specular_sheen, glass_still_control_fill, glass_still_panel_fill, good,
     hairline, hover_fill, pressed_fill, subtle_fill, track_fill, type_control, type_section,
     type_small, warn,
 };
-use rune::{Color, El, Pixels, SurfaceFit, col, el, row, text};
+use rune::{Color, El, Pixels, SpringPair, SurfaceFit, Transition, Vec2, col, el, row, text};
+
+pub fn popover_transition() -> Transition {
+    let enter = Transition::scale_anchor(0.96, Vec2::new(1.0, 0.0)).combined(Transition::opacity());
+    Transition::asymmetric(enter, Transition::opacity())
+        .springs(SpringPair::new(SPRING_BASE, SPRING_QUICK))
+}
+
+pub fn modal_scrim_transition() -> Transition {
+    Transition::asymmetric(Transition::opacity(), Transition::opacity())
+        .springs(SpringPair::new(SPRING_BASE, SPRING_QUICK))
+}
+
+pub fn modal_card_transition() -> Transition {
+    let enter = Transition::scale(0.98).combined(Transition::opacity());
+    Transition::asymmetric(enter, Transition::opacity())
+        .springs(SpringPair::new(SPRING_MOVE, SPRING_QUICK))
+}
 
 pub fn glass_capsule(key: &'static str) -> El {
     glass_capsule_opt(key, true)
@@ -36,7 +53,7 @@ pub fn glass_capsule_opt(key: &'static str, blur: bool) -> El {
 }
 
 pub fn glass_panel(key: impl Into<String>, width: f32) -> El {
-    glass_panel_opt(key, width, true)
+    glass_panel_opt(key, width, true).transition(popover_transition())
 }
 
 pub fn glass_panel_opt(key: impl Into<String>, width: f32, blur: bool) -> El {
@@ -202,7 +219,7 @@ pub fn nav_tab(key: &'static str, label: &'static str, active: bool, icon: El) -
         .press_on_down()
         .press_scale(PRESS_SCALE)
         .h(30.0)
-        .px(13.0)
+        .px(10.0)
         .gap(6.0)
         .center_y()
         .radius(RADIUS_PILL)

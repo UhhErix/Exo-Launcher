@@ -62,11 +62,13 @@ fn on_key(s: &mut AppState, ev: &KeyEvent, tx: &mut Tx) -> bool {
         return true;
     }
     if ev.is_command(',') {
+        tx.instant();
         s.toggle_settings();
         return true;
     }
     for (idx, ch) in ['1', '2', '3', '4', '5', '6', '7'].into_iter().enumerate() {
         if ev.is_command(ch) {
+            tx.instant();
             s.switch_room(state::Room::NAV_TABS[idx]);
             return true;
         }
@@ -1837,6 +1839,75 @@ mod tests {
             );
         }
     }
+
+    #[test]
+    fn top_bar_nav_x_is_invariant_across_mini_player_and_popover_states() {
+        for (vw, vh) in [(1920.0_f32, 1080.0_f32), (1280.0_f32, 800.0_f32)] {
+            let mut rt = Runtime::new(
+                AppState::default(),
+                shell::view,
+                (vw, vh),
+                Env::new(true, 1.0),
+            );
+            rt.frame(0.0);
+            let (nav_with_mini, _) = rt.presented("nav-capsule").expect("nav with mini");
+            let (mini_rect, _) = rt
+                .presented("music-mini-player")
+                .expect("mini player present");
+            let (tools_rect, _) = rt.presented("titlebar-tools").expect("tools present");
+            if vw >= 1900.0 {
+                assert!(
+                    mini_rect[0] >= nav_with_mini[0] + nav_with_mini[2] + 12.0,
+                    "mini player overlapped nav at {vw}px: nav={nav_with_mini:?} mini={mini_rect:?}"
+                );
+                assert!(
+                    mini_rect[0] + mini_rect[2] <= tools_rect[0],
+                    "mini player overlapped tools at {vw}px: mini={mini_rect:?} tools={tools_rect:?}"
+                );
+            }
+
+            rt.update(|s, tx| {
+                tx.instant();
+                s.capture_menu_open = true;
+            });
+            rt.frame(1.0 / 60.0);
+            let (nav_with_capture, _) = rt.presented("nav-capsule").expect("nav with capture");
+            assert_eq!(
+                nav_with_mini[0], nav_with_capture[0],
+                "nav x shifted on capture_menu_open at {vw}px"
+            );
+
+            rt.update(|s, tx| {
+                tx.instant();
+                s.capture_menu_open = false;
+                s.media.playback = None;
+            });
+            rt.frame(2.0 / 60.0);
+            let (nav_without_mini, _) = rt.presented("nav-capsule").expect("nav without mini");
+            assert_eq!(
+                nav_with_mini[0], nav_without_mini[0],
+                "nav x shifted when mini_player disappeared at {vw}px"
+            );
+        }
+
+        let mut rt_narrow = Runtime::new(
+            AppState::default(),
+            shell::view,
+            (1100.0, 800.0),
+            Env::new(true, 1.0),
+        );
+        rt_narrow.frame(0.0);
+        rt_narrow.frame(1.0 / 60.0);
+        rt_narrow.frame(0.25);
+        assert_eq!(rt_narrow.state.mini_bar_slot, state::MiniBarSlot::Hidden);
+        assert!(rt_narrow.presented("music-mini-player").is_none());
+
+        let mut s = AppState::default();
+        s.switch_room(Room::Music);
+        assert_eq!(s.room_dir, 1.0);
+        s.switch_room(Room::Store);
+        assert_eq!(s.room_dir, -1.0);
+    }
 }
 
 #[cfg(test)]
@@ -1852,7 +1923,7 @@ mod motion_audit {
     fn make_run(reduce_motion: bool) -> Run<AppState> {
         let mut state = AppState::default();
         state.settings.reduce_motion = reduce_motion;
-        let mut rt = Runtime::new(state, shell::view, (1280.0, 800.0), Env::new(true, 1.0));
+        let mut rt = Runtime::new(state, shell::view, (1920.0, 1080.0), Env::new(true, 1.0));
         rt.poll = Some(poll_state);
         let mut r = Run::new(rt, HZ);
         r.idle(0.5);
@@ -1876,7 +1947,12 @@ mod motion_audit {
             ("to-settings", Room::Settings),
             ("to-library", Room::Library),
         ] {
-            r.act(name, |rt| rt.update(|s, _| s.switch_room(room)));
+            r.act(name, |rt| {
+                rt.update(|s, tx| {
+                    tx.animated();
+                    s.switch_room(room);
+                })
+            });
             r.play(0.45);
         }
         r.quiet();
@@ -1887,29 +1963,84 @@ mod motion_audit {
     fn overlays_recording(reduce_motion: bool) -> Recording {
         let mut r = make_run(reduce_motion);
         r.act("open-captures", |rt| {
-            rt.update(|s, _| s.capture_menu_open = true);
+            rt.update(|s, tx| {
+                tx.animated();
+                s.capture_menu_open = true;
+            });
         });
-        r.play(0.35);
+        r.play(0.4);
         r.act("close-captures", |rt| {
-            rt.update(|s, _| s.capture_menu_open = false);
+            rt.update(|s, tx| {
+                tx.animated();
+                s.capture_menu_open = false;
+            });
         });
-        r.play(0.35);
+        r.play(0.4);
         r.act("open-palette", |rt| {
-            rt.update(|s, tx| s.open_palette(tx));
+            rt.update(|s, tx| {
+                tx.animated();
+                s.open_palette(tx);
+            });
         });
-        r.play(0.35);
+        r.play(0.4);
         r.act("close-palette", |rt| {
-            rt.update(|s, _| s.close_palette());
+            rt.update(|s, tx| {
+                tx.animated();
+                s.close_palette();
+            });
         });
-        r.play(0.35);
+        r.play(0.4);
         r.act("open-key-modal", |rt| {
-            rt.update(|s, _| s.key_modal_open = true);
+            rt.update(|s, tx| {
+                tx.animated();
+                s.key_modal_open = true;
+            });
         });
-        r.play(0.35);
+        r.play(0.4);
         r.act("close-key-modal", |rt| {
-            rt.update(|s, _| s.close_key_modal());
+            rt.update(|s, tx| {
+                tx.animated();
+                s.close_key_modal();
+            });
         });
+        r.play(0.4);
+        r.act("open-tour", |rt| {
+            rt.update(|s, tx| {
+                tx.animated();
+                s.start_tour();
+            });
+        });
+        r.play(0.4);
+        r.act("close-tour", |rt| {
+            rt.update(|s, tx| {
+                tx.animated();
+                s.finish_tour();
+            });
+        });
+        r.play(0.4);
+        r.quiet();
         r.play(0.35);
+        r.rec
+    }
+
+    fn mini_player_recording(reduce_motion: bool) -> Recording {
+        let mut r = make_run(reduce_motion);
+        let saved = r.rt.state.media.playback.clone();
+        r.act("hide-mini", |rt| {
+            rt.update(|s, tx| {
+                tx.animated();
+                s.media.playback = None;
+            });
+        });
+        r.play(0.4);
+        r.act("show-mini", |rt| {
+            let track = saved.clone();
+            rt.update(|s, tx| {
+                tx.animated();
+                s.media.playback = track;
+            });
+        });
+        r.play(0.45);
         r.quiet();
         r.play(0.35);
         r.rec
@@ -1918,7 +2049,10 @@ mod motion_audit {
     fn mid_flight_reduce_motion_toggle() -> Recording {
         let mut r = make_run(false);
         r.act("open-key-modal", |rt| {
-            rt.update(|s, _| s.key_modal_open = true);
+            rt.update(|s, tx| {
+                tx.animated();
+                s.key_modal_open = true;
+            });
         });
         r.play(0.08);
         r.act("enable-reduce-motion", |rt| {
@@ -1926,7 +2060,10 @@ mod motion_audit {
         });
         r.play(0.4);
         r.act("close-key-modal", |rt| {
-            rt.update(|s, _| s.close_key_modal());
+            rt.update(|s, tx| {
+                tx.animated();
+                s.close_key_modal();
+            });
         });
         r.play(0.4);
         r.quiet();
@@ -2006,13 +2143,21 @@ mod motion_audit {
                 Box::new(|| overlays_recording(true)),
             ),
             (
+                "mini-player/normal".into(),
+                Box::new(|| mini_player_recording(false)),
+            ),
+            (
+                "mini-player/reduced".into(),
+                Box::new(|| mini_player_recording(true)),
+            ),
+            (
                 "toggle/mid-flight".into(),
                 Box::new(mid_flight_reduce_motion_toggle),
             ),
         ];
         let cells = run(jobs, "");
         let summary = report(&cells, &[], false, 0.0);
-        assert_eq!(cells.len(), 6);
+        assert_eq!(cells.len(), 8);
         for cell in &cells {
             assert!(!cell.skipped, "cell {} skipped", cell.name);
             assert_no_kinds(
@@ -2028,19 +2173,22 @@ mod motion_audit {
                 ],
             );
         }
-        assert!(summary.text.contains("6 cells") || !summary.text.is_empty());
+        assert!(summary.text.contains("8 cells") || !summary.text.is_empty());
     }
 
     #[test]
     fn reduce_motion_eliminates_spatial_travel_on_room_and_overlay_changes() {
         let mut r = make_run(true);
         r.act("to-store", |rt| {
-            rt.update(|s, _| s.switch_room(Room::Store));
+            rt.update(|s, tx| {
+                tx.animated();
+                s.switch_room(Room::Store);
+            });
         });
-        let mut prev_pos: Option<[f32; 4]> = r.rt.presented("room-scroll").map(|(rect, _)| rect);
+        let mut prev_pos: Option<[f32; 4]> = r.rt.presented("room-store").map(|(rect, _)| rect);
         for _ in 0..30 {
             r.step();
-            if let Some((rect, _)) = r.rt.presented("room-scroll") {
+            if let Some((rect, _)) = r.rt.presented("room-store") {
                 if let Some(prev) = prev_pos {
                     assert!(
                         (rect[0] - prev[0]).abs() < 0.01 && (rect[1] - prev[1]).abs() < 0.01,
@@ -2051,7 +2199,10 @@ mod motion_audit {
             }
         }
         r.act("open-key-modal", |rt| {
-            rt.update(|s, _| s.key_modal_open = true);
+            rt.update(|s, tx| {
+                tx.animated();
+                s.key_modal_open = true;
+            });
         });
         let mut modal_prev: Option<[f32; 4]> =
             r.rt.presented("activate-key-modal").map(|(rect, _)| rect);

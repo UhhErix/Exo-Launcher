@@ -3,7 +3,8 @@ use crate::state::{AppState, PaletteItem, PaletteTarget};
 use exo_kit::{
     FG, RADIUS_SHEET, RADIUS_SMALL, SPRING_BASE, SPRING_QUICK, TRANSPARENT, fg_muted,
     glass_panel_opt, hairline, hover_fill, icon_gamepad, icon_key, icon_refresh, icon_search,
-    icon_sparkles, scaled, scrim_fill, type_body, type_control, type_small,
+    icon_sparkles, modal_card_transition, modal_scrim_transition, scaled, scrim_fill, type_body,
+    type_control, type_small,
 };
 use rune::{
     El, Key, KeyEvent, ScrollSpec, Spring, TextStyle, Tx, col, edit_access, el, row, text,
@@ -166,6 +167,7 @@ pub fn view(s: &AppState) -> El {
         .radius(RADIUS_SHEET)
         .clip_rounded(RADIUS_SHEET)
         .motion(SPRING_BASE)
+        .transition(modal_card_transition())
         .child(header)
         .child(el().w_full().h(1.0).fill(hairline()))
         .child(body);
@@ -174,6 +176,7 @@ pub fn view(s: &AppState) -> El {
         .pin(Some(0.0), Some(0.0), Some(0.0), Some(0.0))
         .fill(scrim_fill())
         .hit()
+        .transition(modal_scrim_transition())
         .on_press(|s: &mut AppState| s.close_palette())
         .child(col().w_full().h_full().pt(130.0).items_center().child(card))
 }
