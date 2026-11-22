@@ -1,10 +1,12 @@
-use crate::{captures, game_page, key_modal, library, music, palette, pc, settings, store, tour};
+use crate::{
+    captures, discord, game_page, key_modal, library, music, palette, pc, settings, store, tour,
+};
 use crate::state::{AppState, HostStatus, Room};
 use exo_kit::{
-    BG, FG, GAP, GLASS_CONTROL_SIGMA, PRESS_SCALE, PRIMARY_FG, RADIUS_PANEL, RADIUS_PILL, bad,
-    fg_muted, glass_capsule, glass_control_fill, glass_rim, good, hover_fill, icon_chat, icon_cpu,
+    BG, FG, GAP, GLASS_CONTROL_SIGMA, PRESS_SCALE, PRIMARY_FG, RADIUS_PILL, bad, fg_muted,
+    glass_capsule, glass_control_fill, glass_rim, good, hover_fill, icon_chat, icon_cpu,
     icon_gamepad, icon_grid, icon_music, icon_search, icon_settings, icon_store, nav_tab,
-    type_body, type_control, type_page, type_small, warn,
+    type_control, type_small, warn,
 };
 use rune::{Cx, El, ScrollSpec, col, el, row, text};
 
@@ -65,33 +67,6 @@ fn gamepad_prompt_bar() -> El {
         )
 }
 
-fn placeholder_room(room: Room) -> El {
-    col()
-        .w_full()
-        .pt(76.0)
-        .px(24.0)
-        .gap(14.0)
-        .child(text(room.label()).font(type_page()).color(FG))
-        .child(
-            col()
-                .w(540.0)
-                .px(20.0)
-                .py(18.0)
-                .gap(8.0)
-                .radius(RADIUS_PANEL)
-                .fill(glass_control_fill())
-                .border(1.0, glass_rim())
-                .child(text("Native Rune port in progress").font(type_control()).color(FG))
-                .child(
-                    text(room.next_phase_note())
-                        .font(type_body())
-                        .color(fg_muted())
-                        .w_full()
-                        .wrap(),
-                ),
-        )
-}
-
 pub fn view(s: &AppState, cx: &mut Cx<AppState>) -> El {
     let insets = cx.chrome_insets();
     let trailing_pad = if insets.trailing > 0.0 {
@@ -145,37 +120,41 @@ pub fn view(s: &AppState, cx: &mut Cx<AppState>) -> El {
         .child(nav)
         .child(row().gap(8.0).center_y().child(search).child(status_capsule(s)));
 
-    let page = if s.media.captures_open {
-        captures::view(s, scale)
+    let content = if !s.media.captures_open && s.room == Room::Discord {
+        discord::view(s, scale)
     } else {
-        match s.room {
-            Room::Library => {
-                if let Some(game) = s.open_game() {
-                    game_page::view(s, game, scale)
-                } else {
-                    library::view(s, scale)
+        let page = if s.media.captures_open {
+            captures::view(s, scale)
+        } else {
+            match s.room {
+                Room::Library => {
+                    if let Some(game) = s.open_game() {
+                        game_page::view(s, game, scale)
+                    } else {
+                        library::view(s, scale)
+                    }
                 }
+                Room::Store => store::view(s, scale),
+                Room::Music => music::view(s, scale),
+                Room::Pc => pc::view(s),
+                Room::Settings => settings::view(s),
+                Room::Discord => discord::view(s, scale),
             }
-            Room::Store => store::view(s, scale),
-            Room::Music => music::view(s, scale),
-            Room::Pc => pc::view(s),
-            Room::Settings => settings::view(s),
-            other => placeholder_room(other),
-        }
-    };
+        };
 
-    let scroller = col()
-        .key("room-scroll")
-        .w_full()
-        .h_full()
-        .scroll(ScrollSpec { stick_bottom: false })
-        .child(page);
+        col()
+            .key("room-scroll")
+            .w_full()
+            .h_full()
+            .scroll(ScrollSpec { stick_bottom: false })
+            .child(page)
+    };
 
     let mut root = el()
         .w_full()
         .h_full()
         .fill(BG)
-        .child(scroller)
+        .child(content)
         .child(top_bar);
 
     if s.gamepad_connected {

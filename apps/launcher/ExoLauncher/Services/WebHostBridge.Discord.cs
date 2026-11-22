@@ -66,8 +66,9 @@ public sealed partial class WebHostBridge
     }
 
     // The client's state; connect starts it again after it stopped (Try again on its error).
-    private static object DiscordStatus(JsonElement p, bool hasParams)
+    private object DiscordStatus(JsonElement p, bool hasParams)
     {
+        DiscordEvents();
         if (ReadBool(p, hasParams, "connect") == true) DiscordSession.Start();
         return DiscordSession.Status();
     }

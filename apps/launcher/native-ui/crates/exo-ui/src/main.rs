@@ -1,4 +1,6 @@
 mod captures;
+mod discord;
+mod discord_state;
 mod game_page;
 mod gamepad;
 mod key_modal;
@@ -285,6 +287,40 @@ fn load_live_state_sync(pipe: &str, scene: Option<&str>) -> AppState {
                 state.media.capture_items = list.items;
             }
         }
+        Some("discord") => {
+            if let Ok(st) = client.call_blocking::<_, exo_rpc::DiscordStatus>(
+                exo_rpc::METHOD_DISCORD_STATUS,
+                &serde_json::json!({ "connect": true }),
+                Duration::from_secs(5),
+            ) {
+                state.discord.status = st;
+                state.discord.loaded = true;
+            }
+            if let Ok(accs) = client.call_blocking::<_, exo_rpc::DiscordAccountsReply>(
+                exo_rpc::METHOD_DISCORD_ACCOUNTS,
+                &serde_json::json!({}),
+                Duration::from_secs(5),
+            ) {
+                state.discord.accounts = accs.accounts;
+            }
+            if state.discord.status.state == "ready" {
+                if let Ok(home) = client.call_blocking::<_, exo_rpc::DiscordHome>(
+                    exo_rpc::METHOD_DISCORD_HOME,
+                    &serde_json::json!({}),
+                    Duration::from_secs(6),
+                ) {
+                    state.discord.active_dm_id = home.dms.first().map(|d| d.id.clone());
+                    state.discord.home = home;
+                }
+                if let Ok(fr) = client.call_blocking::<_, exo_rpc::DiscordFriendsReply>(
+                    exo_rpc::METHOD_DISCORD_FRIENDS,
+                    &serde_json::json!({}),
+                    Duration::from_secs(6),
+                ) {
+                    state.discord.friends = fr.friends;
+                }
+            }
+        }
         _ => {}
     }
     state.rpc = Some(client);
@@ -368,6 +404,25 @@ fn main() {
                 s.open_capture_item(&first);
             }
         }),
+        ("discord", |s: &mut AppState| s.switch_room(state::Room::Discord)),
+        ("discord-messages", |s: &mut AppState| {
+            s.switch_room(state::Room::Discord);
+            s.open_discord_place(discord_state::DiscordPlace::Messages);
+        }),
+        ("discord-servers", |s: &mut AppState| {
+            s.switch_room(state::Room::Discord);
+            s.open_discord_place(discord_state::DiscordPlace::Servers);
+        }),
+        ("discord-server", |s: &mut AppState| {
+            s.switch_room(state::Room::Discord);
+            s.open_discord_guild("g-exo");
+        }),
+        ("discord-signin", |s: &mut AppState| {
+            s.switch_room(state::Room::Discord);
+            s.discord.status.state = "signedOut".into();
+            s.discord.home.me = None;
+            s.start_discord_signin();
+        }),
     ];
 
     let target_scene = rune_args
@@ -449,6 +504,18 @@ fn main() {
                         }
                         exo_rpc::HostEvent::MusicPlayback(pb) => {
                             s.media.playback = pb;
+                        }
+                        exo_rpc::HostEvent::DiscordState(ev) => s.handle_discord_state(ev),
+                        exo_rpc::HostEvent::DiscordSignIn(step) => s.handle_discord_signin(step),
+                        exo_rpc::HostEvent::DiscordChanged(ev) => s.handle_discord_changed(ev),
+                        exo_rpc::HostEvent::DiscordMembers { guild_id } => {
+                            s.handle_discord_members(&guild_id);
+                        }
+                        exo_rpc::HostEvent::DiscordPresence(ev) => s.handle_discord_presence(ev),
+                        exo_rpc::HostEvent::DiscordUnread(ev) => s.handle_discord_unread(ev),
+                        exo_rpc::HostEvent::DiscordVoice(v) => s.handle_discord_voice(v),
+                        exo_rpc::HostEvent::DiscordSpeaking { user_id, speaking } => {
+                            s.handle_discord_speaking(&user_id, speaking);
                         }
                         exo_rpc::HostEvent::DevicesChanged => {
                             if s.room == state::Room::Pc && s.pc.pc_tab == pc_state::PcTab::Devices {
@@ -697,5 +764,77 @@ mod tests {
             Some("cap0000000000001")
         );
         assert!(rt.find("cap-trim-go").is_some());
+    }
+
+    #[test]
+    fn phase5a_discord_navigation_voice_members_and_qr_signin() {
+        let mut rt = Runtime::new(
+            AppState::default(),
+            shell::view,
+            (1280.0, 800.0),
+            Env::new(true, 1.0),
+        );
+        rt.update(|s, _| s.switch_room(Room::Discord));
+        rt.frame(0.0);
+        assert_eq!(rt.state.room, Room::Discord);
+        assert_eq!(rt.state.discord.place, discord_state::DiscordPlace::Home);
+        let blurs = rt
+            .instances
+            .iter()
+            .filter(|i| i.params[1] == KIND_BACKDROP_BLUR)
+            .count();
+        assert!(blurs <= 4, "Discord exceeded MAX_BACKDROP_BLURS=4: {blurs}");
+
+        let (mx, my) = rt.find("dc-place-messages").expect("Messages tab");
+        rt.pointer_down(mx, my);
+        rt.pointer_up(mx, my);
+        rt.frame(1.0 / 60.0);
+        assert_eq!(rt.state.discord.place, discord_state::DiscordPlace::Messages);
+        assert!(rt.find("dc-dm-stage").is_some());
+
+        let (sx, sy) = rt.find("dc-place-servers").expect("Servers tab");
+        rt.pointer_down(sx, sy);
+        rt.pointer_up(sx, sy);
+        rt.frame(2.0 / 60.0);
+        assert_eq!(rt.state.discord.place, discord_state::DiscordPlace::Servers);
+
+        let (gx, gy) = rt.find("dc-guild-tile-g-exo").expect("Exo HQ server tile");
+        rt.pointer_down(gx, gy);
+        rt.pointer_up(gx, gy);
+        rt.frame(3.0 / 60.0);
+        assert_eq!(rt.state.discord.active_guild_id.as_deref(), Some("g-exo"));
+        assert!(rt.find("dc-members-panel").is_some());
+
+        let (vx, vy) = rt.find("dc-ch-vc-lounge").expect("Main Lounge voice channel");
+        rt.pointer_down(vx, vy);
+        rt.pointer_up(vx, vy);
+        rt.frame(4.0 / 60.0);
+        assert_eq!(rt.state.discord.voice.state, "connected");
+        assert!(rt.find("dc-voice-dock").is_some());
+
+        let (tx, ty) = rt.find("dc-me-trigger").expect("MePanel status trigger");
+        rt.pointer_down(tx, ty);
+        rt.pointer_up(tx, ty);
+        rt.frame(5.0 / 60.0);
+        let (dx, dy) = rt.find("dc-set-status-dnd").expect("DND status option");
+        rt.pointer_down(dx, dy);
+        rt.pointer_up(dx, dy);
+        rt.frame(6.0 / 60.0);
+        assert_eq!(
+            rt.state
+                .discord
+                .home
+                .me
+                .as_ref()
+                .and_then(|m| m.status.as_deref()),
+            Some("dnd")
+        );
+
+        rt.update(|s, _| {
+            s.sign_out_discord();
+            s.start_discord_signin();
+        });
+        rt.frame(7.0 / 60.0);
+        assert!(rt.find("dc-signin-card").is_some());
     }
 }

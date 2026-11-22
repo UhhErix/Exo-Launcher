@@ -1,3 +1,4 @@
+pub mod discord_types;
 pub mod media_types;
 pub mod pc_types;
 pub mod pipe;
@@ -5,7 +6,7 @@ pub mod remote_art;
 pub mod types;
 
 use serde::Serialize;
-use serde::de::DeserializeOwned;
+pub use serde::de::DeserializeOwned;
 use serde_json::{Value, json};
 use std::collections::HashMap;
 use std::fmt;
@@ -13,6 +14,14 @@ use std::io;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, mpsc};
 use std::time::Duration;
+pub use discord_types::{
+    DiscordAccountItem, DiscordAccountsReply, DiscordChangedEvent, DiscordChannel, DiscordChannels,
+    DiscordDm, DiscordDmMember, DiscordFriend, DiscordFriendActionReply, DiscordFriendsReply,
+    DiscordGuild, DiscordHome, DiscordMe, DiscordMember, DiscordMemberItem, DiscordMemberList,
+    DiscordPrep, DiscordPresenceEvent, DiscordRailItem, DiscordRich, DiscordSignInStep,
+    DiscordStateEvent, DiscordStatus, DiscordThreadSummary, DiscordUnreadChannel,
+    DiscordUnreadEvent, DiscordUnreadsReply, DiscordVoice, DiscordVoiceMember, DiscordVoiceReply,
+};
 pub use media_types::{
     CaptureItem, CaptureListReply, CaptureLiveState, CaptureSettingsDto, CaptureStatusReply,
     MusicPlayback, MusicPlaybackReply, MusicVolumeReply, format_duration_ms,
@@ -59,6 +68,20 @@ pub const METHOD_CAPTURE_REEL_CANCEL: &str = "capture.reel.cancel";
 pub const METHOD_CAPTURE_SETTINGS: &str = "capture.settings";
 pub const METHOD_CAPTURE_STATUS: &str = "capture.status";
 pub const METHOD_DEVICES_LIST: &str = "devices.list";
+pub const METHOD_DISCORD_ACCOUNTS: &str = "discord.accounts";
+pub const METHOD_DISCORD_CHANNELS: &str = "discord.channels";
+pub const METHOD_DISCORD_FRIEND: &str = "discord.friend";
+pub const METHOD_DISCORD_FRIENDS: &str = "discord.friends";
+pub const METHOD_DISCORD_HOME: &str = "discord.home";
+pub const METHOD_DISCORD_MARK_READ: &str = "discord.markRead";
+pub const METHOD_DISCORD_MEMBERS: &str = "discord.members";
+pub const METHOD_DISCORD_SET_STATUS: &str = "discord.setStatus";
+pub const METHOD_DISCORD_SIGN_IN: &str = "discord.signIn";
+pub const METHOD_DISCORD_SIGN_OUT: &str = "discord.signOut";
+pub const METHOD_DISCORD_STATUS: &str = "discord.status";
+pub const METHOD_DISCORD_UNREADS: &str = "discord.unreads";
+pub const METHOD_DISCORD_VIEW: &str = "discord.view";
+pub const METHOD_DISCORD_VOICE: &str = "discord.voice";
 pub const METHOD_EXO_ACCOUNT_SIGN_OUT: &str = "exoAccount.signOut";
 pub const METHOD_EXO_ACCOUNT_STATE: &str = "exoAccount.state";
 pub const METHOD_EXO_ACCOUNT_SYNC: &str = "exoAccount.sync";
@@ -139,6 +162,20 @@ pub const USED_METHODS: &[&str] = &[
     METHOD_CAPTURE_SETTINGS,
     METHOD_CAPTURE_STATUS,
     METHOD_DEVICES_LIST,
+    METHOD_DISCORD_ACCOUNTS,
+    METHOD_DISCORD_CHANNELS,
+    METHOD_DISCORD_FRIEND,
+    METHOD_DISCORD_FRIENDS,
+    METHOD_DISCORD_HOME,
+    METHOD_DISCORD_MARK_READ,
+    METHOD_DISCORD_MEMBERS,
+    METHOD_DISCORD_SET_STATUS,
+    METHOD_DISCORD_SIGN_IN,
+    METHOD_DISCORD_SIGN_OUT,
+    METHOD_DISCORD_STATUS,
+    METHOD_DISCORD_UNREADS,
+    METHOD_DISCORD_VIEW,
+    METHOD_DISCORD_VOICE,
     METHOD_EXO_ACCOUNT_SIGN_OUT,
     METHOD_EXO_ACCOUNT_STATE,
     METHOD_EXO_ACCOUNT_SYNC,
@@ -486,6 +523,68 @@ fn dispatch_line(
                 .ok()
                 .flatten();
                 HostEvent::MusicPlayback(pb)
+            }
+            "discord.state" => serde_json::from_value::<DiscordStateEvent>(data.clone())
+                .map(HostEvent::DiscordState)
+                .unwrap_or(HostEvent::Raw {
+                    event: name.to_string(),
+                    data,
+                }),
+            "discord.signin" => serde_json::from_value::<DiscordSignInStep>(data.clone())
+                .map(HostEvent::DiscordSignIn)
+                .unwrap_or(HostEvent::Raw {
+                    event: name.to_string(),
+                    data,
+                }),
+            "discord.changed" => serde_json::from_value::<DiscordChangedEvent>(data.clone())
+                .map(HostEvent::DiscordChanged)
+                .unwrap_or(HostEvent::Raw {
+                    event: name.to_string(),
+                    data,
+                }),
+            "discord.members" => data
+                .get("guildId")
+                .and_then(Value::as_str)
+                .map(|g| HostEvent::DiscordMembers {
+                    guild_id: g.to_string(),
+                })
+                .unwrap_or(HostEvent::Raw {
+                    event: name.to_string(),
+                    data,
+                }),
+            "discord.presence" => serde_json::from_value::<DiscordPresenceEvent>(data.clone())
+                .map(HostEvent::DiscordPresence)
+                .unwrap_or(HostEvent::Raw {
+                    event: name.to_string(),
+                    data,
+                }),
+            "discord.unread" => serde_json::from_value::<DiscordUnreadEvent>(data.clone())
+                .map(HostEvent::DiscordUnread)
+                .unwrap_or(HostEvent::Raw {
+                    event: name.to_string(),
+                    data,
+                }),
+            "discord.voice" => serde_json::from_value::<DiscordVoice>(data.clone())
+                .map(HostEvent::DiscordVoice)
+                .unwrap_or(HostEvent::Raw {
+                    event: name.to_string(),
+                    data,
+                }),
+            "discord.speaking" => {
+                if let Some(uid) = data.get("userId").and_then(Value::as_str) {
+                    HostEvent::DiscordSpeaking {
+                        user_id: uid.to_string(),
+                        speaking: data
+                            .get("speaking")
+                            .and_then(Value::as_bool)
+                            .unwrap_or(false),
+                    }
+                } else {
+                    HostEvent::Raw {
+                        event: name.to_string(),
+                        data,
+                    }
+                }
             }
             "devices.changed" => HostEvent::DevicesChanged,
             "apps.changed" => HostEvent::AppsChanged,
