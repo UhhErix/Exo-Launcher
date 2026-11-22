@@ -788,6 +788,202 @@ fn drive_row(d: &DriveInfo) -> El {
         .child(progress_bar(420.0, used_pct))
 }
 
+const SHADER_ROUGH: f64 = 1.5;
+
+#[derive(Debug, Clone, Copy)]
+struct ShaderSpan {
+    low: f64,
+    high: f64,
+    learned: bool,
+}
+
+fn shader_js_round(value: f64) -> i64 {
+    (value + 0.5).floor() as i64
+}
+
+fn shader_span(est: &exo_rpc::ShaderEstimate, share: f64) -> ShaderSpan {
+    let sure = est.learned && est.low_seconds.is_none();
+    let low = est.low_seconds.unwrap_or(if sure {
+        est.seconds
+    } else {
+        est.seconds / SHADER_ROUGH
+    }) * share;
+    let high = if est.low_seconds.is_some() || sure {
+        est.seconds
+    } else {
+        est.seconds * SHADER_ROUGH
+    } * share;
+    ShaderSpan {
+        low,
+        high,
+        learned: sure,
+    }
+}
+
+fn shader_minute_text(minutes: i64) -> String {
+    let h = minutes / 60;
+    let m = minutes % 60;
+    if h > 0 {
+        if m > 0 {
+            format!("{h} h {m} min")
+        } else {
+            format!("{h} h")
+        }
+    } else {
+        format!("{m} min")
+    }
+}
+
+fn shader_round_span(seconds: f64) -> String {
+    if seconds < 60.0 {
+        return "under a minute".into();
+    }
+    let minutes = seconds / 60.0;
+    let step: i64 = if minutes < 10.0 {
+        1
+    } else if minutes < 60.0 {
+        5
+    } else if minutes < 600.0 {
+        10
+    } else {
+        60
+    };
+    let rounded = (shader_js_round(minutes / step as f64) * step).max(step);
+    shader_minute_text(rounded)
+}
+
+fn shader_range_text(low: f64, high: f64) -> String {
+    if high < 60.0 {
+        return "under a minute".into();
+    }
+    let minutes = high / 60.0;
+    let step: i64 = if minutes < 10.0 {
+        1
+    } else if minutes < 60.0 {
+        5
+    } else if minutes < 600.0 {
+        30
+    } else {
+        60
+    };
+    let top = (shader_js_round(minutes / step as f64) * step).max(step);
+    let bottom = shader_js_round(low / 60.0 / step as f64) * step;
+    if bottom <= 0 {
+        return format!("up to {}", shader_minute_text(top));
+    }
+    if bottom >= top {
+        return format!("about {}", shader_minute_text(top));
+    }
+    if top < 60 {
+        return format!("{bottom}–{}", shader_minute_text(top));
+    }
+    if bottom % 60 == 0 && top % 60 == 0 {
+        format!("{}–{} h", bottom / 60, top / 60)
+    } else {
+        format!("{}–{}", shader_minute_text(bottom), shader_minute_text(top))
+    }
+}
+
+fn format_shader_estimate(est: &exo_rpc::ShaderEstimate) -> String {
+    let span = shader_span(est, 1.0);
+    if !span.learned {
+        shader_range_text(span.low, span.high)
+    } else if span.high < 60.0 {
+        "under a minute".into()
+    } else {
+        format!("about {}", shader_round_span(span.high))
+    }
+}
+
+fn resolve_shader_estimate(
+    sg: &exo_rpc::ShaderSnapGame,
+    shader_estimates: &std::collections::HashMap<String, f64>,
+) -> Option<exo_rpc::ShaderEstimate> {
+    sg.estimate.clone().or_else(|| {
+        shader_estimates
+            .get(&sg.id)
+            .copied()
+            .map(|seconds| exo_rpc::ShaderEstimate {
+                seconds,
+                low_seconds: None,
+                learned: false,
+            })
+    })
+}
+
+fn shader_whole_percent(percent: f64) -> Option<u32> {
+    if !percent.is_finite() {
+        return None;
+    }
+    let share = (percent / 100.0).clamp(0.0, 1.0);
+    let cap = if share < 1.0 { 99 } else { 100 };
+    Some(((share * 100.0 + 1e-9).floor() as u32).min(cap))
+}
+
+fn shader_poster_subtitle(
+    sg: &exo_rpc::ShaderSnapGame,
+    place: Option<usize>,
+    estimate: Option<&exo_rpc::ShaderEstimate>,
+) -> String {
+    if sg.compiling {
+        if let Some(pct) = sg.percent.and_then(shader_whole_percent) {
+            return format!("Compiling · {pct}%");
+        }
+        return sg
+            .status_text
+            .as_deref()
+            .filter(|s| !s.is_empty())
+            .unwrap_or("Compiling")
+            .to_string();
+    }
+    let time = if place.is_some() || sg.in_add_all_ready {
+        estimate.map(format_shader_estimate)
+    } else {
+        None
+    };
+    if let Some(pos) = place {
+        let head = if pos == 1 {
+            "Next".to_string()
+        } else {
+            format!("#{pos}")
+        };
+        return match time {
+            Some(t) => format!("{head} · {t}"),
+            None => head,
+        };
+    }
+    time.or_else(|| sg.status_text.clone()).unwrap_or_default()
+}
+
+fn shader_prepare_subtitle(sg: &exo_rpc::ShaderPrepareGame) -> String {
+    match sg.state.as_str() {
+        "running" => "Compiling its first launch".into(),
+        "stale" => "Driver changed".into(),
+        _ => sg
+            .message
+            .clone()
+            .filter(|m| !m.is_empty())
+            .unwrap_or_else(|| "First launch".into()),
+    }
+}
+
+fn shader_eta_text(span: ShaderSpan, floor: bool, running: bool) -> Option<String> {
+    if span.high <= 0.0 {
+        return None;
+    }
+    let left = if running { " left" } else { "" };
+    if floor {
+        return (span.low >= 60.0).then(|| format!("over {}{left}", shader_round_span(span.low)));
+    }
+    if !span.learned {
+        return Some(format!("{}{left}", shader_range_text(span.low, span.high)));
+    }
+    if span.high < 60.0 {
+        return Some(format!("under a minute{left}"));
+    }
+    Some(format!("about {}{left}", shader_round_span(span.high)))
+}
+
 fn exo_ai_storage_view(s: &AppState) -> El {
     let drives =
         s.pc.drives
@@ -1318,68 +1514,131 @@ fn exo_ai_room(s: &AppState, scale: f32) -> El {
         .child(hw_card)
         .child(updates_card);
 
-    let format_est = |secs: f64| -> String {
-        let mins = (secs / 60.0).ceil() as u32;
-        if mins <= 2 {
-            "1–3 min".into()
-        } else if mins <= 5 {
-            "2–5 min".into()
-        } else if mins <= 15 {
-            "up to 15 min".into()
-        } else if mins < 60 {
-            format!("about {mins} min")
-        } else {
-            let h = mins / 60;
-            let m = ((mins % 60) + 5) / 10 * 10;
-            if m == 0 {
-                format!("up to {h} h")
+    let (shader_list, shader_summary) = if !s.pc.shader_snap_games.is_empty() {
+        let current = s.pc.shader_snap_games.iter().find(|g| g.compiling);
+        let current_id = current.map(|g| g.id.as_str());
+        let waiting: Vec<&exo_rpc::ShaderSnapGame> =
+            s.pc.shader_snap_games
+                .iter()
+                .filter(|g| g.queued && Some(g.id.as_str()) != current_id)
+                .collect();
+        let mut ready: Vec<&exo_rpc::ShaderSnapGame> =
+            s.pc.shader_snap_games
+                .iter()
+                .filter(|g| g.in_add_all_ready && !g.queued && Some(g.id.as_str()) != current_id)
+                .collect();
+        ready.sort_by(|a, b| {
+            let ta = resolve_shader_estimate(a, &s.pc.shader_estimates)
+                .map(|e| e.seconds)
+                .unwrap_or(f64::INFINITY);
+            let tb = resolve_shader_estimate(b, &s.pc.shader_estimates)
+                .map(|e| e.seconds)
+                .unwrap_or(f64::INFINITY);
+            ta.partial_cmp(&tb).unwrap_or(std::cmp::Ordering::Equal)
+        });
+        let mut rest: Vec<&exo_rpc::ShaderSnapGame> = s
+            .pc
+            .shader_snap_games
+            .iter()
+            .filter(|g| {
+                Some(g.id.as_str()) != current_id
+                    && !g.queued
+                    && !g.in_add_all_ready
+                    && (g.error.is_some() || matches!(g.tone.as_deref(), Some("warn" | "primary")))
+            })
+            .collect();
+        rest.sort_by_key(|g| match g.tone.as_deref() {
+            Some("warn" | "primary") => 1000_u32,
+            Some("good") => 2000,
+            _ => 3000,
+        });
+
+        let working = current.is_some();
+        let mut total = ShaderSpan {
+            low: 0.0,
+            high: 0.0,
+            learned: true,
+        };
+        let mut unknown = 0usize;
+        if let Some(cur) = current {
+            if let Some(est) = resolve_shader_estimate(cur, &s.pc.shader_estimates) {
+                let share = 1.0 - (cur.percent.unwrap_or(0.0).clamp(0.0, 100.0) / 100.0);
+                let span = shader_span(&est, share);
+                total.low += span.low;
+                total.high += span.high;
+                total.learned &= span.learned;
             } else {
-                format!("about {h} h {m} min")
+                unknown += 1;
             }
         }
-    };
+        let counted: Vec<&exo_rpc::ShaderSnapGame> = if working {
+            waiting.clone()
+        } else {
+            waiting.iter().chain(ready.iter()).copied().collect()
+        };
+        for sg in &counted {
+            if let Some(est) = resolve_shader_estimate(sg, &s.pc.shader_estimates) {
+                let span = shader_span(&est, 1.0);
+                total.low += span.low;
+                total.high += span.high;
+                total.learned &= span.learned;
+            } else {
+                unknown += 1;
+            }
+        }
+        let left_count = if working {
+            waiting.len() + usize::from(current.is_some())
+        } else {
+            waiting.len() + ready.len()
+        };
+        let eta = if working || left_count > 0 {
+            shader_eta_text(total, unknown > 0, working)
+        } else {
+            None
+        };
+        let games_label = (left_count > 0).then(|| {
+            format!(
+                "{left_count} {}",
+                if left_count == 1 { "game" } else { "games" }
+            )
+        });
+        let summary = match (games_label, eta) {
+            (Some(g), Some(t)) => format!("{g} · {t}"),
+            (Some(g), None) => g,
+            (None, Some(t)) => t,
+            (None, None) => String::new(),
+        };
 
-    let mut total_shader_secs = 0.0_f64;
-    let shader_list: Vec<(String, String, String, Option<&exo_rpc::Game>)> =
-        if !s.pc.shader_snap_games.is_empty() {
-            let mut items: Vec<_> = s
-                .pc
-                .shader_snap_games
-                .iter()
-                .filter(|g| {
-                    g.in_add_all_ready
-                        || g.queued
-                        || g.compiling
-                        || g.error.is_some()
-                        || matches!(g.tone.as_deref(), Some("warn" | "primary"))
-                })
-                .map(|sg| {
-                    let secs = sg
-                        .estimate
-                        .as_ref()
-                        .map(|e| e.seconds)
-                        .or_else(|| s.pc.shader_estimates.get(&sg.id).copied())
-                        .unwrap_or(600.0);
-                    total_shader_secs += secs;
-                    let g = s
-                        .games
-                        .iter()
-                        .find(|g| g.id == sg.id || g.title.eq_ignore_ascii_case(&sg.name));
-                    let sub = sg
-                        .status_text
-                        .clone()
-                        .filter(|t| !t.is_empty() && !t.eq_ignore_ascii_case("ready to compile"))
-                        .unwrap_or_else(|| format_est(secs));
-                    (secs, sg.id.clone(), sg.name.clone(), sub, g)
-                })
-                .collect();
-            items.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal));
-            items
-                .into_iter()
-                .take(8)
-                .map(|(_, id, name, sub, g)| (id, name, sub, g))
-                .collect()
-        } else if !s.pc.shader_games.is_empty() {
+        let mut ordered: Vec<(&exo_rpc::ShaderSnapGame, Option<usize>)> = Vec::new();
+        if let Some(cur) = current {
+            ordered.push((cur, None));
+        }
+        for (i, sg) in waiting.iter().enumerate() {
+            ordered.push((sg, Some(i + 1)));
+        }
+        for sg in &ready {
+            ordered.push((sg, None));
+        }
+        for sg in &rest {
+            ordered.push((sg, None));
+        }
+
+        let list = ordered
+            .into_iter()
+            .take(8)
+            .map(|(sg, place)| {
+                let est = resolve_shader_estimate(sg, &s.pc.shader_estimates);
+                let sub = shader_poster_subtitle(sg, place, est.as_ref());
+                let g = s
+                    .games
+                    .iter()
+                    .find(|g| g.id == sg.id || g.title.eq_ignore_ascii_case(&sg.name));
+                (sg.id.clone(), sg.name.clone(), sub, g)
+            })
+            .collect();
+        (list, summary)
+    } else if !s.pc.shader_games.is_empty() {
+        let list: Vec<_> =
             s.pc.shader_games
                 .iter()
                 .take(8)
@@ -1391,21 +1650,27 @@ fn exo_ai_room(s: &AppState, scale: f32) -> El {
                     (
                         sg.id.clone(),
                         sg.title.clone(),
-                        sg.message.clone().unwrap_or_else(|| sg.state.clone()),
+                        shader_prepare_subtitle(sg),
                         g,
                     )
                 })
-                .collect()
-        } else {
-            s.games
-                .iter()
-                .filter(|g| g.installed)
-                .take(8)
-                .map(|g| (g.id.clone(), g.title.clone(), "Ready".into(), Some(g)))
-                .collect()
-        };
+                .collect();
+        let n = list.len();
+        let summary = format!("{n} {}", if n == 1 { "game" } else { "games" });
+        (list, summary)
+    } else {
+        let list: Vec<_> = s
+            .games
+            .iter()
+            .filter(|g| g.installed)
+            .take(8)
+            .map(|g| (g.id.clone(), g.title.clone(), "Ready".into(), Some(g)))
+            .collect();
+        let n = list.len();
+        let summary = format!("{n} {}", if n == 1 { "game" } else { "games" });
+        (list, summary)
+    };
 
-    let shader_count = shader_list.len();
     let mut shader_rows = col().w_full().pt(16.0).gap(20.0);
     for chunk in shader_list.chunks(4) {
         let mut r = row().w_full().gap(16.0).items_start();
@@ -1456,14 +1721,6 @@ fn exo_ai_room(s: &AppState, scale: f32) -> El {
         }
         shader_rows = shader_rows.child(r);
     }
-
-    let shader_summary = if total_shader_secs >= 3600.0 {
-        let low_h = ((total_shader_secs * 0.4) / 3600.0).floor().max(1.0) as u32;
-        let high_h = (total_shader_secs / 3600.0).ceil().max(low_h as f64 + 1.0) as u32;
-        format!("{shader_count} games · {low_h}–{high_h} h")
-    } else {
-        format!("{shader_count} games")
-    };
 
     let shaders_card = col()
         .key("exo-ai-shaders-card")
@@ -2284,6 +2541,194 @@ mod tests {
         assert_eq!(
             super::short_drive_model("Crucial® P5 Plus (TM) Solid State Drive 2 TB"),
             "Crucial P5 Plus"
+        );
+    }
+
+    #[test]
+    fn exo_ai_shader_subtitle_and_estimate_parity() {
+        let est = |seconds: f64, low_seconds: Option<f64>, learned: bool| exo_rpc::ShaderEstimate {
+            seconds,
+            low_seconds,
+            learned,
+        };
+
+        assert_eq!(
+            super::format_shader_estimate(&est(30.0, None, false)),
+            "under a minute"
+        );
+        assert_eq!(
+            super::format_shader_estimate(&est(120.0, None, false)),
+            "1–3 min"
+        );
+        assert_eq!(
+            super::format_shader_estimate(&est(200.0, None, false)),
+            "2–5 min"
+        );
+        assert_eq!(
+            super::format_shader_estimate(&est(600.0, None, false)),
+            "5–15 min"
+        );
+        assert_eq!(
+            super::format_shader_estimate(&est(900.0, Some(10.0), true)),
+            "up to 15 min"
+        );
+        assert_eq!(
+            super::format_shader_estimate(&est(3600.0, Some(10.0), false)),
+            "up to 1 h"
+        );
+        assert_eq!(
+            super::format_shader_estimate(&est(12600.0, Some(10.0), false)),
+            "up to 3 h 30 min"
+        );
+        assert_eq!(
+            super::format_shader_estimate(&est(6000.0, None, true)),
+            "about 1 h 40 min"
+        );
+        assert_eq!(
+            super::format_shader_estimate(&est(45.0, None, true)),
+            "under a minute"
+        );
+        assert_eq!(super::shader_range_text(7200.0, 25200.0), "2–7 h");
+        assert_eq!(super::shader_range_text(5400.0, 10800.0), "1 h 30 min–3 h");
+        assert_eq!(super::shader_range_text(850.0, 900.0), "about 15 min");
+
+        let needs_rebuild = exo_rpc::ShaderSnapGame {
+            id: "g1".into(),
+            name: "CONTROL Resonant".into(),
+            status_text: Some("Needs rebuilding".into()),
+            tone: Some("warn".into()),
+            in_add_all_ready: true,
+            estimate: Some(est(120.0, None, false)),
+            ..Default::default()
+        };
+        assert_eq!(
+            super::shader_poster_subtitle(&needs_rebuild, None, needs_rebuild.estimate.as_ref()),
+            "1–3 min"
+        );
+
+        let needs_rebuild_no_est = exo_rpc::ShaderSnapGame {
+            estimate: None,
+            ..needs_rebuild.clone()
+        };
+        assert_eq!(
+            super::shader_poster_subtitle(&needs_rebuild_no_est, None, None),
+            "Needs rebuilding"
+        );
+
+        let mut est_map = std::collections::HashMap::new();
+        est_map.insert("roblox".to_string(), 600.0);
+        let ready_from_map = exo_rpc::ShaderSnapGame {
+            id: "roblox".into(),
+            name: "Roblox".into(),
+            status_text: Some("Ready to compile".into()),
+            in_add_all_ready: true,
+            ..Default::default()
+        };
+        let resolved = super::resolve_shader_estimate(&ready_from_map, &est_map);
+        assert_eq!(
+            super::shader_poster_subtitle(&ready_from_map, None, resolved.as_ref()),
+            "5–15 min"
+        );
+
+        let warmed = exo_rpc::ShaderSnapGame {
+            id: "warmed".into(),
+            name: "Hades".into(),
+            status_text: Some("Warmed".into()),
+            tone: Some("good".into()),
+            in_add_all_ready: false,
+            estimate: Some(est(600.0, None, false)),
+            ..Default::default()
+        };
+        assert_eq!(
+            super::shader_poster_subtitle(&warmed, None, warmed.estimate.as_ref()),
+            "Warmed"
+        );
+
+        let needs_recording = exo_rpc::ShaderSnapGame {
+            id: "rec".into(),
+            name: "New Game".into(),
+            status_text: Some("Needs a 5-min recording".into()),
+            tone: Some("warn".into()),
+            in_add_all_ready: false,
+            estimate: Some(est(600.0, None, false)),
+            ..Default::default()
+        };
+        assert_eq!(
+            super::shader_poster_subtitle(
+                &needs_recording,
+                None,
+                needs_recording.estimate.as_ref()
+            ),
+            "Needs a 5-min recording"
+        );
+
+        let queued = exo_rpc::ShaderSnapGame {
+            id: "q1".into(),
+            name: "Thymesia".into(),
+            status_text: Some("Needs rebuilding".into()),
+            queued: true,
+            in_add_all_ready: true,
+            estimate: Some(est(200.0, None, false)),
+            ..Default::default()
+        };
+        assert_eq!(
+            super::shader_poster_subtitle(&queued, Some(1), queued.estimate.as_ref()),
+            "Next · 2–5 min"
+        );
+        assert_eq!(
+            super::shader_poster_subtitle(&queued, Some(2), queued.estimate.as_ref()),
+            "#2 · 2–5 min"
+        );
+        assert_eq!(
+            super::shader_poster_subtitle(&queued, Some(1), None),
+            "Next"
+        );
+
+        let compiling_pct = exo_rpc::ShaderSnapGame {
+            id: "c1".into(),
+            name: "Wuthering Waves".into(),
+            compiling: true,
+            percent: Some(42.9),
+            ..Default::default()
+        };
+        assert_eq!(
+            super::shader_poster_subtitle(&compiling_pct, None, None),
+            "Compiling · 42%"
+        );
+
+        let compiling_stage = exo_rpc::ShaderSnapGame {
+            id: "c2".into(),
+            name: "Wuthering Waves".into(),
+            compiling: true,
+            status_text: Some("Linking pipelines".into()),
+            ..Default::default()
+        };
+        assert_eq!(
+            super::shader_poster_subtitle(&compiling_stage, None, None),
+            "Linking pipelines"
+        );
+
+        let prep = |state: &str, message: Option<&str>| exo_rpc::ShaderPrepareGame {
+            id: "p".into(),
+            title: "Game".into(),
+            state: state.into(),
+            message: message.map(str::to_string),
+        };
+        assert_eq!(
+            super::shader_prepare_subtitle(&prep("running", None)),
+            "Compiling its first launch"
+        );
+        assert_eq!(
+            super::shader_prepare_subtitle(&prep("stale", None)),
+            "Driver changed"
+        );
+        assert_eq!(
+            super::shader_prepare_subtitle(&prep("ready", Some("1–3 min"))),
+            "1–3 min"
+        );
+        assert_eq!(
+            super::shader_prepare_subtitle(&prep("ready", None)),
+            "First launch"
         );
     }
 }
