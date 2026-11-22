@@ -235,6 +235,22 @@
   pointer-events: none;
 }
 
+.exo-devices-frame.is-pending {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.exo-devices-mouse-wait {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  color: var(--color-muted);
+  font-size: calc(13px * var(--exo-scale, 1));
+}
+
 .exo-devices-head {
   display: flex;
   align-items: center;

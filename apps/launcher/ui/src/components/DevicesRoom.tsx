@@ -17,10 +17,12 @@ import { railWidth } from './devices/rail'
 import { readWearing, saveWearing } from './devices/wearing'
 import { onUiPrefs } from '../lib/uiPrefs'
 import { ErrorState } from './ui/ErrorState'
+import { Spinner } from './ui/Spinner'
 import { deviceHasPage } from '../lib/canUse'
 
 /** How long Exo Mouse has to say anything after its frame starts loading before the room says it didn't load. */
-const LOAD_MS = 15_000
+const LOAD_MS = 3_000
+const POST_LOAD_MS = 1_200
 
 /** What devices.image is asked for a device's official picture. */
 type PictureAsk = { kind: string; model?: string | null; name?: string | null; maker?: string | null; color?: string | null; layout?: string | null }
@@ -338,6 +340,8 @@ function MouseFrame({ shown, visible }: { shown: boolean; visible: boolean }) {
   }, [sendRail])
   useEffect(() => { if (shown) sendRail() }, [shown, sendRail])
   const [load, setLoad] = useState(0)
+  const [loaded, setLoaded] = useState(false)
+  const [ready, setReady] = useState(false)
   const [failed, setFailed] = useState(false)
   // The load whose frame has said anything: it is running from then on, however quiet it goes after (behind a game it
   // reads the mouse slowly or not at all). Judged per load, not per showing; once a load has spoken, nothing listens
@@ -347,6 +351,7 @@ function MouseFrame({ shown, visible }: { shown: boolean; visible: boolean }) {
     const listen = (event: MessageEvent) => {
       if (event.origin !== MOUSE_ORIGIN || event.source === null || event.source !== frame.current?.contentWindow) return
       heard.current = load
+      setReady(true)
       setFailed(false)
       window.removeEventListener('message', listen)
     }
@@ -355,23 +360,35 @@ function MouseFrame({ shown, visible }: { shown: boolean; visible: boolean }) {
   }, [load])
   useEffect(() => {
     if (!visible || heard.current === load) return
-    const timer = window.setTimeout(() => { if (heard.current !== load) setFailed(true) }, LOAD_MS)
+    const timer = window.setTimeout(() => { if (heard.current !== load) setFailed(true) }, loaded ? POST_LOAD_MS : LOAD_MS)
     return () => window.clearTimeout(timer)
-  }, [load, visible])
+  }, [load, visible, loaded])
+
+  const retry = () => {
+    setFailed(false)
+    setReady(false)
+    setLoaded(false)
+    setLoad(value => value + 1)
+  }
 
   return (
     <div className={cn('exo-devices-mouse', !shown && 'is-away')} aria-hidden={!shown} inert={!shown}>
       {failed && shown ? (
-        <ErrorState title="Exo Mouse unavailable" message="Exo Mouse didn't load." onRetry={() => { setFailed(false); setLoad(value => value + 1) }} />
+        <ErrorState title="Exo Mouse unavailable" message="Exo Mouse didn't load." onRetry={retry} />
+      ) : shown && !ready ? (
+        <div className="exo-devices-mouse-wait" role="status">
+          <Spinner size={18} />
+          <span>Loading Exo Mouse</span>
+        </div>
       ) : null}
       <iframe
         key={load}
         ref={frame}
-        className="exo-devices-frame"
+        className={cn('exo-devices-frame', !ready && 'is-pending')}
         hidden={failed && shown}
         src={`${MOUSE_ORIGIN}/index.html`}
         title="Mouse"
-        onLoad={() => { postToMouse({ event: 'room.visible', data: visible }); sendRail() }}
+        onLoad={() => { setLoaded(true); postToMouse({ event: 'room.visible', data: visible }); sendRail() }}
       />
     </div>
   )
