@@ -46,6 +46,7 @@ fn gamepad_prompt_bar() -> El {
 }
 
 pub fn view(s: &AppState, cx: &mut Cx<AppState>) -> El {
+    cx.reduced_motion(s.settings.reduce_motion);
     set_text_scale(s.text_scale());
     let has_modal_scrim = s.palette_open || s.key_modal_open;
     cx.caption_color(if has_modal_scrim {

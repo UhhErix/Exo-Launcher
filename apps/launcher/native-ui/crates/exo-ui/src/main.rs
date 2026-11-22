@@ -1542,3 +1542,233 @@ mod tests {
         );
     }
 }
+
+#[cfg(test)]
+mod motion_audit {
+    use super::*;
+    use crate::state::Room;
+    use rune::motion_gate::{Finding, Job, Recording, Run, check, report, run};
+    use rune::{Env, Runtime};
+    use std::sync::atomic::{AtomicBool, Ordering};
+
+    const HZ: f64 = 120.0;
+
+    fn make_run(reduce_motion: bool) -> Run<AppState> {
+        let mut state = AppState::default();
+        state.settings.reduce_motion = reduce_motion;
+        let rt = Runtime::new(state, shell::view, (1280.0, 800.0), Env::new(true, 1.0));
+        let mut r = Run::new(rt, HZ);
+        r.idle(0.5);
+        r.step();
+        r
+    }
+
+    fn boot_idle_recording(reduce_motion: bool) -> Recording {
+        let mut r = make_run(reduce_motion);
+        r.play(0.4);
+        r.quiet();
+        r.play(0.35);
+        r.rec
+    }
+
+    fn room_switch_recording(reduce_motion: bool) -> Recording {
+        let mut r = make_run(reduce_motion);
+        for (name, room) in [
+            ("to-store", Room::Store),
+            ("to-music", Room::Music),
+            ("to-settings", Room::Settings),
+            ("to-library", Room::Library),
+        ] {
+            r.act(name, |rt| rt.update(|s, _| s.switch_room(room)));
+            r.play(0.45);
+        }
+        r.quiet();
+        r.play(0.35);
+        r.rec
+    }
+
+    fn overlays_recording(reduce_motion: bool) -> Recording {
+        let mut r = make_run(reduce_motion);
+        r.act("open-captures", |rt| {
+            rt.update(|s, _| s.capture_menu_open = true);
+        });
+        r.play(0.35);
+        r.act("close-captures", |rt| {
+            rt.update(|s, _| s.capture_menu_open = false);
+        });
+        r.play(0.35);
+        r.act("open-palette", |rt| {
+            rt.update(|s, tx| s.open_palette(tx));
+        });
+        r.play(0.35);
+        r.act("close-palette", |rt| {
+            rt.update(|s, _| s.close_palette());
+        });
+        r.play(0.35);
+        r.act("open-key-modal", |rt| {
+            rt.update(|s, _| s.key_modal_open = true);
+        });
+        r.play(0.35);
+        r.act("close-key-modal", |rt| {
+            rt.update(|s, _| s.close_key_modal());
+        });
+        r.play(0.35);
+        r.quiet();
+        r.play(0.35);
+        r.rec
+    }
+
+    fn mid_flight_reduce_motion_toggle() -> Recording {
+        let mut r = make_run(false);
+        r.act("open-key-modal", |rt| {
+            rt.update(|s, _| s.key_modal_open = true);
+        });
+        r.play(0.08);
+        r.act("enable-reduce-motion", |rt| {
+            rt.update(|s, _| s.settings.reduce_motion = true);
+        });
+        r.play(0.4);
+        r.act("close-key-modal", |rt| {
+            rt.update(|s, _| s.close_key_modal());
+        });
+        r.play(0.4);
+        r.quiet();
+        r.play(0.35);
+        r.rec
+    }
+
+    fn assert_no_kinds(label: &str, findings: &[Finding], forbidden: &[&str]) {
+        let hits: Vec<&Finding> = findings
+            .iter()
+            .filter(|f| forbidden.contains(&f.kind))
+            .collect();
+        assert!(hits.is_empty(), "{label} motion findings: {hits:#?}");
+    }
+
+    #[test]
+    fn reduce_motion_drives_cx_runtime_override() {
+        static OBSERVED: AtomicBool = AtomicBool::new(false);
+
+        fn spy_view(s: &AppState, cx: &mut rune::Cx<AppState>) -> rune::El {
+            let root = shell::view(s, cx);
+            OBSERVED.store(cx.is_reduced_motion(), Ordering::SeqCst);
+            root
+        }
+
+        let mut rt = Runtime::new(
+            AppState::default(),
+            spy_view,
+            (1280.0, 800.0),
+            Env::new(true, 1.0),
+        );
+        rt.frame(0.0);
+        assert!(!OBSERVED.load(Ordering::SeqCst));
+
+        rt.update(|s, _| s.settings.reduce_motion = true);
+        rt.frame(1.0 / 60.0);
+        assert!(OBSERVED.load(Ordering::SeqCst));
+
+        rt.update(|s, _| s.settings.reduce_motion = false);
+        rt.frame(1.0 / 60.0);
+        assert!(!OBSERVED.load(Ordering::SeqCst));
+    }
+
+    #[test]
+    fn boot_idle_has_no_load_motion_or_wakes() {
+        for reduced in [false, true] {
+            let rec = boot_idle_recording(reduced);
+            let findings = check(&rec);
+            assert!(
+                findings.is_empty(),
+                "idle reduced={reduced} findings: {findings:#?}"
+            );
+        }
+    }
+
+    #[test]
+    fn room_switches_and_overlays_settle_cleanly() {
+        let jobs: Vec<(String, Job)> = vec![
+            (
+                "boot/normal".into(),
+                Box::new(|| boot_idle_recording(false)),
+            ),
+            (
+                "rooms/normal".into(),
+                Box::new(|| room_switch_recording(false)),
+            ),
+            (
+                "rooms/reduced".into(),
+                Box::new(|| room_switch_recording(true)),
+            ),
+            (
+                "overlays/normal".into(),
+                Box::new(|| overlays_recording(false)),
+            ),
+            (
+                "overlays/reduced".into(),
+                Box::new(|| overlays_recording(true)),
+            ),
+            (
+                "toggle/mid-flight".into(),
+                Box::new(mid_flight_reduce_motion_toggle),
+            ),
+        ];
+        let cells = run(jobs, "");
+        let summary = report(&cells, &[], false, 0.0);
+        assert_eq!(cells.len(), 6);
+        for cell in &cells {
+            assert!(!cell.skipped, "cell {} skipped", cell.name);
+            assert_no_kinds(
+                &cell.name,
+                &cell.findings,
+                &[
+                    "load-motion",
+                    "never-settles",
+                    "wakes-after-end",
+                    "overshoot",
+                    "jerk",
+                    "flicker",
+                ],
+            );
+        }
+        assert!(summary.text.contains("6 cells") || !summary.text.is_empty());
+    }
+
+    #[test]
+    fn reduce_motion_eliminates_spatial_travel_on_room_and_overlay_changes() {
+        let mut r = make_run(true);
+        r.act("to-store", |rt| {
+            rt.update(|s, _| s.switch_room(Room::Store));
+        });
+        let mut prev_pos: Option<[f32; 4]> = r.rt.presented("room-scroll").map(|(rect, _)| rect);
+        for _ in 0..30 {
+            r.step();
+            if let Some((rect, _)) = r.rt.presented("room-scroll") {
+                if let Some(prev) = prev_pos {
+                    assert!(
+                        (rect[0] - prev[0]).abs() < 0.01 && (rect[1] - prev[1]).abs() < 0.01,
+                        "unexpected spatial translation under reduce_motion: {prev:?} -> {rect:?}"
+                    );
+                }
+                prev_pos = Some(rect);
+            }
+        }
+        r.act("open-key-modal", |rt| {
+            rt.update(|s, _| s.key_modal_open = true);
+        });
+        let mut modal_prev: Option<[f32; 4]> =
+            r.rt.presented("activate-key-modal").map(|(rect, _)| rect);
+        for _ in 0..30 {
+            r.step();
+            if let Some((rect, _)) = r.rt.presented("activate-key-modal") {
+                if let Some(prev) = modal_prev {
+                    assert!(
+                        (rect[0] - prev[0]).abs() < 0.01 && (rect[1] - prev[1]).abs() < 0.01,
+                        "modal translated under reduce_motion: {prev:?} -> {rect:?}"
+                    );
+                }
+                modal_prev = Some(rect);
+            }
+        }
+    }
+}
