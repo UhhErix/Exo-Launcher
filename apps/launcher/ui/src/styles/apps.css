@@ -227,11 +227,11 @@
 }
 
 .exo-apps-tag {
-  padding: 2px 7px;
+  padding: 2px 8px;
   border-radius: 999px;
   background-color: var(--exo-surface-icon);
   color: var(--color-muted);
-  font-size: var(--exo-type-label);
+  font-size: var(--exo-type-small);
   font-weight: 500;
   white-space: nowrap;
 }
@@ -285,17 +285,6 @@
 .exo-apps-act {
   display: flex;
   justify-content: flex-end;
-  opacity: 0.48;
-  transition: opacity var(--dur-quick) var(--ease-out);
-}
-
-.exo-apps-row:hover .exo-apps-act,
-.exo-apps-row:focus-within .exo-apps-act,
-.exo-apps-row.is-kept .exo-apps-act,
-.exo-apps-row.is-startup .exo-apps-act,
-.exo-apps-act:has([data-exo-armed]),
-.exo-apps-act:has(.exo-action:not([data-action="idle"])) {
-  opacity: 1;
 }
 
 .exo-apps-error {

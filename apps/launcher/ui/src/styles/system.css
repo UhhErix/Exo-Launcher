@@ -1120,7 +1120,7 @@
 }
 
 .exo-shaders-poster.is-good .exo-shaders-art,
-.exo-shaders-poster.is-muted .exo-shaders-art {
+.exo-shaders-poster.is-muted .exo-shaders-art img {
   filter: brightness(0.5) saturate(0.6);
 }
 
@@ -1134,7 +1134,7 @@
   color: var(--color-fg);
   font-size: var(--exo-type-body);
   font-weight: 500;
-  line-height: 1.25;
+  line-height: 1.35;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
   text-overflow: ellipsis;

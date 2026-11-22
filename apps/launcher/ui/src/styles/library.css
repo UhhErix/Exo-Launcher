@@ -391,10 +391,10 @@
   z-index: 2;
   display: inline-flex;
   align-items: center;
-  height: 22px;
+  height: 24px;
   padding: 0 9px;
   border-radius: 999px;
-  font-size: var(--exo-type-label);
+  font-size: var(--exo-type-small);
   font-weight: var(--exo-weight-title);
   white-space: nowrap;
   pointer-events: none;
