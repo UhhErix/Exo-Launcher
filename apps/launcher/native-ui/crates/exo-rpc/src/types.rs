@@ -26,6 +26,8 @@ pub struct Game {
     #[serde(default)]
     pub update_available: bool,
     #[serde(default)]
+    pub can_install: bool,
+    #[serde(default)]
     pub primary_action: Option<String>,
     #[serde(default)]
     pub cover_url: Option<String>,
@@ -37,6 +39,12 @@ pub struct Game {
     pub size_bytes: Option<u64>,
     #[serde(default)]
     pub status: Option<String>,
+    #[serde(default)]
+    pub launch_note: Option<String>,
+    #[serde(default)]
+    pub family_shared: bool,
+    #[serde(default)]
+    pub shared_by: Option<String>,
     #[serde(default)]
     pub last_played_utc: Option<String>,
     #[serde(default)]
@@ -80,24 +88,51 @@ impl Game {
     }
 
     pub fn store_display(&self) -> &'static str {
-        match self.store.as_str() {
-            "steam" => "Steam",
-            "epic" => "Epic",
-            "gog" => "GOG",
-            "riot" => "Riot",
-            "xbox" => "Xbox",
-            "ea" => "EA",
-            "ubisoft" => "Ubisoft",
-            "battlenet" => "Battle.net",
-            "amazon" => "Amazon",
-            "rockstar" => "Rockstar",
-            "itch" => "itch.io",
-            "minecraft" => "Minecraft",
-            "roblox" => "Roblox",
-            "local" => "Local",
-            _ => "Game",
-        }
+        store_label(&self.store)
     }
+}
+
+pub fn store_label(store: &str) -> &'static str {
+    match store.to_ascii_lowercase().as_str() {
+        "steam" => "Steam",
+        "epic" | "epic games store" => "Epic",
+        "gog" => "GOG",
+        "riot" => "Riot",
+        "xbox" => "Xbox",
+        "ea" => "EA",
+        "ubisoft" | "ubisoft store" => "Ubisoft",
+        "battlenet" => "Battle.net",
+        "amazon" => "Amazon",
+        "rockstar" => "Rockstar",
+        "itch" => "itch.io",
+        "minecraft" => "Minecraft",
+        "roblox" => "Roblox",
+        "local" => "Local",
+        _ => "Store",
+    }
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct InstallProgress {
+    #[serde(default)]
+    pub game_id: Option<String>,
+    #[serde(default)]
+    pub phase: String,
+    #[serde(default)]
+    pub percent: f64,
+    #[serde(default)]
+    pub bytes_downloaded: u64,
+    #[serde(default)]
+    pub bytes_to_download: u64,
+    #[serde(default)]
+    pub bytes_per_second: u64,
+    #[serde(default)]
+    pub status: Option<String>,
+    #[serde(default)]
+    pub can_cancel: bool,
+    #[serde(default)]
+    pub is_active: bool,
 }
 
 #[derive(Debug, Clone, Default, Deserialize)]
@@ -111,6 +146,338 @@ pub struct LibraryPayload {
     pub sort_mode: Option<String>,
     #[serde(default)]
     pub recent: Vec<String>,
+    #[serde(default)]
+    pub progress: Option<InstallProgress>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GameGetReply {
+    #[serde(default)]
+    pub ok: bool,
+    #[serde(default)]
+    pub game: Option<Game>,
+    #[serde(default)]
+    pub message: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GameExtras {
+    #[serde(default)]
+    pub ok: bool,
+    #[serde(default)]
+    pub achievements_unlocked: Option<u32>,
+    #[serde(default)]
+    pub achievements_total: Option<u32>,
+    #[serde(default)]
+    pub message: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GameProperties {
+    #[serde(default)]
+    pub ok: bool,
+    #[serde(default)]
+    pub message: Option<String>,
+    #[serde(default)]
+    pub launch_options: Option<String>,
+    #[serde(default)]
+    pub steam_overlay: Option<bool>,
+    #[serde(default)]
+    pub cloud_sync: Option<bool>,
+    #[serde(default)]
+    pub language: Option<String>,
+    #[serde(default)]
+    pub beta: Option<String>,
+    #[serde(default)]
+    pub folder: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GamePropertySetReply {
+    #[serde(default)]
+    pub ok: bool,
+    #[serde(default)]
+    pub pending: bool,
+    #[serde(default)]
+    pub message: Option<String>,
+    #[serde(default)]
+    pub properties: Option<GameProperties>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct KeyPreview {
+    #[serde(default)]
+    pub ok: bool,
+    #[serde(default)]
+    pub looks_like_key: bool,
+    #[serde(default)]
+    pub store: Option<String>,
+    #[serde(default)]
+    pub key: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StoreArt {
+    #[serde(default)]
+    pub poster: Option<String>,
+    #[serde(default)]
+    pub hero: Option<String>,
+    #[serde(default)]
+    pub capsule: Option<String>,
+    #[serde(default)]
+    pub header: Option<String>,
+}
+
+impl StoreArt {
+    pub fn best_poster(&self) -> Option<&str> {
+        self.poster
+            .as_deref()
+            .or(self.header.as_deref())
+            .or(self.capsule.as_deref())
+            .or(self.hero.as_deref())
+    }
+
+    pub fn best_hero(&self) -> Option<&str> {
+        self.hero
+            .as_deref()
+            .or(self.header.as_deref())
+            .or(self.capsule.as_deref())
+            .or(self.poster.as_deref())
+    }
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StoreTile {
+    #[serde(default)]
+    pub app_id: String,
+    #[serde(default)]
+    pub name: String,
+    #[serde(default)]
+    pub final_price: Option<i64>,
+    #[serde(rename = "final", default)]
+    pub final_cents: Option<i64>,
+    #[serde(default)]
+    pub initial: Option<i64>,
+    #[serde(default)]
+    pub discount: i32,
+    #[serde(default)]
+    pub currency: Option<String>,
+    #[serde(default)]
+    pub price_text: Option<String>,
+    #[serde(default)]
+    pub was_text: Option<String>,
+    #[serde(default)]
+    pub review: Option<String>,
+    #[serde(default)]
+    pub review_percent: Option<i32>,
+    #[serde(default)]
+    pub free: bool,
+    #[serde(default)]
+    pub soon: bool,
+    #[serde(default)]
+    pub when: Option<String>,
+    #[serde(default)]
+    pub wished: bool,
+    #[serde(default)]
+    pub art: Option<StoreArt>,
+}
+
+impl StoreTile {
+    pub fn display_price(&self) -> String {
+        if self.free {
+            return "Free".into();
+        }
+        if let Some(txt) = self.price_text.as_deref().filter(|s| !s.is_empty()) {
+            return txt.to_string();
+        }
+        if let Some(cents) = self.final_cents.or(self.final_price) {
+            return format_cents(cents, self.currency.as_deref());
+        }
+        if self.soon {
+            return self.when.clone().unwrap_or_else(|| "Coming soon".into());
+        }
+        String::new()
+    }
+}
+
+pub fn format_cents(cents: i64, currency: Option<&str>) -> String {
+    if cents <= 0 {
+        return "Free".into();
+    }
+    let sym = match currency.unwrap_or("USD") {
+        "EUR" => "€",
+        "GBP" => "£",
+        "CAD" => "CA$",
+        "AUD" => "A$",
+        _ => "$",
+    };
+    format!("{sym}{:.2}", cents as f64 / 100.0)
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StoreShelf {
+    #[serde(default)]
+    pub id: String,
+    #[serde(default)]
+    pub title: String,
+    #[serde(default)]
+    pub items: Vec<StoreTile>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StoreHome {
+    #[serde(default)]
+    pub ok: bool,
+    #[serde(default)]
+    pub message: Option<String>,
+    #[serde(default)]
+    pub hero: Vec<StoreTile>,
+    #[serde(default)]
+    pub shelves: Vec<StoreShelf>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StoreSearchReply {
+    #[serde(default)]
+    pub ok: bool,
+    #[serde(default)]
+    pub message: Option<String>,
+    #[serde(default)]
+    pub items: Vec<StoreTile>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StoreGame {
+    #[serde(default)]
+    pub ok: bool,
+    #[serde(default)]
+    pub message: Option<String>,
+    #[serde(default)]
+    pub app_id: String,
+    #[serde(default)]
+    pub name: String,
+    #[serde(default)]
+    pub description: Option<String>,
+    #[serde(default)]
+    pub header: Option<String>,
+    #[serde(default)]
+    pub coming_soon: bool,
+    #[serde(default)]
+    pub released: Option<String>,
+    #[serde(default)]
+    pub developers: Vec<String>,
+    #[serde(default)]
+    pub publishers: Vec<String>,
+    #[serde(default)]
+    pub genres: Vec<String>,
+    #[serde(default)]
+    pub metacritic: Option<i32>,
+    #[serde(default)]
+    pub review_word: Option<String>,
+    #[serde(default)]
+    pub review_percent: Option<i32>,
+    #[serde(default)]
+    pub price_text: Option<String>,
+    #[serde(default)]
+    pub was_text: Option<String>,
+    #[serde(default)]
+    pub discount: i32,
+    #[serde(default)]
+    pub free: bool,
+    #[serde(default)]
+    pub url: Option<String>,
+    #[serde(default)]
+    pub offers: Vec<StoreOffer>,
+    #[serde(default)]
+    pub art: Option<StoreArt>,
+    #[serde(default)]
+    pub fit: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StoreOffer {
+    #[serde(default)]
+    pub store: String,
+    #[serde(default)]
+    pub name: String,
+    #[serde(rename = "final", default)]
+    pub final_cents: Option<i64>,
+    #[serde(default)]
+    pub discount: i32,
+    #[serde(default)]
+    pub currency: Option<String>,
+    #[serde(default)]
+    pub price_text: Option<String>,
+    #[serde(default)]
+    pub url: String,
+}
+
+impl StoreOffer {
+    pub fn display_price(&self) -> String {
+        if let Some(txt) = self.price_text.as_deref().filter(|s| !s.is_empty()) {
+            return txt.to_string();
+        }
+        if let Some(cents) = self.final_cents {
+            return format_cents(cents, self.currency.as_deref());
+        }
+        String::new()
+    }
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StoreLowest {
+    #[serde(rename = "final", default)]
+    pub final_cents: i64,
+    #[serde(default)]
+    pub at: String,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StoreOtherOffers {
+    #[serde(default)]
+    pub ok: bool,
+    #[serde(default)]
+    pub offers: Vec<StoreOffer>,
+    #[serde(default)]
+    pub lowest: Option<StoreLowest>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LauncherSettings {
+    #[serde(default)]
+    pub reduce_motion: bool,
+    #[serde(default)]
+    pub onboarding_complete: Option<bool>,
+    #[serde(default)]
+    pub ui_prefs: HashMap<String, Value>,
+}
+
+use std::collections::HashMap;
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ExoAccountState {
+    #[serde(default)]
+    pub signed_in: bool,
+    #[serde(default)]
+    pub email: Option<String>,
+    #[serde(default)]
+    pub account_asked: bool,
 }
 
 #[derive(Debug, Clone, Default, Deserialize)]
@@ -187,12 +554,15 @@ pub struct ActionResult {
     #[serde(default)]
     pub ok: bool,
     #[serde(default)]
+    pub store: Option<String>,
+    #[serde(default)]
     pub message: Option<String>,
 }
 
 #[derive(Debug, Clone)]
 pub enum HostEvent {
     LibraryUpdated(LibraryPayload),
+    InstallProgress(InstallProgress),
     Raw { event: String, data: Value },
     Disconnected(String),
 }

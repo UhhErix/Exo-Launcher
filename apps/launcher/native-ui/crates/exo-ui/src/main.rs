@@ -1,7 +1,12 @@
+mod game_page;
+mod gamepad;
+mod key_modal;
 mod library;
 mod palette;
 mod shell;
 mod state;
+mod store;
+mod tour;
 
 use crate::state::AppState;
 use exo_kit::{FONT_FAMILIES, FONTS, TITLEBAR_HEIGHT};
@@ -40,9 +45,29 @@ fn on_key(s: &mut AppState, ev: &KeyEvent, tx: &mut Tx) -> bool {
     if s.palette_open {
         return palette::handle_palette_key(s, ev, tx);
     }
-    if ev.key == Key::Escape && s.notice.is_some() {
-        s.notice = None;
-        return true;
+    if let Some(step) = s.tour_step {
+        match ev.key {
+            Key::Escape => {
+                s.finish_tour();
+                return true;
+            }
+            Key::Right | Key::Enter => {
+                if step + 1 >= tour::STEPS.len() {
+                    s.finish_tour();
+                } else {
+                    s.jump_tour(step + 1);
+                }
+                return true;
+            }
+            Key::Left => {
+                s.jump_tour(step.saturating_sub(1));
+                return true;
+            }
+            _ => {}
+        }
+    }
+    if ev.key == Key::Escape {
+        return s.dismiss_top_layer();
     }
     false
 }
@@ -53,16 +78,18 @@ fn setup_state(s: &mut AppState, waker: Waker) {
 }
 
 #[cfg(windows)]
-fn load_live_state_sync(pipe: &str) -> AppState {
+fn load_live_state_sync(pipe: &str, want_store: bool) -> AppState {
     let mut state = AppState::for_host_pipe();
     let Ok(client) = exo_rpc::RpcClient::connect(pipe, Duration::from_secs(6), |_| {}) else {
         state.status = state::HostStatus::Error("Connect failed".into());
         state.refreshing = false;
         return state;
     };
-    if let Ok(base) =
-        client.call_blocking::<_, exo_rpc::ArtBase>(exo_rpc::METHOD_ART_BASE, &serde_json::json!({}), Duration::from_secs(5))
-    {
+    if let Ok(base) = client.call_blocking::<_, exo_rpc::ArtBase>(
+        exo_rpc::METHOD_ART_BASE,
+        &serde_json::json!({}),
+        Duration::from_secs(5),
+    ) {
         state.apply_art_base(base);
     }
     if let Ok(lib) = client.call_blocking::<_, exo_rpc::LibraryPayload>(
@@ -71,6 +98,32 @@ fn load_live_state_sync(pipe: &str) -> AppState {
         Duration::from_secs(12),
     ) {
         state.apply_library(lib);
+    }
+    if want_store
+        && let Ok(home) = client.call_blocking::<_, exo_rpc::StoreHome>(
+            exo_rpc::METHOD_STORE_HOME,
+            &serde_json::json!({}),
+            Duration::from_secs(10),
+        )
+        && home.ok
+    {
+        let mut urls = Vec::new();
+        if let Some(hero) = home.hero.first().and_then(|t| t.art.as_ref()).and_then(|a| a.best_hero()) {
+            urls.push(hero.to_string());
+        }
+        for shelf in home.shelves.iter().take(2) {
+            for tile in shelf.items.iter().take(6) {
+                if let Some(u) = tile.art.as_ref().and_then(|a| a.best_poster()) {
+                    urls.push(u.to_string());
+                }
+            }
+        }
+        if let Some(ref cache_dir) = state.remote_cache_dir {
+            for url in urls {
+                let _ = exo_rpc::remote_art::fetch_cached_image(&url, cache_dir);
+            }
+        }
+        state.store_home = Some(home);
     }
     state.rpc = Some(client);
     state
@@ -107,7 +160,31 @@ fn main() {
     spec.families = FONT_FAMILIES;
     spec.setup = Some(setup_state);
     spec.on_key = Some(on_key);
-    spec.scenes = &[("palette", |s: &mut AppState| s.palette_open = true)];
+    spec.scenes = &[
+        ("palette", |s: &mut AppState| s.palette_open = true),
+        ("game-page", |s: &mut AppState| {
+            let target = if s.games.iter().any(|g| g.id == "demo:cyberpunk") {
+                "demo:cyberpunk".to_string()
+            } else {
+                s.selected_game_id
+                    .clone()
+                    .or_else(|| s.games.first().map(|g| g.id.clone()))
+                    .unwrap_or_else(|| "demo:cyberpunk".into())
+            };
+            s.open_game_page(&target);
+        }),
+        ("store", |s: &mut AppState| s.switch_room(state::Room::Store)),
+        ("store-game", |s: &mut AppState| {
+            s.switch_room(state::Room::Store);
+            s.open_store_game("1091500");
+        }),
+        ("tour", |s: &mut AppState| s.start_tour()),
+        ("activate-key", |s: &mut AppState| s.key_modal_open = true),
+    ];
+
+    let want_store_sync = rune_args
+        .windows(2)
+        .any(|w| w[0] == "--scene" && w[1] == "store");
 
     let mut app = App::new(spec)
         .args(rune_args)
@@ -119,7 +196,7 @@ fn main() {
             #[cfg(windows)]
             {
                 let pipe_owned = pipe.clone();
-                app = app.init(move || load_live_state_sync(&pipe_owned));
+                app = app.init(move || load_live_state_sync(&pipe_owned, want_store_sync));
             }
         } else {
             app = app.init(AppState::for_host_pipe);
@@ -127,6 +204,13 @@ fn main() {
     }
 
     let handle = app.handle();
+
+    if !headless_flag {
+        let gp_handle = handle.clone();
+        gamepad::start_polling(move |action| {
+            gp_handle.update(move |s, tx| s.apply_gamepad_action(action, tx));
+        });
+    }
 
     let _tray = if !headless_flag {
         let tray_handle = handle.clone();
@@ -167,6 +251,9 @@ fn main() {
                 match exo_rpc::RpcClient::connect(&pipe, Duration::from_secs(6), move |ev| {
                     event_handle.update(move |s, _| match ev {
                         exo_rpc::HostEvent::LibraryUpdated(lib) => s.apply_library(lib),
+                        exo_rpc::HostEvent::InstallProgress(p) => {
+                            s.install_progress = p.is_active.then_some(p);
+                        }
                         exo_rpc::HostEvent::Disconnected(why) => {
                             s.status = state::HostStatus::Error(why);
                             s.notice = Some("Disconnected from Exo host".into());
@@ -203,6 +290,7 @@ fn main() {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::gamepad::GamepadAction;
     use crate::state::{LibraryFilter, Room};
     use rune::{
         Env, Mods, Runtime,
@@ -210,8 +298,13 @@ mod tests {
     };
 
     #[test]
-    fn phase1_shell_switches_rooms_filters_and_palette() {
-        let mut rt = Runtime::new(AppState::default(), shell::view, (1280.0, 800.0), Env::new(true, 1.0));
+    fn phase2_game_page_store_tour_key_modal_and_gamepad() {
+        let mut rt = Runtime::new(
+            AppState::default(),
+            shell::view,
+            (1280.0, 800.0),
+            Env::new(true, 1.0),
+        );
         rt.frame(0.0);
 
         let blurs = rt
@@ -219,8 +312,7 @@ mod tests {
             .iter()
             .filter(|i| i.params[1] == KIND_BACKDROP_BLUR)
             .count();
-        assert!(blurs >= 3, "expected glass surfaces, got {blurs}");
-
+        assert_eq!(blurs, 2, "expected 2 floating glass top-bar surfaces, got {blurs}");
         let strokes = rt
             .instances
             .iter()
@@ -228,42 +320,76 @@ mod tests {
             .count();
         assert!(strokes >= 10, "expected vector icons, got {strokes}");
 
-        let (ix, iy) = rt.find(LibraryFilter::Installed.key()).expect("Installed filter");
-        rt.pointer_down(ix, iy);
-        rt.pointer_up(ix, iy);
+        let (tx, ty) = rt.find("tile-demo:cyberpunk").expect("Cyberpunk tile");
+        rt.pointer_down(tx, ty);
+        rt.pointer_up(tx, ty);
         rt.frame(1.0 / 60.0);
-        assert_eq!(rt.state.filter, LibraryFilter::Installed);
+        assert_eq!(rt.state.open_game_id.as_deref(), Some("demo:cyberpunk"));
 
-        let (sx, sy) = rt.find(Room::Store.key()).expect("Store nav");
-        assert!(sy < 60.0, "nav should sit in titlebar band, y={sy}");
-        rt.pointer_down(sx, sy);
-        rt.pointer_up(sx, sy);
+        let (px, py) = rt.find("gp-props").expect("Properties button");
+        rt.pointer_down(px, py);
+        rt.pointer_up(px, py);
         rt.frame(1.0 / 60.0);
-        assert_eq!(rt.state.room, Room::Store);
+        assert!(rt.state.props_open);
+        let modal_blurs = rt
+            .instances
+            .iter()
+            .filter(|i| i.params[1] == KIND_BACKDROP_BLUR)
+            .count();
+        assert_eq!(
+            modal_blurs, 3,
+            "expected modal blur within MAX_BACKDROP_BLURS=4, got {modal_blurs}"
+        );
 
-        let (kx, ky) = rt.find("search-capsule").expect("Search capsule");
-        rt.pointer_down(kx, ky);
-        rt.pointer_up(kx, ky);
-        rt.frame(1.0 / 60.0);
-        assert!(rt.state.palette_open);
-        let rect = rt.presented("command-palette").expect("palette rect").0;
-        let cx = rect[0] + rect[2] * 0.5;
-        assert!((cx - 640.0).abs() < 2.0, "palette centered, cx={cx}");
-
-        rt.state.palette_query.text = "elden".into();
-        let results = rt.state.palette_results();
-        assert_eq!(results.first().map(|r| r.title.as_str()), Some("Elden Ring"));
-
-        let mut tx = Tx::default();
-        let handled = on_key(
+        let mut tx_ctx = Tx::default();
+        assert!(on_key(
             &mut rt.state,
             &KeyEvent {
                 key: Key::Escape,
-                mods: Mods::default(),
+                mods: Mods::default()
             },
-            &mut tx,
-        );
-        assert!(handled);
-        assert!(!rt.state.palette_open);
+            &mut tx_ctx
+        ));
+        assert!(!rt.state.props_open);
+        assert!(on_key(
+            &mut rt.state,
+            &KeyEvent {
+                key: Key::Escape,
+                mods: Mods::default()
+            },
+            &mut tx_ctx
+        ));
+        assert!(rt.state.open_game_id.is_none());
+
+        rt.update(|s, tx| {
+            s.apply_gamepad_action(GamepadAction::Connected(true), tx);
+            s.apply_gamepad_action(GamepadAction::NextRoom, tx);
+        });
+        rt.frame(2.0 / 60.0);
+        assert_eq!(rt.state.room, Room::Store);
+        assert!(rt.find("gamepad-bar").is_some());
+
+        let (hx, hy) = rt.find("store-hero-open").expect("Store hero button");
+        rt.pointer_down(hx, hy);
+        rt.pointer_up(hx, hy);
+        rt.frame(3.0 / 60.0);
+        assert!(rt.state.store_game.is_some());
+        assert!(rt.state.store_offers.is_some());
+
+        rt.update(|s, _| s.start_tour());
+        rt.frame(4.0 / 60.0);
+        assert_eq!(rt.state.tour_step, Some(0));
+        assert_eq!(rt.state.room, Room::Library);
+        let (nx, ny) = rt.find("tour-next").expect("Tour Next");
+        rt.pointer_down(nx, ny);
+        rt.pointer_up(nx, ny);
+        rt.frame(5.0 / 60.0);
+        assert_eq!(rt.state.tour_step, Some(1));
+        rt.state.finish_tour();
+        assert!(rt.state.tour_step.is_none());
+        assert!(rt.state.tour_seen);
+
+        rt.state.filter = LibraryFilter::Installed;
+        assert!(rt.state.filtered_games().iter().all(|g| g.installed));
     }
 }

@@ -1,11 +1,10 @@
-use crate::library;
-use crate::palette;
+use crate::{game_page, key_modal, library, palette, store, tour};
 use crate::state::{AppState, HostStatus, Room};
 use exo_kit::{
     BG, FG, GAP, GLASS_CONTROL_SIGMA, PRESS_SCALE, PRIMARY_FG, RADIUS_PANEL, RADIUS_PILL, bad,
     fg_muted, glass_capsule, glass_control_fill, glass_rim, good, hover_fill, icon_chat, icon_cpu,
-    icon_grid, icon_music, icon_search, icon_settings, icon_store, nav_tab, type_body,
-    type_control, type_page, type_small, warn,
+    icon_gamepad, icon_grid, icon_music, icon_search, icon_settings, icon_store, nav_tab,
+    type_body, type_control, type_page, type_small, warn,
 };
 use rune::{Cx, El, ScrollSpec, col, el, row, text};
 
@@ -36,11 +35,34 @@ fn status_capsule(s: &AppState) -> El {
         .gap(8.0)
         .center_y()
         .radius(RADIUS_PILL)
-        .backdrop_blur(GLASS_CONTROL_SIGMA)
         .fill(glass_control_fill())
         .border(1.0, glass_rim())
         .child(el().size(8.0, 8.0).radius(4.0).fill(dot))
         .child(text(label).font(type_control()).color(FG))
+}
+
+fn gamepad_prompt_bar() -> El {
+    row()
+        .key("gamepad-bar")
+        .pin(Some(0.0), None, Some(0.0), Some(14.0))
+        .justify_center()
+        .child(
+            row()
+                .h(34.0)
+                .px(14.0)
+                .gap(10.0)
+                .center_y()
+                .radius(RADIUS_PILL)
+                .backdrop_blur(GLASS_CONTROL_SIGMA)
+                .fill(glass_control_fill())
+                .border(1.0, glass_rim())
+                .child(icon_gamepad(14.0, FG))
+                .child(
+                    text("A Open · B Back · X Play · Y Search · LB/RB Rooms")
+                        .font(type_small())
+                        .color(FG),
+                ),
+        )
 }
 
 fn placeholder_room(room: Room) -> El {
@@ -60,7 +82,13 @@ fn placeholder_room(room: Room) -> El {
                 .fill(glass_control_fill())
                 .border(1.0, glass_rim())
                 .child(text("Native Rune port in progress").font(type_control()).color(FG))
-                .child(text(room.next_phase_note()).font(type_body()).color(fg_muted())),
+                .child(
+                    text(room.next_phase_note())
+                        .font(type_body())
+                        .color(fg_muted())
+                        .w_full()
+                        .wrap(),
+                ),
         )
 }
 
@@ -76,7 +104,7 @@ pub fn view(s: &AppState, cx: &mut Cx<AppState>) -> El {
     let nav = glass_capsule("nav-capsule").children(Room::ALL.into_iter().map(|room| {
         let active = s.room == room;
         nav_tab(room.key(), room.label(), active, room_icon(room, active))
-            .on_press(move |s: &mut AppState| s.room = room)
+            .on_press(move |s: &mut AppState| s.switch_room(room))
     }));
 
     let search = row()
@@ -118,7 +146,14 @@ pub fn view(s: &AppState, cx: &mut Cx<AppState>) -> El {
         .child(row().gap(8.0).center_y().child(search).child(status_capsule(s)));
 
     let page = match s.room {
-        Room::Library => library::view(s, scale),
+        Room::Library => {
+            if let Some(game) = s.open_game() {
+                game_page::view(s, game, scale)
+            } else {
+                library::view(s, scale)
+            }
+        }
+        Room::Store => store::view(s, scale),
         other => placeholder_room(other),
     };
 
@@ -136,6 +171,15 @@ pub fn view(s: &AppState, cx: &mut Cx<AppState>) -> El {
         .child(scroller)
         .child(top_bar);
 
+    if s.gamepad_connected {
+        root = root.child(gamepad_prompt_bar());
+    }
+    if s.tour_step.is_some() {
+        root = root.child(tour::view(s));
+    }
+    if s.key_modal_open {
+        root = root.child(key_modal::view(s));
+    }
     if s.palette_open {
         root = root.child(palette::view(s));
     }
