@@ -578,6 +578,7 @@ function mockDrives(p?: { action?: unknown; space?: unknown }) {
 
 // ?whatsnew: a user just updated to 3.14.1 from 3.13.2, so the sheet opens over the Library with 3.14.1 and the 3.14.0 they skipped.
 const mockWhatsNew = typeof location !== 'undefined' && new URLSearchParams(location.search).has('whatsnew')
+const mockTour = typeof location !== 'undefined' && new URLSearchParams(location.search).has('tour')
 // ?update: 3.15.0 is offered as Exo opens (the update sheet), with its What's New.
 const mockUpdate = typeof location !== 'undefined' && new URLSearchParams(location.search).has('update')
 
@@ -686,6 +687,7 @@ const mockSettings: LauncherSettings = {
   keepAwakeDownloads: true,
   storeClientsQuiet: true,
   chipset: mockIntelCpu ? 'intel' : 'amd',
+  uiPrefs: mockTour ? {} : { tourSeen: 1 },
   ...(mockFolders ? {
     libraryFolders: [
       { id: 'mockfav', name: 'Favorites', color: 'blue', sort: 'played', games: ['mock:hades', 'mock:eldenring', 'mock:valorant'] },

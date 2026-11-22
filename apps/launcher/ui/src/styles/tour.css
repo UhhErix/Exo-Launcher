@@ -1,0 +1,223 @@
+.exo-tour-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 65;
+  pointer-events: auto;
+}
+
+.exo-tour-scrim {
+  position: fixed;
+  inset: 0;
+  background: var(--exo-scrim);
+  animation: exo-scrim-in var(--dur-base) var(--ease-out) backwards;
+}
+
+.exo-tour-spot {
+  position: fixed;
+  border-radius: var(--exo-card-radius);
+  outline: 2px solid var(--color-fg);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 9999px color-mix(in srgb, var(--color-bg) 48%, transparent);
+  pointer-events: none;
+  animation: exo-tour-spot-in var(--dur-base) var(--ease-spring) backwards;
+}
+
+.exo-tour-spot.is-pill {
+  border-radius: 999px;
+}
+
+.exo-tour-card {
+  position: fixed;
+  display: grid;
+  gap: 14px;
+  width: min(408px, calc(100vw - 32px));
+  padding: 20px;
+  border-radius: var(--exo-panel-radius);
+  color: var(--color-fg);
+  outline: none;
+  animation: exo-tour-in var(--dur-base) var(--ease-out) backwards;
+}
+
+.exo-tour-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.exo-tour-badge {
+  display: inline-grid;
+  flex: none;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 999px;
+  background: var(--exo-surface-icon);
+  color: var(--color-fg);
+}
+
+.exo-tour-title {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  color: var(--color-fg);
+  font-size: var(--exo-type-title);
+  font-weight: var(--exo-weight-title);
+  line-height: 1.2;
+  text-wrap: balance;
+}
+
+.exo-tour-count {
+  flex: none;
+  color: var(--color-muted);
+  font-size: var(--exo-type-small);
+  font-variant-numeric: tabular-nums;
+}
+
+.exo-tour-close {
+  display: inline-grid;
+  flex: none;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--color-muted);
+  cursor: pointer;
+  transition: background-color var(--dur-quick) var(--ease-out), color var(--dur-quick) var(--ease-out);
+}
+
+.exo-tour-close:hover {
+  background: var(--hover-fill);
+  color: var(--color-fg);
+}
+
+.exo-tour-body {
+  margin: 0;
+  color: var(--color-muted);
+  font-size: var(--exo-type-body);
+  line-height: 1.5;
+  text-wrap: pretty;
+}
+
+.exo-tour-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  color: var(--color-muted);
+  font-size: var(--exo-type-small);
+}
+
+.exo-tour-key {
+  display: inline-flex;
+  align-items: center;
+  height: 24px;
+  padding: 0 8px;
+  border-radius: 999px;
+  background: var(--exo-fill);
+  box-shadow: var(--exo-rim);
+  color: var(--color-fg);
+  font-family: inherit;
+  font-size: var(--exo-type-small);
+  font-weight: 500;
+}
+
+.exo-tour-dots {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+}
+
+.exo-tour-dot {
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  cursor: pointer;
+}
+
+.exo-tour-dot::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--exo-float-line);
+  transition: transform var(--dur-quick) var(--ease-spring), background-color var(--dur-quick) var(--ease-out);
+}
+
+.exo-tour-dot:hover::before {
+  background: var(--color-muted);
+}
+
+.exo-tour-dot[aria-selected="true"]::before {
+  background: var(--color-fg);
+  transform: scale(1.4);
+}
+
+.exo-tour-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.exo-tour-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.exo-tour-card :is(button):focus-visible {
+  outline: 2px solid var(--color-fg);
+  outline-offset: 2px;
+}
+
+@keyframes exo-tour-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px) scale(0.985);
+  }
+}
+
+@keyframes exo-tour-spot-in {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+}
+
+:root[data-exo-motion="reduce"] .exo-tour-scrim,
+:root[data-exo-motion="reduce"] .exo-tour-spot,
+:root[data-exo-motion="reduce"] .exo-tour-card {
+  animation: none;
+}
+
+@media (forced-colors: active) {
+  .exo-tour-spot {
+    outline: 2px solid Highlight;
+    box-shadow: none;
+  }
+
+  .exo-tour-card {
+    border: 1px solid CanvasText;
+    background: Canvas;
+    color: CanvasText;
+  }
+
+  .exo-tour-dot::before {
+    background: GrayText;
+  }
+
+  .exo-tour-dot[aria-selected="true"]::before {
+    background: Highlight;
+  }
+}

@@ -2,6 +2,7 @@ import { memo, useState } from 'react'
 import { host } from '../../lib/host'
 import { invalidateUpscalerStatus } from '../../lib/upscalerCache'
 import { WHATS_NEW } from '../../lib/whatsNew'
+import { requestTourStart } from '../../lib/tour'
 import { updateWords } from '../shell/useAppUpdate'
 import { Progress, ProgressWords } from '../ui/Progress'
 import { ActionButton } from '../ui/ConfirmButton'
@@ -111,6 +112,9 @@ export const AboutSection = memo(function AboutSection({ version, ...update }: U
         <ul className="exo-set-links">
           <li>
             <button type="button" className="exo-set-link" aria-haspopup="dialog" onClick={() => setReporting(true)}>Report a problem</button>
+          </li>
+          <li>
+            <button type="button" className="exo-set-link" onClick={requestTourStart}>Take the tour</button>
           </li>
           {LINKS.map(link => (
             <li key={link.label}>

@@ -11,6 +11,7 @@ import {
   Minus,
   Mouse,
   MusicNotes,
+  New,
   Play,
   Refresh,
   Settings,
@@ -19,6 +20,7 @@ import {
 import type { Game } from '../../lib/host'
 import { gameSearchKeywords } from '../../lib/library'
 import { requestDiscordSettings } from '../../lib/discord'
+import { requestTourStart } from '../../lib/tour'
 import { runNoteCommand } from '../../lib/notes'
 import { SETTINGS_SEARCH, type SettingsSectionId } from '../../lib/settingsSections'
 import { sortGames } from '../../lib/utils'
@@ -98,6 +100,7 @@ export function buildShellCommands({
     { id: 'act-add-game', group: 'Actions', title: 'Add a game', icon: Controller },
     { id: 'act-activate-key', group: 'Actions', title: 'Activate a key', icon: Key },
     { id: 'act-refresh', group: 'Actions', title: 'Refresh library', icon: Refresh },
+    { id: 'act-tour', group: 'Actions', title: 'Take the tour', icon: New, keywords: ['guide', 'walkthrough', 'onboarding', 'help', 'intro'] },
     { id: 'act-update', group: 'Actions', title: 'Check for updates', icon: AppUpdate },
     { id: 'act-minimize', group: 'Actions', title: 'Minimize window', icon: Minus },
     { id: 'act-close', group: 'Actions', title: 'Close window', icon: Close },
@@ -140,6 +143,7 @@ export function executeShellCommand(
     'act-add-game': deps.addGame,
     'act-activate-key': () => void deps.goToView('library').then(() => deps.setActivateKeyOpen(true)),
     'act-refresh': () => { void deps.goToView('library'); deps.refreshLibrary() },
+    'act-tour': () => requestTourStart(),
     'act-update': deps.checkUpdate,
     'act-minimize': deps.minimize,
     'act-close': deps.close,

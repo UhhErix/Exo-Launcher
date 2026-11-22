@@ -131,6 +131,7 @@ internal static class PlayerData
         new("goLivePreview", Syncs: true, "whether the player's own stream shows as a tile: a look"),
         new("voiceChat", Syncs: true, "whether the call's chat panel shows: a look"),
         new("discordPinnedDms", Syncs: true, "pinned Discord DM channel ids, in pinned order"),
+        new("tourSeen", Syncs: true, "whether the player completed or skipped the guided tour"),
     ];
 
     internal static readonly string[] UiPrefKeys = [.. UiPrefs.Select(pref => pref.Key)];
