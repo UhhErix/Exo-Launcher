@@ -1441,6 +1441,7 @@ export interface LauncherSettings {
   /** Always black: Exo is pure black (AMOLED), with no Background choice (lib/exoTheme.ts › BACKGROUNDS). */
   background?: 'black' | 'near' | 'grey' | 'windows' | 'graphite' | string
   textSize?: 'small' | 'normal' | 'large' | string
+  musicService?: MusicService
   /** The page's own choices Exo keeps (lib/uiPrefs.ts), by key. settings.set merges the keys sent; null removes one. */
   uiPrefs?: Record<string, unknown>
   sortMode?: SortMode | string

@@ -1,33 +1,41 @@
 using System.Text.Json;
 using ExoLauncher.Helpers;
-using ExoLauncher.Services;
+using Microsoft.Web.WebView2.Core;
 
-namespace ExoLauncher;
+namespace ExoLauncher.Services;
 
-/// <summary>
-/// Exo's own Spotify room. Spotify's web player runs hidden as the audio engine on
-/// Exo's embedded profile; the room's pages, queue, devices and actions go through
-/// <see cref="SpotifyNative"/>. Every call wakes an idle page first and retries while it wakes.
-/// </summary>
-public sealed partial class MainWindow
+internal sealed partial class MusicEngineService
 {
     private SpotifyNative? _spotifyNative;
-    private Microsoft.Web.WebView2.Core.CoreWebView2? _spotifyNativeCore;
+    private CoreWebView2? _spotifyNativeCore;
 
-    /// The bridge bound to the current page; replaced with it.
+    internal Task<object> SpotifyViewAsync(string? view, string? uri, string? query, int offset)
+    {
+        if (_musicWebClosed || _dispatcher is null)
+            return Task.FromResult<object>(new { ok = false, message = "Music engine is unavailable." });
+        return OnUiAsync(() => SpotifyViewCoreAsync(view, uri, query, offset));
+    }
+
+    internal Task<object> SpotifyActAsync(string? action, string? uri, string? context, int? index, bool? on, string? uid, string? query,
+        string? name = null, string? description = null, string? image = null)
+    {
+        if (_musicWebClosed || _dispatcher is null)
+            return Task.FromResult<object>(new { ok = false, message = "Music engine is unavailable." });
+        return OnUiAsync(() => SpotifyActCoreAsync(action, uri, context, index, on, uid, query, name, description, image));
+    }
+
     private SpotifyNative? SpotifyBridge()
     {
-        if (_musicWebService != "spotify" || !_musicWebReady || _musicWeb?.CoreWebView2 is not { } core) return null;
+        if (_musicWebService != "spotify" || !_musicWebReady || MusicCore is not { } core) return null;
         if (_spotifyNative is { } page && ReferenceEquals(_spotifyNativeCore, core)) return page;
         _spotifyNativeCore = core;
         return _spotifyNative = new SpotifyNative(MusicWebEvaluate(core), MusicWebEvaluate(core, click: true));
     }
 
-    /// The Connect devices list, read when Spotify's player refuses a control (<see cref="MusicControlRefusal"/>).
-    internal Task<JsonElement?> SpotifyDevicesAsync() =>
+    private Task<JsonElement?> SpotifyDevicesAsync() =>
         SpotifyCallAsync(bridge => bridge.ViewAsync("devices", null, null, 0, _lifetimeCts.Token));
 
-    internal async Task<object> SpotifyViewAsync(string? view, string? uri, string? query, int offset)
+    private async Task<object> SpotifyViewCoreAsync(string? view, string? uri, string? query, int offset)
     {
         if (view is null || !SpotifyNative.Views.Contains(view)) return new { ok = false, message = "Unknown page." };
         if (view is "playlist" or "album" or "artist" or "show" or "lyrics" or "discography" or "credits" or "radio" && !SpotifyNative.IsUri(uri))
@@ -40,8 +48,6 @@ public sealed partial class MainWindow
         if (!await MusicWebUpAsync("spotify")) return new { ok = false, message = "Spotify is not answering. Try again." };
         Task<JsonElement?> Read() => SpotifyCallAsync(bridge => bridge.ViewAsync(view, uri, query, Math.Clamp(offset, 0, 100_000), _lifetimeCts.Token));
         var data = await Read();
-        // A query this build keeps in its main bundle is found in the page at runtime, a moment
-        // after it loads: asked once more before the room says it failed.
         if (data is { ValueKind: JsonValueKind.Object } first && first.TryGetProperty("error", out var missing) &&
             missing.GetString() is { } reason && reason.StartsWith("missing query", StringComparison.Ordinal))
         {
@@ -62,10 +68,7 @@ public sealed partial class MainWindow
         return new { ok = true, data = page };
     }
 
-    /// context is the playlist/album/artist the track plays in, the device id for transfer or the folder
-    /// something goes into; query is the Songs page's order and filter a song plays in; name, description
-    /// and image are a playlist's or folder's new details (image a JPEG data URL), name also a move or a Jam token.
-    internal async Task<object> SpotifyActAsync(string? action, string? uri, string? context, int? index, bool? on, string? uid, string? query,
+    private async Task<object> SpotifyActCoreAsync(string? action, string? uri, string? context, int? index, bool? on, string? uid, string? query,
         string? name = null, string? description = null, string? image = null)
     {
         if (!MusicSongs.IsQuery(query)) return new { ok = false, message = "Nothing to play." };
@@ -96,8 +99,6 @@ public sealed partial class MainWindow
         if (uid is { Length: > 80 }) uid = null;
         var act = new SpotifyAct(action, SpotifyNative.IsUri(uri) ? uri : null, context, index, on, uid, query, name, description, image);
         if (!await MusicWebUpAsync("spotify")) return new { ok = false, message = "Spotify did not take that. Try again." };
-        // The wake-up and its retries are for a read that asks nothing of the account. The action itself goes once: a call that
-        // timed out may still have run, and sent again a like, a shuffle or a new playlist would be done twice.
         if (await SpotifyCallAsync(bridge => bridge.PingAsync(_lifetimeCts.Token)) is null)
             return new { ok = false, message = "Spotify did not take that. Try again." };
         var reply = await SpotifyCallAsync(bridge => bridge.ActAsync(act, _lifetimeCts.Token), attempts: 1);
@@ -108,7 +109,6 @@ public sealed partial class MainWindow
         return new { ok = false, message = "Spotify did not take that. Try again." };
     }
 
-    /// <summary>Whether Spotify is in a Jam someone else hosts (this user a guest), from Spotify's own Jam state; false when it can't tell.</summary>
     private async Task<bool> SpotifyJamGuestAsync()
     {
         try
@@ -123,7 +123,6 @@ public sealed partial class MainWindow
         }
     }
 
-    /// A suspended page answers nothing until it wakes: wake it and retry for about three seconds.
     private async Task<JsonElement?> SpotifyCallAsync(Func<SpotifyNative, Task<JsonElement?>> call, int attempts = 7)
     {
         for (var attempt = 0; attempt < attempts && !_lifetimeCts.IsCancellationRequested; attempt++)
