@@ -1096,6 +1096,14 @@ impl AppState {
             self.discord.chat.reply_to = None;
             return true;
         }
+        if self.room == Room::Discord && self.discord.voice_ui.fullscreen_stream {
+            self.discord.voice_ui.fullscreen_stream = false;
+            return true;
+        }
+        if self.room == Room::Discord && self.discord.voice_ui.panel != crate::discord_voice_state::VoicePanel::None {
+            self.discord.voice_ui.panel = crate::discord_voice_state::VoicePanel::None;
+            return true;
+        }
         if self.media.open_capture_id.is_some() {
             self.close_capture_item();
             return true;

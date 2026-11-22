@@ -16,17 +16,20 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, mpsc};
 use std::time::Duration;
 pub use discord_types::{
-    DiscordAccountItem, DiscordAccountsReply, DiscordAttachment, DiscordChangedEvent,
-    DiscordChannel, DiscordChannels, DiscordDm, DiscordDmMember, DiscordEmbed, DiscordEmbedAuthor,
-    DiscordEmbedField, DiscordEmbedFooter, DiscordEmbedMedia, DiscordEmbedProvider, DiscordFriend,
-    DiscordFriendActionReply, DiscordFriendsReply, DiscordGuild, DiscordHome, DiscordMe,
-    DiscordMember, DiscordMemberItem, DiscordMemberList, DiscordMessage, DiscordMessageEvent,
-    DiscordMessageMember, DiscordMessageRef, DiscordMessagesReply, DiscordPinsReply, DiscordPrep,
-    DiscordPresenceEvent, DiscordRailItem, DiscordReaction, DiscordReactionEmoji,
-    DiscordReactionEvent, DiscordRich, DiscordSearchReply, DiscordSearchResult, DiscordSendReply,
-    DiscordSignInStep, DiscordStateEvent, DiscordStatus, DiscordThreadSummary, DiscordTypingEvent,
-    DiscordUnreadChannel, DiscordUnreadEvent, DiscordUnreadsReply, DiscordUploadReply,
-    DiscordUser, DiscordVoice, DiscordVoiceMember, DiscordVoiceReply,
+    DiscordAccountItem, DiscordAccountsReply, DiscordAttachment, DiscordAudioDevice,
+    DiscordAudioReply, DiscordChangedEvent, DiscordChannel, DiscordChannels, DiscordDm,
+    DiscordDmMember, DiscordEmbed, DiscordEmbedAuthor, DiscordEmbedField, DiscordEmbedFooter,
+    DiscordEmbedMedia, DiscordEmbedProvider, DiscordFriend, DiscordFriendActionReply,
+    DiscordFriendsReply, DiscordGoLiveReply, DiscordGoLiveStateEvent, DiscordGoLiveStatsEvent,
+    DiscordGuild, DiscordHome, DiscordMe, DiscordMember, DiscordMemberItem, DiscordMemberList,
+    DiscordMessage, DiscordMessageEvent, DiscordMessageMember, DiscordMessageRef,
+    DiscordMessagesReply, DiscordMyVoiceReply, DiscordPinsReply, DiscordPrep, DiscordPresenceEvent,
+    DiscordRailItem, DiscordReaction, DiscordReactionEmoji, DiscordReactionEvent, DiscordRich,
+    DiscordSearchReply, DiscordSearchResult, DiscordSendReply, DiscordSignInStep, DiscordSoundItem,
+    DiscordSoundboardReply, DiscordStateEvent, DiscordStatus, DiscordThreadSummary,
+    DiscordTypingEvent, DiscordUnreadChannel, DiscordUnreadEvent, DiscordUnreadsReply,
+    DiscordUploadReply, DiscordUser, DiscordVideoEvent, DiscordVideoFrame, DiscordVideoFrameMeta,
+    DiscordVoice, DiscordVoiceMember, DiscordVoiceReply, GoLiveSource,
 };
 pub use media_types::{
     CaptureItem, CaptureListReply, CaptureLiveState, CaptureSettingsDto, CaptureStatusReply,
@@ -76,15 +79,19 @@ pub const METHOD_CAPTURE_STATUS: &str = "capture.status";
 pub const METHOD_DEVICES_LIST: &str = "devices.list";
 pub const METHOD_DISCORD_ACCOUNTS: &str = "discord.accounts";
 pub const METHOD_DISCORD_ACK: &str = "discord.ack";
+pub const METHOD_DISCORD_AUDIO: &str = "discord.audio";
+pub const METHOD_DISCORD_CAMERA: &str = "discord.camera";
 pub const METHOD_DISCORD_CHANNELS: &str = "discord.channels";
 pub const METHOD_DISCORD_DELETE: &str = "discord.delete";
 pub const METHOD_DISCORD_EDIT: &str = "discord.edit";
 pub const METHOD_DISCORD_FRIEND: &str = "discord.friend";
 pub const METHOD_DISCORD_FRIENDS: &str = "discord.friends";
+pub const METHOD_DISCORD_GOLIVE: &str = "discord.golive";
 pub const METHOD_DISCORD_HOME: &str = "discord.home";
 pub const METHOD_DISCORD_MARK_READ: &str = "discord.markRead";
 pub const METHOD_DISCORD_MEMBERS: &str = "discord.members";
 pub const METHOD_DISCORD_MESSAGES: &str = "discord.messages";
+pub const METHOD_DISCORD_MY_VOICE: &str = "discord.myVoice";
 pub const METHOD_DISCORD_PINS: &str = "discord.pins";
 pub const METHOD_DISCORD_REACT: &str = "discord.react";
 pub const METHOD_DISCORD_SEARCH: &str = "discord.search";
@@ -92,7 +99,9 @@ pub const METHOD_DISCORD_SEND: &str = "discord.send";
 pub const METHOD_DISCORD_SET_STATUS: &str = "discord.setStatus";
 pub const METHOD_DISCORD_SIGN_IN: &str = "discord.signIn";
 pub const METHOD_DISCORD_SIGN_OUT: &str = "discord.signOut";
+pub const METHOD_DISCORD_SOUNDBOARD: &str = "discord.soundboard";
 pub const METHOD_DISCORD_STATUS: &str = "discord.status";
+pub const METHOD_DISCORD_STREAM: &str = "discord.stream";
 pub const METHOD_DISCORD_TYPING: &str = "discord.typing";
 pub const METHOD_DISCORD_UNREADS: &str = "discord.unreads";
 pub const METHOD_DISCORD_UPLOAD: &str = "discord.upload";
@@ -180,15 +189,19 @@ pub const USED_METHODS: &[&str] = &[
     METHOD_DEVICES_LIST,
     METHOD_DISCORD_ACCOUNTS,
     METHOD_DISCORD_ACK,
+    METHOD_DISCORD_AUDIO,
+    METHOD_DISCORD_CAMERA,
     METHOD_DISCORD_CHANNELS,
     METHOD_DISCORD_DELETE,
     METHOD_DISCORD_EDIT,
     METHOD_DISCORD_FRIEND,
     METHOD_DISCORD_FRIENDS,
+    METHOD_DISCORD_GOLIVE,
     METHOD_DISCORD_HOME,
     METHOD_DISCORD_MARK_READ,
     METHOD_DISCORD_MEMBERS,
     METHOD_DISCORD_MESSAGES,
+    METHOD_DISCORD_MY_VOICE,
     METHOD_DISCORD_PINS,
     METHOD_DISCORD_REACT,
     METHOD_DISCORD_SEARCH,
@@ -196,7 +209,9 @@ pub const USED_METHODS: &[&str] = &[
     METHOD_DISCORD_SET_STATUS,
     METHOD_DISCORD_SIGN_IN,
     METHOD_DISCORD_SIGN_OUT,
+    METHOD_DISCORD_SOUNDBOARD,
     METHOD_DISCORD_STATUS,
+    METHOD_DISCORD_STREAM,
     METHOD_DISCORD_TYPING,
     METHOD_DISCORD_UNREADS,
     METHOD_DISCORD_UPLOAD,
@@ -630,6 +645,62 @@ fn dispatch_line(
                     event: name.to_string(),
                     data,
                 }),
+            "discord.video" => serde_json::from_value::<DiscordVideoEvent>(data.clone())
+                .map(HostEvent::DiscordVideo)
+                .unwrap_or(HostEvent::Raw {
+                    event: name.to_string(),
+                    data,
+                }),
+            "discord.golive" => serde_json::from_value::<DiscordGoLiveStateEvent>(data.clone())
+                .map(HostEvent::DiscordGoLive)
+                .unwrap_or(HostEvent::Raw {
+                    event: name.to_string(),
+                    data,
+                }),
+            "discord.golive.stats" => {
+                serde_json::from_value::<DiscordGoLiveStatsEvent>(data.clone())
+                    .map(HostEvent::DiscordGoLiveStats)
+                    .unwrap_or(HostEvent::Raw {
+                        event: name.to_string(),
+                        data,
+                    })
+            }
+            "discord.golive.viewers" => {
+                let ids = data
+                    .get("ids")
+                    .and_then(Value::as_array)
+                    .map(|arr| {
+                        arr.iter()
+                            .filter_map(|v| v.as_str().map(str::to_string))
+                            .collect()
+                    })
+                    .unwrap_or_default();
+                HostEvent::DiscordGoLiveViewers(ids)
+            }
+            "binaryFrame" => {
+                let meta_val = val.get("meta").cloned().unwrap_or(Value::Null);
+                let b64 = val.get("data").and_then(Value::as_str).unwrap_or("");
+                if let (Ok(meta), Some(bytes)) = (
+                    serde_json::from_value::<DiscordVideoFrameMeta>(meta_val),
+                    base64::decode(b64),
+                ) {
+                    HostEvent::DiscordVideoFrame(DiscordVideoFrame {
+                        source: meta.source,
+                        user_id: meta.user_id,
+                        timestamp: meta.timestamp,
+                        keyframe: meta.keyframe,
+                        rotation: meta.rotation,
+                        flip: meta.flip,
+                        codec: meta.codec.unwrap_or_else(|| "h264".into()),
+                        data: bytes,
+                    })
+                } else {
+                    HostEvent::Raw {
+                        event: name.to_string(),
+                        data,
+                    }
+                }
+            }
             "devices.changed" => HostEvent::DevicesChanged,
             "apps.changed" => HostEvent::AppsChanged,
             _ => HostEvent::Raw {
@@ -679,5 +750,27 @@ mod tests {
             base.resolve_capture_file("https://captures.exo-launcher.local/..%2F..%2Fwin.ini")
                 .is_none()
         );
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn decodes_binary_video_frame_from_named_pipe_envelope() {
+        let payload = br#"{"event":"binaryFrame","meta":{"source":"stream","userId":"200002","timestamp":1234.5,"keyframe":true,"codec":"h265"},"data":"AAABZ2Q="}"#;
+        let pending = Mutex::new(HashMap::new());
+        let received = Mutex::new(None);
+        dispatch_line(payload, &pending, &|ev| {
+            *received.lock().unwrap() = Some(ev);
+        });
+        let ev = received.lock().unwrap().take().expect("decoded event");
+        match ev {
+            HostEvent::DiscordVideoFrame(f) => {
+                assert_eq!(f.source, "stream");
+                assert_eq!(f.user_id, "200002");
+                assert_eq!(f.codec, "h265");
+                assert!(f.keyframe);
+                assert_eq!(f.data, vec![0x00, 0x00, 0x01, 0x67, 0x64]);
+            }
+            other => panic!("unexpected event: {other:?}"),
+        }
     }
 }

@@ -76,6 +76,8 @@ internal sealed class HeadlessCaptureService : IDisposable
         }
     }
 
+    internal CaptureAddon? StreamCapture => Addon;
+
     private CaptureAddon? Addon
     {
         get

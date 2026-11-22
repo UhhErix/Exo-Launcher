@@ -588,7 +588,8 @@ public sealed partial class WebHostBridge
             session.WatchOwnStream(ReadBool(p, hasParams, "on") == true);
             return new { ok = true, message = (string?)null };
         }
-        if (App.MainAppWindow?.StreamCapture is not { } addon)
+        var addon = App.MainAppWindow?.StreamCapture ?? App.Services.HeadlessCapture.StreamCapture;
+        if (addon is null)
             return new { ok = false, message = (string?)"Exo Capture isn't installed, so Exo can't share your screen." };
         var games = await Task.Run(RunningGames, ct).ConfigureAwait(true);
         switch (action)
