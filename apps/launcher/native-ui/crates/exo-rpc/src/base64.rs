@@ -24,7 +24,18 @@ pub fn encode(input: &[u8]) -> String {
 }
 
 pub fn decode(input: &str) -> Option<Vec<u8>> {
-    let bytes: Vec<u8> = input.bytes().filter(|b| !b.is_ascii_whitespace()).collect();
+    let raw = input.as_bytes();
+    let stripped: Vec<u8>;
+    let bytes: &[u8] = if raw.iter().any(u8::is_ascii_whitespace) {
+        stripped = raw
+            .iter()
+            .copied()
+            .filter(|b| !b.is_ascii_whitespace())
+            .collect();
+        &stripped
+    } else {
+        raw
+    };
     if !bytes.len().is_multiple_of(4) {
         return None;
     }

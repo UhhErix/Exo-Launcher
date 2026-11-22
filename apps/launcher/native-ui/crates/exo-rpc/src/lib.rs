@@ -1,5 +1,6 @@
 pub mod base64;
 pub mod discord_types;
+pub mod events;
 pub mod media_types;
 pub mod pc_types;
 pub mod pipe;
@@ -22,6 +23,11 @@ pub use discord_types::{
     DiscordUploadReply, DiscordUser, DiscordVideoEvent, DiscordVideoFrame, DiscordVideoFrameMeta,
     DiscordVoice, DiscordVoiceMember, DiscordVoiceReply, GoLiveSource,
 };
+pub use events::{
+    AppUpdateStateEvent, AutopilotReportEvent, CaptureReelEvent, CaptureSavedEvent,
+    GameRunStateEvent, InstallQueueEvent, LaunchStatusEvent, MusicVolumeEvent, PausedDownloadItem,
+    RequestId, ShellBootstrap, StoreChangedEvent,
+};
 pub use media_types::{
     CaptureItem, CaptureListReply, CaptureLiveState, CaptureSettingsDto, CaptureStatusReply,
     MusicPlayback, MusicPlaybackReply, MusicVolumeReply, PlayerAlbumRef, PlayerArtist, PlayerCard,
@@ -40,9 +46,11 @@ pub use pc_types::{
     StartupListReply, StartupRemovedItem, SystemAbout, SystemTuningState, TuningItem,
     UpdateCheckReply, UpdateProgress,
 };
-use serde::Serialize;
 pub use serde::de::DeserializeOwned;
+use serde::{Deserialize, Serialize};
+use serde_json::value::RawValue;
 use serde_json::{Value, json};
+use std::borrow::Cow;
 use std::collections::HashMap;
 use std::fmt;
 use std::io;
@@ -58,6 +66,8 @@ pub use types::{
 
 pub const PROTOCOL_VERSION: u32 = 1;
 const MAX_INBOUND_BYTES: usize = 32 * 1024 * 1024;
+const MAX_MEDIA_META_BYTES: usize = 64 * 1024;
+const MAX_MEDIA_FRAME_BYTES: usize = 8 * 1024 * 1024;
 
 pub const METHOD_APP_CHECK_UPDATE: &str = "app.checkUpdate";
 pub const METHOD_APP_INSTALL_UPDATE: &str = "app.installUpdate";
@@ -160,6 +170,8 @@ pub const METHOD_SHADERS_CALL: &str = "shaders.call";
 pub const METHOD_SHADERS_ESTIMATES: &str = "shaders.estimates";
 pub const METHOD_SHADERS_PREPARE_GAMES: &str = "shaders.prepare.games";
 pub const METHOD_SHADERS_PREPARE_START: &str = "shaders.prepare.start";
+pub const METHOD_RPC_CANCEL: &str = "rpc.cancel";
+pub const METHOD_SHELL_BOOTSTRAP: &str = "shell.bootstrap";
 pub const METHOD_SHELL_READY: &str = "shell.ready";
 pub const METHOD_SPOTIFY_ACT: &str = "spotify.act";
 pub const METHOD_SPOTIFY_START: &str = "spotify.start";
@@ -283,6 +295,7 @@ pub const USED_METHODS: &[&str] = &[
     METHOD_SHADERS_ESTIMATES,
     METHOD_SHADERS_PREPARE_GAMES,
     METHOD_SHADERS_PREPARE_START,
+    METHOD_SHELL_BOOTSTRAP,
     METHOD_SHELL_READY,
     METHOD_SPOTIFY_ACT,
     METHOD_SPOTIFY_START,
@@ -340,11 +353,44 @@ impl From<serde_json::Error> for RpcError {
     }
 }
 
-type PendingCallback = Box<dyn FnOnce(Result<Value, RpcError>) + Send + 'static>;
+type PendingCallback = Box<dyn FnOnce(Result<Box<RawValue>, RpcError>) + Send + 'static>;
+type VideoFrameHandler =
+    Arc<dyn Fn(DiscordVideoFrame) -> Result<(), DiscordVideoFrame> + Send + Sync>;
+
+enum DispatchWork {
+    Response(PendingCallback, Result<Box<RawValue>, RpcError>),
+    Event(HostEvent),
+    VideoFrame(DiscordVideoFrame),
+}
+
+#[derive(Deserialize)]
+struct WireEnvelope<'a> {
+    #[serde(borrow, default)]
+    id: Option<Cow<'a, str>>,
+    #[serde(default)]
+    ok: Option<bool>,
+    #[serde(borrow, default)]
+    result: Option<&'a RawValue>,
+    #[serde(borrow, default)]
+    error: Option<Cow<'a, str>>,
+    #[serde(borrow, default)]
+    event: Option<Cow<'a, str>>,
+    #[serde(borrow, default)]
+    data: Option<&'a RawValue>,
+    #[serde(borrow, default)]
+    meta: Option<&'a RawValue>,
+}
+
+fn null_raw() -> Box<RawValue> {
+    RawValue::from_string("null".to_string()).expect("valid null raw json")
+}
 
 pub fn load_host_contract(json: &str) -> Result<HostContract, serde_json::Error> {
     serde_json::from_str(json)
 }
+
+#[cfg(windows)]
+type MediaPipeSlot = Arc<Mutex<Option<(String, Arc<pipe::PipeHandle>)>>>;
 
 #[cfg(windows)]
 pub struct RpcClient {
@@ -353,6 +399,9 @@ pub struct RpcClient {
     pending: Arc<Mutex<HashMap<String, PendingCallback>>>,
     next_id: AtomicU64,
     closed: Arc<AtomicBool>,
+    dispatch_tx: mpsc::Sender<DispatchWork>,
+    video_handler: Arc<Mutex<Option<VideoFrameHandler>>>,
+    media_pipe: MediaPipeSlot,
 }
 
 #[cfg(windows)]
@@ -364,10 +413,39 @@ impl RpcClient {
     ) -> Result<Arc<Self>, RpcError> {
         let pipe = pipe::PipeHandle::connect(pipe_name, timeout)?;
         let (tx, rx) = mpsc::channel::<String>();
+        let (dispatch_tx, dispatch_rx) = mpsc::channel::<DispatchWork>();
         let pending: Arc<Mutex<HashMap<String, PendingCallback>>> =
             Arc::new(Mutex::new(HashMap::new()));
         let closed = Arc::new(AtomicBool::new(false));
         let on_event: Arc<dyn Fn(HostEvent) + Send + Sync> = Arc::new(on_event);
+        let video_handler: Arc<Mutex<Option<VideoFrameHandler>>> = Arc::new(Mutex::new(None));
+        let media_pipe: MediaPipeSlot = Arc::new(Mutex::new(None));
+
+        let dispatch_events = Arc::clone(&on_event);
+        let dispatch_video = Arc::clone(&video_handler);
+        std::thread::Builder::new()
+            .name("exo-rpc-dispatch".into())
+            .spawn(move || {
+                while let Ok(work) = dispatch_rx.recv() {
+                    match work {
+                        DispatchWork::Response(cb, res) => cb(res),
+                        DispatchWork::Event(ev) => dispatch_events(ev),
+                        DispatchWork::VideoFrame(frame) => {
+                            let handler = dispatch_video
+                                .lock()
+                                .unwrap_or_else(|e| e.into_inner())
+                                .clone();
+                            let unrouted = match handler {
+                                Some(h) => h(frame).err(),
+                                None => Some(frame),
+                            };
+                            if let Some(frame) = unrouted {
+                                dispatch_events(HostEvent::DiscordVideoFrame(frame));
+                            }
+                        }
+                    }
+                }
+            })?;
 
         let write_pipe = Arc::clone(&pipe);
         let write_closed = Arc::clone(&closed);
@@ -394,18 +472,23 @@ impl RpcClient {
         let read_pipe = Arc::clone(&pipe);
         let read_pending = Arc::clone(&pending);
         let read_closed = Arc::clone(&closed);
-        let read_events = Arc::clone(&on_event);
+        let read_dispatch = dispatch_tx.clone();
+        let read_media = Arc::clone(&media_pipe);
         std::thread::Builder::new()
             .name("exo-rpc-reader".into())
             .spawn(move || {
-                let reason = read_loop(&read_pipe, &read_pending, &*read_events);
+                let reason = read_loop(&read_pipe, &read_pending, &read_dispatch);
                 read_closed.store(true, Ordering::Release);
+                if let Some((_, mp)) = read_media.lock().unwrap_or_else(|e| e.into_inner()).take() {
+                    mp.cancel();
+                }
                 let mut map = read_pending.lock().unwrap_or_else(|e| e.into_inner());
                 for (_, cb) in map.drain() {
-                    cb(Err(RpcError::Disconnected));
+                    let _ =
+                        read_dispatch.send(DispatchWork::Response(cb, Err(RpcError::Disconnected)));
                 }
                 drop(map);
-                read_events(HostEvent::Disconnected(reason));
+                let _ = read_dispatch.send(DispatchWork::Event(HostEvent::Disconnected(reason)));
             })?;
 
         Ok(Arc::new(Self {
@@ -414,20 +497,72 @@ impl RpcClient {
             pending,
             next_id: AtomicU64::new(1),
             closed,
+            dispatch_tx,
+            video_handler,
+            media_pipe,
         }))
     }
 
-    pub fn call_raw<P: Serialize>(
+    pub fn set_video_frame_handler(
+        &self,
+        handler: impl Fn(DiscordVideoFrame) -> Result<(), DiscordVideoFrame> + Send + Sync + 'static,
+    ) {
+        *self.video_handler.lock().unwrap_or_else(|e| e.into_inner()) = Some(Arc::new(handler));
+    }
+
+    pub fn connect_media_pipe(&self, media_pipe_name: &str, timeout: Duration) -> io::Result<()> {
+        if self.closed.load(Ordering::Acquire) || media_pipe_name.trim().is_empty() {
+            return Ok(());
+        }
+        {
+            let guard = self.media_pipe.lock().unwrap_or_else(|e| e.into_inner());
+            if let Some((ref current, _)) = *guard
+                && current == media_pipe_name
+            {
+                return Ok(());
+            }
+        }
+        let handle = pipe::PipeHandle::connect_read_only(media_pipe_name, timeout)?;
+        {
+            let mut guard = self.media_pipe.lock().unwrap_or_else(|e| e.into_inner());
+            if let Some((_, old)) =
+                guard.replace((media_pipe_name.to_string(), Arc::clone(&handle)))
+            {
+                old.cancel();
+            }
+        }
+        let closed = Arc::clone(&self.closed);
+        let video_handler = Arc::clone(&self.video_handler);
+        let dispatch_tx = self.dispatch_tx.clone();
+        let media_slot = Arc::clone(&self.media_pipe);
+        let expected_name = media_pipe_name.to_string();
+        std::thread::Builder::new()
+            .name("exo-media-reader".into())
+            .spawn(move || {
+                media_read_loop(&handle, &closed, &video_handler, &dispatch_tx);
+                let mut guard = media_slot.lock().unwrap_or_else(|e| e.into_inner());
+                if guard
+                    .as_ref()
+                    .is_some_and(|(name, ptr)| name == &expected_name && Arc::ptr_eq(ptr, &handle))
+                {
+                    *guard = None;
+                }
+            })?;
+        Ok(())
+    }
+
+    fn call_raw_json<P: Serialize>(
         &self,
         method: &str,
         params: &P,
-        callback: impl FnOnce(Result<Value, RpcError>) + Send + 'static,
-    ) {
+        callback: PendingCallback,
+    ) -> RequestId {
+        let id = self.next_id.fetch_add(1, Ordering::Relaxed).to_string();
+        let req_id = RequestId(id.clone());
         if self.closed.load(Ordering::Acquire) {
             callback(Err(RpcError::Disconnected));
-            return;
+            return req_id;
         }
-        let id = self.next_id.fetch_add(1, Ordering::Relaxed).to_string();
         let envelope = json!({
             "version": PROTOCOL_VERSION,
             "id": id,
@@ -438,12 +573,12 @@ impl RpcClient {
             Ok(s) => s,
             Err(e) => {
                 callback(Err(RpcError::Json(e)));
-                return;
+                return req_id;
             }
         };
         {
             let mut map = self.pending.lock().unwrap_or_else(|e| e.into_inner());
-            map.insert(id.clone(), Box::new(callback));
+            map.insert(id.clone(), callback);
         }
         if self.outbound.send(payload).is_err() {
             let mut map = self.pending.lock().unwrap_or_else(|e| e.into_inner());
@@ -451,6 +586,25 @@ impl RpcClient {
                 cb(Err(RpcError::Disconnected));
             }
         }
+        req_id
+    }
+
+    pub fn call_raw<P: Serialize>(
+        &self,
+        method: &str,
+        params: &P,
+        callback: impl FnOnce(Result<Value, RpcError>) + Send + 'static,
+    ) -> RequestId {
+        self.call_raw_json(
+            method,
+            params,
+            Box::new(move |res| {
+                let typed = res.and_then(|raw| {
+                    serde_json::from_str::<Value>(raw.get()).map_err(RpcError::Json)
+                });
+                callback(typed);
+            }),
+        )
     }
 
     pub fn call<P: Serialize, R: DeserializeOwned + Send + 'static>(
@@ -458,11 +612,38 @@ impl RpcClient {
         method: &str,
         params: &P,
         callback: impl FnOnce(Result<R, RpcError>) + Send + 'static,
-    ) {
-        self.call_raw(method, params, move |res| {
-            let typed = res.and_then(|v| serde_json::from_value::<R>(v).map_err(RpcError::Json));
-            callback(typed);
-        });
+    ) -> RequestId {
+        self.call_raw_json(
+            method,
+            params,
+            Box::new(move |res| {
+                let typed = res
+                    .and_then(|raw| serde_json::from_str::<R>(raw.get()).map_err(RpcError::Json));
+                callback(typed);
+            }),
+        )
+    }
+
+    pub fn cancel(&self, id: &RequestId) -> bool {
+        let removed = self
+            .pending
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .remove(id.as_str())
+            .is_some();
+        if removed && !self.closed.load(Ordering::Acquire) {
+            let cancel_id = format!("c{}", self.next_id.fetch_add(1, Ordering::Relaxed));
+            let envelope = json!({
+                "version": PROTOCOL_VERSION,
+                "id": cancel_id,
+                "method": METHOD_RPC_CANCEL,
+                "params": { "id": id.as_str() },
+            });
+            if let Ok(payload) = serde_json::to_string(&envelope) {
+                let _ = self.outbound.send(payload);
+            }
+        }
+        removed
     }
 
     pub fn call_blocking<P: Serialize, R: DeserializeOwned + Send + 'static>(
@@ -472,15 +653,29 @@ impl RpcClient {
         timeout: Duration,
     ) -> Result<R, RpcError> {
         let (tx, rx) = mpsc::channel();
-        self.call(method, params, move |res| {
+        let id = self.call(method, params, move |res| {
             let _ = tx.send(res);
         });
-        rx.recv_timeout(timeout).map_err(|_| RpcError::Timeout)?
+        match rx.recv_timeout(timeout) {
+            Ok(res) => res,
+            Err(_) => {
+                self.cancel(&id);
+                Err(RpcError::Timeout)
+            }
+        }
     }
 
     pub fn close(&self) {
         self.closed.store(true, Ordering::Release);
         self.pipe.cancel();
+        if let Some((_, mp)) = self
+            .media_pipe
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .take()
+        {
+            mp.cancel();
+        }
     }
 }
 
@@ -492,10 +687,82 @@ impl Drop for RpcClient {
 }
 
 #[cfg(windows)]
+fn media_read_loop(
+    pipe: &pipe::PipeHandle,
+    closed: &AtomicBool,
+    video_handler: &Mutex<Option<VideoFrameHandler>>,
+    dispatch_tx: &mpsc::Sender<DispatchWork>,
+) {
+    let Ok(event) = pipe::EventHandle::new() else {
+        return;
+    };
+    let mut header = [0u8; 8];
+    let mut meta_buf = Vec::with_capacity(512);
+    while !closed.load(Ordering::Acquire) {
+        if pipe
+            .read_exact_overlapped(event.raw(), &mut header)
+            .is_err()
+        {
+            break;
+        }
+        let meta_len = u32::from_le_bytes([header[0], header[1], header[2], header[3]]) as usize;
+        let frame_len = u32::from_le_bytes([header[4], header[5], header[6], header[7]]) as usize;
+        if meta_len == 0 || meta_len > MAX_MEDIA_META_BYTES || frame_len > MAX_MEDIA_FRAME_BYTES {
+            break;
+        }
+        meta_buf.resize(meta_len, 0);
+        if pipe
+            .read_exact_overlapped(event.raw(), &mut meta_buf)
+            .is_err()
+        {
+            break;
+        }
+        let mut frame_buf = vec![0u8; frame_len];
+        if frame_len > 0
+            && pipe
+                .read_exact_overlapped(event.raw(), &mut frame_buf)
+                .is_err()
+        {
+            break;
+        }
+        if let Some(frame) = decode_binary_media_frame(&meta_buf, frame_buf) {
+            let handler = video_handler
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .clone();
+            let unrouted = match handler {
+                Some(h) => h(frame).err(),
+                None => Some(frame),
+            };
+            if let Some(frame) = unrouted {
+                let _ = dispatch_tx.send(DispatchWork::Event(HostEvent::DiscordVideoFrame(frame)));
+            }
+        }
+    }
+}
+
+pub fn decode_binary_media_frame(
+    meta_bytes: &[u8],
+    frame_bytes: Vec<u8>,
+) -> Option<DiscordVideoFrame> {
+    let meta = serde_json::from_slice::<DiscordVideoFrameMeta>(meta_bytes).ok()?;
+    Some(DiscordVideoFrame {
+        source: meta.source,
+        user_id: meta.user_id,
+        timestamp: meta.timestamp,
+        keyframe: meta.keyframe,
+        rotation: meta.rotation,
+        flip: meta.flip,
+        codec: meta.codec.unwrap_or_else(|| "h264".into()),
+        data: frame_bytes,
+    })
+}
+
+#[cfg(windows)]
 fn read_loop(
     pipe: &pipe::PipeHandle,
     pending: &Mutex<HashMap<String, PendingCallback>>,
-    on_event: &(dyn Fn(HostEvent) + Send + Sync),
+    dispatch_tx: &mpsc::Sender<DispatchWork>,
 ) -> String {
     let event = match pipe::EventHandle::new() {
         Ok(e) => e,
@@ -523,7 +790,7 @@ fn read_loop(
                 line.pop();
             }
             if !line.is_empty() {
-                dispatch_line(&line, pending, on_event);
+                dispatch_line_to(&line, pending, dispatch_tx);
             }
             line.clear();
             start = i + 1;
@@ -537,205 +804,232 @@ fn read_loop(
     }
 }
 
-#[cfg(windows)]
-fn dispatch_line(
+fn raw_fallback(name: &str, data_raw: &str) -> HostEvent {
+    HostEvent::Raw {
+        event: name.to_string(),
+        data: serde_json::from_str::<Value>(data_raw).unwrap_or(Value::Null),
+    }
+}
+
+fn parse_event(
+    name: &str,
+    data_raw: &str,
+    meta_raw: Option<&str>,
+) -> Result<HostEvent, DiscordVideoFrame> {
+    match name {
+        "library.updated" => Ok(serde_json::from_str::<LibraryPayload>(data_raw)
+            .map(HostEvent::LibraryUpdated)
+            .unwrap_or_else(|_| raw_fallback(name, data_raw))),
+        "install.progress" => Ok(serde_json::from_str::<InstallProgress>(data_raw)
+            .map(HostEvent::InstallProgress)
+            .unwrap_or_else(|_| raw_fallback(name, data_raw))),
+        "install.queue" => Ok(serde_json::from_str::<InstallQueueEvent>(data_raw)
+            .map(HostEvent::InstallQueue)
+            .unwrap_or_else(|_| raw_fallback(name, data_raw))),
+        "game.runState" => Ok(serde_json::from_str::<GameRunStateEvent>(data_raw)
+            .map(HostEvent::GameRunState)
+            .unwrap_or_else(|_| raw_fallback(name, data_raw))),
+        "launch.status" => Ok(serde_json::from_str::<LaunchStatusEvent>(data_raw)
+            .map(HostEvent::LaunchStatus)
+            .unwrap_or_else(|_| raw_fallback(name, data_raw))),
+        "app.updateProgress" => Ok(serde_json::from_str::<UpdateProgress>(data_raw)
+            .map(HostEvent::UpdateProgress)
+            .unwrap_or_else(|_| raw_fallback(name, data_raw))),
+        "app.updateState" => Ok(serde_json::from_str::<AppUpdateStateEvent>(data_raw)
+            .map(HostEvent::AppUpdateState)
+            .unwrap_or_else(|_| raw_fallback(name, data_raw))),
+        "exoAccount.changed" => Ok(HostEvent::ExoAccountChanged),
+        "autopilot.report" => Ok(serde_json::from_str::<AutopilotReportEvent>(data_raw)
+            .map(HostEvent::AutopilotReport)
+            .unwrap_or_else(|_| raw_fallback(name, data_raw))),
+        "autopilot.live" => {
+            if data_raw == "null" {
+                Ok(HostEvent::AutopilotLive(None))
+            } else {
+                Ok(serde_json::from_str::<AutopilotLive>(data_raw)
+                    .map(|live| HostEvent::AutopilotLive(Some(live)))
+                    .unwrap_or_else(|_| raw_fallback(name, data_raw)))
+            }
+        }
+        "shaders.changed" => Ok(HostEvent::ShadersChanged),
+        "store.changed" => Ok(serde_json::from_str::<StoreChangedEvent>(data_raw)
+            .map(HostEvent::StoreChanged)
+            .unwrap_or_else(|_| raw_fallback(name, data_raw))),
+        "music.playback" => {
+            fn present_option<'de, D, T>(d: D) -> Result<Option<Option<T>>, D::Error>
+            where
+                D: serde::Deserializer<'de>,
+                T: Deserialize<'de>,
+            {
+                Option::<T>::deserialize(d).map(Some)
+            }
+            #[derive(Deserialize)]
+            struct PlaybackWrap {
+                #[serde(default, deserialize_with = "present_option")]
+                playback: Option<Option<MusicPlayback>>,
+            }
+            let pb = if data_raw == "null" {
+                None
+            } else if let Ok(PlaybackWrap {
+                playback: Some(inner),
+            }) = serde_json::from_str::<PlaybackWrap>(data_raw)
+            {
+                inner
+            } else {
+                serde_json::from_str::<MusicPlayback>(data_raw).ok()
+            };
+            Ok(HostEvent::MusicPlayback(pb))
+        }
+        "music.volume" => Ok(serde_json::from_str::<MusicVolumeEvent>(data_raw)
+            .map(HostEvent::MusicVolume)
+            .unwrap_or_else(|_| raw_fallback(name, data_raw))),
+        "capture.state" => Ok(serde_json::from_str::<CaptureLiveState>(data_raw)
+            .map(HostEvent::CaptureState)
+            .unwrap_or_else(|_| raw_fallback(name, data_raw))),
+        "capture.saved" => Ok(serde_json::from_str::<CaptureSavedEvent>(data_raw)
+            .map(|ev| HostEvent::CaptureSaved(Box::new(ev)))
+            .unwrap_or_else(|_| raw_fallback(name, data_raw))),
+        "capture.reel" => Ok(serde_json::from_str::<CaptureReelEvent>(data_raw)
+            .map(|ev| HostEvent::CaptureReel(Box::new(ev)))
+            .unwrap_or_else(|_| raw_fallback(name, data_raw))),
+        "discord.state" => Ok(serde_json::from_str::<DiscordStateEvent>(data_raw)
+            .map(HostEvent::DiscordState)
+            .unwrap_or_else(|_| raw_fallback(name, data_raw))),
+        "discord.signin" => Ok(serde_json::from_str::<DiscordSignInStep>(data_raw)
+            .map(HostEvent::DiscordSignIn)
+            .unwrap_or_else(|_| raw_fallback(name, data_raw))),
+        "discord.changed" => Ok(serde_json::from_str::<DiscordChangedEvent>(data_raw)
+            .map(HostEvent::DiscordChanged)
+            .unwrap_or_else(|_| raw_fallback(name, data_raw))),
+        "discord.members" => {
+            #[derive(Deserialize)]
+            struct MembersWire<'a> {
+                #[serde(rename = "guildId", borrow)]
+                guild_id: Cow<'a, str>,
+            }
+            Ok(serde_json::from_str::<MembersWire<'_>>(data_raw)
+                .map(|m| HostEvent::DiscordMembers {
+                    guild_id: m.guild_id.into_owned(),
+                })
+                .unwrap_or_else(|_| raw_fallback(name, data_raw)))
+        }
+        "discord.presence" => Ok(serde_json::from_str::<DiscordPresenceEvent>(data_raw)
+            .map(HostEvent::DiscordPresence)
+            .unwrap_or_else(|_| raw_fallback(name, data_raw))),
+        "discord.unread" => Ok(serde_json::from_str::<DiscordUnreadEvent>(data_raw)
+            .map(HostEvent::DiscordUnread)
+            .unwrap_or_else(|_| raw_fallback(name, data_raw))),
+        "discord.voice" => Ok(serde_json::from_str::<DiscordVoice>(data_raw)
+            .map(HostEvent::DiscordVoice)
+            .unwrap_or_else(|_| raw_fallback(name, data_raw))),
+        "discord.speaking" => {
+            #[derive(Deserialize)]
+            struct SpeakingWire<'a> {
+                #[serde(rename = "userId", borrow)]
+                user_id: Cow<'a, str>,
+                #[serde(default)]
+                speaking: bool,
+            }
+            Ok(serde_json::from_str::<SpeakingWire<'_>>(data_raw)
+                .map(|s| HostEvent::DiscordSpeaking {
+                    user_id: s.user_id.into_owned(),
+                    speaking: s.speaking,
+                })
+                .unwrap_or_else(|_| raw_fallback(name, data_raw)))
+        }
+        "discord.message" => Ok(serde_json::from_str::<DiscordMessageEvent>(data_raw)
+            .map(|ev| HostEvent::DiscordMessage(Box::new(ev)))
+            .unwrap_or_else(|_| raw_fallback(name, data_raw))),
+        "discord.reaction" => Ok(serde_json::from_str::<DiscordReactionEvent>(data_raw)
+            .map(HostEvent::DiscordReaction)
+            .unwrap_or_else(|_| raw_fallback(name, data_raw))),
+        "discord.typing" => Ok(serde_json::from_str::<DiscordTypingEvent>(data_raw)
+            .map(HostEvent::DiscordTyping)
+            .unwrap_or_else(|_| raw_fallback(name, data_raw))),
+        "discord.video" => Ok(serde_json::from_str::<DiscordVideoEvent>(data_raw)
+            .map(HostEvent::DiscordVideo)
+            .unwrap_or_else(|_| raw_fallback(name, data_raw))),
+        "discord.golive" => Ok(serde_json::from_str::<DiscordGoLiveStateEvent>(data_raw)
+            .map(HostEvent::DiscordGoLive)
+            .unwrap_or_else(|_| raw_fallback(name, data_raw))),
+        "discord.golive.stats" => Ok(serde_json::from_str::<DiscordGoLiveStatsEvent>(data_raw)
+            .map(HostEvent::DiscordGoLiveStats)
+            .unwrap_or_else(|_| raw_fallback(name, data_raw))),
+        "discord.golive.viewers" => {
+            #[derive(Deserialize)]
+            struct ViewersWire {
+                #[serde(default)]
+                ids: Vec<String>,
+            }
+            let ids = serde_json::from_str::<ViewersWire>(data_raw)
+                .map(|v| v.ids)
+                .unwrap_or_default();
+            Ok(HostEvent::DiscordGoLiveViewers(ids))
+        }
+        "binaryFrame" => {
+            let meta_str = meta_raw.unwrap_or("null");
+            let b64 = serde_json::from_str::<Cow<'_, str>>(data_raw).ok();
+            if let (Ok(meta), Some(b64_str)) =
+                (serde_json::from_str::<DiscordVideoFrameMeta>(meta_str), b64)
+                && let Some(bytes) = base64::decode(&b64_str)
+            {
+                Err(DiscordVideoFrame {
+                    source: meta.source,
+                    user_id: meta.user_id,
+                    timestamp: meta.timestamp,
+                    keyframe: meta.keyframe,
+                    rotation: meta.rotation,
+                    flip: meta.flip,
+                    codec: meta.codec.unwrap_or_else(|| "h264".into()),
+                    data: bytes,
+                })
+            } else {
+                Ok(raw_fallback(name, data_raw))
+            }
+        }
+        "devices.changed" => Ok(HostEvent::DevicesChanged),
+        "apps.changed" => Ok(HostEvent::AppsChanged),
+        _ => Ok(raw_fallback(name, data_raw)),
+    }
+}
+
+fn dispatch_line_to(
     raw: &[u8],
     pending: &Mutex<HashMap<String, PendingCallback>>,
-    on_event: &(dyn Fn(HostEvent) + Send + Sync),
+    dispatch_tx: &mpsc::Sender<DispatchWork>,
 ) {
-    let Ok(val) = serde_json::from_slice::<Value>(raw) else {
+    let Ok(env) = serde_json::from_slice::<WireEnvelope<'_>>(raw) else {
         return;
     };
-    if let Some(id) = val.get("id").and_then(Value::as_str) {
+    if let Some(id) = env.id.as_deref() {
         let cb = pending.lock().unwrap_or_else(|e| e.into_inner()).remove(id);
         if let Some(cb) = cb {
-            let ok = val.get("ok").and_then(Value::as_bool).unwrap_or(false);
-            if ok {
-                cb(Ok(val.get("result").cloned().unwrap_or(Value::Null)));
+            let ok = env.ok.unwrap_or(false);
+            let res = if ok {
+                Ok(env.result.map(RawValue::to_owned).unwrap_or_else(null_raw))
             } else {
-                let err = val
-                    .get("error")
-                    .and_then(Value::as_str)
+                let err = env
+                    .error
+                    .as_deref()
                     .unwrap_or("Host request failed")
                     .to_string();
-                cb(Err(RpcError::Host(err)));
-            }
+                Err(RpcError::Host(err))
+            };
+            let _ = dispatch_tx.send(DispatchWork::Response(cb, res));
         }
         return;
     }
-    if let Some(name) = val.get("event").and_then(Value::as_str) {
-        let data = val.get("data").cloned().unwrap_or(Value::Null);
-        let parsed = match name {
-            "library.updated" => serde_json::from_value::<LibraryPayload>(data.clone())
-                .map(HostEvent::LibraryUpdated)
-                .unwrap_or(HostEvent::Raw {
-                    event: name.to_string(),
-                    data,
-                }),
-            "install.progress" => serde_json::from_value::<InstallProgress>(data.clone())
-                .map(HostEvent::InstallProgress)
-                .unwrap_or(HostEvent::Raw {
-                    event: name.to_string(),
-                    data,
-                }),
-            "app.updateProgress" => serde_json::from_value::<UpdateProgress>(data.clone())
-                .map(HostEvent::UpdateProgress)
-                .unwrap_or(HostEvent::Raw {
-                    event: name.to_string(),
-                    data,
-                }),
-            "music.playback" => {
-                let pb = serde_json::from_value::<Option<MusicPlayback>>(
-                    data.get("playback").cloned().unwrap_or(Value::Null),
-                )
-                .ok()
-                .flatten();
-                HostEvent::MusicPlayback(pb)
+    if let Some(name) = env.event.as_deref() {
+        let data_raw = env.data.map(RawValue::get).unwrap_or("null");
+        let meta_raw = env.meta.map(RawValue::get);
+        match parse_event(name, data_raw, meta_raw) {
+            Ok(ev) => {
+                let _ = dispatch_tx.send(DispatchWork::Event(ev));
             }
-            "discord.state" => serde_json::from_value::<DiscordStateEvent>(data.clone())
-                .map(HostEvent::DiscordState)
-                .unwrap_or(HostEvent::Raw {
-                    event: name.to_string(),
-                    data,
-                }),
-            "discord.signin" => serde_json::from_value::<DiscordSignInStep>(data.clone())
-                .map(HostEvent::DiscordSignIn)
-                .unwrap_or(HostEvent::Raw {
-                    event: name.to_string(),
-                    data,
-                }),
-            "discord.changed" => serde_json::from_value::<DiscordChangedEvent>(data.clone())
-                .map(HostEvent::DiscordChanged)
-                .unwrap_or(HostEvent::Raw {
-                    event: name.to_string(),
-                    data,
-                }),
-            "discord.members" => data
-                .get("guildId")
-                .and_then(Value::as_str)
-                .map(|g| HostEvent::DiscordMembers {
-                    guild_id: g.to_string(),
-                })
-                .unwrap_or(HostEvent::Raw {
-                    event: name.to_string(),
-                    data,
-                }),
-            "discord.presence" => serde_json::from_value::<DiscordPresenceEvent>(data.clone())
-                .map(HostEvent::DiscordPresence)
-                .unwrap_or(HostEvent::Raw {
-                    event: name.to_string(),
-                    data,
-                }),
-            "discord.unread" => serde_json::from_value::<DiscordUnreadEvent>(data.clone())
-                .map(HostEvent::DiscordUnread)
-                .unwrap_or(HostEvent::Raw {
-                    event: name.to_string(),
-                    data,
-                }),
-            "discord.voice" => serde_json::from_value::<DiscordVoice>(data.clone())
-                .map(HostEvent::DiscordVoice)
-                .unwrap_or(HostEvent::Raw {
-                    event: name.to_string(),
-                    data,
-                }),
-            "discord.speaking" => {
-                if let Some(uid) = data.get("userId").and_then(Value::as_str) {
-                    HostEvent::DiscordSpeaking {
-                        user_id: uid.to_string(),
-                        speaking: data
-                            .get("speaking")
-                            .and_then(Value::as_bool)
-                            .unwrap_or(false),
-                    }
-                } else {
-                    HostEvent::Raw {
-                        event: name.to_string(),
-                        data,
-                    }
-                }
+            Err(frame) => {
+                let _ = dispatch_tx.send(DispatchWork::VideoFrame(frame));
             }
-            "discord.message" => serde_json::from_value::<DiscordMessageEvent>(data.clone())
-                .map(|ev| HostEvent::DiscordMessage(Box::new(ev)))
-                .unwrap_or(HostEvent::Raw {
-                    event: name.to_string(),
-                    data,
-                }),
-            "discord.reaction" => serde_json::from_value::<DiscordReactionEvent>(data.clone())
-                .map(HostEvent::DiscordReaction)
-                .unwrap_or(HostEvent::Raw {
-                    event: name.to_string(),
-                    data,
-                }),
-            "discord.typing" => serde_json::from_value::<DiscordTypingEvent>(data.clone())
-                .map(HostEvent::DiscordTyping)
-                .unwrap_or(HostEvent::Raw {
-                    event: name.to_string(),
-                    data,
-                }),
-            "discord.video" => serde_json::from_value::<DiscordVideoEvent>(data.clone())
-                .map(HostEvent::DiscordVideo)
-                .unwrap_or(HostEvent::Raw {
-                    event: name.to_string(),
-                    data,
-                }),
-            "discord.golive" => serde_json::from_value::<DiscordGoLiveStateEvent>(data.clone())
-                .map(HostEvent::DiscordGoLive)
-                .unwrap_or(HostEvent::Raw {
-                    event: name.to_string(),
-                    data,
-                }),
-            "discord.golive.stats" => {
-                serde_json::from_value::<DiscordGoLiveStatsEvent>(data.clone())
-                    .map(HostEvent::DiscordGoLiveStats)
-                    .unwrap_or(HostEvent::Raw {
-                        event: name.to_string(),
-                        data,
-                    })
-            }
-            "discord.golive.viewers" => {
-                let ids = data
-                    .get("ids")
-                    .and_then(Value::as_array)
-                    .map(|arr| {
-                        arr.iter()
-                            .filter_map(|v| v.as_str().map(str::to_string))
-                            .collect()
-                    })
-                    .unwrap_or_default();
-                HostEvent::DiscordGoLiveViewers(ids)
-            }
-            "binaryFrame" => {
-                let meta_val = val.get("meta").cloned().unwrap_or(Value::Null);
-                let b64 = val.get("data").and_then(Value::as_str).unwrap_or("");
-                if let (Ok(meta), Some(bytes)) = (
-                    serde_json::from_value::<DiscordVideoFrameMeta>(meta_val),
-                    base64::decode(b64),
-                ) {
-                    HostEvent::DiscordVideoFrame(DiscordVideoFrame {
-                        source: meta.source,
-                        user_id: meta.user_id,
-                        timestamp: meta.timestamp,
-                        keyframe: meta.keyframe,
-                        rotation: meta.rotation,
-                        flip: meta.flip,
-                        codec: meta.codec.unwrap_or_else(|| "h264".into()),
-                        data: bytes,
-                    })
-                } else {
-                    HostEvent::Raw {
-                        event: name.to_string(),
-                        data,
-                    }
-                }
-            }
-            "devices.changed" => HostEvent::DevicesChanged,
-            "apps.changed" => HostEvent::AppsChanged,
-            _ => HostEvent::Raw {
-                event: name.to_string(),
-                data,
-            },
-        };
-        on_event(parsed);
+        }
     }
 }
 
@@ -779,25 +1073,275 @@ mod tests {
         );
     }
 
-    #[cfg(windows)]
     #[test]
     fn decodes_binary_video_frame_from_named_pipe_envelope() {
         let payload = br#"{"event":"binaryFrame","meta":{"source":"stream","userId":"200002","timestamp":1234.5,"keyframe":true,"codec":"h265"},"data":"AAABZ2Q="}"#;
         let pending = Mutex::new(HashMap::new());
-        let received = Mutex::new(None);
-        dispatch_line(payload, &pending, &|ev| {
-            *received.lock().unwrap() = Some(ev);
-        });
-        let ev = received.lock().unwrap().take().expect("decoded event");
-        match ev {
-            HostEvent::DiscordVideoFrame(f) => {
+        let (tx, rx) = mpsc::channel();
+        dispatch_line_to(payload, &pending, &tx);
+        match rx.try_recv().expect("dispatched video frame") {
+            DispatchWork::VideoFrame(f) => {
                 assert_eq!(f.source, "stream");
                 assert_eq!(f.user_id, "200002");
                 assert_eq!(f.codec, "h265");
                 assert!(f.keyframe);
                 assert_eq!(f.data, vec![0x00, 0x00, 0x01, 0x67, 0x64]);
             }
-            other => panic!("unexpected event: {other:?}"),
+            _ => panic!("expected VideoFrame dispatch work"),
         }
+    }
+
+    #[test]
+    fn decodes_binary_media_pipe_frame_directly() {
+        let meta = br#"{"source":"stream","userId":"77","timestamp":99.25,"keyframe":true,"rotation":90,"flip":true,"codec":"h264"}"#;
+        let raw = vec![0x00, 0x00, 0x00, 0x01, 0x67];
+        let frame = decode_binary_media_frame(meta, raw.clone()).expect("valid media frame");
+        assert_eq!(frame.source, "stream");
+        assert_eq!(frame.user_id, "77");
+        assert!(frame.keyframe);
+        assert_eq!(frame.rotation, 90);
+        assert!(frame.flip);
+        assert_eq!(frame.codec, "h264");
+        assert_eq!(frame.data, raw);
+    }
+
+    #[test]
+    fn parses_music_playback_flat_wrapped_and_null() {
+        let flat = br#"{"event":"music.playback","data":{"status":"playing","title":"Track A","artist":"Artist A","provider":"spotify","source":"music"}}"#;
+        let wrapped = br#"{"event":"music.playback","data":{"playback":{"status":"paused","title":"Track B"}}}"#;
+        let wrapped_null = br#"{"event":"music.playback","data":{"playback":null}}"#;
+        let bare_null = br#"{"event":"music.playback","data":null}"#;
+        let pending = Mutex::new(HashMap::new());
+        let (tx, rx) = mpsc::channel();
+
+        dispatch_line_to(flat, &pending, &tx);
+        match rx.try_recv().unwrap() {
+            DispatchWork::Event(HostEvent::MusicPlayback(Some(pb))) => {
+                assert_eq!(pb.status, "playing");
+                assert_eq!(pb.title, "Track A");
+                assert_eq!(pb.artist, "Artist A");
+            }
+            _ => panic!("expected flat MusicPlayback(Some)"),
+        }
+
+        dispatch_line_to(wrapped, &pending, &tx);
+        match rx.try_recv().unwrap() {
+            DispatchWork::Event(HostEvent::MusicPlayback(Some(pb))) => {
+                assert_eq!(pb.status, "paused");
+                assert_eq!(pb.title, "Track B");
+            }
+            _ => panic!("expected wrapped MusicPlayback(Some)"),
+        }
+
+        dispatch_line_to(wrapped_null, &pending, &tx);
+        match rx.try_recv().unwrap() {
+            DispatchWork::Event(HostEvent::MusicPlayback(None)) => {}
+            _ => panic!("expected wrapped MusicPlayback(None)"),
+        }
+
+        dispatch_line_to(bare_null, &pending, &tx);
+        match rx.try_recv().unwrap() {
+            DispatchWork::Event(HostEvent::MusicPlayback(None)) => {}
+            _ => panic!("expected bare null MusicPlayback(None)"),
+        }
+    }
+
+    #[test]
+    fn parses_all_newly_wired_host_events() {
+        let cases: &[(&[u8], fn(HostEvent) -> bool)] = &[
+            (
+                br#"{"event":"music.volume","data":{"level":0.42,"source":"app"}}"#,
+                |ev| matches!(ev, HostEvent::MusicVolume(v) if (v.level - 0.42).abs() < 1e-6 && v.source == "app"),
+            ),
+            (
+                br#"{"event":"capture.state","data":{"present":true,"buffering":true,"recording":false}}"#,
+                |ev| matches!(ev, HostEvent::CaptureState(s) if s.present && s.buffering && !s.recording),
+            ),
+            (
+                br#"{"event":"capture.saved","data":{"item":{"id":"c1","name":"Clip 1","kind":"clip"},"edit":true}}"#,
+                |ev| matches!(ev, HostEvent::CaptureSaved(s) if s.item.id == "c1" && s.edit),
+            ),
+            (
+                br#"{"event":"capture.reel","data":{"state":"working","percent":55.0,"wait":false}}"#,
+                |ev| matches!(ev, HostEvent::CaptureReel(r) if r.state == "working" && (r.percent - 55.0).abs() < 1e-6),
+            ),
+            (
+                br#"{"event":"install.queue","data":{"queuedGameIds":["steam:10"],"pausedDownloads":[],"held":null}}"#,
+                |ev| matches!(ev, HostEvent::InstallQueue(q) if q.queued_game_ids == vec!["steam:10"]),
+            ),
+            (
+                br#"{"event":"game.runState","data":{"id":"steam:10","isRunning":true,"canStop":true}}"#,
+                |ev| matches!(ev, HostEvent::GameRunState(r) if r.id == "steam:10" && r.is_running && r.can_stop),
+            ),
+            (
+                br#"{"event":"launch.status","data":{"gameId":"steam:10","ok":true,"phase":"running","processId":4242}}"#,
+                |ev| matches!(ev, HostEvent::LaunchStatus(l) if l.game_id == "steam:10" && l.phase == "running" && l.process_id == Some(4242)),
+            ),
+            (
+                br#"{"event":"app.updateState","data":{"state":"downloading"}}"#,
+                |ev| matches!(ev, HostEvent::AppUpdateState(u) if u.state == "downloading"),
+            ),
+            (
+                br#"{"event":"exoAccount.changed","data":{}}"#,
+                |ev| matches!(ev, HostEvent::ExoAccountChanged),
+            ),
+            (
+                br#"{"event":"autopilot.report","data":{"game":"steam:10","title":"Halo"}}"#,
+                |ev| matches!(ev, HostEvent::AutopilotReport(r) if r.game == "steam:10" && r.title == "Halo"),
+            ),
+            (
+                br#"{"event":"autopilot.live","data":null}"#,
+                |ev| matches!(ev, HostEvent::AutopilotLive(None)),
+            ),
+            (
+                br#"{"event":"shaders.changed","data":{}}"#,
+                |ev| matches!(ev, HostEvent::ShadersChanged),
+            ),
+            (
+                br#"{"event":"store.changed","data":{"what":"wishlist"}}"#,
+                |ev| matches!(ev, HostEvent::StoreChanged(s) if s.what == "wishlist"),
+            ),
+        ];
+        let pending = Mutex::new(HashMap::new());
+        let (tx, rx) = mpsc::channel();
+        for (idx, (payload, check)) in cases.iter().enumerate() {
+            dispatch_line_to(payload, &pending, &tx);
+            let work = rx.try_recv().expect("event dispatched");
+            match work {
+                DispatchWork::Event(ev) => assert!(check(ev), "case {idx} failed"),
+                _ => panic!("case {idx} was not an Event"),
+            }
+        }
+    }
+
+    #[test]
+    fn raw_value_response_dispatch_avoids_value_roundtrip() {
+        let line = br#"{"version":1,"id":"7","ok":true,"result":{"ok":true,"artBase":{"covers":"https://covers.exo-launcher.local/"},"settings":{},"library":{"games":[],"count":0},"musicPlayback":{"ok":true,"playback":null},"discordStatus":{},"binaryMediaPipe":"exo-pipe-media"}}"#;
+        let pending: Mutex<HashMap<String, PendingCallback>> = Mutex::new(HashMap::new());
+        let (tx, rx) = mpsc::channel();
+        let (res_tx, res_rx) = mpsc::channel();
+        pending.lock().unwrap().insert(
+            "7".into(),
+            Box::new(move |raw_res| {
+                let boot = raw_res.and_then(|raw| {
+                    serde_json::from_str::<ShellBootstrap>(raw.get()).map_err(RpcError::Json)
+                });
+                let _ = res_tx.send(boot);
+            }),
+        );
+        dispatch_line_to(line, &pending, &tx);
+        match rx.try_recv().unwrap() {
+            DispatchWork::Response(cb, res) => cb(res),
+            _ => panic!("expected Response"),
+        }
+        let boot = res_rx.try_recv().unwrap().expect("decoded ShellBootstrap");
+        assert!(boot.ok);
+        assert_eq!(boot.binary_media_pipe.as_deref(), Some("exo-pipe-media"));
+    }
+
+    #[test]
+    #[ignore]
+    fn bench_dispatch_cost() {
+        let mut games = String::from(r#"{"version":1,"id":"1","ok":true,"result":{"games":["#);
+        for i in 0..250 {
+            if i > 0 {
+                games.push(',');
+            }
+            games.push_str(&format!(
+                r#"{{"id":"steam:{i}","title":"Benchmark Game {i}","store":"steam","installed":true,"playtimeMinutes":{},"isRunning":false,"canStop":false,"cover":"https://covers.exo-launcher.local/tok/steam_{i}.jpg","hero":"https://covers.exo-launcher.local/tok/hero_{i}.jpg","logo":"https://covers.exo-launcher.local/tok/logo_{i}.png","status":"Ready","launchTarget":"{i}","genres":["Action","RPG"],"tags":["Singleplayer","Controller"],"variants":[]}}"#,
+                i * 15
+            ));
+        }
+        games.push_str(r#"],"count":250,"recent":["steam:1","steam:2"]}}"#);
+        let lib_bytes = games.as_bytes();
+        let mut reader_times = Vec::with_capacity(50);
+        let mut total_times = Vec::with_capacity(50);
+        let pending: Mutex<HashMap<String, PendingCallback>> = Mutex::new(HashMap::new());
+        let (tx, rx) = mpsc::channel();
+        for _ in 0..50 {
+            let (done_tx, done_rx) = mpsc::channel();
+            pending.lock().unwrap().insert(
+                "1".to_string(),
+                Box::new(move |res: Result<Box<RawValue>, RpcError>| {
+                    let typed = res.and_then(|raw| {
+                        serde_json::from_str::<LibraryPayload>(raw.get()).map_err(RpcError::Json)
+                    });
+                    let _ = done_tx.send(typed.unwrap().games.len());
+                }),
+            );
+            let t0 = std::time::Instant::now();
+            dispatch_line_to(lib_bytes, &pending, &tx);
+            let reader_ms = t0.elapsed().as_secs_f64() * 1000.0;
+            if let DispatchWork::Response(cb, res) = rx.recv().unwrap() {
+                cb(res);
+            }
+            let count = done_rx.recv().unwrap();
+            assert_eq!(count, 250);
+            reader_times.push(reader_ms);
+            total_times.push(t0.elapsed().as_secs_f64() * 1000.0);
+        }
+        reader_times.sort_by(|a, b| a.total_cmp(b));
+        total_times.sort_by(|a, b| a.total_cmp(b));
+        println!(
+            "LIB_DISPATCH_READER bytes={} n=50 p50={:.3}ms p95={:.3}ms max={:.3}ms",
+            lib_bytes.len(),
+            reader_times[24],
+            reader_times[47],
+            reader_times[49]
+        );
+        println!(
+            "LIB_DISPATCH_TOTAL bytes={} n=50 p50={:.3}ms p95={:.3}ms max={:.3}ms",
+            lib_bytes.len(),
+            total_times[24],
+            total_times[47],
+            total_times[49]
+        );
+
+        let raw_frame = vec![0xABu8; 64 * 1024];
+        let b64 = base64::encode(&raw_frame);
+        let frame_json = format!(
+            r#"{{"event":"binaryFrame","meta":{{"source":"stream","userId":"200002","timestamp":1234.5,"keyframe":false,"codec":"h264"}},"data":"{b64}"}}"#
+        );
+        let frame_bytes = frame_json.as_bytes();
+        let mut frame_json_times = Vec::with_capacity(120);
+        for _ in 0..120 {
+            let t0 = std::time::Instant::now();
+            dispatch_line_to(frame_bytes, &pending, &tx);
+            match rx.recv().unwrap() {
+                DispatchWork::VideoFrame(f) => assert_eq!(f.data.len(), 64 * 1024),
+                _ => panic!("expected VideoFrame"),
+            }
+            frame_json_times.push(t0.elapsed().as_secs_f64() * 1000.0);
+        }
+        frame_json_times.sort_by(|a, b| a.total_cmp(b));
+        let sum60_json: f64 = frame_json_times.iter().take(60).sum();
+        println!(
+            "VIDEO_FRAME_JSON_FALLBACK bytes={} n=120 p50={:.3}ms p95={:.3}ms max={:.3}ms 60fps_cpu={:.2}ms/s",
+            frame_bytes.len(),
+            frame_json_times[59],
+            frame_json_times[113],
+            frame_json_times[119],
+            sum60_json
+        );
+
+        let meta_bytes = br#"{"source":"stream","userId":"200002","timestamp":1234.5,"keyframe":false,"codec":"h264"}"#;
+        let mut frame_bin_times = Vec::with_capacity(120);
+        for _ in 0..120 {
+            let payload = raw_frame.clone();
+            let t0 = std::time::Instant::now();
+            let f = decode_binary_media_frame(meta_bytes, payload).unwrap();
+            assert_eq!(f.data.len(), 64 * 1024);
+            frame_bin_times.push(t0.elapsed().as_secs_f64() * 1000.0);
+        }
+        frame_bin_times.sort_by(|a, b| a.total_cmp(b));
+        let sum60_bin: f64 = frame_bin_times.iter().take(60).sum();
+        println!(
+            "VIDEO_FRAME_BINARY bytes={} n=120 p50={:.3}ms p95={:.3}ms max={:.3}ms 60fps_cpu={:.2}ms/s",
+            meta_bytes.len() + raw_frame.len() + 8,
+            frame_bin_times[59],
+            frame_bin_times[113],
+            frame_bin_times[119],
+            sum60_bin
+        );
     }
 }

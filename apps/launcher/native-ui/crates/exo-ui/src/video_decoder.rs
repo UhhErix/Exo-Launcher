@@ -1,7 +1,10 @@
+use exo_rpc::DiscordVideoFrame;
 use rune::Pixels;
-use std::sync::mpsc::{self, SyncSender, TrySendError};
-use std::sync::{Arc, Mutex};
+use std::collections::{HashMap, VecDeque};
+use std::sync::{Arc, Condvar, Mutex};
 use std::time::Instant;
+
+const VIDEO_QUEUE_CAPACITY: usize = 8;
 
 #[derive(Debug, Clone, Default)]
 pub struct VideoStreamStats {
@@ -23,10 +26,80 @@ pub struct VideoPacket {
     pub codec: String,
 }
 
+struct QueueState {
+    packets: VecDeque<VideoPacket>,
+    closed: bool,
+}
+
+struct VideoPacketQueue {
+    cap: usize,
+    state: Mutex<QueueState>,
+    cond: Condvar,
+}
+
+impl VideoPacketQueue {
+    fn new(cap: usize) -> Self {
+        Self {
+            cap: cap.max(1),
+            state: Mutex::new(QueueState {
+                packets: VecDeque::with_capacity(cap.max(1)),
+                closed: false,
+            }),
+            cond: Condvar::new(),
+        }
+    }
+
+    fn push_drop_oldest(&self, pkt: VideoPacket) -> bool {
+        let mut guard = self.state.lock().unwrap_or_else(|e| e.into_inner());
+        if guard.closed {
+            return false;
+        }
+        let dropped = if guard.packets.len() >= self.cap {
+            guard.packets.pop_front();
+            true
+        } else {
+            false
+        };
+        guard.packets.push_back(pkt);
+        self.cond.notify_one();
+        dropped
+    }
+
+    fn pop_blocking(&self) -> Option<VideoPacket> {
+        let mut guard = self.state.lock().unwrap_or_else(|e| e.into_inner());
+        loop {
+            if let Some(pkt) = guard.packets.pop_front() {
+                return Some(pkt);
+            }
+            if guard.closed {
+                return None;
+            }
+            guard = self.cond.wait(guard).unwrap_or_else(|e| e.into_inner());
+        }
+    }
+
+    fn close(&self) {
+        let mut guard = self.state.lock().unwrap_or_else(|e| e.into_inner());
+        guard.closed = true;
+        guard.packets.clear();
+        self.cond.notify_all();
+    }
+}
+
+struct QueueOwner(Arc<VideoPacketQueue>);
+
+impl Drop for QueueOwner {
+    fn drop(&mut self) {
+        self.0.close();
+    }
+}
+
+#[derive(Clone)]
 pub struct VideoStreamHandle {
     pub pixels: Pixels,
     pub stats: Arc<Mutex<VideoStreamStats>>,
-    tx: SyncSender<VideoPacket>,
+    queue: Arc<VideoPacketQueue>,
+    _owner: Arc<QueueOwner>,
 }
 
 impl VideoStreamHandle {
@@ -36,21 +109,28 @@ impl VideoStreamHandle {
             codec: codec.to_string(),
             ..Default::default()
         }));
-        let (tx, rx) = mpsc::sync_channel::<VideoPacket>(8);
+        let queue = Arc::new(VideoPacketQueue::new(VIDEO_QUEUE_CAPACITY));
+        let owner = Arc::new(QueueOwner(Arc::clone(&queue)));
 
         let px_bg = pixels.clone();
         let st_bg = Arc::clone(&stats);
+        let q_bg = Arc::clone(&queue);
         let init_codec = codec.to_string();
         std::thread::Builder::new()
             .name("exo-mf-video-dec".into())
-            .spawn(move || decode_loop(rx, px_bg, st_bg, &init_codec))
+            .spawn(move || decode_loop(q_bg, px_bg, st_bg, &init_codec))
             .ok();
 
-        Self { pixels, stats, tx }
+        Self {
+            pixels,
+            stats,
+            queue,
+            _owner: owner,
+        }
     }
 
     pub fn push(&self, pkt: VideoPacket) {
-        if let Err(TrySendError::Full(_)) = self.tx.try_send(pkt)
+        if self.queue.push_drop_oldest(pkt)
             && let Ok(mut s) = self.stats.lock()
         {
             s.dropped_frames += 1;
@@ -59,6 +139,59 @@ impl VideoStreamHandle {
 
     pub fn snapshot_stats(&self) -> VideoStreamStats {
         self.stats.lock().map(|s| s.clone()).unwrap_or_default()
+    }
+}
+
+#[derive(Clone, Default)]
+pub struct VideoFrameRouter {
+    handles: Arc<Mutex<HashMap<(String, String), VideoStreamHandle>>>,
+}
+
+impl VideoFrameRouter {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn register(&self, key: (String, String), handle: VideoStreamHandle) {
+        self.handles
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .insert(key, handle);
+    }
+
+    pub fn remove(&self, key: &(String, String)) {
+        self.handles
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .remove(key);
+    }
+
+    pub fn clear(&self) {
+        self.handles
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clear();
+    }
+
+    pub fn try_push(&self, frame: DiscordVideoFrame) -> Result<(), DiscordVideoFrame> {
+        let handle = self
+            .handles
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .get(&(frame.source.clone(), frame.user_id.clone()))
+            .cloned();
+        if let Some(handle) = handle {
+            handle.push(VideoPacket {
+                data: frame.data,
+                timestamp_ms: frame.timestamp,
+                keyframe: frame.keyframe,
+                flip: frame.flip,
+                codec: frame.codec,
+            });
+            Ok(())
+        } else {
+            Err(frame)
+        }
     }
 }
 
@@ -151,7 +284,7 @@ pub fn make_demo_stream_pixels(width: u32, height: u32) -> Pixels {
 
 #[cfg(windows)]
 fn decode_loop(
-    rx: mpsc::Receiver<VideoPacket>,
+    queue: Arc<VideoPacketQueue>,
     pixels: Pixels,
     stats: Arc<Mutex<VideoStreamStats>>,
     initial_codec: &str,
@@ -189,7 +322,7 @@ fn decode_loop(
     let mut fps_window_start = Instant::now();
     let mut fps_window_frames = 0u32;
 
-    while let Ok(pkt) = rx.recv() {
+    while let Some(pkt) = queue.pop_blocking() {
         if pkt.codec != active_codec && !pkt.codec.is_empty() {
             active_codec = pkt.codec.clone();
             decoder = MfDecoder::create(&active_codec);
@@ -494,17 +627,27 @@ impl MfDecoder {
 
 #[cfg(not(windows))]
 fn decode_loop(
-    rx: mpsc::Receiver<VideoPacket>,
+    queue: Arc<VideoPacketQueue>,
     _pixels: Pixels,
     _stats: Arc<Mutex<VideoStreamStats>>,
     _initial_codec: &str,
 ) {
-    while rx.recv().is_ok() {}
+    while queue.pop_blocking().is_some() {}
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn sample_packet(ts: f64) -> VideoPacket {
+        VideoPacket {
+            data: vec![0, 0, 0, 1, 0x67],
+            timestamp_ms: ts,
+            keyframe: ts == 0.0,
+            flip: false,
+            codec: "h264".into(),
+        }
+    }
 
     #[test]
     fn converts_bt709_nv12_black_and_white_with_stride_padding() {
@@ -527,5 +670,58 @@ mod tests {
         assert_eq!(rgba.len(), 4 * 2 * 4);
         assert!(rgba[0] <= 2 && rgba[1] <= 2 && rgba[2] <= 2 && rgba[3] == 255);
         assert!(rgba[4] >= 253 && rgba[5] >= 253 && rgba[6] >= 253 && rgba[7] == 255);
+    }
+
+    #[test]
+    fn video_packet_queue_drops_oldest_when_full_and_keeps_latest_frames() {
+        let q = VideoPacketQueue::new(3);
+        assert!(!q.push_drop_oldest(sample_packet(1.0)));
+        assert!(!q.push_drop_oldest(sample_packet(2.0)));
+        assert!(!q.push_drop_oldest(sample_packet(3.0)));
+        assert!(q.push_drop_oldest(sample_packet(4.0)));
+        assert!(q.push_drop_oldest(sample_packet(5.0)));
+
+        let mut popped = Vec::new();
+        for _ in 0..3 {
+            popped.push(q.pop_blocking().unwrap().timestamp_ms);
+        }
+        assert_eq!(popped, vec![3.0, 4.0, 5.0]);
+        q.close();
+        assert!(q.pop_blocking().is_none());
+    }
+
+    #[test]
+    fn video_frame_router_routes_registered_streams_and_returns_unregistered_frames() {
+        let router = VideoFrameRouter::new();
+        let make_frame = |uid: &str, ts: f64| DiscordVideoFrame {
+            source: "stream".into(),
+            user_id: uid.into(),
+            timestamp: ts,
+            keyframe: true,
+            rotation: 0,
+            flip: false,
+            codec: "h264".into(),
+            data: vec![0, 0, 0, 1, 0x67],
+        };
+
+        let unrouted = router
+            .try_push(make_frame("u1", 10.0))
+            .expect_err("unregistered stream should fall back");
+        assert_eq!(unrouted.user_id, "u1");
+
+        let queue = Arc::new(VideoPacketQueue::new(4));
+        let stats = Arc::new(Mutex::new(VideoStreamStats::default()));
+        let handle = VideoStreamHandle {
+            pixels: Pixels::new(),
+            stats,
+            queue: Arc::clone(&queue),
+            _owner: Arc::new(QueueOwner(Arc::clone(&queue))),
+        };
+        router.register(("stream".into(), "u1".into()), handle);
+        assert!(router.try_push(make_frame("u1", 20.0)).is_ok());
+        assert_eq!(queue.pop_blocking().unwrap().timestamp_ms, 20.0);
+
+        router.remove(&("stream".into(), "u1".into()));
+        assert!(router.try_push(make_frame("u1", 30.0)).is_err());
     }
 }

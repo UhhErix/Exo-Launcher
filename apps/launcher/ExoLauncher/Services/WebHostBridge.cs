@@ -287,6 +287,8 @@ public sealed partial class WebHostBridge
         _services.GogAuth.AttachDispatcher(_queue);
         _services.EpicAuth.AttachDispatcher(_queue);
         _services.MusicEngine.Attach(_queue, PostEvent);
+        _services.HeadlessMusic.Attach(PostEvent, () => _services.MusicEngine.IsActive || App.MainAppWindow is not null);
+        _services.HeadlessCapture.Attach(PostCaptureEvent);
         if (Interlocked.Exchange(ref _transport, transport) is { } previous)
         {
             previous.MessageReceived -= OnMessage;
@@ -312,6 +314,8 @@ public sealed partial class WebHostBridge
     {
         if (_detached) return;
         Volatile.Write(ref _detached, true);
+        _services.HeadlessMusic.Detach();
+        _services.HeadlessCapture.Detach();
         try { _bridgeLifetime.Cancel(); } catch { }
         try { Interlocked.Exchange(ref _keyWatchCts, null)?.Cancel(); } catch { }
         StopWatch(Interlocked.Exchange(ref _controllerWatch, null));
@@ -631,17 +635,7 @@ public sealed partial class WebHostBridge
                 "art.reset" => await ArtworkResetAsync(paramsEl, hasParams).ConfigureAwait(true),
                 "art.refetch" => await ArtworkRefetchAsync(paramsEl, hasParams).ConfigureAwait(true),
                 // Answered at once, so it reaches the page before the library does (cover art the page names itself).
-                "art.base" => _transport is NamedPipeHostTransport
-                    ? new
-                    {
-                        covers = LocalFileHost.Url(CoverArtService.VirtualHost, ""),
-                        coversDir = CoverArtService.CacheRoot,
-                        devicesDir = DeviceImages.CacheRoot,
-                        notesDir = NoteStore.Shared.PhotosFolder,
-                        capturesDir = _services.HeadlessCapture.CaptureFolder,
-                        captureThumbsDir = HeadlessCaptureService.ThumbsDir,
-                    }
-                    : (object)new { covers = LocalFileHost.Url(CoverArtService.VirtualHost, "") },
+                "art.base" => BuildArtBase(),
                 "library.folderArt" => await LibraryFolderArtAsync(paramsEl, hasParams).ConfigureAwait(true),
                 "library.refreshAll" => await LibraryRefreshAllAsync(_bridgeLifetime.Token).ConfigureAwait(true),
                 "game.cancelInstall" => _services.Launcher.Cancel(ReadString(paramsEl, hasParams, "id")),
@@ -696,6 +690,7 @@ public sealed partial class WebHostBridge
                     : new { ok = false },
                 // The UI reached a usable start (Library or first-run setup): an update's startup receipt (UpdateStartupHealth).
                 "shell.ready" => ShellReady(),
+                "shell.bootstrap" => await ShellBootstrapAsync(requestToken).ConfigureAwait(false),
                 "shell.prepare" => App.MainAppWindow is { } prepareWindow
                     ? await prepareWindow.PrepareConnectedRoomsAsync()
                     : new { ok = false },
@@ -3431,8 +3426,56 @@ public sealed partial class WebHostBridge
             officialUrl = d.OfficialUrl,
         }).ToArray();
 
+    private object BuildArtBase() =>
+        _transport is NamedPipeHostTransport
+            ? new
+            {
+                covers = LocalFileHost.Url(CoverArtService.VirtualHost, ""),
+                coversDir = CoverArtService.CacheRoot,
+                devicesDir = DeviceImages.CacheRoot,
+                notesDir = NoteStore.Shared.PhotosFolder,
+                capturesDir = _services.HeadlessCapture.CaptureFolder,
+                captureThumbsDir = HeadlessCaptureService.ThumbsDir,
+            }
+            : (object)new { covers = LocalFileHost.Url(CoverArtService.VirtualHost, "") };
+
+    private async Task<object> ShellBootstrapAsync(CancellationToken ct)
+    {
+        var libraryTask = Task.Run(() => LibraryGetAsync(default, false), ct);
+        var settingsTask = Task.Run(BuildSettings, ct);
+        var musicTask = Task.Run(
+            () => _services.MusicEngine.IsActive || App.MainAppWindow is not null
+                ? _services.MusicEngine.PlaybackAsync()
+                : _services.HeadlessMusic.PlaybackAsync(),
+            ct);
+        var discordTask = Task.Run(() => DiscordStatus(default, false), ct);
+        UpdateStartupHealth.UiReady(_services.AppVersion);
+        var artBase = BuildArtBase();
+        await Task.WhenAll(libraryTask, settingsTask, musicTask, discordTask).WaitAsync(ct).ConfigureAwait(false);
+        return new
+        {
+            ok = true,
+            artBase,
+            settings = await settingsTask.ConfigureAwait(false),
+            library = await libraryTask.ConfigureAwait(false),
+            musicPlayback = await musicTask.ConfigureAwait(false),
+            discordStatus = await discordTask.ConfigureAwait(false),
+            binaryMediaPipe = (_transport as NamedPipeHostTransport)?.MediaPipeName,
+        };
+    }
+
     private void PostResponse(string id, bool ok, object? result = null, string? error = null)
-        => PostSerialized(ExoBridgeProtocol.SerializeResponse(id, ok, result, error));
+    {
+        var transport = _transport;
+        if (transport is null || _detached) return;
+        if (transport is NamedPipeHostTransport pipeTransport)
+        {
+            try { pipeTransport.PostJsonUtf8(ExoBridgeProtocol.SerializeResponseUtf8(id, ok, result, error)); }
+            catch { }
+            return;
+        }
+        PostSerialized(ExoBridgeProtocol.SerializeResponse(id, ok, result, error));
+    }
 
     /// <summary>An event from the shader add-on's engine, for its page.</summary>
     internal void PostShadersEvent(string name, System.Text.Json.Nodes.JsonNode? data) =>
@@ -3445,7 +3488,17 @@ public sealed partial class WebHostBridge
     private void OnComponentFailed(string feature) => PostEvent("components.failed", new { feature });
 
     private void PostEvent(string name, object? data)
-        => PostSerialized(ExoBridgeProtocol.SerializeEvent(name, data));
+    {
+        var transport = _transport;
+        if (transport is null || _detached) return;
+        if (transport is NamedPipeHostTransport pipeTransport)
+        {
+            try { pipeTransport.PostJsonUtf8(ExoBridgeProtocol.SerializeEventUtf8(name, data)); }
+            catch { }
+            return;
+        }
+        PostSerialized(ExoBridgeProtocol.SerializeEvent(name, data));
+    }
 
     /// <summary>
     /// Cover art on its way to the page: every cover cache and thumbnail address with this run's token, which

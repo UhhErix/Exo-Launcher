@@ -10,6 +10,7 @@ public interface IHostTransport : IDisposable
     event Action? SessionReset;
 
     void PostJson(string json);
+    void PostJsonUtf8(byte[] utf8Json) => PostJson(System.Text.Encoding.UTF8.GetString(utf8Json));
     void PostBinaryFrame(string metaJson, byte[] frame);
     void Detach();
 }

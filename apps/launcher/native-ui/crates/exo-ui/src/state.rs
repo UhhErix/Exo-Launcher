@@ -3,17 +3,21 @@ use crate::gamepad::GamepadAction;
 use crate::media_state::MediaState;
 use crate::pc_state::SettingsAndPcState;
 use crate::tour;
+use crate::video_decoder::VideoFrameRouter;
 use exo_rpc::{
-    ActionResult, ArtBase, Game, GameExtras, GameGetReply, GameProperties, GamePropertySetReply,
-    InstallProgress, KeyPreview, LauncherSettings, LibraryPayload, METHOD_ART_BASE,
-    METHOD_GAME_CANCEL_INSTALL, METHOD_GAME_EXTRAS, METHOD_GAME_GET, METHOD_GAME_INSTALL,
-    METHOD_GAME_LAUNCH, METHOD_GAME_OPEN_FOLDER, METHOD_GAME_PAUSE_INSTALL, METHOD_GAME_PROPERTIES,
-    METHOD_GAME_PROPERTIES_SET, METHOD_GAME_REPAIR, METHOD_GAME_STOP, METHOD_GAME_UNINSTALL,
-    METHOD_GAME_UPDATE, METHOD_KEYS_ACTIVATE, METHOD_KEYS_PREVIEW, METHOD_LIBRARY_GET,
-    METHOD_LIBRARY_REFRESH, METHOD_SETTINGS_GET, METHOD_SETTINGS_SET, METHOD_STORE_GAME,
-    METHOD_STORE_GAME_OFFERS, METHOD_STORE_HOME, METHOD_STORE_OPEN, METHOD_STORE_SEARCH, StoreArt,
-    StoreGame, StoreHome, StoreOffer, StoreOtherOffers, StoreSearchReply, StoreShelf, StoreTile,
-    remote_art,
+    ActionResult, AppUpdateStateEvent, ArtBase, AutopilotLive, AutopilotReportEvent,
+    CaptureLiveState, CaptureReelEvent, CaptureSavedEvent, CaptureStatusReply, ExoAccountState,
+    Game, GameExtras, GameGetReply, GameProperties, GamePropertySetReply, GameRunStateEvent,
+    InstallProgress, InstallQueueEvent, KeyPreview, LaunchStatusEvent, LauncherSettings,
+    LibraryPayload, METHOD_EXO_ACCOUNT_STATE, METHOD_GAME_CANCEL_INSTALL, METHOD_GAME_EXTRAS,
+    METHOD_GAME_GET, METHOD_GAME_INSTALL, METHOD_GAME_LAUNCH, METHOD_GAME_OPEN_FOLDER,
+    METHOD_GAME_PAUSE_INSTALL, METHOD_GAME_PROPERTIES, METHOD_GAME_PROPERTIES_SET,
+    METHOD_GAME_REPAIR, METHOD_GAME_STOP, METHOD_GAME_UNINSTALL, METHOD_GAME_UPDATE,
+    METHOD_KEYS_ACTIVATE, METHOD_KEYS_PREVIEW, METHOD_LIBRARY_REFRESH, METHOD_SETTINGS_SET,
+    METHOD_SHELL_BOOTSTRAP, METHOD_STORE_GAME, METHOD_STORE_GAME_OFFERS, METHOD_STORE_HOME,
+    METHOD_STORE_OPEN, METHOD_STORE_SEARCH, MusicVolumeEvent, ShellBootstrap, StoreArt,
+    StoreChangedEvent, StoreGame, StoreHome, StoreOffer, StoreOtherOffers, StoreSearchReply,
+    StoreShelf, StoreTile, remote_art,
 };
 use rune::{Image, ImageCache, TextEdit, Tx, Waker};
 use serde_json::json;
@@ -23,7 +27,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 #[cfg(windows)]
-use exo_rpc::RpcClient;
+use exo_rpc::{RequestId, RpcClient};
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum Room {
@@ -225,6 +229,8 @@ pub struct AppState {
     pub props_launch_opts: TextEdit,
     pub uninstall_confirm: bool,
     pub install_progress: Option<InstallProgress>,
+    pub install_queue: Option<InstallQueueEvent>,
+    pub app_update_state: String,
     pub key_modal_open: bool,
     pub key_input: TextEdit,
     pub key_preview: Option<KeyPreview>,
@@ -260,10 +266,15 @@ pub struct AppState {
     covers: RefCell<HashMap<String, Option<Image>>>,
     remote_covers: RefCell<HashMap<String, Option<Image>>>,
     remote_inflight: RefCell<HashSet<String>>,
+    pub video_router: VideoFrameRouter,
     #[cfg(windows)]
     pub rpc: Option<Arc<RpcClient>>,
     #[cfg(windows)]
     pub handle: Option<rune::AppHandle<AppState>>,
+    #[cfg(windows)]
+    inflight_requests: HashMap<&'static str, RequestId>,
+    #[cfg(windows)]
+    pub inflight_discord_channel: Option<String>,
 }
 
 impl Default for AppState {
@@ -316,6 +327,8 @@ impl AppState {
             props_launch_opts: TextEdit::default(),
             uninstall_confirm: false,
             install_progress: None,
+            install_queue: None,
+            app_update_state: "idle".into(),
             key_modal_open: false,
             key_input: TextEdit::default(),
             key_preview: None,
@@ -363,10 +376,15 @@ impl AppState {
             covers: RefCell::new(HashMap::new()),
             remote_covers: RefCell::new(HashMap::new()),
             remote_inflight: RefCell::new(HashSet::new()),
+            video_router: VideoFrameRouter::new(),
             #[cfg(windows)]
             rpc: None,
             #[cfg(windows)]
             handle: None,
+            #[cfg(windows)]
+            inflight_requests: HashMap::new(),
+            #[cfg(windows)]
+            inflight_discord_channel: None,
         }
     }
 
@@ -396,6 +414,8 @@ impl AppState {
             props_launch_opts: TextEdit::default(),
             uninstall_confirm: false,
             install_progress: None,
+            install_queue: None,
+            app_update_state: "idle".into(),
             key_modal_open: false,
             key_input: TextEdit::default(),
             key_preview: None,
@@ -431,10 +451,15 @@ impl AppState {
             covers: RefCell::new(HashMap::new()),
             remote_covers: RefCell::new(HashMap::new()),
             remote_inflight: RefCell::new(HashSet::new()),
+            video_router: VideoFrameRouter::new(),
             #[cfg(windows)]
             rpc: None,
             #[cfg(windows)]
             handle: None,
+            #[cfg(windows)]
+            inflight_requests: HashMap::new(),
+            #[cfg(windows)]
+            inflight_discord_channel: None,
         }
     }
 
@@ -526,6 +551,51 @@ impl AppState {
                 let mapped = res.map_err(|e| e.to_string());
                 handle.update(move |s, _| on_done(s, mapped));
             });
+        }
+    }
+
+    #[cfg(windows)]
+    pub fn cancel_inflight(&mut self, slot: &'static str) {
+        if let Some(prev) = self.inflight_requests.remove(slot)
+            && let Some(ref rpc) = self.rpc
+        {
+            rpc.cancel(&prev);
+        }
+    }
+
+    #[cfg(windows)]
+    pub fn call_host_replaceable<R, F>(
+        &mut self,
+        slot: &'static str,
+        method: &str,
+        params: serde_json::Value,
+        on_done: F,
+    ) where
+        R: exo_rpc::DeserializeOwned + Send + 'static,
+        F: FnOnce(&mut AppState, Result<R, String>) + Send + 'static,
+    {
+        self.cancel_inflight(slot);
+        if let (Some(rpc), Some(handle)) = (self.rpc.clone(), self.handle.clone()) {
+            let slot_copy = slot;
+            let req_id_cell = Arc::new(std::sync::Mutex::new(None::<RequestId>));
+            let cell_for_cb = Arc::clone(&req_id_cell);
+            let req_id = rpc.call::<_, R>(method, &params, move |res| {
+                let expected = cell_for_cb.lock().ok().and_then(|g| g.clone());
+                let mapped = res.map_err(|e| e.to_string());
+                handle.update(move |s, _| {
+                    if let Some(ref exp) = expected
+                        && s.inflight_requests.get(slot_copy) != Some(exp)
+                    {
+                        return;
+                    }
+                    s.inflight_requests.remove(slot_copy);
+                    on_done(s, mapped);
+                });
+            });
+            if let Ok(mut g) = req_id_cell.lock() {
+                *g = Some(req_id.clone());
+            }
+            self.inflight_requests.insert(slot, req_id);
         }
     }
 
@@ -1156,29 +1226,29 @@ impl AppState {
         }
 
         #[cfg(windows)]
-        if let (Some(rpc), Some(handle)) = (self.rpc.clone(), self.handle.clone()) {
-            let aid = app_id.to_string();
-            let h1 = handle.clone();
-            rpc.call::<_, StoreGame>(METHOD_STORE_GAME, &json!({ "appId": aid }), move |res| {
-                h1.update(move |s, _| {
+        {
+            self.call_host_replaceable(
+                "store.game",
+                METHOD_STORE_GAME,
+                json!({ "appId": app_id }),
+                |s, res: Result<StoreGame, String>| {
                     if let Ok(g) = res
                         && g.ok
                     {
                         s.store_game = Some(g);
                     }
-                });
-            });
+                },
+            );
 
-            let aid2 = app_id.to_string();
-            let h2 = handle.clone();
-            rpc.call::<_, StoreOtherOffers>(
+            self.call_host_replaceable(
+                "store.gameOffers",
                 METHOD_STORE_GAME_OFFERS,
-                &json!({ "appId": aid2 }),
-                move |res| {
+                json!({ "appId": app_id }),
+                |s, res: Result<StoreOtherOffers, String>| {
                     if let Ok(offers) = res
                         && offers.ok
                     {
-                        h2.update(move |s, _| s.store_offers = Some(offers));
+                        s.store_offers = Some(offers);
                     }
                 },
             );
@@ -1186,6 +1256,11 @@ impl AppState {
     }
 
     pub fn close_store_game(&mut self) {
+        #[cfg(windows)]
+        {
+            self.cancel_inflight("store.game");
+            self.cancel_inflight("store.gameOffers");
+        }
         self.store_game = None;
         self.store_offers = None;
     }
@@ -1865,35 +1940,184 @@ impl AppState {
         }
     }
 
+    pub fn apply_bootstrap(&mut self, boot: ShellBootstrap) {
+        self.apply_art_base(boot.art_base);
+        self.apply_settings(boot.settings);
+        self.apply_library(boot.library);
+        self.media.playback = boot.music_playback.playback;
+        self.discord.status = boot.discord_status;
+    }
+
+    pub fn apply_music_volume(&mut self, ev: MusicVolumeEvent) {
+        let clamped = ev.level.clamp(0.0, 1.0);
+        self.media.music_volume = clamped;
+        self.media.music_muted = clamped <= 0.0001;
+    }
+
+    pub fn apply_capture_state(&mut self, live: CaptureLiveState) {
+        if let Some(ref mut st) = self.media.capture_status {
+            st.state = Some(live);
+        } else {
+            self.media.capture_status = Some(CaptureStatusReply {
+                ok: true,
+                state: Some(live),
+                ..Default::default()
+            });
+        }
+    }
+
+    pub fn apply_capture_saved(&mut self, ev: CaptureSavedEvent) {
+        let name = ev.item.name.clone();
+        self.media.capture_items.retain(|it| it.id != ev.item.id);
+        self.media.capture_items.insert(0, ev.item);
+        if !name.is_empty() {
+            self.notice = Some(format!("Saved {name}."));
+        }
+    }
+
+    pub fn apply_capture_reel(&mut self, ev: CaptureReelEvent) {
+        match ev.state.as_str() {
+            "done" => {
+                if let Some(item) = ev.item {
+                    let name = item.name.clone();
+                    self.media.capture_items.retain(|it| it.id != item.id);
+                    self.media.capture_items.insert(0, item);
+                    if !name.is_empty() {
+                        self.notice = Some(format!("{name} is ready."));
+                    }
+                }
+            }
+            "failed" => {
+                self.notice = Some(
+                    ev.message
+                        .filter(|m| !m.trim().is_empty())
+                        .unwrap_or_else(|| "Could not make reel.".into()),
+                );
+            }
+            "working" => {
+                self.notice = Some(format!("Making reel… {:.0}%", ev.percent.clamp(0.0, 100.0)));
+            }
+            "waiting" => {
+                self.notice = Some("Reel queued until game ends.".into());
+            }
+            _ => {}
+        }
+    }
+
+    pub fn apply_install_queue(&mut self, ev: InstallQueueEvent) {
+        self.install_queue = Some(ev);
+    }
+
+    pub fn apply_game_run_state(&mut self, ev: GameRunStateEvent) {
+        if let Some(game) = self.games.iter_mut().find(|g| g.id == ev.id) {
+            game.is_running = ev.is_running;
+            game.can_stop = ev.can_stop;
+        }
+    }
+
+    pub fn apply_launch_status(&mut self, ev: LaunchStatusEvent) {
+        if let Some(game) = self.games.iter_mut().find(|g| g.id == ev.game_id) {
+            match ev.phase.as_str() {
+                "running" => {
+                    game.is_running = true;
+                    game.can_stop = !ev.handoff_only;
+                }
+                "stopped" | "failed" => {
+                    game.is_running = false;
+                    game.can_stop = false;
+                }
+                _ => {}
+            }
+        }
+        if (!ev.ok || matches!(ev.phase.as_str(), "failed" | "stopFailed"))
+            && let Some(msg) = ev.message.filter(|m| !m.trim().is_empty())
+        {
+            self.notice = Some(msg);
+        }
+    }
+
+    pub fn apply_app_update_state(&mut self, ev: AppUpdateStateEvent) {
+        self.pc.checking_update = ev.state == "checking";
+        self.pc.installing_update =
+            matches!(ev.state.as_str(), "downloading" | "applying" | "restarting");
+        if matches!(ev.state.as_str(), "idle" | "failed") {
+            self.pc.update_progress = None;
+        }
+        self.app_update_state = ev.state;
+    }
+
+    pub fn apply_exo_account_changed(&mut self) {
+        if self.status != HostStatus::Connected {
+            return;
+        }
+        #[cfg(windows)]
+        self.call_host_async(
+            METHOD_EXO_ACCOUNT_STATE,
+            json!({}),
+            |s, res: Result<ExoAccountState, String>| {
+                if let Ok(acct) = res {
+                    s.pc.account = acct;
+                }
+            },
+        );
+    }
+
+    pub fn apply_autopilot_live(&mut self, live: Option<AutopilotLive>) {
+        if let Some(ref mut ap) = self.pc.autopilot {
+            ap.live = live;
+        }
+    }
+
+    pub fn apply_autopilot_report(&mut self, ev: AutopilotReportEvent) {
+        if !ev.title.is_empty() {
+            self.notice = Some(format!("Autopilot report saved for {}.", ev.title));
+        }
+        if self.room == Room::ExoAi {
+            self.load_pc_exo_ai();
+        }
+    }
+
+    pub fn apply_shaders_changed(&mut self) {
+        if self.room == Room::ExoAi {
+            self.load_pc_exo_ai();
+        }
+    }
+
+    pub fn apply_store_changed(&mut self, ev: StoreChangedEvent) {
+        if matches!(ev.what.as_str(), "home" | "wishlist")
+            && (self.room == Room::Store || self.store_home.is_some())
+            && !self.store_loading
+        {
+            self.load_store_home(false);
+        }
+    }
+
     #[cfg(windows)]
     pub fn bootstrap_rpc(rpc: Arc<RpcClient>, handle: rune::AppHandle<AppState>) {
-        let art_handle = handle.clone();
-        rpc.call::<_, ArtBase>(METHOD_ART_BASE, &json!({}), move |res| {
-            if let Ok(base) = res {
-                art_handle.update(move |s, _| s.apply_art_base(base));
-            }
-        });
-
-        let lib_handle = handle.clone();
-        rpc.call::<_, LibraryPayload>(METHOD_LIBRARY_GET, &json!({}), move |res| {
-            lib_handle.update(move |s, _| match res {
-                Ok(lib) => s.apply_library(lib),
-                Err(e) => {
-                    s.refreshing = false;
-                    s.status = HostStatus::Error(e.to_string());
-                    s.notice = Some(format!("Failed to load library: {e}"));
+        let rpc_for_media = Arc::clone(&rpc);
+        rpc.call::<_, ShellBootstrap>(METHOD_SHELL_BOOTSTRAP, &json!({}), move |res| match res {
+            Ok(boot) => {
+                if let Some(media_pipe) = boot.binary_media_pipe.clone() {
+                    let rpc_media = Arc::clone(&rpc_for_media);
+                    std::thread::Builder::new()
+                        .name("exo-media-connect".into())
+                        .spawn(move || {
+                            let _ = rpc_media
+                                .connect_media_pipe(&media_pipe, std::time::Duration::from_secs(3));
+                        })
+                        .ok();
                 }
-            });
-        });
-
-        let set_handle = handle.clone();
-        rpc.call::<_, LauncherSettings>(METHOD_SETTINGS_GET, &json!({}), move |res| {
-            if let Ok(settings) = res {
-                set_handle.update(move |s, _| s.apply_settings(settings));
+                handle.update(move |s, _| s.apply_bootstrap(boot));
+            }
+            Err(e) => {
+                let msg = e.to_string();
+                handle.update(move |s, _| {
+                    s.refreshing = false;
+                    s.status = HostStatus::Error(msg.clone());
+                    s.notice = Some(format!("Failed to bootstrap host: {msg}"));
+                });
             }
         });
-
-        rpc.call::<_, ActionResult>(exo_rpc::METHOD_SHELL_READY, &json!({}), |_| {});
     }
 }
 
@@ -2028,5 +2252,120 @@ fn demo_store_home() -> StoreHome {
                 tile("1817070", "Marvel's Spider-Man Remastered", "$29.99", 50),
             ],
         }],
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use exo_rpc::{CaptureItem, DiscordStatus, MusicPlayback, MusicPlaybackReply};
+
+    #[test]
+    fn apply_bootstrap_populates_library_music_and_discord() {
+        let mut s = AppState::for_host_pipe();
+        let boot = ShellBootstrap {
+            ok: true,
+            art_base: ArtBase {
+                covers: "https://covers.exo-launcher.local/".into(),
+                ..Default::default()
+            },
+            settings: LauncherSettings {
+                fps_counter: true,
+                ..Default::default()
+            },
+            library: LibraryPayload {
+                games: vec![Game {
+                    id: "steam:10".into(),
+                    title: "Half-Life".into(),
+                    ..Default::default()
+                }],
+                count: 1,
+                recent: vec!["steam:10".into()],
+                ..Default::default()
+            },
+            music_playback: MusicPlaybackReply {
+                ok: true,
+                playback: Some(MusicPlayback {
+                    status: "playing".into(),
+                    title: "Still Alive".into(),
+                    ..Default::default()
+                }),
+            },
+            discord_status: DiscordStatus {
+                state: "ready".into(),
+                ..Default::default()
+            },
+            binary_media_pipe: Some("exo-pipe-media".into()),
+        };
+
+        s.apply_bootstrap(boot);
+        assert_eq!(s.games.len(), 1);
+        assert!(s.settings.fps_counter);
+        assert_eq!(
+            s.media.playback.as_ref().map(|p| p.title.as_str()),
+            Some("Still Alive")
+        );
+        assert_eq!(s.discord.status.state, "ready");
+    }
+
+    #[test]
+    fn push_event_handlers_update_state_without_roundtrip() {
+        let mut s = AppState::with_demo_games();
+        s.apply_music_volume(MusicVolumeEvent {
+            level: 0.35,
+            source: "app".into(),
+        });
+        assert!((s.media.music_volume - 0.35).abs() < 1e-6);
+        assert!(!s.media.music_muted);
+
+        s.apply_capture_state(CaptureLiveState {
+            present: true,
+            buffering: true,
+            recording: true,
+            recording_ms: Some(4200.0),
+            replay: true,
+        });
+        assert!(
+            s.media
+                .capture_status
+                .as_ref()
+                .and_then(|c| c.state.as_ref())
+                .is_some_and(|st| st.recording)
+        );
+
+        s.apply_capture_saved(CaptureSavedEvent {
+            item: CaptureItem {
+                id: "cap-new".into(),
+                name: "Clutch Clip".into(),
+                ..Default::default()
+            },
+            edit: false,
+        });
+        assert_eq!(s.media.capture_items[0].id, "cap-new");
+
+        s.apply_game_run_state(GameRunStateEvent {
+            id: "demo:cs2".into(),
+            is_running: true,
+            can_stop: true,
+        });
+        let cs2 = s.games.iter().find(|g| g.id == "demo:cs2").unwrap();
+        assert!(cs2.is_running && cs2.can_stop);
+
+        s.apply_launch_status(LaunchStatusEvent {
+            game_id: "demo:cs2".into(),
+            ok: false,
+            message: Some("Launch failed".into()),
+            phase: "failed".into(),
+            ..Default::default()
+        });
+        let cs2 = s.games.iter().find(|g| g.id == "demo:cs2").unwrap();
+        assert!(!cs2.is_running);
+        assert_eq!(s.notice.as_deref(), Some("Launch failed"));
+
+        s.apply_app_update_state(AppUpdateStateEvent {
+            state: "downloading".into(),
+        });
+        assert!(s.pc.installing_update);
+        assert_eq!(s.app_update_state, "downloading");
     }
 }

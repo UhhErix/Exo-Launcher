@@ -283,6 +283,7 @@
     "shaders.prepare.start": "{ ok: boolean; message?: string | null }",
     "shaders.rebuild": "{ ok: boolean } & ShaderRebuild",
     "shaders.status": "ShaderStatus",
+    "shell.bootstrap": "{ ok: boolean artBase: { covers: string coversDir?: string devicesDir?: string notesDir?: string capturesDir?: string captureThumbsDir?: string } settings: LauncherSettings library: LibraryResponse musicPlayback: { ok: boolean; playback: MusicPlayback | null } discordStatus: DiscordStatus binaryMediaPipe?: string | null }",
     "shell.close": "{ ok: boolean }",
     "shell.heartbeat": "{ ok: boolean }",
     "shell.maximize": "{ ok: boolean; maximized?: boolean }",

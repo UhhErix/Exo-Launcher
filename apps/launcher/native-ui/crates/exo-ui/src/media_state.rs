@@ -720,18 +720,19 @@ impl AppState {
             }
         };
         #[cfg(windows)]
-        if let (Some(rpc), Some(handle)) = (self.rpc.clone(), self.handle.clone()) {
-            rpc.call::<_, PlayerViewReply>(view_method, &params, move |res| {
+        self.call_host_replaceable(
+            "music.view",
+            view_method,
+            params,
+            |s, res: Result<PlayerViewReply, String>| {
                 if let Ok(reply) = res
                     && reply.ok
                     && let Some(data) = reply.data
                 {
-                    handle.update(move |s, _| {
-                        s.media.music_page_data = Some(data);
-                    });
+                    s.media.music_page_data = Some(data);
                 }
-            });
-        }
+            },
+        );
     }
 
     pub fn music_open_card(&mut self, uri: String, kind: String, title: String) {

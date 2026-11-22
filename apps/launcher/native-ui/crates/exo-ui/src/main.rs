@@ -121,26 +121,12 @@ fn load_live_state_sync(pipe: &str, scene: Option<&str>) -> AppState {
         state.refreshing = false;
         return state;
     };
-    if let Ok(base) = client.call_blocking::<_, exo_rpc::ArtBase>(
-        exo_rpc::METHOD_ART_BASE,
-        &serde_json::json!({}),
-        Duration::from_secs(5),
-    ) {
-        state.apply_art_base(base);
-    }
-    if let Ok(lib) = client.call_blocking::<_, exo_rpc::LibraryPayload>(
-        exo_rpc::METHOD_LIBRARY_GET,
+    if let Ok(boot) = client.call_blocking::<_, exo_rpc::ShellBootstrap>(
+        exo_rpc::METHOD_SHELL_BOOTSTRAP,
         &serde_json::json!({}),
         Duration::from_secs(12),
     ) {
-        state.apply_library(lib);
-    }
-    if let Ok(set) = client.call_blocking::<_, exo_rpc::LauncherSettings>(
-        exo_rpc::METHOD_SETTINGS_GET,
-        &serde_json::json!({}),
-        Duration::from_secs(5),
-    ) {
-        state.settings = set;
+        state.apply_bootstrap(boot);
     }
     match scene {
         Some("store") => {
@@ -1106,7 +1092,22 @@ fn main() {
                                 s.load_pc_apps();
                             }
                         }
+                        exo_rpc::HostEvent::MusicVolume(ev) => s.apply_music_volume(ev),
+                        exo_rpc::HostEvent::CaptureState(live) => s.apply_capture_state(live),
+                        exo_rpc::HostEvent::CaptureSaved(ev) => s.apply_capture_saved(*ev),
+                        exo_rpc::HostEvent::CaptureReel(ev) => s.apply_capture_reel(*ev),
+                        exo_rpc::HostEvent::InstallQueue(ev) => s.apply_install_queue(ev),
+                        exo_rpc::HostEvent::GameRunState(ev) => s.apply_game_run_state(ev),
+                        exo_rpc::HostEvent::LaunchStatus(ev) => s.apply_launch_status(ev),
+                        exo_rpc::HostEvent::AppUpdateState(ev) => s.apply_app_update_state(ev),
+                        exo_rpc::HostEvent::ExoAccountChanged => s.apply_exo_account_changed(),
+                        exo_rpc::HostEvent::AutopilotReport(ev) => s.apply_autopilot_report(ev),
+                        exo_rpc::HostEvent::AutopilotLive(live) => s.apply_autopilot_live(live),
+                        exo_rpc::HostEvent::ShadersChanged => s.apply_shaders_changed(),
+                        exo_rpc::HostEvent::StoreChanged(ev) => s.apply_store_changed(ev),
                         exo_rpc::HostEvent::Disconnected(why) => {
+                            s.discord.voice_ui.decoders.clear();
+                            s.video_router.clear();
                             s.status = state::HostStatus::Error(why);
                             s.notice = Some("Disconnected from Exo host".into());
                         }
@@ -1117,6 +1118,8 @@ fn main() {
                         let rpc_for_boot = std::sync::Arc::clone(&client);
                         let boot_handle = connect_handle.clone();
                         connect_handle.update(move |s, _| {
+                            let router = s.video_router.clone();
+                            client.set_video_frame_handler(move |frame| router.try_push(frame));
                             s.rpc = Some(client);
                             s.handle = Some(boot_handle.clone());
                             s.status = state::HostStatus::Connected;

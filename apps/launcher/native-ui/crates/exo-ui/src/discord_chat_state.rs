@@ -260,6 +260,15 @@ impl AppState {
         if self.discord.chat.loading_channels.contains(channel_id) {
             return;
         }
+        #[cfg(windows)]
+        if before.is_none()
+            && let Some(prev_cid) = self
+                .inflight_discord_channel
+                .replace(channel_id.to_string())
+            && prev_cid != channel_id
+        {
+            self.discord.chat.loading_channels.remove(&prev_cid);
+        }
         self.discord
             .chat
             .loading_channels
@@ -272,46 +281,55 @@ impl AppState {
             if let Some(b) = before {
                 params["before"] = json!(b);
             }
-            self.call_host_async(
-                METHOD_DISCORD_MESSAGES,
-                params,
-                move |s, res: Result<DiscordMessagesReply, String>| {
-                    s.discord.chat.loading_channels.remove(&cid);
-                    if let Ok(rep) = res
-                        && rep.ok
-                        && let Some(mut page) = rep.messages
-                    {
-                        let page_len = page.len();
-                        page.reverse();
-                        s.discord
-                            .chat
-                            .has_more_before
-                            .insert(cid.clone(), page_len >= 50);
-                        let newest_id = page.last().map(|m| m.id.clone());
-                        let entry = s
-                            .discord
-                            .chat
-                            .messages_by_channel
-                            .entry(cid.clone())
-                            .or_default();
-                        if is_older {
-                            let existing_ids: HashSet<String> =
-                                entry.iter().map(|m| m.id.clone()).collect();
-                            let mut merged: Vec<DiscordMessage> = page
-                                .into_iter()
-                                .filter(|m| !existing_ids.contains(&m.id))
-                                .collect();
-                            merged.append(entry);
-                            *entry = merged;
-                        } else {
-                            *entry = page;
-                        }
-                        if !is_older && let Some(mid) = newest_id {
-                            s.ack_discord_channel(&cid, &mid);
-                        }
+            let on_done = move |s: &mut AppState, res: Result<DiscordMessagesReply, String>| {
+                s.discord.chat.loading_channels.remove(&cid);
+                if s.inflight_discord_channel.as_deref() == Some(cid.as_str()) {
+                    s.inflight_discord_channel = None;
+                }
+                if let Ok(rep) = res
+                    && rep.ok
+                    && let Some(mut page) = rep.messages
+                {
+                    let page_len = page.len();
+                    page.reverse();
+                    s.discord
+                        .chat
+                        .has_more_before
+                        .insert(cid.clone(), page_len >= 50);
+                    let newest_id = page.last().map(|m| m.id.clone());
+                    let entry = s
+                        .discord
+                        .chat
+                        .messages_by_channel
+                        .entry(cid.clone())
+                        .or_default();
+                    if is_older {
+                        let existing_ids: HashSet<String> =
+                            entry.iter().map(|m| m.id.clone()).collect();
+                        let mut merged: Vec<DiscordMessage> = page
+                            .into_iter()
+                            .filter(|m| !existing_ids.contains(&m.id))
+                            .collect();
+                        merged.append(entry);
+                        *entry = merged;
+                    } else {
+                        *entry = page;
                     }
-                },
-            );
+                    if !is_older && let Some(mid) = newest_id {
+                        s.ack_discord_channel(&cid, &mid);
+                    }
+                }
+            };
+            if is_older {
+                self.call_host_async(METHOD_DISCORD_MESSAGES, params, on_done);
+            } else {
+                self.call_host_replaceable(
+                    "discord.messages",
+                    METHOD_DISCORD_MESSAGES,
+                    params,
+                    on_done,
+                );
+            }
         }
     }
 

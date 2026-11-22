@@ -2296,6 +2296,23 @@ export const host = {
   shellPainted: () => rawCall<{ ok: boolean }>('shell.painted'),
   /** The Library or first-run setup is up: an update's startup check (UpdateStartupHealth) counts this start as working. */
   shellReady: () => rawCall<{ ok: boolean }>('shell.ready'),
+  shellBootstrap: () =>
+    rawCall<{
+      ok: boolean
+      artBase: {
+        covers: string
+        coversDir?: string
+        devicesDir?: string
+        notesDir?: string
+        capturesDir?: string
+        captureThumbsDir?: string
+      }
+      settings: LauncherSettings
+      library: LibraryResponse
+      musicPlayback: { ok: boolean; playback: MusicPlayback | null }
+      discordStatus: DiscordStatus
+      binaryMediaPipe?: string | null
+    }>('shell.bootstrap'),
   getLibrary: (force = false, full = false) =>
     rawCall<LibraryResponse>(force ? 'library.refresh' : 'library.get',
       { force, ...(full ? { full: true } : {}) }).then((res) => {
