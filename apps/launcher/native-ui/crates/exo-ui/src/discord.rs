@@ -5,26 +5,32 @@ use crate::discord_voice_state::VoicePanel;
 use crate::state::{AppState, Room};
 use exo_kit::{
     BG, FG, GAP, PRESS_SCALE, PRIMARY_FG, RADIUS_CARD, RADIUS_PANEL, RADIUS_PILL, RADIUS_SMALL,
-    SPRING_QUICK, TRANSPARENT, bad, fg_faint, fg_muted, glass_button, glass_rim, glass_rim_bottom,
-    glass_rim_top, good, hairline, hex, hover_fill, icon_chat, icon_check, icon_chevron_down,
-    icon_chevron_right, icon_close, icon_folder, icon_gamepad, icon_hash, icon_headphones,
-    icon_headphones_off, icon_home, icon_lock, icon_mic, icon_mic_off, icon_more_horiz, icon_music,
-    icon_phone, icon_phone_off, icon_plus, icon_refresh, icon_screen_share, icon_search,
-    icon_settings, icon_trophy, icon_video, icon_volume, pressed_fill, primary_button,
-    qr_code_view, srgb, subtle_fill, type_body, type_control, type_label, type_page, type_section,
-    type_small, type_title, warn,
+    SPRING_BASE, SPRING_QUICK, TRANSPARENT, bad, fg_faint, fg_muted, glass_button, glass_rim,
+    glass_rim_bottom, glass_rim_top, good, hairline, hex, hover_fill, icon_chat, icon_check,
+    icon_chevron_down, icon_chevron_right, icon_close, icon_folder, icon_gamepad, icon_hash,
+    icon_headphones, icon_headphones_off, icon_home, icon_lock, icon_mic, icon_mic_off,
+    icon_more_horiz, icon_music, icon_phone, icon_phone_off, icon_plus, icon_refresh,
+    icon_screen_share, icon_search, icon_settings, icon_trophy, icon_video, icon_volume,
+    pressed_fill, primary_button, qr_code_view, srgb, subtle_fill, type_body, type_control,
+    type_label, type_page, type_section, type_small, type_title, warn,
 };
 use exo_rpc::discord_types::{DiscordGuildTag, DiscordLook, DiscordNameplate, DiscordRestricted};
 use exo_rpc::{
     DiscordChannel, DiscordDm, DiscordFriend, DiscordGuild, DiscordMemberItem, DiscordRailItem,
 };
 use rune::{
-    Color, El, ScrollSpec, Shape, SurfaceFit, TextStyle, canvas, col, edit_access, el, row, text,
-    text_input,
+    Color, El, ScrollSpec, Shape, Spring, SpringPair, SurfaceFit, TextStyle, Transition, Tx,
+    canvas, col, edit_access, el, row, text, text_input,
 };
 use std::collections::{HashMap, HashSet};
 use std::f32::consts::FRAC_PI_2;
 use std::time::{SystemTime, UNIX_EPOCH};
+
+fn inline_bar_transition(dy: f32) -> Transition {
+    let enter = Transition::offset(0.0, dy).combined(Transition::opacity());
+    Transition::asymmetric(enter, Transition::opacity())
+        .springs(SpringPair::new(SPRING_BASE, SPRING_QUICK))
+}
 
 pub(crate) fn ui_scale(s: &AppState) -> f32 {
     match s.settings.text_size.as_deref() {
@@ -1207,6 +1213,7 @@ fn server_band(s: &AppState, sc: f32, scale: f32) -> El {
         .grow(1.0)
         .min_w(0.0)
         .scroll_x()
+        .scroll_edge_fade(24.0)
         .px(8.0)
         .py(6.0)
         .gap(8.0)
@@ -1414,15 +1421,18 @@ fn me_panel(s: &AppState, sc: f32, scale: f32) -> El {
         stack = stack.child(dock);
     }
 
+    let mut status_menu = None;
     if s.discord.status_menu_open {
         let mut menu = col()
             .key("dc-status-menu")
-            .w_full()
+            .pin(Some(8.0), None, Some(8.0), Some(60.0 * sc + 6.0))
             .px(8.0)
             .py(6.0)
             .gap(2.0)
-            .border_sides([0.0, 0.0, 1.0, 0.0], hairline())
-            .fill(BG);
+            .radius(RADIUS_CARD)
+            .border(1.0, glass_rim())
+            .fill(BG)
+            .transition(Transition::opacity().springs(SpringPair::new(SPRING_BASE, SPRING_QUICK)));
         for (code, title) in [
             ("online", "Online"),
             ("idle", "Idle"),
@@ -1441,6 +1451,7 @@ fn me_panel(s: &AppState, sc: f32, scale: f32) -> El {
                     .radius(RADIUS_SMALL)
                     .fill(if active { hover_fill() } else { TRANSPARENT })
                     .hover(hover_fill())
+                    .hover_motion(Spring::NONE, SPRING_QUICK)
                     .hit()
                     .press_on_down()
                     .on_press(move |s: &mut AppState| s.set_discord_status(code))
@@ -1470,6 +1481,7 @@ fn me_panel(s: &AppState, sc: f32, scale: f32) -> El {
                         .center_y()
                         .radius(RADIUS_SMALL)
                         .hover(hover_fill())
+                        .hover_motion(Spring::NONE, SPRING_QUICK)
                         .hit()
                         .press_on_down()
                         .on_press(move |s: &mut AppState| s.switch_discord_account(&aid))
@@ -1491,6 +1503,7 @@ fn me_panel(s: &AppState, sc: f32, scale: f32) -> El {
                 .center_y()
                 .radius(RADIUS_SMALL)
                 .hover(bad().alpha(0.16))
+                .hover_motion(Spring::NONE, SPRING_QUICK)
                 .hit()
                 .press_on_down()
                 .on_press(|s: &mut AppState| s.sign_out_discord())
@@ -1500,7 +1513,7 @@ fn me_panel(s: &AppState, sc: f32, scale: f32) -> El {
                         .color(bad()),
                 ),
         );
-        stack = stack.child(menu);
+        status_menu = Some(menu);
     }
 
     let identity = row()
@@ -1508,12 +1521,12 @@ fn me_panel(s: &AppState, sc: f32, scale: f32) -> El {
         .grow(1.0)
         .min_w(0.0)
         .h(48.0)
-        .pl(10.0)
-        .pr(8.0)
-        .gap(10.0)
+        .px(8.0)
+        .gap(12.0)
         .center_y()
         .radius(RADIUS_PILL)
         .hover(hover_fill())
+        .hover_motion(Spring::NONE, SPRING_QUICK)
         .hit()
         .press_on_down()
         .on_press(|s: &mut AppState| s.discord.status_menu_open = !s.discord.status_menu_open)
@@ -1652,7 +1665,11 @@ fn me_panel(s: &AppState, sc: f32, scale: f32) -> El {
         .child(row().center_y().child(deaf_btn).child(deaf_caret))
         .child(settings_btn);
 
-    stack.child(bar)
+    stack = stack.child(bar);
+    if let Some(menu) = status_menu {
+        stack = stack.child(menu);
+    }
+    stack
 }
 
 fn pinned_dm_ids(s: &AppState) -> Vec<String> {
@@ -1763,6 +1780,7 @@ fn dm_row(s: &AppState, dm: &DiscordDm, active: bool, sc: f32, scale: f32) -> El
         .hover(if active { FG } else { hover_fill() })
         .press(if active { FG } else { pressed_fill() })
         .motion(SPRING_QUICK)
+        .hover_motion(Spring::NONE, SPRING_QUICK)
         .on_press(move |s: &mut AppState| s.open_discord_dm(&dm_id))
         .child(avatar_with_look(
             s,
@@ -1952,7 +1970,7 @@ fn dm_sidebar(s: &AppState, sc: f32, scale: f32) -> El {
             text("No direct messages")
                 .font(font_px(13.0 * sc, 400.0))
                 .color(fg_muted())
-                .px(12.0)
+                .px(8.0)
                 .py(12.0),
         );
     }
@@ -2031,13 +2049,14 @@ fn guild_channel_row(
         .key(format!("dc-ch-{}", ch.id))
         .w_full()
         .h(34.0 * sc)
-        .px(10.0)
+        .px(8.0)
         .gap(8.0)
         .center_y()
         .radius(RADIUS_PILL)
         .fill(if active { FG } else { TRANSPARENT })
         .hover(if active { FG } else { hover_fill() })
         .press(if active { FG } else { pressed_fill() })
+        .hover_motion(Spring::NONE, SPRING_QUICK)
         .hit()
         .press_on_down()
         .on_press(move |s: &mut AppState| {
@@ -2046,7 +2065,7 @@ fn guild_channel_row(
                 s.join_discord_voice(Some(&gid), &cid);
             }
         })
-        .child(icon)
+        .child(el().size(16.0, 16.0).center().child(icon))
         .child(
             text(ch.name.clone())
                 .font(font_px(
@@ -2360,6 +2379,7 @@ fn friend_card(s: &AppState, friend: &DiscordFriend, sc: f32, scale: f32) -> El 
             .clip_rounded(RADIUS_CARD)
             .fill(card_surface())
             .hover(hover_fill())
+            .hover_motion(Spring::NONE, SPRING_QUICK)
             .hover_group(),
     )
     .child(glass_top_sheen());
@@ -2559,7 +2579,7 @@ fn friends_panel(s: &AppState, sc: f32, scale: f32) -> El {
         let active = tab == t;
         let mut pill = row()
             .key(t.key())
-            .role("button")
+            .role("tab")
             .label(t.label())
             .focusable(true)
             .hit()
@@ -2572,8 +2592,14 @@ fn friends_panel(s: &AppState, sc: f32, scale: f32) -> El {
             .radius(RADIUS_PILL)
             .fill(if active { FG } else { TRANSPARENT })
             .hover(if active { FG } else { hover_fill() })
+            .hover_motion(Spring::NONE, SPRING_QUICK)
             .motion(SPRING_QUICK)
-            .on_press(move |s: &mut AppState| s.discord.friends_tab = t)
+            .on_press_tx(move |s: &mut AppState, tx: &mut Tx| {
+                if tx.by_keys() {
+                    tx.instant();
+                }
+                s.discord.friends_tab = t;
+            })
             .child(
                 text(t.label())
                     .font(font_px(13.0 * sc, 500.0))
@@ -2647,10 +2673,14 @@ fn friends_panel(s: &AppState, sc: f32, scale: f32) -> El {
         .w_full()
         .h(head_h)
         .pl(8.0)
-        .pr(4.0)
         .gap(12.0)
         .center_y()
-        .child(text("Friends").font(font_px(15.0 * sc, 600.0)).color(FG))
+        .child(
+            text("Friends")
+                .key("dc-friends-title")
+                .font(font_px(15.0 * sc, 600.0))
+                .color(FG),
+        )
         .child(tabs_row)
         .child(
             row()
@@ -2668,21 +2698,21 @@ fn friends_panel(s: &AppState, sc: f32, scale: f32) -> El {
             || username.is_some_and(|u| u.to_lowercase().contains(&q))
     };
 
-    let cols = if sc > 1.05 { 4 } else { 5 };
-    let mut body = col().w_full().pt(4.0);
-
-    if s.discord.add_friend_open {
-        body = body.child(
+    let cols = if sc > 1.15 { 3 } else { 4 };
+    let add_bar = if s.discord.add_friend_open {
+        Some(
             glassy_ring(
                 row()
-                    .w_full()
+                    .key("dc-add-friend-bar")
+                    .pin(None, Some(head_h + 4.0), Some(8.0), None)
+                    .w(380.0)
                     .px(12.0)
                     .py(10.0)
-                    .mb(8.0)
                     .gap(8.0)
                     .center_y()
                     .radius(RADIUS_CARD)
-                    .fill(card_surface()),
+                    .fill(BG)
+                    .transition(inline_bar_transition(-6.0)),
             )
             .child(
                 text_input(&s.discord.add_friend_input, font_px(13.0 * sc, 400.0))
@@ -2701,8 +2731,16 @@ fn friends_panel(s: &AppState, sc: f32, scale: f32) -> El {
                 primary_button("dc-add-friend-submit", "Send request", None)
                     .on_press(|s: &mut AppState| s.submit_add_discord_friend()),
             ),
-        );
-    }
+        )
+    } else {
+        None
+    };
+
+    let mut pane = col()
+        .key(format!("dc-friends-pane-{}", tab.key()))
+        .w_full()
+        .pt(4.0)
+        .transition(Transition::opacity());
 
     if tab == DiscordFriendsTab::Blocked {
         let blocked_list: Vec<&DiscordRestricted> = s
@@ -2712,8 +2750,9 @@ fn friends_panel(s: &AppState, sc: f32, scale: f32) -> El {
             .filter(|b| matches_name(&b.name, b.username.as_deref()))
             .collect();
         if !blocked_list.is_empty() {
-            body = body.child(
+            pane = pane.child(
                 row()
+                    .key("dc-friends-sec-blocked-row")
                     .w_full()
                     .h(16.0)
                     .center_y()
@@ -2726,22 +2765,26 @@ fn friends_panel(s: &AppState, sc: f32, scale: f32) -> El {
                             .color(fg_muted()),
                     ),
             );
-            let mut grid = el().w_full().equal_columns(cols).gaps(8.0, 10.0);
+            let mut grid = el()
+                .key("dc-friends-grid-blocked")
+                .w_full()
+                .equal_columns(cols)
+                .gaps(8.0, 10.0);
             for person in blocked_list {
                 grid = grid.child(blocked_card(s, person, sc, scale));
             }
-            body = body.child(grid);
+            pane = pane.child(grid);
         } else {
             let empty_msg = if q.is_empty() {
                 "No blocked users."
             } else {
                 "No match by that name."
             };
-            body = body.child(
+            pane = pane.child(
                 text(empty_msg)
                     .font(font_px(13.0 * sc, 400.0))
                     .color(fg_muted())
-                    .px(12.0)
+                    .px(8.0)
                     .py(12.0),
             );
         }
@@ -2780,8 +2823,9 @@ fn friends_panel(s: &AppState, sc: f32, scale: f32) -> El {
             };
 
         if !active.is_empty() {
-            body = body.child(
+            pane = pane.child(
                 row()
+                    .key("dc-friends-sec-active-row")
                     .w_full()
                     .h(16.0)
                     .center_y()
@@ -2790,20 +2834,26 @@ fn friends_panel(s: &AppState, sc: f32, scale: f32) -> El {
                     .mx(8.0)
                     .child(
                         text("Active now")
+                            .key("dc-friends-sec-active")
                             .font(font_px(12.0 * sc, 600.0))
                             .color(fg_muted()),
                     ),
             );
-            let mut grid = el().w_full().equal_columns(cols).gaps(8.0, 10.0);
+            let mut grid = el()
+                .key("dc-friends-grid-active")
+                .w_full()
+                .equal_columns(cols)
+                .gaps(8.0, 10.0);
             for f in &active {
                 grid = grid.child(friend_card(s, f, sc, scale));
             }
-            body = body.child(grid);
+            pane = pane.child(grid);
         }
 
         if !rest.is_empty() {
-            body = body.child(
+            pane = pane.child(
                 row()
+                    .key("dc-friends-sec-rest-row")
                     .w_full()
                     .h(16.0)
                     .center_y()
@@ -2812,15 +2862,20 @@ fn friends_panel(s: &AppState, sc: f32, scale: f32) -> El {
                     .mx(8.0)
                     .child(
                         text(tab.section_label())
+                            .key("dc-friends-sec-rest")
                             .font(font_px(12.0 * sc, 600.0))
                             .color(fg_muted()),
                     ),
             );
-            let mut grid = el().w_full().equal_columns(cols).gaps(8.0, 10.0);
+            let mut grid = el()
+                .key("dc-friends-grid-rest")
+                .w_full()
+                .equal_columns(cols)
+                .gaps(8.0, 10.0);
             for f in &rest {
                 grid = grid.child(friend_card(s, f, sc, scale));
             }
-            body = body.child(grid);
+            pane = pane.child(grid);
         }
 
         if active.is_empty() && rest.is_empty() {
@@ -2831,17 +2886,17 @@ fn friends_panel(s: &AppState, sc: f32, scale: f32) -> El {
             } else {
                 "No friends here yet."
             };
-            body = body.child(
+            pane = pane.child(
                 text(empty_msg)
                     .font(font_px(13.0 * sc, 400.0))
                     .color(fg_muted())
-                    .px(12.0)
+                    .px(8.0)
                     .py(12.0),
             );
         }
     }
 
-    panel_frame(
+    let mut panel = panel_frame(
         col()
             .key("dc-friends-panel")
             .grow(1.0)
@@ -2860,8 +2915,12 @@ fn friends_panel(s: &AppState, sc: f32, scale: f32) -> El {
             .scroll(ScrollSpec {
                 stick_bottom: false,
             })
-            .child(body),
-    )
+            .child(pane),
+    );
+    if let Some(bar) = add_bar {
+        panel = panel.child(bar);
+    }
+    panel
 }
 
 fn channel_or_dm_stage(s: &AppState, sc: f32, scale: f32) -> El {
@@ -3147,6 +3206,7 @@ fn right_members_panel(s: &AppState, sc: f32, scale: f32) -> Option<El> {
                                     .center_y()
                                     .radius(RADIUS_PILL)
                                     .hover(hover_fill())
+                                    .hover_motion(Spring::NONE, SPRING_QUICK)
                                     .opacity(if offline { 0.55 } else { 1.0 })
                                     .hit()
                                     .press_on_down()
@@ -3383,6 +3443,7 @@ fn inbox_panel(s: &AppState, sc: f32) -> El {
                     .radius(RADIUS_CARD)
                     .fill(card_surface())
                     .hover(hover_fill())
+                    .hover_motion(Spring::NONE, SPRING_QUICK)
                     .hit()
                     .press_on_down()
                     .on_press(move |s: &mut AppState| {
@@ -3507,4 +3568,294 @@ pub fn view(s: &AppState, scale: f32) -> El {
         .fill(BG)
         .child(server_band(s, sc, scale))
         .child(body)
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::discord_state::{DiscordPlace, DiscordState};
+    use crate::discord_voice_state::VoicePanel;
+    use crate::shell;
+    use crate::state::{AppState, Room};
+    use exo_rpc::{DiscordFriend, DiscordRich};
+    use rune::motion_gate::Run;
+    use rune::render::KIND_BACKDROP_BLUR;
+    use rune::{Env, Runtime};
+
+    fn demo_discord_state(reduce_motion: bool) -> AppState {
+        let mut state = AppState::default();
+        state.settings.reduce_motion = reduce_motion;
+        let mut dc = DiscordState::demo();
+        for (idx, (name, game)) in [
+            ("Vex", "Valorant"),
+            ("Nori", "Balatro"),
+            ("Juno", "Apex Legends"),
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            dc.friends.push(DiscordFriend {
+                id: format!("20001{idx}"),
+                name: name.into(),
+                username: Some(name.to_lowercase()),
+                avatar: None,
+                look: None,
+                kind: "friend".into(),
+                status: "online".into(),
+                activity: Some(game.into()),
+                activity_type: Some(0),
+                rich: Some(DiscordRich {
+                    activity_type: 0,
+                    name: game.into(),
+                    details: None,
+                    state: None,
+                    start: None,
+                    image: None,
+                    through_exo: false,
+                }),
+                prep: None,
+                dm_id: None,
+            });
+        }
+        dc.friends.push(DiscordFriend {
+            id: "200019".into(),
+            name: "Tess".into(),
+            username: Some("tess".into()),
+            avatar: None,
+            look: None,
+            kind: "friend".into(),
+            status: "online".into(),
+            activity: None,
+            activity_type: None,
+            rich: None,
+            prep: None,
+            dm_id: None,
+        });
+        state.discord = dc;
+        state.switch_room(Room::Discord);
+        state
+    }
+
+    fn blur_count(rt: &Runtime<AppState>) -> usize {
+        rt.instances
+            .iter()
+            .filter(|i| i.params[1] == KIND_BACKDROP_BLUR)
+            .count()
+    }
+
+    #[test]
+    fn discord_friends_gridlines_four_cols_and_blur_cap() {
+        let state = demo_discord_state(false);
+        let mut rt = Runtime::new(state, shell::view, (1920.0, 1080.0), Env::new(true, 1.0));
+        rt.frame(0.0);
+        rt.settle_all();
+        rt.frame(1.0 / 60.0);
+
+        let blurs = blur_count(&rt);
+        assert!(blurs <= 4, "Discord exceeded MAX_BACKDROP_BLURS=4: {blurs}");
+
+        let (c0, _) = rt.presented("dc-friend-200001").expect("card 0");
+        let (c1, _) = rt.presented("dc-friend-200002").expect("card 1");
+        let (c2, _) = rt.presented("dc-friend-200003").expect("card 2");
+        let (c3, _) = rt.presented("dc-friend-200004").expect("card 3");
+        let (c4, _) = rt.presented("dc-friend-200010").expect("card 4");
+
+        assert!((c0[1] - c1[1]).abs() <= 1.0, "card 1 not on row 0");
+        assert!((c0[1] - c2[1]).abs() <= 1.0, "card 2 not on row 0");
+        assert!((c0[1] - c3[1]).abs() <= 1.0, "card 3 not on row 0");
+        assert!(c4[1] > c0[1] + 10.0, "expected 4 columns before wrapping");
+        assert!(
+            c0[2] >= 340.0,
+            "expected 4-column card width >= 340px, got {}",
+            c0[2]
+        );
+
+        let (title, _) = rt.presented("dc-friends-title").expect("dc-friends-title");
+        let (sec_active, _) = rt
+            .presented("dc-friends-sec-active")
+            .expect("dc-friends-sec-active");
+        let (sec_rest, _) = rt
+            .presented("dc-friends-sec-rest")
+            .expect("dc-friends-sec-rest");
+        assert!(
+            (title[0] - sec_active[0]).abs() <= 1.0,
+            "title x={} missed Active now x={}",
+            title[0],
+            sec_active[0]
+        );
+        assert!(
+            (title[0] - sec_rest[0]).abs() <= 1.0,
+            "title x={} missed Online x={}",
+            title[0],
+            sec_rest[0]
+        );
+
+        let (add_btn, _) = rt
+            .presented("dc-add-friend-toggle")
+            .expect("dc-add-friend-toggle");
+        let (grid, _) = rt
+            .presented("dc-friends-grid-active")
+            .expect("dc-friends-grid-active");
+        assert!(
+            ((add_btn[0] + add_btn[2]) - (grid[0] + grid[2])).abs() <= 1.0,
+            "Add friend right={} missed grid right={}",
+            add_btn[0] + add_btn[2],
+            grid[0] + grid[2]
+        );
+
+        let (me_trigger, _) = rt.presented("dc-me-trigger").expect("dc-me-trigger");
+        let (dm_first, _) = rt.presented("dc-dm-dm-ada").expect("dc-dm-dm-ada");
+        assert!(
+            (me_trigger[0] - dm_first[0]).abs() <= 1.0,
+            "me-trigger x={} missed first DM x={}",
+            me_trigger[0],
+            dm_first[0]
+        );
+    }
+
+    #[test]
+    fn discord_friends_tabs_and_add_bar_motion_gate() {
+        for reduce_motion in [false, true] {
+            let state = demo_discord_state(reduce_motion);
+            let mut rt = Runtime::new(state, shell::view, (1920.0, 1080.0), Env::new(true, 1.0));
+            rt.set_system_reduced_motion(reduce_motion);
+            let mut run = Run::new(rt, 120.0);
+            run.idle(0.5);
+            run.step();
+            run.act("switch to All", |rt| Run::tap(rt, "dc-friends-tab-all"));
+            run.play(0.5);
+            run.act("switch to Online", |rt| {
+                Run::tap(rt, "dc-friends-tab-online")
+            });
+            run.play(0.5);
+            run.act("open Add friend", |rt| Run::tap(rt, "dc-add-friend-toggle"));
+            run.play(0.5);
+            run.act("close Add friend", |rt| {
+                Run::tap(rt, "dc-add-friend-toggle")
+            });
+            run.play(0.5);
+            let findings = run.finish();
+            assert!(
+                findings.is_empty(),
+                "friends motion_gate findings (reduce_motion={reduce_motion}): {findings:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn discord_chat_message_launch_motion_gate() {
+        for reduce_motion in [false, true] {
+            let mut state = demo_discord_state(reduce_motion);
+            state.discord.place = DiscordPlace::Messages;
+            state.discord.active_dm_id = Some("dm-ada".into());
+            let initial_count = state
+                .discord
+                .chat
+                .messages_by_channel
+                .get("dm-ada")
+                .map_or(0, Vec::len);
+            let mut rt = Runtime::new(state, shell::view, (1920.0, 1080.0), Env::new(true, 1.0));
+            rt.set_system_reduced_motion(reduce_motion);
+            rt.frame(0.0);
+            rt.settle_all();
+            rt.frame(1.0 / 60.0);
+            assert!(
+                blur_count(&rt) <= 4,
+                "Discord chat exceeded MAX_BACKDROP_BLURS=4"
+            );
+
+            let mut run = Run::new(rt, 120.0);
+            run.idle(0.5);
+            run.step();
+            run.act("send message", |rt| {
+                rt.update(|s, _| s.discord.chat.composer.text = "Ready for queue".into());
+                Run::tap(rt, "dc-composer-send");
+            });
+            run.play(0.5);
+            run.act("open emoji bar", |rt| Run::tap(rt, "dc-composer-emoji"));
+            run.play(0.5);
+            run.act("close emoji bar", |rt| Run::tap(rt, "dc-composer-emoji"));
+            run.play(0.5);
+            assert_eq!(
+                run.rt
+                    .state
+                    .discord
+                    .chat
+                    .messages_by_channel
+                    .get("dm-ada")
+                    .map_or(0, Vec::len),
+                initial_count + 1
+            );
+            assert!(run.rt.state.discord.chat.composer.text.is_empty());
+            let findings = run.finish();
+            assert!(
+                findings.is_empty(),
+                "chat motion_gate findings (reduce_motion={reduce_motion}): {findings:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn discord_status_menu_and_voice_panels_motion_gate() {
+        for reduce_motion in [false, true] {
+            let state = demo_discord_state(reduce_motion);
+            let mut rt = Runtime::new(state, shell::view, (1920.0, 1080.0), Env::new(true, 1.0));
+            rt.set_system_reduced_motion(reduce_motion);
+            let mut run = Run::new(rt, 120.0);
+            run.idle(0.5);
+            run.step();
+            run.act("open status menu", |rt| Run::tap(rt, "dc-me-trigger"));
+            run.play(0.5);
+            run.act("close status menu", |rt| Run::tap(rt, "dc-me-trigger"));
+            run.play(0.5);
+            let findings = run.finish();
+            assert!(
+                findings.is_empty(),
+                "status menu motion_gate findings (reduce_motion={reduce_motion}): {findings:?}"
+            );
+
+            let mut voice_state = demo_discord_state(reduce_motion);
+            voice_state.discord.place = DiscordPlace::Servers;
+            voice_state.discord.active_guild_id = voice_state
+                .discord
+                .home
+                .guilds
+                .first()
+                .map(|g| g.id.clone());
+            let mut vrt = Runtime::new(
+                voice_state,
+                shell::view,
+                (1920.0, 1080.0),
+                Env::new(true, 1.0),
+            );
+            vrt.set_system_reduced_motion(reduce_motion);
+            let mut vrun = Run::new(vrt, 120.0);
+            vrun.idle(0.5);
+            vrun.step();
+            vrun.act("open audio panel", |rt| {
+                rt.update(|s, _| s.discord.voice_ui.panel = VoicePanel::Audio);
+            });
+            vrun.play(0.5);
+            assert!(
+                blur_count(&vrun.rt) <= 4,
+                "Discord voice audio panel exceeded MAX_BACKDROP_BLURS=4"
+            );
+            vrun.act("switch to GoLive panel", |rt| {
+                rt.update(|s, _| s.discord.voice_ui.panel = VoicePanel::GoLive);
+            });
+            vrun.play(0.5);
+            vrun.act("switch to Soundboard panel", |rt| {
+                rt.update(|s, _| s.discord.voice_ui.panel = VoicePanel::Soundboard);
+            });
+            vrun.play(0.5);
+            vrun.act("close voice panel", |rt| {
+                rt.update(|s, _| s.discord.voice_ui.panel = VoicePanel::None);
+            });
+            vrun.play(0.5);
+            let vfindings = vrun.finish();
+            assert!(
+                vfindings.is_empty(),
+                "voice panels motion_gate findings (reduce_motion={reduce_motion}): {vfindings:?}"
+            );
+        }
+    }
 }
