@@ -19,6 +19,7 @@ export type HomeDeckProps = {
   searchOpen: boolean
   onSearchOpenChange: (open: boolean) => void
   games: Game[]
+  loading?: boolean
   active: boolean
   blocked: boolean
   transferFor: (game: Game) => InstallProgress | null
@@ -216,6 +217,7 @@ export const HomeDeck = memo(function HomeDeck({
   searchOpen,
   onSearchOpenChange,
   games,
+  loading = false,
   active,
   blocked,
   transferFor,
@@ -333,7 +335,7 @@ export const HomeDeck = memo(function HomeDeck({
               </button>
             ) : null}
           </div>
-        ) : (
+        ) : loading && !trimmedQuery ? null : (
           <div className="exo-home-empty">
             <p>{trimmedQuery ? `No games match “${trimmedQuery}”.` : 'No games yet.'}</p>
             {trimmedQuery ? (

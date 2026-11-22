@@ -35,13 +35,14 @@ export function HomePage({ data, onSettled }: { data: PlayerViewData; onSettled:
   // Home is in once its recent grid is too (or the service has none, or it failed): the room shows it whole.
   const recentIn = !has('recent') || !!recent.data || !!recent.error
   useEffect(() => { if (recentIn) onSettled() }, [recentIn, onSettled])
+  if (!recentIn) return null
   const sections = (data.sections ?? []).filter(section => section.items.length)
   const recents = recent.data?.items ?? []
   return (
     <>
       {recents.length ? <RecentGrid cards={recents.slice(0, 8)} /> : null}
       {sections.map((section, index) => <Shelf key={`${index}:${section.title}`} title={section.title} cards={section.items} more={section.more} />)}
-      {!sections.length && !recents.length && (recent.data || !has('recent')) ? <p className="exo-music-empty">Nothing on Home yet</p> : null}
+      {!sections.length && !recents.length ? <p className="exo-music-empty">Nothing on Home yet</p> : null}
     </>
   )
 }

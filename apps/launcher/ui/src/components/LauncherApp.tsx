@@ -700,6 +700,7 @@ export function LauncherApp() {
         mainRef={libraryMainRef}
         active={under === 'library'}
         overlayOpen={overlayOpen}
+        loading={loading}
         empty={emptyLibrary}
         error={libraryError}
         games={liveShelves.library}
@@ -731,7 +732,7 @@ export function LauncherApp() {
         onUninstall={actions.uninstallGames}
       />
     </Room>
-  ), [under, view, openedRooms, overlayOpen, emptyLibrary, libraryError, liveShelves, selectedId, activeGameId, actions, sortMode, layout.reduceMotion,
+  ), [under, view, openedRooms, overlayOpen, loading, emptyLibrary, libraryError, liveShelves, selectedId, activeGameId, actions, sortMode, layout.reduceMotion,
     transferFor, openCard, openProperties, sortLibrary, libraryFolders, saveFolders, hiddenGames, saveHiddenGames, addGameFromLibrary,
     activateKey, refreshEverything, retryLibrary, openStoreSettings])
 

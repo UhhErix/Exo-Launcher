@@ -180,7 +180,7 @@ export function MusicPlayer({ adapter, service, active, nowPlaying }: { adapter:
   return (
     <PlayerContext.Provider value={value}>
       {reveal.covered ? <MusicWait name={adapter.name} leaving={reveal.ready} onLeft={reveal.uncover} /> : null}
-      <main className="exo-music" aria-label={adapter.name} inert={reveal.covered || immersive}>
+      <main className={reveal.covered && !reveal.ready ? 'exo-music is-concealed' : 'exo-music'} aria-label={adapter.name} inert={reveal.covered || immersive}>
         <h1 className="sr-only">{adapter.name}</h1>
         <nav className="exo-music-side" aria-label="Your library">
           {NAV.filter(([view]) => view === 'home' || view === 'songs' || value.has(view)).map(([view, Icon, name]) => (

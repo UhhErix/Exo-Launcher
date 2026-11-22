@@ -25,6 +25,7 @@ export type LibraryPaneProps = {
   active: boolean
   /** The details sheet is up: the shelf stays put and takes no input. */
   overlayOpen: boolean
+  loading?: boolean
   /** Nothing to show and a reason why (or null when the PC simply has no installs). */
   empty: boolean
   error: string | null
@@ -553,6 +554,7 @@ export const LibraryPane = memo(function LibraryPane(props: LibraryPaneProps) {
             searchOpen={homeSearchOpen}
             onSearchOpenChange={setHomeSearchOpen}
             games={deckGames}
+            loading={props.loading}
             active={active && !covered}
             blocked={blocked}
             transferFor={props.transferFor}
