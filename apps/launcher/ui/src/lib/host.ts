@@ -1918,6 +1918,7 @@ export interface HostEventMap {
   'game.optimizeHeld': { title: string }
   /** Autopilot kept a session's report (shown in PC › Autopilot afterwards; nothing is said during play). */
   'autopilot.report': { game: string; title: string }
+  'autopilot.live': AutopilotLive | null
   /** The shader precompile moved on (at most four a second) or ended (ok set). */
   /** The Exo Shaders engine changed its list or a game's record: read shaders.status again. */
   'shaders.changed': Record<string, never>

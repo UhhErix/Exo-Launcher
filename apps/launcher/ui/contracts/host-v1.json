@@ -350,6 +350,7 @@
     "app.updateProgress": "{ status: string; percent: number | null }",
     "app.updateState": "{ state: UpdateState }",
     "apps.changed": "Record<string, never>",
+    "autopilot.live": "AutopilotLive | null",
     "autopilot.report": "{ game: string; title: string }",
     "backup.stopped": "{ sentence: string; since: string }",
     "bios.progress": "{ share: number }",

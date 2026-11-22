@@ -275,6 +275,27 @@ internal sealed partial class SystemTuning(SystemTuning.ISystem system, string p
         finally { _gate.Release(); }
     }
 
+    internal Item? ReadMemoryIntegrityOnly()
+    {
+        var saved = Load();
+        var boot = system.Boot();
+        return ReadMemoryIntegrityItem(saved, key => saved.Changed.TryGetValue(key, out var at) && at > boot);
+    }
+
+    private Item? ReadMemoryIntegrityItem(Saved saved, Func<string, bool> pending)
+    {
+        var enabled = system.Dword(Hvci, "Enabled");
+        var running = system.IntegrityRunning();
+        if (enabled != 1 && running != true && !saved.Kept.ContainsKey(IntegrityKey) && !pending(IntegrityKey))
+            return null;
+        var isOff = enabled == 0;
+        var blocked = isOff ? null : IntegrityBlocked();
+        var restart = pending(IntegrityKey) || isOff && running == true;
+        var detail = isOff ? restart ? "Restart to finish. Turn this off to put Memory Integrity back on." : "Memory Integrity is off. Turn this off to put it back on."
+            : pending(IntegrityKey) ? "Goes back on after a restart." : blocked ?? IntegrityWarning;
+        return new(IntegrityKey, "Memory Integrity off", detail, isOff, saved.Kept.ContainsKey(IntegrityKey), false, true, restart, blocked);
+    }
+
     private State StateOf(Saved saved)
     {
         var boot = system.Boot();
@@ -401,17 +422,8 @@ internal sealed partial class SystemTuning(SystemTuning.ISystem system, string p
             ReadDeepPlaybookItems(saved, Pending, Tell, items);
 
         // Memory Integrity: shown while it's on (or Exo turned it off).
-        var enabled = system.Dword(Hvci, "Enabled");
-        var running = system.IntegrityRunning();
-        if (enabled == 1 || running == true || saved.Kept.ContainsKey(IntegrityKey) || Pending(IntegrityKey))
-        {
-            var isOff = enabled == 0;
-            var blocked = isOff ? null : IntegrityBlocked();
-            var restart = Pending(IntegrityKey) || isOff && running == true;
-            var detail = isOff ? restart ? "Restart to finish. Turn this off to put Memory Integrity back on." : "Memory Integrity is off. Turn this off to put it back on."
-                : Pending(IntegrityKey) ? "Goes back on after a restart." : blocked ?? IntegrityWarning;
-            items.Add(new(IntegrityKey, "Memory Integrity off", detail, isOff, saved.Kept.ContainsKey(IntegrityKey), false, true, restart, blocked));
-        }
+        if (ReadMemoryIntegrityItem(saved, Pending) is { } integrityItem)
+            items.Add(integrityItem);
 
         // Legacy non-admin undo entries only: Autopilot manages mouse acceleration automatically and Windows windowed VRR is retired.
         if (system.SupportsUserHardwareToggles)

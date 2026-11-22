@@ -94,6 +94,8 @@ public sealed partial class WebHostBridge
         ExoComponents.FailedTwice += OnComponentFailed;
         GameSettings.AppliedAgain += OnOptimizedAgain;
         AutopilotWatch.Reported += OnAutopilotReported;
+        AutopilotWatch.Shared.LiveChanged += OnAutopilotLiveChanged;
+        InitGpuAndDisplayCaches();
         GameSettings.WindowModeHeld += OnOptimizeHeld;
         Account.AccountSessionStore.Changed += OnAccountChanged;
         _runStatePoll = new System.Threading.Timer(_ => PollRunStates(), null, Timeout.InfiniteTimeSpan, Timeout.InfiniteTimeSpan);
@@ -119,6 +121,7 @@ public sealed partial class WebHostBridge
     {
         if (_detached || Interlocked.Exchange(ref _backgroundMonitorsStarted, 1) != 0) return;
         WatchDevices();
+        WatchGpuAndDisplayHardware();
         KeepSteamClientCurrent();
         KeepShadersPrepared();
         WatchVersions();
@@ -346,6 +349,8 @@ public sealed partial class WebHostBridge
         ExoComponents.FailedTwice -= OnComponentFailed;
         GameSettings.AppliedAgain -= OnOptimizedAgain;
         AutopilotWatch.Reported -= OnAutopilotReported;
+        AutopilotWatch.Shared.LiveChanged -= OnAutopilotLiveChanged;
+        DetachGpuAndDisplayCaches();
         GameSettings.WindowModeHeld -= OnOptimizeHeld;
         Account.AccountSessionStore.Changed -= OnAccountChanged;
         if (Volatile.Read(ref _driverEvents) is { } driverEvents)
@@ -872,7 +877,7 @@ public sealed partial class WebHostBridge
                 "hdr.game" => await HdrGameAsync(paramsEl, hasParams, requestToken).ConfigureAwait(true),
                 "game.settings" => await GameSettingsAsync(paramsEl, hasParams, requestToken).ConfigureAwait(true),
                 "keep.status" => KeepStatusForPage(paramsEl, hasParams),
-                "gpu.display" => await GpuDeadlineAsync(GpuDisplayAsync(paramsEl, hasParams), TimeSpan.FromSeconds(25), requestToken).ConfigureAwait(true),
+                "gpu.display" => await GpuDeadlineAsync(GpuDisplayAsync(paramsEl, hasParams, requestToken), TimeSpan.FromSeconds(25), requestToken).ConfigureAwait(false),
                 "discord.status" => DiscordStatus(paramsEl, hasParams),
                 "discord.signIn" => DiscordSignIn(paramsEl, hasParams),
                 "discord.accounts" => DiscordAccountsCall(paramsEl, hasParams),
