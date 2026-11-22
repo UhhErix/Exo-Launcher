@@ -1,0 +1,8 @@
+[package]
+name = "exo-kit"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+rune.workspace = true

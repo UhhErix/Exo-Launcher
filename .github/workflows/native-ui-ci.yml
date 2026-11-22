@@ -1,0 +1,47 @@
+name: Native UI (Rune) CI
+
+on:
+  pull_request:
+    paths:
+      - 'apps/launcher/native-ui/**'
+      - 'apps/launcher/ui/contracts/host-v1.json'
+      - '.github/workflows/native-ui-ci.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'apps/launcher/native-ui/**'
+      - 'apps/launcher/ui/contracts/host-v1.json'
+      - '.github/workflows/native-ui-ci.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: native-ui-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  rune-check:
+    name: Native UI (Rune)
+    runs-on: windows-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: apps/launcher/native-ui
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            apps/launcher/native-ui/target/
+          key: ${{ runner.os }}-rune-${{ hashFiles('apps/launcher/native-ui/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-rune-
+
+      - name: Cargo test
+        run: cargo test --locked

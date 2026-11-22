@@ -1,0 +1,31 @@
+[workspace]
+resolver = "3"
+members = [
+    "crates/exo-rpc",
+    "crates/exo-kit",
+    "crates/exo-ui",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+
+[workspace.dependencies]
+rune = { git = "https://github.com/anomalyco/rune", rev = "b8470260385b39c98d39e3d203306ef4b9f63fc5", features = ["tooling"] }
+rune-media = { git = "https://github.com/anomalyco/rune", rev = "b8470260385b39c98d39e3d203306ef4b9f63fc5", default-features = false }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[patch.crates-io]
+wgpu-hal = { git = "https://github.com/anomalyco/rune", rev = "b8470260385b39c98d39e3d203306ef4b9f63fc5" }
+winit = { git = "https://github.com/anomalyco/rune", rev = "b8470260385b39c98d39e3d203306ef4b9f63fc5" }
+sctk-adwaita = { git = "https://github.com/anomalyco/rune", rev = "b8470260385b39c98d39e3d203306ef4b9f63fc5" }
+parley_engine = { git = "https://github.com/anomalyco/rune", rev = "b8470260385b39c98d39e3d203306ef4b9f63fc5" }
+accesskit_windows = { git = "https://github.com/anomalyco/rune", rev = "b8470260385b39c98d39e3d203306ef4b9f63fc5" }
+accesskit_macos = { git = "https://github.com/anomalyco/rune", rev = "b8470260385b39c98d39e3d203306ef4b9f63fc5" }
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+strip = true
