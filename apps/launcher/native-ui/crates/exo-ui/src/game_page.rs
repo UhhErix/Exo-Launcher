@@ -1,15 +1,18 @@
-use crate::state::{AppState, title_hue};
+use crate::state::{AppState, InputMode, title_hue};
 use exo_kit::{
-    BG, FG, PRESS_SCALE, PRIMARY_FG, RADIUS_CARD, RADIUS_PANEL, RADIUS_PILL, SPRING_QUICK,
-    amoled_card, danger_button, exo_play_button, fg_muted, float_line, glass_button,
-    glass_control_fill, glass_icon_circle, glass_rim_bottom, glass_rim_top, good, hairline,
-    hover_fill, icon_chevron_down, icon_chevron_left, icon_chevron_right, icon_download,
-    icon_folder, icon_play, icon_stop, icon_store, icon_trash, icon_wrench, pressed_fill,
-    primary_button, scaled, surface_card, switch_pill, type_body, type_control, type_first_run,
-    type_section, type_small, type_title,
+    BG, FG, PRESS_SCALE, PRIMARY_FG, RADIUS_CARD, RADIUS_PANEL, RADIUS_PILL, SPRING_BASE,
+    SPRING_FLIGHT, SPRING_MOVE, SPRING_QUICK, TRANSPARENT, amoled_card, bad, exo_play_button,
+    fg_muted, float_line, glass_button, glass_control_fill, glass_icon_circle, glass_rim_bottom,
+    glass_rim_top, good, hairline, hover_fill, icon_chevron_down, icon_chevron_left,
+    icon_chevron_right, icon_download, icon_folder, icon_play, icon_stop, icon_store, icon_trash,
+    icon_wrench, pressed_fill, primary_button, scaled, surface_card, switch_pill, type_body,
+    type_control, type_first_run, type_section, type_small, type_title,
 };
 use exo_rpc::Game;
-use rune::{El, SurfaceFit, TextStyle, col, edit_access, el, oklch, row, text, text_input};
+use rune::{
+    El, SpringPair, SurfaceFit, TextStyle, Transition, col, edit_access, el, oklch, row, text,
+    text_input,
+};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 const GAME_EDGE: f32 = 32.0;
@@ -174,8 +177,10 @@ fn performance_card(s: &AppState, game: &Game) -> El {
         .child(icon_chevron_down(12.0, fg_muted()));
 
     amoled_card(RADIUS_PANEL)
+        .key("gp-perf-card")
         .grow(1.15)
         .min_w(0.0)
+        .h_full()
         .child(
             el().w_full()
                 .pt(18.0)
@@ -212,12 +217,13 @@ fn properties_card(s: &AppState, game: &Game) -> El {
         .and_then(|p| p.folder.as_deref())
         .filter(|v| !v.is_empty())
         .unwrap_or("Managed by store");
+    let gamepad_focus = s.input_mode == InputMode::Gamepad;
 
     let tab_bar =
         row()
             .px(20.0)
             .pb(12.0)
-            .gap(6.0)
+            .gap(4.0)
             .flex_wrap()
             .children(PROPS_TABS.iter().enumerate().map(|(i, label)| {
                 let active = s.game_props_tab == i;
@@ -226,6 +232,11 @@ fn properties_card(s: &AppState, game: &Game) -> El {
                 } else {
                     format!("gp-prop-tab-{i}")
                 };
+                let base = row().py(6.0).px(12.0).center().child(
+                    text(*label)
+                        .font(TextStyle::new(scaled(12.0), 600.0))
+                        .color(fg_muted()),
+                );
                 let mut btn = el()
                     .key(key)
                     .role("tab")
@@ -234,32 +245,49 @@ fn properties_card(s: &AppState, game: &Game) -> El {
                     .hit()
                     .press_on_down()
                     .press_scale(PRESS_SCALE)
-                    .py(6.0)
-                    .px(12.0)
-                    .center()
                     .radius(RADIUS_PILL)
-                    .fill(if active { FG } else { glass_control_fill() })
-                    .hover(if active { FG } else { hover_fill() })
-                    .press(if active { FG } else { pressed_fill() })
+                    .fill(TRANSPARENT)
+                    .hover(if active { TRANSPARENT } else { hover_fill() })
+                    .press(if active { TRANSPARENT } else { pressed_fill() })
                     .motion(SPRING_QUICK)
                     .on_press(move |s: &mut AppState| {
+                        s.input_mode = InputMode::Pointer;
+                        s.disarm_confirm();
                         s.game_props_tab = i;
                         s.props_open = false;
                     })
-                    .child(
-                        text(*label)
-                            .font(TextStyle::new(scaled(12.0), 600.0))
-                            .color(if active { PRIMARY_FG } else { fg_muted() }),
+                    .child(base);
+                if active {
+                    btn = btn.child(
+                        row()
+                            .key("gp-props-pill")
+                            .matched("gp-props-pill")
+                            .matched_crop()
+                            .motion(SPRING_MOVE)
+                            .pin(Some(0.0), Some(0.0), Some(0.0), Some(0.0))
+                            .py(6.0)
+                            .px(12.0)
+                            .center()
+                            .radius(RADIUS_PILL)
+                            .fill(FG)
+                            .child(
+                                text(*label)
+                                    .font(TextStyle::new(scaled(12.0), 600.0))
+                                    .color(PRIMARY_FG),
+                            ),
                     );
-                if !active {
-                    btn = btn.border_gradient(1.0, glass_rim_top(), glass_rim_bottom());
+                }
+                if gamepad_focus {
+                    btn = btn.focus_ring(2.0, 3.0, FG);
                 }
                 btn
             }));
 
-    let mut card = amoled_card(RADIUS_PANEL)
+    let card = amoled_card(RADIUS_PANEL)
+        .key("gp-props-card")
         .grow(1.0)
         .min_w(340.0)
+        .h_full()
         .child(
             el().w_full()
                 .pt(18.0)
@@ -268,6 +296,11 @@ fn properties_card(s: &AppState, game: &Game) -> El {
                 .child(text("Properties").font(type_title()).color(FG)),
         )
         .child(tab_bar);
+
+    let mut body = col()
+        .key(format!("gp-props-body-{}", s.game_props_tab))
+        .w_full()
+        .transition(Transition::opacity().springs(SpringPair::new(SPRING_QUICK, SPRING_QUICK)));
 
     match s.game_props_tab {
         0 => {
@@ -316,7 +349,7 @@ fn properties_card(s: &AppState, game: &Game) -> El {
                     );
                 });
 
-            card = card
+            body = body
                 .child(props_row("Launch options", None, Some(launch_input)))
                 .child(props_row("Language", None, Some(lang_pill)))
                 .child(props_row("Steam overlay", None, Some(overlay_sw)));
@@ -326,8 +359,61 @@ fn properties_card(s: &AppState, game: &Game) -> El {
             let gid_repair = game.id.clone();
             let gid_uninst = game.id.clone();
             let size_label = format_storage(game);
+            let armed = s.is_confirm_armed("gp-uninstall");
 
-            card = card
+            let mut uninstall_btn = row()
+                .key("gp-uninstall")
+                .role("button")
+                .label(if armed {
+                    "Confirm uninstall"
+                } else {
+                    "Uninstall"
+                })
+                .focusable(true)
+                .hit()
+                .press_on_down()
+                .press_scale(0.96)
+                .h(32.0)
+                .px(12.0)
+                .gap(6.0)
+                .center_y()
+                .radius(RADIUS_PILL)
+                .fill(if armed { bad() } else { glass_control_fill() })
+                .hover(if armed {
+                    bad().alpha(0.85)
+                } else {
+                    hover_fill()
+                })
+                .press(if armed {
+                    bad().alpha(0.75)
+                } else {
+                    pressed_fill()
+                })
+                .hold_landing_width()
+                .motion(SPRING_BASE)
+                .on_press_tx(move |s: &mut AppState, tx| {
+                    s.input_mode = InputMode::Pointer;
+                    s.arm_or_confirm_game_uninstall(&gid_uninst, tx);
+                })
+                .child(icon_trash(13.0, if armed { PRIMARY_FG } else { FG }))
+                .child(
+                    text(if armed {
+                        "Confirm uninstall"
+                    } else {
+                        "Uninstall"
+                    })
+                    .font(type_control())
+                    .color(if armed { PRIMARY_FG } else { FG }),
+                );
+            if !armed {
+                uninstall_btn =
+                    uninstall_btn.border_gradient(1.0, glass_rim_top(), glass_rim_bottom());
+            }
+            if gamepad_focus {
+                uninstall_btn = uninstall_btn.focus_ring(2.0, 3.0, FG);
+            }
+
+            body = body
                 .child(props_row(
                     "Install folder",
                     Some((folder.to_string(), fg_muted())),
@@ -347,21 +433,11 @@ fn properties_card(s: &AppState, game: &Game) -> El {
                 .child(props_row(
                     "Remove game",
                     Some(("Uninstall from this PC".into(), fg_muted())),
-                    Some(if s.uninstall_confirm {
-                        danger_button(
-                            "gp-uninstall-confirm",
-                            "Confirm uninstall",
-                            Some(icon_trash(13.0, PRIMARY_FG)),
-                        )
-                        .on_press(move |s: &mut AppState| s.uninstall_game(&gid_uninst))
-                    } else {
-                        glass_button("gp-uninstall", "Uninstall", Some(icon_trash(13.0, FG)))
-                            .on_press(|s: &mut AppState| s.uninstall_confirm = true)
-                    }),
+                    Some(uninstall_btn),
                 ));
         }
         2 => {
-            card = card.child(props_row(
+            body = body.child(props_row(
                 "Beta participation",
                 Some((beta.to_string(), fg_muted())),
                 None,
@@ -374,11 +450,11 @@ fn properties_card(s: &AppState, game: &Game) -> El {
             } else {
                 "Managed by store client".into()
             };
-            card = card.child(props_row("DLC & expansions", Some((msg, fg_muted())), None));
+            body = body.child(props_row("DLC & expansions", Some((msg, fg_muted())), None));
         }
         _ => {
             let gid_save = game.id.clone();
-            card = card.child(props_row(
+            body = body.child(props_row(
                 "Custom artwork",
                 Some(("Using official store cover & hero art".into(), fg_muted())),
                 Some(primary_button("gp-art-refresh", "Refresh", None).on_press(
@@ -391,7 +467,7 @@ fn properties_card(s: &AppState, game: &Game) -> El {
         }
     }
 
-    card
+    card.child(body)
 }
 
 pub fn view(s: &AppState, game: &Game, scale: f32) -> El {
@@ -434,7 +510,9 @@ pub fn view(s: &AppState, game: &Game, scale: f32) -> El {
             ],
         );
 
-    let back_btn = row()
+    let gamepad_focus = s.input_mode == InputMode::Gamepad;
+
+    let mut back_btn = row()
         .key("gp-back")
         .role("button")
         .label("Library")
@@ -453,9 +531,15 @@ pub fn view(s: &AppState, game: &Game, scale: f32) -> El {
         .press(pressed_fill())
         .border_gradient(1.0, glass_rim_top(), glass_rim_bottom())
         .motion(SPRING_QUICK)
-        .on_press(|s: &mut AppState| s.close_game_page())
+        .on_press_tx(|s: &mut AppState, tx| {
+            s.input_mode = InputMode::Pointer;
+            s.close_game_page_tx(tx);
+        })
         .child(icon_chevron_left(16.0, FG))
         .child(text("Library").font(type_control()).color(FG));
+    if gamepad_focus {
+        back_btn = back_btn.focus_ring(2.0, 3.0, FG);
+    }
 
     let store_pill = row()
         .h(34.0)
@@ -480,7 +564,14 @@ pub fn view(s: &AppState, game: &Game, scale: f32) -> El {
         .child(back_btn)
         .child(store_pill);
 
+    let flight_id = s
+        .cover_flight_id
+        .clone()
+        .unwrap_or_else(|| format!("deck:{}", game.id));
     let mut poster = el()
+        .key(format!("gp-poster-{}", game.id))
+        .matched(flight_id)
+        .motion(SPRING_FLIGHT)
         .w(148.0)
         .h(222.0)
         .radius(RADIUS_CARD)
@@ -498,7 +589,7 @@ pub fn view(s: &AppState, game: &Game, scale: f32) -> El {
     }
 
     let id_primary = game.id.clone();
-    let primary_btn = if game.is_running && game.can_stop {
+    let mut primary_btn = if game.is_running && game.can_stop {
         exo_play_button("gp-stop", "Stop", Some(icon_stop(14.0, PRIMARY_FG)))
             .min_w(196.0)
             .h(44.0)
@@ -527,13 +618,19 @@ pub fn view(s: &AppState, game: &Game, scale: f32) -> El {
         .px(22.0)
         .on_press(move |s: &mut AppState| s.install_game(&id_primary))
     };
+    if gamepad_focus {
+        primary_btn = primary_btn.focus_ring(2.0, 3.0, FG);
+    }
 
     let id_folder = game.id.clone();
-    let folder_btn = glass_icon_circle("gp-folder", "Open folder", 44.0, icon_folder(16.0, FG))
+    let mut folder_btn = glass_icon_circle("gp-folder", "Open folder", 44.0, icon_folder(16.0, FG))
         .on_press(move |s: &mut AppState| s.open_game_folder(&id_folder));
+    if gamepad_focus {
+        folder_btn = folder_btn.focus_ring(2.0, 3.0, FG);
+    }
 
     let identity = if let Some(logo) = s.logo_image(game, scale) {
-        row().h(112.0).items_end().child(
+        row().max_h(112.0).items_end().child(
             el().max_w(440.0)
                 .max_h(112.0)
                 .w(400.0)
@@ -541,7 +638,7 @@ pub fn view(s: &AppState, game: &Game, scale: f32) -> El {
                 .pixels_fit(logo.pixels(), SurfaceFit::Fit),
         )
     } else {
-        row().h(112.0).items_end().child(
+        row().items_end().pb(4.0).child(
             text(game.title.clone())
                 .font(type_first_run())
                 .color(FG)
@@ -575,11 +672,19 @@ pub fn view(s: &AppState, game: &Game, scale: f32) -> El {
         let mut c = col()
             .px(22.0)
             .gap(3.0)
-            .child(text(val).font(type_title()).color(FG))
             .child(
-                text(label)
-                    .font(TextStyle::new(scaled(12.0), 500.0))
-                    .color(fg_muted()),
+                row()
+                    .key(format!("gp-stat-val-{label}"))
+                    .h(26.0)
+                    .center_y()
+                    .child(text(val).font(type_title()).color(FG)),
+            )
+            .child(
+                row().h(16.0).center_y().child(
+                    text(label)
+                        .font(TextStyle::new(scaled(12.0), 500.0))
+                        .color(fg_muted()),
+                ),
             );
         if let Some(p) = bar {
             let fill_w = (76.0 * p).max(if p > 0.0 { 4.0 } else { 0.0 });
@@ -601,6 +706,7 @@ pub fn view(s: &AppState, game: &Game, scale: f32) -> El {
     let stats_card = row()
         .py(14.0)
         .px(4.0)
+        .items_start()
         .radius(RADIUS_PANEL)
         .continuous_corners()
         .fill(glass_control_fill())
@@ -643,15 +749,131 @@ pub fn view(s: &AppState, game: &Game, scale: f32) -> El {
         .w_full()
         .px(GAME_EDGE)
         .gap(16.0)
-        .items_start()
+        .items_stretch()
         .child(performance_card(s, game))
         .child(properties_card(s, game));
 
-    col()
+    let mut page = col()
+        .key(format!("game-page-{}", game.id))
         .w_full()
         .gap(14.0)
         .pb(24.0)
         .fill(BG)
+        .transition(Transition::opacity().springs(SpringPair::new(SPRING_QUICK, SPRING_QUICK)))
         .child(stage)
-        .child(lower_cards)
+        .child(lower_cards);
+    if s.is_confirm_armed("gp-uninstall") {
+        page = page.hit().on_press(|s: &mut AppState| {
+            s.disarm_confirm();
+        });
+    }
+    page
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::shell;
+    use crate::state::AppState;
+    use rune::motion_gate::Run;
+    use rune::render::KIND_BACKDROP_BLUR;
+    use rune::{Env, Runtime};
+
+    #[test]
+    fn game_page_equal_cards_stat_baselines_and_blur_cap() {
+        let mut state = AppState::with_demo_games();
+        state.open_game_page("demo:cyberpunk");
+        let mut rt = Runtime::new(state, shell::view, (1920.0, 1080.0), Env::new(true, 1.0));
+        rt.frame(0.0);
+        rt.settle_all();
+        rt.frame(1.0 / 60.0);
+
+        let blurs = rt
+            .instances
+            .iter()
+            .filter(|i| i.params[1] == KIND_BACKDROP_BLUR)
+            .count();
+        assert!(
+            blurs <= 4,
+            "Game page exceeded MAX_BACKDROP_BLURS=4: {blurs}"
+        );
+
+        let (perf_rect, _) = rt
+            .presented("gp-perf-card")
+            .expect("gp-perf-card presented");
+        let (props_rect, _) = rt
+            .presented("gp-props-card")
+            .expect("gp-props-card presented");
+        let perf_bottom = perf_rect[1] + perf_rect[3];
+        let props_bottom = props_rect[1] + props_rect[3];
+        assert!(
+            (perf_bottom - props_bottom).abs() <= 1.0,
+            "bottom cards not flush: perf_bottom={perf_bottom} props_bottom={props_bottom}"
+        );
+
+        let stat_keys = [
+            "gp-stat-val-Played",
+            "gp-stat-val-Last played",
+            "gp-stat-val-Storage",
+            "gp-stat-val-Achievements",
+        ];
+        let first_y = rt
+            .presented(stat_keys[0])
+            .expect("Played stat value presented")
+            .0[1];
+        for key in &stat_keys[1..] {
+            let (rect, _) = rt.presented(key).expect(key);
+            assert!(
+                (rect[1] - first_y).abs() <= 1.0,
+                "stat baseline {key} y={} missed Played y={first_y}",
+                rect[1]
+            );
+        }
+    }
+
+    #[test]
+    fn game_page_properties_pill_and_confirm_button_motion_gate() {
+        for reduce_motion in [false, true] {
+            let mut state = AppState::with_demo_games();
+            state.settings.reduce_motion = reduce_motion;
+            state.open_game_page("demo:cyberpunk");
+            let mut rt = Runtime::new(state, shell::view, (1920.0, 1080.0), Env::new(true, 1.0));
+            rt.set_system_reduced_motion(reduce_motion);
+            let mut run = Run::new(rt, 120.0);
+            run.idle(0.5);
+            run.step();
+
+            run.act("switch to Installed files tab", |rt| {
+                Run::tap(rt, "gp-prop-tab-1")
+            });
+            run.play(0.4);
+            run.act("arm uninstall confirm button", |rt| {
+                Run::tap(rt, "gp-uninstall")
+            });
+            run.play(0.3);
+            run.act("switch to Updates tab", |rt| Run::tap(rt, "gp-prop-tab-2"));
+            run.play(0.4);
+            run.act("switch back to Installed files tab", |rt| {
+                Run::tap(rt, "gp-prop-tab-1")
+            });
+            run.play(0.4);
+
+            let findings: Vec<_> = run
+                .finish()
+                .into_iter()
+                .filter(|f| {
+                    if f.kind == "pop-out" && f.element.contains("gp-props-pill") {
+                        return false;
+                    }
+                    if reduce_motion && matches!(f.kind, "jump" | "text-swap") {
+                        return false;
+                    }
+                    true
+                })
+                .collect();
+            assert!(
+                findings.is_empty(),
+                "game_page motion_gate findings (reduce_motion={reduce_motion}): {findings:?}"
+            );
+        }
+    }
 }

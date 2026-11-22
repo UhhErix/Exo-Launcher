@@ -1,4 +1,4 @@
-use crate::state::{AppState, MiniBarSlot, Room};
+use crate::state::{AppState, InputMode, MiniBarSlot, Room};
 use crate::{
     captures, discord, game_page, key_modal, library, music, notice, palette, pc, settings, store,
     tour,
@@ -9,8 +9,8 @@ use exo_kit::{
     glass_outer_edge, glass_rim_bottom, glass_rim_top, glass_specular_sheen,
     glass_still_control_fill, good, hover_fill, icon_camera, icon_chat, icon_close, icon_gamepad,
     icon_grid, icon_library, icon_maximize, icon_minimize, icon_mouse, icon_music, icon_settings,
-    icon_sparkles, icon_store, modal_scrim_transition, nav_tab, pressed_fill, scrim_fill,
-    selected_fill, set_text_scale, type_body, type_small,
+    icon_sparkles, icon_store, modal_scrim_transition, pressed_fill, scrim_fill, selected_fill,
+    set_text_scale, type_body, type_section, type_small,
 };
 use rune::{Cx, El, MAX_BACKDROP_BLURS, ScrollSpec, SpringPair, Transition, col, el, row, text};
 
@@ -176,11 +176,58 @@ pub fn view(s: &AppState, cx: &mut Cx<AppState>) -> El {
         search = search.backdrop_blur(GLASS_CONTROL_SIGMA);
     }
 
+    let gamepad_focus = s.input_mode == InputMode::Gamepad;
     let nav = glass_capsule_opt("nav-capsule", budget.top_bar_nav).children(
         Room::NAV_TABS.into_iter().map(|room| {
             let active = s.room == room && !s.media.captures_open;
-            nav_tab(room.key(), room.label(), active, room_icon(room, active))
-                .on_press(move |s: &mut AppState| s.switch_room(room))
+            let base = row()
+                .h(30.0)
+                .px(10.0)
+                .gap(6.0)
+                .center_y()
+                .child(room_icon(room, false))
+                .child(text(room.label()).font(type_section()).color(FG));
+            let mut tab = el()
+                .key(room.key())
+                .role("tab")
+                .label(room.label())
+                .focusable(true)
+                .hit()
+                .press_on_down()
+                .press_scale(PRESS_SCALE)
+                .h(30.0)
+                .radius(RADIUS_PILL)
+                .fill(TRANSPARENT)
+                .hover(if active { TRANSPARENT } else { hover_fill() })
+                .press(if active { TRANSPARENT } else { pressed_fill() })
+                .motion(SPRING_QUICK)
+                .on_press(move |s: &mut AppState| {
+                    s.input_mode = InputMode::Pointer;
+                    s.switch_room(room);
+                })
+                .child(base);
+            if active {
+                tab = tab.child(
+                    row()
+                        .key("nav-active-pill")
+                        .matched("nav-active-pill")
+                        .matched_crop()
+                        .motion(SPRING_MOVE)
+                        .pin(Some(0.0), Some(0.0), Some(0.0), Some(0.0))
+                        .h(30.0)
+                        .px(10.0)
+                        .gap(6.0)
+                        .center_y()
+                        .radius(RADIUS_PILL)
+                        .fill(FG)
+                        .child(room_icon(room, true))
+                        .child(text(room.label()).font(type_section()).color(PRIMARY_FG)),
+                );
+            }
+            if gamepad_focus {
+                tab = tab.focus_ring(2.0, 3.0, FG);
+            }
+            tab
         }),
     );
 

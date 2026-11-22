@@ -196,6 +196,325 @@ impl Game {
         ))
     }
 
+    pub fn portrait_art_candidates(&self) -> Vec<ArtCandidate> {
+        let app_id = self.art_steam_app_id();
+        let steam_cache_urls: Vec<String> = match app_id.as_deref() {
+            Some(id) => [
+                format!("{COVER_CACHE_ORIGIN}/{id}_2x.jpg"),
+                format!("{COVER_CACHE_ORIGIN}/{id}.jpg"),
+                format!("{COVER_CACHE_ORIGIN}/steam_{id}.jpg"),
+            ]
+            .into_iter()
+            .map(|u| with_art_revision(&u, self.art_revision))
+            .collect(),
+            None => Vec::new(),
+        };
+        build_portrait_art_candidates(
+            self.cover_url.as_deref(),
+            self.art_revision,
+            app_id.as_deref(),
+            &steam_cache_urls,
+        )
+    }
+
+    pub fn is_preloaded(&self) -> bool {
+        self.status
+            .as_deref()
+            .is_some_and(|s| s.eq_ignore_ascii_case("preloaded"))
+    }
+}
+
+pub const COVER_CACHE_ORIGIN: &str = "https://covers.exo-launcher.local";
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ArtCandidate {
+    pub url: String,
+    pub derived: bool,
+}
+
+pub fn with_art_revision(url: &str, art_revision: Option<u64>) -> String {
+    match art_revision {
+        Some(rev) if rev > 0 && url.starts_with(&format!("{COVER_CACHE_ORIGIN}/")) => {
+            let sep = if url.contains('?') { '&' } else { '?' };
+            format!("{url}{sep}rev={rev}")
+        }
+        _ => url.to_string(),
+    }
+}
+
+const SAFE_COVER_HOSTS: &[&str] = &[
+    "gog-statics.com",
+    "ddragon.leagueoflegends.com",
+    "riotgames.com",
+    "playvalorant.com",
+    "leagueoflegends.com",
+    "store-images.s-microsoft.com",
+    "images-eds-ssl.xboxlive.com",
+    "ubisoft.com",
+    "ubi.com",
+    "ea.com",
+    "origin.com",
+    "blizzard.com",
+    "battle.net",
+    "cdn.akamai.steamstatic.com",
+];
+
+fn https_authority(url: &str) -> Option<(&str, Option<&str>)> {
+    let rest = url.strip_prefix("https://")?;
+    let authority = rest.split(['/', '?', '#']).next()?;
+    if authority.is_empty() || authority.contains('@') {
+        return None;
+    }
+    if let Some((host, port)) = authority.rsplit_once(':') {
+        if host.is_empty() || !port.chars().all(|c| c.is_ascii_digit()) {
+            return None;
+        }
+        Some((host, Some(port)))
+    } else {
+        Some((authority, None))
+    }
+}
+
+fn https_host_is(url: &str, host: &str) -> bool {
+    let Some((hostname, port)) = https_authority(url) else {
+        return false;
+    };
+    if !matches!(port, None | Some("") | Some("443")) {
+        return false;
+    }
+    let lower = hostname.to_ascii_lowercase();
+    lower == host || lower.ends_with(&format!(".{host}"))
+}
+
+fn is_official_epic_portrait_cdn(url: &str) -> bool {
+    let Some((hostname, _)) = https_authority(url) else {
+        return false;
+    };
+    let lower = hostname.to_ascii_lowercase();
+    lower == "cdn1.epicgames.com" || lower == "cdn2.unrealengine.com"
+}
+
+fn is_official_steam_portrait_cdn(url: &str) -> bool {
+    let host_ok =
+        https_host_is(url, "steamstatic.com") || https_host_is(url, "steamcdn-a.akamaihd.net");
+    if !host_ok {
+        return false;
+    }
+    if url.contains("library_hero")
+        || url.contains("header.jpg")
+        || url.contains("capsule_231")
+        || url.contains("capsule_184")
+        || url.contains("capsule_616")
+        || url.contains("capsule_sm")
+    {
+        return false;
+    }
+    url.contains("library_600x900")
+        || url.contains("library_capsule")
+        || url.contains("portrait.png")
+        || url.contains("library_600x900_schinese")
+}
+
+fn is_official_steam_hero_cdn(url: &str) -> bool {
+    let host_ok =
+        https_host_is(url, "steamstatic.com") || https_host_is(url, "steamcdn-a.akamaihd.net");
+    host_ok
+        && (url.contains("library_hero")
+            || url.contains("page_bg_raw")
+            || url.contains("page_bg_generated"))
+}
+
+fn is_official_steam_header_cdn(url: &str) -> bool {
+    let host_ok =
+        https_host_is(url, "steamstatic.com") || https_host_is(url, "steamcdn-a.akamaihd.net");
+    host_ok
+        && (url.contains("/header.jpg")
+            || url.contains("/header_2x.jpg")
+            || url.contains("capsule_616x353"))
+}
+
+pub fn is_safe_cover_url(url: &str, allow_hero: bool) -> bool {
+    if url.is_empty() {
+        return false;
+    }
+    if url.starts_with("data:image/") || url.starts_with(&format!("{COVER_CACHE_ORIGIN}/")) {
+        return true;
+    }
+    if is_official_steam_portrait_cdn(url) || is_official_epic_portrait_cdn(url) {
+        return true;
+    }
+    if allow_hero && (is_official_steam_hero_cdn(url) || is_official_steam_header_cdn(url)) {
+        return true;
+    }
+    SAFE_COVER_HOSTS.iter().any(|host| https_host_is(url, host))
+}
+
+fn has_prefixed_token_suffix(lower: &str, token: &str, suffixes: &[u8]) -> bool {
+    let bytes = lower.as_bytes();
+    let tbytes = token.as_bytes();
+    if bytes.len() < tbytes.len() + 1 {
+        return false;
+    }
+    for i in 0..=bytes.len() - tbytes.len() {
+        if &bytes[i..i + tbytes.len()] == tbytes {
+            let start_ok = i == 0 || matches!(bytes[i - 1], b'/' | b'_');
+            let end = i + tbytes.len();
+            let end_ok = end < bytes.len() && suffixes.contains(&bytes[end]);
+            if start_ok && end_ok {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+fn has_header_segment(lower: &str) -> bool {
+    let bytes = lower.as_bytes();
+    let token = b"header";
+    if bytes.len() < token.len() {
+        return false;
+    }
+    for i in 0..=bytes.len() - token.len() {
+        if &bytes[i..i + token.len()] == token {
+            let start_ok = i == 0 || matches!(bytes[i - 1], b'/' | b'_');
+            if !start_ok {
+                continue;
+            }
+            let end = i + token.len();
+            if end == bytes.len() {
+                return true;
+            }
+            if bytes[end] == b'.' && end + 1 < bytes.len() && bytes[end + 1].is_ascii_alphanumeric()
+            {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+fn has_product_tile_256(url: &str) -> bool {
+    let bytes = url.as_bytes();
+    let needle = b"product_tile_256";
+    if bytes.len() < needle.len() {
+        return false;
+    }
+    for i in 0..=bytes.len() - needle.len() {
+        if &bytes[i..i + needle.len()] == needle {
+            let next = i + needle.len();
+            if next == bytes.len() || bytes[next] != b'0' {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+pub fn is_rejected_cover_url(url: &str, allow_hero: bool) -> bool {
+    let lower = url.to_ascii_lowercase();
+    let has_hero = has_prefixed_token_suffix(&lower, "hero", b"_./-");
+    if allow_hero && has_hero {
+        return false;
+    }
+    if allow_hero && is_official_steam_header_cdn(url) {
+        return false;
+    }
+    has_hero
+        || has_prefixed_token_suffix(&lower, "banner", b"_./-")
+        || has_header_segment(&lower)
+        || url.contains("capsule_231")
+        || url.contains("capsule_184")
+        || url.contains("capsule_sm")
+        || url.contains("capsule_616")
+        || url.contains("library_hero")
+        || url.contains("product_card")
+        || (url.contains("product_tile") && !has_product_tile_256(url))
+}
+
+fn push_unique_portrait(list: &mut Vec<ArtCandidate>, url: Option<&str>) {
+    let Some(url) = url else {
+        return;
+    };
+    if url.is_empty() || list.iter().any(|c| c.url == url) {
+        return;
+    }
+    if !is_safe_cover_url(url, false) || is_rejected_cover_url(url, false) {
+        return;
+    }
+    list.push(ArtCandidate {
+        url: url.to_string(),
+        derived: false,
+    });
+}
+
+pub fn build_portrait_art_candidates(
+    cover_url: Option<&str>,
+    art_revision: Option<u64>,
+    app_id: Option<&str>,
+    steam_cache_urls: &[String],
+) -> Vec<ArtCandidate> {
+    let mut list = Vec::new();
+    let raw = cover_url
+        .filter(|u| !u.is_empty())
+        .map(|u| with_art_revision(u, art_revision));
+    let raw_is_hi_res = raw
+        .as_deref()
+        .is_some_and(|r| r.contains("custom_") || r.contains("_2x"));
+    if raw_is_hi_res && let Some(ref raw_url) = raw {
+        push_unique_portrait(&mut list, Some(raw_url.as_str()));
+        if raw_url.contains("library_600x900_2x") {
+            let fallback = raw_url.replace("library_600x900_2x", "library_600x900");
+            push_unique_portrait(&mut list, Some(fallback.as_str()));
+        }
+    }
+    if let Some(id) = app_id {
+        let fastly =
+            format!("https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/{id}");
+        let base = format!("https://cdn.cloudflare.steamstatic.com/steam/apps/{id}");
+        for url in steam_cache_urls {
+            if url.contains("_2x") {
+                push_unique_portrait(&mut list, Some(url.as_str()));
+            }
+        }
+        if !raw_is_hi_res {
+            let fastly_2x = format!("{fastly}/library_600x900_2x.jpg");
+            let base_2x = format!("{base}/library_600x900_2x.jpg");
+            push_unique_portrait(&mut list, Some(fastly_2x.as_str()));
+            push_unique_portrait(&mut list, Some(base_2x.as_str()));
+            push_unique_portrait(&mut list, raw.as_deref());
+        }
+        for url in steam_cache_urls {
+            push_unique_portrait(&mut list, Some(url.as_str()));
+        }
+        for url in [
+            format!("{fastly}/library_600x900_2x.jpg"),
+            format!("{fastly}/library_600x900.jpg"),
+            format!("{fastly}/library_capsule.jpg"),
+            format!("{base}/library_600x900_2x.jpg"),
+            format!("{base}/library_600x900.jpg"),
+            format!("{base}/library_capsule.jpg"),
+        ] {
+            push_unique_portrait(&mut list, Some(url.as_str()));
+        }
+        for store_url in [
+            format!("{fastly}/header.jpg"),
+            format!("{base}/header.jpg"),
+            format!("{base}/capsule_616x353.jpg"),
+        ] {
+            if !list.iter().any(|c| c.url == store_url) {
+                list.push(ArtCandidate {
+                    url: store_url,
+                    derived: true,
+                });
+            }
+        }
+    } else if !raw_is_hi_res {
+        push_unique_portrait(&mut list, raw.as_deref());
+    }
+    list
+}
+
+impl Game {
     pub fn hours_label(&self) -> String {
         if self.playtime_minutes == 0 {
             return String::new();
@@ -633,6 +952,10 @@ pub struct LauncherSettings {
     pub onboarding_complete: Option<bool>,
     #[serde(default)]
     pub ui_prefs: HashMap<String, Value>,
+    #[serde(default, deserialize_with = "null_as_default")]
+    pub hidden_games: Vec<String>,
+    #[serde(default, deserialize_with = "null_as_default")]
+    pub recent: Vec<String>,
 }
 
 use std::collections::HashMap;
@@ -688,25 +1011,8 @@ impl ArtBase {
         }
     }
 
-    pub fn resolve_local_portrait(&self, game: &Game) -> Option<PathBuf> {
-        if let Some(url) = game.cover_url.as_deref()
-            && let Some(p) = self.resolve_local_cover(url)
-        {
-            return Some(p);
-        }
+    pub fn resolve_local_sanitized_portrait(&self, game: &Game) -> Option<PathBuf> {
         let root = self.covers_dir.as_deref()?;
-        if let Some(app_id) = game.art_steam_app_id() {
-            for name in [
-                format!("{app_id}_2x.jpg"),
-                format!("{app_id}.jpg"),
-                format!("steam_{app_id}.jpg"),
-            ] {
-                let p = Path::new(root).join(&name);
-                if p.is_file() {
-                    return Some(p);
-                }
-            }
-        }
         let sanitized = sanitize_cache_id(&game.id);
         for ext in ["jpg", "png", "webp"] {
             let p = Path::new(root).join(format!("{sanitized}.{ext}"));
@@ -715,6 +1021,15 @@ impl ArtBase {
             }
         }
         None
+    }
+
+    pub fn resolve_local_portrait(&self, game: &Game) -> Option<PathBuf> {
+        for cand in game.portrait_art_candidates() {
+            if let Some(p) = self.resolve_local_cover(&cand.url) {
+                return Some(p);
+            }
+        }
+        self.resolve_local_sanitized_portrait(game)
     }
 
     pub fn resolve_local_hero(&self, game: &Game) -> Option<PathBuf> {
@@ -869,4 +1184,113 @@ pub enum HostEvent {
     StoreChanged(crate::events::StoreChangedEvent),
     Raw { event: String, data: Value },
     Disconnected(String),
+}
+
+#[cfg(test)]
+mod cover_policy_tests {
+    use super::*;
+
+    fn rocket_league_game() -> Game {
+        Game {
+            id: "epic:Sugar".into(),
+            title: "Rocket League".into(),
+            store: "epic".into(),
+            stores: vec!["epic".into(), "steam".into()],
+            installed: true,
+            owned: true,
+            cover_url: Some("https://covers.exo-launcher.local/252950.jpg".into()),
+            variants: vec![
+                GameVariant {
+                    id: "epic:Sugar".into(),
+                    launch_target: None,
+                },
+                GameVariant {
+                    id: "steam:252950".into(),
+                    launch_target: None,
+                },
+            ],
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn rocket_league_candidates_match_react_order() {
+        let game = rocket_league_game();
+        let cands = game.portrait_art_candidates();
+        let urls: Vec<&str> = cands.iter().map(|c| c.url.as_str()).collect();
+        assert_eq!(
+            urls,
+            vec![
+                "https://covers.exo-launcher.local/252950_2x.jpg",
+                "https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/252950/library_600x900_2x.jpg",
+                "https://cdn.cloudflare.steamstatic.com/steam/apps/252950/library_600x900_2x.jpg",
+                "https://covers.exo-launcher.local/252950.jpg",
+                "https://covers.exo-launcher.local/steam_252950.jpg",
+                "https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/252950/library_600x900.jpg",
+                "https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/252950/library_capsule.jpg",
+                "https://cdn.cloudflare.steamstatic.com/steam/apps/252950/library_600x900.jpg",
+                "https://cdn.cloudflare.steamstatic.com/steam/apps/252950/library_capsule.jpg",
+                "https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/252950/header.jpg",
+                "https://cdn.cloudflare.steamstatic.com/steam/apps/252950/header.jpg",
+                "https://cdn.cloudflare.steamstatic.com/steam/apps/252950/capsule_616x353.jpg",
+            ]
+        );
+        assert!(cands[..9].iter().all(|c| !c.derived));
+        assert!(cands[9..].iter().all(|c| c.derived));
+    }
+
+    #[test]
+    fn rocket_league_resolves_2x_cover_over_1x_raw_cover() {
+        let game = rocket_league_game();
+        let dir = std::env::temp_dir().join(format!("exo-rpc-cover-test-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let file_1x = dir.join("252950.jpg");
+        let file_2x = dir.join("252950_2x.jpg");
+        std::fs::write(&file_1x, b"1x").unwrap();
+        std::fs::write(&file_2x, b"2x").unwrap();
+
+        let base = ArtBase {
+            covers_dir: Some(dir.to_string_lossy().into_owned()),
+            ..Default::default()
+        };
+        assert_eq!(base.resolve_local_portrait(&game), Some(file_2x.clone()));
+
+        std::fs::remove_file(&file_2x).unwrap();
+        assert_eq!(base.resolve_local_portrait(&game), Some(file_1x));
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn custom_hires_cover_beats_steam_2x_and_rejects_headers() {
+        let mut game = rocket_league_game();
+        game.cover_url = Some("https://covers.exo-launcher.local/custom_epic_Sugar.jpg".into());
+        game.art_revision = Some(7);
+        let cands = game.portrait_art_candidates();
+        assert_eq!(
+            cands[0].url,
+            "https://covers.exo-launcher.local/custom_epic_Sugar.jpg?rev=7"
+        );
+        assert_eq!(
+            cands[1].url,
+            "https://covers.exo-launcher.local/252950_2x.jpg?rev=7"
+        );
+        assert!(is_rejected_cover_url(
+            "https://cdn.cloudflare.steamstatic.com/steam/apps/252950/header.jpg",
+            false
+        ));
+        assert!(!is_rejected_cover_url(
+            "https://cdn.cloudflare.steamstatic.com/steam/apps/252950/header.jpg",
+            true
+        ));
+        assert!(!is_safe_cover_url(
+            "https://example.invalid/cover.jpg",
+            false
+        ));
+        assert!(is_safe_cover_url(
+            "https://cdn1.epicgames.com/offer/sugar/portrait.jpg",
+            false
+        ));
+    }
 }

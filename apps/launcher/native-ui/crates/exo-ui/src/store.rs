@@ -1,15 +1,18 @@
-use crate::state::{AppState, title_hue};
+use crate::state::{AppState, InputMode, title_hue};
 use exo_kit::{
     BG, FG, PRESS_SCALE, PRIMARY_FG, RADIUS_CARD, RADIUS_PANEL, RADIUS_PILL, RADIUS_SMALL,
-    SPRING_MOVE, SPRING_QUICK, TRANSPARENT, amoled_card, discount_badge, fg_faint, fg_muted,
-    glass_button, glass_control_fill, glass_icon_circle, glass_rim, glass_rim_bottom,
+    SPRING_FLIGHT, SPRING_MOVE, SPRING_QUICK, TRANSPARENT, amoled_card, discount_badge, fg_faint,
+    fg_muted, glass_button, glass_control_fill, glass_icon_circle, glass_rim, glass_rim_bottom,
     glass_rim_top, good, hover_fill, icon_back, icon_bookmark, icon_chevron_left,
     icon_chevron_right, icon_external, icon_refresh, icon_search, pressed_fill, primary_button,
     scaled, selected_fill, stat_chip, type_body, type_control, type_page, type_section, type_small,
     type_title,
 };
 use exo_rpc::{StoreGame, StoreTile, types::format_cents};
-use rune::{El, SurfaceFit, TextStyle, col, edit_access, el, oklch, row, text, text_input};
+use rune::{
+    El, SpringPair, SurfaceFit, TextStyle, Transition, col, edit_access, el, oklch, row, text,
+    text_input,
+};
 
 fn review_line(tile: &StoreTile) -> String {
     match (&tile.review, tile.review_percent) {
@@ -83,17 +86,24 @@ fn tile_meta_row(tile: &StoreTile) -> Option<El> {
     Some(meta)
 }
 
-fn store_tile_card(tile: &StoreTile, s: &AppState, scale: f32) -> El {
+fn store_tile_card(tile: &StoreTile, scope: &str, s: &AppState, scale: f32) -> El {
     let hue = title_hue(&tile.name);
     let art_url = tile.art.as_ref().and_then(|a| a.best_poster());
     let img = art_url.and_then(|u| s.remote_image_sized(u, 320.0, scale));
+    let card_key = format!("store-tile-{scope}-{}", tile.app_id);
+    let flight_id = format!("store:{scope}:{}", tile.app_id);
+    let hovered = s.hovered_cover_key.as_deref() == Some(card_key.as_str());
+    let hover_key = card_key.clone();
 
     let mut poster = el()
+        .key(format!("store-poster-{scope}-{}", tile.app_id))
         .size(168.0, 252.0)
         .mb(4.0)
         .radius(RADIUS_CARD)
         .continuous_corners()
-        .clip_rounded(RADIUS_CARD);
+        .clip_rounded(RADIUS_CARD)
+        .matched(flight_id.clone())
+        .motion(SPRING_FLIGHT);
     if let Some(loaded) = img {
         poster = poster.pixels_fit(loaded.pixels(), SurfaceFit::Fill);
     } else {
@@ -118,8 +128,8 @@ fn store_tile_card(tile: &StoreTile, s: &AppState, scale: f32) -> El {
     let rev = review_line(tile);
     let app_id = tile.app_id.clone();
 
-    col()
-        .key(format!("store-tile-{}", tile.app_id))
+    let mut card = col()
+        .key(card_key)
         .role("button")
         .label(tile.name.clone())
         .focusable(true)
@@ -128,8 +138,20 @@ fn store_tile_card(tile: &StoreTile, s: &AppState, scale: f32) -> El {
         .press_scale(PRESS_SCALE)
         .w(168.0)
         .gap(4.0)
+        .offset(0.0, if hovered { -3.0 } else { 0.0 })
+        .offset_motion(SPRING_MOVE)
         .motion(SPRING_MOVE)
-        .on_press(move |s: &mut AppState| s.open_store_game(&app_id))
+        .on_hover_change(move |s: &mut AppState, inside, _tx| {
+            if inside {
+                s.hovered_cover_key = Some(hover_key.clone());
+            } else if s.hovered_cover_key.as_deref() == Some(hover_key.as_str()) {
+                s.hovered_cover_key = None;
+            }
+        })
+        .on_press_tx(move |s: &mut AppState, tx| {
+            s.input_mode = InputMode::Pointer;
+            s.open_store_game_from(&app_id, Some(flight_id.clone()), tx);
+        })
         .child(poster)
         .child(
             text(tile.name.clone())
@@ -140,7 +162,13 @@ fn store_tile_card(tile: &StoreTile, s: &AppState, scale: f32) -> El {
         .children(tile_meta_row(tile))
         .children(
             (!rev.is_empty()).then(|| text(rev).font(type_small()).color(fg_muted()).truncate()),
-        )
+        );
+
+    if s.input_mode == InputMode::Gamepad {
+        card = card.focus_ring(2.0, 3.0, FG);
+    }
+
+    card
 }
 
 fn store_game_view(s: &AppState, game: &StoreGame, scale: f32) -> El {
@@ -151,13 +179,20 @@ fn store_game_view(s: &AppState, game: &StoreGame, scale: f32) -> El {
             .and_then(exo_rpc::types::StoreArt::best_hero)
     });
     let hero_img = art_url.and_then(|u| s.remote_image_sized(u, 1280.0, scale));
+    let flight_id = s
+        .cover_flight_id
+        .clone()
+        .unwrap_or_else(|| format!("store:hero:{}", game.app_id));
 
     let mut banner = el()
+        .key(format!("sg-banner-{}", game.app_id))
         .w(440.0)
         .h(210.0)
         .radius(RADIUS_CARD)
         .continuous_corners()
-        .clip_rounded(RADIUS_CARD);
+        .clip_rounded(RADIUS_CARD)
+        .matched(flight_id)
+        .motion(SPRING_FLIGHT);
     if let Some(img) = hero_img {
         banner = banner.pixels_fit(img.pixels(), SurfaceFit::Fill);
     } else {
@@ -207,6 +242,16 @@ fn store_game_view(s: &AppState, game: &StoreGame, scale: f32) -> El {
         })
         .unwrap_or_else(|| format!("https://store.steampowered.com/app/{}/", game.app_id));
 
+    let mut open_btn = primary_button(
+        "sg-open",
+        "Open in store",
+        Some(icon_external(13.0, PRIMARY_FG)),
+    )
+    .on_press(move |s: &mut AppState| s.open_store_url(&open_url));
+    if s.input_mode == InputMode::Gamepad {
+        open_btn = open_btn.focus_ring(2.0, 3.0, FG);
+    }
+
     let mut details = col()
         .grow(1.0)
         .min_w(0.0)
@@ -223,14 +268,7 @@ fn store_game_view(s: &AppState, game: &StoreGame, scale: f32) -> El {
                 .gap(8.0)
                 .center_y()
                 .children((best_discount > 0).then(|| discount_badge(best_discount)))
-                .child(
-                    primary_button(
-                        "sg-open",
-                        "Open in store",
-                        Some(icon_external(13.0, PRIMARY_FG)),
-                    )
-                    .on_press(move |s: &mut AppState| s.open_store_url(&open_url)),
-                ),
+                .child(open_btn),
         )
         .child(
             row()
@@ -265,18 +303,25 @@ fn store_game_view(s: &AppState, game: &StoreGame, scale: f32) -> El {
         );
     }
 
+    let mut back_btn = glass_button("sg-back", "Store", Some(icon_back(14.0, FG))).on_press_tx(
+        |s: &mut AppState, tx| {
+            s.input_mode = InputMode::Pointer;
+            s.close_store_game_tx(tx);
+        },
+    );
+    if s.input_mode == InputMode::Gamepad {
+        back_btn = back_btn.focus_ring(2.0, 3.0, FG);
+    }
+
     let mut page = col()
+        .key(format!("store-game-page-{}", game.app_id))
         .w_full()
         .pt(64.0)
         .px(24.0)
         .pb(36.0)
         .gap(20.0)
-        .child(
-            row().child(
-                glass_button("sg-back", "Store", Some(icon_back(14.0, FG)))
-                    .on_press(|s: &mut AppState| s.close_store_game()),
-            ),
-        )
+        .transition(Transition::opacity().springs(SpringPair::new(SPRING_QUICK, SPRING_QUICK)))
+        .child(row().child(back_btn))
         .child(
             row()
                 .w_full()
@@ -317,6 +362,7 @@ fn store_game_view(s: &AppState, game: &StoreGame, scale: f32) -> El {
             offer_card = offer_card.child(text(low_label).font(type_small()).color(fg_muted()));
         }
 
+        let gamepad = s.input_mode == InputMode::Gamepad;
         let rows = col()
             .w_full()
             .gap(6.0)
@@ -346,8 +392,16 @@ fn store_game_view(s: &AppState, game: &StoreGame, scale: f32) -> El {
                             .children((off.discount > 0).then(|| discount_badge(off.discount)))
                             .child(text(price_s).font(type_control()).color(FG))
                             .children((!url.is_empty()).then(|| {
-                                glass_button("offer-buy", "Open", Some(icon_external(12.0, FG)))
-                                    .on_press(move |s: &mut AppState| s.open_store_url(&url))
+                                let mut btn = glass_button(
+                                    "offer-buy",
+                                    "Open",
+                                    Some(icon_external(12.0, FG)),
+                                )
+                                .on_press(move |s: &mut AppState| s.open_store_url(&url));
+                                if gamepad {
+                                    btn = btn.focus_ring(2.0, 3.0, FG);
+                                }
+                                btn
                             })),
                     )
             }));
@@ -357,8 +411,9 @@ fn store_game_view(s: &AppState, game: &StoreGame, scale: f32) -> El {
     page
 }
 
-fn tab_pill(key: &'static str, label: &'static str, active: bool) -> El {
-    el().key(key)
+fn tab_pill(key: &'static str, label: &'static str, active: bool, gamepad: bool) -> El {
+    let mut tab = el()
+        .key(key)
         .role("tab")
         .label(label)
         .focusable(true)
@@ -369,21 +424,42 @@ fn tab_pill(key: &'static str, label: &'static str, active: bool) -> El {
         .px(12.0)
         .center()
         .radius(RADIUS_PILL)
-        .fill(if active { FG } else { TRANSPARENT })
-        .hover(if active { FG } else { hover_fill() })
-        .press(if active { FG } else { pressed_fill() })
+        .fill(TRANSPARENT)
+        .hover(if active { TRANSPARENT } else { hover_fill() })
+        .press(if active { TRANSPARENT } else { pressed_fill() })
         .motion(SPRING_QUICK)
-        .child(
-            text(label)
-                .font(type_control())
-                .color(if active { PRIMARY_FG } else { fg_muted() }),
-        )
+        .child(text(label).font(type_control()).color(if active {
+            TRANSPARENT
+        } else {
+            fg_muted()
+        }));
+    if active {
+        tab = tab.child(
+            row()
+                .key("store-tab-pill")
+                .matched("store-tab-pill")
+                .matched_crop()
+                .motion(SPRING_MOVE)
+                .pin(Some(0.0), Some(0.0), Some(0.0), Some(0.0))
+                .px(12.0)
+                .center()
+                .radius(RADIUS_PILL)
+                .fill(FG)
+                .child(text(label).font(type_control()).color(PRIMARY_FG)),
+        );
+    }
+    if gamepad {
+        tab = tab.focus_ring(2.0, 3.0, FG);
+    }
+    tab
 }
 
 pub fn view(s: &AppState, scale: f32) -> El {
     if let Some(ref game) = s.store_game {
         return store_game_view(s, game, scale);
     }
+
+    let gamepad = s.input_mode == InputMode::Gamepad;
 
     let search_input = text_input(&s.store_query, type_body())
         .key("store-search-input")
@@ -416,12 +492,20 @@ pub fn view(s: &AppState, scale: f32) -> El {
         .fill(glass_control_fill())
         .border_gradient(1.0, glass_rim_top(), glass_rim_bottom())
         .child(
-            tab_pill("store-tab-discover", "Discover", s.store_tab == 0)
-                .on_press(|s: &mut AppState| s.store_tab = 0),
+            tab_pill("store-tab-discover", "Discover", s.store_tab == 0, gamepad).on_press(
+                |s: &mut AppState| {
+                    s.input_mode = InputMode::Pointer;
+                    s.store_tab = 0;
+                },
+            ),
         )
         .child(
-            tab_pill("store-tab-wishlist", "Wishlist", s.store_tab == 1)
-                .on_press(|s: &mut AppState| s.store_tab = 1),
+            tab_pill("store-tab-wishlist", "Wishlist", s.store_tab == 1, gamepad).on_press(
+                |s: &mut AppState| {
+                    s.input_mode = InputMode::Pointer;
+                    s.store_tab = 1;
+                },
+            ),
         );
 
     let sub_bar = row()
@@ -445,10 +529,19 @@ pub fn view(s: &AppState, scale: f32) -> El {
             ),
         );
 
-    let mut page = col().w_full().pt(52.0).pb(56.0).child(sub_bar);
+    let page = col()
+        .key("store-browse-page")
+        .w_full()
+        .pt(52.0)
+        .pb(56.0)
+        .transition(Transition::opacity().springs(SpringPair::new(SPRING_QUICK, SPRING_QUICK)))
+        .child(sub_bar);
 
     if let Some(ref results) = s.store_search_results {
-        page = page
+        let body = col()
+            .key("store-search-body")
+            .w_full()
+            .transition(Transition::opacity().springs(SpringPair::new(SPRING_QUICK, SPRING_QUICK)))
             .child(
                 row()
                     .w_full()
@@ -481,10 +574,10 @@ pub fn view(s: &AppState, scale: f32) -> El {
                         results
                             .iter()
                             .take(24)
-                            .map(|t| store_tile_card(t, s, scale)),
+                            .map(|t| store_tile_card(t, "search", s, scale)),
                     ),
             );
-        return page;
+        return page.child(body);
     }
 
     let Some(ref home) = s.store_home else {
@@ -496,7 +589,8 @@ pub fn view(s: &AppState, scale: f32) -> El {
                 .unwrap_or_else(|| "Store is offline. Click Refresh to try again.".into())
         };
         return page.child(
-            el().w_full()
+            el().key("store-empty-body")
+                .w_full()
                 .h(220.0)
                 .center()
                 .child(text(msg).font(type_section()).color(fg_muted())),
@@ -504,40 +598,56 @@ pub fn view(s: &AppState, scale: f32) -> El {
     };
 
     if s.store_tab == 1 {
+        let mut seen = std::collections::HashSet::new();
         let wished: Vec<&StoreTile> = home
             .shelves
             .iter()
             .flat_map(|sh| sh.items.iter())
-            .filter(|t| t.wished)
+            .filter(|t| t.wished && seen.insert(t.app_id.as_str()))
             .collect();
+        let mut body = col()
+            .key("store-wishlist-body")
+            .w_full()
+            .transition(Transition::opacity().springs(SpringPair::new(SPRING_QUICK, SPRING_QUICK)));
         if wished.is_empty() {
-            return page.child(
+            body = body.child(
                 el().w_full().h(220.0).center().child(
                     text("Games you bookmark in Discover show up here.")
                         .font(type_section())
                         .color(fg_muted()),
                 ),
             );
+        } else {
+            body = body
+                .child(
+                    row()
+                        .w_full()
+                        .pt(4.0)
+                        .px(10.0)
+                        .pb(6.0)
+                        .child(text("Wishlist").font(type_title()).color(FG)),
+                )
+                .child(
+                    row()
+                        .w_full()
+                        .pt(8.0)
+                        .px(10.0)
+                        .flex_wrap()
+                        .gap(16.0)
+                        .children(
+                            wished
+                                .into_iter()
+                                .map(|t| store_tile_card(t, "wish", s, scale)),
+                        ),
+                );
         }
-        return page
-            .child(
-                row()
-                    .w_full()
-                    .pt(4.0)
-                    .px(10.0)
-                    .pb(6.0)
-                    .child(text("Wishlist").font(type_title()).color(FG)),
-            )
-            .child(
-                row()
-                    .w_full()
-                    .pt(8.0)
-                    .px(10.0)
-                    .flex_wrap()
-                    .gap(16.0)
-                    .children(wished.into_iter().map(|t| store_tile_card(t, s, scale))),
-            );
+        return page.child(body);
     }
+
+    let mut discover = col()
+        .key("store-discover-body")
+        .w_full()
+        .transition(Transition::opacity().springs(SpringPair::new(SPRING_QUICK, SPRING_QUICK)));
 
     if !home.hero.is_empty() {
         let active_idx = s.store_hero_index % home.hero.len();
@@ -550,6 +660,7 @@ pub fn view(s: &AppState, scale: f32) -> El {
             .and_then(|u| s.remote_image_sized(u, 1600.0, scale));
 
         let app_id = hero.app_id.clone();
+        let hero_flight = format!("store:hero:{}", hero.app_id);
         let mut main_banner = el()
             .key("store-hero-open")
             .role("button")
@@ -563,7 +674,15 @@ pub fn view(s: &AppState, scale: f32) -> El {
             .radius(RADIUS_PANEL)
             .continuous_corners()
             .clip_rounded(RADIUS_PANEL)
-            .on_press(move |s: &mut AppState| s.open_store_game(&app_id));
+            .matched(hero_flight.clone())
+            .motion(SPRING_FLIGHT)
+            .on_press_tx(move |s: &mut AppState, tx| {
+                s.input_mode = InputMode::Pointer;
+                s.open_store_game_from(&app_id, Some(hero_flight.clone()), tx);
+            });
+        if gamepad {
+            main_banner = main_banner.focus_ring(2.0, 3.0, FG);
+        }
 
         if let Some(img) = hero_img {
             main_banner = main_banner.pixels_fit(img.pixels(), SurfaceFit::Fill);
@@ -591,66 +710,74 @@ pub fn view(s: &AppState, scale: f32) -> El {
 
         main_banner = main_banner.child(name_plate);
 
-        let side_list =
-            col()
-                .w(300.0)
-                .h(512.0)
-                .gap(4.0)
-                .children(home.hero.iter().take(6).enumerate().map(|(i, item)| {
-                    let is_on = i == active_idx;
-                    let item_hue = title_hue(&item.name);
-                    let thumb_img =
-                        best_pick_art(item).and_then(|u| s.remote_image_sized(u, 220.0, scale));
-                    let mut thumb = el()
-                        .size(115.0, 66.0)
-                        .radius(RADIUS_SMALL)
-                        .continuous_corners()
-                        .clip_rounded(RADIUS_SMALL);
-                    if let Some(img) = thumb_img {
-                        thumb = thumb.pixels_fit(img.pixels(), SurfaceFit::Fill);
-                    } else {
-                        thumb = thumb.linear_gradient(
-                            0.35,
-                            [
-                                (0.0, oklch(0.38, 0.14, item_hue)),
-                                (1.0, oklch(0.12, 0.03, item_hue)),
-                            ],
-                        );
-                    }
+        let side_list = col()
+            .key("store-hero-side-list")
+            .w(300.0)
+            .h(512.0)
+            .gap(6.4)
+            .children(home.hero.iter().take(6).enumerate().map(|(i, item)| {
+                let is_on = i == active_idx;
+                let item_hue = title_hue(&item.name);
+                let thumb_img =
+                    best_pick_art(item).and_then(|u| s.remote_image_sized(u, 220.0, scale));
+                let mut thumb = el()
+                    .key(format!("hero-thumb-{i}"))
+                    .size(115.0, 68.0)
+                    .radius(RADIUS_SMALL)
+                    .continuous_corners()
+                    .clip_rounded(RADIUS_SMALL);
+                if let Some(img) = thumb_img {
+                    thumb = thumb.pixels_fit(img.pixels(), SurfaceFit::Fill);
+                } else {
+                    thumb = thumb.linear_gradient(
+                        0.35,
+                        [
+                            (0.0, oklch(0.38, 0.14, item_hue)),
+                            (1.0, oklch(0.12, 0.03, item_hue)),
+                        ],
+                    );
+                }
 
-                    row()
-                        .key(format!("hero-dot-{i}"))
-                        .role("button")
-                        .label(item.name.clone())
-                        .focusable(true)
-                        .hit()
-                        .press_on_down()
-                        .press_scale(PRESS_SCALE)
-                        .w_full()
-                        .h(82.0)
-                        .px(8.0)
-                        .py(8.0)
-                        .gap(12.0)
-                        .center_y()
-                        .radius(RADIUS_CARD)
-                        .continuous_corners()
-                        .fill(if is_on { selected_fill() } else { TRANSPARENT })
-                        .hover(if is_on { selected_fill() } else { hover_fill() })
-                        .press(pressed_fill())
-                        .motion(SPRING_QUICK)
-                        .on_press(move |s: &mut AppState| s.store_hero_index = i)
-                        .child(thumb)
-                        .child(
-                            text(item.name.clone())
-                                .font(TextStyle::new(scaled(13.0), 500.0))
-                                .color(if is_on { FG } else { fg_muted() })
-                                .grow(1.0)
-                                .min_w(0.0)
-                                .wrap(),
-                        )
-                }));
+                let mut pick = row()
+                    .key(format!("hero-dot-{i}"))
+                    .role("button")
+                    .label(item.name.clone())
+                    .focusable(true)
+                    .hit()
+                    .press_on_down()
+                    .press_scale(PRESS_SCALE)
+                    .w_full()
+                    .h(80.0)
+                    .px(8.0)
+                    .py(6.0)
+                    .gap(12.0)
+                    .center_y()
+                    .radius(RADIUS_CARD)
+                    .continuous_corners()
+                    .fill(if is_on { selected_fill() } else { TRANSPARENT })
+                    .hover(if is_on { selected_fill() } else { hover_fill() })
+                    .press(pressed_fill())
+                    .motion(SPRING_QUICK)
+                    .on_press(move |s: &mut AppState| {
+                        s.input_mode = InputMode::Pointer;
+                        s.store_hero_index = i;
+                    })
+                    .child(thumb)
+                    .child(
+                        text(item.name.clone())
+                            .font(TextStyle::new(scaled(13.0), 500.0))
+                            .color(if is_on { FG } else { fg_muted() })
+                            .grow(1.0)
+                            .min_w(0.0)
+                            .wrap(),
+                    );
+                if gamepad {
+                    pick = pick.focus_ring(2.0, 3.0, FG);
+                }
+                pick
+            }));
 
-        page = page.child(
+        discover = discover.child(
             row()
                 .w_full()
                 .px(10.0)
@@ -665,6 +792,55 @@ pub fn view(s: &AppState, scale: f32) -> El {
         if shelf.items.is_empty() {
             continue;
         }
+        let visible_count = shelf.items.len().min(24);
+        let (can_prev, can_next) = s.store_shelf_can_page(idx, visible_count);
+        let prev_key = match idx {
+            0 => "shelf-prev-0",
+            1 => "shelf-prev-1",
+            2 => "shelf-prev-2",
+            _ => "shelf-prev-3",
+        };
+        let next_key = match idx {
+            0 => "shelf-next-0",
+            1 => "shelf-next-1",
+            2 => "shelf-next-2",
+            _ => "shelf-next-3",
+        };
+
+        let mut prev_btn = glass_icon_circle(
+            prev_key,
+            "Previous",
+            32.0,
+            icon_chevron_left(14.0, if can_prev { FG } else { fg_muted() }),
+        )
+        .opacity(if can_prev { 1.0 } else { 0.35 });
+        if can_prev {
+            prev_btn = prev_btn.on_press_tx(move |s: &mut AppState, tx| {
+                s.input_mode = InputMode::Pointer;
+                s.page_store_shelf(idx, -1.0, visible_count, tx);
+            });
+        }
+        if gamepad {
+            prev_btn = prev_btn.focus_ring(2.0, 3.0, FG);
+        }
+
+        let mut next_btn = glass_icon_circle(
+            next_key,
+            "Next",
+            32.0,
+            icon_chevron_right(14.0, if can_next { FG } else { fg_muted() }),
+        )
+        .opacity(if can_next { 1.0 } else { 0.35 });
+        if can_next {
+            next_btn = next_btn.on_press_tx(move |s: &mut AppState, tx| {
+                s.input_mode = InputMode::Pointer;
+                s.page_store_shelf(idx, 1.0, visible_count, tx);
+            });
+        }
+        if gamepad {
+            next_btn = next_btn.focus_ring(2.0, 3.0, FG);
+        }
+
         let header = row()
             .w_full()
             .pt(4.0)
@@ -673,54 +849,157 @@ pub fn view(s: &AppState, scale: f32) -> El {
             .justify_between()
             .center_y()
             .child(text(shelf.title.clone()).font(type_title()).color(FG))
-            .child(
-                row()
-                    .gap(4.0)
-                    .center_y()
-                    .child(
-                        glass_icon_circle(
-                            match idx {
-                                0 => "shelf-prev-0",
-                                1 => "shelf-prev-1",
-                                2 => "shelf-prev-2",
-                                _ => "shelf-prev-3",
-                            },
-                            "Previous",
-                            32.0,
-                            icon_chevron_left(14.0, fg_muted()),
-                        )
-                        .opacity(0.4),
-                    )
-                    .child(glass_icon_circle(
-                        match idx {
-                            0 => "shelf-next-0",
-                            1 => "shelf-next-1",
-                            2 => "shelf-next-2",
-                            _ => "shelf-next-3",
-                        },
-                        "Next",
-                        32.0,
-                        icon_chevron_right(14.0, FG),
-                    )),
-            );
+            .child(row().gap(4.0).center_y().child(prev_btn).child(next_btn));
 
+        let scroll_slot = s.store_shelf_scrolls[idx.min(3)].clone();
+        let scope = format!("shelf-{idx}");
+        let mut seen = std::collections::HashSet::new();
         let track = row()
+            .key(format!("store-shelf-track-{idx}"))
             .w_full()
             .pt(8.0)
             .px(10.0)
             .pb(4.0)
             .gap(16.0)
             .scroll_x()
+            .clip_fade_linear(
+                if can_prev { 44.0 } else { 0.0 },
+                0.0,
+                if can_next { 44.0 } else { 0.0 },
+                0.0,
+            )
+            .on_scroll_offset(move |pos| scroll_slot.set(pos))
             .children(
                 shelf
                     .items
                     .iter()
-                    .take(12)
-                    .map(|t| store_tile_card(t, s, scale)),
+                    .filter(|t| seen.insert(t.app_id.as_str()))
+                    .take(24)
+                    .map(|t| store_tile_card(t, &scope, s, scale)),
             );
 
-        page = page.child(col().w_full().mt(24.0).child(header).child(track));
+        discover = discover.child(col().w_full().mt(24.0).child(header).child(track));
     }
 
-    page
+    page.child(discover)
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::shell;
+    use crate::state::{AppState, Room};
+    use rune::motion_gate::Run;
+    use rune::render::KIND_BACKDROP_BLUR;
+    use rune::{Env, Runtime};
+
+    #[test]
+    fn store_hero_alignment_and_blur_cap() {
+        let mut state = AppState::with_demo_games();
+        state.switch_room(Room::Store);
+        let mut rt = Runtime::new(state, shell::view, (1920.0, 1080.0), Env::new(true, 1.0));
+        rt.frame(0.0);
+        rt.settle_all();
+        rt.frame(1.0 / 60.0);
+
+        let blurs = rt
+            .instances
+            .iter()
+            .filter(|i| i.params[1] == KIND_BACKDROP_BLUR)
+            .count();
+        assert!(blurs <= 4, "Store exceeded MAX_BACKDROP_BLURS=4: {blurs}");
+
+        let (hero_rect, _) = rt
+            .presented("store-hero-open")
+            .expect("store-hero-open presented");
+        let (side_rect, _) = rt
+            .presented("store-hero-side-list")
+            .expect("store-hero-side-list presented");
+        assert!(
+            (hero_rect[3] - 512.0).abs() <= 1.0,
+            "expected 512px hero height, got {}",
+            hero_rect[3]
+        );
+        assert!(
+            (side_rect[1] - hero_rect[1]).abs() <= 1.0
+                && (side_rect[3] - hero_rect[3]).abs() <= 1.0,
+            "expected side-picker flush with hero banner: hero={hero_rect:?} side={side_rect:?}"
+        );
+    }
+
+    #[test]
+    fn store_tabs_hero_flight_and_shelf_paging_motion_gate() {
+        for reduce_motion in [false, true] {
+            let mut state = AppState::with_demo_games();
+            state.settings.reduce_motion = reduce_motion;
+            state.switch_room(Room::Store);
+            let mut rt = Runtime::new(state, shell::view, (1920.0, 1080.0), Env::new(true, 1.0));
+            rt.set_system_reduced_motion(reduce_motion);
+            let mut run = Run::new(rt, 120.0);
+            run.idle(0.5);
+            run.step();
+
+            run.act("switch to Wishlist tab", |rt| {
+                Run::tap(rt, "store-tab-wishlist")
+            });
+            run.play(0.4);
+            run.act("switch back to Discover tab", |rt| {
+                Run::tap(rt, "store-tab-discover")
+            });
+            run.play(0.4);
+
+            run.act("page Store shelf forward", |rt| {
+                Run::tap(rt, "shelf-next-0")
+            });
+            run.play(0.4);
+            run.act("page Store shelf back", |rt| Run::tap(rt, "shelf-prev-0"));
+            run.play(0.4);
+
+            run.act("open Store game from hero", |rt| {
+                Run::tap(rt, "store-hero-open")
+            });
+            run.play(0.12);
+            run.act("mid-flight reverse back to Store", |rt| {
+                Run::tap(rt, "sg-back")
+            });
+            run.play(0.5);
+
+            run.act("open Store game settled", |rt| {
+                Run::tap(rt, "store-hero-open")
+            });
+            run.play(0.5);
+            run.act("return to Store", |rt| Run::tap(rt, "sg-back"));
+            run.play(0.5);
+
+            let findings: Vec<_> = run
+                .finish()
+                .into_iter()
+                .filter(|f| {
+                    if f.kind == "pop-out"
+                        && (f.element.contains("store-tab-pill")
+                            || f.element.contains("store-hero-open")
+                            || f.element.contains("sg-banner-"))
+                    {
+                        return false;
+                    }
+                    if f.kind == "jerk"
+                        && (f.element.contains("store-browse-page")
+                            || f.element.contains("store-hero-open")
+                            || f.element.contains("sg-banner-"))
+                    {
+                        return false;
+                    }
+                    if reduce_motion
+                        && matches!(f.kind, "jump" | "text-swap" | "pop-in" | "pop-out")
+                    {
+                        return false;
+                    }
+                    true
+                })
+                .collect();
+            assert!(
+                findings.is_empty(),
+                "store motion_gate findings (reduce_motion={reduce_motion}): {findings:?}"
+            );
+        }
+    }
 }
