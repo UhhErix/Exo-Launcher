@@ -59,6 +59,83 @@ pub struct DiscordAccountsReply {
 
 #[derive(Debug, Clone, Default, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct DiscordDecoration {
+    #[serde(default)]
+    pub asset: String,
+    #[serde(default)]
+    pub sku_id: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DiscordNameplate {
+    #[serde(default)]
+    pub sku_id: String,
+    #[serde(default)]
+    pub asset: Option<String>,
+    #[serde(default)]
+    pub palette: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DiscordNameStyle {
+    #[serde(default)]
+    pub font: i32,
+    #[serde(default)]
+    pub effect: i32,
+    #[serde(default)]
+    pub colors: Vec<u32>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DiscordGuildTag {
+    #[serde(default)]
+    pub guild_id: String,
+    #[serde(default)]
+    pub tag: String,
+    #[serde(default)]
+    pub badge: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DiscordLook {
+    #[serde(default)]
+    pub decoration: Option<DiscordDecoration>,
+    #[serde(default)]
+    pub nameplate: Option<DiscordNameplate>,
+    #[serde(default)]
+    pub name_style: Option<DiscordNameStyle>,
+    #[serde(default)]
+    pub tag: Option<DiscordGuildTag>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DiscordRestricted {
+    #[serde(default)]
+    pub id: String,
+    #[serde(default)]
+    pub name: String,
+    #[serde(default)]
+    pub username: Option<String>,
+    #[serde(default)]
+    pub avatar: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DiscordRestrictedSet {
+    #[serde(default)]
+    pub blocked: Vec<DiscordRestricted>,
+    #[serde(default)]
+    pub ignored: Vec<DiscordRestricted>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct DiscordMe {
     #[serde(default)]
     pub id: String,
@@ -68,6 +145,8 @@ pub struct DiscordMe {
     pub avatar: Option<String>,
     #[serde(default)]
     pub status: Option<String>,
+    #[serde(default)]
+    pub look: Option<DiscordLook>,
 }
 
 #[derive(Debug, Clone, Default, Deserialize)]
@@ -110,6 +189,8 @@ pub struct DiscordVoiceMember {
     pub suppress: bool,
     #[serde(default)]
     pub request_to_speak: Option<String>,
+    #[serde(default)]
+    pub look: Option<DiscordLook>,
 }
 
 #[derive(Debug, Clone, Default, Deserialize)]
@@ -125,6 +206,8 @@ pub struct DiscordDm {
     pub last_at: Option<i64>,
     #[serde(default)]
     pub line: Option<String>,
+    #[serde(default)]
+    pub look: Option<DiscordLook>,
     #[serde(default)]
     pub group: bool,
     #[serde(default)]
@@ -320,6 +403,8 @@ pub struct DiscordMember {
     pub boosting: Option<String>,
     #[serde(default)]
     pub in_voice: Option<String>,
+    #[serde(default)]
+    pub look: Option<Box<DiscordLook>>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -372,36 +457,8 @@ pub struct DiscordPrep {
     pub percent: Option<i32>,
 }
 
-#[derive(Debug, Clone, Default, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct DiscordLookTag {
-    #[serde(default)]
-    pub guild_id: String,
-    #[serde(default)]
-    pub tag: String,
-    #[serde(default)]
-    pub badge: Option<String>,
-}
-
-#[derive(Debug, Clone, Default, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct DiscordLookNameplate {
-    #[serde(default)]
-    pub sku_id: String,
-    #[serde(default)]
-    pub asset: Option<String>,
-    #[serde(default)]
-    pub palette: Option<String>,
-}
-
-#[derive(Debug, Clone, Default, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct DiscordLook {
-    #[serde(default)]
-    pub nameplate: Option<DiscordLookNameplate>,
-    #[serde(default)]
-    pub tag: Option<DiscordLookTag>,
-}
+pub type DiscordLookTag = DiscordGuildTag;
+pub type DiscordLookNameplate = DiscordNameplate;
 
 #[derive(Debug, Clone, Default, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -437,6 +494,8 @@ pub struct DiscordFriend {
 pub struct DiscordFriendsReply {
     #[serde(default)]
     pub friends: Vec<DiscordFriend>,
+    #[serde(default)]
+    pub restricted: Option<DiscordRestrictedSet>,
 }
 
 #[derive(Debug, Clone, Default, Deserialize)]
