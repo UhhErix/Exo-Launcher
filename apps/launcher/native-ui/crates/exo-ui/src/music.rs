@@ -6,8 +6,7 @@ use exo_kit::{
     glass_capsule, glass_control_fill, glass_rim, glass_rim_bottom, glass_rim_top, good,
     hover_fill, icon_back, icon_close, icon_home, icon_maximize, icon_more_horiz, icon_music,
     icon_pause, icon_play, icon_plus, icon_search, icon_skip_back, icon_skip_forward,
-    icon_sparkles, icon_volume, icon_volume_off, pressed_fill, primary_button, type_body,
-    type_control, type_small, type_title,
+    icon_sparkles, icon_volume, icon_volume_off, pressed_fill, primary_button,
 };
 use exo_rpc::{PlayerCard, PlayerSection, PlayerTrack, format_duration_ms};
 use rune::{
@@ -19,8 +18,28 @@ const SIDEBAR_W: f32 = 272.0;
 const ROW_RADIUS: f32 = 12.0;
 const RECENT_ART_RADIUS: f32 = 9.0;
 
-fn type_mini_title() -> TextStyle {
-    TextStyle::new(12.0, 600.0)
+fn text_scale(s: &AppState) -> f32 {
+    match s.settings.text_size.as_deref() {
+        Some("small") => 0.9,
+        Some("large") => 1.14,
+        _ => 1.0,
+    }
+}
+
+fn scaled_title(s: &AppState) -> TextStyle {
+    TextStyle::new(20.0 * text_scale(s), 600.0)
+}
+
+fn scaled_body(s: &AppState) -> TextStyle {
+    TextStyle::new(13.0 * text_scale(s), 400.0)
+}
+
+fn scaled_small(s: &AppState) -> TextStyle {
+    TextStyle::new(12.0 * text_scale(s), 400.0)
+}
+
+fn scaled_mini_title(s: &AppState) -> TextStyle {
+    TextStyle::new(12.0 * text_scale(s), 600.0)
 }
 
 fn art_surface_fill() -> Color {
@@ -202,7 +221,14 @@ fn render_art(
     }
 }
 
-fn nav_row(key: &str, label: &str, icon: El, active: bool, target: MusicNav) -> El {
+fn nav_row(
+    key: &str,
+    label: &str,
+    icon: El,
+    active: bool,
+    target: MusicNav,
+    font: TextStyle,
+) -> El {
     let mut r = row()
         .key(key)
         .role("button")
@@ -221,7 +247,7 @@ fn nav_row(key: &str, label: &str, icon: El, active: bool, target: MusicNav) -> 
         .motion(SPRING_QUICK)
         .on_press(move |s: &mut AppState| s.music_open_nav(target.clone()))
         .child(icon)
-        .child(text(label).font(type_body()).color(FG).truncate());
+        .child(text(label).font(font).color(FG).truncate());
     if active {
         r = r.fill(pressed_fill());
     }
@@ -230,12 +256,15 @@ fn nav_row(key: &str, label: &str, icon: El, active: bool, target: MusicNav) -> 
 
 fn library_sidebar(s: &AppState, scale: f32) -> El {
     let svc = s.media.music_service;
+    let row_font = scaled_body(s);
+    let sub_font = scaled_small(s);
     let mut nav = col().w_full().gap(8.0).child(nav_row(
         "music-nav-home",
         "Home",
         icon_home(16.0, FG),
         s.media.music_nav == MusicNav::Home,
         MusicNav::Home,
+        row_font,
     ));
     nav = nav.child(nav_row(
         "music-nav-songs",
@@ -243,6 +272,7 @@ fn library_sidebar(s: &AppState, scale: f32) -> El {
         icon_list_music(16.0, FG),
         s.media.music_nav == MusicNav::Songs,
         MusicNav::Songs,
+        row_font,
     ));
     if svc.has_explore() {
         nav = nav.child(nav_row(
@@ -251,6 +281,7 @@ fn library_sidebar(s: &AppState, scale: f32) -> El {
             icon_compass(16.0, FG),
             s.media.music_nav == MusicNav::Explore,
             MusicNav::Explore,
+            row_font,
         ));
     }
     if svc.has_browse() {
@@ -260,6 +291,7 @@ fn library_sidebar(s: &AppState, scale: f32) -> El {
             icon_sparkles(16.0, FG),
             s.media.music_nav == MusicNav::Browse,
             MusicNav::Browse,
+            row_font,
         ));
     }
     if svc.has_radio() {
@@ -269,6 +301,7 @@ fn library_sidebar(s: &AppState, scale: f32) -> El {
             icon_radio(16.0, FG),
             s.media.music_nav == MusicNav::Radio,
             MusicNav::Radio,
+            row_font,
         ));
     }
 
@@ -304,7 +337,7 @@ fn library_sidebar(s: &AppState, scale: f32) -> El {
                 s.media.music_library_filter = filters[(idx + 1) % filters.len()].id.clone();
             }
         })
-        .child(text(filter_label).font(type_small()).color(fg_muted()));
+        .child(text(filter_label).font(sub_font).color(fg_muted()));
 
     let plus_btn = el()
         .key("music-lib-create")
@@ -364,16 +397,14 @@ fn library_sidebar(s: &AppState, scale: f32) -> El {
             let uri = card.uri.clone();
             let kind = card.kind.clone();
             let title = card.title.clone();
-            let mut text_col = col().grow(1.0).min_w(0.0).child(
-                text(card.title.clone())
-                    .font(type_body())
-                    .color(FG)
-                    .truncate(),
-            );
+            let mut text_col = col()
+                .grow(1.0)
+                .min_w(0.0)
+                .child(text(card.title.clone()).font(row_font).color(FG).truncate());
             if !is_artist && !card.subtitle.is_empty() {
                 text_col = text_col.child(
                     text(card.subtitle.clone())
-                        .font(type_small())
+                        .font(sub_font)
                         .color(fg_muted())
                         .truncate(),
                 );
@@ -479,7 +510,7 @@ fn recent_grid(s: &AppState, scale: f32) -> El {
                 ))
                 .child(
                     text(card.title.clone())
-                        .font(type_body())
+                        .font(scaled_body(s))
                         .color(FG)
                         .truncate()
                         .grow(1.0)
@@ -494,7 +525,7 @@ fn shelf_section(s: &AppState, idx: usize, section: &PlayerSection, scale: f32) 
         .mb(12.0)
         .justify_between()
         .center_y()
-        .child(text(section.title.clone()).font(type_title()).color(FG));
+        .child(text(section.title.clone()).font(scaled_title(s)).color(FG));
     if let Some(ref more) = section.more {
         let uri = more.uri.clone();
         let kind = more.kind.clone();
@@ -513,7 +544,7 @@ fn shelf_section(s: &AppState, idx: usize, section: &PlayerSection, scale: f32) 
                 .on_press(move |s: &mut AppState| {
                     s.music_open_card(uri.clone(), kind.clone(), title.clone());
                 })
-                .child(text("Show all").font(type_small()).color(fg_muted())),
+                .child(text("Show all").font(scaled_small(s)).color(fg_muted())),
         );
     }
 
@@ -552,14 +583,14 @@ fn shelf_section(s: &AppState, idx: usize, section: &PlayerSection, scale: f32) 
                 )))
                 .child(
                     text(card.title.clone())
-                        .font(type_body())
+                        .font(scaled_body(s))
                         .color(FG)
                         .truncate(),
                 );
             if !card.subtitle.is_empty() {
                 card_col = card_col.child(
                     text(card.subtitle.clone())
-                        .font(type_small())
+                        .font(scaled_small(s))
                         .color(fg_muted())
                         .truncate(),
                 );
@@ -634,23 +665,27 @@ fn track_row(
             col()
                 .grow(1.0)
                 .min_w(0.0)
-                .gap(2.0)
                 .child(
                     text(track.title.clone())
-                        .font(type_body())
+                        .font(scaled_body(s))
                         .color(if active { good() } else { FG })
                         .truncate(),
                 )
-                .child(text(artist).font(type_small()).color(fg_muted()).truncate()),
+                .child(
+                    text(artist)
+                        .font(scaled_small(s))
+                        .color(fg_muted())
+                        .truncate(),
+                ),
         )
         .child(
             text(album)
-                .font(type_small())
+                .font(scaled_small(s))
                 .color(fg_muted())
                 .truncate()
                 .w(240.0),
         )
-        .child(text(dur).font(type_small()).color(fg_muted()).w(48.0))
+        .child(text(dur).font(scaled_small(s)).color(fg_muted()).w(48.0))
 }
 
 fn main_panel_body(s: &AppState, scale: f32) -> El {
@@ -663,12 +698,12 @@ fn main_panel_body(s: &AppState, scale: f32) -> El {
                 .items_center()
                 .child(
                     text(format!("Sign in to {}", s.media.music_service.label()))
-                        .font(type_title())
+                        .font(scaled_title(s))
                         .color(FG),
                 )
                 .child(
                     text("Connect your account to browse and play music inside Exo.")
-                        .font(type_body())
+                        .font(scaled_body(s))
                         .color(fg_muted()),
                 )
                 .child(
@@ -682,10 +717,14 @@ fn main_panel_body(s: &AppState, scale: f32) -> El {
                 .py(120.0)
                 .gap(10.0)
                 .items_center()
-                .child(text("Subscription required").font(type_title()).color(FG))
+                .child(
+                    text("Subscription required")
+                        .font(scaled_title(s))
+                        .color(FG),
+                )
                 .child(
                     text("Sign in with an eligible account to play in Exo.")
-                        .font(type_body())
+                        .font(scaled_body(s))
                         .color(fg_muted()),
                 )
                 .child(
@@ -705,7 +744,7 @@ fn main_panel_body(s: &AppState, scale: f32) -> El {
                     } else {
                         msg.as_str()
                     })
-                    .font(type_body())
+                    .font(scaled_body(s))
                     .color(bad()),
                 )
                 .child(
@@ -717,7 +756,7 @@ fn main_panel_body(s: &AppState, scale: f32) -> El {
             if s.media.music_home_sections.is_empty() && s.media.music_recent.is_empty() {
                 return col().w_full().py(140.0).items_center().child(
                     text(format!("Starting {}…", s.media.music_service.label()))
-                        .font(type_body())
+                        .font(scaled_body(s))
                         .color(fg_muted()),
                 );
             }
@@ -762,11 +801,11 @@ fn main_panel_body(s: &AppState, scale: f32) -> El {
                         .grow(1.0)
                         .min_w(0.0)
                         .gap(6.0)
-                        .child(text(hdr.title.clone()).font(type_title()).color(FG));
+                        .child(text(hdr.title.clone()).font(scaled_title(s)).color(FG));
                     if !hdr.subtitle.is_empty() {
                         meta = meta.child(
                             text(hdr.subtitle.clone())
-                                .font(type_body())
+                                .font(scaled_body(s))
                                 .color(fg_muted()),
                         );
                     }
@@ -775,7 +814,7 @@ fn main_panel_body(s: &AppState, scale: f32) -> El {
                     {
                         meta = meta.child(
                             text(desc.clone())
-                                .font(type_small())
+                                .font(scaled_small(s))
                                 .color(fg_faint())
                                 .wrap(),
                         );
@@ -810,8 +849,8 @@ fn main_panel_body(s: &AppState, scale: f32) -> El {
                     MusicNav::Home => "Home",
                 };
                 body = body
-                    .child(text(heading).font(type_title()).color(FG).mb(12.0))
-                    .child(text("Loading…").font(type_body()).color(fg_muted()));
+                    .child(text(heading).font(scaled_title(s)).color(FG).mb(12.0))
+                    .child(text("Loading…").font(scaled_body(s)).color(fg_muted()));
             }
             body
         }
@@ -819,7 +858,7 @@ fn main_panel_body(s: &AppState, scale: f32) -> El {
 }
 
 fn main_panel(s: &AppState, scale: f32) -> El {
-    let search_input = text_input(&s.media.music_search_edit, type_body())
+    let search_input = text_input(&s.media.music_search_edit, scaled_body(s))
         .key("music-search-input")
         .label("Search music")
         .grow(1.0)
@@ -900,7 +939,7 @@ fn side_panel(s: &AppState, panel: MusicPanel, scale: f32) -> El {
         .mb(14.0)
         .justify_between()
         .center_y()
-        .child(text(title).font(type_title()).color(FG))
+        .child(text(title).font(scaled_title(s)).color(FG))
         .child(
             el().key("music-panel-close")
                 .role("button")
@@ -924,18 +963,23 @@ fn side_panel(s: &AppState, panel: MusicPanel, scale: f32) -> El {
                     .w_full()
                     .gap(12.0)
                     .child(render_art(s, art_url, None, RADIUS_CARD, false, scale))
-                    .child(text(pb.title.clone()).font(type_title()).color(FG))
-                    .child(text(pb.artist.clone()).font(type_body()).color(fg_muted()))
-                    .children(
-                        (!pb.album.is_empty())
-                            .then(|| text(pb.album.clone()).font(type_small()).color(fg_faint())),
+                    .child(text(pb.title.clone()).font(scaled_title(s)).color(FG))
+                    .child(
+                        text(pb.artist.clone())
+                            .font(scaled_body(s))
+                            .color(fg_muted()),
                     )
+                    .children((!pb.album.is_empty()).then(|| {
+                        text(pb.album.clone())
+                            .font(scaled_small(s))
+                            .color(fg_faint())
+                    }))
             } else {
-                col()
-                    .w_full()
-                    .py(40.0)
-                    .items_center()
-                    .child(text("Nothing playing").font(type_body()).color(fg_muted()))
+                col().w_full().py(40.0).items_center().child(
+                    text("Nothing playing")
+                        .font(scaled_body(s))
+                        .color(fg_muted()),
+                )
             }
         }
         MusicPanel::Queue => {
@@ -945,7 +989,7 @@ fn side_panel(s: &AppState, panel: MusicPanel, scale: f32) -> El {
                     list = list
                         .child(
                             text("Now playing")
-                                .font(type_small())
+                                .font(scaled_small(s))
                                 .color(fg_muted())
                                 .mb(4.0),
                         )
@@ -957,7 +1001,7 @@ fn side_panel(s: &AppState, panel: MusicPanel, scale: f32) -> El {
                     list = list
                         .child(
                             text("Next")
-                                .font(type_small())
+                                .font(scaled_small(s))
                                 .color(fg_muted())
                                 .mt(12.0)
                                 .mb(4.0),
@@ -971,11 +1015,11 @@ fn side_panel(s: &AppState, panel: MusicPanel, scale: f32) -> El {
                 }
                 list
             } else {
-                col()
-                    .w_full()
-                    .py(40.0)
-                    .items_center()
-                    .child(text("Queue is empty").font(type_body()).color(fg_muted()))
+                col().w_full().py(40.0).items_center().child(
+                    text("Queue is empty")
+                        .font(scaled_body(s))
+                        .color(fg_muted()),
+                )
             }
         }
     };
@@ -1079,14 +1123,19 @@ fn transport_bar(s: &AppState, scale: f32) -> El {
     let title = pb.map(|p| p.title.as_str()).unwrap_or("Nothing playing");
     let artist = pb.map(|p| p.artist.as_str()).unwrap_or("");
 
-    let mut song_text = col().grow(1.0).min_w(0.0).gap(2.0).child(
+    let mut song_text = col().grow(1.0).min_w(0.0).child(
         text(title)
-            .font(type_control())
+            .font(scaled_body(s))
             .color(if has_track { FG } else { fg_muted() })
             .truncate(),
     );
     if !artist.is_empty() {
-        song_text = song_text.child(text(artist).font(type_small()).color(fg_muted()).truncate());
+        song_text = song_text.child(
+            text(artist)
+                .font(scaled_small(s))
+                .color(fg_muted())
+                .truncate(),
+        );
     }
 
     let left = row()
@@ -1360,12 +1409,14 @@ fn immersion_view(s: &AppState, scale: f32) -> El {
             col()
                 .items_center()
                 .gap(4.0)
-                .child(text(title).font(type_title()).color(FG))
+                .child(text(title).font(scaled_title(s)).color(FG))
                 .children(
-                    (!artist.is_empty()).then(|| text(artist).font(type_body()).color(fg_muted())),
+                    (!artist.is_empty())
+                        .then(|| text(artist).font(scaled_body(s)).color(fg_muted())),
                 )
                 .children(
-                    (!album.is_empty()).then(|| text(album).font(type_small()).color(fg_faint())),
+                    (!album.is_empty())
+                        .then(|| text(album).font(scaled_small(s)).color(fg_faint())),
                 ),
         );
 
@@ -1531,13 +1582,13 @@ pub fn mini_player(s: &AppState, scale: f32) -> Option<El> {
                         .center_y()
                         .child(
                             text(track.title.clone())
-                                .font(type_mini_title())
+                                .font(scaled_mini_title(s))
                                 .color(FG)
                                 .truncate(),
                         )
                         .children((!track.artist.is_empty()).then(|| {
                             text(track.artist.clone())
-                                .font(type_small())
+                                .font(scaled_small(s))
                                 .color(fg_muted())
                                 .truncate()
                                 .grow(1.0)
