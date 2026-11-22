@@ -364,10 +364,8 @@ impl AppState {
         );
     }
 
-    pub fn send_discord_message(&mut self) {
-        let Some(cid) = self.active_chat_channel_id() else {
-            return;
-        };
+    pub fn send_discord_message(&mut self) -> Option<String> {
+        let cid = self.active_chat_channel_id()?;
         let content = self.discord.chat.composer.text.trim().to_string();
         let upload_ids: Vec<String> = self
             .discord
@@ -377,7 +375,7 @@ impl AppState {
             .filter_map(|u| u.upload_id.clone())
             .collect();
         if content.is_empty() && upload_ids.is_empty() {
-            return;
+            return None;
         }
         if self
             .discord
@@ -387,7 +385,7 @@ impl AppState {
             .any(|u| u.uploading)
         {
             self.notice = Some("Wait for attachments to finish uploading".into());
-            return;
+            return None;
         }
 
         let reply_id = self
@@ -399,6 +397,7 @@ impl AppState {
         let seq = self.discord.chat.next_local_seq;
         self.discord.chat.next_local_seq += 1;
         let local_id = format!("local-{seq}");
+        let launch_id = (!content.is_empty()).then(|| local_id.clone());
         let me = self.discord.home.me.clone();
         let optimistic = DiscordMessage {
             id: local_id.clone(),
@@ -434,7 +433,7 @@ impl AppState {
         self.discord.chat.composer_emoji_open = false;
 
         if self.status != HostStatus::Connected {
-            return;
+            return launch_id;
         }
         #[cfg(windows)]
         {
@@ -485,6 +484,7 @@ impl AppState {
                 },
             );
         }
+        launch_id
     }
 
     pub fn begin_edit_discord_message(&mut self, message_id: &str, content: &str) {
