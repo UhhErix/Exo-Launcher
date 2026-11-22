@@ -1,0 +1,12 @@
+[package]
+name = "exo-ui"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+exo-kit = { path = "../exo-kit" }
+exo-rpc = { path = "../exo-rpc" }
+rune.workspace = true
+rune-media.workspace = true
+serde_json.workspace = true
