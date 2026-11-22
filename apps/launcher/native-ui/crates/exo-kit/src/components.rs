@@ -6,7 +6,7 @@ use crate::tokens::{
     hairline, hover_fill, pressed_fill, subtle_fill, track_fill, type_control, type_section,
     type_small, warn,
 };
-use rune::{Color, El, Pixels, SpringPair, SurfaceFit, Transition, Vec2, col, el, row, text};
+use rune::{Color, El, SpringPair, Transition, Vec2, col, el, row, text};
 
 pub fn popover_transition() -> Transition {
     let enter = Transition::scale_anchor(0.96, Vec2::new(1.0, 0.0)).combined(Transition::opacity());
@@ -402,29 +402,4 @@ pub fn segmented_bar(segments: &[(f32, Color)]) -> El {
                 .filter(|(f, _)| *f > 0.004)
                 .map(|(frac, color)| el().grow(*frac).h(8.0).fill(*color)),
         )
-}
-
-pub fn cover_image(
-    pixels: &Pixels,
-    container_w: f32,
-    container_h: f32,
-    anchor_x: f32,
-    anchor_y: f32,
-) -> El {
-    let (iw, ih) = pixels.size();
-    if iw == 0 || ih == 0 || container_w <= 0.0 || container_h <= 0.0 {
-        return el()
-            .pin(Some(0.0), Some(0.0), Some(0.0), Some(0.0))
-            .pixels_fit(pixels, SurfaceFit::Fill);
-    }
-    let iw = iw as f32;
-    let ih = ih as f32;
-    let fit = (container_w / iw).max(container_h / ih);
-    let draw_w = iw * fit;
-    let draw_h = ih * fit;
-    let left = (container_w - draw_w) * anchor_x;
-    let top = (container_h - draw_h) * anchor_y;
-    el().pin(Some(left), Some(top), None, None)
-        .size(draw_w, draw_h)
-        .pixels_fit(pixels, SurfaceFit::Fill)
 }
