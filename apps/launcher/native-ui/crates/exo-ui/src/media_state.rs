@@ -833,6 +833,20 @@ impl AppState {
         }
     }
 
+    pub fn refresh_music_playback(&mut self) {
+        if self.status == HostStatus::Standalone {
+            return;
+        }
+        #[cfg(windows)]
+        if let (Some(rpc), Some(handle)) = (self.rpc.clone(), self.handle.clone()) {
+            rpc.call::<_, MusicPlaybackReply>(METHOD_MUSIC_PLAYBACK, &json!({}), move |res| {
+                if let Ok(reply) = res {
+                    handle.update(move |s, _| s.media.playback = reply.playback);
+                }
+            });
+        }
+    }
+
     pub fn music_control(&mut self, action: &str) {
         if let Some(ref mut pb) = self.media.playback {
             match action {
@@ -855,13 +869,19 @@ impl AppState {
                 &json!({ "action": action }),
                 move |res| {
                     handle.update(move |s, _| {
-                        if let Ok(r) = res
-                            && !r.ok
-                            && let Some(msg) = r.message
-                        {
-                            s.notice = Some(msg);
+                        let control_ok = match res {
+                            Ok(r) if r.ok => true,
+                            Ok(r) => {
+                                if let Some(msg) = r.message {
+                                    s.notice = Some(msg);
+                                }
+                                false
+                            }
+                            Err(_) => false,
+                        };
+                        if needs_music_playback_refresh(control_ok, s.media.playback.as_ref()) {
+                            s.refresh_music_playback();
                         }
-                        s.load_music_room();
                     });
                 },
             );
@@ -1096,5 +1116,67 @@ impl AppState {
                 },
             );
         }
+    }
+}
+
+pub fn needs_music_playback_refresh(control_ok: bool, playback: Option<&MusicPlayback>) -> bool {
+    if !control_ok {
+        return true;
+    }
+    playback.is_some_and(|p| !p.source.eq_ignore_ascii_case("page"))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn page_control_ok_skips_follow_up_rpcs() {
+        let page_pb = MusicPlayback {
+            source: "page".into(),
+            status: "playing".into(),
+            title: "Song".into(),
+            ..Default::default()
+        };
+        assert!(!needs_music_playback_refresh(true, Some(&page_pb)));
+        assert!(!needs_music_playback_refresh(true, None));
+    }
+
+    #[test]
+    fn failed_or_headless_control_requests_single_playback_refresh() {
+        let page_pb = MusicPlayback {
+            source: "page".into(),
+            status: "playing".into(),
+            title: "Song".into(),
+            ..Default::default()
+        };
+        let gsmtc_pb = MusicPlayback {
+            source: "system".into(),
+            status: "playing".into(),
+            title: "Song".into(),
+            ..Default::default()
+        };
+        assert!(needs_music_playback_refresh(false, Some(&page_pb)));
+        assert!(needs_music_playback_refresh(false, None));
+        assert!(needs_music_playback_refresh(true, Some(&gsmtc_pb)));
+    }
+
+    #[test]
+    fn music_control_flips_playback_optimistically() {
+        let mut s = AppState::default();
+        s.media.playback = Some(MusicPlayback {
+            source: "page".into(),
+            status: "playing".into(),
+            title: "Song".into(),
+            ..Default::default()
+        });
+        s.music_control("toggle");
+        assert_eq!(s.media.playback.as_ref().unwrap().status, "paused");
+        s.music_control("toggle");
+        assert_eq!(s.media.playback.as_ref().unwrap().status, "playing");
+        s.music_control("pause");
+        assert_eq!(s.media.playback.as_ref().unwrap().status, "paused");
+        s.music_control("play");
+        assert_eq!(s.media.playback.as_ref().unwrap().status, "playing");
     }
 }

@@ -90,7 +90,7 @@ internal sealed partial class MusicEngineService
             if (_musicHost is null) return new { ok = false, state = "error", message = label + " could not open." };
         }
         if (!_musicWebReady) return MusicWebLoading(service);
-        var status = await WebMusicCallAsync(service, MusicWebStatus(service), attempts: 2);
+        var status = await WebMusicStatusCallAsync(service, attempts: 2);
         if (status is not { ValueKind: JsonValueKind.Object } answer ||
             !answer.TryGetProperty("ready", out var ready) || ready.ValueKind != JsonValueKind.True)
             return MusicWebLoading(service);
@@ -136,11 +136,11 @@ internal sealed partial class MusicEngineService
         return new { ok = true, state = "signedOut", message = interrupted };
     }
 
-    private static string MusicWebStatus(string service) => service switch
+    private Task<JsonElement?> WebMusicStatusCallAsync(string service, int attempts, TimeSpan? timeout = null) => service switch
     {
-        "apple" => AppleMusicNative.View("status", null, null, 0),
-        "spotify" => SpotifyNative.Status,
-        _ => YouTubeMusicNative.View("status", null, null, 0),
+        "apple" => WebMusicAppleCallAsync(installed => AppleMusicNative.View("status", null, null, 0, installed), attempts: attempts, timeout: timeout),
+        "spotify" => WebMusicCallAsync(service, SpotifyNative.Status, attempts: attempts, timeout: timeout),
+        _ => WebMusicCallAsync(service, YouTubeMusicNative.View("status", null, null, 0), attempts: attempts, timeout: timeout),
     };
 
     private async Task<bool> MusicWebUpAsync(string service)
@@ -161,7 +161,7 @@ internal sealed partial class MusicEngineService
         var booted = await MusicWebPolicy.WaitUntilAsync(async () =>
         {
             if (_musicWebBooted) return true;
-            var status = await WebMusicCallAsync(service, MusicWebStatus(service), attempts: 1, timeout: TimeSpan.FromSeconds(6));
+            var status = await WebMusicStatusCallAsync(service, attempts: 1, timeout: TimeSpan.FromSeconds(6));
             return status is { ValueKind: JsonValueKind.Object } answer && answer.TryGetProperty("ready", out var ready) && ready.ValueKind == JsonValueKind.True;
         }, Gone, MusicWebBootLimit, _lifetimeCts.Token);
         if (booted) _musicWebBooted = true;
@@ -184,8 +184,9 @@ internal sealed partial class MusicEngineService
         offset = Math.Clamp(offset, 0, 100_000);
         var label = MusicWebPolicy.Label(service);
         if (!await MusicWebUpAsync(service)) return new { ok = false, message = label + " is not answering. Try again." };
-        var data = await WebMusicCallAsync(service, apple
-            ? AppleMusicNative.View(view, uri, query, offset) : YouTubeMusicNative.View(view, uri, query, offset));
+        var data = apple
+            ? await WebMusicAppleCallAsync(installed => AppleMusicNative.View(view, uri, query, offset, installed))
+            : await WebMusicCallAsync(service, YouTubeMusicNative.View(view, uri, query, offset));
         if (data is not { ValueKind: JsonValueKind.Object } page) return new { ok = false, message = label + " is not answering. Try again." };
         if (page.TryGetProperty("error", out var error))
         {
@@ -219,10 +220,9 @@ internal sealed partial class MusicEngineService
             return new { ok = false, message = "Nothing to play." };
         var label = MusicWebPolicy.Label(service);
         if (!await MusicWebUpAsync(service)) return new { ok = false, message = label + " did not take that. Try again." };
-        if (await WebMusicCallAsync(service, "1", timeout: TimeSpan.FromSeconds(2)) is null)
-            return new { ok = false, message = label + " did not take that. Try again." };
-        var reply = await WebMusicCallAsync(service, apple
-            ? AppleMusicNative.Act(action, uri, context, index, on, uid, query, text) : YouTubeMusicNative.Act(action, uri, context, index, on, uid, query, text), attempts: 1, click: apple);
+        var reply = apple
+            ? await WebMusicAppleCallAsync(installed => AppleMusicNative.Act(action, uri, context, index, on, uid, query, text, installed), attempts: 1, click: true)
+            : await WebMusicCallAsync(service, YouTubeMusicNative.Act(action, uri, context, index, on, uid, query, text), attempts: 1, click: false);
         if (reply is { ValueKind: JsonValueKind.Object } answer && answer.TryGetProperty("ok", out var ok) && ok.ValueKind == JsonValueKind.True)
             return new { ok = true };
         if (reply is { ValueKind: JsonValueKind.Object } failed && failed.TryGetProperty("error", out var error))
@@ -324,7 +324,7 @@ internal sealed partial class MusicEngineService
     {
         await Task.Delay(1500);
         if (_musicWebService != "apple" || !MusicSignInRequested()) return;
-        var status = await WebMusicCallAsync("apple", AppleMusicNative.View("status", null, null, 0), attempts: 2);
+        var status = await WebMusicAppleCallAsync(installed => AppleMusicNative.View("status", null, null, 0, installed), attempts: 2);
         var signedIn = status is { ValueKind: JsonValueKind.Object } answer && answer.TryGetProperty("signedIn", out var flag) && flag.ValueKind == JsonValueKind.True;
         var trace = await WebMusicCallAsync("apple", AppleMusicNative.SignInTrace, attempts: 1);
         AppLog.Info("Music sign-in: Apple's page " + (signedIn ? "has the session" : "has no session yet; reading it fresh") +
@@ -335,6 +335,13 @@ internal sealed partial class MusicEngineService
         _musicSignInUntil = default;
         NoteMusicSignInFailed("apple");
     }
+
+    private Task<JsonElement?> WebMusicAppleCallAsync(Func<bool, string> buildExpression, int attempts = 5, bool click = false, TimeSpan? timeout = null) =>
+        AppleMusicNative.InvokeCachedAsync(
+            buildExpression,
+            expression => WebMusicCallAsync("apple", expression, attempts: attempts, click: click, timeout: timeout),
+            () => _appleAdapterInstalled,
+            installed => _appleAdapterInstalled = installed);
 
     private async Task<JsonElement?> WebMusicCallAsync(string service, string expression, int attempts = 5, bool click = false, TimeSpan? timeout = null)
     {
