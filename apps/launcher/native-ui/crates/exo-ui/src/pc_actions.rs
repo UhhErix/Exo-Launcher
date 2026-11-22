@@ -177,6 +177,7 @@ impl AppState {
 
     pub fn switch_pc_tab(&mut self, tab: PcTab) {
         self.pc.pc_tab = tab;
+        self.pc.armed_uninstall = None;
         self.load_pc_tab(tab);
     }
 
@@ -450,7 +451,43 @@ impl AppState {
         }
     }
 
+    pub fn disarm_uninstall(&mut self) {
+        self.pc.armed_uninstall = None;
+    }
+
+    pub fn arm_or_confirm_uninstall(&mut self, id: &str) {
+        if self
+            .pc
+            .armed_uninstall
+            .as_ref()
+            .is_some_and(|(armed_id, _)| armed_id == id)
+        {
+            self.pc.armed_uninstall = None;
+            self.uninstall_app(id);
+            return;
+        }
+        self.pc.armed_uninstall_seq = self.pc.armed_uninstall_seq.wrapping_add(1);
+        let seq = self.pc.armed_uninstall_seq;
+        self.pc.armed_uninstall = Some((id.to_string(), seq));
+        #[cfg(windows)]
+        if let Some(handle) = self.handle.clone() {
+            std::thread::spawn(move || {
+                std::thread::sleep(std::time::Duration::from_secs(4));
+                handle.update(move |s, _| {
+                    if s.pc
+                        .armed_uninstall
+                        .as_ref()
+                        .is_some_and(|(_, armed_seq)| *armed_seq == seq)
+                    {
+                        s.pc.armed_uninstall = None;
+                    }
+                });
+            });
+        }
+    }
+
     pub fn uninstall_app(&mut self, id: &str) {
+        self.pc.armed_uninstall = None;
         self.notice = Some("Starting application uninstaller…".into());
         #[cfg(windows)]
         if let (Some(rpc), Some(handle)) = (self.rpc.clone(), self.handle.clone()) {

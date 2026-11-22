@@ -12,7 +12,8 @@ use exo_kit::{
 };
 use exo_rpc::{DriveInfo, InstalledAppItem, KeyboardReadReply, PeripheralCard};
 use rune::{
-    El, ScrollSpec, SurfaceFit, TextStyle, col, edit_access, el, oklch, row, text, text_input,
+    El, Key, ScrollSpec, SurfaceFit, TextStyle, Transition, col, edit_access, el, oklch, row, text,
+    text_input,
 };
 
 fn connection_label(conn: Option<&str>) -> &'static str {
@@ -899,7 +900,7 @@ fn exo_ai_room(s: &AppState, scale: f32) -> El {
                         .hit()
                         .press_on_down()
                         .press_scale(PRESS_SCALE)
-                        .h(28.0)
+                        .h(32.0)
                         .pl(10.0)
                         .pr(12.0)
                         .gap(6.0)
@@ -922,45 +923,24 @@ fn exo_ai_room(s: &AppState, scale: f32) -> El {
                         ),
                 )
                 .child(
-                    row()
-                        .gap(8.0)
-                        .center_y()
-                        .child(
-                            row()
-                                .h(36.0)
-                                .px(14.0)
-                                .gap(7.0)
-                                .center_y()
-                                .radius(RADIUS_PILL)
-                                .fill(good().alpha(0.10))
-                                .border(1.0, good().alpha(0.28))
-                                .child(icon_check(14.0, good()))
-                                .child(
-                                    text("Auto Tune complete")
-                                        .font(TextStyle::new(scaled(13.0), 600.0))
-                                        .color(good()),
-                                ),
-                        )
-                        .child(
-                            el().key("ai-run-again")
-                                .role("button")
-                                .label("Run again")
-                                .focusable(true)
-                                .hit()
-                                .press_on_down()
-                                .press_scale(PRESS_SCALE)
-                                .h(36.0)
-                                .px(14.0)
-                                .center()
-                                .radius(RADIUS_PILL)
-                                .fill(glass_control_fill())
-                                .hover(hover_fill())
-                                .press(pressed_fill())
-                                .border_gradient(1.0, glass_rim_top(), glass_rim_bottom())
-                                .motion(SPRING_QUICK)
-                                .on_press(|s: &mut AppState| s.run_exo_ai_now())
-                                .child(text("Run again").font(type_control()).color(FG)),
-                        ),
+                    el().key("ai-run-again")
+                        .role("button")
+                        .label("Run again")
+                        .focusable(true)
+                        .hit()
+                        .press_on_down()
+                        .press_scale(PRESS_SCALE)
+                        .h(32.0)
+                        .px(14.0)
+                        .center()
+                        .radius(RADIUS_PILL)
+                        .fill(glass_control_fill())
+                        .hover(hover_fill())
+                        .press(pressed_fill())
+                        .border_gradient(1.0, glass_rim_top(), glass_rim_bottom())
+                        .motion(SPRING_QUICK)
+                        .on_press(|s: &mut AppState| s.run_exo_ai_now())
+                        .child(text("Run again").font(type_control()).color(FG)),
                 ),
         );
 
@@ -986,10 +966,11 @@ fn exo_ai_room(s: &AppState, scale: f32) -> El {
     ];
 
     let mut auto_tune_card = col()
+        .key("exo-ai-auto-tune-card")
         .w_full()
         .pt(18.0)
         .px(24.0)
-        .pb(12.0)
+        .pb(8.0)
         .radius(RADIUS_PANEL)
         .continuous_corners()
         .fill(BG)
@@ -997,15 +978,27 @@ fn exo_ai_room(s: &AppState, scale: f32) -> El {
         .child(
             row()
                 .w_full()
-                .min_h(32.0)
+                .min_h(42.0)
                 .pb(10.0)
                 .justify_between()
                 .center_y()
-                .child(text("Auto Tune").font(type_title()).color(FG))
                 .child(
-                    text("Auto Tune complete")
-                        .font(TextStyle::new(scaled(12.0), 500.0))
-                        .color(good()),
+                    text("Auto Tune")
+                        .key("exo-ai-auto-tune-title")
+                        .font(type_title())
+                        .color(FG),
+                )
+                .child(
+                    row()
+                        .gap(6.0)
+                        .center_y()
+                        .child(icon_check(13.0, good()))
+                        .child(
+                            text("Auto Tune complete")
+                                .key("exo-ai-auto-tune-status")
+                                .font(TextStyle::new(scaled(12.0), 500.0))
+                                .color(good()),
+                        ),
                 ),
         )
         .child(el().w_full().h(1.0).fill(float_line()));
@@ -1018,8 +1011,8 @@ fn exo_ai_room(s: &AppState, scale: f32) -> El {
         stages_col = stages_col.child(
             row()
                 .w_full()
-                .min_h(54.0)
-                .py(10.0)
+                .min_h(48.0)
+                .py(8.0)
                 .gap(10.0)
                 .center_y()
                 .child(
@@ -1038,16 +1031,16 @@ fn exo_ai_room(s: &AppState, scale: f32) -> El {
 
     auto_tune_card = auto_tune_card
         .child(stages_col)
-        .child(el().w_full().mt(8.0).h(1.0).fill(float_line()))
+        .child(el().w_full().mt(4.0).h(1.0).fill(float_line()))
         .child(
             col()
                 .w_full()
-                .pt(4.0)
+                .pt(2.0)
                 .child(
                     row()
                         .w_full()
-                        .min_h(66.0)
-                        .py(16.0)
+                        .min_h(58.0)
+                        .py(12.0)
                         .justify_between()
                         .center_y()
                         .child(
@@ -1071,7 +1064,7 @@ fn exo_ai_room(s: &AppState, scale: f32) -> El {
                                 ),
                         )
                         .child(
-                            primary_button("ai-tune-gpu", "Tune GPU", None)
+                            glass_button("ai-tune-gpu", "Tune GPU", None)
                                 .on_press(|s: &mut AppState| s.run_exo_ai_now()),
                         ),
                 )
@@ -1079,8 +1072,8 @@ fn exo_ai_room(s: &AppState, scale: f32) -> El {
                 .child(
                     row()
                         .w_full()
-                        .min_h(66.0)
-                        .py(16.0)
+                        .min_h(58.0)
+                        .py(12.0)
                         .justify_between()
                         .center_y()
                         .child(
@@ -1104,7 +1097,7 @@ fn exo_ai_room(s: &AppState, scale: f32) -> El {
                                 ),
                         )
                         .child(
-                            primary_button("ai-tune-cpu", "Tune CPU", None)
+                            glass_button("ai-tune-cpu", "Tune CPU", None)
                                 .on_press(|s: &mut AppState| s.run_latency_check()),
                         ),
                 ),
@@ -1165,12 +1158,11 @@ fn exo_ai_room(s: &AppState, scale: f32) -> El {
         );
 
     let hw_card = col()
+        .key("exo-ai-hw-card")
         .w_full()
-        .grow(1.0)
-        .min_h(0.0)
         .pt(20.0)
         .px(24.0)
-        .pb(10.0)
+        .pb(14.0)
         .radius(RADIUS_PANEL)
         .continuous_corners()
         .fill(BG)
@@ -1204,19 +1196,11 @@ fn exo_ai_room(s: &AppState, scale: f32) -> El {
                 .child(drive_cell),
         );
 
-    let left_col = col()
-        .grow(1.12)
-        .min_w(0.0)
-        .h_full()
-        .gap(10.0)
-        .child(auto_tune_card)
-        .child(hw_card);
-
     let updates_card = col()
+        .key("exo-ai-updates-card")
         .w_full()
-        .pt(18.0)
+        .py(14.0)
         .px(24.0)
-        .pb(4.0)
         .radius(RADIUS_PANEL)
         .continuous_corners()
         .fill(BG)
@@ -1224,13 +1208,21 @@ fn exo_ai_room(s: &AppState, scale: f32) -> El {
         .child(
             row()
                 .w_full()
-                .min_h(40.0)
-                .pb(10.0)
+                .min_h(32.0)
                 .justify_between()
                 .center_y()
                 .child(text("Updates").font(type_title()).color(FG))
                 .child(text("Up to date").font(type_body()).color(fg_muted())),
         );
+
+    let left_col = col()
+        .key("exo-ai-left-col")
+        .grow(1.12)
+        .min_w(0.0)
+        .gap(10.0)
+        .child(auto_tune_card)
+        .child(hw_card)
+        .child(updates_card);
 
     let format_est = |secs: f64| -> String {
         let mins = (secs / 60.0).ceil() as u32;
@@ -1380,12 +1372,11 @@ fn exo_ai_room(s: &AppState, scale: f32) -> El {
     };
 
     let shaders_card = col()
+        .key("exo-ai-shaders-card")
         .w_full()
-        .grow(1.0)
-        .min_h(0.0)
         .pt(18.0)
         .px(24.0)
-        .pb(16.0)
+        .pb(18.0)
         .radius(RADIUS_PANEL)
         .continuous_corners()
         .fill(BG)
@@ -1393,11 +1384,16 @@ fn exo_ai_room(s: &AppState, scale: f32) -> El {
         .child(
             row()
                 .w_full()
-                .min_h(40.0)
+                .min_h(42.0)
                 .pb(10.0)
                 .justify_between()
                 .center_y()
-                .child(text("Shaders").font(type_title()).color(FG))
+                .child(
+                    text("Shaders")
+                        .key("exo-ai-shaders-title")
+                        .font(type_title())
+                        .color(FG),
+                )
                 .child(
                     row()
                         .gap(8.0)
@@ -1416,11 +1412,10 @@ fn exo_ai_room(s: &AppState, scale: f32) -> El {
         .child(shader_rows);
 
     let right_col = col()
+        .key("exo-ai-right-col")
         .grow(1.0)
         .min_w(0.0)
-        .h_full()
         .gap(10.0)
-        .child(updates_card)
         .child(shaders_card);
 
     col()
@@ -1435,9 +1430,11 @@ fn exo_ai_room(s: &AppState, scale: f32) -> El {
         .child(header)
         .child(
             row()
+                .key("exo-ai-grid")
                 .w_full()
                 .grow(1.0)
                 .min_h(0.0)
+                .items_start()
                 .gap(10.0)
                 .child(left_col)
                 .child(right_col),
@@ -1467,8 +1464,12 @@ fn apps_pill(key: &'static str, label: &'static str, active: bool) -> El {
         )
 }
 
-fn app_table_row(app: &InstalledAppItem, s: &AppState) -> El {
+fn app_table_row(app: &InstalledAppItem, s: &AppState, show_last_used: bool) -> El {
     let id = app.id.clone();
+    let is_armed =
+        s.pc.armed_uninstall
+            .as_ref()
+            .is_some_and(|(armed_id, _)| armed_id == &app.id);
     let icon_box = if let Some(img) = s.app_icon_image(&app.id) {
         el().size(28.0, 28.0)
             .radius(RADIUS_SMALL)
@@ -1495,74 +1496,130 @@ fn app_table_row(app: &InstalledAppItem, s: &AppState) -> El {
     let size_txt = app.bytes.map(format_bytes).unwrap_or_else(|| "—".into());
     let last_used = app.last_opened.clone().unwrap_or_default();
 
-    let uninstall_btn = el()
-        .key(format!("app-uninst-{}", app.id))
-        .role("button")
-        .label(format!("Uninstall {}", app.name))
-        .focusable(true)
-        .hit()
-        .press_on_down()
-        .press_scale(PRESS_SCALE)
-        .h(30.0)
-        .px(12.0)
-        .center()
-        .radius(RADIUS_PILL)
-        .fill(BG)
-        .hover(hover_fill())
-        .press(pressed_fill())
-        .border(1.0, float_line())
-        .motion(SPRING_QUICK)
-        .on_press(move |s: &mut AppState| s.uninstall_app(&id))
+    let action_slot = if is_armed {
+        let confirm_btn = el()
+            .key(format!("app-confirm-{}", app.id))
+            .role("button")
+            .label(format!("Confirm uninstall {}", app.name))
+            .focusable(true)
+            .hit()
+            .press_on_down()
+            .press_scale(PRESS_SCALE)
+            .h(30.0)
+            .px(12.0)
+            .center()
+            .radius(RADIUS_PILL)
+            .fill(bad())
+            .border(1.0, bad())
+            .hover(bad().alpha(0.90))
+            .press(bad().alpha(0.80))
+            .on_press(move |s: &mut AppState| s.arm_or_confirm_uninstall(&id))
+            .on_key(|s: &mut AppState, ev, _| {
+                if ev.key == Key::Escape && s.pc.armed_uninstall.is_some() {
+                    s.disarm_uninstall();
+                    true
+                } else {
+                    false
+                }
+            })
+            .child(
+                text("Confirm uninstall")
+                    .font(TextStyle::new(scaled(12.0), 500.0))
+                    .color(PRIMARY_FG),
+            );
+        row()
+            .key(format!("app-confirm-slot-{}", app.id))
+            .absolute(0.0, 0.0)
+            .w_full()
+            .h_full()
+            .justify_end()
+            .center_y()
+            .transition(Transition::opacity())
+            .child(confirm_btn)
+    } else {
+        let uninstall_btn = el()
+            .key(format!("app-uninst-{}", app.id))
+            .role("button")
+            .label(format!("Uninstall {}", app.name))
+            .focusable(true)
+            .hit()
+            .press_on_down()
+            .press_scale(PRESS_SCALE)
+            .h(30.0)
+            .px(12.0)
+            .center()
+            .radius(RADIUS_PILL)
+            .fill(BG)
+            .border(1.0, float_line())
+            .hover(hover_fill())
+            .press(pressed_fill())
+            .group_opacity(0.0, 1.0)
+            .on_press(move |s: &mut AppState| s.arm_or_confirm_uninstall(&id))
+            .child(
+                text("Uninstall")
+                    .font(TextStyle::new(scaled(12.0), 500.0))
+                    .color(bad()),
+            );
+        row()
+            .key(format!("app-uninst-slot-{}", app.id))
+            .absolute(0.0, 0.0)
+            .w_full()
+            .h_full()
+            .justify_end()
+            .center_y()
+            .transition(Transition::opacity())
+            .child(uninstall_btn)
+    };
+
+    let mut content_row = row()
+        .w_full()
+        .h(51.0)
+        .gap(12.0)
+        .center_y()
+        .hover_group()
+        .hover_motion(SPRING_QUICK, SPRING_QUICK)
+        .child(icon_box)
         .child(
-            text("Uninstall")
-                .font(TextStyle::new(scaled(12.0), 500.0))
-                .color(bad()),
+            col()
+                .grow(1.0)
+                .min_w(0.0)
+                .gap(2.0)
+                .child(
+                    text(app.name.clone())
+                        .font(type_control())
+                        .color(FG)
+                        .truncate(),
+                )
+                .children(
+                    (!sub.is_empty())
+                        .then(|| text(sub).font(type_small()).color(fg_muted()).truncate()),
+                ),
         );
+    if show_last_used {
+        content_row = content_row.child(
+            el().w(scaled(112.0)).child(
+                text(last_used)
+                    .font(type_small())
+                    .color(fg_muted())
+                    .truncate(),
+            ),
+        );
+    }
+    content_row = content_row
+        .child(
+            row()
+                .w(scaled(80.0))
+                .justify_end()
+                .child(text(size_txt).font(type_small()).color(fg_muted())),
+        )
+        .child(el().w(scaled(140.0)).h(30.0).child(action_slot));
 
     col()
         .key(format!("app-row-{}", app.id))
         .w_full()
         .h(52.0)
         .child(el().w_full().h(1.0).fill(float_line()))
-        .child(
-            row()
-                .w_full()
-                .h(51.0)
-                .gap(12.0)
-                .center_y()
-                .child(icon_box)
-                .child(
-                    col()
-                        .grow(1.0)
-                        .min_w(0.0)
-                        .gap(2.0)
-                        .child(
-                            text(app.name.clone())
-                                .font(type_control())
-                                .color(FG)
-                                .truncate(),
-                        )
-                        .children(
-                            (!sub.is_empty())
-                                .then(|| text(sub).font(type_small()).color(fg_muted()).truncate()),
-                        ),
-                )
-                .child(
-                    el().w(112.0).child(
-                        text(last_used)
-                            .font(type_small())
-                            .color(fg_muted())
-                            .truncate(),
-                    ),
-                )
-                .child(
-                    row()
-                        .w(72.0)
-                        .justify_end()
-                        .child(text(size_txt).font(type_small()).color(fg_muted())),
-                )
-                .child(row().w(108.0).justify_end().child(uninstall_btn)),
-        )
+        .child(content_row)
 }
 
 fn is_system_part(app: &InstalledAppItem) -> bool {
@@ -1738,7 +1795,16 @@ fn apps_room(s: &AppState) -> El {
             .collect();
         parts.sort_by_key(|a| std::cmp::Reverse(a.bytes.unwrap_or(0)));
 
-        let table_head = row()
+        let visible_main = &main_apps[..main_apps.len().min(60)];
+        let visible_parts = &parts[..parts.len().min(40)];
+        let show_last_used = visible_main.iter().chain(visible_parts.iter()).any(|a| {
+            a.last_opened
+                .as_deref()
+                .is_some_and(|t| !t.trim().is_empty())
+        });
+
+        let mut table_head = row()
+            .key("apps-table-head")
             .w_full()
             .h(32.0)
             .gap(12.0)
@@ -1750,29 +1816,32 @@ fn apps_room(s: &AppState) -> El {
                         .font(TextStyle::new(scaled(12.0), 500.0))
                         .color(fg_muted()),
                 ),
-            )
-            .child(
-                el().w(112.0).child(
+            );
+        if show_last_used {
+            table_head = table_head.child(
+                el().key("apps-head-last-used").w(scaled(112.0)).child(
                     text("Last used")
                         .font(TextStyle::new(scaled(12.0), 500.0))
                         .color(fg_muted()),
                 ),
-            )
+            );
+        }
+        table_head = table_head
             .child(
                 row()
-                    .w(72.0)
+                    .w(scaled(80.0))
                     .justify_end()
                     .gap(4.0)
                     .center_y()
+                    .child(icon_chevron_down(12.0, fg_muted()))
                     .child(
                         text("Size")
                             .font(TextStyle::new(scaled(12.0), 500.0))
                             .color(FG),
-                    )
-                    .child(icon_chevron_down(12.0, fg_muted())),
+                    ),
             )
             .child(
-                row().w(108.0).justify_end().center_y().child(
+                row().w(scaled(140.0)).justify_end().center_y().child(
                     el().h(28.0)
                         .px(12.0)
                         .center()
@@ -1795,8 +1864,8 @@ fn apps_room(s: &AppState) -> El {
             .scroll(ScrollSpec {
                 stick_bottom: false,
             });
-        for app in main_apps.into_iter().take(60) {
-            list = list.child(app_table_row(app, s));
+        for app in visible_main {
+            list = list.child(app_table_row(app, s, show_last_used));
         }
         if !parts.is_empty() {
             list = list.child(
@@ -1809,8 +1878,8 @@ fn apps_room(s: &AppState) -> El {
                     .color(fg_muted()),
                 ),
             );
-            for app in parts.into_iter().take(40) {
-                list = list.child(app_table_row(app, s));
+            for app in visible_parts {
+                list = list.child(app_table_row(app, s, show_last_used));
             }
         }
 
@@ -1847,6 +1916,15 @@ fn apps_room(s: &AppState) -> El {
         .px(10.0)
         .pb(20.0)
         .fill(BG)
+        .on_background_press(|s: &mut AppState| s.disarm_uninstall())
+        .on_key(|s: &mut AppState, ev, _| {
+            if ev.key == Key::Escape && s.pc.armed_uninstall.is_some() {
+                s.disarm_uninstall();
+                true
+            } else {
+                false
+            }
+        })
         .child(surface)
 }
 
@@ -1855,5 +1933,230 @@ pub fn view(s: &AppState, scale: f32) -> El {
         Room::Devices => devices_room(s, scale),
         Room::Apps => apps_room(s),
         _ => exo_ai_room(s, scale),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::shell;
+    use crate::state::{AppState, Room};
+    use rune::motion_gate::Run;
+    use rune::render::KIND_BACKDROP_BLUR;
+    use rune::{Env, Key, KeyEvent, Mods, Runtime};
+
+    #[test]
+    fn apps_uninstall_hidden_at_rest_reveals_on_hover_and_confirms_in_place() {
+        let mut state = AppState::default();
+        if let Some(ref mut list) = state.pc.apps_list {
+            for p in &mut list.programs {
+                p.last_opened = None;
+            }
+        }
+        state.switch_room(Room::Apps);
+
+        let mut rt = Runtime::new(state, shell::view, (1920.0, 1080.0), Env::new(true, 1.0));
+        rt.frame(0.0);
+        rt.settle_all();
+        rt.frame(1.0 / 60.0);
+
+        let blurs = rt
+            .instances
+            .iter()
+            .filter(|i| i.params[1] == KIND_BACKDROP_BLUR)
+            .count();
+        assert!(blurs <= 4, "Apps exceeded MAX_BACKDROP_BLURS=4: {blurs}");
+
+        assert!(
+            rt.find("apps-head-last-used").is_none(),
+            "Last used column should be omitted when all apps have last_opened == None"
+        );
+
+        let (_, rest_opacity) = rt
+            .presented("app-uninst-app:obs")
+            .expect("app-uninst-app:obs");
+        assert!(
+            rest_opacity < 0.01,
+            "Uninstall button must be hidden at rest, got opacity {rest_opacity}"
+        );
+
+        let (rx, ry) = rt.find("app-row-app:obs").expect("app-row-app:obs");
+        rt.pointer_move(rx, ry);
+        for _ in 0..30 {
+            rt.frame(1.0 / 60.0);
+        }
+        let (_, hovered_opacity) = rt
+            .presented("app-uninst-app:obs")
+            .expect("app-uninst-app:obs");
+        assert!(
+            hovered_opacity > 0.95,
+            "Uninstall button must reveal on row hover, got opacity {hovered_opacity}"
+        );
+
+        let (bx, by) = rt.find("app-uninst-app:obs").expect("app-uninst-app:obs");
+        rt.pointer_down(bx, by);
+        rt.pointer_up(bx, by);
+        rt.frame(1.0 / 60.0);
+        assert_eq!(
+            rt.state
+                .pc
+                .armed_uninstall
+                .as_ref()
+                .map(|(id, _)| id.as_str()),
+            Some("app:obs")
+        );
+        assert!(rt.state.notice.is_none());
+
+        rt.pointer_move(10.0, 10.0);
+        for _ in 0..30 {
+            rt.frame(1.0 / 60.0);
+        }
+        let (_, armed_opacity) = rt
+            .presented("app-confirm-app:obs")
+            .expect("app-confirm-app:obs");
+        assert!(
+            armed_opacity > 0.95,
+            "Armed confirm button must remain visible when pointer leaves, got {armed_opacity}"
+        );
+
+        rt.key(KeyEvent {
+            key: Key::Escape,
+            mods: Mods::default(),
+        });
+        rt.frame(1.0 / 60.0);
+        assert!(rt.state.pc.armed_uninstall.is_none());
+
+        rt.pointer_move(rx, ry);
+        for _ in 0..30 {
+            rt.frame(1.0 / 60.0);
+        }
+        let (bx2, by2) = rt.find("app-uninst-app:obs").expect("app-uninst-app:obs");
+        rt.pointer_down(bx2, by2);
+        rt.pointer_up(bx2, by2);
+        rt.frame(1.0 / 60.0);
+        assert!(rt.state.pc.armed_uninstall.is_some());
+
+        let (bx3, by3) = rt.find("app-confirm-app:obs").expect("app-confirm-app:obs");
+        rt.pointer_down(bx3, by3);
+        rt.pointer_up(bx3, by3);
+        rt.frame(1.0 / 60.0);
+        assert!(rt.state.pc.armed_uninstall.is_none());
+        assert_eq!(
+            rt.state.notice.as_deref(),
+            Some("Starting application uninstaller…")
+        );
+    }
+
+    #[test]
+    fn apps_shows_last_used_column_when_populated() {
+        let mut state = AppState::default();
+        state.switch_room(Room::Apps);
+        let mut rt = Runtime::new(state, shell::view, (1920.0, 1080.0), Env::new(true, 1.0));
+        rt.frame(0.0);
+        rt.settle_all();
+        rt.frame(1.0 / 60.0);
+        assert!(
+            rt.find("apps-head-last-used").is_some(),
+            "Last used column should render when at least one app has last_opened"
+        );
+    }
+
+    #[test]
+    fn exo_ai_bento_balance_header_alignment_and_blur_cap() {
+        let mut state = AppState::default();
+        let extra: Vec<_> = state
+            .pc
+            .shader_games
+            .iter()
+            .enumerate()
+            .map(|(i, g)| exo_rpc::ShaderPrepareGame {
+                id: format!("{}-row2-{i}", g.id),
+                title: g.title.clone(),
+                state: g.state.clone(),
+                message: g.message.clone(),
+            })
+            .collect();
+        state.pc.shader_games.extend(extra);
+        state.switch_room(Room::ExoAi);
+        let mut rt = Runtime::new(state, shell::view, (1920.0, 1080.0), Env::new(true, 1.0));
+        rt.frame(0.0);
+        rt.settle_all();
+        rt.frame(1.0 / 60.0);
+
+        let blurs = rt
+            .instances
+            .iter()
+            .filter(|i| i.params[1] == KIND_BACKDROP_BLUR)
+            .count();
+        assert!(blurs <= 4, "Exo AI exceeded MAX_BACKDROP_BLURS=4: {blurs}");
+
+        let (auto_title, _) = rt
+            .presented("exo-ai-auto-tune-title")
+            .expect("exo-ai-auto-tune-title");
+        let (shaders_title, _) = rt
+            .presented("exo-ai-shaders-title")
+            .expect("exo-ai-shaders-title");
+        assert!(
+            (auto_title[1] - shaders_title[1]).abs() <= 1.0,
+            "Auto Tune y={} and Shaders y={} headers should align",
+            auto_title[1],
+            shaders_title[1]
+        );
+
+        let (hw_rect, _) = rt.presented("exo-ai-hw-card").expect("exo-ai-hw-card");
+        let (upd_rect, _) = rt
+            .presented("exo-ai-updates-card")
+            .expect("exo-ai-updates-card");
+        assert!(
+            (hw_rect[0] - upd_rect[0]).abs() <= 1.0 && upd_rect[1] > hw_rect[1],
+            "Updates card should sit directly below hardware card in left column"
+        );
+        assert!(
+            hw_rect[3] < 260.0,
+            "Hardware card should hug content at natural height, got h={}",
+            hw_rect[3]
+        );
+
+        let (left_col, _) = rt.presented("exo-ai-left-col").expect("exo-ai-left-col");
+        let (right_col, _) = rt.presented("exo-ai-right-col").expect("exo-ai-right-col");
+        let left_bottom = left_col[1] + left_col[3];
+        let right_bottom = right_col[1] + right_col[3];
+        assert!(
+            (left_bottom - right_bottom).abs() <= 40.0,
+            "Exo AI left bottom ({left_bottom}) and right bottom ({right_bottom}) drifted apart"
+        );
+    }
+
+    #[test]
+    fn apps_hover_and_confirm_motion_gate() {
+        for reduce_motion in [false, true] {
+            let mut state = AppState::default();
+            state.settings.reduce_motion = reduce_motion;
+            state.switch_room(Room::Apps);
+            let mut rt = Runtime::new(state, shell::view, (1920.0, 1080.0), Env::new(true, 1.0));
+            rt.set_system_reduced_motion(reduce_motion);
+            let mut run = Run::new(rt, 120.0);
+            run.idle(0.5);
+            run.step();
+            run.act("hover app row", |rt| {
+                if let Some((x, y)) = rt.find("app-row-app:obs") {
+                    rt.pointer_move(x, y);
+                }
+            });
+            run.play(0.4);
+            run.act("arm uninstall", |rt| Run::tap(rt, "app-uninst-app:obs"));
+            run.play(0.4);
+            run.act("disarm via escape", |rt| {
+                rt.key(KeyEvent {
+                    key: Key::Escape,
+                    mods: Mods::default(),
+                });
+            });
+            run.play(0.4);
+            let findings = run.finish();
+            assert!(
+                findings.is_empty(),
+                "motion_gate findings (reduce_motion={reduce_motion}): {findings:?}"
+            );
+        }
     }
 }

@@ -8,7 +8,7 @@ use exo_kit::{
     icon_sparkles, icon_trophy, pressed_fill, primary_button, progress_bar, scaled, selected_fill,
     switch_pill, type_body, type_control, type_page, type_section, type_small,
 };
-use rune::{El, ScrollSpec, TextStyle, col, edit_access, el, row, text, text_input};
+use rune::{El, ScrollSpec, TextStyle, Transition, col, edit_access, el, row, text, text_input};
 
 fn nav_label(sec: SettingsSection) -> &'static str {
     match sec {
@@ -44,6 +44,7 @@ fn text_size_label(raw: &str) -> &'static str {
 fn set_row(title: &str, subtitle: Option<&str>, control: El) -> El {
     let mut left = col().grow(1.0).min_w(0.0).gap(3.0).child(
         text(title.to_string())
+            .key(format!("set-label-{title}"))
             .font(TextStyle::new(scaled(13.0), 500.0))
             .color(FG),
     );
@@ -94,10 +95,15 @@ fn section_head(title: &str) -> El {
     row()
         .w_full()
         .min_h(28.0)
-        .px(2.0)
+        .px(18.0)
         .center_y()
         .justify_between()
-        .child(text(title.to_string()).font(type_section()).color(FG))
+        .child(
+            text(title.to_string())
+                .key(format!("set-sec-head-{title}"))
+                .font(type_section())
+                .color(FG),
+        )
 }
 
 fn section_general(s: &AppState) -> El {
@@ -351,7 +357,7 @@ pub fn view(s: &AppState) -> El {
         .press_on_down()
         .press_scale(PRESS_SCALE)
         .h(34.0)
-        .pl(10.0)
+        .pl(12.0)
         .pr(14.0)
         .gap(6.0)
         .center_y()
@@ -366,26 +372,29 @@ pub fn view(s: &AppState) -> El {
         .child(text("Back").font(type_body()).color(FG));
 
     let sidebar = col()
-        .w(scaled(280.0))
+        .key("settings-sidebar")
+        .w(scaled(232.0))
         .h_full()
         .py(24.0)
-        .px(16.0)
+        .pl(0.0)
+        .pr(20.0)
         .gap(14.0)
         .border_sides([0.0, 1.0, 0.0, 0.0], float_line())
         .child(row().child(back_btn))
         .child(
-            row()
-                .h(scaled(42.0))
-                .px(8.0)
-                .center_y()
-                .child(text("Settings").font(type_page()).color(FG)),
+            row().h(scaled(42.0)).px(12.0).center_y().child(
+                text("Settings")
+                    .key("settings-sidebar-title")
+                    .font(type_page())
+                    .color(FG),
+            ),
         )
         .child(
             row()
                 .w_full()
                 .h(36.0)
                 .px(12.0)
-                .gap(8.0)
+                .gap(10.0)
                 .center_y()
                 .radius(RADIUS_PILL)
                 .fill(glass_control_fill())
@@ -459,33 +468,154 @@ pub fn view(s: &AppState) -> El {
         .key("settings-scroll")
         .grow(1.0)
         .min_w(0.0)
+        .max_w(scaled(952.0))
         .h_full()
         .scroll(ScrollSpec {
             stick_bottom: false,
         })
-        .items_center()
         .child(
             col()
+                .key(format!("settings-pane-{:?}", s.pc.settings_section))
+                .transition(Transition::opacity())
                 .w_full()
-                .max_w(scaled(960.0))
                 .pt(24.0)
-                .px(36.0)
                 .pb(48.0)
                 .child(
                     row()
+                        .key("settings-page-title")
                         .h(scaled(42.0))
+                        .px(18.0)
                         .center_y()
-                        .child(text(title).font(type_page()).color(FG)),
+                        .child(
+                            text(title)
+                                .key("settings-page-title-text")
+                                .font(type_page())
+                                .color(FG),
+                        ),
                 )
                 .child(col().w_full().pt(20.0).child(body)),
         );
 
-    row()
+    col()
+        .key("room-settings")
         .w_full()
         .h_full()
         .pt(52.0)
+        .px(16.0)
         .fill(BG)
-        .items_start()
-        .child(sidebar)
-        .child(right_col)
+        .items_center()
+        .child(
+            row()
+                .key("settings-shell")
+                .w_full()
+                .max_w(scaled(1220.0))
+                .h_full()
+                .items_start()
+                .gap(36.0)
+                .child(sidebar)
+                .child(right_col),
+        )
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::shell;
+    use crate::state::{AppState, Room};
+    use rune::motion_gate::Run;
+    use rune::render::KIND_BACKDROP_BLUR;
+    use rune::{Env, Runtime};
+
+    #[test]
+    fn settings_gridlines_gutter_and_blur_cap() {
+        let mut rt = Runtime::new(
+            AppState::default(),
+            shell::view,
+            (1920.0, 1080.0),
+            Env::new(true, 1.0),
+        );
+        rt.update(|s, _| s.switch_room(Room::Settings));
+        rt.frame(0.0);
+        rt.settle_all();
+        rt.frame(1.0 / 60.0);
+
+        let blurs = rt
+            .instances
+            .iter()
+            .filter(|i| i.params[1] == KIND_BACKDROP_BLUR)
+            .count();
+        assert!(
+            blurs <= 4,
+            "Settings exceeded MAX_BACKDROP_BLURS=4: {blurs}"
+        );
+
+        let (shell_rect, _) = rt.presented("settings-shell").expect("settings-shell");
+        let (sidebar_rect, _) = rt.presented("settings-sidebar").expect("settings-sidebar");
+        let (scroll_rect, _) = rt.presented("settings-scroll").expect("settings-scroll");
+
+        assert!(
+            (shell_rect[2] - 1220.0).abs() <= 1.0,
+            "expected centered 1220px settings shell, got {}",
+            shell_rect[2]
+        );
+        let gutter = scroll_rect[0] - (sidebar_rect[0] + sidebar_rect[2]);
+        assert!(
+            (gutter - 36.0).abs() <= 1.0,
+            "expected 36px sidebar-to-content gutter, got {gutter}"
+        );
+
+        let (title_rect, _) = rt
+            .presented("settings-page-title-text")
+            .expect("settings-page-title-text");
+        let (sec_rect, _) = rt
+            .presented("set-sec-head-Backups")
+            .expect("set-sec-head-Backups");
+        let (row1_rect, _) = rt
+            .presented("set-label-Text size")
+            .expect("set-label-Text size");
+        let (row2_rect, _) = rt
+            .presented("set-label-Last backup")
+            .expect("set-label-Last backup");
+
+        assert!(
+            (title_rect[0] - row1_rect[0]).abs() <= 1.0,
+            "page title x={} missed row label x={}",
+            title_rect[0],
+            row1_rect[0]
+        );
+        assert!(
+            (sec_rect[0] - row1_rect[0]).abs() <= 1.0,
+            "section head x={} missed row label x={}",
+            sec_rect[0],
+            row1_rect[0]
+        );
+        assert!(
+            (row2_rect[0] - row1_rect[0]).abs() <= 1.0,
+            "backup row label x={} missed primary row label x={}",
+            row2_rect[0],
+            row1_rect[0]
+        );
+    }
+
+    #[test]
+    fn settings_section_switch_motion_gate() {
+        for reduce_motion in [false, true] {
+            let mut state = AppState::default();
+            state.settings.reduce_motion = reduce_motion;
+            state.switch_room(Room::Settings);
+            let mut rt = Runtime::new(state, shell::view, (1920.0, 1080.0), Env::new(true, 1.0));
+            rt.set_system_reduced_motion(reduce_motion);
+            let mut run = Run::new(rt, 120.0);
+            run.idle(0.5);
+            run.step();
+            run.act("switch to Library", |rt| Run::tap(rt, "set-sec-account"));
+            run.play(0.5);
+            run.act("switch to About", |rt| Run::tap(rt, "set-sec-about"));
+            run.play(0.5);
+            let findings = run.finish();
+            assert!(
+                findings.is_empty(),
+                "motion_gate findings (reduce_motion={reduce_motion}): {findings:?}"
+            );
+        }
+    }
 }
