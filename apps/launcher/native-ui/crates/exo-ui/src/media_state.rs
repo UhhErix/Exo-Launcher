@@ -1123,7 +1123,7 @@ pub fn needs_music_playback_refresh(control_ok: bool, playback: Option<&MusicPla
     if !control_ok {
         return true;
     }
-    playback.is_some_and(|p| !p.source.eq_ignore_ascii_case("page"))
+    playback.is_some_and(|p| !p.source.is_empty() && !p.source.eq_ignore_ascii_case("page"))
 }
 
 #[cfg(test)]
@@ -1132,31 +1132,38 @@ mod tests {
 
     #[test]
     fn page_control_ok_skips_follow_up_rpcs() {
+        let engine_pb = MusicPlayback {
+            provider: "apple".into(),
+            status: "playing".into(),
+            title: "Song".into(),
+            ..Default::default()
+        };
         let page_pb = MusicPlayback {
             source: "page".into(),
             status: "playing".into(),
             title: "Song".into(),
             ..Default::default()
         };
+        assert!(!needs_music_playback_refresh(true, Some(&engine_pb)));
         assert!(!needs_music_playback_refresh(true, Some(&page_pb)));
         assert!(!needs_music_playback_refresh(true, None));
     }
 
     #[test]
     fn failed_or_headless_control_requests_single_playback_refresh() {
-        let page_pb = MusicPlayback {
-            source: "page".into(),
+        let engine_pb = MusicPlayback {
+            provider: "apple".into(),
             status: "playing".into(),
             title: "Song".into(),
             ..Default::default()
         };
         let gsmtc_pb = MusicPlayback {
-            source: "system".into(),
+            source: "session".into(),
             status: "playing".into(),
             title: "Song".into(),
             ..Default::default()
         };
-        assert!(needs_music_playback_refresh(false, Some(&page_pb)));
+        assert!(needs_music_playback_refresh(false, Some(&engine_pb)));
         assert!(needs_music_playback_refresh(false, None));
         assert!(needs_music_playback_refresh(true, Some(&gsmtc_pb)));
     }
