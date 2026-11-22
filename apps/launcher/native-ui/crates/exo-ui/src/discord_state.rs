@@ -1,6 +1,7 @@
 use crate::discord_chat_state::{ChatDrawer, DiscordChatState};
 use crate::discord_voice_state::DiscordVoiceUiState;
 use crate::state::{AppState, HostStatus};
+use exo_rpc::discord_types::DiscordRestricted;
 use exo_rpc::{
     ActionResult, DiscordAccountItem, DiscordAccountsReply, DiscordChangedEvent, DiscordChannel,
     DiscordChannels, DiscordDm, DiscordDmMember, DiscordFriend, DiscordFriendActionReply,
@@ -9,9 +10,9 @@ use exo_rpc::{
     DiscordStateEvent, DiscordStatus, DiscordUnreadChannel, DiscordUnreadEvent,
     DiscordUnreadsReply, DiscordVoice, DiscordVoiceMember, DiscordVoiceReply,
     METHOD_DISCORD_ACCOUNTS, METHOD_DISCORD_CHANNELS, METHOD_DISCORD_FRIEND,
-    METHOD_DISCORD_FRIENDS, METHOD_DISCORD_HOME, METHOD_DISCORD_MARK_READ, METHOD_DISCORD_MEMBERS,
-    METHOD_DISCORD_SET_STATUS, METHOD_DISCORD_SIGN_IN, METHOD_DISCORD_SIGN_OUT,
-    METHOD_DISCORD_STATUS, METHOD_DISCORD_UNREADS, METHOD_DISCORD_VIEW, METHOD_DISCORD_VOICE,
+    METHOD_DISCORD_FRIENDS, METHOD_DISCORD_HOME, METHOD_DISCORD_MEMBERS, METHOD_DISCORD_SET_STATUS,
+    METHOD_DISCORD_SIGN_IN, METHOD_DISCORD_SIGN_OUT, METHOD_DISCORD_STATUS, METHOD_DISCORD_UNREADS,
+    METHOD_DISCORD_VIEW, METHOD_DISCORD_VOICE,
 };
 use rune::TextEdit;
 use serde_json::json;
@@ -24,32 +25,6 @@ pub enum DiscordPlace {
     Servers,
 }
 
-impl DiscordPlace {
-    pub const ALL: [Self; 3] = [Self::Home, Self::Messages, Self::Servers];
-
-    pub fn key(self) -> &'static str {
-        match self {
-            Self::Home => "dc-place-home",
-            Self::Messages => "dc-place-messages",
-            Self::Servers => "dc-place-servers",
-        }
-    }
-
-    pub fn label(self) -> &'static str {
-        match self {
-            Self::Home => "Home",
-            Self::Messages => "Messages",
-            Self::Servers => "Servers",
-        }
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum DiscordHomeTab {
-    Now,
-    Friends,
-}
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DiscordFriendsTab {
     Online,
@@ -58,31 +33,65 @@ pub enum DiscordFriendsTab {
     Blocked,
 }
 
+impl DiscordFriendsTab {
+    pub const ALL: [Self; 4] = [Self::Online, Self::All, Self::Pending, Self::Blocked];
+
+    pub fn key(self) -> &'static str {
+        match self {
+            Self::Online => "dc-friends-tab-online",
+            Self::All => "dc-friends-tab-all",
+            Self::Pending => "dc-friends-tab-pending",
+            Self::Blocked => "dc-friends-tab-blocked",
+        }
+    }
+
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Online => "Online",
+            Self::All => "All",
+            Self::Pending => "Pending",
+            Self::Blocked => "Blocked",
+        }
+    }
+
+    pub fn section_label(self) -> &'static str {
+        match self {
+            Self::Online => "Online",
+            Self::All => "All friends",
+            Self::Pending => "Pending",
+            Self::Blocked => "Blocked",
+        }
+    }
+}
+
 pub struct DiscordState {
     pub status: DiscordStatus,
     pub signin: Option<DiscordSignInStep>,
     pub accounts: Vec<DiscordAccountItem>,
     pub home: DiscordHome,
     pub friends: Vec<DiscordFriend>,
+    pub blocked: Vec<DiscordRestricted>,
     pub unreads: Vec<DiscordUnreadChannel>,
     pub voice: DiscordVoice,
     pub speaking: HashSet<String>,
     pub place: DiscordPlace,
-    pub home_tab: DiscordHomeTab,
     pub friends_tab: DiscordFriendsTab,
-    pub dm_search_open: bool,
     pub active_dm_id: Option<String>,
     pub active_guild_id: Option<String>,
     pub active_channel_id: Option<String>,
     pub channels_by_guild: HashMap<String, DiscordChannels>,
     pub members_by_guild: HashMap<String, DiscordMemberList>,
     pub collapsed_categories: HashSet<String>,
-    pub collapsed_folders: HashSet<String>,
+    pub expanded_folders: HashSet<String>,
     pub show_members: bool,
     pub status_menu_open: bool,
     pub accounts_menu_open: bool,
     pub add_friend_open: bool,
+    pub dm_search_open: bool,
+    pub shop_open: bool,
+    pub inbox_open: bool,
     pub search_query: TextEdit,
+    pub dm_search_query: TextEdit,
     pub add_friend_input: TextEdit,
     pub revealed_spoilers: HashSet<String>,
     pub chat: DiscordChatState,
@@ -102,6 +111,7 @@ impl DiscordState {
             accounts: Vec::new(),
             home: DiscordHome::default(),
             friends: Vec::new(),
+            blocked: Vec::new(),
             unreads: Vec::new(),
             voice: DiscordVoice {
                 state: "off".into(),
@@ -109,21 +119,23 @@ impl DiscordState {
             },
             speaking: HashSet::new(),
             place: DiscordPlace::Home,
-            home_tab: DiscordHomeTab::Friends,
             friends_tab: DiscordFriendsTab::Online,
-            dm_search_open: false,
             active_dm_id: None,
             active_guild_id: None,
             active_channel_id: None,
             channels_by_guild: HashMap::new(),
             members_by_guild: HashMap::new(),
             collapsed_categories: HashSet::new(),
-            collapsed_folders: HashSet::new(),
+            expanded_folders: HashSet::new(),
             show_members: true,
             status_menu_open: false,
             accounts_menu_open: false,
             add_friend_open: false,
+            dm_search_open: false,
+            shop_open: false,
+            inbox_open: false,
             search_query: TextEdit::default(),
+            dm_search_query: TextEdit::default(),
             add_friend_input: TextEdit::default(),
             revealed_spoilers: HashSet::new(),
             chat: DiscordChatState::empty(),
@@ -162,6 +174,7 @@ impl DiscordState {
                 name: "Erix".into(),
                 avatar: None,
                 status: Some("online".into()),
+                look: None,
             }),
             dms: vec![
                 DiscordDm {
@@ -170,6 +183,7 @@ impl DiscordState {
                     avatar: None,
                     last_at: Some(1_760_000_000_000),
                     line: Some("Queueing Premier in 5?".into()),
+                    look: None,
                     group: false,
                     owner_id: None,
                     members: None,
@@ -190,6 +204,7 @@ impl DiscordState {
                     avatar: None,
                     last_at: Some(1_759_999_000_000),
                     line: Some("Kai: dropping hot on Mirage".into()),
+                    look: None,
                     group: true,
                     owner_id: Some("100001".into()),
                     members: Some(vec![
@@ -243,6 +258,7 @@ impl DiscordState {
                     avatar: None,
                     last_at: Some(1_759_995_000_000),
                     line: Some("Cyberpunk 2077 path tracing hits 110 FPS".into()),
+                    look: None,
                     group: false,
                     owner_id: None,
                     members: None,
@@ -263,6 +279,7 @@ impl DiscordState {
                     avatar: None,
                     last_at: Some(1_759_980_000_000),
                     line: Some("Sent the Wooting profile".into()),
+                    look: None,
                     group: false,
                     owner_id: None,
                     members: None,
@@ -613,15 +630,15 @@ impl DiscordState {
     }
 
     pub fn unread_dm_count(&self) -> usize {
-        self.home.dms.iter().filter(|d| d.unread && !d.muted).count()
+        self.home
+            .dms
+            .iter()
+            .filter(|d| d.unread && !d.muted)
+            .count()
     }
 
     pub fn total_dm_mentions(&self) -> i32 {
         self.home.dms.iter().map(|d| d.mentions).sum()
-    }
-
-    pub fn total_guild_mentions(&self) -> i32 {
-        self.home.guilds.iter().map(|g| g.mentions).sum()
     }
 
     pub fn active_guild(&self) -> Option<&DiscordGuild> {
@@ -755,6 +772,7 @@ impl AppState {
                 |s, res: Result<DiscordFriendsReply, String>| {
                     if let Ok(rep) = res {
                         s.discord.friends = rep.friends;
+                        s.discord.blocked = rep.restricted.map(|r| r.blocked).unwrap_or_default();
                     }
                 },
             );
@@ -780,9 +798,7 @@ impl AppState {
         if self.status != HostStatus::Connected {
             self.discord.signin = Some(DiscordSignInStep {
                 state: "waiting".into(),
-                url: Some(
-                    "https://discord.com/ra/ExoRuneDemoFingerprint0123456789ABCDEFGH".into(),
-                ),
+                url: Some("https://discord.com/ra/ExoRuneDemoFingerprint0123456789ABCDEFGH".into()),
                 user: None,
                 message: None,
             });
@@ -889,8 +905,14 @@ impl AppState {
         self.discord.place = place;
         self.discord.status_menu_open = false;
         self.discord.accounts_menu_open = false;
+        self.discord.shop_open = false;
+        self.discord.inbox_open = false;
         self.discord.chat.drawer = ChatDrawer::None;
+        if place == DiscordPlace::Home {
+            self.discord.active_guild_id = None;
+        }
         if place == DiscordPlace::Messages {
+            self.discord.active_guild_id = None;
             if self.discord.active_dm_id.is_none() {
                 self.discord.active_dm_id = self.discord.home.dms.first().map(|d| d.id.clone());
             }
@@ -904,7 +926,10 @@ impl AppState {
 
     pub fn open_discord_dm(&mut self, dm_id: &str) {
         self.discord.place = DiscordPlace::Messages;
+        self.discord.active_guild_id = None;
         self.discord.active_dm_id = Some(dm_id.to_string());
+        self.discord.shop_open = false;
+        self.discord.inbox_open = false;
         self.discord.chat.reply_to = None;
         self.discord.chat.editing = None;
         self.discord.chat.drawer = ChatDrawer::None;
@@ -923,6 +948,8 @@ impl AppState {
     pub fn open_discord_guild(&mut self, guild_id: &str) {
         self.discord.place = DiscordPlace::Servers;
         self.discord.active_guild_id = Some(guild_id.to_string());
+        self.discord.shop_open = false;
+        self.discord.inbox_open = false;
         self.discord.chat.reply_to = None;
         self.discord.chat.editing = None;
         self.discord.chat.drawer = ChatDrawer::None;
@@ -943,12 +970,6 @@ impl AppState {
             self.discord.active_channel_id = None;
         }
         self.load_discord_guild(guild_id, true);
-    }
-
-    pub fn close_discord_guild(&mut self) {
-        self.discord.active_guild_id = None;
-        self.discord.active_channel_id = None;
-        self.discord.place = DiscordPlace::Servers;
     }
 
     pub fn load_discord_guild(&mut self, guild_id: &str, select_default: bool) {
@@ -1046,28 +1067,6 @@ impl AppState {
                 },
             );
         }
-    }
-
-    pub fn mark_discord_guild_read(&mut self, guild_id: &str) {
-        if let Some(g) = self.discord.home.guilds.iter_mut().find(|g| g.id == guild_id) {
-            g.unread = false;
-            g.mentions = 0;
-        }
-        if let Some(chans) = self.discord.channels_by_guild.get_mut(guild_id) {
-            for c in &mut chans.channels {
-                c.unread = false;
-                c.mentions = 0;
-            }
-        }
-        if self.status != HostStatus::Connected {
-            return;
-        }
-        #[cfg(windows)]
-        self.call_host_async(
-            METHOD_DISCORD_MARK_READ,
-            json!({ "guildId": guild_id }),
-            |_s, _res: Result<ActionResult, String>| {},
-        );
     }
 
     pub fn join_discord_voice(&mut self, guild_id: Option<&str>, channel_id: &str) {
@@ -1268,7 +1267,9 @@ impl AppState {
                         s.notice = Some("Friend request sent".into());
                         s.refresh_discord_home();
                     } else {
-                        s.notice = rep.message.or_else(|| Some("Could not send request".into()));
+                        s.notice = rep
+                            .message
+                            .or_else(|| Some("Could not send request".into()));
                     }
                 }
             },
@@ -1282,8 +1283,8 @@ impl AppState {
     }
 
     pub fn toggle_discord_folder(&mut self, folder_id: &str) {
-        if !self.discord.collapsed_folders.remove(folder_id) {
-            self.discord.collapsed_folders.insert(folder_id.to_string());
+        if !self.discord.expanded_folders.remove(folder_id) {
+            self.discord.expanded_folders.insert(folder_id.to_string());
         }
     }
 
@@ -1406,6 +1407,105 @@ impl AppState {
             self.discord.speaking.insert(user_id.to_string());
         } else {
             self.discord.speaking.remove(user_id);
+        }
+    }
+
+    pub fn collect_discord_image_urls(&self) -> Vec<String> {
+        let mut urls: Vec<String> = Vec::new();
+        if let Some(ref me) = self.discord.home.me {
+            if let Some(ref u) = me.avatar {
+                urls.push(u.clone());
+            }
+            if let Some(u) = crate::discord::decoration_url(me.look.as_ref()) {
+                urls.push(u);
+            }
+        }
+        let mut by_id: HashMap<&str, &DiscordGuild> = HashMap::new();
+        for g in &self.discord.home.guilds {
+            by_id.insert(g.id.as_str(), g);
+        }
+        for item in self.discord.home.rail.iter().take(60) {
+            for gid in item.guild_ids.iter().take(4) {
+                if let Some(g) = by_id.get(gid.as_str())
+                    && let Some(ref u) = g.icon
+                {
+                    urls.push(u.clone());
+                }
+            }
+        }
+        for g in self.discord.home.guilds.iter().take(48) {
+            if let Some(ref u) = g.icon {
+                urls.push(u.clone());
+            }
+        }
+        for dm in self.discord.home.dms.iter().take(32) {
+            if let Some(ref u) = dm.avatar {
+                urls.push(u.clone());
+            }
+            if let Some(u) = crate::discord::decoration_url(dm.look.as_ref()) {
+                urls.push(u);
+            }
+        }
+        for f in self
+            .discord
+            .friends
+            .iter()
+            .filter(|f| f.kind == "friend" && f.status != "offline")
+        {
+            if let Some(ref u) = f.avatar {
+                urls.push(u.clone());
+            }
+            if let Some(ref look) = f.look {
+                if let Some(u) = crate::discord::decoration_url(Some(look)) {
+                    urls.push(u);
+                }
+                if let Some(ref plate) = look.nameplate
+                    && let Some(u) = crate::discord::nameplate_static_url(plate)
+                {
+                    urls.push(u);
+                }
+                if let Some(ref tag) = look.tag
+                    && let Some(u) = crate::discord::clan_badge_url(tag)
+                {
+                    urls.push(u);
+                }
+            }
+        }
+        for msgs in self.discord.chat.messages_by_channel.values() {
+            for m in msgs.iter().rev().take(30) {
+                if let Some(u) = m.author.avatar_url() {
+                    urls.push(u);
+                }
+            }
+        }
+        for ml in self.discord.members_by_guild.values() {
+            for item in ml.items.iter().flatten().take(30) {
+                if let DiscordMemberItem::Member(m) = item {
+                    if let Some(ref u) = m.avatar {
+                        urls.push(u.clone());
+                    }
+                    if let Some(u) = crate::discord::decoration_url(m.look.as_deref()) {
+                        urls.push(u);
+                    }
+                }
+            }
+        }
+        urls.sort();
+        urls.dedup();
+        urls
+    }
+
+    pub fn preload_discord_images_sync(&self, scale: f32) {
+        if self.image_cache.is_none() || !self.discord.loaded {
+            return;
+        }
+        let images: Vec<rune::Image> = self
+            .collect_discord_image_urls()
+            .into_iter()
+            .filter_map(|u| self.remote_image(&u, scale))
+            .collect();
+        for img in images {
+            let _ = img.wait();
         }
     }
 }

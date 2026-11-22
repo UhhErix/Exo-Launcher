@@ -102,6 +102,7 @@ fn on_key(s: &mut AppState, ev: &KeyEvent, tx: &mut Tx) -> bool {
 fn setup_state(s: &mut AppState, waker: Waker) {
     s.install_waker(waker);
     s.preload_visible_covers_sync(2.0);
+    s.preload_discord_images_sync(1.0);
 }
 
 #[cfg(windows)]
@@ -395,14 +396,30 @@ fn load_live_state_sync(pipe: &str, scene: Option<&str>) -> AppState {
                 state.media.capture_items = list.items;
             }
         }
-        Some("discord") => {
-            if let Ok(st) = client.call_blocking::<_, exo_rpc::DiscordStatus>(
-                exo_rpc::METHOD_DISCORD_STATUS,
-                &serde_json::json!({ "connect": true }),
-                Duration::from_secs(5),
+        Some(sc) if sc.starts_with("discord") => {
+            if let Ok(settings) = client.call_blocking::<_, exo_rpc::LauncherSettings>(
+                exo_rpc::METHOD_SETTINGS_GET,
+                &serde_json::json!({}),
+                Duration::from_secs(4),
             ) {
-                state.discord.status = st;
-                state.discord.loaded = true;
+                state.settings = settings;
+            }
+            for _ in 0..40 {
+                if let Ok(st) = client.call_blocking::<_, exo_rpc::DiscordStatus>(
+                    exo_rpc::METHOD_DISCORD_STATUS,
+                    &serde_json::json!({ "connect": true }),
+                    Duration::from_secs(5),
+                ) {
+                    let done = st.state == "ready" || st.state == "error" || !st.signed_in;
+                    state.discord.status = st;
+                    state.discord.loaded = true;
+                    if done {
+                        break;
+                    }
+                } else {
+                    break;
+                }
+                std::thread::sleep(Duration::from_millis(250));
             }
             if let Ok(accs) = client.call_blocking::<_, exo_rpc::DiscordAccountsReply>(
                 exo_rpc::METHOD_DISCORD_ACCOUNTS,
@@ -426,6 +443,84 @@ fn load_live_state_sync(pipe: &str, scene: Option<&str>) -> AppState {
                     Duration::from_secs(6),
                 ) {
                     state.discord.friends = fr.friends;
+                    state.discord.blocked = fr.restricted.map(|r| r.blocked).unwrap_or_default();
+                }
+                if let Ok(unreads) = client.call_blocking::<_, exo_rpc::DiscordUnreadsReply>(
+                    exo_rpc::METHOD_DISCORD_UNREADS,
+                    &serde_json::json!({}),
+                    Duration::from_secs(5),
+                ) {
+                    state.discord.unreads = unreads.channels;
+                }
+                if sc == "discord-messages"
+                    && let Some(dm_id) = state.discord.active_dm_id.clone()
+                    && let Ok(rep) = client.call_blocking::<_, exo_rpc::DiscordMessagesReply>(
+                        exo_rpc::METHOD_DISCORD_MESSAGES,
+                        &serde_json::json!({ "channelId": dm_id, "limit": 40 }),
+                        Duration::from_secs(6),
+                    )
+                    && let Some(msgs) = rep.messages
+                {
+                    state.discord.chat.messages_by_channel.insert(dm_id, msgs);
+                }
+                if sc == "discord-server"
+                    && let Some(gid) = state.discord.home.guilds.first().map(|g| g.id.clone())
+                {
+                    state.discord.active_guild_id = Some(gid.clone());
+                    if let Ok(chans) = client.call_blocking::<_, exo_rpc::DiscordChannels>(
+                        exo_rpc::METHOD_DISCORD_CHANNELS,
+                        &serde_json::json!({ "guildId": gid }),
+                        Duration::from_secs(6),
+                    ) {
+                        let first_cid = chans
+                            .channels
+                            .iter()
+                            .find(|c| c.kind == "text" && c.can_read != Some(false))
+                            .or_else(|| chans.channels.iter().find(|c| c.kind != "category"))
+                            .map(|c| c.id.clone());
+                        state.discord.channels_by_guild.insert(gid.clone(), chans);
+                        if let Some(cid) = first_cid {
+                            state.discord.active_channel_id = Some(cid.clone());
+                            if let Ok(rep) = client
+                                .call_blocking::<_, exo_rpc::DiscordMessagesReply>(
+                                    exo_rpc::METHOD_DISCORD_MESSAGES,
+                                    &serde_json::json!({ "channelId": cid, "limit": 40 }),
+                                    Duration::from_secs(6),
+                                )
+                                && let Some(msgs) = rep.messages
+                            {
+                                state.discord.chat.messages_by_channel.insert(cid, msgs);
+                            }
+                        }
+                    }
+                    if let Ok(ml) = client.call_blocking::<_, exo_rpc::DiscordMemberList>(
+                        exo_rpc::METHOD_DISCORD_MEMBERS,
+                        &serde_json::json!({ "guildId": gid }),
+                        Duration::from_secs(6),
+                    ) {
+                        state.discord.members_by_guild.insert(gid, ml);
+                    }
+                }
+                if let Some(ref cache_dir) = state.remote_cache_dir {
+                    let urls = state.collect_discord_image_urls();
+                    let missing: Vec<String> = urls
+                        .into_iter()
+                        .filter(|u| !exo_rpc::remote_art::cache_path_for(cache_dir, u).is_file())
+                        .collect();
+                    if !missing.is_empty() {
+                        let workers = missing.len().min(8);
+                        let chunk = missing.len().div_ceil(workers);
+                        std::thread::scope(|scope| {
+                            for slice in missing.chunks(chunk) {
+                                let dir = cache_dir.clone();
+                                scope.spawn(move || {
+                                    for u in slice {
+                                        let _ = exo_rpc::remote_art::fetch_cached_image(u, &dir);
+                                    }
+                                });
+                            }
+                        });
+                    }
                 }
             }
         }
@@ -461,7 +556,12 @@ fn main() {
         .iter()
         .any(|a| a == "--snap" || a == "--tree" || a == "--script" || a == "--headless");
 
-    let mut spec = AppSpec::new("Exo Launcher", (1280.0, 800.0), AppState::default, shell::view);
+    let mut spec = AppSpec::new(
+        "Exo Launcher",
+        (1280.0, 800.0),
+        AppState::default,
+        shell::view,
+    );
     spec.fonts = FONTS;
     spec.families = FONT_FAMILIES;
     spec.setup = Some(setup_state);
@@ -504,7 +604,9 @@ fn main() {
             s.switch_room(state::Room::Devices);
             s.switch_pc_tab(pc_state::PcTab::Devices);
         }),
-        ("music", |s: &mut AppState| s.switch_room(state::Room::Music)),
+        ("music", |s: &mut AppState| {
+            s.switch_room(state::Room::Music)
+        }),
         ("music-immersion", |s: &mut AppState| {
             s.switch_room(state::Room::Music);
             s.media.music_immersion = true;
@@ -516,7 +618,9 @@ fn main() {
                 s.open_capture_item(&first);
             }
         }),
-        ("discord", |s: &mut AppState| s.switch_room(state::Room::Discord)),
+        ("discord", |s: &mut AppState| {
+            s.switch_room(state::Room::Discord)
+        }),
         ("discord-messages", |s: &mut AppState| {
             s.switch_room(state::Room::Discord);
             s.open_discord_place(discord_state::DiscordPlace::Messages);
@@ -527,7 +631,22 @@ fn main() {
         }),
         ("discord-server", |s: &mut AppState| {
             s.switch_room(state::Room::Discord);
-            s.open_discord_guild("g-exo");
+            let gid = s
+                .discord
+                .active_guild_id
+                .clone()
+                .or_else(|| {
+                    s.discord
+                        .home
+                        .guilds
+                        .iter()
+                        .find(|g| g.id == "g-exo")
+                        .map(|g| g.id.clone())
+                })
+                .or_else(|| s.discord.home.guilds.first().map(|g| g.id.clone()));
+            if let Some(gid) = gid {
+                s.open_discord_guild(&gid);
+            }
         }),
         ("discord-voice", |s: &mut AppState| {
             s.switch_room(state::Room::Discord);
@@ -854,7 +973,10 @@ mod tests {
             .iter()
             .filter(|i| i.params[1] == KIND_BACKDROP_BLUR)
             .count();
-        assert!(blurs <= 4, "mini-player exceeded MAX_BACKDROP_BLURS=4: {blurs}");
+        assert!(
+            blurs <= 4,
+            "mini-player exceeded MAX_BACKDROP_BLURS=4: {blurs}"
+        );
 
         let (mx, my) = rt.find("mini-open-music").expect("Mini player open Music");
         rt.pointer_down(mx, my);
@@ -872,7 +994,9 @@ mod tests {
         rt.update(|s, _| s.open_captures(None));
         rt.frame(3.0 / 60.0);
         assert!(rt.state.media.captures_open);
-        let (cx, cy) = rt.find("cap-card-cap0000000000001").expect("First capture card");
+        let (cx, cy) = rt
+            .find("cap-card-cap0000000000001")
+            .expect("First capture card");
         rt.pointer_down(cx, cy);
         rt.pointer_up(cx, cy);
         rt.frame(4.0 / 60.0);
@@ -902,27 +1026,27 @@ mod tests {
             .count();
         assert!(blurs <= 4, "Discord exceeded MAX_BACKDROP_BLURS=4: {blurs}");
 
-        let (mx, my) = rt.find("dc-place-messages").expect("Messages tab");
+        let (mx, my) = rt.find("dc-dm-dm-ada").expect("DM row");
         rt.pointer_down(mx, my);
         rt.pointer_up(mx, my);
         rt.frame(1.0 / 60.0);
-        assert_eq!(rt.state.discord.place, discord_state::DiscordPlace::Messages);
+        assert_eq!(
+            rt.state.discord.place,
+            discord_state::DiscordPlace::Messages
+        );
         assert!(rt.find("dc-dm-stage").is_some());
-
-        let (sx, sy) = rt.find("dc-place-servers").expect("Servers tab");
-        rt.pointer_down(sx, sy);
-        rt.pointer_up(sx, sy);
-        rt.frame(2.0 / 60.0);
-        assert_eq!(rt.state.discord.place, discord_state::DiscordPlace::Servers);
 
         let (gx, gy) = rt.find("dc-guild-tile-g-exo").expect("Exo HQ server tile");
         rt.pointer_down(gx, gy);
         rt.pointer_up(gx, gy);
-        rt.frame(3.0 / 60.0);
+        rt.frame(2.0 / 60.0);
+        assert_eq!(rt.state.discord.place, discord_state::DiscordPlace::Servers);
         assert_eq!(rt.state.discord.active_guild_id.as_deref(), Some("g-exo"));
         assert!(rt.find("dc-members-panel").is_some());
 
-        let (vx, vy) = rt.find("dc-ch-vc-lounge").expect("Main Lounge voice channel");
+        let (vx, vy) = rt
+            .find("dc-ch-vc-lounge")
+            .expect("Main Lounge voice channel");
         rt.pointer_down(vx, vy);
         rt.pointer_up(vx, vy);
         rt.frame(4.0 / 60.0);
@@ -974,7 +1098,10 @@ mod tests {
             .iter()
             .filter(|i| i.params[1] == KIND_BACKDROP_BLUR)
             .count();
-        assert!(blurs <= 4, "Discord chat exceeded MAX_BACKDROP_BLURS=4: {blurs}");
+        assert!(
+            blurs <= 4,
+            "Discord chat exceeded MAX_BACKDROP_BLURS=4: {blurs}"
+        );
 
         let before_count = rt
             .state
@@ -1043,7 +1170,10 @@ mod tests {
             .iter()
             .filter(|i| i.params[1] == KIND_BACKDROP_BLUR)
             .count();
-        assert!(blurs <= 4, "Discord voice exceeded MAX_BACKDROP_BLURS=4: {blurs}");
+        assert!(
+            blurs <= 4,
+            "Discord voice exceeded MAX_BACKDROP_BLURS=4: {blurs}"
+        );
 
         let (gx, gy) = rt.find("dc-vc-share").expect("Share screen button");
         rt.pointer_down(gx, gy);
