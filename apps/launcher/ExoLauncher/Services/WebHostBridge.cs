@@ -614,7 +614,15 @@ public sealed partial class WebHostBridge
                 "art.reset" => await ArtworkResetAsync(paramsEl, hasParams).ConfigureAwait(true),
                 "art.refetch" => await ArtworkRefetchAsync(paramsEl, hasParams).ConfigureAwait(true),
                 // Answered at once, so it reaches the page before the library does (cover art the page names itself).
-                "art.base" => new { covers = LocalFileHost.Url(CoverArtService.VirtualHost, "") },
+                "art.base" => _transport is NamedPipeHostTransport
+                    ? new
+                    {
+                        covers = LocalFileHost.Url(CoverArtService.VirtualHost, ""),
+                        coversDir = CoverArtService.CacheRoot,
+                        devicesDir = DeviceImages.CacheRoot,
+                        notesDir = NoteStore.Shared.PhotosFolder,
+                    }
+                    : (object)new { covers = LocalFileHost.Url(CoverArtService.VirtualHost, "") },
                 "library.folderArt" => await LibraryFolderArtAsync(paramsEl, hasParams).ConfigureAwait(true),
                 "library.refreshAll" => await LibraryRefreshAllAsync(_bridgeLifetime.Token).ConfigureAwait(true),
                 "game.cancelInstall" => _services.Launcher.Cancel(ReadString(paramsEl, hasParams, "id")),

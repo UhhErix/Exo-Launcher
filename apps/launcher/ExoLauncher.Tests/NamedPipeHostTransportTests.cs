@@ -110,4 +110,59 @@ public sealed class NamedPipeHostTransportTests
         transport.Detach();
         transport.Dispose();
     }
+
+    [Fact]
+    public async Task ReliableJsonRepliesAreNeverDroppedUnderBinaryFrameFlood()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var pipeName = $"exo-test-pipe-{Guid.NewGuid():N}";
+        using var transport = new NamedPipeHostTransport(pipeName);
+
+        using var client = new NamedPipeClientStream(".", pipeName, PipeDirection.InOut, PipeOptions.Asynchronous);
+        await client.ConnectAsync(5000, ct);
+        using var reader = new StreamReader(client, Encoding.UTF8, detectEncodingFromByteOrderMarks: false, leaveOpen: true);
+
+        byte[] dummyFrame = [1, 2, 3, 4];
+        for (var i = 0; i < 300; i++)
+            transport.PostBinaryFrame("""{"channel":"discord:stream"}""", dummyFrame);
+
+        const int reliableCount = 25;
+        for (var i = 0; i < reliableCount; i++)
+            transport.PostJson($"{{\"version\":1,\"id\":\"req-{i}\",\"ok\":true}}");
+
+        var seenIds = new HashSet<string>();
+        var deadline = DateTime.UtcNow.AddSeconds(5);
+        while (seenIds.Count < reliableCount && DateTime.UtcNow < deadline)
+        {
+            var line = await reader.ReadLineAsync(ct).AsTask().WaitAsync(TimeSpan.FromSeconds(5), ct);
+            Assert.NotNull(line);
+            using var doc = JsonDocument.Parse(line!);
+            if (doc.RootElement.TryGetProperty("id", out var idEl) && idEl.GetString() is { } id)
+                seenIds.Add(id);
+        }
+
+        Assert.Equal(reliableCount, seenIds.Count);
+    }
+
+    [Fact]
+    public void RuneHostSessionParsesCliAndRejectsUnsafePipeNames()
+    {
+        var pipeOnly = RuneHostSession.TryParse(["--host-pipe", "exo-dev-123"], _ => null);
+        Assert.NotNull(pipeOnly);
+        Assert.Equal("exo-dev-123", pipeOnly!.PipeName);
+        Assert.False(pipeOnly.SpawnUi);
+
+        var uiMode = RuneHostSession.TryParse(["--ui=rune"], _ => null);
+        Assert.NotNull(uiMode);
+        Assert.True(uiMode!.SpawnUi);
+
+        var envMode = RuneHostSession.TryParse([], key => key == "EXO_UI" ? "rune" : null);
+        Assert.NotNull(envMode);
+        Assert.True(envMode!.SpawnUi);
+
+        var defaultMode = RuneHostSession.TryParse([], _ => null);
+        Assert.Null(defaultMode);
+
+        Assert.Throws<ArgumentException>(() => RuneHostSession.TryParse(["--host-pipe", "../escape"], _ => null));
+    }
 }

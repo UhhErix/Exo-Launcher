@@ -91,6 +91,12 @@ public static class Program
             // Inside the app folder it would hold it open after Exo exits, and the next
             // update could not swap the folder; Exo's data folder is never replaced.
             try { Environment.CurrentDirectory = Helpers.PathHelper.AppDataDir; } catch { }
+            if (Services.RuneHostSession.TryParse(args) is { } runeOptions)
+            {
+                ComWrappersSupport.InitializeComWrappers();
+                Environment.ExitCode = Services.RuneHostSession.Run(runeOptions);
+                return;
+            }
             Helpers.WebViewRuntimeLocator.ClearStaleBrowserFolderPin();
             AppDomain.CurrentDomain.SetData("REGEX_DEFAULT_MATCH_TIMEOUT", TimeSpan.FromSeconds(5));
             PackagedSmoke.Configure(args);
