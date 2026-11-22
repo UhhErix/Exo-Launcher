@@ -190,6 +190,7 @@
     <!-- DeepFilterNet noise suppression (Exo's build of its C interface, voice\build.ps1): ships in the app, so a call has it from the first join. -->
     <Content Include="..\voice\out\exo-deepfilter.dll" Condition="Exists('..\voice\out\exo-deepfilter.dll')" Link="%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <Content Include="..\voice\out\LICENSE-*.txt" Link="%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="..\native-ui\target\release\exo-ui.exe" Condition="Exists('..\native-ui\target\release\exo-ui.exe')" Link="exo-ui.exe" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
 
     <Content Include="..\LICENSE" Link="LICENSE.txt" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <Content Include="..\THIRD_PARTY_NOTICES.md" Link="THIRD_PARTY_NOTICES.md" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />

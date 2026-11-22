@@ -13,6 +13,10 @@ $previous = Join-Path $env:LOCALAPPDATA ('ExoLauncher\app.previous-dev-' + [guid
 robocopy $pub $incoming /E /NFL /NDL /NJH /NJS | Out-Null
 if ($LASTEXITCODE -gt 7) { throw "robocopy failed with exit code $LASTEXITCODE" }
 if (-not (Test-Path -LiteralPath (Join-Path $incoming 'ExoLauncher.exe'))) { throw 'staged copy is missing ExoLauncher.exe' }
+$nativeUi = Join-Path $repo 'native-ui\target\release\exo-ui.exe'
+if ((Test-Path -LiteralPath $nativeUi) -and -not (Test-Path -LiteralPath (Join-Path $incoming 'exo-ui.exe'))) {
+    Copy-Item -LiteralPath $nativeUi -Destination (Join-Path $incoming 'exo-ui.exe') -Force
+}
 # dotnet publish carries no add-ons (Build-Release.ps1 adds them): keep each installed one the publish lacks, or the swap
 # drops Exo Capture and Settings says it is not installed. Lucid (addons\lucid, hosted until 3.25) is not carried over.
 $installedAddons = Join-Path $app 'addons'
@@ -24,6 +28,8 @@ if (Test-Path -LiteralPath $installedAddons) {
         if ($LASTEXITCODE -gt 7) { throw "robocopy of add-on $($addon.Name) failed with exit code $LASTEXITCODE" }
     }
 }
+$uiTargets = @(Get-Process 'exo-ui' -ErrorAction SilentlyContinue | Where-Object { $_.Path -eq (Join-Path $app 'exo-ui.exe') })
+foreach ($p in $uiTargets) { try { [void]$p.CloseMainWindow() } catch { } }
 $targets = @(Get-Process ExoLauncher -ErrorAction SilentlyContinue | Where-Object { $_.Path -eq (Join-Path $app 'ExoLauncher.exe') })
 if ($targets.Count) {
     & (Join-Path $PSScriptRoot 'e2e\lib\win.ps1') -Command close -W 20 | Out-Null

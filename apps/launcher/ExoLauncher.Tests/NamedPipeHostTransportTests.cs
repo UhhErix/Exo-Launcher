@@ -147,22 +147,35 @@ public sealed class NamedPipeHostTransportTests
     [Fact]
     public void RuneHostSessionParsesCliAndRejectsUnsafePipeNames()
     {
-        var pipeOnly = RuneHostSession.TryParse(["--host-pipe", "exo-dev-123"], _ => null);
+        var pipeOnly = RuneHostSession.TryParse(["--host-pipe", "exo-dev-123"], _ => null, _ => false);
         Assert.NotNull(pipeOnly);
         Assert.Equal("exo-dev-123", pipeOnly!.PipeName);
         Assert.False(pipeOnly.SpawnUi);
 
-        var uiMode = RuneHostSession.TryParse(["--ui=rune"], _ => null);
+        var uiMode = RuneHostSession.TryParse(["--ui=rune"], _ => null, _ => false);
         Assert.NotNull(uiMode);
         Assert.True(uiMode!.SpawnUi);
 
-        var envMode = RuneHostSession.TryParse([], key => key == "EXO_UI" ? "rune" : null);
+        var envMode = RuneHostSession.TryParse([], key => key == "EXO_UI" ? "rune" : null, _ => false);
         Assert.NotNull(envMode);
         Assert.True(envMode!.SpawnUi);
 
-        var defaultMode = RuneHostSession.TryParse([], _ => null);
-        Assert.Null(defaultMode);
+        var defaultWithBundled = RuneHostSession.TryParse([], _ => null, path => path.EndsWith("exo-ui.exe", StringComparison.OrdinalIgnoreCase));
+        Assert.NotNull(defaultWithBundled);
+        Assert.True(defaultWithBundled!.SpawnUi);
 
-        Assert.Throws<ArgumentException>(() => RuneHostSession.TryParse(["--host-pipe", "../escape"], _ => null));
+        var defaultWithoutBundled = RuneHostSession.TryParse([], _ => null, _ => false);
+        Assert.Null(defaultWithoutBundled);
+
+        var webRollbackFlag = RuneHostSession.TryParse(["--ui=web"], _ => null, _ => true);
+        Assert.Null(webRollbackFlag);
+
+        var webRollbackEnv = RuneHostSession.TryParse([], key => key == "EXO_UI" ? "web" : null, _ => true);
+        Assert.Null(webRollbackEnv);
+
+        var smokeBypass = RuneHostSession.TryParse(["--smoke-test"], _ => null, _ => true);
+        Assert.Null(smokeBypass);
+
+        Assert.Throws<ArgumentException>(() => RuneHostSession.TryParse(["--host-pipe", "../escape"], _ => null, _ => false));
     }
 }

@@ -10,23 +10,52 @@ internal sealed partial class RuneHostSession
 {
     private const uint JobObjectExtendedLimitInformationClass = 9;
     private const uint JobObjectLimitKillOnJobClose = 0x00002000;
+    private const int SwRestore = 9;
+    private static readonly object ActiveUiLock = new();
+    private static Process? _activeUiProcess;
+
+    internal static void RequestActivate()
+    {
+        Process? ui;
+        lock (ActiveUiLock) ui = _activeUiProcess;
+        if (ui is null) return;
+        try
+        {
+            if (ui.HasExited) return;
+            ui.Refresh();
+            var hwnd = ui.MainWindowHandle;
+            if (hwnd == IntPtr.Zero) return;
+            if (IsIconic(hwnd)) ShowWindow(hwnd, SwRestore);
+            SetForegroundWindow(hwnd);
+        }
+        catch { }
+    }
 
     internal sealed record Options(string PipeName, bool SpawnUi, string? UiExecutableOverride);
 
     [GeneratedRegex("^[A-Za-z0-9._-]{1,120}$")]
     private static partial Regex ValidPipeName();
 
-    internal static Options? TryParse(string[] args, Func<string, string?>? readEnv = null)
+    internal static Options? TryParse(
+        string[] args,
+        Func<string, string?>? readEnv = null,
+        Func<string, bool>? fileExists = null)
     {
         readEnv ??= Environment.GetEnvironmentVariable;
+        fileExists ??= File.Exists;
         string? explicitPipe = null;
         string? uiMode = null;
         string? uiExe = null;
+        var smokeTest = false;
 
         for (var i = 0; i < args.Length; i++)
         {
             var arg = args[i];
-            if (arg.Equals("--host-pipe", StringComparison.OrdinalIgnoreCase) && i + 1 < args.Length)
+            if (arg.Equals("--smoke-test", StringComparison.Ordinal))
+            {
+                smokeTest = true;
+            }
+            else if (arg.Equals("--host-pipe", StringComparison.OrdinalIgnoreCase) && i + 1 < args.Length)
             {
                 explicitPipe = args[++i];
             }
@@ -55,11 +84,27 @@ internal sealed partial class RuneHostSession
             return new Options(explicitPipe, SpawnUi: false, UiExecutableOverride: null);
         }
 
-        uiMode ??= readEnv("EXO_UI");
-        if (!string.Equals(uiMode, "rune", StringComparison.OrdinalIgnoreCase))
+        if (smokeTest)
             return null;
 
+        uiMode ??= readEnv("EXO_UI");
+        if (string.Equals(uiMode, "web", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(uiMode, "webview", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(uiMode, "webview2", StringComparison.OrdinalIgnoreCase))
+        {
+            return null;
+        }
+
         uiExe ??= readEnv("EXO_RUNE_UI_PATH");
+        var explicitRune = string.Equals(uiMode, "rune", StringComparison.OrdinalIgnoreCase);
+        if (!explicitRune)
+        {
+            var bundledUi = Path.Combine(AppContext.BaseDirectory, "exo-ui.exe");
+            var hasOverride = !string.IsNullOrWhiteSpace(uiExe) && fileExists(uiExe);
+            if (!hasOverride && !fileExists(bundledUi))
+                return null;
+        }
+
         return new Options($"exo-launcher-rpc-{Environment.ProcessId}", SpawnUi: true, UiExecutableOverride: uiExe);
     }
 
@@ -123,6 +168,7 @@ internal sealed partial class RuneHostSession
                 var psi = new ProcessStartInfo(exe)
                 {
                     UseShellExecute = false,
+                    CreateNoWindow = true,
                     WorkingDirectory = Path.GetDirectoryName(exe) ?? PathHelper.AppDataDir,
                 };
                 psi.ArgumentList.Add("--pipe");
@@ -134,6 +180,7 @@ internal sealed partial class RuneHostSession
                     return 3;
                 }
                 jobHandle = BindChildToKillJob(uiProcess);
+                lock (ActiveUiLock) _activeUiProcess = uiProcess;
                 uiProcess.EnableRaisingEvents = true;
                 uiProcess.Exited += (_, _) => stop.Set();
                 if (uiProcess.HasExited) stop.Set();
@@ -144,6 +191,10 @@ internal sealed partial class RuneHostSession
         }
         finally
         {
+            lock (ActiveUiLock)
+            {
+                if (ReferenceEquals(_activeUiProcess, uiProcess)) _activeUiProcess = null;
+            }
             Console.CancelKeyPress -= onCancel;
             try { bridge.Detach(); } catch { }
             try { transport.Detach(); } catch { }
@@ -239,4 +290,16 @@ internal sealed partial class RuneHostSession
     [DllImport("kernel32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool CloseHandle(IntPtr hObject);
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool IsIconic(IntPtr hWnd);
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool SetForegroundWindow(IntPtr hWnd);
 }

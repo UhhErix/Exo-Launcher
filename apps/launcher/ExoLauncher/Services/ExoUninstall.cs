@@ -135,7 +135,7 @@ internal static class ExoUninstall
         var scan = new LeftoverScan(LeftoverScan.ThisPc());
         var found = scan.Find(new Trail("Exo Launcher")
         {
-            Homes = [app], Exes = ["ExoLauncher.exe"], Ids = [Program.AppUserModelId], Keep = [PathHelper.AppDataDir],
+            Homes = [app], Exes = ["ExoLauncher.exe", "exo-ui.exe"], Ids = [Program.AppUserModelId], Keep = [PathHelper.AppDataDir],
         }, deep: false).Where(item => !item.Machine && !item.Likely).ToList();
         var gone = found.Count(scan.Delete);
         AppLog.Info($"Uninstall: cleared {gone} of Windows' {found.Count} records of Exo.");
