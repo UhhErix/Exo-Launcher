@@ -1,37 +1,65 @@
 use crate::tokens::{
     BG, FG, GLASS_CONTROL_SIGMA, GLASS_PANEL_SIGMA, PRESS_SCALE, PRIMARY_FG, RADIUS_CARD,
     RADIUS_PANEL, RADIUS_PILL, SPRING_MOVE, SPRING_QUICK, TRANSPARENT, bad, fg_muted,
-    glass_control_fill, glass_panel_fill, glass_rim, glass_rim_bottom, glass_rim_top, good,
+    glass_control_fill, glass_outer_edge, glass_panel_fill, glass_rim, glass_rim_bottom,
+    glass_rim_top, glass_specular_sheen, glass_still_control_fill, glass_still_panel_fill, good,
     hairline, hover_fill, pressed_fill, subtle_fill, track_fill, type_control, type_section,
     type_small, warn,
 };
 use rune::{Color, El, Pixels, SurfaceFit, col, el, row, text};
 
 pub fn glass_capsule(key: &'static str) -> El {
-    row()
+    glass_capsule_opt(key, true)
+}
+
+pub fn glass_capsule_opt(key: &'static str, blur: bool) -> El {
+    let mut capsule = row()
         .key(key)
         .h(36.0)
         .px(3.0)
         .gap(2.0)
         .center_y()
         .radius(RADIUS_PILL)
-        .backdrop_blur(GLASS_CONTROL_SIGMA)
-        .fill(glass_control_fill())
+        .fill(if blur {
+            glass_control_fill()
+        } else {
+            glass_still_control_fill()
+        })
+        .linear_gradient(std::f32::consts::PI, glass_specular_sheen())
         .border_gradient(1.0, glass_rim_top(), glass_rim_bottom())
+        .shadow(1.0, 3.0, glass_outer_edge())
+        .shadow(6.0, 18.0, BG.alpha(0.45));
+    if blur {
+        capsule = capsule.backdrop_blur(GLASS_CONTROL_SIGMA);
+    }
+    capsule
 }
 
 pub fn glass_panel(key: &'static str, width: f32) -> El {
-    rune::col()
+    glass_panel_opt(key, width, true)
+}
+
+pub fn glass_panel_opt(key: &'static str, width: f32, blur: bool) -> El {
+    let mut panel = rune::col()
         .key(key)
         .w(width)
         .radius(RADIUS_PANEL)
         .continuous_corners()
         .clip_rounded(RADIUS_PANEL)
         .hit()
-        .backdrop_blur(GLASS_PANEL_SIGMA)
-        .fill(glass_panel_fill())
+        .fill(if blur {
+            glass_panel_fill()
+        } else {
+            glass_still_panel_fill()
+        })
+        .linear_gradient(std::f32::consts::PI, glass_specular_sheen())
         .border_gradient(1.0, glass_rim_top(), glass_rim_bottom())
-        .shadow(0.0, 40.0, BG.alpha(0.55))
+        .shadow(1.0, 3.0, glass_outer_edge())
+        .shadow(12.0, 32.0, BG.alpha(0.55));
+    if blur {
+        panel = panel.backdrop_blur(GLASS_PANEL_SIGMA);
+    }
+    panel
 }
 
 pub fn amoled_card(radius: f32) -> El {

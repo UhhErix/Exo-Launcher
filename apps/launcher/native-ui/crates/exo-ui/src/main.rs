@@ -52,6 +52,7 @@ fn split_cli_args() -> (Option<String>, Vec<String>) {
 
 fn on_key(s: &mut AppState, ev: &KeyEvent, tx: &mut Tx) -> bool {
     if ev.is_command('k') {
+        tx.instant();
         if s.palette_open {
             s.close_palette();
         } else {
@@ -1539,6 +1540,119 @@ mod tests {
         assert_eq!(
             rt.state.discord.voice_ui.panel,
             discord_voice_state::VoicePanel::Audio
+        );
+    }
+
+    #[test]
+    fn blur_budget_and_glass_palette_invariants() {
+        let check_case = |label: &str,
+                          setup: &dyn Fn(&mut AppState),
+                          expected_overlay: Option<&str>| {
+            let mut state = AppState::default();
+            setup(&mut state);
+            let mut rt = Runtime::new(state, shell::view, (1920.0, 1080.0), Env::new(true, 1.0));
+            rt.frame(0.0);
+            rt.frame(1.0 / 60.0);
+            let blur_rects: Vec<[f32; 4]> = rt
+                .instances
+                .iter()
+                .filter(|i| i.params[1] == KIND_BACKDROP_BLUR)
+                .map(|i| i.rect)
+                .collect();
+            assert!(
+                blur_rects.len() <= rune::MAX_BACKDROP_BLURS,
+                "{label}: emitted {} backdrop blurs (cap {})",
+                blur_rects.len(),
+                rune::MAX_BACKDROP_BLURS
+            );
+            if let Some(key) = expected_overlay {
+                let (rect, _) = rt
+                    .presented(key)
+                    .unwrap_or_else(|| panic!("{label}: overlay {key} not presented"));
+                let hit = blur_rects.iter().take(rune::MAX_BACKDROP_BLURS).any(|r| {
+                    (r[0] - rect[0]).abs() < 2.0
+                        && (r[1] - rect[1]).abs() < 2.0
+                        && (r[2] - rect[2]).abs() < 2.0
+                        && (r[3] - rect[3]).abs() < 2.0
+                });
+                assert!(
+                    hit,
+                    "{label}: overlay {key} rect {rect:?} missing from first {} blur slots: {blur_rects:?}",
+                    rune::MAX_BACKDROP_BLURS
+                );
+            }
+            rt
+        };
+
+        check_case("library-normal", &|_| {}, None);
+        check_case(
+            "music-normal",
+            &|s| {
+                s.switch_room(Room::Music);
+            },
+            None,
+        );
+        check_case(
+            "music-capture-menu",
+            &|s| {
+                s.switch_room(Room::Music);
+                s.capture_menu_open = true;
+            },
+            Some("capture-popover-menu"),
+        );
+        let rt_palette = check_case(
+            "library-mini-palette",
+            &|s| {
+                s.palette_open = true;
+            },
+            Some("command-palette"),
+        );
+        let (pal_rect, _) = rt_palette
+            .presented("command-palette")
+            .expect("command-palette presented");
+        assert!(
+            pal_rect[3] <= 520.5,
+            "palette height {} exceeded 520px cap",
+            pal_rect[3]
+        );
+        check_case(
+            "settings-key-modal",
+            &|s| {
+                s.switch_room(Room::Settings);
+                s.key_modal_open = true;
+            },
+            Some("activate-key-modal"),
+        );
+        check_case(
+            "library-tour",
+            &|s| {
+                s.start_tour();
+            },
+            Some("exo-tour-card"),
+        );
+        check_case(
+            "library-more-menu",
+            &|s| {
+                s.library_more_open = true;
+            },
+            Some("library-more-menu"),
+        );
+        let rt_settings = check_case(
+            "settings-void-top",
+            &|s| {
+                s.switch_room(Room::Settings);
+                s.media.playback = None;
+            },
+            None,
+        );
+        let settings_blurs = rt_settings
+            .instances
+            .iter()
+            .filter(|i| i.params[1] == KIND_BACKDROP_BLUR)
+            .count();
+        assert_eq!(
+            settings_blurs, 0,
+            "void-top Settings room should emit 0 backdrop blurs, got {settings_blurs}"
         );
     }
 }

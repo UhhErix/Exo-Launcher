@@ -1,12 +1,13 @@
 use crate::shell::room_icon;
 use crate::state::{AppState, PaletteItem, PaletteTarget};
 use exo_kit::{
-    BG, FG, RADIUS_PANEL, RADIUS_SMALL, SPRING_BASE, TRANSPARENT, fg_muted, float_line, hover_fill,
-    icon_gamepad, icon_key, icon_refresh, icon_search, icon_sparkles, scaled, scrim_fill,
-    type_body, type_control, type_small,
+    FG, RADIUS_SHEET, RADIUS_SMALL, SPRING_BASE, SPRING_QUICK, TRANSPARENT, fg_muted,
+    glass_panel_opt, hairline, hover_fill, icon_gamepad, icon_key, icon_refresh, icon_search,
+    icon_sparkles, scaled, scrim_fill, type_body, type_control, type_small,
 };
 use rune::{
-    El, Key, KeyEvent, ScrollSpec, TextStyle, Tx, col, edit_access, el, row, text, text_input,
+    El, Key, KeyEvent, ScrollSpec, Spring, TextStyle, Tx, col, edit_access, el, row, text,
+    text_input,
 };
 
 fn palette_icon(target: &PaletteTarget) -> El {
@@ -37,6 +38,7 @@ fn palette_row(item: PaletteItem, index: usize, selected: bool) -> El {
         .radius(RADIUS_SMALL + 2.0)
         .fill(if selected { hover_fill() } else { TRANSPARENT })
         .hover(hover_fill())
+        .hover_motion(Spring::NONE, SPRING_QUICK)
         .on_press_tx(move |s: &mut AppState, tx| {
             s.palette_index = index;
             s.execute_palette_target(target.clone(), tx);
@@ -48,6 +50,7 @@ fn palette_row(item: PaletteItem, index: usize, selected: bool) -> El {
 pub fn handle_palette_key(s: &mut AppState, ev: &KeyEvent, tx: &mut Tx) -> bool {
     match ev.key {
         Key::Escape => {
+            tx.instant();
             s.close_palette();
             true
         }
@@ -66,6 +69,7 @@ pub fn handle_palette_key(s: &mut AppState, ev: &KeyEvent, tx: &mut Tx) -> bool 
             true
         }
         Key::Enter => {
+            tx.instant();
             let items = s.palette_results();
             if let Some(item) = items.get(s.palette_index) {
                 s.execute_palette_target(item.target.clone(), tx);
@@ -97,6 +101,7 @@ pub fn view(s: &AppState) -> El {
         .on_input_change(|s: &mut AppState, _| s.palette_index = 0)
         .on_input_key(handle_palette_key)
         .on_submit(|s: &mut AppState, tx| {
+            tx.instant();
             let list = s.palette_results();
             if let Some(item) = list.get(s.palette_index) {
                 s.execute_palette_target(item.target.clone(), tx);
@@ -113,6 +118,7 @@ pub fn view(s: &AppState) -> El {
         .child(icon_search(16.0, fg_muted()))
         .child(input);
 
+    let max_palette_h = 520.0;
     let body = if items.is_empty() {
         el().w_full().h(72.0).center().child(
             text("No matching games or commands")
@@ -145,27 +151,23 @@ pub fn view(s: &AppState) -> El {
         }
         col()
             .w_full()
-            .max_h(821.0 - header_h)
+            .max_h(max_palette_h - header_h - 1.0)
             .px(scaled(6.0))
             .py(scaled(6.0))
             .scroll(ScrollSpec {
                 stick_bottom: false,
             })
-            .clip_fade_linear(0.0, 0.0, 0.0, 36.0)
+            .clip_fade_linear(0.0, 0.0, 0.0, 28.0)
             .children(rows)
     };
 
-    let card = col()
-        .key("command-palette")
-        .w(scaled(576.0))
-        .max_h(821.0)
-        .radius(RADIUS_PANEL)
-        .continuous_corners()
-        .clip_rounded(RADIUS_PANEL)
-        .fill(BG)
-        .border(1.0, float_line())
+    let card = glass_panel_opt("command-palette", scaled(576.0), true)
+        .max_h(max_palette_h)
+        .radius(RADIUS_SHEET)
+        .clip_rounded(RADIUS_SHEET)
         .motion(SPRING_BASE)
         .child(header)
+        .child(el().w_full().h(1.0).fill(hairline()))
         .child(body);
 
     el().key("palette-scrim")
