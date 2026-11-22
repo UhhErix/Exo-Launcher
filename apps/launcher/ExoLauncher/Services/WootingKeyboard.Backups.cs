@@ -8,6 +8,7 @@ namespace ExoLauncher.Services;
 
 internal static partial class WootingKeyboard
 {
+    private const long MaxBackupFileBytes = 512 * 1024;
     private static readonly ConcurrentDictionary<string, bool> AutoBackedUp = new(StringComparer.OrdinalIgnoreCase);
     private static readonly JsonSerializerOptions BackupJsonOptions = new()
     {
@@ -66,7 +67,7 @@ internal static partial class WootingKeyboard
         try
         {
             var parsed = JsonSerializer.Deserialize<KeyboardBackupFile>(json, BackupJsonOptions);
-            if (parsed is null || parsed.SchemaVersion < 1 || string.IsNullOrWhiteSpace(parsed.Model)) return null;
+            if (parsed is null || parsed.SchemaVersion < 1 || string.IsNullOrWhiteSpace(parsed.Model) || parsed.Profiles is null) return null;
             return parsed;
         }
         catch (JsonException)
@@ -87,6 +88,7 @@ internal static partial class WootingKeyboard
             if (!BackupNamePattern().IsMatch(name)) continue;
             try
             {
+                if (new FileInfo(full).Length > MaxBackupFileBytes) continue;
                 var parsed = DeserializeBackup(File.ReadAllText(full));
                 if (parsed is null) continue;
                 if (familyPid is { } fp && (parsed.ProductId & 0xFFF0) != fp) continue;
@@ -134,7 +136,18 @@ internal static partial class WootingKeyboard
         if (ResolveBackupPath(fileName) is not { } full || !File.Exists(full))
             return Read(card) with { Ok = false, Message = "Backup file not found." };
 
-        var backup = DeserializeBackup(File.ReadAllText(full));
+        KeyboardBackupFile? backup;
+        try
+        {
+            if (new FileInfo(full).Length > MaxBackupFileBytes)
+                return Read(card) with { Ok = false, Message = "Backup file is too large to restore." };
+            backup = DeserializeBackup(File.ReadAllText(full));
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            AppLog.Warn("Wooting: backup read failed: " + ex.Message);
+            return Read(card) with { Ok = false, Message = "Couldn't read keyboard backup." };
+        }
         if (backup is null || backup.Profiles.Count == 0)
             return Read(card) with { Ok = false, Message = "Backup file is empty or damaged." };
         if ((backup.ProductId & 0xFFF0) != (pid & 0xFFF0))

@@ -59,6 +59,7 @@ internal static class RiotLocalMatchHistory
             accountMatches = new Dictionary<string, CachedMatch>(StringComparer.Ordinal);
             cache[accountKey] = accountMatches;
         }
+        var initialKeys = new HashSet<string>(accountMatches.Keys, StringComparer.Ordinal);
 
         var clientAvailable = false;
         var authRejected = false;
@@ -103,7 +104,14 @@ internal static class RiotLocalMatchHistory
         }
 
         if (added > 0)
-            SaveCache(cache);
+        {
+            var newEntries = new Dictionary<string, CachedMatch>(StringComparer.Ordinal);
+            foreach (var (k, v) in accountMatches)
+            {
+                if (!initialKeys.Contains(k)) newEntries[k] = v;
+            }
+            accountMatches = MergeAndSaveCache(accountKey, newEntries);
+        }
 
         var (seeds, latest) = Summarize(accountMatches);
         if (seeds.Count == 0)
@@ -505,7 +513,7 @@ internal static class RiotLocalMatchHistory
     {
         try
         {
-            using var resp = await http.GetAsync("https://valorant-api.com/v1/version", ct).ConfigureAwait(false);
+            using var resp = await http.GetAsync("https://valorant-api.com/v1/version", HttpCompletionOption.ResponseHeadersRead, ct).ConfigureAwait(false);
             if (!resp.IsSuccessStatusCode) return null;
             var body = await ExoHttp.ReadBodyLimitedAsync(resp.Content, 1024 * 1024, ct).ConfigureAwait(false);
             return ParseValorantVersionApi(body);
@@ -535,7 +543,7 @@ internal static class RiotLocalMatchHistory
         req.Headers.TryAddWithoutValidation("X-Riot-ClientPlatform", ClientPlatformBase64);
         try
         {
-            using var resp = await http.SendAsync(req, ct).ConfigureAwait(false);
+            using var resp = await http.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, ct).ConfigureAwait(false);
             if (!resp.IsSuccessStatusCode)
                 return (false, resp.StatusCode, null);
             var body = await ExoHttp.ReadBodyLimitedAsync(resp.Content, 8 * 1024 * 1024, ct).ConfigureAwait(false);
@@ -555,61 +563,85 @@ internal static class RiotLocalMatchHistory
     {
         lock (CacheGate)
         {
-            var path = Path.Combine(PathHelper.AppDataDir, CacheFileName);
-            var result = new Dictionary<string, Dictionary<string, CachedMatch>>(StringComparer.Ordinal);
-            try
-            {
-                if (!File.Exists(path)) return result;
-                var json = File.ReadAllText(path, Encoding.UTF8);
-                var parsed = JsonSerializer.Deserialize<Dictionary<string, Dictionary<string, CachedMatch>>>(json);
-                if (parsed is null) return result;
-                foreach (var (account, entries) in parsed)
-                {
-                    if (string.IsNullOrWhiteSpace(account) || entries is null) continue;
-                    result[account] = new Dictionary<string, CachedMatch>(entries, StringComparer.Ordinal);
-                }
-            }
-            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)
-            {
-                AppLog.Debug("Riot match cache read failed: " + ex.GetType().Name);
-            }
-            return result;
+            return LoadCache_NoLock();
         }
     }
 
-    private static void SaveCache(Dictionary<string, Dictionary<string, CachedMatch>> cache)
+    private static Dictionary<string, CachedMatch> MergeAndSaveCache(
+        string accountKey,
+        Dictionary<string, CachedMatch> newEntries)
     {
         lock (CacheGate)
         {
-            try
+            var latest = LoadCache_NoLock();
+            if (!latest.TryGetValue(accountKey, out var merged))
             {
-                Directory.CreateDirectory(PathHelper.AppDataDir);
-                var path = Path.Combine(PathHelper.AppDataDir, CacheFileName);
-                var root = new JsonObject();
-                foreach (var (account, entries) in cache)
+                merged = new Dictionary<string, CachedMatch>(StringComparer.Ordinal);
+                latest[accountKey] = merged;
+            }
+            var changed = false;
+            foreach (var (key, match) in newEntries)
+            {
+                if (merged.TryAdd(key, match)) changed = true;
+            }
+            if (changed) SaveCache_NoLock(latest);
+            return new Dictionary<string, CachedMatch>(merged, StringComparer.Ordinal);
+        }
+    }
+
+    private static Dictionary<string, Dictionary<string, CachedMatch>> LoadCache_NoLock()
+    {
+        var path = Path.Combine(PathHelper.AppDataDir, CacheFileName);
+        var result = new Dictionary<string, Dictionary<string, CachedMatch>>(StringComparer.Ordinal);
+        try
+        {
+            if (!File.Exists(path)) return result;
+            var json = File.ReadAllText(path, Encoding.UTF8);
+            var parsed = JsonSerializer.Deserialize<Dictionary<string, Dictionary<string, CachedMatch>>>(json);
+            if (parsed is null) return result;
+            foreach (var (account, entries) in parsed)
+            {
+                if (string.IsNullOrWhiteSpace(account) || entries is null) continue;
+                result[account] = new Dictionary<string, CachedMatch>(entries, StringComparer.Ordinal);
+            }
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)
+        {
+            AppLog.Debug("Riot match cache read failed: " + ex.GetType().Name);
+        }
+        return result;
+    }
+
+    private static void SaveCache_NoLock(Dictionary<string, Dictionary<string, CachedMatch>> cache)
+    {
+        try
+        {
+            Directory.CreateDirectory(PathHelper.AppDataDir);
+            var path = Path.Combine(PathHelper.AppDataDir, CacheFileName);
+            var root = new JsonObject();
+            foreach (var (account, entries) in cache)
+            {
+                var obj = new JsonObject();
+                foreach (var (key, match) in entries)
                 {
-                    var obj = new JsonObject();
-                    foreach (var (key, match) in entries)
+                    var item = new JsonObject
                     {
-                        var item = new JsonObject
-                        {
-                            ["s"] = match.Seconds,
-                            ["t"] = match.TimestampMs,
-                        };
-                        if (!string.IsNullOrWhiteSpace(match.Mode))
-                            item["m"] = match.Mode;
-                        obj[key] = item;
-                    }
-                    root[account] = obj;
+                        ["s"] = match.Seconds,
+                        ["t"] = match.TimestampMs,
+                    };
+                    if (!string.IsNullOrWhiteSpace(match.Mode))
+                        item["m"] = match.Mode;
+                    obj[key] = item;
                 }
-                var temp = path + ".tmp";
-                File.WriteAllText(temp, root.ToJsonString(), new UTF8Encoding(false));
-                File.Move(temp, path, overwrite: true);
+                root[account] = obj;
             }
-            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-            {
-                AppLog.Debug("Riot match cache save failed: " + ex.GetType().Name);
-            }
+            var temp = path + ".tmp";
+            File.WriteAllText(temp, root.ToJsonString(), new UTF8Encoding(false));
+            File.Move(temp, path, overwrite: true);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            AppLog.Debug("Riot match cache save failed: " + ex.GetType().Name);
         }
     }
 

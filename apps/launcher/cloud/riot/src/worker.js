@@ -48,6 +48,7 @@ export function backoffSeconds(status, retryAfter) {
 }
 
 const stateRequest = (name) => new Request(STATE_ORIGIN + encodeURIComponent(name))
+const MAX_TRACKED_FLAGS = 256
 const writtenFlags = new Set()
 
 export async function flagGet(name) {
@@ -60,6 +61,10 @@ export async function flagGet(name) {
 }
 
 export async function flagSet(name, value, ttl) {
+  if (!writtenFlags.has(name) && writtenFlags.size >= MAX_TRACKED_FLAGS) {
+    const oldest = writtenFlags.values().next().value
+    if (oldest !== undefined) writtenFlags.delete(oldest)
+  }
   writtenFlags.add(name)
   try {
     await caches.default.put(stateRequest(name), new Response(value, { headers: { 'Cache-Control': `public, max-age=${ttl}` } }))
@@ -185,7 +190,8 @@ async function lookupHours(id, region, env, ctx, address, config) {
 
   if (Object.keys(games).length > 0) {
     const payload = { games, coverage }
-    ctx.waitUntil(kvPutJson(env, cacheKey, payload, RESULT_TTL_SECONDS))
+    const degraded = Object.values(coverage).some((s) => s === 'unavailable')
+    ctx.waitUntil(kvPutJson(env, cacheKey, payload, degraded ? MISS_TTL_SECONDS : RESULT_TTL_SECONDS))
     return json({ ok: true, cached: false, ...payload })
   }
 

@@ -106,7 +106,7 @@ internal static class RiotHoursClient
 
         try
         {
-            using var response = await http.SendAsync(request, ct).ConfigureAwait(false);
+            using var response = await http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, ct).ConfigureAwait(false);
             var body = await ExoHttp.ReadBodyLimitedAsync(response.Content, MaxBodyBytes, ct).ConfigureAwait(false);
             var status = response.StatusCode;
 
