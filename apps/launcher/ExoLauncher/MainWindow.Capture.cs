@@ -20,12 +20,12 @@ public sealed partial class MainWindow
     internal const string CaptureMediaHost = "captures.exo-launcher.local";
     internal const string CaptureThumbHost = "capture-thumbs.exo-launcher.local";
 
-    private static string CaptureData => Path.Combine(
+    internal static string CaptureData => Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "ExoLauncher", "capture");
-    private static string CaptureThumbs => Path.Combine(CaptureData, "thumbs");
-    private static string CaptureSettingsPath => Path.Combine(CaptureData, "settings.json");
-    private static string CaptureIndexPath => Path.Combine(CaptureData, "index.json");
-    private static string DefaultCaptureFolder => Path.Combine(
+    internal static string CaptureThumbs => Path.Combine(CaptureData, "thumbs");
+    internal static string CaptureSettingsPath => Path.Combine(CaptureData, "settings.json");
+    internal static string CaptureIndexPath => Path.Combine(CaptureData, "index.json");
+    internal static string DefaultCaptureFolder => Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.MyVideos), "Exo Captures");
 
     private static readonly JsonSerializerOptions CaptureJson = new()

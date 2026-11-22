@@ -1,7 +1,10 @@
+mod captures;
 mod game_page;
 mod gamepad;
 mod key_modal;
 mod library;
+mod media_state;
+mod music;
 mod palette;
 mod pc;
 mod pc_actions;
@@ -247,6 +250,41 @@ fn load_live_state_sync(pipe: &str, scene: Option<&str>) -> AppState {
                 state.pc.keyboard = Some(kb);
             }
         }
+        Some("music") => {
+            if let Ok(pb) = client.call_blocking::<_, exo_rpc::MusicPlaybackReply>(
+                exo_rpc::METHOD_MUSIC_PLAYBACK,
+                &serde_json::json!({}),
+                Duration::from_secs(5),
+            ) {
+                state.media.playback = pb.playback;
+            }
+            if let Ok(vol) = client.call_blocking::<_, exo_rpc::MusicVolumeReply>(
+                exo_rpc::METHOD_MUSIC_VOLUME,
+                &serde_json::json!({}),
+                Duration::from_secs(5),
+            ) {
+                if let Some(lvl) = vol.level {
+                    state.media.music_volume = lvl;
+                }
+                state.media.music_muted = vol.muted;
+            }
+        }
+        Some("captures") => {
+            if let Ok(st) = client.call_blocking::<_, exo_rpc::CaptureStatusReply>(
+                exo_rpc::METHOD_CAPTURE_STATUS,
+                &serde_json::json!({}),
+                Duration::from_secs(5),
+            ) {
+                state.media.capture_status = Some(st);
+            }
+            if let Ok(list) = client.call_blocking::<_, exo_rpc::CaptureListReply>(
+                exo_rpc::METHOD_CAPTURE_LIST,
+                &serde_json::json!({ "limit": 60 }),
+                Duration::from_secs(8),
+            ) {
+                state.media.capture_items = list.items;
+            }
+        }
         _ => {}
     }
     state.rpc = Some(client);
@@ -317,6 +355,18 @@ fn main() {
         ("pc-devices", |s: &mut AppState| {
             s.switch_room(state::Room::Pc);
             s.switch_pc_tab(pc_state::PcTab::Devices);
+        }),
+        ("music", |s: &mut AppState| s.switch_room(state::Room::Music)),
+        ("music-immersion", |s: &mut AppState| {
+            s.switch_room(state::Room::Music);
+            s.media.music_immersion = true;
+        }),
+        ("captures", |s: &mut AppState| s.open_captures(None)),
+        ("capture-clip", |s: &mut AppState| {
+            s.open_captures(None);
+            if let Some(first) = s.media.capture_items.first().map(|c| c.id.clone()) {
+                s.open_capture_item(&first);
+            }
         }),
     ];
 
@@ -397,6 +447,9 @@ fn main() {
                         exo_rpc::HostEvent::UpdateProgress(p) => {
                             s.pc.update_progress = Some(p);
                         }
+                        exo_rpc::HostEvent::MusicPlayback(pb) => {
+                            s.media.playback = pb;
+                        }
                         exo_rpc::HostEvent::DevicesChanged => {
                             if s.room == state::Room::Pc && s.pc.pc_tab == pc_state::PcTab::Devices {
                                 s.load_pc_devices();
@@ -465,7 +518,10 @@ mod tests {
             .iter()
             .filter(|i| i.params[1] == KIND_BACKDROP_BLUR)
             .count();
-        assert_eq!(blurs, 2, "expected 2 floating glass top-bar surfaces, got {blurs}");
+        assert!(
+            blurs >= 2 && blurs <= 4,
+            "expected 2..=4 floating glass surfaces within MAX_BACKDROP_BLURS=4, got {blurs}"
+        );
         let strokes = rt
             .instances
             .iter()
@@ -489,8 +545,8 @@ mod tests {
             .iter()
             .filter(|i| i.params[1] == KIND_BACKDROP_BLUR)
             .count();
-        assert_eq!(
-            modal_blurs, 3,
+        assert!(
+            modal_blurs >= 3 && modal_blurs <= 4,
             "expected modal blur within MAX_BACKDROP_BLURS=4, got {modal_blurs}"
         );
 
@@ -597,5 +653,49 @@ mod tests {
         rt.frame(6.0 / 60.0);
         let act_after = rt.state.pc.keyboard.as_ref().and_then(|k| k.actuation_mm).unwrap_or(0.0);
         assert!((act_after - (act_before + 0.1)).abs() < 0.01);
+    }
+
+    #[test]
+    fn phase4_music_mini_player_and_captures_theater() {
+        let mut rt = Runtime::new(
+            AppState::default(),
+            shell::view,
+            (1280.0, 800.0),
+            Env::new(true, 1.0),
+        );
+        rt.frame(0.0);
+        assert!(rt.find("music-mini-player").is_some());
+        let blurs = rt
+            .instances
+            .iter()
+            .filter(|i| i.params[1] == KIND_BACKDROP_BLUR)
+            .count();
+        assert!(blurs <= 4, "mini-player exceeded MAX_BACKDROP_BLURS=4: {blurs}");
+
+        let (mx, my) = rt.find("mini-open-music").expect("Mini player open Music");
+        rt.pointer_down(mx, my);
+        rt.pointer_up(mx, my);
+        rt.frame(1.0 / 60.0);
+        assert_eq!(rt.state.room, Room::Music);
+        assert!(rt.find("music-mini-player").is_none());
+
+        let (px, py) = rt.find("music-toggle").expect("Music play/pause");
+        rt.pointer_down(px, py);
+        rt.pointer_up(px, py);
+        rt.frame(2.0 / 60.0);
+        assert!(!rt.state.media.playback.as_ref().unwrap().is_playing());
+
+        rt.update(|s, _| s.open_captures(None));
+        rt.frame(3.0 / 60.0);
+        assert!(rt.state.media.captures_open);
+        let (cx, cy) = rt.find("cap-card-cap0000000000001").expect("First capture card");
+        rt.pointer_down(cx, cy);
+        rt.pointer_up(cx, cy);
+        rt.frame(4.0 / 60.0);
+        assert_eq!(
+            rt.state.media.open_capture_id.as_deref(),
+            Some("cap0000000000001")
+        );
+        assert!(rt.find("cap-trim-go").is_some());
     }
 }

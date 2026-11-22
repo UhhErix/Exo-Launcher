@@ -1,7 +1,7 @@
 use crate::state::{AppState, LibraryFilter, title_hue};
 use exo_kit::{
     BG, FG, PRESS_SCALE, PRIMARY_FG, RADIUS_CARD, RADIUS_PANEL, RADIUS_PILL, SPRING_MOVE, fg_muted,
-    filter_pill, glass_button, glass_control_fill, glass_rim, good, icon_key, icon_play,
+    filter_pill, glass_button, glass_control_fill, glass_rim, good, icon_film, icon_key, icon_play,
     icon_refresh, icon_stop, primary_button, progress_bar, type_control, type_page, type_section,
     type_small,
 };
@@ -179,6 +179,10 @@ pub fn view(s: &AppState, scale: f32) -> El {
         }
     }
     actions = actions
+        .child(
+            glass_button("open-captures-btn", "Captures", Some(icon_film(14.0, FG)))
+                .on_press(|s: &mut AppState| s.open_captures(None)),
+        )
         .child(
             glass_button("activate-key-btn", "Activate key", Some(icon_key(14.0, FG)))
                 .on_press_tx(|s: &mut AppState, tx| s.open_key_modal(tx)),

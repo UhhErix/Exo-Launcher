@@ -627,6 +627,8 @@ public sealed partial class WebHostBridge
                         coversDir = CoverArtService.CacheRoot,
                         devicesDir = DeviceImages.CacheRoot,
                         notesDir = NoteStore.Shared.PhotosFolder,
+                        capturesDir = _services.HeadlessCapture.CaptureFolder,
+                        captureThumbsDir = HeadlessCaptureService.ThumbsDir,
                     }
                     : (object)new { covers = LocalFileHost.Url(CoverArtService.VirtualHost, "") },
                 "library.folderArt" => await LibraryFolderArtAsync(paramsEl, hasParams).ConfigureAwait(true),
@@ -686,16 +688,20 @@ public sealed partial class WebHostBridge
                 "shell.prepare" => App.MainAppWindow is { } prepareWindow
                     ? await prepareWindow.PrepareConnectedRoomsAsync()
                     : new { ok = false },
-                "music.playback" => App.MainAppWindow?.MusicPlayback() ?? new { ok = false, playback = (object?)null },
+                "music.playback" => App.MainAppWindow is { } pbWindow
+                    ? pbWindow.MusicPlayback()
+                    : await _services.HeadlessMusic.PlaybackAsync().ConfigureAwait(false),
                 "music.match" => hasParams ? MusicMatch.Answer(paramsEl) : new { ok = false, message = "Nothing to match." },
                 "music.control" => App.MainAppWindow is { } controlWindow
                     ? await controlWindow.ControlMusicAsync(ReadString(paramsEl, hasParams, "action"),
                         ReadDouble(paramsEl, hasParams, "positionMs")).ConfigureAwait(true)
-                    : new { ok = false, message = "The app window is unavailable." },
+                    : await _services.HeadlessMusic.ControlAsync(ReadString(paramsEl, hasParams, "action"),
+                        ReadDouble(paramsEl, hasParams, "positionMs")).ConfigureAwait(false),
                 "music.volume" => App.MainAppWindow is { } volumeWindow
                     ? await volumeWindow.MusicVolumeAsync(ReadDouble(paramsEl, hasParams, "level"),
                         ReadBool(paramsEl, hasParams, "muted")).ConfigureAwait(true)
-                    : new { ok = false, message = "The app window is unavailable." },
+                    : await _services.HeadlessMusic.VolumeAsync(ReadDouble(paramsEl, hasParams, "level"),
+                        ReadBool(paramsEl, hasParams, "muted")).ConfigureAwait(false),
                 "spotify.start" => App.MainAppWindow is { } spotifyWindow
                     ? await spotifyWindow.WebMusicStartAsync("spotify").ConfigureAwait(true)
                     : new { ok = false, state = "error", message = "The app window is unavailable." },
@@ -736,20 +742,25 @@ public sealed partial class WebHostBridge
                 "shaders.call" => await _services.ShadersHost.CallAsync(ReadString(paramsEl, hasParams, "method"),
                         hasParams && paramsEl.TryGetProperty("params", out var shadersParams) ? System.Text.Json.Nodes.JsonNode.Parse(shadersParams.GetRawText()) : null,
                         requestToken).ConfigureAwait(true),
-                "capture.status" => App.MainAppWindow?.CaptureStatus() ?? new { ok = false },
+                "capture.status" => App.MainAppWindow?.CaptureStatus() ?? _services.HeadlessCapture.Status(),
                 "capture.settings" => App.MainAppWindow is { } captureWindow
-                    ? await captureWindow.CaptureSetSettingsAsync(paramsEl).ConfigureAwait(true) : new { ok = false },
+                    ? await captureWindow.CaptureSetSettingsAsync(paramsEl).ConfigureAwait(true)
+                    : await _services.HeadlessCapture.UpdateSettingsAsync(paramsEl).ConfigureAwait(false),
                 "capture.act" => App.MainAppWindow is { } actWindow
-                    ? await actWindow.CaptureActAsync(ReadString(paramsEl, hasParams, "action")).ConfigureAwait(true) : new { ok = false },
+                    ? await actWindow.CaptureActAsync(ReadString(paramsEl, hasParams, "action")).ConfigureAwait(true)
+                    : await _services.HeadlessCapture.ActAsync(ReadString(paramsEl, hasParams, "action"), requestToken).ConfigureAwait(false),
                 "capture.list" => App.MainAppWindow is { } listWindow
                     ? await Task.Run(() => listWindow.CaptureList(ReadString(paramsEl, hasParams, "gameId"), (int?)ReadDouble(paramsEl, hasParams, "limit"))).ConfigureAwait(true)
-                    : new { ok = false },
+                    : await Task.Run(() => _services.HeadlessCapture.List(ReadString(paramsEl, hasParams, "gameId"), (int?)ReadDouble(paramsEl, hasParams, "limit"))).ConfigureAwait(false),
                 // Each finds its file by scanning the captures folder, then moves, writes or decodes it: off the UI thread.
                 "capture.item" => App.MainAppWindow is { } itemWindow
-                    ? await Task.Run(() => itemWindow.CaptureItemAsync(ReadString(paramsEl, hasParams, "id"), ReadString(paramsEl, hasParams, "action"))).ConfigureAwait(false) : new { ok = false },
+                    ? await Task.Run(() => itemWindow.CaptureItemAsync(ReadString(paramsEl, hasParams, "id"), ReadString(paramsEl, hasParams, "action"))).ConfigureAwait(false)
+                    : await Task.Run(() => _services.HeadlessCapture.ItemAsync(ReadString(paramsEl, hasParams, "id"), ReadString(paramsEl, hasParams, "action"))).ConfigureAwait(false),
                 "capture.edit" => App.MainAppWindow is { } editWindow
                     ? await Task.Run(() => editWindow.CaptureEditAsync(ReadString(paramsEl, hasParams, "id"), ReadString(paramsEl, hasParams, "preset"),
-                        ReadDouble(paramsEl, hasParams, "startMs"), ReadDouble(paramsEl, hasParams, "endMs"))).ConfigureAwait(false) : new { ok = false },
+                        ReadDouble(paramsEl, hasParams, "startMs"), ReadDouble(paramsEl, hasParams, "endMs"))).ConfigureAwait(false)
+                    : await Task.Run(() => _services.HeadlessCapture.EditAsync(ReadString(paramsEl, hasParams, "id"), ReadString(paramsEl, hasParams, "preset"),
+                        ReadDouble(paramsEl, hasParams, "startMs"), ReadDouble(paramsEl, hasParams, "endMs"), requestToken)).ConfigureAwait(false),
                 "capture.reel" => App.MainAppWindow is { } reelWindow && hasParams
                     ? await Task.Run(() => reelWindow.CaptureReelStart(paramsEl)).ConfigureAwait(false) : new { ok = false },
                 "capture.reel.cancel" => App.MainAppWindow?.CaptureReelCancel() ?? new { ok = false },

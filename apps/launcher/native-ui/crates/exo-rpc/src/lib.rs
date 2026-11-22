@@ -1,3 +1,4 @@
+pub mod media_types;
 pub mod pc_types;
 pub mod pipe;
 pub mod remote_art;
@@ -12,6 +13,10 @@ use std::io;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, mpsc};
 use std::time::Duration;
+pub use media_types::{
+    CaptureItem, CaptureListReply, CaptureLiveState, CaptureSettingsDto, CaptureStatusReply,
+    MusicPlayback, MusicPlaybackReply, MusicVolumeReply, format_duration_ms,
+};
 pub use pc_types::{
     AppsListReply, AudioEndpoint, AudioReadReply, AudioVoiceInfo, AutopilotLive,
     AutopilotMemoryIntegrity, AutopilotReport, AutopilotState, DevicesListReply, DriveFix,
@@ -36,6 +41,7 @@ pub const METHOD_APP_CHECK_UPDATE: &str = "app.checkUpdate";
 pub const METHOD_APP_INSTALL_UPDATE: &str = "app.installUpdate";
 pub const METHOD_APP_OPEN_LOGS: &str = "app.openLogs";
 pub const METHOD_APP_REPAIR_CACHE: &str = "app.repairCache";
+pub const METHOD_APPLEMUSIC_START: &str = "applemusic.start";
 pub const METHOD_APPS_LIST: &str = "apps.list";
 pub const METHOD_APPS_TIDY: &str = "apps.tidy";
 pub const METHOD_APPS_UNINSTALL: &str = "apps.uninstall";
@@ -44,6 +50,14 @@ pub const METHOD_AUDIO_READ: &str = "audio.read";
 pub const METHOD_AUDIO_SET_MUTE: &str = "audio.setMute";
 pub const METHOD_AUDIO_SET_VOLUME: &str = "audio.setVolume";
 pub const METHOD_AUTOPILOT_STATE: &str = "autopilot.state";
+pub const METHOD_CAPTURE_ACT: &str = "capture.act";
+pub const METHOD_CAPTURE_EDIT: &str = "capture.edit";
+pub const METHOD_CAPTURE_ITEM: &str = "capture.item";
+pub const METHOD_CAPTURE_LIST: &str = "capture.list";
+pub const METHOD_CAPTURE_REEL: &str = "capture.reel";
+pub const METHOD_CAPTURE_REEL_CANCEL: &str = "capture.reel.cancel";
+pub const METHOD_CAPTURE_SETTINGS: &str = "capture.settings";
+pub const METHOD_CAPTURE_STATUS: &str = "capture.status";
 pub const METHOD_DEVICES_LIST: &str = "devices.list";
 pub const METHOD_EXO_ACCOUNT_SIGN_OUT: &str = "exoAccount.signOut";
 pub const METHOD_EXO_ACCOUNT_STATE: &str = "exoAccount.state";
@@ -77,11 +91,16 @@ pub const METHOD_GAME_PROPERTIES: &str = "game.properties";
 pub const METHOD_GAME_PROPERTIES_SET: &str = "game.properties.set";
 pub const METHOD_KEYS_PREVIEW: &str = "keys.preview";
 pub const METHOD_KEYS_ACTIVATE: &str = "keys.activate";
+pub const METHOD_MUSIC_CONTROL: &str = "music.control";
+pub const METHOD_MUSIC_PLAYBACK: &str = "music.playback";
+pub const METHOD_MUSIC_SIGN_IN: &str = "music.signIn";
+pub const METHOD_MUSIC_VOLUME: &str = "music.volume";
 pub const METHOD_PLAYTIME_RIOT_REFRESH: &str = "playtime.riotRefresh";
 pub const METHOD_SETTINGS_GET: &str = "settings.get";
 pub const METHOD_SETTINGS_SET: &str = "settings.set";
 pub const METHOD_SHADERS_ADDON: &str = "shaders.addon";
 pub const METHOD_SHADERS_CALL: &str = "shaders.call";
+pub const METHOD_SPOTIFY_START: &str = "spotify.start";
 pub const METHOD_STARTUP_CLEAN: &str = "startup.clean";
 pub const METHOD_STARTUP_LIST: &str = "startup.list";
 pub const METHOD_STARTUP_REMOVE: &str = "startup.remove";
@@ -95,12 +114,14 @@ pub const METHOD_STORE_WISHLIST: &str = "store.wishlist";
 pub const METHOD_SYSTEM_ABOUT: &str = "system.about";
 pub const METHOD_SYSTEM_DRIVES: &str = "system.drives";
 pub const METHOD_SYSTEM_TUNING: &str = "system.tuning";
+pub const METHOD_YTMUSIC_START: &str = "ytmusic.start";
 
 pub const USED_METHODS: &[&str] = &[
     METHOD_APP_CHECK_UPDATE,
     METHOD_APP_INSTALL_UPDATE,
     METHOD_APP_OPEN_LOGS,
     METHOD_APP_REPAIR_CACHE,
+    METHOD_APPLEMUSIC_START,
     METHOD_APPS_LIST,
     METHOD_APPS_TIDY,
     METHOD_APPS_UNINSTALL,
@@ -109,6 +130,14 @@ pub const USED_METHODS: &[&str] = &[
     METHOD_AUDIO_SET_MUTE,
     METHOD_AUDIO_SET_VOLUME,
     METHOD_AUTOPILOT_STATE,
+    METHOD_CAPTURE_ACT,
+    METHOD_CAPTURE_EDIT,
+    METHOD_CAPTURE_ITEM,
+    METHOD_CAPTURE_LIST,
+    METHOD_CAPTURE_REEL,
+    METHOD_CAPTURE_REEL_CANCEL,
+    METHOD_CAPTURE_SETTINGS,
+    METHOD_CAPTURE_STATUS,
     METHOD_DEVICES_LIST,
     METHOD_EXO_ACCOUNT_SIGN_OUT,
     METHOD_EXO_ACCOUNT_STATE,
@@ -142,11 +171,16 @@ pub const USED_METHODS: &[&str] = &[
     METHOD_GAME_PROPERTIES_SET,
     METHOD_KEYS_PREVIEW,
     METHOD_KEYS_ACTIVATE,
+    METHOD_MUSIC_CONTROL,
+    METHOD_MUSIC_PLAYBACK,
+    METHOD_MUSIC_SIGN_IN,
+    METHOD_MUSIC_VOLUME,
     METHOD_PLAYTIME_RIOT_REFRESH,
     METHOD_SETTINGS_GET,
     METHOD_SETTINGS_SET,
     METHOD_SHADERS_ADDON,
     METHOD_SHADERS_CALL,
+    METHOD_SPOTIFY_START,
     METHOD_STARTUP_CLEAN,
     METHOD_STARTUP_LIST,
     METHOD_STARTUP_REMOVE,
@@ -160,6 +194,7 @@ pub const USED_METHODS: &[&str] = &[
     METHOD_SYSTEM_ABOUT,
     METHOD_SYSTEM_DRIVES,
     METHOD_SYSTEM_TUNING,
+    METHOD_YTMUSIC_START,
 ];
 
 #[derive(Debug)]
@@ -444,6 +479,14 @@ fn dispatch_line(
                     event: name.to_string(),
                     data,
                 }),
+            "music.playback" => {
+                let pb = serde_json::from_value::<Option<MusicPlayback>>(
+                    data.get("playback").cloned().unwrap_or(Value::Null),
+                )
+                .ok()
+                .flatten();
+                HostEvent::MusicPlayback(pb)
+            }
             "devices.changed" => HostEvent::DevicesChanged,
             "apps.changed" => HostEvent::AppsChanged,
             _ => HostEvent::Raw {
@@ -478,8 +521,8 @@ mod tests {
         let base = ArtBase {
             covers: "https://covers.exo-launcher.local/tok/".into(),
             covers_dir: Some(std::env::temp_dir().to_string_lossy().into_owned()),
-            devices_dir: None,
-            notes_dir: None,
+            captures_dir: Some(std::env::temp_dir().to_string_lossy().into_owned()),
+            ..Default::default()
         };
         assert!(
             base.resolve_local_cover("https://covers.exo-launcher.local/tok/..%2Fsecret.png")
@@ -487,6 +530,10 @@ mod tests {
         );
         assert!(
             base.resolve_local_cover("https://evil.example/tok/a.png")
+                .is_none()
+        );
+        assert!(
+            base.resolve_capture_file("https://captures.exo-launcher.local/..%2F..%2Fwin.ini")
                 .is_none()
         );
     }

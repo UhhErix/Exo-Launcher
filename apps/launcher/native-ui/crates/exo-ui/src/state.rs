@@ -1,4 +1,5 @@
 use crate::gamepad::GamepadAction;
+use crate::media_state::MediaState;
 use crate::pc_state::SettingsAndPcState;
 use crate::tour;
 use exo_rpc::{
@@ -212,6 +213,7 @@ pub struct AppState {
     pub gamepad_connected: bool,
     pub settings: LauncherSettings,
     pub pc: SettingsAndPcState,
+    pub media: MediaState,
     pub art_base: ArtBase,
     pub notice: Option<String>,
     pub refreshing: bool,
@@ -294,6 +296,7 @@ impl AppState {
                 ..LauncherSettings::default()
             },
             pc: SettingsAndPcState::demo(),
+            media: MediaState::demo(),
             art_base: ArtBase::default(),
             notice: None,
             refreshing: false,
@@ -345,6 +348,7 @@ impl AppState {
             gamepad_connected: false,
             settings: LauncherSettings::default(),
             pc: SettingsAndPcState::empty_for_host(),
+            media: MediaState::empty_for_host(),
             art_base: ArtBase::default(),
             notice: Some("Connecting to Exo host…".into()),
             refreshing: true,
@@ -404,8 +408,13 @@ impl AppState {
         self.open_game_id = None;
         self.props_open = false;
         self.uninstall_confirm = false;
+        if self.media.captures_open {
+            self.close_captures();
+        }
         if room == Room::Store && self.store_home.is_none() && !self.store_loading {
             self.load_store_home(false);
+        } else if room == Room::Music {
+            self.load_music_room();
         } else if room == Room::Settings {
             self.load_settings_room();
         } else if room == Room::Pc {
@@ -531,6 +540,20 @@ impl AppState {
             .art_base
             .resolve_local_cover(url)
             .map(|path| cache.file(path, 250.0, scale));
+        self.covers.borrow_mut().insert(key, loaded.clone());
+        loaded
+    }
+
+    pub fn capture_thumb_image(&self, url: &str, scale: f32) -> Option<Image> {
+        let cache = self.image_cache.as_ref()?;
+        let key = format!("cap:{url}");
+        if let Some(existing) = self.covers.borrow().get(&key) {
+            return existing.clone();
+        }
+        let loaded = self
+            .art_base
+            .resolve_capture_thumb(url)
+            .map(|path| cache.file(path, 320.0, scale));
         self.covers.borrow_mut().insert(key, loaded.clone());
         loaded
     }
@@ -1041,6 +1064,14 @@ impl AppState {
         }
         if self.props_open {
             self.props_open = false;
+            return true;
+        }
+        if self.media.open_capture_id.is_some() {
+            self.close_capture_item();
+            return true;
+        }
+        if self.media.captures_open {
+            self.close_captures();
             return true;
         }
         if self.open_game_id.is_some() {
