@@ -178,9 +178,9 @@ fn performance_card(s: &AppState, game: &Game) -> El {
         .min_w(0.0)
         .child(
             el().w_full()
-                .pt(15.0)
+                .pt(18.0)
                 .px(20.0)
-                .pb(12.0)
+                .pb(15.0)
                 .child(text("Performance & graphics").font(type_title()).color(FG)),
         )
         .child(perf_line(
@@ -262,9 +262,9 @@ fn properties_card(s: &AppState, game: &Game) -> El {
         .min_w(340.0)
         .child(
             el().w_full()
-                .pt(15.0)
+                .pt(18.0)
                 .px(20.0)
-                .pb(12.0)
+                .pb(15.0)
                 .child(text("Properties").font(type_title()).color(FG)),
         )
         .child(tab_bar);

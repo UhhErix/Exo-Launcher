@@ -1038,7 +1038,7 @@ fn exo_ai_room(s: &AppState, scale: f32) -> El {
 
     auto_tune_card = auto_tune_card
         .child(stages_col)
-        .child(el().w_full().mt(6.0).h(1.0).fill(float_line()))
+        .child(el().w_full().mt(8.0).h(1.0).fill(float_line()))
         .child(
             col()
                 .w_full()
@@ -1046,7 +1046,8 @@ fn exo_ai_room(s: &AppState, scale: f32) -> El {
                 .child(
                     row()
                         .w_full()
-                        .py(14.0)
+                        .min_h(66.0)
+                        .py(16.0)
                         .justify_between()
                         .center_y()
                         .child(
@@ -1078,7 +1079,8 @@ fn exo_ai_room(s: &AppState, scale: f32) -> El {
                 .child(
                     row()
                         .w_full()
-                        .py(14.0)
+                        .min_h(66.0)
+                        .py(16.0)
                         .justify_between()
                         .center_y()
                         .child(

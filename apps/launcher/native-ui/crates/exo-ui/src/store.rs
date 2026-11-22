@@ -109,7 +109,7 @@ fn store_tile_card(tile: &StoreTile, s: &AppState, scale: f32) -> El {
                 .size(28.0, 28.0)
                 .radius(14.0)
                 .center()
-                .fill(glass_control_fill())
+                .fill(BG.alpha(0.64))
                 .border_gradient(1.0, glass_rim_top(), glass_rim_bottom())
                 .child(icon_bookmark(14.0, FG)),
         );
