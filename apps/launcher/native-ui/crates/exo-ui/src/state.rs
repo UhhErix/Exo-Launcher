@@ -3,6 +3,8 @@ use crate::gamepad::GamepadAction;
 use crate::media_state::MediaState;
 use crate::pc_state::SettingsAndPcState;
 use crate::tour;
+use exo_kit::SPRING_MOVE;
+use exo_rpc::types::COVER_CACHE_ORIGIN;
 use exo_rpc::{
     ActionResult, ArtBase, Game, GameExtras, GameGetReply, GameProperties, GamePropertySetReply,
     InstallProgress, KeyPreview, LauncherSettings, LibraryPayload, METHOD_ART_BASE,
@@ -15,15 +17,24 @@ use exo_rpc::{
     StoreGame, StoreHome, StoreOffer, StoreOtherOffers, StoreSearchReply, StoreShelf, StoreTile,
     remote_art,
 };
-use rune::{Image, ImageCache, TextEdit, Tx, Waker};
+use rune::{Image, ImageCache, ScrollPos, TextEdit, Tx, Waker};
 use serde_json::json;
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::path::PathBuf;
+use std::rc::Rc;
 use std::sync::Arc;
+use std::time::Duration;
 
 #[cfg(windows)]
 use exo_rpc::RpcClient;
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum InputMode {
+    #[default]
+    Pointer,
+    Gamepad,
+}
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum Room {
@@ -212,7 +223,10 @@ pub struct AppState {
     pub capture_menu_open: bool,
     pub home_stage_size: (f32, f32),
     pub game_stage_size: (f32, f32),
-    pub deck_start: usize,
+    pub deck_scroll: Rc<Cell<ScrollPos>>,
+    pub deck_scroll_x: f32,
+    pub store_shelf_scrolls: [Rc<Cell<ScrollPos>>; 4],
+    pub store_shelf_x: [f32; 4],
     pub filter: LibraryFilter,
     pub sort: LibrarySort,
     pub status: HostStatus,
@@ -220,12 +234,15 @@ pub struct AppState {
     pub recent_ids: Vec<String>,
     pub selected_game_id: Option<String>,
     pub open_game_id: Option<String>,
+    pub cover_flight_id: Option<String>,
+    pub hovered_cover_key: Option<String>,
     pub game_extras: Option<GameExtras>,
     pub game_props: Option<GameProperties>,
     pub props_open: bool,
     pub game_props_tab: usize,
     pub props_launch_opts: TextEdit,
     pub uninstall_confirm: bool,
+    pub armed_confirm: Option<(String, f64)>,
     pub install_progress: Option<InstallProgress>,
     pub key_modal_open: bool,
     pub key_input: TextEdit,
@@ -242,6 +259,7 @@ pub struct AppState {
     pub tour_step: Option<usize>,
     pub tour_seen: bool,
     pub gamepad_connected: bool,
+    pub input_mode: InputMode,
     pub settings: LauncherSettings,
     pub pc: SettingsAndPcState,
     pub media: MediaState,
@@ -290,7 +308,10 @@ impl AppState {
             capture_menu_open: false,
             home_stage_size: (1920.0, 636.0),
             game_stage_size: (1920.0, 460.0),
-            deck_start: 0,
+            deck_scroll: Rc::new(Cell::new(ScrollPos::default())),
+            deck_scroll_x: 0.0,
+            store_shelf_scrolls: std::array::from_fn(|_| Rc::new(Cell::new(ScrollPos::default()))),
+            store_shelf_x: [0.0; 4],
             filter: LibraryFilter::All,
             sort: LibrarySort::LastLaunched,
             status: HostStatus::Standalone,
@@ -302,6 +323,8 @@ impl AppState {
             ],
             selected_game_id,
             open_game_id: None,
+            cover_flight_id: None,
+            hovered_cover_key: None,
             game_extras: Some(GameExtras {
                 ok: true,
                 achievements_unlocked: Some(34),
@@ -319,6 +342,7 @@ impl AppState {
             game_props_tab: 0,
             props_launch_opts: TextEdit::default(),
             uninstall_confirm: false,
+            armed_confirm: None,
             install_progress: None,
             key_modal_open: false,
             key_input: TextEdit::default(),
@@ -335,6 +359,7 @@ impl AppState {
             tour_step: None,
             tour_seen: true,
             gamepad_connected: false,
+            input_mode: InputMode::Pointer,
             settings: LauncherSettings {
                 start_with_windows: true,
                 show_library_tools: true,
@@ -387,7 +412,10 @@ impl AppState {
             capture_menu_open: false,
             home_stage_size: (1920.0, 636.0),
             game_stage_size: (1920.0, 460.0),
-            deck_start: 0,
+            deck_scroll: Rc::new(Cell::new(ScrollPos::default())),
+            deck_scroll_x: 0.0,
+            store_shelf_scrolls: std::array::from_fn(|_| Rc::new(Cell::new(ScrollPos::default()))),
+            store_shelf_x: [0.0; 4],
             filter: LibraryFilter::All,
             sort: LibrarySort::LastLaunched,
             status: HostStatus::Connecting,
@@ -395,12 +423,15 @@ impl AppState {
             recent_ids: Vec::new(),
             selected_game_id: None,
             open_game_id: None,
+            cover_flight_id: None,
+            hovered_cover_key: None,
             game_extras: None,
             game_props: None,
             props_open: false,
             game_props_tab: 0,
             props_launch_opts: TextEdit::default(),
             uninstall_confirm: false,
+            armed_confirm: None,
             install_progress: None,
             key_modal_open: false,
             key_input: TextEdit::default(),
@@ -417,6 +448,7 @@ impl AppState {
             tour_step: None,
             tour_seen: true,
             gamepad_connected: false,
+            input_mode: InputMode::Pointer,
             settings: LauncherSettings::default(),
             pc: SettingsAndPcState::empty_for_host(),
             media: MediaState::empty_for_host(),
@@ -643,46 +675,73 @@ impl AppState {
 
     pub fn filtered_games(&self) -> Vec<&Game> {
         let query = self.library_search.text.trim().to_lowercase();
-        let mut out: Vec<&Game> = match self.filter {
-            LibraryFilter::All => self.games.iter().collect(),
-            LibraryFilter::Installed => self.games.iter().filter(|g| g.installed).collect(),
-            LibraryFilter::Running => self.games.iter().filter(|g| g.is_running).collect(),
-            LibraryFilter::Recent => self
-                .games
-                .iter()
-                .filter(|g| {
-                    g.last_played_utc.is_some()
-                        || self.recent_ids.iter().any(|r| r == &g.id)
-                        || g.playtime_minutes > 0
-                })
-                .collect(),
+        let show_tools = self.settings.show_library_tools;
+        let transfer_id = self
+            .install_progress
+            .as_ref()
+            .filter(|p| p.is_active)
+            .and_then(|p| p.game_id.as_deref());
+        let recent: &[String] = if !self.recent_ids.is_empty() {
+            &self.recent_ids
+        } else {
+            &self.settings.recent
         };
+        let mut out: Vec<&Game> = self
+            .games
+            .iter()
+            .filter(|g| {
+                is_shelf_game(g, transfer_id, show_tools)
+                    && !self.settings.hidden_games.iter().any(|h| h == &g.id)
+            })
+            .filter(|g| match self.filter {
+                LibraryFilter::All => true,
+                LibraryFilter::Installed => g.installed,
+                LibraryFilter::Running => g.is_running,
+                LibraryFilter::Recent => {
+                    g.last_played_utc
+                        .as_deref()
+                        .and_then(parse_iso_utc_ms)
+                        .is_some()
+                        || recent.iter().any(|r| r.eq_ignore_ascii_case(&g.id))
+                        || g.playtime_minutes > 0
+                }
+            })
+            .collect();
         if !query.is_empty() {
             out.retain(|g| g.title.to_lowercase().contains(&query));
         }
-        out.retain(|g| g.id != "local:add");
         let recent_rank = |id: &str| -> usize {
-            self.recent_ids
+            recent
                 .iter()
                 .position(|r| r.eq_ignore_ascii_case(id))
                 .unwrap_or(9999)
         };
         out.sort_by(|a, b| match self.sort {
-            LibrarySort::LastLaunched => b
-                .last_played_utc
-                .cmp(&a.last_played_utc)
-                .then_with(|| recent_rank(&a.id).cmp(&recent_rank(&b.id)))
-                .then_with(|| a.title.to_lowercase().cmp(&b.title.to_lowercase())),
+            LibrarySort::LastLaunched => {
+                let pa = a
+                    .last_played_utc
+                    .as_deref()
+                    .and_then(parse_iso_utc_ms)
+                    .unwrap_or(0);
+                let pb = b
+                    .last_played_utc
+                    .as_deref()
+                    .and_then(parse_iso_utc_ms)
+                    .unwrap_or(0);
+                pb.cmp(&pa)
+                    .then_with(|| recent_rank(&a.id).cmp(&recent_rank(&b.id)))
+                    .then_with(|| cmp_title_base(&a.title, &b.title))
+            }
             LibrarySort::Playtime => b
                 .playtime_minutes
                 .cmp(&a.playtime_minutes)
-                .then_with(|| a.title.to_lowercase().cmp(&b.title.to_lowercase())),
-            LibrarySort::Title => a.title.to_lowercase().cmp(&b.title.to_lowercase()),
+                .then_with(|| cmp_title_base(&a.title, &b.title)),
+            LibrarySort::Title => cmp_title_base(&a.title, &b.title),
             LibrarySort::Size => b
                 .size_bytes
                 .unwrap_or(0)
                 .cmp(&a.size_bytes.unwrap_or(0))
-                .then_with(|| a.title.to_lowercase().cmp(&b.title.to_lowercase())),
+                .then_with(|| cmp_title_base(&a.title, &b.title)),
         });
         out
     }
@@ -703,32 +762,47 @@ impl AppState {
 
     pub fn cover_image(&self, game: &Game, scale: f32) -> Option<Image> {
         let cache = self.image_cache.as_ref()?;
-        let key = format!("cov:{}#{}", game.id, game.art_revision.unwrap_or(0));
-        if let Some(existing) = self.covers.borrow().get(&key) {
-            if existing.is_some() {
-                return existing.clone();
+        let mut waiting_remote = false;
+        for cand in game.portrait_art_candidates() {
+            if cand.url.starts_with(COVER_CACHE_ORIGIN) {
+                let key = format!("cov-url:{}", cand.url);
+                let cached = self.covers.borrow().get(&key).cloned();
+                let img = match cached {
+                    Some(existing) => existing,
+                    None => {
+                        let loaded = self
+                            .art_base
+                            .resolve_local_cover(&cand.url)
+                            .map(|path| cache.file(path, 320.0, scale));
+                        self.covers.borrow_mut().insert(key, loaded.clone());
+                        loaded
+                    }
+                };
+                if img.is_some() {
+                    return img;
+                }
+            } else if cand.url.starts_with("https://") && !waiting_remote {
+                let remote_key = format!("{}@320", cand.url);
+                let failed = matches!(self.remote_covers.borrow().get(&remote_key), Some(None));
+                if failed {
+                    continue;
+                }
+                if let Some(img) = self.remote_image_sized(&cand.url, 320.0, scale) {
+                    return Some(img);
+                }
+                waiting_remote = true;
             }
-        } else {
-            let loaded = self
-                .art_base
-                .resolve_local_portrait(game)
-                .map(|path| cache.file(path, 320.0, scale));
-            self.covers.borrow_mut().insert(key, loaded.clone());
-            if loaded.is_some() {
-                return loaded;
-            }
         }
-        if let Some(url) = game.cover_url.as_deref()
-            && url.starts_with("https://")
-            && !url.contains(".exo-launcher.local")
-            && let Some(img) = self.remote_image_sized(url, 320.0, scale)
-        {
-            return Some(img);
+        let san_key = format!("cov-san:{}#{}", game.id, game.art_revision.unwrap_or(0));
+        if let Some(existing) = self.covers.borrow().get(&san_key) {
+            return existing.clone();
         }
-        if let Some(url) = game.steam_portrait_url() {
-            return self.remote_image_sized(&url, 320.0, scale);
-        }
-        None
+        let loaded = self
+            .art_base
+            .resolve_local_sanitized_portrait(game)
+            .map(|path| cache.file(path, 320.0, scale));
+        self.covers.borrow_mut().insert(san_key, loaded.clone());
+        loaded
     }
 
     pub fn hero_image(&self, game: &Game, scale: f32) -> Option<Image> {
@@ -857,6 +931,12 @@ impl AppState {
         None
     }
 
+    pub fn open_game_page_from(&mut self, id: &str, flight_id: Option<String>, tx: &mut Tx) {
+        self.cover_flight_id = flight_id;
+        tx.unclipped_flights();
+        self.open_game_page(id);
+    }
+
     pub fn open_game_page(&mut self, id: &str) {
         self.room = Room::Library;
         self.selected_game_id = Some(id.to_string());
@@ -864,6 +944,7 @@ impl AppState {
         self.props_open = false;
         self.game_props_tab = 0;
         self.uninstall_confirm = false;
+        self.armed_confirm = None;
         if self.status != HostStatus::Standalone {
             self.game_extras = None;
             self.game_props = None;
@@ -926,10 +1007,145 @@ impl AppState {
         }
     }
 
+    pub fn close_game_page_tx(&mut self, tx: &mut Tx) {
+        tx.unclipped_flights();
+        self.close_game_page();
+    }
+
     pub fn close_game_page(&mut self) {
         self.open_game_id = None;
         self.props_open = false;
         self.uninstall_confirm = false;
+        self.armed_confirm = None;
+    }
+
+    pub fn open_store_game_from(&mut self, app_id: &str, flight_id: Option<String>, tx: &mut Tx) {
+        self.cover_flight_id = flight_id;
+        tx.unclipped_flights();
+        self.open_store_game(app_id);
+    }
+
+    pub fn close_store_game_tx(&mut self, tx: &mut Tx) {
+        tx.unclipped_flights();
+        self.store_game = None;
+        self.store_offers = None;
+    }
+
+    pub fn is_confirm_armed(&self, key: &str) -> bool {
+        self.armed_confirm.as_ref().is_some_and(|(k, _)| k == key)
+    }
+
+    pub fn disarm_confirm(&mut self) -> bool {
+        let was_armed = self.armed_confirm.take().is_some() || self.uninstall_confirm;
+        self.uninstall_confirm = false;
+        was_armed
+    }
+
+    pub fn arm_or_confirm_game_uninstall(&mut self, id: &str, tx: &mut Tx) {
+        const KEY: &str = "gp-uninstall";
+        const ARMED_SECS: f64 = 4.0;
+        if self.is_confirm_armed(KEY) {
+            self.disarm_confirm();
+            self.uninstall_game(id);
+        } else {
+            let deadline = self.clock_secs + ARMED_SECS;
+            self.armed_confirm = Some((KEY.to_string(), deadline));
+            self.uninstall_confirm = true;
+            tx.wake_after(Duration::from_secs_f64(ARMED_SECS));
+        }
+    }
+
+    pub fn deck_can_page(&self, total: usize) -> (bool, bool) {
+        let pos = self.deck_scroll.get();
+        let current = if pos.max[0] > 0.0 {
+            pos.offset[0]
+        } else {
+            self.deck_scroll_x
+        };
+        let can_prev = current > 2.0;
+        let can_next = if pos.max[0] > 0.0 {
+            current + 2.0 < pos.max[0]
+        } else {
+            let approx_track = (total as f32 * 238.0 - 14.0).max(0.0);
+            let approx_view = (self.home_stage_size.0 - 64.0).max(320.0);
+            approx_track > approx_view + 2.0 && current + 2.0 < approx_track - approx_view
+        };
+        (can_prev, can_next)
+    }
+
+    pub fn page_deck(&mut self, dir: f32, total: usize, tx: &mut Tx) {
+        let pos = self.deck_scroll.get();
+        let viewport = if pos.viewport[0] > 1.0 {
+            pos.viewport[0]
+        } else {
+            (self.home_stage_size.0 - 64.0).max(320.0)
+        };
+        let max_x = if pos.max[0] > 0.0 {
+            pos.max[0]
+        } else {
+            ((total as f32 * 238.0 - 14.0) - viewport).max(0.0)
+        };
+        let current = if pos.max[0] > 0.0 {
+            pos.offset[0]
+        } else {
+            self.deck_scroll_x
+        };
+        let step = (viewport * 0.8).max(320.0);
+        let target = (current + dir * step).clamp(0.0, max_x);
+        self.deck_scroll_x = target;
+        if self.settings.reduce_motion {
+            tx.scroll_to_instant("home-deck-track", target, 0.0);
+        } else {
+            tx.scroll_to_with("home-deck-track", target, 0.0, SPRING_MOVE);
+        }
+    }
+
+    pub fn store_shelf_can_page(&self, idx: usize, count: usize) -> (bool, bool) {
+        let slot = idx.min(3);
+        let pos = self.store_shelf_scrolls[slot].get();
+        let current = if pos.max[0] > 0.0 {
+            pos.offset[0]
+        } else {
+            self.store_shelf_x[slot]
+        };
+        let can_prev = current > 2.0;
+        let can_next = if pos.max[0] > 0.0 {
+            current + 2.0 < pos.max[0]
+        } else {
+            let approx_track = (count as f32 * 194.0 - 14.0).max(0.0);
+            let approx_view = (self.home_stage_size.0 - 104.0).max(360.0);
+            approx_track > approx_view + 2.0 && current + 2.0 < approx_track - approx_view
+        };
+        (can_prev, can_next)
+    }
+
+    pub fn page_store_shelf(&mut self, idx: usize, dir: f32, count: usize, tx: &mut Tx) {
+        let slot = idx.min(3);
+        let pos = self.store_shelf_scrolls[slot].get();
+        let viewport = if pos.viewport[0] > 1.0 {
+            pos.viewport[0]
+        } else {
+            (self.home_stage_size.0 - 104.0).max(360.0)
+        };
+        let max_x = if pos.max[0] > 0.0 {
+            pos.max[0]
+        } else {
+            ((count as f32 * 194.0 - 14.0) - viewport).max(0.0)
+        };
+        let current = if pos.max[0] > 0.0 {
+            pos.offset[0]
+        } else {
+            self.store_shelf_x[slot]
+        };
+        let step = (viewport * 0.8).max(360.0);
+        let target = (current + dir * step).clamp(0.0, max_x);
+        self.store_shelf_x[slot] = target;
+        let key = format!("store-shelf-track-{idx}");
+        if self.settings.reduce_motion {
+            tx.scroll_to_instant(key, target, 0.0);
+        } else {
+            tx.scroll_to_with(key, target, 0.0, SPRING_MOVE);
+        }
     }
 
     pub fn set_game_property(&mut self, id: &str, key: &str, value: &str) {
@@ -1247,15 +1463,25 @@ impl AppState {
     }
 
     pub fn apply_gamepad_action(&mut self, action: GamepadAction, tx: &mut Tx) {
+        if !matches!(action, GamepadAction::Connected(_)) {
+            self.input_mode = InputMode::Gamepad;
+        }
         match action {
-            GamepadAction::Connected(on) => self.gamepad_connected = on,
+            GamepadAction::Connected(on) => {
+                self.gamepad_connected = on;
+                if !on {
+                    self.input_mode = InputMode::Pointer;
+                }
+            }
             GamepadAction::PrevRoom => {
                 let len = Room::NAV_TABS.len();
                 let cur = Room::NAV_TABS
                     .iter()
                     .position(|&r| r == self.room)
                     .unwrap_or(0);
-                self.switch_room(Room::NAV_TABS[(cur + len - 1) % len]);
+                let target = Room::NAV_TABS[(cur + len - 1) % len];
+                self.switch_room(target);
+                tx.focus(target.key(), true);
             }
             GamepadAction::NextRoom => {
                 let len = Room::NAV_TABS.len();
@@ -1263,7 +1489,9 @@ impl AppState {
                     .iter()
                     .position(|&r| r == self.room)
                     .unwrap_or(0);
-                self.switch_room(Room::NAV_TABS[(cur + 1) % len]);
+                let target = Room::NAV_TABS[(cur + 1) % len];
+                self.switch_room(target);
+                tx.focus(target.key(), true);
             }
             GamepadAction::Search => {
                 if self.palette_open {
@@ -1273,6 +1501,9 @@ impl AppState {
                 }
             }
             GamepadAction::Back => {
+                if self.open_game_id.is_some() || self.store_game.is_some() {
+                    tx.unclipped_flights();
+                }
                 self.dismiss_top_layer();
             }
             GamepadAction::QuickPlay => {
@@ -1293,7 +1524,13 @@ impl AppState {
                     }
                 } else if self.room == Room::Library && self.open_game_id.is_none() {
                     if let Some(id) = self.selected_game().map(|g| g.id.clone()) {
-                        self.open_game_page(&id);
+                        let flight_id = if self.library_all_games {
+                            format!("grid:{id}")
+                        } else {
+                            format!("deck:{id}")
+                        };
+                        self.open_game_page_from(&id, Some(flight_id), tx);
+                        tx.focus("gp-play", true);
                     }
                 } else if let Some(g) = self.open_game().cloned()
                     && g.installed
@@ -1339,13 +1576,20 @@ impl AppState {
                         _ => 0,
                     };
                     let next = (cur as isize + delta).clamp(0, (ids.len() - 1) as isize) as usize;
-                    self.selected_game_id = Some(ids[next].clone());
+                    let next_id = ids[next].clone();
+                    let focus_key = format!("tile-{next_id}");
+                    self.selected_game_id = Some(next_id);
+                    tx.focus(focus_key.clone(), true);
+                    tx.scroll_into_view(focus_key);
                 }
             }
         }
     }
 
     pub fn dismiss_top_layer(&mut self) -> bool {
+        if self.disarm_confirm() {
+            return true;
+        }
         if self.capture_menu_open {
             self.capture_menu_open = false;
             return true;
@@ -1597,6 +1841,16 @@ impl AppState {
         self.clock_secs = now;
         let mut changed = false;
 
+        if let Some((_, deadline)) = self.armed_confirm {
+            if now >= deadline {
+                self.disarm_confirm();
+                tx.animated();
+                changed = true;
+            } else {
+                tx.wake_at(deadline);
+            }
+        }
+
         if self.notice != self.notice_last_synced {
             self.notice_last_synced = self.notice.clone();
             if let Some(text) = self.notice.clone()
@@ -1780,7 +2034,7 @@ impl AppState {
     }
 
     pub fn uninstall_game(&mut self, id: &str) {
-        self.uninstall_confirm = false;
+        self.disarm_confirm();
         self.game_action(
             METHOD_GAME_UNINSTALL,
             id,
@@ -2034,5 +2288,378 @@ fn demo_store_home() -> StoreHome {
                 tile("1817070", "Marvel's Spider-Man Remastered", "$29.99", 50),
             ],
         }],
+    }
+}
+
+const MARKETPLACE_TITLES: &[&str] = &[
+    "actor locker",
+    "actorlocker",
+    "auto footstep",
+    "autofootstep",
+    "async loading",
+    "ai for npc",
+    "metahuman",
+    "unreal engine",
+    "c++",
+    "sequence manager",
+    "montage sequence",
+    "electric dreams",
+    "code flow",
+    "quixel",
+    "megascan",
+    "twinmotion",
+    "lyra starter",
+    "city sample",
+    "content example",
+    "starter content",
+    "vehicle variety",
+    "fab plugin",
+    "unreal marketplace",
+];
+
+const EXACT_DROP_TITLES: &[&str] = &["discord", "epiconlineservices", "eosoverlay"];
+
+const TOOL_TITLES: &[&str] = &["soundtrack", "dedicated server", "software development kit"];
+
+fn compact_title(title: &str) -> String {
+    title
+        .chars()
+        .filter(|c| c.is_ascii_alphanumeric())
+        .map(|c| c.to_ascii_lowercase())
+        .collect()
+}
+
+fn is_marketplace_or_engine_title(title: &str) -> bool {
+    let lower = title.to_lowercase();
+    let packed = compact_title(title);
+    if EXACT_DROP_TITLES.contains(&packed.as_str()) {
+        return true;
+    }
+    MARKETPLACE_TITLES.iter().any(|needle| {
+        let needle_packed: String = needle.chars().filter(|c| !c.is_whitespace()).collect();
+        lower.contains(needle) || packed.contains(&needle_packed)
+    })
+}
+
+fn has_word_demo(title: &str) -> bool {
+    let lower = title.to_ascii_lowercase();
+    if lower.contains("(demo)") {
+        return true;
+    }
+    let bytes = lower.as_bytes();
+    let word = b"demo";
+    if bytes.len() < word.len() {
+        return false;
+    }
+    for i in 0..=bytes.len() - word.len() {
+        if &bytes[i..i + word.len()] == word {
+            let left_ok = i == 0 || !(bytes[i - 1].is_ascii_alphanumeric() || bytes[i - 1] == b'_');
+            let end = i + word.len();
+            let right_ok =
+                end == bytes.len() || !(bytes[end].is_ascii_alphanumeric() || bytes[end] == b'_');
+            if left_ok && right_ok {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+fn is_tool_or_extra_title(title: &str) -> bool {
+    let padded = format!(" {} ", title.to_lowercase());
+    TOOL_TITLES.iter().any(|needle| padded.contains(needle)) || has_word_demo(title)
+}
+
+pub fn is_playable_library_game(game: &Game, show_tools: bool) -> bool {
+    if game.is_add_portable || game.id == "local:add" {
+        return false;
+    }
+    let id_lower = game.id.to_ascii_lowercase();
+    if !id_lower.starts_with("steam:") && is_marketplace_or_engine_title(&game.title) {
+        return false;
+    }
+    if !show_tools && is_tool_or_extra_title(&game.title) {
+        return false;
+    }
+    if compact_title(&game.title) == "emergence" && id_lower.starts_with("epic:") {
+        return false;
+    }
+    true
+}
+
+fn is_installing_game(game: &Game, transfer_id: Option<&str>) -> bool {
+    let Some(tid) = transfer_id else {
+        return false;
+    };
+    if game.id == tid || game.variants.iter().any(|v| v.id == tid) {
+        return true;
+    }
+    if let Some(rest) = tid
+        .strip_prefix("steam:")
+        .or_else(|| tid.strip_prefix("STEAM:"))
+    {
+        let digits: String = rest.chars().take_while(|c| c.is_ascii_digit()).collect();
+        if !digits.is_empty() && game.art_steam_app_id().as_deref() == Some(digits.as_str()) {
+            return true;
+        }
+    }
+    false
+}
+
+pub fn is_shelf_game(game: &Game, transfer_id: Option<&str>, show_tools: bool) -> bool {
+    if !is_playable_library_game(game, show_tools) {
+        return false;
+    }
+    if is_installing_game(game, transfer_id) {
+        return true;
+    }
+    if game.installed || game.owned {
+        return true;
+    }
+    game.store == "local"
+}
+
+fn cmp_title_base(a: &str, b: &str) -> std::cmp::Ordering {
+    a.to_lowercase().cmp(&b.to_lowercase())
+}
+
+fn days_from_civil(y: i64, m: u32, d: u32) -> i64 {
+    let y = y - i64::from(m <= 2);
+    let era = y.div_euclid(400);
+    let yoe = (y - era * 400) as u64;
+    let m = u64::from(m);
+    let d = u64::from(d);
+    let doy = (153 * (if m > 2 { m - 3 } else { m + 9 }) + 2) / 5 + d - 1;
+    let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+    era * 146_097 + doe as i64 - 719_468
+}
+
+pub fn parse_iso_utc_ms(raw: &str) -> Option<i64> {
+    let s = raw.trim();
+    if s.len() < 10 {
+        return None;
+    }
+    let bytes = s.as_bytes();
+    if bytes[4] != b'-' || bytes[7] != b'-' {
+        return None;
+    }
+    let year: i64 = s[0..4].parse().ok()?;
+    let month: u32 = s[5..7].parse().ok()?;
+    let day: u32 = s[8..10].parse().ok()?;
+    if !(1..=12).contains(&month) || !(1..=31).contains(&day) {
+        return None;
+    }
+    let days = days_from_civil(year, month, day);
+    if s.len() == 10 {
+        return Some(days * 86_400_000);
+    }
+    if !matches!(bytes[10], b'T' | b't' | b' ') || s.len() < 19 {
+        return None;
+    }
+    if bytes[13] != b':' || bytes[16] != b':' {
+        return None;
+    }
+    let hour: i64 = s[11..13].parse().ok()?;
+    let min: i64 = s[14..16].parse().ok()?;
+    let sec: i64 = s[17..19].parse().ok()?;
+    if !(0..=23).contains(&hour) || !(0..=59).contains(&min) || !(0..=60).contains(&sec) {
+        return None;
+    }
+    let mut rest = &s[19..];
+    let mut ms: i64 = 0;
+    if let Some(after_dot) = rest.strip_prefix('.') {
+        let frac_len = after_dot.bytes().take_while(|b| b.is_ascii_digit()).count();
+        let frac = &after_dot[..frac_len];
+        if !frac.is_empty() {
+            let mut scaled = 0i64;
+            for idx in 0..3 {
+                let digit = frac
+                    .as_bytes()
+                    .get(idx)
+                    .map(|b| i64::from(b - b'0'))
+                    .unwrap_or(0);
+                scaled = scaled * 10 + digit;
+            }
+            ms = scaled;
+        }
+        rest = &after_dot[frac_len..];
+    }
+    let tz_offset_ms: i64 = if rest.is_empty() || rest == "Z" || rest == "z" {
+        0
+    } else if let Some(sign_byte) = rest.as_bytes().first().copied()
+        && (sign_byte == b'+' || sign_byte == b'-')
+    {
+        let sign = if sign_byte == b'+' { 1i64 } else { -1i64 };
+        let tz = &rest[1..];
+        let (th, tm) = if let Some((h, m)) = tz.split_once(':') {
+            (h.parse::<i64>().ok()?, m.parse::<i64>().ok()?)
+        } else if tz.len() == 4 {
+            (tz[0..2].parse::<i64>().ok()?, tz[2..4].parse::<i64>().ok()?)
+        } else {
+            return None;
+        };
+        sign * (th * 3600 + tm * 60) * 1000
+    } else {
+        return None;
+    };
+    let utc_ms = days * 86_400_000 + (hour * 3600 + min * 60 + sec) * 1000 + ms - tz_offset_ms;
+    Some(utc_ms)
+}
+
+#[cfg(test)]
+mod library_sort_and_confirm_tests {
+    use super::*;
+
+    fn mk_game(
+        id: &str,
+        title: &str,
+        installed: bool,
+        owned: bool,
+        last_played_utc: Option<&str>,
+    ) -> Game {
+        Game {
+            id: id.into(),
+            title: title.into(),
+            store: "steam".into(),
+            stores: vec!["steam".into()],
+            installed,
+            owned,
+            last_played_utc: last_played_utc.map(str::to_string),
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn last_launched_sort_matches_react_timestamps_tiebreaks_and_hygiene() {
+        let mut s = AppState::with_demo_games();
+        s.settings.show_library_tools = false;
+        s.settings.hidden_games = vec!["steam:hidden".into()];
+        s.recent_ids = vec!["steam:tie-first".into(), "steam:tie-second".into()];
+        s.sort = LibrarySort::LastLaunched;
+        s.filter = LibraryFilter::All;
+        s.games = vec![
+            mk_game(
+                "steam:older-z",
+                "Older Z",
+                true,
+                true,
+                Some("2026-04-10T10:00:00Z"),
+            ),
+            mk_game(
+                "steam:newer-frac",
+                "Newer Fractional",
+                false,
+                true,
+                Some("2026-04-10T10:00:00.5000000Z"),
+            ),
+            mk_game(
+                "steam:offset",
+                "Offset Newer",
+                false,
+                true,
+                Some("2026-04-10T12:00:01+02:00"),
+            ),
+            mk_game("steam:never-b", "Beta Never", true, true, None),
+            mk_game("steam:never-a", "alpha never", false, true, None),
+            mk_game("steam:tie-second", "Tie Alpha", true, true, None),
+            mk_game("steam:tie-first", "Tie Zulu", false, true, None),
+            mk_game(
+                "steam:hidden",
+                "Hidden Game",
+                true,
+                true,
+                Some("2026-05-01T00:00:00Z"),
+            ),
+            mk_game(
+                "steam:demo",
+                "Cool Game Demo",
+                true,
+                true,
+                Some("2026-05-02T00:00:00Z"),
+            ),
+            mk_game(
+                "steam:unowned",
+                "Not Owned",
+                false,
+                false,
+                Some("2026-05-03T00:00:00Z"),
+            ),
+        ];
+
+        let ids: Vec<&str> = s
+            .filtered_games()
+            .into_iter()
+            .map(|g| g.id.as_str())
+            .collect();
+        assert_eq!(
+            ids,
+            vec![
+                "steam:offset",
+                "steam:newer-frac",
+                "steam:older-z",
+                "steam:tie-first",
+                "steam:tie-second",
+                "steam:never-a",
+                "steam:never-b",
+            ]
+        );
+    }
+
+    #[test]
+    fn confirm_button_arms_disarms_on_escape_timeout_and_fires_on_second_press() {
+        let mut s = AppState::with_demo_games();
+        let mut tx = Tx::default();
+        assert!(!s.is_confirm_armed("gp-uninstall"));
+
+        s.arm_or_confirm_game_uninstall("demo:cyberpunk", &mut tx);
+        assert!(s.is_confirm_armed("gp-uninstall"));
+        assert!(s.notice.is_none());
+
+        assert!(s.dismiss_top_layer());
+        assert!(!s.is_confirm_armed("gp-uninstall"));
+
+        s.clock_secs = 10.0;
+        s.arm_or_confirm_game_uninstall("demo:cyberpunk", &mut tx);
+        assert!(s.is_confirm_armed("gp-uninstall"));
+        s.sync_and_tick_notices(13.5, &mut tx);
+        assert!(s.is_confirm_armed("gp-uninstall"));
+        s.sync_and_tick_notices(14.0, &mut tx);
+        assert!(!s.is_confirm_armed("gp-uninstall"));
+
+        s.arm_or_confirm_game_uninstall("demo:cyberpunk", &mut tx);
+        assert!(s.is_confirm_armed("gp-uninstall"));
+        s.arm_or_confirm_game_uninstall("demo:cyberpunk", &mut tx);
+        assert!(!s.is_confirm_armed("gp-uninstall"));
+        assert!(
+            s.notice
+                .as_deref()
+                .is_some_and(|n| n.contains("Uninstalling"))
+        );
+    }
+
+    #[test]
+    fn store_shelf_paging_respects_bounds_and_scroll_targets() {
+        let mut s = AppState::with_demo_games();
+        let mut tx = Tx::default();
+        let mut pos = ScrollPos::default();
+        pos.viewport = [1000.0, 260.0];
+        pos.max = [1400.0, 0.0];
+        s.store_shelf_scrolls[0].set(pos);
+
+        assert_eq!(s.store_shelf_can_page(0, 12), (false, true));
+        s.page_store_shelf(0, 1.0, 12, &mut tx);
+        assert_eq!(s.store_shelf_x[0], 800.0);
+
+        pos.offset = [800.0, 0.0];
+        s.store_shelf_scrolls[0].set(pos);
+        assert_eq!(s.store_shelf_can_page(0, 12), (true, true));
+        s.page_store_shelf(0, 1.0, 12, &mut tx);
+        assert_eq!(s.store_shelf_x[0], 1400.0);
+
+        pos.offset = [1400.0, 0.0];
+        s.store_shelf_scrolls[0].set(pos);
+        assert_eq!(s.store_shelf_can_page(0, 12), (true, false));
+        s.page_store_shelf(0, -1.0, 12, &mut tx);
+        assert_eq!(s.store_shelf_x[0], 600.0);
     }
 }
