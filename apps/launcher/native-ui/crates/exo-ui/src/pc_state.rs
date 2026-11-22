@@ -103,6 +103,8 @@ pub struct SettingsAndPcState {
     pub compress_potential_bytes: u64,
     pub compress_saved_bytes: u64,
     pub exo_ai_storage_open: bool,
+    pub armed_uninstall: Option<(String, u64)>,
+    pub armed_uninstall_seq: u64,
 }
 
 impl SettingsAndPcState {
@@ -627,6 +629,8 @@ impl SettingsAndPcState {
             compress_potential_bytes: 0,
             compress_saved_bytes: 0,
             exo_ai_storage_open: false,
+            armed_uninstall: None,
+            armed_uninstall_seq: 0,
         }
     }
 
@@ -673,6 +677,8 @@ impl SettingsAndPcState {
             compress_potential_bytes: 0,
             compress_saved_bytes: 0,
             exo_ai_storage_open: false,
+            armed_uninstall: None,
+            armed_uninstall_seq: 0,
         }
     }
 }
