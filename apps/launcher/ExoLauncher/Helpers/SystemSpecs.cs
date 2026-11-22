@@ -14,7 +14,9 @@ namespace ExoLauncher.Helpers;
 /// </summary>
 internal static partial class SystemSpecs
 {
+    private static readonly Lazy<string?> CpuOnce = new(ReadCpuName, LazyThreadSafetyMode.ExecutionAndPublication);
     private static readonly Lazy<StoreService.ThisPc> Once = new(ReadNow, LazyThreadSafetyMode.ExecutionAndPublication);
+    private static int _warmStarted;
 
     internal static StoreService.ThisPc Read() => Once.Value with { FreeGb = FreeGb(), Online = NetworkInterface.GetIsNetworkAvailable() };
 
@@ -23,6 +25,39 @@ internal static partial class SystemSpecs
 
     /// <summary>The main graphics card's name for frame generation (<see cref="FrameGenName"/>).</summary>
     internal static string? FrameGenGpu => FrameGenName(Gpu, Once.Value.Cpu);
+
+    internal static string? FastFrameGenGpu =>
+        ResolveFastFrameGenGpu(
+            Once.IsValueCreated,
+            () => FrameGenGpu,
+            () =>
+            {
+                WarmInBackground();
+                return FrameGenName(MainGpu(GpuCapability.Adapters()), CpuOnce.Value);
+            });
+
+    internal static string? ResolveFastFrameGenGpu(bool warmed, Func<string?> readWarmed, Func<string?> readFallback) =>
+        warmed ? readWarmed() : readFallback();
+
+    internal static void WarmInBackground()
+    {
+        if (Interlocked.Exchange(ref _warmStarted, 1) != 0) return;
+        _ = Task.Run(() =>
+        {
+            try
+            {
+                var gpu = FrameGenName(MainGpu(GpuCapability.Adapters()), CpuOnce.Value);
+                _ = DlssSwapService.FrameGenEverywhereCard(gpu);
+                _ = ChipsetUpdate.ThisPc?.Installed();
+                _ = WebClientPreferences.Read();
+            }
+            catch { }
+        });
+        _ = Task.Run(() =>
+        {
+            try { _ = Once.Value; } catch { }
+        });
+    }
 
     /// <summary>
     /// The graphics card's name as frame generation reads it (DlssSwapService.FrameGenCardFor): a handheld's Radeon, which
@@ -38,7 +73,7 @@ internal static partial class SystemSpecs
     [GeneratedRegex(@"\bRyzen\s+(?:Z[12]|AI)\b", RegexOptions.IgnoreCase)]
     private static partial Regex HandheldChip();
 
-    private static StoreService.ThisPc ReadNow()
+    private static string? ReadCpuName()
     {
         string? cpu = null;
         try
@@ -47,6 +82,12 @@ internal static partial class SystemSpecs
             cpu = Cpu(key?.GetValue("ProcessorNameString") as string);
         }
         catch { /* left out */ }
+        return cpu;
+    }
+
+    private static StoreService.ThisPc ReadNow()
+    {
+        var cpu = CpuOnce.Value;
         // The memory installed (what the box says), not what Windows can use after hardware reserves.
         var ramGb = GetPhysicallyInstalledSystemMemory(out var kilobytes) ? (int)Math.Round(kilobytes / 1048576.0) : 0;
         var windows = Environment.OSVersion.Version.Build >= 22000 ? 11 : 10;

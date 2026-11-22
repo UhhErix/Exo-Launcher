@@ -17,6 +17,7 @@ public sealed class NamedPipeHostTransport : IHostTransport
 {
     internal const int MaxMessageBytes = 4 * 1024 * 1024;
     private const int StreamQueueCapacity = 64;
+    private const int WriteBatchBytes = 64 * 1024;
 
     private readonly CancellationTokenSource _cts = new();
     private readonly Channel<string> _reliable = Channel.CreateUnbounded<string>(new UnboundedChannelOptions
@@ -33,7 +34,9 @@ public sealed class NamedPipeHostTransport : IHostTransport
     private readonly SemaphoreSlim _outboundSignal = new(0);
     private readonly Lock _pipeGate = new();
     private NamedPipeServerStream? _activePipe;
-    private readonly Task _acceptTask;
+    private Task? _acceptTask;
+    private int _outboundSignaled;
+    private long _sessionGeneration;
     private bool _detached;
 
     public string PipeName { get; }
@@ -45,7 +48,15 @@ public sealed class NamedPipeHostTransport : IHostTransport
     public NamedPipeHostTransport(string? pipeName = null)
     {
         PipeName = string.IsNullOrWhiteSpace(pipeName) ? $"exo-launcher-rpc-{Environment.ProcessId}" : pipeName;
-        _acceptTask = Task.Run(AcceptLoopAsync);
+    }
+
+    public void Start()
+    {
+        lock (_pipeGate)
+        {
+            if (Volatile.Read(ref _detached) || _acceptTask is not null) return;
+            _acceptTask = Task.Run(AcceptLoopAsync);
+        }
     }
 
     internal static PipeSecurity CreateCurrentUserPipeSecurity()
@@ -82,6 +93,7 @@ public sealed class NamedPipeHostTransport : IHostTransport
 
     private void SignalOutbound()
     {
+        if (Interlocked.Exchange(ref _outboundSignaled, 1) != 0) return;
         try { _outboundSignal.Release(); } catch (ObjectDisposedException) { }
     }
 
@@ -116,8 +128,9 @@ public sealed class NamedPipeHostTransport : IHostTransport
                 }
 
                 await pipe.WaitForConnectionAsync(_cts.Token).ConfigureAwait(false);
+                var sessionGen = Interlocked.Increment(ref _sessionGeneration);
                 writerTask = WriterLoopAsync(pipe, clientCts.Token);
-                await ReadLoopAsync(pipe, clientCts.Token).ConfigureAwait(false);
+                await ReadLoopAsync(pipe, sessionGen, clientCts.Token).ConfigureAwait(false);
             }
             catch (OperationCanceledException) when (_cts.IsCancellationRequested)
             {
@@ -129,6 +142,7 @@ public sealed class NamedPipeHostTransport : IHostTransport
             }
             finally
             {
+                Interlocked.Increment(ref _sessionGeneration);
                 try { clientCts.Cancel(); } catch { }
                 if (writerTask is not null)
                 {
@@ -144,6 +158,7 @@ public sealed class NamedPipeHostTransport : IHostTransport
                 }
                 while (_reliable.Reader.TryRead(out _)) { }
                 while (_stream.Reader.TryRead(out _)) { }
+                Volatile.Write(ref _outboundSignaled, 0);
                 while (_outboundSignal.Wait(0)) { }
                 if (!Volatile.Read(ref _detached))
                 {
@@ -153,7 +168,7 @@ public sealed class NamedPipeHostTransport : IHostTransport
         }
     }
 
-    private async Task ReadLoopAsync(NamedPipeServerStream pipe, CancellationToken ct)
+    private async Task ReadLoopAsync(NamedPipeServerStream pipe, long sessionGen, CancellationToken ct)
     {
         var chunk = new byte[16 * 1024];
         using var line = new MemoryStream();
@@ -172,7 +187,7 @@ public sealed class NamedPipeHostTransport : IHostTransport
                     throw new InvalidDataException("Named pipe inbound message exceeded MaxMessageBytes.");
 
                 if (segLen > 0) line.Write(chunk, start, segLen);
-                EmitLine(line);
+                EmitLine(line, sessionGen);
                 line.SetLength(0);
                 start = i + 1;
             }
@@ -187,7 +202,7 @@ public sealed class NamedPipeHostTransport : IHostTransport
         }
     }
 
-    private void EmitLine(MemoryStream line)
+    private void EmitLine(MemoryStream line, long sessionGen)
     {
         if (line.Length == 0) return;
         var len = (int)line.Length;
@@ -195,42 +210,97 @@ public sealed class NamedPipeHostTransport : IHostTransport
         if (buf[len - 1] == (byte)'\r') len--;
         if (len <= 0) return;
         var text = Encoding.UTF8.GetString(buf, 0, len);
-        if (!string.IsNullOrWhiteSpace(text))
-            MessageReceived?.Invoke(text);
+        if (string.IsNullOrWhiteSpace(text)) return;
+        var handler = MessageReceived;
+        if (handler is null) return;
+        ThreadPool.UnsafeQueueUserWorkItem(
+            static state =>
+            {
+                var (self, callback, payload, gen) = state;
+                if (Volatile.Read(ref self._sessionGeneration) != gen || Volatile.Read(ref self._detached)) return;
+                try { callback(payload); } catch { }
+            },
+            (this, handler, text, sessionGen),
+            preferLocal: false);
     }
 
     private async Task WriterLoopAsync(NamedPipeServerStream pipe, CancellationToken ct)
     {
-        while (!ct.IsCancellationRequested && pipe.IsConnected)
+        var batch = ArrayPool<byte>.Shared.Rent(WriteBatchBytes);
+        try
         {
-            var sent = false;
-            while (_reliable.Reader.TryRead(out var message))
+            while (!ct.IsCancellationRequested && pipe.IsConnected)
             {
-                if (!pipe.IsConnected || ct.IsCancellationRequested) return;
-                await WriteLineAsync(pipe, message, ct).ConfigureAwait(false);
-                sent = true;
+                Interlocked.Exchange(ref _outboundSignaled, 0);
+                var sent = false;
+                var offset = 0;
+
+                while (_reliable.Reader.TryRead(out var message))
+                {
+                    if (!pipe.IsConnected || ct.IsCancellationRequested) return;
+                    var byteCount = Encoding.UTF8.GetByteCount(message) + 1;
+                    if (byteCount > batch.Length)
+                    {
+                        if (offset > 0)
+                        {
+                            await pipe.WriteAsync(batch.AsMemory(0, offset), ct).ConfigureAwait(false);
+                            offset = 0;
+                        }
+                        await WriteLargeLineAsync(pipe, message, byteCount, ct).ConfigureAwait(false);
+                    }
+                    else
+                    {
+                        if (offset + byteCount > batch.Length)
+                        {
+                            await pipe.WriteAsync(batch.AsMemory(0, offset), ct).ConfigureAwait(false);
+                            offset = 0;
+                        }
+                        offset += Encoding.UTF8.GetBytes(message, batch.AsSpan(offset));
+                        batch[offset++] = (byte)'\n';
+                    }
+                    sent = true;
+                }
+
+                if (offset > 0)
+                {
+                    await pipe.WriteAsync(batch.AsMemory(0, offset), ct).ConfigureAwait(false);
+                }
+
+                if (_stream.Reader.TryRead(out var frameMessage))
+                {
+                    if (!pipe.IsConnected || ct.IsCancellationRequested) return;
+                    var byteCount = Encoding.UTF8.GetByteCount(frameMessage) + 1;
+                    if (byteCount <= batch.Length)
+                    {
+                        var written = Encoding.UTF8.GetBytes(frameMessage, batch);
+                        batch[written] = (byte)'\n';
+                        await pipe.WriteAsync(batch.AsMemory(0, written + 1), ct).ConfigureAwait(false);
+                    }
+                    else
+                    {
+                        await WriteLargeLineAsync(pipe, frameMessage, byteCount, ct).ConfigureAwait(false);
+                    }
+                    sent = true;
+                }
+
+                if (!sent)
+                    await _outboundSignal.WaitAsync(ct).ConfigureAwait(false);
             }
-            if (_stream.Reader.TryRead(out var frameMessage))
-            {
-                if (!pipe.IsConnected || ct.IsCancellationRequested) return;
-                await WriteLineAsync(pipe, frameMessage, ct).ConfigureAwait(false);
-                sent = true;
-            }
-            if (!sent)
-                await _outboundSignal.WaitAsync(ct).ConfigureAwait(false);
+        }
+        finally
+        {
+            ArrayPool<byte>.Shared.Return(batch);
         }
     }
 
-    private static async Task WriteLineAsync(NamedPipeServerStream pipe, string message, CancellationToken ct)
+    private static async Task WriteLargeLineAsync(NamedPipeServerStream pipe, string message, int byteCount, CancellationToken ct)
     {
-        var byteCount = Encoding.UTF8.GetByteCount(message) + 1;
         var rented = ArrayPool<byte>.Shared.Rent(byteCount);
         try
         {
             var written = Encoding.UTF8.GetBytes(message, rented);
             rented[written] = (byte)'\n';
             await pipe.WriteAsync(rented.AsMemory(0, written + 1), ct).ConfigureAwait(false);
-            await pipe.FlushAsync(ct).ConfigureAwait(false);
         }
         finally
         {
@@ -245,16 +315,21 @@ public sealed class NamedPipeHostTransport : IHostTransport
         _stream.Writer.TryComplete();
         try { _cts.Cancel(); } catch { }
         NamedPipeServerStream? pipe;
+        Task? acceptTask;
         lock (_pipeGate)
         {
             pipe = _activePipe;
             _activePipe = null;
+            acceptTask = _acceptTask;
         }
         if (pipe is not null)
         {
             try { pipe.Dispose(); } catch { }
         }
-        try { _acceptTask.Wait(TimeSpan.FromSeconds(2)); } catch { }
+        if (acceptTask is not null)
+        {
+            try { acceptTask.Wait(TimeSpan.FromSeconds(2)); } catch { }
+        }
         _outboundSignal.Dispose();
         _cts.Dispose();
     }
