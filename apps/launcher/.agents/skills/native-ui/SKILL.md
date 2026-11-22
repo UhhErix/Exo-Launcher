@@ -15,7 +15,7 @@ The native UI replaces only the React/WebView2 UI; the .NET host stays and talks
 
 ## Rune API
 
-Rune is pinned to one git rev in `Cargo.toml`; `[workspace.dependencies]` and every `[patch.crates-io]` entry use the same rev. Never guess its API. Read the source cargo already fetched: `%USERPROFILE%\.cargo\git\checkouts\rune-*\<first 7 characters of the rev>\` (`crates/`, `examples/`, and its own `AGENTS.md`). Bump the rev only when asked, and then in every entry at once.
+Exo pins the `exo` branch of our Rune fork (`https://github.com/UhhErix/rune`, upstream `anomalyco/rune` plus Exo's features) to one git rev in `Cargo.toml`; `[workspace.dependencies]` and every `[patch.crates-io]` entry use the same rev. Never guess its API. Read the source cargo already fetched in the fork's checkout folder under `%USERPROFILE%\.cargo\git\checkouts\rune-*\<first 7 characters of the rev>\` (pick the `rune-*` folder for the fork's URL, and read its `crates/`, `examples/`, and `AGENTS.md`). The `.github/workflows/native-ui-rune-bump.yml` workflow bumps the pin automatically when the fork's `exo` branch moves; otherwise bump the rev only when asked, and always in every entry at once.
 
 ## Rules
 

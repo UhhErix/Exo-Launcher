@@ -1,7 +1,7 @@
 use crate::state::{AppState, LibraryFilter, title_hue};
 use exo_kit::{
     BG, FG, PRESS_SCALE, PRIMARY_FG, RADIUS_CARD, RADIUS_PANEL, RADIUS_PILL, RADIUS_SMALL,
-    SPRING_MOVE, SPRING_QUICK, TRANSPARENT, cover_image, exo_play_button, fg_muted, glass_button,
+    SPRING_MOVE, SPRING_QUICK, TRANSPARENT, exo_play_button, fg_muted, glass_button,
     glass_control_fill, glass_icon_circle, glass_panel, glass_rim, glass_rim_bottom, glass_rim_top,
     good, hover_fill, icon_chevron_down, icon_chevron_left, icon_chevron_right, icon_download,
     icon_filter, icon_grid, icon_key, icon_more_horiz, icon_play, icon_plus, icon_refresh,
@@ -39,17 +39,28 @@ fn cover_surface(
     dim_uninstalled: bool,
 ) -> El {
     let hue = title_hue(&game.title);
+    let dim = dim_uninstalled && !game.installed;
     let mut art = el()
         .size(w, h)
         .radius(RADIUS_CARD)
         .continuous_corners()
         .clip_rounded(RADIUS_CARD)
-        .fill(surface_card());
+        .fill(if dim { BG } else { surface_card() });
 
     if let Some(img) = s.cover_image(game, scale) {
-        art = art.pixels_fit(img.pixels(), SurfaceFit::Fill);
+        if dim {
+            art = art.child(
+                el().pin(Some(0.0), Some(0.0), Some(0.0), Some(0.0))
+                    .pixels_fit(img.pixels(), SurfaceFit::Fill)
+                    .saturate(0.45)
+                    .opacity(0.42),
+            );
+        } else {
+            art = art.pixels_fit(img.pixels(), SurfaceFit::Fill);
+        }
     } else {
-        art = art
+        let mut fallback = el()
+            .pin(Some(0.0), Some(0.0), Some(0.0), Some(0.0))
             .linear_gradient(
                 0.35,
                 [
@@ -72,22 +83,21 @@ fn cover_surface(
                             .wrap(),
                     ),
             );
+        if dim {
+            fallback = fallback.opacity(0.42);
+        }
+        art = art.child(fallback);
     }
 
-    if dim_uninstalled && !game.installed {
-        art = art
-            .child(
-                el().pin(Some(0.0), Some(0.0), Some(0.0), Some(0.0))
-                    .fill(BG.alpha(0.58)),
-            )
-            .child(
-                el().pin(None, Some(8.0), Some(8.0), None)
-                    .size(22.0, 22.0)
-                    .radius(11.0)
-                    .center()
-                    .fill(scrim_fill())
-                    .child(icon_download(13.0, FG.alpha(0.9))),
-            );
+    if dim {
+        art = art.child(
+            el().pin(None, Some(8.0), Some(8.0), None)
+                .size(22.0, 22.0)
+                .radius(11.0)
+                .center()
+                .fill(scrim_fill())
+                .child(icon_download(13.0, FG.alpha(0.9))),
+        );
     }
 
     if game.is_running {
@@ -296,24 +306,15 @@ fn view_home_deck(s: &AppState, scale: f32) -> El {
     let active_game = s.selected_game().or_else(|| filtered.first().copied());
     let active_id = active_game.map(|g| g.id.clone());
 
-    let (stage_w, stage_h) = s.home_stage_size;
     let mut hero_art = el()
         .pin(Some(0.0), Some(0.0), Some(0.0), Some(0.0))
-        .clip_rounded(0.0)
-        .fill(BG)
-        .on_layout(|s: &mut AppState, r| {
-            if r[2] > 0.0
-                && r[3] > 0.0
-                && ((s.home_stage_size.0 - r[2]).abs() > 0.5
-                    || (s.home_stage_size.1 - r[3]).abs() > 0.5)
-            {
-                s.home_stage_size = (r[2], r[3]);
-            }
-        });
+        .fill(BG);
 
     if let Some(game) = active_game {
         if let Some(img) = s.hero_image(game, scale) {
-            hero_art = hero_art.child(cover_image(img.pixels(), stage_w, stage_h, 0.5, 0.22));
+            hero_art = hero_art
+                .pixels_fit(img.pixels(), SurfaceFit::Fill)
+                .surface_anchor_fraction(0.5, 0.22);
         } else {
             let hue = title_hue(&game.title);
             hero_art = hero_art.linear_gradient(

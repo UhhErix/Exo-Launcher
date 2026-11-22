@@ -108,7 +108,7 @@ fn monogram_fill(seed: &str) -> Color {
     hex(palette[(h as usize) % palette.len()], 1.0)
 }
 
-fn lift_rgb(v: u32) -> Color {
+fn lift_rgb_f32(v: u32) -> [f32; 3] {
     let mut r = ((v >> 16) & 0xff) as f32 / 255.0;
     let mut g = ((v >> 8) & 0xff) as f32 / 255.0;
     let mut b = (v & 0xff) as f32 / 255.0;
@@ -119,12 +119,28 @@ fn lift_rgb(v: u32) -> Color {
         g += (1.0 - g) * boost;
         b += (1.0 - b) * boost;
     }
+    [r, g, b]
+}
+
+fn rgb_to_color([r, g, b]: [f32; 3]) -> Color {
     srgb(
         (r * 255.0).round() as u8,
         (g * 255.0).round() as u8,
         (b * 255.0).round() as u8,
         1.0,
     )
+}
+
+fn lift_rgb(v: u32) -> Color {
+    rgb_to_color(lift_rgb_f32(v))
+}
+
+fn tint_toward_white([r, g, b]: [f32; 3], amount: f32) -> Color {
+    rgb_to_color([
+        r + (1.0 - r) * amount,
+        g + (1.0 - g) * amount,
+        b + (1.0 - b) * amount,
+    ])
 }
 
 fn lift_role_color(raw: Option<&str>, offline: bool) -> Color {
@@ -143,14 +159,53 @@ fn lift_role_color(raw: Option<&str>, offline: bool) -> Color {
     lift_rgb(v)
 }
 
-fn styled_name_color(look: Option<&DiscordLook>, fallback: Color) -> Color {
-    if let Some(first) = look
-        .and_then(|l| l.name_style.as_ref())
-        .and_then(|ns| ns.colors.first().copied())
-    {
-        return lift_rgb(first);
+fn styled_name_text(node: El, look: Option<&DiscordLook>, fallback: Color) -> El {
+    let Some(ns) = look.and_then(|l| l.name_style.as_ref()) else {
+        return node.color(fallback);
+    };
+    if ns.colors.is_empty() {
+        return node.color(fallback);
     }
-    fallback
+    let lifted: Vec<Color> = ns.colors.iter().take(15).map(|&c| lift_rgb(c)).collect();
+    let main = lifted[0];
+    match ns.effect {
+        2 | 6 if lifted.len() >= 2 => {
+            let denom = (lifted.len() - 1) as f32;
+            let stops: Vec<(f32, Color)> = lifted
+                .iter()
+                .enumerate()
+                .map(|(i, &c)| (0.10 + 0.80 * (i as f32) / denom, c))
+                .collect();
+            node.color(main)
+                .text_gradient(3.0 * std::f32::consts::FRAC_PI_4, stops)
+        }
+        7 if lifted.len() >= 2 => {
+            let n = lifted.len();
+            let stops: Vec<(f32, Color)> = (0..=n)
+                .map(|i| (i as f32 / n as f32, lifted[i % n]))
+                .collect();
+            node.color(main)
+                .text_gradient(std::f32::consts::FRAC_PI_2, stops)
+        }
+        4 => {
+            let base = lift_rgb_f32(ns.colors[0]);
+            let light1 = tint_toward_white(base, 0.25);
+            let light2 = tint_toward_white(base, 0.60);
+            node.color(main).text_gradient(
+                std::f32::consts::PI,
+                [(0.0, FG), (0.32, light2), (0.60, light1), (1.0, main)],
+            )
+        }
+        5 => {
+            let base = lift_rgb_f32(ns.colors[0]);
+            let light1 = tint_toward_white(base, 0.25);
+            node.color(main).text_gradient(
+                5.0 * std::f32::consts::FRAC_PI_4,
+                [(0.0, light1), (0.12, light1), (0.40, main), (1.0, main)],
+            )
+        }
+        _ => node.color(main),
+    }
 }
 
 fn nameplate_palette_rgb(palette: &str) -> Option<u32> {
@@ -1492,12 +1547,13 @@ fn me_panel(s: &AppState, sc: f32, scale: f32) -> El {
                 .grow(1.0)
                 .min_w(0.0)
                 .gap(1.0)
-                .child(
+                .child(styled_name_text(
                     text(name.to_string())
                         .font(font_px(13.0 * sc, 600.0))
-                        .color(styled_name_color(look, FG))
                         .truncate(),
-                )
+                    look,
+                    FG,
+                ))
                 .child(
                     text(status_label(st))
                         .font(font_px(12.0 * sc, 400.0))
@@ -2262,14 +2318,19 @@ fn friend_card(s: &AppState, friend: &DiscordFriend, sc: f32, scale: f32) -> El 
     let uid = friend.id.clone();
     let look = friend.look.as_ref();
     let is_friend = friend.kind == "friend";
-    let name_color = styled_name_color(look, FG);
 
-    let mut top_row = row().w_full().min_w(0.0).gap(6.0).center_y().child(
-        text(friend.name.clone())
-            .font(font_px(13.0 * sc, 600.0))
-            .color(name_color)
-            .truncate(),
-    );
+    let mut top_row = row()
+        .w_full()
+        .min_w(0.0)
+        .gap(6.0)
+        .center_y()
+        .child(styled_name_text(
+            text(friend.name.clone())
+                .font(font_px(13.0 * sc, 600.0))
+                .truncate(),
+            look,
+            FG,
+        ));
     if let Some(tag) = look.and_then(|l| l.tag.as_ref())
         && !tag.tag.is_empty()
     {
@@ -3110,16 +3171,13 @@ fn right_members_panel(s: &AppState, sc: f32, scale: f32) -> Option<El> {
                         DiscordMemberItem::Member(m) => {
                             let offline = m.status == "offline";
                             let uid = m.id.clone();
-                            let name_color = styled_name_color(
-                                m.look.as_deref(),
-                                lift_role_color(m.color.as_deref(), offline),
-                            );
-                            let mut name_row = row().gap(5.0).center_y().child(
+                            let mut name_row = row().gap(5.0).center_y().child(styled_name_text(
                                 text(m.name.clone())
                                     .font(font_px(13.0 * sc, 500.0))
-                                    .color(name_color)
                                     .truncate(),
-                            );
+                                (!offline).then_some(m.look.as_deref()).flatten(),
+                                lift_role_color(m.color.as_deref(), offline),
+                            ));
                             if m.bot {
                                 name_row =
                                     name_row.child(
@@ -3289,7 +3347,11 @@ fn right_members_panel(s: &AppState, sc: f32, scale: f32) -> Option<El> {
                     .child(
                         col()
                             .gap(2.0)
-                            .child(text(dm.name.clone()).font(type_title()).color(FG))
+                            .child(styled_name_text(
+                                text(dm.name.clone()).font(type_title()),
+                                dm.look.as_ref(),
+                                FG,
+                            ))
                             .child(
                                 text(
                                     dm.username
