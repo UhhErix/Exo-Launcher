@@ -241,17 +241,23 @@ fn nav_row(
         .hit()
         .press_on_down()
         .w_full()
-        .min_h(42.0)
+        .min_h(44.0)
         .px(8.0)
         .py(4.0)
-        .gap(12.0)
+        .gap(10.0)
         .radius(ROW_RADIUS)
         .center_y()
         .hover(hover_fill())
         .motion(SPRING_QUICK)
         .on_press(move |s: &mut AppState| s.music_open_nav(target.clone()))
-        .child(icon)
-        .child(text(label).font(font).color(FG).truncate());
+        .child(el().size(36.0, 36.0).center().child(icon))
+        .child(
+            col()
+                .key(format!("{key}-text"))
+                .grow(1.0)
+                .min_w(0.0)
+                .child(text(label).font(font).color(FG).truncate()),
+        );
     if active {
         r = r.fill(pressed_fill());
     }
@@ -262,7 +268,7 @@ fn library_sidebar(s: &AppState, scale: f32) -> El {
     let svc = s.media.music_service;
     let row_font = scaled_body(s);
     let sub_font = scaled_small(s);
-    let mut nav = col().w_full().gap(8.0).child(nav_row(
+    let mut nav = col().w_full().gap(4.0).child(nav_row(
         "music-nav-home",
         "Home",
         icon_home(16.0, FG),
@@ -362,6 +368,7 @@ fn library_sidebar(s: &AppState, scale: f32) -> El {
     let side_head = row()
         .w_full()
         .mt(12.0)
+        .px(8.0)
         .justify_between()
         .center_y()
         .gap(8.0)
@@ -397,11 +404,16 @@ fn library_sidebar(s: &AppState, scale: f32) -> El {
             let is_artist = card.kind == "artist";
             let is_liked = card.kind == "collection" || card.title == svc.liked_name();
             let selected = active_uri == Some(card.uri.as_str());
-            let art_r = if is_artist { RADIUS_PILL } else { RADIUS_CARD };
+            let art_r = if is_artist {
+                RADIUS_PILL
+            } else {
+                RECENT_ART_RADIUS
+            };
             let uri = card.uri.clone();
             let kind = card.kind.clone();
             let title = card.title.clone();
             let mut text_col = col()
+                .key(format!("music-lib-{i}-text"))
                 .grow(1.0)
                 .min_w(0.0)
                 .child(text(card.title.clone()).font(row_font).color(FG).truncate());
@@ -421,10 +433,10 @@ fn library_sidebar(s: &AppState, scale: f32) -> El {
                 .hit()
                 .press_on_down()
                 .w_full()
-                .min_h(52.0)
+                .min_h(44.0)
                 .px(8.0)
                 .py(4.0)
-                .gap(12.0)
+                .gap(10.0)
                 .radius(ROW_RADIUS)
                 .center_y()
                 .hover(hover_fill())
@@ -435,7 +447,7 @@ fn library_sidebar(s: &AppState, scale: f32) -> El {
                 .child(render_art(
                     s,
                     &card.image,
-                    Some(44.0),
+                    Some(36.0),
                     art_r,
                     is_liked,
                     scale,
@@ -844,20 +856,32 @@ fn main_panel_body(s: &AppState, scale: f32) -> El {
                     );
                 }
             } else {
-                let heading = match &s.media.music_nav {
-                    MusicNav::Songs => "Songs",
-                    MusicNav::Browse => "New",
-                    MusicNav::Radio => "Radio",
-                    MusicNav::Explore => "Explore",
-                    MusicNav::Search => "Search",
-                    MusicNav::Collection { title, .. } => title.as_str(),
-                    MusicNav::Home => "Home",
-                };
-                body = body
-                    .child(text(heading).font(scaled_title(s)).color(FG).mb(12.0))
-                    .child(text("Loading…").font(scaled_body(s)).color(fg_muted()));
+                body = body.child(text("Loading…").font(scaled_body(s)).color(fg_muted()));
             }
             body
+        }
+    }
+}
+
+fn section_title(s: &AppState) -> Option<&str> {
+    match &s.media.music_nav {
+        MusicNav::Home => Some("Home"),
+        MusicNav::Songs => Some("Songs"),
+        MusicNav::Browse => Some("New"),
+        MusicNav::Radio => Some("Radio"),
+        MusicNav::Explore => Some("Explore"),
+        MusicNav::Search => Some("Search"),
+        MusicNav::Collection { title, .. } => {
+            if s.media
+                .music_page_data
+                .as_ref()
+                .and_then(|d| d.header.as_ref())
+                .is_some()
+            {
+                None
+            } else {
+                Some(title.as_str())
+            }
         }
     }
 }
@@ -876,6 +900,7 @@ fn main_panel(s: &AppState, scale: f32) -> El {
         .on_submit(|s: &mut AppState, _| s.music_submit_search());
 
     let search_box = row()
+        .key("music-search-box")
         .w(260.0)
         .h(32.0)
         .px(12.0)
@@ -904,6 +929,15 @@ fn main_panel(s: &AppState, scale: f32) -> El {
                 .center()
                 .on_press(|s: &mut AppState| s.music_go_back())
                 .child(icon_back(16.0, FG)),
+        );
+    }
+    if let Some(title) = section_title(s) {
+        head = head.child(
+            text(title)
+                .key("music-section-title")
+                .font(scaled_title(s))
+                .color(FG)
+                .truncate(),
         );
     }
     head = head.child(el().grow(1.0)).child(search_box);
@@ -1475,8 +1509,6 @@ pub fn mini_player(s: &AppState, scale: f32, slot: crate::state::MiniBarSlot) ->
         || s.palette_open
         || s.key_modal_open
         || s.props_open
-        || s.capture_menu_open
-        || s.library_more_open
         || s.media.open_capture_id.is_some()
     {
         return None;
@@ -1750,5 +1782,60 @@ mod tests {
                 && (shelf_12 - 300.5).abs() <= 1.5,
             "shelf vertical alignment drifted: c0={c0:?} c1={c1:?} c2={c2:?} d01={shelf_01} d12={shelf_12}"
         );
+    }
+
+    #[test]
+    fn music_sidebar_labels_align_and_toolbar_shows_section_title() {
+        let mut state = AppState::default();
+        state.room = Room::Music;
+
+        let mut rt = Runtime::new(state, shell::view, (1920.0, 1080.0), Env::new(true, 1.0));
+        rt.frame(0.0);
+
+        let nav_text = rt.find("music-nav-home-text").expect("nav home text");
+        let lib_text = rt.find("music-lib-0-text").expect("library item 0 text");
+        assert!(
+            (nav_text.0 - lib_text.0).abs() <= 0.5,
+            "sidebar text column jumped: nav={nav_text:?} lib={lib_text:?}"
+        );
+
+        let title = rt.find("music-section-title").expect("section title");
+        let search = rt.find("music-search-box").expect("search box");
+        assert!(
+            title.0 < search.0 && (title.1 - search.1).abs() <= 4.0,
+            "toolbar title not aligned with search: title={title:?} search={search:?}"
+        );
+    }
+
+    #[test]
+    fn mini_player_stays_visible_when_capture_or_library_menu_opens() {
+        for capture in [true, false] {
+            let mut state = AppState::default();
+            state.room = Room::Library;
+            state.mini_bar_slot = crate::state::MiniBarSlot::Inline;
+            state.media.playback = Some(exo_rpc::MusicPlayback {
+                status: "playing".into(),
+                title: "Track".into(),
+                artist: "Artist".into(),
+                ..Default::default()
+            });
+            state.capture_menu_open = capture;
+            state.library_more_open = !capture;
+
+            assert!(mini_player(&state, 1.0, crate::state::MiniBarSlot::Inline).is_some());
+            let budget = shell::BlurBudget::compute(&state, true);
+            assert!(!budget.mini_player);
+            let active_blurs = usize::from(budget.top_bar_search)
+                + usize::from(budget.top_bar_nav)
+                + usize::from(budget.top_bar_tools)
+                + usize::from(budget.mini_player)
+                + usize::from(budget.overlay)
+                + usize::from(budget.toast);
+            assert!(active_blurs <= rune::MAX_BACKDROP_BLURS);
+
+            let mut rt = Runtime::new(state, shell::view, (1920.0, 1080.0), Env::new(true, 1.0));
+            rt.frame(0.0);
+            assert!(rt.find("music-mini-player").is_some());
+        }
     }
 }
