@@ -337,7 +337,7 @@ function Row({ id, title, count, shining, children }: { id: string; title: strin
           <button type="button" className="exo-set-btn" aria-label={`More ${title}`} disabled={edges.end} onClick={() => page(1, 0.9)}><ChevronRight size={14} /></button>
         </span>
       </div>
-      <div ref={track} className="exo-store-track" onScroll={measure}>{children}</div>
+      <div ref={track} className="exo-store-track" data-h-track="" onScroll={measure}>{children}</div>
     </section>
   )
 }

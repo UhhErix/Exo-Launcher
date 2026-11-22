@@ -15,6 +15,7 @@ export type GamepadGlyphs = {
   back: string
   action: string
   search: string
+  view: string
   prevRoom: string
   nextRoom: string
   prevTab: string
@@ -31,12 +32,12 @@ export function detectGamepadKind(id: string): GamepadKind {
 
 export function gamepadLabels(kind: GamepadKind): GamepadGlyphs {
   if (kind === 'playstation') {
-    return { confirm: '✕', back: '○', action: '◻', search: '△', prevRoom: 'L1', nextRoom: 'R1', prevTab: 'L2', nextTab: 'R2', menu: 'Options' }
+    return { confirm: '✕', back: '○', action: '◻', search: '△', view: 'Create', prevRoom: 'L1', nextRoom: 'R1', prevTab: 'L2', nextTab: 'R2', menu: 'Options' }
   }
   if (kind === 'nintendo') {
-    return { confirm: 'A', back: 'B', action: 'X', search: 'Y', prevRoom: 'L', nextRoom: 'R', prevTab: 'ZL', nextTab: 'ZR', menu: '+' }
+    return { confirm: 'A', back: 'B', action: 'X', search: 'Y', view: '-', prevRoom: 'L', nextRoom: 'R', prevTab: 'ZL', nextTab: 'ZR', menu: '+' }
   }
-  return { confirm: 'A', back: 'B', action: 'X', search: 'Y', prevRoom: 'LB', nextRoom: 'RB', prevTab: 'LT', nextTab: 'RT', menu: 'Menu' }
+  return { confirm: 'A', back: 'B', action: 'X', search: 'Y', view: 'View', prevRoom: 'LB', nextRoom: 'RB', prevTab: 'LT', nextTab: 'RT', menu: 'Menu' }
 }
 
 function centerOf(rect: SpatialRect) {
@@ -59,7 +60,7 @@ export function scoreDirectionCandidate(from: SpatialRect, candidate: SpatialRec
   const aligned = horizontal
     ? overlapSpan(from.top, from.bottom, candidate.top, candidate.bottom) > 0
     : overlapSpan(from.left, from.right, candidate.left, candidate.right) > 0
-  if (!aligned && cross > primary * 2.4) return null
+  if (!aligned && cross > primary * 1.8) return null
   const edgeGap = dir === 'right'
     ? Math.max(0, candidate.left - from.right)
     : dir === 'left'
@@ -67,7 +68,8 @@ export function scoreDirectionCandidate(from: SpatialRect, candidate: SpatialRec
       : dir === 'down'
         ? Math.max(0, candidate.top - from.bottom)
         : Math.max(0, from.top - candidate.bottom)
-  return edgeGap * 1.15 + primary * 0.35 + cross * (aligned ? 1.4 : 3.2) - (aligned ? 24 : 0)
+  const crossCost = aligned ? cross * 1.25 - 32 : cross * 5.2 + 120
+  return edgeGap * 1.15 + primary * 0.35 + crossCost
 }
 
 export function pickSpatialTarget<T>(

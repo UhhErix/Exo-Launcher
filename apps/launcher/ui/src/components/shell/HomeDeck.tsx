@@ -313,7 +313,7 @@ export const HomeDeck = memo(function HomeDeck({
                 <ChevronLeft size={16} />
               </button>
             ) : null}
-            <div ref={trackRef} className="exo-deck-track" role="region" aria-label="Games" onScroll={measure}>
+            <div ref={trackRef} className="exo-deck-track" data-h-track="" role="region" aria-label="Games" onScroll={measure}>
               {games.map((item) => (
                 <PosterCard
                   key={item.id}

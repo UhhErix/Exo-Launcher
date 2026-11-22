@@ -16,25 +16,9 @@ function hintsFor(kind: GamepadKind, view: View, overlayOpen: boolean): Hint[] {
     return [
       { keys: g.confirm, label: 'Select' },
       { keys: g.action, label: 'Play' },
-      { keys: g.back, label: 'Library' },
-      { keys: `${g.prevRoom}/${g.nextRoom}`, label: 'Rooms' },
-    ]
-  }
-  if (view === 'library') {
-    return [
-      { keys: `${g.prevRoom}/${g.nextRoom}`, label: 'Rooms' },
-      { keys: `${g.prevTab}/${g.nextTab}`, label: 'Filter' },
-      { keys: g.confirm, label: 'Open' },
-      { keys: g.action, label: 'Play' },
-      { keys: g.search, label: 'Search' },
-    ]
-  }
-  if (view === 'music') {
-    return [
-      { keys: `${g.prevRoom}/${g.nextRoom}`, label: 'Rooms' },
-      { keys: g.confirm, label: 'Select' },
-      { keys: g.action, label: 'Play / Pause' },
       { keys: g.back, label: 'Back' },
+      { keys: g.view, label: 'Search' },
+      { keys: g.menu, label: 'Settings' },
     ]
   }
   if (view === 'settings') {
@@ -42,22 +26,15 @@ function hintsFor(kind: GamepadKind, view: View, overlayOpen: boolean): Hint[] {
       { keys: `${g.prevTab}/${g.nextTab}`, label: 'Sections' },
       { keys: g.confirm, label: 'Select' },
       { keys: g.back, label: 'Close' },
-    ]
-  }
-  if (view === 'devices') {
-    return [
-      { keys: `${g.prevRoom}/${g.nextRoom}`, label: 'Rooms' },
-      { keys: g.confirm, label: 'Open' },
-      { keys: g.back, label: 'Back' },
-      { keys: g.search, label: 'Search' },
+      { keys: g.view, label: 'Search' },
     ]
   }
   return [
     { keys: `${g.prevRoom}/${g.nextRoom}`, label: 'Rooms' },
-    { keys: `${g.prevTab}/${g.nextTab}`, label: 'Tabs' },
-    { keys: g.confirm, label: 'Select' },
+    { keys: g.confirm, label: view === 'devices' || view === 'library' ? 'Open' : 'Select' },
     { keys: g.back, label: 'Back' },
-    { keys: g.search, label: 'Search' },
+    { keys: g.view, label: 'Search' },
+    { keys: g.menu, label: 'Settings' },
   ]
 }
 

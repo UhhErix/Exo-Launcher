@@ -186,12 +186,13 @@
   line-height: 1;
 }
 
-:root[data-exo-gamepad] :is(button, a, input, select, textarea, [tabindex]):focus {
+:root[data-exo-gamepad] :is(button, a, input, select, textarea, [role="tab"], [tabindex]:not([tabindex="-1"])):is(:focus, :focus-visible) {
   outline: 2px solid var(--color-fg);
-  outline-offset: 2px;
+  outline-offset: 3px;
+  box-shadow: 0 0 0 5px rgb(var(--exo-ink-rgb) / 0.16);
 }
 
-:root[data-exo-gamepad] .exo-deck-card-btn:focus {
+:root[data-exo-gamepad] .exo-deck-card-btn:is(:focus, :focus-visible) {
   outline: 2px solid var(--color-fg);
   outline-offset: 3px;
 }
