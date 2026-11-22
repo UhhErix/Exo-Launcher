@@ -379,8 +379,14 @@
   --color-faint: var(--exo-line);
 }
 
-:root .exo-dc .exo-dc-pane .exo-dc-item[aria-current="true"] :is(svg, .exo-dc-item-name, .exo-dc-item-sub, .exo-dc-item-time) {
+:root .exo-dc .exo-dc-pane .exo-dc-item[aria-current="true"] :is(svg, .exo-dc-item-name, .exo-dc-item-sub, .exo-dc-item-time, .exo-dc-voice-limit) {
   color: inherit;
+}
+
+:root .exo-dc .exo-dc-pane .exo-dc-item[aria-current="true"] .exo-dc-avatar-wrap > .exo-dc-initials {
+  background: var(--color-bg);
+  color: var(--color-fg);
+  box-shadow: none;
 }
 
 :root .exo-dc .exo-dc-pane .exo-dc-item[aria-current="true"] .exo-dc-badge {
@@ -843,6 +849,11 @@ html[data-exo-motion="reduce"] .exo-dc-band-place {
     forced-color-adjust: none;
     background: Highlight;
     color: HighlightText;
+  }
+
+  :root .exo-dc .exo-dc-pane .exo-dc-item[aria-current="true"] .exo-dc-avatar-wrap > .exo-dc-initials {
+    background: Canvas;
+    color: CanvasText;
   }
 }
 
