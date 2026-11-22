@@ -502,7 +502,7 @@ public sealed partial class MainWindow : Window
         CloseMusicWeb();
         var closing = new List<Task>();
         // The shader engine stops its queue so the driver writes its cache, then exits.
-        if (_shadersAddon is { } shadersAddon) closing.Add(Task.Run(shadersAddon.Dispose));
+        closing.Add(Task.Run(App.Services.ShadersHost.Dispose));
         // Exo Capture closes a recording in progress, then exits.
         if (_captureAddon is { } captureAddon) closing.Add(Task.Run(captureAddon.Dispose));
         try { Task.WaitAll(closing.ToArray(), HostCloseGrace + TimeSpan.FromSeconds(1)); } catch { }

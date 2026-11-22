@@ -29,6 +29,8 @@ public sealed partial class WebHostBridge
     private int _backgroundMonitorsStarted;
     private Action<UpdateFlow.State>? _updaterStateChanged;
     private Action? _libraryAntiCheatWarm;
+    private Action<string, System.Text.Json.Nodes.JsonNode?>? _shadersHostEvent;
+    internal Action? RequestHostShutdown { get; set; }
 
     private CancellationTokenSource? _keyWatchCts;
     private int _libraryPushScheduled;
@@ -74,6 +76,8 @@ public sealed partial class WebHostBridge
         _services.Launcher.GameLaunched += OnGameLaunched;
         _services.Launcher.GameRunStateChanged += OnGameRunStateChanged;
         _services.Shaders.Changed += OnShadersChanged;
+        _shadersHostEvent = PostShadersEvent;
+        _services.ShadersHost.Event += _shadersHostEvent;
         _services.ShaderPrepare.Changed += OnShadersChanged;
         ShaderRebuildWatch.Changed += OnShadersRebuildChanged;
         _services.Store.Changed += OnStoreChanged;
@@ -326,6 +330,8 @@ public sealed partial class WebHostBridge
         _services.Launcher.GameLaunched -= OnGameLaunched;
         _services.Launcher.GameRunStateChanged -= OnGameRunStateChanged;
         _services.Shaders.Changed -= OnShadersChanged;
+        if (_shadersHostEvent is { } shadersEvt) _services.ShadersHost.Event -= shadersEvt;
+        _shadersHostEvent = null;
         UnwireCompress();
         _services.ShaderPrepare.Changed -= OnShadersChanged;
         ShaderRebuildWatch.Changed -= OnShadersRebuildChanged;
@@ -726,13 +732,10 @@ public sealed partial class WebHostBridge
                     ? await signInWindow.MusicSignInAsync(ReadString(paramsEl, hasParams, "service")).ConfigureAwait(true)
                     : new { ok = false, message = "The app window is unavailable." },
                 "music.warm" => App.MainAppWindow?.WarmMusic() ?? new { ok = false },
-                "shaders.addon" => App.MainAppWindow is { } shadersStatusWindow
-                    ? await Task.Run(shadersStatusWindow.ShadersAddonStatus).ConfigureAwait(true) : new { ok = false, present = false },
-                "shaders.call" => App.MainAppWindow is { } shadersWindow
-                    ? await shadersWindow.ShadersAddonCallAsync(ReadString(paramsEl, hasParams, "method"),
+                "shaders.addon" => await Task.Run(_services.ShadersHost.Status).ConfigureAwait(true),
+                "shaders.call" => await _services.ShadersHost.CallAsync(ReadString(paramsEl, hasParams, "method"),
                         hasParams && paramsEl.TryGetProperty("params", out var shadersParams) ? System.Text.Json.Nodes.JsonNode.Parse(shadersParams.GetRawText()) : null,
-                        requestToken).ConfigureAwait(true)
-                    : new { ok = false, message = "The app window is unavailable." },
+                        requestToken).ConfigureAwait(true),
                 "capture.status" => App.MainAppWindow?.CaptureStatus() ?? new { ok = false },
                 "capture.settings" => App.MainAppWindow is { } captureWindow
                     ? await captureWindow.CaptureSetSettingsAsync(paramsEl).ConfigureAwait(true) : new { ok = false },
@@ -2533,7 +2536,7 @@ public sealed partial class WebHostBridge
             discordQuietWhilePlaying: discordQuietWhilePlaying,
             whatsNewSeen: whatsNewSeen,
             frameGenEverywhere: frameGenEverywhere);
-        if (hdrForGames is not null || hdrSdrGamma is not null) App.MainAppWindow?.SyncHdrSoon();
+        if (hdrForGames is not null || hdrSdrGamma is not null) _services.HdrHost.SyncSoon();
         if (frameGenEverywhere is not null) DlssSwapService.FrameGenEverywhereSoon();
         if (showLibraryTools is { } tools && tools != previousShowLibraryTools)
             RefreshLibraryAfterToolsToggle();

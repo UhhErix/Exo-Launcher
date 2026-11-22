@@ -1,4 +1,4 @@
-use crate::{game_page, key_modal, library, palette, store, tour};
+use crate::{game_page, key_modal, library, palette, pc, settings, store, tour};
 use crate::state::{AppState, HostStatus, Room};
 use exo_kit::{
     BG, FG, GAP, GLASS_CONTROL_SIGMA, PRESS_SCALE, PRIMARY_FG, RADIUS_PANEL, RADIUS_PILL, bad,
@@ -154,6 +154,8 @@ pub fn view(s: &AppState, cx: &mut Cx<AppState>) -> El {
             }
         }
         Room::Store => store::view(s, scale),
+        Room::Pc => pc::view(s),
+        Room::Settings => settings::view(s),
         other => placeholder_room(other),
     };
 

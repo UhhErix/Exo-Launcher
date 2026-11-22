@@ -94,10 +94,13 @@ internal sealed partial class RuneHostSession
         var dispatcherController = DispatcherQueueController.CreateOnDedicatedThread();
         using var transport = new NamedPipeHostTransport(options.PipeName);
         var bridge = new WebHostBridge(services, dispatcherController.DispatcherQueue);
+        using var stop = new ManualResetEventSlim(false);
+        bridge.RequestHostShutdown = () => stop.Set();
         bridge.Attach(transport);
+        services.HdrHost.Start();
+        bridge.StartBackgroundMonitors();
         AppLog.Info($"RuneHostSession: listening on {transport.FullPipePath} (spawnUi={options.SpawnUi})");
 
-        using var stop = new ManualResetEventSlim(false);
         ConsoleCancelEventHandler onCancel = (_, e) =>
         {
             e.Cancel = true;

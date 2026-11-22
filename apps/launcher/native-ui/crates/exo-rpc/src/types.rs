@@ -462,6 +462,36 @@ pub struct LauncherSettings {
     #[serde(default)]
     pub reduce_motion: bool,
     #[serde(default)]
+    pub start_with_windows: bool,
+    #[serde(default)]
+    pub start_maximized: bool,
+    #[serde(default)]
+    pub show_library_tools: bool,
+    #[serde(default)]
+    pub pause_downloads_while_playing: bool,
+    #[serde(default)]
+    pub keep_awake_downloads: bool,
+    #[serde(default)]
+    pub auto_update_games: bool,
+    #[serde(default)]
+    pub store_clients_quiet: bool,
+    #[serde(default)]
+    pub achievement_banners: bool,
+    #[serde(default)]
+    pub fps_counter: bool,
+    #[serde(default)]
+    pub fps_counter_position: Option<String>,
+    #[serde(default)]
+    pub hdr_for_games: bool,
+    #[serde(default)]
+    pub auto_update_upscalers: bool,
+    #[serde(default)]
+    pub auto_update_chipset: bool,
+    #[serde(default)]
+    pub text_size: Option<String>,
+    #[serde(default)]
+    pub riot_id: Option<String>,
+    #[serde(default)]
     pub onboarding_complete: Option<bool>,
     #[serde(default)]
     pub ui_prefs: HashMap<String, Value>,
@@ -563,6 +593,9 @@ pub struct ActionResult {
 pub enum HostEvent {
     LibraryUpdated(LibraryPayload),
     InstallProgress(InstallProgress),
+    UpdateProgress(crate::pc_types::UpdateProgress),
+    DevicesChanged,
+    AppsChanged,
     Raw { event: String, data: Value },
     Disconnected(String),
 }

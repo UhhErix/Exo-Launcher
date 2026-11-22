@@ -156,11 +156,10 @@ public sealed partial class WebHostBridge
         }
         var off = await Task.Run(() => AntiCheatBackOn(_dlss, game), ct).ConfigureAwait(true);
         if (!off.Ok) throw new UserFacingException(off.Message);
-        if (App.MainAppWindow is not { } window) throw new UserFacingException("Exo couldn't check its shader recorder in this game. Try again.");
         using (var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct))
         {
             timeout.CancelAfter(TimeSpan.FromSeconds(60));
-            if (await window.ShadersRecorderOffAsync(game.Id, timeout.Token).ConfigureAwait(true) is { } recorder) throw new UserFacingException(recorder);
+            if (await _services.ShadersHost.RecorderOffAsync(game.Id, timeout.Token).ConfigureAwait(true) is { } recorder) throw new UserFacingException(recorder);
         }
         _services.Settings.SetSteamWithoutAntiCheat(game.Id, false);
         AppLog.Info($"Anti-cheat: {game.Title} starts with its anti-cheat again{(off.Removed ? "; Exo's frame generation came out" : "")}.");
