@@ -1,6 +1,6 @@
 use crate::media_state::CaptureFilter;
 use crate::pc_state::format_bytes;
-use crate::state::AppState;
+use crate::state::{AppState, InputMode};
 use exo_kit::{
     BG, BadgeTone, FG, PRESS_SCALE, PRIMARY_FG, RADIUS_CARD, RADIUS_PANEL, RADIUS_PILL,
     RADIUS_SHEET, RADIUS_SMALL, SPRING_MOVE, SPRING_QUICK, bad, fg_faint, fg_muted, filter_pill,
@@ -12,7 +12,10 @@ use exo_kit::{
 };
 use exo_rpc::{CaptureItem, format_duration_ms};
 use rune::color::oklch;
-use rune::{Color, El, ScrollSpec, Shape, SurfaceFit, TextStyle, canvas, col, el, row, text};
+use rune::{
+    Align, Color, El, ScrollSpec, Shape, Side, Spring, SurfaceFit, TextStyle, canvas, col, el, row,
+    text,
+};
 
 fn clip_hue(name: &str) -> f32 {
     let mut h: u32 = 2166136261;
@@ -89,7 +92,14 @@ fn icon_notes(size: f32, color: Color) -> El {
     canvas(shape).size(size, size)
 }
 
-fn popover_row(key: &str, label: &str, icon: El, hint: Option<String>, disabled: bool) -> El {
+fn popover_row(
+    key: &str,
+    label: &str,
+    icon: El,
+    hint: Option<String>,
+    disabled: bool,
+    gamepad_focus: bool,
+) -> El {
     let mut r = row()
         .key(key)
         .role("menuitem")
@@ -101,6 +111,7 @@ fn popover_row(key: &str, label: &str, icon: El, hint: Option<String>, disabled:
         .gap(10.0)
         .radius(RADIUS_SMALL)
         .center_y()
+        .hover_motion(Spring::NONE, SPRING_QUICK)
         .motion(SPRING_QUICK);
     if !disabled {
         r = r
@@ -108,6 +119,9 @@ fn popover_row(key: &str, label: &str, icon: El, hint: Option<String>, disabled:
             .press_on_down()
             .hover(hover_fill())
             .press(pressed_fill());
+        if gamepad_focus {
+            r = r.focus_ring(2.0, 3.0, FG);
+        }
     }
     r = r.child(icon).child(
         text(label)
@@ -131,6 +145,7 @@ pub fn popover(s: &AppState) -> El {
     let present = live.map_or(status.is_none_or(|st| st.present), |l| l.present);
     let buffering = live.is_some_and(|l| l.buffering || l.replay);
     let recording = live.is_some_and(|l| l.recording);
+    let gamepad_focus = s.input_mode == InputMode::Gamepad;
 
     let replay_hint = cfg
         .map(|c| keys_label(&c.save_replay_keys))
@@ -145,10 +160,16 @@ pub fn popover(s: &AppState) -> El {
         .filter(|k| !k.is_empty())
         .or_else(|| Some("Ctrl + Alt + F8".into()));
 
+    let anchor_key = if recording {
+        "top-capture-rec"
+    } else {
+        "top-capture-btn"
+    };
+
     let mut menu = glass_panel("capture-popover-menu", 240.0)
         .role("menu")
         .label("Capture")
-        .pin(None, Some(48.0), Some(168.0), None)
+        .anchored(anchor_key, Side::Bottom, Align::End, 16.0)
         .padding(8.0)
         .gap(2.0)
         .radius(RADIUS_CARD)
@@ -161,6 +182,7 @@ pub fn popover(s: &AppState) -> El {
             icon_replay(16.0, if buffering { FG } else { fg_faint() }),
             replay_hint,
             !buffering,
+            gamepad_focus,
         );
         let replay_row = if buffering {
             replay_row.on_press(|s: &mut AppState| {
@@ -170,6 +192,7 @@ pub fn popover(s: &AppState) -> El {
         } else {
             replay_row
         };
+        let divider = el().w_full().h(1.0).my(4.0).fill(hairline());
         menu = menu
             .child(replay_row)
             .child(
@@ -183,6 +206,7 @@ pub fn popover(s: &AppState) -> El {
                     icon_record_dot(16.0, if recording { bad() } else { FG }),
                     record_hint,
                     false,
+                    gamepad_focus,
                 )
                 .on_press(|s: &mut AppState| {
                     s.capture_menu_open = false;
@@ -196,12 +220,14 @@ pub fn popover(s: &AppState) -> El {
                     icon_scissors(16.0, FG),
                     snip_hint,
                     false,
+                    gamepad_focus,
                 )
                 .on_press(|s: &mut AppState| {
                     s.capture_menu_open = false;
                     s.capture_act("snip");
                 }),
             )
+            .child(divider)
             .child(
                 popover_row(
                     "cap-menu-note",
@@ -209,6 +235,7 @@ pub fn popover(s: &AppState) -> El {
                     icon_plus(16.0, FG),
                     None,
                     false,
+                    gamepad_focus,
                 )
                 .on_press(|s: &mut AppState| {
                     s.capture_menu_open = false;
@@ -222,6 +249,7 @@ pub fn popover(s: &AppState) -> El {
                     icon_gallery(16.0, FG),
                     None,
                     false,
+                    gamepad_focus,
                 )
                 .on_press(|s: &mut AppState| {
                     s.capture_menu_open = false;
@@ -237,6 +265,7 @@ pub fn popover(s: &AppState) -> El {
                     icon_plus(16.0, FG),
                     None,
                     false,
+                    gamepad_focus,
                 )
                 .on_press(|s: &mut AppState| {
                     s.capture_menu_open = false;
@@ -244,12 +273,18 @@ pub fn popover(s: &AppState) -> El {
                 }),
             )
             .child(
-                popover_row("cap-menu-notes", "Notes", icon_notes(16.0, FG), None, false).on_press(
-                    |s: &mut AppState| {
-                        s.capture_menu_open = false;
-                        s.open_captures(None);
-                    },
-                ),
+                popover_row(
+                    "cap-menu-notes",
+                    "Notes",
+                    icon_notes(16.0, FG),
+                    None,
+                    false,
+                    gamepad_focus,
+                )
+                .on_press(|s: &mut AppState| {
+                    s.capture_menu_open = false;
+                    s.open_captures(None);
+                }),
             );
     }
 
