@@ -90,6 +90,11 @@ public sealed partial class WebHostBridge
                 try { await Task.Delay(350).ConfigureAwait(false); } catch { /* */ }
                 _queue.Enqueue(() =>
                 {
+                    if (RequestHostShutdown is { } shutdown)
+                    {
+                        try { shutdown(); } catch { }
+                        return;
+                    }
                     try { App.MainAppWindow?.CloseWindow(); } catch { /* installer will time out safely */ }
                     // Exo did not close: the installer stops on its own (it can't swap a running app), and the update failed.
                     try { Microsoft.UI.Xaml.Application.Current?.Exit(); } catch { _services.Updater.Move(UpdateFlow.Step.ApplyFailed); }

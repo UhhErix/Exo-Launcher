@@ -20,6 +20,10 @@ public sealed class AppServices
     public GogOwnedLibraryService GogOwnedLibrary { get; } = new();
     /// <summary>The game sheet's Shaders line, read from the Exo Shaders engine.</summary>
     internal ScsKillerStatus Shaders { get; } = new();
+    internal ShadersHostService ShadersHost => _shadersHost ??= new ShadersHostService(this);
+    private ShadersHostService? _shadersHost;
+    internal HdrHostService HdrHost => _hdrHost ??= new HdrHostService(this, _lifetime.Token);
+    private HdrHostService? _hdrHost;
 
     /// <summary>The Shaders page's Prepare, for Unreal games.</summary>
     internal ShaderPrepare ShaderPrepare => _shaderPrepare ??= new ShaderPrepare(() => Launcher);
@@ -232,9 +236,7 @@ public sealed class AppServices
         // Properties › Anti-cheat: a Steam game the player starts from Steam's entry without its anti-cheat.
         AntiCheatCheck.ChoseWithoutAntiCheat = game => Settings.SteamWithoutAntiCheat(game.Id);
         // Its shader recorder goes in only for a session Exo starts, through Exo Shaders' engine (DlssSwapService.SessionMods.cs).
-        DlssSwapService.RecorderSwitch = (id, on, ct) => App.MainAppWindow is { } window
-            ? window.ShadersRecorderSetAsync(id, on, ct)
-            : Task.FromResult<string?>("Exo's window isn't open yet.");
+        DlssSwapService.RecorderSwitch = (id, on, ct) => ShadersHost.RecorderSetAsync(id, on, ct);
         // Frame generation Exo put into a game: checked as each game starts and ends, and kept on the mod's newest release.
         DlssSwapService.WatchFrameGen(Launcher, Settings, Library);
         // Open Exo when Windows starts: the Run value follows the switch (an update or a moved install puts its path right).
@@ -337,6 +339,8 @@ public sealed class AppServices
         Shaders.Dispose();
         if (_store.IsValueCreated) _store.Value.Dispose();
         if (_hid.IsValueCreated) _hid.Value.Dispose();
+        _hdrHost?.Stop();
+        _shadersHost?.Dispose();
         _downloads?.Dispose();
         _junk?.Dispose();
         _compressor?.Dispose();

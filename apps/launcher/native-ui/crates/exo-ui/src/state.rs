@@ -1,4 +1,5 @@
 use crate::gamepad::GamepadAction;
+use crate::pc_state::SettingsAndPcState;
 use crate::tour;
 use exo_rpc::{
     ActionResult, ArtBase, Game, GameExtras, GameGetReply, GameProperties, GamePropertySetReply,
@@ -210,6 +211,7 @@ pub struct AppState {
     pub tour_seen: bool,
     pub gamepad_connected: bool,
     pub settings: LauncherSettings,
+    pub pc: SettingsAndPcState,
     pub art_base: ArtBase,
     pub notice: Option<String>,
     pub refreshing: bool,
@@ -278,7 +280,20 @@ impl AppState {
             tour_step: None,
             tour_seen: true,
             gamepad_connected: false,
-            settings: LauncherSettings::default(),
+            settings: LauncherSettings {
+                start_with_windows: true,
+                show_library_tools: true,
+                pause_downloads_while_playing: true,
+                keep_awake_downloads: true,
+                store_clients_quiet: true,
+                achievement_banners: true,
+                fps_counter: true,
+                fps_counter_position: Some("top-right".into()),
+                hdr_for_games: true,
+                auto_update_upscalers: true,
+                ..LauncherSettings::default()
+            },
+            pc: SettingsAndPcState::demo(),
             art_base: ArtBase::default(),
             notice: None,
             refreshing: false,
@@ -329,6 +344,7 @@ impl AppState {
             tour_seen: true,
             gamepad_connected: false,
             settings: LauncherSettings::default(),
+            pc: SettingsAndPcState::empty_for_host(),
             art_base: ArtBase::default(),
             notice: Some("Connecting to Exo host…".into()),
             refreshing: true,
@@ -390,6 +406,10 @@ impl AppState {
         self.uninstall_confirm = false;
         if room == Room::Store && self.store_home.is_none() && !self.store_loading {
             self.load_store_home(false);
+        } else if room == Room::Settings {
+            self.load_settings_room();
+        } else if room == Room::Pc {
+            self.load_pc_tab(self.pc.pc_tab);
         }
     }
 

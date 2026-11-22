@@ -1,8 +1,8 @@
 use crate::tokens::{
     BG, FG, GLASS_CONTROL_SIGMA, GLASS_PANEL_SIGMA, PRESS_SCALE, PRIMARY_FG, RADIUS_CARD,
     RADIUS_PANEL, RADIUS_PILL, SPRING_QUICK, TRANSPARENT, bad, fg_muted, glass_control_fill,
-    glass_panel_fill, glass_rim, good, hover_fill, pressed_fill, subtle_fill, type_control,
-    type_section, type_small,
+    glass_panel_fill, glass_rim, good, hairline, hover_fill, pressed_fill, subtle_fill,
+    type_control, type_section, type_small, warn,
 };
 use rune::{Color, El, col, el, row, text};
 
@@ -204,5 +204,81 @@ pub fn progress_bar(width: f32, fraction: f32) -> El {
         .radius(2.0)
         .fill(Color::WHITE.alpha(0.16))
         .child(el().w(fill_w).h(4.0).radius(2.0).fill(FG))
+}
+
+#[derive(Clone, Copy)]
+pub enum BadgeTone {
+    Good,
+    Warn,
+    Bad,
+    Neutral,
+}
+
+pub fn status_badge(label: String, tone: BadgeTone) -> El {
+    let (bg, fg) = match tone {
+        BadgeTone::Good => (good().alpha(0.18), good()),
+        BadgeTone::Warn => (warn().alpha(0.18), warn()),
+        BadgeTone::Bad => (bad().alpha(0.18), bad()),
+        BadgeTone::Neutral => (subtle_fill(), fg_muted()),
+    };
+    el().h(22.0)
+        .px(9.0)
+        .radius(RADIUS_PILL)
+        .center()
+        .fill(bg)
+        .child(text(label).font(type_small()).color(fg))
+}
+
+pub fn section_card(title: &'static str, subtitle: Option<String>) -> El {
+    let mut header = col().w_full().gap(2.0).child(text(title).font(type_section()).color(FG));
+    if let Some(sub) = subtitle {
+        header = header.child(text(sub).font(type_small()).color(fg_muted()).w_full().wrap());
+    }
+    col()
+        .w_full()
+        .px(18.0)
+        .py(16.0)
+        .gap(12.0)
+        .radius(RADIUS_PANEL)
+        .fill(subtle_fill())
+        .border(1.0, hairline())
+        .child(header)
+}
+
+pub fn setting_row(title: &'static str, description: &'static str, control: El) -> El {
+    row()
+        .w_full()
+        .py(10.0)
+        .gap(16.0)
+        .justify_between()
+        .center_y()
+        .child(
+            col()
+                .grow(1.0)
+                .min_w(0.0)
+                .gap(2.0)
+                .child(text(title).font(type_control()).color(FG))
+                .child(
+                    text(description)
+                        .font(type_small())
+                        .color(fg_muted())
+                        .w_full()
+                        .wrap(),
+                ),
+        )
+        .child(control)
+}
+
+pub fn segmented_bar(segments: &[(f32, Color)]) -> El {
+    row()
+        .w_full()
+        .h(8.0)
+        .radius(4.0)
+        .clip_rounded(4.0)
+        .fill(Color::WHITE.alpha(0.10))
+        .gap(1.5)
+        .children(segments.iter().filter(|(f, _)| *f > 0.004).map(|(frac, color)| {
+            el().grow(*frac).h(8.0).fill(*color)
+        }))
 }
 

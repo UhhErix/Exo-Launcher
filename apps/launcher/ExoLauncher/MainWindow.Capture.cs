@@ -141,6 +141,7 @@ public sealed partial class MainWindow
     // ------------------------------------------------------------------ add-on
 
     private readonly SemaphoreSlim _captureSyncGate = new(1, 1);
+    private readonly Lock _addonGate = new();
 
     private Services.CaptureAddon? CaptureAddon
     {

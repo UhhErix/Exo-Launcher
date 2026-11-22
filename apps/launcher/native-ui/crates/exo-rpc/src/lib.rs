@@ -1,3 +1,4 @@
+pub mod pc_types;
 pub mod pipe;
 pub mod remote_art;
 pub mod types;
@@ -11,6 +12,16 @@ use std::io;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, mpsc};
 use std::time::Duration;
+pub use pc_types::{
+    AppsListReply, AudioEndpoint, AudioReadReply, AudioVoiceInfo, AutopilotLive,
+    AutopilotMemoryIntegrity, AutopilotReport, AutopilotState, DevicesListReply, DriveFix,
+    DriveGameEntry, DriveHealth, DriveInfo, DriveLink, DriveSpaceBreakdown, DriveTemp,
+    DriveVerdict, DriveVolume, DrivesReply, ExoAiFans, ExoAiGaming, ExoAiState, HdrState,
+    InstalledAppItem, KeyboardBackupSummary, KeyboardBackupsReply, KeyboardProfileSlot,
+    KeyboardReadReply, LatencyReport, LatencySample, PeripheralCard, ShadersAddonStatus,
+    StartupItem, StartupListReply, StartupRemovedItem, SystemAbout, SystemTuningState, TuningItem,
+    UpdateCheckReply, UpdateProgress,
+};
 pub use types::{
     ActionResult, ArtBase, ExoAccountState, Game, GameExtras, GameGetReply, GameProperties,
     GamePropertySetReply, HostContract, HostEvent, InstallProgress, KeyPreview, LauncherSettings,
@@ -21,8 +32,34 @@ pub use types::{
 pub const PROTOCOL_VERSION: u32 = 1;
 const MAX_INBOUND_BYTES: usize = 32 * 1024 * 1024;
 
+pub const METHOD_APP_CHECK_UPDATE: &str = "app.checkUpdate";
+pub const METHOD_APP_INSTALL_UPDATE: &str = "app.installUpdate";
+pub const METHOD_APP_OPEN_LOGS: &str = "app.openLogs";
+pub const METHOD_APP_REPAIR_CACHE: &str = "app.repairCache";
+pub const METHOD_APPS_LIST: &str = "apps.list";
+pub const METHOD_APPS_TIDY: &str = "apps.tidy";
+pub const METHOD_APPS_UNINSTALL: &str = "apps.uninstall";
 pub const METHOD_ART_BASE: &str = "art.base";
+pub const METHOD_AUDIO_READ: &str = "audio.read";
+pub const METHOD_AUDIO_SET_MUTE: &str = "audio.setMute";
+pub const METHOD_AUDIO_SET_VOLUME: &str = "audio.setVolume";
+pub const METHOD_AUTOPILOT_STATE: &str = "autopilot.state";
+pub const METHOD_DEVICES_LIST: &str = "devices.list";
+pub const METHOD_EXO_ACCOUNT_SIGN_OUT: &str = "exoAccount.signOut";
 pub const METHOD_EXO_ACCOUNT_STATE: &str = "exoAccount.state";
+pub const METHOD_EXO_ACCOUNT_SYNC: &str = "exoAccount.sync";
+pub const METHOD_EXO_AI_SET: &str = "exoAi.set";
+pub const METHOD_EXO_AI_STATE: &str = "exoAi.state";
+pub const METHOD_HDR_STATE: &str = "hdr.state";
+pub const METHOD_JUNK_CLEAN: &str = "junk.clean";
+pub const METHOD_JUNK_SCAN: &str = "junk.scan";
+pub const METHOD_KEYBOARD_BACKUP: &str = "keyboard.backup";
+pub const METHOD_KEYBOARD_BACKUPS: &str = "keyboard.backups";
+pub const METHOD_KEYBOARD_OPEN_APP: &str = "keyboard.openApp";
+pub const METHOD_KEYBOARD_PROFILE: &str = "keyboard.profile";
+pub const METHOD_KEYBOARD_READ: &str = "keyboard.read";
+pub const METHOD_KEYBOARD_RESTORE: &str = "keyboard.restore";
+pub const METHOD_KEYBOARD_SETTINGS: &str = "keyboard.settings";
 pub const METHOD_LIBRARY_GET: &str = "library.get";
 pub const METHOD_LIBRARY_REFRESH: &str = "library.refresh";
 pub const METHOD_GAME_GET: &str = "game.get";
@@ -40,18 +77,54 @@ pub const METHOD_GAME_PROPERTIES: &str = "game.properties";
 pub const METHOD_GAME_PROPERTIES_SET: &str = "game.properties.set";
 pub const METHOD_KEYS_PREVIEW: &str = "keys.preview";
 pub const METHOD_KEYS_ACTIVATE: &str = "keys.activate";
+pub const METHOD_PLAYTIME_RIOT_REFRESH: &str = "playtime.riotRefresh";
 pub const METHOD_SETTINGS_GET: &str = "settings.get";
 pub const METHOD_SETTINGS_SET: &str = "settings.set";
+pub const METHOD_SHADERS_ADDON: &str = "shaders.addon";
+pub const METHOD_SHADERS_CALL: &str = "shaders.call";
+pub const METHOD_STARTUP_CLEAN: &str = "startup.clean";
+pub const METHOD_STARTUP_LIST: &str = "startup.list";
+pub const METHOD_STARTUP_REMOVE: &str = "startup.remove";
+pub const METHOD_STARTUP_RESTORE: &str = "startup.restore";
 pub const METHOD_STORE_HOME: &str = "store.home";
 pub const METHOD_STORE_SEARCH: &str = "store.search";
 pub const METHOD_STORE_GAME: &str = "store.game";
 pub const METHOD_STORE_GAME_OFFERS: &str = "store.gameOffers";
 pub const METHOD_STORE_OPEN: &str = "store.open";
 pub const METHOD_STORE_WISHLIST: &str = "store.wishlist";
+pub const METHOD_SYSTEM_ABOUT: &str = "system.about";
+pub const METHOD_SYSTEM_DRIVES: &str = "system.drives";
+pub const METHOD_SYSTEM_TUNING: &str = "system.tuning";
 
 pub const USED_METHODS: &[&str] = &[
+    METHOD_APP_CHECK_UPDATE,
+    METHOD_APP_INSTALL_UPDATE,
+    METHOD_APP_OPEN_LOGS,
+    METHOD_APP_REPAIR_CACHE,
+    METHOD_APPS_LIST,
+    METHOD_APPS_TIDY,
+    METHOD_APPS_UNINSTALL,
     METHOD_ART_BASE,
+    METHOD_AUDIO_READ,
+    METHOD_AUDIO_SET_MUTE,
+    METHOD_AUDIO_SET_VOLUME,
+    METHOD_AUTOPILOT_STATE,
+    METHOD_DEVICES_LIST,
+    METHOD_EXO_ACCOUNT_SIGN_OUT,
     METHOD_EXO_ACCOUNT_STATE,
+    METHOD_EXO_ACCOUNT_SYNC,
+    METHOD_EXO_AI_SET,
+    METHOD_EXO_AI_STATE,
+    METHOD_HDR_STATE,
+    METHOD_JUNK_CLEAN,
+    METHOD_JUNK_SCAN,
+    METHOD_KEYBOARD_BACKUP,
+    METHOD_KEYBOARD_BACKUPS,
+    METHOD_KEYBOARD_OPEN_APP,
+    METHOD_KEYBOARD_PROFILE,
+    METHOD_KEYBOARD_READ,
+    METHOD_KEYBOARD_RESTORE,
+    METHOD_KEYBOARD_SETTINGS,
     METHOD_LIBRARY_GET,
     METHOD_LIBRARY_REFRESH,
     METHOD_GAME_GET,
@@ -69,14 +142,24 @@ pub const USED_METHODS: &[&str] = &[
     METHOD_GAME_PROPERTIES_SET,
     METHOD_KEYS_PREVIEW,
     METHOD_KEYS_ACTIVATE,
+    METHOD_PLAYTIME_RIOT_REFRESH,
     METHOD_SETTINGS_GET,
     METHOD_SETTINGS_SET,
+    METHOD_SHADERS_ADDON,
+    METHOD_SHADERS_CALL,
+    METHOD_STARTUP_CLEAN,
+    METHOD_STARTUP_LIST,
+    METHOD_STARTUP_REMOVE,
+    METHOD_STARTUP_RESTORE,
     METHOD_STORE_HOME,
     METHOD_STORE_SEARCH,
     METHOD_STORE_GAME,
     METHOD_STORE_GAME_OFFERS,
     METHOD_STORE_OPEN,
     METHOD_STORE_WISHLIST,
+    METHOD_SYSTEM_ABOUT,
+    METHOD_SYSTEM_DRIVES,
+    METHOD_SYSTEM_TUNING,
 ];
 
 #[derive(Debug)]
@@ -355,6 +438,14 @@ fn dispatch_line(
                     event: name.to_string(),
                     data,
                 }),
+            "app.updateProgress" => serde_json::from_value::<UpdateProgress>(data.clone())
+                .map(HostEvent::UpdateProgress)
+                .unwrap_or(HostEvent::Raw {
+                    event: name.to_string(),
+                    data,
+                }),
+            "devices.changed" => HostEvent::DevicesChanged,
+            "apps.changed" => HostEvent::AppsChanged,
             _ => HostEvent::Raw {
                 event: name.to_string(),
                 data,

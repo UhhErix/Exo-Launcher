@@ -35,13 +35,13 @@ internal static class ShaderRebuildWatch
             () => PcIdle.Now(() => services.Launcher.AnyGameRunning || GameRunningSignal.Running || LeanSignal.Active),
             () => services.Shaders.ToCompile(services.Library.PeekCachedLibrary()),
             () => Engine(ShadersAddon.Live is { } live ? live.CompilingAsync(ct) : Task.FromResult(false), "asking whether it compiles"),
-            ids => Engine(App.MainAppWindow is { } window ? window.ShadersRebuildStartAsync(ids, ct) : Task.FromResult(false), "starting the compile"),
-            () => Engine(App.MainAppWindow is { } window ? Done(window.ShadersRebuildPauseAsync(ct)) : Task.FromResult(false), "pausing the compile"),
+            ids => Engine(services.ShadersHost.RebuildStartAsync(ids, ct), "starting the compile"),
+            () => Engine(Done(services.ShadersHost.RebuildPauseAsync(ct)), "pausing the compile"),
             () => ShaderRebuild.LoadFrom(ShaderRebuild.Path),
             record => ShaderRebuild.SaveTo(ShaderRebuild.Path, record),
             AppLog.Info,
             installed: () => services.Library.PeekCachedLibrary() is { Count: > 0 } library ? ScsKillerStatus.Installed(library) : null,
-            scan: () => Engine(App.MainAppWindow is { } window ? window.ShadersScanAsync(ct) : Task.FromResult(false), "scanning the games"));
+            scan: () => Engine(services.ShadersHost.ScanAsync(ct), "scanning the games"));
         rebuild.Changed += () => Changed?.Invoke();
         _rebuild = rebuild;
         DriverInstallSignal.Changed += OnStep;
