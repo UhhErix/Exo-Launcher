@@ -214,7 +214,7 @@
     border-color: ButtonText;
   }
 
-  .is-on,
+  :is(button, [role="button"], [role="radio"], [role="tab"], [role="option"]).is-on,
   .is-current,
   .is-selected,
   [aria-current="page"],
