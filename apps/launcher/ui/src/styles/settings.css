@@ -98,6 +98,24 @@ span.exo-error-note {
   padding-top: 16px;
 }
 
+.exo-props-close {
+  display: inline-grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--color-muted);
+  cursor: pointer;
+}
+
+.exo-props-close:hover {
+  background: var(--hover-fill);
+  color: var(--color-fg);
+}
+
 .exo-settings-close {
   position: absolute;
   top: 14px;
@@ -422,8 +440,8 @@ span.exo-error-note {
 .exo-settings-search-clear {
   display: inline-grid;
   place-items: center;
-  width: 20px;
-  height: 20px;
+  width: 28px;
+  height: 28px;
   padding: 0;
   border: 0;
   border-radius: 999px;

@@ -286,6 +286,11 @@
   flex-direction: column;
 }
 
+.exo-props-row .exo-set-item-control {
+  max-width: none;
+  flex-wrap: nowrap;
+}
+
 .exo-props-field {
   flex: 0 1 220px;
   width: 220px;
@@ -505,5 +510,9 @@
   .exo-game-page .exo-game-page-layout {
     grid-template-columns: minmax(0, 1fr);
     align-items: start;
+  }
+
+  .exo-props-row .exo-set-item-control {
+    flex-wrap: wrap;
   }
 }
