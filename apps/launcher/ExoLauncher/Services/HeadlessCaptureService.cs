@@ -26,17 +26,15 @@ internal sealed class HeadlessCaptureService : IDisposable
         _services = services;
     }
 
-    internal static string DataDir => Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "ExoLauncher", "capture");
+    internal static string DataDir => MainWindow.CaptureData;
 
-    internal static string ThumbsDir => Path.Combine(DataDir, "thumbs");
+    internal static string ThumbsDir => MainWindow.CaptureThumbs;
 
-    private static string SettingsPath => Path.Combine(DataDir, "settings.json");
+    private static string SettingsPath => MainWindow.CaptureSettingsPath;
 
-    private static string IndexPath => Path.Combine(DataDir, "index.json");
+    private static string IndexPath => MainWindow.CaptureIndexPath;
 
-    private static string DefaultFolder => Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.MyVideos), "Exo Captures");
+    private static string DefaultFolder => MainWindow.DefaultCaptureFolder;
 
     internal string CaptureFolder => Path.TrimEndingDirectorySeparator(Path.GetFullPath(Config.Folder ?? DefaultFolder));
 
