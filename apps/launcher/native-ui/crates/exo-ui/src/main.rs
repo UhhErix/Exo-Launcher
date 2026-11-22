@@ -14,6 +14,7 @@ mod key_modal;
 mod library;
 mod media_state;
 mod music;
+mod notice;
 mod palette;
 mod pc;
 mod pc_actions;
@@ -52,6 +53,7 @@ fn split_cli_args() -> (Option<String>, Vec<String>) {
 
 fn on_key(s: &mut AppState, ev: &KeyEvent, tx: &mut Tx) -> bool {
     if ev.is_command('k') {
+        tx.instant();
         if s.palette_open {
             s.close_palette();
         } else {
@@ -60,11 +62,13 @@ fn on_key(s: &mut AppState, ev: &KeyEvent, tx: &mut Tx) -> bool {
         return true;
     }
     if ev.is_command(',') {
+        tx.instant();
         s.toggle_settings();
         return true;
     }
     for (idx, ch) in ['1', '2', '3', '4', '5', '6', '7'].into_iter().enumerate() {
         if ev.is_command(ch) {
+            tx.instant();
             s.switch_room(state::Room::NAV_TABS[idx]);
             return true;
         }
@@ -103,6 +107,10 @@ fn setup_state(s: &mut AppState, waker: Waker) {
     s.install_waker(waker);
     s.preload_visible_covers_sync(2.0);
     s.preload_discord_images_sync(1.0);
+}
+
+fn poll_state(s: &mut AppState, now: f64, tx: &mut Tx) -> bool {
+    s.sync_and_tick_notices(now, tx)
 }
 
 #[cfg(windows)]
@@ -854,6 +862,7 @@ fn main() {
     spec.fonts = FONTS;
     spec.families = FONT_FAMILIES;
     spec.setup = Some(setup_state);
+    spec.poll = Some(poll_state);
     spec.on_key = Some(on_key);
     spec.scenes = &[
         ("palette", |s: &mut AppState| {
@@ -1540,5 +1549,743 @@ mod tests {
             rt.state.discord.voice_ui.panel,
             discord_voice_state::VoicePanel::Audio
         );
+    }
+
+    #[test]
+    fn blur_budget_and_glass_palette_invariants() {
+        let check_case = |label: &str,
+                          setup: &dyn Fn(&mut AppState),
+                          expected_overlay: Option<&str>| {
+            let mut state = AppState::default();
+            setup(&mut state);
+            let mut rt = Runtime::new(state, shell::view, (1920.0, 1080.0), Env::new(true, 1.0));
+            rt.frame(0.0);
+            rt.frame(1.0 / 60.0);
+            let blur_rects: Vec<[f32; 4]> = rt
+                .instances
+                .iter()
+                .filter(|i| i.params[1] == KIND_BACKDROP_BLUR)
+                .map(|i| i.rect)
+                .collect();
+            assert!(
+                blur_rects.len() <= rune::MAX_BACKDROP_BLURS,
+                "{label}: emitted {} backdrop blurs (cap {})",
+                blur_rects.len(),
+                rune::MAX_BACKDROP_BLURS
+            );
+            if let Some(key) = expected_overlay {
+                let (rect, _) = rt
+                    .presented(key)
+                    .unwrap_or_else(|| panic!("{label}: overlay {key} not presented"));
+                let hit = blur_rects.iter().take(rune::MAX_BACKDROP_BLURS).any(|r| {
+                    (r[0] - rect[0]).abs() < 2.0
+                        && (r[1] - rect[1]).abs() < 2.0
+                        && (r[2] - rect[2]).abs() < 2.0
+                        && (r[3] - rect[3]).abs() < 2.0
+                });
+                assert!(
+                    hit,
+                    "{label}: overlay {key} rect {rect:?} missing from first {} blur slots: {blur_rects:?}",
+                    rune::MAX_BACKDROP_BLURS
+                );
+            }
+            rt
+        };
+
+        check_case("library-normal", &|_| {}, None);
+        check_case(
+            "music-normal",
+            &|s| {
+                s.switch_room(Room::Music);
+            },
+            None,
+        );
+        check_case(
+            "music-capture-menu",
+            &|s| {
+                s.switch_room(Room::Music);
+                s.capture_menu_open = true;
+            },
+            Some("capture-popover-menu"),
+        );
+        let rt_palette = check_case(
+            "library-mini-palette",
+            &|s| {
+                s.palette_open = true;
+            },
+            Some("command-palette"),
+        );
+        let (pal_rect, _) = rt_palette
+            .presented("command-palette")
+            .expect("command-palette presented");
+        assert!(
+            pal_rect[3] <= 520.5,
+            "palette height {} exceeded 520px cap",
+            pal_rect[3]
+        );
+        check_case(
+            "settings-key-modal",
+            &|s| {
+                s.switch_room(Room::Settings);
+                s.key_modal_open = true;
+            },
+            Some("activate-key-modal"),
+        );
+        check_case(
+            "library-tour",
+            &|s| {
+                s.start_tour();
+            },
+            Some("exo-tour-card"),
+        );
+        check_case(
+            "library-more-menu",
+            &|s| {
+                s.library_more_open = true;
+            },
+            Some("library-more-menu"),
+        );
+        let rt_settings = check_case(
+            "settings-void-top",
+            &|s| {
+                s.switch_room(Room::Settings);
+                s.media.playback = None;
+            },
+            None,
+        );
+        let settings_blurs = rt_settings
+            .instances
+            .iter()
+            .filter(|i| i.params[1] == KIND_BACKDROP_BLUR)
+            .count();
+        assert_eq!(
+            settings_blurs, 0,
+            "void-top Settings room should emit 0 backdrop blurs, got {settings_blurs}"
+        );
+    }
+
+    #[test]
+    fn notice_stack_queue_caps_at_three_and_escape_dismisses_newest() {
+        let mut s = AppState::default();
+        let id1 = s.push_notice("First notice", state::NoticeTone::Neutral);
+        let id2 = s.push_notice("Second notice", state::NoticeTone::Good);
+        let id3 = s.push_notice("Third notice", state::NoticeTone::Bad);
+        let id4 = s.push_notice("Fourth notice", state::NoticeTone::Neutral);
+
+        assert_eq!(s.notices.len(), state::MAX_NOTICES);
+        assert_eq!(
+            s.notices.iter().map(|n| n.id).collect::<Vec<_>>(),
+            vec![id2, id3, id4]
+        );
+        assert_ne!(s.notices[0].id, id1);
+
+        assert!(s.dismiss_top_layer());
+        assert_eq!(
+            s.notices.iter().map(|n| n.id).collect::<Vec<_>>(),
+            vec![id2, id3]
+        );
+        assert!(s.dismiss_top_layer());
+        assert_eq!(
+            s.notices.iter().map(|n| n.id).collect::<Vec<_>>(),
+            vec![id2]
+        );
+        assert!(s.dismiss_top_layer());
+        assert!(s.notices.is_empty());
+        assert!(s.notice.is_none());
+    }
+
+    #[test]
+    fn notice_stack_syncs_legacy_notice_and_auto_dismisses_with_hover_pause() {
+        let mut rt = Runtime::new(
+            AppState::default(),
+            shell::view,
+            (1280.0, 800.0),
+            Env::new(true, 1.0),
+        );
+        rt.poll = Some(poll_state);
+        rt.frame(0.0);
+        assert!(rt.state.notices.is_empty());
+
+        rt.update(|s, _| {
+            s.notice = Some("Clip saved".into());
+        });
+        rt.frame(0.016);
+        assert_eq!(rt.state.notices.len(), 1);
+        let id = rt.state.notices[0].id;
+        assert_eq!(rt.state.notices[0].tone, state::NoticeTone::Good);
+        assert!(rt.presented(&format!("notice-{id}")).is_some());
+
+        rt.frame(1.5);
+        assert_eq!(rt.state.notices.len(), 1);
+        assert!(rt.state.notices[0].remaining_secs < 2.6);
+
+        rt.update(|s, tx| s.set_notice_hovered(id, true, tx));
+        rt.frame(3.0);
+        assert_eq!(rt.state.notices.len(), 1);
+        assert!(
+            rt.state.notices[0].remaining_secs > 2.4,
+            "hovered toast timer should remain paused, got {}",
+            rt.state.notices[0].remaining_secs
+        );
+
+        rt.update(|s, tx| s.set_notice_hovered(id, false, tx));
+        rt.frame(2.6);
+        assert!(rt.state.notices.is_empty());
+        assert!(rt.state.notice.is_none());
+    }
+
+    #[test]
+    fn notice_stack_swipe_dismiss_and_snap_back_thresholds() {
+        let mut rt = Runtime::new(
+            AppState::default(),
+            shell::view,
+            (1280.0, 800.0),
+            Env::new(true, 1.0),
+        );
+        rt.poll = Some(poll_state);
+        rt.frame(0.0);
+
+        let id_partial = rt
+            .state
+            .push_notice("Partial swipe", state::NoticeTone::Neutral);
+        rt.frame(0.016);
+        rt.update(|s, tx| {
+            s.begin_notice_drag(id_partial, tx.clock());
+            s.update_notice_drag(id_partial, 64.0, tx.clock() + 0.5);
+            s.end_notice_drag(id_partial, false, tx);
+        });
+        assert_eq!(rt.state.notices.len(), 1);
+        assert_eq!(rt.state.notices[0].drag_x, 0.0);
+
+        rt.update(|s, tx| {
+            s.begin_notice_drag(id_partial, tx.clock());
+            s.update_notice_drag(id_partial, notice::SWIPE_DISMISS_DX + 2.0, tx.clock() + 0.5);
+            s.end_notice_drag(id_partial, true, tx);
+        });
+        assert_eq!(rt.state.notices.len(), 1);
+        assert_eq!(rt.state.notices[0].drag_x, 0.0);
+
+        rt.update(|s, tx| {
+            s.begin_notice_drag(id_partial, tx.clock());
+            s.update_notice_drag(
+                id_partial,
+                notice::SWIPE_DISMISS_DX + 10.0,
+                tx.clock() + 0.5,
+            );
+            s.end_notice_drag(id_partial, false, tx);
+        });
+        assert!(rt.state.notices.is_empty());
+
+        let id_flick = rt
+            .state
+            .push_notice("Fast flick", state::NoticeTone::Neutral);
+        rt.frame(0.016);
+        rt.update(|s, tx| {
+            let t0 = tx.clock();
+            s.begin_notice_drag(id_flick, t0);
+            s.update_notice_drag(id_flick, 36.0, t0 + 0.02);
+            s.update_notice_drag(id_flick, 72.0, t0 + 0.04);
+            s.end_notice_drag(id_flick, false, tx);
+        });
+        assert!(rt.state.notices.is_empty());
+    }
+
+    #[test]
+    fn notice_stack_respects_blur_budget_with_mini_player_and_music() {
+        for (label, setup) in [
+            (
+                "library+mini+3-toasts",
+                Box::new(|s: &mut AppState| {
+                    s.switch_room(Room::Library);
+                    s.push_notice("One", state::NoticeTone::Neutral);
+                    s.push_notice("Two", state::NoticeTone::Good);
+                    s.push_notice("Three", state::NoticeTone::Bad);
+                }) as Box<dyn Fn(&mut AppState)>,
+            ),
+            (
+                "music+transport+3-toasts",
+                Box::new(|s: &mut AppState| {
+                    s.switch_room(Room::Music);
+                    s.push_notice("One", state::NoticeTone::Neutral);
+                    s.push_notice("Two", state::NoticeTone::Good);
+                    s.push_notice("Three", state::NoticeTone::Bad);
+                }),
+            ),
+            (
+                "palette+3-toasts",
+                Box::new(|s: &mut AppState| {
+                    s.switch_room(Room::Library);
+                    s.palette_open = true;
+                    s.push_notice("One", state::NoticeTone::Neutral);
+                    s.push_notice("Two", state::NoticeTone::Good);
+                    s.push_notice("Three", state::NoticeTone::Bad);
+                }),
+            ),
+        ] {
+            let mut state = AppState::default();
+            setup(&mut state);
+            let mut rt = Runtime::new(state, shell::view, (1920.0, 1080.0), Env::new(true, 1.0));
+            rt.poll = Some(poll_state);
+            rt.frame(0.0);
+            let blur_count = rt
+                .instances
+                .iter()
+                .filter(|i| i.params[1] == KIND_BACKDROP_BLUR)
+                .count();
+            assert!(
+                blur_count <= rune::MAX_BACKDROP_BLURS,
+                "{label}: emitted {blur_count} backdrop blurs (cap {})",
+                rune::MAX_BACKDROP_BLURS
+            );
+        }
+    }
+
+    #[test]
+    fn top_bar_nav_x_is_invariant_across_mini_player_and_popover_states() {
+        for (vw, vh) in [(1920.0_f32, 1080.0_f32), (1280.0_f32, 800.0_f32)] {
+            let mut rt = Runtime::new(
+                AppState::default(),
+                shell::view,
+                (vw, vh),
+                Env::new(true, 1.0),
+            );
+            rt.frame(0.0);
+            let (nav_with_mini, _) = rt.presented("nav-capsule").expect("nav with mini");
+            let (mini_rect, _) = rt
+                .presented("music-mini-player")
+                .expect("mini player present");
+            let (tools_rect, _) = rt.presented("titlebar-tools").expect("tools present");
+            if vw >= 1900.0 {
+                assert!(
+                    mini_rect[0] >= nav_with_mini[0] + nav_with_mini[2] + 12.0,
+                    "mini player overlapped nav at {vw}px: nav={nav_with_mini:?} mini={mini_rect:?}"
+                );
+                assert!(
+                    mini_rect[0] + mini_rect[2] <= tools_rect[0],
+                    "mini player overlapped tools at {vw}px: mini={mini_rect:?} tools={tools_rect:?}"
+                );
+            }
+
+            rt.update(|s, tx| {
+                tx.instant();
+                s.capture_menu_open = true;
+            });
+            rt.frame(1.0 / 60.0);
+            let (nav_with_capture, _) = rt.presented("nav-capsule").expect("nav with capture");
+            assert_eq!(
+                nav_with_mini[0], nav_with_capture[0],
+                "nav x shifted on capture_menu_open at {vw}px"
+            );
+
+            rt.update(|s, tx| {
+                tx.instant();
+                s.capture_menu_open = false;
+                s.media.playback = None;
+            });
+            rt.frame(2.0 / 60.0);
+            let (nav_without_mini, _) = rt.presented("nav-capsule").expect("nav without mini");
+            assert_eq!(
+                nav_with_mini[0], nav_without_mini[0],
+                "nav x shifted when mini_player disappeared at {vw}px"
+            );
+        }
+
+        let mut rt_narrow = Runtime::new(
+            AppState::default(),
+            shell::view,
+            (1100.0, 800.0),
+            Env::new(true, 1.0),
+        );
+        rt_narrow.frame(0.0);
+        rt_narrow.frame(1.0 / 60.0);
+        rt_narrow.frame(0.25);
+        assert_eq!(rt_narrow.state.mini_bar_slot, state::MiniBarSlot::Hidden);
+        assert!(rt_narrow.presented("music-mini-player").is_none());
+
+        let mut s = AppState::default();
+        s.switch_room(Room::Music);
+        assert_eq!(s.room_dir, 1.0);
+        s.switch_room(Room::Store);
+        assert_eq!(s.room_dir, -1.0);
+    }
+}
+
+#[cfg(test)]
+mod motion_audit {
+    use super::*;
+    use crate::state::Room;
+    use rune::motion_gate::{Finding, Job, Recording, Run, check, report, run};
+    use rune::{Env, Runtime};
+    use std::sync::atomic::{AtomicBool, Ordering};
+
+    const HZ: f64 = 120.0;
+
+    fn make_run(reduce_motion: bool) -> Run<AppState> {
+        let mut state = AppState::default();
+        state.settings.reduce_motion = reduce_motion;
+        let mut rt = Runtime::new(state, shell::view, (1920.0, 1080.0), Env::new(true, 1.0));
+        rt.poll = Some(poll_state);
+        let mut r = Run::new(rt, HZ);
+        r.idle(0.5);
+        r.step();
+        r
+    }
+
+    fn boot_idle_recording(reduce_motion: bool) -> Recording {
+        let mut r = make_run(reduce_motion);
+        r.play(0.4);
+        r.quiet();
+        r.play(0.35);
+        r.rec
+    }
+
+    fn room_switch_recording(reduce_motion: bool) -> Recording {
+        let mut r = make_run(reduce_motion);
+        for (name, room) in [
+            ("to-store", Room::Store),
+            ("to-music", Room::Music),
+            ("to-settings", Room::Settings),
+            ("to-library", Room::Library),
+        ] {
+            r.act(name, |rt| {
+                rt.update(|s, tx| {
+                    tx.animated();
+                    s.switch_room(room);
+                })
+            });
+            r.play(0.45);
+        }
+        r.quiet();
+        r.play(0.35);
+        r.rec
+    }
+
+    fn overlays_recording(reduce_motion: bool) -> Recording {
+        let mut r = make_run(reduce_motion);
+        r.act("open-captures", |rt| {
+            rt.update(|s, tx| {
+                tx.animated();
+                s.capture_menu_open = true;
+            });
+        });
+        r.play(0.4);
+        r.act("close-captures", |rt| {
+            rt.update(|s, tx| {
+                tx.animated();
+                s.capture_menu_open = false;
+            });
+        });
+        r.play(0.4);
+        r.act("open-palette", |rt| {
+            rt.update(|s, tx| {
+                tx.animated();
+                s.open_palette(tx);
+            });
+        });
+        r.play(0.4);
+        r.act("close-palette", |rt| {
+            rt.update(|s, tx| {
+                tx.animated();
+                s.close_palette();
+            });
+        });
+        r.play(0.4);
+        r.act("open-key-modal", |rt| {
+            rt.update(|s, tx| {
+                tx.animated();
+                s.key_modal_open = true;
+            });
+        });
+        r.play(0.4);
+        r.act("close-key-modal", |rt| {
+            rt.update(|s, tx| {
+                tx.animated();
+                s.close_key_modal();
+            });
+        });
+        r.play(0.4);
+        r.act("open-tour", |rt| {
+            rt.update(|s, tx| {
+                tx.animated();
+                s.start_tour();
+            });
+        });
+        r.play(0.4);
+        r.act("close-tour", |rt| {
+            rt.update(|s, tx| {
+                tx.animated();
+                s.finish_tour();
+            });
+        });
+        r.play(0.4);
+        r.quiet();
+        r.play(0.35);
+        r.rec
+    }
+
+    fn mini_player_recording(reduce_motion: bool) -> Recording {
+        let mut r = make_run(reduce_motion);
+        let saved = r.rt.state.media.playback.clone();
+        r.act("hide-mini", |rt| {
+            rt.update(|s, tx| {
+                tx.animated();
+                s.media.playback = None;
+            });
+        });
+        r.play(0.4);
+        r.act("show-mini", |rt| {
+            let track = saved.clone();
+            rt.update(|s, tx| {
+                tx.animated();
+                s.media.playback = track;
+            });
+        });
+        r.play(0.45);
+        r.quiet();
+        r.play(0.35);
+        r.rec
+    }
+
+    fn mid_flight_reduce_motion_toggle() -> Recording {
+        let mut r = make_run(false);
+        r.act("open-key-modal", |rt| {
+            rt.update(|s, tx| {
+                tx.animated();
+                s.key_modal_open = true;
+            });
+        });
+        r.play(0.08);
+        r.act("enable-reduce-motion", |rt| {
+            rt.update(|s, _| s.settings.reduce_motion = true);
+        });
+        r.play(0.4);
+        r.act("close-key-modal", |rt| {
+            rt.update(|s, tx| {
+                tx.animated();
+                s.close_key_modal();
+            });
+        });
+        r.play(0.4);
+        r.quiet();
+        r.play(0.35);
+        r.rec
+    }
+
+    fn assert_no_kinds(label: &str, findings: &[Finding], forbidden: &[&str]) {
+        let hits: Vec<&Finding> = findings
+            .iter()
+            .filter(|f| forbidden.contains(&f.kind))
+            .collect();
+        assert!(hits.is_empty(), "{label} motion findings: {hits:#?}");
+    }
+
+    #[test]
+    fn reduce_motion_drives_cx_runtime_override() {
+        static OBSERVED: AtomicBool = AtomicBool::new(false);
+
+        fn spy_view(s: &AppState, cx: &mut rune::Cx<AppState>) -> rune::El {
+            let root = shell::view(s, cx);
+            OBSERVED.store(cx.is_reduced_motion(), Ordering::SeqCst);
+            root
+        }
+
+        let mut rt = Runtime::new(
+            AppState::default(),
+            spy_view,
+            (1280.0, 800.0),
+            Env::new(true, 1.0),
+        );
+        rt.frame(0.0);
+        assert!(!OBSERVED.load(Ordering::SeqCst));
+
+        rt.update(|s, _| s.settings.reduce_motion = true);
+        rt.frame(1.0 / 60.0);
+        assert!(OBSERVED.load(Ordering::SeqCst));
+
+        rt.update(|s, _| s.settings.reduce_motion = false);
+        rt.frame(1.0 / 60.0);
+        assert!(!OBSERVED.load(Ordering::SeqCst));
+    }
+
+    #[test]
+    fn boot_idle_has_no_load_motion_or_wakes() {
+        for reduced in [false, true] {
+            let rec = boot_idle_recording(reduced);
+            let findings = check(&rec);
+            assert!(
+                findings.is_empty(),
+                "idle reduced={reduced} findings: {findings:#?}"
+            );
+        }
+    }
+
+    #[test]
+    fn room_switches_and_overlays_settle_cleanly() {
+        let jobs: Vec<(String, Job)> = vec![
+            (
+                "boot/normal".into(),
+                Box::new(|| boot_idle_recording(false)),
+            ),
+            (
+                "rooms/normal".into(),
+                Box::new(|| room_switch_recording(false)),
+            ),
+            (
+                "rooms/reduced".into(),
+                Box::new(|| room_switch_recording(true)),
+            ),
+            (
+                "overlays/normal".into(),
+                Box::new(|| overlays_recording(false)),
+            ),
+            (
+                "overlays/reduced".into(),
+                Box::new(|| overlays_recording(true)),
+            ),
+            (
+                "mini-player/normal".into(),
+                Box::new(|| mini_player_recording(false)),
+            ),
+            (
+                "mini-player/reduced".into(),
+                Box::new(|| mini_player_recording(true)),
+            ),
+            (
+                "toggle/mid-flight".into(),
+                Box::new(mid_flight_reduce_motion_toggle),
+            ),
+        ];
+        let cells = run(jobs, "");
+        let summary = report(&cells, &[], false, 0.0);
+        assert_eq!(cells.len(), 8);
+        for cell in &cells {
+            assert!(!cell.skipped, "cell {} skipped", cell.name);
+            assert_no_kinds(
+                &cell.name,
+                &cell.findings,
+                &[
+                    "load-motion",
+                    "never-settles",
+                    "wakes-after-end",
+                    "overshoot",
+                    "jerk",
+                    "flicker",
+                ],
+            );
+        }
+        assert!(summary.text.contains("8 cells") || !summary.text.is_empty());
+    }
+
+    #[test]
+    fn reduce_motion_eliminates_spatial_travel_on_room_and_overlay_changes() {
+        let mut r = make_run(true);
+        r.act("to-store", |rt| {
+            rt.update(|s, tx| {
+                tx.animated();
+                s.switch_room(Room::Store);
+            });
+        });
+        let mut prev_pos: Option<[f32; 4]> = r.rt.presented("room-store").map(|(rect, _)| rect);
+        for _ in 0..30 {
+            r.step();
+            if let Some((rect, _)) = r.rt.presented("room-store") {
+                if let Some(prev) = prev_pos {
+                    assert!(
+                        (rect[0] - prev[0]).abs() < 0.01 && (rect[1] - prev[1]).abs() < 0.01,
+                        "unexpected spatial translation under reduce_motion: {prev:?} -> {rect:?}"
+                    );
+                }
+                prev_pos = Some(rect);
+            }
+        }
+        r.act("open-key-modal", |rt| {
+            rt.update(|s, tx| {
+                tx.animated();
+                s.key_modal_open = true;
+            });
+        });
+        let mut modal_prev: Option<[f32; 4]> =
+            r.rt.presented("activate-key-modal").map(|(rect, _)| rect);
+        for _ in 0..30 {
+            r.step();
+            if let Some((rect, _)) = r.rt.presented("activate-key-modal") {
+                if let Some(prev) = modal_prev {
+                    assert!(
+                        (rect[0] - prev[0]).abs() < 0.01 && (rect[1] - prev[1]).abs() < 0.01,
+                        "modal translated under reduce_motion: {prev:?} -> {rect:?}"
+                    );
+                }
+                modal_prev = Some(rect);
+            }
+        }
+    }
+
+    fn notice_stack_recording(reduce_motion: bool) -> Recording {
+        let mut r = make_run(reduce_motion);
+        let mut toast_id = 0_u64;
+        r.act("push-notice", |rt| {
+            rt.update(|s, tx| {
+                tx.animated();
+                toast_id = s.push_notice("Clip saved to Captures", state::NoticeTone::Good);
+            });
+        });
+        r.play(0.45);
+        r.act("drag-start", |rt| {
+            rt.update(|s, tx| s.begin_notice_drag(toast_id, tx.clock()));
+        });
+        for step in 1..=6 {
+            let x = step as f32 * 10.0;
+            r.act("drag-move", |rt| {
+                rt.update(|s, tx| s.update_notice_drag(toast_id, x, tx.clock()));
+            });
+            r.step();
+        }
+        r.act("drag-snap-back", |rt| {
+            rt.update(|s, tx| {
+                tx.animated();
+                s.end_notice_drag(toast_id, false, tx);
+            });
+        });
+        r.play(0.45);
+        r.act("swipe-start", |rt| {
+            rt.update(|s, tx| s.begin_notice_drag(toast_id, tx.clock()));
+        });
+        for step in 1..=6 {
+            let x = step as f32 * 22.0;
+            r.act("swipe-move", |rt| {
+                rt.update(|s, tx| s.update_notice_drag(toast_id, x, tx.clock()));
+            });
+            r.step();
+        }
+        r.act("swipe-dismiss", |rt| {
+            rt.update(|s, tx| {
+                tx.animated();
+                s.end_notice_drag(toast_id, false, tx);
+            });
+        });
+        r.play(0.45);
+        r.quiet();
+        r.play(0.35);
+        r.rec
+    }
+
+    #[test]
+    fn notice_stack_enter_drag_snap_back_and_dismiss_settle_cleanly() {
+        for (label, reduced) in [("notice/normal", false), ("notice/reduced", true)] {
+            let rec = notice_stack_recording(reduced);
+            let findings = check(&rec);
+            assert_no_kinds(
+                label,
+                &findings,
+                &[
+                    "pop-in",
+                    "cut-exit",
+                    "overshoot",
+                    "never-settles",
+                    "wakes-after-end",
+                    "flicker",
+                ],
+            );
+        }
     }
 }

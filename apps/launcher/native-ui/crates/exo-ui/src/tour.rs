@@ -1,7 +1,8 @@
 use crate::state::{AppState, Room};
 use exo_kit::{
     BG, FG, RADIUS_PILL, SPRING_BASE, SPRING_QUICK, fg_muted, glass_button, glass_panel, hairline,
-    icon_sparkles, primary_button, type_body, type_small, type_title,
+    icon_sparkles, modal_card_transition, modal_scrim_transition, primary_button, type_body,
+    type_small, type_title,
 };
 use rune::{Color, El, col, el, row, text};
 
@@ -166,6 +167,7 @@ pub fn view(s: &AppState) -> El {
 
     let card = glass_panel("exo-tour-card", 460.0)
         .motion(SPRING_BASE)
+        .transition(modal_card_transition())
         .child(body)
         .child(el().w_full().h(1.0).fill(hairline()))
         .child(footer);
@@ -173,6 +175,7 @@ pub fn view(s: &AppState) -> El {
     el().key("tour-scrim")
         .pin(Some(0.0), Some(0.0), Some(0.0), Some(0.0))
         .fill(BG.alpha(0.50))
+        .transition(modal_scrim_transition())
         .child(
             col()
                 .w_full()

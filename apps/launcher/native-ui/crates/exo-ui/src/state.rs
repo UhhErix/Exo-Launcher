@@ -18,7 +18,7 @@ use exo_rpc::{
 use rune::{Image, ImageCache, TextEdit, Tx, Waker};
 use serde_json::json;
 use std::cell::RefCell;
-use std::collections::{HashMap, HashSet};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -72,6 +72,19 @@ impl Room {
             Room::ExoAi => "nav-exo-ai",
             Room::Apps => "nav-apps",
             Room::Settings => "nav-settings",
+        }
+    }
+
+    pub const fn tab_index(self) -> usize {
+        match self {
+            Room::Library => 0,
+            Room::Store => 1,
+            Room::Discord => 2,
+            Room::Music => 3,
+            Room::Devices => 4,
+            Room::ExoAi => 5,
+            Room::Apps => 6,
+            Room::Settings => 7,
         }
     }
 }
@@ -139,9 +152,56 @@ pub struct PaletteItem {
     pub target: PaletteTarget,
 }
 
+pub const NOTICE_DURATION_SECS: f64 = 4.0;
+pub const MAX_NOTICES: usize = 3;
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum NoticeTone {
+    Neutral,
+    Good,
+    Bad,
+}
+
+#[derive(Clone, Debug)]
+pub struct NoticeItem {
+    pub id: u64,
+    pub text: String,
+    pub tone: NoticeTone,
+    pub remaining_secs: f64,
+    pub last_tick: Option<f64>,
+    pub hovered: bool,
+    pub dragging: bool,
+    pub drag_x: f32,
+    pub drag_prev_x: f32,
+    pub drag_prev_t: f64,
+    pub drag_vx: f32,
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum MiniBarSlot {
+    #[default]
+    Inline,
+    BelowTools,
+    Hidden,
+}
+
+impl MiniBarSlot {
+    pub fn from_width(w: f32) -> Self {
+        if w >= 1760.0 {
+            Self::Inline
+        } else if w >= 1180.0 {
+            Self::BelowTools
+        } else {
+            Self::Hidden
+        }
+    }
+}
+
 pub struct AppState {
     pub room: Room,
     pub prev_room: Room,
+    pub room_dir: f32,
+    pub mini_bar_slot: MiniBarSlot,
     pub library_all_games: bool,
     pub library_search_open: bool,
     pub library_search: TextEdit,
@@ -185,6 +245,10 @@ pub struct AppState {
     pub discord: DiscordState,
     pub art_base: ArtBase,
     pub notice: Option<String>,
+    pub notices: VecDeque<NoticeItem>,
+    next_notice_id: u64,
+    notice_last_synced: Option<String>,
+    clock_secs: f64,
     pub refreshing: bool,
     pub palette_open: bool,
     pub palette_query: TextEdit,
@@ -214,6 +278,8 @@ impl AppState {
         Self {
             room: Room::Library,
             prev_room: Room::Library,
+            room_dir: 1.0,
+            mini_bar_slot: MiniBarSlot::Inline,
             library_all_games: false,
             library_search_open: false,
             library_search: TextEdit::default(),
@@ -284,6 +350,10 @@ impl AppState {
             discord: DiscordState::demo(),
             art_base: ArtBase::default(),
             notice: None,
+            notices: VecDeque::new(),
+            next_notice_id: 1,
+            notice_last_synced: None,
+            clock_secs: 0.0,
             refreshing: false,
             palette_open: false,
             palette_query: TextEdit::default(),
@@ -305,6 +375,8 @@ impl AppState {
         Self {
             room: Room::Library,
             prev_room: Room::Library,
+            room_dir: 1.0,
+            mini_bar_slot: MiniBarSlot::Inline,
             library_all_games: false,
             library_search_open: false,
             library_search: TextEdit::default(),
@@ -348,6 +420,10 @@ impl AppState {
             discord: DiscordState::empty(),
             art_base: ArtBase::default(),
             notice: Some("Connecting to Exo host…".into()),
+            notices: VecDeque::new(),
+            next_notice_id: 1,
+            notice_last_synced: Some("Connecting to Exo host…".into()),
+            clock_secs: 0.0,
             refreshing: true,
             palette_open: false,
             palette_query: TextEdit::default(),
@@ -457,6 +533,13 @@ impl AppState {
     }
 
     pub fn switch_room(&mut self, room: Room) {
+        if room != self.room {
+            self.room_dir = if room.tab_index() >= self.room.tab_index() {
+                1.0
+            } else {
+                -1.0
+            };
+        }
         if self.room != Room::Settings && room == Room::Settings {
             self.prev_room = self.room;
         }
@@ -1332,11 +1415,226 @@ impl AppState {
             self.close_store_game();
             return true;
         }
+        if !self.notices.is_empty() {
+            return self.dismiss_newest_notice();
+        }
         if self.notice.is_some() {
             self.notice = None;
+            self.notice_last_synced = None;
             return true;
         }
         false
+    }
+
+    pub fn infer_notice_tone(text: &str) -> NoticeTone {
+        let lower = text.to_lowercase();
+        if lower.contains("failed")
+            || lower.contains("error")
+            || lower.contains("unable")
+            || lower.contains("could not")
+            || lower.contains("couldn't")
+            || lower.contains("invalid")
+            || lower.contains("denied")
+            || lower.contains("disconnected")
+            || lower.contains("not connected")
+        {
+            NoticeTone::Bad
+        } else if lower.contains("saved")
+            || lower.contains("activated")
+            || lower.contains("copied")
+            || lower.contains("installed")
+            || lower.contains("connected")
+            || lower.contains("updated")
+            || lower.contains("captured")
+            || lower.contains("added")
+        {
+            NoticeTone::Good
+        } else {
+            NoticeTone::Neutral
+        }
+    }
+
+    pub fn push_notice(&mut self, text: impl Into<String>, tone: NoticeTone) -> u64 {
+        let text = text.into();
+        let id = self.next_notice_id;
+        self.next_notice_id = self.next_notice_id.saturating_add(1);
+        self.notices.push_back(NoticeItem {
+            id,
+            text: text.clone(),
+            tone,
+            remaining_secs: NOTICE_DURATION_SECS,
+            last_tick: None,
+            hovered: false,
+            dragging: false,
+            drag_x: 0.0,
+            drag_prev_x: 0.0,
+            drag_prev_t: self.clock_secs,
+            drag_vx: 0.0,
+        });
+        while self.notices.len() > MAX_NOTICES {
+            self.notices.pop_front();
+        }
+        self.notice = Some(text.clone());
+        self.notice_last_synced = Some(text);
+        id
+    }
+
+    pub fn dismiss_notice(&mut self, id: u64) -> bool {
+        if let Some(pos) = self.notices.iter().position(|n| n.id == id) {
+            self.notices.remove(pos);
+            if self.notices.is_empty() {
+                self.notice = None;
+                self.notice_last_synced = None;
+            }
+            return true;
+        }
+        false
+    }
+
+    pub fn dismiss_newest_notice(&mut self) -> bool {
+        if self.notices.pop_back().is_some() {
+            if self.notices.is_empty() {
+                self.notice = None;
+                self.notice_last_synced = None;
+            }
+            return true;
+        }
+        false
+    }
+
+    fn schedule_notice_wake(&self, now: f64, tx: &mut Tx) {
+        let min_rem = self
+            .notices
+            .iter()
+            .filter(|n| !n.hovered && !n.dragging)
+            .map(|n| n.remaining_secs)
+            .reduce(f64::min);
+        if let Some(rem) = min_rem {
+            tx.wake_at(now + rem.max(0.001));
+        }
+    }
+
+    pub fn set_notice_hovered(&mut self, id: u64, hovering: bool, tx: &mut Tx) {
+        let now = tx.clock();
+        self.clock_secs = now;
+        if let Some(item) = self.notices.iter_mut().find(|n| n.id == id) {
+            if hovering {
+                if !item.hovered
+                    && !item.dragging
+                    && let Some(prev) = item.last_tick
+                {
+                    item.remaining_secs = (item.remaining_secs - (now - prev).max(0.0)).max(0.0);
+                }
+                item.hovered = true;
+                item.last_tick = Some(now);
+            } else {
+                item.hovered = false;
+                item.last_tick = Some(now);
+            }
+        }
+        self.schedule_notice_wake(now, tx);
+    }
+
+    pub fn begin_notice_drag(&mut self, id: u64, now: f64) {
+        self.clock_secs = now;
+        if let Some(item) = self.notices.iter_mut().find(|n| n.id == id) {
+            if !item.hovered
+                && !item.dragging
+                && let Some(prev) = item.last_tick
+            {
+                item.remaining_secs = (item.remaining_secs - (now - prev).max(0.0)).max(0.0);
+            }
+            item.dragging = true;
+            item.last_tick = Some(now);
+            item.drag_prev_x = item.drag_x;
+            item.drag_prev_t = now;
+            item.drag_vx = 0.0;
+        }
+    }
+
+    pub fn update_notice_drag(&mut self, id: u64, x: f32, now: f64) {
+        self.clock_secs = now;
+        if let Some(item) = self.notices.iter_mut().find(|n| n.id == id) {
+            let dt = (now - item.drag_prev_t) as f32;
+            if dt > 0.0005 {
+                let instant_vx = (x - item.drag_prev_x) / dt;
+                item.drag_vx = item.drag_vx * 0.4 + instant_vx * 0.6;
+                item.drag_prev_x = x;
+                item.drag_prev_t = now;
+            }
+            item.drag_x = x;
+            item.last_tick = Some(now);
+        }
+    }
+
+    pub fn end_notice_drag(&mut self, id: u64, cancelled: bool, tx: &mut Tx) {
+        let now = tx.clock();
+        self.clock_secs = now;
+        let should_dismiss = self
+            .notices
+            .iter()
+            .find(|n| n.id == id)
+            .is_some_and(|item| {
+                !cancelled
+                    && (item.drag_x > crate::notice::SWIPE_DISMISS_DX
+                        || item.drag_vx > crate::notice::SWIPE_DISMISS_VX)
+            });
+        if should_dismiss {
+            self.dismiss_notice(id);
+        } else if let Some(item) = self.notices.iter_mut().find(|n| n.id == id) {
+            item.dragging = false;
+            item.drag_x = 0.0;
+            item.drag_vx = 0.0;
+            item.last_tick = Some(now);
+        }
+        self.schedule_notice_wake(now, tx);
+    }
+
+    pub fn sync_and_tick_notices(&mut self, now: f64, tx: &mut Tx) -> bool {
+        self.clock_secs = now;
+        let mut changed = false;
+
+        if self.notice != self.notice_last_synced {
+            self.notice_last_synced = self.notice.clone();
+            if let Some(text) = self.notice.clone()
+                && !text.trim().is_empty()
+            {
+                let tone = Self::infer_notice_tone(&text);
+                self.push_notice(text, tone);
+                tx.animated();
+                changed = true;
+            }
+        }
+
+        if self.notices.is_empty() {
+            return changed;
+        }
+
+        for item in &mut self.notices {
+            if item.hovered || item.dragging {
+                item.last_tick = Some(now);
+            } else {
+                if let Some(prev) = item.last_tick {
+                    item.remaining_secs -= (now - prev).max(0.0);
+                }
+                item.last_tick = Some(now);
+            }
+        }
+
+        let before = self.notices.len();
+        self.notices
+            .retain(|item| item.hovered || item.dragging || item.remaining_secs > 0.0);
+        if self.notices.len() != before {
+            if self.notices.is_empty() {
+                self.notice = None;
+                self.notice_last_synced = None;
+            }
+            tx.animated();
+            changed = true;
+        }
+
+        self.schedule_notice_wake(now, tx);
+        changed
     }
 
     pub fn open_palette(&mut self, tx: &mut Tx) {

@@ -1,7 +1,8 @@
 use crate::state::AppState;
 use exo_kit::{
     BG, FG, RADIUS_SMALL, SPRING_BASE, fg_muted, glass_button, glass_panel, glass_rim, good,
-    hairline, icon_key, primary_button, type_body, type_small, type_title,
+    hairline, icon_key, modal_card_transition, modal_scrim_transition, primary_button, type_body,
+    type_small, type_title,
 };
 use rune::{El, Key, col, edit_access, el, row, text, text_input};
 
@@ -102,6 +103,7 @@ pub fn view(s: &AppState) -> El {
 
     let card = glass_panel("activate-key-modal", 460.0)
         .motion(SPRING_BASE)
+        .transition(modal_card_transition())
         .child(content)
         .child(el().w_full().h(1.0).fill(hairline()))
         .child(footer);
@@ -110,6 +112,7 @@ pub fn view(s: &AppState) -> El {
         .pin(Some(0.0), Some(0.0), Some(0.0), Some(0.0))
         .fill(BG.alpha(0.52))
         .hit()
+        .transition(modal_scrim_transition())
         .on_press(|s: &mut AppState| s.close_key_modal())
         .child(col().w_full().h_full().center().child(card))
 }
