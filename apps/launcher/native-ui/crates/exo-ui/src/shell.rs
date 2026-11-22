@@ -1,6 +1,7 @@
 use crate::state::{AppState, Room};
 use crate::{
-    captures, discord, game_page, key_modal, library, music, palette, pc, settings, store, tour,
+    captures, discord, game_page, key_modal, library, music, notice, palette, pc, settings, store,
+    tour,
 };
 use exo_kit::{
     BG, FG, GAP, GLASS_CONTROL_SIGMA, PRESS_SCALE, PRIMARY_FG, RADIUS_PILL, SPRING_QUICK,
@@ -106,7 +107,7 @@ pub fn view(s: &AppState, cx: &mut Cx<AppState>) -> El {
     cx.reduced_motion(s.settings.reduce_motion);
     set_text_scale(s.text_scale());
     let has_modal_scrim = s.palette_open || s.key_modal_open;
-    let budget = BlurBudget::compute(s, false);
+    let budget = BlurBudget::compute(s, !s.notices.is_empty());
     cx.caption_color(if has_modal_scrim {
         fg_muted().alpha(0.28)
     } else {
@@ -433,6 +434,9 @@ pub fn view(s: &AppState, cx: &mut Cx<AppState>) -> El {
     }
     if s.palette_open {
         root = root.child(palette::view(s));
+    }
+    if !s.notices.is_empty() {
+        root = root.child(notice::view(s, budget.toast));
     }
     root
 }

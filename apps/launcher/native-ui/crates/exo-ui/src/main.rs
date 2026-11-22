@@ -14,6 +14,7 @@ mod key_modal;
 mod library;
 mod media_state;
 mod music;
+mod notice;
 mod palette;
 mod pc;
 mod pc_actions;
@@ -104,6 +105,10 @@ fn setup_state(s: &mut AppState, waker: Waker) {
     s.install_waker(waker);
     s.preload_visible_covers_sync(2.0);
     s.preload_discord_images_sync(1.0);
+}
+
+fn poll_state(s: &mut AppState, now: f64, tx: &mut Tx) -> bool {
+    s.sync_and_tick_notices(now, tx)
 }
 
 #[cfg(windows)]
@@ -855,6 +860,7 @@ fn main() {
     spec.fonts = FONTS;
     spec.families = FONT_FAMILIES;
     spec.setup = Some(setup_state);
+    spec.poll = Some(poll_state);
     spec.on_key = Some(on_key);
     spec.scenes = &[
         ("palette", |s: &mut AppState| {
@@ -1655,6 +1661,182 @@ mod tests {
             "void-top Settings room should emit 0 backdrop blurs, got {settings_blurs}"
         );
     }
+
+    #[test]
+    fn notice_stack_queue_caps_at_three_and_escape_dismisses_newest() {
+        let mut s = AppState::default();
+        let id1 = s.push_notice("First notice", state::NoticeTone::Neutral);
+        let id2 = s.push_notice("Second notice", state::NoticeTone::Good);
+        let id3 = s.push_notice("Third notice", state::NoticeTone::Bad);
+        let id4 = s.push_notice("Fourth notice", state::NoticeTone::Neutral);
+
+        assert_eq!(s.notices.len(), state::MAX_NOTICES);
+        assert_eq!(
+            s.notices.iter().map(|n| n.id).collect::<Vec<_>>(),
+            vec![id2, id3, id4]
+        );
+        assert_ne!(s.notices[0].id, id1);
+
+        assert!(s.dismiss_top_layer());
+        assert_eq!(
+            s.notices.iter().map(|n| n.id).collect::<Vec<_>>(),
+            vec![id2, id3]
+        );
+        assert!(s.dismiss_top_layer());
+        assert_eq!(
+            s.notices.iter().map(|n| n.id).collect::<Vec<_>>(),
+            vec![id2]
+        );
+        assert!(s.dismiss_top_layer());
+        assert!(s.notices.is_empty());
+        assert!(s.notice.is_none());
+    }
+
+    #[test]
+    fn notice_stack_syncs_legacy_notice_and_auto_dismisses_with_hover_pause() {
+        let mut rt = Runtime::new(
+            AppState::default(),
+            shell::view,
+            (1280.0, 800.0),
+            Env::new(true, 1.0),
+        );
+        rt.poll = Some(poll_state);
+        rt.frame(0.0);
+        assert!(rt.state.notices.is_empty());
+
+        rt.update(|s, _| {
+            s.notice = Some("Clip saved".into());
+        });
+        rt.frame(0.016);
+        assert_eq!(rt.state.notices.len(), 1);
+        let id = rt.state.notices[0].id;
+        assert_eq!(rt.state.notices[0].tone, state::NoticeTone::Good);
+        assert!(rt.presented(&format!("notice-{id}")).is_some());
+
+        rt.frame(1.5);
+        assert_eq!(rt.state.notices.len(), 1);
+        assert!(rt.state.notices[0].remaining_secs < 2.6);
+
+        rt.update(|s, tx| s.set_notice_hovered(id, true, tx));
+        rt.frame(3.0);
+        assert_eq!(rt.state.notices.len(), 1);
+        assert!(
+            rt.state.notices[0].remaining_secs > 2.4,
+            "hovered toast timer should remain paused, got {}",
+            rt.state.notices[0].remaining_secs
+        );
+
+        rt.update(|s, tx| s.set_notice_hovered(id, false, tx));
+        rt.frame(2.6);
+        assert!(rt.state.notices.is_empty());
+        assert!(rt.state.notice.is_none());
+    }
+
+    #[test]
+    fn notice_stack_swipe_dismiss_and_snap_back_thresholds() {
+        let mut rt = Runtime::new(
+            AppState::default(),
+            shell::view,
+            (1280.0, 800.0),
+            Env::new(true, 1.0),
+        );
+        rt.poll = Some(poll_state);
+        rt.frame(0.0);
+
+        let id_partial = rt
+            .state
+            .push_notice("Partial swipe", state::NoticeTone::Neutral);
+        rt.frame(0.016);
+        rt.update(|s, tx| {
+            s.begin_notice_drag(id_partial, tx.clock());
+            s.update_notice_drag(id_partial, 64.0, tx.clock() + 0.5);
+            s.end_notice_drag(id_partial, false, tx);
+        });
+        assert_eq!(rt.state.notices.len(), 1);
+        assert_eq!(rt.state.notices[0].drag_x, 0.0);
+
+        rt.update(|s, tx| {
+            s.begin_notice_drag(id_partial, tx.clock());
+            s.update_notice_drag(id_partial, notice::SWIPE_DISMISS_DX + 2.0, tx.clock() + 0.5);
+            s.end_notice_drag(id_partial, true, tx);
+        });
+        assert_eq!(rt.state.notices.len(), 1);
+        assert_eq!(rt.state.notices[0].drag_x, 0.0);
+
+        rt.update(|s, tx| {
+            s.begin_notice_drag(id_partial, tx.clock());
+            s.update_notice_drag(
+                id_partial,
+                notice::SWIPE_DISMISS_DX + 10.0,
+                tx.clock() + 0.5,
+            );
+            s.end_notice_drag(id_partial, false, tx);
+        });
+        assert!(rt.state.notices.is_empty());
+
+        let id_flick = rt
+            .state
+            .push_notice("Fast flick", state::NoticeTone::Neutral);
+        rt.frame(0.016);
+        rt.update(|s, tx| {
+            let t0 = tx.clock();
+            s.begin_notice_drag(id_flick, t0);
+            s.update_notice_drag(id_flick, 36.0, t0 + 0.02);
+            s.update_notice_drag(id_flick, 72.0, t0 + 0.04);
+            s.end_notice_drag(id_flick, false, tx);
+        });
+        assert!(rt.state.notices.is_empty());
+    }
+
+    #[test]
+    fn notice_stack_respects_blur_budget_with_mini_player_and_music() {
+        for (label, setup) in [
+            (
+                "library+mini+3-toasts",
+                Box::new(|s: &mut AppState| {
+                    s.switch_room(Room::Library);
+                    s.push_notice("One", state::NoticeTone::Neutral);
+                    s.push_notice("Two", state::NoticeTone::Good);
+                    s.push_notice("Three", state::NoticeTone::Bad);
+                }) as Box<dyn Fn(&mut AppState)>,
+            ),
+            (
+                "music+transport+3-toasts",
+                Box::new(|s: &mut AppState| {
+                    s.switch_room(Room::Music);
+                    s.push_notice("One", state::NoticeTone::Neutral);
+                    s.push_notice("Two", state::NoticeTone::Good);
+                    s.push_notice("Three", state::NoticeTone::Bad);
+                }),
+            ),
+            (
+                "palette+3-toasts",
+                Box::new(|s: &mut AppState| {
+                    s.switch_room(Room::Library);
+                    s.palette_open = true;
+                    s.push_notice("One", state::NoticeTone::Neutral);
+                    s.push_notice("Two", state::NoticeTone::Good);
+                    s.push_notice("Three", state::NoticeTone::Bad);
+                }),
+            ),
+        ] {
+            let mut state = AppState::default();
+            setup(&mut state);
+            let mut rt = Runtime::new(state, shell::view, (1920.0, 1080.0), Env::new(true, 1.0));
+            rt.poll = Some(poll_state);
+            rt.frame(0.0);
+            let blur_count = rt
+                .instances
+                .iter()
+                .filter(|i| i.params[1] == KIND_BACKDROP_BLUR)
+                .count();
+            assert!(
+                blur_count <= rune::MAX_BACKDROP_BLURS,
+                "{label}: emitted {blur_count} backdrop blurs (cap {})",
+                rune::MAX_BACKDROP_BLURS
+            );
+        }
+    }
 }
 
 #[cfg(test)]
@@ -1670,7 +1852,8 @@ mod motion_audit {
     fn make_run(reduce_motion: bool) -> Run<AppState> {
         let mut state = AppState::default();
         state.settings.reduce_motion = reduce_motion;
-        let rt = Runtime::new(state, shell::view, (1280.0, 800.0), Env::new(true, 1.0));
+        let mut rt = Runtime::new(state, shell::view, (1280.0, 800.0), Env::new(true, 1.0));
+        rt.poll = Some(poll_state);
         let mut r = Run::new(rt, HZ);
         r.idle(0.5);
         r.step();
@@ -1883,6 +2066,75 @@ mod motion_audit {
                 }
                 modal_prev = Some(rect);
             }
+        }
+    }
+
+    fn notice_stack_recording(reduce_motion: bool) -> Recording {
+        let mut r = make_run(reduce_motion);
+        let mut toast_id = 0_u64;
+        r.act("push-notice", |rt| {
+            rt.update(|s, tx| {
+                tx.animated();
+                toast_id = s.push_notice("Clip saved to Captures", state::NoticeTone::Good);
+            });
+        });
+        r.play(0.45);
+        r.act("drag-start", |rt| {
+            rt.update(|s, tx| s.begin_notice_drag(toast_id, tx.clock()));
+        });
+        for step in 1..=6 {
+            let x = step as f32 * 10.0;
+            r.act("drag-move", |rt| {
+                rt.update(|s, tx| s.update_notice_drag(toast_id, x, tx.clock()));
+            });
+            r.step();
+        }
+        r.act("drag-snap-back", |rt| {
+            rt.update(|s, tx| {
+                tx.animated();
+                s.end_notice_drag(toast_id, false, tx);
+            });
+        });
+        r.play(0.45);
+        r.act("swipe-start", |rt| {
+            rt.update(|s, tx| s.begin_notice_drag(toast_id, tx.clock()));
+        });
+        for step in 1..=6 {
+            let x = step as f32 * 22.0;
+            r.act("swipe-move", |rt| {
+                rt.update(|s, tx| s.update_notice_drag(toast_id, x, tx.clock()));
+            });
+            r.step();
+        }
+        r.act("swipe-dismiss", |rt| {
+            rt.update(|s, tx| {
+                tx.animated();
+                s.end_notice_drag(toast_id, false, tx);
+            });
+        });
+        r.play(0.45);
+        r.quiet();
+        r.play(0.35);
+        r.rec
+    }
+
+    #[test]
+    fn notice_stack_enter_drag_snap_back_and_dismiss_settle_cleanly() {
+        for (label, reduced) in [("notice/normal", false), ("notice/reduced", true)] {
+            let rec = notice_stack_recording(reduced);
+            let findings = check(&rec);
+            assert_no_kinds(
+                label,
+                &findings,
+                &[
+                    "pop-in",
+                    "cut-exit",
+                    "overshoot",
+                    "never-settles",
+                    "wakes-after-end",
+                    "flicker",
+                ],
+            );
         }
     }
 }

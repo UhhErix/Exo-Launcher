@@ -35,11 +35,11 @@ pub fn glass_capsule_opt(key: &'static str, blur: bool) -> El {
     capsule
 }
 
-pub fn glass_panel(key: &'static str, width: f32) -> El {
+pub fn glass_panel(key: impl Into<String>, width: f32) -> El {
     glass_panel_opt(key, width, true)
 }
 
-pub fn glass_panel_opt(key: &'static str, width: f32, blur: bool) -> El {
+pub fn glass_panel_opt(key: impl Into<String>, width: f32, blur: bool) -> El {
     let mut panel = rune::col()
         .key(key)
         .w(width)
