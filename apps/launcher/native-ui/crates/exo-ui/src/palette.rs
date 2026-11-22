@@ -22,15 +22,15 @@ fn palette_row(item: PaletteItem, index: usize, selected: bool) -> El {
         .center_y()
         .fill(if selected { hover_fill() } else { TRANSPARENT })
         .hover(hover_fill())
-        .on_press(move |s: &mut AppState| {
+        .on_press_tx(move |s: &mut AppState, tx| {
             s.palette_index = index;
-            s.execute_palette_target(target.clone());
+            s.execute_palette_target(target.clone(), tx);
         })
         .child(text(item.title).font(type_control()).color(FG).truncate())
         .child(text(item.subtitle).font(type_small()).color(fg_muted()))
 }
 
-pub fn handle_palette_key(s: &mut AppState, ev: &KeyEvent, _tx: &mut Tx) -> bool {
+pub fn handle_palette_key(s: &mut AppState, ev: &KeyEvent, tx: &mut Tx) -> bool {
     match ev.key {
         Key::Escape => {
             s.close_palette();
@@ -53,7 +53,7 @@ pub fn handle_palette_key(s: &mut AppState, ev: &KeyEvent, _tx: &mut Tx) -> bool
         Key::Enter => {
             let items = s.palette_results();
             if let Some(item) = items.get(s.palette_index) {
-                s.execute_palette_target(item.target.clone());
+                s.execute_palette_target(item.target.clone(), tx);
             } else {
                 s.close_palette();
             }
@@ -81,10 +81,10 @@ pub fn view(s: &AppState) -> El {
         .on_edit(edit_access(|s: &mut AppState| &mut s.palette_query))
         .on_input_change(|s: &mut AppState, _| s.palette_index = 0)
         .on_input_key(handle_palette_key)
-        .on_submit(|s: &mut AppState, _| {
+        .on_submit(|s: &mut AppState, tx| {
             let list = s.palette_results();
             if let Some(item) = list.get(s.palette_index) {
-                s.execute_palette_target(item.target.clone());
+                s.execute_palette_target(item.target.clone(), tx);
             }
         });
 
@@ -102,19 +102,18 @@ pub fn view(s: &AppState) -> El {
         el().w_full()
             .h(72.0)
             .center()
-            .child(text("No matching games or commands").font(type_small()).color(fg_muted()))
-    } else {
-        col()
-            .w_full()
-            .px(6.0)
-            .py(6.0)
-            .gap(2.0)
-            .children(
-                items
-                    .into_iter()
-                    .enumerate()
-                    .map(|(i, item)| palette_row(item, i, i == clamped)),
+            .child(
+                text("No matching games or commands")
+                    .font(type_small())
+                    .color(fg_muted()),
             )
+    } else {
+        col().w_full().px(6.0).py(6.0).gap(2.0).children(
+            items
+                .into_iter()
+                .enumerate()
+                .map(|(i, item)| palette_row(item, i, i == clamped)),
+        )
     };
 
     let card = glass_panel("command-palette", 540.0)

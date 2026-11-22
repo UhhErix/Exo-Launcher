@@ -1,4 +1,5 @@
 pub mod pipe;
+pub mod remote_art;
 pub mod types;
 
 use serde::Serialize;
@@ -10,25 +11,72 @@ use std::io;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, mpsc};
 use std::time::Duration;
-pub use types::{ActionResult, ArtBase, Game, HostContract, HostEvent, LibraryPayload};
+pub use types::{
+    ActionResult, ArtBase, ExoAccountState, Game, GameExtras, GameGetReply, GameProperties,
+    GamePropertySetReply, HostContract, HostEvent, InstallProgress, KeyPreview, LauncherSettings,
+    LibraryPayload, StoreArt, StoreGame, StoreHome, StoreLowest, StoreOffer, StoreOtherOffers,
+    StoreSearchReply, StoreShelf, StoreTile,
+};
 
 pub const PROTOCOL_VERSION: u32 = 1;
 const MAX_INBOUND_BYTES: usize = 32 * 1024 * 1024;
 
 pub const METHOD_ART_BASE: &str = "art.base";
+pub const METHOD_EXO_ACCOUNT_STATE: &str = "exoAccount.state";
 pub const METHOD_LIBRARY_GET: &str = "library.get";
 pub const METHOD_LIBRARY_REFRESH: &str = "library.refresh";
+pub const METHOD_GAME_GET: &str = "game.get";
+pub const METHOD_GAME_EXTRAS: &str = "game.extras";
 pub const METHOD_GAME_LAUNCH: &str = "game.launch";
 pub const METHOD_GAME_STOP: &str = "game.stop";
+pub const METHOD_GAME_INSTALL: &str = "game.install";
+pub const METHOD_GAME_UPDATE: &str = "game.update";
+pub const METHOD_GAME_UNINSTALL: &str = "game.uninstall";
+pub const METHOD_GAME_REPAIR: &str = "game.repair";
+pub const METHOD_GAME_OPEN_FOLDER: &str = "game.openFolder";
+pub const METHOD_GAME_CANCEL_INSTALL: &str = "game.cancelInstall";
+pub const METHOD_GAME_PAUSE_INSTALL: &str = "game.pauseInstall";
+pub const METHOD_GAME_PROPERTIES: &str = "game.properties";
+pub const METHOD_GAME_PROPERTIES_SET: &str = "game.properties.set";
+pub const METHOD_KEYS_PREVIEW: &str = "keys.preview";
+pub const METHOD_KEYS_ACTIVATE: &str = "keys.activate";
 pub const METHOD_SETTINGS_GET: &str = "settings.get";
+pub const METHOD_SETTINGS_SET: &str = "settings.set";
+pub const METHOD_STORE_HOME: &str = "store.home";
+pub const METHOD_STORE_SEARCH: &str = "store.search";
+pub const METHOD_STORE_GAME: &str = "store.game";
+pub const METHOD_STORE_GAME_OFFERS: &str = "store.gameOffers";
+pub const METHOD_STORE_OPEN: &str = "store.open";
+pub const METHOD_STORE_WISHLIST: &str = "store.wishlist";
 
 pub const USED_METHODS: &[&str] = &[
     METHOD_ART_BASE,
+    METHOD_EXO_ACCOUNT_STATE,
     METHOD_LIBRARY_GET,
     METHOD_LIBRARY_REFRESH,
+    METHOD_GAME_GET,
+    METHOD_GAME_EXTRAS,
     METHOD_GAME_LAUNCH,
     METHOD_GAME_STOP,
+    METHOD_GAME_INSTALL,
+    METHOD_GAME_UPDATE,
+    METHOD_GAME_UNINSTALL,
+    METHOD_GAME_REPAIR,
+    METHOD_GAME_OPEN_FOLDER,
+    METHOD_GAME_CANCEL_INSTALL,
+    METHOD_GAME_PAUSE_INSTALL,
+    METHOD_GAME_PROPERTIES,
+    METHOD_GAME_PROPERTIES_SET,
+    METHOD_KEYS_PREVIEW,
+    METHOD_KEYS_ACTIVATE,
     METHOD_SETTINGS_GET,
+    METHOD_SETTINGS_SET,
+    METHOD_STORE_HOME,
+    METHOD_STORE_SEARCH,
+    METHOD_STORE_GAME,
+    METHOD_STORE_GAME_OFFERS,
+    METHOD_STORE_OPEN,
+    METHOD_STORE_WISHLIST,
 ];
 
 #[derive(Debug)]
@@ -297,6 +345,12 @@ fn dispatch_line(
         let parsed = match name {
             "library.updated" => serde_json::from_value::<LibraryPayload>(data.clone())
                 .map(HostEvent::LibraryUpdated)
+                .unwrap_or(HostEvent::Raw {
+                    event: name.to_string(),
+                    data,
+                }),
+            "install.progress" => serde_json::from_value::<InstallProgress>(data.clone())
+                .map(HostEvent::InstallProgress)
                 .unwrap_or(HostEvent::Raw {
                     event: name.to_string(),
                     data,

@@ -1,8 +1,9 @@
 use crate::state::{AppState, LibraryFilter, title_hue};
 use exo_kit::{
-    BG, FG, PRESS_SCALE, PRIMARY_FG, RADIUS_CARD, RADIUS_PILL, SPRING_MOVE, fg_muted, filter_pill,
-    glass_button, good, icon_play, icon_refresh, icon_stop, primary_button, type_page,
-    type_section, type_small,
+    BG, FG, PRESS_SCALE, PRIMARY_FG, RADIUS_CARD, RADIUS_PANEL, RADIUS_PILL, SPRING_MOVE, fg_muted,
+    filter_pill, glass_button, glass_control_fill, glass_rim, good, icon_key, icon_play,
+    icon_refresh, icon_stop, primary_button, progress_bar, type_control, type_page, type_section,
+    type_small,
 };
 use exo_rpc::Game;
 use rune::{El, SurfaceFit, col, el, oklch, row, text};
@@ -78,8 +79,66 @@ fn poster_tile(game: &Game, selected: bool, s: &AppState, scale: f32) -> El {
         .radius(RADIUS_CARD + 3.0)
         .border(if selected { 1.5 } else { 0.0 }, FG.alpha(0.88))
         .motion(SPRING_MOVE)
-        .on_press(move |s: &mut AppState| s.selected_game_id = Some(id.clone()))
+        .on_press(move |s: &mut AppState| s.open_game_page(&id))
         .child(art.child(scrim))
+}
+
+fn install_banner(s: &AppState) -> Option<El> {
+    let prog = s.install_progress.as_ref()?;
+    if !prog.is_active {
+        return None;
+    }
+    let gid = prog.game_id.clone().unwrap_or_default();
+    let title = s
+        .games
+        .iter()
+        .find(|g| g.id == gid)
+        .map(|g| g.title.clone())
+        .unwrap_or_else(|| "Downloading".into());
+    let pct = (prog.percent.clamp(0.0, 100.0)).round() as u32;
+    let status = prog
+        .status
+        .clone()
+        .unwrap_or_else(|| format!("{} · {pct}%", prog.phase));
+    let gid_pause = gid.clone();
+    let gid_cancel = gid;
+
+    Some(
+        row()
+            .w_full()
+            .px(16.0)
+            .py(12.0)
+            .justify_between()
+            .center_y()
+            .radius(RADIUS_PANEL)
+            .fill(glass_control_fill())
+            .border(1.0, glass_rim())
+            .child(
+                col()
+                    .gap(6.0)
+                    .child(
+                        row()
+                            .gap(10.0)
+                            .center_y()
+                            .child(text(title).font(type_control()).color(FG))
+                            .child(text(status).font(type_small()).color(fg_muted())),
+                    )
+                    .child(progress_bar(280.0, (prog.percent / 100.0) as f32)),
+            )
+            .child(
+                row()
+                    .gap(8.0)
+                    .center_y()
+                    .child(
+                        glass_button("install-pause", "Pause", None)
+                            .on_press(move |s: &mut AppState| s.pause_install(&gid_pause)),
+                    )
+                    .children(prog.can_cancel.then(|| {
+                        glass_button("install-cancel", "Cancel", None)
+                            .on_press(move |s: &mut AppState| s.cancel_install(&gid_cancel))
+                    })),
+            ),
+    )
 }
 
 pub fn view(s: &AppState, scale: f32) -> El {
@@ -119,27 +178,40 @@ pub fn view(s: &AppState, scale: f32) -> El {
             );
         }
     }
-    actions = actions.child(
-        glass_button("refresh-library", "Refresh", Some(icon_refresh(14.0, FG)))
-            .on_press(|s: &mut AppState| s.refresh_library()),
-    );
+    actions = actions
+        .child(
+            glass_button("activate-key-btn", "Activate key", Some(icon_key(14.0, FG)))
+                .on_press_tx(|s: &mut AppState, tx| s.open_key_modal(tx)),
+        )
+        .child(
+            glass_button("refresh-library", "Refresh", Some(icon_refresh(14.0, FG)))
+                .on_press(|s: &mut AppState| s.refresh_library()),
+        );
 
-    let filter_bar = row().gap(6.0).center_y().children(
-        LibraryFilter::ALL.into_iter().map(|f| {
-            let count = match f {
-                LibraryFilter::All => s.games.len(),
-                LibraryFilter::Installed => s.installed_count(),
-                LibraryFilter::Recent => s
-                    .games
-                    .iter()
-                    .filter(|g| g.last_played_utc.is_some() || g.playtime_minutes > 0)
-                    .count(),
-                LibraryFilter::Running => s.running_count(),
-            };
-            filter_pill(f.key(), format!("{} ({count})", f.label()), s.filter == f)
-                .on_press(move |s: &mut AppState| s.filter = f)
-        }),
-    );
+    let filter_bar = row()
+        .w_full()
+        .justify_between()
+        .center_y()
+        .child(row().gap(6.0).center_y().children(
+            LibraryFilter::ALL.into_iter().map(|f| {
+                let count = match f {
+                    LibraryFilter::All => s.games.len(),
+                    LibraryFilter::Installed => s.installed_count(),
+                    LibraryFilter::Recent => s
+                        .games
+                        .iter()
+                        .filter(|g| g.last_played_utc.is_some() || g.playtime_minutes > 0)
+                        .count(),
+                    LibraryFilter::Running => s.running_count(),
+                };
+                filter_pill(f.key(), format!("{} ({count})", f.label()), s.filter == f)
+                    .on_press(move |s: &mut AppState| s.filter = f)
+            }),
+        ))
+        .child(
+            filter_pill("sort-cycle", s.sort.label().into(), false)
+                .on_press(|s: &mut AppState| s.sort = s.sort.next()),
+        );
 
     let grid = if filtered.is_empty() {
         el().w_full()
@@ -169,7 +241,7 @@ pub fn view(s: &AppState, scale: f32) -> El {
         .w_full()
         .pt(72.0)
         .px(24.0)
-        .pb(36.0)
+        .pb(44.0)
         .gap(18.0)
         .child(
             row()
@@ -184,6 +256,7 @@ pub fn view(s: &AppState, scale: f32) -> El {
                 )
                 .child(actions),
         )
+        .children(install_banner(s))
         .child(filter_bar)
         .child(grid);
 
@@ -204,8 +277,8 @@ pub fn view(s: &AppState, scale: f32) -> El {
                 el().px(14.0)
                     .py(7.0)
                     .radius(RADIUS_PILL)
-                    .fill(exo_kit::glass_control_fill())
-                    .border(1.0, exo_kit::glass_rim())
+                    .fill(glass_control_fill())
+                    .border(1.0, glass_rim())
                     .child(text(notice.clone()).font(type_small()).color(FG)),
             ),
         );
