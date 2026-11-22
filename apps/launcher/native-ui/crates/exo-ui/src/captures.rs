@@ -7,7 +7,7 @@ use exo_kit::{
     glass_button, glass_panel, glass_rim, hairline, hover_fill, icon_back, icon_camera, icon_close,
     icon_film, icon_folder, icon_pause, icon_play, icon_plus, icon_record_dot, icon_replay,
     icon_scissors, icon_settings, icon_star, icon_trash, icon_volume, icon_volume_off,
-    primary_button, pressed_fill, section_card, status_badge, subtle_fill, type_body, type_control,
+    pressed_fill, primary_button, section_card, status_badge, subtle_fill, type_body, type_control,
     type_page, type_section, type_small, type_title, warn,
 };
 use exo_rpc::{CaptureItem, format_duration_ms};

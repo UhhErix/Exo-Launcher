@@ -58,10 +58,7 @@ impl VideoStreamHandle {
     }
 
     pub fn snapshot_stats(&self) -> VideoStreamStats {
-        self.stats
-            .lock()
-            .map(|s| s.clone())
-            .unwrap_or_default()
+        self.stats.lock().map(|s| s.clone()).unwrap_or_default()
     }
 }
 
@@ -90,9 +87,9 @@ pub fn nv12_to_rgba(
         let y_row = &nv12[row * stride..row * stride + w];
         let uv_row_off = uv_base + (row >> 1) * stride;
         let out_row_off = row * w * 4;
-        for col in 0..w {
+        for (col, &y_byte) in y_row.iter().enumerate() {
             let dst_col = if flip_x { w - 1 - col } else { col };
-            let y = y_row[col] as i32;
+            let y = y_byte as i32;
             let uv_idx = uv_row_off + (col & !1);
             let u = nv12[uv_idx] as i32 - 128;
             let v = nv12[uv_idx + 1] as i32 - 128;
@@ -159,8 +156,10 @@ fn decode_loop(
     stats: Arc<Mutex<VideoStreamStats>>,
     initial_codec: &str,
 ) {
+    use windows::Win32::Media::MediaFoundation::{
+        MF_VERSION, MFSTARTUP_LITE, MFShutdown, MFStartup,
+    };
     use windows::Win32::System::Com::{COINIT_MULTITHREADED, CoInitializeEx, CoUninitialize};
-    use windows::Win32::Media::MediaFoundation::{MF_VERSION, MFSTARTUP_LITE, MFShutdown, MFStartup};
 
     unsafe {
         let _ = CoInitializeEx(None, COINIT_MULTITHREADED);
@@ -244,11 +243,11 @@ impl MfDecoder {
     fn create(codec: &str) -> Result<Self, String> {
         use std::ptr::null_mut;
         use windows::Win32::Media::MediaFoundation::{
-            CODECAPI_AVLowLatencyMode, IMFActivate, IMFTransform, MFCreateMediaType,
-            MFMediaType_Video, MFT_CATEGORY_VIDEO_DECODER, MFT_ENUM_FLAG_HARDWARE,
-            MFT_ENUM_FLAG_SORTANDFILTER, MFT_ENUM_FLAG_SYNCMFT, MFT_MESSAGE_NOTIFY_BEGIN_STREAMING,
-            MFT_MESSAGE_NOTIFY_START_OF_STREAM, MFT_REGISTER_TYPE_INFO, MFTEnumEx,
-            MFVideoFormat_H264, MFVideoFormat_HEVC, MF_MT_MAJOR_TYPE, MF_MT_SUBTYPE,
+            CODECAPI_AVLowLatencyMode, IMFActivate, IMFTransform, MF_MT_MAJOR_TYPE, MF_MT_SUBTYPE,
+            MFCreateMediaType, MFMediaType_Video, MFT_CATEGORY_VIDEO_DECODER,
+            MFT_ENUM_FLAG_HARDWARE, MFT_ENUM_FLAG_SORTANDFILTER, MFT_ENUM_FLAG_SYNCMFT,
+            MFT_MESSAGE_NOTIFY_BEGIN_STREAMING, MFT_MESSAGE_NOTIFY_START_OF_STREAM,
+            MFT_REGISTER_TYPE_INFO, MFTEnumEx, MFVideoFormat_H264, MFVideoFormat_HEVC,
         };
         use windows::Win32::System::Com::CoTaskMemFree;
 
@@ -303,7 +302,8 @@ impl MfDecoder {
             }
         }
 
-        let transform = transform.ok_or_else(|| format!("No Media Foundation decoder for {codec}"))?;
+        let transform =
+            transform.ok_or_else(|| format!("No Media Foundation decoder for {codec}"))?;
         unsafe {
             if let Ok(attrs) = transform.GetAttributes() {
                 let _ = attrs.SetUINT32(&CODECAPI_AVLowLatencyMode, 1);
@@ -344,8 +344,9 @@ impl MfDecoder {
 
     fn configure_output(&mut self) -> Result<(), String> {
         use windows::Win32::Media::MediaFoundation::{
+            MF_MT_DEFAULT_STRIDE, MF_MT_FRAME_SIZE, MF_MT_SUBTYPE,
             MFT_OUTPUT_STREAM_CAN_PROVIDE_SAMPLES, MFT_OUTPUT_STREAM_PROVIDES_SAMPLES,
-            MFVideoFormat_NV12, MF_MT_DEFAULT_STRIDE, MF_MT_FRAME_SIZE, MF_MT_SUBTYPE,
+            MFVideoFormat_NV12,
         };
         unsafe {
             let mut idx = 0u32;
@@ -359,7 +360,8 @@ impl MfDecoder {
                 }
                 idx += 1;
             }
-            let out_type = chosen.ok_or_else(|| "Decoder does not expose NV12 output".to_string())?;
+            let out_type =
+                chosen.ok_or_else(|| "Decoder does not expose NV12 output".to_string())?;
             self.transform
                 .SetOutputType(0, &out_type, 0)
                 .map_err(|e| e.to_string())?;
@@ -393,8 +395,8 @@ impl MfDecoder {
     ) -> Result<Option<(u32, u32)>, String> {
         use std::mem::ManuallyDrop;
         use windows::Win32::Media::MediaFoundation::{
-            MFCreateMemoryBuffer, MFCreateSample, MFT_OUTPUT_DATA_BUFFER,
-            MF_E_TRANSFORM_NEED_MORE_INPUT, MF_E_TRANSFORM_STREAM_CHANGE,
+            MF_E_TRANSFORM_NEED_MORE_INPUT, MF_E_TRANSFORM_STREAM_CHANGE, MFCreateMemoryBuffer,
+            MFCreateSample, MFT_OUTPUT_DATA_BUFFER,
         };
 
         if !self.seen_keyframe {

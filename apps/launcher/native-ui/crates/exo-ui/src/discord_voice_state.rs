@@ -378,7 +378,11 @@ impl AppState {
                 fps: fps as f64,
                 bitrate: 6200.0,
                 codec: Some("h265".into()),
-                sound: if sound { Some("Game audio".into()) } else { None },
+                sound: if sound {
+                    Some("Game audio".into())
+                } else {
+                    None
+                },
             });
             self.discord.voice_ui.panel = VoicePanel::None;
             return;
@@ -400,7 +404,9 @@ impl AppState {
                     && !rep.ok
                 {
                     s.discord.voice_ui.golive_state = "off".into();
-                    s.notice = rep.message.or_else(|| Some("Could not start screen share".into()));
+                    s.notice = rep
+                        .message
+                        .or_else(|| Some("Could not start screen share".into()));
                 }
             },
         );

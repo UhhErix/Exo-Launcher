@@ -214,7 +214,8 @@ impl DiscordChatState {
                     id: "1309000000000001002".into(),
                     channel_id: "dm-ada".into(),
                     author: erix.clone(),
-                    content: "Joining `Main Lounge` right after this **DX12** test finishes!".into(),
+                    content: "Joining `Main Lounge` right after this **DX12** test finishes!"
+                        .into(),
                     timestamp: "2026-11-22T18:03:15.000Z".into(),
                     reactions: vec![DiscordReaction {
                         count: 1,
@@ -259,7 +260,10 @@ impl AppState {
         if self.discord.chat.loading_channels.contains(channel_id) {
             return;
         }
-        self.discord.chat.loading_channels.insert(channel_id.to_string());
+        self.discord
+            .chat
+            .loading_channels
+            .insert(channel_id.to_string());
         #[cfg(windows)]
         {
             let cid = channel_id.to_string();
@@ -279,7 +283,10 @@ impl AppState {
                     {
                         let page_len = page.len();
                         page.reverse();
-                        s.discord.chat.has_more_before.insert(cid.clone(), page_len >= 50);
+                        s.discord
+                            .chat
+                            .has_more_before
+                            .insert(cid.clone(), page_len >= 50);
                         let newest_id = page.last().map(|m| m.id.clone());
                         let entry = s
                             .discord
@@ -372,12 +379,23 @@ impl AppState {
         if content.is_empty() && upload_ids.is_empty() {
             return;
         }
-        if self.discord.chat.pending_uploads.iter().any(|u| u.uploading) {
+        if self
+            .discord
+            .chat
+            .pending_uploads
+            .iter()
+            .any(|u| u.uploading)
+        {
             self.notice = Some("Wait for attachments to finish uploading".into());
             return;
         }
 
-        let reply_id = self.discord.chat.reply_to.as_ref().map(|(id, _)| id.clone());
+        let reply_id = self
+            .discord
+            .chat
+            .reply_to
+            .as_ref()
+            .map(|(id, _)| id.clone());
         let seq = self.discord.chat.next_local_seq;
         self.discord.chat.next_local_seq += 1;
         let local_id = format!("local-{seq}");
@@ -386,8 +404,14 @@ impl AppState {
             id: local_id.clone(),
             channel_id: cid.clone(),
             author: DiscordUser {
-                id: me.as_ref().map(|m| m.id.clone()).unwrap_or_else(|| "me".into()),
-                username: me.as_ref().map(|m| m.name.clone()).unwrap_or_else(|| "You".into()),
+                id: me
+                    .as_ref()
+                    .map(|m| m.id.clone())
+                    .unwrap_or_else(|| "me".into()),
+                username: me
+                    .as_ref()
+                    .map(|m| m.name.clone())
+                    .unwrap_or_else(|| "You".into()),
                 global_name: me.as_ref().map(|m| m.name.clone()),
                 avatar: me.and_then(|m| m.avatar),
                 bot: false,
@@ -582,7 +606,12 @@ impl AppState {
         );
     }
 
-    pub fn toggle_discord_pin(&mut self, channel_id: &str, message_id: &str, currently_pinned: bool) {
+    pub fn toggle_discord_pin(
+        &mut self,
+        channel_id: &str,
+        message_id: &str,
+        currently_pinned: bool,
+    ) {
         let pin = !currently_pinned;
         if let Some(list) = self.discord.chat.messages_by_channel.get_mut(channel_id)
             && let Some(m) = list.iter_mut().find(|m| m.id == message_id)
@@ -840,10 +869,9 @@ impl AppState {
                 if let Some(pos) = list.iter().position(|m| m.id == msg.id) {
                     list[pos] = msg;
                 } else {
-                    if let Some(ppos) = list
-                        .iter()
-                        .position(|m| m.pending && m.author.id == msg.author.id && m.content == msg.content)
-                    {
+                    if let Some(ppos) = list.iter().position(|m| {
+                        m.pending && m.author.id == msg.author.id && m.content == msg.content
+                    }) {
                         list[ppos] = msg;
                     } else {
                         list.push(msg);
@@ -870,7 +898,12 @@ impl AppState {
     }
 
     pub fn handle_discord_reaction(&mut self, ev: DiscordReactionEvent) {
-        let Some(list) = self.discord.chat.messages_by_channel.get_mut(&ev.channel_id) else {
+        let Some(list) = self
+            .discord
+            .chat
+            .messages_by_channel
+            .get_mut(&ev.channel_id)
+        else {
             return;
         };
         let Some(msg) = list.iter_mut().find(|m| m.id == ev.message_id) else {

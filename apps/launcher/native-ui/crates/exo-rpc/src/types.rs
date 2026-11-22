@@ -94,14 +94,20 @@ pub struct Game {
 }
 
 fn steam_app_id_from_text(value: &str) -> Option<String> {
-    if let Some(rest) = value.strip_prefix("steam:").or_else(|| value.strip_prefix("STEAM:")) {
+    if let Some(rest) = value
+        .strip_prefix("steam:")
+        .or_else(|| value.strip_prefix("STEAM:"))
+    {
         let digits: String = rest.chars().take_while(|c| c.is_ascii_digit()).collect();
         if !digits.is_empty() {
             return Some(digits);
         }
     }
     if let Some(idx) = value.find("/apps/") {
-        let digits: String = value[idx + 6..].chars().take_while(|c| c.is_ascii_digit()).collect();
+        let digits: String = value[idx + 6..]
+            .chars()
+            .take_while(|c| c.is_ascii_digit())
+            .collect();
         if !digits.is_empty() {
             return Some(digits);
         }
@@ -838,7 +844,7 @@ pub enum HostEvent {
     DiscordUnread(crate::discord_types::DiscordUnreadEvent),
     DiscordVoice(crate::discord_types::DiscordVoice),
     DiscordSpeaking { user_id: String, speaking: bool },
-    DiscordMessage(crate::discord_types::DiscordMessageEvent),
+    DiscordMessage(Box<crate::discord_types::DiscordMessageEvent>),
     DiscordReaction(crate::discord_types::DiscordReactionEvent),
     DiscordTyping(crate::discord_types::DiscordTypingEvent),
     DiscordVideo(crate::discord_types::DiscordVideoEvent),

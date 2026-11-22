@@ -1,5 +1,4 @@
-const ENC_TABLE: &[u8; 64] =
-    b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+const ENC_TABLE: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 
 pub fn encode(input: &[u8]) -> String {
     let mut out = String::with_capacity(input.len().div_ceil(3) * 4);
@@ -25,15 +24,12 @@ pub fn encode(input: &[u8]) -> String {
 }
 
 pub fn decode(input: &str) -> Option<Vec<u8>> {
-    let bytes: Vec<u8> = input
-        .bytes()
-        .filter(|b| !b.is_ascii_whitespace())
-        .collect();
+    let bytes: Vec<u8> = input.bytes().filter(|b| !b.is_ascii_whitespace()).collect();
     if !bytes.len().is_multiple_of(4) {
         return None;
     }
     let mut out = Vec::with_capacity((bytes.len() / 4) * 3);
-    for chunk in bytes.chunks_exact(4) {
+    for chunk in bytes.as_chunks::<4>().0 {
         let v0 = dec_val(chunk[0])?;
         let v1 = dec_val(chunk[1])?;
         out.push((v0 << 2) | (v1 >> 4));
@@ -66,7 +62,14 @@ mod tests {
 
     #[test]
     fn round_trips_binary_and_text_payloads() {
-        for sample in [b"".as_slice(), b"f", b"fo", b"foo", b"Exo Rune DX12!", &[0, 1, 254, 255]] {
+        for sample in [
+            b"".as_slice(),
+            b"f",
+            b"fo",
+            b"foo",
+            b"Exo Rune DX12!",
+            &[0, 1, 254, 255],
+        ] {
             let enc = encode(sample);
             let dec = decode(&enc).expect("valid base64");
             assert_eq!(dec, sample);

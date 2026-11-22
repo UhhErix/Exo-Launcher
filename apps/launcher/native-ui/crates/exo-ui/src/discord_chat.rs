@@ -53,7 +53,11 @@ fn tiny_action(key: String, label: &'static str, danger: bool, icon: El) -> El {
         .size(24.0, 24.0)
         .radius(6.0)
         .fill(Color::TRANSPARENT)
-        .hover(if danger { bad().alpha(0.22) } else { hover_fill() })
+        .hover(if danger {
+            bad().alpha(0.22)
+        } else {
+            hover_fill()
+        })
         .press(pressed_fill())
         .center()
         .motion(SPRING_QUICK)
@@ -75,12 +79,22 @@ fn embed_card(s: &AppState, embed: &DiscordEmbed, msg_id: &str, scale: f32) -> E
         .or_else(|| embed.provider.as_ref().and_then(|p| p.name.as_deref()))
         .filter(|s| !s.is_empty())
     {
-        inner = inner.child(text(author.to_string()).font(type_label()).color(fg_muted()));
+        inner = inner.child(
+            text(author.to_string())
+                .font(type_label())
+                .color(fg_muted()),
+        );
     }
     if let Some(ref title) = embed.title
         && !title.is_empty()
     {
-        inner = inner.child(text(title.clone()).font(type_section()).color(FG).w_full().wrap());
+        inner = inner.child(
+            text(title.clone())
+                .font(type_section())
+                .color(FG)
+                .w_full()
+                .wrap(),
+        );
     }
     if let Some(ref desc) = embed.description
         && !desc.is_empty()
@@ -93,7 +107,13 @@ fn embed_card(s: &AppState, embed: &DiscordEmbed, msg_id: &str, scale: f32) -> E
             let mut fc = col()
                 .gap(2.0)
                 .child(text(f.name.clone()).font(type_label()).color(fg_muted()))
-                .child(text(f.value.clone()).font(type_small()).color(FG).w_full().wrap());
+                .child(
+                    text(f.value.clone())
+                        .font(type_small())
+                        .color(FG)
+                        .w_full()
+                        .wrap(),
+                );
             if f.inline {
                 fc = fc.min_w(130.0).grow(1.0);
             } else {
@@ -123,7 +143,11 @@ fn embed_card(s: &AppState, embed: &DiscordEmbed, msg_id: &str, scale: f32) -> E
         .and_then(|f| f.text.as_deref())
         .filter(|s| !s.is_empty())
     {
-        inner = inner.child(text(footer.to_string()).font(type_label()).color(fg_faint()));
+        inner = inner.child(
+            text(footer.to_string())
+                .font(type_label())
+                .color(fg_faint()),
+        );
     }
 
     row()
@@ -181,7 +205,13 @@ fn message_row(
                         .font(type_label())
                         .color(fg_muted()),
                 )
-                .child(text(preview).font(type_label()).color(fg_faint()).grow(1.0).truncate()),
+                .child(
+                    text(preview)
+                        .font(type_label())
+                        .color(fg_faint())
+                        .grow(1.0)
+                        .truncate(),
+                ),
         );
     }
 
@@ -360,7 +390,11 @@ fn message_row(
     }
 
     if let Some(ref fail) = msg.failed {
-        body = body.child(text(format!("Failed: {fail}")).font(type_label()).color(bad()));
+        body = body.child(
+            text(format!("Failed: {fail}"))
+                .font(type_label())
+                .color(bad()),
+        );
     }
 
     if !msg.attachments.is_empty() {
@@ -469,10 +503,7 @@ fn message_row(
                 let cid_q = channel_id.to_string();
                 let mid_q = msg.id.clone();
                 let em_s = em.to_string();
-                let already = msg
-                    .reactions
-                    .iter()
-                    .any(|r| r.emoji.key() == em && r.me);
+                let already = msg.reactions.iter().any(|r| r.emoji.key() == em && r.me);
                 bar = bar.child(
                     el().key(format!("dc-qrx-{}-{em}", msg.id))
                         .size(24.0, 24.0)
@@ -534,7 +565,11 @@ fn message_row(
                     .gap(10.0)
                     .center_y()
                     .child(el().grow(1.0).h(1.0).fill(hairline()))
-                    .child(text(msg.day_key().to_string()).font(type_label()).color(fg_faint()))
+                    .child(
+                        text(msg.day_key().to_string())
+                            .font(type_label())
+                            .color(fg_faint()),
+                    )
                     .child(el().grow(1.0).h(1.0).fill(hairline())),
             )
             .child(line)
@@ -660,12 +695,8 @@ pub fn timeline_and_composer(
     let mut composer_wrap = col().w_full().px(12.0).pb(10.0).gap(6.0);
 
     if let Some(typing) = s.discord.chat.typing_label(channel_id) {
-        composer_wrap = composer_wrap.child(
-            text(typing)
-                .font(type_label())
-                .color(fg_muted())
-                .px(6.0),
-        );
+        composer_wrap =
+            composer_wrap.child(text(typing).font(type_label()).color(fg_muted()).px(6.0));
     }
 
     if let Some((_, ref author)) = s.discord.chat.reply_to {
@@ -915,15 +946,11 @@ pub fn chat_drawer_panel(s: &AppState, scale: f32) -> Option<El> {
                             .justify_between()
                             .center_y()
                             .child(
-                                row()
-                                    .gap(6.0)
-                                    .center_y()
-                                    .child(icon_pin(13.0, FG))
-                                    .child(
-                                        text(format!("Pinned · {}", s.discord.chat.pins.len()))
-                                            .font(type_section())
-                                            .color(FG),
-                                    ),
+                                row().gap(6.0).center_y().child(icon_pin(13.0, FG)).child(
+                                    text(format!("Pinned · {}", s.discord.chat.pins.len()))
+                                        .font(type_section())
+                                        .color(FG),
+                                ),
                             )
                             .child(
                                 tiny_action(
@@ -942,7 +969,9 @@ pub fn chat_drawer_panel(s: &AppState, scale: f32) -> Option<El> {
                             .grow(1.0)
                             .w_full()
                             .min_h(0.0)
-                            .scroll(ScrollSpec { stick_bottom: false })
+                            .scroll(ScrollSpec {
+                                stick_bottom: false,
+                            })
                             .child(list),
                     ),
             )
@@ -957,7 +986,13 @@ pub fn chat_drawer_panel(s: &AppState, scale: f32) -> Option<El> {
                 } else {
                     "No matching messages found."
                 };
-                list = list.child(text(msg).font(type_small()).color(fg_muted()).w_full().wrap());
+                list = list.child(
+                    text(msg)
+                        .font(type_small())
+                        .color(fg_muted())
+                        .w_full()
+                        .wrap(),
+                );
             } else {
                 list = list.child(
                     text(format!("{} results", s.discord.chat.search_total))
@@ -1032,7 +1067,9 @@ pub fn chat_drawer_panel(s: &AppState, scale: f32) -> Option<El> {
                             .grow(1.0)
                             .w_full()
                             .min_h(0.0)
-                            .scroll(ScrollSpec { stick_bottom: false })
+                            .scroll(ScrollSpec {
+                                stick_bottom: false,
+                            })
                             .child(list),
                     ),
             )
@@ -1075,7 +1112,12 @@ fn drawer_message_card(s: &AppState, m: &DiscordMessage, scale: f32) -> El {
                 )
                 .child(text(m.time_short()).font(type_label()).color(fg_faint())),
         )
-        .child(discord_md::render_markdown(&m.content, &m.mentions, &m.id, true))
+        .child(discord_md::render_markdown(
+            &m.content,
+            &m.mentions,
+            &m.id,
+            true,
+        ))
 }
 
 pub fn header_tools(s: &AppState) -> El {

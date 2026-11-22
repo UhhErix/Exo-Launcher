@@ -1075,7 +1075,7 @@ fn main() {
                         exo_rpc::HostEvent::DiscordSpeaking { user_id, speaking } => {
                             s.handle_discord_speaking(&user_id, speaking);
                         }
-                        exo_rpc::HostEvent::DiscordMessage(ev) => s.handle_discord_message(ev),
+                        exo_rpc::HostEvent::DiscordMessage(ev) => s.handle_discord_message(*ev),
                         exo_rpc::HostEvent::DiscordReaction(ev) => s.handle_discord_reaction(ev),
                         exo_rpc::HostEvent::DiscordTyping(ev) => s.handle_discord_typing(ev),
                         exo_rpc::HostEvent::DiscordVideo(ev) => s.handle_discord_video_event(ev),
@@ -1156,7 +1156,7 @@ mod tests {
             .filter(|i| i.params[1] == KIND_BACKDROP_BLUR)
             .count();
         assert!(
-            blurs >= 2 && blurs <= 4,
+            (2..=4).contains(&blurs),
             "expected 2..=4 floating glass surfaces within MAX_BACKDROP_BLURS=4, got {blurs}"
         );
         let strokes = rt

@@ -6,15 +6,6 @@ pub mod pipe;
 pub mod remote_art;
 pub mod types;
 
-use serde::Serialize;
-pub use serde::de::DeserializeOwned;
-use serde_json::{Value, json};
-use std::collections::HashMap;
-use std::fmt;
-use std::io;
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
-use std::sync::{Arc, Mutex, mpsc};
-use std::time::Duration;
 pub use discord_types::{
     DiscordAccountItem, DiscordAccountsReply, DiscordAttachment, DiscordAudioDevice,
     DiscordAudioReply, DiscordChangedEvent, DiscordChannel, DiscordChannels, DiscordDm,
@@ -49,6 +40,15 @@ pub use pc_types::{
     StartupListReply, StartupRemovedItem, SystemAbout, SystemTuningState, TuningItem,
     UpdateCheckReply, UpdateProgress,
 };
+use serde::Serialize;
+pub use serde::de::DeserializeOwned;
+use serde_json::{Value, json};
+use std::collections::HashMap;
+use std::fmt;
+use std::io;
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::{Arc, Mutex, mpsc};
+use std::time::Duration;
 pub use types::{
     ActionResult, ArtBase, ExoAccountState, Game, GameExtras, GameGetReply, GameProperties,
     GamePropertySetReply, HostContract, HostEvent, InstallProgress, KeyPreview, LauncherSettings,
@@ -547,10 +547,7 @@ fn dispatch_line(
         return;
     };
     if let Some(id) = val.get("id").and_then(Value::as_str) {
-        let cb = pending
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .remove(id);
+        let cb = pending.lock().unwrap_or_else(|e| e.into_inner()).remove(id);
         if let Some(cb) = cb {
             let ok = val.get("ok").and_then(Value::as_bool).unwrap_or(false);
             if ok {
@@ -658,7 +655,7 @@ fn dispatch_line(
                 }
             }
             "discord.message" => serde_json::from_value::<DiscordMessageEvent>(data.clone())
-                .map(HostEvent::DiscordMessage)
+                .map(|ev| HostEvent::DiscordMessage(Box::new(ev)))
                 .unwrap_or(HostEvent::Raw {
                     event: name.to_string(),
                     data,

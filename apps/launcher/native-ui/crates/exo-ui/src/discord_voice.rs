@@ -2,13 +2,12 @@ use crate::discord::avatar_box;
 use crate::discord_voice_state::VoicePanel;
 use crate::state::AppState;
 use exo_kit::{
-    BG, FG, PRESS_SCALE, PRIMARY_FG, RADIUS_CARD, RADIUS_PANEL, RADIUS_PILL,
-    SPRING_QUICK, bad, fg_muted, filter_pill, glass_button, glass_rim, good, hairline,
-    hex, hover_fill, icon_close, icon_hand, icon_headphones, icon_headphones_off, icon_maximize,
-    icon_mic, icon_mic_off, icon_monitor, icon_music, icon_phone, icon_phone_off,
-    icon_screen_share, icon_sliders, icon_video, icon_volume, icon_volume_off, pressed_fill,
-    primary_button, subtle_fill, type_body, type_control, type_label, type_section, type_small,
-    type_title, warn,
+    BG, FG, PRESS_SCALE, PRIMARY_FG, RADIUS_CARD, RADIUS_PANEL, RADIUS_PILL, SPRING_QUICK, bad,
+    fg_muted, filter_pill, glass_button, glass_rim, good, hairline, hex, hover_fill, icon_close,
+    icon_hand, icon_headphones, icon_headphones_off, icon_maximize, icon_mic, icon_mic_off,
+    icon_monitor, icon_music, icon_phone, icon_phone_off, icon_screen_share, icon_sliders,
+    icon_video, icon_volume, icon_volume_off, pressed_fill, primary_button, subtle_fill, type_body,
+    type_control, type_label, type_section, type_small, type_title, warn,
 };
 use exo_rpc::{DiscordChannel, DiscordVoiceMember};
 use rune::{Color, El, ScrollSpec, SurfaceFit, col, el, row, text};
@@ -22,7 +21,13 @@ fn card_surface() -> Color {
     hex(0x0e0e11, 1.0)
 }
 
-fn control_pill_btn(key: &'static str, label: &'static str, active: bool, danger: bool, icon: El) -> El {
+fn control_pill_btn(
+    key: &'static str,
+    label: &'static str,
+    active: bool,
+    danger: bool,
+    icon: El,
+) -> El {
     let fill = if danger {
         bad().alpha(0.20)
     } else if active {
@@ -107,7 +112,11 @@ fn stream_theater(s: &AppState, user_id: &str, members: &[DiscordVoiceMember]) -
             .clip_rounded(RADIUS_CARD)
             .fill(BG)
             .pixels_fit(&pixels, SurfaceFit::Fit);
-        s_el = if fs { s_el.grow(1.0).min_h(380.0) } else { s_el.h(254.0) };
+        s_el = if fs {
+            s_el.grow(1.0).min_h(380.0)
+        } else {
+            s_el.h(254.0)
+        };
         (s_el, meta)
     } else {
         (
@@ -154,7 +163,11 @@ fn stream_theater(s: &AppState, user_id: &str, members: &[DiscordVoiceMember]) -
                 .child(
                     glass_button(
                         "dc-stream-mute",
-                        if mix.stream_muted { "Unmute stream" } else { "Mute stream" },
+                        if mix.stream_muted {
+                            "Unmute stream"
+                        } else {
+                            "Mute stream"
+                        },
                         Some(if mix.stream_muted {
                             icon_volume_off(13.0, bad())
                         } else {
@@ -180,8 +193,12 @@ fn stream_theater(s: &AppState, user_id: &str, members: &[DiscordVoiceMember]) -
                     }),
                 )
                 .child(
-                    glass_button("dc-stream-stop", "Stop watching", Some(icon_close(13.0, FG)))
-                        .on_press(|s: &mut AppState| s.stop_watching_discord_stream()),
+                    glass_button(
+                        "dc-stream-stop",
+                        "Stop watching",
+                        Some(icon_close(13.0, FG)),
+                    )
+                    .on_press(|s: &mut AppState| s.stop_watching_discord_stream()),
                 ),
         );
 
@@ -249,13 +266,21 @@ fn golive_panel(s: &AppState) -> El {
                     .on_press(move |s: &mut AppState| {
                         s.discord.voice_ui.golive_selected_source = Some(sid.clone())
                     })
-                    .child(icon_monitor(16.0, if selected { good() } else { fg_muted() }))
+                    .child(icon_monitor(
+                        16.0,
+                        if selected { good() } else { fg_muted() },
+                    ))
                     .child(
                         col()
                             .grow(1.0)
                             .min_w(0.0)
                             .gap(2.0)
-                            .child(text(src.title.clone()).font(type_control()).color(FG).truncate())
+                            .child(
+                                text(src.title.clone())
+                                    .font(type_control())
+                                    .color(FG)
+                                    .truncate(),
+                            )
                             .child(
                                 text(format!(
                                     "{}×{} · {} Hz{}",
@@ -265,7 +290,11 @@ fn golive_panel(s: &AppState) -> El {
                                     if src.game { " · Game" } else { "" }
                                 ))
                                 .font(type_label())
-                                .color(if src.game { good() } else { fg_muted() }),
+                                .color(if src.game {
+                                    good()
+                                } else {
+                                    fg_muted()
+                                }),
                             ),
                     ),
             );
@@ -353,27 +382,37 @@ fn golive_panel(s: &AppState) -> El {
                 .w_full()
                 .justify_between()
                 .center_y()
-                .child(text("Share screen · Go Live").font(type_section()).color(FG))
+                .child(
+                    text("Share screen · Go Live")
+                        .font(type_section())
+                        .color(FG),
+                )
                 .child(
                     glass_button("dc-gl-close", "Close", Some(icon_close(12.0, fg_muted())))
                         .on_press(|s: &mut AppState| s.discord.voice_ui.panel = VoicePanel::None),
                 ),
         )
         .child(sources_col)
-        .child(row().w_full().justify_between().flex_wrap().gap(10.0).child(res_row).child(fps_row))
         .child(
-            row().w_full().justify_end().gap(8.0).child(if is_live {
-                glass_button("dc-gl-stop", "Stop sharing", Some(icon_close(13.0, bad())))
-                    .on_press(|s: &mut AppState| s.stop_discord_golive())
-            } else {
-                primary_button(
-                    "dc-gl-start",
-                    "Go Live",
-                    Some(icon_screen_share(13.0, PRIMARY_FG)),
-                )
-                .on_press(|s: &mut AppState| s.start_discord_golive())
-            }),
+            row()
+                .w_full()
+                .justify_between()
+                .flex_wrap()
+                .gap(10.0)
+                .child(res_row)
+                .child(fps_row),
         )
+        .child(row().w_full().justify_end().gap(8.0).child(if is_live {
+            glass_button("dc-gl-stop", "Stop sharing", Some(icon_close(13.0, bad())))
+                .on_press(|s: &mut AppState| s.stop_discord_golive())
+        } else {
+            primary_button(
+                "dc-gl-start",
+                "Go Live",
+                Some(icon_screen_share(13.0, PRIMARY_FG)),
+            )
+            .on_press(|s: &mut AppState| s.start_discord_golive())
+        }))
 }
 
 fn soundboard_panel(s: &AppState) -> El {
@@ -438,7 +477,9 @@ fn soundboard_panel(s: &AppState) -> El {
                 ),
         )
         .child(if s.discord.voice_ui.soundboard_loading {
-            text("Loading soundboard…").font(type_small()).color(fg_muted())
+            text("Loading soundboard…")
+                .font(type_small())
+                .color(fg_muted())
         } else {
             grid
         })
@@ -464,7 +505,11 @@ fn audio_mixer_panel(s: &AppState) -> El {
                         .gap(8.0)
                         .center_y()
                         .child(icon_sliders(14.0, FG))
-                        .child(text("Voice audio & Exo Voice").font(type_section()).color(FG)),
+                        .child(
+                            text("Voice audio & Exo Voice")
+                                .font(type_section())
+                                .color(FG),
+                        ),
                 )
                 .child(
                     glass_button("dc-aud-close", "Close", Some(icon_close(12.0, fg_muted())))
@@ -486,10 +531,10 @@ fn audio_mixer_panel(s: &AppState) -> El {
         for d in &aud.outputs {
             let id = d.id.clone();
             let active = aud.output.as_deref() == Some(d.id.as_str());
-            out_pills = out_pills.child(
-                filter_pill("dc-aud-out", d.name.clone(), active)
-                    .on_press(move |s: &mut AppState| s.set_discord_audio(json!({ "output": id }))),
-            );
+            out_pills = out_pills
+                .child(filter_pill("dc-aud-out", d.name.clone(), active).on_press(
+                    move |s: &mut AppState| s.set_discord_audio(json!({ "output": id })),
+                ));
         }
         let in_vol = aud.input_volume.round() as i32;
         let out_vol = aud.output_volume.round() as i32;
@@ -497,8 +542,20 @@ fn audio_mixer_panel(s: &AppState) -> El {
         let sb_muted = aud.soundboard_muted;
 
         body = body
-            .child(col().w_full().gap(6.0).child(text("Microphone").font(type_label()).color(fg_muted())).child(in_pills))
-            .child(col().w_full().gap(6.0).child(text("Output").font(type_label()).color(fg_muted())).child(out_pills))
+            .child(
+                col()
+                    .w_full()
+                    .gap(6.0)
+                    .child(text("Microphone").font(type_label()).color(fg_muted()))
+                    .child(in_pills),
+            )
+            .child(
+                col()
+                    .w_full()
+                    .gap(6.0)
+                    .child(text("Output").font(type_label()).color(fg_muted()))
+                    .child(out_pills),
+            )
             .child(
                 row()
                     .w_full()
@@ -509,52 +566,74 @@ fn audio_mixer_panel(s: &AppState) -> El {
                             .gap(6.0)
                             .center_y()
                             .child(text(format!("Mic {in_vol}%")).font(type_small()).color(FG))
-                            .child(
-                                glass_button("dc-mic-dn", "−", None).on_press(move |s: &mut AppState| {
-                                    s.set_discord_audio(json!({ "inputVolume": (in_vol - 10).clamp(0, 200) }))
-                                }),
-                            )
-                            .child(
-                                glass_button("dc-mic-up", "+", None).on_press(move |s: &mut AppState| {
-                                    s.set_discord_audio(json!({ "inputVolume": (in_vol + 10).clamp(0, 200) }))
-                                }),
-                            ),
+                            .child(glass_button("dc-mic-dn", "−", None).on_press(
+                                move |s: &mut AppState| {
+                                    s.set_discord_audio(
+                                        json!({ "inputVolume": (in_vol - 10).clamp(0, 200) }),
+                                    )
+                                },
+                            ))
+                            .child(glass_button("dc-mic-up", "+", None).on_press(
+                                move |s: &mut AppState| {
+                                    s.set_discord_audio(
+                                        json!({ "inputVolume": (in_vol + 10).clamp(0, 200) }),
+                                    )
+                                },
+                            )),
                     )
                     .child(
                         row()
                             .gap(6.0)
                             .center_y()
-                            .child(text(format!("Output {out_vol}%")).font(type_small()).color(FG))
                             .child(
-                                glass_button("dc-out-dn", "−", None).on_press(move |s: &mut AppState| {
-                                    s.set_discord_audio(json!({ "outputVolume": (out_vol - 10).clamp(0, 200) }))
-                                }),
+                                text(format!("Output {out_vol}%"))
+                                    .font(type_small())
+                                    .color(FG),
                             )
-                            .child(
-                                glass_button("dc-out-up", "+", None).on_press(move |s: &mut AppState| {
-                                    s.set_discord_audio(json!({ "outputVolume": (out_vol + 10).clamp(0, 200) }))
-                                }),
-                            ),
+                            .child(glass_button("dc-out-dn", "−", None).on_press(
+                                move |s: &mut AppState| {
+                                    s.set_discord_audio(
+                                        json!({ "outputVolume": (out_vol - 10).clamp(0, 200) }),
+                                    )
+                                },
+                            ))
+                            .child(glass_button("dc-out-up", "+", None).on_press(
+                                move |s: &mut AppState| {
+                                    s.set_discord_audio(
+                                        json!({ "outputVolume": (out_vol + 10).clamp(0, 200) }),
+                                    )
+                                },
+                            )),
                     )
                     .child(
                         row()
                             .gap(6.0)
                             .center_y()
-                            .child(text(format!("Soundboard {sb_vol}%")).font(type_small()).color(FG))
+                            .child(
+                                text(format!("Soundboard {sb_vol}%"))
+                                    .font(type_small())
+                                    .color(FG),
+                            )
                             .child(
                                 glass_button(
                                     "dc-sb-mute",
                                     if sb_muted { "Unmute" } else { "Mute" },
                                     None,
                                 )
-                                .on_press(move |s: &mut AppState| {
-                                    s.set_discord_audio(json!({ "soundboardMuted": !sb_muted }))
-                                }),
+                                .on_press(
+                                    move |s: &mut AppState| {
+                                        s.set_discord_audio(json!({ "soundboardMuted": !sb_muted }))
+                                    },
+                                ),
                             ),
                     ),
             );
     } else {
-        body = body.child(text("Reading audio devices…").font(type_small()).color(fg_muted()));
+        body = body.child(
+            text("Reading audio devices…")
+                .font(type_small())
+                .color(fg_muted()),
+        );
     }
 
     body = body.child(
@@ -591,7 +670,12 @@ fn audio_mixer_panel(s: &AppState) -> El {
     body
 }
 
-pub fn voice_stage_view(s: &AppState, guild_id: Option<&str>, ch: &DiscordChannel, scale: f32) -> El {
+pub fn voice_stage_view(
+    s: &AppState,
+    guild_id: Option<&str>,
+    ch: &DiscordChannel,
+    scale: f32,
+) -> El {
     let members = ch.members.as_deref().unwrap_or(&[]);
     let in_this_voice = s.discord.voice.channel_id.as_deref() == Some(ch.id.as_str())
         && s.discord.voice.state != "off";
@@ -700,13 +784,21 @@ pub fn voice_stage_view(s: &AppState, guild_id: Option<&str>, ch: &DiscordChanne
                         .child(
                             col()
                                 .gap(1.0)
-                                .child(text(format!("Live · {title}")).font(type_control()).color(FG))
+                                .child(
+                                    text(format!("Live · {title}"))
+                                        .font(type_control())
+                                        .color(FG),
+                                )
                                 .child(text(stats_txt).font(type_label()).color(good())),
                         ),
                 )
                 .child(
-                    glass_button("dc-golive-stop-top", "Stop sharing", Some(icon_close(13.0, bad())))
-                        .on_press(|s: &mut AppState| s.stop_discord_golive()),
+                    glass_button(
+                        "dc-golive-stop-top",
+                        "Stop sharing",
+                        Some(icon_close(13.0, bad())),
+                    )
+                    .on_press(|s: &mut AppState| s.stop_discord_golive()),
                 ),
         );
     }
@@ -761,7 +853,12 @@ pub fn voice_stage_view(s: &AppState, guild_id: Option<&str>, ch: &DiscordChanne
                     row()
                         .gap(6.0)
                         .center_y()
-                        .child(text(m.name.clone()).font(type_control()).color(FG).truncate())
+                        .child(
+                            text(m.name.clone())
+                                .font(type_control())
+                                .color(FG)
+                                .truncate(),
+                        )
                         .child(if m.deaf || m.server_deaf {
                             icon_headphones_off(12.0, bad())
                         } else if m.mute || m.server_mute {
@@ -808,9 +905,17 @@ pub fn voice_stage_view(s: &AppState, guild_id: Option<&str>, ch: &DiscordChanne
                             }
                         })
                         .child(
-                            text(if is_watching { "Watching" } else { "Watch LIVE" })
-                                .font(type_label())
-                                .color(if is_watching { good() } else { bad() }),
+                            text(if is_watching {
+                                "Watching"
+                            } else {
+                                "Watch LIVE"
+                            })
+                            .font(type_label())
+                            .color(if is_watching {
+                                good()
+                            } else {
+                                bad()
+                            }),
                         ),
                 );
             }
@@ -864,16 +969,16 @@ pub fn voice_stage_view(s: &AppState, guild_id: Option<&str>, ch: &DiscordChanne
                         .key(format!("dc-mix-row-{}", m.id))
                         .gap(4.0)
                         .center_y()
-                        .child(
-                            glass_button("dc-umix-dn", "−", None).on_press(move |s: &mut AppState| {
+                        .child(glass_button("dc-umix-dn", "−", None).on_press(
+                            move |s: &mut AppState| {
                                 s.set_discord_user_mix(&u_dn, Some(v - 20.0), None, None)
-                            }),
-                        )
-                        .child(
-                            glass_button("dc-umix-up", "+", None).on_press(move |s: &mut AppState| {
+                            },
+                        ))
+                        .child(glass_button("dc-umix-up", "+", None).on_press(
+                            move |s: &mut AppState| {
                                 s.set_discord_user_mix(&u_up, Some(v + 20.0), None, None)
-                            }),
-                        )
+                            },
+                        ))
                         .child(
                             glass_button("dc-umix-mute", if mt { "Unmute" } else { "Mute" }, None)
                                 .on_press(move |s: &mut AppState| {
@@ -1006,8 +1111,12 @@ pub fn voice_stage_view(s: &AppState, guild_id: Option<&str>, ch: &DiscordChanne
             )
             .on_press(|s: &mut AppState| s.leave_discord_voice())
         } else {
-            primary_button("dc-vc-join", "Join voice", Some(icon_phone(14.0, PRIMARY_FG)))
-                .on_press(move |s: &mut AppState| s.join_discord_voice(gid_btn.as_deref(), &cid_btn))
+            primary_button(
+                "dc-vc-join",
+                "Join voice",
+                Some(icon_phone(14.0, PRIMARY_FG)),
+            )
+            .on_press(move |s: &mut AppState| s.join_discord_voice(gid_btn.as_deref(), &cid_btn))
         });
 
     stage
@@ -1016,7 +1125,9 @@ pub fn voice_stage_view(s: &AppState, guild_id: Option<&str>, ch: &DiscordChanne
                 .grow(1.0)
                 .w_full()
                 .min_h(0.0)
-                .scroll(ScrollSpec { stick_bottom: false })
+                .scroll(ScrollSpec {
+                    stick_bottom: false,
+                })
                 .child(scroll_body),
         )
         .child(controls_bar)
