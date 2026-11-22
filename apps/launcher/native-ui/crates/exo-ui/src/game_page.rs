@@ -1,7 +1,7 @@
 use crate::state::{AppState, title_hue};
 use exo_kit::{
     BG, FG, PRESS_SCALE, PRIMARY_FG, RADIUS_CARD, RADIUS_PANEL, RADIUS_PILL, SPRING_QUICK,
-    amoled_card, cover_image, danger_button, exo_play_button, fg_muted, float_line, glass_button,
+    amoled_card, danger_button, exo_play_button, fg_muted, float_line, glass_button,
     glass_control_fill, glass_icon_circle, glass_rim_bottom, glass_rim_top, good, hairline,
     hover_fill, icon_chevron_down, icon_chevron_left, icon_chevron_right, icon_download,
     icon_folder, icon_play, icon_stop, icon_store, icon_trash, icon_wrench, pressed_fill,
@@ -399,22 +399,13 @@ pub fn view(s: &AppState, game: &Game, scale: f32) -> El {
     let cover = s.cover_image(game, scale);
     let hero = s.hero_image(game, scale);
 
-    let (stage_w, stage_h) = s.game_stage_size;
     let mut hero_bg = el()
         .pin(Some(0.0), Some(0.0), Some(0.0), Some(0.0))
-        .clip_rounded(0.0)
-        .fill(BG)
-        .on_layout(|s: &mut AppState, r| {
-            if r[2] > 0.0
-                && r[3] > 0.0
-                && ((s.game_stage_size.0 - r[2]).abs() > 0.5
-                    || (s.game_stage_size.1 - r[3]).abs() > 0.5)
-            {
-                s.game_stage_size = (r[2], r[3]);
-            }
-        });
+        .fill(BG);
     if let Some(ref img) = hero {
-        hero_bg = hero_bg.child(cover_image(img.pixels(), stage_w, stage_h, 0.5, 0.22));
+        hero_bg = hero_bg
+            .pixels_fit(img.pixels(), SurfaceFit::Fill)
+            .surface_anchor_fraction(0.5, 0.22);
     } else {
         hero_bg =
             hero_bg.linear_gradient(0.3, [(0.0, oklch(0.32, 0.14, hue).alpha(0.65)), (1.0, BG)]);
