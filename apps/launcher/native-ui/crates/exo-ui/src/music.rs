@@ -27,19 +27,23 @@ fn text_scale(s: &AppState) -> f32 {
 }
 
 fn scaled_title(s: &AppState) -> TextStyle {
-    TextStyle::new(20.0 * text_scale(s), 600.0)
+    let size = 20.0 * text_scale(s);
+    TextStyle::new(size, 600.0).lh(size * 1.5)
 }
 
 fn scaled_body(s: &AppState) -> TextStyle {
-    TextStyle::new(13.0 * text_scale(s), 400.0)
+    let size = 13.0 * text_scale(s);
+    TextStyle::new(size, 400.0).lh(size * 1.3)
 }
 
 fn scaled_small(s: &AppState) -> TextStyle {
-    TextStyle::new(12.0 * text_scale(s), 400.0)
+    let size = 12.0 * text_scale(s);
+    TextStyle::new(size, 400.0).lh(size * 1.3)
 }
 
 fn scaled_mini_title(s: &AppState) -> TextStyle {
-    TextStyle::new(12.0 * text_scale(s), 600.0)
+    let size = 12.0 * text_scale(s);
+    TextStyle::new(size, 600.0).lh(size * 1.3)
 }
 
 fn art_surface_fill() -> Color {
@@ -486,6 +490,7 @@ fn recent_grid(s: &AppState, scale: f32) -> El {
                 .press_on_down()
                 .press_scale(PRESS_SCALE)
                 .w_full()
+                .min_w(0.0)
                 .h(52.0)
                 .pl(4.0)
                 .pr(48.0)
@@ -1644,4 +1649,66 @@ pub fn mini_player(s: &AppState, scale: f32) -> Option<El> {
             .child(lcd)
             .child(volume),
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::shell;
+    use rune::{Env, Runtime};
+
+    #[test]
+    fn music_home_pills_equal_width_and_shelf_cadence() {
+        let mut state = AppState::default();
+        state.room = Room::Music;
+        state.settings.text_size = Some("small".into());
+        if let Some(pill) = state.media.music_recent.get_mut(5) {
+            pill.title = "Ultimate Pitch Perfect (Original Motion Picture Soundtrack)".into();
+        }
+        let sample_section = state.media.music_home_sections[0].clone();
+        state.media.music_home_sections = vec![
+            PlayerSection {
+                title: "Best New Songs".into(),
+                ..sample_section.clone()
+            },
+            PlayerSection {
+                title: "New This Week".into(),
+                ..sample_section.clone()
+            },
+            PlayerSection {
+                title: "Recent Releases".into(),
+                ..sample_section
+            },
+        ];
+
+        let mut rt = Runtime::new(state, shell::view, (1920.0, 1080.0), Env::new(true, 1.0));
+        rt.frame(0.0);
+
+        let p0 = rt.find("music-recent-0").expect("pill 0");
+        let p1 = rt.find("music-recent-1").expect("pill 1");
+        let p2 = rt.find("music-recent-2").expect("pill 2");
+        let p3 = rt.find("music-recent-3").expect("pill 3");
+        let pitch_01 = p1.0 - p0.0;
+        let pitch_12 = p2.0 - p1.0;
+        let pitch_23 = p3.0 - p2.0;
+        assert!(
+            (p0.0 - 508.5).abs() <= 1.0
+                && (pitch_01 - 395.0).abs() <= 1.0
+                && (pitch_12 - 395.0).abs() <= 1.0
+                && (pitch_23 - 395.0).abs() <= 1.0,
+            "pills drifted horizontally: p0={p0:?} p1={p1:?} p2={p2:?} p3={p3:?}"
+        );
+
+        let c0 = rt.find("music-card-0-0").expect("shelf 0 card 0");
+        let c1 = rt.find("music-card-1-0").expect("shelf 1 card 0");
+        let c2 = rt.find("music-card-2-0").expect("shelf 2 card 0");
+        let shelf_01 = c1.1 - c0.1;
+        let shelf_12 = c2.1 - c1.1;
+        assert!(
+            (c0.1 - 419.75).abs() <= 1.5
+                && (shelf_01 - 300.5).abs() <= 1.5
+                && (shelf_12 - 300.5).abs() <= 1.5,
+            "shelf vertical alignment drifted: c0={c0:?} c1={c1:?} c2={c2:?} d01={shelf_01} d12={shelf_12}"
+        );
+    }
 }
