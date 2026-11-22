@@ -622,9 +622,48 @@ fn format_gb_short(gb: f64) -> String {
     }
 }
 
+fn strip_trademarks(raw: &str) -> String {
+    let mut out = String::with_capacity(raw.len());
+    let chars: Vec<char> = raw.chars().collect();
+    let mut i = 0;
+    while i < chars.len() {
+        if chars[i] == '®' || chars[i] == '™' {
+            i += 1;
+            continue;
+        }
+        if chars[i] == '(' {
+            if i + 2 < chars.len()
+                && chars[i + 2] == ')'
+                && matches!(chars[i + 1].to_ascii_lowercase(), 'r' | 'c')
+            {
+                i += 3;
+                continue;
+            }
+            if i + 3 < chars.len()
+                && chars[i + 3] == ')'
+                && chars[i + 1].eq_ignore_ascii_case(&'t')
+                && chars[i + 2].eq_ignore_ascii_case(&'m')
+            {
+                i += 4;
+                continue;
+            }
+        }
+        out.push(chars[i]);
+        i += 1;
+    }
+    out
+}
+
+fn is_numeric_token(s: &str) -> bool {
+    !s.is_empty()
+        && s.chars().all(|c| c.is_ascii_digit() || c == '.')
+        && s.chars().any(|c| c.is_ascii_digit())
+}
+
 fn short_drive_model(raw: &str) -> String {
+    let cleaned = strip_trademarks(raw);
     let mut parts = Vec::new();
-    let tokens: Vec<&str> = raw.split_whitespace().collect();
+    let tokens: Vec<&str> = cleaned.split_whitespace().collect();
     let mut i = 0;
     while i < tokens.len() {
         let t = tokens[i];
@@ -634,26 +673,76 @@ fn short_drive_model(raw: &str) -> String {
             i += 2;
             continue;
         }
-        if matches!(lower.as_str(), "nvme" | "m.2" | "series") {
+        if lower == "solid"
+            && i + 2 < tokens.len()
+            && tokens[i + 1].eq_ignore_ascii_case("state")
+            && tokens[i + 2].eq_ignore_ascii_case("drive")
+        {
+            i += 3;
+            continue;
+        }
+        if matches!(lower.as_str(), "ssd" | "nvme" | "m.2" | "series") {
             i += 1;
             continue;
         }
         if (lower.ends_with("tb") || lower.ends_with("gb"))
-            && lower[..lower.len() - 2]
-                .chars()
-                .all(|c| c.is_ascii_digit() || c == '.')
             && lower.len() > 2
+            && is_numeric_token(&lower[..lower.len() - 2])
         {
             i += 1;
+            continue;
+        }
+        if is_numeric_token(&lower)
+            && i + 1 < tokens.len()
+            && matches!(tokens[i + 1].to_ascii_lowercase().as_str(), "tb" | "gb")
+        {
+            i += 2;
             continue;
         }
         parts.push(t);
         i += 1;
     }
     if parts.is_empty() {
-        raw.trim().to_string()
+        cleaned.trim().to_string()
     } else {
         parts.join(" ")
+    }
+}
+
+fn short_windows_name(raw: &str) -> String {
+    let trimmed = raw.trim();
+    let lower = trimmed.to_ascii_lowercase();
+    let base = if lower.starts_with("windows 11") {
+        Some("Windows 11")
+    } else if lower.starts_with("windows 10") {
+        Some("Windows 10")
+    } else {
+        None
+    };
+    match base {
+        Some(name) if lower.contains("insider") => format!("{name} Insider"),
+        Some(name) => name.to_string(),
+        None => trimmed.to_string(),
+    }
+}
+
+fn format_windows_label(about: Option<&exo_rpc::SystemAbout>) -> String {
+    let name = about
+        .and_then(|a| a.windows.as_deref())
+        .map(short_windows_name)
+        .filter(|s| !s.is_empty());
+    let version = about
+        .and_then(|a| a.windows_version.as_deref())
+        .map(str::trim)
+        .filter(|s| !s.is_empty());
+    match (name, version) {
+        (Some(w), Some(v)) => format!("{w} {v}"),
+        (Some(w), None) => w,
+        _ => about
+            .and_then(|a| a.os.as_deref())
+            .map(short_windows_name)
+            .filter(|s| !s.is_empty())
+            .unwrap_or_else(|| "Windows 11".into()),
     }
 }
 
@@ -763,10 +852,12 @@ fn exo_ai_room(s: &AppState, scale: f32) -> El {
             .unwrap_or("Graphics");
     let ram_label = match (
         about.and_then(|a| a.memory_gb.or(a.ram_gb)),
-        about.and_then(|a| a.memory_type.as_deref()),
+        about
+            .and_then(|a| a.memory_type.as_deref())
+            .filter(|t| !t.is_empty()),
     ) {
         (Some(gb), Some(t)) => format!("{} GB {t}", gb.round() as u32),
-        (Some(gb), None) => format!("{} GB RAM", gb.round() as u32),
+        (Some(gb), None) => format!("{} GB", gb.round() as u32),
         _ => "Memory".into(),
     };
     let display_label =
@@ -801,27 +892,30 @@ fn exo_ai_room(s: &AppState, scale: f32) -> El {
             (None, None) => "Network".into(),
         }
     };
-    let win_label = match (
-        about.and_then(|a| a.windows.as_deref()),
-        about.and_then(|a| a.windows_version.as_deref()),
-    ) {
-        (Some(w), Some(v)) => format!("{w} {v}"),
-        (Some(w), None) => w.to_string(),
-        _ => about
-            .and_then(|a| a.os.clone())
-            .unwrap_or_else(|| "Windows 11".into()),
-    };
+    let win_label = format_windows_label(about);
 
     let sys_drive = s.pc.drives.as_ref().and_then(|d| d.drives.first());
     let (drive_title, drive_sub, drive_pct) = if let Some(d) = sys_drive {
-        let (letter, free_gb, total_gb) = d
+        let letters = d
             .volumes
-            .first()
-            .map(|v| (v.letter.as_str(), v.free_gb, v.total_gb.max(1.0)))
-            .unwrap_or(("C:", 0.0, 1.0));
+            .iter()
+            .map(|v| v.letter.as_str())
+            .filter(|l| !l.is_empty())
+            .collect::<Vec<_>>()
+            .join(" ");
+        let total_gb: f64 = d.volumes.iter().map(|v| v.total_gb).sum::<f64>().max(1.0);
+        let free_gb: f64 = d.volumes.iter().map(|v| v.free_gb).sum();
         let used = ((total_gb - free_gb) / total_gb).clamp(0.0, 1.0) as f32;
+        let model = short_drive_model(&d.model);
+        let title = if letters.is_empty() {
+            model
+        } else if model.is_empty() {
+            letters
+        } else {
+            format!("{letters} {model}")
+        };
         (
-            format!("{letter} {}", short_drive_model(&d.model)),
+            title,
             format!(
                 "{} free of {}",
                 format_gb_short(free_gb),
@@ -1112,7 +1206,7 @@ fn exo_ai_room(s: &AppState, scale: f32) -> El {
                 row()
                     .w_full()
                     .pt(14.0)
-                    .pr(24.0)
+                    .pr(28.0)
                     .pb(16.0)
                     .gap(10.0)
                     .items_start()
@@ -1123,7 +1217,7 @@ fn exo_ai_room(s: &AppState, scale: f32) -> El {
                             .color(FG)
                             .grow(1.0)
                             .min_w(0.0)
-                            .wrap(),
+                            .wrap_anywhere(),
                     ),
             )
     };
@@ -1136,11 +1230,11 @@ fn exo_ai_room(s: &AppState, scale: f32) -> El {
             row()
                 .w_full()
                 .pt(14.0)
-                .pr(24.0)
+                .pr(28.0)
                 .pb(16.0)
                 .gap(10.0)
                 .items_start()
-                .child(el().pt(1.0).child(icon_hard_drive(15.0, fg_muted())))
+                .child(el().pt(1.0).child(icon_hard_drive(16.0, fg_muted())))
                 .child(
                     col()
                         .grow(1.0)
@@ -1172,14 +1266,14 @@ fn exo_ai_room(s: &AppState, scale: f32) -> El {
             row()
                 .w_full()
                 .mt(12.0)
-                .child(spec_cell(icon_cpu(15.0, fg_muted()), cpu_name.to_string()))
+                .child(spec_cell(icon_cpu(16.0, fg_muted()), cpu_name.to_string()))
                 .child(spec_cell(
-                    icon_monitor(15.0, fg_muted()),
+                    icon_monitor(16.0, fg_muted()),
                     gpu_name.to_string(),
                 ))
-                .child(spec_cell(icon_hard_drive(15.0, fg_muted()), ram_label))
+                .child(spec_cell(icon_hard_drive(16.0, fg_muted()), ram_label))
                 .child(spec_cell(
-                    icon_monitor(15.0, fg_muted()),
+                    icon_monitor(16.0, fg_muted()),
                     display_label.to_string(),
                 )),
         )
@@ -1188,11 +1282,11 @@ fn exo_ai_room(s: &AppState, scale: f32) -> El {
                 .w_full()
                 .items_start()
                 .child(spec_cell(
-                    icon_cpu(15.0, fg_muted()),
+                    icon_cpu(16.0, fg_muted()),
                     board_label.to_string(),
                 ))
-                .child(spec_cell(icon_app_window(15.0, fg_muted()), net_label))
-                .child(spec_cell(icon_app_window(15.0, fg_muted()), win_label))
+                .child(spec_cell(icon_app_window(16.0, fg_muted()), net_label))
+                .child(spec_cell(icon_app_window(16.0, fg_muted()), win_label))
                 .child(drive_cell),
         );
 
@@ -2158,5 +2252,38 @@ mod tests {
                 "motion_gate findings (reduce_motion={reduce_motion}): {findings:?}"
             );
         }
+    }
+
+    #[test]
+    fn exo_ai_spec_formatting_matches_react() {
+        let about = exo_rpc::SystemAbout {
+            windows: Some("Windows 11 Pro".into()),
+            windows_version: Some("26H2".into()),
+            ..Default::default()
+        };
+        assert_eq!(super::format_windows_label(Some(&about)), "Windows 11 26H2");
+
+        let insider = exo_rpc::SystemAbout {
+            windows: Some("Windows 11 Pro Insider Preview".into()),
+            windows_version: Some("26300".into()),
+            ..Default::default()
+        };
+        assert_eq!(
+            super::format_windows_label(Some(&insider)),
+            "Windows 11 Insider 26300"
+        );
+
+        assert_eq!(
+            super::short_drive_model("Samsung SSD 990 PRO with Heatsink 2TB"),
+            "Samsung 990 PRO"
+        );
+        assert_eq!(
+            super::short_drive_model("WD_BLACK SN850X 2000GB"),
+            "WD_BLACK SN850X"
+        );
+        assert_eq!(
+            super::short_drive_model("Crucial® P5 Plus (TM) Solid State Drive 2 TB"),
+            "Crucial P5 Plus"
+        );
     }
 }
