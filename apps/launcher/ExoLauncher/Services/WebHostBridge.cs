@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using ExoLauncher.Adapters;
+using ExoLauncher.Adapters.Riot;
 using ExoLauncher.Helpers;
 using ExoLauncher.Models;
 using ExoLauncher.Ui;
@@ -656,6 +657,7 @@ public sealed partial class WebHostBridge
                 "steam.signInGuard" => await SteamSignInGuardAsync(paramsEl, hasParams, requestToken).ConfigureAwait(true),
                 "steam.signOut" => await SteamSignOutAsync(requestToken).ConfigureAwait(true),
                 "playtime.riotRefresh" => await RiotHoursRefreshAsync(paramsEl, hasParams).ConfigureAwait(true),
+                "playtime.importRiotExport" => await ImportRiotExportAsync(paramsEl, hasParams).ConfigureAwait(true),
                 "playtime.setRiotBaseline" => await SetRiotBaselineAsync(paramsEl, hasParams).ConfigureAwait(true),
                 "web.preferences.get" => WebClientPreferences.Reload(),
 
@@ -975,6 +977,9 @@ public sealed partial class WebHostBridge
                 "keyboard.profile" => await Task.Run(() => KeyboardProfile(paramsEl, hasParams)).ConfigureAwait(false),
                 "keyboard.settings" => await Task.Run(() => KeyboardSettings(paramsEl, hasParams)).ConfigureAwait(false),
                 "keyboard.openApp" => await Task.Run(KeyboardOpenApp).ConfigureAwait(false),
+                "keyboard.backup" => await Task.Run(() => KeyboardBackup(paramsEl, hasParams)).ConfigureAwait(false),
+                "keyboard.backups" => await Task.Run(() => KeyboardBackups(paramsEl, hasParams)).ConfigureAwait(false),
+                "keyboard.restore" => await Task.Run(() => KeyboardRestore(paramsEl, hasParams)).ConfigureAwait(false),
                 "audio.read" => await Task.Run(() => AudioRead(paramsEl, hasParams)).ConfigureAwait(false),
                 "audio.formats" => await Task.Run(() => AudioFormats(paramsEl, hasParams)).ConfigureAwait(false),
                 "audio.setVolume" => await Task.Run(() => AudioSetVolume(paramsEl, hasParams)).ConfigureAwait(false),
@@ -1960,27 +1965,53 @@ public sealed partial class WebHostBridge
     {
         var riotId = RiotIdStore.Normalize(typedId) ?? (typedId is null ? RiotIdStore.TryRead() : null);
         if (riotId is null)
-            return new { ok = false, profilePrivate = false, message = "Save a Riot ID first (Name#TAG)." };
+            return new { ok = false, profilePrivate = false, source = (string?)null, clientNeeded = false, message = "Save a Riot ID first (Name#TAG)." };
         var account = RiotLedger.AccountKey(riotId)!;
 
-        if (typedId is not null)
-        {
-            RiotIdStore.Save(riotId);
-            if (RiotLedger.HasSeed(account))
-                return new { ok = true, skipped = true, message = "Hours are already imported for this Riot ID." };
-        }
+        if (typedId is not null) RiotIdStore.Save(riotId);
 
         if (Interlocked.CompareExchange(ref _riotHoursRefreshing, 1, 0) != 0)
-            return new { ok = false, profilePrivate = false, message = "Hours refresh is already running." };
+            return new { ok = false, profilePrivate = false, source = (string?)null, clientNeeded = false, message = "Hours refresh is already running." };
 
         try
         {
             using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
-            timeout.CancelAfter(TimeSpan.FromSeconds(25));
-            var result = await TrackerGgPlaytime.LoadAsync(riotId, timeout.Token).ConfigureAwait(false);
-            // A lifetime total is seeded whole; a playlist-only profile is seeded as partial (TrackerGgPlaytime.ToSeeds).
-            var seeds = TrackerGgPlaytime.ToSeeds(result.Readings ?? new Dictionary<string, TrackerGgPlaytime.RiotGameSeedReading>());
-            if (result.Ok && RiotLedger.Seed(account, seeds, DateTimeOffset.UtcNow))
+            timeout.CancelAfter(TimeSpan.FromSeconds(45));
+
+            var local = await RiotLocalMatchHistory.SyncAsync(account, ct: timeout.Token).ConfigureAwait(false);
+            var cloud = await RiotHoursClient.LoadAsync(riotId, timeout.Token).ConfigureAwait(false);
+
+            var cloudWrote = false;
+            if (cloud.Ok)
+            {
+                var now = DateTimeOffset.UtcNow;
+                var importedAt = cloud.LatestMatchUtc() is { } latest && latest <= now ? latest : now;
+                cloudWrote = RiotLedger.SeedIfHigher(account, cloud.ToSeeds(), importedAt, RiotLedger.CloudSource);
+            }
+
+            if (!local.Ok && !cloud.Ok)
+            {
+                var clientNeeded = !local.ClientAvailable && (cloud.Unconfigured || cloud.TransientFailure);
+                var message = clientNeeded
+                    ? "Open Riot Client (signed in) and press Sync hours again, or import your Riot data export."
+                    : local.AuthorizationRejected
+                        ? "Riot denied local match history lookup. Try importing your Riot data export instead."
+                        : cloud.Message;
+                return new
+                {
+                    ok = false,
+                    profilePrivate = false,
+                    unconfigured = cloud.Unconfigured,
+                    source = (string?)null,
+                    clientNeeded,
+                    message,
+                    profileUrl = TrackerGgPlaytime.ProfilePageUrl(riotId),
+                    baseline = RiotBaselineFor(riotId),
+                };
+            }
+
+            var wrote = local.SeedUpdated || cloudWrote;
+            if (wrote)
             {
                 try
                 {
@@ -1990,35 +2021,126 @@ public sealed partial class WebHostBridge
                 {
                     AppLog.Debug("Riot hours library refresh skipped: " + ex.GetType().Name);
                 }
-
-                result.Minutes.TryGetValue("riot:valorant", out var valorantMinutes);
-                result.Minutes.TryGetValue("riot:league_of_legends", out var leagueMinutes);
-                return new
-                {
-                    ok = true,
-                    profilePrivate = false,
-                    message = result.Message,
-                    valorantMinutes = valorantMinutes > 0 ? valorantMinutes : (int?)null,
-                    leagueMinutes = leagueMinutes > 0 ? leagueMinutes : (int?)null,
-                    profileUrl = TrackerGgPlaytime.ProfilePageUrl(riotId),
-                };
             }
+
+            var baselines = RiotLedger.Baselines(account);
+            baselines.TryGetValue("riot:valorant", out var valMinutes);
+            baselines.TryGetValue("riot:league_of_legends", out var lolMinutes);
+            baselines.TryGetValue("riot:teamfighttactics", out var tftMinutes);
+            var source = local.SeedUpdated || (local.Ok && !cloudWrote) ? "local" : "service";
+            var okMessage = !wrote
+                ? "Your saved Riot hours are already up to date."
+                : source == "local"
+                    ? local.Message
+                    : cloud.Message;
 
             return new
             {
-                ok = false,
-                profilePrivate = result.ProfilePrivate,
-                message = result.Ok ? "tracker.gg did not return a lifetime total for that Riot ID." : result.Message,
+                ok = true,
+                skipped = !wrote,
+                profilePrivate = false,
+                partial = cloud.Ok ? cloud.Readings.Values.Any(r => r.Partial) : local.Seeds.Values.Any(s => s.Partial),
+                unconfigured = false,
+                source,
+                clientNeeded = false,
+                message = okMessage,
+                valorantMinutes = valMinutes > 0 ? valMinutes : (int?)null,
+                leagueMinutes = lolMinutes > 0 ? lolMinutes : (int?)null,
+                tftMinutes = tftMinutes > 0 ? tftMinutes : (int?)null,
                 profileUrl = TrackerGgPlaytime.ProfilePageUrl(riotId),
+                baseline = RiotBaselineFor(riotId),
             };
         }
         catch (OperationCanceledException)
         {
-            return new { ok = false, profilePrivate = false, message = "tracker.gg did not answer in time." };
+            return new { ok = false, profilePrivate = false, source = (string?)null, clientNeeded = false, message = "Riot hours sync did not answer in time." };
         }
         finally
         {
             Interlocked.Exchange(ref _riotHoursRefreshing, 0);
+        }
+    }
+
+    private async Task<object> ImportRiotExportAsync(JsonElement p, bool hasParams)
+    {
+        var typed = ReadString(p, hasParams, "riotId");
+        var riotId = RiotIdStore.Normalize(typed) ?? (typed is null ? RiotIdStore.TryRead() : null);
+        if (riotId is null)
+            return new { ok = false, cancelled = false, message = "Save a Riot ID first (Name#TAG)." };
+        var account = RiotLedger.AccountKey(riotId)!;
+        if (typed is not null) RiotIdStore.Save(riotId);
+
+        var picked = await PickRiotExportFileAsync().ConfigureAwait(false);
+        if (picked.Cancelled || string.IsNullOrWhiteSpace(picked.Path))
+            return new { ok = false, cancelled = true, message = picked.Message };
+
+        var imported = await RiotDataExportImporter.ImportFromFileAsync(picked.Path, CancellationToken.None).ConfigureAwait(false);
+        if (!imported.Ok)
+            return new { ok = false, cancelled = false, message = imported.Message };
+
+        var now = DateTimeOffset.UtcNow;
+        var importedAt = imported.LatestMatchUtc is { } latest && latest <= now ? latest : now;
+        if (!RiotLedger.Seed(account, imported.Seeds, importedAt, RiotLedger.ExportSource))
+            return new { ok = false, cancelled = false, message = "Riot export hours could not be saved." };
+
+        try
+        {
+            await _services.Library.RefreshDerivedStateAsync(CancellationToken.None).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            AppLog.Debug("Riot export library refresh skipped: " + ex.GetType().Name);
+        }
+
+        return new
+        {
+            ok = true,
+            cancelled = false,
+            message = imported.Message,
+            matchCounts = imported.MatchCounts,
+            baseline = RiotBaselineFor(riotId),
+        };
+    }
+
+    private async Task<PickedFile> PickRiotExportFileAsync()
+    {
+        var tcs = new TaskCompletionSource<PickedFile>();
+        void Run() => _ = RunPickRiotExportAsync(tcs);
+        if (!_queue.HasThreadAccess)
+            _queue.Enqueue(Run);
+        else
+            Run();
+        return await tcs.Task.ConfigureAwait(true);
+    }
+
+    private static async Task RunPickRiotExportAsync(TaskCompletionSource<PickedFile> tcs)
+    {
+        try
+        {
+            var window = App.MainAppWindow;
+            if (window is null)
+            {
+                tcs.TrySetResult(new PickedFile(null, true, "The file picker could not open."));
+                return;
+            }
+            var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(window);
+            var picker = new Windows.Storage.Pickers.FileOpenPicker();
+            WinRT.Interop.InitializeWithWindow.Initialize(picker, hwnd);
+            picker.SuggestedStartLocation = Windows.Storage.Pickers.PickerLocationId.Downloads;
+            picker.ViewMode = Windows.Storage.Pickers.PickerViewMode.List;
+            picker.FileTypeFilter.Add(".zip");
+            picker.FileTypeFilter.Add(".json");
+            var file = await picker.PickSingleFileAsync();
+            if (file is null)
+            {
+                tcs.TrySetResult(new PickedFile(null, true, null));
+                return;
+            }
+            tcs.TrySetResult(new PickedFile(file.Path, false, null));
+        }
+        catch (Exception ex)
+        {
+            tcs.TrySetResult(new PickedFile(null, false, UserMessage(ex, "Exo could not open the picker.")));
         }
     }
 
@@ -2032,7 +2154,10 @@ public sealed partial class WebHostBridge
         if (typed is not null) RiotIdStore.Save(riotId);
 
         if (!TryParseBaselineMinutes(p, hasParams, "valorantHours", "valorantMinutes", out var valorant, out var err)
-            || !TryParseBaselineMinutes(p, hasParams, "leagueHours", "leagueMinutes", out var league, out err))
+            || !TryParseBaselineMinutes(p, hasParams, "leagueHours", "leagueMinutes", out var league, out err)
+            || !TryParseBaselineMinutes(p, hasParams, "tftHours", "tftMinutes", out var tft, out err)
+            || !TryParseBaselineMinutes(p, hasParams, "lorHours", "lorMinutes", out var lor, out err)
+            || !TryParseBaselineMinutes(p, hasParams, "twoXkoHours", "twoXkoMinutes", out var twoXko, out err))
         {
             return new { ok = false, message = err ?? "Enter a valid number of hours." };
         }
@@ -2040,8 +2165,11 @@ public sealed partial class WebHostBridge
         var seeds = new Dictionary<string, GameSeed>(StringComparer.OrdinalIgnoreCase);
         if (valorant > 0) seeds["riot:valorant"] = new GameSeed(valorant);
         if (league > 0) seeds["riot:league_of_legends"] = new GameSeed(league);
+        if (tft > 0) seeds["riot:teamfighttactics"] = new GameSeed(tft);
+        if (lor > 0) seeds["riot:bacon"] = new GameSeed(lor);
+        if (twoXko > 0) seeds["riot:lion"] = new GameSeed(twoXko);
         if (seeds.Count == 0)
-            return new { ok = false, message = "Enter starting hours for VALORANT or League of Legends." };
+            return new { ok = false, message = "Enter starting hours for at least one Riot game." };
 
         if (!RiotLedger.Seed(account, seeds, DateTimeOffset.UtcNow, RiotLedger.ManualSource))
             return new { ok = false, message = "Starting hours could not be saved." };
@@ -2114,10 +2242,16 @@ public sealed partial class WebHostBridge
         var baselines = RiotLedger.Baselines(account);
         baselines.TryGetValue("riot:valorant", out var valorant);
         baselines.TryGetValue("riot:league_of_legends", out var league);
+        baselines.TryGetValue("riot:teamfighttactics", out var tft);
+        baselines.TryGetValue("riot:bacon", out var lor);
+        baselines.TryGetValue("riot:lion", out var twoXko);
         return new
         {
             valorantMinutes = valorant > 0 ? valorant : (int?)null,
             leagueMinutes = league > 0 ? league : (int?)null,
+            tftMinutes = tft > 0 ? tft : (int?)null,
+            lorMinutes = lor > 0 ? lor : (int?)null,
+            twoXkoMinutes = twoXko > 0 ? twoXko : (int?)null,
         };
     }
 
@@ -2430,6 +2564,8 @@ public sealed partial class WebHostBridge
         {
             if (!RiotIdStore.Save(riotId.GetString()))
                 throw new UserFacingException("Riot ID was not saved.");
+            if (!string.IsNullOrWhiteSpace(riotId.GetString()))
+                _ = Task.Run(() => PlaytimeService.TryAutoSeedRiotHoursAsync(() => _services.Library.RefreshDerivedStateAsync(CancellationToken.None)));
         }
         return BuildSettings();
     }

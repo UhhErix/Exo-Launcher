@@ -796,6 +796,10 @@ body,
     border-color: ButtonText;
   }
 
+  .exo-company-logo {
+    forced-color-adjust: none;
+  }
+
   :is(.exo-app, .exo-hung, .exo-portal) select {
     color: FieldText;
     background: Field;

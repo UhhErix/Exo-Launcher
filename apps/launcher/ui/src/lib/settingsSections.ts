@@ -6,12 +6,6 @@
  */
 export const SETTINGS_PAGES = [
   {
-    page: 'account',
-    label: 'Account',
-    sections: [],
-    keywords: ['account', 'sign in', 'sign out', 'devices', 'password', 'recovery code', 'export my data', 'delete my account', 'sync', 'sync status'],
-  },
-  {
     page: 'general',
     label: 'General',
     sections: [],
@@ -56,16 +50,14 @@ export const SETTINGS_PAGES = [
     keywords: ['music', 'music service', 'spotify', 'apple music', 'youtube music', 'lossless', 'jam'],
   },
   {
-    page: 'privacy',
-    label: 'Privacy',
-    sections: [],
-    keywords: ['privacy', 'app data', 'telemetry', 'crash reports', "view what's sent", "what's sent", 'delete my data'],
-  },
-  {
     page: 'about',
     label: 'About',
-    sections: ['updates'],
-    keywords: ['about', 'version', 'exo launcher', 'updates', 'check for updates', 'install update', 'update exo', 'clear caches', 'caches', "what's new", 'changelog', 'report a problem', 'support exo', 'license', 'licenses'],
+    sections: ['updates', 'account', 'privacy'],
+    keywords: [
+      'about', 'version', 'exo launcher', 'updates', 'check for updates', 'install update', 'update exo', 'clear caches', 'caches', "what's new", 'changelog', 'report a problem', 'support exo', 'license', 'licenses',
+      'account', 'sign in', 'sign out', 'devices', 'password', 'recovery code', 'export my data', 'delete my account', 'sync', 'sync status',
+      'privacy', 'app data', 'telemetry', 'crash reports', "view what's sent", "what's sent", 'delete my data',
+    ],
   },
 ] as const
 

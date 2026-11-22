@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { Check, ChevronDown, ChevronUp, Close, Search } from '../../brand/icons'
 import { cleanOutcome } from '../../lib/junkClean'
-import { host, onHostEvent, type AppFind, type AppLeftover, type InstalledApp, type JunkItem, type LeftoverSummary, type StartupItem, type StartupState, type WindowsApp, type WindowsAppLine } from '../../lib/host'
+import { host, onHostEvent, type AppFind, type AppLeftover, type InstalledApp, type JunkItem, type LeftoverSummary, type StartupItem, type StartupState } from '../../lib/host'
 import { report } from '../../lib/report'
 import { ActionButton, ConfirmButton } from '../ui/ConfirmButton'
 import { errorText, type PlainError } from '../../lib/errorWords'
@@ -11,7 +11,7 @@ import { Wait, sample, times } from '../ui/Wait'
 import { Spinner } from '../ui/Spinner'
 import { ArtImg } from '../ui/ArtImg'
 
-type View = 'apps' | 'windows' | 'startup'
+type View = 'apps' | 'startup'
 type Sort = 'name' | 'used' | 'size'
 type Removed = { id: string; name: string; find?: AppFind; message?: string }
 
@@ -122,7 +122,7 @@ export function AppsPanel({ active }: { active: boolean }) {
   // Select: the apps picked to uninstall together (null: not selecting), and how far a run of them has got.
   const [picked, setPicked] = useState<Set<string> | null>(null)
   const [run, setRun] = useState<{ at: number; of: number } | null>(null)
-  const startup = useStartup(active)
+  const startup = useStartup(active, view === 'startup')
   const read = useRef(false)
 
   /** The list (the host's last at once, apps.changed when its read behind differs), then the icons it hasn't drawn yet. */
@@ -327,8 +327,6 @@ export function AppsPanel({ active }: { active: boolean }) {
             <section aria-label="Apps">{apps.map(line)}{apps.length === 0 && parts.length === 0 ? <p className="exo-apps-none">No apps match</p> : null}</section>
             <Parts count={parts.length} searching={searching}>{parts.map(line)}</Parts>
           </>
-        ) : view === 'windows' ? (
-          <WindowsAppsView active={active} query={query} onChanged={() => void load(iconsNow.current)} />
         ) : (
           <StartupView startup={startup} query={query} />
         )}
@@ -410,7 +408,7 @@ function Parts({ count: how, searching, children }: { count: number; searching: 
 }
 
 function Head({ view, onView, query, onQuery, facts }: { view: View; onView: (next: View) => void; query: string; onQuery: (next: string) => void; facts?: string }) {
-  const views: { id: View; label: string }[] = [{ id: 'apps', label: 'Apps' }, { id: 'windows', label: 'Windows' }, { id: 'startup', label: 'Startup' }]
+  const views: { id: View; label: string }[] = [{ id: 'apps', label: 'Apps' }, { id: 'startup', label: 'Startup' }]
   return (
     <div className="exo-apps-head">
       <h2 id="pc-apps-title">Apps{facts ? <span className="exo-apps-facts">{facts}</span> : null}</h2>
@@ -847,8 +845,7 @@ function InstallerCacheRow({ active, busy, onChanged }: { active: boolean; busy:
 
 type Startup = ReturnType<typeof useStartup>
 
-/** Everything that starts when you sign in, refreshed whenever Apps opens. */
-function useStartup(active: boolean) {
+function useStartup(active: boolean, visible: boolean) {
   const [state, setState] = useState<StartupState | null>(null)
   const [icons, setIcons] = useState<Record<string, string | null>>({})
   const [errors, setErrors] = useState<Record<string, string>>({})
@@ -868,9 +865,21 @@ function useStartup(active: boolean) {
   useEffect(() => {
     if (!active) return
     let live = true
-    host.startupList().then(next => { if (live) void take(next) }, (error: unknown) => report(error, 'AppsPanel.startup'))
-    return () => { live = false }
-  }, [active])
+    const refresh = () => {
+      host.startupList().then(next => { if (live) void take(next) }, (error: unknown) => report(error, 'AppsPanel.startup'))
+    }
+    refresh()
+    if (!visible) return () => { live = false }
+    const onFocus = () => refresh()
+    const onVis = () => { if (document.visibilityState === 'visible') refresh() }
+    window.addEventListener('focus', onFocus)
+    document.addEventListener('visibilitychange', onVis)
+    return () => {
+      live = false
+      window.removeEventListener('focus', onFocus)
+      document.removeEventListener('visibilitychange', onVis)
+    }
+  }, [active, visible])
 
   const tell = (id: string, text: string) => setErrors(current => ({ ...current, [id]: text }))
   // The row's button (ActionButton) shows the work; the list takes the answer after its check (`settle`), or at once on a refusal.
@@ -930,13 +939,13 @@ function byName<T extends { id: string; name: string }>(list: T[]): (T & { ids: 
   return [...rows.values()]
 }
 
-/**
- * Starts with Windows: three clear groups — Broken (app removed), Starts with Windows (On / Required), and Turned off
- * (unified Exo-disabled + externally-disabled entries, each with a full-opacity switch to turn back on).
- */
+const isWindowsStartupId = (id: string) =>
+  id.startsWith('run:') || id.startsWith('run32:') || id.startsWith('runonce:') || id.startsWith('runonce32:') || id.startsWith('folder:') || id.startsWith('package:')
+
 function StartupView({ startup, query }: { startup: Startup; query: string }) {
   const { state, icons, errors, tell, settle, change } = startup
   const [toggling, setToggling] = useState<string | null>(null)
+  const [bgOpen, setBgOpen] = useState(false)
   if (!state) return <Wait label="Reading what starts with Windows">{sampleLines(5)}</Wait>
   const words = query.trim().toLowerCase()
   const matches = (text: string) => !words || text.toLowerCase().includes(words)
@@ -944,12 +953,15 @@ function StartupView({ startup, query }: { startup: Startup; query: string }) {
   const removed = byName(state.removed.filter(item => matches(item.name)))
 
   const brokenItems = items.filter(item => item.missing)
-  const onItems = items.filter(item => !item.missing && item.enabled)
+  const winItems = items.filter(item => !item.missing && item.source !== 'task')
+  const bgItems = items.filter(item => !item.missing && item.source === 'task')
+  const onItems = winItems.filter(item => item.enabled)
+  const bgOnItems = bgItems.filter(item => item.enabled)
   type OffRow =
     | { kind: 'item'; id: string; ids: string[]; name: string; icon: string | null; detail: string; amount: string; locked: boolean }
     | { kind: 'removed'; id: string; ids: string[]; name: string; icon: string | null; detail: string }
   const offRows: OffRow[] = [
-    ...items.filter(item => !item.missing && !item.enabled).map(item => ({
+    ...winItems.filter(item => !item.enabled).map(item => ({
       kind: 'item' as const,
       id: item.id,
       ids: item.ids,
@@ -959,7 +971,7 @@ function StartupView({ startup, query }: { startup: Startup; query: string }) {
       amount: size(item.memory),
       locked: item.locked || item.readOnly,
     })),
-    ...removed.map(rem => ({
+    ...removed.filter(rem => isWindowsStartupId(rem.id)).map(rem => ({
       kind: 'removed' as const,
       id: rem.id,
       ids: rem.ids,
@@ -968,6 +980,27 @@ function StartupView({ startup, query }: { startup: Startup; query: string }) {
       detail: `Turned off ${fullDay.format(new Date(rem.at))}`,
     })),
   ].sort((a, b) => a.name.localeCompare(b.name))
+  const bgOffRows: OffRow[] = [
+    ...bgItems.filter(item => !item.enabled).map(item => ({
+      kind: 'item' as const,
+      id: item.id,
+      ids: item.ids,
+      name: item.name,
+      icon: item.icon ?? null,
+      detail: startupDetail(item),
+      amount: size(item.memory),
+      locked: item.locked || item.readOnly,
+    })),
+    ...removed.filter(rem => !isWindowsStartupId(rem.id)).map(rem => ({
+      kind: 'removed' as const,
+      id: rem.id,
+      ids: rem.ids,
+      name: rem.name,
+      icon: rem.icon ?? null,
+      detail: `Turned off ${fullDay.format(new Date(rem.at))}`,
+    })),
+  ].sort((a, b) => a.name.localeCompare(b.name))
+  const bgCount = bgOnItems.length + bgOffRows.length
 
   const toggle = async (rowId: string, ids: string[], restore: boolean) => {
     setToggling(rowId)
@@ -980,8 +1013,38 @@ function StartupView({ startup, query }: { startup: Startup; query: string }) {
     return await change(allIds, false)
   }
 
-  if (words && brokenItems.length + onItems.length + offRows.length === 0) return <p className="exo-apps-none">Nothing matches</p>
-  if (!words && brokenItems.length + onItems.length + offRows.length === 0) return <p className="exo-apps-none">Nothing starts with Windows</p>
+  if (words && brokenItems.length + onItems.length + offRows.length + bgCount === 0) return <p className="exo-apps-none">Nothing matches</p>
+  if (!words && brokenItems.length + onItems.length + offRows.length + bgCount === 0) return <p className="exo-apps-none">Nothing starts with Windows</p>
+
+  const renderOnRow = (item: (typeof items)[number]) => {
+    const rowError = item.ids.map(id => errors[id]).find(Boolean)
+    const required = item.locked || item.readOnly
+    return (
+      <Line key={item.id} startup name={item.name} icon={<AppIcon name={item.name} icon={item.icon ? icons[item.icon] ?? null : null} />}
+        tags={required ? [{ text: 'Required' }] : [{ text: 'On', tone: 'good' }]} detail={startupDetail(item)}
+        amount={size(item.memory)} showUsed={false} error={rowError}>
+        {required ? <span className="exo-apps-tag">Required</span> : (
+          <Switch checked={true} disabled={toggling !== null} label={`Turn off ${item.name}`}
+            onChange={() => void toggle(item.id, item.ids, false)} />
+        )}
+      </Line>
+    )
+  }
+
+  const renderOffRow = (row: OffRow) => {
+    const rowError = row.ids.map(id => errors[id]).find(Boolean)
+    const locked = row.kind === 'item' && row.locked
+    return (
+      <Line key={row.id} startup name={row.name} icon={<AppIcon name={row.name} icon={row.icon ? icons[row.icon] ?? null : null} />}
+        tags={[{ text: 'Off' }]} detail={row.detail}
+        amount={row.kind === 'item' ? row.amount : ''} showUsed={false} error={rowError}>
+        {locked ? <span className="exo-apps-tag">Required</span> : (
+          <Switch checked={false} disabled={toggling !== null} label={`Turn on ${row.name}`}
+            onChange={() => void toggle(row.id, row.ids, true)} />
+        )}
+      </Line>
+    )
+  }
 
   return (
     <>
@@ -1015,216 +1078,35 @@ function StartupView({ startup, query }: { startup: Startup; query: string }) {
       {onItems.length > 0 ? (
         <section aria-label="Starts with Windows">
           <h3 className="exo-apps-group">Starts with Windows ({onItems.length})</h3>
-          {onItems.map(item => {
-            const rowError = item.ids.map(id => errors[id]).find(Boolean)
-            const required = item.locked || item.readOnly
-            return (
-              <Line key={item.id} startup name={item.name} icon={<AppIcon name={item.name} icon={item.icon ? icons[item.icon] ?? null : null} />}
-                tags={required ? [{ text: 'Required' }] : [{ text: 'On', tone: 'good' }]} detail={startupDetail(item)}
-                amount={size(item.memory)} showUsed={false} error={rowError}>
-                {required ? <span className="exo-apps-tag">Required</span> : (
-                  <Switch checked={true} disabled={toggling !== null} label={`Turn off ${item.name}`}
-                    onChange={() => void toggle(item.id, item.ids, false)} />
-                )}
-              </Line>
-            )
-          })}
+          {onItems.map(renderOnRow)}
         </section>
       ) : null}
 
       {offRows.length > 0 ? (
         <section aria-label="Turned off">
           <h3 className="exo-apps-group">Turned off ({offRows.length})</h3>
-          {offRows.map(row => {
-            const rowError = row.ids.map(id => errors[id]).find(Boolean)
-            const locked = row.kind === 'item' && row.locked
-            return (
-              <Line key={row.id} startup name={row.name} icon={<AppIcon name={row.name} icon={row.icon ? icons[row.icon] ?? null : null} />}
-                tags={[{ text: 'Off' }]} detail={row.detail}
-                amount={row.kind === 'item' ? row.amount : ''} showUsed={false} error={rowError}>
-                {locked ? <span className="exo-apps-tag">Required</span> : (
-                  <Switch checked={false} disabled={toggling !== null} label={`Turn on ${row.name}`}
-                    onChange={() => void toggle(row.id, row.ids, true)} />
-                )}
-              </Line>
-            )
-          })}
+          {offRows.map(renderOffRow)}
+        </section>
+      ) : null}
+
+      {bgCount > 0 ? (
+        <section aria-label="Background tasks and services">
+          {words ? (
+            <h3 className="exo-apps-group">Background tasks &amp; services ({bgCount})</h3>
+          ) : (
+            <button type="button" className="exo-apps-more" aria-expanded={bgOpen} onClick={() => setBgOpen(value => !value)}>
+              <span>Background tasks &amp; services ({bgCount})</span>
+              {bgOpen ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+            </button>
+          )}
+          {bgOpen || words ? (
+            <>
+              {bgOnItems.map(renderOnRow)}
+              {bgOffRows.map(renderOffRow)}
+            </>
+          ) : null}
         </section>
       ) : null}
     </>
-  )
-}
-
-// ---- Windows apps ----
-
-/** Where a Store app is: for you, for other accounts, for new accounts. */
-function whereItIs(app: WindowsApp): string {
-  const parts: string[] = []
-  if (app.forMe) parts.push(app.others > 0 ? `For you and ${count(app.others, 'other account', 'other accounts')}` : 'For you')
-  else parts.push(app.others > 0 ? `Not for you: ${count(app.others, 'other account has', 'other accounts have')} it` : 'Not for you')
-  if (app.provisioned) parts.push('New accounts get it')
-  return parts.join(' · ')
-}
-
-/**
- * Windows apps: the Store and preinstalled apps on this PC across its accounts, as Win11Debloat and BCU list them. What Windows,
- * Store apps, games or Exo need is never listed (only counted). Select, then For you (no prompt; Add back while its files stay
- * on this PC) or Every account (one Windows prompt; can't be undone here). Review shows what each removal does and how it
- * comes back before anything goes. A restore point doesn't bring Store apps back, so none is made here.
- */
-const needsAllAccounts = (ids: Set<string>, list: readonly WindowsApp[]) =>
-  ids.size > 0 && !list.some(app => ids.has(app.id) && app.forMe)
-
-function WindowsAppsView({ active, query, onChanged }: { active: boolean; query: string; onChanged: () => void }) {
-  const [state, setState] = useState<{ items: WindowsApp[]; hidden: number } | null>(null)
-  const [picked, setPicked] = useState<Set<string> | null>(null)
-  const [everyone, setEveryone] = useState(false)
-  const [plan, setPlan] = useState<{ token: string; admin: boolean; lines: WindowsAppLine[] } | null>(null)
-  const [errors, setErrors] = useState<Record<string, string | null>>({})
-  const [done, setDone] = useState<string | null>(null)
-  const read = () => host.appsPackages().then(
-    result => setState({ items: result.items, hidden: result.hidden }),
-    (error: unknown) => { report(error, 'AppsPanel.packages'); setState(current => current ?? { items: [], hidden: 0 }) },
-  )
-  useEffect(() => { if (active) void read() }, [active])
-  const setError = (id: string, message: string | null) => setErrors(current => ({ ...current, [id]: message }))
-
-  async function review() {
-    if (!picked || picked.size === 0) return { ok: false, message: 'Pick an app first.' }
-    setError('plan', null)
-    const result = await host.appsPackagesPlan([...picked], everyone)
-    if (result.ok && !result.token) return { ok: false, message: 'Nothing there can be removed that way.' }
-    if (result.ok && result.token) {
-      setEveryone(result.admin)
-      setPlan({ token: result.token, admin: result.admin, lines: result.lines })
-    }
-    return result
-  }
-
-  /** Removes the plan's apps; what went, the list again and the picks cleared once its check has shown. */
-  async function remove() {
-    if (!plan) return { ok: false }
-    setError('plan', null)
-    const forAll = plan.admin
-    const result = await host.appsPackagesRemove(plan.token)
-    if (!result.ok) {
-      if (result.removed > 0) setDone(`Removed ${count(result.removed, 'app', 'apps')} ${forAll ? 'for every account' : 'for you'}.`)
-      await read()
-    }
-    return result
-  }
-  const removed = (value: unknown) => {
-    const result = value as Awaited<ReturnType<typeof host.appsPackagesRemove>>
-    const forAll = plan?.admin ?? everyone
-    if (result.removed > 0) setDone(`Removed ${count(result.removed, 'app', 'apps')} ${forAll ? 'for every account' : 'for you'}.`)
-    setPlan(null)
-    setPicked(null)
-    void read().then(onChanged)
-  }
-
-  async function addBack(app: WindowsApp) {
-    setError(app.id, null)
-    const result = await host.appsPackageAddBack(app.id)
-    if (result.ok && result.store) {
-      void read()
-      return { ok: false, message: 'Windows couldn’t add it back from this PC: its Microsoft Store page is open.' }
-    }
-    return result
-  }
-
-  if (!state) return <Wait label="Reading Windows apps">{sampleLines(6)}</Wait>
-  const words = query.trim().toLowerCase()
-  const items = state.items.filter(app => !words || `${app.name} ${app.publisher ?? ''}`.toLowerCase().includes(words))
-  const bloat = state.items.filter(app => app.bloat && (app.forMe || app.provisioned))
-  const pick = (id: string) => {
-    setPlan(null)
-    setPicked(current => {
-      const next = new Set(current)
-      if (!next.delete(id)) next.add(id)
-      if (needsAllAccounts(next, state.items)) setEveryone(true)
-      return next
-    })
-  }
-  return (
-    <>
-      {done ? <ReadyRow title={done} done /> : null}
-      {!words && !picked && bloat.length > 0 ? (
-        <ReadyRow title={count(bloat.length, 'Windows app you didn’t ask for', 'Windows apps you didn’t ask for')} detail={names(bloat.map(app => app.name))}>
-          <button type="button" className="exo-set-btn" onClick={() => {
-            const next = new Set(bloat.map(app => app.id))
-            setPicked(next)
-            setPlan(null)
-            if (needsAllAccounts(next, state.items)) setEveryone(true)
-          }}>Pick them</button>
-        </ReadyRow>
-      ) : null}
-      <div className="exo-apps-filter">
-        <span>{picked ? `${picked.size} picked` : 'Store and preinstalled apps'}</span>
-        <span className="exo-apps-ready-act">
-          {picked ? (
-            <>
-              <span className="exo-shelf-chips" role="group" aria-label="Remove for">
-                <button type="button" className="exo-shelf-chip" aria-pressed={!everyone} onClick={() => { setEveryone(false); setPlan(null) }}>For you</button>
-                <button type="button" className="exo-shelf-chip" aria-pressed={everyone} onClick={() => { setEveryone(true); setPlan(null) }}>Every account</button>
-              </span>
-              <ActionButton className="exo-set-btn is-compact" disabled={picked.size === 0} context="AppsPanel.packagesPlan" fallback="Exo couldn’t look at what goes. Try again." why="none"
-                onPress={review} onFailed={failure => setError('plan', failure.text)}>Review</ActionButton>
-            </>
-          ) : null}
-          <button type="button" className="exo-set-btn is-compact" aria-pressed={picked !== null} onClick={() => { setPicked(current => current ? null : new Set()); setPlan(null) }}>{picked ? 'Cancel' : 'Select'}</button>
-        </span>
-      </div>
-      {errors.plan ? <ErrorNote className="exo-set-error" message={errors.plan} /> : null}
-      {plan ? <PackagePlan plan={plan} onRemove={remove} onRemoved={removed} onFailed={failure => setError('plan', failure.text)} onBack={() => setPlan(null)} /> : null}
-      <section aria-label="Windows apps">
-        {items.map(app => (
-          <Line key={app.id} name={app.name} icon={<AppIcon name={app.name} icon={null} />} detail={[app.bloat, whereItIs(app)].filter(Boolean).join(' · ')} showUsed={false} error={errors[app.id] ?? null} keep={picked !== null || app.addBack}>
-            {picked ? (
-              <button type="button" className={picked.has(app.id) ? 'exo-apps-pick is-picked' : 'exo-apps-pick'} aria-pressed={picked.has(app.id)} aria-label={`Pick ${app.name}`} onClick={() => pick(app.id)}>
-                {picked.has(app.id) ? <Check size={12} /> : null}
-              </button>
-            ) : app.addBack ? (
-              <ActionButton className="exo-set-btn is-compact" context="AppsPanel.packageAddBack" fallback="Windows didn’t add it back. Try again." why="none"
-                onPress={() => addBack(app)} onFailed={failure => setError(app.id, failure.text)} onDone={() => void read().then(onChanged)}>Add for you</ActionButton>
-            ) : null}
-          </Line>
-        ))}
-        {items.length === 0 ? <p className="exo-apps-none">{words ? 'No Windows apps match' : 'No Windows apps to remove'}</p> : null}
-      </section>
-    </>
-  )
-}
-
-/** Before anything goes: what each removal does and how it comes back, and the one press that does it (asked in place). */
-function PackagePlan({ plan, onRemove, onRemoved, onFailed, onBack }: {
-  plan: { admin: boolean; lines: WindowsAppLine[] }
-  onRemove: () => Promise<unknown>
-  onRemoved: (value: unknown) => void
-  onFailed: (failure: PlainError) => void
-  onBack: () => void
-}) {
-  const lasting = plan.lines.filter(line => !line.undoable).length
-  const apps = count(plan.lines.length, 'app', 'apps')
-  return (
-    <section className="exo-apps-ready" aria-label="What goes">
-      <ReadyRow title={plan.admin ? `Remove ${apps} for every account` : `Remove ${apps} for you`}
-        detail={[plan.admin ? 'Windows asks for permission' : 'No permission needed', lasting > 0 ? `${lasting} can’t be undone here` : 'Each can be added back', 'A restore point doesn’t bring Store apps back'].join(' · ')}>
-        <ConfirmButton className="exo-set-btn is-danger" danger question={lasting > 0 ? 'Remove for good?' : `Remove ${plan.lines.length}?`} timeoutMs={null}
-          context="AppsPanel.packagesRemove" fallback="Nothing was removed. Try again." why="none" onConfirm={onRemove} onFailed={onFailed} onDone={onRemoved}>Remove {plan.lines.length}</ConfirmButton>
-        <button type="button" className="exo-set-btn" onClick={onBack}>Back</button>
-      </ReadyRow>
-      <ul className="exo-apps-items">
-        {plan.lines.map(line => (
-          <li key={line.id}>
-            <span />
-            <span className="exo-apps-item">
-              <span className="exo-apps-path">{line.name}</span>
-              <span className="exo-apps-note">{line.does} · {line.back}</span>
-            </span>
-            <span className="exo-apps-item-size">{line.undoable ? '' : 'For good'}</span>
-          </li>
-        ))}
-      </ul>
-    </section>
   )
 }

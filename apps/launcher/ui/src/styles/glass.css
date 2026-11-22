@@ -333,9 +333,7 @@ button.exo-glass:hover {
    child): glass hides the page from the glass inside it, so a menu or dialog opened in the sheet would draw near
    black. Its words are large glass's; the section list and cards in it are clear with a light hairline, never gray or
    black holes in it. */
-.exo-set-room > .exo-settings,
 .exo-dc-settings,
-.exo-props,
 .exo-whats-new,
 .exo-folder-panel,
 .exo-folder-sheet {
@@ -536,8 +534,8 @@ button.exo-glass:hover {
 .exo-island-btn {
   display: grid;
   place-items: center;
-  width: 24px;
-  height: 24px;
+  width: 28px;
+  height: 28px;
   border: 0;
   border-radius: 999px;
   background: none;

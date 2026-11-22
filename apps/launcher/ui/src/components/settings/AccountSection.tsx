@@ -25,7 +25,7 @@ export function AccountSection() {
   const [recovery, setRecovery] = useState<string | null>(null)
   if (recovery) {
     return (
-      <Section id="account">
+      <Section id="account" title="Account">
         <div className={SUB}><RecoveryCodeScreen code={recovery} onDone={() => { setRecovery(null); void refresh() }} onKeyDown={() => undefined} /></div>
       </Section>
     )
@@ -58,7 +58,7 @@ function SyncRow({ sync, onSynced }: { sync: AccountOverview['sync']; onSynced: 
 function SignedIn({ overview, onChanged }: { overview: AccountOverview; onChanged: () => void }) {
   return (
     <>
-      <Section id="account">
+      <Section id="account" title="Account">
         <Row label={overview.email ?? 'Exo account'}><SignOut onDone={onChanged} /></Row>
         <SyncRow sync={overview.sync} onSynced={onChanged} />
         {overview.sync.held.length > 0 ? (
@@ -287,7 +287,7 @@ function SignedOut({ onSignedIn, onCode }: { onSignedIn: () => void; onCode: (co
 
   const heading = mode === 'create' ? 'Create your Exo account' : mode === 'reset' ? 'Reset your password' : 'Sign in to Exo'
   return (
-    <Section id="account">
+    <Section id="account" title="Account">
       <Row label={heading} stacked>
         <form className={SUB} onSubmit={pressSubmit} noValidate>
           <label className="exo-ob-label" htmlFor="exo-account-email">Email</label>

@@ -321,7 +321,7 @@ internal sealed class RealStartupHost : IStartupHost
                 catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or COMException) { continue; }
                 if (!File.Exists(manifest)) continue;
                 var text = File.ReadAllText(manifest);
-                if (!text.Contains("windows.startupTask", StringComparison.Ordinal)) continue;
+                if (!text.Contains("windows.startupTask", StringComparison.OrdinalIgnoreCase)) continue;
                 var family = package.Id.FamilyName;
                 foreach (var task in XDocument.Parse(text).Descendants().Where(element => element.Name.LocalName == "StartupTask"))
                 {

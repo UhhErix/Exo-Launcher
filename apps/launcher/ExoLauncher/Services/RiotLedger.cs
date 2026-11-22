@@ -27,6 +27,9 @@ internal static partial class RiotLedger
     internal const int SchemaVersion = 1;
     internal const string TrackerSource = "tracker.gg";
     internal const string ManualSource = "manual";
+    internal const string CloudSource = "exo-riot";
+    internal const string LocalSource = "riot-local";
+    internal const string ExportSource = "riot-export";
 
     /// <summary>
     /// The ledger for sessions played before any Riot ID is set on this PC. It is local only (never synced) and moves into
@@ -84,6 +87,24 @@ internal static partial class RiotLedger
     {
         var effectiveSource = string.IsNullOrWhiteSpace(source) ? TrackerSource : source;
         lock (Gate) return WriteSeeds(Open(account), seeds, importedAt, effectiveSource);
+    }
+
+    internal static bool SeedIfHigher(string account, IReadOnlyDictionary<string, GameSeed> seeds, DateTimeOffset importedAt, string source)
+    {
+        var effectiveSource = string.IsNullOrWhiteSpace(source) ? CloudSource : source;
+        lock (Gate)
+        {
+            var doc = Open(account);
+            var higher = new Dictionary<string, GameSeed>(StringComparer.OrdinalIgnoreCase);
+            foreach (var (game, seed) in seeds)
+            {
+                if (!game.StartsWith("riot:", StringComparison.OrdinalIgnoreCase) || seed.Minutes <= 0 || seed.Minutes > MaxSeedMinutes)
+                    continue;
+                var current = doc.Seeds.TryGetValue(game, out var existing) ? existing.Minutes : 0;
+                if (seed.Minutes > current) higher[game] = seed;
+            }
+            return higher.Count > 0 && WriteSeeds(doc, higher, importedAt, effectiveSource);
+        }
     }
 
     /// <summary>The latest baseline minutes saved per Riot game for this account (excluding Exo's own session rows).</summary>

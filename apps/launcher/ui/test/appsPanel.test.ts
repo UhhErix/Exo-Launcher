@@ -22,9 +22,10 @@ test('Startup view refreshes on reopen, groups Broken / On / Off with Switch tog
   assert.match(appsPanel, /item\.ids\.map\(id => errors\[id\]\)\.find\(Boolean\)/)
 })
 
-test('WindowsAppsView auto-selects Every account when picked packages are not for this user', () => {
-  assert.match(appsPanel, /const needsAllAccounts = \(/)
-  assert.match(appsPanel, /setEveryone\(result\.admin\)/)
+test('AppsPanel omits the redundant Windows tab and separates Background tasks from Windows startup', () => {
+  assert.doesNotMatch(appsPanel, /id:\s*'windows'|WindowsAppsView/)
+  assert.match(appsPanel, /Background tasks &amp; services/)
+  assert.match(appsPanel, /window\.addEventListener\('focus', onFocus\)/)
 })
 
 test('AppsPanel omits the Removed section and Edge history view', () => {

@@ -1,15 +1,13 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { ChevronLeft, Drive } from '../../brand/icons'
 import { focusWhenActive } from '../../lib/focusTrap'
-import { host, type CompressList, type DriveInfo, type DrivesState, type JunkItem } from '../../lib/host'
-import { cleanOutcome } from '../../lib/junkClean'
+import { host, type CompressList, type DriveInfo, type DrivesState } from '../../lib/host'
 import { driveName } from '../../lib/partNames'
 import { report } from '../../lib/report'
 import { cn, formatSize } from '../../lib/utils'
 import { Row, State } from '../settings/parts'
-import { ActionButton, ConfirmButton } from '../ui/ConfirmButton'
-import { ErrorNote } from '../ui/ErrorNote'
+import { ActionButton } from '../ui/ConfirmButton'
 import { Meter } from '../ui/Meter'
 import { CompressGames } from './CompressGames'
 import '../../styles/storage-room.css'
@@ -27,8 +25,8 @@ function driveTotals(drive: DriveInfo): { total: number; free: number } {
   return { total, free }
 }
 
-function summaryLine(drives: DrivesState | null, list: CompressList | null): string {
-  if (!drives || drives.drives.length === 0) return 'Drives, caches & game compression'
+function summaryLine(drives: DrivesState | null, list: CompressList | null): string | null {
+  if (!drives || drives.drives.length === 0) return null
   let total = 0
   let free = 0
   for (const d of drives.drives) {
@@ -148,20 +146,6 @@ export function StorageRoom({
 }) {
   const backRef = useRef<HTMLButtonElement>(null)
   const spaceScannedRef = useRef(false)
-  const [junkItems, setJunkItems] = useState<JunkItem[] | null>(null)
-  const [junkError, setJunkError] = useState<string | null>(null)
-  const [itemErrors, setItemErrors] = useState<Record<string, string | null>>({})
-
-  const readJunk = useCallback(async () => {
-    try {
-      const scan = await host.junkScan()
-      setJunkItems(scan.items)
-      return scan
-    } catch (e) {
-      report(e, 'StorageRoom.junkScan', { level: 'warn' })
-      return null
-    }
-  }, [])
 
   useEffect(() => {
     if (!open || !active) {
@@ -169,10 +153,6 @@ export function StorageRoom({
       return
     }
     let alive = true
-    void host.junkScan().then(
-      scan => { if (alive) setJunkItems(scan.items) },
-      (e: unknown) => { report(e, 'StorageRoom.junkScan', { level: 'warn' }); if (alive) setJunkItems(current => current ?? []) },
-    )
     if (!spaceScannedRef.current && (!drives || drives.drives.some(d => !d.space))) {
       spaceScannedRef.current = true
       void host.systemDrives(undefined, true).then(
@@ -196,44 +176,13 @@ export function StorageRoom({
   if (!open || !active) return null
 
   const rescanAll = async () => {
-    setJunkError(null)
-    setItemErrors({})
-    const [nextDrives] = await Promise.all([
-      host.systemDrives(undefined, true),
-      readJunk(),
-    ])
+    const nextDrives = await host.systemDrives(undefined, true)
     onDrives(nextDrives)
     onReadCompress()
     return nextDrives
   }
 
-  const activeJunk = (junkItems ?? []).filter(item => item.bytes > 0)
-  const safeJunk = activeJunk.filter(item => item.id !== 'bin')
-  const safeBytes = safeJunk.reduce((sum, item) => sum + item.bytes, 0)
-  const safeIds = safeJunk.map(item => item.id)
-
-  const cleanBatch = async (ids: string[], key?: string) => {
-    if (key) setItemErrors(c => ({ ...c, [key]: null }))
-    else setJunkError(null)
-    const result = await host.junkClean(ids)
-    const outcome = cleanOutcome(result, formatSize)
-    if (!outcome.done) return { ok: false, message: outcome.error ?? null }
-    return result
-  }
-
-  const afterBatch = async (result: unknown, key?: string) => {
-    const outcome = cleanOutcome(result as Awaited<ReturnType<typeof host.junkClean>>, formatSize)
-    if (outcome.error) {
-      if (key) setItemErrors(c => ({ ...c, [key]: outcome.error ?? null }))
-      else setJunkError(outcome.error)
-    }
-    await readJunk()
-    try {
-      onDrives(await host.systemDrives(undefined, true))
-    } catch (e) {
-      report(e, 'StorageRoom.drivesAfterClean', { level: 'warn' })
-    }
-  }
+  const sub = summaryLine(drives, list)
 
   return createPortal(
     <div
@@ -252,7 +201,7 @@ export function StorageRoom({
             </button>
             <div className="exo-st-heading">
               <h1 id="exo-storage-title" className="exo-st-title">Storage</h1>
-              <p className="exo-st-sub">{summaryLine(drives, list)}</p>
+              {sub ? <span className="exo-st-sub">{sub}</span> : null}
             </div>
           </div>
           <ActionButton
@@ -283,7 +232,7 @@ export function StorageRoom({
                 <h3 className="exo-st-subhead">Drive settings</h3>
                 <div className="exo-pc-menu-rows">
                   {drives.fixes.map(fix => (
-                    <Row key={fix.key} label={fix.label} detail={fix.detail}>
+                    <Row key={fix.key} label={fix.label}>
                       {fix.applied ? (
                         <State on>{fix.restart ? 'After restart' : 'Optimal'}</State>
                       ) : (
@@ -308,60 +257,9 @@ export function StorageRoom({
             ) : null}
           </section>
 
-          <section className="exo-system-panel exo-st-panel" aria-labelledby="exo-st-free-title">
-            <h2 id="exo-st-free-title">Free up space</h2>
-            <div className="exo-st-section is-first">
-              <div className="exo-st-section-head">
-                <h3 className="exo-st-subhead">Temporary &amp; cache files</h3>
-                {safeBytes > 0 ? (
-                  <ConfirmButton
-                    className="exo-set-btn is-danger is-compact"
-                    danger
-                    question={`Delete ${formatSize(safeBytes)}?`}
-                    why="none"
-                    context="StorageRoom.cleanCaches"
-                    fallback="Nothing was deleted. Try again."
-                    onConfirm={() => cleanBatch(safeIds)}
-                    onFailed={failure => setJunkError(failure.text)}
-                    onDone={res => void afterBatch(res)}
-                  >
-                    Clean caches
-                  </ConfirmButton>
-                ) : null}
-              </div>
-              {junkError ? <ErrorNote className="exo-set-error" message={junkError} /> : null}
-              {junkItems === null ? (
-                <p className="exo-st-quiet">Scanning temporary files and caches…</p>
-              ) : activeJunk.length === 0 ? (
-                <p className="exo-st-quiet">Temporary files and caches are clean.</p>
-              ) : (
-                <div className="exo-pc-menu-rows">
-                  {activeJunk.map(item => (
-                    <Row key={item.id} label={item.name} detail={item.detail} error={itemErrors[item.id] ?? null}>
-                      <span className="exo-st-size">{formatSize(item.bytes)}</span>
-                      <ConfirmButton
-                        className="exo-set-btn is-danger is-compact"
-                        danger
-                        question={`Delete ${formatSize(item.bytes)}?`}
-                        why="none"
-                        context={`StorageRoom.clean.${item.id}`}
-                        fallback="Nothing was deleted. Try again."
-                        onConfirm={() => cleanBatch([item.id], item.id)}
-                        onFailed={failure => setItemErrors(c => ({ ...c, [item.id]: failure.text }))}
-                        onDone={res => void afterBatch(res, item.id)}
-                      >
-                        Clean
-                      </ConfirmButton>
-                    </Row>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            <div className="exo-st-section">
-              <h3 className="exo-st-subhead">Compress games</h3>
-              <CompressGames list={list} onList={onList} onRead={onReadCompress} />
-            </div>
+          <section className="exo-system-panel exo-st-panel" aria-labelledby="exo-st-compress-title">
+            <h2 id="exo-st-compress-title">Compress games</h2>
+            <CompressGames list={list} onList={onList} onRead={onReadCompress} />
           </section>
         </div>
       </div>

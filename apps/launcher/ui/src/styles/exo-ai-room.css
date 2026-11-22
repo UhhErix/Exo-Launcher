@@ -222,6 +222,11 @@ html[data-exo-inactive="true"] .exo-ai-live-dot {
 }
 
 @media (max-width: 1180px), (max-height: 760px) {
+  .exo-ai-shell,
+  .exo-ai-col {
+    flex: none;
+  }
+
   .exo-ai-grid {
     display: flex;
     flex-direction: column;

@@ -272,7 +272,7 @@ export function SheetNav<T extends string>({ title, groups, current, onPick }: {
       {groups.filter(group => group.items.length > 0).map(group => (
         <div key={group.heading ?? group.items[0].id} className="exo-dc-sheet-group">
           {group.heading ? <span className="exo-dc-sheet-label">{group.heading}</span> : null}
-          <ul>
+          <ul className="exo-settings-nav-pages">
             {group.items.map(item => (
               <li key={item.id}><button type="button" aria-current={item.id === current ? 'page' : undefined} onClick={() => onPick(item.id)}>{item.label}</button></li>
             ))}

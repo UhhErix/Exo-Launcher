@@ -27,14 +27,14 @@ function announce(text: string) {
   if (text) window.requestAnimationFrame(() => { if (live) live.textContent = text })
 }
 
-/** The control's width springs from what it was to what its new words need, on the move time (DESIGN.md › Feel). */
+/** The control settles into its new size with a compositor-only scale spring, on the base time (DESIGN.md › Feel). */
 export function morph(element: HTMLElement, from: number) {
   const to = element.getBoundingClientRect().width
   if (shouldReduceMotion() || Math.abs(to - from) < 1) return
   const root = getComputedStyle(document.documentElement)
   const easing = root.getPropertyValue('--ease-spring').trim() || 'ease-out'
-  const duration = parseFloat(root.getPropertyValue('--dur-move')) || 220
-  element.animate([{ width: `${from}px` }, { width: `${to}px` }], { duration, easing })
+  const duration = parseFloat(root.getPropertyValue('--dur-base')) || 160
+  element.animate([{ transform: 'scale(0.96)' }, { transform: 'scale(1)' }], { duration, easing })
 }
 
 /**

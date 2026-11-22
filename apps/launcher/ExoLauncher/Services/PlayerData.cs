@@ -78,6 +78,7 @@ internal static class PlayerData
         new("riot-ledger/*.jsonl", Shape.JsonLines, Large, Sync.Log + " (riot-ledger)", ["riot-ledger/unassigned.jsonl@RiotLedger"],
             Match: @"^riot-ledger/(?:[0-9a-f]{20}|unassigned)\.jsonl\z"),
         new("riot-id.txt", Shape.RiotId, 1024, Sync.Choice + " (riot-id)", ["riot-id.txt@RiotIdStore"]),
+        new("riot-matches.json", Shape.JsonObject, Large, Sync.ThisPc + ": accumulated Riot match durations read on this PC", ["riot-matches.json@RiotLocalMatchHistory"]),
         new("exo-imported-lifetime.json", Shape.JsonObject, Small, Sync.ThisPc + ": the tracker.gg hours from before the ledger, which become a Riot ID's ledger seed when that ID is used", ["exo-imported-lifetime.json@RiotLedger"]),
         new("window-placement.json", Shape.JsonObject, Small, Sync.ThisPc + ": the window's place on this PC's screens", ["window-placement.json@WindowPlacementStore"]),
         new("notes/notes.json", Shape.JsonObject, Small, Sync.ThisPc + ": notes are not synced yet", ["notes/notes.json@NoteStore"]),
@@ -90,6 +91,7 @@ internal static class PlayerData
         new("mouse/presets.json", Shape.JsonObject, 512 * 1024, Sync.ThisPc + ": presets are for the mouse on this PC", ["presets.json@WebHostBridge"]),
         new("controllers/games.json", Shape.JsonArray, Small, Sync.ThisPc + ": per-game controller settings for the pads on this PC", ["controllers/games.json@ControllerLab"]),
         new("controllers/*.json", Shape.JsonObject, Small, Sync.ThisPc + ": a pad's own memory (its factory calibration) is kept where the pad was read", []),
+        new("keyboard-backups/*.json", Shape.JsonObject, Small, Sync.ThisPc + ": Wooting keyboard profile backups saved on this PC", []),
         new("exo-eq.json", Shape.JsonObject, Small, Sync.ThisPc + ": Exo EQ's outputs are this PC's audio devices, by Windows' ids for them", ["exo-eq.json@ExoEq"]),
         new("game-settings/window-modes.json", Shape.JsonObject, Small, Sync.ThisPc + ": each game's window mode, which fits this PC's screens", ["window-modes.json@GameSettings"]),
         new("game-settings/*.json", Shape.Json, Small, Sync.ThisPc + ": what Optimize changed in this PC's game files, to put back", ["kept.json@GameSettings", ".on.json@GameSettings", ".nvidia.json@GameSettings", "game-settings/sync.json@CompetitiveSync"], OfThisMachine: true),
@@ -129,6 +131,7 @@ internal static class PlayerData
         new("goLivePreview", Syncs: true, "whether the player's own stream shows as a tile: a look"),
         new("voiceChat", Syncs: true, "whether the call's chat panel shows: a look"),
         new("discordPinnedDms", Syncs: true, "pinned Discord DM channel ids, in pinned order"),
+        new("tourSeen", Syncs: true, "whether the player completed or skipped the guided tour"),
     ];
 
     internal static readonly string[] UiPrefKeys = [.. UiPrefs.Select(pref => pref.Key)];

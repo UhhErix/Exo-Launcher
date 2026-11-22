@@ -230,6 +230,40 @@ export function buildWideArtCandidates(
   return list
 }
 
+function pushSteamPortraitCandidates(
+  appId: string,
+  steamCacheUrls: readonly (string | null)[],
+  raw: string | null,
+  rawIsHiRes: boolean,
+  pushUnique: (url: string | null | undefined) => void,
+  list: ArtCandidate[],
+): void {
+  const fastly = `https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/${appId}`
+  const base = `https://cdn.cloudflare.steamstatic.com/steam/apps/${appId}`
+  for (const url of steamCacheUrls) {
+    if (url?.includes('_2x')) pushUnique(url)
+  }
+  if (!rawIsHiRes) {
+    pushUnique(`${fastly}/library_600x900_2x.jpg`)
+    pushUnique(`${base}/library_600x900_2x.jpg`)
+    pushUnique(raw)
+  }
+  for (const url of steamCacheUrls) pushUnique(url)
+  for (const url of [
+    `${fastly}/library_600x900_2x.jpg`,
+    `${fastly}/library_600x900.jpg`,
+    `${fastly}/library_capsule.jpg`,
+    `${base}/library_600x900_2x.jpg`,
+    `${base}/library_600x900.jpg`,
+    `${base}/library_capsule.jpg`,
+  ]) {
+    pushUnique(url)
+  }
+  for (const storeUrl of [`${fastly}/header.jpg`, `${base}/header.jpg`, `${base}/capsule_616x353.jpg`]) {
+    if (!list.some((candidate) => candidate.url === storeUrl)) list.push({ url: storeUrl, derived: true })
+  }
+}
+
 export function buildPortraitArtCandidates(
   game: Pick<CoverGame, 'coverUrl' | 'artRevision'>,
   appId: string | null,
@@ -244,29 +278,15 @@ export function buildPortraitArtCandidates(
     list.push({ url, derived: false })
   }
   const raw = game.coverUrl ? withArtRevision(game.coverUrl, game.artRevision) : null
-  if (raw && isSafeCoverUrl(raw) && !isRejectedCoverUrl(raw, false)) {
+  const rawIsHiRes = !!raw && (raw.includes('custom_') || raw.includes('_2x'))
+  if (rawIsHiRes) {
     pushUnique(raw)
-    if (raw.includes('library_600x900_2x')) {
-      pushUnique(raw.replace('library_600x900_2x', 'library_600x900'))
-    }
+    if (raw.includes('library_600x900_2x')) pushUnique(raw.replace('library_600x900_2x', 'library_600x900'))
   }
   if (appId) {
-    const fastly = `https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/${appId}`
-    const base = `https://cdn.cloudflare.steamstatic.com/steam/apps/${appId}`
-    for (const url of steamCacheUrls) pushUnique(url)
-    for (const url of [
-      `${fastly}/library_600x900_2x.jpg`,
-      `${fastly}/library_600x900.jpg`,
-      `${fastly}/library_capsule.jpg`,
-      `${base}/library_600x900_2x.jpg`,
-      `${base}/library_600x900.jpg`,
-      `${base}/library_capsule.jpg`,
-    ]) {
-      pushUnique(url)
-    }
-    for (const storeUrl of [`${fastly}/header.jpg`, `${base}/header.jpg`, `${base}/capsule_616x353.jpg`]) {
-      if (!list.some((candidate) => candidate.url === storeUrl)) list.push({ url: storeUrl, derived: true })
-    }
+    pushSteamPortraitCandidates(appId, steamCacheUrls, raw, rawIsHiRes, pushUnique, list)
+  } else if (!rawIsHiRes) {
+    pushUnique(raw)
   }
   if (!toThumb) return list
   return list.flatMap((candidate) => {

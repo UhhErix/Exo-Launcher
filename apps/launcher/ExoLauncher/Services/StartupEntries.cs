@@ -123,15 +123,18 @@ internal static partial class StartupEntries
     /// <summary>What the list shows: every entry that starts, those that start first, and what Exo removed that still runs another way or is the guard's to show.</summary>
     internal static IReadOnlyList<StartupEntry> Read() => Read(Host);
 
-    internal static IReadOnlyList<StartupEntry> Read(IStartupHost host)
+    internal static IReadOnlyList<StartupEntry> Read(IStartupHost host) => ReadWithPresent(host).Entries;
+
+    internal static (IReadOnlyList<StartupEntry> Entries, IReadOnlySet<string> PresentIds) ReadWithPresent(IStartupHost host)
     {
         var removed = Kept(host);
         var guard = StartupGuard.Load(host);
-        var list = ReadAll(host).Select(entry => WithGuard(entry, removed, guard)).ToList();
-        // What Exo removed is under Removed from startup, not here, unless its program turned it back on or runs another way
-        // (an updater service, Riot Vanguard). What an uninstalled app left (its program gone) shows until it's deleted for good.
-        return [.. list.Where(entry => entry.Enabled || entry.Missing || entry.Guard is GuardState.Updater or GuardState.AntiCheat || removed.All(item => item.Id != entry.Id))
-            .OrderByDescending(entry => entry.Enabled).ThenBy(entry => entry.Name, StringComparer.CurrentCultureIgnoreCase)];
+        var all = ReadAll(host);
+        var present = new HashSet<string>(all.Select(entry => entry.Id), StringComparer.OrdinalIgnoreCase);
+        var list = all.Select(entry => WithGuard(entry, removed, guard)).ToList();
+        var entries = list.Where(entry => entry.Enabled || entry.Missing || entry.Guard is GuardState.Updater or GuardState.AntiCheat || removed.All(item => item.Id != entry.Id))
+            .OrderByDescending(entry => entry.Enabled).ThenBy(entry => entry.Name, StringComparer.CurrentCultureIgnoreCase).ToList();
+        return (entries, present);
     }
 
     private static StartupEntry WithGuard(StartupEntry entry, IReadOnlyList<Removal> removed, StartupGuard.Record guard)
@@ -300,12 +303,12 @@ internal static partial class StartupEntries
         foreach (var task in host.PackageTasks())
         {
             var state = host.Get(Hive.User, $@"{StartupKeys.Packaged}\{task.Family}\{task.TaskId}", "State");
-            var on = state is null ? task.ManifestEnabled : state.Number switch { 2 or 4 => true, 1 => false, _ => (bool?)null };
-            // Off by the app or by policy, never asked to start: not a startup app of this user's.
-            if (on is null || on == false && state?.Number != 1) continue;
+            var on = state is null ? task.ManifestEnabled : state.Number switch { 2 or 4 => true, 0 or 1 or 3 => false, _ => (bool?)null };
+            if (on is null) continue;
+            var policyLocked = state?.Number is 3 or 4;
             var publisher = task.Publisher;
             yield return Describe(host, $"package:{task.Family}!{task.TaskId}", StartupSource.Package, machine: false, task.Name, task.Exe ?? task.Family, null, on.Value)
-                with { Publisher = publisher.Length > 0 ? publisher : null, Fingerprint = "package:" + task.Family.ToLowerInvariant() + "!" + task.TaskId.ToLowerInvariant() };
+                with { Publisher = publisher.Length > 0 ? publisher : null, ReadOnly = policyLocked, Fingerprint = "package:" + task.Family.ToLowerInvariant() + "!" + task.TaskId.ToLowerInvariant() };
         }
     }
 

@@ -21,10 +21,11 @@ test('startGoLive preserves live UI state during hot-swap failures', () => {
   assert.match(goLive, /if \(!wasLive\) setGoLive\(\{ state: 'off' \}\)/)
 })
 
-test('Store stops backstage dwell timers and avoids render-phase setLastPage', () => {
+test('Store stops backstage dwell timers and opens full-page game rooms', () => {
   assert.match(storeData, /if \(card\.closest\('\.is-backstage'\)\) \{ settle\(card\); return \}/)
   assert.doesNotMatch(storeData, /if \(card\.closest\('\.is-backstage'\)\) \{ dwell\(card\); return \}/)
-  assert.match(storeRoom, /useEffect\(\(\) => \{ if \(page\) setLastPage\(page\) \}, \[page\]\)/)
+  assert.match(storeRoom, /className="exo-store-page-room exo-enter"/)
+  assert.doesNotMatch(storeRoom, /<GameOverlay/)
 })
 
 test('Composer registers exo-dc-mention listener once per mount', () => {

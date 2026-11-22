@@ -1,7 +1,7 @@
 import { Fragment, useEffect, useId, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { useGlide } from './glide'
-import { groupOf } from './section'
+import { HIDDEN_PANELS, groupOf } from './section'
 
 /** A polling rate as a choice reads it: 500, 1K, 8K. */
 export const hz = (v: number): string => (v >= 1000 ? `${v / 1000}K` : String(v))
@@ -9,6 +9,7 @@ export const hz = (v: number): string => (v >= 1000 ? `${v / 1000}K` : String(v)
 /** A section: its name is the only bold type, its rows ruled by hairlines; it rises in when it appears. */
 export function Panel({ title, actions, children }: { title: string; children?: ReactNode; /** Buttons on the title's own line, for a panel that is only a few actions. */ actions?: ReactNode }) {
   const id = useId()
+  if (HIDDEN_PANELS.has(title)) return null
   return (
     <section className={`m-panel m-arrive${actions ? ' has-actions' : ''}`} aria-labelledby={id} data-group={groupOf(title)}>
       {actions ? (

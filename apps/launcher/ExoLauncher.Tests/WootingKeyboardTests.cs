@@ -85,4 +85,39 @@ public sealed class WootingKeyboardTests
         Assert.Equal(0x11, report[3]);
         Assert.Equal(0x03, report[4]);
     }
+
+    [Fact]
+    public void Backups_RoundTripJsonValidateFileNameAndRegisterPlayerData()
+    {
+        var backup = new WootingKeyboard.KeyboardBackupFile(
+            SchemaVersion: 1,
+            Model: "Wooting 60HE v2",
+            ProductId: 0x1342,
+            Firmware: "2.15.0",
+            CreatedUtc: "2026-11-21T16:00:00.0000000Z",
+            ActiveProfile: 1,
+            Profiles:
+            [
+                new(0, "Digital", Convert.ToBase64String([0x0A, 0x02, 0x08, 0x01])),
+                new(1, "FPS", Convert.ToBase64String([0x0A, 0x02, 0x08, 0x02])),
+            ]);
+
+        var json = WootingKeyboard.SerializeBackup(backup);
+        var restored = WootingKeyboard.DeserializeBackup(json);
+        Assert.NotNull(restored);
+        Assert.Equal("Wooting 60HE v2", restored.Model);
+        Assert.Equal(0x1342, restored.ProductId);
+        Assert.Equal(1, restored.ActiveProfile);
+        Assert.Equal(2, restored.Profiles.Count);
+        Assert.Equal("FPS", restored.Profiles[1].Name);
+
+        Assert.Null(WootingKeyboard.ResolveBackupPath(null));
+        Assert.Null(WootingKeyboard.ResolveBackupPath("../wooting-1342-20261121-160000.json"));
+        Assert.Null(WootingKeyboard.ResolveBackupPath("sub/wooting-1342-20261121-160000.json"));
+        Assert.Null(WootingKeyboard.ResolveBackupPath("evil.json"));
+        Assert.NotNull(WootingKeyboard.ResolveBackupPath("wooting-1342-20261121-160000.json"));
+        Assert.NotNull(WootingKeyboard.ResolveBackupPath("wooting-1342-20261121-160000-01.json"));
+
+        Assert.NotNull(PlayerData.Of("keyboard-backups/wooting-1342-20261121-160000.json"));
+    }
 }

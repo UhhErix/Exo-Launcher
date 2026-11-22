@@ -1,6 +1,6 @@
-import { focusableSelector } from './focusTrap'
-import { detectGamepadKind, pickSpatialTarget, stepSliderValue, type Direction } from './gamepadMath'
-import { activateGamepadModality, setGamepadPaused, shouldReduceMotion } from './motionPreference'
+import { focusableSelector } from './focusTrap.ts'
+import { detectGamepadKind, pickSpatialTarget, stepSliderValue, type Direction } from './gamepadMath.ts'
+import { activateGamepadModality, setGamepadPaused, shouldReduceMotion } from './motionPreference.ts'
 
 export type GamepadNavHandlers = {
   onRoomStep: (delta: -1 | 1) => void
@@ -16,6 +16,16 @@ const REPEAT_INITIAL_MS = 340
 const REPEAT_INTERVAL_MS = 105
 const SCROLL_PX_PER_SEC = 760
 
+const scopeMemory = new WeakMap<HTMLElement, HTMLElement>()
+
+const SCOPE_SELECTORS = [
+  '.exo-music-immersive',
+  '.exo-game-page',
+  '.exo-store-page-room',
+  '.exo-set-room:not([hidden])',
+  '.exo-devices.is-device',
+]
+
 function isVisibleElement(el: HTMLElement): boolean {
   if (el.hidden || el.getAttribute('aria-hidden') === 'true') return false
   if (el.closest('[hidden], [inert], .is-backstage')) return false
@@ -25,60 +35,91 @@ function isVisibleElement(el: HTMLElement): boolean {
   return style.visibility !== 'hidden' && style.display !== 'none'
 }
 
+function isEnabledElement(el: HTMLElement): boolean {
+  if (!isVisibleElement(el)) return false
+  if ('disabled' in el && (el as HTMLButtonElement).disabled) return false
+  return el.getAttribute('aria-disabled') !== 'true'
+}
+
+function rememberScopeFocus(scope: HTMLElement | null, target: HTMLElement) {
+  if (!scope || !scope.contains(target)) return
+  if ('disabled' in target && (target as HTMLButtonElement).disabled) return
+  scopeMemory.set(scope, target)
+}
+
 function resolveActiveScope(): HTMLElement | null {
   const popovers = [...document.querySelectorAll<HTMLElement>('[popover]:popover-open')].filter(isVisibleElement)
   if (popovers.length > 0) return popovers[popovers.length - 1]
   const modals = [...document.querySelectorAll<HTMLElement>('[aria-modal="true"], [role="menu"], [role="dialog"]')].filter(isVisibleElement)
   if (modals.length > 0) return modals[modals.length - 1]
-  const immersive = document.querySelector<HTMLElement>('.exo-music-immersive')
-  if (immersive && isVisibleElement(immersive)) return immersive
-  const gameRoom = document.querySelector<HTMLElement>('.exo-game-room')
-  if (gameRoom && isVisibleElement(gameRoom)) return gameRoom
-  const storePage = document.querySelector<HTMLElement>('.exo-sgp')
-  if (storePage && isVisibleElement(storePage)) return storePage
-  const rooms = [...document.querySelectorAll<HTMLElement>('.exo-room')].filter(isVisibleElement)
+  for (const selector of SCOPE_SELECTORS) {
+    const match = document.querySelector<HTMLElement>(selector)
+    if (match && isVisibleElement(match)) return match
+  }
+  const rooms = [...document.querySelectorAll<HTMLElement>('.exo-room:not([hidden], .is-backstage)')].filter(isVisibleElement)
   return rooms[rooms.length - 1] ?? document.body
 }
 
 function focusablesIn(scope: HTMLElement): HTMLElement[] {
-  return [...scope.querySelectorAll<HTMLElement>(focusableSelector)].filter(isVisibleElement)
+  return [...scope.querySelectorAll<HTMLElement>(focusableSelector)].filter(isEnabledElement)
 }
 
 function scrollTargetIntoView(el: HTMLElement) {
+  const behavior: ScrollBehavior = shouldReduceMotion() ? 'instant' : 'smooth'
+  const track = el.closest<HTMLElement>('[data-h-track]')
+  if (track && typeof track.scrollTo === 'function') {
+    const trackRect = track.getBoundingClientRect()
+    const elRect = el.getBoundingClientRect()
+    const nextLeft = Math.max(0, track.scrollLeft + (elRect.left - trackRect.left) - (trackRect.width - elRect.width) / 2)
+    track.scrollTo({ left: nextLeft, behavior })
+  }
   el.scrollIntoView({
-    behavior: shouldReduceMotion() ? 'instant' : 'smooth',
+    behavior,
     block: 'nearest',
     inline: 'center',
   })
 }
 
+function focusAndTrack(scope: HTMLElement, target: HTMLElement) {
+  rememberScopeFocus(scope, target)
+  target.focus({ preventScroll: true })
+  scrollTargetIntoView(target)
+}
+
+const PREFERRED_FOCUS_SELECTORS = [
+  '.exo-deck-card.is-active .exo-deck-card-btn',
+  '.exo-game-page .exo-play:not(:disabled)',
+  '.exo-sgp-cta .exo-play:not(:disabled)',
+  '.exo-settings-nav-pages button[aria-current="page"]',
+  '.exo-devices.is-device .exo-devices-back button',
+  '.exo-device-card',
+  '[data-device-card]',
+  '.exo-store-hero-stage',
+  '.exo-music-tile',
+  '.exo-ai-head-actions button',
+  '.exo-apps-pick',
+  '.exo-tile button',
+  '[data-autofocus]',
+]
+
 export function focusRoomPrimary(scope?: HTMLElement | null): boolean {
   const root = scope ?? resolveActiveScope()
   if (!root) return false
-  const preferred = [
-    '.exo-deck-card.is-active .exo-deck-card-btn',
-    '.exo-game-room .exo-play',
-    '.exo-sgp button',
-    '.exo-store-hero-stage',
-    '[data-device-card]',
-    '.exo-music-tile',
-    '.exo-ai-head-actions button',
-    '.exo-apps-pick',
-    '.exo-tile button',
-    '[data-autofocus]',
-  ]
-  for (const selector of preferred) {
+  const remembered = scopeMemory.get(root)
+  if (remembered && remembered.isConnected && root.contains(remembered) && isEnabledElement(remembered)) {
+    focusAndTrack(root, remembered)
+    return true
+  }
+  for (const selector of PREFERRED_FOCUS_SELECTORS) {
     const match = root.querySelector<HTMLElement>(selector)
-    if (match && isVisibleElement(match)) {
-      match.focus({ preventScroll: true })
-      scrollTargetIntoView(match)
+    if (match && isEnabledElement(match)) {
+      focusAndTrack(root, match)
       return true
     }
   }
   const first = focusablesIn(root)[0]
   if (!first) return false
-  first.focus({ preventScroll: true })
-  scrollTargetIntoView(first)
+  focusAndTrack(root, first)
   return true
 }
 
@@ -96,7 +137,7 @@ function adjustRangeInput(input: HTMLInputElement, delta: -1 | 1): boolean {
   return true
 }
 
-function moveHomePoster(active: HTMLElement, dir: 'left' | 'right'): boolean {
+function moveHomePoster(scope: HTMLElement, active: HTMLElement, dir: 'left' | 'right'): boolean {
   const card = active.closest('.exo-deck-card')
   if (!card) return false
   const cards = [...(card.parentElement?.querySelectorAll<HTMLElement>('.exo-deck-card') ?? [])]
@@ -105,49 +146,38 @@ function moveHomePoster(active: HTMLElement, dir: 'left' | 'right'): boolean {
   const next = cards[index + (dir === 'right' ? 1 : -1)]
   const button = next?.querySelector<HTMLElement>('.exo-deck-card-btn')
   if (!button) return true
-  button.focus({ preventScroll: true })
-  scrollTargetIntoView(button)
+  focusAndTrack(scope, button)
   return true
-}
-
-function activeDeckButton(scope: HTMLElement): HTMLElement | null {
-  const button = scope.querySelector<HTMLElement>('.exo-deck-card.is-active .exo-deck-card-btn')
-  return button && isVisibleElement(button) ? button : null
 }
 
 function moveFocus(dir: Direction) {
   const scope = resolveActiveScope()
   if (!scope) return
-  let active = document.activeElement instanceof HTMLElement && scope.contains(document.activeElement)
+  const active = document.activeElement instanceof HTMLElement && scope.contains(document.activeElement)
     ? document.activeElement
     : null
   if (!active) {
-    const deck = activeDeckButton(scope)
-    if (!deck) {
-      focusRoomPrimary(scope)
-      return
-    }
-    active = deck
+    focusRoomPrimary(scope)
+    return
   }
   if (active instanceof HTMLInputElement && active.type === 'range' && (dir === 'left' || dir === 'right')) {
     adjustRangeInput(active, dir === 'right' ? 1 : -1)
     return
   }
-  if ((dir === 'left' || dir === 'right') && moveHomePoster(active, dir)) return
+  if ((dir === 'left' || dir === 'right') && moveHomePoster(scope, active, dir)) return
   const fromRect = active.getBoundingClientRect()
   const candidates = focusablesIn(scope)
     .filter(el => el !== active)
     .map(item => ({ item, rect: item.getBoundingClientRect() }))
   const target = pickSpatialTarget(fromRect, candidates, dir)
   if (!target) return
-  target.focus({ preventScroll: true })
-  scrollTargetIntoView(target)
+  focusAndTrack(scope, target)
 }
 
 function cycleSubTabs(delta: -1 | 1) {
   const scope = resolveActiveScope()
   if (!scope) return
-  const group = scope.querySelector<HTMLElement>('.exo-home-tabs, .exo-library-tabs, .exo-store-top .exo-shelf-chips, .exo-dc-tabs, .exo-settings-nav, .exo-shelf-chips, [role="tablist"]')
+  const group = scope.querySelector<HTMLElement>('.exo-home-tabs, .exo-store-top .exo-shelf-chips, .exo-dc-tabs, .exo-settings-nav, .exo-shelf-chips, [role="tablist"]')
   if (!group || !isVisibleElement(group)) return
   const buttons = [...group.querySelectorAll<HTMLElement>('button:not(:disabled), [role="tab"]:not([aria-disabled="true"])')].filter(isVisibleElement)
   if (buttons.length < 2) return
@@ -155,7 +185,7 @@ function cycleSubTabs(delta: -1 | 1) {
   const nextIdx = current < 0 ? 0 : (current + delta + buttons.length) % buttons.length
   const next = buttons[nextIdx]
   next.click()
-  next.focus({ preventScroll: true })
+  focusAndTrack(scope, next)
 }
 
 function triggerPrimaryQuickAction() {
@@ -163,7 +193,8 @@ function triggerPrimaryQuickAction() {
   if (!scope) return
   const targets = [
     '.exo-home-play:not(:disabled)',
-    '.exo-game-room .exo-play:not(:disabled)',
+    '.exo-game-page .exo-play:not(:disabled)',
+    '.exo-sgp-cta .exo-play:not(:disabled)',
     '.exo-music-immersive .exo-music-bar-play:not(:disabled)',
     '.exo-music-bar-play:not(:disabled)',
   ]
@@ -182,27 +213,24 @@ function triggerBack(onBackFallback: () => void) {
     popovers[popovers.length - 1].hidePopover()
     return
   }
-  const subBack = document.querySelector<HTMLElement>('.exo-devices-back button, .exo-music-back, .exo-st-back')
-  if (subBack && isVisibleElement(subBack)) {
-    subBack.click()
-    requestAnimationFrame(() => focusRoomPrimary())
-    return
-  }
-  const allGamesTabs = document.querySelector<HTMLElement>('.exo-library-tabs')
-  if (allGamesTabs && isVisibleElement(allGamesTabs)) {
-    const recent = allGamesTabs.querySelector<HTMLElement>('button')
-    if (recent && recent.getAttribute('aria-pressed') !== 'true') {
-      recent.click()
+  const inSettings = !!document.querySelector('.exo-set-room:not([hidden], .is-backstage)')
+  if (!inSettings) {
+    const subBack = document.querySelector<HTMLElement>('.exo-game-back, .exo-devices-back button, .exo-music-back, .exo-st-back, .exo-sgp-back, .exo-library-back')
+    if (subBack && isVisibleElement(subBack)) {
+      subBack.click()
       requestAnimationFrame(() => focusRoomPrimary())
       return
     }
   }
-  const wasSettings = !!document.querySelector('.exo-set-room:not([hidden]):not(.is-leaving)')
   const esc = new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true })
   const target = document.activeElement instanceof HTMLElement ? document.activeElement : document.body
   target.dispatchEvent(esc)
-  if (!esc.defaultPrevented) onBackFallback()
-  if (wasSettings) requestAnimationFrame(() => requestAnimationFrame(() => focusRoomPrimary()))
+  if (!esc.defaultPrevented) {
+    const settingsBack = inSettings ? document.querySelector<HTMLElement>('.exo-settings-back') : null
+    if (settingsBack && isVisibleElement(settingsBack)) settingsBack.click()
+    else onBackFallback()
+  }
+  if (inSettings) requestAnimationFrame(() => requestAnimationFrame(() => focusRoomPrimary()))
 }
 
 function triggerConfirm() {
@@ -212,12 +240,6 @@ function triggerConfirm() {
     ? document.activeElement
     : null
   if (!active) {
-    const deck = activeDeckButton(scope)
-    if (deck) {
-      deck.focus({ preventScroll: true })
-      deck.click()
-      return
-    }
     focusRoomPrimary(scope)
     return
   }
@@ -226,13 +248,6 @@ function triggerConfirm() {
     return
   }
   active.click()
-}
-
-function triggerViewOptions() {
-  const scope = resolveActiveScope()
-  if (!scope) return
-  const optionsBtn = scope.querySelector<HTMLElement>('.exo-home-more-btn, .exo-game-tool[aria-label="Properties"], .exo-library-tabs button:last-child')
-  if (optionsBtn && isVisibleElement(optionsBtn)) optionsBtn.click()
 }
 
 function scrollActiveContainer(rx: number, ry: number, dtSec: number) {
@@ -303,12 +318,11 @@ function handleEdgeButton(index: number, handlers: GamepadNavHandlers) {
   if (index === 0) triggerConfirm()
   else if (index === 1) triggerBack(handlers.onBackFallback)
   else if (index === 2) triggerPrimaryQuickAction()
-  else if (index === 3) handlers.onSearchToggle()
+  else if (index === 3 || index === 8) handlers.onSearchToggle()
   else if (index === 4) { handlers.onRoomStep(-1); requestAnimationFrame(() => requestAnimationFrame(() => focusRoomPrimary())) }
   else if (index === 5) { handlers.onRoomStep(1); requestAnimationFrame(() => requestAnimationFrame(() => focusRoomPrimary())) }
   else if (index === 6) cycleSubTabs(-1)
   else if (index === 7) cycleSubTabs(1)
-  else if (index === 8) triggerViewOptions()
   else if (index === 9) handlers.onSettingsToggle()
 }
 
@@ -396,6 +410,15 @@ export function installGamepadNav(handlers: GamepadNavHandlers): () => void {
     }
   }
 
+  const onFocusIn = (event: FocusEvent) => {
+    if (!document.documentElement?.hasAttribute('data-exo-gamepad')) return
+    const target = event.target
+    if (!(target instanceof HTMLElement)) return
+    const scope = resolveActiveScope()
+    rememberScopeFocus(scope, target)
+  }
+
+  document.addEventListener('focusin', onFocusIn)
   window.addEventListener('gamepadconnected', onConnect)
   window.addEventListener('gamepaddisconnected', onDisconnect)
   if ([...(navigator.getGamepads() ?? [])].some(p => !!p && p.connected)) start()
@@ -404,6 +427,7 @@ export function installGamepadNav(handlers: GamepadNavHandlers): () => void {
     running = false
     setGamepadPaused(false)
     cancelAnimationFrame(raf)
+    document.removeEventListener('focusin', onFocusIn)
     window.removeEventListener('gamepadconnected', onConnect)
     window.removeEventListener('gamepaddisconnected', onDisconnect)
   }

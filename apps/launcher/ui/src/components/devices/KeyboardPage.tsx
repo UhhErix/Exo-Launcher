@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react'
 import { ExternalLink, Refresh } from '../../brand/icons'
-import { host, type KeyboardRead, type Peripheral } from '../../lib/host'
 import { errorText } from '../../lib/errorWords'
+import { host, type KeyboardBackupSummary, type KeyboardRead, type Peripheral } from '../../lib/host'
 import { report } from '../../lib/report'
-import { ChoiceRow, Row, SliderRow, State, SwitchRow } from '../settings/parts'
+import { Row, SliderRow, State, SwitchRow } from '../settings/parts'
+import { ActionButton, ConfirmButton } from '../ui/ConfirmButton'
 import { Spinner } from '../ui/Spinner'
 import { DevicePage, DevicePanel as Panel } from './DevicePage'
+import { KeyboardMap } from './KeyboardMap'
 import { portShort, portWords } from './ports'
 
 const ACTUATION_PRESETS = [
@@ -22,18 +24,35 @@ type KeyboardPatch = {
   tachyon?: boolean
 }
 
+function formatBackupTime(iso: string): string {
+  const date = new Date(iso)
+  if (Number.isNaN(date.getTime())) return iso
+  return new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(date)
+}
+
 function useKeyboard(id: string) {
   const [read, setRead] = useState<KeyboardRead | null>(null)
+  const [backups, setBackups] = useState<KeyboardBackupSummary[]>([])
   const [busy, setBusy] = useState<string | null>(null)
+  const [pendingSlot, setPendingSlot] = useState<number | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [loadFailed, setLoadFailed] = useState<string | null>(null)
+
+  const loadBackups = useCallback(() => {
+    return host.keyboardBackups(id)
+      .then(res => {
+        if (res.ok) setBackups(res.backups)
+      })
+      .catch((cause: unknown) => report(cause, 'KeyboardPage.backups'))
+  }, [id])
 
   const refresh = useCallback(() => {
     setBusy('read')
     setLoadFailed(null)
-    return host.keyboardRead(id)
-      .then(next => {
+    return Promise.all([host.keyboardRead(id), host.keyboardBackups(id).catch(() => null)])
+      .then(([next, bk]) => {
         setRead(next)
+        if (bk?.ok) setBackups(bk.backups)
         if (!next.ok && next.message) setLoadFailed(next.message)
       })
       .catch((cause: unknown) => {
@@ -45,10 +64,11 @@ function useKeyboard(id: string) {
 
   useEffect(() => {
     let active = true
-    host.keyboardRead(id)
-      .then(next => {
+    Promise.all([host.keyboardRead(id), host.keyboardBackups(id).catch(() => null)])
+      .then(([next, bk]) => {
         if (!active) return
         setRead(next)
+        if (bk?.ok) setBackups(bk.backups)
         if (!next.ok && next.message) setLoadFailed(next.message)
       })
       .catch((cause: unknown) => {
@@ -80,16 +100,48 @@ function useKeyboard(id: string) {
     }
   }, [])
 
-  const switchProfile = useCallback(
-    (slot: number) => runAction('profile', "Couldn't switch profile.", () => host.keyboardProfile(id, slot)),
-    [id, runAction],
-  )
-  const saveSettings = useCallback(
-    (patch: KeyboardPatch) => runAction('settings', "Couldn't update keyboard settings.", () => host.keyboardSettings(id, patch)),
-    [id, runAction],
-  )
+  const switchProfile = useCallback(async (slot: number) => {
+    setPendingSlot(slot)
+    try {
+      return await runAction('profile', "Couldn't switch profile.", () => host.keyboardProfile(id, slot))
+    } finally {
+      setPendingSlot(null)
+    }
+  }, [id, runAction])
 
-  return { read, busy, error, loadFailed, refresh, switchProfile, saveSettings }
+  const saveSettings = useCallback(async (patch: KeyboardPatch) => {
+    const msg = await runAction('settings', "Couldn't update keyboard settings.", () => host.keyboardSettings(id, patch))
+    void loadBackups()
+    return msg
+  }, [id, loadBackups, runAction])
+
+  const createBackup = useCallback(async () => {
+    const res = await host.keyboardBackup(id)
+    if (!res.ok) throw new Error(res.message ?? "Couldn't save a keyboard backup.")
+    setBackups(res.backups)
+  }, [id])
+
+  const restoreBackup = useCallback(async (fileName: string) => {
+    setError(null)
+    const next = await host.keyboardRestore(id, fileName)
+    if (!next.ok) throw new Error(next.message ?? "Couldn't restore this backup.")
+    setRead(next)
+    void loadBackups()
+  }, [id, loadBackups])
+
+  return {
+    read,
+    backups,
+    busy,
+    pendingSlot,
+    error,
+    loadFailed,
+    refresh,
+    switchProfile,
+    saveSettings,
+    createBackup,
+    restoreBackup,
+  }
 }
 
 function rapidTriggerStat(read: KeyboardRead | null): string | null {
@@ -108,6 +160,49 @@ function heroStats(read: KeyboardRead | null) {
     { label: 'Firmware', value: read?.firmware ?? null },
     { label: 'Layout', value: read?.layout ?? null },
   ]
+}
+
+function ProfilesPanel({
+  profiles,
+  activeProfile,
+  busy,
+  pendingSlot,
+  onSelect,
+}: {
+  profiles: { index: number; name: string }[]
+  activeProfile: number
+  busy: boolean
+  pendingSlot: number | null
+  onSelect: (slot: number) => void
+}) {
+  return (
+    <Panel title="Profiles">
+      <Row label="Onboard profiles" detail="Switch active slot stored on keyboard memory" stacked>
+        <div className="exo-kb-tabs" role="tablist" aria-label="Onboard keyboard profiles">
+          {profiles.map(profile => {
+            const selected = profile.index === activeProfile
+            const pending = pendingSlot === profile.index
+            return (
+              <button
+                key={profile.index}
+                type="button"
+                role="tab"
+                aria-selected={selected}
+                aria-busy={pending || undefined}
+                className={selected ? 'exo-kb-tab is-active' : 'exo-kb-tab'}
+                disabled={busy}
+                onClick={() => { if (!selected) onSelect(profile.index) }}
+              >
+                <span className="exo-kb-tab-slot">P{profile.index + 1}</span>
+                <span>{profile.name}</span>
+                {pending ? <Spinner size={12} label="Switching profile" /> : null}
+              </button>
+            )
+          })}
+        </div>
+      </Row>
+    </Panel>
+  )
 }
 
 function ActuationPanel({ actuationMm, canEdit, error, onSave }: {
@@ -222,57 +317,202 @@ function PerformancePanel({ card, read, canEdit, onSave }: {
   )
 }
 
+function BackupsPanel({
+  backups,
+  canEdit,
+  onSaveBackup,
+  onRestoreBackup,
+}: {
+  backups: KeyboardBackupSummary[]
+  canEdit: boolean
+  onSaveBackup: () => Promise<void>
+  onRestoreBackup: (fileName: string) => Promise<void>
+}) {
+  return (
+    <Panel title="Backups">
+      <Row label="Save snapshot" detail="Stores all onboard profiles locally for this keyboard">
+        <ActionButton
+          className="exo-set-btn is-primary"
+          disabled={!canEdit}
+          working="Saving"
+          done="Saved"
+          context="KeyboardPage.backup"
+          fallback="Couldn't save keyboard backup."
+          onPress={onSaveBackup}
+        >
+          Save backup
+        </ActionButton>
+      </Row>
+      {backups.length > 0 ? (
+        <div className="exo-kb-backups">
+          {backups.map(backup => (
+            <div key={backup.fileName} className="exo-kb-backup-row">
+              <div className="exo-kb-backup-copy">
+                <span className="exo-kb-backup-date">{formatBackupTime(backup.createdUtc)}</span>
+                <span className="exo-kb-backup-meta">
+                  {backup.model} · {backup.profileCount} {backup.profileCount === 1 ? 'profile' : 'profiles'}
+                </span>
+              </div>
+              <ConfirmButton
+                className="exo-set-btn"
+                question="Restore backup?"
+                danger
+                disabled={!canEdit}
+                working="Restoring"
+                done="Restored"
+                context="KeyboardPage.restore"
+                fallback="Couldn't restore keyboard backup."
+                onConfirm={() => onRestoreBackup(backup.fileName)}
+              >
+                Restore
+              </ConfirmButton>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <p className="exo-kb-backups-empty">
+          No backups saved yet. A safety backup is created automatically before Exo writes settings.
+        </p>
+      )}
+    </Panel>
+  )
+}
+
+function RetryPanel({
+  loadFailed,
+  retrying,
+  disabled,
+  onRetry,
+}: {
+  loadFailed: string | null
+  retrying: boolean
+  disabled: boolean
+  onRetry: () => void
+}) {
+  if (!loadFailed) return null
+  return (
+    <Panel title="Keyboard">
+      <Row label="Couldn't read keyboard" detail={loadFailed}>
+        <button type="button" className="exo-set-btn" disabled={disabled} onClick={onRetry}>
+          {retrying ? <Spinner label="Retrying" /> : <Refresh size={14} />}
+          Retry
+        </button>
+      </Row>
+    </Panel>
+  )
+}
+
+function KeyboardProfileControls({
+  read,
+  isBusy,
+  canEdit,
+  pendingSlot,
+  error,
+  onSelectProfile,
+  onSave,
+}: {
+  read: KeyboardRead | null
+  isBusy: boolean
+  canEdit: boolean
+  pendingSlot: number | null
+  error: string | null
+  onSelectProfile: (slot: number) => void
+  onSave: (patch: KeyboardPatch) => Promise<string | null>
+}) {
+  if (!read) return null
+  return (
+    <>
+      {read.profiles.length > 0 ? (
+        <ProfilesPanel
+          profiles={read.profiles}
+          activeProfile={read.activeProfile}
+          busy={isBusy}
+          pendingSlot={pendingSlot}
+          onSelect={onSelectProfile}
+        />
+      ) : null}
+      {read.actuationMm != null ? (
+        <ActuationPanel actuationMm={read.actuationMm} canEdit={canEdit} error={error} onSave={onSave} />
+      ) : null}
+      {read.rapidTrigger != null ? (
+        <RapidTriggerPanel enabled={read.rapidTrigger} sensitivityMm={read.rapidTriggerMm} canEdit={canEdit} onSave={onSave} />
+      ) : null}
+    </>
+  )
+}
+
 export function KeyboardPage({ card, name, status, art }: {
   card: Peripheral
   name: string
   status: string
   art: ReactNode
 }) {
-  const { read, busy, error, loadFailed, refresh, switchProfile, saveSettings } = useKeyboard(card.id)
-  const canEdit = read?.ok === true && read.canWrite === true && busy === null
+  const {
+    read,
+    backups,
+    busy,
+    pendingSlot,
+    error,
+    loadFailed,
+    refresh,
+    switchProfile,
+    saveSettings,
+    createBackup,
+    restoreBackup,
+  } = useKeyboard(card.id)
+  const isBusy = busy !== null
+  const canEdit = read?.ok === true && read.canWrite === true && !isBusy
+  const activeProfileName = read?.profiles.find(p => p.index === read.activeProfile)?.name ?? null
+  const displayName = read?.model ?? name
+  const mapModel = read?.model ?? card.model ?? name
+  const mapLayout = read?.layout ?? card.layout
 
   return (
     <DevicePage
-      name={read?.model ?? name}
+      name={displayName}
       status={status}
       art={art}
       stats={heroStats(read)}
       credit="Direct Wooting USB HID protocol"
     >
-      {loadFailed ? (
-        <Panel title="Keyboard">
-          <Row label="Couldn't read keyboard" detail={loadFailed}>
-            <button type="button" className="exo-set-btn" disabled={busy !== null} onClick={() => void refresh()}>
-              {busy === 'read' ? <Spinner label="Retrying" /> : <Refresh size={14} />}
-              Retry
-            </button>
-          </Row>
-        </Panel>
-      ) : null}
+      <RetryPanel
+        loadFailed={loadFailed}
+        retrying={busy === 'read'}
+        disabled={isBusy}
+        onRetry={() => { void refresh() }}
+      />
 
-      {read?.profiles.length ? (
-        <Panel title="Profile">
-          <ChoiceRow
-            id="kb-profile"
-            label="Active profile"
-            detail="Switches onboard keyboard profile immediately"
-            value={read.activeProfile}
-            disabled={busy !== null}
-            choices={read.profiles.map(p => ({ value: p.index, label: p.name }))}
-            onChange={slot => switchProfile(Number(slot))}
-          />
-        </Panel>
-      ) : null}
+      <KeyboardProfileControls
+        read={read}
+        isBusy={isBusy}
+        canEdit={canEdit}
+        pendingSlot={pendingSlot}
+        error={error}
+        onSelectProfile={slot => { void switchProfile(slot) }}
+        onSave={saveSettings}
+      />
 
-      {read?.actuationMm != null ? (
-        <ActuationPanel actuationMm={read.actuationMm} canEdit={canEdit} error={error} onSave={saveSettings} />
-      ) : null}
-
-      {read?.rapidTrigger != null ? (
-        <RapidTriggerPanel enabled={read.rapidTrigger} sensitivityMm={read.rapidTriggerMm} canEdit={canEdit} onSave={saveSettings} />
-      ) : null}
+      <Panel title="Keyboard map">
+        <KeyboardMap
+          model={mapModel}
+          layout={mapLayout}
+          profileName={activeProfileName}
+          actuationMm={read?.actuationMm}
+          rapidTrigger={read?.rapidTrigger}
+          rapidTriggerMm={read?.rapidTriggerMm}
+          tachyon={read?.tachyon}
+          maxScanHz={read?.maxScanHz}
+        />
+      </Panel>
 
       <PerformancePanel card={card} read={read} canEdit={canEdit} onSave={saveSettings} />
+
+      <BackupsPanel
+        backups={backups}
+        canEdit={canEdit}
+        onSaveBackup={createBackup}
+        onRestoreBackup={restoreBackup}
+      />
     </DevicePage>
   )
 }

@@ -233,8 +233,9 @@ function useExoAiJump({
 }) {
   const handled = useRef<typeof jump>(null)
   useLayoutEffect(() => {
+    if (!jump) { handled.current = null; return }
     const scroller = room.current
-    if (!active || !jump || handled.current === jump || !scroller) return
+    if (!active || handled.current === jump || !scroller) return
     if (jump.tab === 'control' && !vendor) return
     handled.current = jump
     if (jump.tab === 'drives' || jump.tab === 'compress') { onStorage(); return }
@@ -301,6 +302,13 @@ export function ExoAiRoom({
     setMenu(null)
     setStorageOpen(true)
   }, [])
+
+  useEffect(() => {
+    if (!active) {
+      setMenu(null)
+      setStorageOpen(false)
+    }
+  }, [active])
 
   useExoAiJump({
     active,

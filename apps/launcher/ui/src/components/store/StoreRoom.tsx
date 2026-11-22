@@ -3,11 +3,11 @@ import { Wait, sample, times } from '../ui/Wait'
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import { Bookmark, CHECK_PATH, ChevronLeft, ChevronRight, Close, Refresh, Search } from '../../brand/icons'
 import { shouldReduceMotion } from '../../lib/motionPreference'
+import { useTrackArrows } from '../../lib/useTrackArrows'
 import { host, onHostEvent, type Game, type StoreHome, type StoreTile } from '../../lib/host'
 import { onPageActivityChanged, pageIsActive } from '../../lib/pageActivity'
 import { report } from '../../lib/report'
 import { useGlide } from '../../lib/glide'
-import { GameOverlay } from '../../motion'
 import { onScreen, pane, pressedArt, transition, visible } from '../../lib/viewTransition'
 import { useTopOnChange } from '../../lib/topOnChange'
 import { onStoreSearch, takeStoreSearch } from '../../lib/storeSearch'
@@ -20,7 +20,8 @@ import { errorText } from '../../lib/errorWords'
 
 type Tab = 'home' | 'wishlist'
 /** A card at its place in the view; arrive: the view is showing its items for the first time. */
-type CardFn = (tile: StoreTile, index: number, arrive: boolean) => ReactNode
+type CardFn = (tile: StoreTile, index: number, arrive: boolean, shelfId?: string) => ReactNode
+type PageSelection = { tile: StoreTile; fromShelf?: string }
 
 /** Views that have already arrived once this session (DESIGN.md › Motion: arrive plays the first time only). */
 const arrived = new Set<string>()
@@ -41,11 +42,9 @@ function arriveStyle(i: number): CSSProperties {
  * they play woven in. Search and a wishlist
  * sit above; a game opens its own page.
  */
-/** A game's page's viewer (its trailer or screenshot, or their placeholder): where its card's art flies to and back from. */
-const PAGE_ART = '.exo-game-overlay-stage .exo-sgp-stage'
+const PAGE_ART = '.exo-store-page-room .exo-sgp-stage'
 
-/** What a hidden-unmounted Store comes back to (BootGate's roomScroll keeps the scroll). */
-const remembered = { tab: 'home' as Tab, query: '', page: null as StoreTile | null, lastPage: null as StoreTile | null }
+const remembered = { tab: 'home' as Tab, query: '', page: null as PageSelection | null }
 
 export function StoreRoom({ active, games, onOpenGame }: {
   active: boolean
@@ -55,20 +54,15 @@ export function StoreRoom({ active, games, onOpenGame }: {
 }) {
   const [tab, setTab] = useState<Tab>(remembered.tab)
   const [query, setQuery] = useState(remembered.query)
-  const [page, setPage] = useState<StoreTile | null>(remembered.page)
-  // The closing fade keeps showing the game that was open.
-  const [lastPage, setLastPage] = useState<StoreTile | null>(remembered.lastPage)
-  useEffect(() => { remembered.tab = tab; remembered.query = query; remembered.page = page; remembered.lastPage = lastPage },
-    [tab, query, page, lastPage])
-  useEffect(() => { if (page) setLastPage(page) }, [page])
-  // A search sent here from elsewhere (a friend's game you don't have): taken once the room is up, or at once when it is.
+  const [page, setPage] = useState<PageSelection | null>(remembered.page)
+  useEffect(() => { remembered.tab = tab; remembered.query = query; remembered.page = page },
+    [tab, query, page])
   useEffect(() => {
     const search = (text: string) => { setPage(null); setQuery(text) }
     const waiting = takeStoreSearch()
     if (waiting) search(waiting)
     return onStoreSearch(text => { takeStoreSearch(); search(text) })
   }, [])
-  const shownPage = page ?? lastPage
   const owned = useOwned(games)
   const home = useHome()
   const wish = useWishlist()
@@ -79,71 +73,103 @@ export function StoreRoom({ active, games, onOpenGame }: {
   const scroller = useRef<HTMLDivElement>(null)
   useTopOnChange(scroller, `${view}|${hits.query}`)
 
-  // The card's art flies into the page's viewer and back on close, the page coming up under it, as a game's page does
-  // in Library. Flown into the whole window, the window's glass was captured on its own and stood in as a flat tint,
-  // then blinked into glass as it landed. Opened from elsewhere, the page floats in.
   const artFrom = useRef<Element | null>(null)
-  const openPage = useCallback((tile: StoreTile) => {
+  const openPage = useCallback((tile: StoreTile, fromShelf?: string) => {
     const from = pressedArt()
     artFrom.current = from
-    void transition(() => setPage(tile), { kind: 'morph', morph: { name: 'exo-store-art', from, to: () => visible(PAGE_ART) } })
+    void transition(() => setPage({ tile, fromShelf }), { kind: 'morph', morph: { name: 'exo-store-art', from, to: () => visible(PAGE_ART) } })
   }, [])
-  const closePage = () => {
+  const closePage = useCallback(() => {
     const to = artFrom.current
     void transition(() => setPage(null), { kind: 'morph', back: true, morph: { name: 'exo-store-art', from: visible(PAGE_ART), to: () => onScreen(to) ? to : null } })
-  }
+  }, [])
 
-  // A game's wishlist mark follows the wishlist as it is now: the shelves, the banner and the calendar were read with the
-  // wishlist of their moment, so a game added since showed none. Their own word stands only until the wishlist is read.
+  useEffect(() => {
+    if (!active || !page) return
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape' || event.defaultPrevented) return
+      event.preventDefault()
+      closePage()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [active, page, closePage])
+
   const withWish = useCallback((tile: StoreTile): StoreTile => {
     const wished = wish.loaded ? wish.ids.has(tile.appId) : !!tile.wished
     return wished === !!tile.wished ? tile : { ...tile, wished }
   }, [wish.loaded, wish.ids])
   const steamSale = steamSaleNow()
   const openOwned = useCallback((game: Game) => { setPage(null); onOpenGame(game.title, game.id) }, [onOpenGame])
-  const card = useCallback<CardFn>((tile, index, arrive) => (
-    <StoreCard key={tile.appId} tile={withWish(tile)} owned={owned(tile.appId, tile.name)} onOpen={openPage} onLibrary={openOwned} arrive={arrive ? index : undefined} />
+  const card = useCallback<CardFn>((tile, index, arrive, shelfId) => (
+    <StoreCard key={tile.appId} tile={withWish(tile)} owned={owned(tile.appId, tile.name)} onOpen={t => openPage(t, shelfId)} onLibrary={openOwned} arrive={arrive ? index : undefined} />
   ), [owned, openPage, openOwned, withWish])
 
-  const shownOwned = shownPage ? owned(shownPage.appId, shownPage.name) : undefined
+  const activeTile = page?.tile ?? null
+  const fromShelf = page?.fromShelf
+  const moreLikeThis = useMemo(() => {
+    if (!activeTile || !home.data?.shelves?.length) return []
+    const shelves = home.data.shelves
+    const primary = fromShelf ? shelves.find(s => s.id === fromShelf) : undefined
+    const ordered = primary ? [primary, ...shelves.filter(s => s.id !== fromShelf)] : shelves
+    const seen = new Set<string>([activeTile.appId])
+    const list: StoreTile[] = []
+    for (const shelf of ordered) {
+      for (const item of shelf.items) {
+        if (seen.has(item.appId)) continue
+        seen.add(item.appId)
+        list.push(item)
+        if (list.length >= 12) return list
+      }
+    }
+    return list
+  }, [activeTile, fromShelf, home.data])
+
+  const shownOwned = activeTile ? owned(activeTile.appId, activeTile.name) : undefined
   const [openError, setOpenError] = useState<string | null>(null)
   const status = viewStatus(view, { hits, home, wish, openError })
 
   return (
     <main className="exo-store" aria-label="Store" data-room-scroll>
       <h1 className="sr-only">Store</h1>
-      <header className="exo-store-top">
-        <StoreTools view={view} query={query} refreshing={home.refreshing}
-          onTab={next => void transition(() => { setTab(next); setQuery(''); setOpenError(null) }, { kind: 'push', back: next === 'home', morph: pane(scroller.current) })} onQuery={setQuery} onRefresh={() => void home.load(true)}>
-          <p className="exo-store-status" role="status">{status}</p>
-          {steamSale ? <span className="exo-store-sale">{steamSale}</span> : null}
-        </StoreTools>
-      </header>
+      <div className="exo-store-shelf-layer" hidden={!!activeTile}>
+        <header className="exo-store-top">
+          <StoreTools view={view} query={query} refreshing={home.refreshing}
+            onTab={next => void transition(() => { setTab(next); setQuery(''); setOpenError(null) }, { kind: 'push', back: next === 'home', morph: pane(scroller.current) })} onQuery={setQuery} onRefresh={() => void home.load(true)}>
+            <p className="exo-store-status" role="status">{status}</p>
+            {steamSale ? <span className="exo-store-sale">{steamSale}</span> : null}
+          </StoreTools>
+        </header>
 
-      <div ref={scroller} className="exo-store-scroll">
-        <div key={view} className="exo-motion-switch">
-          {view === 'search' ? <Results hits={hits} card={card} onClear={() => setQuery('')} />
-            : view === 'wishlist' ? <Wishlist wish={wish} owned={owned} card={card} />
-              : <Discover games={games} home={home.data} error={home.error} retrying={home.loading} onRetry={() => void home.load(false)} card={card} withWish={withWish} onOpen={openPage}
-                  still={!!page || !active} shining={home.refreshing} />}
+        <div ref={scroller} className="exo-store-scroll">
+          <div key={view} className="exo-motion-switch">
+            {view === 'search' ? <Results hits={hits} card={card} onClear={() => setQuery('')} />
+              : view === 'wishlist' ? <Wishlist wish={wish} owned={owned} card={card} />
+                : <Discover home={home.data} error={home.error} retrying={home.loading} onRetry={() => void home.load(false)} card={card} withWish={withWish} onOpen={t => openPage(t)}
+                    still={!!activeTile || !active} shining={home.refreshing} />}
+          </div>
         </div>
       </div>
 
-      <GameOverlay open={!!page} label={shownPage?.name ?? 'Game'} scrim={<button type="button" className="exo-game-overlay-scrim" aria-label="Close" tabIndex={-1} onClick={closePage} />}>
-        {shownPage ? (
+      {activeTile ? (
+        <div className="exo-store-page-room exo-enter" role="region" aria-label={activeTile.name}>
           <StoreGamePage
-            key={shownPage.appId}
-            seed={shownPage}
+            key={activeTile.appId}
+            seed={activeTile}
             onScreen={active}
             owned={!!shownOwned}
-            like={shownPage.wished ? undefined : shownPage.similarTo?.flatMap(id => games.find(game => game.id === id) ?? [])[0]}
-            onOpenLike={game => { setPage(null); onOpenGame(game.title) }}
-            wished={wish.ids.has(shownPage.appId)}
-            onWish={on => void wish.set(shownPage, on)}
+            wished={wish.ids.has(activeTile.appId)}
+            onWish={on => void wish.set(activeTile, on)}
             onOpenLibrary={() => { if (shownOwned) openOwned(shownOwned) }}
+            onBack={closePage}
+            more={moreLikeThis.length > 0 ? (
+              <Row id="more-like-this" title="More like this" count={moreLikeThis.length} shining={false}>
+                {moreLikeThis.map((t, i) => card(t, i, false, page?.fromShelf))}
+              </Row>
+            ) : null}
           />
-        ) : null}
-      </GameOverlay>
+        </div>
+      ) : null}
     </main>
   )
 }
@@ -159,8 +185,7 @@ function viewStatus(view: string, s: {
   return s.wish.loaded ? s.wish.error : null
 }
 
-function Discover({ games, home, error, retrying, onRetry, card, withWish, onOpen, still, shining }: {
-  games: readonly Game[]
+function Discover({ home, error, retrying, onRetry, card, withWish, onOpen, still, shining }: {
   home: StoreHome | null
   error: string | null
   retrying: boolean
@@ -177,9 +202,9 @@ function Discover({ games, home, error, retrying, onRetry, card, withWish, onOpe
   if (!home) return error ? <Unreachable message={error} busy={retrying} onRetry={onRetry} /> : <HomeWait />
   return (
     <>
-      {hero?.length ? <Hero items={hero} games={games} onOpen={onOpen} still={still} shining={shining} arrive={arrive} /> : null}
+      {hero?.length ? <Hero items={hero} onOpen={onOpen} still={still} shining={shining} arrive={arrive} /> : null}
       {(home.shelves ?? []).map(s => s.items.length
-        ? <Row key={s.id} id={s.id} title={s.title} count={s.items.length} shining={shining}>{s.items.map((t, i) => card(t, i, arrive))}</Row>
+        ? <Row key={s.id} id={s.id} title={s.title} count={s.items.length} shining={shining}>{s.items.map((t, i) => card(t, i, arrive, s.id))}</Row>
         : null)}
     </>
   )
@@ -204,7 +229,7 @@ function heroWhen(when?: string | null): string {
  * the pick, so the two never disagree; under Reduce motion it does not turn.
  * The next game's art loads while this one shows.
  */
-function Hero({ items, games, onOpen, still, shining, arrive }: { items: StoreTile[]; games: readonly Game[]; onOpen: (t: StoreTile) => void; still: boolean; shining: boolean; arrive: boolean }) {
+function Hero({ items, onOpen, still, shining, arrive }: { items: StoreTile[]; onOpen: (t: StoreTile) => void; still: boolean; shining: boolean; arrive: boolean }) {
   const [index, setIndex] = useState(0)
   const [hovered, setHovered] = useState(false)
   const [focused, setFocused] = useState(false)
@@ -231,7 +256,7 @@ function Hero({ items, games, onOpen, still, shining, arrive }: { items: StoreTi
       <button type="button" className={`exo-store-hero-stage${shining ? ' exo-shine' : ''}`} data-vt-art onClick={() => onOpen(current)} {...warm} aria-label={`Open ${current.name}`}>
         <HeroArt tile={current} />
         <span className="exo-store-hero-copy">
-          <HeroTags tile={current} like={current.similarTo?.flatMap(id => games.find(game => game.id === id) ?? [])[0]} />
+          <HeroTags tile={current} />
           <HeroLogo key={current.appId} tile={current} />
         </span>
       </button>
@@ -302,34 +327,17 @@ function HeroLogo({ tile }: { tile: StoreTile }) {
 
 /** A shelf: one horizontal row, scrolled by its arrows (a page at a time) or the wheel. Arrows change only when an edge is reached or left. */
 function Row({ id, title, count, shining, children }: { id: string; title: string; count: number; shining: boolean; children: ReactNode }) {
-  const track = useRef<HTMLDivElement>(null)
-  const [edges, setEdges] = useState({ start: true, end: false })
-  const measure = useCallback(() => {
-    const el = track.current
-    if (!el) return
-    const start = el.scrollLeft < 4
-    const end = el.scrollLeft + el.clientWidth >= el.scrollWidth - 4
-    setEdges(e => e.start === start && e.end === end ? e : { start, end })
-  }, [])
-  useEffect(() => {
-    measure()
-    const el = track.current
-    if (!el) return
-    const observer = new ResizeObserver(measure)
-    observer.observe(el)
-    return () => observer.disconnect()
-  }, [measure, count])
-  const page = (dir: 1 | -1) => track.current?.scrollBy({ left: dir * track.current.clientWidth * 0.9, behavior: shouldReduceMotion() ? 'auto' : 'smooth' })
+  const { trackRef: track, edges, measure, page } = useTrackArrows<HTMLDivElement>(count)
   return (
     <section className={`exo-store-row${shining ? ' exo-shine' : ''}`} aria-labelledby={`exo-store-${id}`}>
       <div className="exo-shelf-head">
         <h2 id={`exo-store-${id}`} className="exo-shelf-title">{title}</h2>
         <span className="exo-store-arrows">
-          <button type="button" className="exo-set-btn" aria-label={`Back in ${title}`} disabled={edges.start} onClick={() => page(-1)}><ChevronLeft size={14} /></button>
-          <button type="button" className="exo-set-btn" aria-label={`More ${title}`} disabled={edges.end} onClick={() => page(1)}><ChevronRight size={14} /></button>
+          <button type="button" className="exo-set-btn" aria-label={`Back in ${title}`} disabled={edges.start} onClick={() => page(-1, 0.9)}><ChevronLeft size={14} /></button>
+          <button type="button" className="exo-set-btn" aria-label={`More ${title}`} disabled={edges.end} onClick={() => page(1, 0.9)}><ChevronRight size={14} /></button>
         </span>
       </div>
-      <div ref={track} className="exo-store-track" onScroll={measure}>{children}</div>
+      <div ref={track} className="exo-store-track" data-h-track="" onScroll={measure}>{children}</div>
     </section>
   )
 }
@@ -346,14 +354,13 @@ function Results({ hits, card, onClear }: { hits: ReturnType<typeof useSearch>; 
   return <div className={`exo-store-grid${hits.pending ? ' exo-shine' : ''}`}>{hits.items.map((t, i) => card(t, i, true))}</div>
 }
 
-/** Above the logo: when a coming game is out, and why it is here (your wishlist, or the game you play it is like). */
-function HeroTags({ tile, like }: { tile: StoreTile; like?: Game }) {
-  if (!tile.soon && !tile.wished && !like) return null
+/** Above the logo: when a coming game is out, and why it is here (your wishlist). */
+function HeroTags({ tile }: { tile: StoreTile }) {
+  if (!tile.soon && !tile.wished) return null
   return (
     <span className="exo-store-hero-tags">
       {tile.soon ? <span className="exo-store-hero-tag">{heroWhen(tile.when)}</span> : null}
-      {tile.wished ? <span className="exo-store-hero-tag"><Bookmark size={12} filled />On your wishlist</span>
-        : like ? <span className="exo-store-hero-tag">Similar to {like.title}</span> : null}
+      {tile.wished ? <span className="exo-store-hero-tag"><Bookmark size={12} filled />On your wishlist</span> : null}
     </span>
   )
 }

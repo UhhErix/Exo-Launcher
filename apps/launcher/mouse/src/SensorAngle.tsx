@@ -5,7 +5,7 @@ import { Overlay } from './brands/magnetic-tools-tests'
 import { can } from './mouse'
 import type { Section } from './section'
 import type { RazerAngleStatus } from './razer-angle'
-import { Panel, Progress, Row, Spinner } from './ui'
+import { Progress, Row, Spinner } from './ui'
 import { frameGet, frameSet } from './frameStore'
 import './sensor-angle.css'
 
@@ -80,17 +80,6 @@ export function MeasureAngle(section: Section) {
       <button type="button" className="m-button is-compact" onClick={() => setOpen(true)}>Measure</button>
       {open ? <AngleSheet section={section} onClose={() => setOpen(false)} /> : null}
     </>
-  )
-}
-
-/** A mouse whose angle Exo can't set: the measurement on its own, with the polling and click tests. */
-export function SensorAngleTest(section: Section) {
-  const [open, setOpen] = useState(false)
-  if (angleSetting(section)) return null
-  return (
-    <Panel title="Sensor angle" actions={<button type="button" className="m-button" onClick={() => setOpen(true)}>Measure</button>}>
-      {open ? <AngleSheet section={section} onClose={() => setOpen(false)} /> : null}
-    </Panel>
   )
 }
 

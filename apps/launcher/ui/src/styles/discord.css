@@ -2240,7 +2240,7 @@ video.exo-dc-media {
 
 /* Offline: the picture steps back and the name is the muted word, which still reads (a dimmed role color didn't). */
 .exo-dc-member.is-offline .exo-dc-avatar-wrap {
-  opacity: 0.45;
+  opacity: 0.55;
 }
 
 .exo-dc-member.is-offline .exo-dc-member-name {

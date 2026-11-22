@@ -578,6 +578,7 @@ function mockDrives(p?: { action?: unknown; space?: unknown }) {
 
 // ?whatsnew: a user just updated to 3.14.1 from 3.13.2, so the sheet opens over the Library with 3.14.1 and the 3.14.0 they skipped.
 const mockWhatsNew = typeof location !== 'undefined' && new URLSearchParams(location.search).has('whatsnew')
+const mockTour = typeof location !== 'undefined' && new URLSearchParams(location.search).has('tour')
 // ?update: 3.15.0 is offered as Exo opens (the update sheet), with its What's New.
 const mockUpdate = typeof location !== 'undefined' && new URLSearchParams(location.search).has('update')
 
@@ -686,6 +687,7 @@ const mockSettings: LauncherSettings = {
   keepAwakeDownloads: true,
   storeClientsQuiet: true,
   chipset: mockIntelCpu ? 'intel' : 'amd',
+  uiPrefs: mockTour ? {} : { tourSeen: 1 },
   ...(mockFolders ? {
     libraryFolders: [
       { id: 'mockfav', name: 'Favorites', color: 'blue', sort: 'played', games: ['mock:hades', 'mock:eldenring', 'mock:valorant'] },
@@ -1420,22 +1422,33 @@ const MOCK_HANDLERS: Record<string, MockHandler> = {
     MOCK_STEAM_ACCOUNT = null
     return { ok: true }
   },
-  // What tracker.gg answers apps now (TrackerGgPlaytime.BlockedMessage): a browser check, so nothing is imported.
   'playtime.riotRefresh': () => ({
     ok: false,
     profilePrivate: false,
-    message: "tracker.gg now blocks apps from reading its profiles, so Exo can't import your Riot hours from it. Exo still counts every session you play.",
+    unconfigured: true,
+    source: null,
+    clientNeeded: true,
+    message: 'Open Riot Client (signed in) and press Sync hours again, or import your Riot data export.',
     profileUrl: 'https://tracker.gg/valorant',
+    baseline: mockSettings.riotBaseline,
+  }),
+  'playtime.importRiotExport': () => ({
+    ok: false,
+    cancelled: true,
+    message: null,
+    baseline: mockSettings.riotBaseline,
   }),
   'playtime.setRiotBaseline': (params) => {
     const current = mockSettings.riotBaseline ?? {}
-    const valorant = typeof params?.valorantHours === 'number' && params.valorantHours > 0
-      ? Math.round(params.valorantHours * 60)
-      : current.valorantMinutes ?? null
-    const league = typeof params?.leagueHours === 'number' && params.leagueHours > 0
-      ? Math.round(params.leagueHours * 60)
-      : current.leagueMinutes ?? null
-    mockSettings.riotBaseline = { valorantMinutes: valorant, leagueMinutes: league }
+    const pick = (hours: unknown, prev: number | null | undefined) =>
+      typeof hours === 'number' && hours > 0 ? Math.round(hours * 60) : prev ?? null
+    mockSettings.riotBaseline = {
+      valorantMinutes: pick(params?.valorantHours, current.valorantMinutes),
+      leagueMinutes: pick(params?.leagueHours, current.leagueMinutes),
+      tftMinutes: pick(params?.tftHours, current.tftMinutes),
+      lorMinutes: pick(params?.lorHours, current.lorMinutes),
+      twoXkoMinutes: pick(params?.twoXkoHours, current.twoXkoMinutes),
+    }
     return { ok: true, message: 'Starting hours saved.', baseline: mockSettings.riotBaseline }
   },
   'web.preferences.get': () => ({ microphone: 'ask', camera: 'ask', clipboard: 'ask', notifications: 'ask' }),
@@ -1999,6 +2012,64 @@ const MOCK_HANDLERS: Record<string, MockHandler> = {
     }
   },
   'keyboard.openApp': () => ({ ok: true }),
+  'keyboard.backup': () => ({
+    ok: true,
+    message: null,
+    created: {
+      fileName: 'wooting-1342-20261121-161500.json',
+      model: 'Wooting 60HE v2',
+      productId: 0x1342,
+      firmware: '2.15.0',
+      createdUtc: new Date().toISOString(),
+      profileCount: 4,
+    },
+    backups: [
+      {
+        fileName: 'wooting-1342-20261121-161500.json',
+        model: 'Wooting 60HE v2',
+        productId: 0x1342,
+        firmware: '2.15.0',
+        createdUtc: new Date().toISOString(),
+        profileCount: 4,
+      },
+    ],
+  }),
+  'keyboard.backups': () => ({
+    ok: true,
+    backups: [
+      {
+        fileName: 'wooting-1342-20261121-160000.json',
+        model: 'Wooting 60HE v2',
+        productId: 0x1342,
+        firmware: '2.15.0',
+        createdUtc: '2026-11-21T16:00:00.000Z',
+        profileCount: 4,
+      },
+    ],
+  }),
+  'keyboard.restore': () => ({
+    ok: true,
+    message: null,
+    model: 'Wooting 60HE v2',
+    hallEffect: true,
+    maxScanHz: 8000,
+    firmware: '2.15.0',
+    layout: 'ANSI · Split spacebar',
+    activeProfile: 1,
+    profiles: [
+      { index: 0, name: 'Digital' },
+      { index: 1, name: 'FPS' },
+      { index: 2, name: 'Typing' },
+      { index: 3, name: 'Rapid' },
+    ],
+    actuationMm: 0.4,
+    rapidTrigger: true,
+    rapidTriggerMm: 0.15,
+    tachyon: true,
+    canWrite: true,
+    wootilityInstalled: true,
+    backgroundServiceRunning: true,
+  }),
   'devices.list': () => ({
     ok: true,
     devices: [

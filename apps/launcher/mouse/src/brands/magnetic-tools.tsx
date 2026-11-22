@@ -1,27 +1,21 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { MagneticButtonStatus, MagneticButtonsStatus, MouseStatus } from '@openmouse/protocol/drivers/mouse-types'
 import { can, type Step } from '../mouse'
 import { loadSaved, saveValue, savedValue } from '../saved'
 import type { Section } from '../section'
-import { SensorAngleTest } from '../SensorAngle'
 import { Dropdown, Panel, Row, Segmented, Slider, Switch } from '../ui'
-import { ClickTest, DepthMeter, HitsSpeedTest, Overlay, PollingTest } from './magnetic-tools-tests'
+import { DepthMeter, Overlay } from './magnetic-tools-tests'
 import './magnetic-tools.css'
 
 // Adapted from OpenMouse (AGPL-3.0): src/app/MagneticButtons.tsx,
 // src/app/Superstrike.tsx, src/hits-presets.ts and the matching parts of
 // src/device/controller.ts. Logic kept, interface rewritten for Exo.
 
-/**
- * Magnetic (Hall-effect / TMR) main buttons, Logitech's HITS tuning, and the
- * in-page tests: polling rate, clicks and bounce, and HITS speed.
- */
 export function MagneticToolsPanels(section: Section) {
   return (
     <>
       <MagneticPanel {...section} />
       <HitsPanel {...section} />
-      <TestsPanel {...section} />
     </>
   )
 }
@@ -432,69 +426,4 @@ function HitsControls({ tuning, state, prefix, busy, onChange }: {
   )
 }
 
-/* ------------------------------------------------------------------ tests */
-
-type Test = 'polling' | 'clicks' | 'hits'
-
-function TestsPanel(section: Section) {
-  const { status, client } = section
-  const [open, setOpen] = useState<Test | null>(null)
-  const tuning = status.analogButtonTuning
-  const hits = !!tuning && tuning.buttons.length === 2 && can(client, 'setAnalogButtonTuning')
-    && can(client, 'onAnalogPress') && can(client, 'startAnalogPressStream') && can(client, 'stopAnalogPressStream')
-  const close = useCallback(() => setOpen(null), [])
-  const run = (test: Test, name: string) => <button type="button" className="m-button" onClick={() => setOpen(test)}>{name}</button>
-  // The polling and click tests live on the page, ready to use: their pads are what you test on.
-  // HITS speed needs the press stream armed, so it stays a button its pad hangs from while it runs.
-  return (
-    <>
-      <Panel title="Polling test"><PollingTest reportedHz={status.pollingRateHz || null} /></Panel>
-      <Panel title="Click test"><ClickTest /></Panel>
-      <SensorAngleTest {...section} />
-      {hits ? (
-        <Panel title="HITS speed" actions={run('hits', 'Start')}>
-          {open === 'hits' ? <HitsTest section={section} onClose={close} /> : null}
-        </Panel>
-      ) : null}
-    </>
-  )
-}
-
-/** Arms the mouse's press-depth stream while open (re-armed every 20 s, as G HUB's page does) and disarms on close. */
-function HitsTest({ section, onClose }: { section: Section; onClose: () => void }) {
-  const { client, status, busy } = section
-  const apply = useRef(section.apply)
-  apply.current = section.apply
-  const write = useHitsWriter(section)
-  useEffect(() => {
-    void apply.current('startAnalogPressStream')
-    const keepalive = window.setInterval(() => void apply.current('startAnalogPressStream'), 20_000)
-    // A right-click test would otherwise pop the context menu.
-    const menu = (e: MouseEvent) => e.preventDefault()
-    window.addEventListener('contextmenu', menu)
-    return () => {
-      window.clearInterval(keepalive)
-      window.removeEventListener('contextmenu', menu)
-      void apply.current('stopAnalogPressStream')
-    }
-  }, [])
-  const subscribe = useCallback((listener: (l: number, r: number) => void) => listen(client, 'onAnalogPress', listener), [client])
-  const tuning = status.analogButtonTuning as Tuning
-  const left = values(tuning.buttons[0])
-  const right = values(tuning.buttons[1])
-  const together = matches({ left, right }, { left: right, right: left }) && left.rapidTrigger === right.rapidTrigger
-  return (
-    <Overlay title="HITS speed" onClose={onClose}>
-      <HitsSpeedTest
-        subscribe={subscribe}
-        actuation={[left.actuation, right.actuation]}
-        maxActuation={tuning.maxActuation}
-        busy={busy}
-        onAdjust={(b, v) => {
-          if (together) write([{ ...left, actuation: v }, { ...right, actuation: v }])
-          else write(b === 0 ? [{ ...left, actuation: v }, null] : [null, { ...right, actuation: v }])
-        }}
-      />
-    </Overlay>
-  )
-}
+/* ------------------------------------------------------------------ */

@@ -26,7 +26,7 @@ export function PrivacySection() {
   }
 
   return (
-    <Section id="privacy">
+    <Section id="privacy" title="Privacy">
 
       <Row label="What's sent">
         <Button variant="ghost" onPress={() => setViewing(shown => !shown)}>{viewing ? 'Hide' : 'View'}</Button>

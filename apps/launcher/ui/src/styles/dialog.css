@@ -286,10 +286,11 @@ button.exo-notice-main:focus-visible {
 
 /* Dismiss shows under the pointer or keyboard focus; on one that waits for it, always. */
 .exo-notice-close {
+  position: relative;
   display: grid;
   place-items: center;
-  width: 24px;
-  height: 24px;
+  width: 28px;
+  height: 28px;
   border: 0;
   border-radius: 999px;
   background: transparent;
@@ -297,16 +298,6 @@ button.exo-notice-main:focus-visible {
   opacity: 0;
   cursor: pointer;
   transition: opacity var(--dur-quick) var(--ease-out), background-color var(--dur-quick) var(--ease-out);
-}
-
-/* The disc stays 24px; its press is 28px (an invisible 2px ring). */
-.exo-notice-close {
-  position: relative;
-}
-.exo-notice-close::after {
-  content: '';
-  position: absolute;
-  inset: -2px;
 }
 
 .exo-notice.is-sticky .exo-notice-close,

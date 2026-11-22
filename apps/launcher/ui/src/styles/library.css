@@ -17,71 +17,90 @@
 
 .exo-home-deck {
   --exo-home-edge: clamp(20px, 2.2vw, 32px);
+  --exo-deck-card-w: clamp(180px, 11.8vw, 224px);
   position: relative;
   display: flex;
   flex: 1;
   flex-direction: column;
   justify-content: flex-end;
+  gap: 8px;
   min-width: 0;
   min-height: 0;
 }
 
-.exo-home-backdrop {
-  position: fixed;
-  top: 0;
-  right: 0;
-  left: 0;
-  height: min(82vh, 880px);
+.exo-home-stage {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  justify-content: flex-end;
+  width: 100%;
+  min-height: 280px;
+  overflow: hidden;
+  background: var(--color-bg);
+}
+
+.exo-home-stage-art {
+  position: absolute;
+  inset: 0;
   z-index: 0;
   overflow: hidden;
   pointer-events: none;
-  background: radial-gradient(ellipse 75% 80% at 58% 28%, var(--exo-surface-card) 0%, var(--color-bg) 78%);
+  background: radial-gradient(ellipse 80% 90% at 56% 30%, var(--exo-surface-card) 0%, var(--color-bg) 82%);
 }
 
-.exo-home-backdrop::after {
+.exo-home-stage-art::after {
   content: "";
   position: absolute;
   inset: 0;
   z-index: 1;
   background:
-    linear-gradient(180deg, color-mix(in srgb, var(--color-bg) 32%, transparent) 0%, color-mix(in srgb, var(--color-bg) 6%, transparent) 24%, color-mix(in srgb, var(--color-bg) 42%, transparent) 64%, color-mix(in srgb, var(--color-bg) 88%, transparent) 88%, var(--color-bg) 100%),
-    linear-gradient(90deg, color-mix(in srgb, var(--color-bg) 70%, transparent) 0%, color-mix(in srgb, var(--color-bg) 26%, transparent) 42%, transparent 76%);
+    linear-gradient(180deg, color-mix(in srgb, var(--color-bg) 26%, transparent) 0%, transparent 18%, transparent 48%, color-mix(in srgb, var(--color-bg) 56%, transparent) 78%, var(--color-bg) 100%),
+    linear-gradient(90deg, color-mix(in srgb, var(--color-bg) 62%, transparent) 0%, color-mix(in srgb, var(--color-bg) 20%, transparent) 36%, transparent 70%);
 }
 
-.exo-home-backdrop .exo-now-wash-img {
+.exo-home-stage-art .exo-now-wash-img {
   position: absolute;
   inset: 0;
   z-index: 0;
   width: 100%;
   height: 100%;
   object-fit: cover;
-  object-position: center 20%;
+  object-position: center 22%;
   opacity: 0;
   transition: opacity var(--dur-move) var(--ease-out);
 }
 
-.exo-home-backdrop .exo-now-wash-img.is-on {
-  opacity: 0.94;
+.exo-home-stage-art .exo-now-wash-img.is-on {
+  opacity: 1;
 }
 
-.exo-home-backdrop .exo-now-wash-img.exo-cover-derived.is-on {
-  opacity: 0.58;
-  filter: blur(28px) saturate(1.25) brightness(0.78);
+.exo-home-stage-art .exo-now-wash-img.exo-cover-derived.is-on {
+  opacity: 0.62;
+  filter: blur(28px) saturate(1.25) brightness(0.8);
   transform: scale(1.16) translateZ(0);
 }
 
-.exo-home-hero {
+.exo-home-stage-foot {
   position: relative;
   z-index: 2;
   display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 20px;
+  padding: calc(var(--exo-titlebar-h, 52px) + 12px) var(--exo-home-edge) 16px;
+  min-width: 0;
+}
+
+.exo-home-hero {
+  display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: 8px;
-  max-width: min(640px, 52vw);
-  margin-top: auto;
-  margin-bottom: 0;
-  padding: calc(var(--exo-titlebar-h, 52px) + 16px) var(--exo-home-edge) 18px var(--exo-home-edge);
+  gap: 14px;
+  max-width: min(600px, 52vw);
   min-width: 0;
+  min-height: calc(clamp(78px, 10.5vh, 112px) + 54px);
 }
 
 .exo-home-identity {
@@ -89,7 +108,7 @@
   align-items: flex-end;
   justify-content: flex-start;
   width: 100%;
-  height: clamp(82px, 11vh, 118px);
+  height: clamp(78px, 10.5vh, 112px);
   min-width: 0;
 }
 
@@ -119,35 +138,11 @@
   text-wrap: balance;
 }
 
-.exo-home-meta {
-  display: flex;
-  flex-wrap: nowrap;
-  align-items: center;
-  min-height: 22px;
-  margin: 0;
-  color: var(--color-muted);
-  font-size: var(--exo-type-body);
-  font-weight: var(--exo-weight-control);
-  white-space: nowrap;
-}
-
-.exo-home-meta span + span::before {
-  content: "·";
-  margin: 0 10px;
-  color: var(--color-faint);
-}
-
-.exo-home-meta span.is-good {
-  color: var(--color-good);
-  font-weight: var(--exo-weight-title);
-}
-
 .exo-home-actions {
   display: flex;
   flex-wrap: nowrap;
   align-items: center;
   gap: 10px;
-  margin-top: 2px;
 }
 
 .exo-home-play {
@@ -158,26 +153,9 @@
 }
 
 .exo-home-play:active:not(:disabled),
-.exo-home-details-btn:active,
 .exo-home-more-btn:active,
 .exo-home-icon-btn:active {
   transform: scale(0.97);
-}
-
-.exo-home-details-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  height: 40px;
-  padding: 0 22px;
-  border: 0;
-  border-radius: 999px;
-  color: var(--color-fg);
-  font: inherit;
-  font-size: var(--exo-type-body);
-  font-weight: var(--exo-weight-control);
-  cursor: pointer;
-  transition: transform var(--dur-press) var(--ease-out), background-color var(--dur-quick) var(--ease-out);
 }
 
 .exo-home-more-btn {
@@ -198,26 +176,14 @@
   z-index: 2;
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  padding: 0 0 10px;
+  padding: 0 0 12px;
   min-width: 0;
-}
-
-.exo-home-bar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 0 var(--exo-home-edge);
-}
-
-.exo-home-tabs {
-  height: 34px;
-  padding: 3px;
+  min-height: calc(var(--exo-deck-card-w) * 1.5 + 30px);
 }
 
 .exo-home-bar-tools {
   display: flex;
+  flex: none;
   align-items: center;
   gap: 8px;
 }
@@ -275,8 +241,8 @@
   display: inline-grid;
   place-items: center;
   flex: none;
-  width: 22px;
-  height: 22px;
+  width: 28px;
+  height: 28px;
   padding: 0;
   border: 0;
   border-radius: 999px;
@@ -290,6 +256,12 @@
   color: var(--color-fg);
 }
 
+.exo-deck-rail {
+  position: relative;
+  width: 100%;
+  min-width: 0;
+}
+
 .exo-deck-track {
   display: flex;
   align-items: flex-end;
@@ -300,6 +272,43 @@
   scrollbar-width: none;
 }
 
+.exo-deck-rail[data-can-prev="true"]:not([data-can-next="true"]) .exo-deck-track {
+  mask-image: linear-gradient(to right, transparent, #000 44px);
+}
+
+.exo-deck-rail[data-can-next="true"]:not([data-can-prev="true"]) .exo-deck-track {
+  mask-image: linear-gradient(to right, #000 calc(100% - 44px), transparent);
+}
+
+.exo-deck-rail[data-can-prev="true"][data-can-next="true"] .exo-deck-track {
+  mask-image: linear-gradient(to right, transparent, #000 44px, #000 calc(100% - 44px), transparent);
+}
+
+.exo-deck-arrow {
+  position: absolute;
+  inset-block: 0;
+  margin-block: auto;
+  z-index: 4;
+  display: inline-grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  color: var(--color-fg);
+  cursor: pointer;
+  transition: scale var(--dur-press) var(--ease-out), background-color var(--dur-quick) var(--ease-out);
+}
+
+.exo-deck-arrow.is-prev {
+  left: var(--exo-gap);
+}
+
+.exo-deck-arrow.is-next {
+  right: var(--exo-gap);
+}
+
 .exo-deck-track::-webkit-scrollbar {
   display: none;
 }
@@ -307,7 +316,7 @@
 .exo-deck-card {
   position: relative;
   flex: none;
-  width: clamp(180px, 11.8vw, 224px);
+  width: var(--exo-deck-card-w);
   aspect-ratio: 2 / 3;
   overflow: hidden;
   border-radius: var(--exo-card-radius);
@@ -382,10 +391,10 @@
   z-index: 2;
   display: inline-flex;
   align-items: center;
-  height: 22px;
+  height: 24px;
   padding: 0 9px;
   border-radius: 999px;
-  font-size: var(--exo-type-label);
+  font-size: var(--exo-type-small);
   font-weight: var(--exo-weight-title);
   white-space: nowrap;
   pointer-events: none;
@@ -403,6 +412,7 @@
 
 .exo-home-empty {
   display: flex;
+  flex: 1;
   align-items: center;
   justify-content: space-between;
   gap: 16px;
@@ -784,37 +794,11 @@
   padding: 6px var(--exo-gutter) 16px;
 }
 
-.exo-library-tabs-wrap {
+.exo-library-head-lead {
   display: flex;
   align-items: center;
   gap: 10px;
   min-width: 0;
-}
-
-.exo-library-tabs {
-  height: 34px;
-  padding: 3px;
-}
-
-.exo-library-tab-count {
-  color: var(--color-faint);
-  font-size: var(--exo-type-label);
-  font-weight: var(--exo-weight-control);
-}
-
-.exo-shelf-chip[aria-pressed="true"] .exo-library-tab-count {
-  color: var(--color-primary-fg);
-  opacity: 0.7;
-}
-
-.exo-library-tab-count.has-updates {
-  color: var(--color-warn);
-  font-weight: var(--exo-weight-title);
-}
-
-.exo-shelf-chip[aria-pressed="true"] .exo-library-tab-count.has-updates {
-  color: var(--color-primary-fg);
-  opacity: 1;
 }
 
 .exo-library-chip {

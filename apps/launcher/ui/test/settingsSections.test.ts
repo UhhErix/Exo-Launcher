@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { DISCORD_SETTINGS, SETTINGS_PAGES, SETTINGS_SEARCH, discordPageOf, settingsPageOf, type SettingsSectionId } from '../src/lib/settingsSections.ts'
+import { searchSettings } from '../src/lib/settingsIndex.ts'
 
 const SRC = join(import.meta.dirname, '..', 'src')
 const read = (rel: string) => readFileSync(join(SRC, rel), 'utf8')
@@ -10,9 +11,9 @@ const read = (rel: string) => readFileSync(join(SRC, rel), 'utf8')
 const PANEL_FILES = ['components/SettingsPanel.tsx', 'components/settings/GeneralSection.tsx', 'components/settings/AboutSection.tsx', 'components/settings/StoresSection.tsx', 'components/settings/AppsSection.tsx', 'components/settings/PrivacySection.tsx', 'components/settings/AccountSection.tsx', 'components/shaders/ShaderTools.tsx']
 const panelSource = PANEL_FILES.map(read).join('\n')
 
-test('the sidebar lists the eight pages in the owner\'s order (Discord\'s settings are a sheet over its room, not a page)', () => {
-  assert.deepEqual(SETTINGS_PAGES.map(page => page.page), ['account', 'general', 'library', 'downloads', 'ingame', 'music', 'privacy', 'about'])
-  assert.deepEqual(SETTINGS_PAGES.map(page => page.label), ['Account', 'General', 'Library', 'Downloads', 'In game', 'Music', 'Privacy', 'About'])
+test('the sidebar lists the six pages with Account and Privacy inside About', () => {
+  assert.deepEqual(SETTINGS_PAGES.map(page => page.page), ['general', 'library', 'downloads', 'ingame', 'music', 'about'])
+  assert.deepEqual(SETTINGS_PAGES.map(page => page.label), ['General', 'Library', 'Downloads', 'In game', 'Music', 'About'])
 })
 
 test('every section is named once, and belongs to the page that lists it', () => {
@@ -32,12 +33,12 @@ test('every deep link opens the page that holds its rows', () => {
   const links: [SettingsSectionId, string][] = [
     ['accounts', 'library'],
     ['music', 'music'],
-    ['account', 'account'],
+    ['account', 'about'],
     ['updates', 'about'],
     ['downloads', 'downloads'],
     ['achievements', 'ingame'],
     ['fps', 'ingame'],
-    ['privacy', 'privacy'],
+    ['privacy', 'about'],
     ['about', 'about'],
   ]
   for (const [section, page] of links) assert.equal(settingsPageOf(section), page, section)
@@ -76,4 +77,14 @@ test('every row keeps a Ctrl+K keyword, so search still finds it', () => {
     const lower = label.toLowerCase()
     assert.ok(keywords.some(word => lower.includes(word)), `no Ctrl+K keyword covers the row "${label}"`)
   }
+})
+
+test('SettingsPanel is a full-page searchable room without exo-sheet-glass and searchSettings indexes rows', () => {
+  const settingsPanel = read('components/SettingsPanel.tsx')
+  assert.match(settingsPanel, /Search settings/)
+  assert.doesNotMatch(settingsPanel, /exo-sheet-glass/)
+  assert.deepEqual(searchSettings(''), [])
+  assert.ok(searchSettings('riot hours').some(hit => hit.page === 'library' && hit.label === 'Riot hours'))
+  assert.ok(searchSettings('fps').some(hit => hit.page === 'ingame' && hit.label === 'Show FPS counter'))
+  assert.ok(searchSettings('backup').some(hit => hit.page === 'general' && hit.sectionId === 'backups'))
 })

@@ -172,18 +172,9 @@ async function reachOrThrow(p, start, path) {
   // The page that ran with ?fail still logs its late refusals after the next one loads: those are not this page's.
   if (p.wasFail && !/(^|&)fail/.test(start.query ?? '')) { for (let i = p.console.length - 1; i >= 0; i--) if (/Host refused/.test(p.console[i].text)) p.console.splice(i, 1); p.wasFail = false }
   if (start.room) {
-    if (start.room === 'Devices') {
-      const pc = await p.fn(() => { const b = [...document.querySelectorAll('.exo-titlebar button, nav button')].find((x) => (x.getAttribute('aria-label') || x.textContent || '').trim().replace(/\s*\d+$/, '') === 'PC'); b?.click(); return !!b })
-      if (!pc) throw new Error('no PC tab in the Bar')
-      await sleep(1100)
-      const dev = await p.fn(() => { const b = [...document.querySelectorAll('button.exo-pc-chip')].find((x) => (x.getAttribute('aria-label') || x.textContent || '').trim() === 'Devices'); b?.click(); return !!b })
-      if (!dev) throw new Error('no Devices chip in PC')
-      await sleep(1300)
-    } else {
-      const ok = await p.fn((r) => { const b = [...document.querySelectorAll('.exo-titlebar button, nav button')].find((x) => (x.getAttribute('aria-label') || x.textContent || '').trim().replace(/\s*\d+$/, '') === r); b?.click(); return !!b }, start.room)
-      if (!ok) throw new Error(`no ${start.room} tab in the Bar`)
-      await sleep(1300)
-    }
+    const ok = await p.fn((r) => { const b = [...document.querySelectorAll('.exo-titlebar button, nav button')].find((x) => (x.getAttribute('aria-label') || x.textContent || '').trim().replace(/\s*\d+$/, '') === r); b?.click(); return !!b }, start.room)
+    if (!ok) throw new Error(`no ${start.room} tab in the Bar`)
+    await sleep(1300)
   }
   if (start.open) await start.open(p)
   for (const sig of path) {
@@ -221,7 +212,7 @@ async function explore(p, start, label) {
   }
 }
 
-const ROOMS = ['Library', 'Store', 'Discord', 'Music', 'PC', 'Devices']
+const ROOMS = ['Library', 'Store', 'Discord', 'Music', 'Devices', 'Exo AI', 'Apps']
 const EXTRAS = [
   { label: 'Settings', start: { open: async (p) => { await p.clickSel('.exo-settings-btn'); await sleep(900) } } },
   { label: 'Ctrl+K', start: { open: async (p) => { await p.key('k', { ctrl: true }); await sleep(600); await p.key('a'); await sleep(600) } } },

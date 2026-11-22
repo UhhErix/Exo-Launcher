@@ -1,9 +1,5 @@
-import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
-import { createPortal } from 'react-dom'
-import { Close } from '../../brand/icons'
+import { useCallback, useEffect, useRef, useState, type ReactNode, type RefObject } from 'react'
 import { host, type DlssRunResult, type DlssStatus, type Game, type GameProperties, type GamePropertyKey } from '../../lib/host'
-import { useDialogFocus } from '../../lib/focusTrap'
-import { useDismiss } from '../../lib/dismiss'
 import { onPageActivityChanged, pageIsVisible } from '../../lib/pageActivity'
 import { invalidateUpscalerStatus } from '../../lib/upscalerCache'
 import { gateReason, upscalerView } from '../../lib/upscalers'
@@ -18,71 +14,55 @@ import { useChoiceMenu } from '../ui/Menu'
 import { Progress, ProgressWords } from '../ui/Progress'
 import { Spinner } from '../ui/Spinner'
 import { Wait, sample, times } from '../ui/Wait'
-import { ArtworkTools, type Artwork } from './Artwork'
+import { ArtworkTools, useArtwork, type Artwork } from './Artwork'
 import { CompressRow } from './CompressRow'
+import { UninstallButton } from './ManageStrip'
 import { sheetMemory } from './useGameDetails'
 
-/** The last few games' properties, so Properties opened again draws at once while it reads again. */
 const propertiesRead = sheetMemory<GameProperties>(8)
 
-/** While Steam moves a game its progress is read every 2 s; a read that finds it no further waits twice as long, up to 8 s. */
 const MOVE_READ_MS = 2000
 const MOVE_READ_MAX_MS = 8000
 
-const READ_FAILED = 'Exo couldn’t read this game\'s properties. Try again.'
+const READ_FAILED = "Exo couldn’t read this game's properties. Try again."
 const CHANGE_FAILED = 'Exo couldn’t make that change. Try again.'
 
-/**
- * A change once it is asked for. One that downloads, deletes or moves files (or lets Exo change an anti-cheat game's)
- * asks first, in place on the control pressed (DESIGN.md › Confirm), saying what it costs.
- */
 type Change = { key: GamePropertyKey | 'verify' | 'restore' | 'consent'; value: string }
 
-/** What every section needs: the properties, what is in flight, and the row helpers. */
 type Rows = {
   props: GameProperties
-  /** The game is running: nothing that changes its files can start. */
   locked: boolean
   busy: string | null
-  /** Verify answers with its promise, for its button to show (ConfirmButton); every other change shows on its row. */
   run: (change: Change) => void | Promise<unknown>
   apply: (key: GamePropertyKey, value?: string, secret?: string) => Promise<boolean>
   line: (row: string) => ReactNode
-  /** Puts what happened on a row's line (a failure in Bad). */
   note: (row: string, text: string, bad?: boolean) => void
 }
 
 type SectionId = 'general' | 'files' | 'betas' | 'content' | 'artwork'
 
-/** A failure in plain words (lib/errorWords.ts): what went wrong and what to do, never an exception's own text. */
 function errorText(error: unknown, fallback = CHANGE_FAILED): string {
   return plainErrorText(error, fallback)
 }
 
-/** A download's question, with its size when the store gives one: "Download 22.4 GB?" */
 function download(bytes: number | null | undefined): string {
   return bytes && bytes > 0 ? `Download ${formatSize(bytes)}?` : 'Download it?'
 }
 
-/** How much of a move is done, 0 to 1; null (gliding, no figure) until its size is known. */
 function movedShare(moving: { done: number; total: number }): number | null {
   return moving.total > 0 ? moving.done / moving.total : null
 }
 
-/** Which row a change belongs to: one row per DLC, Verify's own row. */
 function rowOf(change: Change): string {
   return change.key === 'content' ? `content:${change.value.slice(0, change.value.lastIndexOf(':'))}` : change.key
 }
 
-/** A change going through: the ring beside the row's control, or before the words of the button that made it. */
 function Working({ on, label }: { on: boolean; label: string }) {
   return on ? <Spinner label={label} /> : null
 }
 
-/** The sections this game's store has, in Steam's order, with Artwork (Exo's own) last. */
 function sectionsFor(props: GameProperties): { id: SectionId; title: string }[] {
   return [
-    // General only with something in it (a Riot game has none of these).
     ...(props.launchOptions !== null || props.launchOptionsNote || props.language !== null || props.cloudSync || props.storeProperties || props.throughSteam != null || props.steamOverlay != null || props.antiCheatLaunch
       ? [{ id: 'general' as const, title: 'General' }] : []),
     { id: 'files' as const, title: 'Installed files' },
@@ -92,53 +72,13 @@ function sectionsFor(props: GameProperties): { id: SectionId; title: string }[] 
   ]
 }
 
-/**
- * An installed game's Properties over its page: a sheet of one column of rows, with no title and no close (Escape or a
- * press outside closes it); only a list of a store's content has a heading. What the game's store offers (Steam: launch options, language, files,
- * betas, DLC, and Steam's own controller page where Steam Input maps the
- * controller; Epic: optional content and cloud saves), only the rows that store
- * has, and Exo's own: the folder, the upscalers' original files and the cover.
- * Steam's overlay, Steam Input, cloud saves and updates have no row: Exo keeps
- * them right for each game itself. A row that downloads, deletes or
- * moves files asks first, saying how much; the store's own download then shows
- * in Exo's downloads.
- */
-export function PropertiesSheet({ game, artwork, upscalers: upscalerStatus, onUpscalersChanged, uninstall, onClose }: {
-  game: Game
-  artwork: Artwork
-  upscalers: DlssStatus | null
-  onUpscalersChanged: () => void
-  /** Uninstall (or Remove), on the row with the game's size. */
-  uninstall: ReactNode
-  onClose: () => void
-}) {
-  const dialog = useRef<HTMLDivElement>(null)
-  useDialogFocus(dialog)
-  useDismiss(dialog, onClose, { modal: true })
-  const [props, setProps] = useState<GameProperties | null>(() => propertiesRead.get(game.id))
-  const [loadError, setLoadError] = useState<string | null>(null)
-  const [busy, setBusy] = useState<string | null>(null)
-  const [notes, setNotes] = useState<Record<string, { text: string; bad?: boolean }>>({})
+function defaultSectionId(sections: { id: SectionId }[]): SectionId {
+  if (sections.some(s => s.id === 'general')) return 'general'
+  if (sections.some(s => s.id === 'files')) return 'files'
+  return sections[0]?.id ?? 'files'
+}
 
-  /** Reads the properties (the last read stays on screen meanwhile); how far a move has got, for its reads. */
-  const load = useCallback(() => host.properties(game.id).then((result) => {
-    if (!result.ok) {
-      setLoadError(errorText(result.message, READ_FAILED))
-      return null
-    }
-    propertiesRead.set(game.id, result)
-    setProps(result)
-    return result.moving?.done ?? null
-  }).catch((error: unknown) => {
-    setLoadError(errorText(error, READ_FAILED))
-    return null
-  }), [game.id])
-
-  useEffect(() => { void load() }, [load])
-
-  // While Steam moves the game its progress is read again: only while Exo is on screen (this panel is open while it
-  // is mounted), one read at a time, every 2 s while it moves on and up to 8 s while it doesn't.
-  const moving = !!props?.moving
+function useMovePolling(moving: boolean, load: () => Promise<number | null>) {
   useEffect(() => {
     if (!moving) return
     let timer = 0
@@ -169,20 +109,114 @@ export function PropertiesSheet({ game, artwork, upscalers: upscalerStatus, onUp
     })
     return () => { stopped = true; window.clearTimeout(timer); off() }
   }, [moving, load])
+}
+
+function usePropertiesFocus(panelRef: RefObject<HTMLElement | null>, propertiesOpen: boolean, onPropertiesOpen: (open: boolean) => void) {
+  useEffect(() => {
+    if (!propertiesOpen) return
+    const frame = window.requestAnimationFrame(() => {
+      const panel = panelRef.current
+      if (!panel) return
+      const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches || document.documentElement.dataset.exoMotion === 'reduce'
+      panel.scrollIntoView({ behavior: reduced ? 'auto' : 'smooth', block: 'nearest' })
+      panel.focus({ preventScroll: true })
+      onPropertiesOpen(false)
+    })
+    return () => window.cancelAnimationFrame(frame)
+  }, [panelRef, propertiesOpen, onPropertiesOpen])
+}
+
+function SectionPanelContent({
+  id,
+  rows,
+  game,
+  upscalers,
+  uninstall,
+  artwork,
+}: {
+  id: SectionId
+  rows: Rows
+  game: Game
+  upscalers: DlssStatus | null
+  uninstall: ReactNode
+  artwork: Artwork
+}) {
+  switch (id) {
+    case 'general': return <GeneralSection {...rows} />
+    case 'files': return <FilesSection {...rows} gameId={game.id} game={game} upscalers={upscalers} uninstall={uninstall} />
+    case 'betas': return <BetasSection {...rows} />
+    case 'content': return <ContentSection {...rows} />
+    case 'artwork': return (
+      <PropRow label="Cover" line={null}>
+        <ArtworkTools artwork={artwork} disabled={false} className="exo-set-btn" />
+      </PropRow>
+    )
+  }
+}
+
+export function GamePropertiesPanel({
+  game,
+  coverSource,
+  locked,
+  upscalers: upscalerStatus,
+  onUpscalersChanged,
+  onStatus,
+  onArtwork,
+  onUninstalled,
+  onBusyChange,
+  propertiesOpen,
+  onPropertiesOpen,
+}: {
+  game: Game
+  coverSource: string | null | undefined
+  locked: boolean
+  upscalers: DlssStatus | null
+  onUpscalersChanged: () => void
+  onStatus: (msg: string | null, sticky?: boolean) => void
+  onArtwork: (game: Game) => void
+  onUninstalled: () => void
+  onBusyChange: (busy: boolean) => void
+  propertiesOpen: boolean
+  onPropertiesOpen: (open: boolean) => void
+}) {
+  const panelRef = useRef<HTMLElement>(null)
+  const [props, setProps] = useState<GameProperties | null>(() => propertiesRead.get(game.id))
+  const [tab, setTab] = useState<SectionId | null>(null)
+  const [loadError, setLoadError] = useState<string | null>(null)
+  const [busy, setBusy] = useState<string | null>(null)
+  const [notes, setNotes] = useState<Record<string, { text: string; bad?: boolean }>>({})
+  const [uninstallBusy, setUninstallBusy] = useState(false)
+  const artwork = useArtwork(game, coverSource, onArtwork, onStatus)
 
   useEffect(() => {
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key !== 'Escape') return
-      // A dropdown open in the panel (language, beta, folder) takes the key first; a control asking puts itself back.
-      if (document.querySelector('[popover]:popover-open') || (event.target as Element | null)?.closest?.('[data-exo-armed]')) return
-      // Escape closes this panel, not the game page under it.
-      event.preventDefault()
-      event.stopPropagation()
-      onClose()
+    onBusyChange(uninstallBusy || artwork.action !== null)
+  }, [uninstallBusy, artwork.action, onBusyChange])
+
+  useEffect(() => {
+    setProps(propertiesRead.get(game.id))
+    setTab(null)
+    setLoadError(null)
+    setBusy(null)
+    setNotes({})
+  }, [game.id])
+
+  usePropertiesFocus(panelRef, propertiesOpen, onPropertiesOpen)
+
+  const load = useCallback(() => host.properties(game.id).then((result) => {
+    if (!result.ok) {
+      setLoadError(errorText(result.message, READ_FAILED))
+      return null
     }
-    window.addEventListener('keydown', onKey, true)
-    return () => window.removeEventListener('keydown', onKey, true)
-  }, [onClose])
+    propertiesRead.set(game.id, result)
+    setProps(result)
+    return result.moving?.done ?? null
+  }).catch((error: unknown) => {
+    setLoadError(errorText(error, READ_FAILED))
+    return null
+  }), [game.id])
+
+  useEffect(() => { void load() }, [load])
+  useMovePolling(!!props?.moving, load)
 
   const note = (row: string, text: string, bad = false) => setNotes(current => ({ ...current, [row]: { text, bad } }))
 
@@ -205,7 +239,6 @@ export function PropertiesSheet({ game, artwork, upscalers: upscalerStatus, onUp
     }
   }
 
-  /** An upscaler change (the originals back, or the anti-cheat consent), then the game page reads the files again. */
   const upscalers = (row: 'restore' | 'consent', change: () => Promise<DlssRunResult>, done: string) => {
     setBusy(row)
     note(row, '')
@@ -223,24 +256,22 @@ export function PropertiesSheet({ game, artwork, upscalers: upscalerStatus, onUp
   const run = (asked: Change) => {
     const { value } = asked
     if (asked.key === 'restore') {
-      upscalers('restore', () => host.dlssRestore(game.id), 'The game\'s own files are back.')
+      upscalers('restore', () => host.dlssRestore(game.id), "The game's own files are back.")
       return
     }
     if (asked.key === 'consent') {
-      // Consent changes no file; Stop and restore also puts the game's own files back.
       const allow = value === 'allow'
       upscalers('consent', async () => {
         const answer = await host.dlssConsent(game.id, allow, upscalerView(upscalerStatus).antiCheatName ?? undefined)
         if (!answer.ok || value !== 'restore') return { ok: answer.ok, message: answer.message }
         return host.dlssRestore(game.id)
-      }, allow ? 'Exo may update this game\'s upscalers.' : value === 'restore' ? 'Stopped. The game\'s own files are back.' : 'Stopped.')
+      }, allow ? "Exo may update this game's upscalers." : value === 'restore' ? "Stopped. The game's own files are back." : 'Stopped.')
       return
     }
     if (asked.key !== 'verify') {
       void apply(asked.key, asked.value, undefined, rowOf(asked))
       return
     }
-    // The button shows the check (its ring, then its check, or Bad); what the store said stays on the row.
     note('verify', '')
     return host.repair(game.id).then(result => {
       if (result.ok) note('verify', result.message ?? 'Files verified.')
@@ -248,7 +279,6 @@ export function PropertiesSheet({ game, artwork, upscalers: upscalerStatus, onUp
     })
   }
 
-  /** The row's own line: what the last change said; a failure as every row's error, with Copy logs (settings › Row). */
   const line = (row: string): ReactNode => {
     const said = notes[row]
     if (!said?.text) return null
@@ -265,61 +295,79 @@ export function PropertiesSheet({ game, artwork, upscalers: upscalerStatus, onUp
     note,
   }
   const sections = props ? sectionsFor(props) : []
+  const activeId = tab && sections.some(s => s.id === tab) ? tab : defaultSectionId(sections)
+  const activeSection = sections.find(s => s.id === activeId) ?? null
   const readAgain = () => {
     setLoadError(null)
     void load()
   }
 
-  return createPortal(
-    <div className="exo-props-back exo-portal">
-      <div ref={dialog} className="exo-props" role="dialog" aria-modal="true" aria-label={`Properties of ${game.title}`} tabIndex={-1}>
-        <span className="exo-glass is-panel exo-sheet-glass" aria-hidden="true" />
-        <header className="exo-props-head">
-          <div className="exo-props-head-copy">
-            <h2>{game.title}</h2>
-            <span>Properties</span>
-            {props?.running ? <State>Playing</State> : null}
-          </div>
-          <button type="button" className="exo-props-close" aria-label="Close properties" onClick={onClose}>
-            <Close size={16} />
-          </button>
-        </header>
-        <div className="exo-props-pane">
-          {rows ? (
-            <div className="exo-settings-layout">
-              {sections.map(({ id, title }) => (
-                <section key={id} className="exo-set-section" id={`props-${id}`} aria-label={title}>
-                  {id === 'content' ? <header className="exo-set-section-head"><h2>{title}</h2></header> : null}
-                  <div className="exo-props-section exo-set-list">
-                    {id === 'general' && <GeneralSection {...rows} />}
-                    {id === 'files' && <FilesSection {...rows} gameId={game.id} game={game} upscalers={upscalerStatus} uninstall={uninstall} />}
-                    {id === 'betas' && <BetasSection {...rows} />}
-                    {id === 'content' && <ContentSection {...rows} />}
-                    {id === 'artwork' && (
-                      <PropRow label="Cover" line={null}>
-                        <ArtworkTools artwork={artwork} disabled={false} className="exo-set-btn" />
-                      </PropRow>
-                    )}
-                  </div>
-                </section>
-              ))}
-            </div>
-          ) : loadError ? (
-            <div className="exo-set-error exo-utility-row">
-              <ErrorNote message={loadError} />
-              <button type="button" className="exo-set-btn" onClick={readAgain}>Try again</button>
-            </div>
-          ) : (
-            <Wait label="Reading properties">
-              <div className="exo-settings-layout">
-                <section className="exo-set-section"><div className="exo-props-section exo-set-list">{times(6, i => <Row label={sample(i)} detail={sample(i + 2)}><span className="exo-set-btn">Change</span></Row>)}</div></section>
-              </div>
-            </Wait>
-          )}
+  const uninstall = (
+    <UninstallButton
+      selected={game}
+      locked={locked}
+      onStatus={onStatus}
+      onUninstalled={onUninstalled}
+      onBusyChange={setUninstallBusy}
+    />
+  )
+
+  return (
+    <section
+      ref={panelRef}
+      className="exo-glass is-panel exo-game-panel exo-game-props"
+      aria-labelledby="exo-game-props-title"
+      tabIndex={-1}
+    >
+      <header className="exo-game-panel-head">
+        <h2 id="exo-game-props-title">Properties</h2>
+        {props?.running ? <State>Playing</State> : null}
+      </header>
+      {rows && sections.length > 0 ? (
+        <div className="exo-game-props-tabs" role="tablist" aria-label="Properties sections">
+          {sections.map(({ id, title }) => {
+            const active = id === activeId
+            return (
+              <button
+                key={id}
+                id={`exo-props-tab-${id}`}
+                type="button"
+                role="tab"
+                aria-selected={active}
+                aria-controls={`exo-props-panel-${id}`}
+                className={cn('exo-game-props-tab', active && 'is-active')}
+                onClick={() => setTab(id)}
+              >
+                {title}
+              </button>
+            )
+          })}
         </div>
+      ) : null}
+      <div
+        className="exo-props-pane"
+        role={activeSection ? 'tabpanel' : undefined}
+        id={activeSection ? `exo-props-panel-${activeSection.id}` : undefined}
+        aria-labelledby={activeSection ? `exo-props-tab-${activeSection.id}` : undefined}
+      >
+        {rows && activeSection ? (
+          <div className="exo-props-section exo-set-list">
+            <SectionPanelContent id={activeSection.id} rows={rows} game={game} upscalers={upscalerStatus} uninstall={uninstall} artwork={artwork} />
+          </div>
+        ) : loadError ? (
+          <div className="exo-set-error exo-utility-row exo-game-props-error">
+            <ErrorNote message={loadError} />
+            <button type="button" className="exo-set-btn" onClick={readAgain}>Try again</button>
+          </div>
+        ) : (
+          <Wait label="Reading properties">
+            <div className="exo-props-section exo-set-list">
+              {times(5, i => <Row key={i} label={sample(i)} detail={sample(i + 2)}><span className="exo-set-btn">Change</span></Row>)}
+            </div>
+          </Wait>
+        )}
       </div>
-    </div>,
-    document.body,
+    </section>
   )
 }
 
@@ -332,7 +380,6 @@ function PropRow({ label: name, detail, line, children }: { label: string; detai
   )
 }
 
-/** Which of Steam's Play-menu entries Play starts, for a game Steam offers without its anti-cheat. */
 const ANTI_CHEAT_LAUNCH = [
   { value: 'with', label: 'Launch with anti-cheat' },
   { value: 'without', label: 'Launch without anti-cheat (offline)' },
@@ -379,8 +426,6 @@ function GeneralSection({ props, locked, busy, run, apply, line }: Rows) {
         </PropRow>
       )}
       {props.antiCheatLaunch && (
-        // Without: Steam's own entry for it, and the game counts as one with no anti-cheat. Back with: Exo takes out
-        // what went in first.
         <PropRow label="Anti-cheat" detail={props.antiCheatLaunch.detail} line={line('antiCheatLaunch')}>
           <Working on={busy === 'antiCheatLaunch'} label="Saving your choice" />
           <Choice
@@ -451,16 +496,11 @@ function FilesSection({ props, locked, busy, run, line, note, gameId, game, upsc
   )
 }
 
-/** Allow's confirmation, the one place the ban risk is said: "Risk a BattlEye ban?" ("possibly Valve Anti-Cheat" asks about Valve's). */
 function banQuestion(antiCheat: string) {
   const name = antiCheat.replace(/^possibly /, '').replace(/^an /, '')
   return `Risk ${/^[aeiou]/i.test(name) ? 'an' : 'a'} ${name} ban?`
 }
 
-/**
- * An anti-cheat game's consent to upscaler changes, and the originals put back. Allow changes asks in place; Stop
- * allowing goes at once (Allow changes takes it back), or, with the originals there to put back, asks which from a menu.
- */
 function UpscalerRows({ view, gate, busy, run, line }: Pick<Rows, 'busy' | 'run' | 'line'> & { view: ReturnType<typeof upscalerView>; gate: string | null }) {
   const choice = useChoiceMenu()
   const restorable = view.restorable > 0 && !gate
@@ -504,7 +544,6 @@ function UpscalerRows({ view, gate, busy, run, line }: Pick<Rows, 'busy' | 'run'
   )
 }
 
-/** Call of Duty's shader cache: its size, and Rebuild shaders, which deletes it so the game builds it again as it starts. */
 function ShadersRow({ bytes, locked, busy, run, line }: Pick<Rows, 'locked' | 'busy' | 'run' | 'line'> & { bytes?: number | null }) {
   if (bytes == null) return null
   return (
@@ -541,10 +580,8 @@ function BetasSection({ props, locked, busy, run, apply, line }: Rows) {
   )
 }
 
-/** Every DLC in two columns when there are many: a switch where the store has one, else where it stands. */
 function ContentSection({ props, locked, busy, run, line }: Rows) {
   const content = props.content ?? []
-  // The DLC whose switch is asking: the switch shows where it is going while its question is beside it.
   const [asking, setAsking] = useState<string | null>(null)
   return (
     <div className={`exo-props-content${content.length > 6 ? ' is-columns' : ''}`}>
@@ -575,11 +612,6 @@ function ContentSection({ props, locked, busy, run, line }: Rows) {
   )
 }
 
-/**
- * A switch that downloads or removes asks beside itself as it flips (DESIGN.md › Confirm): its question appears
- * armed, its width springing open from nothing, and a press on it or Enter runs it. Put back (Escape, a press
- * elsewhere, focus leaving, 4 s), the switch goes back and has the focus again.
- */
 function SwitchAsk({ question, danger, onConfirm, onCancel }: { question: string; danger: boolean; onConfirm: () => void; onCancel: () => void }) {
   const ask = useConfirmInPlace<HTMLButtonElement>(question, onConfirm, danger)
   const arm = useRef(ask.arm)
@@ -601,7 +633,6 @@ function SwitchAsk({ question, danger, onConfirm, onCancel }: { question: string
   )
 }
 
-/** Exo's own launch options for the game, saved on Enter or when the field loses focus. */
 function LaunchOptions({ value, busy, onSave, line }: { value: string; busy: boolean; onSave: (value: string) => Promise<boolean>; line: ReactNode }) {
   const [draft, setDraft] = useState(value)
   useEffect(() => setDraft(value), [value])
@@ -623,7 +654,6 @@ function LaunchOptions({ value, busy, onSave, line }: { value: string; busy: boo
   )
 }
 
-/** A private beta's access code; it goes to the store and is never kept. */
 function AccessCode({ busy, disabled, onCheck, line }: { busy: boolean; disabled: boolean; onCheck: (code: string) => Promise<boolean>; line: ReactNode }) {
   const [code, setCode] = useState('')
   const check = () => {

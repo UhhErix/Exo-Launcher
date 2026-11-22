@@ -1,18 +1,15 @@
 import { useEffect, useId, useRef, useState, type ReactNode } from 'react'
-import { Close, Filter, Search } from '../../brand/icons'
+import { ChevronLeft, Close, Filter, Search } from '../../brand/icons'
 import { useDismissOnAncestorScroll } from '../../lib/dismiss'
-import { useGlide } from '../../lib/glide'
 import { filterKey, filterLabel, type LibraryFilter } from '../../lib/librarySearch'
 
 export type FilterOption = { section: string; filter: LibraryFilter; disabled?: boolean }
-export type LibraryTab = 'home' | 'installed' | 'all' | 'updates'
+export type LibraryTab = 'home' | 'all'
 
 export function LibraryHead({
   empty,
-  tab,
-  onTab,
+  onBack,
   total,
-  updatesCount,
   found,
   query,
   onQuery,
@@ -26,10 +23,8 @@ export function LibraryHead({
   autoFocusSearch = false,
 }: {
   empty: boolean
-  tab: LibraryTab
-  onTab: (next: LibraryTab) => void
+  onBack: () => void
   total: number
-  updatesCount: number
   found: readonly unknown[] | null
   query: string
   onQuery: (query: string) => void
@@ -43,7 +38,6 @@ export function LibraryHead({
   autoFocusSearch?: boolean
 }) {
   const field = useRef<HTMLInputElement>(null)
-  const tabsGlide = useGlide<HTMLDivElement>()
   useEffect(() => {
     if (!autoFocusSearch) return
     requestAnimationFrame(() => {
@@ -52,33 +46,15 @@ export function LibraryHead({
     })
   }, [autoFocusSearch])
   if (empty) return <h1 className="sr-only">Library</h1>
-  const tabs: ReadonlyArray<{ id: LibraryTab; label: string; count?: number }> = [
-    { id: 'home', label: 'Recent' },
-    { id: 'installed', label: 'Installed' },
-    ...(updatesCount > 0 ? [{ id: 'updates' as const, label: 'Updates', count: updatesCount }] : []),
-    { id: 'all', label: 'All games' },
-  ]
   return (
     <>
       <header className="exo-library-head">
-        <div className="exo-library-tabs-wrap">
+        <div className="exo-library-head-lead">
           <h1 className="sr-only">Library</h1>
-          <div ref={tabsGlide} className="exo-glass exo-shelf-chips exo-glide exo-library-tabs" role="group" aria-label="Library view">
-            {tabs.map(item => (
-              <button
-                key={item.id}
-                type="button"
-                className="exo-shelf-chip"
-                aria-pressed={tab === item.id}
-                onClick={() => onTab(item.id)}
-              >
-                <span>{item.label}</span>
-                {item.count != null ? (
-                  <span className="exo-library-tab-count has-updates tabular-nums">{item.count}</span>
-                ) : null}
-              </button>
-            ))}
-          </div>
+          <button type="button" className="exo-glass exo-game-back exo-library-back" onClick={onBack}>
+            <ChevronLeft size={16} />
+            Library
+          </button>
           {found != null ? (
             <span className="exo-library-chip tabular-nums">
               {`${found.length.toLocaleString('en-US')} of ${total.toLocaleString('en-US')}`}

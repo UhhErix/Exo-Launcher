@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Button } from './ui/Button'
 import { ActionButton } from './ui/ConfirmButton'
@@ -11,13 +11,10 @@ const STORES = ['steam', 'epic', 'gog'] as const
 const STORE_LABELS: Record<(typeof STORES)[number], string> = { steam: 'Steam', epic: 'Epic', gog: 'GOG' }
 const OPEN_FAILED = 'Exo couldn’t open the redeem page. Try again.'
 
-type Place = { top: number; left: number; width: number; maxHeight: number }
-const samePlace = (a: Place, b: Place) => a.top === b.top && a.left === b.left && a.width === b.width && a.maxHeight === b.maxHeight
-
 /**
- * Anchored popover under the library's Add button. It hands the key to the
- * store's own redeem page and closes; LauncherApp listens for `keys.found`
- * so the confirmation still lands after this popover is gone.
+ * Centered key-activation dialog. It hands the key to the store's own redeem
+ * page and closes; LauncherApp listens for `keys.found` so the confirmation
+ * still lands after this dialog is gone.
  */
 export function ActivateKeySheet({
   open,
@@ -39,35 +36,11 @@ export function ActivateKeySheet({
   const [copied, sayCopied] = useSaid()
   const [busy, setBusy] = useState(false)
   const [note, setNote] = useState('')
-  const [position, setPosition] = useState<Place>({ top: 96, left: 12, width: 360, maxHeight: 500 })
-
-  useLayoutEffect(() => {
-    if (!open) return
-    const place = () => {
-      const inset = 12
-      const width = Math.min(360, Math.max(0, window.innerWidth - inset * 2))
-      const maxHeight = Math.max(0, window.innerHeight - inset * 2)
-      const anchor = document.querySelector('.exo-library-more')?.getBoundingClientRect()
-      const height = Math.min(panelRef.current?.getBoundingClientRect().height || 240, maxHeight)
-      // Right-align under the Add button, which sits at the right edge of the shelf header.
-      const preferredLeft = anchor ? anchor.right - width : window.innerWidth - width - inset
-      const left = Math.max(inset, Math.min(preferredLeft, window.innerWidth - width - inset))
-      const preferredTop = (anchor?.bottom ?? 84) + 8
-      const top = Math.max(inset, Math.min(preferredTop, window.innerHeight - height - inset))
-      // The observer's first call (and any resize that moves nothing) keeps the same place: no render for it.
-      const next = { top, left, width, maxHeight }
-      setPosition(previous => samePlace(previous, next) ? previous : next)
-    }
-    place()
-    const observer = new ResizeObserver(place)
-    if (panelRef.current) observer.observe(panelRef.current)
-    window.addEventListener('resize', place)
-    return () => { observer.disconnect(); window.removeEventListener('resize', place) }
-  }, [open])
 
   useEffect(() => {
     const revision = ++sessionRevision.current
     if (!open) return
+    const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null
     setBusy(false)
     setNote('')
     edited.current = false
@@ -88,7 +61,8 @@ export function ActivateKeySheet({
     return () => {
       sessionRevision.current = revision + 1
       window.cancelAnimationFrame(focusFrame)
-      document.querySelector<HTMLElement>('.exo-library-more')?.focus({ preventScroll: true })
+      const back = opener?.isConnected ? opener : document.querySelector<HTMLElement>('.exo-library-more')
+      back?.focus({ preventScroll: true })
     }
   }, [open])
 
@@ -112,7 +86,7 @@ export function ActivateKeySheet({
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [open, onClose])
-  useDismiss(panelRef, onClose, { on: open })
+  useDismiss(panelRef, onClose, { on: open, modal: true })
 
   if (!open) return null
 
@@ -136,58 +110,60 @@ export function ActivateKeySheet({
   }
 
   return createPortal(
-    <div ref={panelRef} className="exo-key-popover exo-portal" style={position} role="dialog" aria-modal="true" aria-labelledby="exo-key-popover-title">
-      <h2 id="exo-key-popover-title">Activate key</h2>
-      <input
-        ref={inputRef}
-        className="exo-field"
-        value={key}
-        onChange={(event) => { edited.current = true; setKey(event.target.value) }}
-        onKeyDown={(event) => { if (event.key === 'Enter' && trimmed && !busy) { event.preventDefault(); openRef.current?.querySelector<HTMLButtonElement>('.exo-action')?.click() } }}
-        placeholder="Product key"
-        autoComplete="off"
-        spellCheck={false}
-        aria-label="Product key"
-      />
-      <div ref={chipGlide} className="exo-shelf-chips exo-glide" role="group" aria-label="Store">
-        {STORES.map((id) => (
-          <button
-            key={id}
+    <div className="exo-key-backdrop exo-portal">
+      <div ref={panelRef} className="exo-key-popover" role="dialog" aria-modal="true" aria-labelledby="exo-key-popover-title">
+        <h2 id="exo-key-popover-title">Activate key</h2>
+        <input
+          ref={inputRef}
+          className="exo-field"
+          value={key}
+          onChange={(event) => { edited.current = true; setKey(event.target.value) }}
+          onKeyDown={(event) => { if (event.key === 'Enter' && trimmed && !busy) { event.preventDefault(); openRef.current?.querySelector<HTMLButtonElement>('.exo-action')?.click() } }}
+          placeholder="Product key"
+          autoComplete="off"
+          spellCheck={false}
+          aria-label="Product key"
+        />
+        <div ref={chipGlide} className="exo-shelf-chips exo-glide" role="group" aria-label="Store">
+          {STORES.map((id) => (
+            <button
+              key={id}
+              type="button"
+              className="exo-shelf-chip"
+              aria-pressed={id === store}
+              disabled={busy}
+              onClick={() => { edited.current = true; setStore(id) }}
+            >
+              {STORE_LABELS[id]}
+            </button>
+          ))}
+        </div>
+        {/* Only ever a failure (the page didn't open, the copy didn't take), so it is announced as one. */}
+        {note ? <p className="exo-key-popover-note" role="alert">{note}</p> : null}
+        <div className="exo-key-popover-actions">
+          <Button
             type="button"
-            className="exo-shelf-chip"
-            aria-pressed={id === store}
-            disabled={busy}
-            onClick={() => { edited.current = true; setStore(id) }}
+            size="sm"
+            className="exo-set-btn"
+            isDisabled={busy || !trimmed}
+            onPress={() => {
+              void navigator.clipboard.writeText(trimmed)
+                .then(() => { setNote(''); sayCopied('Copied') })
+                .catch(() => setNote('Select the key and press Ctrl+C to copy it.'))
+            }}
           >
-            {STORE_LABELS[id]}
-          </button>
-        ))}
-      </div>
-      {/* Only ever a failure (the page didn't open, the copy didn't take), so it is announced as one. */}
-      {note ? <p className="exo-key-popover-note" role="alert">{note}</p> : null}
-      <div className="exo-key-popover-actions">
-        <Button
-          type="button"
-          size="sm"
-          className="exo-set-btn"
-          isDisabled={busy || !trimmed}
-          onPress={() => {
-            void navigator.clipboard.writeText(trimmed)
-              .then(() => { setNote(''); sayCopied('Copied') })
-              .catch(() => setNote('Select the key and press Ctrl+C to copy it.'))
-          }}
-        >
-          {copied ?? 'Copy key'}
-        </Button>
-        <Button type="button" size="sm" className="exo-set-btn" onPress={onClose}>
-          Cancel
-        </Button>
-        <span ref={openRef} className="contents">
-          <ActionButton className="exo-set-btn is-primary" disabled={!trimmed} context="ActivateKeySheet.keysActivate"
-            fallback={OPEN_FAILED} why="none" onFailed={error => setNote(error.text)} onPress={activate} onDone={opened}>
-            Open {STORE_LABELS[store]}
-          </ActionButton>
-        </span>
+            {copied ?? 'Copy key'}
+          </Button>
+          <Button type="button" size="sm" className="exo-set-btn" onPress={onClose}>
+            Cancel
+          </Button>
+          <span ref={openRef} className="contents">
+            <ActionButton className="exo-set-btn is-primary" disabled={!trimmed} context="ActivateKeySheet.keysActivate"
+              fallback={OPEN_FAILED} why="none" onFailed={error => setNote(error.text)} onPress={activate} onDone={opened}>
+              Open {STORE_LABELS[store]}
+            </ActionButton>
+          </span>
+        </div>
       </div>
     </div>,
     document.body,

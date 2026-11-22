@@ -16,14 +16,24 @@ internal static class PackagedSmoke
 
     internal static void Configure(string[] args)
     {
-        if (!args.Contains("--smoke-test", StringComparer.Ordinal)) return;
-        var root = Environment.GetEnvironmentVariable(PathHelper.DataDirOverrideVariable);
-        if (string.IsNullOrWhiteSpace(root) || !PathHelper.IsUnderRoot(root, Path.GetTempPath()) ||
-            !Path.GetFileName(Path.TrimEndingDirectorySeparator(root)).StartsWith("exo-packaged-smoke-", StringComparison.Ordinal) ||
-            !File.Exists(Path.Combine(root, ".exo-smoke-owner")))
-            throw new InvalidOperationException("Packaged smoke requires an owned disposable test directory.");
-        Enabled = true;
-        InstanceKey = "ExoLauncher.Smoke." + Path.GetFileName(Path.TrimEndingDirectorySeparator(root));
+        if (args.Contains("--smoke-test", StringComparer.Ordinal))
+        {
+            var root = Environment.GetEnvironmentVariable(PathHelper.DataDirOverrideVariable);
+            if (string.IsNullOrWhiteSpace(root) || !PathHelper.IsUnderRoot(root, Path.GetTempPath()) ||
+                !Path.GetFileName(Path.TrimEndingDirectorySeparator(root)).StartsWith("exo-packaged-smoke-", StringComparison.Ordinal) ||
+                !File.Exists(Path.Combine(root, ".exo-smoke-owner")))
+                throw new InvalidOperationException("Packaged smoke requires an owned disposable test directory.");
+            Enabled = true;
+            InstanceKey = "ExoLauncher.Smoke." + Path.GetFileName(Path.TrimEndingDirectorySeparator(root));
+            return;
+        }
+#if DEBUG
+        if (HostMode.IsDisposable)
+        {
+            var dir = Path.TrimEndingDirectorySeparator(PathHelper.AppDataDir);
+            InstanceKey = "ExoLauncher.Dev." + Path.GetFileName(dir);
+        }
+#endif
     }
 
     internal static async Task RunAsync(CoreWebView2 core, MainWindow window)

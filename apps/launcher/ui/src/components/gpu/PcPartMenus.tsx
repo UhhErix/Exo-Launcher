@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from 'react'
-import { Drive } from '../../brand/icons'
+import { Close, Drive } from '../../brand/icons'
 import { gpuOffers } from '../../lib/canUse'
 import { errorText } from '../../lib/errorWords'
 import {
@@ -47,6 +47,9 @@ function PcMenu({ title, onClose, children }: { title: string; onClose: () => vo
       <header className="exo-pc-menu-head">
         <h2>{title}</h2>
         <div ref={setSlot} className="exo-pc-section-actions" />
+        <button type="button" className="exo-props-close" aria-label={`Close ${title}`} onClick={onClose}>
+          <Close size={15} />
+        </button>
       </header>
       <SectionSlot.Provider value={slot}>
         <div className="exo-pc-menu-body">{children}</div>

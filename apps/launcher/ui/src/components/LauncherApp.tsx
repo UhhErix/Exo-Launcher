@@ -74,6 +74,7 @@ import { onScreen, pressedArt, transition, visible } from '../lib/viewTransition
 import { buildShellCommands, executeShellCommand } from './shell/launcherCommands'
 import { useRoomController } from './shell/useRoomController'
 import { useGameActions } from './shell/useGameActions'
+import { useExoTour } from './shell/useExoTour'
 import { logFirstCoversPainted, tellBackupStop, useShellHostEvents } from './shell/useShellEvents'
 
 const SettingsPanel = lazy(() => import('./SettingsPanel').then((m) => ({ default: m.SettingsPanel })))
@@ -89,6 +90,7 @@ const ActivateKeySheet = lazy(() => import('./ActivateKeySheet').then((m) => ({ 
 const WhatsNewSheet = lazy(() => import('./shell/WhatsNewSheet').then((m) => ({ default: m.WhatsNewSheet })))
 const UpdateSheet = lazy(() => import('./shell/WhatsNewSheet').then((m) => ({ default: m.UpdateSheet })))
 const CapturesOverlay = lazy(() => import('./captures/CapturesSheet').then((m) => ({ default: m.CapturesOverlay })))
+const ExoTour = lazy(() => import('./shell/ExoTour').then((m) => ({ default: m.ExoTour })))
 
 const NO_FOLDERS: LibraryFolder[] = []
 const NO_IDS: string[] = []
@@ -164,6 +166,7 @@ export function LauncherApp() {
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [selectedVariantId, setSelectedVariantId] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
+  const [prefsLoaded, setPrefsLoaded] = useState(false)
   const [libraryError, setLibraryError] = useState<string | null>(null)
   const [booting, setBooting] = useState(true)
   const [bootRevealing, setBootRevealing] = useState(false)
@@ -338,6 +341,7 @@ export function LauncherApp() {
       setSettings(s)
       if (s.onboardingComplete) void tellBackupStop()
       void loadUiPrefs(s.uiPrefs, { save: (uiPrefs) => saveSettingsPatch({ uiPrefs }), move: (uiPrefsMoved) => saveSettingsPatch({ uiPrefsMoved }) })
+        .finally(() => setPrefsLoaded(true))
       setSettingsError(null)
     } catch (error) {
       setSettingsError(errorText(error, 'Exo couldn’t load your settings. Try again.'))
@@ -584,8 +588,13 @@ export function LauncherApp() {
 
   const [whatsNew, closeWhatsNew] = useWhatsNew(settings, [booting, view !== 'library', overlayOpen, commandOpen, activateKeyOpen, !!actions.depPrompt, update.pending, update.sheet], persistSettings)
   const accountShell = useAccountShell(!!whatsNew)
+  const tour = useExoTour(
+    prefsLoaded,
+    settings?.onboardingComplete,
+    [booting, loading, view !== 'library', overlayOpen, commandOpen, activateKeyOpen, !!actions.depPrompt, update.sheet, !!whatsNew, accountShell.sheetOpen, capturesSheet.open],
+  )
 
-  const dialogBlockers = [overlayOpen, commandOpen, activateKeyOpen, !!actions.depPrompt, booting, capturesSheet.open]
+  const dialogBlockers = [overlayOpen, commandOpen, activateKeyOpen, !!actions.depPrompt, booting, capturesSheet.open, tour.open]
   const friendsActive = isSurfaceActive(view, 'friends', dialogBlockers)
   const musicActive = isSurfaceActive(view, 'music', dialogBlockers)
   const devicesActive = isSurfaceActive(view, 'devices', dialogBlockers)
@@ -601,6 +610,7 @@ export function LauncherApp() {
       if (s.overlayOpen) s.closeGamePage()
       const idx = ROOM_ORDER.indexOf(s.under)
       const next = ROOM_ORDER[(idx < 0 ? 0 : idx + delta + ROOM_ORDER.length) % ROOM_ORDER.length]
+      setGpuJump(null)
       void s.goToView(next)
     },
     onSearchToggle: () => setCommandOpen(open => !open),
@@ -613,12 +623,17 @@ export function LauncherApp() {
     },
   }), [])
 
+  const openRoomFromBar = useCallback((next: View) => {
+    setGpuJump(null)
+    return goToView(next)
+  }, [goToView])
+
   const island = useMemo(() => <ExoIsland inDiscord={view === 'friends'} onOpenDiscord={openDiscordRoom} />, [view, openDiscordRoom])
   const titleBar = useMemo(() => (
     <TitleBar
       view={view}
       opening={opening}
-      onView={goToView}
+      onView={openRoomFromBar}
       onWarm={warmRoom}
       onNowPlaying={openNowPlaying}
       onToggleSettings={toggleSettings}
@@ -626,10 +641,10 @@ export function LauncherApp() {
       island={island}
       onSearch={openSearch}
     />
-  ), [view, opening, goToView, warmRoom, openNowPlaying, toggleSettings, musicService, island, openSearch])
+  ), [view, opening, openRoomFromBar, warmRoom, openNowPlaying, toggleSettings, musicService, island, openSearch])
 
   const settingsRoom = useMemo(() => settings && (
-    <Room mounted={openedRooms.has('settings')} warm={warming} active={view === 'settings'} label="Settings" className="exo-set-room" onBackdrop={toggleSettings}>
+    <Room mounted={openedRooms.has('settings')} warm={warming} active={view === 'settings'} label="Settings" className="exo-set-room">
       <SettingsPanel
         active={view === 'settings'}
         onClose={toggleSettings}
@@ -694,6 +709,7 @@ export function LauncherApp() {
         mainRef={libraryMainRef}
         active={under === 'library'}
         overlayOpen={overlayOpen}
+        loading={loading}
         empty={emptyLibrary}
         error={libraryError}
         games={liveShelves.library}
@@ -725,7 +741,7 @@ export function LauncherApp() {
         onUninstall={actions.uninstallGames}
       />
     </Room>
-  ), [under, view, openedRooms, overlayOpen, emptyLibrary, libraryError, liveShelves, selectedId, activeGameId, actions, sortMode, layout.reduceMotion,
+  ), [under, view, openedRooms, overlayOpen, loading, emptyLibrary, libraryError, liveShelves, selectedId, activeGameId, actions, sortMode, layout.reduceMotion,
     transferFor, openCard, openProperties, sortLibrary, libraryFolders, saveFolders, hiddenGames, saveHiddenGames, addGameFromLibrary,
     activateKey, refreshEverything, retryLibrary, openStoreSettings])
 
@@ -841,6 +857,7 @@ export function LauncherApp() {
       <RoomReport room={view} />
       {commandMenu}
       <Suspense fallback={null}><WhatsNewSheet releases={whatsNew} update={update} onClose={closeWhatsNew} /></Suspense>
+      <TourSlot tour={tour} currentView={view} onNavigate={goToView} onBeforeNavigate={closeGamePage} />
       <AccountOverlays shell={accountShell} />
       <Suspense fallback={null}><UpdateSheet update={update} shown={updateSheetShown(booting, accountShell.sheetOpen)} /></Suspense>
       <GamepadBar view={view} overlayOpen={overlayOpen} />
@@ -851,4 +868,31 @@ export function LauncherApp() {
 function RoomReport({ room }: { room: string }) {
   useEffect(() => { void host.telemetryRoom(room).catch(() => { }) }, [room])
   return null
+}
+
+function TourSlot({
+  tour,
+  currentView,
+  onNavigate,
+  onBeforeNavigate,
+}: {
+  tour: ReturnType<typeof useExoTour>
+  currentView: View
+  onNavigate: (view: View) => Promise<void>
+  onBeforeNavigate: () => void
+}) {
+  if (!tour.open) return null
+  return (
+    <Suspense fallback={null}>
+      <ExoTour
+        open={tour.open}
+        step={tour.step}
+        currentView={currentView}
+        onStep={tour.setStep}
+        onNavigate={onNavigate}
+        onBeforeNavigate={onBeforeNavigate}
+        onClose={tour.close}
+      />
+    </Suspense>
+  )
 }

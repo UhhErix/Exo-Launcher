@@ -790,6 +790,7 @@ main.exo-dc {
   width: 100%;
   height: 100%;
   border-radius: 999px;
+  color: var(--color-fg);
   box-shadow: var(--glassy-ring);
   font-size: var(--exo-type-small);
 }

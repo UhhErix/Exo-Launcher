@@ -185,6 +185,20 @@ export type CpuPorts = { free: number; total: number; freeTypeC: boolean }
 /** AMD's unreleased Fluid Motion Frames 3: offer, show the switch; on, the value is set; note, one line once AMD has released it. */
 export type Afmf3State = { ok: boolean; message?: string | null; offer: boolean; on: boolean; note?: string | null }
 export type KeyboardProfileSlot = { index: number; name: string }
+export type KeyboardBackupSummary = {
+  fileName: string
+  model: string
+  productId: number
+  firmware: string | null
+  createdUtc: string
+  profileCount: number
+}
+export type KeyboardBackupResult = {
+  ok: boolean
+  message?: string | null
+  created?: KeyboardBackupSummary | null
+  backups: KeyboardBackupSummary[]
+}
 export type KeyboardRead = {
   ok: boolean
   message?: string | null
@@ -1509,16 +1523,33 @@ export type ChromeLayout = {
 export type RiotBaseline = {
   valorantMinutes?: number | null
   leagueMinutes?: number | null
+  tftMinutes?: number | null
+  lorMinutes?: number | null
+  twoXkoMinutes?: number | null
 }
 
 export type RiotHoursRefresh = {
   ok: boolean
   profilePrivate?: boolean
   skipped?: boolean
+  partial?: boolean
+  unconfigured?: boolean
+  source?: 'local' | 'service' | null
+  clientNeeded?: boolean
   message?: string
   valorantMinutes?: number | null
   leagueMinutes?: number | null
+  tftMinutes?: number | null
   profileUrl?: string
+  baseline?: RiotBaseline | null
+}
+
+export type RiotExportImport = {
+  ok: boolean
+  cancelled?: boolean
+  message?: string | null
+  matchCounts?: Record<string, number>
+  baseline?: RiotBaseline | null
 }
 
 /** The Game clients card's read: Epic's launcher layout, Steam's branch, and whether the card is due (an old Epic, Steam not on Beta, or a branch that can't be read). */
@@ -2674,8 +2705,22 @@ export const host = {
     rawCall<RiotHoursRefresh>(
       'playtime.riotRefresh',
       riotId ? { riotId } : {},
+      30_000,
     ),
-  setRiotBaseline: (baseline: { valorantHours?: number; leagueHours?: number; riotId?: string }) =>
+  importRiotExport: (riotId?: string) =>
+    rawCall<RiotExportImport>(
+      'playtime.importRiotExport',
+      riotId ? { riotId } : {},
+      120_000,
+    ),
+  setRiotBaseline: (baseline: {
+    valorantHours?: number
+    leagueHours?: number
+    tftHours?: number
+    lorHours?: number
+    twoXkoHours?: number
+    riotId?: string
+  }) =>
     rawCall<{ ok: boolean; message?: string; baseline?: RiotBaseline | null }>(
       'playtime.setRiotBaseline',
       baseline,
@@ -2925,6 +2970,9 @@ export const host = {
   keyboardSettings: (id: string, patch: { actuationMm?: number; rapidTrigger?: boolean; rapidTriggerMm?: number; tachyon?: boolean }) =>
     rawCall<KeyboardRead>('keyboard.settings', { id, ...patch }, 15_000),
   keyboardOpenApp: () => rawCall<{ ok: boolean }>('keyboard.openApp', {}, 10_000),
+  keyboardBackup: (id: string) => rawCall<KeyboardBackupResult>('keyboard.backup', { id }, 30_000),
+  keyboardBackups: (id: string) => rawCall<{ ok: boolean; backups: KeyboardBackupSummary[] }>('keyboard.backups', { id }, 10_000),
+  keyboardRestore: (id: string, fileName: string) => rawCall<KeyboardRead>('keyboard.restore', { id, fileName }, 30_000),
   controllerRead: (id: string) => rawCall<ControllerRead>('controller.read', { id }, 30_000),
   /** The output's and microphone's format, volume and mute, and how Exo Voice is set. */
   audioRead: (output: string | null, mic: string | null) => rawCall<AudioRead>('audio.read', { output, mic }),

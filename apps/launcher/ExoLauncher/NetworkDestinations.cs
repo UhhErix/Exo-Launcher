@@ -34,6 +34,7 @@ internal static class NetworkDestinations
     internal const string SteamProfile = "Steam public game list (steamcommunity.com)";
     internal const string SteamWebsiteFamily = "Steam Family's shared games with the Steam website sign-in (api.steampowered.com)";
     internal const string TrackerGg = "tracker.gg";
+    internal const string RiotHours = "Riot hours (riot.getexo.app, on Exo's Cloudflare account, pd.*.a.pvp.net, valorant-api.com)";
     internal const string PcGamingWiki = "PCGamingWiki";
     internal const string CoverArt = "Cover art: Steam CDN and Steam store search, Epic store catalog, GOG, Microsoft Store catalog, and the image servers a store's own data points to";
     internal const string CoverCache = "Exo's cover cache (covers.getexo.app, on Exo's Cloudflare account): a game's title and Steam or GOG id, asked for its portrait when Exo has none";
@@ -119,6 +120,9 @@ internal static class NetworkDestinations
 
         // TrackerGgPlaytime.
         new("api.tracker.gg", TrackerGg),
+        new("riot.getexo.app", RiotHours),
+        new("*.a.pvp.net", RiotHours),
+        new("valorant-api.com", RiotHours),
 
         // GameWiki: whether a game outputs HDR (only with HDR for HDR games, or a game page on an HDR screen), and its facts for Fluid Motion Frames (a Radeon that has it).
         new("www.pcgamingwiki.com", PcGamingWiki),

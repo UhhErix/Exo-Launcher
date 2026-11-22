@@ -37,6 +37,7 @@ jobs:
             apps/launcher/cloud/updates/package-lock.json
             apps/launcher/cloud/account/package-lock.json
             apps/launcher/cloud/covers/package-lock.json
+            apps/launcher/cloud/riot/package-lock.json
 
       - name: UI check
         run: |
@@ -57,6 +58,8 @@ jobs:
           npm test --prefix cloud/reports
           npm ci --prefix cloud/covers --no-audit --no-fund
           npm test --prefix cloud/covers
+          npm ci --prefix cloud/riot --no-audit --no-fund
+          npm test --prefix cloud/riot
 
   test:
     runs-on: windows-latest
