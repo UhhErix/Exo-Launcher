@@ -1466,8 +1466,11 @@ pub fn view(s: &AppState, scale: f32) -> El {
         .child(transport_bar(s, scale))
 }
 
-pub fn mini_player(s: &AppState, scale: f32) -> Option<El> {
-    if s.room == Room::Music
+pub fn mini_player(s: &AppState, scale: f32, slot: crate::state::MiniBarSlot) -> Option<El> {
+    use crate::state::MiniBarSlot;
+
+    if slot == MiniBarSlot::Hidden
+        || s.room == Room::Music
         || s.tour_step.is_some()
         || s.palette_open
         || s.key_modal_open
@@ -1486,61 +1489,25 @@ pub fn mini_player(s: &AppState, scale: f32) -> Option<El> {
         _ => 0.0,
     };
 
-    let controls = row()
-        .gap(2.0)
-        .center_y()
-        .child(
-            el().key("mini-prev")
-                .role("button")
-                .label("Previous track")
-                .focusable(true)
-                .hit()
-                .press_on_down()
-                .press_scale(PRESS_SCALE)
-                .size(28.0, 28.0)
-                .radius(RADIUS_PILL)
-                .center()
-                .hover(hover_fill())
-                .motion(SPRING_QUICK)
-                .on_press(|s: &mut AppState| s.music_control("prev"))
-                .child(icon_skip_back(15.0, FG)),
-        )
-        .child(
-            el().key("mini-toggle")
-                .role("button")
-                .label(if playing { "Pause" } else { "Play" })
-                .focusable(true)
-                .hit()
-                .press_on_down()
-                .press_scale(PRESS_SCALE)
-                .size(28.0, 28.0)
-                .radius(RADIUS_PILL)
-                .center()
-                .hover(hover_fill())
-                .motion(SPRING_QUICK)
-                .on_press(|s: &mut AppState| s.music_control("toggle"))
-                .child(if playing {
-                    icon_pause(15.0, FG)
-                } else {
-                    icon_play(15.0, FG)
-                }),
-        )
-        .child(
-            el().key("mini-next")
-                .role("button")
-                .label("Next track")
-                .focusable(true)
-                .hit()
-                .press_on_down()
-                .press_scale(PRESS_SCALE)
-                .size(28.0, 28.0)
-                .radius(RADIUS_PILL)
-                .center()
-                .hover(hover_fill())
-                .motion(SPRING_QUICK)
-                .on_press(|s: &mut AppState| s.music_control("next"))
-                .child(icon_skip_forward(15.0, FG)),
-        );
+    let toggle_btn = el()
+        .key("mini-toggle")
+        .role("button")
+        .label(if playing { "Pause" } else { "Play" })
+        .focusable(true)
+        .hit()
+        .press_on_down()
+        .press_scale(PRESS_SCALE)
+        .size(28.0, 28.0)
+        .radius(RADIUS_PILL)
+        .center()
+        .hover(hover_fill())
+        .motion(SPRING_QUICK)
+        .on_press(|s: &mut AppState| s.music_control("toggle"))
+        .child(if playing {
+            icon_pause(15.0, FG)
+        } else {
+            icon_play(15.0, FG)
+        });
 
     let thumb = if let Some(img) = if art_url.is_empty() {
         None
@@ -1559,7 +1526,97 @@ pub fn mini_player(s: &AppState, scale: f32) -> Option<El> {
             .child(icon_music(12.0, fg_faint()))
     };
 
-    let lcd_w: f32 = 164.0;
+    if slot == MiniBarSlot::Compact {
+        let open_btn = el()
+            .key("mini-open-music")
+            .role("button")
+            .label("Open Music")
+            .focusable(true)
+            .hit()
+            .press_on_down()
+            .press_scale(PRESS_SCALE)
+            .size(28.0, 28.0)
+            .radius(RADIUS_SMALL)
+            .center()
+            .hover(hover_fill())
+            .motion(SPRING_QUICK)
+            .on_press(|s: &mut AppState| s.switch_room(Room::Music))
+            .child(thumb);
+
+        return Some(
+            glass_capsule("music-mini-player")
+                .px(4.0)
+                .gap(4.0)
+                .child(toggle_btn)
+                .child(open_btn),
+        );
+    }
+
+    let muted = s.media.music_muted;
+    let mute_btn = el()
+        .key("mini-mute")
+        .role("button")
+        .label(if muted { "Unmute" } else { "Mute" })
+        .focusable(true)
+        .hit()
+        .press_on_down()
+        .size(28.0, 28.0)
+        .radius(RADIUS_PILL)
+        .center()
+        .hover(hover_fill())
+        .on_press(|s: &mut AppState| {
+            let next = !s.media.music_muted;
+            s.music_set_volume(s.media.music_volume, Some(next));
+        })
+        .child(if muted {
+            icon_volume_off(15.0, fg_muted())
+        } else {
+            icon_volume(15.0, fg_muted())
+        });
+
+    let full = slot == MiniBarSlot::Inline;
+    let controls = if full {
+        row()
+            .gap(2.0)
+            .center_y()
+            .child(
+                el().key("mini-prev")
+                    .role("button")
+                    .label("Previous track")
+                    .focusable(true)
+                    .hit()
+                    .press_on_down()
+                    .press_scale(PRESS_SCALE)
+                    .size(28.0, 28.0)
+                    .radius(RADIUS_PILL)
+                    .center()
+                    .hover(hover_fill())
+                    .motion(SPRING_QUICK)
+                    .on_press(|s: &mut AppState| s.music_control("prev"))
+                    .child(icon_skip_back(15.0, FG)),
+            )
+            .child(toggle_btn)
+            .child(
+                el().key("mini-next")
+                    .role("button")
+                    .label("Next track")
+                    .focusable(true)
+                    .hit()
+                    .press_on_down()
+                    .press_scale(PRESS_SCALE)
+                    .size(28.0, 28.0)
+                    .radius(RADIUS_PILL)
+                    .center()
+                    .hover(hover_fill())
+                    .motion(SPRING_QUICK)
+                    .on_press(|s: &mut AppState| s.music_control("next"))
+                    .child(icon_skip_forward(15.0, FG)),
+            )
+    } else {
+        row().center_y().child(toggle_btn)
+    };
+
+    let lcd_w: f32 = if full { 164.0 } else { 104.0 };
     let seek_w: f32 = lcd_w;
     let lcd = row()
         .key("mini-open-music")
@@ -1570,7 +1627,7 @@ pub fn mini_player(s: &AppState, scale: f32) -> Option<El> {
         .press_on_down()
         .h(30.0)
         .gap(8.0)
-        .pr(8.0)
+        .pr(if full { 8.0 } else { 6.0 })
         .radius(RADIUS_SMALL)
         .hover(hover_fill())
         .center_y()
@@ -1591,7 +1648,7 @@ pub fn mini_player(s: &AppState, scale: f32) -> Option<El> {
                                 .color(FG)
                                 .truncate(),
                         )
-                        .children((!track.artist.is_empty()).then(|| {
+                        .children((full && !track.artist.is_empty()).then(|| {
                             text(track.artist.clone())
                                 .font(scaled_small(s))
                                 .color(fg_muted())
@@ -1614,37 +1671,20 @@ pub fn mini_player(s: &AppState, scale: f32) -> Option<El> {
                 ),
         );
 
-    let muted = s.media.music_muted;
-    let volume = row()
-        .gap(6.0)
-        .center_y()
-        .child(
-            el().key("mini-mute")
-                .role("button")
-                .label(if muted { "Unmute" } else { "Mute" })
-                .focusable(true)
-                .hit()
-                .press_on_down()
-                .size(28.0, 28.0)
-                .radius(RADIUS_PILL)
-                .center()
-                .hover(hover_fill())
-                .on_press(|s: &mut AppState| {
-                    let next = !s.media.music_muted;
-                    s.music_set_volume(s.media.music_volume, Some(next));
-                })
-                .child(if muted {
-                    icon_volume_off(15.0, fg_muted())
-                } else {
-                    icon_volume(15.0, fg_muted())
-                }),
-        )
-        .child(volume_slider("mini", 72.0, s.media.music_volume, muted));
+    let volume = if full {
+        row()
+            .gap(6.0)
+            .center_y()
+            .child(mute_btn)
+            .child(volume_slider("mini", 72.0, s.media.music_volume, muted))
+    } else {
+        row().center_y().child(mute_btn)
+    };
 
     Some(
         glass_capsule("music-mini-player")
-            .px(6.0)
-            .gap(10.0)
+            .px(if full { 6.0 } else { 5.0 })
+            .gap(if full { 10.0 } else { 6.0 })
             .child(controls)
             .child(lcd)
             .child(volume),

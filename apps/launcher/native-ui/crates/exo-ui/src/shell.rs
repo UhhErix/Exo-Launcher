@@ -332,7 +332,7 @@ pub fn view(s: &AppState, cx: &mut Cx<AppState>) -> El {
     }
 
     let mini = (s.mini_bar_slot != MiniBarSlot::Hidden)
-        .then(|| music::mini_player(s, scale))
+        .then(|| music::mini_player(s, scale, s.mini_bar_slot))
         .flatten()
         .map(|m| {
             let m = if budget.mini_player {
@@ -342,11 +342,6 @@ pub fn view(s: &AppState, cx: &mut Cx<AppState>) -> El {
             };
             m.transition(mini_player_transition())
         });
-    let (mini_inline, mini_below) = match s.mini_bar_slot {
-        MiniBarSlot::Inline => (mini, None),
-        MiniBarSlot::BelowTools => (None, mini),
-        MiniBarSlot::Hidden => (None, None),
-    };
 
     let right_pin = if insets.trailing > 0.0 { 4.0 } else { GAP };
 
@@ -396,7 +391,7 @@ pub fn view(s: &AppState, cx: &mut Cx<AppState>) -> El {
                 .h(36.0)
                 .center_y()
                 .gap(8.0)
-                .children(mini_inline)
+                .children(mini)
                 .child(tools),
         )
         .children(has_modal_scrim.then(|| {
@@ -477,16 +472,6 @@ pub fn view(s: &AppState, cx: &mut Cx<AppState>) -> El {
         .child(room_stage)
         .child(top_fade)
         .child(top_bar);
-
-    if let Some(mini_card) = mini_below {
-        root = root.child(
-            row()
-                .pin(None, Some(52.0), Some(right_pin), None)
-                .h(36.0)
-                .center_y()
-                .child(mini_card),
-        );
-    }
 
     if s.capture_menu_open {
         root = root.child(captures::popover(s).transition(modal_scrim_transition()));

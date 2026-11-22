@@ -1908,6 +1908,44 @@ mod tests {
         s.switch_room(Room::Store);
         assert_eq!(s.room_dir, -1.0);
     }
+
+    #[test]
+    fn mini_player_stays_inline_and_clears_nav_and_room_headers() {
+        for (vw, expected_slot) in [
+            (1920.0_f32, state::MiniBarSlot::Inline),
+            (1480.0_f32, state::MiniBarSlot::Medium),
+            (1280.0_f32, state::MiniBarSlot::Compact),
+            (1180.0_f32, state::MiniBarSlot::Compact),
+        ] {
+            let mut state = AppState::default();
+            state.switch_room(Room::ExoAi);
+            let mut rt = Runtime::new(state, shell::view, (vw, 800.0), Env::new(true, 1.0));
+            rt.frame(0.0);
+            rt.frame(1.0 / 60.0);
+            rt.frame(0.5);
+            assert_eq!(rt.state.mini_bar_slot, expected_slot, "width={vw}");
+            let (nav, _) = rt.presented("nav-capsule").expect("nav");
+            let (tools, _) = rt.presented("titlebar-tools").expect("tools");
+            let (mini, _) = rt.presented("music-mini-player").expect("mini");
+            let (storage, _) = rt.presented("pc-tab-storage").expect("storage");
+            assert!(
+                mini[1] + mini[3] <= 52.0,
+                "mini intruded below top bar at {vw}px: mini={mini:?}"
+            );
+            assert!(
+                mini[0] >= nav[0] + nav[2] + 8.0,
+                "mini overlapped nav at {vw}px: nav={nav:?} mini={mini:?}"
+            );
+            assert!(
+                mini[0] + mini[2] <= tools[0],
+                "mini overlapped tools at {vw}px: mini={mini:?} tools={tools:?}"
+            );
+            assert!(
+                mini[1] + mini[3] < storage[1],
+                "mini overlapped Exo AI storage button at {vw}px: mini={mini:?} storage={storage:?}"
+            );
+        }
+    }
 }
 
 #[cfg(test)]

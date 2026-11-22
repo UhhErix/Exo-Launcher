@@ -181,16 +181,19 @@ pub struct NoticeItem {
 pub enum MiniBarSlot {
     #[default]
     Inline,
-    BelowTools,
+    Medium,
+    Compact,
     Hidden,
 }
 
 impl MiniBarSlot {
     pub fn from_width(w: f32) -> Self {
-        if w >= 1760.0 {
+        if w >= 1880.0 {
             Self::Inline
+        } else if w >= 1480.0 {
+            Self::Medium
         } else if w >= 1180.0 {
-            Self::BelowTools
+            Self::Compact
         } else {
             Self::Hidden
         }
