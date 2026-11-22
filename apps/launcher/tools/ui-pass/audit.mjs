@@ -17,7 +17,7 @@ export function layoutAudit() {
   const seen = new Set()
   for (const e of els) {
     const b = e.getBoundingClientRect()
-    if (b.width < 28 || b.height < 28) { const s = sel(e) + ' ' + Math.round(b.width) + 'x' + Math.round(b.height); if (!seen.has(s)) { seen.add(s); out.small.push({ sel: sel(e), w: Math.round(b.width * 10) / 10, h: Math.round(b.height * 10) / 10, label: label(e) }) } }
+    if ((b.width < 28 || b.height < 28) && !e.closest(':disabled, [aria-disabled="true"], [inert]')) { const s = sel(e) + ' ' + Math.round(b.width) + 'x' + Math.round(b.height); if (!seen.has(s)) { seen.add(s); out.small.push({ sel: sel(e), w: Math.round(b.width * 10) / 10, h: Math.round(b.height * 10) / 10, label: label(e) }) } }
     const name = e.getAttribute('aria-label') || e.getAttribute('aria-labelledby') || (e.textContent || '').trim() || e.getAttribute('placeholder')
     if (!name && e.tagName !== 'INPUT') out.unnamed.push({ sel: sel(e) })
   }
@@ -28,7 +28,11 @@ export function layoutAudit() {
     const cutX = e.scrollWidth > e.clientWidth + 1 && /(hidden|clip)/.test(cs.overflowX)
     const cutY = e.scrollHeight > e.clientHeight + 1 && /(hidden|clip)/.test(cs.overflowY) && cs.webkitLineClamp === 'none'
     if ((cutX || cutY) && e.clientWidth > 0) { const ell = cs.textOverflow === 'ellipsis' || cs.webkitLineClamp !== 'none'; const k = sel(e) + (ell ? 'E' : 'C'); if (!clipSeen.has(k)) { clipSeen.add(k); out.clipped.push({ sel: sel(e), ellipsis: ell, text: label(e), w: Math.round(b.width), sw: e.scrollWidth, h: Math.round(b.height), sh: e.scrollHeight }) } }
-    if (b.right > innerWidth + 1 || b.left < -1) { const k = sel(e) + 'W'; if (!clipSeen.has(k)) { clipSeen.add(k); out.clipped.push({ sel: sel(e), pastWindow: true, text: label(e), left: Math.round(b.left), right: Math.round(b.right) }) } }
+    if ((b.right > innerWidth + 1 || b.left < -1) && !e.closest('[inert], [aria-hidden="true"]')) {
+      let sc = false
+      for (let a = e.parentElement; a && a !== document.body; a = a.parentElement) if (/(auto|scroll|hidden|clip)/.test(getComputedStyle(a).overflowX)) { sc = true; break }
+      if (!sc) { const k = sel(e) + 'W'; if (!clipSeen.has(k)) { clipSeen.add(k); out.clipped.push({ sel: sel(e), pastWindow: true, text: label(e), left: Math.round(b.left), right: Math.round(b.right) }) } }
+    }
     const px = parseFloat(cs.fontSize) / scale
     if (![10, 12, 13, 15, 20, 28, 32].includes(Math.round(px * 2) / 2)) { const k = Math.round(px * 10) / 10 + 'px'; const a = (out.offscale[k] ||= []); if (a.length < 4) a.push(sel(e)) }
   }
@@ -55,7 +59,7 @@ export function textItems() {
   const sel = (e) => { const parts = []; let n = e; for (let i = 0; i < 3 && n && n.nodeType === 1; i++) { let s = n.tagName.toLowerCase(); const c = String(n.className && n.className.baseVal !== undefined ? n.className.baseVal : n.className || '').split(/\s+/).filter((x) => x && !/^(is-|has-)/.test(x)).slice(0, 2); if (c.length) s += '.' + c.join('.'); parts.unshift(s); n = n.parentElement } return parts.join(' > ') }
   const items = []
   for (const e of document.querySelectorAll('body *')) {
-    if (!vis(e)) continue
+    if (!vis(e) || e.closest(':disabled, [aria-disabled="true"], [inert]')) continue
     const own = [...e.childNodes].filter((n) => n.nodeType === 3).map((n) => n.textContent).join('').replace(/\s+/g, ' ').trim()
     if (!own) continue
     const cs = getComputedStyle(e)
