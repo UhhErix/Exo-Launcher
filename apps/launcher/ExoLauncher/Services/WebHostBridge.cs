@@ -2027,7 +2027,7 @@ public sealed partial class WebHostBridge
             baselines.TryGetValue("riot:valorant", out var valMinutes);
             baselines.TryGetValue("riot:league_of_legends", out var lolMinutes);
             baselines.TryGetValue("riot:teamfighttactics", out var tftMinutes);
-            var source = local.SeedUpdated || (local.Ok && !cloudWrote) ? "local" : "cloud";
+            var source = local.SeedUpdated || (local.Ok && !cloudWrote) ? "local" : "service";
             var okMessage = !wrote
                 ? "Your saved Riot hours are already up to date."
                 : source == "local"

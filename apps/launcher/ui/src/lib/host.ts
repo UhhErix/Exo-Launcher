@@ -1534,7 +1534,7 @@ export type RiotHoursRefresh = {
   skipped?: boolean
   partial?: boolean
   unconfigured?: boolean
-  source?: 'local' | 'cloud' | null
+  source?: 'local' | 'service' | null
   clientNeeded?: boolean
   message?: string
   valorantMinutes?: number | null
