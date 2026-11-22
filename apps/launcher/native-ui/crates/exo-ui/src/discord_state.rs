@@ -1,4 +1,5 @@
 use crate::discord_chat_state::{ChatDrawer, DiscordChatState};
+use crate::discord_voice_state::DiscordVoiceUiState;
 use crate::state::{AppState, HostStatus};
 use exo_rpc::{
     ActionResult, DiscordAccountItem, DiscordAccountsReply, DiscordChangedEvent, DiscordChannel,
@@ -75,6 +76,7 @@ pub struct DiscordState {
     pub add_friend_input: TextEdit,
     pub revealed_spoilers: HashSet<String>,
     pub chat: DiscordChatState,
+    pub voice_ui: DiscordVoiceUiState,
     pub loaded: bool,
 }
 
@@ -113,6 +115,7 @@ impl DiscordState {
             add_friend_input: TextEdit::default(),
             revealed_spoilers: HashSet::new(),
             chat: DiscordChatState::empty(),
+            voice_ui: DiscordVoiceUiState::empty(),
             loaded: false,
         }
     }
@@ -120,6 +123,7 @@ impl DiscordState {
     pub fn demo() -> Self {
         let mut s = Self::empty();
         s.chat = DiscordChatState::demo();
+        s.voice_ui = DiscordVoiceUiState::demo();
         s.status = DiscordStatus {
             state: "ready".into(),
             message: None,
@@ -653,6 +657,7 @@ impl AppState {
         if self.status != HostStatus::Connected {
             return;
         }
+        self.announce_hardware_video_decode();
         #[cfg(windows)]
         {
             self.call_host_async(
@@ -1077,6 +1082,13 @@ impl AppState {
     }
 
     pub fn leave_discord_voice(&mut self) {
+        self.discord.voice_ui.watching_stream = None;
+        self.discord.voice_ui.fullscreen_stream = false;
+        self.discord.voice_ui.decoders.clear();
+        self.discord.voice_ui.golive_state = "off".into();
+        self.discord.voice_ui.golive_title = None;
+        self.discord.voice_ui.golive_stats = None;
+        self.discord.voice_ui.camera_on = false;
         if self.status != HostStatus::Connected {
             self.discord.voice.state = "off".into();
             self.discord.voice.guild_id = None;

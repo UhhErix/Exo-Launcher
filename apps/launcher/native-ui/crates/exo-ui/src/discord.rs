@@ -1,5 +1,7 @@
 use crate::discord_chat;
 use crate::discord_state::{DiscordHomeTab, DiscordPlace};
+use crate::discord_voice;
+use crate::discord_voice_state::VoicePanel;
 use crate::state::{AppState, Room};
 use exo_kit::{
     BG, FG, GAP, PRESS_SCALE, PRIMARY_FG, RADIUS_CARD, RADIUS_PANEL, RADIUS_PILL, RADIUS_SMALL,
@@ -7,7 +9,8 @@ use exo_kit::{
     glass_rim, good, hairline, hex, hover_fill, icon_back, icon_bell_off, icon_chat,
     icon_chevron_down, icon_chevron_right, icon_hash, icon_headphones, icon_headphones_off,
     icon_home, icon_lock, icon_mic, icon_mic_off, icon_phone, icon_phone_off, icon_play,
-    icon_refresh, icon_search, icon_server, icon_settings, icon_user_plus, icon_users, icon_volume,
+    icon_refresh, icon_screen_share, icon_search, icon_server, icon_settings, icon_user_plus,
+    icon_users, icon_volume,
     pressed_fill, primary_button, qr_code_view, srgb, subtle_fill, type_body, type_control,
     type_label, type_page, type_section, type_small, type_title, warn,
 };
@@ -535,12 +538,12 @@ fn voice_dock(s: &AppState) -> Option<El> {
     let connected = s.discord.voice.state == "connected";
     let status_txt = if connected {
         if let Some(rtt) = s.discord.voice.rtt_ms {
-            format!("Voice connected · {rtt} ms")
+            format!("Connected · {rtt} ms")
         } else {
-            "Voice connected".into()
+            "Connected".into()
         }
     } else {
-        "Connecting to voice…".into()
+        "Connecting…".into()
     };
     let label = s.discord.voice_channel_label();
     Some(
@@ -596,6 +599,23 @@ fn voice_dock(s: &AppState) -> Option<El> {
                             }),
                     )
                     .child(text(label).font(type_small()).color(FG).truncate()),
+            )
+            .child(
+                icon_btn(
+                    "dc-voice-dock-share".into(),
+                    "Share screen",
+                    s.discord.voice_ui.golive_state == "live",
+                    false,
+                    icon_screen_share(
+                        14.0,
+                        if s.discord.voice_ui.golive_state == "live" {
+                            good()
+                        } else {
+                            FG
+                        },
+                    ),
+                )
+                .on_press(|s: &mut AppState| s.open_voice_panel(VoicePanel::GoLive)),
             )
             .child(
                 icon_btn(
@@ -2224,68 +2244,7 @@ fn channel_or_dm_stage(s: &AppState, scale: f32) -> El {
             }
 
             let stage_pane = if is_voice {
-                let mut tiles = row().w_full().gap(14.0).flex_wrap().justify_center();
-                if let Some(ref members) = ch.members {
-                    for m in members {
-                        let speaking = s.discord.speaking.contains(&m.id);
-                        tiles = tiles.child(
-                            col()
-                                .key(format!("dc-stage-tile-{}", m.id))
-                                .w(172.0)
-                                .h(148.0)
-                                .px(16.0).py(16.0)
-                                .gap(10.0)
-                                .center()
-                                .radius(RADIUS_PANEL)
-                                .fill(card_surface())
-                                .border(
-                                    if speaking { 2.0 } else { 1.0 },
-                                    if speaking { good() } else { glass_rim() },
-                                )
-                                .child(avatar_box(
-                                    s,
-                                    m.avatar.as_deref(),
-                                    &m.name,
-                                    58.0,
-                                    29.0,
-                                    None,
-                                    speaking,
-                                    scale,
-                                ))
-                                .child(
-                                    row()
-                                        .gap(6.0)
-                                        .center_y()
-                                        .child(text(m.name.clone()).font(type_control()).color(FG).truncate())
-                                        .child(if m.stream {
-                                            el().px(5.0)
-                                                .py(1.0)
-                                                .radius(4.0)
-                                                .fill(bad().alpha(0.2))
-                                                .child(text("LIVE").font(type_label()).color(bad()))
-                                        } else {
-                                            el()
-                                        }),
-                                ),
-                        );
-                    }
-                }
-                col()
-                    .grow(1.0)
-                    .w_full()
-                    .min_h(0.0)
-                    .radius(RADIUS_PANEL)
-                    .fill(pane_surface())
-                    .border(1.0, hairline())
-                    .child(
-                        col()
-                            .grow(1.0)
-                            .w_full()
-                            .px(24.0).py(24.0)
-                            .gap(16.0)
-                            .center()
-                            .child(tiles),
-                    )
+                discord_voice::voice_stage_view(s, gid.as_deref(), ch, scale)
             } else {
                 discord_chat::timeline_and_composer(
                     s,

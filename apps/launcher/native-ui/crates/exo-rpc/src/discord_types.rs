@@ -894,6 +894,188 @@ pub struct DiscordTypingEvent {
     pub name: String,
 }
 
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DiscordAudioDevice {
+    #[serde(default)]
+    pub id: String,
+    #[serde(default)]
+    pub name: String,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DiscordAudioReply {
+    #[serde(default)]
+    pub inputs: Vec<DiscordAudioDevice>,
+    #[serde(default)]
+    pub outputs: Vec<DiscordAudioDevice>,
+    #[serde(default)]
+    pub input: Option<String>,
+    #[serde(default)]
+    pub output: Option<String>,
+    #[serde(default)]
+    pub input_volume: f64,
+    #[serde(default)]
+    pub output_volume: f64,
+    #[serde(default)]
+    pub soundboard_volume: f64,
+    #[serde(default)]
+    pub soundboard_muted: bool,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct DiscordSoundItem {
+    #[serde(default)]
+    pub sound_id: String,
+    #[serde(default)]
+    pub name: String,
+    #[serde(default)]
+    pub volume: f64,
+    #[serde(default)]
+    pub emoji_id: Option<String>,
+    #[serde(default)]
+    pub emoji_name: Option<String>,
+    #[serde(default)]
+    pub guild_id: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DiscordSoundboardReply {
+    #[serde(default)]
+    pub ok: bool,
+    #[serde(default)]
+    pub message: Option<String>,
+    #[serde(default)]
+    pub premium: bool,
+    #[serde(default)]
+    pub defaults: Option<Vec<DiscordSoundItem>>,
+    #[serde(default)]
+    pub guild: Option<Vec<DiscordSoundItem>>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GoLiveSource {
+    #[serde(default)]
+    pub id: String,
+    #[serde(default)]
+    pub kind: String,
+    #[serde(default)]
+    pub title: String,
+    #[serde(default)]
+    pub app: Option<String>,
+    #[serde(default)]
+    pub game: bool,
+    #[serde(default)]
+    pub width: i32,
+    #[serde(default)]
+    pub height: i32,
+    #[serde(default)]
+    pub hz: i32,
+    #[serde(default)]
+    pub primary: bool,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DiscordGoLiveReply {
+    #[serde(default)]
+    pub ok: bool,
+    #[serde(default)]
+    pub message: Option<String>,
+    #[serde(default)]
+    pub capture_mode: Option<String>,
+    #[serde(default)]
+    pub service_disabled: bool,
+    #[serde(default)]
+    pub sources: Vec<GoLiveSource>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DiscordGoLiveStateEvent {
+    #[serde(default)]
+    pub state: String,
+    #[serde(default)]
+    pub title: Option<String>,
+    #[serde(default)]
+    pub message: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DiscordGoLiveStatsEvent {
+    #[serde(default)]
+    pub width: i32,
+    #[serde(default)]
+    pub height: i32,
+    #[serde(default)]
+    pub fps: f64,
+    #[serde(default)]
+    pub bitrate: f64,
+    #[serde(default)]
+    pub codec: Option<String>,
+    #[serde(default)]
+    pub sound: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DiscordMyVoiceReply {
+    #[serde(default)]
+    pub ok: bool,
+    #[serde(default)]
+    pub learned: bool,
+    #[serde(default)]
+    pub message: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DiscordVideoEvent {
+    #[serde(default)]
+    pub source: String,
+    #[serde(default)]
+    pub user_id: String,
+    #[serde(default)]
+    pub active: bool,
+    #[serde(default)]
+    pub state: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DiscordVideoFrameMeta {
+    #[serde(default)]
+    pub source: String,
+    #[serde(default)]
+    pub user_id: String,
+    #[serde(default)]
+    pub timestamp: f64,
+    #[serde(default)]
+    pub keyframe: bool,
+    #[serde(default)]
+    pub rotation: i32,
+    #[serde(default)]
+    pub flip: bool,
+    #[serde(default)]
+    pub codec: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+pub struct DiscordVideoFrame {
+    pub source: String,
+    pub user_id: String,
+    pub timestamp: f64,
+    pub keyframe: bool,
+    pub rotation: i32,
+    pub flip: bool,
+    pub codec: String,
+    pub data: Vec<u8>,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

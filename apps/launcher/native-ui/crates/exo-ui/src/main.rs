@@ -4,6 +4,8 @@ mod discord_chat;
 mod discord_chat_state;
 mod discord_md;
 mod discord_state;
+mod discord_voice;
+mod discord_voice_state;
 mod game_page;
 mod gamepad;
 mod key_modal;
@@ -19,6 +21,7 @@ mod shell;
 mod state;
 mod store;
 mod tour;
+mod video_decoder;
 
 use crate::state::AppState;
 use exo_kit::{FONT_FAMILIES, FONTS, TITLEBAR_HEIGHT};
@@ -420,6 +423,12 @@ fn main() {
             s.switch_room(state::Room::Discord);
             s.open_discord_guild("g-exo");
         }),
+        ("discord-voice", |s: &mut AppState| {
+            s.switch_room(state::Room::Discord);
+            s.open_discord_guild("g-exo");
+            s.open_discord_channel("vc-lounge");
+            s.join_discord_voice(Some("g-exo"), "vc-lounge");
+        }),
         ("discord-signin", |s: &mut AppState| {
             s.switch_room(state::Room::Discord);
             s.discord.status.state = "signedOut".into();
@@ -523,6 +532,15 @@ fn main() {
                         exo_rpc::HostEvent::DiscordMessage(ev) => s.handle_discord_message(ev),
                         exo_rpc::HostEvent::DiscordReaction(ev) => s.handle_discord_reaction(ev),
                         exo_rpc::HostEvent::DiscordTyping(ev) => s.handle_discord_typing(ev),
+                        exo_rpc::HostEvent::DiscordVideo(ev) => s.handle_discord_video_event(ev),
+                        exo_rpc::HostEvent::DiscordVideoFrame(f) => s.handle_discord_video_frame(f),
+                        exo_rpc::HostEvent::DiscordGoLive(ev) => s.handle_discord_golive_state(ev),
+                        exo_rpc::HostEvent::DiscordGoLiveStats(ev) => {
+                            s.handle_discord_golive_stats(ev);
+                        }
+                        exo_rpc::HostEvent::DiscordGoLiveViewers(ids) => {
+                            s.handle_discord_golive_viewers(ids);
+                        }
                         exo_rpc::HostEvent::DevicesChanged => {
                             if s.room == state::Room::Pc && s.pc.pc_tab == pc_state::PcTab::Devices {
                                 s.load_pc_devices();
@@ -908,5 +926,61 @@ mod tests {
         });
         rt.frame(5.0 / 60.0);
         assert!(rt.state.discord.chat.search_total >= 1);
+    }
+
+    #[test]
+    fn phase5c_discord_voice_stage_stream_golive_soundboard_and_audio() {
+        let mut rt = Runtime::new(
+            AppState::default(),
+            shell::view,
+            (1280.0, 800.0),
+            Env::new(true, 1.0),
+        );
+        rt.update(|s, _| {
+            s.switch_room(Room::Discord);
+            s.open_discord_guild("g-exo");
+            s.open_discord_channel("vc-lounge");
+            s.join_discord_voice(Some("g-exo"), "vc-lounge");
+        });
+        rt.frame(0.0);
+        assert!(rt.find("dc-voice-stage").is_some());
+        assert!(rt.find("dc-stream-theater").is_some());
+        let blurs = rt
+            .instances
+            .iter()
+            .filter(|i| i.params[1] == KIND_BACKDROP_BLUR)
+            .count();
+        assert!(blurs <= 4, "Discord voice exceeded MAX_BACKDROP_BLURS=4: {blurs}");
+
+        let (gx, gy) = rt.find("dc-vc-share").expect("Share screen button");
+        rt.pointer_down(gx, gy);
+        rt.pointer_up(gx, gy);
+        rt.frame(1.0 / 60.0);
+        assert_eq!(
+            rt.state.discord.voice_ui.panel,
+            discord_voice_state::VoicePanel::GoLive
+        );
+        rt.update(|s, _| s.start_discord_golive());
+        rt.frame(2.0 / 60.0);
+        assert_eq!(rt.state.discord.voice_ui.golive_state, "live");
+        assert!(rt.find("dc-golive-banner").is_some());
+
+        let (sx, sy) = rt.find("dc-vc-sb").expect("Soundboard button");
+        rt.pointer_down(sx, sy);
+        rt.pointer_up(sx, sy);
+        rt.frame(3.0 / 60.0);
+        assert_eq!(
+            rt.state.discord.voice_ui.panel,
+            discord_voice_state::VoicePanel::Soundboard
+        );
+
+        let (ax, ay) = rt.find("dc-vc-audio").expect("Audio mixer button");
+        rt.pointer_down(ax, ay);
+        rt.pointer_up(ax, ay);
+        rt.frame(4.0 / 60.0);
+        assert_eq!(
+            rt.state.discord.voice_ui.panel,
+            discord_voice_state::VoicePanel::Audio
+        );
     }
 }
