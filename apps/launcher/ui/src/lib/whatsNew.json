@@ -1,5 +1,40 @@
 [
   {
+    "version": "3.29.0",
+    "items": [
+      {
+        "icon": "Home",
+        "title": "Interactive guided tour",
+        "detail": "Walks through every room and shortcut on first open with a live spotlight, skippable anytime and replayable from Settings › About or Ctrl+K."
+      },
+      {
+        "icon": "Library",
+        "title": "Redesigned Library deck, Store & Game Page",
+        "detail": "Clean poster deck with scroll arrows, details directly from the menu, centered Activate key dialog, and smooth layout without load jumps."
+      },
+      {
+        "icon": "Performance",
+        "title": "Wooting keyboard tuning & profile backups",
+        "detail": "Switch profiles, adjust actuation and Rapid Trigger, view the live key map, and back up or restore Wooting profiles inside Devices."
+      },
+      {
+        "icon": "Controller",
+        "title": "Upgraded controller navigation",
+        "detail": "Spatial focus movement, shoulder room switching, stick scrolling, and live controller prompts across rooms and overlays."
+      },
+      {
+        "icon": "Calendar",
+        "title": "Automatic Riot hours sync & export import",
+        "detail": "Reads local Riot Client match history automatically, imports Riot privacy exports (.zip/.json), and supports cloud Riot hours sync."
+      },
+      {
+        "icon": "Settings",
+        "title": "Cleaner Settings & cross-room polish",
+        "detail": "Reorganized Settings sidebar, sharper Apps and Shaders contrast, aligned Discord sidebar, prompt Exo Mouse fallback, and GPU-only confirm transitions."
+      }
+    ]
+  },
+  {
     "version": "3.28.0",
     "items": [
       {
