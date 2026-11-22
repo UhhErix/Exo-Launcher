@@ -7,8 +7,8 @@ use exo_kit::{
     glass_button, glass_panel, glass_rim, hairline, hover_fill, icon_back, icon_camera, icon_close,
     icon_film, icon_folder, icon_pause, icon_play, icon_plus, icon_record_dot, icon_replay,
     icon_scissors, icon_settings, icon_star, icon_trash, icon_volume, icon_volume_off,
-    primary_button, section_card, status_badge, subtle_fill, type_body, type_control, type_page,
-    type_section, type_small, type_title, warn,
+    primary_button, pressed_fill, section_card, status_badge, subtle_fill, type_body, type_control,
+    type_page, type_section, type_small, type_title, warn,
 };
 use exo_rpc::{CaptureItem, format_duration_ms};
 use rune::color::oklch;
@@ -95,24 +95,27 @@ fn popover_row(key: &str, label: &str, icon: El, hint: Option<String>, disabled:
         .role("menuitem")
         .label(label)
         .focusable(!disabled)
-        .hit()
-        .press_on_down()
         .w_full()
         .min_h(38.0)
         .px(12.0)
         .gap(10.0)
         .radius(RADIUS_SMALL)
         .center_y()
-        .hover(hover_fill())
-        .motion(SPRING_QUICK)
-        .child(icon)
-        .child(
-            text(label)
-                .font(type_control())
-                .color(if disabled { fg_faint() } else { FG })
-                .grow(1.0)
-                .min_w(0.0),
-        );
+        .motion(SPRING_QUICK);
+    if !disabled {
+        r = r
+            .hit()
+            .press_on_down()
+            .hover(hover_fill())
+            .press(pressed_fill());
+    }
+    r = r.child(icon).child(
+        text(label)
+            .font(type_control())
+            .color(if disabled { fg_faint() } else { FG })
+            .grow(1.0)
+            .min_w(0.0),
+    );
     if let Some(h) = hint
         && !h.is_empty()
     {
@@ -121,7 +124,6 @@ fn popover_row(key: &str, label: &str, icon: El, hint: Option<String>, disabled:
     r
 }
 
-#[allow(dead_code)]
 pub fn popover(s: &AppState) -> El {
     let status = s.media.capture_status.as_ref();
     let live = status.and_then(|st| st.state.as_ref());
@@ -153,20 +155,23 @@ pub fn popover(s: &AppState) -> El {
         .clip_rounded(RADIUS_CARD);
 
     if present {
+        let replay_row = popover_row(
+            "cap-menu-replay",
+            "Save replay",
+            icon_replay(16.0, if buffering { FG } else { fg_faint() }),
+            replay_hint,
+            !buffering,
+        );
+        let replay_row = if buffering {
+            replay_row.on_press(|s: &mut AppState| {
+                s.capture_menu_open = false;
+                s.capture_act("saveReplay");
+            })
+        } else {
+            replay_row
+        };
         menu = menu
-            .child(
-                popover_row(
-                    "cap-menu-replay",
-                    "Save replay",
-                    icon_replay(16.0, if buffering { FG } else { fg_faint() }),
-                    replay_hint,
-                    !buffering,
-                )
-                .on_press(|s: &mut AppState| {
-                    s.capture_menu_open = false;
-                    s.capture_act("saveReplay");
-                }),
-            )
+            .child(replay_row)
             .child(
                 popover_row(
                     "cap-menu-record",
@@ -181,7 +186,7 @@ pub fn popover(s: &AppState) -> El {
                 )
                 .on_press(|s: &mut AppState| {
                     s.capture_menu_open = false;
-                    s.capture_act("toggleRecord");
+                    s.capture_act("record");
                 }),
             )
             .child(
@@ -248,7 +253,11 @@ pub fn popover(s: &AppState) -> El {
             );
     }
 
-    menu
+    el().key("capture-menu-backdrop")
+        .pin(Some(0.0), Some(0.0), Some(0.0), Some(0.0))
+        .hit()
+        .on_press(|s: &mut AppState| s.capture_menu_open = false)
+        .child(menu)
 }
 
 fn clip_card(item: &CaptureItem, s: &AppState, scale: f32) -> El {

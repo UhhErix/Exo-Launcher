@@ -642,6 +642,34 @@ fn load_live_state_sync(pipe: &str, scene: Option<&str>) -> AppState {
             }
         }
         Some("captures") => {
+            if let Ok(set) = client.call_blocking::<_, exo_rpc::LauncherSettings>(
+                exo_rpc::METHOD_SETTINGS_GET,
+                &serde_json::json!({}),
+                Duration::from_secs(5),
+            ) {
+                state.settings = set;
+            }
+            if let Ok(acct) = client.call_blocking::<_, exo_rpc::ExoAccountState>(
+                exo_rpc::METHOD_EXO_ACCOUNT_STATE,
+                &serde_json::json!({}),
+                Duration::from_secs(5),
+            ) {
+                state.pc.account = acct;
+            }
+            if let Ok(hdr) = client.call_blocking::<_, exo_rpc::HdrState>(
+                exo_rpc::METHOD_HDR_STATE,
+                &serde_json::json!({}),
+                Duration::from_secs(5),
+            ) {
+                state.pc.hdr = Some(hdr);
+            }
+            if let Ok(about) = client.call_blocking::<_, exo_rpc::SystemAbout>(
+                exo_rpc::METHOD_SYSTEM_ABOUT,
+                &serde_json::json!({}),
+                Duration::from_secs(5),
+            ) {
+                state.pc.system_about = Some(about);
+            }
             if let Ok(st) = client.call_blocking::<_, exo_rpc::CaptureStatusReply>(
                 exo_rpc::METHOD_CAPTURE_STATUS,
                 &serde_json::json!({}),
@@ -901,7 +929,10 @@ fn main() {
             s.switch_room(state::Room::Music);
             s.media.music_immersion = true;
         }),
-        ("captures", |s: &mut AppState| s.open_captures(None)),
+        ("captures", |s: &mut AppState| {
+            s.switch_room(state::Room::Settings);
+            s.capture_menu_open = true;
+        }),
         ("capture-clip", |s: &mut AppState| {
             s.open_captures(None);
             if let Some(first) = s.media.capture_items.first().map(|c| c.id.clone()) {

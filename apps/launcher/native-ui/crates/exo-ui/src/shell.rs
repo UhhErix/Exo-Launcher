@@ -3,13 +3,12 @@ use crate::{
     captures, discord, game_page, key_modal, library, music, palette, pc, settings, store, tour,
 };
 use exo_kit::{
-    BG, FG, GAP, GLASS_CONTROL_SIGMA, PRESS_SCALE, PRIMARY_FG, RADIUS_CARD, RADIUS_PILL,
-    RADIUS_SMALL, SPRING_QUICK, TRANSPARENT, bad, exo_mark, fg_faint, fg_muted, glass_capsule,
-    glass_control_fill, glass_panel, glass_rim_bottom, glass_rim_top, good, hover_fill,
-    icon_camera, icon_chat, icon_close, icon_film, icon_gamepad, icon_grid, icon_library,
-    icon_maximize, icon_minimize, icon_mouse, icon_music, icon_plus, icon_record_dot, icon_replay,
-    icon_scissors, icon_settings, icon_sparkles, icon_store, nav_tab, pressed_fill, scrim_fill,
-    selected_fill, set_text_scale, type_body, type_control, type_small,
+    BG, FG, GAP, GLASS_CONTROL_SIGMA, PRESS_SCALE, PRIMARY_FG, RADIUS_PILL, SPRING_QUICK,
+    TRANSPARENT, bad, exo_mark, fg_muted, glass_capsule, glass_control_fill, glass_rim_bottom,
+    glass_rim_top, good, hover_fill, icon_camera, icon_chat, icon_close, icon_gamepad, icon_grid,
+    icon_library, icon_maximize, icon_minimize, icon_mouse, icon_music, icon_settings,
+    icon_sparkles, icon_store, nav_tab, pressed_fill, scrim_fill, selected_fill, set_text_scale,
+    type_body, type_small,
 };
 use rune::{Cx, El, ScrollSpec, col, el, row, text};
 
@@ -25,198 +24,6 @@ pub fn room_icon(room: Room, active: bool) -> El {
         Room::Apps => icon_grid(16.0, color),
         Room::Settings => icon_settings(16.0, color),
     }
-}
-
-fn format_keys_hint(raw: &str, fallback: &'static str) -> String {
-    let trimmed = raw.trim();
-    if trimmed.is_empty() {
-        return fallback.to_string();
-    }
-    trimmed
-        .split('+')
-        .map(str::trim)
-        .filter(|s| !s.is_empty())
-        .collect::<Vec<_>>()
-        .join(" + ")
-}
-
-fn capture_menu_row(
-    key: &'static str,
-    label: &'static str,
-    shortcut: String,
-    icon: El,
-    disabled: bool,
-) -> El {
-    let fg = if disabled { fg_faint() } else { FG };
-    let mut item = row()
-        .key(key)
-        .role("menuitem")
-        .label(label)
-        .focusable(!disabled)
-        .w_full()
-        .min_h(38.0)
-        .px(12.0)
-        .gap(10.0)
-        .justify_between()
-        .center_y()
-        .radius(RADIUS_SMALL)
-        .fill(TRANSPARENT)
-        .motion(SPRING_QUICK);
-    if !disabled {
-        item = item
-            .hit()
-            .press_on_down()
-            .hover(hover_fill())
-            .press(pressed_fill());
-    }
-    item.child(
-        row()
-            .gap(10.0)
-            .center_y()
-            .child(icon)
-            .child(text(label).font(type_control()).color(fg)),
-    )
-    .children((!shortcut.is_empty()).then(|| text(shortcut).font(type_small()).color(fg_faint())))
-}
-
-fn capture_popover(s: &AppState) -> El {
-    let status = s.media.capture_status.as_ref();
-    let present = status.is_none_or(|st| st.present);
-    let live = status.and_then(|st| st.state.as_ref());
-    let settings = status.and_then(|st| st.settings.as_ref());
-    let buffering = live.is_some_and(|l| l.replay);
-    let recording = live.is_some_and(|l| l.recording);
-
-    let replay_hint = settings
-        .map(|st| format_keys_hint(&st.save_replay_keys, "Ctrl + Alt + F10"))
-        .unwrap_or_else(|| "Ctrl + Alt + F10".to_string());
-    let record_hint = settings
-        .map(|st| format_keys_hint(&st.record_keys, "Ctrl + Alt + F9"))
-        .unwrap_or_else(|| "Ctrl + Alt + F9".to_string());
-    let snip_hint = settings
-        .map(|st| format_keys_hint(&st.snip_keys, "Ctrl + Alt + F8"))
-        .unwrap_or_else(|| "Ctrl + Alt + F8".to_string());
-
-    let mut menu = glass_panel("capture-menu", 240.0)
-        .radius(RADIUS_CARD)
-        .clip_rounded(RADIUS_CARD)
-        .px(8.0)
-        .py(8.0)
-        .gap(0.0);
-
-    if present {
-        let replay_row = capture_menu_row(
-            "cap-menu-replay",
-            "Save replay",
-            replay_hint,
-            icon_replay(16.0, if buffering { FG } else { fg_faint() }),
-            !buffering,
-        );
-        let replay_row = if buffering {
-            replay_row.on_press(|s: &mut AppState| {
-                s.capture_menu_open = false;
-                s.capture_act("saveReplay");
-            })
-        } else {
-            replay_row
-        };
-        menu = menu
-            .child(replay_row)
-            .child(
-                capture_menu_row(
-                    "cap-menu-record",
-                    if recording {
-                        "Stop recording"
-                    } else {
-                        "Record"
-                    },
-                    record_hint,
-                    icon_record_dot(16.0, FG),
-                    false,
-                )
-                .on_press(|s: &mut AppState| {
-                    s.capture_menu_open = false;
-                    s.capture_act("record");
-                }),
-            )
-            .child(
-                capture_menu_row(
-                    "cap-menu-snip",
-                    "Snip",
-                    snip_hint,
-                    icon_scissors(16.0, FG),
-                    false,
-                )
-                .on_press(|s: &mut AppState| {
-                    s.capture_menu_open = false;
-                    s.capture_act("snip");
-                }),
-            )
-            .child(
-                capture_menu_row(
-                    "cap-menu-note",
-                    "New note",
-                    String::new(),
-                    icon_plus(16.0, FG),
-                    false,
-                )
-                .on_press(|s: &mut AppState| {
-                    s.capture_menu_open = false;
-                    s.notice = Some("Quick note ready".into());
-                }),
-            )
-            .child(
-                capture_menu_row(
-                    "cap-menu-open",
-                    "Captures",
-                    String::new(),
-                    icon_film(16.0, FG),
-                    false,
-                )
-                .on_press(|s: &mut AppState| {
-                    s.capture_menu_open = false;
-                    s.open_captures(None);
-                }),
-            );
-    } else {
-        menu = menu
-            .child(
-                capture_menu_row(
-                    "cap-menu-note",
-                    "New note",
-                    String::new(),
-                    icon_plus(16.0, FG),
-                    false,
-                )
-                .on_press(|s: &mut AppState| {
-                    s.capture_menu_open = false;
-                    s.notice = Some("Quick note ready".into());
-                }),
-            )
-            .child(
-                capture_menu_row(
-                    "cap-menu-notes",
-                    "Notes",
-                    String::new(),
-                    icon_film(16.0, FG),
-                    false,
-                )
-                .on_press(|s: &mut AppState| {
-                    s.capture_menu_open = false;
-                    s.open_captures(None);
-                }),
-            );
-    }
-
-    el().key("capture-menu-backdrop")
-        .pin(Some(0.0), Some(0.0), Some(0.0), Some(0.0))
-        .hit()
-        .on_press(|s: &mut AppState| s.capture_menu_open = false)
-        .child(
-            el().pin(None, Some(52.0), Some(112.0), None)
-                .radius(RADIUS_CARD)
-                .child(menu),
-        )
 }
 
 fn gamepad_prompt_bar() -> El {
@@ -528,7 +335,7 @@ pub fn view(s: &AppState, cx: &mut Cx<AppState>) -> El {
         .child(top_bar);
 
     if s.capture_menu_open {
-        root = root.child(capture_popover(s));
+        root = root.child(captures::popover(s));
     }
     if s.gamepad_connected {
         root = root.child(gamepad_prompt_bar());
