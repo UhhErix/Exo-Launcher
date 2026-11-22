@@ -1,14 +1,14 @@
 use crate::pc_state::SettingsSection;
 use crate::state::AppState;
 use exo_kit::{
-    BG, FG, PRESS_SCALE, RADIUS_PANEL, RADIUS_PILL, RADIUS_SMALL, SPRING_QUICK, TRANSPARENT,
-    amoled_card, card_border, fg_muted, glass_button, glass_control_fill, glass_rim,
-    glass_rim_bottom, glass_rim_top, good, hairline, hover_fill, icon_check, icon_chevron_down,
-    icon_chevron_left, icon_download, icon_folder, icon_library, icon_music, icon_refresh,
-    icon_search, icon_sliders, icon_sparkles, icon_trophy, pressed_fill, primary_button,
-    progress_bar, switch_pill, type_body, type_control, type_small,
+    BG, FG, PRESS_SCALE, RADIUS_CARD, RADIUS_PILL, RADIUS_SMALL, SPRING_QUICK, TRANSPARENT,
+    amoled_card, fg_muted, float_line, glass_button, glass_control_fill, glass_rim_bottom,
+    glass_rim_top, good, hairline, hover_fill, icon_chevron_down, icon_chevron_left, icon_download,
+    icon_folder, icon_info, icon_library, icon_music, icon_refresh, icon_search, icon_sliders,
+    icon_sparkles, icon_trophy, pressed_fill, primary_button, progress_bar, scaled, selected_fill,
+    switch_pill, type_body, type_control, type_page, type_section, type_small,
 };
-use rune::{El, TextStyle, col, edit_access, el, row, text, text_input};
+use rune::{El, ScrollSpec, TextStyle, col, edit_access, el, row, text, text_input};
 
 fn nav_label(sec: SettingsSection) -> &'static str {
     match sec {
@@ -22,41 +22,49 @@ fn nav_label(sec: SettingsSection) -> &'static str {
 }
 
 fn nav_icon(sec: SettingsSection, active: bool) -> El {
-    let c = if active { FG } else { fg_muted() };
+    let c = if active { FG } else { FG.alpha(0.48) };
     match sec {
-        SettingsSection::General => icon_sliders(14.0, c),
-        SettingsSection::Account => icon_library(14.0, c),
-        SettingsSection::Appearance => icon_download(14.0, c),
-        SettingsSection::Graphics => icon_trophy(14.0, c),
-        SettingsSection::Updates => icon_music(14.0, c),
-        SettingsSection::About => icon_check(14.0, c),
+        SettingsSection::General => icon_sliders(15.0, c),
+        SettingsSection::Account => icon_library(15.0, c),
+        SettingsSection::Appearance => icon_download(15.0, c),
+        SettingsSection::Graphics => icon_trophy(15.0, c),
+        SettingsSection::Updates => icon_music(15.0, c),
+        SettingsSection::About => icon_info(15.0, c),
+    }
+}
+
+fn text_size_label(raw: &str) -> &'static str {
+    match raw {
+        "small" => "Small",
+        "large" => "Large",
+        _ => "Normal",
     }
 }
 
 fn set_row(title: &str, subtitle: Option<&str>, control: El) -> El {
-    let mut left = col()
-        .grow(1.0)
-        .min_w(0.0)
-        .gap(2.0)
-        .child(text(title.to_string()).font(TextStyle::new(13.0, 600.0)).color(FG));
+    let mut left = col().grow(1.0).min_w(0.0).gap(3.0).child(
+        text(title.to_string())
+            .font(TextStyle::new(scaled(13.0), 500.0))
+            .color(FG),
+    );
     if let Some(sub) = subtitle {
         left = left.child(
             text(sub.to_string())
-                .font(TextStyle::new(12.0, 400.0))
+                .font(TextStyle::new(scaled(13.0), 400.0))
                 .color(fg_muted())
                 .wrap(),
         );
     }
-    row()
-        .w_full()
-        .min_h(54.0)
-        .px(20.0)
-        .py(12.0)
-        .gap(16.0)
-        .justify_between()
-        .center_y()
-        .child(left)
-        .child(control)
+    el().w_full().py(12.0).px(18.0).child(
+        row()
+            .w_full()
+            .min_h(38.0)
+            .gap(16.0)
+            .justify_between()
+            .center_y()
+            .child(left)
+            .child(control),
+    )
 }
 
 fn toggle_row(key: &'static str, title: &'static str, field: &'static str, value: bool) -> El {
@@ -71,7 +79,7 @@ fn toggle_row(key: &'static str, title: &'static str, field: &'static str, value
 
 fn dropdown_pill(label: &str) -> El {
     row()
-        .h(30.0)
+        .h(32.0)
         .px(12.0)
         .gap(6.0)
         .center_y()
@@ -82,11 +90,27 @@ fn dropdown_pill(label: &str) -> El {
         .child(icon_chevron_down(12.0, fg_muted()))
 }
 
+fn section_head(title: &str) -> El {
+    row()
+        .w_full()
+        .min_h(28.0)
+        .px(2.0)
+        .center_y()
+        .justify_between()
+        .child(text(title.to_string()).font(type_section()).color(FG))
+}
+
 fn section_general(s: &AppState) -> El {
     let set = &s.settings;
-    let main_card = amoled_card(RADIUS_PANEL)
+    let main_card = amoled_card(RADIUS_CARD)
         .w_full()
-        .child(set_row("Text size", None, dropdown_pill("Small")))
+        .child(set_row(
+            "Text size",
+            None,
+            dropdown_pill(text_size_label(
+                set.text_size.as_deref().unwrap_or("normal"),
+            )),
+        ))
         .child(el().w_full().h(1.0).fill(hairline()))
         .child(toggle_row(
             "set-reduce-motion",
@@ -102,13 +126,13 @@ fn section_general(s: &AppState) -> El {
             set.start_with_windows,
         ));
 
-    let backup_card = amoled_card(RADIUS_PANEL)
+    let backup_card = amoled_card(RADIUS_CARD)
         .w_full()
         .child(set_row(
             "Last backup",
             None,
             row()
-                .gap(12.0)
+                .gap(8.0)
                 .center_y()
                 .child(text("Today").font(type_small()).color(fg_muted()))
                 .child(
@@ -133,30 +157,22 @@ fn section_general(s: &AppState) -> El {
                 ),
         ));
 
-    col()
-        .w_full()
-        .gap(20.0)
-        .child(main_card)
-        .child(
-            col()
-                .w_full()
-                .gap(10.0)
-                .child(
-                    text("Backups")
-                        .font(TextStyle::new(13.0, 600.0))
-                        .color(FG),
-                )
-                .child(backup_card),
-        )
+    col().w_full().gap(24.0).child(main_card).child(
+        col()
+            .w_full()
+            .gap(8.0)
+            .child(section_head("Backups"))
+            .child(backup_card),
+    )
 }
 
 fn section_library(s: &AppState) -> El {
     let set = &s.settings;
-    let card = amoled_card(RADIUS_PANEL)
+    let card = amoled_card(RADIUS_CARD)
         .w_full()
         .child(toggle_row(
             "set-lib-tools",
-            "Show library tools",
+            "Show tools and soundtracks",
             "showLibraryTools",
             set.show_library_tools,
         ))
@@ -181,12 +197,12 @@ fn section_library(s: &AppState) -> El {
             glass_button("set-repair-cache", "Repair cache", None)
                 .on_press(|s: &mut AppState| s.repair_app_cache()),
         ));
-    col().w_full().gap(16.0).child(card)
+    col().w_full().gap(24.0).child(card)
 }
 
 fn section_downloads(s: &AppState) -> El {
     let set = &s.settings;
-    let card = amoled_card(RADIUS_PANEL)
+    let card = amoled_card(RADIUS_CARD)
         .w_full()
         .child(toggle_row(
             "set-pause-dl",
@@ -208,16 +224,16 @@ fn section_downloads(s: &AppState) -> El {
             "autoUpdateGames",
             set.auto_update_games,
         ));
-    col().w_full().gap(16.0).child(card)
+    col().w_full().gap(24.0).child(card)
 }
 
 fn section_in_game(s: &AppState) -> El {
     let set = &s.settings;
-    let card = amoled_card(RADIUS_PANEL)
+    let card = amoled_card(RADIUS_CARD)
         .w_full()
         .child(toggle_row(
             "set-ach-banners",
-            "Achievement banners",
+            "Show achievement pop-ups",
             "achievementBanners",
             set.achievement_banners,
         ))
@@ -242,32 +258,36 @@ fn section_in_game(s: &AppState) -> El {
             "autoUpdateUpscalers",
             set.auto_update_upscalers,
         ));
-    col().w_full().gap(16.0).child(card)
+    col().w_full().gap(24.0).child(card)
 }
 
 fn section_music(s: &AppState) -> El {
     let current = s.media.music_service.label();
-    let card = amoled_card(RADIUS_PANEL)
-        .w_full()
-        .child(set_row(
-            "Music service",
-            Some("Active source for the Music room and top-bar mini player"),
-            dropdown_pill(current),
-        ));
-    col().w_full().gap(16.0).child(card)
+    let card = amoled_card(RADIUS_CARD).w_full().child(set_row(
+        "Music service",
+        Some("Active source for the Music room and top-bar mini player"),
+        dropdown_pill(current),
+    ));
+    col().w_full().gap(24.0).child(card)
 }
 
 fn section_about(s: &AppState) -> El {
-    let ver = s
-        .pc
-        .system_about
-        .as_ref()
-        .and_then(|a| a.version.as_deref())
-        .or_else(|| s.pc.update_check.as_ref().and_then(|u| u.current.as_deref()))
-        .unwrap_or("3.29.0");
-    let upd_avail = s.pc.update_check.as_ref().is_some_and(|u| u.update_available);
+    let ver =
+        s.pc.system_about
+            .as_ref()
+            .and_then(|a| a.version.as_deref())
+            .or_else(|| {
+                s.pc.update_check
+                    .as_ref()
+                    .and_then(|u| u.current.as_deref())
+            })
+            .unwrap_or("3.29.0");
+    let upd_avail =
+        s.pc.update_check
+            .as_ref()
+            .is_some_and(|u| u.update_available);
 
-    let mut card = amoled_card(RADIUS_PANEL)
+    let mut card = amoled_card(RADIUS_CARD)
         .w_full()
         .child(set_row(
             "Exo Launcher",
@@ -288,8 +308,12 @@ fn section_about(s: &AppState) -> El {
         .child(set_row(
             "Guided tour",
             Some("Walk through Library, Store, Discord, Music, Devices, and Exo AI"),
-            glass_button("set-replay-tour", "Replay tour", Some(icon_sparkles(13.0, FG)))
-                .on_press(|s: &mut AppState| s.start_tour()),
+            glass_button(
+                "set-replay-tour",
+                "Replay tour",
+                Some(icon_sparkles(13.0, FG)),
+            )
+            .on_press(|s: &mut AppState| s.start_tour()),
         ))
         .child(el().w_full().h(1.0).fill(hairline()))
         .child(set_row(
@@ -304,7 +328,7 @@ fn section_about(s: &AppState) -> El {
         card = card.child(
             col()
                 .w_full()
-                .px(20.0)
+                .px(18.0)
                 .pb(16.0)
                 .gap(6.0)
                 .child(text(prog.status.clone()).font(type_small()).color(good()))
@@ -312,42 +336,61 @@ fn section_about(s: &AppState) -> El {
         );
     }
 
-    col().w_full().gap(16.0).child(card)
+    col().w_full().gap(24.0).child(card)
 }
 
 pub fn view(s: &AppState) -> El {
     let q = s.pc.settings_query.text.trim().to_lowercase();
 
+    let back_btn = row()
+        .key("settings-back")
+        .role("button")
+        .label("Back")
+        .focusable(true)
+        .hit()
+        .press_on_down()
+        .press_scale(PRESS_SCALE)
+        .h(34.0)
+        .pl(10.0)
+        .pr(14.0)
+        .gap(6.0)
+        .center_y()
+        .radius(RADIUS_PILL)
+        .fill(glass_control_fill())
+        .hover(hover_fill())
+        .press(pressed_fill())
+        .border_gradient(1.0, glass_rim_top(), glass_rim_bottom())
+        .motion(SPRING_QUICK)
+        .on_press(|s: &mut AppState| s.toggle_settings())
+        .child(icon_chevron_left(16.0, FG))
+        .child(text("Back").font(type_body()).color(FG));
+
     let sidebar = col()
-        .w(212.0)
-        .min_h(720.0)
-        .pt(60.0)
-        .px(14.0)
-        .pb(28.0)
+        .w(scaled(280.0))
+        .h_full()
+        .py(24.0)
+        .px(16.0)
         .gap(14.0)
-        .border_sides([0.0, 1.0, 0.0, 0.0], hairline())
+        .border_sides([0.0, 1.0, 0.0, 0.0], float_line())
+        .child(row().child(back_btn))
         .child(
-            row().child(
-                glass_button("settings-back", "Back", Some(icon_chevron_left(14.0, FG)))
-                    .on_press(|s: &mut AppState| s.toggle_settings()),
-            ),
-        )
-        .child(
-            text("Settings")
-                .font(TextStyle::new(26.0, 700.0))
-                .color(FG),
+            row()
+                .h(scaled(42.0))
+                .px(8.0)
+                .center_y()
+                .child(text("Settings").font(type_page()).color(FG)),
         )
         .child(
             row()
                 .w_full()
-                .h(34.0)
-                .px(11.0)
+                .h(36.0)
+                .px(12.0)
                 .gap(8.0)
                 .center_y()
                 .radius(RADIUS_PILL)
-                .fill(BG)
-                .border(1.0, glass_rim())
-                .child(icon_search(13.0, fg_muted()))
+                .fill(glass_control_fill())
+                .border_gradient(1.0, glass_rim_top(), glass_rim_bottom())
+                .child(icon_search(15.0, fg_muted()))
                 .child(
                     text_input(&s.pc.settings_query, type_body())
                         .key("settings-search")
@@ -359,39 +402,48 @@ pub fn view(s: &AppState) -> El {
                         .on_edit(edit_access(|s: &mut AppState| &mut s.pc.settings_query)),
                 ),
         )
-        .child(col().w_full().gap(2.0).children(SettingsSection::ALL.into_iter().map(|sec| {
-            let active = s.pc.settings_section == sec && q.is_empty();
-            row()
-                .key(sec.key())
-                .role("tab")
-                .label(nav_label(sec))
-                .focusable(true)
-                .hit()
-                .press_on_down()
-                .press_scale(PRESS_SCALE)
+        .child(
+            col()
                 .w_full()
-                .h(36.0)
-                .px(12.0)
-                .gap(10.0)
-                .center_y()
-                .radius(RADIUS_SMALL)
-                .fill(if active { FG.alpha(0.11) } else { TRANSPARENT })
-                .hover(hover_fill())
-                .press(pressed_fill())
-                .border(if active { 1.0 } else { 0.0 }, card_border())
-                .motion(SPRING_QUICK)
-                .on_press(move |s: &mut AppState| {
-                    s.pc.settings_section = sec;
-                    s.pc.settings_query.text.clear();
-                    s.pc.settings_query.sync_invariants();
-                })
-                .child(nav_icon(sec, active))
-                .child(
-                    text(nav_label(sec))
-                        .font(TextStyle::new(13.0, if active { 600.0 } else { 500.0 }))
-                        .color(if active { FG } else { fg_muted() }),
-                )
-        })));
+                .gap(3.0)
+                .children(SettingsSection::ALL.into_iter().map(|sec| {
+                    let active = s.pc.settings_section == sec && q.is_empty();
+                    let mut item = row()
+                        .key(sec.key())
+                        .role("tab")
+                        .label(nav_label(sec))
+                        .focusable(true)
+                        .hit()
+                        .press_on_down()
+                        .press_scale(PRESS_SCALE)
+                        .w_full()
+                        .min_h(36.0)
+                        .py(6.0)
+                        .px(12.0)
+                        .gap(10.0)
+                        .center_y()
+                        .radius(RADIUS_SMALL)
+                        .fill(if active { selected_fill() } else { TRANSPARENT })
+                        .hover(hover_fill())
+                        .press(pressed_fill())
+                        .motion(SPRING_QUICK)
+                        .on_press(move |s: &mut AppState| {
+                            s.pc.settings_section = sec;
+                            s.pc.settings_query.text.clear();
+                            s.pc.settings_query.sync_invariants();
+                        })
+                        .child(nav_icon(sec, active))
+                        .child(
+                            text(nav_label(sec))
+                                .font(if active { type_section() } else { type_body() })
+                                .color(if active { FG } else { fg_muted() }),
+                        );
+                    if active {
+                        item = item.border_gradient(1.0, glass_rim_top(), glass_rim_bottom());
+                    }
+                    item
+                })),
+        );
 
     let title = nav_label(s.pc.settings_section);
     let body = match s.pc.settings_section {
@@ -404,23 +456,35 @@ pub fn view(s: &AppState) -> El {
     };
 
     let right_col = col()
+        .key("settings-scroll")
         .grow(1.0)
         .min_w(0.0)
-        .pt(64.0)
-        .px(44.0)
-        .pb(40.0)
+        .h_full()
+        .scroll(ScrollSpec {
+            stick_bottom: false,
+        })
         .items_center()
         .child(
             col()
                 .w_full()
-                .max_w(680.0)
-                .gap(20.0)
-                .child(text(title).font(TextStyle::new(24.0, 700.0)).color(FG))
-                .child(body),
+                .max_w(scaled(960.0))
+                .pt(24.0)
+                .px(36.0)
+                .pb(48.0)
+                .child(
+                    row()
+                        .h(scaled(42.0))
+                        .center_y()
+                        .child(text(title).font(type_page()).color(FG)),
+                )
+                .child(col().w_full().pt(20.0).child(body)),
         );
 
     row()
         .w_full()
+        .h_full()
+        .pt(52.0)
+        .fill(BG)
         .items_start()
         .child(sidebar)
         .child(right_col)

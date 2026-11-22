@@ -126,6 +126,13 @@ fn load_live_state_sync(pipe: &str, scene: Option<&str>) -> AppState {
     ) {
         state.apply_library(lib);
     }
+    if let Ok(set) = client.call_blocking::<_, exo_rpc::LauncherSettings>(
+        exo_rpc::METHOD_SETTINGS_GET,
+        &serde_json::json!({}),
+        Duration::from_secs(5),
+    ) {
+        state.settings = set;
+    }
     match scene {
         Some("store") => {
             if let Ok(home) = client.call_blocking::<_, exo_rpc::StoreHome>(
@@ -135,13 +142,25 @@ fn load_live_state_sync(pipe: &str, scene: Option<&str>) -> AppState {
             ) && home.ok
             {
                 let mut urls = Vec::new();
-                for h in home.hero.iter().take(6) {
-                    if let Some(u) = h.art.as_ref().and_then(|a| a.best_hero()) {
-                        urls.push(u.to_string());
+                for (i, h) in home.hero.iter().take(6).enumerate() {
+                    if let Some(a) = h.art.as_ref() {
+                        if i == 0
+                            && let Some(u) = a.best_hero()
+                        {
+                            urls.push(u.to_string());
+                        }
+                        if let Some(u) = a
+                            .capsule
+                            .as_deref()
+                            .or(a.header.as_deref())
+                            .or_else(|| a.best_hero())
+                        {
+                            urls.push(u.to_string());
+                        }
                     }
                 }
                 for shelf in home.shelves.iter().take(2) {
-                    for tile in shelf.items.iter().take(10) {
+                    for tile in shelf.items.iter().take(12) {
                         if let Some(u) = tile.art.as_ref().and_then(|a| a.best_poster()) {
                             urls.push(u.to_string());
                         }
@@ -155,7 +174,56 @@ fn load_live_state_sync(pipe: &str, scene: Option<&str>) -> AppState {
                 state.store_home = Some(home);
             }
         }
-        Some("settings") => {
+        Some("game") | Some("game-page") => {
+            if let Ok(set) = client.call_blocking::<_, exo_rpc::LauncherSettings>(
+                exo_rpc::METHOD_SETTINGS_GET,
+                &serde_json::json!({}),
+                Duration::from_secs(5),
+            ) {
+                state.settings = set;
+            }
+            if let Some(gid) = state
+                .selected_game_id
+                .clone()
+                .or_else(|| state.games.first().map(|g| g.id.clone()))
+            {
+                state.open_game_id = Some(gid.clone());
+                if let Ok(ext) = client.call_blocking::<_, exo_rpc::GameExtras>(
+                    exo_rpc::METHOD_GAME_EXTRAS,
+                    &serde_json::json!({ "id": gid }),
+                    Duration::from_secs(6),
+                ) {
+                    state.game_extras = Some(ext);
+                }
+                if let Ok(props) = client.call_blocking::<_, exo_rpc::GameProperties>(
+                    exo_rpc::METHOD_GAME_PROPERTIES,
+                    &serde_json::json!({ "id": gid }),
+                    Duration::from_secs(6),
+                ) {
+                    state.props_launch_opts.text = props.launch_options.clone().unwrap_or_default();
+                    state.props_launch_opts.sync_invariants();
+                    state.game_props = Some(props);
+                }
+            }
+        }
+        Some("library-all") | Some("all-games") => {
+            state.library_all_games = true;
+            if let Some(ref cache_dir) = state.remote_cache_dir {
+                let urls: Vec<String> = state
+                    .filtered_games()
+                    .into_iter()
+                    .take(48)
+                    .filter(|g| state.art_base.resolve_local_portrait(g).is_none())
+                    .filter_map(|g| g.cover_url.as_deref())
+                    .filter(|u| u.starts_with("https://"))
+                    .map(str::to_string)
+                    .collect();
+                for url in urls {
+                    let _ = exo_rpc::remote_art::fetch_cached_image(&url, cache_dir);
+                }
+            }
+        }
+        Some("settings") | Some("palette") => {
             if let Ok(set) = client.call_blocking::<_, exo_rpc::LauncherSettings>(
                 exo_rpc::METHOD_SETTINGS_GET,
                 &serde_json::json!({}),
@@ -214,15 +282,36 @@ fn load_live_state_sync(pipe: &str, scene: Option<&str>) -> AppState {
             ) {
                 state.pc.hdr = Some(hdr);
             }
-            if let Ok(sh) = client.call_blocking::<_, exo_rpc::ShadersAddonStatus>(
+            if let Ok(v) = client.call_blocking::<_, serde_json::Value>(
                 exo_rpc::METHOD_SHADERS_ADDON,
                 &serde_json::json!({}),
                 Duration::from_secs(5),
             ) {
-                if let Some(ref snap) = sh.snapshot {
-                    state.pc.shader_snap_games = snap.games.clone();
+                let present = v.get("present").and_then(|x| x.as_bool()).unwrap_or(false);
+                if let Some(snap_val) = v.get("snapshot") {
+                    state.pc.shader_snap_games = pc_actions::parse_shader_snap_games(snap_val);
                 }
-                state.pc.shaders = Some(sh);
+                state.pc.shaders = Some(exo_rpc::ShadersAddonStatus {
+                    ok: v.get("ok").and_then(|x| x.as_bool()).unwrap_or(true),
+                    present,
+                    state: v.get("state").and_then(|x| x.as_str()).map(str::to_string),
+                    message: v
+                        .get("message")
+                        .and_then(|x| x.as_str())
+                        .map(str::to_string),
+                    snapshot: None,
+                });
+                if present
+                    && state.pc.shader_snap_games.is_empty()
+                    && let Ok(sv) = client.call_blocking::<_, serde_json::Value>(
+                        exo_rpc::METHOD_SHADERS_CALL,
+                        &serde_json::json!({ "method": "snapshot", "params": {} }),
+                        Duration::from_secs(12),
+                    )
+                    && let Some(res_val) = sv.get("result")
+                {
+                    state.pc.shader_snap_games = pc_actions::parse_shader_snap_games(res_val);
+                }
             }
             if let Ok(est) = client.call_blocking::<_, exo_rpc::ShadersEstimatesReply>(
                 exo_rpc::METHOD_SHADERS_ESTIMATES,
@@ -246,12 +335,50 @@ fn load_live_state_sync(pipe: &str, scene: Option<&str>) -> AppState {
             ) {
                 state.pc.system_about = Some(about);
             }
+            if let Ok(gp) = client.call_blocking::<_, serde_json::Value>(
+                "gpu.profile",
+                &serde_json::json!({}),
+                Duration::from_secs(6),
+            ) {
+                let (gpu_name, screen) = pc_actions::parse_gpu_profile_fields(&gp);
+                state.pc.gpu_short_name = gpu_name;
+                state.pc.screen_label = screen;
+            }
+            if let Ok(cl) = client.call_blocking::<_, serde_json::Value>(
+                "compress.list",
+                &serde_json::json!({}),
+                Duration::from_secs(6),
+            ) {
+                let (potential, saved) = pc_actions::parse_compress_totals(&cl);
+                state.pc.compress_potential_bytes = potential;
+                state.pc.compress_saved_bytes = saved;
+            }
             if let Ok(drv) = client.call_blocking::<_, exo_rpc::DrivesReply>(
                 exo_rpc::METHOD_SYSTEM_DRIVES,
                 &serde_json::json!({ "space": false }),
                 Duration::from_secs(8),
             ) {
                 state.pc.drives = Some(drv);
+            }
+            if let Some(ref cache_dir) = state.remote_cache_dir {
+                let urls: Vec<String> = state
+                    .pc
+                    .shader_snap_games
+                    .iter()
+                    .filter_map(|sg| {
+                        state
+                            .games
+                            .iter()
+                            .find(|g| g.id == sg.id || g.title.eq_ignore_ascii_case(&sg.name))
+                    })
+                    .filter(|g| state.art_base.resolve_local_portrait(g).is_none())
+                    .filter_map(|g| g.cover_url.as_deref())
+                    .filter(|u| u.starts_with("https://"))
+                    .map(str::to_string)
+                    .collect();
+                for url in urls {
+                    let _ = exo_rpc::remote_art::fetch_cached_image(&url, cache_dir);
+                }
             }
         }
         Some("pc-apps") => {
@@ -261,8 +388,12 @@ fn load_live_state_sync(pipe: &str, scene: Option<&str>) -> AppState {
                 Duration::from_secs(12),
             ) {
                 let mut by_size: Vec<&exo_rpc::InstalledAppItem> = list.programs.iter().collect();
-                by_size.sort_by(|a, b| b.bytes.unwrap_or(0).cmp(&a.bytes.unwrap_or(0)));
-                let ids: Vec<String> = by_size.into_iter().take(100).map(|p| p.id.clone()).collect();
+                by_size.sort_by_key(|a| std::cmp::Reverse(a.bytes.unwrap_or(0)));
+                let ids: Vec<String> = by_size
+                    .into_iter()
+                    .take(100)
+                    .map(|p| p.id.clone())
+                    .collect();
                 if !ids.is_empty()
                     && let Ok(ic) = client.call_blocking::<_, exo_rpc::AppsIconsReply>(
                         exo_rpc::METHOD_APPS_ICONS,
@@ -295,7 +426,11 @@ fn load_live_state_sync(pipe: &str, scene: Option<&str>) -> AppState {
                 Duration::from_secs(6),
             ) && let Some(hp) = eq.headphone
             {
-                let look = if hp.form == "over-ear" { "headphones" } else { "iem" };
+                let look = if hp.form == "over-ear" {
+                    "headphones"
+                } else {
+                    "iem"
+                };
                 if let Ok(reply) = client.call_blocking::<_, exo_rpc::DevicesImageReply>(
                     exo_rpc::METHOD_DEVICES_IMAGE,
                     &serde_json::json!({
@@ -323,6 +458,8 @@ fn load_live_state_sync(pipe: &str, scene: Option<&str>) -> AppState {
                             "name": dev.name,
                             "model": dev.model,
                             "maker": dev.maker.as_deref().or(dev.brand.as_deref()),
+                            "color": dev.color,
+                            "layout": dev.layout,
                         }),
                         Duration::from_secs(8),
                     ) && let Some(url) = reply.url
@@ -444,7 +581,7 @@ fn tray_icon_rgba() -> TrayIcon {
             let dy = y as f32 - 7.5;
             let r2 = dx * dx + dy * dy;
             let idx = ((y * SIZE + x) * 4) as usize;
-            if r2 <= 52.0 && r2 >= 16.0 {
+            if (16.0..=52.0).contains(&r2) {
                 rgba[idx] = 255;
                 rgba[idx + 1] = 255;
                 rgba[idx + 2] = 255;
@@ -461,36 +598,70 @@ fn main() {
         .iter()
         .any(|a| a == "--snap" || a == "--tree" || a == "--script" || a == "--headless");
 
-    let mut spec = AppSpec::new("Exo Launcher", (1280.0, 800.0), AppState::default, shell::view);
+    let mut spec = AppSpec::new(
+        "Exo Launcher",
+        (1280.0, 800.0),
+        AppState::default,
+        shell::view,
+    );
     spec.fonts = FONTS;
     spec.families = FONT_FAMILIES;
     spec.setup = Some(setup_state);
     spec.on_key = Some(on_key);
     spec.scenes = &[
-        ("palette", |s: &mut AppState| s.palette_open = true),
+        ("palette", |s: &mut AppState| {
+            s.switch_room(state::Room::Settings);
+            s.palette_open = true;
+        }),
+        ("game", |s: &mut AppState| {
+            let target = s
+                .open_game_id
+                .clone()
+                .or_else(|| s.selected_game_id.clone())
+                .or_else(|| s.games.first().map(|g| g.id.clone()))
+                .unwrap_or_else(|| "demo:cyberpunk".into());
+            if s.open_game_id.as_deref() != Some(target.as_str()) {
+                s.open_game_page(&target);
+            } else {
+                s.room = state::Room::Library;
+            }
+        }),
         ("game-page", |s: &mut AppState| {
             let target = if s.games.iter().any(|g| g.id == "demo:cyberpunk") {
                 "demo:cyberpunk".to_string()
             } else {
-                s.selected_game_id
+                s.open_game_id
                     .clone()
+                    .or_else(|| s.selected_game_id.clone())
                     .or_else(|| s.games.first().map(|g| g.id.clone()))
                     .unwrap_or_else(|| "demo:cyberpunk".into())
             };
-            s.open_game_page(&target);
+            if s.open_game_id.as_deref() != Some(target.as_str()) {
+                s.open_game_page(&target);
+            } else {
+                s.room = state::Room::Library;
+            }
+        }),
+        ("library-all", |s: &mut AppState| {
+            s.switch_room(state::Room::Library);
+            s.library_all_games = true;
         }),
         ("all-games", |s: &mut AppState| {
             s.switch_room(state::Room::Library);
             s.library_all_games = true;
         }),
-        ("store", |s: &mut AppState| s.switch_room(state::Room::Store)),
+        ("store", |s: &mut AppState| {
+            s.switch_room(state::Room::Store)
+        }),
         ("store-game", |s: &mut AppState| {
             s.switch_room(state::Room::Store);
             s.open_store_game("1091500");
         }),
         ("tour", |s: &mut AppState| s.start_tour()),
         ("activate-key", |s: &mut AppState| s.key_modal_open = true),
-        ("settings", |s: &mut AppState| s.switch_room(state::Room::Settings)),
+        ("settings", |s: &mut AppState| {
+            s.switch_room(state::Room::Settings)
+        }),
         ("pc", |s: &mut AppState| s.switch_room(state::Room::ExoAi)),
         ("pc-apps", |s: &mut AppState| {
             s.switch_room(state::Room::Apps);
@@ -504,7 +675,9 @@ fn main() {
             s.switch_room(state::Room::Devices);
             s.switch_pc_tab(pc_state::PcTab::Devices);
         }),
-        ("music", |s: &mut AppState| s.switch_room(state::Room::Music)),
+        ("music", |s: &mut AppState| {
+            s.switch_room(state::Room::Music)
+        }),
         ("music-immersion", |s: &mut AppState| {
             s.switch_room(state::Room::Music);
             s.media.music_immersion = true;
@@ -516,7 +689,9 @@ fn main() {
                 s.open_capture_item(&first);
             }
         }),
-        ("discord", |s: &mut AppState| s.switch_room(state::Room::Discord)),
+        ("discord", |s: &mut AppState| {
+            s.switch_room(state::Room::Discord)
+        }),
         ("discord-messages", |s: &mut AppState| {
             s.switch_room(state::Room::Discord);
             s.open_discord_place(discord_state::DiscordPlace::Messages);
@@ -826,16 +1001,30 @@ mod tests {
         rt.frame(5.0 / 60.0);
         assert_eq!(rt.state.room, Room::Devices);
 
-        let (wx, wy) = rt.find("dev-card-dev:wooting").expect("Wooting device card");
+        let (wx, wy) = rt
+            .find("dev-card-dev:wooting")
+            .expect("Wooting device card");
         rt.pointer_down(wx, wy);
         rt.pointer_up(wx, wy);
         rt.frame(6.0 / 60.0);
-        let act_before = rt.state.pc.keyboard.as_ref().and_then(|k| k.actuation_mm).unwrap_or(0.4);
+        let act_before = rt
+            .state
+            .pc
+            .keyboard
+            .as_ref()
+            .and_then(|k| k.actuation_mm)
+            .unwrap_or(0.4);
         let (ux, uy) = rt.find("kb-act-up").expect("Wooting actuation +");
         rt.pointer_down(ux, uy);
         rt.pointer_up(ux, uy);
         rt.frame(7.0 / 60.0);
-        let act_after = rt.state.pc.keyboard.as_ref().and_then(|k| k.actuation_mm).unwrap_or(0.0);
+        let act_after = rt
+            .state
+            .pc
+            .keyboard
+            .as_ref()
+            .and_then(|k| k.actuation_mm)
+            .unwrap_or(0.0);
         assert!((act_after - (act_before + 0.1)).abs() < 0.01);
     }
 
@@ -854,7 +1043,10 @@ mod tests {
             .iter()
             .filter(|i| i.params[1] == KIND_BACKDROP_BLUR)
             .count();
-        assert!(blurs <= 4, "mini-player exceeded MAX_BACKDROP_BLURS=4: {blurs}");
+        assert!(
+            blurs <= 4,
+            "mini-player exceeded MAX_BACKDROP_BLURS=4: {blurs}"
+        );
 
         let (mx, my) = rt.find("mini-open-music").expect("Mini player open Music");
         rt.pointer_down(mx, my);
@@ -872,7 +1064,9 @@ mod tests {
         rt.update(|s, _| s.open_captures(None));
         rt.frame(3.0 / 60.0);
         assert!(rt.state.media.captures_open);
-        let (cx, cy) = rt.find("cap-card-cap0000000000001").expect("First capture card");
+        let (cx, cy) = rt
+            .find("cap-card-cap0000000000001")
+            .expect("First capture card");
         rt.pointer_down(cx, cy);
         rt.pointer_up(cx, cy);
         rt.frame(4.0 / 60.0);
@@ -906,7 +1100,10 @@ mod tests {
         rt.pointer_down(mx, my);
         rt.pointer_up(mx, my);
         rt.frame(1.0 / 60.0);
-        assert_eq!(rt.state.discord.place, discord_state::DiscordPlace::Messages);
+        assert_eq!(
+            rt.state.discord.place,
+            discord_state::DiscordPlace::Messages
+        );
         assert!(rt.find("dc-dm-stage").is_some());
 
         let (sx, sy) = rt.find("dc-place-servers").expect("Servers tab");
@@ -922,7 +1119,9 @@ mod tests {
         assert_eq!(rt.state.discord.active_guild_id.as_deref(), Some("g-exo"));
         assert!(rt.find("dc-members-panel").is_some());
 
-        let (vx, vy) = rt.find("dc-ch-vc-lounge").expect("Main Lounge voice channel");
+        let (vx, vy) = rt
+            .find("dc-ch-vc-lounge")
+            .expect("Main Lounge voice channel");
         rt.pointer_down(vx, vy);
         rt.pointer_up(vx, vy);
         rt.frame(4.0 / 60.0);
@@ -974,7 +1173,10 @@ mod tests {
             .iter()
             .filter(|i| i.params[1] == KIND_BACKDROP_BLUR)
             .count();
-        assert!(blurs <= 4, "Discord chat exceeded MAX_BACKDROP_BLURS=4: {blurs}");
+        assert!(
+            blurs <= 4,
+            "Discord chat exceeded MAX_BACKDROP_BLURS=4: {blurs}"
+        );
 
         let before_count = rt
             .state
@@ -1043,7 +1245,10 @@ mod tests {
             .iter()
             .filter(|i| i.params[1] == KIND_BACKDROP_BLUR)
             .count();
-        assert!(blurs <= 4, "Discord voice exceeded MAX_BACKDROP_BLURS=4: {blurs}");
+        assert!(
+            blurs <= 4,
+            "Discord voice exceeded MAX_BACKDROP_BLURS=4: {blurs}"
+        );
 
         let (gx, gy) = rt.find("dc-vc-share").expect("Share screen button");
         rt.pointer_down(gx, gy);

@@ -62,24 +62,27 @@ pub fn view(s: &AppState) -> El {
     let is_first = idx == 0;
     let is_last = idx + 1 >= STEPS.len();
 
-    let dots = row().gap(4.0).center_y().children((0..STEPS.len()).map(|i| {
-        let active = i == idx;
-        el().key(format!("tour-dot-{i}"))
-            .role("button")
-            .label(format!("Step {}", i + 1))
-            .focusable(true)
-            .hit()
-            .press_on_down()
-            .size(22.0, 22.0)
-            .center()
-            .on_press(move |s: &mut AppState| s.jump_tour(i))
-            .child(
-                el().size(if active { 16.0 } else { 6.0 }, 6.0)
-                    .radius(3.0)
-                    .fill(if active { FG } else { Color::WHITE.alpha(0.28) })
-                    .motion(SPRING_QUICK),
-            )
-    }));
+    let dots = row()
+        .gap(4.0)
+        .center_y()
+        .children((0..STEPS.len()).map(|i| {
+            let active = i == idx;
+            el().key(format!("tour-dot-{i}"))
+                .role("button")
+                .label(format!("Step {}", i + 1))
+                .focusable(true)
+                .hit()
+                .press_on_down()
+                .size(22.0, 22.0)
+                .center()
+                .on_press(move |s: &mut AppState| s.jump_tour(i))
+                .child(
+                    el().size(if active { 16.0 } else { 6.0 }, 6.0)
+                        .radius(3.0)
+                        .fill(if active { FG } else { Color::WHITE.alpha(0.28) })
+                        .motion(SPRING_QUICK),
+                )
+        }));
 
     let body = col()
         .w_full()
@@ -118,8 +121,20 @@ pub fn view(s: &AppState) -> El {
                         .child(text("Skip").font(type_small()).color(fg_muted())),
                 ),
         )
-        .child(text(step.title).font(type_title()).color(FG).w_full().wrap())
-        .child(text(step.body).font(type_body()).color(fg_muted()).w_full().wrap());
+        .child(
+            text(step.title)
+                .font(type_title())
+                .color(FG)
+                .w_full()
+                .wrap(),
+        )
+        .child(
+            text(step.body)
+                .font(type_body())
+                .color(fg_muted())
+                .w_full()
+                .wrap(),
+        );
 
     let mut nav = row().gap(8.0).center_y();
     if !is_first {

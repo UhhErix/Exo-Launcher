@@ -63,6 +63,8 @@ pub struct SystemAbout {
     #[serde(default)]
     pub network: Option<String>,
     #[serde(default)]
+    pub network_mbps: Option<f64>,
+    #[serde(default)]
     pub display: Option<String>,
     #[serde(default)]
     pub version: Option<String>,
@@ -662,6 +664,10 @@ pub struct PeripheralCard {
     pub polling_hz: Option<i32>,
     #[serde(default)]
     pub wooting: bool,
+    #[serde(default)]
+    pub color: Option<String>,
+    #[serde(default)]
+    pub layout: Option<String>,
     #[serde(default)]
     pub port: Option<PeripheralPort>,
 }

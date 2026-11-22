@@ -1,19 +1,21 @@
 use crate::shell::room_icon;
 use crate::state::{AppState, PaletteItem, PaletteTarget};
 use exo_kit::{
-    BG, FG, RADIUS_SMALL, SPRING_BASE, TRANSPARENT, fg_muted, glass_panel, hover_fill,
-    icon_gamepad, icon_key, icon_refresh, icon_search, icon_sparkles, type_body, type_small,
+    BG, FG, RADIUS_PANEL, RADIUS_SMALL, SPRING_BASE, TRANSPARENT, fg_muted, float_line, hover_fill,
+    icon_gamepad, icon_key, icon_refresh, icon_search, icon_sparkles, scaled, scrim_fill,
+    type_body, type_control, type_small,
 };
-use rune::{El, Key, KeyEvent, ScrollSpec, TextStyle, Tx, col, edit_access, el, row, text, text_input};
+use rune::{
+    El, Key, KeyEvent, ScrollSpec, TextStyle, Tx, col, edit_access, el, row, text, text_input,
+};
 
 fn palette_icon(target: &PaletteTarget) -> El {
     match target {
         PaletteTarget::Room(room) => room_icon(*room, false),
-        PaletteTarget::OpenGame(_) | PaletteTarget::LaunchGame(_) => icon_gamepad(15.0, fg_muted()),
-        PaletteTarget::RefreshLibrary => icon_refresh(14.0, fg_muted()),
-        PaletteTarget::ActivateKey => icon_key(14.0, fg_muted()),
-        PaletteTarget::StartTour => icon_sparkles(14.0, fg_muted()),
-        PaletteTarget::ToggleFilter(_) => icon_search(14.0, fg_muted()),
+        PaletteTarget::OpenGame(_) => icon_gamepad(16.0, fg_muted()),
+        PaletteTarget::RefreshLibrary => icon_refresh(16.0, fg_muted()),
+        PaletteTarget::ActivateKey => icon_key(16.0, fg_muted()),
+        PaletteTarget::StartTour => icon_sparkles(16.0, fg_muted()),
     }
 }
 
@@ -28,11 +30,11 @@ fn palette_row(item: PaletteItem, index: usize, selected: bool) -> El {
         .hit()
         .press_on_down()
         .w_full()
-        .h(36.0)
-        .px(12.0)
-        .gap(10.0)
+        .h(scaled(44.0))
+        .px(scaled(10.0))
+        .gap(scaled(12.0))
         .center_y()
-        .radius(RADIUS_SMALL)
+        .radius(RADIUS_SMALL + 2.0)
         .fill(if selected { hover_fill() } else { TRANSPARENT })
         .hover(hover_fill())
         .on_press_tx(move |s: &mut AppState, tx| {
@@ -40,12 +42,7 @@ fn palette_row(item: PaletteItem, index: usize, selected: bool) -> El {
             s.execute_palette_target(target.clone(), tx);
         })
         .child(icon)
-        .child(
-            text(item.title)
-                .font(TextStyle::new(13.0, 500.0))
-                .color(FG)
-                .truncate(),
-        )
+        .child(text(item.title).font(type_control()).color(FG).truncate())
 }
 
 pub fn handle_palette_key(s: &mut AppState, ev: &KeyEvent, tx: &mut Tx) -> bool {
@@ -106,24 +103,22 @@ pub fn view(s: &AppState) -> El {
             }
         });
 
+    let header_h = scaled(48.0);
     let header = row()
         .w_full()
-        .h(46.0)
-        .px(16.0)
-        .gap(10.0)
+        .h(header_h)
+        .px(scaled(16.0))
+        .gap(scaled(12.0))
         .center_y()
-        .child(icon_search(15.0, fg_muted()))
+        .child(icon_search(16.0, fg_muted()))
         .child(input);
 
     let body = if items.is_empty() {
-        el().w_full()
-            .h(72.0)
-            .center()
-            .child(
-                text("No matching games or commands")
-                    .font(type_small())
-                    .color(fg_muted()),
-            )
+        el().w_full().h(72.0).center().child(
+            text("No matching games or commands")
+                .font(type_small())
+                .color(fg_muted()),
+        )
     } else {
         let mut rows: Vec<El> = Vec::new();
         let mut last_group: Option<&'static str> = None;
@@ -131,12 +126,16 @@ pub fn view(s: &AppState) -> El {
             if last_group != Some(item.group) {
                 rows.push(
                     el().w_full()
-                        .px(12.0)
-                        .pt(if last_group.is_some() { 10.0 } else { 4.0 })
-                        .pb(4.0)
+                        .px(scaled(10.0))
+                        .pt(if last_group.is_some() {
+                            scaled(12.0)
+                        } else {
+                            scaled(8.0)
+                        })
+                        .pb(scaled(4.0))
                         .child(
                             text(item.group)
-                                .font(TextStyle::new(11.0, 600.0))
+                                .font(TextStyle::new(scaled(12.0), 500.0))
                                 .color(fg_muted()),
                         ),
                 );
@@ -146,23 +145,33 @@ pub fn view(s: &AppState) -> El {
         }
         col()
             .w_full()
-            .max_h(520.0)
-            .px(6.0)
-            .pb(8.0)
-            .gap(1.0)
-            .scroll(ScrollSpec { stick_bottom: false })
+            .max_h(821.0 - header_h)
+            .px(scaled(6.0))
+            .py(scaled(6.0))
+            .scroll(ScrollSpec {
+                stick_bottom: false,
+            })
+            .clip_fade_linear(0.0, 0.0, 0.0, 36.0)
             .children(rows)
     };
 
-    let card = glass_panel("command-palette", 468.0)
+    let card = col()
+        .key("command-palette")
+        .w(scaled(576.0))
+        .max_h(821.0)
+        .radius(RADIUS_PANEL)
+        .continuous_corners()
+        .clip_rounded(RADIUS_PANEL)
+        .fill(BG)
+        .border(1.0, float_line())
         .motion(SPRING_BASE)
         .child(header)
         .child(body);
 
     el().key("palette-scrim")
         .pin(Some(0.0), Some(0.0), Some(0.0), Some(0.0))
-        .fill(BG.alpha(0.55))
+        .fill(scrim_fill())
         .hit()
         .on_press(|s: &mut AppState| s.close_palette())
-        .child(col().w_full().h_full().pt(92.0).items_center().child(card))
+        .child(col().w_full().h_full().pt(130.0).items_center().child(card))
 }

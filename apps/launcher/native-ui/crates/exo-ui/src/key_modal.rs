@@ -8,7 +8,10 @@ use rune::{El, Key, col, edit_access, el, row, text, text_input};
 pub fn view(s: &AppState) -> El {
     let preview_note = if let Some(ref preview) = s.key_preview {
         if let Some(ref store) = preview.store {
-            Some(format!("Detected {} key", exo_rpc::types::store_label(store)))
+            Some(format!(
+                "Detected {} key",
+                exo_rpc::types::store_label(store)
+            ))
         } else if preview.looks_like_key {
             Some("Valid key format detected".into())
         } else {
@@ -86,7 +89,11 @@ pub fn view(s: &AppState) -> El {
         .child(
             primary_button(
                 "key-submit",
-                if s.key_submitting { "Activating…" } else { "Activate" },
+                if s.key_submitting {
+                    "Activating…"
+                } else {
+                    "Activate"
+                },
                 None,
             )
             .opacity(if can_submit { 1.0 } else { 0.45 })

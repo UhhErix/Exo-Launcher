@@ -1,132 +1,212 @@
+use crate::state::{AppState, Room};
 use crate::{
     captures, discord, game_page, key_modal, library, music, palette, pc, settings, store, tour,
 };
-use crate::state::{AppState, Room};
 use exo_kit::{
-    BG, FG, GAP, GLASS_CONTROL_SIGMA, PRESS_SCALE, PRIMARY_FG, RADIUS_PANEL, RADIUS_PILL,
-    RADIUS_SMALL, SPRING_QUICK, TRANSPARENT, exo_mark, fg_faint, fg_muted, glass_capsule,
+    BG, FG, GAP, GLASS_CONTROL_SIGMA, PRESS_SCALE, PRIMARY_FG, RADIUS_CARD, RADIUS_PILL,
+    RADIUS_SMALL, SPRING_QUICK, TRANSPARENT, bad, exo_mark, fg_faint, fg_muted, glass_capsule,
     glass_control_fill, glass_panel, glass_rim_bottom, glass_rim_top, good, hover_fill,
     icon_camera, icon_chat, icon_close, icon_film, icon_gamepad, icon_grid, icon_library,
     icon_maximize, icon_minimize, icon_mouse, icon_music, icon_plus, icon_record_dot, icon_replay,
-    icon_scissors, icon_settings, icon_sparkles, icon_store, nav_tab, pressed_fill, type_control,
-    type_small,
+    icon_scissors, icon_settings, icon_sparkles, icon_store, nav_tab, pressed_fill, scrim_fill,
+    selected_fill, set_text_scale, type_body, type_control, type_small,
 };
-use rune::{Cx, El, ScrollSpec, TextStyle, col, el, row, text};
+use rune::{Cx, El, ScrollSpec, col, el, row, text};
 
 pub fn room_icon(room: Room, active: bool) -> El {
     let color = if active { PRIMARY_FG } else { FG };
     match room {
-        Room::Library => icon_library(15.0, color),
-        Room::Store => icon_store(15.0, color),
-        Room::Discord => icon_chat(15.0, color),
-        Room::Music => icon_music(15.0, color),
-        Room::Devices => icon_mouse(15.0, color),
-        Room::ExoAi => icon_sparkles(15.0, color),
-        Room::Apps => icon_grid(15.0, color),
-        Room::Settings => icon_settings(15.0, color),
+        Room::Library => icon_library(16.0, color),
+        Room::Store => icon_store(16.0, color),
+        Room::Discord => icon_chat(16.0, color),
+        Room::Music => icon_music(16.0, color),
+        Room::Devices => icon_mouse(16.0, color),
+        Room::ExoAi => icon_sparkles(16.0, color),
+        Room::Apps => icon_grid(16.0, color),
+        Room::Settings => icon_settings(16.0, color),
     }
+}
+
+fn format_keys_hint(raw: &str, fallback: &'static str) -> String {
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        return fallback.to_string();
+    }
+    trimmed
+        .split('+')
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .collect::<Vec<_>>()
+        .join(" + ")
 }
 
 fn capture_menu_row(
     key: &'static str,
     label: &'static str,
-    shortcut: &'static str,
+    shortcut: String,
     icon: El,
+    disabled: bool,
 ) -> El {
-    row()
+    let fg = if disabled { fg_faint() } else { FG };
+    let mut item = row()
         .key(key)
         .role("menuitem")
         .label(label)
-        .focusable(true)
-        .hit()
-        .press_on_down()
+        .focusable(!disabled)
         .w_full()
-        .h(34.0)
-        .px(10.0)
+        .min_h(38.0)
+        .px(12.0)
         .gap(10.0)
         .justify_between()
         .center_y()
         .radius(RADIUS_SMALL)
         .fill(TRANSPARENT)
-        .hover(hover_fill())
-        .press(pressed_fill())
-        .motion(SPRING_QUICK)
-        .child(
-            row()
-                .gap(10.0)
-                .center_y()
-                .child(icon)
-                .child(text(label).font(type_control()).color(FG)),
-        )
-        .children((!shortcut.is_empty()).then(|| {
-            text(shortcut)
-                .font(type_small())
-                .color(fg_muted())
-        }))
+        .motion(SPRING_QUICK);
+    if !disabled {
+        item = item
+            .hit()
+            .press_on_down()
+            .hover(hover_fill())
+            .press(pressed_fill());
+    }
+    item.child(
+        row()
+            .gap(10.0)
+            .center_y()
+            .child(icon)
+            .child(text(label).font(type_control()).color(fg)),
+    )
+    .children((!shortcut.is_empty()).then(|| text(shortcut).font(type_small()).color(fg_faint())))
 }
 
 fn capture_popover(s: &AppState) -> El {
-    let live = s.media.capture_status.as_ref().and_then(|st| st.state.as_ref());
-    let menu = glass_panel("capture-menu", 236.0)
-        .px(6.0)
-        .py(6.0)
-        .gap(2.0)
-        .child(
-            capture_menu_row(
-                "cap-menu-replay",
-                "Save replay",
-                "Ctrl + Alt + F10",
-                icon_replay(15.0, FG),
-            )
-            .on_press(|s: &mut AppState| {
+    let status = s.media.capture_status.as_ref();
+    let present = status.is_none_or(|st| st.present);
+    let live = status.and_then(|st| st.state.as_ref());
+    let settings = status.and_then(|st| st.settings.as_ref());
+    let buffering = live.is_some_and(|l| l.replay);
+    let recording = live.is_some_and(|l| l.recording);
+
+    let replay_hint = settings
+        .map(|st| format_keys_hint(&st.save_replay_keys, "Ctrl + Alt + F10"))
+        .unwrap_or_else(|| "Ctrl + Alt + F10".to_string());
+    let record_hint = settings
+        .map(|st| format_keys_hint(&st.record_keys, "Ctrl + Alt + F9"))
+        .unwrap_or_else(|| "Ctrl + Alt + F9".to_string());
+    let snip_hint = settings
+        .map(|st| format_keys_hint(&st.snip_keys, "Ctrl + Alt + F8"))
+        .unwrap_or_else(|| "Ctrl + Alt + F8".to_string());
+
+    let mut menu = glass_panel("capture-menu", 240.0)
+        .radius(RADIUS_CARD)
+        .clip_rounded(RADIUS_CARD)
+        .px(8.0)
+        .py(8.0)
+        .gap(0.0);
+
+    if present {
+        let replay_row = capture_menu_row(
+            "cap-menu-replay",
+            "Save replay",
+            replay_hint,
+            icon_replay(16.0, if buffering { FG } else { fg_faint() }),
+            !buffering,
+        );
+        let replay_row = if buffering {
+            replay_row.on_press(|s: &mut AppState| {
                 s.capture_menu_open = false;
                 s.capture_act("saveReplay");
-            }),
-        )
-        .child(
-            capture_menu_row(
-                "cap-menu-record",
-                if live.is_some_and(|l| l.recording) {
-                    "Stop recording"
-                } else {
-                    "Record"
-                },
-                "Ctrl + Alt + F9",
-                icon_record_dot(14.0, FG),
+            })
+        } else {
+            replay_row
+        };
+        menu = menu
+            .child(replay_row)
+            .child(
+                capture_menu_row(
+                    "cap-menu-record",
+                    if recording {
+                        "Stop recording"
+                    } else {
+                        "Record"
+                    },
+                    record_hint,
+                    icon_record_dot(16.0, FG),
+                    false,
+                )
+                .on_press(|s: &mut AppState| {
+                    s.capture_menu_open = false;
+                    s.capture_act("record");
+                }),
             )
-            .on_press(|s: &mut AppState| {
-                s.capture_menu_open = false;
-                s.capture_act("toggleRecord");
-            }),
-        )
-        .child(
-            capture_menu_row(
-                "cap-menu-snip",
-                "Snip",
-                "Ctrl + Alt + F8",
-                icon_scissors(15.0, FG),
+            .child(
+                capture_menu_row(
+                    "cap-menu-snip",
+                    "Snip",
+                    snip_hint,
+                    icon_scissors(16.0, FG),
+                    false,
+                )
+                .on_press(|s: &mut AppState| {
+                    s.capture_menu_open = false;
+                    s.capture_act("snip");
+                }),
             )
-            .on_press(|s: &mut AppState| {
-                s.capture_menu_open = false;
-                s.capture_act("snip");
-            }),
-        )
-        .child(
-            capture_menu_row("cap-menu-note", "New note", "", icon_plus(15.0, FG)).on_press(
-                |s: &mut AppState| {
+            .child(
+                capture_menu_row(
+                    "cap-menu-note",
+                    "New note",
+                    String::new(),
+                    icon_plus(16.0, FG),
+                    false,
+                )
+                .on_press(|s: &mut AppState| {
                     s.capture_menu_open = false;
                     s.notice = Some("Quick note ready".into());
-                },
-            ),
-        )
-        .child(
-            capture_menu_row("cap-menu-open", "Captures", "", icon_film(15.0, FG)).on_press(
-                |s: &mut AppState| {
+                }),
+            )
+            .child(
+                capture_menu_row(
+                    "cap-menu-open",
+                    "Captures",
+                    String::new(),
+                    icon_film(16.0, FG),
+                    false,
+                )
+                .on_press(|s: &mut AppState| {
                     s.capture_menu_open = false;
                     s.open_captures(None);
-                },
-            ),
-        );
+                }),
+            );
+    } else {
+        menu = menu
+            .child(
+                capture_menu_row(
+                    "cap-menu-note",
+                    "New note",
+                    String::new(),
+                    icon_plus(16.0, FG),
+                    false,
+                )
+                .on_press(|s: &mut AppState| {
+                    s.capture_menu_open = false;
+                    s.notice = Some("Quick note ready".into());
+                }),
+            )
+            .child(
+                capture_menu_row(
+                    "cap-menu-notes",
+                    "Notes",
+                    String::new(),
+                    icon_film(16.0, FG),
+                    false,
+                )
+                .on_press(|s: &mut AppState| {
+                    s.capture_menu_open = false;
+                    s.open_captures(None);
+                }),
+            );
+    }
 
     el().key("capture-menu-backdrop")
         .pin(Some(0.0), Some(0.0), Some(0.0), Some(0.0))
@@ -134,7 +214,7 @@ fn capture_popover(s: &AppState) -> El {
         .on_press(|s: &mut AppState| s.capture_menu_open = false)
         .child(
             el().pin(None, Some(52.0), Some(112.0), None)
-                .radius(RADIUS_PANEL)
+                .radius(RADIUS_CARD)
                 .child(menu),
         )
 }
@@ -159,6 +239,14 @@ fn gamepad_prompt_bar() -> El {
 }
 
 pub fn view(s: &AppState, cx: &mut Cx<AppState>) -> El {
+    set_text_scale(s.text_scale());
+    let has_modal_scrim = s.palette_open || s.key_modal_open;
+    cx.caption_color(if has_modal_scrim {
+        fg_muted().alpha(0.28)
+    } else {
+        fg_muted()
+    });
+
     let insets = cx.chrome_insets();
     let scale = cx.env().scale;
 
@@ -192,7 +280,7 @@ pub fn view(s: &AppState, cx: &mut Cx<AppState>) -> El {
             }
         })
         .child(exo_mark(18.0, FG))
-        .child(text("Search").font(TextStyle::new(13.0, 500.0)).color(FG));
+        .child(text("Search").font(type_body()).color(FG));
 
     let nav = glass_capsule("nav-capsule").children(Room::NAV_TABS.into_iter().map(|room| {
         let active = s.room == room && !s.media.captures_open;
@@ -200,41 +288,73 @@ pub fn view(s: &AppState, cx: &mut Cx<AppState>) -> El {
             .on_press(move |s: &mut AppState| s.switch_room(room))
     }));
 
-    let replay_on = s
+    let live_cap = s
         .media
         .capture_status
         .as_ref()
-        .and_then(|st| st.state.as_ref())
-        .is_some_and(|l| l.replay);
-    let capture_btn = el()
-        .key("top-capture-btn")
-        .role("button")
-        .label("Capture")
-        .focusable(true)
-        .hit()
-        .press_on_down()
-        .press_scale(PRESS_SCALE)
-        .size(32.0, 30.0)
-        .center()
-        .radius(RADIUS_PILL)
-        .fill(if s.capture_menu_open || s.media.captures_open {
-            hover_fill()
-        } else {
-            TRANSPARENT
-        })
-        .hover(hover_fill())
-        .press(pressed_fill())
-        .motion(SPRING_QUICK)
-        .on_press(|s: &mut AppState| {
-            s.capture_menu_open = !s.capture_menu_open;
-        })
-        .child(icon_camera(15.0, if s.capture_menu_open { FG } else { fg_muted() }))
-        .children(replay_on.then(|| {
-            el().pin(None, Some(5.0), Some(6.0), None)
-                .size(6.0, 6.0)
-                .radius(3.0)
-                .fill(good())
-        }));
+        .and_then(|st| st.state.as_ref());
+    let replay_on = live_cap.is_some_and(|l| l.replay);
+    let recording = live_cap.is_some_and(|l| l.recording);
+
+    let capture_btn = if recording {
+        row()
+            .key("top-capture-rec")
+            .role("button")
+            .label("Stop recording")
+            .focusable(true)
+            .hit()
+            .press_on_down()
+            .press_scale(PRESS_SCALE)
+            .h(28.0)
+            .px(11.0)
+            .mr(4.0)
+            .gap(7.0)
+            .center_y()
+            .radius(RADIUS_PILL)
+            .fill(glass_control_fill())
+            .hover(hover_fill())
+            .border(1.0, bad().alpha(0.40))
+            .motion(SPRING_QUICK)
+            .on_press(|s: &mut AppState| s.capture_act("record"))
+            .child(el().size(8.0, 8.0).radius(4.0).fill(bad()))
+            .child(text("REC").font(type_small()).color(FG))
+    } else {
+        el().key("top-capture-btn")
+            .role("button")
+            .label("Capture")
+            .focusable(true)
+            .hit()
+            .press_on_down()
+            .press_scale(PRESS_SCALE)
+            .size(32.0, 28.0)
+            .mr(2.0)
+            .center()
+            .radius(RADIUS_PILL)
+            .fill(if s.capture_menu_open {
+                selected_fill()
+            } else if s.media.captures_open {
+                hover_fill()
+            } else {
+                TRANSPARENT
+            })
+            .hover(hover_fill())
+            .press(pressed_fill())
+            .motion(SPRING_QUICK)
+            .on_press(|s: &mut AppState| {
+                s.capture_menu_open = !s.capture_menu_open;
+            })
+            .child(icon_camera(
+                16.0,
+                if s.capture_menu_open { FG } else { fg_muted() },
+            ))
+            .children(replay_on.then(|| {
+                el().pin(None, Some(5.0), Some(6.0), None)
+                    .size(6.0, 6.0)
+                    .radius(3.0)
+                    .fill(good())
+                    .outline(2.0, 0.0, BG)
+            }))
+    };
 
     let settings_active = s.room == Room::Settings;
     let settings_btn = el()
@@ -245,7 +365,7 @@ pub fn view(s: &AppState, cx: &mut Cx<AppState>) -> El {
         .hit()
         .press_on_down()
         .press_scale(PRESS_SCALE)
-        .size(32.0, 30.0)
+        .size(34.0, 30.0)
         .center()
         .radius(RADIUS_PILL)
         .fill(if settings_active { FG } else { TRANSPARENT })
@@ -254,17 +374,21 @@ pub fn view(s: &AppState, cx: &mut Cx<AppState>) -> El {
         .motion(SPRING_QUICK)
         .on_press(|s: &mut AppState| s.toggle_settings())
         .child(icon_settings(
-            15.0,
-            if settings_active { PRIMARY_FG } else { fg_muted() },
+            16.0,
+            if settings_active {
+                PRIMARY_FG
+            } else {
+                fg_muted()
+            },
         ));
 
-    let divider = el().size(1.0, 14.0).mx(3.0).fill(FG.alpha(0.10));
+    let divider = el().size(1.0, 16.0).mx(3.0).fill(selected_fill());
 
     let mut tools = row()
         .key("titlebar-tools")
         .h(36.0)
-        .pl(4.0)
-        .pr(if insets.trailing > 0.0 { 0.0 } else { 4.0 })
+        .pl(3.0)
+        .pr(if insets.trailing > 0.0 { 0.0 } else { 3.0 })
         .gap(2.0)
         .center_y()
         .radius(RADIUS_PILL)
@@ -283,15 +407,23 @@ pub fn view(s: &AppState, cx: &mut Cx<AppState>) -> El {
             el().key(key)
                 .role("button")
                 .label(label)
-                .size(30.0, 30.0)
+                .size(34.0, 30.0)
                 .center()
                 .radius(RADIUS_PILL)
                 .child(icon)
         };
         tools = tools
-            .child(win_btn("win-min", "Minimize", icon_minimize(12.0, fg_faint())))
-            .child(win_btn("win-max", "Maximize", icon_maximize(11.0, fg_faint())))
-            .child(win_btn("win-close", "Close", icon_close(12.0, fg_faint())));
+            .child(win_btn(
+                "win-min",
+                "Minimize",
+                icon_minimize(16.0, fg_muted()),
+            ))
+            .child(win_btn(
+                "win-max",
+                "Maximize",
+                icon_maximize(16.0, fg_muted()),
+            ))
+            .child(win_btn("win-close", "Close", icon_close(16.0, fg_muted())));
     }
 
     let mini = music::mini_player(s, scale);
@@ -304,8 +436,8 @@ pub fn view(s: &AppState, cx: &mut Cx<AppState>) -> El {
         .linear_gradient(
             std::f32::consts::PI,
             [
-                (0.0, BG.alpha(0.55)),
-                (0.55, BG.alpha(0.18)),
+                (0.0, BG.alpha(0.42)),
+                (0.58, BG.alpha(0.16)),
                 (1.0, BG.alpha(0.0)),
             ],
         );
@@ -338,7 +470,11 @@ pub fn view(s: &AppState, cx: &mut Cx<AppState>) -> El {
                 .h(36.0)
                 .center_y()
                 .child(tools),
-        );
+        )
+        .children(has_modal_scrim.then(|| {
+            el().pin(Some(0.0), Some(0.0), Some(0.0), Some(0.0))
+                .fill(scrim_fill())
+        }));
 
     let full_bleed_home = !s.media.captures_open
         && s.room == Room::Library
@@ -347,6 +483,10 @@ pub fn view(s: &AppState, cx: &mut Cx<AppState>) -> El {
 
     let content = if !s.media.captures_open && s.room == Room::Discord {
         discord::view(s, scale)
+    } else if !s.media.captures_open && s.room == Room::Settings {
+        settings::view(s)
+    } else if !s.media.captures_open && matches!(s.room, Room::Devices | Room::ExoAi | Room::Apps) {
+        pc::view(s, scale)
     } else if full_bleed_home {
         library::view(s, scale)
     } else {
@@ -373,7 +513,9 @@ pub fn view(s: &AppState, cx: &mut Cx<AppState>) -> El {
             .key("room-scroll")
             .w_full()
             .h_full()
-            .scroll(ScrollSpec { stick_bottom: false })
+            .scroll(ScrollSpec {
+                stick_bottom: false,
+            })
             .child(page)
     };
 

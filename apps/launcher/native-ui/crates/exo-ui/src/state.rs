@@ -49,17 +49,6 @@ impl Room {
         Room::Apps,
     ];
 
-    pub const ALL: [Room; 8] = [
-        Room::Library,
-        Room::Store,
-        Room::Discord,
-        Room::Music,
-        Room::ExoAi,
-        Room::Apps,
-        Room::Devices,
-        Room::Settings,
-    ];
-
     pub const fn label(self) -> &'static str {
         match self {
             Room::Library => "Library",
@@ -85,23 +74,6 @@ impl Room {
             Room::Settings => "nav-settings",
         }
     }
-
-    pub const fn index(self) -> usize {
-        match self {
-            Room::Library => 0,
-            Room::Store => 1,
-            Room::Discord => 2,
-            Room::Music => 3,
-            Room::Devices => 4,
-            Room::ExoAi => 5,
-            Room::Apps => 6,
-            Room::Settings => 7,
-        }
-    }
-
-    pub const fn from_index(i: usize) -> Self {
-        Self::NAV_TABS[i % Self::NAV_TABS.len()]
-    }
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -111,33 +83,6 @@ pub enum LibraryFilter {
     Installed,
     Recent,
     Running,
-}
-
-impl LibraryFilter {
-    pub const ALL: [LibraryFilter; 4] = [
-        LibraryFilter::All,
-        LibraryFilter::Installed,
-        LibraryFilter::Recent,
-        LibraryFilter::Running,
-    ];
-
-    pub const fn label(self) -> &'static str {
-        match self {
-            LibraryFilter::All => "All",
-            LibraryFilter::Installed => "Installed",
-            LibraryFilter::Recent => "Recent",
-            LibraryFilter::Running => "Running",
-        }
-    }
-
-    pub const fn key(self) -> &'static str {
-        match self {
-            LibraryFilter::All => "filter-all",
-            LibraryFilter::Installed => "filter-installed",
-            LibraryFilter::Recent => "filter-recent",
-            LibraryFilter::Running => "filter-running",
-        }
-    }
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -181,11 +126,9 @@ pub enum HostStatus {
 pub enum PaletteTarget {
     Room(Room),
     OpenGame(String),
-    LaunchGame(String),
     RefreshLibrary,
     ActivateKey,
     StartTour,
-    ToggleFilter(LibraryFilter),
 }
 
 #[derive(Clone, Debug)]
@@ -193,7 +136,6 @@ pub struct PaletteItem {
     pub id: String,
     pub group: &'static str,
     pub title: String,
-    pub subtitle: String,
     pub target: PaletteTarget,
 }
 
@@ -280,7 +222,11 @@ impl AppState {
             sort: LibrarySort::LastLaunched,
             status: HostStatus::Standalone,
             games,
-            recent_ids: vec!["demo:cyberpunk".into(), "demo:cs2".into(), "demo:elden".into()],
+            recent_ids: vec![
+                "demo:cyberpunk".into(),
+                "demo:cs2".into(),
+                "demo:elden".into(),
+            ],
             selected_game_id,
             open_game_id: None,
             game_extras: Some(GameExtras {
@@ -431,25 +377,42 @@ impl AppState {
             images.extend(
                 self.filtered_games()
                     .into_iter()
-                    .take(24)
+                    .take(48)
                     .filter_map(|g| self.cover_image(g, scale)),
             );
+            for sg in &self.pc.shader_snap_games {
+                if let Some(g) = self
+                    .games
+                    .iter()
+                    .find(|g| g.id == sg.id || g.title.eq_ignore_ascii_case(&sg.name))
+                    && let Some(img) = self.cover_image(g, scale)
+                {
+                    images.push(img);
+                }
+            }
         }
         if let Some(ref home) = self.store_home {
             for (i, h) in home.hero.iter().take(6).enumerate() {
-                if let Some(u) = h.art.as_ref().and_then(|a| a.best_hero()) {
+                if let Some(a) = h.art.as_ref() {
                     if i == 0
-                        && let Some(img) = self.remote_image_sized(u, 1280.0, scale)
+                        && let Some(u) = a.best_hero()
+                        && let Some(img) = self.remote_image_sized(u, 1600.0, scale)
                     {
                         images.push(img);
                     }
-                    if let Some(img) = self.remote_image_sized(u, 220.0, scale) {
+                    if let Some(u) = a
+                        .capsule
+                        .as_deref()
+                        .or(a.header.as_deref())
+                        .or_else(|| a.best_hero())
+                        && let Some(img) = self.remote_image_sized(u, 220.0, scale)
+                    {
                         images.push(img);
                     }
                 }
             }
             for shelf in home.shelves.iter().take(2) {
-                for tile in shelf.items.iter().take(10) {
+                for tile in shelf.items.iter().take(12) {
                     if let Some(u) = tile.art.as_ref().and_then(|a| a.best_poster())
                         && let Some(img) = self.remote_image_sized(u, 320.0, scale)
                     {
@@ -539,7 +502,11 @@ impl AppState {
         }
         self.refreshing = false;
         self.status = HostStatus::Connected;
-        if self.games.iter().all(|g| Some(&g.id) != self.selected_game_id.as_ref()) {
+        if self
+            .games
+            .iter()
+            .all(|g| Some(&g.id) != self.selected_game_id.as_ref())
+        {
             self.selected_game_id = self
                 .filtered_games()
                 .into_iter()
@@ -574,12 +541,12 @@ impl AppState {
         }
     }
 
-    pub fn installed_count(&self) -> usize {
-        self.games.iter().filter(|g| g.installed).count()
-    }
-
-    pub fn running_count(&self) -> usize {
-        self.games.iter().filter(|g| g.is_running).count()
+    pub fn text_scale(&self) -> f32 {
+        match self.settings.text_size.as_deref() {
+            Some("small") => 0.9,
+            Some("large") => 1.14,
+            _ => 1.0,
+        }
     }
 
     pub fn filtered_games(&self) -> Vec<&Game> {
@@ -601,21 +568,29 @@ impl AppState {
         if !query.is_empty() {
             out.retain(|g| g.title.to_lowercase().contains(&query));
         }
-        out.sort_by(|a, b| {
-            let primary = b.is_running.cmp(&a.is_running).then_with(|| b.installed.cmp(&a.installed));
-            match self.sort {
-                LibrarySort::LastLaunched => primary
-                    .then_with(|| b.last_played_utc.cmp(&a.last_played_utc))
-                    .then_with(|| b.playtime_minutes.cmp(&a.playtime_minutes))
-                    .then_with(|| a.title.to_lowercase().cmp(&b.title.to_lowercase())),
-                LibrarySort::Playtime => primary
-                    .then_with(|| b.playtime_minutes.cmp(&a.playtime_minutes))
-                    .then_with(|| a.title.to_lowercase().cmp(&b.title.to_lowercase())),
-                LibrarySort::Title => primary.then_with(|| a.title.to_lowercase().cmp(&b.title.to_lowercase())),
-                LibrarySort::Size => primary
-                    .then_with(|| b.size_bytes.unwrap_or(0).cmp(&a.size_bytes.unwrap_or(0)))
-                    .then_with(|| a.title.to_lowercase().cmp(&b.title.to_lowercase())),
-            }
+        out.retain(|g| g.id != "local:add");
+        let recent_rank = |id: &str| -> usize {
+            self.recent_ids
+                .iter()
+                .position(|r| r.eq_ignore_ascii_case(id))
+                .unwrap_or(9999)
+        };
+        out.sort_by(|a, b| match self.sort {
+            LibrarySort::LastLaunched => b
+                .last_played_utc
+                .cmp(&a.last_played_utc)
+                .then_with(|| recent_rank(&a.id).cmp(&recent_rank(&b.id)))
+                .then_with(|| a.title.to_lowercase().cmp(&b.title.to_lowercase())),
+            LibrarySort::Playtime => b
+                .playtime_minutes
+                .cmp(&a.playtime_minutes)
+                .then_with(|| a.title.to_lowercase().cmp(&b.title.to_lowercase())),
+            LibrarySort::Title => a.title.to_lowercase().cmp(&b.title.to_lowercase()),
+            LibrarySort::Size => b
+                .size_bytes
+                .unwrap_or(0)
+                .cmp(&a.size_bytes.unwrap_or(0))
+                .then_with(|| a.title.to_lowercase().cmp(&b.title.to_lowercase())),
         });
         out
     }
@@ -754,9 +729,7 @@ impl AppState {
             return existing.clone();
         }
         let dir = self.remote_cache_dir.as_ref()?;
-        if remote_art::parse_allowed_https(url).is_none() {
-            return None;
-        }
+        remote_art::parse_allowed_https(url)?;
         let path = remote_art::cache_path_for(dir, url);
         if path.is_file() {
             let img = cache.file(path, max_dim, scale);
@@ -804,7 +777,11 @@ impl AppState {
             self.game_props = None;
             self.props_launch_opts.text.clear();
             self.props_launch_opts.sync_invariants();
-        } else if let Some(opts) = self.game_props.as_ref().and_then(|p| p.launch_options.as_deref()) {
+        } else if let Some(opts) = self
+            .game_props
+            .as_ref()
+            .and_then(|p| p.launch_options.as_deref())
+        {
             self.props_launch_opts.text = opts.to_string();
             self.props_launch_opts.sync_invariants();
         }
@@ -863,27 +840,6 @@ impl AppState {
         self.uninstall_confirm = false;
     }
 
-    pub fn open_game_properties(&mut self, id: &str) {
-        self.props_open = true;
-        if let Some(ref p) = self.game_props {
-            self.props_launch_opts.text = p.launch_options.clone().unwrap_or_default();
-            self.props_launch_opts.sync_invariants();
-        }
-        #[cfg(windows)]
-        if let (Some(rpc), Some(handle)) = (self.rpc.clone(), self.handle.clone()) {
-            let gid = id.to_string();
-            rpc.call::<_, GameProperties>(METHOD_GAME_PROPERTIES, &json!({ "id": gid }), move |res| {
-                if let Ok(props) = res {
-                    handle.update(move |s, _| {
-                        s.props_launch_opts.text = props.launch_options.clone().unwrap_or_default();
-                        s.props_launch_opts.sync_invariants();
-                        s.game_props = Some(props);
-                    });
-                }
-            });
-        }
-    }
-
     pub fn set_game_property(&mut self, id: &str, key: &str, value: &str) {
         if self.status == HostStatus::Standalone {
             if let Some(ref mut p) = self.game_props {
@@ -912,7 +868,12 @@ impl AppState {
                             }
                             s.notice = Some(r.message.unwrap_or_else(|| "Saved properties".into()));
                         }
-                        Ok(r) => s.notice = Some(r.message.unwrap_or_else(|| "Could not save property".into())),
+                        Ok(r) => {
+                            s.notice = Some(
+                                r.message
+                                    .unwrap_or_else(|| "Could not save property".into()),
+                            )
+                        }
                         Err(e) => s.notice = Some(format!("Save failed: {e}")),
                     });
                 },
@@ -971,9 +932,17 @@ impl AppState {
                     match res {
                         Ok(r) if r.ok => {
                             s.close_key_modal();
-                            s.notice = Some(r.message.unwrap_or_else(|| "Opened store key redemption".into()));
+                            s.notice = Some(
+                                r.message
+                                    .unwrap_or_else(|| "Opened store key redemption".into()),
+                            );
                         }
-                        Ok(r) => s.notice = Some(r.message.unwrap_or_else(|| "Key could not be redeemed".into())),
+                        Ok(r) => {
+                            s.notice = Some(
+                                r.message
+                                    .unwrap_or_else(|| "Key could not be redeemed".into()),
+                            )
+                        }
                         Err(e) => s.notice = Some(format!("Key activation failed: {e}")),
                     }
                 });
@@ -989,13 +958,19 @@ impl AppState {
         #[cfg(windows)]
         if let (Some(rpc), Some(handle)) = (self.rpc.clone(), self.handle.clone()) {
             self.store_loading = true;
-            let params = if refresh { json!({ "refresh": true }) } else { json!({}) };
+            let params = if refresh {
+                json!({ "refresh": true })
+            } else {
+                json!({})
+            };
             rpc.call::<_, StoreHome>(METHOD_STORE_HOME, &params, move |res| {
                 handle.update(move |s, _| {
                     s.store_loading = false;
                     match res {
                         Ok(home) if home.ok => s.store_home = Some(home),
-                        Ok(home) => s.notice = home.message.or_else(|| Some("Store unavailable".into())),
+                        Ok(home) => {
+                            s.notice = home.message.or_else(|| Some("Store unavailable".into()))
+                        }
                         Err(e) => s.notice = Some(format!("Store error: {e}")),
                     }
                 });
@@ -1046,7 +1021,10 @@ impl AppState {
                 .into_iter()
                 .chain(demo_store_home().shelves.into_iter().flat_map(|s| s.items))
                 .find(|t| t.app_id == app_id);
-            let name = tile.as_ref().map(|t| t.name.clone()).unwrap_or_else(|| "Store Game".into());
+            let name = tile
+                .as_ref()
+                .map(|t| t.name.clone())
+                .unwrap_or_else(|| "Store Game".into());
             self.store_game = Some(StoreGame {
                 ok: true,
                 app_id: app_id.into(),
@@ -1181,12 +1159,18 @@ impl AppState {
             GamepadAction::Connected(on) => self.gamepad_connected = on,
             GamepadAction::PrevRoom => {
                 let len = Room::NAV_TABS.len();
-                let cur = Room::NAV_TABS.iter().position(|&r| r == self.room).unwrap_or(0);
+                let cur = Room::NAV_TABS
+                    .iter()
+                    .position(|&r| r == self.room)
+                    .unwrap_or(0);
                 self.switch_room(Room::NAV_TABS[(cur + len - 1) % len]);
             }
             GamepadAction::NextRoom => {
                 let len = Room::NAV_TABS.len();
-                let cur = Room::NAV_TABS.iter().position(|&r| r == self.room).unwrap_or(0);
+                let cur = Room::NAV_TABS
+                    .iter()
+                    .position(|&r| r == self.room)
+                    .unwrap_or(0);
                 self.switch_room(Room::NAV_TABS[(cur + 1) % len]);
             }
             GamepadAction::Search => {
@@ -1219,13 +1203,16 @@ impl AppState {
                     if let Some(id) = self.selected_game().map(|g| g.id.clone()) {
                         self.open_game_page(&id);
                     }
-                } else if let Some(g) = self.open_game().cloned() {
-                    if g.installed {
-                        self.launch_game(&g.id);
-                    }
+                } else if let Some(g) = self.open_game().cloned()
+                    && g.installed
+                {
+                    self.launch_game(&g.id);
                 }
             }
-            GamepadAction::Left | GamepadAction::Right | GamepadAction::Up | GamepadAction::Down => {
+            GamepadAction::Left
+            | GamepadAction::Right
+            | GamepadAction::Up
+            | GamepadAction::Down => {
                 if self.palette_open {
                     let len = self.palette_results().len();
                     if len > 0 {
@@ -1303,7 +1290,9 @@ impl AppState {
             self.discord.chat.editing = None;
             return true;
         }
-        if self.room == Room::Discord && self.discord.chat.drawer != crate::discord_chat_state::ChatDrawer::None {
+        if self.room == Room::Discord
+            && self.discord.chat.drawer != crate::discord_chat_state::ChatDrawer::None
+        {
             self.discord.chat.drawer = crate::discord_chat_state::ChatDrawer::None;
             return true;
         }
@@ -1315,7 +1304,9 @@ impl AppState {
             self.discord.voice_ui.fullscreen_stream = false;
             return true;
         }
-        if self.room == Room::Discord && self.discord.voice_ui.panel != crate::discord_voice_state::VoicePanel::None {
+        if self.room == Room::Discord
+            && self.discord.voice_ui.panel != crate::discord_voice_state::VoicePanel::None
+        {
             self.discord.voice_ui.panel = crate::discord_voice_state::VoicePanel::None;
             return true;
         }
@@ -1359,14 +1350,24 @@ impl AppState {
         let query = self.palette_query.text.trim().to_lowercase();
         let mut items = Vec::new();
 
-        for room in Room::ALL {
+        const PALETTE_ROOMS: [Room; 8] = [
+            Room::Library,
+            Room::Store,
+            Room::Discord,
+            Room::Music,
+            Room::ExoAi,
+            Room::Apps,
+            Room::Devices,
+            Room::Settings,
+        ];
+
+        for room in PALETTE_ROOMS {
             let label = room.label();
             if query.is_empty() || label.to_lowercase().contains(&query) {
                 items.push(PaletteItem {
                     id: format!("pal-room-{}", room.key()),
                     group: "Go to",
                     title: label.into(),
-                    subtitle: String::new(),
                     target: PaletteTarget::Room(room),
                 });
             }
@@ -1377,24 +1378,34 @@ impl AppState {
             .iter()
             .filter(|g| query.is_empty() || g.title.to_lowercase().contains(&query))
             .collect();
-        candidates.sort_by(|a, b| a.title.to_lowercase().cmp(&b.title.to_lowercase()));
+        candidates.sort_by_key(|a| a.title.to_lowercase());
 
-        let game_limit = if query.is_empty() { 10 } else { 12 };
-        for game in candidates.into_iter().take(game_limit) {
+        for game in candidates.into_iter().take(50) {
             items.push(PaletteItem {
                 id: format!("pal-game-{}", game.id),
                 group: "Library",
                 title: game.title.clone(),
-                subtitle: String::new(),
                 target: PaletteTarget::OpenGame(game.id.clone()),
             });
         }
 
         if !query.is_empty() {
             let actions = [
-                ("pal-action-tour", "Take the guided tour", PaletteTarget::StartTour),
-                ("pal-action-key", "Activate a game key", PaletteTarget::ActivateKey),
-                ("pal-action-refresh", "Refresh library", PaletteTarget::RefreshLibrary),
+                (
+                    "pal-action-tour",
+                    "Take the guided tour",
+                    PaletteTarget::StartTour,
+                ),
+                (
+                    "pal-action-key",
+                    "Activate a game key",
+                    PaletteTarget::ActivateKey,
+                ),
+                (
+                    "pal-action-refresh",
+                    "Refresh library",
+                    PaletteTarget::RefreshLibrary,
+                ),
             ];
             for (id, title, target) in actions {
                 if title.to_lowercase().contains(&query) {
@@ -1402,7 +1413,6 @@ impl AppState {
                         id: id.into(),
                         group: "Actions",
                         title: title.into(),
-                        subtitle: String::new(),
                         target,
                     });
                 }
@@ -1417,19 +1427,9 @@ impl AppState {
         match target {
             PaletteTarget::Room(room) => self.switch_room(room),
             PaletteTarget::OpenGame(id) => self.open_game_page(&id),
-            PaletteTarget::LaunchGame(id) => {
-                self.room = Room::Library;
-                self.selected_game_id = Some(id.clone());
-                self.launch_game(&id);
-            }
             PaletteTarget::RefreshLibrary => self.refresh_library(),
             PaletteTarget::ActivateKey => self.open_key_modal(tx),
             PaletteTarget::StartTour => self.start_tour(),
-            PaletteTarget::ToggleFilter(filter) => {
-                self.room = Room::Library;
-                self.open_game_id = None;
-                self.filter = filter;
-            }
         }
     }
 
@@ -1442,7 +1442,12 @@ impl AppState {
     }
 
     pub fn install_game(&mut self, id: &str) {
-        self.game_action(METHOD_GAME_INSTALL, id, "Starting install for", "Install started for");
+        self.game_action(
+            METHOD_GAME_INSTALL,
+            id,
+            "Starting install for",
+            "Install started for",
+        );
     }
 
     pub fn update_game(&mut self, id: &str) {
@@ -1450,27 +1455,58 @@ impl AppState {
     }
 
     pub fn repair_game(&mut self, id: &str) {
-        self.game_action(METHOD_GAME_REPAIR, id, "Verifying", "Verification started for");
+        self.game_action(
+            METHOD_GAME_REPAIR,
+            id,
+            "Verifying",
+            "Verification started for",
+        );
     }
 
     pub fn open_game_folder(&mut self, id: &str) {
-        self.game_action(METHOD_GAME_OPEN_FOLDER, id, "Opening folder for", "Opened folder for");
+        self.game_action(
+            METHOD_GAME_OPEN_FOLDER,
+            id,
+            "Opening folder for",
+            "Opened folder for",
+        );
     }
 
     pub fn uninstall_game(&mut self, id: &str) {
         self.uninstall_confirm = false;
-        self.game_action(METHOD_GAME_UNINSTALL, id, "Uninstalling", "Uninstall started for");
+        self.game_action(
+            METHOD_GAME_UNINSTALL,
+            id,
+            "Uninstalling",
+            "Uninstall started for",
+        );
     }
 
     pub fn cancel_install(&mut self, id: &str) {
-        self.game_action(METHOD_GAME_CANCEL_INSTALL, id, "Canceling install for", "Canceled install for");
+        self.game_action(
+            METHOD_GAME_CANCEL_INSTALL,
+            id,
+            "Canceling install for",
+            "Canceled install for",
+        );
     }
 
     pub fn pause_install(&mut self, id: &str) {
-        self.game_action(METHOD_GAME_PAUSE_INSTALL, id, "Pausing download for", "Paused download for");
+        self.game_action(
+            METHOD_GAME_PAUSE_INSTALL,
+            id,
+            "Pausing download for",
+            "Paused download for",
+        );
     }
 
-    fn game_action(&mut self, method: &'static str, id: &str, pending_verb: &str, done_verb: &'static str) {
+    fn game_action(
+        &mut self,
+        method: &'static str,
+        id: &str,
+        pending_verb: &str,
+        done_verb: &'static str,
+    ) {
         let title = self
             .games
             .iter()
@@ -1484,8 +1520,15 @@ impl AppState {
             let game_id = id.to_string();
             rpc.call::<_, ActionResult>(method, &json!({ "id": game_id }), move |res| {
                 handle.update(move |s, _| match res {
-                    Ok(r) if r.ok => s.notice = Some(r.message.unwrap_or_else(|| format!("{done_verb} {title}"))),
-                    Ok(r) => s.notice = Some(r.message.unwrap_or_else(|| format!("Action failed for {title}"))),
+                    Ok(r) if r.ok => {
+                        s.notice = Some(r.message.unwrap_or_else(|| format!("{done_verb} {title}")))
+                    }
+                    Ok(r) => {
+                        s.notice = Some(
+                            r.message
+                                .unwrap_or_else(|| format!("Action failed for {title}")),
+                        )
+                    }
                     Err(e) => s.notice = Some(format!("Action failed: {e}")),
                 });
             });
@@ -1554,40 +1597,105 @@ impl AppState {
 }
 
 pub fn title_hue(title: &str) -> f32 {
-    let hash = title
-        .bytes()
-        .fold(2166136261u32, |acc, b| acc.wrapping_mul(16777619) ^ b as u32);
+    let hash = title.bytes().fold(2166136261u32, |acc, b| {
+        acc.wrapping_mul(16777619) ^ b as u32
+    });
     (hash % 360) as f32
 }
 
 fn demo_games() -> Vec<Game> {
     let raw = [
-        ("demo:cyberpunk", "Cyberpunk 2077", "steam", true, 8520, Some(68_000_000_000)),
-        ("demo:cs2", "Counter-Strike 2", "steam", true, 37080, Some(42_500_000_000)),
-        ("demo:elden", "Elden Ring", "steam", true, 5640, Some(66_200_000_000)),
-        ("demo:valorant", "Valorant", "riot", true, 18720, Some(34_800_000_000)),
-        ("demo:hades2", "Hades II", "steam", true, 2760, Some(10_400_000_000)),
-        ("demo:bg3", "Baldur's Gate 3", "steam", true, 11280, Some(144_000_000_000)),
-        ("demo:apex", "Apex Legends", "steam", true, 12600, Some(74_000_000_000)),
-        ("demo:hollow", "Hollow Knight", "steam", true, 3480, Some(9_100_000_000)),
+        (
+            "demo:cyberpunk",
+            "Cyberpunk 2077",
+            "steam",
+            true,
+            8520,
+            Some(68_000_000_000),
+        ),
+        (
+            "demo:cs2",
+            "Counter-Strike 2",
+            "steam",
+            true,
+            37080,
+            Some(42_500_000_000),
+        ),
+        (
+            "demo:elden",
+            "Elden Ring",
+            "steam",
+            true,
+            5640,
+            Some(66_200_000_000),
+        ),
+        (
+            "demo:valorant",
+            "Valorant",
+            "riot",
+            true,
+            18720,
+            Some(34_800_000_000),
+        ),
+        (
+            "demo:hades2",
+            "Hades II",
+            "steam",
+            true,
+            2760,
+            Some(10_400_000_000),
+        ),
+        (
+            "demo:bg3",
+            "Baldur's Gate 3",
+            "steam",
+            true,
+            11280,
+            Some(144_000_000_000),
+        ),
+        (
+            "demo:apex",
+            "Apex Legends",
+            "steam",
+            true,
+            12600,
+            Some(74_000_000_000),
+        ),
+        (
+            "demo:hollow",
+            "Hollow Knight",
+            "steam",
+            true,
+            3480,
+            Some(9_100_000_000),
+        ),
         ("demo:aw2", "Alan Wake 2", "epic", false, 1740, None),
-        ("demo:hd2", "Helldivers 2", "steam", true, 4440, Some(82_000_000_000)),
+        (
+            "demo:hd2",
+            "Helldivers 2",
+            "steam",
+            true,
+            4440,
+            Some(82_000_000_000),
+        ),
         ("demo:fh5", "Forza Horizon 5", "xbox", false, 3780, None),
         ("demo:doom", "Doom Eternal", "steam", false, 2460, None),
     ];
     raw.into_iter()
-        .map(|(id, title, store, installed, playtime_minutes, size_bytes)| Game {
-            id: id.into(),
-            title: title.into(),
-            store: store.into(),
-            stores: vec![store.into()],
-            installed,
-            owned: true,
-            playtime_minutes,
-            size_bytes,
-            tags: vec!["Action".into(), "Singleplayer".into()],
-            ..Default::default()
-        })
+        .map(
+            |(id, title, store, installed, playtime_minutes, size_bytes)| Game {
+                id: id.into(),
+                title: title.into(),
+                store: store.into(),
+                stores: vec![store.into()],
+                installed,
+                owned: true,
+                playtime_minutes,
+                size_bytes,
+                tags: vec!["Action".into(), "Singleplayer".into()],
+                ..Default::default()
+            },
+        )
         .collect()
 }
 

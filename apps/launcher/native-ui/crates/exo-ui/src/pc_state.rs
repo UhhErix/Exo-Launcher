@@ -41,17 +41,6 @@ impl SettingsSection {
             Self::About => "set-sec-about",
         }
     }
-
-    pub fn label(self) -> &'static str {
-        match self {
-            Self::General => "General",
-            Self::Account => "Account & Sync",
-            Self::Appearance => "Appearance & Overlay",
-            Self::Graphics => "Graphics & HDR",
-            Self::Updates => "Updates",
-            Self::About => "About & Tour",
-        }
-    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -62,39 +51,10 @@ pub enum PcTab {
     Devices,
 }
 
-impl PcTab {
-    pub const ALL: [Self; 4] = [Self::ExoAi, Self::Apps, Self::Storage, Self::Devices];
-
-    pub fn key(self) -> &'static str {
-        match self {
-            Self::ExoAi => "pc-tab-ai",
-            Self::Apps => "pc-tab-apps",
-            Self::Storage => "pc-tab-storage",
-            Self::Devices => "pc-tab-devices",
-        }
-    }
-
-    pub fn label(self) -> &'static str {
-        match self {
-            Self::ExoAi => "Exo AI",
-            Self::Apps => "Apps",
-            Self::Storage => "Storage",
-            Self::Devices => "Devices",
-        }
-    }
-}
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AppsSubTab {
     Installed,
     Startup,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum AppsFilter {
-    All,
-    Bloat,
-    Removable,
 }
 
 pub struct SettingsAndPcState {
@@ -116,7 +76,6 @@ pub struct SettingsAndPcState {
     pub latency_running: bool,
 
     pub apps_sub_tab: AppsSubTab,
-    pub apps_filter: AppsFilter,
     pub apps_query: TextEdit,
     pub apps_list: Option<AppsListReply>,
     pub startup_list: Option<StartupListReply>,
@@ -139,6 +98,10 @@ pub struct SettingsAndPcState {
     pub shader_games: Vec<ShaderPrepareGame>,
     pub shader_snap_games: Vec<ShaderSnapGame>,
     pub shader_estimates: HashMap<String, f64>,
+    pub gpu_short_name: Option<String>,
+    pub screen_label: Option<String>,
+    pub compress_potential_bytes: u64,
+    pub compress_saved_bytes: u64,
     pub exo_ai_storage_open: bool,
 }
 
@@ -179,7 +142,8 @@ impl SettingsAndPcState {
                 windows: Some("Windows 11".into()),
                 windows_version: Some("24H2".into()),
                 os: Some("Windows 11 Pro 24H2".into()),
-                network: Some("Ethernet · 2.5 Gbps".into()),
+                network: Some("Ethernet".into()),
+                network_mbps: Some(2500.0),
                 display: Some("240 Hz".into()),
                 version: Some("3.29.0".into()),
             }),
@@ -335,7 +299,6 @@ impl SettingsAndPcState {
             }),
             latency_running: false,
             apps_sub_tab: AppsSubTab::Installed,
-            apps_filter: AppsFilter::All,
             apps_query: TextEdit::default(),
             apps_list: Some(AppsListReply {
                 ok: true,
@@ -659,6 +622,10 @@ impl SettingsAndPcState {
             ],
             shader_snap_games: Vec::new(),
             shader_estimates: HashMap::new(),
+            gpu_short_name: None,
+            screen_label: None,
+            compress_potential_bytes: 0,
+            compress_saved_bytes: 0,
             exo_ai_storage_open: false,
         }
     }
@@ -681,7 +648,6 @@ impl SettingsAndPcState {
             shaders: None,
             latency_running: false,
             apps_sub_tab: AppsSubTab::Installed,
-            apps_filter: AppsFilter::All,
             apps_query: TextEdit::default(),
             apps_list: None,
             startup_list: None,
@@ -702,25 +668,29 @@ impl SettingsAndPcState {
             shader_games: Vec::new(),
             shader_snap_games: Vec::new(),
             shader_estimates: HashMap::new(),
+            gpu_short_name: None,
+            screen_label: None,
+            compress_potential_bytes: 0,
+            compress_saved_bytes: 0,
             exo_ai_storage_open: false,
         }
     }
 }
 
 pub fn format_bytes(bytes: u64) -> String {
-    const KB: f64 = 1024.0;
-    const MB: f64 = KB * 1024.0;
-    const GB: f64 = MB * 1024.0;
-    const TB: f64 = GB * 1024.0;
+    const KB: f64 = 1_000.0;
+    const MB: f64 = 1_000_000.0;
+    const GB: f64 = 1_000_000_000.0;
+    const TB: f64 = 1_000_000_000_000.0;
     let b = bytes as f64;
     if b >= TB {
-        format!("{:.2} TB", b / TB)
+        format!("{:.1} TB", b / TB)
     } else if b >= GB {
         format!("{:.1} GB", b / GB)
     } else if b >= MB {
-        format!("{:.0} MB", b / MB)
+        format!("{:.0} MB", (b / MB).round())
     } else if b >= KB {
-        format!("{:.0} KB", b / KB)
+        format!("{:.0} KB", (b / KB).round())
     } else {
         format!("{bytes} B")
     }
