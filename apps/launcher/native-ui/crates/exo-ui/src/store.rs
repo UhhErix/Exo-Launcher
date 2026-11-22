@@ -1,77 +1,101 @@
 use crate::state::{AppState, title_hue};
 use exo_kit::{
-    BG, FG, PRESS_SCALE, PRIMARY_FG, RADIUS_CARD, RADIUS_PANEL, RADIUS_PILL,
-    SPRING_MOVE, discount_badge, fg_muted, glass_button, glass_control_fill, glass_rim,
-    icon_back, icon_external, icon_refresh, icon_search, primary_button, stat_chip, subtle_fill,
-    type_body, type_control, type_page, type_section, type_small, type_title,
+    BG, FG, PRESS_SCALE, PRIMARY_FG, RADIUS_CARD, RADIUS_PANEL, RADIUS_PILL, SPRING_MOVE,
+    SPRING_QUICK, TRANSPARENT, amoled_card, discount_badge, fg_faint, fg_muted, filter_pill,
+    glass_button, glass_control_fill, glass_icon_circle, glass_rim, glass_rim_bottom,
+    glass_rim_top, hover_fill, icon_back, icon_bookmark, icon_chevron_left, icon_chevron_right,
+    icon_external, icon_refresh, icon_search, pressed_fill, primary_button, stat_chip, type_body,
+    type_control, type_page, type_section, type_small, type_title,
 };
 use exo_rpc::{StoreGame, StoreTile, types::format_cents};
-use rune::{El, SurfaceFit, col, edit_access, el, oklch, row, text, text_input};
+use rune::{El, SurfaceFit, TextStyle, col, edit_access, el, oklch, row, text, text_input};
+
+fn review_line(tile: &StoreTile) -> String {
+    match (&tile.review, tile.review_percent) {
+        (Some(w), Some(p)) if !w.is_empty() => format!("{w} · {p}%"),
+        (Some(w), None) if !w.is_empty() => w.clone(),
+        _ => String::new(),
+    }
+}
 
 fn store_tile_card(tile: &StoreTile, s: &AppState, scale: f32) -> El {
     let hue = title_hue(&tile.name);
     let art_url = tile.art.as_ref().and_then(|a| a.best_poster());
-    let img = art_url.and_then(|u| s.remote_image(u, scale));
+    let img = art_url.and_then(|u| s.remote_image_sized(u, 320.0, scale));
 
-    let mut art = el().w(188.0).h(256.0).radius(RADIUS_CARD);
+    let mut poster = el()
+        .size(136.0, 204.0)
+        .radius(RADIUS_CARD)
+        .continuous_corners()
+        .clip_rounded(RADIUS_CARD);
     if let Some(loaded) = img {
-        art = art.pixels_fit(loaded.pixels(), SurfaceFit::Fill);
+        poster = poster.pixels_fit(loaded.pixels(), SurfaceFit::Fill);
     } else {
-        art = art.linear_gradient(
+        poster = poster.linear_gradient(
             0.35,
             [
-                (0.0, oklch(0.46, 0.16, hue)),
-                (1.0, oklch(0.11, 0.03, hue)),
+                (0.0, oklch(0.42, 0.14, hue)),
+                (1.0, oklch(0.10, 0.03, hue)),
             ],
         );
     }
 
-    let price = tile.display_price();
-    let scrim = el()
-        .w_full()
-        .h_full()
-        .radius(RADIUS_CARD)
-        .linear_gradient(
-            std::f32::consts::PI,
-            [
-                (0.0, BG.alpha(0.0)),
-                (0.55, BG.alpha(0.08)),
-                (0.82, BG.alpha(0.72)),
-                (1.0, BG.alpha(0.92)),
-            ],
-        )
-        .child(
-            col()
-                .w_full()
-                .h_full()
-                .px(11.0)
-                .py(11.0)
-                .justify_between()
-                .child(
-                    row().justify_end().children(
-                        (tile.discount > 0).then(|| discount_badge(tile.discount)),
-                    ),
-                )
-                .child(
-                    col()
-                        .gap(3.0)
-                        .child(text(tile.name.clone()).font(type_section()).color(FG).truncate())
-                        .child(text(price).font(type_small()).color(fg_muted()).truncate()),
-                ),
-        );
+    poster = poster.child(
+        el().pin(None, Some(8.0), Some(8.0), None)
+            .size(26.0, 26.0)
+            .radius(13.0)
+            .center()
+            .fill(BG.alpha(0.58))
+            .child(icon_bookmark(12.0, if tile.wished { FG } else { FG.alpha(0.85) })),
+    );
 
+    if tile.discount > 0 {
+        poster = poster.child(
+            el().pin(Some(8.0), Some(8.0), None, None)
+                .child(discount_badge(tile.discount)),
+        );
+    }
+
+    let price = tile.display_price();
+    let rev = review_line(tile);
     let app_id = tile.app_id.clone();
-    el().key(format!("store-tile-{}", tile.app_id))
+
+    col()
+        .key(format!("store-tile-{}", tile.app_id))
         .role("button")
         .label(tile.name.clone())
         .focusable(true)
         .hit()
         .press_on_down()
         .press_scale(PRESS_SCALE)
-        .radius(RADIUS_CARD)
+        .w(136.0)
+        .gap(7.0)
         .motion(SPRING_MOVE)
         .on_press(move |s: &mut AppState| s.open_store_game(&app_id))
-        .child(art.child(scrim))
+        .child(poster)
+        .child(
+            col()
+                .w_full()
+                .gap(2.0)
+                .child(
+                    text(tile.name.clone())
+                        .font(TextStyle::new(12.5, 600.0))
+                        .color(FG)
+                        .truncate(),
+                )
+                .children((!price.is_empty()).then(|| {
+                    text(price)
+                        .font(TextStyle::new(12.0, 500.0))
+                        .color(FG.alpha(0.92))
+                        .truncate()
+                }))
+                .children((!rev.is_empty()).then(|| {
+                    text(rev)
+                        .font(TextStyle::new(11.0, 400.0))
+                        .color(fg_faint())
+                        .truncate()
+                })),
+        )
 }
 
 fn store_game_view(s: &AppState, game: &StoreGame, scale: f32) -> El {
@@ -80,9 +104,14 @@ fn store_game_view(s: &AppState, game: &StoreGame, scale: f32) -> El {
         .header
         .as_deref()
         .or_else(|| game.art.as_ref().and_then(exo_rpc::types::StoreArt::best_hero));
-    let hero_img = art_url.and_then(|u| s.remote_image(u, scale));
+    let hero_img = art_url.and_then(|u| s.remote_image_sized(u, 1280.0, scale));
 
-    let mut banner = el().w(420.0).h(196.0).radius(RADIUS_CARD);
+    let mut banner = el()
+        .w(440.0)
+        .h(210.0)
+        .radius(RADIUS_CARD)
+        .continuous_corners()
+        .clip_rounded(RADIUS_CARD);
     if let Some(img) = hero_img {
         banner = banner.pixels_fit(img.pixels(), SurfaceFit::Fill);
     } else {
@@ -103,11 +132,21 @@ fn store_game_view(s: &AppState, game: &StoreGame, scale: f32) -> El {
     } else {
         game.price_text
             .clone()
-            .or_else(|| primary_offer.map(exo_rpc::types::StoreOffer::display_price).filter(|p| !p.is_empty()))
-            .unwrap_or_else(|| if game.coming_soon { "Coming soon".into() } else { "—".into() })
+            .or_else(|| {
+                primary_offer
+                    .map(exo_rpc::types::StoreOffer::display_price)
+                    .filter(|p| !p.is_empty())
+            })
+            .unwrap_or_else(|| {
+                if game.coming_soon {
+                    "Coming soon".into()
+                } else {
+                    "—".into()
+                }
+            })
     };
     let review_val = match (&game.review_word, game.review_percent) {
-        (Some(w), Some(pct)) => format!("{w} ({pct}%)"),
+        (Some(w), Some(pct)) => format!("{w} · {pct}%"),
         (Some(w), None) => w.clone(),
         _ => "—".into(),
     };
@@ -166,23 +205,10 @@ fn store_game_view(s: &AppState, game: &StoreGame, scale: f32) -> El {
         );
     }
 
-    if !game.genres.is_empty() {
-        details = details.child(row().gap(6.0).flex_wrap().children(
-            game.genres.iter().take(6).map(|g| {
-                el().h(24.0)
-                    .px(10.0)
-                    .radius(RADIUS_PILL)
-                    .center()
-                    .fill(subtle_fill())
-                    .child(text(g.clone()).font(type_small()).color(fg_muted()))
-            }),
-        ));
-    }
-
     let mut page = col()
         .w_full()
-        .pt(72.0)
-        .px(28.0)
+        .pt(64.0)
+        .px(24.0)
         .pb(36.0)
         .gap(20.0)
         .child(
@@ -193,52 +219,65 @@ fn store_game_view(s: &AppState, game: &StoreGame, scale: f32) -> El {
         )
         .child(row().w_full().gap(24.0).items_start().child(banner).child(details));
 
-    if let Some(ref offers) = s.store_offers
-        && !offers.offers.is_empty()
-    {
-        let mut offer_col = col()
-            .w_full()
-            .gap(10.0)
-            .child(text("Official store prices").font(type_title()).color(FG));
-        if let Some(ref low) = offers.lowest {
-            offer_col = offer_col.child(
-                text(format!(
-                    "Historical low: {} ({})",
-                    format_cents(low.final_cents, Some("USD")),
-                    low.at
-                ))
-                .font(type_small())
-                .color(fg_muted()),
-            );
+    let mut all_offers = game.offers.clone();
+    if let Some(ref extra) = s.store_offers {
+        for off in &extra.offers {
+            if !all_offers.iter().any(|o| o.store == off.store) {
+                all_offers.push(off.clone());
+            }
         }
-        let rows = col().w(560.0).gap(6.0).children(offers.offers.iter().map(|o| {
-            let url = o.url.clone();
+    }
+
+    if !all_offers.is_empty() {
+        let mut offer_card = amoled_card(RADIUS_PANEL)
+            .w_full()
+            .px(18.0)
+            .py(16.0)
+            .gap(10.0)
+            .child(text("Official stores & pricing").font(type_title()).color(FG));
+
+        if let Some(low) = s.store_offers.as_ref().and_then(|o| o.lowest.as_ref()) {
+            let low_price = format_cents(low.final_cents, Some("USD"));
+            let low_label = if low.at.is_empty() {
+                format!("Historical low: {low_price}")
+            } else {
+                format!("Historical low: {low_price} ({})", low.at)
+            };
+            offer_card = offer_card.child(text(low_label).font(type_small()).color(fg_muted()));
+        }
+
+        let rows = col().w_full().gap(6.0).children(all_offers.into_iter().map(|off| {
+            let url = off.url.clone();
+            let store_name = if off.store.is_empty() {
+                "Official store".into()
+            } else {
+                off.store.clone()
+            };
+            let price_s = off.display_price();
             row()
-                .key(format!("offer-{}-{}", o.store, o.url))
-                .role("button")
-                .label(o.name.clone())
-                .focusable(true)
-                .hit()
-                .press_on_down()
+                .key(format!("offer-{store_name}"))
                 .w_full()
-                .h(44.0)
+                .h(42.0)
                 .px(14.0)
-                .radius(RADIUS_CARD)
                 .justify_between()
                 .center_y()
-                .fill(glass_control_fill())
+                .radius(RADIUS_CARD)
+                .fill(BG)
                 .border(1.0, glass_rim())
-                .on_press(move |s: &mut AppState| s.open_store_url(&url))
-                .child(text(o.name.clone()).font(type_control()).color(FG))
+                .child(text(store_name).font(type_section()).color(FG))
                 .child(
                     row()
-                        .gap(8.0)
+                        .gap(10.0)
                         .center_y()
-                        .children((o.discount > 0).then(|| discount_badge(o.discount)))
-                        .child(text(o.display_price()).font(type_section()).color(FG)),
+                        .children((off.discount > 0).then(|| discount_badge(off.discount)))
+                        .child(text(price_s).font(type_control()).color(FG))
+                        .children((!url.is_empty()).then(|| {
+                            glass_button("offer-buy", "Open", Some(icon_external(12.0, FG)))
+                                .on_press(move |s: &mut AppState| s.open_store_url(&url))
+                        })),
                 )
         }));
-        page = page.child(offer_col.child(rows));
+        page = page.child(offer_card.child(rows));
     }
 
     page
@@ -251,49 +290,66 @@ pub fn view(s: &AppState, scale: f32) -> El {
 
     let search_input = text_input(&s.store_query, type_body())
         .key("store-search-input")
-        .label("Search Store")
+        .label("Search the store")
         .grow(1.0)
         .single_line()
         .color(FG)
-        .placeholder("Search Steam & official deals…", fg_muted())
+        .placeholder("Search the store", fg_muted())
         .on_edit(edit_access(|s: &mut AppState| &mut s.store_query))
         .on_submit(|s: &mut AppState, _| s.search_store());
 
     let search_bar = row()
-        .w(340.0)
-        .h(36.0)
+        .w(260.0)
+        .h(34.0)
         .px(12.0)
         .gap(8.0)
         .center_y()
         .radius(RADIUS_PILL)
-        .fill(subtle_fill())
-        .border(1.0, glass_rim())
+        .fill(glass_control_fill())
+        .border_gradient(1.0, glass_rim_top(), glass_rim_bottom())
         .child(icon_search(14.0, fg_muted()))
         .child(search_input);
 
-    let mut page = col()
+    let sub_bar = row()
         .w_full()
-        .pt(72.0)
-        .px(24.0)
-        .pb(36.0)
-        .gap(20.0)
+        .justify_between()
+        .center_y()
         .child(
             row()
-                .w_full()
-                .justify_between()
+                .gap(4.0)
                 .center_y()
-                .child(text("Store").font(type_page()).color(FG))
                 .child(
-                    row()
-                        .gap(8.0)
-                        .center_y()
-                        .child(search_bar)
-                        .child(
-                            glass_button("store-refresh", "Refresh", Some(icon_refresh(14.0, FG)))
-                                .on_press(|s: &mut AppState| s.load_store_home(true)),
-                        ),
+                    filter_pill("store-tab-discover", "Discover".into(), s.store_tab == 0)
+                        .on_press(|s: &mut AppState| s.store_tab = 0),
+                )
+                .child(
+                    filter_pill("store-tab-wishlist", "Wishlist".into(), s.store_tab == 1)
+                        .on_press(|s: &mut AppState| s.store_tab = 1),
+                ),
+        )
+        .child(
+            row()
+                .gap(8.0)
+                .center_y()
+                .child(search_bar)
+                .child(
+                    glass_icon_circle(
+                        "store-refresh",
+                        "Refresh store",
+                        34.0,
+                        icon_refresh(14.0, FG),
+                    )
+                    .on_press(|s: &mut AppState| s.load_store_home(true)),
                 ),
         );
+
+    let mut page = col()
+        .w_full()
+        .pt(60.0)
+        .px(14.0)
+        .pb(36.0)
+        .gap(18.0)
+        .child(sub_bar);
 
     if let Some(ref results) = s.store_search_results {
         page = page
@@ -343,90 +399,201 @@ pub fn view(s: &AppState, scale: f32) -> El {
         );
     };
 
-    if let Some(hero) = home.hero.get(s.store_hero_index % home.hero.len().max(1)) {
-        let hue = title_hue(&hero.name);
-        let hero_img = hero
-            .art
-            .as_ref()
-            .and_then(|a| a.best_hero())
-            .and_then(|u| s.remote_image(u, scale));
-        let mut hero_card = el().w_full().h(260.0).radius(RADIUS_PANEL);
-        if let Some(img) = hero_img {
-            hero_card = hero_card.pixels_fit(img.pixels(), SurfaceFit::Fill);
-        } else {
-            hero_card = hero_card.linear_gradient(
-                0.35,
-                [(0.0, oklch(0.42, 0.16, hue)), (1.0, oklch(0.11, 0.03, hue))],
-            );
-        }
-
-        let app_id = hero.app_id.clone();
-        let hero_count = home.hero.len();
-        let hero_overlay = el()
-            .w_full()
-            .h_full()
-            .radius(RADIUS_PANEL)
-            .linear_gradient(
-                std::f32::consts::PI,
-                [(0.0, BG.alpha(0.08)), (0.6, BG.alpha(0.55)), (1.0, BG.alpha(0.92))],
-            )
-            .child(
-                col()
-                    .w_full()
-                    .h_full()
-                    .px(24.0)
-                    .py(22.0)
-                    .justify_end()
-                    .gap(10.0)
-                    .child(text(hero.name.clone()).font(type_page()).color(FG).w_full().wrap())
+    if s.store_tab == 1 {
+        let wished: Vec<&StoreTile> = home
+            .shelves
+            .iter()
+            .flat_map(|sh| sh.items.iter())
+            .filter(|t| t.wished)
+            .collect();
+        if wished.is_empty() {
+            return page.child(
+                el().w_full()
+                    .h(220.0)
+                    .center()
                     .child(
-                        row()
-                            .w_full()
-                            .justify_between()
-                            .center_y()
-                            .child(
-                                row()
-                                    .gap(8.0)
-                                    .center_y()
-                                    .children((hero.discount > 0).then(|| discount_badge(hero.discount)))
-                                    .child(text(hero.display_price()).font(type_section()).color(FG))
-                                    .child(
-                                        primary_button("store-hero-open", "View game", None)
-                                            .on_press(move |s: &mut AppState| s.open_store_game(&app_id)),
-                                    ),
-                            )
-                            .children((hero_count > 1).then(|| {
-                                row().gap(6.0).children((0..hero_count.min(6)).map(|i| {
-                                    let active = i == s.store_hero_index % hero_count;
-                                    el().key(format!("hero-dot-{i}"))
-                                        .role("button")
-                                        .label(format!("Featured {}", i + 1))
-                                        .focusable(true)
-                                        .hit()
-                                        .size(if active { 18.0 } else { 8.0 }, 8.0)
-                                        .radius(4.0)
-                                        .fill(if active { FG } else { FG.alpha(0.35) })
-                                        .on_press(move |s: &mut AppState| s.store_hero_index = i)
-                                }))
-                            })),
+                        text("Games you bookmark in Discover show up here.")
+                            .font(type_section())
+                            .color(fg_muted()),
                     ),
             );
-        page = page.child(hero_card.child(hero_overlay));
-    }
-
-    for shelf in home.shelves.iter().take(4) {
-        if shelf.items.is_empty() {
-            continue;
         }
-        page = page
-            .child(text(shelf.title.clone()).font(type_title()).color(FG))
+        return page
+            .child(text("Wishlist").font(type_title()).color(FG))
             .child(
                 row()
                     .w_full()
                     .flex_wrap()
                     .gap(12.0)
-                    .children(shelf.items.iter().take(6).map(|t| store_tile_card(t, s, scale))),
+                    .children(wished.into_iter().map(|t| store_tile_card(t, s, scale))),
             );
+    }
+
+    if !home.hero.is_empty() {
+        let active_idx = s.store_hero_index % home.hero.len();
+        let hero = &home.hero[active_idx];
+        let hue = title_hue(&hero.name);
+        let hero_img = hero
+            .art
+            .as_ref()
+            .and_then(|a| a.best_hero())
+            .and_then(|u| s.remote_image_sized(u, 1280.0, scale));
+
+        let app_id = hero.app_id.clone();
+        let mut main_banner = el()
+            .key("store-hero-open")
+            .role("button")
+            .label(hero.name.clone())
+            .focusable(true)
+            .hit()
+            .press_on_down()
+            .grow(1.0)
+            .min_w(0.0)
+            .h(378.0)
+            .radius(RADIUS_PANEL)
+            .continuous_corners()
+            .clip_rounded(RADIUS_PANEL)
+            .on_press(move |s: &mut AppState| s.open_store_game(&app_id));
+
+        if let Some(img) = hero_img {
+            main_banner = main_banner.pixels_fit(img.pixels(), SurfaceFit::Fill);
+        } else {
+            main_banner = main_banner.linear_gradient(
+                0.35,
+                [(0.0, oklch(0.42, 0.16, hue)), (1.0, oklch(0.11, 0.03, hue))],
+            );
+        }
+
+        let name_plate = row()
+            .pin(Some(18.0), None, None, Some(18.0))
+            .px(14.0)
+            .py(8.0)
+            .gap(10.0)
+            .center_y()
+            .radius(10.0)
+            .fill(BG.alpha(0.68))
+            .child(
+                text(hero.name.clone())
+                    .font(TextStyle::new(15.0, 700.0))
+                    .color(FG),
+            )
+            .children((hero.discount > 0).then(|| discount_badge(hero.discount)));
+
+        main_banner = main_banner.child(name_plate);
+
+        let side_list = col()
+            .w(244.0)
+            .gap(6.0)
+            .children(home.hero.iter().take(6).enumerate().map(|(i, item)| {
+                let is_on = i == active_idx;
+                let item_hue = title_hue(&item.name);
+                let thumb_img = item
+                    .art
+                    .as_ref()
+                    .and_then(|a| a.best_hero())
+                    .and_then(|u| s.remote_image_sized(u, 220.0, scale));
+                let mut thumb = el()
+                    .size(74.0, 42.0)
+                    .radius(8.0)
+                    .continuous_corners()
+                    .clip_rounded(8.0);
+                if let Some(img) = thumb_img {
+                    thumb = thumb.pixels_fit(img.pixels(), SurfaceFit::Fill);
+                } else {
+                    thumb = thumb.linear_gradient(
+                        0.35,
+                        [(0.0, oklch(0.38, 0.14, item_hue)), (1.0, oklch(0.12, 0.03, item_hue))],
+                    );
+                }
+
+                row()
+                    .key(format!("hero-dot-{i}"))
+                    .role("button")
+                    .label(item.name.clone())
+                    .focusable(true)
+                    .hit()
+                    .press_on_down()
+                    .press_scale(PRESS_SCALE)
+                    .w_full()
+                    .h(58.0)
+                    .px(8.0)
+                    .gap(10.0)
+                    .center_y()
+                    .radius(12.0)
+                    .continuous_corners()
+                    .fill(if is_on { FG.alpha(0.10) } else { TRANSPARENT })
+                    .hover(hover_fill())
+                    .press(pressed_fill())
+                    .motion(SPRING_QUICK)
+                    .on_press(move |s: &mut AppState| s.store_hero_index = i)
+                    .child(thumb)
+                    .child(
+                        text(item.name.clone())
+                            .font(TextStyle::new(12.0, if is_on { 600.0 } else { 500.0 }))
+                            .color(if is_on { FG } else { fg_muted() })
+                            .grow(1.0)
+                            .wrap(),
+                    )
+            }));
+
+        page = page.child(
+            row()
+                .w_full()
+                .gap(12.0)
+                .items_start()
+                .child(main_banner)
+                .child(side_list),
+        );
+    }
+
+    for (idx, shelf) in home.shelves.iter().take(4).enumerate() {
+        if shelf.items.is_empty() {
+            continue;
+        }
+        let header = row()
+            .w_full()
+            .justify_between()
+            .center_y()
+            .child(
+                text(shelf.title.clone())
+                    .font(TextStyle::new(17.0, 650.0))
+                    .color(FG),
+            )
+            .child(
+                row()
+                    .gap(6.0)
+                    .center_y()
+                    .child(glass_icon_circle(
+                        match idx {
+                            0 => "shelf-prev-0",
+                            1 => "shelf-prev-1",
+                            2 => "shelf-prev-2",
+                            _ => "shelf-prev-3",
+                        },
+                        "Previous",
+                        28.0,
+                        icon_chevron_left(13.0, fg_muted()),
+                    ))
+                    .child(glass_icon_circle(
+                        match idx {
+                            0 => "shelf-next-0",
+                            1 => "shelf-next-1",
+                            2 => "shelf-next-2",
+                            _ => "shelf-next-3",
+                        },
+                        "Next",
+                        28.0,
+                        icon_chevron_right(13.0, FG),
+                    )),
+            );
+
+        let track = row()
+            .w_full()
+            .gap(12.0)
+            .scroll_x()
+            .children(shelf.items.iter().take(12).map(|t| store_tile_card(t, s, scale)));
+
+        page = page.child(col().w_full().gap(10.0).child(header).child(track));
     }
 
     page

@@ -1,19 +1,22 @@
 use crate::pc_state::PcTab;
 use crate::state::{AppState, HostStatus};
 use exo_rpc::{
-    ActionResult, AppsListReply, AudioReadReply, AutopilotState, DevicesListReply, DrivesReply,
-    ExoAccountState, ExoAiState, HdrState, KeyboardBackupsReply, KeyboardReadReply,
-    LauncherSettings, METHOD_APP_CHECK_UPDATE, METHOD_APP_INSTALL_UPDATE, METHOD_APP_OPEN_LOGS,
-    METHOD_APP_REPAIR_CACHE, METHOD_APPS_LIST, METHOD_APPS_TIDY, METHOD_APPS_UNINSTALL,
-    METHOD_AUDIO_READ, METHOD_AUDIO_SET_MUTE, METHOD_AUDIO_SET_VOLUME, METHOD_AUTOPILOT_STATE,
-    METHOD_DEVICES_LIST, METHOD_EXO_ACCOUNT_SIGN_OUT, METHOD_EXO_ACCOUNT_STATE,
+    ActionResult, AppsIconsReply, AppsListReply, AudioReadReply, AutopilotState, DevicesImageReply,
+    DevicesListReply, DrivesReply, EqStateReply, ExoAccountState, ExoAiState, HdrState,
+    KeyboardBackupsReply, KeyboardReadReply, LauncherSettings, METHOD_APP_CHECK_UPDATE,
+    METHOD_APP_INSTALL_UPDATE, METHOD_APP_OPEN_LOGS, METHOD_APP_REPAIR_CACHE, METHOD_APPS_ICONS,
+    METHOD_APPS_LIST, METHOD_APPS_TIDY, METHOD_APPS_UNINSTALL, METHOD_AUDIO_READ,
+    METHOD_AUDIO_SET_MUTE, METHOD_AUDIO_SET_VOLUME, METHOD_AUTOPILOT_STATE, METHOD_DEVICES_IMAGE,
+    METHOD_DEVICES_LIST, METHOD_EQ, METHOD_EXO_ACCOUNT_SIGN_OUT, METHOD_EXO_ACCOUNT_STATE,
     METHOD_EXO_ACCOUNT_SYNC, METHOD_EXO_AI_SET, METHOD_EXO_AI_STATE, METHOD_HDR_STATE,
     METHOD_JUNK_CLEAN, METHOD_KEYBOARD_BACKUP, METHOD_KEYBOARD_BACKUPS, METHOD_KEYBOARD_OPEN_APP,
     METHOD_KEYBOARD_PROFILE, METHOD_KEYBOARD_READ, METHOD_KEYBOARD_RESTORE,
     METHOD_KEYBOARD_SETTINGS, METHOD_PLAYTIME_RIOT_REFRESH, METHOD_SETTINGS_SET,
-    METHOD_SHADERS_ADDON, METHOD_STARTUP_CLEAN, METHOD_STARTUP_LIST, METHOD_STARTUP_REMOVE,
+    METHOD_SHADERS_ADDON, METHOD_SHADERS_ESTIMATES, METHOD_SHADERS_PREPARE_GAMES,
+    METHOD_SHADERS_PREPARE_START, METHOD_STARTUP_CLEAN, METHOD_STARTUP_LIST, METHOD_STARTUP_REMOVE,
     METHOD_STARTUP_RESTORE, METHOD_SYSTEM_ABOUT, METHOD_SYSTEM_DRIVES, METHOD_SYSTEM_TUNING,
-    ShadersAddonStatus, StartupListReply, SystemAbout, SystemTuningState, UpdateCheckReply,
+    ShadersAddonStatus, ShadersEstimatesReply, ShadersPrepareGamesReply, StartupListReply,
+    SystemAbout, SystemTuningState, UpdateCheckReply,
 };
 use serde_json::{Map, Value, json};
 
@@ -245,9 +248,68 @@ impl AppState {
             let h5 = handle.clone();
             rpc.call::<_, ShadersAddonStatus>(METHOD_SHADERS_ADDON, &json!({}), move |res| {
                 if let Ok(sh) = res {
-                    h5.update(move |s, _| s.pc.shaders = Some(sh));
+                    h5.update(move |s, _| {
+                        if let Some(ref snap) = sh.snapshot {
+                            s.pc.shader_snap_games = snap.games.clone();
+                        }
+                        s.pc.shaders = Some(sh);
+                    });
                 }
             });
+            let h5b = handle.clone();
+            rpc.call::<_, ShadersEstimatesReply>(METHOD_SHADERS_ESTIMATES, &json!({}), move |res| {
+                if let Ok(est) = res
+                    && est.ok
+                {
+                    h5b.update(move |s, _| s.pc.shader_estimates = est.seconds);
+                }
+            });
+            let h6 = handle.clone();
+            rpc.call::<_, ShadersPrepareGamesReply>(
+                METHOD_SHADERS_PREPARE_GAMES,
+                &json!({}),
+                move |res| {
+                    if let Ok(reply) = res {
+                        h6.update(move |s, _| s.pc.shader_games = reply.games);
+                    }
+                },
+            );
+            let h7 = handle.clone();
+            rpc.call::<_, SystemAbout>(METHOD_SYSTEM_ABOUT, &json!({}), move |res| {
+                if let Ok(about) = res {
+                    h7.update(move |s, _| s.pc.system_about = Some(about));
+                }
+            });
+            if self.pc.drives.is_none() {
+                self.load_pc_drives();
+            }
+        }
+    }
+
+    pub fn compile_shaders_all(&mut self) {
+        let ids: Vec<String> = self
+            .pc
+            .shader_games
+            .iter()
+            .filter(|g| g.state != "prepared" && g.state != "running")
+            .map(|g| g.id.clone())
+            .collect();
+        if let Some(first) = ids.first() {
+            self.notice = Some("Starting shader pre-compilation…".into());
+            #[cfg(windows)]
+            if let (Some(rpc), Some(handle)) = (self.rpc.clone(), self.handle.clone()) {
+                rpc.call::<_, ActionResult>(
+                    METHOD_SHADERS_PREPARE_START,
+                    &json!({ "id": first }),
+                    move |res| {
+                        handle.update(move |s, _| {
+                            if let Ok(r) = res {
+                                s.notice = r.message.or_else(|| Some("Shader compile started.".into()));
+                            }
+                        });
+                    },
+                );
+            }
         }
     }
 
@@ -367,13 +429,39 @@ impl AppState {
         if let (Some(rpc), Some(handle)) = (self.rpc.clone(), self.handle.clone()) {
             self.pc.apps_loading = true;
             let h1 = handle.clone();
+            let rpc_icons = rpc.clone();
             rpc.call::<_, AppsListReply>(METHOD_APPS_LIST, &json!({}), move |res| {
-                h1.update(move |s, _| {
-                    s.pc.apps_loading = false;
-                    if let Ok(list) = res {
+                if let Ok(list) = res {
+                    let mut by_size: Vec<&exo_rpc::InstalledAppItem> = list.programs.iter().collect();
+                    by_size.sort_by(|a, b| b.bytes.unwrap_or(0).cmp(&a.bytes.unwrap_or(0)));
+                    let all_ids: Vec<String> = by_size.into_iter().map(|p| p.id.clone()).collect();
+                    let h_ic = h1.clone();
+                    h1.update(move |s, _| {
+                        s.pc.apps_loading = false;
                         s.pc.apps_list = Some(list);
+                    });
+                    for chunk in all_ids.chunks(100) {
+                        let chunk_vec: Vec<String> = chunk.to_vec();
+                        let h_c = h_ic.clone();
+                        rpc_icons.call::<_, AppsIconsReply>(
+                            METHOD_APPS_ICONS,
+                            &json!({ "ids": chunk_vec }),
+                            move |ic_res| {
+                                if let Ok(reply) = ic_res {
+                                    h_c.update(move |s, _| {
+                                        for (k, v) in reply.icons {
+                                            if let Some(data_url) = v {
+                                                s.pc.app_icons.insert(k, data_url);
+                                            }
+                                        }
+                                    });
+                                }
+                            },
+                        );
                     }
-                });
+                } else {
+                    h1.update(|s, _| s.pc.apps_loading = false);
+                }
             });
             let h2 = handle.clone();
             rpc.call::<_, StartupListReply>(METHOD_STARTUP_LIST, &json!({}), move |res| {
@@ -543,12 +631,45 @@ impl AppState {
                     let h_aud = h1.clone();
                     let out_clone = out_id.clone();
                     let mic_clone = mic_id.clone();
+                    let photo_reqs: Vec<(String, serde_json::Value)> = list
+                        .devices
+                        .iter()
+                        .map(|d| {
+                            (
+                                d.id.clone(),
+                                json!({
+                                    "kind": d.kind,
+                                    "name": d.name,
+                                    "model": d.model,
+                                    "maker": d.maker.as_deref().or(d.brand.as_deref()),
+                                }),
+                            )
+                        })
+                        .collect();
+                    let rpc_img = rpc_audio.clone();
+                    let h_img_base = h1.clone();
                     h1.update(move |s, _| {
                         s.pc.devices_loading = false;
                         s.pc.audio_output_id = out_id;
                         s.pc.audio_mic_id = mic_id;
                         s.pc.devices = Some(list);
                     });
+                    for (dev_id, payload) in photo_reqs {
+                        let h_i = h_img_base.clone();
+                        rpc_img.call::<_, DevicesImageReply>(
+                            METHOD_DEVICES_IMAGE,
+                            &payload,
+                            move |img_res| {
+                                if let Ok(reply) = img_res
+                                    && let Some(url) = reply.url
+                                {
+                                    h_i.update(move |s, _| {
+                                        s.pc.device_images.insert(dev_id, url);
+                                    });
+                                }
+                            },
+                        );
+                    }
                     rpc_audio.call::<_, AudioReadReply>(
                         METHOD_AUDIO_READ,
                         &json!({ "output": out_clone, "mic": mic_clone }),
@@ -574,6 +695,38 @@ impl AppState {
             rpc.call::<_, KeyboardBackupsReply>(METHOD_KEYBOARD_BACKUPS, &json!({}), move |res| {
                 if let Ok(b) = res {
                     h3.update(move |s, _| s.pc.keyboard_backups = b.backups);
+                }
+            });
+            let h4 = handle.clone();
+            let rpc_eq_img = rpc.clone();
+            rpc.call::<_, EqStateReply>(METHOD_EQ, &json!({ "action": "state" }), move |res| {
+                if let Ok(eq) = res
+                    && let Some(hp) = eq.headphone
+                {
+                    let look = if hp.form == "over-ear" { "headphones" } else { "iem" };
+                    let img_payload = json!({
+                        "kind": "audio",
+                        "model": look,
+                        "name": hp.name,
+                    });
+                    let h4_img = h4.clone();
+                    h4.update(move |s, _| s.pc.eq_headphone = Some(hp));
+                    rpc_eq_img.call::<_, DevicesImageReply>(
+                        METHOD_DEVICES_IMAGE,
+                        &img_payload,
+                        move |img_res| {
+                            if let Ok(reply) = img_res
+                                && let Some(url) = reply.url
+                            {
+                                h4_img.update(move |s, _| {
+                                    if let Some(out_id) = s.pc.audio_output_id.clone() {
+                                        s.pc.device_images.insert(out_id, url.clone());
+                                    }
+                                    s.pc.device_images.insert("audio:worn".into(), url);
+                                });
+                            }
+                        },
+                    );
                 }
             });
         }

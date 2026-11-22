@@ -65,6 +65,133 @@ pub struct MusicVolumeReply {
     pub muted: bool,
 }
 
+fn null_vec<'de, D, T>(d: D) -> Result<Vec<T>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+    T: Deserialize<'de>,
+{
+    Ok(Option::<Vec<T>>::deserialize(d)?.unwrap_or_default())
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PlayerStartReply {
+    #[serde(default)]
+    pub ok: bool,
+    #[serde(default)]
+    pub state: String,
+    #[serde(default)]
+    pub message: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PlayerCard {
+    #[serde(default)]
+    pub uri: String,
+    #[serde(default)]
+    pub kind: String,
+    #[serde(default)]
+    pub title: String,
+    #[serde(default)]
+    pub subtitle: String,
+    #[serde(default)]
+    pub image: String,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PlayerArtist {
+    #[serde(default)]
+    pub uri: String,
+    #[serde(default)]
+    pub name: String,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PlayerAlbumRef {
+    #[serde(default)]
+    pub uri: String,
+    #[serde(default)]
+    pub name: String,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PlayerTrack {
+    #[serde(default)]
+    pub uri: String,
+    #[serde(default)]
+    pub uid: String,
+    #[serde(default)]
+    pub title: String,
+    #[serde(default, deserialize_with = "null_vec")]
+    pub artists: Vec<PlayerArtist>,
+    #[serde(default)]
+    pub album: Option<PlayerAlbumRef>,
+    #[serde(default)]
+    pub image: String,
+    #[serde(default)]
+    pub duration_ms: i64,
+    #[serde(default)]
+    pub explicit: bool,
+    #[serde(default)]
+    pub liked: bool,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PlayerSection {
+    #[serde(default)]
+    pub title: String,
+    #[serde(default, deserialize_with = "null_vec")]
+    pub items: Vec<PlayerCard>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PlayerHeader {
+    #[serde(default)]
+    pub uri: String,
+    #[serde(default)]
+    pub title: String,
+    #[serde(default)]
+    pub subtitle: String,
+    #[serde(default)]
+    pub image: String,
+    #[serde(default)]
+    pub description: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PlayerViewData {
+    #[serde(default, deserialize_with = "null_vec")]
+    pub sections: Vec<PlayerSection>,
+    #[serde(default, deserialize_with = "null_vec")]
+    pub items: Vec<PlayerCard>,
+    #[serde(default, deserialize_with = "null_vec")]
+    pub top: Vec<PlayerCard>,
+    #[serde(default, deserialize_with = "null_vec")]
+    pub tracks: Vec<PlayerTrack>,
+    #[serde(default)]
+    pub header: Option<PlayerHeader>,
+    #[serde(default)]
+    pub total: Option<u32>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PlayerViewReply {
+    #[serde(default)]
+    pub ok: bool,
+    #[serde(default)]
+    pub data: Option<PlayerViewData>,
+    #[serde(default)]
+    pub message: Option<String>,
+}
+
 #[derive(Debug, Clone, Default, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CaptureSettingsDto {

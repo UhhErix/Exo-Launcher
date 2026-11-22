@@ -59,6 +59,16 @@ fn on_key(s: &mut AppState, ev: &KeyEvent, tx: &mut Tx) -> bool {
         }
         return true;
     }
+    if ev.is_command(',') {
+        s.toggle_settings();
+        return true;
+    }
+    for (idx, ch) in ['1', '2', '3', '4', '5', '6', '7'].into_iter().enumerate() {
+        if ev.is_command(ch) {
+            s.switch_room(state::Room::NAV_TABS[idx]);
+            return true;
+        }
+    }
     if s.palette_open {
         return palette::handle_palette_key(s, ev, tx);
     }
@@ -125,16 +135,13 @@ fn load_live_state_sync(pipe: &str, scene: Option<&str>) -> AppState {
             ) && home.ok
             {
                 let mut urls = Vec::new();
-                if let Some(hero) = home
-                    .hero
-                    .first()
-                    .and_then(|t| t.art.as_ref())
-                    .and_then(|a| a.best_hero())
-                {
-                    urls.push(hero.to_string());
+                for h in home.hero.iter().take(6) {
+                    if let Some(u) = h.art.as_ref().and_then(|a| a.best_hero()) {
+                        urls.push(u.to_string());
+                    }
                 }
                 for shelf in home.shelves.iter().take(2) {
-                    for tile in shelf.items.iter().take(6) {
+                    for tile in shelf.items.iter().take(10) {
                         if let Some(u) = tile.art.as_ref().and_then(|a| a.best_poster()) {
                             urls.push(u.to_string());
                         }
@@ -212,7 +219,64 @@ fn load_live_state_sync(pipe: &str, scene: Option<&str>) -> AppState {
                 &serde_json::json!({}),
                 Duration::from_secs(5),
             ) {
+                if let Some(ref snap) = sh.snapshot {
+                    state.pc.shader_snap_games = snap.games.clone();
+                }
                 state.pc.shaders = Some(sh);
+            }
+            if let Ok(est) = client.call_blocking::<_, exo_rpc::ShadersEstimatesReply>(
+                exo_rpc::METHOD_SHADERS_ESTIMATES,
+                &serde_json::json!({}),
+                Duration::from_secs(5),
+            ) && est.ok
+            {
+                state.pc.shader_estimates = est.seconds;
+            }
+            if let Ok(sg) = client.call_blocking::<_, exo_rpc::ShadersPrepareGamesReply>(
+                exo_rpc::METHOD_SHADERS_PREPARE_GAMES,
+                &serde_json::json!({}),
+                Duration::from_secs(6),
+            ) {
+                state.pc.shader_games = sg.games;
+            }
+            if let Ok(about) = client.call_blocking::<_, exo_rpc::SystemAbout>(
+                exo_rpc::METHOD_SYSTEM_ABOUT,
+                &serde_json::json!({}),
+                Duration::from_secs(5),
+            ) {
+                state.pc.system_about = Some(about);
+            }
+            if let Ok(drv) = client.call_blocking::<_, exo_rpc::DrivesReply>(
+                exo_rpc::METHOD_SYSTEM_DRIVES,
+                &serde_json::json!({ "space": false }),
+                Duration::from_secs(8),
+            ) {
+                state.pc.drives = Some(drv);
+            }
+        }
+        Some("pc-apps") => {
+            if let Ok(list) = client.call_blocking::<_, exo_rpc::AppsListReply>(
+                exo_rpc::METHOD_APPS_LIST,
+                &serde_json::json!({}),
+                Duration::from_secs(12),
+            ) {
+                let mut by_size: Vec<&exo_rpc::InstalledAppItem> = list.programs.iter().collect();
+                by_size.sort_by(|a, b| b.bytes.unwrap_or(0).cmp(&a.bytes.unwrap_or(0)));
+                let ids: Vec<String> = by_size.into_iter().take(100).map(|p| p.id.clone()).collect();
+                if !ids.is_empty()
+                    && let Ok(ic) = client.call_blocking::<_, exo_rpc::AppsIconsReply>(
+                        exo_rpc::METHOD_APPS_ICONS,
+                        &serde_json::json!({ "ids": ids }),
+                        Duration::from_secs(12),
+                    )
+                {
+                    for (k, v) in ic.icons {
+                        if let Some(d) = v {
+                            state.pc.app_icons.insert(k, d);
+                        }
+                    }
+                }
+                state.pc.apps_list = Some(list);
             }
         }
         Some("pc-storage") => {
@@ -225,11 +289,47 @@ fn load_live_state_sync(pipe: &str, scene: Option<&str>) -> AppState {
             }
         }
         Some("pc-devices") => {
+            if let Ok(eq) = client.call_blocking::<_, exo_rpc::EqStateReply>(
+                exo_rpc::METHOD_EQ,
+                &serde_json::json!({ "action": "state" }),
+                Duration::from_secs(6),
+            ) && let Some(hp) = eq.headphone
+            {
+                let look = if hp.form == "over-ear" { "headphones" } else { "iem" };
+                if let Ok(reply) = client.call_blocking::<_, exo_rpc::DevicesImageReply>(
+                    exo_rpc::METHOD_DEVICES_IMAGE,
+                    &serde_json::json!({
+                        "kind": "audio",
+                        "model": look,
+                        "name": hp.name,
+                    }),
+                    Duration::from_secs(8),
+                ) && let Some(url) = reply.url
+                {
+                    state.pc.device_images.insert("audio:worn".into(), url);
+                }
+                state.pc.eq_headphone = Some(hp);
+            }
             if let Ok(list) = client.call_blocking::<_, exo_rpc::DevicesListReply>(
                 exo_rpc::METHOD_DEVICES_LIST,
                 &serde_json::json!({}),
                 Duration::from_secs(8),
             ) {
+                for dev in &list.devices {
+                    if let Ok(reply) = client.call_blocking::<_, exo_rpc::DevicesImageReply>(
+                        exo_rpc::METHOD_DEVICES_IMAGE,
+                        &serde_json::json!({
+                            "kind": dev.kind,
+                            "name": dev.name,
+                            "model": dev.model,
+                            "maker": dev.maker.as_deref().or(dev.brand.as_deref()),
+                        }),
+                        Duration::from_secs(8),
+                    ) && let Some(url) = reply.url
+                    {
+                        state.pc.device_images.insert(dev.id.clone(), url);
+                    }
+                }
                 let out_id = list
                     .devices
                     .iter()
@@ -379,6 +479,10 @@ fn main() {
             };
             s.open_game_page(&target);
         }),
+        ("all-games", |s: &mut AppState| {
+            s.switch_room(state::Room::Library);
+            s.library_all_games = true;
+        }),
         ("store", |s: &mut AppState| s.switch_room(state::Room::Store)),
         ("store-game", |s: &mut AppState| {
             s.switch_room(state::Room::Store);
@@ -387,17 +491,17 @@ fn main() {
         ("tour", |s: &mut AppState| s.start_tour()),
         ("activate-key", |s: &mut AppState| s.key_modal_open = true),
         ("settings", |s: &mut AppState| s.switch_room(state::Room::Settings)),
-        ("pc", |s: &mut AppState| s.switch_room(state::Room::Pc)),
+        ("pc", |s: &mut AppState| s.switch_room(state::Room::ExoAi)),
         ("pc-apps", |s: &mut AppState| {
-            s.switch_room(state::Room::Pc);
+            s.switch_room(state::Room::Apps);
             s.switch_pc_tab(pc_state::PcTab::Apps);
         }),
         ("pc-storage", |s: &mut AppState| {
-            s.switch_room(state::Room::Pc);
+            s.switch_room(state::Room::ExoAi);
             s.switch_pc_tab(pc_state::PcTab::Storage);
         }),
         ("pc-devices", |s: &mut AppState| {
-            s.switch_room(state::Room::Pc);
+            s.switch_room(state::Room::Devices);
             s.switch_pc_tab(pc_state::PcTab::Devices);
         }),
         ("music", |s: &mut AppState| s.switch_room(state::Room::Music)),
@@ -544,12 +648,12 @@ fn main() {
                             s.handle_discord_golive_viewers(ids);
                         }
                         exo_rpc::HostEvent::DevicesChanged => {
-                            if s.room == state::Room::Pc && s.pc.pc_tab == pc_state::PcTab::Devices {
+                            if s.room == state::Room::Devices {
                                 s.load_pc_devices();
                             }
                         }
                         exo_rpc::HostEvent::AppsChanged => {
-                            if s.room == state::Room::Pc && s.pc.pc_tab == pc_state::PcTab::Apps {
+                            if s.room == state::Room::Apps {
                                 s.load_pc_apps();
                             }
                         }
@@ -628,31 +732,13 @@ mod tests {
         rt.frame(1.0 / 60.0);
         assert_eq!(rt.state.open_game_id.as_deref(), Some("demo:cyberpunk"));
 
-        let (px, py) = rt.find("gp-props").expect("Properties button");
+        let (px, py) = rt.find("gp-prop-tab-1").expect("Installed files tab");
         rt.pointer_down(px, py);
         rt.pointer_up(px, py);
         rt.frame(1.0 / 60.0);
-        assert!(rt.state.props_open);
-        let modal_blurs = rt
-            .instances
-            .iter()
-            .filter(|i| i.params[1] == KIND_BACKDROP_BLUR)
-            .count();
-        assert!(
-            modal_blurs >= 3 && modal_blurs <= 4,
-            "expected modal blur within MAX_BACKDROP_BLURS=4, got {modal_blurs}"
-        );
+        assert_eq!(rt.state.game_props_tab, 1);
 
         let mut tx_ctx = Tx::default();
-        assert!(on_key(
-            &mut rt.state,
-            &KeyEvent {
-                key: Key::Escape,
-                mods: Mods::default()
-            },
-            &mut tx_ctx
-        ));
-        assert!(!rt.state.props_open);
         assert!(on_key(
             &mut rt.state,
             &KeyEvent {
@@ -712,7 +798,7 @@ mod tests {
         rt.frame(1.0 / 60.0);
         assert_eq!(rt.state.settings.start_with_windows, !before);
 
-        rt.update(|s, _| s.switch_room(Room::Pc));
+        rt.update(|s, _| s.switch_room(Room::ExoAi));
         rt.frame(2.0 / 60.0);
         assert_eq!(rt.state.pc.pc_tab, pc_state::PcTab::ExoAi);
         let blurs = rt
@@ -722,28 +808,33 @@ mod tests {
             .count();
         assert!(blurs <= 4, "PC room exceeded MAX_BACKDROP_BLURS=4: {blurs}");
 
-        let (ax, ay) = rt.find("pc-tab-apps").expect("PC Apps tab");
-        rt.pointer_down(ax, ay);
-        rt.pointer_up(ax, ay);
-        rt.frame(3.0 / 60.0);
-        assert_eq!(rt.state.pc.pc_tab, pc_state::PcTab::Apps);
-
-        let (sx, sy) = rt.find("pc-tab-storage").expect("PC Storage tab");
+        let (sx, sy) = rt.find("pc-tab-storage").expect("Storage button");
         rt.pointer_down(sx, sy);
         rt.pointer_up(sx, sy);
-        rt.frame(4.0 / 60.0);
-        assert_eq!(rt.state.pc.pc_tab, pc_state::PcTab::Storage);
+        rt.frame(3.0 / 60.0);
+        assert!(rt.state.pc.exo_ai_storage_open);
 
-        let (dx, dy) = rt.find("pc-tab-devices").expect("PC Devices tab");
+        let (ax, ay) = rt.find("nav-apps").expect("Apps nav tab");
+        rt.pointer_down(ax, ay);
+        rt.pointer_up(ax, ay);
+        rt.frame(4.0 / 60.0);
+        assert_eq!(rt.state.room, Room::Apps);
+
+        let (dx, dy) = rt.find("nav-devices").expect("Devices nav tab");
         rt.pointer_down(dx, dy);
         rt.pointer_up(dx, dy);
         rt.frame(5.0 / 60.0);
-        assert_eq!(rt.state.pc.pc_tab, pc_state::PcTab::Devices);
+        assert_eq!(rt.state.room, Room::Devices);
+
+        let (wx, wy) = rt.find("dev-card-dev:wooting").expect("Wooting device card");
+        rt.pointer_down(wx, wy);
+        rt.pointer_up(wx, wy);
+        rt.frame(6.0 / 60.0);
         let act_before = rt.state.pc.keyboard.as_ref().and_then(|k| k.actuation_mm).unwrap_or(0.4);
         let (ux, uy) = rt.find("kb-act-up").expect("Wooting actuation +");
         rt.pointer_down(ux, uy);
         rt.pointer_up(ux, uy);
-        rt.frame(6.0 / 60.0);
+        rt.frame(7.0 / 60.0);
         let act_after = rt.state.pc.keyboard.as_ref().and_then(|k| k.actuation_mm).unwrap_or(0.0);
         assert!((act_after - (act_before + 0.1)).abs() < 0.01);
     }

@@ -50,6 +50,14 @@ pub enum DiscordHomeTab {
     Friends,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DiscordFriendsTab {
+    Online,
+    All,
+    Pending,
+    Blocked,
+}
+
 pub struct DiscordState {
     pub status: DiscordStatus,
     pub signin: Option<DiscordSignInStep>,
@@ -61,6 +69,8 @@ pub struct DiscordState {
     pub speaking: HashSet<String>,
     pub place: DiscordPlace,
     pub home_tab: DiscordHomeTab,
+    pub friends_tab: DiscordFriendsTab,
+    pub dm_search_open: bool,
     pub active_dm_id: Option<String>,
     pub active_guild_id: Option<String>,
     pub active_channel_id: Option<String>,
@@ -99,7 +109,9 @@ impl DiscordState {
             },
             speaking: HashSet::new(),
             place: DiscordPlace::Home,
-            home_tab: DiscordHomeTab::Now,
+            home_tab: DiscordHomeTab::Friends,
+            friends_tab: DiscordFriendsTab::Online,
+            dm_search_open: false,
             active_dm_id: None,
             active_guild_id: None,
             active_channel_id: None,
@@ -341,6 +353,7 @@ impl DiscordState {
                 name: "Ada".into(),
                 username: Some("ada".into()),
                 avatar: None,
+                look: None,
                 kind: "friend".into(),
                 status: "online".into(),
                 activity: Some("Counter-Strike 2".into()),
@@ -362,6 +375,7 @@ impl DiscordState {
                 name: "Kai".into(),
                 username: Some("kai".into()),
                 avatar: None,
+                look: None,
                 kind: "friend".into(),
                 status: "online".into(),
                 activity: Some("Counter-Strike 2".into()),
@@ -383,6 +397,7 @@ impl DiscordState {
                 name: "Mina".into(),
                 username: Some("mina".into()),
                 avatar: None,
+                look: None,
                 kind: "friend".into(),
                 status: "dnd".into(),
                 activity: Some("Cyberpunk 2077".into()),
@@ -404,6 +419,7 @@ impl DiscordState {
                 name: "Sol".into(),
                 username: Some("sol".into()),
                 avatar: None,
+                look: None,
                 kind: "friend".into(),
                 status: "idle".into(),
                 activity: Some("Midnight City — M83".into()),
@@ -417,6 +433,7 @@ impl DiscordState {
                 name: "Devon".into(),
                 username: Some("devon".into()),
                 avatar: None,
+                look: None,
                 kind: "incoming".into(),
                 status: "online".into(),
                 activity: None,

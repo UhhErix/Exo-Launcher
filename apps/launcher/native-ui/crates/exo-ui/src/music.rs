@@ -1,12 +1,11 @@
 use crate::media_state::MusicService;
 use crate::state::{AppState, Room};
 use exo_kit::{
-    BG, BadgeTone, FG, GLASS_CONTROL_SIGMA, PRESS_SCALE, PRIMARY_FG, RADIUS_CARD, RADIUS_PANEL,
-    RADIUS_PILL, SPRING_QUICK, bad, fg_muted, filter_pill, glass_button, glass_control_fill,
-    glass_rim, good, hairline, hover_fill, icon_music, icon_pause, icon_play, icon_refresh,
-    icon_skip_back, icon_skip_forward, icon_sparkles, icon_volume, icon_volume_off,
-    primary_button, progress_bar, status_badge, subtle_fill, type_body, type_label, type_page,
-    type_section, type_small, type_title,
+    BG, BadgeTone, FG, GLASS_CONTROL_SIGMA, PRESS_SCALE, PRIMARY_FG, RADIUS_PANEL, RADIUS_PILL,
+    SPRING_QUICK, bad, fg_muted, filter_pill, glass_button, glass_control_fill, hairline,
+    hover_fill, icon_music, icon_pause, icon_play, icon_refresh, icon_skip_back, icon_skip_forward,
+    icon_sparkles, icon_volume, icon_volume_off, primary_button, progress_bar, status_badge,
+    subtle_fill, type_body, type_label, type_page, type_small, type_title,
 };
 use exo_rpc::format_duration_ms;
 use rune::color::oklch;
@@ -303,6 +302,8 @@ pub fn mini_player(s: &AppState, scale: f32) -> Option<El> {
         || s.palette_open
         || s.key_modal_open
         || s.props_open
+        || s.capture_menu_open
+        || s.library_more_open
         || s.media.open_capture_id.is_some()
     {
         return None;
@@ -315,9 +316,7 @@ pub fn mini_player(s: &AppState, scale: f32) -> Option<El> {
         .as_deref()
         .and_then(|u| s.remote_image(u, scale));
 
-    let in_top_bar = s.room == Room::Discord;
-    let thumb_sz = if in_top_bar { 26.0 } else { 34.0 };
-    let mut thumb = el().size(thumb_sz, thumb_sz).radius(if in_top_bar { 13.0 } else { 8.0 });
+    let mut thumb = el().size(24.0, 24.0).radius(12.0).clip_rounded(12.0);
     if let Some(img) = art_img {
         thumb = thumb.pixels_fit(img.pixels(), SurfaceFit::Fill);
     } else {
@@ -327,34 +326,21 @@ pub fn mini_player(s: &AppState, scale: f32) -> Option<El> {
                 [(0.0, oklch(0.50, 0.16, hue)), (1.0, oklch(0.16, 0.04, hue))],
             )
             .center()
-            .child(icon_music(if in_top_bar { 12.0 } else { 14.0 }, FG));
-    }
-
-    let mut capsule = row()
-        .key("music-mini-player")
-        .center_y()
-        .backdrop_blur(GLASS_CONTROL_SIGMA)
-        .fill(glass_control_fill())
-        .border(1.0, glass_rim());
-    if in_top_bar {
-        capsule = capsule
-            .pin(None, Some(7.0), Some(408.0), None)
-            .h(40.0)
-            .px(8.0)
-            .gap(7.0)
-            .radius(RADIUS_PILL);
-    } else {
-        capsule = capsule
-            .pin(None, None, Some(16.0), Some(16.0))
-            .h(52.0)
-            .px(10.0)
-            .gap(10.0)
-            .radius(RADIUS_CARD)
-            .shadow(10.0, 28.0, BG.alpha(0.55));
+            .child(icon_music(11.0, FG));
     }
 
     Some(
-        capsule
+        row()
+            .key("music-mini-player")
+            .h(36.0)
+            .pl(6.0)
+            .pr(8.0)
+            .gap(7.0)
+            .center_y()
+            .radius(RADIUS_PILL)
+            .backdrop_blur(GLASS_CONTROL_SIGMA)
+            .fill(glass_control_fill())
+            .border_gradient(1.0, exo_kit::glass_rim_top(), exo_kit::glass_rim_bottom())
             .child(
                 row()
                     .key("mini-open-music")
@@ -363,23 +349,23 @@ pub fn mini_player(s: &AppState, scale: f32) -> Option<El> {
                     .focusable(true)
                     .hit()
                     .press_on_down()
-                    .gap(if in_top_bar { 8.0 } else { 10.0 })
+                    .gap(7.0)
                     .center_y()
                     .on_press(|s: &mut AppState| s.switch_room(Room::Music))
                     .child(thumb)
                     .child(
                         col()
-                            .w(if in_top_bar { 94.0 } else { 148.0 })
-                            .gap(1.0)
+                            .w(88.0)
+                            .gap(0.0)
                             .child(
                                 text(track.title.clone())
-                                    .font(if in_top_bar { type_small() } else { type_section() })
+                                    .font(type_small())
                                     .color(FG)
                                     .truncate(),
                             )
                             .child(
                                 text(track.artist.clone())
-                                    .font(if in_top_bar { type_label() } else { type_small() })
+                                    .font(type_label())
                                     .color(fg_muted())
                                     .truncate(),
                             ),
@@ -393,16 +379,16 @@ pub fn mini_player(s: &AppState, scale: f32) -> Option<El> {
                     .hit()
                     .press_on_down()
                     .press_scale(PRESS_SCALE)
-                    .size(if in_top_bar { 26.0 } else { 32.0 }, if in_top_bar { 26.0 } else { 32.0 })
+                    .size(24.0, 24.0)
                     .radius(RADIUS_PILL)
                     .center()
                     .fill(FG)
                     .motion(SPRING_QUICK)
                     .on_press(|s: &mut AppState| s.music_control("toggle"))
                     .child(if playing {
-                        icon_pause(if in_top_bar { 11.0 } else { 13.0 }, PRIMARY_FG)
+                        icon_pause(10.0, PRIMARY_FG)
                     } else {
-                        icon_play(if in_top_bar { 11.0 } else { 13.0 }, PRIMARY_FG)
+                        icon_play(10.0, PRIMARY_FG)
                     }),
             )
             .child(
@@ -413,18 +399,13 @@ pub fn mini_player(s: &AppState, scale: f32) -> Option<El> {
                     .hit()
                     .press_on_down()
                     .press_scale(PRESS_SCALE)
-                    .size(if in_top_bar { 26.0 } else { 30.0 }, if in_top_bar { 26.0 } else { 30.0 })
+                    .size(24.0, 24.0)
                     .radius(RADIUS_PILL)
                     .center()
                     .hover(hover_fill())
                     .motion(SPRING_QUICK)
                     .on_press(|s: &mut AppState| s.music_control("next"))
-                    .child(icon_skip_forward(if in_top_bar { 11.0 } else { 13.0 }, FG)),
-            )
-            .child(
-                el().size(6.0, 6.0)
-                    .radius(3.0)
-                    .fill(if playing { good() } else { fg_muted() }),
+                    .child(icon_skip_forward(10.0, FG)),
             ),
     )
 }

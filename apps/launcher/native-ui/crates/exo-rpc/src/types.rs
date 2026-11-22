@@ -1,7 +1,15 @@
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::Value;
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
+
+fn null_as_default<'de, D, T>(deserializer: D) -> Result<T, D::Error>
+where
+    D: Deserializer<'de>,
+    T: Default + Deserialize<'de>,
+{
+    Ok(Option::<T>::deserialize(deserializer)?.unwrap_or_default())
+}
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct HostContract {
@@ -12,12 +20,30 @@ pub struct HostContract {
 
 #[derive(Debug, Clone, Default, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
+pub struct GameInclude {
+    #[serde(default)]
+    pub app_id: Option<String>,
+    #[serde(default)]
+    pub title: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GameVariant {
+    #[serde(default, deserialize_with = "null_as_default")]
+    pub id: String,
+    #[serde(default)]
+    pub launch_target: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Game {
     pub id: String,
     pub title: String,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "null_as_default")]
     pub store: String,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "null_as_default")]
     pub stores: Vec<String>,
     #[serde(default)]
     pub installed: bool,
@@ -31,6 +57,16 @@ pub struct Game {
     pub primary_action: Option<String>,
     #[serde(default)]
     pub cover_url: Option<String>,
+    #[serde(default)]
+    pub cover_source: Option<String>,
+    #[serde(default)]
+    pub hero_url: Option<String>,
+    #[serde(default)]
+    pub launch_target: Option<String>,
+    #[serde(default, deserialize_with = "null_as_default")]
+    pub includes: Vec<GameInclude>,
+    #[serde(default, deserialize_with = "null_as_default")]
+    pub variants: Vec<GameVariant>,
     #[serde(default)]
     pub art_revision: Option<u64>,
     #[serde(default)]
@@ -53,11 +89,107 @@ pub struct Game {
     pub can_stop: bool,
     #[serde(default)]
     pub is_add_portable: bool,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "null_as_default")]
     pub tags: Vec<String>,
 }
 
+fn steam_app_id_from_text(value: &str) -> Option<String> {
+    if let Some(rest) = value.strip_prefix("steam:").or_else(|| value.strip_prefix("STEAM:")) {
+        let digits: String = rest.chars().take_while(|c| c.is_ascii_digit()).collect();
+        if !digits.is_empty() {
+            return Some(digits);
+        }
+    }
+    if let Some(idx) = value.find("/apps/") {
+        let digits: String = value[idx + 6..].chars().take_while(|c| c.is_ascii_digit()).collect();
+        if !digits.is_empty() {
+            return Some(digits);
+        }
+    }
+    for prefix in ["steam://rungameid/", "steam://launch/", "steam://install/"] {
+        if let Some(idx) = value.to_ascii_lowercase().find(prefix) {
+            let digits: String = value[idx + prefix.len()..]
+                .chars()
+                .take_while(|c| c.is_ascii_digit())
+                .collect();
+            if !digits.is_empty() {
+                return Some(digits);
+            }
+        }
+    }
+    None
+}
+
+pub fn sanitize_cache_id(game_id: &str) -> String {
+    game_id
+        .chars()
+        .map(|c| if c.is_alphanumeric() { c } else { '_' })
+        .collect()
+}
+
 impl Game {
+    pub fn art_steam_app_id(&self) -> Option<String> {
+        if let Some(id) = self.includes.first().and_then(|inc| inc.app_id.as_deref())
+            && !id.is_empty()
+        {
+            return Some(id.to_string());
+        }
+        if let Some(id) = steam_app_id_from_text(&self.id) {
+            return Some(id);
+        }
+        if let Some(url) = self.cover_url.as_deref()
+            && let Some(id) = steam_app_id_from_text(url)
+        {
+            return Some(id);
+        }
+        if let Some(target) = self.launch_target.as_deref()
+            && let Some(id) = steam_app_id_from_text(target)
+        {
+            return Some(id);
+        }
+        for v in &self.variants {
+            if let Some(id) = steam_app_id_from_text(&v.id) {
+                return Some(id);
+            }
+            if let Some(target) = v.launch_target.as_deref()
+                && let Some(id) = steam_app_id_from_text(target)
+            {
+                return Some(id);
+            }
+        }
+        None
+    }
+
+    pub fn hero_cache_target(&self) -> String {
+        if let Some(id) = self.includes.first().and_then(|inc| inc.app_id.as_deref())
+            && !id.is_empty()
+        {
+            return format!("steam:{id}");
+        }
+        self.id.clone()
+    }
+
+    pub fn steam_hero_url(&self) -> Option<String> {
+        let app_id = self.art_steam_app_id()?;
+        Some(format!(
+            "https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/{app_id}/library_hero.jpg"
+        ))
+    }
+
+    pub fn steam_logo_url(&self) -> Option<String> {
+        let app_id = self.art_steam_app_id()?;
+        Some(format!(
+            "https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/{app_id}/logo.png"
+        ))
+    }
+
+    pub fn steam_portrait_url(&self) -> Option<String> {
+        let app_id = self.art_steam_app_id()?;
+        Some(format!(
+            "https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/{app_id}/library_600x900.jpg"
+        ))
+    }
+
     pub fn hours_label(&self) -> String {
         if self.playtime_minutes == 0 {
             return String::new();
@@ -548,6 +680,68 @@ impl ArtBase {
         } else {
             None
         }
+    }
+
+    pub fn resolve_local_portrait(&self, game: &Game) -> Option<PathBuf> {
+        if let Some(url) = game.cover_url.as_deref()
+            && let Some(p) = self.resolve_local_cover(url)
+        {
+            return Some(p);
+        }
+        let root = self.covers_dir.as_deref()?;
+        if let Some(app_id) = game.art_steam_app_id() {
+            for name in [
+                format!("{app_id}_2x.jpg"),
+                format!("{app_id}.jpg"),
+                format!("steam_{app_id}.jpg"),
+            ] {
+                let p = Path::new(root).join(&name);
+                if p.is_file() {
+                    return Some(p);
+                }
+            }
+        }
+        let sanitized = sanitize_cache_id(&game.id);
+        for ext in ["jpg", "png", "webp"] {
+            let p = Path::new(root).join(format!("{sanitized}.{ext}"));
+            if p.is_file() {
+                return Some(p);
+            }
+        }
+        None
+    }
+
+    pub fn resolve_local_hero(&self, game: &Game) -> Option<PathBuf> {
+        let root = self.covers_dir.as_deref()?;
+        let target = sanitize_cache_id(&game.hero_cache_target());
+        let direct = Path::new(root).join(format!("hero_{target}.jpg"));
+        if direct.is_file() {
+            return Some(direct);
+        }
+        if let Some(app_id) = game.art_steam_app_id() {
+            for name in [
+                format!("hero_steam_{app_id}.jpg"),
+                format!("{app_id}_hero.jpg"),
+            ] {
+                let p = Path::new(root).join(&name);
+                if p.is_file() {
+                    return Some(p);
+                }
+            }
+        }
+        None
+    }
+
+    pub fn resolve_device_image(&self, url: &str) -> Option<PathBuf> {
+        let root = self.devices_dir.as_deref()?;
+        let rest = url.strip_prefix("https://devices.exo-launcher.local/")?;
+        let leaf = rest.split('?').next().unwrap_or(rest).rsplit('/').next()?;
+        let decoded = percent_decode_simple(leaf)?;
+        if !is_safe_leaf(&decoded) {
+            return None;
+        }
+        let p = Path::new(root).join(decoded);
+        p.is_file().then_some(p)
     }
 
     pub fn resolve_capture_thumb(&self, thumb_url: &str) -> Option<PathBuf> {

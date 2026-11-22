@@ -33,16 +33,20 @@ pub use discord_types::{
 };
 pub use media_types::{
     CaptureItem, CaptureListReply, CaptureLiveState, CaptureSettingsDto, CaptureStatusReply,
-    MusicPlayback, MusicPlaybackReply, MusicVolumeReply, format_duration_ms,
+    MusicPlayback, MusicPlaybackReply, MusicVolumeReply, PlayerAlbumRef, PlayerArtist, PlayerCard,
+    PlayerHeader, PlayerSection, PlayerStartReply, PlayerTrack, PlayerViewData, PlayerViewReply,
+    format_duration_ms,
 };
 pub use pc_types::{
-    AppsListReply, AudioEndpoint, AudioReadReply, AudioVoiceInfo, AutopilotLive,
-    AutopilotMemoryIntegrity, AutopilotReport, AutopilotState, DevicesListReply, DriveFix,
-    DriveGameEntry, DriveHealth, DriveInfo, DriveLink, DriveSpaceBreakdown, DriveTemp,
-    DriveVerdict, DriveVolume, DrivesReply, ExoAiFans, ExoAiGaming, ExoAiState, HdrState,
-    InstalledAppItem, KeyboardBackupSummary, KeyboardBackupsReply, KeyboardProfileSlot,
-    KeyboardReadReply, LatencyReport, LatencySample, PeripheralCard, ShadersAddonStatus,
-    StartupItem, StartupListReply, StartupRemovedItem, SystemAbout, SystemTuningState, TuningItem,
+    AppsIconsReply, AppsListReply, AudioEndpoint, AudioReadReply, AudioVoiceInfo, AutopilotLive,
+    AutopilotMemoryIntegrity, AutopilotReport, AutopilotState, DevicesImageReply, DevicesListReply,
+    DriveFix, DriveGameEntry, DriveHealth, DriveInfo, DriveLink, DriveSpaceBreakdown, DriveTemp,
+    DriveVerdict, DriveVolume, DrivesReply, EqHeadphone, EqStateReply, ExoAiFans, ExoAiGaming,
+    ExoAiState, HdrState, InstalledAppItem, KeyboardBackupSummary, KeyboardBackupsReply,
+    KeyboardProfileSlot, KeyboardReadReply, LatencyReport, LatencySample, PeripheralCard,
+    PeripheralPort, ShaderEstimate, ShaderPrepareGame, ShaderSnapGame, ShadersAddonStatus,
+    ShadersEstimatesReply, ShadersPrepareGamesReply, ShadersSnapshot, StartupItem,
+    StartupListReply, StartupRemovedItem, SystemAbout, SystemTuningState, TuningItem,
     UpdateCheckReply, UpdateProgress,
 };
 pub use types::{
@@ -59,7 +63,10 @@ pub const METHOD_APP_CHECK_UPDATE: &str = "app.checkUpdate";
 pub const METHOD_APP_INSTALL_UPDATE: &str = "app.installUpdate";
 pub const METHOD_APP_OPEN_LOGS: &str = "app.openLogs";
 pub const METHOD_APP_REPAIR_CACHE: &str = "app.repairCache";
+pub const METHOD_APPLEMUSIC_ACT: &str = "applemusic.act";
 pub const METHOD_APPLEMUSIC_START: &str = "applemusic.start";
+pub const METHOD_APPLEMUSIC_VIEW: &str = "applemusic.view";
+pub const METHOD_APPS_ICONS: &str = "apps.icons";
 pub const METHOD_APPS_LIST: &str = "apps.list";
 pub const METHOD_APPS_TIDY: &str = "apps.tidy";
 pub const METHOD_APPS_UNINSTALL: &str = "apps.uninstall";
@@ -76,6 +83,7 @@ pub const METHOD_CAPTURE_REEL: &str = "capture.reel";
 pub const METHOD_CAPTURE_REEL_CANCEL: &str = "capture.reel.cancel";
 pub const METHOD_CAPTURE_SETTINGS: &str = "capture.settings";
 pub const METHOD_CAPTURE_STATUS: &str = "capture.status";
+pub const METHOD_DEVICES_IMAGE: &str = "devices.image";
 pub const METHOD_DEVICES_LIST: &str = "devices.list";
 pub const METHOD_DISCORD_ACCOUNTS: &str = "discord.accounts";
 pub const METHOD_DISCORD_ACK: &str = "discord.ack";
@@ -107,6 +115,7 @@ pub const METHOD_DISCORD_UNREADS: &str = "discord.unreads";
 pub const METHOD_DISCORD_UPLOAD: &str = "discord.upload";
 pub const METHOD_DISCORD_VIEW: &str = "discord.view";
 pub const METHOD_DISCORD_VOICE: &str = "discord.voice";
+pub const METHOD_EQ: &str = "eq";
 pub const METHOD_EXO_ACCOUNT_SIGN_OUT: &str = "exoAccount.signOut";
 pub const METHOD_EXO_ACCOUNT_STATE: &str = "exoAccount.state";
 pub const METHOD_EXO_ACCOUNT_SYNC: &str = "exoAccount.sync";
@@ -148,8 +157,13 @@ pub const METHOD_SETTINGS_GET: &str = "settings.get";
 pub const METHOD_SETTINGS_SET: &str = "settings.set";
 pub const METHOD_SHADERS_ADDON: &str = "shaders.addon";
 pub const METHOD_SHADERS_CALL: &str = "shaders.call";
+pub const METHOD_SHADERS_ESTIMATES: &str = "shaders.estimates";
+pub const METHOD_SHADERS_PREPARE_GAMES: &str = "shaders.prepare.games";
+pub const METHOD_SHADERS_PREPARE_START: &str = "shaders.prepare.start";
 pub const METHOD_SHELL_READY: &str = "shell.ready";
+pub const METHOD_SPOTIFY_ACT: &str = "spotify.act";
 pub const METHOD_SPOTIFY_START: &str = "spotify.start";
+pub const METHOD_SPOTIFY_VIEW: &str = "spotify.view";
 pub const METHOD_STARTUP_CLEAN: &str = "startup.clean";
 pub const METHOD_STARTUP_LIST: &str = "startup.list";
 pub const METHOD_STARTUP_REMOVE: &str = "startup.remove";
@@ -163,14 +177,19 @@ pub const METHOD_STORE_WISHLIST: &str = "store.wishlist";
 pub const METHOD_SYSTEM_ABOUT: &str = "system.about";
 pub const METHOD_SYSTEM_DRIVES: &str = "system.drives";
 pub const METHOD_SYSTEM_TUNING: &str = "system.tuning";
+pub const METHOD_YTMUSIC_ACT: &str = "ytmusic.act";
 pub const METHOD_YTMUSIC_START: &str = "ytmusic.start";
+pub const METHOD_YTMUSIC_VIEW: &str = "ytmusic.view";
 
 pub const USED_METHODS: &[&str] = &[
     METHOD_APP_CHECK_UPDATE,
     METHOD_APP_INSTALL_UPDATE,
     METHOD_APP_OPEN_LOGS,
     METHOD_APP_REPAIR_CACHE,
+    METHOD_APPLEMUSIC_ACT,
     METHOD_APPLEMUSIC_START,
+    METHOD_APPLEMUSIC_VIEW,
+    METHOD_APPS_ICONS,
     METHOD_APPS_LIST,
     METHOD_APPS_TIDY,
     METHOD_APPS_UNINSTALL,
@@ -187,6 +206,7 @@ pub const USED_METHODS: &[&str] = &[
     METHOD_CAPTURE_REEL_CANCEL,
     METHOD_CAPTURE_SETTINGS,
     METHOD_CAPTURE_STATUS,
+    METHOD_DEVICES_IMAGE,
     METHOD_DEVICES_LIST,
     METHOD_DISCORD_ACCOUNTS,
     METHOD_DISCORD_ACK,
@@ -218,6 +238,7 @@ pub const USED_METHODS: &[&str] = &[
     METHOD_DISCORD_UPLOAD,
     METHOD_DISCORD_VIEW,
     METHOD_DISCORD_VOICE,
+    METHOD_EQ,
     METHOD_EXO_ACCOUNT_SIGN_OUT,
     METHOD_EXO_ACCOUNT_STATE,
     METHOD_EXO_ACCOUNT_SYNC,
@@ -259,8 +280,13 @@ pub const USED_METHODS: &[&str] = &[
     METHOD_SETTINGS_SET,
     METHOD_SHADERS_ADDON,
     METHOD_SHADERS_CALL,
+    METHOD_SHADERS_ESTIMATES,
+    METHOD_SHADERS_PREPARE_GAMES,
+    METHOD_SHADERS_PREPARE_START,
     METHOD_SHELL_READY,
+    METHOD_SPOTIFY_ACT,
     METHOD_SPOTIFY_START,
+    METHOD_SPOTIFY_VIEW,
     METHOD_STARTUP_CLEAN,
     METHOD_STARTUP_LIST,
     METHOD_STARTUP_REMOVE,
@@ -274,7 +300,9 @@ pub const USED_METHODS: &[&str] = &[
     METHOD_SYSTEM_ABOUT,
     METHOD_SYSTEM_DRIVES,
     METHOD_SYSTEM_TUNING,
+    METHOD_YTMUSIC_ACT,
     METHOD_YTMUSIC_START,
+    METHOD_YTMUSIC_VIEW,
 ];
 
 #[derive(Debug)]

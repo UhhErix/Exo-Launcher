@@ -51,15 +51,27 @@ pub fn bad() -> Color {
 }
 
 pub fn glass_control_fill() -> Color {
-    hex(0x141416, 0.64)
+    BG.alpha(0.36)
 }
 
 pub fn glass_panel_fill() -> Color {
-    hex(0x0a0a0c, 0.90)
+    BG.alpha(0.72)
+}
+
+pub fn glass_rim_top() -> Color {
+    Color::WHITE.alpha(0.17)
+}
+
+pub fn glass_rim_bottom() -> Color {
+    Color::WHITE.alpha(0.03)
 }
 
 pub fn glass_rim() -> Color {
-    Color::WHITE.alpha(0.11)
+    Color::WHITE.alpha(0.09)
+}
+
+pub fn card_border() -> Color {
+    Color::WHITE.alpha(0.08)
 }
 
 pub fn hairline() -> Color {
@@ -67,11 +79,11 @@ pub fn hairline() -> Color {
 }
 
 pub fn hover_fill() -> Color {
-    Color::WHITE.alpha(0.10)
+    Color::WHITE.alpha(0.08)
 }
 
 pub fn pressed_fill() -> Color {
-    Color::WHITE.alpha(0.16)
+    Color::WHITE.alpha(0.14)
 }
 
 pub fn subtle_fill() -> Color {
@@ -84,10 +96,10 @@ pub const RADIUS_PANEL: f32 = 18.0;
 pub const RADIUS_SHEET: f32 = 24.0;
 pub const RADIUS_PILL: f32 = 999.0;
 pub const GAP: f32 = 10.0;
-pub const TITLEBAR_HEIGHT: f32 = 54.0;
+pub const TITLEBAR_HEIGHT: f32 = 52.0;
 
-pub const GLASS_CONTROL_SIGMA: f32 = 12.0;
-pub const GLASS_PANEL_SIGMA: f32 = 22.0;
+pub const GLASS_CONTROL_SIGMA: f32 = 14.0;
+pub const GLASS_PANEL_SIGMA: f32 = 20.0;
 pub const PRESS_SCALE: f32 = 0.97;
 
 pub const SPRING_PRESS: Spring = Spring::new(0.09, 0.0);

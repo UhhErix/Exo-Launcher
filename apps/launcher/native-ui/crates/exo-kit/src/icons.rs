@@ -808,3 +808,121 @@ pub fn icon_maximize(size: f32, color: Color) -> El {
     )
 }
 
+pub fn exo_mark(size: f32, color: Color) -> El {
+    let slant = 1.75;
+    let bar = |x: f32, y: f32, w: f32, h: f32| -> Vec<[f32; 2]> {
+        vec![
+            [x + slant, y],
+            [x + w + slant, y],
+            [x + w, y + h],
+            [x, y + h],
+        ]
+    };
+    let shape = Shape::new()
+        .view_box(64.0, 64.0)
+        .fill(bar(16.8, 13.0, 36.0, 9.0), color)
+        .fill(bar(14.0, 27.5, 24.0, 9.0), color)
+        .fill(bar(11.2, 42.0, 36.0, 9.0), color);
+    canvas(shape).size(size, size)
+}
+
+pub fn icon_library(size: f32, color: Color) -> El {
+    strokes(
+        size,
+        &[
+            &[[5.0, 5.0], [5.0, 19.0]],
+            &[[10.0, 5.0], [10.0, 19.0]],
+            &[[14.5, 5.5], [19.5, 18.5]],
+        ],
+        color,
+    )
+}
+
+pub fn icon_mouse(size: f32, color: Color) -> El {
+    let mut shape = Shape::new().view_box(24.0, 24.0);
+    let w = if size <= 16.0 { 1.8 } else { 2.0 };
+    shape = shape
+        .stroke(
+            vec![
+                [7.0, 8.0],
+                [7.5, 5.5],
+                [9.5, 4.0],
+                [14.5, 4.0],
+                [16.5, 5.5],
+                [17.0, 8.0],
+                [17.0, 16.0],
+                [16.5, 18.5],
+                [14.5, 20.0],
+                [9.5, 20.0],
+                [7.5, 18.5],
+                [7.0, 16.0],
+                [7.0, 8.0],
+            ],
+            w,
+            color,
+        )
+        .stroke(vec![[12.0, 7.5], [12.0, 11.0]], w, color);
+    canvas(shape).size(size, size)
+}
+
+pub fn icon_more_horiz(size: f32, color: Color) -> El {
+    let mut shape = Shape::new().view_box(24.0, 24.0);
+    for cx in [6.5, 12.0, 17.5] {
+        shape = shape.fill(circle_pts(cx, 12.0, 1.4, 12), color);
+    }
+    canvas(shape).size(size, size)
+}
+
+pub fn icon_filter(size: f32, color: Color) -> El {
+    strokes(
+        size,
+        &[
+            &[[4.5, 7.0], [19.5, 7.0]],
+            &[[7.5, 12.0], [16.5, 12.0]],
+            &[[10.5, 17.0], [13.5, 17.0]],
+        ],
+        color,
+    )
+}
+
+pub fn icon_chevron_left(size: f32, color: Color) -> El {
+    strokes(size, &[&[[14.5, 6.5], [9.0, 12.0], [14.5, 17.5]]], color)
+}
+
+pub fn icon_replay(size: f32, color: Color) -> El {
+    strokes(
+        size,
+        &[
+            &[[5.0, 11.0], [6.5, 7.0], [10.0, 5.0], [14.5, 5.0], [18.0, 7.5], [19.0, 12.0], [17.5, 16.5], [13.5, 19.0], [9.0, 18.5], [6.5, 16.0]],
+            &[[5.0, 6.0], [5.0, 11.0], [10.0, 11.0]],
+        ],
+        color,
+    )
+}
+
+pub fn icon_record_dot(size: f32, color: Color) -> El {
+    let shape = Shape::new()
+        .view_box(24.0, 24.0)
+        .fill(circle_pts(12.0, 12.0, 6.0, 20), color);
+    canvas(shape).size(size, size)
+}
+
+pub fn icon_bookmark(size: f32, color: Color) -> El {
+    strokes(
+        size,
+        &[&[
+            [6.5, 4.5],
+            [17.5, 4.5],
+            [17.5, 19.5],
+            [12.0, 15.5],
+            [6.5, 19.5],
+            [6.5, 4.5],
+        ]],
+        color,
+    )
+}
+
+pub fn icon_minimize(size: f32, color: Color) -> El {
+    strokes(size, &[&[[6.0, 12.0], [18.0, 12.0]]], color)
+}
+

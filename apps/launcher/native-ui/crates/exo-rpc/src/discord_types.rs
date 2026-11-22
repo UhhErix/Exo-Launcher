@@ -374,6 +374,37 @@ pub struct DiscordPrep {
 
 #[derive(Debug, Clone, Default, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct DiscordLookTag {
+    #[serde(default)]
+    pub guild_id: String,
+    #[serde(default)]
+    pub tag: String,
+    #[serde(default)]
+    pub badge: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DiscordLookNameplate {
+    #[serde(default)]
+    pub sku_id: String,
+    #[serde(default)]
+    pub asset: Option<String>,
+    #[serde(default)]
+    pub palette: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DiscordLook {
+    #[serde(default)]
+    pub nameplate: Option<DiscordLookNameplate>,
+    #[serde(default)]
+    pub tag: Option<DiscordLookTag>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct DiscordFriend {
     #[serde(default)]
     pub id: String,
@@ -383,6 +414,8 @@ pub struct DiscordFriend {
     pub username: Option<String>,
     #[serde(default)]
     pub avatar: Option<String>,
+    #[serde(default)]
+    pub look: Option<DiscordLook>,
     #[serde(default)]
     pub kind: String,
     #[serde(default)]

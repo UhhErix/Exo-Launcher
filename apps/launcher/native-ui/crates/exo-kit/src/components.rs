@@ -1,22 +1,22 @@
 use crate::tokens::{
     BG, FG, GLASS_CONTROL_SIGMA, GLASS_PANEL_SIGMA, PRESS_SCALE, PRIMARY_FG, RADIUS_CARD,
-    RADIUS_PANEL, RADIUS_PILL, SPRING_QUICK, TRANSPARENT, bad, fg_muted, glass_control_fill,
-    glass_panel_fill, glass_rim, good, hairline, hover_fill, pressed_fill, subtle_fill,
-    type_control, type_section, type_small, warn,
+    RADIUS_PANEL, RADIUS_PILL, SPRING_QUICK, TRANSPARENT, bad, card_border, fg_muted,
+    glass_control_fill, glass_panel_fill, glass_rim, glass_rim_bottom, glass_rim_top, good,
+    hairline, hover_fill, pressed_fill, subtle_fill, type_control, type_section, type_small, warn,
 };
-use rune::{Color, El, col, el, row, text};
+use rune::{Color, El, TextStyle, col, el, row, text};
 
 pub fn glass_capsule(key: &'static str) -> El {
     row()
         .key(key)
-        .h(40.0)
-        .px(4.0)
+        .h(36.0)
+        .px(3.0)
         .gap(2.0)
         .center_y()
         .radius(RADIUS_PILL)
         .backdrop_blur(GLASS_CONTROL_SIGMA)
         .fill(glass_control_fill())
-        .border(1.0, glass_rim())
+        .border_gradient(1.0, glass_rim_top(), glass_rim_bottom())
 }
 
 pub fn glass_panel(key: &'static str, width: f32) -> El {
@@ -24,12 +24,66 @@ pub fn glass_panel(key: &'static str, width: f32) -> El {
         .key(key)
         .w(width)
         .radius(RADIUS_PANEL)
+        .continuous_corners()
         .clip_rounded(RADIUS_PANEL)
         .hit()
         .backdrop_blur(GLASS_PANEL_SIGMA)
         .fill(glass_panel_fill())
-        .border(1.0, glass_rim())
-        .shadow(16.0, 42.0, BG.alpha(0.65))
+        .border_gradient(1.0, glass_rim_top(), glass_rim_bottom())
+        .shadow(0.0, 40.0, BG.alpha(0.55))
+}
+
+pub fn amoled_card(radius: f32) -> El {
+    col()
+        .radius(radius)
+        .continuous_corners()
+        .fill(BG)
+        .border(1.0, card_border())
+}
+
+pub fn exo_play_button(key: &'static str, label: &'static str, icon: Option<El>) -> El {
+    let mut btn = row()
+        .key(key)
+        .role("button")
+        .label(label)
+        .focusable(true)
+        .hit()
+        .press_on_down()
+        .press_scale(PRESS_SCALE)
+        .h(40.0)
+        .min_w(116.0)
+        .px(24.0)
+        .gap(8.0)
+        .justify_center()
+        .center_y()
+        .radius(RADIUS_PILL)
+        .fill(FG)
+        .hover(FG.alpha(0.92))
+        .press(FG.alpha(0.84))
+        .motion(SPRING_QUICK);
+    if let Some(ic) = icon {
+        btn = btn.child(ic);
+    }
+    btn.child(text(label).font(TextStyle::new(13.0, 600.0)).color(PRIMARY_FG))
+}
+
+pub fn glass_icon_circle(key: &'static str, label: &'static str, size: f32, icon: El) -> El {
+    el().key(key)
+        .role("button")
+        .label(label)
+        .focusable(true)
+        .hit()
+        .press_on_down()
+        .press_scale(PRESS_SCALE)
+        .size(size, size)
+        .center()
+        .radius(RADIUS_PILL)
+        .fill(glass_control_fill())
+        .hover(hover_fill())
+        .press(pressed_fill())
+        .border_gradient(1.0, glass_rim_top(), glass_rim_bottom())
+        .motion(SPRING_QUICK)
+        .child(icon)
 }
 
 pub fn primary_button(key: &'static str, label: &'static str, icon: Option<El>) -> El {
@@ -41,8 +95,8 @@ pub fn primary_button(key: &'static str, label: &'static str, icon: Option<El>) 
         .hit()
         .press_on_down()
         .press_scale(PRESS_SCALE)
-        .h(34.0)
-        .px(16.0)
+        .h(32.0)
+        .px(14.0)
         .gap(6.0)
         .center_y()
         .radius(RADIUS_PILL)
@@ -53,7 +107,7 @@ pub fn primary_button(key: &'static str, label: &'static str, icon: Option<El>) 
     if let Some(ic) = icon {
         btn = btn.child(ic);
     }
-    btn.child(text(label).font(type_control()).color(PRIMARY_FG))
+    btn.child(text(label).font(TextStyle::new(13.0, 600.0)).color(PRIMARY_FG))
 }
 
 pub fn glass_button(key: &'static str, label: &'static str, icon: Option<El>) -> El {
@@ -65,15 +119,15 @@ pub fn glass_button(key: &'static str, label: &'static str, icon: Option<El>) ->
         .hit()
         .press_on_down()
         .press_scale(PRESS_SCALE)
-        .h(34.0)
-        .px(14.0)
+        .h(32.0)
+        .px(12.0)
         .gap(6.0)
         .center_y()
         .radius(RADIUS_PILL)
         .fill(glass_control_fill())
         .hover(hover_fill())
         .press(pressed_fill())
-        .border(1.0, glass_rim())
+        .border_gradient(1.0, glass_rim_top(), glass_rim_bottom())
         .motion(SPRING_QUICK);
     if let Some(ic) = icon {
         btn = btn.child(ic);
@@ -90,16 +144,21 @@ pub fn filter_pill(key: &'static str, label: String, active: bool) -> El {
         .press_on_down()
         .press_scale(PRESS_SCALE)
         .h(30.0)
-        .px(12.0)
+        .px(13.0)
         .radius(RADIUS_PILL)
         .center()
-        .fill(if active { FG } else { subtle_fill() })
+        .fill(if active { FG } else { TRANSPARENT })
         .hover(if active { FG } else { hover_fill() })
         .press(if active { FG } else { pressed_fill() })
+        .border(if active { 0.0 } else { 1.0 }, glass_rim())
         .motion(SPRING_QUICK)
         .child(
             text(label)
-                .font(type_control())
+                .font(if active {
+                    TextStyle::new(13.0, 600.0)
+                } else {
+                    type_control()
+                })
                 .color(if active { PRIMARY_FG } else { FG }),
         )
 }
@@ -113,8 +172,8 @@ pub fn nav_tab(key: &'static str, label: &'static str, active: bool, icon: El) -
         .hit()
         .press_on_down()
         .press_scale(PRESS_SCALE)
-        .h(32.0)
-        .px(12.0)
+        .h(30.0)
+        .px(13.0)
         .gap(6.0)
         .center_y()
         .radius(RADIUS_PILL)
@@ -125,7 +184,7 @@ pub fn nav_tab(key: &'static str, label: &'static str, active: bool, icon: El) -
         .child(icon)
         .child(
             text(label)
-                .font(type_control())
+                .font(TextStyle::new(13.0, 600.0))
                 .color(if active { PRIMARY_FG } else { FG }),
         )
 }

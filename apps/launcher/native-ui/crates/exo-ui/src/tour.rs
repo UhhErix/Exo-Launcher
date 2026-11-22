@@ -43,9 +43,9 @@ pub const STEPS: [TourStep; 8] = [
         room: Room::Music,
     },
     TourStep {
-        title: "This PC & Exo AI",
-        body: "Keep Windows tuned automatically, monitor live frame telemetry, manage Startup apps and drives, and tune Wooting keyboards and audio.",
-        room: Room::Pc,
+        title: "Exo AI, Devices & Apps",
+        body: "Keep Windows tuned automatically, compile shaders, manage Startup apps, and configure your mice, keyboards, and controllers.",
+        room: Room::ExoAi,
     },
     TourStep {
         title: "You're ready to play",
