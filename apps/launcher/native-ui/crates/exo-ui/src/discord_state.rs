@@ -1,3 +1,4 @@
+use crate::discord_chat_state::{ChatDrawer, DiscordChatState};
 use crate::state::{AppState, HostStatus};
 use exo_rpc::{
     ActionResult, DiscordAccountItem, DiscordAccountsReply, DiscordChangedEvent, DiscordChannel,
@@ -72,6 +73,8 @@ pub struct DiscordState {
     pub add_friend_open: bool,
     pub search_query: TextEdit,
     pub add_friend_input: TextEdit,
+    pub revealed_spoilers: HashSet<String>,
+    pub chat: DiscordChatState,
     pub loaded: bool,
 }
 
@@ -108,12 +111,15 @@ impl DiscordState {
             add_friend_open: false,
             search_query: TextEdit::default(),
             add_friend_input: TextEdit::default(),
+            revealed_spoilers: HashSet::new(),
+            chat: DiscordChatState::empty(),
             loaded: false,
         }
     }
 
     pub fn demo() -> Self {
         let mut s = Self::empty();
+        s.chat = DiscordChatState::demo();
         s.status = DiscordStatus {
             state: "ready".into(),
             message: None,
@@ -861,14 +867,26 @@ impl AppState {
         self.discord.place = place;
         self.discord.status_menu_open = false;
         self.discord.accounts_menu_open = false;
-        if place == DiscordPlace::Messages && self.discord.active_dm_id.is_none() {
-            self.discord.active_dm_id = self.discord.home.dms.first().map(|d| d.id.clone());
+        self.discord.chat.drawer = ChatDrawer::None;
+        if place == DiscordPlace::Messages {
+            if self.discord.active_dm_id.is_none() {
+                self.discord.active_dm_id = self.discord.home.dms.first().map(|d| d.id.clone());
+            }
+            if let Some(dm_id) = self.discord.active_dm_id.clone()
+                && !self.discord.chat.messages_by_channel.contains_key(&dm_id)
+            {
+                self.load_discord_messages(&dm_id, None);
+            }
         }
     }
 
     pub fn open_discord_dm(&mut self, dm_id: &str) {
         self.discord.place = DiscordPlace::Messages;
         self.discord.active_dm_id = Some(dm_id.to_string());
+        self.discord.chat.reply_to = None;
+        self.discord.chat.editing = None;
+        self.discord.chat.drawer = ChatDrawer::None;
+        self.load_discord_messages(dm_id, None);
         if self.status != HostStatus::Connected {
             return;
         }
@@ -883,6 +901,9 @@ impl AppState {
     pub fn open_discord_guild(&mut self, guild_id: &str) {
         self.discord.place = DiscordPlace::Servers;
         self.discord.active_guild_id = Some(guild_id.to_string());
+        self.discord.chat.reply_to = None;
+        self.discord.chat.editing = None;
+        self.discord.chat.drawer = ChatDrawer::None;
         if let Some(existing) = self.discord.channels_by_guild.get(guild_id) {
             let first = existing
                 .channels
@@ -890,7 +911,12 @@ impl AppState {
                 .find(|c| c.kind == "text" && c.can_read != Some(false))
                 .or_else(|| existing.channels.iter().find(|c| c.kind != "category"))
                 .map(|c| c.id.clone());
-            self.discord.active_channel_id = first;
+            self.discord.active_channel_id = first.clone();
+            if let Some(cid) = first
+                && !self.discord.chat.messages_by_channel.contains_key(&cid)
+            {
+                self.load_discord_messages(&cid, None);
+            }
         } else {
             self.discord.active_channel_id = None;
         }
@@ -936,6 +962,7 @@ impl AppState {
                                 s.discord.active_channel_id = first.clone();
                                 if let Some(cid) = first {
                                     s.notify_discord_view(&cid);
+                                    s.load_discord_messages(&cid, None);
                                 }
                             }
                         }
@@ -957,7 +984,11 @@ impl AppState {
 
     pub fn open_discord_channel(&mut self, channel_id: &str) {
         self.discord.active_channel_id = Some(channel_id.to_string());
+        self.discord.chat.reply_to = None;
+        self.discord.chat.editing = None;
+        self.discord.chat.drawer = ChatDrawer::None;
         self.notify_discord_view(channel_id);
+        self.load_discord_messages(channel_id, None);
         if let Some(gid) = self.discord.active_guild_id.clone() {
             self.refresh_discord_members(&gid);
         }

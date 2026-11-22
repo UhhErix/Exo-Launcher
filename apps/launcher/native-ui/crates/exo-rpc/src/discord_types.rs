@@ -530,6 +530,370 @@ pub struct DiscordUnreadEvent {
     pub guild_mentions: i32,
 }
 
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct DiscordUser {
+    #[serde(default)]
+    pub id: String,
+    #[serde(default)]
+    pub username: String,
+    #[serde(default)]
+    pub global_name: Option<String>,
+    #[serde(default)]
+    pub avatar: Option<String>,
+    #[serde(default)]
+    pub bot: bool,
+}
+
+impl DiscordUser {
+    pub fn avatar_url(&self) -> Option<String> {
+        let hash = self.avatar.as_deref().filter(|s| !s.is_empty())?;
+        if hash.starts_with("https://") {
+            return Some(hash.to_string());
+        }
+        Some(format!(
+            "https://cdn.discordapp.com/avatars/{}/{}.webp?size=128&quality=lossless",
+            self.id, hash
+        ))
+    }
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct DiscordMessageMember {
+    #[serde(default)]
+    pub nick: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct DiscordAttachment {
+    #[serde(default)]
+    pub id: String,
+    #[serde(default)]
+    pub filename: String,
+    #[serde(default)]
+    pub description: Option<String>,
+    #[serde(default)]
+    pub url: String,
+    #[serde(default)]
+    pub proxy_url: Option<String>,
+    #[serde(default)]
+    pub size: u64,
+    #[serde(default)]
+    pub width: Option<u32>,
+    #[serde(default)]
+    pub height: Option<u32>,
+    #[serde(default)]
+    pub content_type: Option<String>,
+}
+
+impl DiscordAttachment {
+    pub fn is_image(&self) -> bool {
+        if let Some(ct) = self.content_type.as_deref()
+            && ct.starts_with("image/")
+        {
+            return true;
+        }
+        let lower = self.filename.to_ascii_lowercase();
+        lower.ends_with(".png")
+            || lower.ends_with(".jpg")
+            || lower.ends_with(".jpeg")
+            || lower.ends_with(".webp")
+            || lower.ends_with(".gif")
+    }
+
+    pub fn best_image_url(&self) -> &str {
+        self.proxy_url
+            .as_deref()
+            .filter(|u| !u.is_empty())
+            .unwrap_or(&self.url)
+    }
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct DiscordEmbedMedia {
+    #[serde(default)]
+    pub url: Option<String>,
+    #[serde(default)]
+    pub proxy_url: Option<String>,
+    #[serde(default)]
+    pub width: Option<u32>,
+    #[serde(default)]
+    pub height: Option<u32>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct DiscordEmbedAuthor {
+    #[serde(default)]
+    pub name: Option<String>,
+    #[serde(default)]
+    pub url: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct DiscordEmbedProvider {
+    #[serde(default)]
+    pub name: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct DiscordEmbedFooter {
+    #[serde(default)]
+    pub text: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct DiscordEmbedField {
+    #[serde(default)]
+    pub name: String,
+    #[serde(default)]
+    pub value: String,
+    #[serde(default)]
+    pub inline: bool,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct DiscordEmbed {
+    #[serde(rename = "type", default)]
+    pub kind: Option<String>,
+    #[serde(default)]
+    pub title: Option<String>,
+    #[serde(default)]
+    pub description: Option<String>,
+    #[serde(default)]
+    pub url: Option<String>,
+    #[serde(default)]
+    pub color: Option<u32>,
+    #[serde(default)]
+    pub author: Option<DiscordEmbedAuthor>,
+    #[serde(default)]
+    pub provider: Option<DiscordEmbedProvider>,
+    #[serde(default)]
+    pub footer: Option<DiscordEmbedFooter>,
+    #[serde(default)]
+    pub fields: Vec<DiscordEmbedField>,
+    #[serde(default)]
+    pub image: Option<DiscordEmbedMedia>,
+    #[serde(default)]
+    pub thumbnail: Option<DiscordEmbedMedia>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct DiscordReactionEmoji {
+    #[serde(default)]
+    pub id: Option<String>,
+    #[serde(default)]
+    pub name: Option<String>,
+}
+
+impl DiscordReactionEmoji {
+    pub fn key(&self) -> String {
+        match (self.name.as_deref(), self.id.as_deref()) {
+            (Some(n), Some(id)) if !id.is_empty() => format!("{n}:{id}"),
+            (Some(n), _) => n.to_string(),
+            _ => String::new(),
+        }
+    }
+
+    pub fn display(&self) -> String {
+        match (self.name.as_deref(), self.id.as_deref()) {
+            (Some(n), Some(id)) if !id.is_empty() => format!(":{n}:"),
+            (Some(n), _) => n.to_string(),
+            _ => "?".into(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct DiscordReaction {
+    #[serde(default)]
+    pub count: i32,
+    #[serde(default)]
+    pub me: bool,
+    #[serde(default)]
+    pub emoji: DiscordReactionEmoji,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct DiscordMessageRef {
+    #[serde(default)]
+    pub message_id: Option<String>,
+    #[serde(default)]
+    pub channel_id: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct DiscordMessage {
+    #[serde(default)]
+    pub id: String,
+    #[serde(default)]
+    pub channel_id: String,
+    #[serde(rename = "type", default)]
+    pub msg_type: i32,
+    #[serde(default)]
+    pub author: DiscordUser,
+    #[serde(default)]
+    pub member: Option<DiscordMessageMember>,
+    #[serde(default)]
+    pub content: String,
+    #[serde(default)]
+    pub timestamp: String,
+    #[serde(default)]
+    pub edited_timestamp: Option<String>,
+    #[serde(default)]
+    pub attachments: Vec<DiscordAttachment>,
+    #[serde(default)]
+    pub embeds: Vec<DiscordEmbed>,
+    #[serde(default)]
+    pub mentions: Vec<DiscordUser>,
+    #[serde(default)]
+    pub mention_everyone: bool,
+    #[serde(default)]
+    pub referenced_message: Option<Box<DiscordMessage>>,
+    #[serde(default)]
+    pub message_reference: Option<DiscordMessageRef>,
+    #[serde(default)]
+    pub reactions: Vec<DiscordReaction>,
+    #[serde(default)]
+    pub pinned: bool,
+    #[serde(default)]
+    pub pending: bool,
+    #[serde(default)]
+    pub failed: Option<String>,
+}
+
+impl DiscordMessage {
+    pub fn display_name(&self) -> &str {
+        self.member
+            .as_ref()
+            .and_then(|m| m.nick.as_deref())
+            .filter(|s| !s.is_empty())
+            .or_else(|| self.author.global_name.as_deref().filter(|s| !s.is_empty()))
+            .unwrap_or(&self.author.username)
+    }
+
+    pub fn snowflake_ms(&self) -> Option<i64> {
+        let id = self.id.parse::<u64>().ok()?;
+        Some(((id >> 22) as i64) + 1_420_070_400_000)
+    }
+
+    pub fn time_short(&self) -> String {
+        if let Some(t_pos) = self.timestamp.find('T') {
+            let rest = &self.timestamp[t_pos + 1..];
+            if rest.len() >= 5 {
+                return rest[..5].to_string();
+            }
+        }
+        String::new()
+    }
+
+    pub fn day_key(&self) -> &str {
+        self.timestamp.get(..10).unwrap_or("")
+    }
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DiscordMessagesReply {
+    #[serde(default)]
+    pub ok: bool,
+    #[serde(default)]
+    pub message: Option<String>,
+    #[serde(default)]
+    pub messages: Option<Vec<DiscordMessage>>,
+    #[serde(default)]
+    pub last_read: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DiscordSendReply {
+    #[serde(default)]
+    pub ok: bool,
+    #[serde(default)]
+    pub message: Option<String>,
+    #[serde(default)]
+    pub sent: Option<DiscordMessage>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DiscordPinsReply {
+    #[serde(default)]
+    pub ok: bool,
+    #[serde(default)]
+    pub message: Option<String>,
+    #[serde(default)]
+    pub messages: Option<Vec<DiscordMessage>>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct DiscordSearchResult {
+    #[serde(default)]
+    pub messages: Vec<Vec<DiscordMessage>>,
+    #[serde(default)]
+    pub total_results: usize,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DiscordSearchReply {
+    #[serde(default)]
+    pub ok: bool,
+    #[serde(default)]
+    pub message: Option<String>,
+    #[serde(default)]
+    pub result: Option<DiscordSearchResult>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DiscordUploadReply {
+    #[serde(default)]
+    pub ok: bool,
+    #[serde(default)]
+    pub message: Option<String>,
+    #[serde(default)]
+    pub upload_id: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DiscordMessageEvent {
+    #[serde(default)]
+    pub kind: String,
+    #[serde(default)]
+    pub channel_id: String,
+    #[serde(default)]
+    pub message: Option<DiscordMessage>,
+    #[serde(default)]
+    pub id: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DiscordReactionEvent {
+    #[serde(default)]
+    pub channel_id: String,
+    #[serde(default)]
+    pub message_id: String,
+    #[serde(default)]
+    pub add: bool,
+    #[serde(default)]
+    pub me: bool,
+    #[serde(default)]
+    pub emoji: DiscordReactionEmoji,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DiscordTypingEvent {
+    #[serde(default)]
+    pub channel_id: String,
+    #[serde(default)]
+    pub user_id: String,
+    #[serde(default)]
+    pub name: String,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

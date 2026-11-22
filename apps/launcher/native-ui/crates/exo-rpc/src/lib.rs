@@ -1,3 +1,4 @@
+pub mod base64;
 pub mod discord_types;
 pub mod media_types;
 pub mod pc_types;
@@ -15,12 +16,17 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, mpsc};
 use std::time::Duration;
 pub use discord_types::{
-    DiscordAccountItem, DiscordAccountsReply, DiscordChangedEvent, DiscordChannel, DiscordChannels,
-    DiscordDm, DiscordDmMember, DiscordFriend, DiscordFriendActionReply, DiscordFriendsReply,
-    DiscordGuild, DiscordHome, DiscordMe, DiscordMember, DiscordMemberItem, DiscordMemberList,
-    DiscordPrep, DiscordPresenceEvent, DiscordRailItem, DiscordRich, DiscordSignInStep,
-    DiscordStateEvent, DiscordStatus, DiscordThreadSummary, DiscordUnreadChannel,
-    DiscordUnreadEvent, DiscordUnreadsReply, DiscordVoice, DiscordVoiceMember, DiscordVoiceReply,
+    DiscordAccountItem, DiscordAccountsReply, DiscordAttachment, DiscordChangedEvent,
+    DiscordChannel, DiscordChannels, DiscordDm, DiscordDmMember, DiscordEmbed, DiscordEmbedAuthor,
+    DiscordEmbedField, DiscordEmbedFooter, DiscordEmbedMedia, DiscordEmbedProvider, DiscordFriend,
+    DiscordFriendActionReply, DiscordFriendsReply, DiscordGuild, DiscordHome, DiscordMe,
+    DiscordMember, DiscordMemberItem, DiscordMemberList, DiscordMessage, DiscordMessageEvent,
+    DiscordMessageMember, DiscordMessageRef, DiscordMessagesReply, DiscordPinsReply, DiscordPrep,
+    DiscordPresenceEvent, DiscordRailItem, DiscordReaction, DiscordReactionEmoji,
+    DiscordReactionEvent, DiscordRich, DiscordSearchReply, DiscordSearchResult, DiscordSendReply,
+    DiscordSignInStep, DiscordStateEvent, DiscordStatus, DiscordThreadSummary, DiscordTypingEvent,
+    DiscordUnreadChannel, DiscordUnreadEvent, DiscordUnreadsReply, DiscordUploadReply,
+    DiscordUser, DiscordVoice, DiscordVoiceMember, DiscordVoiceReply,
 };
 pub use media_types::{
     CaptureItem, CaptureListReply, CaptureLiveState, CaptureSettingsDto, CaptureStatusReply,
@@ -69,17 +75,27 @@ pub const METHOD_CAPTURE_SETTINGS: &str = "capture.settings";
 pub const METHOD_CAPTURE_STATUS: &str = "capture.status";
 pub const METHOD_DEVICES_LIST: &str = "devices.list";
 pub const METHOD_DISCORD_ACCOUNTS: &str = "discord.accounts";
+pub const METHOD_DISCORD_ACK: &str = "discord.ack";
 pub const METHOD_DISCORD_CHANNELS: &str = "discord.channels";
+pub const METHOD_DISCORD_DELETE: &str = "discord.delete";
+pub const METHOD_DISCORD_EDIT: &str = "discord.edit";
 pub const METHOD_DISCORD_FRIEND: &str = "discord.friend";
 pub const METHOD_DISCORD_FRIENDS: &str = "discord.friends";
 pub const METHOD_DISCORD_HOME: &str = "discord.home";
 pub const METHOD_DISCORD_MARK_READ: &str = "discord.markRead";
 pub const METHOD_DISCORD_MEMBERS: &str = "discord.members";
+pub const METHOD_DISCORD_MESSAGES: &str = "discord.messages";
+pub const METHOD_DISCORD_PINS: &str = "discord.pins";
+pub const METHOD_DISCORD_REACT: &str = "discord.react";
+pub const METHOD_DISCORD_SEARCH: &str = "discord.search";
+pub const METHOD_DISCORD_SEND: &str = "discord.send";
 pub const METHOD_DISCORD_SET_STATUS: &str = "discord.setStatus";
 pub const METHOD_DISCORD_SIGN_IN: &str = "discord.signIn";
 pub const METHOD_DISCORD_SIGN_OUT: &str = "discord.signOut";
 pub const METHOD_DISCORD_STATUS: &str = "discord.status";
+pub const METHOD_DISCORD_TYPING: &str = "discord.typing";
 pub const METHOD_DISCORD_UNREADS: &str = "discord.unreads";
+pub const METHOD_DISCORD_UPLOAD: &str = "discord.upload";
 pub const METHOD_DISCORD_VIEW: &str = "discord.view";
 pub const METHOD_DISCORD_VOICE: &str = "discord.voice";
 pub const METHOD_EXO_ACCOUNT_SIGN_OUT: &str = "exoAccount.signOut";
@@ -163,17 +179,27 @@ pub const USED_METHODS: &[&str] = &[
     METHOD_CAPTURE_STATUS,
     METHOD_DEVICES_LIST,
     METHOD_DISCORD_ACCOUNTS,
+    METHOD_DISCORD_ACK,
     METHOD_DISCORD_CHANNELS,
+    METHOD_DISCORD_DELETE,
+    METHOD_DISCORD_EDIT,
     METHOD_DISCORD_FRIEND,
     METHOD_DISCORD_FRIENDS,
     METHOD_DISCORD_HOME,
     METHOD_DISCORD_MARK_READ,
     METHOD_DISCORD_MEMBERS,
+    METHOD_DISCORD_MESSAGES,
+    METHOD_DISCORD_PINS,
+    METHOD_DISCORD_REACT,
+    METHOD_DISCORD_SEARCH,
+    METHOD_DISCORD_SEND,
     METHOD_DISCORD_SET_STATUS,
     METHOD_DISCORD_SIGN_IN,
     METHOD_DISCORD_SIGN_OUT,
     METHOD_DISCORD_STATUS,
+    METHOD_DISCORD_TYPING,
     METHOD_DISCORD_UNREADS,
+    METHOD_DISCORD_UPLOAD,
     METHOD_DISCORD_VIEW,
     METHOD_DISCORD_VOICE,
     METHOD_EXO_ACCOUNT_SIGN_OUT,
@@ -586,6 +612,24 @@ fn dispatch_line(
                     }
                 }
             }
+            "discord.message" => serde_json::from_value::<DiscordMessageEvent>(data.clone())
+                .map(HostEvent::DiscordMessage)
+                .unwrap_or(HostEvent::Raw {
+                    event: name.to_string(),
+                    data,
+                }),
+            "discord.reaction" => serde_json::from_value::<DiscordReactionEvent>(data.clone())
+                .map(HostEvent::DiscordReaction)
+                .unwrap_or(HostEvent::Raw {
+                    event: name.to_string(),
+                    data,
+                }),
+            "discord.typing" => serde_json::from_value::<DiscordTypingEvent>(data.clone())
+                .map(HostEvent::DiscordTyping)
+                .unwrap_or(HostEvent::Raw {
+                    event: name.to_string(),
+                    data,
+                }),
             "devices.changed" => HostEvent::DevicesChanged,
             "apps.changed" => HostEvent::AppsChanged,
             _ => HostEvent::Raw {
