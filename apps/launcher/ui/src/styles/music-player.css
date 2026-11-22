@@ -903,6 +903,7 @@
 .exo-music-bar .exo-mini-volume input[type='range'] {
   width: 96px;
   min-width: 64px;
+  height: 28px;
 }
 
 .exo-music-art.exo-music-bar-art {
