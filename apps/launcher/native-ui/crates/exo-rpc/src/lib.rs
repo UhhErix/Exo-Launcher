@@ -148,6 +148,7 @@ pub const METHOD_SETTINGS_GET: &str = "settings.get";
 pub const METHOD_SETTINGS_SET: &str = "settings.set";
 pub const METHOD_SHADERS_ADDON: &str = "shaders.addon";
 pub const METHOD_SHADERS_CALL: &str = "shaders.call";
+pub const METHOD_SHELL_READY: &str = "shell.ready";
 pub const METHOD_SPOTIFY_START: &str = "spotify.start";
 pub const METHOD_STARTUP_CLEAN: &str = "startup.clean";
 pub const METHOD_STARTUP_LIST: &str = "startup.list";
@@ -258,6 +259,7 @@ pub const USED_METHODS: &[&str] = &[
     METHOD_SETTINGS_SET,
     METHOD_SHADERS_ADDON,
     METHOD_SHADERS_CALL,
+    METHOD_SHELL_READY,
     METHOD_SPOTIFY_START,
     METHOD_STARTUP_CLEAN,
     METHOD_STARTUP_LIST,

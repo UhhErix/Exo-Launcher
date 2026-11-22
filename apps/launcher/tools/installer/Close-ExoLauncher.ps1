@@ -83,12 +83,15 @@ $app = [IO.Path]::GetFullPath($AppDirectory).TrimEnd('\')
 $data = [IO.Path]::GetFullPath($DataDirectory).TrimEnd('\')
 if (-not [StringComparer]::OrdinalIgnoreCase.Equals($app, (Join-Path $data 'app'))) { throw 'Unexpected managed app location.' }
 $target = Join-Path $app 'ExoLauncher.exe'
+$uiTarget = Join-Path $app 'exo-ui.exe'
 $profiles = @(Get-ExoProfileRoots $app $data)
 
 function Get-InstalledExoProcess {
-    @(Get-CimInstance Win32_Process -Filter "Name = 'ExoLauncher.exe'" | Where-Object {
-        $_.ProcessId -ne $SetupProcessId -and $_.ExecutablePath -and
-        [StringComparer]::OrdinalIgnoreCase.Equals([IO.Path]::GetFullPath($_.ExecutablePath), $target)
+    @(Get-CimInstance Win32_Process -Filter "Name = 'ExoLauncher.exe' OR Name = 'exo-ui.exe'" | Where-Object {
+        $_.ProcessId -ne $SetupProcessId -and $_.ExecutablePath -and (
+            [StringComparer]::OrdinalIgnoreCase.Equals([IO.Path]::GetFullPath($_.ExecutablePath), $target) -or
+            [StringComparer]::OrdinalIgnoreCase.Equals([IO.Path]::GetFullPath($_.ExecutablePath), $uiTarget)
+        )
     })
 }
 

@@ -12,7 +12,7 @@ edition = "2024"
 license = "MIT"
 
 [workspace.dependencies]
-rune = { git = "https://github.com/anomalyco/rune", rev = "b8470260385b39c98d39e3d203306ef4b9f63fc5", features = ["tooling"] }
+rune = { git = "https://github.com/anomalyco/rune", rev = "b8470260385b39c98d39e3d203306ef4b9f63fc5" }
 rune-media = { git = "https://github.com/anomalyco/rune", rev = "b8470260385b39c98d39e3d203306ef4b9f63fc5", default-features = false }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
@@ -29,3 +29,4 @@ accesskit_macos = { git = "https://github.com/anomalyco/rune", rev = "b847026038
 lto = "thin"
 codegen-units = 1
 strip = true
+panic = "abort"

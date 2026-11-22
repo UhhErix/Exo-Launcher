@@ -50,6 +50,10 @@ Push-Location ui
 npm run -s test
 if ($LASTEXITCODE) { throw "UI tests failed ($LASTEXITCODE); nothing was published." }
 Pop-Location
+Push-Location native-ui
+cargo test --workspace --locked
+if ($LASTEXITCODE) { throw "Native UI tests failed ($LASTEXITCODE); nothing was published." }
+Pop-Location
 
 # A clean publish: an incremental one once shipped plain IL instead of ReadyToRun.
 Get-ChildItem -Recurse -Directory ExoLauncher\bin, ExoLauncher\obj -ErrorAction SilentlyContinue |
@@ -66,6 +70,10 @@ if (@('dave.dll', 'opus.dll', 'exo_apm.dll', 'exo-deepfilter.dll') | Where-Objec
     pwsh -NoProfile -File (Join-Path $repo 'voice\build.ps1')
     if ($LASTEXITCODE) { throw "Discord voice build failed ($LASTEXITCODE)." }
 }
+Push-Location native-ui
+cargo build --release --locked --bin exo-ui
+if ($LASTEXITCODE) { throw "Native UI release build failed ($LASTEXITCODE)." }
+Pop-Location
 dotnet publish ExoLauncher\ExoLauncher.csproj -c Release -p:Platform=x64 -r win-x64 --self-contained -v q -nologo
 if ($LASTEXITCODE) { throw "dotnet publish failed ($LASTEXITCODE)." }
 $publish = Get-ChildItem -Recurse -Directory ExoLauncher\bin | Where-Object { $_.FullName -match 'Release\\.*win-x64\\publish$' } | Select-Object -First 1
@@ -106,7 +114,7 @@ Copy-Item (Join-Path $repo 'capture\out\obs') $captureAddon -Recurse -Force
 # What every release must hold. The voice libraries are only copied once they're built, and releases have gone out
 # without them, so a missing part stops the build, and the voice libraries must also load here.
 $voice = 'dave.dll', 'opus.dll', 'exo_apm.dll', 'exo-deepfilter.dll', 'sherpa-onnx-c-api.dll', 'onnxruntime.dll'
-$parts = $voice + 'ExoLauncher.exe', 'wwwroot\index.html', 'wwwroot\mouse\index.html', 'steam-ipc\ExoLauncher.SteamIpc.exe',
+$parts = $voice + 'ExoLauncher.exe', 'exo-ui.exe', 'wwwroot\index.html', 'wwwroot\mouse\index.html', 'steam-ipc\ExoLauncher.SteamIpc.exe',
     'addons\shaders\engine\ExoShaders.Service.exe', 'addons\capture\ExoCapture.exe'
 $missing = $parts | Where-Object { -not (Test-Path (Join-Path $publish.FullName $_)) }
 if ($missing) { throw "The app folder lacks $($missing -join ', ')." }

@@ -1367,6 +1367,8 @@ impl AppState {
                 set_handle.update(move |s, _| s.apply_settings(settings));
             }
         });
+
+        rpc.call::<_, ActionResult>(exo_rpc::METHOD_SHELL_READY, &json!({}), |_| {});
     }
 }
 
