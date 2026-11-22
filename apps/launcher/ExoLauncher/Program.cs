@@ -138,7 +138,7 @@ public static class Program
             if (Services.ExoLinks.Find(args) is { } place) Services.WebHostBridge.QueueOpen(place);
             if (Services.RuneHostSession.TryParse(args) is { } runeOptions)
             {
-                mainInstance.Activated += (_, _) => Services.RuneHostSession.RequestActivate();
+                mainInstance.Activated += (_, _) => UiGuard.Run(Services.RuneHostSession.RequestActivate);
                 Environment.ExitCode = Services.RuneHostSession.Run(runeOptions);
                 return;
             }
