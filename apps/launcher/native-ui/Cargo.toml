@@ -12,18 +12,18 @@ edition = "2024"
 license = "MIT"
 
 [workspace.dependencies]
-rune = { git = "https://github.com/anomalyco/rune", rev = "14b59a3434b49d5f117140d865482f080c7caa32" }
-rune-media = { git = "https://github.com/anomalyco/rune", rev = "14b59a3434b49d5f117140d865482f080c7caa32", default-features = false }
+rune = { git = "https://github.com/UhhErix/rune", rev = "1735bc26b094cd8264802aef3799f73e6eddd4a2" }
+rune-media = { git = "https://github.com/UhhErix/rune", rev = "1735bc26b094cd8264802aef3799f73e6eddd4a2", default-features = false }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 
 [patch.crates-io]
-wgpu-hal = { git = "https://github.com/anomalyco/rune", rev = "14b59a3434b49d5f117140d865482f080c7caa32" }
-winit = { git = "https://github.com/anomalyco/rune", rev = "14b59a3434b49d5f117140d865482f080c7caa32" }
-sctk-adwaita = { git = "https://github.com/anomalyco/rune", rev = "14b59a3434b49d5f117140d865482f080c7caa32" }
-parley_engine = { git = "https://github.com/anomalyco/rune", rev = "14b59a3434b49d5f117140d865482f080c7caa32" }
-accesskit_windows = { git = "https://github.com/anomalyco/rune", rev = "14b59a3434b49d5f117140d865482f080c7caa32" }
-accesskit_macos = { git = "https://github.com/anomalyco/rune", rev = "14b59a3434b49d5f117140d865482f080c7caa32" }
+wgpu-hal = { git = "https://github.com/UhhErix/rune", rev = "1735bc26b094cd8264802aef3799f73e6eddd4a2" }
+winit = { git = "https://github.com/UhhErix/rune", rev = "1735bc26b094cd8264802aef3799f73e6eddd4a2" }
+sctk-adwaita = { git = "https://github.com/UhhErix/rune", rev = "1735bc26b094cd8264802aef3799f73e6eddd4a2" }
+parley_engine = { git = "https://github.com/UhhErix/rune", rev = "1735bc26b094cd8264802aef3799f73e6eddd4a2" }
+accesskit_windows = { git = "https://github.com/UhhErix/rune", rev = "1735bc26b094cd8264802aef3799f73e6eddd4a2" }
+accesskit_macos = { git = "https://github.com/UhhErix/rune", rev = "1735bc26b094cd8264802aef3799f73e6eddd4a2" }
 
 [profile.release]
 lto = "thin"

@@ -32,6 +32,7 @@ internal sealed partial class MusicEngineService
     private string? _musicWebService;
     private bool _musicWebClosed;
     private bool _musicWebReady;
+    private bool _appleAdapterInstalled;
     private bool _musicWebFailed;
     private (string Service, string Message)? _musicWebCause;
     private int _musicWebGeneration;
@@ -645,6 +646,7 @@ internal sealed partial class MusicEngineService
         _musicWebLoad?.TrySetCanceled();
         _musicWebLoad = null;
         _musicWebReady = false;
+        _appleAdapterInstalled = false;
         _musicWebFailed = false;
         Volatile.Write(ref _musicWebAudio, false);
         NotifyStateChanged();
@@ -827,6 +829,8 @@ internal sealed partial class MusicEngineService
             {
                 if (guard.Failure(e) is not { } message) return;
                 _musicWebReady = false;
+                _appleAdapterInstalled = false;
+                _musicNowPlaying?.MarkNavigationStarting();
                 _musicWebFailed = true;
                 _musicWebCause = (service, message);
                 host.SetControllerVisible(false);
@@ -836,12 +840,15 @@ internal sealed partial class MusicEngineService
                 return;
             }
             _musicWebReady = true;
+            _appleAdapterInstalled = service == "apple";
             _musicWebBooted = false;
             _musicWebFailed = false;
             SetEmbeddedActivity(core, false, force: true);
             if (_musicNowPlaying?.Service != service)
                 SetMusicNowPlaying(MusicNowPlaying.ForWebPage(service, MusicWebEvaluate(core), () => MusicWebSuspended(core),
-                    control: MusicWebEvaluate(core, click: true), press: MusicWebPress(core)));
+                    control: MusicWebEvaluate(core, click: true), press: MusicWebPress(core), preinstalled: true));
+            else
+                _musicNowPlaying.MarkInstalled();
             loaded.TrySetResult();
             host.SetControllerVisible(true);
             NotifyStateChanged();
@@ -856,6 +863,8 @@ internal sealed partial class MusicEngineService
                 return;
             _musicWebFailed = true;
             _musicWebReady = false;
+            _appleAdapterInstalled = false;
+            _musicNowPlaying?.MarkNavigationStarting();
             host.SetControllerVisible(false);
             NotifyStateChanged();
             PublishMusicStatus(service, "error", "The player stopped responding. Choose Retry to reconnect.");
@@ -863,6 +872,9 @@ internal sealed partial class MusicEngineService
             AppLog.Warn("Music web player process stopped; reload is available.");
         });
         await core.AddScriptToExecuteOnDocumentCreatedAsync(EmbeddedClientPresentation.Script);
+        await core.AddScriptToExecuteOnDocumentCreatedAsync(MusicNowPlaying.InstallScriptFor(service));
+        if (service == "apple")
+            await core.AddScriptToExecuteOnDocumentCreatedAsync(AppleMusicNative.InstallScript);
         if (service == "youtube")
             await core.AddScriptToExecuteOnDocumentCreatedAsync(EmbeddedClientPresentation.OptimizeScript);
         var domLogged = false;
@@ -901,7 +913,15 @@ internal sealed partial class MusicEngineService
         var guard = WebPageGuard.Attach(core, MusicWebPolicy.Label(service));
         core.NavigationStarting += (_, e) => UiGuard.Run(() =>
         {
-            if (MusicWebPolicy.IsServiceDocument(service, e.Uri) || (popup && (e.Uri == "about:blank" || MusicWebPolicy.IsSignInHop(service, e.Uri))) || WebPageGuard.IsAppLink(e.Uri)) return;
+            if (MusicWebPolicy.IsServiceDocument(service, e.Uri) || (popup && (e.Uri == "about:blank" || MusicWebPolicy.IsSignInHop(service, e.Uri))) || WebPageGuard.IsAppLink(e.Uri))
+            {
+                if (!popup && !WebPageGuard.IsAppLink(e.Uri) && ReferenceEquals(_musicHost, host))
+                {
+                    _appleAdapterInstalled = false;
+                    _musicNowPlaying?.MarkNavigationStarting();
+                }
+                return;
+            }
             e.Cancel = true;
             if (popup)
             {

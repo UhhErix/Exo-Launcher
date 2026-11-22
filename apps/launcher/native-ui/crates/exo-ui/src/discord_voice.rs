@@ -2,16 +2,23 @@ use crate::discord::avatar_box;
 use crate::discord_voice_state::VoicePanel;
 use crate::state::AppState;
 use exo_kit::{
-    BG, FG, PRESS_SCALE, PRIMARY_FG, RADIUS_CARD, RADIUS_PANEL, RADIUS_PILL, SPRING_QUICK, bad,
-    fg_muted, filter_pill, glass_button, glass_rim, good, hairline, hex, hover_fill, icon_close,
-    icon_hand, icon_headphones, icon_headphones_off, icon_maximize, icon_mic, icon_mic_off,
-    icon_monitor, icon_music, icon_phone, icon_phone_off, icon_screen_share, icon_sliders,
-    icon_video, icon_volume, icon_volume_off, pressed_fill, primary_button, subtle_fill, type_body,
-    type_control, type_label, type_section, type_small, type_title, warn,
+    BG, FG, PRESS_SCALE, PRIMARY_FG, RADIUS_CARD, RADIUS_PANEL, RADIUS_PILL, SPRING_MOVE,
+    SPRING_QUICK, bad, fg_muted, filter_pill, glass_button, glass_rim, good, hairline, hex,
+    hover_fill, icon_close, icon_hand, icon_headphones, icon_headphones_off, icon_maximize,
+    icon_mic, icon_mic_off, icon_monitor, icon_music, icon_phone, icon_phone_off,
+    icon_screen_share, icon_sliders, icon_video, icon_volume, icon_volume_off, pressed_fill,
+    primary_button, subtle_fill, type_body, type_control, type_label, type_section, type_small,
+    type_title, warn,
 };
 use exo_rpc::{DiscordChannel, DiscordVoiceMember};
-use rune::{Color, El, ScrollSpec, SurfaceFit, col, el, row, text};
+use rune::{Color, El, ScrollSpec, SpringPair, SurfaceFit, Transition, col, el, row, text};
 use serde_json::json;
+
+fn voice_panel_transition() -> Transition {
+    let enter = Transition::scale(0.98).combined(Transition::opacity());
+    Transition::asymmetric(enter, Transition::opacity())
+        .springs(SpringPair::new(SPRING_MOVE, SPRING_QUICK))
+}
 
 fn pane_surface() -> Color {
     hex(0x0b0b0d, 1.0)
@@ -377,6 +384,7 @@ fn golive_panel(s: &AppState) -> El {
         .radius(RADIUS_PANEL)
         .fill(card_surface())
         .border(1.0, glass_rim())
+        .transition(voice_panel_transition())
         .child(
             row()
                 .w_full()
@@ -425,7 +433,10 @@ fn soundboard_panel(s: &AppState) -> El {
         .chain(s.discord.voice_ui.soundboard_defaults.iter())
     {
         let item = snd.clone();
-        let emoji = snd.emoji_name.clone().unwrap_or_else(|| "🔊".into());
+        let leading = match snd.emoji_name.as_deref().filter(|e| !e.is_empty()) {
+            Some(em) => text(em.to_string()).font(type_body()).color(FG),
+            None => icon_volume(14.0, fg_muted()),
+        };
         grid = grid.child(
             row()
                 .key(format!("dc-snd-{}", snd.sound_id))
@@ -445,7 +456,7 @@ fn soundboard_panel(s: &AppState) -> El {
                 .hover(hover_fill())
                 .motion(SPRING_QUICK)
                 .on_press(move |s: &mut AppState| s.play_discord_sound(&item))
-                .child(text(emoji).font(type_body()).color(FG))
+                .child(leading)
                 .child(text(snd.name.clone()).font(type_control()).color(FG)),
         );
     }
@@ -459,6 +470,7 @@ fn soundboard_panel(s: &AppState) -> El {
         .radius(RADIUS_PANEL)
         .fill(card_surface())
         .border(1.0, glass_rim())
+        .transition(voice_panel_transition())
         .child(
             row()
                 .w_full()
@@ -495,6 +507,7 @@ fn audio_mixer_panel(s: &AppState) -> El {
         .radius(RADIUS_PANEL)
         .fill(card_surface())
         .border(1.0, glass_rim())
+        .transition(voice_panel_transition())
         .child(
             row()
                 .w_full()

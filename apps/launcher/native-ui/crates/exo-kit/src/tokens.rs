@@ -193,5 +193,5 @@ pub fn type_page() -> TextStyle {
 }
 
 pub fn type_first_run() -> TextStyle {
-    TextStyle::new(scaled(32.0), 700.0)
+    TextStyle::new(scaled(32.0), 700.0).letter_spacing(-0.025)
 }

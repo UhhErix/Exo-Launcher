@@ -221,8 +221,6 @@ pub struct AppState {
     pub library_search: TextEdit,
     pub library_more_open: bool,
     pub capture_menu_open: bool,
-    pub home_stage_size: (f32, f32),
-    pub game_stage_size: (f32, f32),
     pub deck_scroll: Rc<Cell<ScrollPos>>,
     pub deck_scroll_x: f32,
     pub store_shelf_scrolls: [Rc<Cell<ScrollPos>>; 4],
@@ -306,8 +304,6 @@ impl AppState {
             library_search: TextEdit::default(),
             library_more_open: false,
             capture_menu_open: false,
-            home_stage_size: (1920.0, 636.0),
-            game_stage_size: (1920.0, 460.0),
             deck_scroll: Rc::new(Cell::new(ScrollPos::default())),
             deck_scroll_x: 0.0,
             store_shelf_scrolls: std::array::from_fn(|_| Rc::new(Cell::new(ScrollPos::default()))),
@@ -410,8 +406,6 @@ impl AppState {
             library_search: TextEdit::default(),
             library_more_open: false,
             capture_menu_open: false,
-            home_stage_size: (1920.0, 636.0),
-            game_stage_size: (1920.0, 460.0),
             deck_scroll: Rc::new(Cell::new(ScrollPos::default())),
             deck_scroll_x: 0.0,
             store_shelf_scrolls: std::array::from_fn(|_| Rc::new(Cell::new(ScrollPos::default()))),
@@ -1067,7 +1061,7 @@ impl AppState {
             current + 2.0 < pos.max[0]
         } else {
             let approx_track = (total as f32 * 238.0 - 14.0).max(0.0);
-            let approx_view = (self.home_stage_size.0 - 64.0).max(320.0);
+            let approx_view = (1920.0_f32 - 64.0).max(320.0);
             approx_track > approx_view + 2.0 && current + 2.0 < approx_track - approx_view
         };
         (can_prev, can_next)
@@ -1078,7 +1072,7 @@ impl AppState {
         let viewport = if pos.viewport[0] > 1.0 {
             pos.viewport[0]
         } else {
-            (self.home_stage_size.0 - 64.0).max(320.0)
+            (1920.0_f32 - 64.0).max(320.0)
         };
         let max_x = if pos.max[0] > 0.0 {
             pos.max[0]
@@ -1113,7 +1107,7 @@ impl AppState {
             current + 2.0 < pos.max[0]
         } else {
             let approx_track = (count as f32 * 194.0 - 14.0).max(0.0);
-            let approx_view = (self.home_stage_size.0 - 104.0).max(360.0);
+            let approx_view = (1920.0_f32 - 104.0).max(360.0);
             approx_track > approx_view + 2.0 && current + 2.0 < approx_track - approx_view
         };
         (can_prev, can_next)
@@ -1125,7 +1119,7 @@ impl AppState {
         let viewport = if pos.viewport[0] > 1.0 {
             pos.viewport[0]
         } else {
-            (self.home_stage_size.0 - 104.0).max(360.0)
+            (1920.0_f32 - 104.0).max(360.0)
         };
         let max_x = if pos.max[0] > 0.0 {
             pos.max[0]
