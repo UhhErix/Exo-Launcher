@@ -783,6 +783,16 @@ fn main_panel_body(s: &AppState, scale: f32) -> El {
 
     match &s.media.music_nav {
         MusicNav::Home => {
+            if s.media.music_home_loading
+                && s.media.music_home_sections.is_empty()
+                && s.media.music_recent.is_empty()
+            {
+                return col().w_full().py(140.0).items_center().child(
+                    text(format!("Loading {}…", s.media.music_service.label()))
+                        .font(scaled_body(s))
+                        .color(fg_muted()),
+                );
+            }
             let mut body = col().w_full();
             if !s.media.music_recent.is_empty() {
                 body = body.child(recent_grid(s, scale));
