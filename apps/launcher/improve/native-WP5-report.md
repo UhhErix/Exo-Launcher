@@ -64,3 +64,33 @@ All gates run in `apps/launcher/native-ui` (plus `check-comments`):
 - `apps/launcher/native-ui/crates/exo-ui/src/main.rs` (module registration, `poll_state` tick, lightbox keyboard nav, parity scene settling & `store-lightbox` scene)
 - `apps/launcher/improve/feature-matrix.md` & `apps/launcher/improve/feature-matrix.json` (updated WP5 rows)
 - `apps/launcher/improve/native-WP5-report.md` (this report)
+
+
+## WP11 RPC & Push-Event Parity Closure
+
+Verified against `origin/UhhErix/native-WP11` (`d1d9589`) `apps/launcher/improve/rpc-parity.md` / `.json` using `EXO_RPC_TRACE` with the release `exo-ui.exe` and WP11's `uia.ps1` + `lib.mjs` scanners in a disposable temp data dir.
+
+### Changes ported from React (`storeData.ts`, `StoreRoom.tsx`, `StoreCard.tsx`)
+- **Startup warm-up (`state.rs::bootstrap_rpc` -> `store_page.rs::warm_store_on_startup`)**: Calls `store.home` `{}` and `store.wishlist` `{"action":"get"}` after bootstrap (matching React's backstage `StoreRoom` mount), without warming individual `store.game` pages until Store is visible.
+- **Room entry stale-while-revalidate (`state.rs::switch_room(Room::Store)`)**: Revalidates `store.home` `{}` (keeping existing state if `at` matches, matching `StoreRoom.tsx:454`), refreshes `store.wishlist` `{"action":"get"}`, and starts the 500 ms visibility dwell timer (`WARM_DWELL_SECS = 0.5`).
+- **Visible-card & hover warming + 10-min game cache (`store_page.rs`, `store.rs`)**: Mirrors `storeData.ts:120-241` and `StoreCard.tsx:70-76` — 10-minute `store.game` cache (96-entry FIFO cap), 500 ms dwell warm of visible cards (3 concurrent, 1024-entry warmed cap, preloading hero/logo/first media thumb, never pre-warming CheapShark `store.gameOffers` or `store.gameReviews`), 60 ms hover warm on `store_tile_card`, and instant first-frame `StoreGamePage` hydration from cache on open.
+- **Push events (`exo-rpc/src/lib.rs`, `exo-rpc/src/events.rs`, `state.rs`)**: Both React `store.*` push events (`store.changed` and `store.sale`) are parsed in `exo-rpc` and handled in `exo-ui`. (`stores.outage` / `stores.outages` belongs to `shell-bar-16` / WP3, and `stores.matrix` belongs to WP4.)
+
+### Before vs After (WP11 `rpc-parity` rows for Store)
+
+| Row | React (WP11) | Native before | Native after | Status |
+| --- | ---: | ---: | ---: | --- |
+| `startup` -> `store.home` | 1 | 0 | 1 | 0 gap |
+| `startup` -> `store.wishlist` | 1 | 0 | 1 | 0 gap |
+| `startup` -> `store.changed` event | 1 | 0 | 1 | 0 gap |
+| `room-store` -> `store.home` | 1 | 1 | 1 | 0 gap (session ratio 3:2 = 1.5x, no longer chatty) |
+| `room-store` -> `store.wishlist` | 1 | 0 | 1 | 0 gap |
+| `room-store` -> `store.game` | 10 | 0 | 10 | 0 gap |
+| Static unhandled `store.*` push events (`lib.mjs`) | 2 (`store.changed`, `store.sale`) | 1 (`store.sale`) | 0 (`[]`) | 0 gap |
+
+### Verification Gates (post-RPC parity pass)
+- `cargo fmt --check`: pass (exit 0)
+- `cargo clippy --workspace --locked -- -D warnings`: pass (exit 0)
+- `cargo test --workspace --locked`: pass (111 passed, 0 failed; added `store_game_cache_respects_ttl_and_lru_cap` and `store_warm_dwell_enqueues_visible_cards_once_and_respects_hover`)
+- `cargo build --release --locked -p exo-ui`: pass (exit 0)
+- `node apps/launcher/tools/check-comments.mjs` (`native-ui` scope): clean (0 findings)
