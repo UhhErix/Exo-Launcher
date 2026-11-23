@@ -1,6 +1,3 @@
-// Copies an owner's data folder into a test data dir, so the parity run starts signed in.
-// The source is only read. The app folder and its update staging folders are skipped:
-// the test instance must never run from or touch the installed app.
 import { cp, stat } from 'node:fs/promises'
 import { basename, resolve } from 'node:path'
 

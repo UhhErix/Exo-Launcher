@@ -53,7 +53,6 @@ export async function startWebTestInstance({ folder, dataDir, fresh = true, host
     framelessPinSide: false,
     reduceMotion: true,
   }
-  // The owner's settings (pins, Discord prefs, look) stay; the harness's own values are laid over them.
   const settingsPath = join(safeData, 'settings.json')
   const kept = await readFile(settingsPath, 'utf8').then(JSON.parse, () => ({}))
   await writeFile(settingsPath, JSON.stringify({ ...kept, ...seededSettings }, null, 2))
@@ -122,7 +121,6 @@ export async function startWebTestInstance({ folder, dataDir, fresh = true, host
       await sleep(400)
     }
     if (discordReady) {
-      // The Discord gateway takes ~10 s after launch; the signed-in markers appear when it is ready.
       const until = Date.now() + 40000
       while (Date.now() < until) {
         const ready = await shell.eval("!!document.querySelector('.exo-dc-me, .exo-dc-band-guild, .exo-dc-signin')")
