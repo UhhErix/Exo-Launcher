@@ -5,8 +5,8 @@ use exo_kit::{
     fg_muted, glass_button, glass_control_fill, glass_icon_circle, glass_rim, glass_rim_bottom,
     glass_rim_top, good, hover_fill, icon_back, icon_bookmark, icon_chevron_left,
     icon_chevron_right, icon_external, icon_refresh, icon_search, pressed_fill, primary_button,
-    scaled, selected_fill, stat_chip, type_body, type_control, type_page, type_section, type_small,
-    type_title,
+    scaled, selected_fill, stat_chip, store_logo, type_body, type_control, type_page, type_section,
+    type_small, type_title,
 };
 use exo_rpc::{StoreGame, StoreTile, types::format_cents};
 use rune::{
@@ -384,7 +384,13 @@ fn store_game_view(s: &AppState, game: &StoreGame, scale: f32) -> El {
                     .radius(RADIUS_CARD)
                     .fill(BG)
                     .border(1.0, glass_rim())
-                    .child(text(store_name).font(type_section()).color(FG))
+                    .child(
+                        row()
+                            .gap(10.0)
+                            .center_y()
+                            .children(store_logo(&store_name, 16.0))
+                            .child(text(store_name).font(type_section()).color(FG)),
+                    )
                     .child(
                         row()
                             .gap(10.0)

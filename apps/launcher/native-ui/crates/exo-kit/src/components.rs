@@ -1,15 +1,19 @@
 use crate::tokens::{
     BG, FG, GLASS_CONTROL_SIGMA, GLASS_PANEL_SIGMA, PRESS_SCALE, PRIMARY_FG, RADIUS_CARD,
     RADIUS_PANEL, RADIUS_PILL, SPRING_BASE, SPRING_MOVE, SPRING_QUICK, TRANSPARENT, bad, fg_muted,
-    glass_control_fill, glass_outer_edge, glass_panel_fill, glass_rim, glass_rim_bottom,
-    glass_rim_top, glass_specular_sheen, glass_still_control_fill, glass_still_panel_fill, good,
+    glass_control_fill, glass_panel_fill, glass_panel_shadow_color, glass_plate_fill, glass_rim,
+    glass_rim_bottom, glass_rim_top, glass_still_control_fill, glass_still_panel_fill, good,
     hairline, hover_fill, pressed_fill, subtle_fill, track_fill, type_control, type_section,
     type_small, warn,
 };
-use rune::{Color, El, SpringPair, Transition, Vec2, col, el, row, text};
+use rune::{Color, Cursor, El, SpringPair, Transition, Vec2, col, el, row, text};
 
 pub fn popover_transition() -> Transition {
-    let enter = Transition::scale_anchor(0.96, Vec2::new(1.0, 0.0)).combined(Transition::opacity());
+    popover_transition_from(Vec2::new(1.0, 0.0))
+}
+
+pub fn popover_transition_from(anchor: Vec2) -> Transition {
+    let enter = Transition::scale_anchor(0.96, anchor).combined(Transition::opacity());
     Transition::asymmetric(enter, Transition::opacity())
         .springs(SpringPair::new(SPRING_BASE, SPRING_QUICK))
 }
@@ -42,10 +46,7 @@ pub fn glass_capsule_opt(key: &'static str, blur: bool) -> El {
         } else {
             glass_still_control_fill()
         })
-        .linear_gradient(std::f32::consts::PI, glass_specular_sheen())
-        .border_gradient(1.0, glass_rim_top(), glass_rim_bottom())
-        .shadow(1.0, 3.0, glass_outer_edge())
-        .shadow(6.0, 18.0, BG.alpha(0.45));
+        .border_gradient(1.0, glass_rim_top(), glass_rim_bottom());
     if blur {
         capsule = capsule.backdrop_blur(GLASS_CONTROL_SIGMA);
     }
@@ -64,19 +65,59 @@ pub fn glass_panel_opt(key: impl Into<String>, width: f32, blur: bool) -> El {
         .continuous_corners()
         .clip_rounded(RADIUS_PANEL)
         .hit()
+        .cursor(Cursor::Default)
         .fill(if blur {
             glass_panel_fill()
         } else {
             glass_still_panel_fill()
         })
-        .linear_gradient(std::f32::consts::PI, glass_specular_sheen())
         .border_gradient(1.0, glass_rim_top(), glass_rim_bottom())
-        .shadow(1.0, 3.0, glass_outer_edge())
-        .shadow(12.0, 32.0, BG.alpha(0.55));
+        .shadow(0.0, 40.0, glass_panel_shadow_color());
     if blur {
         panel = panel.backdrop_blur(GLASS_PANEL_SIGMA);
     }
     panel
+}
+
+pub fn glass_plate(key: impl Into<String>, blur: bool) -> El {
+    let mut plate = row().key(key).center_y().radius(RADIUS_PILL).fill(if blur {
+        glass_plate_fill()
+    } else {
+        glass_still_control_fill()
+    });
+    if blur {
+        plate = plate.backdrop_blur(GLASS_CONTROL_SIGMA);
+    }
+    plate
+}
+
+pub fn glass_input(key: impl Into<String>) -> El {
+    row()
+        .key(key)
+        .h(34.0)
+        .px(12.0)
+        .gap(8.0)
+        .center_y()
+        .radius(RADIUS_PILL)
+        .cursor(Cursor::Text)
+        .fill(glass_control_fill())
+        .border_gradient(1.0, glass_rim_top(), glass_rim_bottom())
+}
+
+pub fn glass_chip(key: impl Into<String>, label: impl Into<String>, icon: Option<El>) -> El {
+    let mut chip = row()
+        .key(key)
+        .h(28.0)
+        .px(10.0)
+        .gap(6.0)
+        .center_y()
+        .radius(RADIUS_PILL)
+        .fill(glass_control_fill())
+        .border_gradient(1.0, glass_rim_top(), glass_rim_bottom());
+    if let Some(ic) = icon {
+        chip = chip.child(ic);
+    }
+    chip.child(text(label.into()).font(type_small()).color(FG))
 }
 
 pub fn amoled_card(radius: f32) -> El {
@@ -94,6 +135,7 @@ pub fn exo_play_button(key: &'static str, label: &'static str, icon: Option<El>)
         .label(label)
         .focusable(true)
         .hit()
+        .cursor(Cursor::Pointer)
         .press_on_down()
         .press_scale(PRESS_SCALE)
         .h(40.0)
@@ -114,22 +156,42 @@ pub fn exo_play_button(key: &'static str, label: &'static str, icon: Option<El>)
 }
 
 pub fn glass_icon_circle(key: &'static str, label: &'static str, size: f32, icon: El) -> El {
-    el().key(key)
+    glass_icon_circle_opt(key, label, size, icon, false)
+}
+
+pub fn glass_icon_circle_opt(
+    key: &'static str,
+    label: &'static str,
+    size: f32,
+    icon: El,
+    blur: bool,
+) -> El {
+    let mut btn = el()
+        .key(key)
         .role("button")
         .label(label)
         .focusable(true)
         .hit()
+        .cursor(Cursor::Pointer)
         .press_on_down()
         .press_scale(PRESS_SCALE)
         .size(size, size)
         .center()
         .radius(RADIUS_PILL)
-        .fill(glass_control_fill())
+        .fill(if blur {
+            glass_control_fill()
+        } else {
+            glass_still_control_fill()
+        })
         .hover(hover_fill())
         .press(pressed_fill())
         .border_gradient(1.0, glass_rim_top(), glass_rim_bottom())
         .motion(SPRING_QUICK)
-        .child(icon)
+        .child(icon);
+    if blur {
+        btn = btn.backdrop_blur(GLASS_CONTROL_SIGMA);
+    }
+    btn
 }
 
 pub fn primary_button(key: &'static str, label: &'static str, icon: Option<El>) -> El {
@@ -139,6 +201,7 @@ pub fn primary_button(key: &'static str, label: &'static str, icon: Option<El>) 
         .label(label)
         .focusable(true)
         .hit()
+        .cursor(Cursor::Pointer)
         .press_on_down()
         .press_scale(PRESS_SCALE)
         .h(32.0)
@@ -157,12 +220,22 @@ pub fn primary_button(key: &'static str, label: &'static str, icon: Option<El>) 
 }
 
 pub fn glass_button(key: &'static str, label: &'static str, icon: Option<El>) -> El {
+    glass_button_opt(key, label, icon, false)
+}
+
+pub fn glass_button_opt(
+    key: &'static str,
+    label: &'static str,
+    icon: Option<El>,
+    blur: bool,
+) -> El {
     let mut btn = row()
         .key(key)
         .role("button")
         .label(label)
         .focusable(true)
         .hit()
+        .cursor(Cursor::Pointer)
         .press_on_down()
         .press_scale(PRESS_SCALE)
         .h(32.0)
@@ -170,11 +243,18 @@ pub fn glass_button(key: &'static str, label: &'static str, icon: Option<El>) ->
         .gap(6.0)
         .center_y()
         .radius(RADIUS_PILL)
-        .fill(glass_control_fill())
+        .fill(if blur {
+            glass_control_fill()
+        } else {
+            glass_still_control_fill()
+        })
         .hover(hover_fill())
         .press(pressed_fill())
         .border_gradient(1.0, glass_rim_top(), glass_rim_bottom())
         .motion(SPRING_QUICK);
+    if blur {
+        btn = btn.backdrop_blur(GLASS_CONTROL_SIGMA);
+    }
     if let Some(ic) = icon {
         btn = btn.child(ic);
     }
@@ -187,6 +267,7 @@ pub fn filter_pill(key: &'static str, label: String, active: bool) -> El {
         .label(label.clone())
         .focusable(true)
         .hit()
+        .cursor(Cursor::Pointer)
         .press_on_down()
         .press_scale(PRESS_SCALE)
         .h(30.0)
@@ -216,6 +297,7 @@ pub fn nav_tab(key: &'static str, label: &'static str, active: bool, icon: El) -
         .label(label)
         .focusable(true)
         .hit()
+        .cursor(Cursor::Pointer)
         .press_on_down()
         .press_scale(PRESS_SCALE)
         .h(30.0)
@@ -242,6 +324,7 @@ pub fn danger_button(key: &'static str, label: &'static str, icon: Option<El>) -
         .label(label)
         .focusable(true)
         .hit()
+        .cursor(Cursor::Pointer)
         .press_on_down()
         .press_scale(PRESS_SCALE)
         .h(32.0)
@@ -299,12 +382,49 @@ pub fn switch_pill(key: &'static str, label: &'static str, on: bool) -> El {
         .checked(on)
         .focusable(true)
         .hit()
+        .cursor(Cursor::Pointer)
         .press_on_down()
         .size(40.0, 24.0)
         .radius(RADIUS_PILL)
         .fill(if on { good() } else { track_fill() })
         .motion(SPRING_QUICK)
         .child(knob)
+}
+
+pub fn slider_track(
+    key: impl Into<String>,
+    label: impl Into<String>,
+    width: f32,
+    fraction: f32,
+    dragging: bool,
+    disabled: bool,
+) -> El {
+    let frac = fraction.clamp(0.0, 1.0);
+    let fill_w = (width * frac).max(4.0);
+    let cursor = if disabled {
+        Cursor::NotAllowed
+    } else if dragging {
+        Cursor::Grabbing
+    } else {
+        Cursor::Grab
+    };
+    el().key(key)
+        .role("slider")
+        .label(label)
+        .focusable(!disabled)
+        .disabled(disabled)
+        .hit()
+        .cursor(cursor)
+        .w(width)
+        .h(20.0)
+        .center_y()
+        .child(
+            el().w(width)
+                .h(4.0)
+                .radius(2.0)
+                .fill(Color::WHITE.alpha(0.16))
+                .child(el().w(fill_w).h(4.0).radius(2.0).fill(FG)),
+        )
 }
 
 pub fn progress_bar(width: f32, fraction: f32) -> El {

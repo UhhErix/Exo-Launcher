@@ -1,20 +1,20 @@
 use crate::state::AppState;
 use exo_kit::{
-    BG, FG, RADIUS_SMALL, SPRING_BASE, fg_muted, glass_button, glass_panel, glass_rim, good,
-    hairline, icon_key, modal_card_transition, modal_scrim_transition, primary_button, type_body,
-    type_small, type_title,
+    BG, FG, RADIUS_SMALL, SPRING_BASE, fg_muted, glass_button, glass_control_fill, glass_panel_opt,
+    glass_rim_bottom, glass_rim_top, good, hairline, icon_key, modal_card_transition,
+    modal_scrim_transition, primary_button, store_logo, type_body, type_small, type_title,
 };
-use rune::{El, Key, col, edit_access, el, row, text, text_input};
+use rune::{Cursor, El, Key, Transition, col, edit_access, el, row, text, text_input};
 
-pub fn view(s: &AppState) -> El {
+pub fn layers(s: &AppState, blur: bool) -> Vec<El> {
     let preview_note = if let Some(ref preview) = s.key_preview {
         if let Some(ref store) = preview.store {
-            Some(format!(
-                "Detected {} key",
-                exo_rpc::types::store_label(store)
+            Some((
+                Some(store.as_str()),
+                format!("Detected {} key", exo_rpc::types::store_label(store)),
             ))
         } else if preview.looks_like_key {
-            Some("Valid key format detected".into())
+            Some((None, "Valid key format detected".into()))
         } else {
             None
         }
@@ -45,9 +45,10 @@ pub fn view(s: &AppState) -> El {
         .px(12.0)
         .gap(10.0)
         .center_y()
+        .cursor(Cursor::Text)
         .radius(RADIUS_SMALL)
-        .fill(BG.alpha(0.55))
-        .border(1.0, glass_rim())
+        .fill(glass_control_fill())
+        .border_gradient(1.0, glass_rim_top(), glass_rim_bottom())
         .child(icon_key(15.0, fg_muted()))
         .child(input);
 
@@ -66,17 +67,37 @@ pub fn view(s: &AppState) -> El {
         )
         .child(input_box);
 
-    if let Some(note) = preview_note {
-        content = content.child(
-            row()
-                .gap(6.0)
-                .center_y()
-                .child(el().size(7.0, 7.0).radius(3.5).fill(good()))
-                .child(text(note).font(type_small()).color(FG)),
-        );
+    if let Some((store_id, note)) = preview_note {
+        let mut badge = row().gap(8.0).center_y();
+        if let Some(logo) = store_id.and_then(|id| store_logo(id, 16.0)) {
+            badge = badge.child(logo);
+        } else {
+            badge = badge.child(el().size(7.0, 7.0).radius(3.5).fill(good()));
+        }
+        content = content.child(badge.child(text(note).font(type_small()).color(FG)));
     }
 
     let can_submit = !s.key_input.text.trim().is_empty() && !s.key_submitting;
+    let mut submit_btn = primary_button(
+        "key-submit",
+        if s.key_submitting {
+            "Activating…"
+        } else {
+            "Activate"
+        },
+        None,
+    )
+    .disabled(!can_submit)
+    .cursor(if can_submit {
+        Cursor::Pointer
+    } else {
+        Cursor::NotAllowed
+    })
+    .opacity(if can_submit { 1.0 } else { 0.45 });
+    if can_submit {
+        submit_btn = submit_btn.on_press(|s: &mut AppState| s.submit_key_activation());
+    }
+
     let footer = row()
         .w_full()
         .px(20.0)
@@ -87,32 +108,30 @@ pub fn view(s: &AppState) -> El {
             glass_button("key-cancel", "Cancel", None)
                 .on_press(|s: &mut AppState| s.close_key_modal()),
         )
-        .child(
-            primary_button(
-                "key-submit",
-                if s.key_submitting {
-                    "Activating…"
-                } else {
-                    "Activate"
-                },
-                None,
-            )
-            .opacity(if can_submit { 1.0 } else { 0.45 })
-            .on_press(|s: &mut AppState| s.submit_key_activation()),
-        );
+        .child(submit_btn);
 
-    let card = glass_panel("activate-key-modal", 460.0)
+    let card = glass_panel_opt("activate-key-modal", 460.0, blur)
         .motion(SPRING_BASE)
         .transition(modal_card_transition())
         .child(content)
         .child(el().w_full().h(1.0).fill(hairline()))
         .child(footer);
 
-    el().key("key-modal-scrim")
+    let scrim = el()
+        .key("key-modal-scrim")
         .pin(Some(0.0), Some(0.0), Some(0.0), Some(0.0))
         .fill(BG.alpha(0.52))
         .hit()
+        .cursor(Cursor::Default)
         .transition(modal_scrim_transition())
-        .on_press(|s: &mut AppState| s.close_key_modal())
-        .child(col().w_full().h_full().center().child(card))
+        .on_press(|s: &mut AppState| s.close_key_modal());
+
+    let host = col()
+        .key("key-modal-host")
+        .pin(Some(0.0), Some(0.0), Some(0.0), Some(0.0))
+        .center()
+        .transition(Transition::none())
+        .child(card);
+
+    vec![scrim, host]
 }

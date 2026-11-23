@@ -1,10 +1,10 @@
 use crate::state::{AppState, Room};
 use exo_kit::{
-    BG, FG, RADIUS_PILL, SPRING_BASE, SPRING_QUICK, fg_muted, glass_button, glass_panel, hairline,
-    icon_sparkles, modal_card_transition, modal_scrim_transition, primary_button, type_body,
-    type_small, type_title,
+    BG, FG, RADIUS_PILL, SPRING_BASE, SPRING_QUICK, fg_muted, glass_button, glass_panel_opt,
+    hairline, icon_sparkles, modal_card_transition, modal_scrim_transition, primary_button,
+    type_body, type_small, type_title,
 };
-use rune::{Color, El, col, el, row, text};
+use rune::{Color, Cursor, El, Transition, col, el, row, text};
 
 pub struct TourStep {
     pub title: &'static str,
@@ -55,9 +55,9 @@ pub const STEPS: [TourStep; 8] = [
     },
 ];
 
-pub fn view(s: &AppState) -> El {
+pub fn layers(s: &AppState, blur: bool) -> Vec<El> {
     let Some(idx) = s.tour_step else {
-        return el();
+        return Vec::new();
     };
     let step = &STEPS[idx.min(STEPS.len() - 1)];
     let is_first = idx == 0;
@@ -73,6 +73,7 @@ pub fn view(s: &AppState) -> El {
                 .label(format!("Step {}", i + 1))
                 .focusable(true)
                 .hit()
+                .cursor(Cursor::Pointer)
                 .press_on_down()
                 .size(22.0, 22.0)
                 .center()
@@ -112,6 +113,7 @@ pub fn view(s: &AppState) -> El {
                         .label("Skip")
                         .focusable(true)
                         .hit()
+                        .cursor(Cursor::Pointer)
                         .press_on_down()
                         .px(10.0)
                         .h(26.0)
@@ -165,24 +167,28 @@ pub fn view(s: &AppState) -> El {
         .child(dots)
         .child(nav);
 
-    let card = glass_panel("exo-tour-card", 460.0)
+    let card = glass_panel_opt("exo-tour-card", 460.0, blur)
         .motion(SPRING_BASE)
         .transition(modal_card_transition())
         .child(body)
         .child(el().w_full().h(1.0).fill(hairline()))
         .child(footer);
 
-    el().key("tour-scrim")
+    let scrim = el()
+        .key("tour-scrim")
         .pin(Some(0.0), Some(0.0), Some(0.0), Some(0.0))
         .fill(BG.alpha(0.50))
-        .transition(modal_scrim_transition())
-        .child(
-            col()
-                .w_full()
-                .h_full()
-                .pb(44.0)
-                .justify_end()
-                .items_center()
-                .child(card),
-        )
+        .cursor(Cursor::Default)
+        .transition(modal_scrim_transition());
+
+    let host = col()
+        .key("tour-host")
+        .pin(Some(0.0), Some(0.0), Some(0.0), Some(0.0))
+        .pb(44.0)
+        .justify_end()
+        .items_center()
+        .transition(Transition::none())
+        .child(card);
+
+    vec![scrim, host]
 }

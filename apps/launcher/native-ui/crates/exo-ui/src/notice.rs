@@ -3,7 +3,7 @@ use exo_kit::{
     FG, PRESS_SCALE, RADIUS_CARD, RADIUS_PILL, SPRING_BASE, SPRING_MOVE, SPRING_QUICK, bad,
     fg_muted, glass_panel_opt, good, hover_fill, icon_close, pressed_fill, type_body,
 };
-use rune::{El, Phase, Spring, SpringPair, Transition, col, el, row, text};
+use rune::{Cursor, El, Phase, Spring, SpringPair, Transition, col, el, row, text};
 
 pub const TOAST_WIDTH: f32 = 320.0;
 pub const SWIPE_DISMISS_DX: f32 = 106.0;
@@ -38,6 +38,7 @@ fn toast_card(item: &NoticeItem, allow_blur: bool) -> El {
         .label("Dismiss")
         .focusable(true)
         .hit()
+        .cursor(Cursor::Pointer)
         .press_on_down()
         .press_scale(PRESS_SCALE)
         .size(24.0, 24.0)
@@ -65,6 +66,11 @@ fn toast_card(item: &NoticeItem, allow_blur: bool) -> El {
     glass_panel_opt(format!("notice-{id}"), TOAST_WIDTH, allow_blur)
         .role("status")
         .label(item.text.clone())
+        .cursor(if item.dragging {
+            Cursor::Grabbing
+        } else {
+            Cursor::Grab
+        })
         .radius(RADIUS_CARD)
         .clip_rounded(RADIUS_CARD)
         .px(14.0)
