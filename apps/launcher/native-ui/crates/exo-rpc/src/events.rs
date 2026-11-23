@@ -106,3 +106,13 @@ pub struct AutopilotReportEvent {
 pub struct StoreChangedEvent {
     pub what: String,
 }
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct GpuDriverInstallEvent {
+    pub phase: String,
+    pub version: Option<String>,
+    pub message: Option<String>,
+    pub restored: Vec<String>,
+    pub not_restored: Vec<String>,
+}

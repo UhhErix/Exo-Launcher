@@ -45,6 +45,43 @@ impl AppState {
                     h3.update(move |s, _| s.pc.system_about = Some(about));
                 }
             });
+            let h4 = handle.clone();
+            rpc.call::<_, Value>(METHOD_SHADERS_ADDON, &json!({}), move |res| {
+                if let Ok(v) = res {
+                    let present = v.get("present").and_then(|x| x.as_bool()).unwrap_or(false);
+                    let status = ShadersAddonStatus {
+                        ok: v.get("ok").and_then(|x| x.as_bool()).unwrap_or(true),
+                        present,
+                        state: v.get("state").and_then(|x| x.as_str()).map(str::to_string),
+                        message: v
+                            .get("message")
+                            .and_then(|x| x.as_str())
+                            .map(str::to_string),
+                        snapshot: None,
+                    };
+                    h4.update(move |s, _| {
+                        s.pc.shaders = Some(status);
+                        if let Some(snap_val) = v.get("snapshot") {
+                            s.apply_shaders_snapshot_value(snap_val);
+                        }
+                    });
+                }
+            });
+            let h5 = handle.clone();
+            rpc.call::<_, Value>(
+                METHOD_SHADERS_CALL,
+                &json!({ "method": "snapshot", "params": {} }),
+                move |snap_res| {
+                    if let Ok(sv) = snap_res
+                        && let Some(res_val) = sv.get("result")
+                    {
+                        let res_clone = res_val.clone();
+                        h5.update(move |s, _| {
+                            s.apply_shaders_snapshot_value(&res_clone);
+                        });
+                    }
+                },
+            );
             if self.pc.update_check.is_none() && !self.pc.checking_update {
                 self.check_app_update();
             }
@@ -233,7 +270,6 @@ impl AppState {
                         .get("snapshot")
                         .map(parse_shader_snap_games)
                         .unwrap_or_default();
-                    let has_games = !snap_games.is_empty();
                     let status = ShadersAddonStatus {
                         ok: v.get("ok").and_then(|x| x.as_bool()).unwrap_or(true),
                         present,
@@ -254,7 +290,12 @@ impl AppState {
                             s.apply_shaders_snapshot_value(snap_val);
                         }
                     });
-                    if present && !has_games {
+                    if present {
+                        rpc_sh.call_raw(
+                            METHOD_SHADERS_CALL,
+                            &json!({ "method": "ui.visible", "params": { "visible": true } }),
+                            |_| {},
+                        );
                         rpc_sh.call::<_, Value>(
                             METHOD_SHADERS_CALL,
                             &json!({ "method": "snapshot", "params": {} }),
@@ -298,30 +339,6 @@ impl AppState {
             rpc.call::<_, SystemAbout>(METHOD_SYSTEM_ABOUT, &json!({}), move |res| {
                 if let Ok(about) = res {
                     h7.update(move |s, _| s.pc.system_about = Some(about));
-                }
-            });
-            let h8 = handle.clone();
-            rpc.call::<_, Value>("gpu.profile", &json!({}), move |res| {
-                if let Ok(v) = res {
-                    let (gpu_name, screen) = parse_gpu_profile_fields(&v);
-                    h8.update(move |s, _| {
-                        if gpu_name.is_some() {
-                            s.pc.gpu_short_name = gpu_name;
-                        }
-                        if screen.is_some() {
-                            s.pc.screen_label = screen;
-                        }
-                    });
-                }
-            });
-            let h9 = handle.clone();
-            rpc.call::<_, Value>("compress.list", &json!({}), move |res| {
-                if let Ok(v) = res {
-                    let (potential, saved) = parse_compress_totals(&v);
-                    h9.update(move |s, _| {
-                        s.pc.compress_potential_bytes = potential;
-                        s.pc.compress_saved_bytes = saved;
-                    });
                 }
             });
             if self.pc.drives.is_none() {
@@ -392,7 +409,35 @@ impl AppState {
     pub fn load_pc_apps(&mut self) {
         #[cfg(windows)]
         if let (Some(rpc), Some(handle)) = (self.rpc.clone(), self.handle.clone()) {
-            self.pc.apps_loading = true;
+            self.pc.apps_loading = self.pc.apps_list.is_none();
+            if let Some(ref existing) = self.pc.apps_list {
+                let mut by_size: Vec<&exo_rpc::InstalledAppItem> = existing
+                    .programs
+                    .iter()
+                    .filter(|p| !self.pc.app_icons.contains_key(&p.id))
+                    .collect();
+                by_size.sort_by_key(|a| std::cmp::Reverse(a.bytes.unwrap_or(0)));
+                let missing_ids: Vec<String> = by_size.into_iter().map(|p| p.id.clone()).collect();
+                for chunk in missing_ids.chunks(100) {
+                    let chunk_vec: Vec<String> = chunk.to_vec();
+                    let h_c = handle.clone();
+                    rpc.call::<_, AppsIconsReply>(
+                        METHOD_APPS_ICONS,
+                        &json!({ "ids": chunk_vec }),
+                        move |ic_res| {
+                            if let Ok(reply) = ic_res {
+                                h_c.update(move |s, _| {
+                                    for (k, v) in reply.icons {
+                                        if let Some(data_url) = v {
+                                            s.pc.app_icons.insert(k, data_url);
+                                        }
+                                    }
+                                });
+                            }
+                        },
+                    );
+                }
+            }
             let h1 = handle.clone();
             let rpc_icons = rpc.clone();
             rpc.call::<_, AppsListReply>(METHOD_APPS_LIST, &json!({}), move |res| {

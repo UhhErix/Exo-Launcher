@@ -1,35 +1,36 @@
 use crate::pc_actions::parse_shader_snap_games;
 use crate::pc_state::{
-    AutoClearedEntry, AutoTuneStageId, AutoTuneStageStatus, BloatAppInfo, RemovedAppEntry,
-    best_steps_list, compute_initial_auto_tune_stages, format_bytes, has_interrupts_work,
-    is_playbook_item, leftover_cleared_line, trim_stop,
+    AutoClearedEntry, AutoTuneStageId, AutoTuneStageStatus, BloatAppInfo,
+    DriverInstallOverlayState, RemovedAppEntry, best_steps_list, compute_initial_auto_tune_stages,
+    format_bytes, has_interrupts_work, is_playbook_item, leftover_cleared_line, trim_stop,
 };
 use crate::state::{AppState, HostStatus, Room};
 use exo_rpc::{
-    ActionResult, Afmf3State, AppCleanReply, AppConfirmReply, AppFind, AppUndoReply,
+    ActionResult, Afmf3State, AppCleanReply, AppConfirmReply, AppFind, AppUndoReply, AppsListReply,
     AppsPackagesPlanReply, AppsPackagesRemoveReply, AppsPackagesReply, AutoTuneState,
     AutopilotSetReply, AutopilotState, BiosUpdateReply, CompressActReply, CompressAllReply,
     CompressList, CompressSettingsReply, CompressState, DevicesListReply, DisplayState,
     DriverProgress, DriverState, DriverStep, DriversState, DrivesReply, ExoAiState,
-    FpsCounterReply, GpuProfile, InstallerCacheCleanReply, InstallerCacheReply, InterruptsState,
-    JunkCleanReply, JunkScanReply, KeepStatus, LauncherSettings, METHOD_APPS_ALLOW_EDGE,
-    METHOD_APPS_CLEAN, METHOD_APPS_CONFIRM, METHOD_APPS_INSTALLER_CACHE,
-    METHOD_APPS_INSTALLER_CACHE_CLEAN, METHOD_APPS_LEAVE, METHOD_APPS_LIST,
-    METHOD_APPS_OPEN_DEFAULTS, METHOD_APPS_PACKAGE_ADD_BACK, METHOD_APPS_PACKAGES,
-    METHOD_APPS_PACKAGES_PLAN, METHOD_APPS_PACKAGES_REMOVE, METHOD_APPS_RESTORE_POINT,
-    METHOD_APPS_SCAN, METHOD_APPS_TIDY, METHOD_APPS_UNDO, METHOD_APPS_UNINSTALL,
-    METHOD_AUTOPILOT_SET, METHOD_AUTOPILOT_STATE, METHOD_BIOS_UPDATE, METHOD_COMPRESS_ACT,
-    METHOD_COMPRESS_ALL, METHOD_COMPRESS_LIST, METHOD_COMPRESS_SETTINGS, METHOD_CONTROLLER_READ,
-    METHOD_DEVICES_LIST, METHOD_EXO_AI_SET, METHOD_FPS_COUNTER, METHOD_GPU_AFMF3,
-    METHOD_GPU_CONTROL_PANEL, METHOD_GPU_DISPLAY, METHOD_GPU_DRIVER, METHOD_GPU_PROFILE,
-    METHOD_JUNK_CLEAN, METHOD_JUNK_SCAN, METHOD_KEEP_STATUS, METHOD_REPLACED_REMOVE,
-    METHOD_RUNTIMES_CANCEL, METHOD_RUNTIMES_INSTALL, METHOD_RUNTIMES_LIST, METHOD_SETTINGS_SET,
-    METHOD_SHADERS_CALL, METHOD_SHADERS_PREPARE_CANCEL, METHOD_SHADERS_REBUILD,
-    METHOD_SHELL_OPEN_URL, METHOD_STARTUP_CLEAN, METHOD_STARTUP_RESTORE, METHOD_SYSTEM_DRIVERS,
-    METHOD_SYSTEM_DRIVES, METHOD_SYSTEM_HEALTH, METHOD_SYSTEM_INTERRUPTS, METHOD_SYSTEM_TUNE,
-    METHOD_SYSTEM_TUNING, METHOD_WEB_PREFERENCES_GET, METHOD_WEB_PREFERENCES_SET, PcHealth,
-    RestorePointReply, RuntimesInstallReply, RuntimesListReply, RuntimesProgress, ShaderRebuild,
-    StartupListReply, SystemTuningState, WebClientOptions,
+    FpsCounterReply, GpuDriverInstallEvent, GpuProfile, InstallerCacheCleanReply,
+    InstallerCacheReply, InterruptsState, JunkCleanReply, JunkScanReply, KeepStatus,
+    LauncherSettings, METHOD_APPS_ALLOW_EDGE, METHOD_APPS_CLEAN, METHOD_APPS_CONFIRM,
+    METHOD_APPS_INSTALLER_CACHE, METHOD_APPS_INSTALLER_CACHE_CLEAN, METHOD_APPS_LEAVE,
+    METHOD_APPS_LIST, METHOD_APPS_OPEN_DEFAULTS, METHOD_APPS_PACKAGE_ADD_BACK,
+    METHOD_APPS_PACKAGES, METHOD_APPS_PACKAGES_PLAN, METHOD_APPS_PACKAGES_REMOVE,
+    METHOD_APPS_RESTORE_POINT, METHOD_APPS_SCAN, METHOD_APPS_TIDY, METHOD_APPS_UNDO,
+    METHOD_APPS_UNINSTALL, METHOD_AUTOPILOT_SET, METHOD_AUTOPILOT_STATE, METHOD_BIOS_UPDATE,
+    METHOD_COMPRESS_ACT, METHOD_COMPRESS_ALL, METHOD_COMPRESS_LIST, METHOD_COMPRESS_SETTINGS,
+    METHOD_CONTROLLER_READ, METHOD_DEVICES_LIST, METHOD_EXO_AI_SET, METHOD_FPS_COUNTER,
+    METHOD_GPU_AFMF3, METHOD_GPU_CONTROL_PANEL, METHOD_GPU_DISPLAY, METHOD_GPU_DRIVER,
+    METHOD_GPU_PROFILE, METHOD_JUNK_CLEAN, METHOD_JUNK_SCAN, METHOD_KEEP_STATUS,
+    METHOD_REPLACED_REMOVE, METHOD_RUNTIMES_CANCEL, METHOD_RUNTIMES_INSTALL, METHOD_RUNTIMES_LIST,
+    METHOD_SETTINGS_SET, METHOD_SHADERS_CALL, METHOD_SHADERS_PREPARE_CANCEL,
+    METHOD_SHADERS_REBUILD, METHOD_SHELL_OPEN_URL, METHOD_STARTUP_CLEAN, METHOD_STARTUP_RESTORE,
+    METHOD_SYSTEM_DRIVERS, METHOD_SYSTEM_DRIVES, METHOD_SYSTEM_HEALTH, METHOD_SYSTEM_INTERRUPTS,
+    METHOD_SYSTEM_TUNE, METHOD_SYSTEM_TUNING, METHOD_WEB_PREFERENCES_GET,
+    METHOD_WEB_PREFERENCES_SET, PcHealth, RestorePointReply, RuntimesInstallReply,
+    RuntimesListReply, RuntimesProgress, ShaderRebuild, StartupListReply, SystemTuningState,
+    WebClientOptions,
 };
 use serde_json::{Value, json};
 use std::collections::HashSet;
@@ -254,6 +255,15 @@ impl AppState {
                         s.pc.windows_packages = reply.items;
                         s.pc.bloat_apps = bloat;
                         s.refresh_auto_tune_stages_if_idle();
+                    });
+                }
+            });
+
+            let h = handle.clone();
+            rpc.call::<_, AppsListReply>(METHOD_APPS_LIST, &json!({}), move |res| {
+                if let Ok(list) = res {
+                    h.update(move |s, _| {
+                        s.pc.apps_list = Some(list);
                     });
                 }
             });
@@ -2708,7 +2718,14 @@ impl AppState {
         if let (Some(rpc), Some(handle)) = (self.rpc.clone(), self.handle.clone()) {
             rpc.call::<_, WebClientOptions>(METHOD_WEB_PREFERENCES_GET, &json!({}), move |res| {
                 if let Ok(opts) = res {
-                    handle.update(move |s, _| s.pc.web_preferences = Some(opts));
+                    handle.update(move |s, _| {
+                        let missing_svc = opts.music_service.is_none();
+                        s.pc.web_preferences = Some(opts);
+                        if missing_svc {
+                            let svc = s.media.music_service.id();
+                            s.save_web_preferences(json!({ "musicService": svc }));
+                        }
+                    });
                 }
             });
         }
@@ -2726,24 +2743,156 @@ impl AppState {
         }
     }
 
-    pub fn handle_gpu_driver_progress(&mut self, data: &Value) -> bool {
-        let Ok(prog) = serde_json::from_value::<DriverProgress>(data.clone()) else {
-            return false;
-        };
+    pub fn notify_shaders_visibility(&mut self, visible: bool) {
+        #[cfg(windows)]
+        if (!visible || self.pc.shaders.as_ref().is_some_and(|sh| sh.present))
+            && let Some(rpc) = self.rpc.clone()
+        {
+            rpc.call_raw(
+                METHOD_SHADERS_CALL,
+                &json!({ "method": "ui.visible", "params": { "visible": visible } }),
+                |_| {},
+            );
+        }
+        #[cfg(not(windows))]
+        let _ = visible;
+    }
+
+    fn advance_driver_install_overlay(
+        &mut self,
+        phase: &str,
+        version: Option<String>,
+        share: Option<f64>,
+        message: Option<String>,
+        restored: Option<Vec<String>>,
+        not_restored: Option<Vec<String>>,
+    ) {
+        const ORDER: &[&str] = &[
+            "starting",
+            "downloading",
+            "unpacking",
+            "waiting",
+            "installing",
+            "reloading",
+            "restoring",
+            "done",
+            "failed",
+        ];
+        if let Some(ref cur) = self.pc.driver_install_overlay
+            && cur.kind == "chipset"
+        {
+            return;
+        }
+        if let Some(ref cur) = self.pc.driver_install_overlay
+            && phase != "failed"
+        {
+            let next_idx = ORDER.iter().position(|p| *p == phase).unwrap_or(0);
+            let cur_idx = ORDER.iter().position(|p| *p == cur.phase).unwrap_or(0);
+            if next_idx < cur_idx {
+                return;
+            }
+        }
+        let vendor_name = self
+            .pc
+            .gpu_driver
+            .as_ref()
+            .and_then(|d| d.vendor.as_deref())
+            .map(|v| match v {
+                "nvidia" => "NVIDIA".to_string(),
+                "amd" => "AMD".to_string(),
+                "intel" => "Intel".to_string(),
+                other => other.to_string(),
+            });
+        let latest_size = self
+            .pc
+            .gpu_driver
+            .as_ref()
+            .and_then(|d| d.latest.as_ref())
+            .map(|l| l.size);
+        let latest_ver = self
+            .pc
+            .gpu_driver
+            .as_ref()
+            .and_then(|d| d.latest.as_ref())
+            .map(|l| l.version.clone());
+        let entry =
+            self.pc
+                .driver_install_overlay
+                .get_or_insert_with(|| DriverInstallOverlayState {
+                    kind: "gpu".into(),
+                    phase: phase.into(),
+                    name: vendor_name,
+                    version: latest_ver,
+                    share: None,
+                    size: latest_size,
+                    message: None,
+                    restored: Vec::new(),
+                    not_restored: Vec::new(),
+                });
+        entry.phase = phase.into();
+        if let Some(v) = version {
+            entry.version = Some(v);
+        }
+        entry.share = share;
+        if message.is_some() || phase == "failed" {
+            entry.message = message;
+        }
+        if let Some(r) = restored {
+            entry.restored = r;
+        }
+        if let Some(nr) = not_restored {
+            entry.not_restored = nr;
+        }
+    }
+
+    pub fn dismiss_driver_install_overlay(&mut self) {
+        self.pc.driver_install_overlay = None;
+    }
+
+    pub fn handle_gpu_driver_progress(&mut self, prog: DriverProgress) -> bool {
         let finished = prog.stage == "done" || prog.stage == "failed";
         self.pc.gpu_driver_starting = false;
+        let stage = prog.stage.clone();
+        let share = if stage == "downloading" {
+            Some((prog.percent / 100.0).clamp(0.0, 1.0))
+        } else {
+            None
+        };
+        let msg = prog.message.clone();
         self.pc.gpu_driver_progress = Some(prog);
+        if matches!(
+            stage.as_str(),
+            "downloading" | "unpacking" | "waiting" | "installing"
+        ) {
+            self.advance_driver_install_overlay(&stage, None, share, msg, None, None);
+        } else if stage == "failed" && self.pc.driver_install_overlay.is_some() {
+            self.advance_driver_install_overlay("failed", None, None, msg, None, None);
+        }
         if finished {
             let b = self.pc.gpu_driver_branch.clone();
             self.set_gpu_driver_branch(&b);
         }
-        self.room == Room::ExoAi
+        true
     }
 
-    pub fn handle_driver_step_event(&mut self, data: &Value) -> bool {
-        let Ok(step) = serde_json::from_value::<DriverStep>(data.clone()) else {
-            return false;
-        };
+    pub fn handle_gpu_driver_install_event(&mut self, ev: GpuDriverInstallEvent) -> bool {
+        let finished = ev.phase == "done" || ev.phase == "failed";
+        self.advance_driver_install_overlay(
+            &ev.phase,
+            ev.version,
+            None,
+            ev.message,
+            Some(ev.restored),
+            Some(ev.not_restored),
+        );
+        if finished {
+            let b = self.pc.gpu_driver_branch.clone();
+            self.set_gpu_driver_branch(&b);
+        }
+        true
+    }
+
+    pub fn handle_driver_step_event(&mut self, step: DriverStep) -> bool {
         if step.id.is_empty() {
             self.pc.drivers_updating_all = false;
             #[cfg(windows)]
@@ -2760,22 +2909,12 @@ impl AppState {
         self.room == Room::ExoAi
     }
 
-    pub fn handle_bios_progress_event(&mut self, data: &Value) -> bool {
-        let share = data.get("share").and_then(|v| v.as_f64());
-        self.pc.bios_progress = share;
+    pub fn handle_bios_progress_event(&mut self, share: f64) -> bool {
+        self.pc.bios_progress = Some(share);
         self.room == Room::ExoAi
     }
 
-    pub fn handle_compress_progress_event(&mut self, data: &Value) -> bool {
-        let Some(id) = data.get("id").and_then(|v| v.as_str()) else {
-            return false;
-        };
-        let Some(comp_val) = data.get("compress") else {
-            return false;
-        };
-        let Ok(comp) = serde_json::from_value::<CompressState>(comp_val.clone()) else {
-            return false;
-        };
+    pub fn handle_compress_progress_event(&mut self, id: &str, comp: CompressState) -> bool {
         if let Some(ref mut list) = self.pc.compress_list
             && let Some(game) = list.games.iter_mut().find(|g| g.id == id)
         {
@@ -2785,10 +2924,7 @@ impl AppState {
         false
     }
 
-    pub fn handle_runtimes_progress_event(&mut self, data: &Value) -> bool {
-        let Ok(prog) = serde_json::from_value::<RuntimesProgress>(data.clone()) else {
-            return false;
-        };
+    pub fn handle_runtimes_progress_event(&mut self, prog: RuntimesProgress) -> bool {
         if self.pc.runtimes_running.is_some() {
             self.pc.runtimes_progress = Some(prog);
             return self.room == Room::ExoAi;
@@ -2796,24 +2932,18 @@ impl AppState {
         false
     }
 
-    pub fn handle_shaders_event(&mut self, data: &Value) -> bool {
-        let Some(name) = data.get("name").and_then(|v| v.as_str()) else {
-            return false;
-        };
-        let inner = data.get("data");
+    pub fn handle_shaders_event(&mut self, name: &str, data: &Value) -> bool {
         match name {
             "state" => {
-                if let Some(snap) = inner {
-                    self.apply_shaders_snapshot_value(snap);
-                }
+                self.apply_shaders_snapshot_value(data);
             }
             "progress" => {
-                if let Some(q) = inner.and_then(|d| d.get("queue")) {
+                if let Some(q) = data.get("queue") {
                     self.apply_shaders_queue_value(q);
                 }
             }
             "ready" | "addon" => {
-                let state = inner.and_then(|d| d.get("state")).and_then(|v| v.as_str());
+                let state = data.get("state").and_then(|v| v.as_str());
                 if name == "addon" && state == Some("starting") {
                     return false;
                 }
@@ -2824,10 +2954,7 @@ impl AppState {
         self.room == Room::ExoAi
     }
 
-    pub fn handle_shaders_rebuild_event(&mut self, data: &Value) -> bool {
-        let Ok(mut rb) = serde_json::from_value::<ShaderRebuild>(data.clone()) else {
-            return false;
-        };
+    pub fn handle_shaders_rebuild_event(&mut self, mut rb: ShaderRebuild) -> bool {
         rb.ok = true;
         self.pc.shaders_rebuild = Some(rb);
         self.room == Room::ExoAi

@@ -215,6 +215,19 @@ pub struct BestStepInfo {
     pub done: bool,
 }
 
+#[derive(Debug, Clone, Default)]
+pub struct DriverInstallOverlayState {
+    pub kind: String,
+    pub phase: String,
+    pub name: Option<String>,
+    pub version: Option<String>,
+    pub share: Option<f64>,
+    pub size: Option<u64>,
+    pub message: Option<String>,
+    pub restored: Vec<String>,
+    pub not_restored: Vec<String>,
+}
+
 pub struct SettingsAndPcState {
     pub settings_section: SettingsSection,
     pub settings_query: TextEdit,
@@ -259,6 +272,7 @@ pub struct SettingsAndPcState {
     pub gpu_driver_starting: bool,
     pub gpu_driver_consent_open: bool,
     pub gpu_driver_error: Option<String>,
+    pub driver_install_overlay: Option<DriverInstallOverlayState>,
     pub display_state: Option<DisplayState>,
     pub selected_display_id: Option<String>,
     pub display_busy: Option<String>,
@@ -662,6 +676,7 @@ impl SettingsAndPcState {
             gpu_driver_starting: false,
             gpu_driver_consent_open: false,
             gpu_driver_error: None,
+            driver_install_overlay: None,
             display_state: None,
             selected_display_id: None,
             display_busy: None,
@@ -1139,6 +1154,7 @@ impl SettingsAndPcState {
             gpu_driver_starting: false,
             gpu_driver_consent_open: false,
             gpu_driver_error: None,
+            driver_install_overlay: None,
             display_state: None,
             selected_display_id: None,
             display_busy: None,
@@ -1822,43 +1838,77 @@ mod wp9_tests {
             ..Default::default()
         });
 
-        assert!(s.apply_host_event(HostEvent::Raw {
-            event: "gpu.driver".into(),
-            data: json!({ "stage": "downloading", "percent": 42.0, "message": "Downloading" }),
-        }));
+        assert!(s.apply_host_event(HostEvent::GpuDriver(DriverProgress {
+            stage: "downloading".into(),
+            percent: 42.0,
+            message: Some("Downloading".into()),
+        })));
         assert_eq!(
             s.pc.gpu_driver_progress.as_ref().map(|p| p.percent),
             Some(42.0)
         );
+        assert_eq!(
+            s.pc.driver_install_overlay
+                .as_ref()
+                .map(|o| o.phase.as_str()),
+            Some("downloading")
+        );
 
-        assert!(s.apply_host_event(HostEvent::Raw {
-            event: "drivers.step".into(),
-            data: json!({ "id": "drv1", "working": "Installing", "ok": null, "message": null, "restart": false }),
-        }));
+        assert!(s.apply_host_event(HostEvent::GpuDriverInstall(
+            exo_rpc::GpuDriverInstallEvent {
+                phase: "restoring".into(),
+                version: Some("621.35".into()),
+                message: None,
+                restored: vec!["profile".into()],
+                not_restored: Vec::new(),
+            }
+        )));
+        assert_eq!(
+            s.pc.driver_install_overlay
+                .as_ref()
+                .map(|o| o.phase.as_str()),
+            Some("restoring")
+        );
+
+        assert!(s.apply_host_event(HostEvent::DriversStep(DriverStep {
+            id: "drv1".into(),
+            working: Some("Installing".into()),
+            ok: None,
+            message: None,
+            restart: false,
+        })));
         assert!(s.pc.driver_steps.contains_key("drv1"));
 
-        assert!(s.apply_host_event(HostEvent::Raw {
-            event: "bios.progress".into(),
-            data: json!({ "share": 0.65 }),
-        }));
+        assert!(s.apply_host_event(HostEvent::BiosProgress { share: 0.65 }));
         assert_eq!(s.pc.bios_progress, Some(0.65));
 
-        assert!(s.apply_host_event(HostEvent::Raw {
-            event: "compress.progress".into(),
-            data: json!({
-                "id": "steam:730",
-                "compress": { "state": "compressing", "percent": 0.5, "saved": 0, "changed": 0, "sampled": true }
-            }),
+        assert!(s.apply_host_event(HostEvent::CompressProgress {
+            id: "steam:730".into(),
+            compress: CompressState {
+                state: "compressing".into(),
+                percent: Some(0.5),
+                sampled: true,
+                ..Default::default()
+            },
         }));
         assert_eq!(
             compress_words(&s.pc.compress_list.as_ref().unwrap().games[0].compress),
             "Compressing 50%"
         );
 
-        assert!(s.apply_host_event(HostEvent::Raw {
-            event: "runtimes.progress".into(),
-            data: json!({ "phase": "download", "id": "vc2022", "name": "Visual C++", "index": 1, "count": 2, "bytes": 1000, "doneBytes": 5000000, "allBytes": 10000000 }),
-        }));
+        assert!(
+            s.apply_host_event(HostEvent::RuntimesProgress(RuntimesProgress {
+                phase: "download".into(),
+                id: Some("vc2022".into()),
+                name: Some("Visual C++".into()),
+                index: 1,
+                count: 2,
+                bytes: 1000,
+                total: Some(2000),
+                done_bytes: 5_000_000,
+                all_bytes: 10_000_000,
+            }))
+        );
         assert_eq!(
             s.pc.runtimes_progress
                 .as_ref()
@@ -1866,15 +1916,18 @@ mod wp9_tests {
             Some("Visual C++")
         );
 
-        assert!(s.apply_host_event(HostEvent::Raw {
-            event: "shaders.rebuild".into(),
-            data: json!({ "state": "running", "ready": 3, "total": 8 }),
-        }));
+        assert!(s.apply_host_event(HostEvent::ShadersRebuild(ShaderRebuild {
+            ok: true,
+            state: "running".into(),
+            ready: 3,
+            total: 8,
+            ..Default::default()
+        })));
         assert_eq!(s.pc.shaders_rebuild.as_ref().map(|r| r.ready), Some(3));
 
-        assert!(s.apply_host_event(HostEvent::Raw {
-            event: "shaders.event".into(),
-            data: json!({ "name": "progress", "data": { "rev": 2, "queue": { "running": true, "paused": false, "canStart": false, "waiting": [] } } }),
+        assert!(s.apply_host_event(HostEvent::ShadersEvent {
+            name: "progress".into(),
+            data: json!({ "rev": 2, "queue": { "running": true, "paused": false, "canStart": false, "waiting": [] } }),
         }));
         assert!(s.pc.shaders_queue_running);
     }

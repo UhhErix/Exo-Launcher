@@ -1160,11 +1160,16 @@ pub enum HostEvent {
     DiscordState(crate::discord_types::DiscordStateEvent),
     DiscordSignIn(crate::discord_types::DiscordSignInStep),
     DiscordChanged(crate::discord_types::DiscordChangedEvent),
-    DiscordMembers { guild_id: String },
+    DiscordMembers {
+        guild_id: String,
+    },
     DiscordPresence(crate::discord_types::DiscordPresenceEvent),
     DiscordUnread(crate::discord_types::DiscordUnreadEvent),
     DiscordVoice(crate::discord_types::DiscordVoice),
-    DiscordSpeaking { user_id: String, speaking: bool },
+    DiscordSpeaking {
+        user_id: String,
+        speaking: bool,
+    },
     DiscordMessage(Box<crate::discord_types::DiscordMessageEvent>),
     DiscordReaction(crate::discord_types::DiscordReactionEvent),
     DiscordTyping(crate::discord_types::DiscordTypingEvent),
@@ -1188,7 +1193,26 @@ pub enum HostEvent {
     AutopilotLive(Option<crate::pc_types::AutopilotLive>),
     ShadersChanged,
     StoreChanged(crate::events::StoreChangedEvent),
-    Raw { event: String, data: Value },
+    GpuDriver(crate::pc_types::DriverProgress),
+    GpuDriverInstall(crate::events::GpuDriverInstallEvent),
+    DriversStep(crate::pc_types::DriverStep),
+    BiosProgress {
+        share: f64,
+    },
+    CompressProgress {
+        id: String,
+        compress: crate::pc_types::CompressState,
+    },
+    RuntimesProgress(crate::pc_types::RuntimesProgress),
+    ShadersEvent {
+        name: String,
+        data: Value,
+    },
+    ShadersRebuild(crate::pc_types::ShaderRebuild),
+    Raw {
+        event: String,
+        data: Value,
+    },
     Disconnected(String),
 }
 

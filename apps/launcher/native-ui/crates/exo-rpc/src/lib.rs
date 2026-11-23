@@ -26,8 +26,8 @@ pub use discord_types::{
 };
 pub use events::{
     AppUpdateStateEvent, AutopilotReportEvent, CaptureReelEvent, CaptureSavedEvent,
-    GameRunStateEvent, InstallQueueEvent, LaunchStatusEvent, MusicVolumeEvent, PausedDownloadItem,
-    RequestId, ShellBootstrap, StoreChangedEvent,
+    GameRunStateEvent, GpuDriverInstallEvent, InstallQueueEvent, LaunchStatusEvent,
+    MusicVolumeEvent, PausedDownloadItem, RequestId, ShellBootstrap, StoreChangedEvent,
 };
 pub use media_types::{
     CaptureItem, CaptureListReply, CaptureLiveState, CaptureSettingsDto, CaptureStatusReply,
@@ -1273,6 +1273,61 @@ fn parse_event(
         }
         "devices.changed" => Ok(HostEvent::DevicesChanged),
         "apps.changed" => Ok(HostEvent::AppsChanged),
+        "gpu.driver" => Ok(serde_json::from_str::<DriverProgress>(data_raw)
+            .map(HostEvent::GpuDriver)
+            .unwrap_or_else(|_| raw_fallback(name, data_raw))),
+        "gpu.driverInstall" => Ok(serde_json::from_str::<GpuDriverInstallEvent>(data_raw)
+            .map(HostEvent::GpuDriverInstall)
+            .unwrap_or_else(|_| raw_fallback(name, data_raw))),
+        "drivers.step" => Ok(serde_json::from_str::<DriverStep>(data_raw)
+            .map(HostEvent::DriversStep)
+            .unwrap_or_else(|_| raw_fallback(name, data_raw))),
+        "bios.progress" => {
+            #[derive(Deserialize)]
+            struct BiosProgressWire {
+                #[serde(default)]
+                share: f64,
+            }
+            Ok(serde_json::from_str::<BiosProgressWire>(data_raw)
+                .map(|b| HostEvent::BiosProgress { share: b.share })
+                .unwrap_or_else(|_| raw_fallback(name, data_raw)))
+        }
+        "compress.progress" => {
+            #[derive(Deserialize)]
+            struct CompressProgressWire {
+                #[serde(default)]
+                id: String,
+                #[serde(default)]
+                compress: CompressState,
+            }
+            Ok(serde_json::from_str::<CompressProgressWire>(data_raw)
+                .map(|c| HostEvent::CompressProgress {
+                    id: c.id,
+                    compress: c.compress,
+                })
+                .unwrap_or_else(|_| raw_fallback(name, data_raw)))
+        }
+        "runtimes.progress" => Ok(serde_json::from_str::<RuntimesProgress>(data_raw)
+            .map(HostEvent::RuntimesProgress)
+            .unwrap_or_else(|_| raw_fallback(name, data_raw))),
+        "shaders.event" => {
+            #[derive(Deserialize)]
+            struct ShadersEventWire {
+                #[serde(default)]
+                name: String,
+                #[serde(default)]
+                data: Value,
+            }
+            Ok(serde_json::from_str::<ShadersEventWire>(data_raw)
+                .map(|s| HostEvent::ShadersEvent {
+                    name: s.name,
+                    data: s.data,
+                })
+                .unwrap_or_else(|_| raw_fallback(name, data_raw)))
+        }
+        "shaders.rebuild" => Ok(serde_json::from_str::<ShaderRebuild>(data_raw)
+            .map(HostEvent::ShadersRebuild)
+            .unwrap_or_else(|_| raw_fallback(name, data_raw))),
         _ => Ok(raw_fallback(name, data_raw)),
     }
 }
@@ -1691,5 +1746,41 @@ mod tests {
         assert_eq!(presences, vec!["u7", "u8", "u9"]);
         assert_eq!(music, vec!["track-4"]);
         assert_eq!(frames, vec!["u3", "u4"]);
+    }
+
+    #[test]
+    fn parses_all_wp9_push_events() {
+        assert!(matches!(
+            parse_event("gpu.driver", r#"{"stage":"downloading","percent":42}"#, None),
+            Ok(HostEvent::GpuDriver(p)) if p.stage == "downloading" && (p.percent - 42.0).abs() < 0.01
+        ));
+        assert!(matches!(
+            parse_event("gpu.driverInstall", r#"{"phase":"restoring","version":"621.35","restored":["profile"]}"#, None),
+            Ok(HostEvent::GpuDriverInstall(ev)) if ev.phase == "restoring" && ev.version.as_deref() == Some("621.35") && ev.restored == vec!["profile"]
+        ));
+        assert!(matches!(
+            parse_event("drivers.step", r#"{"id":"drv1","working":"Installing"}"#, None),
+            Ok(HostEvent::DriversStep(s)) if s.id == "drv1"
+        ));
+        assert!(matches!(
+            parse_event("bios.progress", r#"{"share":0.75}"#, None),
+            Ok(HostEvent::BiosProgress { share }) if (share - 0.75).abs() < 0.01
+        ));
+        assert!(matches!(
+            parse_event("compress.progress", r#"{"id":"steam:730","compress":{"state":"compressing","percent":0.5}}"#, None),
+            Ok(HostEvent::CompressProgress { id, compress }) if id == "steam:730" && compress.state == "compressing"
+        ));
+        assert!(matches!(
+            parse_event("runtimes.progress", r#"{"phase":"download","name":"Visual C++"}"#, None),
+            Ok(HostEvent::RuntimesProgress(p)) if p.name.as_deref() == Some("Visual C++")
+        ));
+        assert!(matches!(
+            parse_event("shaders.event", r#"{"name":"progress","data":{"rev":2}}"#, None),
+            Ok(HostEvent::ShadersEvent { name, .. }) if name == "progress"
+        ));
+        assert!(matches!(
+            parse_event("shaders.rebuild", r#"{"state":"running","ready":3,"total":8}"#, None),
+            Ok(HostEvent::ShadersRebuild(r)) if r.ready == 3 && r.total == 8
+        ));
     }
 }

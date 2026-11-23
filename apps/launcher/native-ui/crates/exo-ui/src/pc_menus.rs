@@ -2269,6 +2269,96 @@ fn driver_consent_layer(s: &AppState, blur: bool) -> Option<El> {
     )
 }
 
+fn driver_install_overlay_layer(s: &AppState, blur: bool) -> Option<El> {
+    let install = s.pc.driver_install_overlay.as_ref()?;
+    let title = match (install.name.as_deref(), install.version.as_deref()) {
+        (Some(n), Some(v)) => format!("{n} {v}"),
+        (Some(n), None) => format!("{n} driver"),
+        _ => "Graphics driver update".into(),
+    };
+    let done = install.phase == "done";
+    let failed = install.phase == "failed";
+    let status_text = match install.phase.as_str() {
+        "starting" => "Starting the update".into(),
+        "downloading" => {
+            if let (Some(sh), Some(sz)) = (install.share, install.size)
+                && sz > 0
+            {
+                let got = (sz as f64 * sh) as u64;
+                format!(
+                    "Downloading the driver · {} of {}",
+                    format_driver_size(got),
+                    format_driver_size(sz)
+                )
+            } else {
+                "Downloading the driver".into()
+            }
+        }
+        "unpacking" => "Unpacking the driver".into(),
+        "waiting" => "Waiting to install".into(),
+        "installing" => "Installing the driver".into(),
+        "reloading" => "Reloading the graphics driver".into(),
+        "restoring" => "Putting your settings back".into(),
+        "done" => "Driver updated".into(),
+        "failed" => install
+            .message
+            .clone()
+            .unwrap_or_else(|| "Driver update did not finish.".into()),
+        other => other.into(),
+    };
+    let mut panel = glass_panel_opt("driver-install-overlay", 480.0, blur)
+        .role("dialog")
+        .label(title.clone())
+        .px(24.0)
+        .py(22.0)
+        .gap(14.0)
+        .transition(modal_card_transition())
+        .child(text(title).font(type_title()).color(FG))
+        .child(
+            text(status_text)
+                .font(type_body())
+                .color(if failed { bad() } else { fg_muted() })
+                .wrap(),
+        );
+    if !done && !failed {
+        let share = install.share.unwrap_or(0.5) as f32;
+        panel = panel.child(progress_bar(432.0, share));
+    }
+    if done && !install.restored.is_empty() {
+        panel = panel.child(
+            text(format!("Restored: {}", install.restored.join(", ")))
+                .font(type_small())
+                .color(good())
+                .wrap(),
+        );
+    }
+    if done && !install.not_restored.is_empty() {
+        panel = panel.child(
+            text(format!("Not restored: {}", install.not_restored.join(", ")))
+                .font(type_small())
+                .color(warn())
+                .wrap(),
+        );
+    }
+    if done || failed {
+        panel = panel.child(
+            row().w_full().justify_end().child(
+                menu_btn("driver-install-dismiss".into(), "Done", true, false, false)
+                    .on_press(|s: &mut AppState| s.dismiss_driver_install_overlay()),
+            ),
+        );
+    }
+    Some(
+        el().key("driver-install-scrim")
+            .w_full()
+            .h_full()
+            .center()
+            .fill(BG.alpha(0.72))
+            .transition(modal_scrim_transition())
+            .child(panel),
+    )
+}
+
 pub(crate) fn part_menu_layers(s: &AppState, blur: bool) -> Vec<El> {
     if s.room != Room::ExoAi {
         return Vec::new();
@@ -2352,6 +2442,9 @@ pub(crate) fn part_menu_layers(s: &AppState, blur: bool) -> Vec<El> {
     }
     if let Some(consent) = driver_consent_layer(s, blur) {
         layers.push(consent);
+    }
+    if let Some(overlay) = driver_install_overlay_layer(s, blur) {
+        layers.push(overlay);
     }
 
     layers

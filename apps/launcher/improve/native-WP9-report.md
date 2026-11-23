@@ -60,6 +60,21 @@ Branch: `UhhErix/native-WP9` (base `feat/native-polish-2`, merged `6158403` from
 
 - `cargo fmt --check`: PASS (exit 0)
 - `cargo clippy --workspace --locked -- -D warnings`: PASS (exit 0, 0 warnings)
-- `cargo test --workspace --locked`: PASS (exit 0 — `exo-kit`: 4 passed; `exo-rpc`: 22 passed, 1 ignored; `exo-ui`: 82 passed)
-- `cargo build --release --locked -p exo-ui`: PASS (exit 0)
-- Comment ban check on all touched/new Rust files: PASS (0 prose comments across all 12 Rust files)
+- `cargo test --workspace --locked`: PASS (exit 0 — `exo-kit`: 4 passed; `exo-rpc`: 23 passed, 1 ignored; `exo-ui`: 82 passed)
+- `cargo build --release --locked -p exo-ui`: PASS (exit 0, Rune pin `d70347b3`)
+- Comment ban check on all touched/new Rust files: PASS (0 prose comments across all touched Rust files)
+
+## Follow-up: WP11 RPC & Push-Event Parity + Rune `d70347b3`
+
+- Merged `origin/feat/native-polish-2` (`5790322`, Rune pin `d70347b3`) cleanly with zero conflicts.
+- Promoted all 8 PC / Storage / Apps / Exo AI push events into typed `HostEvent` variants parsed in `exo-rpc/src/lib.rs::parse_event` and dispatched via `events::register_pc`:
+  - `gpu.driver`, `gpu.driverInstall` (with `DriverInstallOverlay` modal in `pc_menus.rs`), `drivers.step`, `bios.progress`, `compress.progress`, `runtimes.progress`, `shaders.event`, `shaders.rebuild`.
+  - Added unit test `parses_all_wp9_push_events` in `exo-rpc` and updated `wp9_tests` in `exo-ui`.
+- Closed remaining RPC parity gaps against WP11's `rpc-parity.md`:
+  - `shaders.call` (`ui.visible` on enter/leave Exo AI + `snapshot` in Exo AI and Settings `ShaderTools`).
+  - `apps.list` in `load_pc_exo_ai_full` (`room-pc`, matching `PcApps.tsx:16`) + immediate `apps.icons` on Apps entry + removed duplicate `gpu.profile`/`compress.list` calls in `load_pc_exo_ai`.
+  - `web.preferences.get` + default-seed `web.preferences.set` on bootstrap (matching `LauncherApp.tsx:184-191`).
+- Confirmed with WP11's live RPC parity recorder (`run.mjs` + `diff.mjs` across `startup,room-pc,room-pc-apps,settings-general,settings-ingame,settings-music`, 18/18 drivable):
+  - **0** missing PC / Storage / Apps / Exo AI / Shaders RPC methods session-wide (including `system.tune`, `shaders.call`, `apps.list`, `apps.icons`, `apps.installerCache`, `apps.packages`, `apps.tidy`, `junk.scan`, `keep.status`, `runtimes.list`, `system.drivers`, `system.health`, `system.interrupts`, `gpu.display`, `gpu.driver`, `controller.read`, `devices.list`, `web.preferences.get`, `web.preferences.set`).
+  - **0** missing PC / Storage / Apps / Exo AI / Shaders static push-event handlers in `exo-rpc`.
+
