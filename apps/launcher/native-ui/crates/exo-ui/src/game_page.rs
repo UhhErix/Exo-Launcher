@@ -1,19 +1,16 @@
 use crate::state::{AppState, InputMode, OpenDropdown, title_hue};
 use exo_kit::{
-    BG, FG, PRESS_SCALE, PRIMARY_FG, RADIUS_CARD, RADIUS_PANEL, RADIUS_PILL, SPRING_BASE,
-    SPRING_FLIGHT, SPRING_MOVE, SPRING_QUICK, SelectTrigger, TRANSPARENT, amoled_card, bad,
-    exo_play_button, fg_muted, float_line, glass_button, glass_control_fill, glass_icon_circle,
-    glass_rim_bottom, glass_rim_top, good, hairline, hover_fill, icon_chevron_left,
-    icon_chevron_right, icon_download, icon_folder, icon_play, icon_stop, icon_trash, icon_wrench,
-    pressed_fill, primary_button, scaled, select_trigger, store_logo, store_logo_or_fallback,
-    surface_card, switch_pill, type_body, type_control, type_first_run, type_section, type_small,
-    type_title,
+    BG, FG, GLASS_CONTROL_SIGMA, PRESS_SCALE, PRIMARY_FG, RADIUS_CARD, RADIUS_PANEL, RADIUS_PILL,
+    SPRING_BASE, SPRING_FLIGHT, SPRING_MOVE, SPRING_QUICK, SelectTrigger, TRANSPARENT, amoled_card,
+    bad, exo_play_button, fg_muted, float_line, glass_button, glass_control_fill,
+    glass_icon_circle, glass_rim_bottom, glass_rim_top, good, hairline, hover_fill,
+    icon_chevron_left, icon_chevron_right, icon_download, icon_folder, icon_play, icon_stop,
+    icon_trash, icon_wrench, pressed_fill, primary_button, scaled, select_trigger, store_logo,
+    store_logo_or_fallback, surface_card, switch_pill, type_body, type_control, type_first_run,
+    type_section, type_small, type_title,
 };
 use exo_rpc::Game;
-use rune::{
-    Cursor, El, SpringPair, SurfaceFit, TextStyle, Transition, col, edit_access, el, oklch, row,
-    text, text_input,
-};
+use rune::{Cursor, El, SurfaceFit, TextStyle, col, edit_access, el, oklch, row, text, text_input};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 const GAME_EDGE: f32 = 32.0;
@@ -242,6 +239,7 @@ fn properties_card(s: &AppState, game: &Game) -> El {
                     .key(key)
                     .role("tab")
                     .label(*label)
+                    .cursor(Cursor::Pointer)
                     .focusable(true)
                     .hit()
                     .press_on_down()
@@ -300,8 +298,7 @@ fn properties_card(s: &AppState, game: &Game) -> El {
 
     let mut body = col()
         .key(format!("gp-props-body-{}", s.game_props_tab))
-        .w_full()
-        .transition(Transition::opacity().springs(SpringPair::new(SPRING_QUICK, SPRING_QUICK)));
+        .w_full();
 
     match s.game_props_tab {
         0 => {
@@ -314,6 +311,7 @@ fn properties_card(s: &AppState, game: &Game) -> El {
                 .center_y()
                 .radius(RADIUS_PILL)
                 .fill(glass_control_fill())
+                .backdrop_blur(GLASS_CONTROL_SIGMA)
                 .border_gradient(1.0, glass_rim_top(), glass_rim_bottom())
                 .cursor(Cursor::Text)
                 .child(
@@ -391,6 +389,7 @@ fn properties_card(s: &AppState, game: &Game) -> El {
                 } else {
                     "Uninstall"
                 })
+                .cursor(Cursor::Pointer)
                 .focusable(true)
                 .hit()
                 .press_on_down()
@@ -417,16 +416,19 @@ fn properties_card(s: &AppState, game: &Game) -> El {
                     s.input_mode = InputMode::Pointer;
                     s.arm_or_confirm_game_uninstall(&gid_uninst, tx);
                 })
-                .child(icon_trash(13.0, if armed { PRIMARY_FG } else { FG }))
-                .child(
-                    text(if armed {
-                        "Confirm uninstall"
-                    } else {
-                        "Uninstall"
-                    })
-                    .font(type_control())
-                    .color(if armed { PRIMARY_FG } else { FG }),
-                );
+                .child(icon_trash(13.0, if armed { PRIMARY_FG } else { FG }));
+            if !armed {
+                uninstall_btn = uninstall_btn.backdrop_blur(GLASS_CONTROL_SIGMA);
+            }
+            uninstall_btn = uninstall_btn.child(
+                text(if armed {
+                    "Confirm uninstall"
+                } else {
+                    "Uninstall"
+                })
+                .font(type_control())
+                .color(if armed { PRIMARY_FG } else { FG }),
+            );
             if !armed {
                 uninstall_btn =
                     uninstall_btn.border_gradient(1.0, glass_rim_top(), glass_rim_bottom());
@@ -538,6 +540,7 @@ pub fn view(s: &AppState, game: &Game, scale: f32) -> El {
         .key("gp-back")
         .role("button")
         .label("Library")
+        .cursor(Cursor::Pointer)
         .focusable(true)
         .hit()
         .press_on_down()
@@ -549,6 +552,7 @@ pub fn view(s: &AppState, game: &Game, scale: f32) -> El {
         .center_y()
         .radius(RADIUS_PILL)
         .fill(glass_control_fill())
+        .backdrop_blur(GLASS_CONTROL_SIGMA)
         .hover(hover_fill())
         .press(pressed_fill())
         .border_gradient(1.0, glass_rim_top(), glass_rim_bottom())
@@ -570,6 +574,7 @@ pub fn view(s: &AppState, game: &Game, scale: f32) -> El {
         .center_y()
         .radius(RADIUS_PILL)
         .fill(glass_control_fill())
+        .backdrop_blur(GLASS_CONTROL_SIGMA)
         .border_gradient(1.0, glass_rim_top(), glass_rim_bottom())
         .child(store_logo_or_fallback(&game.store, 15.0))
         .child(
@@ -732,6 +737,7 @@ pub fn view(s: &AppState, game: &Game, scale: f32) -> El {
         .radius(RADIUS_PANEL)
         .continuous_corners()
         .fill(glass_control_fill())
+        .backdrop_blur(GLASS_CONTROL_SIGMA)
         .border_gradient(1.0, glass_rim_top(), glass_rim_bottom())
         .child(stat_col(played_str, "Played", None, false))
         .child(stat_col(last_played_str, "Last played", None, true))
@@ -781,7 +787,6 @@ pub fn view(s: &AppState, game: &Game, scale: f32) -> El {
         .gap(14.0)
         .pb(24.0)
         .fill(BG)
-        .transition(Transition::opacity().springs(SpringPair::new(SPRING_QUICK, SPRING_QUICK)))
         .child(stage)
         .child(lower_cards);
     if s.is_confirm_armed("gp-uninstall") {
@@ -805,6 +810,7 @@ mod tests {
         let mut state = AppState::with_demo_games();
         state.open_game_page("demo:cyberpunk");
         let mut rt = Runtime::new(state, shell::view, (1920.0, 1080.0), Env::new(true, 1.0));
+        rt.set_max_backdrop_blurs(exo_kit::EXO_MAX_BACKDROP_BLURS);
         rt.frame(0.0);
         rt.settle_all();
         rt.frame(1.0 / 60.0);
@@ -815,8 +821,12 @@ mod tests {
             .filter(|i| i.params[1] == KIND_BACKDROP_BLUR)
             .count();
         assert!(
-            blurs <= 4,
-            "Game page exceeded MAX_BACKDROP_BLURS=4: {blurs}"
+            blurs <= exo_kit::EXO_MAX_BACKDROP_BLURS,
+            "Game page exceeded EXO_MAX_BACKDROP_BLURS: {blurs}"
+        );
+        assert!(
+            blurs >= 8,
+            "Game page should render real Liquid Glass across top bar and hero controls, got {blurs}"
         );
 
         let (perf_rect, _) = rt

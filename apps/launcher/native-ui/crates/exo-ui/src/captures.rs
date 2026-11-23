@@ -2,13 +2,14 @@ use crate::media_state::CaptureFilter;
 use crate::pc_state::format_bytes;
 use crate::state::{AppState, InputMode};
 use exo_kit::{
-    BG, BadgeTone, FG, PRESS_SCALE, PRIMARY_FG, RADIUS_CARD, RADIUS_PANEL, RADIUS_PILL,
-    RADIUS_SHEET, RADIUS_SMALL, SPRING_MOVE, SPRING_QUICK, bad, fg_faint, fg_muted, filter_pill,
-    glass_button, glass_panel_opt, glass_rim, hairline, hover_fill, icon_back, icon_camera,
-    icon_close, icon_film, icon_folder, icon_pause, icon_play, icon_plus, icon_record_dot,
-    icon_replay, icon_scissors, icon_settings, icon_star, icon_trash, icon_volume, icon_volume_off,
-    popover_transition, pressed_fill, primary_button, section_card, status_badge, subtle_fill,
-    type_body, type_control, type_page, type_section, type_small, type_title, warn,
+    BG, BadgeTone, FG, GLASS_CONTROL_SIGMA, PRESS_SCALE, PRIMARY_FG, RADIUS_CARD, RADIUS_PANEL,
+    RADIUS_PILL, RADIUS_SHEET, RADIUS_SMALL, SPRING_MOVE, SPRING_QUICK, bad, fg_faint, fg_muted,
+    filter_pill, glass_button, glass_control_fill, glass_panel_opt, glass_rim, hairline,
+    hover_fill, icon_back, icon_camera, icon_close, icon_film, icon_folder, icon_pause, icon_play,
+    icon_plus, icon_record_dot, icon_replay, icon_scissors, icon_settings, icon_star, icon_trash,
+    icon_volume, icon_volume_off, popover_transition, pressed_fill, primary_button, section_card,
+    status_badge, subtle_fill, type_body, type_control, type_page, type_section, type_small,
+    type_title, warn,
 };
 use exo_rpc::{CaptureItem, format_duration_ms};
 use rune::color::oklch;
@@ -179,7 +180,7 @@ pub fn popover_layers(s: &AppState, blur: bool) -> Vec<El> {
         .role("menu")
         .label("Capture")
         .focus_group()
-        .modal(false, |s: &mut AppState| s.capture_menu_open = false)
+        .modal(true, |s: &mut AppState| s.capture_menu_open = false)
         .focus_return(anchor_key)
         .anchored_fit(anchor_key, Side::Bottom, Align::End, 16.0)
         .padding(8.0)
@@ -300,15 +301,7 @@ pub fn popover_layers(s: &AppState, blur: bool) -> Vec<El> {
             );
     }
 
-    let backdrop = el()
-        .key("capture-menu-backdrop")
-        .pin(Some(0.0), Some(0.0), Some(0.0), Some(0.0))
-        .hit()
-        .cursor(Cursor::Default)
-        .on_press(|s: &mut AppState| s.capture_menu_open = false)
-        .on_secondary_press(|s: &mut AppState, _, _| s.capture_menu_open = false);
-
-    vec![backdrop, menu]
+    vec![menu]
 }
 
 fn clip_card(item: &CaptureItem, s: &AppState, scale: f32) -> El {
@@ -368,6 +361,7 @@ fn clip_card(item: &CaptureItem, s: &AppState, scale: f32) -> El {
     el().key(format!("cap-card-{}", item.id))
         .role("button")
         .label(item.name.clone())
+        .cursor(Cursor::Pointer)
         .focusable(true)
         .hit()
         .press_on_down()
@@ -644,6 +638,7 @@ fn empty_state(s: &AppState) -> El {
                 .key(key)
                 .role("button")
                 .label(label)
+                .cursor(Cursor::Pointer)
                 .focusable(true)
                 .hit()
                 .press_on_down()
@@ -651,7 +646,8 @@ fn empty_state(s: &AppState) -> El {
                 .px(14.0)
                 .gap(8.0)
                 .radius(RADIUS_PILL)
-                .fill(subtle_fill())
+                .fill(glass_control_fill())
+                .backdrop_blur(GLASS_CONTROL_SIGMA)
                 .border(1.0, glass_rim())
                 .hover(hover_fill())
                 .center_y()
@@ -805,12 +801,14 @@ pub fn view(s: &AppState, scale: f32) -> El {
         el().key("cap-close")
             .role("button")
             .label("Close Captures")
+            .cursor(Cursor::Pointer)
             .focusable(true)
             .hit()
             .press_on_down()
             .size(32.0, 32.0)
             .radius(RADIUS_PILL)
-            .fill(subtle_fill())
+            .fill(glass_control_fill())
+            .backdrop_blur(GLASS_CONTROL_SIGMA)
             .border(1.0, glass_rim())
             .hover(hover_fill())
             .center()

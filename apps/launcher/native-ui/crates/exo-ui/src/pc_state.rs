@@ -57,6 +57,13 @@ pub enum AppsSubTab {
     Startup,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PcPartMenu {
+    Graphics,
+    Display,
+    Board,
+}
+
 pub struct SettingsAndPcState {
     pub settings_section: SettingsSection,
     pub settings_query: TextEdit,
@@ -110,6 +117,7 @@ pub struct SettingsAndPcState {
     pub compress_potential_bytes: u64,
     pub compress_saved_bytes: u64,
     pub exo_ai_storage_open: bool,
+    pub part_menu: Option<PcPartMenu>,
     pub armed_uninstall: Option<(String, u64)>,
     pub armed_uninstall_seq: u64,
 }
@@ -643,6 +651,7 @@ impl SettingsAndPcState {
             compress_potential_bytes: 0,
             compress_saved_bytes: 0,
             exo_ai_storage_open: false,
+            part_menu: None,
             armed_uninstall: None,
             armed_uninstall_seq: 0,
         }
@@ -698,6 +707,7 @@ impl SettingsAndPcState {
             compress_potential_bytes: 0,
             compress_saved_bytes: 0,
             exo_ai_storage_open: false,
+            part_menu: None,
             armed_uninstall: None,
             armed_uninstall_seq: 0,
         }

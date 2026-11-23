@@ -28,6 +28,7 @@ function parseArgs(argv) {
     keepData: false,
     hostExe: null,
     exoUiExe: null,
+    seedData: null,
   }
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i]
@@ -41,6 +42,7 @@ function parseArgs(argv) {
     else if (a === '--keep-data') opts.keepData = true
     else if (a === '--host-exe') opts.hostExe = argv[++i] || null
     else if (a === '--exo-ui') opts.exoUiExe = argv[++i] || null
+    else if (a === '--seed-data') opts.seedData = argv[++i] || null
   }
   return opts
 }
@@ -79,7 +81,7 @@ async function main() {
     if (opts.skipReact) {
       reactResults = await loadExistingRecords(join(outDir, 'react'), states)
     } else {
-      const r = await runReactPass({ states, outDir, folder, dataDir, hostExe: opts.hostExe })
+      const r = await runReactPass({ states, outDir, folder, dataDir, hostExe: opts.hostExe, seedDir: opts.seedData })
       reactResults = r.results
     }
 
@@ -94,6 +96,7 @@ async function main() {
         hostExe: opts.hostExe,
         exoUiExe: opts.exoUiExe,
         resume: opts.resumeNative,
+        seedDir: opts.seedData,
       })
       nativeResults = n.results
     }

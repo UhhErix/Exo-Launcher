@@ -5,7 +5,7 @@ import { randomBytes } from 'node:crypto'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { sleep } from '../e2e/cdp.mjs'
-import { assertSafeDataDir } from './react-driver.mjs'
+import { assertSafeDataDir, seedInstanceData } from './react-driver.mjs'
 
 const LAUNCHER_ROOT = fileURLToPath(new URL('../..', import.meta.url))
 const INSTALLED_EXE = resolve(process.env.LOCALAPPDATA || '', 'ExoLauncher', 'app', 'ExoLauncher.exe')
@@ -162,8 +162,10 @@ export async function runNativePass({
   hostExe = null,
   exoUiExe = null,
   resume = false,
+  seedDir = null,
 }) {
   const safeDataDir = assertSafeDataDir(dataDir)
+  await seedInstanceData(seedDir, safeDataDir)
   const resolvedHost = resolveRepoHostExe(hostExe)
   const resolvedUi = resolveExoUiExe(exoUiExe)
   const resolvedProbe = resolveProbeExe(exoUiExe)

@@ -54,8 +54,8 @@ pub fn popover_transition() -> Transition {
 }
 
 pub fn popover_transition_from(anchor: Vec2) -> Transition {
-    let enter = Transition::scale_anchor(0.96, anchor).combined(Transition::opacity());
-    Transition::asymmetric(enter, Transition::opacity())
+    let enter = Transition::scale_anchor(0.96, anchor);
+    Transition::asymmetric(enter, Transition::scale_anchor(0.96, anchor))
         .springs(SpringPair::new(SPRING_BASE, SPRING_QUICK))
 }
 
@@ -65,8 +65,8 @@ pub fn modal_scrim_transition() -> Transition {
 }
 
 pub fn modal_card_transition() -> Transition {
-    let enter = Transition::scale(0.98).combined(Transition::opacity());
-    Transition::asymmetric(enter, Transition::opacity())
+    let enter = Transition::scale(0.98);
+    Transition::asymmetric(enter, Transition::scale(0.98))
         .springs(SpringPair::new(SPRING_MOVE, SPRING_QUICK))
 }
 
@@ -142,6 +142,7 @@ pub fn glass_input(key: impl Into<String>) -> El {
         .radius(RADIUS_PILL)
         .cursor(Cursor::Text)
         .fill(glass_control_fill())
+        .backdrop_blur(GLASS_CONTROL_SIGMA)
         .border_gradient(1.0, glass_rim_top(), glass_rim_bottom())
 }
 
@@ -154,6 +155,7 @@ pub fn glass_chip(key: impl Into<String>, label: impl Into<String>, icon: Option
         .center_y()
         .radius(RADIUS_PILL)
         .fill(glass_control_fill())
+        .backdrop_blur(GLASS_CONTROL_SIGMA)
         .border_gradient(1.0, glass_rim_top(), glass_rim_bottom());
     if let Some(ic) = icon {
         chip = chip.child(ic);
@@ -197,7 +199,7 @@ pub fn exo_play_button(key: &'static str, label: &'static str, icon: Option<El>)
 }
 
 pub fn glass_icon_circle(key: &'static str, label: &'static str, size: f32, icon: El) -> El {
-    glass_icon_circle_opt(key, label, size, icon, false)
+    glass_icon_circle_opt(key, label, size, icon, true)
 }
 
 pub fn glass_icon_circle_opt(
@@ -261,7 +263,7 @@ pub fn primary_button(key: &'static str, label: &'static str, icon: Option<El>) 
 }
 
 pub fn glass_button(key: &'static str, label: &'static str, icon: Option<El>) -> El {
-    glass_button_opt(key, label, icon, false)
+    glass_button_opt(key, label, icon, true)
 }
 
 pub fn glass_button_opt(

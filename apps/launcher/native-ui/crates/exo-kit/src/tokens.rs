@@ -152,6 +152,7 @@ pub const TITLEBAR_HEIGHT: f32 = 52.0;
 
 pub const GLASS_CONTROL_SIGMA: f32 = 10.0;
 pub const GLASS_PANEL_SIGMA: f32 = 16.0;
+pub const EXO_MAX_BACKDROP_BLURS: usize = 16;
 pub const PRESS_SCALE: f32 = 0.97;
 
 pub const SPRING_PRESS: Spring = Spring::new(0.09, 0.0);

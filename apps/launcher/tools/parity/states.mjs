@@ -418,7 +418,7 @@ export const STATES = [
       steps: [
         { type: 'click', selector: 'button[aria-label="All games grid"]', optional: true },
         { type: 'wait', ms: 500 },
-        { type: 'click', selector: '.exo-shelf-sort-trigger, button[aria-label="Sort library"]' },
+        { type: 'click', selector: 'button[aria-label^="Sort library"]' },
         { type: 'wait', ms: 400 },
       ],
       openSelector: '[role="menu"]',
@@ -492,7 +492,9 @@ export const STATES = [
       steps: [
         { type: 'click', selector: 'button[aria-label="All games grid"]', optional: true },
         { type: 'wait', ms: 500 },
-        { type: 'clickText', selector: 'button', text: /^Installed$/i },
+        { type: 'click', selector: 'button[aria-label^="Filter"]' },
+        { type: 'wait', ms: 300 },
+        { type: 'clickText', selector: '.exo-library-filter-chips button', text: /^Installed$/i },
         { type: 'wait', ms: 400 },
       ],
       openSelector: '.exo-shelf-sort-trigger, .exo-tile-hit',

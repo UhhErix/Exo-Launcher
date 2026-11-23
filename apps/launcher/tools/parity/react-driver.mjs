@@ -1,5 +1,5 @@
 import { execFile } from 'node:child_process'
-import { mkdir, rm, writeFile } from 'node:fs/promises'
+import { cp, mkdir, rm, writeFile } from 'node:fs/promises'
 import { join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { openShell, sleep } from '../e2e/cdp.mjs'
@@ -35,13 +35,29 @@ export function assertSafeDataDir(dataDir) {
   return full
 }
 
-export async function startWebTestInstance({ folder, dataDir, fresh = true, hostExe = null }) {
+export const SEED_SKIP = /^(app(.|$)|logs$|pending-reports$|cache$)/
+
+export async function seedInstanceData(seedDir, dataDir) {
+  if (!seedDir) return
+  const from = resolve(seedDir)
+  if (from.toLowerCase() === INSTALLED_DATA.toLowerCase()) {
+    throw new Error(`Refused: --seed-data must be a copy, not ${from}.`)
+  }
+  await cp(from, dataDir, {
+    recursive: true,
+    force: true,
+    filter: (src) => !SEED_SKIP.test(src.slice(from.length + 1)),
+  })
+}
+
+export async function startWebTestInstance({ folder, dataDir, fresh = true, hostExe = null, seedDir = null }) {
   const safeFolder = assertSafeDataDir(folder)
   const safeData = assertSafeDataDir(dataDir)
   if (fresh) {
     await rm(safeData, { recursive: true, force: true })
   }
   await mkdir(safeData, { recursive: true })
+  await seedInstanceData(seedDir, safeData)
   const seededSettings = {
     onboardingComplete: true,
     accountAsked: true,
@@ -323,10 +339,10 @@ async function resetReactShell(shell, roomLabel) {
   }
 }
 
-export async function runReactPass({ states, outDir, folder, dataDir, hostExe = null }) {
+export async function runReactPass({ states, outDir, folder, dataDir, hostExe = null, seedDir = null }) {
   const reactDir = join(outDir, 'react')
   await mkdir(reactDir, { recursive: true })
-  const { info, shell } = await startWebTestInstance({ folder, dataDir, fresh: true, hostExe })
+  const { info, shell } = await startWebTestInstance({ folder, dataDir, fresh: true, hostExe, seedDir })
   const results = {}
   try {
     for (const state of states) {

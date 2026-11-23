@@ -359,23 +359,12 @@ pub fn context_menu_layers<S: 'static>(spec: ContextMenuSpec<S>) -> Vec<El> {
         on_submenu,
     } = spec;
 
-    let mut layers = Vec::with_capacity(4);
-
-    let dismiss_scrim = Rc::clone(&on_dismiss);
-    let dismiss_scrim_sec = Rc::clone(&on_dismiss);
-    layers.push(
-        el().key(format!("{id}-scrim"))
-            .pin(Some(0.0), Some(0.0), Some(0.0), Some(0.0))
-            .hit()
-            .cursor(Cursor::Default)
-            .on_press_tx(move |s: &mut S, tx| dismiss_scrim(s, tx))
-            .on_secondary_press(move |s: &mut S, _, tx| dismiss_scrim_sec(s, tx)),
-    );
+    let mut menu_nodes = Vec::with_capacity(3);
 
     let (anchor_key, side, align, gap, origin) = match anchor {
         MenuAnchor::Point(x, y) => {
             let pt_key = format!("{id}-anchor-pt");
-            layers.push(el().key(pt_key.clone()).absolute(x, y).size(0.0, 0.0));
+            menu_nodes.push(el().key(pt_key.clone()).absolute(x, y).size(0.0, 0.0));
             (pt_key, Side::Bottom, Align::Start, 2.0, Vec2::new(0.0, 0.0))
         }
         MenuAnchor::Element {
@@ -403,19 +392,17 @@ pub fn context_menu_layers<S: 'static>(spec: ContextMenuSpec<S>) -> Vec<El> {
         &on_submenu,
     );
 
-    let dismiss_modal = Rc::clone(&on_dismiss);
     let mut main_menu = glass_menu_surface(format!("{id}-menu"), width, blur, origin)
         .role("menu")
         .focus_group()
         .anchored_fit(anchor_key, side, align, gap)
-        .modal_tx(false, move |s: &mut S, tx| dismiss_modal(s, tx))
         .children(rows);
 
     if let Some(ref rf) = return_focus {
         main_menu = main_menu.focus_return(rf.clone());
     }
 
-    layers.push(main_menu);
+    menu_nodes.push(main_menu);
 
     if let Some((trigger_key, sub_entries)) = active_sub {
         let (sub_rows, _) = build_menu_rows(
@@ -427,7 +414,6 @@ pub fn context_menu_layers<S: 'static>(spec: ContextMenuSpec<S>) -> Vec<El> {
             &on_dismiss,
             &on_submenu,
         );
-        let dismiss_sub = Rc::clone(&on_dismiss);
         let sub_menu = glass_menu_surface(
             format!("{id}-submenu"),
             (width - 20.0).max(180.0),
@@ -437,10 +423,15 @@ pub fn context_menu_layers<S: 'static>(spec: ContextMenuSpec<S>) -> Vec<El> {
         .role("menu")
         .focus_group()
         .anchored_fit(trigger_key, Side::Right, Align::Start, 4.0)
-        .modal_tx(false, move |s: &mut S, tx| dismiss_sub(s, tx))
         .children(sub_rows);
-        layers.push(sub_menu);
+        menu_nodes.push(sub_menu);
     }
 
-    layers
+    let dismiss_modal = Rc::clone(&on_dismiss);
+    vec![
+        el().key(format!("{id}-root"))
+            .pin(Some(0.0), Some(0.0), Some(0.0), Some(0.0))
+            .modal_tx(true, move |s: &mut S, tx| dismiss_modal(s, tx))
+            .children(menu_nodes),
+    ]
 }

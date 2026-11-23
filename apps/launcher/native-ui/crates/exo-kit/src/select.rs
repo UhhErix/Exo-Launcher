@@ -1,10 +1,10 @@
 use crate::components::popover_transition_from;
 use crate::icons::{icon_check, icon_chevron_down};
 use crate::tokens::{
-    FG, GLASS_PANEL_SIGMA, PRESS_SCALE, RADIUS_CARD, RADIUS_PILL, RADIUS_SMALL, SPRING_QUICK,
-    TRANSPARENT, fg_faint, fg_muted, glass_control_fill, glass_panel_fill,
-    glass_panel_shadow_color, glass_rim_bottom, glass_rim_top, glass_still_panel_fill, hover_fill,
-    pressed_fill, type_control,
+    FG, GLASS_CONTROL_SIGMA, GLASS_PANEL_SIGMA, PRESS_SCALE, RADIUS_CARD, RADIUS_PILL,
+    RADIUS_SMALL, SPRING_QUICK, TRANSPARENT, fg_faint, fg_muted, glass_control_fill,
+    glass_panel_fill, glass_panel_shadow_color, glass_rim_bottom, glass_rim_top,
+    glass_still_panel_fill, hover_fill, pressed_fill, type_control,
 };
 use rune::{Align, Cursor, El, Key, Side, Tx, Vec2, col, el, row, text};
 use std::rc::Rc;
@@ -123,6 +123,7 @@ pub fn select_trigger<S: 'static>(
         } else {
             glass_control_fill()
         })
+        .backdrop_blur(GLASS_CONTROL_SIGMA)
         .border_gradient(1.0, glass_rim_top(), glass_rim_bottom())
         .motion(SPRING_QUICK);
 
@@ -271,16 +272,6 @@ pub fn select_menu_layers<S: 'static>(spec: SelectMenuSpec<S>) -> Vec<El> {
         })
         .collect();
 
-    let dismiss_scrim = Rc::clone(&on_dismiss);
-    let dismiss_scrim_sec = Rc::clone(&on_dismiss);
-    let scrim = el()
-        .key(format!("{id}-scrim"))
-        .pin(Some(0.0), Some(0.0), Some(0.0), Some(0.0))
-        .hit()
-        .cursor(Cursor::Default)
-        .on_press_tx(move |s: &mut S, tx| dismiss_scrim(s, tx))
-        .on_secondary_press(move |s: &mut S, _, tx| dismiss_scrim_sec(s, tx));
-
     let dismiss_modal = Rc::clone(&on_dismiss);
     let mut panel = col()
         .key(format!("{id}-menu"))
@@ -304,7 +295,7 @@ pub fn select_menu_layers<S: 'static>(spec: SelectMenuSpec<S>) -> Vec<El> {
         .shadow(0.0, 40.0, glass_panel_shadow_color())
         .anchored_fit(trigger_key.clone(), Side::Bottom, align, 6.0)
         .transition(popover_transition_from(origin))
-        .modal_tx(false, move |s: &mut S, tx| dismiss_modal(s, tx))
+        .modal_tx(true, move |s: &mut S, tx| dismiss_modal(s, tx))
         .focus_return(trigger_key)
         .children(rows);
 
@@ -312,5 +303,5 @@ pub fn select_menu_layers<S: 'static>(spec: SelectMenuSpec<S>) -> Vec<El> {
         panel = panel.backdrop_blur(GLASS_PANEL_SIGMA);
     }
 
-    vec![scrim, panel]
+    vec![panel]
 }
