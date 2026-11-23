@@ -543,6 +543,12 @@ fn load_live_state_sync(pipe: &str, scene: Option<&str>) -> AppState {
                     .iter()
                     .find(|d| d.kind == "audio" && d.role.as_deref() == Some("mic"))
                     .map(|d| d.id.clone());
+                let kb_id = list
+                    .devices
+                    .iter()
+                    .find(|d| d.lab)
+                    .or_else(|| list.devices.iter().find(|d| d.kind == "keyboard"))
+                    .map(|d| d.id.clone());
                 if let Ok(aud) = client.call_blocking::<_, exo_rpc::AudioReadReply>(
                     exo_rpc::METHOD_AUDIO_READ,
                     &serde_json::json!({ "output": out_id, "mic": mic_id }),
@@ -552,15 +558,25 @@ fn load_live_state_sync(pipe: &str, scene: Option<&str>) -> AppState {
                 }
                 state.pc.audio_output_id = out_id;
                 state.pc.audio_mic_id = mic_id;
+                state.pc.keyboard_id = kb_id;
                 state.pc.devices = Some(list);
             }
-            if let Ok(kb) = client.call_blocking::<_, exo_rpc::KeyboardReadReply>(
+            let kb_payload = match state.pc.keyboard_id.as_deref() {
+                Some(id) => serde_json::json!({ "id": id }),
+                None => serde_json::json!({}),
+            };
+            let kb_res = client.call_blocking::<_, exo_rpc::KeyboardReadReply>(
                 exo_rpc::METHOD_KEYBOARD_READ,
-                &serde_json::json!({}),
+                &kb_payload,
                 Duration::from_secs(5),
-            ) && kb.ok
-            {
-                state.pc.keyboard = Some(kb);
+            );
+            state.apply_keyboard_read_reply(kb_res.map_err(|e| e.to_string()));
+            if let Ok(b) = client.call_blocking::<_, exo_rpc::KeyboardBackupsReply>(
+                exo_rpc::METHOD_KEYBOARD_BACKUPS,
+                &kb_payload,
+                Duration::from_secs(5),
+            ) {
+                state.pc.keyboard_backups = b.backups;
             }
         }
         Some(sc) if sc == "music" || sc.starts_with("music-") => {
@@ -1879,6 +1895,171 @@ mod tests {
             .and_then(|k| k.actuation_mm)
             .unwrap_or(0.0);
         assert!((act_after - (act_before + 0.1)).abs() < 0.01);
+    }
+
+    #[test]
+    fn wooting_native_layouts_controls_and_error_recovery() {
+        let mut rt = Runtime::new(
+            AppState::default(),
+            shell::view,
+            (1280.0, 800.0),
+            Env::new(true, 1.0),
+        );
+        rt.update(|s, _| {
+            s.switch_room(Room::Devices);
+            s.pc.selected_device_id = Some("dev:wooting".into());
+            if let Some(ref mut kb) = s.pc.keyboard {
+                kb.model = Some("Wooting 60HE v2".into());
+                kb.form_factor = Some("60".into());
+                kb.layout = Some("ANSI · Split spacebar".into());
+                kb.layout_code = Some("ansi-split".into());
+                kb.actuation_mm = Some(1.0);
+                kb.rapid_trigger = Some(true);
+                kb.rapid_trigger_mm = Some(0.15);
+                kb.rgb_brightness = Some(70);
+                kb.can_write = true;
+            }
+        });
+        rt.frame(0.0);
+
+        let (sx, sy) = rt
+            .find("kb-key-space-l")
+            .expect("60HE v2 left split spacebar");
+        assert!(rt.find("kb-key-fn-mid").is_some());
+        assert!(rt.find("kb-key-space-r").is_some());
+        rt.pointer_down(sx, sy);
+        rt.pointer_up(sx, sy);
+        rt.frame(1.0 / 60.0);
+        assert_eq!(
+            rt.state.pc.keyboard_selected_key.as_deref(),
+            Some("space-l")
+        );
+        assert!(rt.find("kb-key-inspect").is_some());
+
+        let (rtx, rty) = rt.find("kb-rt-up").expect("RT +0.05 button");
+        rt.pointer_down(rtx, rty);
+        rt.pointer_up(rtx, rty);
+        rt.frame(2.0 / 60.0);
+        assert!(
+            (rt.state
+                .pc
+                .keyboard
+                .as_ref()
+                .and_then(|k| k.rapid_trigger_mm)
+                .unwrap_or(0.0)
+                - 0.20)
+                .abs()
+                < 0.005
+        );
+
+        let (rgbx, rgby) = rt.find("kb-rgb-down").expect("RGB -5% button");
+        rt.pointer_down(rgbx, rgby);
+        rt.pointer_up(rgbx, rgby);
+        rt.frame(3.0 / 60.0);
+        assert_eq!(
+            rt.state.pc.keyboard.as_ref().and_then(|k| k.rgb_brightness),
+            Some(65)
+        );
+
+        let snap = rt.state.pc.keyboard.clone();
+        rt.update(|s, _| {
+            if let Some(ref mut kb) = s.pc.keyboard {
+                kb.actuation_mm = Some(2.5);
+            }
+            s.apply_keyboard_write_reply(
+                snap.clone(),
+                Ok(exo_rpc::KeyboardReadReply {
+                    ok: false,
+                    message: Some("HID report rejected by firmware".into()),
+                    ..Default::default()
+                }),
+                "Failed",
+            );
+        });
+        rt.frame(4.0 / 60.0);
+        assert_eq!(
+            rt.state.pc.keyboard.as_ref().and_then(|k| k.actuation_mm),
+            Some(1.0)
+        );
+        assert_eq!(
+            rt.state.pc.keyboard_error.as_deref(),
+            Some("HID report rejected by firmware")
+        );
+        assert!(rt.find("kb-write-error").is_some());
+
+        rt.update(|s, _| {
+            s.pc.keyboard_error = None;
+            if let Some(ref mut kb) = s.pc.keyboard {
+                kb.model = Some("Wooting 80HE".into());
+                kb.form_factor = Some("80".into());
+                kb.layout_code = Some("ansi".into());
+            }
+        });
+        rt.frame(5.0 / 60.0);
+        assert!(rt.find("kb-key-led-bar").is_some());
+        assert!(rt.find("kb-key-mode").is_some());
+
+        rt.update(|s, _| {
+            if let Some(ref mut kb) = s.pc.keyboard {
+                kb.model = Some("Wooting Two HE".into());
+                kb.form_factor = Some("full".into());
+                kb.layout_code = Some("iso".into());
+            }
+        });
+        rt.frame(6.0 / 60.0);
+        assert!(rt.find("kb-key-a1").is_some());
+        assert!(rt.find("kb-key-a3").is_some());
+        assert!(rt.find("kb-key-iso-lt").is_some());
+
+        rt.update(|s, _| {
+            if let Some(ref mut kb) = s.pc.keyboard {
+                kb.model = Some("Wooting UwU".into());
+                kb.form_factor = Some("keypad3".into());
+                kb.layout_code = Some("keypad".into());
+                kb.has_rgb = false;
+                kb.has_rapid_trigger = true;
+            }
+        });
+        rt.frame(7.0 / 60.0);
+        assert!(rt.find("kb-key-uwu-k1").is_some());
+        assert!(rt.find("kb-rgb-up").is_none());
+
+        rt.update(|s, _| {
+            if let Some(ref mut kb) = s.pc.keyboard {
+                kb.model = Some("Wooting One".into());
+                kb.form_factor = Some("tkl".into());
+                kb.layout_code = Some("ansi".into());
+                kb.hall_effect = false;
+                kb.has_rapid_trigger = false;
+                kb.has_rgb = true;
+                kb.min_actuation_mm = Some(1.5);
+                kb.max_actuation_mm = Some(3.6);
+                kb.actuation_mm = Some(1.5);
+                kb.rapid_trigger = None;
+                kb.tachyon = None;
+                kb.can_write = false;
+                kb.message = Some("Close Wootility to edit".into());
+            }
+        });
+        rt.frame(8.0 / 60.0);
+        assert!(rt.find("kb-rt-toggle").is_none());
+        assert!(rt.find("kb-readonly-banner").is_some());
+        rt.update(|s, _| s.update_keyboard_settings(Some(0.2), None, None, None, None));
+        assert_eq!(
+            rt.state.pc.keyboard.as_ref().and_then(|k| k.actuation_mm),
+            Some(1.5)
+        );
+
+        rt.update(|s, _| {
+            s.apply_keyboard_read_reply(Ok(exo_rpc::KeyboardReadReply {
+                ok: false,
+                message: Some("Wooting keyboard not connected.".into()),
+                ..Default::default()
+            }));
+        });
+        rt.frame(9.0 / 60.0);
+        assert!(rt.find("kb-error-card").is_some());
+        assert!(rt.find("kb-retry").is_some());
     }
 
     #[test]

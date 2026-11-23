@@ -3,20 +3,21 @@ use crate::state::{AppState, HostStatus};
 use exo_rpc::{
     ActionResult, AppsIconsReply, AppsListReply, AudioReadReply, AutopilotState, DevicesImageReply,
     DevicesListReply, DrivesReply, EqStateReply, ExoAccountState, ExoAiState, HdrState,
-    KeyboardBackupsReply, KeyboardReadReply, LauncherSettings, METHOD_APP_CHECK_UPDATE,
-    METHOD_APP_INSTALL_UPDATE, METHOD_APP_OPEN_LOGS, METHOD_APP_REPAIR_CACHE, METHOD_APPS_ICONS,
-    METHOD_APPS_LIST, METHOD_APPS_UNINSTALL, METHOD_AUDIO_READ, METHOD_AUDIO_SET_MUTE,
-    METHOD_AUDIO_SET_VOLUME, METHOD_AUTOPILOT_STATE, METHOD_DEVICES_IMAGE, METHOD_DEVICES_LIST,
-    METHOD_EQ, METHOD_EXO_ACCOUNT_STATE, METHOD_EXO_ACCOUNT_SYNC, METHOD_EXO_AI_SET,
-    METHOD_EXO_AI_STATE, METHOD_HDR_STATE, METHOD_JUNK_CLEAN, METHOD_KEYBOARD_BACKUP,
-    METHOD_KEYBOARD_BACKUPS, METHOD_KEYBOARD_PROFILE, METHOD_KEYBOARD_READ,
-    METHOD_KEYBOARD_SETTINGS, METHOD_MOUSE_PANEL_BOUNDS, METHOD_MOUSE_PANEL_CLOSE,
-    METHOD_MOUSE_PANEL_OPEN, METHOD_PLAYTIME_RIOT_REFRESH, METHOD_SETTINGS_SET,
-    METHOD_SHADERS_ADDON, METHOD_SHADERS_CALL, METHOD_SHADERS_ESTIMATES,
-    METHOD_SHADERS_PREPARE_GAMES, METHOD_SHADERS_PREPARE_START, METHOD_STARTUP_LIST,
-    METHOD_STARTUP_REMOVE, METHOD_SYSTEM_ABOUT, METHOD_SYSTEM_DRIVES, METHOD_SYSTEM_TUNING,
-    ShaderEstimate, ShaderSnapGame, ShadersAddonStatus, ShadersEstimatesReply,
-    ShadersPrepareGamesReply, StartupListReply, SystemAbout, SystemTuningState, UpdateCheckReply,
+    KeyboardBackupResult, KeyboardBackupsReply, KeyboardReadReply, LauncherSettings,
+    METHOD_APP_CHECK_UPDATE, METHOD_APP_INSTALL_UPDATE, METHOD_APP_OPEN_LOGS,
+    METHOD_APP_REPAIR_CACHE, METHOD_APPS_ICONS, METHOD_APPS_LIST, METHOD_APPS_UNINSTALL,
+    METHOD_AUDIO_READ, METHOD_AUDIO_SET_MUTE, METHOD_AUDIO_SET_VOLUME, METHOD_AUTOPILOT_STATE,
+    METHOD_DEVICES_IMAGE, METHOD_DEVICES_LIST, METHOD_EQ, METHOD_EXO_ACCOUNT_STATE,
+    METHOD_EXO_ACCOUNT_SYNC, METHOD_EXO_AI_SET, METHOD_EXO_AI_STATE, METHOD_HDR_STATE,
+    METHOD_JUNK_CLEAN, METHOD_KEYBOARD_BACKUP, METHOD_KEYBOARD_BACKUPS, METHOD_KEYBOARD_PROFILE,
+    METHOD_KEYBOARD_READ, METHOD_KEYBOARD_RESTORE, METHOD_KEYBOARD_SETTINGS,
+    METHOD_MOUSE_PANEL_BOUNDS, METHOD_MOUSE_PANEL_CLOSE, METHOD_MOUSE_PANEL_OPEN,
+    METHOD_PLAYTIME_RIOT_REFRESH, METHOD_SETTINGS_SET, METHOD_SHADERS_ADDON, METHOD_SHADERS_CALL,
+    METHOD_SHADERS_ESTIMATES, METHOD_SHADERS_PREPARE_GAMES, METHOD_SHADERS_PREPARE_START,
+    METHOD_STARTUP_LIST, METHOD_STARTUP_REMOVE, METHOD_SYSTEM_ABOUT, METHOD_SYSTEM_DRIVES,
+    METHOD_SYSTEM_TUNING, ShaderEstimate, ShaderSnapGame, ShadersAddonStatus,
+    ShadersEstimatesReply, ShadersPrepareGamesReply, StartupListReply, SystemAbout,
+    SystemTuningState, UpdateCheckReply,
 };
 use serde_json::{Map, Value, json};
 
@@ -568,7 +569,7 @@ impl AppState {
         if let (Some(rpc), Some(handle)) = (self.rpc.clone(), self.handle.clone()) {
             self.pc.devices_loading = true;
             let h1 = handle.clone();
-            let rpc_audio = rpc.clone();
+            let rpc_follow = rpc.clone();
             rpc.call::<_, DevicesListReply>(METHOD_DEVICES_LIST, &json!({}), move |res| {
                 if let Ok(list) = res {
                     let out_id = list
@@ -581,9 +582,18 @@ impl AppState {
                         .iter()
                         .find(|d| d.kind == "audio" && d.role.as_deref() == Some("mic"))
                         .map(|d| d.id.clone());
+                    let kb_id = list
+                        .devices
+                        .iter()
+                        .find(|d| d.lab)
+                        .or_else(|| list.devices.iter().find(|d| d.kind == "keyboard"))
+                        .map(|d| d.id.clone());
                     let h_aud = h1.clone();
+                    let h_kb = h1.clone();
+                    let h_bak = h1.clone();
                     let out_clone = out_id.clone();
                     let mic_clone = mic_id.clone();
+                    let kb_clone = kb_id.clone();
                     let photo_reqs: Vec<(String, serde_json::Value)> = list
                         .devices
                         .iter()
@@ -601,12 +611,15 @@ impl AppState {
                             )
                         })
                         .collect();
-                    let rpc_img = rpc_audio.clone();
+                    let rpc_img = rpc_follow.clone();
+                    let rpc_kb = rpc_follow.clone();
+                    let rpc_bak = rpc_follow.clone();
                     let h_img_base = h1.clone();
                     h1.update(move |s, _| {
                         s.pc.devices_loading = false;
                         s.pc.audio_output_id = out_id;
                         s.pc.audio_mic_id = mic_id;
+                        s.pc.keyboard_id = kb_id;
                         s.pc.devices = Some(list);
                     });
                     for (dev_id, payload) in photo_reqs {
@@ -625,7 +638,7 @@ impl AppState {
                             },
                         );
                     }
-                    rpc_audio.call::<_, AudioReadReply>(
+                    rpc_follow.call::<_, AudioReadReply>(
                         METHOD_AUDIO_READ,
                         &json!({ "output": out_clone, "mic": mic_clone }),
                         move |aud_res| {
@@ -634,22 +647,30 @@ impl AppState {
                             }
                         },
                     );
+                    let kb_payload = match kb_clone {
+                        Some(ref id) => json!({ "id": id }),
+                        None => json!({}),
+                    };
+                    rpc_kb.call::<_, KeyboardReadReply>(
+                        METHOD_KEYBOARD_READ,
+                        &kb_payload,
+                        move |kb_res| {
+                            h_kb.update(move |s, _| {
+                                s.apply_keyboard_read_reply(kb_res.map_err(|e| e.to_string()));
+                            });
+                        },
+                    );
+                    rpc_bak.call::<_, KeyboardBackupsReply>(
+                        METHOD_KEYBOARD_BACKUPS,
+                        &kb_payload,
+                        move |bak_res| {
+                            if let Ok(b) = bak_res {
+                                h_bak.update(move |s, _| s.pc.keyboard_backups = b.backups);
+                            }
+                        },
+                    );
                 } else {
                     h1.update(|s, _| s.pc.devices_loading = false);
-                }
-            });
-            let h2 = handle.clone();
-            rpc.call::<_, KeyboardReadReply>(METHOD_KEYBOARD_READ, &json!({}), move |res| {
-                if let Ok(kb) = res
-                    && kb.ok
-                {
-                    h2.update(move |s, _| s.pc.keyboard = Some(kb));
-                }
-            });
-            let h3 = handle.clone();
-            rpc.call::<_, KeyboardBackupsReply>(METHOD_KEYBOARD_BACKUPS, &json!({}), move |res| {
-                if let Ok(b) = res {
-                    h3.update(move |s, _| s.pc.keyboard_backups = b.backups);
                 }
             });
             let h4 = handle.clone();
@@ -742,21 +763,143 @@ impl AppState {
         }
     }
 
+    pub fn keyboard_device_id(&self) -> Option<String> {
+        if let Some(sel) = self.pc.selected_device_id.as_deref()
+            && let Some(devs) = self.pc.devices.as_ref()
+            && devs
+                .devices
+                .iter()
+                .any(|d| d.id == sel && (d.lab || d.kind == "keyboard"))
+        {
+            return Some(sel.to_string());
+        }
+        if let Some(ref id) = self.pc.keyboard_id {
+            return Some(id.clone());
+        }
+        self.pc.devices.as_ref().and_then(|list| {
+            list.devices
+                .iter()
+                .find(|d| d.lab)
+                .or_else(|| list.devices.iter().find(|d| d.kind == "keyboard"))
+                .map(|d| d.id.clone())
+        })
+    }
+
+    pub fn apply_keyboard_read_reply(&mut self, res: Result<KeyboardReadReply, String>) {
+        match res {
+            Ok(kb) if kb.ok => {
+                self.pc.keyboard_error = None;
+                self.pc.keyboard = Some(kb);
+            }
+            Ok(kb) => {
+                self.pc.keyboard_error = kb
+                    .message
+                    .clone()
+                    .or_else(|| Some("Could not read Wooting keyboard.".into()));
+                self.pc.keyboard = Some(kb);
+            }
+            Err(err) => {
+                self.pc.keyboard_error = Some(format!("Could not read Wooting keyboard: {err}"));
+            }
+        }
+    }
+
+    pub fn apply_keyboard_write_reply(
+        &mut self,
+        prev: Option<KeyboardReadReply>,
+        res: Result<KeyboardReadReply, String>,
+        fallback_err: &str,
+    ) {
+        match res {
+            Ok(kb) if kb.ok => {
+                self.pc.keyboard_error = None;
+                self.pc.keyboard = Some(kb);
+            }
+            Ok(kb) => {
+                let msg = kb
+                    .message
+                    .clone()
+                    .unwrap_or_else(|| fallback_err.to_string());
+                self.pc.keyboard = prev;
+                self.pc.keyboard_error = Some(msg);
+            }
+            Err(err) => {
+                self.pc.keyboard = prev;
+                self.pc.keyboard_error = Some(format!("{fallback_err}: {err}"));
+            }
+        }
+    }
+
+    pub fn toggle_keyboard_key(&mut self, key_id: String) {
+        if self.pc.keyboard_selected_key.as_deref() == Some(key_id.as_str()) {
+            self.pc.keyboard_selected_key = None;
+        } else {
+            self.pc.keyboard_selected_key = Some(key_id);
+        }
+    }
+
+    pub fn reload_keyboard(&mut self) {
+        self.pc.keyboard_error = None;
+        let kb_id = self.keyboard_device_id();
+        let payload = match kb_id {
+            Some(ref id) => json!({ "id": id }),
+            None => json!({}),
+        };
+        #[cfg(windows)]
+        if let (Some(rpc), Some(handle)) = (self.rpc.clone(), self.handle.clone()) {
+            let h1 = handle.clone();
+            let payload_bak = payload.clone();
+            rpc.call::<_, KeyboardReadReply>(METHOD_KEYBOARD_READ, &payload, move |res| {
+                h1.update(move |s, _| {
+                    s.apply_keyboard_read_reply(res.map_err(|e| e.to_string()));
+                });
+            });
+            rpc.call::<_, KeyboardBackupsReply>(
+                METHOD_KEYBOARD_BACKUPS,
+                &payload_bak,
+                move |res| {
+                    if let Ok(b) = res {
+                        handle.update(move |s, _| s.pc.keyboard_backups = b.backups);
+                    }
+                },
+            );
+        }
+    }
+
     pub fn switch_keyboard_profile(&mut self, slot: i32) {
+        if let Some(ref kb) = self.pc.keyboard
+            && !kb.can_write
+        {
+            self.pc.keyboard_error = kb
+                .message
+                .clone()
+                .or_else(|| Some("Keyboard is read-only right now.".into()));
+            return;
+        }
+        let prev = self.pc.keyboard.clone();
+        self.pc.keyboard_error = None;
         if let Some(ref mut kb) = self.pc.keyboard {
             kb.active_profile = slot;
         }
+        let kb_id = self.keyboard_device_id();
         #[cfg(windows)]
         if let (Some(rpc), Some(handle)) = (self.rpc.clone(), self.handle.clone()) {
+            let mut map = Map::new();
+            if let Some(id) = kb_id {
+                map.insert("id".into(), json!(id));
+            }
+            map.insert("slot".into(), json!(slot));
             rpc.call::<_, KeyboardReadReply>(
                 METHOD_KEYBOARD_PROFILE,
-                &json!({ "slot": slot }),
+                &Value::Object(map),
                 move |res| {
-                    if let Ok(kb) = res
-                        && kb.ok
-                    {
-                        handle.update(move |s, _| s.pc.keyboard = Some(kb));
-                    }
+                    handle.update(move |s, _| {
+                        s.apply_keyboard_write_reply(
+                            prev,
+                            res.map_err(|e| e.to_string()),
+                            "Failed to switch keyboard profile",
+                        );
+                    });
                 },
             );
         }
@@ -768,63 +911,180 @@ impl AppState {
         rapid_trigger: Option<bool>,
         rapid_trigger_mm: Option<f64>,
         tachyon: Option<bool>,
+        rgb_brightness: Option<i32>,
     ) {
+        if let Some(ref kb) = self.pc.keyboard
+            && !kb.can_write
+        {
+            self.pc.keyboard_error = kb
+                .message
+                .clone()
+                .or_else(|| Some("Keyboard is read-only right now.".into()));
+            return;
+        }
+        let (min_act, max_act, has_rt, has_rgb) = self
+            .pc
+            .keyboard
+            .as_ref()
+            .map(|kb| {
+                (
+                    kb.min_actuation_mm.unwrap_or(0.1),
+                    kb.max_actuation_mm.unwrap_or(4.0),
+                    kb.has_rapid_trigger,
+                    kb.has_rgb,
+                )
+            })
+            .unwrap_or((0.1, 4.0, true, true));
+
+        let clamped_act = actuation_mm.map(|a| ((a.clamp(min_act, max_act)) * 10.0).round() / 10.0);
+        let eff_rt = if has_rt { rapid_trigger } else { None };
+        let clamped_rt_mm = if has_rt {
+            rapid_trigger_mm.map(|v| ((v.clamp(0.10, 2.35)) * 20.0).round() / 20.0)
+        } else {
+            None
+        };
+        let clamped_rgb = if has_rgb {
+            rgb_brightness.map(|b| b.clamp(0, 100))
+        } else {
+            None
+        };
+
+        let prev = self.pc.keyboard.clone();
+        self.pc.keyboard_error = None;
         if let Some(ref mut kb) = self.pc.keyboard {
-            if let Some(a) = actuation_mm {
-                kb.actuation_mm = Some((a * 10.0).round() / 10.0);
+            if let Some(a) = clamped_act {
+                kb.actuation_mm = Some(a);
             }
-            if let Some(rt) = rapid_trigger {
-                kb.rapid_trigger = rt;
+            if let Some(rt) = eff_rt {
+                kb.rapid_trigger = Some(rt);
             }
-            if let Some(rtm) = rapid_trigger_mm {
+            if let Some(rtm) = clamped_rt_mm {
                 kb.rapid_trigger_mm = Some(rtm);
             }
             if let Some(t) = tachyon {
-                kb.tachyon = t;
+                kb.tachyon = Some(t);
+            }
+            if let Some(rgb) = clamped_rgb {
+                kb.rgb_brightness = Some(rgb);
             }
         }
+        let kb_id = self.keyboard_device_id();
         #[cfg(windows)]
         if let (Some(rpc), Some(handle)) = (self.rpc.clone(), self.handle.clone()) {
             let mut map = Map::new();
-            if let Some(a) = actuation_mm {
-                map.insert("actuationMm".into(), json!((a * 10.0).round() / 10.0));
+            if let Some(id) = kb_id {
+                map.insert("id".into(), json!(id));
             }
-            if let Some(rt) = rapid_trigger {
+            if let Some(a) = clamped_act {
+                map.insert("actuationMm".into(), json!(a));
+            }
+            if let Some(rt) = eff_rt {
                 map.insert("rapidTrigger".into(), json!(rt));
             }
-            if let Some(rtm) = rapid_trigger_mm {
+            if let Some(rtm) = clamped_rt_mm {
                 map.insert("rapidTriggerMm".into(), json!(rtm));
             }
             if let Some(t) = tachyon {
                 map.insert("tachyon".into(), json!(t));
             }
+            if let Some(rgb) = clamped_rgb {
+                map.insert("rgbBrightness".into(), json!(rgb));
+            }
             rpc.call::<_, KeyboardReadReply>(
                 METHOD_KEYBOARD_SETTINGS,
                 &Value::Object(map),
                 move |res| {
-                    if let Ok(kb) = res
-                        && kb.ok
-                    {
-                        handle.update(move |s, _| s.pc.keyboard = Some(kb));
-                    }
+                    handle.update(move |s, _| {
+                        s.apply_keyboard_write_reply(
+                            prev,
+                            res.map_err(|e| e.to_string()),
+                            "Failed to save keyboard settings",
+                        );
+                    });
                 },
             );
         }
     }
 
     pub fn backup_keyboard_profiles(&mut self) {
+        self.pc.keyboard_error = None;
         self.notice = Some("Backing up Wooting profiles…".into());
+        let kb_id = self.keyboard_device_id();
+        let payload = match kb_id {
+            Some(ref id) => json!({ "id": id }),
+            None => json!({}),
+        };
         #[cfg(windows)]
         if let (Some(rpc), Some(handle)) = (self.rpc.clone(), self.handle.clone()) {
-            rpc.call::<_, KeyboardBackupsReply>(METHOD_KEYBOARD_BACKUP, &json!({}), move |res| {
+            rpc.call::<_, KeyboardBackupResult>(METHOD_KEYBOARD_BACKUP, &payload, move |res| {
                 handle.update(move |s, _| match res {
                     Ok(b) if b.ok => {
                         s.pc.keyboard_backups = b.backups;
+                        s.pc.keyboard_error = None;
                         s.notice = Some("Keyboard profiles backed up.".into());
                     }
-                    _ => s.notice = Some("Keyboard backup failed.".into()),
+                    Ok(b) => {
+                        let msg = b
+                            .message
+                            .unwrap_or_else(|| "Keyboard backup failed.".into());
+                        s.pc.keyboard_error = Some(msg.clone());
+                        s.notice = Some(msg);
+                    }
+                    Err(e) => {
+                        let msg = format!("Keyboard backup failed: {e}");
+                        s.pc.keyboard_error = Some(msg.clone());
+                        s.notice = Some(msg);
+                    }
                 });
             });
+        }
+    }
+
+    pub fn restore_keyboard_backup(&mut self, file_name: String) {
+        if let Some(ref kb) = self.pc.keyboard
+            && !kb.can_write
+        {
+            self.pc.keyboard_error = kb
+                .message
+                .clone()
+                .or_else(|| Some("Keyboard is read-only right now.".into()));
+            return;
+        }
+        self.pc.keyboard_error = None;
+        self.notice = Some("Restoring Wooting backup…".into());
+        let kb_id = self.keyboard_device_id();
+        #[cfg(windows)]
+        if let (Some(rpc), Some(handle)) = (self.rpc.clone(), self.handle.clone()) {
+            let mut map = Map::new();
+            if let Some(id) = kb_id {
+                map.insert("id".into(), json!(id));
+            }
+            map.insert("fileName".into(), json!(file_name));
+            rpc.call::<_, KeyboardReadReply>(
+                METHOD_KEYBOARD_RESTORE,
+                &Value::Object(map),
+                move |res| {
+                    handle.update(move |s, _| match res {
+                        Ok(kb) if kb.ok => {
+                            s.pc.keyboard = Some(kb);
+                            s.pc.keyboard_error = None;
+                            s.notice = Some("Keyboard backup restored.".into());
+                        }
+                        Ok(kb) => {
+                            let msg = kb
+                                .message
+                                .unwrap_or_else(|| "Keyboard restore failed.".into());
+                            s.pc.keyboard_error = Some(msg.clone());
+                            s.notice = Some(msg);
+                        }
+                        Err(e) => {
+                            let msg = format!("Keyboard restore failed: {e}");
+                            s.pc.keyboard_error = Some(msg.clone());
+                            s.notice = Some(msg);
+                        }
+                    });
+                },
+            );
         }
     }
 

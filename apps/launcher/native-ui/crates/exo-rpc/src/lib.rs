@@ -1,6 +1,7 @@
 pub mod base64;
 pub mod discord_types;
 pub mod events;
+pub mod keyboard_layouts;
 pub mod media_types;
 pub mod pc_types;
 pub mod pipe;
@@ -39,11 +40,11 @@ pub use pc_types::{
     AutopilotMemoryIntegrity, AutopilotReport, AutopilotState, DevicesImageReply, DevicesListReply,
     DriveFix, DriveGameEntry, DriveHealth, DriveInfo, DriveLink, DriveSpaceBreakdown, DriveTemp,
     DriveVerdict, DriveVolume, DrivesReply, EqHeadphone, EqStateReply, ExoAiFans, ExoAiGaming,
-    ExoAiState, HdrState, InstalledAppItem, KeyboardBackupSummary, KeyboardBackupsReply,
-    KeyboardProfileSlot, KeyboardReadReply, LatencyReport, LatencySample, PeripheralCard,
-    PeripheralPort, ShaderEstimate, ShaderPrepareGame, ShaderSnapGame, ShadersAddonStatus,
-    ShadersEstimatesReply, ShadersPrepareGamesReply, ShadersSnapshot, StartupItem,
-    StartupListReply, StartupRemovedItem, SystemAbout, SystemTuningState, TuningItem,
+    ExoAiState, HdrState, InstalledAppItem, KeyboardBackupResult, KeyboardBackupSummary,
+    KeyboardBackupsReply, KeyboardProfileSlot, KeyboardReadReply, LatencyReport, LatencySample,
+    PeripheralCard, PeripheralPort, ShaderEstimate, ShaderPrepareGame, ShaderSnapGame,
+    ShadersAddonStatus, ShadersEstimatesReply, ShadersPrepareGamesReply, ShadersSnapshot,
+    StartupItem, StartupListReply, StartupRemovedItem, SystemAbout, SystemTuningState, TuningItem,
     UpdateCheckReply, UpdateProgress,
 };
 pub use serde::de::DeserializeOwned;

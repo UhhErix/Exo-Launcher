@@ -662,8 +662,8 @@ pub struct PeripheralCard {
     pub battery: Option<f64>,
     #[serde(default)]
     pub polling_hz: Option<i32>,
-    #[serde(default)]
-    pub wooting: bool,
+    #[serde(default, alias = "wooting")]
+    pub lab: bool,
     #[serde(default)]
     pub color: Option<String>,
     #[serde(default)]
@@ -775,13 +775,25 @@ pub struct KeyboardReadReply {
     #[serde(default)]
     pub model: Option<String>,
     #[serde(default)]
+    pub form_factor: Option<String>,
+    #[serde(default)]
     pub hall_effect: bool,
     #[serde(default)]
+    pub has_rapid_trigger: bool,
+    #[serde(default)]
+    pub has_rgb: bool,
+    #[serde(default)]
     pub max_scan_hz: Option<i32>,
+    #[serde(default)]
+    pub min_actuation_mm: Option<f64>,
+    #[serde(default)]
+    pub max_actuation_mm: Option<f64>,
     #[serde(default)]
     pub firmware: Option<String>,
     #[serde(default)]
     pub layout: Option<String>,
+    #[serde(default)]
+    pub layout_code: Option<String>,
     #[serde(default)]
     pub active_profile: i32,
     #[serde(default)]
@@ -789,15 +801,19 @@ pub struct KeyboardReadReply {
     #[serde(default)]
     pub actuation_mm: Option<f64>,
     #[serde(default)]
-    pub rapid_trigger: bool,
+    pub rapid_trigger: Option<bool>,
     #[serde(default)]
     pub rapid_trigger_mm: Option<f64>,
     #[serde(default)]
-    pub tachyon: bool,
+    pub tachyon: Option<bool>,
+    #[serde(default)]
+    pub rgb_brightness: Option<i32>,
     #[serde(default)]
     pub can_write: bool,
     #[serde(default)]
     pub wootility_installed: bool,
+    #[serde(default)]
+    pub background_service_running: bool,
 }
 
 #[derive(Debug, Clone, Default, Deserialize)]
@@ -808,9 +824,26 @@ pub struct KeyboardBackupSummary {
     #[serde(default)]
     pub model: String,
     #[serde(default)]
+    pub product_id: Option<i32>,
+    #[serde(default)]
+    pub firmware: Option<String>,
+    #[serde(default)]
     pub created_utc: String,
     #[serde(default)]
     pub profile_count: i32,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct KeyboardBackupResult {
+    #[serde(default)]
+    pub ok: bool,
+    #[serde(default)]
+    pub message: Option<String>,
+    #[serde(default)]
+    pub created: Option<KeyboardBackupSummary>,
+    #[serde(default)]
+    pub backups: Vec<KeyboardBackupSummary>,
 }
 
 #[derive(Debug, Clone, Default, Deserialize)]
@@ -820,4 +853,121 @@ pub struct KeyboardBackupsReply {
     pub ok: bool,
     #[serde(default)]
     pub backups: Vec<KeyboardBackupSummary>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn peripheral_card_accepts_lab_and_wooting_alias() {
+        let from_lab: PeripheralCard = serde_json::from_str(
+            r#"{"id":"kb-1","kind":"keyboard","name":"Wooting 60HE v2","lab":true}"#,
+        )
+        .expect("lab field");
+        assert!(from_lab.lab);
+
+        let from_wooting: PeripheralCard = serde_json::from_str(
+            r#"{"id":"kb-2","kind":"keyboard","name":"Wooting 60HE","wooting":true}"#,
+        )
+        .expect("wooting alias");
+        assert!(from_wooting.lab);
+    }
+
+    #[test]
+    fn keyboard_read_reply_deserializes_60he_v2_and_optical_models() {
+        let v2: KeyboardReadReply = serde_json::from_str(
+            r#"{
+                "ok": true,
+                "model": "Wooting 60HE v2",
+                "formFactor": "60",
+                "hallEffect": true,
+                "hasRapidTrigger": true,
+                "hasRgb": true,
+                "maxScanHz": 8000,
+                "minActuationMm": 0.1,
+                "maxActuationMm": 4.0,
+                "firmware": "2.15.0-beta.0",
+                "layout": "ANSI · Split spacebar",
+                "layoutCode": "ansi-split",
+                "activeProfile": 0,
+                "profiles": [{"index": 0, "name": "General"}],
+                "actuationMm": 3.0,
+                "rapidTrigger": true,
+                "rapidTriggerMm": 0.15,
+                "tachyon": true,
+                "rgbBrightness": 70,
+                "canWrite": true,
+                "wootilityInstalled": false,
+                "backgroundServiceRunning": false
+            }"#,
+        )
+        .expect("60HE v2 payload");
+        assert!(v2.ok);
+        assert_eq!(v2.form_factor.as_deref(), Some("60"));
+        assert_eq!(v2.layout_code.as_deref(), Some("ansi-split"));
+        assert_eq!(v2.rapid_trigger, Some(true));
+        assert_eq!(v2.tachyon, Some(true));
+        assert_eq!(v2.rgb_brightness, Some(70));
+        assert_eq!(v2.min_actuation_mm, Some(0.1));
+        assert_eq!(v2.max_actuation_mm, Some(4.0));
+        assert!(v2.has_rapid_trigger);
+        assert!(v2.has_rgb);
+
+        let optical: KeyboardReadReply = serde_json::from_str(
+            r#"{
+                "ok": true,
+                "model": "Wooting One",
+                "formFactor": "tkl",
+                "hallEffect": false,
+                "hasRapidTrigger": false,
+                "hasRgb": true,
+                "minActuationMm": 1.5,
+                "maxActuationMm": 3.6,
+                "rapidTrigger": null,
+                "tachyon": null,
+                "canWrite": false,
+                "backgroundServiceRunning": true
+            }"#,
+        )
+        .expect("Wooting One optical payload");
+        assert_eq!(optical.form_factor.as_deref(), Some("tkl"));
+        assert!(!optical.has_rapid_trigger);
+        assert_eq!(optical.rapid_trigger, None);
+        assert_eq!(optical.tachyon, None);
+        assert!(optical.background_service_running);
+        assert_eq!(optical.min_actuation_mm, Some(1.5));
+        assert_eq!(optical.max_actuation_mm, Some(3.6));
+    }
+
+    #[test]
+    fn keyboard_backup_result_deserializes_product_id_and_firmware() {
+        let res: KeyboardBackupResult = serde_json::from_str(
+            r#"{
+                "ok": true,
+                "created": {
+                    "fileName": "wooting-1342-20261123.json",
+                    "model": "Wooting 60HE v2",
+                    "productId": 4930,
+                    "firmware": "2.15.0-beta.0",
+                    "createdUtc": "2026-11-23T07:45:26Z",
+                    "profileCount": 1
+                },
+                "backups": [{
+                    "fileName": "wooting-1342-20261123.json",
+                    "model": "Wooting 60HE v2",
+                    "productId": 4930,
+                    "firmware": "2.15.0-beta.0",
+                    "createdUtc": "2026-11-23T07:45:26Z",
+                    "profileCount": 1
+                }]
+            }"#,
+        )
+        .expect("backup result");
+        assert!(res.ok);
+        let created = res.created.expect("created summary");
+        assert_eq!(created.product_id, Some(4930));
+        assert_eq!(created.firmware.as_deref(), Some("2.15.0-beta.0"));
+        assert_eq!(res.backups.len(), 1);
+    }
 }
