@@ -35,7 +35,10 @@ public sealed partial class WebHostBridge
         var rt = ReadBool(p, hasParams, "rapidTrigger");
         var rtMm = ReadDouble(p, hasParams, "rapidTriggerMm");
         var tachyon = ReadBool(p, hasParams, "tachyon");
-        return FormatKeyboardRead(WootingKeyboard.UpdateProfile(card, actuation, rt, rtMm, tachyon));
+        var rgbBrightness = ReadDouble(p, hasParams, "rgbBrightness") is { } rawRgb && double.IsFinite(rawRgb)
+            ? (int?)Math.Round(rawRgb)
+            : null;
+        return FormatKeyboardRead(WootingKeyboard.UpdateProfile(card, actuation, rt, rtMm, tachyon, rgbBrightness));
     }
 
     private static object KeyboardOpenApp() =>
@@ -87,16 +90,23 @@ public sealed partial class WebHostBridge
         ok = r.Ok,
         message = r.Message,
         model = r.Model,
+        formFactor = r.FormFactor,
         hallEffect = r.HallEffect,
+        hasRapidTrigger = r.HasRapidTrigger,
+        hasRgb = r.HasRgb,
         maxScanHz = r.MaxScanHz,
+        minActuationMm = r.MinActuationMm,
+        maxActuationMm = r.MaxActuationMm,
         firmware = r.Firmware,
         layout = r.Layout,
+        layoutCode = r.LayoutCode,
         activeProfile = r.ActiveProfile,
         profiles = r.Profiles.Select(p => new { index = p.Index, name = p.Name }).ToList(),
         actuationMm = r.ActuationMm,
         rapidTrigger = r.RapidTrigger,
         rapidTriggerMm = r.RapidTriggerMm,
         tachyon = r.Tachyon,
+        rgbBrightness = r.RgbBrightness,
         canWrite = r.CanWrite,
         wootilityInstalled = r.WootilityInstalled,
         backgroundServiceRunning = r.BackgroundServiceRunning,

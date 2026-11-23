@@ -11,6 +11,7 @@ use exo_kit::{
     pressed_fill, primary_button, progress_bar, scaled, surface_card, type_body, type_control,
     type_label, type_page, type_section, type_small, type_title, warn,
 };
+use exo_rpc::keyboard_layouts::{FormFactor, KeyCap, KeyKind, build_keyboard_layout, find_key};
 use exo_rpc::{DriveInfo, InstalledAppItem, KeyboardReadReply, PeripheralCard};
 use rune::{
     Align, Cursor, El, Key, ScrollSpec, Side, SurfaceFit, TextStyle, Transition, col, edit_access,
@@ -114,6 +115,7 @@ fn device_showcase_card(dev: &PeripheralCard, s: &AppState, scale: f32) -> El {
 
     let dev_id = dev.id.clone();
     let is_mouse = dev.kind == "mouse";
+    let is_kb = dev.lab || dev.kind == "keyboard";
     col()
         .key(format!("dev-card-{}", dev.id))
         .role("button")
@@ -141,6 +143,13 @@ fn device_showcase_card(dev: &PeripheralCard, s: &AppState, scale: f32) -> El {
                 s.open_mouse_panel(dev_id.clone());
             } else {
                 s.pc.selected_device_id = Some(dev_id.clone());
+                if is_kb {
+                    s.pc.keyboard_id = Some(dev_id.clone());
+                    let needs_reload = s.pc.keyboard.as_ref().is_none_or(|k| !k.ok);
+                    if needs_reload {
+                        s.reload_keyboard();
+                    }
+                }
             }
         })
         .child(media)
@@ -165,136 +174,274 @@ fn device_showcase_card(dev: &PeripheralCard, s: &AppState, scale: f32) -> El {
         )
 }
 
-fn wooting_key_matrix(kb: &KeyboardReadReply) -> El {
-    let rows_spec: [&[(&str, f32)]; 5] = [
-        &[
-            ("Esc", 1.0),
-            ("1", 1.0),
-            ("2", 1.0),
-            ("3", 1.0),
-            ("4", 1.0),
-            ("5", 1.0),
-            ("6", 1.0),
-            ("7", 1.0),
-            ("8", 1.0),
-            ("9", 1.0),
-            ("0", 1.0),
-            ("-", 1.0),
-            ("=", 1.0),
-            ("Bksp", 2.0),
-        ],
-        &[
-            ("Tab", 1.5),
-            ("Q", 1.0),
-            ("W", 1.0),
-            ("E", 1.0),
-            ("R", 1.0),
-            ("T", 1.0),
-            ("Y", 1.0),
-            ("U", 1.0),
-            ("I", 1.0),
-            ("O", 1.0),
-            ("P", 1.0),
-            ("[", 1.0),
-            ("]", 1.0),
-            ("\\", 1.5),
-        ],
-        &[
-            ("Caps", 1.75),
-            ("A", 1.0),
-            ("S", 1.0),
-            ("D", 1.0),
-            ("F", 1.0),
-            ("G", 1.0),
-            ("H", 1.0),
-            ("J", 1.0),
-            ("K", 1.0),
-            ("L", 1.0),
-            (";", 1.0),
-            ("'", 1.0),
-            ("Enter", 2.25),
-        ],
-        &[
-            ("Shift", 2.25),
-            ("Z", 1.0),
-            ("X", 1.0),
-            ("C", 1.0),
-            ("V", 1.0),
-            ("B", 1.0),
-            ("N", 1.0),
-            ("M", 1.0),
-            (",", 1.0),
-            (".", 1.0),
-            ("/", 1.0),
-            ("Shift", 2.75),
-        ],
-        &[
-            ("Ctrl", 1.25),
-            ("Win", 1.25),
-            ("Alt", 1.25),
-            ("Space", 6.25),
-            ("Alt", 1.25),
-            ("Fn", 1.25),
-            ("Menu", 1.25),
-            ("Ctrl", 1.25),
-        ],
-    ];
-    let wasd = ["W", "A", "S", "D"];
-    let act = kb.actuation_mm.unwrap_or(0.4);
-    let unit = 44.0;
-    let gap = 4.0;
+fn key_cap_width(u: f32, unit: f32, gap: f32) -> f32 {
+    u * unit + (u - 1.0).max(0.0) * gap
+}
 
-    let mut matrix = col().gap(gap);
-    for r in rows_spec {
+fn render_key_section(
+    rows: &[Vec<KeyCap>],
+    unit: f32,
+    key_h: f32,
+    gap: f32,
+    act: Option<f64>,
+    rt_on: bool,
+    selected_key: Option<&str>,
+) -> El {
+    let mut section = col().gap(gap);
+    for r in rows {
         let mut krow = row().gap(gap);
-        for (lbl, u) in r {
-            let is_hot = wasd.contains(lbl);
-            let w = u * unit + (u - 1.0).max(0.0) * gap;
-            let fill = if is_hot && kb.rapid_trigger {
+        for cap in r {
+            let w = key_cap_width(cap.u, unit, gap);
+            if cap.kind == KeyKind::Gap {
+                krow = krow.child(el().w(w).h(key_h));
+                continue;
+            }
+            let is_selected = selected_key == Some(cap.id.as_str());
+            let key_id = cap.id.clone();
+            if cap.kind == KeyKind::LedBar {
+                let mut bar = row()
+                    .key(format!("kb-key-{}", cap.id))
+                    .role("button")
+                    .label(cap.label.clone())
+                    .focusable(true)
+                    .hit()
+                    .cursor(Cursor::Pointer)
+                    .press_on_down()
+                    .press_scale(PRESS_SCALE)
+                    .w(w)
+                    .h(key_h)
+                    .px(6.0)
+                    .radius(RADIUS_SMALL)
+                    .center_y()
+                    .justify_between()
+                    .fill(if is_selected {
+                        FG.alpha(0.18)
+                    } else {
+                        FG.alpha(0.04)
+                    })
+                    .border(
+                        1.0,
+                        if is_selected {
+                            FG.alpha(0.75)
+                        } else {
+                            card_border()
+                        },
+                    )
+                    .on_press(move |s: &mut AppState| s.toggle_keyboard_key(key_id.clone()));
+                for idx in 0..10 {
+                    let seg_c = if rt_on || idx < 6 {
+                        good().alpha(0.85)
+                    } else {
+                        FG.alpha(0.30)
+                    };
+                    bar = bar.child(el().w(5.0).h(4.0).radius(2.0).fill(seg_c));
+                }
+                krow = krow.child(bar);
+                continue;
+            }
+
+            let is_hot = matches!(cap.kind, KeyKind::Wasd | KeyKind::Analog);
+            let fill = if is_selected {
+                FG.alpha(0.22)
+            } else if is_hot && rt_on {
                 good().alpha(0.18)
             } else if is_hot {
                 FG.alpha(0.14)
+            } else if cap.kind == KeyKind::Mod {
+                FG.alpha(0.06)
             } else {
                 FG.alpha(0.04)
             };
-            let border_c = if is_hot && kb.rapid_trigger {
+            let border_c = if is_selected {
+                FG.alpha(0.75)
+            } else if is_hot && rt_on {
                 good().alpha(0.70)
             } else {
                 card_border()
             };
+            let lbl_font = if unit <= 30.0 {
+                type_label()
+            } else {
+                type_small()
+            };
             krow = krow.child(
                 col()
+                    .key(format!("kb-key-{}", cap.id))
+                    .role("button")
+                    .label(cap.label.clone())
+                    .focusable(true)
+                    .hit()
+                    .cursor(Cursor::Pointer)
+                    .press_on_down()
+                    .press_scale(PRESS_SCALE)
                     .w(w)
-                    .h(40.0)
+                    .h(key_h)
                     .radius(7.0)
                     .center()
-                    .gap(2.0)
+                    .gap(1.0)
                     .fill(fill)
+                    .hover(hover_fill())
+                    .press(pressed_fill())
                     .border(1.0, border_c)
-                    .child(text(*lbl).font(type_small()).color(FG))
-                    .children(is_hot.then(|| {
-                        text(format!("{act:.1}"))
-                            .font(type_label())
-                            .color(if kb.rapid_trigger { good() } else { fg_muted() })
+                    .motion(SPRING_QUICK)
+                    .on_press(move |s: &mut AppState| s.toggle_keyboard_key(key_id.clone()))
+                    .child(text(cap.label.clone()).font(lbl_font).color(FG))
+                    .children((is_hot && act.is_some()).then(|| {
+                        let v = act.unwrap_or(0.4);
+                        text(format!("{v:.1}")).font(type_label()).color(if rt_on {
+                            good()
+                        } else {
+                            fg_muted()
+                        })
                     })),
             );
         }
-        matrix = matrix.child(krow);
+        section = section.child(krow);
+    }
+    section
+}
+
+fn wooting_key_matrix(s: &AppState, kb: &KeyboardReadReply) -> El {
+    let spec = build_keyboard_layout(
+        kb.form_factor.as_deref(),
+        kb.layout_code.as_deref(),
+        kb.model.as_deref(),
+        kb.layout.as_deref(),
+    );
+    let (unit, key_h, gap) = match spec.form {
+        FormFactor::Sixty => (42.0, 38.0, 4.0),
+        FormFactor::Eighty | FormFactor::Tkl => (34.0, 34.0, 3.0),
+        FormFactor::Full => (28.0, 32.0, 3.0),
+        FormFactor::Keypad3 => (56.0, 46.0, 6.0),
+    };
+    let rt_on = kb.has_rapid_trigger && kb.rapid_trigger.unwrap_or(false);
+    let selected_id = s.pc.keyboard_selected_key.as_deref();
+
+    let mut sections = row().gap(12.0).child(render_key_section(
+        &spec.main_rows,
+        unit,
+        key_h,
+        gap,
+        kb.actuation_mm,
+        rt_on,
+        selected_id,
+    ));
+    if !spec.nav_rows.is_empty() {
+        sections = sections.child(render_key_section(
+            &spec.nav_rows,
+            unit,
+            key_h,
+            gap,
+            kb.actuation_mm,
+            rt_on,
+            selected_id,
+        ));
+    }
+    if !spec.num_rows.is_empty() {
+        sections = sections.child(render_key_section(
+            &spec.num_rows,
+            unit,
+            key_h,
+            gap,
+            kb.actuation_mm,
+            rt_on,
+            selected_id,
+        ));
     }
 
-    el().w_full()
+    let inspect_line = selected_id.and_then(|id| find_key(&spec, id)).map(|cap| {
+        let mut parts = vec![cap.label.clone()];
+        if let Some(ref note) = cap.note {
+            parts.push(note.clone());
+        }
+        if let Some(a) = kb.actuation_mm {
+            parts.push(format!("Actuation {a:.1} mm"));
+        }
+        if rt_on && let Some(rtm) = kb.rapid_trigger_mm {
+            parts.push(format!("RT {rtm:.2} mm"));
+        }
+        row()
+            .key("kb-key-inspect")
+            .w_full()
+            .pt(6.0)
+            .justify_between()
+            .center_y()
+            .child(text(parts.join(" · ")).font(type_small()).color(fg_muted()))
+    });
+
+    col()
+        .key("kb-matrix")
+        .w_full()
         .px(16.0)
         .py(14.0)
+        .gap(8.0)
         .radius(RADIUS_CARD)
         .fill(BG)
         .border(1.0, card_border())
-        .child(matrix)
+        .child(sections)
+        .children(inspect_line)
 }
 
-fn wooting_detail(_s: &AppState, kb: &KeyboardReadReply) -> El {
-    let act = kb.actuation_mm.unwrap_or(0.4);
-    let rt = kb.rapid_trigger;
-    let tach = kb.tachyon;
+fn kb_button(
+    key: &'static str,
+    label: &'static str,
+    enabled: bool,
+    on_press: impl Fn(&mut AppState) + 'static,
+) -> El {
+    let mut btn = glass_button(key, label, None);
+    if enabled {
+        btn = btn.on_press(on_press);
+    } else {
+        btn = btn.cursor(Cursor::NotAllowed).opacity(0.45);
+    }
+    btn
+}
+
+fn kb_pill(
+    key: &'static str,
+    label: String,
+    active: bool,
+    enabled: bool,
+    on_press: impl Fn(&mut AppState) + 'static,
+) -> El {
+    let mut pill = filter_pill(key, label, active);
+    if enabled {
+        pill = pill.on_press(on_press);
+    } else {
+        pill = pill.cursor(Cursor::NotAllowed).opacity(0.45);
+    }
+    pill
+}
+
+fn wooting_detail(s: &AppState, kb: &KeyboardReadReply) -> El {
+    let min_act = kb.min_actuation_mm.unwrap_or(0.1);
+    let max_act = kb.max_actuation_mm.unwrap_or(4.0);
+    let act = kb.actuation_mm.unwrap_or(min_act).clamp(min_act, max_act);
+    let rt_on = kb.has_rapid_trigger && kb.rapid_trigger.unwrap_or(false);
+    let rt_mm = kb.rapid_trigger_mm.unwrap_or(0.15).clamp(0.10, 2.35);
+    let show_tach = kb.tachyon.is_some() || kb.hall_effect;
+    let tach = kb.tachyon.unwrap_or(false);
+    let rgb = kb.rgb_brightness.unwrap_or(100).clamp(0, 100);
+    let can_write = kb.can_write;
+
+    let mut meta_parts: Vec<String> = Vec::new();
+    if let Some(ref lay) = kb.layout
+        && !lay.is_empty()
+    {
+        meta_parts.push(lay.clone());
+    }
+    if let Some(ref fw) = kb.firmware
+        && !fw.is_empty()
+    {
+        meta_parts.push(format!("FW {fw}"));
+    }
+    if let Some(hz) = kb.max_scan_hz
+        && hz > 0
+    {
+        meta_parts.push(format!("{hz} Hz"));
+    }
+
+    let latest_backup = s.pc.keyboard_backups.first().map(|b| b.file_name.clone());
 
     let profiles = row()
         .gap(6.0)
@@ -302,7 +449,7 @@ fn wooting_detail(_s: &AppState, kb: &KeyboardReadReply) -> El {
         .children(kb.profiles.iter().map(|p| {
             let idx = p.index;
             let active = kb.active_profile == idx;
-            filter_pill(
+            kb_pill(
                 match idx {
                     0 => "kb-prof-0",
                     1 => "kb-prof-1",
@@ -311,9 +458,187 @@ fn wooting_detail(_s: &AppState, kb: &KeyboardReadReply) -> El {
                 },
                 p.name.clone(),
                 active,
+                can_write,
+                move |s: &mut AppState| s.switch_keyboard_profile(idx),
             )
-            .on_press(move |s: &mut AppState| s.switch_keyboard_profile(idx))
         }));
+
+    let error_banner = s.pc.keyboard_error.as_ref().map(|err| {
+        row()
+            .key("kb-write-error")
+            .w_full()
+            .px(12.0)
+            .py(10.0)
+            .gap(10.0)
+            .justify_between()
+            .center_y()
+            .radius(RADIUS_SMALL)
+            .fill(bad().alpha(0.12))
+            .border(1.0, bad().alpha(0.45))
+            .child(text(err.clone()).font(type_small()).color(bad()))
+            .child(
+                glass_button("kb-error-dismiss", "Dismiss", None)
+                    .on_press(|s: &mut AppState| s.pc.keyboard_error = None),
+            )
+    });
+
+    let readonly_banner = (!can_write && s.pc.keyboard_error.is_none()).then(|| {
+        let msg = kb
+            .message
+            .clone()
+            .unwrap_or_else(|| "Keyboard is read-only right now.".into());
+        row()
+            .key("kb-readonly-banner")
+            .w_full()
+            .px(12.0)
+            .py(8.0)
+            .radius(RADIUS_SMALL)
+            .fill(warn().alpha(0.10))
+            .border(1.0, warn().alpha(0.35))
+            .child(text(msg).font(type_small()).color(warn()))
+    });
+
+    let mut controls = row()
+        .w_full()
+        .gap(12.0)
+        .justify_between()
+        .center_y()
+        .flex_wrap()
+        .child(
+            row()
+                .gap(8.0)
+                .center_y()
+                .child(
+                    text(format!("Actuation {act:.1} mm"))
+                        .font(type_control())
+                        .color(FG),
+                )
+                .child(kb_button(
+                    "kb-act-down",
+                    "−0.1",
+                    can_write && act > min_act + 0.001,
+                    move |s: &mut AppState| {
+                        s.update_keyboard_settings(
+                            Some((act - 0.1).max(min_act)),
+                            None,
+                            None,
+                            None,
+                            None,
+                        );
+                    },
+                ))
+                .child(kb_button(
+                    "kb-act-up",
+                    "+0.1",
+                    can_write && act < max_act - 0.001,
+                    move |s: &mut AppState| {
+                        s.update_keyboard_settings(
+                            Some((act + 0.1).min(max_act)),
+                            None,
+                            None,
+                            None,
+                            None,
+                        );
+                    },
+                )),
+        );
+
+    if kb.has_rapid_trigger && rt_on {
+        controls = controls.child(
+            row()
+                .gap(8.0)
+                .center_y()
+                .child(
+                    text(format!("RT {rt_mm:.2} mm"))
+                        .font(type_control())
+                        .color(FG),
+                )
+                .child(kb_button(
+                    "kb-rt-down",
+                    "−0.05",
+                    can_write && rt_mm > 0.101,
+                    move |s: &mut AppState| {
+                        s.update_keyboard_settings(
+                            None,
+                            None,
+                            Some((rt_mm - 0.05).max(0.10)),
+                            None,
+                            None,
+                        );
+                    },
+                ))
+                .child(kb_button(
+                    "kb-rt-up",
+                    "+0.05",
+                    can_write && rt_mm < 2.349,
+                    move |s: &mut AppState| {
+                        s.update_keyboard_settings(
+                            None,
+                            None,
+                            Some((rt_mm + 0.05).min(2.35)),
+                            None,
+                            None,
+                        );
+                    },
+                )),
+        );
+    }
+
+    if kb.has_rgb {
+        controls = controls.child(
+            row()
+                .gap(8.0)
+                .center_y()
+                .child(text(format!("RGB {rgb}%")).font(type_control()).color(FG))
+                .child(kb_button(
+                    "kb-rgb-down",
+                    "−5%",
+                    can_write && rgb > 0,
+                    move |s: &mut AppState| {
+                        s.update_keyboard_settings(None, None, None, None, Some((rgb - 5).max(0)));
+                    },
+                ))
+                .child(kb_button(
+                    "kb-rgb-up",
+                    "+5%",
+                    can_write && rgb < 100,
+                    move |s: &mut AppState| {
+                        s.update_keyboard_settings(
+                            None,
+                            None,
+                            None,
+                            None,
+                            Some((rgb + 5).min(100)),
+                        );
+                    },
+                )),
+        );
+    }
+
+    let mut toggles = row().gap(8.0).center_y();
+    if kb.has_rapid_trigger {
+        toggles = toggles.child(kb_pill(
+            "kb-rt-toggle",
+            "Rapid Trigger".into(),
+            rt_on,
+            can_write,
+            move |s: &mut AppState| {
+                s.update_keyboard_settings(None, Some(!rt_on), None, None, None);
+            },
+        ));
+    }
+    if show_tach {
+        toggles = toggles.child(kb_pill(
+            "kb-tach-toggle",
+            "Tachyon".into(),
+            tach,
+            can_write,
+            move |s: &mut AppState| {
+                s.update_keyboard_settings(None, None, None, Some(!tach), None);
+            },
+        ));
+    }
+    controls = controls.child(toggles);
 
     amoled_card(RADIUS_PANEL)
         .w_full()
@@ -325,73 +650,50 @@ fn wooting_detail(_s: &AppState, kb: &KeyboardReadReply) -> El {
                 .w_full()
                 .justify_between()
                 .center_y()
+                .gap(12.0)
                 .child(
-                    text(
-                        kb.model
-                            .clone()
-                            .unwrap_or_else(|| "Wooting Hall-Effect".into()),
-                    )
-                    .font(type_title())
-                    .color(FG),
-                )
-                .child(
-                    glass_button("kb-backup", "Backup profiles", None)
-                        .on_press(|s: &mut AppState| s.backup_keyboard_profiles()),
-                ),
-        )
-        .child(profiles)
-        .child(wooting_key_matrix(kb))
-        .child(
-            row()
-                .w_full()
-                .justify_between()
-                .center_y()
-                .child(
-                    row()
-                        .gap(10.0)
-                        .center_y()
+                    col()
+                        .gap(2.0)
                         .child(
-                            text(format!("Actuation {act:.1} mm"))
-                                .font(type_control())
-                                .color(FG),
+                            text(
+                                kb.model
+                                    .clone()
+                                    .unwrap_or_else(|| "Wooting Hall-Effect".into()),
+                            )
+                            .font(type_title())
+                            .color(FG),
                         )
-                        .child(glass_button("kb-act-down", "−0.1", None).on_press(
-                            move |s: &mut AppState| {
-                                s.update_keyboard_settings(
-                                    Some((act - 0.1).max(0.1)),
-                                    None,
-                                    None,
-                                    None,
-                                );
-                            },
-                        ))
-                        .child(glass_button("kb-act-up", "+0.1", None).on_press(
-                            move |s: &mut AppState| {
-                                s.update_keyboard_settings(
-                                    Some((act + 0.1).min(4.0)),
-                                    None,
-                                    None,
-                                    None,
-                                );
-                            },
-                        )),
+                        .children((!meta_parts.is_empty()).then(|| {
+                            text(meta_parts.join(" · "))
+                                .font(type_small())
+                                .color(fg_muted())
+                        })),
                 )
                 .child(
                     row()
                         .gap(8.0)
                         .center_y()
-                        .child(filter_pill("kb-rt-toggle", "Rapid Trigger", rt).on_press(
-                            move |s: &mut AppState| {
-                                s.update_keyboard_settings(None, Some(!rt), None, None);
-                            },
-                        ))
-                        .child(filter_pill("kb-tach-toggle", "Tachyon", tach).on_press(
-                            move |s: &mut AppState| {
-                                s.update_keyboard_settings(None, None, None, Some(!tach));
-                            },
-                        )),
+                        .child(
+                            glass_button("kb-backup", "Backup profiles", None)
+                                .on_press(|s: &mut AppState| s.backup_keyboard_profiles()),
+                        )
+                        .children(latest_backup.map(|file_name| {
+                            kb_button(
+                                "kb-restore-latest",
+                                "Restore backup",
+                                can_write,
+                                move |s: &mut AppState| {
+                                    s.restore_keyboard_backup(file_name.clone());
+                                },
+                            )
+                        })),
                 ),
         )
+        .children(error_banner)
+        .children(readonly_banner)
+        .child(profiles)
+        .child(wooting_key_matrix(s, kb))
+        .child(controls)
 }
 
 fn audio_detail(s: &AppState) -> El {
@@ -556,9 +858,41 @@ fn devices_room(s: &AppState, scale: f32) -> El {
                     .color(FG),
             );
 
-        if dev.wooting || dev.kind == "keyboard" {
-            if let Some(ref kb) = s.pc.keyboard {
+        if dev.lab || dev.kind == "keyboard" {
+            if let Some(ref kb) = s.pc.keyboard
+                && kb.ok
+            {
                 page = page.child(wooting_detail(s, kb));
+            } else if s.pc.keyboard.is_some() || s.pc.keyboard_error.is_some() {
+                let err_msg =
+                    s.pc.keyboard_error
+                        .clone()
+                        .or_else(|| s.pc.keyboard.as_ref().and_then(|k| k.message.clone()))
+                        .unwrap_or_else(|| "Could not read Wooting keyboard.".into());
+                page = page.child(
+                    amoled_card(RADIUS_PANEL)
+                        .key("kb-error-card")
+                        .w_full()
+                        .px(20.0)
+                        .py(18.0)
+                        .gap(12.0)
+                        .child(text("Keyboard unavailable").font(type_section()).color(FG))
+                        .child(text(err_msg).font(type_body()).color(bad()))
+                        .child(
+                            row().child(
+                                glass_button("kb-retry", "Retry", Some(icon_refresh(14.0, FG)))
+                                    .on_press(|s: &mut AppState| s.reload_keyboard()),
+                            ),
+                        ),
+                );
+            } else {
+                page = page.child(
+                    amoled_card(RADIUS_PANEL).w_full().px(20.0).py(18.0).child(
+                        text("Reading keyboard…")
+                            .font(type_body())
+                            .color(fg_muted()),
+                    ),
+                );
             }
         } else if dev.kind == "audio" {
             page = page.child(audio_detail(s));
