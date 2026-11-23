@@ -246,7 +246,11 @@ internal static class Autopilot
         AutopilotWatch.Shared.Did = Engine.Did;
         try { Engine.Recover(); }
         catch (Exception ex) when (ex is not OutOfMemoryException) { AppLog.Warn("Autopilot: recovery failed: " + ex.GetType().Name); }
-        try { GameSessionDownloadPause.Shared.Recover(); }
+        try
+        {
+            GameSessionDownloadPause.Shared.Recover();
+            GameSessionDownloadPause.Shared.AttachPowerEvents();
+        }
         catch (Exception ex) when (ex is not OutOfMemoryException) { AppLog.Warn("Download pause: recovery failed: " + ex.GetType().Name); }
         HandGameMode();
         HandMouseAccel();
@@ -308,7 +312,11 @@ internal static class Autopilot
     {
         try { Engine.End(); }
         catch (Exception ex) when (ex is not OutOfMemoryException) { AppLog.Warn("Autopilot: ending failed: " + ex.GetType().Name); }
-        try { GameSessionDownloadPause.Shared.SetGaming(false); }
+        try
+        {
+            GameSessionDownloadPause.Shared.DetachPowerEvents();
+            GameSessionDownloadPause.Shared.SetGaming(false);
+        }
         catch (Exception ex) when (ex is not OutOfMemoryException) { AppLog.Warn("Download pause: restore failed: " + ex.GetType().Name); }
     }
 

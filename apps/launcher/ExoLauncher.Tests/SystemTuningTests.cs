@@ -174,7 +174,8 @@ public sealed class SystemTuningTests : IDisposable
                     // Behind findstr: only when the read before found the value.
                     if (_answers.GetValueOrDefault(path!)?.Contains("useplatformclock", StringComparison.Ordinal) == true && !BcdRefuses) Clock = false;
                 }
-                else if (line.Contains("/set {current} useplatformclock true", StringComparison.Ordinal)) { if (!BcdRefuses) Clock = true; }
+                else if (line.Contains("/set {current} useplatformclock true", StringComparison.OrdinalIgnoreCase)
+                    || line.Contains("/set {current} useplatformclock Yes", StringComparison.OrdinalIgnoreCase)) { if (!BcdRefuses) Clock = true; }
                 else if (line.Contains("bcdedit.exe", StringComparison.OrdinalIgnoreCase) && line.Contains("/set {current} ", StringComparison.OrdinalIgnoreCase))
                 {
                     var marker = "/set {current} ";
@@ -479,7 +480,7 @@ public sealed class SystemTuningTests : IDisposable
         Assert.True(item.On && item.CanUndo && item.Restart);
         Assert.False(_system.Clock);
         Assert.Null(await Make().TurnOffAsync(TimerKey));
-        Assert.Contains("/set {current} useplatformclock true", _system.Runs[^1][0], StringComparison.Ordinal);
+        Assert.Contains("/set {current} useplatformclock Yes", _system.Runs[^1][0], StringComparison.OrdinalIgnoreCase);
         Assert.True(_system.Clock);
         var after = Make().Read().Items.Single();
         Assert.True(after.Off);

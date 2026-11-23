@@ -331,7 +331,7 @@ internal sealed partial class SystemTuning(SystemTuning.ISystem system, string p
             items.Add(new(TimerKey, "Windows' own timer", Tell(TimerKey, hpet ? "Windows still reads the platform clock (HPET)." : "Games read the processor's fast clock, not the platform clock (HPET)."),
                 timerKept && (!hpet || Pending(TimerKey)), timerKept, off.Contains(TimerKey), false, Pending(TimerKey)));
         else if (hpet && !saved.Native.Contains(TimerKey))
-            items.Add(new(TimerKey, "Windows' own timer", "A tweak forced the platform clock (HPET), so every clock read a game makes waits on it. Takes a restart.", false, false, off.Contains(TimerKey), false, false));
+            items.Add(new(TimerKey, "Windows' own timer", "Another tool forced the platform clock (HPET / useplatformtick), so every clock read a game makes waits on it; Exo can undo it. Takes a restart.", false, false, off.Contains(TimerKey), false, false));
 
         // Scheduling: Programs, or anything that gives the foreground a longer, boosted turn (takes effect immediately, no restart).
         var separation = system.Dword(PriorityControl, Separation);
@@ -381,7 +381,7 @@ internal sealed partial class SystemTuning(SystemTuning.ISystem system, string p
         var netThrottleKept = saved.Kept.ContainsKey(NetworkThrottlingKey);
         if (netThrottleBroken || netThrottleKept || Pending(NetworkThrottlingKey))
             items.Add(new(NetworkThrottlingKey, "Network throttling default",
-                Tell(NetworkThrottlingKey, netThrottleBroken ? "Set to 0xFFFFFFFF by a tweak, which increases NDIS.sys DPC latency. Restores Windows' default (10)." : "Restored to Windows' default (10) so NDIS.sys DPC latency stays low."),
+                Tell(NetworkThrottlingKey, netThrottleBroken ? "Another tool set NetworkThrottlingIndex to 0xFFFFFFFF, which increases NDIS.sys DPC latency; Exo can restore Windows' default (10) and undo it back. Takes a restart." : "Restored to Windows' default (10) so NDIS.sys DPC latency stays low."),
                 !netThrottleBroken, netThrottleKept, off.Contains(NetworkThrottlingKey), false, Pending(NetworkThrottlingKey)));
 
         var pagingExec = system.Dword(MemoryManagement, DisablePagingExecValue);
@@ -389,14 +389,14 @@ internal sealed partial class SystemTuning(SystemTuning.ISystem system, string p
         var pagingExecKept = saved.Kept.ContainsKey(PagingExecutiveKey);
         if (pagingExecSet || pagingExecKept || Pending(PagingExecutiveKey))
             items.Add(new(PagingExecutiveKey, "Kernel paging default",
-                Tell(PagingExecutiveKey, pagingExecSet ? "DisablePagingExecutive is set to 1, wasting RAM on unused drivers with no FPS gain. Restores Windows' default (0)." : "Restored to Windows' default (0)."),
+                Tell(PagingExecutiveKey, pagingExecSet ? "Another tool set DisablePagingExecutive to 1, wasting RAM on unused drivers with no FPS gain; Exo can restore Windows' default (0) and undo it back. Takes a restart." : "Restored to Windows' default (0)."),
                 !pagingExecSet, pagingExecKept, off.Contains(PagingExecutiveKey), false, Pending(PagingExecutiveKey)));
 
         var trimDisabled = system.Dword(FileSystemKey, DisableDeleteNotifyValue) == 1;
         var trimKept = saved.Kept.ContainsKey(TrimEnabledKey);
         if (trimDisabled || trimKept || Pending(TrimEnabledKey))
             items.Add(new(TrimEnabledKey, "SSD TRIM enabled",
-                Tell(TrimEnabledKey, trimDisabled ? "NTFS TRIM (DisableDeleteNotify) was disabled by a tweak, which degrades SSD write latency over time. Restores it on." : "NTFS TRIM is enabled."),
+                Tell(TrimEnabledKey, trimDisabled ? "Another tool disabled NTFS TRIM (DisableDeleteNotify=1), which degrades SSD write latency over time; Exo can re-enable it and undo it back. Takes a restart." : "NTFS TRIM is enabled."),
                 !trimDisabled, trimKept, off.Contains(TrimEnabledKey), false, Pending(TrimEnabledKey)));
 
         var nvidiaAdapters = system.NvidiaDisplayClassKeys().Where(k => NvidiaClassKeyPattern().IsMatch(k)).ToList();
@@ -1123,7 +1123,7 @@ internal sealed partial class SystemTuning(SystemTuning.ISystem system, string p
                     ServicesKey => was.Services!.All(s => system.Service(s.Name) is { } now && now.Start == s.Start && now.Delayed == s.Delayed),
                     IntegrityKey => system.Dword(Hvci, "Enabled") == was.Value,
                     _ when IsDeepPlaybookKey(key) => VerifyDeepReverted(key, was),
-                    _ => Forced(system.ReadAnswer(check!)) == true,
+                    _ => VerifyTimerReverted(was, system.ReadAnswer(check!)),
                 };
                 if (!back) return "Windows didn't put it back. Try again.";
                 var kept = new Dictionary<string, Was>(saved.Kept);
@@ -1193,7 +1193,7 @@ internal sealed partial class SystemTuning(SystemTuning.ISystem system, string p
     /// <summary>The lines that put back what <paramref name="was"/> recorded; null when the record holds something Exo wouldn't write.</summary>
     internal static IReadOnlyList<string>? Revert(string key, Was was, string? selfExe = null) => key switch
     {
-        TimerKey => was.Clock ? [$"{Tool("bcdedit.exe")} /set {{current}} useplatformclock true"] : [],
+        TimerKey => RevertTimer(was),
         SchedulingKey => [was.Absent ? RegDelete(PriorityControl, Separation) : RegDword(PriorityControl, Separation, was.Value ?? Programs)],
         PagefileKey => was.Absent ? [RegDelete(MemoryManagement, PagingFiles)] : was.Strings is { } s && s.All(SafeText().IsMatch) ? [RegStrings(MemoryManagement, PagingFiles, s)] : null,
         CacheKey => [was.Absent ? RegDelete(MemoryManagement, LargeSystemCache) : RegDword(MemoryManagement, LargeSystemCache, was.Value ?? 0)],
@@ -1386,9 +1386,63 @@ internal sealed partial class SystemTuning(SystemTuning.ISystem system, string p
     /// The platform clock forced in a boot entry read (<see cref="TimerRead"/>): true when the value is there (seen in any
     /// read, even one cut short), false when bcdedit read the entry and it isn't, null when the read didn't happen or failed.
     /// </summary>
+    private static readonly string[] ForcedTimerFlagNames = ["useplatformclock", "useplatformtick"];
+
+    internal static string[] ExtractForcedTimerFlags(string bcdOutput)
+    {
+        var list = new List<string>();
+        foreach (var flag in ForcedTimerFlagNames)
+        {
+            if (ExtractBcdFlagValue(bcdOutput, flag) is { } val && SafeBcdTokenPattern().IsMatch(val))
+                list.Add($"{flag}={val}");
+        }
+        return [.. list];
+    }
+
+    private static IReadOnlyList<string>? RevertTimer(Was was)
+    {
+        if (was.Strings is { Length: > 0 } entries)
+        {
+            var lines = new List<string>(entries.Length);
+            foreach (var entry in entries)
+            {
+                var eq = entry.IndexOf('=');
+                if (eq <= 0 || eq >= entry.Length - 1) return null;
+                var flag = entry[..eq];
+                var val = entry[(eq + 1)..];
+                if (!ForcedTimerFlagNames.Any(f => f.Equals(flag, StringComparison.OrdinalIgnoreCase)) || !SafeBcdTokenPattern().IsMatch(val))
+                    return null;
+                lines.Add($"{Tool("bcdedit.exe")} /set {{current}} {flag} {val}");
+            }
+            return lines;
+        }
+        return was.Clock ? [$"{Tool("bcdedit.exe")} /set {{current}} useplatformclock true"] : [];
+    }
+
+    private static bool VerifyTimerReverted(Was was, string? rawCheck)
+    {
+        if (rawCheck is null) return false;
+        if (was.Strings is { Length: > 0 } entries)
+        {
+            if (!rawCheck.Contains(ReadOk, StringComparison.Ordinal)) return false;
+            foreach (var entry in entries)
+            {
+                var eq = entry.IndexOf('=');
+                if (eq <= 0 || eq >= entry.Length - 1) return false;
+                var flag = entry[..eq];
+                var expected = entry[(eq + 1)..];
+                if (!string.Equals(ExtractBcdFlagValue(rawCheck, flag), expected, StringComparison.OrdinalIgnoreCase))
+                    return false;
+            }
+            return true;
+        }
+        return Forced(rawCheck) == true;
+    }
+
     internal static bool? Forced(string? read) =>
         read is null ? null
-        : read.Contains("useplatformclock", StringComparison.OrdinalIgnoreCase) ? true
+        : read.Contains("useplatformclock", StringComparison.OrdinalIgnoreCase)
+            || read.Contains("useplatformtick", StringComparison.OrdinalIgnoreCase) ? true
         : read.Contains(ReadOk, StringComparison.Ordinal) ? false
         : null;
 
@@ -1444,11 +1498,17 @@ internal sealed partial class SystemTuning(SystemTuning.ISystem system, string p
     {
         note = null;
         if (!saved.Kept.TryGetValue(TimerKey, out var record) || record.Probe is not { } probe) return saved;
-        var forced = Forced(system.ReadAnswer(probe, keep: true));
+        var rawProbe = system.ReadAnswer(probe, keep: true);
+        var forced = Forced(rawProbe);
         var kept = new Dictionary<string, Was>(saved.Kept);
         var changed = new Dictionary<string, DateTimeOffset>(saved.Changed);
         var native = saved.Native;
-        if (forced == true) { kept[TimerKey] = new Was(Clock: true); changed[TimerKey] = record.ProbeAt ?? now(); }
+        if (forced == true)
+        {
+            var flags = rawProbe is not null ? ExtractForcedTimerFlags(rawProbe) : [];
+            kept[TimerKey] = new Was(Clock: true, Strings: flags.Length > 0 ? flags : null);
+            changed[TimerKey] = record.ProbeAt ?? now();
+        }
         else if (record.Clock) kept[TimerKey] = record with { Probe = null, ProbeAt = null };
         else kept.Remove(TimerKey);
         if (forced == false && !record.Clock)
