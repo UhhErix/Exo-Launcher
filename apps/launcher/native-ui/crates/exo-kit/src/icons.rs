@@ -2,11 +2,38 @@ use rune::{Color, El, Shape, canvas};
 
 fn strokes(size: f32, lines: &[&[[f32; 2]]], color: Color) -> El {
     let width = if size <= 16.0 { 1.8 } else { 2.0 };
+    strokes_w(size, width, lines, color)
+}
+
+fn strokes_w(size: f32, width: f32, lines: &[&[[f32; 2]]], color: Color) -> El {
     let mut shape = Shape::new().view_box(24.0, 24.0);
     for pts in lines {
         shape = shape.stroke(pts.to_vec(), width, color);
     }
     canvas(shape).size(size, size)
+}
+
+fn arc_pts(cx: f32, cy: f32, r: f32, from: f32, to: f32, steps: usize) -> Vec<[f32; 2]> {
+    (0..=steps)
+        .map(|i| {
+            let a = from + (to - from) * (i as f32 / steps as f32);
+            [cx + r * a.cos(), cy + r * a.sin()]
+        })
+        .collect()
+}
+
+pub fn icon_microphone(size: f32, color: Color) -> El {
+    use std::f32::consts::PI;
+    // Lucide "mic": capsule body, cradle arc, stem and base.
+    let mut body = arc_pts(12.0, 5.0, 3.0, PI, 2.0 * PI, 12);
+    body.push([15.0, 12.0]);
+    body.extend(arc_pts(12.0, 12.0, 3.0, 0.0, PI, 12));
+    body.push([9.0, 5.0]);
+    let mut cradle = vec![[19.0, 10.0], [19.0, 12.0]];
+    cradle.extend(arc_pts(12.0, 12.0, 7.0, 0.0, PI, 16));
+    cradle.push([5.0, 10.0]);
+    let lines: Vec<&[[f32; 2]]> = vec![&body, &cradle, &[[12.0, 19.0], [12.0, 22.0]]];
+    strokes_w(size, 1.5, &lines, color)
 }
 
 fn circle_pts(cx: f32, cy: f32, r: f32, steps: usize) -> Vec<[f32; 2]> {

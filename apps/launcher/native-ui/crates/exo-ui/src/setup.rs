@@ -3,8 +3,8 @@ use exo_kit::{
     BG, FG, PRIMARY_FG, RADIUS_CARD, RADIUS_PILL, RADIUS_SMALL, SPRING_QUICK, amoled_card,
     exo_mark, fg_faint, fg_muted, glass_control_fill, glass_panel_opt, glass_rim_bottom,
     glass_rim_top, good, hairline, hover_fill, icon_check, icon_gamepad, icon_headphones,
-    icon_keyboard, icon_mouse, icon_shield, pressed_fill, scaled, store_logo_or_fallback,
-    type_body, type_page, type_small, warn,
+    icon_keyboard, icon_microphone, icon_mouse, icon_shield, pressed_fill, scaled,
+    store_logo_or_fallback, type_body, type_page, type_small, warn,
 };
 use rune::{Align, Color, Cursor, El, Side, SurfaceFit, TextStyle, col, el, row, text};
 use serde_json::json;
@@ -689,13 +689,20 @@ fn pill(label: impl Into<String>, tint: Color, color: Color) -> El {
     )
 }
 
-fn device_glyph(kind: &str, size: f32) -> El {
-    match kind {
+fn device_glyph(dev: &exo_rpc::PeripheralCard, size: f32) -> El {
+    match dev.kind.as_str() {
         "keyboard" => icon_keyboard(size, fg_muted()),
         "controller" => icon_gamepad(size, fg_muted()),
+        "audio" if is_microphone(dev) => icon_microphone(size, fg_muted()),
         "audio" => icon_headphones(size, fg_muted()),
         _ => icon_mouse(size, fg_muted()),
     }
+}
+
+fn is_microphone(dev: &exo_rpc::PeripheralCard) -> bool {
+    [dev.name.as_str(), dev.model.as_deref().unwrap_or("")]
+        .iter()
+        .any(|v| v.to_ascii_lowercase().contains("mic"))
 }
 
 fn device_maker_model(dev: &exo_rpc::PeripheralCard) -> String {
@@ -799,7 +806,7 @@ fn welcome(s: &AppState, scale: f32) -> El {
             .unwrap_or_default();
     let device_names = devices
         .iter()
-        .take(4)
+        .take(5)
         .map(|d| d.name.clone())
         .collect::<Vec<_>>()
         .join(" · ");
@@ -896,8 +903,8 @@ fn welcome(s: &AppState, scale: f32) -> El {
                 ),
         );
     }
-    let mut device_row = row().w_full().gap(10.0);
-    for dev in devices.iter().take(4) {
+    let mut device_row = row().w_full().gap(8.0);
+    for dev in devices.iter().take(5) {
         let photo =
             s.pc.device_images
                 .get(&dev.id)
@@ -911,7 +918,7 @@ fn welcome(s: &AppState, scale: f32) -> El {
                 .w_full()
                 .h(64.0)
                 .center()
-                .child(device_glyph(&dev.kind, 28.0)),
+                .child(device_glyph(dev, 28.0)),
         };
         device_row = device_row.child(
             col()
@@ -1218,7 +1225,7 @@ fn bay(s: &AppState, i: usize, dev: &exo_rpc::PeripheralCard, fact_rows: usize, 
             .grow(1.0)
             .min_h(0.0)
             .center()
-            .child(device_glyph(&dev.kind, 140.0)),
+            .child(device_glyph(dev, 140.0)),
     };
     let mut facts = col()
         .w_full()
@@ -1803,7 +1810,7 @@ fn done(s: &AppState, scale: f32) -> El {
                 .grow(1.0)
                 .min_h(0.0)
                 .center()
-                .child(device_glyph(&dev.kind, 96.0)),
+                .child(device_glyph(dev, 96.0)),
         };
         let mut name_row = row().w_full().gap(8.0).center_y().child(
             text(dev.name.clone())

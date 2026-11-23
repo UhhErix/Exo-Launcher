@@ -61,6 +61,12 @@ Also changed:
 - Devices: all five host devices are shown (five columns, same bay layout). Done shows all five device cards as well, to match "5 peripherals set up".
 - Known: the fifth device is an audio input (fifine Microphone) and uses the headphones glyph; there is no microphone glyph in exo_kit.
 
+## Follow-up 3: microphone glyph and welcome device count
+
+- Microphone: `icon_microphone` (exo_kit, Lucide "mic" path at 1.5 stroke, same 24-unit box as the other icons) is used by `device_glyph` when an audio device's name or model contains "mic". Discord's existing `icon_mic` is unchanged. Devices and Done show the mic glyph for fifine Microphone; headphones stay for Headphones.
+- Welcome: the "5 devices" subtitle and the Found on this PC row now list all five devices. The row wraps labels and shrinks cells (gap 8) to fit five.
+- Snaps (1080p, 900 frames): `...\scratchpad\snaps\r3h1080-setup-{welcome,devices,done}.png`.
+
 Snaps (900 frames): `...\scratchpad\snaps\h{720,1080,1440}-setup-{welcome,devices,tour,done}.png`. Checked: welcome, devices, tour, done at 1080p; devices and welcome at 720p; devices and done at 1440p (mosaic full, five cards).
 
 ## Gates (final, after the snap-review commit)
