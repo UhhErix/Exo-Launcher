@@ -106,3 +106,15 @@ pub struct AutopilotReportEvent {
 pub struct StoreChangedEvent {
     pub what: String,
 }
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct StoreSaleEvent {
+    pub app_id: String,
+    pub name: String,
+    #[serde(rename = "final")]
+    pub final_cents: Option<i64>,
+    pub discount: i32,
+    pub currency: Option<String>,
+    pub price: Option<String>,
+}

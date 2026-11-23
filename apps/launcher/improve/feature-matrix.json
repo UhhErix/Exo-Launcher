@@ -1006,24 +1006,24 @@
    "id": "store-02",
    "room": "Store",
    "feature": "Store hero hover / pick list",
-   "status": "PARTIAL",
+   "status": "DONE",
    "reactRef": "components/store/StoreRoom.tsx:201",
-   "nativeRef": "exo-ui/src/store.rs:720",
+   "nativeRef": "exo-ui/src/store.rs:777",
    "rpc": [],
-   "notes": "",
+   "notes": "8s auto-rotation with countdown bar, hover pause, reduce-motion pause, active pick click opens page, Steam logo/tags.",
    "workPackage": "WP5"
   },
   {
    "id": "store-03",
    "room": "Store",
    "feature": "Wishlist tab",
-   "status": "PARTIAL",
+   "status": "DONE",
    "reactRef": "components/store/storeData.ts:265",
-   "nativeRef": "exo-ui/src/store.rs:509",
+   "nativeRef": "exo-ui/src/store.rs:582",
    "rpc": [
     "store.wishlist"
    ],
-   "notes": "store.changed(wishlist) refreshes; no on-sale count badge on the tab.",
+   "notes": "Calls store.wishlist(get), refreshes on store.changed(wishlist), handles loading/empty/error states (matches React: no tab badge).",
    "workPackage": "WP5"
   },
   {
@@ -1054,24 +1054,24 @@
    "id": "store-06",
    "room": "Store",
    "feature": "Tile card: \"Library\" button on owned games",
-   "status": "MISSING",
+   "status": "DONE",
    "reactRef": "components/store/StoreCard.tsx:87",
-   "nativeRef": null,
+   "nativeRef": "exo-ui/src/store.rs:348",
    "rpc": [],
-   "notes": "",
+   "notes": "Matches React useOwned (Steam appId, includes, variants, non-Steam title fold); hides price/reviews and opens game in Library.",
    "workPackage": "WP5"
   },
   {
    "id": "store-07",
    "room": "Store",
    "feature": "Check prices / On sale split",
-   "status": "MISSING",
+   "status": "DONE",
    "reactRef": "components/store/StoreRoom.tsx:385",
-   "nativeRef": null,
+   "nativeRef": "exo-ui/src/store.rs:610",
    "rpc": [
     "store.wishlist"
    ],
-   "notes": "storeWishlist(\"check\") never called; store.sale event not handled.",
+   "notes": "Calls store.wishlist(check) with busy/done states, splits On sale now (unowned discounted) vs Not on sale, handles store.sale push event notice.",
    "workPackage": "WP5"
   },
   {
@@ -1091,26 +1091,29 @@
    "id": "store-09",
    "room": "Store",
    "feature": "Store game page: offer rows (store names, prices, historical low)",
-   "status": "BROKEN",
+   "status": "DONE",
    "reactRef": "components/store/StoreGamePage.tsx:45",
-   "nativeRef": "exo-ui/src/store.rs:402",
+   "nativeRef": "exo-ui/src/store_page.rs:1244",
    "rpc": [
-    "store.game"
+    "store.game",
+    "store.gameOffers",
+    "store.open",
+    "shell.openUrl"
    ],
-   "notes": "Smoke (store-game): offer rows are labeled \"1\" and \"25\" (raw store ids, not store names) and the Historical low line prints a raw ISO timestamp 2026-11-19T20:55:23.0000000+00:00.",
+   "notes": "Uses StoreOffer::display_name() (Steam, Epic Games Store, GOG, Ubisoft — never raw store IDs), GG.deals link, owned Library primary button, and formatted StoreLowest::formatted_date() helper.",
    "workPackage": "WP5"
   },
   {
    "id": "store-10",
    "room": "Store",
    "feature": "Store game page: hero art / header image",
-   "status": "MISSING",
+   "status": "DONE",
    "reactRef": "components/store/StoreGamePage.tsx:4",
-   "nativeRef": "exo-ui/src/store.rs:174",
+   "nativeRef": "exo-ui/src/store_page.rs:1143",
    "rpc": [
     "store.game"
    ],
-   "notes": "Smoke: page opens with a bare title and empty left gutter; no hero, cover or logo.",
+   "notes": "Fixed 80px Steam logo slot with title fallback when logo 404s, plus 16:9 media stage with header/hero art fallback.",
    "workPackage": "WP5"
   },
   {
@@ -1128,70 +1131,70 @@
    "id": "store-12",
    "room": "Store",
    "feature": "Store game page: trailers (HLS player)",
-   "status": "MISSING",
+   "status": "PARTIAL",
    "reactRef": "components/store/TrailerPlayer.tsx:24",
-   "nativeRef": "exo-ui/src/video_decoder.rs:1",
+   "nativeRef": "exo-ui/src/store_media.rs:172",
    "rpc": [],
-   "notes": "video_decoder.rs exists for captures only; video.frame / keyframe events handled for captures.",
+   "notes": "Trailer UI, play/pause/mute/progress controls, poster-until-playing, and graceful poster fallback are wired via rune_media::Player::url; blocked on HLS playback: video_decoder.rs only decodes raw Discord WebRTC elementary VideoPackets, and Windows desktop Media Foundation IMFSourceResolver::CreateObjectFromURL in rune-media rejects Steam .m3u8 HLS playlists (needs AdaptiveMediaSource or HLS demuxer in rune-media).",
    "workPackage": "WP5"
   },
   {
    "id": "store-13",
    "room": "Store",
    "feature": "Store game page: screenshot strip + lightbox",
-   "status": "MISSING",
+   "status": "DONE",
    "reactRef": "components/store/StoreGamePage.tsx:28",
-   "nativeRef": null,
+   "nativeRef": "exo-ui/src/store_media.rs:172",
    "rpc": [],
-   "notes": "",
+   "notes": "16:9 stage + horizontal thumbnail strip (600x338 thumbs for screenshots, play icon on trailers) + fullscreen lightbox overlay with counter, prev/next buttons, and Esc/Left/Right keyboard nav.",
    "workPackage": "WP5"
   },
   {
    "id": "store-14",
    "room": "Store",
    "feature": "Store game page: system requirements",
-   "status": "MISSING",
+   "status": "DONE",
    "reactRef": "components/store/StoreGamePage.tsx:29",
-   "nativeRef": null,
+   "nativeRef": "exo-ui/src/store_page.rs:1632",
    "rpc": [],
-   "notes": "",
+   "notes": "All 7 parts (OS, Processor, Graphics, Memory, Storage, DirectX, Network), This PC marks/tones, Minimum/Recommended rows, and verdict pill (Runs at Recommended / Meets Minimum / Meets the requirements / Below Minimum).",
    "workPackage": "WP5"
   },
   {
    "id": "store-15",
    "room": "Store",
    "feature": "Store game page: tags, About card, More like this",
-   "status": "MISSING",
+   "status": "DONE",
    "reactRef": "components/store/StoreGamePage.tsx:29",
-   "nativeRef": null,
+   "nativeRef": "exo-ui/src/store_page.rs:1168",
    "rpc": [],
-   "notes": "",
+   "notes": "Single-row tag pills, About card, and More like this horizontal shelf footer (up to 12 deduplicated items starting from source shelf).",
    "workPackage": "WP5"
   },
   {
    "id": "store-16",
    "room": "Store",
    "feature": "Store game page: wishlist toggle",
-   "status": "MISSING",
+   "status": "DONE",
    "reactRef": "components/store/StoreGamePage.tsx:34",
-   "nativeRef": null,
+   "nativeRef": "exo-ui/src/store_page.rs:1357",
    "rpc": [
     "store.wishlist"
    ],
-   "notes": "",
+   "notes": "Optimistic Wishlist / On wishlist toggle (bookmark vs green check) calling store.wishlist(add/remove) with rollback on host error; stays visible on owned wishlisted games.",
    "workPackage": "WP5"
   },
   {
    "id": "store-17",
    "room": "Store",
    "feature": "Game reviews",
-   "status": "MISSING",
+   "status": "DONE",
    "reactRef": "components/store/StoreGamePage.tsx:243",
-   "nativeRef": null,
+   "nativeRef": "exo-ui/src/store_page.rs:1526",
    "rpc": [
     "store.gameReviews"
    ],
-   "notes": "Chip uses cached score only; no review list.",
+   "notes": "Calls store.gameReviews alongside store.game and renders Recent reviews (word · percent% of count) in the 10-cell Facts card alongside all-time Reviews.",
    "workPackage": "WP5"
   },
   {

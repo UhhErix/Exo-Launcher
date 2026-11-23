@@ -1386,6 +1386,17 @@ pub fn icon_upload(size: f32, color: Color) -> El {
     )
 }
 
+pub fn icon_arrow_right(size: f32, color: Color) -> El {
+    strokes(
+        size,
+        &[
+            &[[5.0, 12.0], [19.0, 12.0]],
+            &[[13.0, 6.0], [19.0, 12.0], [13.0, 18.0]],
+        ],
+        color,
+    )
+}
+
 pub fn icon_rotate_ccw(size: f32, color: Color) -> El {
     let mut arc = arc_pts(
         12.0,
@@ -1401,5 +1412,19 @@ pub fn icon_rotate_ccw(size: f32, color: Color) -> El {
         .view_box(24.0, 24.0)
         .stroke(arc, w, color)
         .stroke(vec![[3.5, 4.0], [3.5, 9.5], [9.0, 9.5]], w, color);
+    canvas(shape).size(size, size)
+}
+
+pub fn icon_bookmark_filled(size: f32, color: Color) -> El {
+    let shape = Shape::new().view_box(24.0, 24.0).fill(
+        vec![
+            [6.5, 4.5],
+            [17.5, 4.5],
+            [17.5, 19.5],
+            [12.0, 15.5],
+            [6.5, 19.5],
+        ],
+        color,
+    );
     canvas(shape).size(size, size)
 }

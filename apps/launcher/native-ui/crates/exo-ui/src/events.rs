@@ -41,6 +41,7 @@ pub enum HostEventKind {
     AutopilotLive,
     ShadersChanged,
     StoreChanged,
+    StoreSale,
     GameAchievements,
     GameOptimizedAgain,
     GameOptimizeHeld,
@@ -87,6 +88,7 @@ impl HostEventKind {
             HostEvent::AutopilotLive(_) => Self::AutopilotLive,
             HostEvent::ShadersChanged => Self::ShadersChanged,
             HostEvent::StoreChanged(_) => Self::StoreChanged,
+            HostEvent::StoreSale(_) => Self::StoreSale,
             HostEvent::GameAchievements(_) => Self::GameAchievements,
             HostEvent::GameOptimizedAgain(_) => Self::GameOptimizedAgain,
             HostEvent::GameOptimizeHeld(_) => Self::GameOptimizeHeld,
@@ -438,6 +440,13 @@ fn register_store(reg: &mut EventRegistry) {
         };
         state.apply_store_changed(sc);
         state.room == Room::Store
+    });
+    reg.on(HostEventKind::StoreSale, |state, ev| {
+        let HostEvent::StoreSale(sale) = ev else {
+            return false;
+        };
+        state.apply_store_sale(sale);
+        true
     });
 }
 
