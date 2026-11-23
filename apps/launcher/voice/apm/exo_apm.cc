@@ -62,4 +62,30 @@ __declspec(dllexport) int exo_ns_process(void* handle, float* samples) {
 __declspec(dllexport) void exo_ns_destroy(void* handle) {
   static_cast<webrtc::AudioProcessing*>(handle)->Release();
 }
+
+__declspec(dllexport) void* exo_agc2_create() {
+  rtc::scoped_refptr<webrtc::AudioProcessing> apm = webrtc::AudioProcessingBuilder().Create();
+  if (!apm) return nullptr;
+  webrtc::AudioProcessing::Config config;
+  config.gain_controller2.enabled = true;
+  config.gain_controller2.input_volume_controller.enabled = false;
+  config.gain_controller2.adaptive_digital.enabled = true;
+  config.gain_controller2.adaptive_digital.headroom_db = 5.0f;
+  config.gain_controller2.adaptive_digital.max_gain_db = 30.0f;
+  config.gain_controller2.adaptive_digital.initial_gain_db = 0.0f;
+  config.gain_controller2.adaptive_digital.max_gain_change_db_per_second = 6.0f;
+  config.gain_controller2.adaptive_digital.max_output_noise_level_dbfs = -50.0f;
+  apm->ApplyConfig(config);
+  return apm.release();
+}
+
+__declspec(dllexport) int exo_agc2_process(void* handle, float* samples) {
+  const float* in[1] = {samples};
+  float* out[1] = {samples};
+  return static_cast<webrtc::AudioProcessing*>(handle)->ProcessStream(in, kMono, kMono, out);
+}
+
+__declspec(dllexport) void exo_agc2_destroy(void* handle) {
+  static_cast<webrtc::AudioProcessing*>(handle)->Release();
+}
 }

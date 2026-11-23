@@ -419,6 +419,8 @@ public sealed class AppSettings
     public bool DiscordOnlyMyVoice { get; set; }
     /// <summary>Each person's voice in a call brought toward one speaking level, for you (<see cref="ExoLauncher.Services.DiscordClient.Voice.VoiceLeveling"/>); on by default.</summary>
     public bool DiscordEvenVoices { get; set; } = true;
+    public int DiscordVoiceTargetLufs { get; set; } = -20;
+    public bool DiscordMicAutoGain { get; set; }
     /// <summary>Game focus: no Discord notifications while a game runs (the unread badge still counts).</summary>
     public bool DiscordQuietWhilePlaying { get; set; } = true;
     /// <summary>Exo's Discord calls: the microphone and speakers chosen (Windows endpoint ids; none is Windows' default) and their volume, 0-200 like Discord's.</summary>

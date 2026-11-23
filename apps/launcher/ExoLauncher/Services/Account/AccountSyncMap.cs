@@ -36,7 +36,7 @@ internal static class AccountSyncMap
         "AllowResize", "AppVersion", "AutoUpdateChipset", "CompressWhileIdle", "RecompressAfterUpdates", "AutoUpdateUpscalers", "CheckForUpdates", "CopyPortableIntoLibrary", "DefaultInstallRoot",
         "DiscordAttenuateOthers", "DiscordAttenuateSelf", "DiscordAttenuation", "DiscordAutoSensitivity",
         "DiscordDesktopNotifications", "DiscordDisableAllSounds", "DiscordDisabledSounds", "DiscordEchoCancellation",
-        "DiscordEvenVoices", "DiscordInputDevice", "DiscordInputProfile", "DiscordInputVolume",
+        "DiscordEvenVoices", "DiscordVoiceTargetLufs", "DiscordMicAutoGain", "DiscordInputDevice", "DiscordInputProfile", "DiscordInputVolume",
         "DiscordKeybinds", "DiscordNoiseSuppression", "DiscordNoiseSuppressionKind", "DiscordOnlyMyVoice",
         "DiscordOthersNoiseSuppression", "DiscordOutputDevice", "DiscordOutputVolume", "DiscordPttDelay",
         "DiscordPushToTalk", "DiscordQuietWhilePlaying", "DiscordSelectedChannelSound",

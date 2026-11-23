@@ -188,6 +188,7 @@ internal sealed unsafe partial class VoiceAudio : IDisposable
     internal bool EvensVoices { get; init; }
 
     private readonly VoiceLeveling _leveling = new();
+    private readonly SoftKneeLimiter _limiter = new();
     private readonly Lock _levelGate = new();
     private bool _evenSaid;
 
@@ -197,15 +198,16 @@ internal sealed unsafe partial class VoiceAudio : IDisposable
     /// </summary>
     internal void Play(uint ssrc, float[] frame, float gain = 1f, bool level = true)
     {
-        var even = level && EvensVoices && (App.Services.Settings.Shared.DiscordEvenVoices || VoiceProcessing.ExoOn(App.Services.Settings.Shared));
+        var settings = App.Services.Settings.Shared;
+        var even = level && EvensVoices && settings.DiscordEvenVoices;
         // The leveling under its own lock (a speaker's frames come from the receive thread or their own cleaner's, one
         // leveler each), and the frame is still the caller's: the speakers' thread never waits on either to mix.
         if (even)
         {
             lock (_levelGate)
             {
-                _leveling.Process(ssrc, frame);
-                if (!_evenSaid) AppLog.Info("Discord voice: evening out each voice toward one speaking level (Even Out Voices).");
+                _leveling.Process(ssrc, frame, settings.DiscordVoiceTargetLufs);
+                if (!_evenSaid) AppLog.Info("Discord voice: leveling each voice on BS.1770 LUFS (Level voices).");
                 _evenSaid = true;
             }
         }
@@ -619,7 +621,7 @@ internal sealed unsafe partial class VoiceAudio : IDisposable
         // Output Volume, 0-200%.
         var gain = App.Services.Settings.Shared.DiscordOutputVolume / 100f;
         if (gain != 1f) for (var i = 0; i < mix.Length; i++) mix[i] *= gain;
-        for (var i = 0; i < mix.Length; i++) mix[i] = MathF.Max(-1f, MathF.Min(1f, mix[i]));
+        _limiter.Process(mix);
         _echo?.Render(mix, Deafened);
         // The call as it plays here, for Go Live to know it again in another app's sound (nothing plays while deafened).
         if (!Call) return;
@@ -760,58 +762,228 @@ internal sealed unsafe partial class VoiceAudio : IDisposable
 /// </summary>
 internal sealed class VoiceLeveling
 {
-    /// <summary>How far over their speaking level a frame counts as a shout.</summary>
+    internal const float DefaultTargetLufs = -20f;
+    internal const float MinTargetLufs = -26f;
+    internal const float MaxTargetLufs = -14f;
+    internal const float MinGainDb = -12f;
+    internal const float MaxGainDb = 12f;
+    internal const float SnrThresholdDb = 15f;
     internal const float ShoutOverDb = 10f;
+    internal const float AttackTimeSec = 1.0f;
+    internal const float ReleaseTimeSec = 3.0f;
 
-    private readonly Dictionary<uint, (SpeechLeveler Leveler, QuietFloor Quiet, KnockDetector Knock, ShoutGuard Guard)> _voices = [];
+    private static readonly float AttackAlpha = 1f - MathF.Exp(-0.02f / AttackTimeSec);
+    private static readonly float ReleaseAlpha = 1f - MathF.Exp(-0.02f / ReleaseTimeSec);
 
-    /// <summary>Levels one of their decoded 20 ms stereo frames in place.</summary>
-    internal void Process(uint ssrc, float[] frame)
+    private readonly Dictionary<uint, SpeakerState> _voices = [];
+
+    internal void Process(uint ssrc, float[] frame, float targetLufs = DefaultTargetLufs)
     {
-        if (!_voices.TryGetValue(ssrc, out var voice)) _voices[ssrc] = voice = (new SpeechLeveler(), new QuietFloor(), new KnockDetector(), new ShoutGuard());
-        var db = SpeechLeveler.Level(frame);
-        var quiet = voice.Quiet.Db;
-        voice.Quiet.Add(db);
-        var knock = voice.Knock.Hit(frame);
-        voice.Leveler.Process(frame, db > -50f && db > quiet + 10f && !knock && !voice.Guard.Shouting(db, voice.Leveler.SpeechDb + ShoutOverDb));
-        voice.Guard.Process(frame, SpeechLeveler.TargetDb + ShoutOverDb);
+        var clampedTarget = Math.Clamp(targetLufs, MinTargetLufs, MaxTargetLufs);
+        if (!_voices.TryGetValue(ssrc, out var state))
+            _voices[ssrc] = state = new SpeakerState();
+
+        var frames = frame.Length >> 1;
+        var frameEnergy = state.Meter.FilterStereoFrame(frame, out var silentInput);
+        var frameLufs = silentInput ? LoudnessMeter.SilenceLufs : LoudnessMeter.PowerToLufs(frameEnergy / Math.Max(1, frames));
+
+        var knock = !silentInput && state.Knock.Hit(frame);
+        state.NoiseFloor.Update(frame, frameLufs, knock);
+        var noiseFloor = state.NoiseFloor.Db;
+
+        var shoutThreshold = MathF.Max(clampedTarget + 4f, state.Meter.ShortTermLufs + ShoutOverDb);
+        var shouting = !silentInput
+            && state.Meter.HasShortTerm
+            && state.Guard.Shouting(frameLufs, shoutThreshold);
+        if (!knock && !shouting)
+            state.Meter.RecordFrameEnergy(silentInput ? 0.0 : frameEnergy, frames);
+
+        var voiced = !silentInput
+            && state.Meter.HasShortTerm
+            && frameLufs > -60f
+            && frameLufs > noiseFloor + 6f
+            && !knock
+            && !shouting;
+
+        if (voiced)
+        {
+            var measuredLufs = state.Meter.ShortTermLufs;
+            var snrDb = measuredLufs - noiseFloor;
+            var rawDesired = Math.Clamp(clampedTarget - measuredLufs, MinGainDb, MaxGainDb);
+            var desired = rawDesired > 0f && snrDb < SnrThresholdDb ? 0f : rawDesired;
+            var alpha = desired < state.GainDb ? AttackAlpha : ReleaseAlpha;
+            state.GainDb = Math.Clamp(state.GainDb + (desired - state.GainDb) * alpha, MinGainDb, MaxGainDb);
+        }
+
+        var nextGain = MathF.Pow(10f, state.GainDb / 20f);
+        var currentGain = state.AppliedGain;
+        if (!silentInput && (MathF.Abs(nextGain - 1f) > 1e-5f || MathF.Abs(currentGain - 1f) > 1e-5f))
+        {
+            if (MathF.Abs(nextGain - currentGain) < 1e-5f && System.Numerics.Vector.IsHardwareAccelerated)
+            {
+                var vGain = new System.Numerics.Vector<float>(nextGain);
+                var vCount = System.Numerics.Vector<float>.Count;
+                var i = 0;
+                for (; i <= frame.Length - vCount; i += vCount)
+                    (new System.Numerics.Vector<float>(frame, i) * vGain).CopyTo(frame, i);
+                for (; i < frame.Length; i++) frame[i] *= nextGain;
+            }
+            else
+            {
+                var step = (nextGain - currentGain) / Math.Max(1, frames);
+                var g = currentGain;
+                var limit = frames << 1;
+                for (var i = 0; i < limit; i += 2)
+                {
+                    g += step;
+                    frame[i] *= g;
+                    frame[i + 1] *= g;
+                }
+            }
+        }
+        state.AppliedGain = nextGain;
+        if (!silentInput)
+            state.Guard.Process(frame, clampedTarget + ShoutOverDb, frameLufs + state.GainDb);
     }
 
-    /// <summary>Their gain now, in dB (0 before they have talked).</summary>
-    internal float GainDb(uint ssrc) => _voices.TryGetValue(ssrc, out var voice) ? voice.Leveler.GainDb : 0f;
+    internal float GainDb(uint ssrc) => _voices.TryGetValue(ssrc, out var state) ? state.GainDb : 0f;
 
-    /// <summary>They left: the next to get their SSRC starts afresh.</summary>
+    internal float ShortTermLufs(uint ssrc) => _voices.TryGetValue(ssrc, out var state) ? state.Meter.ShortTermLufs : LoudnessMeter.SilenceLufs;
+
+    internal float NoiseFloorLufs(uint ssrc) => _voices.TryGetValue(ssrc, out var state) ? state.NoiseFloor.Db : LoudnessMeter.SilenceLufs;
+
+    internal float EstimatedSnrDb(uint ssrc) => _voices.TryGetValue(ssrc, out var state) && state.Meter.HasShortTerm
+        ? state.Meter.ShortTermLufs - state.NoiseFloor.Db
+        : 0f;
+
     internal void Forget(uint ssrc) => _voices.Remove(ssrc);
+
+    private sealed class SpeakerState
+    {
+        internal readonly LoudnessMeter Meter = new(Opus.SampleRate, Opus.Channels);
+        internal readonly SpeakerNoiseFloor NoiseFloor = new();
+        internal readonly KnockDetector Knock = new();
+        internal readonly ShoutGuard Guard = new();
+        internal float GainDb;
+        internal float AppliedGain = 1f;
+    }
+
+    private sealed class SpeakerNoiseFloor
+    {
+        private const int RecentFrames = 50;
+        private const float SteadySpreadDb = 3.5f;
+        private const float DownAlpha = 0.25f;
+        private readonly float[] _recent = new float[RecentFrames];
+        private int _recentAt;
+        private int _recentCount;
+        private int _steadyCheckCooldown;
+        private float _floorDb = float.NaN;
+
+        internal float Db => float.IsNaN(_floorDb) ? -70f : _floorDb;
+
+        internal void Update(ReadOnlySpan<float> stereo, float frameLufs, bool knock)
+        {
+            if (knock) return;
+
+            _recent[_recentAt] = frameLufs;
+            _recentAt++;
+            if (_recentAt == RecentFrames) _recentAt = 0;
+            if (_recentCount < RecentFrames) _recentCount++;
+
+            if (float.IsNaN(_floorDb))
+            {
+                if (frameLufs <= -65f) _floorDb = MathF.Max(-90f, frameLufs);
+                else if (!IsPeriodic(stereo)) _floorDb = MathF.Max(-90f, frameLufs);
+                else _floorDb = -70f;
+                return;
+            }
+
+            if (frameLufs < _floorDb)
+            {
+                _floorDb = MathF.Max(-90f, _floorDb + (frameLufs - _floorDb) * DownAlpha);
+                return;
+            }
+
+            if (frameLufs < _floorDb + 6f)
+            {
+                _floorDb = MathF.Min(frameLufs, _floorDb + 0.04f);
+            }
+
+            if (_recentCount < RecentFrames) return;
+            if (_steadyCheckCooldown > 0)
+            {
+                _steadyCheckCooldown--;
+                return;
+            }
+
+            var min = _recent[0];
+            var max = _recent[0];
+            for (var i = 1; i < RecentFrames; i++)
+            {
+                var v = _recent[i];
+                if (v < min) min = v;
+                if (v > max) max = v;
+            }
+            if (max - min < SteadySpreadDb && min > _floorDb + 2f)
+            {
+                _steadyCheckCooldown = 100;
+                if (!IsPeriodic(stereo))
+                    _floorDb += (min - _floorDb) * 0.2f;
+            }
+        }
+
+        private static bool IsPeriodic(ReadOnlySpan<float> stereo)
+        {
+            var samples = Math.Min(stereo.Length >> 1, 480);
+            if (samples < 256) return false;
+            var maxLag = Math.Min(360, samples / 2);
+            for (var lag = 24; lag <= maxLag; lag += 4)
+            {
+                double cross = 0, a = 0, b = 0;
+                var len = samples - lag;
+                for (var i = 0; i < len; i += 4)
+                {
+                    double x = stereo[i << 1];
+                    double y = stereo[(i + lag) << 1];
+                    cross += x * y;
+                    a += x * x;
+                    b += y * y;
+                }
+                if (a > 1e-12 && b > 1e-12 && cross / Math.Sqrt(a * b) > 0.55) return true;
+            }
+            return false;
+        }
+    }
 }
 
-/// <summary>
-/// A fast limiter for one voice, after its leveling: a frame over the ceiling is brought down to it within that frame, and
-/// the gain comes back over about a third of a second, so a yell is loud rather than painful and the next word isn't lost.
-/// Ramped across each frame, so it never clicks; no lookahead, so it adds no delay.
-/// </summary>
 internal sealed class ShoutGuard
 {
     private const float Release = 0.12f;
     private float _gain = 1f;
     private int _loud;
 
-    /// <summary>The gain now, in dB (0: not holding anything down).</summary>
     internal float GainDb => 20 * MathF.Log10(_gain);
 
-    /// <summary>A frame over this level, for under 1.5 s: a shout. Longer is how loud their mic is, and the leveler should learn it.</summary>
     internal bool Shouting(float db, float overDb)
     {
         _loud = db >= overDb ? _loud + 1 : 0;
         return _loud is > 0 and < 75;
     }
 
-    internal void Process(Span<float> stereo, float ceilingDb)
+    internal void Process(Span<float> stereo, float ceilingDb) =>
+        Process(stereo, ceilingDb, SpeechLeveler.Level(stereo));
+
+    internal void Process(Span<float> stereo, float ceilingDb, float levelDb)
     {
-        var over = SpeechLeveler.Level(stereo) - ceilingDb;
-        // Measured after the gain this frame starts at: what it asks for is the whole way down from unity.
+        var over = levelDb - ceilingDb;
         var target = over > 0f ? Math.Min(MathF.Pow(10, -over / 20), _gain + (1f - _gain) * Release) : _gain + (1f - _gain) * Release;
+        if (MathF.Abs(target - 1f) < 1e-5f && MathF.Abs(_gain - 1f) < 1e-5f)
+        {
+            _gain = 1f;
+            return;
+        }
         var gain = _gain;
-        var step = (target - gain) / (stereo.Length / 2);
+        var step = (target - gain) / Math.Max(1, stereo.Length >> 1);
         for (var i = 0; i + 1 < stereo.Length; i += 2)
         {
             gain += step;

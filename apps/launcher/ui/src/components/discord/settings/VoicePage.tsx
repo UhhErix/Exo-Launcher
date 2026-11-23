@@ -4,6 +4,7 @@ import { setDiscordPrefs, useDiscordPrefs, type DiscordClientSettings, type Disc
 import { uiPref, setUiPref } from '../../../lib/uiPrefs'
 import { Menu } from '../../ui/Menu'
 import { Slider } from '../../ui/Slider'
+import { Choice } from '../../settings/Choice'
 import { ChoiceRow, Row, Section, SliderRow, State, SwitchRow } from '../../settings/parts'
 import { KeybindRecorder } from './KeybindsPage'
 import { LoadError, useClientSettings, useRemembered } from './parts'
@@ -83,10 +84,20 @@ function Microphone({ settings, save }: { settings: DiscordClientSettings; save:
       <HearYourVoice />
       <NoiseSuppression settings={settings} save={save} live={live} />
       <OnlyMyVoice settings={settings} save={save} />
+      <SwitchRow label="Level voices" checked={settings.evenVoices} onChange={value => save({ evenVoices: value })}>
+        {settings.evenVoices ? (
+          <Choice
+            label="Voice target loudness"
+            value={String(settings.voiceTargetLufs ?? -20)}
+            choices={VOICE_TARGET_LUFS_CHOICES}
+            onChange={value => void save({ voiceTargetLufs: Number(value) })}
+          />
+        ) : null}
+      </SwitchRow>
+      <SwitchRow label="Mic auto gain" checked={settings.micAutoGain ?? false} onChange={value => save({ micAutoGain: value })} />
       {!exoOn ? (
         <>
           <SwitchRow label="Noise suppression for others" checked={settings.othersNoiseSuppression} onChange={value => save({ othersNoiseSuppression: value })} />
-          <SwitchRow label="Even out voices" checked={settings.evenVoices} onChange={value => save({ evenVoices: value })} />
           <SwitchRow label="Echo cancellation" checked={settings.echoCancellation} onChange={value => save({ echoCancellation: value })} />
           <Sensitivity settings={settings} save={save} live={live} />
         </>
@@ -106,6 +117,11 @@ function Microphone({ settings, save }: { settings: DiscordClientSettings; save:
 }
 
 type Suppression = 'exo' | 'standard' | 'none'
+
+const VOICE_TARGET_LUFS_CHOICES = Array.from({ length: 13 }, (_, i) => {
+  const lufs = -26 + i
+  return { value: String(lufs), label: `${lufs} LUFS` }
+})
 
 /** Why what's chosen isn't what runs, on the row it concerns. */
 const NOT_RUNNING: Partial<Record<MicLevel['stages']['suppression'], string>> = {
