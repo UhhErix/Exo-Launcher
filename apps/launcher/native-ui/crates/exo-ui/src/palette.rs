@@ -142,7 +142,7 @@ pub fn layers(s: &AppState, blur: bool) -> Vec<El> {
         .child(icon_search(16.0, fg_muted()))
         .child(input);
 
-    let max_palette_h = 580.0;
+    let max_palette_h = 820.8;
     let body = if items.is_empty() {
         el().w_full().h(72.0).center().child(
             text("No matching games or commands")
@@ -210,7 +210,7 @@ pub fn layers(s: &AppState, blur: bool) -> Vec<El> {
     let host = col()
         .key("palette-host")
         .pin(Some(0.0), Some(0.0), Some(0.0), Some(0.0))
-        .pt(120.0)
+        .pt(129.6)
         .items_center()
         .transition(Transition::none())
         .child(card);

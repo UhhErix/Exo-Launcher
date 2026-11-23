@@ -501,7 +501,10 @@ export const STATES = [
     },
     native: {
       scene: 'library-all',
-      script: [{ t: 0.1, type: 'tap', key: 'all-games-filter' }],
+      script: [
+        { t: 0.1, type: 'tap', key: 'all-games-filter' },
+        { t: 0.6, type: 'tap', key: 'library-filter-chip-installed' },
+      ],
       expect: { libraryAllGames: true },
     },
   },

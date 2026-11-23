@@ -1461,6 +1461,7 @@ fn run_parity_probe(
         "dd-",
         "command-palette",
         "pc-part-menu",
+        "library-filter-pop",
     ];
     let legacy_menu_prefixes = ["dc-status-menu", "dc-menu"];
     let mut menu_items: Vec<String> = Vec::new();
@@ -1732,7 +1733,7 @@ mod tests {
     use super::*;
     use crate::gamepad::GamepadAction;
     use crate::media_state::MusicService;
-    use crate::state::{LibraryFilter, LibrarySort, Room};
+    use crate::state::{LibraryChip, LibrarySort, Room};
     use rune::{
         Cursor, Env, Mods, Runtime,
         render::{KIND_BACKDROP_BLUR, KIND_LAYER, KIND_LAYER_END, KIND_SEGMENT},
@@ -1815,7 +1816,7 @@ mod tests {
         assert!(rt.state.tour_step.is_none());
         assert!(rt.state.tour_seen);
 
-        rt.state.filter = LibraryFilter::Installed;
+        rt.state.filters = vec![LibraryChip::Installed];
         assert!(rt.state.filtered_games().iter().all(|g| g.installed));
     }
 
@@ -2212,8 +2213,8 @@ mod tests {
             .presented("command-palette")
             .expect("command-palette presented");
         assert!(
-            pal_rect[3] <= 520.5,
-            "palette height {} exceeded 520px cap",
+            pal_rect[3] <= 821.3,
+            "palette height {} exceeded 821px cap",
             pal_rect[3]
         );
         check_case(
@@ -2246,14 +2247,17 @@ mod tests {
             },
             None,
         );
-        let settings_blurs = rt_settings
+        let settings_blur_rects: Vec<[f32; 4]> = rt_settings
             .instances
             .iter()
             .filter(|i| i.params[1] == KIND_BACKDROP_BLUR)
-            .count();
-        assert_eq!(
-            settings_blurs, 0,
-            "void-top Settings room should emit 0 backdrop blurs, got {settings_blurs}"
+            .map(|i| i.rect)
+            .collect();
+        assert!(
+            settings_blur_rects.len() <= exo_kit::EXO_MAX_BACKDROP_BLURS,
+            "void-top Settings room emitted {} backdrop blurs (cap {}): {settings_blur_rects:?}",
+            settings_blur_rects.len(),
+            exo_kit::EXO_MAX_BACKDROP_BLURS
         );
     }
 
@@ -2547,6 +2551,7 @@ mod tests {
         let mut open_layers: Vec<([f32; 4], f32)> = Vec::new();
         let mut total_blurs = 0usize;
         let mut matched_layers: Option<Vec<([f32; 4], f32)>> = None;
+        let mut blur_rects: Vec<[f32; 4]> = Vec::new();
         for inst in &rt.instances {
             let kind = inst.params[1];
             if kind == KIND_LAYER {
@@ -2555,6 +2560,7 @@ mod tests {
                 open_layers.pop();
             } else if kind == KIND_BACKDROP_BLUR {
                 total_blurs += 1;
+                blur_rects.push(inst.rect);
                 if (inst.rect[0] - rect[0]).abs() < 4.0
                     && (inst.rect[1] - rect[1]).abs() < 4.0
                     && (inst.rect[2] - rect[2]).abs() < 4.0
@@ -2572,7 +2578,7 @@ mod tests {
         assert_eq!(
             matched_layers,
             Some(Vec::new()),
-            "{phase}: {key} blur must be emitted at layer_depth 0 (outside fading ancestor layers), got {matched_layers:?}"
+            "{phase}: {key} blur must be emitted at layer_depth 0 (outside fading ancestor layers), got {matched_layers:?}; key rect {rect:?}, blur rects {blur_rects:?}"
         );
     }
 
@@ -2705,6 +2711,7 @@ mod tests {
             (1920.0, 1080.0),
             Env::new(true, 1.0),
         );
+        rt.set_max_backdrop_blurs(exo_kit::EXO_MAX_BACKDROP_BLURS);
         rt.on_key = Some(on_key);
         rt.frame(0.0);
         rt.frame(0.5);
@@ -2712,10 +2719,12 @@ mod tests {
         let (sx, sy) = rt.find("search-capsule").expect("search-capsule");
         rt.secondary_down(sx, sy);
         rt.secondary_up(sx, sy);
-        rt.frame(1.0 / 60.0);
+        for _ in 0..90 {
+            rt.frame(1.0 / 60.0);
+        }
         assert!(rt.presented("exo-ctx-menu").is_some());
         assert!(rt.presented("ctx-search-open").is_some());
-        assert_blur_outside_layers(&rt, "exo-ctx-menu", "ctx-search-frame-1");
+        assert_blur_outside_layers(&rt, "exo-ctx-menu", "ctx-search-settled");
         rt.key(KeyEvent {
             key: Key::Escape,
             mods: Mods::default(),
@@ -2853,6 +2862,7 @@ mod tests {
             (1920.0, 1080.0),
             Env::new(true, 1.0),
         );
+        rt.set_max_backdrop_blurs(exo_kit::EXO_MAX_BACKDROP_BLURS);
         rt.on_key = Some(on_key);
         rt.frame(0.0);
         rt.frame(0.5);

@@ -490,7 +490,7 @@ pub fn view(s: &AppState) -> El {
         .child(
             col()
                 .key(format!("settings-pane-{:?}", s.pc.settings_section))
-                .transition(Transition::offset(0.0, 6.0))
+                .transition(Transition::offset(0.0, 6.0).combined(Transition::opacity()))
                 .w_full()
                 .pt(24.0)
                 .pb(48.0)

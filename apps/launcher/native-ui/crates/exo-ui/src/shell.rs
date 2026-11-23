@@ -22,7 +22,7 @@ fn mini_player_transition() -> Transition {
 }
 
 fn room_transition(dir: f32) -> Transition {
-    let enter = Transition::offset(12.0 * dir, 0.0);
+    let enter = Transition::offset(12.0 * dir, 0.0).combined(Transition::opacity());
     let exit = Transition::offset(-12.0 * dir, 0.0).combined(Transition::opacity());
     Transition::asymmetric(enter, exit).springs(SpringPair::new(SPRING_MOVE, SPRING_QUICK))
 }
@@ -48,11 +48,15 @@ impl BlurBudget {
             && s.room != Room::Music
             && s.media.open_capture_id.is_none()
             && s.media.playback.as_ref().is_some_and(|p| p.has_track());
+        let art_under_bar = matches!(s.room, Room::Library | Room::Store | Room::Music)
+            || s.media.captures_open
+            || s.open_game_id.is_some()
+            || s.store_game.is_some();
 
         Self {
-            top_bar_search: true,
-            top_bar_nav: true,
-            top_bar_tools: true,
+            top_bar_search: art_under_bar,
+            top_bar_nav: art_under_bar,
+            top_bar_tools: art_under_bar,
             mini_player: mini_visible,
             overlay: true,
             submenu: submenu_open,
@@ -522,6 +526,9 @@ pub fn view(s: &AppState, cx: &mut Cx<AppState>) -> El {
     }
     if s.library_add_open {
         root = root.children(menus::library_add_overlay(s, budget.overlay));
+    }
+    if s.library_filter_open {
+        root = root.children(crate::library::library_filter_overlay(s, budget.overlay));
     }
     if s.pc.part_menu.is_some() {
         root = root.children(pc::part_menu_layers(s, budget.overlay));

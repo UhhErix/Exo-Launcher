@@ -1,17 +1,22 @@
 use crate::state::{
-    AppState, ContextMenuTarget, InputMode, LibraryFilter, OpenDropdown, title_hue,
+    AppState, ContextMenuTarget, InputMode, LibraryChip, OpenDropdown, library_chip_options,
+    now_unix_ms, title_hue,
 };
 use exo_kit::{
     BG, FG, GLASS_CONTROL_SIGMA, PRESS_SCALE, PRIMARY_FG, RADIUS_CARD, RADIUS_PANEL, RADIUS_PILL,
-    SPRING_FLIGHT, SPRING_MOVE, SPRING_QUICK, SelectTrigger, exo_play_button, fg_muted,
-    glass_button, glass_control_fill, glass_icon_circle, glass_rim, glass_rim_bottom,
-    glass_rim_top, good, hover_fill, icon_chevron_left, icon_chevron_right, icon_download,
-    icon_filter, icon_grid, icon_more_horiz, icon_play, icon_plus, icon_search, icon_stop,
-    pressed_fill, primary_button, progress_bar, scrim_fill, select_trigger, store_logo,
-    surface_card, type_body, type_control, type_first_run, type_section, type_small, type_title,
+    SPRING_FLIGHT, SPRING_MOVE, SPRING_QUICK, SelectTrigger, TRANSPARENT, exo_play_button,
+    fg_muted, glass_button, glass_control_fill, glass_icon_circle, glass_panel_opt, glass_rim,
+    glass_rim_bottom, glass_rim_top, good, hover_fill, icon_chevron_left, icon_chevron_right,
+    icon_download, icon_filter, icon_grid, icon_more_horiz, icon_play, icon_plus, icon_search,
+    icon_stop, popover_transition, pressed_fill, primary_button, progress_bar, scrim_fill,
+    select_trigger, store_logo, surface_card, type_body, type_control, type_first_run,
+    type_section, type_small, type_title,
 };
 use exo_rpc::Game;
-use rune::{Cursor, El, SurfaceFit, TextStyle, col, edit_access, el, oklch, row, text, text_input};
+use rune::{
+    Align, Cursor, El, Side, SurfaceFit, TextStyle, Tx, col, edit_access, el, oklch, row, text,
+    text_input,
+};
 
 const HOME_EDGE: f32 = 32.0;
 const DECK_CARD_W: f32 = 224.0;
@@ -197,6 +202,97 @@ fn deck_poster_card(game: &Game, active: bool, load_cover: bool, s: &AppState, s
     }
 
     card
+}
+
+pub fn library_filter_overlay(s: &AppState, blur: bool) -> Vec<El> {
+    if !s.library_filter_open {
+        return Vec::new();
+    }
+    let options = library_chip_options(&s.games, now_unix_ms());
+    let mut sections: Vec<El> = Vec::new();
+    for section in ["Show", "Store"] {
+        let chips: Vec<&LibraryChip> = options.iter().filter(|c| c.section() == section).collect();
+        if chips.is_empty() {
+            continue;
+        }
+        let rows: Vec<El> = chips
+            .chunks(3)
+            .map(|group| {
+                let pills: Vec<El> = group
+                    .iter()
+                    .map(|chip| filter_chip(chip, s.filters.contains(chip)))
+                    .collect();
+                row().gap(6.0).children(pills)
+            })
+            .collect();
+        sections.push(
+            col()
+                .key(format!("library-filter-section-{}", section.to_lowercase()))
+                .gap(6.0)
+                .child(text(section).font(type_small()).color(fg_muted()))
+                .children(rows),
+        );
+    }
+    if !s.filters.is_empty() {
+        sections.push(
+            glass_button("library-filter-clear", "Clear all", None)
+                .on_press(|s: &mut AppState| s.filters.clear()),
+        );
+    }
+    let panel = glass_panel_opt("library-filter-pop", 300.0, blur)
+        .transition(popover_transition())
+        .anchored_fit("all-games-filter", Side::Bottom, Align::End, 8.0)
+        .px(12.0)
+        .py(12.0)
+        .gap(12.0)
+        .children(sections);
+    vec![
+        el().key("library-filter-root")
+            .pin(Some(0.0), Some(0.0), Some(0.0), Some(0.0))
+            .modal_tx(true, |s: &mut AppState, _: &mut Tx| {
+                s.library_filter_open = false
+            })
+            .child(panel),
+    ]
+}
+
+fn filter_chip(chip: &LibraryChip, active: bool) -> El {
+    let label = chip.label();
+    let target = chip.clone();
+    el().key(format!("library-filter-chip-{}", chip.key()))
+        .role("option")
+        .label(label.clone())
+        .focusable(true)
+        .hit()
+        .cursor(Cursor::Pointer)
+        .press_on_down()
+        .press_scale(PRESS_SCALE)
+        .h(30.0)
+        .px(13.0)
+        .radius(RADIUS_PILL)
+        .center()
+        .fill(if active { FG } else { TRANSPARENT })
+        .hover(if active { FG } else { hover_fill() })
+        .press(if active { FG } else { pressed_fill() })
+        .border(if active { 0.0 } else { 1.0 }, glass_rim())
+        .motion(SPRING_QUICK)
+        .on_press(
+            move |s: &mut AppState| match s.filters.iter().position(|c| *c == target) {
+                Some(i) => {
+                    s.filters.remove(i);
+                }
+                None => s.filters.push(target.clone()),
+            },
+        )
+        .child(
+            text(label)
+                .font(if active {
+                    type_section()
+                } else {
+                    type_control()
+                })
+                .color(if active { PRIMARY_FG } else { FG }),
+        )
 }
 
 fn all_games_poster_tile(game: &Game, s: &AppState, scale: f32) -> El {
@@ -678,17 +774,16 @@ fn view_all_games(s: &AppState, scale: f32) -> El {
                 .on_edit(edit_access(|s: &mut AppState| &mut s.library_search)),
         );
 
-    let filter_label = match s.filter {
-        LibraryFilter::All => "Filter",
-        LibraryFilter::Installed => "Installed",
-        LibraryFilter::Recent => "Recent",
-        LibraryFilter::Running => "Running",
+    let filter_label = if s.filters.is_empty() {
+        "Filter".to_string()
+    } else {
+        format!("Filter · {}", s.filters.len())
     };
 
     let filter_btn = row()
         .key("all-games-filter")
         .role("button")
-        .label(filter_label)
+        .label(filter_label.clone())
         .cursor(Cursor::Pointer)
         .focusable(true)
         .hit()
@@ -706,14 +801,7 @@ fn view_all_games(s: &AppState, scale: f32) -> El {
         .press(pressed_fill())
         .border_gradient(1.0, glass_rim_top(), glass_rim_bottom())
         .motion(SPRING_QUICK)
-        .on_press(|s: &mut AppState| {
-            s.filter = match s.filter {
-                LibraryFilter::All => LibraryFilter::Installed,
-                LibraryFilter::Installed => LibraryFilter::Recent,
-                LibraryFilter::Recent => LibraryFilter::Running,
-                LibraryFilter::Running => LibraryFilter::All,
-            };
-        })
+        .on_press(|s: &mut AppState| s.library_filter_open = !s.library_filter_open)
         .child(icon_filter(16.0, FG))
         .child(text(filter_label).font(type_control()).color(FG));
 
@@ -798,7 +886,7 @@ fn view_all_games(s: &AppState, scale: f32) -> El {
             .child(
                 glass_button("reset-filters", "Show all games", None).on_press(
                     |s: &mut AppState| {
-                        s.filter = LibraryFilter::All;
+                        s.filters.clear();
                         s.library_show_hidden = false;
                         s.library_search.text.clear();
                         s.library_search.sync_invariants();

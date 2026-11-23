@@ -105,13 +105,149 @@ impl Room {
     }
 }
 
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub enum LibraryFilter {
-    #[default]
-    All,
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum LibraryChip {
     Installed,
-    Recent,
-    Running,
+    NotInstalled,
+    Update,
+    PlayedLately,
+    NotPlayed,
+    FamilyShared,
+    Store(String),
+}
+
+const PLAYED_LATELY_MS: i64 = 14 * 86_400_000;
+
+pub fn now_unix_ms() -> i64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis() as i64)
+        .unwrap_or(0)
+}
+
+fn has_played(g: &Game) -> bool {
+    g.playtime_minutes > 0 || g.last_played_utc.is_some()
+}
+
+impl LibraryChip {
+    pub fn section(&self) -> &'static str {
+        match self {
+            Self::Store(_) => "Store",
+            _ => "Show",
+        }
+    }
+
+    fn group(&self) -> &'static str {
+        match self {
+            Self::Installed | Self::NotInstalled => "install",
+            Self::PlayedLately => "recent",
+            Self::NotPlayed => "played",
+            Self::Update => "update",
+            Self::FamilyShared => "family",
+            Self::Store(_) => "store",
+        }
+    }
+
+    pub fn key(&self) -> String {
+        match self {
+            Self::Installed => "installed".into(),
+            Self::NotInstalled => "not-installed".into(),
+            Self::Update => "update".into(),
+            Self::PlayedLately => "played-lately".into(),
+            Self::NotPlayed => "not-played".into(),
+            Self::FamilyShared => "family-shared".into(),
+            Self::Store(store) => format!("store-{store}"),
+        }
+    }
+
+    pub fn label(&self) -> String {
+        match self {
+            Self::Installed => "Installed".into(),
+            Self::NotInstalled => "Not installed".into(),
+            Self::Update => "Update ready".into(),
+            Self::PlayedLately => "Played lately".into(),
+            Self::NotPlayed => "Not played".into(),
+            Self::FamilyShared => "Family shared".into(),
+            Self::Store(store) => store_chip_label(store),
+        }
+    }
+
+    fn matches(&self, g: &Game, now_ms: i64) -> bool {
+        match self {
+            Self::Installed => g.installed,
+            Self::NotInstalled => !g.installed,
+            Self::Update => g.update_available,
+            Self::PlayedLately => g
+                .last_played_utc
+                .as_deref()
+                .and_then(parse_iso_utc_ms)
+                .is_some_and(|t| now_ms - t < PLAYED_LATELY_MS),
+            Self::NotPlayed => !has_played(g),
+            Self::FamilyShared => g.family_shared,
+            Self::Store(store) => g.store == *store || g.stores.iter().any(|s| s == store),
+        }
+    }
+}
+
+fn store_chip_label(store: &str) -> String {
+    match store {
+        "steam" => "Steam".into(),
+        "epic" => "Epic".into(),
+        "gog" => "GOG".into(),
+        "riot" => "Riot".into(),
+        "xbox" => "Xbox".into(),
+        "ea" => "EA".into(),
+        "ubisoft" => "Ubisoft".into(),
+        "battlenet" => "Battle.net".into(),
+        "local" => "Local".into(),
+        other => {
+            let mut chars = other.chars();
+            chars
+                .next()
+                .map(|c| c.to_uppercase().chain(chars).collect())
+                .unwrap_or_default()
+        }
+    }
+}
+
+pub fn chips_match(chips: &[LibraryChip], g: &Game, now_ms: i64) -> bool {
+    chips.iter().all(|c| {
+        chips
+            .iter()
+            .any(|o| o.group() == c.group() && o.matches(g, now_ms))
+    })
+}
+
+pub fn library_chip_options(games: &[Game], now_ms: i64) -> Vec<LibraryChip> {
+    let show = [
+        LibraryChip::Installed,
+        LibraryChip::NotInstalled,
+        LibraryChip::Update,
+        LibraryChip::PlayedLately,
+        LibraryChip::NotPlayed,
+        LibraryChip::FamilyShared,
+    ];
+    let mut out: Vec<LibraryChip> = show
+        .into_iter()
+        .filter(|chip| games.iter().any(|g| chip.matches(g, now_ms)))
+        .collect();
+    let mut stores: Vec<String> = games
+        .iter()
+        .flat_map(|g| {
+            if g.stores.is_empty() {
+                vec![g.store.clone()]
+            } else {
+                g.stores.clone()
+            }
+        })
+        .filter(|s| !s.is_empty())
+        .collect();
+    stores.sort();
+    stores.dedup();
+    if stores.len() > 1 {
+        out.extend(stores.into_iter().map(LibraryChip::Store));
+    }
+    out
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -294,7 +430,8 @@ pub struct AppState {
     pub deck_scroll_x: f32,
     pub store_shelf_scrolls: [Rc<Cell<ScrollPos>>; 4],
     pub store_shelf_x: [f32; 4],
-    pub filter: LibraryFilter,
+    pub filters: Vec<LibraryChip>,
+    pub library_filter_open: bool,
     pub sort: LibrarySort,
     pub status: HostStatus,
     pub games: Vec<Game>,
@@ -391,7 +528,8 @@ impl AppState {
             deck_scroll_x: 0.0,
             store_shelf_scrolls: std::array::from_fn(|_| Rc::new(Cell::new(ScrollPos::default()))),
             store_shelf_x: [0.0; 4],
-            filter: LibraryFilter::All,
+            filters: Vec::new(),
+            library_filter_open: false,
             sort: LibrarySort::LastLaunched,
             status: HostStatus::Standalone,
             games,
@@ -507,7 +645,8 @@ impl AppState {
             deck_scroll_x: 0.0,
             store_shelf_scrolls: std::array::from_fn(|_| Rc::new(Cell::new(ScrollPos::default()))),
             store_shelf_x: [0.0; 4],
-            filter: LibraryFilter::All,
+            filters: Vec::new(),
+            library_filter_open: false,
             sort: LibrarySort::LastLaunched,
             status: HostStatus::Connecting,
             games: Vec::new(),
@@ -1027,6 +1166,7 @@ impl AppState {
         } else {
             &self.settings.recent
         };
+        let now_ms = now_unix_ms();
         let mut out: Vec<&Game> = self
             .games
             .iter()
@@ -1034,19 +1174,7 @@ impl AppState {
                 is_shelf_game(g, transfer_id, show_tools)
                     && !self.settings.hidden_games.iter().any(|h| h == &g.id)
             })
-            .filter(|g| match self.filter {
-                LibraryFilter::All => true,
-                LibraryFilter::Installed => g.installed,
-                LibraryFilter::Running => g.is_running,
-                LibraryFilter::Recent => {
-                    g.last_played_utc
-                        .as_deref()
-                        .and_then(parse_iso_utc_ms)
-                        .is_some()
-                        || recent.iter().any(|r| r.eq_ignore_ascii_case(&g.id))
-                        || g.playtime_minutes > 0
-                }
-            })
+            .filter(|g| chips_match(&self.filters, g, now_ms))
             .collect();
         let hidden = &self.settings.hidden_games;
         let show_hidden = self.library_show_hidden;
@@ -3728,7 +3856,7 @@ mod library_sort_and_confirm_tests {
         s.settings.hidden_games = vec!["steam:hidden".into()];
         s.recent_ids = vec!["steam:tie-first".into(), "steam:tie-second".into()];
         s.sort = LibrarySort::LastLaunched;
-        s.filter = LibraryFilter::All;
+        s.filters.clear();
         s.games = vec![
             mk_game(
                 "steam:older-z",
