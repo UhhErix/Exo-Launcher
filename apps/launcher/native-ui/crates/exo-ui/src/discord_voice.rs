@@ -10,9 +10,9 @@ use exo_kit::{
     glass_rim_top, glass_still_control_fill, glass_still_panel_fill, good, hairline, hover_fill,
     icon_app_window, icon_chat, icon_close, icon_hand, icon_headphones, icon_headphones_off,
     icon_lock, icon_maximize, icon_mic, icon_mic_off, icon_monitor, icon_music, icon_phone_off,
-    icon_screen_share, icon_settings, icon_video, icon_volume, icon_volume_off,
-    modal_scrim_transition, pressed_fill, primary_button, scrim_fill, subtle_fill, type_body,
-    type_control, type_label, type_section, type_small, type_title, warn,
+    icon_screen_share, icon_settings, icon_video, icon_volume, icon_volume_off, pressed_fill,
+    primary_button, subtle_fill, type_body, type_control, type_label, type_section, type_small,
+    type_title, warn,
 };
 use exo_rpc::{DiscordChannel, DiscordVoiceMember};
 use rune::{Color, Cursor, El, ScrollSpec, SpringPair, SurfaceFit, Transition, col, el, row, text};
@@ -1002,16 +1002,15 @@ pub fn voice_overlay_layers(s: &AppState, blur: bool) -> Vec<El> {
     match s.discord.voice_ui.panel {
         VoicePanel::None => Vec::new(),
         VoicePanel::GoLive => vec![
-            el().key("dc-golive-scrim")
+            el().key("dc-golive-dismiss")
                 .pin(Some(0.0), Some(52.0), Some(0.0), Some(0.0))
-                .fill(scrim_fill())
-                .transition(modal_scrim_transition())
                 .hit()
                 .on_press(|s: &mut AppState| s.open_voice_panel(VoicePanel::None)),
-            el().key("dc-golive-wrap")
-                .pin(Some(0.0), Some(52.0), Some(0.0), Some(0.0))
-                .center()
-                .child(golive_modal(s, blur)),
+            col()
+                .key("dc-golive-wrap")
+                .pin(Some(0.0), Some(52.0), Some(0.0), Some(90.0))
+                .justify_end()
+                .child(row().w_full().justify_center().child(golive_modal(s, blur))),
         ],
         VoicePanel::Soundboard => vec![
             el().key("dc-sb-dismiss")
