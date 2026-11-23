@@ -3,7 +3,7 @@ use serde_json::Value;
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
-fn null_as_default<'de, D, T>(deserializer: D) -> Result<T, D::Error>
+pub(crate) fn null_as_default<'de, D, T>(deserializer: D) -> Result<T, D::Error>
 where
     D: Deserializer<'de>,
     T: Default + Deserialize<'de>,
@@ -32,8 +32,32 @@ pub struct GameInclude {
 pub struct GameVariant {
     #[serde(default, deserialize_with = "null_as_default")]
     pub id: String,
+    #[serde(default, deserialize_with = "null_as_default")]
+    pub store: String,
+    #[serde(default)]
+    pub installed: bool,
+    #[serde(default)]
+    pub owned: bool,
+    #[serde(default)]
+    pub entitlement_state: Option<String>,
+    #[serde(default)]
+    pub update_available: bool,
+    #[serde(default)]
+    pub can_install: bool,
+    #[serde(default)]
+    pub primary_action: Option<String>,
     #[serde(default)]
     pub launch_target: Option<String>,
+    #[serde(default)]
+    pub playtime_minutes: Option<u64>,
+    #[serde(default)]
+    pub last_played_utc: Option<String>,
+    #[serde(default, deserialize_with = "null_as_default")]
+    pub status: String,
+    #[serde(default)]
+    pub is_running: bool,
+    #[serde(default)]
+    pub can_stop: bool,
 }
 
 #[derive(Debug, Clone, Default, Deserialize, Serialize)]
@@ -50,11 +74,19 @@ pub struct Game {
     #[serde(default)]
     pub owned: bool,
     #[serde(default)]
+    pub entitlement_state: Option<String>,
+    #[serde(default)]
     pub update_available: bool,
     #[serde(default)]
     pub can_install: bool,
     #[serde(default)]
     pub primary_action: Option<String>,
+    #[serde(default)]
+    pub canonical_title_key: Option<String>,
+    #[serde(default)]
+    pub selected_variant_id: Option<String>,
+    #[serde(default)]
+    pub buy_url: Option<String>,
     #[serde(default)]
     pub cover_url: Option<String>,
     #[serde(default)]
@@ -574,21 +606,21 @@ pub fn store_label(store: &str) -> &'static str {
 pub struct InstallProgress {
     #[serde(default)]
     pub game_id: Option<String>,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "null_as_default")]
     pub phase: String,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "null_as_default")]
     pub percent: f64,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "null_as_default")]
     pub bytes_downloaded: u64,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "null_as_default")]
     pub bytes_to_download: u64,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "null_as_default")]
     pub bytes_per_second: u64,
     #[serde(default)]
     pub status: Option<String>,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "null_as_default")]
     pub can_cancel: bool,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "null_as_default")]
     pub is_active: bool,
 }
 
@@ -628,6 +660,8 @@ pub struct GameExtras {
     #[serde(default)]
     pub achievements_total: Option<u32>,
     #[serde(default)]
+    pub drive_heat: Option<crate::game_types::DriveHeat>,
+    #[serde(default)]
     pub message: Option<String>,
 }
 
@@ -638,18 +672,54 @@ pub struct GameProperties {
     pub ok: bool,
     #[serde(default)]
     pub message: Option<String>,
+    #[serde(default, deserialize_with = "null_as_default")]
+    pub store: String,
     #[serde(default)]
     pub launch_options: Option<String>,
     #[serde(default)]
+    pub launch_options_note: Option<String>,
+    #[serde(default)]
+    pub size_bytes: Option<u64>,
+    #[serde(default)]
+    pub verify_label: Option<String>,
+    #[serde(default)]
+    pub can_browse: bool,
+    #[serde(default)]
+    pub running: bool,
+    #[serde(default)]
     pub steam_overlay: Option<bool>,
+    #[serde(default)]
+    pub steam_overlay_note: Option<String>,
+    #[serde(default)]
+    pub through_steam: Option<bool>,
+    #[serde(default)]
+    pub store_properties: Option<String>,
     #[serde(default)]
     pub cloud_sync: Option<bool>,
     #[serde(default)]
     pub language: Option<String>,
+    #[serde(default, deserialize_with = "null_as_default")]
+    pub language_choices: Vec<crate::game_types::PropertyChoice>,
     #[serde(default)]
     pub beta: Option<String>,
+    #[serde(default, deserialize_with = "null_as_default")]
+    pub beta_choices: Vec<crate::game_types::PropertyChoice>,
+    #[serde(default)]
+    pub beta_code: bool,
+    #[serde(default, deserialize_with = "null_as_default")]
+    pub content_label: String,
+    #[serde(default)]
+    pub content: Option<Vec<crate::game_types::GameContent>>,
     #[serde(default)]
     pub folder: Option<String>,
+    #[serde(default, deserialize_with = "null_as_default")]
+    pub folder_choices: Vec<crate::game_types::PropertyChoice>,
+    #[serde(default)]
+    pub moving: Option<crate::game_types::MovingProgress>,
+    #[serde(default)]
+    pub shader_cache_bytes: Option<u64>,
+    #[serde(default)]
+    pub anti_cheat_launch: Option<crate::game_types::AntiCheatLaunch>,
 }
 
 #[derive(Debug, Clone, Default, Deserialize)]
@@ -956,6 +1026,8 @@ pub struct LauncherSettings {
     pub hidden_games: Vec<String>,
     #[serde(default, deserialize_with = "null_as_default")]
     pub recent: Vec<String>,
+    #[serde(default, deserialize_with = "null_as_default")]
+    pub preferred_game_sources: HashMap<String, String>,
 }
 
 use std::collections::HashMap;
@@ -1182,6 +1254,10 @@ pub enum HostEvent {
     AutopilotLive(Option<crate::pc_types::AutopilotLive>),
     ShadersChanged,
     StoreChanged(crate::events::StoreChangedEvent),
+    GameAchievements(crate::game_types::GameAchievementsEvent),
+    GameOptimizedAgain(crate::game_types::GameOptimizeEvent),
+    GameOptimizeHeld(crate::game_types::GameOptimizeEvent),
+    CompressProgress(crate::game_types::CompressProgressEvent),
     Raw { event: String, data: Value },
     Disconnected(String),
 }
@@ -1203,10 +1279,12 @@ mod cover_policy_tests {
                 GameVariant {
                     id: "epic:Sugar".into(),
                     launch_target: None,
+                    ..Default::default()
                 },
                 GameVariant {
                     id: "steam:252950".into(),
                     launch_target: None,
+                    ..Default::default()
                 },
             ],
             ..Default::default()

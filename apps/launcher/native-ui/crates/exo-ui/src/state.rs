@@ -10,12 +10,10 @@ use exo_rpc::types::COVER_CACHE_ORIGIN;
 use exo_rpc::{
     ActionResult, AppUpdateStateEvent, ArtBase, AutopilotLive, AutopilotReportEvent,
     CaptureLiveState, CaptureReelEvent, CaptureSavedEvent, CaptureStatusReply, DiscordFriend,
-    ExoAccountState, Game, GameExtras, GameGetReply, GameProperties, GamePropertySetReply,
-    GameRunStateEvent, HostEvent, InstallProgress, InstallQueueEvent, KeyPreview,
-    LaunchStatusEvent, LauncherSettings, LibraryPayload, METHOD_EXO_ACCOUNT_STATE,
-    METHOD_GAME_CANCEL_INSTALL, METHOD_GAME_EXTRAS, METHOD_GAME_GET, METHOD_GAME_INSTALL,
-    METHOD_GAME_LAUNCH, METHOD_GAME_OPEN_FOLDER, METHOD_GAME_PAUSE_INSTALL, METHOD_GAME_PROPERTIES,
-    METHOD_GAME_PROPERTIES_SET, METHOD_GAME_REPAIR, METHOD_GAME_STOP, METHOD_GAME_UNINSTALL,
+    ExoAccountState, Game, GameExtras, GameProperties, GameRunStateEvent, HostEvent,
+    InstallProgress, InstallQueueEvent, KeyPreview, LaunchStatusEvent, LauncherSettings,
+    LibraryPayload, METHOD_EXO_ACCOUNT_STATE, METHOD_GAME_CANCEL_INSTALL, METHOD_GAME_INSTALL,
+    METHOD_GAME_LAUNCH, METHOD_GAME_OPEN_FOLDER, METHOD_GAME_PAUSE_INSTALL, METHOD_GAME_STOP,
     METHOD_GAME_UPDATE, METHOD_KEYS_ACTIVATE, METHOD_KEYS_PREVIEW, METHOD_LIBRARY_REFRESH,
     METHOD_SETTINGS_SET, METHOD_SHELL_BOOTSTRAP, METHOD_STORE_GAME, METHOD_STORE_GAME_OFFERS,
     METHOD_STORE_HOME, METHOD_STORE_OPEN, METHOD_STORE_SEARCH, MusicPlayback, MusicVolumeEvent,
@@ -510,6 +508,12 @@ pub enum OpenDropdown {
     LibrarySort,
     GameDisplayMode,
     GameLanguage,
+    GameHdrMode,
+    GameIntelFrameGen,
+    GameBeta,
+    GameFolder,
+    GameAntiCheat,
+    GameUpscalerStop,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -624,6 +628,7 @@ pub struct AppState {
     pub hovered_cover_key: Option<String>,
     pub game_extras: Option<GameExtras>,
     pub game_props: Option<GameProperties>,
+    pub game_page: crate::game_actions::GamePageState,
     pub props_open: bool,
     pub game_props_tab: usize,
     pub props_launch_opts: TextEdit,
@@ -727,15 +732,11 @@ impl AppState {
                 ok: true,
                 achievements_unlocked: Some(34),
                 achievements_total: Some(57),
+                drive_heat: None,
                 message: None,
             }),
-            game_props: Some(GameProperties {
-                ok: true,
-                launch_options: Some("-skipStartScreen".into()),
-                steam_overlay: Some(false),
-                cloud_sync: Some(true),
-                ..Default::default()
-            }),
+            game_props: Some(crate::game_actions::demo_game_properties()),
+            game_page: crate::game_actions::GamePageState::demo(),
             props_open: false,
             game_props_tab: 0,
             props_launch_opts: TextEdit::default(),
@@ -837,6 +838,7 @@ impl AppState {
             hovered_cover_key: None,
             game_extras: None,
             game_props: None,
+            game_page: crate::game_actions::GamePageState::new(),
             props_open: false,
             game_props_tab: 0,
             props_launch_opts: TextEdit::default(),
@@ -1261,20 +1263,8 @@ impl AppState {
         }
     }
 
-    pub fn set_game_display_mode(&mut self, mode: &str) {
-        let normalized = match mode {
-            "fullscreen" => "fullscreen",
-            _ => "borderless",
-        };
-        self.game_display_mode = normalized.to_string();
-        self.notice = Some(format!(
-            "Display mode set to {}",
-            if normalized == "fullscreen" {
-                "Fullscreen"
-            } else {
-                "Borderless"
-            }
-        ));
+    pub fn now_secs(&self) -> f64 {
+        self.clock_secs
     }
 
     pub fn toggle_settings(&mut self) {
@@ -1901,6 +1891,10 @@ impl AppState {
                 self.apply_store_changed(ev);
                 self.room == Room::Store
             }
+            HostEvent::GameAchievements(ev) => self.handle_game_achievements(ev),
+            HostEvent::GameOptimizedAgain(ev) => self.handle_game_optimized_again(ev),
+            HostEvent::GameOptimizeHeld(ev) => self.handle_game_optimize_held(ev),
+            HostEvent::CompressProgress(ev) => self.handle_compress_progress(ev),
             HostEvent::Disconnected(why) => {
                 self.discord.voice_ui.decoders.clear();
                 self.video_router.clear();
@@ -1996,66 +1990,8 @@ impl AppState {
         self.game_props_tab = 0;
         self.uninstall_confirm = false;
         self.armed_confirm = None;
-        if self.status != HostStatus::Standalone {
-            self.game_extras = None;
-            self.game_props = None;
-            self.props_launch_opts.text.clear();
-            self.props_launch_opts.sync_invariants();
-        } else if let Some(opts) = self
-            .game_props
-            .as_ref()
-            .and_then(|p| p.launch_options.as_deref())
-        {
-            self.props_launch_opts.text = opts.to_string();
-            self.props_launch_opts.sync_invariants();
-        }
-
-        #[cfg(windows)]
-        if let (Some(rpc), Some(handle)) = (self.rpc.clone(), self.handle.clone()) {
-            let gid_props = id.to_string();
-            let h_props = handle.clone();
-            rpc.call::<_, GameProperties>(
-                METHOD_GAME_PROPERTIES,
-                &json!({ "id": gid_props }),
-                move |res| {
-                    if let Ok(props) = res {
-                        h_props.update(move |s, _| {
-                            if s.open_game_id.as_deref() == Some(gid_props.as_str()) {
-                                s.props_launch_opts.text =
-                                    props.launch_options.clone().unwrap_or_default();
-                                s.props_launch_opts.sync_invariants();
-                                s.game_props = Some(props);
-                            }
-                        });
-                    }
-                },
-            );
-            let gid = id.to_string();
-            let h1 = handle.clone();
-            rpc.call::<_, GameGetReply>(METHOD_GAME_GET, &json!({ "id": gid }), move |res| {
-                if let Ok(reply) = res
-                    && let Some(fresh) = reply.game
-                {
-                    h1.update(move |s, _| {
-                        if let Some(slot) = s.games.iter_mut().find(|g| g.id == fresh.id) {
-                            *slot = fresh;
-                        }
-                    });
-                }
-            });
-
-            let gid2 = id.to_string();
-            let h2 = handle.clone();
-            rpc.call::<_, GameExtras>(METHOD_GAME_EXTRAS, &json!({ "id": gid2 }), move |res| {
-                if let Ok(ex) = res {
-                    h2.update(move |s, _| {
-                        if s.open_game_id.as_deref() == Some(gid2.as_str()) {
-                            s.game_extras = Some(ex);
-                        }
-                    });
-                }
-            });
-        }
+        self.game_page.selected_variant_id = None;
+        self.load_game_page_data(id);
     }
 
     pub fn close_game_page_tx(&mut self, tx: &mut Tx) {
@@ -2068,6 +2004,9 @@ impl AppState {
         self.props_open = false;
         self.uninstall_confirm = false;
         self.armed_confirm = None;
+        self.game_page.pending_choice = None;
+        self.game_page.selected_variant_id = None;
+        self.game_page.move_poll_due = None;
     }
 
     pub fn open_store_game_from(&mut self, app_id: &str, flight_id: Option<String>, tx: &mut Tx) {
@@ -2092,6 +2031,7 @@ impl AppState {
         was_armed
     }
 
+    #[cfg(test)]
     pub fn arm_or_confirm_game_uninstall(&mut self, id: &str, tx: &mut Tx) {
         const KEY: &str = "gp-uninstall";
         const ARMED_SECS: f64 = 4.0;
@@ -2196,49 +2136,6 @@ impl AppState {
             tx.scroll_to_instant(key, target, 0.0);
         } else {
             tx.scroll_to_with(key, target, 0.0, SPRING_MOVE);
-        }
-    }
-
-    pub fn set_game_property(&mut self, id: &str, key: &str, value: &str) {
-        if self.status == HostStatus::Standalone {
-            if let Some(ref mut p) = self.game_props {
-                if key == "launchOptions" {
-                    p.launch_options = Some(value.to_string());
-                } else if key == "steamOverlay" {
-                    p.steam_overlay = Some(value == "true");
-                } else if key == "language" {
-                    p.language = Some(value.to_string());
-                }
-            }
-            self.notice = Some("Saved game property".into());
-            return;
-        }
-        #[cfg(windows)]
-        if let (Some(rpc), Some(handle)) = (self.rpc.clone(), self.handle.clone()) {
-            let gid = id.to_string();
-            let k = key.to_string();
-            let v = value.to_string();
-            rpc.call::<_, GamePropertySetReply>(
-                METHOD_GAME_PROPERTIES_SET,
-                &json!({ "id": gid, "key": k, "value": v }),
-                move |res| {
-                    handle.update(move |s, _| match res {
-                        Ok(r) if r.ok => {
-                            if let Some(p) = r.properties {
-                                s.game_props = Some(p);
-                            }
-                            s.notice = Some(r.message.unwrap_or_else(|| "Saved properties".into()));
-                        }
-                        Ok(r) => {
-                            s.notice = Some(
-                                r.message
-                                    .unwrap_or_else(|| "Could not save property".into()),
-                            )
-                        }
-                        Err(e) => s.notice = Some(format!("Save failed: {e}")),
-                    });
-                },
-            );
         }
     }
 
@@ -2910,6 +2807,11 @@ impl AppState {
             }
         }
 
+        self.poll_game_move_if_due(now);
+        if let Some(due) = self.game_page.move_poll_due {
+            tx.wake_at(due);
+        }
+
         if self.notice != self.notice_last_synced {
             self.notice_last_synced = self.notice.clone();
             if let Some(text) = self.notice.clone()
@@ -3255,15 +3157,6 @@ impl AppState {
         self.game_action(METHOD_GAME_UPDATE, id, "Updating", "Update started for");
     }
 
-    pub fn repair_game(&mut self, id: &str) {
-        self.game_action(
-            METHOD_GAME_REPAIR,
-            id,
-            "Verifying",
-            "Verification started for",
-        );
-    }
-
     pub fn open_game_folder(&mut self, id: &str) {
         self.game_action(
             METHOD_GAME_OPEN_FOLDER,
@@ -3273,10 +3166,11 @@ impl AppState {
         );
     }
 
+    #[cfg(test)]
     pub fn uninstall_game(&mut self, id: &str) {
         self.disarm_confirm();
         self.game_action(
-            METHOD_GAME_UNINSTALL,
+            exo_rpc::METHOD_GAME_UNINSTALL,
             id,
             "Uninstalling",
             "Uninstall started for",
@@ -3443,6 +3337,7 @@ impl AppState {
             game.is_running = ev.is_running;
             game.can_stop = ev.can_stop;
         }
+        self.on_game_run_state(&ev.id);
     }
 
     pub fn apply_launch_status(&mut self, ev: LaunchStatusEvent) {
@@ -3511,6 +3406,7 @@ impl AppState {
         if self.room == Room::ExoAi {
             self.load_pc_exo_ai();
         }
+        self.on_game_shaders_changed();
     }
 
     pub fn apply_store_changed(&mut self, ev: StoreChangedEvent) {

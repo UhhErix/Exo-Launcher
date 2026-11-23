@@ -14,7 +14,7 @@ Base: `integrate-polish-2` @ 3bdbdf1. Four finished branches counted as DONE: ro
 |---|---:|---:|---:|---:|---:|
 | Shell & Bar | 6 | 10 | 9 | 0 | 25 |
 | Library | 6 | 7 | 6 | 2 | 21 |
-| Game page | 3 | 7 | 9 | 3 | 22 |
+| Game page | 22 | 0 | 0 | 0 | 22 |
 | Store | 5 | 2 | 9 | 1 | 17 |
 | Discord | 9 | 16 | 20 | 0 | 45 |
 | Music | 5 | 7 | 9 | 0 | 21 |
@@ -24,7 +24,7 @@ Base: `integrate-polish-2` @ 3bdbdf1. Four finished branches counted as DONE: ro
 | Captures | 0 | 4 | 5 | 1 | 10 |
 | Settings | 6 | 5 | 12 | 0 | 23 |
 | Onboarding & Account | 0 | 4 | 6 | 0 | 10 |
-| **Overall** | **47** | **74** | **108** | **9** | **238** |
+| **Overall** | **66** | **67** | **99** | **6** | **238** |
 
 RPC: React calls 345 of 345 contract methods; native references 134. 211 methods React calls are never called natively. Events: React handles 77 of 77; native handles 35; 42 React-handled events are dropped natively.
 
@@ -103,32 +103,32 @@ Totals: DONE 6, PARTIAL 7, MISSING 6, BROKEN 2 (of 21).
 
 ## Game page
 
-Totals: DONE 3, PARTIAL 7, MISSING 9, BROKEN 3 (of 22).
+Totals: DONE 22, PARTIAL 0, MISSING 0, BROKEN 0 (of 22).
 
 | Feature | React ref | Native ref | Status | Notes |
 |---|---|---|---|---|
-| Page hero (art, logo, title, meta) | components/GamePage.tsx:50 | exo-ui/src/game_page.rs:562 | DONE | rpc: game.get.  |
-| Primary action states (Play / Install / Update / Pause / Resume / Queued / Stop / Buy) | components/game/PrimaryAction.tsx:6 | exo-ui/src/game_page.rs:8 | PARTIAL | rpc: game.launch, game.install, game.update, game.pauseInstall, game.cancelInstall, game.stop. game.dequeue / resumeDownload / progress unused; no Queued, Buy again, entitlement states. |
-| Download / install progress bar + speed + ETA | components/game/PrimaryAction.tsx:16 | exo-ui/src/game_page.rs:154 | PARTIAL | rpc: game.progress. Progress from push events only. |
-| Performance card (OptimizeLine, shaders, FSR/DLSS summary, HDR, frame gen) | components/game/OptimizeLine.tsx:29 | exo-ui/src/game_page.rs:156 | BROKEN | rpc: game.settings, keep.status, dlss.*, gpu.game, hdr.game. game_page.rs:149-190 renders hardcoded text ("Up to date", "Built into the game", Optimize "Applied" for any installed game). No RPC behind it. |
-| Display mode (windowed / fullscreen / borderless) | components/game/GameProperties.tsx:1 | exo-ui/src/state.rs:1068 | BROKEN | rpc: game.settings. state.rs:1263 sets local state + notice only; never persisted or applied. |
-| Frame generation row (DLSS FG / AFMF / Lossless) | components/game/FrameGenRow.tsx:28 | — | MISSING | rpc: dlss.frameGen, gpu.game, gpu.afmf3.  |
-| HDR row | components/game/HdrRow.tsx:23 | — | MISSING | rpc: hdr.game.  |
-| Compress row (CompactOS per game) | components/game/CompressRow.tsx:110 | — | MISSING | rpc: compress.state, compress.act.  |
-| Shader pre-compile row | components/game/ShaderPrecompile.tsx:10 | — | MISSING | rpc: shaders.status, shaders.prepare.cancel, shaders.rebuild. native uses 5 shaders.* methods in PC only. |
-| Properties: General (launch options, language, Steam overlay) | components/game/GameProperties.tsx:2 | exo-ui/src/game_page.rs:129 | PARTIAL | rpc: game.properties, game.properties.set. Cloud saves, Steam Input, anti-cheat choice, size on disk, library folder move missing. |
-| Properties: Installed files (Verify, Browse, Uninstall) | components/game/GameProperties.tsx:42 | exo-ui/src/game_page.rs:453 | DONE | rpc: game.repair, game.uninstall.  |
-| Properties: Betas (switch branch, access code) | components/game/GameProperties.tsx:42 | exo-ui/src/game_page.rs:17 | PARTIAL | rpc: game.properties. Read-only text; cannot switch. |
-| Properties: DLC | components/game/GameProperties.tsx:1 | exo-ui/src/game_page.rs:17 | PARTIAL | Read-only list. |
-| Properties: Artwork (refetch, replace, reset) | components/game/Artwork.tsx:3 | exo-ui/src/game_page.rs:484 | BROKEN | rpc: art.refetch, art.replace, art.reset. game_page.rs:~482 "Refresh" calls refresh_library, not art.*; no Replace/Reset/file picker. |
-| Properties: Upscaler files (DLSS/FSR/XeSS swap, restore, consent) | components/UpscalerFiles.tsx:6 | — | MISSING | rpc: dlss.consent, dlss.restore, dlss.status, dlss.newer, dlss.downloadNewer, dlss.updateAll. Scene game-props-dlss exists but no real UI. |
-| Properties: Anti-cheat choice | components/game/GameProperties.tsx:66 | — | MISSING | rpc: game.properties.set.  |
-| Properties: Cloud saves / Steam Input | components/game/GameProperties.tsx:66 | — | MISSING | rpc: steamInput.state, game.properties.  |
-| Properties: Move to another library folder / size on disk | components/game/GameProperties.tsx:52 | — | MISSING | rpc: game.properties.set.  |
-| Achievements (list, progress, rarity) + pop-up | components/game/GameSections.tsx:1 | exo-ui/src/game_page.rs:690 | PARTIAL | rpc: game.extras. game.achievements event not handled; achievement pop-up not shown. |
-| Playtime / last played stats | components/game/GameSections.tsx:1 | exo-ui/src/game_page.rs:686 | DONE | rpc: game.get. Riot export import (playtime.importRiotExport / setRiotBaseline) missing. |
-| Friends who play | components/game/GameSections.tsx:1 | exo-ui/src/game_page.rs:202 | PARTIAL |  |
-| Store page link / Buy again | components/game/PrimaryAction.tsx:7 | — | MISSING |  |
+| Page hero (art, logo, title, meta) | components/GamePage.tsx:50 | exo-ui/src/game_page.rs:405 | DONE | rpc: game.get. Includes driveHeat warning, live status pill, non-installed ArtworkStrip. |
+| Primary action states (Play / Install / Update / Pause / Resume / Queued / Stop / Buy) | components/game/PrimaryAction.tsx:6 | exo-ui/src/game_page.rs:163 | DONE | rpc: game.launch, game.install, game.update, game.pauseInstall, game.cancelInstall, game.stop, game.dequeue, game.resumeDownload, game.progress, shell.openUrl. |
+| Download / install progress bar + speed + ETA | components/game/PrimaryAction.tsx:16 | exo-ui/src/game_page.rs:315 | DONE | rpc: game.progress + install.progress event; edge progress bar, bytes, speed, ETA. |
+| Performance card (OptimizeLine, shaders, FSR/DLSS summary, HDR, frame gen) | components/game/OptimizeLine.tsx:29 | exo-ui/src/game_perf.rs:187 | DONE | rpc: game.settings, keep.status, dlss.status, dlss.frameGen, gpu.game, hdr.game, hdr.state, shaders.status. Zero fake data. |
+| Display mode (windowed / fullscreen / borderless) | components/game/OptimizeLine.tsx:87 | exo-ui/src/game_perf.rs:354 | DONE | rpc: game.settings (windowMode persisted to host). |
+| Frame generation row (DLSS FG / AFMF / Lossless) | components/game/FrameGenRow.tsx:28 | exo-ui/src/game_perf.rs:260 | DONE | rpc: dlss.frameGen, gpu.game + Smooth Motion switch. |
+| HDR row | components/game/HdrRow.tsx:23 | exo-ui/src/game_perf.rs:277 | DONE | rpc: hdr.game, hdr.state, settings.set (hdrForGames Turn on). |
+| Compress row (CompactOS per game) | components/game/CompressRow.tsx:110 | exo-ui/src/game_props.rs:475 | DONE | rpc: compress.state (auto-sample), compress.act + compress.progress event. |
+| Shader pre-compile row | components/game/ShaderPrecompile.tsx:10 | exo-ui/src/game_perf.rs:232 | DONE | rpc: shaders.status + shaders.changed event + Installed files Rebuild shaders. |
+| Properties: General (launch options, language, Steam overlay) | components/game/GameProperties.tsx:388 | exo-ui/src/game_props.rs:254 | DONE | rpc: game.properties, game.properties.set (fixed steamOverlay on/off). |
+| Properties: Installed files (Verify, Browse, Uninstall) | components/game/GameProperties.tsx:452 | exo-ui/src/game_props.rs:647 | DONE | rpc: game.repair, game.uninstall, game.openFolder. |
+| Properties: Betas (switch branch, access code) | components/game/GameProperties.tsx:561 | exo-ui/src/game_props.rs:956 | DONE | rpc: game.properties, game.properties.set (beta + secure masked betaCode). |
+| Properties: DLC | components/game/GameProperties.tsx:583 | exo-ui/src/game_props.rs:1057 | DONE | rpc: game.properties, game.properties.set (content toggles + confirm + states). |
+| Properties: Artwork (refetch, replace, reset) | components/game/Artwork.tsx:19 | exo-ui/src/game_props.rs:196 | DONE | rpc: art.refetch, art.replace, art.reset. |
+| Properties: Upscaler files (DLSS/FSR/XeSS swap, restore, consent) | components/game/GameProperties.tsx:504 | exo-ui/src/game_props.rs:869 | DONE | rpc: dlss.consent, dlss.restore, dlss.status. |
+| Properties: Anti-cheat choice | components/game/GameProperties.tsx:428 | exo-ui/src/game_props.rs:424 | DONE | rpc: game.properties.set (antiCheatLaunch + confirm). |
+| Properties: Cloud saves / Steam Input | components/game/GameProperties.tsx:409 | exo-ui/src/game_props.rs:348 | DONE | rpc: game.properties, game.properties.set (cloudSync, throughSteam, storeProperties). |
+| Properties: Move to another library folder / size on disk | components/game/GameProperties.tsx:464 | exo-ui/src/game_props.rs:815 | DONE | rpc: game.properties, game.properties.set (folder + live move progress polling). |
+| Achievements (list, progress, rarity) + pop-up | components/game/GameSections.tsx:122 | exo-ui/src/game_page.rs:517 | DONE | rpc: game.extras + game.achievements event + progress bar (in-game banners are host-side). |
+| Playtime / last played stats | components/game/GameSections.tsx:1 | exo-ui/src/game_page.rs:505 | DONE | rpc: game.get. Matches React relative last played + omits unknown facts. |
+| Friends who play | components/game/GameSections.tsx:8 | exo-ui/src/game_page.rs:41 | DONE | Matches React GameSections.tsx: GameShared Steam Family badge + multi-source GameStore switcher. |
+| Store page link / Buy again | components/game/PrimaryAction.tsx:25 | exo-ui/src/game_page.rs:233 | DONE | rpc: shell.openUrl (hostedBuyUrl + Buy again / Buy on Steam / GOG / browser). |
 
 ## Store
 
@@ -531,25 +531,25 @@ Owns: native-ui/crates/exo-ui/src/game_page.rs (+ new game_props.rs, game_perf.r
 
 Depends on: None for RPC (game.settings, game.properties.set, dlss.*, gpu.game, hdr.game, compress.*, art.*, keep.status, shaders.status all exist). Rune: file picker is host-side (shell), none needed.
 
-- `game-page-02` [PARTIAL] Primary action states (Play / Install / Update / Pause / Resume / Queued / Stop / Buy)
-- `game-page-03` [PARTIAL] Download / install progress bar + speed + ETA
-- `game-page-04` [BROKEN] Performance card (OptimizeLine, shaders, FSR/DLSS summary, HDR, frame gen)
-- `game-page-05` [BROKEN] Display mode (windowed / fullscreen / borderless)
-- `game-page-06` [MISSING] Frame generation row (DLSS FG / AFMF / Lossless)
-- `game-page-07` [MISSING] HDR row
-- `game-page-08` [MISSING] Compress row (CompactOS per game)
-- `game-page-09` [MISSING] Shader pre-compile row
-- `game-page-10` [PARTIAL] Properties: General (launch options, language, Steam overlay)
-- `game-page-12` [PARTIAL] Properties: Betas (switch branch, access code)
-- `game-page-13` [PARTIAL] Properties: DLC
-- `game-page-14` [BROKEN] Properties: Artwork (refetch, replace, reset)
-- `game-page-15` [MISSING] Properties: Upscaler files (DLSS/FSR/XeSS swap, restore, consent)
-- `game-page-16` [MISSING] Properties: Anti-cheat choice
-- `game-page-17` [MISSING] Properties: Cloud saves / Steam Input
-- `game-page-18` [MISSING] Properties: Move to another library folder / size on disk
-- `game-page-19` [PARTIAL] Achievements (list, progress, rarity) + pop-up
-- `game-page-21` [PARTIAL] Friends who play
-- `game-page-22` [MISSING] Store page link / Buy again
+- `game-page-02` [DONE] Primary action states (Play / Install / Update / Pause / Resume / Queued / Stop / Buy)
+- `game-page-03` [DONE] Download / install progress bar + speed + ETA
+- `game-page-04` [DONE] Performance card (OptimizeLine, shaders, FSR/DLSS summary, HDR, frame gen)
+- `game-page-05` [DONE] Display mode (windowed / fullscreen / borderless)
+- `game-page-06` [DONE] Frame generation row (DLSS FG / AFMF / Lossless)
+- `game-page-07` [DONE] HDR row
+- `game-page-08` [DONE] Compress row (CompactOS per game)
+- `game-page-09` [DONE] Shader pre-compile row
+- `game-page-10` [DONE] Properties: General (launch options, language, Steam overlay)
+- `game-page-12` [DONE] Properties: Betas (switch branch, access code)
+- `game-page-13` [DONE] Properties: DLC
+- `game-page-14` [DONE] Properties: Artwork (refetch, replace, reset)
+- `game-page-15` [DONE] Properties: Upscaler files (DLSS/FSR/XeSS swap, restore, consent)
+- `game-page-16` [DONE] Properties: Anti-cheat choice
+- `game-page-17` [DONE] Properties: Cloud saves / Steam Input
+- `game-page-18` [DONE] Properties: Move to another library folder / size on disk
+- `game-page-19` [DONE] Achievements (list, progress, rarity) + pop-up
+- `game-page-21` [DONE] Friends who play
+- `game-page-22` [DONE] Store page link / Buy again
 
 #### WP2 Library: folders, select mode, gifts, shelves, drag and drop (L, 15 items)
 
