@@ -1526,13 +1526,19 @@ fn run_parity_probe(
         let in_legacy_menu = legacy_menu_prefixes
             .iter()
             .any(|p| el.path.contains(p) || el.key.as_deref().is_some_and(|k| k.contains(p)));
-        let label_opt = if in_semantic_menu && matches!(el.role, "menuitem" | "option") {
-            el.label.as_deref().or(el.text.as_deref())
-        } else if in_legacy_menu {
-            el.text.as_deref().or(el.label.as_deref())
-        } else {
-            None
-        };
+        let in_golive_tab = el.role == "tab"
+            && el
+                .key
+                .as_deref()
+                .is_some_and(|k| k.starts_with("dc-gl-tab-"));
+        let label_opt =
+            if (in_semantic_menu && matches!(el.role, "menuitem" | "option")) || in_golive_tab {
+                el.label.as_deref().or(el.text.as_deref())
+            } else if in_legacy_menu {
+                el.text.as_deref().or(el.label.as_deref())
+            } else {
+                None
+            };
         if let Some(t) = label_opt {
             let trimmed = t.trim();
             if !trimmed.is_empty() && !menu_items.iter().any(|x| x == trimmed) {

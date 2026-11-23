@@ -307,10 +307,18 @@ fn participant_tile(
     };
     let av_size = if compact { 46.0 } else { 72.0 };
 
+    let backdrop = if m.stream {
+        None
+    } else {
+        m.avatar
+            .as_deref()
+            .and_then(|u| s.discord_remote_image_sized(u, 128.0, scale))
+    };
+
     let mut tile = el()
         .key(format!("dc-stage-tile-{}", m.id))
         .radius(RADIUS_PANEL)
-        .fill(if speaking { good().alpha(0.06) } else { BG })
+        .clip_rounded(RADIUS_PANEL)
         .motion(SPRING_QUICK)
         .hit()
         .cursor(Cursor::Pointer)
@@ -320,11 +328,24 @@ fn participant_tile(
 
     tile = tile.size(tile_w, tile_h);
 
-    tile = if speaking {
-        tile.border(2.0, good())
-    } else {
-        tile.border_gradient(1.0, glass_rim_top(), glass_rim_bottom())
-    };
+    if backdrop.is_none() && !speaking {
+        tile = tile.border_gradient(1.0, glass_rim_top(), glass_rim_bottom());
+    }
+
+    if let Some(img) = backdrop.as_ref() {
+        tile = tile
+            .child(
+                el().pin(Some(-tile_w * 0.2), Some(-tile_h * 0.2), None, None)
+                    .size(tile_w * 1.4, tile_h * 1.4)
+                    .pixels_fit(img.pixels(), SurfaceFit::Fill)
+                    .saturate(1.3)
+                    .blur(36.0),
+            )
+            .child(
+                el().pin(Some(0.0), Some(0.0), Some(0.0), Some(0.0))
+                    .fill(Color::BLACK.alpha(0.58)),
+            );
+    }
 
     let mut center_col = col().w_full().h_full().center().gap(10.0).child(avatar_box(
         s,
@@ -333,7 +354,7 @@ fn participant_tile(
         av_size,
         av_size * 0.5,
         None,
-        speaking,
+        false,
         scale,
     ));
 
@@ -402,6 +423,14 @@ fn participant_tile(
 
     tile = tile.child(center_col);
 
+    tile = tile.child(
+        el().pin(Some(0.0), Some(0.0), Some(0.0), Some(0.0))
+            .radius(RADIUS_PANEL)
+            .border(2.0, good())
+            .opacity(if speaking { 1.0 } else { 0.0 })
+            .motion(SPRING_QUICK),
+    );
+
     if m.stream {
         tile = tile.child(
             row()
@@ -465,8 +494,9 @@ fn golive_modal(s: &AppState, blur: bool) -> El {
         .on_press(|s: &mut AppState| s.open_voice_panel(VoicePanel::None))
         .child(icon_close(15.0, fg_muted()));
 
+    let chosen = s.discord.voice_ui.golive_chosen;
     let tab = s.discord.voice_ui.golive_tab;
-    let tabs = row()
+    let pills = row()
         .gap(6.0)
         .center_y()
         .child(
@@ -480,13 +510,18 @@ fn golive_modal(s: &AppState, blur: bool) -> El {
         .child(
             filter_pill("dc-gl-tab-screens", "Screens", tab == GoLiveTab::Screens)
                 .on_press(|s: &mut AppState| s.discord.voice_ui.golive_tab = GoLiveTab::Screens),
-        )
-        .child(el().grow(1.0))
-        .child(
-            glass_button("dc-gl-refresh", "Refresh", None)
-                .on_press(|s: &mut AppState| s.load_golive_sources()),
-        )
-        .child(close);
+        );
+    let tabs = if chosen {
+        pills
+            .child(el().grow(1.0))
+            .child(
+                glass_button("dc-gl-refresh", "Refresh", None)
+                    .on_press(|s: &mut AppState| s.load_golive_sources()),
+            )
+            .child(close)
+    } else {
+        pills.child(el().grow(1.0)).child(close)
+    };
 
     let want_kind = match tab {
         GoLiveTab::Applications => "window",
@@ -548,6 +583,7 @@ fn golive_modal(s: &AppState, blur: bool) -> El {
                 .motion(SPRING_QUICK)
                 .on_press(move |s: &mut AppState| {
                     s.discord.voice_ui.golive_selected_source = Some(sid.clone());
+                    s.discord.voice_ui.golive_chosen = true;
                 });
             card = if selected {
                 card.border(1.5, FG)
@@ -700,18 +736,20 @@ fn golive_modal(s: &AppState, blur: bool) -> El {
                 ),
         );
 
+    let grid_scroll = col()
+        .w_full()
+        .grow(1.0)
+        .min_h(0.0)
+        .scroll(ScrollSpec {
+            stick_bottom: false,
+        })
+        .child(grid);
+    if !chosen {
+        return modal.child(tabs).child(grid_scroll);
+    }
     modal
         .child(tabs)
-        .child(
-            col()
-                .w_full()
-                .grow(1.0)
-                .min_h(0.0)
-                .scroll(ScrollSpec {
-                    stick_bottom: false,
-                })
-                .child(grid),
-        )
+        .child(grid_scroll)
         .child(el().w_full().h(1.0).fill(hairline()))
         .child(quality_row)
         .child(audio_row)

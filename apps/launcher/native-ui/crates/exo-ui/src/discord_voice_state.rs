@@ -61,6 +61,7 @@ pub struct DiscordVoiceUiState {
     pub golive_viewers: Vec<String>,
     pub golive_sources: Vec<GoLiveSource>,
     pub golive_selected_source: Option<String>,
+    pub golive_chosen: bool,
     pub golive_tab: GoLiveTab,
     pub golive_height: i32,
     pub golive_fps: i32,
@@ -93,6 +94,7 @@ impl DiscordVoiceUiState {
             golive_viewers: Vec::new(),
             golive_sources: Vec::new(),
             golive_selected_source: None,
+            golive_chosen: false,
             golive_tab: GoLiveTab::Applications,
             golive_height: 1080,
             golive_fps: 60,
@@ -330,7 +332,10 @@ impl AppState {
         }
         self.discord.voice_ui.panel = panel;
         match panel {
-            VoicePanel::GoLive => self.load_golive_sources(),
+            VoicePanel::GoLive => {
+                self.discord.voice_ui.golive_chosen = false;
+                self.load_golive_sources();
+            }
             VoicePanel::Soundboard => self.load_discord_soundboard(),
             VoicePanel::Audio => self.load_discord_audio(),
             VoicePanel::None => {}

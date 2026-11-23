@@ -2,6 +2,48 @@
 
 Branch: `UhhErix/room-discord` (worktree `room-discord`). Scope: native Discord room (Rune, `apps/launcher/native-ui`) against the React room, signed in.
 
+## Round 3 (task_1cdae989baa7, on 2324296)
+
+Status: **partial.** Outcome `failed`: the feature audit was not run live, and DM and server layouts were not rebuilt end to end.
+
+Scores, signed-in run `room-discord-after-signedin-8` (9 states, exit 0):
+
+| Metric | After 7 | After 8 |
+| --- | --- | --- |
+| CRITICAL | 1 | 0 |
+| HIGH | 3 | 3 |
+| MEDIUM | 5 | 6 |
+| Menu failures | 1 (`discord-voice-stream` 0/0) | 0 |
+| Cursor failures | 4 | 4 |
+| Pixel diff >15 | 1 (voice-stream 20.81) | 1 (voice-call 17.37) |
+| Mean abs pixel diff | 11.87 | 10.51 |
+
+Changes in this round:
+1. **Menu 0/0 (item 4), fixed.** Cause: the React selector `.exo-dc-golive-menu` exists only while live, so React found 0 items while the picker was open. Native probe also did not collect the picker tabs, and `resolveProbeExe` picked a stale `target/release` binary. Fixed: `states.mjs` now opens `.exo-dc-golive` and counts `[role="tab"]`; `run_parity_probe` collects `dc-gl-tab-*` tabs; `resolveProbeExe` delegates to `resolveExoUiExe` (debug first). Result: 2/2.
+2. **Go Live picker layout (item 3).** While picking, the modal shows only the tabs (Applications / Screens), the close control and the grid. Quality, audio and footer appear after a source is chosen. `DiscordVoiceUiState.golive_chosen` drives this. Visual compare: tabs at the React position, popover at the React x.
+3. **Voice tile (item 2), implemented, not visually verified.** Avatar backdrop: image at 1.4× tile, `saturate(1.3)`, `blur(36)`, black overlay at alpha 0.58 (React brightness 0.42). Speaking ring: 2 px `good()` border, opacity transition on `SPRING_QUICK`. The voice-call compare cannot confirm this: the React reference is in the "Connecting" state with an empty stage, while Rune shows an avatar tile. The two sides are not the same state.
+4. **Settings sheet (item 1), partly fixed.** The native state tapped React coordinates, which hit a different control, so the sheet never opened. It now taps `dc-me-settings`. Sheet rect equals React's (550,126, 820×880). Remaining settings cursor misses (9/21) are the top-bar cursor under the modal, which is fork-blocked.
+5. **DM and server layouts (item 1), not done end to end.** Native widths already match React (DM pane 400, server channels 300, chat at x320). No further rebuild or measurement was made after the sheet fix.
+
+Feature audit (item 5). No live Discord session was run; the sandbox network was unreliable. Harness-proven only:
+
+| Feature | Status |
+| --- | --- |
+| Open status menu / DM context menu / channel context menu | ✓ harness (menu counts match React) |
+| Go Live picker open, share popover | ✓ harness |
+| Send, edit, delete, reply, react to messages | not verified live |
+| Attachments, emoji picker | not verified live |
+| Friend add / accept / remove | not verified live |
+| Server and channel switching, unread badges | not verified live |
+| Join / leave voice, mute / deafen | not verified live |
+| Go Live start / stop, DM calls | not verified live |
+
+Gates passed on this source before the run; no source changed after that. Harness notes: `--exo-ui` override; `exo-ui.exe` is locked while another session runs `smoke.mjs`, so the build used `CARGO_TARGET_DIR=…/rd-check`.
+
+Open after round 3: top-bar cursor under open menus (Rune fork, `ModalScope`, not touched); feature live verification; DM and server end-to-end; voice tile visual check against a React tile in the same state; element blur cost per tile (one element blur per tile with an avatar; not a backdrop, so not counted against the cap of 4).
+
+## Round 2 (archived)
+
 Status: **partial.** Round 2 (items 2–6 of the owner's decisions) moved the Go Live popover, the call bar, the members column, the sheen and the solo tile. Still open: the top-bar cursor under menus (Rune fork, not touched), the avatar backdrop and speaking ring on the voice stage, the settings/DM/server layout (measured only), and the Go Live picker's inner layout.
 
 ## Scores (signed-in parity harness, 9 Discord states)

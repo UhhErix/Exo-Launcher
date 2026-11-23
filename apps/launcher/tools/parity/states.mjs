@@ -960,8 +960,8 @@ export const STATES = [
         { type: 'click', selector: '.exo-dc-share > button.exo-dc-voice-btn' },
         { type: 'wait', ms: 500 },
       ],
-      openSelector: '.exo-dc-golive-menu, [role="dialog"]',
-      menuSelector: '.exo-dc-golive-menu [role^="menuitem"], .exo-dc-golive-menu button',
+      openSelector: '.exo-dc-golive',
+      menuSelector: '.exo-dc-golive [role="tab"]',
     },
     native: {
       scene: 'discord-voice',
@@ -987,7 +987,7 @@ export const STATES = [
     },
     native: {
       scene: 'discord',
-      script: [{ t: 0.1, type: 'tap', fromReactTarget: true }],
+      script: [{ t: 0.1, type: 'tap', key: 'dc-me-settings' }],
       expect: { room: 'Discord' },
     },
   },

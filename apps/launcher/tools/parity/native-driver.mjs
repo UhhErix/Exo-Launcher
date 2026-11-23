@@ -40,16 +40,7 @@ export function resolveExoUiExe(override = null) {
 }
 
 export function resolveProbeExe(override = null) {
-  const candidates = [
-    override,
-    join(LAUNCHER_ROOT, 'native-ui', 'target', 'release', 'exo-ui.exe'),
-    join(LAUNCHER_ROOT, 'native-ui', 'target', 'debug', 'exo-ui.exe'),
-  ].filter(Boolean)
-  for (const p of candidates) {
-    const full = resolve(p)
-    if (existsSync(full)) return full
-  }
-  throw new Error('No built exo-ui.exe found under native-ui/target/{release,debug}.')
+  return resolveExoUiExe(override)
 }
 
 function runExe(exe, args, timeoutMs = 45000) {
