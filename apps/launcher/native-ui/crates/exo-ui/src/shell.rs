@@ -1,19 +1,257 @@
+use crate::events::EventRegistry;
+use crate::gamepad::GamepadKind;
 use crate::state::{AppState, ContextMenuTarget, InputMode, MiniBarSlot, Room};
 use crate::{
-    captures, discord, game_page, key_modal, library, menus, music, notice, palette, pc, settings,
-    setup, store,
+    boot, captures, discord, downloads, game_page, gamepad, island, key_modal, library, menus,
+    music, notice, palette, pc, settings, setup, store, whats_new,
 };
 use exo_kit::{
     BG, CAPTION_BUTTON_GAP, CAPTION_BUTTON_HEIGHT, CAPTION_BUTTON_WIDTH, CAPTION_CAPSULE_PAD,
-    CAPTION_TRAILING_INSET, FG, GAP, GLASS_CONTROL_SIGMA, PRESS_SCALE, PRIMARY_FG, RADIUS_PILL,
-    SPRING_MOVE, SPRING_QUICK, TRANSPARENT, bad, exo_mark, exo_titlebar, fg_muted,
-    glass_capsule_opt, glass_control_fill, glass_enter, glass_rim_bottom, glass_rim_top,
-    glass_still_control_fill, good, hover_fill, icon_camera, icon_chat, icon_close, icon_gamepad,
+    CAPTION_TRAILING_INSET, FG, GAP, GLASS_CONTROL_SIGMA, PRESS_SCALE, PRIMARY_FG, RADIUS_CARD,
+    RADIUS_PILL, SPRING_MOVE, SPRING_QUICK, TRANSPARENT, bad, exo_mark, exo_titlebar, fg_muted,
+    glass_capsule_opt, glass_control_fill, glass_enter, glass_panel_opt, glass_rim_bottom,
+    glass_rim_top, glass_still_control_fill, good, hover_fill, icon_camera, icon_chat, icon_close,
     icon_grid, icon_library, icon_minimize, icon_mouse, icon_music, icon_settings, icon_sparkles,
-    icon_store, icon_win_maximize, modal_scrim_transition, pressed_fill, scrim_fill, selected_fill,
-    set_text_scale, type_body, type_section, type_small,
+    icon_store, icon_volume, icon_volume_low, icon_volume_off, icon_win_maximize, icon_win_restore,
+    modal_scrim_transition, popover_transition, pressed_fill, scrim_fill, selected_fill,
+    set_text_scale, slider_track, type_body, type_section, type_small,
 };
-use rune::{Cursor, Cx, El, ScrollSpec, SpringPair, Transition, col, el, row, text};
+use rune::{
+    Cursor, Cx, El, Phase, ScrollSpec, SpringPair, TextStyle, Transition, col, el, row, text,
+};
+use serde_json::{Value, json};
+
+#[derive(Debug, Clone)]
+pub struct ShellChromeState {
+    pub discord_badge_count: u32,
+    pub discord_badge_revision: u64,
+    pub window_maximized: bool,
+    pub window_maximize_hover: bool,
+    pub gamepad_kind: GamepadKind,
+    pub gamepad_paused: bool,
+    pub mini_volume_open: bool,
+    pub mini_dragging_seek: bool,
+    pub mini_dragging_vol: bool,
+    pub mini_seek_preview: Option<f32>,
+    pub mini_last_audible: f32,
+    pub room_history: Vec<Room>,
+    pub room_history_index: usize,
+}
+
+impl Default for ShellChromeState {
+    fn default() -> Self {
+        Self {
+            discord_badge_count: 0,
+            discord_badge_revision: 0,
+            window_maximized: false,
+            window_maximize_hover: false,
+            gamepad_kind: GamepadKind::Xbox,
+            gamepad_paused: false,
+            mini_volume_open: false,
+            mini_dragging_seek: false,
+            mini_dragging_vol: false,
+            mini_seek_preview: None,
+            mini_last_audible: 0.25,
+            room_history: vec![Room::Library],
+            room_history_index: 0,
+        }
+    }
+}
+
+pub fn register_events(reg: &mut EventRegistry) {
+    reg.on_raw("friends.badge", |state, data| {
+        let Some(raw) = data.get("count").and_then(|v| v.as_f64()) else {
+            return false;
+        };
+        if !raw.is_finite() {
+            return false;
+        }
+        state.chrome.discord_badge_revision = state.chrome.discord_badge_revision.saturating_add(1);
+        let next = raw.max(0.0).floor() as u32;
+        if state.chrome.discord_badge_count != next {
+            state.chrome.discord_badge_count = next;
+            true
+        } else {
+            false
+        }
+    });
+
+    reg.on_raw("shell.window", |state, data| {
+        let mut changed = false;
+        if let Some(max) = data.get("maximized").and_then(|v| v.as_bool())
+            && state.chrome.window_maximized != max
+        {
+            state.chrome.window_maximized = max;
+            changed = true;
+        }
+        let hover = data
+            .get("maximizeHover")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
+        if state.chrome.window_maximize_hover != hover {
+            state.chrome.window_maximize_hover = hover;
+            changed = true;
+        }
+        changed
+    });
+
+    reg.on_raw("discord.open", |state, data| {
+        state.switch_room(Room::Discord);
+        let guild_id = data
+            .get("guildId")
+            .and_then(|v| v.as_str())
+            .filter(|s| !s.is_empty())
+            .map(|s| s.to_string());
+        let channel_id = data
+            .get("channelId")
+            .and_then(|v| v.as_str())
+            .filter(|s| !s.is_empty())
+            .map(|s| s.to_string());
+        if let Some(gid) = guild_id {
+            state.open_discord_guild(&gid);
+            if let Some(cid) = channel_id {
+                state.open_discord_channel(&cid);
+            }
+        } else if let Some(cid) = channel_id {
+            state.open_discord_dm(&cid);
+        }
+        true
+    });
+
+    reg.on_raw("app.open", |state, data| {
+        let room = data.get("room").and_then(|v| v.as_str());
+        let part = data.get("part").and_then(|v| v.as_str());
+        match room {
+            Some("pc") => {
+                if part == Some("apps") {
+                    state.switch_room(Room::Apps);
+                } else {
+                    state.switch_room(Room::ExoAi);
+                    if part == Some("storage") {
+                        state.pc.exo_ai_storage_open = true;
+                        state.load_pc_drives();
+                    }
+                }
+                true
+            }
+            Some("library") => {
+                state.switch_room(Room::Library);
+                true
+            }
+            _ => false,
+        }
+    });
+
+    reg.on_raw("notes.open", |state, data| {
+        if let Some(id) = data.get("id").and_then(|v| v.as_str())
+            && !id.is_empty()
+        {
+            state.open_captures(None);
+            return true;
+        }
+        if let Some(msg) = data.get("message").and_then(|v| v.as_str())
+            && !msg.is_empty()
+        {
+            state.push_notice(msg, crate::state::NoticeTone::Bad);
+            return true;
+        }
+        false
+    });
+}
+
+impl AppState {
+    pub fn load_shell_chrome_state(&mut self) {
+        #[cfg(windows)]
+        {
+            self.call_host_async(
+                "friends.badge",
+                json!({}),
+                |s, res: Result<Value, String>| {
+                    if s.chrome.discord_badge_revision == 0
+                        && let Ok(val) = res
+                        && let Some(count) = val.get("count").and_then(|v| v.as_f64())
+                        && count.is_finite()
+                    {
+                        s.chrome.discord_badge_count = count.max(0.0).floor() as u32;
+                    }
+                },
+            );
+            self.call_host_async(
+                "shell.windowState",
+                json!({}),
+                |s, res: Result<Value, String>| {
+                    if let Ok(val) = res
+                        && let Some(max) = val.get("maximized").and_then(|v| v.as_bool())
+                    {
+                        s.chrome.window_maximized = max;
+                    }
+                },
+            );
+        }
+        self.load_store_outages();
+        self.hydrate_version_from_settings_json();
+        self.startup_check_update();
+    }
+
+    pub fn record_room_history(&mut self, room: Room) {
+        if self.chrome.room_history.get(self.chrome.room_history_index) == Some(&room) {
+            return;
+        }
+        let next_idx = self.chrome.room_history_index + 1;
+        self.chrome.room_history.truncate(next_idx);
+        self.chrome.room_history.push(room);
+        if self.chrome.room_history.len() > 32 {
+            self.chrome.room_history.remove(0);
+        }
+        self.chrome.room_history_index = self.chrome.room_history.len().saturating_sub(1);
+    }
+
+    pub fn navigate_history(&mut self, delta: isize) -> bool {
+        let cur = self.chrome.room_history_index as isize;
+        let next = cur + delta;
+        if next < 0 || next as usize >= self.chrome.room_history.len() {
+            return false;
+        }
+        self.chrome.room_history_index = next as usize;
+        let target = self.chrome.room_history[self.chrome.room_history_index];
+        self.switch_room_without_history(target);
+        true
+    }
+
+    pub fn seek_music_ms(&mut self, position_ms: i64) {
+        let clamped = position_ms.max(0);
+        if let Some(ref mut pb) = self.media.playback {
+            pb.position_ms = Some(clamped);
+        }
+        #[cfg(windows)]
+        self.call_host_async(
+            "music.control",
+            json!({ "action": "seek", "positionMs": clamped }),
+            |s, res: Result<exo_rpc::ActionResult, String>| {
+                if let Ok(r) = res
+                    && !r.ok
+                {
+                    let msg = r
+                        .message
+                        .filter(|m| !m.trim().is_empty())
+                        .unwrap_or_else(|| "This song can’t move to another time.".into());
+                    s.push_notice(msg, crate::state::NoticeTone::Bad);
+                }
+            },
+        );
+    }
+
+    pub fn toggle_mini_mute(&mut self) {
+        let currently_silent = self.media.music_muted || self.media.music_volume <= 0.001;
+        if currently_silent {
+            let restore = (self.chrome.mini_last_audible as f64).clamp(0.05, 1.0);
+            self.music_set_volume(restore, Some(false));
+        } else {
+            self.chrome.mini_last_audible = (self.media.music_volume as f32).clamp(0.05, 1.0);
+            self.music_set_volume(0.0, Some(true));
+        }
+    }
+}
 
 fn mini_player_transition() -> Transition {
     let enter =
@@ -33,6 +271,7 @@ pub struct BlurBudget {
     pub top_bar_search: bool,
     pub top_bar_nav: bool,
     pub top_bar_tools: bool,
+    pub island: bool,
     pub mini_player: bool,
     pub discord_voice_bar: bool,
     pub overlay: bool,
@@ -67,11 +306,13 @@ impl BlurBudget {
                     .channel_id
                     .as_deref()
                     .is_some_and(|vc| s.discord.active_dm_id.as_deref() == Some(vc)));
+        let island_visible = s.island_visible();
 
         Self {
             top_bar_search: art_under_bar,
             top_bar_nav: art_under_bar,
             top_bar_tools: art_under_bar,
+            island: island_visible && art_under_bar,
             mini_player: mini_visible,
             discord_voice_bar: voice_bar_visible,
             overlay: true,
@@ -95,30 +336,120 @@ pub fn room_icon(room: Room, active: bool) -> El {
     }
 }
 
-fn gamepad_prompt_bar() -> El {
-    row()
-        .key("gamepad-bar")
-        .pin(None, None, Some(GAP), Some(GAP))
-        .h(36.0)
-        .px(14.0)
-        .gap(12.0)
-        .center_y()
+fn discord_badge_el(count: u32) -> Option<El> {
+    if count == 0 {
+        return None;
+    }
+    let label = if count > 99 {
+        "99+".to_string()
+    } else {
+        count.to_string()
+    };
+    Some(
+        el().key("discord-nav-badge")
+            .h(16.0)
+            .min_w(16.0)
+            .px(5.0)
+            .radius(RADIUS_PILL)
+            .fill(bad())
+            .center()
+            .child(text(label).font(TextStyle::new(10.5, 650.0)).color(FG)),
+    )
+}
+
+fn mini_volume_popover_layers(s: &AppState, blur: bool) -> Vec<El> {
+    if !s.chrome.mini_volume_open {
+        return Vec::new();
+    }
+    let muted = s.media.music_muted || s.media.music_volume <= 0.001;
+    let vol_pct = (s.media.music_volume.clamp(0.0, 1.0) * 100.0).round() as i32;
+    let vol_w = 124.0;
+    let slider = slider_track(
+        "mini-vol-pop-slider",
+        "Music volume",
+        vol_w,
+        if muted {
+            0.0
+        } else {
+            s.media.music_volume as f32
+        },
+        s.chrome.mini_dragging_vol,
+        false,
+    )
+    .on_drag(move |s: &mut AppState, d, _| {
+        let frac = (d.x / d.w.max(1.0)).clamp(0.0, 1.0);
+        if frac > 0.01 {
+            s.chrome.mini_last_audible = frac;
+        }
+        match d.phase {
+            Phase::Down | Phase::Move => {
+                s.chrome.mini_dragging_vol = true;
+                s.music_set_volume(frac as f64, Some(frac <= 0.001));
+            }
+            Phase::Up => {
+                s.chrome.mini_dragging_vol = false;
+                s.music_set_volume(frac as f64, Some(frac <= 0.001));
+            }
+        }
+    });
+
+    let mute_icon_btn = el()
+        .key("mini-vol-pop-mute")
+        .role("button")
+        .label(if muted { "Unmute music" } else { "Mute music" })
+        .hit()
+        .cursor(Cursor::Pointer)
+        .size(28.0, 28.0)
         .radius(RADIUS_PILL)
-        .fill(glass_control_fill())
-        .backdrop_blur(GLASS_CONTROL_SIGMA)
-        .border_gradient(1.0, glass_rim_top(), glass_rim_bottom())
-        .child(icon_gamepad(14.0, FG))
+        .center()
+        .hover(hover_fill())
+        .on_press(|s: &mut AppState| s.toggle_mini_mute())
+        .child(if muted {
+            icon_volume_off(16.0, fg_muted())
+        } else if vol_pct < 50 {
+            icon_volume_low(16.0, fg_muted())
+        } else {
+            icon_volume(16.0, fg_muted())
+        });
+
+    let card = glass_panel_opt("mini-volume-popover", 216.0, blur)
+        .pin(None, Some(52.0), Some(212.0), None)
+        .radius(RADIUS_CARD)
+        .px(10.0)
+        .py(8.0)
+        .transition(popover_transition())
         .child(
-            text("A Open · B Back · X Play · Y Search · LB/RB Rooms")
-                .font(type_small())
-                .color(fg_muted()),
-        )
+            row()
+                .w_full()
+                .gap(8.0)
+                .center_y()
+                .child(mute_icon_btn)
+                .child(slider)
+                .child(
+                    text(format!("{vol_pct}%"))
+                        .font(type_small())
+                        .color(fg_muted()),
+                ),
+        );
+
+    let scrim = el()
+        .key("mini-vol-pop-scrim")
+        .pin(Some(0.0), Some(0.0), Some(0.0), Some(0.0))
+        .fill(BG.alpha(0.01))
+        .hit()
+        .on_press(|s: &mut AppState| s.chrome.mini_volume_open = false);
+
+    vec![scrim, card]
 }
 
 pub fn view(s: &AppState, cx: &mut Cx<AppState>) -> El {
     cx.reduced_motion(s.settings.reduce_motion);
     set_text_scale(s.text_scale());
-    let has_modal_scrim = s.palette_open || s.key_modal_open;
+    let has_modal_scrim = s.palette_open
+        || s.key_modal_open
+        || s.downloads.open
+        || s.whats_new.mode.is_some()
+        || s.whats_new.sheet_open;
     let budget = BlurBudget::compute(s, !s.notices.is_empty());
     cx.set_titlebar(exo_titlebar());
     cx.caption_color(if has_modal_scrim {
@@ -129,10 +460,22 @@ pub fn view(s: &AppState, cx: &mut Cx<AppState>) -> El {
 
     let insets = cx.chrome_insets();
     let scale = cx.env().scale;
+
+    if let Some(driver_screen) = boot::driver_install_overlay(s) {
+        return el().w_full().h_full().fill(BG).child(driver_screen);
+    }
+
+    if let Some(gate) = boot::boot_splash_if_needed(s, budget.overlay) {
+        return gate;
+    }
+
     if s.setup.open {
         let mut root = setup::view(s, scale);
+        if s.whats_new.sheet_open {
+            root = root.children(whats_new::update_sheet_layers(s, budget.overlay));
+        }
         if !s.notices.is_empty() {
-            root = root.child(notice::view(s, budget.toast));
+            root = root.child(notice::view(s, scale, budget.toast));
         }
         return root;
     }
@@ -164,6 +507,7 @@ pub fn view(s: &AppState, cx: &mut Cx<AppState>) -> El {
         .motion(SPRING_QUICK)
         .on_press_tx(|s: &mut AppState, tx| {
             s.capture_menu_open = false;
+            s.chrome.mini_volume_open = false;
             s.close_context_menu();
             s.close_dropdown();
             if s.palette_open {
@@ -182,16 +526,24 @@ pub fn view(s: &AppState, cx: &mut Cx<AppState>) -> El {
     }
 
     let gamepad_focus = s.input_mode == InputMode::Gamepad;
+    let discord_badge_count = s.chrome.discord_badge_count;
     let nav = glass_capsule_opt("nav-capsule", budget.top_bar_nav).children(
         Room::NAV_TABS.into_iter().map(|room| {
             let active = s.room == room && !s.media.captures_open;
+            let badge = (room == Room::Discord)
+                .then(|| discord_badge_el(discord_badge_count))
+                .flatten();
+            let badge_active = (room == Room::Discord)
+                .then(|| discord_badge_el(discord_badge_count))
+                .flatten();
             let base = row()
                 .h(30.0)
                 .px(10.0)
                 .gap(6.0)
                 .center_y()
                 .child(room_icon(room, false))
-                .child(text(room.label()).font(type_section()).color(FG));
+                .child(text(room.label()).font(type_section()).color(FG))
+                .children(badge);
             let mut tab = el()
                 .key(room.key())
                 .role("tab")
@@ -230,7 +582,8 @@ pub fn view(s: &AppState, cx: &mut Cx<AppState>) -> El {
                         .radius(RADIUS_PILL)
                         .fill(FG)
                         .child(room_icon(room, true))
-                        .child(text(room.label()).font(type_section()).color(PRIMARY_FG)),
+                        .child(text(room.label()).font(type_section()).color(PRIMARY_FG))
+                        .children(badge_active),
                 );
             }
             if gamepad_focus {
@@ -300,6 +653,7 @@ pub fn view(s: &AppState, cx: &mut Cx<AppState>) -> El {
             .on_press(|s: &mut AppState| {
                 s.close_context_menu();
                 s.close_dropdown();
+                s.chrome.mini_volume_open = false;
                 s.capture_menu_open = !s.capture_menu_open;
             })
             .on_secondary_press(|s: &mut AppState, p, _| {
@@ -375,28 +729,70 @@ pub fn view(s: &AppState, cx: &mut Cx<AppState>) -> El {
         let reserve = (insets.trailing - CAPTION_TRAILING_INSET).max(0.0);
         tools = tools.child(el().size(reserve, CAPTION_BUTTON_HEIGHT));
     } else {
-        let win_btn = |key: &'static str, label: &'static str, icon: El| {
-            el().key(key)
-                .role("button")
-                .label(label)
-                .cursor(Cursor::Pointer)
-                .size(CAPTION_BUTTON_WIDTH, CAPTION_BUTTON_HEIGHT)
-                .center()
-                .radius(RADIUS_PILL)
-                .child(icon)
-        };
-        tools = tools
-            .child(win_btn(
-                "win-min",
-                "Minimize",
-                icon_minimize(16.0, fg_muted()),
-            ))
-            .child(win_btn(
-                "win-max",
-                "Maximize",
-                icon_win_maximize(16.0, fg_muted()),
-            ))
-            .child(win_btn("win-close", "Close", icon_close(16.0, fg_muted())));
+        let maximized = s.chrome.window_maximized;
+        let max_hover = s.chrome.window_maximize_hover;
+        let win_min = el()
+            .key("win-min")
+            .role("button")
+            .label("Minimize")
+            .focusable(true)
+            .hit()
+            .cursor(Cursor::Pointer)
+            .press_on_down()
+            .size(CAPTION_BUTTON_WIDTH, CAPTION_BUTTON_HEIGHT)
+            .center()
+            .radius(RADIUS_PILL)
+            .fill(TRANSPARENT)
+            .hover(hover_fill())
+            .press(pressed_fill())
+            .motion(SPRING_QUICK)
+            .on_press_tx(|_s: &mut AppState, tx| tx.minimize())
+            .child(icon_minimize(16.0, fg_muted()));
+
+        let win_max = el()
+            .key("win-max")
+            .role("button")
+            .label(if maximized { "Restore" } else { "Maximize" })
+            .focusable(true)
+            .hit()
+            .cursor(Cursor::Pointer)
+            .press_on_down()
+            .size(CAPTION_BUTTON_WIDTH, CAPTION_BUTTON_HEIGHT)
+            .center()
+            .radius(RADIUS_PILL)
+            .fill(if max_hover { hover_fill() } else { TRANSPARENT })
+            .hover(hover_fill())
+            .press(pressed_fill())
+            .motion(SPRING_QUICK)
+            .on_press_tx(|s: &mut AppState, tx| {
+                s.chrome.window_maximized = !s.chrome.window_maximized;
+                tx.toggle_maximized();
+            })
+            .child(if maximized {
+                icon_win_restore(16.0, fg_muted())
+            } else {
+                icon_win_maximize(16.0, fg_muted())
+            });
+
+        let win_close = el()
+            .key("win-close")
+            .role("button")
+            .label("Close")
+            .focusable(true)
+            .hit()
+            .cursor(Cursor::Pointer)
+            .press_on_down()
+            .size(CAPTION_BUTTON_WIDTH, CAPTION_BUTTON_HEIGHT)
+            .center()
+            .radius(RADIUS_PILL)
+            .fill(TRANSPARENT)
+            .hover(bad())
+            .press(bad().alpha(0.82))
+            .motion(SPRING_QUICK)
+            .on_press_tx(|_s: &mut AppState, tx| tx.close_window())
+            .child(icon_close(16.0, fg_muted()));
+
+        tools = tools.child(win_min).child(win_max).child(win_close);
     }
 
     let mini = (s.mini_bar_slot != MiniBarSlot::Hidden)
@@ -410,6 +806,8 @@ pub fn view(s: &AppState, cx: &mut Cx<AppState>) -> El {
             };
             m.transition(mini_player_transition())
         });
+
+    let island_cap = island::capsule(s, scale, budget.island);
 
     let right_pin = GAP;
 
@@ -443,7 +841,9 @@ pub fn view(s: &AppState, cx: &mut Cx<AppState>) -> El {
                 .pin(Some(GAP), Some(8.0), None, None)
                 .h(36.0)
                 .center_y()
-                .child(search),
+                .gap(8.0)
+                .child(search)
+                .children(island_cap),
         )
         .child(
             row()
@@ -484,48 +884,58 @@ pub fn view(s: &AppState, cx: &mut Cx<AppState>) -> El {
         }
     };
 
+    let room_label = if s.media.captures_open {
+        "Captures"
+    } else {
+        s.room.label()
+    };
+
     let full_bleed_home = !s.media.captures_open
         && s.room == Room::Library
         && s.open_game_id.is_none()
         && !s.library_all_games;
 
-    let content = if !s.media.captures_open && s.room == Room::Discord {
-        discord::view(s, scale, budget)
-    } else if !s.media.captures_open && s.room == Room::Settings {
-        settings::view(s)
-    } else if !s.media.captures_open && matches!(s.room, Room::Devices | Room::ExoAi | Room::Apps) {
-        pc::view(s, scale)
-    } else if full_bleed_home {
-        library::view(s, scale)
-    } else {
-        let page = if s.media.captures_open {
-            captures::view(s, scale)
+    let content = boot::render_room_guarded(s, room_label, || {
+        if !s.media.captures_open && s.room == Room::Discord {
+            discord::view(s, scale, budget)
+        } else if !s.media.captures_open && s.room == Room::Settings {
+            settings::view(s)
+        } else if !s.media.captures_open
+            && matches!(s.room, Room::Devices | Room::ExoAi | Room::Apps)
+        {
+            pc::view(s, scale)
+        } else if full_bleed_home {
+            library::view(s, scale)
         } else {
-            match s.room {
-                Room::Library => {
-                    if let Some(game) = s.open_game() {
-                        game_page::view(s, game, scale)
-                    } else {
-                        library::view(s, scale)
+            let page = if s.media.captures_open {
+                captures::view(s, scale)
+            } else {
+                match s.room {
+                    Room::Library => {
+                        if let Some(game) = s.open_game() {
+                            game_page::view(s, game, scale)
+                        } else {
+                            library::view(s, scale)
+                        }
                     }
+                    Room::Store => store::view(s, scale),
+                    Room::Music => music::view(s, scale),
+                    Room::Devices | Room::ExoAi | Room::Apps => pc::view(s, scale),
+                    Room::Settings => settings::view(s),
+                    Room::Discord => discord::view(s, scale, budget),
                 }
-                Room::Store => store::view(s, scale),
-                Room::Music => music::view(s, scale),
-                Room::Devices | Room::ExoAi | Room::Apps => pc::view(s, scale),
-                Room::Settings => settings::view(s),
-                Room::Discord => discord::view(s, scale, budget),
-            }
-        };
+            };
 
-        col()
-            .key(format!("{room_key}-scroll"))
-            .w_full()
-            .h_full()
-            .scroll(ScrollSpec {
-                stick_bottom: false,
-            })
-            .child(page)
-    };
+            col()
+                .key(format!("{room_key}-scroll"))
+                .w_full()
+                .h_full()
+                .scroll(ScrollSpec {
+                    stick_bottom: false,
+                })
+                .child(page)
+        }
+    });
 
     let room_stage = el()
         .key(room_key)
@@ -546,6 +956,12 @@ pub fn view(s: &AppState, cx: &mut Cx<AppState>) -> El {
     }
     if s.capture_menu_open {
         root = root.children(captures::popover_layers(s, budget.overlay));
+    }
+    if s.chrome.mini_volume_open {
+        root = root.children(mini_volume_popover_layers(s, budget.overlay));
+    }
+    if s.island.person_menu.is_some() {
+        root = root.children(island::person_menu_layers(s, budget.overlay));
     }
     if s.library_more_open {
         root = root.children(menus::library_more_overlay(s, budget.overlay));
@@ -570,7 +986,7 @@ pub fn view(s: &AppState, cx: &mut Cx<AppState>) -> El {
         ));
     }
     if s.gamepad_connected {
-        root = root.child(gamepad_prompt_bar());
+        root = root.child(gamepad::bar_view(s));
     }
     if s.setup.beat.is_some() {
         root = root.child(setup::coach(s));
@@ -578,14 +994,23 @@ pub fn view(s: &AppState, cx: &mut Cx<AppState>) -> El {
     if s.setup.return_to.is_some() && !s.setup.open {
         root = root.child(setup::return_bar(s));
     }
+    if s.downloads.open {
+        root = root.children(downloads::layers(s, budget.overlay));
+    }
     if s.key_modal_open {
         root = root.children(key_modal::layers(s, budget.overlay));
     }
     if s.palette_open {
         root = root.children(palette::layers(s, budget.overlay));
     }
+    if s.whats_new.mode.is_some() {
+        root = root.children(whats_new::whats_new_layers(s, budget.overlay));
+    }
+    if s.whats_new.sheet_open {
+        root = root.children(whats_new::update_sheet_layers(s, budget.overlay));
+    }
     if !s.notices.is_empty() {
-        root = root.child(notice::view(s, budget.toast));
+        root = root.child(notice::view(s, scale, budget.toast));
     }
     root
 }
@@ -593,6 +1018,7 @@ pub fn view(s: &AppState, cx: &mut Cx<AppState>) -> El {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use exo_rpc::HostEvent;
     use rune::{Env, Runtime};
 
     #[test]
@@ -615,5 +1041,26 @@ mod tests {
             tools[0] + tools[2],
             1920.0 - GAP
         );
+    }
+
+    #[test]
+    fn discord_badge_and_window_state_events_update_chrome() {
+        let mut s = AppState::default();
+        assert!(s.apply_host_event(HostEvent::Raw {
+            event: "friends.badge".into(),
+            data: json!({ "count": 12 }),
+        }));
+        assert_eq!(s.chrome.discord_badge_count, 12);
+
+        assert!(s.apply_host_event(HostEvent::Raw {
+            event: "shell.window".into(),
+            data: json!({ "maximized": true, "maximizeHover": true }),
+        }));
+        assert!(s.chrome.window_maximized);
+        assert!(s.chrome.window_maximize_hover);
+
+        let mut rt = Runtime::new(s, view, (1920.0, 1080.0), Env::new(true, 1.0));
+        rt.frame(0.0);
+        assert!(rt.presented("discord-nav-badge").is_some());
     }
 }

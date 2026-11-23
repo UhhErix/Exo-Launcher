@@ -12,7 +12,7 @@ Base: `integrate-polish-2` @ 3bdbdf1. Four finished branches counted as DONE: ro
 
 | Room | DONE | PARTIAL | MISSING | BROKEN | Total |
 |---|---:|---:|---:|---:|---:|
-| Shell & Bar | 6 | 10 | 9 | 0 | 25 |
+| Shell & Bar | 24 | 0 | 1 | 0 | 25 |
 | Library | 6 | 7 | 6 | 2 | 21 |
 | Game page | 3 | 7 | 9 | 3 | 22 |
 | Store | 5 | 2 | 9 | 1 | 17 |
@@ -24,7 +24,7 @@ Base: `integrate-polish-2` @ 3bdbdf1. Four finished branches counted as DONE: ro
 | Captures | 0 | 4 | 5 | 1 | 10 |
 | Settings | 6 | 5 | 12 | 0 | 23 |
 | Onboarding & Account | 0 | 4 | 6 | 0 | 10 |
-| **Overall** | **47** | **74** | **108** | **9** | **238** |
+| **Overall** | **65** | **64** | **100** | **9** | **238** |
 
 RPC: React calls 345 of 345 contract methods; native references 134. 211 methods React calls are never called natively. Events: React handles 77 of 77; native handles 35; 42 React-handled events are dropped natively.
 
@@ -43,33 +43,33 @@ RPC: React calls 345 of 345 contract methods; native references 134. 211 methods
 
 ## Shell & Bar
 
-Totals: DONE 6, PARTIAL 10, MISSING 9, BROKEN 0 (of 25).
+Totals: DONE 24, PARTIAL 0, MISSING 1, BROKEN 0 (of 25).
 
 | Feature | React ref | Native ref | Status | Notes |
 |---|---|---|---|---|
-| Search capsule (opens palette, Ctrl+K) | components/shell/BarCapsule.tsx:13 | exo-ui/src/shell.rs:32 | DONE | Right-click menu on capsule also present. |
+| Search capsule (opens palette, Ctrl+K) | components/shell/BarCapsule.tsx:13 | exo-ui/src/shell.rs:483 | DONE | Right-click menu on capsule also present. |
 | Room nav tabs (Library, Store, Discord, Music, Devices, Exo AI, Apps) | components/shell/TitleBar.tsx:34 | exo-ui/src/state.rs:45 | DONE | Ctrl+1..7 shortcuts present. |
-| Discord unread / mention badge on nav tab | components/shell/DiscordBadge.tsx:6 | — | MISSING | rpc: friends.badge, discord.mentions. No badge anywhere in shell.rs; friends.badge never called. |
-| Mini player in bar (title, play/pause, next, volume) | components/shell/MusicMiniPlayer.tsx:103 | exo-ui/src/music.rs:1520 | PARTIAL | rpc: music.control, music.volume. Controls work; React MusicVolume popover, seek and open-now-playing click partial. |
+| Discord unread / mention badge on nav tab | components/shell/DiscordBadge.tsx:6 | exo-ui/src/shell.rs:339 | DONE | rpc: friends.badge (+ push event). Red 99+ pill on Discord tab; event registered via events.rs. |
+| Mini player in bar (title, play/pause, next, volume) | components/shell/MusicMiniPlayer.tsx:103 | exo-ui/src/music.rs:1521 | DONE | rpc: music.control (previous/toggle/next/seek), music.volume. Interactive seek drag, disabled states, volume slider/mute with last_audible, Medium popover (`shell.rs:360`). |
 | Capture button + menu (screenshot, clip, open captures) | components/shell/CaptureButton.tsx:27 | exo-ui/src/captures.rs:183 | DONE | rpc: capture.list, capture.act. Popover exit fades per room-shell-library report. |
-| Settings gear | components/shell/TitleBar.tsx:34 | exo-ui/src/shell.rs:3 | DONE |  |
-| Window controls (min/max/close, drag, double-click maximize) | components/WindowChrome.tsx:6 | exo-ui/src/shell.rs:407 | PARTIAL | rpc: shell.window. shell.window event (maximize state) not handled; maximize icon does not follow host state. |
+| Settings gear | components/shell/TitleBar.tsx:34 | exo-ui/src/shell.rs:676 | DONE |  |
+| Window controls (min/max/close, drag, double-click maximize) | components/WindowChrome.tsx:6 | exo-ui/src/shell.rs:753 | DONE | rpc: shell.windowState (+ shell.window event). Restore/Maximize icon and hover mirror host state; wired to Tx minimize/toggle_maximized/close_window. |
 | Right-click menus on bar items | components/shell/BarCapsule.tsx:13 | exo-ui/src/menus.rs:72 | DONE |  |
-| Exo Island (in-call / download capsule) | components/shell/ExoIsland.tsx:6 | — | MISSING | rpc: discord.ring, discord.myVoice, downloads.list. Not in native at all; also ExoIslandCall.tsx (call controls from any room). |
-| Downloads sheet (queue, pause, cancel, resume, speed, order) | components/DownloadsSheet.tsx:23 | exo-ui/src/library.rs:398 | PARTIAL | rpc: downloads.list, downloads.pauseAll, downloads.resumeAll, downloads.move, game.pauseInstall, game.cancelInstall. Native only has pause/cancel buttons on the game page; downloads.* never called; no sheet, no queue. |
-| What's New sheet (changelog after update) | components/shell/WhatsNewSheet.tsx:19 | — | MISSING | versions.new event not handled. |
-| App update flow (check, download progress, install, restart) | components/shell/useAppUpdate.ts:69 | exo-ui/src/settings.rs:295 | PARTIAL | rpc: app.checkUpdate, app.installUpdate. Only Settings > About buttons; no auto toast, no progress, no update sheet. |
-| Activate key sheet | components/ActivateKeySheet.tsx:19 | exo-ui/src/key_modal.rs:36 | PARTIAL | rpc: keys.activate, keys.preview. keys.found event (clipboard key found) not handled. |
-| Toast / notice stack (with actions, tones, auto-dismiss) | components/shell/NoticeStack.tsx:18 | exo-ui/src/state.rs:2570 | PARTIAL | Plain text notices only; app.notify / notifyClear events not handled; no actions. |
-| Anti-cheat missing notice (install anti-cheat prompt) | components/shell/AntiCheatNotices.tsx:31 | — | MISSING | anticheat.missing event not handled. |
-| Store outage notices | components/shell/StoreOutageNotices.tsx:57 | — | MISSING | rpc: stores.outage. stores.outage event/RPC absent. |
-| Discord DM / ping toasts | components/shell/DiscordNotices.tsx:12 | — | MISSING | rpc: discord.notify, discord.dmLine. discord.notify/dmLine events not handled. |
-| Driver install overlay | components/shell/DriverInstallOverlay.tsx:140 | — | MISSING | rpc: gpu.driverInstall. gpu.driverInstall event not handled. |
-| Boot gate + error boundary (splash, retry, crash screen) | components/shell/BootGate.tsx:87 | exo-ui/src/main.rs:143 | PARTIAL | rpc: shell.bootstrap, shell.ready. No splash/retry UI; host-down state silently renders empty rooms; ErrorBoundary equivalent absent. |
-| Gamepad bar / controller navigation | components/shell/GamepadBar.tsx:41 | exo-ui/src/gamepad.rs:1 | PARTIAL | 173 lines: focus ring + hint bar; no Y/X actions, no per-room mapping, no wiggle. |
-| Global keyboard shortcuts (Ctrl+F, Ctrl+A, Alt+arrows, etc.) | components/shell/useRoomController.ts:312 | exo-ui/src/main.rs:78 | PARTIAL | Only Ctrl+K, Ctrl+, , Ctrl+1..7, Escape. Missing Ctrl+F library search, Ctrl+A select-all, Discord Alt/Ctrl nav, Music shortcuts. |
-| Command palette (rooms, settings, games, actions) | components/shell/launcherCommands.ts:1 | exo-ui/src/palette.rs:14 | PARTIAL | Has Rooms, PC sections, Settings sections, games, Add game, Refresh, Activate key, Resume setup, Check updates. |
-| Palette: Take the tour, Minimize/Close window, Play/Install selected, note commands, Discord DMs/servers/channels, music controls | components/shell/paletteExtras.ts:1 | — | MISSING | rpc: discord.home, music.control. All absent natively. |
+| Exo Island (in-call / download capsule) | components/shell/ExoIsland.tsx:6 | exo-ui/src/island.rs:324 | DONE | rpc: discord.ring, discord.voice (+ discord.call event). Call capsule outside Discord with speaking ring, 4 faces + overflow, per-user mute/volume menu, Live badge, live timer, Mute/Deafen/Leave, incoming-call Answer/Decline. |
+| Downloads sheet (queue, pause, cancel, resume, speed, order) | components/DownloadsSheet.tsx:23 | exo-ui/src/downloads.rs:412 | DONE | rpc: downloads.list, downloads.pauseAll, downloads.resumeAll, downloads.move, game.dequeue, game.resumeDownload, game.pauseInstall, game.cancelInstall, game.autoUpdate (+ install.queue/install.progress). 880x760 glass sheet matching React. |
+| What's New sheet (changelog after update) | components/shell/WhatsNewSheet.tsx:19 | exo-ui/src/whats_new.rs:930 | DONE | Embeds whatsNew.json & CHANGELOG.md, auto-opens missed releases on update, saves whatsNewSeen via settings.set, handles versions.new event. |
+| App update flow (check, download progress, install, restart) | components/shell/useAppUpdate.ts:69 | exo-ui/src/whats_new.rs:1090 | DONE | rpc: app.checkUpdate (startup 800ms boot hold + manual), app.installUpdate (+ app.updateState/app.updateProgress). UpdateSheet, progress bar, error/retry, NoticeStack notifications. |
+| Activate key sheet | components/ActivateKeySheet.tsx:19 | exo-ui/src/key_modal.rs:182 | DONE | rpc: keys.activate, keys.preview (+ keys.found event). Store chips (Steam/Epic/GOG), copy key, inline error, Epic clipboard copy before activate. |
+| Toast / notice stack (with actions, tones, auto-dismiss) | components/shell/NoticeStack.tsx:18 | exo-ui/src/notice.rs:960 | DONE | Bottom-right stack (lifted in Music), titles, where label, count badge, 36px avatar/tone glyph, confirm actions, edge progress bar, click-to-open, waiting queue, app.notify/app.notifyClear. |
+| Anti-cheat missing notice (install anti-cheat prompt) | components/shell/AntiCheatNotices.tsx:31 | exo-ui/src/notice.rs:139 | DONE | Handles anticheat.missing event with Install action calling runtimes.install. |
+| Store outage notices | components/shell/StoreOutageNotices.tsx:57 | exo-ui/src/notice.rs:174 | DONE | rpc: stores.outages, stores.playOffline (+ stores.outage event). |
+| Discord DM / ping toasts | components/shell/DiscordNotices.tsx:12 | exo-ui/src/notice.rs:179 | DONE | Handles discord.notify, discord.notifyClear, discord.dmLine; coalesces counts, click opens DM/channel. |
+| Driver install overlay | components/shell/DriverInstallOverlay.tsx:140 | exo-ui/src/boot.rs:598 | DONE | Handles gpu.driver & gpu.driverInstall with monotonic phases, milestone rail, Hide until it installs, Not now / Restart now (bios.update windows), Copy logs (app.logsFor). |
+| Boot gate + error boundary (splash, retry, crash screen) | components/shell/BootGate.tsx:87 | exo-ui/src/boot.rs:448 | DONE | rpc: shell.bootstrap, shell.painted, app.openLogs, app.logsFor. Splash while connecting/update-hold, error card with Try again/Open logs/Copy logs, catch_unwind room ErrorBoundary. |
+| Gamepad bar / controller navigation | components/shell/GamepadBar.tsx:41 | exo-ui/src/gamepad.rs:152 | DONE | Xbox/PS/Nintendo glyphs, START/BACK/LT/RT polling, context-aware bar with paused Controller Lab state, per-room subtab cycling. |
+| Global keyboard shortcuts (Ctrl+F, Ctrl+A, Alt+arrows, etc.) | components/shell/useRoomController.ts:312 | exo-ui/src/main.rs:131 | DONE | Ctrl+K, Ctrl+,, Ctrl+1..7, Ctrl+F, Ctrl+A, Ctrl+Shift+M/D, Alt+Left/Right history/back, Alt+Up/Down (+Shift unread) Discord channels, Shift+Escape mark read, Space in Music, modal holds. |
+| Command palette (rooms, settings, games, actions) | components/shell/launcherCommands.ts:1 | exo-ui/src/palette.rs:526 | DONE | Rooms, PC/Settings sections, games, Downloads, What's new, Add game, Refresh, Activate key, Resume/Take tour, Check updates, Minimize/Close window. |
+| Palette: Take the tour, Minimize/Close window, Play/Install selected, note commands, Discord DMs/servers/channels, music controls | components/shell/paletteExtras.ts:1 | exo-ui/src/palette.rs:42 | DONE | rpc: notes.list, discord.home, discord.channels, music.control. Loads extras on open; Play/Install selected game, notes, Discord DMs/servers/channels, Music play-pause/next/prev/open. |
 | Tour (guided walkthrough) | components/shell/ExoTour.tsx:54 | exo-ui/src/setup.rs:25† | DONE | Delivered by native-onboarding branch (live tour). |
 | Report a problem entry points (Settings, palette, error screen) | components/settings/ReportProblem.tsx:20 | — | MISSING | rpc: report.preview, report.send. See Settings. |
 
@@ -579,24 +579,24 @@ Owns: shell.rs, notice.rs, palette.rs, gamepad.rs, main.rs on_key, new downloads
 
 Depends on: Land events.rs first (S): one push-event registry that rooms register handlers into, so WP6/7/8/9/10 stop editing the same state.rs match. Island call controls need WP7 voice state.
 
-- `shell-bar-03` [MISSING] Discord unread / mention badge on nav tab
-- `shell-bar-04` [PARTIAL] Mini player in bar (title, play/pause, next, volume)
-- `shell-bar-07` [PARTIAL] Window controls (min/max/close, drag, double-click maximize)
-- `shell-bar-09` [MISSING] Exo Island (in-call / download capsule)
-- `shell-bar-10` [PARTIAL] Downloads sheet (queue, pause, cancel, resume, speed, order)
-- `shell-bar-11` [MISSING] What's New sheet (changelog after update)
-- `shell-bar-12` [PARTIAL] App update flow (check, download progress, install, restart)
-- `shell-bar-13` [PARTIAL] Activate key sheet
-- `shell-bar-14` [PARTIAL] Toast / notice stack (with actions, tones, auto-dismiss)
-- `shell-bar-15` [MISSING] Anti-cheat missing notice (install anti-cheat prompt)
-- `shell-bar-16` [MISSING] Store outage notices
-- `shell-bar-17` [MISSING] Discord DM / ping toasts
-- `shell-bar-18` [MISSING] Driver install overlay
-- `shell-bar-19` [PARTIAL] Boot gate + error boundary (splash, retry, crash screen)
-- `shell-bar-20` [PARTIAL] Gamepad bar / controller navigation
-- `shell-bar-21` [PARTIAL] Global keyboard shortcuts (Ctrl+F, Ctrl+A, Alt+arrows, etc.)
-- `shell-bar-22` [PARTIAL] Command palette (rooms, settings, games, actions)
-- `shell-bar-23` [MISSING] Palette: Take the tour, Minimize/Close window, Play/Install selected, note commands, Discord DMs/servers/channels, music controls
+- `shell-bar-03` [DONE] Discord unread / mention badge on nav tab
+- `shell-bar-04` [DONE] Mini player in bar (title, play/pause, next, volume)
+- `shell-bar-07` [DONE] Window controls (min/max/close, drag, double-click maximize)
+- `shell-bar-09` [DONE] Exo Island (in-call / download capsule)
+- `shell-bar-10` [DONE] Downloads sheet (queue, pause, cancel, resume, speed, order)
+- `shell-bar-11` [DONE] What's New sheet (changelog after update)
+- `shell-bar-12` [DONE] App update flow (check, download progress, install, restart)
+- `shell-bar-13` [DONE] Activate key sheet
+- `shell-bar-14` [DONE] Toast / notice stack (with actions, tones, auto-dismiss)
+- `shell-bar-15` [DONE] Anti-cheat missing notice (install anti-cheat prompt)
+- `shell-bar-16` [DONE] Store outage notices
+- `shell-bar-17` [DONE] Discord DM / ping toasts
+- `shell-bar-18` [DONE] Driver install overlay
+- `shell-bar-19` [DONE] Boot gate + error boundary (splash, retry, crash screen)
+- `shell-bar-20` [DONE] Gamepad bar / controller navigation
+- `shell-bar-21` [DONE] Global keyboard shortcuts (Ctrl+F, Ctrl+A, Alt+arrows, etc.)
+- `shell-bar-22` [DONE] Command palette (rooms, settings, games, actions)
+- `shell-bar-23` [DONE] Palette: Take the tour, Minimize/Close window, Play/Install selected, note commands, Discord DMs/servers/channels, music controls
 
 #### WP4 Settings, accounts, privacy, report, onboarding remainder (L, 28 items)
 

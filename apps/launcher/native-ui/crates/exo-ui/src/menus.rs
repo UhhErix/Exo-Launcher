@@ -1517,7 +1517,7 @@ pub fn library_more_overlay(s: &AppState, blur: bool) -> Vec<El> {
             MenuItem::new("lib-menu-downloads", "Downloads")
                 .icon(icon_download(15.0, FG))
                 .on_select(|s: &mut AppState, _| {
-                    s.push_notice("No active downloads", NoticeTone::Neutral);
+                    s.open_downloads();
                 }),
         ),
         MenuEntry::item(

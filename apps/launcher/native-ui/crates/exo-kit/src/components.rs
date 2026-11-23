@@ -249,10 +249,19 @@ pub fn glass_icon_circle_opt(
 }
 
 pub fn primary_button(key: &'static str, label: &'static str, icon: Option<El>) -> El {
+    primary_button_dyn(key, label, icon)
+}
+
+pub fn primary_button_dyn(
+    key: impl Into<String>,
+    label: impl Into<String>,
+    icon: Option<El>,
+) -> El {
+    let label_str = label.into();
     let mut btn = row()
         .key(key)
         .role("button")
-        .label(label)
+        .label(label_str.clone())
         .focusable(true)
         .hit()
         .cursor(Cursor::Pointer)
@@ -270,11 +279,77 @@ pub fn primary_button(key: &'static str, label: &'static str, icon: Option<El>) 
     if let Some(ic) = icon {
         btn = btn.child(ic);
     }
-    btn.child(text(label).font(type_control()).color(PRIMARY_FG))
+    btn.child(text(label_str).font(type_control()).color(PRIMARY_FG))
 }
 
 pub fn glass_button(key: &'static str, label: &'static str, icon: Option<El>) -> El {
     glass_button_opt(key, label, icon, true)
+}
+
+pub fn glass_button_dyn(
+    key: impl Into<String>,
+    label: impl Into<String>,
+    icon: Option<El>,
+    blur: bool,
+) -> El {
+    let label_str = label.into();
+    let mut btn = row()
+        .key(key)
+        .role("button")
+        .label(label_str.clone())
+        .focusable(true)
+        .hit()
+        .cursor(Cursor::Pointer)
+        .press_on_down()
+        .press_scale(PRESS_SCALE)
+        .h(32.0)
+        .px(12.0)
+        .gap(6.0)
+        .center_y()
+        .radius(RADIUS_PILL)
+        .fill(if blur {
+            glass_control_fill()
+        } else {
+            glass_still_control_fill()
+        })
+        .hover(hover_fill())
+        .press(pressed_fill())
+        .border_gradient(1.0, glass_rim_top(), glass_rim_bottom())
+        .motion(SPRING_QUICK);
+    if blur {
+        btn = btn.backdrop_blur(GLASS_CONTROL_SIGMA);
+    }
+    if let Some(ic) = icon {
+        btn = btn.child(ic);
+    }
+    btn.child(text(label_str).font(type_control()).color(FG))
+}
+
+pub fn danger_button_dyn(key: impl Into<String>, label: impl Into<String>, icon: Option<El>) -> El {
+    let label_str = label.into();
+    let mut btn = row()
+        .key(key)
+        .role("button")
+        .label(label_str.clone())
+        .focusable(true)
+        .hit()
+        .cursor(Cursor::Pointer)
+        .press_on_down()
+        .press_scale(PRESS_SCALE)
+        .h(32.0)
+        .px(12.0)
+        .gap(6.0)
+        .center_y()
+        .radius(RADIUS_PILL)
+        .fill(bad().alpha(0.14))
+        .hover(bad().alpha(0.24))
+        .press(bad().alpha(0.32))
+        .border(1.0, bad().alpha(0.36))
+        .motion(SPRING_QUICK);
+    if let Some(ic) = icon {
+        btn = btn.child(ic);
+    }
+    btn.child(text(label_str).font(type_control()).color(bad()))
 }
 
 pub fn glass_button_opt(
@@ -423,6 +498,10 @@ pub fn stat_chip(label: &'static str, value: String) -> El {
 }
 
 pub fn switch_pill(key: &'static str, label: &'static str, on: bool) -> El {
+    switch_pill_keyed(key, label, on)
+}
+
+pub fn switch_pill_keyed(key: impl Into<String>, label: impl Into<String>, on: bool) -> El {
     let knob = el()
         .size(20.0, 20.0)
         .radius(10.0)

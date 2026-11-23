@@ -1,11 +1,19 @@
+use crate::boot::BootState;
 use crate::discord_state::DiscordState;
+use crate::downloads::DownloadsState;
 use crate::events::EventRegistry;
 use crate::gamepad::GamepadAction;
 use crate::image_cache::{CacheRoom, ImageLruCache, bucket_dim, scale_bucket};
+use crate::island::IslandState;
+use crate::key_modal::KeyModalState;
 use crate::media_state::MediaState;
+use crate::notice::{NoticeActionSpec, NoticeOpenKind, NoticeRuntimeState};
+use crate::palette::PaletteExtrasState;
 use crate::pc_state::SettingsAndPcState;
 use crate::setup::SetupFlow;
+use crate::shell::ShellChromeState;
 use crate::video_decoder::VideoFrameRouter;
+use crate::whats_new::WhatsNewState;
 use exo_kit::SPRING_MOVE;
 use exo_rpc::types::COVER_CACHE_ORIGIN;
 use exo_rpc::{
@@ -17,11 +25,11 @@ use exo_rpc::{
     METHOD_GAME_CANCEL_INSTALL, METHOD_GAME_EXTRAS, METHOD_GAME_GET, METHOD_GAME_INSTALL,
     METHOD_GAME_LAUNCH, METHOD_GAME_OPEN_FOLDER, METHOD_GAME_PAUSE_INSTALL, METHOD_GAME_PROPERTIES,
     METHOD_GAME_PROPERTIES_SET, METHOD_GAME_REPAIR, METHOD_GAME_STOP, METHOD_GAME_UNINSTALL,
-    METHOD_GAME_UPDATE, METHOD_KEYS_ACTIVATE, METHOD_KEYS_PREVIEW, METHOD_LIBRARY_REFRESH,
-    METHOD_SETTINGS_SET, METHOD_SHELL_BOOTSTRAP, METHOD_STORE_GAME, METHOD_STORE_GAME_OFFERS,
-    METHOD_STORE_HOME, METHOD_STORE_OPEN, METHOD_STORE_SEARCH, MusicPlayback, MusicVolumeEvent,
-    ShellBootstrap, StoreArt, StoreChangedEvent, StoreGame, StoreHome, StoreOffer,
-    StoreOtherOffers, StoreSearchReply, StoreShelf, StoreTile, remote_art,
+    METHOD_GAME_UPDATE, METHOD_LIBRARY_REFRESH, METHOD_SETTINGS_SET, METHOD_SHELL_BOOTSTRAP,
+    METHOD_STORE_GAME, METHOD_STORE_GAME_OFFERS, METHOD_STORE_HOME, METHOD_STORE_OPEN,
+    METHOD_STORE_SEARCH, MusicPlayback, MusicVolumeEvent, ShellBootstrap, StoreArt,
+    StoreChangedEvent, StoreGame, StoreHome, StoreOffer, StoreOtherOffers, StoreSearchReply,
+    StoreShelf, StoreTile, remote_art,
 };
 use rune::{Image, ImageCache, ScrollPos, TextEdit, Tx, Waker};
 use serde_json::json;
@@ -535,6 +543,23 @@ pub enum PaletteTarget {
     MinimizeWindow,
     CloseWindow,
     ResumeSetup,
+    PlaySelected(String),
+    InstallSelected(String),
+    OpenDownloads,
+    OpenWhatsNew,
+    NoteNew,
+    NoteOpen,
+    NoteItem(String),
+    DiscordDm(String),
+    DiscordServer(String),
+    DiscordChannel {
+        guild_id: String,
+        channel_id: String,
+    },
+    MusicToggle,
+    MusicNext,
+    MusicPrevious,
+    MusicOpen,
 }
 
 #[derive(Clone, Debug)]
@@ -542,15 +567,16 @@ pub struct PaletteItem {
     pub id: String,
     pub group: &'static str,
     pub title: String,
-    pub detail: Option<&'static str>,
+    pub detail: Option<String>,
     pub target: PaletteTarget,
 }
 
 pub const NOTICE_DURATION_SECS: f64 = 4.0;
 pub const MAX_NOTICES: usize = 3;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum NoticeTone {
+    #[default]
     Neutral,
     Good,
     Bad,
@@ -559,8 +585,19 @@ pub enum NoticeTone {
 #[derive(Clone, Debug)]
 pub struct NoticeItem {
     pub id: u64,
+    pub key_id: Option<String>,
+    pub title: Option<String>,
+    pub where_label: Option<String>,
     pub text: String,
     pub tone: NoticeTone,
+    pub sticky: bool,
+    pub lasting: bool,
+    pub count: u32,
+    pub progress: Option<Option<f32>>,
+    pub action: Option<NoticeActionSpec>,
+    pub on_open: Option<NoticeOpenKind>,
+    pub avatar_url: Option<String>,
+    pub avatar_initial: Option<String>,
     pub remaining_secs: f64,
     pub last_tick: Option<f64>,
     pub hovered: bool,
@@ -672,6 +709,14 @@ pub struct AppState {
     remote_inflight: RefCell<HashSet<String>>,
     pub video_router: VideoFrameRouter,
     pub events: Rc<EventRegistry>,
+    pub chrome: ShellChromeState,
+    pub downloads: DownloadsState,
+    pub island: IslandState,
+    pub whats_new: WhatsNewState,
+    pub boot: BootState,
+    pub key_modal: KeyModalState,
+    pub notice_runtime: NoticeRuntimeState,
+    pub palette_extras: PaletteExtrasState,
     #[cfg(windows)]
     pub rpc: Option<Arc<RpcClient>>,
     #[cfg(windows)]
@@ -797,6 +842,14 @@ impl AppState {
             remote_inflight: RefCell::new(HashSet::new()),
             video_router: VideoFrameRouter::new(),
             events: Rc::new(EventRegistry::with_defaults()),
+            chrome: ShellChromeState::default(),
+            downloads: DownloadsState::default(),
+            island: IslandState::default(),
+            whats_new: WhatsNewState::default(),
+            boot: BootState::default(),
+            key_modal: KeyModalState::default(),
+            notice_runtime: NoticeRuntimeState::default(),
+            palette_extras: PaletteExtrasState::default(),
             #[cfg(windows)]
             rpc: None,
             #[cfg(windows)]
@@ -887,6 +940,14 @@ impl AppState {
             remote_inflight: RefCell::new(HashSet::new()),
             video_router: VideoFrameRouter::new(),
             events: Rc::new(EventRegistry::with_defaults()),
+            chrome: ShellChromeState::default(),
+            downloads: DownloadsState::default(),
+            island: IslandState::default(),
+            whats_new: WhatsNewState::for_host_pipe(),
+            boot: BootState::default(),
+            key_modal: KeyModalState::default(),
+            notice_runtime: NoticeRuntimeState::default(),
+            palette_extras: PaletteExtrasState::default(),
             #[cfg(windows)]
             rpc: None,
             #[cfg(windows)]
@@ -1080,7 +1141,22 @@ impl AppState {
         }
     }
 
+    pub fn clock_secs(&self) -> f64 {
+        self.clock_secs
+    }
+
+    pub fn alloc_notice_id(&mut self) -> u64 {
+        let id = self.next_notice_id;
+        self.next_notice_id = self.next_notice_id.saturating_add(1);
+        id
+    }
+
     pub fn switch_room(&mut self, room: Room) {
+        self.record_room_history(room);
+        self.switch_room_without_history(room);
+    }
+
+    pub fn switch_room_without_history(&mut self, room: Room) {
         let prev_cache_room = Self::cache_room_for(self.room);
         let next_cache_room = Self::cache_room_for(room);
         if prev_cache_room != next_cache_room {
@@ -1111,6 +1187,8 @@ impl AppState {
         self.library_add_open = false;
         self.context_menu = None;
         self.open_dropdown = None;
+        self.chrome.mini_volume_open = false;
+        self.island.person_menu = None;
         if self.media.captures_open {
             self.close_captures();
         }
@@ -1174,6 +1252,8 @@ impl AppState {
         self.library_more_open = false;
         self.context_menu = None;
         self.open_dropdown = None;
+        self.chrome.mini_volume_open = false;
+        self.island.person_menu = None;
         self.library_add_open = next;
     }
 
@@ -2107,67 +2187,14 @@ impl AppState {
         self.key_input.text.clear();
         self.key_input.sync_invariants();
         self.key_preview = None;
+        self.reset_key_modal_fields();
         tx.focus("activate-key-input", false);
-
-        #[cfg(windows)]
-        if let (Some(rpc), Some(handle)) = (self.rpc.clone(), self.handle.clone()) {
-            rpc.call::<_, KeyPreview>(METHOD_KEYS_PREVIEW, &json!({}), move |res| {
-                if let Ok(prev) = res {
-                    handle.update(move |s, _| {
-                        if prev.looks_like_key
-                            && let Some(ref k) = prev.key
-                            && s.key_input.text.is_empty()
-                        {
-                            s.key_input.text = k.clone();
-                            s.key_input.sync_invariants();
-                        }
-                        s.key_preview = Some(prev);
-                    });
-                }
-            });
-        }
+        self.preview_clipboard_key();
     }
 
     pub fn close_key_modal(&mut self) {
         self.key_modal_open = false;
         self.key_submitting = false;
-    }
-
-    pub fn submit_key_activation(&mut self) {
-        let key = self.key_input.text.trim().to_string();
-        if key.is_empty() || self.key_submitting {
-            return;
-        }
-        if self.status == HostStatus::Standalone {
-            self.close_key_modal();
-            self.notice = Some("Standalone preview: key redemption requires Exo host".into());
-            return;
-        }
-        self.key_submitting = true;
-        #[cfg(windows)]
-        if let (Some(rpc), Some(handle)) = (self.rpc.clone(), self.handle.clone()) {
-            rpc.call::<_, ActionResult>(METHOD_KEYS_ACTIVATE, &json!({ "key": key }), move |res| {
-                handle.update(move |s, _| {
-                    s.key_submitting = false;
-                    match res {
-                        Ok(r) if r.ok => {
-                            s.close_key_modal();
-                            s.notice = Some(
-                                r.message
-                                    .unwrap_or_else(|| "Opened store key redemption".into()),
-                            );
-                        }
-                        Ok(r) => {
-                            s.notice = Some(
-                                r.message
-                                    .unwrap_or_else(|| "Key could not be redeemed".into()),
-                            )
-                        }
-                        Err(e) => s.notice = Some(format!("Key activation failed: {e}")),
-                    }
-                });
-            });
-        }
     }
 
     pub fn load_store_home(&mut self, refresh: bool) {
@@ -2350,6 +2377,9 @@ impl AppState {
 
     pub fn apply_gamepad_action(&mut self, action: GamepadAction, tx: &mut Tx) {
         if !matches!(action, GamepadAction::Connected(_)) {
+            if self.chrome.gamepad_paused {
+                return;
+            }
             self.input_mode = InputMode::Gamepad;
         }
         match action {
@@ -2359,6 +2389,9 @@ impl AppState {
                     self.input_mode = InputMode::Pointer;
                 }
             }
+            GamepadAction::PrevTab => crate::gamepad::cycle_room_subtab(self, -1),
+            GamepadAction::NextTab => crate::gamepad::cycle_room_subtab(self, 1),
+            GamepadAction::Settings => self.toggle_settings(),
             GamepadAction::PrevRoom => {
                 let len = Room::NAV_TABS.len();
                 let cur = Room::NAV_TABS
@@ -2469,7 +2502,38 @@ impl AppState {
     }
 
     pub fn dismiss_top_layer(&mut self) -> bool {
+        if let Some(ref driver) = self.boot.driver_install
+            && driver.visible()
+        {
+            if driver.working() {
+                return true;
+            }
+            self.dismiss_driver_install();
+            return true;
+        }
+        if self.whats_new.sheet_open {
+            if self.whats_new.not_now && !self.whats_new.busy() {
+                self.set_aside_update_sheet();
+            }
+            return true;
+        }
+        if self.whats_new.mode.is_some() {
+            self.close_whats_new();
+            return true;
+        }
+        if self.chrome.gamepad_paused {
+            self.chrome.gamepad_paused = false;
+            return true;
+        }
         if self.disarm_confirm() {
+            return true;
+        }
+        if self.island.person_menu.is_some() {
+            self.island_close_person_menu();
+            return true;
+        }
+        if self.chrome.mini_volume_open {
+            self.chrome.mini_volume_open = false;
             return true;
         }
         if self.context_menu.is_some() {
@@ -2494,6 +2558,10 @@ impl AppState {
         }
         if self.pc.part_menu.is_some() {
             self.pc.part_menu = None;
+            return true;
+        }
+        if self.downloads.open {
+            self.close_downloads();
             return true;
         }
         if self.palette_open {
@@ -2572,6 +2640,10 @@ impl AppState {
             self.close_mouse_panel();
             return true;
         }
+        if self.room == Room::Settings {
+            self.toggle_settings();
+            return true;
+        }
         if !self.notices.is_empty() {
             return self.dismiss_newest_notice();
         }
@@ -2617,8 +2689,19 @@ impl AppState {
         self.next_notice_id = self.next_notice_id.saturating_add(1);
         self.notices.push_back(NoticeItem {
             id,
+            key_id: None,
+            title: None,
+            where_label: None,
             text: text.clone(),
             tone,
+            sticky: false,
+            lasting: false,
+            count: 0,
+            progress: None,
+            action: None,
+            on_open: None,
+            avatar_url: None,
+            avatar_initial: None,
             remaining_secs: NOTICE_DURATION_SECS,
             last_tick: None,
             hovered: false,
@@ -2639,6 +2722,7 @@ impl AppState {
     pub fn dismiss_notice(&mut self, id: u64) -> bool {
         if let Some(pos) = self.notices.iter().position(|n| n.id == id) {
             self.notices.remove(pos);
+            self.promote_waiting_notices();
             if self.notices.is_empty() {
                 self.notice = None;
                 self.notice_last_synced = None;
@@ -2649,7 +2733,9 @@ impl AppState {
     }
 
     pub fn dismiss_newest_notice(&mut self) -> bool {
-        if self.notices.pop_back().is_some() {
+        if let Some(pos) = self.notices.iter().rposition(|n| !n.lasting) {
+            self.notices.remove(pos);
+            self.promote_waiting_notices();
             if self.notices.is_empty() {
                 self.notice = None;
                 self.notice_last_synced = None;
@@ -2663,7 +2749,7 @@ impl AppState {
         let min_rem = self
             .notices
             .iter()
-            .filter(|n| !n.hovered && !n.dragging)
+            .filter(|n| !n.hovered && !n.dragging && !n.sticky && !n.lasting)
             .map(|n| n.remaining_secs)
             .reduce(f64::min);
         if let Some(rem) = min_rem {
@@ -2781,12 +2867,28 @@ impl AppState {
             }
         }
 
+        if self.whats_new.boot_hold_active {
+            if now >= crate::whats_new::BOOT_HOLD_SECS {
+                self.whats_new.boot_hold_active = false;
+                changed = true;
+            } else {
+                tx.wake_at(crate::whats_new::BOOT_HOLD_SECS);
+            }
+        }
+
+        if let Some(until) = self.key_modal.copied_until
+            && now >= until
+        {
+            self.key_modal.copied_until = None;
+            changed = true;
+        }
+
         if self.notices.is_empty() {
             return changed;
         }
 
         for item in &mut self.notices {
-            if item.hovered || item.dragging {
+            if item.hovered || item.dragging || item.sticky || item.lasting {
                 item.last_tick = Some(now);
             } else {
                 if let Some(prev) = item.last_tick {
@@ -2797,9 +2899,15 @@ impl AppState {
         }
 
         let before = self.notices.len();
-        self.notices
-            .retain(|item| item.hovered || item.dragging || item.remaining_secs > 0.0);
+        self.notices.retain(|item| {
+            item.hovered
+                || item.dragging
+                || item.sticky
+                || item.lasting
+                || item.remaining_secs > 0.0
+        });
         if self.notices.len() != before {
+            self.promote_waiting_notices();
             if self.notices.is_empty() {
                 self.notice = None;
                 self.notice_last_synced = None;
@@ -2817,6 +2925,7 @@ impl AppState {
         self.palette_index = 0;
         self.palette_query.text.clear();
         self.palette_query.sync_invariants();
+        self.load_palette_extras();
         tx.focus("palette-input", false);
     }
 
@@ -2909,7 +3018,7 @@ impl AppState {
                         id: format!("pal-pc-{sec_id}"),
                         group: "Go to",
                         title: title.into(),
-                        detail: Some("Exo AI"),
+                        detail: Some("Exo AI".into()),
                         target: PaletteTarget::PcSection(sec_id),
                     });
                 }
@@ -2957,7 +3066,7 @@ impl AppState {
                         id: format!("pal-set-{}", sec.key()),
                         group: "Go to",
                         title: title.into(),
-                        detail: Some("Settings"),
+                        detail: Some("Settings".into()),
                         target: PaletteTarget::SettingsSection(sec),
                     });
                 }
@@ -3051,6 +3160,8 @@ impl AppState {
             }
         }
 
+        self.append_palette_extras(&query, &mut items);
+
         items
     }
 
@@ -3086,10 +3197,11 @@ impl AppState {
             }
             PaletteTarget::ActivateKey => self.open_key_modal(tx),
             PaletteTarget::StartTour => self.start_tour(),
-            PaletteTarget::CheckUpdates => self.check_app_update(),
+            PaletteTarget::CheckUpdates => self.manual_check_update(),
             PaletteTarget::MinimizeWindow => tx.minimize(),
             PaletteTarget::CloseWindow => tx.close_window(),
             PaletteTarget::ResumeSetup => self.setup_resume(),
+            other => self.execute_palette_extra(other),
         }
     }
 
@@ -3235,6 +3347,7 @@ impl AppState {
             Room::Music => self.load_music_room(),
             _ => {}
         }
+        self.load_shell_chrome_state();
     }
 
     pub fn apply_music_volume(&mut self, ev: MusicVolumeEvent) {

@@ -97,6 +97,11 @@ export function evaluateNativeOpened(expect, probe, tree, menuItems) {
   if (expect.capturesOpen && !s.capturesOpen) return false
   if (expect.capturesSettingsOpen && !s.capturesSettingsOpen) return false
   if (expect.keyModalOpen && !s.keyModalOpen) return false
+  if (expect.downloadsOpen && !s.downloadsOpen) return false
+  if (expect.whatsNewOpen && !s.whatsNewOpen) return false
+  if (expect.updateSheetOpen && !s.updateSheetOpen) return false
+  if (expect.islandVisible && !s.islandVisible) return false
+  if (expect.driverInstallOpen && !s.driverInstallOpen) return false
   if (expect.tourOpen && (s.tourStep === null || s.tourStep === undefined)) return false
   if (expect.settingsSection && s.settingsSection !== expect.settingsSection) return false
   if (expect.pcTab && s.pcTab !== expect.pcTab) return false

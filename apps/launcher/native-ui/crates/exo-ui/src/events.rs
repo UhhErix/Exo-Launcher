@@ -111,6 +111,13 @@ impl EventRegistry {
         register_discord(&mut reg);
         register_pc(&mut reg);
         register_store(&mut reg);
+        crate::shell::register_events(&mut reg);
+        crate::downloads::register_events(&mut reg);
+        crate::island::register_events(&mut reg);
+        crate::whats_new::register_events(&mut reg);
+        crate::boot::register_events(&mut reg);
+        crate::notice::register_events(&mut reg);
+        crate::key_modal::register_events(&mut reg);
         reg
     }
 
