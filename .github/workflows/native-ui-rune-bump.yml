@@ -108,10 +108,26 @@ jobs:
             apps/launcher/ui/contracts
             apps/launcher/ExoLauncher/Assets/Fonts
 
-      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+      - name: Compute Rust toolchain key
+        id: rust-key
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $info = (rustc -Vv) -join "`n"
+          $bytes = [System.Text.Encoding]::UTF8.GetBytes($info)
+          $hash = ([System.Security.Cryptography.SHA256]::HashData($bytes) | ForEach-Object { $_.ToString('x2') }) -join ''
+          "toolchain=$($hash.Substring(0, 16))" >> $env:GITHUB_OUTPUT
+
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
-          workspaces: apps/launcher/native-ui
-          key: ${{ hashFiles('apps/launcher/native-ui/Cargo.lock') }}
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+            apps/launcher/native-ui/target
+          key: ${{ runner.os }}-rune-${{ steps.rust-key.outputs.toolchain }}-${{ hashFiles('apps/launcher/native-ui/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-rune-${{ steps.rust-key.outputs.toolchain }}-
 
       - name: Rewrite Cargo.toml and update Cargo.lock
         shell: pwsh
@@ -152,6 +168,24 @@ jobs:
       - name: Cargo test
         working-directory: apps/launcher/native-ui
         run: cargo test --workspace --locked
+
+      - name: Prune stale target artifacts before cache save
+        if: always()
+        working-directory: apps/launcher/native-ui
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'SilentlyContinue'
+          $target = 'target'
+          if (Test-Path $target) {
+            foreach ($dir in @('debug/incremental', 'release/incremental', 'doc', 'package', 'tmp')) {
+              $p = Join-Path $target $dir
+              if (Test-Path $p) { Remove-Item -Recurse -Force $p }
+            }
+            $cutoff = (Get-Date).AddDays(-7)
+            Get-ChildItem -Path $target -Recurse -File | Where-Object {
+              $_.Extension -in @('.pdb') -or ($_.LastWriteTime -lt $cutoff -and $_.DirectoryName -match '(\\deps|\\build|\\.fingerprint)')
+            } | Remove-Item -Force
+          }
 
       - name: Open or update bump PR
         shell: pwsh
