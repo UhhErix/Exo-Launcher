@@ -68,3 +68,21 @@ Run against a repo-built Debug `ExoLauncher.exe` and a temp copy of the signed-i
   - 8 states checked: **CRITICAL=0, HIGH=0**, MEDIUM=4, LOW=4 (0 Open failures on active states, 0 Cursor failures 11/11, 0 Glass failures 10/10 & 10/8).
   - Mean pixel diff dropped from **15.03** (initial WP1 pass) to **14.93** after matching inactive Properties tab pills, plain `Steam overlay` label, and `Access code` width/placeholder; remaining pixel diff (~14.3) is purely because React's `All games` click opened alphabetical #1 (*Beast of Reincarnation*) while native `game` scene opened most-recently-played (*Call of Duty: Modern Warfare 4*).
   - Visual inspection of all 5 live-host captures (`game`, `game-props-files`, `game-props-betas`, `game-props-dlc`, `game-props-artwork`) confirmed 1:1 visual and data parity with React.
+
+## WP11 RPC Parity Follow-up (`dlss.status`, `dlss.newer`, `dlss.downloadNewer`, WP1 push events)
+
+Audited `origin/UhhErix/native-WP11:apps/launcher/improve/rpc-parity.md` and `.json` (`d1d9589`) against WP1's game-page / game-actions surface:
+
+- **Push events (4/4 handled, 0 WP1 gaps remaining):** `game.achievements`, `game.optimizedAgain`, `game.optimizeHeld`, and `compress.progress` are all registered as typed `HostEvent` parsers in `exo-rpc/src/lib.rs` (`parse_event`) and handled in `game_actions.rs`. Verified via WP11's `indexNativeHandlers` (`tools/parity/lib.mjs`): all 4 return `true`.
+- **RPC methods ported to close WP1 gaps:**
+  - `dlss.status` (6 calls on `startup` in React via `ui/src/lib/upscalerCache.ts:34` / `LauncherApp.tsx:477`): ported 1:1 startup preloading (`schedule_upscaler_startup_work` -> `1s` delay -> `preload_upscaler_statuses` over top 8 visible games & installed variants, concurrency 2, 2s budget) plus 30-min case-insensitive TTL cache (cap 512) and inflight dedup/invalidation in `game_actions.rs`.
+  - `dlss.newer` + `dlss.downloadNewer` (`ui/src/components/LauncherApp.tsx:111-118`, `ui/src/lib/upscalerNotice.ts`): added `DlssNewerItem`/`DlssNewerReply` DTOs, `METHOD_DLSS_NEWER`/`METHOD_DLSS_DOWNLOAD_NEWER` constants in `exo-rpc`, 20s startup check (`check_dlss_newer`), interactive `"Download"` action button on toast notices (`notice.rs` / `state.rs`), and `download_newer_upscalers`.
+  - `keep.status` + all game-page RPCs (`game.get`, `game.extras`, `game.progress`, `game.properties`, `game.properties.set`, `game.settings`, `dlss.frameGen`, `dlss.restore`, `dlss.consent`, `gpu.game`, `hdr.game`, `shaders.status`, `compress.state`, `compress.act`, `art.replace`, `art.reset`, `art.refetch`): already wired in WP1 (`50fce5d`) and confirmed `true` in WP11's `indexNativeHandlers`.
+- **Verification after follow-up edits:**
+  - `cargo fmt --check`: exit `0`
+  - `cargo clippy --workspace --all-targets --locked -- -D warnings`: exit `0`
+  - `cargo test --workspace --locked`: exit `0` (`exo-kit` 4/4, `exo-rpc` 22/22, `exo-ui` 82/82 including 4 new `upscaler_cache_tests`)
+  - `cargo build --release --locked -p exo-ui`: exit `0`
+  - `node apps/launcher/tools/check-comments.mjs`: 0 violations in `native-ui/`
+  - **Live WP11 `EXO_RPC_TRACE` run against release `exo-ui.exe`** (using WP11's Debug `ExoLauncher.exe` and disposable data dir): observed `"dlss.status": 6` (and `8` on full warm) + `"dlss.newer": 1` on startup/session, matching React 1:1.
+  - **WP11 `indexNativeHandlers` static check:** 4/4 WP1 push events = `true`, 21/21 WP1 RPC methods = `true` (0 remaining WP1 rows).

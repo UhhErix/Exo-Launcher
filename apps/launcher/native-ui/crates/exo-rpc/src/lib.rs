@@ -32,10 +32,11 @@ pub use events::{
 };
 pub use game_types::{
     AntiCheatLaunch, ArtworkMutationResponse, CompressProgressEvent, CompressState,
-    CompressStateReply, DequeueReply, DlssFileOutcome, DlssRunResult, DlssStatus, DlssStatusItem,
-    DriveHeat, FrameGenMod, GameAchievementsEvent, GameContent, GameOptimizeEvent,
-    GameSettingsGroup, GameSettingsState, GpuGame, HdrGame, InstallResponse, KeepStatus,
-    MovingProgress, OpenUrlReply, PropertyChoice, ShaderStatus, ShaderWarmed, UninstallResponse,
+    CompressStateReply, DequeueReply, DlssFileOutcome, DlssNewerItem, DlssNewerReply,
+    DlssRunResult, DlssStatus, DlssStatusItem, DriveHeat, FrameGenMod, GameAchievementsEvent,
+    GameContent, GameOptimizeEvent, GameSettingsGroup, GameSettingsState, GpuGame, HdrGame,
+    InstallResponse, KeepStatus, MovingProgress, OpenUrlReply, PropertyChoice, ShaderStatus,
+    ShaderWarmed, UninstallResponse,
 };
 pub use media_types::{
     CaptureItem, CaptureListReply, CaptureLiveState, CaptureSettingsDto, CaptureStatusReply,
@@ -98,7 +99,9 @@ pub const METHOD_ART_RESET: &str = "art.reset";
 pub const METHOD_COMPRESS_ACT: &str = "compress.act";
 pub const METHOD_COMPRESS_STATE: &str = "compress.state";
 pub const METHOD_DLSS_CONSENT: &str = "dlss.consent";
+pub const METHOD_DLSS_DOWNLOAD_NEWER: &str = "dlss.downloadNewer";
 pub const METHOD_DLSS_FRAME_GEN: &str = "dlss.frameGen";
+pub const METHOD_DLSS_NEWER: &str = "dlss.newer";
 pub const METHOD_DLSS_RESTORE: &str = "dlss.restore";
 pub const METHOD_DLSS_STATUS: &str = "dlss.status";
 pub const METHOD_GPU_GAME: &str = "gpu.game";
@@ -252,7 +255,9 @@ pub const USED_METHODS: &[&str] = &[
     METHOD_COMPRESS_ACT,
     METHOD_COMPRESS_STATE,
     METHOD_DLSS_CONSENT,
+    METHOD_DLSS_DOWNLOAD_NEWER,
     METHOD_DLSS_FRAME_GEN,
+    METHOD_DLSS_NEWER,
     METHOD_DLSS_RESTORE,
     METHOD_DLSS_STATUS,
     METHOD_GPU_GAME,

@@ -1,15 +1,16 @@
 use crate::pc_state::PcTab;
-use crate::state::{AppState, HostStatus, Room};
+use crate::state::{AppState, HostStatus, NoticeAction, NoticeTone, Room};
 use exo_rpc::{
     ActionResult, ArtworkMutationResponse, CompressProgressEvent, CompressState,
-    CompressStateReply, DequeueReply, DlssRunResult, DlssStatus, DlssStatusItem, FrameGenMod, Game,
-    GameAchievementsEvent, GameContent, GameExtras, GameGetReply, GameOptimizeEvent,
-    GameProperties, GamePropertySetReply, GameSettingsState, GpuGame, HdrGame, HdrState,
-    InstallProgress, InstallResponse, KeepStatus, LauncherSettings, METHOD_ART_REFETCH,
-    METHOD_ART_REPLACE, METHOD_ART_RESET, METHOD_COMPRESS_ACT, METHOD_COMPRESS_STATE,
-    METHOD_DLSS_CONSENT, METHOD_DLSS_FRAME_GEN, METHOD_DLSS_RESTORE, METHOD_DLSS_STATUS,
-    METHOD_GAME_DEQUEUE, METHOD_GAME_EXTRAS, METHOD_GAME_GET, METHOD_GAME_OPEN_FOLDER,
-    METHOD_GAME_PROGRESS, METHOD_GAME_PROPERTIES, METHOD_GAME_PROPERTIES_SET, METHOD_GAME_REPAIR,
+    CompressStateReply, DequeueReply, DlssNewerItem, DlssNewerReply, DlssRunResult, DlssStatus,
+    DlssStatusItem, FrameGenMod, Game, GameAchievementsEvent, GameContent, GameExtras,
+    GameGetReply, GameOptimizeEvent, GameProperties, GamePropertySetReply, GameSettingsState,
+    GpuGame, HdrGame, HdrState, InstallProgress, InstallResponse, KeepStatus, LauncherSettings,
+    METHOD_ART_REFETCH, METHOD_ART_REPLACE, METHOD_ART_RESET, METHOD_COMPRESS_ACT,
+    METHOD_COMPRESS_STATE, METHOD_DLSS_CONSENT, METHOD_DLSS_DOWNLOAD_NEWER, METHOD_DLSS_FRAME_GEN,
+    METHOD_DLSS_NEWER, METHOD_DLSS_RESTORE, METHOD_DLSS_STATUS, METHOD_GAME_DEQUEUE,
+    METHOD_GAME_EXTRAS, METHOD_GAME_GET, METHOD_GAME_OPEN_FOLDER, METHOD_GAME_PROGRESS,
+    METHOD_GAME_PROPERTIES, METHOD_GAME_PROPERTIES_SET, METHOD_GAME_REPAIR,
     METHOD_GAME_RESUME_DOWNLOAD, METHOD_GAME_SETTINGS, METHOD_GAME_STOP, METHOD_GAME_UNINSTALL,
     METHOD_GPU_GAME, METHOD_HDR_GAME, METHOD_HDR_STATE, METHOD_KEEP_STATUS, METHOD_SETTINGS_SET,
     METHOD_SHADERS_STATUS, METHOD_SHELL_OPEN_URL, OpenUrlReply, PropertyChoice, ShaderStatus,
@@ -17,10 +18,17 @@ use exo_rpc::{
 };
 use rune::{TextEdit, Tx};
 use serde_json::json;
-use std::collections::{HashMap, HashSet};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 const SHEET_CACHE_CAP: usize = 64;
+const DLSS_CACHE_CAP: usize = 512;
+const DLSS_CACHE_TTL_SECS: f64 = 30.0 * 60.0;
+const DLSS_PRELOAD_DELAY_SECS: f64 = 1.0;
+const DLSS_PRELOAD_CONCURRENCY: usize = 2;
+const DLSS_PRELOAD_BUDGET_SECS: f64 = 2.0;
+const DLSS_PRELOAD_MAX_GAMES: usize = 8;
+const DLSS_NEWER_DELAY_SECS: f64 = 20.0;
 const MOVE_POLL_BASE_SECS: f64 = 2.0;
 const MOVE_POLL_MAX_SECS: f64 = 8.0;
 pub const SHADERS_RELEASES_URL: &str = "https://getexo.app/source";
@@ -121,6 +129,17 @@ pub struct GamePageState {
     pub keep_status: Option<KeepStatus>,
     pub dlss: Option<DlssStatus>,
     pub dlss_cache: HashMap<String, DlssStatus>,
+    pub dlss_cached_at: HashMap<String, f64>,
+    pub dlss_inflight: HashSet<String>,
+    pub dlss_preloaded: bool,
+    pub dlss_preload_pending: bool,
+    pub dlss_preload_due: Option<f64>,
+    pub dlss_preload_queue: VecDeque<String>,
+    pub dlss_preload_active: usize,
+    pub dlss_preload_deadline: Option<f64>,
+    pub dlss_newer_checked: bool,
+    pub dlss_newer_pending: bool,
+    pub dlss_newer_due: Option<f64>,
     pub dlss_loading: bool,
     pub frame_gen: Option<FrameGenMod>,
     pub frame_gen_cache: HashMap<String, FrameGenMod>,
@@ -254,6 +273,50 @@ impl GamePageState {
         }
     }
 
+    pub fn dlss_key(id: &str) -> String {
+        id.trim().to_ascii_lowercase()
+    }
+
+    pub fn dlss_peek(&self, id: &str) -> Option<DlssStatus> {
+        self.dlss_cache.get(&Self::dlss_key(id)).cloned()
+    }
+
+    pub fn dlss_get_fresh(&self, id: &str, now: f64) -> Option<DlssStatus> {
+        let key = Self::dlss_key(id);
+        let status = self.dlss_cache.get(&key)?;
+        let ts = self.dlss_cached_at.get(&key).copied().unwrap_or(0.0);
+        if (now - ts) < DLSS_CACHE_TTL_SECS {
+            Some(status.clone())
+        } else {
+            None
+        }
+    }
+
+    pub fn dlss_put(&mut self, id: &str, status: DlssStatus, now: f64) {
+        let key = Self::dlss_key(id);
+        if self.dlss_cache.len() >= DLSS_CACHE_CAP
+            && !self.dlss_cache.contains_key(&key)
+            && let Some(oldest) = self
+                .dlss_cached_at
+                .iter()
+                .min_by(|a, b| a.1.total_cmp(b.1))
+                .map(|(k, _)| k.clone())
+                .or_else(|| self.dlss_cache.keys().next().cloned())
+        {
+            self.dlss_cache.remove(&oldest);
+            self.dlss_cached_at.remove(&oldest);
+        }
+        self.dlss_cache.insert(key.clone(), status);
+        self.dlss_cached_at.insert(key, now);
+    }
+
+    pub fn dlss_invalidate(&mut self, id: &str) {
+        let key = Self::dlss_key(id);
+        self.dlss_cache.remove(&key);
+        self.dlss_cached_at.remove(&key);
+        self.dlss_inflight.remove(&key);
+    }
+
     pub fn clear_for_game(&mut self, id: &str, store: &str) {
         self.generation = self.generation.wrapping_add(1);
         let key = selection_key_for(id, store);
@@ -261,7 +324,7 @@ impl GamePageState {
         self.settings_working = false;
         self.settings_work_on = false;
         self.settings_work_failed = false;
-        self.dlss = self.dlss_cache.get(id).cloned();
+        self.dlss = self.dlss_peek(id);
         self.dlss_loading = self.dlss.is_none();
         self.frame_gen = self.frame_gen_cache.get(id).cloned();
         self.gpu_game = self.gpu_game_cache.get(id).cloned();
@@ -1516,7 +1579,7 @@ impl AppState {
     }
 
     #[cfg(windows)]
-    fn fetch_game_perf_rpcs(&self, game_id: &str, epoch: u64) {
+    fn fetch_game_perf_rpcs(&mut self, game_id: &str, epoch: u64) {
         let (Some(rpc), Some(handle)) = (self.rpc.clone(), self.handle.clone()) else {
             return;
         };
@@ -1603,10 +1666,24 @@ impl AppState {
     }
 
     #[cfg(windows)]
-    pub fn fetch_game_dlss_rpc(&self, game_id: &str, refresh: bool, epoch: u64) {
+    pub fn fetch_game_dlss_rpc(&mut self, game_id: &str, refresh: bool, epoch: u64) {
+        let now = self.now_secs();
+        let key = GamePageState::dlss_key(game_id);
+        if !refresh {
+            if let Some(cached) = self.game_page.dlss_get_fresh(game_id, now) {
+                self.game_page.dlss = Some(cached);
+                self.game_page.dlss_loading = false;
+                return;
+            }
+            if self.game_page.dlss_inflight.contains(&key) {
+                self.game_page.dlss_loading = self.game_page.dlss.is_none();
+                return;
+            }
+        }
         let (Some(rpc), Some(handle)) = (self.rpc.clone(), self.handle.clone()) else {
             return;
         };
+        self.game_page.dlss_inflight.insert(key.clone());
         let gid = game_id.to_string();
         let params = if refresh {
             json!({ "id": gid, "refresh": true })
@@ -1615,20 +1692,25 @@ impl AppState {
         };
         rpc.call::<_, DlssStatus>(METHOD_DLSS_STATUS, &params, move |res| {
             handle.update(move |s, _| {
-                if s.game_page.generation != epoch {
-                    return;
-                }
-                s.game_page.dlss_loading = false;
+                s.game_page.dlss_inflight.remove(&key);
                 let st = res.unwrap_or_else(|_| DlssStatus {
                     ok: Some(false),
                     message: Some("Could not check the files.".into()),
                     items: Vec::new(),
                     ..Default::default()
                 });
+                let now = s.now_secs();
                 if st.ok != Some(false) {
-                    GamePageState::cache_put(&mut s.game_page.dlss_cache, gid, st.clone());
+                    s.game_page.dlss_put(&gid, st.clone(), now);
                 }
-                s.game_page.dlss = Some(st);
+                let matches_open = s
+                    .current_open_game_id()
+                    .map(|cur| GamePageState::dlss_key(&cur) == key)
+                    .unwrap_or(false);
+                if s.game_page.generation == epoch || matches_open {
+                    s.game_page.dlss_loading = false;
+                    s.game_page.dlss = Some(st);
+                }
             });
         });
     }
@@ -2303,7 +2385,7 @@ impl AppState {
                         return;
                     }
                     s.game_page.props_busy = None;
-                    s.game_page.dlss_cache.remove(&gid);
+                    s.game_page.dlss_invalidate(&gid);
                     s.fetch_game_dlss_rpc(&gid, false, epoch);
                     match res {
                         Ok(r) => {
@@ -2386,7 +2468,7 @@ impl AppState {
                                     return;
                                 }
                                 s.game_page.props_busy = None;
-                                s.game_page.dlss_cache.remove(&gid2);
+                                s.game_page.dlss_invalidate(&gid2);
                                 s.fetch_game_dlss_rpc(&gid2, false, epoch);
                                 match r2 {
                                     Ok(rr) => {
@@ -2427,7 +2509,7 @@ impl AppState {
                             return;
                         }
                         s.game_page.props_busy = None;
-                        s.game_page.dlss_cache.remove(&gid);
+                        s.game_page.dlss_invalidate(&gid);
                         s.fetch_game_dlss_rpc(&gid, false, epoch);
                         if ans.ok {
                             s.game_page.set_note("consent", done_msg, false);
@@ -2866,11 +2948,350 @@ impl AppState {
         }
     }
 
+    pub fn schedule_upscaler_startup_work(&mut self) {
+        if self.status != HostStatus::Connected {
+            return;
+        }
+        if !self.game_page.dlss_preloaded
+            && !self.game_page.dlss_preload_pending
+            && self.game_page.dlss_preload_due.is_none()
+            && !self.games.is_empty()
+        {
+            self.game_page.dlss_preload_pending = true;
+        }
+        if !self.game_page.dlss_newer_checked
+            && !self.game_page.dlss_newer_pending
+            && self.game_page.dlss_newer_due.is_none()
+        {
+            self.game_page.dlss_newer_pending = true;
+        }
+    }
+
+    pub fn tick_game_page_timers(&mut self, now: f64, tx: &mut Tx) {
+        self.poll_game_move_if_due(now);
+        if let Some(due) = self.game_page.move_poll_due {
+            tx.wake_at(due);
+        }
+
+        if self.game_page.dlss_preload_pending {
+            self.game_page.dlss_preload_pending = false;
+            self.game_page.dlss_preload_due = Some(now + DLSS_PRELOAD_DELAY_SECS);
+        }
+        if let Some(due) = self.game_page.dlss_preload_due {
+            if now >= due {
+                self.game_page.dlss_preload_due = None;
+                self.game_page.dlss_preloaded = true;
+                self.preload_upscaler_statuses(now);
+            } else {
+                tx.wake_at(due);
+            }
+        }
+
+        if self.game_page.dlss_newer_pending {
+            self.game_page.dlss_newer_pending = false;
+            self.game_page.dlss_newer_due = Some(now + DLSS_NEWER_DELAY_SECS);
+        }
+        if let Some(due) = self.game_page.dlss_newer_due {
+            if now >= due {
+                self.game_page.dlss_newer_due = None;
+                self.game_page.dlss_newer_checked = true;
+                self.check_dlss_newer();
+            } else {
+                tx.wake_at(due);
+            }
+        }
+    }
+
+    pub fn preload_upscaler_statuses(&mut self, now: f64) {
+        if self.status != HostStatus::Connected {
+            return;
+        }
+        let visible: Vec<Game> = self
+            .filtered_games()
+            .into_iter()
+            .take(DLSS_PRELOAD_MAX_GAMES)
+            .cloned()
+            .collect();
+        let ids = collect_upscaler_preload_ids(&visible, DLSS_PRELOAD_MAX_GAMES);
+        if ids.is_empty() {
+            return;
+        }
+        self.game_page.dlss_preload_queue = ids.into_iter().collect();
+        self.game_page.dlss_preload_deadline = Some(now + DLSS_PRELOAD_BUDGET_SECS);
+        #[cfg(windows)]
+        self.pump_dlss_preload(now);
+        #[cfg(not(windows))]
+        let _ = now;
+    }
+
+    #[cfg(windows)]
+    fn pump_dlss_preload(&mut self, now: f64) {
+        let Some(deadline) = self.game_page.dlss_preload_deadline else {
+            return;
+        };
+        if now >= deadline {
+            self.game_page.dlss_preload_queue.clear();
+            self.game_page.dlss_preload_deadline = None;
+            return;
+        }
+        let (Some(rpc), Some(handle)) = (self.rpc.clone(), self.handle.clone()) else {
+            self.game_page.dlss_preload_queue.clear();
+            self.game_page.dlss_preload_deadline = None;
+            return;
+        };
+        while self.game_page.dlss_preload_active < DLSS_PRELOAD_CONCURRENCY {
+            let Some(gid) = self.game_page.dlss_preload_queue.pop_front() else {
+                if self.game_page.dlss_preload_active == 0 {
+                    self.game_page.dlss_preload_deadline = None;
+                }
+                break;
+            };
+            let key = GamePageState::dlss_key(&gid);
+            if self.game_page.dlss_get_fresh(&gid, now).is_some()
+                || self.game_page.dlss_inflight.contains(&key)
+            {
+                continue;
+            }
+            self.game_page.dlss_inflight.insert(key.clone());
+            self.game_page.dlss_preload_active += 1;
+            let h = handle.clone();
+            rpc.call::<_, DlssStatus>(METHOD_DLSS_STATUS, &json!({ "id": gid }), move |res| {
+                h.update(move |s, _| {
+                    s.game_page.dlss_inflight.remove(&key);
+                    s.game_page.dlss_preload_active =
+                        s.game_page.dlss_preload_active.saturating_sub(1);
+                    let now = s.now_secs();
+                    if let Ok(st) = res {
+                        if st.ok != Some(false) {
+                            s.game_page.dlss_put(&gid, st.clone(), now);
+                        }
+                        let matches_open = s
+                            .current_open_game_id()
+                            .map(|cur| GamePageState::dlss_key(&cur) == key)
+                            .unwrap_or(false);
+                        if matches_open && s.game_page.dlss.is_none() {
+                            s.game_page.dlss_loading = false;
+                            s.game_page.dlss = Some(st);
+                        }
+                    }
+                    s.pump_dlss_preload(now);
+                });
+            });
+        }
+    }
+
+    pub fn check_dlss_newer(&mut self) {
+        if self.status != HostStatus::Connected {
+            return;
+        }
+        #[cfg(windows)]
+        if let (Some(rpc), Some(handle)) = (self.rpc.clone(), self.handle.clone()) {
+            rpc.call::<_, DlssNewerReply>(METHOD_DLSS_NEWER, &json!({}), move |res| {
+                if let Ok(reply) = res
+                    && let Some(text) = format_dlss_newer_notice(&reply.items)
+                {
+                    handle.update(move |s, _| {
+                        s.push_notice_with_action(
+                            text,
+                            NoticeTone::Neutral,
+                            "Download",
+                            NoticeAction::DownloadNewerUpscalers,
+                        );
+                    });
+                }
+            });
+        }
+    }
+
+    pub fn download_newer_upscalers(&mut self) {
+        if self.status == HostStatus::Standalone {
+            self.push_notice("Downloaded and checked.", NoticeTone::Good);
+            return;
+        }
+        #[cfg(windows)]
+        if let (Some(rpc), Some(handle)) = (self.rpc.clone(), self.handle.clone()) {
+            rpc.call::<_, ActionResult>(METHOD_DLSS_DOWNLOAD_NEWER, &json!({}), move |res| {
+                handle.update(move |s, _| match res {
+                    Ok(done) if done.ok => {
+                        s.push_notice("Downloaded and checked.", NoticeTone::Good);
+                    }
+                    Ok(done) => {
+                        let msg = done
+                            .message
+                            .filter(|m| !m.trim().is_empty())
+                            .unwrap_or_else(|| "Exo couldn't download it.".into());
+                        s.push_notice(msg, NoticeTone::Bad);
+                    }
+                    Err(_) => {
+                        s.push_notice("Exo couldn't download it.", NoticeTone::Bad);
+                    }
+                });
+            });
+        }
+    }
+
+    pub fn run_notice_action(&mut self, action: NoticeAction) {
+        match action {
+            NoticeAction::DownloadNewerUpscalers => self.download_newer_upscalers(),
+        }
+    }
+
     pub fn select_props_section(&mut self, section: PropsSectionId, idx: usize) {
         self.disarm_confirm();
         self.game_page.pending_choice = None;
         self.game_page.props_tab_id = Some(section);
         self.game_props_tab = idx;
         self.props_open = false;
+    }
+}
+
+pub fn collect_upscaler_preload_ids(games: &[Game], max_games: usize) -> Vec<String> {
+    let mut seen = HashSet::new();
+    let mut ids = Vec::new();
+    for game in games.iter().take(max_games) {
+        if game.installed {
+            let key = GamePageState::dlss_key(&game.id);
+            if seen.insert(key) {
+                ids.push(game.id.clone());
+            }
+        }
+        for variant in &game.variants {
+            if variant.installed {
+                let key = GamePageState::dlss_key(&variant.id);
+                if seen.insert(key) {
+                    ids.push(variant.id.clone());
+                }
+            }
+        }
+    }
+    ids
+}
+
+pub fn format_dlss_newer_notice(items: &[DlssNewerItem]) -> Option<String> {
+    let mut seen = HashSet::new();
+    let mut families = Vec::new();
+    for item in items {
+        if !item.family.is_empty() && seen.insert(item.family.clone()) {
+            families.push(item.family.clone());
+        }
+    }
+    match families.len() {
+        0 => None,
+        1 => Some(format!("A newer {} is available", families[0])),
+        _ => Some(format!("Newer {} are available", families.join(", "))),
+    }
+}
+
+#[cfg(test)]
+mod upscaler_cache_tests {
+    use super::*;
+    use exo_rpc::GameVariant;
+
+    #[test]
+    fn collect_upscaler_preload_ids_dedupes_installed_games_and_variants() {
+        let g1 = Game {
+            id: "steam:10".into(),
+            installed: true,
+            variants: vec![
+                GameVariant {
+                    id: "STEAM:10".into(),
+                    installed: true,
+                    ..Default::default()
+                },
+                GameVariant {
+                    id: "epic:10".into(),
+                    installed: true,
+                    ..Default::default()
+                },
+                GameVariant {
+                    id: "gog:10".into(),
+                    installed: false,
+                    ..Default::default()
+                },
+            ],
+            ..Default::default()
+        };
+        let g2 = Game {
+            id: "steam:20".into(),
+            installed: false,
+            variants: vec![GameVariant {
+                id: "xbox:20".into(),
+                installed: true,
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+        let g3 = Game {
+            id: "steam:30".into(),
+            installed: true,
+            ..Default::default()
+        };
+
+        let ids = collect_upscaler_preload_ids(&[g1, g2, g3], 2);
+        assert_eq!(ids, vec!["steam:10", "epic:10", "xbox:20"]);
+    }
+
+    #[test]
+    fn dlss_cache_ttl_case_insensitive_and_invalidation() {
+        let mut state = GamePageState::new();
+        let st = DlssStatus {
+            ok: Some(true),
+            ..Default::default()
+        };
+        state.dlss_put("Steam:1091500", st, 100.0);
+        assert!(
+            state
+                .dlss_get_fresh("steam:1091500", 100.0 + 60.0)
+                .is_some()
+        );
+        assert!(
+            state
+                .dlss_get_fresh("steam:1091500", 100.0 + DLSS_CACHE_TTL_SECS)
+                .is_none()
+        );
+        state.dlss_invalidate("STEAM:1091500");
+        assert!(state.dlss_peek("steam:1091500").is_none());
+    }
+
+    #[test]
+    fn format_dlss_newer_notice_matches_react_copy() {
+        assert_eq!(format_dlss_newer_notice(&[]), None);
+        assert_eq!(
+            format_dlss_newer_notice(&[
+                DlssNewerItem {
+                    family: "DLSS".into(),
+                    version: "310.3.0".into(),
+                },
+                DlssNewerItem {
+                    family: "DLSS".into(),
+                    version: "310.3.1".into(),
+                },
+            ]),
+            Some("A newer DLSS is available".into())
+        );
+        assert_eq!(
+            format_dlss_newer_notice(&[
+                DlssNewerItem {
+                    family: "DLSS".into(),
+                    version: "310.3.0".into(),
+                },
+                DlssNewerItem {
+                    family: "XeSS".into(),
+                    version: "2.1.0".into(),
+                },
+            ]),
+            Some("Newer DLSS, XeSS are available".into())
+        );
+    }
+
+    #[test]
+    fn apply_library_schedules_upscaler_preload_and_newer_check() {
+        let mut app = AppState::with_demo_games();
+        app.status = HostStatus::Connected;
+        app.game_page.dlss_preloaded = false;
+        app.game_page.dlss_newer_checked = false;
+        app.schedule_upscaler_startup_work();
+        assert!(app.game_page.dlss_preload_pending);
+        assert!(app.game_page.dlss_newer_pending);
     }
 }

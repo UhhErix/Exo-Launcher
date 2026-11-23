@@ -559,11 +559,18 @@ pub enum NoticeTone {
     Bad,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum NoticeAction {
+    DownloadNewerUpscalers,
+}
+
 #[derive(Clone, Debug)]
 pub struct NoticeItem {
     pub id: u64,
     pub text: String,
     pub tone: NoticeTone,
+    pub action_label: Option<String>,
+    pub action: Option<NoticeAction>,
     pub remaining_secs: f64,
     pub last_tick: Option<f64>,
     pub hovered: bool,
@@ -1400,6 +1407,7 @@ impl AppState {
         if self.room == Room::Store && self.store_home.is_none() && !self.store_loading {
             self.load_store_home(false);
         }
+        self.schedule_upscaler_startup_work();
     }
 
     pub fn apply_art_base(&mut self, base: ArtBase) {
@@ -2470,13 +2478,34 @@ impl AppState {
     }
 
     pub fn push_notice(&mut self, text: impl Into<String>, tone: NoticeTone) -> u64 {
-        let text = text.into();
+        self.push_notice_inner(text.into(), tone, None, None)
+    }
+
+    pub fn push_notice_with_action(
+        &mut self,
+        text: impl Into<String>,
+        tone: NoticeTone,
+        action_label: impl Into<String>,
+        action: NoticeAction,
+    ) -> u64 {
+        self.push_notice_inner(text.into(), tone, Some(action_label.into()), Some(action))
+    }
+
+    fn push_notice_inner(
+        &mut self,
+        text: String,
+        tone: NoticeTone,
+        action_label: Option<String>,
+        action: Option<NoticeAction>,
+    ) -> u64 {
         let id = self.next_notice_id;
         self.next_notice_id = self.next_notice_id.saturating_add(1);
         self.notices.push_back(NoticeItem {
             id,
             text: text.clone(),
             tone,
+            action_label,
+            action,
             remaining_secs: NOTICE_DURATION_SECS,
             last_tick: None,
             hovered: false,
@@ -2627,10 +2656,7 @@ impl AppState {
             }
         }
 
-        self.poll_game_move_if_due(now);
-        if let Some(due) = self.game_page.move_poll_due {
-            tx.wake_at(due);
-        }
+        self.tick_game_page_timers(now, tx);
 
         if self.notice != self.notice_last_synced {
             self.notice_last_synced = self.notice.clone();
