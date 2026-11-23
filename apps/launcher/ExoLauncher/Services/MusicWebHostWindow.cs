@@ -54,7 +54,7 @@ internal sealed class MusicWebHostWindow
         Instances[hwnd] = this;
     }
 
-    internal static MusicWebHostWindow CreateHidden()
+    internal static MusicWebHostWindow CreateHidden(int width = HiddenWidth, int height = HiddenHeight)
     {
         EnsureClassRegistered();
         var hwnd = CreateWindowExW(
@@ -64,8 +64,8 @@ internal sealed class MusicWebHostWindow
             WsPopup | WsClipChildren,
             0,
             0,
-            HiddenWidth,
-            HiddenHeight,
+            Math.Max(1, width),
+            Math.Max(1, height),
             0,
             0,
             GetModuleHandleW(null),

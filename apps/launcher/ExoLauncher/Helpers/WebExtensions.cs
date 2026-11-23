@@ -38,7 +38,10 @@ internal static class WebExtensions
     private static readonly Dictionary<string, Registration> Profiles = new(StringComparer.Ordinal);
     private static readonly Dictionary<string, bool> VerifiedHashes = new(StringComparer.Ordinal);
 
-    internal static async Task AttachAsync(CoreWebView2 core, string name, nint owner = 0)
+    internal static bool IsEnabledForService(Entry entry, string? service) =>
+        entry.Key != "sponsorblock" || service is null or "youtube";
+
+    internal static async Task AttachAsync(CoreWebView2 core, string name, nint owner = 0, string? service = null)
     {
         try
         {
@@ -54,7 +57,7 @@ internal static class WebExtensions
                 registration.Targets.Add(core, context);
             }
             await PruneAsync(core, "embedded");
-            await EnsureProfileAsync(registration);
+            await EnsureProfileAsync(registration, service);
         }
         catch (Exception error) { AppLog.Warn("Provider extensions could not attach to " + name + ": " + error.Message); }
     }
@@ -181,18 +184,44 @@ internal static class WebExtensions
 
     private static string Signature(Entry entry) => entry.Version + "|" + entry.ManifestSha256;
 
-    private static async Task EnsureProfileAsync(Registration registration)
+    private static async Task EnsureProfileAsync(Registration registration, string? service)
     {
         await registration.Operation.WaitAsync();
         try
         {
             foreach (var entry in Entries)
             {
+                var shouldEnable = IsEnabledForService(entry, service);
                 var storedId = ReadMarker(Marker(registration, entry, ".extid"));
                 var signature = Signature(entry);
                 var warm = storedId is not null &&
                     string.Equals(ReadMarker(Marker(registration, entry, ".version")), signature, StringComparison.Ordinal);
-                if (warm) { _ = StartConfiguration(registration, entry, storedId!); continue; }
+                if (!shouldEnable)
+                {
+                    await WithLiveCoreAsync(registration, async (core, _) =>
+                    {
+                        var installed = (await core.Profile.GetBrowserExtensionsAsync())
+                            .FirstOrDefault(item => Matches(entry, item, storedId));
+                        if (installed is { IsEnabled: true })
+                            await installed.EnableAsync(false);
+                    });
+                    continue;
+                }
+                if (warm)
+                {
+                    if (entry.Key == "sponsorblock")
+                    {
+                        await WithLiveCoreAsync(registration, async (core, _) =>
+                        {
+                            var installed = (await core.Profile.GetBrowserExtensionsAsync())
+                                .FirstOrDefault(item => Matches(entry, item, storedId));
+                            if (installed is { IsEnabled: false })
+                                await installed.EnableAsync(true);
+                        });
+                    }
+                    _ = StartConfiguration(registration, entry, storedId!);
+                    continue;
+                }
                 await WithLiveCoreAsync(registration, async (core, context) =>
                 {
                     var installed = (await core.Profile.GetBrowserExtensionsAsync())

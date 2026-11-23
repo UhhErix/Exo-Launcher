@@ -72,4 +72,21 @@ public sealed class WebExtensionsTests
             Assert.False(WebExtensions.Retires(entry.Title, "shipped-id", none), entry.Title + " would be removed every start");
         }
     }
+
+    [Fact]
+    public void ServiceScopedExtensionsEnableOnlyForTheirService()
+    {
+        var shield = Assert.Single(WebExtensions.Entries, e => e.Folder == "exo-shield");
+        var sponsorBlock = Assert.Single(WebExtensions.Entries, e => e.Folder == "sponsorblock");
+
+        Assert.True(WebExtensions.IsEnabledForService(shield, "apple"));
+        Assert.True(WebExtensions.IsEnabledForService(shield, "spotify"));
+        Assert.True(WebExtensions.IsEnabledForService(shield, "youtube"));
+        Assert.True(WebExtensions.IsEnabledForService(shield, null));
+
+        Assert.False(WebExtensions.IsEnabledForService(sponsorBlock, "apple"));
+        Assert.False(WebExtensions.IsEnabledForService(sponsorBlock, "spotify"));
+        Assert.True(WebExtensions.IsEnabledForService(sponsorBlock, "youtube"));
+        Assert.True(WebExtensions.IsEnabledForService(sponsorBlock, null));
+    }
 }

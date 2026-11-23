@@ -75,7 +75,7 @@ internal sealed partial class MusicEngineService
     private async Task<object> WebMusicStartCoreAsync(string service)
     {
         var label = MusicWebPolicy.Label(service);
-        if (WebClientPreferences.Read().MusicService is { } selected && selected != service)
+        if (!MusicEngineDiet.ServiceMatchesSelection(WebClientPreferences.Read().MusicService, service))
             return new { ok = false, state = "error", message = "Choose " + label + " in Settings." };
         if (_musicWebService != service) SelectServiceCore(service);
         if (_musicWebCause is { } last)
@@ -96,6 +96,8 @@ internal sealed partial class MusicEngineService
             return MusicWebLoading(service);
         _musicWebLoadingSince = default;
         _musicWebStalls = 0;
+        _musicWebBooted = true;
+        ApplyMusicMemoryTarget();
         var signedIn = answer.TryGetProperty("signedIn", out var flag) && flag.ValueKind == JsonValueKind.True;
         var unsubscribed = signedIn && answer.TryGetProperty("subscribed", out var subscribed) && subscribed.ValueKind == JsonValueKind.False;
         _youTubeNeedsPremium = service == "youtube" && unsubscribed;
@@ -147,7 +149,7 @@ internal sealed partial class MusicEngineService
     {
         if (_musicWebReady && _musicWebBooted && MusicCore is not null && _musicWebService == service) return true;
         if (_musicWebClosed) return false;
-        if (WebClientPreferences.Read().MusicService is { } selected && selected != service) return false;
+        if (!MusicEngineDiet.ServiceMatchesSelection(WebClientPreferences.Read().MusicService, service)) return false;
         if (_musicWebService != service) SelectServiceCore(service);
         if (_musicWebFailed) ResetMusicWebView();
         bool Gone() => _musicWebService != service || _musicWebClosed || _musicWebFailed;
@@ -164,7 +166,11 @@ internal sealed partial class MusicEngineService
             var status = await WebMusicStatusCallAsync(service, attempts: 1, timeout: TimeSpan.FromSeconds(6));
             return status is { ValueKind: JsonValueKind.Object } answer && answer.TryGetProperty("ready", out var ready) && ready.ValueKind == JsonValueKind.True;
         }, Gone, MusicWebBootLimit, _lifetimeCts.Token);
-        if (booted) _musicWebBooted = true;
+        if (booted)
+        {
+            _musicWebBooted = true;
+            ApplyMusicMemoryTarget();
+        }
         return !Gone();
     }
 
@@ -276,6 +282,7 @@ internal sealed partial class MusicEngineService
             if (ReferenceEquals(_musicSignInWindow, window)) _musicSignInWindow = null;
             _musicPopouts.Remove(window);
             NotifyStateChanged();
+            ApplyMusicMemoryTarget();
             try { if (window.Core is { } c) WebExtensions.Detach(c); } catch { }
         };
         ForegroundWatcher.Asked(label + "'s sign-in window");
