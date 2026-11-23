@@ -1186,6 +1186,50 @@ pub enum HostEvent {
     Disconnected(String),
 }
 
+impl HostEvent {
+    pub fn kind(&self) -> &'static str {
+        match self {
+            Self::LibraryUpdated(_) => "library.updated",
+            Self::InstallProgress(_) => "install.progress",
+            Self::UpdateProgress(_) => "app.updateProgress",
+            Self::MusicPlayback(_) => "music.playback",
+            Self::DiscordState(_) => "discord.state",
+            Self::DiscordSignIn(_) => "discord.signIn",
+            Self::DiscordChanged(_) => "discord.changed",
+            Self::DiscordMembers { .. } => "discord.members",
+            Self::DiscordPresence(_) => "discord.presence",
+            Self::DiscordUnread(_) => "discord.unread",
+            Self::DiscordVoice(_) => "discord.voice",
+            Self::DiscordSpeaking { .. } => "discord.speaking",
+            Self::DiscordMessage(_) => "discord.message",
+            Self::DiscordReaction(_) => "discord.reaction",
+            Self::DiscordTyping(_) => "discord.typing",
+            Self::DiscordVideo(_) => "discord.video",
+            Self::DiscordVideoFrame(_) => "discord.videoFrame",
+            Self::DiscordGoLive(_) => "discord.goLive",
+            Self::DiscordGoLiveStats(_) => "discord.goLiveStats",
+            Self::DiscordGoLiveViewers(_) => "discord.goLiveViewers",
+            Self::DevicesChanged => "devices.changed",
+            Self::AppsChanged => "apps.changed",
+            Self::MusicVolume(_) => "music.volume",
+            Self::CaptureState(_) => "capture.state",
+            Self::CaptureSaved(_) => "capture.saved",
+            Self::CaptureReel(_) => "capture.reel",
+            Self::InstallQueue(_) => "install.queue",
+            Self::GameRunState(_) => "game.runState",
+            Self::LaunchStatus(_) => "launch.status",
+            Self::AppUpdateState(_) => "app.updateState",
+            Self::ExoAccountChanged => "exoAccount.changed",
+            Self::AutopilotReport(_) => "autopilot.report",
+            Self::AutopilotLive(_) => "autopilot.live",
+            Self::ShadersChanged => "shaders.changed",
+            Self::StoreChanged(_) => "store.changed",
+            Self::Raw { .. } => "raw",
+            Self::Disconnected(_) => "disconnected",
+        }
+    }
+}
+
 #[cfg(test)]
 mod cover_policy_tests {
     use super::*;
