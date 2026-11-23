@@ -3,7 +3,7 @@ use serde_json::Value;
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
-fn null_as_default<'de, D, T>(deserializer: D) -> Result<T, D::Error>
+pub(crate) fn null_as_default<'de, D, T>(deserializer: D) -> Result<T, D::Error>
 where
     D: Deserializer<'de>,
     T: Default + Deserialize<'de>,
@@ -917,6 +917,8 @@ pub struct StoreOtherOffers {
 #[serde(rename_all = "camelCase")]
 pub struct LauncherSettings {
     #[serde(default)]
+    pub app_version: Option<String>,
+    #[serde(default)]
     pub reduce_motion: bool,
     #[serde(default)]
     pub start_with_windows: bool,
@@ -935,9 +937,13 @@ pub struct LauncherSettings {
     #[serde(default)]
     pub achievement_banners: bool,
     #[serde(default)]
+    pub achievement_volume: Option<i32>,
+    #[serde(default)]
     pub fps_counter: bool,
     #[serde(default)]
     pub fps_counter_position: Option<String>,
+    #[serde(default, deserialize_with = "null_as_default")]
+    pub fps_counter_items: Vec<String>,
     #[serde(default)]
     pub hdr_for_games: bool,
     #[serde(default)]
@@ -945,9 +951,19 @@ pub struct LauncherSettings {
     #[serde(default)]
     pub auto_update_chipset: bool,
     #[serde(default)]
+    pub upscaler_anti_cheat_everywhere: bool,
+    #[serde(default)]
+    pub default_install_root: Option<String>,
+    #[serde(default)]
+    pub download_hours_start: Option<i32>,
+    #[serde(default)]
+    pub download_hours_end: Option<i32>,
+    #[serde(default)]
     pub text_size: Option<String>,
     #[serde(default)]
     pub riot_id: Option<String>,
+    #[serde(default)]
+    pub riot_baseline: Option<crate::settings_types::RiotBaseline>,
     #[serde(default)]
     pub onboarding_complete: Option<bool>,
     #[serde(default)]
@@ -1181,6 +1197,11 @@ pub enum HostEvent {
     AutopilotReport(crate::events::AutopilotReportEvent),
     AutopilotLive(Option<crate::pc_types::AutopilotLive>),
     ShadersChanged,
+    ShadersEvent(crate::settings_types::ShadersEventPayload),
+    AccountsProgress(crate::settings_types::AccountsProgressEvent),
+    BackupStopped(crate::settings_types::BackupStoppedEvent),
+    ComponentsFailed(crate::settings_types::ComponentsFailedEvent),
+    GiftsChanged(crate::settings_types::StoreGiftsReply),
     StoreChanged(crate::events::StoreChangedEvent),
     Raw { event: String, data: Value },
     Disconnected(String),
