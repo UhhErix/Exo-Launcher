@@ -10,11 +10,18 @@ import { DevicePage, DevicePanel as Panel } from './DevicePage'
 import { KeyboardMap } from './KeyboardMap'
 import { portShort, portWords } from './ports'
 
-const ACTUATION_PRESETS = [
+const HE_ACTUATION_PRESETS = [
   { label: '0.1 mm', value: 0.1 },
   { label: '0.4 mm', value: 0.4 },
   { label: '1.2 mm', value: 1.2 },
   { label: '2.0 mm', value: 2.0 },
+] as const
+
+const OPTICAL_ACTUATION_PRESETS = [
+  { label: '1.5 mm', value: 1.5 },
+  { label: '2.0 mm', value: 2.0 },
+  { label: '2.8 mm', value: 2.8 },
+  { label: '3.6 mm', value: 3.6 },
 ] as const
 
 type KeyboardPatch = {
@@ -22,6 +29,7 @@ type KeyboardPatch = {
   rapidTrigger?: boolean
   rapidTriggerMm?: number
   tachyon?: boolean
+  rgbBrightness?: number
 }
 
 function formatBackupTime(iso: string): string {
@@ -49,6 +57,7 @@ function useKeyboard(id: string) {
   const refresh = useCallback(() => {
     setBusy('read')
     setLoadFailed(null)
+    setError(null)
     return Promise.all([host.keyboardRead(id), host.keyboardBackups(id).catch(() => null)])
       .then(([next, bk]) => {
         setRead(next)
@@ -116,16 +125,25 @@ function useKeyboard(id: string) {
   }, [id, loadBackups, runAction])
 
   const createBackup = useCallback(async () => {
+    setError(null)
     const res = await host.keyboardBackup(id)
-    if (!res.ok) throw new Error(res.message ?? "Couldn't save a keyboard backup.")
+    if (!res.ok) {
+      const msg = res.message ?? "Couldn't save a keyboard backup."
+      setError(msg)
+      throw new Error(msg)
+    }
     setBackups(res.backups)
   }, [id])
 
   const restoreBackup = useCallback(async (fileName: string) => {
     setError(null)
     const next = await host.keyboardRestore(id, fileName)
-    if (!next.ok) throw new Error(next.message ?? "Couldn't restore this backup.")
     setRead(next)
+    if (!next.ok) {
+      const msg = next.message ?? "Couldn't restore this backup."
+      setError(msg)
+      throw new Error(msg)
+    }
     void loadBackups()
   }, [id, loadBackups])
 
@@ -145,7 +163,7 @@ function useKeyboard(id: string) {
 }
 
 function rapidTriggerStat(read: KeyboardRead | null): string | null {
-  if (read?.rapidTrigger == null) return null
+  if (!read?.hasRapidTrigger || read.rapidTrigger == null) return null
   if (!read.rapidTrigger) return 'Off'
   return read.rapidTriggerMm != null ? `${read.rapidTriggerMm.toFixed(2)} mm` : 'On'
 }
@@ -160,6 +178,26 @@ function heroStats(read: KeyboardRead | null) {
     { label: 'Firmware', value: read?.firmware ?? null },
     { label: 'Layout', value: read?.layout ?? null },
   ]
+}
+
+function WriteErrorBanner({ message, onRetry, disabled }: {
+  message: string | null
+  onRetry: () => void
+  disabled: boolean
+}) {
+  if (!message) return null
+  return (
+    <div className="exo-kb-error" role="alert">
+      <div className="exo-kb-error-copy">
+        <span className="exo-kb-error-title">Keyboard change didn&apos;t apply</span>
+        <span className="exo-kb-error-detail">{message}</span>
+      </div>
+      <button type="button" className="exo-set-btn" disabled={disabled} onClick={onRetry}>
+        <Refresh size={14} />
+        Re-read
+      </button>
+    </div>
+  )
 }
 
 function ProfilesPanel({
@@ -205,18 +243,28 @@ function ProfilesPanel({
   )
 }
 
-function ActuationPanel({ actuationMm, canEdit, error, onSave }: {
+function ActuationPanel({
+  actuationMm,
+  minActuationMm,
+  maxActuationMm,
+  canEdit,
+  error,
+  onSave,
+}: {
   actuationMm: number
+  minActuationMm: number
+  maxActuationMm: number
   canEdit: boolean
   error: string | null
   onSave: (patch: KeyboardPatch) => Promise<string | null>
 }) {
+  const presets = minActuationMm >= 1.0 ? OPTICAL_ACTUATION_PRESETS : HE_ACTUATION_PRESETS
   return (
     <Panel title="Actuation">
       <SliderRow
         label="Actuation point"
-        min={0.1}
-        max={4.0}
+        min={minActuationMm}
+        max={maxActuationMm}
         step={0.1}
         value={Number(actuationMm.toFixed(1))}
         render={v => `${v.toFixed(1)} mm`}
@@ -226,7 +274,7 @@ function ActuationPanel({ actuationMm, canEdit, error, onSave }: {
       />
       <Row label="Presets" detail="Instant global travel presets">
         <div className="exo-kb-presets">
-          {ACTUATION_PRESETS.map(preset => (
+          {presets.map(preset => (
             <button
               key={preset.value}
               type="button"
@@ -262,7 +310,7 @@ function RapidTriggerPanel({ enabled, sensitivityMm, canEdit, onSave }: {
       {enabled && sensitivityMm != null ? (
         <SliderRow
           label="Sensitivity"
-          min={0.15}
+          min={0.1}
           max={2.35}
           step={0.05}
           value={Number(sensitivityMm.toFixed(2))}
@@ -271,6 +319,27 @@ function RapidTriggerPanel({ enabled, sensitivityMm, canEdit, onSave }: {
           onCommit={rapidTriggerMm => { void onSave({ rapidTriggerMm }) }}
         />
       ) : null}
+    </Panel>
+  )
+}
+
+function LightingPanel({ brightness, canEdit, onSave }: {
+  brightness: number
+  canEdit: boolean
+  onSave: (patch: KeyboardPatch) => Promise<string | null>
+}) {
+  return (
+    <Panel title="Lighting">
+      <SliderRow
+        label="RGB brightness"
+        min={0}
+        max={100}
+        step={5}
+        value={Math.round(brightness)}
+        render={v => `${Math.round(v)}%`}
+        disabled={!canEdit}
+        onCommit={rgbBrightness => { void onSave({ rgbBrightness: Math.round(rgbBrightness) }) }}
+      />
     </Panel>
   )
 }
@@ -432,12 +501,58 @@ function KeyboardProfileControls({
         />
       ) : null}
       {read.actuationMm != null ? (
-        <ActuationPanel actuationMm={read.actuationMm} canEdit={canEdit} error={error} onSave={onSave} />
+        <ActuationPanel
+          actuationMm={read.actuationMm}
+          minActuationMm={read.minActuationMm}
+          maxActuationMm={read.maxActuationMm}
+          canEdit={canEdit}
+          error={error}
+          onSave={onSave}
+        />
       ) : null}
-      {read.rapidTrigger != null ? (
-        <RapidTriggerPanel enabled={read.rapidTrigger} sensitivityMm={read.rapidTriggerMm} canEdit={canEdit} onSave={onSave} />
+      {read.hasRapidTrigger && read.rapidTrigger != null ? (
+        <RapidTriggerPanel
+          enabled={read.rapidTrigger}
+          sensitivityMm={read.rapidTriggerMm}
+          canEdit={canEdit}
+          onSave={onSave}
+        />
+      ) : null}
+      {read.hasRgb && read.rgbBrightness != null ? (
+        <LightingPanel
+          brightness={read.rgbBrightness}
+          canEdit={canEdit}
+          onSave={onSave}
+        />
       ) : null}
     </>
+  )
+}
+
+function KeyboardMapPanel({ card, name, read }: {
+  card: Peripheral
+  name: string
+  read: KeyboardRead | null
+}) {
+  const activeProfileName = read?.profiles.find(p => p.index === read.activeProfile)?.name ?? null
+  return (
+    <Panel title="Keyboard map">
+      <KeyboardMap
+        model={read?.model ?? card.model ?? name}
+        formFactor={read?.formFactor}
+        layout={read?.layout ?? card.layout}
+        layoutCode={read?.layoutCode ?? card.layout}
+        profileName={activeProfileName}
+        actuationMm={read?.actuationMm}
+        minActuationMm={read?.minActuationMm}
+        maxActuationMm={read?.maxActuationMm}
+        rapidTrigger={read?.rapidTrigger}
+        rapidTriggerMm={read?.rapidTriggerMm}
+        tachyon={read?.tachyon}
+        maxScanHz={read?.maxScanHz}
+        rgbBrightness={read?.rgbBrightness}
+      />
+    </Panel>
   )
 }
 
@@ -461,15 +576,11 @@ export function KeyboardPage({ card, name, status, art }: {
     restoreBackup,
   } = useKeyboard(card.id)
   const isBusy = busy !== null
-  const canEdit = read?.ok === true && read.canWrite === true && !isBusy
-  const activeProfileName = read?.profiles.find(p => p.index === read.activeProfile)?.name ?? null
-  const displayName = read?.model ?? name
-  const mapModel = read?.model ?? card.model ?? name
-  const mapLayout = read?.layout ?? card.layout
+  const canEdit = read != null && read.canWrite && !isBusy
 
   return (
     <DevicePage
-      name={displayName}
+      name={read?.model ?? name}
       status={status}
       art={art}
       stats={heroStats(read)}
@@ -478,6 +589,12 @@ export function KeyboardPage({ card, name, status, art }: {
       <RetryPanel
         loadFailed={loadFailed}
         retrying={busy === 'read'}
+        disabled={isBusy}
+        onRetry={() => { void refresh() }}
+      />
+
+      <WriteErrorBanner
+        message={error}
         disabled={isBusy}
         onRetry={() => { void refresh() }}
       />
@@ -492,18 +609,7 @@ export function KeyboardPage({ card, name, status, art }: {
         onSave={saveSettings}
       />
 
-      <Panel title="Keyboard map">
-        <KeyboardMap
-          model={mapModel}
-          layout={mapLayout}
-          profileName={activeProfileName}
-          actuationMm={read?.actuationMm}
-          rapidTrigger={read?.rapidTrigger}
-          rapidTriggerMm={read?.rapidTriggerMm}
-          tachyon={read?.tachyon}
-          maxScanHz={read?.maxScanHz}
-        />
-      </Panel>
+      <KeyboardMapPanel card={card} name={name} read={read} />
 
       <PerformancePanel card={card} read={read} canEdit={canEdit} onSave={saveSettings} />
 
