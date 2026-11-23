@@ -965,7 +965,7 @@ export const STATES = [
     },
     native: {
       scene: 'discord-voice',
-      script: [{ t: 0.1, type: 'tap', fromReactTarget: true }],
+      script: [{ t: 0.1, type: 'tap', key: 'dc-voice-share' }],
       expect: { room: 'Discord', discordVoiceActive: true },
     },
   },

@@ -10,7 +10,7 @@ use exo_kit::{
     glass_rim_top, glass_still_control_fill, glass_still_panel_fill, good, hairline, hover_fill,
     icon_app_window, icon_chat, icon_close, icon_hand, icon_headphones, icon_headphones_off,
     icon_lock, icon_maximize, icon_mic, icon_mic_off, icon_monitor, icon_music, icon_phone_off,
-    icon_screen_share, icon_settings, icon_sliders, icon_video, icon_volume, icon_volume_off,
+    icon_screen_share, icon_settings, icon_video, icon_volume, icon_volume_off,
     modal_scrim_transition, pressed_fill, primary_button, scrim_fill, subtle_fill, type_body,
     type_control, type_label, type_section, type_small, type_title, warn,
 };
@@ -28,28 +28,24 @@ fn overlay_transition() -> Transition {
     Transition::asymmetric(enter, exit).springs(SpringPair::new(SPRING_MOVE, SPRING_QUICK))
 }
 
-fn bar_icon_btn(
+/// A call control with its word beside the icon, as the call bar draws Mute, Deafen, Camera, Share, Soundboard, Leave.
+fn bar_word_btn(
     key: &'static str,
+    word: &'static str,
     label: &'static str,
     active: bool,
     danger: bool,
     icon: El,
 ) -> El {
-    let fill = if danger {
-        bad().alpha(0.24)
+    let (fill, hover) = if danger {
+        (bad().alpha(0.24), bad().alpha(0.36))
     } else if active {
-        FG
+        (FG, FG.alpha(0.92))
     } else {
-        Color::TRANSPARENT
+        (glass_still_control_fill(), hover_fill())
     };
-    let hover = if danger {
-        bad().alpha(0.36)
-    } else if active {
-        FG.alpha(0.92)
-    } else {
-        hover_fill()
-    };
-    el().key(key)
+    row()
+        .key(key)
         .role("button")
         .label(label)
         .cursor(Cursor::Pointer)
@@ -57,14 +53,21 @@ fn bar_icon_btn(
         .hit()
         .press_on_down()
         .press_scale(PRESS_SCALE)
-        .size(40.0, 40.0)
+        .h(40.0)
+        .px(14.0)
+        .gap(8.0)
+        .center()
         .radius(RADIUS_PILL)
         .fill(fill)
         .hover(hover)
         .press(pressed_fill())
-        .center()
         .motion(SPRING_QUICK)
         .child(icon)
+        .child(text(word).font(type_control()).color(if active && !danger {
+            PRIMARY_FG
+        } else {
+            FG
+        }))
 }
 
 fn dock_action_btn(key: &'static str, label: &'static str, active: bool, icon: El) -> El {
@@ -267,6 +270,7 @@ fn participant_tile(
     guild_id: Option<&str>,
     m: &DiscordVoiceMember,
     compact: bool,
+    solo: bool,
     scale: f32,
 ) -> El {
     let speaking = s.discord.speaking.contains(&m.id);
@@ -280,13 +284,17 @@ fn participant_tile(
         in_voice: true,
     };
 
-    let tile_w = if compact { 216.0 } else { 320.0 };
-    let tile_h = if compact { 122.0 } else { 180.0 };
+    let (tile_w, tile_h) = if compact {
+        (216.0, 122.0)
+    } else if solo {
+        (1120.0, 630.0)
+    } else {
+        (320.0, 180.0)
+    };
     let av_size = if compact { 46.0 } else { 72.0 };
 
     let mut tile = el()
         .key(format!("dc-stage-tile-{}", m.id))
-        .size(tile_w, tile_h)
         .radius(RADIUS_PANEL)
         .fill(if speaking { good().alpha(0.06) } else { BG })
         .motion(SPRING_QUICK)
@@ -295,6 +303,8 @@ fn participant_tile(
         .on_secondary_press(move |s: &mut AppState, p, _| {
             s.open_context_menu(ctx_target.clone(), p.x, p.y);
         });
+
+    tile = tile.size(tile_w, tile_h);
 
     tile = if speaking {
         tile.border(2.0, good())
@@ -391,14 +401,10 @@ fn participant_tile(
     }
 
     let mut badge = row()
-        .pin(Some(10.0), None, None, Some(10.0))
-        .h(26.0)
-        .px(10.0)
+        .pin(Some(14.0), None, None, Some(12.0))
+        .h(22.0)
         .gap(6.0)
         .center_y()
-        .radius(RADIUS_PILL)
-        .fill(BG.alpha(0.76))
-        .border(1.0, hairline())
         .child(text(m.name.clone()).font(type_small()).color(FG).truncate());
 
     if m.deaf || m.server_deaf {
@@ -1043,138 +1049,135 @@ pub fn call_dock(s: &AppState) -> Option<El> {
     );
     let cam = s.discord.voice_ui.camera_on;
 
-    Some(
-        col()
-            .key("dc-call-dock")
-            .w_full()
-            .px(10.0)
-            .py(9.0)
-            .gap(8.0)
-            .fill(BG)
-            .border_sides([1.0, 0.0, 0.0, 0.0], hairline())
-            .child(
-                row()
-                    .w_full()
-                    .justify_between()
-                    .center_y()
-                    .gap(6.0)
-                    .child(
-                        col()
-                            .grow(1.0)
-                            .min_w(0.0)
-                            .gap(2.0)
-                            .child(
-                                row()
-                                    .key("dc-dock-status")
-                                    .role("button")
-                                    .label("Voice connection details")
-                                    .cursor(Cursor::Pointer)
-                                    .hit()
-                                    .press_on_down()
-                                    .gap(6.0)
-                                    .center_y()
-                                    .on_press(|s: &mut AppState| {
-                                        s.open_voice_panel(VoicePanel::Audio)
-                                    })
-                                    .child(el().size(7.0, 7.0).radius(3.5).fill(if connected {
-                                        good()
+    let mut dock = col()
+        .key("dc-call-dock")
+        .w_full()
+        .px(10.0)
+        .py(9.0)
+        .gap(8.0)
+        .fill(BG)
+        .border_sides([1.0, 0.0, 0.0, 0.0], hairline())
+        .child(
+            row()
+                .w_full()
+                .justify_between()
+                .center_y()
+                .gap(6.0)
+                .child(
+                    col()
+                        .grow(1.0)
+                        .min_w(0.0)
+                        .gap(2.0)
+                        .child(
+                            row()
+                                .key("dc-dock-status")
+                                .role("button")
+                                .label("Voice connection details")
+                                .cursor(Cursor::Pointer)
+                                .hit()
+                                .press_on_down()
+                                .gap(6.0)
+                                .center_y()
+                                .on_press(|s: &mut AppState| s.open_voice_panel(VoicePanel::Audio))
+                                .child(el().size(7.0, 7.0).radius(3.5).fill(if connected {
+                                    good()
+                                } else {
+                                    warn()
+                                }))
+                                .child(
+                                    text(if connected {
+                                        match dur {
+                                            Some(ref d) => format!("Voice connected · {d}"),
+                                            None => "Voice connected".into(),
+                                        }
                                     } else {
-                                        warn()
-                                    }))
-                                    .child(
-                                        text(if connected {
-                                            match dur {
-                                                Some(ref d) => format!("Voice connected · {d}"),
-                                                None => "Voice connected".into(),
-                                            }
-                                        } else {
-                                            "Connecting…".into()
-                                        })
-                                        .font(type_label())
-                                        .color(if connected { good() } else { warn() })
-                                        .truncate(),
-                                    ),
-                            )
-                            .child(
-                                row()
-                                    .key("dc-dock-channel")
-                                    .role("button")
-                                    .label("Open voice channel")
-                                    .cursor(Cursor::Pointer)
-                                    .hit()
-                                    .press_on_down()
-                                    .on_press(|s: &mut AppState| s.open_active_voice_channel())
-                                    .child(
-                                        text(label).font(type_small()).color(fg_muted()).truncate(),
-                                    ),
-                            ),
-                    )
-                    .child(
-                        el().key("dc-dock-leave")
-                            .role("button")
-                            .label("Disconnect")
-                            .cursor(Cursor::Pointer)
-                            .focusable(true)
-                            .hit()
-                            .press_on_down()
-                            .press_scale(PRESS_SCALE)
-                            .size(30.0, 30.0)
-                            .radius(RADIUS_PILL)
-                            .fill(bad().alpha(0.16))
-                            .hover(bad().alpha(0.28))
-                            .center()
-                            .motion(SPRING_QUICK)
-                            .on_press(|s: &mut AppState| s.leave_discord_voice())
-                            .child(icon_phone_off(14.0, bad())),
-                    ),
-            )
-            .child(
-                row()
-                    .w_full()
-                    .gap(6.0)
-                    .child(
-                        dock_action_btn(
-                            "dc-dock-cam",
-                            "Camera",
-                            cam,
-                            icon_video(14.0, if cam { PRIMARY_FG } else { FG }),
+                                        "Connecting".into()
+                                    })
+                                    .font(type_label())
+                                    .color(if connected { good() } else { warn() })
+                                    .truncate(),
+                                ),
                         )
-                        .on_press(|s: &mut AppState| s.toggle_discord_camera()),
+                        .child(
+                            row()
+                                .key("dc-dock-channel")
+                                .role("button")
+                                .label("Open voice channel")
+                                .cursor(Cursor::Pointer)
+                                .hit()
+                                .press_on_down()
+                                .on_press(|s: &mut AppState| s.open_active_voice_channel())
+                                .child(text(label).font(type_small()).color(fg_muted()).truncate()),
+                        ),
+                )
+                .child(
+                    el().key("dc-dock-leave")
+                        .role("button")
+                        .label("Disconnect")
+                        .cursor(Cursor::Pointer)
+                        .focusable(true)
+                        .hit()
+                        .press_on_down()
+                        .press_scale(PRESS_SCALE)
+                        .size(30.0, 30.0)
+                        .radius(RADIUS_PILL)
+                        .fill(bad().alpha(0.16))
+                        .hover(bad().alpha(0.28))
+                        .center()
+                        .motion(SPRING_QUICK)
+                        .on_press(|s: &mut AppState| s.leave_discord_voice())
+                        .child(icon_phone_off(14.0, bad())),
+                ),
+        );
+    if connected {
+        dock = dock.child(
+            row()
+                .w_full()
+                .gap(6.0)
+                .child(
+                    dock_action_btn(
+                        "dc-dock-cam",
+                        "Camera",
+                        cam,
+                        icon_video(14.0, if cam { PRIMARY_FG } else { FG }),
                     )
-                    .child(
-                        dock_action_btn(
-                            "dc-dock-share",
-                            "Share screen",
-                            is_golive || s.discord.voice_ui.panel == VoicePanel::GoLive,
-                            icon_screen_share(
-                                14.0,
-                                if is_golive || s.discord.voice_ui.panel == VoicePanel::GoLive {
-                                    PRIMARY_FG
-                                } else {
-                                    FG
-                                },
-                            ),
-                        )
-                        .on_press(|s: &mut AppState| s.open_voice_panel(VoicePanel::GoLive)),
+                    .on_press(|s: &mut AppState| s.toggle_discord_camera()),
+                )
+                .child(
+                    dock_action_btn(
+                        "dc-dock-share",
+                        "Share screen",
+                        is_golive || s.discord.voice_ui.panel == VoicePanel::GoLive,
+                        icon_screen_share(
+                            14.0,
+                            if is_golive || s.discord.voice_ui.panel == VoicePanel::GoLive {
+                                PRIMARY_FG
+                            } else {
+                                FG
+                            },
+                        ),
                     )
-                    .child(
-                        dock_action_btn(
-                            "dc-dock-sb",
-                            "Soundboard",
-                            s.discord.voice_ui.panel == VoicePanel::Soundboard,
-                            icon_music(
-                                14.0,
-                                if s.discord.voice_ui.panel == VoicePanel::Soundboard {
-                                    PRIMARY_FG
-                                } else {
-                                    FG
-                                },
-                            ),
-                        )
-                        .on_press(|s: &mut AppState| s.open_voice_panel(VoicePanel::Soundboard)),
-                    ),
-            ),
-    )
+                    .on_press(|s: &mut AppState| s.open_voice_panel(VoicePanel::GoLive)),
+                )
+                .child(
+                    dock_action_btn(
+                        "dc-dock-sb",
+                        "Soundboard",
+                        s.discord.voice_ui.panel == VoicePanel::Soundboard,
+                        icon_music(
+                            14.0,
+                            if s.discord.voice_ui.panel == VoicePanel::Soundboard {
+                                PRIMARY_FG
+                            } else {
+                                FG
+                            },
+                        ),
+                    )
+                    .on_press(|s: &mut AppState| s.open_voice_panel(VoicePanel::Soundboard)),
+                ),
+        );
+    }
+    Some(dock)
 }
 
 pub fn voice_stage_view(
@@ -1184,9 +1187,27 @@ pub fn voice_stage_view(
     scale: f32,
     voice_bar_blur: bool,
 ) -> El {
-    let members = ch.members.as_deref().unwrap_or(&[]);
     let in_this_voice = s.discord.voice.channel_id.as_deref() == Some(ch.id.as_str())
         && s.discord.voice.state != "off";
+    let mut roster: Vec<DiscordVoiceMember> = ch.members.clone().unwrap_or_default();
+    if in_this_voice
+        && let Some(me) = s.discord.home.me.as_ref()
+        && !roster.iter().any(|m| m.id == me.id)
+    {
+        roster.insert(
+            0,
+            DiscordVoiceMember {
+                id: me.id.clone(),
+                name: me.name.clone(),
+                avatar: me.avatar.clone(),
+                mute: s.discord.voice.muted,
+                deaf: s.discord.voice.deafened,
+                video: s.discord.voice_ui.camera_on,
+                ..Default::default()
+            },
+        );
+    }
+    let members = roster.as_slice();
     let is_stage = ch.channel_type == 13 || ch.stage_topic.is_some();
     let is_golive = matches!(
         s.discord.voice_ui.golive_state.as_str(),
@@ -1210,14 +1231,12 @@ pub fn voice_stage_view(
         .child(text(count_text).font(type_small()).color(fg_muted()));
 
     if in_this_voice {
-        let dur = s.voice_duration_label();
-        let status_label = if s.discord.voice.state == "connected" {
-            match dur {
-                Some(d) => format!("Voice connected · {d}"),
-                None => "Voice connected".into(),
-            }
+        let connected = s.discord.voice.state == "connected";
+        let tone = if connected { good() } else { warn() };
+        let status_label = if connected {
+            "Voice connected"
         } else {
-            "Connecting…".into()
+            "Connecting"
         };
         head_left = head_left.child(
             row()
@@ -1232,11 +1251,11 @@ pub fn voice_stage_view(
                 .gap(6.0)
                 .center_y()
                 .radius(RADIUS_PILL)
-                .fill(good().alpha(0.12))
-                .border(1.0, good().alpha(0.32))
+                .fill(tone.alpha(0.12))
+                .border(1.0, tone.alpha(0.32))
                 .on_press(|s: &mut AppState| s.open_voice_panel(VoicePanel::Audio))
-                .child(el().size(6.0, 6.0).radius(3.0).fill(good()))
-                .child(text(status_label).font(type_label()).color(good())),
+                .child(el().size(6.0, 6.0).radius(3.0).fill(tone))
+                .child(text(status_label).font(type_label()).color(tone)),
         );
     }
 
@@ -1416,9 +1435,10 @@ pub fn voice_stage_view(
                 ),
         );
     } else if !s.discord.voice_ui.fullscreen_stream {
+        let solo = members.len() == 1 && !watching_any;
         let mut tiles = row().w_full().gap(14.0).flex_wrap().justify_center();
         for m in members {
-            tiles = tiles.child(participant_tile(s, guild_id, m, watching_any, scale));
+            tiles = tiles.child(participant_tile(s, guild_id, m, watching_any, solo, scale));
         }
         stage_inner = stage_inner.child(
             col()
@@ -1488,8 +1508,9 @@ pub fn voice_stage_view(
             })
             .border_gradient(1.0, glass_rim_top(), glass_rim_bottom())
             .child(
-                bar_icon_btn(
+                bar_word_btn(
                     "dc-voice-mute",
+                    if muted { "Unmute" } else { "Mute" },
                     if muted { "Unmute" } else { "Mute" },
                     false,
                     muted,
@@ -1509,8 +1530,9 @@ pub fn voice_stage_view(
                 }),
             )
             .child(
-                bar_icon_btn(
+                bar_word_btn(
                     "dc-voice-deafen",
+                    if deaf { "Undeafen" } else { "Deafen" },
                     if deaf { "Undeafen" } else { "Deafen" },
                     false,
                     deaf,
@@ -1530,8 +1552,9 @@ pub fn voice_stage_view(
                 }),
             )
             .child(
-                bar_icon_btn(
+                bar_word_btn(
                     "dc-voice-cam",
+                    "Camera",
                     if cam {
                         "Turn off camera"
                     } else {
@@ -1545,8 +1568,9 @@ pub fn voice_stage_view(
             )
             .child(el().w(1.0).h(24.0).mx(2.0).fill(hairline()))
             .child(
-                bar_icon_btn(
+                bar_word_btn(
                     "dc-voice-share",
+                    "Share",
                     if is_golive {
                         "Stream options"
                     } else {
@@ -1569,8 +1593,9 @@ pub fn voice_stage_view(
                 }),
             )
             .child(
-                bar_icon_btn(
+                bar_word_btn(
                     "dc-voice-sb",
+                    "Soundboard",
                     "Soundboard",
                     s.discord.voice_ui.panel == VoicePanel::Soundboard,
                     false,
@@ -1585,26 +1610,10 @@ pub fn voice_stage_view(
                 )
                 .on_press(|s: &mut AppState| s.open_voice_panel(VoicePanel::Soundboard)),
             )
-            .child(
-                bar_icon_btn(
-                    "dc-voice-audio",
-                    "Audio & diagnostics",
-                    s.discord.voice_ui.panel == VoicePanel::Audio,
-                    false,
-                    icon_sliders(
-                        18.0,
-                        if s.discord.voice_ui.panel == VoicePanel::Audio {
-                            PRIMARY_FG
-                        } else {
-                            FG
-                        },
-                    ),
-                )
-                .on_press(|s: &mut AppState| s.open_voice_panel(VoicePanel::Audio)),
-            )
             .child(el().w(1.0).h(24.0).mx(2.0).fill(hairline()))
             .child(
-                el().key("dc-voice-leave")
+                row()
+                    .key("dc-voice-leave")
                     .role("button")
                     .label("Disconnect")
                     .cursor(Cursor::Pointer)
@@ -1612,7 +1621,9 @@ pub fn voice_stage_view(
                     .hit()
                     .press_on_down()
                     .press_scale(PRESS_SCALE)
-                    .size(46.0, 40.0)
+                    .h(40.0)
+                    .px(14.0)
+                    .gap(8.0)
                     .radius(RADIUS_PILL)
                     .fill(bad())
                     .hover(bad().alpha(0.88))
@@ -1620,7 +1631,8 @@ pub fn voice_stage_view(
                     .center()
                     .motion(SPRING_QUICK)
                     .on_press(|s: &mut AppState| s.leave_discord_voice())
-                    .child(icon_phone_off(18.0, FG)),
+                    .child(icon_phone_off(18.0, FG))
+                    .child(text("Leave").font(type_control()).color(FG)),
             )
     };
 
@@ -1712,7 +1724,7 @@ pub fn voice_stage_view(
         ));
 
     row()
-        .w_full()
+        .grow(1.0)
         .h_full()
         .min_w(0.0)
         .min_h(0.0)

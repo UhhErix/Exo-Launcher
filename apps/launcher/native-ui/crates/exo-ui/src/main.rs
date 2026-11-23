@@ -1223,10 +1223,10 @@ const PARITY_SCENES: &[(&str, SceneSetter)] = &[
                 .unwrap_or_else(|| "vc-lounge".into());
             s.open_discord_guild(&gid);
             s.open_discord_channel(&voice_cid);
-            s.discord.voice_ui.show_voice_chat = true;
-            if s.status != state::HostStatus::Connected {
-                s.join_discord_voice(Some(&gid), &voice_cid);
-            }
+            s.discord.voice.state = "connecting".into();
+            s.discord.voice.guild_id = Some(gid.clone());
+            s.discord.voice.channel_id = Some(voice_cid.clone());
+            s.discord.voice.e2ee = true;
         }
     }),
     ("discord-signin", |s: &mut AppState| {
