@@ -583,6 +583,7 @@ public sealed class AppSettings
     public Dictionary<string, string> SteamOverlayPrior { get; set; } = new(StringComparer.OrdinalIgnoreCase);
     /// <summary>Per-game opt-in for NVIDIA driver Smooth Motion (<c>0xB0D384C0</c>) on RTX 40/50 when not using native DLSS-G.</summary>
     public Dictionary<string, bool> SmoothMotion { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+    public Dictionary<string, string> FrameGenRoute { get; set; } = new(StringComparer.OrdinalIgnoreCase);
     /// <summary>
     /// Devices > controller > Sound in Windows: controllers' own speakers and microphones as Windows audio devices.
     /// Off by default: Exo turns them off whenever a controller connects, so Windows never switches your sound to one.

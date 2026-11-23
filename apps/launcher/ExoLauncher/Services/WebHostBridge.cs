@@ -872,6 +872,7 @@ public sealed partial class WebHostBridge
                 "dlss.restore" => await DlssRestoreAsync(paramsEl, hasParams).ConfigureAwait(true),
                 "dlss.consent" => await DlssConsentAsync(paramsEl, hasParams, requestToken).ConfigureAwait(true),
                 "dlss.frameGen" => await DlssFrameGenAsync(paramsEl, hasParams, requestToken).ConfigureAwait(true),
+                "game.frameGen" => await GameFrameGenAsync(paramsEl, hasParams, requestToken).ConfigureAwait(true),
                 // Windows' administrator prompt blocks the thread that asks until it is answered.
                 "shaders.status" => await ShadersStatusAsync(paramsEl, hasParams, requestToken).ConfigureAwait(false),
                 "shaders.prepare.games" => await ShaderPrepareGamesAsync(requestToken).ConfigureAwait(false),

@@ -633,6 +633,74 @@ pub struct GameExtras {
 
 #[derive(Debug, Clone, Default, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct FrameGenRoute {
+    #[serde(default)]
+    pub id: String,
+    #[serde(default)]
+    pub tier: String,
+    #[serde(default)]
+    pub kind: String,
+    #[serde(default)]
+    pub label: String,
+    #[serde(default)]
+    pub status: String,
+    #[serde(default)]
+    pub summary: String,
+    #[serde(default)]
+    pub gpu_supported: bool,
+    #[serde(default)]
+    pub gpu_note: String,
+    #[serde(default)]
+    pub anti_cheat_verdict: String,
+    #[serde(default)]
+    pub anti_cheat_note: String,
+    #[serde(default)]
+    pub auto_enable: bool,
+    #[serde(default)]
+    pub latency_note: String,
+    #[serde(default)]
+    pub selectable: bool,
+    #[serde(default)]
+    pub active: bool,
+    #[serde(default)]
+    pub reason: Option<String>,
+    #[serde(default)]
+    pub how_to_enable: Option<String>,
+    #[serde(default)]
+    pub choice_value: Option<String>,
+    #[serde(default)]
+    pub choices: Vec<String>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GameFrameGen {
+    #[serde(default)]
+    pub ok: bool,
+    #[serde(default)]
+    pub message: Option<String>,
+    #[serde(default)]
+    pub best_route_id: String,
+    #[serde(default)]
+    pub selected_route_id: String,
+    #[serde(default)]
+    pub state: String,
+    #[serde(default)]
+    pub word: String,
+    #[serde(default)]
+    pub good: bool,
+    #[serde(default)]
+    pub bad: bool,
+    #[serde(default)]
+    pub reason: Option<String>,
+    #[serde(default)]
+    pub how_to_enable: Option<String>,
+    #[serde(default)]
+    pub routes: Vec<FrameGenRoute>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct GameProperties {
     #[serde(default)]
     pub ok: bool,

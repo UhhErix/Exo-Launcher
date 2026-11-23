@@ -191,11 +191,7 @@ fn performance_card(s: &AppState, game: &Game) -> El {
             Some(upscalers_sub),
             Some(icon_chevron_right(14.0, fg_muted())),
         ))
-        .child(perf_line(
-            "Frame generation",
-            Some(("Built into the game".into(), fg_muted())),
-            None,
-        ))
+        .child(crate::frame_gen_row::view(s, game))
         .child(perf_line("Optimize", Some(opt_sub), Some(borderless_pill)))
 }
 

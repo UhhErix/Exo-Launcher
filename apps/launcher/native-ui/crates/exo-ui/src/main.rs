@@ -9,6 +9,7 @@ mod discord_state;
 mod discord_voice;
 mod discord_voice_state;
 mod events;
+mod frame_gen_row;
 mod game_page;
 mod gamepad;
 mod image_cache;
@@ -335,6 +336,13 @@ fn load_live_state_sync(pipe: &str, scene: Option<&str>) -> AppState {
                     state.props_launch_opts.text = props.launch_options.clone().unwrap_or_default();
                     state.props_launch_opts.sync_invariants();
                     state.game_props = Some(props);
+                }
+                if let Ok(fg) = client.call_blocking::<_, exo_rpc::GameFrameGen>(
+                    exo_rpc::METHOD_GAME_FRAME_GEN,
+                    &serde_json::json!({ "id": gid }),
+                    Duration::from_secs(6),
+                ) {
+                    state.game_frame_gen = Some(fg);
                 }
             }
         }
