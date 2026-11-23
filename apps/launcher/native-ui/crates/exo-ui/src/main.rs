@@ -13,6 +13,7 @@ mod gamepad;
 mod key_modal;
 mod library;
 mod media_state;
+mod menus;
 mod music;
 mod notice;
 mod palette;
@@ -1146,10 +1147,11 @@ fn main() {
 mod tests {
     use super::*;
     use crate::gamepad::GamepadAction;
-    use crate::state::{LibraryFilter, Room};
+    use crate::media_state::MusicService;
+    use crate::state::{LibraryFilter, LibrarySort, Room};
     use rune::{
-        Env, Mods, Runtime,
-        render::{KIND_BACKDROP_BLUR, KIND_SEGMENT},
+        Cursor, Env, Mods, Runtime,
+        render::{KIND_BACKDROP_BLUR, KIND_LAYER, KIND_LAYER_END, KIND_SEGMENT},
     };
 
     #[test]
@@ -1948,6 +1950,462 @@ mod tests {
                 "mini overlapped Exo AI storage button at {vw}px: mini={mini:?} storage={storage:?}"
             );
         }
+    }
+
+    fn assert_blur_outside_layers(rt: &Runtime<AppState>, key: &str, phase: &str) {
+        let (rect, _) = rt
+            .presented(key)
+            .unwrap_or_else(|| panic!("{phase}: {key} not presented"));
+        let mut open_layers: Vec<([f32; 4], f32)> = Vec::new();
+        let mut total_blurs = 0usize;
+        let mut matched_layers: Option<Vec<([f32; 4], f32)>> = None;
+        for inst in &rt.instances {
+            let kind = inst.params[1];
+            if kind == KIND_LAYER {
+                open_layers.push((inst.rect, inst.fill[3]));
+            } else if kind == KIND_LAYER_END {
+                open_layers.pop();
+            } else if kind == KIND_BACKDROP_BLUR {
+                total_blurs += 1;
+                if (inst.rect[0] - rect[0]).abs() < 4.0
+                    && (inst.rect[1] - rect[1]).abs() < 4.0
+                    && (inst.rect[2] - rect[2]).abs() < 4.0
+                    && (inst.rect[3] - rect[3]).abs() < 4.0
+                {
+                    matched_layers = Some(open_layers.clone());
+                }
+            }
+        }
+        assert!(
+            total_blurs <= rune::MAX_BACKDROP_BLURS,
+            "{phase}: emitted {total_blurs} blurs (cap {})",
+            rune::MAX_BACKDROP_BLURS
+        );
+        assert_eq!(
+            matched_layers,
+            Some(Vec::new()),
+            "{phase}: {key} blur must be emitted at layer_depth 0 (outside fading ancestor layers), got {matched_layers:?}"
+        );
+    }
+
+    #[test]
+    fn liquid_glass_blurs_from_frame_one_during_enter_and_exit() {
+        let mut state = AppState::default();
+        state.media.playback = None;
+        let mut rt = Runtime::new(state, shell::view, (1920.0, 1080.0), Env::new(true, 1.0));
+        rt.on_key = Some(on_key);
+        rt.frame(0.0);
+        rt.frame(0.5);
+
+        let (cx, cy) = rt.find("top-capture-btn").expect("top-capture-btn");
+        rt.pointer_down(cx, cy);
+        rt.pointer_up(cx, cy);
+
+        rt.frame(1.0 / 60.0);
+        assert!(rt.state.capture_menu_open);
+        assert_blur_outside_layers(&rt, "capture-popover-menu", "capture-frame-1");
+        assert_blur_outside_layers(&rt, "nav-capsule", "nav-kept-blur-with-capture");
+
+        for step in 2..=24 {
+            rt.frame(1.0 / 60.0);
+            assert_blur_outside_layers(
+                &rt,
+                "capture-popover-menu",
+                &format!("capture-enter-step-{step}"),
+            );
+        }
+
+        rt.key(KeyEvent {
+            key: Key::Escape,
+            mods: Mods::default(),
+        });
+        rt.frame(1.0 / 60.0);
+        assert!(!rt.state.capture_menu_open);
+        if rt.presented("capture-popover-menu").is_some() {
+            assert_blur_outside_layers(&rt, "capture-popover-menu", "capture-exit-frame-1");
+        }
+        for _ in 0..30 {
+            rt.frame(1.0 / 60.0);
+        }
+
+        rt.update(|s, tx| {
+            tx.animated();
+            s.open_palette(tx);
+        });
+        rt.frame(1.0 / 60.0);
+        assert_blur_outside_layers(&rt, "command-palette", "palette-frame-1");
+        rt.update(|s, _| s.close_palette());
+        for _ in 0..30 {
+            rt.frame(1.0 / 60.0);
+        }
+
+        rt.update(|s, tx| {
+            tx.animated();
+            s.open_key_modal(tx);
+        });
+        rt.frame(1.0 / 60.0);
+        assert_blur_outside_layers(&rt, "activate-key-modal", "key-modal-frame-1");
+    }
+
+    #[test]
+    fn cursors_match_interactive_element_roles() {
+        let mut rt = Runtime::new(
+            AppState::default(),
+            shell::view,
+            (1920.0, 1080.0),
+            Env::new(true, 1.0),
+        );
+        rt.frame(0.0);
+        rt.frame(0.5);
+
+        for key in [
+            "search-capsule",
+            "nav-library",
+            "top-capture-btn",
+            "nav-settings",
+        ] {
+            let (x, y) = rt.find(key).unwrap_or_else(|| panic!("missing {key}"));
+            rt.pointer_move(x, y);
+            rt.frame(1.0 / 60.0);
+            assert_eq!(rt.cursor(), Cursor::Pointer, "expected Pointer over {key}");
+        }
+
+        rt.update(|s, tx| s.open_key_modal(tx));
+        for _ in 0..30 {
+            rt.frame(1.0 / 60.0);
+        }
+        let (ix, iy) = rt.find("activate-key-input").expect("activate-key-input");
+        rt.pointer_move(ix, iy);
+        rt.frame(1.0 / 60.0);
+        assert_eq!(rt.cursor(), Cursor::Text);
+
+        let (dx, dy) = rt.find("key-submit").expect("key-submit");
+        rt.pointer_move(dx, dy);
+        rt.frame(1.0 / 60.0);
+        assert_eq!(rt.cursor(), Cursor::NotAllowed);
+
+        rt.pointer_move(10.0, 10.0);
+        rt.frame(1.0 / 60.0);
+        assert_eq!(rt.cursor(), Cursor::Default);
+
+        rt.update(|s, _| s.close_key_modal());
+        let mut notice_id = 0_u64;
+        rt.update(|s, _| {
+            notice_id = s.push_notice("Saved clip", state::NoticeTone::Good);
+        });
+        for _ in 0..30 {
+            rt.frame(1.0 / 60.0);
+        }
+        let nkey = format!("notice-{notice_id}");
+        let (nx, ny) = rt.find(&nkey).expect("notice card");
+        rt.pointer_move(nx - 40.0, ny);
+        rt.frame(1.0 / 60.0);
+        assert_eq!(rt.cursor(), Cursor::Grab);
+        rt.pointer_down(nx - 40.0, ny);
+        rt.pointer_move(nx - 20.0, ny);
+        rt.frame(1.0 / 60.0);
+        assert_eq!(rt.cursor(), Cursor::Grabbing);
+        rt.pointer_up(nx - 20.0, ny);
+    }
+
+    #[test]
+    fn top_bar_context_menus_right_click_keyboard_and_submenus() {
+        let mut rt = Runtime::new(
+            AppState::default(),
+            shell::view,
+            (1920.0, 1080.0),
+            Env::new(true, 1.0),
+        );
+        rt.on_key = Some(on_key);
+        rt.frame(0.0);
+        rt.frame(0.5);
+
+        let (sx, sy) = rt.find("search-capsule").expect("search-capsule");
+        rt.secondary_down(sx, sy);
+        rt.secondary_up(sx, sy);
+        rt.frame(1.0 / 60.0);
+        assert!(rt.presented("exo-ctx-menu").is_some());
+        assert!(rt.presented("ctx-search-open").is_some());
+        assert_blur_outside_layers(&rt, "exo-ctx-menu", "ctx-search-frame-1");
+        rt.key(KeyEvent {
+            key: Key::Escape,
+            mods: Mods::default(),
+        });
+        rt.frame(1.0 / 60.0);
+        assert!(rt.state.context_menu.is_none());
+
+        let (nx, ny) = rt.find("nav-library").expect("nav-library");
+        rt.secondary_down(nx, ny);
+        rt.secondary_up(nx, ny);
+        for _ in 0..10 {
+            rt.frame(1.0 / 60.0);
+        }
+        assert!(rt.presented("exo-ctx-menu").is_some());
+        assert!(rt.presented("ctx-nav-rooms").is_some());
+
+        for _ in 0..2 {
+            rt.key(KeyEvent {
+                key: Key::Down,
+                mods: Mods::default(),
+            });
+            rt.frame(1.0 / 60.0);
+        }
+        rt.key(KeyEvent {
+            key: Key::Right,
+            mods: Mods::default(),
+        });
+        for _ in 0..10 {
+            rt.frame(1.0 / 60.0);
+        }
+        assert!(rt.presented("exo-ctx-submenu").is_some());
+        rt.key(KeyEvent {
+            key: Key::Left,
+            mods: Mods::default(),
+        });
+        rt.frame(1.0 / 60.0);
+        assert_eq!(rt.state.context_menu.and_then(|c| c.open_submenu), None);
+        for _ in 0..30 {
+            rt.frame(1.0 / 60.0);
+        }
+        assert!(rt.presented("exo-ctx-submenu").is_none());
+        rt.key(KeyEvent {
+            key: Key::Right,
+            mods: Mods::default(),
+        });
+        for _ in 0..10 {
+            rt.frame(1.0 / 60.0);
+        }
+        assert!(rt.presented("exo-ctx-submenu").is_some());
+        let (store_x, store_y) = rt
+            .find("ctx-sub-room-nav-store")
+            .expect("ctx-sub-room-nav-store");
+        rt.pointer_down(store_x, store_y);
+        rt.pointer_up(store_x, store_y);
+        rt.frame(1.0 / 60.0);
+        assert_eq!(rt.state.room, Room::Store);
+        assert!(rt.state.context_menu.is_none());
+
+        rt.update(|s, _| s.media.capture_status = None);
+        rt.frame(1.0 / 60.0);
+        let (cx, cy) = rt.find("top-capture-btn").expect("top-capture-btn");
+        rt.secondary_down(cx, cy);
+        rt.secondary_up(cx, cy);
+        for _ in 0..30 {
+            rt.frame(1.0 / 60.0);
+        }
+        assert!(rt.presented("exo-ctx-menu").is_some());
+        let (rx, ry) = rt.find("ctx-cap-replay").expect("ctx-cap-replay");
+        rt.pointer_move(rx, ry);
+        rt.frame(1.0 / 60.0);
+        assert_eq!(rt.cursor(), Cursor::NotAllowed);
+        rt.key(KeyEvent {
+            key: Key::Escape,
+            mods: Mods::default(),
+        });
+        rt.frame(1.0 / 60.0);
+
+        let (set_x, set_y) = rt.find("nav-settings").expect("nav-settings");
+        rt.secondary_down(set_x, set_y);
+        rt.secondary_up(set_x, set_y);
+        for _ in 0..10 {
+            rt.frame(1.0 / 60.0);
+        }
+        assert!(rt.presented("exo-ctx-menu").is_some());
+        let (ts_x, ts_y) = rt.find("ctx-set-text-size").expect("ctx-set-text-size");
+        rt.pointer_down(ts_x, ts_y);
+        rt.pointer_up(ts_x, ts_y);
+        for _ in 0..10 {
+            rt.frame(1.0 / 60.0);
+        }
+        assert!(rt.presented("exo-ctx-submenu").is_some());
+        let (lg_x, lg_y) = rt.find("ctx-sub-text-large").expect("ctx-sub-text-large");
+        rt.pointer_down(lg_x, lg_y);
+        rt.pointer_up(lg_x, lg_y);
+        rt.frame(1.0 / 60.0);
+        assert_eq!(rt.state.settings.text_size.as_deref(), Some("large"));
+        assert!(rt.state.context_menu.is_none());
+
+        rt.update(|_, tx| tx.focus("nav-library", true));
+        rt.frame(1.0 / 60.0);
+        rt.key(KeyEvent {
+            key: Key::ContextMenu,
+            mods: Mods::default(),
+        });
+        rt.frame(1.0 / 60.0);
+        assert!(rt.presented("exo-ctx-menu").is_some());
+        rt.key(KeyEvent {
+            key: Key::Escape,
+            mods: Mods::default(),
+        });
+        rt.frame(1.0 / 60.0);
+        assert!(rt.state.context_menu.is_none());
+
+        rt.update(|_, tx| tx.focus("nav-library", true));
+        rt.frame(1.0 / 60.0);
+        rt.key(KeyEvent {
+            key: Key::Function(10),
+            mods: Mods {
+                shift: true,
+                ..Mods::default()
+            },
+        });
+        rt.frame(1.0 / 60.0);
+        assert!(rt.presented("exo-ctx-menu").is_some());
+    }
+
+    #[test]
+    fn dropdowns_replace_all_five_fake_selects_with_pointer_and_keyboard() {
+        let mut rt = Runtime::new(
+            AppState::default(),
+            shell::view,
+            (1920.0, 1080.0),
+            Env::new(true, 1.0),
+        );
+        rt.on_key = Some(on_key);
+        rt.frame(0.0);
+        rt.frame(0.5);
+
+        rt.update(|s, _| s.switch_room(Room::Settings));
+        for _ in 0..30 {
+            rt.frame(1.0 / 60.0);
+        }
+        let (tx, ty) = rt
+            .find("set-text-size-select")
+            .expect("set-text-size-select");
+        rt.pointer_down(tx, ty);
+        rt.pointer_up(tx, ty);
+        for _ in 0..10 {
+            rt.frame(1.0 / 60.0);
+        }
+        assert!(rt.presented("dd-text-size-menu").is_some());
+        assert_blur_outside_layers(&rt, "dd-text-size-menu", "dropdown-frame-1");
+        let (ox, oy) = rt
+            .find("dd-text-size-opt-large")
+            .expect("dd-text-size-opt-large");
+        rt.pointer_down(ox, oy);
+        rt.pointer_up(ox, oy);
+        rt.frame(1.0 / 60.0);
+        assert_eq!(rt.state.settings.text_size.as_deref(), Some("large"));
+        assert!(rt.state.open_dropdown.is_none());
+
+        rt.update(|_, tx| tx.focus("set-text-size-select", true));
+        rt.frame(1.0 / 60.0);
+        rt.key(KeyEvent {
+            key: Key::Down,
+            mods: Mods::default(),
+        });
+        rt.frame(1.0 / 60.0);
+        assert!(rt.presented("dd-text-size-menu").is_some());
+        rt.key(KeyEvent {
+            key: Key::Up,
+            mods: Mods::default(),
+        });
+        rt.frame(1.0 / 60.0);
+        rt.key(KeyEvent {
+            key: Key::Enter,
+            mods: Mods::default(),
+        });
+        rt.frame(1.0 / 60.0);
+        assert_eq!(rt.state.settings.text_size.as_deref(), Some("normal"));
+        assert!(rt.state.open_dropdown.is_none());
+
+        rt.key(KeyEvent {
+            key: Key::Down,
+            mods: Mods::default(),
+        });
+        rt.frame(1.0 / 60.0);
+        assert!(rt.presented("dd-text-size-menu").is_some());
+        rt.key(KeyEvent {
+            key: Key::Escape,
+            mods: Mods::default(),
+        });
+        rt.frame(1.0 / 60.0);
+        assert!(rt.state.open_dropdown.is_none());
+
+        rt.update(|s, _| s.pc.settings_section = pc_state::SettingsSection::Updates);
+        for _ in 0..20 {
+            rt.frame(1.0 / 60.0);
+        }
+        let (mx, my) = rt
+            .find("set-music-service-select")
+            .expect("set-music-service-select");
+        rt.pointer_down(mx, my);
+        rt.pointer_up(mx, my);
+        for _ in 0..10 {
+            rt.frame(1.0 / 60.0);
+        }
+        let (yx, yy) = rt
+            .find("dd-music-service-opt-youtube")
+            .expect("dd-music-service-opt-youtube");
+        rt.pointer_down(yx, yy);
+        rt.pointer_up(yx, yy);
+        rt.frame(1.0 / 60.0);
+        assert_eq!(rt.state.media.music_service, MusicService::YouTube);
+
+        rt.update(|s, _| {
+            s.switch_room(Room::Library);
+            s.library_all_games = true;
+        });
+        for _ in 0..30 {
+            rt.frame(1.0 / 60.0);
+        }
+        let (sx, sy) = rt.find("sort-cycle").expect("sort-cycle");
+        rt.pointer_down(sx, sy);
+        rt.pointer_up(sx, sy);
+        for _ in 0..10 {
+            rt.frame(1.0 / 60.0);
+        }
+        let (ax, ay) = rt
+            .find("dd-library-sort-opt-title")
+            .expect("dd-library-sort-opt-title");
+        rt.pointer_down(ax, ay);
+        rt.pointer_up(ax, ay);
+        rt.frame(1.0 / 60.0);
+        assert_eq!(rt.state.sort, LibrarySort::Title);
+
+        let first_id = rt.state.games[0].id.clone();
+        rt.update(|s, _| {
+            s.library_all_games = false;
+            s.open_game_page(&first_id);
+        });
+        for _ in 0..30 {
+            rt.frame(1.0 / 60.0);
+        }
+        let (dx, dy) = rt
+            .find("gp-display-mode-select")
+            .expect("gp-display-mode-select");
+        rt.pointer_down(dx, dy);
+        rt.pointer_up(dx, dy);
+        for _ in 0..10 {
+            rt.frame(1.0 / 60.0);
+        }
+        let (fx, fy) = rt
+            .find("dd-game-display-opt-fullscreen")
+            .expect("dd-game-display-opt-fullscreen");
+        rt.pointer_down(fx, fy);
+        rt.pointer_up(fx, fy);
+        rt.frame(1.0 / 60.0);
+        assert_eq!(rt.state.game_display_mode, "fullscreen");
+
+        let (lx, ly) = rt.find("gp-language-select").expect("gp-language-select");
+        rt.pointer_down(lx, ly);
+        rt.pointer_up(lx, ly);
+        for _ in 0..10 {
+            rt.frame(1.0 / 60.0);
+        }
+        let (jx, jy) = rt
+            .find("dd-game-language-opt-japanese")
+            .expect("dd-game-language-opt-japanese");
+        rt.pointer_down(jx, jy);
+        rt.pointer_up(jx, jy);
+        rt.frame(1.0 / 60.0);
+        assert_eq!(
+            rt.state
+                .game_props
+                .as_ref()
+                .and_then(|p| p.language.as_deref()),
+            Some("japanese")
+        );
     }
 }
 

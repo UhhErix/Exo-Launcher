@@ -1,12 +1,12 @@
 use crate::pc_state::SettingsSection;
-use crate::state::AppState;
+use crate::state::{AppState, InputMode, OpenDropdown};
 use exo_kit::{
-    BG, FG, PRESS_SCALE, RADIUS_CARD, RADIUS_PILL, RADIUS_SMALL, SPRING_QUICK, TRANSPARENT,
-    amoled_card, fg_muted, float_line, glass_button, glass_control_fill, glass_rim_bottom,
-    glass_rim_top, good, hairline, hover_fill, icon_chevron_down, icon_chevron_left, icon_download,
+    BG, FG, PRESS_SCALE, RADIUS_CARD, RADIUS_PILL, RADIUS_SMALL, SPRING_QUICK, SelectTrigger,
+    TRANSPARENT, amoled_card, fg_muted, float_line, glass_button, glass_control_fill,
+    glass_rim_bottom, glass_rim_top, good, hairline, hover_fill, icon_chevron_left, icon_download,
     icon_folder, icon_info, icon_library, icon_music, icon_refresh, icon_search, icon_sliders,
-    icon_sparkles, icon_trophy, pressed_fill, primary_button, progress_bar, scaled, selected_fill,
-    switch_pill, type_body, type_control, type_page, type_section, type_small,
+    icon_sparkles, icon_trophy, pressed_fill, primary_button, progress_bar, scaled, select_trigger,
+    selected_fill, store_logo, switch_pill, type_body, type_page, type_section, type_small,
 };
 use rune::{El, ScrollSpec, TextStyle, Transition, col, edit_access, el, row, text, text_input};
 
@@ -78,19 +78,6 @@ fn toggle_row(key: &'static str, title: &'static str, field: &'static str, value
     )
 }
 
-fn dropdown_pill(label: &str) -> El {
-    row()
-        .h(32.0)
-        .px(12.0)
-        .gap(6.0)
-        .center_y()
-        .radius(RADIUS_PILL)
-        .fill(glass_control_fill())
-        .border_gradient(1.0, glass_rim_top(), glass_rim_bottom())
-        .child(text(label.to_string()).font(type_control()).color(FG))
-        .child(icon_chevron_down(12.0, fg_muted()))
-}
-
 fn section_head(title: &str) -> El {
     row()
         .w_full()
@@ -108,14 +95,22 @@ fn section_head(title: &str) -> El {
 
 fn section_general(s: &AppState) -> El {
     let set = &s.settings;
+    let gamepad_focus = s.input_mode == InputMode::Gamepad;
     let main_card = amoled_card(RADIUS_CARD)
         .w_full()
         .child(set_row(
             "Text size",
             None,
-            dropdown_pill(text_size_label(
-                set.text_size.as_deref().unwrap_or("normal"),
-            )),
+            select_trigger(
+                SelectTrigger::new(
+                    "set-text-size-select",
+                    "Text size",
+                    text_size_label(set.text_size.as_deref().unwrap_or("normal")),
+                )
+                .open(s.open_dropdown == Some(OpenDropdown::TextSize))
+                .gamepad_focus(gamepad_focus),
+                |s: &mut AppState, _| s.toggle_dropdown(OpenDropdown::TextSize),
+            ),
         ))
         .child(el().w_full().h(1.0).fill(hairline()))
         .child(toggle_row(
@@ -269,10 +264,21 @@ fn section_in_game(s: &AppState) -> El {
 
 fn section_music(s: &AppState) -> El {
     let current = s.media.music_service.label();
+    let logo_id = match s.media.music_service.id() {
+        "apple" => "apple-music",
+        other => other,
+    };
+    let gamepad_focus = s.input_mode == InputMode::Gamepad;
     let card = amoled_card(RADIUS_CARD).w_full().child(set_row(
         "Music service",
         Some("Active source for the Music room and top-bar mini player"),
-        dropdown_pill(current),
+        select_trigger(
+            SelectTrigger::new("set-music-service-select", "Music service", current)
+                .leading(store_logo(logo_id, 15.0))
+                .open(s.open_dropdown == Some(OpenDropdown::MusicService))
+                .gamepad_focus(gamepad_focus),
+            |s: &mut AppState, _| s.toggle_dropdown(OpenDropdown::MusicService),
+        ),
     ));
     col().w_full().gap(24.0).child(card)
 }

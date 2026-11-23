@@ -4,17 +4,17 @@ use crate::state::{AppState, InputMode};
 use exo_kit::{
     BG, BadgeTone, FG, PRESS_SCALE, PRIMARY_FG, RADIUS_CARD, RADIUS_PANEL, RADIUS_PILL,
     RADIUS_SHEET, RADIUS_SMALL, SPRING_MOVE, SPRING_QUICK, bad, fg_faint, fg_muted, filter_pill,
-    glass_button, glass_panel, glass_rim, hairline, hover_fill, icon_back, icon_camera, icon_close,
-    icon_film, icon_folder, icon_pause, icon_play, icon_plus, icon_record_dot, icon_replay,
-    icon_scissors, icon_settings, icon_star, icon_trash, icon_volume, icon_volume_off,
-    pressed_fill, primary_button, section_card, status_badge, subtle_fill, type_body, type_control,
-    type_page, type_section, type_small, type_title, warn,
+    glass_button, glass_panel_opt, glass_rim, hairline, hover_fill, icon_back, icon_camera,
+    icon_close, icon_film, icon_folder, icon_pause, icon_play, icon_plus, icon_record_dot,
+    icon_replay, icon_scissors, icon_settings, icon_star, icon_trash, icon_volume, icon_volume_off,
+    popover_transition, pressed_fill, primary_button, section_card, status_badge, subtle_fill,
+    type_body, type_control, type_page, type_section, type_small, type_title, warn,
 };
 use exo_rpc::{CaptureItem, format_duration_ms};
 use rune::color::oklch;
 use rune::{
-    Align, Color, El, ScrollSpec, Shape, Side, Spring, SurfaceFit, TextStyle, canvas, col, el, row,
-    text,
+    Align, Color, Cursor, El, ScrollSpec, Shape, Side, Spring, SurfaceFit, TextStyle, canvas, col,
+    el, row, text,
 };
 
 fn clip_hue(name: &str) -> f32 {
@@ -104,20 +104,28 @@ fn popover_row(
         .key(key)
         .role("menuitem")
         .label(label)
+        .disabled(disabled)
         .focusable(!disabled)
+        .hit()
+        .cursor(if disabled {
+            Cursor::NotAllowed
+        } else {
+            Cursor::Pointer
+        })
         .w_full()
         .min_h(38.0)
         .px(12.0)
         .gap(10.0)
         .radius(RADIUS_SMALL)
+        .continuous_corners()
         .center_y()
         .hover_motion(Spring::NONE, SPRING_QUICK)
         .motion(SPRING_QUICK);
     if !disabled {
         r = r
-            .hit()
             .press_on_down()
-            .hover(hover_fill())
+            .press_scale(0.985)
+            .focus_highlight(hover_fill())
             .press(pressed_fill());
         if gamepad_focus {
             r = r.focus_ring(2.0, 3.0, FG);
@@ -138,7 +146,7 @@ fn popover_row(
     r
 }
 
-pub fn popover(s: &AppState) -> El {
+pub fn popover_layers(s: &AppState, blur: bool) -> Vec<El> {
     let status = s.media.capture_status.as_ref();
     let live = status.and_then(|st| st.state.as_ref());
     let cfg = status.and_then(|st| st.settings.as_ref());
@@ -166,10 +174,14 @@ pub fn popover(s: &AppState) -> El {
         "top-capture-btn"
     };
 
-    let mut menu = glass_panel("capture-popover-menu", 240.0)
+    let mut menu = glass_panel_opt("capture-popover-menu", 240.0, blur)
+        .transition(popover_transition())
         .role("menu")
         .label("Capture")
-        .anchored(anchor_key, Side::Bottom, Align::End, 16.0)
+        .focus_group()
+        .modal(false, |s: &mut AppState| s.capture_menu_open = false)
+        .focus_return(anchor_key)
+        .anchored_fit(anchor_key, Side::Bottom, Align::End, 16.0)
         .padding(8.0)
         .gap(2.0)
         .radius(RADIUS_CARD)
@@ -288,11 +300,15 @@ pub fn popover(s: &AppState) -> El {
             );
     }
 
-    el().key("capture-menu-backdrop")
+    let backdrop = el()
+        .key("capture-menu-backdrop")
         .pin(Some(0.0), Some(0.0), Some(0.0), Some(0.0))
         .hit()
+        .cursor(Cursor::Default)
         .on_press(|s: &mut AppState| s.capture_menu_open = false)
-        .child(menu)
+        .on_secondary_press(|s: &mut AppState, _, _| s.capture_menu_open = false);
+
+    vec![backdrop, menu]
 }
 
 fn clip_card(item: &CaptureItem, s: &AppState, scale: f32) -> El {

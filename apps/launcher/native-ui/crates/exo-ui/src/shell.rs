@@ -1,18 +1,19 @@
-use crate::state::{AppState, InputMode, MiniBarSlot, Room};
+use crate::state::{AppState, ContextMenuTarget, InputMode, MiniBarSlot, Room};
 use crate::{
-    captures, discord, game_page, key_modal, library, music, notice, palette, pc, settings, store,
-    tour,
+    captures, discord, game_page, key_modal, library, menus, music, notice, palette, pc, settings,
+    store, tour,
 };
 use exo_kit::{
     BG, FG, GAP, GLASS_CONTROL_SIGMA, PRESS_SCALE, PRIMARY_FG, RADIUS_PILL, SPRING_MOVE,
     SPRING_QUICK, TRANSPARENT, bad, exo_mark, fg_muted, glass_capsule_opt, glass_control_fill,
-    glass_outer_edge, glass_rim_bottom, glass_rim_top, glass_specular_sheen,
-    glass_still_control_fill, good, hover_fill, icon_camera, icon_chat, icon_close, icon_gamepad,
-    icon_grid, icon_library, icon_maximize, icon_minimize, icon_mouse, icon_music, icon_settings,
-    icon_sparkles, icon_store, modal_scrim_transition, pressed_fill, scrim_fill, selected_fill,
-    set_text_scale, type_body, type_section, type_small,
+    glass_rim_bottom, glass_rim_top, glass_still_control_fill, good, hover_fill, icon_camera,
+    icon_chat, icon_close, icon_gamepad, icon_grid, icon_library, icon_maximize, icon_minimize,
+    icon_mouse, icon_music, icon_settings, icon_sparkles, icon_store, modal_scrim_transition,
+    pressed_fill, scrim_fill, selected_fill, set_text_scale, type_body, type_section, type_small,
 };
-use rune::{Cx, El, MAX_BACKDROP_BLURS, ScrollSpec, SpringPair, Transition, col, el, row, text};
+use rune::{
+    Cursor, Cx, El, MAX_BACKDROP_BLURS, ScrollSpec, SpringPair, Transition, col, el, row, text,
+};
 
 fn mini_player_transition() -> Transition {
     let enter = Transition::offset(0.0, -8.0)
@@ -37,23 +38,30 @@ pub struct BlurBudget {
     pub top_bar_tools: bool,
     pub mini_player: bool,
     pub overlay: bool,
+    pub submenu: bool,
     pub toast: bool,
 }
 
 impl BlurBudget {
     pub fn compute(s: &AppState, has_toast: bool) -> Self {
         let modal_open = s.palette_open || s.key_modal_open || s.tour_step.is_some();
-        let popover_open = s.capture_menu_open || s.library_more_open || s.props_open;
-        if modal_open || popover_open {
+        if modal_open {
             return Self {
                 top_bar_search: false,
                 top_bar_nav: false,
                 top_bar_tools: false,
                 mini_player: false,
                 overlay: true,
+                submenu: false,
                 toast: has_toast,
             };
         }
+        let popover_open = s.capture_menu_open
+            || s.library_more_open
+            || s.props_open
+            || s.context_menu.is_some()
+            || s.open_dropdown.is_some();
+        let submenu_open = s.context_menu.is_some_and(|cm| cm.open_submenu.is_some());
         let art_under_bar = matches!(s.room, Room::Library | Room::Store | Room::Music)
             || s.media.captures_open
             || s.open_game_id.is_some()
@@ -63,9 +71,10 @@ impl BlurBudget {
             && s.room != Room::Music
             && s.media.open_capture_id.is_none()
             && s.media.playback.as_ref().is_some_and(|p| p.has_track());
-        let mut used = usize::from(transport_visible) + usize::from(mini_visible);
-        let toast = has_toast && used < MAX_BACKDROP_BLURS;
-        if toast {
+
+        let mut used = usize::from(popover_open) + usize::from(submenu_open);
+        let transport = transport_visible && used < MAX_BACKDROP_BLURS;
+        if transport {
             used += 1;
         }
         let top_bar_nav = art_under_bar && used < MAX_BACKDROP_BLURS;
@@ -77,12 +86,21 @@ impl BlurBudget {
             used += 1;
         }
         let top_bar_search = art_under_bar && used < MAX_BACKDROP_BLURS;
+        if top_bar_search {
+            used += 1;
+        }
+        let mini_player = mini_visible && used < MAX_BACKDROP_BLURS;
+        if mini_player {
+            used += 1;
+        }
+        let toast = has_toast && used < MAX_BACKDROP_BLURS;
         Self {
             top_bar_search,
             top_bar_nav,
             top_bar_tools,
-            mini_player: mini_visible,
+            mini_player,
             overlay: true,
+            submenu: submenu_open,
             toast,
         }
     }
@@ -141,6 +159,7 @@ pub fn view(s: &AppState, cx: &mut Cx<AppState>) -> El {
         .label("Search")
         .focusable(true)
         .hit()
+        .cursor(Cursor::Pointer)
         .press_on_down()
         .press_scale(PRESS_SCALE)
         .w(200.0)
@@ -155,20 +174,22 @@ pub fn view(s: &AppState, cx: &mut Cx<AppState>) -> El {
         } else {
             glass_still_control_fill()
         })
-        .linear_gradient(std::f32::consts::PI, glass_specular_sheen())
         .hover(hover_fill())
         .press(pressed_fill())
         .border_gradient(1.0, glass_rim_top(), glass_rim_bottom())
-        .shadow(1.0, 3.0, glass_outer_edge())
-        .shadow(6.0, 18.0, BG.alpha(0.45))
         .motion(SPRING_QUICK)
         .on_press_tx(|s: &mut AppState, tx| {
             s.capture_menu_open = false;
+            s.close_context_menu();
+            s.close_dropdown();
             if s.palette_open {
                 s.close_palette();
             } else {
                 s.open_palette(tx);
             }
+        })
+        .on_secondary_press(|s: &mut AppState, p, _| {
+            s.open_context_menu(ContextMenuTarget::SearchCapsule, p.x, p.y);
         })
         .child(exo_mark(18.0, FG))
         .child(text("Search").font(type_body()).color(FG));
@@ -193,6 +214,7 @@ pub fn view(s: &AppState, cx: &mut Cx<AppState>) -> El {
                 .label(room.label())
                 .focusable(true)
                 .hit()
+                .cursor(Cursor::Pointer)
                 .press_on_down()
                 .press_scale(PRESS_SCALE)
                 .h(30.0)
@@ -204,6 +226,9 @@ pub fn view(s: &AppState, cx: &mut Cx<AppState>) -> El {
                 .on_press(move |s: &mut AppState| {
                     s.input_mode = InputMode::Pointer;
                     s.switch_room(room);
+                })
+                .on_secondary_press(move |s: &mut AppState, p, _| {
+                    s.open_context_menu(ContextMenuTarget::NavTab(room), p.x, p.y);
                 })
                 .child(base);
             if active {
@@ -246,6 +271,7 @@ pub fn view(s: &AppState, cx: &mut Cx<AppState>) -> El {
             .label("Stop recording")
             .focusable(true)
             .hit()
+            .cursor(Cursor::Pointer)
             .press_on_down()
             .press_scale(PRESS_SCALE)
             .h(28.0)
@@ -259,6 +285,9 @@ pub fn view(s: &AppState, cx: &mut Cx<AppState>) -> El {
             .border(1.0, bad().alpha(0.40))
             .motion(SPRING_QUICK)
             .on_press(|s: &mut AppState| s.capture_act("record"))
+            .on_secondary_press(|s: &mut AppState, p, _| {
+                s.open_context_menu(ContextMenuTarget::CaptureButton, p.x, p.y);
+            })
             .child(el().size(8.0, 8.0).radius(4.0).fill(bad()))
             .child(text("REC").font(type_small()).color(FG))
     } else {
@@ -267,6 +296,7 @@ pub fn view(s: &AppState, cx: &mut Cx<AppState>) -> El {
             .label("Capture")
             .focusable(true)
             .hit()
+            .cursor(Cursor::Pointer)
             .press_on_down()
             .press_scale(PRESS_SCALE)
             .size(32.0, 28.0)
@@ -284,7 +314,12 @@ pub fn view(s: &AppState, cx: &mut Cx<AppState>) -> El {
             .press(pressed_fill())
             .motion(SPRING_QUICK)
             .on_press(|s: &mut AppState| {
+                s.close_context_menu();
+                s.close_dropdown();
                 s.capture_menu_open = !s.capture_menu_open;
+            })
+            .on_secondary_press(|s: &mut AppState, p, _| {
+                s.open_context_menu(ContextMenuTarget::CaptureButton, p.x, p.y);
             })
             .child(icon_camera(
                 16.0,
@@ -306,6 +341,7 @@ pub fn view(s: &AppState, cx: &mut Cx<AppState>) -> El {
         .label("Settings")
         .focusable(true)
         .hit()
+        .cursor(Cursor::Pointer)
         .press_on_down()
         .press_scale(PRESS_SCALE)
         .size(34.0, 30.0)
@@ -316,6 +352,9 @@ pub fn view(s: &AppState, cx: &mut Cx<AppState>) -> El {
         .press(if settings_active { FG } else { pressed_fill() })
         .motion(SPRING_QUICK)
         .on_press(|s: &mut AppState| s.toggle_settings())
+        .on_secondary_press(|s: &mut AppState, p, _| {
+            s.open_context_menu(ContextMenuTarget::SettingsButton, p.x, p.y);
+        })
         .child(icon_settings(
             16.0,
             if settings_active {
@@ -340,10 +379,7 @@ pub fn view(s: &AppState, cx: &mut Cx<AppState>) -> El {
         } else {
             glass_still_control_fill()
         })
-        .linear_gradient(std::f32::consts::PI, glass_specular_sheen())
         .border_gradient(1.0, glass_rim_top(), glass_rim_bottom())
-        .shadow(1.0, 3.0, glass_outer_edge())
-        .shadow(6.0, 18.0, BG.alpha(0.45))
         .child(capture_btn)
         .child(settings_btn)
         .child(divider);
@@ -359,6 +395,7 @@ pub fn view(s: &AppState, cx: &mut Cx<AppState>) -> El {
             el().key(key)
                 .role("button")
                 .label(label)
+                .cursor(Cursor::Pointer)
                 .size(34.0, 30.0)
                 .center()
                 .radius(RADIUS_PILL)
@@ -521,19 +558,32 @@ pub fn view(s: &AppState, cx: &mut Cx<AppState>) -> El {
         .child(top_bar);
 
     if s.capture_menu_open {
-        root = root.child(captures::popover(s).transition(modal_scrim_transition()));
+        root = root.children(captures::popover_layers(s, budget.overlay));
+    }
+    if s.library_more_open {
+        root = root.children(menus::library_more_overlay(s, budget.overlay));
+    }
+    if s.open_dropdown.is_some() {
+        root = root.children(menus::dropdown_overlay(s, budget.overlay));
+    }
+    if s.context_menu.is_some() {
+        root = root.children(menus::context_menu_overlay(
+            s,
+            budget.overlay,
+            budget.submenu,
+        ));
     }
     if s.gamepad_connected {
         root = root.child(gamepad_prompt_bar());
     }
     if s.tour_step.is_some() {
-        root = root.child(tour::view(s));
+        root = root.children(tour::layers(s, budget.overlay));
     }
     if s.key_modal_open {
-        root = root.child(key_modal::view(s));
+        root = root.children(key_modal::layers(s, budget.overlay));
     }
     if s.palette_open {
-        root = root.child(palette::view(s));
+        root = root.children(palette::layers(s, budget.overlay));
     }
     if !s.notices.is_empty() {
         root = root.child(notice::view(s, budget.toast));

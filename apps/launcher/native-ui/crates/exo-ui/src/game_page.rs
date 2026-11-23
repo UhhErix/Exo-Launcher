@@ -1,17 +1,18 @@
-use crate::state::{AppState, InputMode, title_hue};
+use crate::state::{AppState, InputMode, OpenDropdown, title_hue};
 use exo_kit::{
     BG, FG, PRESS_SCALE, PRIMARY_FG, RADIUS_CARD, RADIUS_PANEL, RADIUS_PILL, SPRING_BASE,
-    SPRING_FLIGHT, SPRING_MOVE, SPRING_QUICK, TRANSPARENT, amoled_card, bad, exo_play_button,
-    fg_muted, float_line, glass_button, glass_control_fill, glass_icon_circle, glass_rim_bottom,
-    glass_rim_top, good, hairline, hover_fill, icon_chevron_down, icon_chevron_left,
-    icon_chevron_right, icon_download, icon_folder, icon_play, icon_stop, icon_store, icon_trash,
-    icon_wrench, pressed_fill, primary_button, scaled, surface_card, switch_pill, type_body,
-    type_control, type_first_run, type_section, type_small, type_title,
+    SPRING_FLIGHT, SPRING_MOVE, SPRING_QUICK, SelectTrigger, TRANSPARENT, amoled_card, bad,
+    exo_play_button, fg_muted, float_line, glass_button, glass_control_fill, glass_icon_circle,
+    glass_rim_bottom, glass_rim_top, good, hairline, hover_fill, icon_chevron_left,
+    icon_chevron_right, icon_download, icon_folder, icon_play, icon_stop, icon_trash, icon_wrench,
+    pressed_fill, primary_button, scaled, select_trigger, store_logo, store_logo_or_fallback,
+    surface_card, switch_pill, type_body, type_control, type_first_run, type_section, type_small,
+    type_title,
 };
 use exo_rpc::Game;
 use rune::{
-    El, SpringPair, SurfaceFit, TextStyle, Transition, col, edit_access, el, oklch, row, text,
-    text_input,
+    Cursor, El, SpringPair, SurfaceFit, TextStyle, Transition, col, edit_access, el, oklch, row,
+    text, text_input,
 };
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -165,16 +166,16 @@ fn performance_card(s: &AppState, game: &Game) -> El {
         ("Available once installed".to_string(), fg_muted())
     };
 
-    let borderless_pill = row()
-        .h(32.0)
-        .px(12.0)
-        .gap(6.0)
-        .center_y()
-        .radius(RADIUS_PILL)
-        .fill(glass_control_fill())
-        .border_gradient(1.0, glass_rim_top(), glass_rim_bottom())
-        .child(text("Borderless").font(type_control()).color(FG))
-        .child(icon_chevron_down(12.0, fg_muted()));
+    let display_label = match s.game_display_mode.as_str() {
+        "fullscreen" => "Fullscreen",
+        _ => "Borderless",
+    };
+    let borderless_pill = select_trigger(
+        SelectTrigger::new("gp-display-mode-select", "Display mode", display_label)
+            .open(s.open_dropdown == Some(OpenDropdown::GameDisplayMode))
+            .gamepad_focus(s.input_mode == InputMode::Gamepad),
+        |s: &mut AppState, _| s.toggle_dropdown(OpenDropdown::GameDisplayMode),
+    );
 
     amoled_card(RADIUS_PANEL)
         .key("gp-perf-card")
@@ -314,6 +315,7 @@ fn properties_card(s: &AppState, game: &Game) -> El {
                 .radius(RADIUS_PILL)
                 .fill(glass_control_fill())
                 .border_gradient(1.0, glass_rim_top(), glass_rim_bottom())
+                .cursor(Cursor::Text)
                 .child(
                     text_input(&s.props_launch_opts, type_body())
                         .key("props-launch-input")
@@ -329,16 +331,12 @@ fn properties_card(s: &AppState, game: &Game) -> El {
                         }),
                 );
 
-            let lang_pill = row()
-                .h(32.0)
-                .px(12.0)
-                .gap(6.0)
-                .center_y()
-                .radius(RADIUS_PILL)
-                .fill(glass_control_fill())
-                .border_gradient(1.0, glass_rim_top(), glass_rim_bottom())
-                .child(text(language).font(type_control()).color(FG))
-                .child(icon_chevron_down(12.0, fg_muted()));
+            let lang_pill = select_trigger(
+                SelectTrigger::new("gp-language-select", "Language", &language)
+                    .open(s.open_dropdown == Some(OpenDropdown::GameLanguage))
+                    .gamepad_focus(gamepad_focus),
+                |s: &mut AppState, _| s.toggle_dropdown(OpenDropdown::GameLanguage),
+            );
 
             let overlay_sw = switch_pill("props-overlay-switch", "Steam overlay", overlay_on)
                 .on_press(move |s: &mut AppState| {
@@ -349,10 +347,34 @@ fn properties_card(s: &AppState, game: &Game) -> El {
                     );
                 });
 
+            let overlay_row = el()
+                .w_full()
+                .py(14.0)
+                .px(20.0)
+                .border_sides([1.0, 0.0, 0.0, 0.0], hairline())
+                .child(
+                    row()
+                        .w_full()
+                        .min_h(38.0)
+                        .gap(16.0)
+                        .justify_between()
+                        .center_y()
+                        .child(
+                            row()
+                                .grow(1.0)
+                                .min_w(0.0)
+                                .gap(8.0)
+                                .center_y()
+                                .children(store_logo("steam", 15.0))
+                                .child(text("Steam overlay").font(type_control()).color(FG)),
+                        )
+                        .child(overlay_sw),
+                );
+
             body = body
                 .child(props_row("Launch options", None, Some(launch_input)))
                 .child(props_row("Language", None, Some(lang_pill)))
-                .child(props_row("Steam overlay", None, Some(overlay_sw)));
+                .child(overlay_row);
         }
         1 => {
             let gid_folder = game.id.clone();
@@ -549,7 +571,7 @@ pub fn view(s: &AppState, game: &Game, scale: f32) -> El {
         .radius(RADIUS_PILL)
         .fill(glass_control_fill())
         .border_gradient(1.0, glass_rim_top(), glass_rim_bottom())
-        .child(icon_store(14.0, fg_muted()))
+        .child(store_logo_or_fallback(&game.store, 15.0))
         .child(
             text(game.store_display())
                 .font(type_control())

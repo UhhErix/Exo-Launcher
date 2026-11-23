@@ -67,39 +67,39 @@ pub fn bad() -> Color {
 }
 
 pub fn glass_control_fill() -> Color {
-    BG.alpha(0.52)
+    BG.alpha(0.54)
 }
 
 pub fn glass_panel_fill() -> Color {
     BG.alpha(0.76)
 }
 
+pub fn glass_plate_fill() -> Color {
+    BG.alpha(0.72)
+}
+
 pub fn glass_still_control_fill() -> Color {
-    BG.alpha(0.78)
+    BG.alpha(0.80)
 }
 
 pub fn glass_still_panel_fill() -> Color {
-    BG.alpha(0.90)
+    BG.alpha(0.92)
 }
 
-pub fn glass_outer_edge() -> Color {
-    BG.alpha(0.68)
-}
-
-pub fn glass_specular_sheen() -> [(f32, Color); 2] {
-    [(0.0, Color::WHITE.alpha(0.09)), (0.32, TRANSPARENT)]
+pub fn glass_panel_shadow_color() -> Color {
+    BG.alpha(0.50)
 }
 
 pub fn glass_rim_top() -> Color {
-    Color::WHITE.alpha(0.28)
+    Color::WHITE.alpha(0.17)
 }
 
 pub fn glass_rim_bottom() -> Color {
-    Color::WHITE.alpha(0.06)
+    Color::WHITE.alpha(0.03)
 }
 
 pub fn glass_rim() -> Color {
-    Color::WHITE.alpha(0.09)
+    Color::WHITE.alpha(0.07)
 }
 
 pub fn card_border() -> Color {
@@ -150,8 +150,8 @@ pub const RADIUS_PILL: f32 = 999.0;
 pub const GAP: f32 = 10.0;
 pub const TITLEBAR_HEIGHT: f32 = 52.0;
 
-pub const GLASS_CONTROL_SIGMA: f32 = 14.0;
-pub const GLASS_PANEL_SIGMA: f32 = 24.0;
+pub const GLASS_CONTROL_SIGMA: f32 = 10.0;
+pub const GLASS_PANEL_SIGMA: f32 = 16.0;
 pub const PRESS_SCALE: f32 = 0.97;
 
 pub const SPRING_PRESS: Spring = Spring::new(0.09, 0.0);

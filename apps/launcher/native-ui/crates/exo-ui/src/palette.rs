@@ -7,8 +7,8 @@ use exo_kit::{
     type_control, type_small,
 };
 use rune::{
-    El, Key, KeyEvent, ScrollSpec, Spring, TextStyle, Tx, col, edit_access, el, row, text,
-    text_input,
+    Cursor, El, Key, KeyEvent, ScrollSpec, Spring, TextStyle, Transition, Tx, col, edit_access, el,
+    row, text, text_input,
 };
 
 fn palette_icon(target: &PaletteTarget) -> El {
@@ -30,6 +30,7 @@ fn palette_row(item: PaletteItem, index: usize, selected: bool) -> El {
         .label(item.title.clone())
         .focusable(true)
         .hit()
+        .cursor(Cursor::Pointer)
         .press_on_down()
         .w_full()
         .h(scaled(44.0))
@@ -83,7 +84,7 @@ pub fn handle_palette_key(s: &mut AppState, ev: &KeyEvent, tx: &mut Tx) -> bool 
     }
 }
 
-pub fn view(s: &AppState) -> El {
+pub fn layers(s: &AppState, blur: bool) -> Vec<El> {
     let items = s.palette_results();
     let clamped = if items.is_empty() {
         0
@@ -116,6 +117,7 @@ pub fn view(s: &AppState) -> El {
         .px(scaled(16.0))
         .gap(scaled(12.0))
         .center_y()
+        .cursor(Cursor::Text)
         .child(icon_search(16.0, fg_muted()))
         .child(input);
 
@@ -162,7 +164,7 @@ pub fn view(s: &AppState) -> El {
             .children(rows)
     };
 
-    let card = glass_panel_opt("command-palette", scaled(576.0), true)
+    let card = glass_panel_opt("command-palette", scaled(576.0), blur)
         .max_h(max_palette_h)
         .radius(RADIUS_SHEET)
         .clip_rounded(RADIUS_SHEET)
@@ -172,11 +174,22 @@ pub fn view(s: &AppState) -> El {
         .child(el().w_full().h(1.0).fill(hairline()))
         .child(body);
 
-    el().key("palette-scrim")
+    let scrim = el()
+        .key("palette-scrim")
         .pin(Some(0.0), Some(0.0), Some(0.0), Some(0.0))
         .fill(scrim_fill())
         .hit()
+        .cursor(Cursor::Default)
         .transition(modal_scrim_transition())
-        .on_press(|s: &mut AppState| s.close_palette())
-        .child(col().w_full().h_full().pt(130.0).items_center().child(card))
+        .on_press(|s: &mut AppState| s.close_palette());
+
+    let host = col()
+        .key("palette-host")
+        .pin(Some(0.0), Some(0.0), Some(0.0), Some(0.0))
+        .pt(130.0)
+        .items_center()
+        .transition(Transition::none())
+        .child(card);
+
+    vec![scrim, host]
 }

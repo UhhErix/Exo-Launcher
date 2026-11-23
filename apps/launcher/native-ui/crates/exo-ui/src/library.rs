@@ -1,16 +1,16 @@
-use crate::state::{AppState, InputMode, LibraryFilter, title_hue};
+use crate::state::{AppState, InputMode, LibraryFilter, OpenDropdown, title_hue};
 use exo_kit::{
-    BG, FG, PRESS_SCALE, PRIMARY_FG, RADIUS_CARD, RADIUS_PANEL, RADIUS_PILL, RADIUS_SMALL,
-    SPRING_FLIGHT, SPRING_MOVE, SPRING_QUICK, TRANSPARENT, exo_play_button, fg_muted, glass_button,
-    glass_control_fill, glass_icon_circle, glass_panel, glass_rim, glass_rim_bottom, glass_rim_top,
-    good, hover_fill, icon_chevron_down, icon_chevron_left, icon_chevron_right, icon_download,
-    icon_filter, icon_grid, icon_key, icon_more_horiz, icon_play, icon_plus, icon_refresh,
-    icon_search, icon_sparkles, icon_stop, pressed_fill, primary_button, progress_bar, scrim_fill,
-    surface_card, type_body, type_control, type_first_run, type_section, type_small, type_title,
+    BG, FG, PRESS_SCALE, PRIMARY_FG, RADIUS_CARD, RADIUS_PANEL, RADIUS_PILL, SPRING_FLIGHT,
+    SPRING_MOVE, SPRING_QUICK, SelectTrigger, exo_play_button, fg_muted, glass_button,
+    glass_control_fill, glass_icon_circle, glass_rim, glass_rim_bottom, glass_rim_top, good,
+    hover_fill, icon_chevron_left, icon_chevron_right, icon_download, icon_filter, icon_grid,
+    icon_more_horiz, icon_play, icon_plus, icon_search, icon_stop, pressed_fill, primary_button,
+    progress_bar, scrim_fill, select_trigger, store_logo, surface_card, type_body, type_control,
+    type_first_run, type_section, type_small, type_title,
 };
 use exo_rpc::Game;
 use rune::{
-    El, Spring, SpringPair, SurfaceFit, TextStyle, Transition, col, edit_access, el, oklch, row,
+    Cursor, El, SpringPair, SurfaceFit, TextStyle, Transition, col, edit_access, el, oklch, row,
     text, text_input,
 };
 
@@ -222,12 +222,11 @@ fn install_banner(s: &AppState) -> Option<El> {
         return None;
     }
     let gid = prog.game_id.clone().unwrap_or_default();
-    let title = s
-        .games
-        .iter()
-        .find(|g| g.id == gid)
+    let found = s.games.iter().find(|g| g.id == gid);
+    let title = found
         .map(|g| g.title.clone())
         .unwrap_or_else(|| "Downloading".into());
+    let store_badge = found.and_then(|g| store_logo(&g.store, 15.0));
     let pct = (prog.percent.clamp(0.0, 100.0)).round() as u32;
     let status = prog
         .status
@@ -252,8 +251,9 @@ fn install_banner(s: &AppState) -> Option<El> {
                     .gap(5.0)
                     .child(
                         row()
-                            .gap(10.0)
+                            .gap(8.0)
                             .center_y()
+                            .children(store_badge)
                             .child(text(title).font(type_control()).color(FG))
                             .child(text(status).font(type_small()).color(fg_muted())),
                     )
@@ -275,68 +275,6 @@ fn install_banner(s: &AppState) -> Option<El> {
                     ),
             ),
     )
-}
-
-fn library_more_popover(gamepad_focus: bool) -> El {
-    let menu_item = |key: &'static str, label: &'static str, icon: El| {
-        let mut item = row()
-            .key(key)
-            .role("menuitem")
-            .label(label)
-            .focusable(true)
-            .hit()
-            .press_on_down()
-            .w_full()
-            .h(38.0)
-            .px(12.0)
-            .gap(10.0)
-            .center_y()
-            .radius(RADIUS_SMALL)
-            .fill(TRANSPARENT)
-            .hover(hover_fill())
-            .press(pressed_fill())
-            .hover_motion(Spring::NONE, SPRING_QUICK)
-            .motion(SPRING_QUICK)
-            .child(icon)
-            .child(text(label).font(type_control()).color(FG));
-        if gamepad_focus {
-            item = item.focus_ring(2.0, 3.0, FG);
-        }
-        item
-    };
-
-    glass_panel("library-more-menu", 240.0)
-        .radius(RADIUS_CARD)
-        .px(8.0)
-        .py(8.0)
-        .gap(2.0)
-        .child(
-            menu_item(
-                "lib-menu-refresh",
-                "Refresh library",
-                icon_refresh(15.0, FG),
-            )
-            .on_press(|s: &mut AppState| {
-                s.library_more_open = false;
-                s.refresh_library();
-            }),
-        )
-        .child(
-            menu_item("lib-menu-key", "Activate a key", icon_key(15.0, FG)).on_press_tx(
-                |s: &mut AppState, tx| {
-                    s.library_more_open = false;
-                    s.open_key_modal(tx);
-                },
-            ),
-        )
-        .child(
-            menu_item("lib-menu-tour", "Guided tour", icon_sparkles(15.0, FG)).on_press(
-                |s: &mut AppState| {
-                    s.library_more_open = false;
-                    s.start_tour();
-                },
-            ),
-        )
 }
 
 fn view_home_deck(s: &AppState, scale: f32) -> El {
@@ -632,7 +570,7 @@ fn view_home_deck(s: &AppState, scale: f32) -> El {
         .pb(12.0)
         .child(deck_rail);
 
-    let mut page = col()
+    col()
         .key("library-home-deck")
         .w_full()
         .h_full()
@@ -641,16 +579,7 @@ fn view_home_deck(s: &AppState, scale: f32) -> El {
         .fill(BG)
         .transition(Transition::opacity().springs(SpringPair::new(SPRING_QUICK, SPRING_QUICK)))
         .child(stage)
-        .child(lower);
-
-    if s.library_more_open {
-        page = page.child(
-            el().pin(None, None, Some(74.0), Some(392.0))
-                .child(library_more_popover(s.input_mode == InputMode::Gamepad)),
-        );
-    }
-
-    page
+        .child(lower)
 }
 
 fn view_all_games(s: &AppState, scale: f32) -> El {
@@ -661,6 +590,7 @@ fn view_all_games(s: &AppState, scale: f32) -> El {
         .key("all-games-back")
         .role("button")
         .label("Library")
+        .cursor(Cursor::Pointer)
         .focusable(true)
         .hit()
         .press_on_down()
@@ -685,6 +615,7 @@ fn view_all_games(s: &AppState, scale: f32) -> El {
 
     let search_bar = row()
         .key("all-games-search")
+        .cursor(Cursor::Text)
         .w(380.0)
         .h(32.0)
         .pl(12.0)
@@ -717,6 +648,7 @@ fn view_all_games(s: &AppState, scale: f32) -> El {
         .key("all-games-filter")
         .role("button")
         .label(filter_label)
+        .cursor(Cursor::Pointer)
         .focusable(true)
         .hit()
         .press_on_down()
@@ -743,27 +675,12 @@ fn view_all_games(s: &AppState, scale: f32) -> El {
         .child(icon_filter(16.0, FG))
         .child(text(filter_label).font(type_control()).color(FG));
 
-    let sort_btn = row()
-        .key("sort-cycle")
-        .role("button")
-        .label(s.sort.label())
-        .focusable(true)
-        .hit()
-        .press_on_down()
-        .press_scale(PRESS_SCALE)
-        .h(32.0)
-        .px(12.0)
-        .gap(6.0)
-        .center_y()
-        .radius(RADIUS_PILL)
-        .fill(glass_control_fill())
-        .hover(hover_fill())
-        .press(pressed_fill())
-        .border_gradient(1.0, glass_rim_top(), glass_rim_bottom())
-        .motion(SPRING_QUICK)
-        .on_press(|s: &mut AppState| s.sort = s.sort.next())
-        .child(text(s.sort.label()).font(type_control()).color(FG))
-        .child(icon_chevron_down(12.0, fg_muted()));
+    let sort_btn = select_trigger(
+        SelectTrigger::new("sort-cycle", "Sort games", s.sort.label())
+            .open(s.open_dropdown == Some(OpenDropdown::LibrarySort))
+            .gamepad_focus(s.input_mode == InputMode::Gamepad),
+        |s: &mut AppState, _| s.toggle_dropdown(OpenDropdown::LibrarySort),
+    );
 
     let more_btn = glass_icon_circle(
         "all-games-more-btn",
@@ -861,6 +778,7 @@ fn view_all_games(s: &AppState, scale: f32) -> El {
                     .key("load-more-games")
                     .role("button")
                     .label("Show more games")
+                    .cursor(Cursor::Pointer)
                     .focusable(true)
                     .hit()
                     .press_on_down()
@@ -879,13 +797,6 @@ fn view_all_games(s: &AppState, scale: f32) -> El {
                             .color(FG),
                     ),
             ),
-        );
-    }
-
-    if s.library_more_open {
-        page = page.child(
-            el().pin(None, Some(112.0), Some(76.0), None)
-                .child(library_more_popover(s.input_mode == InputMode::Gamepad)),
         );
     }
 

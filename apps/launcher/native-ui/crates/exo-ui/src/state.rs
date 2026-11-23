@@ -123,6 +123,26 @@ pub enum LibrarySort {
 }
 
 impl LibrarySort {
+    pub const ALL: [Self; 4] = [Self::LastLaunched, Self::Playtime, Self::Title, Self::Size];
+
+    pub const fn id(self) -> &'static str {
+        match self {
+            Self::LastLaunched => "last-launched",
+            Self::Playtime => "playtime",
+            Self::Title => "title",
+            Self::Size => "size",
+        }
+    }
+
+    pub fn from_id(id: &str) -> Self {
+        match id {
+            "playtime" => Self::Playtime,
+            "title" => Self::Title,
+            "size" => Self::Size,
+            _ => Self::LastLaunched,
+        }
+    }
+
     pub const fn label(self) -> &'static str {
         match self {
             Self::LastLaunched => "Last launched",
@@ -131,15 +151,31 @@ impl LibrarySort {
             Self::Size => "Size",
         }
     }
+}
 
-    pub const fn next(self) -> Self {
-        match self {
-            Self::LastLaunched => Self::Playtime,
-            Self::Playtime => Self::Title,
-            Self::Title => Self::Size,
-            Self::Size => Self::LastLaunched,
-        }
-    }
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ContextMenuTarget {
+    SearchCapsule,
+    NavTab(Room),
+    CaptureButton,
+    SettingsButton,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct ContextMenuState {
+    pub target: ContextMenuTarget,
+    pub x: f32,
+    pub y: f32,
+    pub open_submenu: Option<usize>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum OpenDropdown {
+    TextSize,
+    MusicService,
+    LibrarySort,
+    GameDisplayMode,
+    GameLanguage,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -225,6 +261,9 @@ pub struct AppState {
     pub library_search: TextEdit,
     pub library_more_open: bool,
     pub capture_menu_open: bool,
+    pub context_menu: Option<ContextMenuState>,
+    pub open_dropdown: Option<OpenDropdown>,
+    pub game_display_mode: String,
     pub deck_scroll: Rc<Cell<ScrollPos>>,
     pub deck_scroll_x: f32,
     pub store_shelf_scrolls: [Rc<Cell<ScrollPos>>; 4],
@@ -315,6 +354,9 @@ impl AppState {
             library_search: TextEdit::default(),
             library_more_open: false,
             capture_menu_open: false,
+            context_menu: None,
+            open_dropdown: None,
+            game_display_mode: "borderless".into(),
             deck_scroll: Rc::new(Cell::new(ScrollPos::default())),
             deck_scroll_x: 0.0,
             store_shelf_scrolls: std::array::from_fn(|_| Rc::new(Cell::new(ScrollPos::default()))),
@@ -424,6 +466,9 @@ impl AppState {
             library_search: TextEdit::default(),
             library_more_open: false,
             capture_menu_open: false,
+            context_menu: None,
+            open_dropdown: None,
+            game_display_mode: "borderless".into(),
             deck_scroll: Rc::new(Cell::new(ScrollPos::default())),
             deck_scroll_x: 0.0,
             store_shelf_scrolls: std::array::from_fn(|_| Rc::new(Cell::new(ScrollPos::default()))),
@@ -648,6 +693,8 @@ impl AppState {
         self.uninstall_confirm = false;
         self.capture_menu_open = false;
         self.library_more_open = false;
+        self.context_menu = None;
+        self.open_dropdown = None;
         if self.media.captures_open {
             self.close_captures();
         }
@@ -663,6 +710,97 @@ impl AppState {
             Room::Apps => self.load_pc_tab(crate::pc_state::PcTab::Apps),
             _ => {}
         }
+    }
+
+    pub fn open_context_menu(&mut self, target: ContextMenuTarget, x: f32, y: f32) {
+        self.capture_menu_open = false;
+        self.library_more_open = false;
+        self.open_dropdown = None;
+        self.context_menu = Some(ContextMenuState {
+            target,
+            x,
+            y,
+            open_submenu: None,
+        });
+    }
+
+    pub fn close_context_menu(&mut self) {
+        self.context_menu = None;
+    }
+
+    pub fn toggle_dropdown(&mut self, which: OpenDropdown) {
+        self.capture_menu_open = false;
+        self.library_more_open = false;
+        self.context_menu = None;
+        if self.open_dropdown == Some(which) {
+            self.open_dropdown = None;
+        } else {
+            self.open_dropdown = Some(which);
+        }
+    }
+
+    pub fn close_dropdown(&mut self) {
+        self.open_dropdown = None;
+    }
+
+    pub fn set_text_size(&mut self, size: &str) {
+        let normalized = match size {
+            "small" | "large" => size,
+            _ => "normal",
+        };
+        self.settings.text_size = Some(normalized.to_string());
+        #[cfg(windows)]
+        if let (Some(rpc), Some(handle)) = (self.rpc.clone(), self.handle.clone()) {
+            rpc.call::<_, LauncherSettings>(
+                METHOD_SETTINGS_SET,
+                &json!({ "textSize": normalized }),
+                move |res| {
+                    if let Ok(set) = res {
+                        handle.update(move |s, _| s.settings = set);
+                    }
+                },
+            );
+        }
+    }
+
+    pub fn set_music_service(&mut self, id: &str) {
+        let svc = crate::media_state::MusicService::from_pref(Some(id));
+        self.media.music_service = svc;
+        let svc_id = svc.id();
+        self.settings
+            .ui_prefs
+            .insert("musicService".into(), serde_json::json!(svc_id));
+        #[cfg(windows)]
+        if let (Some(rpc), Some(handle)) = (self.rpc.clone(), self.handle.clone()) {
+            rpc.call::<_, LauncherSettings>(
+                METHOD_SETTINGS_SET,
+                &json!({ "uiPrefs": { "musicService": svc_id } }),
+                move |res| {
+                    if let Ok(set) = res {
+                        handle.update(move |s, _| {
+                            s.settings = set;
+                            s.sync_music_service_from_settings();
+                        });
+                    }
+                },
+            );
+        }
+    }
+
+    pub fn set_game_display_mode(&mut self, mode: &str) {
+        let normalized = match mode {
+            "fullscreen" => "fullscreen",
+            _ => "borderless",
+        };
+        self.game_display_mode = normalized.to_string();
+        self.notice = Some(format!(
+            "Display mode set to {}",
+            if normalized == "fullscreen" {
+                "Fullscreen"
+            } else {
+                "Borderless"
+            }
+        ));
     }
 
     pub fn toggle_settings(&mut self) {
@@ -1219,6 +1357,8 @@ impl AppState {
                     p.launch_options = Some(value.to_string());
                 } else if key == "steamOverlay" {
                     p.steam_overlay = Some(value == "true");
+                } else if key == "language" {
+                    p.language = Some(value.to_string());
                 }
             }
             self.notice = Some("Saved game property".into());
@@ -1657,6 +1797,14 @@ impl AppState {
 
     pub fn dismiss_top_layer(&mut self) -> bool {
         if self.disarm_confirm() {
+            return true;
+        }
+        if self.context_menu.is_some() {
+            self.context_menu = None;
+            return true;
+        }
+        if self.open_dropdown.is_some() {
+            self.open_dropdown = None;
             return true;
         }
         if self.capture_menu_open {
