@@ -97,6 +97,7 @@ public sealed partial class WebHostBridge
         GameSettings.AppliedAgain += OnOptimizedAgain;
         AutopilotWatch.Reported += OnAutopilotReported;
         AutopilotWatch.Shared.LiveChanged += OnAutopilotLiveChanged;
+        FrameCapService.Shared.CapLabChanged += OnCapLabChanged;
         InitGpuAndDisplayCaches();
         GameSettings.WindowModeHeld += OnOptimizeHeld;
         Account.AccountSessionStore.Changed += OnAccountChanged;
@@ -360,6 +361,7 @@ public sealed partial class WebHostBridge
         GameSettings.AppliedAgain -= OnOptimizedAgain;
         AutopilotWatch.Reported -= OnAutopilotReported;
         AutopilotWatch.Shared.LiveChanged -= OnAutopilotLiveChanged;
+        FrameCapService.Shared.CapLabChanged -= OnCapLabChanged;
         DetachGpuAndDisplayCaches();
         GameSettings.WindowModeHeld -= OnOptimizeHeld;
         Account.AccountSessionStore.Changed -= OnAccountChanged;
@@ -873,6 +875,9 @@ public sealed partial class WebHostBridge
                 "dlss.consent" => await DlssConsentAsync(paramsEl, hasParams, requestToken).ConfigureAwait(true),
                 "dlss.frameGen" => await DlssFrameGenAsync(paramsEl, hasParams, requestToken).ConfigureAwait(true),
                 "game.frameGen" => await GameFrameGenAsync(paramsEl, hasParams, requestToken).ConfigureAwait(true),
+                "game.frameCap" => await GameFrameCapAsync(paramsEl, hasParams, requestToken).ConfigureAwait(true),
+                "game.capLab.run" => await GameCapLabRunAsync(paramsEl, hasParams, requestToken).ConfigureAwait(true),
+                "game.capLab.cancel" => GameCapLabCancel(paramsEl, hasParams),
                 // Windows' administrator prompt blocks the thread that asks until it is answered.
                 "shaders.status" => await ShadersStatusAsync(paramsEl, hasParams, requestToken).ConfigureAwait(false),
                 "shaders.prepare.games" => await ShaderPrepareGamesAsync(requestToken).ConfigureAwait(false),

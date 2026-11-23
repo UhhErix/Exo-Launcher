@@ -60,10 +60,12 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Condvar, Mutex, mpsc};
 use std::time::Duration;
 pub use types::{
-    ActionResult, ArtBase, ExoAccountState, FrameGenRoute, Game, GameExtras, GameFrameGen,
-    GameGetReply, GameProperties, GamePropertySetReply, HostContract, HostEvent, InstallProgress,
-    KeyPreview, LauncherSettings, LibraryPayload, StoreArt, StoreGame, StoreHome, StoreLowest,
-    StoreOffer, StoreOtherOffers, StoreSearchReply, StoreShelf, StoreTile,
+    ActionResult, ArtBase, CapLabActionReply, CapLabArmMetrics, CapLabStatus, ExoAccountState,
+    FrameCapBackend, FrameCapStutter, FrameCapStutterBreakdown, FrameCapSuggestion, FrameCapTier,
+    FrameGenRoute, Game, GameExtras, GameFrameCap, GameFrameGen, GameGetReply, GameProperties,
+    GamePropertySetReply, HostContract, HostEvent, InstallProgress, KeyPreview, LauncherSettings,
+    LibraryPayload, StoreArt, StoreGame, StoreHome, StoreLowest, StoreOffer, StoreOtherOffers,
+    StoreSearchReply, StoreShelf, StoreTile,
 };
 
 pub const PROTOCOL_VERSION: u32 = 1;
@@ -166,6 +168,9 @@ pub const METHOD_GAME_PAUSE_INSTALL: &str = "game.pauseInstall";
 pub const METHOD_GAME_PROPERTIES: &str = "game.properties";
 pub const METHOD_GAME_PROPERTIES_SET: &str = "game.properties.set";
 pub const METHOD_GAME_FRAME_GEN: &str = "game.frameGen";
+pub const METHOD_GAME_FRAME_CAP: &str = "game.frameCap";
+pub const METHOD_GAME_CAP_LAB_RUN: &str = "game.capLab.run";
+pub const METHOD_GAME_CAP_LAB_CANCEL: &str = "game.capLab.cancel";
 pub const METHOD_KEYS_PREVIEW: &str = "keys.preview";
 pub const METHOD_KEYS_ACTIVATE: &str = "keys.activate";
 pub const METHOD_MOUSE_PANEL_BOUNDS: &str = "mouse.panel.bounds";
@@ -1040,6 +1045,9 @@ fn parse_event(
                     .unwrap_or_else(|_| raw_fallback(name, data_raw)))
             }
         }
+        "game.capLab" => Ok(serde_json::from_str::<CapLabStatus>(data_raw)
+            .map(|status| HostEvent::GameCapLab(Box::new(status)))
+            .unwrap_or_else(|_| raw_fallback(name, data_raw))),
         "shaders.changed" => Ok(HostEvent::ShadersChanged),
         "store.changed" => Ok(serde_json::from_str::<StoreChangedEvent>(data_raw)
             .map(HostEvent::StoreChanged)

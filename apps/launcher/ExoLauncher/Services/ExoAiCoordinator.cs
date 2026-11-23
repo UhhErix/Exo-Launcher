@@ -9,7 +9,8 @@ internal sealed record ExoAiSnapshot(
     IReadOnlyList<string> AutoApplied,
     IReadOnlyList<string> NeedsAttention,
     ExoAiAutopilotSnapshot Gaming,
-    FanStatus Fans);
+    FanStatus Fans,
+    string? CapSuggestion = null);
 
 /// <summary>
 /// Unified real-time optimization coordinator ("Exo AI"):
@@ -118,6 +119,9 @@ internal sealed class ExoAiCoordinator : IDisposable
     {
         var gaming = _autopilotSnapshot();
         var fanStatus = Fans.ReadStatus();
+        string? capSuggestion = null;
+        try { capSuggestion = FrameCapService.Shared.SuggestSentenceFor(gaming.GameId); }
+        catch (Exception ex) when (ex is not OutOfMemoryException) { AppLog.Debug("ExoAI: cap suggestion skipped: " + ex.GetType().Name); }
         lock (_gate)
         {
             return new ExoAiSnapshot(
@@ -127,7 +131,8 @@ internal sealed class ExoAiCoordinator : IDisposable
                 [.. _autoApplied],
                 [.. _needsAttention],
                 gaming,
-                fanStatus);
+                fanStatus,
+                capSuggestion);
         }
     }
 

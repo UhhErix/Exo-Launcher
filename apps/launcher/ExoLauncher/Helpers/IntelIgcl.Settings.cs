@@ -113,7 +113,7 @@ internal static unsafe partial class IntelIgcl
     }
 
     /// <summary>One feature as this driver lists it: its value type and, for an int, its range.</summary>
-    internal readonly record struct Feature(int ValueType, int Min, int Max);
+    internal readonly record struct Feature(int ValueType, int Min, int Max, bool PerApp = false);
 
     // A custom value's buffer: both custom values Exo reads are 8 bytes.
     private const int CustomBytes = 16;
@@ -194,7 +194,7 @@ internal static unsafe partial class IntelIgcl
         foreach (var detail in details)
         {
             var isInt = detail.ValueType is TypeInt32 or TypeUInt32;
-            features.TryAdd(detail.FeatureType, new Feature(detail.ValueType, isInt ? detail.Value.Min : 0, isInt ? detail.Value.Max : 0));
+            features.TryAdd(detail.FeatureType, new Feature(detail.ValueType, isInt ? detail.Value.Min : 0, isInt ? detail.Value.Max : 0, detail.PerAppSupport != 0));
         }
         return features;
     }
@@ -301,6 +301,81 @@ internal static unsafe partial class IntelIgcl
         }
         status = call(device, &request);
         return status == Success ? Get(session, device, feature, valueType, key) : null;
+    }
+
+    internal static (bool Supported, bool PerApp, int Min, int Max) FrameLimitCapability() =>
+        WithSession<(bool, bool, int, int)>("frame limit cap", session =>
+        {
+            var (device, _, _) = session.Main();
+            if (Capabilities(session, device) is not { } features) return default;
+            if (!features.TryGetValue(FeatureFrameLimit, out var f)) return default;
+            return (true, f.PerApp, f.Min, f.Max);
+        });
+
+    internal static int? ReadPerAppFrameLimit(string exeName)
+    {
+        if (string.IsNullOrWhiteSpace(exeName)) return null;
+        var clean = Path.GetFileName(exeName.Trim());
+        var nameBytes = System.Text.Encoding.UTF8.GetBytes(clean + "\0");
+        if (nameBytes.Length > sbyte.MaxValue) return null;
+        return WithSession<int?>("per-app frame limit read", session =>
+        {
+            var (device, _, _) = session.Main();
+            if (Capabilities(session, device) is not { } features || !features.TryGetValue(FeatureFrameLimit, out var f) || !f.PerApp)
+                return null;
+            fixed (byte* appPtr = nameBytes)
+            {
+                var custom = stackalloc byte[CustomBytes];
+                new Span<byte>(custom, CustomBytes).Clear();
+                var req = new FeatureGetSet
+                {
+                    Size = (uint)sizeof(FeatureGetSet),
+                    FeatureType = FeatureFrameLimit,
+                    ApplicationName = (nint)appPtr,
+                    ApplicationNameLength = (sbyte)(nameBytes.Length - 1),
+                    ValueType = f.ValueType,
+                };
+                return GetSet(session)(device, &req) == Success
+                    ? Decode(Keys.FrameLimit, f.ValueType, req, new ReadOnlySpan<byte>(custom, CustomBytes))
+                    : null;
+            }
+        });
+    }
+
+    internal static string? WritePerAppFrameLimit(string exeName, int fps)
+    {
+        if (string.IsNullOrWhiteSpace(exeName)) return "No game executable path available for per-app Intel frame limit.";
+        var clean = Path.GetFileName(exeName.Trim());
+        var nameBytes = System.Text.Encoding.UTF8.GetBytes(clean + "\0");
+        if (nameBytes.Length > sbyte.MaxValue) return "Executable name exceeds Intel IGCL limit.";
+        return WithSession<string>("per-app frame limit write", session =>
+        {
+            var (device, _, _) = session.Main();
+            if (Capabilities(session, device) is not { } features || !features.TryGetValue(FeatureFrameLimit, out var f) || !f.PerApp)
+                return "Intel driver does not support per-app Frame Limit here.";
+            var clamped = fps > 0 && f.Max > f.Min ? Math.Clamp(fps, f.Min, f.Max) : Math.Max(0, fps);
+            fixed (byte* appPtr = nameBytes)
+            {
+                var custom = stackalloc byte[CustomBytes];
+                new Span<byte>(custom, CustomBytes).Clear();
+                var call = GetSet(session);
+                var req = new FeatureGetSet
+                {
+                    Size = (uint)sizeof(FeatureGetSet),
+                    FeatureType = FeatureFrameLimit,
+                    ApplicationName = (nint)appPtr,
+                    ApplicationNameLength = (sbyte)(nameBytes.Length - 1),
+                    ValueType = f.ValueType,
+                };
+                var status = call(device, &req);
+                if (status != Success) return "Intel driver could not read per-app Frame Limit.";
+                if (!Encode(Keys.FrameLimit, f.ValueType, clamped, ref req, new Span<byte>(custom, CustomBytes)))
+                    return "Intel driver Frame Limit value type is unsupported.";
+                status = call(device, &req);
+                if (status != Success) return "Intel driver refused per-app Frame Limit.";
+                return "";
+            }
+        }) is { } result ? result.Length == 0 ? null : result : "Intel's driver did not answer.";
     }
 
     // Not an IGCL result: Exo can't write this value type.

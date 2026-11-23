@@ -192,6 +192,7 @@ fn performance_card(s: &AppState, game: &Game) -> El {
             Some(icon_chevron_right(14.0, fg_muted())),
         ))
         .child(crate::frame_gen_row::view(s, game))
+        .child(crate::frame_cap_row::view(s, game))
         .child(perf_line("Optimize", Some(opt_sub), Some(borderless_pill)))
 }
 

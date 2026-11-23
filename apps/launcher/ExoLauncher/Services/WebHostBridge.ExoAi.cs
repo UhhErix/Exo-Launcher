@@ -50,6 +50,7 @@ public sealed partial class WebHostBridge
         lastCheckUtc = snap.LastCheckUtc,
         autoApplied = snap.AutoApplied,
         needsAttention = snap.NeedsAttention,
+        capSuggestion = snap.CapSuggestion,
         gaming = new
         {
             active = snap.Gaming.IsGaming,
