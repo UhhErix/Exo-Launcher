@@ -51,6 +51,7 @@ jobs:
           install -m 0755 "$bin" ~/.local/tools/zizmor/zizmor
 
       - name: Run zizmor on workflows
+        id: zizmor
         shell: bash
         run: |
           set -euo pipefail
@@ -60,6 +61,7 @@ jobs:
           plain_exit=$?
           ~/.local/tools/zizmor/zizmor --offline --format sarif .github/workflows > zizmor.sarif
           set -e
+          echo "exit_code=${plain_exit}" >> "$GITHUB_OUTPUT"
           echo "zizmor_exit=${plain_exit}"
 
       - name: Upload zizmor SARIF
@@ -68,6 +70,12 @@ jobs:
         with:
           sarif_file: zizmor.sarif
           category: zizmor
+
+      - name: Enforce zero zizmor findings
+        shell: bash
+        env:
+          ZIZMOR_EXIT: ${{ steps.zizmor.outputs.exit_code }}
+        run: exit "${ZIZMOR_EXIT}"
 
   osv-scanner:
     name: Security — OSV-Scanner
@@ -112,7 +120,7 @@ jobs:
           set +e
           ~/.local/tools/osv-scanner/osv-scanner scan source -r apps/launcher
           table_exit=$?
-          ~/.local/tools/osv-scanner/osv-scanner scan source -r apps/launcher --format sarif --output osv.sarif
+          ~/.local/tools/osv-scanner/osv-scanner scan source -r apps/launcher --format sarif --output-file osv.sarif
           set -e
           echo "osv_exit=${table_exit}"
 
@@ -279,10 +287,10 @@ jobs:
           ~/.local/tools/cargo-deny/cargo-deny --version
           set +e
           ~/.local/tools/cargo-deny/cargo-deny \
+            --config apps/launcher/native-ui/deny.toml \
             --manifest-path apps/launcher/native-ui/Cargo.toml \
             --all-features \
             check \
-            --config apps/launcher/native-ui/deny.toml \
             advisories bans licenses
           deny_exit=$?
           set -e

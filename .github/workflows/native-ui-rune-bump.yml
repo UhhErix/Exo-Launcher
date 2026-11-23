@@ -107,6 +107,7 @@ jobs:
             apps/launcher/native-ui
             apps/launcher/ui/contracts
             apps/launcher/ExoLauncher/Assets/Fonts
+          persist-credentials: false
 
       - name: Compute Rust toolchain key
         id: rust-key
@@ -248,6 +249,7 @@ jobs:
 
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          gh auth setup-git
           git checkout -B $env:BUMP_BRANCH
           git add apps/launcher/native-ui/Cargo.toml apps/launcher/native-ui/Cargo.lock
           git commit -m $title
