@@ -1,0 +1,22 @@
+{
+  "name": "exo-agent-kit",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Pinned offline MCP toolkit and SessionStart helper for Exo Launcher",
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "build": "node scripts/build.mjs",
+    "test": "node --test test/kit.test.mjs",
+    "smoke": "node test/mcp-smoke.mjs",
+    "install:kit": "node scripts/install.mjs"
+  },
+  "devDependencies": {
+    "@types/node": "26.6.6",
+    "esbuild": "0.28.2",
+    "typescript": "7.0.2"
+  }
+}
