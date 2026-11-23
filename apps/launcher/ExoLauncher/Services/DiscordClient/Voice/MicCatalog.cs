@@ -33,6 +33,7 @@ internal static class MicCatalog
 
     private const string Target = "your loudest words reach about −12 dB";
     private const string CloseTip = "Speak from about a hand's width away, a little off to the side so breaths and pops miss it.";
+    private const string TooMuchGainTip = "Too much gain makes the room louder than you: turn the knob down until your voice is clear and the room is quiet.";
     private const string HeadsetTip = "Keep the mic about two fingers from the corner of your mouth, not straight in front of it.";
     private const string CardioidTip = "Set the pickup pattern to cardioid (the heart) for one voice.";
     private const string WindowsGainTip = $"This mic's gain is Windows' input level: in Settings > System > Sound, open the mic and set Input volume so {Target}.";
@@ -467,8 +468,8 @@ internal static class MicCatalog
         new("Maono PD200X", MicKind.UsbMic, "Maono Link", [0x352F_0104], ["pd200x"], MaonoLink("PD200X"), [CloseTip]),
         new("Maono PD100X", MicKind.UsbMic, "Maono Link", [0x352F_010C], ["pd100x"], MaonoLink("PD100X"), [CloseTip]),
         new("Maono DM30", MicKind.UsbMic, "Maono Link", [0x352F_0101], ["maono dm30", "dm30 usb"], MaonoLink("DM30"), [CloseTip]),
-        new("Maono AU-A04", MicKind.UsbMic, null, [], ["au-a04", "au a04"], [Knob("the gain knob on the AU-A04")], [CloseTip, "Too much gain makes the room louder than you: turn the knob down until your voice is clear and the room is quiet."]),
-        new("Maono AU-A04TR", MicKind.UsbMic, null, [], ["au-a04tr"], [Knob("the gain knob on the AU-A04TR")], [CloseTip, "Too much gain makes the room louder than you: turn the knob down until your voice is clear and the room is quiet."]),
+        new("Maono AU-A04", MicKind.UsbMic, null, [], ["au-a04"], [Knob("the gain knob on the AU-A04")], [CloseTip, TooMuchGainTip]),
+        new("Maono AU-A04TR", MicKind.UsbMic, null, [], ["au-a04tr"], [Knob("the gain knob on the AU-A04TR")], [CloseTip, TooMuchGainTip]),
         new("Maono mic", MicKind.UsbMic, "Maono Link", [], ["maono"], [], [], Vendor: 0x352F),
         new("Samson Q2U", MicKind.UsbMic, null, [0x17A0_0301, 0x17A0_0304, 0x17A0_0307], ["q2u"], [], [NoKnobTip, EndTip]),
         new("Samson Q9U", MicKind.UsbMic, null, [0x17A0_0243], ["q9u"],
@@ -481,7 +482,7 @@ internal static class MicCatalog
         var names = new[] { id.DeviceName, id.InterfaceName, id.EndpointName }.Where(n => !string.IsNullOrWhiteSpace(n)).Select(n => Normal(n!)).ToArray();
         var usb = id.UsbVendor is { } vendor && id.UsbProduct is { } product ? (uint)vendor << 16 | product : 0;
         var entry = Entries.FirstOrDefault(e => usb != 0 && e.Ids.Contains(usb))
-            ?? Entries.SelectMany(e => e.Names.Where(n => names.Any(name => name.Contains(n, StringComparison.Ordinal))).Select(n => (e, n.Length)))
+            ?? Entries.SelectMany(e => e.Names.Select(Normal).Where(n => names.Any(name => name.Contains(n, StringComparison.Ordinal))).Select(n => (e, n.Length)))
                 .OrderByDescending(m => m.Length).Select(m => m.e).FirstOrDefault()
             ?? Entries.FirstOrDefault(e => e.Vendor != 0 && e.Vendor == id.UsbVendor);
         var bluetooth = id.Bus?.StartsWith("BTH", StringComparison.OrdinalIgnoreCase) == true;

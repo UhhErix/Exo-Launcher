@@ -302,7 +302,12 @@ internal sealed unsafe partial class VoiceAudio : IDisposable
             // Not while Windows' noise suppression stands in: a raw stream skips it.
             if (captureSide && (exoCleans || !processing.NoiseSuppression)) RawStream(clientObject);
             Marshal.ThrowExceptionForHR(client.Initialize(0, EventCallback | AutoConvert, BufferHns, 0, ref format, 0));
-            if (captureSide) AppLog.Info($"Discord voice: microphone opened as {format.SamplesPerSec} Hz, {format.BitsPerSample}-bit float, {format.Channels} channels; the device runs at {AudioDevices.Identify(MicId)?.NativeSampleRate?.ToString() ?? "an unknown rate"} Hz, which Windows converts.");
+            if (captureSide)
+            {
+                var sample = format.SubFormat == IeeeFloat ? "32-bit float" : $"{format.BitsPerSample}-bit";
+                var native = AudioDevices.Identify(MicId)?.NativeSampleRate is { } hz ? $"{hz} Hz" : "an unknown rate";
+                AppLog.Info($"Discord voice: microphone opened. Exo reads it as {format.SamplesPerSec} Hz, {sample}, {format.Channels} channels; the device runs at {native}. Windows converts between them.");
+            }
             if (captureSide) Effects(client, processing.NoiseSuppression && !exoCleans);
             using var ready = new AutoResetEvent(false);
             Marshal.ThrowExceptionForHR(client.SetEventHandle(ready.SafeWaitHandle.DangerousGetHandle()));
@@ -631,6 +636,8 @@ internal sealed unsafe partial class VoiceAudio : IDisposable
     /// <summary>The call's own sound (not a watched stream's): what it plays is <see cref="CallEcho.Heard"/>.</summary>
     internal bool Call { get; init; }
 
+    private static readonly Guid IeeeFloat = new("00000003-0000-0010-8000-00aa00389b71");
+
     internal static WaveFormatExtensible Format() => new()
     {
         FormatTag = 0xFFFE,
@@ -642,7 +649,7 @@ internal sealed unsafe partial class VoiceAudio : IDisposable
         Size = 22,
         ValidBitsPerSample = 32,
         ChannelMask = 3,
-        SubFormat = new Guid("00000003-0000-0010-8000-00aa00389b71"),
+        SubFormat = IeeeFloat,
     };
 
     public void Dispose()
