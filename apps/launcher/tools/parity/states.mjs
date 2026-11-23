@@ -509,6 +509,28 @@ export const STATES = [
     },
   },
   {
+    id: 'library-capture-click',
+    room: 'library',
+    name: 'Capture button clicked from Library (first 10 frames)',
+    kind: 'menu',
+    priority: 1,
+    expectGlass: true,
+    react: {
+      room: 'Library',
+      steps: [
+        { type: 'click', selector: 'button.exo-capture-btn' },
+        { type: 'wait', ms: 300 },
+      ],
+      openSelector: '.exo-capture-menu, [role="menu"][aria-label*="Capture" i], [popover]:popover-open',
+      menuSelector: '[role="menu"] [role^="menuitem"], .exo-capture-menu button',
+    },
+    native: {
+      scene: 'library',
+      script: [{ t: 0.1, type: 'tap', key: 'top-capture-btn' }],
+      expect: { captureMenuOpen: true },
+    },
+  },
+  {
     id: 'game-page',
     room: 'game',
     name: 'Game detail page',
@@ -1315,7 +1337,7 @@ export const STATES = [
       room: 'Exo AI',
       steps: [
         { type: 'wait', ms: 1200 },
-        { type: 'clickText', selector: 'button', text: /display|graphics|best settings/i },
+        { type: 'clickText', selector: 'button', text: /^Screen/ },
         { type: 'wait', ms: 500 },
       ],
       openSelector: '[role="menu"], [role="dialog"]',
@@ -1323,7 +1345,7 @@ export const STATES = [
     },
     native: {
       scene: 'pc',
-      script: [{ t: 0.1, type: 'tap', fromReactTarget: true }],
+      script: [{ t: 0.1, type: 'tap', key: 'pc-cell-display' }],
       expect: { menuOpen: true },
     },
   },

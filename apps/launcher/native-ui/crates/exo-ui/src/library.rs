@@ -1,16 +1,16 @@
 use crate::state::{
-    AppState, ContextMenuTarget, InputMode, LibraryChip, OpenDropdown, library_chip_options,
-    now_unix_ms, title_hue,
+    AppState, ContextMenuTarget, InputMode, LibraryChip, OpenDropdown, friends_playing,
+    library_chip_options, now_unix_ms, title_hue,
 };
 use exo_kit::{
     BG, FG, GLASS_CONTROL_SIGMA, PRESS_SCALE, PRIMARY_FG, RADIUS_CARD, RADIUS_PANEL, RADIUS_PILL,
     SPRING_FLIGHT, SPRING_MOVE, SPRING_QUICK, SelectTrigger, TRANSPARENT, exo_play_button,
-    fg_muted, glass_button, glass_control_fill, glass_icon_circle, glass_panel_opt, glass_rim,
-    glass_rim_bottom, glass_rim_top, good, hover_fill, icon_chevron_left, icon_chevron_right,
-    icon_download, icon_filter, icon_grid, icon_more_horiz, icon_play, icon_plus, icon_search,
-    icon_stop, popover_transition, pressed_fill, primary_button, progress_bar, scrim_fill,
-    select_trigger, store_logo, surface_card, type_body, type_control, type_first_run,
-    type_section, type_small, type_title,
+    fg_faint, fg_muted, glass_button, glass_control_fill, glass_icon_circle, glass_icon_circle_opt,
+    glass_panel_opt, glass_rim, glass_rim_bottom, glass_rim_top, glass_still_control_fill, good,
+    hover_fill, icon_chevron_left, icon_chevron_right, icon_download, icon_filter, icon_grid,
+    icon_more_horiz, icon_play, icon_plus, icon_search, icon_stop, popover_transition,
+    pressed_fill, primary_button, progress_bar, scrim_fill, select_trigger, store_logo,
+    surface_card, type_body, type_control, type_first_run, type_section, type_small, type_title,
 };
 use exo_rpc::Game;
 use rune::{
@@ -146,6 +146,9 @@ fn deck_poster_card(game: &Game, active: bool, load_cover: bool, s: &AppState, s
     let id_hover = game.id.clone();
     let id_ctx = game.id.clone();
     let flight_id = format!("deck:{}", game.id);
+    let hover_key = format!("tile-{}", game.id);
+    let hovered = s.hovered_cover_key.as_deref() == Some(hover_key.as_str());
+    let hover_key_cb = hover_key.clone();
     let art = cover_surface(
         game,
         s,
@@ -166,15 +169,33 @@ fn deck_poster_card(game: &Game, active: bool, load_cover: bool, s: &AppState, s
         .focusable(true)
         .hit()
         .press_scale(PRESS_SCALE)
+        .hover(hover_fill())
         .size(DECK_CARD_W, DECK_CARD_H)
         .radius(RADIUS_CARD)
         .continuous_corners()
-        .offset(0.0, if active { -6.0 } else { 0.0 })
+        .opacity(if active || hovered { 1.0 } else { 0.88 })
+        .offset(
+            0.0,
+            if active {
+                -6.0
+            } else if hovered {
+                -4.0
+            } else {
+                0.0
+            },
+        )
         .offset_motion(SPRING_MOVE)
         .motion(SPRING_MOVE)
         .on_hover(move |s: &mut AppState| {
             if s.selected_game_id.as_deref() != Some(id_hover.as_str()) {
                 s.selected_game_id = Some(id_hover.clone());
+            }
+        })
+        .on_hover_change(move |s: &mut AppState, inside, _| {
+            if inside {
+                s.hovered_cover_key = Some(hover_key_cb.clone());
+            } else if s.hovered_cover_key.as_deref() == Some(hover_key_cb.as_str()) {
+                s.hovered_cover_key = None;
             }
         })
         .on_press_tx(move |s: &mut AppState, tx| {
@@ -209,8 +230,9 @@ pub fn library_filter_overlay(s: &AppState, blur: bool) -> Vec<El> {
         return Vec::new();
     }
     let options = library_chip_options(&s.games, now_unix_ms());
+    let friends_idle = friends_playing(&s.games, &s.discord.friends).is_empty();
     let mut sections: Vec<El> = Vec::new();
-    for section in ["Show", "Store"] {
+    for section in ["Show", "Store", "Genre", "Mode"] {
         let chips: Vec<&LibraryChip> = options.iter().filter(|c| c.section() == section).collect();
         if chips.is_empty() {
             continue;
@@ -220,7 +242,10 @@ pub fn library_filter_overlay(s: &AppState, blur: bool) -> Vec<El> {
             .map(|group| {
                 let pills: Vec<El> = group
                     .iter()
-                    .map(|chip| filter_chip(chip, s.filters.contains(chip)))
+                    .map(|chip| {
+                        let idle = friends_idle && **chip == LibraryChip::Friends;
+                        filter_chip(chip, s.filters.contains(chip), idle)
+                    })
                     .collect();
                 row().gap(6.0).children(pills)
             })
@@ -256,34 +281,35 @@ pub fn library_filter_overlay(s: &AppState, blur: bool) -> Vec<El> {
     ]
 }
 
-fn filter_chip(chip: &LibraryChip, active: bool) -> El {
+fn filter_chip(chip: &LibraryChip, active: bool, idle: bool) -> El {
     let label = chip.label();
     let target = chip.clone();
-    el().key(format!("library-filter-chip-{}", chip.key()))
+    let color = if idle {
+        fg_faint()
+    } else if active {
+        PRIMARY_FG
+    } else {
+        FG
+    };
+    let pill = el()
+        .key(format!("library-filter-chip-{}", chip.key()))
         .role("option")
         .label(label.clone())
-        .focusable(true)
+        .focusable(!idle)
         .hit()
-        .cursor(Cursor::Pointer)
-        .press_on_down()
-        .press_scale(PRESS_SCALE)
+        .disabled(idle)
+        .cursor(if idle {
+            Cursor::NotAllowed
+        } else {
+            Cursor::Pointer
+        })
         .h(30.0)
         .px(13.0)
         .radius(RADIUS_PILL)
         .center()
         .fill(if active { FG } else { TRANSPARENT })
-        .hover(if active { FG } else { hover_fill() })
-        .press(if active { FG } else { pressed_fill() })
         .border(if active { 0.0 } else { 1.0 }, glass_rim())
         .motion(SPRING_QUICK)
-        .on_press(
-            move |s: &mut AppState| match s.filters.iter().position(|c| *c == target) {
-                Some(i) => {
-                    s.filters.remove(i);
-                }
-                None => s.filters.push(target.clone()),
-            },
-        )
         .child(
             text(label)
                 .font(if active {
@@ -291,7 +317,22 @@ fn filter_chip(chip: &LibraryChip, active: bool) -> El {
                 } else {
                     type_control()
                 })
-                .color(if active { PRIMARY_FG } else { FG }),
+                .color(color),
+        );
+    if idle {
+        return pill;
+    }
+    pill.press_on_down()
+        .press_scale(PRESS_SCALE)
+        .hover(if active { FG } else { hover_fill() })
+        .press(if active { FG } else { pressed_fill() })
+        .on_press(
+            move |s: &mut AppState| match s.filters.iter().position(|c| *c == target) {
+                Some(i) => {
+                    s.filters.remove(i);
+                }
+                None => s.filters.push(target.clone()),
+            },
         )
 }
 
@@ -759,8 +800,7 @@ fn view_all_games(s: &AppState, scale: f32) -> El {
         .gap(8.0)
         .center_y()
         .radius(RADIUS_PILL)
-        .fill(glass_control_fill())
-        .backdrop_blur(GLASS_CONTROL_SIGMA)
+        .fill(glass_still_control_fill())
         .border_gradient(1.0, glass_rim_top(), glass_rim_bottom())
         .child(icon_search(16.0, fg_muted()))
         .child(
@@ -795,8 +835,7 @@ fn view_all_games(s: &AppState, scale: f32) -> El {
         .gap(6.0)
         .center_y()
         .radius(RADIUS_PILL)
-        .fill(glass_control_fill())
-        .backdrop_blur(GLASS_CONTROL_SIGMA)
+        .fill(glass_still_control_fill())
         .hover(hover_fill())
         .press(pressed_fill())
         .border_gradient(1.0, glass_rim_top(), glass_rim_bottom())
@@ -808,15 +847,17 @@ fn view_all_games(s: &AppState, scale: f32) -> El {
     let sort_btn = select_trigger(
         SelectTrigger::new("sort-cycle", "Sort library", s.sort.label())
             .open(s.open_dropdown == Some(OpenDropdown::LibrarySort))
-            .gamepad_focus(s.input_mode == InputMode::Gamepad),
+            .gamepad_focus(s.input_mode == InputMode::Gamepad)
+            .flat(true),
         |s: &mut AppState, _| s.toggle_dropdown(OpenDropdown::LibrarySort),
     );
 
-    let more_btn = glass_icon_circle(
+    let more_btn = glass_icon_circle_opt(
         "all-games-more-btn",
         "More",
         32.0,
         icon_more_horiz(16.0, FG),
+        false,
     )
     .on_press(|s: &mut AppState| {
         let next = !s.library_more_open;
