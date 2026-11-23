@@ -36,6 +36,7 @@ fn bar_word_btn(
     active: bool,
     danger: bool,
     icon: El,
+    width: f32,
 ) -> El {
     let (fill, hover) = if danger {
         (bad().alpha(0.24), bad().alpha(0.36))
@@ -54,7 +55,7 @@ fn bar_word_btn(
         .press_on_down()
         .press_scale(PRESS_SCALE)
         .h(40.0)
-        .px(14.0)
+        .w(width)
         .gap(8.0)
         .center()
         .radius(RADIUS_PILL)
@@ -68,6 +69,19 @@ fn bar_word_btn(
         } else {
             FG
         }))
+}
+
+/// The call bar's width and the Share button's offset inside it, as React lays the bar out at 1920 px.
+const CALL_BAR_W: f32 = 696.0;
+const SHARE_OFFSET_IN_BAR: f32 = 340.0;
+
+/// A 1 px divider inside a 4 px slot, so the call bar's groups keep the React spacing.
+fn bar_divider() -> El {
+    row()
+        .w(4.0)
+        .h(24.0)
+        .center()
+        .child(el().w(1.0).h(24.0).fill(hairline()))
 }
 
 fn dock_action_btn(key: &'static str, label: &'static str, active: bool, icon: El) -> El {
@@ -287,7 +301,7 @@ fn participant_tile(
     let (tile_w, tile_h) = if compact {
         (216.0, 122.0)
     } else if solo {
-        (1120.0, 630.0)
+        (1240.0, 697.5)
     } else {
         (320.0, 180.0)
     };
@@ -419,8 +433,8 @@ fn participant_tile(
 fn golive_modal(s: &AppState, blur: bool) -> El {
     let mut modal = col()
         .key("dc-golive-panel")
-        .w(560.0)
-        .max_h(640.0)
+        .w(900.0)
+        .h(620.0)
         .padding(20.0)
         .gap(14.0)
         .radius(22.0)
@@ -436,32 +450,20 @@ fn golive_modal(s: &AppState, blur: bool) -> El {
         modal = modal.backdrop_blur(GLASS_PANEL_SIGMA);
     }
 
-    let header = row()
-        .w_full()
-        .justify_between()
-        .center_y()
-        .child(
-            row()
-                .gap(8.0)
-                .center_y()
-                .child(icon_screen_share(18.0, FG))
-                .child(text("Share your screen").font(type_title()).color(FG)),
-        )
-        .child(
-            el().key("dc-gl-close")
-                .role("button")
-                .label("Close")
-                .cursor(Cursor::Pointer)
-                .focusable(true)
-                .hit()
-                .press_on_down()
-                .size(30.0, 30.0)
-                .radius(RADIUS_PILL)
-                .hover(hover_fill())
-                .center()
-                .on_press(|s: &mut AppState| s.open_voice_panel(VoicePanel::None))
-                .child(icon_close(15.0, fg_muted())),
-        );
+    let close = el()
+        .key("dc-gl-close")
+        .role("button")
+        .label("Close")
+        .cursor(Cursor::Pointer)
+        .focusable(true)
+        .hit()
+        .press_on_down()
+        .size(30.0, 30.0)
+        .radius(RADIUS_PILL)
+        .hover(hover_fill())
+        .center()
+        .on_press(|s: &mut AppState| s.open_voice_panel(VoicePanel::None))
+        .child(icon_close(15.0, fg_muted()));
 
     let tab = s.discord.voice_ui.golive_tab;
     let tabs = row()
@@ -483,7 +485,8 @@ fn golive_modal(s: &AppState, blur: bool) -> El {
         .child(
             glass_button("dc-gl-refresh", "Refresh", None)
                 .on_press(|s: &mut AppState| s.load_golive_sources()),
-        );
+        )
+        .child(close);
 
     let want_kind = match tab {
         GoLiveTab::Applications => "window",
@@ -698,12 +701,12 @@ fn golive_modal(s: &AppState, blur: bool) -> El {
         );
 
     modal
-        .child(header)
         .child(tabs)
         .child(
             col()
                 .w_full()
-                .max_h(260.0)
+                .grow(1.0)
+                .min_h(0.0)
                 .scroll(ScrollSpec {
                     stick_bottom: false,
                 })
@@ -1003,14 +1006,21 @@ pub fn voice_overlay_layers(s: &AppState, blur: bool) -> Vec<El> {
         VoicePanel::None => Vec::new(),
         VoicePanel::GoLive => vec![
             el().key("dc-golive-dismiss")
-                .pin(Some(0.0), Some(52.0), Some(0.0), Some(0.0))
+                .pin(Some(0.0), Some(52.0), Some(0.0), Some(78.0))
                 .hit()
                 .on_press(|s: &mut AppState| s.open_voice_panel(VoicePanel::None)),
             col()
                 .key("dc-golive-wrap")
-                .pin(Some(0.0), Some(52.0), Some(0.0), Some(90.0))
+                .pin(Some(0.0), Some(52.0), Some(0.0), Some(76.0))
                 .justify_end()
-                .child(row().w_full().justify_center().child(golive_modal(s, blur))),
+                .child(
+                    row().w_full().justify_center().child(
+                        row()
+                            .w(CALL_BAR_W)
+                            .child(el().w(SHARE_OFFSET_IN_BAR))
+                            .child(golive_modal(s, blur)),
+                    ),
+                ),
         ],
         VoicePanel::Soundboard => vec![
             el().key("dc-sb-dismiss")
@@ -1304,7 +1314,7 @@ pub fn voice_stage_view(
         .grow(1.0)
         .min_h(0.0)
         .px(18.0)
-        .pb(92.0)
+        .pb(63.0)
         .gap(14.0);
 
     if is_stage {
@@ -1450,6 +1460,7 @@ pub fn voice_stage_view(
                 .child(
                     col()
                         .w_full()
+                        .grow(1.0)
                         .min_h(if watching_any { 0.0 } else { 420.0 })
                         .center()
                         .child(tiles),
@@ -1496,8 +1507,9 @@ pub fn voice_stage_view(
         row()
             .key("dc-voice-bar")
             .h(56.0)
-            .px(10.0)
-            .gap(6.0)
+            .w(CALL_BAR_W)
+            .px(8.0)
+            .gap(8.0)
             .center_y()
             .radius(RADIUS_PILL)
             .fill(if voice_bar_blur {
@@ -1518,6 +1530,7 @@ pub fn voice_stage_view(
                     } else {
                         icon_mic(18.0, FG)
                     },
+                    89.0,
                 )
                 .on_press(|s: &mut AppState| s.toggle_discord_mute())
                 .on_secondary_press(|s: &mut AppState, p, _| {
@@ -1540,6 +1553,7 @@ pub fn voice_stage_view(
                     } else {
                         icon_headphones(18.0, FG)
                     },
+                    102.0,
                 )
                 .on_press(|s: &mut AppState| s.toggle_discord_deafen())
                 .on_secondary_press(|s: &mut AppState, p, _| {
@@ -1562,10 +1576,11 @@ pub fn voice_stage_view(
                     cam,
                     false,
                     icon_video(18.0, if cam { PRIMARY_FG } else { FG }),
+                    105.0,
                 )
                 .on_press(|s: &mut AppState| s.toggle_discord_camera()),
             )
-            .child(el().w(1.0).h(24.0).mx(2.0).fill(hairline()))
+            .child(bar_divider())
             .child(
                 bar_word_btn(
                     "dc-voice-share",
@@ -1585,6 +1600,7 @@ pub fn voice_stage_view(
                             FG
                         },
                     ),
+                    94.0,
                 )
                 .on_press(|s: &mut AppState| s.open_voice_panel(VoicePanel::GoLive))
                 .on_secondary_press(|s: &mut AppState, p, _| {
@@ -1606,10 +1622,11 @@ pub fn voice_stage_view(
                             FG
                         },
                     ),
+                    132.0,
                 )
                 .on_press(|s: &mut AppState| s.open_voice_panel(VoicePanel::Soundboard)),
             )
-            .child(el().w(1.0).h(24.0).mx(2.0).fill(hairline()))
+            .child(bar_divider())
             .child(
                 row()
                     .key("dc-voice-leave")
@@ -1621,7 +1638,7 @@ pub fn voice_stage_view(
                     .press_on_down()
                     .press_scale(PRESS_SCALE)
                     .h(40.0)
-                    .px(14.0)
+                    .w(94.0)
                     .gap(8.0)
                     .radius(RADIUS_PILL)
                     .fill(bad())

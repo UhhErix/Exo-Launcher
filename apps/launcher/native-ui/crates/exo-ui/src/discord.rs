@@ -61,8 +61,8 @@ fn glassy_ring(node: El) -> El {
 
 fn glass_top_sheen() -> El {
     el().pin(Some(0.0), Some(0.0), Some(0.0), None)
-        .h(16.0)
-        .linear_gradient(0.0, [(0.0, Color::WHITE.alpha(0.035)), (1.0, TRANSPARENT)])
+        .h(22.0)
+        .linear_gradient(0.0, [(0.0, Color::WHITE.alpha(0.055)), (1.0, TRANSPARENT)])
 }
 
 fn panel_frame(node: El) -> El {
@@ -3277,7 +3277,7 @@ fn right_members_panel(s: &AppState, sc: f32, scale: f32) -> Option<El> {
                     match it {
                         DiscordMemberItem::Group { group, count } => {
                             list = list.child(
-                                text(format!("{group} — {count}"))
+                                text(format!("{group} ({count})"))
                                     .font(font_px(12.0 * sc, 600.0))
                                     .color(fg_muted())
                                     .pt(if idx == 0 { 6.0 } else { 12.0 })
@@ -3378,7 +3378,7 @@ fn right_members_panel(s: &AppState, sc: f32, scale: f32) -> Option<El> {
                         }
                     }
                 }
-                format!("Members · {} online", ml.online)
+                "Members".to_string()
             } else {
                 list = list.child(
                     text("Loading members…")
@@ -3694,7 +3694,7 @@ pub fn view(s: &AppState, scale: f32, budget: BlurBudget) -> El {
             .child(channel_or_dm_stage(s, sc, scale, budget));
         if s.discord.inbox_open {
             body = body.child(inbox_panel(s, sc));
-        } else if !on_voice {
+        } else if !on_voice || !s.discord.voice_ui.show_voice_chat {
             if let Some(drawer) = discord_chat::chat_drawer_panel(s, scale) {
                 body = body.child(drawer);
             } else if let Some(panel) = right_members_panel(s, sc, scale) {
