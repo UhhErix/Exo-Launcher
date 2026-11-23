@@ -1398,7 +1398,7 @@ fn transport_bar(s: &AppState, scale: f32) -> El {
         || s.palette_open
         || s.key_modal_open
         || s.props_open
-        || s.tour_step.is_some();
+        || s.setup.beat.is_some();
 
     let mut pill = row()
         .key("music-transport-bar")
@@ -1522,7 +1522,7 @@ pub fn mini_player(s: &AppState, scale: f32, slot: crate::state::MiniBarSlot) ->
 
     if slot == MiniBarSlot::Hidden
         || s.room == Room::Music
-        || s.tour_step.is_some()
+        || s.setup.beat.is_some()
         || s.palette_open
         || s.key_modal_open
         || s.props_open

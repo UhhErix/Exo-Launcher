@@ -22,10 +22,10 @@ mod pc;
 mod pc_actions;
 mod pc_state;
 mod settings;
+mod setup;
 mod shell;
 mod state;
 mod store;
-mod tour;
 mod video_decoder;
 
 use crate::state::AppState;
@@ -100,22 +100,14 @@ fn on_key(s: &mut AppState, ev: &KeyEvent, tx: &mut Tx) -> bool {
     if s.palette_open {
         return palette::handle_palette_key(s, ev, tx);
     }
-    if let Some(step) = s.tour_step {
+    if s.setup.beat.is_some() {
         match ev.key {
             Key::Escape => {
                 s.finish_tour();
                 return true;
             }
             Key::Right | Key::Enter => {
-                if step + 1 >= tour::STEPS.len() {
-                    s.finish_tour();
-                } else {
-                    s.jump_tour(step + 1);
-                }
-                return true;
-            }
-            Key::Left => {
-                s.jump_tour(step.saturating_sub(1));
+                s.setup_beat_skip();
                 return true;
             }
             _ => {}
@@ -136,7 +128,77 @@ fn setup_state(s: &mut AppState, waker: Waker) {
 }
 
 fn poll_state(s: &mut AppState, now: f64, tx: &mut Tx) -> bool {
-    s.sync_and_tick_notices(now, tx)
+    let notices = s.sync_and_tick_notices(now, tx);
+    let setup = s.setup_tick(now);
+    notices || setup
+}
+
+#[cfg(windows)]
+fn settle_setup_host(client: &exo_rpc::RpcClient, state: &mut AppState) {
+    let timeout = Duration::from_secs(8);
+    if let Ok(acct) = client.call_blocking::<_, exo_rpc::ExoAccountState>(
+        exo_rpc::METHOD_EXO_ACCOUNT_STATE,
+        &serde_json::json!({}),
+        timeout,
+    ) {
+        state.pc.account = acct;
+    }
+    if let Ok(about) = client.call_blocking::<_, exo_rpc::SystemAbout>(
+        exo_rpc::METHOD_SYSTEM_ABOUT,
+        &serde_json::json!({}),
+        timeout,
+    ) {
+        state.pc.system_about = Some(about);
+    }
+    if let Ok(drv) = client.call_blocking::<_, exo_rpc::DrivesReply>(
+        exo_rpc::METHOD_SYSTEM_DRIVES,
+        &serde_json::json!({ "space": false }),
+        timeout,
+    ) {
+        state.pc.drives = Some(drv);
+    }
+    if let Ok(t) = client.call_blocking::<_, exo_rpc::SystemTuningState>(
+        exo_rpc::METHOD_SYSTEM_TUNING,
+        &serde_json::json!({}),
+        timeout,
+    ) {
+        state.pc.tuning = Some(t);
+    }
+    if let Ok(hdr) = client.call_blocking::<_, exo_rpc::HdrState>(
+        exo_rpc::METHOD_HDR_STATE,
+        &serde_json::json!({}),
+        timeout,
+    ) {
+        state.pc.hdr = Some(hdr);
+    }
+    if let Ok(ai) = client.call_blocking::<_, exo_rpc::ExoAiState>(
+        exo_rpc::METHOD_EXO_AI_STATE,
+        &serde_json::json!({}),
+        timeout,
+    ) {
+        state.pc.exo_ai = Some(ai);
+    }
+    if let Ok(backup) = client.call_blocking::<_, exo_rpc::BackupStatus>(
+        exo_rpc::METHOD_BACKUP_STATUS,
+        &serde_json::json!({}),
+        timeout,
+    ) {
+        state.pc.backup = Some(backup);
+    }
+    if let Ok(clients) = client.call_blocking::<_, exo_rpc::ClientsStatus>(
+        exo_rpc::METHOD_CLIENTS_STATUS,
+        &serde_json::json!({}),
+        timeout,
+    ) {
+        state.pc.clients = Some(clients);
+    }
+    if let Ok(gp) =
+        client.call_blocking::<_, serde_json::Value>("gpu.profile", &serde_json::json!({}), timeout)
+    {
+        let (gpu_name, screen) = pc_actions::parse_gpu_profile_fields(&gp);
+        state.pc.gpu_short_name = gpu_name;
+        state.pc.screen_label = screen;
+    }
 }
 
 #[cfg(windows)]
@@ -160,6 +222,9 @@ fn load_live_state_sync(pipe: &str, scene: Option<&str>) -> AppState {
         Duration::from_secs(5),
     ) {
         state.media.capture_status = Some(st);
+    }
+    if scene.is_some_and(|s| s.starts_with("setup")) {
+        settle_setup_host(&client, &mut state);
     }
     match scene {
         Some(sc) if sc.starts_with("store") => {
@@ -492,7 +557,9 @@ fn load_live_state_sync(pipe: &str, scene: Option<&str>) -> AppState {
                 state.pc.drives = Some(drv);
             }
         }
-        Some(sc) if sc == "pc-devices" || sc.starts_with("pc-devices-") => {
+        Some(sc)
+            if sc == "pc-devices" || sc.starts_with("pc-devices-") || sc.starts_with("setup") =>
+        {
             if let Ok(eq) = client.call_blocking::<_, exo_rpc::EqStateReply>(
                 exo_rpc::METHOD_EQ,
                 &serde_json::json!({ "action": "state" }),
@@ -1053,6 +1120,13 @@ const PARITY_SCENES: &[(&str, SceneSetter)] = &[
         }
     }),
     ("tour", |s: &mut AppState| s.start_tour()),
+    ("setup-welcome", |s: &mut AppState| s.setup_go(0)),
+    ("setup-accounts", |s: &mut AppState| s.setup_go(1)),
+    ("setup-devices", |s: &mut AppState| s.setup_go(2)),
+    ("setup-pc", |s: &mut AppState| s.setup_go(3)),
+    ("setup-tour", |s: &mut AppState| s.setup_go(4)),
+    ("setup-done", |s: &mut AppState| s.setup_go_complete()),
+    ("setup-coach", |s: &mut AppState| s.start_tour()),
     ("activate-key", |s: &mut AppState| s.key_modal_open = true),
     ("settings", |s: &mut AppState| {
         s.switch_room(state::Room::Settings)
@@ -1496,6 +1570,7 @@ fn run_parity_probe(
         setup_fn(&mut state);
         scene_matched = true;
     }
+    setup_state(&mut state, std::sync::Arc::new(|| {}));
 
     let text = rune::text::TextSystem::for_window(FONTS, FONT_FAMILIES);
     let mut rt = rune::Runtime::with_text(
@@ -1521,6 +1596,13 @@ fn run_parity_probe(
 
     for _ in 0..24 {
         rt.frame(1.0 / 60.0);
+    }
+    if target_scene.is_some_and(|s| s.starts_with("setup")) {
+        let until = std::time::Instant::now() + Duration::from_secs(4);
+        while std::time::Instant::now() < until {
+            std::thread::sleep(Duration::from_millis(50));
+            rt.frame(1.0 / 60.0);
+        }
     }
     let glass_final = collect_backdrop_blurs(&rt);
 
@@ -1597,7 +1679,7 @@ fn run_parity_probe(
         "capturesOpen": rt.state.media.captures_open,
         "capturesSettingsOpen": rt.state.media.captures_settings_open,
         "keyModalOpen": rt.state.key_modal_open,
-        "tourStep": rt.state.tour_step,
+        "setupStage": rt.state.setup.stage,
         "settingsSection": format!("{:?}", rt.state.pc.settings_section),
         "pcTab": format!("{:?}", rt.state.pc.pc_tab),
         "pcPartMenu": rt.state.pc.part_menu.map(|m| format!("{m:?}")),
@@ -1901,16 +1983,12 @@ mod tests {
 
         rt.update(|s, _| s.start_tour());
         rt.frame(4.0 / 60.0);
-        assert_eq!(rt.state.tour_step, Some(0));
+        assert_eq!(rt.state.setup.beat, Some(0));
         assert_eq!(rt.state.room, Room::Library);
-        let (nx, ny) = rt.find("tour-next").expect("Tour Next");
-        rt.pointer_down(nx, ny);
-        rt.pointer_up(nx, ny);
-        rt.frame(5.0 / 60.0);
-        assert_eq!(rt.state.tour_step, Some(1));
+        rt.state.setup_beat_skip();
+        assert_eq!(rt.state.setup.beat, Some(1));
         rt.state.finish_tour();
-        assert!(rt.state.tour_step.is_none());
-        assert!(rt.state.tour_seen);
+        assert!(rt.state.setup.beat.is_none());
 
         rt.state.filters = vec![LibraryChip::Installed];
         assert!(rt.state.filtered_games().iter().all(|g| g.installed));
@@ -2436,7 +2514,7 @@ mod tests {
             &|s| {
                 s.start_tour();
             },
-            Some("exo-tour-card"),
+            Some("setup-coach"),
         );
         check_case(
             "library-more-menu",

@@ -42,7 +42,7 @@ public sealed class PlayerChoicesSyncTests : IDisposable
     {
         { "discord", true }, { "discordCamera", false }, { "discordPerformance", true }, { "discordPinnedDms", true },
         { "driverBranch", false }, { "wearing", false }, { "shadersOrder", true }, { "goLiveQuality", false },
-        { "goLivePreview", true }, { "voiceChat", true }, { "tourSeen", true },
+        { "goLivePreview", true }, { "voiceChat", true }, { "tourSeen", true }, { "setupProgress", false },
     };
 
     [Fact]

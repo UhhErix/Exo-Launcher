@@ -848,7 +848,7 @@ impl AppState {
             && self.pc.mouse_panel_window_visible
             && !self.palette_open
             && !self.key_modal_open
-            && self.tour_step.is_none()
+            && self.setup.beat.is_none()
             && !self.capture_menu_open
             && !self.media.captures_open
             && !self.props_open

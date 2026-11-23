@@ -132,6 +132,7 @@ internal static class PlayerData
         new("voiceChat", Syncs: true, "whether the call's chat panel shows: a look"),
         new("discordPinnedDms", Syncs: true, "pinned Discord DM channel ids, in pinned order"),
         new("tourSeen", Syncs: true, "whether the player completed or skipped the guided tour"),
+        new("setupProgress", Syncs: false, "per-PC setup stage states: pending, done or skipped, comma separated"),
     ];
 
     internal static readonly string[] UiPrefKeys = [.. UiPrefs.Select(pref => pref.Key)];
