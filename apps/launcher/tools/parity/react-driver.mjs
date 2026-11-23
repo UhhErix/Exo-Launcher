@@ -1,5 +1,5 @@
 import { execFile } from 'node:child_process'
-import { mkdir, rm, writeFile } from 'node:fs/promises'
+import { mkdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { openShell, sleep } from '../e2e/cdp.mjs'
@@ -53,7 +53,10 @@ export async function startWebTestInstance({ folder, dataDir, fresh = true, host
     framelessPinSide: false,
     reduceMotion: true,
   }
-  await writeFile(join(safeData, 'settings.json'), JSON.stringify(seededSettings, null, 2))
+  // The owner's settings (pins, Discord prefs, look) stay; the harness's own values are laid over them.
+  const settingsPath = join(safeData, 'settings.json')
+  const kept = await readFile(settingsPath, 'utf8').then(JSON.parse, () => ({}))
+  await writeFile(settingsPath, JSON.stringify({ ...kept, ...seededSettings }, null, 2))
 
   const exeArg = hostExe ? `-Exe '${q(hostExe)}'` : ''
   const envArg = `-Env @{ 'EXO_UI' = 'web' }`
