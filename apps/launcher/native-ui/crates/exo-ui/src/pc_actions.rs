@@ -5,19 +5,18 @@ use exo_rpc::{
     DevicesListReply, DrivesReply, EqStateReply, ExoAccountState, ExoAiState, HdrState,
     KeyboardBackupResult, KeyboardBackupsReply, KeyboardReadReply, LauncherSettings,
     METHOD_APP_CHECK_UPDATE, METHOD_APP_INSTALL_UPDATE, METHOD_APP_OPEN_LOGS,
-    METHOD_APP_REPAIR_CACHE, METHOD_APPS_ICONS, METHOD_APPS_LIST, METHOD_APPS_UNINSTALL,
-    METHOD_AUDIO_READ, METHOD_AUDIO_SET_MUTE, METHOD_AUDIO_SET_VOLUME, METHOD_AUTOPILOT_STATE,
-    METHOD_DEVICES_IMAGE, METHOD_DEVICES_LIST, METHOD_EQ, METHOD_EXO_ACCOUNT_STATE,
-    METHOD_EXO_ACCOUNT_SYNC, METHOD_EXO_AI_SET, METHOD_EXO_AI_STATE, METHOD_HDR_STATE,
-    METHOD_JUNK_CLEAN, METHOD_KEYBOARD_BACKUP, METHOD_KEYBOARD_BACKUPS, METHOD_KEYBOARD_PROFILE,
-    METHOD_KEYBOARD_READ, METHOD_KEYBOARD_RESTORE, METHOD_KEYBOARD_SETTINGS,
-    METHOD_MOUSE_PANEL_BOUNDS, METHOD_MOUSE_PANEL_CLOSE, METHOD_MOUSE_PANEL_OPEN,
-    METHOD_PLAYTIME_RIOT_REFRESH, METHOD_SETTINGS_SET, METHOD_SHADERS_ADDON, METHOD_SHADERS_CALL,
-    METHOD_SHADERS_ESTIMATES, METHOD_SHADERS_PREPARE_GAMES, METHOD_SHADERS_PREPARE_START,
-    METHOD_STARTUP_LIST, METHOD_STARTUP_REMOVE, METHOD_SYSTEM_ABOUT, METHOD_SYSTEM_DRIVES,
-    METHOD_SYSTEM_TUNING, ShaderEstimate, ShaderSnapGame, ShadersAddonStatus,
-    ShadersEstimatesReply, ShadersPrepareGamesReply, StartupListReply, SystemAbout,
-    SystemTuningState, UpdateCheckReply,
+    METHOD_APP_REPAIR_CACHE, METHOD_APPS_ICONS, METHOD_APPS_LIST, METHOD_AUDIO_READ,
+    METHOD_AUDIO_SET_MUTE, METHOD_AUDIO_SET_VOLUME, METHOD_AUTOPILOT_STATE, METHOD_DEVICES_IMAGE,
+    METHOD_DEVICES_LIST, METHOD_EQ, METHOD_EXO_ACCOUNT_STATE, METHOD_EXO_ACCOUNT_SYNC,
+    METHOD_EXO_AI_STATE, METHOD_HDR_STATE, METHOD_KEYBOARD_BACKUP, METHOD_KEYBOARD_BACKUPS,
+    METHOD_KEYBOARD_PROFILE, METHOD_KEYBOARD_READ, METHOD_KEYBOARD_RESTORE,
+    METHOD_KEYBOARD_SETTINGS, METHOD_MOUSE_PANEL_BOUNDS, METHOD_MOUSE_PANEL_CLOSE,
+    METHOD_MOUSE_PANEL_OPEN, METHOD_PLAYTIME_RIOT_REFRESH, METHOD_SETTINGS_SET,
+    METHOD_SHADERS_ADDON, METHOD_SHADERS_CALL, METHOD_SHADERS_ESTIMATES,
+    METHOD_SHADERS_PREPARE_GAMES, METHOD_SHADERS_PREPARE_START, METHOD_STARTUP_LIST,
+    METHOD_STARTUP_REMOVE, METHOD_SYSTEM_ABOUT, METHOD_SYSTEM_DRIVES, METHOD_SYSTEM_TUNING,
+    ShaderEstimate, ShaderSnapGame, ShadersAddonStatus, ShadersEstimatesReply,
+    ShadersPrepareGamesReply, StartupListReply, SystemAbout, SystemTuningState, UpdateCheckReply,
 };
 use serde_json::{Map, Value, json};
 
@@ -49,6 +48,8 @@ impl AppState {
             if self.pc.update_check.is_none() && !self.pc.checking_update {
                 self.check_app_update();
             }
+            self.load_fps_counter_state();
+            self.load_web_preferences();
         }
     }
 
@@ -65,6 +66,7 @@ impl AppState {
             "achievementBanners" => self.settings.achievement_banners = value,
             "fpsCounter" => self.settings.fps_counter = value,
             "hdrForGames" => self.settings.hdr_for_games = value,
+            "frameGenEverywhere" => self.settings.frame_gen_everywhere = value,
             "autoUpdateUpscalers" => self.settings.auto_update_upscalers = value,
             "autoUpdateChipset" => self.settings.auto_update_chipset = value,
             _ => {}
@@ -248,6 +250,9 @@ impl AppState {
                             s.pc.shader_snap_games = snap_games;
                         }
                         s.pc.shaders = Some(status);
+                        if let Some(snap_val) = v.get("snapshot") {
+                            s.apply_shaders_snapshot_value(snap_val);
+                        }
                     });
                     if present && !has_games {
                         rpc_sh.call::<_, Value>(
@@ -257,12 +262,10 @@ impl AppState {
                                 if let Ok(sv) = snap_res
                                     && let Some(res_val) = sv.get("result")
                                 {
-                                    let games = parse_shader_snap_games(res_val);
-                                    if !games.is_empty() {
-                                        h5_snap.update(move |s, _| {
-                                            s.pc.shader_snap_games = games;
-                                        });
-                                    }
+                                    let res_clone = res_val.clone();
+                                    h5_snap.update(move |s, _| {
+                                        s.apply_shaders_snapshot_value(&res_clone);
+                                    });
                                 }
                             },
                         );
@@ -324,6 +327,7 @@ impl AppState {
             if self.pc.drives.is_none() {
                 self.load_pc_drives();
             }
+            self.load_pc_exo_ai_full();
         }
     }
 
@@ -352,25 +356,6 @@ impl AppState {
                     },
                 );
             }
-        }
-    }
-
-    pub fn run_exo_ai_now(&mut self) {
-        self.notice = Some("Running Exo AI optimization pass…".into());
-        #[cfg(windows)]
-        if let (Some(rpc), Some(handle)) = (self.rpc.clone(), self.handle.clone()) {
-            rpc.call::<_, ExoAiState>(METHOD_EXO_AI_SET, &json!({ "runNow": true }), move |res| {
-                handle.update(move |s, _| match res {
-                    Ok(ai) => {
-                        s.notice = Some(format!(
-                            "Exo AI ready: {} optimizations active.",
-                            ai.auto_applied.len()
-                        ));
-                        s.pc.exo_ai = Some(ai);
-                    }
-                    Err(e) => s.notice = Some(format!("Exo AI failed: {e}")),
-                });
-            });
         }
     }
 
@@ -450,6 +435,7 @@ impl AppState {
                     h2.update(move |s, _| s.pc.startup_list = Some(list));
                 }
             });
+            self.load_pc_apps_extras(false);
         }
     }
 
@@ -489,19 +475,7 @@ impl AppState {
     }
 
     pub fn uninstall_app(&mut self, id: &str) {
-        self.pc.armed_uninstall = None;
-        self.notice = Some("Starting application uninstaller…".into());
-        #[cfg(windows)]
-        if let (Some(rpc), Some(handle)) = (self.rpc.clone(), self.handle.clone()) {
-            rpc.call::<_, ActionResult>(METHOD_APPS_UNINSTALL, &json!({ "id": id }), move |res| {
-                handle.update(move |s, _| {
-                    if let Ok(r) = res {
-                        s.notice = r.message;
-                    }
-                    s.load_pc_apps();
-                });
-            });
-        }
+        self.remove_single_app(id);
     }
 
     pub fn remove_startup_item(&mut self, id: &str) {
@@ -543,24 +517,6 @@ impl AppState {
                     });
                 },
             );
-        }
-    }
-
-    pub fn clean_system_junk(&mut self) {
-        self.notice = Some("Cleaning temporary files and caches…".into());
-        #[cfg(windows)]
-        if let (Some(rpc), Some(handle)) = (self.rpc.clone(), self.handle.clone()) {
-            rpc.call::<_, ActionResult>(METHOD_JUNK_CLEAN, &json!({}), move |res| {
-                handle.update(move |s, _| {
-                    s.notice = match res {
-                        Ok(r) => r
-                            .message
-                            .or_else(|| Some("Temporary files cleaned.".into())),
-                        Err(e) => Some(format!("Cleanup failed: {e}")),
-                    };
-                    s.load_pc_drives();
-                });
-            });
         }
     }
 

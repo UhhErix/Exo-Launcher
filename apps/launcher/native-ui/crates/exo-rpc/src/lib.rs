@@ -36,17 +36,30 @@ pub use media_types::{
     PlayerViewData, PlayerViewReply, format_duration_ms,
 };
 pub use pc_types::{
-    AppsIconsReply, AppsListReply, AudioEndpoint, AudioReadReply, AudioVoiceInfo, AutopilotLive,
-    AutopilotMemoryIntegrity, AutopilotReport, AutopilotState, BackupDay, BackupNote, BackupOffer,
-    BackupStatus, ClientsEpic, ClientsStatus, ClientsSteam, DevicesImageReply, DevicesListReply,
+    Afmf3State, AppAutoCleared, AppCleanReply, AppConfirmReply, AppFind, AppLeftover, AppSkip,
+    AppUndoReply, AppsIconsReply, AppsListReply, AppsPackagesPlanReply, AppsPackagesRemoveReply,
+    AppsPackagesReply, AudioEndpoint, AudioReadReply, AudioVoiceInfo, AutoTuneState,
+    AutopilotFinding, AutopilotGameMode, AutopilotLive, AutopilotMemoryIntegrity,
+    AutopilotMouseAccel, AutopilotNow, AutopilotReport, AutopilotSetReply, AutopilotState,
+    BackupDay, BackupNote, BackupOffer, BackupStatus, BiosStaged, BiosUpdateReply, ClientsEpic,
+    ClientsStatus, ClientsSteam, ColorControl, CompressActReply, CompressAllReply, CompressList,
+    CompressListGame, CompressSettings, CompressSettingsReply, CompressState, DevicesImageReply,
+    DevicesListReply, DisplayAdjust, DisplayBest, DisplayDdc, DisplayScreen, DisplayState,
     DriveFix, DriveGameEntry, DriveHealth, DriveInfo, DriveLink, DriveSpaceBreakdown, DriveTemp,
-    DriveVerdict, DriveVolume, DrivesReply, EqHeadphone, EqStateReply, ExoAiFans, ExoAiGaming,
-    ExoAiState, HdrState, InstalledAppItem, KeyboardBackupResult, KeyboardBackupSummary,
-    KeyboardBackupsReply, KeyboardProfileSlot, KeyboardReadReply, LatencyReport, LatencySample,
-    PeripheralCard, PeripheralPort, ShaderEstimate, ShaderPrepareGame, ShaderSnapGame,
-    ShadersAddonStatus, ShadersEstimatesReply, ShadersPrepareGamesReply, ShadersSnapshot,
-    StartupItem, StartupListReply, StartupRemovedItem, SystemAbout, SystemTuningState, TuningItem,
-    UpdateCheckReply, UpdateProgress,
+    DriveVendor, DriveVerdict, DriveVolume, DriverAdvised, DriverEntry, DriverEntryAdvised,
+    DriverLatest, DriverProgress, DriverSkipped, DriverState, DriverStep, DriversState,
+    DrivesReply, EqHeadphone, EqStateReply, ExoAiFans, ExoAiGaming, ExoAiState, FpsCounterReply,
+    GpuFeature, GpuProfile, GpuProfileItem, GpuProfileScreen, HdrState, InstalledAppItem,
+    InstallerCacheCleanReply, InstallerCacheReply, InterruptDevice, InterruptsState,
+    JunkCleanReply, JunkItem, JunkScanReply, KeepStatus, KeyboardBackupResult,
+    KeyboardBackupSummary, KeyboardBackupsReply, KeyboardProfileSlot, KeyboardReadReply,
+    LatencyReport, LatencySample, LeftoverSummary, NetCheck, NetSample, OutputColor, PcHealth,
+    PcHealthItem, PeripheralCard, PeripheralPort, RestorePointReply, RuntimeItem, RuntimeResult,
+    RuntimesInstallReply, RuntimesListReply, RuntimesProgress, ShaderEstimate, ShaderPrepareGame,
+    ShaderRebuild, ShaderSnapGame, ShadersAddonStatus, ShadersEstimatesReply,
+    ShadersPrepareGamesReply, ShadersSnapshot, StartupItem, StartupListReply, StartupRemovedItem,
+    SystemAbout, SystemTuningState, TuneMeasure, TunePart, TuningItem, UpdateCheckReply,
+    UpdateProgress, WebClientOptions, WindowsApp, WindowsAppLine, WindowsReleaseInfo,
 };
 pub use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
@@ -78,15 +91,31 @@ pub const METHOD_APP_REPAIR_CACHE: &str = "app.repairCache";
 pub const METHOD_APPLEMUSIC_ACT: &str = "applemusic.act";
 pub const METHOD_APPLEMUSIC_START: &str = "applemusic.start";
 pub const METHOD_APPLEMUSIC_VIEW: &str = "applemusic.view";
+pub const METHOD_APPS_ALLOW_EDGE: &str = "apps.allowEdge";
+pub const METHOD_APPS_CLEAN: &str = "apps.clean";
+pub const METHOD_APPS_CONFIRM: &str = "apps.confirm";
 pub const METHOD_APPS_ICONS: &str = "apps.icons";
+pub const METHOD_APPS_INSTALLER_CACHE: &str = "apps.installerCache";
+pub const METHOD_APPS_INSTALLER_CACHE_CLEAN: &str = "apps.installerCacheClean";
+pub const METHOD_APPS_LEAVE: &str = "apps.leave";
 pub const METHOD_APPS_LIST: &str = "apps.list";
+pub const METHOD_APPS_OPEN_DEFAULTS: &str = "apps.openDefaults";
+pub const METHOD_APPS_PACKAGE_ADD_BACK: &str = "apps.packageAddBack";
+pub const METHOD_APPS_PACKAGES: &str = "apps.packages";
+pub const METHOD_APPS_PACKAGES_PLAN: &str = "apps.packagesPlan";
+pub const METHOD_APPS_PACKAGES_REMOVE: &str = "apps.packagesRemove";
+pub const METHOD_APPS_RESTORE_POINT: &str = "apps.restorePoint";
+pub const METHOD_APPS_SCAN: &str = "apps.scan";
 pub const METHOD_APPS_TIDY: &str = "apps.tidy";
+pub const METHOD_APPS_UNDO: &str = "apps.undo";
 pub const METHOD_APPS_UNINSTALL: &str = "apps.uninstall";
 pub const METHOD_ART_BASE: &str = "art.base";
 pub const METHOD_AUDIO_READ: &str = "audio.read";
 pub const METHOD_AUDIO_SET_MUTE: &str = "audio.setMute";
 pub const METHOD_AUDIO_SET_VOLUME: &str = "audio.setVolume";
+pub const METHOD_AUTOPILOT_SET: &str = "autopilot.set";
 pub const METHOD_AUTOPILOT_STATE: &str = "autopilot.state";
+pub const METHOD_BIOS_UPDATE: &str = "bios.update";
 pub const METHOD_CAPTURE_ACT: &str = "capture.act";
 pub const METHOD_CAPTURE_EDIT: &str = "capture.edit";
 pub const METHOD_CAPTURE_ITEM: &str = "capture.item";
@@ -95,6 +124,11 @@ pub const METHOD_CAPTURE_REEL: &str = "capture.reel";
 pub const METHOD_CAPTURE_REEL_CANCEL: &str = "capture.reel.cancel";
 pub const METHOD_CAPTURE_SETTINGS: &str = "capture.settings";
 pub const METHOD_CAPTURE_STATUS: &str = "capture.status";
+pub const METHOD_COMPRESS_ACT: &str = "compress.act";
+pub const METHOD_COMPRESS_ALL: &str = "compress.all";
+pub const METHOD_COMPRESS_LIST: &str = "compress.list";
+pub const METHOD_COMPRESS_SETTINGS: &str = "compress.settings";
+pub const METHOD_CONTROLLER_READ: &str = "controller.read";
 pub const METHOD_DEVICES_IMAGE: &str = "devices.image";
 pub const METHOD_DEVICES_LIST: &str = "devices.list";
 pub const METHOD_DISCORD_ACCOUNTS: &str = "discord.accounts";
@@ -140,9 +174,16 @@ pub const METHOD_EXO_ACCOUNT_STATE: &str = "exoAccount.state";
 pub const METHOD_EXO_ACCOUNT_SYNC: &str = "exoAccount.sync";
 pub const METHOD_EXO_AI_SET: &str = "exoAi.set";
 pub const METHOD_EXO_AI_STATE: &str = "exoAi.state";
+pub const METHOD_FPS_COUNTER: &str = "fps.counter";
+pub const METHOD_GPU_AFMF3: &str = "gpu.afmf3";
+pub const METHOD_GPU_CONTROL_PANEL: &str = "gpu.controlPanel";
+pub const METHOD_GPU_DISPLAY: &str = "gpu.display";
+pub const METHOD_GPU_DRIVER: &str = "gpu.driver";
+pub const METHOD_GPU_PROFILE: &str = "gpu.profile";
 pub const METHOD_HDR_STATE: &str = "hdr.state";
 pub const METHOD_JUNK_CLEAN: &str = "junk.clean";
 pub const METHOD_JUNK_SCAN: &str = "junk.scan";
+pub const METHOD_KEEP_STATUS: &str = "keep.status";
 pub const METHOD_KEYBOARD_BACKUP: &str = "keyboard.backup";
 pub const METHOD_KEYBOARD_BACKUPS: &str = "keyboard.backups";
 pub const METHOD_KEYBOARD_OPEN_APP: &str = "keyboard.openApp";
@@ -175,15 +216,23 @@ pub const METHOD_MUSIC_PLAYBACK: &str = "music.playback";
 pub const METHOD_MUSIC_SIGN_IN: &str = "music.signIn";
 pub const METHOD_MUSIC_VOLUME: &str = "music.volume";
 pub const METHOD_PLAYTIME_RIOT_REFRESH: &str = "playtime.riotRefresh";
+pub const METHOD_REPLACED_REMOVE: &str = "replaced.remove";
+pub const METHOD_RUNTIMES_CANCEL: &str = "runtimes.cancel";
+pub const METHOD_RUNTIMES_INSTALL: &str = "runtimes.install";
+pub const METHOD_RUNTIMES_LIST: &str = "runtimes.list";
 pub const METHOD_SETTINGS_GET: &str = "settings.get";
 pub const METHOD_SETTINGS_SET: &str = "settings.set";
 pub const METHOD_SHADERS_ADDON: &str = "shaders.addon";
 pub const METHOD_SHADERS_CALL: &str = "shaders.call";
 pub const METHOD_SHADERS_ESTIMATES: &str = "shaders.estimates";
+pub const METHOD_SHADERS_PREPARE_CANCEL: &str = "shaders.prepare.cancel";
 pub const METHOD_SHADERS_PREPARE_GAMES: &str = "shaders.prepare.games";
 pub const METHOD_SHADERS_PREPARE_START: &str = "shaders.prepare.start";
+pub const METHOD_SHADERS_REBUILD: &str = "shaders.rebuild";
+pub const METHOD_SHADERS_STATUS: &str = "shaders.status";
 pub const METHOD_RPC_CANCEL: &str = "rpc.cancel";
 pub const METHOD_SHELL_BOOTSTRAP: &str = "shell.bootstrap";
+pub const METHOD_SHELL_OPEN_URL: &str = "shell.openUrl";
 pub const METHOD_SHELL_READY: &str = "shell.ready";
 pub const METHOD_SPOTIFY_ACT: &str = "spotify.act";
 pub const METHOD_SPOTIFY_START: &str = "spotify.start";
@@ -199,8 +248,14 @@ pub const METHOD_STORE_GAME_OFFERS: &str = "store.gameOffers";
 pub const METHOD_STORE_OPEN: &str = "store.open";
 pub const METHOD_STORE_WISHLIST: &str = "store.wishlist";
 pub const METHOD_SYSTEM_ABOUT: &str = "system.about";
+pub const METHOD_SYSTEM_DRIVERS: &str = "system.drivers";
 pub const METHOD_SYSTEM_DRIVES: &str = "system.drives";
+pub const METHOD_SYSTEM_HEALTH: &str = "system.health";
+pub const METHOD_SYSTEM_INTERRUPTS: &str = "system.interrupts";
+pub const METHOD_SYSTEM_TUNE: &str = "system.tune";
 pub const METHOD_SYSTEM_TUNING: &str = "system.tuning";
+pub const METHOD_WEB_PREFERENCES_GET: &str = "web.preferences.get";
+pub const METHOD_WEB_PREFERENCES_SET: &str = "web.preferences.set";
 pub const METHOD_YTMUSIC_ACT: &str = "ytmusic.act";
 pub const METHOD_YTMUSIC_START: &str = "ytmusic.start";
 pub const METHOD_YTMUSIC_VIEW: &str = "ytmusic.view";
@@ -213,15 +268,31 @@ pub const USED_METHODS: &[&str] = &[
     METHOD_APPLEMUSIC_ACT,
     METHOD_APPLEMUSIC_START,
     METHOD_APPLEMUSIC_VIEW,
+    METHOD_APPS_ALLOW_EDGE,
+    METHOD_APPS_CLEAN,
+    METHOD_APPS_CONFIRM,
     METHOD_APPS_ICONS,
+    METHOD_APPS_INSTALLER_CACHE,
+    METHOD_APPS_INSTALLER_CACHE_CLEAN,
+    METHOD_APPS_LEAVE,
     METHOD_APPS_LIST,
+    METHOD_APPS_OPEN_DEFAULTS,
+    METHOD_APPS_PACKAGE_ADD_BACK,
+    METHOD_APPS_PACKAGES,
+    METHOD_APPS_PACKAGES_PLAN,
+    METHOD_APPS_PACKAGES_REMOVE,
+    METHOD_APPS_RESTORE_POINT,
+    METHOD_APPS_SCAN,
     METHOD_APPS_TIDY,
+    METHOD_APPS_UNDO,
     METHOD_APPS_UNINSTALL,
     METHOD_ART_BASE,
     METHOD_AUDIO_READ,
     METHOD_AUDIO_SET_MUTE,
     METHOD_AUDIO_SET_VOLUME,
+    METHOD_AUTOPILOT_SET,
     METHOD_AUTOPILOT_STATE,
+    METHOD_BIOS_UPDATE,
     METHOD_CAPTURE_ACT,
     METHOD_CAPTURE_EDIT,
     METHOD_CAPTURE_ITEM,
@@ -230,6 +301,11 @@ pub const USED_METHODS: &[&str] = &[
     METHOD_CAPTURE_REEL_CANCEL,
     METHOD_CAPTURE_SETTINGS,
     METHOD_CAPTURE_STATUS,
+    METHOD_COMPRESS_ACT,
+    METHOD_COMPRESS_ALL,
+    METHOD_COMPRESS_LIST,
+    METHOD_COMPRESS_SETTINGS,
+    METHOD_CONTROLLER_READ,
     METHOD_DEVICES_IMAGE,
     METHOD_DEVICES_LIST,
     METHOD_DISCORD_ACCOUNTS,
@@ -273,9 +349,16 @@ pub const USED_METHODS: &[&str] = &[
     METHOD_EXO_ACCOUNT_SYNC,
     METHOD_EXO_AI_SET,
     METHOD_EXO_AI_STATE,
+    METHOD_FPS_COUNTER,
+    METHOD_GPU_AFMF3,
+    METHOD_GPU_CONTROL_PANEL,
+    METHOD_GPU_DISPLAY,
+    METHOD_GPU_DRIVER,
+    METHOD_GPU_PROFILE,
     METHOD_HDR_STATE,
     METHOD_JUNK_CLEAN,
     METHOD_JUNK_SCAN,
+    METHOD_KEEP_STATUS,
     METHOD_KEYBOARD_BACKUP,
     METHOD_KEYBOARD_BACKUPS,
     METHOD_KEYBOARD_OPEN_APP,
@@ -308,6 +391,10 @@ pub const USED_METHODS: &[&str] = &[
     METHOD_MUSIC_SIGN_IN,
     METHOD_MUSIC_VOLUME,
     METHOD_PLAYTIME_RIOT_REFRESH,
+    METHOD_REPLACED_REMOVE,
+    METHOD_RUNTIMES_CANCEL,
+    METHOD_RUNTIMES_INSTALL,
+    METHOD_RUNTIMES_LIST,
     METHOD_SETTINGS_GET,
     METHOD_SETTINGS_SET,
     METHOD_SHADERS_ADDON,
@@ -315,9 +402,13 @@ pub const USED_METHODS: &[&str] = &[
     METHOD_CLIENTS_STATUS,
     METHOD_SHADERS_CALL,
     METHOD_SHADERS_ESTIMATES,
+    METHOD_SHADERS_PREPARE_CANCEL,
     METHOD_SHADERS_PREPARE_GAMES,
     METHOD_SHADERS_PREPARE_START,
+    METHOD_SHADERS_REBUILD,
+    METHOD_SHADERS_STATUS,
     METHOD_SHELL_BOOTSTRAP,
+    METHOD_SHELL_OPEN_URL,
     METHOD_SHELL_READY,
     METHOD_SPOTIFY_ACT,
     METHOD_SPOTIFY_START,
@@ -333,8 +424,14 @@ pub const USED_METHODS: &[&str] = &[
     METHOD_STORE_OPEN,
     METHOD_STORE_WISHLIST,
     METHOD_SYSTEM_ABOUT,
+    METHOD_SYSTEM_DRIVERS,
     METHOD_SYSTEM_DRIVES,
+    METHOD_SYSTEM_HEALTH,
+    METHOD_SYSTEM_INTERRUPTS,
+    METHOD_SYSTEM_TUNE,
     METHOD_SYSTEM_TUNING,
+    METHOD_WEB_PREFERENCES_GET,
+    METHOD_WEB_PREFERENCES_SET,
     METHOD_YTMUSIC_ACT,
     METHOD_YTMUSIC_START,
     METHOD_YTMUSIC_VIEW,

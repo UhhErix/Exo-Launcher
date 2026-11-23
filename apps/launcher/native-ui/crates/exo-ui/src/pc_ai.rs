@@ -1,15 +1,21 @@
-use crate::pc_state::{PcPartMenu, PcTab};
-use crate::pc_storage::{exo_ai_storage_view, format_gb_short};
-use crate::state::{AppState, Room, title_hue};
-use exo_kit::{
-    BG, FG, GLASS_CONTROL_SIGMA, PRESS_SCALE, RADIUS_PANEL, RADIUS_PILL, RADIUS_SMALL,
-    SPRING_QUICK, fg_faint, fg_muted, float_line, glass_button, glass_control_fill,
-    glass_icon_circle, glass_panel_opt, glass_rim_bottom, glass_rim_top, good, hover_fill,
-    icon_app_window, icon_check, icon_close, icon_cpu, icon_hard_drive, icon_monitor,
-    popover_transition_from, pressed_fill, primary_button, progress_bar, scaled, surface_card,
-    type_body, type_control, type_page, type_section, type_small, type_title,
+use crate::pc_menus::{driver_row_view, menu_btn};
+use crate::pc_state::{
+    AutoTuneStageStatus, PcPartMenu, PcTab, compute_initial_auto_tune_stages,
+    count_pending_auto_tune, format_bytes, trim_stop,
 };
-use rune::{Align, Cursor, El, Key, Side, SurfaceFit, TextStyle, col, el, oklch, row, text};
+use crate::pc_storage::{exo_ai_storage_view, format_gb_short};
+use crate::state::{AppState, title_hue};
+use exo_kit::{
+    BG, BadgeTone, FG, GLASS_CONTROL_SIGMA, PRESS_SCALE, RADIUS_PANEL, RADIUS_PILL, RADIUS_SMALL,
+    SPRING_QUICK, bad, fg_faint, fg_muted, float_line, glass_button, glass_control_fill,
+    glass_rim_bottom, glass_rim_top, good, hover_fill, icon_app_window, icon_check, icon_cpu,
+    icon_hard_drive, icon_monitor, pressed_fill, primary_button, progress_bar, scaled,
+    status_badge, surface_card, type_body, type_control, type_page, type_section, type_small,
+    type_title, warn,
+};
+use exo_rpc::{DriverEntry, RuntimeItem, RuntimesProgress, TunePart};
+use rune::{Cursor, El, SurfaceFit, TextStyle, col, el, oklch, row, text};
+use serde_json::json;
 
 fn strip_trademarks(raw: &str) -> String {
     let mut out = String::with_capacity(raw.len());
@@ -49,7 +55,7 @@ fn is_numeric_token(s: &str) -> bool {
         && s.chars().any(|c| c.is_ascii_digit())
 }
 
-fn short_drive_model(raw: &str) -> String {
+pub(crate) fn short_drive_model(raw: &str) -> String {
     let cleaned = strip_trademarks(raw);
     let mut parts = Vec::new();
     let tokens: Vec<&str> = cleaned.split_whitespace().collect();
@@ -331,23 +337,862 @@ fn shader_eta_text(span: ShaderSpan, floor: bool, running: bool) -> Option<Strin
     Some(format!("about {}{left}", shader_round_span(span.high)))
 }
 
+const PAWNIO_URL: &str = "https://pawnio.eu";
+const SONY_CTRL_URL: &str = "https://www.playstation.com/support/hardware/ps5-controller-update/";
+
+fn tune_metrics(part: &TunePart) -> Vec<(&'static str, String)> {
+    let mut out = Vec::new();
+    if let Some(ref applied) = part.applied
+        && !applied.is_empty()
+    {
+        out.push(("Applied", applied.clone()));
+    }
+    if let (Some(before), Some(after)) = (part.before.as_ref(), part.after.as_ref()) {
+        if before.score > 0.0 {
+            let delta = ((after.score / before.score - 1.0) * 100.0).round() as i64;
+            let val = if delta > 0 {
+                format!("+{delta}%")
+            } else if delta < 0 {
+                format!("{delta}%")
+            } else {
+                "Same".into()
+            };
+            out.push(("Score", val));
+        }
+        if let (Some(bp), Some(ap)) = (before.peak_c, after.peak_c) {
+            out.push((
+                "Peak temp",
+                format!("{} to {} °C", bp.round() as i64, ap.round() as i64),
+            ));
+        }
+    }
+    out
+}
+
+fn auto_tune_hardware_row(
+    part: &TunePart,
+    name: String,
+    error: Option<&String>,
+    armed: Option<&str>,
+) -> El {
+    let is_cpu = part.id == "ryzen";
+    let role_label = if is_cpu {
+        "CPU undervolt (Curve Optimizer)"
+    } else {
+        "GPU overclock & undervolt"
+    };
+    let tune_label = if is_cpu { "Tune CPU" } else { "Tune GPU" };
+    let ready = matches!(part.state.as_str(), "ready" | "crashed");
+    let part_id = part.id.clone();
+
+    let mut actions = row().gap(6.0).center_y();
+    if part.state == "tuned" {
+        actions = actions.child(status_badge("Tuned".into(), BadgeTone::Good));
+    }
+    if part.state == "needs-driver" {
+        actions = actions.child(
+            menu_btn(
+                format!("tune-pawnio-{}", part.id),
+                "Get PawnIO",
+                false,
+                false,
+                false,
+            )
+            .on_press(|s: &mut AppState| s.open_external_url(PAWNIO_URL)),
+        );
+    }
+    if ready {
+        let warned = part.warning.as_ref().is_some_and(|w| !w.is_empty());
+        let blocked = part.blocked.is_some();
+        let confirm_key = format!("tune:{}", part.id);
+        let is_armed = armed == Some(confirm_key.as_str());
+        let lbl = if warned && is_armed {
+            "Start at your own risk?"
+        } else {
+            tune_label
+        };
+        let pid = part_id.clone();
+        actions = actions.child(
+            menu_btn(
+                format!("ai-tune-{}", if is_cpu { "cpu" } else { "gpu" }),
+                lbl,
+                true,
+                false,
+                blocked,
+            )
+            .on_press(move |s: &mut AppState| {
+                if warned && s.pc.armed_confirm.as_deref() != Some(confirm_key.as_str()) {
+                    s.pc.armed_confirm = Some(confirm_key.clone());
+                } else {
+                    s.run_system_tune_action(&pid, "start");
+                }
+            }),
+        );
+    }
+    if part.state == "testing" {
+        let pid = part_id.clone();
+        actions = actions.child(
+            menu_btn(
+                format!("tune-stop-{}", part.id),
+                "Stop",
+                false,
+                false,
+                false,
+            )
+            .on_press(move |s: &mut AppState| s.run_system_tune_action(&pid, "stop")),
+        );
+    } else if part.can_undo {
+        let pid = part_id.clone();
+        actions = actions.child(
+            menu_btn(
+                format!("tune-undo-{}", part.id),
+                "Undo",
+                false,
+                false,
+                false,
+            )
+            .on_press(move |s: &mut AppState| s.run_system_tune_action(&pid, "undo")),
+        );
+    }
+
+    let mut row_wrap = col().w_full().py(10.0).gap(6.0).child(
+        row()
+            .w_full()
+            .min_h(36.0)
+            .justify_between()
+            .center_y()
+            .gap(10.0)
+            .child(
+                row()
+                    .gap(10.0)
+                    .center_y()
+                    .min_w(0.0)
+                    .grow(1.0)
+                    .child(if is_cpu {
+                        icon_cpu(15.0, fg_muted())
+                    } else {
+                        icon_monitor(15.0, fg_muted())
+                    })
+                    .child(
+                        col()
+                            .gap(2.0)
+                            .min_w(0.0)
+                            .grow(1.0)
+                            .child(text(role_label).font(type_section()).color(FG))
+                            .child(text(name).font(type_small()).color(fg_muted()).truncate()),
+                    ),
+            )
+            .child(actions),
+    );
+
+    if part.state == "testing" {
+        let mins = part
+            .minutes_left
+            .filter(|&m| m > 0.0)
+            .map(|m| format!(" · about {} min left", m.round() as i64))
+            .unwrap_or_default();
+        let lbl = format!("{}{mins}", part.testing.as_deref().unwrap_or("Testing"));
+        row_wrap = row_wrap.child(
+            col()
+                .w_full()
+                .gap(4.0)
+                .child(progress_bar(420.0, 0.5))
+                .child(text(lbl).font(type_small()).color(fg_muted())),
+        );
+    } else if part.state == "tuned" {
+        let metrics = tune_metrics(part);
+        if !metrics.is_empty() {
+            let mut mrow = row().gap(16.0).center_y();
+            for (k, v) in metrics {
+                mrow = mrow.child(
+                    row()
+                        .gap(5.0)
+                        .center_y()
+                        .child(text(k).font(type_small()).color(fg_muted()))
+                        .child(text(v).font(type_small()).color(FG)),
+                );
+            }
+            row_wrap = row_wrap.child(mrow);
+        }
+    } else {
+        let detail = part
+            .blocked
+            .as_deref()
+            .or_else(|| (part.state == "crashed").then_some("Returned to stock after instability"));
+        if let Some(d) = detail {
+            row_wrap = row_wrap.child(text(d.to_string()).font(type_small()).color(warn()).wrap());
+        }
+    }
+
+    if let Some(err) = error {
+        row_wrap = row_wrap.child(text(err.clone()).font(type_small()).color(bad()).wrap());
+    }
+
+    row_wrap
+}
+
+fn runtime_mb(bytes: u64) -> String {
+    if bytes >= 1_000_000_000 {
+        format!("{:.1} GB", bytes as f64 / 1e9)
+    } else {
+        format!("{} MB", (bytes as f64 / 1e6).round().max(1.0) as u64)
+    }
+}
+
+fn runtime_progress_text(prog: Option<&RuntimesProgress>, mode: &str) -> String {
+    let Some(p) = prog else {
+        return if mode == "repair" {
+            "Getting Visual C++ ready".into()
+        } else {
+            "Getting ready".into()
+        };
+    };
+    let name = p.name.as_deref().unwrap_or("runtime");
+    let of = format!("{} of {}", p.index, p.count);
+    match p.phase.as_str() {
+        "download" => format!(
+            "Downloading {name} · {of} · {} of {}",
+            runtime_mb(p.done_bytes),
+            runtime_mb(p.all_bytes)
+        ),
+        "verify" => format!("Checking {name}"),
+        "install" => format!("Installing {name} · {of}"),
+        _ => "Checking what installed".into(),
+    }
+}
+
+fn runtimes_section_view(s: &AppState) -> Option<El> {
+    let items = s.pc.runtimes.as_ref()?;
+    let missing: Vec<&RuntimeItem> = items
+        .iter()
+        .filter(|i| i.state == "missing" && i.bulk)
+        .collect();
+    let outdated: Vec<&RuntimeItem> = items.iter().filter(|i| i.state == "outdated").collect();
+    let any_work = !missing.is_empty() || !outdated.is_empty();
+    if !any_work && s.pc.runtimes_running.is_none() && s.pc.runtimes_note.is_none() {
+        return None;
+    }
+
+    let mut sec = col()
+        .key("pc-runtimes-section")
+        .w_full()
+        .pt(8.0)
+        .gap(6.0)
+        .child(el().w_full().h(1.0).fill(float_line()))
+        .child(text("Game runtimes").font(type_section()).color(FG));
+
+    if let Some(ref mode) = s.pc.runtimes_running {
+        let prog = s.pc.runtimes_progress.as_ref();
+        let words = runtime_progress_text(prog, mode);
+        let share = prog.and_then(|p| match p.phase.as_str() {
+            "install" if p.count > 0 => Some((p.index.saturating_sub(1)) as f32 / p.count as f32),
+            "check" => None,
+            _ if p.all_bytes > 0 => Some((p.done_bytes as f64 / p.all_bytes as f64) as f32),
+            _ => None,
+        });
+        let downloading = prog.is_none_or(|p| matches!(p.phase.as_str(), "download" | "verify"));
+        let mut r = row().w_full().justify_between().center_y().gap(10.0).child(
+            col()
+                .grow(1.0)
+                .min_w(0.0)
+                .gap(4.0)
+                .child(text(words).font(type_small()).color(fg_muted()).wrap())
+                .child(progress_bar(360.0, share.unwrap_or(0.35))),
+        );
+        if downloading {
+            r = r.child(
+                menu_btn(
+                    "runtimes-cancel".into(),
+                    "Cancel",
+                    false,
+                    false,
+                    s.pc.runtimes_canceling,
+                )
+                .on_press(|s: &mut AppState| s.run_runtimes_cancel()),
+            );
+        }
+        sec = sec.child(r);
+    } else if any_work {
+        let mut parts = Vec::new();
+        if !missing.is_empty() {
+            parts.push(format!("{} to install", missing.len()));
+        }
+        if !outdated.is_empty() {
+            parts.push(format!("{} to update", outdated.len()));
+        }
+        let dl_bytes: u64 = missing
+            .iter()
+            .chain(outdated.iter())
+            .map(|i| if i.size > 0 { i.size } else { 60_000_000 })
+            .sum();
+        let status_txt = format!("{} · about {}", parts.join(", "), runtime_mb(dl_bytes));
+        let action_word = if !missing.is_empty() && !outdated.is_empty() {
+            "Install and update"
+        } else if !missing.is_empty() {
+            "Install"
+        } else {
+            "Update"
+        };
+        sec = sec.child(
+            row()
+                .w_full()
+                .justify_between()
+                .center_y()
+                .gap(8.0)
+                .child(text(status_txt).font(type_small()).color(fg_muted()))
+                .child(
+                    row()
+                        .gap(6.0)
+                        .child(
+                            menu_btn("runtimes-repair".into(), "Repair all", false, false, false)
+                                .on_press(|s: &mut AppState| s.run_runtimes_install("repair")),
+                        )
+                        .child(
+                            menu_btn("runtimes-install".into(), action_word, true, false, false)
+                                .on_press(|s: &mut AppState| s.run_runtimes_install("update")),
+                        ),
+                ),
+        );
+    }
+
+    if let Some((ref note, is_err)) = s.pc.runtimes_note {
+        sec = sec.child(
+            text(note.clone())
+                .font(type_small())
+                .color(if is_err { bad() } else { fg_muted() })
+                .wrap(),
+        );
+    }
+
+    for item in items.iter().filter(|i| {
+        (i.state == "missing" && i.bulk)
+            || i.state == "outdated"
+            || s.pc
+                .runtimes_results
+                .get(&i.id)
+                .is_some_and(|r| r.outcome == "failed")
+            || s.pc
+                .runtimes_progress
+                .as_ref()
+                .and_then(|p| p.id.as_deref())
+                == Some(i.id.as_str())
+    }) {
+        let right = if let Some(res) = s.pc.runtimes_results.get(&item.id) {
+            let word = match res.outcome.as_str() {
+                "installed" => "Installed",
+                "newer" => "Already newer",
+                "restart" => "Restart to finish",
+                _ => "Failed",
+            };
+            status_badge(
+                word.into(),
+                if res.outcome == "failed" {
+                    BadgeTone::Bad
+                } else {
+                    BadgeTone::Good
+                },
+            )
+        } else {
+            text(if item.state == "missing" {
+                "Missing".into()
+            } else {
+                format!(
+                    "{} → {}",
+                    item.installed.as_deref().unwrap_or(""),
+                    item.latest
+                )
+            })
+            .font(type_small())
+            .color(fg_muted())
+        };
+        sec = sec.child(
+            row()
+                .w_full()
+                .py(6.0)
+                .justify_between()
+                .center_y()
+                .child(text(item.name.clone()).font(type_control()).color(FG))
+                .child(right),
+        );
+    }
+
+    Some(sec)
+}
+
+fn driver_row_name(item: &DriverEntry) -> String {
+    if item.kind == "ssd" {
+        format!("{} firmware", short_drive_model(&item.name))
+    } else {
+        strip_trademarks(&item.name)
+            .split_whitespace()
+            .collect::<Vec<_>>()
+            .join(" ")
+    }
+}
+
+fn updates_card_view(s: &AppState) -> El {
+    let drivers_state = s.pc.drivers_state.as_ref();
+    let health = s.pc.health.as_ref();
+    let gpu_drv = s.pc.gpu_driver.as_ref();
+    let armed = s.pc.armed_confirm.as_deref();
+
+    let rows: Vec<&DriverEntry> = drivers_state
+        .map(|ds| {
+            ds.items
+                .iter()
+                .filter(|i| i.how != "none" || s.pc.driver_steps.contains_key(&i.id))
+                .collect()
+        })
+        .unwrap_or_default();
+    let chipset_item = health.and_then(|h| {
+        h.items
+            .iter()
+            .find(|i| i.key == "chipset" && !i.current && !i.held)
+    });
+    let chipset_needs = chipset_item.is_some_and(|i| !i.applied && !i.busy);
+    let gpu_needs =
+        gpu_drv.is_some_and(|d| d.update || d.advised.as_ref().is_some_and(|a| a.back.is_some()));
+    let gpu_shown = gpu_needs
+        || gpu_drv
+            .and_then(|d| s.pc.gpu_driver_progress.as_ref().or(d.progress.as_ref()))
+            .is_some_and(|p| !matches!(p.stage.as_str(), "idle" | "done"));
+    let runtime_waiting =
+        s.pc.runtimes
+            .as_ref()
+            .map(|items| {
+                items
+                    .iter()
+                    .filter(|i| (i.state == "missing" && i.bulk) || i.state == "outdated")
+                    .count()
+            })
+            .unwrap_or(0);
+    let installable =
+        rows.iter().any(|i| i.how == "install" && !i.app) || chipset_needs || gpu_needs;
+    let waiting = rows.iter().filter(|i| !i.app && i.how != "none").count()
+        + usize::from(chipset_needs)
+        + usize::from(gpu_needs)
+        + runtime_waiting;
+    let working = s.pc.drivers_updating_all || drivers_state.is_some_and(|d| d.running);
+    let busy_reason = drivers_state.and_then(|d| d.busy.as_deref());
+
+    let mut head_right = row().gap(8.0).center_y();
+    if (drivers_state.is_none() && s.pc.drivers_error.is_none()) || (waiting == 0 && !working) {
+        head_right = head_right.child(text("Up to date").font(type_body()).color(fg_muted()));
+    }
+    if installable {
+        head_right = head_right.child(
+            menu_btn(
+                "drivers-update-all".into(),
+                if working { "Updating…" } else { "Update all" },
+                true,
+                false,
+                working || busy_reason.is_some(),
+            )
+            .on_press(|s: &mut AppState| s.run_drivers_update_all()),
+        );
+    }
+
+    let mut card = col()
+        .key("exo-ai-updates-card")
+        .w_full()
+        .py(14.0)
+        .px(24.0)
+        .gap(4.0)
+        .radius(RADIUS_PANEL)
+        .continuous_corners()
+        .fill(BG)
+        .border(1.0, float_line())
+        .child(
+            row()
+                .w_full()
+                .min_h(32.0)
+                .justify_between()
+                .center_y()
+                .child(text("Updates").font(type_title()).color(FG))
+                .child(head_right),
+        );
+
+    let restart = drivers_state.is_some_and(|d| d.restart);
+    let blocked_err = s.pc.drivers_error.clone().or_else(|| {
+        (installable && !working)
+            .then(|| busy_reason.map(str::to_string))
+            .flatten()
+    });
+    if working || restart || blocked_err.is_some() {
+        let lbl = if working {
+            "Updating"
+        } else if restart {
+            "Restart to finish"
+        } else {
+            "Updates"
+        };
+        card = card.child(
+            col()
+                .w_full()
+                .pt(6.0)
+                .gap(2.0)
+                .child(
+                    text(lbl)
+                        .font(type_control())
+                        .color(if restart { warn() } else { FG }),
+                )
+                .children(blocked_err.map(|e| text(e).font(type_small()).color(bad()).wrap())),
+        );
+    }
+
+    if gpu_shown && let Some(drv_row) = driver_row_view(s) {
+        card = card.child(drv_row);
+    }
+
+    if let Some(chip) = chipset_item {
+        let ctrl = if chip.busy {
+            menu_btn("chipset-busy".into(), "Updating…", false, false, true)
+        } else if let Some(ref url) = chip.url {
+            let u = url.clone();
+            menu_btn("chipset-url".into(), "Update", false, false, false)
+                .on_press(move |s: &mut AppState| s.open_external_url(&u))
+        } else if chip.applied {
+            status_badge("Restart to finish".into(), BadgeTone::Warn)
+        } else {
+            menu_btn("chipset-upd".into(), "Update", false, false, false)
+                .on_press(|s: &mut AppState| s.run_health_action("chipset"))
+        };
+        card = card.child(
+            col()
+                .w_full()
+                .child(el().w_full().h(1.0).fill(float_line()))
+                .child(
+                    row()
+                        .w_full()
+                        .py(8.0)
+                        .justify_between()
+                        .center_y()
+                        .child(
+                            col()
+                                .grow(1.0)
+                                .min_w(0.0)
+                                .gap(2.0)
+                                .child(text(chip.label.clone()).font(type_control()).color(FG))
+                                .children(
+                                    ((chip.busy || chip.applied) && !chip.detail.is_empty()).then(
+                                        || {
+                                            text(chip.detail.clone())
+                                                .font(type_small())
+                                                .color(fg_muted())
+                                                .wrap()
+                                        },
+                                    ),
+                                ),
+                        )
+                        .child(ctrl),
+                ),
+        );
+    }
+
+    for item in rows {
+        if item.kind == "bios"
+            && item.source.as_deref() == Some("ASUS")
+            && (item.how != "none" || item.advised.is_some())
+        {
+            let ready =
+                s.pc.bios_staged
+                    .as_ref()
+                    .is_some_and(|st| st.version == item.latest.as_deref().unwrap_or(&st.version));
+            let busy = s.pc.bios_busy.as_deref();
+            let det = if busy == Some("prepare") {
+                match s.pc.bios_progress {
+                    Some(sh) => {
+                        format!("Getting the BIOS ready · {}%", (sh * 100.0).round() as i32)
+                    }
+                    None => "Getting the BIOS ready".into(),
+                }
+            } else if ready && let Some(ref st) = s.pc.bios_staged {
+                format!(
+                    "{} is ready. In the BIOS: Tool › ASUS EZ Flash 3, pick {} and keep the power on; if it asks to reset fTPM, choose No.",
+                    st.version, st.file
+                )
+            } else {
+                item.advised
+                    .as_ref()
+                    .map(|a| a.why.clone())
+                    .unwrap_or_default()
+            };
+            let ctrl = if ready {
+                let is_armed = armed == Some("bios-update");
+                menu_btn(
+                    "bios-restart-upd".into(),
+                    if is_armed {
+                        "Restart now?"
+                    } else {
+                        "Restart to update"
+                    },
+                    false,
+                    true,
+                    busy.is_some(),
+                )
+                .on_press(|s: &mut AppState| {
+                    if s.pc.armed_confirm.as_deref() == Some("bios-update") {
+                        s.run_bios_update("restart");
+                    } else {
+                        s.pc.armed_confirm = Some("bios-update".into());
+                    }
+                })
+            } else {
+                let ver = item.latest.as_deref().unwrap_or("it");
+                menu_btn(
+                    "bios-prepare".into(),
+                    format!("Get {ver} ready"),
+                    false,
+                    false,
+                    busy.is_some(),
+                )
+                .on_press(|s: &mut AppState| s.run_bios_update("prepare"))
+            };
+            card = card.child(
+                col()
+                    .w_full()
+                    .child(el().w_full().h(1.0).fill(float_line()))
+                    .child(
+                        row()
+                            .w_full()
+                            .py(8.0)
+                            .gap(10.0)
+                            .justify_between()
+                            .center_y()
+                            .child(
+                                col()
+                                    .grow(1.0)
+                                    .min_w(0.0)
+                                    .gap(2.0)
+                                    .child(text("BIOS").font(type_control()).color(FG))
+                                    .children((!det.is_empty()).then(|| {
+                                        text(det).font(type_small()).color(fg_muted()).wrap()
+                                    }))
+                                    .children(s.pc.bios_error.as_ref().map(|e| {
+                                        text(e.clone()).font(type_small()).color(bad()).wrap()
+                                    })),
+                            )
+                            .child(ctrl),
+                    ),
+            );
+            continue;
+        }
+
+        let step = s.pc.driver_steps.get(&item.id);
+        let detail = step
+            .and_then(|st| st.working.clone())
+            .or_else(|| {
+                step.filter(|st| st.ok == Some(true)).map(|st| {
+                    st.message
+                        .as_deref()
+                        .map(trim_stop)
+                        .filter(|m| !m.is_empty())
+                        .unwrap_or_else(|| "Updated".into())
+                })
+            })
+            .or_else(|| item.advised.as_ref().map(|a| a.why.clone()));
+        let err = step.filter(|st| st.ok == Some(false)).map(|st| {
+            st.message
+                .as_deref()
+                .map(trim_stop)
+                .filter(|m| !m.is_empty())
+                .unwrap_or_else(|| "Didn’t update".into())
+        });
+        let ctrl = if item.how == "page"
+            && let Some(ref page) = item.page
+        {
+            let url = page.clone();
+            let word = item
+                .advised
+                .as_ref()
+                .filter(|a| a.to.is_some() && a.action != "skip")
+                .map(|a| {
+                    if a.action == "back" {
+                        format!("Go back to {}", a.to.as_deref().unwrap_or(""))
+                    } else {
+                        let target = if item.skipped.is_some() {
+                            a.to.as_deref().unwrap_or("")
+                        } else {
+                            item.latest.as_deref().or(a.to.as_deref()).unwrap_or("")
+                        };
+                        format!("Update to {target}")
+                    }
+                })
+                .unwrap_or_else(|| {
+                    item.source
+                        .as_deref()
+                        .map(|src| format!("Open {src}"))
+                        .unwrap_or_else(|| "Open".into())
+                });
+            menu_btn(format!("drv-page-{}", item.id), word, false, false, false)
+                .on_press(move |s: &mut AppState| s.open_external_url(&url))
+        } else if item.how == "install" && item.app {
+            let ck = format!("driver-app:{}", item.id);
+            let is_armed = armed == Some(ck.as_str());
+            let did = item.id.clone();
+            menu_btn(
+                format!("drv-inst-{}", item.id),
+                if is_armed {
+                    format!("Install {}?", item.name)
+                } else {
+                    "Install".into()
+                },
+                is_armed,
+                false,
+                working
+                    || busy_reason.is_some()
+                    || step.and_then(|st| st.working.as_ref()).is_some(),
+            )
+            .on_press(move |s: &mut AppState| {
+                if s.pc.armed_confirm.as_deref() == Some(ck.as_str()) {
+                    s.run_driver_install(&did);
+                } else {
+                    s.pc.armed_confirm = Some(ck.clone());
+                }
+            })
+        } else if item.how == "install" {
+            let did = item.id.clone();
+            menu_btn(
+                format!("drv-upd-{}", item.id),
+                if step.and_then(|st| st.working.as_ref()).is_some() {
+                    "Updating…"
+                } else {
+                    "Install"
+                },
+                false,
+                false,
+                working || busy_reason.is_some(),
+            )
+            .on_press(move |s: &mut AppState| s.run_driver_install(&did))
+        } else {
+            row()
+        };
+
+        card = card.child(
+            col()
+                .w_full()
+                .child(el().w_full().h(1.0).fill(float_line()))
+                .child(
+                    row()
+                        .w_full()
+                        .py(8.0)
+                        .gap(10.0)
+                        .justify_between()
+                        .center_y()
+                        .child(
+                            col()
+                                .grow(1.0)
+                                .min_w(0.0)
+                                .gap(2.0)
+                                .child(text(driver_row_name(item)).font(type_control()).color(FG))
+                                .children(
+                                    detail.map(|d| {
+                                        text(d).font(type_small()).color(fg_muted()).wrap()
+                                    }),
+                                )
+                                .children(
+                                    err.map(|e| text(e).font(type_small()).color(bad()).wrap()),
+                                ),
+                        )
+                        .child(ctrl),
+                ),
+        );
+    }
+
+    for (id, name, current) in &s.pc.controller_firmwares {
+        if !current {
+            let clean = name.trim_end_matches(" Wireless Controller");
+            card = card.child(
+                col()
+                    .w_full()
+                    .child(el().w_full().h(1.0).fill(float_line()))
+                    .child(
+                        row()
+                            .w_full()
+                            .py(8.0)
+                            .justify_between()
+                            .center_y()
+                            .child(
+                                text(format!("{clean} firmware"))
+                                    .font(type_control())
+                                    .color(FG),
+                            )
+                            .child(
+                                menu_btn(format!("ctrl-fw-{id}"), "Open Sony", false, false, false)
+                                    .on_press(|s: &mut AppState| {
+                                        s.open_external_url(SONY_CTRL_URL)
+                                    }),
+                            ),
+                    ),
+            );
+        }
+    }
+
+    if let Some(rel) =
+        s.pc.system_about
+            .as_ref()
+            .and_then(|a| a.windows_release.as_ref())
+        && !rel.insider
+        && rel.up_to_date == Some(false)
+    {
+        let lbl = match rel.newest.as_deref() {
+            Some(n) => format!("{} {n}", rel.name),
+            None => rel.name.clone(),
+        };
+        card = card.child(
+            col()
+                .w_full()
+                .child(el().w_full().h(1.0).fill(float_line()))
+                .child(
+                    row()
+                        .w_full()
+                        .py(8.0)
+                        .justify_between()
+                        .center_y()
+                        .child(text(lbl).font(type_control()).color(FG))
+                        .child(
+                            menu_btn(
+                                "win-update-open".into(),
+                                "Open Windows Update",
+                                false,
+                                false,
+                                false,
+                            )
+                            .on_press(|s: &mut AppState| {
+                                s.open_external_url("ms-settings:windowsupdate");
+                            }),
+                        ),
+                ),
+        );
+    }
+
+    if let Some(rt_sec) = runtimes_section_view(s) {
+        card = card.child(rt_sec);
+    }
+
+    card
+}
+
 pub(crate) fn exo_ai_room(s: &AppState, scale: f32) -> El {
     if s.pc.exo_ai_storage_open || s.pc.pc_tab == PcTab::Storage {
         return exo_ai_storage_view(s);
     }
 
-    let ap_on = s.pc.autopilot.as_ref().is_some_and(|a| a.on);
     let about = s.pc.system_about.as_ref();
+    let health = s.pc.health.as_ref();
     let pc_name = about
         .and_then(|a| a.name.as_deref())
         .filter(|n| !n.is_empty())
+        .or_else(|| s.pc.gpu_profile.as_ref().and_then(|p| p.gpu.as_deref()))
         .unwrap_or("This PC");
     let cpu_name = about
         .and_then(|a| a.processor.as_deref().or(a.cpu.as_deref()))
         .unwrap_or("Processor");
     let gpu_name =
-        s.pc.gpu_short_name
-            .as_deref()
+        s.pc.gpu_profile
+            .as_ref()
+            .and_then(|p| p.gpu.as_deref())
+            .or(s.pc.gpu_short_name.as_deref())
             .or_else(|| about.and_then(|a| a.graphics.as_deref().or(a.gpu.as_deref())))
             .unwrap_or("Graphics");
     let ram_label = match (
@@ -389,13 +1234,53 @@ pub(crate) fn exo_ai_room(s: &AppState, scale: f32) -> El {
             (Some(b), Some(sp)) if !b.contains("bps") => format!("{b} · {sp}"),
             (Some(b), _) => b.to_string(),
             (None, Some(sp)) => sp,
-            (None, None) => "Network".into(),
+            (None, None) => about
+                .and_then(|a| a.network_adapter.as_deref())
+                .map(strip_trademarks)
+                .unwrap_or_else(|| "Network".into()),
         }
     };
     let win_label = format_windows_label(about);
 
+    let kept_pc =
+        s.pc.keep_status
+            .as_ref()
+            .map(|k| k.pc.as_str())
+            .unwrap_or("none");
+    let pcie_warn = health
+        .and_then(|h| h.items.iter().find(|i| i.key == "pcie"))
+        .map(|i| i.detail.as_str())
+        .filter(|d| !d.is_empty());
+    let cable_warn = health
+        .and_then(|h| h.items.iter().find(|i| i.key == "gpucable"))
+        .map(|i| i.detail.as_str())
+        .filter(|d| !d.is_empty());
+    let netlink_warn = health
+        .and_then(|h| h.items.iter().find(|i| i.key == "netlink"))
+        .map(|i| i.detail.as_str())
+        .filter(|d| !d.is_empty());
+
+    let gpu_sub_note: Option<(String, bool)> = match kept_pc {
+        "putBackAfterDriverUpdate" => {
+            Some(("Settings put back after the driver update".into(), false))
+        }
+        "needsYourOk" => Some(("A setting needs your OK".into(), true)),
+        _ => pcie_warn.map(|w| (w.to_string(), true)),
+    };
+
+    let board_warn: Option<String> = {
+        let mut p = Vec::new();
+        if about.and_then(|a| a.secure_boot) == Some(false) {
+            p.push("Secure Boot off");
+        }
+        if about.and_then(|a| a.tpm.as_deref()) == Some("None") {
+            p.push("No TPM");
+        }
+        (!p.is_empty()).then(|| p.join(" · "))
+    };
+
     let sys_drive = s.pc.drives.as_ref().and_then(|d| d.drives.first());
-    let (drive_title, drive_sub, drive_pct) = if let Some(d) = sys_drive {
+    let (drive_title, drive_sub, drive_pct, drive_note) = if let Some(d) = sys_drive {
         let letters = d
             .volumes
             .iter()
@@ -414,6 +1299,22 @@ pub(crate) fn exo_ai_room(s: &AppState, scale: f32) -> El {
         } else {
             format!("{letters} {model}")
         };
+        let wrong = d
+            .verdicts
+            .iter()
+            .filter(|v| !v.key.starts_with("bypass:") && v.key != "ok")
+            .max_by_key(|v| v.bad);
+        let hot = d.temperature.as_ref().and_then(|t| {
+            let warn_t = t.warn?;
+            if t.now >= warn_t {
+                Some(("Running hot".to_string(), true))
+            } else if t.now >= warn_t - 5 {
+                Some(("Running hot".to_string(), false))
+            } else {
+                None
+            }
+        });
+        let note = wrong.map(|v| (v.text.clone(), v.bad)).or(hot);
         (
             title,
             format!(
@@ -422,25 +1323,114 @@ pub(crate) fn exo_ai_room(s: &AppState, scale: f32) -> El {
                 format_gb_short(total_gb)
             ),
             used,
+            note,
         )
     } else {
-        ("C: System drive".into(), "NVMe SSD".into(), 0.55)
+        (
+            "C: System drive".into(),
+            "Reading drives…".into(),
+            0.0,
+            None,
+        )
     };
 
-    let (storage_label, storage_is_good) = if s.pc.compress_potential_bytes > 0 {
-        let gb = (s.pc.compress_potential_bytes as f64 / 1_000_000_000.0)
-            .round()
-            .max(1.0) as u64;
-        (format!("Storage · {gb} GB"), true)
-    } else if s.pc.compress_saved_bytes > 0 {
-        let gb = (s.pc.compress_saved_bytes as f64 / 1_000_000_000.0)
-            .round()
-            .max(1.0) as u64;
-        (format!("Storage · {gb} GB"), true)
+    let needs_drive_fix =
+        s.pc.drives
+            .as_ref()
+            .is_some_and(|d| d.fixes.iter().any(|f| !f.applied));
+    let has_bad_drive =
+        s.pc.drives
+            .as_ref()
+            .is_some_and(|d| d.drives.iter().any(|dr| dr.verdicts.iter().any(|v| v.bad)));
+    let potential =
+        s.pc.compress_list
+            .as_ref()
+            .map(|c| c.potential)
+            .unwrap_or(s.pc.compress_potential_bytes);
+    let saved =
+        s.pc.compress_list
+            .as_ref()
+            .map(|c| c.saved)
+            .unwrap_or(s.pc.compress_saved_bytes);
+
+    let (storage_label, storage_fg) = if has_bad_drive || needs_drive_fix {
+        ("Storage · Needs check".to_string(), bad())
+    } else if potential > 0 {
+        (format!("Storage · {}", format_bytes(potential)), FG)
+    } else if saved > 0 {
+        (format!("Storage · {}", format_bytes(saved)), good())
     } else {
-        ("Storage".into(), true)
+        ("Storage".to_string(), FG)
     };
-    let storage_fg = if storage_is_good { good() } else { FG };
+
+    let gaming = s.pc.exo_ai.as_ref().is_some_and(|a| a.gaming.active);
+    let testing =
+        s.pc.auto_tune
+            .as_ref()
+            .is_some_and(|t| t.parts.iter().any(|p| p.state == "testing"));
+    let live_text = if gaming {
+        match s
+            .pc
+            .exo_ai
+            .as_ref()
+            .and_then(|a| a.gaming.game_title.as_deref())
+        {
+            Some(title) if !title.is_empty() => format!("Boosting {title}"),
+            _ => "Boosting game".into(),
+        }
+    } else if testing {
+        "Calibrating hardware".into()
+    } else {
+        "Autopilot active".into()
+    };
+
+    let pending = count_pending_auto_tune(&s.pc, &s.settings);
+    let is_complete = !s.pc.auto_tune_running
+        && (s.pc.auto_tune_completed_at.is_some()
+            || (pending == Some(0) && s.pc.gpu_profile.is_some() && s.pc.health.is_some()));
+
+    let header_action = if is_complete {
+        row()
+            .gap(10.0)
+            .center_y()
+            .child(
+                row()
+                    .gap(5.0)
+                    .center_y()
+                    .child(icon_check(14.0, good()))
+                    .child(text("Auto Tune complete").font(type_small()).color(good())),
+            )
+            .child(
+                el().key("ai-run-again")
+                    .role("button")
+                    .label("Run again")
+                    .cursor(Cursor::Pointer)
+                    .focusable(true)
+                    .hit()
+                    .press_on_down()
+                    .press_scale(PRESS_SCALE)
+                    .h(32.0)
+                    .px(14.0)
+                    .center()
+                    .radius(RADIUS_PILL)
+                    .fill(glass_control_fill())
+                    .backdrop_blur(GLASS_CONTROL_SIGMA)
+                    .hover(hover_fill())
+                    .press(pressed_fill())
+                    .border_gradient(1.0, glass_rim_top(), glass_rim_bottom())
+                    .motion(SPRING_QUICK)
+                    .on_press(|s: &mut AppState| s.run_auto_tune_pipeline())
+                    .child(text("Run again").font(type_control()).color(FG)),
+            )
+    } else {
+        let lbl = if s.pc.auto_tune_running {
+            "Optimizing PC"
+        } else {
+            "Run Auto Tune"
+        };
+        primary_button("ai-run-auto-tune", lbl, None)
+            .on_press(|s: &mut AppState| s.run_auto_tune_pipeline())
+    };
 
     let header = row()
         .w_full()
@@ -461,23 +1451,11 @@ pub(crate) fn exo_ai_room(s: &AppState, scale: f32) -> El {
                         .radius(RADIUS_PILL)
                         .fill(surface_card())
                         .border(1.0, float_line())
-                        .child(el().size(6.0, 6.0).radius(3.0).fill(if ap_on {
-                            good()
-                        } else {
-                            fg_muted()
-                        }))
+                        .child(el().size(6.0, 6.0).radius(3.0).fill(good()))
                         .child(
-                            text(if ap_on {
-                                "Autopilot active"
-                            } else {
-                                "Autopilot paused"
-                            })
-                            .font(TextStyle::new(scaled(12.0), 600.0))
-                            .color(if ap_on {
-                                FG
-                            } else {
-                                fg_muted()
-                            }),
+                            text(live_text)
+                                .font(TextStyle::new(scaled(12.0), 600.0))
+                                .color(FG),
                         ),
                 ),
         )
@@ -510,7 +1488,7 @@ pub(crate) fn exo_ai_room(s: &AppState, scale: f32) -> El {
                         .on_press(|s: &mut AppState| {
                             s.pc.exo_ai_storage_open = true;
                             s.pc.part_menu = None;
-                            s.load_pc_drives();
+                            s.scan_storage_space();
                         })
                         .child(icon_hard_drive(14.0, storage_fg))
                         .child(
@@ -519,50 +1497,47 @@ pub(crate) fn exo_ai_room(s: &AppState, scale: f32) -> El {
                                 .color(storage_fg),
                         ),
                 )
-                .child(
-                    el().key("ai-run-again")
-                        .role("button")
-                        .label("Run again")
-                        .cursor(Cursor::Pointer)
-                        .focusable(true)
-                        .hit()
-                        .press_on_down()
-                        .press_scale(PRESS_SCALE)
-                        .h(32.0)
-                        .px(14.0)
-                        .center()
-                        .radius(RADIUS_PILL)
-                        .fill(glass_control_fill())
-                        .backdrop_blur(GLASS_CONTROL_SIGMA)
-                        .hover(hover_fill())
-                        .press(pressed_fill())
-                        .border_gradient(1.0, glass_rim_top(), glass_rim_bottom())
-                        .motion(SPRING_QUICK)
-                        .on_press(|s: &mut AppState| s.run_exo_ai_now())
-                        .child(text("Run again").font(type_control()).color(FG)),
-                ),
+                .child(header_action),
         );
 
-    let tune_rows = [
-        (
-            "Power & Autopilot",
-            "Exo power plan, 0.5 ms timer, standby purge & Autopilot",
-        ),
-        (
-            "Graphics & display",
-            "Graphics profile and display at best defaults",
-        ),
-        (
-            "System, interrupts & network",
-            "Windows 11 tweaks, MSI interrupts & network optimal",
-        ),
-        ("Preinstalled apps", "No bloatware found"),
-        (
-            "Temporary caches",
-            "Windows Update, browser, crash dump & launcher caches",
-        ),
-        ("Drivers & updates", "Graphics & chipset drivers up to date"),
-    ];
+    let stages = if s.pc.auto_tune_stages.is_empty() {
+        compute_initial_auto_tune_stages(&s.pc, &s.settings)
+    } else {
+        s.pc.auto_tune_stages.clone()
+    };
+
+    let playbook_badge: Option<El> = if s.pc.auto_tune_running {
+        Some(
+            text("Optimizing…")
+                .key("exo-ai-auto-tune-status")
+                .font(TextStyle::new(scaled(12.0), 500.0))
+                .color(FG),
+        )
+    } else if is_complete {
+        Some(
+            row()
+                .gap(6.0)
+                .center_y()
+                .child(icon_check(13.0, good()))
+                .child(
+                    text("Auto Tune complete")
+                        .key("exo-ai-auto-tune-status")
+                        .font(TextStyle::new(scaled(12.0), 500.0))
+                        .color(good()),
+                ),
+        )
+    } else if let Some(n) = pending
+        && n > 0
+    {
+        Some(
+            text(format!("{n} ready"))
+                .key("exo-ai-auto-tune-status")
+                .font(TextStyle::new(scaled(12.0), 500.0))
+                .color(warn()),
+        )
+    } else {
+        None
+    };
 
     let mut auto_tune_card = col()
         .key("exo-ai-auto-tune-card")
@@ -587,122 +1562,106 @@ pub(crate) fn exo_ai_room(s: &AppState, scale: f32) -> El {
                         .font(type_title())
                         .color(FG),
                 )
-                .child(
-                    row()
-                        .gap(6.0)
-                        .center_y()
-                        .child(icon_check(13.0, good()))
-                        .child(
-                            text("Auto Tune complete")
-                                .key("exo-ai-auto-tune-status")
-                                .font(TextStyle::new(scaled(12.0), 500.0))
-                                .color(good()),
-                        ),
-                ),
+                .children(playbook_badge),
         )
         .child(el().w_full().h(1.0).fill(float_line()));
 
     let mut stages_col = col().w_full().pt(4.0);
-    for (i, (title, desc)) in tune_rows.iter().enumerate() {
+    for (i, stage) in stages.iter().enumerate() {
         if i > 0 {
             stages_col = stages_col.child(el().w_full().h(1.0).fill(float_line()));
         }
+        let eff_status = if is_complete && stage.status == AutoTuneStageStatus::Idle {
+            AutoTuneStageStatus::Done
+        } else {
+            stage.status
+        };
+        let marker = match eff_status {
+            AutoTuneStageStatus::Done => el()
+                .size(16.0, 16.0)
+                .center()
+                .child(icon_check(14.0, good())),
+            AutoTuneStageStatus::Warn => el()
+                .size(16.0, 16.0)
+                .center()
+                .child(el().size(8.0, 8.0).radius(4.0).fill(warn())),
+            AutoTuneStageStatus::Active => el()
+                .size(16.0, 16.0)
+                .center()
+                .child(el().size(8.0, 8.0).radius(4.0).fill(FG)),
+            AutoTuneStageStatus::Idle => el()
+                .size(16.0, 16.0)
+                .center()
+                .child(el().size(6.0, 6.0).radius(3.0).fill(fg_faint())),
+        };
         stages_col = stages_col.child(
             row()
+                .key(format!("auto-tune-stage-{}", stage.id.key()))
                 .w_full()
                 .min_h(48.0)
                 .py(8.0)
                 .gap(10.0)
                 .center_y()
-                .child(
-                    el().size(16.0, 16.0)
-                        .center()
-                        .child(icon_check(14.0, good())),
-                )
+                .child(marker)
                 .child(
                     col()
                         .gap(2.0)
-                        .child(text(*title).font(type_section()).color(FG))
-                        .child(text(*desc).font(type_small()).color(fg_muted())),
+                        .min_w(0.0)
+                        .grow(1.0)
+                        .child(text(stage.label).font(type_section()).color(FG))
+                        .child(
+                            text(stage.detail.clone())
+                                .font(type_small())
+                                .color(if eff_status == AutoTuneStageStatus::Warn {
+                                    warn()
+                                } else {
+                                    fg_muted()
+                                })
+                                .wrap(),
+                        ),
                 ),
         );
     }
 
-    auto_tune_card = auto_tune_card
-        .child(stages_col)
-        .child(el().w_full().mt(4.0).h(1.0).fill(float_line()))
-        .child(
-            col()
-                .w_full()
-                .pt(2.0)
-                .child(
-                    row()
-                        .w_full()
-                        .min_h(58.0)
-                        .py(12.0)
-                        .justify_between()
-                        .center_y()
-                        .child(
-                            row()
-                                .gap(10.0)
-                                .center_y()
-                                .child(icon_monitor(15.0, fg_muted()))
-                                .child(
-                                    col()
-                                        .gap(2.0)
-                                        .child(
-                                            text("GPU overclock & undervolt")
-                                                .font(type_section())
-                                                .color(FG),
-                                        )
-                                        .child(
-                                            text(gpu_name.to_string())
-                                                .font(type_small())
-                                                .color(fg_muted()),
-                                        ),
-                                ),
-                        )
-                        .child(
-                            glass_button("ai-tune-gpu", "Tune GPU", None)
-                                .on_press(|s: &mut AppState| s.run_exo_ai_now()),
-                        ),
-                )
-                .child(el().w_full().h(1.0).fill(float_line()))
-                .child(
-                    row()
-                        .w_full()
-                        .min_h(58.0)
-                        .py(12.0)
-                        .justify_between()
-                        .center_y()
-                        .child(
-                            row()
-                                .gap(10.0)
-                                .center_y()
-                                .child(icon_cpu(15.0, fg_muted()))
-                                .child(
-                                    col()
-                                        .gap(2.0)
-                                        .child(
-                                            text("CPU undervolt (Curve Optimizer)")
-                                                .font(type_section())
-                                                .color(FG),
-                                        )
-                                        .child(
-                                            text(cpu_name.to_string())
-                                                .font(type_small())
-                                                .color(fg_muted()),
-                                        ),
-                                ),
-                        )
-                        .child(
-                            glass_button("ai-tune-cpu", "Tune CPU", None)
-                                .on_press(|s: &mut AppState| s.run_latency_check()),
-                        ),
-                ),
-        );
+    auto_tune_card = auto_tune_card.child(stages_col);
 
-    let spec_cell = |icon: El, label: String| {
+    if let Some(ref tune) = s.pc.auto_tune {
+        let mut hw_wrap = col()
+            .key("exo-ai-tune-hw-wrap")
+            .w_full()
+            .pt(4.0)
+            .child(el().w_full().h(1.0).fill(float_line()));
+        if tune.parts.is_empty() {
+            hw_wrap = hw_wrap.child(
+                el().w_full().py(10.0).child(
+                    text("No supported desktop GPU or Ryzen desktop CPU detected on this PC.")
+                        .font(type_small())
+                        .color(fg_muted())
+                        .wrap(),
+                ),
+            );
+        } else {
+            for (idx, part) in tune.parts.iter().enumerate() {
+                if idx > 0 {
+                    hw_wrap = hw_wrap.child(el().w_full().h(1.0).fill(float_line()));
+                }
+                let name = if part.id == "ryzen" {
+                    cpu_name.to_string()
+                } else {
+                    gpu_name.to_string()
+                };
+                hw_wrap = hw_wrap.child(auto_tune_hardware_row(
+                    part,
+                    name,
+                    s.pc.tune_errors.get(&part.id),
+                    s.pc.armed_confirm.as_deref(),
+                ));
+            }
+        }
+        auto_tune_card = auto_tune_card.child(hw_wrap);
+    }
+
+    let spec_cell = |icon: El, label: String, note: Option<(String, bool)>| {
         col()
             .grow(1.0)
             .min_w(0.0)
@@ -717,70 +1676,79 @@ pub(crate) fn exo_ai_room(s: &AppState, scale: f32) -> El {
                     .items_start()
                     .child(el().pt(1.0).child(icon))
                     .child(
-                        text(label)
-                            .font(type_control())
-                            .color(FG)
+                        col()
                             .grow(1.0)
                             .min_w(0.0)
-                            .wrap_anywhere(),
+                            .gap(2.0)
+                            .child(text(label).font(type_control()).color(FG).wrap_anywhere())
+                            .children(note.map(|(n, is_warn)| {
+                                text(n)
+                                    .font(type_small())
+                                    .color(if is_warn { warn() } else { fg_muted() })
+                                    .wrap()
+                            })),
                     ),
             )
     };
 
-    let spec_action_cell =
-        |key: &'static str, aria: &'static str, icon: El, label: String, menu: PcPartMenu| {
-            let active = s.pc.part_menu == Some(menu);
-            col()
-                .key(key)
-                .role("button")
-                .label(format!("{aria} {label}"))
-                .cursor(Cursor::Pointer)
-                .focusable(true)
-                .hit()
-                .press_on_down()
-                .hover(hover_fill())
-                .press(pressed_fill())
-                .radius(RADIUS_SMALL)
-                .grow(1.0)
-                .min_w(0.0)
-                .on_press(move |s: &mut AppState| {
-                    s.pc.part_menu = if s.pc.part_menu == Some(menu) {
-                        None
-                    } else {
-                        Some(menu)
-                    };
-                })
-                .child(el().w_full().h(1.0).fill(float_line()))
-                .child(
-                    row()
-                        .w_full()
-                        .pt(14.0)
-                        .pr(24.0)
-                        .pb(16.0)
-                        .gap(10.0)
-                        .items_start()
-                        .child(el().pt(1.0).child(icon))
-                        .child(
-                            col()
-                                .grow(1.0)
-                                .min_w(0.0)
-                                .gap(2.0)
-                                .child(
-                                    text(label)
-                                        .font(type_control())
-                                        .color(FG)
-                                        .grow(1.0)
-                                        .min_w(0.0)
-                                        .wrap_anywhere(),
-                                )
-                                .child(el().w(44.0).h(1.0).fill(if active {
-                                    FG
-                                } else {
-                                    fg_faint()
-                                })),
-                        ),
-                )
-        };
+    let spec_action_cell = |key: &'static str,
+                            aria: &'static str,
+                            icon: El,
+                            label: String,
+                            note: Option<(String, bool)>,
+                            menu: PcPartMenu| {
+        let active = s.pc.part_menu == Some(menu);
+        col()
+            .key(key)
+            .role("button")
+            .label(format!("{aria} {label}"))
+            .cursor(Cursor::Pointer)
+            .focusable(true)
+            .hit()
+            .press_on_down()
+            .hover(hover_fill())
+            .press(pressed_fill())
+            .radius(RADIUS_SMALL)
+            .grow(1.0)
+            .min_w(0.0)
+            .on_press(move |s: &mut AppState| {
+                s.pc.part_menu = if s.pc.part_menu == Some(menu) {
+                    None
+                } else {
+                    Some(menu)
+                };
+                s.pc.armed_confirm = None;
+            })
+            .child(el().w_full().h(1.0).fill(float_line()))
+            .child(
+                row()
+                    .w_full()
+                    .pt(14.0)
+                    .pr(24.0)
+                    .pb(16.0)
+                    .gap(10.0)
+                    .items_start()
+                    .child(el().pt(1.0).child(icon))
+                    .child(
+                        col()
+                            .grow(1.0)
+                            .min_w(0.0)
+                            .gap(2.0)
+                            .child(text(label).font(type_control()).color(FG).wrap_anywhere())
+                            .children(note.map(|(n, is_warn)| {
+                                text(n)
+                                    .font(type_small())
+                                    .color(if is_warn { warn() } else { fg_muted() })
+                                    .wrap()
+                            }))
+                            .child(
+                                el().w(44.0)
+                                    .h(1.0)
+                                    .fill(if active { FG } else { fg_faint() }),
+                            ),
+                    ),
+            )
+    };
 
     let drive_cell = col()
         .grow(1.0)
@@ -807,7 +1775,13 @@ pub(crate) fn exo_ai_room(s: &AppState, scale: f32) -> El {
                                 .color(fg_muted())
                                 .truncate(),
                         )
-                        .child(el().pt(5.0).pb(2.0).child(progress_bar(168.0, drive_pct))),
+                        .child(el().pt(5.0).pb(2.0).child(progress_bar(168.0, drive_pct)))
+                        .children(drive_note.map(|(n, is_bad)| {
+                            text(n)
+                                .font(type_small())
+                                .color(if is_bad { bad() } else { warn() })
+                                .wrap()
+                        })),
                 ),
         );
 
@@ -826,20 +1800,30 @@ pub(crate) fn exo_ai_room(s: &AppState, scale: f32) -> El {
             row()
                 .w_full()
                 .mt(12.0)
-                .child(spec_cell(icon_cpu(16.0, fg_muted()), cpu_name.to_string()))
+                .child(spec_cell(
+                    icon_cpu(16.0, fg_muted()),
+                    cpu_name.to_string(),
+                    None,
+                ))
                 .child(spec_action_cell(
                     "pc-cell-graphics",
                     "Graphics",
                     icon_monitor(16.0, fg_muted()),
                     gpu_name.to_string(),
+                    gpu_sub_note,
                     PcPartMenu::Graphics,
                 ))
-                .child(spec_cell(icon_hard_drive(16.0, fg_muted()), ram_label))
+                .child(spec_cell(
+                    icon_hard_drive(16.0, fg_muted()),
+                    ram_label,
+                    None,
+                ))
                 .child(spec_action_cell(
                     "pc-cell-display",
                     "Display",
                     icon_monitor(16.0, fg_muted()),
                     display_label.to_string(),
+                    cable_warn.map(|w| (w.to_string(), true)),
                     PcPartMenu::Display,
                 )),
         )
@@ -852,31 +1836,23 @@ pub(crate) fn exo_ai_room(s: &AppState, scale: f32) -> El {
                     "Motherboard",
                     icon_cpu(16.0, fg_muted()),
                     board_label.to_string(),
+                    board_warn.map(|w| (w, true)),
                     PcPartMenu::Board,
                 ))
-                .child(spec_cell(icon_app_window(16.0, fg_muted()), net_label))
-                .child(spec_cell(icon_app_window(16.0, fg_muted()), win_label))
+                .child(spec_cell(
+                    icon_app_window(16.0, fg_muted()),
+                    net_label,
+                    netlink_warn.map(|w| (w.to_string(), true)),
+                ))
+                .child(spec_cell(
+                    icon_app_window(16.0, fg_muted()),
+                    win_label,
+                    None,
+                ))
                 .child(drive_cell),
         );
 
-    let updates_card = col()
-        .key("exo-ai-updates-card")
-        .w_full()
-        .py(14.0)
-        .px(24.0)
-        .radius(RADIUS_PANEL)
-        .continuous_corners()
-        .fill(BG)
-        .border(1.0, float_line())
-        .child(
-            row()
-                .w_full()
-                .min_h(32.0)
-                .justify_between()
-                .center_y()
-                .child(text("Updates").font(type_title()).color(FG))
-                .child(text("Up to date").font(type_body()).color(fg_muted())),
-        );
+    let updates_card = updates_card_view(s);
 
     let left_col = col()
         .key("exo-ai-left-col")
@@ -887,7 +1863,17 @@ pub(crate) fn exo_ai_room(s: &AppState, scale: f32) -> El {
         .child(hw_card)
         .child(updates_card);
 
-    let (shader_list, shader_summary) = if !s.pc.shader_snap_games.is_empty() {
+    let shaders_working = s.pc.shaders_queue_running
+        || s.pc.shaders_queue_current_id.is_some()
+        || s.pc.shader_snap_games.iter().any(|g| g.compiling);
+    let ready_ids: Vec<String> =
+        s.pc.shader_snap_games
+            .iter()
+            .filter(|g| g.in_add_all_ready && !g.queued && !g.compiling)
+            .map(|g| g.id.clone())
+            .collect();
+
+    let (shader_list, base_shader_summary) = if !s.pc.shader_snap_games.is_empty() {
         let current = s.pc.shader_snap_games.iter().find(|g| g.compiling);
         let current_id = current.map(|g| g.id.as_str());
         let waiting: Vec<&exo_rpc::ShaderSnapGame> =
@@ -1006,7 +1992,7 @@ pub(crate) fn exo_ai_room(s: &AppState, scale: f32) -> El {
                     .games
                     .iter()
                     .find(|g| g.id == sg.id || g.title.eq_ignore_ascii_case(&sg.name));
-                (sg.id.clone(), sg.name.clone(), sub, g)
+                (sg.id.clone(), sg.name.clone(), sub, g, sg.queued, false)
             })
             .collect();
         (list, summary)
@@ -1025,6 +2011,8 @@ pub(crate) fn exo_ai_room(s: &AppState, scale: f32) -> El {
                         sg.title.clone(),
                         shader_prepare_subtitle(sg),
                         g,
+                        sg.state == "running",
+                        true,
                     )
                 })
                 .collect();
@@ -1037,17 +2025,36 @@ pub(crate) fn exo_ai_room(s: &AppState, scale: f32) -> El {
             .iter()
             .filter(|g| g.installed)
             .take(8)
-            .map(|g| (g.id.clone(), g.title.clone(), "Ready".into(), Some(g)))
+            .map(|g| {
+                (
+                    g.id.clone(),
+                    g.title.clone(),
+                    "Ready".into(),
+                    Some(g),
+                    false,
+                    true,
+                )
+            })
             .collect();
         let n = list.len();
         let summary = format!("{n} {}", if n == 1 { "game" } else { "games" });
         (list, summary)
     };
 
+    let rebuild_summary = s.pc.shaders_rebuild.as_ref().and_then(|rb| {
+        (!matches!(rb.state.as_str(), "idle" | "done" | "")).then(|| {
+            format!(
+                "Getting ready for the new driver · {} of {} games",
+                rb.ready, rb.total
+            )
+        })
+    });
+    let shader_summary = rebuild_summary.unwrap_or(base_shader_summary);
+
     let mut shader_rows = col().w_full().pt(16.0).gap(20.0);
     for chunk in shader_list.chunks(4) {
         let mut r = row().w_full().gap(16.0).items_start();
-        for (id, title, est, game_opt) in chunk {
+        for (id, title, est, game_opt, is_queued, is_prepare) in chunk {
             let hue = title_hue(title);
             let mut art = el()
                 .w_full()
@@ -1063,12 +2070,39 @@ pub(crate) fn exo_ai_room(s: &AppState, scale: f32) -> El {
                     [(0.0, oklch(0.38, 0.14, hue)), (1.0, oklch(0.10, 0.03, hue))],
                 );
             }
+            let gid = id.clone();
+            let queued = *is_queued;
+            let prep = *is_prepare;
             r = r.child(
                 col()
                     .key(format!("shader-game-{id}"))
+                    .role("button")
+                    .label(title.clone())
+                    .cursor(Cursor::Pointer)
+                    .focusable(true)
+                    .hit()
                     .grow(1.0)
                     .min_w(0.0)
                     .gap(6.0)
+                    .on_press(move |s: &mut AppState| {
+                        if prep {
+                            if queued {
+                                s.cancel_shader_prepare(&gid);
+                            } else {
+                                s.compile_shaders_all();
+                            }
+                        } else if queued {
+                            s.run_shaders_steps(
+                                &format!("game:{gid}"),
+                                vec![("queue.remove", json!({ "id": gid }))],
+                            );
+                        } else {
+                            s.run_shaders_steps(
+                                &format!("game:{gid}"),
+                                vec![("game.compile", json!({ "id": gid }))],
+                            );
+                        }
+                    })
                     .child(art)
                     .child(
                         col()
@@ -1095,7 +2129,71 @@ pub(crate) fn exo_ai_room(s: &AppState, scale: f32) -> El {
         shader_rows = shader_rows.child(r);
     }
 
-    let shaders_card = col()
+    let mut shader_actions = row()
+        .gap(8.0)
+        .center_y()
+        .child(text(shader_summary).font(type_body()).color(fg_muted()))
+        .child(
+            glass_button(
+                "shaders-refresh",
+                if s.pc.shaders_scanning || s.pc.shaders_busy.as_deref() == Some("scan") {
+                    "Scanning…"
+                } else {
+                    "Refresh"
+                },
+                None,
+            )
+            .on_press(|s: &mut AppState| {
+                if s.pc.shaders.as_ref().is_some_and(|sh| sh.present) {
+                    s.run_shaders_steps("scan", vec![("scan", json!({}))]);
+                } else {
+                    s.load_pc_exo_ai();
+                }
+            }),
+        );
+
+    if shaders_working {
+        let paused = s.pc.shaders_queue_paused;
+        shader_actions = shader_actions
+            .child(
+                glass_button(
+                    "shaders-pause",
+                    if paused { "Resume" } else { "Pause" },
+                    None,
+                )
+                .on_press(move |s: &mut AppState| {
+                    let m = if paused {
+                        "queue.resume"
+                    } else {
+                        "queue.pause"
+                    };
+                    s.run_shaders_steps("pause", vec![(m, json!({}))]);
+                }),
+            )
+            .child(
+                glass_button("shaders-stop", "Stop", None).on_press(|s: &mut AppState| {
+                    s.run_shaders_steps("stop", vec![("queue.stop", json!({}))]);
+                }),
+            );
+    } else {
+        let ids_c = ready_ids.clone();
+        shader_actions = shader_actions.child(
+            primary_button("shaders-compile", "Compile", None).on_press(move |s: &mut AppState| {
+                if !ids_c.is_empty() || s.pc.shaders_queue_can_start {
+                    let mut steps = Vec::new();
+                    if !ids_c.is_empty() {
+                        steps.push(("queue.add", json!({ "ids": ids_c })));
+                    }
+                    steps.push(("queue.start", json!({})));
+                    s.run_shaders_steps("compile", steps);
+                } else {
+                    s.compile_shaders_all();
+                }
+            }),
+        );
+    }
+
+    let mut shaders_card = col()
         .key("exo-ai-shaders-card")
         .w_full()
         .pt(18.0)
@@ -1118,22 +2216,85 @@ pub(crate) fn exo_ai_room(s: &AppState, scale: f32) -> El {
                         .font(type_title())
                         .color(FG),
                 )
+                .child(shader_actions),
+        );
+
+    if let Some(ref off_msg) = s.pc.shaders_cache_off {
+        shaders_card = shaders_card.child(
+            row()
+                .w_full()
+                .py(8.0)
+                .justify_between()
+                .center_y()
                 .child(
-                    row()
-                        .gap(8.0)
-                        .center_y()
-                        .child(text(shader_summary).font(type_body()).color(fg_muted()))
-                        .child(
-                            glass_button("shaders-refresh", "Refresh", None)
-                                .on_press(|s: &mut AppState| s.load_pc_exo_ai()),
-                        )
-                        .child(
-                            primary_button("shaders-compile", "Compile", None)
-                                .on_press(|s: &mut AppState| s.compile_shaders_all()),
-                        ),
+                    text(off_msg.clone())
+                        .font(type_small())
+                        .color(warn())
+                        .wrap(),
+                )
+                .child(
+                    menu_btn(
+                        "shaders-cache-unlimited".into(),
+                        "Set Unlimited",
+                        true,
+                        false,
+                        false,
+                    )
+                    .on_press(|s: &mut AppState| {
+                        s.run_shaders_steps(
+                            "cache-limit",
+                            vec![("driver.setCacheLimit", json!({ "index": 12 }))],
+                        );
+                    }),
                 ),
-        )
-        .child(shader_rows);
+        );
+    }
+    if let Some(ref old_note) = s.pc.shaders_old_driver_note {
+        shaders_card = shaders_card.child(
+            row().w_full().py(6.0).justify_end().child(
+                menu_btn(
+                    "shaders-free-old".into(),
+                    format!("Free old cache ({old_note})"),
+                    false,
+                    false,
+                    false,
+                )
+                .on_press(|s: &mut AppState| {
+                    s.run_shaders_steps("free-old", vec![("cache.freeOldDriver", json!({}))]);
+                }),
+            ),
+        );
+    }
+    if let Some(ref err) = s.pc.shaders_error {
+        shaders_card = shaders_card.child(
+            el().w_full()
+                .py(4.0)
+                .child(text(err.clone()).font(type_small()).color(bad()).wrap()),
+        );
+    }
+    if s.pc.shaders.as_ref().is_some_and(|sh| !sh.present) && shader_list.is_empty() {
+        shaders_card = shaders_card.child(
+            el().w_full().py(16.0).child(
+                text("Exo Shaders isn't installed")
+                    .font(type_body())
+                    .color(fg_muted()),
+            ),
+        );
+    } else if shader_list.is_empty() && !s.pc.shaders_scanning {
+        shaders_card = shaders_card.child(
+            el().w_full().py(16.0).child(
+                text(if !s.pc.shader_snap_games.is_empty() {
+                    "Every game is compiled"
+                } else {
+                    "No games found"
+                })
+                .font(type_body())
+                .color(fg_muted()),
+            ),
+        );
+    } else {
+        shaders_card = shaders_card.child(shader_rows);
+    }
 
     let right_col = col()
         .key("exo-ai-right-col")
@@ -1166,186 +2327,7 @@ pub(crate) fn exo_ai_room(s: &AppState, scale: f32) -> El {
 }
 
 pub(crate) fn part_menu_layers(s: &AppState, blur: bool) -> Vec<El> {
-    let Some(which) = s.pc.part_menu else {
-        return Vec::new();
-    };
-    if s.room != Room::ExoAi {
-        return Vec::new();
-    }
-    let (anchor_key, title) = match which {
-        PcPartMenu::Graphics => ("pc-cell-graphics", "Graphics"),
-        PcPartMenu::Display => ("pc-cell-display", "Display"),
-        PcPartMenu::Board => ("pc-cell-board", "Motherboard"),
-    };
-
-    let row_item = |label: String, sub: Option<String>, value: String, tone: rune::Color| {
-        row()
-            .w_full()
-            .py(12.0)
-            .justify_between()
-            .center_y()
-            .gap(16.0)
-            .child(
-                col()
-                    .grow(1.0)
-                    .min_w(0.0)
-                    .gap(3.0)
-                    .child(text(label).font(type_control()).color(FG))
-                    .children(sub.map(|s| text(s).font(type_small()).color(fg_muted()))),
-            )
-            .child(text(value).font(type_control()).color(tone))
-    };
-
-    let divider = || el().w_full().h(1.0).fill(float_line());
-
-    let mut body = col().w_full().px(20.0).pb(16.0);
-    match which {
-        PcPartMenu::Graphics => {
-            let gpu_name =
-                s.pc.gpu_short_name
-                    .as_deref()
-                    .or_else(|| {
-                        s.pc.system_about
-                            .as_ref()
-                            .and_then(|a| a.gpu.as_deref().or(a.graphics.as_deref()))
-                    })
-                    .unwrap_or("Graphics adapter")
-                    .to_string();
-            body = body
-                .child(row_item(
-                    "Graphics driver".into(),
-                    Some(gpu_name),
-                    "Game Ready".into(),
-                    FG,
-                ))
-                .child(divider())
-                .child(row_item(
-                    "Exo's driver profile".into(),
-                    None,
-                    "Applied".into(),
-                    good(),
-                ))
-                .child(divider())
-                .child(row_item("Resizable BAR".into(), None, "On".into(), good()))
-                .child(divider())
-                .child(row_item(
-                    "Hardware-accelerated GPU scheduling".into(),
-                    None,
-                    "On".into(),
-                    good(),
-                ));
-        }
-        PcPartMenu::Display => {
-            let screen =
-                s.pc.screen_label
-                    .as_deref()
-                    .or_else(|| {
-                        s.pc.system_about
-                            .as_ref()
-                            .and_then(|a| a.display.as_deref())
-                    })
-                    .unwrap_or("Primary display")
-                    .to_string();
-            let hdr_on = s.pc.hdr.as_ref().is_some_and(|h| h.on);
-            body = body
-                .child(row_item(
-                    "Active display".into(),
-                    Some(screen),
-                    "Native".into(),
-                    FG,
-                ))
-                .child(divider())
-                .child(row_item(
-                    "HDR".into(),
-                    Some("High dynamic range output".into()),
-                    if hdr_on { "On".into() } else { "Off".into() },
-                    if hdr_on { good() } else { fg_muted() },
-                ))
-                .child(divider())
-                .child(row_item(
-                    "Variable refresh rate".into(),
-                    None,
-                    "Active".into(),
-                    good(),
-                ));
-        }
-        PcPartMenu::Board => {
-            let board =
-                s.pc.system_about
-                    .as_ref()
-                    .and_then(|a| a.motherboard.as_deref())
-                    .unwrap_or("System board")
-                    .to_string();
-            let autopilot_on = s.pc.autopilot.as_ref().is_some_and(|a| a.on);
-            body = body
-                .child(row_item(
-                    "Motherboard".into(),
-                    Some(board),
-                    "Ready".into(),
-                    FG,
-                ))
-                .child(divider())
-                .child(row_item(
-                    "Autopilot".into(),
-                    Some("Core affinity & timer pacing".into()),
-                    if autopilot_on {
-                        "Active".into()
-                    } else {
-                        "Off".into()
-                    },
-                    if autopilot_on { good() } else { fg_muted() },
-                ))
-                .child(divider())
-                .child(row_item(
-                    "Chipset & power plan".into(),
-                    None,
-                    "Optimized".into(),
-                    good(),
-                ));
-        }
-    }
-
-    let close_label = match which {
-        PcPartMenu::Graphics => "Close Graphics",
-        PcPartMenu::Display => "Close Display",
-        PcPartMenu::Board => "Close Motherboard",
-    };
-    let head = row()
-        .w_full()
-        .pt(16.0)
-        .px(20.0)
-        .pb(8.0)
-        .justify_between()
-        .center_y()
-        .child(text(title).font(type_section()).color(FG))
-        .child(
-            glass_icon_circle(
-                "pc-part-menu-close",
-                close_label,
-                28.0,
-                icon_close(13.0, FG),
-            )
-            .on_press(|s: &mut AppState| s.pc.part_menu = None),
-        );
-
-    let card = glass_panel_opt("pc-part-menu", 540.0, blur)
-        .role("dialog")
-        .label(title)
-        .anchored_fit(anchor_key, Side::Top, Align::Start, 10.0)
-        .transition(popover_transition_from(rune::Vec2::new(0.0, 1.0)))
-        .modal(true, |s: &mut AppState| s.pc.part_menu = None)
-        .on_key(|s: &mut AppState, ev, _| {
-            if ev.key == Key::Escape {
-                s.pc.part_menu = None;
-                true
-            } else {
-                false
-            }
-        })
-        .child(head)
-        .child(body);
-
-    vec![card]
+    crate::pc_menus::part_menu_layers(s, blur)
 }
 
 #[cfg(test)]

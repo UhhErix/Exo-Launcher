@@ -420,6 +420,33 @@ fn register_pc(reg: &mut EventRegistry) {
         state.apply_shaders_changed();
         state.room == Room::Library || state.room == Room::ExoAi
     });
+    reg.on_raw("gpu.driver", |state, data| {
+        state.handle_gpu_driver_progress(data)
+    });
+    reg.on_raw("drivers.step", |state, data| {
+        state.handle_driver_step_event(data)
+    });
+    reg.on_raw("bios.progress", |state, data| {
+        state.handle_bios_progress_event(data)
+    });
+    reg.on_raw("compress.progress", |state, data| {
+        state.handle_compress_progress_event(data)
+    });
+    reg.on_raw("runtimes.progress", |state, data| {
+        state.handle_runtimes_progress_event(data)
+    });
+    reg.on_raw("shaders.event", |state, data| {
+        state.handle_shaders_event(data)
+    });
+    reg.on_raw("shaders.rebuild", |state, data| {
+        state.handle_shaders_rebuild_event(data)
+    });
+    reg.on(HostEventKind::GameRunState, |state, _| {
+        state.on_pc_blocker_changed()
+    });
+    reg.on(HostEventKind::DiscordVoice, |state, _| {
+        state.on_pc_blocker_changed()
+    });
 }
 
 fn register_store(reg: &mut EventRegistry) {

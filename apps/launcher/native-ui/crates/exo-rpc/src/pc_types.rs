@@ -1,5 +1,13 @@
-use serde::Deserialize;
+use serde::{Deserialize, Deserializer, Serialize};
 use std::collections::HashMap;
+
+fn null_as_default<'de, D, T>(d: D) -> Result<T, D::Error>
+where
+    D: Deserializer<'de>,
+    T: Default + Deserialize<'de>,
+{
+    Ok(Option::<T>::deserialize(d)?.unwrap_or_default())
+}
 
 #[derive(Debug, Clone, Default, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -33,6 +41,25 @@ pub struct UpdateProgress {
 
 #[derive(Debug, Clone, Default, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct WindowsReleaseInfo {
+    #[serde(default)]
+    pub name: String,
+    #[serde(default)]
+    pub version: Option<String>,
+    #[serde(default)]
+    pub build: String,
+    #[serde(default)]
+    pub newest: Option<String>,
+    #[serde(default)]
+    pub newest_build: Option<i64>,
+    #[serde(default)]
+    pub up_to_date: Option<bool>,
+    #[serde(default)]
+    pub insider: bool,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct SystemAbout {
     #[serde(default)]
     pub ok: bool,
@@ -55,15 +82,31 @@ pub struct SystemAbout {
     #[serde(default)]
     pub motherboard: Option<String>,
     #[serde(default)]
+    pub bios: Option<String>,
+    #[serde(default)]
+    pub bios_date: Option<String>,
+    #[serde(default)]
     pub windows: Option<String>,
     #[serde(default)]
     pub windows_version: Option<String>,
     #[serde(default)]
+    pub build: Option<String>,
+    #[serde(default)]
     pub os: Option<String>,
+    #[serde(default)]
+    pub secure_boot: Option<bool>,
+    #[serde(default)]
+    pub tpm: Option<String>,
+    #[serde(default)]
+    pub memory_integrity: Option<bool>,
     #[serde(default)]
     pub network: Option<String>,
     #[serde(default)]
     pub network_mbps: Option<f64>,
+    #[serde(default)]
+    pub network_adapter: Option<String>,
+    #[serde(default)]
+    pub windows_release: Option<WindowsReleaseInfo>,
     #[serde(default)]
     pub display: Option<String>,
     #[serde(default)]
@@ -137,7 +180,51 @@ pub struct AutopilotMemoryIntegrity {
     #[serde(default)]
     pub reason: String,
     #[serde(default)]
+    pub can_undo: bool,
+    #[serde(default)]
     pub needs_restart: bool,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AutopilotGameMode {
+    #[serde(default)]
+    pub off: bool,
+    #[serde(default)]
+    pub kept_on: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AutopilotMouseAccel {
+    #[serde(default)]
+    pub off: bool,
+    #[serde(default)]
+    pub managed: bool,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AutopilotNow {
+    #[serde(default)]
+    pub game: String,
+    #[serde(default, deserialize_with = "null_as_default")]
+    pub did: Vec<String>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AutopilotFinding {
+    #[serde(default)]
+    pub kind: String,
+    #[serde(default)]
+    pub stutters: i32,
+    #[serde(default)]
+    pub app: Option<String>,
+    #[serde(default)]
+    pub detail: String,
+    #[serde(default)]
+    pub suggestion: String,
 }
 
 #[derive(Debug, Clone, Default, Deserialize)]
@@ -160,6 +247,8 @@ pub struct AutopilotLive {
     #[serde(default)]
     pub cpu: Option<f64>,
     #[serde(default)]
+    pub clock: Option<f64>,
+    #[serde(default)]
     pub gpu: Option<f64>,
     #[serde(default)]
     pub gpu_temp: Option<f64>,
@@ -171,6 +260,10 @@ pub struct AutopilotLive {
     pub ram_gb: Option<f64>,
     #[serde(default)]
     pub ram_total_gb: Option<f64>,
+    #[serde(default)]
+    pub standby_gb: Option<f64>,
+    #[serde(default)]
+    pub free_gb: Option<f64>,
     #[serde(default)]
     pub dpc: Option<f64>,
 }
@@ -185,13 +278,25 @@ pub struct AutopilotReport {
     #[serde(default)]
     pub title: String,
     #[serde(default)]
+    pub started: String,
+    #[serde(default)]
     pub minutes: f64,
     #[serde(default)]
     pub fps: f64,
     #[serde(default)]
     pub low1: f64,
     #[serde(default)]
+    pub low01: f64,
+    #[serde(default)]
     pub stutters: i32,
+    #[serde(default, deserialize_with = "null_as_default")]
+    pub findings: Vec<AutopilotFinding>,
+    #[serde(default, deserialize_with = "null_as_default")]
+    pub did: Vec<String>,
+    #[serde(default, deserialize_with = "null_as_default")]
+    pub learned: Vec<String>,
+    #[serde(default)]
+    pub islc_seconds: f64,
 }
 
 #[derive(Debug, Clone, Default, Deserialize)]
@@ -201,12 +306,33 @@ pub struct AutopilotState {
     pub on: bool,
     #[serde(default)]
     pub cpu: String,
+    #[serde(default, deserialize_with = "null_as_default")]
+    pub always_demote: Vec<String>,
+    #[serde(default, deserialize_with = "null_as_default")]
+    pub suspend: Vec<String>,
     #[serde(default)]
+    pub game_mode: AutopilotGameMode,
+    #[serde(default)]
+    pub mouse_accel: Option<AutopilotMouseAccel>,
+    #[serde(default)]
+    pub now: Option<AutopilotNow>,
+    #[serde(default, deserialize_with = "null_as_default")]
     pub memory_integrity: AutopilotMemoryIntegrity,
     #[serde(default)]
     pub live: Option<AutopilotLive>,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "null_as_default")]
     pub reports: Vec<AutopilotReport>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AutopilotSetReply {
+    #[serde(default)]
+    pub ok: bool,
+    #[serde(default)]
+    pub message: Option<String>,
+    #[serde(default)]
+    pub state: AutopilotState,
 }
 
 #[derive(Debug, Clone, Default, Deserialize)]
@@ -246,6 +372,8 @@ pub struct TuningItem {
     pub on: bool,
     #[serde(default)]
     pub can_undo: bool,
+    #[serde(default)]
+    pub off: bool,
     #[serde(default)]
     pub opt_in: bool,
     #[serde(default)]
@@ -410,6 +538,16 @@ pub struct InstalledAppItem {
     pub bloat: Option<String>,
     #[serde(default)]
     pub last_opened: Option<String>,
+    #[serde(default)]
+    pub installed_on: Option<String>,
+    #[serde(default)]
+    pub quiet_since: Option<String>,
+    #[serde(default)]
+    pub uninstaller: bool,
+    #[serde(default)]
+    pub caution: Option<String>,
+    #[serde(default)]
+    pub replaces: Option<String>,
 }
 
 #[derive(Debug, Clone, Default, Deserialize)]
@@ -428,6 +566,8 @@ pub struct AppsListReply {
 pub struct StartupItem {
     #[serde(default)]
     pub id: String,
+    #[serde(default)]
+    pub app: Option<String>,
     #[serde(default)]
     pub source: String,
     #[serde(default)]
@@ -557,6 +697,8 @@ pub struct DriveSpaceBreakdown {
     #[serde(default)]
     pub caches: u64,
     #[serde(default)]
+    pub old_caches: u64,
+    #[serde(default)]
     pub exo: u64,
     #[serde(default)]
     pub leftovers: u64,
@@ -588,6 +730,17 @@ pub struct DriveVerdict {
 
 #[derive(Debug, Clone, Default, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct DriveVendor {
+    #[serde(default)]
+    pub name: String,
+    #[serde(default)]
+    pub tool: String,
+    #[serde(default)]
+    pub url: String,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct DriveInfo {
     #[serde(default)]
     pub id: String,
@@ -597,6 +750,8 @@ pub struct DriveInfo {
     pub kind: String,
     #[serde(default)]
     pub link: Option<DriveLink>,
+    #[serde(default)]
+    pub vendor: Option<DriveVendor>,
     #[serde(default)]
     pub temperature: Option<DriveTemp>,
     #[serde(default)]
@@ -930,6 +1085,1059 @@ pub struct ClientsStatus {
     pub epic: ClientsEpic,
     #[serde(default)]
     pub steam: ClientsSteam,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TuneMeasure {
+    #[serde(default)]
+    pub score: f64,
+    #[serde(default)]
+    pub peak_c: Option<f64>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TunePart {
+    #[serde(default)]
+    pub id: String,
+    #[serde(default)]
+    pub state: String,
+    #[serde(default)]
+    pub modes: bool,
+    #[serde(default)]
+    pub mode: String,
+    #[serde(default)]
+    pub testing: Option<String>,
+    #[serde(default)]
+    pub minutes_left: Option<f64>,
+    #[serde(default)]
+    pub applied: Option<String>,
+    #[serde(default)]
+    pub before: Option<TuneMeasure>,
+    #[serde(default)]
+    pub after: Option<TuneMeasure>,
+    #[serde(default)]
+    pub note: Option<String>,
+    #[serde(default)]
+    pub warning: Option<String>,
+    #[serde(default)]
+    pub minutes: f64,
+    #[serde(default)]
+    pub can_undo: bool,
+    #[serde(default)]
+    pub blocked: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AutoTuneState {
+    #[serde(default)]
+    pub ok: bool,
+    #[serde(default)]
+    pub message: Option<String>,
+    #[serde(default, deserialize_with = "null_as_default")]
+    pub parts: Vec<TunePart>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NetSample {
+    #[serde(default)]
+    pub ping: Option<f64>,
+    #[serde(default)]
+    pub jitter: Option<f64>,
+    #[serde(default)]
+    pub router: Option<f64>,
+    #[serde(default)]
+    pub lookup: Option<f64>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NetCheck {
+    #[serde(default)]
+    pub before: Option<NetSample>,
+    #[serde(default)]
+    pub after: NetSample,
+    #[serde(default)]
+    pub said: String,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PcHealthItem {
+    #[serde(default)]
+    pub key: String,
+    #[serde(default)]
+    pub label: String,
+    #[serde(default)]
+    pub detail: String,
+    #[serde(default)]
+    pub url: Option<String>,
+    #[serde(default)]
+    pub applied: bool,
+    #[serde(default)]
+    pub can_undo: bool,
+    #[serde(default)]
+    pub busy: bool,
+    #[serde(default)]
+    pub cpu: Option<String>,
+    #[serde(default)]
+    pub current: bool,
+    #[serde(default)]
+    pub held: bool,
+    #[serde(default)]
+    pub off: bool,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PcHealth {
+    #[serde(default)]
+    pub ok: bool,
+    #[serde(default)]
+    pub message: Option<String>,
+    #[serde(default, deserialize_with = "null_as_default")]
+    pub items: Vec<PcHealthItem>,
+    #[serde(default)]
+    pub check: Option<NetCheck>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct InterruptDevice {
+    #[serde(default)]
+    pub id: String,
+    #[serde(default)]
+    pub name: String,
+    #[serde(default)]
+    pub kind: String,
+    #[serde(default)]
+    pub mode: String,
+    #[serde(default)]
+    pub plan: String,
+    #[serde(default)]
+    pub reason: String,
+    #[serde(default)]
+    pub changed: bool,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct InterruptsState {
+    #[serde(default)]
+    pub ok: bool,
+    #[serde(default)]
+    pub message: Option<String>,
+    #[serde(default)]
+    pub restart: bool,
+    #[serde(default)]
+    pub result: Option<String>,
+    #[serde(default)]
+    pub can_undo: bool,
+    #[serde(default)]
+    pub reset: bool,
+    #[serde(default, deserialize_with = "null_as_default")]
+    pub devices: Vec<InterruptDevice>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GpuProfileScreen {
+    #[serde(default)]
+    pub name: Option<String>,
+    #[serde(default)]
+    pub hz: f64,
+    #[serde(default)]
+    pub vrr: bool,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GpuProfileItem {
+    #[serde(default)]
+    pub key: String,
+    #[serde(default)]
+    pub label: String,
+    #[serde(default)]
+    pub value: String,
+    #[serde(default)]
+    pub why: String,
+    #[serde(default)]
+    pub current: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GpuFeature {
+    #[serde(default)]
+    pub key: String,
+    #[serde(default)]
+    pub label: String,
+    #[serde(default)]
+    pub state: String,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GpuProfile {
+    #[serde(default)]
+    pub ok: bool,
+    #[serde(default)]
+    pub message: Option<String>,
+    #[serde(default)]
+    pub vendor: Option<String>,
+    #[serde(default)]
+    pub gpu: Option<String>,
+    #[serde(default)]
+    pub series: i32,
+    #[serde(default)]
+    pub screen: GpuProfileScreen,
+    #[serde(default)]
+    pub status: String,
+    #[serde(default)]
+    pub can_undo: bool,
+    #[serde(default)]
+    pub driver_updated: bool,
+    #[serde(default, deserialize_with = "null_as_default")]
+    pub items: Vec<GpuProfileItem>,
+    #[serde(default)]
+    pub low_latency: Option<String>,
+    #[serde(default)]
+    pub vrr_enabled: Option<bool>,
+    #[serde(default)]
+    pub rebar: Option<bool>,
+    #[serde(default)]
+    pub summary: Option<String>,
+    #[serde(default)]
+    pub skipped: bool,
+    #[serde(default, deserialize_with = "null_as_default")]
+    pub features: Vec<GpuFeature>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OutputColor {
+    #[serde(default)]
+    pub format: String,
+    #[serde(default)]
+    pub bpc: i32,
+    #[serde(default)]
+    pub full: bool,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DisplayBest {
+    #[serde(default)]
+    pub refresh: i32,
+    #[serde(default)]
+    pub color: Option<OutputColor>,
+    #[serde(default)]
+    pub why: Option<String>,
+    #[serde(default)]
+    pub scaling: bool,
+    #[serde(default)]
+    pub over: bool,
+    #[serde(default)]
+    pub video_hdr: bool,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ColorControl {
+    #[serde(default)]
+    pub key: String,
+    #[serde(default)]
+    pub label: String,
+    #[serde(default)]
+    pub value: f64,
+    #[serde(default)]
+    pub min: f64,
+    #[serde(default)]
+    pub max: f64,
+    #[serde(default)]
+    pub step: f64,
+    #[serde(default)]
+    pub normal: f64,
+    #[serde(default)]
+    pub unit: String,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DisplayAdjust {
+    #[serde(default)]
+    pub nvidia: Option<bool>,
+    #[serde(default, deserialize_with = "null_as_default")]
+    pub controls: Vec<ColorControl>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DisplayDdc {
+    #[serde(default)]
+    pub brightness: Option<i32>,
+    #[serde(default)]
+    pub brightness_min: i32,
+    #[serde(default)]
+    pub brightness_max: i32,
+    #[serde(default)]
+    pub contrast: Option<i32>,
+    #[serde(default)]
+    pub contrast_min: i32,
+    #[serde(default)]
+    pub contrast_max: i32,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DisplayScreen {
+    #[serde(default)]
+    pub id: String,
+    #[serde(default)]
+    pub name: String,
+    #[serde(default)]
+    pub main: bool,
+    #[serde(default)]
+    pub hdr: bool,
+    #[serde(default)]
+    pub hdr_supported: bool,
+    #[serde(default)]
+    pub vendor: Option<String>,
+    #[serde(default)]
+    pub refresh: i32,
+    #[serde(default)]
+    pub refresh_label: Option<String>,
+    #[serde(default, deserialize_with = "null_as_default")]
+    pub refreshes: Vec<i32>,
+    #[serde(default)]
+    pub color: Option<OutputColor>,
+    #[serde(default)]
+    pub auto: bool,
+    #[serde(default, deserialize_with = "null_as_default")]
+    pub supported: Vec<OutputColor>,
+    #[serde(default)]
+    pub best: DisplayBest,
+    #[serde(default)]
+    pub is_best: bool,
+    #[serde(default)]
+    pub adjust: Option<DisplayAdjust>,
+    #[serde(default)]
+    pub ddc: Option<DisplayDdc>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DisplayState {
+    #[serde(default)]
+    pub ok: bool,
+    #[serde(default)]
+    pub message: Option<String>,
+    #[serde(default, deserialize_with = "null_as_default")]
+    pub displays: Vec<DisplayScreen>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DriverProgress {
+    #[serde(default)]
+    pub stage: String,
+    #[serde(default)]
+    pub percent: f64,
+    #[serde(default)]
+    pub message: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DriverLatest {
+    #[serde(default)]
+    pub version: String,
+    #[serde(default)]
+    pub size: u64,
+    #[serde(default)]
+    pub released: Option<String>,
+    #[serde(default)]
+    pub kind: String,
+    #[serde(default)]
+    pub page: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DriverSkipped {
+    #[serde(default)]
+    pub version: String,
+    #[serde(default)]
+    pub why: String,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DriverAdvised {
+    #[serde(default)]
+    pub version: String,
+    #[serde(default)]
+    pub why: String,
+    #[serde(default)]
+    pub back: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DriverState {
+    #[serde(default)]
+    pub ok: bool,
+    #[serde(default)]
+    pub message: Option<String>,
+    #[serde(default)]
+    pub vendor: Option<String>,
+    #[serde(default)]
+    pub card: Option<String>,
+    #[serde(default)]
+    pub installed: Option<String>,
+    #[serde(default)]
+    pub workstation: bool,
+    #[serde(default)]
+    pub latest: Option<DriverLatest>,
+    #[serde(default)]
+    pub update: bool,
+    #[serde(default)]
+    pub skipped: Option<DriverSkipped>,
+    #[serde(default)]
+    pub advised: Option<DriverAdvised>,
+    #[serde(default)]
+    pub software: bool,
+    #[serde(default)]
+    pub blocked: Option<String>,
+    #[serde(default)]
+    pub progress: Option<DriverProgress>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DriverEntryAdvised {
+    #[serde(default)]
+    pub version: String,
+    #[serde(default)]
+    pub why: String,
+    #[serde(default)]
+    pub action: String,
+    #[serde(default)]
+    pub to: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DriverEntry {
+    #[serde(default)]
+    pub id: String,
+    #[serde(default)]
+    pub kind: String,
+    #[serde(default)]
+    pub name: String,
+    #[serde(default)]
+    pub maker: Option<String>,
+    #[serde(default)]
+    pub version: Option<String>,
+    #[serde(default)]
+    pub date: Option<String>,
+    #[serde(default)]
+    pub latest: Option<String>,
+    #[serde(default)]
+    pub latest_date: Option<String>,
+    #[serde(default)]
+    pub how: String,
+    #[serde(default)]
+    pub page: Option<String>,
+    #[serde(default)]
+    pub source: Option<String>,
+    #[serde(default)]
+    pub app: bool,
+    #[serde(default)]
+    pub skipped: Option<DriverSkipped>,
+    #[serde(default)]
+    pub advised: Option<DriverEntryAdvised>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DriversState {
+    #[serde(default)]
+    pub ok: bool,
+    #[serde(default)]
+    pub message: Option<String>,
+    #[serde(default)]
+    pub busy: Option<String>,
+    #[serde(default)]
+    pub running: bool,
+    #[serde(default)]
+    pub restart: bool,
+    #[serde(default, deserialize_with = "null_as_default")]
+    pub items: Vec<DriverEntry>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DriverStep {
+    #[serde(default)]
+    pub id: String,
+    #[serde(default)]
+    pub working: Option<String>,
+    #[serde(default)]
+    pub ok: Option<bool>,
+    #[serde(default)]
+    pub message: Option<String>,
+    #[serde(default)]
+    pub restart: bool,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BiosStaged {
+    #[serde(default)]
+    pub version: String,
+    #[serde(default)]
+    pub file: String,
+    #[serde(default)]
+    pub bitlocker: bool,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BiosUpdateReply {
+    #[serde(default)]
+    pub ok: bool,
+    #[serde(default)]
+    pub message: Option<String>,
+    #[serde(default)]
+    pub staged: Option<BiosStaged>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Afmf3State {
+    #[serde(default)]
+    pub ok: bool,
+    #[serde(default)]
+    pub message: Option<String>,
+    #[serde(default)]
+    pub offer: bool,
+    #[serde(default)]
+    pub on: bool,
+    #[serde(default)]
+    pub note: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct KeepStatus {
+    #[serde(default)]
+    pub pc: String,
+    #[serde(default, deserialize_with = "null_as_default")]
+    pub games: HashMap<String, String>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CompressState {
+    #[serde(default)]
+    pub state: String,
+    #[serde(default)]
+    pub percent: Option<f64>,
+    #[serde(default)]
+    pub saved: u64,
+    #[serde(default)]
+    pub size: Option<u64>,
+    #[serde(default)]
+    pub estimate: Option<u64>,
+    #[serde(default)]
+    pub sampled: bool,
+    #[serde(default)]
+    pub changed: u64,
+    #[serde(default)]
+    pub algorithm: Option<String>,
+    #[serde(default)]
+    pub message: Option<String>,
+    #[serde(default)]
+    pub anti_cheat: Option<String>,
+    #[serde(default)]
+    pub held: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CompressSettings {
+    #[serde(default)]
+    pub while_idle: bool,
+    #[serde(default)]
+    pub after_updates: bool,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CompressListGame {
+    #[serde(default)]
+    pub id: String,
+    #[serde(default)]
+    pub title: String,
+    #[serde(default)]
+    pub compress: CompressState,
+    #[serde(default)]
+    pub eligible: bool,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CompressList {
+    #[serde(default)]
+    pub ok: bool,
+    #[serde(default, deserialize_with = "null_as_default")]
+    pub games: Vec<CompressListGame>,
+    #[serde(default)]
+    pub saved: u64,
+    #[serde(default)]
+    pub potential: u64,
+    #[serde(default)]
+    pub settings: CompressSettings,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CompressActReply {
+    #[serde(default)]
+    pub ok: bool,
+    #[serde(default)]
+    pub message: Option<String>,
+    #[serde(default)]
+    pub compress: Option<CompressState>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CompressAllReply {
+    #[serde(default)]
+    pub ok: bool,
+    #[serde(default)]
+    pub queued: i32,
+    #[serde(default)]
+    pub message: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CompressSettingsReply {
+    #[serde(default)]
+    pub ok: bool,
+    #[serde(default)]
+    pub settings: CompressSettings,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RuntimeItem {
+    #[serde(default)]
+    pub id: String,
+    #[serde(default)]
+    pub name: String,
+    #[serde(default)]
+    pub group: String,
+    #[serde(default)]
+    pub installed: Option<String>,
+    #[serde(default)]
+    pub latest: String,
+    #[serde(default)]
+    pub state: String,
+    #[serde(default)]
+    pub detail: Option<String>,
+    #[serde(default)]
+    pub size: u64,
+    #[serde(default)]
+    pub end_of_support: bool,
+    #[serde(default)]
+    pub bulk: bool,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RuntimeResult {
+    #[serde(default)]
+    pub id: String,
+    #[serde(default)]
+    pub name: String,
+    #[serde(default)]
+    pub outcome: String,
+    #[serde(default)]
+    pub message: String,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RuntimesListReply {
+    #[serde(default)]
+    pub ok: bool,
+    #[serde(default)]
+    pub busy: bool,
+    #[serde(default, deserialize_with = "null_as_default")]
+    pub items: Vec<RuntimeItem>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RuntimesInstallReply {
+    #[serde(default)]
+    pub ok: bool,
+    #[serde(default)]
+    pub message: Option<String>,
+    #[serde(default)]
+    pub declined: bool,
+    #[serde(default)]
+    pub canceled: bool,
+    #[serde(default, deserialize_with = "null_as_default")]
+    pub results: Vec<RuntimeResult>,
+    #[serde(default)]
+    pub items: Option<Vec<RuntimeItem>>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RuntimesProgress {
+    #[serde(default)]
+    pub phase: String,
+    #[serde(default)]
+    pub id: Option<String>,
+    #[serde(default)]
+    pub name: Option<String>,
+    #[serde(default)]
+    pub index: usize,
+    #[serde(default)]
+    pub count: usize,
+    #[serde(default)]
+    pub bytes: u64,
+    #[serde(default)]
+    pub total: Option<u64>,
+    #[serde(default)]
+    pub done_bytes: u64,
+    #[serde(default)]
+    pub all_bytes: u64,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ShaderRebuild {
+    #[serde(default)]
+    pub ok: bool,
+    #[serde(default)]
+    pub state: String,
+    #[serde(default)]
+    pub ready: i32,
+    #[serde(default)]
+    pub total: i32,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LeftoverSummary {
+    #[serde(default)]
+    pub folders: i32,
+    #[serde(default)]
+    pub files: i32,
+    #[serde(default)]
+    pub registry: i32,
+    #[serde(default)]
+    pub shortcuts: i32,
+    #[serde(default)]
+    pub bytes: u64,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AppLeftover {
+    #[serde(default)]
+    pub id: i64,
+    #[serde(default)]
+    pub kind: String,
+    #[serde(default)]
+    pub path: String,
+    #[serde(default)]
+    pub bytes: u64,
+    #[serde(default)]
+    pub selected: bool,
+    #[serde(default)]
+    pub note: Option<String>,
+    #[serde(default)]
+    pub certainty: String,
+    #[serde(default)]
+    pub because: String,
+    #[serde(default)]
+    pub store: bool,
+    #[serde(default)]
+    pub machine: bool,
+    #[serde(default)]
+    pub from: String,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AppAutoCleared {
+    #[serde(default)]
+    pub id: String,
+    #[serde(default)]
+    pub name: String,
+    #[serde(default)]
+    pub cleared: LeftoverSummary,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AppFind {
+    #[serde(default)]
+    pub ok: bool,
+    #[serde(default)]
+    pub message: Option<String>,
+    #[serde(default)]
+    pub token: String,
+    #[serde(default)]
+    pub name: String,
+    #[serde(default, deserialize_with = "null_as_default")]
+    pub items: Vec<AppLeftover>,
+    #[serde(default)]
+    pub auto: bool,
+    #[serde(default)]
+    pub cleared: Option<LeftoverSummary>,
+    #[serde(default)]
+    pub undo: Option<String>,
+    #[serde(default)]
+    pub declined: bool,
+    #[serde(default, deserialize_with = "null_as_default")]
+    pub auto_cleared: Vec<AppAutoCleared>,
+    #[serde(default, deserialize_with = "null_as_default")]
+    pub defaults: Vec<String>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AppCleanReply {
+    #[serde(default)]
+    pub ok: bool,
+    #[serde(default)]
+    pub cleared: Option<LeftoverSummary>,
+    #[serde(default)]
+    pub undo: Option<String>,
+    #[serde(default)]
+    pub left: i32,
+    #[serde(default)]
+    pub message: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AppSkip {
+    #[serde(default)]
+    pub id: String,
+    #[serde(default)]
+    pub reason: String,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AppConfirmReply {
+    #[serde(default)]
+    pub ok: bool,
+    #[serde(default)]
+    pub message: Option<String>,
+    #[serde(default, deserialize_with = "null_as_default")]
+    pub ids: Vec<String>,
+    #[serde(default, deserialize_with = "null_as_default")]
+    pub skipped: Vec<AppSkip>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RestorePointReply {
+    #[serde(default)]
+    pub ok: bool,
+    #[serde(default)]
+    pub made: bool,
+    #[serde(default)]
+    pub declined: bool,
+    #[serde(default)]
+    pub message: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AppUndoReply {
+    #[serde(default)]
+    pub ok: bool,
+    #[serde(default)]
+    pub back: i32,
+    #[serde(default)]
+    pub message: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct InstallerCacheReply {
+    #[serde(default)]
+    pub ok: bool,
+    #[serde(default)]
+    pub files: i32,
+    #[serde(default)]
+    pub bytes: u64,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct InstallerCacheCleanReply {
+    #[serde(default)]
+    pub ok: bool,
+    #[serde(default)]
+    pub files: i32,
+    #[serde(default)]
+    pub bytes: u64,
+    #[serde(default)]
+    pub undo: Option<String>,
+    #[serde(default)]
+    pub message: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WindowsApp {
+    #[serde(default)]
+    pub id: String,
+    #[serde(default)]
+    pub name: String,
+    #[serde(default)]
+    pub publisher: Option<String>,
+    #[serde(default)]
+    pub for_me: bool,
+    #[serde(default)]
+    pub others: i32,
+    #[serde(default)]
+    pub provisioned: bool,
+    #[serde(default)]
+    pub bloat: Option<String>,
+    #[serde(default)]
+    pub add_back: bool,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AppsPackagesReply {
+    #[serde(default)]
+    pub ok: bool,
+    #[serde(default)]
+    pub hidden: i32,
+    #[serde(default, deserialize_with = "null_as_default")]
+    pub items: Vec<WindowsApp>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WindowsAppLine {
+    #[serde(default)]
+    pub id: String,
+    #[serde(default)]
+    pub name: String,
+    #[serde(default)]
+    pub does: String,
+    #[serde(default)]
+    pub back: String,
+    #[serde(default)]
+    pub undoable: bool,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AppsPackagesPlanReply {
+    #[serde(default)]
+    pub ok: bool,
+    #[serde(default)]
+    pub token: Option<String>,
+    #[serde(default)]
+    pub admin: bool,
+    #[serde(default, deserialize_with = "null_as_default")]
+    pub lines: Vec<WindowsAppLine>,
+    #[serde(default)]
+    pub message: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AppsPackagesRemoveReply {
+    #[serde(default)]
+    pub ok: bool,
+    #[serde(default)]
+    pub removed: i32,
+    #[serde(default)]
+    pub left: i32,
+    #[serde(default)]
+    pub message: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct JunkItem {
+    #[serde(default)]
+    pub id: String,
+    #[serde(default)]
+    pub name: String,
+    #[serde(default)]
+    pub detail: String,
+    #[serde(default)]
+    pub bytes: u64,
+    #[serde(default)]
+    pub files: i32,
+    #[serde(default)]
+    pub auto: bool,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct JunkScanReply {
+    #[serde(default)]
+    pub ok: bool,
+    #[serde(default, deserialize_with = "null_as_default")]
+    pub items: Vec<JunkItem>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct JunkCleanReply {
+    #[serde(default)]
+    pub ok: bool,
+    #[serde(default)]
+    pub bytes: u64,
+    #[serde(default)]
+    pub files: i32,
+    #[serde(default)]
+    pub skipped: i32,
+    #[serde(default)]
+    pub message: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FpsCounterReply {
+    #[serde(default)]
+    pub on: bool,
+    #[serde(default)]
+    pub state: String,
+    #[serde(default)]
+    pub message: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WebClientOptions {
+    #[serde(default)]
+    pub music_service: Option<String>,
+    #[serde(default)]
+    pub notifications: Option<String>,
 }
 
 #[cfg(test)]

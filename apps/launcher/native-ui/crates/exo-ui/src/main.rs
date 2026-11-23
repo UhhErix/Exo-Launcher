@@ -24,8 +24,10 @@ mod pc_actions;
 mod pc_ai;
 mod pc_apps;
 mod pc_devices;
+mod pc_menus;
 mod pc_state;
 mod pc_storage;
+mod pc_wp9_actions;
 mod settings;
 mod setup;
 mod shell;
@@ -387,13 +389,20 @@ fn load_live_state_sync(pipe: &str, scene: Option<&str>) -> AppState {
                 state.pc.system_about = Some(about);
             }
         }
-        Some("pc") => {
+        Some(sc) if sc == "pc" || sc.starts_with("pc-menu-") => {
             if let Ok(ai) = client.call_blocking::<_, exo_rpc::ExoAiState>(
                 exo_rpc::METHOD_EXO_AI_STATE,
                 &serde_json::json!({}),
                 Duration::from_secs(6),
             ) {
                 state.pc.exo_ai = Some(ai);
+            }
+            if let Ok(tune) = client.call_blocking::<_, exo_rpc::AutoTuneState>(
+                exo_rpc::METHOD_SYSTEM_TUNE,
+                &serde_json::json!({ "action": "status" }),
+                Duration::from_secs(6),
+            ) {
+                state.pc.auto_tune = Some(tune);
             }
             if let Ok(ap) = client.call_blocking::<_, exo_rpc::AutopilotState>(
                 exo_rpc::METHOD_AUTOPILOT_STATE,
@@ -408,6 +417,20 @@ fn load_live_state_sync(pipe: &str, scene: Option<&str>) -> AppState {
                 Duration::from_secs(8),
             ) {
                 state.pc.tuning = Some(t);
+            }
+            if let Ok(h) = client.call_blocking::<_, exo_rpc::PcHealth>(
+                exo_rpc::METHOD_SYSTEM_HEALTH,
+                &serde_json::json!({}),
+                Duration::from_secs(8),
+            ) {
+                state.pc.health = Some(h);
+            }
+            if let Ok(ir) = client.call_blocking::<_, exo_rpc::InterruptsState>(
+                exo_rpc::METHOD_SYSTEM_INTERRUPTS,
+                &serde_json::json!({}),
+                Duration::from_secs(6),
+            ) {
+                state.pc.interrupts = Some(ir);
             }
             if let Ok(hdr) = client.call_blocking::<_, exo_rpc::HdrState>(
                 exo_rpc::METHOD_HDR_STATE,
@@ -447,6 +470,13 @@ fn load_live_state_sync(pipe: &str, scene: Option<&str>) -> AppState {
                     state.pc.shader_snap_games = pc_actions::parse_shader_snap_games(res_val);
                 }
             }
+            if let Ok(rb) = client.call_blocking::<_, exo_rpc::ShaderRebuild>(
+                exo_rpc::METHOD_SHADERS_REBUILD,
+                &serde_json::json!({}),
+                Duration::from_secs(5),
+            ) {
+                state.pc.shaders_rebuild = Some(rb);
+            }
             if let Ok(est) = client.call_blocking::<_, exo_rpc::ShadersEstimatesReply>(
                 exo_rpc::METHOD_SHADERS_ESTIMATES,
                 &serde_json::json!({}),
@@ -470,22 +500,86 @@ fn load_live_state_sync(pipe: &str, scene: Option<&str>) -> AppState {
                 state.pc.system_about = Some(about);
             }
             if let Ok(gp) = client.call_blocking::<_, serde_json::Value>(
-                "gpu.profile",
+                exo_rpc::METHOD_GPU_PROFILE,
                 &serde_json::json!({}),
                 Duration::from_secs(6),
             ) {
                 let (gpu_name, screen) = pc_actions::parse_gpu_profile_fields(&gp);
                 state.pc.gpu_short_name = gpu_name;
                 state.pc.screen_label = screen;
+                if let Ok(parsed) = serde_json::from_value::<exo_rpc::GpuProfile>(gp) {
+                    state.pc.gpu_profile = Some(parsed);
+                }
+            }
+            if let Ok(gd) = client.call_blocking::<_, exo_rpc::DriverState>(
+                exo_rpc::METHOD_GPU_DRIVER,
+                &serde_json::json!({ "action": "status" }),
+                Duration::from_secs(6),
+            ) {
+                state.pc.gpu_driver = Some(gd);
+            }
+            if let Ok(disp) = client.call_blocking::<_, exo_rpc::DisplayState>(
+                exo_rpc::METHOD_GPU_DISPLAY,
+                &serde_json::json!({ "action": "state" }),
+                Duration::from_secs(6),
+            ) {
+                state.pc.display_state = Some(disp);
+            }
+            if let Ok(af) = client.call_blocking::<_, exo_rpc::Afmf3State>(
+                exo_rpc::METHOD_GPU_AFMF3,
+                &serde_json::json!({ "action": "status" }),
+                Duration::from_secs(5),
+            ) {
+                state.pc.afmf3 = Some(af);
+            }
+            if let Ok(ks) = client.call_blocking::<_, exo_rpc::KeepStatus>(
+                exo_rpc::METHOD_KEEP_STATUS,
+                &serde_json::json!({}),
+                Duration::from_secs(5),
+            ) {
+                state.pc.keep_status = Some(ks);
+            }
+            if let Ok(ds) = client.call_blocking::<_, exo_rpc::DriversState>(
+                exo_rpc::METHOD_SYSTEM_DRIVERS,
+                &serde_json::json!({ "action": "status" }),
+                Duration::from_secs(8),
+            ) {
+                state.pc.drivers_state = Some(ds);
+            }
+            if let Ok(bu) = client.call_blocking::<_, exo_rpc::BiosUpdateReply>(
+                exo_rpc::METHOD_BIOS_UPDATE,
+                &serde_json::json!({ "action": "status" }),
+                Duration::from_secs(6),
+            ) {
+                state.pc.bios_staged = bu.staged;
+            }
+            if let Ok(rt) = client.call_blocking::<_, exo_rpc::RuntimesListReply>(
+                exo_rpc::METHOD_RUNTIMES_LIST,
+                &serde_json::json!({}),
+                Duration::from_secs(8),
+            ) && rt.ok
+            {
+                state.pc.runtimes = Some(rt.items);
+            }
+            if let Ok(pkgs) = client.call_blocking::<_, exo_rpc::AppsPackagesReply>(
+                exo_rpc::METHOD_APPS_PACKAGES,
+                &serde_json::json!({}),
+                Duration::from_secs(6),
+            ) && pkgs.ok
+            {
+                state.pc.windows_packages = pkgs.items;
             }
             if let Ok(cl) = client.call_blocking::<_, serde_json::Value>(
-                "compress.list",
+                exo_rpc::METHOD_COMPRESS_LIST,
                 &serde_json::json!({}),
                 Duration::from_secs(6),
             ) {
                 let (potential, saved) = pc_actions::parse_compress_totals(&cl);
                 state.pc.compress_potential_bytes = potential;
                 state.pc.compress_saved_bytes = saved;
+                if let Ok(parsed) = serde_json::from_value::<exo_rpc::CompressList>(cl) {
+                    state.pc.compress_list = Some(parsed);
+                }
             }
             if let Ok(drv) = client.call_blocking::<_, exo_rpc::DrivesReply>(
                 exo_rpc::METHOD_SYSTEM_DRIVES,
@@ -494,6 +588,7 @@ fn load_live_state_sync(pipe: &str, scene: Option<&str>) -> AppState {
             ) {
                 state.pc.drives = Some(drv);
             }
+            state.refresh_auto_tune_stages_if_idle();
             if let Some(ref cache_dir) = state.remote_cache_dir {
                 let urls: Vec<String> = state
                     .pc
@@ -543,23 +638,80 @@ fn load_live_state_sync(pipe: &str, scene: Option<&str>) -> AppState {
                 }
                 state.pc.apps_list = Some(list);
             }
-            if sc == "pc-apps-startup"
-                && let Ok(st) = client.call_blocking::<_, exo_rpc::StartupListReply>(
-                    exo_rpc::METHOD_STARTUP_LIST,
-                    &serde_json::json!({}),
-                    Duration::from_secs(10),
-                )
-            {
+            if let Ok(st) = client.call_blocking::<_, exo_rpc::StartupListReply>(
+                exo_rpc::METHOD_STARTUP_LIST,
+                &serde_json::json!({}),
+                Duration::from_secs(10),
+            ) {
                 state.pc.startup_list = Some(st);
+            }
+            if let Ok(tidy) = client.call_blocking::<_, exo_rpc::AppFind>(
+                exo_rpc::METHOD_APPS_TIDY,
+                &serde_json::json!({}),
+                Duration::from_secs(10),
+            ) && tidy.ok
+                && !tidy.items.is_empty()
+            {
+                let picks = tidy
+                    .items
+                    .iter()
+                    .filter(|i| i.selected)
+                    .map(|i| i.id)
+                    .collect();
+                state.pc.apps_tidy = Some(pc_state::RemovedAppEntry {
+                    id: "tidy".into(),
+                    name: "Left by programs that are gone".into(),
+                    find: Some(tidy),
+                    message: None,
+                    cleared_line: None,
+                    undo_token: None,
+                    undone: false,
+                    review_open: false,
+                    picks,
+                    error: None,
+                });
+            }
+            if let Ok(j) = client.call_blocking::<_, exo_rpc::JunkScanReply>(
+                exo_rpc::METHOD_JUNK_SCAN,
+                &serde_json::json!({}),
+                Duration::from_secs(8),
+            ) && j.ok
+            {
+                state.pc.junk_items = Some(j.items);
+            }
+            if let Ok(ic) = client.call_blocking::<_, exo_rpc::InstallerCacheReply>(
+                exo_rpc::METHOD_APPS_INSTALLER_CACHE,
+                &serde_json::json!({ "action": "scan" }),
+                Duration::from_secs(8),
+            ) && ic.ok
+            {
+                state.pc.installer_cache = Some(ic);
+            }
+            if let Ok(pkgs) = client.call_blocking::<_, exo_rpc::AppsPackagesReply>(
+                exo_rpc::METHOD_APPS_PACKAGES,
+                &serde_json::json!({}),
+                Duration::from_secs(6),
+            ) && pkgs.ok
+            {
+                state.pc.windows_packages = pkgs.items;
             }
         }
         Some("pc-storage") => {
             if let Ok(drv) = client.call_blocking::<_, exo_rpc::DrivesReply>(
                 exo_rpc::METHOD_SYSTEM_DRIVES,
-                &serde_json::json!({ "space": false }),
-                Duration::from_secs(10),
+                &serde_json::json!({ "space": true }),
+                Duration::from_secs(12),
             ) {
                 state.pc.drives = Some(drv);
+            }
+            if let Ok(cl) = client.call_blocking::<_, exo_rpc::CompressList>(
+                exo_rpc::METHOD_COMPRESS_LIST,
+                &serde_json::json!({}),
+                Duration::from_secs(8),
+            ) {
+                state.pc.compress_potential_bytes = cl.potential;
+                state.pc.compress_saved_bytes = cl.saved;
+                state.pc.compress_list = Some(cl);
             }
         }
         Some(sc)
@@ -1177,6 +1329,18 @@ const PARITY_SCENES: &[(&str, SceneSetter)] = &[
         s.pc.settings_section = pc_state::SettingsSection::About;
     }),
     ("pc", |s: &mut AppState| s.switch_room(state::Room::ExoAi)),
+    ("pc-menu-board", |s: &mut AppState| {
+        s.switch_room(state::Room::ExoAi);
+        s.pc.part_menu = Some(pc_state::PcPartMenu::Board);
+    }),
+    ("pc-menu-graphics", |s: &mut AppState| {
+        s.switch_room(state::Room::ExoAi);
+        s.pc.part_menu = Some(pc_state::PcPartMenu::Graphics);
+    }),
+    ("pc-menu-display", |s: &mut AppState| {
+        s.switch_room(state::Room::ExoAi);
+        s.pc.part_menu = Some(pc_state::PcPartMenu::Display);
+    }),
     ("pc-apps", |s: &mut AppState| {
         s.switch_room(state::Room::Apps);
         s.switch_pc_tab(pc_state::PcTab::Apps);
@@ -1189,6 +1353,7 @@ const PARITY_SCENES: &[(&str, SceneSetter)] = &[
     ("pc-storage", |s: &mut AppState| {
         s.switch_room(state::Room::ExoAi);
         s.switch_pc_tab(pc_state::PcTab::Storage);
+        s.pc.exo_ai_storage_open = true;
     }),
     ("pc-devices", |s: &mut AppState| {
         s.switch_room(state::Room::Devices);

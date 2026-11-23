@@ -938,8 +938,14 @@ pub struct LauncherSettings {
     pub fps_counter: bool,
     #[serde(default)]
     pub fps_counter_position: Option<String>,
+    #[serde(default, deserialize_with = "null_as_default")]
+    pub fps_counter_items: Vec<String>,
     #[serde(default)]
     pub hdr_for_games: bool,
+    #[serde(default)]
+    pub frame_gen_everywhere: bool,
+    #[serde(default)]
+    pub frame_gen_everywhere_card: bool,
     #[serde(default)]
     pub auto_update_upscalers: bool,
     #[serde(default)]

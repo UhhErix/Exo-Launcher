@@ -233,7 +233,17 @@ fn section_downloads(s: &AppState) -> El {
 
 fn section_in_game(s: &AppState) -> El {
     let set = &s.settings;
-    let card = amoled_card(RADIUS_CARD)
+    let fps_on =
+        s.pc.fps_counter_state
+            .as_ref()
+            .map(|f| f.on)
+            .unwrap_or(set.fps_counter);
+    let fps_signout =
+        s.pc.fps_counter_state
+            .as_ref()
+            .is_some_and(|f| f.state == "signout");
+
+    let mut card = amoled_card(RADIUS_CARD)
         .w_full()
         .child(toggle_row(
             "set-ach-banners",
@@ -242,12 +252,54 @@ fn section_in_game(s: &AppState) -> El {
             set.achievement_banners,
         ))
         .child(el().w_full().h(1.0).fill(hairline()))
-        .child(toggle_row(
-            "set-fps-counter",
-            "FPS counter",
-            "fpsCounter",
-            set.fps_counter,
-        ))
+        .child(set_row(
+            "Show FPS counter",
+            fps_signout.then_some("Sign out to finish"),
+            switch_pill("set-fps-counter", "Show FPS counter", fps_on)
+                .on_press(move |s: &mut AppState| s.toggle_fps_counter(!fps_on)),
+        ));
+
+    if fps_on {
+        let cur_pos = set.fps_counter_position.as_deref().unwrap_or("right");
+        let (pos_label, next_pos) = match cur_pos {
+            "left" => ("Top left", "middle"),
+            "middle" => ("Top middle", "right"),
+            _ => ("Top right", "left"),
+        };
+        card = card
+            .child(el().w_full().h(1.0).fill(hairline()))
+            .child(set_row(
+                "Position",
+                None,
+                glass_button("set-fps-position", pos_label, None)
+                    .on_press(move |s: &mut AppState| s.set_fps_counter_position(next_pos)),
+            ));
+
+        const FPS_ITEMS: &[(&str, &str, &str)] = &[
+            ("set-fps-low", "low", "1% low"),
+            ("set-fps-frametime", "frametime", "Frame time"),
+            ("set-fps-gpu", "gpu", "GPU use"),
+            ("set-fps-gputemp", "gputemp", "GPU temperature"),
+            ("set-fps-cpu", "cpu", "CPU use"),
+            ("set-fps-vram", "vram", "VRAM"),
+            ("set-fps-ram", "ram", "RAM"),
+            ("set-fps-battery", "battery", "Lowest battery"),
+            ("set-fps-clock", "clock", "Time of day"),
+        ];
+        for &(key, id, label) in FPS_ITEMS {
+            let checked = set.fps_counter_items.iter().any(|x| x == id);
+            card = card
+                .child(el().w_full().h(1.0).fill(hairline()))
+                .child(set_row(
+                    label,
+                    None,
+                    switch_pill(key, label, checked)
+                        .on_press(move |s: &mut AppState| s.toggle_fps_counter_item(id)),
+                ));
+        }
+    }
+
+    card = card
         .child(el().w_full().h(1.0).fill(hairline()))
         .child(toggle_row(
             "set-hdr-games",
@@ -266,13 +318,23 @@ fn section_in_game(s: &AppState) -> El {
 }
 
 fn section_music(s: &AppState) -> El {
-    let current = s.media.music_service.label();
-    let logo_id = match s.media.music_service.id() {
+    let pref_svc =
+        s.pc.web_preferences
+            .as_ref()
+            .and_then(|w| w.music_service.as_deref());
+    let current = match pref_svc {
+        Some("spotify") => "Spotify",
+        Some("apple") => "Apple Music",
+        Some("youtube") => "YouTube Music",
+        _ => s.media.music_service.label(),
+    };
+    let svc_id = pref_svc.unwrap_or_else(|| s.media.music_service.id());
+    let logo_id = match svc_id {
         "apple" => "apple-music",
         other => other,
     };
     let gamepad_focus = s.input_mode == InputMode::Gamepad;
-    let card = amoled_card(RADIUS_CARD).w_full().child(set_row(
+    let mut card = amoled_card(RADIUS_CARD).w_full().child(set_row(
         "Music service",
         Some("Active source for the Music room and top-bar mini player"),
         select_trigger(
@@ -283,6 +345,29 @@ fn section_music(s: &AppState) -> El {
             |s: &mut AppState, _| s.toggle_dropdown(OpenDropdown::MusicService),
         ),
     ));
+    if svc_id == "youtube" {
+        let notif =
+            s.pc.web_preferences
+                .as_ref()
+                .and_then(|w| w.notifications.as_deref())
+                .unwrap_or("ask");
+        let (notif_label, next_notif) = match notif {
+            "allow" => ("Allow", "block"),
+            "block" => ("Block", "ask"),
+            _ => ("Ask", "allow"),
+        };
+        card = card
+            .child(el().w_full().h(1.0).fill(hairline()))
+            .child(set_row(
+                "YouTube Music notifications",
+                None,
+                glass_button("set-yt-notifications", notif_label, None).on_press(
+                    move |s: &mut AppState| {
+                        s.save_web_preferences(serde_json::json!({ "notifications": next_notif }));
+                    },
+                ),
+            ));
+    }
     col().w_full().gap(24.0).child(card)
 }
 
