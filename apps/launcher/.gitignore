@@ -66,6 +66,9 @@ ExoLauncher/wwwroot/
 # Exo Lab reports (tools/lab/run.mjs)
 /lab-reports/
 
+# Parity recorder raw captures (tools/parity/run.mjs)
+/tools/parity/out/
+
 # Exo Capture build output
 capture/build/
 capture/out/
