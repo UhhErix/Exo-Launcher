@@ -1366,3 +1366,40 @@ pub fn icon_forward(size: f32, color: Color) -> El {
         color,
     )
 }
+
+pub fn icon_upload(size: f32, color: Color) -> El {
+    strokes(
+        size,
+        &[
+            &[
+                [21.0, 15.0],
+                [21.0, 19.0],
+                [19.0, 21.0],
+                [5.0, 21.0],
+                [3.0, 19.0],
+                [3.0, 15.0],
+            ],
+            &[[17.0, 8.0], [12.0, 3.0], [7.0, 8.0]],
+            &[[12.0, 3.0], [12.0, 15.0]],
+        ],
+        color,
+    )
+}
+
+pub fn icon_rotate_ccw(size: f32, color: Color) -> El {
+    let mut arc = arc_pts(
+        12.0,
+        12.0,
+        8.5,
+        -std::f32::consts::FRAC_PI_4 * 3.0,
+        std::f32::consts::FRAC_PI_4 * 3.0,
+        18,
+    );
+    arc.reverse();
+    let w = if size <= 16.0 { 1.75 } else { 1.9 };
+    let shape = Shape::new()
+        .view_box(24.0, 24.0)
+        .stroke(arc, w, color)
+        .stroke(vec![[3.5, 4.0], [3.5, 9.5], [9.0, 9.5]], w, color);
+    canvas(shape).size(size, size)
+}

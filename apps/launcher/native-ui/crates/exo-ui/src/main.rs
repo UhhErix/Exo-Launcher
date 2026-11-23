@@ -9,7 +9,10 @@ mod discord_state;
 mod discord_voice;
 mod discord_voice_state;
 mod events;
+mod game_actions;
 mod game_page;
+mod game_perf;
+mod game_props;
 mod gamepad;
 mod image_cache;
 mod key_modal;
@@ -335,6 +338,81 @@ fn load_live_state_sync(pipe: &str, scene: Option<&str>) -> AppState {
                     state.props_launch_opts.text = props.launch_options.clone().unwrap_or_default();
                     state.props_launch_opts.sync_invariants();
                     state.game_props = Some(props);
+                }
+                if let Ok(hdr) = client.call_blocking::<_, exo_rpc::HdrState>(
+                    exo_rpc::METHOD_HDR_STATE,
+                    &serde_json::json!({}),
+                    Duration::from_secs(5),
+                ) {
+                    state.pc.hdr = Some(hdr);
+                }
+                if let Ok(dlss) = client.call_blocking::<_, exo_rpc::DlssStatus>(
+                    exo_rpc::METHOD_DLSS_STATUS,
+                    &serde_json::json!({ "id": gid }),
+                    Duration::from_secs(8),
+                ) {
+                    state.game_page.dlss_loading = false;
+                    state.game_page.dlss = Some(dlss);
+                }
+                if let Ok(fg) = client.call_blocking::<_, exo_rpc::FrameGenMod>(
+                    exo_rpc::METHOD_DLSS_FRAME_GEN,
+                    &serde_json::json!({ "id": gid }),
+                    Duration::from_secs(6),
+                ) {
+                    state.game_page.frame_gen = Some(fg);
+                }
+                if let Ok(gs) = client.call_blocking::<_, exo_rpc::GameSettingsState>(
+                    exo_rpc::METHOD_GAME_SETTINGS,
+                    &serde_json::json!({ "id": gid }),
+                    Duration::from_secs(6),
+                ) {
+                    if let Some(ref wm) = gs.window_mode {
+                        state.game_display_mode = wm.clone();
+                    }
+                    state.game_page.settings = Some(gs);
+                }
+                if let Ok(ks) = client.call_blocking::<_, exo_rpc::KeepStatus>(
+                    exo_rpc::METHOD_KEEP_STATUS,
+                    &serde_json::json!({}),
+                    Duration::from_secs(5),
+                ) {
+                    state.game_page.keep_status = Some(ks);
+                }
+                if let Ok(sh) = client.call_blocking::<_, exo_rpc::ShaderStatus>(
+                    exo_rpc::METHOD_SHADERS_STATUS,
+                    &serde_json::json!({ "id": gid }),
+                    Duration::from_secs(5),
+                ) {
+                    state.game_page.shaders = Some(sh);
+                }
+                if let Ok(hg) = client.call_blocking::<_, exo_rpc::HdrGame>(
+                    exo_rpc::METHOD_HDR_GAME,
+                    &serde_json::json!({ "id": gid }),
+                    Duration::from_secs(5),
+                ) {
+                    state.game_page.hdr_game = Some(hg);
+                }
+                if let Ok(gg) = client.call_blocking::<_, exo_rpc::GpuGame>(
+                    exo_rpc::METHOD_GPU_GAME,
+                    &serde_json::json!({ "id": gid }),
+                    Duration::from_secs(5),
+                ) {
+                    state.game_page.gpu_game = Some(gg);
+                }
+                if let Ok(comp) = client.call_blocking::<_, exo_rpc::CompressStateReply>(
+                    exo_rpc::METHOD_COMPRESS_STATE,
+                    &serde_json::json!({ "id": gid, "estimate": false }),
+                    Duration::from_secs(5),
+                ) {
+                    state.game_page.compress = comp.compress;
+                }
+                if let Ok(prog) = client.call_blocking::<_, exo_rpc::InstallProgress>(
+                    exo_rpc::METHOD_GAME_PROGRESS,
+                    &serde_json::json!({ "id": gid }),
+                    Duration::from_secs(3),
+                ) && prog.is_active
+                {
+                    state.install_progress = Some(prog);
                 }
             }
         }
@@ -1105,6 +1183,18 @@ const PARITY_SCENES: &[(&str, SceneSetter)] = &[
     }),
     ("game-props-dlss", |s: &mut AppState| {
         open_game_props_tab(s, 3);
+    }),
+    ("game-props-betas", |s: &mut AppState| {
+        open_game_props_tab(s, 2);
+        s.game_page.props_tab_id = Some(game_actions::PropsSectionId::Betas);
+    }),
+    ("game-props-dlc", |s: &mut AppState| {
+        open_game_props_tab(s, 3);
+        s.game_page.props_tab_id = Some(game_actions::PropsSectionId::Content);
+    }),
+    ("game-props-artwork", |s: &mut AppState| {
+        open_game_props_tab(s, 4);
+        s.game_page.props_tab_id = Some(game_actions::PropsSectionId::Artwork);
     }),
     ("library-all", |s: &mut AppState| {
         s.switch_room(state::Room::Library);
