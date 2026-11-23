@@ -71,6 +71,21 @@ Steam library sign-in (`settings-07`) was NOT blocked because Rune (`fc71db1`) a
 
 - `cargo fmt --check`: PASS (exit 0)
 - `cargo clippy --workspace --locked -- -D warnings`: PASS (exit 0)
-- `cargo test --workspace --locked`: PASS (exit 0 — `exo-kit` 4/4, `exo-rpc` 24/24, `exo-ui` 89/89; 117 passed, 0 failed)
+- `cargo test --workspace --locked`: PASS (exit 0 — `exo-kit` 4/4, `exo-rpc` 25 passed / 1 ignored bench, `exo-ui` 90/90; 119 passed, 0 failed)
 - `cargo build --release --locked -p exo-ui`: PASS (exit 0)
-- `node tools/check-comments.mjs`: PASS (exit 0 — 225 zero-comment files)
+- `node tools/check-comments.mjs`: PASS (exit 0 — 2384 legacy files, 225 zero-comment files)
+
+## Follow-up Integration Pass (2026-11-23)
+
+1. **Merged `origin/feat/native-polish-2`**: clean merge with zero conflicts; all WP4 host push events stay registered via `register_wp4_events` in `events.rs` (none in `state.rs`).
+2. **Rune `exo-inputs` pin (`01eb4cd`)**: pinned all 8 Rune crates in `apps/launcher/native-ui/Cargo.toml` (and updated `Cargo.lock`) to `e1379c0ad937e9dab48450589e5b7e93dad8d335` in a single dedicated commit.
+3. **Migrated WP4 inputs & QR to Rune native widgets**:
+   - Steam QR sign-in (`settings_stores.rs`): switched from `exo_kit::qr_code_view` to `rune::QrCode::encode` + `rune::QrView` (160 pt, ISO 4-module quiet zone, accessible `"Steam sign-in code"` label). Left `exo-kit/src/qr.rs` intact because `discord.rs:722` (WP7) still calls it.
+   - Steam Guard (`settings_stores.rs`, `settings_state.rs`): switched from single `TextEdit` to 5-box `rune::OtpInput` backed by `rune::OtpState::new(5).kind(OtpKind::AlphanumericUpper)` with `on_complete` submission and `"Continue"` button matching React `SteamSignInRow.tsx:230`. Added unit test `steam_guard_otp_state_normalizes_upper_alphanumeric_five_boxes`.
+   - Password fields (`settings_stores.rs`, `settings_account.rs`): switched Steam password and all 8 Exo Account password fields (signed-in password change, recovery code password, delete password, signed-out sign-in/create/reset, and `AccountStep` Create/SignIn/Reset/NewCode) to `rune::PasswordInput` (enforcing `secure`, no copy-out, IME off, and built-in inline `Show`/`Hide` reveal toggle on signed-out SignIn and Create).
+4. **Closed WP4 RPC & push-event parity gaps (`origin/UhhErix/native-WP11:apps/launcher/improve/rpc-parity.json`)**:
+   - Added `KeepStatus` DTO + `METHOD_KEEP_STATUS` (`"keep.status"`) in `exo-rpc` (with serde unit test `deserializes_keep_status` and `host-v1.json` contract check) and `wp4_load_keep_status()` in `settings_state.rs`.
+   - Added `wp4_warm_startup()` invoked from `bootstrap_rpc` (`state.rs`) to preload `settings.get`, `exoAccount.overview`, `clients.status`, `backup.status`, `stores.matrix`, `accounts.list`, `steam.account`, `gifts.list`, `shaders.addon`, `shaders.call`, `web.preferences.get`, and `keep.status`.
+   - Removed redundant Native-only `exoAccount.state` call from `pc_actions.rs:load_settings_room()` (since `exoAccount.overview` already populates `s.pc.account`).
+   - Verified statically against WP11's `rpc-parity.json` indexer rules: all 13 WP4 startup/settings methods present and called, and all 6 WP4 push events (`accounts.progress`, `backup.stopped`, `components.failed`, `gifts.changed`, `shaders.event`, `exoAccount.changed`) parsed in `exo-rpc` and registered via `events.rs` (0 remaining WP4 gaps).
+5. **Re-snapped & visually inspected at 1920x1080 scale 1**: `settings-steam-signin` (vector `QrView`), `settings-steam-password` (masked `PasswordInput`), `settings-steam-guard` (5-box `OtpInput` showing `A 2 B _ _`), and `settings-about` (`PasswordInput` with inline `Show` toggle).

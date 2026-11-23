@@ -1209,6 +1209,46 @@ const PARITY_SCENES: &[(&str, SceneSetter)] = &[
             ..Default::default()
         });
     }),
+    ("settings-steam-password", |s: &mut AppState| {
+        s.switch_room(state::Room::Settings);
+        s.pc.settings_section = pc_state::SettingsSection::Account;
+        if s.wp4.stores.is_empty() {
+            s.wp4.stores.push(exo_rpc::StoreStatus {
+                store: "steam".into(),
+                display_name: "Steam".into(),
+                agent_present: true,
+                client_present: Some(true),
+                signed_in: true,
+                ..Default::default()
+            });
+        }
+        s.wp4.steam_panel_open = true;
+        s.wp4.steam_mode = settings_state::SteamSignInMode::Password;
+        s.wp4.steam_step = None;
+        s.wp4.steam_user = rune::TextEdit::new("erix_demo");
+        s.wp4.steam_pass = rune::TextEdit::new("hunter2secret").secure();
+    }),
+    ("settings-steam-guard", |s: &mut AppState| {
+        s.switch_room(state::Room::Settings);
+        s.pc.settings_section = pc_state::SettingsSection::Account;
+        if s.wp4.stores.is_empty() {
+            s.wp4.stores.push(exo_rpc::StoreStatus {
+                store: "steam".into(),
+                display_name: "Steam".into(),
+                agent_present: true,
+                client_present: Some(true),
+                signed_in: true,
+                ..Default::default()
+            });
+        }
+        s.wp4.steam_panel_open = true;
+        s.wp4.steam_mode = settings_state::SteamSignInMode::Password;
+        s.wp4.steam_step = Some(exo_rpc::SteamSignInStep {
+            state: "guard".into(),
+            ..Default::default()
+        });
+        s.wp4.steam_guard.set_value("A2B");
+    }),
     ("account-sheet", |s: &mut AppState| {
         s.status = state::HostStatus::Connected;
         s.wp4.account_overview = Some(exo_rpc::ExoAccountOverview {
@@ -1216,6 +1256,17 @@ const PARITY_SCENES: &[(&str, SceneSetter)] = &[
             ..Default::default()
         });
         s.wp4.account_later_this_run = false;
+    }),
+    ("account-sheet-create", |s: &mut AppState| {
+        s.status = state::HostStatus::Connected;
+        s.wp4.account_overview = Some(exo_rpc::ExoAccountOverview {
+            signed_in: false,
+            ..Default::default()
+        });
+        s.wp4.account_later_this_run = false;
+        s.wp4_flow_open(settings_state::AccountScreen::Create);
+        s.wp4.flow_email = rune::TextEdit::new("player@example.com");
+        s.wp4.flow_password = rune::TextEdit::new("correcthorsebatterystaple").secure();
     }),
     ("clients-gate", |s: &mut AppState| {
         s.status = state::HostStatus::Connected;

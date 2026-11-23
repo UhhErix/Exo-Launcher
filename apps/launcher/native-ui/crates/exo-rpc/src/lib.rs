@@ -58,7 +58,7 @@ pub use settings_types::{
     ComponentsFailedEvent, EpicAccountsInfo, EpicAddedAccount, ExoAccountFileReply,
     ExoAccountHeldItem, ExoAccountOutcome, ExoAccountOverview, ExoAccountProbe, ExoAccountSession,
     ExoAccountSessionsReply, ExoAccountSyncState, GogAccountInfo, JunkCleanReply, JunkItem,
-    JunkScanReply, LeftoverSummary, PickFolderReply, ReplacedApp, ReplacedRemoveReply,
+    JunkScanReply, KeepStatus, LeftoverSummary, PickFolderReply, ReplacedApp, ReplacedRemoveReply,
     ReplacedScanReply, ReportPreviewReply, ReportSendReply, RiotAccountEntry, RiotAccountsInfo,
     RiotBaseline, RiotBaselineReply, RiotExportImport, RiotHoursRefresh, ShadersEventPayload,
     SteamAccountEntry, SteamAccountReply, SteamAccountsInfo, SteamSignInStep, StoreAccounts,
@@ -156,6 +156,7 @@ pub const METHOD_EXO_AI_STATE: &str = "exoAi.state";
 pub const METHOD_HDR_STATE: &str = "hdr.state";
 pub const METHOD_JUNK_CLEAN: &str = "junk.clean";
 pub const METHOD_JUNK_SCAN: &str = "junk.scan";
+pub const METHOD_KEEP_STATUS: &str = "keep.status";
 pub const METHOD_KEYBOARD_BACKUP: &str = "keyboard.backup";
 pub const METHOD_KEYBOARD_BACKUPS: &str = "keyboard.backups";
 pub const METHOD_KEYBOARD_OPEN_APP: &str = "keyboard.openApp";
@@ -435,6 +436,7 @@ pub const USED_METHODS: &[&str] = &[
     METHOD_GIFTS_LIST,
     METHOD_GIFTS_STEAM_SIGN_IN,
     METHOD_GIFTS_STEAM_SIGN_OUT,
+    METHOD_KEEP_STATUS,
     METHOD_PLAYTIME_IMPORT_RIOT_EXPORT,
     METHOD_PLAYTIME_SET_RIOT_BASELINE,
     METHOD_REPLACED_SCAN,

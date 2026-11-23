@@ -8,15 +8,18 @@ use crate::settings_state::{
 use crate::state::AppState;
 use exo_kit::{
     BG, FG, RADIUS_CARD, RADIUS_SMALL, amoled_card, bad, fg_muted, glass_rim_bottom, glass_rim_top,
-    glass_still_control_fill, good, hairline, hover_fill, icon_check, icon_chevron_down,
-    qr_code_view, scaled, store_logo_or_fallback, switch_pill, type_body, type_section, type_small,
+    glass_still_control_fill, good, hairline, hover_fill, icon_check, icon_chevron_down, scaled,
+    store_logo_or_fallback, switch_pill, type_body, type_section, type_small,
 };
 use exo_rpc::{
     METHOD_ACCOUNTS_ADD, METHOD_ACCOUNTS_EPIC_ADD, METHOD_ACCOUNTS_EPIC_IMPORT,
     METHOD_ACCOUNTS_EPIC_NEW_LAUNCHER, METHOD_ACCOUNTS_REMOVE, METHOD_ACCOUNTS_SIGN_OUT,
     METHOD_ACCOUNTS_SWITCH, StoreAccounts, StoreStatus,
 };
-use rune::{Cursor, El, TextEdit, TextStyle, col, edit_access, el, row, text, text_input};
+use rune::{
+    Cursor, El, OtpInput, PasswordInput, QrCode, QrView, TextEdit, TextStyle, col, edit_access, el,
+    row, text, text_input,
+};
 use serde_json::{Value, json};
 
 fn sec_head_with_action(title: &str, action: Option<El>) -> El {
@@ -496,7 +499,20 @@ fn steam_library_panel(s: &AppState) -> El {
                 .filter(|st| st.state == "waiting")
                 .and_then(|st| st.challenge_url.as_deref())
             {
-                qr_code_view(url, 160.0)
+                match QrCode::encode(url) {
+                    Ok(code) => QrView::new(&code)
+                        .size(160.0)
+                        .label("Steam sign-in code")
+                        .build()
+                        .radius(RADIUS_SMALL),
+                    Err(_) => el()
+                        .size(160.0, 160.0)
+                        .radius(RADIUS_SMALL)
+                        .fill(BG)
+                        .border_gradient(1.0, glass_rim_top(), glass_rim_bottom())
+                        .center()
+                        .child(text("Invalid QR").font(type_small()).color(fg_muted())),
+                }
             } else if ended {
                 el().size(160.0, 160.0)
                     .radius(RADIUS_SMALL)
@@ -557,8 +573,8 @@ fn steam_library_panel(s: &AppState) -> El {
         }
         SteamSignInMode::Password => {
             if step.is_some_and(|st| st.state == "guard") {
-                let can = !s.wp4.steam_guard.text.trim().is_empty() && !busy;
-                let mut btn = set_primary_btn("steam-guard-submit", "Verify", None)
+                let can = !s.wp4.steam_guard.is_empty() && !busy;
+                let mut btn = set_primary_btn("steam-guard-submit", "Continue", None)
                     .disabled(!can)
                     .opacity(if can { 1.0 } else { 0.45 });
                 if can {
@@ -571,20 +587,26 @@ fn steam_library_panel(s: &AppState) -> El {
                     .child(
                         row()
                             .w_full()
-                            .gap(10.0)
+                            .gap(12.0)
                             .center_y()
-                            .child(field_box(
-                                text_input(&s.wp4.steam_guard, type_body())
+                            .child(
+                                OtpInput::new(&s.wp4.steam_guard)
                                     .key("steam-guard-input")
                                     .label("Steam Guard code")
-                                    .w_full()
-                                    .single_line()
+                                    .box_size(40.0, 44.0)
+                                    .gap(8.0)
+                                    .radius(RADIUS_SMALL)
+                                    .fill(glass_still_control_fill())
+                                    .border(glass_rim_top(), FG)
                                     .color(FG)
-                                    .placeholder("5-character code", fg_muted())
-                                    .on_edit(edit_access(|s: &mut AppState| &mut s.wp4.steam_guard))
-                                    .on_submit(|s: &mut AppState, _| s.wp4_steam_submit_guard()),
-                                Some(220.0),
-                            ))
+                                    .text_style(TextStyle::new(scaled(16.0), 600.0))
+                                    .disabled(busy)
+                                    .on_state(|s: &mut AppState| &mut s.wp4.steam_guard)
+                                    .on_complete(|s: &mut AppState, _, _| {
+                                        s.wp4_steam_submit_guard()
+                                    })
+                                    .build(),
+                            )
                             .child(btn),
                     )
             } else if step.is_some_and(|st| st.state == "approve") {
@@ -632,18 +654,17 @@ fn steam_library_panel(s: &AppState) -> El {
                                 .gap(4.0)
                                 .child(text("Password").font(type_small()).color(fg_muted()))
                                 .child(field_box(
-                                    text_input(&s.wp4.steam_pass, type_body())
+                                    PasswordInput::new(&s.wp4.steam_pass, type_body())
                                         .key("steam-pass-input")
                                         .label("Password")
-                                        .w_full()
-                                        .single_line()
                                         .color(FG)
-                                        .on_edit(edit_access(|s: &mut AppState| {
-                                            &mut s.wp4.steam_pass
-                                        }))
+                                        .disabled(busy)
+                                        .on_edit(|s: &mut AppState| &mut s.wp4.steam_pass)
                                         .on_submit(|s: &mut AppState, _| {
                                             s.wp4_steam_submit_password()
-                                        }),
+                                        })
+                                        .build()
+                                        .w_full(),
                                     None,
                                 )),
                         ),

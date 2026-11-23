@@ -10,7 +10,9 @@ use exo_kit::{
     modal_card_transition, modal_scrim_transition, scaled, type_body, type_section, type_small,
     type_title,
 };
-use rune::{Cursor, El, TextStyle, Transition, col, edit_access, el, row, text, text_input};
+use rune::{
+    Cursor, El, PasswordInput, TextStyle, Transition, col, edit_access, el, row, text, text_input,
+};
 
 fn field_box(input: El) -> El {
     row()
@@ -337,27 +339,27 @@ pub fn account_section(s: &AppState) -> El {
                     .color(fg_muted()),
             )
             .child(field_box(
-                text_input(&s.wp4.account_current_pass, type_body())
+                PasswordInput::new(&s.wp4.account_current_pass, type_body())
                     .key("set-acct-cur-pass")
                     .label("Current password")
-                    .w_full()
-                    .single_line()
                     .color(FG)
-                    .on_edit(edit_access(|s: &mut AppState| {
-                        &mut s.wp4.account_current_pass
-                    })),
+                    .disabled(s.wp4.account_security_busy)
+                    .on_edit(|s: &mut AppState| &mut s.wp4.account_current_pass)
+                    .build()
+                    .w_full(),
             ))
             .child(text("New password").font(type_small()).color(fg_muted()))
             .child(field_box(
-                text_input(&s.wp4.account_new_pass, type_body())
+                PasswordInput::new(&s.wp4.account_new_pass, type_body())
                     .key("set-acct-new-pass")
                     .label("New password")
-                    .w_full()
-                    .single_line()
                     .color(FG)
                     .placeholder("At least 12 characters", fg_muted())
-                    .on_edit(edit_access(|s: &mut AppState| &mut s.wp4.account_new_pass))
-                    .on_submit(|s: &mut AppState, _| s.wp4_account_change_password()),
+                    .disabled(s.wp4.account_security_busy)
+                    .on_edit(|s: &mut AppState| &mut s.wp4.account_new_pass)
+                    .on_submit(|s: &mut AppState, _| s.wp4_account_change_password())
+                    .build()
+                    .w_full(),
             ));
         if let Some(ref err) = s.wp4.account_security_error {
             form = form.child(text(err.clone()).font(type_small()).color(bad()).wrap());
@@ -407,14 +409,15 @@ pub fn account_section(s: &AppState) -> El {
             .gap(10.0)
             .child(text("Password").font(type_small()).color(fg_muted()))
             .child(field_box(
-                text_input(&s.wp4.account_code_pass, type_body())
+                PasswordInput::new(&s.wp4.account_code_pass, type_body())
                     .key("set-acct-code-pass")
                     .label("Password")
-                    .w_full()
-                    .single_line()
                     .color(FG)
-                    .on_edit(edit_access(|s: &mut AppState| &mut s.wp4.account_code_pass))
-                    .on_submit(|s: &mut AppState, _| s.wp4_account_new_recovery_code()),
+                    .disabled(s.wp4.account_security_busy)
+                    .on_edit(|s: &mut AppState| &mut s.wp4.account_code_pass)
+                    .on_submit(|s: &mut AppState, _| s.wp4_account_new_recovery_code())
+                    .build()
+                    .w_full(),
             ));
         if let Some(ref err) = s.wp4.account_security_error {
             form = form.child(text(err.clone()).font(type_small()).color(bad()).wrap());
@@ -556,16 +559,15 @@ pub fn account_section(s: &AppState) -> El {
             .gap(10.0)
             .child(text("Password").font(type_small()).color(fg_muted()))
             .child(field_box(
-                text_input(&s.wp4.account_delete_pass, type_body())
+                PasswordInput::new(&s.wp4.account_delete_pass, type_body())
                     .key("set-acct-del-pass")
                     .label("Password")
-                    .w_full()
-                    .single_line()
                     .color(FG)
-                    .on_edit(edit_access(|s: &mut AppState| {
-                        &mut s.wp4.account_delete_pass
-                    }))
-                    .on_submit(|s: &mut AppState, _| s.wp4_delete_account()),
+                    .disabled(s.wp4.account_delete_busy)
+                    .on_edit(|s: &mut AppState| &mut s.wp4.account_delete_pass)
+                    .on_submit(|s: &mut AppState, _| s.wp4_delete_account())
+                    .build()
+                    .w_full(),
             ))
             .child(
                 text("This deletes the account and every item synced to it. Your games, playtime and settings stay on this PC.")
@@ -671,31 +673,30 @@ fn signed_out_section(s: &AppState) -> El {
     } else {
         "At least 12 characters"
     };
+    let mut pass_input = PasswordInput::new(&s.wp4.account_password, type_body())
+        .key("set-acct-pass")
+        .label("Password")
+        .color(FG)
+        .placeholder(pass_placeholder, fg_muted())
+        .disabled(s.wp4.account_form_busy)
+        .on_edit(|s: &mut AppState| &mut s.wp4.account_password)
+        .on_submit(|s: &mut AppState, _| s.wp4_account_signed_out_submit());
+    if mode == AccountSignedOutMode::SignIn {
+        pass_input = pass_input
+            .revealed(s.wp4.account_show_pass)
+            .on_reveal_toggle(|s: &mut AppState, next, _| {
+                s.wp4.account_show_pass = next;
+                s.wp4.account_password.set_revealed(next);
+            })
+            .reveal_button(|revealed| {
+                text(if revealed { "Hide" } else { "Show" })
+                    .font(type_small())
+                    .color(fg_muted())
+            });
+    }
     form = form
         .child(text("Password").font(type_small()).color(fg_muted()))
-        .child(field_box(
-            text_input(&s.wp4.account_password, type_body())
-                .key("set-acct-pass")
-                .label("Password")
-                .w_full()
-                .single_line()
-                .color(FG)
-                .placeholder(pass_placeholder, fg_muted())
-                .on_edit(edit_access(|s: &mut AppState| &mut s.wp4.account_password))
-                .on_submit(|s: &mut AppState, _| s.wp4_account_signed_out_submit()),
-        ));
-
-    if mode == AccountSignedOutMode::SignIn {
-        let showing = s.wp4.account_show_pass;
-        form = form.child(link_btn(
-            "set-acct-show-pass",
-            if showing { "Hide" } else { "Show" },
-            move |s: &mut AppState| {
-                s.wp4.account_show_pass = !showing;
-                s.wp4.account_password.set_revealed(!showing);
-            },
-        ));
-    }
+        .child(field_box(pass_input.build().w_full()));
 
     if let Some(ref err) = s.wp4.account_form_error {
         form = form.child(text(err.clone()).font(type_small()).color(bad()).wrap());
@@ -895,34 +896,27 @@ pub fn account_step_view(s: &AppState) -> El {
             }
             out = out
                 .child(text("Password").font(type_small()).color(fg_muted()))
-                .child(
-                    row()
-                        .w_full()
-                        .gap(8.0)
-                        .center_y()
-                        .child(
-                            field_box(
-                                text_input(&s.wp4.flow_password, type_body())
-                                    .key("flow-create-pass")
-                                    .label("Password")
-                                    .w_full()
-                                    .single_line()
-                                    .color(FG)
-                                    .on_edit(edit_access(|s: &mut AppState| {
-                                        &mut s.wp4.flow_password
-                                    }))
-                                    .on_submit(|s: &mut AppState, _| s.wp4_flow_submit()),
-                            )
-                            .grow(1.0),
-                        )
-                        .child(
-                            set_btn("flow-create-show", if show { "Hide" } else { "Show" }, None)
-                                .on_press(move |s: &mut AppState| {
-                                    s.wp4.flow_show_pass = !show;
-                                    s.wp4.flow_password.set_revealed(!show);
-                                }),
-                        ),
-                );
+                .child(field_box(
+                    PasswordInput::new(&s.wp4.flow_password, type_body())
+                        .key("flow-create-pass")
+                        .label("Password")
+                        .color(FG)
+                        .revealed(show)
+                        .disabled(busy)
+                        .on_edit(|s: &mut AppState| &mut s.wp4.flow_password)
+                        .on_submit(|s: &mut AppState, _| s.wp4_flow_submit())
+                        .on_reveal_toggle(|s: &mut AppState, next, _| {
+                            s.wp4.flow_show_pass = next;
+                            s.wp4.flow_password.set_revealed(next);
+                        })
+                        .reveal_button(|revealed| {
+                            text(if revealed { "Hide" } else { "Show" })
+                                .font(type_small())
+                                .color(fg_muted())
+                        })
+                        .build()
+                        .w_full(),
+                ));
             if let Some(ref err) = s.wp4.flow_password_error {
                 out = out.child(text(err.clone()).font(type_small()).color(bad()).wrap());
             } else {
@@ -979,14 +973,15 @@ pub fn account_step_view(s: &AppState) -> El {
                 ))
                 .child(text("Password").font(type_small()).color(fg_muted()))
                 .child(field_box(
-                    text_input(&s.wp4.flow_password, type_body())
+                    PasswordInput::new(&s.wp4.flow_password, type_body())
                         .key("flow-signin-pass")
                         .label("Password")
-                        .w_full()
-                        .single_line()
                         .color(FG)
-                        .on_edit(edit_access(|s: &mut AppState| &mut s.wp4.flow_password))
-                        .on_submit(|s: &mut AppState, _| s.wp4_flow_submit()),
+                        .disabled(busy)
+                        .on_edit(|s: &mut AppState| &mut s.wp4.flow_password)
+                        .on_submit(|s: &mut AppState, _| s.wp4_flow_submit())
+                        .build()
+                        .w_full(),
                 ));
             if let Some(ref err) = s.wp4.flow_form_error {
                 out = out.child(text(err.clone()).font(type_small()).color(bad()).wrap());
@@ -1055,14 +1050,15 @@ pub fn account_step_view(s: &AppState) -> El {
                 ))
                 .child(text("New password").font(type_small()).color(fg_muted()))
                 .child(field_box(
-                    text_input(&s.wp4.flow_password, type_body())
+                    PasswordInput::new(&s.wp4.flow_password, type_body())
                         .key("flow-reset-pass")
                         .label("New password")
-                        .w_full()
-                        .single_line()
                         .color(FG)
-                        .on_edit(edit_access(|s: &mut AppState| &mut s.wp4.flow_password))
-                        .on_submit(|s: &mut AppState, _| s.wp4_flow_submit()),
+                        .disabled(busy)
+                        .on_edit(|s: &mut AppState| &mut s.wp4.flow_password)
+                        .on_submit(|s: &mut AppState, _| s.wp4_flow_submit())
+                        .build()
+                        .w_full(),
                 ))
                 .child(
                     text("At least 12 characters. Every PC signed in to this account will sign in again.")
@@ -1116,14 +1112,15 @@ pub fn account_step_view(s: &AppState) -> El {
                 )
                 .child(text("Password").font(type_small()).color(fg_muted()))
                 .child(field_box(
-                    text_input(&s.wp4.flow_password, type_body())
+                    PasswordInput::new(&s.wp4.flow_password, type_body())
                         .key("flow-newcode-pass")
                         .label("Password")
-                        .w_full()
-                        .single_line()
                         .color(FG)
-                        .on_edit(edit_access(|s: &mut AppState| &mut s.wp4.flow_password))
-                        .on_submit(|s: &mut AppState, _| s.wp4_flow_submit()),
+                        .disabled(busy)
+                        .on_edit(|s: &mut AppState| &mut s.wp4.flow_password)
+                        .on_submit(|s: &mut AppState, _| s.wp4_flow_submit())
+                        .build()
+                        .w_full(),
                 ));
             if let Some(ref err) = s.wp4.flow_form_error
                 && !locked

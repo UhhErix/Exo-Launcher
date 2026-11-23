@@ -3421,9 +3421,7 @@ impl AppState {
                 handle.update(move |s, _| {
                     s.apply_bootstrap(boot);
                     s.warm_discord();
-                    s.wp4_load_account_overview();
-                    s.wp4_load_clients_status(false);
-                    s.wp4_load_backup_status();
+                    s.wp4_warm_startup();
                 });
             }
             Err(e) => {

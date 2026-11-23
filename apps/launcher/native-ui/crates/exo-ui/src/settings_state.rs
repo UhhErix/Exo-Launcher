@@ -5,8 +5,8 @@ use exo_rpc::{
     AccountsProgressEvent, ActionResult, BackupActionReply, BackupStatus, BackupStoppedEvent,
     ClientsStatus, ComponentsFailedEvent, ExoAccountFileReply, ExoAccountHeldItem,
     ExoAccountOutcome, ExoAccountOverview, ExoAccountProbe, ExoAccountSession,
-    ExoAccountSessionsReply, HostEvent, JunkCleanReply, JunkItem, JunkScanReply, LauncherSettings,
-    LeftoverSummary, METHOD_ACCOUNTS_EPIC_REMOVE, METHOD_ACCOUNTS_LIST,
+    ExoAccountSessionsReply, HostEvent, JunkCleanReply, JunkItem, JunkScanReply, KeepStatus,
+    LauncherSettings, LeftoverSummary, METHOD_ACCOUNTS_EPIC_REMOVE, METHOD_ACCOUNTS_LIST,
     METHOD_ACHIEVEMENTS_PREVIEW, METHOD_APP_REPAIR_CACHE, METHOD_BACKUP_DECLINE,
     METHOD_BACKUP_EXPORT, METHOD_BACKUP_IMPORT, METHOD_BACKUP_NOW, METHOD_BACKUP_RESTORE,
     METHOD_BACKUP_STATUS, METHOD_CLIENTS_FIX, METHOD_CLIENTS_STATUS,
@@ -16,7 +16,7 @@ use exo_rpc::{
     METHOD_EXO_ACCOUNT_RESET, METHOD_EXO_ACCOUNT_REVOKE, METHOD_EXO_ACCOUNT_SAVE_CODE,
     METHOD_EXO_ACCOUNT_SESSIONS, METHOD_EXO_ACCOUNT_SIGN_IN, METHOD_EXO_ACCOUNT_SIGN_OUT,
     METHOD_EXO_ACCOUNT_SYNC, METHOD_GIFTS_LIST, METHOD_GIFTS_STEAM_SIGN_IN,
-    METHOD_GIFTS_STEAM_SIGN_OUT, METHOD_JUNK_CLEAN, METHOD_JUNK_SCAN,
+    METHOD_GIFTS_STEAM_SIGN_OUT, METHOD_JUNK_CLEAN, METHOD_JUNK_SCAN, METHOD_KEEP_STATUS,
     METHOD_PLAYTIME_IMPORT_RIOT_EXPORT, METHOD_PLAYTIME_RIOT_REFRESH,
     METHOD_PLAYTIME_SET_RIOT_BASELINE, METHOD_REPLACED_REMOVE, METHOD_REPLACED_SCAN,
     METHOD_REPORT_PREVIEW, METHOD_REPORT_SEND, METHOD_SETTINGS_GET, METHOD_SETTINGS_SET,
@@ -31,7 +31,7 @@ use exo_rpc::{
     SteamAccountReply, SteamSignInStep, StoreAccounts, StoreGiftsReply, StoreLocalCheck,
     StoreStatus, StoresAuthReply, TelemetrySentReply, WebClientOptions,
 };
-use rune::TextEdit;
+use rune::{OtpKind, OtpState, TextEdit};
 use serde_json::{Map, Value, json};
 use std::collections::{HashMap, HashSet};
 
@@ -1381,7 +1381,7 @@ pub struct SettingsUiState {
     pub steam_poll_at: Option<f64>,
     pub steam_user: TextEdit,
     pub steam_pass: TextEdit,
-    pub steam_guard: TextEdit,
+    pub steam_guard: OtpState,
     pub steam_offline_pending: Option<bool>,
     pub steam_offline_line: Option<String>,
     pub steam_offline_error: Option<String>,
@@ -1501,6 +1501,8 @@ pub struct SettingsUiState {
     pub clients_installer_started_at: Option<f64>,
     pub clients_installer_long: bool,
     pub clients_next_poll_at: Option<f64>,
+
+    pub keep_status: Option<KeepStatus>,
 }
 
 impl Default for SettingsUiState {
@@ -1543,7 +1545,7 @@ impl Default for SettingsUiState {
             steam_poll_at: None,
             steam_user: TextEdit::new(""),
             steam_pass: TextEdit::new("").secure(),
-            steam_guard: TextEdit::new(""),
+            steam_guard: OtpState::new(5).kind(OtpKind::AlphanumericUpper),
             steam_offline_pending: None,
             steam_offline_line: None,
             steam_offline_error: None,
@@ -1652,6 +1654,7 @@ impl Default for SettingsUiState {
             clients_installer_started_at: None,
             clients_installer_long: false,
             clients_next_poll_at: None,
+            keep_status: None,
         }
     }
 }
@@ -1852,6 +1855,31 @@ impl AppState {
         }
 
         redraw
+    }
+
+    pub fn wp4_warm_startup(&mut self) {
+        self.wp4_reload_settings();
+        self.wp4_load_account_overview();
+        self.wp4_load_clients_status(false);
+        self.wp4_load_backup_status();
+        self.wp4_load_stores_matrix();
+        self.wp4_load_store_accounts();
+        self.wp4_load_steam_account();
+        self.wp4_load_gifts_steam_status();
+        self.wp4_load_shaders();
+        self.wp4_load_web_prefs();
+        self.wp4_load_keep_status();
+    }
+
+    pub fn wp4_load_keep_status(&mut self) {
+        #[cfg(windows)]
+        if let (Some(rpc), Some(handle)) = (self.rpc.clone(), self.handle.clone()) {
+            rpc.call::<_, KeepStatus>(METHOD_KEEP_STATUS, &json!({}), move |res| {
+                if let Ok(status) = res {
+                    handle.update(move |s, _| s.wp4.keep_status = Some(status));
+                }
+            });
+        }
     }
 
     pub fn wp4_load_settings_all(&mut self) {
@@ -2425,7 +2453,7 @@ impl AppState {
         self.wp4.steam_poll_at = None;
         self.wp4.steam_busy = false;
         self.wp4.steam_pass = TextEdit::new("").secure();
-        self.wp4.steam_guard = TextEdit::new("");
+        self.wp4.steam_guard.clear();
         #[cfg(windows)]
         if let Some(rpc) = self.rpc.clone() {
             rpc.call_raw(METHOD_STEAM_SIGN_IN_CANCEL, &json!({}), |_| {});
@@ -2497,8 +2525,8 @@ impl AppState {
     }
 
     pub fn wp4_steam_submit_guard(&mut self) {
-        let code = self.wp4.steam_guard.text.trim().to_string();
-        self.wp4.steam_guard = TextEdit::new("");
+        let code = self.wp4.steam_guard.value();
+        self.wp4.steam_guard.clear();
         if code.is_empty() || self.wp4.steam_busy {
             return;
         }
@@ -4284,5 +4312,17 @@ mod tests {
         assert!(parse_hours_input("0").is_err());
         assert_eq!(parse_hours_input(""), Ok(None));
         assert_eq!(parse_hours_input("12.5"), Ok(Some(12.5)));
+    }
+
+    #[test]
+    fn steam_guard_otp_state_normalizes_upper_alphanumeric_five_boxes() {
+        let mut wp4 = SettingsUiState::default();
+        assert_eq!(wp4.steam_guard.len(), 5);
+        assert!(wp4.steam_guard.is_empty());
+        wp4.steam_guard.paste_at(0, "a2-b9z");
+        assert!(wp4.steam_guard.is_complete());
+        assert_eq!(wp4.steam_guard.value(), "A2B9Z");
+        wp4.steam_guard.clear();
+        assert!(wp4.steam_guard.is_empty());
     }
 }

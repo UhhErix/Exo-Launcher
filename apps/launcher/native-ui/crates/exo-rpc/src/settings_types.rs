@@ -588,6 +588,15 @@ pub struct ShadersEventPayload {
     pub data: Value,
 }
 
+#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct KeepStatus {
+    #[serde(default)]
+    pub pc: String,
+    #[serde(default)]
+    pub games: std::collections::HashMap<String, String>,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -674,5 +683,21 @@ mod tests {
         let rep: ReplacedScanReply = serde_json::from_str(rep_json).expect("replaced");
         assert_eq!(rep.apps.len(), 1);
         assert_eq!(rep.apps[0].found.folders, 1);
+    }
+
+    #[test]
+    fn deserializes_keep_status() {
+        let json =
+            r#"{"pc":"optimized","games":{"steam:730":"optimized","epic:fn":"waitsForFirstRun"}}"#;
+        let parsed: KeepStatus = serde_json::from_str(json).expect("keep status");
+        assert_eq!(parsed.pc, "optimized");
+        assert_eq!(
+            parsed.games.get("steam:730").map(String::as_str),
+            Some("optimized")
+        );
+        assert_eq!(
+            parsed.games.get("epic:fn").map(String::as_str),
+            Some("waitsForFirstRun")
+        );
     }
 }
