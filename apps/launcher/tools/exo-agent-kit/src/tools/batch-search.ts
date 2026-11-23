@@ -12,7 +12,7 @@ import { runCommand } from '../utils/exec.js'
 import { runReadOnlyGit, splitCommandArgs } from '../utils/git.js'
 import {
   parseMaybeJsonArray,
-  resolveSafePath,
+  resolveUnconfinedPath,
   resolveWorkspacePaths,
   toPosixPath,
 } from '../utils/paths.js'
@@ -112,7 +112,7 @@ function fuzzyScore(candidate: string, needle: string): number {
 
 async function runTextOrRegexQuery(q: SearchQuery, baseDir: string): Promise<string> {
   const maxResults = Math.max(1, Math.min(200, q.maxResults ?? 40))
-  const searchTarget = q.path ? resolveSafePath(baseDir, q.path) : baseDir
+  const searchTarget = q.path ? resolveUnconfinedPath(baseDir, q.path) : baseDir
   const rgArgs = [
     '--no-heading',
     '--line-number',
@@ -179,7 +179,7 @@ async function runTextOrRegexQuery(q: SearchQuery, baseDir: string): Promise<str
 
 async function runGlobQuery(q: SearchQuery, baseDir: string): Promise<string> {
   const maxResults = Math.max(1, Math.min(200, q.maxResults ?? 60))
-  const searchTarget = q.path ? resolveSafePath(baseDir, q.path) : baseDir
+  const searchTarget = q.path ? resolveUnconfinedPath(baseDir, q.path) : baseDir
   const res = await runCommand('rg', ['--files', '--color=never', '--glob', q.query, searchTarget], {
     cwd: baseDir,
     timeoutMs: 15_000,
@@ -208,7 +208,7 @@ async function runGlobQuery(q: SearchQuery, baseDir: string): Promise<string> {
 
 async function runFuzzyQuery(q: SearchQuery, baseDir: string): Promise<string> {
   const maxResults = Math.max(1, Math.min(100, q.maxResults ?? 25))
-  const searchTarget = q.path ? resolveSafePath(baseDir, q.path) : baseDir
+  const searchTarget = q.path ? resolveUnconfinedPath(baseDir, q.path) : baseDir
   let files: string[] = []
   const res = await runCommand('rg', ['--files', '--color=never', searchTarget], {
     cwd: baseDir,
@@ -234,7 +234,7 @@ async function runFuzzyQuery(q: SearchQuery, baseDir: string): Promise<string> {
 }
 
 async function runGitQuery(q: SearchQuery, baseDir: string): Promise<string> {
-  const searchDir = q.path ? resolveSafePath(baseDir, q.path) : baseDir
+  const searchDir = q.path ? resolveUnconfinedPath(baseDir, q.path) : baseDir
   const tokens = q.args && q.args.length > 0 ? [q.query, ...q.args] : splitCommandArgs(q.query)
   const subcommand = tokens[0] ?? ''
   const rest = tokens.slice(1)

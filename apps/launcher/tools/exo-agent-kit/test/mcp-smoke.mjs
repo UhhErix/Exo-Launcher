@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
+import crypto from 'node:crypto'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
@@ -11,13 +12,21 @@ const DIST_MCP = path.join(KIT_ROOT, 'dist', 'mcp-server.mjs')
 
 async function main() {
   const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'exo-kit-smoke-'))
+  const workParityDir = path.join(
+    REPO_ROOT,
+    'apps',
+    'launcher',
+    'work',
+    `exo-kit-smoke-${crypto.randomBytes(4).toString('hex')}`,
+  )
+  fs.mkdirSync(workParityDir, { recursive: true })
   const cacheDir = path.join(tempRoot, 'cache')
   const editFile = path.join(tempRoot, 'smoke.txt')
   fs.writeFileSync(editFile, 'hello world\n', 'utf8')
 
-  const refPng = path.join(tempRoot, 'ref.png')
-  const snapPng = path.join(tempRoot, 'snap.png')
-  const diffPng = path.join(tempRoot, 'diff.png')
+  const refPng = path.join(workParityDir, 'ref.png')
+  const snapPng = path.join(workParityDir, 'snap.png')
+  const diffPng = path.join(workParityDir, 'diff.png')
   await new Promise((resolve, reject) => {
     const p = spawn(
       'python',
@@ -176,6 +185,7 @@ async function main() {
       }, 2000)
     })
     fs.rmSync(tempRoot, { recursive: true, force: true })
+    fs.rmSync(workParityDir, { recursive: true, force: true })
   }
 }
 

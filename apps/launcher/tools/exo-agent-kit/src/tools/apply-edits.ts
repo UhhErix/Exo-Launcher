@@ -10,10 +10,12 @@ import {
   stripAnsi,
   type BudgetSection,
 } from '../utils/budget.js'
-import { resolveNpmInvocation, runCommand } from '../utils/exec.js'
+import { resolveNpmInvocation, runCommand, type CommandResult } from '../utils/exec.js'
+import { runReadOnlyGit, validateReadOnlyGitArgs } from '../utils/git.js'
 import {
   parseMaybeJsonArray,
-  resolveSafePath,
+  resolveConfinedDir,
+  resolveConfinedWritePath,
   resolveWorkspacePaths,
   toPosixPath,
 } from '../utils/paths.js'
@@ -41,19 +43,322 @@ interface VerifySpec {
   timeoutSec?: number
 }
 
-const DISALLOWED_VERIFY_SHELLS = new Set([
-  'cmd',
-  'cmd.exe',
-  'powershell',
-  'powershell.exe',
-  'pwsh',
-  'pwsh.exe',
-  'sh',
-  'bash',
-  'zsh',
-  'wsl',
-  'wsl.exe',
+export const ALLOWED_VERIFY_COMMANDS = new Set([
+  'cargo',
+  'dotnet',
+  'npm',
+  'node',
+  'python',
+  'python3',
+  'rg',
+  'git',
 ])
+
+const ALLOWED_CARGO_SUBCOMMANDS = new Set(['fmt', 'clippy', 'test', 'build', 'check'])
+const ALLOWED_DOTNET_SUBCOMMANDS = new Set(['build', 'test'])
+const FORBIDDEN_NODE_LONG_FLAGS = new Set([
+  '--eval',
+  '--print',
+  '--import',
+  '--require',
+  '--loader',
+  '--experimental-loader',
+  '--env-file',
+])
+const FORBIDDEN_NPM_FLAGS = new Set([
+  '--script-shell',
+  '--prefix',
+  '--userconfig',
+  '--globalconfig',
+])
+
+type ValidatedVerifyPlan =
+  | {
+      ok: true
+      kind: 'exec'
+      display: string
+      command: string
+      args: string[]
+      cwd: string
+      timeoutMs: number
+    }
+  | {
+      ok: true
+      kind: 'git'
+      display: string
+      subcommand: string
+      args: string[]
+      cwd: string
+      timeoutMs: number
+    }
+  | { ok: false; error: string }
+
+function hasForbiddenNodeFlag(args: string[]): string | null {
+  for (const arg of args) {
+    if (arg === '--') break
+    if (arg === '-e' || arg === '-p' || arg === '-r') return arg
+    const eqIdx = arg.indexOf('=')
+    const base = eqIdx > 0 ? arg.slice(0, eqIdx) : arg
+    if (FORBIDDEN_NODE_LONG_FLAGS.has(base)) return base
+    if (/^-[a-zA-Z]+$/.test(arg)) {
+      if (arg.includes('e') || arg.includes('p') || arg.includes('r')) {
+        return arg
+      }
+    }
+  }
+  return null
+}
+
+export function validateVerifySpec(
+  repoRoot: string,
+  baseCwd: string,
+  spec: VerifySpec,
+): ValidatedVerifyPlan {
+  const rawCmd = typeof spec.command === 'string' ? spec.command.trim() : ''
+  if (!rawCmd) {
+    return { ok: false, error: 'Refused verify: command must be a non-empty string.' }
+  }
+  if (rawCmd.includes('/') || rawCmd.includes('\\')) {
+    return {
+      ok: false,
+      error: `Refused verify command "${rawCmd}": path separators are not allowed; use a bare allowlisted command (${Array.from(ALLOWED_VERIFY_COMMANDS).join(', ')}).`,
+    }
+  }
+
+  const cwdTarget = typeof spec.cwd === 'string' && spec.cwd.trim() ? spec.cwd.trim() : '.'
+  const cwdCheck = resolveConfinedDir(repoRoot, baseCwd, cwdTarget)
+  if (!cwdCheck.ok) {
+    return { ok: false, error: `Refused verify cwd: ${cwdCheck.error}` }
+  }
+  const verifyCwd = cwdCheck.realPath
+  if (!fs.existsSync(verifyCwd) || !fs.statSync(verifyCwd).isDirectory()) {
+    return { ok: false, error: `Refused verify cwd: directory does not exist (${cwdTarget}).` }
+  }
+
+  const args = Array.isArray(spec.args) ? spec.args.map((a) => String(a)) : []
+  const timeoutMs =
+    typeof spec.timeoutSec === 'number' && Number.isFinite(spec.timeoutSec)
+      ? Math.max(2, Math.min(120, Math.floor(spec.timeoutSec))) * 1000
+      : 60_000
+
+  const cmd = rawCmd.toLowerCase().replace(/\.(exe|cmd)$/i, '')
+  if (!ALLOWED_VERIFY_COMMANDS.has(cmd)) {
+    return {
+      ok: false,
+      error: `Refused verify command "${rawCmd}": not in allowlist (${Array.from(ALLOWED_VERIFY_COMMANDS).join(', ')}).`,
+    }
+  }
+
+  if (cmd === 'cargo') {
+    const sub = args[0] ?? ''
+    if (!ALLOWED_CARGO_SUBCOMMANDS.has(sub)) {
+      return {
+        ok: false,
+        error: `Refused cargo verify subcommand "${sub}": allowed subcommands are ${Array.from(ALLOWED_CARGO_SUBCOMMANDS).join(', ')}.`,
+      }
+    }
+    for (const arg of args.slice(1)) {
+      const base = arg.includes('=') ? arg.slice(0, arg.indexOf('=')) : arg
+      if (base === '--config' || base === '-Z') {
+        return { ok: false, error: `Refused cargo verify flag "${base}".` }
+      }
+    }
+    return {
+      ok: true,
+      kind: 'exec',
+      display: `cargo ${args.join(' ')}`,
+      command: 'cargo',
+      args,
+      cwd: verifyCwd,
+      timeoutMs,
+    }
+  }
+
+  if (cmd === 'dotnet') {
+    const sub = args[0] ?? ''
+    if (!ALLOWED_DOTNET_SUBCOMMANDS.has(sub)) {
+      return {
+        ok: false,
+        error: `Refused dotnet verify subcommand "${sub}": allowed subcommands are build, test.`,
+      }
+    }
+    return {
+      ok: true,
+      kind: 'exec',
+      display: `dotnet ${args.join(' ')}`,
+      command: 'dotnet',
+      args,
+      cwd: verifyCwd,
+      timeoutMs,
+    }
+  }
+
+  if (cmd === 'npm') {
+    if (args[0] !== 'run' || !args[1] || !/^[A-Za-z0-9:._-]+$/.test(args[1])) {
+      return {
+        ok: false,
+        error: 'Refused npm verify: only "npm run <script>" with a valid script name is allowed.',
+      }
+    }
+    for (const arg of args.slice(2)) {
+      const base = arg.includes('=') ? arg.slice(0, arg.indexOf('=')) : arg
+      if (FORBIDDEN_NPM_FLAGS.has(base)) {
+        return { ok: false, error: `Refused npm verify flag "${base}".` }
+      }
+    }
+    const invoked = resolveNpmInvocation(args)
+    return {
+      ok: true,
+      kind: 'exec',
+      display: `npm ${args.join(' ')}`,
+      command: invoked.command,
+      args: invoked.args,
+      cwd: verifyCwd,
+      timeoutMs,
+    }
+  }
+
+  if (cmd === 'node') {
+    if (args.length === 0) {
+      return {
+        ok: false,
+        error: 'Refused node verify: must be "node --test <path inside repo>" or "node <script inside repo>".',
+      }
+    }
+    const badFlag = hasForbiddenNodeFlag(args)
+    if (badFlag) {
+      return {
+        ok: false,
+        error: `Refused node verify flag "${badFlag}": inline evaluation and module preload flags are disallowed.`,
+      }
+    }
+    if (args[0] === '--test') {
+      const rest = args.slice(1)
+      let testPathCount = 0
+      const resolvedArgs: string[] = ['--test']
+      for (const arg of rest) {
+        if (arg.startsWith('-')) {
+          if (!arg.startsWith('--test-')) {
+            return {
+              ok: false,
+              error: `Refused node --test flag "${arg}": only --test-* flags and repo test paths are allowed.`,
+            }
+          }
+          resolvedArgs.push(arg)
+        } else {
+          const checked = resolveConfinedWritePath(repoRoot, verifyCwd, arg)
+          if (!checked.ok) {
+            return { ok: false, error: `Refused node --test path "${arg}": ${checked.error}` }
+          }
+          resolvedArgs.push(checked.realPath)
+          testPathCount++
+        }
+      }
+      if (testPathCount === 0) {
+        return {
+          ok: false,
+          error: 'Refused node --test verify: at least one test file path inside the repo is required.',
+        }
+      }
+      return {
+        ok: true,
+        kind: 'exec',
+        display: `node ${args.join(' ')}`,
+        command: process.execPath,
+        args: resolvedArgs,
+        cwd: verifyCwd,
+        timeoutMs,
+      }
+    }
+
+    const scriptArg = args[0]!
+    if (scriptArg.startsWith('-')) {
+      return {
+        ok: false,
+        error: `Refused node verify flag "${scriptArg}": only "node --test <path>" or "node <script inside repo>" is allowed.`,
+      }
+    }
+    const scriptCheck = resolveConfinedWritePath(repoRoot, verifyCwd, scriptArg)
+    if (!scriptCheck.ok) {
+      return { ok: false, error: `Refused node script "${scriptArg}": ${scriptCheck.error}` }
+    }
+    if (!fs.existsSync(scriptCheck.realPath) || !fs.statSync(scriptCheck.realPath).isFile()) {
+      return { ok: false, error: `Refused node script "${scriptArg}": file does not exist inside repo.` }
+    }
+    return {
+      ok: true,
+      kind: 'exec',
+      display: `node ${args.join(' ')}`,
+      command: process.execPath,
+      args: [scriptCheck.realPath, ...args.slice(1)],
+      cwd: verifyCwd,
+      timeoutMs,
+    }
+  }
+
+  if (cmd === 'python' || cmd === 'python3') {
+    if (args.length < 2 || args[0] !== '-I' || args[1]!.startsWith('-')) {
+      return {
+        ok: false,
+        error: 'Refused python verify: only "python -I <script inside repo> [...]" is allowed (no -c/-m).',
+      }
+    }
+    const scriptCheck = resolveConfinedWritePath(repoRoot, verifyCwd, args[1]!)
+    if (!scriptCheck.ok) {
+      return { ok: false, error: `Refused python script "${args[1]!}": ${scriptCheck.error}` }
+    }
+    if (!fs.existsSync(scriptCheck.realPath) || !fs.statSync(scriptCheck.realPath).isFile()) {
+      return { ok: false, error: `Refused python script "${args[1]!}": file does not exist inside repo.` }
+    }
+    return {
+      ok: true,
+      kind: 'exec',
+      display: `${cmd} ${args.join(' ')}`,
+      command: cmd,
+      args: ['-I', scriptCheck.realPath, ...args.slice(2)],
+      cwd: verifyCwd,
+      timeoutMs,
+    }
+  }
+
+  if (cmd === 'rg') {
+    for (const arg of args) {
+      const base = arg.includes('=') ? arg.slice(0, arg.indexOf('=')) : arg
+      if (base === '--pre' || base === '--pre-glob') {
+        return { ok: false, error: `Refused rg verify flag "${base}".` }
+      }
+    }
+    return {
+      ok: true,
+      kind: 'exec',
+      display: `rg ${args.join(' ')}`,
+      command: 'rg',
+      args,
+      cwd: verifyCwd,
+      timeoutMs,
+    }
+  }
+
+  if (cmd === 'git') {
+    const sub = args[0] ?? ''
+    const rest = args.slice(1)
+    const gitErr = validateReadOnlyGitArgs(sub, rest)
+    if (gitErr) {
+      return { ok: false, error: `Refused git verify: ${gitErr}` }
+    }
+    return {
+      ok: true,
+      kind: 'git',
+      display: `git ${args.join(' ')}`,
+      subcommand: sub,
+      args: rest,
+      cwd: verifyCwd,
+      timeoutMs,
+    }
+  }
+
+  return { ok: false, error: `Refused verify command "${rawCmd}".` }
+}
 
 function detectEol(text: string): '\r\n' | '\n' {
   const crlf = text.indexOf('\r\n')
@@ -111,25 +416,6 @@ function findClosestLineHint(contentLf: string, needleLf: string): string {
   return ` (closest L${bestIdx + 1}: ${contentLines[bestIdx]!.trim().slice(0, 90)})`
 }
 
-function resolveRealTargetPath(absPath: string): {
-  targetPath: string
-  exists: boolean
-  mode: number | null
-} {
-  if (!fs.existsSync(absPath)) {
-    return { targetPath: absPath, exists: false, mode: null }
-  }
-  let targetPath = absPath
-  try {
-    targetPath = fs.realpathSync(absPath)
-  } catch {}
-  let mode: number | null = null
-  try {
-    mode = fs.statSync(targetPath).mode
-  } catch {}
-  return { targetPath, exists: true, mode }
-}
-
 function atomicWritePreservingMode(targetPath: string, content: string, mode: number | null): void {
   const dir = path.dirname(targetPath)
   fs.mkdirSync(dir, { recursive: true })
@@ -181,6 +467,19 @@ export async function runApplyEdits(args: Record<string, unknown>): Promise<Tool
   const bestEffort = args.bestEffort === true
   const dryRun = args.dryRun === true
 
+  const verifyArg =
+    args.verify && typeof args.verify === 'object' && !Array.isArray(args.verify)
+      ? (args.verify as unknown as VerifySpec)
+      : null
+
+  let verifyPlan: ValidatedVerifyPlan | null = null
+  if (verifyArg && !dryRun) {
+    verifyPlan = validateVerifySpec(ws.repoRoot, ws.cwd, verifyArg)
+    if (!verifyPlan.ok) {
+      return { text: verifyPlan.error, isError: true }
+    }
+  }
+
   interface MergedFilePlan {
     displayPath: string
     targetPath: string
@@ -195,9 +494,20 @@ export async function runApplyEdits(args: Record<string, unknown>): Promise<Tool
     if (!spec || typeof spec.path !== 'string' || !spec.path.trim()) {
       return { text: 'Every edit spec must include a non-empty "path".', isError: true }
     }
-    const abs = resolveSafePath(ws.cwd, spec.path)
-    const resolved = resolveRealTargetPath(abs)
-    const key = resolved.targetPath.toLowerCase()
+    const confined = resolveConfinedWritePath(ws.repoRoot, ws.cwd, spec.path)
+    if (!confined.ok) {
+      return { text: confined.error, isError: true }
+    }
+
+    const exists = fs.existsSync(confined.realPath)
+    let mode: number | null = null
+    if (exists) {
+      try {
+        mode = fs.statSync(confined.realPath).mode
+      } catch {}
+    }
+
+    const key = confined.realPath.toLowerCase()
     const existing = merged.get(key)
     const hunks = normalizeHunks(spec)
     if (existing) {
@@ -205,10 +515,10 @@ export async function runApplyEdits(args: Record<string, unknown>): Promise<Tool
       existing.hunks.push(...hunks)
     } else {
       merged.set(key, {
-        displayPath: toPosixPath(path.relative(ws.repoRoot, abs) || spec.path),
-        targetPath: resolved.targetPath,
-        exists: resolved.exists,
-        mode: resolved.mode,
+        displayPath: toPosixPath(confined.relPath),
+        targetPath: confined.realPath,
+        exists,
+        mode,
         createContent: spec.createIfMissing && typeof spec.content === 'string' ? spec.content : null,
         hunks,
       })
@@ -355,42 +665,28 @@ export async function runApplyEdits(args: Record<string, unknown>): Promise<Tool
   }
 
   let verifyFailed = false
-  const verifyArg =
-    args.verify && typeof args.verify === 'object' && !Array.isArray(args.verify)
-      ? (args.verify as unknown as VerifySpec)
-      : null
-
-  if (verifyArg && typeof verifyArg.command === 'string' && verifyArg.command.trim() && !dryRun) {
-    const rawCmd = verifyArg.command.trim()
-    const baseCmd = path.basename(rawCmd).toLowerCase()
-    if (DISALLOWED_VERIFY_SHELLS.has(baseCmd)) {
-      verifyFailed = true
-      sections.push({
-        header: `Verify REFUSED (${rawCmd})`,
-        body: 'Shell interpreters are disallowed in verify.command; invoke the target binary directly with args[].',
-      })
+  if (verifyPlan && verifyPlan.ok && !dryRun) {
+    let res: CommandResult
+    if (verifyPlan.kind === 'git') {
+      res = await runReadOnlyGit(
+        verifyPlan.cwd,
+        verifyPlan.subcommand,
+        verifyPlan.args,
+        verifyPlan.timeoutMs,
+      )
     } else {
-      const verifyArgs = Array.isArray(verifyArg.args)
-        ? verifyArg.args.map((a) => String(a))
-        : []
-      const invoked =
-        baseCmd === 'npm' || baseCmd === 'npm.cmd'
-          ? resolveNpmInvocation(verifyArgs)
-          : { command: rawCmd, args: verifyArgs }
-      const verifyCwd = verifyArg.cwd ? resolveSafePath(ws.cwd, verifyArg.cwd) : ws.cwd
-      const timeoutMs =
-        typeof verifyArg.timeoutSec === 'number' && Number.isFinite(verifyArg.timeoutSec)
-          ? Math.max(2, Math.min(120, Math.floor(verifyArg.timeoutSec))) * 1000
-          : 60_000
-      const res = await runCommand(invoked.command, invoked.args, { cwd: verifyCwd, timeoutMs })
-      const ok = res.exitCode === 0 && !res.timedOut
-      if (!ok) verifyFailed = true
-      const combined = stripAnsi([res.stdout.trim(), res.stderr.trim()].filter(Boolean).join('\n'))
-      sections.push({
-        header: `Verify [${rawCmd} ${verifyArgs.join(' ')}] ${ok ? 'PASS' : `FAIL(exit=${res.exitCode})`} ${res.durationMs}ms`,
-        body: ok ? '(passed)' : foldHeadTail(combined || '(no output)', 2400),
+      res = await runCommand(verifyPlan.command, verifyPlan.args, {
+        cwd: verifyPlan.cwd,
+        timeoutMs: verifyPlan.timeoutMs,
       })
     }
+    const ok = res.exitCode === 0 && !res.timedOut
+    if (!ok) verifyFailed = true
+    const combined = stripAnsi([res.stdout.trim(), res.stderr.trim()].filter(Boolean).join('\n'))
+    sections.push({
+      header: `Verify [${verifyPlan.display}] ${ok ? 'PASS' : `FAIL(exit=${res.exitCode})`} ${res.durationMs}ms`,
+      body: ok ? '(passed)' : foldHeadTail(combined || '(no output)', 2400),
+    })
   }
 
   const preamble = `apply_edits: ${validFiles.length}/${validated.length} ok${

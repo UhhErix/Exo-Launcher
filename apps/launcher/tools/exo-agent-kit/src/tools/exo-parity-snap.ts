@@ -1,6 +1,5 @@
 import crypto from 'node:crypto'
 import fs from 'node:fs'
-import os from 'node:os'
 import path from 'node:path'
 import type { ToolResult } from '../protocol/mcp.js'
 import {
@@ -13,8 +12,9 @@ import {
 import { MCP_CALL_BUDGET_MS, runCommand } from '../utils/exec.js'
 import {
   parseMaybeJsonArray,
+  resolveConfinedWritePath,
   resolveLocalAppData,
-  resolveSafePath,
+  resolveUnconfinedPath,
   resolveWorkspacePaths,
   toPosixPath,
 } from '../utils/paths.js'
@@ -145,17 +145,29 @@ export async function runExoParitySnap(args: Record<string, unknown>): Promise<T
       : null
 
   if (compareArg) {
-    const refPath = typeof compareArg.refPath === 'string' ? resolveSafePath(ws.cwd, compareArg.refPath) : ''
-    const snapPath = typeof compareArg.snapPath === 'string' ? resolveSafePath(ws.cwd, compareArg.snapPath) : ''
+    const refPath =
+      typeof compareArg.refPath === 'string' ? resolveUnconfinedPath(ws.cwd, compareArg.refPath) : ''
+    const snapPath =
+      typeof compareArg.snapPath === 'string' ? resolveUnconfinedPath(ws.cwd, compareArg.snapPath) : ''
     if (!refPath || !snapPath) {
       return { text: 'compare requires both refPath and snapPath.', isError: true }
     }
     if (!fs.existsSync(refPath)) return { text: `refPath not found: ${refPath}`, isError: true }
     if (!fs.existsSync(snapPath)) return { text: `snapPath not found: ${snapPath}`, isError: true }
-    const outPath =
+
+    const rawOutPath =
       typeof compareArg.outPath === 'string' && compareArg.outPath.trim()
-        ? resolveSafePath(ws.cwd, compareArg.outPath)
-        : path.join(os.tmpdir(), `exo-parity-compare-${crypto.randomBytes(4).toString('hex')}.png`)
+        ? compareArg.outPath.trim()
+        : path.join(
+            ws.launcherRoot,
+            'work',
+            `exo-parity-compare-${crypto.randomBytes(4).toString('hex')}.png`,
+          )
+    const outCheck = resolveConfinedWritePath(ws.repoRoot, ws.cwd, rawOutPath)
+    if (!outCheck.ok) {
+      return { text: `Refused compare.outPath: ${outCheck.error}`, isError: true }
+    }
+    const outPath = outCheck.realPath
     fs.mkdirSync(path.dirname(outPath), { recursive: true })
 
     const pyRes = await runCommand(
@@ -210,28 +222,44 @@ export async function runExoParitySnap(args: Record<string, unknown>): Promise<T
     }
   }
 
-  const dataDir =
-    typeof args.dataDir === 'string' && args.dataDir.trim()
-      ? resolveSafePath(ws.cwd, args.dataDir)
-      : undefined
-  if (dataDir && isInsideDir(dataDir, installedDataDir)) {
-    return {
-      text: 'Refused: dataDir cannot be inside %LOCALAPPDATA%\\ExoLauncher.',
-      isError: true,
+  let dataDir: string | undefined
+  if (typeof args.dataDir === 'string' && args.dataDir.trim()) {
+    const rawDataDir = resolveUnconfinedPath(ws.cwd, args.dataDir.trim())
+    if (isInsideDir(rawDataDir, installedDataDir)) {
+      return {
+        text: 'Refused: dataDir cannot be inside %LOCALAPPDATA%\\ExoLauncher.',
+        isError: true,
+      }
     }
+    const dataCheck = resolveConfinedWritePath(ws.repoRoot, ws.cwd, args.dataDir.trim())
+    if (!dataCheck.ok) {
+      return { text: `Refused dataDir: ${dataCheck.error}`, isError: true }
+    }
+    dataDir = dataCheck.realPath
   }
 
   const tag =
     typeof args.tag === 'string' && /^[A-Za-z0-9._-]+$/.test(args.tag.trim())
       ? args.tag.trim()
       : 'snap'
-  const outDir =
+
+  const rawOutDir =
     typeof args.outDir === 'string' && args.outDir.trim()
-      ? resolveSafePath(ws.cwd, args.outDir)
-      : path.join(os.tmpdir(), `exo-parity-out-${crypto.randomBytes(4).toString('hex')}`)
+      ? args.outDir.trim()
+      : path.join(
+          ws.launcherRoot,
+          'work',
+          `exo-parity-out-${crypto.randomBytes(4).toString('hex')}`,
+        )
+  const outDirCheck = resolveConfinedWritePath(ws.repoRoot, ws.cwd, rawOutDir)
+  if (!outDirCheck.ok) {
+    return { text: `Refused outDir: ${outDirCheck.error}`, isError: true }
+  }
+  const outDir = outDirCheck.realPath
+
   const refsDir =
     typeof args.refsDir === 'string' && args.refsDir.trim()
-      ? resolveSafePath(ws.cwd, args.refsDir)
+      ? resolveUnconfinedPath(ws.cwd, args.refsDir)
       : process.env.EXO_PARITY_REFS && process.env.EXO_PARITY_REFS.trim()
         ? path.resolve(process.env.EXO_PARITY_REFS.trim())
         : undefined

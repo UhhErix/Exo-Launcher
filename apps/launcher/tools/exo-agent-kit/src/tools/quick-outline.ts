@@ -9,7 +9,7 @@ import {
 } from '../utils/budget.js'
 import {
   parseMaybeJsonArray,
-  resolveSafePath,
+  resolveUnconfinedPath,
   resolveWorkspacePaths,
   toPosixPath,
 } from '../utils/paths.js'
@@ -607,7 +607,7 @@ export async function runQuickOutline(args: Record<string, unknown>): Promise<To
   const sections: BudgetSection[] = []
 
   for (const rawPath of paths) {
-    const abs = resolveSafePath(ws.cwd, rawPath)
+    const abs = resolveUnconfinedPath(ws.cwd, rawPath)
     const rel = toPosixPath(path.relative(ws.repoRoot, abs))
     if (!fs.existsSync(abs)) {
       sections.push({ header: `### ${rel}`, body: '(file not found)' })

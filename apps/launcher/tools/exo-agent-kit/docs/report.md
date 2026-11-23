@@ -8,8 +8,8 @@ Built `exo-agent-kit` v1 at `apps/launcher/tools/exo-agent-kit/` as a pinned, of
 
 | Bundle | Entrypoint | Output Size | Purpose |
 | --- | --- | ---: | --- |
-| `dist/mcp-server.mjs` | `src/mcp-server.ts` | 97,369 B | Hand-rolled JSON-RPC 2.0 stdio MCP server (no MCP SDK) |
-| `dist/session-start.mjs` | `src/session-start.ts` | 9,391 B | `SessionStart` hook (`--agent claude \| antigravity`, <= 1.5 KB, fail-open) |
+| `dist/mcp-server.mjs` | `src/mcp-server.ts` | 106,811 B | Hand-rolled JSON-RPC 2.0 stdio MCP server (no MCP SDK) |
+| `dist/session-start.mjs` | `src/session-start.ts` | 9,881 B | `SessionStart` hook (`--agent claude \| antigravity`, <= 1.5 KB, fail-open) |
 | `dist/exo-orca-helper.mjs` | `src/exo-orca-helper.ts` | 9,680 B | Tool 9 CLI (`wave` parallel launcher + `recover` 3-step sequence) |
 
 Pinned `devDependencies` (zero `dependencies`, committed `package-lock.json`):
@@ -27,17 +27,37 @@ Pinned `devDependencies` (zero `dependencies`, committed `package-lock.json`):
 | 4 | `exo_rune_api` | MCP | Resolves pinned Rune rev from `native-ui/Cargo.toml` / `Cargo.lock`, parses `pub [const\|async\|unsafe] fn`, `struct`, `enum`, `trait`, `type`, `const`, `impl` into offline rev-keyed JSON cache |
 | 5 | `quick_outline` | MCP | Up to 20 files, stateful brace-depth outliner for C# (any indent depth, block namespaces, properties, `=>` members), Rust (nested `mod`/`impl`/`pub const fn`), and TS/TSX/JS with `[startLine..endLine]` ranges |
 | 6 | `exo_snapshot` (+ `session-start.mjs`) | MCP + Hook | Hardened read-only git branch/dirty/commits snapshot, explicit `Orca: pass --base-branch <branch>` guard off `main`, active areas, and applicable skills |
-| 7 | `exo_parity_snap` | MCP | Wraps in-repo `apps/launcher/tools/parity/parity-snap.ps1` and `parity-compare.py`; refuses installed `%LOCALAPPDATA%\ExoLauncher\app\ExoLauncher.exe` and `%LOCALAPPDATA%\ExoLauncher` data dir |
-| 8 | `apply_edits` | MCP | Up to 50 files, array or JSON-stringified array, atomic & `bestEffort` modes, CRLF/mode preservation, closest-line hints, optional direct-spawn `verify` (shell interpreters disallowed) |
+| 7 | `exo_parity_snap` | MCP | Wraps in-repo `apps/launcher/tools/parity/parity-snap.ps1` and `parity-compare.py`; refuses installed `%LOCALAPPDATA%\ExoLauncher\app\ExoLauncher.exe` and `%LOCALAPPDATA%\ExoLauncher` data dir; confines write outputs (`outDir`, `dataDir`, `compare.outPath`) to workspace root |
+| 8 | `apply_edits` | MCP | Up to 50 files, array or JSON-stringified array, atomic & `bestEffort` modes, CRLF/mode preservation, closest-line hints, strict workspace write confinement, allowlisted direct-spawn `verify` |
 | 9 | `exo-orca-helper` | CLI | `wave` (1..4 concurrent `orca orchestration worker-start` with auto-injected `--base-branch <current-branch>` + receipt logs) and `recover` (`worker-abandon`/`worker-stop` -> `task-update --status ready` -> `worker-start --worktree path:...`) |
+
+## Safety boundary
+
+Because `exo-agent-kit` MCP tools run locally without Antigravity's remote per-edit/per-command safety checks, the kit enforces its own filesystem and subprocess boundaries in code and at build time:
+
+1. **Workspace-confined writes (`resolveConfinedWritePath` / `resolveConfinedDir` in `src/utils/paths.ts`):**
+   - Removed the misleading `resolveSafePath` name (`resolveUnconfinedPath` is used strictly for read-only search/outline/reference inputs).
+   - Every write target in `apply_edits` and `exo_parity_snap` (`outDir`, `dataDir`, `compare.outPath`; defaults now land in gitignored `apps/launcher/work/`) is canonicalized via `fs.realpathSync` (following symlinks and Windows junctions for existing paths, dangling symlinks, and the nearest existing ancestor of new files) and confined to `ws.repoRoot`.
+   - Rejects any target outside `ws.repoRoot` (absolute paths, `..` traversal, symlink/junction escapes) and rejects any path equal to or inside `.git/`.
+   - `resolveWorkspacePaths` also refuses filesystem roots (e.g. `C:\`, catching a real `C:\.git` on this workstation during testing), `%USERPROFILE%`, and `C:\Users` as repo roots.
+   - `exo_rune_api` writes exclusively to its own rev-keyed cache directory (`resolveCacheDir()`).
+2. **Strict `apply_edits` `verify` allowlist (`validateVerifySpec` in `src/tools/apply-edits.ts`):**
+   - Replaced the shell denylist with an explicit bare-binary allowlist (no path separators in `verify.command`) and confined `verify.cwd` inside `ws.repoRoot` (excluding `.git/`).
+   - Allowed commands: `cargo` (`fmt`/`clippy`/`test`/`build`/`check`, no `--config`/`-Z`), `dotnet` (`build`/`test`), `npm` (`npm run <script>` only, no `--script-shell`/`--prefix`/`--*config`), `node` (`node --test <repo path>` or `node <repo script>`, strictly forbidding `-e`/`-p`/`-r`/`--eval`/`--print`/`--import`/`--require`/`--loader`/`--env-file` and short-flag clusters containing `e`/`p`/`r`), `python`/`python3` (`-I <repo script>` only, no `-c`/`-m`), `rg` (no `--pre`/`--pre-glob`), and `git` routed through `runReadOnlyGit`.
+   - Any other binary (e.g. `rundll32`, `mshta`, shells) or disallowed flag is refused before edits are written.
+3. **Build-time enforcement (`scripts/verify-guarantees.mjs`):**
+   - Every tool under `src/tools/` (other than `exo-rune-api.ts`) that calls a filesystem write API (`writeFileSync`, `appendFileSync`, `renameSync`, `copyFileSync`, `rmSync`, `unlinkSync`, `createWriteStream`, `mkdirSync`) must call `resolveConfinedWritePath()`.
+   - Forbids the name `resolveSafePath`, requires `realpathSync` + `.git` checks in `src/utils/paths.ts`, and requires `ALLOWED_VERIFY_COMMANDS`/`validateVerifySpec` (with no `resolveUnconfinedPath`) in `src/tools/apply-edits.ts`.
+   - Unit-tested in `test/kit.test.mjs` with both a planted `shell: true` file and a planted unrestricted write tool (`src/tools/planted-writer.ts`), plus refusal tests for outside absolute paths, `..` escapes, Windows junction escapes, `.git/` writes, `node -e`/`--eval`/`-p`/`--import`/`-r`, `python -c`/`-I -c`, `rundll32`, `mshta`, and `verify.cwd` outside repo root.
 
 ## Build-Time Security Guarantees (`scripts/verify-guarantees.mjs`)
 
-Checked automatically during `npm run build` across all 16 `src/` files and 3 `dist/` bundles (and unit-tested with a planted `shell: true`):
+Checked automatically during `npm run build` across all 16 `src/` files and 3 `dist/` bundles:
 - Zero network module imports (`http`, `https`, `http2`, `net`, `tls`, `dgram`, `dns`, `undici`, `node:*`) and zero runtime network APIs (`fetch`, `WebSocket`, `XMLHttpRequest`, `EventSource`).
 - Zero `shell: true` / shell path options and zero `exec`/`execSync` calls.
 - `DEFAULT_INLINE_MAX_BYTES = 8800` enforced in `src/utils/budget.ts` and `src/protocol/mcp.ts`.
 - Read-only git flags (`--no-optional-locks`, `core.fsmonitor=false`, `diff.external=`, `gpg.program=false`) enforced in `src/utils/git.ts` with no direct `git` spawns bypassing it.
+- Confined write boundary (`resolveConfinedWritePath`) and `apply_edits` verify allowlist enforced across `src/tools/`.
 - Zero hardcoded Windows user profile paths (`[A-Za-z]:\Users\<name>`) in `src/` or `dist/`.
 - Zero CWD workspace plugin lookups (`./plugin.json`, `.agents/plugins`) and zero auto-update code.
 
@@ -47,7 +67,7 @@ Checked automatically during `npm run build` across all 16 `src/` files and 3 `d
 | --- | --- | --- |
 | Clean install | `npm ci --no-audit --no-fund` | Exit 0 (6 dev packages, 0 runtime deps) |
 | Typecheck + Bundle + Guarantees | `npm run build` | Exit 0 (`tsc --noEmit` + 3 esbuild bundles + 16 src / 3 dist verified) |
-| Unit + Integration Tests | `npm test` (`node --test test/kit.test.mjs`) | Exit 0 (12/12 pass in 3.20 s) |
+| Unit + Integration Tests | `npm test` (`node --test test/kit.test.mjs`) | Exit 0 (15/15 pass in 3.40 s) |
 | Stdio MCP Smoke Test | `npm run smoke` (`node test/mcp-smoke.mjs`) | Exit 0 (all 8 tools + `initialize` + `tools/list`, all <= 8,800 JSON bytes) |
 | Dry-Run Install | `node scripts/install.mjs` | Exit 0 (no files written; `%USERPROFILE%\.exo-agent-kit` untouched) |
 | Comment Ratchet | `node apps/launcher/tools/check-comments.mjs` | Exit 0 (0 comment lines across all 24 kit files) |
@@ -58,16 +78,16 @@ Captured by `node test/mcp-smoke.mjs` spawning `dist/mcp-server.mjs` over stdio 
 
 | Step | Latency (ms) | Wire Response (B) | Text Payload JSON (B) | Status |
 | --- | ---: | ---: | ---: | --- |
-| `initialize` | 32.1 | 150 | — | OK |
+| `initialize` | 34.2 | 150 | — | OK |
 | `tools/list` (8 tools) | 0.4 | 5,847 | — | OK |
-| `tools/call:exo_run_gates` (`parity-test`) | 88.0 | 171 | 100 | OK |
-| `tools/call:batch_search` (2 concurrent queries) | 33.0 | 600 | 529 | OK |
-| `tools/call:exo_contract` (`game.get`) | 151.2 | 667 | 596 | OK |
-| `tools/call:exo_rune_api` (`tracking`, cold index) | 331.4 | 876 | 805 | OK |
-| `tools/call:quick_outline` (`exo-rpc/src/lib.rs`) | 5.0 | 927 | 856 | OK |
-| `tools/call:exo_snapshot` | 50.9 | 1,208 | 1,137 | OK |
-| `tools/call:exo_parity_snap` (`parity-compare.py`) | 68.2 | 455 | 384 | OK |
-| `tools/call:apply_edits` | 3.6 | 223 | 151 | OK |
+| `tools/call:exo_run_gates` (`parity-test`) | 95.0 | 171 | 100 | OK |
+| `tools/call:batch_search` (2 concurrent queries) | 35.8 | 625 | 554 | OK |
+| `tools/call:exo_contract` (`game.get`) | 157.9 | 667 | 596 | OK |
+| `tools/call:exo_rune_api` (`tracking`, cold index) | 344.1 | 876 | 805 | OK |
+| `tools/call:quick_outline` (`exo-rpc/src/lib.rs`) | 5.6 | 927 | 856 | OK |
+| `tools/call:exo_snapshot` | 55.7 | 1,250 | 1,179 | OK |
+| `tools/call:exo_parity_snap` (`parity-compare.py`) | 84.4 | 462 | 391 | OK |
+| `tools/call:apply_edits` | 4.0 | 138 | 66 | OK |
 
 ## Dry-Run Install Output (`node scripts/install.mjs`)
 

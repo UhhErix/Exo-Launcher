@@ -55,7 +55,17 @@ const BANNED_PATTERNS = [
     rx: /(?:\.\/plugin\.json|\.agents[\\\/]plugins)/g,
     message: 'Forbidden CWD workspace plugin lookup detected',
   },
+  {
+    id: 'no-misleading-path-helper',
+    rx: /\bresolveSafePath\b/g,
+    message: 'Misleading unconfined path helper name resolveSafePath is forbidden',
+  },
 ]
+
+const FS_WRITE_CALL_RX =
+  /\b(?:writeFileSync|appendFileSync|renameSync|copyFileSync|rmSync|unlinkSync|createWriteStream|mkdirSync)\s*\(/
+
+const KIT_CACHE_ONLY_TOOLS = new Set(['exo-rune-api.ts'])
 
 function listFiles(dir, exts) {
   const out = []
@@ -108,12 +118,68 @@ export function verifyGuarantees({ srcDir, distDir }) {
         message: 'Direct git spawn bypasses src/utils/git.ts read-only wrapper',
       })
     }
+
+    if (rel.startsWith('src/tools/') && !KIT_CACHE_ONLY_TOOLS.has(base)) {
+      const writeMatch = FS_WRITE_CALL_RX.exec(text)
+      if (writeMatch) {
+        if (!/\bresolveConfinedWritePath\s*\(/.test(text)) {
+          const line = text.slice(0, writeMatch.index).split('\n').length
+          violations.push({
+            rule: 'confined-write-boundary',
+            file: rel,
+            line,
+            message: 'Tool performs filesystem writes without confining targets via resolveConfinedWritePath()',
+          })
+        }
+      }
+    }
   }
 
   for (const file of distFiles) {
     const rel = path.relative(path.dirname(distDir), file).replace(/\\/g, '/')
     const text = fs.readFileSync(file, 'utf8')
     violations.push(...scanFileContent(rel, text))
+  }
+
+  const pathsFile = path.join(srcDir, 'utils', 'paths.ts')
+  if (!fs.existsSync(pathsFile)) {
+    violations.push({
+      rule: 'confined-write-boundary',
+      file: 'src/utils/paths.ts',
+      line: 1,
+      message: 'Missing src/utils/paths.ts',
+    })
+  } else {
+    const pathsText = fs.readFileSync(pathsFile, 'utf8')
+    if (
+      !pathsText.includes('export function resolveConfinedWritePath') ||
+      !pathsText.includes('realpathSync') ||
+      !pathsText.includes("'.git'")
+    ) {
+      violations.push({
+        rule: 'confined-write-boundary',
+        file: 'src/utils/paths.ts',
+        line: 1,
+        message: 'src/utils/paths.ts must export resolveConfinedWritePath with realpathSync and .git rejection',
+      })
+    }
+  }
+
+  const applyEditsFile = path.join(srcDir, 'tools', 'apply-edits.ts')
+  if (fs.existsSync(applyEditsFile)) {
+    const applyText = fs.readFileSync(applyEditsFile, 'utf8')
+    if (
+      !applyText.includes('ALLOWED_VERIFY_COMMANDS') ||
+      !applyText.includes('validateVerifySpec') ||
+      applyText.includes('resolveUnconfinedPath')
+    ) {
+      violations.push({
+        rule: 'verify-allowlist',
+        file: 'src/tools/apply-edits.ts',
+        line: 1,
+        message: 'apply-edits.ts must enforce ALLOWED_VERIFY_COMMANDS/validateVerifySpec and must not import resolveUnconfinedPath',
+      })
+    }
   }
 
   const budgetFile = path.join(srcDir, 'utils', 'budget.ts')
