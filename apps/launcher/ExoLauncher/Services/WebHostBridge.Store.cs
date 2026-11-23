@@ -149,26 +149,30 @@ public sealed partial class WebHostBridge
                 return new { ok = false, message = await _services.Store.SoldOnlyElsewhereAsync(appId, ct).ConfigureAwait(false)
                     ? "This game isn't sold in your region on Steam."
                     : "Steam does not list this game anymore." };
-            // A cached answer comes back on the UI thread; this PC's specs read the registry, Steam's library list and each drive.
-            var fit = StoreService.FitSpecs(g.Specs, await Task.Run(Helpers.SystemSpecs.Read, ct).ConfigureAwait(false));
-            return new
-            {
-                ok = true, appId = g.AppId, name = g.Name, description = g.Description, header = g.Header,
-                comingSoon = g.ComingSoon, released = g.Released, developers = g.Developers, publishers = g.Publishers, genres = g.Genres,
-                metacritic = g.Metacritic, reviewWord = g.ReviewWord, reviewPercent = g.ReviewPercent, reviewCount = g.ReviewCount, free = g.Free,
-                tags = g.Tags, drm = g.Drm, account = g.Account, controller = g.Controller, playStation = g.PlayStation, languages = g.Languages,
-                offers = g.Offers.Select(MapOffer),
-                media = g.Media.Select(m => new { thumb = m.Thumb, hls = m.Hls, av1 = m.Av1 }),
-                specs = fit.Rows.Select(s => new { label = s.Label, minimum = s.Minimum, recommended = s.Recommended, mine = s.Mine, meets = s.Meets }),
-                fit = fit.Verdict,
-                screenshots = g.Screenshots,
-                art = MapArt(g.Art),
-            };
+            return BuildStoreGameResponse(g, await Task.Run(Helpers.SystemSpecs.Read, ct).ConfigureAwait(false));
         }
         catch (Exception ex) when (ex is HttpRequestException or OperationCanceledException or JsonException)
         {
             return new { ok = false, message = "The store could not be reached." };
         }
+    }
+
+    internal static object BuildStoreGameResponse(StoreService.GameDetail g, StoreService.ThisPc pcSpecs)
+    {
+        var fit = StoreService.FitSpecs(g.Specs, pcSpecs);
+        return new
+        {
+            ok = true, appId = g.AppId, name = g.Name, description = g.Description, header = g.Header,
+            comingSoon = g.ComingSoon, released = g.Released, developers = g.Developers, publishers = g.Publishers, genres = g.Genres,
+            metacritic = g.Metacritic, reviewWord = g.ReviewWord, reviewPercent = g.ReviewPercent, reviewCount = g.ReviewCount, free = g.Free,
+            tags = g.Tags, drm = g.Drm, account = g.Account, controller = g.Controller, playStation = g.PlayStation, languages = g.Languages,
+            offers = g.Offers.Select(MapOffer),
+            media = g.Media.Select(m => new { thumb = m.Thumb, hls = m.Hls, av1 = m.Av1 }),
+            specs = fit.Rows.Select(s => new { label = s.Label, minimum = s.Minimum, recommended = s.Recommended, mine = s.Mine, meets = s.Meets }),
+            fit = fit.Verdict,
+            screenshots = g.Screenshots,
+            art = MapArt(g.Art),
+        };
     }
 
     /// <summary>The other official launchers for a game page, Epic first, and the lowest price ever (US only), from CheapShark.</summary>

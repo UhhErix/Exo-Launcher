@@ -1,0 +1,23 @@
+{
+  "version": 1,
+  "id": "<REQUEST_ID>",
+  "ok": true,
+  "result": {
+    "ok": true,
+    "playback": {
+      "provider": "spotify",
+      "source": "session",
+      "status": "playing",
+      "title": "Still Alive",
+      "artist": "Jonathan Coulton",
+      "album": "Portal Soundtrack",
+      "positionMs": 42000,
+      "durationMs": 176000,
+      "canPlay": true,
+      "canPause": true,
+      "canPrev": true,
+      "canNext": true,
+      "canSeek": true
+    }
+  }
+}

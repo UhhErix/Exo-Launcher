@@ -1,0 +1,90 @@
+{
+  "version": 1,
+  "id": "<REQUEST_ID>",
+  "ok": true,
+  "result": {
+    "ok": true,
+    "appId": "620",
+    "name": "Portal 2",
+    "description": "The Perpetual Testing Initiative has been expanded to allow you to design co-op puzzles.",
+    "header": "https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/620/header.jpg",
+    "comingSoon": false,
+    "released": "Apr 18, 2011",
+    "developers": [
+      "Valve"
+    ],
+    "publishers": [
+      "Valve"
+    ],
+    "genres": [
+      "Action",
+      "Adventure"
+    ],
+    "metacritic": 95,
+    "reviewWord": "Overwhelmingly Positive",
+    "reviewPercent": 98,
+    "reviewCount": 340000,
+    "free": false,
+    "tags": [
+      "Puzzle",
+      "Co-op",
+      "Sci-fi"
+    ],
+    "controller": "full",
+    "playStation": true,
+    "languages": [
+      "English",
+      "Spanish"
+    ],
+    "offers": [
+      {
+        "store": "steam",
+        "name": "Steam",
+        "final": 999,
+        "initial": 999,
+        "discount": 0,
+        "currency": "USD",
+        "priceText": "$9.99",
+        "url": "https://store.steampowered.com/app/620"
+      }
+    ],
+    "media": [
+      {
+        "thumb": "https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/256658589/movie.293x165.jpg",
+        "hls": "https://video.fastly.steamstatic.com/store_trailers/256658589/hls_264_master.m3u8"
+      }
+    ],
+    "specs": [
+      {
+        "label": "OS",
+        "minimum": "Windows 10",
+        "recommended": "Windows 11",
+        "mine": "Windows 11",
+        "meets": "recommended"
+      },
+      {
+        "label": "Memory",
+        "minimum": "2 GB",
+        "recommended": "4 GB",
+        "mine": "64 GB",
+        "meets": "recommended"
+      },
+      {
+        "label": "Storage",
+        "minimum": "8 GB",
+        "recommended": "8 GB",
+        "mine": "512 GB free",
+        "meets": "recommended"
+      }
+    ],
+    "screenshots": [
+      "https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/620/ss_1.1920x1080.jpg"
+    ],
+    "art": {
+      "poster": "https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/620/library_600x900.jpg",
+      "hero": "https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/620/library_hero.jpg",
+      "capsule": "https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/620/capsule_616x353.jpg",
+      "header": "https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/620/header.jpg"
+    }
+  }
+}

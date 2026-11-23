@@ -1,0 +1,106 @@
+{
+  "version": 1,
+  "id": "<REQUEST_ID>",
+  "ok": true,
+  "result": {
+    "games": [
+      {
+        "id": "steam:620",
+        "title": "Portal 2",
+        "store": "steam",
+        "stores": [
+          "steam"
+        ],
+        "selectedVariantId": "steam:620",
+        "variants": [],
+        "installed": true,
+        "owned": true,
+        "entitlementState": "unknown",
+        "updateAvailable": false,
+        "canInstall": false,
+        "primaryAction": "play",
+        "artRevision": 0,
+        "playtimeMinutes": 245,
+        "sizeBytes": 12884901888,
+        "sizeApproximate": false,
+        "status": "Ready",
+        "deps": [],
+        "launchNote": "",
+        "familyShared": false,
+        "launchTarget": "620",
+        "isAddPortable": false,
+        "isRunning": false,
+        "canStop": false,
+        "tags": []
+      },
+      {
+        "id": "gog:1308320804",
+        "title": "Hollow Knight",
+        "store": "gog",
+        "stores": [
+          "gog"
+        ],
+        "selectedVariantId": "gog:1308320804",
+        "variants": [],
+        "installed": false,
+        "owned": true,
+        "entitlementState": "unknown",
+        "updateAvailable": false,
+        "canInstall": false,
+        "primaryAction": "install",
+        "artRevision": 0,
+        "playtimeMinutes": 0,
+        "sizeApproximate": false,
+        "status": "Not installed",
+        "deps": [],
+        "launchNote": "",
+        "familyShared": false,
+        "launchTarget": "1308320804",
+        "isAddPortable": false,
+        "isRunning": false,
+        "canStop": false,
+        "tags": []
+      }
+    ],
+    "count": 2,
+    "stores": [
+      {
+        "store": "steam",
+        "displayName": "Steam",
+        "agentPresent": true,
+        "clientPresent": true,
+        "backendPresent": true,
+        "signedIn": true,
+        "cachePresent": true,
+        "detail": "Ready",
+        "checkCode": "ok",
+        "checkedAtUtc": "<TIMESTAMP>"
+      },
+      {
+        "store": "gog",
+        "displayName": "GOG",
+        "agentPresent": true,
+        "clientPresent": false,
+        "backendPresent": true,
+        "signedIn": true,
+        "cachePresent": true,
+        "detail": "Ready",
+        "checkCode": "ok",
+        "checkedAtUtc": "<TIMESTAMP>"
+      }
+    ],
+    "progress": {
+      "gameId": "",
+      "phase": "idle",
+      "status": "",
+      "canCancel": false,
+      "isActive": false
+    },
+    "queuedGameIds": [],
+    "pausedDownloads": [],
+    "sortMode": "recent",
+    "recent": [
+      "steam:620"
+    ]
+  }
+}
