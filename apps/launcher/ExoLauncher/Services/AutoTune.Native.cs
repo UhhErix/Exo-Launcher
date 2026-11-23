@@ -10,7 +10,7 @@ namespace ExoLauncher.Services;
 internal static class TuneSignIn
 {
     internal const string TaskName = @"Exo\AutoTune";
-    internal const string ScriptFile = "apply.ps1", ModuleFile = "RyzenSMU.bin", KeepFile = "keep", LastRunFile = "last-run.txt";
+    internal const string ScriptFile = "apply.ps1", ModuleFile = "RyzenSMU.bin", LastRunFile = "last-run.txt";
 
     /// <summary>
     /// The script: integers only, in a folder only an administrator can write. It applies nothing after a crash in testing,
@@ -45,13 +45,13 @@ internal static class TuneSignIn
         if (ryzen is not null) script.AppendLine(string.Create(CultureInfo.InvariantCulture, $"[ExoTune]::Ryzen({ryzen[0]}, \"$d\\{ModuleFile}\")"));
         script.AppendLine("} catch {");
         script.AppendLine("Remove-Item -LiteralPath \"$d\\applying\" -ErrorAction SilentlyContinue");
-        script.AppendLine("Note ('error: ' + ($_.Exception.Message -replace '[\\r\\n]+', ' '))");
+        script.AppendLine("Note ('error: ' + ($_.Exception.Message -replace '[\\r\\n]+', ' ') + ' (language mode: ' + $ExecutionContext.SessionState.LanguageMode + ')')");
         script.AppendLine("exit");
         script.AppendLine("}");
         script.AppendLine("Start-Sleep -Seconds 120");
         script.AppendLine("Remove-Item -LiteralPath \"$d\\applying\"");
-        script.AppendLine("Note 'applied'");
-        if (nvidia is not null) script.AppendLine(string.Create(CultureInfo.InvariantCulture, $"[ExoTune]::Keep({nvidia[0]}, {nvidia[1]}, \"$d\\{KeepFile}\", \"$d\\last-run.txt\")"));
+        if (nvidia is null) script.AppendLine("Note 'applied'");
+        else script.AppendLine(string.Create(CultureInfo.InvariantCulture, $"try {{ Note (\"applied: driver reads \" + [ExoTune]::NvidiaRead() + \" MHz (wanted {nvidia[0]})\") }} catch {{ Note ('applied, but the read failed: ' + ($_.Exception.Message -replace '[\\r\\n]+', ' ')) }}"));
         return script.ToString();
     }
 
@@ -87,16 +87,11 @@ internal static class TuneSignIn
             Offset o = new Offset(); o.V = 24 | (1u << 24); o.Mhz = mhz;
             Ok(nvmlDeviceSetClockOffsets(D, ref o));
           }
-          public static void Keep(int mhz, int cap, string flag, string log) {
+          public static int NvidiaRead() {
             Open();
-            while (File.Exists(flag)) {
-              Thread.Sleep(15000);
-              if (!File.Exists(flag)) break;
-              Offset read = new Offset(); read.V = 24 | (1u << 24);
-              if (nvmlDeviceGetClockOffsets(D, ref read) != 0 || read.Mhz == mhz) continue;
-              Nvidia(mhz, cap);
-              File.AppendAllText(log, DateTime.Now.ToString("s") + " put back: the driver read " + read.Mhz + " MHz, wanted " + mhz + " MHz" + Environment.NewLine);
-            }
+            Offset read = new Offset(); read.V = 24 | (1u << 24);
+            Ok(nvmlDeviceGetClockOffsets(D, ref read));
+            return read.Mhz;
           }
           [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
           static extern IntPtr CreateFileW(string n, uint a, uint s, IntPtr sec, uint c, uint f, IntPtr t);
@@ -144,7 +139,7 @@ internal static class TuneSignIn
         """;
 
     /// <summary>Runs as SYSTEM at sign-in and on wake (Power-Troubleshooter 1), no window, never two at once.</summary>
-    internal static string TaskXml(string script, bool keepsRunning = false) => $$"""
+    internal static string TaskXml(string script) => $$"""
         <?xml version="1.0" encoding="UTF-16"?>
         <Task version="1.4" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
           <RegistrationInfo><Description>Exo's Auto tune: re-applies a value that passed its test. Undo in Exo removes this.</Description></RegistrationInfo>
@@ -160,7 +155,7 @@ internal static class TuneSignIn
             <MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy>
             <DisallowStartIfOnBatteries>false</DisallowStartIfOnBatteries>
             <StopIfGoingOnBatteries>false</StopIfGoingOnBatteries>
-            <ExecutionTimeLimit>{{(keepsRunning ? "PT0S" : "PT5M")}}</ExecutionTimeLimit>
+            <ExecutionTimeLimit>PT5M</ExecutionTimeLimit>
           </Settings>
           <Actions Context="Exo">
             <Exec>
@@ -178,32 +173,20 @@ internal static class TuneSignIn
         int[]? Values(string id) => parts.GetValueOrDefault(id) is { Applied: > 0, SignIn: { } values } ? values : null;
         var (nvidia, ryzen) = (Values("nvidia"), Values("ryzen"));
         var script = Path.Combine(store.Folder, ScriptFile);
-        var keep = Path.Combine(store.Folder, KeepFile);
         if (nvidia is null && ryzen is null)
         {
             Tasks($"/Delete /TN \"{TaskName}\" /F", quiet: true);
             DeletionGate.DeleteFile(script);
             DeletionGate.DeleteFile(Path.Combine(store.Folder, ModuleFile));
-            DeletionGate.DeleteFile(keep);
             return;
         }
         if (Environment.ProcessPath is not { } exo) return;
         if (ryzen is not null) File.Copy(Path.Combine(AppContext.BaseDirectory, "Assets", "pawnio", ModuleFile), Path.Combine(store.Folder, ModuleFile), overwrite: true);
         File.WriteAllText(script, Script(nvidia, ryzen, store.Folder, exo), Encoding.UTF8);
-        if (nvidia is not null) File.WriteAllText(keep, "");
-        else DeletionGate.DeleteFile(keep);
         var xml = Path.Combine(store.Folder, "task.xml");
-        File.WriteAllText(xml, TaskXml(script, keepsRunning: nvidia is not null), Encoding.Unicode);
+        File.WriteAllText(xml, TaskXml(script), Encoding.Unicode);
         Tasks($"/Create /TN \"{TaskName}\" /XML \"{xml}\" /F", quiet: false);
         DeletionGate.DeleteFile(xml);
-    }
-
-    internal static void ReleaseKeep(string folder, TimeSpan wait)
-    {
-        var keep = Path.Combine(folder, KeepFile);
-        if (!File.Exists(keep)) return;
-        DeletionGate.DeleteFile(keep);
-        Thread.Sleep(wait);
     }
 
     internal static string? LastRun(string folder)
@@ -279,7 +262,6 @@ internal static class AutoTuneWorker
         using var one = new Mutex(false, OneWorker, out var first);
         if (!first) return 3;
         Directory.CreateDirectory(Folder);
-        TuneSignIn.ReleaseKeep(Folder, TimeSpan.FromSeconds(16));
         var store = new TuneStore(Folder);
         try
         {
@@ -383,6 +365,17 @@ internal static class AutoTuneService
     }
 
     private static readonly TuneStore Store = new(AutoTuneWorker.Folder);
+
+    internal static string AtStart(int? read, int wanted) =>
+        read is { } now ? $"Auto tune: at start the driver reads {now} MHz, applied {wanted}." : $"Auto tune: at start the driver's offset couldn't be read, applied {wanted}.";
+
+    internal static void CheckAtStart()
+    {
+        var part = Store.Part("nvidia");
+        if (part.Applied <= 0 || part.SignIn is not { Length: 2 } values) return;
+        var wanted = values[0];
+        _ = Task.Run(() => AppLog.Info(AtStart(TuneNvidia.ReadOffset(), wanted)));
+    }
 
     private static string? _loggedSignIn;
 

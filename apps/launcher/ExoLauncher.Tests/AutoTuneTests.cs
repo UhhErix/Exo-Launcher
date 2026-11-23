@@ -519,7 +519,7 @@ public sealed class AutoTuneTests : IDisposable
     public void AScriptErrorNotesItAndNeverHolds()
     {
         var script = TuneSignIn.Script([120, 0], null, @"C:\t", @"C:\e.exe");
-        var catchAt = script.LastIndexOf("} catch {", StringComparison.Ordinal);
+        var catchAt = script.LastIndexOf("} catch {", script.IndexOf("Remove-Item -LiteralPath \"$d\\applying\" -ErrorAction", StringComparison.Ordinal), StringComparison.Ordinal);
         var exitAt = script.IndexOf("exit", catchAt, StringComparison.Ordinal);
         Assert.True(catchAt > 0 && exitAt > catchAt);
         var handler = script[catchAt..exitAt];
@@ -529,13 +529,34 @@ public sealed class AutoTuneTests : IDisposable
     }
 
     [Fact]
-    public void AnNvidiaApplyKeepsItsOffsetFromBeingDroppedAndLogsEachPutBack()
+    public void AnNvidiaApplyReadsTheOffsetBackAfterTheWaitAndWritesWhatTheDriverSays()
     {
-        var nvidia = TuneSignIn.Script([120, 1935], null, @"C:\t", @"C:\e.exe");
-        Assert.Contains("[ExoTune]::Keep(120, 1935, \"$d\\keep\", \"$d\\last-run.txt\")", nvidia);
-        Assert.True(nvidia.IndexOf("[ExoTune]::Keep(", StringComparison.Ordinal) > nvidia.IndexOf("Note 'applied'", StringComparison.Ordinal));
+        var script = TuneSignIn.Script([120, 1935], null, @"C:\t", @"C:\e.exe");
+        var wait = script.IndexOf("Start-Sleep -Seconds 120", StringComparison.Ordinal);
+        var read = script.IndexOf("[ExoTune]::NvidiaRead()", StringComparison.Ordinal);
+        Assert.True(wait > 0 && read > wait);
+        Assert.Contains("applied: driver reads ", script);
+        Assert.Contains("MHz (wanted 120)", script);
+        Assert.DoesNotContain("Keep(", script);
+        Assert.DoesNotContain("keep", script);
         var ryzenOnly = TuneSignIn.Script(null, [10], @"C:\t", @"C:\e.exe");
-        Assert.DoesNotContain("[ExoTune]::Keep(", ryzenOnly);
+        Assert.DoesNotContain("[ExoTune]::NvidiaRead()", ryzenOnly);
+        Assert.Contains("Note 'applied'", ryzenOnly);
+    }
+
+    [Fact]
+    public void AnErrorNoteSaysWhatLanguageModeWindowsRanThePowerShellIn()
+    {
+        var script = TuneSignIn.Script([120, 0], null, @"C:\t", @"C:\e.exe");
+        Assert.Contains("$ExecutionContext.SessionState.LanguageMode", script);
+    }
+
+    [Fact]
+    public void TheStartLineSaysWhatTheDriverReadAgainstWhatWasApplied()
+    {
+        Assert.Equal("Auto tune: at start the driver reads 120 MHz, applied 120.", AutoTuneService.AtStart(120, 120));
+        Assert.Equal("Auto tune: at start the driver reads 0 MHz, applied 120.", AutoTuneService.AtStart(0, 120));
+        Assert.Equal("Auto tune: at start the driver's offset couldn't be read, applied 120.", AutoTuneService.AtStart(null, 120));
     }
 
     [Fact]
@@ -559,26 +580,6 @@ public sealed class AutoTuneTests : IDisposable
         Assert.DoesNotContain("<BootTrigger>", xml);
         Assert.Contains("IgnoreNew", xml);
         Assert.Contains("<ExecutionTimeLimit>PT5M</ExecutionTimeLimit>", xml);
-    }
-
-    [Fact]
-    public void TheNvidiaHolderIsTheOnlyTaskWithNoTimeLimit()
-    {
-        var xml = TuneSignIn.TaskXml(@"C:\t\apply.ps1", keepsRunning: true);
-        Assert.Contains("<ExecutionTimeLimit>PT0S</ExecutionTimeLimit>", xml);
-        Assert.DoesNotContain("PT5M", xml);
-    }
-
-    [Fact]
-    public void ReleasingTheHolderRemovesItsFlagBeforeAnythingTouchesTheCard()
-    {
-        Directory.CreateDirectory(_folder);
-        var keep = Path.Combine(_folder, TuneSignIn.KeepFile);
-        File.WriteAllText(keep, "");
-        TuneSignIn.ReleaseKeep(_folder, TimeSpan.Zero);
-        Assert.False(File.Exists(keep));
-        TuneSignIn.ReleaseKeep(_folder, TimeSpan.Zero);
-        Assert.False(File.Exists(keep));
     }
 
     [Fact]

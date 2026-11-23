@@ -81,6 +81,15 @@ internal sealed unsafe class TuneNvidia : ITunePart, IDisposable
     private static nint Export(nint library, string name) =>
         NativeLibrary.TryGetExport(library, name, out var address) ? address : throw new TuneDriverException($"This driver has no {name}.");
 
+    internal static int? ReadOffset()
+    {
+        var opened = Open();
+        if (opened is null) return null;
+        var (library, device) = opened.Value;
+        try { return Range(library, device)?.Now; }
+        finally { Close(library); }
+    }
+
     private static (int Now, int Max)? Range(nint library, nint device)
     {
         if (!NativeLibrary.TryGetExport(library, "nvmlDeviceGetClockOffsets", out var get)) return null;
