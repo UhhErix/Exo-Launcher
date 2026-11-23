@@ -138,4 +138,217 @@ internal static class MusicWebPolicy
 
     private static string Host(string uri) =>
         Uri.TryCreate(uri, UriKind.Absolute, out var parsed) ? parsed.Host : "";
+
+    private static readonly string[] YouTubeAdTrackerDomains =
+    [
+        "doubleclick.net",
+        "googlesyndication.com",
+        "googleadservices.com",
+        "googletagmanager.com",
+        "google-analytics.com",
+    ];
+
+    private static readonly string[] YouTubeAdPathPrefixes =
+    [
+        "/pagead/",
+        "/api/stats/ads",
+        "/pcs/activeview",
+        "/ptracking",
+        "/get_midroll_",
+        "/youtubei/v1/player/ad_break",
+        "/api/stats/qoe",
+        "/youtubei/v1/log_event",
+    ];
+
+    private static readonly string[] SpotifyAdTrackerDomains =
+    [
+        "pixel.spotify.com",
+        "pixel-static.spotify.com",
+        "doubleclick.net",
+        "googletagmanager.com",
+        "google-analytics.com",
+        "connect.facebook.net",
+        "analytics.tiktok.com",
+        "sc-static.net",
+        "tr.snapchat.com",
+        "bat.bing.com",
+        "static.ads-twitter.com",
+        "ads.linkedin.com",
+        "sentry.io",
+        "cookielaw.org",
+        "onetrust.com",
+    ];
+
+    private static readonly string[] SpotifyVideoCanvasDomains =
+    [
+        "canvaz.scdn.co",
+        "video-fa.scdn.co",
+    ];
+
+    private static readonly string[] AppleTrackerDomains =
+    [
+        "xp.apple.com",
+        "metrics.apple.com",
+        "metrics.icloud.com",
+        "securemetrics.apple.com",
+    ];
+
+    private static readonly string[] AppleVideoDomains =
+    [
+        "mvod.itunes.apple.com",
+        "mvod-ssl.itunes.apple.com",
+    ];
+
+    internal static IReadOnlyList<(string Pattern, Microsoft.Web.WebView2.Core.CoreWebView2WebResourceContext Context)> ResourceDietFilterPatterns(string service)
+    {
+        var list = new List<(string, Microsoft.Web.WebView2.Core.CoreWebView2WebResourceContext)>
+        {
+            ("*", Microsoft.Web.WebView2.Core.CoreWebView2WebResourceContext.Image),
+            ("*", Microsoft.Web.WebView2.Core.CoreWebView2WebResourceContext.Font),
+        };
+        if (service == "youtube")
+        {
+            foreach (var domain in YouTubeAdTrackerDomains) AddDomainPatterns(list, domain);
+            list.Add(("*://*.youtube.com/pagead/*", Microsoft.Web.WebView2.Core.CoreWebView2WebResourceContext.All));
+            list.Add(("*://*.youtube.com/api/stats/ads*", Microsoft.Web.WebView2.Core.CoreWebView2WebResourceContext.All));
+            list.Add(("*://*.youtube.com/pcs/activeview*", Microsoft.Web.WebView2.Core.CoreWebView2WebResourceContext.All));
+            list.Add(("*://*.youtube.com/ptracking*", Microsoft.Web.WebView2.Core.CoreWebView2WebResourceContext.All));
+            list.Add(("*://*.youtube.com/get_midroll_*", Microsoft.Web.WebView2.Core.CoreWebView2WebResourceContext.All));
+            list.Add(("*://music.youtube.com/youtubei/v1/player/ad_break*", Microsoft.Web.WebView2.Core.CoreWebView2WebResourceContext.All));
+            list.Add(("*://music.youtube.com/api/stats/qoe*", Microsoft.Web.WebView2.Core.CoreWebView2WebResourceContext.All));
+            list.Add(("*://music.youtube.com/youtubei/v1/log_event*", Microsoft.Web.WebView2.Core.CoreWebView2WebResourceContext.All));
+            list.Add(("*://*.google.com/pagead/*", Microsoft.Web.WebView2.Core.CoreWebView2WebResourceContext.All));
+        }
+        else if (service == "spotify")
+        {
+            foreach (var domain in SpotifyAdTrackerDomains) AddDomainPatterns(list, domain);
+            foreach (var domain in SpotifyVideoCanvasDomains) AddDomainPatterns(list, domain);
+            list.Add(("*://*.spotify.com/ads/*", Microsoft.Web.WebView2.Core.CoreWebView2WebResourceContext.All));
+            list.Add(("*://*.spotify.com/ad-logic/*", Microsoft.Web.WebView2.Core.CoreWebView2WebResourceContext.All));
+            list.Add(("*://open.spotifycdn.com/cdn/js/retargeting-pixels*", Microsoft.Web.WebView2.Core.CoreWebView2WebResourceContext.All));
+            list.Add(("*://*.scdn.co/*canvas*", Microsoft.Web.WebView2.Core.CoreWebView2WebResourceContext.Media));
+            list.Add(("*://video*.scdn.co/*", Microsoft.Web.WebView2.Core.CoreWebView2WebResourceContext.All));
+        }
+        else if (service == "apple")
+        {
+            foreach (var domain in AppleTrackerDomains) AddDomainPatterns(list, domain);
+            foreach (var domain in AppleVideoDomains) AddDomainPatterns(list, domain);
+            list.Add(("*://*.itunes.apple.com/*EditorialVideo*", Microsoft.Web.WebView2.Core.CoreWebView2WebResourceContext.All));
+        }
+        return list;
+    }
+
+    internal static bool ShouldBlockHiddenResource(string service, string? uri, Microsoft.Web.WebView2.Core.CoreWebView2WebResourceContext context, bool popup)
+    {
+        if (popup || string.IsNullOrEmpty(uri)) return false;
+        if (!Uri.TryCreate(uri, UriKind.Absolute, out var parsed)) return false;
+        if (parsed.Scheme is not ("https" or "http")) return false;
+        var host = parsed.Host;
+        var path = parsed.AbsolutePath;
+
+        if (IsPlaybackCriticalResource(service, host, path)) return false;
+
+        if (context == Microsoft.Web.WebView2.Core.CoreWebView2WebResourceContext.Font) return true;
+
+        if (context == Microsoft.Web.WebView2.Core.CoreWebView2WebResourceContext.Image) return true;
+
+        if (service == "youtube")
+        {
+            if (MatchesAnyDomain(host, YouTubeAdTrackerDomains)) return true;
+            if ((MatchesDomain(host, "youtube.com") || MatchesDomain(host, "google.com"))
+                && StartsWithAny(path, YouTubeAdPathPrefixes))
+                return true;
+            return false;
+        }
+
+        if (service == "spotify")
+        {
+            if (MatchesAnyDomain(host, SpotifyAdTrackerDomains)) return true;
+            if (MatchesAnyDomain(host, SpotifyVideoCanvasDomains)) return true;
+            if (MatchesDomain(host, "spotify.com")
+                && (path.StartsWith("/ads/", StringComparison.OrdinalIgnoreCase)
+                    || path.StartsWith("/ad-logic/", StringComparison.OrdinalIgnoreCase)))
+                return true;
+            if (host.Equals("open.spotifycdn.com", StringComparison.OrdinalIgnoreCase)
+                && path.StartsWith("/cdn/js/retargeting-pixels", StringComparison.OrdinalIgnoreCase))
+                return true;
+            if (MatchesDomain(host, "scdn.co")
+                && host.StartsWith("video", StringComparison.OrdinalIgnoreCase))
+                return true;
+            if (context == Microsoft.Web.WebView2.Core.CoreWebView2WebResourceContext.Media
+                && MatchesDomain(host, "scdn.co")
+                && !host.StartsWith("audio", StringComparison.OrdinalIgnoreCase)
+                && (path.Contains("/canvas/", StringComparison.OrdinalIgnoreCase)
+                    || path.EndsWith(".mp4", StringComparison.OrdinalIgnoreCase)))
+                return true;
+            return false;
+        }
+
+        if (service == "apple")
+        {
+            if (MatchesAnyDomain(host, AppleTrackerDomains)) return true;
+            if (MatchesAnyDomain(host, AppleVideoDomains)) return true;
+            if (MatchesDomain(host, "itunes.apple.com")
+                && path.Contains("/EditorialVideo/", StringComparison.OrdinalIgnoreCase))
+                return true;
+            return false;
+        }
+
+        return false;
+    }
+
+    private static bool IsPlaybackCriticalResource(string service, string host, string path)
+    {
+        if (service == "youtube")
+        {
+            if (MatchesDomain(host, "googlevideo.com")) return true;
+            if (host.Equals("music.youtube.com", StringComparison.OrdinalIgnoreCase)
+                && (path.StartsWith("/api/stats/watchtime", StringComparison.OrdinalIgnoreCase)
+                    || path.StartsWith("/api/stats/playback", StringComparison.OrdinalIgnoreCase)))
+                return true;
+        }
+        else if (service == "spotify")
+        {
+            if (host.StartsWith("audio", StringComparison.OrdinalIgnoreCase)
+                && (MatchesDomain(host, "scdn.co") || MatchesDomain(host, "spotifycdn.com")))
+                return true;
+        }
+        else if (service == "apple")
+        {
+            if (host.StartsWith("aod", StringComparison.OrdinalIgnoreCase)
+                && MatchesDomain(host, "itunes.apple.com"))
+                return true;
+            if (host.Equals("play.itunes.apple.com", StringComparison.OrdinalIgnoreCase)
+                || host.Equals("amp-api.music.apple.com", StringComparison.OrdinalIgnoreCase)
+                || host.Equals("api.music.apple.com", StringComparison.OrdinalIgnoreCase))
+                return true;
+        }
+        return false;
+    }
+
+    private static void AddDomainPatterns(List<(string, Microsoft.Web.WebView2.Core.CoreWebView2WebResourceContext)> list, string domain)
+    {
+        list.Add(("*://" + domain + "/*", Microsoft.Web.WebView2.Core.CoreWebView2WebResourceContext.All));
+        list.Add(("*://*." + domain + "/*", Microsoft.Web.WebView2.Core.CoreWebView2WebResourceContext.All));
+    }
+
+    private static bool MatchesAnyDomain(string host, string[] domains)
+    {
+        for (var i = 0; i < domains.Length; i++)
+            if (MatchesDomain(host, domains[i])) return true;
+        return false;
+    }
+
+    private static bool MatchesDomain(string host, string domain) =>
+        host.Equals(domain, StringComparison.OrdinalIgnoreCase)
+        || (host.Length > domain.Length
+            && host.EndsWith(domain, StringComparison.OrdinalIgnoreCase)
+            && host[host.Length - domain.Length - 1] == '.');
+
+    private static bool StartsWithAny(string path, string[] prefixes)
+    {
+        for (var i = 0; i < prefixes.Length; i++)
+            if (path.StartsWith(prefixes[i], StringComparison.OrdinalIgnoreCase)) return true;
+        return false;
+    }
 }
