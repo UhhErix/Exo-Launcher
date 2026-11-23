@@ -95,7 +95,12 @@ export class Run {
     await writeFile(join(this.out, 'summary.md'), lines.join('\n'))
     // A manifest of every file, so the artifact can be checked later (sha256sum -c SHA256SUMS.txt).
     const files = []
-    const walk = async (dir) => { for (const e of await readdir(dir, { withFileTypes: true })) e.isDirectory() ? await walk(join(dir, e.name)) : files.push(join(dir, e.name)) }
+    const walk = async (dir) => {
+      for (const e of await readdir(dir, { withFileTypes: true })) {
+        if (e.isDirectory()) await walk(join(dir, e.name))
+        else files.push(join(dir, e.name))
+      }
+    }
     await walk(this.out)
     const sums = await Promise.all(files.filter(f => !f.endsWith('SHA256SUMS.txt')).map(async f =>
       `${createHash('sha256').update(await readFile(f)).digest('hex')}  ${relative(this.out, f).replace(/\\/g, '/')}`))

@@ -5,43 +5,50 @@ on:
     paths:
       - 'apps/launcher/native-ui/**'
       - 'apps/launcher/ui/contracts/host-v1.json'
+      - 'apps/launcher/ui/contracts/keyboard-layouts.json'
+      - 'apps/launcher/ExoLauncher/Assets/Fonts/Goeist-Variable.ttf'
       - '.github/workflows/native-ui-ci.yml'
   push:
     branches: [main]
     paths:
       - 'apps/launcher/native-ui/**'
       - 'apps/launcher/ui/contracts/host-v1.json'
+      - 'apps/launcher/ui/contracts/keyboard-layouts.json'
+      - 'apps/launcher/ExoLauncher/Assets/Fonts/Goeist-Variable.ttf'
       - '.github/workflows/native-ui-ci.yml'
 
-permissions:
-  contents: read
+permissions: {}
 
 concurrency:
   group: native-ui-ci-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
   rune-check:
     name: Native UI (Rune)
     runs-on: windows-latest
     timeout-minutes: 30
+    permissions:
+      contents: read
+    env:
+      CARGO_INCREMENTAL: '0'
     defaults:
       run:
         working-directory: apps/launcher/native-ui
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-
-      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
-          path: |
-            ~/.cargo/bin/
-            ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
-            ~/.cargo/git/db/
-            apps/launcher/native-ui/target/
-          key: ${{ runner.os }}-rune-${{ hashFiles('apps/launcher/native-ui/Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-rune-
+          filter: blob:none
+          sparse-checkout: |
+            apps/launcher/native-ui
+            apps/launcher/ui/contracts
+            apps/launcher/ExoLauncher/Assets/Fonts
+          persist-credentials: false
+
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          workspaces: apps/launcher/native-ui
+          key: ${{ hashFiles('apps/launcher/native-ui/Cargo.lock') }}
 
       - name: Cargo test
         run: cargo test --locked

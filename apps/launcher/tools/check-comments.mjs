@@ -7,10 +7,18 @@ export const APP_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)
 export const RATCHET_PATH = path.join(APP_ROOT, 'tools', 'comments-ratchet.json')
 
 let tsApi = null
+const tsModulePath = process.env.EXO_COMMENTS_TS_PATH || '../ui/node_modules/typescript/lib/typescript.js'
 try {
-  const tsMod = await import('../ui/node_modules/typescript/lib/typescript.js')
+  const tsMod = await import(tsModulePath)
   tsApi = tsMod.default ?? tsMod
 } catch {}
+
+export function requireTypeScript(api = tsApi) {
+  if (!api) {
+    throw new Error('TypeScript compiler API missing (ui/node_modules/typescript/lib/typescript.js); run npm ci --prefix ui first.')
+  }
+  return api
+}
 
 const SOURCE_EXTENSIONS = new Set(['.ts', '.tsx', '.js', '.mjs', '.cjs', '.cs', '.css', '.ps1', '.psm1'])
 const EXCLUDED_PREFIXES = [
@@ -732,7 +740,10 @@ export function scanComments(text, filePath) {
   if (ext === '.cs') rawComments = scanCSharp(text, starts)
   else if (ext === '.css') rawComments = scanCss(text, starts)
   else if (ext === '.ps1' || ext === '.psm1') rawComments = scanPowerShell(text, starts)
-  else if (SOURCE_EXTENSIONS.has(ext)) rawComments = tsApi ? scanJsWithTs(text, ext, filePath, starts) : scanJsLike(text, ext, starts)
+  else if (SOURCE_EXTENSIONS.has(ext)) {
+    requireTypeScript()
+    rawComments = scanJsWithTs(text, ext, filePath, starts)
+  }
   else return []
 
   return rawComments.map((c) => ({
@@ -999,6 +1010,12 @@ export function tightenRatchet(counts, baselineFiles) {
 }
 
 function runCli() {
+  try {
+    requireTypeScript()
+  } catch (error) {
+    console.error(error.message)
+    process.exit(1)
+  }
   const args = process.argv.slice(2)
   if (args.includes('--strip')) {
     const targets = args.filter((a) => !a.startsWith('--'))

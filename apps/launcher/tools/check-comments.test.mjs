@@ -1,9 +1,12 @@
 import assert from 'node:assert/strict'
+import { spawnSync } from 'node:child_process'
+import path from 'node:path'
 import test from 'node:test'
 import {
   analyzeFile,
   evaluateRatchet,
   isAllowedComment,
+  requireTypeScript,
   scanComments,
   stripComments,
   tightenRatchet,
@@ -131,4 +134,19 @@ test('enforces strict ratchet semantics and rejects increases on update', () => 
   const tightened = tightenRatchet({ 'a.ts': 2, 'b.ts': 5, 'new.ts': 1 }, { 'a.ts': 4, 'b.ts': 3 })
   assert.equal(tightened.ok, false)
   assert.deepEqual(tightened.next, { 'a.ts': 2, 'b.ts': 3 })
+})
+
+test('fails loudly instead of falling back when TypeScript is missing', () => {
+  assert.throws(() => requireTypeScript(null), /run npm ci --prefix ui first/)
+
+  const script = path.resolve(import.meta.dirname, 'check-comments.mjs')
+  const env = { ...process.env, EXO_COMMENTS_TS_PATH: './__missing_typescript_module__.js' }
+
+  const updateRun = spawnSync(process.execPath, [script, '--update'], { env, encoding: 'utf8' })
+  assert.equal(updateRun.status, 1)
+  assert.match(updateRun.stderr, /run npm ci --prefix ui first/)
+
+  const checkRun = spawnSync(process.execPath, [script], { env, encoding: 'utf8' })
+  assert.equal(checkRun.status, 1)
+  assert.match(checkRun.stderr, /run npm ci --prefix ui first/)
 })

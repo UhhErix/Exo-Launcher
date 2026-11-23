@@ -3,21 +3,18 @@
 // whose declaration is gone stays silently (the list never shrinks); tokens.css itself is checked.
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { spawnSync } from 'node:child_process'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-
-const script = path.resolve(import.meta.dirname, '../scripts/css-design.mjs')
+import { runCssDesign } from '../scripts/css-design.mjs'
 
 function run(css: Record<string, string>, config: Record<string, unknown> = {}) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'exo-css-design-'))
   fs.mkdirSync(path.join(dir, 'src'))
   for (const [file, text] of Object.entries(css)) fs.writeFileSync(path.join(dir, 'src', file), text)
-  fs.writeFileSync(path.join(dir, 'config.mjs'), `export default ${JSON.stringify({ sizes: [13], tokenFiles: ['src/tokens.css'], ...config })}`)
-  const out = spawnSync(process.execPath, [script, 'config.mjs', 'src'], { cwd: dir, encoding: 'utf8' })
+  const out = runCssDesign({ sizes: [13], tokenFiles: ['src/tokens.css'], ...config }, { dir: 'src', cwd: dir, configPath: 'config.mjs' })
   fs.rmSync(dir, { recursive: true, force: true })
-  return { code: out.status, text: out.stdout + out.stderr }
+  return { code: out.code, text: out.text }
 }
 
 test('a backdrop-filter (Liquid Glass) passes: nothing in the gate refuses it', () => {
@@ -98,8 +95,8 @@ test('a style block and style attributes in the page HTML are checked', () => {
   fs.writeFileSync(path.join(dir, 'config.mjs'), `export default ${JSON.stringify({ sizes: [13], tokenFiles: ['src/tokens.css'], htmlFiles: ['index.html'] })}`)
   const go = (html: string) => {
     fs.writeFileSync(path.join(dir, 'index.html'), html)
-    const out = spawnSync(process.execPath, [script, 'config.mjs', 'src'], { cwd: dir, encoding: 'utf8' })
-    return { code: out.status, text: out.stdout + out.stderr }
+    const out = runCssDesign({ sizes: [13], tokenFiles: ['src/tokens.css'], htmlFiles: ['index.html'] }, { dir: 'src', cwd: dir, configPath: 'config.mjs' })
+    return { code: out.code, text: out.text }
   }
   assert.equal(go('<style>html { background: #000 }</style><p style="color: var(--color-fg)">x</p>').code, 0)
   assert.match(go('<style>html { background: #123456 }</style>').text, /index\.html.*exo\/token-colour/)
