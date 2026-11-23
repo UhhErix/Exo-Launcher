@@ -1,12 +1,53 @@
+use crate::icons::{icon_close, icon_minimize, icon_win_maximize, icon_win_restore};
 use crate::tokens::{
-    BG, FG, GLASS_CONTROL_SIGMA, GLASS_PANEL_SIGMA, PRESS_SCALE, PRIMARY_FG, RADIUS_CARD,
-    RADIUS_PANEL, RADIUS_PILL, SPRING_BASE, SPRING_MOVE, SPRING_QUICK, TRANSPARENT, bad, fg_muted,
-    glass_control_fill, glass_outer_edge, glass_panel_fill, glass_rim, glass_rim_bottom,
-    glass_rim_top, glass_specular_sheen, glass_still_control_fill, glass_still_panel_fill, good,
-    hairline, hover_fill, pressed_fill, subtle_fill, track_fill, type_control, type_section,
-    type_small, warn,
+    BG, FG, GAP, GLASS_CONTROL_SIGMA, GLASS_PANEL_SIGMA, PRESS_SCALE, PRIMARY_FG, RADIUS_CARD,
+    RADIUS_PANEL, RADIUS_PILL, SPRING_BASE, SPRING_MOVE, SPRING_QUICK, TITLEBAR_HEIGHT,
+    TRANSPARENT, bad, fg_muted, glass_control_fill, glass_outer_edge, glass_panel_fill, glass_rim,
+    glass_rim_bottom, glass_rim_top, glass_specular_sheen, glass_still_control_fill,
+    glass_still_panel_fill, good, hairline, hover_fill, pressed_fill, subtle_fill, track_fill,
+    type_control, type_section, type_small, warn,
 };
-use rune::{Color, El, SpringPair, Transition, Vec2, col, el, row, text};
+use rune::{
+    CaptionGlyph, CaptionStyle, Color, El, SpringPair, Titlebar, Transition, Vec2, col, el, row,
+    text,
+};
+
+pub const CAPTION_BUTTON_WIDTH: f32 = 34.0;
+pub const CAPTION_BUTTON_HEIGHT: f32 = 30.0;
+pub const CAPTION_BUTTON_GAP: f32 = 2.0;
+pub const CAPTION_CAPSULE_PAD: f32 = 3.0;
+pub const CAPTION_TRAILING_INSET: f32 = GAP + CAPTION_CAPSULE_PAD;
+
+pub fn caption_glyph(glyph: CaptionGlyph, color: Color) -> El {
+    match glyph {
+        CaptionGlyph::Minimize => icon_minimize(16.0, color),
+        CaptionGlyph::Maximize => icon_win_maximize(16.0, color),
+        CaptionGlyph::Restore => icon_win_restore(16.0, color),
+        CaptionGlyph::Close => icon_close(16.0, color),
+    }
+}
+
+pub fn caption_style() -> CaptionStyle {
+    CaptionStyle::new()
+        .button_width(CAPTION_BUTTON_WIDTH)
+        .button_height(CAPTION_BUTTON_HEIGHT)
+        .gap(CAPTION_BUTTON_GAP)
+        .trailing_inset(CAPTION_TRAILING_INSET)
+        .radius(RADIUS_PILL)
+        .hover_fill(hover_fill())
+        .press_fill(pressed_fill())
+        .hover_symbol(FG)
+        .press_symbol(FG)
+        .close_hover_fill(hover_fill())
+        .close_press_fill(pressed_fill())
+        .close_hover_symbol(bad())
+        .close_press_symbol(bad())
+        .glyph(caption_glyph)
+}
+
+pub fn exo_titlebar() -> Titlebar {
+    Titlebar::new(TITLEBAR_HEIGHT).caption_style(caption_style())
+}
 
 pub fn popover_transition() -> Transition {
     let enter = Transition::scale_anchor(0.96, Vec2::new(1.0, 0.0)).combined(Transition::opacity());
@@ -402,4 +443,44 @@ pub fn segmented_bar(segments: &[(f32, Color)]) -> El {
                 .filter(|(f, _)| *f > 0.004)
                 .map(|(frac, color)| el().grow(*frac).h(8.0).fill(*color)),
         )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn caption_style_matches_exo_tokens() {
+        let style = caption_style();
+        let expected = CaptionStyle::new()
+            .button_width(34.0)
+            .button_height(30.0)
+            .gap(2.0)
+            .trailing_inset(13.0)
+            .radius(RADIUS_PILL)
+            .hover_fill(hover_fill())
+            .press_fill(pressed_fill())
+            .hover_symbol(FG)
+            .press_symbol(FG)
+            .close_hover_fill(hover_fill())
+            .close_press_fill(pressed_fill())
+            .close_hover_symbol(bad())
+            .close_press_symbol(bad())
+            .glyph(caption_glyph);
+        assert_eq!(style, expected);
+        assert_ne!(style, CaptionStyle::default());
+
+        let tb = exo_titlebar();
+        assert_eq!(tb.height(), TITLEBAR_HEIGHT);
+        assert_eq!(tb.caption(), style);
+
+        for kind in [
+            CaptionGlyph::Minimize,
+            CaptionGlyph::Maximize,
+            CaptionGlyph::Restore,
+            CaptionGlyph::Close,
+        ] {
+            let _ = caption_glyph(kind, fg_muted());
+        }
+    }
 }
