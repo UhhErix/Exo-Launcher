@@ -822,7 +822,7 @@ internal sealed partial class MusicEngineService
             }
             ApplyMusicMemoryTarget();
         });
-        core.NavigationCompleted += (_, e) => UiGuard.Run(() =>
+        core.NavigationCompleted += (sender, e) => UiGuard.Run(() =>
         {
             if (!ReferenceEquals(_musicHost, host) || _musicWebClosed) return;
             if (!e.IsSuccess)
@@ -852,7 +852,7 @@ internal sealed partial class MusicEngineService
             loaded.TrySetResult();
             host.SetControllerVisible(true);
             NotifyStateChanged();
-            PublishMusicStatus(service, "running");
+            _ = PublishMusicReadyWhenBootedAsync(host, service);
             NotifyRenderersChanged();
         });
         core.ProcessFailed += (_, e) => UiGuard.Run(() =>

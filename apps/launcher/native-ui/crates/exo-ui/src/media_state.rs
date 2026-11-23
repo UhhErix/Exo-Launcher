@@ -1,4 +1,4 @@
-use crate::state::{AppState, HostStatus};
+use crate::state::{AppState, HostStatus, Room};
 use exo_rpc::{
     ActionResult, CaptureItem, CaptureListReply, CaptureLiveState, CaptureSettingsDto,
     CaptureStatusReply, METHOD_APPLEMUSIC_ACT, METHOD_APPLEMUSIC_START, METHOD_APPLEMUSIC_VIEW,
@@ -11,6 +11,22 @@ use exo_rpc::{
 };
 use rune::{Player, TextEdit};
 use serde_json::json;
+
+const MUSIC_START_FAST_ATTEMPTS: u32 = 20;
+const MUSIC_START_FAST_POLL_MS: u64 = 500;
+const MUSIC_START_SLOW_POLL_MS: u64 = 1000;
+const MUSIC_START_MAX_ATTEMPTS: u32 = 120;
+const MUSIC_SIGN_IN_POLL_MS: u64 = 2000;
+const MUSIC_SIGN_IN_MAX_ATTEMPTS: u32 = 300;
+#[cfg(windows)]
+const MUSIC_HOME_RETRY_MS: u64 = 1000;
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum MusicStartAction {
+    LoadViews,
+    RetryAfter { delay_ms: u64, next_attempt: u32 },
+    Stop,
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MusicService {
@@ -155,6 +171,9 @@ pub struct MediaState {
     pub music_page_data: Option<PlayerViewData>,
     pub music_queue_data: Option<PlayerViewData>,
     pub music_search_edit: TextEdit,
+    pub music_start_gen: u64,
+    pub music_sign_in_pending: bool,
+    pub music_home_loading: bool,
 
     pub captures_open: bool,
     pub captures_settings_open: bool,
@@ -364,6 +383,9 @@ impl MediaState {
             music_page_data: None,
             music_queue_data: None,
             music_search_edit: TextEdit::new(""),
+            music_start_gen: 0,
+            music_sign_in_pending: false,
+            music_home_loading: false,
             captures_open: false,
             captures_settings_open: false,
             capture_popover_open: false,
@@ -485,6 +507,9 @@ impl MediaState {
             music_page_data: None,
             music_queue_data: None,
             music_search_edit: TextEdit::new(""),
+            music_start_gen: 0,
+            music_sign_in_pending: false,
+            music_home_loading: false,
             captures_open: false,
             captures_settings_open: false,
             capture_popover_open: false,
@@ -531,7 +556,22 @@ impl AppState {
             .ui_prefs
             .get("exo.musicWebService")
             .and_then(|v| v.as_str());
-        self.media.music_service = MusicService::from_pref(pref);
+        let next = MusicService::from_pref(pref);
+        if self.media.music_service != next {
+            self.media.music_service = next;
+            self.media.music_room_state = MusicRoomState::Loading;
+            self.media.music_nav = MusicNav::Home;
+            self.media.music_history.clear();
+            self.media.music_library.clear();
+            self.media.music_library_filters.clear();
+            self.media.music_recent.clear();
+            self.media.music_home_sections.clear();
+            self.media.music_page_data = None;
+            self.media.music_queue_data = None;
+            self.media.music_sign_in_pending = false;
+            self.media.music_home_loading = false;
+            self.media.music_start_gen = self.media.music_start_gen.wrapping_add(1);
+        }
     }
 
     pub fn load_music_room(&mut self) {
@@ -539,6 +579,12 @@ impl AppState {
             return;
         }
         self.sync_music_service_from_settings();
+        if matches!(self.media.music_room_state, MusicRoomState::Error(_)) {
+            self.media.music_room_state = MusicRoomState::Loading;
+        }
+        self.media.music_start_gen = self.media.music_start_gen.wrapping_add(1);
+        let generation = self.media.music_start_gen;
+        let service = self.media.music_service;
         #[cfg(windows)]
         if let (Some(rpc), Some(handle)) = (self.rpc.clone(), self.handle.clone()) {
             let h1 = handle.clone();
@@ -558,47 +604,95 @@ impl AppState {
                     });
                 }
             });
-            if let Some(start_method) = self.media.music_service.start_method() {
-                let h3 = handle.clone();
-                rpc.call::<_, PlayerStartReply>(start_method, &json!({}), move |res| {
-                    h3.update(move |s, _| match res {
-                        Ok(reply) if reply.ok && reply.state == "running" => {
-                            s.media.music_room_state = MusicRoomState::Running;
+            self.poll_music_start(service, generation, 0);
+        }
+        #[cfg(not(windows))]
+        let _ = (generation, service);
+    }
+
+    #[cfg(windows)]
+    fn poll_music_start(&mut self, service: MusicService, generation: u64, attempt: u32) {
+        if self.status == HostStatus::Standalone {
+            return;
+        }
+        let Some(start_method) = service.start_method() else {
+            return;
+        };
+        if let (Some(rpc), Some(handle)) = (self.rpc.clone(), self.handle.clone()) {
+            let h = handle.clone();
+            rpc.call::<_, PlayerStartReply>(start_method, &json!({}), move |res| {
+                let mapped = res.map_err(|e| e.to_string());
+                h.update(move |s, _| {
+                    if s.media.music_start_gen != generation || s.media.music_service != service {
+                        return;
+                    }
+                    let in_music_room = s.room == Room::Music;
+                    match apply_music_start_reply(&mut s.media, in_music_room, mapped, attempt) {
+                        MusicStartAction::LoadViews => {
                             s.load_music_views();
+                            if s.media.music_nav != MusicNav::Home {
+                                s.load_music_current_nav();
+                            }
                         }
-                        Ok(reply) if reply.state == "signedOut" => {
-                            s.media.music_room_state = MusicRoomState::SignedOut;
-                        }
-                        Ok(reply) if reply.state == "notPremium" => {
-                            s.media.music_room_state = MusicRoomState::NotPremium;
-                        }
-                        Ok(reply) if reply.state == "loading" => {
-                            s.media.music_room_state = MusicRoomState::Loading;
-                        }
-                        Ok(reply) => {
-                            s.media.music_room_state = MusicRoomState::Error(
-                                reply
-                                    .message
-                                    .unwrap_or_else(|| "Unable to start music engine.".into()),
+                        MusicStartAction::RetryAfter {
+                            delay_ms,
+                            next_attempt,
+                        } => {
+                            s.schedule_music_start_retry(
+                                service,
+                                generation,
+                                next_attempt,
+                                delay_ms,
                             );
                         }
-                        Err(err) => {
-                            s.media.music_room_state = MusicRoomState::Error(err.to_string());
+                        MusicStartAction::Stop => {}
+                    }
+                });
+            });
+        }
+    }
+
+    #[cfg(windows)]
+    fn schedule_music_start_retry(
+        &self,
+        service: MusicService,
+        generation: u64,
+        next_attempt: u32,
+        delay_ms: u64,
+    ) {
+        if let Some(handle) = self.handle.clone() {
+            let _ = std::thread::Builder::new()
+                .name("exo-music-retry".into())
+                .spawn(move || {
+                    std::thread::sleep(std::time::Duration::from_millis(delay_ms));
+                    handle.update(move |s, _| {
+                        if s.room == Room::Music
+                            && s.media.music_start_gen == generation
+                            && s.media.music_service == service
+                        {
+                            s.poll_music_start(service, generation, next_attempt);
                         }
                     });
                 });
-            }
         }
     }
 
     pub fn load_music_views(&mut self) {
+        self.load_music_views_attempt(self.media.music_start_gen, 0);
+    }
+
+    fn load_music_views_attempt(&mut self, generation: u64, retry: u32) {
         if self.status == HostStatus::Standalone {
             return;
         }
-        let Some(view_method) = self.media.music_service.view_method() else {
+        let service = self.media.music_service;
+        let Some(view_method) = service.view_method() else {
             return;
         };
-        let has_recent = self.media.music_service.has_recent();
+        let has_recent = service.has_recent();
+        if self.media.music_home_sections.is_empty() && self.media.music_recent.is_empty() {
+            self.media.music_home_loading = true;
+        }
         #[cfg(windows)]
         if let (Some(rpc), Some(handle)) = (self.rpc.clone(), self.handle.clone()) {
             let h_lib = handle.clone();
@@ -611,6 +705,9 @@ impl AppState {
                         && let Some(data) = reply.data
                     {
                         h_lib.update(move |s, _| {
+                            if s.media.music_service != service {
+                                return;
+                            }
                             s.media.music_library = data.items;
                             if !data.filters.is_empty() {
                                 s.media.music_library_filters = data.filters;
@@ -624,14 +721,48 @@ impl AppState {
             );
             let h_home = handle.clone();
             rpc.call::<_, PlayerViewReply>(view_method, &json!({ "view": "home" }), move |res| {
-                if let Ok(reply) = res
-                    && reply.ok
-                    && let Some(data) = reply.data
-                {
-                    h_home.update(move |s, _| {
-                        s.media.music_home_sections = data.sections;
-                    });
-                }
+                let sections = res
+                    .ok()
+                    .filter(|reply| reply.ok)
+                    .and_then(|reply| reply.data)
+                    .map(|data| data.sections)
+                    .filter(|sections| !sections.is_empty());
+                h_home.update(move |s, _| {
+                    if s.media.music_start_gen != generation || s.media.music_service != service {
+                        return;
+                    }
+                    if let Some(sections) = sections {
+                        s.media.music_home_sections = sections;
+                        s.media.music_home_loading = false;
+                        return;
+                    }
+                    if retry == 0
+                        && s.room == Room::Music
+                        && s.media.music_room_state == MusicRoomState::Running
+                        && s.media.music_home_sections.is_empty()
+                        && let Some(retry_handle) = s.handle.clone()
+                    {
+                        let _ = std::thread::Builder::new()
+                            .name("exo-music-home-retry".into())
+                            .spawn(move || {
+                                std::thread::sleep(std::time::Duration::from_millis(
+                                    MUSIC_HOME_RETRY_MS,
+                                ));
+                                retry_handle.update(move |s, _| {
+                                    if s.room == Room::Music
+                                        && s.media.music_start_gen == generation
+                                        && s.media.music_service == service
+                                        && s.media.music_room_state == MusicRoomState::Running
+                                        && s.media.music_home_sections.is_empty()
+                                    {
+                                        s.load_music_views_attempt(generation, 1);
+                                    }
+                                });
+                            });
+                        return;
+                    }
+                    s.media.music_home_loading = false;
+                });
             });
             if has_recent {
                 let h_rec = handle.clone();
@@ -644,6 +775,12 @@ impl AppState {
                             && let Some(data) = reply.data
                         {
                             h_rec.update(move |s, _| {
+                                if s.media.music_service != service {
+                                    return;
+                                }
+                                if !data.items.is_empty() {
+                                    s.media.music_home_loading = false;
+                                }
                                 s.media.music_recent = data.items;
                             });
                         }
@@ -657,11 +794,16 @@ impl AppState {
                     && let Some(data) = reply.data
                 {
                     h_pl.update(move |s, _| {
+                        if s.media.music_service != service {
+                            return;
+                        }
                         s.media.apply_player_state(&data);
                     });
                 }
             });
         }
+        #[cfg(not(windows))]
+        let _ = (generation, retry, has_recent);
     }
 
     pub fn music_open_nav(&mut self, nav: MusicNav) {
@@ -908,21 +1050,49 @@ impl AppState {
     }
 
     pub fn music_sign_in(&mut self) {
-        let svc = self.media.music_service.id();
+        let service = self.media.music_service;
+        let svc = service.id();
+        self.media.music_sign_in_pending = true;
+        self.media.music_start_gen = self.media.music_start_gen.wrapping_add(1);
+        let generation = self.media.music_start_gen;
         #[cfg(windows)]
         if let (Some(rpc), Some(handle)) = (self.rpc.clone(), self.handle.clone()) {
             rpc.call::<_, ActionResult>(
                 METHOD_MUSIC_SIGN_IN,
                 &json!({ "service": svc }),
                 move |res| {
-                    if let Ok(r) = res
-                        && let Some(msg) = r.message
-                    {
-                        handle.update(move |s, _| s.notice = Some(msg));
-                    }
+                    handle.update(move |s, _| match res {
+                        Ok(r) if r.ok => {
+                            if let Some(msg) = r.message {
+                                s.notice = Some(msg);
+                            }
+                            if s.room == Room::Music
+                                && s.media.music_start_gen == generation
+                                && s.media.music_service == service
+                            {
+                                s.schedule_music_start_retry(
+                                    service,
+                                    generation,
+                                    0,
+                                    MUSIC_SIGN_IN_POLL_MS,
+                                );
+                            }
+                        }
+                        Ok(r) => {
+                            s.media.music_sign_in_pending = false;
+                            if let Some(msg) = r.message {
+                                s.notice = Some(msg);
+                            }
+                        }
+                        Err(_) => {
+                            s.media.music_sign_in_pending = false;
+                        }
+                    });
                 },
             );
         }
+        #[cfg(not(windows))]
+        let _ = (svc, generation);
     }
 
     pub fn open_captures(&mut self, game_id: Option<String>) {
@@ -1120,6 +1290,85 @@ impl AppState {
     }
 }
 
+pub fn apply_music_start_reply(
+    media: &mut MediaState,
+    in_music_room: bool,
+    res: Result<PlayerStartReply, String>,
+    attempt: u32,
+) -> MusicStartAction {
+    match res {
+        Ok(reply) if reply.ok && reply.state == "running" => {
+            media.music_room_state = MusicRoomState::Running;
+            media.music_sign_in_pending = false;
+            MusicStartAction::LoadViews
+        }
+        Ok(reply) if reply.state == "loading" => {
+            if media.music_room_state != MusicRoomState::Running {
+                media.music_room_state = MusicRoomState::Loading;
+            }
+            if !in_music_room {
+                return MusicStartAction::Stop;
+            }
+            if attempt >= MUSIC_START_MAX_ATTEMPTS {
+                if media.music_room_state != MusicRoomState::Running {
+                    media.music_room_state = MusicRoomState::Error(format!(
+                        "{} did not open. Try again.",
+                        media.music_service.label()
+                    ));
+                }
+                return MusicStartAction::Stop;
+            }
+            let delay_ms = if attempt < MUSIC_START_FAST_ATTEMPTS {
+                MUSIC_START_FAST_POLL_MS
+            } else {
+                MUSIC_START_SLOW_POLL_MS
+            };
+            MusicStartAction::RetryAfter {
+                delay_ms,
+                next_attempt: attempt + 1,
+            }
+        }
+        Ok(reply) if reply.state == "signedOut" => {
+            media.music_room_state = MusicRoomState::SignedOut;
+            if in_music_room && media.music_sign_in_pending && attempt < MUSIC_SIGN_IN_MAX_ATTEMPTS
+            {
+                MusicStartAction::RetryAfter {
+                    delay_ms: MUSIC_SIGN_IN_POLL_MS,
+                    next_attempt: attempt + 1,
+                }
+            } else {
+                MusicStartAction::Stop
+            }
+        }
+        Ok(reply) if reply.state == "notPremium" => {
+            media.music_room_state = MusicRoomState::NotPremium;
+            if in_music_room && media.music_sign_in_pending && attempt < MUSIC_SIGN_IN_MAX_ATTEMPTS
+            {
+                MusicStartAction::RetryAfter {
+                    delay_ms: MUSIC_SIGN_IN_POLL_MS,
+                    next_attempt: attempt + 1,
+                }
+            } else {
+                MusicStartAction::Stop
+            }
+        }
+        Ok(reply) => {
+            media.music_sign_in_pending = false;
+            media.music_room_state = MusicRoomState::Error(
+                reply
+                    .message
+                    .unwrap_or_else(|| "Unable to start music engine.".into()),
+            );
+            MusicStartAction::Stop
+        }
+        Err(err) => {
+            media.music_sign_in_pending = false;
+            media.music_room_state = MusicRoomState::Error(err);
+            MusicStartAction::Stop
+        }
+    }
+}
+
 pub fn needs_music_playback_refresh(control_ok: bool, playback: Option<&MusicPlayback>) -> bool {
     if !control_ok {
         return true;
@@ -1130,6 +1379,136 @@ pub fn needs_music_playback_refresh(control_ok: bool, playback: Option<&MusicPla
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn start_reply(ok: bool, state: &str, message: Option<&str>) -> PlayerStartReply {
+        PlayerStartReply {
+            ok,
+            state: state.into(),
+            message: message.map(Into::into),
+        }
+    }
+
+    #[test]
+    fn music_start_loading_retries_fast_then_loads_views_when_ready() {
+        let mut media = MediaState::empty_for_host();
+        media.music_service = MusicService::Apple;
+
+        let first =
+            apply_music_start_reply(&mut media, true, Ok(start_reply(true, "loading", None)), 0);
+        assert_eq!(media.music_room_state, MusicRoomState::Loading);
+        assert_eq!(
+            first,
+            MusicStartAction::RetryAfter {
+                delay_ms: MUSIC_START_FAST_POLL_MS,
+                next_attempt: 1,
+            }
+        );
+
+        let slow = apply_music_start_reply(
+            &mut media,
+            true,
+            Ok(start_reply(true, "loading", None)),
+            MUSIC_START_FAST_ATTEMPTS,
+        );
+        assert_eq!(
+            slow,
+            MusicStartAction::RetryAfter {
+                delay_ms: MUSIC_START_SLOW_POLL_MS,
+                next_attempt: MUSIC_START_FAST_ATTEMPTS + 1,
+            }
+        );
+
+        let ready =
+            apply_music_start_reply(&mut media, true, Ok(start_reply(true, "running", None)), 2);
+        assert_eq!(media.music_room_state, MusicRoomState::Running);
+        assert_eq!(ready, MusicStartAction::LoadViews);
+    }
+
+    #[test]
+    fn music_start_stops_when_left_room_or_attempt_limit_reached() {
+        let mut media = MediaState::empty_for_host();
+        media.music_service = MusicService::Apple;
+
+        let left =
+            apply_music_start_reply(&mut media, false, Ok(start_reply(true, "loading", None)), 0);
+        assert_eq!(left, MusicStartAction::Stop);
+        assert_eq!(media.music_room_state, MusicRoomState::Loading);
+
+        let timed_out = apply_music_start_reply(
+            &mut media,
+            true,
+            Ok(start_reply(true, "loading", None)),
+            MUSIC_START_MAX_ATTEMPTS,
+        );
+        assert_eq!(timed_out, MusicStartAction::Stop);
+        assert!(
+            matches!(media.music_room_state, MusicRoomState::Error(ref msg) if msg.contains("Apple Music"))
+        );
+    }
+
+    #[test]
+    fn music_start_keeps_running_on_transient_loading_and_polls_pending_sign_in() {
+        let mut media = MediaState::demo();
+        let retry =
+            apply_music_start_reply(&mut media, true, Ok(start_reply(true, "loading", None)), 0);
+        assert_eq!(media.music_room_state, MusicRoomState::Running);
+        assert_eq!(
+            retry,
+            MusicStartAction::RetryAfter {
+                delay_ms: MUSIC_START_FAST_POLL_MS,
+                next_attempt: 1,
+            }
+        );
+
+        let idle_signed_out = apply_music_start_reply(
+            &mut media,
+            true,
+            Ok(start_reply(true, "signedOut", None)),
+            0,
+        );
+        assert_eq!(media.music_room_state, MusicRoomState::SignedOut);
+        assert_eq!(idle_signed_out, MusicStartAction::Stop);
+
+        media.music_sign_in_pending = true;
+        let polling_signed_out = apply_music_start_reply(
+            &mut media,
+            true,
+            Ok(start_reply(true, "signedOut", None)),
+            0,
+        );
+        assert_eq!(
+            polling_signed_out,
+            MusicStartAction::RetryAfter {
+                delay_ms: MUSIC_SIGN_IN_POLL_MS,
+                next_attempt: 1,
+            }
+        );
+
+        let completed =
+            apply_music_start_reply(&mut media, true, Ok(start_reply(true, "running", None)), 1);
+        assert_eq!(completed, MusicStartAction::LoadViews);
+        assert!(!media.music_sign_in_pending);
+    }
+
+    #[test]
+    fn sync_music_service_clears_views_and_bumps_generation_on_change() {
+        let mut s = AppState::default();
+        assert_eq!(s.media.music_service, MusicService::Apple);
+        assert!(!s.media.music_home_sections.is_empty());
+        let before_gen = s.media.music_start_gen;
+
+        s.settings
+            .ui_prefs
+            .insert("exo.musicWebService".into(), json!("spotify"));
+        s.sync_music_service_from_settings();
+
+        assert_eq!(s.media.music_service, MusicService::Spotify);
+        assert_eq!(s.media.music_room_state, MusicRoomState::Loading);
+        assert!(s.media.music_home_sections.is_empty());
+        assert!(s.media.music_recent.is_empty());
+        assert!(s.media.music_library.is_empty());
+        assert_ne!(s.media.music_start_gen, before_gen);
+    }
 
     #[test]
     fn page_control_ok_skips_follow_up_rpcs() {

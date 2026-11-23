@@ -225,4 +225,99 @@ public sealed class MusicEngineReturnTests
         Assert.True(fallbackSent[1].Length > 5000);
         Assert.True(sw.ElapsedMilliseconds < 400);
     }
+
+    [Fact]
+    public async Task WaitAndPublishReadyWaitsUntilPlayerBootsAndPublishesOnce()
+    {
+        var probes = 0;
+        var booted = false;
+        var published = new List<(string Service, string State, string? Message)>();
+
+        var result = await MusicEngineService.WaitAndPublishReadyAsync(
+            "apple",
+            () =>
+            {
+                probes++;
+                var payload = probes < 3
+                    ? "{\"signedIn\":false,\"ready\":false}"
+                    : "{\"signedIn\":true,\"subscribed\":true,\"ready\":true}";
+                using var doc = JsonDocument.Parse(payload);
+                return Task.FromResult<JsonElement?>(doc.RootElement.Clone());
+            },
+            () => false,
+            () => booted,
+            _ => booted = true,
+            (svc, state, msg) => published.Add((svc, state, msg)),
+            TimeSpan.FromSeconds(5),
+            TimeSpan.FromMilliseconds(15),
+            TestContext.Current.CancellationToken);
+
+        Assert.NotNull(result);
+        Assert.True(booted);
+        Assert.Equal(3, probes);
+        Assert.Equal("running", result.Value.State);
+        Assert.Single(published);
+        Assert.Equal(("apple", "running", null), published[0]);
+
+        var duplicate = await MusicEngineService.WaitAndPublishReadyAsync(
+            "apple",
+            () =>
+            {
+                probes++;
+                using var doc = JsonDocument.Parse("{\"signedIn\":true,\"subscribed\":true,\"ready\":true}");
+                return Task.FromResult<JsonElement?>(doc.RootElement.Clone());
+            },
+            () => false,
+            () => booted,
+            _ => booted = true,
+            (svc, state, msg) => published.Add((svc, state, msg)),
+            TimeSpan.FromSeconds(5),
+            TimeSpan.FromMilliseconds(15),
+            TestContext.Current.CancellationToken);
+
+        Assert.Null(duplicate);
+        Assert.Equal(3, probes);
+        Assert.Single(published);
+    }
+
+    [Fact]
+    public async Task WaitAndPublishReadyClassifiesSignedOutAndNotPremiumAndStopsWhenGone()
+    {
+        using var signedOutDoc = JsonDocument.Parse("{\"signedIn\":false,\"ready\":true}");
+        var signedOut = MusicEngineService.ClassifyMusicStatus("apple", signedOutDoc.RootElement, null);
+        Assert.NotNull(signedOut);
+        Assert.Equal("signedOut", signedOut.Value.State);
+
+        using var unsubDoc = JsonDocument.Parse("{\"signedIn\":true,\"subscribed\":false,\"ready\":true}");
+        var notPremium = MusicEngineService.ClassifyMusicStatus("apple", unsubDoc.RootElement, null);
+        Assert.NotNull(notPremium);
+        Assert.Equal("notPremium", notPremium.Value.State);
+
+        using var notReadyDoc = JsonDocument.Parse("{\"signedIn\":false,\"ready\":false}");
+        Assert.Null(MusicEngineService.ClassifyMusicStatus("apple", notReadyDoc.RootElement, null));
+
+        var published = 0;
+        var gone = false;
+        var probes = 0;
+        var stopped = await MusicEngineService.WaitAndPublishReadyAsync(
+            "apple",
+            () =>
+            {
+                probes++;
+                if (probes == 2) gone = true;
+                using var doc = JsonDocument.Parse("{\"signedIn\":false,\"ready\":false}");
+                return Task.FromResult<JsonElement?>(doc.RootElement.Clone());
+            },
+            () => gone,
+            () => false,
+            _ => { },
+            (_, _, _) => published++,
+            TimeSpan.FromSeconds(5),
+            TimeSpan.FromMilliseconds(15),
+            TestContext.Current.CancellationToken);
+
+        Assert.Null(stopped);
+        Assert.Equal(2, probes);
+        Assert.Equal(0, published);
+    }
 }
