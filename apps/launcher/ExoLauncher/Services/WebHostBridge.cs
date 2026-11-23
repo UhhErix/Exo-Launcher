@@ -26,6 +26,7 @@ public sealed partial class WebHostBridge
     private readonly CancellationTokenSource _bridgeLifetime = new();
     private readonly BridgeRequestRegistry _rpcRequests = new();
     private readonly EarlyCancelTracker _earlyCancels = new();
+    private readonly RpcTrace _trace = RpcTrace.Default;
     private bool _detached;
     private int _backgroundMonitorsStarted;
     private Action<UpdateFlow.State>? _updaterStateChanged;
@@ -587,7 +588,7 @@ public sealed partial class WebHostBridge
                 if (request.Id.Length > 0 && !_detached)
                 {
                     AppLog.Warn($"RPC {request.Method}: request of {raw.Length} characters is over the limit.");
-                    PostResponse(request.Id, ok: false, error: "That is too large for Exo to take.");
+                    PostResponse(request.Id, ok: false, error: "That is too large for Exo to take.", elapsedMs: Stopwatch.GetElapsedTime(started).TotalMilliseconds);
                 }
                 return;
             }
@@ -597,6 +598,13 @@ public sealed partial class WebHostBridge
             var hasParams = request.HasParams;
             perfKey = hasParams ? PerfKey(paramsEl) : null;
             if (_detached) return;
+            if (_trace.IsEnabled)
+                _trace.RecordRequest(RpcTrace.ClientKind(_transport), id, method, paramsEl, hasParams);
+            if (_trace.IsEnabled && method == "debug.mark")
+            {
+                PostResponse(id, ok: true, result: new { ok = true }, elapsedMs: Stopwatch.GetElapsedTime(started).TotalMilliseconds);
+                return;
+            }
             if (method == "rpc.cancel")
             {
                 var target = ReadString(paramsEl, hasParams, "requestId");
@@ -1018,11 +1026,11 @@ public sealed partial class WebHostBridge
             };
 
             if (!_detached && scope?.Token.IsCancellationRequested != true)
-                PostResponse(id!, ok: true, result: result);
+                PostResponse(id!, ok: true, result: result, elapsedMs: Stopwatch.GetElapsedTime(started).TotalMilliseconds);
         }
         catch (OperationCanceledException)
         {
-            if (!_detached && id is not null) PostResponse(id, ok: false, error: "The request was canceled or timed out.");
+            if (!_detached && id is not null) PostResponse(id, ok: false, error: "The request was canceled or timed out.", elapsedMs: Stopwatch.GetElapsedTime(started).TotalMilliseconds);
         }
         catch (BridgeRequestRegistry.DuplicateRequestException)
         {
@@ -1037,7 +1045,7 @@ public sealed partial class WebHostBridge
             // Handlers throw InvalidOperation/InvalidData with a line meant for the user; file and
             // Windows errors carry paths, which stay in native code (AGENTS.md).
             if (!_detached && id is not null)
-                PostResponse(id, ok: false, error: UserMessage(ex, "Exo could not finish that. The details are in the log."));
+                PostResponse(id, ok: false, error: UserMessage(ex, "Exo could not finish that. The details are in the log."), elapsedMs: Stopwatch.GetElapsedTime(started).TotalMilliseconds);
         }
         finally
         {
@@ -3534,10 +3542,12 @@ public sealed partial class WebHostBridge
             (_transport as NamedPipeHostTransport)?.MediaPipeName);
     }
 
-    private void PostResponse(string id, bool ok, object? result = null, string? error = null)
+    private void PostResponse(string id, bool ok, object? result = null, string? error = null, double elapsedMs = 0)
     {
         var transport = _transport;
         if (transport is null || _detached) return;
+        if (_trace.IsEnabled)
+            _trace.RecordReply(RpcTrace.ClientKind(transport), id, ok, elapsedMs);
         if (transport is NamedPipeHostTransport pipeTransport)
         {
             try { pipeTransport.PostJsonUtf8(ExoBridgeProtocol.SerializeResponseUtf8(id, ok, result, error)); }
@@ -3561,6 +3571,8 @@ public sealed partial class WebHostBridge
     {
         var transport = _transport;
         if (transport is null || _detached) return;
+        if (_trace.IsEnabled)
+            _trace.RecordEvent(RpcTrace.ClientKind(transport), name, data);
         if (transport is NamedPipeHostTransport pipeTransport)
         {
             try { pipeTransport.PostJsonUtf8(ExoBridgeProtocol.SerializeEventUtf8(name, data)); }
