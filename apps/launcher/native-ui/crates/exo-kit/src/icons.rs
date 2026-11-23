@@ -1366,3 +1366,28 @@ pub fn icon_forward(size: f32, color: Color) -> El {
         color,
     )
 }
+
+pub fn icon_arrow_right(size: f32, color: Color) -> El {
+    strokes(
+        size,
+        &[
+            &[[5.0, 12.0], [19.0, 12.0]],
+            &[[13.0, 6.0], [19.0, 12.0], [13.0, 18.0]],
+        ],
+        color,
+    )
+}
+
+pub fn icon_bookmark_filled(size: f32, color: Color) -> El {
+    let shape = Shape::new().view_box(24.0, 24.0).fill(
+        vec![
+            [6.5, 4.5],
+            [17.5, 4.5],
+            [17.5, 19.5],
+            [12.0, 15.5],
+            [6.5, 19.5],
+        ],
+        color,
+    );
+    canvas(shape).size(size, size)
+}

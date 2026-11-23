@@ -27,7 +27,7 @@ pub use discord_types::{
 pub use events::{
     AppUpdateStateEvent, AutopilotReportEvent, CaptureReelEvent, CaptureSavedEvent,
     GameRunStateEvent, InstallQueueEvent, LaunchStatusEvent, MusicVolumeEvent, PausedDownloadItem,
-    RequestId, ShellBootstrap, StoreChangedEvent,
+    RequestId, ShellBootstrap, StoreChangedEvent, StoreSaleEvent,
 };
 pub use media_types::{
     CaptureItem, CaptureListReply, CaptureLiveState, CaptureSettingsDto, CaptureStatusReply,
@@ -62,8 +62,9 @@ use std::time::Duration;
 pub use types::{
     ActionResult, ArtBase, ExoAccountState, Game, GameExtras, GameGetReply, GameProperties,
     GamePropertySetReply, HostContract, HostEvent, InstallProgress, KeyPreview, LauncherSettings,
-    LibraryPayload, StoreArt, StoreGame, StoreHome, StoreLowest, StoreOffer, StoreOtherOffers,
-    StoreSearchReply, StoreShelf, StoreTile,
+    LibraryPayload, StoreArt, StoreGame, StoreHome, StoreLowest, StoreMedia, StoreOffer,
+    StoreOtherOffers, StoreRecentReviews, StoreSearchReply, StoreShelf, StoreSpec, StoreTile,
+    StoreWishlistReply,
 };
 
 pub const PROTOCOL_VERSION: u32 = 1;
@@ -184,6 +185,7 @@ pub const METHOD_SHADERS_PREPARE_GAMES: &str = "shaders.prepare.games";
 pub const METHOD_SHADERS_PREPARE_START: &str = "shaders.prepare.start";
 pub const METHOD_RPC_CANCEL: &str = "rpc.cancel";
 pub const METHOD_SHELL_BOOTSTRAP: &str = "shell.bootstrap";
+pub const METHOD_SHELL_OPEN_URL: &str = "shell.openUrl";
 pub const METHOD_SHELL_READY: &str = "shell.ready";
 pub const METHOD_SPOTIFY_ACT: &str = "spotify.act";
 pub const METHOD_SPOTIFY_START: &str = "spotify.start";
@@ -196,6 +198,7 @@ pub const METHOD_STORE_HOME: &str = "store.home";
 pub const METHOD_STORE_SEARCH: &str = "store.search";
 pub const METHOD_STORE_GAME: &str = "store.game";
 pub const METHOD_STORE_GAME_OFFERS: &str = "store.gameOffers";
+pub const METHOD_STORE_GAME_REVIEWS: &str = "store.gameReviews";
 pub const METHOD_STORE_OPEN: &str = "store.open";
 pub const METHOD_STORE_WISHLIST: &str = "store.wishlist";
 pub const METHOD_SYSTEM_ABOUT: &str = "system.about";
@@ -318,6 +321,7 @@ pub const USED_METHODS: &[&str] = &[
     METHOD_SHADERS_PREPARE_GAMES,
     METHOD_SHADERS_PREPARE_START,
     METHOD_SHELL_BOOTSTRAP,
+    METHOD_SHELL_OPEN_URL,
     METHOD_SHELL_READY,
     METHOD_SPOTIFY_ACT,
     METHOD_SPOTIFY_START,
@@ -330,6 +334,7 @@ pub const USED_METHODS: &[&str] = &[
     METHOD_STORE_SEARCH,
     METHOD_STORE_GAME,
     METHOD_STORE_GAME_OFFERS,
+    METHOD_STORE_GAME_REVIEWS,
     METHOD_STORE_OPEN,
     METHOD_STORE_WISHLIST,
     METHOD_SYSTEM_ABOUT,
@@ -1042,6 +1047,9 @@ fn parse_event(
         "store.changed" => Ok(serde_json::from_str::<StoreChangedEvent>(data_raw)
             .map(HostEvent::StoreChanged)
             .unwrap_or_else(|_| raw_fallback(name, data_raw))),
+        "store.sale" => Ok(serde_json::from_str::<StoreSaleEvent>(data_raw)
+            .map(HostEvent::StoreSale)
+            .unwrap_or_else(|_| raw_fallback(name, data_raw))),
         "music.playback" => {
             fn present_option<'de, D, T>(d: D) -> Result<Option<Option<T>>, D::Error>
             where
@@ -1387,6 +1395,10 @@ mod tests {
             (
                 br#"{"event":"store.changed","data":{"what":"wishlist"}}"#,
                 |ev| matches!(ev, HostEvent::StoreChanged(s) if s.what == "wishlist"),
+            ),
+            (
+                br#"{"event":"store.sale","data":{"appId":"1091500","name":"Cyberpunk 2077","final":2999,"discount":50,"currency":"USD","price":"$29.99"}}"#,
+                |ev| matches!(ev, HostEvent::StoreSale(s) if s.app_id == "1091500" && s.discount == 50),
             ),
         ];
         let pending = Mutex::new(HashMap::new());

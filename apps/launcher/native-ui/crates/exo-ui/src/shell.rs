@@ -1,7 +1,7 @@
 use crate::state::{AppState, ContextMenuTarget, InputMode, MiniBarSlot, Room};
 use crate::{
     captures, discord, game_page, key_modal, library, menus, music, notice, palette, pc, settings,
-    setup, store,
+    setup, store, store_media,
 };
 use exo_kit::{
     BG, CAPTION_BUTTON_GAP, CAPTION_BUTTON_HEIGHT, CAPTION_BUTTON_WIDTH, CAPTION_CAPSULE_PAD,
@@ -118,7 +118,8 @@ fn gamepad_prompt_bar() -> El {
 pub fn view(s: &AppState, cx: &mut Cx<AppState>) -> El {
     cx.reduced_motion(s.settings.reduce_motion);
     set_text_scale(s.text_scale());
-    let has_modal_scrim = s.palette_open || s.key_modal_open;
+    let has_modal_scrim =
+        s.palette_open || s.key_modal_open || s.store_ext.lightbox_index.is_some();
     let budget = BlurBudget::compute(s, !s.notices.is_empty());
     cx.set_titlebar(exo_titlebar());
     cx.caption_color(if has_modal_scrim {
@@ -577,6 +578,9 @@ pub fn view(s: &AppState, cx: &mut Cx<AppState>) -> El {
     }
     if s.setup.return_to.is_some() && !s.setup.open {
         root = root.child(setup::return_bar(s));
+    }
+    if s.store_ext.lightbox_index.is_some() {
+        root = root.children(store_media::lightbox_layers(s, scale, budget.overlay));
     }
     if s.key_modal_open {
         root = root.children(key_modal::layers(s, budget.overlay));

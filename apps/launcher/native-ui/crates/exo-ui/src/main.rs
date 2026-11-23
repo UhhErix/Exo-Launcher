@@ -26,6 +26,8 @@ mod setup;
 mod shell;
 mod state;
 mod store;
+mod store_media;
+mod store_page;
 mod video_decoder;
 
 use crate::state::AppState;
@@ -113,6 +115,23 @@ fn on_key(s: &mut AppState, ev: &KeyEvent, tx: &mut Tx) -> bool {
             _ => {}
         }
     }
+    if s.store_ext.lightbox_index.is_some() {
+        match ev.key {
+            Key::Escape => {
+                s.store_close_lightbox();
+                return true;
+            }
+            Key::Left => {
+                s.store_step_lightbox(-1);
+                return true;
+            }
+            Key::Right => {
+                s.store_step_lightbox(1);
+                return true;
+            }
+            _ => {}
+        }
+    }
     if ev.key == Key::Escape {
         return s.dismiss_top_layer();
     }
@@ -130,7 +149,8 @@ fn setup_state(s: &mut AppState, waker: Waker) {
 fn poll_state(s: &mut AppState, now: f64, tx: &mut Tx) -> bool {
     let notices = s.sync_and_tick_notices(now, tx);
     let setup = s.setup_tick(now);
-    notices || setup
+    let store = s.store_tick(now);
+    notices || setup || store
 }
 
 #[cfg(windows)]
@@ -263,16 +283,70 @@ fn load_live_state_sync(pipe: &str, scene: Option<&str>) -> AppState {
                     for url in urls {
                         let _ = exo_rpc::remote_art::fetch_cached_image(&url, cache_dir);
                     }
+                    if let Some(first_hero) = home.hero.first() {
+                        let logo = exo_rpc::StoreArt::steam_url(&first_hero.app_id, "logo");
+                        let _ = exo_rpc::remote_art::fetch_cached_image(&logo, cache_dir);
+                    }
                 }
+                state.store_ensure_shelf_slots(home.shelves.len());
                 state.store_home = Some(home);
             }
-            if sc == "store-game" {
-                let app_id = state
+            if let Ok(wish) = client.call_blocking::<_, exo_rpc::StoreWishlistReply>(
+                exo_rpc::METHOD_STORE_WISHLIST,
+                &serde_json::json!({ "action": "get" }),
+                Duration::from_secs(10),
+            ) && wish.message.is_none()
+            {
+                if let Some(ref cache_dir) = state.remote_cache_dir {
+                    for tile in wish.items.iter().take(12) {
+                        let url = tile
+                            .art
+                            .as_ref()
+                            .and_then(|a| a.best_poster())
+                            .map(ToString::to_string)
+                            .unwrap_or_else(|| {
+                                exo_rpc::StoreArt::steam_url(&tile.app_id, "poster")
+                            });
+                        let _ = exo_rpc::remote_art::fetch_cached_image(&url, cache_dir);
+                    }
+                }
+                state.store_ext.wishlist = wish.items;
+                state.store_ext.wishlist_loaded = true;
+            }
+            if sc == "store-search"
+                && let Ok(reply) = client.call_blocking::<_, exo_rpc::StoreSearchReply>(
+                    exo_rpc::METHOD_STORE_SEARCH,
+                    &serde_json::json!({ "query": "elden", "typed": true }),
+                    Duration::from_secs(10),
+                )
+                && reply.ok
+            {
+                if let Some(ref cache_dir) = state.remote_cache_dir {
+                    for tile in reply.items.iter().take(12) {
+                        let url = tile
+                            .art
+                            .as_ref()
+                            .and_then(|a| a.best_poster())
+                            .map(ToString::to_string)
+                            .unwrap_or_else(|| {
+                                exo_rpc::StoreArt::steam_url(&tile.app_id, "poster")
+                            });
+                        let _ = exo_rpc::remote_art::fetch_cached_image(&url, cache_dir);
+                    }
+                }
+                state.store_search_results = Some(reply.items);
+                state.store_ext.search_query_sent = "elden".into();
+            }
+            if sc == "store-game" || sc == "store-lightbox" {
+                let seed_tile = state
                     .store_home
                     .as_ref()
-                    .and_then(|h| h.hero.first())
+                    .and_then(|h| h.hero.first().cloned());
+                let app_id = seed_tile
+                    .as_ref()
                     .map(|t| t.app_id.clone())
                     .unwrap_or_else(|| "1091500".into());
+                state.store_ext.seed = seed_tile;
                 if let Ok(g) = client.call_blocking::<_, exo_rpc::StoreGame>(
                     exo_rpc::METHOD_STORE_GAME,
                     &serde_json::json!({ "appId": app_id }),
@@ -280,6 +354,8 @@ fn load_live_state_sync(pipe: &str, scene: Option<&str>) -> AppState {
                 ) && g.ok
                 {
                     if let Some(ref cache_dir) = state.remote_cache_dir {
+                        let logo = exo_rpc::StoreArt::steam_url(&g.app_id, "logo");
+                        let _ = exo_rpc::remote_art::fetch_cached_image(&logo, cache_dir);
                         if let Some(ref a) = g.art
                             && let Some(u) = a.best_hero()
                         {
@@ -288,8 +364,22 @@ fn load_live_state_sync(pipe: &str, scene: Option<&str>) -> AppState {
                         if let Some(ref hdr) = g.header {
                             let _ = exo_rpc::remote_art::fetch_cached_image(hdr, cache_dir);
                         }
+                        for m in g.media.iter().take(4) {
+                            let _ = exo_rpc::remote_art::fetch_cached_image(&m.thumb, cache_dir);
+                        }
+                        for (i, shot) in g.screenshots.iter().take(8).enumerate() {
+                            if i == 0 {
+                                let _ = exo_rpc::remote_art::fetch_cached_image(shot, cache_dir);
+                            }
+                            let small = store_media::thumb_of_screenshot(shot);
+                            let _ = exo_rpc::remote_art::fetch_cached_image(&small, cache_dir);
+                        }
                     }
                     state.store_game = Some(g);
+                    state.store_sync_trailer_for_game();
+                    if sc == "store-lightbox" {
+                        state.store_open_lightbox(0);
+                    }
                 }
                 if let Ok(offers) = client.call_blocking::<_, exo_rpc::StoreOtherOffers>(
                     exo_rpc::METHOD_STORE_GAME_OFFERS,
@@ -298,6 +388,14 @@ fn load_live_state_sync(pipe: &str, scene: Option<&str>) -> AppState {
                 ) && offers.ok
                 {
                     state.store_offers = Some(offers);
+                }
+                if let Ok(rev) = client.call_blocking::<_, exo_rpc::StoreRecentReviews>(
+                    exo_rpc::METHOD_STORE_GAME_REVIEWS,
+                    &serde_json::json!({ "appId": app_id }),
+                    Duration::from_secs(10),
+                ) && rev.ok
+                {
+                    state.store_ext.recent_reviews = Some(rev);
                 }
             }
         }
@@ -1135,6 +1233,13 @@ const PARITY_SCENES: &[(&str, SceneSetter)] = &[
             s.open_store_game("1091500");
         }
     }),
+    ("store-lightbox", |s: &mut AppState| {
+        s.room = state::Room::Store;
+        if s.store_game.is_none() {
+            s.open_store_game("1091500");
+        }
+        s.store_open_lightbox(0);
+    }),
     ("tour", |s: &mut AppState| s.start_tour()),
     ("setup-welcome", |s: &mut AppState| s.setup_go(0)),
     ("setup-accounts", |s: &mut AppState| s.setup_go(1)),
@@ -1689,7 +1794,7 @@ fn run_parity_probe(
         "propsOpen": rt.state.props_open,
         "gamePropsTab": rt.state.game_props_tab,
         "storeTab": rt.state.store_tab,
-        "storeGameOpen": rt.state.store_game.is_some(),
+        "storeGameOpen": rt.state.store_has_page_open(),
         "paletteOpen": rt.state.palette_open,
         "captureMenuOpen": rt.state.capture_menu_open,
         "capturesOpen": rt.state.media.captures_open,
