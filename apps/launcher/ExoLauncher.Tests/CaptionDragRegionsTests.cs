@@ -3,13 +3,6 @@ using Windows.Graphics;
 
 namespace ExoLauncher.Tests;
 
-/// <summary>
-/// The write order for the title band's native caption regions. Setting rects identical to the ones a region already lists
-/// does nothing, so a region whose hit-test went stale (after an activation, a minimize or a game closing) keeps its old
-/// rects unless it is cleared first. Ways this could fail: Caption or Passthrough is set without a clear before it, so the
-/// tabs stay under a stale caption; a clear lands after its set and wipes the rects just written; an empty Maximize set is
-/// written as a set instead of only its clear.
-/// </summary>
 public sealed class CaptionDragRegionsTests
 {
     private static readonly RectInt32[] Caption = [new(0, 0, 1600, 11)];
