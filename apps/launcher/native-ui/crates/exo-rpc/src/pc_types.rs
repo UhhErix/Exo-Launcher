@@ -821,3 +821,80 @@ pub struct KeyboardBackupsReply {
     #[serde(default)]
     pub backups: Vec<KeyboardBackupSummary>,
 }
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BackupDay {
+    #[serde(default)]
+    pub day: String,
+    #[serde(default)]
+    pub at: String,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BackupOffer {
+    #[serde(default)]
+    pub day: String,
+    #[serde(default)]
+    pub device: String,
+    #[serde(default)]
+    pub files: u32,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BackupNote {
+    #[serde(default)]
+    pub sentence: String,
+    #[serde(default)]
+    pub stopped: bool,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BackupStatus {
+    #[serde(default)]
+    pub ok: bool,
+    #[serde(default)]
+    pub last: Option<BackupDay>,
+    #[serde(default)]
+    pub offer: Option<BackupOffer>,
+    #[serde(default)]
+    pub note: Option<BackupNote>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ClientsEpic {
+    #[serde(default)]
+    pub layout: String,
+    #[serde(default)]
+    pub version: Option<String>,
+    #[serde(default)]
+    pub old_still_there: bool,
+    #[serde(default)]
+    pub installing: bool,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ClientsSteam {
+    #[serde(default)]
+    pub channel: String,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ClientsStatus {
+    #[serde(default)]
+    pub ok: bool,
+    #[serde(default)]
+    pub needs_fix: bool,
+    #[serde(default)]
+    pub problem: Option<String>,
+    #[serde(default)]
+    pub epic: ClientsEpic,
+    #[serde(default)]
+    pub steam: ClientsSteam,
+}

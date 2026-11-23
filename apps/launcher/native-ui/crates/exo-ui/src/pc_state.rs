@@ -1,12 +1,12 @@
 use exo_rpc::{
     AppsListReply, AudioEndpoint, AudioReadReply, AudioVoiceInfo, AutopilotLive,
-    AutopilotMemoryIntegrity, AutopilotReport, AutopilotState, DevicesListReply, DriveFix,
-    DriveGameEntry, DriveHealth, DriveInfo, DriveLink, DriveSpaceBreakdown, DriveTemp,
-    DriveVerdict, DriveVolume, DrivesReply, EqHeadphone, ExoAccountState, ExoAiFans, ExoAiGaming,
-    ExoAiState, HdrState, InstalledAppItem, KeyboardBackupSummary, KeyboardProfileSlot,
-    KeyboardReadReply, LatencyReport, LatencySample, PeripheralCard, ShaderPrepareGame,
-    ShaderSnapGame, ShadersAddonStatus, StartupItem, StartupListReply, SystemAbout,
-    SystemTuningState, TuningItem, UpdateCheckReply, UpdateProgress,
+    AutopilotMemoryIntegrity, AutopilotReport, AutopilotState, BackupStatus, ClientsStatus,
+    DevicesListReply, DriveFix, DriveGameEntry, DriveHealth, DriveInfo, DriveLink,
+    DriveSpaceBreakdown, DriveTemp, DriveVerdict, DriveVolume, DrivesReply, EqHeadphone,
+    ExoAccountState, ExoAiFans, ExoAiGaming, ExoAiState, HdrState, InstalledAppItem,
+    KeyboardBackupSummary, KeyboardProfileSlot, KeyboardReadReply, LatencyReport, LatencySample,
+    PeripheralCard, ShaderPrepareGame, ShaderSnapGame, ShadersAddonStatus, StartupItem,
+    StartupListReply, SystemAbout, SystemTuningState, TuningItem, UpdateCheckReply, UpdateProgress,
 };
 use rune::TextEdit;
 use std::collections::HashMap;
@@ -66,6 +66,8 @@ pub struct SettingsAndPcState {
     pub checking_update: bool,
     pub installing_update: bool,
     pub system_about: Option<SystemAbout>,
+    pub backup: Option<BackupStatus>,
+    pub clients: Option<ClientsStatus>,
 
     pub pc_tab: PcTab,
     pub exo_ai: Option<ExoAiState>,
@@ -137,6 +139,8 @@ impl SettingsAndPcState {
             update_progress: None,
             checking_update: false,
             installing_update: false,
+            backup: None,
+            clients: None,
             system_about: Some(SystemAbout {
                 ok: true,
                 name: Some("Exo PC".into()),
@@ -658,6 +662,8 @@ impl SettingsAndPcState {
             checking_update: false,
             installing_update: false,
             system_about: None,
+            backup: None,
+            clients: None,
             pc_tab: PcTab::ExoAi,
             exo_ai: None,
             autopilot: None,

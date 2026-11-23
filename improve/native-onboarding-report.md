@@ -22,34 +22,51 @@ Review points:
 - Wooting header thumbnail crop: the source PNG (1200x800) had the keyboard in the middle third, so the pill showed a small keyboard in a lot of black. Added `docs-audit/assets/devices/wooting-60he-v2-thumb.png` (keyboard bounds + 10 px pad, 1097x392) and pointed `03-setup-wooting-60he-v2.html` at it. Native does not crop: it draws the host image with `SurfaceFit::Fit`. If the native Devices header needs the tight crop, the host's device image has to change, not the UI.
 - PC defaults empty middles: `04-pc-defaults.html` `.hw-grid` changed from full-height rows (`1.15fr 1fr`) to content-height rows (`auto auto`, `align-content: start`). Native cards are content-height (about 140 px); the picks panel fills the right column.
 
-## Gates
+## Follow-up (coordinator items 1-7)
+
+Snaps: 720p (1280x720), 1080p (1920x1080), 1440p (2560x1440), all 7 setup scenes, `tools/parity/parity-snap.ps1` with `-DataDir` a temp copy of the data dir (device-images and covers copied in). Files are in the scratch folder `...\scratchpad\snaps\h{720,1080,1440}-setup-*.png`, not committed.
+
+| # | Item | Status |
+|---|------|--------|
+| 1 | Coach marks anchored to real element bounds | Partly. Coach is anchored to `search-capsule` / `tile-<id>` / `nav-devices` through `coach_anchor`. In the 1080p snap the card sits top-left under the Bar's search capsule, not right-aligned as the mockup shows (the native Bar puts search on the left, the mockup on the right). Whether the anchor resolved or fell back to the top-left position is not verified in code. Open. |
+| 2 | Restore backup and Game clients rows in Accounts | Done in code (`backup.status`, `clients.status` via `load_backup_and_clients`). Values are in the settle path; the Accounts snap shows the rows. |
+| 3 | Tour (on-05) and Done (on-06) layouts | Tour: now the Library room (installed-cover grid, "Last played" hero, real counts) with the coach card pinned top-right at the mockup position, step 1 of 3. The footer (Back / Skip live tour / Start tour) stays; the mockup has none. Two grid cells are empty where a game has no cover. Done: "Setup complete" + "You're ready to play" when all five stages are Done; paragraph built from real counts. Device cards have no spec sub-line and no status pills (the host gives no data for them, nothing is invented). Open. |
+| 4 | Welcome mosaic tilted | Done (`rotate(-0.14)`). |
+| 5 | Open account keeps the user in setup | Done (return bar, `setup_return`). |
+| 6 | Devices bays vs on-03 | Checked on the 1080p snap. Dongle first, four bays (host lists five; the fifth is not shown). Bay headers and tags follow the host's `kind`/`tag`. Mockup has spec lines and pills that the host does not provide. Open. |
+| 7 | Parity snaps show real host values | Done. `settle_setup_host` runs before the setup scenes (PC cards, drives, GPU, Accounts, backup, clients, devices, device images, covers). `--frames 240 --fps 60` lets the background image decode finish. No "Checking" in the 1080p/1440p snaps except Version when the host returns no version. |
+
+Also changed:
+- Accounts: "1 game on this PC" (singular). Code only, not seen in a snap.
+- Track cells: the pill sits under the stage title; sub-lines truncate. Visible in all snaps.
+- Setup-done parity scene marks stages 1-5 Done (`setup_go_complete`), which is the state on-06 shows. `picks` is not set by the fixture, so the snap reads "0 PC defaults applied"; mockup shows 5. Data-driven, not fixed.
+
+## Gates (final, after the follow-up commit)
 
 - `cargo fmt --all -- --check`: pass
 - `cargo clippy --workspace --locked -- -D warnings`: pass
 - `cargo test --workspace --locked`: pass (4 + 17 (1 ignored) + 69)
 - `cargo build --release --locked --bin exo-ui`: pass
 - `node tools/check-comments.mjs` (from `apps/launcher`): pass ("Comment ratchet ok")
-- Host: `dotnet build ExoLauncher/ExoLauncher.csproj -c Release -p:Platform=x64`: 0 warnings, 0 errors. `dotnet test --project ExoLauncher.Tests -c Release -p:Platform=x64`: pass (8118 succeeded, 28 skipped, exit 0).
+- No C# changed; dotnet gates not re-run for this follow-up.
 
 ## Visual check (1920x1080, parity harness)
 
 Scenes: setup-welcome, setup-accounts, setup-devices, setup-pc, setup-tour, setup-done, setup-coach (`tools/parity/parity-snap.ps1`, `-NoBuild`, temp data dir). Checked: track, Accounts & stores, PC defaults (the picks panel no longer overlaps cards), coach overlay in the real Library room, live tour, Done.
 
-## Known gaps
+## Known gaps (open after the follow-up)
 
-- Coach marks are fixed-position cards, not anchored to their targets.
-- Restore backup and Game clients rows are not built (need `backup.status` / `clients.status`).
-- "Open account" leaves the flow for Settings instead of signing in inline.
-- Live tour stage and Done layout differ from `05`/`06` mockups in spacing and card count.
-- Welcome mosaic is not tilted.
-- Devices bays were not verified visually against mockup `01`/`05` after the last changes.
-- Per-device bodies (dual-sense edge, audio EQ) are not built; the Devices stage hands off to the Devices room.
+- Coach mark placement: card is top-left under the Bar's search capsule; mockup is top-right. Anchor resolution unverified.
+- Tour footer buttons are not in the mockup (kept for Back / Start).
+- Devices: host has five devices, four bays shown; no spec lines or status pills (no host data).
+- Done: device cards have no spec sub-line or status pills; PC defaults count reads from picks (fixture has none).
+- "Open account" still opens the Settings-side flow rather than inline sign-in (item 5 is the return path, not inline sign-in).
+- Per-device bodies (dual-sense edge, audio EQ) are not built (out of scope).
 
 ## Parity limitations
 
-- The parity snapshot captures one frame. Host data arrives asynchronously, so several panels read "Checking" in snapshots (`Checking graphics`, `-0 GB free of -0 GB`). Real values were confirmed only in the running app's data path, not in the snapshot.
-- `parity-snap.ps1` compares only against its fixed `refByScene` map, which has no setup entries. Comparison against the mockup PNGs is manual.
-- The mockup PNGs in `docs-audit/*/mockups-v2/screenshots` were not regenerated after the two HTML fixes; regenerate them before comparing again.
+- `parity-snap.ps1` compares only against its fixed `refByScene` map, which has no setup entries. Comparison against the mockup PNGs is manual (done for the snaps above, by eye).
+- Mockup references: `docs-audit/onboarding/mockups-v2/screenshots/0N-*-1920x1080.png` on `UhhErix/setup-redesign`.
 
 ## Processes
 

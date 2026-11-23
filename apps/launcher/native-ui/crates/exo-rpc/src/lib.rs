@@ -36,7 +36,8 @@ pub use media_types::{
 };
 pub use pc_types::{
     AppsIconsReply, AppsListReply, AudioEndpoint, AudioReadReply, AudioVoiceInfo, AutopilotLive,
-    AutopilotMemoryIntegrity, AutopilotReport, AutopilotState, DevicesImageReply, DevicesListReply,
+    AutopilotMemoryIntegrity, AutopilotReport, AutopilotState, BackupDay, BackupNote, BackupOffer,
+    BackupStatus, ClientsEpic, ClientsStatus, ClientsSteam, DevicesImageReply, DevicesListReply,
     DriveFix, DriveGameEntry, DriveHealth, DriveInfo, DriveLink, DriveSpaceBreakdown, DriveTemp,
     DriveVerdict, DriveVolume, DrivesReply, EqHeadphone, EqStateReply, ExoAiFans, ExoAiGaming,
     ExoAiState, HdrState, InstalledAppItem, KeyboardBackupSummary, KeyboardBackupsReply,
@@ -127,6 +128,8 @@ pub const METHOD_DISCORD_VIEW: &str = "discord.view";
 pub const METHOD_DISCORD_VOICE: &str = "discord.voice";
 pub const METHOD_EQ: &str = "eq";
 pub const METHOD_EXO_ACCOUNT_SIGN_OUT: &str = "exoAccount.signOut";
+pub const METHOD_BACKUP_STATUS: &str = "backup.status";
+pub const METHOD_CLIENTS_STATUS: &str = "clients.status";
 pub const METHOD_EXO_ACCOUNT_STATE: &str = "exoAccount.state";
 pub const METHOD_EXO_ACCOUNT_SYNC: &str = "exoAccount.sync";
 pub const METHOD_EXO_AI_SET: &str = "exoAi.set";
@@ -297,6 +300,8 @@ pub const USED_METHODS: &[&str] = &[
     METHOD_SETTINGS_GET,
     METHOD_SETTINGS_SET,
     METHOD_SHADERS_ADDON,
+    METHOD_BACKUP_STATUS,
+    METHOD_CLIENTS_STATUS,
     METHOD_SHADERS_CALL,
     METHOD_SHADERS_ESTIMATES,
     METHOD_SHADERS_PREPARE_GAMES,

@@ -134,6 +134,74 @@ fn poll_state(s: &mut AppState, now: f64, tx: &mut Tx) -> bool {
 }
 
 #[cfg(windows)]
+fn settle_setup_host(client: &exo_rpc::RpcClient, state: &mut AppState) {
+    let timeout = Duration::from_secs(8);
+    if let Ok(acct) = client.call_blocking::<_, exo_rpc::ExoAccountState>(
+        exo_rpc::METHOD_EXO_ACCOUNT_STATE,
+        &serde_json::json!({}),
+        timeout,
+    ) {
+        state.pc.account = acct;
+    }
+    if let Ok(about) = client.call_blocking::<_, exo_rpc::SystemAbout>(
+        exo_rpc::METHOD_SYSTEM_ABOUT,
+        &serde_json::json!({}),
+        timeout,
+    ) {
+        state.pc.system_about = Some(about);
+    }
+    if let Ok(drv) = client.call_blocking::<_, exo_rpc::DrivesReply>(
+        exo_rpc::METHOD_SYSTEM_DRIVES,
+        &serde_json::json!({ "space": false }),
+        timeout,
+    ) {
+        state.pc.drives = Some(drv);
+    }
+    if let Ok(t) = client.call_blocking::<_, exo_rpc::SystemTuningState>(
+        exo_rpc::METHOD_SYSTEM_TUNING,
+        &serde_json::json!({}),
+        timeout,
+    ) {
+        state.pc.tuning = Some(t);
+    }
+    if let Ok(hdr) = client.call_blocking::<_, exo_rpc::HdrState>(
+        exo_rpc::METHOD_HDR_STATE,
+        &serde_json::json!({}),
+        timeout,
+    ) {
+        state.pc.hdr = Some(hdr);
+    }
+    if let Ok(ai) = client.call_blocking::<_, exo_rpc::ExoAiState>(
+        exo_rpc::METHOD_EXO_AI_STATE,
+        &serde_json::json!({}),
+        timeout,
+    ) {
+        state.pc.exo_ai = Some(ai);
+    }
+    if let Ok(backup) = client.call_blocking::<_, exo_rpc::BackupStatus>(
+        exo_rpc::METHOD_BACKUP_STATUS,
+        &serde_json::json!({}),
+        timeout,
+    ) {
+        state.pc.backup = Some(backup);
+    }
+    if let Ok(clients) = client.call_blocking::<_, exo_rpc::ClientsStatus>(
+        exo_rpc::METHOD_CLIENTS_STATUS,
+        &serde_json::json!({}),
+        timeout,
+    ) {
+        state.pc.clients = Some(clients);
+    }
+    if let Ok(gp) =
+        client.call_blocking::<_, serde_json::Value>("gpu.profile", &serde_json::json!({}), timeout)
+    {
+        let (gpu_name, screen) = pc_actions::parse_gpu_profile_fields(&gp);
+        state.pc.gpu_short_name = gpu_name;
+        state.pc.screen_label = screen;
+    }
+}
+
+#[cfg(windows)]
 fn load_live_state_sync(pipe: &str, scene: Option<&str>) -> AppState {
     let mut state = AppState::for_host_pipe();
     let Ok(client) = exo_rpc::RpcClient::connect(pipe, Duration::from_secs(6), |_| {}) else {
@@ -147,6 +215,9 @@ fn load_live_state_sync(pipe: &str, scene: Option<&str>) -> AppState {
         Duration::from_secs(12),
     ) {
         state.apply_bootstrap(boot);
+    }
+    if scene.is_some_and(|s| s.starts_with("setup")) {
+        settle_setup_host(&client, &mut state);
     }
     match scene {
         Some(sc) if sc.starts_with("store") => {
@@ -479,7 +550,9 @@ fn load_live_state_sync(pipe: &str, scene: Option<&str>) -> AppState {
                 state.pc.drives = Some(drv);
             }
         }
-        Some(sc) if sc == "pc-devices" || sc.starts_with("pc-devices-") => {
+        Some(sc)
+            if sc == "pc-devices" || sc.starts_with("pc-devices-") || sc.starts_with("setup") =>
+        {
             if let Ok(eq) = client.call_blocking::<_, exo_rpc::EqStateReply>(
                 exo_rpc::METHOD_EQ,
                 &serde_json::json!({ "action": "state" }),
@@ -1034,7 +1107,7 @@ const PARITY_SCENES: &[(&str, SceneSetter)] = &[
     ("setup-devices", |s: &mut AppState| s.setup_go(2)),
     ("setup-pc", |s: &mut AppState| s.setup_go(3)),
     ("setup-tour", |s: &mut AppState| s.setup_go(4)),
-    ("setup-done", |s: &mut AppState| s.setup_go(5)),
+    ("setup-done", |s: &mut AppState| s.setup_go_complete()),
     ("setup-coach", |s: &mut AppState| s.start_tour()),
     ("activate-key", |s: &mut AppState| s.key_modal_open = true),
     ("settings", |s: &mut AppState| {
@@ -1415,6 +1488,7 @@ fn run_parity_probe(
         setup_fn(&mut state);
         scene_matched = true;
     }
+    setup_state(&mut state, std::sync::Arc::new(|| {}));
 
     let text = rune::text::TextSystem::for_window(FONTS, FONT_FAMILIES);
     let mut rt = rune::Runtime::with_text(
@@ -1437,6 +1511,13 @@ fn run_parity_probe(
 
     for _ in 0..24 {
         rt.frame(1.0 / 60.0);
+    }
+    if target_scene.is_some_and(|s| s.starts_with("setup")) {
+        let until = std::time::Instant::now() + Duration::from_secs(4);
+        while std::time::Instant::now() < until {
+            std::thread::sleep(Duration::from_millis(50));
+            rt.frame(1.0 / 60.0);
+        }
     }
     let glass_final = collect_backdrop_blurs(&rt);
 

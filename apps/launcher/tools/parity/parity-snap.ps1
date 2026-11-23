@@ -6,7 +6,8 @@ param(
     [switch] $NoBuild,
     [string] $Refs,
     [string] $HostExe,
-    [string] $DataDir
+    [string] $DataDir,
+    [string] $Size = '1920x1080'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -76,7 +77,8 @@ try {
             $png = Join-Path $Out "$Tag-$scene.png"
             $sceneArgs = @()
             if ($scene -ne 'library') { $sceneArgs = @('--scene', $scene) }
-            & .\target\debug\exo-ui.exe --pipe $pipe @sceneArgs --snap $png --size 1920x1080 --scale 1
+            $frameArgs = if ($scene -like 'setup-*') { @('--frames', '240', '--fps', '60') } else { @() }
+            & .\target\debug\exo-ui.exe --pipe $pipe @sceneArgs @frameArgs --snap $png --size $Size --scale 1
             if (-not (Test-Path -LiteralPath $png)) { "SNAP FAILED: $scene"; continue }
             $ref = $refByScene[$scene]
             if ($Refs -and $ref -and (Test-Path -LiteralPath (Join-Path $Refs $ref))) {

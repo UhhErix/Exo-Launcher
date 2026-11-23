@@ -1,17 +1,19 @@
-use crate::state::{AppState, Room};
+use crate::state::{AppState, HostStatus, Room};
 use exo_kit::{
     BG, FG, PRIMARY_FG, RADIUS_CARD, RADIUS_PILL, RADIUS_SMALL, SPRING_QUICK, amoled_card,
     exo_mark, fg_faint, fg_muted, glass_control_fill, glass_panel_opt, glass_rim_bottom,
     glass_rim_top, good, hairline, hover_fill, icon_check, icon_mouse, icon_shield, pressed_fill,
-    scaled, store_logo_or_fallback, type_body, type_page, type_small,
+    scaled, store_logo_or_fallback, type_body, type_page, type_small, warn,
 };
-use rune::{Color, Cursor, El, SurfaceFit, TextStyle, col, el, row, text};
+use rune::{Align, Color, Cursor, El, Side, SurfaceFit, TextStyle, col, el, row, text};
 use serde_json::json;
 use std::collections::VecDeque;
 
 use exo_rpc::METHOD_SETTINGS_SET;
 #[cfg(windows)]
-use exo_rpc::{METHOD_SYSTEM_TUNING, SystemTuningState};
+use exo_rpc::{
+    METHOD_BACKUP_STATUS, METHOD_CLIENTS_STATUS, METHOD_SYSTEM_TUNING, SystemTuningState,
+};
 
 pub const STAGES: usize = 6;
 pub const STAGE_TITLES: [&str; STAGES] = [
@@ -26,10 +28,11 @@ const TOUR_STAGE: usize = 4;
 const DONE_STAGE: usize = 5;
 const TRACK_H: f32 = 64.0;
 const BEAT_HOLD_SECS: f64 = 0.45;
+const COACH_STEPS: [&str; 3] = ["1. Ctrl+K", "2. Open game", "3. Devices"];
 const BEATS: [(&str, &str); 3] = [
     (
-        "Search with Ctrl+K",
-        "Launch a game, jump rooms or activate a key from anywhere. Press Ctrl+K now.",
+        "Try instant search right here",
+        "The Library is live and unblocked. Press Ctrl+K or click the Search capsule to jump to any game, room, or device setting.",
     ),
     (
         "Open a game",
@@ -160,6 +163,7 @@ impl AppState {
             1 => {
                 self.load_pc_devices();
                 self.load_settings_room();
+                self.load_backup_and_clients();
             }
             0 => {
                 self.load_pc_devices();
@@ -184,6 +188,11 @@ impl AppState {
     pub fn setup_go(&mut self, stage: usize) {
         self.setup.open = true;
         self.setup_go_stage(stage);
+    }
+
+    pub fn setup_go_complete(&mut self) {
+        self.setup.states[..TOUR_STAGE + 1].fill(StageState::Done);
+        self.setup_go(DONE_STAGE);
     }
 
     pub fn setup_back(&mut self) {
@@ -237,6 +246,32 @@ impl AppState {
         self.setup.open = true;
         self.setup.stage = self.setup.return_to.take().unwrap_or(2);
         self.setup_enter_stage();
+    }
+
+    pub fn setup_open_settings(&mut self, stage: usize) {
+        self.setup.return_to = Some(stage);
+        self.setup.open = false;
+        self.switch_room(Room::Settings);
+    }
+
+    fn load_backup_and_clients(&mut self) {
+        if self.status == HostStatus::Standalone {
+            return;
+        }
+        #[cfg(windows)]
+        if let (Some(rpc), Some(handle)) = (self.rpc.clone(), self.handle.clone()) {
+            let h1 = handle.clone();
+            rpc.call::<_, exo_rpc::BackupStatus>(METHOD_BACKUP_STATUS, &json!({}), move |res| {
+                if let Ok(backup) = res {
+                    h1.update(move |s, _| s.pc.backup = Some(backup));
+                }
+            });
+            rpc.call::<_, exo_rpc::ClientsStatus>(METHOD_CLIENTS_STATUS, &json!({}), move |res| {
+                if let Ok(clients) = res {
+                    handle.update(move |s, _| s.pc.clients = Some(clients));
+                }
+            });
+        }
     }
 
     pub fn setup_open_device(&mut self, id: String) {
@@ -513,19 +548,30 @@ fn track_cell(s: &AppState, i: usize) -> El {
     } else {
         fg_muted()
     };
-    let mut labels = col().grow(1.0).min_w(0.0).gap(2.0).child(
+    let mut labels = col().w_full().grow(1.0).min_w(0.0).gap(2.0).child(
         text(STAGE_TITLES[i])
             .font(type_body())
             .color(title_color)
-            .wrap(),
+            .truncate(),
     );
+    if let Some((label, fill, color)) = pill {
+        labels = labels.child(
+            row()
+                .h(18.0)
+                .px(7.0)
+                .radius(RADIUS_PILL)
+                .fill(fill)
+                .center_y()
+                .child(text(label).font(type_small()).color(color)),
+        );
+    }
     labels = labels.child(
         text(stage_sub(s, i))
             .font(type_small())
             .color(fg_muted())
-            .wrap(),
+            .truncate(),
     );
-    let mut content = row()
+    let content = row()
         .w_full()
         .grow(1.0)
         .gap(10.0)
@@ -533,17 +579,6 @@ fn track_cell(s: &AppState, i: usize) -> El {
         .center_y()
         .child(dot)
         .child(labels);
-    if let Some((label, fill, color)) = pill {
-        content = content.child(
-            row()
-                .h(20.0)
-                .px(8.0)
-                .radius(RADIUS_PILL)
-                .fill(fill)
-                .center_y()
-                .child(text(label).font(type_small()).color(color)),
-        );
-    }
     let underline_fill = if current {
         FG
     } else if state == StageState::Done {
@@ -578,6 +613,7 @@ fn track(s: &AppState) -> El {
         .pr(150.0)
         .gap(6.0)
         .center_y()
+        .fill(BG)
         .child(
             row()
                 .w(150.0)
@@ -676,15 +712,16 @@ fn mosaic(s: &AppState, scale: f32) -> El {
         .take(24)
         .collect();
     let mut columns = row()
-        .pin(Some(0.0), Some(0.0), Some(0.0), Some(0.0))
-        .gap(12.0);
+        .pin(Some(-160.0), Some(-160.0), Some(-160.0), Some(-160.0))
+        .gap(12.0)
+        .rotate(-0.14);
     for col_idx in 0..8usize {
         let mut column = col().grow(1.0).min_w(0.0).gap(12.0);
         for row_idx in 0..3usize {
             let idx = col_idx * 3 + row_idx;
             let mut cover = el()
                 .w_full()
-                .h(280.0)
+                .h(380.0)
                 .radius(RADIUS_SMALL)
                 .fill(fg_faint().alpha(0.12));
             if let Some(game) = games.get(idx)
@@ -897,7 +934,11 @@ fn store_row(s: &AppState, id: &str) -> El {
                 )
                 .child(
                     text(if count > 0 {
-                        format!("{count} games on this PC")
+                        if count == 1 {
+                            "1 game on this PC".into()
+                        } else {
+                            format!("{count} games on this PC")
+                        }
                     } else {
                         "Install or sign in there, then run setup again".into()
                     })
@@ -930,7 +971,10 @@ fn accounts(s: &AppState) -> El {
                 .clone()
                 .unwrap_or_else(|| "Signed in".into())
         }
-        false => "Not signed in. Optional: sync settings across PCs.".into(),
+        false => {
+            "Not signed in. Optional: sync settings across PCs, staying local until you sign in."
+                .into()
+        }
     };
     let account_action = if s.pc.account.signed_in {
         button(
@@ -942,11 +986,38 @@ fn accounts(s: &AppState) -> El {
     } else {
         button(
             "setup-account-open",
-            "Open account",
+            "Sign in",
             false,
-            |s: &mut AppState| s.switch_room(Room::Settings),
+            |s: &mut AppState| s.setup_open_settings(1),
         )
     };
+    let backup_line = match s.pc.backup.as_ref() {
+        Some(b) if b.offer.is_some() => {
+            let o = b.offer.as_ref();
+            format!(
+                "Backup from {} found · {} files",
+                o.map_or("another PC", |o| o.device.as_str()),
+                o.map_or(0, |o| o.files)
+            )
+        }
+        Some(b) => match b.last.as_ref() {
+            Some(last) => format!("{} snapshot · folders, covers & notes", last.day),
+            None => "No backup on this PC yet".into(),
+        },
+        None => "Checking backups".into(),
+    };
+    let (clients_pill, clients_tint, clients_ink) = match s.pc.clients.as_ref() {
+        None => ("Checking", fg_faint().alpha(0.2), fg_muted()),
+        Some(c) if c.needs_fix => ("Needs fix", warn().alpha(0.16), warn()),
+        Some(c) if c.problem.is_some() => ("Unknown", fg_faint().alpha(0.2), fg_muted()),
+        Some(_) => ("Healthy", good().alpha(0.16), good()),
+    };
+    let backup_action = button(
+        "setup-restore-backup",
+        "Restore",
+        false,
+        |s: &mut AppState| s.setup_open_settings(1),
+    );
 
     let side = col()
         .w(380.0)
@@ -959,6 +1030,55 @@ fn accounts(s: &AppState) -> El {
                 .child(text("Exo account").font(type_body()).color(FG))
                 .child(text(account).font(type_small()).color(fg_muted()).wrap())
                 .child(account_action),
+        )
+        .child(
+            amoled_card(RADIUS_CARD)
+                .w_full()
+                .padding(18.0)
+                .gap(12.0)
+                .child(text("Backups & clients").font(type_body()).color(FG))
+                .child(
+                    row()
+                        .w_full()
+                        .justify_between()
+                        .center_y()
+                        .gap(10.0)
+                        .child(
+                            col()
+                                .grow(1.0)
+                                .min_w(0.0)
+                                .gap(2.0)
+                                .child(text("Restore local backup").font(type_small()).color(FG))
+                                .child(
+                                    text(backup_line)
+                                        .font(type_small())
+                                        .color(fg_muted())
+                                        .wrap(),
+                                ),
+                        )
+                        .child(backup_action),
+                )
+                .child(
+                    row()
+                        .w_full()
+                        .justify_between()
+                        .center_y()
+                        .gap(10.0)
+                        .child(
+                            col()
+                                .grow(1.0)
+                                .min_w(0.0)
+                                .gap(2.0)
+                                .child(text("Game clients").font(type_small()).color(FG))
+                                .child(
+                                    text("Steam, Riot & Epic stay untouched as backends")
+                                        .font(type_small())
+                                        .color(fg_muted())
+                                        .wrap(),
+                                ),
+                        )
+                        .child(pill(clients_pill, clients_tint, clients_ink)),
+                ),
         )
         .child(
             amoled_card(RADIUS_CARD)
@@ -1174,6 +1294,7 @@ fn spec_card(key: &'static str, title: &str, name: String, tag: String, facts: V
 
 fn pc_cards(s: &AppState) -> El {
     let about = s.pc.system_about.clone().unwrap_or_default();
+    let display = about.display.clone().or_else(|| s.pc.screen_label.clone());
     let gpu_name = about
         .gpu
         .clone()
@@ -1188,7 +1309,7 @@ fn pc_cards(s: &AppState) -> El {
         "setup-card-gpu",
         "Graphics",
         gpu_name,
-        about.display.clone().unwrap_or_default(),
+        display.clone().unwrap_or_default(),
         vec![
             fact(
                 "Memory",
@@ -1199,7 +1320,7 @@ fn pc_cards(s: &AppState) -> El {
             ),
             fact(
                 "Display",
-                about.display.clone().unwrap_or_else(|| "Checking".into()),
+                display.clone().unwrap_or_else(|| "Checking".into()),
             ),
             fact(
                 "Windows",
@@ -1218,7 +1339,7 @@ fn pc_cards(s: &AppState) -> El {
         vec![
             fact(
                 "RAM",
-                match (about.ram_gb, about.memory_type.clone()) {
+                match (about.memory_gb.or(about.ram_gb), about.memory_type.clone()) {
                     (Some(g), Some(t)) => format!("{g:.0} GB {t}"),
                     (Some(g), None) => format!("{g:.0} GB"),
                     _ => "Checking".into(),
@@ -1304,7 +1425,11 @@ fn pc_cards(s: &AppState) -> El {
             ),
             fact(
                 "Version",
-                about.version.clone().unwrap_or_else(|| "Checking".into()),
+                about
+                    .version
+                    .clone()
+                    .or_else(|| s.pc.update_check.as_ref().and_then(|u| u.current.clone()))
+                    .unwrap_or_else(|| "Checking".into()),
             ),
         ],
     );
@@ -1454,68 +1579,104 @@ fn setup_switch(key: String, on: bool, on_press: impl Fn(&mut AppState) + 'stati
         .child(knob)
 }
 
-fn tour_stage(s: &AppState) -> El {
-    let mut beats = col().w_full().gap(0.0);
-    for (i, (title, body)) in BEATS.iter().enumerate() {
-        let done = s.setup.states[4] == StageState::Done;
-        beats = beats.child(
-            row()
-                .w_full()
-                .py(14.0)
-                .gap(16.0)
-                .center_y()
-                .child(
-                    el().size(28.0, 28.0)
-                        .radius(14.0)
-                        .fill(if done { good() } else { fg_faint().alpha(0.2) })
-                        .center()
-                        .child(text(format!("{}", i + 1)).font(type_small()).color(FG)),
-                )
-                .child(
-                    col()
-                        .grow(1.0)
-                        .min_w(0.0)
-                        .gap(2.0)
-                        .child(text(title.to_string()).font(type_body()).color(FG))
-                        .child(
-                            text(body.to_string())
-                                .font(type_small())
-                                .color(fg_muted())
-                                .wrap(),
-                        ),
-                ),
-        );
-        beats = beats.child(el().w_full().h(1.0).fill(hairline()));
+fn tour_stage(s: &AppState, scale: f32) -> El {
+    let games: Vec<_> = s.games.iter().filter(|g| g.installed).take(16).collect();
+    let hero_name = games
+        .first()
+        .map_or("Your library".to_string(), |g| g.title.clone());
+    let mut grid = col().w_full().grow(1.0).min_h(0.0).gap(12.0);
+    for line_idx in 0..2usize {
+        let mut line = row().w_full().grow(1.0).min_h(0.0).gap(12.0);
+        for col_idx in 0..8usize {
+            let mut cover = el()
+                .grow(1.0)
+                .min_w(0.0)
+                .h_full()
+                .radius(RADIUS_SMALL)
+                .fill(fg_faint().alpha(0.12));
+            if let Some(game) = games.get(line_idx * 8 + col_idx)
+                && let Some(img) = s.cover_image(game, scale)
+            {
+                cover = cover.pixels_fit(img.pixels(), SurfaceFit::Fill);
+            }
+            line = line.child(cover);
+        }
+        grid = grid.child(line);
     }
-    row()
+    let room = col()
         .w_full()
         .h_full()
-        .px(32.0)
-        .pt(28.0)
         .child(
             col()
-                .w(720.0)
-                .gap(16.0)
-                .child(text("Live tour").font(type_page()).color(FG))
+                .w_full()
+                .px(32.0)
+                .pt(28.0)
+                .gap(12.0)
                 .child(
-                    text("Three actions in the rooms you will use. Each coach mark waits for you to do the thing; nothing is blocked, and you can skip any of them.")
-                        .font(type_body())
-                        .color(fg_muted())
-                        .wrap(),
+                    row()
+                        .h(24.0)
+                        .px(10.0)
+                        .radius(RADIUS_PILL)
+                        .fill(FG)
+                        .center_y()
+                        .child(text("Last played").font(type_small()).color(BG)),
                 )
-                .child(beats),
+                .child(text(hero_name).font(hero_style()).color(FG))
+                .child(
+                    text(format!(
+                        "{} installed · {} stores",
+                        installed_count(s),
+                        stores_count(s)
+                    ))
+                    .font(type_small())
+                    .color(fg_muted()),
+                ),
         )
-}
-
-fn done_cell(title: &str, state: &str, sub: String) -> El {
-    amoled_card(RADIUS_CARD)
-        .grow(1.0)
-        .min_w(0.0)
-        .padding(18.0)
-        .gap(8.0)
-        .child(text(title.to_string()).font(type_small()).color(fg_muted()))
-        .child(text(state.to_string()).font(type_body()).color(FG))
-        .child(text(sub).font(type_small()).color(fg_muted()).wrap())
+        .child(
+            col()
+                .w_full()
+                .grow(1.0)
+                .min_h(0.0)
+                .px(32.0)
+                .pt(20.0)
+                .pb(20.0)
+                .child(grid),
+        );
+    let (title, body) = BEATS[0];
+    let card = glass_panel_opt("setup-tour-coach", 480.0, true)
+        .pin(None, Some(20.0), Some(24.0), None)
+        .padding(20.0)
+        .gap(14.0)
+        .child(coach_steps(0))
+        .child(text(title).font(type_page()).color(FG).wrap())
+        .child(text(body).font(type_body()).color(fg_muted()).wrap())
+        .child(
+            row()
+                .w_full()
+                .h(40.0)
+                .px(12.0)
+                .radius(RADIUS_SMALL)
+                .fill(glass_control_fill())
+                .center_y()
+                .justify_between()
+                .child(
+                    text("Waiting for your action…")
+                        .font(type_small())
+                        .color(fg_muted()),
+                )
+                .child(pill(
+                    format!("Step 1 of {}", BEATS.len()),
+                    fg_faint().alpha(0.2),
+                    fg_muted(),
+                )),
+        )
+        .child(row().w_full().justify_end().center_y().child(button(
+            "setup-tour-skip",
+            "Skip tour",
+            false,
+            |s: &mut AppState| s.setup_skip_stage(),
+        )));
+    el().w_full().h_full().child(room).child(card)
 }
 
 fn state_word(st: StageState) -> &'static str {
@@ -1526,24 +1687,35 @@ fn state_word(st: StageState) -> &'static str {
     }
 }
 
+fn done_fact(label: &str, value: String) -> El {
+    col()
+        .w_full()
+        .gap(6.0)
+        .child(text(label.to_string()).font(type_small()).color(fg_muted()))
+        .child(
+            row()
+                .w_full()
+                .gap(8.0)
+                .center_y()
+                .child(el().size(6.0, 6.0).radius(3.0).fill(good()))
+                .child(text(value).font(type_body()).color(FG).wrap()),
+        )
+}
+
 fn done(s: &AppState, scale: f32) -> El {
     let all_done = s.setup.states[..5].iter().all(|st| *st == StageState::Done);
     let title = if all_done {
-        "You're set"
+        "You're ready to play"
     } else {
         "Setup saved"
     };
-    let sub = if all_done {
-        "Your library, devices and PC defaults are ready. Nothing else will ask you to set up."
-    } else {
-        "Skipped steps stay in Settings › Setup and Ctrl+K › Resume setup."
-    };
-    let mut strip = row().w_full().gap(12.0);
+    let has_skipped = s.setup.states[..5].contains(&StageState::Skipped);
     let devices =
         s.pc.devices
             .as_ref()
             .map(|d| d.devices.clone())
             .unwrap_or_default();
+    let mut strip = row().w_full().grow(1.0).min_h(0.0).gap(12.0);
     for dev in devices.iter().take(4) {
         let photo =
             s.pc.device_images
@@ -1552,11 +1724,13 @@ fn done(s: &AppState, scale: f32) -> El {
         let media = match photo {
             Some(img) => el()
                 .w_full()
-                .h(110.0)
+                .grow(1.0)
+                .min_h(0.0)
                 .pixels_fit(img.pixels(), SurfaceFit::Fit),
             None => el()
                 .w_full()
-                .h(110.0)
+                .grow(1.0)
+                .min_h(0.0)
                 .center()
                 .child(icon_mouse(36.0, fg_muted())),
         };
@@ -1564,51 +1738,71 @@ fn done(s: &AppState, scale: f32) -> El {
             col()
                 .grow(1.0)
                 .min_w(0.0)
-                .padding(12.0)
+                .padding(16.0)
                 .gap(8.0)
                 .radius(RADIUS_CARD)
                 .fill(BG)
                 .border_gradient(1.0, glass_rim_top(), glass_rim_bottom())
                 .child(media)
-                .child(text(dev.name.clone()).font(type_small()).color(FG).wrap()),
+                .child(text(dev.name.clone()).font(type_body()).color(FG).wrap())
+                .child(text(dev.kind.clone()).font(type_small()).color(fg_muted())),
         );
     }
-    let cells = row()
-        .w_full()
-        .gap(12.0)
-        .child(done_cell(
-            "Accounts & stores",
-            state_word(s.setup.states[1]),
-            format!("{} games on this PC", s.games.len()),
-        ))
-        .child(done_cell(
-            "Devices",
-            state_word(s.setup.states[2]),
-            format!("{} set up or found", device_count(s)),
-        ))
-        .child(done_cell(
-            "PC defaults",
-            state_word(s.setup.states[3]),
-            format!(
-                "{} optimizations picked",
-                s.setup.picks.as_ref().map_or(0, Vec::len)
-            ),
-        ))
-        .child(done_cell(
-            "Live tour",
-            state_word(s.setup.states[4]),
-            "Coach marks in your real rooms".into(),
-        ));
-    col()
-        .w_full()
-        .h_full()
-        .px(32.0)
-        .pt(36.0)
+    let facts = glass_panel_opt("setup-done-facts", 470.0, true)
+        .padding(20.0)
         .gap(18.0)
+        .child(
+            row()
+                .w_full()
+                .gap(24.0)
+                .child(done_fact(
+                    "Stores & library",
+                    format!("{} stores · {} games", stores_count(s), s.games.len()),
+                ))
+                .child(done_fact(
+                    "Devices",
+                    format!("{} set up or found", device_count(s)),
+                )),
+        )
+        .child(
+            row()
+                .w_full()
+                .gap(24.0)
+                .child(done_fact(
+                    "PC defaults",
+                    match s.setup.states[3] {
+                        StageState::Skipped => "Skipped".into(),
+                        _ => format!("{} applied", s.setup.picks.as_ref().map_or(0, Vec::len)),
+                    },
+                ))
+                .child(done_fact(
+                    "Live tour",
+                    match s.setup.states[4] {
+                        StageState::Done => "3 of 3 actions completed".into(),
+                        other => state_word(other).to_string(),
+                    },
+                )),
+        );
+    let copy = col()
+        .grow(1.0)
+        .min_w(0.0)
+        .gap(16.0)
+        .child(pill(
+            if all_done {
+                "Setup complete"
+            } else {
+                "Setup paused"
+            },
+            good().alpha(0.16),
+            good(),
+        ))
         .child(text(title).font(hero_style()).color(FG))
-        .child(text(sub).font(type_body()).color(fg_muted()).wrap())
-        .child(cells)
-        .child(strip)
+        .child(
+            text(done_summary(s))
+                .font(type_body())
+                .color(fg_muted())
+                .wrap(),
+        )
         .child(
             row()
                 .gap(10.0)
@@ -1624,14 +1818,107 @@ fn done(s: &AppState, scale: f32) -> El {
                     "Open Devices",
                     false,
                     |s: &mut AppState| s.setup_finish(Room::Devices),
+                )),
+        );
+    let hero = row()
+        .w_full()
+        .grow(1.2)
+        .min_h(0.0)
+        .px(56.0)
+        .gap(32.0)
+        .center_y()
+        .child(copy)
+        .child(facts);
+    let mut footer = row()
+        .w_full()
+        .h(64.0)
+        .px(24.0)
+        .gap(12.0)
+        .center_y()
+        .justify_between()
+        .child(
+            text(if has_skipped {
+                "Skipped steps stay quietly available under Settings › Setup."
+            } else {
+                "Nothing is left to set up. Settings › Setup stays available."
+            })
+            .font(type_small())
+            .color(fg_muted()),
+        )
+        .child(
+            row()
+                .gap(10.0)
+                .center_y()
+                .child(button(
+                    "setup-done-replay",
+                    "Replay interactive tour",
+                    false,
+                    |s: &mut AppState| s.start_tour(),
                 ))
                 .child(button(
-                    "setup-done-resume",
-                    "Resume skipped steps",
+                    "setup-done-settings",
+                    "Settings › Setup",
                     false,
-                    |s: &mut AppState| s.setup_resume(),
+                    |s: &mut AppState| s.setup_finish(Room::Settings),
                 )),
+        );
+    if has_skipped {
+        footer = footer.child(button(
+            "setup-done-resume",
+            "Resume skipped steps",
+            false,
+            |s: &mut AppState| s.setup_resume(),
+        ));
+    }
+    el().w_full()
+        .h_full()
+        .child(
+            el().pin(Some(0.0), Some(0.0), Some(0.0), Some(0.0))
+                .child(mosaic(s, scale)),
         )
+        .child(
+            el().pin(Some(0.0), Some(0.0), Some(0.0), Some(0.0))
+                .fill(BG.alpha(0.72)),
+        )
+        .child(
+            col()
+                .w_full()
+                .h_full()
+                .child(hero)
+                .child(
+                    col()
+                        .w_full()
+                        .grow(1.0)
+                        .min_h(0.0)
+                        .px(56.0)
+                        .pb(20.0)
+                        .child(strip),
+                )
+                .child(el().w_full().h(1.0).fill(hairline()))
+                .child(footer),
+        )
+}
+
+fn stores_count(s: &AppState) -> usize {
+    store_ids(s).len()
+}
+
+fn done_summary(s: &AppState) -> String {
+    let defaults = if s.setup.states[3] == StageState::Skipped {
+        "PC defaults skipped".to_string()
+    } else {
+        format!(
+            "{} PC defaults applied",
+            s.setup.picks.as_ref().map_or(0, Vec::len)
+        )
+    };
+    format!(
+        "{} installed games across {} stores, {} peripherals set up or found, and {}. Everything stays editable anytime.",
+        installed_count(s),
+        stores_count(s),
+        device_count(s),
+        defaults
+    )
 }
 
 fn footer(s: &AppState) -> El {
@@ -1700,7 +1987,7 @@ pub fn view(s: &AppState, scale: f32) -> El {
         1 => accounts(s),
         2 => devices(s, scale),
         3 => pc_defaults(s),
-        TOUR_STAGE => tour_stage(s),
+        TOUR_STAGE => tour_stage(s, scale),
         _ => done(s, scale),
     };
     let mut root = col()
@@ -1719,71 +2006,115 @@ pub fn view(s: &AppState, scale: f32) -> El {
     root
 }
 
-pub fn coach(s: &AppState) -> El {
-    let beat = s.setup.beat.unwrap_or(0);
-    let (title, body) = BEATS[beat.min(BEATS.len() - 1)];
-    let met = s.setup.beat_met_at.is_some();
-    let status = if met {
-        row()
-            .h(22.0)
-            .px(9.0)
-            .radius(RADIUS_PILL)
-            .fill(good().alpha(0.16))
-            .center_y()
-            .gap(6.0)
-            .child(icon_check(11.0, good()))
-            .child(text("Done").font(type_small()).color(good()))
-    } else {
-        pill("Waiting for you", fg_faint().alpha(0.2), fg_muted())
-    };
-    glass_panel_opt("setup-coach", 360.0, true)
-        .pin(None, None, Some(24.0), Some(24.0))
-        .padding(20.0)
-        .gap(12.0)
-        .child(
+fn coach_anchor(s: &AppState, beat: usize) -> (String, Side, Align) {
+    match beat {
+        0 => ("search-capsule".into(), Side::Bottom, Align::End),
+        1 => {
+            let key = s
+                .games
+                .iter()
+                .find(|g| g.installed)
+                .map_or("nav-library".to_string(), |g| format!("tile-{}", g.id));
+            (key, Side::Bottom, Align::Start)
+        }
+        _ => ("nav-devices".into(), Side::Bottom, Align::Center),
+    }
+}
+
+fn coach_steps(active: usize) -> El {
+    let mut steps = row()
+        .w_full()
+        .padding(4.0)
+        .gap(4.0)
+        .radius(RADIUS_PILL)
+        .fill(glass_control_fill());
+    for (i, label) in COACH_STEPS.iter().enumerate() {
+        let on = i == active;
+        steps = steps.child(
             row()
-                .w_full()
-                .justify_between()
-                .center_y()
+                .grow(1.0)
+                .min_w(0.0)
+                .h(28.0)
+                .radius(RADIUS_PILL)
+                .center()
+                .fill(if on { FG.alpha(0.12) } else { FG.alpha(0.0) })
                 .child(
-                    text(format!("Live tour · {} of {}", beat + 1, BEATS.len()))
+                    text(*label)
                         .font(type_small())
-                        .color(fg_muted()),
-                )
-                .child(status),
-        )
-        .child(text(title).font(type_body()).color(FG))
-        .child(text(body).font(type_small()).color(fg_muted()).wrap())
+                        .color(if on { FG } else { fg_muted() }),
+                ),
+        );
+    }
+    steps
+}
+
+pub fn coach(s: &AppState) -> El {
+    let beat = s.setup.beat.unwrap_or(0).min(BEATS.len() - 1);
+    let (title, body) = BEATS[beat];
+    let met = s.setup.beat_met_at.is_some();
+    let (anchor, side, align) = coach_anchor(s, beat);
+    let steps = coach_steps(beat);
+    let (status_text, status_ink) = if met {
+        ("Done", good())
+    } else {
+        ("Waiting for your action…", fg_muted())
+    };
+    glass_panel_opt("setup-coach", 480.0, true)
+        .anchored(anchor, side, align, 12.0)
+        .padding(20.0)
+        .gap(14.0)
+        .child(steps)
+        .child(text(title).font(type_page()).color(FG).wrap())
+        .child(text(body).font(type_body()).color(fg_muted()).wrap())
         .child(
             row()
                 .w_full()
-                .pt(4.0)
+                .h(40.0)
+                .px(12.0)
+                .radius(RADIUS_SMALL)
+                .fill(glass_control_fill())
+                .center_y()
+                .justify_between()
+                .child(text(status_text).font(type_small()).color(status_ink))
+                .child(pill(
+                    format!("Step {} of {}", beat + 1, BEATS.len()),
+                    fg_faint().alpha(0.2),
+                    fg_muted(),
+                )),
+        )
+        .child(
+            row()
+                .w_full()
                 .justify_between()
                 .center_y()
-                .child(button(
-                    "setup-coach-skip-step",
-                    "Skip step",
-                    false,
-                    |s: &mut AppState| s.setup_beat_skip(),
-                ))
                 .child(button(
                     "setup-coach-skip-tour",
                     "Skip tour",
                     false,
                     |s: &mut AppState| s.finish_tour(),
+                ))
+                .child(button(
+                    "setup-coach-skip-step",
+                    "Skip step",
+                    false,
+                    |s: &mut AppState| s.setup_beat_skip(),
                 )),
         )
 }
 
 pub fn return_bar(s: &AppState) -> El {
-    let _ = s;
+    let stage = s.setup.return_to.unwrap_or(2).min(STAGES - 1);
     glass_panel_opt("setup-return", 300.0, true)
         .pin(None, Some(76.0), Some(24.0), None)
         .h(48.0)
         .px(16.0)
         .gap(12.0)
         .center_y()
-        .child(text("Setup paused on Devices").font(type_small()).color(FG))
+        .child(
+            text(format!("Setup paused on {}", STAGE_TITLES[stage]))
+                .font(type_small())
+                .color(FG),
+        )
         .child(button(
             "setup-return-btn",
             "Back to setup",
