@@ -10,6 +10,7 @@ mod discord_voice;
 mod discord_voice_state;
 mod game_page;
 mod gamepad;
+mod image_cache;
 mod key_modal;
 mod library;
 mod media_state;
@@ -105,8 +106,10 @@ fn on_key(s: &mut AppState, ev: &KeyEvent, tx: &mut Tx) -> bool {
 
 fn setup_state(s: &mut AppState, waker: Waker) {
     s.install_waker(waker);
-    s.preload_visible_covers_sync(2.0);
-    s.preload_discord_images_sync(1.0);
+    s.preload_visible_covers_sync(1.0);
+    if s.room == state::Room::Discord {
+        s.preload_discord_images_sync(1.0);
+    }
 }
 
 fn poll_state(s: &mut AppState, now: f64, tx: &mut Tx) -> bool {
@@ -506,7 +509,7 @@ fn load_live_state_sync(pipe: &str, scene: Option<&str>) -> AppState {
                 &serde_json::json!({}),
                 Duration::from_secs(5),
             ) {
-                state.media.playback = pb.playback;
+                state.apply_music_playback(pb.playback);
             }
             if let Ok(vol) = client.call_blocking::<_, exo_rpc::MusicVolumeReply>(
                 exo_rpc::METHOD_MUSIC_VOLUME,
@@ -986,6 +989,7 @@ fn main() {
     let mut app = App::new(spec)
         .args(rune_args)
         .titlebar(Titlebar::new(TITLEBAR_HEIGHT))
+        .on_rest(AppState::on_rest)
         .release_gpu_when_closed();
 
     if let Some(ref pipe) = pipe_name {
@@ -1047,72 +1051,7 @@ fn main() {
             .spawn(move || {
                 let event_handle = connect_handle.clone();
                 match exo_rpc::RpcClient::connect(&pipe, Duration::from_secs(6), move |ev| {
-                    event_handle.update(move |s, _| match ev {
-                        exo_rpc::HostEvent::LibraryUpdated(lib) => s.apply_library(lib),
-                        exo_rpc::HostEvent::InstallProgress(p) => {
-                            s.install_progress = p.is_active.then_some(p);
-                        }
-                        exo_rpc::HostEvent::UpdateProgress(p) => {
-                            s.pc.update_progress = Some(p);
-                        }
-                        exo_rpc::HostEvent::MusicPlayback(pb) => {
-                            s.media.playback = pb;
-                        }
-                        exo_rpc::HostEvent::DiscordState(ev) => s.handle_discord_state(ev),
-                        exo_rpc::HostEvent::DiscordSignIn(step) => s.handle_discord_signin(step),
-                        exo_rpc::HostEvent::DiscordChanged(ev) => s.handle_discord_changed(ev),
-                        exo_rpc::HostEvent::DiscordMembers { guild_id } => {
-                            s.handle_discord_members(&guild_id);
-                        }
-                        exo_rpc::HostEvent::DiscordPresence(ev) => s.handle_discord_presence(ev),
-                        exo_rpc::HostEvent::DiscordUnread(ev) => s.handle_discord_unread(ev),
-                        exo_rpc::HostEvent::DiscordVoice(v) => s.handle_discord_voice(v),
-                        exo_rpc::HostEvent::DiscordSpeaking { user_id, speaking } => {
-                            s.handle_discord_speaking(&user_id, speaking);
-                        }
-                        exo_rpc::HostEvent::DiscordMessage(ev) => s.handle_discord_message(*ev),
-                        exo_rpc::HostEvent::DiscordReaction(ev) => s.handle_discord_reaction(ev),
-                        exo_rpc::HostEvent::DiscordTyping(ev) => s.handle_discord_typing(ev),
-                        exo_rpc::HostEvent::DiscordVideo(ev) => s.handle_discord_video_event(ev),
-                        exo_rpc::HostEvent::DiscordVideoFrame(f) => s.handle_discord_video_frame(f),
-                        exo_rpc::HostEvent::DiscordGoLive(ev) => s.handle_discord_golive_state(ev),
-                        exo_rpc::HostEvent::DiscordGoLiveStats(ev) => {
-                            s.handle_discord_golive_stats(ev);
-                        }
-                        exo_rpc::HostEvent::DiscordGoLiveViewers(ids) => {
-                            s.handle_discord_golive_viewers(ids);
-                        }
-                        exo_rpc::HostEvent::DevicesChanged => {
-                            if s.room == state::Room::Devices {
-                                s.load_pc_devices();
-                            }
-                        }
-                        exo_rpc::HostEvent::AppsChanged => {
-                            if s.room == state::Room::Apps {
-                                s.load_pc_apps();
-                            }
-                        }
-                        exo_rpc::HostEvent::MusicVolume(ev) => s.apply_music_volume(ev),
-                        exo_rpc::HostEvent::CaptureState(live) => s.apply_capture_state(live),
-                        exo_rpc::HostEvent::CaptureSaved(ev) => s.apply_capture_saved(*ev),
-                        exo_rpc::HostEvent::CaptureReel(ev) => s.apply_capture_reel(*ev),
-                        exo_rpc::HostEvent::InstallQueue(ev) => s.apply_install_queue(ev),
-                        exo_rpc::HostEvent::GameRunState(ev) => s.apply_game_run_state(ev),
-                        exo_rpc::HostEvent::LaunchStatus(ev) => s.apply_launch_status(ev),
-                        exo_rpc::HostEvent::AppUpdateState(ev) => s.apply_app_update_state(ev),
-                        exo_rpc::HostEvent::ExoAccountChanged => s.apply_exo_account_changed(),
-                        exo_rpc::HostEvent::AutopilotReport(ev) => s.apply_autopilot_report(ev),
-                        exo_rpc::HostEvent::AutopilotLive(live) => s.apply_autopilot_live(live),
-                        exo_rpc::HostEvent::ShadersChanged => s.apply_shaders_changed(),
-                        exo_rpc::HostEvent::StoreChanged(ev) => s.apply_store_changed(ev),
-                        exo_rpc::HostEvent::Disconnected(why) => {
-                            s.discord.voice_ui.decoders.clear();
-                            s.video_router.clear();
-                            s.status = state::HostStatus::Error(why);
-                            s.notice = Some("Disconnected from Exo host".into());
-                        }
-                        exo_rpc::HostEvent::Raw { .. } => {}
-                    });
+                    event_handle.update_if(move |s, _| s.apply_host_event(ev));
                 }) {
                     Ok(client) => {
                         let rpc_for_boot = std::sync::Arc::clone(&client);

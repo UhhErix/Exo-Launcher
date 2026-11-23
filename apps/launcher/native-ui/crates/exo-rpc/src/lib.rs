@@ -51,11 +51,11 @@ use serde::{Deserialize, Serialize};
 use serde_json::value::RawValue;
 use serde_json::{Value, json};
 use std::borrow::Cow;
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::fmt;
 use std::io;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
-use std::sync::{Arc, Mutex, mpsc};
+use std::sync::{Arc, Condvar, Mutex, mpsc};
 use std::time::Duration;
 pub use types::{
     ActionResult, ArtBase, ExoAccountState, Game, GameExtras, GameGetReply, GameProperties,
@@ -357,10 +357,164 @@ type PendingCallback = Box<dyn FnOnce(Result<Box<RawValue>, RpcError>) + Send + 
 type VideoFrameHandler =
     Arc<dyn Fn(DiscordVideoFrame) -> Result<(), DiscordVideoFrame> + Send + Sync>;
 
+const OUTBOUND_QUEUE_CAP: usize = 256;
+const EVENT_QUEUE_CAP: usize = 256;
+const VIDEO_FRAME_QUEUE_CAP: usize = 8;
+
 enum DispatchWork {
     Response(PendingCallback, Result<Box<RawValue>, RpcError>),
     Event(HostEvent),
     VideoFrame(DiscordVideoFrame),
+}
+
+struct BoundedQueueState<T> {
+    items: VecDeque<T>,
+    closed: bool,
+}
+
+struct BoundedQueue<T> {
+    cap: usize,
+    state: Mutex<BoundedQueueState<T>>,
+    cond: Condvar,
+}
+
+impl<T> BoundedQueue<T> {
+    fn new(cap: usize) -> Self {
+        let cap = cap.max(1);
+        Self {
+            cap,
+            state: Mutex::new(BoundedQueueState {
+                items: VecDeque::with_capacity(cap.min(64)),
+                closed: false,
+            }),
+            cond: Condvar::new(),
+        }
+    }
+
+    fn push_drop_oldest(&self, item: T) -> bool {
+        let mut guard = self.state.lock().unwrap_or_else(|e| e.into_inner());
+        if guard.closed {
+            return false;
+        }
+        if guard.items.len() >= self.cap {
+            guard.items.pop_front();
+        }
+        guard.items.push_back(item);
+        self.cond.notify_one();
+        true
+    }
+
+    fn pop_blocking(&self) -> Option<T> {
+        let mut guard = self.state.lock().unwrap_or_else(|e| e.into_inner());
+        loop {
+            if let Some(item) = guard.items.pop_front() {
+                return Some(item);
+            }
+            if guard.closed {
+                return None;
+            }
+            guard = self.cond.wait(guard).unwrap_or_else(|e| e.into_inner());
+        }
+    }
+
+    fn close(&self) {
+        let mut guard = self.state.lock().unwrap_or_else(|e| e.into_inner());
+        guard.closed = true;
+        guard.items.clear();
+        self.cond.notify_all();
+    }
+}
+
+struct DispatchQueueState {
+    responses: VecDeque<(PendingCallback, Result<Box<RawValue>, RpcError>)>,
+    events: VecDeque<HostEvent>,
+    video_frames: VecDeque<DiscordVideoFrame>,
+    closed: bool,
+}
+
+struct DispatchQueue {
+    event_cap: usize,
+    video_cap: usize,
+    state: Mutex<DispatchQueueState>,
+    cond: Condvar,
+}
+
+impl DispatchQueue {
+    fn new(event_cap: usize, video_cap: usize) -> Self {
+        Self {
+            event_cap: event_cap.max(1),
+            video_cap: video_cap.max(1),
+            state: Mutex::new(DispatchQueueState {
+                responses: VecDeque::new(),
+                events: VecDeque::with_capacity(event_cap.clamp(1, 64)),
+                video_frames: VecDeque::with_capacity(video_cap.clamp(1, 16)),
+                closed: false,
+            }),
+            cond: Condvar::new(),
+        }
+    }
+
+    fn send(&self, work: DispatchWork) -> bool {
+        let mut guard = self.state.lock().unwrap_or_else(|e| e.into_inner());
+        if guard.closed {
+            return false;
+        }
+        match work {
+            DispatchWork::Response(cb, res) => {
+                guard.responses.push_back((cb, res));
+            }
+            DispatchWork::Event(ev) => {
+                if matches!(ev, HostEvent::MusicPlayback(_))
+                    && let Some(slot) = guard
+                        .events
+                        .iter_mut()
+                        .rev()
+                        .find(|e| matches!(e, HostEvent::MusicPlayback(_)))
+                {
+                    *slot = ev;
+                    self.cond.notify_one();
+                    return true;
+                }
+                if guard.events.len() >= self.event_cap {
+                    guard.events.pop_front();
+                }
+                guard.events.push_back(ev);
+            }
+            DispatchWork::VideoFrame(frame) => {
+                if guard.video_frames.len() >= self.video_cap {
+                    guard.video_frames.pop_front();
+                }
+                guard.video_frames.push_back(frame);
+            }
+        }
+        self.cond.notify_one();
+        true
+    }
+
+    fn pop_blocking(&self) -> Option<DispatchWork> {
+        let mut guard = self.state.lock().unwrap_or_else(|e| e.into_inner());
+        loop {
+            if let Some((cb, res)) = guard.responses.pop_front() {
+                return Some(DispatchWork::Response(cb, res));
+            }
+            if let Some(ev) = guard.events.pop_front() {
+                return Some(DispatchWork::Event(ev));
+            }
+            if let Some(frame) = guard.video_frames.pop_front() {
+                return Some(DispatchWork::VideoFrame(frame));
+            }
+            if guard.closed {
+                return None;
+            }
+            guard = self.cond.wait(guard).unwrap_or_else(|e| e.into_inner());
+        }
+    }
+
+    fn close(&self) {
+        let mut guard = self.state.lock().unwrap_or_else(|e| e.into_inner());
+        guard.closed = true;
+        self.cond.notify_all();
+    }
 }
 
 #[derive(Deserialize)]
@@ -395,11 +549,11 @@ type MediaPipeSlot = Arc<Mutex<Option<(String, Arc<pipe::PipeHandle>)>>>;
 #[cfg(windows)]
 pub struct RpcClient {
     pipe: Arc<pipe::PipeHandle>,
-    outbound: mpsc::Sender<String>,
+    outbound: Arc<BoundedQueue<String>>,
     pending: Arc<Mutex<HashMap<String, PendingCallback>>>,
     next_id: AtomicU64,
     closed: Arc<AtomicBool>,
-    dispatch_tx: mpsc::Sender<DispatchWork>,
+    dispatch_tx: Arc<DispatchQueue>,
     video_handler: Arc<Mutex<Option<VideoFrameHandler>>>,
     media_pipe: MediaPipeSlot,
 }
@@ -412,8 +566,8 @@ impl RpcClient {
         on_event: impl Fn(HostEvent) + Send + Sync + 'static,
     ) -> Result<Arc<Self>, RpcError> {
         let pipe = pipe::PipeHandle::connect(pipe_name, timeout)?;
-        let (tx, rx) = mpsc::channel::<String>();
-        let (dispatch_tx, dispatch_rx) = mpsc::channel::<DispatchWork>();
+        let outbound = Arc::new(BoundedQueue::<String>::new(OUTBOUND_QUEUE_CAP));
+        let dispatch_tx = Arc::new(DispatchQueue::new(EVENT_QUEUE_CAP, VIDEO_FRAME_QUEUE_CAP));
         let pending: Arc<Mutex<HashMap<String, PendingCallback>>> =
             Arc::new(Mutex::new(HashMap::new()));
         let closed = Arc::new(AtomicBool::new(false));
@@ -423,10 +577,11 @@ impl RpcClient {
 
         let dispatch_events = Arc::clone(&on_event);
         let dispatch_video = Arc::clone(&video_handler);
+        let dispatch_rx = Arc::clone(&dispatch_tx);
         std::thread::Builder::new()
             .name("exo-rpc-dispatch".into())
             .spawn(move || {
-                while let Ok(work) = dispatch_rx.recv() {
+                while let Some(work) = dispatch_rx.pop_blocking() {
                     match work {
                         DispatchWork::Response(cb, res) => cb(res),
                         DispatchWork::Event(ev) => dispatch_events(ev),
@@ -449,13 +604,14 @@ impl RpcClient {
 
         let write_pipe = Arc::clone(&pipe);
         let write_closed = Arc::clone(&closed);
+        let write_rx = Arc::clone(&outbound);
         std::thread::Builder::new()
             .name("exo-rpc-writer".into())
             .spawn(move || {
                 let Ok(event) = pipe::EventHandle::new() else {
                     return;
                 };
-                while let Ok(mut line) = rx.recv() {
+                while let Some(mut line) = write_rx.pop_blocking() {
                     if write_closed.load(Ordering::Acquire) {
                         break;
                     }
@@ -472,7 +628,7 @@ impl RpcClient {
         let read_pipe = Arc::clone(&pipe);
         let read_pending = Arc::clone(&pending);
         let read_closed = Arc::clone(&closed);
-        let read_dispatch = dispatch_tx.clone();
+        let read_dispatch = Arc::clone(&dispatch_tx);
         let read_media = Arc::clone(&media_pipe);
         std::thread::Builder::new()
             .name("exo-rpc-reader".into())
@@ -493,7 +649,7 @@ impl RpcClient {
 
         Ok(Arc::new(Self {
             pipe,
-            outbound: tx,
+            outbound,
             pending,
             next_id: AtomicU64::new(1),
             closed,
@@ -580,7 +736,7 @@ impl RpcClient {
             let mut map = self.pending.lock().unwrap_or_else(|e| e.into_inner());
             map.insert(id.clone(), callback);
         }
-        if self.outbound.send(payload).is_err() {
+        if !self.outbound.push_drop_oldest(payload) {
             let mut map = self.pending.lock().unwrap_or_else(|e| e.into_inner());
             if let Some(cb) = map.remove(&id) {
                 cb(Err(RpcError::Disconnected));
@@ -640,7 +796,7 @@ impl RpcClient {
                 "params": { "id": id.as_str() },
             });
             if let Ok(payload) = serde_json::to_string(&envelope) {
-                let _ = self.outbound.send(payload);
+                let _ = self.outbound.push_drop_oldest(payload);
             }
         }
         removed
@@ -667,6 +823,8 @@ impl RpcClient {
 
     pub fn close(&self) {
         self.closed.store(true, Ordering::Release);
+        self.outbound.close();
+        self.dispatch_tx.close();
         self.pipe.cancel();
         if let Some((_, mp)) = self
             .media_pipe
@@ -691,7 +849,7 @@ fn media_read_loop(
     pipe: &pipe::PipeHandle,
     closed: &AtomicBool,
     video_handler: &Mutex<Option<VideoFrameHandler>>,
-    dispatch_tx: &mpsc::Sender<DispatchWork>,
+    dispatch_tx: &DispatchQueue,
 ) {
     let Ok(event) = pipe::EventHandle::new() else {
         return;
@@ -735,8 +893,12 @@ fn media_read_loop(
                 None => Some(frame),
             };
             if let Some(frame) = unrouted {
-                let _ = dispatch_tx.send(DispatchWork::Event(HostEvent::DiscordVideoFrame(frame)));
+                let _ = dispatch_tx.send(DispatchWork::VideoFrame(frame));
             }
+        }
+        if meta_buf.capacity() > 16 * 1024 {
+            meta_buf.clear();
+            meta_buf.shrink_to(512);
         }
     }
 }
@@ -762,7 +924,7 @@ pub fn decode_binary_media_frame(
 fn read_loop(
     pipe: &pipe::PipeHandle,
     pending: &Mutex<HashMap<String, PendingCallback>>,
-    dispatch_tx: &mpsc::Sender<DispatchWork>,
+    dispatch_tx: &DispatchQueue,
 ) -> String {
     let event = match pipe::EventHandle::new() {
         Ok(e) => e,
@@ -793,6 +955,9 @@ fn read_loop(
                 dispatch_line_to(&line, pending, dispatch_tx);
             }
             line.clear();
+            if line.capacity() > 64 * 1024 {
+                line.shrink_to(4096);
+            }
             start = i + 1;
         }
         if start < n {
@@ -996,7 +1161,7 @@ fn parse_event(
 fn dispatch_line_to(
     raw: &[u8],
     pending: &Mutex<HashMap<String, PendingCallback>>,
-    dispatch_tx: &mpsc::Sender<DispatchWork>,
+    dispatch_tx: &DispatchQueue,
 ) {
     let Ok(env) = serde_json::from_slice::<WireEnvelope<'_>>(raw) else {
         return;
@@ -1077,9 +1242,9 @@ mod tests {
     fn decodes_binary_video_frame_from_named_pipe_envelope() {
         let payload = br#"{"event":"binaryFrame","meta":{"source":"stream","userId":"200002","timestamp":1234.5,"keyframe":true,"codec":"h265"},"data":"AAABZ2Q="}"#;
         let pending = Mutex::new(HashMap::new());
-        let (tx, rx) = mpsc::channel();
-        dispatch_line_to(payload, &pending, &tx);
-        match rx.try_recv().expect("dispatched video frame") {
+        let queue = DispatchQueue::new(EVENT_QUEUE_CAP, VIDEO_FRAME_QUEUE_CAP);
+        dispatch_line_to(payload, &pending, &queue);
+        match queue.pop_blocking().expect("dispatched video frame") {
             DispatchWork::VideoFrame(f) => {
                 assert_eq!(f.source, "stream");
                 assert_eq!(f.user_id, "200002");
@@ -1112,10 +1277,10 @@ mod tests {
         let wrapped_null = br#"{"event":"music.playback","data":{"playback":null}}"#;
         let bare_null = br#"{"event":"music.playback","data":null}"#;
         let pending = Mutex::new(HashMap::new());
-        let (tx, rx) = mpsc::channel();
+        let queue = DispatchQueue::new(EVENT_QUEUE_CAP, VIDEO_FRAME_QUEUE_CAP);
 
-        dispatch_line_to(flat, &pending, &tx);
-        match rx.try_recv().unwrap() {
+        dispatch_line_to(flat, &pending, &queue);
+        match queue.pop_blocking().unwrap() {
             DispatchWork::Event(HostEvent::MusicPlayback(Some(pb))) => {
                 assert_eq!(pb.status, "playing");
                 assert_eq!(pb.title, "Track A");
@@ -1124,8 +1289,8 @@ mod tests {
             _ => panic!("expected flat MusicPlayback(Some)"),
         }
 
-        dispatch_line_to(wrapped, &pending, &tx);
-        match rx.try_recv().unwrap() {
+        dispatch_line_to(wrapped, &pending, &queue);
+        match queue.pop_blocking().unwrap() {
             DispatchWork::Event(HostEvent::MusicPlayback(Some(pb))) => {
                 assert_eq!(pb.status, "paused");
                 assert_eq!(pb.title, "Track B");
@@ -1133,14 +1298,14 @@ mod tests {
             _ => panic!("expected wrapped MusicPlayback(Some)"),
         }
 
-        dispatch_line_to(wrapped_null, &pending, &tx);
-        match rx.try_recv().unwrap() {
+        dispatch_line_to(wrapped_null, &pending, &queue);
+        match queue.pop_blocking().unwrap() {
             DispatchWork::Event(HostEvent::MusicPlayback(None)) => {}
             _ => panic!("expected wrapped MusicPlayback(None)"),
         }
 
-        dispatch_line_to(bare_null, &pending, &tx);
-        match rx.try_recv().unwrap() {
+        dispatch_line_to(bare_null, &pending, &queue);
+        match queue.pop_blocking().unwrap() {
             DispatchWork::Event(HostEvent::MusicPlayback(None)) => {}
             _ => panic!("expected bare null MusicPlayback(None)"),
         }
@@ -1203,10 +1368,10 @@ mod tests {
             ),
         ];
         let pending = Mutex::new(HashMap::new());
-        let (tx, rx) = mpsc::channel();
+        let queue = DispatchQueue::new(EVENT_QUEUE_CAP, VIDEO_FRAME_QUEUE_CAP);
         for (idx, (payload, check)) in cases.iter().enumerate() {
-            dispatch_line_to(payload, &pending, &tx);
-            let work = rx.try_recv().expect("event dispatched");
+            dispatch_line_to(payload, &pending, &queue);
+            let work = queue.pop_blocking().expect("event dispatched");
             match work {
                 DispatchWork::Event(ev) => assert!(check(ev), "case {idx} failed"),
                 _ => panic!("case {idx} was not an Event"),
@@ -1218,7 +1383,7 @@ mod tests {
     fn raw_value_response_dispatch_avoids_value_roundtrip() {
         let line = br#"{"version":1,"id":"7","ok":true,"result":{"ok":true,"artBase":{"covers":"https://covers.exo-launcher.local/"},"settings":{},"library":{"games":[],"count":0},"musicPlayback":{"ok":true,"playback":null},"discordStatus":{},"binaryMediaPipe":"exo-pipe-media"}}"#;
         let pending: Mutex<HashMap<String, PendingCallback>> = Mutex::new(HashMap::new());
-        let (tx, rx) = mpsc::channel();
+        let queue = DispatchQueue::new(EVENT_QUEUE_CAP, VIDEO_FRAME_QUEUE_CAP);
         let (res_tx, res_rx) = mpsc::channel();
         pending.lock().unwrap().insert(
             "7".into(),
@@ -1229,8 +1394,8 @@ mod tests {
                 let _ = res_tx.send(boot);
             }),
         );
-        dispatch_line_to(line, &pending, &tx);
-        match rx.try_recv().unwrap() {
+        dispatch_line_to(line, &pending, &queue);
+        match queue.pop_blocking().unwrap() {
             DispatchWork::Response(cb, res) => cb(res),
             _ => panic!("expected Response"),
         }
@@ -1257,7 +1422,7 @@ mod tests {
         let mut reader_times = Vec::with_capacity(50);
         let mut total_times = Vec::with_capacity(50);
         let pending: Mutex<HashMap<String, PendingCallback>> = Mutex::new(HashMap::new());
-        let (tx, rx) = mpsc::channel();
+        let queue = DispatchQueue::new(EVENT_QUEUE_CAP, VIDEO_FRAME_QUEUE_CAP);
         for _ in 0..50 {
             let (done_tx, done_rx) = mpsc::channel();
             pending.lock().unwrap().insert(
@@ -1270,9 +1435,9 @@ mod tests {
                 }),
             );
             let t0 = std::time::Instant::now();
-            dispatch_line_to(lib_bytes, &pending, &tx);
+            dispatch_line_to(lib_bytes, &pending, &queue);
             let reader_ms = t0.elapsed().as_secs_f64() * 1000.0;
-            if let DispatchWork::Response(cb, res) = rx.recv().unwrap() {
+            if let DispatchWork::Response(cb, res) = queue.pop_blocking().unwrap() {
                 cb(res);
             }
             let count = done_rx.recv().unwrap();
@@ -1306,8 +1471,8 @@ mod tests {
         let mut frame_json_times = Vec::with_capacity(120);
         for _ in 0..120 {
             let t0 = std::time::Instant::now();
-            dispatch_line_to(frame_bytes, &pending, &tx);
-            match rx.recv().unwrap() {
+            dispatch_line_to(frame_bytes, &pending, &queue);
+            match queue.pop_blocking().unwrap() {
                 DispatchWork::VideoFrame(f) => assert_eq!(f.data.len(), 64 * 1024),
                 _ => panic!("expected VideoFrame"),
             }
@@ -1343,5 +1508,69 @@ mod tests {
             frame_bin_times[119],
             sum60_bin
         );
+    }
+
+    #[test]
+    fn bounded_queue_drops_oldest_when_full() {
+        let q = BoundedQueue::new(3);
+        for i in 0..5 {
+            assert!(q.push_drop_oldest(i));
+        }
+        assert_eq!(q.pop_blocking(), Some(2));
+        assert_eq!(q.pop_blocking(), Some(3));
+        assert_eq!(q.pop_blocking(), Some(4));
+        q.close();
+        assert_eq!(q.pop_blocking(), None);
+        assert!(!q.push_drop_oldest(9));
+    }
+
+    #[test]
+    fn dispatch_queue_bounds_events_video_and_coalesces_music_playback() {
+        let q = DispatchQueue::new(4, 2);
+        for i in 0..10 {
+            q.send(DispatchWork::Event(HostEvent::DiscordPresence(
+                DiscordPresenceEvent {
+                    user_id: format!("u{i}"),
+                    status: "online".into(),
+                    ..Default::default()
+                },
+            )));
+        }
+        for i in 0..5 {
+            q.send(DispatchWork::Event(HostEvent::MusicPlayback(Some(
+                MusicPlayback {
+                    title: format!("track-{i}"),
+                    position_ms: Some(i * 1000),
+                    ..Default::default()
+                },
+            ))));
+        }
+        for i in 0..5 {
+            q.send(DispatchWork::VideoFrame(DiscordVideoFrame {
+                source: "stream".into(),
+                user_id: format!("u{i}"),
+                timestamp: i as f64,
+                keyframe: false,
+                rotation: 0,
+                flip: false,
+                codec: "h264".into(),
+                data: vec![i as u8; 16],
+            }));
+        }
+        let mut presences = Vec::new();
+        let mut music = Vec::new();
+        let mut frames = Vec::new();
+        q.close();
+        while let Some(work) = q.pop_blocking() {
+            match work {
+                DispatchWork::Event(HostEvent::DiscordPresence(p)) => presences.push(p.user_id),
+                DispatchWork::Event(HostEvent::MusicPlayback(Some(m))) => music.push(m.title),
+                DispatchWork::VideoFrame(f) => frames.push(f.user_id),
+                _ => {}
+            }
+        }
+        assert_eq!(presences, vec!["u7", "u8", "u9"]);
+        assert_eq!(music, vec!["track-4"]);
+        assert_eq!(frames, vec!["u3", "u4"]);
     }
 }

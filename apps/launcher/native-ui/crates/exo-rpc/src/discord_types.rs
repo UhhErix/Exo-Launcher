@@ -427,7 +427,7 @@ pub struct DiscordMemberList {
     pub rows: Option<i32>,
 }
 
-#[derive(Debug, Clone, Default, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DiscordRich {
     #[serde(rename = "type", default)]
@@ -446,7 +446,7 @@ pub struct DiscordRich {
     pub through_exo: bool,
 }
 
-#[derive(Debug, Clone, Default, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DiscordPrep {
     #[serde(default)]

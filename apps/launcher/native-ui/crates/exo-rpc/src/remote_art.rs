@@ -36,15 +36,38 @@ pub fn parse_allowed_https(url: &str) -> Option<(String, String)> {
     Some((host, path_and_query.to_string()))
 }
 
+pub fn canonical_cache_key(url: &str) -> String {
+    let trimmed = url.trim();
+    let Some((base, query)) = trimmed.split_once('?') else {
+        return trimmed.to_string();
+    };
+    let mut kept: Vec<&str> = query
+        .split('&')
+        .filter(|pair| !pair.is_empty())
+        .filter(|pair| {
+            let key = pair.split('=').next().unwrap_or("");
+            !key.eq_ignore_ascii_case("ex")
+                && !key.eq_ignore_ascii_case("is")
+                && !key.eq_ignore_ascii_case("hm")
+        })
+        .collect();
+    if kept.is_empty() {
+        return base.to_string();
+    }
+    kept.sort_unstable();
+    format!("{base}?{}", kept.join("&"))
+}
+
 pub fn cache_path_for(cache_dir: &Path, url: &str) -> PathBuf {
-    let h1 = fnv64(url.as_bytes(), 0xcbf29ce484222325);
-    let h2 = fnv64(url.as_bytes(), 0x84222325cbf29ce4 ^ (url.len() as u64));
-    let ext = url
+    let key = canonical_cache_key(url);
+    let h1 = fnv64(key.as_bytes(), 0xcbf29ce484222325);
+    let h2 = fnv64(key.as_bytes(), 0x84222325cbf29ce4 ^ (key.len() as u64));
+    let ext = key
         .split('?')
         .next()
         .and_then(|s| s.rsplit('.').next())
         .map(|s| s.to_ascii_lowercase())
-        .filter(|e| matches!(e.as_str(), "jpg" | "jpeg" | "png" | "webp"))
+        .filter(|e| matches!(e.as_str(), "jpg" | "jpeg" | "png" | "webp" | "gif"))
         .unwrap_or_else(|| "img".into());
     cache_dir.join(format!("{h1:016x}{h2:016x}.{ext}"))
 }
@@ -95,16 +118,68 @@ pub fn fetch_cached_image(_url: &str, _cache_dir: &Path) -> Option<PathBuf> {
 }
 
 #[cfg(windows)]
+struct SharedSession(*mut std::ffi::c_void);
+
+#[cfg(windows)]
+unsafe impl Send for SharedSession {}
+
+#[cfg(windows)]
+unsafe impl Sync for SharedSession {}
+
+#[cfg(windows)]
+fn shared_winhttp_session() -> Option<*mut std::ffi::c_void> {
+    use std::ffi::OsStr;
+    use std::os::windows::ffi::OsStrExt;
+    use std::ptr::null;
+    use std::sync::OnceLock;
+    use windows_sys::Win32::Networking::WinHttp::{
+        WINHTTP_ACCESS_TYPE_AUTOMATIC_PROXY, WINHTTP_OPTION_REDIRECT_POLICY,
+        WINHTTP_OPTION_REDIRECT_POLICY_DISALLOW_HTTPS_TO_HTTP, WinHttpOpen, WinHttpSetOption,
+        WinHttpSetTimeouts,
+    };
+
+    static SESSION: OnceLock<Option<SharedSession>> = OnceLock::new();
+    let entry = SESSION.get_or_init(|| {
+        let agent: Vec<u16> = OsStr::new("ExoLauncher-Rune/1.0")
+            .encode_wide()
+            .chain(Some(0))
+            .collect();
+        let raw = unsafe {
+            WinHttpOpen(
+                agent.as_ptr(),
+                WINHTTP_ACCESS_TYPE_AUTOMATIC_PROXY,
+                null(),
+                null(),
+                0,
+            )
+        };
+        if raw.is_null() {
+            return None;
+        }
+        unsafe {
+            WinHttpSetTimeouts(raw, 4000, 4000, 4000, 8000);
+            let policy = WINHTTP_OPTION_REDIRECT_POLICY_DISALLOW_HTTPS_TO_HTTP;
+            WinHttpSetOption(
+                raw,
+                WINHTTP_OPTION_REDIRECT_POLICY,
+                (&policy as *const u32).cast(),
+                std::mem::size_of::<u32>() as u32,
+            );
+        }
+        Some(SharedSession(raw))
+    });
+    entry.as_ref().map(|s| s.0)
+}
+
+#[cfg(windows)]
 fn winhttp_get(host: &str, path: &str) -> Option<Vec<u8>> {
     use std::ffi::OsStr;
     use std::os::windows::ffi::OsStrExt;
     use std::ptr::null;
     use windows_sys::Win32::Networking::WinHttp::{
-        WINHTTP_ACCESS_TYPE_AUTOMATIC_PROXY, WINHTTP_FLAG_SECURE, WINHTTP_OPTION_REDIRECT_POLICY,
-        WINHTTP_OPTION_REDIRECT_POLICY_DISALLOW_HTTPS_TO_HTTP, WINHTTP_QUERY_FLAG_NUMBER,
-        WINHTTP_QUERY_STATUS_CODE, WinHttpCloseHandle, WinHttpConnect, WinHttpOpen,
-        WinHttpOpenRequest, WinHttpQueryDataAvailable, WinHttpQueryHeaders, WinHttpReadData,
-        WinHttpReceiveResponse, WinHttpSendRequest, WinHttpSetOption, WinHttpSetTimeouts,
+        WINHTTP_FLAG_SECURE, WINHTTP_QUERY_FLAG_NUMBER, WINHTTP_QUERY_STATUS_CODE,
+        WinHttpCloseHandle, WinHttpConnect, WinHttpOpenRequest, WinHttpQueryDataAvailable,
+        WinHttpQueryHeaders, WinHttpReadData, WinHttpReceiveResponse, WinHttpSendRequest,
     };
 
     fn to_wide(s: &str) -> Vec<u16> {
@@ -122,32 +197,9 @@ fn winhttp_get(host: &str, path: &str) -> Option<Vec<u8>> {
         }
     }
 
-    let agent = to_wide("ExoLauncher-Rune/1.0");
-    let session = Handle(unsafe {
-        WinHttpOpen(
-            agent.as_ptr(),
-            WINHTTP_ACCESS_TYPE_AUTOMATIC_PROXY,
-            null(),
-            null(),
-            0,
-        )
-    });
-    if session.0.is_null() {
-        return None;
-    }
-    unsafe {
-        WinHttpSetTimeouts(session.0, 4000, 4000, 4000, 8000);
-        let policy = WINHTTP_OPTION_REDIRECT_POLICY_DISALLOW_HTTPS_TO_HTTP;
-        WinHttpSetOption(
-            session.0,
-            WINHTTP_OPTION_REDIRECT_POLICY,
-            (&policy as *const u32).cast(),
-            std::mem::size_of::<u32>() as u32,
-        );
-    }
-
+    let session = shared_winhttp_session()?;
     let host_w = to_wide(host);
-    let conn = Handle(unsafe { WinHttpConnect(session.0, host_w.as_ptr(), 443, 0) });
+    let conn = Handle(unsafe { WinHttpConnect(session, host_w.as_ptr(), 443, 0) });
     if conn.0.is_null() {
         return None;
     }
@@ -239,5 +291,24 @@ mod tests {
         assert!(parse_allowed_https("https://127.0.0.1/secret.png").is_none());
         assert!(parse_allowed_https("https://evil.example/a.png").is_none());
         assert!(parse_allowed_https("https://shared.fastly.steamstatic.com:8443/a.jpg").is_none());
+    }
+
+    #[test]
+    fn canonical_cache_key_strips_volatile_discord_signature_params() {
+        let a = "https://cdn.discordapp.com/attachments/1/2/photo.png?ex=67000001&is=66f00001&hm=aaa&width=400";
+        let b = "https://cdn.discordapp.com/attachments/1/2/photo.png?width=400&ex=67999999&is=67888888&hm=zzz";
+        assert_eq!(canonical_cache_key(a), canonical_cache_key(b));
+        assert_eq!(
+            canonical_cache_key(a),
+            "https://cdn.discordapp.com/attachments/1/2/photo.png?width=400"
+        );
+        let dir = Path::new("cache");
+        assert_eq!(cache_path_for(dir, a), cache_path_for(dir, b));
+
+        let c = "https://cdn.discordapp.com/avatars/1/hash.webp?ex=1&is=2&hm=3";
+        assert_eq!(
+            canonical_cache_key(c),
+            "https://cdn.discordapp.com/avatars/1/hash.webp"
+        );
     }
 }

@@ -142,7 +142,7 @@ fn embed_card(s: &AppState, embed: &DiscordEmbed, msg_id: &str, scale: f32) -> E
         .image
         .as_ref()
         .and_then(|m| m.proxy_url.as_deref().or(m.url.as_deref()))
-        && let Some(img) = s.remote_image(url, scale)
+        && let Some(img) = s.remote_image_sized(url, 360.0, scale)
     {
         inner = inner.child(
             el().w(360.0)
@@ -421,7 +421,7 @@ fn message_row(
         let mut att_col = col().w_full().gap(6.0).pt(2.0);
         for att in &msg.attachments {
             if att.is_image()
-                && let Some(img) = s.remote_image(att.best_image_url(), scale)
+                && let Some(img) = s.remote_image_sized(att.best_image_url(), 640.0, scale)
             {
                 let (w, h) = match (att.width, att.height) {
                     (Some(iw), Some(ih)) if iw > 0 && ih > 0 => {

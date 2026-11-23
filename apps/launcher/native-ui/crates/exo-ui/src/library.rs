@@ -37,10 +37,12 @@ fn cover_surface(
     game: &Game,
     s: &AppState,
     scale: f32,
-    w: f32,
-    h: f32,
+    size: [f32; 2],
     dim_uninstalled: bool,
+    load_cover: bool,
+    inactive_scrim: bool,
 ) -> El {
+    let [w, h] = size;
     let hue = title_hue(&game.title);
     let dim = dim_uninstalled && !game.installed;
     let mut art = el()
@@ -50,7 +52,13 @@ fn cover_surface(
         .clip_rounded(RADIUS_CARD)
         .fill(if dim { BG } else { surface_card() });
 
-    if let Some(img) = s.cover_image(game, scale) {
+    let cover = if load_cover {
+        s.cover_image(game, scale)
+    } else {
+        None
+    };
+
+    if let Some(img) = cover {
         if dim {
             art = art.child(
                 el().pin(Some(0.0), Some(0.0), Some(0.0), Some(0.0))
@@ -92,6 +100,13 @@ fn cover_surface(
         art = art.child(fallback);
     }
 
+    if inactive_scrim {
+        art = art.child(
+            el().pin(Some(0.0), Some(0.0), Some(0.0), Some(0.0))
+                .fill(BG.alpha(0.12)),
+        );
+    }
+
     if dim {
         art = art.child(
             el().pin(None, Some(8.0), Some(8.0), None)
@@ -122,13 +137,21 @@ fn cover_surface(
     art
 }
 
-fn deck_poster_card(game: &Game, active: bool, s: &AppState, scale: f32) -> El {
+fn deck_poster_card(game: &Game, active: bool, load_cover: bool, s: &AppState, scale: f32) -> El {
     let id_click = game.id.clone();
     let id_hover = game.id.clone();
     let flight_id = format!("deck:{}", game.id);
-    let art = cover_surface(game, s, scale, DECK_CARD_W, DECK_CARD_H, false)
-        .matched(flight_id.clone())
-        .motion(SPRING_FLIGHT);
+    let art = cover_surface(
+        game,
+        s,
+        scale,
+        [DECK_CARD_W, DECK_CARD_H],
+        false,
+        load_cover,
+        !active,
+    )
+    .matched(flight_id.clone())
+    .motion(SPRING_FLIGHT);
 
     let mut card = el()
         .key(format!("tile-{}", game.id))
@@ -141,7 +164,6 @@ fn deck_poster_card(game: &Game, active: bool, s: &AppState, scale: f32) -> El {
         .size(DECK_CARD_W, DECK_CARD_H)
         .radius(RADIUS_CARD)
         .continuous_corners()
-        .opacity(if active { 1.0 } else { 0.88 })
         .offset(0.0, if active { -6.0 } else { 0.0 })
         .offset_motion(SPRING_MOVE)
         .motion(SPRING_MOVE)
@@ -178,7 +200,7 @@ fn all_games_poster_tile(game: &Game, s: &AppState, scale: f32) -> El {
     let hover_key = format!("tile-{}", game.id);
     let hovered = s.hovered_cover_key.as_deref() == Some(hover_key.as_str());
     let hover_key_cb = hover_key.clone();
-    let art = cover_surface(game, s, scale, ALL_CARD_W, ALL_CARD_H, true)
+    let art = cover_surface(game, s, scale, [ALL_CARD_W, ALL_CARD_H], true, true, false)
         .matched(flight_id.clone())
         .motion(SPRING_FLIGHT);
     let mut tile = el()
@@ -563,9 +585,19 @@ fn view_home_deck(s: &AppState, scale: f32) -> El {
 
     let deck_games: Vec<&Game> = filtered.iter().copied().take(s.visible_limit).collect();
     let deck_total = deck_games.len();
+    let scroll_x = s.deck_scroll.get().offset[0].max(0.0);
+    let stride = DECK_CARD_W + 14.0;
+    let first_visible = (scroll_x / stride).floor() as usize;
+    let load_start = first_visible.saturating_sub(4);
+    let load_end = (first_visible + 14).min(deck_total);
     let deck_cards: Vec<El> = deck_games
         .iter()
-        .map(|g| deck_poster_card(g, active_id.as_deref() == Some(g.id.as_str()), s, scale))
+        .enumerate()
+        .map(|(idx, g)| {
+            let active = active_id.as_deref() == Some(g.id.as_str());
+            let load_cover = active || (idx >= load_start && idx < load_end);
+            deck_poster_card(g, active, load_cover, s, scale)
+        })
         .collect();
 
     let (can_prev, can_next) = s.deck_can_page(deck_total);

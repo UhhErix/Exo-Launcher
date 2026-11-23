@@ -1,5 +1,6 @@
 use crate::discord_state::DiscordState;
 use crate::gamepad::GamepadAction;
+use crate::image_cache::{CacheRoom, ImageLruCache, bucket_dim, scale_bucket};
 use crate::media_state::MediaState;
 use crate::pc_state::SettingsAndPcState;
 use crate::tour;
@@ -10,16 +11,16 @@ use exo_rpc::{
     ActionResult, AppUpdateStateEvent, ArtBase, AutopilotLive, AutopilotReportEvent,
     CaptureLiveState, CaptureReelEvent, CaptureSavedEvent, CaptureStatusReply, ExoAccountState,
     Game, GameExtras, GameGetReply, GameProperties, GamePropertySetReply, GameRunStateEvent,
-    InstallProgress, InstallQueueEvent, KeyPreview, LaunchStatusEvent, LauncherSettings,
+    HostEvent, InstallProgress, InstallQueueEvent, KeyPreview, LaunchStatusEvent, LauncherSettings,
     LibraryPayload, METHOD_EXO_ACCOUNT_STATE, METHOD_GAME_CANCEL_INSTALL, METHOD_GAME_EXTRAS,
     METHOD_GAME_GET, METHOD_GAME_INSTALL, METHOD_GAME_LAUNCH, METHOD_GAME_OPEN_FOLDER,
     METHOD_GAME_PAUSE_INSTALL, METHOD_GAME_PROPERTIES, METHOD_GAME_PROPERTIES_SET,
     METHOD_GAME_REPAIR, METHOD_GAME_STOP, METHOD_GAME_UNINSTALL, METHOD_GAME_UPDATE,
     METHOD_KEYS_ACTIVATE, METHOD_KEYS_PREVIEW, METHOD_LIBRARY_REFRESH, METHOD_SETTINGS_SET,
     METHOD_SHELL_BOOTSTRAP, METHOD_STORE_GAME, METHOD_STORE_GAME_OFFERS, METHOD_STORE_HOME,
-    METHOD_STORE_OPEN, METHOD_STORE_SEARCH, MusicVolumeEvent, ShellBootstrap, StoreArt,
-    StoreChangedEvent, StoreGame, StoreHome, StoreOffer, StoreOtherOffers, StoreSearchReply,
-    StoreShelf, StoreTile, remote_art,
+    METHOD_STORE_OPEN, METHOD_STORE_SEARCH, MusicPlayback, MusicVolumeEvent, ShellBootstrap,
+    StoreArt, StoreChangedEvent, StoreGame, StoreHome, StoreOffer, StoreOtherOffers,
+    StoreSearchReply, StoreShelf, StoreTile, remote_art,
 };
 use rune::{Image, ImageCache, ScrollPos, TextEdit, Tx, Waker};
 use serde_json::json;
@@ -281,8 +282,10 @@ pub struct AppState {
     pub visible_limit: usize,
     pub image_cache: Option<ImageCache>,
     pub remote_cache_dir: Option<PathBuf>,
-    covers: RefCell<HashMap<String, Option<Image>>>,
-    remote_covers: RefCell<HashMap<String, Option<Image>>>,
+    pub images: RefCell<ImageLruCache>,
+    last_scale_bucket: Cell<u8>,
+    pub room_left_at: HashMap<CacheRoom, f64>,
+    pub discord_dirty_while_closed: bool,
     remote_inflight: RefCell<HashSet<String>>,
     pub video_router: VideoFrameRouter,
     #[cfg(windows)]
@@ -398,8 +401,10 @@ impl AppState {
             visible_limit: 96,
             image_cache: None,
             remote_cache_dir: remote_art::default_cache_dir(),
-            covers: RefCell::new(HashMap::new()),
-            remote_covers: RefCell::new(HashMap::new()),
+            images: RefCell::new(ImageLruCache::default()),
+            last_scale_bucket: Cell::new(0),
+            room_left_at: HashMap::new(),
+            discord_dirty_while_closed: false,
             remote_inflight: RefCell::new(HashSet::new()),
             video_router: VideoFrameRouter::new(),
             #[cfg(windows)]
@@ -480,8 +485,10 @@ impl AppState {
             visible_limit: 96,
             image_cache: None,
             remote_cache_dir: remote_art::default_cache_dir(),
-            covers: RefCell::new(HashMap::new()),
-            remote_covers: RefCell::new(HashMap::new()),
+            images: RefCell::new(ImageLruCache::default()),
+            last_scale_bucket: Cell::new(0),
+            room_left_at: HashMap::new(),
+            discord_dirty_while_closed: false,
             remote_inflight: RefCell::new(HashSet::new()),
             video_router: VideoFrameRouter::new(),
             #[cfg(windows)]
@@ -496,12 +503,59 @@ impl AppState {
     }
 
     pub fn install_waker(&mut self, waker: Waker) {
-        self.image_cache = Some(ImageCache::new(waker));
+        let budget = self.images.borrow().max_bytes();
+        self.image_cache = Some(ImageCache::with_budget(waker, budget));
+    }
+
+    pub fn sync_budget_for_scale(&self, scale: f32) {
+        let bucket = scale_bucket(scale);
+        if self.last_scale_bucket.get() != bucket {
+            self.last_scale_bucket.set(bucket);
+            let max_bytes = self.images.borrow_mut().set_budget_for_scale(scale);
+            if let Some(ref ic) = self.image_cache {
+                ic.set_budget(max_bytes);
+            }
+        }
+    }
+
+    pub fn cache_room_for(room: Room) -> CacheRoom {
+        match room {
+            Room::Library => CacheRoom::Library,
+            Room::Store => CacheRoom::Store,
+            Room::Discord => CacheRoom::Discord,
+            Room::Music => CacheRoom::Music,
+            Room::Devices | Room::ExoAi | Room::Apps => CacheRoom::Pc,
+            Room::Settings => CacheRoom::Global,
+        }
+    }
+
+    pub fn current_cache_room(&self) -> CacheRoom {
+        Self::cache_room_for(self.room)
+    }
+
+    #[cfg(test)]
+    pub fn cache_stats(&self) -> (usize, usize, usize, usize) {
+        let mut images = self.images.borrow_mut();
+        images.refresh_sizes_and_evict();
+        let (retained_count, retained_bytes) = self
+            .image_cache
+            .as_ref()
+            .map(|ic| (ic.retained_count(), ic.retained_bytes()))
+            .unwrap_or((0, 0));
+        (
+            images.len(),
+            images.total_bytes(),
+            retained_count,
+            retained_bytes,
+        )
     }
 
     pub fn preload_visible_covers_sync(&self, scale: f32) {
         let mut images: Vec<Image> = Vec::new();
-        if self.art_base.covers_dir.is_some() && !self.games.is_empty() {
+        if self.room == Room::Library
+            && self.art_base.covers_dir.is_some()
+            && !self.games.is_empty()
+        {
             if let Some(sel) = self.open_game().or_else(|| self.selected_game()) {
                 if let Some(img) = self.hero_image(sel, scale) {
                     images.push(img);
@@ -513,26 +567,19 @@ impl AppState {
             images.extend(
                 self.filtered_games()
                     .into_iter()
-                    .take(48)
+                    .take(16)
                     .filter_map(|g| self.cover_image(g, scale)),
             );
-            for sg in &self.pc.shader_snap_games {
-                if let Some(g) = self
-                    .games
-                    .iter()
-                    .find(|g| g.id == sg.id || g.title.eq_ignore_ascii_case(&sg.name))
-                    && let Some(img) = self.cover_image(g, scale)
-                {
-                    images.push(img);
-                }
-            }
         }
-        if let Some(ref home) = self.store_home {
+        if self.room == Room::Store
+            && let Some(ref home) = self.store_home
+        {
             for (i, h) in home.hero.iter().take(6).enumerate() {
                 if let Some(a) = h.art.as_ref() {
                     if i == 0
                         && let Some(u) = a.best_hero()
-                        && let Some(img) = self.remote_image_sized(u, 1600.0, scale)
+                        && let Some(img) =
+                            self.remote_image_in_room(u, 1440.0, scale, CacheRoom::Store)
                     {
                         images.push(img);
                     }
@@ -541,7 +588,8 @@ impl AppState {
                         .as_deref()
                         .or(a.header.as_deref())
                         .or_else(|| a.best_hero())
-                        && let Some(img) = self.remote_image_sized(u, 220.0, scale)
+                        && let Some(img) =
+                            self.remote_image_in_room(u, 360.0, scale, CacheRoom::Store)
                     {
                         images.push(img);
                     }
@@ -550,21 +598,26 @@ impl AppState {
             for shelf in home.shelves.iter().take(2) {
                 for tile in shelf.items.iter().take(12) {
                     if let Some(u) = tile.art.as_ref().and_then(|a| a.best_poster())
-                        && let Some(img) = self.remote_image_sized(u, 320.0, scale)
+                        && let Some(img) =
+                            self.remote_image_in_room(u, 360.0, scale, CacheRoom::Store)
                     {
                         images.push(img);
                     }
                 }
             }
         }
-        for url in self.pc.device_images.values() {
-            if let Some(img) = self.device_image(url, scale) {
-                images.push(img);
+        if self.room == Room::Devices {
+            for url in self.pc.device_images.values() {
+                if let Some(img) = self.device_image(url, scale) {
+                    images.push(img);
+                }
             }
         }
-        for app_id in self.pc.app_icons.keys().take(100) {
-            if let Some(img) = self.app_icon_image(app_id) {
-                images.push(img);
+        if self.room == Room::Apps {
+            for app_id in self.pc.app_icons.keys().take(48) {
+                if let Some(img) = self.app_icon_image(app_id) {
+                    images.push(img);
+                }
             }
         }
         for img in images {
@@ -632,6 +685,14 @@ impl AppState {
     }
 
     pub fn switch_room(&mut self, room: Room) {
+        let prev_cache_room = Self::cache_room_for(self.room);
+        let next_cache_room = Self::cache_room_for(room);
+        if prev_cache_room != next_cache_room {
+            if prev_cache_room != CacheRoom::Global {
+                self.room_left_at.insert(prev_cache_room, self.clock_secs);
+            }
+            self.room_left_at.remove(&next_cache_room);
+        }
         if room != self.room {
             self.room_dir = if room.tab_index() >= self.room.tab_index() {
                 1.0
@@ -655,7 +716,13 @@ impl AppState {
             Room::Store if self.store_home.is_none() && !self.store_loading => {
                 self.load_store_home(false);
             }
-            Room::Discord => self.load_discord_room(),
+            Room::Discord => {
+                if self.discord_dirty_while_closed {
+                    self.discord_dirty_while_closed = false;
+                    self.discord.loaded = false;
+                }
+                self.load_discord_room();
+            }
             Room::Music => self.load_music_room(),
             Room::Settings => self.load_settings_room(),
             Room::Devices => self.load_pc_tab(crate::pc_state::PcTab::Devices),
@@ -712,7 +779,7 @@ impl AppState {
 
     pub fn apply_art_base(&mut self, base: ArtBase) {
         self.art_base = base;
-        self.covers.borrow_mut().clear();
+        self.images.borrow_mut().clear();
     }
 
     pub fn apply_settings(&mut self, settings: LauncherSettings) {
@@ -826,19 +893,27 @@ impl AppState {
 
     pub fn cover_image(&self, game: &Game, scale: f32) -> Option<Image> {
         let cache = self.image_cache.as_ref()?;
+        self.sync_budget_for_scale(scale);
+        let dim = bucket_dim(320.0);
         let mut waiting_remote = false;
         for cand in game.portrait_art_candidates() {
             if cand.url.starts_with(COVER_CACHE_ORIGIN) {
                 let key = format!("cov-url:{}", cand.url);
-                let cached = self.covers.borrow().get(&key).cloned();
+                let cached = self.images.borrow_mut().get(&key, Some(cache));
                 let img = match cached {
                     Some(existing) => existing,
                     None => {
                         let loaded = self
                             .art_base
                             .resolve_local_cover(&cand.url)
-                            .map(|path| cache.file(path, 320.0, scale));
-                        self.covers.borrow_mut().insert(key, loaded.clone());
+                            .map(|path| cache.file_capped(path, dim, scale));
+                        self.images.borrow_mut().insert(
+                            key,
+                            loaded.clone(),
+                            CacheRoom::Library,
+                            dim,
+                            scale,
+                        );
                         loaded
                     }
                 };
@@ -846,42 +921,50 @@ impl AppState {
                     return img;
                 }
             } else if cand.url.starts_with("https://") && !waiting_remote {
-                let remote_key = format!("{}@320", cand.url);
-                let failed = matches!(self.remote_covers.borrow().get(&remote_key), Some(None));
-                if failed {
+                let canonical = remote_art::canonical_cache_key(&cand.url);
+                let remote_key = format!("rem:{canonical}@{dim:.0}");
+                if self.images.borrow().is_failed(&remote_key) {
                     continue;
                 }
-                if let Some(img) = self.remote_image_sized(&cand.url, 320.0, scale) {
+                if let Some(img) =
+                    self.remote_image_in_room(&cand.url, dim, scale, CacheRoom::Library)
+                {
                     return Some(img);
                 }
                 waiting_remote = true;
             }
         }
         let san_key = format!("cov-san:{}#{}", game.id, game.art_revision.unwrap_or(0));
-        if let Some(existing) = self.covers.borrow().get(&san_key) {
-            return existing.clone();
+        if let Some(existing) = self.images.borrow_mut().get(&san_key, Some(cache)) {
+            return existing;
         }
         let loaded = self
             .art_base
             .resolve_local_sanitized_portrait(game)
-            .map(|path| cache.file(path, 320.0, scale));
-        self.covers.borrow_mut().insert(san_key, loaded.clone());
+            .map(|path| cache.file_capped(path, dim, scale));
+        self.images
+            .borrow_mut()
+            .insert(san_key, loaded.clone(), CacheRoom::Library, dim, scale);
         loaded
     }
 
     pub fn hero_image(&self, game: &Game, scale: f32) -> Option<Image> {
         let cache = self.image_cache.as_ref()?;
+        self.sync_budget_for_scale(scale);
+        let dim = bucket_dim(1440.0);
         let key = format!("hero:{}#{}", game.id, game.art_revision.unwrap_or(0));
-        if let Some(existing) = self.covers.borrow().get(&key) {
+        if let Some(existing) = self.images.borrow_mut().get(&key, Some(cache)) {
             if existing.is_some() {
-                return existing.clone();
+                return existing;
             }
         } else {
             let loaded = self
                 .art_base
                 .resolve_local_hero(game)
-                .map(|path| cache.file(path, 1440.0, scale));
-            self.covers.borrow_mut().insert(key, loaded.clone());
+                .map(|path| cache.file_capped(path, dim, scale));
+            self.images
+                .borrow_mut()
+                .insert(key, loaded.clone(), CacheRoom::Library, dim, scale);
             if loaded.is_some() {
                 return loaded;
             }
@@ -889,12 +972,12 @@ impl AppState {
         if let Some(url) = game.hero_url.as_deref()
             && url.starts_with("https://")
             && !url.contains(".exo-launcher.local")
-            && let Some(img) = self.remote_image_sized(url, 1440.0, scale)
+            && let Some(img) = self.remote_image_in_room(url, dim, scale, CacheRoom::Library)
         {
             return Some(img);
         }
         if let Some(url) = game.steam_hero_url()
-            && let Some(img) = self.remote_image_sized(&url, 1440.0, scale)
+            && let Some(img) = self.remote_image_in_room(&url, dim, scale, CacheRoom::Library)
         {
             return Some(img);
         }
@@ -903,48 +986,59 @@ impl AppState {
 
     pub fn logo_image(&self, game: &Game, scale: f32) -> Option<Image> {
         let url = game.steam_logo_url()?;
-        self.remote_image_sized(&url, 460.0, scale)
+        self.remote_image_in_room(&url, 640.0, scale, CacheRoom::Library)
     }
 
     pub fn device_image(&self, url: &str, scale: f32) -> Option<Image> {
         let cache = self.image_cache.as_ref()?;
+        self.sync_budget_for_scale(scale);
+        let dim = bucket_dim(640.0);
         let key = format!("dev:{url}");
-        if let Some(existing) = self.covers.borrow().get(&key) {
-            return existing.clone();
+        if let Some(existing) = self.images.borrow_mut().get(&key, Some(cache)) {
+            return existing;
         }
         let loaded = self
             .art_base
             .resolve_device_image(url)
-            .map(|path| cache.file(path, 640.0, scale));
-        self.covers.borrow_mut().insert(key, loaded.clone());
+            .map(|path| cache.file_capped(path, dim, scale));
+        self.images
+            .borrow_mut()
+            .insert(key, loaded.clone(), CacheRoom::Pc, dim, scale);
         loaded
     }
 
     pub fn app_icon_image(&self, app_id: &str) -> Option<Image> {
         let cache = self.image_cache.as_ref()?;
+        let dim = bucket_dim(128.0);
         let key = format!("appicon:{app_id}");
-        if let Some(existing) = self.covers.borrow().get(&key) {
-            return existing.clone();
+        if let Some(existing) = self.images.borrow_mut().get(&key, Some(cache)) {
+            return existing;
         }
         let data_url = self.pc.app_icons.get(app_id)?;
         let b64 = data_url.split_once("base64,").map(|(_, b)| b)?;
         let bytes = exo_rpc::base64::decode(b64)?;
-        let loaded = Some(cache.load(bytes));
-        self.covers.borrow_mut().insert(key, loaded.clone());
+        let loaded = Some(cache.load_capped(bytes, dim, 1.0));
+        self.images
+            .borrow_mut()
+            .insert(key, loaded.clone(), CacheRoom::Pc, dim, 1.0);
         loaded
     }
 
     pub fn capture_thumb_image(&self, url: &str, scale: f32) -> Option<Image> {
         let cache = self.image_cache.as_ref()?;
+        self.sync_budget_for_scale(scale);
+        let dim = bucket_dim(320.0);
         let key = format!("cap:{url}");
-        if let Some(existing) = self.covers.borrow().get(&key) {
-            return existing.clone();
+        if let Some(existing) = self.images.borrow_mut().get(&key, Some(cache)) {
+            return existing;
         }
         let loaded = self
             .art_base
             .resolve_capture_thumb(url)
-            .map(|path| cache.file(path, 320.0, scale));
-        self.covers.borrow_mut().insert(key, loaded.clone());
+            .map(|path| cache.file_capped(path, dim, scale));
+        self.images
+            .borrow_mut()
+            .insert(key, loaded.clone(), CacheRoom::Library, dim, scale);
         loaded
     }
 
@@ -953,46 +1047,369 @@ impl AppState {
     }
 
     pub fn remote_image_sized(&self, url: &str, max_dim: f32, scale: f32) -> Option<Image> {
+        self.remote_image_in_room(url, max_dim, scale, self.current_cache_room())
+    }
+
+    pub fn remote_image_in_room(
+        &self,
+        url: &str,
+        max_dim: f32,
+        scale: f32,
+        room: CacheRoom,
+    ) -> Option<Image> {
         let cache = self.image_cache.as_ref()?;
-        let cache_key = format!("{url}@{max_dim:.0}");
-        if let Some(existing) = self.remote_covers.borrow().get(&cache_key) {
-            return existing.clone();
+        self.sync_budget_for_scale(scale);
+        let dim = bucket_dim(max_dim);
+        let canonical = remote_art::canonical_cache_key(url);
+        let cache_key = format!("rem:{canonical}@{dim:.0}");
+        if let Some(existing) = self.images.borrow_mut().get(&cache_key, Some(cache)) {
+            return existing;
         }
         let dir = self.remote_cache_dir.as_ref()?;
         remote_art::parse_allowed_https(url)?;
         let path = remote_art::cache_path_for(dir, url);
         if path.is_file() {
-            let img = cache.file(path, max_dim, scale);
-            self.remote_covers
+            let img = cache.file_capped(path, dim, scale);
+            self.images
                 .borrow_mut()
-                .insert(cache_key, Some(img.clone()));
+                .insert(cache_key, Some(img.clone()), room, dim, scale);
             return Some(img);
         }
         #[cfg(windows)]
         if let Some(handle) = self.handle.clone() {
             let mut inflight = self.remote_inflight.borrow_mut();
-            if inflight.len() < 16 && inflight.insert(url.to_string()) {
+            if inflight.len() < 16 && inflight.insert(canonical.clone()) {
                 let url_owned = url.to_string();
+                let inflight_key = canonical;
                 let key_owned = cache_key;
                 let dir_owned = dir.clone();
                 std::thread::Builder::new()
                     .name("exo-art-fetch".into())
                     .spawn(move || {
                         let fetched = remote_art::fetch_cached_image(&url_owned, &dir_owned);
-                        handle.update(move |s, _| {
-                            s.remote_inflight.borrow_mut().remove(&url_owned);
+                        handle.update_if(move |s, _| {
+                            s.remote_inflight.borrow_mut().remove(&inflight_key);
+                            let room_active =
+                                room == CacheRoom::Global || s.current_cache_room() == room;
                             if let (Some(p), Some(ic)) = (fetched, s.image_cache.as_ref()) {
-                                let img = ic.file(p, max_dim, scale);
-                                s.remote_covers.borrow_mut().insert(key_owned, Some(img));
-                            } else {
-                                s.remote_covers.borrow_mut().insert(key_owned, None);
+                                if room_active {
+                                    let img = ic.file_capped(p, dim, scale);
+                                    s.images.borrow_mut().insert(
+                                        key_owned,
+                                        Some(img),
+                                        room,
+                                        dim,
+                                        scale,
+                                    );
+                                    return true;
+                                }
+                                return false;
                             }
+                            s.images
+                                .borrow_mut()
+                                .insert(key_owned, None, room, dim, scale);
+                            false
                         });
                     })
                     .ok();
             }
         }
         None
+    }
+
+    pub fn current_playback_art(&self, scale: f32) -> Option<Image> {
+        if let Some(ref img) = self.media.current_art {
+            return Some(img.clone());
+        }
+        let url = self
+            .media
+            .playback
+            .as_ref()
+            .and_then(|p| p.artwork_url.as_deref())
+            .filter(|u| !u.is_empty())?;
+        self.remote_image_in_room(url, 360.0, scale, CacheRoom::Global)
+    }
+
+    pub fn apply_music_playback(&mut self, pb: Option<MusicPlayback>) -> bool {
+        let Some(mut next) = pb else {
+            let had = self.media.playback.take().is_some();
+            self.media.current_art_key = None;
+            self.media.current_art = None;
+            return had;
+        };
+        let inline_data = next.artwork_data_url.take();
+        let allowed_url = next
+            .artwork_url
+            .as_deref()
+            .filter(|u| !u.is_empty() && remote_art::parse_allowed_https(u).is_some())
+            .map(remote_art::canonical_cache_key);
+        let art_key = if let Some(ref u) = allowed_url {
+            format!("url:{u}")
+        } else if inline_data.as_deref().is_some_and(|d| !d.is_empty()) {
+            format!("inline:{}|{}|{}", next.title, next.artist, next.album)
+        } else {
+            String::new()
+        };
+        let track_art_changed = self.media.current_art_key.as_deref() != Some(art_key.as_str());
+        if track_art_changed {
+            self.media.current_art_key = (!art_key.is_empty()).then_some(art_key);
+            self.media.current_art = None;
+            if allowed_url.is_none()
+                && let Some(ref data_url) = inline_data
+                && let Some(cache) = self.image_cache.as_ref()
+                && let Some(b64) = data_url.split_once("base64,").map(|(_, b)| b)
+                && let Some(bytes) = exo_rpc::base64::decode(b64)
+            {
+                self.media.current_art = Some(cache.load_capped(bytes, 360.0, 1.5));
+            }
+        }
+        let redraw = match self.media.playback.as_ref() {
+            None => true,
+            Some(prev) => {
+                let meta_changed = prev.provider != next.provider
+                    || prev.source != next.source
+                    || prev.status != next.status
+                    || prev.title != next.title
+                    || prev.artist != next.artist
+                    || prev.album != next.album
+                    || prev.duration_ms != next.duration_ms
+                    || prev.can_play != next.can_play
+                    || prev.can_pause != next.can_pause
+                    || prev.can_next != next.can_next
+                    || prev.can_prev != next.can_prev;
+                let progress = |p: &MusicPlayback| match (p.position_ms, p.duration_ms) {
+                    (Some(pos), Some(dur)) if dur > 0 => (pos as f32 / dur as f32).clamp(0.0, 1.0),
+                    _ => 0.0,
+                };
+                if meta_changed || track_art_changed {
+                    true
+                } else if !next.is_playing() {
+                    false
+                } else if self.room == Room::Music {
+                    let prev_sec = prev.position_ms.unwrap_or(0) / 1000;
+                    let next_sec = next.position_ms.unwrap_or(0) / 1000;
+                    let prev_bar = (progress(prev) * 300.0).round() as i32;
+                    let next_bar = (progress(&next) * 300.0).round() as i32;
+                    prev_sec != next_sec || prev_bar != next_bar
+                } else {
+                    let prev_bar = (progress(prev) * 164.0).round() as i32;
+                    let next_bar = (progress(&next) * 164.0).round() as i32;
+                    prev_bar != next_bar
+                }
+            }
+        };
+        self.media.playback = Some(next);
+        redraw
+    }
+
+    pub fn apply_host_event(&mut self, ev: HostEvent) -> bool {
+        match ev {
+            HostEvent::LibraryUpdated(lib) => {
+                self.apply_library(lib);
+                true
+            }
+            HostEvent::InstallProgress(p) => {
+                let next = p.is_active.then_some(p);
+                let changed = self.install_progress.is_some() || next.is_some();
+                self.install_progress = next;
+                changed
+            }
+            HostEvent::UpdateProgress(p) => {
+                self.pc.update_progress = Some(p);
+                true
+            }
+            HostEvent::MusicPlayback(pb) => self.apply_music_playback(pb),
+            HostEvent::DiscordState(ev) => {
+                self.handle_discord_state(ev);
+                self.room == Room::Discord
+            }
+            HostEvent::DiscordSignIn(step) => {
+                self.handle_discord_signin(step);
+                self.room == Room::Discord
+            }
+            HostEvent::DiscordChanged(ev) => self.handle_discord_changed(ev),
+            HostEvent::DiscordMembers { guild_id } => self.handle_discord_members(&guild_id),
+            HostEvent::DiscordPresence(ev) => self.handle_discord_presence(ev),
+            HostEvent::DiscordUnread(ev) => self.handle_discord_unread(ev),
+            HostEvent::DiscordVoice(v) => {
+                self.handle_discord_voice(v);
+                self.room == Room::Discord
+            }
+            HostEvent::DiscordSpeaking { user_id, speaking } => {
+                self.handle_discord_speaking(&user_id, speaking);
+                self.room == Room::Discord
+            }
+            HostEvent::DiscordMessage(ev) => self.handle_discord_message(*ev),
+            HostEvent::DiscordReaction(ev) => self.handle_discord_reaction(ev),
+            HostEvent::DiscordTyping(ev) => self.handle_discord_typing(ev),
+            HostEvent::DiscordVideo(ev) => {
+                self.handle_discord_video_event(ev);
+                self.room == Room::Discord
+            }
+            HostEvent::DiscordVideoFrame(f) => {
+                if self.room != Room::Discord {
+                    return false;
+                }
+                self.handle_discord_video_frame(f);
+                true
+            }
+            HostEvent::DiscordGoLive(ev) => {
+                self.handle_discord_golive_state(ev);
+                self.room == Room::Discord
+            }
+            HostEvent::DiscordGoLiveStats(ev) => {
+                self.handle_discord_golive_stats(ev);
+                self.room == Room::Discord
+            }
+            HostEvent::DiscordGoLiveViewers(ids) => {
+                self.handle_discord_golive_viewers(ids);
+                self.room == Room::Discord
+            }
+            HostEvent::DevicesChanged => {
+                if self.room == Room::Devices {
+                    self.load_pc_devices();
+                    true
+                } else {
+                    false
+                }
+            }
+            HostEvent::AppsChanged => {
+                if self.room == Room::Apps {
+                    self.load_pc_apps();
+                    true
+                } else {
+                    false
+                }
+            }
+            HostEvent::MusicVolume(ev) => {
+                let prev_vol = self.media.music_volume;
+                let prev_muted = self.media.music_muted;
+                self.apply_music_volume(ev);
+                (prev_vol - self.media.music_volume).abs() > 0.001
+                    || prev_muted != self.media.music_muted
+            }
+            HostEvent::CaptureState(live) => {
+                self.apply_capture_state(live);
+                true
+            }
+            HostEvent::CaptureSaved(ev) => {
+                self.apply_capture_saved(*ev);
+                true
+            }
+            HostEvent::CaptureReel(ev) => {
+                self.apply_capture_reel(*ev);
+                true
+            }
+            HostEvent::InstallQueue(ev) => {
+                self.apply_install_queue(ev);
+                true
+            }
+            HostEvent::GameRunState(ev) => {
+                self.apply_game_run_state(ev);
+                true
+            }
+            HostEvent::LaunchStatus(ev) => {
+                self.apply_launch_status(ev);
+                true
+            }
+            HostEvent::AppUpdateState(ev) => {
+                self.apply_app_update_state(ev);
+                true
+            }
+            HostEvent::ExoAccountChanged => {
+                self.apply_exo_account_changed();
+                true
+            }
+            HostEvent::AutopilotReport(ev) => {
+                self.apply_autopilot_report(ev);
+                true
+            }
+            HostEvent::AutopilotLive(live) => {
+                self.apply_autopilot_live(live);
+                self.room == Room::ExoAi || self.room == Room::Devices
+            }
+            HostEvent::ShadersChanged => {
+                self.apply_shaders_changed();
+                self.room == Room::Library || self.room == Room::ExoAi
+            }
+            HostEvent::StoreChanged(ev) => {
+                self.apply_store_changed(ev);
+                self.room == Room::Store
+            }
+            HostEvent::Disconnected(why) => {
+                self.discord.voice_ui.decoders.clear();
+                self.video_router.clear();
+                self.status = HostStatus::Error(why);
+                self.notice = Some("Disconnected from Exo host".into());
+                true
+            }
+            HostEvent::Raw { .. } => false,
+        }
+    }
+
+    pub fn prune_inactive_rooms(&mut self, now: f64, rest: bool) -> bool {
+        let ttl = if rest { 10.0 } else { 30.0 };
+        let active = self.current_cache_room();
+        let due: Vec<CacheRoom> = self
+            .room_left_at
+            .iter()
+            .filter(|&(&room, &left_at)| room != active && now - left_at >= ttl)
+            .map(|(&room, _)| room)
+            .collect();
+        if due.is_empty() {
+            return false;
+        }
+        let mut images = self.images.borrow_mut();
+        for room in due {
+            self.room_left_at.remove(&room);
+            images.evict_room(room);
+            match room {
+                CacheRoom::Discord => {
+                    self.discord.chat.messages_by_channel.clear();
+                    self.discord.chat.pins.clear();
+                    self.discord.chat.typing_by_channel.clear();
+                    self.discord.chat.search_results.clear();
+                    self.discord.members_by_guild.clear();
+                    self.discord.channels_by_guild.clear();
+                    self.discord.loaded = false;
+                    self.discord_dirty_while_closed = false;
+                }
+                CacheRoom::Music => {
+                    self.media.music_page_data = None;
+                    self.media.music_queue_data = None;
+                    self.media.music_home_sections.clear();
+                    self.media.music_recent.clear();
+                    self.media.music_library.clear();
+                }
+                CacheRoom::Store => {
+                    self.store_game = None;
+                    self.store_offers = None;
+                    self.store_search_results = None;
+                }
+                CacheRoom::Pc => {
+                    self.pc.app_icons.clear();
+                }
+                CacheRoom::Library | CacheRoom::Global => {}
+            }
+        }
+        drop(images);
+        if let Some(ref ic) = self.image_cache {
+            ic.evict_all();
+        }
+        true
+    }
+
+    pub fn on_rest(&mut self, _tx: &mut Tx) -> bool {
+        self.prune_inactive_rooms(self.clock_secs, true);
+        self.discord
+            .chat
+            .typing_by_channel
+            .retain(|_, (_, at)| at.elapsed() < Duration::from_secs(10));
+        self.images.borrow_mut().refresh_sizes_and_evict();
+        if let Some(ref ic) = self.image_cache {
+            ic.evict_all();
+        }
+        false
     }
 
     pub fn open_game_page_from(&mut self, id: &str, flight_id: Option<String>, tx: &mut Tx) {
@@ -1910,6 +2327,13 @@ impl AppState {
         self.clock_secs = now;
         let mut changed = false;
 
+        if !self.room_left_at.is_empty() {
+            self.prune_inactive_rooms(now, false);
+            if let Some(&earliest) = self.room_left_at.values().min_by(|a, b| a.total_cmp(b)) {
+                tx.wake_at(earliest + 30.0);
+            }
+        }
+
         if let Some((_, deadline)) = self.armed_confirm {
             if now >= deadline {
                 self.disarm_confirm();
@@ -2198,8 +2622,13 @@ impl AppState {
         self.apply_art_base(boot.art_base);
         self.apply_settings(boot.settings);
         self.apply_library(boot.library);
-        self.media.playback = boot.music_playback.playback;
+        self.apply_music_playback(boot.music_playback.playback);
         self.discord.status = boot.discord_status;
+        match self.room {
+            Room::Discord if !self.discord.loaded => self.load_discord_room(),
+            Room::Music => self.load_music_room(),
+            _ => {}
+        }
     }
 
     pub fn apply_music_volume(&mut self, ev: MusicVolumeEvent) {
@@ -2994,5 +3423,185 @@ mod library_sort_and_confirm_tests {
         assert_eq!(s.store_shelf_can_page(0, 12), (true, false));
         s.page_store_shelf(0, -1.0, 12, &mut tx);
         assert_eq!(s.store_shelf_x[0], 600.0);
+    }
+
+    #[test]
+    fn memory_leak_regression_10k_music_and_discord_pushes_stay_bounded() {
+        use exo_rpc::{
+            DiscordMessage, DiscordMessageEvent, DiscordPresenceEvent, DiscordTypingEvent,
+            DiscordUser,
+        };
+
+        const TINY_PNG_B64: &str = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+X2dIAAAAASUVORK5CYII=";
+        let tiny_png = exo_rpc::base64::decode(TINY_PNG_B64).expect("valid png");
+
+        let cache_dir =
+            std::env::temp_dir().join(format!("exo-ui-leak-test-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&cache_dir);
+        std::fs::create_dir_all(&cache_dir).expect("cache dir");
+
+        let mut s = AppState::with_demo_games();
+        s.remote_cache_dir = Some(cache_dir.clone());
+        s.images.borrow_mut().set_budget(2 << 20, 48);
+        s.install_waker(Arc::new(|| {}));
+        s.room = Room::Library;
+
+        let padded_data_url = format!("data:image/png;base64,{TINY_PNG_B64}");
+        let mut music_redraws = 0usize;
+        let mut paused_redraws = 0usize;
+
+        for i in 0..10_000usize {
+            let track_idx = i / 100;
+            let tick = (i % 100) as i64;
+            let playing = tick < 80;
+            let pos_ms = if playing { tick * 200 } else { 16_000 };
+            let url = format!(
+                "https://cdn.discordapp.com/avatars/100/track_{track_idx}.png?ex={i:x}&is=1&hm={:x}",
+                i.wrapping_mul(31)
+            );
+            let cached_path = remote_art::cache_path_for(&cache_dir, &url);
+            if !cached_path.is_file() {
+                std::fs::write(&cached_path, &tiny_png).expect("write cached art");
+            }
+            let pb = MusicPlayback {
+                provider: "apple".into(),
+                source: "apple".into(),
+                status: if playing { "playing" } else { "paused" }.into(),
+                title: format!("Track {track_idx}"),
+                artist: "Artist".into(),
+                album: "Album".into(),
+                artwork_url: Some(url),
+                artwork_data_url: Some(padded_data_url.clone()),
+                position_ms: Some(pos_ms),
+                duration_ms: Some(180_000),
+                can_play: true,
+                can_pause: true,
+                can_prev: true,
+                can_next: true,
+                can_seek: true,
+            };
+            let redrew = s.apply_host_event(HostEvent::MusicPlayback(Some(pb)));
+            if playing {
+                if redrew {
+                    music_redraws += 1;
+                }
+            } else if tick > 80 && redrew {
+                paused_redraws += 1;
+            }
+            assert!(
+                s.media
+                    .playback
+                    .as_ref()
+                    .and_then(|p| p.artwork_data_url.as_ref())
+                    .is_none()
+            );
+            if tick == 0 || tick == 10 {
+                let _ = s.current_playback_art(1.0);
+            }
+        }
+
+        assert_eq!(paused_redraws, 0);
+        assert!(music_redraws < 2500, "unexpected redraws: {music_redraws}");
+
+        let mut library_discord_redraws = 0usize;
+        for i in 0..10_000usize {
+            let ev = HostEvent::DiscordPresence(DiscordPresenceEvent {
+                user_id: format!("user-{}", i % 250),
+                status: if i % 2 == 0 { "online" } else { "idle" }.into(),
+                activity: Some(format!("Game {}", i % 10)),
+                activity_type: Some(0),
+                rich: None,
+                prep: None,
+            });
+            if s.apply_host_event(ev) {
+                library_discord_redraws += 1;
+            }
+        }
+        assert_eq!(library_discord_redraws, 0);
+
+        s.clock_secs = 10.0;
+        s.switch_room(Room::Discord);
+        for i in 0..120usize {
+            let base = format!("https://cdn.discordapp.com/avatars/{i}/hash.png");
+            let url_a = format!("{base}?ex=100&is=1&hm=aaa");
+            let url_b = format!("{base}?ex=999&is=2&hm=zzz");
+            let p = remote_art::cache_path_for(&cache_dir, &url_a);
+            if !p.is_file() {
+                std::fs::write(&p, &tiny_png).expect("write avatar");
+            }
+            let img_a = s.remote_image_sized(&url_a, 128.0, 1.0);
+            let img_b = s.remote_image_sized(&url_b, 128.0, 1.0);
+            assert!(img_a.is_some());
+            assert!(img_b.is_some());
+            if let Some(ref ic) = s.image_cache {
+                let raw = ic.rgba(64, 64, vec![42; 64 * 64 * 4]);
+                s.images.borrow_mut().insert(
+                    format!("synthetic-discord:{i}"),
+                    Some(raw),
+                    CacheRoom::Discord,
+                    128.0,
+                    1.0,
+                );
+            }
+        }
+
+        for i in 0..1_000usize {
+            let cid = format!("chan-{}", i % 40);
+            let msg = DiscordMessage {
+                id: format!("msg-{i}"),
+                channel_id: cid.clone(),
+                author: DiscordUser {
+                    id: "u1".into(),
+                    username: "Alice".into(),
+                    ..Default::default()
+                },
+                content: format!("hello {i}"),
+                ..Default::default()
+            };
+            s.apply_host_event(HostEvent::DiscordMessage(Box::new(DiscordMessageEvent {
+                kind: "create".into(),
+                channel_id: cid.clone(),
+                id: Some(format!("msg-{i}")),
+                message: Some(msg),
+            })));
+            if i < 200 {
+                s.apply_host_event(HostEvent::DiscordTyping(DiscordTypingEvent {
+                    channel_id: cid,
+                    user_id: format!("typer-{i}"),
+                    name: "Bob".into(),
+                }));
+            }
+        }
+
+        let (entries, bytes, retained_count, retained_bytes) = s.cache_stats();
+        let max_entries = s.images.borrow().max_entries();
+        let max_bytes = s.images.borrow().max_bytes();
+        assert!(entries <= max_entries, "{entries} > {max_entries}");
+        assert!(bytes <= max_bytes, "{bytes} > {max_bytes}");
+        assert!(
+            retained_bytes <= max_bytes,
+            "rune retained {retained_bytes} > {max_bytes} ({retained_count} entries)"
+        );
+        assert!(s.discord.chat.messages_by_channel.len() <= 12);
+        for msgs in s.discord.chat.messages_by_channel.values() {
+            assert!(msgs.len() <= 200);
+        }
+        assert!(s.discord.chat.typing_by_channel.len() <= 32);
+
+        s.clock_secs = 20.0;
+        s.switch_room(Room::Library);
+        assert!(s.images.borrow().room_count(CacheRoom::Discord) > 0);
+        let mut tx = Tx::default();
+        s.sync_and_tick_notices(51.0, &mut tx);
+        assert_eq!(s.images.borrow().room_count(CacheRoom::Discord), 0);
+        assert!(s.discord.chat.messages_by_channel.is_empty());
+        assert!(s.discord.members_by_guild.is_empty());
+        assert!(s.discord.channels_by_guild.is_empty());
+
+        s.on_rest(&mut tx);
+        let (_, _, after_rest_retained, _) = s.cache_stats();
+        assert_eq!(after_rest_retained, 0);
+
+        let _ = std::fs::remove_dir_all(&cache_dir);
     }
 }

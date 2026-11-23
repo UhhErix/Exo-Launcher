@@ -1,5 +1,5 @@
 use crate::discord_state::DiscordPlace;
-use crate::state::{AppState, HostStatus};
+use crate::state::{AppState, HostStatus, Room};
 use exo_rpc::{
     ActionResult, DiscordEmbed, DiscordEmbedAuthor, DiscordEmbedField, DiscordEmbedFooter,
     DiscordMessage, DiscordMessageEvent, DiscordMessagesReply, DiscordPinsReply, DiscordReaction,
@@ -873,11 +873,23 @@ impl AppState {
         }
     }
 
-    pub fn handle_discord_message(&mut self, ev: DiscordMessageEvent) {
+    pub fn handle_discord_message(&mut self, ev: DiscordMessageEvent) -> bool {
+        const MAX_CACHED_CHANNELS: usize = 12;
+        const MAX_MESSAGES_PER_CHANNEL: usize = 200;
+
         let cid = ev.channel_id;
+        let is_active = self.room == Room::Discord
+            && self.active_chat_channel_id().as_deref() == Some(cid.as_str());
         match ev.kind.as_str() {
             "create" => {
-                let Some(msg) = ev.message else { return };
+                let Some(msg) = ev.message else {
+                    return false;
+                };
+                if self.room != Room::Discord
+                    && !self.discord.chat.messages_by_channel.contains_key(&cid)
+                {
+                    return false;
+                }
                 let list = self
                     .discord
                     .chat
@@ -886,46 +898,75 @@ impl AppState {
                     .or_default();
                 if let Some(pos) = list.iter().position(|m| m.id == msg.id) {
                     list[pos] = msg;
+                } else if let Some(ppos) = list.iter().position(|m| {
+                    m.pending && m.author.id == msg.author.id && m.content == msg.content
+                }) {
+                    list[ppos] = msg;
                 } else {
-                    if let Some(ppos) = list.iter().position(|m| {
-                        m.pending && m.author.id == msg.author.id && m.content == msg.content
-                    }) {
-                        list[ppos] = msg;
-                    } else {
-                        list.push(msg);
+                    list.push(msg);
+                }
+                if list.len() > MAX_MESSAGES_PER_CHANNEL {
+                    let excess = list.len() - MAX_MESSAGES_PER_CHANNEL;
+                    list.drain(0..excess);
+                }
+                if self.discord.chat.messages_by_channel.len() > MAX_CACHED_CHANNELS {
+                    let active = self.active_chat_channel_id();
+                    let victim = self
+                        .discord
+                        .chat
+                        .messages_by_channel
+                        .keys()
+                        .find(|k| {
+                            k.as_str() != cid.as_str() && active.as_deref() != Some(k.as_str())
+                        })
+                        .cloned();
+                    if let Some(k) = victim {
+                        self.discord.chat.messages_by_channel.remove(&k);
                     }
                 }
                 self.discord.chat.typing_by_channel.remove(&cid);
+                is_active
             }
             "update" => {
-                let Some(msg) = ev.message else { return };
+                let Some(msg) = ev.message else {
+                    return false;
+                };
                 if let Some(list) = self.discord.chat.messages_by_channel.get_mut(&cid)
                     && let Some(existing) = list.iter_mut().find(|m| m.id == msg.id)
                 {
                     *existing = msg;
+                    return is_active;
                 }
+                false
             }
             "delete" => {
-                let Some(mid) = ev.id else { return };
+                let Some(mid) = ev.id else {
+                    return false;
+                };
                 if let Some(list) = self.discord.chat.messages_by_channel.get_mut(&cid) {
+                    let before = list.len();
                     list.retain(|m| m.id != mid);
+                    return is_active && list.len() != before;
                 }
+                false
             }
-            _ => {}
+            _ => false,
         }
     }
 
-    pub fn handle_discord_reaction(&mut self, ev: DiscordReactionEvent) {
+    pub fn handle_discord_reaction(&mut self, ev: DiscordReactionEvent) -> bool {
+        let is_active = self.room == Room::Discord
+            && self.active_chat_channel_id().as_deref() == Some(ev.channel_id.as_str());
         let Some(list) = self
             .discord
             .chat
             .messages_by_channel
             .get_mut(&ev.channel_id)
         else {
-            return;
+            return false;
         };
         let Some(msg) = list.iter_mut().find(|m| m.id == ev.message_id) else {
-            return;
+            return false;
         };
         let key = ev.emoji.key();
         if let Some(pos) = msg.reactions.iter().position(|r| r.emoji.key() == key) {
@@ -950,9 +991,15 @@ impl AppState {
                 emoji: ev.emoji,
             });
         }
+        is_active
     }
 
-    pub fn handle_discord_typing(&mut self, ev: DiscordTypingEvent) {
+    pub fn handle_discord_typing(&mut self, ev: DiscordTypingEvent) -> bool {
+        const MAX_TYPING_CHANNELS: usize = 32;
+        self.discord
+            .chat
+            .typing_by_channel
+            .retain(|_, (_, at)| at.elapsed() < Duration::from_secs(10));
         if self
             .discord
             .home
@@ -960,12 +1007,32 @@ impl AppState {
             .as_ref()
             .is_some_and(|m| m.id == ev.user_id)
         {
-            return;
+            return false;
         }
+        if self.room != Room::Discord {
+            return false;
+        }
+        let is_active = self.active_chat_channel_id().as_deref() == Some(ev.channel_id.as_str());
         self.discord
             .chat
             .typing_by_channel
             .insert(ev.channel_id, (ev.name, Instant::now()));
+        while self.discord.chat.typing_by_channel.len() > MAX_TYPING_CHANNELS {
+            let oldest = self
+                .discord
+                .chat
+                .typing_by_channel
+                .iter()
+                .min_by_key(|(_, (_, at))| *at)
+                .map(|(k, _)| k.clone());
+            match oldest {
+                Some(k) => {
+                    self.discord.chat.typing_by_channel.remove(&k);
+                }
+                None => break,
+            }
+        }
+        is_active
     }
 }
 

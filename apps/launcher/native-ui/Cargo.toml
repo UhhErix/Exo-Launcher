@@ -12,18 +12,18 @@ edition = "2024"
 license = "MIT"
 
 [workspace.dependencies]
-rune = { git = "https://github.com/UhhErix/rune", rev = "1735bc26b094cd8264802aef3799f73e6eddd4a2" }
-rune-media = { git = "https://github.com/UhhErix/rune", rev = "1735bc26b094cd8264802aef3799f73e6eddd4a2", default-features = false }
+rune = { git = "https://github.com/UhhErix/rune", rev = "efc13976c1c62f1526b04cf928f2fc24658e3c2f" }
+rune-media = { git = "https://github.com/UhhErix/rune", rev = "efc13976c1c62f1526b04cf928f2fc24658e3c2f", default-features = false }
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["raw_value"] }
 
 [patch.crates-io]
-wgpu-hal = { git = "https://github.com/UhhErix/rune", rev = "1735bc26b094cd8264802aef3799f73e6eddd4a2" }
-winit = { git = "https://github.com/UhhErix/rune", rev = "1735bc26b094cd8264802aef3799f73e6eddd4a2" }
-sctk-adwaita = { git = "https://github.com/UhhErix/rune", rev = "1735bc26b094cd8264802aef3799f73e6eddd4a2" }
-parley_engine = { git = "https://github.com/UhhErix/rune", rev = "1735bc26b094cd8264802aef3799f73e6eddd4a2" }
-accesskit_windows = { git = "https://github.com/UhhErix/rune", rev = "1735bc26b094cd8264802aef3799f73e6eddd4a2" }
-accesskit_macos = { git = "https://github.com/UhhErix/rune", rev = "1735bc26b094cd8264802aef3799f73e6eddd4a2" }
+wgpu-hal = { git = "https://github.com/UhhErix/rune", rev = "efc13976c1c62f1526b04cf928f2fc24658e3c2f" }
+winit = { git = "https://github.com/UhhErix/rune", rev = "efc13976c1c62f1526b04cf928f2fc24658e3c2f" }
+sctk-adwaita = { git = "https://github.com/UhhErix/rune", rev = "efc13976c1c62f1526b04cf928f2fc24658e3c2f" }
+parley_engine = { git = "https://github.com/UhhErix/rune", rev = "efc13976c1c62f1526b04cf928f2fc24658e3c2f" }
+accesskit_windows = { git = "https://github.com/UhhErix/rune", rev = "efc13976c1c62f1526b04cf928f2fc24658e3c2f" }
+accesskit_macos = { git = "https://github.com/UhhErix/rune", rev = "efc13976c1c62f1526b04cf928f2fc24658e3c2f" }
 
 [profile.release]
 lto = "thin"
