@@ -1836,18 +1836,21 @@ mod tests {
 
             assert!(mini_player(&state, 1.0, crate::state::MiniBarSlot::Inline).is_some());
             let budget = shell::BlurBudget::compute(&state, true);
-            assert!(!budget.mini_player);
-            let active_blurs = usize::from(budget.top_bar_search)
-                + usize::from(budget.top_bar_nav)
-                + usize::from(budget.top_bar_tools)
-                + usize::from(budget.mini_player)
-                + usize::from(budget.overlay)
-                + usize::from(budget.toast);
-            assert!(active_blurs <= rune::MAX_BACKDROP_BLURS);
+            assert!(budget.mini_player);
 
             let mut rt = Runtime::new(state, shell::view, (1920.0, 1080.0), Env::new(true, 1.0));
+            rt.set_max_backdrop_blurs(exo_kit::EXO_MAX_BACKDROP_BLURS);
             rt.frame(0.0);
             assert!(rt.find("music-mini-player").is_some());
+            let blurs = rt
+                .instances
+                .iter()
+                .filter(|i| i.params[1] == rune::render::KIND_BACKDROP_BLUR)
+                .count();
+            assert!(
+                blurs <= exo_kit::EXO_MAX_BACKDROP_BLURS,
+                "menu open exceeded EXO_MAX_BACKDROP_BLURS: {blurs}"
+            );
         }
     }
 }

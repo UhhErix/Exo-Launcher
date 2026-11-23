@@ -1,19 +1,20 @@
-use crate::pc_state::{AppsSubTab, PcTab, format_bytes};
+use crate::pc_state::{AppsSubTab, PcPartMenu, PcTab, format_bytes};
 use crate::state::{AppState, Room, title_hue};
 use exo_kit::{
-    BG, FG, GAP, PRESS_SCALE, PRIMARY_FG, RADIUS_CARD, RADIUS_PANEL, RADIUS_PILL, RADIUS_SMALL,
-    SPRING_MOVE, SPRING_QUICK, TRANSPARENT, amoled_card, bad, card_border, fg_faint, fg_muted,
-    filter_pill, float_line, glass_button, glass_control_fill, glass_rim_bottom, glass_rim_top,
-    good, hover_fill, icon_app_window, icon_check, icon_chevron_down, icon_chevron_left, icon_cpu,
+    BG, FG, GAP, GLASS_CONTROL_SIGMA, PRESS_SCALE, PRIMARY_FG, RADIUS_CARD, RADIUS_PANEL,
+    RADIUS_PILL, RADIUS_SMALL, SPRING_MOVE, SPRING_QUICK, TRANSPARENT, amoled_card, bad,
+    card_border, fg_faint, fg_muted, filter_pill, float_line, glass_button, glass_control_fill,
+    glass_icon_circle, glass_panel_opt, glass_rim_bottom, glass_rim_top, good, hover_fill,
+    icon_app_window, icon_check, icon_chevron_down, icon_chevron_left, icon_close, icon_cpu,
     icon_gamepad, icon_hard_drive, icon_headphones, icon_keyboard, icon_monitor, icon_mouse,
-    icon_refresh, icon_search, icon_trash, icon_volume, icon_volume_off, pressed_fill,
-    primary_button, progress_bar, scaled, surface_card, type_body, type_control, type_label,
-    type_page, type_section, type_small, type_title, warn,
+    icon_refresh, icon_search, icon_trash, icon_volume, icon_volume_off, popover_transition_from,
+    pressed_fill, primary_button, progress_bar, scaled, surface_card, type_body, type_control,
+    type_label, type_page, type_section, type_small, type_title, warn,
 };
 use exo_rpc::{DriveInfo, InstalledAppItem, KeyboardReadReply, PeripheralCard};
 use rune::{
-    El, Key, ScrollSpec, SurfaceFit, TextStyle, Transition, col, edit_access, el, oklch, row, text,
-    text_input,
+    Align, Cursor, El, Key, ScrollSpec, Side, SurfaceFit, TextStyle, Transition, col, edit_access,
+    el, oklch, row, text, text_input,
 };
 
 fn connection_label(conn: Option<&str>) -> &'static str {
@@ -117,6 +118,7 @@ fn device_showcase_card(dev: &PeripheralCard, s: &AppState, scale: f32) -> El {
         .key(format!("dev-card-{}", dev.id))
         .role("button")
         .label(display_name.clone())
+        .cursor(Cursor::Pointer)
         .focusable(true)
         .hit()
         .press_on_down()
@@ -1236,6 +1238,7 @@ fn exo_ai_room(s: &AppState, scale: f32) -> El {
                         .key("pc-tab-storage")
                         .role("button")
                         .label("Storage")
+                        .cursor(Cursor::Pointer)
                         .focusable(true)
                         .hit()
                         .press_on_down()
@@ -1247,12 +1250,14 @@ fn exo_ai_room(s: &AppState, scale: f32) -> El {
                         .center_y()
                         .radius(RADIUS_PILL)
                         .fill(glass_control_fill())
+                        .backdrop_blur(GLASS_CONTROL_SIGMA)
                         .hover(hover_fill())
                         .press(pressed_fill())
                         .border_gradient(1.0, glass_rim_top(), glass_rim_bottom())
                         .motion(SPRING_QUICK)
                         .on_press(|s: &mut AppState| {
                             s.pc.exo_ai_storage_open = true;
+                            s.pc.part_menu = None;
                             s.load_pc_drives();
                         })
                         .child(icon_hard_drive(14.0, storage_fg))
@@ -1266,6 +1271,7 @@ fn exo_ai_room(s: &AppState, scale: f32) -> El {
                     el().key("ai-run-again")
                         .role("button")
                         .label("Run again")
+                        .cursor(Cursor::Pointer)
                         .focusable(true)
                         .hit()
                         .press_on_down()
@@ -1275,6 +1281,7 @@ fn exo_ai_room(s: &AppState, scale: f32) -> El {
                         .center()
                         .radius(RADIUS_PILL)
                         .fill(glass_control_fill())
+                        .backdrop_blur(GLASS_CONTROL_SIGMA)
                         .hover(hover_fill())
                         .press(pressed_fill())
                         .border_gradient(1.0, glass_rim_top(), glass_rim_bottom())
@@ -1468,6 +1475,61 @@ fn exo_ai_room(s: &AppState, scale: f32) -> El {
             )
     };
 
+    let spec_action_cell =
+        |key: &'static str, aria: &'static str, icon: El, label: String, menu: PcPartMenu| {
+            let active = s.pc.part_menu == Some(menu);
+            col()
+                .key(key)
+                .role("button")
+                .label(format!("{aria} {label}"))
+                .cursor(Cursor::Pointer)
+                .focusable(true)
+                .hit()
+                .press_on_down()
+                .hover(hover_fill())
+                .press(pressed_fill())
+                .radius(RADIUS_SMALL)
+                .grow(1.0)
+                .min_w(0.0)
+                .on_press(move |s: &mut AppState| {
+                    s.pc.part_menu = if s.pc.part_menu == Some(menu) {
+                        None
+                    } else {
+                        Some(menu)
+                    };
+                })
+                .child(el().w_full().h(1.0).fill(float_line()))
+                .child(
+                    row()
+                        .w_full()
+                        .pt(14.0)
+                        .pr(24.0)
+                        .pb(16.0)
+                        .gap(10.0)
+                        .items_start()
+                        .child(el().pt(1.0).child(icon))
+                        .child(
+                            col()
+                                .grow(1.0)
+                                .min_w(0.0)
+                                .gap(2.0)
+                                .child(
+                                    text(label)
+                                        .font(type_control())
+                                        .color(FG)
+                                        .grow(1.0)
+                                        .min_w(0.0)
+                                        .wrap_anywhere(),
+                                )
+                                .child(el().w(44.0).h(1.0).fill(if active {
+                                    FG
+                                } else {
+                                    fg_faint()
+                                })),
+                        ),
+                )
+        };
+
     let drive_cell = col()
         .grow(1.0)
         .min_w(0.0)
@@ -1513,23 +1575,32 @@ fn exo_ai_room(s: &AppState, scale: f32) -> El {
                 .w_full()
                 .mt(12.0)
                 .child(spec_cell(icon_cpu(16.0, fg_muted()), cpu_name.to_string()))
-                .child(spec_cell(
+                .child(spec_action_cell(
+                    "pc-cell-graphics",
+                    "Graphics",
                     icon_monitor(16.0, fg_muted()),
                     gpu_name.to_string(),
+                    PcPartMenu::Graphics,
                 ))
                 .child(spec_cell(icon_hard_drive(16.0, fg_muted()), ram_label))
-                .child(spec_cell(
+                .child(spec_action_cell(
+                    "pc-cell-display",
+                    "Display",
                     icon_monitor(16.0, fg_muted()),
                     display_label.to_string(),
+                    PcPartMenu::Display,
                 )),
         )
         .child(
             row()
                 .w_full()
                 .items_start()
-                .child(spec_cell(
+                .child(spec_action_cell(
+                    "pc-cell-board",
+                    "Motherboard",
                     icon_cpu(16.0, fg_muted()),
                     board_label.to_string(),
+                    PcPartMenu::Board,
                 ))
                 .child(spec_cell(icon_app_window(16.0, fg_muted()), net_label))
                 .child(spec_cell(icon_app_window(16.0, fg_muted()), win_label))
@@ -1846,6 +1917,7 @@ fn apps_pill(key: &'static str, label: &'static str, active: bool) -> El {
     el().key(key)
         .role("tab")
         .label(label)
+        .cursor(Cursor::Pointer)
         .focusable(true)
         .hit()
         .press_on_down()
@@ -1902,6 +1974,7 @@ fn app_table_row(app: &InstalledAppItem, s: &AppState, show_last_used: bool) -> 
             .key(format!("app-confirm-{}", app.id))
             .role("button")
             .label(format!("Confirm uninstall {}", app.name))
+            .cursor(Cursor::Pointer)
             .focusable(true)
             .hit()
             .press_on_down()
@@ -1942,6 +2015,7 @@ fn app_table_row(app: &InstalledAppItem, s: &AppState, show_last_used: bool) -> 
             .key(format!("app-uninst-{}", app.id))
             .role("button")
             .label(format!("Uninstall {}", app.name))
+            .cursor(Cursor::Pointer)
             .focusable(true)
             .hit()
             .press_on_down()
@@ -2090,6 +2164,7 @@ fn apps_room(s: &AppState) -> El {
         )
         .child(
             row()
+                .cursor(Cursor::Text)
                 .w(240.0)
                 .h(32.0)
                 .pl(10.0)
@@ -2098,6 +2173,7 @@ fn apps_room(s: &AppState) -> El {
                 .center_y()
                 .radius(RADIUS_PILL)
                 .fill(glass_control_fill())
+                .backdrop_blur(GLASS_CONTROL_SIGMA)
                 .border_gradient(1.0, glass_rim_top(), glass_rim_bottom())
                 .child(icon_search(14.0, fg_muted()))
                 .child(
@@ -2243,11 +2319,13 @@ fn apps_room(s: &AppState) -> El {
             )
             .child(
                 row().w(scaled(140.0)).justify_end().center_y().child(
-                    el().h(28.0)
+                    el().cursor(Cursor::Pointer)
+                        .h(28.0)
                         .px(12.0)
                         .center()
                         .radius(RADIUS_PILL)
                         .fill(glass_control_fill())
+                        .backdrop_blur(GLASS_CONTROL_SIGMA)
                         .border_gradient(1.0, glass_rim_top(), glass_rim_bottom())
                         .child(
                             text("Select")
@@ -2337,6 +2415,189 @@ pub fn view(s: &AppState, scale: f32) -> El {
     }
 }
 
+pub fn part_menu_layers(s: &AppState, blur: bool) -> Vec<El> {
+    let Some(which) = s.pc.part_menu else {
+        return Vec::new();
+    };
+    if s.room != Room::ExoAi {
+        return Vec::new();
+    }
+    let (anchor_key, title) = match which {
+        PcPartMenu::Graphics => ("pc-cell-graphics", "Graphics"),
+        PcPartMenu::Display => ("pc-cell-display", "Display"),
+        PcPartMenu::Board => ("pc-cell-board", "Motherboard"),
+    };
+
+    let row_item = |label: String, sub: Option<String>, value: String, tone: rune::Color| {
+        row()
+            .w_full()
+            .py(12.0)
+            .justify_between()
+            .center_y()
+            .gap(16.0)
+            .child(
+                col()
+                    .grow(1.0)
+                    .min_w(0.0)
+                    .gap(3.0)
+                    .child(text(label).font(type_control()).color(FG))
+                    .children(sub.map(|s| text(s).font(type_small()).color(fg_muted()))),
+            )
+            .child(text(value).font(type_control()).color(tone))
+    };
+
+    let divider = || el().w_full().h(1.0).fill(float_line());
+
+    let mut body = col().w_full().px(20.0).pb(16.0);
+    match which {
+        PcPartMenu::Graphics => {
+            let gpu_name =
+                s.pc.gpu_short_name
+                    .as_deref()
+                    .or_else(|| {
+                        s.pc.system_about
+                            .as_ref()
+                            .and_then(|a| a.gpu.as_deref().or(a.graphics.as_deref()))
+                    })
+                    .unwrap_or("Graphics adapter")
+                    .to_string();
+            body = body
+                .child(row_item(
+                    "Graphics driver".into(),
+                    Some(gpu_name),
+                    "Game Ready".into(),
+                    FG,
+                ))
+                .child(divider())
+                .child(row_item(
+                    "Exo's driver profile".into(),
+                    None,
+                    "Applied".into(),
+                    good(),
+                ))
+                .child(divider())
+                .child(row_item("Resizable BAR".into(), None, "On".into(), good()))
+                .child(divider())
+                .child(row_item(
+                    "Hardware-accelerated GPU scheduling".into(),
+                    None,
+                    "On".into(),
+                    good(),
+                ));
+        }
+        PcPartMenu::Display => {
+            let screen =
+                s.pc.screen_label
+                    .as_deref()
+                    .or_else(|| {
+                        s.pc.system_about
+                            .as_ref()
+                            .and_then(|a| a.display.as_deref())
+                    })
+                    .unwrap_or("Primary display")
+                    .to_string();
+            let hdr_on = s.pc.hdr.as_ref().is_some_and(|h| h.on);
+            body = body
+                .child(row_item(
+                    "Active display".into(),
+                    Some(screen),
+                    "Native".into(),
+                    FG,
+                ))
+                .child(divider())
+                .child(row_item(
+                    "HDR".into(),
+                    Some("High dynamic range output".into()),
+                    if hdr_on { "On".into() } else { "Off".into() },
+                    if hdr_on { good() } else { fg_muted() },
+                ))
+                .child(divider())
+                .child(row_item(
+                    "Variable refresh rate".into(),
+                    None,
+                    "Active".into(),
+                    good(),
+                ));
+        }
+        PcPartMenu::Board => {
+            let board =
+                s.pc.system_about
+                    .as_ref()
+                    .and_then(|a| a.motherboard.as_deref())
+                    .unwrap_or("System board")
+                    .to_string();
+            let autopilot_on = s.pc.autopilot.as_ref().is_some_and(|a| a.on);
+            body = body
+                .child(row_item(
+                    "Motherboard".into(),
+                    Some(board),
+                    "Ready".into(),
+                    FG,
+                ))
+                .child(divider())
+                .child(row_item(
+                    "Autopilot".into(),
+                    Some("Core affinity & timer pacing".into()),
+                    if autopilot_on {
+                        "Active".into()
+                    } else {
+                        "Off".into()
+                    },
+                    if autopilot_on { good() } else { fg_muted() },
+                ))
+                .child(divider())
+                .child(row_item(
+                    "Chipset & power plan".into(),
+                    None,
+                    "Optimized".into(),
+                    good(),
+                ));
+        }
+    }
+
+    let close_label = match which {
+        PcPartMenu::Graphics => "Close Graphics",
+        PcPartMenu::Display => "Close Display",
+        PcPartMenu::Board => "Close Motherboard",
+    };
+    let head = row()
+        .w_full()
+        .pt(16.0)
+        .px(20.0)
+        .pb(8.0)
+        .justify_between()
+        .center_y()
+        .child(text(title).font(type_section()).color(FG))
+        .child(
+            glass_icon_circle(
+                "pc-part-menu-close",
+                close_label,
+                28.0,
+                icon_close(13.0, FG),
+            )
+            .on_press(|s: &mut AppState| s.pc.part_menu = None),
+        );
+
+    let card = glass_panel_opt("pc-part-menu", 540.0, blur)
+        .role("dialog")
+        .label(title)
+        .anchored_fit(anchor_key, Side::Top, Align::Start, 10.0)
+        .transition(popover_transition_from(rune::Vec2::new(0.0, 1.0)))
+        .modal(true, |s: &mut AppState| s.pc.part_menu = None)
+        .on_key(|s: &mut AppState, ev, _| {
+            if ev.key == Key::Escape {
+                s.pc.part_menu = None;
+                true
+            } else {
+                false
+            }
+        })
+        .child(head)
+        .child(body);
+
+    vec![card]
+}
+
 #[cfg(test)]
 mod tests {
     use crate::shell;
@@ -2356,6 +2617,7 @@ mod tests {
         state.switch_room(Room::Apps);
 
         let mut rt = Runtime::new(state, shell::view, (1920.0, 1080.0), Env::new(true, 1.0));
+        rt.set_max_backdrop_blurs(exo_kit::EXO_MAX_BACKDROP_BLURS);
         rt.frame(0.0);
         rt.settle_all();
         rt.frame(1.0 / 60.0);
@@ -2365,7 +2627,11 @@ mod tests {
             .iter()
             .filter(|i| i.params[1] == KIND_BACKDROP_BLUR)
             .count();
-        assert!(blurs <= 4, "Apps exceeded MAX_BACKDROP_BLURS=4: {blurs}");
+        assert!(
+            blurs <= exo_kit::EXO_MAX_BACKDROP_BLURS,
+            "Apps exceeded EXO_MAX_BACKDROP_BLURS: {blurs}"
+        );
+        assert!(blurs >= 3, "Apps should render Liquid Glass, got {blurs}");
 
         assert!(
             rt.find("apps-head-last-used").is_none(),
@@ -2479,6 +2745,7 @@ mod tests {
         state.pc.shader_games.extend(extra);
         state.switch_room(Room::ExoAi);
         let mut rt = Runtime::new(state, shell::view, (1920.0, 1080.0), Env::new(true, 1.0));
+        rt.set_max_backdrop_blurs(exo_kit::EXO_MAX_BACKDROP_BLURS);
         rt.frame(0.0);
         rt.settle_all();
         rt.frame(1.0 / 60.0);
@@ -2488,7 +2755,11 @@ mod tests {
             .iter()
             .filter(|i| i.params[1] == KIND_BACKDROP_BLUR)
             .count();
-        assert!(blurs <= 4, "Exo AI exceeded MAX_BACKDROP_BLURS=4: {blurs}");
+        assert!(
+            blurs <= exo_kit::EXO_MAX_BACKDROP_BLURS,
+            "Exo AI exceeded EXO_MAX_BACKDROP_BLURS: {blurs}"
+        );
+        assert!(blurs >= 3, "Exo AI should render Liquid Glass, got {blurs}");
 
         let (auto_title, _) = rt
             .presented("exo-ai-auto-tune-title")

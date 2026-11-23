@@ -11,8 +11,8 @@ pub const SWIPE_DISMISS_VX: f32 = 420.0;
 const SWIPE_MIN_DX: f32 = -24.0;
 
 fn toast_transition() -> Transition {
-    let enter = Transition::offset(0.0, 8.0).combined(Transition::opacity());
-    let exit = Transition::offset(0.0, 4.0).combined(Transition::opacity());
+    let enter = Transition::offset(0.0, 8.0);
+    let exit = Transition::offset(0.0, 4.0);
     Transition::asymmetric(enter, exit).springs(SpringPair::new(SPRING_MOVE, SPRING_BASE))
 }
 

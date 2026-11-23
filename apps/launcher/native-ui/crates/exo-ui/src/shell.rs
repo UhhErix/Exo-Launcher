@@ -13,17 +13,11 @@ use exo_kit::{
     icon_store, icon_win_maximize, modal_scrim_transition, pressed_fill, scrim_fill, selected_fill,
     set_text_scale, type_body, type_section, type_small,
 };
-use rune::{
-    Cursor, Cx, El, MAX_BACKDROP_BLURS, ScrollSpec, SpringPair, Transition, col, el, row, text,
-};
+use rune::{Cursor, Cx, El, ScrollSpec, SpringPair, Transition, col, el, row, text};
 
 fn mini_player_transition() -> Transition {
-    let enter = Transition::offset(0.0, -8.0)
-        .combined(Transition::scale(0.96))
-        .combined(Transition::opacity());
-    let exit = Transition::offset(0.0, -6.0)
-        .combined(Transition::scale(0.98))
-        .combined(Transition::opacity());
+    let enter = Transition::offset(0.0, -8.0).combined(Transition::scale(0.96));
+    let exit = Transition::offset(0.0, -6.0).combined(Transition::scale(0.98));
     Transition::asymmetric(enter, exit).springs(SpringPair::new(SPRING_MOVE, SPRING_QUICK))
 }
 
@@ -46,64 +40,27 @@ pub struct BlurBudget {
 
 impl BlurBudget {
     pub fn compute(s: &AppState, has_toast: bool) -> Self {
-        let modal_open = s.palette_open || s.key_modal_open || s.tour_step.is_some();
-        if modal_open {
-            return Self {
-                top_bar_search: false,
-                top_bar_nav: false,
-                top_bar_tools: false,
-                mini_player: false,
-                overlay: true,
-                submenu: false,
-                toast: has_toast,
-            };
-        }
-        let popover_open = s.capture_menu_open
-            || s.library_more_open
-            || s.props_open
-            || s.context_menu.is_some()
-            || s.open_dropdown.is_some();
-        let submenu_open = s.context_menu.is_some_and(|cm| cm.open_submenu.is_some());
-        let art_under_bar = matches!(s.room, Room::Library | Room::Store | Room::Music)
-            || s.media.captures_open
-            || s.open_game_id.is_some()
-            || s.store_game.is_some();
-        let transport_visible = s.room == Room::Music && !s.media.music_immersion;
+        let submenu_open = s
+            .context_menu
+            .as_ref()
+            .is_some_and(|cm| cm.open_submenu.is_some());
         let mini_visible = s.mini_bar_slot != MiniBarSlot::Hidden
             && s.room != Room::Music
             && s.media.open_capture_id.is_none()
             && s.media.playback.as_ref().is_some_and(|p| p.has_track());
+        let art_under_bar = matches!(s.room, Room::Library | Room::Store | Room::Music)
+            || s.media.captures_open
+            || s.open_game_id.is_some()
+            || s.store_game.is_some();
 
-        let mut used = usize::from(popover_open) + usize::from(submenu_open);
-        let transport = transport_visible && used < MAX_BACKDROP_BLURS;
-        if transport {
-            used += 1;
-        }
-        let top_bar_nav = art_under_bar && used < MAX_BACKDROP_BLURS;
-        if top_bar_nav {
-            used += 1;
-        }
-        let top_bar_tools = art_under_bar && used < MAX_BACKDROP_BLURS;
-        if top_bar_tools {
-            used += 1;
-        }
-        let top_bar_search = art_under_bar && used < MAX_BACKDROP_BLURS;
-        if top_bar_search {
-            used += 1;
-        }
-        let mini_player = mini_visible && used < MAX_BACKDROP_BLURS;
-        if mini_player {
-            used += 1;
-        }
-        let toast = has_toast && used < MAX_BACKDROP_BLURS;
         Self {
-            top_bar_search,
-            top_bar_nav,
-            top_bar_tools,
-            mini_player,
+            top_bar_search: art_under_bar,
+            top_bar_nav: art_under_bar,
+            top_bar_tools: art_under_bar,
+            mini_player: mini_visible,
             overlay: true,
             submenu: submenu_open,
-            toast,
+            toast: has_toast,
         }
     }
 }
@@ -131,7 +88,8 @@ fn gamepad_prompt_bar() -> El {
         .gap(12.0)
         .center_y()
         .radius(RADIUS_PILL)
-        .fill(glass_still_control_fill())
+        .fill(glass_control_fill())
+        .backdrop_blur(GLASS_CONTROL_SIGMA)
         .border_gradient(1.0, glass_rim_top(), glass_rim_bottom())
         .child(icon_gamepad(14.0, FG))
         .child(
@@ -565,6 +523,15 @@ pub fn view(s: &AppState, cx: &mut Cx<AppState>) -> El {
     }
     if s.library_more_open {
         root = root.children(menus::library_more_overlay(s, budget.overlay));
+    }
+    if s.library_add_open {
+        root = root.children(menus::library_add_overlay(s, budget.overlay));
+    }
+    if s.library_filter_open {
+        root = root.children(crate::library::library_filter_overlay(s, budget.overlay));
+    }
+    if s.pc.part_menu.is_some() {
+        root = root.children(pc::part_menu_layers(s, budget.overlay));
     }
     if s.open_dropdown.is_some() {
         root = root.children(menus::dropdown_overlay(s, budget.overlay));

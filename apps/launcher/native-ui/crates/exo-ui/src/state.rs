@@ -105,64 +105,216 @@ impl Room {
     }
 }
 
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub enum LibraryFilter {
-    #[default]
-    All,
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum LibraryChip {
     Installed,
-    Recent,
-    Running,
+    NotInstalled,
+    Update,
+    PlayedLately,
+    NotPlayed,
+    FamilyShared,
+    Store(String),
+}
+
+const PLAYED_LATELY_MS: i64 = 14 * 86_400_000;
+
+pub fn now_unix_ms() -> i64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis() as i64)
+        .unwrap_or(0)
+}
+
+fn has_played(g: &Game) -> bool {
+    g.playtime_minutes > 0 || g.last_played_utc.is_some()
+}
+
+impl LibraryChip {
+    pub fn section(&self) -> &'static str {
+        match self {
+            Self::Store(_) => "Store",
+            _ => "Show",
+        }
+    }
+
+    fn group(&self) -> &'static str {
+        match self {
+            Self::Installed | Self::NotInstalled => "install",
+            Self::PlayedLately => "recent",
+            Self::NotPlayed => "played",
+            Self::Update => "update",
+            Self::FamilyShared => "family",
+            Self::Store(_) => "store",
+        }
+    }
+
+    pub fn key(&self) -> String {
+        match self {
+            Self::Installed => "installed".into(),
+            Self::NotInstalled => "not-installed".into(),
+            Self::Update => "update".into(),
+            Self::PlayedLately => "played-lately".into(),
+            Self::NotPlayed => "not-played".into(),
+            Self::FamilyShared => "family-shared".into(),
+            Self::Store(store) => format!("store-{store}"),
+        }
+    }
+
+    pub fn label(&self) -> String {
+        match self {
+            Self::Installed => "Installed".into(),
+            Self::NotInstalled => "Not installed".into(),
+            Self::Update => "Update ready".into(),
+            Self::PlayedLately => "Played lately".into(),
+            Self::NotPlayed => "Not played".into(),
+            Self::FamilyShared => "Family shared".into(),
+            Self::Store(store) => store_chip_label(store),
+        }
+    }
+
+    fn matches(&self, g: &Game, now_ms: i64) -> bool {
+        match self {
+            Self::Installed => g.installed,
+            Self::NotInstalled => !g.installed,
+            Self::Update => g.update_available,
+            Self::PlayedLately => g
+                .last_played_utc
+                .as_deref()
+                .and_then(parse_iso_utc_ms)
+                .is_some_and(|t| now_ms - t < PLAYED_LATELY_MS),
+            Self::NotPlayed => !has_played(g),
+            Self::FamilyShared => g.family_shared,
+            Self::Store(store) => g.store == *store || g.stores.iter().any(|s| s == store),
+        }
+    }
+}
+
+fn store_chip_label(store: &str) -> String {
+    match store {
+        "steam" => "Steam".into(),
+        "epic" => "Epic".into(),
+        "gog" => "GOG".into(),
+        "riot" => "Riot".into(),
+        "xbox" => "Xbox".into(),
+        "ea" => "EA".into(),
+        "ubisoft" => "Ubisoft".into(),
+        "battlenet" => "Battle.net".into(),
+        "local" => "Local".into(),
+        other => {
+            let mut chars = other.chars();
+            chars
+                .next()
+                .map(|c| c.to_uppercase().chain(chars).collect())
+                .unwrap_or_default()
+        }
+    }
+}
+
+pub fn chips_match(chips: &[LibraryChip], g: &Game, now_ms: i64) -> bool {
+    chips.iter().all(|c| {
+        chips
+            .iter()
+            .any(|o| o.group() == c.group() && o.matches(g, now_ms))
+    })
+}
+
+pub fn library_chip_options(games: &[Game], now_ms: i64) -> Vec<LibraryChip> {
+    let show = [
+        LibraryChip::Installed,
+        LibraryChip::NotInstalled,
+        LibraryChip::Update,
+        LibraryChip::PlayedLately,
+        LibraryChip::NotPlayed,
+        LibraryChip::FamilyShared,
+    ];
+    let mut out: Vec<LibraryChip> = show
+        .into_iter()
+        .filter(|chip| games.iter().any(|g| chip.matches(g, now_ms)))
+        .collect();
+    let mut stores: Vec<String> = games
+        .iter()
+        .flat_map(|g| {
+            if g.stores.is_empty() {
+                vec![g.store.clone()]
+            } else {
+                g.stores.clone()
+            }
+        })
+        .filter(|s| !s.is_empty())
+        .collect();
+    stores.sort();
+    stores.dedup();
+    if stores.len() > 1 {
+        out.extend(stores.into_iter().map(LibraryChip::Store));
+    }
+    out
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum LibrarySort {
     #[default]
     LastLaunched,
+    Installed,
     Playtime,
     Title,
     Size,
+    Store,
 }
 
 impl LibrarySort {
-    pub const ALL: [Self; 4] = [Self::LastLaunched, Self::Playtime, Self::Title, Self::Size];
+    pub const ALL: [Self; 6] = [
+        Self::Title,
+        Self::Installed,
+        Self::LastLaunched,
+        Self::Playtime,
+        Self::Size,
+        Self::Store,
+    ];
 
     pub const fn id(self) -> &'static str {
         match self {
+            Self::Title => "title",
+            Self::Installed => "installed",
             Self::LastLaunched => "last-launched",
             Self::Playtime => "playtime",
-            Self::Title => "title",
             Self::Size => "size",
+            Self::Store => "store",
         }
     }
 
     pub fn from_id(id: &str) -> Self {
         match id {
+            "installed" => Self::Installed,
             "playtime" => Self::Playtime,
-            "title" => Self::Title,
+            "title" | "name" => Self::Title,
             "size" => Self::Size,
+            "store" => Self::Store,
             _ => Self::LastLaunched,
         }
     }
 
     pub const fn label(self) -> &'static str {
         match self {
+            Self::Title => "Name",
+            Self::Installed => "Installed first",
             Self::LastLaunched => "Last launched",
-            Self::Playtime => "Playtime",
-            Self::Title => "A–Z",
+            Self::Playtime => "Time played",
             Self::Size => "Size",
+            Self::Store => "Store",
         }
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ContextMenuTarget {
     SearchCapsule,
     NavTab(Room),
     CaptureButton,
     SettingsButton,
+    GameCard(String),
 }
 
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct ContextMenuState {
     pub target: ContextMenuTarget,
     pub x: f32,
@@ -190,10 +342,16 @@ pub enum HostStatus {
 #[derive(Clone, Debug)]
 pub enum PaletteTarget {
     Room(Room),
+    SettingsSection(crate::pc_state::SettingsSection),
+    PcSection(&'static str),
     OpenGame(String),
+    AddGame,
     RefreshLibrary,
     ActivateKey,
     StartTour,
+    CheckUpdates,
+    MinimizeWindow,
+    CloseWindow,
 }
 
 #[derive(Clone, Debug)]
@@ -201,6 +359,7 @@ pub struct PaletteItem {
     pub id: String,
     pub group: &'static str,
     pub title: String,
+    pub detail: Option<&'static str>,
     pub target: PaletteTarget,
 }
 
@@ -261,6 +420,8 @@ pub struct AppState {
     pub library_search_open: bool,
     pub library_search: TextEdit,
     pub library_more_open: bool,
+    pub library_add_open: bool,
+    pub library_show_hidden: bool,
     pub capture_menu_open: bool,
     pub context_menu: Option<ContextMenuState>,
     pub open_dropdown: Option<OpenDropdown>,
@@ -269,7 +430,8 @@ pub struct AppState {
     pub deck_scroll_x: f32,
     pub store_shelf_scrolls: [Rc<Cell<ScrollPos>>; 4],
     pub store_shelf_x: [f32; 4],
-    pub filter: LibraryFilter,
+    pub filters: Vec<LibraryChip>,
+    pub library_filter_open: bool,
     pub sort: LibrarySort,
     pub status: HostStatus,
     pub games: Vec<Game>,
@@ -356,6 +518,8 @@ impl AppState {
             library_search_open: false,
             library_search: TextEdit::default(),
             library_more_open: false,
+            library_add_open: false,
+            library_show_hidden: false,
             capture_menu_open: false,
             context_menu: None,
             open_dropdown: None,
@@ -364,7 +528,8 @@ impl AppState {
             deck_scroll_x: 0.0,
             store_shelf_scrolls: std::array::from_fn(|_| Rc::new(Cell::new(ScrollPos::default()))),
             store_shelf_x: [0.0; 4],
-            filter: LibraryFilter::All,
+            filters: Vec::new(),
+            library_filter_open: false,
             sort: LibrarySort::LastLaunched,
             status: HostStatus::Standalone,
             games,
@@ -470,6 +635,8 @@ impl AppState {
             library_search_open: false,
             library_search: TextEdit::default(),
             library_more_open: false,
+            library_add_open: false,
+            library_show_hidden: false,
             capture_menu_open: false,
             context_menu: None,
             open_dropdown: None,
@@ -478,7 +645,8 @@ impl AppState {
             deck_scroll_x: 0.0,
             store_shelf_scrolls: std::array::from_fn(|_| Rc::new(Cell::new(ScrollPos::default()))),
             store_shelf_x: [0.0; 4],
-            filter: LibraryFilter::All,
+            filters: Vec::new(),
+            library_filter_open: false,
             sort: LibrarySort::LastLaunched,
             status: HostStatus::Connecting,
             games: Vec::new(),
@@ -757,6 +925,7 @@ impl AppState {
         self.uninstall_confirm = false;
         self.capture_menu_open = false;
         self.library_more_open = false;
+        self.library_add_open = false;
         self.context_menu = None;
         self.open_dropdown = None;
         if self.media.captures_open {
@@ -785,6 +954,7 @@ impl AppState {
     pub fn open_context_menu(&mut self, target: ContextMenuTarget, x: f32, y: f32) {
         self.capture_menu_open = false;
         self.library_more_open = false;
+        self.library_add_open = false;
         self.open_dropdown = None;
         self.context_menu = Some(ContextMenuState {
             target,
@@ -798,9 +968,47 @@ impl AppState {
         self.context_menu = None;
     }
 
+    pub fn toggle_library_add(&mut self) {
+        let next = !self.library_add_open;
+        self.capture_menu_open = false;
+        self.library_more_open = false;
+        self.context_menu = None;
+        self.open_dropdown = None;
+        self.library_add_open = next;
+    }
+
+    pub fn toggle_hide_game(&mut self, id: &str) {
+        if let Some(pos) = self
+            .settings
+            .hidden_games
+            .iter()
+            .position(|g| g.eq_ignore_ascii_case(id))
+        {
+            self.settings.hidden_games.remove(pos);
+            self.push_notice("Game unhidden", NoticeTone::Neutral);
+        } else {
+            self.settings.hidden_games.push(id.to_string());
+            self.push_notice("Game hidden", NoticeTone::Neutral);
+        }
+        #[cfg(windows)]
+        if let (Some(rpc), Some(handle)) = (self.rpc.clone(), self.handle.clone()) {
+            let hidden = self.settings.hidden_games.clone();
+            rpc.call::<_, LauncherSettings>(
+                METHOD_SETTINGS_SET,
+                &json!({ "hiddenGames": hidden }),
+                move |res| {
+                    if let Ok(set) = res {
+                        handle.update(move |s, _| s.settings = set);
+                    }
+                },
+            );
+        }
+    }
+
     pub fn toggle_dropdown(&mut self, which: OpenDropdown) {
         self.capture_menu_open = false;
         self.library_more_open = false;
+        self.library_add_open = false;
         self.context_menu = None;
         if self.open_dropdown == Some(which) {
             self.open_dropdown = None;
@@ -958,6 +1166,7 @@ impl AppState {
         } else {
             &self.settings.recent
         };
+        let now_ms = now_unix_ms();
         let mut out: Vec<&Game> = self
             .games
             .iter()
@@ -965,20 +1174,14 @@ impl AppState {
                 is_shelf_game(g, transfer_id, show_tools)
                     && !self.settings.hidden_games.iter().any(|h| h == &g.id)
             })
-            .filter(|g| match self.filter {
-                LibraryFilter::All => true,
-                LibraryFilter::Installed => g.installed,
-                LibraryFilter::Running => g.is_running,
-                LibraryFilter::Recent => {
-                    g.last_played_utc
-                        .as_deref()
-                        .and_then(parse_iso_utc_ms)
-                        .is_some()
-                        || recent.iter().any(|r| r.eq_ignore_ascii_case(&g.id))
-                        || g.playtime_minutes > 0
-                }
-            })
+            .filter(|g| chips_match(&self.filters, g, now_ms))
             .collect();
+        let hidden = &self.settings.hidden_games;
+        let show_hidden = self.library_show_hidden;
+        out.retain(|g| {
+            let is_hidden = hidden.iter().any(|h| h.eq_ignore_ascii_case(&g.id));
+            if show_hidden { is_hidden } else { !is_hidden }
+        });
         if !query.is_empty() {
             out.retain(|g| g.title.to_lowercase().contains(&query));
         }
@@ -1004,6 +1207,10 @@ impl AppState {
                     .then_with(|| recent_rank(&a.id).cmp(&recent_rank(&b.id)))
                     .then_with(|| cmp_title_base(&a.title, &b.title))
             }
+            LibrarySort::Installed => b
+                .installed
+                .cmp(&a.installed)
+                .then_with(|| cmp_title_base(&a.title, &b.title)),
             LibrarySort::Playtime => b
                 .playtime_minutes
                 .cmp(&a.playtime_minutes)
@@ -1013,6 +1220,11 @@ impl AppState {
                 .size_bytes
                 .unwrap_or(0)
                 .cmp(&a.size_bytes.unwrap_or(0))
+                .then_with(|| cmp_title_base(&a.title, &b.title)),
+            LibrarySort::Store => a
+                .store
+                .to_lowercase()
+                .cmp(&b.store.to_lowercase())
                 .then_with(|| cmp_title_base(&a.title, &b.title)),
         });
         out
@@ -2240,6 +2452,14 @@ impl AppState {
             self.library_more_open = false;
             return true;
         }
+        if self.library_add_open {
+            self.library_add_open = false;
+            return true;
+        }
+        if self.pc.part_menu.is_some() {
+            self.pc.part_menu = None;
+            return true;
+        }
         if self.palette_open {
             self.close_palette();
             return true;
@@ -2565,26 +2785,138 @@ impl AppState {
         let query = self.palette_query.text.trim().to_lowercase();
         let mut items = Vec::new();
 
-        const PALETTE_ROOMS: [Room; 8] = [
-            Room::Library,
-            Room::Store,
-            Room::Discord,
-            Room::Music,
-            Room::ExoAi,
-            Room::Apps,
-            Room::Devices,
-            Room::Settings,
+        const PALETTE_ROOMS: [(Room, &[&str]); 8] = [
+            (Room::Library, &[]),
+            (Room::Store, &[]),
+            (
+                Room::Discord,
+                &[
+                    "home", "friends", "messages", "dms", "servers", "playing", "voice",
+                ],
+            ),
+            (Room::Music, &[]),
+            (
+                Room::ExoAi,
+                &[
+                    "auto tune",
+                    "specs",
+                    "overclock",
+                    "undervolt",
+                    "autopilot",
+                    "system tuning",
+                    "shaders",
+                    "updates",
+                    "drivers",
+                    "storage",
+                ],
+            ),
+            (Room::Apps, &["uninstall", "programs", "bloat", "startup"]),
+            (Room::Devices, &[]),
+            (Room::Settings, &[]),
         ];
 
-        for room in PALETTE_ROOMS {
+        for (room, keywords) in PALETTE_ROOMS {
             let label = room.label();
-            if query.is_empty() || label.to_lowercase().contains(&query) {
+            let matched = query.is_empty()
+                || label.to_lowercase().contains(&query)
+                || keywords.iter().any(|k| k.contains(&query));
+            if matched {
                 items.push(PaletteItem {
                     id: format!("pal-room-{}", room.key()),
                     group: "Go to",
                     title: label.into(),
+                    detail: None,
                     target: PaletteTarget::Room(room),
                 });
+            }
+        }
+
+        if !query.is_empty() {
+            const PC_SECTIONS: [(&str, &str, &[&str]); 6] = [
+                (
+                    "this-pc",
+                    "This PC",
+                    &["hardware", "cpu", "ram", "motherboard", "specs"],
+                ),
+                ("updates", "Updates", &["drivers", "windows", "firmware"]),
+                (
+                    "graphics",
+                    "Graphics",
+                    &["gpu", "nvidia", "amd", "upscalers", "dlss"],
+                ),
+                ("shaders", "Shaders", &["compile", "cache", "stutter"]),
+                (
+                    "display",
+                    "Display",
+                    &["monitor", "screen", "hdr", "hz", "refresh"],
+                ),
+                (
+                    "storage",
+                    "Storage",
+                    &["drives", "disk", "compress", "space"],
+                ),
+            ];
+            for (sec_id, title, keywords) in PC_SECTIONS {
+                if title.to_lowercase().contains(&query)
+                    || "exo ai".contains(&query)
+                    || keywords.iter().any(|k| k.contains(&query))
+                {
+                    items.push(PaletteItem {
+                        id: format!("pal-pc-{sec_id}"),
+                        group: "Go to",
+                        title: title.into(),
+                        detail: Some("Exo AI"),
+                        target: PaletteTarget::PcSection(sec_id),
+                    });
+                }
+            }
+
+            use crate::pc_state::SettingsSection;
+            const SETTINGS_PAGES: [(SettingsSection, &str, &[&str]); 6] = [
+                (
+                    SettingsSection::General,
+                    "General",
+                    &["text size", "motion", "startup"],
+                ),
+                (
+                    SettingsSection::Account,
+                    "Library",
+                    &["stores", "steam", "epic", "riot", "backups"],
+                ),
+                (
+                    SettingsSection::Appearance,
+                    "Downloads",
+                    &["install", "folder", "bandwidth"],
+                ),
+                (
+                    SettingsSection::Graphics,
+                    "In game",
+                    &["overlay", "capture", "fps"],
+                ),
+                (
+                    SettingsSection::Updates,
+                    "Music",
+                    &["spotify", "apple music", "youtube"],
+                ),
+                (
+                    SettingsSection::About,
+                    "About",
+                    &["version", "update", "logs", "account"],
+                ),
+            ];
+            for (sec, title, keywords) in SETTINGS_PAGES {
+                if title.to_lowercase().contains(&query)
+                    || "settings".contains(&query)
+                    || keywords.iter().any(|k| k.contains(&query))
+                {
+                    items.push(PaletteItem {
+                        id: format!("pal-set-{}", sec.key()),
+                        group: "Go to",
+                        title: title.into(),
+                        detail: Some("Settings"),
+                        target: PaletteTarget::SettingsSection(sec),
+                    });
+                }
             }
         }
 
@@ -2595,42 +2927,77 @@ impl AppState {
             .collect();
         candidates.sort_by_key(|a| a.title.to_lowercase());
 
+        let mut seen = std::collections::HashSet::new();
         for game in candidates.into_iter().take(50) {
+            let norm = game.title.trim().to_lowercase();
+            if !seen.insert(norm) {
+                continue;
+            }
             items.push(PaletteItem {
                 id: format!("pal-game-{}", game.id),
                 group: "Library",
                 title: game.title.clone(),
+                detail: None,
                 target: PaletteTarget::OpenGame(game.id.clone()),
             });
         }
 
-        if !query.is_empty() {
-            let actions = [
-                (
-                    "pal-action-tour",
-                    "Take the guided tour",
-                    PaletteTarget::StartTour,
-                ),
-                (
-                    "pal-action-key",
-                    "Activate a game key",
-                    PaletteTarget::ActivateKey,
-                ),
-                (
-                    "pal-action-refresh",
-                    "Refresh library",
-                    PaletteTarget::RefreshLibrary,
-                ),
-            ];
-            for (id, title, target) in actions {
-                if title.to_lowercase().contains(&query) {
-                    items.push(PaletteItem {
-                        id: id.into(),
-                        group: "Actions",
-                        title: title.into(),
-                        target,
-                    });
-                }
+        let actions: [(&str, &str, &[&str], PaletteTarget); 7] = [
+            (
+                "pal-action-add-game",
+                "Add a game",
+                &["exe", "portable"],
+                PaletteTarget::AddGame,
+            ),
+            (
+                "pal-action-key",
+                "Activate a key",
+                &["redeem", "code"],
+                PaletteTarget::ActivateKey,
+            ),
+            (
+                "pal-action-refresh",
+                "Refresh library",
+                &["scan", "rescan"],
+                PaletteTarget::RefreshLibrary,
+            ),
+            (
+                "pal-action-tour",
+                "Take the tour",
+                &["guide", "walkthrough", "onboarding", "help", "intro"],
+                PaletteTarget::StartTour,
+            ),
+            (
+                "pal-action-update",
+                "Check for updates",
+                &["upgrade"],
+                PaletteTarget::CheckUpdates,
+            ),
+            (
+                "pal-action-minimize",
+                "Minimize window",
+                &[],
+                PaletteTarget::MinimizeWindow,
+            ),
+            (
+                "pal-action-close",
+                "Close window",
+                &["quit", "exit"],
+                PaletteTarget::CloseWindow,
+            ),
+        ];
+        for (id, title, keywords, target) in actions {
+            if query.is_empty()
+                || title.to_lowercase().contains(&query)
+                || keywords.iter().any(|k| k.contains(&query))
+            {
+                items.push(PaletteItem {
+                    id: id.into(),
+                    group: "Actions",
+                    title: title.into(),
+                    detail: None,
+                    target,
+                });
             }
         }
 
@@ -2641,10 +3008,37 @@ impl AppState {
         self.close_palette();
         match target {
             PaletteTarget::Room(room) => self.switch_room(room),
+            PaletteTarget::SettingsSection(sec) => {
+                self.pc.settings_section = sec;
+                self.switch_room(Room::Settings);
+            }
+            PaletteTarget::PcSection(sec) => {
+                self.switch_room(Room::ExoAi);
+                match sec {
+                    "storage" => {
+                        self.pc.exo_ai_storage_open = true;
+                        self.load_pc_drives();
+                    }
+                    "graphics" => self.pc.part_menu = Some(crate::pc_state::PcPartMenu::Graphics),
+                    "display" => self.pc.part_menu = Some(crate::pc_state::PcPartMenu::Display),
+                    _ => self.pc.exo_ai_storage_open = false,
+                }
+            }
             PaletteTarget::OpenGame(id) => self.open_game_page(&id),
-            PaletteTarget::RefreshLibrary => self.refresh_library(),
+            PaletteTarget::AddGame => {
+                self.switch_room(Room::Library);
+                self.library_all_games = true;
+                self.open_key_modal(tx);
+            }
+            PaletteTarget::RefreshLibrary => {
+                self.switch_room(Room::Library);
+                self.refresh_library();
+            }
             PaletteTarget::ActivateKey => self.open_key_modal(tx),
             PaletteTarget::StartTour => self.start_tour(),
+            PaletteTarget::CheckUpdates => self.check_app_update(),
+            PaletteTarget::MinimizeWindow => tx.minimize(),
+            PaletteTarget::CloseWindow => tx.close_window(),
         }
     }
 
@@ -3462,7 +3856,7 @@ mod library_sort_and_confirm_tests {
         s.settings.hidden_games = vec!["steam:hidden".into()];
         s.recent_ids = vec!["steam:tie-first".into(), "steam:tie-second".into()];
         s.sort = LibrarySort::LastLaunched;
-        s.filter = LibraryFilter::All;
+        s.filters.clear();
         s.games = vec![
             mk_game(
                 "steam:older-z",

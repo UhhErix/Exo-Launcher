@@ -1,9 +1,12 @@
 use crate::shell::room_icon;
-use crate::state::{AppState, ContextMenuTarget, InputMode, LibrarySort, OpenDropdown, Room};
+use crate::state::{
+    AppState, ContextMenuTarget, InputMode, LibrarySort, NoticeTone, OpenDropdown, Room,
+};
 use exo_kit::{
     ContextMenuSpec, FG, MenuAnchor, MenuEntry, MenuItem, SelectMenuSpec, SelectOption, bad,
-    context_menu_layers, fg_faint, icon_camera, icon_key, icon_record_dot, icon_refresh,
-    icon_replay, icon_scissors, icon_search, icon_settings, icon_sliders, icon_sparkles,
+    context_menu_layers, fg_faint, icon_camera, icon_check, icon_download, icon_folder,
+    icon_gamepad, icon_key, icon_play, icon_record_dot, icon_refresh, icon_replay, icon_scissors,
+    icon_search, icon_settings, icon_sliders, icon_sparkles, icon_stop, icon_wrench,
     select_menu_layers, store_logo,
 };
 use rune::{Align, El, Side, Tx};
@@ -61,11 +64,11 @@ fn text_size_submenu(current: &str) -> Vec<MenuEntry<AppState>> {
 }
 
 pub fn context_menu_overlay(s: &AppState, blur: bool, submenu_blur: bool) -> Vec<El> {
-    let Some(cm) = s.context_menu else {
+    let Some(ref cm) = s.context_menu else {
         return Vec::new();
     };
     let gamepad_focus = s.input_mode == InputMode::Gamepad;
-    let return_focus = match cm.target {
+    let return_focus = match &cm.target {
         ContextMenuTarget::SearchCapsule => Some("search-capsule".to_string()),
         ContextMenuTarget::NavTab(r) => Some(r.key().to_string()),
         ContextMenuTarget::CaptureButton => Some(
@@ -81,9 +84,10 @@ pub fn context_menu_overlay(s: &AppState, blur: bool, submenu_blur: bool) -> Vec
             },
         ),
         ContextMenuTarget::SettingsButton => Some("nav-settings".to_string()),
+        ContextMenuTarget::GameCard(id) => Some(format!("tile-{id}")),
     };
 
-    let entries = match cm.target {
+    let entries = match &cm.target {
         ContextMenuTarget::SearchCapsule => vec![
             MenuEntry::item(
                 MenuItem::new("ctx-search-open", "Open Search")
@@ -109,6 +113,7 @@ pub fn context_menu_overlay(s: &AppState, blur: bool, submenu_blur: bool) -> Vec
             ),
         ],
         ContextMenuTarget::NavTab(room) => {
+            let room = *room;
             let mut items = vec![
                 MenuEntry::item(
                     MenuItem::new(
@@ -271,6 +276,84 @@ pub fn context_menu_overlay(s: &AppState, blur: bool, submenu_blur: bool) -> Vec
                 ),
             ]
         }
+        ContextMenuTarget::GameCard(game_id) => {
+            let game = s.games.iter().find(|g| g.id == *game_id);
+            let is_running = game.is_some_and(|g| g.is_running);
+            let is_stop = game.is_some_and(|g| g.is_running && g.can_stop);
+            let is_installed = game.is_some_and(|g| g.installed);
+            let is_update =
+                game.is_some_and(|g| g.update_available && g.installed && !g.is_running);
+            let is_hidden = s
+                .settings
+                .hidden_games
+                .iter()
+                .any(|h| h.eq_ignore_ascii_case(game_id));
+            let primary_label = if is_stop {
+                "Stop"
+            } else if is_running {
+                "Running"
+            } else if is_update {
+                "Update"
+            } else if is_installed {
+                "Play"
+            } else {
+                "Install"
+            };
+            let primary_icon = if is_stop {
+                icon_stop(15.0, FG)
+            } else if is_installed {
+                icon_play(15.0, FG)
+            } else {
+                icon_download(15.0, FG)
+            };
+            let gid_primary = game_id.clone();
+            let mut items = vec![MenuEntry::item(
+                MenuItem::new("ctx-game-primary", primary_label)
+                    .icon(primary_icon)
+                    .disabled(is_running && !is_stop)
+                    .on_select(move |s: &mut AppState, _| {
+                        if is_stop {
+                            s.stop_game(&gid_primary);
+                        } else if !is_installed {
+                            s.install_game(&gid_primary);
+                        } else {
+                            s.launch_game(&gid_primary);
+                        }
+                    }),
+            )];
+            if is_installed {
+                let gid_folder = game_id.clone();
+                items.push(MenuEntry::item(
+                    MenuItem::new("ctx-game-folder", "Open folder")
+                        .icon(icon_folder(15.0, FG))
+                        .on_select(move |s: &mut AppState, _| s.open_game_folder(&gid_folder)),
+                ));
+                let gid_props = game_id.clone();
+                items.push(MenuEntry::item(
+                    MenuItem::new("ctx-game-props", "Properties")
+                        .icon(icon_wrench(15.0, FG))
+                        .on_select(move |s: &mut AppState, _| {
+                            s.open_game_page(&gid_props);
+                            s.props_open = true;
+                        }),
+                ));
+            }
+            let gid_hide = game_id.clone();
+            items.push(MenuEntry::item(
+                MenuItem::new("ctx-game-hide", if is_hidden { "Unhide" } else { "Hide" })
+                    .icon(icon_sliders(15.0, FG))
+                    .on_select(move |s: &mut AppState, _| s.toggle_hide_game(&gid_hide)),
+            ));
+            items.push(MenuEntry::item(
+                MenuItem::new("ctx-game-new-folder", "New folder")
+                    .icon(icon_folder(15.0, FG))
+                    .on_select(|s: &mut AppState, _| {
+                        s.library_all_games = true;
+                        s.push_notice("Folder management coming soon", NoticeTone::Neutral);
+                    }),
+            ));
+            items
+        }
     };
 
     context_menu_layers(ContextMenuSpec {
@@ -297,23 +380,38 @@ pub fn library_more_overlay(s: &AppState, blur: bool) -> Vec<El> {
         return Vec::new();
     }
     let gamepad_focus = s.input_mode == InputMode::Gamepad;
-    let entries = vec![
+    let mut entries = vec![
+        MenuEntry::item(
+            MenuItem::new("lib-menu-select", "Select games")
+                .icon(icon_check(15.0, FG))
+                .on_select(|s: &mut AppState, _| {
+                    s.library_all_games = true;
+                    s.push_notice("Select games in All Games", NoticeTone::Neutral);
+                }),
+        ),
+        MenuEntry::item(
+            MenuItem::new("lib-menu-downloads", "Downloads")
+                .icon(icon_download(15.0, FG))
+                .on_select(|s: &mut AppState, _| {
+                    s.push_notice("No active downloads", NoticeTone::Neutral);
+                }),
+        ),
         MenuEntry::item(
             MenuItem::new("lib-menu-refresh", "Refresh library")
                 .icon(icon_refresh(15.0, FG))
                 .on_select(|s: &mut AppState, _| s.refresh_library()),
         ),
-        MenuEntry::item(
-            MenuItem::new("lib-menu-key", "Activate a key")
-                .icon(icon_key(15.0, FG))
-                .on_select(|s: &mut AppState, tx| s.open_key_modal(tx)),
-        ),
-        MenuEntry::item(
-            MenuItem::new("lib-menu-tour", "Guided tour")
-                .icon(icon_sparkles(15.0, FG))
-                .on_select(|s: &mut AppState, _| s.start_tour()),
-        ),
     ];
+    if !s.library_all_games {
+        entries.push(MenuEntry::item(
+            MenuItem::new("lib-menu-hidden", "Hidden games")
+                .checked(s.library_show_hidden)
+                .on_select(|s: &mut AppState, _| {
+                    s.library_show_hidden = !s.library_show_hidden;
+                    s.library_all_games = true;
+                }),
+        ));
+    }
 
     let (anchor_key, side) = if s.library_all_games {
         ("all-games-more-btn", Side::Bottom)
@@ -337,6 +435,60 @@ pub fn library_more_overlay(s: &AppState, blur: bool) -> Vec<El> {
         gamepad_focus,
         entries,
         on_dismiss: Rc::new(|s: &mut AppState, _: &mut Tx| s.library_more_open = false),
+        on_submenu: Rc::new(|_: &mut AppState, _: Option<usize>, _: &mut Tx| {}),
+    })
+}
+
+pub fn library_add_overlay(s: &AppState, blur: bool) -> Vec<El> {
+    if !s.library_add_open {
+        return Vec::new();
+    }
+    let gamepad_focus = s.input_mode == InputMode::Gamepad;
+    let entries = vec![
+        MenuEntry::item(
+            MenuItem::new("lib-add-folder", "New folder")
+                .icon(icon_folder(15.0, FG))
+                .on_select(|s: &mut AppState, _| {
+                    s.library_all_games = true;
+                    s.push_notice("Folder management coming soon", NoticeTone::Neutral);
+                }),
+        ),
+        MenuEntry::item(
+            MenuItem::new("lib-add-game", "Add a game")
+                .icon(icon_gamepad(15.0, FG))
+                .on_select(|s: &mut AppState, _| {
+                    s.push_notice("Add a custom game from Settings", NoticeTone::Neutral);
+                }),
+        ),
+        MenuEntry::item(
+            MenuItem::new("lib-add-key", "Activate key")
+                .icon(icon_key(15.0, FG))
+                .on_select(|s: &mut AppState, tx| s.open_key_modal(tx)),
+        ),
+    ];
+
+    let (anchor_key, side) = if s.library_all_games {
+        ("all-games-add-btn", Side::Bottom)
+    } else {
+        ("home-add-btn", Side::Top)
+    };
+
+    context_menu_layers(ContextMenuSpec {
+        id: "library-add".into(),
+        anchor: MenuAnchor::Element {
+            key: anchor_key.into(),
+            side,
+            align: Align::End,
+            gap: 8.0,
+        },
+        width: 220.0,
+        blur,
+        submenu_blur: false,
+        open_submenu: None,
+        return_focus: Some(anchor_key.into()),
+        gamepad_focus,
+        entries,
+        on_dismiss: Rc::new(|s: &mut AppState, _: &mut Tx| s.library_add_open = false),
         on_submenu: Rc::new(|_: &mut AppState, _: Option<usize>, _: &mut Tx| {}),
     })
 }
@@ -406,21 +558,25 @@ pub fn dropdown_overlay(s: &AppState, blur: bool) -> Vec<El> {
         }
         OpenDropdown::LibrarySort => {
             let current = s.sort.id().to_string();
-            let options = LibrarySort::ALL
+            let mut options: Vec<SelectOption> = LibrarySort::ALL
                 .into_iter()
                 .map(|sort| SelectOption::new(sort.id(), sort.label()))
                 .collect();
+            options.push(SelectOption::new("all", "All games"));
+            options.push(SelectOption::new("hidden", "Hidden games"));
             select_menu_layers(SelectMenuSpec {
                 id: "dd-library-sort".into(),
                 trigger_key: "sort-cycle".into(),
                 selected: current,
                 options,
-                width: 190.0,
+                width: 200.0,
                 align: Align::End,
                 blur,
                 gamepad_focus,
-                on_select: Rc::new(|s: &mut AppState, val: &str, _: &mut Tx| {
-                    s.sort = LibrarySort::from_id(val);
+                on_select: Rc::new(|s: &mut AppState, val: &str, _: &mut Tx| match val {
+                    "all" => s.library_show_hidden = false,
+                    "hidden" => s.library_show_hidden = true,
+                    other => s.sort = LibrarySort::from_id(other),
                 }),
                 on_dismiss: dismiss,
             })

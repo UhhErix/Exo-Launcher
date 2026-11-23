@@ -1,8 +1,9 @@
 use crate::state::AppState;
 use exo_kit::{
-    BG, FG, RADIUS_SMALL, SPRING_BASE, fg_muted, glass_button, glass_control_fill, glass_panel_opt,
-    glass_rim_bottom, glass_rim_top, good, hairline, icon_key, modal_card_transition,
-    modal_scrim_transition, primary_button, store_logo, type_body, type_small, type_title,
+    BG, FG, GLASS_CONTROL_SIGMA, RADIUS_SMALL, SPRING_BASE, fg_muted, glass_button,
+    glass_control_fill, glass_panel_opt, glass_rim_bottom, glass_rim_top, good, hairline, icon_key,
+    modal_card_transition, modal_scrim_transition, primary_button, store_logo, type_body,
+    type_small, type_title,
 };
 use rune::{Cursor, El, Key, Transition, col, edit_access, el, row, text, text_input};
 
@@ -48,6 +49,7 @@ pub fn layers(s: &AppState, blur: bool) -> Vec<El> {
         .cursor(Cursor::Text)
         .radius(RADIUS_SMALL)
         .fill(glass_control_fill())
+        .backdrop_blur(GLASS_CONTROL_SIGMA)
         .border_gradient(1.0, glass_rim_top(), glass_rim_bottom())
         .child(icon_key(15.0, fg_muted()))
         .child(input);

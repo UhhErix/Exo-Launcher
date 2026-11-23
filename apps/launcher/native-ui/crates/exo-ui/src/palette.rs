@@ -2,9 +2,9 @@ use crate::shell::room_icon;
 use crate::state::{AppState, PaletteItem, PaletteTarget};
 use exo_kit::{
     FG, RADIUS_SHEET, RADIUS_SMALL, SPRING_BASE, SPRING_QUICK, TRANSPARENT, fg_muted,
-    glass_panel_opt, hairline, hover_fill, icon_gamepad, icon_key, icon_refresh, icon_search,
-    icon_sparkles, modal_card_transition, modal_scrim_transition, scaled, scrim_fill, type_body,
-    type_control, type_small,
+    glass_panel_opt, hairline, hover_fill, icon_close, icon_gamepad, icon_key, icon_minimize,
+    icon_refresh, icon_search, icon_settings, icon_sparkles, modal_card_transition,
+    modal_scrim_transition, scaled, scrim_fill, type_body, type_control, type_small,
 };
 use rune::{
     Cursor, El, Key, KeyEvent, ScrollSpec, Spring, TextStyle, Transition, Tx, col, edit_access, el,
@@ -14,20 +14,30 @@ use rune::{
 fn palette_icon(target: &PaletteTarget) -> El {
     match target {
         PaletteTarget::Room(room) => room_icon(*room, false),
-        PaletteTarget::OpenGame(_) => icon_gamepad(16.0, fg_muted()),
-        PaletteTarget::RefreshLibrary => icon_refresh(16.0, fg_muted()),
+        PaletteTarget::SettingsSection(_) => icon_settings(16.0, fg_muted()),
+        PaletteTarget::PcSection(_) => icon_sparkles(16.0, fg_muted()),
+        PaletteTarget::OpenGame(_) | PaletteTarget::AddGame => icon_gamepad(16.0, fg_muted()),
+        PaletteTarget::RefreshLibrary | PaletteTarget::CheckUpdates => {
+            icon_refresh(16.0, fg_muted())
+        }
         PaletteTarget::ActivateKey => icon_key(16.0, fg_muted()),
         PaletteTarget::StartTour => icon_sparkles(16.0, fg_muted()),
+        PaletteTarget::MinimizeWindow => icon_minimize(16.0, fg_muted()),
+        PaletteTarget::CloseWindow => icon_close(16.0, fg_muted()),
     }
 }
 
 fn palette_row(item: PaletteItem, index: usize, selected: bool) -> El {
     let target = item.target.clone();
     let icon = palette_icon(&target);
-    row()
-        .key(item.id)
+    let label = match item.detail {
+        Some(detail) => format!("{}{}", item.title, detail),
+        None => item.title.clone(),
+    };
+    let mut r = row()
+        .key(format!("command-palette-{}", item.id))
         .role("option")
-        .label(item.title.clone())
+        .label(label)
         .focusable(true)
         .hit()
         .cursor(Cursor::Pointer)
@@ -46,7 +56,18 @@ fn palette_row(item: PaletteItem, index: usize, selected: bool) -> El {
             s.execute_palette_target(target.clone(), tx);
         })
         .child(icon)
-        .child(text(item.title).font(type_control()).color(FG).truncate())
+        .child(
+            text(item.title)
+                .font(type_control())
+                .color(FG)
+                .grow(1.0)
+                .min_w(0.0)
+                .truncate(),
+        );
+    if let Some(detail) = item.detail {
+        r = r.child(text(detail).font(type_small()).color(fg_muted()));
+    }
+    r
 }
 
 pub fn handle_palette_key(s: &mut AppState, ev: &KeyEvent, tx: &mut Tx) -> bool {
@@ -121,7 +142,7 @@ pub fn layers(s: &AppState, blur: bool) -> Vec<El> {
         .child(icon_search(16.0, fg_muted()))
         .child(input);
 
-    let max_palette_h = 520.0;
+    let max_palette_h = 820.8;
     let body = if items.is_empty() {
         el().w_full().h(72.0).center().child(
             text("No matching games or commands")
@@ -153,6 +174,9 @@ pub fn layers(s: &AppState, blur: bool) -> Vec<El> {
             rows.push(palette_row(item, i, i == clamped));
         }
         col()
+            .key("command-palette-list")
+            .role("listbox")
+            .label("Commands")
             .w_full()
             .max_h(max_palette_h - header_h - 1.0)
             .px(scaled(6.0))
@@ -186,7 +210,7 @@ pub fn layers(s: &AppState, blur: bool) -> Vec<El> {
     let host = col()
         .key("palette-host")
         .pin(Some(0.0), Some(0.0), Some(0.0), Some(0.0))
-        .pt(130.0)
+        .pt(129.6)
         .items_center()
         .transition(Transition::none())
         .child(card);

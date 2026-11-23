@@ -178,6 +178,7 @@ pub fn layers(s: &AppState, blur: bool) -> Vec<El> {
         .key("tour-scrim")
         .pin(Some(0.0), Some(0.0), Some(0.0), Some(0.0))
         .fill(BG.alpha(0.50))
+        .hit()
         .cursor(Cursor::Default)
         .transition(modal_scrim_transition());
 

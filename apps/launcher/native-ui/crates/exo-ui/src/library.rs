@@ -1,17 +1,21 @@
-use crate::state::{AppState, InputMode, LibraryFilter, OpenDropdown, title_hue};
+use crate::state::{
+    AppState, ContextMenuTarget, InputMode, LibraryChip, OpenDropdown, library_chip_options,
+    now_unix_ms, title_hue,
+};
 use exo_kit::{
-    BG, FG, PRESS_SCALE, PRIMARY_FG, RADIUS_CARD, RADIUS_PANEL, RADIUS_PILL, SPRING_FLIGHT,
-    SPRING_MOVE, SPRING_QUICK, SelectTrigger, exo_play_button, fg_muted, glass_button,
-    glass_control_fill, glass_icon_circle, glass_rim, glass_rim_bottom, glass_rim_top, good,
-    hover_fill, icon_chevron_left, icon_chevron_right, icon_download, icon_filter, icon_grid,
-    icon_more_horiz, icon_play, icon_plus, icon_search, icon_stop, pressed_fill, primary_button,
-    progress_bar, scrim_fill, select_trigger, store_logo, surface_card, type_body, type_control,
-    type_first_run, type_section, type_small, type_title,
+    BG, FG, GLASS_CONTROL_SIGMA, PRESS_SCALE, PRIMARY_FG, RADIUS_CARD, RADIUS_PANEL, RADIUS_PILL,
+    SPRING_FLIGHT, SPRING_MOVE, SPRING_QUICK, SelectTrigger, TRANSPARENT, exo_play_button,
+    fg_muted, glass_button, glass_control_fill, glass_icon_circle, glass_panel_opt, glass_rim,
+    glass_rim_bottom, glass_rim_top, good, hover_fill, icon_chevron_left, icon_chevron_right,
+    icon_download, icon_filter, icon_grid, icon_more_horiz, icon_play, icon_plus, icon_search,
+    icon_stop, popover_transition, pressed_fill, primary_button, progress_bar, scrim_fill,
+    select_trigger, store_logo, surface_card, type_body, type_control, type_first_run,
+    type_section, type_small, type_title,
 };
 use exo_rpc::Game;
 use rune::{
-    Cursor, El, SpringPair, SurfaceFit, TextStyle, Transition, col, edit_access, el, oklch, row,
-    text, text_input,
+    Align, Cursor, El, Side, SurfaceFit, TextStyle, Tx, col, edit_access, el, oklch, row, text,
+    text_input,
 };
 
 const HOME_EDGE: f32 = 32.0;
@@ -140,6 +144,7 @@ fn cover_surface(
 fn deck_poster_card(game: &Game, active: bool, load_cover: bool, s: &AppState, scale: f32) -> El {
     let id_click = game.id.clone();
     let id_hover = game.id.clone();
+    let id_ctx = game.id.clone();
     let flight_id = format!("deck:{}", game.id);
     let art = cover_surface(
         game,
@@ -157,9 +162,9 @@ fn deck_poster_card(game: &Game, active: bool, load_cover: bool, s: &AppState, s
         .key(format!("tile-{}", game.id))
         .role("button")
         .label(game.title.clone())
+        .cursor(Cursor::Pointer)
         .focusable(true)
         .hit()
-        .press_on_down()
         .press_scale(PRESS_SCALE)
         .size(DECK_CARD_W, DECK_CARD_H)
         .radius(RADIUS_CARD)
@@ -180,6 +185,11 @@ fn deck_poster_card(game: &Game, active: bool, load_cover: bool, s: &AppState, s
                 s.selected_game_id = Some(id_click.clone());
             }
         })
+        .on_secondary_press(move |s: &mut AppState, p, _| {
+            s.input_mode = InputMode::Pointer;
+            s.selected_game_id = Some(id_ctx.clone());
+            s.open_context_menu(ContextMenuTarget::GameCard(id_ctx.clone()), p.x, p.y);
+        })
         .child(art);
 
     if active {
@@ -194,8 +204,100 @@ fn deck_poster_card(game: &Game, active: bool, load_cover: bool, s: &AppState, s
     card
 }
 
+pub fn library_filter_overlay(s: &AppState, blur: bool) -> Vec<El> {
+    if !s.library_filter_open {
+        return Vec::new();
+    }
+    let options = library_chip_options(&s.games, now_unix_ms());
+    let mut sections: Vec<El> = Vec::new();
+    for section in ["Show", "Store"] {
+        let chips: Vec<&LibraryChip> = options.iter().filter(|c| c.section() == section).collect();
+        if chips.is_empty() {
+            continue;
+        }
+        let rows: Vec<El> = chips
+            .chunks(3)
+            .map(|group| {
+                let pills: Vec<El> = group
+                    .iter()
+                    .map(|chip| filter_chip(chip, s.filters.contains(chip)))
+                    .collect();
+                row().gap(6.0).children(pills)
+            })
+            .collect();
+        sections.push(
+            col()
+                .key(format!("library-filter-section-{}", section.to_lowercase()))
+                .gap(6.0)
+                .child(text(section).font(type_small()).color(fg_muted()))
+                .children(rows),
+        );
+    }
+    if !s.filters.is_empty() {
+        sections.push(
+            glass_button("library-filter-clear", "Clear all", None)
+                .on_press(|s: &mut AppState| s.filters.clear()),
+        );
+    }
+    let panel = glass_panel_opt("library-filter-pop", 300.0, blur)
+        .transition(popover_transition())
+        .anchored_fit("all-games-filter", Side::Bottom, Align::End, 8.0)
+        .px(12.0)
+        .py(12.0)
+        .gap(12.0)
+        .children(sections);
+    vec![
+        el().key("library-filter-root")
+            .pin(Some(0.0), Some(0.0), Some(0.0), Some(0.0))
+            .modal_tx(true, |s: &mut AppState, _: &mut Tx| {
+                s.library_filter_open = false
+            })
+            .child(panel),
+    ]
+}
+
+fn filter_chip(chip: &LibraryChip, active: bool) -> El {
+    let label = chip.label();
+    let target = chip.clone();
+    el().key(format!("library-filter-chip-{}", chip.key()))
+        .role("option")
+        .label(label.clone())
+        .focusable(true)
+        .hit()
+        .cursor(Cursor::Pointer)
+        .press_on_down()
+        .press_scale(PRESS_SCALE)
+        .h(30.0)
+        .px(13.0)
+        .radius(RADIUS_PILL)
+        .center()
+        .fill(if active { FG } else { TRANSPARENT })
+        .hover(if active { FG } else { hover_fill() })
+        .press(if active { FG } else { pressed_fill() })
+        .border(if active { 0.0 } else { 1.0 }, glass_rim())
+        .motion(SPRING_QUICK)
+        .on_press(
+            move |s: &mut AppState| match s.filters.iter().position(|c| *c == target) {
+                Some(i) => {
+                    s.filters.remove(i);
+                }
+                None => s.filters.push(target.clone()),
+            },
+        )
+        .child(
+            text(label)
+                .font(if active {
+                    type_section()
+                } else {
+                    type_control()
+                })
+                .color(if active { PRIMARY_FG } else { FG }),
+        )
+}
+
 fn all_games_poster_tile(game: &Game, s: &AppState, scale: f32) -> El {
     let id = game.id.clone();
+    let id_ctx = game.id.clone();
     let flight_id = format!("grid:{}", game.id);
     let hover_key = format!("tile-{}", game.id);
     let hovered = s.hovered_cover_key.as_deref() == Some(hover_key.as_str());
@@ -207,9 +309,9 @@ fn all_games_poster_tile(game: &Game, s: &AppState, scale: f32) -> El {
         .key(hover_key)
         .role("button")
         .label(game.title.clone())
+        .cursor(Cursor::Pointer)
         .focusable(true)
         .hit()
-        .press_on_down()
         .press_scale(PRESS_SCALE)
         .size(ALL_CARD_W, ALL_CARD_H)
         .radius(RADIUS_CARD)
@@ -227,6 +329,10 @@ fn all_games_poster_tile(game: &Game, s: &AppState, scale: f32) -> El {
         .on_press_tx(move |s: &mut AppState, tx| {
             s.input_mode = InputMode::Pointer;
             s.open_game_page_from(&id, Some(flight_id.clone()), tx);
+        })
+        .on_secondary_press(move |s: &mut AppState, p, _| {
+            s.input_mode = InputMode::Pointer;
+            s.open_context_menu(ContextMenuTarget::GameCard(id_ctx.clone()), p.x, p.y);
         })
         .child(art);
     if game.is_running {
@@ -267,6 +373,7 @@ fn install_banner(s: &AppState) -> Option<El> {
             .radius(RADIUS_PANEL)
             .continuous_corners()
             .fill(glass_control_fill())
+            .backdrop_blur(GLASS_CONTROL_SIGMA)
             .border_gradient(1.0, glass_rim_top(), glass_rim_bottom())
             .child(
                 col()
@@ -430,6 +537,7 @@ fn view_home_deck(s: &AppState, scale: f32) -> El {
     let inline_search = if s.library_search_open || !s.library_search.text.is_empty() {
         row()
             .key("home-inline-search")
+            .cursor(Cursor::Text)
             .w(240.0)
             .h(34.0)
             .pl(12.0)
@@ -438,6 +546,7 @@ fn view_home_deck(s: &AppState, scale: f32) -> El {
             .center_y()
             .radius(RADIUS_PILL)
             .fill(glass_control_fill())
+            .backdrop_blur(GLASS_CONTROL_SIGMA)
             .border_gradient(1.0, glass_rim_top(), glass_rim_bottom())
             .child(icon_search(14.0, fg_muted()))
             .child(
@@ -472,27 +581,21 @@ fn view_home_deck(s: &AppState, scale: f32) -> El {
                 .on_press(|s: &mut AppState| {
                     s.library_all_games = true;
                     s.library_more_open = false;
+                    s.library_add_open = false;
                 }),
         )
         .child(
-            glass_icon_circle(
-                "home-more-btn",
-                "Library options",
-                34.0,
-                icon_more_horiz(15.0, FG),
-            )
-            .on_press(|s: &mut AppState| {
-                s.library_more_open = !s.library_more_open;
-            }),
+            glass_icon_circle("home-more-btn", "More", 34.0, icon_more_horiz(15.0, FG)).on_press(
+                |s: &mut AppState| {
+                    let next = !s.library_more_open;
+                    s.library_add_open = false;
+                    s.library_more_open = next;
+                },
+            ),
         )
         .child(
-            glass_icon_circle(
-                "activate-key-btn",
-                "Activate key",
-                34.0,
-                icon_plus(15.0, FG),
-            )
-            .on_press_tx(|s: &mut AppState, tx| s.open_key_modal(tx)),
+            glass_icon_circle("home-add-btn", "Add", 34.0, icon_plus(15.0, FG))
+                .on_press(|s: &mut AppState| s.toggle_library_add()),
         );
 
     let foot = row()
@@ -609,7 +712,6 @@ fn view_home_deck(s: &AppState, scale: f32) -> El {
         .pt(70.0)
         .gap(8.0)
         .fill(BG)
-        .transition(Transition::opacity().springs(SpringPair::new(SPRING_QUICK, SPRING_QUICK)))
         .child(stage)
         .child(lower)
 }
@@ -634,6 +736,7 @@ fn view_all_games(s: &AppState, scale: f32) -> El {
         .center_y()
         .radius(RADIUS_PILL)
         .fill(glass_control_fill())
+        .backdrop_blur(GLASS_CONTROL_SIGMA)
         .hover(hover_fill())
         .press(pressed_fill())
         .border_gradient(1.0, glass_rim_top(), glass_rim_bottom())
@@ -641,6 +744,7 @@ fn view_all_games(s: &AppState, scale: f32) -> El {
         .on_press(|s: &mut AppState| {
             s.library_all_games = false;
             s.library_more_open = false;
+            s.library_add_open = false;
         })
         .child(icon_chevron_left(16.0, FG))
         .child(text("Library").font(type_control()).color(FG));
@@ -656,6 +760,7 @@ fn view_all_games(s: &AppState, scale: f32) -> El {
         .center_y()
         .radius(RADIUS_PILL)
         .fill(glass_control_fill())
+        .backdrop_blur(GLASS_CONTROL_SIGMA)
         .border_gradient(1.0, glass_rim_top(), glass_rim_bottom())
         .child(icon_search(16.0, fg_muted()))
         .child(
@@ -669,17 +774,16 @@ fn view_all_games(s: &AppState, scale: f32) -> El {
                 .on_edit(edit_access(|s: &mut AppState| &mut s.library_search)),
         );
 
-    let filter_label = match s.filter {
-        LibraryFilter::All => "Filter",
-        LibraryFilter::Installed => "Installed",
-        LibraryFilter::Recent => "Recent",
-        LibraryFilter::Running => "Running",
+    let filter_label = if s.filters.is_empty() {
+        "Filter".to_string()
+    } else {
+        format!("Filter · {}", s.filters.len())
     };
 
     let filter_btn = row()
         .key("all-games-filter")
         .role("button")
-        .label(filter_label)
+        .label(filter_label.clone())
         .cursor(Cursor::Pointer)
         .focusable(true)
         .hit()
@@ -692,23 +796,17 @@ fn view_all_games(s: &AppState, scale: f32) -> El {
         .center_y()
         .radius(RADIUS_PILL)
         .fill(glass_control_fill())
+        .backdrop_blur(GLASS_CONTROL_SIGMA)
         .hover(hover_fill())
         .press(pressed_fill())
         .border_gradient(1.0, glass_rim_top(), glass_rim_bottom())
         .motion(SPRING_QUICK)
-        .on_press(|s: &mut AppState| {
-            s.filter = match s.filter {
-                LibraryFilter::All => LibraryFilter::Installed,
-                LibraryFilter::Installed => LibraryFilter::Recent,
-                LibraryFilter::Recent => LibraryFilter::Running,
-                LibraryFilter::Running => LibraryFilter::All,
-            };
-        })
+        .on_press(|s: &mut AppState| s.library_filter_open = !s.library_filter_open)
         .child(icon_filter(16.0, FG))
         .child(text(filter_label).font(type_control()).color(FG));
 
     let sort_btn = select_trigger(
-        SelectTrigger::new("sort-cycle", "Sort games", s.sort.label())
+        SelectTrigger::new("sort-cycle", "Sort library", s.sort.label())
             .open(s.open_dropdown == Some(OpenDropdown::LibrarySort))
             .gamepad_focus(s.input_mode == InputMode::Gamepad),
         |s: &mut AppState, _| s.toggle_dropdown(OpenDropdown::LibrarySort),
@@ -716,14 +814,22 @@ fn view_all_games(s: &AppState, scale: f32) -> El {
 
     let more_btn = glass_icon_circle(
         "all-games-more-btn",
-        "Library options",
+        "More",
         32.0,
         icon_more_horiz(16.0, FG),
     )
-    .on_press(|s: &mut AppState| s.library_more_open = !s.library_more_open);
+    .on_press(|s: &mut AppState| {
+        let next = !s.library_more_open;
+        s.library_add_open = false;
+        s.library_more_open = next;
+    });
 
-    let add_btn = primary_button("activate-key-btn", "Add", Some(icon_plus(14.0, PRIMARY_FG)))
-        .on_press_tx(|s: &mut AppState, tx| s.open_key_modal(tx));
+    let add_btn = primary_button(
+        "all-games-add-btn",
+        "Add",
+        Some(icon_plus(14.0, PRIMARY_FG)),
+    )
+    .on_press(|s: &mut AppState| s.toggle_library_add());
 
     let head = row()
         .w_full()
@@ -754,7 +860,15 @@ fn view_all_games(s: &AppState, scale: f32) -> El {
         .px(10.0)
         .pb(6.0)
         .center_y()
-        .child(text("All games").font(type_title()).color(FG));
+        .child(
+            text(if s.library_show_hidden {
+                "Hidden games"
+            } else {
+                "All games"
+            })
+            .font(type_title())
+            .color(FG),
+        );
 
     let visible: Vec<&Game> = filtered.into_iter().take(s.visible_limit).collect();
 
@@ -772,7 +886,8 @@ fn view_all_games(s: &AppState, scale: f32) -> El {
             .child(
                 glass_button("reset-filters", "Show all games", None).on_press(
                     |s: &mut AppState| {
-                        s.filter = LibraryFilter::All;
+                        s.filters.clear();
+                        s.library_show_hidden = false;
                         s.library_search.text.clear();
                         s.library_search.sync_invariants();
                     },
@@ -796,7 +911,6 @@ fn view_all_games(s: &AppState, scale: f32) -> El {
         .w_full()
         .pt(70.0)
         .pb(48.0)
-        .transition(Transition::opacity().springs(SpringPair::new(SPRING_QUICK, SPRING_QUICK)))
         .child(head)
         .children(install_banner(s).map(|b| el().w_full().px(10.0).pb(12.0).child(b)))
         .child(shelf_head)
@@ -820,6 +934,7 @@ fn view_all_games(s: &AppState, scale: f32) -> El {
                     .center_y()
                     .radius(RADIUS_PILL)
                     .fill(glass_control_fill())
+                    .backdrop_blur(GLASS_CONTROL_SIGMA)
                     .hover(hover_fill())
                     .border(1.0, glass_rim())
                     .on_press(|s: &mut AppState| s.visible_limit += 96)
@@ -940,6 +1055,7 @@ mod tests {
             (1920.0, 1080.0),
             Env::new(true, 1.0),
         );
+        rt.set_max_backdrop_blurs(exo_kit::EXO_MAX_BACKDROP_BLURS);
         rt.frame(0.0);
         rt.settle_all();
         rt.frame(1.0 / 60.0);
@@ -950,12 +1066,25 @@ mod tests {
             .filter(|i| i.params[1] == KIND_BACKDROP_BLUR)
             .count();
         assert!(
-            deck_blurs <= 4,
-            "Library HomeDeck exceeded MAX_BACKDROP_BLURS=4: {deck_blurs}"
+            deck_blurs <= exo_kit::EXO_MAX_BACKDROP_BLURS,
+            "Library HomeDeck exceeded EXO_MAX_BACKDROP_BLURS: {deck_blurs}"
+        );
+        assert!(
+            deck_blurs >= 8,
+            "Library HomeDeck should render real Liquid Glass across top bar and hero controls, got {deck_blurs}"
         );
 
         rt.update(|s, _| s.capture_menu_open = true);
         rt.frame(2.0 / 60.0);
+        let frame0_blurs = rt
+            .instances
+            .iter()
+            .filter(|i| i.params[1] == KIND_BACKDROP_BLUR)
+            .count();
+        assert!(
+            frame0_blurs > deck_blurs,
+            "Captures popover must render Liquid Glass on frame 0 (deck={deck_blurs}, frame0={frame0_blurs})"
+        );
         rt.settle_all();
         rt.frame(3.0 / 60.0);
 
@@ -965,8 +1094,8 @@ mod tests {
             .filter(|i| i.params[1] == KIND_BACKDROP_BLUR)
             .count();
         assert!(
-            cap_blurs <= 4,
-            "Captures popover exceeded MAX_BACKDROP_BLURS=4: {cap_blurs}"
+            cap_blurs <= exo_kit::EXO_MAX_BACKDROP_BLURS,
+            "Captures popover exceeded EXO_MAX_BACKDROP_BLURS: {cap_blurs}"
         );
 
         let (btn_rect, _) = rt

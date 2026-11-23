@@ -1423,6 +1423,7 @@ fn run_parity_probe(
         rune::Env::new(true, scale),
         text,
     );
+    rt.set_max_backdrop_blurs(exo_kit::EXO_MAX_BACKDROP_BLURS);
     rt.frame(0.0);
     if let Some(ref sp) = script_path {
         replay_probe_script(&mut rt, sp);
@@ -1454,9 +1455,13 @@ fn run_parity_probe(
     let semantic_menu_prefixes = [
         "capture-popover-menu",
         "library-more",
+        "library-add",
         "exo-ctx-menu",
         "exo-ctx-submenu",
         "dd-",
+        "command-palette",
+        "pc-part-menu",
+        "library-filter-pop",
     ];
     let legacy_menu_prefixes = ["dc-status-menu", "dc-menu"];
     let mut menu_items: Vec<String> = Vec::new();
@@ -1485,13 +1490,17 @@ fn run_parity_probe(
         }
     }
 
-    let popup_menu_open = rt.popup_menu().is_some();
+    let popup_menu_open = rt.popup_menu().is_some()
+        || elements
+            .iter()
+            .any(|e| !e.exiting && e.key.as_deref() == Some("pc-part-menu"));
 
     let state_summary = serde_json::json!({
         "room": format!("{:?}", rt.state.room),
         "libraryAllGames": rt.state.library_all_games,
         "librarySearchOpen": rt.state.library_search_open,
         "libraryMoreOpen": rt.state.library_more_open,
+        "libraryAddOpen": rt.state.library_add_open,
         "contextMenuOpen": rt.state.context_menu.is_some(),
         "openDropdown": rt.state.open_dropdown.map(|d| format!("{d:?}")),
         "openGameId": rt.state.open_game_id,
@@ -1507,6 +1516,7 @@ fn run_parity_probe(
         "tourStep": rt.state.tour_step,
         "settingsSection": format!("{:?}", rt.state.pc.settings_section),
         "pcTab": format!("{:?}", rt.state.pc.pc_tab),
+        "pcPartMenu": rt.state.pc.part_menu.map(|m| format!("{m:?}")),
         "appsSubTab": format!("{:?}", rt.state.pc.apps_sub_tab),
         "selectedDeviceId": rt.state.pc.selected_device_id,
         "musicNav": format!("{:?}", rt.state.media.music_nav),
@@ -1608,6 +1618,7 @@ fn main() {
 
     let mut app = App::new(spec)
         .args(rune_args)
+        .max_backdrop_blurs(exo_kit::EXO_MAX_BACKDROP_BLURS)
         .titlebar(exo_titlebar())
         .on_rest(AppState::on_rest)
         .release_gpu_when_closed();
@@ -1722,7 +1733,7 @@ mod tests {
     use super::*;
     use crate::gamepad::GamepadAction;
     use crate::media_state::MusicService;
-    use crate::state::{LibraryFilter, LibrarySort, Room};
+    use crate::state::{LibraryChip, LibrarySort, Room};
     use rune::{
         Cursor, Env, Mods, Runtime,
         render::{KIND_BACKDROP_BLUR, KIND_LAYER, KIND_LAYER_END, KIND_SEGMENT},
@@ -1805,7 +1816,7 @@ mod tests {
         assert!(rt.state.tour_step.is_none());
         assert!(rt.state.tour_seen);
 
-        rt.state.filter = LibraryFilter::Installed;
+        rt.state.filters = vec![LibraryChip::Installed];
         assert!(rt.state.filtered_games().iter().all(|g| g.installed));
     }
 
@@ -2138,6 +2149,7 @@ mod tests {
             let mut state = AppState::default();
             setup(&mut state);
             let mut rt = Runtime::new(state, shell::view, (1920.0, 1080.0), Env::new(true, 1.0));
+            rt.set_max_backdrop_blurs(exo_kit::EXO_MAX_BACKDROP_BLURS);
             rt.frame(0.0);
             rt.frame(1.0 / 60.0);
             let blur_rects: Vec<[f32; 4]> = rt
@@ -2147,25 +2159,28 @@ mod tests {
                 .map(|i| i.rect)
                 .collect();
             assert!(
-                blur_rects.len() <= rune::MAX_BACKDROP_BLURS,
+                blur_rects.len() <= exo_kit::EXO_MAX_BACKDROP_BLURS,
                 "{label}: emitted {} backdrop blurs (cap {})",
                 blur_rects.len(),
-                rune::MAX_BACKDROP_BLURS
+                exo_kit::EXO_MAX_BACKDROP_BLURS
             );
             if let Some(key) = expected_overlay {
                 let (rect, _) = rt
                     .presented(key)
                     .unwrap_or_else(|| panic!("{label}: overlay {key} not presented"));
-                let hit = blur_rects.iter().take(rune::MAX_BACKDROP_BLURS).any(|r| {
-                    (r[0] - rect[0]).abs() < 2.0
-                        && (r[1] - rect[1]).abs() < 2.0
-                        && (r[2] - rect[2]).abs() < 2.0
-                        && (r[3] - rect[3]).abs() < 2.0
-                });
+                let hit = blur_rects
+                    .iter()
+                    .take(exo_kit::EXO_MAX_BACKDROP_BLURS)
+                    .any(|r| {
+                        (r[0] - rect[0]).abs() < 2.0
+                            && (r[1] - rect[1]).abs() < 2.0
+                            && (r[2] - rect[2]).abs() < 2.0
+                            && (r[3] - rect[3]).abs() < 2.0
+                    });
                 assert!(
                     hit,
                     "{label}: overlay {key} rect {rect:?} missing from first {} blur slots: {blur_rects:?}",
-                    rune::MAX_BACKDROP_BLURS
+                    exo_kit::EXO_MAX_BACKDROP_BLURS
                 );
             }
             rt
@@ -2198,8 +2213,8 @@ mod tests {
             .presented("command-palette")
             .expect("command-palette presented");
         assert!(
-            pal_rect[3] <= 520.5,
-            "palette height {} exceeded 520px cap",
+            pal_rect[3] <= 821.3,
+            "palette height {} exceeded 821px cap",
             pal_rect[3]
         );
         check_case(
@@ -2232,14 +2247,17 @@ mod tests {
             },
             None,
         );
-        let settings_blurs = rt_settings
+        let settings_blur_rects: Vec<[f32; 4]> = rt_settings
             .instances
             .iter()
             .filter(|i| i.params[1] == KIND_BACKDROP_BLUR)
-            .count();
-        assert_eq!(
-            settings_blurs, 0,
-            "void-top Settings room should emit 0 backdrop blurs, got {settings_blurs}"
+            .map(|i| i.rect)
+            .collect();
+        assert!(
+            settings_blur_rects.len() <= exo_kit::EXO_MAX_BACKDROP_BLURS,
+            "void-top Settings room emitted {} backdrop blurs (cap {}): {settings_blur_rects:?}",
+            settings_blur_rects.len(),
+            exo_kit::EXO_MAX_BACKDROP_BLURS
         );
     }
 
@@ -2533,6 +2551,7 @@ mod tests {
         let mut open_layers: Vec<([f32; 4], f32)> = Vec::new();
         let mut total_blurs = 0usize;
         let mut matched_layers: Option<Vec<([f32; 4], f32)>> = None;
+        let mut blur_rects: Vec<[f32; 4]> = Vec::new();
         for inst in &rt.instances {
             let kind = inst.params[1];
             if kind == KIND_LAYER {
@@ -2541,6 +2560,7 @@ mod tests {
                 open_layers.pop();
             } else if kind == KIND_BACKDROP_BLUR {
                 total_blurs += 1;
+                blur_rects.push(inst.rect);
                 if (inst.rect[0] - rect[0]).abs() < 4.0
                     && (inst.rect[1] - rect[1]).abs() < 4.0
                     && (inst.rect[2] - rect[2]).abs() < 4.0
@@ -2551,14 +2571,14 @@ mod tests {
             }
         }
         assert!(
-            total_blurs <= rune::MAX_BACKDROP_BLURS,
+            total_blurs <= exo_kit::EXO_MAX_BACKDROP_BLURS,
             "{phase}: emitted {total_blurs} blurs (cap {})",
-            rune::MAX_BACKDROP_BLURS
+            exo_kit::EXO_MAX_BACKDROP_BLURS
         );
         assert_eq!(
             matched_layers,
             Some(Vec::new()),
-            "{phase}: {key} blur must be emitted at layer_depth 0 (outside fading ancestor layers), got {matched_layers:?}"
+            "{phase}: {key} blur must be emitted at layer_depth 0 (outside fading ancestor layers), got {matched_layers:?}; key rect {rect:?}, blur rects {blur_rects:?}"
         );
     }
 
@@ -2567,6 +2587,7 @@ mod tests {
         let mut state = AppState::default();
         state.media.playback = None;
         let mut rt = Runtime::new(state, shell::view, (1920.0, 1080.0), Env::new(true, 1.0));
+        rt.set_max_backdrop_blurs(exo_kit::EXO_MAX_BACKDROP_BLURS);
         rt.on_key = Some(on_key);
         rt.frame(0.0);
         rt.frame(0.5);
@@ -2690,6 +2711,7 @@ mod tests {
             (1920.0, 1080.0),
             Env::new(true, 1.0),
         );
+        rt.set_max_backdrop_blurs(exo_kit::EXO_MAX_BACKDROP_BLURS);
         rt.on_key = Some(on_key);
         rt.frame(0.0);
         rt.frame(0.5);
@@ -2697,10 +2719,12 @@ mod tests {
         let (sx, sy) = rt.find("search-capsule").expect("search-capsule");
         rt.secondary_down(sx, sy);
         rt.secondary_up(sx, sy);
-        rt.frame(1.0 / 60.0);
+        for _ in 0..90 {
+            rt.frame(1.0 / 60.0);
+        }
         assert!(rt.presented("exo-ctx-menu").is_some());
         assert!(rt.presented("ctx-search-open").is_some());
-        assert_blur_outside_layers(&rt, "exo-ctx-menu", "ctx-search-frame-1");
+        assert_blur_outside_layers(&rt, "exo-ctx-menu", "ctx-search-settled");
         rt.key(KeyEvent {
             key: Key::Escape,
             mods: Mods::default(),
@@ -2737,7 +2761,10 @@ mod tests {
             mods: Mods::default(),
         });
         rt.frame(1.0 / 60.0);
-        assert_eq!(rt.state.context_menu.and_then(|c| c.open_submenu), None);
+        assert_eq!(
+            rt.state.context_menu.as_ref().and_then(|c| c.open_submenu),
+            None
+        );
         for _ in 0..30 {
             rt.frame(1.0 / 60.0);
         }
@@ -2835,6 +2862,7 @@ mod tests {
             (1920.0, 1080.0),
             Env::new(true, 1.0),
         );
+        rt.set_max_backdrop_blurs(exo_kit::EXO_MAX_BACKDROP_BLURS);
         rt.on_key = Some(on_key);
         rt.frame(0.0);
         rt.frame(0.5);

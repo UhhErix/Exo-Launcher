@@ -1,14 +1,17 @@
 use crate::pc_state::SettingsSection;
 use crate::state::{AppState, InputMode, OpenDropdown};
 use exo_kit::{
-    BG, FG, PRESS_SCALE, RADIUS_CARD, RADIUS_PILL, RADIUS_SMALL, SPRING_QUICK, SelectTrigger,
-    TRANSPARENT, amoled_card, fg_muted, float_line, glass_button, glass_control_fill,
-    glass_rim_bottom, glass_rim_top, good, hairline, hover_fill, icon_chevron_left, icon_download,
-    icon_folder, icon_info, icon_library, icon_music, icon_refresh, icon_search, icon_sliders,
-    icon_sparkles, icon_trophy, pressed_fill, primary_button, progress_bar, scaled, select_trigger,
-    selected_fill, store_logo, switch_pill, type_body, type_page, type_section, type_small,
+    BG, FG, GLASS_CONTROL_SIGMA, PRESS_SCALE, RADIUS_CARD, RADIUS_PILL, RADIUS_SMALL, SPRING_QUICK,
+    SelectTrigger, TRANSPARENT, amoled_card, fg_muted, float_line, glass_button,
+    glass_control_fill, glass_rim_bottom, glass_rim_top, good, hairline, hover_fill,
+    icon_chevron_left, icon_download, icon_folder, icon_info, icon_library, icon_music,
+    icon_refresh, icon_search, icon_sliders, icon_sparkles, icon_trophy, pressed_fill,
+    primary_button, progress_bar, scaled, select_trigger, selected_fill, store_logo, switch_pill,
+    type_body, type_page, type_section, type_small,
 };
-use rune::{El, ScrollSpec, TextStyle, Transition, col, edit_access, el, row, text, text_input};
+use rune::{
+    Cursor, El, ScrollSpec, TextStyle, Transition, col, edit_access, el, row, text, text_input,
+};
 
 fn nav_label(sec: SettingsSection) -> &'static str {
     match sec {
@@ -360,6 +363,7 @@ pub fn view(s: &AppState) -> El {
         .label("Back")
         .focusable(true)
         .hit()
+        .cursor(Cursor::Pointer)
         .press_on_down()
         .press_scale(PRESS_SCALE)
         .h(34.0)
@@ -369,6 +373,7 @@ pub fn view(s: &AppState) -> El {
         .center_y()
         .radius(RADIUS_PILL)
         .fill(glass_control_fill())
+        .backdrop_blur(GLASS_CONTROL_SIGMA)
         .hover(hover_fill())
         .press(pressed_fill())
         .border_gradient(1.0, glass_rim_top(), glass_rim_bottom())
@@ -402,8 +407,10 @@ pub fn view(s: &AppState) -> El {
                 .px(12.0)
                 .gap(10.0)
                 .center_y()
+                .cursor(Cursor::Text)
                 .radius(RADIUS_PILL)
                 .fill(glass_control_fill())
+                .backdrop_blur(GLASS_CONTROL_SIGMA)
                 .border_gradient(1.0, glass_rim_top(), glass_rim_bottom())
                 .child(icon_search(15.0, fg_muted()))
                 .child(
@@ -429,6 +436,7 @@ pub fn view(s: &AppState) -> El {
                         .label(nav_label(sec))
                         .focusable(true)
                         .hit()
+                        .cursor(Cursor::Pointer)
                         .press_on_down()
                         .press_scale(PRESS_SCALE)
                         .w_full()
@@ -482,7 +490,7 @@ pub fn view(s: &AppState) -> El {
         .child(
             col()
                 .key(format!("settings-pane-{:?}", s.pc.settings_section))
-                .transition(Transition::opacity())
+                .transition(Transition::offset(0.0, 6.0).combined(Transition::opacity()))
                 .w_full()
                 .pt(24.0)
                 .pb(48.0)
