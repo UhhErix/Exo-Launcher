@@ -22,10 +22,10 @@ mod pc;
 mod pc_actions;
 mod pc_state;
 mod settings;
+mod setup;
 mod shell;
 mod state;
 mod store;
-mod tour;
 mod video_decoder;
 
 use crate::state::AppState;
@@ -100,22 +100,14 @@ fn on_key(s: &mut AppState, ev: &KeyEvent, tx: &mut Tx) -> bool {
     if s.palette_open {
         return palette::handle_palette_key(s, ev, tx);
     }
-    if let Some(step) = s.tour_step {
+    if s.setup.beat.is_some() {
         match ev.key {
             Key::Escape => {
                 s.finish_tour();
                 return true;
             }
             Key::Right | Key::Enter => {
-                if step + 1 >= tour::STEPS.len() {
-                    s.finish_tour();
-                } else {
-                    s.jump_tour(step + 1);
-                }
-                return true;
-            }
-            Key::Left => {
-                s.jump_tour(step.saturating_sub(1));
+                s.setup_beat_skip();
                 return true;
             }
             _ => {}
@@ -136,7 +128,9 @@ fn setup_state(s: &mut AppState, waker: Waker) {
 }
 
 fn poll_state(s: &mut AppState, now: f64, tx: &mut Tx) -> bool {
-    s.sync_and_tick_notices(now, tx)
+    let notices = s.sync_and_tick_notices(now, tx);
+    let setup = s.setup_tick(now);
+    notices || setup
 }
 
 #[cfg(windows)]
@@ -1035,6 +1029,13 @@ const PARITY_SCENES: &[(&str, SceneSetter)] = &[
         }
     }),
     ("tour", |s: &mut AppState| s.start_tour()),
+    ("setup-welcome", |s: &mut AppState| s.setup_go(0)),
+    ("setup-accounts", |s: &mut AppState| s.setup_go(1)),
+    ("setup-devices", |s: &mut AppState| s.setup_go(2)),
+    ("setup-pc", |s: &mut AppState| s.setup_go(3)),
+    ("setup-tour", |s: &mut AppState| s.setup_go(4)),
+    ("setup-done", |s: &mut AppState| s.setup_go(5)),
+    ("setup-coach", |s: &mut AppState| s.start_tour()),
     ("activate-key", |s: &mut AppState| s.key_modal_open = true),
     ("settings", |s: &mut AppState| {
         s.switch_room(state::Room::Settings)
@@ -1504,7 +1505,7 @@ fn run_parity_probe(
         "capturesOpen": rt.state.media.captures_open,
         "capturesSettingsOpen": rt.state.media.captures_settings_open,
         "keyModalOpen": rt.state.key_modal_open,
-        "tourStep": rt.state.tour_step,
+        "setupStage": rt.state.setup.stage,
         "settingsSection": format!("{:?}", rt.state.pc.settings_section),
         "pcTab": format!("{:?}", rt.state.pc.pc_tab),
         "appsSubTab": format!("{:?}", rt.state.pc.apps_sub_tab),
@@ -1794,16 +1795,12 @@ mod tests {
 
         rt.update(|s, _| s.start_tour());
         rt.frame(4.0 / 60.0);
-        assert_eq!(rt.state.tour_step, Some(0));
+        assert_eq!(rt.state.setup.beat, Some(0));
         assert_eq!(rt.state.room, Room::Library);
-        let (nx, ny) = rt.find("tour-next").expect("Tour Next");
-        rt.pointer_down(nx, ny);
-        rt.pointer_up(nx, ny);
-        rt.frame(5.0 / 60.0);
-        assert_eq!(rt.state.tour_step, Some(1));
+        rt.state.setup_beat_skip();
+        assert_eq!(rt.state.setup.beat, Some(1));
         rt.state.finish_tour();
-        assert!(rt.state.tour_step.is_none());
-        assert!(rt.state.tour_seen);
+        assert!(rt.state.setup.beat.is_none());
 
         rt.state.filter = LibraryFilter::Installed;
         assert!(rt.state.filtered_games().iter().all(|g| g.installed));
@@ -2215,7 +2212,7 @@ mod tests {
             &|s| {
                 s.start_tour();
             },
-            Some("exo-tour-card"),
+            Some("setup-coach"),
         );
         check_case(
             "library-more-menu",

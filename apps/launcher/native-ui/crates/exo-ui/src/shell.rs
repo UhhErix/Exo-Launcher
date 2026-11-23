@@ -1,7 +1,7 @@
 use crate::state::{AppState, ContextMenuTarget, InputMode, MiniBarSlot, Room};
 use crate::{
     captures, discord, game_page, key_modal, library, menus, music, notice, palette, pc, settings,
-    store, tour,
+    setup, store,
 };
 use exo_kit::{
     BG, CAPTION_BUTTON_GAP, CAPTION_BUTTON_HEIGHT, CAPTION_BUTTON_WIDTH, CAPTION_CAPSULE_PAD,
@@ -46,7 +46,7 @@ pub struct BlurBudget {
 
 impl BlurBudget {
     pub fn compute(s: &AppState, has_toast: bool) -> Self {
-        let modal_open = s.palette_open || s.key_modal_open || s.tour_step.is_some();
+        let modal_open = s.palette_open || s.key_modal_open || s.setup.beat.is_some();
         if modal_open {
             return Self {
                 top_bar_search: false,
@@ -155,6 +155,13 @@ pub fn view(s: &AppState, cx: &mut Cx<AppState>) -> El {
 
     let insets = cx.chrome_insets();
     let scale = cx.env().scale;
+    if s.setup.open {
+        let mut root = setup::view(s, scale);
+        if !s.notices.is_empty() {
+            root = root.child(notice::view(s, budget.toast));
+        }
+        return root;
+    }
 
     let mut search = row()
         .key("search-capsule")
@@ -579,8 +586,11 @@ pub fn view(s: &AppState, cx: &mut Cx<AppState>) -> El {
     if s.gamepad_connected {
         root = root.child(gamepad_prompt_bar());
     }
-    if s.tour_step.is_some() {
-        root = root.children(tour::layers(s, budget.overlay));
+    if s.setup.beat.is_some() {
+        root = root.child(setup::coach(s));
+    }
+    if s.setup.return_to.is_some() && !s.setup.open {
+        root = root.child(setup::return_bar(s));
     }
     if s.key_modal_open {
         root = root.children(key_modal::layers(s, budget.overlay));

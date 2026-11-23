@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Exo Setup — Ready to Play</title>
+  <link rel="stylesheet" href="../../assets/exo-v2-base.css" />
+  <style>
+    .done-main {
+      display: grid;
+      grid-template-rows: 1.15fr 0.85fr;
+      height: 100%;
+      min-height: 0;
+      overflow: hidden;
+      background: #000000;
+    }
+
+    /* Top 55%: Full-bleed real cover showcase with bold completion hero */
+    .done-hero {
+      position: relative;
+      overflow: hidden;
+      border-bottom: 1px solid var(--exo-float-line);
+    }
+
+    .done-wall {
+      position: absolute;
+      inset: 0;
+      display: grid;
+      grid-template-columns: repeat(7, minmax(0, 1fr));
+      gap: 10px;
+      padding: 10px;
+      opacity: 0.76;
+      pointer-events: none;
+    }
+
+    .done-wall img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      border-radius: var(--exo-card-radius);
+      display: block;
+    }
+
+    .done-vignette {
+      position: absolute;
+      inset: 0;
+      background:
+        linear-gradient(94deg, #000000 0%, rgb(0 0 0 / 0.92) 34%, rgb(0 0 0 / 0.56) 64%, rgb(0 0 0 / 0.34) 100%),
+        linear-gradient(180deg, rgb(0 0 0 / 0.35) 0%, rgb(0 0 0 / 0.25) 40%, #000000 100%);
+    }
+
+    .done-hero-inner {
+      position: relative;
+      z-index: 2;
+      display: grid;
+      grid-template-columns: 1.2fr 0.8fr;
+      align-items: end;
+      gap: 32px;
+      height: 100%;
+      padding: clamp(24px, 3vh, 44px) clamp(24px, 3vw, 48px);
+    }
+
+    .done-title {
+      margin: 12px 0 0;
+      font-size: clamp(42px, 4.2vw, 72px);
+      font-weight: 650;
+      line-height: 1.02;
+    }
+
+    .done-sub {
+      margin: 10px 0 0;
+      font-size: clamp(14px, 1.1vw, 18px);
+      color: var(--color-muted);
+      max-width: 600px;
+    }
+
+    .done-cta-row {
+      margin-top: clamp(18px, 2vh, 26px);
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .done-summary-glass {
+      justify-self: end;
+      width: 100%;
+      max-width: 520px;
+      border-radius: var(--exo-panel-radius);
+      padding: clamp(16px, 1.6vw, 22px);
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 14px 20px;
+    }
+
+    .sum-item-k {
+      font-size: calc(12px * var(--exo-scale));
+      color: var(--color-muted);
+    }
+
+    .sum-item-v {
+      margin-top: 3px;
+      font-size: calc(15px * var(--exo-scale));
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    /* Bottom 45%: Full-width 4-device configured hardware strip */
+    .done-devices {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      min-height: 0;
+    }
+
+    .done-dev-col {
+      position: relative;
+      display: grid;
+      grid-template-rows: 1fr auto;
+      padding: clamp(14px, 1.8vh, 22px) clamp(18px, 1.8vw, 26px);
+      border-right: 1px solid var(--exo-float-line);
+      overflow: hidden;
+      min-height: 0;
+    }
+
+    .done-dev-col:last-child { border-right: 0; }
+
+    .done-dev-art {
+      position: relative;
+      display: grid;
+      place-items: center;
+      min-height: 0;
+      padding: 6px;
+    }
+
+    .done-dev-art img.hw-render {
+      position: relative;
+      z-index: 2;
+      max-width: 90%;
+      max-height: 100%;
+    }
+
+    .done-dev-foot {
+      position: relative;
+      z-index: 2;
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+      gap: 10px;
+      padding-top: 10px;
+      border-top: 1px solid var(--exo-float-line);
+    }
+
+    .done-dev-name {
+      font-size: calc(16px * var(--exo-scale));
+      font-weight: 650;
+    }
+
+    .done-dev-stat {
+      font-size: calc(12px * var(--exo-scale));
+      color: var(--color-muted);
+      margin-top: 2px;
+    }
+  </style>
+</head>
+<body>
+  <div class="setup-shell-a">
+    <div id="topbar"></div>
+
+    <main class="done-main">
+      <section class="done-hero">
+        <div class="done-wall" id="done-wall"></div>
+        <div class="done-vignette"></div>
+
+        <div class="done-hero-inner">
+          <div>
+            <span class="badge good"><span id="ico-check"></span>Setup complete</span>
+            <h1 class="done-title">You're ready to play</h1>
+            <p class="done-sub">
+              16 installed games across 4 stores, all 4 peripherals verified, and 5 PC defaults applied. Everything stays editable anytime.
+            </p>
+            <div class="done-cta-row">
+              <button class="exo-btn is-primary is-lg">
+                <span>Open Library</span>
+                <span id="ico-arrow"></span>
+              </button>
+              <button class="exo-btn is-lg">Open Devices</button>
+            </div>
+          </div>
+
+          <div class="done-summary-glass exo-glass-deep tabular">
+            <div>
+              <div class="sum-item-k">Stores &amp; library</div>
+              <div class="sum-item-v"><span class="dot good"></span>4 stores · 215 games</div>
+            </div>
+            <div>
+              <div class="sum-item-k">Music &amp; Discord</div>
+              <div class="sum-item-v"><span class="dot good"></span>Spotify · Discord ready</div>
+            </div>
+            <div>
+              <div class="sum-item-k">PC defaults</div>
+              <div class="sum-item-v"><span class="dot good"></span>5 applied · Cleanup skipped</div>
+            </div>
+            <div>
+              <div class="sum-item-k">Interactive tour</div>
+              <div class="sum-item-v"><span class="dot good"></span>3 of 3 actions completed</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="done-devices">
+        <article class="done-dev-col">
+          <div class="done-dev-art">
+            <img class="hw-wash" src="../../assets/devices/dualsense-edge-black.png" alt="" />
+            <img class="hw-render" src="../../assets/devices/dualsense-edge-black.png" alt="DualSense Edge" />
+          </div>
+          <div class="done-dev-foot">
+            <div>
+              <div class="done-dev-name">DualSense Edge</div>
+              <div class="done-dev-stat tabular">fw 2.17 · Calibrated · Slot 1</div>
+            </div>
+            <span class="badge good">Ready</span>
+          </div>
+        </article>
+
+        <article class="done-dev-col">
+          <div class="done-dev-art">
+            <img class="hw-wash" src="../../assets/devices/wooting-60he-v2-split.png" alt="" />
+            <img class="hw-render" src="../../assets/devices/wooting-60he-v2-split.png" alt="Wooting 60HE v2" />
+          </div>
+          <div class="done-dev-foot">
+            <div>
+              <div class="done-dev-name">Wooting 60HE v2</div>
+              <div class="done-dev-stat tabular">8000 Hz · 0.4 / 0.15 mm · Backed up</div>
+            </div>
+            <span class="badge warn">CPU USB tip</span>
+          </div>
+        </article>
+
+        <article class="done-dev-col">
+          <div class="done-dev-art">
+            <img class="hw-wash" src="../../assets/devices/starlight-x.png" alt="" />
+            <img class="hw-render" style="max-height:86%" src="../../assets/devices/starlight-x.png" alt="Finalmouse Starlight X" />
+          </div>
+          <div class="done-dev-foot">
+            <div>
+              <div class="done-dev-name">Finalmouse Starlight X</div>
+              <div class="done-dev-stat tabular">84% · 1600 DPI · 4000 Hz</div>
+            </div>
+            <span class="badge good">Ready</span>
+          </div>
+        </article>
+
+        <article class="done-dev-col">
+          <div class="done-dev-art">
+            <img class="hw-wash" src="../../assets/devices/ziigaat-lush.png" alt="" />
+            <img class="hw-render" style="max-height:84%" src="../../assets/devices/ziigaat-lush.png" alt="ZiiGaat Lush" />
+          </div>
+          <div class="done-dev-foot">
+            <div>
+              <div class="done-dev-name">ZiiGaat Lush + fifine</div>
+              <div class="done-dev-stat tabular">Exo EQ v2 Auto · JM-1 · Exo Voice</div>
+            </div>
+            <span class="badge good">Active</span>
+          </div>
+        </article>
+      </section>
+    </main>
+
+    <footer class="setup-footer">
+      <div class="setup-footer-note">Skipped items (Exo account, Cleanup) stay quietly available under Settings › Setup</div>
+      <div class="setup-footer-actions">
+        <button class="exo-btn is-sm is-ghost">Replay interactive tour</button>
+        <button class="exo-btn is-sm">Settings › Setup</button>
+      </div>
+    </footer>
+  </div>
+
+  <script src="../../assets/exo-v2-data.js"></script>
+  <script>
+    document.getElementById("topbar").outerHTML = renderTopStageTrack(5, { hideSkip: true });
+    document.getElementById("ico-check").innerHTML = EXO_ICONS.check;
+    document.getElementById("ico-arrow").innerHTML = EXO_ICONS.arrowRight;
+
+    document.getElementById("done-wall").innerHTML = EXO_GAMES.slice(0, 7).map(g =>
+      `<img src="${EXO_ASSETS}/covers/${g.cover}" alt="${g.title}" />`
+    ).join("");
+  </script>
+</body>
+</html>

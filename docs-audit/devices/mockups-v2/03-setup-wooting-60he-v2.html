@@ -1,0 +1,434 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Exo Devices Setup — Wooting 60HE v2</title>
+  <link rel="stylesheet" href="../../assets/exo-v2-base.css" />
+  <style>
+    .woot-shell {
+      display: grid;
+      grid-template-rows: auto auto 1fr auto;
+      width: 100vw;
+      height: 100vh;
+      overflow: hidden;
+      background: #000000;
+    }
+
+    .woot-main {
+      display: grid;
+      grid-template-rows: auto 1fr auto;
+      gap: clamp(9px, 1.2vh, 16px);
+      padding: clamp(10px, 1.3vh, 20px) clamp(20px, 2.4vw, 40px) clamp(10px, 1.3vh, 18px);
+      min-height: 0;
+      overflow: hidden;
+    }
+
+    .woot-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 20px;
+    }
+
+    .woot-id-cluster {
+      display: flex;
+      align-items: center;
+      gap: clamp(14px, 1.4vw, 22px);
+      min-width: 0;
+    }
+
+    .woot-photo-pill {
+      position: relative;
+      width: clamp(118px, 10vw, 184px);
+      height: clamp(46px, 4.8vh, 68px);
+      padding: 5px 12px;
+      border-radius: 16px;
+      background: radial-gradient(circle at 50% 60%, rgb(255 255 255 / 0.09), rgb(255 255 255 / 0.03) 72%);
+      border: 1px solid var(--exo-float-line);
+      display: grid;
+      place-items: center;
+      overflow: hidden;
+      flex: none;
+    }
+
+    .woot-photo-pill img.photo-wash {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      filter: blur(22px) saturate(1.2) brightness(0.45);
+      opacity: 0.45;
+      pointer-events: none;
+    }
+
+    .woot-photo-pill img.photo-main {
+      position: relative;
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      filter: brightness(1.42) contrast(1.04) drop-shadow(0 4px 10px rgb(0 0 0 / 0.65));
+    }
+
+    .woot-head h1 {
+      margin: 0;
+      font-size: clamp(22px, 2vw, 36px);
+      font-weight: 650;
+      line-height: 1.1;
+    }
+
+    .woot-badges {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+
+    .matrix-hero-wrap {
+      display: grid;
+      grid-template-rows: auto 1fr auto;
+      gap: clamp(7px, 0.9vh, 13px);
+      width: 100%;
+      max-width: min(2240px, 100%);
+      height: 100%;
+      margin: 0 auto;
+      min-height: 0;
+    }
+
+    #wooting-matrix {
+      display: flex;
+      min-height: 0;
+      height: 100%;
+    }
+
+    .woot-main .woot-matrix {
+      flex: 1;
+      display: grid;
+      grid-template-rows: repeat(5, minmax(0, 1fr));
+      height: 100%;
+      padding: clamp(10px, 1.2vh, 18px) clamp(12px, 1.2vw, 22px);
+      gap: clamp(5px, 0.65vh, 10px);
+    }
+
+    .woot-main .wk-row {
+      min-height: 0;
+      height: 100%;
+      gap: clamp(5px, 0.5vw, 9px);
+    }
+
+    .woot-main .wk-key {
+      height: 100%;
+      min-height: 0;
+      padding: clamp(4px, 0.8vh, 14px) clamp(7px, 0.7vw, 14px);
+    }
+
+    .woot-main .wk-label {
+      font-size: clamp(11px, 0.9vw, 17px);
+    }
+
+    .woot-main .wk-act {
+      font-size: clamp(9.5px, 0.72vw, 13px);
+    }
+
+    .matrix-legend {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      font-size: calc(12px * var(--exo-scale));
+      color: var(--color-muted);
+    }
+
+    .legend-items {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+
+    .legend-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .swatch {
+      width: 10px;
+      height: 10px;
+      border-radius: 3px;
+    }
+
+    .woot-travel-strip {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 18px;
+      padding: clamp(6px, 0.8vh, 11px) clamp(14px, 1.3vw, 20px);
+      border-radius: 14px;
+      background: var(--exo-surface-card);
+      border: 1px solid var(--exo-float-line);
+      font-size: calc(12px * var(--exo-scale));
+    }
+
+    .travel-meter {
+      flex: 1;
+      max-width: clamp(280px, 32vw, 660px);
+      height: 8px;
+      border-radius: 999px;
+      background: rgb(255 255 255 / 0.08);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .travel-meter-fill {
+      height: 100%;
+      border-radius: 999px;
+      background: var(--color-good);
+      transition: width var(--dur-quick) var(--ease-out);
+    }
+
+    .woot-dock {
+      display: grid;
+      grid-template-columns: 1.28fr 0.9fr 0.9fr 1.22fr;
+      border-radius: var(--exo-panel-radius);
+      overflow: hidden;
+    }
+
+    .dock-cell {
+      padding: clamp(10px, 1.2vh, 16px) clamp(14px, 1.4vw, 22px);
+      border-right: 1px solid var(--exo-line);
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      gap: 7px;
+      min-width: 0;
+    }
+
+    .dock-cell:last-child { border-right: 0; }
+
+    .dock-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+    }
+
+    .dock-lbl {
+      font-size: calc(13px * var(--exo-scale));
+      font-weight: 600;
+    }
+
+    .dock-val {
+      font-size: calc(14.5px * var(--exo-scale));
+      font-weight: 650;
+      color: var(--color-fg);
+    }
+
+    .dock-sub {
+      font-size: calc(11.5px * var(--exo-scale));
+      color: var(--color-muted);
+      line-height: 1.35;
+    }
+
+    .mode-seg {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 4px;
+      padding: 3px;
+      border-radius: 999px;
+      background: rgb(255 255 255 / 0.08);
+    }
+
+    .mode-seg button {
+      height: calc(26px * var(--exo-scale));
+      border: 0;
+      border-radius: 999px;
+      background: transparent;
+      color: var(--color-muted);
+      font-family: var(--font-sans);
+      font-size: calc(11.5px * var(--exo-scale));
+      font-weight: 500;
+      cursor: pointer;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      padding: 0 8px;
+    }
+
+    .mode-seg button.is-on {
+      background: var(--color-fg);
+      color: var(--color-primary-fg);
+      font-weight: 600;
+    }
+
+    .usb-advisory {
+      display: flex;
+      align-items: flex-start;
+      gap: 8px;
+      padding: 7px 10px;
+      border-radius: 10px;
+      background: rgb(245 185 75 / 0.1);
+      border: 1px solid rgb(245 185 75 / 0.24);
+      font-size: calc(11px * var(--exo-scale));
+      color: var(--color-muted);
+      line-height: 1.35;
+    }
+
+    .usb-advisory strong {
+      color: var(--color-warn);
+      font-weight: 600;
+    }
+  </style>
+</head>
+<body>
+  <div class="woot-shell">
+    <div id="topbar"></div>
+    <div id="dev-stepper"></div>
+
+    <main class="woot-main">
+      <div class="woot-head">
+        <div class="woot-id-cluster">
+          <div class="woot-photo-pill">
+            <img class="photo-wash" src="../../assets/devices/wooting-60he-v2-thumb.png" alt="" />
+            <img class="photo-main" src="../../assets/devices/wooting-60he-v2-thumb.png" alt="Wooting 60HE v2" />
+          </div>
+          <div style="min-width:0">
+            <h1>Wooting 60HE v2</h1>
+            <div class="tabular" style="color:var(--color-muted);font-size:calc(12.5px * var(--exo-scale))">
+              ANSI · Split spacebar [2.75u Space · 1.25u Fn · 2.25u Space] · VID 31E3 / PID 1342 · fw 2.15.0-beta.0 · Profile: General
+            </div>
+          </div>
+        </div>
+
+        <div class="woot-badges tabular">
+          <span class="badge good"><span id="ico-save"></span>Safety backup saved</span>
+          <span class="badge good">8000 Hz · Tachyon on</span>
+          <span class="badge warn"><span id="ico-usb-badge"></span>Chipset USB — free CPU port available</span>
+        </div>
+      </div>
+
+      <section class="matrix-hero-wrap">
+        <div class="matrix-legend tabular">
+          <div class="legend-items">
+            <span class="legend-chip"><i class="swatch" style="background:rgb(61 214 140 / 0.65)"></i>WASD Rapid Trigger (0.4 mm / 0.15 mm)</span>
+            <span class="legend-chip"><i class="swatch" style="background:rgb(255 179 64 / 0.7)"></i>Split-bar center Fn (1.25u)</span>
+            <span class="legend-chip"><i class="swatch" style="background:rgb(255 255 255 / 0.55)"></i>Split Spacebars (2.75u / 2.25u)</span>
+          </div>
+          <span id="selected-key-readout">Selected key: <strong>W</strong> · Actuation 0.4 mm · RT 0.15 mm</span>
+        </div>
+
+        <div id="wooting-matrix"></div>
+
+        <div class="woot-travel-strip tabular">
+          <div><strong id="travel-key">Key W</strong> <span style="color:var(--color-muted)">· Actuates at <span id="travel-act">0.4 mm</span>, resets after <span id="travel-rt">0.15 mm</span> lift (4.0 mm Hall-effect travel)</span></div>
+          <div class="travel-meter"><div class="travel-meter-fill" id="travel-fill" style="width:10%"></div></div>
+          <span class="mono" style="color:var(--color-good)">2047 B HID write OK</span>
+        </div>
+      </section>
+
+      <section class="woot-dock exo-glass-deep tabular">
+        <div class="dock-cell">
+          <div class="dock-row">
+            <span class="dock-lbl">Automatic safety backup</span>
+            <span class="badge good">Saved</span>
+          </div>
+          <div class="mode-seg" id="profile-seg">
+            <button type="button" class="is-on">Exo gaming defaults</button>
+            <button type="button">Keep Wootility (3.0 mm)</button>
+          </div>
+          <div class="dock-sub">Your current Wootility profile ("General", 3.0 mm) was backed up locally before any changes.</div>
+        </div>
+
+        <div class="dock-cell">
+          <div class="dock-row">
+            <span class="dock-lbl">Actuation point</span>
+            <span class="dock-val mono" id="act-val">0.4 mm</span>
+          </div>
+          <input type="range" class="exo-slider" id="act-slider" min="1" max="40" value="4" style="--fill:8%" />
+          <div class="dock-sub">Range 0.1 – 4.0 mm · Original Wootility: 3.0 mm</div>
+        </div>
+
+        <div class="dock-cell">
+          <div class="dock-row">
+            <span class="dock-lbl">Rapid Trigger</span>
+            <div style="display:flex;align-items:center;gap:10px">
+              <span class="dock-val mono" id="rt-val">0.15 mm</span>
+              <button type="button" class="exo-switch is-on"></button>
+            </div>
+          </div>
+          <input type="range" class="exo-slider" id="rt-slider" min="10" max="200" value="15" style="--fill:3%" />
+          <div class="dock-sub">Instant reset on release · 8000 Hz scan</div>
+        </div>
+
+        <div class="dock-cell">
+          <div class="dock-row">
+            <span class="dock-lbl">Tachyon mode (8000 Hz)</span>
+            <button type="button" class="exo-switch is-on"></button>
+          </div>
+          <div class="usb-advisory">
+            <span id="ico-usb-dock" style="color:var(--color-warn);flex:none;margin-top:1px"></span>
+            <span>Connected on a <strong>Chipset USB port</strong>. A free CPU USB port is available for lowest 8000 Hz jitter.</span>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="setup-footer">
+      <div class="setup-footer-note">Device 2 of 4 · Full-width split-bar matrix · Automatic backup restores original Wootility profile in 1 click</div>
+      <div class="setup-footer-actions">
+        <button class="exo-btn is-ghost">Skip keyboard</button>
+        <button class="exo-btn">Keep current Wootility profile</button>
+        <button class="exo-btn is-primary">
+          <span>Apply &amp; next: Starlight X</span>
+          <span id="ico-arrow"></span>
+        </button>
+      </div>
+    </footer>
+  </div>
+
+  <script src="../../assets/exo-v2-data.js"></script>
+  <script>
+    document.getElementById("topbar").outerHTML = renderTopStageTrack(2);
+    document.getElementById("dev-stepper").outerHTML = renderDeviceStepper(1);
+    document.getElementById("ico-save").innerHTML = EXO_ICONS.save;
+    document.getElementById("ico-usb-badge").innerHTML = EXO_ICONS.usb;
+    document.getElementById("ico-usb-dock").innerHTML = EXO_ICONS.usb;
+    document.getElementById("ico-arrow").innerHTML = EXO_ICONS.arrowRight;
+
+    const readout = document.getElementById("selected-key-readout");
+    mountWootingMatrix(document.getElementById("wooting-matrix"), {
+      selected: "W",
+      actuation: "0.4",
+      rt: "0.15",
+      onSelect: (id, label) => {
+        readout.innerHTML = `Selected key: <strong>${label}</strong> (${id}) · Actuation ${document.getElementById("act-val").textContent} · RT ${document.getElementById("rt-val").textContent}`;
+        document.getElementById("travel-key").textContent = `Key ${label}`;
+      }
+    });
+
+    const actSlider = document.getElementById("act-slider");
+    actSlider.addEventListener("input", () => {
+      const mm = (actSlider.value / 10).toFixed(1);
+      actSlider.style.setProperty("--fill", ((actSlider.value - 1) / 39 * 100) + "%");
+      document.getElementById("act-val").textContent = mm + " mm";
+      document.getElementById("travel-act").textContent = mm + " mm";
+      document.getElementById("travel-fill").style.width = (actSlider.value / 40 * 100) + "%";
+      document.querySelectorAll(".wk-act").forEach(el => el.textContent = mm);
+    });
+
+    const rtSlider = document.getElementById("rt-slider");
+    rtSlider.addEventListener("input", () => {
+      const mm = (rtSlider.value / 100).toFixed(2);
+      rtSlider.style.setProperty("--fill", ((rtSlider.value - 10) / 190 * 100) + "%");
+      document.getElementById("rt-val").textContent = mm + " mm";
+    });
+
+    document.querySelectorAll(".exo-switch").forEach(sw => sw.addEventListener("click", () => sw.classList.toggle("is-on")));
+    document.querySelectorAll("#profile-seg button").forEach(btn => btn.addEventListener("click", () => {
+      document.querySelectorAll("#profile-seg button").forEach(b => b.classList.remove("is-on"));
+      btn.classList.add("is-on");
+    }));
+  </script>
+</body>
+</html>

@@ -1,0 +1,384 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Exo Setup — Live Interactive Room Tour</title>
+  <link rel="stylesheet" href="../../assets/exo-v2-base.css" />
+  <style>
+    .live-shell {
+      position: relative;
+      display: grid;
+      grid-template-rows: auto 1fr;
+      width: 100vw;
+      height: 100vh;
+      overflow: hidden;
+      background: #000000;
+    }
+
+    /* Real full-window Library Room — completely UNBLOCKED, zero dimming scrim */
+    .lib-room {
+      position: relative;
+      display: grid;
+      grid-template-rows: minmax(210px, 34%) 1fr;
+      gap: clamp(12px, 1.4vh, 18px);
+      padding: 4px var(--exo-gap) 14px;
+      min-height: 0;
+      overflow: hidden;
+    }
+
+    .lib-hero {
+      position: relative;
+      border-radius: var(--exo-panel-radius);
+      overflow: hidden;
+      background: #080808;
+    }
+
+    .lib-hero img.banner {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      object-position: center 24%;
+      display: block;
+    }
+
+    .lib-hero::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background:
+        linear-gradient(90deg, rgb(0 0 0 / 0.86) 0%, rgb(0 0 0 / 0.35) 45%, rgb(0 0 0 / 0.12) 100%),
+        linear-gradient(180deg, transparent 40%, rgb(0 0 0 / 0.85) 100%);
+    }
+
+    .lib-hero-content {
+      position: absolute;
+      left: clamp(20px, 2.2vw, 34px);
+      right: clamp(20px, 2.2vw, 34px);
+      bottom: clamp(16px, 2vh, 26px);
+      z-index: 2;
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+      gap: 20px;
+    }
+
+    .lib-hero-title {
+      margin: 0;
+      font-size: clamp(26px, 2.4vw, 42px);
+      font-weight: 650;
+      line-height: 1.05;
+    }
+
+    .lib-hero-meta {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-top: 6px;
+      font-size: calc(13px * var(--exo-scale));
+      color: var(--color-muted);
+    }
+
+    .lib-grid-section {
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+    }
+
+    .lib-grid-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 4px 10px;
+    }
+
+    .lib-grid {
+      display: grid;
+      grid-template-columns: repeat(8, minmax(0, 1fr));
+      grid-template-rows: repeat(2, minmax(0, 1fr));
+      gap: var(--exo-gap);
+      flex: 1;
+      min-height: 0;
+    }
+
+    @media (max-width: 1400px) {
+      .lib-grid { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+    }
+
+    .lib-tile {
+      position: relative;
+      border-radius: var(--exo-card-radius);
+      overflow: hidden;
+      background: #0a0a0a;
+      cursor: pointer;
+      transition: transform var(--dur-quick) var(--ease-out);
+    }
+
+    .lib-tile:hover { transform: translateY(-3px); }
+
+    .lib-tile img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+
+    .lib-tile-plate {
+      position: absolute;
+      left: 7px;
+      right: 7px;
+      bottom: 7px;
+      padding: 5px 8px;
+      border-radius: 9px;
+      background: rgb(0 0 0 / 0.65);
+      backdrop-filter: blur(10px);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 6px;
+      font-size: calc(11px * var(--exo-scale));
+    }
+
+    .lib-tile-plate span.n {
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      font-weight: 500;
+    }
+
+    /* Non-blocking Liquid Glass Coach-Mark anchored cleanly under Ctrl+K Search */
+    .coach-anchor {
+      position: fixed;
+      top: calc(64px * var(--exo-scale));
+      right: clamp(18px, 1.8vw, 32px);
+      z-index: 60;
+      width: clamp(380px, 28vw, 480px);
+      border-radius: var(--exo-sheet-radius);
+      padding: clamp(18px, 1.6vw, 24px);
+    }
+
+    .coach-pointer {
+      position: absolute;
+      top: -7px;
+      right: clamp(150px, 11vw, 200px);
+      width: 14px;
+      height: 14px;
+      background: rgb(18 18 18 / 0.9);
+      border-top: 1px solid rgb(255 255 255 / 0.2);
+      border-left: 1px solid rgb(255 255 255 / 0.2);
+      transform: rotate(45deg);
+    }
+
+    .coach-beats {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 6px;
+      margin-bottom: 14px;
+    }
+
+    .coach-beat {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 9px;
+      border-radius: 10px;
+      background: rgb(255 255 255 / 0.05);
+      font-size: calc(11.5px * var(--exo-scale));
+      color: var(--color-faint);
+    }
+
+    .coach-beat.is-active {
+      background: rgb(255 255 255 / 0.14);
+      color: var(--color-fg);
+      font-weight: 600;
+    }
+
+    .coach-beat.is-done {
+      background: rgb(61 214 140 / 0.14);
+      color: var(--color-good);
+      font-weight: 600;
+    }
+
+    .coach-title {
+      margin: 0;
+      font-size: clamp(18px, 1.35vw, 22px);
+      font-weight: 650;
+      line-height: 1.2;
+    }
+
+    .coach-body {
+      margin: 8px 0 0;
+      font-size: calc(13px * var(--exo-scale));
+      color: var(--color-muted);
+      line-height: 1.45;
+    }
+
+    .coach-trigger-row {
+      margin-top: 14px;
+      padding: 10px 12px;
+      border-radius: 12px;
+      background: rgb(255 255 255 / 0.06);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      font-size: calc(12.5px * var(--exo-scale));
+    }
+
+    .coach-actions {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-top: 16px;
+      padding-top: 12px;
+      border-top: 1px solid var(--exo-line);
+    }
+
+    /* Interactive Command Palette demo when user presses Ctrl+K or clicks Search */
+    .palette-demo {
+      position: fixed;
+      top: 16vh;
+      left: 50%;
+      transform: translateX(-50%);
+      width: min(620px, 90vw);
+      border-radius: var(--exo-sheet-radius);
+      padding: 16px;
+      z-index: 70;
+      display: none;
+    }
+
+    .palette-demo.is-open { display: block; }
+  </style>
+</head>
+<body>
+  <div class="live-shell">
+    <div id="exobar"></div>
+
+    <main class="lib-room">
+      <section class="lib-hero">
+        <img class="banner" src="../../assets/heroes/hero_steam_4435490.jpg" alt="Call of Duty: Modern Warfare 4" />
+        <div class="lib-hero-content">
+          <div>
+            <span class="badge solid" style="margin-bottom:8px">Last played</span>
+            <h1 class="lib-hero-title">Call of Duty: Modern Warfare 4</h1>
+            <div class="lib-hero-meta tabular">
+              <img src="../../assets/logos/steam.svg" width="15" height="15" alt="" />
+              <span>Steam</span>
+              <span>·</span>
+              <span>282 hours played</span>
+              <span>·</span>
+              <span style="color:var(--color-good)">Exo EQ Tactical FPS ready</span>
+            </div>
+            <div style="display:flex;gap:10px;margin-top:14px">
+              <button class="exo-btn is-primary is-lg"><span id="ico-play"></span><span>Play</span></button>
+              <button class="exo-btn is-lg">Game details</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="lib-grid-section">
+        <div class="lib-grid-head">
+          <div style="display:flex;align-items:center;gap:10px">
+            <span style="font-size:calc(16px * var(--exo-scale));font-weight:650">Installed games</span>
+            <span class="badge tabular">16 ready</span>
+          </div>
+          <div style="display:flex;gap:6px">
+            <span class="badge solid">Installed</span>
+            <span class="badge">All 215</span>
+            <span class="badge">Recently played</span>
+          </div>
+        </div>
+        <div class="lib-grid" id="lib-grid"></div>
+      </section>
+    </main>
+
+    <!-- Non-blocking Liquid Glass Coach-Mark -->
+    <aside class="coach-anchor exo-glass-deep" id="coach-card" role="status" aria-live="polite">
+      <div class="coach-pointer"></div>
+      <div class="coach-beats tabular">
+        <div class="coach-beat is-active" id="beat-1">1. Ctrl+K</div>
+        <div class="coach-beat" id="beat-2">2. Open game</div>
+        <div class="coach-beat" id="beat-3">3. Devices</div>
+      </div>
+
+      <h2 class="coach-title" id="coach-title">Try instant search right here</h2>
+      <p class="coach-body" id="coach-body">
+        The Library is live and unblocked. Press <span class="exo-kbd" style="margin:0 2px">Ctrl K</span> or click the Search capsule above to jump to any game, room, or device setting.
+      </p>
+
+      <div class="coach-trigger-row" id="coach-status">
+        <span style="color:var(--color-muted)">Waiting for your action…</span>
+        <span class="badge tabular">Step 1 of 3</span>
+      </div>
+
+      <div class="coach-actions">
+        <button class="exo-btn is-sm is-ghost">Skip tour</button>
+        <div style="display:flex;gap:8px">
+          <button class="exo-btn is-sm" id="btn-try">Try Ctrl+K</button>
+          <button class="exo-btn is-sm is-ghost">Skip step</button>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Live Palette Demo -->
+    <div class="palette-demo exo-glass-deep" id="palette-demo">
+      <div style="display:flex;align-items:center;gap:10px;padding:6px 8px 12px;border-bottom:1px solid var(--exo-line)">
+        <span id="ico-search"></span>
+        <span style="color:var(--color-fg);font-size:15px">Wuthering Waves, Wooting 60HE v2, Devices…</span>
+        <span class="exo-kbd">Esc</span>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:4px;margin-top:10px;font-size:13px">
+        <div style="padding:8px 10px;border-radius:10px;background:rgb(255 255 255 / 0.08);display:flex;justify-content:space-between">
+          <span><strong>Wuthering Waves</strong> · Play on Steam</span><span style="color:var(--color-muted)">126 h</span>
+        </div>
+        <div style="padding:8px 10px;border-radius:10px;display:flex;justify-content:space-between;color:var(--color-muted)">
+          <span><strong>Wooting 60HE v2</strong> · Open keyboard settings</span><span>Devices</span>
+        </div>
+        <div style="padding:8px 10px;border-radius:10px;display:flex;justify-content:space-between;color:var(--color-muted)">
+          <span><strong>Resume setup</strong> · Settings › Setup</span><span>Action</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="../../assets/exo-v2-data.js"></script>
+  <script>
+    document.getElementById("exobar").outerHTML = renderExoBar("Library", true);
+    document.getElementById("ico-play").innerHTML = EXO_ICONS.play;
+    document.getElementById("ico-search").innerHTML = EXO_ICONS.search;
+
+    document.getElementById("lib-grid").innerHTML = EXO_GAMES.slice(0, 16).map(g => `
+      <div class="lib-tile">
+        <img src="${EXO_ASSETS}/covers/${g.cover}" alt="${g.title}" />
+        <div class="lib-tile-plate">
+          <span class="n">${g.title}</span>
+          <span class="tabular" style="color:var(--color-muted);flex:none">${g.hours > 0 ? g.hours + "h" : g.store}</span>
+        </div>
+      </div>
+    `).join("");
+
+    function triggerBeat1() {
+      const pal = document.getElementById("palette-demo");
+      pal.classList.add("is-open");
+      const b1 = document.getElementById("beat-1");
+      b1.classList.remove("is-active");
+      b1.classList.add("is-done");
+      b1.innerHTML = EXO_ICONS.check + " Ctrl+K";
+      document.getElementById("beat-2").classList.add("is-active");
+      document.getElementById("coach-status").innerHTML = `<span style="color:var(--color-good);font-weight:600">Nice — Search opened</span><span class="badge good">Completed</span>`;
+    }
+
+    document.getElementById("exo-bar-search-btn").addEventListener("click", triggerBeat1);
+    document.getElementById("btn-try").addEventListener("click", triggerBeat1);
+    window.addEventListener("keydown", e => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        triggerBeat1();
+      } else if (e.key === "Escape") {
+        document.getElementById("palette-demo").classList.remove("is-open");
+      }
+    });
+  </script>
+</body>
+</html>

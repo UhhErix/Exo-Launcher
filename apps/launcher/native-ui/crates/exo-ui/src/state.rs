@@ -3,7 +3,7 @@ use crate::gamepad::GamepadAction;
 use crate::image_cache::{CacheRoom, ImageLruCache, bucket_dim, scale_bucket};
 use crate::media_state::MediaState;
 use crate::pc_state::SettingsAndPcState;
-use crate::tour;
+use crate::setup::SetupFlow;
 use crate::video_decoder::VideoFrameRouter;
 use exo_kit::SPRING_MOVE;
 use exo_rpc::types::COVER_CACHE_ORIGIN;
@@ -193,7 +193,7 @@ pub enum PaletteTarget {
     OpenGame(String),
     RefreshLibrary,
     ActivateKey,
-    StartTour,
+    ResumeSetup,
 }
 
 #[derive(Clone, Debug)]
@@ -300,8 +300,7 @@ pub struct AppState {
     pub store_search_results: Option<Vec<StoreTile>>,
     pub store_game: Option<StoreGame>,
     pub store_offers: Option<StoreOtherOffers>,
-    pub tour_step: Option<usize>,
-    pub tour_seen: bool,
+    pub setup: SetupFlow,
     pub gamepad_connected: bool,
     pub input_mode: InputMode,
     pub settings: LauncherSettings,
@@ -410,8 +409,7 @@ impl AppState {
             store_search_results: None,
             store_game: None,
             store_offers: None,
-            tour_step: None,
-            tour_seen: true,
+            setup: SetupFlow::default(),
             gamepad_connected: false,
             input_mode: InputMode::Pointer,
             settings: LauncherSettings {
@@ -509,8 +507,7 @@ impl AppState {
             store_search_results: None,
             store_game: None,
             store_offers: None,
-            tour_step: None,
-            tour_seen: true,
+            setup: SetupFlow::default(),
             gamepad_connected: false,
             input_mode: InputMode::Pointer,
             settings: LauncherSettings::default(),
@@ -924,16 +921,27 @@ impl AppState {
     }
 
     pub fn apply_settings(&mut self, settings: LauncherSettings) {
-        let seen = settings
+        let tour_seen = settings
             .ui_prefs
             .get("tourSeen")
             .and_then(|v| v.as_i64())
             .unwrap_or(0)
             >= 1;
-        self.tour_seen = seen;
+        let raw = settings
+            .ui_prefs
+            .get("setupProgress")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string();
         self.settings = settings;
-        if !seen && self.tour_step.is_none() && self.status == HostStatus::Connected {
-            self.start_tour();
+        if !self.setup.loaded && self.status == HostStatus::Connected {
+            self.setup.loaded = true;
+            if raw.is_empty() && !tour_seen {
+                self.setup = SetupFlow::first_run();
+                self.setup_enter_stage();
+            } else {
+                self.setup.apply_pref(&raw);
+            }
         }
     }
 
@@ -2065,37 +2073,6 @@ impl AppState {
         }
     }
 
-    pub fn start_tour(&mut self) {
-        self.palette_open = false;
-        self.key_modal_open = false;
-        self.open_game_id = None;
-        self.store_game = None;
-        self.jump_tour(0);
-    }
-
-    pub fn jump_tour(&mut self, idx: usize) {
-        let clamped = idx.min(tour::STEPS.len() - 1);
-        self.tour_step = Some(clamped);
-        let target_room = tour::STEPS[clamped].room;
-        self.room = target_room;
-        if target_room == Room::Store && self.store_home.is_none() {
-            self.load_store_home(false);
-        }
-    }
-
-    pub fn finish_tour(&mut self) {
-        self.tour_step = None;
-        self.tour_seen = true;
-        #[cfg(windows)]
-        if let Some(rpc) = self.rpc.clone() {
-            rpc.call_raw(
-                METHOD_SETTINGS_SET,
-                &json!({ "uiPrefs": { "tourSeen": 1 } }),
-                |_| {},
-            );
-        }
-    }
-
     pub fn apply_gamepad_action(&mut self, action: GamepadAction, tx: &mut Tx) {
         if !matches!(action, GamepadAction::Connected(_)) {
             self.input_mode = InputMode::Gamepad;
@@ -2146,12 +2123,8 @@ impl AppState {
                 }
             }
             GamepadAction::Confirm => {
-                if let Some(step) = self.tour_step {
-                    if step + 1 >= tour::STEPS.len() {
-                        self.finish_tour();
-                    } else {
-                        self.jump_tour(step + 1);
-                    }
+                if self.setup.beat.is_some() {
+                    self.setup_beat_skip();
                 } else if self.palette_open {
                     if let Some(item) = self.palette_results().get(self.palette_index) {
                         self.execute_palette_target(item.target.clone(), tx);
@@ -2248,7 +2221,7 @@ impl AppState {
             self.close_key_modal();
             return true;
         }
-        if self.tour_step.is_some() {
+        if self.setup.beat.is_some() {
             self.finish_tour();
             return true;
         }
@@ -2607,9 +2580,9 @@ impl AppState {
         if !query.is_empty() {
             let actions = [
                 (
-                    "pal-action-tour",
-                    "Take the guided tour",
-                    PaletteTarget::StartTour,
+                    "pal-action-setup",
+                    "Resume setup",
+                    PaletteTarget::ResumeSetup,
                 ),
                 (
                     "pal-action-key",
@@ -2644,7 +2617,7 @@ impl AppState {
             PaletteTarget::OpenGame(id) => self.open_game_page(&id),
             PaletteTarget::RefreshLibrary => self.refresh_library(),
             PaletteTarget::ActivateKey => self.open_key_modal(tx),
-            PaletteTarget::StartTour => self.start_tour(),
+            PaletteTarget::ResumeSetup => self.setup_resume(),
         }
     }
 

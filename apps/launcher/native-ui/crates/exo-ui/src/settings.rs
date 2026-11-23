@@ -318,6 +318,17 @@ fn section_about(s: &AppState) -> El {
         ))
         .child(el().w_full().h(1.0).fill(hairline()))
         .child(set_row(
+            "Setup",
+            Some(&s.setup.summary()),
+            glass_button(
+                "set-resume-setup",
+                "Resume setup",
+                Some(icon_sparkles(13.0, FG)),
+            )
+            .on_press(|s: &mut AppState| s.setup_resume()),
+        ))
+        .child(el().w_full().h(1.0).fill(hairline()))
+        .child(set_row(
             "Guided tour",
             Some("Walk through Library, Store, Discord, Music, Devices, and Exo AI"),
             glass_button(

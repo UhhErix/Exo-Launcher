@@ -17,7 +17,7 @@ fn palette_icon(target: &PaletteTarget) -> El {
         PaletteTarget::OpenGame(_) => icon_gamepad(16.0, fg_muted()),
         PaletteTarget::RefreshLibrary => icon_refresh(16.0, fg_muted()),
         PaletteTarget::ActivateKey => icon_key(16.0, fg_muted()),
-        PaletteTarget::StartTour => icon_sparkles(16.0, fg_muted()),
+        PaletteTarget::ResumeSetup => icon_sparkles(16.0, fg_muted()),
     }
 }
 

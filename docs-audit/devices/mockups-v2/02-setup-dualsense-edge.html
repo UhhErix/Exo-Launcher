@@ -1,0 +1,431 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Exo Devices Setup — DualSense Edge</title>
+  <link rel="stylesheet" href="../../assets/exo-v2-base.css" />
+  <style>
+    .edge-shell {
+      display: grid;
+      grid-template-rows: auto auto 1fr auto;
+      width: 100vw;
+      height: 100vh;
+      overflow: hidden;
+      background: #000000;
+    }
+
+    .edge-body {
+      display: grid;
+      grid-template-columns: minmax(0, 1.55fr) clamp(380px, 31vw, 520px);
+      min-height: 0;
+      height: 100%;
+      overflow: hidden;
+    }
+
+    /* Left ~65%: Massive DualSense Edge hero canvas with live callout pins */
+    .edge-hero-stage {
+      position: relative;
+      display: grid;
+      place-items: center;
+      border-right: 1px solid var(--exo-float-line);
+      padding: clamp(20px, 2.5vh, 36px) clamp(24px, 3vw, 48px);
+      overflow: hidden;
+      min-height: 0;
+    }
+
+    .edge-stage-head {
+      position: absolute;
+      top: clamp(16px, 2vh, 26px);
+      left: clamp(20px, 2.4vw, 34px);
+      right: clamp(20px, 2.4vw, 34px);
+      z-index: 5;
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 16px;
+    }
+
+    .edge-stage-head h1 {
+      margin: 0;
+      font-size: clamp(26px, 2.2vw, 38px);
+      font-weight: 650;
+      line-height: 1.08;
+    }
+
+    .edge-stage-head p {
+      margin: 4px 0 0;
+      font-size: calc(13px * var(--exo-scale));
+      color: var(--color-muted);
+    }
+
+    .edge-visual-frame {
+      position: relative;
+      width: min(880px, 86%);
+      aspect-ratio: 3 / 2;
+      display: grid;
+      place-items: center;
+      margin-top: 24px;
+    }
+
+    .edge-visual-frame img.hw-render {
+      position: relative;
+      z-index: 2;
+      width: 78%;
+      height: auto;
+      max-height: 100%;
+      filter: brightness(1.48) contrast(1.06) drop-shadow(0 0 0.7px rgb(255 255 255 / 0.45)) drop-shadow(0 30px 56px rgb(0 0 0 / 0.85));
+    }
+
+    /* Floating Liquid Glass live telemetry callouts anchored to controller geometry */
+    .callout {
+      position: absolute;
+      z-index: 6;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: clamp(9px, 0.9vw, 13px) clamp(12px, 1.1vw, 16px);
+      border-radius: 16px;
+      min-width: clamp(180px, 13vw, 230px);
+    }
+
+    .callout.c-l2 { top: 4%; left: 0%; }
+    .callout.c-r2 { top: 4%; right: 0%; }
+    .callout.c-ls { bottom: 6%; left: -1%; }
+    .callout.c-rs { bottom: 6%; right: -1%; }
+
+    .stick-ring {
+      width: clamp(34px, 2.6vw, 44px);
+      height: clamp(34px, 2.6vw, 44px);
+      border-radius: 50%;
+      border: 1px solid rgb(255 255 255 / 0.24);
+      position: relative;
+      flex: none;
+      background: radial-gradient(circle, rgb(61 214 140 / 0.14) 0%, transparent 65%);
+    }
+
+    .stick-ring::before {
+      content: "";
+      position: absolute;
+      inset: 50% 0 auto 0;
+      height: 1px;
+      background: rgb(255 255 255 / 0.12);
+    }
+
+    .stick-ring::after {
+      content: "";
+      position: absolute;
+      inset: 0 auto 0 50%;
+      width: 1px;
+      background: rgb(255 255 255 / 0.12);
+    }
+
+    .stick-dot {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      width: 8px;
+      height: 8px;
+      margin: -4px 0 0 -4px;
+      border-radius: 50%;
+      background: var(--color-good);
+      box-shadow: 0 0 10px rgb(61 214 140 / 0.7);
+    }
+
+    .trig-meter {
+      width: clamp(54px, 4.4vw, 76px);
+      height: 6px;
+      border-radius: 999px;
+      background: rgb(255 255 255 / 0.14);
+      overflow: hidden;
+      margin-top: 5px;
+    }
+
+    .trig-meter i {
+      display: block;
+      height: 100%;
+      background: var(--color-fg);
+      border-radius: 999px;
+    }
+
+    .c-lbl {
+      font-size: calc(11.5px * var(--exo-scale));
+      color: var(--color-muted);
+    }
+
+    .c-val {
+      font-size: calc(14px * var(--exo-scale));
+      font-weight: 600;
+      color: var(--color-fg);
+    }
+
+    .edge-bottom-telemetry {
+      position: absolute;
+      left: clamp(20px, 2.4vw, 34px);
+      right: clamp(20px, 2.4vw, 34px);
+      bottom: clamp(14px, 1.8vh, 22px);
+      z-index: 5;
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      border-top: 1px solid var(--exo-float-line);
+      padding-top: 12px;
+    }
+
+    .et-cell { padding-right: 16px; }
+    .et-k { font-size: calc(11.5px * var(--exo-scale)); color: var(--color-faint); }
+    .et-v { font-size: calc(15px * var(--exo-scale)); font-weight: 600; margin-top: 2px; }
+
+    /* Right ~35%: Full-height Setup & Calibration Control Panel */
+    .edge-panel {
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      padding: clamp(18px, 2vh, 26px) clamp(20px, 2vw, 30px);
+      overflow: hidden;
+      min-height: 0;
+    }
+
+    .panel-sec-title {
+      font-size: calc(14px * var(--exo-scale));
+      font-weight: 600;
+      margin: 0 0 8px;
+    }
+
+    .phase-list {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .phase-row {
+      display: grid;
+      grid-template-columns: 22px 1fr auto;
+      align-items: center;
+      gap: 10px;
+      padding: clamp(8px, 0.95vh, 11px) 0;
+      border-bottom: 1px solid var(--exo-float-line);
+      font-size: calc(13px * var(--exo-scale));
+    }
+
+    .phase-row .sub {
+      font-size: calc(11.5px * var(--exo-scale));
+      color: var(--color-muted);
+    }
+
+    .slot-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+      margin-top: 8px;
+    }
+
+    .slot-pill {
+      padding: 8px 11px;
+      border-radius: 12px;
+      background: var(--exo-surface-card);
+      border: 1px solid var(--exo-float-line);
+      font-size: calc(12px * var(--exo-scale));
+    }
+
+    .slot-pill.is-on {
+      background: rgb(255 255 255 / 0.09);
+      border-color: rgb(255 255 255 / 0.25);
+    }
+
+    .toggle-list {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .toggle-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: clamp(8px, 0.9vh, 11px) 0;
+      border-bottom: 1px solid var(--exo-float-line);
+    }
+
+    .toggle-row:last-child { border-bottom: 0; }
+  </style>
+</head>
+<body>
+  <div class="edge-shell">
+    <div id="topbar"></div>
+    <div id="dev-stepper"></div>
+
+    <main class="edge-body">
+      <section class="edge-hero-stage">
+        <div class="edge-stage-head">
+          <div>
+            <h1>DualSense Edge</h1>
+            <p class="tabular">Midnight Black · USB-C (CPU port) · Live HID input active</p>
+          </div>
+          <div style="display:flex;gap:8px;align-items:center">
+            <span class="badge good tabular"><span class="dot good"></span>Calibrated</span>
+            <span class="badge tabular">fw 2.17</span>
+          </div>
+        </div>
+
+        <div class="edge-visual-frame">
+          <img class="hw-wash" src="../../assets/devices/dualsense-edge-black.png" alt="" />
+          <svg viewBox="0 0 900 600" style="position:absolute;inset:0;width:100%;height:100%;z-index:4;pointer-events:none" fill="none">
+            <!-- L2 trigger stop leader -->
+            <polyline points="218,76 284,76 318,148" stroke="rgba(255,255,255,0.32)" stroke-width="1.2" stroke-dasharray="3 3" />
+            <circle cx="318" cy="148" r="4.5" fill="#ffffff" />
+            <circle cx="318" cy="148" r="10" stroke="rgba(255,255,255,0.36)" stroke-width="1" />
+            <!-- R2 trigger stop leader -->
+            <polyline points="682,76 616,76 582,148" stroke="rgba(255,255,255,0.32)" stroke-width="1.2" stroke-dasharray="3 3" />
+            <circle cx="582" cy="148" r="4.5" fill="#ffffff" />
+            <circle cx="582" cy="148" r="10" stroke="rgba(255,255,255,0.36)" stroke-width="1" />
+            <!-- Left stick leader -->
+            <polyline points="222,520 342,520 370,326" stroke="rgba(61,214,140,0.52)" stroke-width="1.2" stroke-dasharray="3 3" />
+            <circle cx="370" cy="326" r="4.5" fill="#3dd68c" />
+            <circle cx="370" cy="326" r="12" stroke="rgba(61,214,140,0.48)" stroke-width="1.2" />
+            <!-- Right stick leader -->
+            <polyline points="678,520 558,520 530,326" stroke="rgba(61,214,140,0.52)" stroke-width="1.2" stroke-dasharray="3 3" />
+            <circle cx="530" cy="326" r="4.5" fill="#3dd68c" />
+            <circle cx="530" cy="326" r="12" stroke="rgba(61,214,140,0.48)" stroke-width="1.2" />
+          </svg>
+          <img class="hw-render" src="../../assets/devices/dualsense-edge-black.png" alt="DualSense Edge Midnight Black" />
+
+          <div class="callout c-l2 exo-glass-deep tabular">
+            <div style="flex:1">
+              <div class="c-lbl">L2 trigger stop</div>
+              <div class="c-val">Short · 1 of 3</div>
+              <div class="trig-meter"><i style="width:34%"></i></div>
+            </div>
+          </div>
+
+          <div class="callout c-r2 exo-glass-deep tabular">
+            <div style="flex:1">
+              <div class="c-lbl">R2 trigger stop</div>
+              <div class="c-val">Short · 1 of 3</div>
+              <div class="trig-meter"><i style="width:34%"></i></div>
+            </div>
+          </div>
+
+          <div class="callout c-ls exo-glass-deep tabular">
+            <div class="stick-ring"><span class="stick-dot"></span></div>
+            <div>
+              <div class="c-lbl">Left stick</div>
+              <div class="c-val">Rest 0.01 · 99.8%</div>
+            </div>
+          </div>
+
+          <div class="callout c-rs exo-glass-deep tabular">
+            <div class="stick-ring"><span class="stick-dot" style="left:52%;top:49%"></span></div>
+            <div>
+              <div class="c-lbl">Right stick</div>
+              <div class="c-val">Rest 0.02 · 99.4%</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="edge-bottom-telemetry tabular">
+          <div class="et-cell"><div class="et-k">Polling rate</div><div class="et-v">1000 Hz USB</div></div>
+          <div class="et-cell"><div class="et-k">Battery (HID)</div><div class="et-v" style="color:var(--color-good)">100% · Charging</div></div>
+          <div class="et-cell"><div class="et-k">Calibration persistence</div><div class="et-v" style="color:var(--color-good)">Auto-reapplies</div></div>
+          <div class="et-cell"><div class="et-k">Onboard profile</div><div class="et-v">Slot 1 · Default</div></div>
+        </div>
+      </section>
+
+      <aside class="edge-panel">
+        <div>
+          <h2 class="panel-sec-title">Automatic verification</h2>
+          <div class="phase-list tabular">
+            <div class="phase-row">
+              <span class="chk" style="color:var(--color-good)"></span>
+              <div>
+                <div style="font-weight:600">Firmware 2.17 verified</div>
+                <div class="sub">Up to date (cached instant check)</div>
+              </div>
+              <span class="badge good">OK</span>
+            </div>
+            <div class="phase-row">
+              <span class="chk" style="color:var(--color-good)"></span>
+              <div>
+                <div style="font-weight:600">Saved stick calibration holds</div>
+                <div class="sub">Reapplied automatically on USB connect</div>
+              </div>
+              <span class="badge good">Holds</span>
+            </div>
+            <div class="phase-row">
+              <span class="chk" style="color:var(--color-good)"></span>
+              <div>
+                <div style="font-weight:600">CPU USB root port</div>
+                <div class="sub">Direct link, lowest HID jitter</div>
+              </div>
+              <span class="badge good">Optimal</span>
+            </div>
+          </div>
+
+          <div style="margin-top:clamp(14px,1.6vh,20px)">
+            <div style="display:flex;justify-content:space-between;align-items:center">
+              <h2 class="panel-sec-title" style="margin:0">Edge onboard slots</h2>
+              <span style="font-size:11.5px;color:var(--color-faint)">Read from controller</span>
+            </div>
+            <div class="slot-grid tabular">
+              <div class="slot-pill is-on"><strong>Slot 1</strong> · Default Profile</div>
+              <div class="slot-pill" style="color:var(--color-faint)">Slot 2 · Empty</div>
+              <div class="slot-pill" style="color:var(--color-faint)">Slot 3 · Empty</div>
+              <div class="slot-pill" style="color:var(--color-faint)">Slot 4 · Empty</div>
+            </div>
+          </div>
+
+          <div style="margin-top:clamp(14px,1.6vh,20px)">
+            <h2 class="panel-sec-title">Clean defaults</h2>
+            <div class="toggle-list">
+              <div class="toggle-row">
+                <div>
+                  <div style="font-weight:500">Mute controller microphone</div>
+                  <div style="font-size:11.5px;color:var(--color-muted)">Keeps fifine Mic as sole input</div>
+                </div>
+                <button type="button" class="exo-switch is-on"></button>
+              </div>
+              <div class="toggle-row">
+                <div>
+                  <div style="font-weight:500">Sync lightbar to game profiles</div>
+                  <div style="font-size:11.5px;color:var(--color-muted)">Subtle profile color per title</div>
+                </div>
+                <button type="button" class="exo-switch is-on"></button>
+              </div>
+              <div class="toggle-row">
+                <div>
+                  <div style="font-weight:500">Vibration &amp; adaptive triggers</div>
+                  <div style="font-size:11.5px;color:var(--color-muted)">Standard strength in supported games</div>
+                </div>
+                <button type="button" class="exo-switch is-on"></button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div style="display:flex;gap:8px;padding-top:12px;border-top:1px solid var(--exo-float-line)">
+          <button class="exo-btn is-sm" style="flex:1">Run 6s stick check</button>
+          <button class="exo-btn is-sm is-ghost">Calibration &amp; tests</button>
+        </div>
+      </aside>
+    </main>
+
+    <footer class="setup-footer">
+      <div class="setup-footer-note">Device 1 of 4 · Diagnostics stay tucked under Change › Calibration &amp; tests</div>
+      <div class="setup-footer-actions">
+        <button class="exo-btn is-ghost">Skip controller</button>
+        <button class="exo-btn is-primary">
+          <span>Save &amp; next: Wooting 60HE v2</span>
+          <span id="ico-arrow"></span>
+        </button>
+      </div>
+    </footer>
+  </div>
+
+  <script src="../../assets/exo-v2-data.js"></script>
+  <script>
+    document.getElementById("topbar").outerHTML = renderTopStageTrack(2);
+    document.getElementById("dev-stepper").outerHTML = renderDeviceStepper(0);
+    document.getElementById("ico-arrow").innerHTML = EXO_ICONS.arrowRight;
+    document.querySelectorAll(".chk").forEach(el => el.innerHTML = EXO_ICONS.check);
+    document.querySelectorAll(".exo-switch").forEach(sw => sw.addEventListener("click", () => sw.classList.toggle("is-on")));
+  </script>
+</body>
+</html>

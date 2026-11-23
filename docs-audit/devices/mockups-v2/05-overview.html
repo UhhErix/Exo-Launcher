@@ -1,0 +1,498 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Exo Devices — Calm Full-Width Overview</title>
+  <link rel="stylesheet" href="../../assets/exo-v2-base.css" />
+  <style>
+    .ov-shell {
+      display: grid;
+      grid-template-rows: auto auto 1fr auto;
+      width: 100vw;
+      height: 100vh;
+      overflow: hidden;
+      background: #000000;
+    }
+
+    .ov-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 20px;
+      padding: clamp(10px, 1.3vh, 18px) clamp(20px, 2.2vw, 36px) clamp(10px, 1.3vh, 16px);
+      border-bottom: 1px solid var(--exo-float-line);
+    }
+
+    .ov-title-wrap {
+      display: flex;
+      align-items: baseline;
+      gap: 14px;
+    }
+
+    .ov-header h1 {
+      margin: 0;
+      font-size: clamp(26px, 2.3vw, 42px);
+      font-weight: 650;
+      line-height: 1.08;
+    }
+
+    .ov-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    /* Hot-plug non-intrusive arrival banner preview */
+    .hotplug-banner {
+      display: none;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      margin: 10px clamp(20px, 2.2vw, 36px) 0;
+      padding: 10px 16px;
+      border-radius: 16px;
+    }
+
+    .hotplug-banner.is-show { display: flex; }
+
+    /* 4 full-width architectural device strips with structured telemetry density across 720p/1080p/1440p */
+    .ov-rows {
+      display: grid;
+      grid-template-rows: repeat(4, minmax(0, 1fr));
+      gap: clamp(8px, 1vh, 14px);
+      padding: clamp(10px, 1.3vh, 18px) clamp(20px, 2.2vw, 36px);
+      min-height: 0;
+      height: 100%;
+    }
+
+    .ov-row {
+      position: relative;
+      display: grid;
+      grid-template-columns: clamp(190px, 15.5vw, 330px) minmax(320px, 1.58fr) repeat(3, minmax(0, 0.92fr)) auto;
+      align-items: center;
+      gap: 0;
+      padding: 0 clamp(18px, 2vw, 32px) 0 0;
+      border-radius: var(--exo-panel-radius);
+      background: rgb(255 255 255 / 0.022);
+      border: 1px solid var(--exo-float-line);
+      overflow: hidden;
+      min-height: 0;
+      transition: background-color var(--dur-quick) var(--ease-out), border-color var(--dur-quick) var(--ease-out);
+    }
+
+    .ov-row:hover {
+      background: rgb(255 255 255 / 0.036);
+      border-color: rgb(255 255 255 / 0.14);
+    }
+
+    .ov-photo-bay {
+      position: relative;
+      height: 100%;
+      display: grid;
+      place-items: center;
+      padding: clamp(10px, 1.3vh, 18px) clamp(16px, 1.7vw, 28px);
+      border-right: 1px solid var(--exo-float-line);
+      background: linear-gradient(90deg, rgb(255 255 255 / 0.024) 0%, transparent 100%);
+      overflow: hidden;
+    }
+
+    .ov-photo-bay img.hw-render {
+      position: relative;
+      z-index: 2;
+      max-width: 92%;
+      max-height: 88%;
+      width: auto;
+      height: auto;
+    }
+
+    .ov-id-cell {
+      padding: 0 clamp(16px, 1.8vw, 30px);
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      gap: clamp(4px, 0.65vh, 10px);
+      min-width: 0;
+    }
+
+    .ov-dev-name {
+      font-size: clamp(16.5px, 1.25vw, 28px);
+      font-weight: 650;
+      line-height: 1.15;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      white-space: nowrap;
+    }
+
+    .ov-dev-sub {
+      font-size: clamp(11.5px, 0.82vw, 15px);
+      color: var(--color-muted);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .ov-tags {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex-wrap: nowrap;
+      overflow: hidden;
+    }
+
+    .ov-mini-tag {
+      font-size: clamp(10.5px, 0.72vw, 13px);
+      color: var(--color-muted);
+      padding: 3px 9px;
+      border-radius: 999px;
+      background: rgb(255 255 255 / 0.045);
+      border: 1px solid var(--exo-float-line);
+      white-space: nowrap;
+    }
+
+    .ov-stat-cell {
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      gap: clamp(4px, 0.55vh, 8px);
+      padding: clamp(10px, 1.2vh, 18px) clamp(14px, 1.6vw, 28px);
+      border-left: 1px solid var(--exo-float-line);
+      min-width: 0;
+    }
+
+    .ov-stat-k {
+      font-size: clamp(11px, 0.76vw, 14px);
+      color: var(--color-faint);
+    }
+
+    .ov-stat-v {
+      font-size: clamp(15.5px, 1.38vw, 26px);
+      font-weight: 650;
+      line-height: 1.12;
+      color: var(--color-fg);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .ov-stat-v.good { color: var(--color-good); }
+    .ov-stat-v.warn { color: var(--color-warn); }
+
+    .ov-stat-meta {
+      font-size: clamp(11px, 0.76vw, 14px);
+      color: var(--color-muted);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .ov-mini-bar {
+      width: 100%;
+      max-width: 220px;
+      height: 5px;
+      border-radius: 999px;
+      background: rgb(255 255 255 / 0.1);
+      overflow: hidden;
+    }
+
+    .ov-mini-bar i {
+      display: block;
+      height: 100%;
+      border-radius: 999px;
+      background: var(--color-fg);
+    }
+
+    .ov-mini-bar i.good { background: var(--color-good); }
+    .ov-mini-bar i.warn { background: var(--color-warn); }
+
+    .ov-pills-inline {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex-wrap: nowrap;
+      overflow: hidden;
+    }
+
+    .ov-pill-chip {
+      font-size: clamp(10.5px, 0.72vw, 13px);
+      padding: 2px 8px;
+      border-radius: 999px;
+      background: rgb(255 255 255 / 0.06);
+      color: var(--color-muted);
+      white-space: nowrap;
+      flex: none;
+    }
+
+    .ov-pill-chip.is-on {
+      background: var(--color-fg);
+      color: var(--color-primary-fg);
+      font-weight: 600;
+    }
+
+    .ov-mini-eq {
+      width: 100%;
+      max-width: 220px;
+      height: clamp(22px, 2.4vh, 34px);
+      display: block;
+    }
+
+    .ov-cta-cell {
+      padding-left: clamp(14px, 1.6vw, 28px);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    /* Bottom peripheral system summary strip */
+    .ov-health-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 20px;
+      padding: clamp(9px, 1.15vh, 16px) clamp(20px, 2.2vw, 36px);
+      border-top: 1px solid var(--exo-float-line);
+      background: rgb(255 255 255 / 0.015);
+      font-size: clamp(11.5px, 0.78vw, 14px);
+      color: var(--color-muted);
+    }
+
+    .ov-health-items {
+      display: flex;
+      align-items: center;
+      gap: clamp(16px, 2vw, 32px);
+      flex-wrap: wrap;
+    }
+
+    .ov-health-item {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    @media (max-height: 780px) {
+      .ov-tags { display: none; }
+      .ov-pill-chip { padding: 2px 6px; font-size: 10px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="ov-shell">
+    <div id="exobar"></div>
+
+    <div>
+      <header class="ov-header">
+        <div class="ov-title-wrap">
+          <h1>Devices</h1>
+          <span class="badge good tabular"><span class="dot good"></span>4 configured · Ready</span>
+        </div>
+        <div class="ov-actions">
+          <button class="exo-btn is-sm is-ghost" id="btn-hotplug">Preview new device plug-in</button>
+          <button class="exo-btn is-sm"><span id="ico-refresh"></span><span>Rescan</span></button>
+          <button class="exo-btn is-sm">Re-run setup</button>
+        </div>
+      </header>
+
+      <div class="hotplug-banner exo-glass-deep" id="hotplug-banner">
+        <div style="display:flex;align-items:center;gap:12px">
+          <span class="dot good"></span>
+          <span><strong>New device found:</strong> DualSense Wireless Controller (USB) — set up automatically without leaving this room.</span>
+        </div>
+        <div style="display:flex;gap:8px">
+          <button class="exo-btn is-sm is-ghost" id="btn-dismiss-hp">Dismiss</button>
+          <button class="exo-btn is-sm is-primary">Set up</button>
+        </div>
+      </div>
+    </div>
+
+    <main class="ov-rows tabular">
+      <!-- 1. DualSense Edge -->
+      <article class="ov-row">
+        <div class="ov-photo-bay">
+          <img class="hw-wash" src="../../assets/devices/dualsense-edge-black.png" alt="" />
+          <img class="hw-render" src="../../assets/devices/dualsense-edge-black.png" alt="DualSense Edge" />
+        </div>
+        <div class="ov-id-cell">
+          <div class="ov-dev-name">
+            <span>DualSense Edge</span>
+            <span class="badge good">Wired · CPU USB</span>
+          </div>
+          <div class="ov-dev-sub">Midnight Black · Controller mic muted · Game lightbar sync</div>
+          <div class="ov-tags">
+            <span class="ov-mini-tag">1000 Hz USB</span>
+            <span class="ov-mini-tag">100% · Charging</span>
+          </div>
+        </div>
+        <div class="ov-stat-cell">
+          <div class="ov-stat-k">Calibration</div>
+          <div class="ov-stat-v good">Holds</div>
+          <div class="ov-mini-bar"><i class="good" style="width:99%"></i></div>
+          <div class="ov-stat-meta">Rest 0.01 / 0.02 · Auto-reapplies</div>
+        </div>
+        <div class="ov-stat-cell">
+          <div class="ov-stat-k">Onboard profile</div>
+          <div class="ov-stat-v">Slot 1 · Default</div>
+          <div class="ov-pills-inline">
+            <span class="ov-pill-chip is-on">L2 1/3</span>
+            <span class="ov-pill-chip is-on">R2 1/3</span>
+            <span class="ov-pill-chip">3 empty</span>
+          </div>
+        </div>
+        <div class="ov-stat-cell">
+          <div class="ov-stat-k">Firmware &amp; link</div>
+          <div class="ov-stat-v mono">2.17</div>
+          <div class="ov-stat-meta">Up to date · Optimal CPU root port</div>
+        </div>
+        <div class="ov-cta-cell">
+          <button class="exo-btn">Change</button>
+        </div>
+      </article>
+
+      <!-- 2. Wooting 60HE v2 -->
+      <article class="ov-row">
+        <div class="ov-photo-bay">
+          <img class="hw-wash" src="../../assets/devices/wooting-60he-v2-split.png" alt="" />
+          <img class="hw-render" src="../../assets/devices/wooting-60he-v2-split.png" alt="Wooting 60HE v2" />
+        </div>
+        <div class="ov-id-cell">
+          <div class="ov-dev-name">
+            <span>Wooting 60HE v2</span>
+            <span class="badge">ANSI · Split bar</span>
+          </div>
+          <div class="ov-dev-sub">Profile: General · Safety backup #1 saved · fw 2.15.0-beta.0</div>
+          <div class="ov-tags">
+            <span class="ov-mini-tag">2.75u / 1.25u Fn / 2.25u</span>
+            <span class="ov-mini-tag">2047 B HID OK</span>
+          </div>
+        </div>
+        <div class="ov-stat-cell">
+          <div class="ov-stat-k">Actuation / RT</div>
+          <div class="ov-stat-v mono">0.4 / 0.15 mm</div>
+          <div class="ov-mini-bar"><i class="good" style="width:14%"></i></div>
+          <div class="ov-stat-meta">Rapid Trigger active on WASD</div>
+        </div>
+        <div class="ov-stat-cell">
+          <div class="ov-stat-k">Scan &amp; polling</div>
+          <div class="ov-stat-v mono">8000 Hz</div>
+          <div class="ov-pills-inline">
+            <span class="ov-pill-chip is-on">Tachyon on</span>
+            <span class="ov-pill-chip">0.125 ms</span>
+          </div>
+        </div>
+        <div class="ov-stat-cell">
+          <div class="ov-stat-k">USB port health</div>
+          <div class="ov-stat-v warn">Chipset USB</div>
+          <div class="ov-mini-bar"><i class="warn" style="width:55%"></i></div>
+          <div class="ov-stat-meta">Move to free rear CPU port</div>
+        </div>
+        <div class="ov-cta-cell">
+          <button class="exo-btn is-primary">Change</button>
+        </div>
+      </article>
+
+      <!-- 3. Finalmouse Starlight X -->
+      <article class="ov-row">
+        <div class="ov-photo-bay">
+          <img class="hw-wash" src="../../assets/devices/starlight-x.png" alt="" />
+          <img class="hw-render" style="max-height:84%" src="../../assets/devices/starlight-x.png" alt="Starlight X" />
+        </div>
+        <div class="ov-id-cell">
+          <div class="ov-dev-name">
+            <span>Finalmouse Starlight X</span>
+            <span class="badge good">Wireless · CPU USB</span>
+          </div>
+          <div class="ov-dev-sub">StarlightX Dongle · Isolated AGPL Exo Mouse IPC</div>
+          <div class="ov-tags">
+            <span class="ov-mini-tag">Per-game profiles</span>
+            <span class="ov-mini-tag">Motion Sync on</span>
+          </div>
+        </div>
+        <div class="ov-stat-cell">
+          <div class="ov-stat-k">Battery</div>
+          <div class="ov-stat-v good mono">84%</div>
+          <div class="ov-mini-bar"><i class="good" style="width:84%"></i></div>
+          <div class="ov-stat-meta">~38 hours remaining</div>
+        </div>
+        <div class="ov-stat-cell">
+          <div class="ov-stat-k">DPI stages</div>
+          <div class="ov-stat-v mono">1600 DPI</div>
+          <div class="ov-pills-inline">
+            <span class="ov-pill-chip">800</span>
+            <span class="ov-pill-chip is-on">1600</span>
+            <span class="ov-pill-chip">3200</span>
+          </div>
+        </div>
+        <div class="ov-stat-cell">
+          <div class="ov-stat-k">Wireless polling</div>
+          <div class="ov-stat-v mono">4000 Hz</div>
+          <div class="ov-stat-meta">Low-latency dongle on CPU port</div>
+        </div>
+        <div class="ov-cta-cell">
+          <button class="exo-btn">Change</button>
+        </div>
+      </article>
+
+      <!-- 4. ZiiGaat Lush + fifine Microphone -->
+      <article class="ov-row">
+        <div class="ov-photo-bay">
+          <img class="hw-wash" src="../../assets/devices/ziigaat-lush.png" alt="" />
+          <img class="hw-render" style="max-height:80%" src="../../assets/devices/ziigaat-lush.png" alt="ZiiGaat Lush" />
+        </div>
+        <div class="ov-id-cell">
+          <div class="ov-dev-name">
+            <span>ZiiGaat Lush + fifine Mic</span>
+            <span class="badge good">Exo EQ v2 · Active</span>
+          </div>
+          <div class="ov-dev-sub">3.5 mm output (48 kHz / 32-bit) · Equalizer APO 1.4.2.0</div>
+          <div class="ov-tags">
+            <span class="ov-mini-tag">Alt+Tab revert on</span>
+            <span class="ov-mini-tag">Zero game injection</span>
+          </div>
+        </div>
+        <div class="ov-stat-cell">
+          <div class="ov-stat-k">Active EQ</div>
+          <div class="ov-stat-v">Auto · JM-1</div>
+          <svg class="ov-mini-eq" viewBox="0 0 220 34" fill="none">
+            <line x1="0" y1="17" x2="220" y2="17" stroke="rgba(255,255,255,0.14)" stroke-dasharray="3 3" />
+            <path d="M 2,20 C 32,20 56,28 84,22 C 110,16 144,8 168,14 C 184,24 198,18 218,19" stroke="#3dd68c" stroke-width="2" stroke-linecap="round" />
+          </svg>
+        </div>
+        <div class="ov-stat-cell">
+          <div class="ov-stat-k">Headroom &amp; guard</div>
+          <div class="ov-stat-v mono">-3.9 dB</div>
+          <div class="ov-mini-bar"><i class="good" style="width:74%"></i></div>
+          <div class="ov-stat-meta">Gunshot Guard on · -1.0 dBTP cap</div>
+        </div>
+        <div class="ov-stat-cell">
+          <div class="ov-stat-k">Microphone</div>
+          <div class="ov-stat-v good">Exo Voice</div>
+          <div class="ov-stat-meta">fifine USB · DeepFilterNet · Sole DSP</div>
+        </div>
+        <div class="ov-cta-cell">
+          <button class="exo-btn">Change</button>
+        </div>
+      </article>
+    </main>
+
+    <footer class="ov-health-bar tabular">
+      <div class="ov-health-items">
+        <span class="ov-health-item"><span class="dot good"></span>3 devices on direct CPU USB</span>
+        <span class="ov-health-item"><span class="dot warn"></span>1 USB advisory: Wooting 60HE v2 on Chipset port</span>
+        <span class="ov-health-item"><span class="dot good"></span>Equalizer APO 1.4.2.0 writable (ProgramData)</span>
+      </div>
+      <span>Click <strong>Change</strong> on any device for full tuning, backups, or calibration</span>
+    </footer>
+  </div>
+
+  <script src="../../assets/exo-v2-data.js"></script>
+  <script>
+    document.getElementById("exobar").outerHTML = renderExoBar("Devices");
+    document.getElementById("ico-refresh").innerHTML = EXO_ICONS.refresh;
+
+    const hp = document.getElementById("hotplug-banner");
+    document.getElementById("btn-hotplug").addEventListener("click", () => hp.classList.toggle("is-show"));
+    document.getElementById("btn-dismiss-hp").addEventListener("click", () => hp.classList.remove("is-show"));
+  </script>
+</body>
+</html>
