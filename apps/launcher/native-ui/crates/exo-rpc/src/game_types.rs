@@ -334,3 +334,21 @@ pub struct CompressProgressEvent {
     pub id: String,
     pub compress: CompressState,
 }
+
+#[derive(Debug, Clone, Default, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase", default)]
+pub struct DlssNewerItem {
+    #[serde(deserialize_with = "null_as_default")]
+    pub family: String,
+    #[serde(deserialize_with = "null_as_default")]
+    pub version: String,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct DlssNewerReply {
+    #[serde(deserialize_with = "null_as_default")]
+    pub ok: bool,
+    #[serde(deserialize_with = "null_as_default")]
+    pub items: Vec<DlssNewerItem>,
+}
