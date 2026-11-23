@@ -216,6 +216,7 @@
     "gpu.display": "DisplayState",
     "gpu.driver": "DriverState",
     "gpu.game": "GpuGame",
+    "gpu.processes": "GpuProcessesState",
     "gpu.profile": "GpuProfile",
     "hdr.game": "HdrGame",
     "hdr.state": "HdrState",

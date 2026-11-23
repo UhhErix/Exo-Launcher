@@ -969,6 +969,7 @@ public sealed partial class WebHostBridge
                 "gpu.afmf3" => await GpuDeadlineAsync(GpuAfmf3Async(paramsEl, hasParams, requestToken), TimeSpan.FromSeconds(25), requestToken).ConfigureAwait(false),
                 "gpu.game" => await GpuDeadlineAsync(GpuGameAsync(paramsEl, hasParams, requestToken), TimeSpan.FromSeconds(25), requestToken).ConfigureAwait(false),
                 "gpu.controlPanel" => await GpuDeadlineAsync(Task.Run(GpuControlPanel.Open, requestToken), TimeSpan.FromSeconds(15), requestToken).ConfigureAwait(true),
+                "gpu.processes" => await Task.Run(() => GpuProcesses(paramsEl, hasParams), requestToken).ConfigureAwait(false),
                 "system.health" => await GpuDeadlineAsync(SystemHealthAsync(paramsEl, hasParams, requestToken), TimeSpan.FromSeconds(30), requestToken).ConfigureAwait(false),
                 "system.about" => await SystemAboutAsync(requestToken).ConfigureAwait(false),
                 "system.tune" => await Task.Run(() => AutoTuneService.Act(ReadString(paramsEl, hasParams, "action"), ReadString(paramsEl, hasParams, "part"), ReadString(paramsEl, hasParams, "mode"))).ConfigureAwait(false),
