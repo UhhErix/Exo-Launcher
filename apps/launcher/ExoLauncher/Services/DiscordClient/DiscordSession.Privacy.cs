@@ -64,11 +64,13 @@ internal sealed partial class DiscordSession
     /// <summary>Discord's time format for this PC's: 24-hour when Windows writes hours with H, else 12-hour.</summary>
     internal static int HourCycleFor(string shortTimePattern) => shortTimePattern.Contains('H', StringComparison.Ordinal) ? 2 : 1;
 
-    private async Task KeepPrivacyAsync()
+    private async Task KeepPrivacyAsync(JsonObject? prefetched = null)
     {
         try
         {
-            var (values, error) = await UserSettingsAsync(null, _stop.Token).ConfigureAwait(false);
+            var (values, error) = prefetched is not null
+                ? (prefetched, (string?)null)
+                : await UserSettingsAsync(null, _stop.Token).ConfigureAwait(false);
             if (values is null) { AppLog.Info("Discord client: privacy defaults not checked (" + error + ")."); return; }
             var changes = PrivacyChanges(values, CultureInfo.CurrentUICulture.Name, CultureInfo.CurrentCulture.DateTimeFormat.ShortTimePattern);
             if (changes.Count > 0)

@@ -1,7 +1,7 @@
 use crate::discord_chat_state::{ChatDrawer, DiscordChatState};
 use crate::discord_voice_state::DiscordVoiceUiState;
 use crate::state::{AppState, HostStatus};
-use exo_rpc::discord_types::DiscordRestricted;
+use exo_rpc::discord_types::{DISCORD_SNAPSHOT_VERSION, DiscordDiskSnapshot, DiscordRestricted};
 use exo_rpc::{
     ActionResult, DiscordAccountItem, DiscordAccountsReply, DiscordChangedEvent, DiscordChannel,
     DiscordChannels, DiscordDm, DiscordDmMember, DiscordFriend, DiscordFriendActionReply,
@@ -16,7 +16,41 @@ use exo_rpc::{
 };
 use rune::TextEdit;
 use serde_json::json;
-use std::collections::{HashMap, HashSet};
+use std::collections::{HashMap, HashSet, VecDeque};
+use std::path::{Path, PathBuf};
+use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
+
+const DISCORD_SNAPSHOT_FILENAME: &str = "rune-discord-snapshot.json";
+const DISCORD_READY_BURST_SUPPRESS: Duration = Duration::from_millis(250);
+const DISCORD_PREFETCH_WORKERS: usize = 6;
+
+pub(crate) fn read_discord_snapshot(path: &Path) -> Option<DiscordDiskSnapshot> {
+    let bytes = std::fs::read(path).ok()?;
+    let snap: DiscordDiskSnapshot = serde_json::from_slice(&bytes).ok()?;
+    if snap.version != DISCORD_SNAPSHOT_VERSION || snap.home.me.is_none() {
+        return None;
+    }
+    Some(snap)
+}
+
+pub(crate) fn write_discord_snapshot(
+    snap: &DiscordDiskSnapshot,
+    path: &Path,
+) -> std::io::Result<()> {
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    let data = serde_json::to_vec(snap)
+        .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
+    let tmp = path.with_extension("json.tmp");
+    std::fs::write(&tmp, &data)?;
+    if std::fs::rename(&tmp, path).is_err() {
+        let _ = std::fs::remove_file(path);
+        std::fs::rename(&tmp, path)?;
+    }
+    Ok(())
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DiscordPlace {
@@ -97,6 +131,15 @@ pub struct DiscordState {
     pub chat: DiscordChatState,
     pub voice_ui: DiscordVoiceUiState,
     pub loaded: bool,
+    pub warmed: bool,
+    pub snapshot_hydrated: bool,
+    pub from_snapshot: bool,
+    pub refresh_pending: u8,
+    pub refresh_queued: bool,
+    pub last_ready_refresh_at: Option<Instant>,
+    pub prefetched_urls: HashSet<String>,
+    pub prefetching_urls: HashSet<String>,
+    pub warmed_image_urls: HashSet<String>,
 }
 
 impl DiscordState {
@@ -141,6 +184,15 @@ impl DiscordState {
             chat: DiscordChatState::empty(),
             voice_ui: DiscordVoiceUiState::empty(),
             loaded: false,
+            warmed: false,
+            snapshot_hydrated: false,
+            from_snapshot: false,
+            refresh_pending: 0,
+            refresh_queued: false,
+            last_ready_refresh_at: None,
+            prefetched_urls: HashSet::new(),
+            prefetching_urls: HashSet::new(),
+            warmed_image_urls: HashSet::new(),
         }
     }
 
@@ -687,22 +739,128 @@ impl DiscordState {
 }
 
 impl AppState {
-    pub fn load_discord_room(&mut self) {
+    pub(crate) fn discord_snapshot_path(&self) -> Option<PathBuf> {
+        self.remote_cache_dir
+            .as_ref()
+            .and_then(|d| d.parent())
+            .map(|p| p.join(DISCORD_SNAPSHOT_FILENAME))
+    }
+
+    pub(crate) fn hydrate_discord_snapshot(&mut self) -> bool {
+        if self.discord.snapshot_hydrated || self.discord.home.me.is_some() {
+            return false;
+        }
+        self.discord.snapshot_hydrated = true;
+        let Some(path) = self.discord_snapshot_path() else {
+            return false;
+        };
+        let Some(snap) = read_discord_snapshot(&path) else {
+            return false;
+        };
+        let first_dm = snap.home.dms.first().map(|d| d.id.clone());
+        self.discord.home = snap.home;
+        self.discord.friends = snap.friends;
+        self.discord.blocked = snap.blocked;
+        if self.discord.accounts.is_empty() {
+            self.discord.accounts = snap.accounts;
+        }
+        self.discord.unreads = snap.unreads;
+        if self.discord.active_dm_id.is_none() {
+            self.discord.active_dm_id = first_dm;
+        }
+        self.discord.from_snapshot = true;
+        self.discord.loaded = true;
+        self.prefetch_discord_images();
+        true
+    }
+
+    pub(crate) fn save_discord_snapshot(&self) {
+        if self.discord.home.me.is_none() || self.discord.from_snapshot {
+            return;
+        }
+        let Some(path) = self.discord_snapshot_path() else {
+            return;
+        };
+        let snap = DiscordDiskSnapshot {
+            version: DISCORD_SNAPSHOT_VERSION,
+            home: self.discord.home.clone(),
+            friends: self.discord.friends.clone(),
+            blocked: self.discord.blocked.clone(),
+            accounts: self.discord.accounts.clone(),
+            unreads: self.discord.unreads.clone(),
+        };
+        std::thread::Builder::new()
+            .name("exo-dc-snap".into())
+            .spawn(move || {
+                let _ = write_discord_snapshot(&snap, &path);
+            })
+            .ok();
+    }
+
+    pub(crate) fn clear_discord_snapshot(&mut self) {
+        self.discord.from_snapshot = false;
+        self.discord.home = DiscordHome::default();
+        self.discord.friends.clear();
+        self.discord.blocked.clear();
+        self.discord.unreads.clear();
+        self.discord.active_dm_id = None;
+        self.discord.active_guild_id = None;
+        self.discord.active_channel_id = None;
+        self.discord.channels_by_guild.clear();
+        self.discord.members_by_guild.clear();
+        if let Some(path) = self.discord_snapshot_path() {
+            let _ = std::fs::remove_file(path);
+        }
+    }
+
+    #[allow(dead_code)]
+    pub fn warm_discord(&mut self) {
+        self.hydrate_discord_snapshot();
         if self.status != HostStatus::Connected {
             return;
         }
+        if self.discord.warmed {
+            return;
+        }
+        self.discord.warmed = true;
+        let already_ready = self.discord.status.state == "ready";
+        if already_ready {
+            self.refresh_discord_home();
+        }
+        self.fetch_discord_bootstrap_wave(already_ready);
+    }
+
+    pub fn load_discord_room(&mut self) {
+        self.hydrate_discord_snapshot();
         self.announce_hardware_video_decode();
+        if self.status != HostStatus::Connected {
+            return;
+        }
+        self.discord.warmed = true;
+        let already_ready = self.discord.status.state == "ready";
+        if already_ready {
+            self.refresh_discord_home();
+        }
+        self.fetch_discord_bootstrap_wave(already_ready);
+    }
+
+    fn fetch_discord_bootstrap_wave(&mut self, already_refreshed: bool) {
+        #[cfg(not(windows))]
+        let _ = already_refreshed;
         #[cfg(windows)]
         {
             self.call_host_async(
                 METHOD_DISCORD_STATUS,
                 json!({ "connect": true }),
-                |s, res: Result<DiscordStatus, String>| {
+                move |s, res: Result<DiscordStatus, String>| {
                     if let Ok(st) = res {
                         let ready = st.state == "ready";
+                        let signed_out = st.state == "signedOut" && !st.signed_in;
                         s.discord.status = st;
                         s.discord.loaded = true;
-                        if ready {
+                        if signed_out {
+                            s.clear_discord_snapshot();
+                        } else if ready && !already_refreshed {
                             s.refresh_discord_home();
                         }
                     }
@@ -735,8 +893,13 @@ impl AppState {
         if self.status != HostStatus::Connected {
             return;
         }
+        if self.discord.refresh_pending > 0 {
+            self.discord.refresh_queued = true;
+            return;
+        }
         #[cfg(windows)]
         {
+            self.discord.refresh_pending = 3;
             self.call_host_async(
                 METHOD_DISCORD_HOME,
                 json!({}),
@@ -752,6 +915,8 @@ impl AppState {
                             .map(|g| g.id.clone())
                             .collect();
                         s.discord.home = home;
+                        s.discord.from_snapshot = false;
+                        s.discord.loaded = true;
                         if s.discord.active_dm_id.is_none() {
                             s.discord.active_dm_id = first_dm;
                         }
@@ -764,6 +929,7 @@ impl AppState {
                             }
                         }
                     }
+                    s.finish_discord_refresh_call();
                 },
             );
             self.call_host_async(
@@ -774,6 +940,7 @@ impl AppState {
                         s.discord.friends = rep.friends;
                         s.discord.blocked = rep.restricted.map(|r| r.blocked).unwrap_or_default();
                     }
+                    s.finish_discord_refresh_call();
                 },
             );
             self.call_host_async(
@@ -783,8 +950,21 @@ impl AppState {
                     if let Ok(rep) = res {
                         s.discord.unreads = rep.channels;
                     }
+                    s.finish_discord_refresh_call();
                 },
             );
+        }
+    }
+
+    pub(crate) fn finish_discord_refresh_call(&mut self) {
+        self.discord.refresh_pending = self.discord.refresh_pending.saturating_sub(1);
+        if self.discord.refresh_pending == 0 {
+            self.save_discord_snapshot();
+            self.prefetch_discord_images();
+            if self.discord.refresh_queued {
+                self.discord.refresh_queued = false;
+                self.refresh_discord_home();
+            }
         }
     }
 
@@ -828,10 +1008,10 @@ impl AppState {
     pub fn sign_out_discord(&mut self) {
         self.discord.accounts_menu_open = false;
         self.discord.status_menu_open = false;
+        self.clear_discord_snapshot();
         if self.status != HostStatus::Connected {
             self.discord.status.state = "signedOut".into();
             self.discord.status.signed_in = false;
-            self.discord.home = DiscordHome::default();
             return;
         }
         #[cfg(windows)]
@@ -841,8 +1021,7 @@ impl AppState {
             |s, _res: Result<ActionResult, String>| {
                 s.discord.status.state = "signedOut".into();
                 s.discord.status.signed_in = false;
-                s.discord.home = DiscordHome::default();
-                s.discord.friends.clear();
+                s.clear_discord_snapshot();
             },
         );
     }
@@ -862,6 +1041,7 @@ impl AppState {
             }
             return;
         }
+        self.clear_discord_snapshot();
         #[cfg(windows)]
         self.call_host_async(
             METHOD_DISCORD_ACCOUNTS,
@@ -1297,8 +1477,10 @@ impl AppState {
             self.discord.signin = None;
         } else if ev.state == "signedOut" {
             self.discord.status.signed_in = false;
+            self.clear_discord_snapshot();
         }
         if became_ready {
+            self.discord.last_ready_refresh_at = Some(Instant::now());
             self.refresh_discord_home();
         }
     }
@@ -1325,7 +1507,13 @@ impl AppState {
                 self.load_discord_guild(gid, false);
             }
         } else {
-            self.refresh_discord_home();
+            let recent_ready = self
+                .discord
+                .last_ready_refresh_at
+                .is_some_and(|at| at.elapsed() < DISCORD_READY_BURST_SUPPRESS);
+            if !recent_ready {
+                self.refresh_discord_home();
+            }
         }
         if ev.friends {
             #[cfg(windows)]
@@ -1490,9 +1678,94 @@ impl AppState {
                 }
             }
         }
-        urls.sort();
-        urls.dedup();
+        let mut seen: HashSet<String> = HashSet::with_capacity(urls.len());
+        urls.retain(|u| seen.insert(u.clone()));
         urls
+    }
+
+    pub fn discord_remote_image(&self, url: &str, scale: f32) -> Option<rune::Image> {
+        if self.discord.prefetching_urls.contains(url) {
+            return None;
+        }
+        self.remote_image(url, scale)
+    }
+
+    pub fn prefetch_discord_images(&mut self) {
+        let Some(dir) = self.remote_cache_dir.clone() else {
+            return;
+        };
+        let urls = self.collect_discord_image_urls();
+        let mut missing: VecDeque<String> = VecDeque::new();
+        let has_cache = self.image_cache.is_some();
+        for url in urls {
+            if exo_rpc::remote_art::parse_allowed_https(&url).is_none() {
+                continue;
+            }
+            if self.discord.warmed_image_urls.contains(&url) {
+                continue;
+            }
+            if exo_rpc::remote_art::cache_path_for(&dir, &url).is_file() {
+                if has_cache {
+                    let _ = self.remote_image(&url, 1.0);
+                    self.discord.warmed_image_urls.insert(url);
+                }
+            } else if self.discord.prefetched_urls.insert(url.clone()) {
+                missing.push_back(url);
+            }
+        }
+        if missing.is_empty() {
+            return;
+        }
+        #[cfg(windows)]
+        if let Some(handle) = self.handle.clone() {
+            for url in &missing {
+                self.discord.prefetching_urls.insert(url.clone());
+            }
+            let workers = DISCORD_PREFETCH_WORKERS.min(missing.len());
+            let queue = Arc::new(Mutex::new(missing));
+            for i in 0..workers {
+                let queue = Arc::clone(&queue);
+                let dir = dir.clone();
+                let handle = handle.clone();
+                std::thread::Builder::new()
+                    .name(format!("exo-dc-art-{i}"))
+                    .spawn(move || {
+                        let mut done_batch: Vec<(String, bool)> = Vec::with_capacity(4);
+                        loop {
+                            let next = queue.lock().ok().and_then(|mut q| q.pop_front());
+                            let Some(url) = next else {
+                                break;
+                            };
+                            let ok = exo_rpc::remote_art::fetch_cached_image(&url, &dir).is_some();
+                            done_batch.push((url, ok));
+                            if done_batch.len() >= 4 {
+                                let batch = std::mem::take(&mut done_batch);
+                                handle.update(move |s, _| {
+                                    for (u, ok) in batch {
+                                        s.discord.prefetching_urls.remove(&u);
+                                        if ok {
+                                            let _ = s.remote_image(&u, 1.0);
+                                            s.discord.warmed_image_urls.insert(u);
+                                        }
+                                    }
+                                });
+                            }
+                        }
+                        if !done_batch.is_empty() {
+                            handle.update(move |s, _| {
+                                for (u, ok) in done_batch {
+                                    s.discord.prefetching_urls.remove(&u);
+                                    if ok {
+                                        let _ = s.remote_image(&u, 1.0);
+                                        s.discord.warmed_image_urls.insert(u);
+                                    }
+                                }
+                            });
+                        }
+                    })
+                    .ok();
+            }
+        }
     }
 
     pub fn preload_discord_images_sync(&self, scale: f32) {
@@ -1507,5 +1780,258 @@ impl AppState {
         for img in images {
             let _ = img.wait();
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::discord::can_show_room;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    static TEST_COUNTER: AtomicUsize = AtomicUsize::new(0);
+
+    fn temp_cache_dir(label: &str) -> PathBuf {
+        let n = TEST_COUNTER.fetch_add(1, Ordering::Relaxed);
+        let dir = std::env::temp_dir()
+            .join(format!("exo-dc-test-{}-{label}-{n}", std::process::id()))
+            .join("rune-art");
+        let _ = std::fs::create_dir_all(&dir);
+        dir
+    }
+
+    fn realistic_snapshot() -> DiscordDiskSnapshot {
+        let dms = (0..50)
+            .map(|i| DiscordDm {
+                id: format!("dm-{i}"),
+                name: format!("Friend {i}"),
+                avatar: Some(format!(
+                    "https://cdn.discordapp.com/avatars/100{i}/hash{i}.webp?size=64"
+                )),
+                unread: i < 3,
+                mentions: if i == 0 { 1 } else { 0 },
+                status: Some(if i < 19 { "online" } else { "offline" }.into()),
+                user_id: Some(format!("100{i}")),
+                ..Default::default()
+            })
+            .collect();
+        let guilds = (0..27)
+            .map(|i| DiscordGuild {
+                id: format!("g-{i}"),
+                name: format!("Guild {i}"),
+                icon: Some(format!(
+                    "https://cdn.discordapp.com/icons/200{i}/icon{i}.webp?size=64"
+                )),
+                in_voice: if i == 0 { 2 } else { 0 },
+                ..Default::default()
+            })
+            .collect();
+        let friends = (0..60)
+            .map(|i| DiscordFriend {
+                id: format!("100{i}"),
+                name: format!("Friend {i}"),
+                avatar: Some(format!(
+                    "https://cdn.discordapp.com/avatars/100{i}/hash{i}.webp?size=64"
+                )),
+                kind: "friend".into(),
+                status: if i < 19 { "online" } else { "offline" }.into(),
+                dm_id: Some(format!("dm-{i}")),
+                ..Default::default()
+            })
+            .collect();
+        DiscordDiskSnapshot {
+            version: DISCORD_SNAPSHOT_VERSION,
+            home: DiscordHome {
+                me: Some(DiscordMe {
+                    id: "900".into(),
+                    name: "Erix".into(),
+                    avatar: Some("https://cdn.discordapp.com/avatars/900/me.webp?size=64".into()),
+                    status: Some("online".into()),
+                    ..Default::default()
+                }),
+                dms,
+                guilds,
+                ..Default::default()
+            },
+            friends,
+            blocked: Vec::new(),
+            accounts: vec![DiscordAccountItem {
+                id: "900".into(),
+                name: "Erix".into(),
+                current: true,
+                ..Default::default()
+            }],
+            unreads: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn snapshot_hydrates_cached_room_before_ready_and_clears_on_sign_out() {
+        let dir = temp_cache_dir("hydrate");
+        let mut app = AppState::for_host_pipe();
+        app.remote_cache_dir = Some(dir.clone());
+        let snap_path = app.discord_snapshot_path().expect("snapshot path");
+        write_discord_snapshot(&realistic_snapshot(), &snap_path).expect("write snapshot");
+
+        assert!(app.hydrate_discord_snapshot());
+        assert!(app.discord.from_snapshot);
+        assert!(app.discord.loaded);
+        assert_eq!(app.discord.home.dms.len(), 50);
+        assert_eq!(app.discord.home.guilds.len(), 27);
+        assert_eq!(app.discord.friends.len(), 60);
+        assert_eq!(app.discord.active_dm_id.as_deref(), Some("dm-0"));
+        assert!(can_show_room(&app));
+
+        app.handle_discord_state(DiscordStateEvent {
+            state: "signedOut".into(),
+            message: None,
+        });
+        assert!(!can_show_room(&app));
+        assert!(app.discord.home.me.is_none());
+        assert!(app.discord.friends.is_empty());
+        assert!(!snap_path.exists());
+
+        let _ = std::fs::remove_dir_all(dir.parent().unwrap());
+    }
+
+    #[test]
+    fn snapshot_ignores_corrupt_or_wrong_version_files() {
+        let dir = temp_cache_dir("corrupt");
+        let mut app = AppState::for_host_pipe();
+        app.remote_cache_dir = Some(dir.clone());
+        let snap_path = app.discord_snapshot_path().expect("snapshot path");
+        std::fs::write(&snap_path, b"{not valid json").expect("write corrupt");
+        assert!(read_discord_snapshot(&snap_path).is_none());
+
+        let mut wrong = realistic_snapshot();
+        wrong.version = DISCORD_SNAPSHOT_VERSION + 99;
+        write_discord_snapshot(&wrong, &snap_path).expect("write wrong version");
+        assert!(read_discord_snapshot(&snap_path).is_none());
+
+        let mut no_me = realistic_snapshot();
+        no_me.home.me = None;
+        write_discord_snapshot(&no_me, &snap_path).expect("write empty me");
+        assert!(read_discord_snapshot(&snap_path).is_none());
+
+        let _ = std::fs::remove_dir_all(dir.parent().unwrap());
+    }
+
+    #[test]
+    fn can_show_room_handles_connecting_ready_signed_out_and_error() {
+        let mut app = AppState::for_host_pipe();
+        assert!(!can_show_room(&app));
+
+        app.discord.home.me = Some(DiscordMe {
+            id: "1".into(),
+            name: "Erix".into(),
+            ..Default::default()
+        });
+        app.discord.status.state = "connecting".into();
+        assert!(can_show_room(&app));
+
+        app.discord.status.state = "ready".into();
+        assert!(can_show_room(&app));
+
+        app.discord.status.state = "error".into();
+        assert!(!can_show_room(&app));
+
+        app.discord.status.state = "signedOut".into();
+        assert!(!can_show_room(&app));
+    }
+
+    #[test]
+    fn warm_discord_hydrates_offline_and_marks_warmed_once_connected() {
+        let dir = temp_cache_dir("warm");
+        let mut app = AppState::for_host_pipe();
+        app.remote_cache_dir = Some(dir.clone());
+        let snap_path = app.discord_snapshot_path().expect("snapshot path");
+        write_discord_snapshot(&realistic_snapshot(), &snap_path).expect("write snapshot");
+
+        app.warm_discord();
+        assert!(app.discord.home.me.is_some());
+        assert!(!app.discord.warmed);
+
+        app.status = HostStatus::Connected;
+        app.warm_discord();
+        assert!(app.discord.warmed);
+        app.warm_discord();
+        assert!(app.discord.warmed);
+
+        let _ = std::fs::remove_dir_all(dir.parent().unwrap());
+    }
+
+    #[test]
+    fn refresh_coalesces_waves_and_suppresses_ready_changed_burst() {
+        let mut app = AppState::for_host_pipe();
+        app.status = HostStatus::Connected;
+        app.discord.refresh_pending = 2;
+
+        app.refresh_discord_home();
+        assert_eq!(app.discord.refresh_pending, 2);
+        assert!(app.discord.refresh_queued);
+
+        app.discord.refresh_queued = false;
+        app.discord.refresh_pending = 0;
+        app.discord.last_ready_refresh_at = Some(Instant::now());
+        app.handle_discord_changed(DiscordChangedEvent {
+            guild_id: None,
+            friends: false,
+            in_voice: None,
+            ..Default::default()
+        });
+        assert_eq!(app.discord.refresh_pending, 0);
+    }
+
+    #[test]
+    fn collect_discord_image_urls_preserves_priority_order_and_deduplicates() {
+        let mut app = AppState::for_host_pipe();
+        let snap = realistic_snapshot();
+        app.discord.home = snap.home;
+        app.discord.friends = snap.friends;
+        let urls = app.collect_discord_image_urls();
+        assert_eq!(
+            urls.first().map(String::as_str),
+            Some("https://cdn.discordapp.com/avatars/900/me.webp?size=64")
+        );
+        let unique: HashSet<&str> = urls.iter().map(String::as_str).collect();
+        assert_eq!(unique.len(), urls.len());
+    }
+
+    #[test]
+    fn bench_snapshot_hydrate_and_discord_view_build() {
+        let dir = temp_cache_dir("bench");
+        let mut app = AppState::for_host_pipe();
+        app.remote_cache_dir = Some(dir.clone());
+        let snap_path = app.discord_snapshot_path().expect("snapshot path");
+        write_discord_snapshot(&realistic_snapshot(), &snap_path).expect("write snapshot");
+
+        let t0 = Instant::now();
+        assert!(app.hydrate_discord_snapshot());
+        let hydrate_us = t0.elapsed().as_micros();
+
+        let t1 = Instant::now();
+        let _root = crate::discord::view(&app, 1.0);
+        let first_view_us = t1.elapsed().as_micros();
+
+        let mut samples_us = Vec::with_capacity(50);
+        for _ in 0..50 {
+            let start = Instant::now();
+            let _root = crate::discord::view(&app, 1.0);
+            samples_us.push(start.elapsed().as_micros());
+        }
+        samples_us.sort_unstable();
+        let p50_us = samples_us[samples_us.len() / 2];
+        let p95_us = samples_us[(samples_us.len() * 95) / 100];
+        println!(
+            "PERF native discord snapshot_hydrate={:.3}ms first_view={:.3}ms warm_view_p50={:.3}ms warm_view_p95={:.3}ms",
+            hydrate_us as f64 / 1000.0,
+            first_view_us as f64 / 1000.0,
+            p50_us as f64 / 1000.0,
+            p95_us as f64 / 1000.0,
+        );
+        assert!(hydrate_us < 100_000);
+        assert!(first_view_us < 100_000);
+
+        let _ = std::fs::remove_dir_all(dir.parent().unwrap());
     }
 }

@@ -136,6 +136,7 @@ internal sealed partial class DiscordCache
     private readonly Dictionary<string, Dictionary<string, VoiceMember>> _calls = [];
     private readonly Dictionary<string, Guild> _guilds = [];
     private readonly Dictionary<string, Channel> _private = [];
+    private readonly Dictionary<string, string> _dmByUser = [];
     private readonly Dictionary<string, User> _users = [];
     private const int NoteCap = 500;
     private readonly Dictionary<string, string?> _notes = [];
@@ -202,7 +203,7 @@ internal sealed partial class DiscordCache
     {
         lock (_gate)
         {
-            _guilds.Clear(); _private.Clear(); _users.Clear(); _read.Clear(); _muted.Clear(); _collapsed.Clear(); _flags.Clear(); _guildFlags.Clear(); _order = []; _unavailable.Clear();
+            _guilds.Clear(); _private.Clear(); _dmByUser.Clear(); _users.Clear(); _read.Clear(); _muted.Clear(); _collapsed.Clear(); _flags.Clear(); _guildFlags.Clear(); _order = []; _unavailable.Clear();
             _notify.Clear(); _suppressEveryone.Clear(); _suppressRoles.Clear(); _hideMuted.Clear(); _noHighlights.Clear(); _muteEvents.Clear(); _noPush.Clear();
             // A new session: DM calls that ended meanwhile are gone (Discord sends a CALL_CREATE for each one still on, as
             // Exo identifies with AUTO_CALL_CONNECT).
@@ -232,7 +233,7 @@ internal sealed partial class DiscordCache
             foreach (var c in Array(d, "private_channels"))
             {
                 var channel = ReadChannel(c, null);
-                _private[channel.Id] = channel;
+                PutPrivate(channel);
             }
             foreach (var entry in Entries(d, "read_state"))
             {
@@ -375,8 +376,10 @@ internal sealed partial class DiscordCache
                 case "CHANNEL_RECIPIENT_ADD" or "CHANNEL_RECIPIENT_REMOVE" when Str(d, "channel_id") is { } gdm && _private.TryGetValue(gdm, out var gdmChannel)
                     && d.TryGetProperty("user", out var gdmUser) && Str(gdmUser, "id") is { } gdmUserId:
                     Remember(ReadUser(gdmUser));
+                    if (gdmChannel.Recipients.Count == 1) RemoveDmIndex(gdmChannel.Recipients[0], gdmChannel.Id);
                     gdmChannel.Recipients.Remove(gdmUserId);
                     if (type == "CHANNEL_RECIPIENT_ADD") gdmChannel.Recipients.Add(gdmUserId);
+                    if (gdmChannel.Recipients.Count == 1) _dmByUser[gdmChannel.Recipients[0]] = gdmChannel.Id;
                     events.Add(("discord.changed", new { guildId = (string?)null }));
                     break;
                 case "CHANNEL_CREATE":
@@ -683,8 +686,8 @@ internal sealed partial class DiscordCache
         var channel = ReadChannel(d, guildId);
         if (guildId is null)
         {
-            if (type == "CHANNEL_DELETE") _private.Remove(channel.Id);
-            else _private[channel.Id] = channel;
+            if (type == "CHANNEL_DELETE") RemovePrivate(channel.Id);
+            else PutPrivate(channel);
             foreach (var user in Array(d, "recipients")) Remember(ReadUser(user));
         }
         else if (_guilds.TryGetValue(guildId, out var guild))
@@ -787,7 +790,35 @@ internal sealed partial class DiscordCache
         {
             if (!_private.TryGetValue(channelId, out var c)) return;
             if (accepted) { c.MessageRequest = false; c.Spam = false; }
-            else _private.Remove(channelId);
+            else RemovePrivate(channelId);
+        }
+    }
+
+    private void PutPrivate(Channel channel)
+    {
+        if (_private.TryGetValue(channel.Id, out var prev) && prev.Recipients.Count == 1)
+            RemoveDmIndex(prev.Recipients[0], prev.Id);
+        _private[channel.Id] = channel;
+        if (channel.Recipients.Count == 1) _dmByUser[channel.Recipients[0]] = channel.Id;
+    }
+
+    private void RemovePrivate(string channelId)
+    {
+        if (_private.Remove(channelId, out var prev) && prev.Recipients.Count == 1)
+            RemoveDmIndex(prev.Recipients[0], prev.Id);
+    }
+
+    private void RemoveDmIndex(string userId, string channelId)
+    {
+        if (!_dmByUser.TryGetValue(userId, out var mapped) || mapped != channelId) return;
+        _dmByUser.Remove(userId);
+        foreach (var other in _private.Values)
+        {
+            if (other.Id != channelId && other.Recipients.Count == 1 && other.Recipients[0] == userId)
+            {
+                _dmByUser[userId] = other.Id;
+                return;
+            }
         }
     }
 
@@ -1407,7 +1438,7 @@ internal sealed partial class DiscordCache
                     activityType = presence?.Kind,
                     rich = presence?.Rich,
                     prep = r.Value == 1 ? _exoPrep.GetValueOrDefault(r.Key) : null,
-                    dmId = _private.Values.FirstOrDefault(c => c.Recipients.Count == 1 && c.Recipients[0] == r.Key)?.Id,
+                    dmId = _dmByUser.GetValueOrDefault(r.Key),
                 };
             }).OrderBy(f => f.name, StringComparer.OrdinalIgnoreCase).ToList();
     }
@@ -1442,7 +1473,7 @@ internal sealed partial class DiscordCache
         lock (_gate)
         {
             if (!_guilds.TryGetValue(guildId, out var guild)) return [];
-            var unread = guild.Channels.Values.Where(c => (Perms(c) & ViewChannel) != 0 && (Unread(c) || _read.GetValueOrDefault(c.Id).Mentions > 0) && c.LastMessageId is not null)
+            var unread = guild.Channels.Values.Where(c => c.LastMessageId is not null && (Unread(c) || _read.GetValueOrDefault(c.Id).Mentions > 0) && (Perms(c) & ViewChannel) != 0)
                 .Select(c => (c.Id, c.LastMessageId!)).ToList();
             foreach (var (channel, message) in unread) _read[channel] = (message, 0);
             return unread;
@@ -1457,7 +1488,7 @@ internal sealed partial class DiscordCache
     {
         lock (_gate)
             return [.. _guilds.Values.Where(g => !IsMuted(g.Id))
-                .SelectMany(g => g.Channels.Values.Where(c => (Perms(c) & ViewChannel) != 0 && Unread(c)).Select(c => (Guild: g, Channel: c)))
+                .SelectMany(g => g.Channels.Values.Where(c => Unread(c) && (Perms(c) & ViewChannel) != 0).Select(c => (Guild: g, Channel: c)))
                 .OrderByDescending(x => Snowflake(x.Channel.LastMessageId!))
                 .Take(limit)
                 .Select(x => (object)new
@@ -1488,7 +1519,7 @@ internal sealed partial class DiscordCache
 
     // Presence is kept only for friends, requests and the people in DMs, not every member of every server.
     private bool Watched(string? id) =>
-        id is not null && (_relationships.ContainsKey(id) || _private.Values.Any(c => c.Recipients.Count == 1 && c.Recipients[0] == id));
+        id is not null && (_relationships.ContainsKey(id) || _dmByUser.ContainsKey(id));
 
     // A friend's or DM person's presence; returns their id when it changed.
     private string? ApplyPresence(JsonElement p)
