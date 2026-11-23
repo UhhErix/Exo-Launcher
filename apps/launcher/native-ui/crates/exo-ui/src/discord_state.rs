@@ -813,7 +813,7 @@ impl AppState {
         }
     }
 
-    #[allow(dead_code)]
+    #[cfg_attr(not(windows), allow(dead_code))]
     pub fn warm_discord(&mut self) {
         self.hydrate_discord_snapshot();
         if self.status != HostStatus::Connected {

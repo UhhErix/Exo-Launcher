@@ -1421,11 +1421,10 @@ fn run_parity_probe(
         text,
     );
     rt.frame(0.0);
-    let glass_frame0 = collect_backdrop_blurs(&rt);
-
     if let Some(ref sp) = script_path {
         replay_probe_script(&mut rt, sp);
     }
+    let glass_frame0 = collect_backdrop_blurs(&rt);
 
     for _ in 0..10 {
         rt.frame(1.0 / 60.0);
@@ -1449,18 +1448,33 @@ fn run_parity_probe(
         .map(|e| e.key.clone().unwrap_or_else(|| e.path.clone()))
         .collect();
 
-    let menu_prefixes = [
+    let semantic_menu_prefixes = [
         "capture-popover-menu",
-        "dc-status-menu",
         "library-more",
-        "dc-menu",
+        "exo-ctx-menu",
+        "exo-ctx-submenu",
+        "dd-",
     ];
+    let legacy_menu_prefixes = ["dc-status-menu", "dc-menu"];
     let mut menu_items: Vec<String> = Vec::new();
     for el in &elements {
-        let in_menu = menu_prefixes
+        if el.exiting {
+            continue;
+        }
+        let in_semantic_menu = semantic_menu_prefixes
             .iter()
             .any(|p| el.path.contains(p) || el.key.as_deref().is_some_and(|k| k.contains(p)));
-        if in_menu && let Some(t) = el.text.as_deref().or(el.label.as_deref()) {
+        let in_legacy_menu = legacy_menu_prefixes
+            .iter()
+            .any(|p| el.path.contains(p) || el.key.as_deref().is_some_and(|k| k.contains(p)));
+        let label_opt = if in_semantic_menu && matches!(el.role, "menuitem" | "option") {
+            el.label.as_deref().or(el.text.as_deref())
+        } else if in_legacy_menu {
+            el.text.as_deref().or(el.label.as_deref())
+        } else {
+            None
+        };
+        if let Some(t) = label_opt {
             let trimmed = t.trim();
             if !trimmed.is_empty() && !menu_items.iter().any(|x| x == trimmed) {
                 menu_items.push(trimmed.to_string());
@@ -1475,6 +1489,8 @@ fn run_parity_probe(
         "libraryAllGames": rt.state.library_all_games,
         "librarySearchOpen": rt.state.library_search_open,
         "libraryMoreOpen": rt.state.library_more_open,
+        "contextMenuOpen": rt.state.context_menu.is_some(),
+        "openDropdown": rt.state.open_dropdown.map(|d| format!("{d:?}")),
         "openGameId": rt.state.open_game_id,
         "propsOpen": rt.state.props_open,
         "gamePropsTab": rt.state.game_props_tab,

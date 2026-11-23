@@ -2509,7 +2509,10 @@ impl AppState {
                         })
                         .ok();
                 }
-                handle.update(move |s, _| s.apply_bootstrap(boot));
+                handle.update(move |s, _| {
+                    s.apply_bootstrap(boot);
+                    s.warm_discord();
+                });
             }
             Err(e) => {
                 let msg = e.to_string();
