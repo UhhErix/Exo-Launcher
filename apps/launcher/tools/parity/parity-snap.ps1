@@ -77,7 +77,7 @@ try {
             $png = Join-Path $Out "$Tag-$scene.png"
             $sceneArgs = @()
             if ($scene -ne 'library') { $sceneArgs = @('--scene', $scene) }
-            $frameArgs = if ($scene -like 'setup-*') { @('--frames', '240', '--fps', '60') } else { @() }
+            $frameArgs = if ($scene -like 'setup-*') { @('--frames', '900', '--fps', '60') } else { @() }
             & .\target\debug\exo-ui.exe --pipe $pipe @sceneArgs @frameArgs --snap $png --size $Size --scale 1
             if (-not (Test-Path -LiteralPath $png)) { "SNAP FAILED: $scene"; continue }
             $ref = $refByScene[$scene]

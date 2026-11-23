@@ -751,9 +751,14 @@ fn stat_cell(value: String, caption: String) -> El {
 }
 
 fn cover_pool(s: &AppState, scale: f32, installed_only: bool) -> Vec<rune::Image> {
-    s.games
+    let mut games: Vec<_> = s
+        .games
         .iter()
         .filter(|g| g.cover_url.is_some() && (!installed_only || g.installed))
+        .collect();
+    games.sort_by_key(|g| !g.installed);
+    games
+        .into_iter()
         .filter_map(|g| s.cover_image(g, scale))
         .take(24)
         .collect()
@@ -1293,11 +1298,11 @@ fn devices(s: &AppState, scale: f32) -> El {
         let mut bays = row().w_full().grow(1.0).gap(16.0);
         let fact_rows = devices
             .iter()
-            .take(4)
+            .take(5)
             .map(|d| bay_facts(d).len())
             .max()
             .unwrap_or(0);
-        for (i, dev) in devices.iter().take(4).enumerate() {
+        for (i, dev) in devices.iter().take(5).enumerate() {
             bays = bays.child(bay(s, i, dev, fact_rows, scale));
         }
         bays
@@ -1645,7 +1650,7 @@ fn setup_switch(key: String, on: bool, on_press: impl Fn(&mut AppState) + 'stati
 
 fn tour_stage(s: &AppState, scale: f32) -> El {
     let games: Vec<_> = s.games.iter().filter(|g| g.installed).take(16).collect();
-    let covers = cover_pool(s, scale, true);
+    let covers = cover_pool(s, scale, false);
     let hero_name = games
         .first()
         .map_or("Your library".to_string(), |g| g.title.clone());
@@ -1659,7 +1664,8 @@ fn tour_stage(s: &AppState, scale: f32) -> El {
                 .h_full()
                 .radius(RADIUS_SMALL)
                 .fill(fg_faint().alpha(0.12));
-            if let Some(img) = covers.get(line_idx * 8 + col_idx) {
+            if !covers.is_empty() {
+                let img = &covers[(line_idx * 8 + col_idx) % covers.len()];
                 cover = cover.pixels_fit(img.pixels(), SurfaceFit::Fill);
             }
             line = line.child(cover);
@@ -1781,7 +1787,7 @@ fn done(s: &AppState, scale: f32) -> El {
             .map(|d| d.devices.clone())
             .unwrap_or_default();
     let mut strip = row().w_full().grow(1.0).min_h(0.0).gap(12.0);
-    for dev in devices.iter().take(4) {
+    for dev in devices.iter().take(5) {
         let photo =
             s.pc.device_images
                 .get(&dev.id)

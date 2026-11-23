@@ -54,6 +54,15 @@ Also changed:
 - Track cells: the pill sits under the stage title; sub-lines truncate.
 - Setup-done parity scene marks stages 1-5 Done (`setup_go_complete`). `picks` is not set by the fixture, so the snap reads "0 PC defaults applied"; the mockup shows 5. Data-driven, not fixed.
 
+## Follow-up 2: last snap-review items
+
+- Welcome and Done mosaics: blank right-half tiles. Cause: the window draws nothing at rest, and covers decode after the first frames, so the snap captured frames before they landed. The pool was full (24 mosaic, 16 tour) the whole time. Fix: setup snaps now run 900 frames instead of 240 (`tools/parity/parity-snap.ps1`). Covers are also ordered installed-first and cycled over every tile, so a short library never leaves a blank tile. At 900 frames the welcome mosaic fills every tile.
+- Tour: the blank cell at 1080p was the same late-decode case; it is filled at 900 frames. Tour covers now cycle too.
+- Devices: all five host devices are shown (five columns, same bay layout). Done shows all five device cards as well, to match "5 peripherals set up".
+- Known: the fifth device is an audio input (fifine Microphone) and uses the headphones glyph; there is no microphone glyph in exo_kit.
+
+Snaps (900 frames): `...\scratchpad\snaps\h{720,1080,1440}-setup-{welcome,devices,tour,done}.png`. Checked: welcome, devices, tour, done at 1080p; devices and welcome at 720p; devices and done at 1440p (mosaic full, five cards).
+
 ## Gates (final, after the snap-review commit)
 
 - `cargo fmt --all -- --check`: pass
@@ -69,9 +78,7 @@ Scenes: setup-welcome, setup-accounts, setup-devices, setup-pc, setup-tour, setu
 
 ## Known gaps (open)
 
-- Tour grid: one cover cell is blank at 1080p (a game whose cover does not decode in the headless snap). Not reproduced in code; the remote-cover path returns None in headless.
 - Tour footer buttons are not in the mockup (kept for Back / Start).
-- Devices: the host lists five devices, four bays are shown.
 - Done: PC defaults count reads from picks (fixture has none), so it reads "0 applied".
 - "Open account" still opens the Settings-side flow rather than inline sign-in (item 5 is the return path, not inline sign-in).
 - Per-device bodies (dual-sense edge, audio EQ) are not built (out of scope).
