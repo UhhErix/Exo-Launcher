@@ -302,6 +302,7 @@ internal sealed unsafe partial class VoiceAudio : IDisposable
             // Not while Windows' noise suppression stands in: a raw stream skips it.
             if (captureSide && (exoCleans || !processing.NoiseSuppression)) RawStream(clientObject);
             Marshal.ThrowExceptionForHR(client.Initialize(0, EventCallback | AutoConvert, BufferHns, 0, ref format, 0));
+            if (captureSide) AppLog.Info($"Discord voice: microphone opened as {format.SamplesPerSec} Hz, {format.BitsPerSample}-bit float, {format.Channels} channels; the device runs at {AudioDevices.Identify(MicId)?.NativeSampleRate?.ToString() ?? "an unknown rate"} Hz, which Windows converts.");
             if (captureSide) Effects(client, processing.NoiseSuppression && !exoCleans);
             using var ready = new AutoResetEvent(false);
             Marshal.ThrowExceptionForHR(client.SetEventHandle(ready.SafeWaitHandle.DangerousGetHandle()));

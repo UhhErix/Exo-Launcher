@@ -467,6 +467,8 @@ internal static class MicCatalog
         new("Maono PD200X", MicKind.UsbMic, "Maono Link", [0x352F_0104], ["pd200x"], MaonoLink("PD200X"), [CloseTip]),
         new("Maono PD100X", MicKind.UsbMic, "Maono Link", [0x352F_010C], ["pd100x"], MaonoLink("PD100X"), [CloseTip]),
         new("Maono DM30", MicKind.UsbMic, "Maono Link", [0x352F_0101], ["maono dm30", "dm30 usb"], MaonoLink("DM30"), [CloseTip]),
+        new("Maono AU-A04", MicKind.UsbMic, null, [], ["au-a04", "au a04"], [Knob("the gain knob on the AU-A04")], [CloseTip, "Too much gain makes the room louder than you: turn the knob down until your voice is clear and the room is quiet."]),
+        new("Maono AU-A04TR", MicKind.UsbMic, null, [], ["au-a04tr"], [Knob("the gain knob on the AU-A04TR")], [CloseTip, "Too much gain makes the room louder than you: turn the knob down until your voice is clear and the room is quiet."]),
         new("Maono mic", MicKind.UsbMic, "Maono Link", [], ["maono"], [], [], Vendor: 0x352F),
         new("Samson Q2U", MicKind.UsbMic, null, [0x17A0_0301, 0x17A0_0304, 0x17A0_0307], ["q2u"], [], [NoKnobTip, EndTip]),
         new("Samson Q9U", MicKind.UsbMic, null, [0x17A0_0243], ["q9u"],
