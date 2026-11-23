@@ -23,6 +23,7 @@ internal sealed partial class DiscordRest : IDisposable
     // read from discord.com's own scripts at start.
     private const int FallbackBuild = 678976;
     private static int? _build;
+    private static int _buildRefreshing;
     private static readonly string LaunchId = Guid.NewGuid().ToString();
     private static readonly string HeartbeatSessionId = Guid.NewGuid().ToString();
     private static (int Build, string Encoded) _superPropertiesCache;
@@ -37,8 +38,8 @@ internal sealed partial class DiscordRest : IDisposable
         PooledConnectionIdleTimeout = TimeSpan.FromMinutes(5),
         EnableMultipleHttp2Connections = true,
         ConnectTimeout = TimeSpan.FromSeconds(10),
-        KeepAlivePingDelay = TimeSpan.FromSeconds(10),
-        KeepAlivePingTimeout = TimeSpan.FromSeconds(5),
+        KeepAlivePingDelay = TimeSpan.FromSeconds(5),
+        KeepAlivePingTimeout = TimeSpan.FromSeconds(2),
         KeepAlivePingPolicy = HttpKeepAlivePingPolicy.Always,
     });
     private readonly string? _token;
@@ -105,12 +106,31 @@ internal sealed partial class DiscordRest : IDisposable
     internal static async Task LoadBuildAsync(CancellationToken ct)
     {
         if (_build is not null) return;
-        if (KeptBuild() is { } kept)
+        var (kept, stale) = KeptBuild();
+        if (kept is { } cached)
         {
-            _build = kept;
-            AppLog.Info($"Discord client: web build {kept} (read within the day).");
+            _build = cached;
+            if (!stale)
+            {
+                AppLog.Info($"Discord client: web build {cached} (read within the day).");
+                return;
+            }
+            AppLog.Info($"Discord client: web build {cached} (stale; refreshing in background).");
+            if (Interlocked.Exchange(ref _buildRefreshing, 1) == 0)
+            {
+                _ = Task.Run(async () =>
+                {
+                    try { await FetchBuildAsync(CancellationToken.None).ConfigureAwait(false); }
+                    finally { Interlocked.Exchange(ref _buildRefreshing, 0); }
+                });
+            }
             return;
         }
+        await FetchBuildAsync(ct).ConfigureAwait(false);
+    }
+
+    private static async Task FetchBuildAsync(CancellationToken ct)
+    {
         try
         {
             using var http = ExoHttp.Create(TimeSpan.FromSeconds(20));
@@ -140,17 +160,27 @@ internal sealed partial class DiscordRest : IDisposable
 
     private static string BuildFile => Path.Combine(PathHelper.AppDataDir, "discord", "web-build.txt");
 
-    // The build kept within the last day, or null.
-    private static int? KeptBuild()
+    internal static (int? Build, bool Stale) EvaluateKeptBuild(string? text, TimeSpan age)
+    {
+        if (string.IsNullOrWhiteSpace(text) || age < TimeSpan.Zero || age > TimeSpan.FromDays(14))
+            return (null, false);
+        if (!int.TryParse(text.Trim(), System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var build) || build <= 0)
+            return (null, false);
+        return (build, age > TimeSpan.FromDays(1));
+    }
+
+    // The build kept within the last day, or stale up to 14 days for background refresh.
+    private static (int? Build, bool Stale) KeptBuild()
     {
         try
         {
             var file = new FileInfo(BuildFile);
-            if (!file.Exists || DateTime.UtcNow - file.LastWriteTimeUtc > TimeSpan.FromDays(1)) return null;
-            return int.TryParse(File.ReadAllText(file.FullName).Trim(), System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var build)
-                && build > 0 ? build : null;
+            if (!file.Exists) return (null, false);
+            var age = DateTime.UtcNow - file.LastWriteTimeUtc;
+            if (age < TimeSpan.Zero) age = TimeSpan.Zero;
+            return EvaluateKeptBuild(File.ReadAllText(file.FullName), age);
         }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { return null; }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { return (null, false); }
     }
 
     private static void KeepBuild(int build)

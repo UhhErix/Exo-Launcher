@@ -1,4 +1,4 @@
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Default, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -33,7 +33,7 @@ pub struct DiscordSignInStep {
     pub message: Option<String>,
 }
 
-#[derive(Debug, Clone, Default, Deserialize)]
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DiscordAccountItem {
     #[serde(default)]
@@ -57,7 +57,7 @@ pub struct DiscordAccountsReply {
     pub accounts: Vec<DiscordAccountItem>,
 }
 
-#[derive(Debug, Clone, Default, Deserialize)]
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DiscordDecoration {
     #[serde(default)]
@@ -66,7 +66,7 @@ pub struct DiscordDecoration {
     pub sku_id: Option<String>,
 }
 
-#[derive(Debug, Clone, Default, Deserialize)]
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DiscordNameplate {
     #[serde(default)]
@@ -77,7 +77,7 @@ pub struct DiscordNameplate {
     pub palette: Option<String>,
 }
 
-#[derive(Debug, Clone, Default, Deserialize)]
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DiscordNameStyle {
     #[serde(default)]
@@ -88,7 +88,7 @@ pub struct DiscordNameStyle {
     pub colors: Vec<u32>,
 }
 
-#[derive(Debug, Clone, Default, Deserialize)]
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DiscordGuildTag {
     #[serde(default)]
@@ -99,7 +99,7 @@ pub struct DiscordGuildTag {
     pub badge: Option<String>,
 }
 
-#[derive(Debug, Clone, Default, Deserialize)]
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DiscordLook {
     #[serde(default)]
@@ -112,7 +112,7 @@ pub struct DiscordLook {
     pub tag: Option<DiscordGuildTag>,
 }
 
-#[derive(Debug, Clone, Default, Deserialize)]
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DiscordRestricted {
     #[serde(default)]
@@ -134,7 +134,7 @@ pub struct DiscordRestrictedSet {
     pub ignored: Vec<DiscordRestricted>,
 }
 
-#[derive(Debug, Clone, Default, Deserialize)]
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DiscordMe {
     #[serde(default)]
@@ -149,7 +149,7 @@ pub struct DiscordMe {
     pub look: Option<DiscordLook>,
 }
 
-#[derive(Debug, Clone, Default, Deserialize)]
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DiscordDmMember {
     #[serde(default)]
@@ -164,7 +164,7 @@ pub struct DiscordDmMember {
     pub status: String,
 }
 
-#[derive(Debug, Clone, Default, Deserialize)]
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DiscordVoiceMember {
     #[serde(default)]
@@ -193,7 +193,7 @@ pub struct DiscordVoiceMember {
     pub look: Option<DiscordLook>,
 }
 
-#[derive(Debug, Clone, Default, Deserialize)]
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DiscordDm {
     #[serde(default)]
@@ -236,7 +236,7 @@ pub struct DiscordDm {
     pub spam: bool,
 }
 
-#[derive(Debug, Clone, Default, Deserialize)]
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DiscordGuild {
     #[serde(default)]
@@ -259,7 +259,7 @@ pub struct DiscordGuild {
     pub owner: bool,
 }
 
-#[derive(Debug, Clone, Default, Deserialize)]
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DiscordRailItem {
     #[serde(default)]
@@ -272,7 +272,7 @@ pub struct DiscordRailItem {
     pub guild_ids: Vec<String>,
 }
 
-#[derive(Debug, Clone, Default, Deserialize)]
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DiscordHome {
     #[serde(default)]
@@ -427,7 +427,7 @@ pub struct DiscordMemberList {
     pub rows: Option<i32>,
 }
 
-#[derive(Debug, Clone, Default, Deserialize)]
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DiscordRich {
     #[serde(rename = "type", default)]
@@ -446,7 +446,7 @@ pub struct DiscordRich {
     pub through_exo: bool,
 }
 
-#[derive(Debug, Clone, Default, Deserialize)]
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DiscordPrep {
     #[serde(default)]
@@ -460,7 +460,7 @@ pub struct DiscordPrep {
 pub type DiscordLookTag = DiscordGuildTag;
 pub type DiscordLookNameplate = DiscordNameplate;
 
-#[derive(Debug, Clone, Default, Deserialize)]
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DiscordFriend {
     #[serde(default)]
@@ -511,7 +511,7 @@ pub struct DiscordFriendActionReply {
     pub stranger: bool,
 }
 
-#[derive(Debug, Clone, Default, Deserialize)]
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DiscordUnreadChannel {
     #[serde(default)]
@@ -1168,6 +1168,24 @@ pub struct DiscordVideoFrame {
     pub data: Vec<u8>,
 }
 
+pub const DISCORD_SNAPSHOT_VERSION: u32 = 1;
+
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DiscordDiskSnapshot {
+    pub version: u32,
+    #[serde(default)]
+    pub home: DiscordHome,
+    #[serde(default)]
+    pub friends: Vec<DiscordFriend>,
+    #[serde(default)]
+    pub blocked: Vec<DiscordRestricted>,
+    #[serde(default)]
+    pub accounts: Vec<DiscordAccountItem>,
+    #[serde(default)]
+    pub unreads: Vec<DiscordUnreadChannel>,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1196,5 +1214,76 @@ mod tests {
             Some(DiscordMemberItem::Member(ref m)) if m.name == "Ada" && m.in_voice.as_deref() == Some("vc-1")
         ));
         assert!(parsed.items[2].is_none());
+    }
+
+    #[test]
+    fn discord_disk_snapshot_round_trips_public_state() {
+        let snap = DiscordDiskSnapshot {
+            version: DISCORD_SNAPSHOT_VERSION,
+            home: DiscordHome {
+                me: Some(DiscordMe {
+                    id: "100".into(),
+                    name: "Erix".into(),
+                    status: Some("online".into()),
+                    ..Default::default()
+                }),
+                dms: vec![DiscordDm {
+                    id: "dm-1".into(),
+                    name: "Ada".into(),
+                    unread: true,
+                    mentions: 2,
+                    ..Default::default()
+                }],
+                guilds: vec![DiscordGuild {
+                    id: "g-1".into(),
+                    name: "Exo".into(),
+                    in_voice: 1,
+                    ..Default::default()
+                }],
+                ..Default::default()
+            },
+            friends: vec![DiscordFriend {
+                id: "200".into(),
+                name: "Ada".into(),
+                kind: "friend".into(),
+                status: "online".into(),
+                dm_id: Some("dm-1".into()),
+                ..Default::default()
+            }],
+            blocked: vec![DiscordRestricted {
+                id: "999".into(),
+                name: "Spam".into(),
+                ..Default::default()
+            }],
+            accounts: vec![DiscordAccountItem {
+                id: "100".into(),
+                name: "Erix".into(),
+                current: true,
+                ..Default::default()
+            }],
+            unreads: vec![DiscordUnreadChannel {
+                channel_id: "ch-1".into(),
+                name: "general".into(),
+                guild_id: "g-1".into(),
+                guild: "Exo".into(),
+                mentions: 1,
+                ..Default::default()
+            }],
+        };
+
+        let bytes = serde_json::to_vec(&snap).expect("serialize snapshot");
+        let parsed: DiscordDiskSnapshot =
+            serde_json::from_slice(&bytes).expect("deserialize snapshot");
+        assert_eq!(parsed.version, DISCORD_SNAPSHOT_VERSION);
+        assert_eq!(
+            parsed.home.me.as_ref().map(|m| m.name.as_str()),
+            Some("Erix")
+        );
+        assert_eq!(parsed.home.dms.len(), 1);
+        assert_eq!(parsed.home.guilds.len(), 1);
+        assert_eq!(parsed.friends.len(), 1);
+        assert_eq!(parsed.blocked.len(), 1);
+        assert_eq!(parsed.accounts.len(), 1);
+        assert_eq!(parsed.unreads.len(), 1);
     }
 }

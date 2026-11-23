@@ -19,11 +19,13 @@ use exo_rpc::{
     DiscordChannel, DiscordDm, DiscordFriend, DiscordGuild, DiscordMemberItem, DiscordRailItem,
 };
 use rune::{
-    Color, El, ScrollSpec, Shape, Spring, SpringPair, SurfaceFit, TextStyle, Transition, Tx,
-    canvas, col, edit_access, el, row, text, text_input,
+    Color, El, GrowthSpec, ScrollSpec, Shape, Spring, SpringPair, SurfaceFit, TextStyle,
+    Transition, Tx, canvas, col, edit_access, el, row, text, text_input,
 };
+use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
 use std::f32::consts::FRAC_PI_2;
+use std::rc::Rc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 fn inline_bar_transition(dy: f32) -> Transition {
@@ -559,7 +561,7 @@ fn avatar_with_look(
         .clip_rounded(radius)
         .fill(Color::WHITE.alpha(0.10))
         .center();
-    if let Some(img) = url.and_then(|u| s.remote_image(u, scale)) {
+    if let Some(img) = url.and_then(|u| s.discord_remote_image(u, scale)) {
         inner = inner.pixels_fit(img.pixels(), SurfaceFit::Fill);
     } else {
         let style = if size >= 40.0 {
@@ -581,7 +583,7 @@ fn avatar_with_look(
     }
     let mut wrap = el().size(size, size).child(inner);
     if let Some(dec_url) = decoration_url(look)
-        && let Some(img) = s.remote_image(&dec_url, scale)
+        && let Some(img) = s.discord_remote_image(&dec_url, scale)
     {
         let dec_sz = (size * 1.2).round();
         let off = -((dec_sz - size) * 0.5);
@@ -871,7 +873,11 @@ fn guild_face(s: &AppState, guild: &DiscordGuild, face_sz: f32, sc: f32, scale: 
         .clip_rounded(face_sz * 0.5)
         .fill(monogram_fill(&guild.name))
         .center();
-    if let Some(img) = guild.icon.as_deref().and_then(|u| s.remote_image(u, scale)) {
+    if let Some(img) = guild
+        .icon
+        .as_deref()
+        .and_then(|u| s.discord_remote_image(u, scale))
+    {
         face = face.pixels_fit(img.pixels(), SurfaceFit::Fill);
     } else {
         face = glassy_ring(face.fill(BG)).child(
@@ -1017,7 +1023,11 @@ fn band_folder_tile(
             .clip_rounded(mini_sz * 0.5)
             .fill(monogram_fill(&g.name))
             .center();
-        if let Some(img) = g.icon.as_deref().and_then(|u| s.remote_image(u, scale)) {
+        if let Some(img) = g
+            .icon
+            .as_deref()
+            .and_then(|u| s.discord_remote_image(u, scale))
+        {
             cell = cell.pixels_fit(img.pixels(), SurfaceFit::Fill);
         } else {
             cell = cell.child(
@@ -1961,9 +1971,34 @@ fn dm_sidebar(s: &AppState, sc: f32, scale: f32) -> El {
             );
         }
     }
-    for dm in &unpinned {
-        let active = active_dm_id == Some(dm.id.as_str());
-        list = list.child(dm_row(s, dm, active, sc, scale));
+    let unpinned_ids: Vec<String> = unpinned.iter().map(|d| d.id.clone()).collect();
+    if !unpinned_ids.is_empty() {
+        let count = unpinned_ids.len();
+        let ids_key = Rc::new(unpinned_ids);
+        let ids_build = Rc::clone(&ids_key);
+        list = list.child(
+            col()
+                .key("dc-dm-unpinned")
+                .w_full()
+                .gap(2.0)
+                .growth(GrowthSpec::default())
+                .virtual_rows(
+                    count,
+                    52.0 * sc,
+                    move |_s: &AppState, i| Cow::Owned(format!("dc-dm-{}", ids_key[i])),
+                    move |s: &AppState, i| {
+                        let Some(id) = ids_build.get(i) else {
+                            return col();
+                        };
+                        let Some(dm) = s.discord.home.dms.iter().find(|d| d.id == *id) else {
+                            return col();
+                        };
+                        let active = s.discord.place == DiscordPlace::Messages
+                            && s.discord.active_dm_id.as_deref() == Some(dm.id.as_str());
+                        dm_row(s, dm, active, sc, scale)
+                    },
+                ),
+        );
     }
     if pinned.is_empty() && unpinned.is_empty() {
         list = list.child(
@@ -2162,7 +2197,7 @@ fn server_left_rail(s: &AppState, guild: &DiscordGuild, sc: f32, scale: f32) -> 
 
     let mut tree = col().w_full().pt(4.0).px(8.0).pb(8.0).gap(2.0);
     if let Some(ref banner_url) = guild.banner
-        && let Some(img) = s.remote_image(banner_url, scale)
+        && let Some(img) = s.discord_remote_image(banner_url, scale)
     {
         let banner_h = ((pane_w - 16.0) * 7.0 / 16.0).round();
         tree = tree.child(
@@ -2273,7 +2308,7 @@ fn clan_tag_chip(s: &AppState, tag: &DiscordGuildTag, sc: f32, scale: f32) -> El
         .fill(Color::WHITE.alpha(0.05))
         .border(1.0, glass_rim());
     if let Some(url) = clan_badge_url(tag)
-        && let Some(img) = s.remote_image(&url, scale)
+        && let Some(img) = s.discord_remote_image(&url, scale)
     {
         chip = chip.child(
             el().size(12.0, 12.0)
@@ -2302,7 +2337,7 @@ fn nameplate_backdrop(s: &AppState, plate: &DiscordNameplate, scale: f32) -> El 
         );
     }
     if let Some(url) = nameplate_static_url(plate)
-        && let Some(img) = s.remote_image(&url, scale)
+        && let Some(img) = s.discord_remote_image(&url, scale)
     {
         layer = layer.child(
             el().pin(Some(0.0), Some(0.0), Some(0.0), Some(0.0))
@@ -3510,9 +3545,18 @@ fn inbox_panel(s: &AppState, sc: f32) -> El {
         )
 }
 
+pub fn can_show_room(s: &AppState) -> bool {
+    s.discord.home.me.is_some()
+        && s.discord.status.state != "signedOut"
+        && s.discord.status.state != "error"
+        && (s.discord.status.state == "ready"
+            || s.discord.status.state == "connecting"
+            || s.discord.status.signed_in
+            || s.discord.from_snapshot)
+}
+
 pub fn view(s: &AppState, scale: f32) -> El {
-    let signed_in = s.discord.status.state == "ready" && s.discord.home.me.is_some();
-    if !signed_in {
+    if !can_show_room(s) {
         return signed_out_view(s);
     }
 
