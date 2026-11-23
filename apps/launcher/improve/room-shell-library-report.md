@@ -1,101 +1,91 @@
-# room-shell-library: menus, popovers, dropdowns, glass and cursors (round 3)
+# room-shell-library: menus, popovers, dropdowns, glass and cursors (round 4)
 
-Branch: UhhErix/room-shell-library. Harness: `node tools/parity/run.mjs --rooms shell,library --exo-ui native-ui/target/debug/exo-ui.exe --report-dir <scratch>` (final run had no `--seed-data`; states that need owner data may differ from an owner-data run).
+Branch: UhhErix/room-shell-library. Harness: `node tools/parity/run.mjs --rooms shell,library --exo-ui native-ui/target/debug/exo-ui.exe --report-dir <scratch>` (no `--seed-data`).
 
 ## Status
 
-Round 3 is partly done. Fixed and proven: the capture popover no longer fades in from transparent (item 2a). Glass over-count fixed for the Library header controls (2b, four of five menus now match React's glass count). Not fixed: `pc-display-popover` does not open natively (2c), homedeck card hover and press do not open natively (2d), and the CRITICALs listed under "Still open" (2e).
+Round 4 items:
+
+1. **pc-display-popover**: fixed. Root cause was the harness, not the app: the React step matched the Graphics cell (`clickText('button', /display|graphics|best settings/i)`), and native tapped the wrong cell. The state now uses `/^Screen/` on React and key tap `pc-cell-display` on native. Targeted run: OK (menu opens). This state is in the `pc` room, so it is not in the shell+library table below.
+2. **Homedeck card hover**: fixed. The probe sees no hover unless Rune has a hover style; `deck_poster_card` now has `.hover(hover_fill())`. Hover run: OK, `hoveredKeys` non-empty.
+3. **Homedeck card press**: not fixed. `pressedKeys` stays empty. Tried: timing (t 1.0 vs 0.1, no change); `.press(pressed_fill())` alone (still fails); adding `.press_on_down()` (probe then fails with glass 10, which suggests the down opens the game page). Reverted to hover-only. Still needs a look at how Rune tracks press amount on `press_scale` tiles.
+4. **Capture menu 5 vs 2**: fixed. Native defaulted `capture_status.present` to true when the host's status was not loaded for library and shell scenes. `load_live_state_sync` (`exo-ui/src/main.rs`) now fetches capture status for every scene. Run: `library-capture-click` menu 2/2. The state is still CRITICAL on glass (5/10) and pixel diff (63.98).
+5. **Library Filter Genre, Mode and Friends**: added (see 4 below).
+6. **Cursor mismatches not under a modal**: none confirmed. See 5 below.
 
 ## Gates
 
-- `cargo fmt --all -- --check`: pass (after `cargo fmt --all`, which reformatted `library.rs` and `shell.rs`).
-- `node tools/check-comments.mjs`: pass. `tools/parity/measure-palette.mjs` (committed in 0703181) had two comment lines; removed.
+- `cargo fmt --all -- --check`: pass.
+- `node tools/check-comments.mjs`: pass.
 - `node --test tools/parity/parity.test.mjs`: 8/8 pass.
-- `cargo clippy --workspace --locked -- -D warnings`: see the result line in the push note below.
-- `cargo test --workspace --locked`: see the result line in the push note below.
-- `cargo test -p exo-ui --locked`: 69/69 pass, before the homedeck edit. The workspace run repeats it on the final tree.
+- `cargo clippy --workspace --locked -- -D warnings`: pass (exit 0, no warnings).
+- `cargo test --workspace --locked`: pass (exo-kit 4, exo-rpc 17 with 1 ignored, exo-ui 69).
 
-## 2a: capture popover is glass from frame 1
+## 4: Library Filter, Genre, Mode and Friends
 
-Root cause: Rune `Transition::scale` and `Transition::scale_anchor` set opacity 0 at enter (rune-motion/src/transition.rs:202–208). The popover, the modal cards and the mini player faded in from transparent, so the glass appeared late.
+Source: `ui/src/components/shell/useLibrarySearch.ts` (`filterOptions`), `ui/src/lib/librarySearch.ts` (`LIBRARY_TAGS`, tag and friends tests), `ui/src/lib/friendsPlaying.ts` (`gamesFriendsPlay`).
 
-Fix: `glass_enter(scale, anchor)` in `exo-kit/src/components.rs`, a scale-only enter (`Effect { scale, anchor, ..IDENTITY }`). Used in `popover_transition_from` (0.96), `modal_card_transition` (0.98), and `mini_player_transition` in `shell.rs` (offset + glass_enter 0.96).
+Native (`exo-ui/src/state.rs`, `exo-ui/src/library.rs`):
+- `LibraryChip::Tag(String)` for each `LIBRARY_TAGS` word present in `Game.tags` (`exo-rpc/src/types.rs`). Genre before `single-player`, Mode from there. Each tag is its own group (all selected tags must match), as in React.
+- `LibraryChip::Friends` in the Show section, always listed, disabled (greyed, not clickable) when no friend is playing a library game.
+- `friends_playing(games, friends)` maps Discord friends from `AppState.discord.friends` (already loaded by the Discord client) to library games: online, `kind == "friend"`, activity type 0 or 5, matched by title identity to a searchable game or one of its includes.
+- Overlay sections: Show, Store, Genre, Mode.
 
-Evidence:
-- Probe (`popoverTrace`, frames 0–10 after the click on `top-capture-btn`): element opacity 1 from frame 0, backdrop blur present.
-- Frame captures, first 10 frames after the click: `scratchpad/frames-before/`, `scratchpad/frames-after/`, contact sheet `scratchpad/capture-popover-sheet.png`.
+Approximation: React folds accents (NFD) before matching titles; native lower-cases and keeps letters and digits, so an accented title can fail to match its unaccented spelling. Only the Friends match is affected.
 
-Exit correction: an earlier claim that exit is now `scale_anchor` "instead of opacity" was wrong. `scale_anchor` also fades on exit, and Rune forces removal opacity to 0 (rune-motion/src/scene/presence.rs:144). Exit still fades. This is not changed here.
+Run: `library-all-filter-installed` menu 20/21 (report: 9/21 before). The one missing row is the "Clear all" button, which the probe may not count; not verified.
 
-## 2b: glass over-count
+## 5: cursor mismatches
 
-Library header (`view_all_games`, `library.rs`): search field, Filter, Sort and the More circle were glass. React draws them as flat fields (`exo-library-search`, `exo-library-filter`, `exo-shelf-sort-trigger`, `exo-library-more`; no `exo-glass`). Changed to flat: search and Filter use `glass_still_control_fill()` with no backdrop blur; Sort uses a new `SelectTrigger::flat(true)` (default off, so other rooms are unchanged); More uses `glass_icon_circle_opt(..., false)`. The home-deck More and icon circles stay glass: React marks them `exo-glass` in `HomeDeck.tsx`.
+Every remaining cursor mismatch is under an open menu, popover or modal, where Rune makes the outside inert and `cursor()` returns Default. Those are out of scope for this round (Rune fork task `rune-modal-live`).
 
-Bar hover: `shell-bar-hover-nav` and `shell-bar-hover-search` both pass glass in the final run. No bar-hover glass gap is reproduced now. Bar cursor mismatches remain (see "Still open").
-
-## 2c: pc-display-popover (not fixed)
-
-Still fails to open natively (`scene=pc`, menu 0). The state taps the React target from `clickText('button', /display|graphics|best settings/i)`. That regex also matches the Graphics cell, which may be the target, not Screen/Display. Not verified; the native tap point was not traced.
-
-## 2d: homedeck card hover and press (not fixed)
-
-Still fail to open natively (hovered 0, pressed 0).
-
-- Changed: the deck card (`deck_poster_card`, `library.rs`) now has React's rest opacity 0.88, hover opacity 1.0 and a 4px lift (`library.css:316–348`), with hover tracked through `hovered_cover_key` (same as the all-games tile).
-- Still failing: the probe reports no hovered element, and `tile-riot:valorant` [32,720,224,336] is under the point (144, 888). The cause is not found.
-- Side effect: hover-state pixel diff rose from 4.15 to 7.57 (the rest opacity change moved the whole deck).
-
-## 2e: remaining CRITICALs (shell + library)
-
-- `library-all-filter-installed`: 9 of 28 React menu items natively. Genre and Mode tags are not in native Game data; Friends is not available natively.
-- `library-capture-click`: glass 10 vs React 5, and menu 5 vs React 2. The extra glass is on home-deck icon circles and deck arrows, which React marks `exo-glass`; the React side of this state listed only 5, which is not explained.
-- Cursor mismatches (native `default`, React `pointer`) on the bar and on library cards and menus. These keep `library-all-card-menu`, `-more-popover`, `-sort-dropdown`, `-add-popover` and `library-homedeck-card-menu` CRITICAL or HIGH even though their glass now matches.
-- `shell-bar-press-search`: CRITICAL, not investigated this round.
-- `shell-tour-modal`, `shell-activate-key-modal`: cursor under modal. Rune-level, left alone.
+The one non-modal state, `library-homedeck-search`, has React's selector missing (`react: MISS`), so the React cursor reading comes from the bar at home, not the search. No fix made.
 
 ## Before/after (shell + library)
 
-Before: `run-final2`, 19 states: CRITICAL 9, HIGH 6, MEDIUM 1, PASS 3. After: `run-final3`, 20 states: CRITICAL 8, HIGH 8, MEDIUM 4, PASS 0. Glass and pixel columns are from each report. `library-capture-click` was added this round and was not in the before run.
+Before: `run-final3` (round 3): CRITICAL 8, HIGH 8, MEDIUM 4, PASS 0. After: `run-final4`: CRITICAL 8, HIGH 7, MEDIUM 5, PASS 0. Pixel diffs are from each report.
 
-| State | Before | After | Glass before→after | Pixel diff before→after |
+| State | Before (sev, px) | After (sev, px) | Menu before→after | Note |
 | --- | --- | --- | --- | --- |
-| `library-all-filter-installed` | CRITICAL | CRITICAL | warn → pass | 27.68 → 28.13 |
-| `library-all-card-menu` | CRITICAL | CRITICAL | warn → pass | 41.1 → 27.25 |
-| `library-all-more-popover` | CRITICAL | CRITICAL | warn → pass | 40.89 → 27.29 |
-| `library-all-sort-dropdown` | CRITICAL | CRITICAL | warn → pass | 39.19 → 26.66 |
-| `library-all-add-popover` | CRITICAL | HIGH | warn → pass | 40.47 → 27.38 |
-| `library-homedeck-card-hover` | CRITICAL | CRITICAL | pass → pass | 4.15 → 7.57 |
-| `library-homedeck-card-menu` | CRITICAL | HIGH | pass → pass | 4.53 → 7.8 |
-| `library-homedeck-card-press` | CRITICAL | CRITICAL | pass → pass | 4.05 → 7.47 |
-| `library-all-games` | HIGH | HIGH | pass → pass | 42.83 → 25.8 |
-| `library-homedeck-more-popover` | HIGH | HIGH | pass → pass | 5.51 → 8.28 |
-| `library-homedeck-search` | MEDIUM | MEDIUM | pass → pass | 4.11 → 7.53 |
-| `shell-bar-press-search` | CRITICAL | CRITICAL | pass → pass | 58.62 → 61.06 |
-| `shell-palette-open` | HIGH | HIGH | pass → pass | 18.25 → 18.25 |
-| `shell-palette-query` | HIGH | HIGH | pass → pass | 18.41 → 18.28 |
-| `shell-tour-modal` | HIGH | HIGH | pass → pass | 18.14 → 19.69 |
-| `shell-activate-key-modal` | HIGH | HIGH | pass → pass | 15.32 → 16.31 |
-| `library-capture-click` | not run | CRITICAL | — → warn | — → 62.78 |
-| `library-homedeck` | not run | MEDIUM | — → pass | — → 7.57 |
-| `shell-bar-hover-nav` | not run | MEDIUM | — → pass | — → 13.13 |
-| `shell-bar-hover-search` | not run | MEDIUM | — → pass | — → 7.48 |
+| `library-homedeck-card-hover` | CRITICAL, 7.57 | MEDIUM, 7.57 | — | hover tracked now |
+| `library-homedeck-card-press` | CRITICAL, 7.47 | CRITICAL, 7.47 | — | not fixed |
+| `library-capture-click` | CRITICAL, 62.78 | CRITICAL, 63.98 | 5/2 → 2/2 | menu fixed; glass 5/10 and pixel still fail |
+| `library-all-filter-installed` | CRITICAL, 28.13 | CRITICAL, 27.96 | 9/21 → 20/21 | Genre, Mode, Friends added |
+| `library-all-card-menu` | CRITICAL, 27.25 | CRITICAL, 30.51 | — | cursor under menu (modal) |
+| `library-all-more-popover` | CRITICAL, 27.29 | CRITICAL, 30.55 | — | cursor under popover (modal) |
+| `library-all-sort-dropdown` | CRITICAL, 26.66 | CRITICAL, 29.82 | — | cursor under dropdown (modal) |
+| `library-all-add-popover` | HIGH, 27.38 | CRITICAL, 30.64 | — | severity worse; cursor under dropdown (modal) |
+| `library-homedeck-card-menu` | HIGH, 7.8 | HIGH, 7.81 | — | cursor under menu (modal) |
+| `library-homedeck-more-popover` | HIGH, 8.28 | HIGH, 8.29 | — | cursor under popover (modal) |
+| `library-homedeck-search` | MEDIUM, 7.53 | MEDIUM, 7.53 | — | React selector MISS (see 5) |
+| `library-homedeck` | MEDIUM, 7.57 | MEDIUM, 7.57 | — | |
+| `library-all-games` | HIGH, 25.8 | HIGH, 25.8 | — | |
+| `shell-bar-press-search` | CRITICAL, 61.06 | CRITICAL, 61.06 | — | not investigated |
+| `shell-bar-hover-nav` | MEDIUM, 13.13 | MEDIUM, 7.47 | — | |
+| `shell-bar-hover-search` | MEDIUM, 7.48 | MEDIUM, 7.48 | — | |
+| `shell-palette-open` | HIGH, 18.25 | HIGH, 19.11 | — | |
+| `shell-palette-query` | HIGH, 18.28 | HIGH, 19.14 | — | |
+| `shell-tour-modal` | HIGH, 19.69 | HIGH, 18.19 | — | modal, cursor (out of scope) |
+| `shell-activate-key-modal` | HIGH, 16.31 | HIGH, 15.1 | — | modal, cursor (out of scope) |
 
-## Out of scope (left alone, per instructions)
+`library-all-add-popover` moved from HIGH to CRITICAL with the same glass and menu counts; its pixel diff rose from 27.4 to 30.6. Not investigated.
 
-- **Rune cursor under modal:** Rune `modal` makes outside targets inert, so `cursor()` returns Default there. Needs a fork decision.
-- **Play as <account>** in the native GameCard menu (`GameMenu.tsx` line 76): needs the account-list and account-switch RPC. Needs owner approval.
-- **Discord, Store and Music:** not touched, except the `music.rs` mini-player test from round 2.
+## Out of scope (left alone)
+
+- Rune cursor under modal and menu (fork task `rune-modal-live`).
+- "Play as <account>" in the native GameCard menu: needs the account-list and account-switch RPC (owner approval).
+- Discord, Store and Music: not touched.
 
 ## Not done
 
-- Capture popover exit still fades (Rune forces removal opacity 0). Not changed.
-- `pc-display-popover` (2c) and homedeck card hover/press (2d): root causes not found.
-- Bar cursors (native `default`, React `pointer`) and library-card cursors: not changed.
-- `shell-bar-press-search`: not investigated.
+- Homedeck card press (item 3): `pressedKeys` stays empty.
+- `shell-bar-press-search` (CRITICAL, menu 37/0): not investigated.
+- `library-all-add-popover` severity regression (HIGH → CRITICAL): not investigated.
+- Capture popover exit still fades (Rune forces removal opacity 0).
 - GPU frame-time before/after for CapturePopover and HomeDeck: not measured.
-- `ctx-game-*` menu parity for FolderCard; NotesView textarea spellcheck (Discord-owned, out of scope).
+- Friends row: the harness host has no Discord friends playing, so the row shows disabled. A run with friends playing (`--seed-data` or a signed-in Discord) would verify the match.
 
 ## Housekeeping
 
-- Temp data copies: the owner-data copy was deleted after an earlier run; `scratchpad/frames-data` and `scratchpad/run-states4` hold temp data and captures, not committed.
-- Exo processes from this session: check before reporting; `ExoLauncher.exe` PID 11660 belongs to the `room-discord` worktree and was left alone.
+- Harness runs write to `scratchpad/` (`exp-r4b` … `exp-r4f`, `run-final4`). No temp data copy was used in round 4.
+- Exo processes from this session: closed by the harness (`run.mjs` closes Exo at the end); `exo-ui` PID 7540 and `ExoLauncher` PID 5688 belong to setup-redesign and were left alone.

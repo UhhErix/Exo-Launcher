@@ -1337,7 +1337,7 @@ export const STATES = [
       room: 'Exo AI',
       steps: [
         { type: 'wait', ms: 1200 },
-        { type: 'clickText', selector: 'button', text: /display|graphics|best settings/i },
+        { type: 'clickText', selector: 'button', text: /^Screen/ },
         { type: 'wait', ms: 500 },
       ],
       openSelector: '[role="menu"], [role="dialog"]',
@@ -1345,7 +1345,7 @@ export const STATES = [
     },
     native: {
       scene: 'pc',
-      script: [{ t: 0.1, type: 'tap', fromReactTarget: true }],
+      script: [{ t: 0.1, type: 'tap', key: 'pc-cell-display' }],
       expect: { menuOpen: true },
     },
   },

@@ -154,6 +154,13 @@ fn load_live_state_sync(pipe: &str, scene: Option<&str>) -> AppState {
     ) {
         state.apply_bootstrap(boot);
     }
+    if let Ok(st) = client.call_blocking::<_, exo_rpc::CaptureStatusReply>(
+        exo_rpc::METHOD_CAPTURE_STATUS,
+        &serde_json::json!({}),
+        Duration::from_secs(5),
+    ) {
+        state.media.capture_status = Some(st);
+    }
     match scene {
         Some(sc) if sc.starts_with("store") => {
             if let Ok(home) = client.call_blocking::<_, exo_rpc::StoreHome>(
@@ -756,13 +763,6 @@ fn load_live_state_sync(pipe: &str, scene: Option<&str>) -> AppState {
                 Duration::from_secs(5),
             ) {
                 state.pc.system_about = Some(about);
-            }
-            if let Ok(st) = client.call_blocking::<_, exo_rpc::CaptureStatusReply>(
-                exo_rpc::METHOD_CAPTURE_STATUS,
-                &serde_json::json!({}),
-                Duration::from_secs(5),
-            ) {
-                state.media.capture_status = Some(st);
             }
             if let Ok(list) = client.call_blocking::<_, exo_rpc::CaptureListReply>(
                 exo_rpc::METHOD_CAPTURE_LIST,

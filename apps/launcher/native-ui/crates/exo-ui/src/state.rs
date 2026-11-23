@@ -9,18 +9,18 @@ use exo_kit::SPRING_MOVE;
 use exo_rpc::types::COVER_CACHE_ORIGIN;
 use exo_rpc::{
     ActionResult, AppUpdateStateEvent, ArtBase, AutopilotLive, AutopilotReportEvent,
-    CaptureLiveState, CaptureReelEvent, CaptureSavedEvent, CaptureStatusReply, ExoAccountState,
-    Game, GameExtras, GameGetReply, GameProperties, GamePropertySetReply, GameRunStateEvent,
-    HostEvent, InstallProgress, InstallQueueEvent, KeyPreview, LaunchStatusEvent, LauncherSettings,
-    LibraryPayload, METHOD_EXO_ACCOUNT_STATE, METHOD_GAME_CANCEL_INSTALL, METHOD_GAME_EXTRAS,
-    METHOD_GAME_GET, METHOD_GAME_INSTALL, METHOD_GAME_LAUNCH, METHOD_GAME_OPEN_FOLDER,
-    METHOD_GAME_PAUSE_INSTALL, METHOD_GAME_PROPERTIES, METHOD_GAME_PROPERTIES_SET,
-    METHOD_GAME_REPAIR, METHOD_GAME_STOP, METHOD_GAME_UNINSTALL, METHOD_GAME_UPDATE,
-    METHOD_KEYS_ACTIVATE, METHOD_KEYS_PREVIEW, METHOD_LIBRARY_REFRESH, METHOD_SETTINGS_SET,
-    METHOD_SHELL_BOOTSTRAP, METHOD_STORE_GAME, METHOD_STORE_GAME_OFFERS, METHOD_STORE_HOME,
-    METHOD_STORE_OPEN, METHOD_STORE_SEARCH, MusicPlayback, MusicVolumeEvent, ShellBootstrap,
-    StoreArt, StoreChangedEvent, StoreGame, StoreHome, StoreOffer, StoreOtherOffers,
-    StoreSearchReply, StoreShelf, StoreTile, remote_art,
+    CaptureLiveState, CaptureReelEvent, CaptureSavedEvent, CaptureStatusReply, DiscordFriend,
+    ExoAccountState, Game, GameExtras, GameGetReply, GameProperties, GamePropertySetReply,
+    GameRunStateEvent, HostEvent, InstallProgress, InstallQueueEvent, KeyPreview,
+    LaunchStatusEvent, LauncherSettings, LibraryPayload, METHOD_EXO_ACCOUNT_STATE,
+    METHOD_GAME_CANCEL_INSTALL, METHOD_GAME_EXTRAS, METHOD_GAME_GET, METHOD_GAME_INSTALL,
+    METHOD_GAME_LAUNCH, METHOD_GAME_OPEN_FOLDER, METHOD_GAME_PAUSE_INSTALL, METHOD_GAME_PROPERTIES,
+    METHOD_GAME_PROPERTIES_SET, METHOD_GAME_REPAIR, METHOD_GAME_STOP, METHOD_GAME_UNINSTALL,
+    METHOD_GAME_UPDATE, METHOD_KEYS_ACTIVATE, METHOD_KEYS_PREVIEW, METHOD_LIBRARY_REFRESH,
+    METHOD_SETTINGS_SET, METHOD_SHELL_BOOTSTRAP, METHOD_STORE_GAME, METHOD_STORE_GAME_OFFERS,
+    METHOD_STORE_HOME, METHOD_STORE_OPEN, METHOD_STORE_SEARCH, MusicPlayback, MusicVolumeEvent,
+    ShellBootstrap, StoreArt, StoreChangedEvent, StoreGame, StoreHome, StoreOffer,
+    StoreOtherOffers, StoreSearchReply, StoreShelf, StoreTile, remote_art,
 };
 use rune::{Image, ImageCache, ScrollPos, TextEdit, Tx, Waker};
 use serde_json::json;
@@ -114,6 +114,8 @@ pub enum LibraryChip {
     NotPlayed,
     FamilyShared,
     Store(String),
+    Friends,
+    Tag(String),
 }
 
 const PLAYED_LATELY_MS: i64 = 14 * 86_400_000;
@@ -133,18 +135,23 @@ impl LibraryChip {
     pub fn section(&self) -> &'static str {
         match self {
             Self::Store(_) => "Store",
+            Self::Tag(tag) if is_genre(tag) => "Genre",
+            Self::Tag(_) => "Mode",
             _ => "Show",
         }
     }
 
-    fn group(&self) -> &'static str {
+    /// Chips in one group stand in for each other; every group must match. Each genre or mode is its own group.
+    fn group(&self) -> String {
         match self {
-            Self::Installed | Self::NotInstalled => "install",
-            Self::PlayedLately => "recent",
-            Self::NotPlayed => "played",
-            Self::Update => "update",
-            Self::FamilyShared => "family",
-            Self::Store(_) => "store",
+            Self::Installed | Self::NotInstalled => "install".into(),
+            Self::PlayedLately => "recent".into(),
+            Self::NotPlayed => "played".into(),
+            Self::Update => "update".into(),
+            Self::FamilyShared => "family".into(),
+            Self::Store(_) => "store".into(),
+            Self::Friends => "friends".into(),
+            Self::Tag(tag) => format!("tag:{tag}"),
         }
     }
 
@@ -157,6 +164,8 @@ impl LibraryChip {
             Self::NotPlayed => "not-played".into(),
             Self::FamilyShared => "family-shared".into(),
             Self::Store(store) => format!("store-{store}"),
+            Self::Friends => "friends".into(),
+            Self::Tag(tag) => format!("tag-{tag}"),
         }
     }
 
@@ -169,11 +178,15 @@ impl LibraryChip {
             Self::NotPlayed => "Not played".into(),
             Self::FamilyShared => "Family shared".into(),
             Self::Store(store) => store_chip_label(store),
+            Self::Friends => "Friends playing".into(),
+            Self::Tag(tag) => tag_label(tag),
         }
     }
 
-    fn matches(&self, g: &Game, now_ms: i64) -> bool {
+    fn matches(&self, g: &Game, now_ms: i64, playing: &HashSet<String>) -> bool {
         match self {
+            Self::Friends => playing.contains(&g.id),
+            Self::Tag(tag) => g.tags.iter().any(|t| t == tag),
             Self::Installed => g.installed,
             Self::NotInstalled => !g.installed,
             Self::Update => g.update_available,
@@ -210,12 +223,115 @@ fn store_chip_label(store: &str) -> String {
     }
 }
 
-pub fn chips_match(chips: &[LibraryChip], g: &Game, now_ms: i64) -> bool {
+pub fn chips_match(
+    chips: &[LibraryChip],
+    g: &Game,
+    now_ms: i64,
+    playing: &HashSet<String>,
+) -> bool {
     chips.iter().all(|c| {
         chips
             .iter()
-            .any(|o| o.group() == c.group() && o.matches(g, now_ms))
+            .any(|o| o.group() == c.group() && o.matches(g, now_ms, playing))
     })
+}
+
+/// The genre and mode words Steam's tags reach the page as (ui/src/lib/librarySearch.ts LIBRARY_TAGS), in the Filter menu's order.
+const LIBRARY_TAGS: [&str; 17] = [
+    "action",
+    "adventure",
+    "rpg",
+    "strategy",
+    "simulation",
+    "racing",
+    "sports",
+    "casual",
+    "indie",
+    "mmo",
+    "free to play",
+    "early access",
+    "single-player",
+    "multiplayer",
+    "co-op",
+    "local co-op",
+    "controller",
+];
+
+/// Genres come before the first mode word; the Filter menu splits its Genre and Mode sections there.
+fn is_genre(tag: &str) -> bool {
+    LIBRARY_TAGS
+        .iter()
+        .take_while(|t| **t != "single-player")
+        .any(|t| *t == tag)
+}
+
+fn tag_label(tag: &str) -> String {
+    match tag {
+        "rpg" => "RPG".into(),
+        "mmo" => "MMO".into(),
+        "co-op" => "Co-op".into(),
+        "local co-op" => "Local co-op".into(),
+        "single-player" => "Single-player".into(),
+        "free to play" => "Free to play".into(),
+        "early access" => "Early access".into(),
+        other => {
+            let mut chars = other.chars();
+            chars
+                .next()
+                .map(|c| c.to_uppercase().chain(chars).collect())
+                .unwrap_or_default()
+        }
+    }
+}
+
+/// The key a title folds on (ui/src/lib/utils.ts titleIdentity): lower case, letters and digits only.
+fn title_identity(value: &str) -> String {
+    value
+        .to_lowercase()
+        .chars()
+        .filter(|c| c.is_alphanumeric())
+        .collect()
+}
+
+/// A game a library search can name (ui/src/lib/library.ts isSearchableLibraryGame).
+fn is_searchable(g: &Game) -> bool {
+    !(g.is_add_portable || g.id == "local:add") && (g.installed || g.owned || g.can_install)
+}
+
+/// The library games a Discord friend is playing now (ui/src/lib/friendsPlaying.ts gamesFriendsPlay): an online
+/// friend whose activity is Playing or Competing, matched to a game by its title or a part's.
+pub fn friends_playing(games: &[Game], friends: &[DiscordFriend]) -> HashSet<String> {
+    let mut ids = HashSet::new();
+    for friend in friends {
+        if friend.kind != "friend" || friend.status == "offline" {
+            continue;
+        }
+        let (kind, name) = match &friend.rich {
+            Some(rich) => (Some(rich.activity_type), rich.name.as_str()),
+            None => (
+                friend.activity_type,
+                friend.activity.as_deref().unwrap_or(""),
+            ),
+        };
+        if !matches!(kind, Some(0 | 5)) {
+            continue;
+        }
+        let key = title_identity(name);
+        if key.is_empty() {
+            continue;
+        }
+        let found = games.iter().find(|g| {
+            is_searchable(g)
+                && (title_identity(&g.title) == key
+                    || g.includes.iter().any(|p| {
+                        p.title.as_deref().map(title_identity).as_deref() == Some(key.as_str())
+                    }))
+        });
+        if let Some(game) = found {
+            ids.insert(game.id.clone());
+        }
+    }
+    ids
 }
 
 pub fn library_chip_options(games: &[Game], now_ms: i64) -> Vec<LibraryChip> {
@@ -229,8 +345,13 @@ pub fn library_chip_options(games: &[Game], now_ms: i64) -> Vec<LibraryChip> {
     ];
     let mut out: Vec<LibraryChip> = show
         .into_iter()
-        .filter(|chip| games.iter().any(|g| chip.matches(g, now_ms)))
+        .filter(|chip| {
+            games
+                .iter()
+                .any(|g| chip.matches(g, now_ms, &HashSet::new()))
+        })
         .collect();
+    out.push(LibraryChip::Friends);
     let mut stores: Vec<String> = games
         .iter()
         .flat_map(|g| {
@@ -247,6 +368,12 @@ pub fn library_chip_options(games: &[Game], now_ms: i64) -> Vec<LibraryChip> {
     if stores.len() > 1 {
         out.extend(stores.into_iter().map(LibraryChip::Store));
     }
+    out.extend(
+        LIBRARY_TAGS
+            .iter()
+            .filter(|tag| games.iter().any(|g| g.tags.iter().any(|t| t == *tag)))
+            .map(|tag| LibraryChip::Tag(tag.to_string())),
+    );
     out
 }
 
@@ -1156,6 +1283,11 @@ impl AppState {
     pub fn filtered_games(&self) -> Vec<&Game> {
         let query = self.library_search.text.trim().to_lowercase();
         let show_tools = self.settings.show_library_tools;
+        let playing = if self.filters.contains(&LibraryChip::Friends) {
+            friends_playing(&self.games, &self.discord.friends)
+        } else {
+            HashSet::new()
+        };
         let transfer_id = self
             .install_progress
             .as_ref()
@@ -1174,7 +1306,7 @@ impl AppState {
                 is_shelf_game(g, transfer_id, show_tools)
                     && !self.settings.hidden_games.iter().any(|h| h == &g.id)
             })
-            .filter(|g| chips_match(&self.filters, g, now_ms))
+            .filter(|g| chips_match(&self.filters, g, now_ms, &playing))
             .collect();
         let hidden = &self.settings.hidden_games;
         let show_hidden = self.library_show_hidden;
