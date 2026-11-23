@@ -1,7 +1,7 @@
 # host-v1 Record & Replay RPC Parity Report
 
 Generated: 2026-11-23T21:57:19.803Z
-Capture: `tools/parity/out/2026-11-23T21-52-00`
+Capture: `tools/rpc-parity/out/2026-11-23T21-52-00`
 
 ## Summary
 

@@ -5,10 +5,10 @@ Records what the reference React/WebView2 UI and the native Rune UI each ask the
 ## How it works
 
 1. **Opt-in host trace (`EXO_RPC_TRACE=<file.jsonl>`)** — hooked once at `WebHostBridge`'s shared dispatch, reply, and push-event points (`ExoLauncher/Services/RpcTrace.cs`). Off by default (one cached boolean check when unset). Writes schema shapes (`*_shape`: keys and JSON types only) and never values, tokens, emails, messages, or paths.
-2. **Action runner (`tools/parity/run.mjs`)** — executes `tools/parity/actions.json` against two disposable test instances (never touching `%LOCALAPPDATA%\ExoLauncher\app` and refusing to run while a game is running):
+2. **Action runner (`tools/rpc-parity/run.mjs`)** — executes `tools/rpc-parity/actions.json` against two disposable test instances (never touching `%LOCALAPPDATA%\ExoLauncher\app` and refusing to run while a game is running):
    - **Web**: launched via `tools/test-instance.ps1` with `EXO_UI=web`, driven over CDP (`tools/e2e/cdp.mjs`).
-   - **Native**: launched as `ExoLauncher.exe --ui=native` in its own temp `EXO_LAUNCHER_DATA_DIR`, driven over Windows UI Automation (`tools/parity/uia.ps1`) against Rune's AccessKit tree.
-3. **Diff generator (`tools/parity/diff.mjs`)** — slices the host trace per action, resolves React callers in `ui/src/`, compares called methods, push events, and chattiness (>2× call ratio), and writes `improve/rpc-parity.md` + `improve/rpc-parity.json` sorted by biggest gaps first.
+   - **Native**: launched as `ExoLauncher.exe --ui=native` in its own temp `EXO_LAUNCHER_DATA_DIR`, driven over Windows UI Automation (`tools/rpc-parity/uia.ps1`) against Rune's AccessKit tree.
+3. **Diff generator (`tools/rpc-parity/diff.mjs`)** — slices the host trace per action, resolves React callers in `ui/src/`, compares called methods, push events, and chattiness (>2× call ratio), and writes `improve/rpc-parity.md` + `improve/rpc-parity.json` sorted by biggest gaps first.
 
 ## Running
 
@@ -21,13 +21,13 @@ Prerequisites (from `apps/launcher/`):
 Run full capture + diff:
 
 ```pwsh
-node tools/parity/run.mjs
+node tools/rpc-parity/run.mjs
 ```
 
 Optional flags:
 
-- `--only=<id1,id2>` — run a subset of actions from `tools/parity/actions.json`
-- `--out=<dir>` — directory for raw/per-action trace slices (default: `tools/parity/out/<timestamp>`)
+- `--only=<id1,id2>` — run a subset of actions from `tools/rpc-parity/actions.json`
+- `--out=<dir>` — directory for raw/per-action trace slices (default: `tools/rpc-parity/out/<timestamp>`)
 - `--web-only` / `--native-only` — record one side only
 - `--exe=<path>` — override `ExoLauncher.exe` path
 - `--ui-exe=<path>` — override `exo-ui.exe` path
@@ -35,13 +35,13 @@ Optional flags:
 Regenerate the diff report from an existing capture directory without re-launching Exo:
 
 ```pwsh
-node tools/parity/diff.mjs --dir <capture-dir>
+node tools/rpc-parity/diff.mjs --dir <capture-dir>
 ```
 
 Run unit tests for the parity tools:
 
 ```pwsh
-node --test tools/parity/*.test.mjs
+node --test tools/rpc-parity/*.test.mjs
 ```
 
 ## Limits (what cannot be driven)

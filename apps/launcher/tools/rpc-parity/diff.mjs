@@ -86,7 +86,7 @@ if (process.argv[1] && path.resolve(process.argv[1]) === path.resolve(fileURLToP
     }
   }
   if (!captureDir || !fs.existsSync(captureDir)) {
-    console.error('No capture directory found. Pass --dir <path> or run tools/parity/run.mjs first.')
+    console.error('No capture directory found. Pass --dir <path> or run tools/rpc-parity/run.mjs first.')
     process.exit(1)
   }
 
