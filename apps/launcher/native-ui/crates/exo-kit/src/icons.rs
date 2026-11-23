@@ -1227,7 +1227,33 @@ pub fn icon_bookmark(size: f32, color: Color) -> El {
 }
 
 pub fn icon_minimize(size: f32, color: Color) -> El {
-    strokes(size, &[&[[6.0, 12.0], [18.0, 12.0]]], color)
+    strokes(size, &[&[[5.0, 12.0], [19.0, 12.0]]], color)
+}
+
+pub fn icon_win_maximize(size: f32, color: Color) -> El {
+    strokes(
+        size,
+        &[
+            &[[15.0, 3.0], [21.0, 3.0], [21.0, 9.0]],
+            &[[21.0, 3.0], [14.0, 10.0]],
+            &[[3.0, 21.0], [10.0, 14.0]],
+            &[[9.0, 21.0], [3.0, 21.0], [3.0, 15.0]],
+        ],
+        color,
+    )
+}
+
+pub fn icon_win_restore(size: f32, color: Color) -> El {
+    strokes(
+        size,
+        &[
+            &[[14.0, 10.0], [21.0, 3.0]],
+            &[[20.0, 10.0], [14.0, 10.0], [14.0, 4.0]],
+            &[[3.0, 21.0], [10.0, 14.0]],
+            &[[4.0, 14.0], [10.0, 14.0], [10.0, 20.0]],
+        ],
+        color,
+    )
 }
 
 pub fn icon_info(size: f32, color: Color) -> El {

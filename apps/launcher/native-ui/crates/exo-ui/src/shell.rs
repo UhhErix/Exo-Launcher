@@ -4,12 +4,14 @@ use crate::{
     store, tour,
 };
 use exo_kit::{
-    BG, FG, GAP, GLASS_CONTROL_SIGMA, PRESS_SCALE, PRIMARY_FG, RADIUS_PILL, SPRING_MOVE,
-    SPRING_QUICK, TRANSPARENT, bad, exo_mark, fg_muted, glass_capsule_opt, glass_control_fill,
-    glass_rim_bottom, glass_rim_top, glass_still_control_fill, good, hover_fill, icon_camera,
-    icon_chat, icon_close, icon_gamepad, icon_grid, icon_library, icon_maximize, icon_minimize,
-    icon_mouse, icon_music, icon_settings, icon_sparkles, icon_store, modal_scrim_transition,
-    pressed_fill, scrim_fill, selected_fill, set_text_scale, type_body, type_section, type_small,
+    BG, CAPTION_BUTTON_GAP, CAPTION_BUTTON_HEIGHT, CAPTION_BUTTON_WIDTH, CAPTION_CAPSULE_PAD,
+    CAPTION_TRAILING_INSET, FG, GAP, GLASS_CONTROL_SIGMA, PRESS_SCALE, PRIMARY_FG, RADIUS_PILL,
+    SPRING_MOVE, SPRING_QUICK, TRANSPARENT, bad, exo_mark, exo_titlebar, fg_muted,
+    glass_capsule_opt, glass_control_fill, glass_rim_bottom, glass_rim_top,
+    glass_still_control_fill, good, hover_fill, icon_camera, icon_chat, icon_close, icon_gamepad,
+    icon_grid, icon_library, icon_minimize, icon_mouse, icon_music, icon_settings, icon_sparkles,
+    icon_store, icon_win_maximize, modal_scrim_transition, pressed_fill, scrim_fill, selected_fill,
+    set_text_scale, type_body, type_section, type_small,
 };
 use rune::{
     Cursor, Cx, El, MAX_BACKDROP_BLURS, ScrollSpec, SpringPair, Transition, col, el, row, text,
@@ -144,6 +146,7 @@ pub fn view(s: &AppState, cx: &mut Cx<AppState>) -> El {
     set_text_scale(s.text_scale());
     let has_modal_scrim = s.palette_open || s.key_modal_open;
     let budget = BlurBudget::compute(s, !s.notices.is_empty());
+    cx.set_titlebar(exo_titlebar());
     cx.caption_color(if has_modal_scrim {
         fg_muted().alpha(0.28)
     } else {
@@ -369,9 +372,9 @@ pub fn view(s: &AppState, cx: &mut Cx<AppState>) -> El {
     let mut tools = row()
         .key("titlebar-tools")
         .h(36.0)
-        .pl(3.0)
-        .pr(if insets.trailing > 0.0 { 0.0 } else { 3.0 })
-        .gap(2.0)
+        .pl(CAPTION_CAPSULE_PAD)
+        .pr(CAPTION_CAPSULE_PAD)
+        .gap(CAPTION_BUTTON_GAP)
         .center_y()
         .radius(RADIUS_PILL)
         .fill(if budget.top_bar_tools {
@@ -388,15 +391,15 @@ pub fn view(s: &AppState, cx: &mut Cx<AppState>) -> El {
     }
 
     if insets.trailing > 0.0 {
-        let reserve = (insets.trailing - 4.0).max(0.0);
-        tools = tools.child(el().size(reserve, 30.0));
+        let reserve = (insets.trailing - CAPTION_TRAILING_INSET).max(0.0);
+        tools = tools.child(el().size(reserve, CAPTION_BUTTON_HEIGHT));
     } else {
         let win_btn = |key: &'static str, label: &'static str, icon: El| {
             el().key(key)
                 .role("button")
                 .label(label)
                 .cursor(Cursor::Pointer)
-                .size(34.0, 30.0)
+                .size(CAPTION_BUTTON_WIDTH, CAPTION_BUTTON_HEIGHT)
                 .center()
                 .radius(RADIUS_PILL)
                 .child(icon)
@@ -410,7 +413,7 @@ pub fn view(s: &AppState, cx: &mut Cx<AppState>) -> El {
             .child(win_btn(
                 "win-max",
                 "Maximize",
-                icon_maximize(16.0, fg_muted()),
+                icon_win_maximize(16.0, fg_muted()),
             ))
             .child(win_btn("win-close", "Close", icon_close(16.0, fg_muted())));
     }
@@ -427,7 +430,7 @@ pub fn view(s: &AppState, cx: &mut Cx<AppState>) -> El {
             m.transition(mini_player_transition())
         });
 
-    let right_pin = if insets.trailing > 0.0 { 4.0 } else { GAP };
+    let right_pin = GAP;
 
     let top_fade = el()
         .pin(Some(0.0), Some(0.0), Some(0.0), None)
@@ -589,4 +592,32 @@ pub fn view(s: &AppState, cx: &mut Cx<AppState>) -> El {
         root = root.child(notice::view(s, budget.toast));
     }
     root
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use rune::{Env, Runtime};
+
+    #[test]
+    fn titlebar_tools_capsule_matches_react_geometry() {
+        let mut rt = Runtime::new(
+            AppState::default(),
+            view,
+            (1920.0, 1080.0),
+            Env::new(true, 1.0),
+        );
+        rt.frame(0.0);
+        let (tools, _) = rt.presented("titlebar-tools").expect("titlebar-tools");
+        assert!((tools[0] - 1717.0).abs() < 1.0, "tools x={}", tools[0]);
+        assert!((tools[1] - 8.0).abs() < 0.5, "tools y={}", tools[1]);
+        assert!((tools[2] - 193.0).abs() < 1.0, "tools w={}", tools[2]);
+        assert!((tools[3] - 36.0).abs() < 0.5, "tools h={}", tools[3]);
+        assert!(
+            ((tools[0] + tools[2]) - (1920.0 - GAP)).abs() < 1.0,
+            "tools right={} expected {}",
+            tools[0] + tools[2],
+            1920.0 - GAP
+        );
+    }
 }

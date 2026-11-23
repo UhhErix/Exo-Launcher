@@ -28,9 +28,9 @@ mod tour;
 mod video_decoder;
 
 use crate::state::AppState;
-use exo_kit::{FONT_FAMILIES, FONTS, TITLEBAR_HEIGHT};
+use exo_kit::{FONT_FAMILIES, FONTS, exo_titlebar};
 use rune::tray::{Tray, TrayEvent, TrayIcon, TrayItem, TraySpec};
-use rune::{App, AppSpec, Key, KeyEvent, Titlebar, Tx, Waker};
+use rune::{App, AppSpec, Key, KeyEvent, Tx, Waker};
 use std::time::Duration;
 
 struct CliArgs {
@@ -1605,7 +1605,7 @@ fn main() {
 
     let mut app = App::new(spec)
         .args(rune_args)
-        .titlebar(Titlebar::new(TITLEBAR_HEIGHT))
+        .titlebar(exo_titlebar())
         .release_gpu_when_closed();
 
     if let Some(ref pipe) = pipe_name {
