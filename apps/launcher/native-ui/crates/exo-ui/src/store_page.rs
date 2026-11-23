@@ -25,12 +25,25 @@ use rune::{
 #[cfg(windows)]
 use serde_json::json;
 use std::cell::Cell;
-use std::collections::{HashMap, HashSet};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::rc::Rc;
 
 pub const HERO_ROTATE_SECS: f64 = 8.0;
 const SEARCH_DEBOUNCE_SECS: f64 = 0.25;
 const DONE_FLASH_SECS: f64 = 1.6;
+const GAME_KEEP_SECS: f64 = 600.0;
+const KEEP_MAX_ENTRIES: usize = 96;
+const WARMED_MAX_ENTRIES: usize = 1024;
+const WARM_DWELL_SECS: f64 = 0.5;
+const HOVER_WARM_SECS: f64 = 0.06;
+const WARM_CONCURRENCY: usize = 3;
+const VISIBLE_WARM_COUNT: usize = 10;
+
+#[derive(Clone)]
+pub struct CachedStoreGame {
+    pub at: f64,
+    pub game: StoreGame,
+}
 const SPEC_PARTS: [&str; 7] = [
     "OS",
     "Processor",
@@ -80,6 +93,14 @@ pub struct StoreExtraState {
     pub more_scroll_x: f32,
     pub extra_shelf_scrolls: Vec<Rc<Cell<ScrollPos>>>,
     pub extra_shelf_x: Vec<f32>,
+    pub game_cache: HashMap<String, CachedStoreGame>,
+    pub game_cache_order: VecDeque<String>,
+    pub warmed_ids: HashSet<String>,
+    pub warmed_order: VecDeque<String>,
+    pub warm_queue: VecDeque<String>,
+    pub warm_inflight: HashSet<String>,
+    pub room_visible_since: Option<f64>,
+    pub hover_warm: Option<(String, f64)>,
 }
 
 impl Default for StoreExtraState {
@@ -123,6 +144,14 @@ impl Default for StoreExtraState {
             more_scroll_x: 0.0,
             extra_shelf_scrolls: Vec::new(),
             extra_shelf_x: Vec::new(),
+            game_cache: HashMap::new(),
+            game_cache_order: VecDeque::new(),
+            warmed_ids: HashSet::new(),
+            warmed_order: VecDeque::new(),
+            warm_queue: VecDeque::new(),
+            warm_inflight: HashSet::new(),
+            room_visible_since: None,
+            hover_warm: None,
         }
     }
 }
@@ -857,38 +886,48 @@ impl AppState {
             return;
         }
 
-        self.store_game = None;
-        self.store_ext.game_loading = true;
+        let now = self.clock_now();
+        let cached = self.store_peek_cached_game(app_id, now);
+        self.store_game = cached.clone();
+        self.store_ext.game_loading = cached.is_none();
         self.store_ext.reviews_loading = true;
+        if cached.is_some() {
+            self.store_sync_trailer_for_game();
+        }
 
         #[cfg(windows)]
         {
-            self.call_host_replaceable(
-                "store.game",
-                METHOD_STORE_GAME,
-                json!({ "appId": app_id }),
-                |s, res: Result<StoreGame, String>| {
-                    s.store_ext.game_loading = false;
-                    match res {
-                        Ok(g) if g.ok => {
-                            s.store_game = Some(g);
-                            s.store_ext.game_error = None;
-                            s.store_sync_trailer_for_game();
+            if cached.is_none() {
+                self.call_host_replaceable(
+                    "store.game",
+                    METHOD_STORE_GAME,
+                    json!({ "appId": app_id }),
+                    |s, res: Result<StoreGame, String>| {
+                        s.store_ext.game_loading = false;
+                        match res {
+                            Ok(g) if g.ok => {
+                                let now = s.clock_now();
+                                s.store_keep_cached_game(g.clone(), now);
+                                s.store_game = Some(g);
+                                s.store_ext.game_error = None;
+                                s.store_sync_trailer_for_game();
+                            }
+                            Ok(g) => {
+                                s.store_game = None;
+                                s.store_ext.game_error =
+                                    Some(g.message.filter(|m| !m.is_empty()).unwrap_or_else(
+                                        || "Exo couldn't reach the store. Try again.".into(),
+                                    ));
+                            }
+                            Err(_) => {
+                                s.store_game = None;
+                                s.store_ext.game_error =
+                                    Some("The store could not be reached.".into());
+                            }
                         }
-                        Ok(g) => {
-                            s.store_game = None;
-                            s.store_ext.game_error =
-                                Some(g.message.filter(|m| !m.is_empty()).unwrap_or_else(|| {
-                                    "Exo couldn't reach the store. Try again.".into()
-                                }));
-                        }
-                        Err(_) => {
-                            s.store_game = None;
-                            s.store_ext.game_error = Some("The store could not be reached.".into());
-                        }
-                    }
-                },
-            );
+                    },
+                );
+            }
 
             self.call_host_replaceable(
                 "store.gameOffers",
@@ -1117,6 +1156,213 @@ impl AppState {
         self.store_ext.hero_timer_start = self.clock_now();
     }
 
+    pub fn store_wake(&self) {
+        if let Some(waker) = &self.store_ext.waker {
+            waker();
+        }
+    }
+
+    pub fn warm_store_on_startup(&mut self) {
+        if !self.store_loading {
+            self.load_store_home(false);
+        }
+        self.load_store_wishlist();
+    }
+
+    pub fn store_on_room_enter(&mut self) {
+        self.store_ext.room_visible_since = Some(self.clock_now());
+        self.store_ext.hover_warm = None;
+        self.store_wake();
+    }
+
+    pub fn store_on_room_leave(&mut self) {
+        self.store_stop_trailer();
+        self.store_ext.room_visible_since = None;
+        self.store_ext.hover_warm = None;
+    }
+
+    pub fn store_hover_tile(&mut self, app_id: Option<String>) {
+        match app_id {
+            Some(id) if !id.is_empty() => {
+                self.store_ext.hover_warm = Some((id, self.clock_now() + HOVER_WARM_SECS));
+                self.store_wake();
+            }
+            _ => {
+                self.store_ext.hover_warm = None;
+            }
+        }
+    }
+
+    pub fn store_peek_cached_game(&self, app_id: &str, now: f64) -> Option<StoreGame> {
+        let entry = self.store_ext.game_cache.get(app_id)?;
+        if (now - entry.at) < GAME_KEEP_SECS {
+            Some(entry.game.clone())
+        } else {
+            None
+        }
+    }
+
+    pub fn store_keep_cached_game(&mut self, game: StoreGame, now: f64) {
+        if !game.ok || game.app_id.is_empty() {
+            return;
+        }
+        let app_id = game.app_id.clone();
+        if !self.store_ext.game_cache.contains_key(&app_id) {
+            while self.store_ext.game_cache.len() >= KEEP_MAX_ENTRIES {
+                if let Some(oldest) = self.store_ext.game_cache_order.pop_front() {
+                    self.store_ext.game_cache.remove(&oldest);
+                } else {
+                    break;
+                }
+            }
+            self.store_ext.game_cache_order.push_back(app_id.clone());
+        }
+        self.store_ext
+            .game_cache
+            .insert(app_id, CachedStoreGame { at: now, game });
+    }
+
+    pub fn store_collect_visible_warm_ids(&self) -> Vec<String> {
+        let mut seen = HashSet::new();
+        let mut out = Vec::with_capacity(VISIBLE_WARM_COUNT);
+        let mut push_id = |id: &str| -> bool {
+            if out.len() < VISIBLE_WARM_COUNT && !id.is_empty() && seen.insert(id.to_string()) {
+                out.push(id.to_string());
+            }
+            out.len() >= VISIBLE_WARM_COUNT
+        };
+        let searching = self.store_query.text.trim().len() >= 2;
+        if searching {
+            if let Some(items) = &self.store_search_results {
+                for tile in items {
+                    if push_id(&tile.app_id) {
+                        break;
+                    }
+                }
+            }
+            return out;
+        }
+        if self.store_tab == 1 {
+            for tile in &self.store_ext.wishlist {
+                if push_id(&tile.app_id) {
+                    break;
+                }
+            }
+            return out;
+        }
+        if let Some(home) = &self.store_home {
+            if let Some(hero) = home
+                .hero
+                .get(self.store_hero_index)
+                .or_else(|| home.hero.first())
+            {
+                let _ = push_id(&hero.app_id);
+            }
+            for shelf in &home.shelves {
+                for tile in &shelf.items {
+                    if push_id(&tile.app_id) {
+                        return out;
+                    }
+                }
+            }
+            for hero in &home.hero {
+                if push_id(&hero.app_id) {
+                    break;
+                }
+            }
+        }
+        out
+    }
+
+    pub fn store_enqueue_warm(&mut self, app_id: String, now: f64) {
+        if app_id.is_empty()
+            || self.store_peek_cached_game(&app_id, now).is_some()
+            || self.store_ext.warmed_ids.contains(&app_id)
+            || self.store_ext.warm_inflight.contains(&app_id)
+        {
+            return;
+        }
+        if self.store_ext.warmed_ids.len() >= WARMED_MAX_ENTRIES
+            && let Some(oldest) = self.store_ext.warmed_order.pop_front()
+        {
+            self.store_ext.warmed_ids.remove(&oldest);
+        }
+        self.store_ext.warmed_ids.insert(app_id.clone());
+        self.store_ext.warmed_order.push_back(app_id.clone());
+        self.store_ext.warm_queue.push_back(app_id);
+    }
+
+    pub fn store_pump_warm(&mut self) {
+        while self.store_ext.warm_inflight.len() < WARM_CONCURRENCY {
+            let Some(app_id) = self.store_ext.warm_queue.pop_front() else {
+                break;
+            };
+            if self.status == HostStatus::Standalone {
+                let now = self.clock_now();
+                let seed = self.store_home.as_ref().and_then(|h| {
+                    h.hero
+                        .iter()
+                        .chain(h.shelves.iter().flat_map(|sh| sh.items.iter()))
+                        .find(|t| t.app_id == app_id)
+                        .cloned()
+                });
+                let (game, _, _) = demo_store_game(&app_id, seed);
+                self.store_keep_cached_game(game, now);
+                continue;
+            }
+            #[cfg(windows)]
+            if let (Some(rpc), Some(handle)) = (self.rpc.clone(), self.handle.clone()) {
+                let hero_url = StoreArt::steam_url(&app_id, "hero");
+                let logo_url = StoreArt::steam_url(&app_id, "logo");
+                let _ = self.remote_image_sized(&hero_url, 1440.0, 1.0);
+                let _ = self.remote_image_sized(&logo_url, 480.0, 1.0);
+                self.store_ext.warm_inflight.insert(app_id.clone());
+                let req_id = app_id.clone();
+                rpc.call::<_, StoreGame>(
+                    METHOD_STORE_GAME,
+                    &json!({ "appId": req_id }),
+                    move |res| {
+                        handle.update(move |s, _| {
+                            s.store_ext.warm_inflight.remove(&app_id);
+                            if let Ok(g) = res
+                                && g.ok
+                            {
+                                if let Some(first_thumb) = g
+                                    .media
+                                    .first()
+                                    .map(|m| m.thumb.as_str())
+                                    .filter(|u| !u.is_empty())
+                                    .or_else(|| {
+                                        g.screenshots
+                                            .first()
+                                            .map(String::as_str)
+                                            .filter(|u| !u.is_empty())
+                                    })
+                                {
+                                    let _ = s.remote_image_sized(first_thumb, 600.0, 1.0);
+                                }
+                                let now = s.clock_now();
+                                s.store_keep_cached_game(g.clone(), now);
+                                if s.store_game.is_none()
+                                    && s.store_ext.seed.as_ref().map(|t| t.app_id.as_str())
+                                        == Some(app_id.as_str())
+                                {
+                                    s.store_game = Some(g);
+                                    s.store_ext.game_loading = false;
+                                    s.store_ext.game_error = None;
+                                    s.store_sync_trailer_for_game();
+                                }
+                            }
+                            s.store_pump_warm();
+                        });
+                    },
+                );
+            } else {
+                break;
+            }
+        }
+    }
+
     pub fn store_tick(&mut self, now: f64) -> bool {
         let mut changed = false;
 
@@ -1133,6 +1379,35 @@ impl AppState {
             let q = self.store_ext.search_pending_query.clone();
             self.store_run_search_now(q);
             changed = true;
+        }
+
+        if let Some((_, due)) = &self.store_ext.hover_warm {
+            if now >= *due {
+                if let Some((app_id, _)) = self.store_ext.hover_warm.take() {
+                    self.store_enqueue_warm(app_id, now);
+                    self.store_pump_warm();
+                }
+                changed = true;
+            } else {
+                changed = true;
+            }
+        }
+
+        if self.room == Room::Store
+            && !self.store_has_page_open()
+            && self.store_home.is_some()
+            && let Some(since) = self.store_ext.room_visible_since
+        {
+            if (now - since) >= WARM_DWELL_SECS {
+                self.store_ext.room_visible_since = None;
+                for app_id in self.store_collect_visible_warm_ids() {
+                    self.store_enqueue_warm(app_id, now);
+                }
+                self.store_pump_warm();
+                changed = true;
+            } else {
+                changed = true;
+            }
         }
 
         let hero_count = self.store_home.as_ref().map_or(0, |h| h.hero.len().min(6));
@@ -2103,5 +2378,49 @@ mod tests {
         s.store_tick(15.0);
         s.store_tick(20.0);
         assert_eq!(s.store_hero_index, 1);
+    }
+
+    #[test]
+    fn store_game_cache_respects_ttl_and_lru_cap() {
+        let mut s = AppState::with_demo_games();
+        for i in 0..(KEEP_MAX_ENTRIES + 4) {
+            let g = StoreGame {
+                ok: true,
+                app_id: format!("{i}"),
+                name: format!("Game {i}"),
+                ..Default::default()
+            };
+            s.store_keep_cached_game(g, 100.0);
+        }
+        assert_eq!(s.store_ext.game_cache.len(), KEEP_MAX_ENTRIES);
+        assert!(s.store_peek_cached_game("0", 120.0).is_none());
+        assert!(s.store_peek_cached_game("99", 120.0).is_some());
+        assert!(
+            s.store_peek_cached_game("99", 100.0 + GAME_KEEP_SECS + 1.0)
+                .is_none()
+        );
+    }
+
+    #[test]
+    fn store_warm_dwell_enqueues_visible_cards_once_and_respects_hover() {
+        let mut s = AppState::with_demo_games();
+        s.switch_room(Room::Store);
+        assert!(s.store_ext.room_visible_since.is_some());
+        let start = s.store_ext.room_visible_since.unwrap();
+        assert!(s.store_ext.warmed_ids.is_empty());
+
+        s.store_tick(start + 0.2);
+        assert!(s.store_ext.warmed_ids.is_empty());
+
+        s.store_tick(start + WARM_DWELL_SECS + 0.05);
+        assert!(!s.store_ext.warmed_ids.is_empty());
+        assert!(s.store_ext.warmed_ids.len() <= VISIBLE_WARM_COUNT);
+        assert!(s.store_ext.room_visible_since.is_none());
+
+        s.store_hover_tile(Some("999001".into()));
+        let due = s.store_ext.hover_warm.as_ref().unwrap().1;
+        s.store_tick(due + 0.01);
+        assert!(s.store_ext.warmed_ids.contains("999001"));
+        assert!(s.store_peek_cached_game("999001", due + 1.0).is_some());
     }
 }

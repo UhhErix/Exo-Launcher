@@ -297,6 +297,7 @@ pub fn store_tile_card(
 
     let rev = review_line(tile);
     let tile_owned = tile.clone();
+    let warm_app_id = tile.app_id.clone();
     let shelf_owned = from_shelf.map(ToString::to_string);
 
     let mut card = col()
@@ -316,8 +317,12 @@ pub fn store_tile_card(
         .on_hover_change(move |s: &mut AppState, inside, _tx| {
             if inside {
                 s.hovered_cover_key = Some(hover_key.clone());
-            } else if s.hovered_cover_key.as_deref() == Some(hover_key.as_str()) {
-                s.hovered_cover_key = None;
+                s.store_hover_tile(Some(warm_app_id.clone()));
+            } else {
+                if s.hovered_cover_key.as_deref() == Some(hover_key.as_str()) {
+                    s.hovered_cover_key = None;
+                }
+                s.store_hover_tile(None);
             }
         })
         .on_press_tx(move |s: &mut AppState, tx| {

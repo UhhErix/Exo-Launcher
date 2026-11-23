@@ -1174,7 +1174,7 @@ impl AppState {
             self.close_mouse_panel();
         }
         if self.room == Room::Store && room != Room::Store {
-            self.store_stop_trailer();
+            self.store_on_room_leave();
         }
         if self.room != Room::Settings && room == Room::Settings {
             self.prev_room = self.room;
@@ -1193,12 +1193,11 @@ impl AppState {
         }
         match room {
             Room::Store => {
-                if self.store_home.is_none() && !self.store_loading {
+                if !self.store_loading {
                     self.load_store_home(false);
                 }
-                if !self.store_ext.wishlist_loaded {
-                    self.load_store_wishlist();
-                }
+                self.load_store_wishlist();
+                self.store_on_room_enter();
             }
             Room::Discord => {
                 if self.discord_dirty_while_closed {
@@ -2421,9 +2420,20 @@ impl AppState {
                     }
                     match res {
                         Ok(home) if home.ok => {
-                            s.store_ensure_shelf_slots(home.shelves.len());
-                            s.store_home = Some(home);
+                            let same_at = home.at.is_some()
+                                && s.store_home.as_ref().and_then(|h| h.at.as_deref())
+                                    == home.at.as_deref();
+                            if !same_at {
+                                s.store_ensure_shelf_slots(home.shelves.len());
+                                s.store_home = Some(home);
+                            }
                             s.store_ext.home_error = None;
+                            if s.room == Room::Store && !s.store_has_page_open() {
+                                if s.store_ext.room_visible_since.is_none() {
+                                    s.store_ext.room_visible_since = Some(s.clock_now());
+                                }
+                                s.store_wake();
+                            }
                         }
                         Ok(home) => {
                             s.store_ext.home_error = Some(
@@ -3511,6 +3521,7 @@ impl AppState {
                 handle.update(move |s, _| {
                     s.apply_bootstrap(boot);
                     s.warm_discord();
+                    s.warm_store_on_startup();
                 });
             }
             Err(e) => {
