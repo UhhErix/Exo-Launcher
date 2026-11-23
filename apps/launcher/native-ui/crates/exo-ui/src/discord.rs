@@ -1,27 +1,30 @@
 use crate::discord_chat;
-use crate::discord_state::{DiscordFriendsTab, DiscordPlace};
+use crate::discord_state::{DiscordFriendsTab, DiscordPlace, DiscordSettingsPage};
 use crate::discord_voice;
-use crate::discord_voice_state::VoicePanel;
-use crate::state::{AppState, Room};
+use crate::shell::BlurBudget;
+use crate::state::{AppState, ContextMenuTarget};
 use exo_kit::{
-    BG, FG, GAP, PRESS_SCALE, PRIMARY_FG, RADIUS_CARD, RADIUS_PANEL, RADIUS_PILL, RADIUS_SMALL,
-    SPRING_BASE, SPRING_QUICK, TRANSPARENT, bad, fg_faint, fg_muted, glass_button, glass_rim,
-    glass_rim_bottom, glass_rim_top, good, hairline, hex, hover_fill, icon_chat, icon_check,
-    icon_chevron_down, icon_chevron_right, icon_close, icon_folder, icon_gamepad, icon_hash,
-    icon_headphones, icon_headphones_off, icon_home, icon_lock, icon_mic, icon_mic_off,
-    icon_more_horiz, icon_music, icon_phone, icon_phone_off, icon_plus, icon_refresh,
-    icon_screen_share, icon_search, icon_settings, icon_trophy, icon_video, icon_volume,
-    pressed_fill, primary_button, qr_code_view, srgb, subtle_fill, type_body, type_control,
-    type_label, type_page, type_section, type_small, type_title, warn,
+    BG, FG, GAP, GLASS_PANEL_SIGMA, PRESS_SCALE, PRIMARY_FG, RADIUS_CARD, RADIUS_PANEL,
+    RADIUS_PILL, RADIUS_SMALL, SPRING_BASE, SPRING_QUICK, TRANSPARENT, bad, fg_faint, fg_muted,
+    glass_button, glass_panel_fill, glass_rim, glass_rim_bottom, glass_rim_top,
+    glass_still_panel_fill, good, hairline, hex, hover_fill, icon_bookmark, icon_chat, icon_check,
+    icon_chevron_down, icon_chevron_right, icon_close, icon_folder, icon_gamepad, icon_grid,
+    icon_hash, icon_headphones, icon_headphones_off, icon_home, icon_lock, icon_mic, icon_mic_off,
+    icon_more_horiz, icon_music, icon_phone, icon_phone_off, icon_plus, icon_refresh, icon_search,
+    icon_settings, icon_sparkles, icon_trophy, icon_user_plus, icon_users, icon_video, icon_volume,
+    modal_scrim_transition, pressed_fill, primary_button, qr_code_view, scrim_fill, selected_fill,
+    srgb, subtle_fill, type_body, type_control, type_label, type_page, type_section, type_small,
+    type_title, warn,
 };
 use exo_rpc::discord_types::{DiscordGuildTag, DiscordLook, DiscordNameplate, DiscordRestricted};
 use exo_rpc::{
     DiscordChannel, DiscordDm, DiscordFriend, DiscordGuild, DiscordMemberItem, DiscordRailItem,
 };
 use rune::{
-    Color, El, GrowthSpec, ScrollSpec, Shape, Spring, SpringPair, SurfaceFit, TextStyle,
+    Color, Cursor, El, GrowthSpec, ScrollSpec, Shape, Spring, SpringPair, SurfaceFit, TextStyle,
     Transition, Tx, canvas, col, edit_access, el, row, text, text_input,
 };
+use serde_json::json;
 use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
 use std::f32::consts::FRAC_PI_2;
@@ -58,8 +61,8 @@ fn glassy_ring(node: El) -> El {
 
 fn glass_top_sheen() -> El {
     el().pin(Some(0.0), Some(0.0), Some(0.0), None)
-        .h(16.0)
-        .linear_gradient(0.0, [(0.0, Color::WHITE.alpha(0.035)), (1.0, TRANSPARENT)])
+        .h(22.0)
+        .linear_gradient(0.0, [(0.0, Color::WHITE.alpha(0.055)), (1.0, TRANSPARENT)])
 }
 
 fn panel_frame(node: El) -> El {
@@ -661,6 +664,7 @@ fn icon_btn(key: String, label: &'static str, active: bool, danger: bool, icon: 
     el().key(key)
         .role("button")
         .label(label)
+        .cursor(Cursor::Pointer)
         .focusable(true)
         .hit()
         .press_on_down()
@@ -680,7 +684,7 @@ fn icon_btn(key: String, label: &'static str, active: bool, danger: bool, icon: 
 }
 
 fn card_surface() -> Color {
-    Color::WHITE.alpha(0.035)
+    BG
 }
 
 fn signed_out_view(s: &AppState) -> El {
@@ -896,11 +900,19 @@ fn band_guild_button(s: &AppState, guild: &DiscordGuild, sc: f32, scale: f32) ->
     let active = s.discord.place == DiscordPlace::Servers
         && s.discord.active_guild_id.as_deref() == Some(guild.id.as_str());
     let gid = guild.id.clone();
+    let srv_ctx = ContextMenuTarget::DiscordServer {
+        guild_id: guild.id.clone(),
+        name: guild.name.clone(),
+        muted: guild.muted,
+        owner: false,
+        icon: guild.icon.clone(),
+    };
 
     let mut btn = row()
         .key(format!("dc-guild-tile-{}", guild.id))
         .role("button")
         .label(guild.name.clone())
+        .cursor(Cursor::Pointer)
         .focusable(true)
         .hit()
         .press_on_down()
@@ -909,7 +921,10 @@ fn band_guild_button(s: &AppState, guild: &DiscordGuild, sc: f32, scale: f32) ->
         .radius(RADIUS_PILL)
         .center_y()
         .motion(SPRING_QUICK)
-        .on_press(move |s: &mut AppState| s.open_discord_guild(&gid));
+        .on_press(move |s: &mut AppState| s.open_discord_guild(&gid))
+        .on_secondary_press(move |s: &mut AppState, p, _| {
+            s.open_context_menu(srv_ctx.clone(), p.x, p.y);
+        });
 
     if active {
         btn = btn
@@ -994,6 +1009,7 @@ fn band_folder_tile(
                 el().key(format!("dc-folder-toggle-{folder_key}"))
                     .role("button")
                     .label(item.name.clone().unwrap_or_else(|| "Folder".into()))
+                    .cursor(Cursor::Pointer)
                     .focusable(true)
                     .hit()
                     .press_on_down()
@@ -1053,6 +1069,7 @@ fn band_folder_tile(
         .key(format!("dc-folder-{folder_key}"))
         .role("button")
         .label(item.name.clone().unwrap_or_else(|| "Folder".into()))
+        .cursor(Cursor::Pointer)
         .focusable(true)
         .hit()
         .press_on_down()
@@ -1108,6 +1125,7 @@ fn server_band(s: &AppState, sc: f32, scale: f32) -> El {
         .key("dc-place-home")
         .role("button")
         .label("Home")
+        .cursor(Cursor::Pointer)
         .focusable(true)
         .hit()
         .press_on_down()
@@ -1169,6 +1187,7 @@ fn server_band(s: &AppState, sc: f32, scale: f32) -> El {
         .key("dc-band-shop")
         .role("button")
         .label("Shop")
+        .cursor(Cursor::Pointer)
         .focusable(true)
         .hit()
         .press_on_down()
@@ -1273,6 +1292,7 @@ fn server_band(s: &AppState, sc: f32, scale: f32) -> El {
         .key("dc-band-add-server")
         .role("button")
         .label("Add a server")
+        .cursor(Cursor::Pointer)
         .focusable(true)
         .hit()
         .press_on_down()
@@ -1320,102 +1340,6 @@ fn server_band(s: &AppState, sc: f32, scale: f32) -> El {
     .child(row().pl(4.0).center_y().child(inbox_btn))
 }
 
-fn voice_dock(s: &AppState, sc: f32) -> Option<El> {
-    if s.discord.voice.state == "off" || s.discord.voice.state.is_empty() {
-        return None;
-    }
-    let connected = s.discord.voice.state == "connected";
-    let status_txt = if connected {
-        if let Some(rtt) = s.discord.voice.rtt_ms {
-            format!("Voice connected · {rtt} ms")
-        } else {
-            "Voice connected".into()
-        }
-    } else {
-        "Connecting…".into()
-    };
-    let label = s.discord.voice_channel_label();
-    Some(
-        row()
-            .key("dc-voice-dock")
-            .w_full()
-            .px(12.0)
-            .py(10.0)
-            .gap(8.0)
-            .center_y()
-            .border_sides([0.0, 0.0, 1.0, 0.0], hairline())
-            .fill(if connected {
-                good().alpha(0.08)
-            } else {
-                warn().alpha(0.08)
-            })
-            .child(
-                col()
-                    .grow(1.0)
-                    .min_w(0.0)
-                    .gap(2.0)
-                    .child(
-                        row()
-                            .gap(6.0)
-                            .center_y()
-                            .child(el().size(7.0, 7.0).radius(3.5).fill(if connected {
-                                good()
-                            } else {
-                                warn()
-                            }))
-                            .child(
-                                text(status_txt)
-                                    .font(font_px(12.0 * sc, 600.0))
-                                    .color(if connected { good() } else { warn() })
-                                    .truncate(),
-                            )
-                            .child(if s.discord.voice.e2ee {
-                                el().px(5.0)
-                                    .py(1.0)
-                                    .radius(4.0)
-                                    .fill(subtle_fill())
-                                    .child(text("E2EE").font(type_label()).color(fg_muted()))
-                            } else {
-                                el()
-                            }),
-                    )
-                    .child(
-                        text(label)
-                            .font(font_px(12.0 * sc, 400.0))
-                            .color(fg_muted())
-                            .truncate(),
-                    ),
-            )
-            .child(
-                icon_btn(
-                    "dc-voice-dock-share".into(),
-                    "Share screen",
-                    s.discord.voice_ui.golive_state == "live",
-                    false,
-                    icon_screen_share(
-                        15.0,
-                        if s.discord.voice_ui.golive_state == "live" {
-                            good()
-                        } else {
-                            FG
-                        },
-                    ),
-                )
-                .on_press(|s: &mut AppState| s.open_voice_panel(VoicePanel::GoLive)),
-            )
-            .child(
-                icon_btn(
-                    "dc-voice-leave".into(),
-                    "Disconnect",
-                    false,
-                    true,
-                    icon_phone_off(15.0, bad()),
-                )
-                .on_press(|s: &mut AppState| s.leave_discord_voice()),
-            ),
-    )
-}
-
 fn me_panel(s: &AppState, sc: f32, scale: f32) -> El {
     let me = s.discord.home.me.as_ref();
     let name = me.map(|m| m.name.as_str()).unwrap_or("Discord");
@@ -1423,112 +1347,27 @@ fn me_panel(s: &AppState, sc: f32, scale: f32) -> El {
     let look = me.and_then(|m| m.look.as_ref());
     let muted = s.discord.voice.muted;
     let deaf = s.discord.voice.deafened;
+    let subtitle = s
+        .discord
+        .custom_status
+        .as_deref()
+        .filter(|t| !t.trim().is_empty())
+        .map(str::to_string)
+        .unwrap_or_else(|| status_label(st).to_string());
 
     let mut stack = col()
         .w_full()
         .border_sides([1.0, 0.0, 0.0, 0.0], hairline());
-
-    if let Some(dock) = voice_dock(s, sc) {
+    if let Some(dock) = discord_voice::call_dock(s) {
         stack = stack.child(dock);
-    }
-
-    let mut status_menu = None;
-    if s.discord.status_menu_open {
-        let mut menu = col()
-            .key("dc-status-menu")
-            .pin(Some(8.0), None, Some(8.0), Some(60.0 * sc + 6.0))
-            .px(8.0)
-            .py(6.0)
-            .gap(2.0)
-            .radius(RADIUS_CARD)
-            .border(1.0, glass_rim())
-            .fill(BG)
-            .transition(Transition::opacity().springs(SpringPair::new(SPRING_BASE, SPRING_QUICK)));
-        for (code, title) in [
-            ("online", "Online"),
-            ("idle", "Idle"),
-            ("dnd", "Do not disturb"),
-            ("invisible", "Invisible"),
-        ] {
-            let active = st == code;
-            menu = menu.child(
-                row()
-                    .key(format!("dc-set-status-{code}"))
-                    .w_full()
-                    .h(30.0)
-                    .px(10.0)
-                    .gap(8.0)
-                    .center_y()
-                    .radius(RADIUS_SMALL)
-                    .fill(if active { hover_fill() } else { TRANSPARENT })
-                    .hover(hover_fill())
-                    .hover_motion(Spring::NONE, SPRING_QUICK)
-                    .hit()
-                    .press_on_down()
-                    .on_press(move |s: &mut AppState| s.set_discord_status(code))
-                    .child(el().size(8.0, 8.0).radius(4.0).fill(status_color(code)))
-                    .child(
-                        text(title)
-                            .font(font_px(12.0 * sc, 500.0))
-                            .color(FG)
-                            .grow(1.0),
-                    ),
-            );
-        }
-        if s.discord.accounts.len() > 1 {
-            menu = menu.child(el().w_full().h(1.0).fill(hairline()));
-            for acc in &s.discord.accounts {
-                if acc.current {
-                    continue;
-                }
-                let aid = acc.id.clone();
-                menu = menu.child(
-                    row()
-                        .key(format!("dc-switch-acc-{}", acc.id))
-                        .w_full()
-                        .h(30.0)
-                        .px(10.0)
-                        .gap(8.0)
-                        .center_y()
-                        .radius(RADIUS_SMALL)
-                        .hover(hover_fill())
-                        .hover_motion(Spring::NONE, SPRING_QUICK)
-                        .hit()
-                        .press_on_down()
-                        .on_press(move |s: &mut AppState| s.switch_discord_account(&aid))
-                        .child(
-                            text(format!("Switch to {}", acc.name))
-                                .font(font_px(12.0 * sc, 400.0))
-                                .color(fg_muted())
-                                .truncate(),
-                        ),
-                );
-            }
-        }
-        menu = menu.child(el().w_full().h(1.0).fill(hairline())).child(
-            row()
-                .key("dc-signout-row")
-                .w_full()
-                .h(30.0)
-                .px(10.0)
-                .center_y()
-                .radius(RADIUS_SMALL)
-                .hover(bad().alpha(0.16))
-                .hover_motion(Spring::NONE, SPRING_QUICK)
-                .hit()
-                .press_on_down()
-                .on_press(|s: &mut AppState| s.sign_out_discord())
-                .child(
-                    text("Sign out")
-                        .font(font_px(12.0 * sc, 500.0))
-                        .color(bad()),
-                ),
-        );
-        status_menu = Some(menu);
     }
 
     let identity = row()
         .key("dc-me-trigger")
+        .role("button")
+        .label("Account status")
+        .cursor(Cursor::Pointer)
+        .focusable(true)
         .grow(1.0)
         .min_w(0.0)
         .h(48.0)
@@ -1540,7 +1379,8 @@ fn me_panel(s: &AppState, sc: f32, scale: f32) -> El {
         .hover_motion(Spring::NONE, SPRING_QUICK)
         .hit()
         .press_on_down()
-        .on_press(|s: &mut AppState| s.discord.status_menu_open = !s.discord.status_menu_open)
+        .on_press(|s: &mut AppState| s.open_discord_status_menu())
+        .on_secondary_press(|s: &mut AppState, _x, _y| s.open_discord_status_menu())
         .child(avatar_with_look(
             s,
             me.and_then(|m| m.avatar.as_deref()),
@@ -1566,7 +1406,7 @@ fn me_panel(s: &AppState, sc: f32, scale: f32) -> El {
                     FG,
                 ))
                 .child(
-                    text(status_label(st))
+                    text(subtitle)
                         .font(font_px(12.0 * sc, 400.0))
                         .color(fg_muted())
                         .truncate(),
@@ -1577,6 +1417,7 @@ fn me_panel(s: &AppState, sc: f32, scale: f32) -> El {
         .key("dc-me-mic-caret")
         .role("button")
         .label("Input device")
+        .cursor(Cursor::Pointer)
         .focusable(true)
         .hit()
         .press_on_down()
@@ -1584,13 +1425,21 @@ fn me_panel(s: &AppState, sc: f32, scale: f32) -> El {
         .radius(RADIUS_PILL)
         .hover(hover_fill())
         .center()
-        .on_press(|s: &mut AppState| s.open_voice_panel(VoicePanel::Audio))
+        .on_press(|s: &mut AppState| {
+            s.load_discord_audio();
+            s.open_context_menu(
+                ContextMenuTarget::DiscordAudioQuick { input: true },
+                0.0,
+                0.0,
+            );
+        })
         .child(icon_chevron_down(11.0, fg_muted()));
 
     let deaf_caret = el()
         .key("dc-me-deaf-caret")
         .role("button")
         .label("Output device")
+        .cursor(Cursor::Pointer)
         .focusable(true)
         .hit()
         .press_on_down()
@@ -1598,13 +1447,21 @@ fn me_panel(s: &AppState, sc: f32, scale: f32) -> El {
         .radius(RADIUS_PILL)
         .hover(hover_fill())
         .center()
-        .on_press(|s: &mut AppState| s.open_voice_panel(VoicePanel::Audio))
+        .on_press(|s: &mut AppState| {
+            s.load_discord_audio();
+            s.open_context_menu(
+                ContextMenuTarget::DiscordAudioQuick { input: false },
+                0.0,
+                0.0,
+            );
+        })
         .child(icon_chevron_down(11.0, fg_muted()));
 
     let mute_btn = el()
         .key("dc-me-mute")
         .role("button")
         .label(if muted { "Unmute" } else { "Mute" })
+        .cursor(Cursor::Pointer)
         .focusable(true)
         .hit()
         .press_on_down()
@@ -1624,6 +1481,14 @@ fn me_panel(s: &AppState, sc: f32, scale: f32) -> El {
         .center()
         .motion(SPRING_QUICK)
         .on_press(|s: &mut AppState| s.toggle_discord_mute())
+        .on_secondary_press(|s: &mut AppState, _x, _y| {
+            s.load_discord_audio();
+            s.open_context_menu(
+                ContextMenuTarget::DiscordAudioQuick { input: true },
+                0.0,
+                0.0,
+            );
+        })
         .child(if muted {
             icon_mic_off(17.0, bad())
         } else {
@@ -1634,6 +1499,7 @@ fn me_panel(s: &AppState, sc: f32, scale: f32) -> El {
         .key("dc-me-deafen")
         .role("button")
         .label(if deaf { "Undeafen" } else { "Deafen" })
+        .cursor(Cursor::Pointer)
         .focusable(true)
         .hit()
         .press_on_down()
@@ -1649,6 +1515,14 @@ fn me_panel(s: &AppState, sc: f32, scale: f32) -> El {
         .center()
         .motion(SPRING_QUICK)
         .on_press(|s: &mut AppState| s.toggle_discord_deafen())
+        .on_secondary_press(|s: &mut AppState, _x, _y| {
+            s.load_discord_audio();
+            s.open_context_menu(
+                ContextMenuTarget::DiscordAudioQuick { input: false },
+                0.0,
+                0.0,
+            );
+        })
         .child(if deaf {
             icon_headphones_off(17.0, bad())
         } else {
@@ -1657,12 +1531,19 @@ fn me_panel(s: &AppState, sc: f32, scale: f32) -> El {
 
     let settings_btn = icon_btn(
         "dc-me-settings".into(),
-        "Settings",
+        "Discord settings",
+        s.discord.settings_open,
         false,
-        false,
-        icon_settings(17.0, fg_muted()),
+        icon_settings(
+            17.0,
+            if s.discord.settings_open {
+                FG
+            } else {
+                fg_muted()
+            },
+        ),
     )
-    .on_press(|s: &mut AppState| s.switch_room(Room::Settings));
+    .on_press(|s: &mut AppState| s.open_discord_settings(DiscordSettingsPage::Account));
 
     let bar = row()
         .key("dc-me-panel")
@@ -1676,24 +1557,28 @@ fn me_panel(s: &AppState, sc: f32, scale: f32) -> El {
         .child(row().center_y().child(deaf_btn).child(deaf_caret))
         .child(settings_btn);
 
-    stack = stack.child(bar);
-    if let Some(menu) = status_menu {
-        stack = stack.child(menu);
-    }
-    stack
+    stack.child(bar)
 }
 
 fn pinned_dm_ids(s: &AppState) -> Vec<String> {
-    s.settings
+    let mut ids: Vec<String> = s
+        .settings
         .ui_prefs
         .get("discordPinnedDms")
         .and_then(|v| v.as_array())
         .map(|arr| {
             arr.iter()
                 .filter_map(|v| v.as_str().map(String::from))
+                .filter(|id| !s.discord.unpinned_dm_overrides.contains(id))
                 .collect()
         })
-        .unwrap_or_default()
+        .unwrap_or_default();
+    for id in &s.discord.pinned_dm_overrides {
+        if !ids.contains(id) {
+            ids.push(id.clone());
+        }
+    }
+    ids
 }
 
 fn dm_subtitle(dm: &DiscordDm) -> Option<String> {
@@ -1772,10 +1657,21 @@ fn dm_row(s: &AppState, dm: &DiscordDm, active: bool, sc: f32, scale: f32) -> El
         meta = meta.child(unread_dot_row(if active { PRIMARY_FG } else { FG }));
     }
 
+    let dm_ctx = ContextMenuTarget::DiscordDm {
+        dm_id: dm.id.clone(),
+        user_id: dm.user_id.clone(),
+        name: dm.name.clone(),
+        username: dm.username.clone(),
+        unread: is_unread,
+        muted: dm.muted,
+        group: dm.group,
+    };
+
     let mut r = row()
         .key(format!("dc-dm-{}", dm.id))
         .role("button")
         .label(dm.name.clone())
+        .cursor(Cursor::Pointer)
         .focusable(true)
         .hit()
         .press_on_down()
@@ -1793,6 +1689,9 @@ fn dm_row(s: &AppState, dm: &DiscordDm, active: bool, sc: f32, scale: f32) -> El
         .motion(SPRING_QUICK)
         .hover_motion(Spring::NONE, SPRING_QUICK)
         .on_press(move |s: &mut AppState| s.open_discord_dm(&dm_id))
+        .on_secondary_press(move |s: &mut AppState, p, _| {
+            s.open_context_menu(dm_ctx.clone(), p.x, p.y);
+        })
         .child(avatar_with_look(
             s,
             dm.avatar.as_deref(),
@@ -1861,6 +1760,7 @@ fn dm_sidebar(s: &AppState, sc: f32, scale: f32) -> El {
                 text_input(&s.discord.dm_search_query, font_px(13.0 * sc, 400.0))
                     .key("dc-dm-find-input")
                     .label("Find a conversation")
+                    .cursor(Cursor::Text)
                     .grow(1.0)
                     .single_line()
                     .color(FG)
@@ -2032,12 +1932,13 @@ fn guild_channel_row(
     guild_id: &str,
     ch: &DiscordChannel,
     active: bool,
+    can_manage: bool,
     sc: f32,
     scale: f32,
 ) -> El {
     let cid = ch.id.clone();
     let gid = guild_id.to_string();
-    let is_voice = ch.kind == "voice";
+    let is_voice = matches!(ch.kind.as_str(), "voice" | "stage");
     let in_this_voice = is_voice
         && s.discord.voice.channel_id.as_deref() == Some(ch.id.as_str())
         && s.discord.voice.state != "off";
@@ -2081,8 +1982,23 @@ fn guild_channel_row(
         )
     };
 
+    let ch_ctx = ContextMenuTarget::DiscordChannel {
+        guild_id: guild_id.to_string(),
+        channel_id: ch.id.clone(),
+        name: ch.name.clone(),
+        kind: ch.kind.clone(),
+        unread: ch.unread || ch.mentions > 0,
+        muted: ch.muted,
+        can_edit: ch.can_edit,
+        can_manage,
+    };
+
     let mut head = row()
         .key(format!("dc-ch-{}", ch.id))
+        .role("button")
+        .label(ch.name.clone())
+        .cursor(Cursor::Pointer)
+        .focusable(true)
         .w_full()
         .h(34.0 * sc)
         .px(8.0)
@@ -2100,6 +2016,9 @@ fn guild_channel_row(
             if is_voice && !in_this_voice {
                 s.join_discord_voice(Some(&gid), &cid);
             }
+        })
+        .on_secondary_press(move |s: &mut AppState, p, _| {
+            s.open_context_menu(ch_ctx.clone(), p.x, p.y);
         })
         .child(el().size(16.0, 16.0).center().child(icon))
         .child(
@@ -2147,14 +2066,28 @@ fn guild_channel_row(
     {
         for m in members {
             let speaking = s.discord.speaking.contains(&m.id);
+            let mem_ctx = ContextMenuTarget::DiscordMember {
+                guild_id: Some(guild_id.to_string()),
+                user_id: m.id.clone(),
+                name: m.name.clone(),
+                username: None,
+                in_voice: true,
+            };
             let mut mrow = row()
                 .key(format!("dc-vc-mem-{}-{}", ch.id, m.id))
+                .cursor(Cursor::Pointer)
                 .w_full()
                 .h(28.0 * sc)
                 .pl(28.0)
                 .pr(8.0)
                 .gap(8.0)
                 .center_y()
+                .radius(RADIUS_SMALL)
+                .hover(hover_fill())
+                .hit()
+                .on_secondary_press(move |s: &mut AppState, p, _| {
+                    s.open_context_menu(mem_ctx.clone(), p.x, p.y);
+                })
                 .child(avatar_box(
                     s,
                     m.avatar.as_deref(),
@@ -2192,6 +2125,33 @@ fn guild_channel_row(
     block
 }
 
+fn guild_nav_row(key: &'static str, label: &'static str, icon: El, sc: f32) -> El {
+    row()
+        .key(key)
+        .role("button")
+        .label(label)
+        .cursor(Cursor::Pointer)
+        .focusable(true)
+        .w_full()
+        .h(34.0 * sc)
+        .px(8.0)
+        .gap(8.0)
+        .center_y()
+        .radius(RADIUS_PILL)
+        .hover(hover_fill())
+        .hover_motion(Spring::NONE, SPRING_QUICK)
+        .hit()
+        .press_on_down()
+        .child(el().size(16.0, 16.0).center().child(icon))
+        .child(
+            text(label)
+                .font(font_px(13.0 * sc, 500.0))
+                .color(fg_muted())
+                .grow(1.0)
+                .truncate(),
+        )
+}
+
 fn server_left_rail(s: &AppState, guild: &DiscordGuild, sc: f32, scale: f32) -> El {
     let pane_w = 300.0 * sc;
     let head_h = 48.0 * sc;
@@ -2212,6 +2172,66 @@ fn server_left_rail(s: &AppState, guild: &DiscordGuild, sc: f32, scale: f32) -> 
     }
 
     if let Some(chans) = s.discord.channels_by_guild.get(&guild.id) {
+        if let Some(ref rows) = chans.rows {
+            let any_row = rows.guide || rows.events || rows.browse || rows.members;
+            if rows.guide {
+                tree = tree.child(
+                    guild_nav_row(
+                        "dc-guild-guide",
+                        "Server Guide",
+                        icon_bookmark(15.0, fg_muted()),
+                        sc,
+                    )
+                    .on_press(|s: &mut AppState| {
+                        s.notice = Some("Server Guide".into());
+                    }),
+                );
+            }
+            if rows.events {
+                tree = tree.child(
+                    guild_nav_row(
+                        "dc-guild-events",
+                        "Events",
+                        icon_sparkles(15.0, fg_muted()),
+                        sc,
+                    )
+                    .on_press(|s: &mut AppState| {
+                        s.notice = Some("No upcoming events".into());
+                    }),
+                );
+            }
+            if rows.browse {
+                tree = tree.child(
+                    guild_nav_row(
+                        "dc-guild-browse",
+                        "Browse channels",
+                        icon_grid(15.0, fg_muted()),
+                        sc,
+                    )
+                    .on_press(|s: &mut AppState| {
+                        s.notice = Some("All visible channels are shown".into());
+                    }),
+                );
+            }
+            if rows.members {
+                tree = tree.child(
+                    guild_nav_row(
+                        "dc-guild-members",
+                        "Members",
+                        icon_users(15.0, fg_muted()),
+                        sc,
+                    )
+                    .on_press(|s: &mut AppState| {
+                        s.discord.show_members = !s.discord.show_members;
+                    }),
+                );
+            }
+            if any_row {
+                tree = tree.child(el().w_full().h(1.0).my(11.0).fill(hairline()));
+            }
+        }
+
+        let hide_muted = s.discord.hide_muted_guilds.contains(&guild.id);
         let mut current_cat_collapsed = false;
         for ch in &chans.channels {
             if ch.resource {
@@ -2221,12 +2241,20 @@ fn server_left_rail(s: &AppState, guild: &DiscordGuild, sc: f32, scale: f32) -> 
                 let cid = ch.id.clone();
                 let collapsed = s.discord.collapsed_categories.contains(&ch.id);
                 current_cat_collapsed = collapsed;
+                let cat_ctx = ContextMenuTarget::DiscordCategory {
+                    guild_id: guild.id.clone(),
+                    category_id: ch.id.clone(),
+                    name: ch.name.clone(),
+                };
                 tree = tree.child(
                     row()
                         .key(format!("dc-cat-{}", ch.id))
+                        .role("button")
+                        .label(ch.name.clone())
+                        .cursor(Cursor::Pointer)
                         .w_full()
-                        .h(28.0)
-                        .pt(6.0)
+                        .h(34.0)
+                        .pt(3.0)
                         .px(8.0)
                         .gap(4.0)
                         .center_y()
@@ -2235,21 +2263,27 @@ fn server_left_rail(s: &AppState, guild: &DiscordGuild, sc: f32, scale: f32) -> 
                         .hit()
                         .press_on_down()
                         .on_press(move |s: &mut AppState| s.toggle_discord_category(&cid))
+                        .on_secondary_press(move |s: &mut AppState, p, _| {
+                            s.open_context_menu(cat_ctx.clone(), p.x, p.y);
+                        })
                         .child(if collapsed {
                             icon_chevron_right(11.0, fg_faint())
                         } else {
                             icon_chevron_down(11.0, fg_faint())
                         })
                         .child(
-                            text(ch.name.clone())
-                                .font(font_px(12.0 * sc, 600.0))
-                                .color(fg_muted())
+                            text(ch.name.to_uppercase())
+                                .font(font_px(11.0 * sc, 600.0))
+                                .color(fg_faint())
                                 .truncate(),
                         ),
                 );
                 continue;
             }
             let active = s.discord.active_channel_id.as_deref() == Some(ch.id.as_str());
+            if hide_muted && ch.muted && !active {
+                continue;
+            }
             let keep_visible = active
                 || ch.unread
                 || ch.mentions > 0
@@ -2257,7 +2291,15 @@ fn server_left_rail(s: &AppState, guild: &DiscordGuild, sc: f32, scale: f32) -> 
             if current_cat_collapsed && !keep_visible {
                 continue;
             }
-            tree = tree.child(guild_channel_row(s, &guild.id, ch, active, sc, scale));
+            tree = tree.child(guild_channel_row(
+                s,
+                &guild.id,
+                ch,
+                active,
+                chans.can_manage,
+                sc,
+                scale,
+            ));
         }
     } else {
         tree = tree.child(
@@ -2269,19 +2311,51 @@ fn server_left_rail(s: &AppState, guild: &DiscordGuild, sc: f32, scale: f32) -> 
         );
     }
 
+    let srv_ctx = ContextMenuTarget::DiscordServer {
+        guild_id: guild.id.clone(),
+        name: guild.name.clone(),
+        muted: guild.muted,
+        owner: false,
+        icon: guild.icon.clone(),
+    };
+    let srv_ctx_btn = srv_ctx.clone();
+    let gid_inv = guild.id.clone();
+
     let head = row()
+        .key("dc-server-head")
+        .cursor(Cursor::Pointer)
         .w_full()
         .h(head_h)
-        .pl(16.0)
-        .pr(10.0)
+        .pl(14.0)
+        .pr(8.0)
         .gap(8.0)
         .center_y()
+        .hit()
+        .on_press(move |s: &mut AppState| {
+            s.open_context_menu(srv_ctx_btn.clone(), 24.0, 178.0);
+        })
+        .on_secondary_press(move |s: &mut AppState, p, _| {
+            s.open_context_menu(srv_ctx.clone(), p.x, p.y);
+        })
         .child(
             text(guild.name.clone())
                 .font(font_px(15.0 * sc, 600.0))
                 .color(FG)
                 .grow(1.0)
                 .truncate(),
+        )
+        .child(icon_chevron_down(13.0, fg_muted()))
+        .child(
+            icon_btn(
+                "dc-server-invite".into(),
+                "Invite people",
+                false,
+                false,
+                icon_user_plus(15.0, fg_muted()),
+            )
+            .on_press(move |s: &mut AppState| {
+                s.discord_server_action("invite", json!({ "guildId": gid_inv }));
+            }),
         );
 
     panel_frame(col().key("dc-server-rail").w(pane_w).h_full())
@@ -2395,14 +2469,31 @@ fn friend_card(s: &AppState, friend: &DiscordFriend, sc: f32, scale: f32) -> El 
             .truncate(),
     );
 
+    let f_id_ctx = friend.id.clone();
+    let f_name_ctx = friend.name.clone();
+    let f_user_ctx = friend.username.clone();
     let mut card = glassy_ring(
         row()
             .key(format!("dc-friend-{}", friend.id))
             .role("button")
             .label(friend.name.clone())
+            .cursor(Cursor::Pointer)
             .focusable(true)
             .hit()
             .press_on_down()
+            .on_secondary_press(move |s: &mut AppState, pos, _| {
+                s.open_context_menu(
+                    ContextMenuTarget::DiscordMember {
+                        guild_id: None,
+                        user_id: f_id_ctx.clone(),
+                        name: f_name_ctx.clone(),
+                        username: f_user_ctx.clone(),
+                        in_voice: false,
+                    },
+                    pos.x,
+                    pos.y,
+                );
+            })
             .w_full()
             .min_w(0.0)
             .h(60.0)
@@ -2453,7 +2544,9 @@ fn friend_card(s: &AppState, friend: &DiscordFriend, sc: f32, scale: f32) -> El 
 
     if is_friend {
         let uid_dm = uid.clone();
-        let uid_more = uid.clone();
+        let uid_more = friend.id.clone();
+        let name_more = friend.name.clone();
+        let user_more = friend.username.clone();
         card = card.child(
             row()
                 .gap(10.0)
@@ -2477,7 +2570,21 @@ fn friend_card(s: &AppState, friend: &DiscordFriend, sc: f32, scale: f32) -> El 
                         false,
                         icon_more_horiz(16.0, fg_muted()),
                     )
-                    .on_press(move |s: &mut AppState| s.open_dm_with_friend(&uid_more)),
+                    .on_press({
+                        let more_key = format!("dc-fr-more-{}", friend.id);
+                        move |s: &mut AppState| {
+                            s.open_context_menu_at_element(
+                                ContextMenuTarget::DiscordMember {
+                                    guild_id: None,
+                                    user_id: uid_more.clone(),
+                                    name: name_more.clone(),
+                                    username: user_more.clone(),
+                                    in_voice: false,
+                                },
+                                &more_key,
+                            );
+                        }
+                    }),
                 ),
         );
     } else if friend.kind == "incoming" {
@@ -2582,6 +2689,7 @@ fn blocked_card(s: &AppState, person: &DiscordRestricted, sc: f32, scale: f32) -
                 .key(format!("dc-unblock-{}", person.id))
                 .role("button")
                 .label("Unblock")
+                .cursor(Cursor::Pointer)
                 .focusable(true)
                 .hit()
                 .press_on_down()
@@ -2617,6 +2725,7 @@ fn friends_panel(s: &AppState, sc: f32, scale: f32) -> El {
             .key(t.key())
             .role("tab")
             .label(t.label())
+            .cursor(Cursor::Pointer)
             .focusable(true)
             .hit()
             .press_on_down()
@@ -2662,6 +2771,7 @@ fn friends_panel(s: &AppState, sc: f32, scale: f32) -> El {
         text_input(&s.discord.search_query, font_px(13.0 * sc, 400.0))
             .key("dc-friends-search")
             .label("Search friends")
+            .cursor(Cursor::Text)
             .grow(1.0)
             .single_line()
             .color(FG)
@@ -2674,6 +2784,7 @@ fn friends_panel(s: &AppState, sc: f32, scale: f32) -> El {
             .key("dc-add-friend-toggle")
             .role("button")
             .label("Add friend")
+            .cursor(Cursor::Pointer)
             .focusable(true)
             .hit()
             .press_on_down()
@@ -2754,6 +2865,7 @@ fn friends_panel(s: &AppState, sc: f32, scale: f32) -> El {
                 text_input(&s.discord.add_friend_input, font_px(13.0 * sc, 400.0))
                     .key("dc-add-friend-input")
                     .label("Enter a Discord username")
+                    .cursor(Cursor::Text)
                     .grow(1.0)
                     .single_line()
                     .color(FG)
@@ -2959,7 +3071,7 @@ fn friends_panel(s: &AppState, sc: f32, scale: f32) -> El {
     panel
 }
 
-fn channel_or_dm_stage(s: &AppState, sc: f32, scale: f32) -> El {
+fn channel_or_dm_stage(s: &AppState, sc: f32, scale: f32, budget: BlurBudget) -> El {
     let head_h = 48.0 * sc;
     match s.discord.place {
         DiscordPlace::Messages => {
@@ -3080,13 +3192,18 @@ fn channel_or_dm_stage(s: &AppState, sc: f32, scale: f32) -> El {
                 );
             };
             let gid = s.discord.active_guild_id.clone();
-            let cid = ch.id.clone();
-            let is_voice = ch.kind == "voice";
-            let in_this_voice = is_voice
-                && s.discord.voice.channel_id.as_deref() == Some(ch.id.as_str())
-                && s.discord.voice.state != "off";
+            let is_voice = matches!(ch.kind.as_str(), "voice" | "stage");
+            if is_voice {
+                return discord_voice::voice_stage_view(
+                    s,
+                    gid.as_deref(),
+                    ch,
+                    scale,
+                    budget.discord_voice_bar,
+                );
+            }
 
-            let mut header = row()
+            let header = row()
                 .w_full()
                 .h(head_h)
                 .px(16.0)
@@ -3100,11 +3217,7 @@ fn channel_or_dm_stage(s: &AppState, sc: f32, scale: f32) -> El {
                         .min_w(0.0)
                         .gap(8.0)
                         .center_y()
-                        .child(if is_voice {
-                            icon_volume(16.0, if in_this_voice { good() } else { fg_muted() })
-                        } else {
-                            icon_hash(16.0, fg_muted())
-                        })
+                        .child(icon_hash(16.0, fg_muted()))
                         .child(
                             text(ch.name.clone())
                                 .font(font_px(14.0 * sc, 600.0))
@@ -3125,52 +3238,20 @@ fn channel_or_dm_stage(s: &AppState, sc: f32, scale: f32) -> El {
                         } else {
                             el()
                         }),
-                );
-
-            if is_voice {
-                let gid_v = gid.clone();
-                let cid_v = cid.clone();
-                header = header.child(
-                    if in_this_voice {
-                        glass_button(
-                            "dc-stage-leave",
-                            "Disconnect",
-                            Some(icon_phone_off(13.0, bad())),
-                        )
-                    } else {
-                        primary_button(
-                            "dc-stage-join",
-                            "Join voice",
-                            Some(icon_phone(13.0, PRIMARY_FG)),
-                        )
-                    }
-                    .on_press(move |s: &mut AppState| {
-                        if in_this_voice {
-                            s.leave_discord_voice();
-                        } else {
-                            s.join_discord_voice(gid_v.as_deref(), &cid_v);
-                        }
-                    }),
-                );
-            } else {
-                header = header.child(discord_chat::header_tools(s));
-            }
-
-            let stage_pane = if is_voice {
-                discord_voice::voice_stage_view(s, gid.as_deref(), ch, scale)
-            } else {
-                discord_chat::timeline_and_composer(
-                    s,
-                    &ch.id,
-                    format!("Message #{}…", ch.name),
-                    format!("Welcome to #{}", ch.name),
-                    ch.topic.clone().unwrap_or_else(|| {
-                        format!("This is the start of the #{} channel.", ch.name)
-                    }),
-                    ch.can_send != Some(false),
-                    scale,
                 )
-            };
+                .child(discord_chat::header_tools(s));
+
+            let stage_pane = discord_chat::timeline_and_composer(
+                s,
+                &ch.id,
+                format!("Message #{}…", ch.name),
+                format!("Welcome to #{}", ch.name),
+                ch.topic
+                    .clone()
+                    .unwrap_or_else(|| format!("This is the start of the #{} channel.", ch.name)),
+                ch.can_send != Some(false),
+                scale,
+            );
 
             panel_frame(col().key("dc-channel-stage").grow(1.0).min_w(0.0).h_full())
                 .child(header)
@@ -3196,7 +3277,7 @@ fn right_members_panel(s: &AppState, sc: f32, scale: f32) -> Option<El> {
                     match it {
                         DiscordMemberItem::Group { group, count } => {
                             list = list.child(
-                                text(format!("{group} — {count}"))
+                                text(format!("{group} ({count})"))
                                     .font(font_px(12.0 * sc, 600.0))
                                     .color(fg_muted())
                                     .pt(if idx == 0 { 6.0 } else { 12.0 })
@@ -3207,6 +3288,10 @@ fn right_members_panel(s: &AppState, sc: f32, scale: f32) -> Option<El> {
                         DiscordMemberItem::Member(m) => {
                             let offline = m.status == "offline";
                             let uid = m.id.clone();
+                            let uid_ctx = m.id.clone();
+                            let gid_ctx = gid.to_string();
+                            let name_ctx = m.name.clone();
+                            let in_voice_ctx = m.in_voice.is_some();
                             let mut name_row = row().gap(5.0).center_y().child(styled_name_text(
                                 text(m.name.clone())
                                     .font(font_px(13.0 * sc, 500.0))
@@ -3235,6 +3320,7 @@ fn right_members_panel(s: &AppState, sc: f32, scale: f32) -> Option<El> {
                             list = list.child(
                                 row()
                                     .key(format!("dc-mem-{}", m.id))
+                                    .cursor(Cursor::Pointer)
                                     .w_full()
                                     .h(44.0 * sc)
                                     .px(8.0)
@@ -3247,6 +3333,19 @@ fn right_members_panel(s: &AppState, sc: f32, scale: f32) -> Option<El> {
                                     .hit()
                                     .press_on_down()
                                     .on_press(move |s: &mut AppState| s.open_dm_with_friend(&uid))
+                                    .on_secondary_press(move |s: &mut AppState, pos, _| {
+                                        s.open_context_menu(
+                                            ContextMenuTarget::DiscordMember {
+                                                guild_id: Some(gid_ctx.clone()),
+                                                user_id: uid_ctx.clone(),
+                                                name: name_ctx.clone(),
+                                                username: None,
+                                                in_voice: in_voice_ctx,
+                                            },
+                                            pos.x,
+                                            pos.y,
+                                        );
+                                    })
                                     .child(avatar_with_look(
                                         s,
                                         m.avatar.as_deref(),
@@ -3279,7 +3378,7 @@ fn right_members_panel(s: &AppState, sc: f32, scale: f32) -> Option<El> {
                         }
                     }
                 }
-                format!("Members · {} online", ml.online)
+                "Members".to_string()
             } else {
                 list = list.child(
                     text("Loading members…")
@@ -3334,9 +3433,13 @@ fn right_members_panel(s: &AppState, sc: f32, scale: f32) -> Option<El> {
                 let mut list = col().w_full().gap(4.0);
                 for m in members {
                     let uid = m.id.clone();
+                    let uid_ctx = m.id.clone();
+                    let name_ctx = m.name.clone();
+                    let user_ctx = m.username.clone();
                     list = list.child(
                         row()
                             .key(format!("dc-grp-mem-{}", m.id))
+                            .cursor(Cursor::Pointer)
                             .w_full()
                             .h(40.0 * sc)
                             .px(8.0)
@@ -3347,6 +3450,19 @@ fn right_members_panel(s: &AppState, sc: f32, scale: f32) -> Option<El> {
                             .hit()
                             .press_on_down()
                             .on_press(move |s: &mut AppState| s.open_dm_with_friend(&uid))
+                            .on_secondary_press(move |s: &mut AppState, pos, _| {
+                                s.open_context_menu(
+                                    ContextMenuTarget::DiscordMember {
+                                        guild_id: None,
+                                        user_id: uid_ctx.clone(),
+                                        name: name_ctx.clone(),
+                                        username: user_ctx.clone(),
+                                        in_voice: false,
+                                    },
+                                    pos.x,
+                                    pos.y,
+                                );
+                            })
                             .child(avatar_box(
                                 s,
                                 m.avatar.as_deref(),
@@ -3471,6 +3587,7 @@ fn inbox_panel(s: &AppState, sc: f32) -> El {
             list = list.child(
                 row()
                     .key(format!("dc-inbox-{}", u.channel_id))
+                    .cursor(Cursor::Pointer)
                     .w_full()
                     .h(44.0 * sc)
                     .px(10.0)
@@ -3556,7 +3673,7 @@ pub fn can_show_room(s: &AppState) -> bool {
             || s.discord.from_snapshot)
 }
 
-pub fn view(s: &AppState, scale: f32) -> El {
+pub fn view(s: &AppState, scale: f32, budget: BlurBudget) -> El {
     if !can_show_room(s) {
         return signed_out_view(s);
     }
@@ -3568,20 +3685,26 @@ pub fn view(s: &AppState, scale: f32) -> El {
     if s.discord.place == DiscordPlace::Servers
         && let Some(guild) = s.discord.active_guild()
     {
+        let on_voice = s
+            .discord
+            .active_channel()
+            .is_some_and(|c| matches!(c.kind.as_str(), "voice" | "stage"));
         body = body
             .child(server_left_rail(s, guild, sc, scale))
-            .child(channel_or_dm_stage(s, sc, scale));
+            .child(channel_or_dm_stage(s, sc, scale, budget));
         if s.discord.inbox_open {
             body = body.child(inbox_panel(s, sc));
-        } else if let Some(drawer) = discord_chat::chat_drawer_panel(s, scale) {
-            body = body.child(drawer);
-        } else if let Some(panel) = right_members_panel(s, sc, scale) {
-            body = body.child(panel);
+        } else if !on_voice || !s.discord.voice_ui.show_voice_chat {
+            if let Some(drawer) = discord_chat::chat_drawer_panel(s, scale) {
+                body = body.child(drawer);
+            } else if let Some(panel) = right_members_panel(s, sc, scale) {
+                body = body.child(panel);
+            }
         }
     } else if s.discord.place == DiscordPlace::Messages {
         body = body
             .child(dm_sidebar(s, sc, scale))
-            .child(channel_or_dm_stage(s, sc, scale));
+            .child(channel_or_dm_stage(s, sc, scale, budget));
         if s.discord.inbox_open {
             body = body.child(inbox_panel(s, sc));
         } else if let Some(drawer) = discord_chat::chat_drawer_panel(s, scale) {
@@ -3613,6 +3736,757 @@ pub fn view(s: &AppState, scale: f32) -> El {
         .fill(BG)
         .child(server_band(s, sc, scale))
         .child(body)
+}
+
+pub fn overlay_layers(s: &AppState, blur: bool) -> Vec<El> {
+    let mut out = discord_voice::voice_overlay_layers(s, blur);
+    if s.discord.settings_open {
+        out.push(discord_settings_modal(s, blur));
+    }
+    if s.discord.custom_status_open {
+        out.push(custom_status_modal(s, blur));
+    }
+    out
+}
+
+fn settings_toggle_row(
+    key: &str,
+    label: &str,
+    desc: &str,
+    on: bool,
+    sc: f32,
+    on_press: impl Fn(&mut AppState) + 'static,
+) -> El {
+    row()
+        .w_full()
+        .py(12.0)
+        .gap(16.0)
+        .justify_between()
+        .center_y()
+        .border_sides([0.0, 0.0, 1.0, 0.0], hairline())
+        .child(
+            col()
+                .grow(1.0)
+                .min_w(0.0)
+                .gap(3.0)
+                .child(text(label).font(font_px(14.0 * sc, 500.0)).color(FG))
+                .child(
+                    text(desc)
+                        .font(font_px(12.0 * sc, 400.0))
+                        .color(fg_muted())
+                        .wrap(),
+                ),
+        )
+        .child(
+            row()
+                .key(key)
+                .role("switch")
+                .label(label)
+                .cursor(Cursor::Pointer)
+                .focusable(true)
+                .hit()
+                .press_on_down()
+                .press_scale(PRESS_SCALE)
+                .h(28.0)
+                .px(12.0)
+                .center_y()
+                .radius(RADIUS_PILL)
+                .fill(if on { FG } else { TRANSPARENT })
+                .border_gradient(1.0, glass_rim_top(), glass_rim_bottom())
+                .hover(if on { FG } else { hover_fill() })
+                .motion(SPRING_QUICK)
+                .on_press(on_press)
+                .child(
+                    text(if on { "On" } else { "Off" })
+                        .font(font_px(12.0 * sc, 600.0))
+                        .color(if on { PRIMARY_FG } else { fg_muted() }),
+                ),
+        )
+}
+
+fn settings_value_row(label: &str, value: &str, action: Option<El>, sc: f32) -> El {
+    let mut r = row()
+        .w_full()
+        .py(12.0)
+        .gap(16.0)
+        .justify_between()
+        .center_y()
+        .child(text(label).font(font_px(13.5 * sc, 600.0)).color(FG));
+    let mut right = row().gap(12.0).center_y();
+    if !value.is_empty() {
+        right = right.child(
+            text(value.to_string())
+                .font(font_px(13.0 * sc, 400.0))
+                .color(fg_muted()),
+        );
+    }
+    if let Some(act) = action {
+        right = right.child(act);
+    }
+    r = r.child(right);
+    r
+}
+
+fn settings_pill_btn(
+    key: &str,
+    label: &str,
+    sc: f32,
+    danger: bool,
+    on_press: impl Fn(&mut AppState) + 'static,
+) -> El {
+    glassy_ring(
+        row()
+            .key(key)
+            .role("button")
+            .label(label)
+            .cursor(Cursor::Pointer)
+            .focusable(true)
+            .hit()
+            .press_on_down()
+            .press_scale(PRESS_SCALE)
+            .h(30.0)
+            .px(14.0)
+            .center_y()
+            .radius(RADIUS_PILL)
+            .fill(if danger {
+                bad().alpha(0.14)
+            } else {
+                TRANSPARENT
+            })
+            .hover(if danger {
+                bad().alpha(0.24)
+            } else {
+                hover_fill()
+            })
+            .motion(SPRING_QUICK)
+            .on_press(on_press),
+    )
+    .child(
+        text(label)
+            .font(font_px(12.5 * sc, 500.0))
+            .color(if danger { bad() } else { FG }),
+    )
+}
+
+fn discord_settings_modal(s: &AppState, blur: bool) -> El {
+    let sc = ui_scale(s);
+    let active = s.discord.settings_page;
+
+    let mut nav = col()
+        .key("dc-settings-nav")
+        .w(240.0)
+        .h_full()
+        .pt(28.0)
+        .px(20.0)
+        .pb(20.0)
+        .gap(16.0)
+        .child(
+            text("Discord settings")
+                .font(font_px(22.0 * sc, 700.0))
+                .color(FG),
+        );
+
+    let mut nav_items = col().w_full().gap(4.0);
+    for page in DiscordSettingsPage::ALL {
+        let is_active = page == active;
+        let mut item = row()
+            .key(page.key())
+            .role("tab")
+            .label(page.label())
+            .cursor(Cursor::Pointer)
+            .focusable(true)
+            .hit()
+            .press_on_down()
+            .w_full()
+            .h(36.0)
+            .px(12.0)
+            .center_y()
+            .radius(10.0)
+            .fill(if is_active {
+                Color::WHITE.alpha(0.13)
+            } else {
+                TRANSPARENT
+            })
+            .hover(if is_active {
+                Color::WHITE.alpha(0.16)
+            } else {
+                hover_fill()
+            })
+            .hover_motion(Spring::NONE, SPRING_QUICK)
+            .on_press(move |s: &mut AppState| {
+                s.discord.settings_page = page;
+                if page == DiscordSettingsPage::Voice {
+                    s.load_discord_audio();
+                }
+            })
+            .child(
+                text(page.label())
+                    .font(font_px(13.5 * sc, if is_active { 600.0 } else { 500.0 }))
+                    .color(if is_active { FG } else { fg_muted() }),
+            );
+        if is_active {
+            item = item.border_gradient(1.0, glass_rim_top(), glass_rim_bottom());
+        }
+        nav_items = nav_items.child(item);
+    }
+    nav = nav.child(nav_items);
+
+    let mut body = col().w_full().gap(16.0).pb(24.0);
+    match active {
+        DiscordSettingsPage::Account => {
+            let me = s.discord.home.me.as_ref();
+            let display_name = me.map(|m| m.name.as_str()).unwrap_or("Discord user");
+            let username = me.map(|m| m.name.as_str()).unwrap_or("");
+            let status_txt =
+                status_label(me.and_then(|m| m.status.as_deref()).unwrap_or("offline"));
+
+            let profile_card = glassy_ring(
+                col()
+                    .w(280.0)
+                    .px(20.0)
+                    .py(20.0)
+                    .gap(12.0)
+                    .radius(RADIUS_CARD)
+                    .fill(BG),
+            )
+            .child(avatar_with_look(
+                s,
+                me.and_then(|m| m.avatar.as_deref()),
+                me.and_then(|m| m.look.as_ref()),
+                display_name,
+                64.0,
+                32.0,
+                me.and_then(|m| m.status.as_deref()),
+                false,
+                BG,
+                1.0,
+            ))
+            .child(
+                col()
+                    .gap(2.0)
+                    .child(
+                        text(display_name.to_string())
+                            .font(font_px(18.0 * sc, 700.0))
+                            .color(FG),
+                    )
+                    .child(
+                        text(username.to_string())
+                            .font(font_px(13.0 * sc, 400.0))
+                            .color(fg_muted()),
+                    ),
+            );
+
+            let custom_label = s.discord.custom_status.as_deref().unwrap_or("");
+
+            body = body
+                .child(profile_card)
+                .child(settings_value_row("Display name", display_name, None, sc))
+                .child(settings_value_row("Username", username, None, sc))
+                .child(settings_value_row(
+                    "Status",
+                    "",
+                    Some(settings_pill_btn(
+                        "dc-set-status-btn",
+                        status_txt,
+                        sc,
+                        false,
+                        |s: &mut AppState| s.open_discord_status_menu(),
+                    )),
+                    sc,
+                ))
+                .child(settings_value_row(
+                    "Custom status",
+                    custom_label,
+                    Some(settings_pill_btn(
+                        "dc-set-custom-status-btn",
+                        if custom_label.is_empty() {
+                            "Set"
+                        } else {
+                            "Edit"
+                        },
+                        sc,
+                        false,
+                        |s: &mut AppState| {
+                            let existing = s.discord.custom_status.clone().unwrap_or_default();
+                            s.discord.custom_status_input = rune::TextEdit::new(&existing);
+                            s.discord.custom_status_open = true;
+                        },
+                    )),
+                    sc,
+                ))
+                .child(el().w_full().h(1.0).fill(hairline()))
+                .child(
+                    row()
+                        .w_full()
+                        .justify_between()
+                        .center_y()
+                        .child(settings_pill_btn(
+                            "dc-set-signout",
+                            "Log out",
+                            sc,
+                            true,
+                            |s: &mut AppState| {
+                                s.close_discord_settings();
+                                s.sign_out_discord();
+                            },
+                        )),
+                );
+        }
+        DiscordSettingsPage::Voice => {
+            let audio = &s.discord.voice_ui.audio;
+            let mut in_list = col().w_full().gap(6.0);
+            if let Some(a) = audio {
+                for dev in &a.inputs {
+                    let selected = a.input.as_deref() == Some(dev.id.as_str());
+                    let id = dev.id.clone();
+                    in_list = in_list.child(
+                        glassy_ring(
+                            row()
+                                .key(format!("dc-set-in-{}", dev.id))
+                                .role("radio")
+                                .label(dev.name.clone())
+                                .cursor(Cursor::Pointer)
+                                .focusable(true)
+                                .hit()
+                                .press_on_down()
+                                .w_full()
+                                .h(38.0)
+                                .px(12.0)
+                                .justify_between()
+                                .center_y()
+                                .radius(10.0)
+                                .fill(if selected { selected_fill() } else { BG })
+                                .hover(hover_fill())
+                                .on_press(move |s: &mut AppState| {
+                                    s.set_discord_audio(json!({ "input": id }));
+                                }),
+                        )
+                        .child(
+                            text(dev.name.clone())
+                                .font(font_px(13.0 * sc, 500.0))
+                                .color(FG)
+                                .truncate(),
+                        )
+                        .child(if selected {
+                            icon_check(14.0, good())
+                        } else {
+                            el()
+                        }),
+                    );
+                }
+            } else {
+                in_list = in_list.child(
+                    text("Loading audio devices…")
+                        .font(font_px(12.5 * sc, 400.0))
+                        .color(fg_muted()),
+                );
+            }
+
+            let mut out_list = col().w_full().gap(6.0);
+            if let Some(a) = audio {
+                for dev in &a.outputs {
+                    let selected = a.output.as_deref() == Some(dev.id.as_str());
+                    let id = dev.id.clone();
+                    out_list = out_list.child(
+                        glassy_ring(
+                            row()
+                                .key(format!("dc-set-out-{}", dev.id))
+                                .role("radio")
+                                .label(dev.name.clone())
+                                .cursor(Cursor::Pointer)
+                                .focusable(true)
+                                .hit()
+                                .press_on_down()
+                                .w_full()
+                                .h(38.0)
+                                .px(12.0)
+                                .justify_between()
+                                .center_y()
+                                .radius(10.0)
+                                .fill(if selected { selected_fill() } else { BG })
+                                .hover(hover_fill())
+                                .on_press(move |s: &mut AppState| {
+                                    s.set_discord_audio(json!({ "output": id }));
+                                }),
+                        )
+                        .child(
+                            text(dev.name.clone())
+                                .font(font_px(13.0 * sc, 500.0))
+                                .color(FG)
+                                .truncate(),
+                        )
+                        .child(if selected {
+                            icon_check(14.0, good())
+                        } else {
+                            el()
+                        }),
+                    );
+                }
+            }
+
+            let in_vol = audio
+                .as_ref()
+                .map(|a| a.input_volume.round() as i32)
+                .unwrap_or(100);
+            let out_vol = audio
+                .as_ref()
+                .map(|a| a.output_volume.round() as i32)
+                .unwrap_or(100);
+
+            body = body
+                .child(
+                    col()
+                        .w_full()
+                        .gap(8.0)
+                        .child(
+                            text("Input device")
+                                .font(font_px(12.0 * sc, 600.0))
+                                .color(fg_muted()),
+                        )
+                        .child(in_list),
+                )
+                .child(
+                    col()
+                        .w_full()
+                        .gap(8.0)
+                        .child(
+                            text("Output device")
+                                .font(font_px(12.0 * sc, 600.0))
+                                .color(fg_muted()),
+                        )
+                        .child(out_list),
+                )
+                .child(settings_value_row(
+                    "Input volume",
+                    &format!("{in_vol}%"),
+                    Some(
+                        row()
+                            .gap(6.0)
+                            .child(settings_pill_btn(
+                                "dc-set-invol-down",
+                                "-10%",
+                                sc,
+                                false,
+                                move |s: &mut AppState| {
+                                    let v = (in_vol - 10).clamp(0, 200);
+                                    s.set_discord_audio(json!({ "inputVolume": v }));
+                                },
+                            ))
+                            .child(settings_pill_btn(
+                                "dc-set-invol-up",
+                                "+10%",
+                                sc,
+                                false,
+                                move |s: &mut AppState| {
+                                    let v = (in_vol + 10).clamp(0, 200);
+                                    s.set_discord_audio(json!({ "inputVolume": v }));
+                                },
+                            )),
+                    ),
+                    sc,
+                ))
+                .child(settings_value_row(
+                    "Output volume",
+                    &format!("{out_vol}%"),
+                    Some(
+                        row()
+                            .gap(6.0)
+                            .child(settings_pill_btn(
+                                "dc-set-outvol-down",
+                                "-10%",
+                                sc,
+                                false,
+                                move |s: &mut AppState| {
+                                    let v = (out_vol - 10).clamp(0, 200);
+                                    s.set_discord_audio(json!({ "outputVolume": v }));
+                                },
+                            ))
+                            .child(settings_pill_btn(
+                                "dc-set-outvol-up",
+                                "+10%",
+                                sc,
+                                false,
+                                move |s: &mut AppState| {
+                                    let v = (out_vol + 10).clamp(0, 200);
+                                    s.set_discord_audio(json!({ "outputVolume": v }));
+                                },
+                            )),
+                    ),
+                    sc,
+                ));
+        }
+        DiscordSettingsPage::Chat => {
+            body = body
+                .child(settings_toggle_row(
+                    "dc-set-chat-compact",
+                    "Compact message density",
+                    "Fit more messages per screen with tighter spacing.",
+                    s.discord.chat_compact,
+                    sc,
+                    |s: &mut AppState| s.discord.chat_compact = !s.discord.chat_compact,
+                ))
+                .child(settings_toggle_row(
+                    "dc-set-chat-embeds",
+                    "Show embeds and link previews",
+                    "Render rich cards and previews attached to links.",
+                    s.discord.show_embeds,
+                    sc,
+                    |s: &mut AppState| s.discord.show_embeds = !s.discord.show_embeds,
+                ))
+                .child(settings_toggle_row(
+                    "dc-set-dev-mode",
+                    "Developer mode",
+                    "Show Copy ID actions in Discord right-click menus.",
+                    s.discord.developer_mode,
+                    sc,
+                    |s: &mut AppState| s.discord.developer_mode = !s.discord.developer_mode,
+                ));
+        }
+        DiscordSettingsPage::Notifications => {
+            body = body
+                .child(settings_toggle_row(
+                    "dc-set-notify-desktop",
+                    "Desktop notifications",
+                    "Show notifications for direct messages and mentions.",
+                    s.discord.notify_desktop,
+                    sc,
+                    |s: &mut AppState| s.discord.notify_desktop = !s.discord.notify_desktop,
+                ))
+                .child(settings_toggle_row(
+                    "dc-set-notify-sounds",
+                    "Notification sounds",
+                    "Play subtle audio cues for incoming messages and calls.",
+                    s.discord.notify_sounds,
+                    sc,
+                    |s: &mut AppState| s.discord.notify_sounds = !s.discord.notify_sounds,
+                ));
+        }
+        DiscordSettingsPage::Privacy => {
+            let ignored = s.discord.ignored_users.len();
+            body = body
+                .child(settings_toggle_row(
+                    "dc-set-privacy-dms",
+                    "Allow direct messages from server members",
+                    "Let members of shared servers start direct conversations with you.",
+                    s.discord.allow_server_dms,
+                    sc,
+                    |s: &mut AppState| s.discord.allow_server_dms = !s.discord.allow_server_dms,
+                ))
+                .child(settings_value_row(
+                    "Ignored users",
+                    &ignored.to_string(),
+                    if ignored > 0 {
+                        Some(settings_pill_btn(
+                            "dc-set-clear-ignored",
+                            "Clear",
+                            sc,
+                            false,
+                            |s: &mut AppState| s.discord.ignored_users.clear(),
+                        ))
+                    } else {
+                        None
+                    },
+                    sc,
+                ));
+        }
+        DiscordSettingsPage::Keybinds => {
+            for (action, keys) in [
+                ("Toggle mute", "Ctrl + Shift + M"),
+                ("Toggle deafen", "Ctrl + Shift + D"),
+                ("Quick switcher", "Ctrl + K"),
+                ("Close sheet or menu", "Esc"),
+            ] {
+                body = body.child(settings_value_row(action, keys, None, sc));
+            }
+        }
+    }
+
+    let content = col()
+        .grow(1.0)
+        .min_w(0.0)
+        .h_full()
+        .pt(22.0)
+        .px(28.0)
+        .pb(20.0)
+        .gap(16.0)
+        .child(
+            row()
+                .w_full()
+                .justify_between()
+                .center_y()
+                .child(
+                    text(active.label())
+                        .font(font_px(22.0 * sc, 700.0))
+                        .color(FG),
+                )
+                .child(
+                    icon_btn(
+                        "dc-settings-close".into(),
+                        "Close Discord settings",
+                        false,
+                        false,
+                        icon_close(16.0, fg_muted()),
+                    )
+                    .on_press(|s: &mut AppState| s.close_discord_settings()),
+                ),
+        )
+        .child(
+            col()
+                .grow(1.0)
+                .w_full()
+                .min_h(0.0)
+                .scroll(ScrollSpec {
+                    stick_bottom: false,
+                })
+                .child(body),
+        );
+
+    let mut sheet = row()
+        .key("dc-settings-sheet")
+        .role("dialog")
+        .label("Discord settings")
+        .w(820.0)
+        .h(880.0)
+        .radius(RADIUS_PANEL)
+        .clip_rounded(RADIUS_PANEL)
+        .fill(if blur {
+            glass_panel_fill()
+        } else {
+            glass_still_panel_fill()
+        })
+        .border_gradient(1.0, glass_rim_top(), glass_rim_bottom())
+        .hit()
+        .child(nav)
+        .child(content);
+    if blur {
+        sheet = sheet.backdrop_blur(GLASS_PANEL_SIGMA);
+    }
+
+    el().key("dc-settings-scrim")
+        .pin(Some(0.0), Some(0.0), Some(0.0), Some(0.0))
+        .pt(52.0)
+        .center()
+        .fill(scrim_fill())
+        .hit()
+        .press_on_down()
+        .on_press(|s: &mut AppState| s.close_discord_settings())
+        .transition(modal_scrim_transition())
+        .child(sheet)
+}
+
+fn custom_status_modal(s: &AppState, blur: bool) -> El {
+    let sc = ui_scale(s);
+    let mut modal = col()
+        .key("dc-custom-status-modal")
+        .role("dialog")
+        .label("Set custom status")
+        .w(420.0)
+        .px(20.0)
+        .py(20.0)
+        .gap(14.0)
+        .radius(RADIUS_PANEL)
+        .clip_rounded(RADIUS_PANEL)
+        .fill(if blur {
+            glass_panel_fill()
+        } else {
+            glass_still_panel_fill()
+        })
+        .border_gradient(1.0, glass_rim_top(), glass_rim_bottom())
+        .hit()
+        .child(
+            row()
+                .w_full()
+                .justify_between()
+                .center_y()
+                .child(
+                    text("Set custom status")
+                        .font(font_px(16.0 * sc, 600.0))
+                        .color(FG),
+                )
+                .child(
+                    icon_btn(
+                        "dc-custom-status-close".into(),
+                        "Close custom status",
+                        false,
+                        false,
+                        icon_close(15.0, fg_muted()),
+                    )
+                    .on_press(|s: &mut AppState| s.discord.custom_status_open = false),
+                ),
+        )
+        .child(
+            glassy_ring(
+                row()
+                    .w_full()
+                    .h(40.0)
+                    .px(12.0)
+                    .center_y()
+                    .radius(RADIUS_CARD)
+                    .fill(BG),
+            )
+            .child(
+                text_input(&s.discord.custom_status_input, font_px(13.5 * sc, 400.0))
+                    .key("dc-custom-status-input")
+                    .label("What are you up to?")
+                    .cursor(Cursor::Text)
+                    .grow(1.0)
+                    .single_line()
+                    .color(FG)
+                    .placeholder("What are you up to?", fg_muted())
+                    .on_edit(edit_access(|s: &mut AppState| {
+                        &mut s.discord.custom_status_input
+                    }))
+                    .on_submit(|s: &mut AppState, _| {
+                        let txt = s.discord.custom_status_input.text.clone();
+                        s.save_discord_custom_status(txt);
+                    }),
+            ),
+        )
+        .child(
+            row()
+                .w_full()
+                .justify_between()
+                .center_y()
+                .child(settings_pill_btn(
+                    "dc-custom-status-clear",
+                    "Clear",
+                    sc,
+                    false,
+                    |s: &mut AppState| s.save_discord_custom_status(String::new()),
+                ))
+                .child(
+                    row()
+                        .gap(8.0)
+                        .child(settings_pill_btn(
+                            "dc-custom-status-cancel",
+                            "Cancel",
+                            sc,
+                            false,
+                            |s: &mut AppState| s.discord.custom_status_open = false,
+                        ))
+                        .child(
+                            primary_button("dc-custom-status-save", "Save", None).on_press(
+                                |s: &mut AppState| {
+                                    let txt = s.discord.custom_status_input.text.clone();
+                                    s.save_discord_custom_status(txt);
+                                },
+                            ),
+                        ),
+                ),
+        );
+    if blur {
+        modal = modal.backdrop_blur(GLASS_PANEL_SIGMA);
+    }
+
+    el().key("dc-custom-status-scrim")
+        .pin(Some(0.0), Some(0.0), Some(0.0), Some(0.0))
+        .center()
+        .fill(scrim_fill())
+        .hit()
+        .press_on_down()
+        .on_press(|s: &mut AppState| s.discord.custom_status_open = false)
+        .transition(modal_scrim_transition())
+        .child(modal)
 }
 
 #[cfg(test)]

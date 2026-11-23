@@ -99,7 +99,9 @@ pub const METHOD_DISCORD_ACCOUNTS: &str = "discord.accounts";
 pub const METHOD_DISCORD_ACK: &str = "discord.ack";
 pub const METHOD_DISCORD_AUDIO: &str = "discord.audio";
 pub const METHOD_DISCORD_CAMERA: &str = "discord.camera";
+pub const METHOD_DISCORD_CHANNEL: &str = "discord.channel";
 pub const METHOD_DISCORD_CHANNELS: &str = "discord.channels";
+pub const METHOD_DISCORD_CLIENT_SETTINGS: &str = "discord.clientSettings";
 pub const METHOD_DISCORD_DELETE: &str = "discord.delete";
 pub const METHOD_DISCORD_EDIT: &str = "discord.edit";
 pub const METHOD_DISCORD_FRIEND: &str = "discord.friend";
@@ -108,12 +110,15 @@ pub const METHOD_DISCORD_GOLIVE: &str = "discord.golive";
 pub const METHOD_DISCORD_HOME: &str = "discord.home";
 pub const METHOD_DISCORD_MARK_READ: &str = "discord.markRead";
 pub const METHOD_DISCORD_MEMBERS: &str = "discord.members";
+pub const METHOD_DISCORD_MESSAGE_ACTION: &str = "discord.messageAction";
 pub const METHOD_DISCORD_MESSAGES: &str = "discord.messages";
 pub const METHOD_DISCORD_MY_VOICE: &str = "discord.myVoice";
 pub const METHOD_DISCORD_PINS: &str = "discord.pins";
 pub const METHOD_DISCORD_REACT: &str = "discord.react";
+pub const METHOD_DISCORD_RING: &str = "discord.ring";
 pub const METHOD_DISCORD_SEARCH: &str = "discord.search";
 pub const METHOD_DISCORD_SEND: &str = "discord.send";
+pub const METHOD_DISCORD_SERVER: &str = "discord.server";
 pub const METHOD_DISCORD_SET_STATUS: &str = "discord.setStatus";
 pub const METHOD_DISCORD_SIGN_IN: &str = "discord.signIn";
 pub const METHOD_DISCORD_SIGN_OUT: &str = "discord.signOut";
@@ -227,7 +232,9 @@ pub const USED_METHODS: &[&str] = &[
     METHOD_DISCORD_ACK,
     METHOD_DISCORD_AUDIO,
     METHOD_DISCORD_CAMERA,
+    METHOD_DISCORD_CHANNEL,
     METHOD_DISCORD_CHANNELS,
+    METHOD_DISCORD_CLIENT_SETTINGS,
     METHOD_DISCORD_DELETE,
     METHOD_DISCORD_EDIT,
     METHOD_DISCORD_FRIEND,
@@ -236,12 +243,15 @@ pub const USED_METHODS: &[&str] = &[
     METHOD_DISCORD_HOME,
     METHOD_DISCORD_MARK_READ,
     METHOD_DISCORD_MEMBERS,
+    METHOD_DISCORD_MESSAGE_ACTION,
     METHOD_DISCORD_MESSAGES,
     METHOD_DISCORD_MY_VOICE,
     METHOD_DISCORD_PINS,
     METHOD_DISCORD_REACT,
+    METHOD_DISCORD_RING,
     METHOD_DISCORD_SEARCH,
     METHOD_DISCORD_SEND,
+    METHOD_DISCORD_SERVER,
     METHOD_DISCORD_SET_STATUS,
     METHOD_DISCORD_SIGN_IN,
     METHOD_DISCORD_SIGN_OUT,

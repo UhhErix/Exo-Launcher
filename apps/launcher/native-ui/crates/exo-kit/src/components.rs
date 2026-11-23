@@ -315,8 +315,9 @@ pub fn glass_button_opt(
     btn.child(text(label).font(type_control()).color(FG))
 }
 
-pub fn filter_pill(key: &'static str, label: String, active: bool) -> El {
-    el().key(key)
+pub fn filter_pill(key: impl Into<String>, label: impl Into<String>, active: bool) -> El {
+    let label: String = label.into();
+    el().key(key.into())
         .role("tab")
         .label(label.clone())
         .focusable(true)

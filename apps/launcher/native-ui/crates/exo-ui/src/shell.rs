@@ -34,6 +34,7 @@ pub struct BlurBudget {
     pub top_bar_nav: bool,
     pub top_bar_tools: bool,
     pub mini_player: bool,
+    pub discord_voice_bar: bool,
     pub overlay: bool,
     pub submenu: bool,
     pub toast: bool,
@@ -49,16 +50,30 @@ impl BlurBudget {
             && s.room != Room::Music
             && s.media.open_capture_id.is_none()
             && s.media.playback.as_ref().is_some_and(|p| p.has_track());
-        let art_under_bar = matches!(s.room, Room::Library | Room::Store | Room::Music)
-            || s.media.captures_open
+        let art_under_bar = matches!(
+            s.room,
+            Room::Library | Room::Store | Room::Discord | Room::Music
+        ) || s.media.captures_open
             || s.open_game_id.is_some()
             || s.store_game.is_some();
+        let discord_active = s.room == Room::Discord && !s.media.captures_open;
+        let voice_bar_visible = discord_active
+            && (s
+                .discord
+                .active_channel()
+                .is_some_and(|c| matches!(c.kind.as_str(), "voice" | "stage"))
+                || s.discord
+                    .voice
+                    .channel_id
+                    .as_deref()
+                    .is_some_and(|vc| s.discord.active_dm_id.as_deref() == Some(vc)));
 
         Self {
             top_bar_search: art_under_bar,
             top_bar_nav: art_under_bar,
             top_bar_tools: art_under_bar,
             mini_player: mini_visible,
+            discord_voice_bar: voice_bar_visible,
             overlay: true,
             submenu: submenu_open,
             toast: has_toast,
@@ -468,7 +483,7 @@ pub fn view(s: &AppState, cx: &mut Cx<AppState>) -> El {
         && !s.library_all_games;
 
     let content = if !s.media.captures_open && s.room == Room::Discord {
-        discord::view(s, scale)
+        discord::view(s, scale, budget)
     } else if !s.media.captures_open && s.room == Room::Settings {
         settings::view(s)
     } else if !s.media.captures_open && matches!(s.room, Room::Devices | Room::ExoAi | Room::Apps) {
@@ -491,7 +506,7 @@ pub fn view(s: &AppState, cx: &mut Cx<AppState>) -> El {
                 Room::Music => music::view(s, scale),
                 Room::Devices | Room::ExoAi | Room::Apps => pc::view(s, scale),
                 Room::Settings => settings::view(s),
-                Room::Discord => discord::view(s, scale),
+                Room::Discord => discord::view(s, scale, budget),
             }
         };
 
@@ -519,6 +534,9 @@ pub fn view(s: &AppState, cx: &mut Cx<AppState>) -> El {
         .child(top_fade)
         .child(top_bar);
 
+    if !s.media.captures_open && s.room == Room::Discord {
+        root = root.children(discord::overlay_layers(s, budget.overlay));
+    }
     if s.capture_menu_open {
         root = root.children(captures::popover_layers(s, budget.overlay));
     }

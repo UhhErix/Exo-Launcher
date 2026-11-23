@@ -1,8 +1,9 @@
 import { execFile } from 'node:child_process'
-import { cp, mkdir, rm, writeFile } from 'node:fs/promises'
+import { cp, mkdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { openShell, sleep } from '../e2e/cdp.mjs'
+import { seedDataFrom } from "./seed.mjs"
 
 const LAUNCHER_ROOT = fileURLToPath(new URL('../..', import.meta.url))
 const TEST_SCRIPT = join(LAUNCHER_ROOT, 'tools', 'test-instance.ps1')
@@ -50,7 +51,7 @@ export async function seedInstanceData(seedDir, dataDir) {
   })
 }
 
-export async function startWebTestInstance({ folder, dataDir, fresh = true, hostExe = null, seedDir = null }) {
+export async function startWebTestInstance({ folder, dataDir, fresh = true, hostExe = null, seedDir = null, seedFrom = null, discordReady = false }) {
   const safeFolder = assertSafeDataDir(folder)
   const safeData = assertSafeDataDir(dataDir)
   if (fresh) {
@@ -58,6 +59,7 @@ export async function startWebTestInstance({ folder, dataDir, fresh = true, host
   }
   await mkdir(safeData, { recursive: true })
   await seedInstanceData(seedDir, safeData)
+  await seedDataFrom(seedFrom, safeData)
   const seededSettings = {
     onboardingComplete: true,
     accountAsked: true,
@@ -67,7 +69,9 @@ export async function startWebTestInstance({ folder, dataDir, fresh = true, host
     framelessPinSide: false,
     reduceMotion: true,
   }
-  await writeFile(join(safeData, 'settings.json'), JSON.stringify(seededSettings, null, 2))
+  const settingsPath = join(safeData, 'settings.json')
+  const kept = await readFile(settingsPath, 'utf8').then(JSON.parse, () => ({}))
+  await writeFile(settingsPath, JSON.stringify({ ...kept, ...seededSettings }, null, 2))
 
   const exeArg = hostExe ? `-Exe '${q(hostExe)}'` : ''
   const envArg = `-Env @{ 'EXO_UI' = 'web' }`
@@ -131,6 +135,14 @@ export async function startWebTestInstance({ folder, dataDir, fresh = true, host
         if (stillClean) break
       }
       await sleep(400)
+    }
+    if (discordReady) {
+      const until = Date.now() + 40000
+      while (Date.now() < until) {
+        const ready = await shell.eval("!!document.querySelector('.exo-dc-me, .exo-dc-band-guild, .exo-dc-signin')")
+        if (ready) break
+        await sleep(500)
+      }
     }
     await sleep(4000)
     return { info, shell }
@@ -339,10 +351,11 @@ async function resetReactShell(shell, roomLabel) {
   }
 }
 
-export async function runReactPass({ states, outDir, folder, dataDir, hostExe = null, seedDir = null }) {
+export async function runReactPass({ states, outDir, folder, dataDir, hostExe = null, seedDir = null, seedFrom = null }) {
+  const discordReady = states.some((s) => s.room === 'discord')
   const reactDir = join(outDir, 'react')
   await mkdir(reactDir, { recursive: true })
-  const { info, shell } = await startWebTestInstance({ folder, dataDir, fresh: true, hostExe, seedDir })
+  const { info, shell } = await startWebTestInstance({ folder, dataDir, fresh: true, hostExe, seedDir, seedFrom, discordReady })
   const results = {}
   try {
     for (const state of states) {

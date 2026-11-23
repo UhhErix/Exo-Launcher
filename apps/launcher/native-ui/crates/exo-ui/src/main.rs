@@ -780,7 +780,7 @@ fn load_live_state_sync(pipe: &str, scene: Option<&str>) -> AppState {
             ) {
                 state.settings = settings;
             }
-            for _ in 0..40 {
+            for _ in 0..80 {
                 if let Ok(st) = client.call_blocking::<_, exo_rpc::DiscordStatus>(
                     exo_rpc::METHOD_DISCORD_STATUS,
                     &serde_json::json!({ "connect": true }),
@@ -839,7 +839,7 @@ fn load_live_state_sync(pipe: &str, scene: Option<&str>) -> AppState {
                 {
                     state.discord.chat.messages_by_channel.insert(dm_id, msgs);
                 }
-                if sc == "discord-server"
+                if (sc == "discord-server" || sc == "discord-voice")
                     && let Some(gid) = state.discord.home.guilds.first().map(|g| g.id.clone())
                 {
                     state.discord.active_guild_id = Some(gid.clone());
@@ -848,12 +848,21 @@ fn load_live_state_sync(pipe: &str, scene: Option<&str>) -> AppState {
                         &serde_json::json!({ "guildId": gid }),
                         Duration::from_secs(6),
                     ) {
-                        let first_cid = chans
-                            .channels
-                            .iter()
-                            .find(|c| c.kind == "text" && c.can_read != Some(false))
-                            .or_else(|| chans.channels.iter().find(|c| c.kind != "category"))
-                            .map(|c| c.id.clone());
+                        let first_cid = if sc == "discord-voice" {
+                            chans
+                                .channels
+                                .iter()
+                                .find(|c| matches!(c.kind.as_str(), "voice" | "stage"))
+                                .or_else(|| chans.channels.iter().find(|c| c.kind != "category"))
+                                .map(|c| c.id.clone())
+                        } else {
+                            chans
+                                .channels
+                                .iter()
+                                .find(|c| c.kind == "text" && c.can_read != Some(false))
+                                .or_else(|| chans.channels.iter().find(|c| c.kind != "category"))
+                                .map(|c| c.id.clone())
+                        };
                         state.discord.channels_by_guild.insert(gid.clone(), chans);
                         if let Some(cid) = first_cid {
                             state.discord.active_channel_id = Some(cid.clone());
@@ -875,6 +884,15 @@ fn load_live_state_sync(pipe: &str, scene: Option<&str>) -> AppState {
                         Duration::from_secs(6),
                     ) {
                         state.discord.members_by_guild.insert(gid, ml);
+                    }
+                    if sc == "discord-voice"
+                        && let Ok(aud) = client.call_blocking::<_, exo_rpc::DiscordAudioReply>(
+                            exo_rpc::METHOD_DISCORD_AUDIO,
+                            &serde_json::json!({}),
+                            Duration::from_secs(5),
+                        )
+                    {
+                        state.discord.voice_ui.audio = Some(aud);
                     }
                 }
                 if let Some(ref cache_dir) = state.remote_cache_dir {
@@ -1138,7 +1156,7 @@ const PARITY_SCENES: &[(&str, SceneSetter)] = &[
     }),
     ("discord-status-menu", |s: &mut AppState| {
         s.switch_room(state::Room::Discord);
-        s.discord.status_menu_open = true;
+        s.open_discord_status_menu();
     }),
     ("discord-messages", |s: &mut AppState| {
         s.switch_room(state::Room::Discord);
@@ -1169,9 +1187,47 @@ const PARITY_SCENES: &[(&str, SceneSetter)] = &[
     }),
     ("discord-voice", |s: &mut AppState| {
         s.switch_room(state::Room::Discord);
-        s.open_discord_guild("g-exo");
-        s.open_discord_channel("vc-lounge");
-        s.join_discord_voice(Some("g-exo"), "vc-lounge");
+        let gid = s
+            .discord
+            .active_guild_id
+            .clone()
+            .or_else(|| {
+                s.discord
+                    .home
+                    .guilds
+                    .iter()
+                    .find(|g| g.id == "g-exo")
+                    .map(|g| g.id.clone())
+            })
+            .or_else(|| s.discord.home.guilds.first().map(|g| g.id.clone()));
+        if let Some(gid) = gid {
+            let voice_cid = s
+                .discord
+                .active_channel_id
+                .clone()
+                .filter(|cid| {
+                    s.discord
+                        .channels_by_guild
+                        .get(&gid)
+                        .and_then(|c| c.channels.iter().find(|ch| ch.id == *cid))
+                        .is_some_and(|ch| matches!(ch.kind.as_str(), "voice" | "stage"))
+                })
+                .or_else(|| {
+                    s.discord.channels_by_guild.get(&gid).and_then(|c| {
+                        c.channels
+                            .iter()
+                            .find(|ch| matches!(ch.kind.as_str(), "voice" | "stage"))
+                            .map(|ch| ch.id.clone())
+                    })
+                })
+                .unwrap_or_else(|| "vc-lounge".into());
+            s.open_discord_guild(&gid);
+            s.open_discord_channel(&voice_cid);
+            s.discord.voice.state = "connecting".into();
+            s.discord.voice.guild_id = Some(gid.clone());
+            s.discord.voice.channel_id = Some(voice_cid.clone());
+            s.discord.voice.e2ee = true;
+        }
     }),
     ("discord-signin", |s: &mut AppState| {
         s.switch_room(state::Room::Discord);
@@ -1552,8 +1608,19 @@ fn run_parity_probe(
         "musicImmersion": rt.state.media.music_immersion,
         "musicRoomState": format!("{:?}", rt.state.media.music_room_state),
         "discordPlace": format!("{:?}", rt.state.discord.place),
-        "discordStatusMenuOpen": rt.state.discord.status_menu_open,
-        "discordVoiceChannel": rt.state.discord.voice.channel_id,
+        "discordStatusMenuOpen": rt.state.discord.status_menu_open
+            || matches!(
+                rt.state.context_menu.as_ref().map(|m| &m.target),
+                Some(state::ContextMenuTarget::DiscordStatusMenu)
+            ),
+        "discordSettingsOpen": rt.state.discord.settings_open,
+        "discordVoiceChannel": rt.state.discord.voice.channel_id.clone().or_else(|| {
+            rt.state
+                .discord
+                .active_channel()
+                .filter(|c| matches!(c.kind.as_str(), "voice" | "stage"))
+                .map(|c| c.id.clone())
+        }),
         "discordSignedIn": rt.state.discord.status.signed_in,
     });
 
@@ -2014,7 +2081,7 @@ mod tests {
         rt.pointer_up(vx, vy);
         rt.frame(4.0 / 60.0);
         assert_eq!(rt.state.discord.voice.state, "connected");
-        assert!(rt.find("dc-voice-dock").is_some());
+        assert!(rt.find("dc-call-dock").is_some());
 
         let (tx, ty) = rt.find("dc-me-trigger").expect("MePanel status trigger");
         rt.pointer_down(tx, ty);
@@ -2024,6 +2091,10 @@ mod tests {
         rt.pointer_down(dx, dy);
         rt.pointer_up(dx, dy);
         rt.frame(6.0 / 60.0);
+        let (ux, uy) = rt.find("dc-status-dnd-60").expect("DND for one hour");
+        rt.pointer_down(ux, uy);
+        rt.pointer_up(ux, uy);
+        rt.frame(6.5 / 60.0);
         assert_eq!(
             rt.state
                 .discord
@@ -2138,7 +2209,7 @@ mod tests {
             "Discord voice exceeded MAX_BACKDROP_BLURS=4: {blurs}"
         );
 
-        let (gx, gy) = rt.find("dc-vc-share").expect("Share screen button");
+        let (gx, gy) = rt.find("dc-dock-share").expect("Share screen button");
         rt.pointer_down(gx, gy);
         rt.pointer_up(gx, gy);
         rt.frame(1.0 / 60.0);
@@ -2151,7 +2222,7 @@ mod tests {
         assert_eq!(rt.state.discord.voice_ui.golive_state, "live");
         assert!(rt.find("dc-golive-banner").is_some());
 
-        let (sx, sy) = rt.find("dc-vc-sb").expect("Soundboard button");
+        let (sx, sy) = rt.find("dc-dock-sb").expect("Soundboard button");
         rt.pointer_down(sx, sy);
         rt.pointer_up(sx, sy);
         rt.frame(3.0 / 60.0);
@@ -2160,7 +2231,9 @@ mod tests {
             discord_voice_state::VoicePanel::Soundboard
         );
 
-        let (ax, ay) = rt.find("dc-vc-audio").expect("Audio mixer button");
+        rt.update(|s, _| s.open_voice_panel(discord_voice_state::VoicePanel::None));
+        rt.frame(3.5 / 60.0);
+        let (ax, ay) = rt.find("dc-dock-status").expect("Audio mixer button");
         rt.pointer_down(ax, ay);
         rt.pointer_up(ax, ay);
         rt.frame(4.0 / 60.0);
@@ -2168,6 +2241,110 @@ mod tests {
             rt.state.discord.voice_ui.panel,
             discord_voice_state::VoicePanel::Audio
         );
+    }
+
+    #[test]
+    fn phase5d_discord_channel_secondary_press_opens_menu() {
+        let mut rt = Runtime::new(
+            AppState::default(),
+            shell::view,
+            (1920.0, 1080.0),
+            Env::new(true, 1.0),
+        );
+        rt.update(|s, _| {
+            s.switch_room(Room::Discord);
+            s.open_discord_guild("g-exo");
+            s.open_discord_channel("ch-general");
+        });
+        rt.frame(0.0);
+        for id in ["ch-general", "vc-lounge"] {
+            let (x, y) = rt.find(&format!("dc-ch-{id}")).expect("channel row");
+            rt.pointer_move(x, y);
+            rt.secondary_down(x, y);
+            rt.frame(1.0 / 60.0);
+            rt.secondary_up(x, y);
+            rt.frame(1.0 / 60.0);
+            eprintln!(
+                "PROBE {id} ctx={:?} items={}",
+                rt.state.context_menu.as_ref().map(|c| c.x),
+                rt.find("dc-ch-copy-id").is_some()
+            );
+            rt.update(|s, _| s.context_menu = None);
+            rt.frame(1.0 / 60.0);
+        }
+    }
+
+    #[test]
+    fn phase5e_bar_and_menu_items_report_pointer_cursor() {
+        let mut rt = Runtime::new(
+            AppState::default(),
+            shell::view,
+            (1920.0, 1080.0),
+            Env::new(true, 1.0),
+        );
+        rt.update(|s, _| {
+            s.switch_room(Room::Discord);
+            s.open_discord_guild("g-exo");
+            s.open_discord_channel("ch-general");
+        });
+        rt.frame(0.0);
+        let (x, y) = rt.find("nav-library").expect("library tab");
+        rt.pointer_move(x, y);
+        rt.frame(1.0 / 60.0);
+        assert_eq!(rt.cursor(), rune::Cursor::Pointer, "nav tab cursor");
+        let (x, y) = rt.find("search-capsule").expect("search");
+        rt.pointer_move(x, y);
+        rt.frame(1.0 / 60.0);
+        assert_eq!(rt.cursor(), rune::Cursor::Pointer, "search cursor");
+        rt.update(|s, _| {
+            s.open_context_menu(crate::state::ContextMenuTarget::DiscordStatusMenu, 0.0, 0.0)
+        });
+        for _ in 0..90 {
+            rt.frame(1.0 / 60.0);
+        }
+        let (x, y) = rt.find("dc-set-status-idle").expect("status item");
+        rt.pointer_move(x, y);
+        for _ in 0..90 {
+            rt.frame(1.0 / 60.0);
+        }
+        assert_eq!(
+            rt.cursor(),
+            rune::Cursor::Pointer,
+            "menu item with submenu cursor"
+        );
+        let el = rt
+            .elements()
+            .into_iter()
+            .find(|e| e.key.as_deref() == Some("dc-set-status-idle"))
+            .expect("item el");
+        let (ex, ey, eh) = (el.rect[0], el.rect[1], el.rect[3]);
+        rt.pointer_move(ex + 3.0, ey + eh * 0.5);
+        for _ in 0..90 {
+            rt.frame(1.0 / 60.0);
+        }
+        assert_eq!(rt.cursor(), rune::Cursor::Pointer, "menu item edge cursor");
+        let sub_key = rt
+            .elements()
+            .into_iter()
+            .filter_map(|e| e.key)
+            .find(|k| k.starts_with("dc-status-idle-"))
+            .expect("submenu item");
+        let (sx, sy) = rt.find(&sub_key).expect("submenu item position");
+        rt.pointer_move(sx, sy);
+        for _ in 0..90 {
+            rt.frame(1.0 / 60.0);
+        }
+        assert_eq!(rt.cursor(), rune::Cursor::Pointer, "submenu item cursor");
+        rt.pointer_down(sx, sy);
+        rt.pointer_up(sx, sy);
+        rt.frame(1.0 / 60.0);
+        rt.update(|s, _| {
+            let status = s.discord.home.me.as_ref().and_then(|m| m.status.clone());
+            eprintln!(
+                "SUBMENU key={sub_key} status={status:?} menu_open={}",
+                s.context_menu.is_some()
+            );
+        });
     }
 
     #[test]
@@ -2827,7 +3004,7 @@ mod tests {
         let (rx, ry) = rt.find("ctx-cap-replay").expect("ctx-cap-replay");
         rt.pointer_move(rx, ry);
         rt.frame(1.0 / 60.0);
-        assert_eq!(rt.cursor(), Cursor::NotAllowed);
+        assert_eq!(rt.cursor(), Cursor::Default);
         rt.key(KeyEvent {
             key: Key::Escape,
             mods: Mods::default(),

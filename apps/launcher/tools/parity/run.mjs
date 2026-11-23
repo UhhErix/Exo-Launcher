@@ -7,6 +7,7 @@ import { filterStates } from './states.mjs'
 import { assertSafeDataDir, runReactPass } from './react-driver.mjs'
 import { runNativePass } from './native-driver.mjs'
 import { compareAll } from './compare.mjs'
+import { seedDataFrom } from './seed.mjs'
 
 const LAUNCHER_ROOT = fileURLToPath(new URL('../..', import.meta.url))
 
@@ -25,6 +26,7 @@ function parseArgs(argv) {
     resumeNative: false,
     reportDir: null,
     dataDir: null,
+    seedFrom: null,
     keepData: false,
     hostExe: null,
     exoUiExe: null,
@@ -39,6 +41,7 @@ function parseArgs(argv) {
     else if (a === '--resume-native') opts.resumeNative = true
     else if (a === '--report-dir') opts.reportDir = argv[++i] || null
     else if (a === '--data-dir') opts.dataDir = argv[++i] || null
+    else if (a === '--seed-from') opts.seedFrom = argv[++i] || null
     else if (a === '--keep-data') opts.keepData = true
     else if (a === '--host-exe') opts.hostExe = argv[++i] || null
     else if (a === '--exo-ui') opts.exoUiExe = argv[++i] || null
@@ -79,9 +82,10 @@ async function main() {
   let nativeResults = {}
   try {
     if (opts.skipReact) {
+      if (opts.seedFrom) await seedDataFrom(opts.seedFrom, dataDir)
       reactResults = await loadExistingRecords(join(outDir, 'react'), states)
     } else {
-      const r = await runReactPass({ states, outDir, folder, dataDir, hostExe: opts.hostExe, seedDir: opts.seedData })
+      const r = await runReactPass({ states, outDir, folder, dataDir, hostExe: opts.hostExe, seedDir: opts.seedData, seedFrom: opts.seedFrom })
       reactResults = r.results
     }
 

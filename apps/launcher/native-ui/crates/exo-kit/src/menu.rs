@@ -235,7 +235,7 @@ fn build_menu_rows<S: 'static>(
                     .disabled(disabled)
                     .focusable(!disabled)
                     .cursor(if disabled {
-                        Cursor::NotAllowed
+                        Cursor::Default
                     } else {
                         Cursor::Pointer
                     })
