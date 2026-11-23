@@ -1,0 +1,59 @@
+{
+  "version": 1,
+  "id": "<REQUEST_ID>",
+  "ok": true,
+  "result": {
+    "me": {
+      "id": "100000000000000001",
+      "name": "Exo Player",
+      "avatar": "https://cdn.discordapp.com/embed/avatars/0.png",
+      "status": "online"
+    },
+    "dms": [
+      {
+        "id": "500000000000000001",
+        "name": "Ally",
+        "userId": "100000000000000002",
+        "username": "ally",
+        "recipients": [
+          "100000000000000002"
+        ],
+        "status": "offline",
+        "avatar": "https://cdn.discordapp.com/embed/avatars/0.png",
+        "group": false,
+        "lastAt": 1563121547460,
+        "request": false,
+        "spam": false,
+        "unread": true,
+        "mentions": 0,
+        "muted": false
+      }
+    ],
+    "guilds": [
+      {
+        "id": "200000000000000001",
+        "name": "Exo Testing",
+        "muted": false,
+        "notify": 0,
+        "suppressEveryone": false,
+        "suppressRoles": false,
+        "suppressHighlights": false,
+        "muteEvents": false,
+        "mobilePush": true,
+        "owner": true,
+        "unread": false,
+        "mentions": 0,
+        "inVoice": 0
+      }
+    ],
+    "rail": [
+      {
+        "guildIds": [
+          "200000000000000001"
+        ]
+      }
+    ],
+    "blocked": [],
+    "ignored": []
+  }
+}

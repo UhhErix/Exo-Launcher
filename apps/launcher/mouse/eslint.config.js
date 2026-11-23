@@ -1,4 +1,6 @@
 // Exo's markup rules for Exo Mouse (CSS: scripts/css-design.mjs). Types are tsc's job.
+import path from 'node:path'
+import oxlint from 'eslint-plugin-oxlint'
 import tseslint from 'typescript-eslint'
 
 const STORAGES = ['localStorage', 'sessionStorage', 'indexedDB']
@@ -6,6 +8,7 @@ const FRAME_STORAGE = "This frame's own storage is lost when its origin is clear
 
 export default tseslint.config({
   files: ['src/**/*.{ts,tsx}'],
+  linterOptions: { reportUnusedDisableDirectives: 'off' },
   languageOptions: { parser: tseslint.parser },
   rules: {
     'no-restricted-syntax': ['error',
@@ -28,4 +31,4 @@ export default tseslint.config({
     'no-restricted-globals': ['error', ...STORAGES.map(name => ({ name, message: FRAME_STORAGE }))],
     'no-restricted-properties': ['error', ...['window', 'globalThis', 'self'].flatMap(object => STORAGES.map(property => ({ object, property, message: FRAME_STORAGE })))],
   },
-})
+}, ...oxlint.buildFromOxlintConfigFile(path.resolve(import.meta.dirname, '.oxlintrc.json')))

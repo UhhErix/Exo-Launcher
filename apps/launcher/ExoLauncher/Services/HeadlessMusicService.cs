@@ -215,22 +215,19 @@ internal sealed class HeadlessMusicService : IDisposable
             var controls = info?.Controls;
             var durationMs = timeline?.EndTime.TotalMilliseconds is > 0 ? (long)timeline.EndTime.TotalMilliseconds : (long?)null;
             var posMs = timeline?.Position.TotalMilliseconds is >= 0 ? (long)timeline.Position.TotalMilliseconds : (long?)null;
-            return new
-            {
-                provider = DetectProvider(session.SourceAppUserModelId),
-                source = "session",
+            return BuildPlaybackDto(
+                DetectProvider(session.SourceAppUserModelId),
                 status,
                 title,
-                artist = media?.Artist?.Trim() ?? "",
-                album = media?.AlbumTitle?.Trim() ?? "",
-                positionMs = posMs,
+                media?.Artist?.Trim() ?? "",
+                media?.AlbumTitle?.Trim() ?? "",
+                posMs,
                 durationMs,
-                canPlay = controls?.IsPlayEnabled == true,
-                canPause = controls?.IsPauseEnabled == true,
-                canPrev = controls?.IsPreviousEnabled == true,
-                canNext = controls?.IsNextEnabled == true,
-                canSeek = controls?.IsPlaybackPositionEnabled == true,
-            };
+                controls?.IsPlayEnabled == true,
+                controls?.IsPauseEnabled == true,
+                controls?.IsPreviousEnabled == true,
+                controls?.IsNextEnabled == true,
+                controls?.IsPlaybackPositionEnabled == true);
         }
         catch
         {
@@ -238,10 +235,43 @@ internal sealed class HeadlessMusicService : IDisposable
         }
     }
 
+    internal static object BuildPlaybackDto(
+        string provider,
+        string status,
+        string title,
+        string artist,
+        string album,
+        long? positionMs,
+        long? durationMs,
+        bool canPlay,
+        bool canPause,
+        bool canPrev,
+        bool canNext,
+        bool canSeek) =>
+        new
+        {
+            provider,
+            source = "session",
+            status,
+            title,
+            artist,
+            album,
+            positionMs,
+            durationMs,
+            canPlay,
+            canPause,
+            canPrev,
+            canNext,
+            canSeek,
+        };
+
+    internal static object BuildPlaybackResponse(object? playback) =>
+        new { ok = true, playback };
+
     internal async Task<object> PlaybackAsync()
     {
         var playback = await BuildPlaybackDtoAsync().ConfigureAwait(false);
-        return new { ok = true, playback };
+        return BuildPlaybackResponse(playback);
     }
 
     internal async Task<object> ControlAsync(string? action, double? positionMs)

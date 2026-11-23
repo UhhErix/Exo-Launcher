@@ -7,7 +7,9 @@
   "type": "module",
   "scripts": {
     "build": "node scripts/build-protocol.mjs && tsc -b && vite build",
-    "check": "node scripts/build-protocol.mjs && tsc -b && eslint src --max-warnings 0 && node scripts/css-design.mjs && node --test test/*.test.ts",
+    "typecheck": "tsc -b",
+    "lint": "oxlint -c .oxlintrc.json --deny-warnings src && eslint src --max-warnings 0",
+    "check": "node scripts/build-protocol.mjs && npm run -s typecheck && npm run -s lint && node scripts/css-design.mjs && node --test test/*.test.ts",
     "test": "node --test test/*.test.ts",
     "postinstall": "node scripts/build-protocol.mjs"
   },
@@ -19,9 +21,11 @@
   "devDependencies": {
     "@types/react": "19.3.0",
     "@types/react-dom": "19.3.0",
-    "@typescript/native": "npm:typescript@7.0.2",
+    "@typescript/native": "npm:typescript@7.1.0-dev.20261121.1",
     "@vitejs/plugin-react": "6.3.0",
     "eslint": "10.15.0",
+    "eslint-plugin-oxlint": "1.94.0",
+    "oxlint": "1.94.0",
     "postcss": "8.5.33",
     "tsx": "4.23.15",
     "typescript": "npm:@typescript/typescript6@6.0.2",
