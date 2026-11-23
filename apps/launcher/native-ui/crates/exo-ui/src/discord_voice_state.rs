@@ -12,6 +12,7 @@ use exo_rpc::{
 use rune::Pixels;
 use serde_json::json;
 use std::collections::{HashMap, HashSet};
+use std::time::Instant;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum VoicePanel {
@@ -21,11 +22,18 @@ pub enum VoicePanel {
     Audio,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum GoLiveTab {
+    Applications,
+    Screens,
+}
+
 #[derive(Debug, Clone)]
 pub struct UserAudioMix {
     pub volume: f32,
     pub muted: bool,
     pub stream_muted: bool,
+    pub soundboard_muted: bool,
 }
 
 impl Default for UserAudioMix {
@@ -34,12 +42,14 @@ impl Default for UserAudioMix {
             volume: 100.0,
             muted: false,
             stream_muted: false,
+            soundboard_muted: false,
         }
     }
 }
 
 pub struct DiscordVoiceUiState {
     pub panel: VoicePanel,
+    pub show_voice_chat: bool,
     pub watching_stream: Option<String>,
     pub fullscreen_stream: bool,
     pub active_video_feeds: HashSet<(String, String)>,
@@ -51,6 +61,7 @@ pub struct DiscordVoiceUiState {
     pub golive_viewers: Vec<String>,
     pub golive_sources: Vec<GoLiveSource>,
     pub golive_selected_source: Option<String>,
+    pub golive_tab: GoLiveTab,
     pub golive_height: i32,
     pub golive_fps: i32,
     pub golive_sound: bool,
@@ -62,14 +73,15 @@ pub struct DiscordVoiceUiState {
     pub audio: Option<DiscordAudioReply>,
     pub my_voice_learned: bool,
     pub user_mix: HashMap<String, UserAudioMix>,
-    pub mix_open_user: Option<String>,
     pub stage_requested: bool,
+    pub voice_connected_since: Option<Instant>,
 }
 
 impl DiscordVoiceUiState {
     pub fn empty() -> Self {
         Self {
             panel: VoicePanel::None,
+            show_voice_chat: false,
             watching_stream: None,
             fullscreen_stream: false,
             active_video_feeds: HashSet::new(),
@@ -81,6 +93,7 @@ impl DiscordVoiceUiState {
             golive_viewers: Vec::new(),
             golive_sources: Vec::new(),
             golive_selected_source: None,
+            golive_tab: GoLiveTab::Applications,
             golive_height: 1080,
             golive_fps: 60,
             golive_sound: true,
@@ -92,8 +105,8 @@ impl DiscordVoiceUiState {
             audio: None,
             my_voice_learned: false,
             user_mix: HashMap::new(),
-            mix_open_user: None,
             stage_requested: false,
+            voice_connected_since: None,
         }
     }
 
@@ -638,7 +651,7 @@ impl AppState {
         );
     }
 
-    pub fn forget_discord_my_voice(&mut self) {
+    fn _forget_discord_my_voice_unused(&mut self) {
         self.discord.voice_ui.my_voice_learned = false;
         if self.status != HostStatus::Connected {
             return;
@@ -713,5 +726,52 @@ impl AppState {
 
     pub fn handle_discord_golive_viewers(&mut self, ids: Vec<String>) {
         self.discord.voice_ui.golive_viewers = ids;
+    }
+
+    pub fn toggle_voice_chat(&mut self) {
+        self.discord.voice_ui.show_voice_chat = !self.discord.voice_ui.show_voice_chat;
+        if self.discord.voice_ui.show_voice_chat
+            && let Some(cid) = self.discord.active_channel_id.clone()
+            && !self.discord.chat.messages_by_channel.contains_key(&cid)
+        {
+            self.load_discord_messages(&cid, None);
+        }
+    }
+
+    pub fn set_user_soundboard_mute(&mut self, user_id: &str, muted: bool) {
+        let entry = self
+            .discord
+            .voice_ui
+            .user_mix
+            .entry(user_id.to_string())
+            .or_default();
+        entry.soundboard_muted = muted;
+    }
+
+    pub fn open_active_voice_channel(&mut self) {
+        let gid = self.discord.voice.guild_id.clone();
+        let cid = self.discord.voice.channel_id.clone();
+        self.switch_room(crate::state::Room::Discord);
+        if let Some(cid) = cid {
+            if let Some(gid) = gid {
+                self.open_discord_guild(&gid);
+                self.open_discord_channel(&cid);
+            } else {
+                self.open_discord_dm(&cid);
+            }
+        }
+    }
+
+    pub fn voice_duration_label(&self) -> Option<String> {
+        let since = self.discord.voice_ui.voice_connected_since?;
+        let total = since.elapsed().as_secs();
+        let h = total / 3600;
+        let m = (total / 60) % 60;
+        let s = total % 60;
+        if h > 0 {
+            Some(format!("{h}:{m:02}:{s:02}"))
+        } else {
+            Some(format!("{m}:{s:02}"))
+        }
     }
 }

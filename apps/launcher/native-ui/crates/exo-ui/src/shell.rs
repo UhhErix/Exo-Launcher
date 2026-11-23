@@ -39,6 +39,7 @@ pub struct BlurBudget {
     pub top_bar_nav: bool,
     pub top_bar_tools: bool,
     pub mini_player: bool,
+    pub discord_voice_bar: bool,
     pub overlay: bool,
     pub submenu: bool,
     pub toast: bool,
@@ -53,19 +54,31 @@ impl BlurBudget {
                 top_bar_nav: false,
                 top_bar_tools: false,
                 mini_player: false,
+                discord_voice_bar: false,
                 overlay: true,
                 submenu: false,
                 toast: has_toast,
             };
         }
+        let discord_active = s.room == Room::Discord && !s.media.captures_open;
+        let discord_overlay_open = discord_active
+            && (s.discord.settings_open
+                || s.discord.custom_status_open
+                || s.discord.voice_ui.panel != crate::discord_voice_state::VoicePanel::None);
         let popover_open = s.capture_menu_open
             || s.library_more_open
             || s.props_open
             || s.context_menu.is_some()
-            || s.open_dropdown.is_some();
-        let submenu_open = s.context_menu.is_some_and(|cm| cm.open_submenu.is_some());
-        let art_under_bar = matches!(s.room, Room::Library | Room::Store | Room::Music)
-            || s.media.captures_open
+            || s.open_dropdown.is_some()
+            || discord_overlay_open;
+        let submenu_open = s
+            .context_menu
+            .as_ref()
+            .is_some_and(|cm| cm.open_submenu.is_some());
+        let art_under_bar = matches!(
+            s.room,
+            Room::Library | Room::Store | Room::Discord | Room::Music
+        ) || s.media.captures_open
             || s.open_game_id.is_some()
             || s.store_game.is_some();
         let transport_visible = s.room == Room::Music && !s.media.music_immersion;
@@ -73,10 +86,25 @@ impl BlurBudget {
             && s.room != Room::Music
             && s.media.open_capture_id.is_none()
             && s.media.playback.as_ref().is_some_and(|p| p.has_track());
+        let voice_bar_visible = discord_active
+            && !popover_open
+            && (s
+                .discord
+                .active_channel()
+                .is_some_and(|c| matches!(c.kind.as_str(), "voice" | "stage"))
+                || s.discord
+                    .voice
+                    .channel_id
+                    .as_deref()
+                    .is_some_and(|vc| s.discord.active_dm_id.as_deref() == Some(vc)));
 
         let mut used = usize::from(popover_open) + usize::from(submenu_open);
         let transport = transport_visible && used < MAX_BACKDROP_BLURS;
         if transport {
+            used += 1;
+        }
+        let discord_voice_bar = voice_bar_visible && used < MAX_BACKDROP_BLURS;
+        if discord_voice_bar {
             used += 1;
         }
         let top_bar_nav = art_under_bar && used < MAX_BACKDROP_BLURS;
@@ -101,6 +129,7 @@ impl BlurBudget {
             top_bar_nav,
             top_bar_tools,
             mini_player,
+            discord_voice_bar,
             overlay: true,
             submenu: submenu_open,
             toast,
@@ -509,7 +538,7 @@ pub fn view(s: &AppState, cx: &mut Cx<AppState>) -> El {
         && !s.library_all_games;
 
     let content = if !s.media.captures_open && s.room == Room::Discord {
-        discord::view(s, scale)
+        discord::view(s, scale, budget)
     } else if !s.media.captures_open && s.room == Room::Settings {
         settings::view(s)
     } else if !s.media.captures_open && matches!(s.room, Room::Devices | Room::ExoAi | Room::Apps) {
@@ -532,7 +561,7 @@ pub fn view(s: &AppState, cx: &mut Cx<AppState>) -> El {
                 Room::Music => music::view(s, scale),
                 Room::Devices | Room::ExoAi | Room::Apps => pc::view(s, scale),
                 Room::Settings => settings::view(s),
-                Room::Discord => discord::view(s, scale),
+                Room::Discord => discord::view(s, scale, budget),
             }
         };
 
@@ -560,6 +589,9 @@ pub fn view(s: &AppState, cx: &mut Cx<AppState>) -> El {
         .child(top_fade)
         .child(top_bar);
 
+    if !s.media.captures_open && s.room == Room::Discord {
+        root = root.children(discord::overlay_layers(s, budget.overlay));
+    }
     if s.capture_menu_open {
         root = root.children(captures::popover_layers(s, budget.overlay));
     }

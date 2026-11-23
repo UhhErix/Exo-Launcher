@@ -378,20 +378,16 @@ fn wooting_detail(_s: &AppState, kb: &KeyboardReadReply) -> El {
                     row()
                         .gap(8.0)
                         .center_y()
-                        .child(
-                            filter_pill("kb-rt-toggle", "Rapid Trigger".into(), rt).on_press(
-                                move |s: &mut AppState| {
-                                    s.update_keyboard_settings(None, Some(!rt), None, None);
-                                },
-                            ),
-                        )
-                        .child(
-                            filter_pill("kb-tach-toggle", "Tachyon".into(), tach).on_press(
-                                move |s: &mut AppState| {
-                                    s.update_keyboard_settings(None, None, None, Some(!tach));
-                                },
-                            ),
-                        ),
+                        .child(filter_pill("kb-rt-toggle", "Rapid Trigger", rt).on_press(
+                            move |s: &mut AppState| {
+                                s.update_keyboard_settings(None, Some(!rt), None, None);
+                            },
+                        ))
+                        .child(filter_pill("kb-tach-toggle", "Tachyon", tach).on_press(
+                            move |s: &mut AppState| {
+                                s.update_keyboard_settings(None, None, None, Some(!tach));
+                            },
+                        )),
                 ),
         )
 }

@@ -725,7 +725,7 @@ fn settings_body(s: &AppState) -> El {
         ]
         .into_iter()
         .map(|(key, id, label)| {
-            filter_pill(key, label.into(), mode == id)
+            filter_pill(key, label, mode == id)
                 .on_press(move |s: &mut AppState| s.capture_set_replay_mode(id))
         }),
     );
@@ -894,7 +894,7 @@ pub fn view(s: &AppState, scale: f32) -> El {
             ]
             .into_iter()
             .map(|(f, key, label)| {
-                filter_pill(key, label.into(), s.media.capture_filter == f)
+                filter_pill(key, label, s.media.capture_filter == f)
                     .on_press(move |s: &mut AppState| s.media.capture_filter = f)
             }),
         );

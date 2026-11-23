@@ -154,20 +154,74 @@ impl LibrarySort {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ContextMenuTarget {
     SearchCapsule,
     NavTab(Room),
     CaptureButton,
     SettingsButton,
+    DiscordStatusMenu,
+    DiscordAudioQuick {
+        input: bool,
+    },
+    DiscordDm {
+        dm_id: String,
+        user_id: Option<String>,
+        name: String,
+        username: Option<String>,
+        unread: bool,
+        muted: bool,
+        group: bool,
+    },
+    DiscordChannel {
+        guild_id: String,
+        channel_id: String,
+        name: String,
+        kind: String,
+        unread: bool,
+        muted: bool,
+        can_edit: bool,
+        can_manage: bool,
+    },
+    DiscordCategory {
+        guild_id: String,
+        category_id: String,
+        name: String,
+    },
+    DiscordServer {
+        guild_id: String,
+        name: String,
+        muted: bool,
+        owner: bool,
+        icon: Option<String>,
+    },
+    DiscordMessage {
+        channel_id: String,
+        guild_id: Option<String>,
+        message_id: String,
+        author_id: String,
+        author_name: String,
+        content: String,
+        mine: bool,
+        pinned: bool,
+    },
+    DiscordMember {
+        guild_id: Option<String>,
+        user_id: String,
+        name: String,
+        username: Option<String>,
+        in_voice: bool,
+    },
+    DiscordGoLiveMenu,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct ContextMenuState {
     pub target: ContextMenuTarget,
     pub x: f32,
     pub y: f32,
     pub open_submenu: Option<usize>,
+    pub anchor_key: Option<String>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -783,19 +837,36 @@ impl AppState {
     }
 
     pub fn open_context_menu(&mut self, target: ContextMenuTarget, x: f32, y: f32) {
+        self.open_context_menu_anchored(target, x, y, None);
+    }
+
+    pub fn open_context_menu_at_element(&mut self, target: ContextMenuTarget, key: &str) {
+        self.open_context_menu_anchored(target, 0.0, 0.0, Some(key.to_string()));
+    }
+
+    fn open_context_menu_anchored(
+        &mut self,
+        target: ContextMenuTarget,
+        x: f32,
+        y: f32,
+        anchor_key: Option<String>,
+    ) {
         self.capture_menu_open = false;
         self.library_more_open = false;
         self.open_dropdown = None;
+        self.discord.status_menu_open = matches!(target, ContextMenuTarget::DiscordStatusMenu);
         self.context_menu = Some(ContextMenuState {
             target,
             x,
             y,
             open_submenu: None,
+            anchor_key,
         });
     }
 
     pub fn close_context_menu(&mut self) {
         self.context_menu = None;
+        self.discord.status_menu_open = false;
     }
 
     pub fn toggle_dropdown(&mut self, which: OpenDropdown) {
@@ -2254,6 +2325,14 @@ impl AppState {
         }
         if self.props_open {
             self.props_open = false;
+            return true;
+        }
+        if self.room == Room::Discord && self.discord.custom_status_open {
+            self.discord.custom_status_open = false;
+            return true;
+        }
+        if self.room == Room::Discord && self.discord.settings_open {
+            self.discord.settings_open = false;
             return true;
         }
         if self.room == Room::Discord && self.discord.status_menu_open {

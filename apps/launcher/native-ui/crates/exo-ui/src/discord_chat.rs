@@ -1,18 +1,18 @@
 use crate::discord::avatar_box;
 use crate::discord_chat_state::ChatDrawer;
 use crate::discord_md;
-use crate::state::AppState;
+use crate::state::{AppState, ContextMenuTarget};
 use exo_kit::{
-    FG, GAP, PRESS_SCALE, PRIMARY_FG, RADIUS_CARD, RADIUS_PANEL, RADIUS_PILL, RADIUS_SMALL,
+    BG, FG, GAP, PRESS_SCALE, PRIMARY_FG, RADIUS_CARD, RADIUS_PANEL, RADIUS_PILL, RADIUS_SMALL,
     SPRING_BASE, SPRING_MOVE, SPRING_QUICK, bad, fg_faint, fg_muted, glass_button,
-    glass_control_fill, glass_rim, good, hairline, hex, hover_fill, icon_close, icon_edit,
-    icon_paperclip, icon_pin, icon_plus, icon_reply, icon_search, icon_send, icon_smile,
-    icon_trash, pressed_fill, primary_button, subtle_fill, type_body, type_control, type_label,
-    type_page, type_section, type_small,
+    glass_control_fill, glass_rim, glass_rim_bottom, glass_rim_top, good, hairline, hex,
+    hover_fill, icon_close, icon_edit, icon_paperclip, icon_pin, icon_plus, icon_reply,
+    icon_search, icon_send, icon_smile, icon_trash, pressed_fill, primary_button, subtle_fill,
+    type_body, type_control, type_label, type_page, type_section, type_small,
 };
 use exo_rpc::{DiscordEmbed, DiscordMessage};
 use rune::{
-    Color, El, GrowthSpec, ScrollSpec, Spring, SpringPair, SurfaceFit, Transition, Tx, col,
+    Color, Cursor, El, GrowthSpec, ScrollSpec, Spring, SpringPair, SurfaceFit, Transition, Tx, col,
     edit_access, el, row, text, text_input,
 };
 use std::borrow::Cow;
@@ -33,11 +33,11 @@ fn send_with_launch(s: &mut AppState, tx: &mut Tx) {
 }
 
 fn pane_surface() -> Color {
-    hex(0x0b0b0d, 1.0)
+    BG
 }
 
 fn card_surface() -> Color {
-    hex(0x0e0e11, 1.0)
+    BG
 }
 
 fn format_bytes(bytes: u64) -> String {
@@ -61,6 +61,7 @@ fn tiny_action(key: String, label: &'static str, danger: bool, icon: El) -> El {
     el().key(key)
         .role("button")
         .label(label)
+        .cursor(Cursor::Pointer)
         .focusable(true)
         .hit()
         .press_on_down()
@@ -495,6 +496,7 @@ fn message_row(
                         },
                     )
                     .hover(hover_fill())
+                    .cursor(Cursor::Pointer)
                     .hit()
                     .press_on_down()
                     .press_scale(PRESS_SCALE)
@@ -518,7 +520,7 @@ fn message_row(
                 .center_y()
                 .radius(RADIUS_PILL)
                 .fill(card_surface())
-                .border(1.0, glass_rim());
+                .border_gradient(1.0, glass_rim_top(), glass_rim_bottom());
             for &em in QUICK_EMOJIS {
                 let cid_q = channel_id.to_string();
                 let mid_q = msg.id.clone();
@@ -529,6 +531,7 @@ fn message_row(
                         .size(24.0, 24.0)
                         .radius(12.0)
                         .hover(hover_fill())
+                        .cursor(Cursor::Pointer)
                         .center()
                         .hit()
                         .press_on_down()
@@ -543,8 +546,20 @@ fn message_row(
         body = body.child(rrow);
     }
 
+    let msg_ctx_target = ContextMenuTarget::DiscordMessage {
+        channel_id: channel_id.to_string(),
+        guild_id: s.discord.active_guild_id.clone(),
+        message_id: msg.id.clone(),
+        author_id: msg.author.id.clone(),
+        author_name: msg.display_name().to_string(),
+        content: msg.content.clone(),
+        mine: is_mine,
+        pinned: msg.pinned,
+    };
+
     let line = if grouped {
         row()
+            .key(format!("dc-msg-row-{}", msg.id))
             .w_full()
             .pl(56.0)
             .pr(16.0)
@@ -552,10 +567,22 @@ fn message_row(
             .opacity(if msg.pending { 0.6 } else { 1.0 })
             .hover_group()
             .hover_motion(Spring::NONE, SPRING_QUICK)
+            .hit()
+            .on_secondary_press(move |s: &mut AppState, p, _| {
+                s.open_context_menu(msg_ctx_target.clone(), p.x, p.y);
+            })
             .child(body)
     } else {
         let av_url = msg.author.avatar_url();
+        let author_ctx = ContextMenuTarget::DiscordMember {
+            guild_id: s.discord.active_guild_id.clone(),
+            user_id: msg.author.id.clone(),
+            name: msg.display_name().to_string(),
+            username: Some(msg.author.username.clone()).filter(|u| !u.is_empty()),
+            in_voice: false,
+        };
         row()
+            .key(format!("dc-msg-row-{}", msg.id))
             .w_full()
             .px(16.0)
             .pt(10.0)
@@ -564,16 +591,27 @@ fn message_row(
             .opacity(if msg.pending { 0.6 } else { 1.0 })
             .hover_group()
             .hover_motion(Spring::NONE, SPRING_QUICK)
-            .child(avatar_box(
-                s,
-                av_url.as_deref(),
-                msg.display_name(),
-                30.0,
-                15.0,
-                None,
-                false,
-                scale,
-            ))
+            .hit()
+            .on_secondary_press(move |s: &mut AppState, p, _| {
+                s.open_context_menu(msg_ctx_target.clone(), p.x, p.y);
+            })
+            .child(
+                el().cursor(Cursor::Pointer)
+                    .hit()
+                    .on_secondary_press(move |s: &mut AppState, p, _| {
+                        s.open_context_menu(author_ctx.clone(), p.x, p.y);
+                    })
+                    .child(avatar_box(
+                        s,
+                        av_url.as_deref(),
+                        msg.display_name(),
+                        30.0,
+                        15.0,
+                        None,
+                        false,
+                        scale,
+                    )),
+            )
             .child(body)
     };
 
@@ -806,7 +844,7 @@ pub fn timeline_and_composer(
     }
 
     if can_send {
-        let composer = row()
+        let mut composer = row()
             .key("dc-composer")
             .w_full()
             .h(44.0)
@@ -814,15 +852,13 @@ pub fn timeline_and_composer(
             .gap(8.0)
             .center_y()
             .radius(RADIUS_CARD)
-            .fill(card_surface())
-            .border(
-                1.0,
-                if s.discord.chat.drop_hover {
-                    good()
-                } else {
-                    glass_rim()
-                },
-            )
+            .fill(card_surface());
+        composer = if s.discord.chat.drop_hover {
+            composer.border(1.0, good())
+        } else {
+            composer.border_gradient(1.0, glass_rim_top(), glass_rim_bottom())
+        };
+        let composer = composer
             .child(
                 tiny_action(
                     "dc-composer-emoji".into(),
@@ -838,6 +874,7 @@ pub fn timeline_and_composer(
                 text_input(&s.discord.chat.composer, type_body())
                     .key("dc-composer-input")
                     .label("Message composer")
+                    .cursor(Cursor::Text)
                     .grow(1.0)
                     .single_line()
                     .color(FG)
@@ -852,6 +889,7 @@ pub fn timeline_and_composer(
                 el().key("dc-composer-send")
                     .role("button")
                     .label("Send message")
+                    .cursor(Cursor::Pointer)
                     .focusable(true)
                     .hit()
                     .press_on_down()
@@ -913,7 +951,7 @@ pub fn timeline_and_composer(
             .center_y()
             .radius(RADIUS_PILL)
             .fill(card_surface())
-            .border(1.0, glass_rim())
+            .border_gradient(1.0, glass_rim_top(), glass_rim_bottom())
             .transition(inline_bar_transition(6.0));
         for &em in QUICK_EMOJIS {
             let em_s = em.to_string();
@@ -922,6 +960,7 @@ pub fn timeline_and_composer(
                     .size(26.0, 26.0)
                     .radius(13.0)
                     .hover(hover_fill())
+                    .cursor(Cursor::Pointer)
                     .center()
                     .hit()
                     .press_on_down()

@@ -317,6 +317,12 @@ pub struct DiscordChannel {
     #[serde(default)]
     pub can_connect: Option<bool>,
     #[serde(default)]
+    pub can_manage_messages: bool,
+    #[serde(default)]
+    pub can_pin: bool,
+    #[serde(default)]
+    pub can_edit: bool,
+    #[serde(default)]
     pub members: Option<Vec<DiscordVoiceMember>>,
     #[serde(default)]
     pub user_limit: Option<i32>,
@@ -336,6 +342,19 @@ pub struct DiscordChannel {
     pub afk: bool,
     #[serde(default)]
     pub resource: bool,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DiscordGuildRows {
+    #[serde(default)]
+    pub guide: bool,
+    #[serde(default)]
+    pub events: bool,
+    #[serde(default)]
+    pub browse: bool,
+    #[serde(default)]
+    pub members: bool,
 }
 
 #[derive(Debug, Clone, Default, Deserialize)]
@@ -373,9 +392,15 @@ pub struct DiscordChannels {
     #[serde(default)]
     pub banner: Option<String>,
     #[serde(default)]
+    pub can_manage: bool,
+    #[serde(default)]
+    pub can_manage_events: bool,
+    #[serde(default)]
     pub hide_muted: bool,
     #[serde(default)]
     pub events: i32,
+    #[serde(default)]
+    pub rows: Option<DiscordGuildRows>,
     #[serde(default)]
     pub threads: Vec<DiscordThreadSummary>,
 }
