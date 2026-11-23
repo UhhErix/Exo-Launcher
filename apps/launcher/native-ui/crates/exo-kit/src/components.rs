@@ -8,8 +8,8 @@ use crate::tokens::{
     type_control, type_section, type_small, warn,
 };
 use rune::{
-    CaptionGlyph, CaptionStyle, Color, Cursor, El, SpringPair, Titlebar, Transition, Vec2, col, el,
-    row, text,
+    CaptionGlyph, CaptionStyle, Color, Cursor, Effect, El, SpringPair, Titlebar, Transition, Vec2,
+    col, el, row, text,
 };
 
 pub const CAPTION_BUTTON_WIDTH: f32 = 34.0;
@@ -53,8 +53,19 @@ pub fn popover_transition() -> Transition {
     popover_transition_from(Vec2::new(1.0, 0.0))
 }
 
+pub fn glass_enter(scale: f32, anchor: Vec2) -> Transition {
+    Transition {
+        insertion: Effect {
+            scale,
+            anchor,
+            ..Effect::IDENTITY
+        },
+        ..Transition::scale_anchor(scale, anchor)
+    }
+}
+
 pub fn popover_transition_from(anchor: Vec2) -> Transition {
-    let enter = Transition::scale_anchor(0.96, anchor);
+    let enter = glass_enter(0.96, anchor);
     Transition::asymmetric(enter, Transition::scale_anchor(0.96, anchor))
         .springs(SpringPair::new(SPRING_BASE, SPRING_QUICK))
 }
@@ -65,7 +76,7 @@ pub fn modal_scrim_transition() -> Transition {
 }
 
 pub fn modal_card_transition() -> Transition {
-    let enter = Transition::scale(0.98);
+    let enter = glass_enter(0.98, Vec2::new(0.5, 0.5));
     Transition::asymmetric(enter, Transition::scale(0.98))
         .springs(SpringPair::new(SPRING_MOVE, SPRING_QUICK))
 }

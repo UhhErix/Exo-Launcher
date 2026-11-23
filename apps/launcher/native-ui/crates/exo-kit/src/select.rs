@@ -4,7 +4,7 @@ use crate::tokens::{
     FG, GLASS_CONTROL_SIGMA, GLASS_PANEL_SIGMA, PRESS_SCALE, RADIUS_CARD, RADIUS_PILL,
     RADIUS_SMALL, SPRING_QUICK, TRANSPARENT, fg_faint, fg_muted, glass_control_fill,
     glass_panel_fill, glass_panel_shadow_color, glass_rim_bottom, glass_rim_top,
-    glass_still_panel_fill, hover_fill, pressed_fill, type_control,
+    glass_still_control_fill, glass_still_panel_fill, hover_fill, pressed_fill, type_control,
 };
 use rune::{Align, Cursor, El, Key, Side, Tx, Vec2, col, el, row, text};
 use std::rc::Rc;
@@ -48,6 +48,7 @@ pub struct SelectTrigger {
     pub open: bool,
     pub disabled: bool,
     pub gamepad_focus: bool,
+    pub flat: bool,
 }
 
 impl SelectTrigger {
@@ -64,6 +65,7 @@ impl SelectTrigger {
             open: false,
             disabled: false,
             gamepad_focus: false,
+            flat: false,
         }
     }
 
@@ -86,6 +88,12 @@ impl SelectTrigger {
         self.gamepad_focus = gamepad_focus;
         self
     }
+
+    /// A flat field (no backdrop blur), as React's library header controls are.
+    pub fn flat(mut self, flat: bool) -> Self {
+        self.flat = flat;
+        self
+    }
 }
 
 pub fn select_trigger<S: 'static>(
@@ -100,6 +108,7 @@ pub fn select_trigger<S: 'static>(
         open,
         disabled,
         gamepad_focus,
+        flat,
     } = spec;
     let mut trigger = row()
         .key(key)
@@ -120,12 +129,16 @@ pub fn select_trigger<S: 'static>(
         })
         .fill(if open {
             hover_fill()
+        } else if flat {
+            glass_still_control_fill()
         } else {
             glass_control_fill()
         })
-        .backdrop_blur(GLASS_CONTROL_SIGMA)
         .border_gradient(1.0, glass_rim_top(), glass_rim_bottom())
         .motion(SPRING_QUICK);
+    if !flat {
+        trigger = trigger.backdrop_blur(GLASS_CONTROL_SIGMA);
+    }
 
     if !disabled {
         let toggle_press = on_toggle.clone();

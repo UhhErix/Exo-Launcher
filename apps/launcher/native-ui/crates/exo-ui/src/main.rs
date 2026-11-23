@@ -1381,6 +1381,32 @@ fn replay_probe_script(rt: &mut rune::Runtime<AppState>, script_path: &str) {
     }
 }
 
+fn popover_trace_sample(rt: &rune::Runtime<AppState>, frame: usize) -> serde_json::Value {
+    const KEY: &str = "capture-popover-menu";
+    let presented = rt.presented(KEY);
+    let element = rt
+        .elements()
+        .into_iter()
+        .find(|e| !e.exiting && e.key.as_deref() == Some(KEY));
+    let blur_on_popover = presented.is_some_and(|(rect, _)| {
+        rt.instances.iter().any(|i| {
+            i.params[1] == rune::render::KIND_BACKDROP_BLUR
+                && (0..4).all(|k| (i.rect[k] - rect[k]).abs() < 1.5)
+        })
+    });
+    serde_json::json!({
+        "frame": frame,
+        "presented": presented.is_some(),
+        "presentedOpacity": presented.map(|(_, o)| (o * 1000.0).round() / 1000.0),
+        "elementOpacity": element.as_ref().map(|e| (e.opacity * 1000.0).round() / 1000.0),
+        "elementScale": element.as_ref().map(|e| (e.scale * 1000.0).round() / 1000.0),
+        "elementBlur": element.as_ref().map(|e| e.blur),
+        "fill": element.as_ref().map(|e| format!("{:?}", e.fill)),
+        "backdropBlurCount": collect_backdrop_blurs(rt).len(),
+        "blurOnPopover": blur_on_popover,
+    })
+}
+
 fn run_parity_probe(
     pipe: Option<&str>,
     target_scene: Option<&str>,
@@ -1430,8 +1456,10 @@ fn run_parity_probe(
     }
     let glass_frame0 = collect_backdrop_blurs(&rt);
 
-    for _ in 0..10 {
+    let mut popover_trace = vec![popover_trace_sample(&rt, 0)];
+    for frame in 1..=10 {
         rt.frame(1.0 / 60.0);
+        popover_trace.push(popover_trace_sample(&rt, frame));
     }
     let glass_frame10 = collect_backdrop_blurs(&rt);
 
@@ -1563,6 +1591,7 @@ fn run_parity_probe(
         "glassAtFrame10": glass_frame10,
         "glassFinal": glass_final,
         "glassAppearedLate": glass_frame0.len() < glass_final.len(),
+        "popoverTrace": popover_trace,
         "popupMenuOpen": popup_menu_open,
         "menuItems": menu_items,
         "hoveredKeys": hovered_keys,

@@ -509,6 +509,28 @@ export const STATES = [
     },
   },
   {
+    id: 'library-capture-click',
+    room: 'library',
+    name: 'Capture button clicked from Library (first 10 frames)',
+    kind: 'menu',
+    priority: 1,
+    expectGlass: true,
+    react: {
+      room: 'Library',
+      steps: [
+        { type: 'click', selector: 'button.exo-capture-btn' },
+        { type: 'wait', ms: 300 },
+      ],
+      openSelector: '.exo-capture-menu, [role="menu"][aria-label*="Capture" i], [popover]:popover-open',
+      menuSelector: '[role="menu"] [role^="menuitem"], .exo-capture-menu button',
+    },
+    native: {
+      scene: 'library',
+      script: [{ t: 0.1, type: 'tap', key: 'top-capture-btn' }],
+      expect: { captureMenuOpen: true },
+    },
+  },
+  {
     id: 'game-page',
     room: 'game',
     name: 'Game detail page',

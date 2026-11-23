@@ -1,5 +1,3 @@
-// One-off measurement: the React command palette's rendered box at 1920x1080 (not part of the gate set).
-// Usage: node tools/parity/measure-palette.mjs <folder> <dataDir>   (a temp folder; never the real data dir)
 import { join, resolve } from 'node:path'
 import { startWebTestInstance, stopWebTestInstance } from './react-driver.mjs'
 

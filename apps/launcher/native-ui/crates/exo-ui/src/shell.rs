@@ -7,7 +7,7 @@ use exo_kit::{
     BG, CAPTION_BUTTON_GAP, CAPTION_BUTTON_HEIGHT, CAPTION_BUTTON_WIDTH, CAPTION_CAPSULE_PAD,
     CAPTION_TRAILING_INSET, FG, GAP, GLASS_CONTROL_SIGMA, PRESS_SCALE, PRIMARY_FG, RADIUS_PILL,
     SPRING_MOVE, SPRING_QUICK, TRANSPARENT, bad, exo_mark, exo_titlebar, fg_muted,
-    glass_capsule_opt, glass_control_fill, glass_rim_bottom, glass_rim_top,
+    glass_capsule_opt, glass_control_fill, glass_enter, glass_rim_bottom, glass_rim_top,
     glass_still_control_fill, good, hover_fill, icon_camera, icon_chat, icon_close, icon_gamepad,
     icon_grid, icon_library, icon_minimize, icon_mouse, icon_music, icon_settings, icon_sparkles,
     icon_store, icon_win_maximize, modal_scrim_transition, pressed_fill, scrim_fill, selected_fill,
@@ -16,7 +16,8 @@ use exo_kit::{
 use rune::{Cursor, Cx, El, ScrollSpec, SpringPair, Transition, col, el, row, text};
 
 fn mini_player_transition() -> Transition {
-    let enter = Transition::offset(0.0, -8.0).combined(Transition::scale(0.96));
+    let enter =
+        Transition::offset(0.0, -8.0).combined(glass_enter(0.96, rune::Vec2::new(0.5, 0.5)));
     let exit = Transition::offset(0.0, -6.0).combined(Transition::scale(0.98));
     Transition::asymmetric(enter, exit).springs(SpringPair::new(SPRING_MOVE, SPRING_QUICK))
 }
