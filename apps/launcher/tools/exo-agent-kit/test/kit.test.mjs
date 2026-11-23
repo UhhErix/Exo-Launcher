@@ -200,13 +200,19 @@ test('3. exo_contract resolves game.get across host-v1.json, TS, C#, and Rust', 
 })
 
 test('4. exo_rune_api finds pub const fn tracking in pinned Rune rev', async () => {
+  const cargoToml = fs.readFileSync(
+    path.join(REPO_ROOT, 'apps', 'launcher', 'native-ui', 'Cargo.toml'),
+    'utf8',
+  )
+  const pinnedRev = cargoToml.match(/rune\s*=\s*\{[^}]*rev\s*=\s*"([0-9a-f]{7,40})"/i)?.[1]?.slice(0, 7)
+  assert.ok(pinnedRev, 'pinned Rune rev in Cargo.toml')
   const res = await client.callTool('exo_rune_api', {
     cwd: REPO_ROOT,
     query: 'tracking',
     kind: 'fn',
   })
   assert.equal(res.isError, false, res.text)
-  assert.match(res.text, /rev=1735bc2/i)
+  assert.match(res.text, new RegExp(`rev=${pinnedRev}`, 'i'))
   assert.match(res.text, /crates\/rune-core\/src\/tok\.rs:108/)
   assert.match(res.text, /pub const fn tracking/)
   assert.ok(res.jsonBytes <= 8800)
