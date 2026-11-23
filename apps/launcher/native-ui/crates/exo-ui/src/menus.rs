@@ -471,7 +471,6 @@ pub fn context_menu_overlay(s: &AppState, blur: bool, submenu_blur: bool) -> Vec
             ),
         ],
         ContextMenuTarget::NavTab(room) => {
-            let room = room;
             let mut items = vec![
                 MenuEntry::item(
                     MenuItem::new(
