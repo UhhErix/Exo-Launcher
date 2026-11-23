@@ -87,6 +87,17 @@ public sealed class SystemTuningTests : IDisposable
         public IReadOnlyList<string> UsbRootHubKeys() => UsbHubKeys;
         public long TotalMemKb { get; set; }
         public long TotalMemoryKb() => TotalMemKb;
+        public int OsBuildValue { get; set; } = Win11_24H2Build;
+        public int OsBuild() => OsBuildValue;
+        public Dictionary<string, bool> Folders { get; } = new(StringComparer.OrdinalIgnoreCase);
+        public IReadOnlyList<string> GameFolders() => [.. Folders.Keys];
+        public bool? FolderNotContentIndexed(string folderPath) => Folders.TryGetValue(folderPath, out var v) ? v : null;
+        public bool SetFolderNotContentIndexed(string folderPath, bool notIndexed)
+        {
+            if (!Folders.ContainsKey(folderPath)) return false;
+            Folders[folderPath] = notIndexed;
+            return true;
+        }
         public bool SupportsDeepPlaybook { get; set; }
         public int FthFlushedCount { get; private set; }
         public int DnsFlushedCount { get; private set; }
@@ -1038,34 +1049,35 @@ public sealed class SystemTuningTests : IDisposable
     }
 
     [Fact]
-    public async Task Os_overhead_applies_desktop_power_throttling_and_skips_it_on_laptop()
+    public async Task Os_overhead_applies_p2p_widgets_and_no_auto_reboot_without_power_throttling_off()
     {
         _system.SupportsOsOverhead = true;
         _system.Dwords[(@"SOFTWARE\Policies\Microsoft\Windows\DeliveryOptimization", "DODownloadMode")] = 3;
         _system.OnRun = _system.Take;
 
         Assert.Null(await Make().ApplyAsync());
-        Assert.Equal(1, _system.Dwords[(@"SYSTEM\CurrentControlSet\Control\Power\PowerThrottling", "PowerThrottlingOff")]);
+        Assert.False(_system.Dwords.ContainsKey((PowerThrottlingKey, PowerThrottlingOffValue)));
         Assert.Equal(0, _system.Dwords[(@"SOFTWARE\Policies\Microsoft\Windows\DeliveryOptimization", "DODownloadMode")]);
         Assert.Equal(0, _system.Dwords[(@"SOFTWARE\Policies\Microsoft\Dsh", "AllowNewsAndInterests")]);
+        Assert.Equal(1, _system.Dwords[(@"SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate\AU", "NoAutoRebootWithLoggedOnUsers")]);
 
         Assert.Null(await Make().TurnOffAsync(OsOverheadKey));
-        Assert.False(_system.Dwords.ContainsKey((@"SYSTEM\CurrentControlSet\Control\Power\PowerThrottling", "PowerThrottlingOff")));
         Assert.Equal(3, _system.Dwords[(@"SOFTWARE\Policies\Microsoft\Windows\DeliveryOptimization", "DODownloadMode")]);
         Assert.False(_system.Dwords.ContainsKey((@"SOFTWARE\Policies\Microsoft\Dsh", "AllowNewsAndInterests")));
+        Assert.False(_system.Dwords.ContainsKey((@"SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate\AU", "NoAutoRebootWithLoggedOnUsers")));
 
         DeletionGate.DeleteFile(SavedPath);
         _system.Runs.Clear();
         _system.Laptop = true;
         Assert.Null(await Make().ApplyAsync([OsOverheadKey]));
-        Assert.False(_system.Dwords.ContainsKey((@"SYSTEM\CurrentControlSet\Control\Power\PowerThrottling", "PowerThrottlingOff")));
+        Assert.False(_system.Dwords.ContainsKey((PowerThrottlingKey, PowerThrottlingOffValue)));
         Assert.Equal(0, _system.Dwords[(@"SOFTWARE\Policies\Microsoft\Windows\DeliveryOptimization", "DODownloadMode")]);
 
         Assert.Null(Revert(OsOverheadKey, new Was(Strings: [@"SOFTWARE\Microsoft\Windows Defender|DisableAntiSpyware=1"])));
     }
 
     [Fact]
-    public async Task Apply_playbook_batches_defaults_and_services_and_unblocked_hvci_in_one_uac_prompt_and_respects_anticheat()
+    public async Task Apply_playbook_batches_defaults_and_services_and_never_disables_hvci_without_explicit_opt_in()
     {
         _system.Tweaked();
         _system.SupportsScheduledTasks = true;
@@ -1086,7 +1098,7 @@ public sealed class SystemTuningTests : IDisposable
         Assert.Contains(batch, l => l.Contains("sc.exe config SysMain start= demand", StringComparison.OrdinalIgnoreCase));
         Assert.Contains(batch, l => l.Contains("schtasks.exe", StringComparison.OrdinalIgnoreCase));
         Assert.Contains(batch, l => l.Contains(WindowsFeatures.Flag, StringComparison.Ordinal));
-        Assert.Contains(batch, l => l.Contains("PowerThrottlingOff", StringComparison.Ordinal));
+        Assert.DoesNotContain(batch, l => l.Contains("PowerThrottlingOff", StringComparison.Ordinal));
         Assert.Contains(batch, l => l.Contains("/flushdns", StringComparison.OrdinalIgnoreCase));
         Assert.Equal(1, _system.DnsFlushedCount);
         Assert.Equal(1, _system.StandbyPurgedCount);
@@ -1100,6 +1112,8 @@ public sealed class SystemTuningTests : IDisposable
         _system.Keys.Remove(@"SYSTEM\CurrentControlSet\Services\vgk");
         _system.Dwords[(Hvci, "Enabled")] = 1;
         Assert.Null(await Make().ApplyPlaybookAsync());
+        Assert.Equal(1, _system.Dwords[(Hvci, "Enabled")]);
+        Assert.Null(await Make().ApplyAsync([IntegrityKey]));
         Assert.Equal(0, _system.Dwords[(Hvci, "Enabled")]);
     }
 
@@ -1112,24 +1126,17 @@ public sealed class SystemTuningTests : IDisposable
     }
 
     [Fact]
-    public async Task Kernel_latency_applies_global_timer_mmcss_and_fth_on_desktop_skips_timer_on_laptop_and_reverts_cleanly()
+    public async Task Kernel_latency_applies_global_timer_on_win11_24h2_and_fth_without_myths_and_reverts_cleanly()
     {
         _system.SupportsDeepPlaybook = true;
         _system.Dwords[(MmcssKey, "SystemResponsiveness")] = 20;
-        _system.Dwords[(MmcssGamesKey, "GPU Priority")] = 2;
-        _system.Dwords[(MmcssGamesKey, "Priority")] = 2;
-        _system.StringValues[(MmcssGamesKey, "Scheduling Category")] = "Medium";
-        _system.StringValues[(MmcssGamesKey, "SFIO Priority")] = "Normal";
         _system.Dwords[(FthKey, "Enabled")] = 1;
         _system.OnRun = _system.Take;
 
         Assert.Null(await Make().ApplyAsync([KernelLatencyKey]));
         Assert.Equal(1, _system.Dwords[(KernelSessionKey, GlobalTimerValue)]);
-        Assert.Equal(10, _system.Dwords[(MmcssKey, "SystemResponsiveness")]);
-        Assert.Equal(8, _system.Dwords[(MmcssGamesKey, "GPU Priority")]);
-        Assert.Equal(6, _system.Dwords[(MmcssGamesKey, "Priority")]);
-        Assert.Equal("High", _system.StringValues[(MmcssGamesKey, "Scheduling Category")]);
-        Assert.Equal("High", _system.StringValues[(MmcssGamesKey, "SFIO Priority")]);
+        Assert.Equal(20, _system.Dwords[(MmcssKey, "SystemResponsiveness")]);
+        Assert.False(_system.Dwords.ContainsKey((MemoryManagement, DisablePagingExecValue)));
         Assert.Equal(0, _system.Dwords[(FthKey, "Enabled")]);
         Assert.Equal(1, _system.FthFlushedCount);
 
@@ -1138,16 +1145,19 @@ public sealed class SystemTuningTests : IDisposable
 
         Assert.Null(await Make().TurnOffAsync(KernelLatencyKey));
         Assert.False(_system.Dwords.ContainsKey((KernelSessionKey, GlobalTimerValue)));
-        Assert.Equal(20, _system.Dwords[(MmcssKey, "SystemResponsiveness")]);
-        Assert.Equal("Medium", _system.StringValues[(MmcssGamesKey, "Scheduling Category")]);
-        Assert.Equal("Normal", _system.StringValues[(MmcssGamesKey, "SFIO Priority")]);
         Assert.Equal(1, _system.Dwords[(FthKey, "Enabled")]);
 
         DeletionGate.DeleteFile(SavedPath);
         _system.Laptop = true;
+        _system.OsBuildValue = 26100;
+        Assert.Null(await Make().ApplyAsync([KernelLatencyKey]));
+        Assert.Equal(1, _system.Dwords[(KernelSessionKey, GlobalTimerValue)]);
+
+        DeletionGate.DeleteFile(SavedPath);
+        _system.Dwords.Remove((KernelSessionKey, GlobalTimerValue));
+        _system.OsBuildValue = 22631;
         Assert.Null(await Make().ApplyAsync([KernelLatencyKey]));
         Assert.False(_system.Dwords.ContainsKey((KernelSessionKey, GlobalTimerValue)));
-        Assert.Equal(10, _system.Dwords[(MmcssKey, "SystemResponsiveness")]);
         Assert.Null(Revert(KernelLatencyKey, new Was(Strings: [@"SOFTWARE\Evil|Key=d:1"])));
     }
 
@@ -1279,7 +1289,7 @@ public sealed class SystemTuningTests : IDisposable
     }
 
     [Fact]
-    public async Task All_deep_playbook_tweaks_run_together_in_playbook_and_each_reverts_cleanly()
+    public async Task Evidence_backed_deep_playbook_runs_without_myths_and_opt_ins_stay_manual()
     {
         var nvidiaAdapter = $@"{DisplayClassRoot}\0000";
         var amdAdapter = $@"{DisplayClassRoot}\0001";
@@ -1291,37 +1301,32 @@ public sealed class SystemTuningTests : IDisposable
         _system.Dwords[(PowerControlKey, HibernateEnabledValue)] = 1;
         _system.Dwords[(SessionPowerKey, HiberbootEnabledValue)] = 1;
         _system.Dwords[(ControlKey, SvcHostSplitValue)] = 3_670_016;
+        _system.Folders[@"D:\Games\CS2"] = false;
         _system.BcdFlags["tscsyncpolicy"] = "Default";
         _system.OnRun = _system.Take;
 
         Assert.Null(await Make().ApplyPlaybookAsync());
         Assert.Single(_system.Runs);
-        Assert.Equal(5, _system.Dwords[(DwmKey, OverlayTestModeValue)]);
-        Assert.Equal(0, _system.Dwords[(DwmKey, OverlayMinFpsValue)]);
         Assert.Equal(0, _system.Dwords[(PowerControlKey, HibernateEnabledValue)]);
         Assert.Equal(1, _system.UserDwords[(BackgroundAppsSpecs[0].Key, BackgroundAppsSpecs[0].Name)]);
-        Assert.Equal(33_554_432, _system.Dwords[(ControlKey, SvcHostSplitValue)]);
-        Assert.Equal(1, _system.Dwords[(nvidiaAdapter, "DisableDynamicPstate")]);
-        Assert.Equal(1, _system.Dwords[(nvidiaAdapter, "DisableASyncPstates")]);
-        Assert.Equal(1, _system.Dwords[(nvidiaAdapter, RmGpsPerCpuDpcValue)]);
-        Assert.Equal(1, _system.Dwords[(GraphicsDriversKey, RmGpsPerCpuDpcValue)]);
-        Assert.Equal(1, _system.Dwords[(amdAdapter, "PP_SclkDeepSleepDisable")]);
-        Assert.Equal(3, _system.Dwords[(MemoryManagement, FeatureOverrideValue)]);
-        Assert.Equal(1, _system.Dwords[(MemoryManagement, DisablePagingExecValue)]);
+        Assert.Equal(0, _system.Dwords[(EdgePolicyKey, EdgeStartupBoostValue)]);
+        Assert.Equal(0, _system.Dwords[(EdgePolicyKey, EdgeBackgroundModeValue)]);
+        Assert.True(_system.Folders[@"D:\Games\CS2"]);
         Assert.Equal(2, _system.Dwords[(FileSystemKey, NtfsMemoryUsageValue)]);
-        Assert.Equal("True", _system.StringValues[(MmcssGamesKey, "Latency Sensitive")]);
         Assert.Equal("0", _system.UserStrings[(@"Control Panel\Keyboard", "KeyboardDelay")]);
-        Assert.Equal("yes", _system.BcdFlags["disabledynamictick"], ignoreCase: true);
-        Assert.Equal("enhanced", _system.BcdFlags["tscsyncpolicy"], ignoreCase: true);
-        Assert.Equal("enable", _system.BcdFlags["x2apicpolicy"], ignoreCase: true);
-        Assert.False(_system.MemoryCompressionOn);
 
-        string[] deepKeys =
-        [
-            MpoOffKey, HibernateOffKey, BackgroundAppsKey, SvcHostSplitKey,
-            GpuPstateKey, CpuMitigationsKey, BootLatencyKey, MemCompressionKey,
-        ];
-        foreach (var deepKey in deepKeys)
+        Assert.False(_system.Dwords.ContainsKey((DwmKey, OverlayTestModeValue)));
+        Assert.False(_system.Dwords.ContainsKey((nvidiaAdapter, "DisableDynamicPstate")));
+        Assert.False(_system.Dwords.ContainsKey((MemoryManagement, FeatureOverrideValue)));
+        Assert.False(_system.Dwords.ContainsKey((MemoryManagement, DisablePagingExecValue)));
+        Assert.Equal(3_670_016, _system.Dwords[(ControlKey, SvcHostSplitValue)]);
+        Assert.False(_system.BcdFlags.ContainsKey("disabledynamictick"));
+        Assert.Equal("Default", _system.BcdFlags["tscsyncpolicy"]);
+        Assert.False(_system.BcdFlags.ContainsKey("x2apicpolicy"));
+        Assert.True(_system.MemoryCompressionOn);
+
+        string[] defaultDeepKeys = [HibernateOffKey, BackgroundAppsKey, EdgeBackgroundKey, GameIndexingKey];
+        foreach (var deepKey in defaultDeepKeys)
         {
             var applied = Make().Read().Items.Single(i => i.Key == deepKey);
             Assert.False(applied.OptIn);
@@ -1332,21 +1337,22 @@ public sealed class SystemTuningTests : IDisposable
             Assert.False(reverted.CanUndo);
         }
 
-        Assert.Equal(1, _system.Dwords[(PowerControlKey, HibernateEnabledValue)]);
-        Assert.Equal(1, _system.Dwords[(SessionPowerKey, HiberbootEnabledValue)]);
-        Assert.Equal(3_670_016, _system.Dwords[(ControlKey, SvcHostSplitValue)]);
-        Assert.False(_system.Dwords.ContainsKey((DwmKey, OverlayTestModeValue)));
-        Assert.False(_system.Dwords.ContainsKey((DwmKey, OverlayMinFpsValue)));
-        Assert.False(_system.Dwords.ContainsKey((nvidiaAdapter, "DisableDynamicPstate")));
-        Assert.False(_system.Dwords.ContainsKey((nvidiaAdapter, RmGpsPerCpuDpcValue)));
-        Assert.False(_system.Dwords.ContainsKey((GraphicsDriversKey, RmGpsPerCpuDpcValue)));
-        Assert.False(_system.Dwords.ContainsKey((amdAdapter, "PP_SclkDeepSleepDisable")));
-        Assert.False(_system.Dwords.ContainsKey((MemoryManagement, FeatureOverrideValue)));
-        Assert.False(_system.BcdFlags.ContainsKey("disabledynamictick"));
-        Assert.Equal("Default", _system.BcdFlags["tscsyncpolicy"]);
-        Assert.False(_system.BcdFlags.ContainsKey("x2apicpolicy"));
-        Assert.True(_system.MemoryCompressionOn);
+        string[] optInKeys = [MpoOffKey, GpuPstateKey, CpuMitigationsKey, MemCompressionKey];
+        foreach (var optKey in optInKeys)
+        {
+            var before = Make().Read().Items.Single(i => i.Key == optKey);
+            Assert.True(before.OptIn);
+            Assert.False(before.On);
+            Assert.Null(await Make().ApplyAsync([optKey]));
+            var applied = Make().Read().Items.Single(i => i.Key == optKey);
+            Assert.True(applied.On && applied.CanUndo);
+            Assert.Null(await Make().TurnOffAsync(optKey));
+            var reverted = Make().Read().Items.Single(i => i.Key == optKey);
+            Assert.False(reverted.On);
+        }
 
+        Assert.NotNull(await Make().ApplyAsync([BootLatencyKey]));
+        Assert.NotNull(await Make().ApplyAsync([SvcHostSplitKey]));
         Assert.Null(Revert(BootLatencyKey, new Was(Strings: ["badflag=Yes"])));
         Assert.Null(Revert(BootLatencyKey, new Was(Strings: ["disabledynamictick=bad val"])));
         Assert.Null(Revert(GpuPstateKey, new Was(Strings: [@"SOFTWARE\Evil|DisableDynamicPstate=d:1"])));

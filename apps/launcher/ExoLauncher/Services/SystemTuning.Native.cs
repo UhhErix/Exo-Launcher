@@ -378,5 +378,44 @@ internal sealed partial class SystemTuning
         }
 
         public long TotalMemoryKb() => GC.GetGCMemoryInfo().TotalAvailableMemoryBytes / 1024L;
+
+        public int OsBuild() => Environment.OSVersion.Version.Build;
+
+        public IReadOnlyList<string> GameFolders()
+        {
+            try
+            {
+                return [.. App.Services.Library.PeekCachedLibrary()
+                    .Where(g => g.Installed && !string.IsNullOrWhiteSpace(g.Path))
+                    .Select(g => Directory.Exists(g.Path) ? g.Path! : Path.GetDirectoryName(g.Path) ?? "")
+                    .Where(p => p.Length > 0 && Directory.Exists(p))
+                    .Distinct(StringComparer.OrdinalIgnoreCase)];
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException) { return []; }
+        }
+
+        public bool? FolderNotContentIndexed(string folderPath)
+        {
+            try
+            {
+                if (!Directory.Exists(folderPath)) return null;
+                return (File.GetAttributes(folderPath) & FileAttributes.NotContentIndexed) != 0;
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { return null; }
+        }
+
+        public bool SetFolderNotContentIndexed(string folderPath, bool notIndexed)
+        {
+            if (HostMode.IsDisposable) return false;
+            try
+            {
+                if (!Directory.Exists(folderPath)) return false;
+                var attrs = File.GetAttributes(folderPath);
+                var next = notIndexed ? attrs | FileAttributes.NotContentIndexed : attrs & ~FileAttributes.NotContentIndexed;
+                if (next != attrs) File.SetAttributes(folderPath, next);
+                return true;
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { return false; }
+        }
     }
 }

@@ -19,7 +19,12 @@ internal sealed partial class SystemTuning
         GpuPstateKey = "gpuPstate",
         CpuMitigationsKey = "cpuMitigations",
         BootLatencyKey = "bootLatency",
-        MemCompressionKey = "memCompression";
+        MemCompressionKey = "memCompression",
+        EdgeBackgroundKey = "edgeBackground",
+        GameIndexingKey = "gameIndexing";
+
+    internal const long MinMemCompressionOffKb = 33_554_432L;
+    internal const int Win11_24H2Build = 26100;
 
     internal const string KernelSessionKey = @"SYSTEM\CurrentControlSet\Control\Session Manager\kernel",
         GlobalTimerValue = "GlobalTimerResolutionRequests",
@@ -29,6 +34,7 @@ internal sealed partial class SystemTuning
         ClearPageFileValue = "ClearPageFileAtShutdown",
         MmcssKey = @"SOFTWARE\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile",
         MmcssGamesKey = @"SOFTWARE\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile\Tasks\Games",
+        NetworkThrottlingValue = "NetworkThrottlingIndex",
         FthKey = @"SOFTWARE\Microsoft\FTH",
         UsbEnumRoot = @"SYSTEM\CurrentControlSet\Enum\USB",
         UsbSurpriseKey = @"SYSTEM\CurrentControlSet\Control\USB\AutomaticSurpriseRemoval",
@@ -37,6 +43,10 @@ internal sealed partial class SystemTuning
         LastAccessValue = "NtfsDisableLastAccessUpdate",
         ShortNamesValue = "NtfsDisable8dot3NameCreation",
         NtfsMemoryUsageValue = "NtfsMemoryUsage",
+        DisableDeleteNotifyValue = "NtfsDisableDeleteNotify",
+        EdgePolicyKey = @"SOFTWARE\Policies\Microsoft\Edge",
+        EdgeStartupBoostValue = "StartupBoostEnabled",
+        EdgeBackgroundModeValue = "BackgroundModeEnabled",
         GraphicsDriversKey = @"SYSTEM\CurrentControlSet\Control\GraphicsDrivers",
         HwSchModeValue = "HwSchMode",
         DwmKey = @"SOFTWARE\Microsoft\Windows\Dwm",
@@ -68,7 +78,12 @@ internal sealed partial class SystemTuning
 
     internal static readonly HklmSpec[] KernelLatencySpecs =
     [
-        new(KernelSessionKey, GlobalTimerValue, Dword: 1, DesktopOnly: true),
+        new(KernelSessionKey, GlobalTimerValue, Dword: 1),
+        new(FthKey, "Enabled", Dword: 0),
+    ];
+
+    internal static readonly HklmSpec[] RetiredKernelLatencySpecs =
+    [
         new(KernelSessionKey, DistributeTimersValue, Dword: 1, DesktopOnly: true),
         new(SessionPowerKey, CoalescingTimerValue, Dword: 0, DesktopOnly: true),
         new(PriorityControl, Separation, Dword: 38),
@@ -78,9 +93,14 @@ internal sealed partial class SystemTuning
         new(MmcssGamesKey, "Scheduling Category", Sz: "High"),
         new(MmcssGamesKey, "SFIO Priority", Sz: "High"),
         new(MmcssGamesKey, "Latency Sensitive", Sz: "True"),
-        new(FthKey, "Enabled", Dword: 0),
         new(MemoryManagement, DisablePagingExecValue, Dword: 1, MinMemoryKb: 8_388_608L),
         new(MemoryManagement, ClearPageFileValue, Dword: 0, MinMemoryKb: 8_388_608L),
+    ];
+
+    internal static readonly HklmSpec[] EdgeBackgroundSpecs =
+    [
+        new(EdgePolicyKey, EdgeStartupBoostValue, Dword: 0),
+        new(EdgePolicyKey, EdgeBackgroundModeValue, Dword: 0),
     ];
 
     internal static readonly string[] UsbHubPowerValues =
@@ -162,12 +182,13 @@ internal sealed partial class SystemTuning
 
     internal static bool IsDeepPlaybookKey(string key) => key is KernelLatencyKey or UsbPowerKey or AiTelemetryKey
         or StorageFsKey or GamingUxKey or AmdGpuPowerKey or HagsKey or MpoOffKey or HibernateOffKey
-        or BackgroundAppsKey or SvcHostSplitKey or GpuPstateKey or CpuMitigationsKey or BootLatencyKey or MemCompressionKey;
+        or BackgroundAppsKey or SvcHostSplitKey or GpuPstateKey or CpuMitigationsKey or BootLatencyKey or MemCompressionKey
+        or EdgeBackgroundKey or GameIndexingKey;
 
-    internal static bool IsNonAdminKey(string key) => key is VrrKey or MouseAccelKey or PrivacyKey or GamingUxKey or BackgroundAppsKey;
+    internal static bool IsNonAdminKey(string key) => key is VrrKey or MouseAccelKey or PrivacyKey or GamingUxKey or BackgroundAppsKey or GameIndexingKey;
 
     internal static bool DoesNotNeedRestartOnApply(string key) =>
-        key is TimerKey or SchedulingKey or CaptureServiceKey or PrivacyKey or TasksKey or GamingUxKey or BackgroundAppsKey or MemCompressionKey or VrrKey or MouseAccelKey;
+        key is TimerKey or SchedulingKey or CaptureServiceKey or PrivacyKey or TasksKey or GamingUxKey or BackgroundAppsKey or MemCompressionKey or VrrKey or MouseAccelKey or EdgeBackgroundKey or GameIndexingKey;
 
     internal static string? TokenValue(string? data, string name) =>
         (data ?? "").Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
@@ -242,9 +263,13 @@ internal sealed partial class SystemTuning
     private IReadOnlyList<HklmSpec> ActiveHklmSpecs(string key, bool laptop)
     {
         var memKb = system.TotalMemoryKb();
+        var win11_24H2 = system.OsBuild() >= Win11_24H2Build;
         return key switch
         {
-            KernelLatencyKey => [.. KernelLatencySpecs.Where(s => (!s.DesktopOnly || !laptop) && (s.MinMemoryKb == 0 || memKb >= s.MinMemoryKb))],
+            KernelLatencyKey => [.. KernelLatencySpecs.Where(s =>
+                (s.Name != GlobalTimerValue || !laptop || win11_24H2)
+                && (!s.DesktopOnly || !laptop)
+                && (s.MinMemoryKb == 0 || memKb >= s.MinMemoryKb))],
             UsbPowerKey => laptop ? [] : BuildUsbPowerSpecs(),
             AiTelemetryKey => AiTelemetrySpecs,
             StorageFsKey => [.. StorageFsSpecs.Where(s => s.MinMemoryKb == 0 || memKb >= s.MinMemoryKb)],
@@ -254,6 +279,7 @@ internal sealed partial class SystemTuning
             SvcHostSplitKey => BuildSvcHostSpecs(memKb),
             GpuPstateKey => laptop ? [] : BuildGpuPstateSpecs(),
             CpuMitigationsKey => CpuMitigationsSpecs,
+            EdgeBackgroundKey => EdgeBackgroundSpecs,
             _ => [],
         };
     }
@@ -333,9 +359,10 @@ internal sealed partial class SystemTuning
     {
         var laptop = system.IsLaptop();
         var memKb = system.TotalMemoryKb();
+        var win11_24H2 = system.OsBuild() >= Win11_24H2Build;
         var off = saved.Off;
 
-        void AddHklmDefault(string key, string label, string onDetail, string offDetail, bool forceShow = true)
+        void AddHklmItem(string key, string label, string onDetail, string offDetail, bool optIn = false, bool forceShow = true, bool needsRestart = true)
         {
             var specs = ActiveHklmSpecs(key, laptop);
             var kept = saved.Kept.ContainsKey(key);
@@ -345,34 +372,60 @@ internal sealed partial class SystemTuning
                 ? (specs.Count == 1 && system.Dword(ControlKey, SvcHostSplitValue) is { } cur && cur >= specs[0].Dword!.Value)
                 : specs.Count > 0 && specs.All(s => SpecMatches(system, s));
             items.Add(new(key, label, tell(key, allSet ? onDetail : offDetail),
-                allSet || (isPend && kept), kept, off.Contains(key), false, isPend));
+                allSet || (isPend && kept), kept, off.Contains(key), optIn, isPend, NeedsRestart: needsRestart));
         }
 
-        AddHklmDefault(
+        var globalTimerActive = !laptop || win11_24H2;
+        AddHklmItem(
             KernelLatencyKey,
-            "Kernel timer, MMCSS, scheduling & FTH latency tuning",
-            laptop ? "Win32PrioritySeparation 0x26, MMCSS game priority high, and FTH off." : "Global timer resolution, DistributeTimers, Win32PrioritySeparation 0x26, MMCSS, and FTH off.",
-            laptop ? "Tunes thread scheduling (0x26), MMCSS game priority, kernel paging, and FTH. Takes a restart." : "Enables global timer resolution, DistributeTimers, thread scheduling (0x26), MMCSS, kernel paging, and FTH off. Takes a restart.");
+            globalTimerActive ? "Global timer resolution & FTH off" : "Fault Tolerant Heap off",
+            globalTimerActive
+                ? "GlobalTimerResolutionRequests is on so Autopilot's 0.507 ms game timer works on Windows 11 24H2+, and Fault Tolerant Heap is off."
+                : "Fault Tolerant Heap is off so Windows doesn't slow down a game after a crash.",
+            globalTimerActive
+                ? "Sets GlobalTimerResolutionRequests=1 so Autopilot's in-game timer resolution applies on Windows 11 24H2+, and disables Fault Tolerant Heap shims. Takes a restart."
+                : "Disables Fault Tolerant Heap so Windows doesn't permanently shim a game after a crash. Takes a restart.");
 
         if (!laptop || saved.Kept.ContainsKey(UsbPowerKey) || pending(UsbPowerKey))
-            AddHklmDefault(
+            AddHklmItem(
                 UsbPowerKey,
                 "USB controller & hub power saving off",
                 "USB root hubs stay out of selective suspend and D3 sleep for consistent input polling.",
                 "Stops Windows powering down desktop USB root hubs between mouse and keyboard inputs. Takes a restart.",
                 forceShow: !laptop);
 
-        AddHklmDefault(
+        AddHklmItem(
             AiTelemetryKey,
             "Windows AI Recall, Copilot & telemetry policies off",
             "Windows Recall, Click to Do, Copilot, telemetry policies, and WPBT are disabled.",
             "Disables Windows Recall, Click to Do, Copilot, CEIP telemetry policies, RSoP logging, and WPBT without breaking updates or Defender. Takes a restart.");
 
-        AddHklmDefault(
+        AddHklmItem(
             StorageFsKey,
             "NTFS last-access, 8.3 short names & memory usage",
             "NTFS last-access writes and 8.3 short names are disabled with raised NTFS pool.",
             "Turns off NTFS last-access directory writes and 8.3 short names, and raises NTFS memory pool on 8 GB+ PCs. Takes a restart.");
+
+        AddHklmItem(
+            EdgeBackgroundKey,
+            "Edge Startup Boost & background mode off",
+            "Microsoft Edge stays closed in the background (WebView2 stays intact; no restart needed).",
+            "Stops Microsoft Edge keeping background processes resident (reclaims 150-400 MB RAM) while keeping WebView2 intact.",
+            needsRestart: false);
+
+        var gameFolders = system.GameFolders();
+        var idxKept = saved.Kept.ContainsKey(GameIndexingKey);
+        if (gameFolders.Count > 0 || idxKept)
+        {
+            var idxOn = gameFolders.Count > 0 && gameFolders.All(f => system.FolderNotContentIndexed(f) == true);
+            items.Add(new(
+                GameIndexingKey,
+                "Exclude game folders from Windows Search indexing",
+                idxOn
+                    ? "Installed game folders are excluded from Windows Search content indexing (no restart needed)."
+                    : "Marks installed game folders NotContentIndexed so Windows Search doesn't scan game assets or shader caches during play (no admin prompt).",
+                idxOn, idxKept, off.Contains(GameIndexingKey), false, false, null, NeedsRestart: false));
+        }
 
         var uxOn = IsGamingUxApplied();
         var uxKept = saved.Kept.ContainsKey(GamingUxKey);
@@ -385,7 +438,7 @@ internal sealed partial class SystemTuning
             uxOn, uxKept, off.Contains(GamingUxKey), false, false, null, NeedsRestart: false));
 
         if (!laptop && BuildAmdPowerSpecs().Count > 0 || saved.Kept.ContainsKey(AmdGpuPowerKey) || pending(AmdGpuPowerKey))
-            AddHklmDefault(
+            AddHklmItem(
                 AmdGpuPowerKey,
                 "AMD GPU ULPS & PCIe ASPM power gating off",
                 "Radeon ULPS sleep and PCIe ASPM link power gating are disabled.",
@@ -394,17 +447,18 @@ internal sealed partial class SystemTuning
 
         var hagsVal = system.Dword(GraphicsDriversKey, HwSchModeValue);
         if (hagsVal == 1 || saved.Kept.ContainsKey(HagsKey) || pending(HagsKey))
-            AddHklmDefault(
+            AddHklmItem(
                 HagsKey,
                 "Hardware-accelerated GPU scheduling",
                 "Hardware-accelerated GPU scheduling (HAGS) is enabled.",
                 "Hardware-accelerated GPU scheduling was turned off; restores it on for lower frame presentation overhead. Takes a restart.");
 
-        AddHklmDefault(
+        AddHklmItem(
             MpoOffKey,
             "Multiplane Overlay (MPO) off",
             "Desktop Window Manager Multiplane Overlay is disabled.",
-            "Disables DWM Multiplane Overlay to prevent mixed-refresh frame pacing stutter and black screens. Takes a restart.");
+            "Troubleshooting only: use if you see multi-monitor flicker or black screens. Disabling MPO can add up to 1 frame of latency with overlays. Takes a restart.",
+            optIn: true);
 
         var hibKept = saved.Kept.ContainsKey(HibernateOffKey);
         var hibPend = pending(HibernateOffKey);
@@ -429,40 +483,29 @@ internal sealed partial class SystemTuning
                 : "Stops Microsoft Store apps running silently in the background (no admin prompt).",
             bgOn, bgKept, off.Contains(BackgroundAppsKey), false, false, null, NeedsRestart: false));
 
-        AddHklmDefault(
-            SvcHostSplitKey,
-            "Consolidate service hosts",
-            "Service host split threshold matches system RAM to consolidate svchost processes.",
-            "Merges dozens of svchost.exe processes into shared hosts to lower background process overhead. Takes a restart.");
+        if (!laptop && BuildGpuPstateSpecs().Count > 0 || saved.Kept.ContainsKey(GpuPstateKey) || pending(GpuPstateKey))
+            AddHklmItem(
+                GpuPstateKey,
+                "Force max GPU clocks (no P-state drops)",
+                "Dynamic GPU P-state downclocking is disabled for steady desktop clock speeds.",
+                "Locks desktop GPU clocks high at idle (+25-60 W power and heat). Exo already sets Prefer Maximum Performance per game. Takes a restart.",
+                optIn: true,
+                forceShow: !laptop && BuildGpuPstateSpecs().Count > 0);
 
-        AddHklmDefault(
-            GpuPstateKey,
-            "Force max GPU clocks (no P-state drops)",
-            "Dynamic GPU P-state downclocking is disabled for steady desktop clock speeds.",
-            "Stops desktop GPU clock-ramp micro-stutters by disabling dynamic P-states and power gating. Takes a restart.");
-
-        AddHklmDefault(
+        AddHklmItem(
             CpuMitigationsKey,
             "CPU Spectre/Meltdown mitigations off",
             "OS CPU Spectre/Meltdown mitigations are disabled.",
-            "Disables OS CPU Spectre/Meltdown mitigations for maximum CPU throughput on gaming PCs. Takes a restart.");
-
-        var bootKept = saved.Kept.ContainsKey(BootLatencyKey);
-        var bootPend = pending(BootLatencyKey);
-        if (!laptop || bootKept || bootPend)
-            items.Add(new(
-                BootLatencyKey,
-                "BCD dynamic tick off, Enhanced TSC & x2APIC",
-                tell(BootLatencyKey, bootKept ? "Boot Configuration Data enforces disabledynamictick, Enhanced TSC sync, and x2APIC." : "Sets BCD disabledynamictick=yes, tscsyncpolicy=Enhanced, and x2apicpolicy=Enable on desktop PCs. Takes a restart."),
-                bootKept, bootKept, off.Contains(BootLatencyKey), false, bootPend));
+            "Less secure: disables OS CPU Spectre/Meltdown mitigations. Only for an isolated gaming PC. Takes a restart.",
+            optIn: true);
 
         var mmKept = saved.Kept.ContainsKey(MemCompressionKey);
-        if (memKb >= 16_777_216L || mmKept)
+        if (memKb >= MinMemCompressionOffKb || mmKept)
             items.Add(new(
                 MemCompressionKey,
                 "Windows Memory Compression off",
-                mmKept ? "Windows Memory Compression is off on 16 GB+ RAM (no restart needed)." : "Disables Memory Compression CPU overhead on 16 GB+ RAM gaming systems (no restart needed).",
-                mmKept, mmKept, off.Contains(MemCompressionKey), false, false, null, NeedsRestart: false));
+                mmKept ? "Windows Memory Compression is off on 32 GB+ RAM (no restart needed)." : "Disables Memory Compression CPU overhead on 32 GB+ RAM systems (kept on below 32 GB to prevent SSD paging stutters; no restart needed).",
+                mmKept, mmKept, off.Contains(MemCompressionKey), true, false, null, NeedsRestart: false));
     }
 
     private void PrepareDeepKey(string key, Dictionary<string, Was> kept, List<string> lines, out List<HklmSpec> recordedSpecs)
@@ -564,6 +607,16 @@ internal sealed partial class SystemTuning
                 said.Add("Windows didn't turn off background Store apps.");
             }
         }
+        else if (key == GameIndexingKey)
+        {
+            var folders = system.GameFolders();
+            var ok = folders.Count > 0 && folders.All(f => system.FolderNotContentIndexed(f) == true || (system.SetFolderNotContentIndexed(f, true) && system.FolderNotContentIndexed(f) == true));
+            if (!ok)
+            {
+                after = Drop(after, prior, key);
+                said.Add("Windows didn't exclude all game folders from Search indexing.");
+            }
+        }
     }
 
     private void PrepareDeepNonAdminBackup(string key, Dictionary<string, Was> kept)
@@ -600,12 +653,27 @@ internal sealed partial class SystemTuning
             }).ToArray();
             kept.TryAdd(key, new Was(Strings: entries));
         }
+        else if (key == GameIndexingKey)
+        {
+            var entries = system.GameFolders()
+                .Where(f => system.FolderNotContentIndexed(f) == false)
+                .ToArray();
+            kept.TryAdd(key, new Was(Strings: entries));
+        }
     }
 
     private string? TryTurnOffDeepNonAdmin(string key, Was was, Saved saved)
     {
         if (key == BackgroundAppsKey)
             return RevertUserDwordList(key, was, saved, BackgroundAppsSpecs);
+
+        if (key == GameIndexingKey)
+        {
+            foreach (var folder in was.Strings ?? [])
+                if (system.FolderNotContentIndexed(folder) == true && !system.SetFolderNotContentIndexed(folder, false))
+                    return "Windows didn't put Search indexing back. Try again.";
+            return CompleteNonAdminTurnOff(saved, key);
+        }
 
         if (key != GamingUxKey) return null;
         if (was.Strings is not { Length: > 0 } entries) return "Exo's record of this setting couldn't be read, so nothing changed.";
@@ -737,7 +805,8 @@ internal sealed partial class SystemTuning
 
     private static bool IsAllowedHklmEntry(string key, string subKey, string valName) => key switch
     {
-        KernelLatencyKey => KernelLatencySpecs.Any(s => s.Key == subKey && s.Name == valName),
+        KernelLatencyKey => KernelLatencySpecs.Any(s => s.Key == subKey && s.Name == valName)
+            || RetiredKernelLatencySpecs.Any(s => s.Key == subKey && s.Name == valName),
         UsbPowerKey => (subKey == UsbSurpriseKey && valName == UsbSurpriseValue)
             || (UsbRootHubKeyPattern().IsMatch(subKey) && UsbHubPowerValues.Contains(valName)),
         AiTelemetryKey => AiTelemetrySpecs.Any(s => s.Key == subKey && s.Name == valName),
@@ -751,6 +820,7 @@ internal sealed partial class SystemTuning
                 && (valName is "DisableDynamicPstate" or "DisableASyncPstates" or "DisablePowerGating" or "PP_GPUPowerDownEnabled" or "DisableVCEPowerGating" or "DisableVceClockGating" or "PP_SclkDeepSleepDisable"
                     || valName == RmGpsPerCpuDpcValue)),
         CpuMitigationsKey => CpuMitigationsSpecs.Any(s => s.Key == subKey && s.Name == valName),
+        EdgeBackgroundKey => EdgeBackgroundSpecs.Any(s => s.Key == subKey && s.Name == valName),
         HibernateOffKey => (subKey == PowerControlKey && valName == HibernateEnabledValue)
             || (subKey == SessionPowerKey && valName == HiberbootEnabledValue),
         _ => false,
@@ -849,7 +919,7 @@ internal sealed partial class SystemTuning
                 {
                     if (system.Dword(subKey, name) == 0) return false;
                 }
-                else if (subKey == MmcssGamesKey && name is "Scheduling Category" or "SFIO Priority")
+                else if (subKey == MmcssGamesKey && name is "Scheduling Category" or "SFIO Priority" or "Latency Sensitive")
                 {
                     if (system.StringValue(subKey, name) is not null) return false;
                 }

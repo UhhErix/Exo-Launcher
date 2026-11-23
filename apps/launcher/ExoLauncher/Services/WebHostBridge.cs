@@ -978,6 +978,8 @@ public sealed partial class WebHostBridge
                 "exoAi.set" => await Task.Run(() => ExoAiSet(paramsEl, hasParams)).ConfigureAwait(false),
                 "system.interrupts" => await SystemInterruptsAsync(paramsEl, hasParams, requestToken).ConfigureAwait(false),
                 "system.tuning" => await SystemTuningAsync(paramsEl, hasParams, requestToken).ConfigureAwait(false),
+                "system.qos" => await SystemQosAsync(paramsEl, hasParams, requestToken).ConfigureAwait(false),
+                "system.overlays" => await SystemOverlaysAsync(paramsEl, hasParams, requestToken).ConfigureAwait(false),
                 "system.mouseCore" => await SystemMouseCoreAsync(paramsEl, hasParams, requestToken).ConfigureAwait(false),
                 "system.drives" => await SystemDrivesAsync(paramsEl, hasParams, requestToken).ConfigureAwait(false),
                 "system.drivers" => await SystemDriversAsync(paramsEl, hasParams, requestToken).WaitAsync(TimeSpan.FromMinutes(4), requestToken).ConfigureAwait(false),

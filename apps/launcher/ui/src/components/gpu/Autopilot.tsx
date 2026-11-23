@@ -63,10 +63,16 @@ async function change(next: AutopilotChange, onState: (state: AutopilotState) =>
 /** Active always-on protections in concise plain English, plus CPU topology and Windows Game Mode / mouse precision status. */
 function activeSummary(state: AutopilotState): string {
   const parts = [
-    'Gives your game priority while it runs, throttles background hogs, and keeps cores awake.',
+    'Gives your game priority while it runs, throttles background hogs, pauses background downloads, and keeps cores awake.',
     state.gameMode.off ? 'Windows Game Mode off.' : state.gameMode.keptOn ? `Windows Game Mode stays on (${state.gameMode.keptOn}).` : null,
     state.mouseAccel?.off ? 'Mouse acceleration off (1:1).' : null,
     state.cpu || null,
+    state.cpuSets || null,
+    state.timerGlobal?.neededForWin11
+      ? (state.timerGlobal.enabled
+        ? 'GlobalTimerResolutionRequests is on for Windows 11 24H2+.'
+        : 'Enable Global timer resolution in System settings so 0.507 ms game timers apply on Windows 11 24H2+.')
+      : null,
   ]
   return parts.filter(Boolean).join(' ')
 }

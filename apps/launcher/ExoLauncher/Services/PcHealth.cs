@@ -57,7 +57,10 @@ internal static partial class PcHealth
         string? BoardMaker = null,
         PcieLink? GpuPcie = null,
         bool Laptop = false,
-        bool PrimaryOnIntegrated = false);
+        bool PrimaryOnIntegrated = false,
+        int OsBuild = 26100,
+        bool? Amd3dVCacheRunning = null,
+        bool? IntelDttRunning = null);
 
     private const byte DimmFormFactor = 0x09; // SMBIOS: a desktop DIMM (SODIMMs are laptops and mini PCs, which seldom offer EXPO/XMP)
 
@@ -124,6 +127,12 @@ internal static partial class PcHealth
             items.Add(new("pcie", "Graphics card slot", $"Running at PCIe x{pcie.CurrentWidth} instead of x{pcie.MaxWidth}. Move the card to the top PCIe x16 slot or reseat it."));
         if (!r.Laptop && r.Hybrid is { } hybrid && r.PrimaryOnIntegrated)
             items.Add(new("gpucable", "Display cable", $"Your main monitor is plugged into the motherboard ({hybrid.PowerSaving}) instead of your {hybrid.HighPerformance}. Move the cable to the graphics card for full performance."));
+        if (r.OsBuild > 0 && r.OsBuild < SystemTuning.Win11_24H2Build && IsRyzenZen3Plus(r.Cpu))
+            items.Add(new("os-ryzen-24h2", "Windows 11 24H2 update", "Windows 11 24H2 adds AMD branch prediction optimizations worth +10-11% FPS on Zen 4/5 (+3-5% on Zen 3). Check Windows Update."));
+        if (x3d && r.Amd3dVCacheRunning == false)
+            items.Add(new("x3d-service", "AMD 3D V-Cache service", "amd3dvcacheSvc isn't running. Reinstall the AMD chipset driver so games stay on the 3D V-Cache CCD (+5-25% FPS)."));
+        if (ClassOf(r.Cpu, r.CpuHybridProbe) == PowerProfiles.CpuClass.IntelHybrid && r.IntelDttRunning == false)
+            items.Add(new("intel-apo", "Intel Application Optimization (DTT)", "Intel Dynamic Tuning Technology isn't running. Install your motherboard's Intel DTT driver for up to +14% FPS in Intel APO titles."));
         if (r.Network is { } net) items.AddRange(Network(net));
         return items;
     }
@@ -403,7 +412,10 @@ internal static partial class PcHealth
         var advised = subject is null ? null : DriverAdvisories.Shared.Against(subject, installed);
         var laptop = ThisPcIsLaptop();
         var primaryOnIntegrated = !laptop && Hybrid.Value is not null && ReadPrimaryOnIntegrated();
-        var reading = new Reading(Memory.Value, Gpu.Value, cpu, power.Read(), installed, latest, update, chipsetAuto && installed is not null && !chipset!.WindowsAsks(), HagsOff(scheduling), Hybrid.Value, fastGpuForGames, NetworkBest.Shared.Read(), skipped, advised, CpuHybrid(), BoardMaker: PcAbout.Maker(PcAbout.Bios.Maker), GpuPcie: GpuPcie.Value, Laptop: laptop, PrimaryOnIntegrated: primaryOnIntegrated);
+        var cpuClass = ClassOf(cpu, CpuHybrid());
+        bool? amd3dRunning = cpuClass == PowerProfiles.CpuClass.AmdDualCcdX3d ? IsServiceRunning("amd3dvcacheSvc") : null;
+        bool? intelDttRunning = cpuClass == PowerProfiles.CpuClass.IntelHybrid ? (IsServiceRunning("ipfsvc") == true || IsServiceRunning("esifsvc") == true) : null;
+        var reading = new Reading(Memory.Value, Gpu.Value, cpu, power.Read(), installed, latest, update, chipsetAuto && installed is not null && !chipset!.WindowsAsks(), HagsOff(scheduling), Hybrid.Value, fastGpuForGames, NetworkBest.Shared.Read(), skipped, advised, CpuHybrid(), BoardMaker: PcAbout.Maker(PcAbout.Bios.Maker), GpuPcie: GpuPcie.Value, Laptop: laptop, PrimaryOnIntegrated: primaryOnIntegrated, OsBuild: Environment.OSVersion.Version.Build, Amd3dVCacheRunning: amd3dRunning, IntelDttRunning: intelDttRunning);
         if (Interlocked.Exchange(ref _logged, 1) == 0) AppLog.Info("PC health: " + Describe(reading));
         return reading;
     }
@@ -433,6 +445,15 @@ internal static partial class PcHealth
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Security.SecurityException) { return null; }
     }
+
+    internal static bool IsRyzenZen3Plus(string? cpu) =>
+        cpu is not null && RyzenZen3PlusPattern().IsMatch(cpu);
+
+    private static bool? IsServiceRunning(string serviceName) =>
+        GameSessionDownloadPause.NativeSystem.QueryServiceRunning(serviceName);
+
+    [GeneratedRegex(@"Ryzen\s+(?:[3579]\s+(?:5\d{3}|7\d{3}|8\d{3}|9\d{3})|AI\s+)", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+    private static partial Regex RyzenZen3PlusPattern();
 
     [GeneratedRegex(@"amd_chipset_software_(\d+\.\d+\.\d+\.\d+)\.exe", RegexOptions.IgnoreCase)]
     private static partial Regex ChipsetLink();

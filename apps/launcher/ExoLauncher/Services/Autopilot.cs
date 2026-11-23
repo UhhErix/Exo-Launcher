@@ -39,6 +39,9 @@ internal interface IAutopilotSystem
     void BeginHighResTimer() { }
     /// <summary>Releases 1 ms system timer resolution (winmm timeEndPeriod).</summary>
     void EndHighResTimer() { }
+    IReadOnlyList<CpuSetInfo> CpuSets() => [];
+    uint[]? ReadCpuSets(int pid, long created) => null;
+    bool WriteCpuSets(int pid, long created, uint[]? ids) => false;
 }
 
 /// <summary>
@@ -244,7 +247,7 @@ internal sealed record CcdLayout(int Caches, ulong VCacheMask, long VCacheBytes)
 internal sealed record ExoAiAutopilotSnapshot(bool IsGaming, string? GameId, string? GameTitle, int DemotedCount, bool TimerResActive, bool AltTabbed);
 
 internal sealed class AutopilotEngine(IAutopilotSystem system, AutopilotJournal journal, Func<AutopilotSettings> settings,
-    Func<PowerProfiles.CpuClass> cpuClass, Func<Action, IDisposable> startTimer, Action<string>? logLine = null, int? self = null)
+    Func<PowerProfiles.CpuClass> cpuClass, Func<Action, IDisposable> startTimer, Action<string>? logLine = null, int? self = null, Func<CcdLayout?>? ccdLayout = null)
 {
     internal const int LookEveryMs = 2000;
     internal const int AltTabReleaseTicks = 2;
@@ -261,6 +264,8 @@ internal sealed class AutopilotEngine(IAutopilotSystem system, AutopilotJournal 
     private readonly HashSet<(int, long)> _demoted = [];
     private readonly HashSet<string> _demotedNames = new(StringComparer.OrdinalIgnoreCase);
     private readonly HashSet<string> _pausedNames = new(StringComparer.OrdinalIgnoreCase);
+    private uint[] _bgCpuSets = [];
+    private bool _cpuSetsUsed;
     private string? _gameSaid, _parkingSaid;
     private bool _timerActive;
     private int _altTabTicks;
@@ -292,7 +297,9 @@ internal sealed class AutopilotEngine(IAutopilotSystem system, AutopilotJournal 
         var lines = new List<string>();
         if (_gameSaid is not null) lines.Add(_gameSaid);
         if (_demotedNames.Count > 0)
-            lines.Add($"Held back {Names(_demotedNames)} (efficiency mode, lower priority, low disk and memory priority)");
+            lines.Add(_cpuSetsUsed
+                ? $"Held back {Names(_demotedNames)} (efficiency mode, lower priority, background CPU sets, low disk and memory priority)"
+                : $"Held back {Names(_demotedNames)} (efficiency mode, lower priority, low disk and memory priority)");
         if (_pausedNames.Count > 0) lines.Add($"Paused {Names(_pausedNames)}, as you chose, and started them again after");
         if (_parkingSaid is not null) lines.Add(_parkingSaid);
         return lines;
@@ -386,6 +393,8 @@ internal sealed class AutopilotEngine(IAutopilotSystem system, AutopilotJournal 
         _demoted.Clear();
         _demotedNames.Clear();
         _pausedNames.Clear();
+        _cpuSetsUsed = false;
+        _bgCpuSets = AutopilotCpuSets.BackgroundSetIds(system.CpuSets(), cpuClass(), ccdLayout?.Invoke());
         (_gameSaid, _parkingSaid) = (null, null);
         _cpu = [];
         _cpuAt = 0;
@@ -486,7 +495,23 @@ internal sealed class AutopilotEngine(IAutopilotSystem system, AutopilotJournal 
         any |= Change(Knob.Priority, row, AutopilotRules.Lower);
         any |= Change(Knob.Io, row, current => current == AutopilotRules.IoNormal ? AutopilotRules.IoLow : null);
         any |= Change(Knob.Memory, row, current => current == AutopilotRules.MemoryNormal ? AutopilotRules.MemoryLow : null);
+        if (_bgCpuSets.Length > 0 && ApplyCpuSets(row))
+        {
+            _cpuSetsUsed = true;
+            any = true;
+        }
         return any;
+    }
+
+    private bool ApplyCpuSets(ProcessRow row)
+    {
+        var current = system.ReadCpuSets(row.Pid, row.CreateTime);
+        if (current is null || current.Length != 0) return false;
+        var entry = new JournalEntry("CpuSets", row.Pid, row.CreateTime, AutopilotSafety.Bare(row.Name), 0, _bgCpuSets.Length);
+        if (!journal.Add(entry)) return false;
+        if (system.WriteCpuSets(row.Pid, row.CreateTime, _bgCpuSets)) return true;
+        journal.Remove(entry);
+        return false;
     }
 
     /// <summary>The apps the player chose to pause while playing (never one on the safety list), once at the game's start.</summary>
@@ -557,7 +582,13 @@ internal sealed class AutopilotEngine(IAutopilotSystem system, AutopilotJournal 
     {
         try
         {
-            if (entry.Kind == "Power")
+            if (entry.Kind == "CpuSets")
+            {
+                var current = system.ReadCpuSets(entry.Pid, entry.Created);
+                if (current is { Length: > 0 } && current.Length == entry.Wrote)
+                    system.WriteCpuSets(entry.Pid, entry.Created, null);
+            }
+            else if (entry.Kind == "Power")
             {
                 if (Guid.TryParse(entry.Scheme, out var scheme) && Guid.TryParse(entry.Subgroup, out var subgroup) && Guid.TryParse(entry.Setting, out var setting)
                     && system.PowerRead(scheme, subgroup, setting) == (uint)entry.Wrote

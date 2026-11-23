@@ -718,7 +718,7 @@ export type NetCheck = { before: NetSample | null; after: NetSample; said: strin
 export type PcHealth = { ok: boolean; message?: string | null; items: PcHealthItem[]; check?: NetCheck | null }
 
 /** Best settings › System's items (SystemTuning.cs): Windows defaults a tweak changed (Best settings) and two opt-ins (their own switch only). */
-export type TuningKey = 'timer' | 'scheduling' | 'pagefile' | 'cache' | 'captureService' | 'vrrLfc' | 'privacy' | 'tasks' | 'winFeatures' | 'osOverhead' | 'kernelLatency' | 'usbPower' | 'aiTelemetry' | 'storageFs' | 'gamingUx' | 'amdGpuPower' | 'hags' | 'mpoOff' | 'hibernateOff' | 'backgroundApps' | 'svcHostSplit' | 'gpuPstate' | 'cpuMitigations' | 'bootLatency' | 'memCompression' | 'services' | 'integrity' | 'vrr' | 'mouseAccel'
+export type TuningKey = 'timer' | 'scheduling' | 'pagefile' | 'cache' | 'captureService' | 'networkThrottling' | 'pagingExecutive' | 'trimEnabled' | 'vrrLfc' | 'privacy' | 'tasks' | 'winFeatures' | 'osOverhead' | 'kernelLatency' | 'usbPower' | 'aiTelemetry' | 'storageFs' | 'edgeBackground' | 'gameIndexing' | 'gamingUx' | 'amdGpuPower' | 'hags' | 'mpoOff' | 'hibernateOff' | 'backgroundApps' | 'svcHostSplit' | 'gpuPstate' | 'cpuMitigations' | 'bootLatency' | 'memCompression' | 'services' | 'integrity' | 'vrr' | 'mouseAccel'
 /**
  * One item: on, Exo's setting is in place; off, the player turned a Best settings item off; optIn, only its own switch sets it;
  * restart, a change (either way) waits on a restart; needsRestart, whether changing it requires a restart; blocked, why Exo won't change it here (an anti-cheat, a policy).
@@ -728,7 +728,12 @@ export type TuningItem = { key: TuningKey; label: string; detail: string; on: bo
 export type LatencySample = { at: string; dpcUs: number; dpcDriver: string | null; isrUs: number; isrDriver: string | null }
 /** The last check, the one before it (null for the first), and what it says. */
 export type LatencyCheck = { before: LatencySample | null; after: LatencySample; said: string }
-export type Tuning = { ok: boolean; message?: string | null; applied: boolean; restart: boolean; latency?: LatencyCheck | null; items: TuningItem[] }
+export type TuningMigration = { pending: boolean; keys: string[]; summary: string; reverted: string[]; restart: boolean }
+export type Tuning = { ok: boolean; message?: string | null; applied: boolean; restart: boolean; latency?: LatencyCheck | null; migration?: TuningMigration | null; items: TuningItem[] }
+export type QosGame = { gameId: string; title: string; exeName: string; enabled: boolean }
+export type QosState = { ok: boolean; message?: string | null; nlaBypassed: boolean; note: string; games: QosGame[] }
+export type OverlayAdvisorItem = { id: string; name: string; status: 'on' | 'off' | 'unknown'; enabled: boolean; cost: string; detail: string; canToggle: boolean; canUndo: boolean; manualSteps?: string | null }
+export type OverlayAdvisorState = { ok: boolean; message?: string | null; items: OverlayAdvisorItem[] }
 
 /**
  * PC › Drives (Drives.cs): one physical drive. link: the PCIe generation and lanes negotiated against the drive's own
@@ -912,6 +917,9 @@ export type AutopilotState = {
   mouseAccel?: { off: boolean; managed: boolean }
   memoryIntegrity?: { status: AutopilotMemoryIntegrityStatus; reason: string; canUndo: boolean; needsRestart: boolean }
   cpu: string
+  cpuSets?: string | null
+  timerGlobal?: { enabled: boolean; neededForWin11: boolean }
+  downloadsPaused?: { active: boolean; jobs: number; services: string[] }
   now?: { game: string; did: string[] } | null
   live: AutopilotLive | null; reports: AutopilotReport[]
 }
@@ -3136,8 +3144,12 @@ export const host = {
   exoAiSet: (change: ExoAiChange) => rawCall<ExoAiState & { ok: boolean; message?: string | null }>('exoAi.set', change, 15_000),
   /** System > This PC > Interrupts: the devices; apply switches every one that can to MSI mode, undo puts all back, revert one. Waits on Windows' permission prompt. */
   /** Best settings › System: the items; apply sets every Best settings item that's on, on and off one item, latency runs the ten-second latency check. Waits on Windows' permission prompt (and a restore point). */
-  systemTuning: (action?: 'apply' | 'playbook' | 'on' | 'off' | 'latency', item?: TuningKey) =>
+  systemTuning: (action?: 'apply' | 'playbook' | 'migrate' | 'on' | 'off' | 'latency', item?: TuningKey) =>
     rawCall<Tuning>('system.tuning', action ? { action, ...(item ? { item } : {}) } : {}, 240_000),
+  systemQos: (action?: 'on' | 'off', gameId?: string) =>
+    rawCall<QosState>('system.qos', action ? { action, ...(gameId ? { gameId } : {}) } : {}, 120_000),
+  systemOverlays: (action?: 'off' | 'restore', id?: string) =>
+    rawCall<OverlayAdvisorState>('system.overlays', action ? { action, ...(id ? { id } : {}) } : {}, 30_000),
   systemInterrupts: (action?: 'apply' | 'undo' | 'revert' | 'reapply', device?: string) =>
     rawCall<Interrupts>('system.interrupts', action ? { action, ...(device ? { device } : {}) } : {}, 120_000),
   /**
