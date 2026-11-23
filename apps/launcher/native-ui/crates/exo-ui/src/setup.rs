@@ -2,8 +2,9 @@ use crate::state::{AppState, HostStatus, Room};
 use exo_kit::{
     BG, FG, PRIMARY_FG, RADIUS_CARD, RADIUS_PILL, RADIUS_SMALL, SPRING_QUICK, amoled_card,
     exo_mark, fg_faint, fg_muted, glass_control_fill, glass_panel_opt, glass_rim_bottom,
-    glass_rim_top, good, hairline, hover_fill, icon_check, icon_mouse, icon_shield, pressed_fill,
-    scaled, store_logo_or_fallback, type_body, type_page, type_small, warn,
+    glass_rim_top, good, hairline, hover_fill, icon_check, icon_gamepad, icon_headphones,
+    icon_keyboard, icon_mouse, icon_shield, pressed_fill, scaled, store_logo_or_fallback,
+    type_body, type_page, type_small, warn,
 };
 use rune::{Align, Color, Cursor, El, Side, SurfaceFit, TextStyle, col, el, row, text};
 use serde_json::json;
@@ -556,13 +557,15 @@ fn track_cell(s: &AppState, i: usize) -> El {
     );
     if let Some((label, fill, color)) = pill {
         labels = labels.child(
-            row()
-                .h(18.0)
-                .px(7.0)
-                .radius(RADIUS_PILL)
-                .fill(fill)
-                .center_y()
-                .child(text(label).font(type_small()).color(color)),
+            row().child(
+                row()
+                    .h(18.0)
+                    .px(7.0)
+                    .radius(RADIUS_PILL)
+                    .fill(fill)
+                    .center_y()
+                    .child(text(label).font(type_small()).color(color)),
+            ),
         );
     }
     labels = labels.child(
@@ -675,13 +678,56 @@ fn button(
 }
 
 fn pill(label: impl Into<String>, tint: Color, color: Color) -> El {
-    row()
-        .h(22.0)
-        .px(9.0)
-        .radius(RADIUS_PILL)
-        .fill(tint)
-        .center_y()
-        .child(text(label.into()).font(type_small()).color(color))
+    row().child(
+        row()
+            .h(22.0)
+            .px(9.0)
+            .radius(RADIUS_PILL)
+            .fill(tint)
+            .center_y()
+            .child(text(label.into()).font(type_small()).color(color)),
+    )
+}
+
+fn device_glyph(kind: &str, size: f32) -> El {
+    match kind {
+        "keyboard" => icon_keyboard(size, fg_muted()),
+        "controller" => icon_gamepad(size, fg_muted()),
+        "audio" => icon_headphones(size, fg_muted()),
+        _ => icon_mouse(size, fg_muted()),
+    }
+}
+
+fn device_maker_model(dev: &exo_rpc::PeripheralCard) -> String {
+    [dev.maker.as_deref(), dev.model.as_deref()]
+        .into_iter()
+        .flatten()
+        .filter(|v| !v.is_empty())
+        .collect::<Vec<_>>()
+        .join(" · ")
+}
+
+fn bay_facts(dev: &exo_rpc::PeripheralCard) -> Vec<(&'static str, String)> {
+    let mut facts = Vec::new();
+    if let Some(c) = dev.connection.clone().filter(|c| !c.is_empty()) {
+        facts.push(("Connection", c));
+    }
+    if let Some(b) = dev.battery {
+        facts.push((
+            "Battery",
+            format!("{}%", (b * if b <= 1.0 { 100.0 } else { 1.0 }).round()),
+        ));
+    }
+    if let Some(hz) = dev.polling_hz {
+        facts.push(("Polling rate", format!("{hz} Hz")));
+    }
+    if let Some(l) = dev.layout.clone().filter(|v| !v.is_empty()) {
+        facts.push(("Layout", l));
+    }
+    if let Some(c) = dev.color.clone().filter(|v| !v.is_empty()) {
+        facts.push(("Color", c));
+    }
+    facts
 }
 
 fn hero_style() -> TextStyle {
@@ -704,13 +750,17 @@ fn stat_cell(value: String, caption: String) -> El {
         .child(text(caption).font(type_small()).color(fg_muted()).wrap())
 }
 
-fn mosaic(s: &AppState, scale: f32) -> El {
-    let games: Vec<_> = s
-        .games
+fn cover_pool(s: &AppState, scale: f32, installed_only: bool) -> Vec<rune::Image> {
+    s.games
         .iter()
-        .filter(|g| g.cover_url.is_some())
+        .filter(|g| g.cover_url.is_some() && (!installed_only || g.installed))
+        .filter_map(|g| s.cover_image(g, scale))
         .take(24)
-        .collect();
+        .collect()
+}
+
+fn mosaic(s: &AppState, scale: f32) -> El {
+    let covers = cover_pool(s, scale, false);
     let mut columns = row()
         .pin(Some(-160.0), Some(-160.0), Some(-160.0), Some(-160.0))
         .gap(12.0)
@@ -724,10 +774,8 @@ fn mosaic(s: &AppState, scale: f32) -> El {
                 .h(380.0)
                 .radius(RADIUS_SMALL)
                 .fill(fg_faint().alpha(0.12));
-            if let Some(game) = games.get(idx)
-                && let Some(img) = s.cover_image(game, scale)
-            {
-                cover = cover.pixels_fit(img.pixels(), SurfaceFit::Fill);
+            if !covers.is_empty() {
+                cover = cover.pixels_fit(covers[idx % covers.len()].pixels(), SurfaceFit::Fill);
             }
             column = column.child(cover);
         }
@@ -858,7 +906,7 @@ fn welcome(s: &AppState, scale: f32) -> El {
                 .w_full()
                 .h(64.0)
                 .center()
-                .child(icon_mouse(28.0, fg_muted())),
+                .child(device_glyph(&dev.kind, 28.0)),
         };
         device_row = device_row.child(
             col()
@@ -897,7 +945,9 @@ fn welcome(s: &AppState, scale: f32) -> El {
                     text("Nothing downloads, installs, or changes on your PC or hardware until you confirm.")
                         .font(type_small())
                         .color(fg_muted())
-                        .wrap(),
+                        .wrap()
+                        .grow(1.0)
+                        .min_w(0.0),
                 ),
         );
 
@@ -1147,7 +1197,7 @@ fn accounts(s: &AppState) -> El {
         .child(side)
 }
 
-fn bay(s: &AppState, i: usize, dev: &exo_rpc::PeripheralCard, scale: f32) -> El {
+fn bay(s: &AppState, i: usize, dev: &exo_rpc::PeripheralCard, fact_rows: usize, scale: f32) -> El {
     let photo =
         s.pc.device_images
             .get(&dev.id)
@@ -1163,16 +1213,32 @@ fn bay(s: &AppState, i: usize, dev: &exo_rpc::PeripheralCard, scale: f32) -> El 
             .grow(1.0)
             .min_h(0.0)
             .center()
-            .child(icon_mouse(56.0, fg_muted())),
+            .child(device_glyph(&dev.kind, 140.0)),
     };
-    let sub = match dev.battery {
-        Some(b) => format!(
-            "{}% · {}",
-            (b * if b <= 1.0 { 100.0 } else { 1.0 }).round(),
-            dev.connection.clone().unwrap_or_default()
-        ),
-        None => dev.connection.clone().unwrap_or_else(|| dev.kind.clone()),
-    };
+    let mut facts = col()
+        .w_full()
+        .gap(8.0)
+        .min_h(fact_rows as f32 * 22.0 + fact_rows.saturating_sub(1) as f32 * 8.0);
+    for (label, value) in bay_facts(dev) {
+        facts = facts.child(
+            row()
+                .w_full()
+                .justify_between()
+                .gap(12.0)
+                .center_y()
+                .child(text(label).font(type_small()).color(fg_muted()))
+                .child(text(value).font(type_small()).color(FG)),
+        );
+    }
+    let maker_model = device_maker_model(dev);
+    let mut head = row().w_full().justify_between().center_y().child(
+        text(format!("{:02} · {}", i + 1, dev.kind))
+            .font(type_small())
+            .color(fg_faint()),
+    );
+    if let Some(conn) = dev.connection.clone().filter(|c| !c.is_empty()) {
+        head = head.child(pill(conn, fg_faint().alpha(0.2), fg_muted()));
+    }
     let id = dev.id.clone();
     col()
         .key(format!("setup-bay-{i}"))
@@ -1193,26 +1259,18 @@ fn bay(s: &AppState, i: usize, dev: &exo_rpc::PeripheralCard, scale: f32) -> El 
         .press(pressed_fill())
         .motion(SPRING_QUICK)
         .on_press(move |s: &mut AppState| s.setup_open_device(id.clone()))
-        .child(
-            row()
-                .w_full()
-                .justify_between()
-                .center_y()
-                .child(
-                    text(format!("{:02} · {}", i + 1, dev.kind))
-                        .font(type_small())
-                        .color(fg_faint()),
-                )
-                .child(pill(
-                    dev.connection.clone().unwrap_or_else(|| "Connected".into()),
-                    fg_faint().alpha(0.2),
-                    fg_muted(),
-                )),
-        )
+        .child(head)
         .child(media)
         .child(el().w_full().h(1.0).fill(hairline()))
         .child(text(dev.name.clone()).font(type_body()).color(FG).wrap())
-        .child(text(sub).font(type_small()).color(fg_muted()).wrap())
+        .child(
+            text(maker_model)
+                .font(type_small())
+                .color(fg_muted())
+                .wrap()
+                .min_h(18.0),
+        )
+        .child(facts)
 }
 
 fn devices(s: &AppState, scale: f32) -> El {
@@ -1233,8 +1291,14 @@ fn devices(s: &AppState, scale: f32) -> El {
         )
     } else {
         let mut bays = row().w_full().grow(1.0).gap(16.0);
+        let fact_rows = devices
+            .iter()
+            .take(4)
+            .map(|d| bay_facts(d).len())
+            .max()
+            .unwrap_or(0);
         for (i, dev) in devices.iter().take(4).enumerate() {
-            bays = bays.child(bay(s, i, dev, scale));
+            bays = bays.child(bay(s, i, dev, fact_rows, scale));
         }
         bays
     };
@@ -1581,6 +1645,7 @@ fn setup_switch(key: String, on: bool, on_press: impl Fn(&mut AppState) + 'stati
 
 fn tour_stage(s: &AppState, scale: f32) -> El {
     let games: Vec<_> = s.games.iter().filter(|g| g.installed).take(16).collect();
+    let covers = cover_pool(s, scale, true);
     let hero_name = games
         .first()
         .map_or("Your library".to_string(), |g| g.title.clone());
@@ -1594,9 +1659,7 @@ fn tour_stage(s: &AppState, scale: f32) -> El {
                 .h_full()
                 .radius(RADIUS_SMALL)
                 .fill(fg_faint().alpha(0.12));
-            if let Some(game) = games.get(line_idx * 8 + col_idx)
-                && let Some(img) = s.cover_image(game, scale)
-            {
+            if let Some(img) = covers.get(line_idx * 8 + col_idx) {
                 cover = cover.pixels_fit(img.pixels(), SurfaceFit::Fill);
             }
             line = line.child(cover);
@@ -1613,13 +1676,15 @@ fn tour_stage(s: &AppState, scale: f32) -> El {
                 .pt(28.0)
                 .gap(12.0)
                 .child(
-                    row()
-                        .h(24.0)
-                        .px(10.0)
-                        .radius(RADIUS_PILL)
-                        .fill(FG)
-                        .center_y()
-                        .child(text("Last played").font(type_small()).color(BG)),
+                    row().child(
+                        row()
+                            .h(24.0)
+                            .px(10.0)
+                            .radius(RADIUS_PILL)
+                            .fill(FG)
+                            .center_y()
+                            .child(text("Last played").font(type_small()).color(BG)),
+                    ),
                 )
                 .child(text(hero_name).font(hero_style()).color(FG))
                 .child(
@@ -1732,7 +1797,24 @@ fn done(s: &AppState, scale: f32) -> El {
                 .grow(1.0)
                 .min_h(0.0)
                 .center()
-                .child(icon_mouse(36.0, fg_muted())),
+                .child(device_glyph(&dev.kind, 96.0)),
+        };
+        let mut name_row = row().w_full().gap(8.0).center_y().child(
+            text(dev.name.clone())
+                .font(type_body())
+                .color(FG)
+                .wrap()
+                .grow(1.0)
+                .min_w(0.0),
+        );
+        if let Some(conn) = dev.connection.clone().filter(|c| !c.is_empty()) {
+            name_row = name_row.child(pill(conn, fg_faint().alpha(0.2), fg_muted()));
+        }
+        let maker_model = device_maker_model(dev);
+        let sub = if maker_model.is_empty() {
+            dev.kind.clone()
+        } else {
+            maker_model
         };
         strip = strip.child(
             col()
@@ -1744,8 +1826,8 @@ fn done(s: &AppState, scale: f32) -> El {
                 .fill(BG)
                 .border_gradient(1.0, glass_rim_top(), glass_rim_bottom())
                 .child(media)
-                .child(text(dev.name.clone()).font(type_body()).color(FG).wrap())
-                .child(text(dev.kind.clone()).font(type_small()).color(fg_muted())),
+                .child(name_row)
+                .child(text(sub).font(type_small()).color(fg_muted()).wrap()),
         );
     }
     let facts = glass_panel_opt("setup-done-facts", 470.0, true)
@@ -1995,7 +2077,14 @@ pub fn view(s: &AppState, scale: f32) -> El {
         .h_full()
         .fill(BG)
         .child(track(s))
-        .child(col().w_full().grow(1.0).min_h(0.0).child(body))
+        .child(
+            col()
+                .w_full()
+                .grow(1.0)
+                .min_h(0.0)
+                .clip_rounded(0.0)
+                .child(body),
+        )
         .child(el().w_full().h(1.0).fill(hairline()));
     if s.setup.stage != 0 && s.setup.stage != DONE_STAGE {
         root = root.child(footer(s));

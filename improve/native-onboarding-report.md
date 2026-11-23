@@ -22,53 +22,66 @@ Review points:
 - Wooting header thumbnail crop: the source PNG (1200x800) had the keyboard in the middle third, so the pill showed a small keyboard in a lot of black. Added `docs-audit/assets/devices/wooting-60he-v2-thumb.png` (keyboard bounds + 10 px pad, 1097x392) and pointed `03-setup-wooting-60he-v2.html` at it. Native does not crop: it draws the host image with `SurfaceFit::Fit`. If the native Devices header needs the tight crop, the host's device image has to change, not the UI.
 - PC defaults empty middles: `04-pc-defaults.html` `.hw-grid` changed from full-height rows (`1.15fr 1fr`) to content-height rows (`auto auto`, `align-content: start`). Native cards are content-height (about 140 px); the picks panel fills the right column.
 
-## Follow-up (coordinator items 1-7)
+## Follow-up: snap review (coordinator msg_06cba6efaa94)
 
-Snaps: 720p (1280x720), 1080p (1920x1080), 1440p (2560x1440), all 7 setup scenes, `tools/parity/parity-snap.ps1` with `-DataDir` a temp copy of the data dir (device-images and covers copied in). Files are in the scratch folder `...\scratchpad\snaps\h{720,1080,1440}-setup-*.png`, not committed.
+Snaps: 720p (1280x720), 1080p (1920x1080), 1440p (2560x1440), all 7 setup scenes, `tools/parity/parity-snap.ps1 -NoBuild` with `-DataDir` a temp copy of the data dir. Files are in the scratch folder `...\scratchpad\snaps\h{720,1080,1440}-setup-*.png`, not committed. The 1080p welcome, devices, tour and done snaps and the 720p welcome and 1440p devices snaps were viewed after the final build.
 
 | # | Item | Status |
 |---|------|--------|
-| 1 | Coach marks anchored to real element bounds | Partly. Coach is anchored to `search-capsule` / `tile-<id>` / `nav-devices` through `coach_anchor`. In the 1080p snap the card sits top-left under the Bar's search capsule, not right-aligned as the mockup shows (the native Bar puts search on the left, the mockup on the right). Whether the anchor resolved or fell back to the top-left position is not verified in code. Open. |
-| 2 | Restore backup and Game clients rows in Accounts | Done in code (`backup.status`, `clients.status` via `load_backup_and_clients`). Values are in the settle path; the Accounts snap shows the rows. |
-| 3 | Tour (on-05) and Done (on-06) layouts | Tour: now the Library room (installed-cover grid, "Last played" hero, real counts) with the coach card pinned top-right at the mockup position, step 1 of 3. The footer (Back / Skip live tour / Start tour) stays; the mockup has none. Two grid cells are empty where a game has no cover. Done: "Setup complete" + "You're ready to play" when all five stages are Done; paragraph built from real counts. Device cards have no spec sub-line and no status pills (the host gives no data for them, nothing is invented). Open. |
+| 1 | Welcome mosaic over the track / title | Done. The body wrapper clips to its rectangle (`clip_rounded(0.0)` in `view()`); the track is clear in 720p and 1080p. |
+| 2 | Welcome right half empty tiles | Done. `cover_pool()` resolves images first and cycles them, so the mosaic fills every tile even when a remote cover is not decoded yet. |
+| 3 | "Found on this PC" footer clipped | Done. The footer text wraps inside the panel (`grow` + `min_w(0)`). |
+| 4 | Devices stage-3 track "Current" bar too wide | Done. Track pills sit in an outer row, so they hug their width. |
+| 5 | Devices Headphones tiny placeholder | Done. Device glyphs come from `device_glyph()` (keyboard, controller, audio, mouse) at bay size. |
+| 6 | Devices bays mostly empty | Done. Bays show the kind, a connection pill, the name, maker · model, and spec lines (Connection, Battery, Polling rate, Layout, Color) only where the host has a value. Bay titles align across bays (`fact_rows`). |
+| 7 | Done device pills as on-06 | Done. Device cards show a connection pill and a maker · model sub-line (kind when there is no maker). |
+| — | Tour "Last played" pill stretched full width | Done in this pass. The pill sits in an outer row. |
+
+Earlier follow-up (coordinator items 1-7, commit `15d4a18`):
+
+| # | Item | Status |
+|---|------|--------|
+| 1 | Coach marks anchored to real element bounds | Coach anchors to `search-capsule` / `tile-<id>` / `nav-devices` through `coach_anchor`. Coordinator confirmed the top-left placement under the search capsule is correct for the native Bar. |
+| 2 | Restore backup and Game clients rows in Accounts | Done (`backup.status`, `clients.status` via `load_backup_and_clients`). |
+| 3 | Tour (on-05) and Done (on-06) layouts | Tour: Library room with installed-cover grid, "Last played" hero, real counts, coach card pinned top-right, step 1 of 3. Footer (Back / Skip live tour / Start tour) kept; the mockup has none. Done: "Setup complete" + "You're ready to play" when all five stages are Done. |
 | 4 | Welcome mosaic tilted | Done (`rotate(-0.14)`). |
 | 5 | Open account keeps the user in setup | Done (return bar, `setup_return`). |
-| 6 | Devices bays vs on-03 | Checked on the 1080p snap. Dongle first, four bays (host lists five; the fifth is not shown). Bay headers and tags follow the host's `kind`/`tag`. Mockup has spec lines and pills that the host does not provide. Open. |
-| 7 | Parity snaps show real host values | Done. `settle_setup_host` runs before the setup scenes (PC cards, drives, GPU, Accounts, backup, clients, devices, device images, covers). `--frames 240 --fps 60` lets the background image decode finish. No "Checking" in the 1080p/1440p snaps except Version when the host returns no version. |
+| 6 | Devices bays vs on-03 | Superseded by the snap-review item 6 above. |
+| 7 | Parity snaps show real host values | Done. `settle_setup_host` runs before the setup scenes; `--frames 240 --fps 60` lets background image decode finish. |
 
 Also changed:
-- Accounts: "1 game on this PC" (singular). Code only, not seen in a snap.
-- Track cells: the pill sits under the stage title; sub-lines truncate. Visible in all snaps.
-- Setup-done parity scene marks stages 1-5 Done (`setup_go_complete`), which is the state on-06 shows. `picks` is not set by the fixture, so the snap reads "0 PC defaults applied"; mockup shows 5. Data-driven, not fixed.
+- Accounts: "1 game on this PC" (singular).
+- Track cells: the pill sits under the stage title; sub-lines truncate.
+- Setup-done parity scene marks stages 1-5 Done (`setup_go_complete`). `picks` is not set by the fixture, so the snap reads "0 PC defaults applied"; the mockup shows 5. Data-driven, not fixed.
 
-## Gates (final, after the follow-up commit)
+## Gates (final, after the snap-review commit)
 
 - `cargo fmt --all -- --check`: pass
 - `cargo clippy --workspace --locked -- -D warnings`: pass
 - `cargo test --workspace --locked`: pass (4 + 17 (1 ignored) + 69)
 - `cargo build --release --locked --bin exo-ui`: pass
 - `node tools/check-comments.mjs` (from `apps/launcher`): pass ("Comment ratchet ok")
-- No C# changed; dotnet gates not re-run for this follow-up.
+- No C# changed; dotnet gates not re-run for this change.
 
-## Visual check (1920x1080, parity harness)
+## Visual check (parity harness)
 
-Scenes: setup-welcome, setup-accounts, setup-devices, setup-pc, setup-tour, setup-done, setup-coach (`tools/parity/parity-snap.ps1`, `-NoBuild`, temp data dir). Checked: track, Accounts & stores, PC defaults (the picks panel no longer overlaps cards), coach overlay in the real Library room, live tour, Done.
+Scenes: setup-welcome, setup-accounts, setup-devices, setup-pc, setup-tour, setup-done, setup-coach at 720p, 1080p and 1440p. Checked by eye against the mockups: welcome, devices, tour, done (1080p); welcome (720p); devices (1440p).
 
-## Known gaps (open after the follow-up)
+## Known gaps (open)
 
-- Coach mark placement: card is top-left under the Bar's search capsule; mockup is top-right. Anchor resolution unverified.
+- Tour grid: one cover cell is blank at 1080p (a game whose cover does not decode in the headless snap). Not reproduced in code; the remote-cover path returns None in headless.
 - Tour footer buttons are not in the mockup (kept for Back / Start).
-- Devices: host has five devices, four bays shown; no spec lines or status pills (no host data).
-- Done: device cards have no spec sub-line or status pills; PC defaults count reads from picks (fixture has none).
+- Devices: the host lists five devices, four bays are shown.
+- Done: PC defaults count reads from picks (fixture has none), so it reads "0 applied".
 - "Open account" still opens the Settings-side flow rather than inline sign-in (item 5 is the return path, not inline sign-in).
 - Per-device bodies (dual-sense edge, audio EQ) are not built (out of scope).
 
 ## Parity limitations
 
-- `parity-snap.ps1` compares only against its fixed `refByScene` map, which has no setup entries. Comparison against the mockup PNGs is manual (done for the snaps above, by eye).
+- `parity-snap.ps1` compares only against its fixed `refByScene` map, which has no setup entries. Comparison against the mockup PNGs is manual.
 - Mockup references: `docs-audit/onboarding/mockups-v2/screenshots/0N-*-1920x1080.png` on `UhhErix/setup-redesign`.
 
 ## Processes
 
-- No Exo process was started and left running by this task's runs. One `ExoLauncher.exe` (PID 10084) is running from another session's scratchpad (`...\c001cd68...\scratchpad\soak\before-debug\`). It was not started here and was not closed.
+- No Exo process was started and left running by this task's runs. A check after the last snap showed no `ExoLauncher` or `exo-ui` process. One `ExoLauncher.exe` (PID 10084) from another session was not started here and was not closed.
 - `%LOCALAPPDATA%\ExoLauncher` was not written to.
