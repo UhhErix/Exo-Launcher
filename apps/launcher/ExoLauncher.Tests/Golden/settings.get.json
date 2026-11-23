@@ -1,0 +1,66 @@
+{
+  "version": 1,
+  "id": "<REQUEST_ID>",
+  "ok": true,
+  "result": {
+    "appVersion": "3.29.0",
+    "whatsNewSeen": "3.29.0",
+    "reduceMotion": false,
+    "startMaximized": true,
+    "startWithWindows": false,
+    "framelessPinTop": false,
+    "framelessPinSide": false,
+    "textColour": "white",
+    "textSize": "default",
+    "background": "void",
+    "musicService": "spotify",
+    "uiPrefs": {
+      "exo.musicWebService": "spotify"
+    },
+    "sortMode": "recent",
+    "defaultInstallRoot": "<PATH>",
+    "preferredGameSources": {
+      "portal 2": "steam"
+    },
+    "recent": [
+      "steam:620"
+    ],
+    "onboardingComplete": true,
+    "showLibraryTools": true,
+    "achievementBanners": true,
+    "achievementVolume": 75,
+    "fpsCounter": false,
+    "fpsCounterPosition": "right",
+    "fpsCounterItems": [
+      "fps",
+      "frametime"
+    ],
+    "fpsCounterHideOverBuiltIn": true,
+    "hdrForGames": true,
+    "frameGenEverywhere": false,
+    "frameGenEverywhereCard": true,
+    "hdrSdrGamma": true,
+    "discordNoiseSuppression": true,
+    "discordQuietWhilePlaying": true,
+    "pauseDownloadsWhilePlaying": true,
+    "autoUpdateGames": true,
+    "autoUpdateChipset": true,
+    "autoUpdateUpscalers": true,
+    "upscalerAntiCheatEverywhere": false,
+    "keepAwakeDownloads": true,
+    "storeClientsQuiet": true,
+    "chipset": "amd",
+    "libraryFolders": [
+      {
+        "id": "folder-coop",
+        "name": "Co-op",
+        "color": "blue",
+        "sort": "folder",
+        "games": [
+          "steam:620"
+        ]
+      }
+    ],
+    "hiddenGames": []
+  }
+}

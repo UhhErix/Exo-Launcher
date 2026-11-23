@@ -52,7 +52,9 @@ internal sealed partial class DiscordSession
 
     internal static DiscordSession? Current => _current;
 
-    internal static object Status() => new { state = _state, message = _message, signedIn = DiscordToken.Read() is not null };
+    internal static object BuildStatusResponse(string state, string? message, bool signedIn) => new { state, message, signedIn };
+
+    internal static object Status() => BuildStatusResponse(_state, _message, DiscordToken.Read() is not null);
 
     private static bool NoiseSuppressionWanted =>
         Voice.VoiceProcessing.Current.NoiseSuppression || App.Services.Settings.Shared.DiscordOthersNoiseSuppression;

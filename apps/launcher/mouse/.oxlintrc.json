@@ -1,0 +1,88 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": ["typescript", "react"],
+  "categories": {
+    "correctness": "off",
+    "suspicious": "off",
+    "pedantic": "off",
+    "perf": "off",
+    "style": "off",
+    "restriction": "off",
+    "nursery": "off"
+  },
+  "ignorePatterns": ["dist/**", "node_modules/**", "vendor/**"],
+  "rules": {
+    "no-restricted-globals": [
+      "error",
+      {
+        "name": "localStorage",
+        "message": "This frame's own storage is lost when its origin is cleared and is never backed up: what the player chooses goes to Exo through the host (saved.ts); a convenience goes through frameStore.ts, under a key named there with why it may be lost."
+      },
+      {
+        "name": "sessionStorage",
+        "message": "This frame's own storage is lost when its origin is cleared and is never backed up: what the player chooses goes to Exo through the host (saved.ts); a convenience goes through frameStore.ts, under a key named there with why it may be lost."
+      },
+      {
+        "name": "indexedDB",
+        "message": "This frame's own storage is lost when its origin is cleared and is never backed up: what the player chooses goes to Exo through the host (saved.ts); a convenience goes through frameStore.ts, under a key named there with why it may be lost."
+      }
+    ],
+    "no-restricted-properties": [
+      "error",
+      {
+        "object": "window",
+        "property": "localStorage",
+        "message": "This frame's own storage is lost when its origin is cleared and is never backed up: what the player chooses goes to Exo through the host (saved.ts); a convenience goes through frameStore.ts, under a key named there with why it may be lost."
+      },
+      {
+        "object": "window",
+        "property": "sessionStorage",
+        "message": "This frame's own storage is lost when its origin is cleared and is never backed up: what the player chooses goes to Exo through the host (saved.ts); a convenience goes through frameStore.ts, under a key named there with why it may be lost."
+      },
+      {
+        "object": "window",
+        "property": "indexedDB",
+        "message": "This frame's own storage is lost when its origin is cleared and is never backed up: what the player chooses goes to Exo through the host (saved.ts); a convenience goes through frameStore.ts, under a key named there with why it may be lost."
+      },
+      {
+        "object": "globalThis",
+        "property": "localStorage",
+        "message": "This frame's own storage is lost when its origin is cleared and is never backed up: what the player chooses goes to Exo through the host (saved.ts); a convenience goes through frameStore.ts, under a key named there with why it may be lost."
+      },
+      {
+        "object": "globalThis",
+        "property": "sessionStorage",
+        "message": "This frame's own storage is lost when its origin is cleared and is never backed up: what the player chooses goes to Exo through the host (saved.ts); a convenience goes through frameStore.ts, under a key named there with why it may be lost."
+      },
+      {
+        "object": "globalThis",
+        "property": "indexedDB",
+        "message": "This frame's own storage is lost when its origin is cleared and is never backed up: what the player chooses goes to Exo through the host (saved.ts); a convenience goes through frameStore.ts, under a key named there with why it may be lost."
+      },
+      {
+        "object": "self",
+        "property": "localStorage",
+        "message": "This frame's own storage is lost when its origin is cleared and is never backed up: what the player chooses goes to Exo through the host (saved.ts); a convenience goes through frameStore.ts, under a key named there with why it may be lost."
+      },
+      {
+        "object": "self",
+        "property": "sessionStorage",
+        "message": "This frame's own storage is lost when its origin is cleared and is never backed up: what the player chooses goes to Exo through the host (saved.ts); a convenience goes through frameStore.ts, under a key named there with why it may be lost."
+      },
+      {
+        "object": "self",
+        "property": "indexedDB",
+        "message": "This frame's own storage is lost when its origin is cleared and is never backed up: what the player chooses goes to Exo through the host (saved.ts); a convenience goes through frameStore.ts, under a key named there with why it may be lost."
+      }
+    ]
+  },
+  "overrides": [
+    {
+      "files": ["src/frameStore.ts"],
+      "rules": {
+        "no-restricted-globals": "off",
+        "no-restricted-properties": "off"
+      }
+    }
+  ]
+}

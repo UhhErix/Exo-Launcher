@@ -1070,19 +1070,37 @@ public sealed partial class WebHostBridge
             Telemetry.Track("library.loaded", ("ms", (long)(libraryMs + projectionMs)), ("games", Telemetry.GameCountBucket(games.Count)),
                 ("stores", games.Select(game => game.Store).Distinct().Count()));
         }
-        return new
-        {
-            games = mapped,
-            count = games.Count,
-            stores = MapStoreMatrix(
-                _services.Library.PeekStoreMatrix() ?? Array.Empty<LibraryService.StoreBackendStatus>()),
-            progress = MapProgress(_services.Launcher.CurrentProgress),
-            queuedGameIds = _services.Launcher.QueuedGameIds,
-            pausedDownloads = _services.Launcher.PausedDownloads,
-            sortMode = settings.SortMode,
-            recent = settings.Recent,
-        };
+        return BuildLibraryResponse(
+            mapped,
+            games.Count,
+            _services.Library.PeekStoreMatrix() ?? Array.Empty<LibraryService.StoreBackendStatus>(),
+            _services.Launcher.CurrentProgress,
+            _services.Launcher.QueuedGameIds,
+            _services.Launcher.PausedDownloads,
+            settings.SortMode,
+            settings.Recent);
     }
+
+    internal static object BuildLibraryResponse(
+        IReadOnlyList<object> mappedGames,
+        int count,
+        IReadOnlyList<LibraryService.StoreBackendStatus> storeMatrix,
+        InstallProgress progress,
+        IReadOnlyList<string> queuedGameIds,
+        IReadOnlyList<PausedDownload> pausedDownloads,
+        string sortMode,
+        IReadOnlyList<string> recent) =>
+        new
+        {
+            games = mappedGames,
+            count,
+            stores = MapStoreMatrix(storeMatrix),
+            progress = MapProgress(progress),
+            queuedGameIds,
+            pausedDownloads,
+            sortMode,
+            recent,
+        };
 
     private async Task<object> GameGetAsync(JsonElement p, bool hasParams)
     {
@@ -2386,16 +2404,31 @@ public sealed partial class WebHostBridge
     private object BuildSettings()
     {
         var s = _services.Settings.Current;
-        // Locked product defaults (SettingsService.EnforceProductDefaults) and
-        // dead fields are not exposed: closeStoreClientsAfterLaunch,
-        // autoInstallRedistributables, minimizeWhilePlaying, antiCheatSafeMode,
-        // framelessMode, theme, copyPortableIntoLibrary, allowResize,
-        // checkForUpdates, libraryShowInstalled, libraryShowOwned.
         var musicService = WebClientPreferences.EffectiveMusicService(WebClientPreferences.Read().MusicService);
         var riotId = RiotIdStore.TryRead();
-        return new
+        return BuildSettingsResponse(
+            s,
+            _services.AppVersion,
+            musicService,
+            riotId,
+            RiotBaselineFor(riotId),
+            DlssSwapService.FrameGenEverywhereCard(SystemSpecs.FastFrameGenGpu) is not null,
+            ChipsetUpdate.ThisPc is { } update && update.Installed() is not null ? update.Vendor : null,
+            _folderArt.ResolveUrl);
+    }
+
+    internal static object BuildSettingsResponse(
+        AppSettings s,
+        string appVersion,
+        string musicService,
+        string? riotId,
+        object? riotBaseline,
+        bool frameGenEverywhereCard,
+        string? chipset,
+        Func<string?, string?> resolveFolderArt) =>
+        new
         {
-            appVersion = _services.AppVersion,
+            appVersion,
             whatsNewSeen = s.WhatsNewSeen,
             reduceMotion = s.ReduceMotion,
             startMaximized = s.StartMaximized,
@@ -2413,7 +2446,7 @@ public sealed partial class WebHostBridge
             recent = s.Recent,
             onboardingComplete = s.OnboardingComplete,
             riotId,
-            riotBaseline = RiotBaselineFor(riotId),
+            riotBaseline,
             showLibraryTools = s.ShowLibraryTools,
             achievementBanners = s.AchievementBanners,
             achievementVolume = s.AchievementVolume,
@@ -2423,7 +2456,7 @@ public sealed partial class WebHostBridge
             fpsCounterHideOverBuiltIn = s.FpsCounterHideOverBuiltIn,
             hdrForGames = s.HdrForGames,
             frameGenEverywhere = s.FrameGenEverywhere,
-            frameGenEverywhereCard = DlssSwapService.FrameGenEverywhereCard(SystemSpecs.FastFrameGenGpu) is not null,
+            frameGenEverywhereCard,
             hdrSdrGamma = s.HdrSdrGamma,
             discordNoiseSuppression = s.DiscordNoiseSuppression,
             discordQuietWhilePlaying = s.DiscordQuietWhilePlaying,
@@ -2436,12 +2469,10 @@ public sealed partial class WebHostBridge
             upscalerAntiCheatEverywhere = s.UpscalerAntiCheatEverywhere,
             keepAwakeDownloads = s.KeepAwakeDownloads,
             storeClientsQuiet = s.StoreClientsQuiet,
-            chipset = ChipsetUpdate.ThisPc is { } update && update.Installed() is not null ? update.Vendor : null,
-            libraryFolders = s.LibraryFolders.Select(folder => new { id = folder.Id, name = folder.Name, color = folder.Color, sort = folder.Sort, art = _folderArt.ResolveUrl(folder.Art), games = folder.Games }),
+            chipset,
+            libraryFolders = s.LibraryFolders.Select(folder => new { id = folder.Id, name = folder.Name, color = folder.Color, sort = folder.Sort, art = resolveFolderArt(folder.Art), games = folder.Games }),
             hiddenGames = s.HiddenGames,
-
         };
-    }
 
     private object SetSettings(JsonElement p, bool hasParams)
     {
@@ -3426,18 +3457,53 @@ public sealed partial class WebHostBridge
             officialUrl = d.OfficialUrl,
         }).ToArray();
 
-    private object BuildArtBase() =>
-        _transport is NamedPipeHostTransport
+    internal static object BuildArtBaseResponse(
+        bool isNamedPipe,
+        string covers,
+        string coversDir,
+        string devicesDir,
+        string notesDir,
+        string capturesDir,
+        string captureThumbsDir) =>
+        isNamedPipe
             ? new
             {
-                covers = LocalFileHost.Url(CoverArtService.VirtualHost, ""),
-                coversDir = CoverArtService.CacheRoot,
-                devicesDir = DeviceImages.CacheRoot,
-                notesDir = NoteStore.Shared.PhotosFolder,
-                capturesDir = _services.HeadlessCapture.CaptureFolder,
-                captureThumbsDir = HeadlessCaptureService.ThumbsDir,
+                covers,
+                coversDir,
+                devicesDir,
+                notesDir,
+                capturesDir,
+                captureThumbsDir,
             }
-            : (object)new { covers = LocalFileHost.Url(CoverArtService.VirtualHost, "") };
+            : (object)new { covers };
+
+    private object BuildArtBase() =>
+        BuildArtBaseResponse(
+            _transport is NamedPipeHostTransport,
+            LocalFileHost.Url(CoverArtService.VirtualHost, ""),
+            CoverArtService.CacheRoot,
+            DeviceImages.CacheRoot,
+            NoteStore.Shared.PhotosFolder,
+            _services.HeadlessCapture.CaptureFolder,
+            HeadlessCaptureService.ThumbsDir);
+
+    internal static object BuildShellBootstrapResponse(
+        object artBase,
+        object settings,
+        object library,
+        object musicPlayback,
+        object discordStatus,
+        string? binaryMediaPipe) =>
+        new
+        {
+            ok = true,
+            artBase,
+            settings,
+            library,
+            musicPlayback,
+            discordStatus,
+            binaryMediaPipe,
+        };
 
     private async Task<object> ShellBootstrapAsync(CancellationToken ct)
     {
@@ -3452,16 +3518,13 @@ public sealed partial class WebHostBridge
         UpdateStartupHealth.UiReady(_services.AppVersion);
         var artBase = BuildArtBase();
         await Task.WhenAll(libraryTask, settingsTask, musicTask, discordTask).WaitAsync(ct).ConfigureAwait(false);
-        return new
-        {
-            ok = true,
+        return BuildShellBootstrapResponse(
             artBase,
-            settings = await settingsTask.ConfigureAwait(false),
-            library = await libraryTask.ConfigureAwait(false),
-            musicPlayback = await musicTask.ConfigureAwait(false),
-            discordStatus = await discordTask.ConfigureAwait(false),
-            binaryMediaPipe = (_transport as NamedPipeHostTransport)?.MediaPipeName,
-        };
+            await settingsTask.ConfigureAwait(false),
+            await libraryTask.ConfigureAwait(false),
+            await musicTask.ConfigureAwait(false),
+            await discordTask.ConfigureAwait(false),
+            (_transport as NamedPipeHostTransport)?.MediaPipeName);
     }
 
     private void PostResponse(string id, bool ok, object? result = null, string? error = null)
