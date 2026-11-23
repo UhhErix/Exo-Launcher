@@ -32,8 +32,17 @@ use rune::tray::{Tray, TrayEvent, TrayIcon, TrayItem, TraySpec};
 use rune::{App, AppSpec, Key, KeyEvent, Titlebar, Tx, Waker};
 use std::time::Duration;
 
-fn split_cli_args() -> (Option<String>, Vec<String>) {
+struct CliArgs {
+    pipe: Option<String>,
+    parity_probe: Option<String>,
+    probe_points: Option<String>,
+    passthrough: Vec<String>,
+}
+
+fn split_cli_args() -> CliArgs {
     let mut pipe = None;
+    let mut parity_probe = None;
+    let mut probe_points = None;
     let mut passthrough = Vec::new();
     let mut iter = std::env::args();
     if let Some(exe) = iter.next() {
@@ -44,11 +53,24 @@ fn split_cli_args() -> (Option<String>, Vec<String>) {
             pipe = iter.next();
         } else if let Some(name) = arg.strip_prefix("--pipe=") {
             pipe = Some(name.to_string());
+        } else if arg == "--parity-probe" {
+            parity_probe = iter.next();
+        } else if let Some(path) = arg.strip_prefix("--parity-probe=") {
+            parity_probe = Some(path.to_string());
+        } else if arg == "--probe-points" {
+            probe_points = iter.next();
+        } else if let Some(path) = arg.strip_prefix("--probe-points=") {
+            probe_points = Some(path.to_string());
         } else {
             passthrough.push(arg);
         }
     }
-    (pipe, passthrough)
+    CliArgs {
+        pipe,
+        parity_probe,
+        probe_points,
+        passthrough,
+    }
 }
 
 fn on_key(s: &mut AppState, ev: &KeyEvent, tx: &mut Tx) -> bool {
@@ -129,7 +151,7 @@ fn load_live_state_sync(pipe: &str, scene: Option<&str>) -> AppState {
         state.apply_bootstrap(boot);
     }
     match scene {
-        Some("store") => {
+        Some(sc) if sc.starts_with("store") => {
             if let Ok(home) = client.call_blocking::<_, exo_rpc::StoreHome>(
                 exo_rpc::METHOD_STORE_HOME,
                 &serde_json::json!({}),
@@ -168,8 +190,42 @@ fn load_live_state_sync(pipe: &str, scene: Option<&str>) -> AppState {
                 }
                 state.store_home = Some(home);
             }
+            if sc == "store-game" {
+                let app_id = state
+                    .store_home
+                    .as_ref()
+                    .and_then(|h| h.hero.first())
+                    .map(|t| t.app_id.clone())
+                    .unwrap_or_else(|| "1091500".into());
+                if let Ok(g) = client.call_blocking::<_, exo_rpc::StoreGame>(
+                    exo_rpc::METHOD_STORE_GAME,
+                    &serde_json::json!({ "appId": app_id }),
+                    Duration::from_secs(10),
+                ) && g.ok
+                {
+                    if let Some(ref cache_dir) = state.remote_cache_dir {
+                        if let Some(ref a) = g.art
+                            && let Some(u) = a.best_hero()
+                        {
+                            let _ = exo_rpc::remote_art::fetch_cached_image(u, cache_dir);
+                        }
+                        if let Some(ref hdr) = g.header {
+                            let _ = exo_rpc::remote_art::fetch_cached_image(hdr, cache_dir);
+                        }
+                    }
+                    state.store_game = Some(g);
+                }
+                if let Ok(offers) = client.call_blocking::<_, exo_rpc::StoreOtherOffers>(
+                    exo_rpc::METHOD_STORE_GAME_OFFERS,
+                    &serde_json::json!({ "appId": app_id }),
+                    Duration::from_secs(10),
+                ) && offers.ok
+                {
+                    state.store_offers = Some(offers);
+                }
+            }
         }
-        Some("game") | Some("game-page") => {
+        Some(sc) if sc == "game" || sc.starts_with("game-") => {
             if let Ok(set) = client.call_blocking::<_, exo_rpc::LauncherSettings>(
                 exo_rpc::METHOD_SETTINGS_GET,
                 &serde_json::json!({}),
@@ -201,8 +257,10 @@ fn load_live_state_sync(pipe: &str, scene: Option<&str>) -> AppState {
                 }
             }
         }
-        Some("library-all") | Some("all-games") => {
-            state.library_all_games = true;
+        Some("library-all") | Some("all-games") | Some("library-more") | Some("library-search") => {
+            if matches!(scene, Some("library-all") | Some("all-games")) {
+                state.library_all_games = true;
+            }
             if let Some(ref cache_dir) = state.remote_cache_dir {
                 let urls: Vec<String> = state
                     .filtered_games()
@@ -218,7 +276,7 @@ fn load_live_state_sync(pipe: &str, scene: Option<&str>) -> AppState {
                 }
             }
         }
-        Some("settings") | Some("palette") => {
+        Some(sc) if sc == "settings" || sc.starts_with("settings-") || sc == "palette" => {
             if let Ok(set) = client.call_blocking::<_, exo_rpc::LauncherSettings>(
                 exo_rpc::METHOD_SETTINGS_GET,
                 &serde_json::json!({}),
@@ -376,7 +434,7 @@ fn load_live_state_sync(pipe: &str, scene: Option<&str>) -> AppState {
                 }
             }
         }
-        Some("pc-apps") => {
+        Some(sc) if sc == "pc-apps" || sc.starts_with("pc-apps-") => {
             if let Ok(list) = client.call_blocking::<_, exo_rpc::AppsListReply>(
                 exo_rpc::METHOD_APPS_LIST,
                 &serde_json::json!({}),
@@ -404,6 +462,15 @@ fn load_live_state_sync(pipe: &str, scene: Option<&str>) -> AppState {
                 }
                 state.pc.apps_list = Some(list);
             }
+            if sc == "pc-apps-startup"
+                && let Ok(st) = client.call_blocking::<_, exo_rpc::StartupListReply>(
+                    exo_rpc::METHOD_STARTUP_LIST,
+                    &serde_json::json!({}),
+                    Duration::from_secs(10),
+                )
+            {
+                state.pc.startup_list = Some(st);
+            }
         }
         Some("pc-storage") => {
             if let Ok(drv) = client.call_blocking::<_, exo_rpc::DrivesReply>(
@@ -414,7 +481,7 @@ fn load_live_state_sync(pipe: &str, scene: Option<&str>) -> AppState {
                 state.pc.drives = Some(drv);
             }
         }
-        Some("pc-devices") => {
+        Some(sc) if sc == "pc-devices" || sc.starts_with("pc-devices-") => {
             if let Ok(eq) = client.call_blocking::<_, exo_rpc::EqStateReply>(
                 exo_rpc::METHOD_EQ,
                 &serde_json::json!({ "action": "state" }),
@@ -492,7 +559,7 @@ fn load_live_state_sync(pipe: &str, scene: Option<&str>) -> AppState {
                 state.pc.keyboard = Some(kb);
             }
         }
-        Some("music") => {
+        Some(sc) if sc == "music" || sc.starts_with("music-") => {
             if let Ok(set) = client.call_blocking::<_, exo_rpc::LauncherSettings>(
                 exo_rpc::METHOD_SETTINGS_GET,
                 &serde_json::json!({}),
@@ -597,6 +664,28 @@ fn load_live_state_sync(pipe: &str, scene: Option<&str>) -> AppState {
                     {
                         state.media.apply_player_state(&data);
                     }
+                    if sc == "music-songs"
+                        && let Ok(r) = client.call_blocking::<_, exo_rpc::PlayerViewReply>(
+                            view_m,
+                            &serde_json::json!({ "view": "songs" }),
+                            Duration::from_secs(8),
+                        )
+                        && r.ok
+                        && let Some(data) = r.data
+                    {
+                        state.media.music_page_data = Some(data);
+                    }
+                    if sc == "music-queue"
+                        && let Ok(r) = client.call_blocking::<_, exo_rpc::PlayerViewReply>(
+                            view_m,
+                            &serde_json::json!({ "view": "queue" }),
+                            Duration::from_secs(8),
+                        )
+                        && r.ok
+                        && let Some(data) = r.data
+                    {
+                        state.media.music_queue_data = Some(data);
+                    }
                     if let Some(ref cache_dir) = state.remote_cache_dir {
                         let mut urls: Vec<String> = Vec::new();
                         let mut push_url = |u: &str| {
@@ -635,7 +724,7 @@ fn load_live_state_sync(pipe: &str, scene: Option<&str>) -> AppState {
                 }
             }
         }
-        Some("captures") => {
+        Some(sc) if sc == "captures" || sc.starts_with("captures-") || sc == "capture-clip" => {
             if let Ok(set) = client.call_blocking::<_, exo_rpc::LauncherSettings>(
                 exo_rpc::METHOD_SETTINGS_GET,
                 &serde_json::json!({}),
@@ -833,8 +922,653 @@ fn tray_icon_rgba() -> TrayIcon {
     TrayIcon::rgba(SIZE, SIZE, rgba)
 }
 
+fn select_device_by_kind(s: &mut AppState, kind: &str) {
+    s.switch_room(state::Room::Devices);
+    s.switch_pc_tab(pc_state::PcTab::Devices);
+    if let Some(id) =
+        s.pc.devices
+            .as_ref()
+            .and_then(|d| d.devices.iter().find(|item| item.kind == kind))
+            .map(|item| item.id.clone())
+    {
+        s.pc.selected_device_id = Some(id);
+    }
+}
+
+fn open_game_props_tab(s: &mut AppState, tab: usize) {
+    let target = s
+        .open_game_id
+        .clone()
+        .or_else(|| s.selected_game_id.clone())
+        .or_else(|| s.games.first().map(|g| g.id.clone()))
+        .unwrap_or_else(|| "demo:cyberpunk".into());
+    if s.open_game_id.as_deref() != Some(target.as_str()) {
+        s.open_game_page(&target);
+    } else {
+        s.room = state::Room::Library;
+    }
+    s.props_open = true;
+    s.game_props_tab = tab;
+}
+
+type SceneSetter = fn(&mut AppState);
+
+const PARITY_SCENES: &[(&str, SceneSetter)] = &[
+    ("palette", |s: &mut AppState| {
+        s.switch_room(state::Room::Settings);
+        s.palette_open = true;
+    }),
+    ("game", |s: &mut AppState| {
+        let target = s
+            .open_game_id
+            .clone()
+            .or_else(|| s.selected_game_id.clone())
+            .or_else(|| s.games.first().map(|g| g.id.clone()))
+            .unwrap_or_else(|| "demo:cyberpunk".into());
+        if s.open_game_id.as_deref() != Some(target.as_str()) {
+            s.open_game_page(&target);
+        } else {
+            s.room = state::Room::Library;
+        }
+    }),
+    ("game-page", |s: &mut AppState| {
+        let target = if s.games.iter().any(|g| g.id == "demo:cyberpunk") {
+            "demo:cyberpunk".to_string()
+        } else {
+            s.open_game_id
+                .clone()
+                .or_else(|| s.selected_game_id.clone())
+                .or_else(|| s.games.first().map(|g| g.id.clone()))
+                .unwrap_or_else(|| "demo:cyberpunk".into())
+        };
+        if s.open_game_id.as_deref() != Some(target.as_str()) {
+            s.open_game_page(&target);
+        } else {
+            s.room = state::Room::Library;
+        }
+    }),
+    ("game-props-files", |s: &mut AppState| {
+        open_game_props_tab(s, 1);
+    }),
+    ("game-props-anticheat", |s: &mut AppState| {
+        open_game_props_tab(s, 2);
+    }),
+    ("game-props-dlss", |s: &mut AppState| {
+        open_game_props_tab(s, 3);
+    }),
+    ("library-all", |s: &mut AppState| {
+        s.switch_room(state::Room::Library);
+        s.library_all_games = true;
+    }),
+    ("all-games", |s: &mut AppState| {
+        s.switch_room(state::Room::Library);
+        s.library_all_games = true;
+    }),
+    ("library-more", |s: &mut AppState| {
+        s.switch_room(state::Room::Library);
+        s.library_more_open = true;
+    }),
+    ("library-search", |s: &mut AppState| {
+        s.switch_room(state::Room::Library);
+        s.library_search_open = true;
+    }),
+    ("store", |s: &mut AppState| {
+        s.switch_room(state::Room::Store)
+    }),
+    ("store-wishlist", |s: &mut AppState| {
+        s.switch_room(state::Room::Store);
+        s.store_tab = 1;
+    }),
+    ("store-search", |s: &mut AppState| {
+        s.switch_room(state::Room::Store);
+        s.store_query.text = "elden".into();
+        s.store_query.sync_invariants();
+    }),
+    ("store-game", |s: &mut AppState| {
+        s.room = state::Room::Store;
+        if s.store_game.is_none() {
+            s.open_store_game("1091500");
+        }
+    }),
+    ("tour", |s: &mut AppState| s.start_tour()),
+    ("activate-key", |s: &mut AppState| s.key_modal_open = true),
+    ("settings", |s: &mut AppState| {
+        s.switch_room(state::Room::Settings)
+    }),
+    ("settings-general", |s: &mut AppState| {
+        s.switch_room(state::Room::Settings);
+        s.pc.settings_section = pc_state::SettingsSection::General;
+    }),
+    ("settings-account", |s: &mut AppState| {
+        s.switch_room(state::Room::Settings);
+        s.pc.settings_section = pc_state::SettingsSection::Account;
+    }),
+    ("settings-appearance", |s: &mut AppState| {
+        s.switch_room(state::Room::Settings);
+        s.pc.settings_section = pc_state::SettingsSection::Appearance;
+    }),
+    ("settings-graphics", |s: &mut AppState| {
+        s.switch_room(state::Room::Settings);
+        s.pc.settings_section = pc_state::SettingsSection::Graphics;
+    }),
+    ("settings-updates", |s: &mut AppState| {
+        s.switch_room(state::Room::Settings);
+        s.pc.settings_section = pc_state::SettingsSection::Updates;
+    }),
+    ("settings-about", |s: &mut AppState| {
+        s.switch_room(state::Room::Settings);
+        s.pc.settings_section = pc_state::SettingsSection::About;
+    }),
+    ("pc", |s: &mut AppState| s.switch_room(state::Room::ExoAi)),
+    ("pc-apps", |s: &mut AppState| {
+        s.switch_room(state::Room::Apps);
+        s.switch_pc_tab(pc_state::PcTab::Apps);
+    }),
+    ("pc-apps-startup", |s: &mut AppState| {
+        s.switch_room(state::Room::Apps);
+        s.switch_pc_tab(pc_state::PcTab::Apps);
+        s.pc.apps_sub_tab = pc_state::AppsSubTab::Startup;
+    }),
+    ("pc-storage", |s: &mut AppState| {
+        s.switch_room(state::Room::ExoAi);
+        s.switch_pc_tab(pc_state::PcTab::Storage);
+    }),
+    ("pc-devices", |s: &mut AppState| {
+        s.switch_room(state::Room::Devices);
+        s.switch_pc_tab(pc_state::PcTab::Devices);
+    }),
+    ("pc-devices-mouse", |s: &mut AppState| {
+        select_device_by_kind(s, "mouse");
+    }),
+    ("pc-devices-keyboard", |s: &mut AppState| {
+        select_device_by_kind(s, "keyboard");
+    }),
+    ("pc-devices-audio", |s: &mut AppState| {
+        select_device_by_kind(s, "audio");
+    }),
+    ("pc-devices-controller", |s: &mut AppState| {
+        select_device_by_kind(s, "controller");
+    }),
+    ("music", |s: &mut AppState| {
+        s.switch_room(state::Room::Music)
+    }),
+    ("music-songs", |s: &mut AppState| {
+        s.switch_room(state::Room::Music);
+        s.media.music_nav = media_state::MusicNav::Songs;
+    }),
+    ("music-search", |s: &mut AppState| {
+        s.switch_room(state::Room::Music);
+        s.media.music_nav = media_state::MusicNav::Search;
+    }),
+    ("music-queue", |s: &mut AppState| {
+        s.switch_room(state::Room::Music);
+        s.media.music_panel = Some(media_state::MusicPanel::Queue);
+    }),
+    ("music-now-playing", |s: &mut AppState| {
+        s.switch_room(state::Room::Music);
+        s.media.music_panel = Some(media_state::MusicPanel::NowPlaying);
+    }),
+    ("music-immersion", |s: &mut AppState| {
+        s.switch_room(state::Room::Music);
+        s.media.music_immersion = true;
+    }),
+    ("captures", |s: &mut AppState| {
+        s.switch_room(state::Room::Settings);
+        s.capture_menu_open = true;
+    }),
+    ("captures-sheet", |s: &mut AppState| {
+        s.open_captures(None);
+    }),
+    ("captures-settings", |s: &mut AppState| {
+        s.open_captures(None);
+        s.media.captures_settings_open = true;
+    }),
+    ("capture-clip", |s: &mut AppState| {
+        s.open_captures(None);
+        if let Some(first) = s.media.capture_items.first().map(|c| c.id.clone()) {
+            s.open_capture_item(&first);
+        }
+    }),
+    ("discord", |s: &mut AppState| {
+        s.switch_room(state::Room::Discord)
+    }),
+    ("discord-status-menu", |s: &mut AppState| {
+        s.switch_room(state::Room::Discord);
+        s.discord.status_menu_open = true;
+    }),
+    ("discord-messages", |s: &mut AppState| {
+        s.switch_room(state::Room::Discord);
+        s.open_discord_place(discord_state::DiscordPlace::Messages);
+    }),
+    ("discord-servers", |s: &mut AppState| {
+        s.switch_room(state::Room::Discord);
+        s.open_discord_place(discord_state::DiscordPlace::Servers);
+    }),
+    ("discord-server", |s: &mut AppState| {
+        s.switch_room(state::Room::Discord);
+        let gid = s
+            .discord
+            .active_guild_id
+            .clone()
+            .or_else(|| {
+                s.discord
+                    .home
+                    .guilds
+                    .iter()
+                    .find(|g| g.id == "g-exo")
+                    .map(|g| g.id.clone())
+            })
+            .or_else(|| s.discord.home.guilds.first().map(|g| g.id.clone()));
+        if let Some(gid) = gid {
+            s.open_discord_guild(&gid);
+        }
+    }),
+    ("discord-voice", |s: &mut AppState| {
+        s.switch_room(state::Room::Discord);
+        s.open_discord_guild("g-exo");
+        s.open_discord_channel("vc-lounge");
+        s.join_discord_voice(Some("g-exo"), "vc-lounge");
+    }),
+    ("discord-signin", |s: &mut AppState| {
+        s.switch_room(state::Room::Discord);
+        s.discord.status.state = "signedOut".into();
+        s.discord.home.me = None;
+        s.start_discord_signin();
+    }),
+];
+
+fn cursor_css_name(c: rune::Cursor) -> &'static str {
+    match c {
+        rune::Cursor::Default => "default",
+        rune::Cursor::Pointer => "pointer",
+        rune::Cursor::Text => "text",
+        rune::Cursor::Grab => "grab",
+        rune::Cursor::Grabbing => "grabbing",
+        rune::Cursor::NotAllowed => "not-allowed",
+        rune::Cursor::Move => "move",
+        rune::Cursor::ResizeColumn => "col-resize",
+        rune::Cursor::ResizeRow => "row-resize",
+        rune::Cursor::Crosshair => "crosshair",
+        rune::Cursor::Cell => "cell",
+        rune::Cursor::ZoomIn => "zoom-in",
+        rune::Cursor::ZoomOut => "zoom-out",
+        rune::Cursor::Hidden => "none",
+        rune::Cursor::Image(_) => "image",
+        _ => "other",
+    }
+}
+
+fn collect_backdrop_blurs(rt: &rune::Runtime<AppState>) -> Vec<serde_json::Value> {
+    rt.instances
+        .iter()
+        .filter(|i| i.params[1] == rune::render::KIND_BACKDROP_BLUR)
+        .map(|i| {
+            serde_json::json!({
+                "rect": [
+                    (i.rect[0] * 10.0).round() / 10.0,
+                    (i.rect[1] * 10.0).round() / 10.0,
+                    (i.rect[2] * 10.0).round() / 10.0,
+                    (i.rect[3] * 10.0).round() / 10.0,
+                ],
+                "sigma": (i.params[0] * 10.0).round() / 10.0,
+            })
+        })
+        .collect()
+}
+
+fn parse_size_arg(args: &[String]) -> (f32, f32) {
+    args.windows(2)
+        .find(|w| w[0] == "--size")
+        .and_then(|w| w[1].split_once('x'))
+        .and_then(|(ws, hs)| Some((ws.parse::<f32>().ok()?, hs.parse::<f32>().ok()?)))
+        .unwrap_or((1920.0, 1080.0))
+}
+
+fn parse_scale_arg(args: &[String]) -> f32 {
+    args.windows(2)
+        .find(|w| w[0] == "--scale")
+        .and_then(|w| w[1].parse::<f32>().ok())
+        .unwrap_or(1.0)
+}
+
+fn resolve_script_point(
+    rt: &rune::Runtime<AppState>,
+    ev: &serde_json::Value,
+) -> Option<(f32, f32)> {
+    if let Some(key) = ev.get("key").and_then(|v| v.as_str()) {
+        return rt.find(key);
+    }
+    let x = ev.get("x").and_then(|v| v.as_f64())? as f32;
+    let y = ev.get("y").and_then(|v| v.as_f64())? as f32;
+    Some((x, y))
+}
+
+fn replay_probe_script(rt: &mut rune::Runtime<AppState>, script_path: &str) {
+    let Ok(raw) = std::fs::read_to_string(script_path) else {
+        return;
+    };
+    let Ok(val) = serde_json::from_str::<serde_json::Value>(&raw) else {
+        return;
+    };
+    let events = val
+        .as_array()
+        .or_else(|| val.get("events").and_then(|e| e.as_array()));
+    let Some(events) = events else {
+        return;
+    };
+    let mut now = 0.0_f64;
+    let dt = 1.0 / 60.0;
+    for ev in events {
+        let target_t = ev.get("t").and_then(|v| v.as_f64()).unwrap_or(now);
+        while now + dt * 0.5 < target_t {
+            now += dt;
+            rt.frame(dt);
+        }
+        let ty = ev.get("type").and_then(|v| v.as_str()).unwrap_or("tap");
+        match ty {
+            "move" => {
+                if let Some((x, y)) = resolve_script_point(rt, ev) {
+                    rt.pointer_move(x, y);
+                }
+            }
+            "down" => {
+                if let Some((x, y)) = resolve_script_point(rt, ev) {
+                    rt.pointer_move(x, y);
+                    rt.pointer_down(x, y);
+                }
+            }
+            "up" => {
+                if let Some((x, y)) = resolve_script_point(rt, ev) {
+                    rt.pointer_up(x, y);
+                }
+            }
+            "tap" | "click" => {
+                if let Some((x, y)) = resolve_script_point(rt, ev) {
+                    rt.pointer_move(x, y);
+                    rt.pointer_down(x, y);
+                    rt.frame(dt);
+                    now += dt;
+                    rt.pointer_up(x, y);
+                }
+            }
+            "secondary-click" => {
+                if let Some((x, y)) = resolve_script_point(rt, ev) {
+                    rt.pointer_move(x, y);
+                    rt.secondary_down(x, y);
+                    rt.frame(dt);
+                    now += dt;
+                    rt.secondary_up(x, y);
+                }
+            }
+            "secondary-down" => {
+                if let Some((x, y)) = resolve_script_point(rt, ev) {
+                    rt.pointer_move(x, y);
+                    rt.secondary_down(x, y);
+                }
+            }
+            "secondary-up" => {
+                if let Some((x, y)) = resolve_script_point(rt, ev) {
+                    rt.secondary_up(x, y);
+                }
+            }
+            "key" => {
+                let name = ev.get("name").and_then(|v| v.as_str()).unwrap_or("");
+                let ctrl = ev.get("ctrl").and_then(|v| v.as_bool()).unwrap_or(false);
+                let cmd = ev.get("cmd").and_then(|v| v.as_bool()).unwrap_or(ctrl);
+                let shift = ev.get("shift").and_then(|v| v.as_bool()).unwrap_or(false);
+                let alt = ev.get("alt").and_then(|v| v.as_bool()).unwrap_or(false);
+                let mods = rune::Mods {
+                    shift,
+                    ctrl,
+                    alt,
+                    cmd,
+                    ..rune::Mods::default()
+                };
+                let key = match name.to_ascii_lowercase().as_str() {
+                    "escape" | "esc" => Some(Key::Escape),
+                    "enter" | "return" => Some(Key::Enter),
+                    "tab" => Some(Key::Tab),
+                    "left" | "arrowleft" => Some(Key::Left),
+                    "right" | "arrowright" => Some(Key::Right),
+                    "up" | "arrowup" => Some(Key::Up),
+                    "down" | "arrowdown" => Some(Key::Down),
+                    "backspace" => Some(Key::Backspace),
+                    s if s.len() == 1 => {
+                        let ch = s.chars().next().unwrap();
+                        if cmd {
+                            Some(Key::Command(ch))
+                        } else {
+                            Some(Key::Text(s.to_string()))
+                        }
+                    }
+                    _ => None,
+                };
+                if let Some(k) = key {
+                    let ke = KeyEvent { key: k, mods };
+                    let mut tx_ctx = Tx::default();
+                    let handled = on_key(&mut rt.state, &ke, &mut tx_ctx);
+                    if !handled {
+                        rt.key(ke);
+                    }
+                }
+            }
+            "type" => {
+                if let Some(text) = ev.get("text").and_then(|v| v.as_str()) {
+                    for ch in text.chars() {
+                        rt.key(KeyEvent {
+                            key: Key::Text(ch.to_string()),
+                            mods: rune::Mods::default(),
+                        });
+                        rt.frame(dt);
+                        now += dt;
+                    }
+                }
+            }
+            "wheel" => {
+                if let Some((x, y)) = resolve_script_point(rt, ev) {
+                    let dy = ev.get("dy").and_then(|v| v.as_f64()).unwrap_or(0.0) as f32;
+                    rt.wheel(x, y, dy);
+                }
+            }
+            _ => {}
+        }
+        rt.frame(dt);
+        now += dt;
+    }
+}
+
+fn run_parity_probe(
+    pipe: Option<&str>,
+    target_scene: Option<&str>,
+    rune_args: &[String],
+    out_path: &str,
+    points_path: Option<&str>,
+) {
+    let viewport = parse_size_arg(rune_args);
+    let scale = parse_scale_arg(rune_args);
+    let script_path = rune_args
+        .windows(2)
+        .find(|w| w[0] == "--script")
+        .map(|w| w[1].clone());
+
+    #[cfg(windows)]
+    let mut state = if let Some(p) = pipe {
+        load_live_state_sync(p, target_scene)
+    } else {
+        AppState::default()
+    };
+    #[cfg(not(windows))]
+    let mut state = {
+        let _ = pipe;
+        AppState::default()
+    };
+
+    let mut scene_matched = false;
+    if let Some(scene_name) = target_scene
+        && let Some((_, setup_fn)) = PARITY_SCENES.iter().find(|(n, _)| *n == scene_name)
+    {
+        setup_fn(&mut state);
+        scene_matched = true;
+    }
+
+    let text = rune::text::TextSystem::for_window(FONTS, FONT_FAMILIES);
+    let mut rt = rune::Runtime::with_text(
+        state,
+        shell::view,
+        viewport,
+        rune::Env::new(true, scale),
+        text,
+    );
+    rt.frame(0.0);
+    let glass_frame0 = collect_backdrop_blurs(&rt);
+
+    if let Some(ref sp) = script_path {
+        replay_probe_script(&mut rt, sp);
+    }
+
+    for _ in 0..10 {
+        rt.frame(1.0 / 60.0);
+    }
+    let glass_frame10 = collect_backdrop_blurs(&rt);
+
+    for _ in 0..24 {
+        rt.frame(1.0 / 60.0);
+    }
+    let glass_final = collect_backdrop_blurs(&rt);
+
+    let elements = rt.elements();
+    let hovered_keys: Vec<String> = elements
+        .iter()
+        .filter(|e| e.hover > 0.01)
+        .map(|e| e.key.clone().unwrap_or_else(|| e.path.clone()))
+        .collect();
+    let pressed_keys: Vec<String> = elements
+        .iter()
+        .filter(|e| e.press > 0.01)
+        .map(|e| e.key.clone().unwrap_or_else(|| e.path.clone()))
+        .collect();
+
+    let menu_prefixes = [
+        "capture-popover-menu",
+        "dc-status-menu",
+        "library-more",
+        "dc-menu",
+    ];
+    let mut menu_items: Vec<String> = Vec::new();
+    for el in &elements {
+        let in_menu = menu_prefixes
+            .iter()
+            .any(|p| el.path.contains(p) || el.key.as_deref().is_some_and(|k| k.contains(p)));
+        if in_menu && let Some(t) = el.text.as_deref().or(el.label.as_deref()) {
+            let trimmed = t.trim();
+            if !trimmed.is_empty() && !menu_items.iter().any(|x| x == trimmed) {
+                menu_items.push(trimmed.to_string());
+            }
+        }
+    }
+
+    let popup_menu_open = rt.popup_menu().is_some();
+
+    let state_summary = serde_json::json!({
+        "room": format!("{:?}", rt.state.room),
+        "libraryAllGames": rt.state.library_all_games,
+        "librarySearchOpen": rt.state.library_search_open,
+        "libraryMoreOpen": rt.state.library_more_open,
+        "openGameId": rt.state.open_game_id,
+        "propsOpen": rt.state.props_open,
+        "gamePropsTab": rt.state.game_props_tab,
+        "storeTab": rt.state.store_tab,
+        "storeGameOpen": rt.state.store_game.is_some(),
+        "paletteOpen": rt.state.palette_open,
+        "captureMenuOpen": rt.state.capture_menu_open,
+        "capturesOpen": rt.state.media.captures_open,
+        "capturesSettingsOpen": rt.state.media.captures_settings_open,
+        "keyModalOpen": rt.state.key_modal_open,
+        "tourStep": rt.state.tour_step,
+        "settingsSection": format!("{:?}", rt.state.pc.settings_section),
+        "pcTab": format!("{:?}", rt.state.pc.pc_tab),
+        "appsSubTab": format!("{:?}", rt.state.pc.apps_sub_tab),
+        "selectedDeviceId": rt.state.pc.selected_device_id,
+        "musicNav": format!("{:?}", rt.state.media.music_nav),
+        "musicPanel": rt.state.media.music_panel.map(|p| format!("{p:?}")),
+        "musicImmersion": rt.state.media.music_immersion,
+        "musicRoomState": format!("{:?}", rt.state.media.music_room_state),
+        "discordPlace": format!("{:?}", rt.state.discord.place),
+        "discordStatusMenuOpen": rt.state.discord.status_menu_open,
+        "discordVoiceChannel": rt.state.discord.voice.channel_id,
+        "discordSignedIn": rt.state.discord.status.signed_in,
+    });
+
+    let mut cursors: Vec<serde_json::Value> = Vec::new();
+    if let Some(pp) = points_path
+        && let Ok(raw) = std::fs::read_to_string(pp)
+        && let Ok(pts) = serde_json::from_str::<Vec<serde_json::Value>>(&raw)
+    {
+        for pt in pts {
+            let name = pt.get("name").and_then(|v| v.as_str()).unwrap_or("");
+            let x = pt.get("x").and_then(|v| v.as_f64()).unwrap_or(0.0) as f32;
+            let y = pt.get("y").and_then(|v| v.as_f64()).unwrap_or(0.0) as f32;
+            rt.pointer_move(x, y);
+            rt.frame(1.0 / 60.0);
+            let cursor = cursor_css_name(rt.cursor());
+            let picked = rt.element_at(x, y);
+            cursors.push(serde_json::json!({
+                "name": name,
+                "x": x,
+                "y": y,
+                "cursor": cursor,
+                "hitKey": picked.as_ref().and_then(|p| p.key()),
+                "hitPath": picked.as_ref().map(|p| p.path()),
+            }));
+        }
+    }
+
+    let report = serde_json::json!({
+        "scene": target_scene,
+        "sceneMatched": scene_matched,
+        "viewport": [viewport.0, viewport.1],
+        "scale": scale,
+        "elementsCount": elements.len(),
+        "glassAtFrame0": glass_frame0,
+        "glassAtFrame10": glass_frame10,
+        "glassFinal": glass_final,
+        "glassAppearedLate": glass_frame0.len() < glass_final.len(),
+        "popupMenuOpen": popup_menu_open,
+        "menuItems": menu_items,
+        "hoveredKeys": hovered_keys,
+        "pressedKeys": pressed_keys,
+        "cursors": cursors,
+        "stateSummary": state_summary,
+    });
+    if let Some(parent) = std::path::Path::new(out_path).parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+    let _ = std::fs::write(
+        out_path,
+        serde_json::to_string_pretty(&report).unwrap_or_default(),
+    );
+}
+
 fn main() {
-    let (pipe_name, rune_args) = split_cli_args();
+    let cli = split_cli_args();
+    let pipe_name = cli.pipe;
+    let rune_args = cli.passthrough;
+    let target_scene = rune_args
+        .windows(2)
+        .find(|w| w[0] == "--scene")
+        .map(|w| w[1].clone());
+
+    if let Some(ref probe_out) = cli.parity_probe {
+        run_parity_probe(
+            pipe_name.as_deref(),
+            target_scene.as_deref(),
+            &rune_args,
+            probe_out,
+            cli.probe_points.as_deref(),
+        );
+        return;
+    }
+
     let headless_flag = rune_args
         .iter()
         .any(|a| a == "--snap" || a == "--tree" || a == "--script" || a == "--headless");
@@ -850,138 +1584,7 @@ fn main() {
     spec.setup = Some(setup_state);
     spec.poll = Some(poll_state);
     spec.on_key = Some(on_key);
-    spec.scenes = &[
-        ("palette", |s: &mut AppState| {
-            s.switch_room(state::Room::Settings);
-            s.palette_open = true;
-        }),
-        ("game", |s: &mut AppState| {
-            let target = s
-                .open_game_id
-                .clone()
-                .or_else(|| s.selected_game_id.clone())
-                .or_else(|| s.games.first().map(|g| g.id.clone()))
-                .unwrap_or_else(|| "demo:cyberpunk".into());
-            if s.open_game_id.as_deref() != Some(target.as_str()) {
-                s.open_game_page(&target);
-            } else {
-                s.room = state::Room::Library;
-            }
-        }),
-        ("game-page", |s: &mut AppState| {
-            let target = if s.games.iter().any(|g| g.id == "demo:cyberpunk") {
-                "demo:cyberpunk".to_string()
-            } else {
-                s.open_game_id
-                    .clone()
-                    .or_else(|| s.selected_game_id.clone())
-                    .or_else(|| s.games.first().map(|g| g.id.clone()))
-                    .unwrap_or_else(|| "demo:cyberpunk".into())
-            };
-            if s.open_game_id.as_deref() != Some(target.as_str()) {
-                s.open_game_page(&target);
-            } else {
-                s.room = state::Room::Library;
-            }
-        }),
-        ("library-all", |s: &mut AppState| {
-            s.switch_room(state::Room::Library);
-            s.library_all_games = true;
-        }),
-        ("all-games", |s: &mut AppState| {
-            s.switch_room(state::Room::Library);
-            s.library_all_games = true;
-        }),
-        ("store", |s: &mut AppState| {
-            s.switch_room(state::Room::Store)
-        }),
-        ("store-game", |s: &mut AppState| {
-            s.switch_room(state::Room::Store);
-            s.open_store_game("1091500");
-        }),
-        ("tour", |s: &mut AppState| s.start_tour()),
-        ("activate-key", |s: &mut AppState| s.key_modal_open = true),
-        ("settings", |s: &mut AppState| {
-            s.switch_room(state::Room::Settings)
-        }),
-        ("pc", |s: &mut AppState| s.switch_room(state::Room::ExoAi)),
-        ("pc-apps", |s: &mut AppState| {
-            s.switch_room(state::Room::Apps);
-            s.switch_pc_tab(pc_state::PcTab::Apps);
-        }),
-        ("pc-storage", |s: &mut AppState| {
-            s.switch_room(state::Room::ExoAi);
-            s.switch_pc_tab(pc_state::PcTab::Storage);
-        }),
-        ("pc-devices", |s: &mut AppState| {
-            s.switch_room(state::Room::Devices);
-            s.switch_pc_tab(pc_state::PcTab::Devices);
-        }),
-        ("music", |s: &mut AppState| {
-            s.switch_room(state::Room::Music)
-        }),
-        ("music-immersion", |s: &mut AppState| {
-            s.switch_room(state::Room::Music);
-            s.media.music_immersion = true;
-        }),
-        ("captures", |s: &mut AppState| {
-            s.switch_room(state::Room::Settings);
-            s.capture_menu_open = true;
-        }),
-        ("capture-clip", |s: &mut AppState| {
-            s.open_captures(None);
-            if let Some(first) = s.media.capture_items.first().map(|c| c.id.clone()) {
-                s.open_capture_item(&first);
-            }
-        }),
-        ("discord", |s: &mut AppState| {
-            s.switch_room(state::Room::Discord)
-        }),
-        ("discord-messages", |s: &mut AppState| {
-            s.switch_room(state::Room::Discord);
-            s.open_discord_place(discord_state::DiscordPlace::Messages);
-        }),
-        ("discord-servers", |s: &mut AppState| {
-            s.switch_room(state::Room::Discord);
-            s.open_discord_place(discord_state::DiscordPlace::Servers);
-        }),
-        ("discord-server", |s: &mut AppState| {
-            s.switch_room(state::Room::Discord);
-            let gid = s
-                .discord
-                .active_guild_id
-                .clone()
-                .or_else(|| {
-                    s.discord
-                        .home
-                        .guilds
-                        .iter()
-                        .find(|g| g.id == "g-exo")
-                        .map(|g| g.id.clone())
-                })
-                .or_else(|| s.discord.home.guilds.first().map(|g| g.id.clone()));
-            if let Some(gid) = gid {
-                s.open_discord_guild(&gid);
-            }
-        }),
-        ("discord-voice", |s: &mut AppState| {
-            s.switch_room(state::Room::Discord);
-            s.open_discord_guild("g-exo");
-            s.open_discord_channel("vc-lounge");
-            s.join_discord_voice(Some("g-exo"), "vc-lounge");
-        }),
-        ("discord-signin", |s: &mut AppState| {
-            s.switch_room(state::Room::Discord);
-            s.discord.status.state = "signedOut".into();
-            s.discord.home.me = None;
-            s.start_discord_signin();
-        }),
-    ];
-
-    let target_scene = rune_args
-        .windows(2)
-        .find(|w| w[0] == "--scene")
-        .map(|w| w[1].clone());
+    spec.scenes = PARITY_SCENES;
 
     let mut app = App::new(spec)
         .args(rune_args)
