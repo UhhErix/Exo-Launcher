@@ -2204,6 +2204,37 @@ mod tests {
     }
 
     #[test]
+    fn phase5d_discord_channel_secondary_press_opens_menu() {
+        let mut rt = Runtime::new(
+            AppState::default(),
+            shell::view,
+            (1920.0, 1080.0),
+            Env::new(true, 1.0),
+        );
+        rt.update(|s, _| {
+            s.switch_room(Room::Discord);
+            s.open_discord_guild("g-exo");
+            s.open_discord_channel("ch-general");
+        });
+        rt.frame(0.0);
+        for id in ["ch-general", "vc-lounge"] {
+            let (x, y) = rt.find(&format!("dc-ch-{id}")).expect("channel row");
+            rt.pointer_move(x, y);
+            rt.secondary_down(x, y);
+            rt.frame(1.0 / 60.0);
+            rt.secondary_up(x, y);
+            rt.frame(1.0 / 60.0);
+            eprintln!(
+                "PROBE {id} ctx={:?} items={}",
+                rt.state.context_menu.as_ref().map(|c| c.x),
+                rt.find("dc-ch-copy-id").is_some()
+            );
+            rt.update(|s, _| s.context_menu = None);
+            rt.frame(1.0 / 60.0);
+        }
+    }
+
+    #[test]
     fn blur_budget_and_glass_palette_invariants() {
         let check_case = |label: &str,
                           setup: &dyn Fn(&mut AppState),

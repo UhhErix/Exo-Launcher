@@ -866,13 +866,14 @@ pub fn context_menu_overlay(s: &AppState, blur: bool, submenu_blur: bool) -> Vec
             guild_id,
             channel_id,
             name: _,
-            kind: _,
+            kind,
             unread,
             muted,
             can_edit,
             can_manage,
         } => {
             let link = format!("https://discord.com/channels/{guild_id}/{channel_id}");
+            let is_voice = matches!(kind.as_str(), "voice" | "stage");
             let mut items = vec![
                 MenuEntry::item(
                     MenuItem::new("dc-ch-read", "Mark as read")
@@ -882,66 +883,55 @@ pub fn context_menu_overlay(s: &AppState, blur: bool, submenu_blur: bool) -> Vec
                             move |s: &mut AppState, _| s.discord_channel_action(&cid, "markRead")
                         }),
                 ),
-                MenuEntry::Separator,
-                MenuEntry::item(
-                    MenuItem::new("dc-ch-invite", "Invite people")
-                        .icon(icon_user_plus(15.0, FG))
-                        .on_select({
-                            let cid = channel_id.clone();
-                            move |s: &mut AppState, _| s.discord_channel_action(&cid, "invite")
-                        }),
-                ),
-                MenuEntry::item(
-                    MenuItem::new("dc-ch-link", "Copy link")
-                        .icon(icon_link(15.0, FG))
-                        .on_select(move |s: &mut AppState, tx| {
-                            tx.copy(link.clone());
-                            s.notice = Some("Copied channel link".into());
-                        }),
-                ),
+                MenuEntry::item(MenuItem::new("dc-ch-invite", "Invite people").on_select({
+                    let cid = channel_id.clone();
+                    move |s: &mut AppState, _| s.discord_channel_action(&cid, "invite")
+                })),
+                MenuEntry::item(MenuItem::new("dc-ch-link", "Copy link").on_select(
+                    move |s: &mut AppState, tx| {
+                        tx.copy(link.clone());
+                        s.notice = Some("Copied channel link".into());
+                    },
+                )),
                 MenuEntry::Separator,
             ];
             if muted {
                 items.push(MenuEntry::item(
-                    MenuItem::new("dc-ch-unmute", "Unmute channel")
-                        .icon(icon_bell_off(15.0, FG))
-                        .on_select({
-                            let cid = channel_id.clone();
-                            move |s: &mut AppState, _| {
-                                s.discord_channel_notify(&cid, Some(false), None, None)
-                            }
-                        }),
+                    MenuItem::new("dc-ch-unmute", "Unmute channel").on_select({
+                        let cid = channel_id.clone();
+                        move |s: &mut AppState, _| {
+                            s.discord_channel_notify(&cid, Some(false), None, None)
+                        }
+                    }),
                 ));
             } else {
                 items.push(MenuEntry::item(
                     MenuItem::new("dc-ch-mute", "Mute channel")
-                        .icon(icon_bell_off(15.0, FG))
                         .submenu(channel_mute_submenu(&channel_id)),
                 ));
             }
-            items.push(MenuEntry::item(
-                MenuItem::new("dc-ch-notify", "Notification settings")
-                    .submenu(channel_notify_submenu(&channel_id)),
-            ));
+            if !is_voice {
+                items.push(MenuEntry::item(
+                    MenuItem::new("dc-ch-notify", "Notification settings")
+                        .submenu(channel_notify_submenu(&channel_id)),
+                ));
+            }
             if can_edit || can_manage {
                 items.push(MenuEntry::Separator);
                 if can_edit {
                     items.push(MenuEntry::item(
-                        MenuItem::new("dc-ch-edit", "Edit channel")
-                            .icon(icon_edit(15.0, FG))
-                            .on_select({
-                                let cid = channel_id.clone();
-                                move |s: &mut AppState, _| {
-                                    s.open_discord_channel(&cid);
-                                    s.notice = Some("Channel editing opens in Discord".into());
-                                }
-                            }),
+                        MenuItem::new("dc-ch-edit", "Edit channel").on_select({
+                            let cid = channel_id.clone();
+                            move |s: &mut AppState, _| {
+                                s.open_discord_channel(&cid);
+                                s.notice = Some("Channel editing opens in Discord".into());
+                            }
+                        }),
                     ));
                 }
                 if can_manage {
                     items.push(MenuEntry::item(
                         MenuItem::new("dc-ch-delete", "Delete channel")
-                            .icon(icon_trash(15.0, bad()))
                             .danger()
                             .on_select({
                                 let cid = channel_id.clone();
@@ -950,15 +940,16 @@ pub fn context_menu_overlay(s: &AppState, blur: bool, submenu_blur: bool) -> Vec
                     ));
                 }
             }
-            items.push(MenuEntry::Separator);
-            items.push(MenuEntry::item(
-                MenuItem::new("dc-ch-copy-id", "Copy channel ID")
-                    .icon(icon_copy(15.0, FG))
-                    .on_select(move |s: &mut AppState, tx| {
-                        tx.copy(channel_id.clone());
-                        s.notice = Some("Copied channel ID".into());
-                    }),
-            ));
+            if s.discord.developer_mode {
+                items.push(MenuEntry::item(
+                    MenuItem::new("dc-ch-copy-id", "Copy channel ID")
+                        .icon(icon_copy(15.0, FG))
+                        .on_select(move |s: &mut AppState, tx| {
+                            tx.copy(channel_id.clone());
+                            s.notice = Some("Copied channel ID".into());
+                        }),
+                ));
+            }
             items
         }
         ContextMenuTarget::DiscordCategory {

@@ -1987,7 +1987,7 @@ fn guild_channel_row(
         channel_id: ch.id.clone(),
         name: ch.name.clone(),
         kind: ch.kind.clone(),
-        unread: is_unread,
+        unread: ch.unread || ch.mentions > 0,
         muted: ch.muted,
         can_edit: ch.can_edit,
         can_manage,
@@ -2227,7 +2227,7 @@ fn server_left_rail(s: &AppState, guild: &DiscordGuild, sc: f32, scale: f32) -> 
                 );
             }
             if any_row {
-                tree = tree.child(el().w_full().h(1.0).my(6.0).fill(hairline()));
+                tree = tree.child(el().w_full().h(1.0).my(11.0).fill(hairline()));
             }
         }
 
@@ -2253,8 +2253,8 @@ fn server_left_rail(s: &AppState, guild: &DiscordGuild, sc: f32, scale: f32) -> 
                         .label(ch.name.clone())
                         .cursor(Cursor::Pointer)
                         .w_full()
-                        .h(28.0)
-                        .pt(6.0)
+                        .h(34.0)
+                        .pt(3.0)
                         .px(8.0)
                         .gap(4.0)
                         .center_y()
