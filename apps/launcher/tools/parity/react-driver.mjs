@@ -3,6 +3,7 @@ import { mkdir, rm, writeFile } from 'node:fs/promises'
 import { join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { openShell, sleep } from '../e2e/cdp.mjs'
+import { seedDataFrom } from "./seed.mjs"
 
 const LAUNCHER_ROOT = fileURLToPath(new URL('../..', import.meta.url))
 const TEST_SCRIPT = join(LAUNCHER_ROOT, 'tools', 'test-instance.ps1')
@@ -35,13 +36,14 @@ export function assertSafeDataDir(dataDir) {
   return full
 }
 
-export async function startWebTestInstance({ folder, dataDir, fresh = true, hostExe = null }) {
+export async function startWebTestInstance({ folder, dataDir, fresh = true, hostExe = null, seedFrom = null, discordReady = false }) {
   const safeFolder = assertSafeDataDir(folder)
   const safeData = assertSafeDataDir(dataDir)
   if (fresh) {
     await rm(safeData, { recursive: true, force: true })
   }
   await mkdir(safeData, { recursive: true })
+  await seedDataFrom(seedFrom, safeData)
   const seededSettings = {
     onboardingComplete: true,
     accountAsked: true,
@@ -115,6 +117,15 @@ export async function startWebTestInstance({ folder, dataDir, fresh = true, host
         if (stillClean) break
       }
       await sleep(400)
+    }
+    if (discordReady) {
+      // The Discord gateway takes ~10 s after launch; the signed-in markers appear when it is ready.
+      const until = Date.now() + 40000
+      while (Date.now() < until) {
+        const ready = await shell.eval("!!document.querySelector('.exo-dc-me, .exo-dc-band-guild, .exo-dc-signin')")
+        if (ready) break
+        await sleep(500)
+      }
     }
     await sleep(4000)
     return { info, shell }
@@ -323,10 +334,11 @@ async function resetReactShell(shell, roomLabel) {
   }
 }
 
-export async function runReactPass({ states, outDir, folder, dataDir, hostExe = null }) {
+export async function runReactPass({ states, outDir, folder, dataDir, hostExe = null, seedFrom = null }) {
+  const discordReady = states.some((s) => s.room === 'discord')
   const reactDir = join(outDir, 'react')
   await mkdir(reactDir, { recursive: true })
-  const { info, shell } = await startWebTestInstance({ folder, dataDir, fresh: true, hostExe })
+  const { info, shell } = await startWebTestInstance({ folder, dataDir, fresh: true, hostExe, seedFrom, discordReady })
   const results = {}
   try {
     for (const state of states) {
