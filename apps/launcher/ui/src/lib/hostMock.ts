@@ -12,12 +12,9 @@ const mockAutopilotChoices: Pick<AutopilotState, 'on' | 'gamePriority' | 'keepGa
 }
 const mockAutopilot = (): AutopilotState => ({
   ...mockAutopilotChoices,
-  on: true,
-  gamePriority: 'above',
-  keepGameMode: false,
-  coreParking: true,
-  gameMode: { off: true, keptOn: null },
-  mouseAccel: { off: true, managed: true },
+  gameMode: { off: mockAutopilotChoices.on && !mockAutopilotChoices.keepGameMode, keptOn: mockAutopilotChoices.on && mockAutopilotChoices.keepGameMode ? 'you keep it on' : null },
+  mouseAccel: { off: mockAutopilotChoices.on, managed: mockAutopilotChoices.on },
+  standbyPurge: { available: false, reason: 'Unavailable without administrator permission (run Exo as administrator for live standby purges; Auto Tune still purges once when elevated).' },
   memoryIntegrity: {
     status: 'unlocked',
     reason: 'None of your installed games require Memory Integrity. Turning it off can add 5–10% FPS (lowers kernel driver protection; takes a restart).',
@@ -2169,6 +2166,12 @@ const MOCK_HANDLERS: Record<string, MockHandler> = {
   'autopilot.state': mockAutopilot,
   'autopilot.set': (p) => {
     const partial = p as Partial<typeof mockAutopilotChoices>
+    if (typeof partial.on === 'boolean') mockAutopilotChoices.on = partial.on
+    if (partial.gamePriority === 'above' || partial.gamePriority === 'high' || partial.gamePriority === 'normal') {
+      mockAutopilotChoices.gamePriority = partial.gamePriority
+    }
+    if (typeof partial.keepGameMode === 'boolean') mockAutopilotChoices.keepGameMode = partial.keepGameMode
+    if (typeof partial.coreParking === 'boolean') mockAutopilotChoices.coreParking = partial.coreParking
     if (Array.isArray(partial.alwaysDemote)) mockAutopilotChoices.alwaysDemote = partial.alwaysDemote
     if (Array.isArray(partial.suspend)) mockAutopilotChoices.suspend = partial.suspend
     return { ok: true, message: null, state: mockAutopilot() }

@@ -543,11 +543,18 @@ pub(crate) fn exo_ai_room(s: &AppState, scale: f32) -> El {
                 ),
         );
 
+    let standby_unavailable =
+        s.pc.autopilot
+            .as_ref()
+            .and_then(|a| a.standby_purge.as_ref())
+            .is_some_and(|sp| !sp.available);
+    let power_detail = if standby_unavailable {
+        "Exo power plan, 0.5 ms timer & Autopilot (live standby purge needs admin)"
+    } else {
+        "Exo power plan, 0.5 ms timer, standby purge & Autopilot"
+    };
     let tune_rows = [
-        (
-            "Power & Autopilot",
-            "Exo power plan, 0.5 ms timer, standby purge & Autopilot",
-        ),
+        ("Power & Autopilot", power_detail),
         (
             "Graphics & display",
             "Graphics profile and display at best defaults",

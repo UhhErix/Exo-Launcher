@@ -196,6 +196,15 @@ pub struct AutopilotReport {
 
 #[derive(Debug, Clone, Default, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct AutopilotStandbyPurge {
+    #[serde(default)]
+    pub available: bool,
+    #[serde(default)]
+    pub reason: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct AutopilotState {
     #[serde(default)]
     pub on: bool,
@@ -203,6 +212,8 @@ pub struct AutopilotState {
     pub cpu: String,
     #[serde(default)]
     pub memory_integrity: AutopilotMemoryIntegrity,
+    #[serde(default)]
+    pub standby_purge: Option<AutopilotStandbyPurge>,
     #[serde(default)]
     pub live: Option<AutopilotLive>,
     #[serde(default)]

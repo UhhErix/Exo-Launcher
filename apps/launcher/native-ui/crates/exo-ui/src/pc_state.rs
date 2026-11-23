@@ -213,6 +213,7 @@ impl SettingsAndPcState {
                     reason: "Off for +5–10% FPS. None of your installed games require it.".into(),
                     needs_restart: false,
                 },
+                standby_purge: None,
                 live: Some(AutopilotLive {
                     game: "demo:cyberpunk".into(),
                     title: "Cyberpunk 2077".into(),

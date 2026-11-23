@@ -238,6 +238,7 @@ public sealed class AppServices
             // Autopilot after the keeper: what a crash left goes back, and Game Mode follows Autopilot's switch.
             Autopilot.Start();
             WindowsGameBar.KeepOff();
+            _ = SystemTuning.Shared.MigrateLegacyPowerThrottlingAsync(allowPrompt: false);
         });
         RadeonProfileService.Shared.Start(Launcher, () => GpuProfileService.MainScreen("amd"));
         IntelProfileService.Shared.Start(Launcher);
