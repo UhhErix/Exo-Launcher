@@ -41,7 +41,7 @@ internal static partial class Peripherals
         var byVendor = card.VendorId switch
         {
             0x31E3 => Wootility,
-            0x03EB when card.ProductId is 0xFF01 or 0xFF02 => Wootility, // Wooting One and Two, on Atmel's ids
+            0x03EB when card.ProductId is 0xFF01 or 0x2402 or 0xFF02 or 0x2403 => Wootility, // Wooting One and Two, on Atmel's ids
             0x3434 => KeychronLauncher,
             0x1532 => Synapse,
             0x046D => LogiOptions().IsMatch(card.Name) ? OptionsPlus : GHub,
