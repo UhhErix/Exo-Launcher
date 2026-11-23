@@ -158,6 +158,9 @@ pub const METHOD_GAME_PROPERTIES: &str = "game.properties";
 pub const METHOD_GAME_PROPERTIES_SET: &str = "game.properties.set";
 pub const METHOD_KEYS_PREVIEW: &str = "keys.preview";
 pub const METHOD_KEYS_ACTIVATE: &str = "keys.activate";
+pub const METHOD_MOUSE_PANEL_BOUNDS: &str = "mouse.panel.bounds";
+pub const METHOD_MOUSE_PANEL_CLOSE: &str = "mouse.panel.close";
+pub const METHOD_MOUSE_PANEL_OPEN: &str = "mouse.panel.open";
 pub const METHOD_MUSIC_CONTROL: &str = "music.control";
 pub const METHOD_MUSIC_PLAYBACK: &str = "music.playback";
 pub const METHOD_MUSIC_SIGN_IN: &str = "music.signIn";
@@ -283,6 +286,9 @@ pub const USED_METHODS: &[&str] = &[
     METHOD_GAME_PROPERTIES_SET,
     METHOD_KEYS_PREVIEW,
     METHOD_KEYS_ACTIVATE,
+    METHOD_MOUSE_PANEL_BOUNDS,
+    METHOD_MOUSE_PANEL_CLOSE,
+    METHOD_MOUSE_PANEL_OPEN,
     METHOD_MUSIC_CONTROL,
     METHOD_MUSIC_PLAYBACK,
     METHOD_MUSIC_SIGN_IN,

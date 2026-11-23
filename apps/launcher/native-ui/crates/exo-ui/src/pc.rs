@@ -1,7 +1,7 @@
 use crate::pc_state::{AppsSubTab, PcTab, format_bytes};
 use crate::state::{AppState, Room, title_hue};
 use exo_kit::{
-    BG, FG, PRESS_SCALE, PRIMARY_FG, RADIUS_CARD, RADIUS_PANEL, RADIUS_PILL, RADIUS_SMALL,
+    BG, FG, GAP, PRESS_SCALE, PRIMARY_FG, RADIUS_CARD, RADIUS_PANEL, RADIUS_PILL, RADIUS_SMALL,
     SPRING_MOVE, SPRING_QUICK, TRANSPARENT, amoled_card, bad, card_border, fg_faint, fg_muted,
     filter_pill, float_line, glass_button, glass_control_fill, glass_rim_bottom, glass_rim_top,
     good, hover_fill, icon_app_window, icon_check, icon_chevron_down, icon_chevron_left, icon_cpu,
@@ -112,6 +112,7 @@ fn device_showcase_card(dev: &PeripheralCard, s: &AppState, scale: f32) -> El {
     });
 
     let dev_id = dev.id.clone();
+    let is_mouse = dev.kind == "mouse";
     col()
         .key(format!("dev-card-{}", dev.id))
         .role("button")
@@ -134,7 +135,11 @@ fn device_showcase_card(dev: &PeripheralCard, s: &AppState, scale: f32) -> El {
         .hover(BG)
         .motion(SPRING_MOVE)
         .on_press(move |s: &mut AppState| {
-            s.pc.selected_device_id = Some(dev_id.clone());
+            if is_mouse {
+                s.open_mouse_panel(dev_id.clone());
+            } else {
+                s.pc.selected_device_id = Some(dev_id.clone());
+            }
         })
         .child(media)
         .child(
@@ -468,6 +473,51 @@ fn audio_detail(s: &AppState) -> El {
 }
 
 fn devices_room(s: &AppState, scale: f32) -> El {
+    if s.pc.mouse_panel_open {
+        let mut slot = el()
+            .key("mouse-panel-slot")
+            .w_full()
+            .grow(1.0)
+            .min_h(0.0)
+            .fill(BG)
+            .center()
+            .on_layout(|s: &mut AppState, rect| s.update_mouse_panel_layout(rect));
+
+        if let Some(ref err) = s.pc.mouse_panel_error {
+            slot = slot.child(
+                col()
+                    .center()
+                    .gap(12.0)
+                    .px(24.0)
+                    .child(text("Exo Mouse unavailable").font(type_section()).color(FG))
+                    .child(text(err.clone()).font(type_body()).color(fg_muted()))
+                    .child(
+                        glass_button("mouse-panel-retry", "Retry", Some(icon_refresh(14.0, FG)))
+                            .on_press(|s: &mut AppState| s.retry_mouse_panel()),
+                    ),
+            );
+        } else if s.pc.mouse_panel_loading {
+            slot = slot.child(
+                text("Opening Exo Mouse…")
+                    .font(type_body())
+                    .color(fg_muted()),
+            );
+        }
+
+        return col()
+            .key("room-devices-mouse")
+            .w_full()
+            .h_full()
+            .fill(BG)
+            .child(
+                row().w_full().pt(60.0).px(GAP).pb(0.0).center_y().child(
+                    glass_button("dev-back", "Devices", Some(icon_chevron_left(14.0, FG)))
+                        .on_press(|s: &mut AppState| s.close_mouse_panel()),
+                ),
+            )
+            .child(slot);
+    }
+
     let devices =
         s.pc.devices
             .as_ref()

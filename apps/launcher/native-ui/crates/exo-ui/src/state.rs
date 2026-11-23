@@ -639,6 +639,9 @@ impl AppState {
                 -1.0
             };
         }
+        if self.room == Room::Devices && room != Room::Devices && self.pc.mouse_panel_open {
+            self.close_mouse_panel();
+        }
         if self.room != Room::Settings && room == Room::Settings {
             self.prev_room = self.room;
         }
@@ -1731,6 +1734,10 @@ impl AppState {
             self.close_store_game();
             return true;
         }
+        if self.room == Room::Devices && self.pc.mouse_panel_open {
+            self.close_mouse_panel();
+            return true;
+        }
         if !self.notices.is_empty() {
             return self.dismiss_newest_notice();
         }
@@ -1908,6 +1915,7 @@ impl AppState {
 
     pub fn sync_and_tick_notices(&mut self, now: f64, tx: &mut Tx) -> bool {
         self.clock_secs = now;
+        self.sync_mouse_panel_visibility();
         let mut changed = false;
 
         if let Some((_, deadline)) = self.armed_confirm {

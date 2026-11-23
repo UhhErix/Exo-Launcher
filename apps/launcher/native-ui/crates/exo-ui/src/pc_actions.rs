@@ -10,7 +10,8 @@ use exo_rpc::{
     METHOD_EQ, METHOD_EXO_ACCOUNT_STATE, METHOD_EXO_ACCOUNT_SYNC, METHOD_EXO_AI_SET,
     METHOD_EXO_AI_STATE, METHOD_HDR_STATE, METHOD_JUNK_CLEAN, METHOD_KEYBOARD_BACKUP,
     METHOD_KEYBOARD_BACKUPS, METHOD_KEYBOARD_PROFILE, METHOD_KEYBOARD_READ,
-    METHOD_KEYBOARD_SETTINGS, METHOD_PLAYTIME_RIOT_REFRESH, METHOD_SETTINGS_SET,
+    METHOD_KEYBOARD_SETTINGS, METHOD_MOUSE_PANEL_BOUNDS, METHOD_MOUSE_PANEL_CLOSE,
+    METHOD_MOUSE_PANEL_OPEN, METHOD_PLAYTIME_RIOT_REFRESH, METHOD_SETTINGS_SET,
     METHOD_SHADERS_ADDON, METHOD_SHADERS_CALL, METHOD_SHADERS_ESTIMATES,
     METHOD_SHADERS_PREPARE_GAMES, METHOD_SHADERS_PREPARE_START, METHOD_STARTUP_LIST,
     METHOD_STARTUP_REMOVE, METHOD_SYSTEM_ABOUT, METHOD_SYSTEM_DRIVES, METHOD_SYSTEM_TUNING,
@@ -824,6 +825,173 @@ impl AppState {
                     _ => s.notice = Some("Keyboard backup failed.".into()),
                 });
             });
+        }
+    }
+
+    pub fn set_owner_hwnd(&mut self, hwnd: u64) {
+        if hwnd == 0 || self.pc.owner_hwnd == hwnd {
+            return;
+        }
+        self.pc.owner_hwnd = hwnd;
+        if self.pc.mouse_panel_open
+            && let Some(rect) = self.pc.mouse_panel_rect
+        {
+            let visible = self.mouse_panel_should_be_visible();
+            self.pc.mouse_panel_visible = visible;
+            self.send_mouse_panel_open(rect, visible);
+        }
+    }
+
+    pub fn mouse_panel_should_be_visible(&self) -> bool {
+        self.pc.mouse_panel_open
+            && self.room == crate::state::Room::Devices
+            && self.pc.mouse_panel_window_visible
+            && !self.palette_open
+            && !self.key_modal_open
+            && self.tour_step.is_none()
+            && !self.capture_menu_open
+            && !self.media.captures_open
+            && !self.props_open
+            && !self.library_more_open
+    }
+
+    pub fn open_mouse_panel(&mut self, dev_id: String) {
+        self.pc.selected_device_id = Some(dev_id);
+        self.pc.mouse_panel_open = true;
+        self.pc.mouse_panel_loading = self.status != HostStatus::Standalone;
+        self.pc.mouse_panel_error = None;
+        self.pc.mouse_panel_rect = None;
+        self.pc.mouse_panel_visible = false;
+    }
+
+    pub fn retry_mouse_panel(&mut self) {
+        if !self.pc.mouse_panel_open {
+            return;
+        }
+        self.pc.mouse_panel_loading = self.status != HostStatus::Standalone;
+        self.pc.mouse_panel_error = None;
+        if let Some(rect) = self.pc.mouse_panel_rect {
+            let visible = self.mouse_panel_should_be_visible();
+            self.pc.mouse_panel_visible = visible;
+            self.send_mouse_panel_open(rect, visible);
+        }
+    }
+
+    pub fn update_mouse_panel_layout(&mut self, rect: [f32; 4]) {
+        if !self.pc.mouse_panel_open || rect[2] < 2.0 || rect[3] < 2.0 {
+            return;
+        }
+        let visible = self.mouse_panel_should_be_visible();
+        let first_layout = self.pc.mouse_panel_rect.is_none();
+        let changed =
+            self.pc.mouse_panel_rect != Some(rect) || self.pc.mouse_panel_visible != visible;
+        if !first_layout && !changed {
+            return;
+        }
+        self.pc.mouse_panel_rect = Some(rect);
+        self.pc.mouse_panel_visible = visible;
+        if first_layout {
+            self.send_mouse_panel_open(rect, visible);
+        } else {
+            self.send_mouse_panel_bounds(rect, visible);
+        }
+    }
+
+    pub fn sync_mouse_panel_visibility(&mut self) {
+        if !self.pc.mouse_panel_open {
+            return;
+        }
+        let visible = self.mouse_panel_should_be_visible();
+        if visible == self.pc.mouse_panel_visible {
+            return;
+        }
+        self.pc.mouse_panel_visible = visible;
+        if let Some(rect) = self.pc.mouse_panel_rect {
+            self.send_mouse_panel_bounds(rect, visible);
+        }
+    }
+
+    pub fn set_mouse_panel_window_visible(&mut self, visible: bool) {
+        self.pc.mouse_panel_window_visible = visible;
+        self.sync_mouse_panel_visibility();
+    }
+
+    pub fn close_mouse_panel(&mut self) {
+        let was_open = self.pc.mouse_panel_open;
+        self.pc.mouse_panel_open = false;
+        self.pc.mouse_panel_loading = false;
+        self.pc.mouse_panel_error = None;
+        self.pc.mouse_panel_rect = None;
+        self.pc.mouse_panel_visible = false;
+        self.pc.selected_device_id = None;
+        if !was_open {
+            return;
+        }
+        #[cfg(windows)]
+        if let Some(rpc) = self.rpc.clone() {
+            rpc.call::<_, ActionResult>(METHOD_MOUSE_PANEL_CLOSE, &json!({}), |_| {});
+        }
+    }
+
+    fn send_mouse_panel_open(&mut self, rect: [f32; 4], visible: bool) {
+        if self.status == HostStatus::Standalone {
+            self.pc.mouse_panel_loading = false;
+            return;
+        }
+        let owner_hwnd = self.pc.owner_hwnd;
+        if owner_hwnd == 0 {
+            return;
+        }
+        #[cfg(windows)]
+        if let (Some(rpc), Some(handle)) = (self.rpc.clone(), self.handle.clone()) {
+            let params = json!({
+                "ownerHwnd": owner_hwnd,
+                "x": rect[0] as f64,
+                "y": rect[1] as f64,
+                "width": rect[2] as f64,
+                "height": rect[3] as f64,
+                "visible": visible,
+            });
+            rpc.call::<_, ActionResult>(METHOD_MOUSE_PANEL_OPEN, &params, move |res| {
+                handle.update(move |s, _| {
+                    if !s.pc.mouse_panel_open {
+                        return;
+                    }
+                    s.pc.mouse_panel_loading = false;
+                    match res {
+                        Ok(r) if r.ok => {
+                            s.pc.mouse_panel_error = None;
+                        }
+                        Ok(r) => {
+                            s.pc.mouse_panel_error = Some(
+                                r.message
+                                    .unwrap_or_else(|| "Exo Mouse could not open.".into()),
+                            );
+                        }
+                        Err(e) => {
+                            s.pc.mouse_panel_error = Some(e.to_string());
+                        }
+                    }
+                });
+            });
+        }
+    }
+
+    fn send_mouse_panel_bounds(&mut self, rect: [f32; 4], visible: bool) {
+        if self.status == HostStatus::Standalone || self.pc.owner_hwnd == 0 {
+            return;
+        }
+        #[cfg(windows)]
+        if let Some(rpc) = self.rpc.clone() {
+            let params = json!({
+                "ownerHwnd": self.pc.owner_hwnd,
+                "x": rect[0] as f64,
+                "y": rect[1] as f64,
+                "width": rect[2] as f64,
+                "height": rect[3] as f64,
+                "visible": visible,
+            });
+            rpc.call::<_, ActionResult>(METHOD_MOUSE_PANEL_BOUNDS, &params, |_| {});
         }
     }
 }
