@@ -485,16 +485,57 @@ public sealed class AutoTuneTests : IDisposable
     }
 
     [Fact]
-    public void TheScriptChecksEverythingBeforeItApplies()
+    public void TheScriptChecksBeforeItApplies()
     {
         var script = TuneSignIn.Script([120, 1935], [15], @"C:\Program Files\ExoLauncher Tune", @"C:\Users\O'Neil\Exo.exe");
         var apply = script.IndexOf("[ExoTune]::Nvidia(120, 1935)", StringComparison.Ordinal);
         Assert.True(apply > 0);
         Assert.Contains("[ExoTune]::Ryzen(15,", script);
         Assert.Contains("O''Neil", script);
-        foreach (var check in new[] { "testing.json", "\\held\")", "\\applying\") { Move-Item", "Id = 41", "WHEA-Logger", "Set-Content -LiteralPath \"$d\\applying\"" })
+        Assert.Contains("ProviderName = 'Microsoft-Windows-Kernel-Power'; Id = 41", script);
+        Assert.DoesNotContain("'Microsoft-Kernel-Power'", script);
+        Assert.Contains("last-run.txt", script);
+        var addType = script.IndexOf("Add-Type", StringComparison.Ordinal);
+        var markApplying = script.IndexOf("Set-Content -LiteralPath \"$d\\applying\"", StringComparison.Ordinal);
+        Assert.InRange(addType, 0, markApplying);
+        foreach (var check in new[] { "testing.json", "\\held\")", "\\applying\")", "Id = 41", "Id = 18", "Set-Content -LiteralPath \"$d\\applying\"" })
             Assert.InRange(script.IndexOf(check, StringComparison.Ordinal), 0, apply);
         Assert.True(script.IndexOf("Start-Sleep -Seconds 120", StringComparison.Ordinal) > apply);
+    }
+
+    [Fact]
+    public void ACrashOrFatalErrorSinceTheApplyHoldsButACorrectedOneDoesNot()
+    {
+        var script = TuneSignIn.Script([120, 0], null, @"C:\t", @"C:\e.exe");
+        Assert.Contains("ProviderName = 'Microsoft-Windows-WHEA-Logger'; Id = 18", script);
+        Assert.Contains("'power-loss'", script);
+        Assert.Contains("'whea-fatal'", script);
+        Assert.DoesNotContain("Id = @(", script);
+        Assert.DoesNotContain("Id = 19", script);
+        Assert.DoesNotContain("Id = 20", script);
+    }
+
+    [Fact]
+    public void AScriptErrorNotesItAndNeverHolds()
+    {
+        var script = TuneSignIn.Script([120, 0], null, @"C:\t", @"C:\e.exe");
+        var catchAt = script.LastIndexOf("} catch {", StringComparison.Ordinal);
+        var exitAt = script.IndexOf("exit", catchAt, StringComparison.Ordinal);
+        Assert.True(catchAt > 0 && exitAt > catchAt);
+        var handler = script[catchAt..exitAt];
+        Assert.Contains("Remove-Item -LiteralPath \"$d\\applying\"", handler);
+        Assert.Contains("Note ('error: '", handler);
+        Assert.DoesNotContain("held", handler);
+    }
+
+    [Fact]
+    public void AnNvidiaApplyKeepsItsOffsetFromBeingDroppedAndLogsEachPutBack()
+    {
+        var nvidia = TuneSignIn.Script([120, 1935], null, @"C:\t", @"C:\e.exe");
+        Assert.Contains("[ExoTune]::Keep(120, 1935, \"$d\\keep\", \"$d\\last-run.txt\")", nvidia);
+        Assert.True(nvidia.IndexOf("[ExoTune]::Keep(", StringComparison.Ordinal) > nvidia.IndexOf("Note 'applied'", StringComparison.Ordinal));
+        var ryzenOnly = TuneSignIn.Script(null, [10], @"C:\t", @"C:\e.exe");
+        Assert.DoesNotContain("[ExoTune]::Keep(", ryzenOnly);
     }
 
     [Fact]
@@ -514,8 +555,39 @@ public sealed class AutoTuneTests : IDisposable
         Assert.Contains("S-1-5-18", xml);
         Assert.Contains("<LogonTrigger>", xml);
         Assert.Contains("Power-Troubleshooter", xml);
+        Assert.Contains("EventID=1]", xml);
         Assert.DoesNotContain("<BootTrigger>", xml);
         Assert.Contains("IgnoreNew", xml);
+        Assert.Contains("<ExecutionTimeLimit>PT5M</ExecutionTimeLimit>", xml);
+    }
+
+    [Fact]
+    public void TheNvidiaHolderIsTheOnlyTaskWithNoTimeLimit()
+    {
+        var xml = TuneSignIn.TaskXml(@"C:\t\apply.ps1", keepsRunning: true);
+        Assert.Contains("<ExecutionTimeLimit>PT0S</ExecutionTimeLimit>", xml);
+        Assert.DoesNotContain("PT5M", xml);
+    }
+
+    [Fact]
+    public void ReleasingTheHolderRemovesItsFlagBeforeAnythingTouchesTheCard()
+    {
+        Directory.CreateDirectory(_folder);
+        var keep = Path.Combine(_folder, TuneSignIn.KeepFile);
+        File.WriteAllText(keep, "");
+        TuneSignIn.ReleaseKeep(_folder, TimeSpan.Zero);
+        Assert.False(File.Exists(keep));
+        TuneSignIn.ReleaseKeep(_folder, TimeSpan.Zero);
+        Assert.False(File.Exists(keep));
+    }
+
+    [Fact]
+    public void TheAppLogLineIsTheSignInScriptsLastLine()
+    {
+        Directory.CreateDirectory(_folder);
+        Assert.Null(TuneSignIn.LastRun(_folder));
+        File.WriteAllText(Path.Combine(_folder, TuneSignIn.LastRunFile), "2026-11-22T09:00:00 applied\n2026-11-23T09:00:00 held: the PC lost power or crashed since the apply\n\n");
+        Assert.Equal("2026-11-23T09:00:00 held: the PC lost power or crashed since the apply", TuneSignIn.LastRun(_folder));
     }
 
     [Theory]
