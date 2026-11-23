@@ -427,7 +427,6 @@ pub fn context_menu_layers<S: 'static>(spec: ContextMenuSpec<S>) -> Vec<El> {
             &on_dismiss,
             &on_submenu,
         );
-        let dismiss_sub = Rc::clone(&on_dismiss);
         let sub_menu = glass_menu_surface(
             format!("{id}-submenu"),
             (width - 20.0).max(180.0),
@@ -437,7 +436,6 @@ pub fn context_menu_layers<S: 'static>(spec: ContextMenuSpec<S>) -> Vec<El> {
         .role("menu")
         .focus_group()
         .anchored_fit(trigger_key, Side::Right, Align::Start, 4.0)
-        .modal_tx(false, move |s: &mut S, tx| dismiss_sub(s, tx))
         .children(sub_rows);
         layers.push(sub_menu);
     }

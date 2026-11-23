@@ -2235,6 +2235,79 @@ mod tests {
     }
 
     #[test]
+    fn phase5e_bar_and_menu_items_report_pointer_cursor() {
+        let mut rt = Runtime::new(
+            AppState::default(),
+            shell::view,
+            (1920.0, 1080.0),
+            Env::new(true, 1.0),
+        );
+        rt.update(|s, _| {
+            s.switch_room(Room::Discord);
+            s.open_discord_guild("g-exo");
+            s.open_discord_channel("ch-general");
+        });
+        rt.frame(0.0);
+        let (x, y) = rt.find("nav-library").expect("library tab");
+        rt.pointer_move(x, y);
+        rt.frame(1.0 / 60.0);
+        assert_eq!(rt.cursor(), rune::Cursor::Pointer, "nav tab cursor");
+        let (x, y) = rt.find("search-capsule").expect("search");
+        rt.pointer_move(x, y);
+        rt.frame(1.0 / 60.0);
+        assert_eq!(rt.cursor(), rune::Cursor::Pointer, "search cursor");
+        rt.update(|s, _| {
+            s.open_context_menu(crate::state::ContextMenuTarget::DiscordStatusMenu, 0.0, 0.0)
+        });
+        for _ in 0..90 {
+            rt.frame(1.0 / 60.0);
+        }
+        let (x, y) = rt.find("dc-set-status-idle").expect("status item");
+        rt.pointer_move(x, y);
+        for _ in 0..90 {
+            rt.frame(1.0 / 60.0);
+        }
+        assert_eq!(
+            rt.cursor(),
+            rune::Cursor::Pointer,
+            "menu item with submenu cursor"
+        );
+        let el = rt
+            .elements()
+            .into_iter()
+            .find(|e| e.key.as_deref() == Some("dc-set-status-idle"))
+            .expect("item el");
+        let (ex, ey, eh) = (el.rect[0], el.rect[1], el.rect[3]);
+        rt.pointer_move(ex + 3.0, ey + eh * 0.5);
+        for _ in 0..90 {
+            rt.frame(1.0 / 60.0);
+        }
+        assert_eq!(rt.cursor(), rune::Cursor::Pointer, "menu item edge cursor");
+        let sub_key = rt
+            .elements()
+            .into_iter()
+            .filter_map(|e| e.key)
+            .find(|k| k.starts_with("dc-status-idle-"))
+            .expect("submenu item");
+        let (sx, sy) = rt.find(&sub_key).expect("submenu item position");
+        rt.pointer_move(sx, sy);
+        for _ in 0..90 {
+            rt.frame(1.0 / 60.0);
+        }
+        assert_eq!(rt.cursor(), rune::Cursor::Pointer, "submenu item cursor");
+        rt.pointer_down(sx, sy);
+        rt.pointer_up(sx, sy);
+        rt.frame(1.0 / 60.0);
+        rt.update(|s, _| {
+            let status = s.discord.home.me.as_ref().and_then(|m| m.status.clone());
+            eprintln!(
+                "SUBMENU key={sub_key} status={status:?} menu_open={}",
+                s.context_menu.is_some()
+            );
+        });
+    }
+
+    #[test]
     fn blur_budget_and_glass_palette_invariants() {
         let check_case = |label: &str,
                           setup: &dyn Fn(&mut AppState),
