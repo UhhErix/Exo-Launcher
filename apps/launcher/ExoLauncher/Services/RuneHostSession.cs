@@ -214,6 +214,7 @@ internal sealed partial class RuneHostSession
             try { bridge.Detach(); } catch { }
             try { transport.Detach(); } catch { }
             try { services.MusicEngine.Close(); } catch { }
+            try { services.MousePanel.Close(); } catch { }
             if (uiProcess is not null)
             {
                 try

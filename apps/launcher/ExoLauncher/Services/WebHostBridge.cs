@@ -287,6 +287,7 @@ public sealed partial class WebHostBridge
         _services.GogAuth.AttachDispatcher(_queue);
         _services.EpicAuth.AttachDispatcher(_queue);
         _services.MusicEngine.Attach(_queue, PostEvent);
+        _services.MousePanel.Attach(_queue, this);
         _services.HeadlessMusic.Attach(PostEvent, () => _services.MusicEngine.IsActive || App.MainAppWindow is not null);
         _services.HeadlessCapture.Attach(PostCaptureEvent);
         if (Interlocked.Exchange(ref _transport, transport) is { } previous)
@@ -308,12 +309,14 @@ public sealed partial class WebHostBridge
         try { Interlocked.Exchange(ref _keyWatchCts, null)?.Cancel(); } catch { }
         // A reloaded session never turns off the controller's live view it asked for (60 events a second, up to 10 minutes).
         StopWatch(Interlocked.Exchange(ref _controllerWatch, null));
+        _services.MousePanel.Close();
     });
 
     public void Detach()
     {
         if (_detached) return;
         Volatile.Write(ref _detached, true);
+        _services.MousePanel.Close();
         _services.HeadlessMusic.Detach();
         _services.HeadlessCapture.Detach();
         try { _bridgeLifetime.Cancel(); } catch { }
@@ -1006,6 +1009,9 @@ public sealed partial class WebHostBridge
                 "mouse.profiles.set" => MouseFileSet("profiles.json", "profiles", paramsEl, hasParams),
                 "mouse.presets.get" => await Task.Run(() => MouseFileGet("presets.json", "presets")).ConfigureAwait(false),
                 "mouse.presets.set" => MouseFileSet("presets.json", "presets", paramsEl, hasParams),
+                "mouse.panel.open" => await MousePanelOpenAsync(paramsEl, hasParams, requestToken).ConfigureAwait(false),
+                "mouse.panel.bounds" => await MousePanelBoundsAsync(paramsEl, hasParams).ConfigureAwait(false),
+                "mouse.panel.close" => await MousePanelCloseAsync().ConfigureAwait(false),
                 "hid.open" or "hid.close" or "hid.sendReport" or "hid.sendFeatureReport" or "hid.receiveFeatureReport" or "hid.receiveInputReport"
                     => await Task.Run(() => HidCallAsync(method, paramsEl, hasParams, requestToken)).ConfigureAwait(false),
                 _ => throw new UserFacingException($"Unknown method: {method}")
@@ -2547,6 +2553,7 @@ public sealed partial class WebHostBridge
             frameGenEverywhere: frameGenEverywhere);
         if (hdrForGames is not null || hdrSdrGamma is not null) _services.HdrHost.SyncSoon();
         if (frameGenEverywhere is not null) DlssSwapService.FrameGenEverywhereSoon();
+        if (textSize is not null || reduceMotion is not null) _services.MousePanel.NotifySettingsChanged();
         if (showLibraryTools is { } tools && tools != previousShowLibraryTools)
             RefreshLibraryAfterToolsToggle();
         ApplyDownloadSettings(p);

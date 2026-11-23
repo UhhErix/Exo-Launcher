@@ -3170,6 +3170,11 @@ export const host = {
   /** Exo Mouse's presets and per-mouse values (an opaque object it owns), kept in Exo's data folder like its profiles. */
   mousePresetsGet: () => rawCall<{ ok: boolean; message?: string; data?: unknown }>('mouse.presets.get'),
   mousePresetsSet: (p: Record<string, unknown>) => rawCall<{ ok: boolean; message?: string }>('mouse.presets.set', p),
+  mousePanelOpen: (p: { ownerHwnd?: number; x: number; y: number; width: number; height: number; visible?: boolean }) =>
+    rawCall<{ ok: boolean; message?: string }>('mouse.panel.open', p),
+  mousePanelBounds: (p: { ownerHwnd?: number; x: number; y: number; width: number; height: number; visible?: boolean }) =>
+    rawCall<{ ok: boolean }>('mouse.panel.bounds', p),
+  mousePanelClose: () => rawCall<{ ok: boolean }>('mouse.panel.close'),
   keysPreview: () =>
     rawCall<{ ok: boolean; looksLikeKey?: boolean; store?: string; key?: string }>('keys.preview'),
   keysActivate: (key: string, store?: string) =>

@@ -745,6 +745,9 @@ impl AppState {
                 -1.0
             };
         }
+        if self.room == Room::Devices && room != Room::Devices && self.pc.mouse_panel_open {
+            self.close_mouse_panel();
+        }
         if self.room != Room::Settings && room == Room::Settings {
             self.prev_room = self.room;
         }
@@ -1477,6 +1480,11 @@ impl AppState {
             HostEvent::Disconnected(why) => {
                 self.discord.voice_ui.decoders.clear();
                 self.video_router.clear();
+                self.pc.mouse_panel_open = false;
+                self.pc.mouse_panel_loading = false;
+                self.pc.mouse_panel_error = None;
+                self.pc.mouse_panel_rect = None;
+                self.pc.mouse_panel_visible = false;
                 self.status = HostStatus::Error(why);
                 self.notice = Some("Disconnected from Exo host".into());
                 true
@@ -2296,6 +2304,10 @@ impl AppState {
             self.close_store_game();
             return true;
         }
+        if self.room == Room::Devices && self.pc.mouse_panel_open {
+            self.close_mouse_panel();
+            return true;
+        }
         if !self.notices.is_empty() {
             return self.dismiss_newest_notice();
         }
@@ -2473,6 +2485,7 @@ impl AppState {
 
     pub fn sync_and_tick_notices(&mut self, now: f64, tx: &mut Tx) -> bool {
         self.clock_secs = now;
+        self.sync_mouse_panel_visibility();
         let mut changed = false;
 
         if !self.room_left_at.is_empty() {

@@ -24,7 +24,7 @@ public sealed partial class WebHostBridge
         return hid;
     }
 
-    private object HidList(JsonElement p, bool hasParams)
+    internal object HidList(JsonElement p, bool hasParams)
     {
         int[]? vendors = null;
         if (hasParams && p.ValueKind == JsonValueKind.Object && p.TryGetProperty("vendorIds", out var v) && v.ValueKind == JsonValueKind.Array)
@@ -46,7 +46,7 @@ public sealed partial class WebHostBridge
         };
     }
 
-    private async Task<object> HidCallAsync(string method, JsonElement p, bool hasParams, CancellationToken ct)
+    internal async Task<object> HidCallAsync(string method, JsonElement p, bool hasParams, CancellationToken ct)
     {
         if (ReadString(p, hasParams, "device") is not { Length: > 0 } key) return new { ok = false, message = "No device." };
         var reportId = (int)(ReadDouble(p, hasParams, "reportId") ?? 0);
@@ -124,6 +124,48 @@ public sealed partial class WebHostBridge
         {
             return new { ok = false, message = $"Exo could not save your mouse {what}." };
         }
+    }
+
+    internal object MouseProfilesGet() => MouseFileGet("profiles.json", "profiles");
+
+    internal object MouseProfilesSet(JsonElement p, bool hasParams) => MouseFileSet("profiles.json", "profiles", p, hasParams);
+
+    internal object MousePresetsGet() => MouseFileGet("presets.json", "presets");
+
+    internal object MousePresetsSet(JsonElement p, bool hasParams) => MouseFileSet("presets.json", "presets", p, hasParams);
+
+    private Task<object> MousePanelOpenAsync(JsonElement p, bool hasParams, CancellationToken ct)
+    {
+        var (ownerHwnd, x, y, width, height, visible) = ReadMousePanelBounds(p, hasParams);
+        return _services.MousePanel.OpenAsync(ownerHwnd, x, y, width, height, visible, ct);
+    }
+
+    private Task<object> MousePanelBoundsAsync(JsonElement p, bool hasParams)
+    {
+        var (ownerHwnd, x, y, width, height, visible) = ReadMousePanelBounds(p, hasParams);
+        return _services.MousePanel.UpdateBoundsAsync(ownerHwnd, x, y, width, height, visible);
+    }
+
+    private Task<object> MousePanelCloseAsync() => _services.MousePanel.CloseAsync();
+
+    private static (nint OwnerHwnd, double X, double Y, double Width, double Height, bool Visible) ReadMousePanelBounds(
+        JsonElement p,
+        bool hasParams)
+    {
+        nint owner = 0;
+        if (hasParams && p.ValueKind == JsonValueKind.Object && p.TryGetProperty("ownerHwnd", out var h))
+        {
+            if (h.ValueKind == JsonValueKind.Number && h.TryGetInt64(out var rawLong) && rawLong != 0)
+                owner = (nint)rawLong;
+            else if (h.ValueKind == JsonValueKind.Number && h.TryGetUInt64(out var rawUlong) && rawUlong != 0)
+                owner = unchecked((nint)rawUlong);
+        }
+        var x = ReadDouble(p, hasParams, "x") ?? 0.0;
+        var y = ReadDouble(p, hasParams, "y") ?? 0.0;
+        var width = ReadDouble(p, hasParams, "width") ?? 0.0;
+        var height = ReadDouble(p, hasParams, "height") ?? 0.0;
+        var visible = ReadBool(p, hasParams, "visible") ?? true;
+        return (owner, x, y, width, height, visible);
     }
 
     private static byte[] Bytes(JsonElement p, bool hasParams) =>

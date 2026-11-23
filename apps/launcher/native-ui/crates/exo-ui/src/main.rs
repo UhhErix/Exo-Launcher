@@ -1626,6 +1626,22 @@ fn main() {
     }
 
     let handle = app.handle();
+    let win_handle = handle.clone();
+    app = app
+        .on_window(move |w| {
+            let hwnd = w
+                .with_raw_handle(|raw| match raw.as_raw() {
+                    rune::raw_window_handle::RawWindowHandle::Win32(h) => h.hwnd.get() as u64,
+                    _ => 0,
+                })
+                .unwrap_or(0);
+            if hwnd != 0 {
+                win_handle.update(move |s, _| s.set_owner_hwnd(hwnd));
+            }
+        })
+        .on_close(|s, _| s.close_mouse_panel())
+        .on_quit(|s, _| s.close_mouse_panel())
+        .on_visibility(|s, visible, _| s.set_mouse_panel_window_visible(visible));
 
     if !headless_flag {
         let gp_handle = handle.clone();
@@ -3344,5 +3360,79 @@ mod motion_audit {
                 ],
             );
         }
+    }
+
+    #[test]
+    fn devices_mouse_card_opens_hosted_panel_and_back_or_room_switch_closes_it() {
+        let mut rt = Runtime::new(
+            AppState::default(),
+            shell::view,
+            (1280.0, 800.0),
+            Env::new(true, 1.0),
+        );
+        rt.state.switch_room(Room::Devices);
+        rt.frame(0.0);
+
+        let (mx, my) = rt.find("dev-card-dev:mouse").expect("mouse device card");
+        rt.pointer_down(mx, my);
+        rt.pointer_up(mx, my);
+        rt.frame(1.0 / 60.0);
+        rt.frame(2.0 / 60.0);
+
+        assert!(rt.state.pc.mouse_panel_open);
+        assert!(rt.find("dev-back").is_some(), "native Devices back button");
+        assert!(
+            rt.find("mouse-panel-slot").is_some(),
+            "mouse panel layout slot"
+        );
+        let rect = rt
+            .state
+            .pc
+            .mouse_panel_rect
+            .expect("mouse panel rect from on_layout");
+        assert!(
+            rect[2] > 1000.0 && rect[3] > 600.0,
+            "unexpected slot size: {rect:?}"
+        );
+        assert!(
+            rect[1] >= 80.0 && rect[1] < 140.0,
+            "slot should start below Bar and back header: {rect:?}"
+        );
+
+        let blurs = rt
+            .instances
+            .iter()
+            .filter(|i| i.params[1] == rune::render::KIND_BACKDROP_BLUR)
+            .count();
+        assert!(blurs <= 4, "blur cap exceeded on mouse panel view: {blurs}");
+
+        assert!(rt.state.mouse_panel_should_be_visible());
+        rt.state.palette_open = true;
+        assert!(!rt.state.mouse_panel_should_be_visible());
+        rt.state.palette_open = false;
+        assert!(rt.state.mouse_panel_should_be_visible());
+
+        let (bx, by) = rt.find("dev-back").expect("back button");
+        rt.pointer_down(bx, by);
+        rt.pointer_up(bx, by);
+        rt.frame(3.0 / 60.0);
+        assert!(!rt.state.pc.mouse_panel_open);
+        assert!(
+            rt.find("dev-card-dev:mouse").is_some(),
+            "back returns to Devices cards"
+        );
+
+        let (mx2, my2) = rt.find("dev-card-dev:mouse").expect("mouse card again");
+        rt.pointer_down(mx2, my2);
+        rt.pointer_up(mx2, my2);
+        rt.frame(4.0 / 60.0);
+        assert!(rt.state.pc.mouse_panel_open);
+        rt.state.switch_room(Room::Library);
+        assert!(!rt.state.pc.mouse_panel_open);
+
+        rt.state.switch_room(Room::Devices);
+        rt.state.open_mouse_panel("dev:mouse".into());
+        assert!(rt.state.dismiss_top_layer());
+        assert!(!rt.state.pc.mouse_panel_open);
     }
 }

@@ -30,6 +30,8 @@ public sealed class AppServices
     private HeadlessMusicService? _headlessMusic;
     internal MusicEngineService MusicEngine => _musicEngine ??= new MusicEngineService();
     private MusicEngineService? _musicEngine;
+    internal MousePanelService MousePanel => _mousePanel ??= new MousePanelService(this);
+    private MousePanelService? _mousePanel;
 
     /// <summary>The Shaders page's Prepare, for Unreal games.</summary>
     internal ShaderPrepare ShaderPrepare => _shaderPrepare ??= new ShaderPrepare(() => Launcher);
@@ -349,6 +351,7 @@ public sealed class AppServices
         _shadersHost?.Dispose();
         _headlessCapture?.Dispose();
         _musicEngine?.Close();
+        _mousePanel?.Close();
         _downloads?.Dispose();
         _junk?.Dispose();
         _compressor?.Dispose();
