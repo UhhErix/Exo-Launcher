@@ -169,6 +169,7 @@ fn deck_poster_card(game: &Game, active: bool, load_cover: bool, s: &AppState, s
         .focusable(true)
         .hit()
         .press_scale(PRESS_SCALE)
+        .press(pressed_fill())
         .hover(hover_fill())
         .size(DECK_CARD_W, DECK_CARD_H)
         .radius(RADIUS_CARD)

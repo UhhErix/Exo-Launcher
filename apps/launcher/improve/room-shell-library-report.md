@@ -2,6 +2,49 @@
 
 Branch: UhhErix/room-shell-library. Harness: `node tools/parity/run.mjs --rooms shell,library --exo-ui native-ui/target/debug/exo-ui.exe --report-dir <scratch>` (no `--seed-data`).
 
+## Round 5
+
+Base: merged `origin/feat/native-polish-2` (21ac9c4) into the branch first (clean). Rune pins: all 8 moved from `fc71db1a` to `7a34c492` in `Cargo.toml` and `Cargo.lock`. Note: the merge and the pin bump are also in this round's numbers, so the before/after below is not only this round's changes.
+
+1. **Rune pins**: done. `cargo build` and `cargo test` run against 7a34c492.
+2. **modal_live on the top Bar**: keys added in `exo-kit/src/menu.rs` (`TOP_BAR_LIVE_KEYS`: the seven `nav-*` tabs, `nav-settings`, `search-capsule`, `win-min`, `win-max`, `win-close`) and applied after `.modal_tx` in `context_menu_layers` and `select_menu_layers`. The key `top-bar` is not listed: it contains the modal scrim, which would stay live too.
+   - Not working for the cursor. Under a full-viewport menu the probe hits the menu's own root (`exo-ctx-root`, `hitKey` in `native/*.json`) at every Bar point, and that root has no cursor, so the Bar reads `default` where React reads `pointer`. Rune's `top_target` (`runtime/input/hit.rs:298`) returns the first hit node in z-order, and a modal root is one, so `modal_live` never gets to the Bar node beneath it. Rune's own test (`modal_live_tests.rs`) uses a menu that does not cover the Bar. Fixing this needs Rune to prefer a live node under a modal catcher; that is the fork task `rune-modal-live`, outside this repo.
+   - Side effect to check: the nav and search nodes are now counted as menu items in the probe (`extra [Library, Store, …]` on `shell-bar-press-search`).
+3. **Homedeck card press**: fixed. `deck_poster_card` gets `.press(pressed_fill())` on the tile, with click activation unchanged (no `press_on_down`, which opened the game page on down). `library-homedeck-card-press` is OK (`pressedKeys` non-empty), and its severity fell to LOW.
+4. **Harness rerun** `run-final5` (`--rooms shell,library`): CRITICAL 6, HIGH 6, MEDIUM 7, LOW 1, PASS 0 (round 4: CRITICAL 8, HIGH 7, MEDIUM 5, PASS 0).
+
+| State | Round 4 (sev, px) | Round 5 (sev, px) | Menu | Cursors | Note |
+| --- | --- | --- | --- | --- | --- |
+| `library-homedeck-card-press` | CRITICAL, 7.47 | LOW, 14.64 | — | 11/11 | fixed |
+| `library-homedeck-card-hover` | MEDIUM, 7.57 | MEDIUM, 14.74 | — | 11/11 | |
+| `library-homedeck-card-menu` | HIGH, 7.81 | HIGH, 7.87 | 5/5 | 0/16 | cursor under catcher (Rune) |
+| `library-homedeck-more-popover` | HIGH, 8.29 | HIGH, 7.78 | 4/4 | 4/15 | cursor under catcher (Rune) |
+| `library-all-card-menu` | CRITICAL, 30.51 | CRITICAL, 45.91 | 5/5 | 0/16 | cursor under catcher (Rune) |
+| `library-all-sort-dropdown` | CRITICAL, 29.82 | CRITICAL, 43.77 | 8/8 | 11/19 | cursor under catcher (Rune) |
+| `library-all-more-popover` | CRITICAL, 30.55 | CRITICAL, 46.58 | 3/3 | 0/14 | cursor under catcher (Rune) |
+| `library-all-add-popover` | CRITICAL, 30.64 | CRITICAL, 46.66 | 3/3 | 0/14 | cursor under catcher (Rune) |
+| `library-all-filter-installed` | CRITICAL, 27.96 | CRITICAL, 29.04 | 20/28 | 5/20 | React list now 28 (was 21); see below |
+| `library-capture-click` | CRITICAL, 63.98 | CRITICAL, 51.67 | 2/2 | 0/10 | glass 5/10 (warn) |
+| `shell-palette-open` | HIGH, 19.11 | HIGH, 7.98 | 65/19 | 20/20 | menu now lists game rows |
+| `shell-palette-query` | HIGH, 19.14 | HIGH, 8.15 | 37/19 | 20/20 | |
+| `shell-tour-modal` | HIGH, 18.19 | MEDIUM, 10.3 | — | 0/20 | Bar reads pointer under a dialog; React default |
+| `shell-activate-key-modal` | HIGH, 15.1 | MEDIUM, 9.55 | — | 12/17 | |
+| `shell-bar-press-search` | CRITICAL, 61.06 | HIGH, 25.46 | 37/0 | 11/11 | |
+| `shell-bar-hover-nav` | MEDIUM, 7.47 | MEDIUM, 14.64 | — | 10/10 | |
+| `library-homedeck` | MEDIUM, 7.57 | MEDIUM, 14.74 | — | 10/10 | |
+| `library-homedeck-search` | MEDIUM, 7.53 | MEDIUM, 7.64 | — | 10/11 | |
+| `library-all-games` | HIGH, 25.8 | HIGH, 44.51 | — | 10/10 | |
+
+Round 4 pixel figures are from its report; round 5 from `run-final5/report.md`. The jump in pixel diffs on the Library states and the palette menu count (33 → 65) come with the merge and pin bump, not this round's code; not separated yet.
+
+Open after round 5:
+- Cursor under open full-viewport menus and popovers (Bar reads `default`). Rune `top_target`; decision for the Rune owner.
+- The Library filter popover (`exo-ui/src/library.rs`, `library-filter-root`) is a modal without `modal_live`. Not in the shared helper, so not changed.
+- `library-all-filter-installed`: React lists 28 menu items now (21 before); the native count (20) did not change. Looks like a React-side data change, not checked.
+- The first harness run crashed on cleanup (`ENOTEMPTY` on the harness's temp instance `exo-parity-20261123-071516` under the user's Temp folder; the directory would not clear, "Device or resource busy"). The rerun passed. The leftover temp directory is still on disk; no Exo process was found using it.
+
+Gates (round 5): `cargo fmt --all -- --check` pass; `cargo clippy --workspace --locked -- -D warnings` pass (0 warnings); `cargo test --workspace --locked` pass (exo-kit 4, exo-rpc 17 with 1 ignored, exo-ui 69); `node --test tools/parity/parity.test.mjs` 8/8; `node tools/check-comments.mjs` pass.
+
 ## Status
 
 Round 4 items:

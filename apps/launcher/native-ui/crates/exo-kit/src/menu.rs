@@ -9,6 +9,23 @@ use crate::tokens::{
 use rune::{Align, Cursor, El, Key, Side, Tx, Vec2, col, el, row, text};
 use std::rc::Rc;
 
+/// Top Bar nodes that stay live under an open menu, popover or select: the nav tabs, the search
+/// capsule and the window controls. A press on one closes the menu and then activates the node.
+pub const TOP_BAR_LIVE_KEYS: [&str; 12] = [
+    "nav-library",
+    "nav-store",
+    "nav-discord",
+    "nav-music",
+    "nav-devices",
+    "nav-exo-ai",
+    "nav-apps",
+    "nav-settings",
+    "search-capsule",
+    "win-min",
+    "win-max",
+    "win-close",
+];
+
 pub type MenuAction<S> = Rc<dyn Fn(&mut S, &mut Tx)>;
 
 pub enum MenuAnchor {
@@ -432,6 +449,7 @@ pub fn context_menu_layers<S: 'static>(spec: ContextMenuSpec<S>) -> Vec<El> {
         el().key(format!("{id}-root"))
             .pin(Some(0.0), Some(0.0), Some(0.0), Some(0.0))
             .modal_tx(true, move |s: &mut S, tx| dismiss_modal(s, tx))
+            .modal_live(TOP_BAR_LIVE_KEYS)
             .children(menu_nodes),
     ]
 }

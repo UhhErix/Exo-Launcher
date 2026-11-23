@@ -1,5 +1,6 @@
 use crate::components::popover_transition_from;
 use crate::icons::{icon_check, icon_chevron_down};
+use crate::menu::TOP_BAR_LIVE_KEYS;
 use crate::tokens::{
     FG, GLASS_CONTROL_SIGMA, GLASS_PANEL_SIGMA, PRESS_SCALE, RADIUS_CARD, RADIUS_PILL,
     RADIUS_SMALL, SPRING_QUICK, TRANSPARENT, fg_faint, fg_muted, glass_control_fill,
@@ -309,6 +310,7 @@ pub fn select_menu_layers<S: 'static>(spec: SelectMenuSpec<S>) -> Vec<El> {
         .anchored_fit(trigger_key.clone(), Side::Bottom, align, 6.0)
         .transition(popover_transition_from(origin))
         .modal_tx(true, move |s: &mut S, tx| dismiss_modal(s, tx))
+        .modal_live(TOP_BAR_LIVE_KEYS)
         .focus_return(trigger_key)
         .children(rows);
 
