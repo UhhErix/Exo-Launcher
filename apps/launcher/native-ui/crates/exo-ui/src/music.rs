@@ -202,8 +202,17 @@ fn render_art(
     let img = if url.is_empty() {
         None
     } else {
-        s.remote_image(url, scale)
+        s.remote_image_sized(url, size.unwrap_or(360.0), scale)
     };
+    render_art_image(img, size, radius, is_liked)
+}
+
+fn render_art_image(
+    img: Option<rune::Image>,
+    size: Option<f32>,
+    radius: f32,
+    is_liked: bool,
+) -> El {
     let mut box_el = el().radius(radius).clip_rounded(radius);
     if let Some(px) = size {
         box_el = box_el.size(px, px);
@@ -1007,11 +1016,15 @@ fn side_panel(s: &AppState, panel: MusicPanel, scale: f32) -> El {
     let content = match panel {
         MusicPanel::NowPlaying => {
             if let Some(pb) = s.media.playback.as_ref().filter(|p| p.has_track()) {
-                let art_url = pb.artwork_url.as_deref().unwrap_or("");
                 col()
                     .w_full()
                     .gap(12.0)
-                    .child(render_art(s, art_url, None, RADIUS_CARD, false, scale))
+                    .child(render_art_image(
+                        s.current_playback_art(scale),
+                        None,
+                        RADIUS_CARD,
+                        false,
+                    ))
                     .child(text(pb.title.clone()).font(scaled_title(s)).color(FG))
                     .child(
                         text(pb.artist.clone())
@@ -1168,7 +1181,6 @@ fn transport_bar(s: &AppState, scale: f32) -> El {
     let pb = s.media.playback.as_ref().filter(|p| p.has_track());
     let has_track = pb.is_some();
     let playing = pb.is_some_and(|p| p.is_playing());
-    let art_url = pb.and_then(|p| p.artwork_url.as_deref()).unwrap_or("");
     let title = pb.map(|p| p.title.as_str()).unwrap_or("Nothing playing");
     let artist = pb.map(|p| p.artist.as_str()).unwrap_or("");
 
@@ -1192,13 +1204,11 @@ fn transport_bar(s: &AppState, scale: f32) -> El {
         .min_w(0.0)
         .gap(12.0)
         .center_y()
-        .child(render_art(
-            s,
-            art_url,
+        .child(render_art_image(
+            s.current_playback_art(scale),
             Some(48.0),
             RADIUS_PILL,
             false,
-            scale,
         ))
         .child(song_text);
 
@@ -1418,7 +1428,6 @@ fn transport_bar(s: &AppState, scale: f32) -> El {
 
 fn immersion_view(s: &AppState, scale: f32) -> El {
     let pb = s.media.playback.as_ref().filter(|p| p.has_track());
-    let art_url = pb.and_then(|p| p.artwork_url.as_deref()).unwrap_or("");
     let title = pb.map(|p| p.title.as_str()).unwrap_or("Nothing playing");
     let artist = pb.map(|p| p.artist.as_str()).unwrap_or("");
     let album = pb.map(|p| p.album.as_str()).unwrap_or("");
@@ -1446,13 +1455,11 @@ fn immersion_view(s: &AppState, scale: f32) -> El {
         .pb(96.0)
         .center()
         .gap(20.0)
-        .child(render_art(
-            s,
-            art_url,
+        .child(render_art_image(
+            s.current_playback_art(scale),
             Some(340.0),
             RADIUS_PANEL,
             false,
-            scale,
         ))
         .child(
             col()
@@ -1525,7 +1532,6 @@ pub fn mini_player(s: &AppState, scale: f32, slot: crate::state::MiniBarSlot) ->
     }
     let track = s.media.playback.as_ref().filter(|p| p.has_track())?;
     let playing = track.is_playing();
-    let art_url = track.artwork_url.as_deref().unwrap_or("");
     let progress = match (track.position_ms, track.duration_ms) {
         (Some(pos), Some(dur)) if dur > 0 => (pos as f32 / dur as f32).clamp(0.0, 1.0),
         _ => 0.0,
@@ -1551,11 +1557,7 @@ pub fn mini_player(s: &AppState, scale: f32, slot: crate::state::MiniBarSlot) ->
             icon_play(15.0, FG)
         });
 
-    let thumb = if let Some(img) = if art_url.is_empty() {
-        None
-    } else {
-        s.remote_image(art_url, scale)
-    } {
+    let thumb = if let Some(img) = s.current_playback_art(scale) {
         el().size(24.0, 24.0)
             .radius(6.0)
             .clip_rounded(6.0)

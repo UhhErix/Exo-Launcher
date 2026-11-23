@@ -1,6 +1,6 @@
 use crate::discord_chat_state::{ChatDrawer, DiscordChatState};
 use crate::discord_voice_state::DiscordVoiceUiState;
-use crate::state::{AppState, HostStatus};
+use crate::state::{AppState, HostStatus, Room};
 use exo_rpc::discord_types::{DISCORD_SNAPSHOT_VERSION, DiscordDiskSnapshot, DiscordRestricted};
 use exo_rpc::{
     ActionResult, DiscordAccountItem, DiscordAccountsReply, DiscordChangedEvent, DiscordChannel,
@@ -1480,8 +1480,12 @@ impl AppState {
             self.clear_discord_snapshot();
         }
         if became_ready {
-            self.discord.last_ready_refresh_at = Some(Instant::now());
-            self.refresh_discord_home();
+            if self.room == Room::Discord {
+                self.discord.last_ready_refresh_at = Some(Instant::now());
+                self.refresh_discord_home();
+            } else {
+                self.discord_dirty_while_closed = true;
+            }
         }
     }
 
@@ -1494,13 +1498,18 @@ impl AppState {
         }
     }
 
-    pub fn handle_discord_changed(&mut self, ev: DiscordChangedEvent) {
+    pub fn handle_discord_changed(&mut self, ev: DiscordChangedEvent) -> bool {
+        if let Some(ref gid) = ev.guild_id
+            && let Some(cnt) = ev.in_voice
+            && let Some(g) = self.discord.home.guilds.iter_mut().find(|g| g.id == *gid)
+        {
+            g.in_voice = cnt;
+        }
+        if self.room != Room::Discord {
+            self.discord_dirty_while_closed = true;
+            return false;
+        }
         if let Some(ref gid) = ev.guild_id {
-            if let Some(cnt) = ev.in_voice
-                && let Some(g) = self.discord.home.guilds.iter_mut().find(|g| g.id == *gid)
-            {
-                g.in_voice = cnt;
-            }
             if self.discord.active_guild_id.as_deref() == Some(gid.as_str())
                 || self.discord.channels_by_guild.contains_key(gid)
             {
@@ -1529,50 +1538,79 @@ impl AppState {
                 );
             }
         }
+        true
     }
 
-    pub fn handle_discord_members(&mut self, guild_id: &str) {
+    pub fn handle_discord_members(&mut self, guild_id: &str) -> bool {
+        if self.room != Room::Discord {
+            self.discord_dirty_while_closed = true;
+            return false;
+        }
         if self.discord.active_guild_id.as_deref() == Some(guild_id) {
             self.refresh_discord_members(guild_id);
+            return true;
         }
+        false
     }
 
-    pub fn handle_discord_presence(&mut self, ev: DiscordPresenceEvent) {
+    pub fn handle_discord_presence(&mut self, ev: DiscordPresenceEvent) -> bool {
+        let mut changed = false;
         if let Some(ref mut me) = self.discord.home.me
             && me.id == ev.user_id
+            && me.status.as_deref() != Some(ev.status.as_str())
         {
             me.status = Some(ev.status.clone());
+            changed = true;
         }
         for dm in &mut self.discord.home.dms {
             if dm.user_id.as_deref() == Some(ev.user_id.as_str()) {
-                dm.status = Some(ev.status.clone());
-                if ev.activity.is_some() {
+                if dm.status.as_deref() != Some(ev.status.as_str()) {
+                    dm.status = Some(ev.status.clone());
+                    changed = true;
+                }
+                if ev.activity.is_some() && dm.subtitle != ev.activity {
                     dm.subtitle = ev.activity.clone();
+                    changed = true;
                 }
             }
         }
         for f in &mut self.discord.friends {
             if f.id == ev.user_id {
-                f.status = ev.status.clone();
-                f.activity = ev.activity.clone();
-                f.activity_type = ev.activity_type;
-                f.rich = ev.rich.clone();
-                f.prep = ev.prep.clone();
+                let diff = f.status != ev.status
+                    || f.activity != ev.activity
+                    || f.activity_type != ev.activity_type
+                    || f.rich != ev.rich
+                    || f.prep != ev.prep;
+                if diff {
+                    f.status = ev.status.clone();
+                    f.activity = ev.activity.clone();
+                    f.activity_type = ev.activity_type;
+                    f.rich = ev.rich.clone();
+                    f.prep = ev.prep.clone();
+                    changed = true;
+                }
             }
         }
+        changed && self.room == Room::Discord
     }
 
-    pub fn handle_discord_unread(&mut self, ev: DiscordUnreadEvent) {
+    pub fn handle_discord_unread(&mut self, ev: DiscordUnreadEvent) -> bool {
+        let mut changed = false;
         if let Some(ref gid) = ev.guild_id {
-            if let Some(g) = self.discord.home.guilds.iter_mut().find(|g| g.id == *gid) {
+            if let Some(g) = self.discord.home.guilds.iter_mut().find(|g| g.id == *gid)
+                && (g.unread != ev.guild_unread || g.mentions != ev.guild_mentions)
+            {
                 g.unread = ev.guild_unread;
                 g.mentions = ev.guild_mentions;
+                changed = true;
             }
             if let Some(chans) = self.discord.channels_by_guild.get_mut(gid)
                 && let Some(c) = chans.channels.iter_mut().find(|c| c.id == ev.channel_id)
+                && (c.unread != ev.unread || c.mentions != ev.mentions)
             {
                 c.unread = ev.unread;
                 c.mentions = ev.mentions;
+                changed = true;
             }
         } else if let Some(dm) = self
             .discord
@@ -1580,10 +1618,13 @@ impl AppState {
             .dms
             .iter_mut()
             .find(|d| d.id == ev.channel_id)
+            && (dm.unread != ev.unread || dm.mentions != ev.mentions)
         {
             dm.unread = ev.unread;
             dm.mentions = ev.mentions;
+            changed = true;
         }
+        changed && self.room == Room::Discord
     }
 
     pub fn handle_discord_voice(&mut self, voice: DiscordVoice) {
@@ -1684,10 +1725,19 @@ impl AppState {
     }
 
     pub fn discord_remote_image(&self, url: &str, scale: f32) -> Option<rune::Image> {
+        self.discord_remote_image_sized(url, 360.0, scale)
+    }
+
+    pub fn discord_remote_image_sized(
+        &self,
+        url: &str,
+        max_dim: f32,
+        scale: f32,
+    ) -> Option<rune::Image> {
         if self.discord.prefetching_urls.contains(url) {
             return None;
         }
-        self.remote_image(url, scale)
+        self.remote_image_sized(url, max_dim, scale)
     }
 
     pub fn prefetch_discord_images(&mut self) {
@@ -1775,7 +1825,7 @@ impl AppState {
         let images: Vec<rune::Image> = self
             .collect_discord_image_urls()
             .into_iter()
-            .filter_map(|u| self.remote_image(&u, scale))
+            .filter_map(|u| self.remote_image_sized(&u, 64.0, scale))
             .collect();
         for img in images {
             let _ = img.wait();

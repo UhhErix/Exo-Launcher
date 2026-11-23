@@ -9,7 +9,7 @@ use exo_rpc::{
     MusicPlayback, MusicPlaybackReply, MusicVolumeReply, PlayerCard, PlayerOption, PlayerSection,
     PlayerStartReply, PlayerViewData, PlayerViewReply,
 };
-use rune::{Player, TextEdit};
+use rune::{Image, Player, TextEdit};
 use serde_json::json;
 
 const MUSIC_START_FAST_ATTEMPTS: u32 = 20;
@@ -155,6 +155,8 @@ pub struct MediaState {
     pub music_panel: Option<MusicPanel>,
     pub music_immersion: bool,
     pub playback: Option<MusicPlayback>,
+    pub current_art_key: Option<String>,
+    pub current_art: Option<Image>,
     pub music_volume: f64,
     pub music_muted: bool,
     pub music_shuffle: bool,
@@ -217,6 +219,8 @@ impl MediaState {
                 can_next: true,
                 can_seek: true,
             }),
+            current_art_key: None,
+            current_art: None,
             music_volume: 0.78,
             music_muted: false,
             music_shuffle: false,
@@ -491,6 +495,8 @@ impl MediaState {
             music_panel: None,
             music_immersion: false,
             playback: None,
+            current_art_key: None,
+            current_art: None,
             music_volume: 0.75,
             music_muted: false,
             music_shuffle: false,
@@ -590,7 +596,7 @@ impl AppState {
             let h1 = handle.clone();
             rpc.call::<_, MusicPlaybackReply>(METHOD_MUSIC_PLAYBACK, &json!({}), move |res| {
                 if let Ok(reply) = res {
-                    h1.update(move |s, _| s.media.playback = reply.playback);
+                    h1.update_if(move |s, _| s.apply_music_playback(reply.playback));
                 }
             });
             let h2 = handle.clone();
@@ -984,7 +990,7 @@ impl AppState {
         if let (Some(rpc), Some(handle)) = (self.rpc.clone(), self.handle.clone()) {
             rpc.call::<_, MusicPlaybackReply>(METHOD_MUSIC_PLAYBACK, &json!({}), move |res| {
                 if let Ok(reply) = res {
-                    handle.update(move |s, _| s.media.playback = reply.playback);
+                    handle.update_if(move |s, _| s.apply_music_playback(reply.playback));
                 }
             });
         }

@@ -561,7 +561,8 @@ fn avatar_with_look(
         .clip_rounded(radius)
         .fill(Color::WHITE.alpha(0.10))
         .center();
-    if let Some(img) = url.and_then(|u| s.discord_remote_image(u, scale)) {
+    let avatar_dim = if size <= 56.0 { 64.0 } else { 128.0 };
+    if let Some(img) = url.and_then(|u| s.discord_remote_image_sized(u, avatar_dim, scale)) {
         inner = inner.pixels_fit(img.pixels(), SurfaceFit::Fill);
     } else {
         let style = if size >= 40.0 {
@@ -583,7 +584,7 @@ fn avatar_with_look(
     }
     let mut wrap = el().size(size, size).child(inner);
     if let Some(dec_url) = decoration_url(look)
-        && let Some(img) = s.discord_remote_image(&dec_url, scale)
+        && let Some(img) = s.discord_remote_image_sized(&dec_url, avatar_dim, scale)
     {
         let dec_sz = (size * 1.2).round();
         let off = -((dec_sz - size) * 0.5);
@@ -876,7 +877,7 @@ fn guild_face(s: &AppState, guild: &DiscordGuild, face_sz: f32, sc: f32, scale: 
     if let Some(img) = guild
         .icon
         .as_deref()
-        .and_then(|u| s.discord_remote_image(u, scale))
+        .and_then(|u| s.discord_remote_image_sized(u, 64.0, scale))
     {
         face = face.pixels_fit(img.pixels(), SurfaceFit::Fill);
     } else {
@@ -1026,7 +1027,7 @@ fn band_folder_tile(
         if let Some(img) = g
             .icon
             .as_deref()
-            .and_then(|u| s.discord_remote_image(u, scale))
+            .and_then(|u| s.discord_remote_image_sized(u, 64.0, scale))
         {
             cell = cell.pixels_fit(img.pixels(), SurfaceFit::Fill);
         } else {
@@ -2197,7 +2198,7 @@ fn server_left_rail(s: &AppState, guild: &DiscordGuild, sc: f32, scale: f32) -> 
 
     let mut tree = col().w_full().pt(4.0).px(8.0).pb(8.0).gap(2.0);
     if let Some(ref banner_url) = guild.banner
-        && let Some(img) = s.discord_remote_image(banner_url, scale)
+        && let Some(img) = s.discord_remote_image_sized(banner_url, 640.0, scale)
     {
         let banner_h = ((pane_w - 16.0) * 7.0 / 16.0).round();
         tree = tree.child(
@@ -2308,7 +2309,7 @@ fn clan_tag_chip(s: &AppState, tag: &DiscordGuildTag, sc: f32, scale: f32) -> El
         .fill(Color::WHITE.alpha(0.05))
         .border(1.0, glass_rim());
     if let Some(url) = clan_badge_url(tag)
-        && let Some(img) = s.discord_remote_image(&url, scale)
+        && let Some(img) = s.discord_remote_image_sized(&url, 64.0, scale)
     {
         chip = chip.child(
             el().size(12.0, 12.0)

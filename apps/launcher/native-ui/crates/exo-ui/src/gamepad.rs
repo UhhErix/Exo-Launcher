@@ -71,6 +71,8 @@ pub fn start_polling(on_action: impl Fn(GamepadAction) + Send + 'static) {
             let mut prev_buttons: u16 = 0;
             let mut prev_dir = (0i8, 0i8);
             let mut last_dir_fire = Instant::now();
+            let mut last_packet: u32 = 0;
+            let mut last_activity = Instant::now();
 
             loop {
                 let mut state = XInputState::default();
@@ -86,6 +88,8 @@ pub fn start_polling(on_action: impl Fn(GamepadAction) + Send + 'static) {
                     connected = found;
                     prev_buttons = 0;
                     prev_dir = (0, 0);
+                    last_packet = state.packet_number;
+                    last_activity = Instant::now();
                     on_action(GamepadAction::Connected(connected));
                 }
 
@@ -133,6 +137,10 @@ pub fn start_polling(on_action: impl Fn(GamepadAction) + Send + 'static) {
                 };
 
                 let now = Instant::now();
+                if state.packet_number != last_packet || b != 0 || (dx, dy) != (0, 0) {
+                    last_packet = state.packet_number;
+                    last_activity = now;
+                }
                 let should_fire = (dx, dy) != (0, 0)
                     && ((dx, dy) != prev_dir
                         || now.duration_since(last_dir_fire) >= Duration::from_millis(180));
@@ -150,7 +158,12 @@ pub fn start_polling(on_action: impl Fn(GamepadAction) + Send + 'static) {
                 }
                 prev_dir = (dx, dy);
 
-                std::thread::sleep(Duration::from_millis(16));
+                let poll_ms = if now.duration_since(last_activity) >= Duration::from_secs(2) {
+                    100
+                } else {
+                    16
+                };
+                std::thread::sleep(Duration::from_millis(poll_ms));
             }
         })
         .ok();
