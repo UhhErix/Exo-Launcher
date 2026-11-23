@@ -8,6 +8,7 @@ mod discord_md;
 mod discord_state;
 mod discord_voice;
 mod discord_voice_state;
+mod events;
 mod game_page;
 mod gamepad;
 mod image_cache;
