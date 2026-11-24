@@ -2131,39 +2131,44 @@ fn auto_tune_cinema_layer(s: &AppState, blur: bool) -> Option<El> {
         .child(milestones);
 
     if finished {
-        let mut summary = col()
-            .w_full()
-            .pt(8.0)
-            .gap(6.0)
-            .px(14.0)
-            .py(14.0)
-            .radius(RADIUS_CARD)
-            .fill(BG.alpha(0.5))
-            .border(1.0, float_line());
-        for st in stages {
-            let is_warn = st.status == AutoTuneStageStatus::Warn;
-            summary = summary.child(
-                row()
-                    .w_full()
-                    .gap(10.0)
-                    .center_y()
-                    .child(icon_check(14.0, if is_warn { warn() } else { good() }))
-                    .child(
-                        col()
-                            .grow(1.0)
-                            .min_w(0.0)
-                            .gap(1.0)
-                            .child(text(st.label).font(type_control()).color(FG))
-                            .child(
-                                text(st.detail.clone())
-                                    .font(type_small())
-                                    .color(if is_warn { warn() } else { fg_muted() })
-                                    .wrap(),
-                            ),
-                    ),
-            );
+        let warnings: Vec<_> = stages
+            .iter()
+            .filter(|st| st.status == AutoTuneStageStatus::Warn)
+            .collect();
+        if !warnings.is_empty() {
+            let mut summary = col()
+                .w_full()
+                .pt(8.0)
+                .gap(6.0)
+                .px(14.0)
+                .py(14.0)
+                .radius(RADIUS_CARD)
+                .fill(BG.alpha(0.5))
+                .border(1.0, float_line());
+            for st in warnings {
+                summary = summary.child(
+                    row()
+                        .w_full()
+                        .gap(10.0)
+                        .center_y()
+                        .child(icon_check(14.0, warn()))
+                        .child(
+                            col()
+                                .grow(1.0)
+                                .min_w(0.0)
+                                .gap(1.0)
+                                .child(text(st.label).font(type_control()).color(FG))
+                                .child(
+                                    text(st.detail.clone())
+                                        .font(type_small())
+                                        .color(warn())
+                                        .wrap(),
+                                ),
+                        ),
+                );
+            }
+            card_body = card_body.child(summary);
         }
-        card_body = card_body.child(summary);
 
         if let Some(ref err) = s.pc.auto_tune_cinema_error {
             card_body = card_body.child(text(err.clone()).font(type_small()).color(bad()).wrap());
