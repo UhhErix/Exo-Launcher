@@ -67,6 +67,7 @@ internal static class NetworkDestinations
     internal const string ExoRelay = "Exo's relay (Cloudflare Workers)";
     internal const string LrcLib = "Synced lyrics for YouTube Music (LRCLIB, lrclib.net)";
     internal const string Installers = "Game runtimes and app installers: Microsoft (Visual C++, DirectX, .NET and its release list, XNA, WebView2; GameInput from NuGet's `globalcdn.nuget.org`), Creative (OpenAL, `openal.org`), NVIDIA (PhysX, `us.download.nvidia.com`), Epic Games (its new launcher, `launcher-public-service-prod06.ol.epicgames.com` and `content-download-egs.distro.on.epicgames.com`)";
+    internal const string ModrinthMods = "Minecraft Fabric performance mods (Sodium, Lithium and FerriteCore, opt-in only, from Modrinth: `api.modrinth.com`, `cdn.modrinth.com`)";
     internal const string DevicePictures = "Device pictures (the makers' own image servers: gmedia.playstation.com, cdn-dynmedia-1.microsoft.com, assets.nintendo.com, store.storeimages.cdn-apple.com, wooting-website.ams3.cdn.digitaloceanspaces.com, resource.logitechg.com, resource.logitech.com, images.ctfassets.net (SteelSeries), assets.corsair.com, dlcdnwebimgs.asus.com, `www.asus.com`, hyperx.com, a.storyblok.com (Cooler Master), `www.deluxworld.com`, ca.sennheiser-hearing.com, assets.sennheiser.com, api.beyerdynamic.de, `www.audio-technica.com`, images.philips.com, sony.scene7.com, assets.fractal-design.com, massdrop-s3.imgix.net (Drop), cdn.prod.website-files.com (Truthear), static.wixstatic.com (Dunu), tanchjim.com, intuaura.net, `www.cherry.de`, motospeed.cc, `www.vaxee.co`, and makers' stores on cdn.shopify.com; where a maker publishes no large or clean picture, an authorized store's copy of its official shot: Best Buy (`pisces.bbystatic.com`, `multimedia.bbycastatic.ca`), MaxGaming (`us.maxgaming.com`) and headphone and IEM stores on cdn.shopify.com; OpenMouse's img.openmouse.app)";
 
     internal static readonly Destination[] Hosts =
@@ -255,6 +256,8 @@ internal static class NetworkDestinations
         new("dns.msftncsi.com", NetworkCheck),
         new("www.asus.com", AsusBios),
         new("dlcdnets.asus.com", AsusBios),
+        new("api.modrinth.com", ModrinthMods),
+        new("cdn.modrinth.com", ModrinthMods),
 
         // DeviceImages: one product picture per device model, from the links in Assets/device-images.json (exact hosts only).
         new("gmedia.playstation.com", DevicePictures),

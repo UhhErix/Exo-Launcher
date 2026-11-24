@@ -1079,6 +1079,8 @@ function mockGameSettings(params?: Record<string, unknown>) {
   return {
     ok: true, supported: true, title: 'Call of Duty: Modern Warfare 4', found: true, groups: [], windowMode: 'borderless' as const,
     standing: mockOptimized ? 'applied' as const : 'off' as const,
+    advice: [],
+    minecraft: null,
   }
 }
 

@@ -42,6 +42,7 @@ internal static partial class GameSettings
         ["UpscaleScreenPercentage"] = Toggle, ["MinimumScreenScale"] = "1 to 100", ["AllowDynamicResolution"] = Toggle,
         ["MaxAnisotropy"] = "1 to 16",
         ["MotionBlur"] = Toggle, ["DepthOfField"] = Toggle, ["Bloom"] = Toggle, ["AmbientOcclusion"] = Toggle,
+        ["DynamicShadows"] = Toggle, ["bAllowD3D9MSAA"] = Toggle,
         ["DynamicDecals"] = Toggle, ["UnbatchedDecals"] = Toggle, ["bEnableForegroundShadowsOnWorld"] = Toggle, ["bUseTranslucentArenaShaders"] = Toggle,
     };
 
@@ -49,7 +50,20 @@ internal static partial class GameSettings
 
     internal static Profile RocketLeague(Pc pc) =>
         new("rocketleague", "Rocket League", Path.Combine(RocketLeagueConfig, "TASystemSettings.ini"), _ => RocketLeagueGroups(pc),
-            ["RocketLeague", "RocketLeague_EAC"], Nvidia: RocketLeagueNvidia, Format: ParseRocketLeague, Program: RocketLeagueProgram, Mark: IniVersion);
+            ["RocketLeague", "RocketLeague_EAC"], Nvidia: RocketLeagueNvidia, Format: ParseRocketLeague, Program: RocketLeagueProgram, Mark: IniVersion,
+            Advice: _ => RocketLeagueAdvice(pc));
+
+    internal static IReadOnlyList<string> RocketLeagueAdvice(Pc pc)
+    {
+        List<string> notes =
+        [
+            "Display mode and V-Sync are stored in Rocket League's encrypted account save; set Borderless or Fullscreen and V-Sync off in-game.",
+            "Dynamic shadows are off for consistent frame pacing; keep DynamicShadows on if you read ball height from floor shadows.",
+        ];
+        if (!pc.Vrr)
+            notes.Add("Leave CustomFPS uncapped or match your display in-game when variable refresh rate is off.");
+        return notes;
+    }
 
     /// <summary>RocketLeague.exe in the copy's own install (NVIDIA's Rocket League profile is that program in Epic's and Steam's alike).</summary>
     internal static string? RocketLeagueProgram(Models.GameEntry game)
@@ -67,10 +81,13 @@ internal static partial class GameSettings
             [new("UpscaleScreenPercentage", "True"), new("MinimumScreenScale", "100"), new("AllowDynamicResolution", "False")]));
         // A card with its own memory: 16x costs it nothing measurable; a laptop's shared-memory graphics keeps the game's 4x.
         if (pc.VideoMemoryGb is >= 2) groups.Add(new("filtering", "Sharpest texture filtering", [new("MaxAnisotropy", "16")]));
-        groups.Add(new("effects", "No motion blur, depth of field, bloom or ambient occlusion",
-            [new("MotionBlur", "False"), new("DepthOfField", "False"), new("Bloom", "False"), new("AmbientOcclusion", "False")]));
+        groups.Add(new("effects", "No motion blur, depth of field, bloom, ambient occlusion, MSAA or dynamic shadows",
+            [new("MotionBlur", "False"), new("DepthOfField", "False"), new("Bloom", "False"), new("AmbientOcclusion", "False"),
+             new("DynamicShadows", "False"), new("bAllowD3D9MSAA", "False")]));
         groups.Add(new("ball", "Ball marker, wall shadows and see-through goalposts",
             [new("DynamicDecals", "True"), new("UnbatchedDecals", "True"), new("bEnableForegroundShadowsOnWorld", "True"), new("bUseTranslucentArenaShaders", "True")]));
+        if (VrrFrameCap(pc) is { } cap)
+            groups.Add(new("framecap", $"Frame cap at {cap} FPS for VRR", [new("CustomFPS", cap.ToString(System.Globalization.CultureInfo.InvariantCulture))]));
         return groups;
     }
 

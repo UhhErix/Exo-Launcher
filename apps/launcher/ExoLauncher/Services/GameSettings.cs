@@ -57,16 +57,18 @@ internal static partial class GameSettings
         Func<IReadOnlyDictionary<string, string>>? Facts = null, IReadOnlyList<string>? Helpers = null,
         IReadOnlyDictionary<string, string>? Inputs = null, IReadOnlyList<string>? InputLines = null,
         Func<GameEntry, IReadOnlyDictionary<string, string>>? GameFacts = null, Func<IReadOnlyList<OpenFile>, DateTime?, bool, bool>? CloudChanged = null,
-        string? Install = null);
+        string? Install = null, Func<SettingsFile?, IReadOnlyList<string>>? Advice = null);
 
     /// <summary>One of a profile's files as read, with the key its kept lines go under ("" for the main file).</summary>
     internal sealed record OpenFile(string Path, string Key, SettingsFile File);
+
+    internal sealed record ChangePreview(string Key, string Current, string Target, bool Applied, bool Kept);
 
     /// <summary>
     /// A group as it stands. On: every line it changes holds Exo's value. Exo: Exo changed at least one of
     /// them, so turning it off puts something back (a group already set that way in the game has nothing to put back).
     /// </summary>
-    internal sealed record GroupState(string Id, string Label, bool On, bool Exo);
+    internal sealed record GroupState(string Id, string Label, bool On, bool Exo, IReadOnlyList<ChangePreview>? Changes = null);
 
     /// <summary>
     /// What the values depend on: the graphics card's maker, the render threads the processor suits, the video memory,
@@ -76,7 +78,8 @@ internal static partial class GameSettings
     /// screen (<see cref="Chosen"/>, which <see cref="For"/> fills in).
     /// </summary>
     internal sealed record Pc(string? Vendor, int? RenderThreads, double? VideoMemoryGb, int Screens = 1, int TopRefresh = 0,
-        bool Headphones = false, int? HdrPeak = null, string? Gpu = null, bool Fullscreen = false);
+        bool Headphones = false, int? HdrPeak = null, string? Gpu = null, bool Fullscreen = false,
+        bool Vrr = false, int RamGb = 0, bool X3d = false, bool LowBandwidth = false);
 
     /// <summary>One setting line: "Name@ids = value // allowed", where allowed is "one of a, b" or "low to high".</summary>
     internal sealed record Line(int Index, string Name, string Id, string Value, string? Allowed, int ValueStart, int ValueLength);
@@ -127,7 +130,12 @@ internal static partial class GameSettings
     {
         if (!game.Installed || string.IsNullOrEmpty(game.Path) || game.Store == StoreKind.Riot) return null;
         if (Directory.Exists(Path.Combine(game.Path, "cod26"))) return ModernWarfare4(Chosen(pc, "mw4"));
+        if (IsCallOfDuty(game)) return CallOfDutyWarzone(Chosen(pc, "cod"));
         if (IsRocketLeague(game.Path)) return RocketLeague(pc);
+        if (IsRainbowSixSiege(game)) return RainbowSixSiege(Chosen(pc, "r6siege"));
+        if (IsApexLegends(game)) return ApexLegends(Chosen(pc, "apex"));
+        if (IsOverwatch2(game)) return Overwatch2(Chosen(pc, "overwatch2"));
+        if (IsMinecraftJava(game)) return MinecraftJava(Chosen(pc, "minecraft"));
         if (IsControlResonant(game.Path)) return ControlResonant(Chosen(pc, "control-resonant"));
         if (IsHellIsUs(game.Path)) return HellIsUs(Chosen(pc, HellIsUsId), HellIsUsHasFrameGeneration(game.Path));
         if (IsPhantomBlade(game.Path)) return PhantomBladeZero(pc.HdrPeak, Chosen(pc, "pbz").Fullscreen);
@@ -138,6 +146,49 @@ internal static partial class GameSettings
             return InSteamCloud(game, profile.File) ? null : profile;
         }
         return UnrealHdr(game, pc.HdrPeak);
+    }
+
+    internal static int? VrrFrameCap(Pc pc)
+    {
+        if (!pc.Vrr || pc.TopRefresh < 40 || pc.TopRefresh > 1800) return null;
+        return Math.Max(30, (int)Math.Floor(pc.TopRefresh - (pc.TopRefresh * (double)pc.TopRefresh) / 3600.0));
+    }
+
+    internal static bool IsX3dCpu(MouseCore.Topology topology, string? cpuName) =>
+        (cpuName?.Contains("X3D", StringComparison.OrdinalIgnoreCase) ?? false)
+        || topology.L3.Any(cache => cache.Bytes >= 64L * 1024 * 1024);
+
+    internal static bool DetectLowBandwidth()
+    {
+        try
+        {
+            var speeds = System.Net.NetworkInformation.NetworkInterface.GetAllNetworkInterfaces()
+                .Where(nic => nic.OperationalStatus == System.Net.NetworkInformation.OperationalStatus.Up
+                    && nic.NetworkInterfaceType is not (System.Net.NetworkInformation.NetworkInterfaceType.Loopback or System.Net.NetworkInformation.NetworkInterfaceType.Tunnel)
+                    && nic.Speed > 0)
+                .Select(nic => nic.Speed)
+                .ToList();
+            return speeds.Count > 0 && speeds.Max() < 50_000_000L;
+        }
+        catch (Exception ex) when (ex is System.Net.NetworkInformation.NetworkInformationException or InvalidOperationException or PlatformNotSupportedException)
+        {
+            return false;
+        }
+    }
+
+    private static bool DetectVrr(string? vendor)
+    {
+        try
+        {
+            var screen = GpuProfileService.MainScreen(vendor);
+            if (screen.Vrr) return true;
+            if (vendor == "amd" && RadeonProfileService.Shared.Read(screen) is { FreeSync: true }) return true;
+            return false;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException or DllNotFoundException or EntryPointNotFoundException)
+        {
+            return false;
+        }
     }
 
     /// <summary>
@@ -166,8 +217,11 @@ internal static partial class GameSettings
         var vendor = GraphicsService.Vendor();
         var screens = WindowsHdr.All();
         var top = WindowsHdr.Primary() is { } primary && DisplayOutput.RefreshRates(primary.GdiName).Rates is { Length: > 0 } rates ? rates[^1] : 0;
-        return new(vendor, RenderThreads(MouseCore.Sampler.ReadTopology()), GpuCapability.VideoMemoryGb(), Math.Max(1, screens.Count), top,
-            ListensOnHeadphones(), GameHdr.MainScreenPeak(), SystemSpecs.Gpu);
+        var topology = MouseCore.Sampler.ReadTopology();
+        var specs = SystemSpecs.Read();
+        return new(vendor, RenderThreads(topology), GpuCapability.VideoMemoryGb(), Math.Max(1, screens.Count), top,
+            ListensOnHeadphones(), GameHdr.MainScreenPeak(), SystemSpecs.Gpu, false,
+            DetectVrr(vendor), specs.RamGb, IsX3dCpu(topology, specs.Cpu), DetectLowBandwidth());
     }
 
     private static bool ListensOnHeadphones()
@@ -369,8 +423,18 @@ internal static partial class GameSettings
             var targets = files.SelectMany(open => Targets(open.File, group).Select(t => (open.Key, t.Line, t.Value))).ToList();
             if (targets.Count == 0) continue;
             var held = keptOn is null || keptOn.Contains(group.Id) || !group.Changes.Any(change => profile.WindowLines?.Contains(change.Key) == true);
+            var previews = targets
+                .GroupBy(t => t.Line.Name, StringComparer.Ordinal)
+                .Select(byKey =>
+                {
+                    var first = byKey.First();
+                    var applied = byKey.All(t => t.Line.Value == t.Value);
+                    var wasKept = byKey.Any(t => kept.TryGetValue(t.Key + t.Line.Id, out var was) && was.Set == t.Line.Value);
+                    return new ChangePreview(first.Line.Name, first.Line.Value, first.Value, applied, wasKept);
+                })
+                .ToList();
             states.Add(new GroupState(group.Id, group.Label, held && targets.TrueForAll(t => t.Line.Value == t.Value),
-                targets.Exists(t => kept.TryGetValue(t.Key + t.Line.Id, out var was) && was.Set == t.Line.Value)));
+                targets.Exists(t => kept.TryGetValue(t.Key + t.Line.Id, out var was) && was.Set == t.Line.Value), previews));
         }
         return states;
     }
@@ -595,6 +659,43 @@ internal static partial class GameSettings
         }
     }
 
+    internal static bool SetKey(Profile profile, string key, bool on, string? program = null)
+    {
+        lock (Gate)
+        {
+            if (Busy(profile) || string.IsNullOrEmpty(profile.File) || string.IsNullOrWhiteSpace(key)) return false;
+            if (!TryReadAll(profile, out var files) || files.Count == 0) return false;
+            var kept = KeptOf(profile.Id);
+            var matching = profile.Groups(files[0].File)
+                .Select(g => new Group(g.Id, g.Label, [.. g.Changes.Where(c => c.Key == key)]))
+                .Where(g => g.Changes.Count > 0)
+                .ToList();
+            if (matching.Count == 0) return false;
+            var writes = Edits(files, matching, on, kept);
+            if (Commit(profile, writes, kept) is not Committed.Written) return false;
+            if (on)
+            {
+                Keep.Update(doc =>
+                {
+                    if (!doc.Games.TryGetValue(profile.Id, out var game)) return;
+                    foreach (var (entryKey, entry) in game.Entries)
+                    {
+                        if (LineNameOf(entryKey) != key || entry.ReadBack != entry.Intended) continue;
+                        entry.Go(KeepEvent.Pressed, entry.ReadBack, "Setting");
+                        entry.Found = null;
+                        entry.ResetStreak = 0;
+                    }
+                });
+            }
+            if (LoadKeeping(profile) is { Groups.Count: > 0 } existing)
+            {
+                var now = writes.Count > 0 ? ReadAll(profile) : files;
+                SaveKeeping(profile, now, existing.Groups, program, ProgramTime(program), null, profile.Facts?.Invoke());
+            }
+            return true;
+        }
+    }
+
     /// <summary>What Optimize keeps on could not be saved: said once, and the answer is no, so nothing acts as if it had.</summary>
     private static bool Failed(Profile profile, string what)
     {
@@ -767,8 +868,8 @@ internal static partial class GameSettings
     private static string LineNameOf(string key)
     {
         var id = key[(key.IndexOf('|') + 1)..];
-        var at = id.IndexOf('@');
-        return at < 0 ? id : id[..at];
+        var sep = id.IndexOfAny(['@', '#']);
+        return sep < 0 ? id : id[..sep];
     }
 
     /// <summary>The group each line name belongs to in this file (the first that holds it).</summary>

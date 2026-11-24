@@ -570,7 +570,23 @@ export type DisplayChange = {
 }
 
 /** A game's best settings for this PC (game.settings), by group: on when every value it sets is in place, exo when Exo set some. */
-export type GameSettingsGroup = { id: string; label: string; on: boolean; exo: boolean }
+export type GameSettingsChange = { key: string; current: string; target: string; applied: boolean; kept: boolean }
+export type GameSettingsGroup = { id: string; label: string; on: boolean; exo: boolean; changes?: GameSettingsChange[] | null }
+export type MinecraftInstanceState = {
+  id: string
+  name: string
+  launcher: string
+  gameVersion: string | null
+  loader: string
+  isFabric: boolean
+  jvmApplied: boolean
+  canInstallMods: boolean
+  modsInstalled: string[]
+}
+export type GameSettingsMinecraft = {
+  heapGb: number
+  instances: MinecraftInstanceState[]
+}
 export type GameSettingsState = {
   ok: boolean
   message?: string | null
@@ -594,6 +610,8 @@ export type GameSettingsState = {
   windowMode?: 'borderless' | 'fullscreen' | null
   /** Opt-in NVIDIA driver Smooth Motion on RTX 40/50 for supported profiles (such as Wuthering Waves); null elsewhere. */
   smoothMotion?: boolean | null
+  advice?: string[] | null
+  minecraft?: GameSettingsMinecraft | null
 }
 
 /**
@@ -2796,7 +2814,17 @@ export const host = {
   hdrState: () => rawCall<HdrState>('hdr.state', {}),
   /** A game's HDR support (asks PCGamingWiki the first time); with a mode, sets its Auto/Always/Never. */
   hdrGame: (id: string, mode?: string) => rawCall<HdrGame>('hdr.game', { id, ...(mode ? { mode } : {}) }, 30_000),
-  gameSettings: (id: string, change?: { group?: string; all?: boolean; on?: boolean; mode?: string; smoothMotion?: boolean }) =>
+  gameSettings: (id: string, change?: {
+    group?: string
+    key?: string
+    all?: boolean
+    on?: boolean
+    mode?: string
+    smoothMotion?: boolean
+    jvm?: boolean
+    modsAction?: 'install' | 'undo'
+    instanceId?: string
+  }) =>
     rawCall<GameSettingsState>('game.settings', { id, ...change }, 30_000),
   /** What Keep holds, said as one word for the PC and one per game; a game with nothing to say is left out. */
   keepStatus: () => rawCall<KeepStatus>('keep.status', {}, 30_000),
