@@ -149,10 +149,7 @@ export async function run(t) {
     const fit = await t.shell.eval(`(() => { const page = document.querySelector('.exo-devices-page'), panels = document.querySelector('.exo-device-page-panels'); return { page: page.scrollHeight - page.clientHeight, panels: panels.scrollHeight - panels.clientHeight, port: !!document.querySelector('.exo-device-page-panel[aria-label="USB port"]') } })()`)
     c.evidence.fit = fit
     await c.shot('controller', t.shell)
-    if (fit.page > 0 || fit.panels > 0) {
-      c.evidence.knownAppBug = '3.29.1 ControllerPage wraps DevicePage in div.contents (display: contents), so DevicePage.useBand reads room.clientHeight=0 and skips multi-column banding'
-      failures.push(`known 3.29.1 app bug (ControllerPage display:contents breaks DevicePage useBand): the page scrolls (${fit.page}px, its panels ${fit.panels}px)`)
-    }
+    if (fit.page > 0 || fit.panels > 0) failures.push(`the page scrolls (${fit.page}px, its panels ${fit.panels}px)`)
     if (pad.connection === 'usb' && !fit.port) failures.push('no USB port panel for a controller on a cable')
     await t.shell.click(() => document.querySelector('.exo-devices-back button'))
     await sleep(800)
