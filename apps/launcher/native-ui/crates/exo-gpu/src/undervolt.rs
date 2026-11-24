@@ -1,3 +1,5 @@
+use std::path::{Path, PathBuf};
+
 use exo_sensors::whea::StabilityEventSummary;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -45,6 +47,129 @@ impl TuneLimits {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum UndervoltRestoreReason {
+    InstabilityBackoff,
+    GameExited,
+    SessionStopped,
+    WatchdogTimeout,
+    WatchdogFault,
+    CrashRecovery,
+}
+
+impl UndervoltRestoreReason {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::InstabilityBackoff => "instability-backoff",
+            Self::GameExited => "game-exited",
+            Self::SessionStopped => "session-stopped",
+            Self::WatchdogTimeout => "watchdog-timeout",
+            Self::WatchdogFault => "watchdog-fault",
+            Self::CrashRecovery => "crash-recovery",
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct UndervoltJournalEntry {
+    pub gpu_name: String,
+    pub original_clock_offset_mhz: i32,
+    pub original_voltage_offset_mv: i32,
+    pub applied_clock_offset_mhz: i32,
+    pub applied_voltage_offset_mv: i32,
+    pub verified: bool,
+    pub written_at_ms: u64,
+}
+
+#[derive(Debug, Clone)]
+pub struct UndervoltJournal {
+    path: PathBuf,
+}
+
+impl UndervoltJournal {
+    pub fn new(path: impl Into<PathBuf>) -> Self {
+        Self { path: path.into() }
+    }
+
+    pub fn default_path() -> PathBuf {
+        let base = std::env::var_os("LOCALAPPDATA")
+            .map(PathBuf::from)
+            .unwrap_or_else(std::env::temp_dir);
+        base.join("ExoLauncher").join("exo-gpu-tune.journal")
+    }
+
+    pub fn path(&self) -> &Path {
+        &self.path
+    }
+
+    pub fn write(&self, entry: &UndervoltJournalEntry) -> Result<(), String> {
+        if let Some(parent) = self.path.parent() {
+            std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+        }
+        let body = format!(
+            "gpu={}\norig_clk={}\norig_mv={}\napplied_clk={}\napplied_mv={}\nverified={}\nwritten_at_ms={}\n",
+            entry.gpu_name.replace(['\r', '\n'], " "),
+            entry.original_clock_offset_mhz,
+            entry.original_voltage_offset_mv,
+            entry.applied_clock_offset_mhz,
+            entry.applied_voltage_offset_mv,
+            if entry.verified { 1 } else { 0 },
+            entry.written_at_ms
+        );
+        let tmp = self.path.with_extension("journal.tmp");
+        std::fs::write(&tmp, body).map_err(|e| e.to_string())?;
+        if self.path.exists() {
+            let _ = std::fs::remove_file(&self.path);
+        }
+        std::fs::rename(&tmp, &self.path).map_err(|e| e.to_string())
+    }
+
+    pub fn read(&self) -> Option<UndervoltJournalEntry> {
+        let raw = std::fs::read_to_string(&self.path).ok()?;
+        let mut gpu = None;
+        let mut orig_clk = None;
+        let mut orig_mv = None;
+        let mut applied_clk = None;
+        let mut applied_mv = None;
+        let mut verified = None;
+        let mut written_at_ms = None;
+        for line in raw.lines() {
+            if let Some(v) = line.strip_prefix("gpu=") {
+                gpu = Some(v.trim().to_string());
+            } else if let Some(v) = line.strip_prefix("orig_clk=") {
+                orig_clk = v.trim().parse::<i32>().ok();
+            } else if let Some(v) = line.strip_prefix("orig_mv=") {
+                orig_mv = v.trim().parse::<i32>().ok();
+            } else if let Some(v) = line.strip_prefix("applied_clk=") {
+                applied_clk = v.trim().parse::<i32>().ok();
+            } else if let Some(v) = line.strip_prefix("applied_mv=") {
+                applied_mv = v.trim().parse::<i32>().ok();
+            } else if let Some(v) = line.strip_prefix("verified=") {
+                verified = Some(v.trim() == "1");
+            } else if let Some(v) = line.strip_prefix("written_at_ms=") {
+                written_at_ms = v.trim().parse::<u64>().ok();
+            }
+        }
+        Some(UndervoltJournalEntry {
+            gpu_name: gpu?,
+            original_clock_offset_mhz: orig_clk?,
+            original_voltage_offset_mv: orig_mv?,
+            applied_clock_offset_mhz: applied_clk?,
+            applied_voltage_offset_mv: applied_mv?,
+            verified: verified?,
+            written_at_ms: written_at_ms?,
+        })
+    }
+
+    pub fn clear(&self) -> Result<(), String> {
+        match std::fs::remove_file(&self.path) {
+            Ok(()) => Ok(()),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
+            Err(e) => Err(e.to_string()),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct StressOutcome {
     pub temp_c: f64,
@@ -56,8 +181,14 @@ pub struct StressOutcome {
 }
 
 pub trait GpuControlBackend {
+    fn current_offsets(&self) -> (i32, i32);
     fn apply_offset(&mut self, clock_offset_mhz: i32, voltage_offset_mv: i32)
     -> Result<(), String>;
+    fn restore_offsets(
+        &mut self,
+        original_clock_mhz: i32,
+        original_voltage_mv: i32,
+    ) -> Result<(), String>;
     fn restore_stock(&mut self) -> Result<(), String>;
     fn run_stress_step(&mut self) -> StressOutcome;
 }
@@ -67,6 +198,7 @@ pub struct MockGpuBackend {
     pub clock_offset_mhz: i32,
     pub voltage_offset_mv: i32,
     pub stock_restores: usize,
+    pub restored_history: Vec<(i32, i32)>,
     pub instability_voltage_mv: i32,
     pub base_watts: f64,
     pub base_temp_c: f64,
@@ -79,6 +211,7 @@ impl Default for MockGpuBackend {
             clock_offset_mhz: 0,
             voltage_offset_mv: 0,
             stock_restores: 0,
+            restored_history: Vec::new(),
             instability_voltage_mv: -100,
             base_watts: 220.0,
             base_temp_c: 71.0,
@@ -88,6 +221,10 @@ impl Default for MockGpuBackend {
 }
 
 impl GpuControlBackend for MockGpuBackend {
+    fn current_offsets(&self) -> (i32, i32) {
+        (self.clock_offset_mhz, self.voltage_offset_mv)
+    }
+
     fn apply_offset(
         &mut self,
         clock_offset_mhz: i32,
@@ -95,6 +232,18 @@ impl GpuControlBackend for MockGpuBackend {
     ) -> Result<(), String> {
         self.clock_offset_mhz = clock_offset_mhz;
         self.voltage_offset_mv = voltage_offset_mv;
+        Ok(())
+    }
+
+    fn restore_offsets(
+        &mut self,
+        original_clock_mhz: i32,
+        original_voltage_mv: i32,
+    ) -> Result<(), String> {
+        self.clock_offset_mhz = original_clock_mhz;
+        self.voltage_offset_mv = original_voltage_mv;
+        self.restored_history
+            .push((original_clock_mhz, original_voltage_mv));
         Ok(())
     }
 
@@ -233,4 +382,216 @@ pub fn evaluate_boot_crash_window(
         };
     }
     CrashGuardDecision::AllowReapply
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CrashRecoveryOutcome {
+    pub recovered_entry: Option<UndervoltJournalEntry>,
+    pub decision: CrashGuardDecision,
+}
+
+pub fn recover_undervolt_from_journal<B: GpuControlBackend>(
+    journal: &UndervoltJournal,
+    backend: &mut B,
+    recent_10m: &StabilityEventSummary,
+) -> Result<CrashRecoveryOutcome, String> {
+    let Some(entry) = journal.read() else {
+        return Ok(CrashRecoveryOutcome {
+            recovered_entry: None,
+            decision: evaluate_boot_crash_window(recent_10m, false),
+        });
+    };
+    backend.restore_offsets(
+        entry.original_clock_offset_mhz,
+        entry.original_voltage_offset_mv,
+    )?;
+    journal.clear()?;
+    let decision = evaluate_boot_crash_window(recent_10m, !entry.verified);
+    Ok(CrashRecoveryOutcome {
+        recovered_entry: Some(entry),
+        decision,
+    })
+}
+
+pub struct SafeUndervoltSession<B: GpuControlBackend> {
+    backend: B,
+    journal: UndervoltJournal,
+    limits: TuneLimits,
+    gpu_name: String,
+    watchdog_timeout_ms: u64,
+    active_original: Option<(i32, i32)>,
+    last_heartbeat_ms: u64,
+    last_restore_reason: Option<UndervoltRestoreReason>,
+}
+
+impl<B: GpuControlBackend> SafeUndervoltSession<B> {
+    pub fn new(
+        backend: B,
+        journal: UndervoltJournal,
+        limits: TuneLimits,
+        gpu_name: impl Into<String>,
+        watchdog_timeout_ms: u64,
+    ) -> Self {
+        Self {
+            backend,
+            journal,
+            limits,
+            gpu_name: gpu_name.into(),
+            watchdog_timeout_ms: watchdog_timeout_ms.max(1_000),
+            active_original: None,
+            last_heartbeat_ms: 0,
+            last_restore_reason: None,
+        }
+    }
+
+    pub fn backend(&self) -> &B {
+        &self.backend
+    }
+
+    pub fn journal(&self) -> &UndervoltJournal {
+        &self.journal
+    }
+
+    pub fn is_tuned(&self) -> bool {
+        self.active_original.is_some()
+    }
+
+    pub fn last_restore_reason(&self) -> Option<UndervoltRestoreReason> {
+        self.last_restore_reason
+    }
+
+    pub fn recover_on_startup(
+        &mut self,
+        recent_10m: &StabilityEventSummary,
+    ) -> Result<CrashRecoveryOutcome, String> {
+        let out = recover_undervolt_from_journal(&self.journal, &mut self.backend, recent_10m)?;
+        if out.recovered_entry.is_some() {
+            self.last_restore_reason = Some(UndervoltRestoreReason::CrashRecovery);
+        }
+        Ok(out)
+    }
+
+    pub fn apply_opt_in_undervolt(
+        &mut self,
+        user_opted_in: bool,
+        step_mv: i32,
+        now_ms: u64,
+        recent_10m: &StabilityEventSummary,
+    ) -> Result<UndervoltResult, String> {
+        if !user_opted_in {
+            return Err("Undervolt write refused: explicit user opt-in required".into());
+        }
+        let unverified_prior = self.journal.read().is_some_and(|e| !e.verified);
+        if let CrashGuardDecision::PauseAndKeepStock { reason } =
+            evaluate_boot_crash_window(recent_10m, unverified_prior)
+        {
+            return Err(reason);
+        }
+
+        let (orig_clk, orig_mv) = self
+            .active_original
+            .unwrap_or_else(|| self.backend.current_offsets());
+
+        self.journal.write(&UndervoltJournalEntry {
+            gpu_name: self.gpu_name.clone(),
+            original_clock_offset_mhz: orig_clk,
+            original_voltage_offset_mv: orig_mv,
+            applied_clock_offset_mhz: orig_clk,
+            applied_voltage_offset_mv: orig_mv,
+            verified: false,
+            written_at_ms: now_ms,
+        })?;
+
+        let result = match run_opt_in_undervolt_search(
+            &mut self.backend,
+            self.limits,
+            user_opted_in,
+            step_mv,
+        ) {
+            Ok(res) => res,
+            Err(err) => {
+                let _ = self.backend.restore_offsets(orig_clk, orig_mv);
+                let _ = self.journal.clear();
+                return Err(err);
+            }
+        };
+
+        if result.applied_voltage_offset_mv < 0 || result.applied_clock_offset_mhz != 0 {
+            self.journal.write(&UndervoltJournalEntry {
+                gpu_name: self.gpu_name.clone(),
+                original_clock_offset_mhz: orig_clk,
+                original_voltage_offset_mv: orig_mv,
+                applied_clock_offset_mhz: result.applied_clock_offset_mhz,
+                applied_voltage_offset_mv: result.applied_voltage_offset_mv,
+                verified: true,
+                written_at_ms: now_ms,
+            })?;
+            self.active_original = Some((orig_clk, orig_mv));
+            self.last_heartbeat_ms = now_ms;
+        } else {
+            let _ = self.backend.restore_offsets(orig_clk, orig_mv);
+            let _ = self.journal.clear();
+            self.active_original = None;
+            self.last_restore_reason = Some(UndervoltRestoreReason::InstabilityBackoff);
+        }
+        Ok(result)
+    }
+
+    pub fn heartbeat(&mut self, now_ms: u64) {
+        self.last_heartbeat_ms = now_ms;
+    }
+
+    pub fn tick_watchdog(
+        &mut self,
+        now_ms: u64,
+        recent_stability: &StabilityEventSummary,
+    ) -> Result<Option<UndervoltRestoreReason>, String> {
+        if self.active_original.is_none() {
+            return Ok(None);
+        }
+        if recent_stability.whea_errors > 0
+            || recent_stability.gpu_tdr_resets > 0
+            || recent_stability.kernel_power_41 > 0
+            || recent_stability.bugcheck_1001 > 0
+        {
+            self.restore_internal(UndervoltRestoreReason::WatchdogFault)?;
+            return Ok(Some(UndervoltRestoreReason::WatchdogFault));
+        }
+        if now_ms.saturating_sub(self.last_heartbeat_ms) >= self.watchdog_timeout_ms {
+            self.restore_internal(UndervoltRestoreReason::WatchdogTimeout)?;
+            return Ok(Some(UndervoltRestoreReason::WatchdogTimeout));
+        }
+        Ok(None)
+    }
+
+    pub fn on_game_exited(&mut self) -> Result<bool, String> {
+        if self.active_original.is_none() {
+            return Ok(false);
+        }
+        self.restore_internal(UndervoltRestoreReason::GameExited)?;
+        Ok(true)
+    }
+
+    pub fn stop_and_restore(&mut self) -> Result<bool, String> {
+        if self.active_original.is_none() {
+            return Ok(false);
+        }
+        self.restore_internal(UndervoltRestoreReason::SessionStopped)?;
+        Ok(true)
+    }
+
+    fn restore_internal(&mut self, reason: UndervoltRestoreReason) -> Result<(), String> {
+        if let Some((orig_clk, orig_mv)) = self.active_original.take() {
+            self.backend.restore_offsets(orig_clk, orig_mv)?;
+            self.journal.clear()?;
+            self.last_restore_reason = Some(reason);
+        }
+        Ok(())
+    }
+}
+
+impl<B: GpuControlBackend> Drop for SafeUndervoltSession<B> {
+    fn drop(&mut self) {
+        let _ = self.restore_internal(UndervoltRestoreReason::SessionStopped);
+    }
 }
