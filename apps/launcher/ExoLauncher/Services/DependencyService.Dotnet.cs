@@ -12,8 +12,10 @@ namespace ExoLauncher.Services;
 /// </summary>
 public sealed partial class DependencyService
 {
+    internal sealed record DotnetFile(string Url, string Sha512);
+
     /// <param name="Files">By architecture ("x64", "x86"): the installer's URL and SHA-512.</param>
-    internal sealed record DotnetRelease(string Version, bool EndOfSupport, IReadOnlyDictionary<string, (string Url, string Sha512)> Files);
+    internal sealed record DotnetRelease(string Version, bool EndOfSupport, IReadOnlyDictionary<string, DotnetFile> Files);
 
     internal sealed record DotnetChannel(string Channel, string LatestRelease, bool EndOfSupport);
 
@@ -22,7 +24,25 @@ public sealed partial class DependencyService
     private static readonly LatestCache<Dictionary<string, DotnetRelease>> Dotnet = new(".NET's release list", TimeSpan.FromHours(6), "dotnet-releases.json");
 
     /// <summary>What was read of .NET's releases last, without asking (null: nothing yet; the catalog's versions stand in).</summary>
-    private static IReadOnlyDictionary<string, DotnetRelease>? DotnetKept() => Dotnet.Kept("releases");
+    private static IReadOnlyDictionary<string, DotnetRelease>? DotnetKept() =>
+        Dotnet.Kept("releases") is { } kept && IsValidDotnetCache(kept) ? kept : null;
+
+    internal static bool IsValidDotnetFile(DotnetFile? file) =>
+        file is not null
+        && !string.IsNullOrWhiteSpace(file.Url)
+        && Uri.TryCreate(file.Url, UriKind.Absolute, out var uri)
+        && uri.Host.Equals("builds.dotnet.microsoft.com", StringComparison.OrdinalIgnoreCase)
+        && IsInstallerHost(uri)
+        && !string.IsNullOrWhiteSpace(file.Sha512)
+        && Regex.IsMatch(file.Sha512, "^[0-9a-fA-F]{128}$");
+
+    internal static bool IsValidDotnetCache(IReadOnlyDictionary<string, DotnetRelease>? releases) =>
+        releases is { Count: > 0 }
+        && releases.Values.All(r =>
+            r is not null
+            && !string.IsNullOrWhiteSpace(r.Version)
+            && r.Files is { Count: > 0 }
+            && r.Files.Values.All(IsValidDotnetFile));
 
     /// <summary>The index's channels Exo offers (6.0, 8.0, 9.0, 10.0): their latest release and support.</summary>
     internal static IReadOnlyList<DotnetChannel> ParseDotnetIndex(string json)
@@ -68,7 +88,7 @@ public sealed partial class DependencyService
         if (!release.TryGetProperty("windowsdesktop", out var desktop)) return null;
         var version = desktop.TryGetProperty("version", out var v) ? v.GetString() : null;
         if (version is null || !Regex.IsMatch(version, @"^\d+\.\d+\.\d+$")) return null;
-        var files = new Dictionary<string, (string, string)>(StringComparer.Ordinal);
+        var files = new Dictionary<string, DotnetFile>(StringComparer.Ordinal);
         foreach (var file in desktop.GetProperty("files").EnumerateArray())
         {
             var rid = file.TryGetProperty("rid", out var ridValue) ? ridValue.GetString() : null;
@@ -78,7 +98,7 @@ public sealed partial class DependencyService
             if (rid is not ("win-x64" or "win-x86") || name?.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) != true) continue;
             if (!Uri.TryCreate(url, UriKind.Absolute, out var uri) || !uri.Host.Equals("builds.dotnet.microsoft.com", StringComparison.OrdinalIgnoreCase) || !IsInstallerHost(uri)) continue;
             if (hash is null || !Regex.IsMatch(hash, "^[0-9a-fA-F]{128}$")) continue;
-            files[rid[4..]] = (uri.AbsoluteUri, hash.ToUpperInvariant());
+            files[rid[4..]] = new DotnetFile(uri.AbsoluteUri, hash.ToUpperInvariant());
         }
         return files.Count == 0 ? null : new DotnetRelease(version, endOfSupport, files);
     }
@@ -87,21 +107,48 @@ public sealed partial class DependencyService
     /// The newest Desktop Runtime of each channel, keyed "8-x64": read from Microsoft at most every 6 hours (soon again
     /// after a failure), else what was read before, else nothing (the catalog's own versions stand in).
     /// </summary>
-    internal static async Task<IReadOnlyDictionary<string, DotnetRelease>> DotnetReleasesAsync(CancellationToken ct) =>
-        await Dotnet.GetAsync("releases", async lookup =>
+    internal static Task<IReadOnlyDictionary<string, DotnetRelease>> DotnetReleasesAsync(CancellationToken ct, bool fresh = false) =>
+        LoadDotnetReleasesAsync(Dotnet, FetchDotnetReleasesAsync, ct, fresh);
+
+    internal static async Task<IReadOnlyDictionary<string, DotnetRelease>> LoadDotnetReleasesAsync(
+        LatestCache<Dictionary<string, DotnetRelease>> cache,
+        Func<CancellationToken, Task<Dictionary<string, DotnetRelease>?>> fetch,
+        CancellationToken ct,
+        bool fresh = false)
+    {
+        if (cache.Kept("releases") is { } kept && !IsValidDotnetCache(kept))
         {
-            var releases = new Dictionary<string, DotnetRelease>(StringComparer.Ordinal);
-            using var http = ExoHttp.Create(TimeSpan.FromSeconds(15));
-            var channels = ParseDotnetIndex(await http.GetStringAsync(ReleaseIndex, lookup).ConfigureAwait(false));
-            var reads = channels.Select(channel => ReadChannelAsync(http, channel, lookup)).ToArray();
-            foreach (var (channel, release) in await Task.WhenAll(reads).ConfigureAwait(false))
+            AppLog.Warn("Runtimes: cached .NET release metadata is missing installer URLs or hashes; clearing cache and refreshing.");
+            cache.Clear();
+            fresh = true;
+        }
+        var releases = await cache.GetAsync("releases", fetch, ct, fresh).ConfigureAwait(false);
+        if (!IsValidDotnetCache(releases))
+        {
+            if (releases is { Count: > 0 })
             {
-                if (release is null) continue;
-                var major = channel.Channel.Split('.')[0];
-                foreach (var arch in release.Files.Keys) releases[$"{major}-{arch}"] = release;
+                AppLog.Warn("Runtimes: .NET release metadata failed validation after lookup; discarding incomplete entries.");
+                cache.Clear();
             }
-            return releases;
-        }, ct).ConfigureAwait(false) ?? new Dictionary<string, DotnetRelease>();
+            return new Dictionary<string, DotnetRelease>();
+        }
+        return releases!;
+    }
+
+    private static async Task<Dictionary<string, DotnetRelease>?> FetchDotnetReleasesAsync(CancellationToken lookup)
+    {
+        var releases = new Dictionary<string, DotnetRelease>(StringComparer.Ordinal);
+        using var http = ExoHttp.Create(TimeSpan.FromSeconds(15));
+        var channels = ParseDotnetIndex(await http.GetStringAsync(ReleaseIndex, lookup).ConfigureAwait(false));
+        var reads = channels.Select(channel => ReadChannelAsync(http, channel, lookup)).ToArray();
+        foreach (var (channel, release) in await Task.WhenAll(reads).ConfigureAwait(false))
+        {
+            if (release is null) continue;
+            var major = channel.Channel.Split('.')[0];
+            foreach (var arch in release.Files.Keys) releases[$"{major}-{arch}"] = release;
+        }
+        return releases;
+    }
 
     /// <summary>
     /// Game runtimes' list doesn't wait on Microsoft: the first showing of a session had to ask (the answer isn't kept across
