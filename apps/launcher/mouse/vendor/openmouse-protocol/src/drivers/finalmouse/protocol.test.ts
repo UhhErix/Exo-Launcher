@@ -19,6 +19,8 @@ import {
   finalmousePawLodRawIsCustom,
   finalmousePawLodRawToMm,
   finalmouseSignalStrength,
+  finalmouseIsUltraclick,
+  FINALMOUSE_INTENT_TRIGGER,
   FINALMOUSE_REPORT,
 } from "@openmouse/protocol/finalmouse";
 
@@ -310,4 +312,29 @@ test("Finalmouse Starlight X exposes a fixed PerfectPolling rate, not a picker",
   assert.equal(status.ui?.pollingReadOnly, true);
   assert.equal(status.ui?.hideMotionSync, true);
   await assert.rejects(client.setPollingRate(8000), /polling rate/);
+});
+
+test("Finalmouse Starlight X decodes and encodes 6-byte click mode with Intent Trigger and Ultraclick", async () => {
+  assert.deepEqual(
+    decodeFinalmouseReport(FINALMOUSE_REPORT.slxInput, input(31, [1, 1, 0, 0, 2, 2])),
+    { clickModeR: 1, clickModeL: 1, clickReleaseR: 0, clickReleaseL: 0, clickIntentR: 2, clickIntentL: 2 },
+  );
+  assert.deepEqual(
+    decodeFinalmouseReport(FINALMOUSE_REPORT.slxInput, input(31, [1, 0, 1, 2, 3, 1])),
+    { clickModeR: 1, clickModeL: 0, clickReleaseR: 1, clickReleaseL: 2, clickIntentR: 3, clickIntentL: 1 },
+  );
+  assert.equal(finalmouseIsUltraclick(FINALMOUSE_INTENT_TRIGGER.on), false);
+  assert.equal(finalmouseIsUltraclick(FINALMOUSE_INTENT_TRIGGER.off), false);
+  assert.equal(finalmouseIsUltraclick(FINALMOUSE_INTENT_TRIGGER.on | FINALMOUSE_INTENT_TRIGGER.ultraclickBit), true);
+  assert.equal(finalmouseIsUltraclick(FINALMOUSE_INTENT_TRIGGER.off | FINALMOUSE_INTENT_TRIGGER.ultraclickBit), true);
+  assert.equal(finalmouseIsUltraclick(null), false);
+
+  assert.deepEqual([...encodeFinalmouseClickMode(1, 1, 0, 0, 2, 3)], [1, 1, 0, 0, 2, 3]);
+  assert.throws(() => encodeFinalmouseClickMode(1, 1, 0, 0, 4, 0), /intent trigger/);
+  assert.throws(() => encodeFinalmouseClickMode(1, 1, 0, 0, 2), /intent trigger/);
+  assert.throws(() => encodeFinalmouseClickMode(1, 1, undefined, undefined, 2, 2), /release points/);
+
+  const { client, writes } = slxDevice();
+  await client.setClickMode(1, 1, 0, 1, 2, 3);
+  assert.deepEqual(writes[0]!.bytes.slice(0, 9), [8, 0x9f, 6, 1, 1, 1, 0, 3, 2]);
 });

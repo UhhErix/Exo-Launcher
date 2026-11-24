@@ -86,7 +86,12 @@ export function snapshot(status: MouseStatus, client: Client): Step[] {
     // mouse reported them; actuation only when both sides are calibrated (a side reading 0 is not).
     const relL = status.finalmouseClickReleaseL
     const relR = status.finalmouseClickReleaseR
-    if (relL != null && relR != null) add('setClickMode', status.finalmouseClickModeL, status.finalmouseClickModeR, relL, relR)
+    const intL = status.finalmouseClickIntentL
+    const intR = status.finalmouseClickIntentR
+    if (relL != null && relR != null && intL != null && intR != null)
+      add('setClickMode', status.finalmouseClickModeL, status.finalmouseClickModeR, relL, relR, intL, intR)
+    else if (relL != null && relR != null)
+      add('setClickMode', status.finalmouseClickModeL, status.finalmouseClickModeR, relL, relR)
     else add('setClickMode', status.finalmouseClickModeL, status.finalmouseClickModeR)
     // Rapid trigger rides along only where the firmware reported it.
     const hyst = status.finalmouseTmrHystL != null && status.finalmouseTmrHystR != null ? [status.finalmouseTmrHystL, status.finalmouseTmrHystR] : []

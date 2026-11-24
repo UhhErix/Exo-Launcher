@@ -1,0 +1,191 @@
+diff --git a/src/drivers/finalmouse/hid.ts b/src/drivers/finalmouse/hid.ts
+index baa1564..3047f9e 100644
+--- a/src/drivers/finalmouse/hid.ts
++++ b/src/drivers/finalmouse/hid.ts
+@@ -187,6 +187,8 @@ export class FinalmouseHidClient {
+       finalmouseClickModeR: state.clickModeR ?? null,
+       finalmouseClickReleaseL: state.clickReleaseL ?? null,
+       finalmouseClickReleaseR: state.clickReleaseR ?? null,
++      finalmouseClickIntentL: state.clickIntentL ?? null,
++      finalmouseClickIntentR: state.clickIntentR ?? null,
+       finalmouseTmrThrL: state.tmrThrL ?? null,
+       finalmouseTmrThrR: state.tmrThrR ?? null,
+       finalmouseTmrHystL: state.tmrHystL ?? null,
+@@ -331,18 +333,33 @@ export class FinalmouseHidClient {
+ 
+   /**
+    * Starlight X click mode per switch (0 mechanical, 1 TMR analog) with an
+-   * optional release point for both (0 normal, 1 early, 2 late). Analog
+-   * needs that side calibrated; the device keeps the previous mode otherwise.
++   * optional release point for both (0 normal, 1 early, 2 late) and optional
++   * intent trigger / Ultraclick byte for both (0 on, 1 off, +2 Ultraclick).
+    */
+-  async setClickMode(modeL: number, modeR: number, relL?: number, relR?: number): Promise<void> {
++  async setClickMode(
++    modeL: number,
++    modeR: number,
++    relL?: number,
++    relR?: number,
++    intentL?: number,
++    intentR?: number,
++  ): Promise<void> {
+     this.requireSlx("Click mode");
+-    await this.write(this.txReport, FINALMOUSE_COMMAND.clickMode, encodeFinalmouseClickMode(modeR, modeL, relR, relL));
++    await this.write(
++      this.txReport,
++      FINALMOUSE_COMMAND.clickMode,
++      encodeFinalmouseClickMode(modeR, modeL, relR, relL, intentR, intentL),
++    );
+     this.telemetry.clickModeL = modeL;
+     this.telemetry.clickModeR = modeR;
+     if (relL !== undefined && relR !== undefined) {
+       this.telemetry.clickReleaseL = relL;
+       this.telemetry.clickReleaseR = relR;
+     }
++    if (intentL !== undefined && intentR !== undefined) {
++      this.telemetry.clickIntentL = intentL;
++      this.telemetry.clickIntentR = intentR;
++    }
+   }
+ 
+   /**
+diff --git a/src/drivers/finalmouse/protocol.test.ts b/src/drivers/finalmouse/protocol.test.ts
+index d140be8..07bacd8 100644
+--- a/src/drivers/finalmouse/protocol.test.ts
++++ b/src/drivers/finalmouse/protocol.test.ts
+@@ -19,6 +19,8 @@ import {
+   finalmousePawLodRawIsCustom,
+   finalmousePawLodRawToMm,
+   finalmouseSignalStrength,
++  finalmouseIsUltraclick,
++  FINALMOUSE_INTENT_TRIGGER,
+   FINALMOUSE_REPORT,
+ } from "@openmouse/protocol/finalmouse";
+ 
+@@ -311,3 +313,28 @@ test("Finalmouse Starlight X exposes a fixed PerfectPolling rate, not a picker",
+   assert.equal(status.ui?.hideMotionSync, true);
+   await assert.rejects(client.setPollingRate(8000), /polling rate/);
+ });
++
++test("Finalmouse Starlight X decodes and encodes 6-byte click mode with Intent Trigger and Ultraclick", async () => {
++  assert.deepEqual(
++    decodeFinalmouseReport(FINALMOUSE_REPORT.slxInput, input(31, [1, 1, 0, 0, 2, 2])),
++    { clickModeR: 1, clickModeL: 1, clickReleaseR: 0, clickReleaseL: 0, clickIntentR: 2, clickIntentL: 2 },
++  );
++  assert.deepEqual(
++    decodeFinalmouseReport(FINALMOUSE_REPORT.slxInput, input(31, [1, 0, 1, 2, 3, 1])),
++    { clickModeR: 1, clickModeL: 0, clickReleaseR: 1, clickReleaseL: 2, clickIntentR: 3, clickIntentL: 1 },
++  );
++  assert.equal(finalmouseIsUltraclick(FINALMOUSE_INTENT_TRIGGER.on), false);
++  assert.equal(finalmouseIsUltraclick(FINALMOUSE_INTENT_TRIGGER.off), false);
++  assert.equal(finalmouseIsUltraclick(FINALMOUSE_INTENT_TRIGGER.on | FINALMOUSE_INTENT_TRIGGER.ultraclickBit), true);
++  assert.equal(finalmouseIsUltraclick(FINALMOUSE_INTENT_TRIGGER.off | FINALMOUSE_INTENT_TRIGGER.ultraclickBit), true);
++  assert.equal(finalmouseIsUltraclick(null), false);
++
++  assert.deepEqual([...encodeFinalmouseClickMode(1, 1, 0, 0, 2, 3)], [1, 1, 0, 0, 2, 3]);
++  assert.throws(() => encodeFinalmouseClickMode(1, 1, 0, 0, 4, 0), /intent trigger/);
++  assert.throws(() => encodeFinalmouseClickMode(1, 1, 0, 0, 2), /intent trigger/);
++  assert.throws(() => encodeFinalmouseClickMode(1, 1, undefined, undefined, 2, 2), /release points/);
++
++  const { client, writes } = slxDevice();
++  await client.setClickMode(1, 1, 0, 1, 2, 3);
++  assert.deepEqual(writes[0]!.bytes.slice(0, 9), [8, 0x9f, 6, 1, 1, 1, 0, 3, 2]);
++});
+diff --git a/src/drivers/mouse-types.ts b/src/drivers/mouse-types.ts
+index b5e8e2b..b63c7b5 100644
+--- a/src/drivers/mouse-types.ts
++++ b/src/drivers/mouse-types.ts
+@@ -367,6 +367,9 @@ export interface MouseStatus {
+   /** Starlight X release point per switch: 0 normal, 1 early, 2 late. */
+   finalmouseClickReleaseL?: number | null;
+   finalmouseClickReleaseR?: number | null;
++  /** Starlight X intent trigger per switch: 0 on, 1 off, bit 1 (+2) Ultraclick. */
++  finalmouseClickIntentL?: number | null;
++  finalmouseClickIntentR?: number | null;
+   /** Starlight X TMR actuation steps in 0.01 mm units (1-40). */
+   finalmouseTmrThrL?: number | null;
+   finalmouseTmrThrR?: number | null;
+diff --git a/src/finalmouse/index.ts b/src/finalmouse/index.ts
+index d1ccc51..b94fe67 100644
+--- a/src/finalmouse/index.ts
++++ b/src/finalmouse/index.ts
+@@ -87,6 +87,9 @@ export interface FinalmouseTelemetry {
+   /** 0 = normal, 1 = early, 2 = late. Null until a 4-byte reply arrives. */
+   clickReleaseL?: number | null;
+   clickReleaseR?: number | null;
++  /** Bit 0: 0 = intent trigger on, 1 = off. Bit 1 (+2): Ultraclick active. Null until a 6-byte reply arrives. */
++  clickIntentL?: number | null;
++  clickIntentR?: number | null;
+   /** Actuation steps in 0.01 mm units (1-40); 0 = not reported / uncalibrated. */
+   tmrThrL?: number;
+   tmrThrR?: number;
+@@ -121,6 +124,13 @@ export interface FinalmouseProfileLed {
+ export const FINALMOUSE_CLICK_MODE = { mechanical: 0, analog: 1 } as const;
+ /** Release-point values (xpanel readback log: 0 = normal, 1 = early, 2 = late). */
+ export const FINALMOUSE_RELEASE_POINT = { normal: 0, early: 1, late: 2 } as const;
++/** Intent-trigger values (xpanel: 0 = on, 1 = off; bit 1 = +2 locks Ultraclick at 0.10 mm). */
++export const FINALMOUSE_INTENT_TRIGGER = { on: 0, off: 1, ultraclickBit: 2 } as const;
++
++/** True when a side's intent-trigger byte has the Ultraclick bit (+2) set. */
++export function finalmouseIsUltraclick(intent: number | null | undefined): boolean {
++  return intent != null && (intent & FINALMOUSE_INTENT_TRIGGER.ultraclickBit) !== 0;
++}
+ 
+ /**
+  * TMR-DS actuation limits from xpanel (Bebg4M4T: min 0.01, max 0.40,
+@@ -130,6 +140,7 @@ export const FINALMOUSE_TMR = {
+   actuationMinMm: 0.01,
+   actuationMaxMm: 0.4,
+   actuationStepMm: 0.01,
++  ultraclickActuationMm: 0.1,
+   rtMinUm: 150,
+   rtMaxUm: 250,
+   rtStepUm: 10,
+@@ -218,23 +229,34 @@ export interface FinalmouseProfileData {
+   enabled: number;
+ }
+ 
+-/** Encode command 31. Wire order is [modeR, modeL] with optional [relR, relL]. */
++/** Encode command 31. Wire order is [modeR, modeL], optional [relR, relL], optional [intentR, intentL]. */
+ export function encodeFinalmouseClickMode(
+   modeR: number,
+   modeL: number,
+   relR?: number,
+   relL?: number,
++  intentR?: number,
++  intentL?: number,
+ ): Uint8Array {
+   for (const mode of [modeR, modeL]) {
+     if (mode !== 0 && mode !== 1) throw new Error("Finalmouse click mode must be 0 (mechanical) or 1 (analog).");
+   }
+   const bytes = [modeR & 1, modeL & 1];
+-  if (relR !== undefined || relL !== undefined) {
++  if (relR !== undefined || relL !== undefined || intentR !== undefined || intentL !== undefined) {
+     if (relR === undefined || relL === undefined) throw new Error("Finalmouse release points must be set for both switches together.");
+     for (const rel of [relR, relL]) {
+       if (rel !== 0 && rel !== 1 && rel !== 2) throw new Error("Finalmouse release point must be 0 (normal), 1 (early) or 2 (late).");
+     }
+     bytes.push(relR, relL);
++    if (intentR !== undefined || intentL !== undefined) {
++      if (intentR === undefined || intentL === undefined) throw new Error("Finalmouse intent trigger must be set for both switches together.");
++      for (const intent of [intentR, intentL]) {
++        if (!Number.isInteger(intent) || intent < 0 || intent > 3) {
++          throw new Error("Finalmouse intent trigger must be 0 (on), 1 (off), or with +2 for Ultraclick.");
++        }
++      }
++      bytes.push(intentR, intentL);
++    }
+   }
+   return new Uint8Array(bytes);
+ }
+@@ -402,6 +424,10 @@ export function decodeFinalmouseReport(reportId: number, data: Uint8Array): Part
+         update.clickReleaseR = payload[2]!;
+         update.clickReleaseL = payload[3]!;
+       }
++      if (payload.length >= 6) {
++        update.clickIntentR = payload[4]!;
++        update.clickIntentL = payload[5]!;
++      }
+       return update;
+     }
+     case 32: {

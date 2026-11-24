@@ -367,6 +367,9 @@ export interface MouseStatus {
   /** Starlight X release point per switch: 0 normal, 1 early, 2 late. */
   finalmouseClickReleaseL?: number | null;
   finalmouseClickReleaseR?: number | null;
+  /** Starlight X intent trigger per switch: 0 on, 1 off, bit 1 (+2) Ultraclick. */
+  finalmouseClickIntentL?: number | null;
+  finalmouseClickIntentR?: number | null;
   /** Starlight X TMR actuation steps in 0.01 mm units (1-40). */
   finalmouseTmrThrL?: number | null;
   finalmouseTmrThrR?: number | null;
