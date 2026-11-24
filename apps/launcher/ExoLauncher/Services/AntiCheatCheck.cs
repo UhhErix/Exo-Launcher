@@ -102,6 +102,7 @@ internal static partial class AntiCheatCheck
         UpscalerSwap,
         /// <summary>(d) The game's files compressed by Windows (WOF): stored smaller, every byte read back the same.</summary>
         Compress,
+        GpuDriverTuning,
     }
 
     /// <summary>The three kinds of change (the orchestrator's decision, 2026-11-10).</summary>
@@ -123,6 +124,7 @@ internal static partial class AntiCheatCheck
         /// With anti-cheat, only with the player's consent for this game naming this exact set, and then only its data
         /// (no program, library or anti-cheat file); never Riot, Vanguard or an install that could not be read.</summary>
         Stored,
+        ExternalDriver,
     }
 
     internal static Category CategoryOf(Change change) => change switch
@@ -130,6 +132,7 @@ internal static partial class AntiCheatCheck
         Change.LaunchOptions or Change.GameSettingsFile or Change.DeleteRegenerated => Category.OwnInterface,
         Change.UpscalerSwap => Category.SignedUpscaler,
         Change.Compress => Category.Stored,
+        Change.GpuDriverTuning => Category.ExternalDriver,
         _ => Category.Placed,
     };
 
@@ -149,10 +152,44 @@ internal static partial class AntiCheatCheck
         if (Riots(game, answer) || answer.Kind == Kind.Unknown) return false;
         return CategoryOf(change) switch
         {
-            Category.OwnInterface => true,
+            Category.OwnInterface or Category.ExternalDriver => true,
             Category.SignedUpscaler or Category.Stored => DlssSwapService.Accepted(game, answer.Label!, consented),
             _ => false,
         };
+    }
+
+    internal static string? ProtectedGameRunningName(IEnumerable<(GameEntry Game, Answer Answer)> runningGames, bool externalAntiCheatProcessRunning = false)
+    {
+        foreach (var (game, answer) in runningGames)
+        {
+            if (IsRiot(game) || answer.AssumeProtected)
+                return string.IsNullOrWhiteSpace(game.Title) ? "a protected game" : game.Title;
+        }
+        return externalAntiCheatProcessRunning ? "a protected game" : null;
+    }
+
+    internal static string? RunningProtectedGameName()
+    {
+        var running = MainWindow.RunningLibraryGames();
+        if (running.Count > 0)
+        {
+            var entries = new List<(GameEntry Game, Answer Answer)>();
+            var library = App.Services.Library.PeekCachedLibrary();
+            foreach (var gameId in running.Keys)
+            {
+                var game = library.FirstOrDefault(g => string.Equals(g.Id, gameId, StringComparison.OrdinalIgnoreCase));
+                if (game is not null) entries.Add((game, Cached(game)));
+            }
+            if (ProtectedGameRunningName(entries) is { } name) return name;
+        }
+        foreach (var row in ProcessSnapshot.Read())
+        {
+            if (row.Pid <= 4 || string.IsNullOrEmpty(row.Name)) continue;
+            var stem = ProcessSnapshot.StripExe(row.Name);
+            if (ForFile(stem + ".exe") is { } antiCheat && antiCheat != DlssSwapService.RiotVanguard)
+                return "a protected game";
+        }
+        return null;
     }
 
     /// <summary>

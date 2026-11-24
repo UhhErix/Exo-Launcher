@@ -106,6 +106,7 @@ internal static class TunePersistence
     {
         "nvidia" => new(SurvivesExoClose: true, SurvivesReboot: false, SurvivesSleep: false, SurvivesDriverReset: false, NeedsResidentProcess: false, UsesScheduledTask: true),
         "radeon" => new(SurvivesExoClose: true, SurvivesReboot: true, SurvivesSleep: true, SurvivesDriverReset: false, NeedsResidentProcess: false, UsesScheduledTask: false),
+        "intel" => new(SurvivesExoClose: true, SurvivesReboot: false, SurvivesSleep: false, SurvivesDriverReset: false, NeedsResidentProcess: false, UsesScheduledTask: true),
         "ryzen" => new(SurvivesExoClose: true, SurvivesReboot: false, SurvivesSleep: false, SurvivesDriverReset: true, NeedsResidentProcess: false, UsesScheduledTask: true),
         "fans" => new(SurvivesExoClose: false, SurvivesReboot: false, SurvivesSleep: false, SurvivesDriverReset: false, NeedsResidentProcess: true, UsesScheduledTask: false),
         _ => new(false, false, false, false, false, false),
@@ -117,9 +118,10 @@ internal static class TunePersistence
         if (ev.Provider.Equals("Microsoft-Windows-WER-SystemErrorReporting", StringComparison.OrdinalIgnoreCase) && ev.EventId == 1001) return true;
         if (ev.Provider.Equals("EventLog", StringComparison.OrdinalIgnoreCase) && ev.EventId == 6008) return true;
         if (ev.Provider.Equals("Microsoft-Windows-WHEA-Logger", StringComparison.OrdinalIgnoreCase)) return true;
-        if (partId is "nvidia" or "radeon" && ev.Provider.Equals("Display", StringComparison.OrdinalIgnoreCase) && ev.EventId == 4101) return true;
+        if (partId is "nvidia" or "radeon" or "intel" && ev.Provider.Equals("Display", StringComparison.OrdinalIgnoreCase) && ev.EventId == 4101) return true;
         if (partId == "nvidia" && ev.Provider.Equals("nvlddmkm", StringComparison.OrdinalIgnoreCase) && ev.EventId is 13 or 14 or 153) return true;
         if (partId == "radeon" && (ev.Provider.Equals("amdkmdag", StringComparison.OrdinalIgnoreCase) || ev.Provider.Equals("amduw23g", StringComparison.OrdinalIgnoreCase))) return true;
+        if (partId == "intel" && (ev.Provider.Equals("igdkmdn64", StringComparison.OrdinalIgnoreCase) || ev.Provider.Equals("igdkmdnd64", StringComparison.OrdinalIgnoreCase))) return true;
         return false;
     }
 

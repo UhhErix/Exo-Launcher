@@ -116,6 +116,8 @@ public sealed partial class WebHostBridge
         _services.Launcher.LaunchNotice += OnLaunchNotice;
         _services.Dependencies.DeferredProgress += PostRuntimeProgress;
         _services.Dependencies.DeferredCompleted += PostRuntimeDone;
+        GpuManualTuningService.Shared.StateChanged += PostGpuTuningChanged;
+        GpuManualTuningService.Shared.TestProgressChanged += PostGpuTuningTestProgress;
     }
 
     /// <summary>
@@ -403,6 +405,8 @@ public sealed partial class WebHostBridge
         _services.Launcher.GameLaunchFailed -= OnGameSessionEndedScan;
         _services.Dependencies.DeferredProgress -= PostRuntimeProgress;
         _services.Dependencies.DeferredCompleted -= PostRuntimeDone;
+        GpuManualTuningService.Shared.StateChanged -= PostGpuTuningChanged;
+        GpuManualTuningService.Shared.TestProgressChanged -= PostGpuTuningTestProgress;
         FpsCounter.Stop();
     }
 
@@ -981,6 +985,12 @@ public sealed partial class WebHostBridge
                 "gpu.afmf3" => await GpuDeadlineAsync(GpuAfmf3Async(paramsEl, hasParams, requestToken), TimeSpan.FromSeconds(25), requestToken).ConfigureAwait(false),
                 "gpu.game" => await GpuDeadlineAsync(GpuGameAsync(paramsEl, hasParams, requestToken), TimeSpan.FromSeconds(25), requestToken).ConfigureAwait(false),
                 "gpu.controlPanel" => await GpuDeadlineAsync(Task.Run(GpuControlPanel.Open, requestToken), TimeSpan.FromSeconds(15), requestToken).ConfigureAwait(true),
+                "gpu.tuning.state" => await GpuDeadlineAsync(GpuTuningStateAsync(requestToken), TimeSpan.FromSeconds(25), requestToken).ConfigureAwait(false),
+                "gpu.tuning.apply" => await GpuDeadlineAsync(GpuTuningApplyAsync(paramsEl, hasParams, requestToken), TimeSpan.FromSeconds(25), requestToken).ConfigureAwait(false),
+                "gpu.tuning.reset" => await GpuDeadlineAsync(GpuTuningResetAsync(requestToken), TimeSpan.FromSeconds(25), requestToken).ConfigureAwait(false),
+                "gpu.tuning.waiver" => await GpuDeadlineAsync(GpuTuningWaiverAsync(paramsEl, hasParams, requestToken), TimeSpan.FromSeconds(25), requestToken).ConfigureAwait(false),
+                "gpu.tuning.test" => await GpuDeadlineAsync(GpuTuningTestAsync(paramsEl, hasParams, requestToken), TimeSpan.FromSeconds(25), requestToken).ConfigureAwait(false),
+                "gpu.tuning.undervolt" => await GpuDeadlineAsync(GpuTuningUndervoltAsync(paramsEl, hasParams, requestToken), TimeSpan.FromSeconds(25), requestToken).ConfigureAwait(false),
                 "system.health" => await GpuDeadlineAsync(SystemHealthAsync(paramsEl, hasParams, requestToken), TimeSpan.FromSeconds(30), requestToken).ConfigureAwait(false),
                 "system.about" => await SystemAboutAsync(requestToken).ConfigureAwait(false),
                 "system.tune" => await Task.Run(() => AutoTuneService.Act(ReadString(paramsEl, hasParams, "action"), ReadString(paramsEl, hasParams, "part"), ReadString(paramsEl, hasParams, "mode"))).ConfigureAwait(false),

@@ -305,6 +305,7 @@ internal static class PlayerData
         new("exo-snapshot.json", "ShadersAddon", Why.ThisPc, "the shader engine's last state"),
         new("gpu-preference.json", "GpuPreference", Why.ThisPc, "Windows' per-game GPU choice before Exo set it"),
         new("gpu-profile.json", "GpuProfileService", Why.ThisPc, "NVIDIA global values before Exo set them"),
+        new("gpu-manual-tuning.json", "GpuManualTuningService", Why.ThisPc, "this PC's GPU manual tuning factory defaults, saved offsets, and per-device Intel waiver consent"),
         new("intel-games.json", "IntelProfileService", Why.ThisPc, "Intel per-game values before Exo set them"),
         new("intel-profile.json", "IntelProfileService", Why.ThisPc, "Intel global values before Exo set them"),
         new("junk-clean.json", "JunkAutoClean", Why.ThisPc, "when the junk clean last ran"),

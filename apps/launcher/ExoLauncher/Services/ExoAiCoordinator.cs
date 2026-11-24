@@ -106,6 +106,7 @@ internal sealed class ExoAiCoordinator : IDisposable
     {
         if (!_running) return;
         _ = Task.Run(() => Fans.ResetCache());
+        _ = Task.Run(() => GpuManualTuningService.Shared.EvaluateLifecycleTrigger("wake"));
     }
 
     internal void NotifySettings(ExoAiSettings settings)

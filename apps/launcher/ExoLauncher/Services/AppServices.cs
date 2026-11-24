@@ -77,6 +77,7 @@ public sealed class AppServices
         // An update kept for after a game is ready again when the game ends (UpdateFlow).
         LeanSignal.Changed += Updater.GameChanged;
         LeanSignal.Changed += Dependencies.OnGameStateChanged;
+        LeanSignal.Changed += GpuManualTuningService.Shared.OnGameStateChanged;
 
         // Adapters, Library, and Launcher are created on first access so the
         // shell can paint before any official-client probing runs.
@@ -334,6 +335,8 @@ public sealed class AppServices
     {
         try { _lifetime.Cancel(); } catch { }
         LeanSignal.Changed -= Dependencies.OnGameStateChanged;
+        LeanSignal.Changed -= GpuManualTuningService.Shared.OnGameStateChanged;
+        GpuManualTuningService.Shared.Dispose();
         Updater.Exiting();
         PlaytimeService.FlushActiveSessions();
         // Compare held as Exo closes: the EQ comes back, as it would when let go.
