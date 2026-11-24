@@ -2194,7 +2194,6 @@ pub(crate) fn music_menus_overlay(s: &AppState) -> Vec<El> {
                 no_sub,
             )
         }
-        MusicMenu::MiniVolume => Vec::new(),
     }
 }
 

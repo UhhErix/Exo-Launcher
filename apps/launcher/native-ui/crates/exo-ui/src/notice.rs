@@ -1,12 +1,12 @@
 use crate::events::{EventRegistry, HostEventKind};
 use crate::state::{AppState, MAX_NOTICES, NoticeItem, NoticeTone, Room};
-use exo_rpc::HostEvent;
 use exo_kit::{
     FG, PRESS_SCALE, PRIMARY_FG, RADIUS_CARD, RADIUS_PILL, SPRING_BASE, SPRING_MOVE, SPRING_QUICK,
     bad, danger_button_dyn, fg_muted, glass_button_dyn, glass_panel_opt, good, hover_fill,
     icon_alert, icon_bell, icon_check, icon_close, pressed_fill, primary_button_dyn, selected_fill,
     track_fill, type_body, type_section, type_small,
 };
+use exo_rpc::HostEvent;
 use rune::{Cursor, El, Phase, Spring, SpringPair, SurfaceFit, Transition, col, el, row, text};
 use serde_json::{Value, json};
 use std::collections::{HashMap, HashSet, VecDeque};

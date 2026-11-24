@@ -95,16 +95,15 @@ pub use media_types::{
     ArtistAbout, ArtistAboutCity, ArtistAboutLink, CaptureEditReply, CaptureHotkeys, CaptureItem,
     CaptureItemReply, CaptureListReply, CaptureLiveState, CaptureReelReply, CaptureSaveImageReply,
     CaptureSendReply, CaptureSettingsDto, CaptureStatusReply, CaptureTextReply, Concert,
-    CreditGroup, CreditPerson, DiscordCallSong, DiscordCallSongsReply, JamMember, JamSession,
-    LyricsLine, LyricsWord, MusicControlReply, MusicMatchReply, MusicMatchSong, MusicPlayback,
-    MusicPlaybackReply, MusicStatusEvent, MusicVolumeReply, NoteInfo, NotesActReply,
-    NotesListReply, NotesOpenReply, NotesPendingReply, NotesPhotoReply, NotesReadReply,
-    NotesSaveAsReply, NotesSaveReply, NotesSpellReply, NotesTextFilesReply, PlayerActReply,
-    PlayerAlbumRef, PlayerArtist, PlayerCard, PlayerDevice, PlayerFolderRef, PlayerFriend,
-    PlayerFriendContext, PlayerFriendTrack, PlayerFriendUser, PlayerHeader, PlayerLink,
-    PlayerOption, PlayerRating, PlayerSection, PlayerStartReply, PlayerStateData, PlayerStateReply,
-    PlayerTrack, PlayerViewData, PlayerViewReply, SpotifyAudio, SpotifyAudioReply,
-    SpotifyEq, SpotifyEqFilter, SpotifyLinkReply, format_duration_ms,
+    CreditGroup, CreditPerson, JamMember, JamSession, LyricsLine, LyricsWord, MusicControlReply,
+    MusicMatchReply, MusicMatchSong, MusicPlayback, MusicPlaybackReply, MusicStatusEvent,
+    MusicVolumeReply, NoteInfo, NotesActReply, NotesListReply, NotesOpenReply, NotesPendingReply,
+    NotesPhotoReply, NotesReadReply, NotesSaveAsReply, NotesSaveReply, NotesSpellReply,
+    NotesTextFilesReply, PlayerActReply, PlayerAlbumRef, PlayerArtist, PlayerCard, PlayerDevice,
+    PlayerFolderRef, PlayerFriend, PlayerFriendContext, PlayerFriendTrack, PlayerFriendUser,
+    PlayerHeader, PlayerLink, PlayerOption, PlayerRating, PlayerSection, PlayerStartReply,
+    PlayerStateData, PlayerStateReply, PlayerTrack, PlayerViewData, PlayerViewReply, SpotifyAudio,
+    SpotifyAudioReply, SpotifyEq, SpotifyEqFilter, format_duration_ms,
 };
 pub use pc_types::{
     Afmf3State, AppAutoCleared, AppCleanReply, AppConfirmReply, AppFind, AppLeftover, AppSkip,
@@ -415,8 +414,6 @@ pub const METHOD_MUSIC_PLAYBACK: &str = "music.playback";
 pub const METHOD_MUSIC_SIGN_IN: &str = "music.signIn";
 pub const METHOD_MUSIC_VOLUME: &str = "music.volume";
 pub const METHOD_MUSIC_WARM: &str = "music.warm";
-pub const METHOD_DISCORD_CALL_SONGS: &str = "discord.callSongs";
-pub const METHOD_SHELL_OPEN_URL: &str = "shell.openUrl";
 pub const METHOD_PLAYTIME_RIOT_REFRESH: &str = "playtime.riotRefresh";
 pub const METHOD_REPLACED_REMOVE: &str = "replaced.remove";
 pub const METHOD_RUNTIMES_CANCEL: &str = "runtimes.cancel";
@@ -754,8 +751,6 @@ pub const USED_METHODS: &[&str] = &[
     METHOD_MUSIC_SIGN_IN,
     METHOD_MUSIC_VOLUME,
     METHOD_MUSIC_WARM,
-    METHOD_DISCORD_CALL_SONGS,
-    METHOD_SHELL_OPEN_URL,
     METHOD_PLAYTIME_RIOT_REFRESH,
     METHOD_REPLACED_REMOVE,
     METHOD_RUNTIMES_CANCEL,
@@ -1629,9 +1624,6 @@ fn parse_event(
             .unwrap_or_else(|_| raw_fallback(name, data_raw))),
         "music.status" => Ok(serde_json::from_str::<MusicStatusEvent>(data_raw)
             .map(HostEvent::MusicStatus)
-            .unwrap_or_else(|_| raw_fallback(name, data_raw))),
-        "discord.callSong" => Ok(serde_json::from_str::<DiscordCallSong>(data_raw)
-            .map(|ev| HostEvent::DiscordCallSong(Box::new(ev)))
             .unwrap_or_else(|_| raw_fallback(name, data_raw))),
         "capture.state" => Ok(serde_json::from_str::<CaptureLiveState>(data_raw)
             .map(HostEvent::CaptureState)

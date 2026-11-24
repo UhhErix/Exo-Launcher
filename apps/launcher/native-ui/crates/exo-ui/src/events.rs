@@ -49,7 +49,6 @@ pub enum HostEventKind {
     AppsChanged,
     MusicVolume,
     MusicStatus,
-    DiscordCallSong,
     CaptureState,
     CaptureSaved,
     CaptureReel,
@@ -135,7 +134,6 @@ impl HostEventKind {
             HostEvent::AppsChanged => Self::AppsChanged,
             HostEvent::MusicVolume(_) => Self::MusicVolume,
             HostEvent::MusicStatus(_) => Self::MusicStatus,
-            HostEvent::DiscordCallSong(_) => Self::DiscordCallSong,
             HostEvent::CaptureState(_) => Self::CaptureState,
             HostEvent::CaptureSaved(_) => Self::CaptureSaved,
             HostEvent::CaptureReel(_) => Self::CaptureReel,
@@ -364,7 +362,7 @@ fn register_media(reg: &mut EventRegistry) {
         let HostEvent::DiscordCallSong(song) = ev else {
             return false;
         };
-        state.on_discord_call_song(*song)
+        state.on_discord_call_song(song.clone())
     });
     reg.on(HostEventKind::CaptureState, |state, ev| {
         let HostEvent::CaptureState(live) = ev else {

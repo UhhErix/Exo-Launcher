@@ -8,18 +8,18 @@ use crate::music_pages::{
 use crate::music_sound::{lyrics_view, music_menus_overlay, side_panel, song_artists_row};
 use crate::state::{AppState, Room};
 use exo_kit::{
-    BG, ExoGlass, FG, GAP, GLASS_PANEL_SIGMA, PRESS_SCALE, PRIMARY_FG, RADIUS_CARD, RADIUS_PANEL,
-    RADIUS_PILL, RADIUS_SMALL, SPRING_QUICK, TITLEBAR_HEIGHT, TRANSPARENT, apply_glass, bad,
-    fg_faint, fg_muted, glass_button, glass_capsule, glass_control_fill, glass_panel, glass_rim,
-    glass_rim_bottom, glass_rim_top, good, hover_fill, icon_back, icon_chevron_left, icon_folder,
-    icon_home, icon_maximize, icon_more_horiz, icon_music, icon_pause, icon_pin, icon_play,
-    icon_plus, icon_search, icon_skip_back, icon_skip_forward, icon_video, icon_volume,
-    icon_volume_low, icon_volume_off, pressed_fill,
+    BG, ExoGlass, FG, GAP, PRESS_SCALE, PRIMARY_FG, RADIUS_CARD, RADIUS_PANEL, RADIUS_PILL,
+    RADIUS_SMALL, SPRING_QUICK, TITLEBAR_HEIGHT, TRANSPARENT, apply_glass, bad, fg_faint, fg_muted,
+    glass_button, glass_capsule, glass_control_fill, glass_rim, glass_rim_bottom, glass_rim_top,
+    good, hover_fill, icon_back, icon_chevron_left, icon_folder, icon_home, icon_maximize,
+    icon_more_horiz, icon_music, icon_pause, icon_pin, icon_play, icon_plus, icon_search,
+    icon_skip_back, icon_skip_forward, icon_video, icon_volume, icon_volume_low, icon_volume_off,
+    pressed_fill, slider_track,
 };
 use exo_rpc::{PlayerCard, PlayerLink, PlayerSection};
 use rune::{
-    Align, Color, Cursor, El, Key, KeyEvent, Phase, ScrollSpec, Shape, Side, SurfaceFit, TextStyle,
-    Tx, canvas, col, edit_access, el, row, text, text_input,
+    Color, Cursor, El, Key, KeyEvent, Phase, ScrollSpec, Shape, SurfaceFit, TextStyle, Tx, canvas,
+    col, edit_access, el, row, text, text_input,
 };
 
 const SIDEBAR_W: f32 = 272.0;
@@ -2243,70 +2243,7 @@ pub fn mini_player(s: &AppState, scale: f32, slot: crate::state::MiniBarSlot) ->
     )
 }
 
-pub fn mini_volume_popover(s: &AppState, blur: bool) -> Vec<El> {
-    if !matches!(s.media.music_menu, Some(MusicMenu::MiniVolume)) {
-        return Vec::new();
-    }
-    let muted = s.media.music_muted;
-    let pct = format!(
-        "{}%",
-        if muted {
-            0
-        } else {
-            (s.media.music_volume * 100.0).round() as i32
-        }
-    );
-    let backdrop = el()
-        .key("mini-vol-backdrop")
-        .pin(Some(0.0), Some(0.0), Some(0.0), Some(0.0))
-        .fill(Color::TRANSPARENT)
-        .hit()
-        .press_on_down()
-        .on_press(|s: &mut AppState| s.media.music_menu = None);
-
-    let panel = glass_panel(
-        "mini-vol-popover",
-        if blur { GLASS_PANEL_SIGMA } else { 0.0 },
-    )
-    .anchored_fit("mini-mute", Side::Bottom, Align::End, 8.0)
-    .px(12.0)
-    .py(8.0)
-    .child(
-        row()
-            .gap(8.0)
-            .center_y()
-            .child(
-                bar_icon_btn(
-                    "mini-pop-mute",
-                    if muted { "Unmute music" } else { "Mute music" },
-                    if muted {
-                        icon_volume_off(15.0, fg_muted())
-                    } else {
-                        icon_volume(15.0, fg_muted())
-                    },
-                    26.0,
-                    false,
-                    false,
-                )
-                .on_press(|s: &mut AppState| s.music_toggle_mute()),
-            )
-            .child(volume_slider(
-                "mini-pop",
-                120.0,
-                s.media.music_volume,
-                muted,
-            ))
-            .child(text(pct).font(scaled_small(s)).color(fg_muted()).w(34.0)),
-    );
-
-    vec![backdrop, panel]
-}
-
 pub fn handle_key(s: &mut AppState, ev: &KeyEvent, tx: &mut Tx) -> bool {
-    if ev.key == Key::Escape && matches!(s.media.music_menu, Some(MusicMenu::MiniVolume)) {
-        s.media.music_menu = None;
-        return true;
-    }
     if s.room != Room::Music || s.media.music_room_state != MusicRoomState::Running {
         return false;
     }

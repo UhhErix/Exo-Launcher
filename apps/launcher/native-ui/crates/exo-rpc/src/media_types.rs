@@ -1,4 +1,3 @@
-use crate::discord_types::DiscordRich;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -111,17 +110,6 @@ pub struct MusicMatchReply {
 
 #[derive(Debug, Clone, Default, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct SpotifyLinkReply {
-    #[serde(default)]
-    pub ok: bool,
-    #[serde(default)]
-    pub uri: Option<String>,
-    #[serde(default)]
-    pub message: Option<String>,
-}
-
-#[derive(Debug, Clone, Default, Deserialize)]
-#[serde(rename_all = "camelCase")]
 pub struct MusicStatusEvent {
     #[serde(default)]
     pub service: String,
@@ -138,28 +126,6 @@ pub struct PlayerActReply {
     pub message: Option<String>,
     #[serde(default)]
     pub uri: Option<String>,
-}
-
-#[derive(Debug, Clone, Default, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct DiscordCallSong {
-    #[serde(default)]
-    pub user_id: String,
-    #[serde(default)]
-    pub name: String,
-    #[serde(default)]
-    pub avatar: Option<String>,
-    #[serde(default)]
-    pub paused: bool,
-    #[serde(default)]
-    pub rich: Option<DiscordRich>,
-}
-
-#[derive(Debug, Clone, Default, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct DiscordCallSongsReply {
-    #[serde(default, deserialize_with = "null_vec")]
-    pub songs: Vec<DiscordCallSong>,
 }
 
 fn null_vec<'de, D, T>(d: D) -> Result<Vec<T>, D::Error>

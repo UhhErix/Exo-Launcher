@@ -1239,7 +1239,6 @@ pub fn view(s: &AppState, cx: &mut Cx<AppState>) -> El {
     if s.open_dropdown.is_some() {
         root = root.children(menus::dropdown_overlay(s, budget.overlay));
     }
-    root = root.children(music::mini_volume_popover(s, budget.overlay));
     if s.context_menu.is_some() {
         root = root.children(menus::context_menu_overlay(
             s,
