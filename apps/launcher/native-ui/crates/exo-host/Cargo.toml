@@ -1,0 +1,14 @@
+[package]
+name = "exo-host"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+exo-display = { path = "../exo-display" }
+exo-gpu = { path = "../exo-gpu" }
+exo-policy = { path = "../exo-policy" }
+exo-sensors = { path = "../exo-sensors" }
+exo-wire = { path = "../exo-wire" }
+serde.workspace = true
+serde_json.workspace = true
