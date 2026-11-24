@@ -338,6 +338,8 @@
     "system.health": "PcHealth",
     "system.interrupts": "Interrupts",
     "system.mouseCore": "MouseCore",
+    "system.overlays": "OverlayAdvisorState",
+    "system.qos": "QosState",
     "system.tune": "AutoTune",
     "system.tuning": "Tuning",
     "telemetry.delete": "{ ok: boolean; message?: string | null }",

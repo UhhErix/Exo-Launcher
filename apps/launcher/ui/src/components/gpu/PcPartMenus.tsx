@@ -28,8 +28,10 @@ import { BestScreenRows, DisplayRows, HdrRows } from './DisplayTab'
 import { DriverRow } from './DriverRow'
 import { InterruptRows } from './InterruptRows'
 import { NetworkGroup } from './NetworkGroup'
+import { OverlayAdvisorGroup } from './OverlayAdvisorGroup'
 import { BoardRows, type PcPartMenu } from './PcOverview'
 import { ProfileRows } from './ProfileTab'
+import { QosGroup } from './QosGroup'
 import { SectionSlot } from './SectionHead'
 import { SystemGroup } from './SystemGroup'
 import { SetupRows } from './ThisPcTab'
@@ -172,6 +174,8 @@ export function PcPartMenus({
             <SetupRows place="section" active={active} health={state.health} onHealth={onHealth} />
             <InterruptRows place="section" state={state.interrupts} onState={onInterrupts} />
             <NetworkGroup health={state.health} onHealth={onHealth} />
+            <QosGroup />
+            <OverlayAdvisorGroup />
             <SystemGroup tuning={state.tuning} onTuning={onTuning} />
           </Group>
         </PcMenu>

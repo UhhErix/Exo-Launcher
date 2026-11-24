@@ -9,10 +9,10 @@
   ],
   "totals": {
     "overall": {
-      "DONE": 93,
-      "PARTIAL": 59,
-      "MISSING": 81,
-      "BROKEN": 5,
+      "DONE": 106,
+      "PARTIAL": 57,
+      "MISSING": 71,
+      "BROKEN": 4,
       "total": 238
     },
     "byRoom": {
@@ -45,9 +45,9 @@
         "total": 17
       },
       "Discord": {
-        "DONE": 25,
-        "PARTIAL": 9,
-        "MISSING": 11,
+        "DONE": 9,
+        "PARTIAL": 16,
+        "MISSING": 20,
         "BROKEN": 0,
         "total": 45
       },
@@ -59,16 +59,16 @@
         "total": 21
       },
       "Exo AI / PC": {
-        "DONE": 0,
-        "PARTIAL": 8,
-        "MISSING": 12,
-        "BROKEN": 1,
+        "DONE": 21,
+        "PARTIAL": 0,
+        "MISSING": 0,
+        "BROKEN": 0,
         "total": 21
       },
       "Apps": {
-        "DONE": 4,
-        "PARTIAL": 1,
-        "MISSING": 7,
+        "DONE": 12,
+        "PARTIAL": 0,
+        "MISSING": 0,
         "BROKEN": 0,
         "total": 12
       },
@@ -2061,246 +2061,246 @@
       "id": "exo-ai-pc-01",
       "room": "Exo AI / PC",
       "feature": "Exo AI room: Auto Tune card (stage list, live progress, undo)",
-      "status": "BROKEN",
+      "status": "DONE",
       "reactRef": "components/gpu/AutoTune.tsx:4",
-      "nativeRef": "exo-ui/src/pc.rs:1344",
+      "nativeRef": "exo-ui/src/pc_ai.rs:372",
       "rpc": [
         "system.tune",
         "autopilot.state",
         "exoAi.state",
         "exoAi.set"
       ],
-      "notes": "pc.rs:~1615-1700: six stage rows and \"Auto Tune complete\" are hardcoded; descriptions like \"No bloatware found\", \"Graphics & chipset drivers up to date\" are static text, not read from the host.",
+      "notes": "Replaced hardcoded static Auto Tune rows with dynamic 6-stage state from host plus real system.tune hardware rows (Tune CPU/GPU with risk confirm, live testing progress + Stop, tuned metrics + Undo).",
       "workPackage": "WP9"
     },
     {
       "id": "exo-ai-pc-02",
       "room": "Exo AI / PC",
       "feature": "Exo AI: Run again / Optimizing PC cinema",
-      "status": "PARTIAL",
+      "status": "DONE",
       "reactRef": "components/gpu/AutoTuneCinema.tsx:151",
-      "nativeRef": "exo-ui/src/pc.rs:1289",
+      "nativeRef": "exo-ui/src/pc_menus.rs:1865",
       "rpc": [
         "exoAi.set"
       ],
-      "notes": "Button calls exoAi.set; no cinema, no stage events, no Not now.",
+      "notes": "Sequential 6-stage Auto Tune pipeline in pc_wp9_actions.rs driving full-screen AutoTuneCinema modal (Stage X of 6, milestones, results summary, Not now / Restart now / Run again / Done).",
       "workPackage": "WP9"
     },
     {
       "id": "exo-ai-pc-03",
       "room": "Exo AI / PC",
       "feature": "Auto Tune: PawnIO / unsupported CPU/GPU notice",
-      "status": "MISSING",
+      "status": "DONE",
       "reactRef": "components/gpu/AutoTune.tsx:139",
-      "nativeRef": null,
+      "nativeRef": "exo-ui/src/pc_ai.rs:392",
       "rpc": [
         "shell.openUrl",
         "system.tune"
       ],
-      "notes": "",
+      "notes": "Get PawnIO external link on needs-driver and unsupported CPU/GPU notice when system.tune returns no parts.",
       "workPackage": "WP9"
     },
     {
       "id": "exo-ai-pc-04",
       "room": "Exo AI / PC",
       "feature": "PC overview (hardware, Windows version, Secure Boot, TPM, memory integrity, BIOS)",
-      "status": "PARTIAL",
+      "status": "DONE",
       "reactRef": "components/gpu/PcOverview.tsx:1",
-      "nativeRef": "exo-ui/src/pc.rs:781",
+      "nativeRef": "exo-ui/src/pc_ai.rs:1790",
       "rpc": [
         "system.about",
         "system.drives",
         "system.tuning"
       ],
-      "notes": "Name/drives/tuning only; no Secure Boot/TPM/BIOS/recovery rows; bios.update never called.",
+      "notes": "PC overview grid with PCIe/cable/netlink/Secure Boot/TPM/drive verdicts and Motherboard BIOS/Recovery/Secure Boot/TPM/Memory integrity rows with vendor hints.",
       "workPackage": "WP9"
     },
     {
       "id": "exo-ai-pc-05",
       "room": "Exo AI / PC",
       "feature": "Autopilot (state, what it found / did, pause, turn back on)",
-      "status": "PARTIAL",
+      "status": "DONE",
       "reactRef": "components/gpu/Autopilot.tsx:3",
-      "nativeRef": "exo-ui/src/pc.rs:1219",
+      "nativeRef": "exo-ui/src/pc_menus.rs:1089",
       "rpc": [
         "autopilot.state",
         "autopilot.set"
       ],
-      "notes": "Shows state only; autopilot.set never called so cannot pause/resume.",
+      "notes": "Autopilot pause/resume, Memory Integrity, per-app rules, live telemetry, and expandable session reports.",
       "workPackage": "WP9"
     },
     {
       "id": "exo-ai-pc-06",
       "room": "Exo AI / PC",
       "feature": "Power & Autopilot group, system tweaks (restore, restart required)",
-      "status": "MISSING",
+      "status": "DONE",
       "reactRef": "components/gpu/SystemGroup.tsx:50",
-      "nativeRef": null,
+      "nativeRef": "exo-ui/src/pc_menus.rs:1169",
       "rpc": [
         "system.tune",
         "system.health"
       ],
-      "notes": "",
+      "notes": "Network & System tuning groups with Put back undo, connection/latency checks, and restart-required indicators.",
       "workPackage": "WP9"
     },
     {
       "id": "exo-ai-pc-07",
       "room": "Exo AI / PC",
       "feature": "Interrupts (MSI, DPC latency measure, drivers hold)",
-      "status": "MISSING",
+      "status": "DONE",
       "reactRef": "components/gpu/InterruptRows.tsx:19",
-      "nativeRef": null,
+      "nativeRef": "exo-ui/src/pc_menus.rs:1169",
       "rpc": [
         "system.interrupts"
       ],
-      "notes": "",
+      "notes": "MSI apply/undo, DPC latency measurement, drivers hold, and interrupt device list.",
       "workPackage": "WP9"
     },
     {
       "id": "exo-ai-pc-08",
       "room": "Exo AI / PC",
       "feature": "Display tab (refresh rate, HDR, calibrate, G-Sync, best settings)",
-      "status": "PARTIAL",
+      "status": "DONE",
       "reactRef": "components/gpu/DisplayTab.tsx:1",
-      "nativeRef": "exo-ui/src/pc.rs:1591",
+      "nativeRef": "exo-ui/src/pc_menus.rs:571",
       "rpc": [
         "gpu.display",
         "hdr.state"
       ],
-      "notes": "Opens a menu; gpu.display / calibration not called; only hdr.state read.",
+      "notes": "Multi-monitor switcher, Use best settings, refresh rate, color format/depth/range, DDC brightness/contrast, color adjust + Restore, HDR verdict/auto-HDR/Calibrate.",
       "workPackage": "WP9"
     },
     {
       "id": "exo-ai-pc-09",
       "room": "Exo AI / PC",
       "feature": "GPU driver row (latest, install, driver type, profile restore)",
-      "status": "MISSING",
+      "status": "DONE",
       "reactRef": "components/gpu/DriverRow.tsx:116",
-      "nativeRef": null,
+      "nativeRef": "exo-ui/src/pc_menus.rs:259",
       "rpc": [
         "gpu.driver",
         "gpu.profile"
       ],
-      "notes": "gpu.driver / gpu.driverInstall events not handled.",
+      "notes": "GPU driver status, Game Ready/Studio toggle, Install/Reinstall with license consent modal, and gpu.driver push event progress.",
       "workPackage": "WP9"
     },
     {
       "id": "exo-ai-pc-10",
       "room": "Exo AI / PC",
       "feature": "Driver profile (low latency, boost)",
-      "status": "PARTIAL",
+      "status": "DONE",
       "reactRef": "components/gpu/DriverProfile.tsx:26",
-      "nativeRef": "exo-ui/src/pc.rs:1013",
+      "nativeRef": "exo-ui/src/pc_menus.rs:356",
       "rpc": [
         "gpu.profile"
       ],
-      "notes": "Read only.",
+      "notes": "Apply/Undo Exo driver profile, NVIDIA Reflex/Low Latency/Power/Shader details, manual profile controls, and Frame Generation switch.",
       "workPackage": "WP9"
     },
     {
       "id": "exo-ai-pc-11",
       "room": "Exo AI / PC",
       "feature": "Drivers & updates (chipset, Windows Update, BIOS, restart)",
-      "status": "MISSING",
+      "status": "DONE",
       "reactRef": "components/gpu/DriversSection.tsx:108",
-      "nativeRef": null,
+      "nativeRef": "exo-ui/src/pc_ai.rs:733",
       "rpc": [
         "system.drivers",
         "system.health",
         "bios.update",
         "controller.read"
       ],
-      "notes": "drivers.step / bios.progress events not handled.",
+      "notes": "Updates card with Update all, GPU/chipset/device/DualSense/Windows Update/ASUS BIOS staging, and drivers.step + bios.progress push events.",
       "workPackage": "WP9"
     },
     {
       "id": "exo-ai-pc-12",
       "room": "Exo AI / PC",
       "feature": "AFMF 3 row",
-      "status": "MISSING",
+      "status": "DONE",
       "reactRef": "components/gpu/Afmf3Row.tsx:12",
-      "nativeRef": null,
+      "nativeRef": "exo-ui/src/pc_menus.rs:356",
       "rpc": [
         "gpu.afmf3"
       ],
-      "notes": "",
+      "notes": "AFMF 3 status and toggle row inside Graphics part menu.",
       "workPackage": "WP9"
     },
     {
       "id": "exo-ai-pc-13",
       "room": "Exo AI / PC",
       "feature": "GPU control panel open",
-      "status": "MISSING",
+      "status": "DONE",
       "reactRef": "components/gpu/PcPartMenus.tsx:69",
-      "nativeRef": null,
+      "nativeRef": "exo-ui/src/pc_menus.rs:356",
       "rpc": [
         "gpu.controlPanel"
       ],
-      "notes": "",
+      "notes": "Opens vendor GPU control panel via gpu.controlPanel.",
       "workPackage": "WP9"
     },
     {
       "id": "exo-ai-pc-14",
       "room": "Exo AI / PC",
       "feature": "Best Setup (use best settings)",
-      "status": "MISSING",
+      "status": "DONE",
       "reactRef": "components/gpu/BestSetup.tsx:107",
-      "nativeRef": null,
+      "nativeRef": "exo-ui/src/pc_menus.rs:1169",
       "rpc": [
         "system.health"
       ],
-      "notes": "",
+      "notes": "Sequential Use best settings runner inside Motherboard menu.",
       "workPackage": "WP9"
     },
     {
       "id": "exo-ai-pc-15",
       "room": "Exo AI / PC",
       "feature": "Storage room (drives, scan space, drive settings)",
-      "status": "PARTIAL",
+      "status": "DONE",
       "reactRef": "components/gpu/StorageRoom.tsx:117",
-      "nativeRef": "exo-ui/src/pc.rs:1238",
+      "nativeRef": "exo-ui/src/pc_storage.rs:522",
       "rpc": [
         "system.drives"
       ],
-      "notes": "Drives list; scan space and drive settings absent.",
+      "notes": "Full Storage room with drive specs, space breakdown, largest games, verdicts, vendor tool, Scan space, and Drive settings fixes.",
       "workPackage": "WP9"
     },
     {
       "id": "exo-ai-pc-16",
       "room": "Exo AI / PC",
       "feature": "Compress games (all, idle, after updates)",
-      "status": "MISSING",
+      "status": "DONE",
       "reactRef": "components/gpu/CompressGames.tsx:14",
-      "nativeRef": null,
+      "nativeRef": "exo-ui/src/pc_storage.rs:345",
       "rpc": [
         "compress.all",
         "compress.act",
         "compress.settings"
       ],
-      "notes": "compress.progress event not handled; native only compress.list.",
+      "notes": "Compress all, per-game Compress/Uncompress with confirm, live compress.progress push events, and idle/after-updates toggles.",
       "workPackage": "WP9"
     },
     {
       "id": "exo-ai-pc-17",
       "room": "Exo AI / PC",
       "feature": "Game runtimes (VC++/.NET list, install)",
-      "status": "MISSING",
+      "status": "DONE",
       "reactRef": "components/runtimes/RuntimesPanel.tsx:1",
-      "nativeRef": null,
+      "nativeRef": "exo-ui/src/pc_ai.rs:564",
       "rpc": [
         "runtimes.list",
         "runtimes.install"
       ],
-      "notes": "runtimes.progress event not handled.",
+      "notes": "VC++/.NET runtimes section inside Updates card with install/repair/cancel and live runtimes.progress push events.",
       "workPackage": "WP9"
     },
     {
       "id": "exo-ai-pc-18",
       "room": "Exo AI / PC",
       "feature": "Shaders board (pre-compile all, rebuild, cancel)",
-      "status": "PARTIAL",
+      "status": "DONE",
       "reactRef": "components/shaders/ShadersBoard.tsx:25",
-      "nativeRef": "exo-ui/src/pc.rs:1846",
+      "nativeRef": "exo-ui/src/pc_ai.rs:2060",
       "rpc": [
         "shaders.status",
         "shaders.prepare.start",
@@ -2308,44 +2308,44 @@
         "shaders.prepare.cancel",
         "shaders.rebuild"
       ],
-      "notes": "Cancel / rebuild missing; shaders.event not handled.",
+      "notes": "Shaders board with rebuild banner, compile/pause/resume/stop, per-game compile/cancel, cache strip, and shaders.event + shaders.rebuild push events.",
       "workPackage": "WP9"
     },
     {
       "id": "exo-ai-pc-19",
       "room": "Exo AI / PC",
       "feature": "Keep (CPU/GPU keep-awake status)",
-      "status": "MISSING",
+      "status": "DONE",
       "reactRef": "components/gpu/PcOverview.tsx:69",
-      "nativeRef": null,
+      "nativeRef": "exo-ui/src/pc_ai.rs:1790",
       "rpc": [
         "keep.status"
       ],
-      "notes": "",
+      "notes": "Displays keep.status status text on PC overview.",
       "workPackage": "WP9"
     },
     {
       "id": "exo-ai-pc-20",
       "room": "Exo AI / PC",
       "feature": "FPS counter options",
-      "status": "MISSING",
+      "status": "DONE",
       "reactRef": "components/settings/GeneralSection.tsx:127",
-      "nativeRef": null,
+      "nativeRef": "exo-ui/src/settings.rs:234",
       "rpc": [
         "fps.counter"
       ],
-      "notes": "See Settings.",
+      "notes": "FPS counter toggle, position selector, and all 9 metric switches wired to fps.counter in Settings -> In game.",
       "workPackage": "WP9"
     },
     {
       "id": "exo-ai-pc-21",
       "room": "Exo AI / PC",
       "feature": "PC part menus (CPU, GPU, RAM, disk context menus)",
-      "status": "PARTIAL",
+      "status": "DONE",
       "reactRef": "components/gpu/PcPartMenus.tsx:69",
-      "nativeRef": "exo-ui/src/pc.rs:1",
+      "nativeRef": "exo-ui/src/pc_menus.rs:2272",
       "rpc": [],
-      "notes": "Display + others present; actions inside menus limited.",
+      "notes": "Full anchored Graphics, Display, and Motherboard part menus with complete host actions and Esc/backdrop dismiss.",
       "workPackage": "WP9"
     },
     {
@@ -2354,25 +2354,28 @@
       "feature": "Installed apps list (icons, size, publisher, search)",
       "status": "DONE",
       "reactRef": "components/apps/AppsPanel.tsx:110",
-      "nativeRef": "exo-ui/src/pc.rs:1307",
+      "nativeRef": "exo-ui/src/pc_apps.rs:1095",
       "rpc": [
         "apps.list",
         "apps.icons"
       ],
-      "notes": "",
+      "notes": "Split into pc_apps.rs with sortable Name/Last used/Size columns and collapsible Needed section.",
       "workPackage": null
     },
     {
       "id": "apps-02",
       "room": "Apps",
       "feature": "Uninstall (confirm, progress, leftovers)",
-      "status": "PARTIAL",
+      "status": "DONE",
       "reactRef": "components/apps/AppsPanel.tsx:77",
-      "nativeRef": "exo-ui/src/pc_actions.rs:181",
+      "nativeRef": "exo-ui/src/pc_apps.rs:259",
       "rpc": [
-        "apps.uninstall"
+        "apps.uninstall",
+        "apps.confirm",
+        "apps.clean",
+        "apps.leave"
       ],
-      "notes": "apps.confirm / apps.clean (leftover scan) / apps.leave not called.",
+      "notes": "Single & multi-select uninstall with apps.confirm, leftover Review item picker, apps.clean, and apps.leave.",
       "workPackage": "WP9"
     },
     {
@@ -2381,94 +2384,94 @@
       "feature": "Tidy / clean up apps",
       "status": "DONE",
       "reactRef": "components/apps/AppsPanel.tsx:120",
-      "nativeRef": "exo-ui/src/pc_actions.rs:24",
+      "nativeRef": "exo-ui/src/pc_apps.rs:531",
       "rpc": [
         "apps.tidy"
       ],
-      "notes": "",
+      "notes": "Ready-for-you tidy row with Review picker, Clean up, Leave, and Put back undo.",
       "workPackage": null
     },
     {
       "id": "apps-04",
       "room": "Apps",
       "feature": "Scan for unused apps (\"Not opened in three months\")",
-      "status": "MISSING",
+      "status": "DONE",
       "reactRef": "components/apps/AppsPanel.tsx:323",
-      "nativeRef": null,
+      "nativeRef": "exo-ui/src/pc_apps.rs:531",
       "rpc": [
         "apps.scan"
       ],
-      "notes": "",
+      "notes": "Unused >90d summary row, Show filter toggle, and filtered banner.",
       "workPackage": "WP9"
     },
     {
       "id": "apps-05",
       "room": "Apps",
       "feature": "Restore point + Undo",
-      "status": "MISSING",
+      "status": "DONE",
       "reactRef": "components/apps/AppsPanel.tsx:98",
-      "nativeRef": null,
+      "nativeRef": "exo-ui/src/pc_apps.rs:259",
       "rpc": [
         "apps.restorePoint",
         "apps.undo"
       ],
-      "notes": "",
+      "notes": "Creates restore point before batch uninstall and provides Put back undo via apps.undo.",
       "workPackage": "WP9"
     },
     {
       "id": "apps-06",
       "room": "Apps",
       "feature": "Installer cache (scan, clean)",
-      "status": "MISSING",
+      "status": "DONE",
       "reactRef": "components/apps/AppsPanel.tsx:821",
-      "nativeRef": null,
+      "nativeRef": "exo-ui/src/pc_apps.rs:531",
       "rpc": [
         "apps.installerCache",
         "apps.installerCacheClean"
       ],
-      "notes": "",
+      "notes": "Installer cache scan row with Clear and Put back undo.",
       "workPackage": "WP9"
     },
     {
       "id": "apps-07",
       "room": "Apps",
       "feature": "Default apps open",
-      "status": "MISSING",
+      "status": "DONE",
       "reactRef": "components/apps/AppsPanel.tsx:744",
-      "nativeRef": null,
+      "nativeRef": "exo-ui/src/pc_apps.rs:225",
       "rpc": [
         "apps.openDefaults"
       ],
-      "notes": "",
+      "notes": "Default apps prompt row opening Windows Default Apps via apps.openDefaults.",
       "workPackage": "WP9"
     },
     {
       "id": "apps-08",
       "room": "Apps",
       "feature": "Replaced apps (remove duplicates)",
-      "status": "MISSING",
+      "status": "DONE",
       "reactRef": "components/apps/AppsPanel.tsx:195",
-      "nativeRef": null,
+      "nativeRef": "exo-ui/src/pc_apps.rs:531",
       "rpc": [
         "replaced.remove"
       ],
-      "notes": "",
+      "notes": "Duplicate/replaced apps removal row wired to replaced.remove.",
       "workPackage": "WP9"
     },
     {
       "id": "apps-09",
       "room": "Apps",
       "feature": "Packages: plan / remove / add back",
-      "status": "MISSING",
+      "status": "DONE",
       "reactRef": "components/gpu/autoTuneStages.ts:212",
-      "nativeRef": null,
+      "nativeRef": "exo-ui/src/pc_apps.rs:531",
       "rpc": [
         "apps.packages",
         "apps.packagesPlan",
         "apps.packagesRemove",
         "apps.packageAddBack"
       ],
-      "notes": "",
+      "notes": "Bloatware plan/removal in Auto Tune and Apps plus removed Windows package Add back rows.",
       "workPackage": "WP9"
     },
     {
@@ -2477,14 +2480,14 @@
       "feature": "Startup apps (list, remove, restore, clean)",
       "status": "DONE",
       "reactRef": "components/apps/AppsPanel.tsx:14",
-      "nativeRef": "exo-ui/src/pc.rs:2158",
+      "nativeRef": "exo-ui/src/pc_apps.rs:1095",
       "rpc": [
         "startup.list",
         "startup.remove",
         "startup.clean",
         "startup.restore"
       ],
-      "notes": "",
+      "notes": "Split into pc_apps.rs Startup tab with Turn off, Clean up, Kept reasons, and Turned off Put back.",
       "workPackage": null
     },
     {
@@ -2493,27 +2496,27 @@
       "feature": "Junk files (scan, clean)",
       "status": "DONE",
       "reactRef": "components/apps/AppsPanel.tsx:3",
-      "nativeRef": "exo-ui/src/pc.rs:1066",
+      "nativeRef": "exo-ui/src/pc_apps.rs:531",
       "rpc": [
         "junk.scan",
         "junk.clean"
       ],
-      "notes": "",
+      "notes": "Ready-for-you junk summary row with Clean action.",
       "workPackage": null
     },
     {
       "id": "apps-12",
       "room": "Apps",
       "feature": "Edge allow, web preferences (default browser behaviour)",
-      "status": "MISSING",
+      "status": "DONE",
       "reactRef": "components/settings/AppsSection.tsx:1",
-      "nativeRef": null,
+      "nativeRef": "exo-ui/src/settings.rs:320",
       "rpc": [
         "apps.allowEdge",
         "web.preferences.get",
         "web.preferences.set"
       ],
-      "notes": "",
+      "notes": "Allow Edge row in pc_apps.rs when edge_removed is true; web preferences & YouTube Music notifications in settings.rs.",
       "workPackage": "WP9"
     },
     {

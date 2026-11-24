@@ -538,6 +538,8 @@ pub struct JunkCleanReply {
     #[serde(default)]
     pub files: Option<u32>,
     #[serde(default)]
+    pub skipped: u32,
+    #[serde(default)]
     pub message: Option<String>,
 }
 

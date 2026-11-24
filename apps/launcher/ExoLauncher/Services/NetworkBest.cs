@@ -96,7 +96,7 @@ internal sealed partial class NetworkBest(NetworkTune tune, NetworkBest.ISystem 
         var items = new List<Item>();
         var net = tune.Read();
         if (net.Pending.Count > 0)
-            items.Add(new(AdapterKey, "Adapter settings for games", Capital(string.Join("; ", net.Pending.Select(p => NetworkTune.Names(p.Rules) + (net.Pending.Count > 1 ? $" on your {(p.Adapter.Wireless ? "Wi-Fi" : "Ethernet")}" : "")))), false, net.Applied, off.Contains(AdapterKey)));
+            items.Add(new(AdapterKey, "Adapter settings for games", Capital(string.Join("; ", net.Pending.Select(p => NetworkTune.Names(p.Rules) + (net.Pending.Count > 1 ? $" on your {(p.Adapter.Wireless ? "Wi-Fi" : "Ethernet")}" : "")))) + ". Briefly reconnects the adapter for a few seconds.", false, net.Applied, off.Contains(AdapterKey)));
         else if (net.Applied)
             items.Add(new(AdapterKey, "Adapter settings for games", "Power saving that drops the link is off.", true, true, off.Contains(AdapterKey)));
 
