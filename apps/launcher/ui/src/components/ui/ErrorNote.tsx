@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react'
 import { cn } from '../../lib/cn'
+import { isUserNotice } from '../../lib/userNotice'
 import { useSaid } from './useSaid'
 
 type LogsReader = (error: string, area: string) => Promise<{ ok: boolean; text?: string; copied?: boolean }>
@@ -28,10 +29,11 @@ export function ErrorNote({ message, detail, className, as: Tag = 'p', role = 'a
   children?: ReactNode
 }) {
   const copyText = detail ? `${message ?? ''} (${detail})`.trim() : (message ?? '')
+  const notice = isUserNotice(copyText)
   return (
-    <Tag className={cn('exo-error-note', className)} role={role}>
+    <Tag className={cn('exo-error-note', className)} role={notice ? 'status' : role}>
       <span className="exo-error-note-text">{children ?? message}</span>
-      <CopyLogs error={copyText} />
+      {notice ? null : <CopyLogs error={copyText} />}
     </Tag>
   )
 }
@@ -40,7 +42,7 @@ export function ErrorNote({ message, detail, className, as: Tag = 'p', role = 'a
 export function CopyLogs({ error }: { error: string }) {
   const [said, say] = useSaid()
   const reader = readLogs
-  if (!reader) return null
+  if (!reader || isUserNotice(error)) return null
   async function copy(reader: LogsReader, button: HTMLButtonElement) {
     const area = button.closest('[data-log-area]')?.getAttribute('data-log-area') ?? ''
     try {

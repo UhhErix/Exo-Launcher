@@ -1128,6 +1128,11 @@ public sealed partial class WebHostBridge
         switch (level)
         {
             case "error":
+                if (FailureReportRules.IsExpectedUserNotice(message))
+                {
+                    AppLog.Info(line);
+                    break;
+                }
                 AppLog.Error(line);
                 // A page error is reported on its own (an uncaught error, a rejected promise, a failure a room caught and
                 // showed): nobody has to copy a log. The scrubber and the daily limits apply as to every report.
@@ -1160,7 +1165,9 @@ public sealed partial class WebHostBridge
         {
             var built = AppLog.ReportFor(error.Length > 2000 ? error[..2000] : error, area, AppLog.RecentLines(), DateTime.UtcNow,
                 _services.AppVersion, Environment.OSVersion.Version.ToString(), Environment.UserName, profile);
-            CrashReport.Payload? payload = CrashReport.Build(error, built, _services.AppVersion, Environment.OSVersion.Version.ToString(), Environment.UserName, profile, Environment.MachineName);
+            CrashReport.Payload? payload = FailureReportRules.IsExpectedUserNotice(error)
+                ? null
+                : CrashReport.Build(error, built, _services.AppVersion, Environment.OSVersion.Version.ToString(), Environment.UserName, profile, Environment.MachineName);
             return (built, payload);
         }).ConfigureAwait(true);
         if (report is not null) _ = CrashReport.SendAsync(report);
