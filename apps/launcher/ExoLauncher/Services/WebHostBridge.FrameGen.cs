@@ -19,14 +19,6 @@ public sealed partial class WebHostBridge
         note = status.Note,
         reason = status.Reason,
         canToggle = status.CanToggle,
-        lossless = status.Lossless is { } ls ? new
-        {
-            installed = ls.Installed,
-            storeUrl = ls.StoreUrl,
-            mode = ls.Mode,
-            multiplier = ls.Multiplier,
-            hotkey = ls.Hotkey,
-        } : null,
         message,
     };
 
@@ -44,10 +36,8 @@ public sealed partial class WebHostBridge
         var game = await FindGameAsync(ReadString(p, hasParams, "id"), ct).ConfigureAwait(false);
         if (game is null) return new { ok = false, state = "hidden", message = "Game not found." };
         var enabled = ReadBool(p, hasParams, "enabled") == true;
-        var mode = ReadString(p, hasParams, "mode");
-        int? multiplier = hasParams && p.TryGetProperty("multiplier", out var multEl) && multEl.TryGetInt32(out var mult) ? mult : null;
         var gpu = await Task.Run(() => SystemSpecs.FrameGenGpu, ct).ConfigureAwait(false);
-        var (ok, message) = await Task.Run(() => _dlss.FrameGenSetAsync(game, gpu, enabled, mode, multiplier, ct), ct).ConfigureAwait(false);
+        var (ok, message) = await Task.Run(() => _dlss.FrameGenSetAsync(game, gpu, enabled, ct), ct).ConfigureAwait(false);
         if (ok) _services.Settings.SetFrameGenKeptOff(game.Id, !enabled);
         var status = await Task.Run(() => _dlss.FrameGenState(game, gpu, ct), ct).ConfigureAwait(false);
         return FrameGenDto(status, ok, message);

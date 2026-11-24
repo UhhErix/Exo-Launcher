@@ -373,8 +373,8 @@ public sealed partial class FrameGenModTests : IDisposable
         Assert.Equal("native", FrameGenPath(FrameGenCardFor("NVIDIA GeForce RTX 5090"), Game()));
         Assert.Equal("fsr", FrameGenPath(FrameGenCardFor("AMD Radeon RX 6600"), Game()));
         Assert.Equal("native", FrameGenPath(FrameGenCardFor("AMD Radeon RX 6600"), Game(own: true)));
-        Assert.Equal("lossless", FrameGenPath(rtx30, Game(dlssg: false)));
-        Assert.Equal("lossless", FrameGenPath(null, Game()));
+        Assert.Null(FrameGenPath(rtx30, Game(dlssg: false)));
+        Assert.Null(FrameGenPath(null, Game()));
     }
 
     /// <summary>
@@ -839,7 +839,9 @@ public sealed partial class FrameGenModTests : IDisposable
         Assert.False(refused.Ok);
         Assert.Equal(before, Snapshot());
         var status = State(service, gpu);
-        Assert.Equal(("off", "lossless", "Easy Anti-Cheat"), (status.State, status.Path, status.AntiCheat));
+        Assert.Equal(("note", "Easy Anti-Cheat"), (status.State, status.AntiCheat));
+        Assert.Equal("Frame generation isn't available here: Easy Anti-Cheat", status.Note);
+        Assert.False(status.CanToggle);
         Assert.Equal(FrameGenNext.Nothing, Next(service, gpu));
     }
 
@@ -857,7 +859,8 @@ public sealed partial class FrameGenModTests : IDisposable
         Assert.False((await On(service)).Ok);
 
         Assert.Equal(before, Snapshot());
-        Assert.Equal(("off", "lossless"), (State(service).State, State(service).Path));
+        Assert.Equal(("note", (string?)null), (State(service).State, State(service).Path));
+        Assert.Equal("Frame generation isn't available here: Easy Anti-Cheat", State(service).Note);
     }
 
     [Fact]
@@ -981,7 +984,9 @@ public sealed partial class FrameGenModTests : IDisposable
         Assert.False(refused.Ok);
         Assert.Equal(before, Snapshot());
         var status = State(service);
-        Assert.Equal(("off", "lossless", "Easy Anti-Cheat"), (status.State, status.Path, status.AntiCheat));
+        Assert.Equal(("note", "Easy Anti-Cheat"), (status.State, status.AntiCheat));
+        Assert.Equal("Frame generation isn't available here: Easy Anti-Cheat", status.Note);
+        Assert.False(status.CanToggle);
     }
 
     [Fact]
@@ -994,12 +999,12 @@ public sealed partial class FrameGenModTests : IDisposable
 
         Assert.False((await On(service)).Ok);
         Assert.Equal(before, Snapshot());
-        Assert.Equal(("note", "Exo never changes Riot games or games with Vanguard."), (State(service).State, State(service).Note));
+        Assert.Equal(("note", "Frame generation isn't available here: Riot Vanguard"), (State(service).State, State(service).Note));
     }
 
     [Theory]
     [InlineData("NVIDIA GeForce RTX 5090", "native")]
-    [InlineData("Intel(R) UHD Graphics 770", "off")]
+    [InlineData("Intel(R) UHD Graphics 770", "hidden")]
     public async Task CardsWithMultiFrameGenerationOrNoModGetNothing(string gpu, string expectedState)
     {
         UnrealGame();
@@ -1767,9 +1772,9 @@ public sealed partial class FrameGenModTests : IDisposable
 
         var status = State(service, gpu);
 
-        Assert.Equal(("off", DlssgGoneNote), (status.State, status.Note));
+        Assert.Equal(("note", DlssgGoneNote), (status.State, status.Note));
         Assert.Equal(expected, Snapshot());
-        Assert.Equal(("off", "lossless"), (State(service, gpu).State, State(service, gpu).Path));
+        Assert.Equal("hidden", State(service, gpu).State);
     }
 
     [Fact]
@@ -1844,7 +1849,7 @@ public sealed partial class FrameGenModTests : IDisposable
 
         Assert.Equal(before, Snapshot());
         var status = State(service);
-        Assert.Equal(("off", "lossless"), (status.State, status.Path));
+        Assert.Equal(("note", (string?)null), (status.State, status.Path));
         Assert.Contains("Easy Anti-Cheat", status.Note);
     }
 
@@ -1881,7 +1886,9 @@ public sealed partial class FrameGenModTests : IDisposable
             Assert.Equal(0, await BestSettingsPass(service));
             Assert.False((await On(service)).Ok);
             Assert.Equal(before, Snapshot());
-            Assert.Equal(("off", "lossless", "Easy Anti-Cheat"), (State(service).State, State(service).Path, State(service).AntiCheat));
+            var backStatus = State(service);
+            Assert.Equal(("note", "Easy Anti-Cheat"), (backStatus.State, backStatus.AntiCheat));
+            Assert.Equal("Frame generation isn't available here: Easy Anti-Cheat", backStatus.Note);
             // Nothing in: taking out again is a no-op.
             Assert.Equal((true, false), AntiCheatBackOn(service) is var (ok2, removed2, _) ? (ok2, removed2) : default);
 

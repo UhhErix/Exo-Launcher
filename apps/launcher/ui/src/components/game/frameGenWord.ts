@@ -24,7 +24,6 @@ export function frameGenWord(state: FrameGenMod): LineWord | null {
   if (state.state === 'broken') return brokenWord(state)
   if (state.note) return { text: curly(state.note) }
   if (state.state === 'off') {
-    if (state.path === 'lossless' && state.lossless && !state.lossless.installed) return { text: 'Lossless Scaling' }
     return { text: state.package ? `Off · ${curly(state.package)}` : 'Off' }
   }
   if (state.state === 'on') {

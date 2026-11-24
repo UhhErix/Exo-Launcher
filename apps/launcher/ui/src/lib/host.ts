@@ -106,18 +106,10 @@ export type DlssRunResult = {
  * frame generation is the one for this card), off and on, broken (Exo's install was damaged, or the game is kept off
  * for that; reason says how), mod (another mod is in the game), note (Exo just took it out by itself, and why).
  */
-export type LosslessInfo = {
-  installed: boolean
-  storeUrl?: string | null
-  mode?: 'FIXED' | 'ADAPTIVE' | null
-  multiplier?: number | null
-  hotkey?: string | null
-}
-
 export type FrameGenMod = {
   ok: boolean
   state: 'hidden' | 'native' | 'off' | 'on' | 'broken' | 'mod' | 'note'
-  path?: 'dlss' | 'mfg' | 'fsr' | 'optifg' | 'lossless' | null
+  path?: 'dlss' | 'mfg' | 'fsr' | 'optifg' | null
   package?: string | null
   version?: string | null
   session?: 'ran' | null
@@ -126,7 +118,6 @@ export type FrameGenMod = {
   note?: string | null
   reason?: 'replaced' | 'changed' | 'removed' | 'gone' | 'unread' | 'card' | null
   canToggle?: boolean
-  lossless?: LosslessInfo | null
   message?: string | null
 }
 
@@ -2801,8 +2792,8 @@ export const host = {
     rawCall<{ ok: boolean; message?: string }>('dlss.consent', { id, allow, ...(allow && antiCheat ? { antiCheat } : {}) }),
   /** The game's Frame generation line. */
   dlssFrameGen: (id: string) => rawCall<FrameGenMod>('dlss.frameGen', { id }, 60_000),
-  dlssFrameGenSet: (id: string, enabled: boolean, options?: { mode?: 'FIXED' | 'ADAPTIVE'; multiplier?: number }) =>
-    rawCall<FrameGenMod>('dlss.frameGenSet', { id, enabled, ...(options ?? {}) }, 10 * 60_000),
+  dlssFrameGenSet: (id: string, enabled: boolean) =>
+    rawCall<FrameGenMod>('dlss.frameGenSet', { id, enabled }, 10 * 60_000),
   dlssNewer: () => rawCall<{ ok: boolean; items: { family: string; version: string }[] }>('dlss.newer', {}, 15_000),
   dlssDownloadNewer: () => rawCall<{ ok: boolean; message?: string | null }>('dlss.downloadNewer', {}, 10 * 60_000),
   shadersStatus: (id: string) => rawCall<ShaderStatus>('shaders.status', { id }),

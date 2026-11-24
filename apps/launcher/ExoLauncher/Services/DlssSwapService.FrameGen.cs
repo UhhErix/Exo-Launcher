@@ -187,8 +187,6 @@ public sealed partial class DlssSwapService
     /// <summary>Swapped in tests: the NVIDIA driver's frame caps; null where there is no NVIDIA driver to ask.</summary>
     internal IFrameGenDriver? FrameGenDriver { get; init; } = NvidiaFrameGenDriver.Instance;
 
-    internal LosslessScalingService Lossless { get; init; } = LosslessScalingService.Shared;
-
     /// <summary>The version a tag names: "v1.5.0-hotfix.1" is 1.5.0.</summary>
     internal static Version? TagVersion(string? tag)
     {
@@ -638,22 +636,21 @@ public sealed partial class DlssSwapService
         if (game.AntiCheat is not null)
         {
             if (game.OwnFrameGen || (card is { DlssFrameGen: true } && game.DlssFrameGen)) return "native";
-            var verdict = FrameGenAntiCheat.Evaluate(entry, game.AntiCheat);
-            return verdict == FrameGenAntiCheatVerdict.LosslessOnly ? "lossless" : null;
+            return FrameGenAntiCheat.Evaluate(entry, game.AntiCheat) == FrameGenAntiCheatVerdict.DllSafe ? "optifg" : null;
         }
         if (card is null)
-            return game.OwnFrameGen ? "native" : "lossless";
+            return game.OwnFrameGen ? "native" : null;
         if (card.DlssFrameGen)
         {
             if (game.DlssFrameGen || game.OwnFrameGen) return "native";
             if (game.HasUpscaler && game.Api is "dx12" or "vulkan") return "optifg";
-            return "lossless";
+            return null;
         }
         if (card.Dlssg)
         {
             if (game.DlssFrameGen)
             {
-                if (!game.Vulkan && game.Api != "dx11" && game.Streamline is >= 2 && game.DlssgMajor >= 310 && !game.NoDlssgHere)
+                if (!game.Vulkan && game.Api != "dx11" && game.Streamline is >= 2 && game.DlssgMajor >= 310 && !game.NoDlssgHere && !game.VersionDllTaken)
                     return "dlss";
                 if (!game.DlssFailed && !game.NoMfgHere && (game.Vulkan || game.Streamline is null or < 2 || game.DlssgMajor is null or < 310 || game.VersionDllTaken))
                     return "mfg";
@@ -662,12 +659,12 @@ public sealed partial class DlssSwapService
             }
             if (game.OwnFrameGen) return "native";
             if (game.HasUpscaler && game.Api is "dx12" or "vulkan") return "optifg";
-            return "lossless";
+            return null;
         }
         if (game.OwnFrameGen) return "native";
         if (game.DlssFrameGen) return "fsr";
         if (game.HasUpscaler && game.Api is "dx12" or "vulkan") return "optifg";
-        return "lossless";
+        return null;
     }
 
     internal static string? FrameGenPackageLabel(string? path, string? modName = null) => path switch
@@ -676,7 +673,6 @@ public sealed partial class DlssSwapService
         "mfg" => MfgUnlocker.Name,
         "fsr" => OptiScaler.Name,
         "optifg" => "OptiScaler FG",
-        "lossless" => "Lossless Scaling",
         _ => modName,
     };
 
@@ -956,12 +952,10 @@ public sealed partial class DlssSwapService
     /// game stays off), <c>changed</c> (another of Exo's files has other bytes; Exo leaves it), <c>removed</c> (Exo's files
     /// went; they go back once), <c>gone</c> (the game no longer ships DLSS Frame Generation; Exo takes its files out).
     /// </param>
-    public sealed record LosslessStatusView(bool Installed, string? StoreUrl, string? Mode, int? Multiplier, string? Hotkey);
-
     public sealed record FrameGenStatus(
         string State, string? Path = null, string? Version = null,
         string? Session = null, string? Mod = null, string? AntiCheat = null, string? Note = null, string? Reason = null,
-        string? Package = null, bool CanToggle = false, LosslessStatusView? Lossless = null);
+        string? Package = null, bool CanToggle = false);
 
     private static readonly ConcurrentDictionary<string, string> FrameGenNotes = new(StringComparer.OrdinalIgnoreCase);
 
@@ -1034,26 +1028,12 @@ public sealed partial class DlssSwapService
                 TakeOut = install.Out ? null : FrameGenTakeOut(card, mod, layout.AntiCheat, layout.Folder!, install, wanted, layout.DlssgGone),
             };
         }
-        if (wanted == "lossless")
-        {
-            var lsInfo = Lossless.Detect();
-            var lsGame = Lossless.GetGame(game.Id);
-            var lsView = new LosslessStatusView(lsInfo.Installed, lsInfo.StoreUrl, lsGame?.Mode ?? LosslessScalingService.DefaultMode, lsGame?.Multiplier ?? LosslessScalingService.DefaultMultiplier, lsInfo.Hotkey);
-            return facts with
-            {
-                Folder = layout.Folder is not null,
-                AntiCheat = layout.AntiCheat,
-                LosslessOn = lsGame is not null,
-                Lossless = lsView,
-                LosslessVersion = lsGame is not null ? $"Lossless Scaling {lsGame.Multiplier}x" : null,
-            };
-        }
         if (wanted is null && layout.AntiCheat is { } blockedAc)
-            return facts with { AntiCheat = blockedAc, NeverAllowed = NeverAllowed(game, blockedAc), AntiCheatSentence = AntiCheatCheck.SentenceFor(game, blockedAc, AntiCheatCheck.Change.FrameGenMod) };
+            return facts with { AntiCheat = blockedAc, NeverAllowed = NeverAllowed(game, blockedAc), AntiCheatSentence = FrameGenAntiCheat.UnavailableMessage(game, blockedAc) };
         if (wanted is null or "native" || layout.Folder is null) return facts with { Folder = layout.Folder is not null };
         if (layout.OtherMod is { } other) return facts with { OtherMod = other };
         if (layout.AntiCheat is { } antiCheat)
-            return facts with { AntiCheat = antiCheat, NeverAllowed = NeverAllowed(game, antiCheat), AntiCheatSentence = AntiCheatCheck.SentenceFor(game, antiCheat, AntiCheatCheck.Change.FrameGenMod) };
+            return facts with { AntiCheat = antiCheat, NeverAllowed = NeverAllowed(game, antiCheat), AntiCheatSentence = FrameGenAntiCheat.UnavailableMessage(game, antiCheat) };
         var targetMod = FrameGenModForPath(wanted);
         return facts with
         {
@@ -1103,8 +1083,7 @@ public sealed partial class DlssSwapService
         bool Readable, string? Wanted = null, string? Record = null, bool Out = false, string? Damage = null, string? TakeOut = null,
         bool DlssgGone = false, bool Folder = true, string? OtherMod = null, string? AntiCheat = null, bool NeverAllowed = false,
         string? KeptOff = null, string? Unoffered = null, string? Note = null, bool Pending = false, string? AntiCheatSentence = null,
-        bool Native = false, string? Unread = null, string? RecordInput = null, bool LosslessOn = false, LosslessStatusView? Lossless = null,
-        string? LosslessVersion = null);
+        bool Native = false, string? Unread = null, string? RecordInput = null);
 
     internal sealed record FrameGenVerdict(FrameGenStatus Status, FrameGenNext Next = FrameGenNext.Nothing);
 
@@ -1123,21 +1102,15 @@ public sealed partial class DlssSwapService
             var next = reason switch { "replaced" => FrameGenNext.KeepOff, "removed" => FrameGenNext.PutBack, null => FrameGenNext.Forget, _ => FrameGenNext.Nothing };
             return new(new(reason is null ? "on" : "broken", Path: path, Note: f.Note, Reason: reason, Package: pkg, CanToggle: reason is null), next);
         }
-        if (f.Wanted == "lossless")
-        {
-            if (f.LosslessOn)
-                return new(new("on", Path: "lossless", Version: f.LosslessVersion ?? "Lossless Scaling", AntiCheat: f.AntiCheat, Note: f.Note, Package: "Lossless Scaling", CanToggle: true, Lossless: f.Lossless));
-            return new(new("off", Path: "lossless", AntiCheat: f.AntiCheat, Note: f.Note, Package: "Lossless Scaling", CanToggle: f.Lossless?.Installed == true, Lossless: f.Lossless));
-        }
         if (f.Wanted is null)
         {
-            if (f.AntiCheat is { } blockedAc) return new(new("note", AntiCheat: blockedAc, Note: f.Note ?? f.AntiCheatSentence));
+            if (f.AntiCheat is { } blockedAc) return new(new("note", AntiCheat: blockedAc, Note: f.Note ?? f.AntiCheatSentence ?? FrameGenAntiCheat.UnavailableMessage(null, blockedAc)));
             return f.Native && f.Note is null ? new(new("native")) : hidden;
         }
         if (f.Wanted == "native") return f.Note is null ? new(new("native")) : hidden;
         if (!f.Folder) return hidden;
         if (f.OtherMod is { } other) return new(new("mod", Mod: NamedMod(other)));
-        if (f.AntiCheat is { } antiCheat) return new(new("note", AntiCheat: antiCheat, Note: f.Note ?? f.AntiCheatSentence));
+        if (f.AntiCheat is { } antiCheat) return new(new("note", AntiCheat: antiCheat, Note: f.Note ?? f.AntiCheatSentence ?? FrameGenAntiCheat.UnavailableMessage(null, antiCheat)));
         if (f.KeptOff is { } kept) return new(new("broken", Path: f.Wanted, Note: f.Note, Reason: kept, Package: FrameGenPackageLabel(f.Wanted), CanToggle: true));
         if (f.Unoffered is { } unavailable) return new(new("note", Note: unavailable, Package: FrameGenPackageLabel(f.Wanted)));
         return new(new("off", Path: f.Wanted, Note: f.Note, Package: FrameGenPackageLabel(f.Wanted), CanToggle: true), FrameGenNext.PutIn);
@@ -1185,15 +1158,8 @@ public sealed partial class DlssSwapService
     /// <summary>Why frame generation can't go into the game now, or null.</summary>
     private static string? FrameGenRefusal(GameEntry game, FrameGenGame layout, string? path)
     {
-        if (path == "lossless")
-        {
-            if (layout.AntiCheat is { } ac && FrameGenAntiCheat.Evaluate(game, ac) != FrameGenAntiCheatVerdict.LosslessOnly)
-                return AntiCheatCheck.SentenceFor(game, ac, AntiCheatCheck.Change.FrameGenMod)!;
-            if (layout.Exe is null) return "Exo couldn't find the game's program.";
-            return null;
-        }
         if (layout.AntiCheat is { } antiCheat)
-            return AntiCheatCheck.SentenceFor(game, antiCheat, AntiCheatCheck.Change.FrameGenMod)!;
+            return FrameGenAntiCheat.UnavailableMessage(game, antiCheat);
         if (layout.Installed is { Out: true }) return "A mod is already in this game, so Exo leaves it alone.";
         if (layout.Installed is not null) return null;
         if (path == "native") return "This game has frame generation of its own. Turn it on in the game's settings.";
@@ -1220,7 +1186,6 @@ public sealed partial class DlssSwapService
         var path = layout.Installed is null ? FrameGenPath(card, layout, game) : null;
         if (FrameGenRefusal(game, layout, path) is { } refused) return (false, refused);
         if (layout.Installed is not null) return (true, "Already on.");
-        if (path == "lossless") return (false, "This game uses Lossless Scaling instead of a DLL mod.");
         if (card is null) return (false, "This graphics card can't run frame generation from a mod.");
         var mod = FrameGenModForPath(path);
         if (mod is null) return (false, "This game has no frame generation mod route.");
@@ -1319,24 +1284,16 @@ public sealed partial class DlssSwapService
     }
 
     internal async Task<(bool Ok, string Message)> FrameGenSetAsync(
-        GameEntry game, string? gpu, bool enabled, string? losslessMode, int? losslessMultiplier, CancellationToken ct)
+        GameEntry game, string? gpu, bool enabled, CancellationToken ct)
     {
         if (!enabled)
         {
-            if (Lossless.IsEnabled(game.Id)) return Lossless.DisableGame(game.Id);
             if (AntiCheatCheck.ChoseWithoutAntiCheat(game) && DropSessionHeldFrameGen(game.Id))
                 return (true, "Off.");
             return FrameGenOff(game);
         }
         ForgetReplaced(game.Id);
         ChangeFrameGenMemory(game.Id, memory => memory with { KeptOff = null, PutBack = 0 });
-        var root = ResolveInstallRoot(game.Path);
-        if (root is null) return (false, "The install folder is unavailable.");
-        if (IsWindowsAppsPath(root)) return (false, StoreLockedMessage);
-        var card = FrameGenCardFor(gpu);
-        var layout = ReadFrameGenGame(game, root, ScanAndStore(game, ct), ct);
-        var path = layout.Installed is null ? FrameGenPath(card, layout, game) : null;
-        if (path == "lossless") return Lossless.EnableGame(game, layout.Exe, losslessMode, losslessMultiplier);
         return await FrameGenOnAsync(game, gpu, ct, auto: false).ConfigureAwait(false);
     }
 

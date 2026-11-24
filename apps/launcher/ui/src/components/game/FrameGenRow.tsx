@@ -76,8 +76,6 @@ const modRead = sheetMemory<FrameGenMod>()
  * (the last read shows at once while it is read again), Built into the game when the game's own runs on this card (an
  * RTX 40 or 50 included), and Not supported in this game only when the game has none and Exo has nothing to offer.
  */
-const LOSSLESS_STORE_URL = 'https://store.steampowered.com/app/993090/Lossless_Scaling/'
-
 export function FrameGenModRow({ gameId }: { gameId: string }) {
   const [state, setState] = useState<FrameGenMod | null>(() => modRead.get(gameId))
   const [busy, setBusy] = useState<'on' | 'off' | null>(null)
@@ -126,16 +124,9 @@ export function FrameGenModRow({ gameId }: { gameId: string }) {
       ? { text: error, bad: true }
       : frameGenWord(state)
 
-  const needsLossless = state.path === 'lossless' && state.lossless && !state.lossless.installed
-  const storeUrl = state.lossless?.storeUrl || LOSSLESS_STORE_URL
-
   return (
     <GameReading name="Frame generation" word={word}>
-      {needsLossless ? (
-        <button type="button" className="exo-set-btn is-compact" onClick={() => void host.openUrl(storeUrl).catch(e => report(e, 'FrameGenModRow.lossless'))}>
-          Get Lossless Scaling
-        </button>
-      ) : state.canToggle ? (
+      {state.canToggle ? (
         <Switch checked={state.state === 'on'} disabled={busy !== null} label="Frame generation" onChange={toggle} />
       ) : null}
     </GameReading>
