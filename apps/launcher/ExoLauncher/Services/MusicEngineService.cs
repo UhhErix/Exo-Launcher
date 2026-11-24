@@ -34,6 +34,8 @@ internal sealed partial class MusicEngineService
     private bool _musicWebReady;
     private bool _appleAdapterInstalled;
     private bool _musicWebFailed;
+    private int _musicWebFailures;
+    private DateTimeOffset _musicWebRetryAfter = DateTimeOffset.MinValue;
     private (string Service, string Message)? _musicWebCause;
     private int _musicWebGeneration;
     private MediaSessionService? _mediaSessions;
@@ -353,9 +355,20 @@ internal sealed partial class MusicEngineService
         return sessions;
     }
 
+    internal static TimeSpan InitRetryBackoff(int consecutiveFailures) => consecutiveFailures switch
+    {
+        <= 0 => TimeSpan.Zero,
+        1 => TimeSpan.FromSeconds(2),
+        2 => TimeSpan.FromSeconds(5),
+        3 => TimeSpan.FromSeconds(15),
+        _ => TimeSpan.FromSeconds(60),
+    };
+
     private void SelectServiceCore(string service)
     {
         if (!MusicWebPolicy.IsService(service) || _musicWebService == service) return;
+        _musicWebFailures = 0;
+        _musicWebRetryAfter = DateTimeOffset.MinValue;
         ResetMusicWebView();
         _musicWebService = service;
         MediaSessions.SetProvider(service);
@@ -366,7 +379,11 @@ internal sealed partial class MusicEngineService
     {
         if (_musicWebClosed || !MusicEngineDiet.ServiceMatchesSelection(WebClientPreferences.Read().MusicService, service)) return;
         if (_musicWebService != service) SelectServiceCore(service);
-        if (_musicWebFailed) ResetMusicWebView();
+        if (_musicWebFailed)
+        {
+            if (DateTimeOffset.UtcNow < _musicWebRetryAfter) return;
+            ResetMusicWebView();
+        }
         if (service == "spotify") _ = SpotifyApp.CloseRunningAsync(_lifetimeCts.Token);
         if (_musicHost is null)
         {
@@ -390,6 +407,8 @@ internal sealed partial class MusicEngineService
             AppLog.Warn("Music web player initialization failed: " + ex.GetType().Name + ": " + ex.Message);
             ResetMusicWebView();
             _musicWebFailed = true;
+            _musicWebFailures++;
+            _musicWebRetryAfter = DateTimeOffset.UtcNow + InitRetryBackoff(_musicWebFailures);
             if (!reported)
                 PublishMusicStatus(service, "error", MusicWebPolicy.Label(service) + " could not load. Choose Retry to reconnect.");
         }
@@ -644,6 +663,8 @@ internal sealed partial class MusicEngineService
 
     private void ReloadMusic()
     {
+        _musicWebFailures = 0;
+        _musicWebRetryAfter = DateTimeOffset.MinValue;
         if (_musicWebFailed) { ResetMusicWebView(); return; }
         if (MusicCore is not { } core) return;
         _musicWebReady = false;
@@ -917,6 +938,8 @@ internal sealed partial class MusicEngineService
                 return;
             }
             _musicWebReady = true;
+            _musicWebFailures = 0;
+            _musicWebRetryAfter = DateTimeOffset.MinValue;
             _appleAdapterInstalled = service == "apple";
             _musicWebBooted = false;
             _musicWebFailed = false;

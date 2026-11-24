@@ -4,7 +4,7 @@ using ExoLauncher.Helpers;
 
 namespace ExoLauncher.Services;
 
-/// <summary>The Store room: store.home, store.calendar, store.search, store.game, store.gameOffers, store.gameReviews, store.wishlist, store.open; store.changed (what: home or wishlist) and store.sale.</summary>
+/// <summary>The Store room: store.home, store.search, store.game, store.gameOffers, store.gameReviews, store.wishlist, store.open; store.changed (what: home or wishlist) and store.sale.</summary>
 public sealed partial class WebHostBridge
 {
     /// <summary>
@@ -55,35 +55,6 @@ public sealed partial class WebHostBridge
             at = home.At.ToString("O", CultureInfo.InvariantCulture),
             hero = home.Hero.Select(MapTile),
             shelves = home.Shelves.Select(s => new { id = s.Id, title = s.Title, items = s.Items.Select(MapTile) }),
-        };
-    }
-
-    /// <summary>
-    /// The calendar for this PC: Steam's public lists placed by day, ordered by the wishlist and by the tags of the Steam
-    /// games played most. The library supplies hours here, in native code; the page gets only the result.
-    /// </summary>
-    private async Task<object> StoreCalendarAsync(CancellationToken ct)
-    {
-        var (played, _) = StoreTasteInputs();
-        StoreService.Calendar? calendar;
-        try { calendar = await Task.Run(() => _services.Store.CalendarAsync(played, ct), ct).ConfigureAwait(false); }
-        catch (Exception ex) when (ex is HttpRequestException or OperationCanceledException or JsonException)
-        {
-            if (!ct.IsCancellationRequested)
-                AppLog.Warn("Store: Steam did not answer. " + ex.Message);
-            calendar = null;
-        }
-        if (calendar is null) return new { ok = false, message = "The store could not be reached. Check your connection and try again." };
-        return new
-        {
-            ok = true,
-            at = calendar.At.ToString("O", CultureInfo.InvariantCulture),
-            interests = calendar.Interests,
-            days = calendar.Days.Select(d => new
-            {
-                date = d.Date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
-                entries = d.Entries.Select(e => new { tile = MapTile(e.Tile), wished = e.Wished, earlyAccess = e.EarlyAccess, why = e.Why }),
-            }),
         };
     }
 

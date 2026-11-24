@@ -1,3 +1,4 @@
+using System.Net;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using ExoLauncher.Helpers;
@@ -87,13 +88,20 @@ public sealed partial class DependencyService
     /// The newest Desktop Runtime of each channel, keyed "8-x64": read from Microsoft at most every 6 hours (soon again
     /// after a failure), else what was read before, else nothing (the catalog's own versions stand in).
     /// </summary>
+    private static readonly HttpClient DotnetHttp = ExoHttp.Create(
+        TimeSpan.FromSeconds(15),
+        new SocketsHttpHandler
+        {
+            AutomaticDecompression = DecompressionMethods.All,
+            PooledConnectionLifetime = TimeSpan.FromMinutes(15),
+        });
+
     internal static async Task<IReadOnlyDictionary<string, DotnetRelease>> DotnetReleasesAsync(CancellationToken ct) =>
         await Dotnet.GetAsync("releases", async lookup =>
         {
             var releases = new Dictionary<string, DotnetRelease>(StringComparer.Ordinal);
-            using var http = ExoHttp.Create(TimeSpan.FromSeconds(15));
-            var channels = ParseDotnetIndex(await http.GetStringAsync(ReleaseIndex, lookup).ConfigureAwait(false));
-            var reads = channels.Select(channel => ReadChannelAsync(http, channel, lookup)).ToArray();
+            var channels = ParseDotnetIndex(await DotnetHttp.GetStringAsync(ReleaseIndex, lookup).ConfigureAwait(false));
+            var reads = channels.Select(channel => ReadChannelAsync(DotnetHttp, channel, lookup)).ToArray();
             foreach (var (channel, release) in await Task.WhenAll(reads).ConfigureAwait(false))
             {
                 if (release is null) continue;

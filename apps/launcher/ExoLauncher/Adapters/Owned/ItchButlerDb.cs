@@ -87,13 +87,7 @@ internal static class ItchButlerDb
 
     private static IReadOnlyList<GameEntry> Query(string path)
     {
-        using var connection = new SqliteConnection(new SqliteConnectionStringBuilder
-        {
-            DataSource = path,
-            Mode = SqliteOpenMode.ReadOnly,
-            Pooling = false,
-        }.ToString());
-        connection.Open();
+        using var connection = ExoSqlite.OpenReadOnly(path, defaultTimeoutSeconds: 5);
 
         using var profile = connection.CreateCommand();
         profile.CommandText = "SELECT user_id FROM profiles ORDER BY last_connected DESC LIMIT 1";

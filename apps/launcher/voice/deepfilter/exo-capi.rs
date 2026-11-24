@@ -32,6 +32,7 @@ pub unsafe extern "C" fn df_process_frame_checked(
     output: *mut c_float,
 ) -> c_float {
     let Some(state) = st.as_mut() else { return f32::NAN };
+    if input.is_null() || output.is_null() { return f32::NAN; }
     let hop = state.0.hop_size;
     let state = std::panic::AssertUnwindSafe(state);
     match std::panic::catch_unwind(move || {

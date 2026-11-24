@@ -37,7 +37,12 @@ internal sealed class SteamWebApi(HttpClient http, string baseUrl = "https://api
 
     internal static HttpClient CreateDefaultClient()
     {
-        var client = ExoHttp.Create(TimeSpan.FromSeconds(15), new HttpClientHandler { AllowAutoRedirect = false });
+        var client = ExoHttp.Create(TimeSpan.FromSeconds(15), new SocketsHttpHandler
+        {
+            AllowAutoRedirect = false,
+            AutomaticDecompression = System.Net.DecompressionMethods.All,
+            PooledConnectionLifetime = TimeSpan.FromMinutes(15),
+        });
         client.DefaultRequestHeaders.UserAgent.ParseAdd("ExoLauncher/1.0");
         return client;
     }

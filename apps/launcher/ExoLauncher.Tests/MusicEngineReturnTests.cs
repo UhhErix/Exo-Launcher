@@ -320,4 +320,42 @@ public sealed class MusicEngineReturnTests
         Assert.Equal(2, probes);
         Assert.Equal(0, published);
     }
+
+    [Fact]
+    public async Task MusicAppVolumeScriptInstallsSentinelAndReusesIt()
+    {
+        var sent = new List<string>();
+        using var volume = MusicAppVolume.ForWebPage(
+            "apple",
+            (expr, _, _) =>
+            {
+                sent.Add(expr);
+                using var doc = JsonDocument.Parse("0.5");
+                return Task.FromResult<JsonElement?>(doc.RootElement.Clone());
+            },
+            () => false);
+
+        var ct = TestContext.Current.CancellationToken;
+        Assert.Equal(0.5, await volume.ReadAsync(ct));
+        Assert.Equal(0.5, await volume.WriteAsync(0.5, ct));
+        volume.MarkNavigationStarting();
+        Assert.Equal(0.5, await volume.ReadAsync(ct));
+
+        Assert.Equal(3, sent.Count);
+        Assert.True(sent[0].Length > 1000);
+        Assert.Contains("window.__exoVolume", sent[1]);
+        Assert.True(sent[1].Length < 200);
+        Assert.True(sent[2].Length > 1000);
+    }
+
+    [Fact]
+    public void MusicInitRetryBackoffScalesAndCaps()
+    {
+        Assert.Equal(TimeSpan.Zero, MusicEngineService.InitRetryBackoff(0));
+        Assert.Equal(TimeSpan.FromSeconds(2), MusicEngineService.InitRetryBackoff(1));
+        Assert.Equal(TimeSpan.FromSeconds(5), MusicEngineService.InitRetryBackoff(2));
+        Assert.Equal(TimeSpan.FromSeconds(15), MusicEngineService.InitRetryBackoff(3));
+        Assert.Equal(TimeSpan.FromSeconds(60), MusicEngineService.InitRetryBackoff(4));
+        Assert.Equal(TimeSpan.FromSeconds(60), MusicEngineService.InitRetryBackoff(20));
+    }
 }

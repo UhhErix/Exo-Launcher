@@ -23,6 +23,19 @@ internal static class SteamStoreAppTypes
     /// up to <see cref="MaxLookupsPerScan"/> it has not answered yet. An app
     /// with no store page, or a DLC (it names its full game), stays unknown.
     /// </summary>
+    private static readonly Lazy<HttpClient> SharedHttp = new(() =>
+    {
+        var http = ExoHttp.Create(TimeSpan.FromSeconds(3), new SocketsHttpHandler
+        {
+            AllowAutoRedirect = false,
+            AutomaticDecompression = System.Net.DecompressionMethods.All,
+            PooledConnectionLifetime = TimeSpan.FromMinutes(15),
+        });
+        http.DefaultRequestHeaders.UserAgent.ParseAdd("ExoLauncher/1.0");
+        http.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+        return http;
+    });
+
     internal static async Task<IReadOnlyDictionary<string, string>> ResolveAsync(
         IReadOnlyCollection<string> appIds,
         CancellationToken ct)
@@ -35,9 +48,7 @@ internal static class SteamStoreAppTypes
         {
             using var budget = CancellationTokenSource.CreateLinkedTokenSource(ct);
             budget.CancelAfter(ScanBudget);
-            using var http = ExoHttp.Create(TimeSpan.FromSeconds(3), new HttpClientHandler { AllowAutoRedirect = false });
-            http.DefaultRequestHeaders.UserAgent.ParseAdd("ExoLauncher/1.0");
-            http.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+            var http = SharedHttp.Value;
             var learned = false;
             foreach (var id in ask)
             {

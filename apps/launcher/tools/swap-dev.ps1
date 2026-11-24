@@ -14,7 +14,7 @@ robocopy $pub $incoming /E /NFL /NDL /NJH /NJS | Out-Null
 if ($LASTEXITCODE -gt 7) { throw "robocopy failed with exit code $LASTEXITCODE" }
 if (-not (Test-Path -LiteralPath (Join-Path $incoming 'ExoLauncher.exe'))) { throw 'staged copy is missing ExoLauncher.exe' }
 $nativeUi = Join-Path $repo 'native-ui\target\release\exo-ui.exe'
-if ((Test-Path -LiteralPath $nativeUi) -and -not (Test-Path -LiteralPath (Join-Path $incoming 'exo-ui.exe'))) {
+if (Test-Path -LiteralPath $nativeUi) {
     Copy-Item -LiteralPath $nativeUi -Destination (Join-Path $incoming 'exo-ui.exe') -Force
 }
 # dotnet publish carries no add-ons (Build-Release.ps1 adds them): keep each installed one the publish lacks, or the swap

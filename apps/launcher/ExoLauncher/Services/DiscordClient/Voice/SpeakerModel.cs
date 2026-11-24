@@ -73,6 +73,8 @@ internal static class SpeakerModel
         lock (Gate) Load();
     }
 
+    internal static int SessionThreads(int processorCount) => Math.Clamp(processorCount, 1, 2);
+
     // Loads sherpa-onnx and the model once; under Gate.
     private static unsafe bool Load()
     {
@@ -98,7 +100,7 @@ internal static class SpeakerModel
         fixed (byte* cpu = "cpu"u8)
         {
             *(byte**)config = path;
-            *(int*)(config + 8) = 1;
+            *(int*)(config + 8) = SessionThreads(Environment.ProcessorCount);
             *(int*)(config + 12) = 0;
             *(byte**)(config + 16) = cpu;
             _extractor = ((delegate* unmanaged[Cdecl]<byte*, nint>)create)(config);

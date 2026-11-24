@@ -9,8 +9,8 @@ use exo_kit::{
 };
 use exo_rpc::{DiscordChannels, DiscordHome};
 use rune::{
-    Cursor, El, Key, KeyEvent, ScrollSpec, Spring, TextStyle, Transition, Tx, col, edit_access, el,
-    row, text, text_input,
+    Cursor, El, Key, KeyEvent, ScrollSpec, Spring, Transition, Tx, col, edit_access, el, row, text,
+    text_input,
 };
 use serde_json::{Value, json};
 
@@ -470,16 +470,18 @@ pub fn handle_palette_key(s: &mut AppState, ev: &KeyEvent, tx: &mut Tx) -> bool 
             true
         }
         Key::Down => {
-            let len = s.palette_results().len();
-            if len > 0 {
-                s.palette_index = (s.palette_index + 1) % len;
+            let items = s.palette_results();
+            if !items.is_empty() {
+                s.palette_index = (s.palette_index + 1) % items.len();
+                tx.scroll_into_view(format!("command-palette-{}", items[s.palette_index].id));
             }
             true
         }
         Key::Up => {
-            let len = s.palette_results().len();
-            if len > 0 {
-                s.palette_index = (s.palette_index + len - 1) % len;
+            let items = s.palette_results();
+            if !items.is_empty() {
+                s.palette_index = (s.palette_index + items.len() - 1) % items.len();
+                tx.scroll_into_view(format!("command-palette-{}", items[s.palette_index].id));
             }
             true
         }
@@ -581,11 +583,7 @@ pub fn layers(s: &AppState, blur: bool) -> Vec<El> {
                             scaled(8.0)
                         })
                         .pb(scaled(4.0))
-                        .child(
-                            text(item.group)
-                                .font(TextStyle::new(scaled(12.0), 500.0))
-                                .color(fg_muted()),
-                        ),
+                        .child(text(item.group).font(type_small()).color(fg_muted())),
                 );
                 last_group = Some(item.group);
             }

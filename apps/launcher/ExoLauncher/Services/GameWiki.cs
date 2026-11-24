@@ -34,7 +34,12 @@ internal static partial class GameWiki
     // The wiki refuses requests that do not say who is asking.
     private static HttpClient CreateClient()
     {
-        var http = ExoHttp.Create(TimeSpan.FromSeconds(12), new HttpClientHandler { AllowAutoRedirect = false });
+        var http = ExoHttp.Create(TimeSpan.FromSeconds(12), new SocketsHttpHandler
+        {
+            AllowAutoRedirect = false,
+            AutomaticDecompression = System.Net.DecompressionMethods.All,
+            PooledConnectionLifetime = TimeSpan.FromMinutes(15),
+        });
         http.DefaultRequestHeaders.UserAgent.ParseAdd("ExoLauncher (+https://getexo.app)");
         return http;
     }

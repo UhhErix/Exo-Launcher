@@ -135,7 +135,7 @@
     <_SteamIpcPub>$(MSBuildThisFileDirectory)..\ExoLauncher.SteamIpc\bin\x64\$(Configuration)\native-publish\</_SteamIpcPub>
   </PropertyGroup>
   <ItemGroup>
-    <_SteamIpcInputs Include="$(MSBuildThisFileDirectory)..\ExoLauncher.SteamIpc\*.cs;$(MSBuildThisFileDirectory)..\ExoLauncher.SteamIpc\*.csproj;$(MSBuildThisFileDirectory)Adapters\SteamProgressCounters.cs;$(MSBuildThisFileDirectory)..\Directory.Build.props;$(MSBuildThisFileDirectory)..\global.json;$(MSBuildThisFileDirectory)..\VERSION;$(MSBuildThisFileFullPath)" />
+    <_SteamIpcInputs Include="$(MSBuildThisFileDirectory)..\ExoLauncher.SteamIpc\*.cs;$(MSBuildThisFileDirectory)..\ExoLauncher.SteamIpc\*.csproj;$(MSBuildThisFileDirectory)Adapters\SteamIpcStubResolver.cs;$(MSBuildThisFileDirectory)Adapters\SteamProgressCounters.cs;$(MSBuildThisFileDirectory)Adapters\SteamStateFlags.cs;$(MSBuildThisFileDirectory)..\Directory.Build.props;$(MSBuildThisFileDirectory)..\global.json;$(MSBuildThisFileDirectory)..\VERSION;$(MSBuildThisFileFullPath)" />
   </ItemGroup>
   <Target Name="PrepareSteamIpc" Inputs="@(_SteamIpcInputs)" Outputs="$(_SteamIpcPub)ExoLauncher.SteamIpc.exe" Condition="'$(DesignTimeBuild)' != 'true'">
     <!-- A fresh helper must be evaluated again after restore so its NativeAOT
@@ -159,10 +159,10 @@
   </PropertyGroup>
   <Target Name="BuildOnnxRuntime" AfterTargets="CopyFilesToOutputDirectory" Condition="'$(DesignTimeBuild)' != 'true'">
     <Error Condition="!Exists('$(_OnnxRuntime)')" Text="ONNX Runtime 1.31.1 is missing from the NuGet cache. Run: dotnet restore" />
-    <Copy SourceFiles="$(_OnnxRuntime)" DestinationFolder="$(OutDir)" />
+    <Copy SourceFiles="$(_OnnxRuntime)" DestinationFolder="$(OutDir)" SkipUnchangedFiles="true" />
   </Target>
   <Target Name="PublishOnnxRuntime" AfterTargets="Publish" Condition="'$(DesignTimeBuild)' != 'true'">
-    <Copy SourceFiles="$(_OnnxRuntime)" DestinationFolder="$(PublishDir)" />
+    <Copy SourceFiles="$(_OnnxRuntime)" DestinationFolder="$(PublishDir)" SkipUnchangedFiles="true" />
   </Target>
 
   <ItemGroup Condition="Exists('$(MSBuildThisFileDirectory)..\capture\out\ExoCapture.exe')">

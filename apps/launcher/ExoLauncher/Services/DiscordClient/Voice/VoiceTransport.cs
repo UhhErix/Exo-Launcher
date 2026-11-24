@@ -308,8 +308,7 @@ internal sealed class VoiceTransport : IDisposable
             _aes.Encrypt(nonce, plain, cipher, tag, aad);
             return;
         }
-        var (chacha, nonce12) = XChaChaFor(counter);
-        using (chacha) chacha.Encrypt(nonce12, plain, cipher, tag, aad);
+        XChaChaEncrypt(_chachaKey!, counter, aad, plain, cipher, tag);
     }
 
     private bool Open(uint counter, ReadOnlySpan<byte> aad, ReadOnlySpan<byte> cipher, ReadOnlySpan<byte> tag, Span<byte> plain)
@@ -324,23 +323,53 @@ internal sealed class VoiceTransport : IDisposable
                 return true;
             }
             if (_chachaKey is null) return false;
-            var (chacha, nonce12) = XChaChaFor(counter);
-            using (chacha) chacha.Decrypt(nonce12, cipher, tag, plain, aad);
-            return true;
+            return XChaChaDecrypt(_chachaKey, counter, aad, cipher, tag, plain);
         }
         catch (CryptographicException) { return false; }
     }
 
-    // XChaCha20-Poly1305 with a 24-byte nonce of the counter then zeros: HChaCha20 of the key and the
-    // nonce's first 16 bytes gives the subkey; the IETF nonce is 4 zero bytes and the last 8 (zeros here).
-    private (ChaCha20Poly1305, byte[]) XChaChaFor(uint counter)
+    internal static void XChaChaEncrypt(ReadOnlySpan<byte> key, uint counter, ReadOnlySpan<byte> aad, ReadOnlySpan<byte> plain, Span<byte> cipher, Span<byte> tag)
     {
         Span<byte> nonce16 = stackalloc byte[16];
+        nonce16.Clear();
         BinaryPrimitives.WriteUInt32BigEndian(nonce16, counter);
-        return (new ChaCha20Poly1305(HChaCha20(_chachaKey!, nonce16)), new byte[12]);
+        Span<byte> subkey = stackalloc byte[32];
+        HChaCha20(key, nonce16, subkey);
+        Span<byte> otkBlock = stackalloc byte[64];
+        ChaCha20Block(subkey, 0, otkBlock);
+        ChaCha20Xor(subkey, 1, plain, cipher);
+        Poly1305AeadTag(otkBlock[..32], aad, cipher, tag);
+        CryptographicOperations.ZeroMemory(subkey);
+        CryptographicOperations.ZeroMemory(otkBlock);
+    }
+
+    internal static bool XChaChaDecrypt(ReadOnlySpan<byte> key, uint counter, ReadOnlySpan<byte> aad, ReadOnlySpan<byte> cipher, ReadOnlySpan<byte> tag, Span<byte> plain)
+    {
+        Span<byte> nonce16 = stackalloc byte[16];
+        nonce16.Clear();
+        BinaryPrimitives.WriteUInt32BigEndian(nonce16, counter);
+        Span<byte> subkey = stackalloc byte[32];
+        HChaCha20(key, nonce16, subkey);
+        Span<byte> otkBlock = stackalloc byte[64];
+        ChaCha20Block(subkey, 0, otkBlock);
+        Span<byte> expected = stackalloc byte[16];
+        Poly1305AeadTag(otkBlock[..32], aad, cipher, expected);
+        var ok = CryptographicOperations.FixedTimeEquals(expected, tag);
+        if (ok) ChaCha20Xor(subkey, 1, cipher, plain);
+        CryptographicOperations.ZeroMemory(subkey);
+        CryptographicOperations.ZeroMemory(otkBlock);
+        CryptographicOperations.ZeroMemory(expected);
+        return ok;
     }
 
     internal static byte[] HChaCha20(ReadOnlySpan<byte> key, ReadOnlySpan<byte> nonce16)
+    {
+        var output = new byte[32];
+        HChaCha20(key, nonce16, output);
+        return output;
+    }
+
+    internal static void HChaCha20(ReadOnlySpan<byte> key, ReadOnlySpan<byte> nonce16, Span<byte> output)
     {
         Span<uint> s = stackalloc uint[16];
         s[0] = 0x61707865; s[1] = 0x3320646e; s[2] = 0x79622d32; s[3] = 0x6b206574;
@@ -351,10 +380,123 @@ internal sealed class VoiceTransport : IDisposable
             Quarter(s, 0, 4, 8, 12); Quarter(s, 1, 5, 9, 13); Quarter(s, 2, 6, 10, 14); Quarter(s, 3, 7, 11, 15);
             Quarter(s, 0, 5, 10, 15); Quarter(s, 1, 6, 11, 12); Quarter(s, 2, 7, 8, 13); Quarter(s, 3, 4, 9, 14);
         }
-        var output = new byte[32];
-        for (var i = 0; i < 4; i++) BinaryPrimitives.WriteUInt32LittleEndian(output.AsSpan(i * 4), s[i]);
-        for (var i = 0; i < 4; i++) BinaryPrimitives.WriteUInt32LittleEndian(output.AsSpan(16 + i * 4), s[12 + i]);
-        return output;
+        for (var i = 0; i < 4; i++) BinaryPrimitives.WriteUInt32LittleEndian(output[(i * 4)..], s[i]);
+        for (var i = 0; i < 4; i++) BinaryPrimitives.WriteUInt32LittleEndian(output[(16 + i * 4)..], s[12 + i]);
+    }
+
+    private static void ChaCha20Block(ReadOnlySpan<byte> key, uint counter, Span<byte> output)
+    {
+        Span<uint> init = stackalloc uint[16];
+        Span<uint> work = stackalloc uint[16];
+        init[0] = 0x61707865; init[1] = 0x3320646e; init[2] = 0x79622d32; init[3] = 0x6b206574;
+        for (var i = 0; i < 8; i++) init[4 + i] = BinaryPrimitives.ReadUInt32LittleEndian(key[(i * 4)..]);
+        init[12] = counter;
+        init[13] = 0; init[14] = 0; init[15] = 0;
+        init.CopyTo(work);
+        for (var round = 0; round < 10; round++)
+        {
+            Quarter(work, 0, 4, 8, 12); Quarter(work, 1, 5, 9, 13); Quarter(work, 2, 6, 10, 14); Quarter(work, 3, 7, 11, 15);
+            Quarter(work, 0, 5, 10, 15); Quarter(work, 1, 6, 11, 12); Quarter(work, 2, 7, 8, 13); Quarter(work, 3, 4, 9, 14);
+        }
+        for (var i = 0; i < 16; i++) BinaryPrimitives.WriteUInt32LittleEndian(output[(i * 4)..], work[i] + init[i]);
+    }
+
+    private static void ChaCha20Xor(ReadOnlySpan<byte> key, uint counter, ReadOnlySpan<byte> input, Span<byte> output)
+    {
+        Span<byte> block = stackalloc byte[64];
+        var offset = 0;
+        while (offset < input.Length)
+        {
+            ChaCha20Block(key, counter++, block);
+            var take = Math.Min(64, input.Length - offset);
+            for (var i = 0; i < take; i++) output[offset + i] = (byte)(input[offset + i] ^ block[i]);
+            offset += take;
+        }
+    }
+
+    private static void Poly1305AeadTag(ReadOnlySpan<byte> otk, ReadOnlySpan<byte> aad, ReadOnlySpan<byte> cipher, Span<byte> tag)
+    {
+        var r0 = BinaryPrimitives.ReadUInt64LittleEndian(otk) & 0x0ffffffc0fffffffUL;
+        var r1 = BinaryPrimitives.ReadUInt64LittleEndian(otk[8..]) & 0x0ffffffc0ffffffcUL;
+        var t0 = r0 & 0xfffffffffffUL;
+        var t1 = ((r0 >> 44) | (r1 << 20)) & 0xfffffffffffUL;
+        var t2 = (r1 >> 24) & 0x3ffffffffffUL;
+        var s1 = t1 * 20;
+        var s2 = t2 * 20;
+        ulong h0 = 0, h1 = 0, h2 = 0;
+
+        void Feed(ReadOnlySpan<byte> data, bool pad16)
+        {
+            var at = 0;
+            Span<byte> block = stackalloc byte[16];
+            while (at < data.Length)
+            {
+                var rem = data.Length - at;
+                ulong lo, hi, hibit;
+                if (rem >= 16)
+                {
+                    lo = BinaryPrimitives.ReadUInt64LittleEndian(data[at..]);
+                    hi = BinaryPrimitives.ReadUInt64LittleEndian(data[(at + 8)..]);
+                    hibit = 1UL << 40;
+                    at += 16;
+                }
+                else
+                {
+                    block.Clear();
+                    data[at..].CopyTo(block);
+                    lo = BinaryPrimitives.ReadUInt64LittleEndian(block);
+                    hi = BinaryPrimitives.ReadUInt64LittleEndian(block[8..]);
+                    hibit = 1UL << 40;
+                    at = data.Length;
+                }
+                h0 += lo & 0xfffffffffffUL;
+                h1 += ((lo >> 44) | (hi << 20)) & 0xfffffffffffUL;
+                h2 += ((hi >> 24) & 0x3ffffffffffUL) | hibit;
+
+                UInt128 d0 = (UInt128)h0 * t0 + (UInt128)h1 * s2 + (UInt128)h2 * s1;
+                UInt128 d1 = (UInt128)h0 * t1 + (UInt128)h1 * t0 + (UInt128)h2 * s2;
+                UInt128 d2 = (UInt128)h0 * t2 + (UInt128)h1 * t1 + (UInt128)h2 * t0;
+
+                var c = (ulong)(d0 >> 44); h0 = (ulong)d0 & 0xfffffffffffUL;
+                d1 += c; c = (ulong)(d1 >> 44); h1 = (ulong)d1 & 0xfffffffffffUL;
+                d2 += c; c = (ulong)(d2 >> 42); h2 = (ulong)d2 & 0x3ffffffffffUL;
+                h0 += c * 5; c = h0 >> 44; h0 &= 0xfffffffffffUL;
+                h1 += c;
+            }
+            _ = pad16;
+        }
+
+        Feed(aad, pad16: true);
+        Feed(cipher, pad16: true);
+        Span<byte> lens = stackalloc byte[16];
+        BinaryPrimitives.WriteUInt64LittleEndian(lens, (ulong)aad.Length);
+        BinaryPrimitives.WriteUInt64LittleEndian(lens[8..], (ulong)cipher.Length);
+        Feed(lens, pad16: false);
+
+        var c2 = h1 >> 44; h1 &= 0xfffffffffffUL;
+        h2 += c2; c2 = h2 >> 42; h2 &= 0x3ffffffffffUL;
+        h0 += c2 * 5; c2 = h0 >> 44; h0 &= 0xfffffffffffUL;
+        h1 += c2; c2 = h1 >> 44; h1 &= 0xfffffffffffUL;
+        h2 += c2; c2 = h2 >> 42; h2 &= 0x3ffffffffffUL;
+        h0 += c2 * 5; c2 = h0 >> 44; h0 &= 0xfffffffffffUL;
+        h1 += c2;
+
+        var g0 = h0 + 5; c2 = g0 >> 44; g0 &= 0xfffffffffffUL;
+        var g1 = h1 + c2; c2 = g1 >> 44; g1 &= 0xfffffffffffUL;
+        var g2 = h2 + c2 - (1UL << 42);
+        var mask = (g2 >> 63) - 1UL;
+        h0 = (h0 & ~mask) | (g0 & mask);
+        h1 = (h1 & ~mask) | (g1 & mask);
+        h2 = (h2 & ~mask) | (g2 & mask);
+
+        var f0 = h0 | (h1 << 44);
+        var f1 = (h1 >> 20) | (h2 << 24);
+        var k0 = BinaryPrimitives.ReadUInt64LittleEndian(otk[16..]);
+        var k1 = BinaryPrimitives.ReadUInt64LittleEndian(otk[24..]);
+        var sum0 = (UInt128)f0 + k0;
+        var sum1 = (UInt128)f1 + k1 + (sum0 >> 64);
+        BinaryPrimitives.WriteUInt64LittleEndian(tag, (ulong)sum0);
+        BinaryPrimitives.WriteUInt64LittleEndian(tag[8..], (ulong)sum1);
     }
 
     private static void Quarter(Span<uint> s, int a, int b, int c, int d)

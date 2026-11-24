@@ -129,12 +129,24 @@ internal sealed partial class DiscordRest : IDisposable
         await FetchBuildAsync(ct).ConfigureAwait(false);
     }
 
+    private static readonly Lazy<HttpClient> BuildHttp = new(() =>
+    {
+        var client = ExoHttp.Create(
+            TimeSpan.FromSeconds(20),
+            new SocketsHttpHandler
+            {
+                AutomaticDecompression = DecompressionMethods.All,
+                PooledConnectionLifetime = TimeSpan.FromMinutes(15),
+            });
+        client.DefaultRequestHeaders.UserAgent.ParseAdd(UserAgent);
+        return client;
+    });
+
     private static async Task FetchBuildAsync(CancellationToken ct)
     {
         try
         {
-            using var http = ExoHttp.Create(TimeSpan.FromSeconds(20));
-            http.DefaultRequestHeaders.UserAgent.ParseAdd(UserAgent);
+            var http = BuildHttp.Value;
             var page = await http.GetStringAsync("https://discord.com/login", ct).ConfigureAwait(false);
             foreach (var script in ScriptRegex().Matches(page).Select(m => m.Groups[1].Value).Reverse().Take(8))
             {

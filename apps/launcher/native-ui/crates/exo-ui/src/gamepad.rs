@@ -245,6 +245,72 @@ pub fn cycle_room_subtab(s: &mut AppState, delta: isize) {
     }
 }
 
+const DPAD_UP_BIT: u16 = 0x0001;
+const DPAD_DOWN_BIT: u16 = 0x0002;
+const DPAD_LEFT_BIT: u16 = 0x0004;
+const DPAD_RIGHT_BIT: u16 = 0x0008;
+const STICK_RADIAL_DEADZONE: f32 = 32767.0 * 0.28;
+const DIR_INITIAL_DELAY_MS: u64 = 340;
+const DIR_REPEAT_INTERVAL_MS: u64 = 105;
+
+fn directional_input(buttons: u16, thumb_lx: i16, thumb_ly: i16) -> (i8, i8) {
+    let dpad_x = if buttons & DPAD_RIGHT_BIT != 0 {
+        1
+    } else if buttons & DPAD_LEFT_BIT != 0 {
+        -1
+    } else {
+        0
+    };
+    let dpad_y = if buttons & DPAD_UP_BIT != 0 {
+        -1
+    } else if buttons & DPAD_DOWN_BIT != 0 {
+        1
+    } else {
+        0
+    };
+    if dpad_x != 0 || dpad_y != 0 {
+        return (dpad_x, dpad_y);
+    }
+    let lx = thumb_lx as f32;
+    let ly = thumb_ly as f32;
+    if lx.hypot(ly) < STICK_RADIAL_DEADZONE {
+        return (0, 0);
+    }
+    if lx.abs() >= ly.abs() {
+        (if lx > 0.0 { 1 } else { -1 }, 0)
+    } else {
+        (0, if ly > 0.0 { -1 } else { 1 })
+    }
+}
+
+fn dir_repeat_due(same_dir: bool, repeating: bool, elapsed_ms: u64) -> bool {
+    if !same_dir {
+        return true;
+    }
+    let threshold = if repeating {
+        DIR_REPEAT_INTERVAL_MS
+    } else {
+        DIR_INITIAL_DELAY_MS
+    };
+    elapsed_ms >= threshold
+}
+
+#[cfg(windows)]
+fn is_process_foreground() -> bool {
+    #[link(name = "user32")]
+    unsafe extern "system" {
+        fn GetForegroundWindow() -> isize;
+        fn GetWindowThreadProcessId(hwnd: isize, lpdw_process_id: *mut u32) -> u32;
+    }
+    let hwnd = unsafe { GetForegroundWindow() };
+    if hwnd == 0 {
+        return false;
+    }
+    let mut pid: u32 = 0;
+    unsafe { GetWindowThreadProcessId(hwnd, &mut pid) };
+    pid == std::process::id()
+}
+
 #[cfg(windows)]
 pub fn start_polling(on_action: impl Fn(GamepadAction) + Send + 'static) {
     use std::ffi::OsStr;
@@ -273,10 +339,6 @@ pub fn start_polling(on_action: impl Fn(GamepadAction) + Send + 'static) {
 
     type XInputGetStateFn = unsafe extern "system" fn(u32, *mut XInputState) -> u32;
 
-    const DPAD_UP: u16 = 0x0001;
-    const DPAD_DOWN: u16 = 0x0002;
-    const DPAD_LEFT: u16 = 0x0004;
-    const DPAD_RIGHT: u16 = 0x0008;
     const BTN_START: u16 = 0x0010;
     const BTN_BACK: u16 = 0x0020;
     const LB: u16 = 0x0100;
@@ -285,7 +347,6 @@ pub fn start_polling(on_action: impl Fn(GamepadAction) + Send + 'static) {
     const BTN_B: u16 = 0x2000;
     const BTN_X: u16 = 0x4000;
     const BTN_Y: u16 = 0x8000;
-    const STICK_DEADZONE: i16 = 14000;
     const TRIGGER_THRESHOLD: u8 = 128;
 
     std::thread::Builder::new()
@@ -307,6 +368,7 @@ pub fn start_polling(on_action: impl Fn(GamepadAction) + Send + 'static) {
             let mut prev_lt = false;
             let mut prev_rt = false;
             let mut prev_dir = (0i8, 0i8);
+            let mut dir_repeating = false;
             let mut last_dir_fire = Instant::now();
             let mut last_packet: u32 = 0;
             let mut last_activity = Instant::now();
@@ -338,11 +400,22 @@ pub fn start_polling(on_action: impl Fn(GamepadAction) + Send + 'static) {
                 }
 
                 let b = state.gamepad.buttons;
+                let lt = state.gamepad.left_trigger >= TRIGGER_THRESHOLD;
+                let rt = state.gamepad.right_trigger >= TRIGGER_THRESHOLD;
+
+                if !is_process_foreground() {
+                    prev_buttons = b;
+                    prev_lt = lt;
+                    prev_rt = rt;
+                    prev_dir = (0, 0);
+                    dir_repeating = false;
+                    std::thread::sleep(Duration::from_millis(100));
+                    continue;
+                }
+
                 let pressed = b & !prev_buttons;
                 prev_buttons = b;
 
-                let lt = state.gamepad.left_trigger >= TRIGGER_THRESHOLD;
-                let rt = state.gamepad.right_trigger >= TRIGGER_THRESHOLD;
                 if lt && !prev_lt {
                     on_action(GamepadAction::PrevTab);
                 }
@@ -374,30 +447,17 @@ pub fn start_polling(on_action: impl Fn(GamepadAction) + Send + 'static) {
                     on_action(GamepadAction::Settings);
                 }
 
-                let dx = if (b & DPAD_RIGHT != 0) || state.gamepad.thumb_lx > STICK_DEADZONE {
-                    1
-                } else if (b & DPAD_LEFT != 0) || state.gamepad.thumb_lx < -STICK_DEADZONE {
-                    -1
-                } else {
-                    0
-                };
-                let dy = if (b & DPAD_UP != 0) || state.gamepad.thumb_ly > STICK_DEADZONE {
-                    -1
-                } else if (b & DPAD_DOWN != 0) || state.gamepad.thumb_ly < -STICK_DEADZONE {
-                    1
-                } else {
-                    0
-                };
+                let (dx, dy) = directional_input(b, state.gamepad.thumb_lx, state.gamepad.thumb_ly);
 
                 let now = Instant::now();
                 if state.packet_number != last_packet || b != 0 || lt || rt || (dx, dy) != (0, 0) {
                     last_packet = state.packet_number;
                     last_activity = now;
                 }
-                let should_fire = (dx, dy) != (0, 0)
-                    && ((dx, dy) != prev_dir
-                        || now.duration_since(last_dir_fire) >= Duration::from_millis(180));
-                if should_fire {
+                let same_dir = (dx, dy) == prev_dir;
+                let elapsed_ms = now.duration_since(last_dir_fire).as_millis() as u64;
+                if (dx, dy) != (0, 0) && dir_repeat_due(same_dir, dir_repeating, elapsed_ms) {
+                    dir_repeating = same_dir;
                     last_dir_fire = now;
                     if dx < 0 {
                         on_action(GamepadAction::Left);
@@ -408,6 +468,8 @@ pub fn start_polling(on_action: impl Fn(GamepadAction) + Send + 'static) {
                     } else if dy > 0 {
                         on_action(GamepadAction::Down);
                     }
+                } else if (dx, dy) == (0, 0) {
+                    dir_repeating = false;
                 }
                 prev_dir = (dx, dy);
 
@@ -448,5 +510,19 @@ mod tests {
         assert_eq!(settings_hints[0], ("L2/R2".into(), "Sections"));
         let overlay_hints = hints_for(GamepadKind::Xbox, Room::Library, true);
         assert_eq!(overlay_hints[1], ("X".into(), "Play"));
+    }
+
+    #[test]
+    fn radial_deadzone_dominant_axis_and_repeat_delay() {
+        assert_eq!(directional_input(0, 5000, 5000), (0, 0));
+        assert_eq!(directional_input(0, 15000, 22000), (0, -1));
+        assert_eq!(directional_input(0, -24000, 12000), (-1, 0));
+        assert_eq!(directional_input(DPAD_DOWN_BIT, 25000, 0), (0, 1));
+
+        assert!(dir_repeat_due(false, false, 0));
+        assert!(!dir_repeat_due(true, false, 200));
+        assert!(dir_repeat_due(true, false, 340));
+        assert!(!dir_repeat_due(true, true, 90));
+        assert!(dir_repeat_due(true, true, 105));
     }
 }
