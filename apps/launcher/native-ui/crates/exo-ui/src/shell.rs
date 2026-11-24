@@ -3,7 +3,7 @@ use crate::gamepad::GamepadKind;
 use crate::state::{AppState, ContextMenuTarget, InputMode, MiniBarSlot, Room};
 use crate::{
     boot, captures, discord, downloads, game_page, gamepad, island, key_modal, library, menus,
-    music, notice, palette, pc, settings, setup, store, whats_new,
+    music, notice, palette, pc, settings, setup, store, store_media, whats_new,
 };
 use exo_kit::{
     BG, CAPTION_BUTTON_GAP, CAPTION_BUTTON_HEIGHT, CAPTION_BUTTON_WIDTH, CAPTION_CAPSULE_PAD,
@@ -449,7 +449,8 @@ pub fn view(s: &AppState, cx: &mut Cx<AppState>) -> El {
         || s.key_modal_open
         || s.downloads.open
         || s.whats_new.mode.is_some()
-        || s.whats_new.sheet_open;
+        || s.whats_new.sheet_open
+        || s.store_ext.lightbox_index.is_some();
     let budget = BlurBudget::compute(s, !s.notices.is_empty());
     cx.set_titlebar(exo_titlebar());
     cx.caption_color(if has_modal_scrim {
@@ -996,6 +997,9 @@ pub fn view(s: &AppState, cx: &mut Cx<AppState>) -> El {
     }
     if s.downloads.open {
         root = root.children(downloads::layers(s, budget.overlay));
+    }
+    if s.store_ext.lightbox_index.is_some() {
+        root = root.children(store_media::lightbox_layers(s, scale, budget.overlay));
     }
     if s.key_modal_open {
         root = root.children(key_modal::layers(s, budget.overlay));

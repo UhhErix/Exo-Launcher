@@ -19,17 +19,13 @@ use exo_rpc::types::COVER_CACHE_ORIGIN;
 use exo_rpc::{
     ActionResult, AppUpdateStateEvent, ArtBase, AutopilotLive, AutopilotReportEvent,
     CaptureLiveState, CaptureReelEvent, CaptureSavedEvent, CaptureStatusReply, DiscordFriend,
-    ExoAccountState, Game, GameExtras, GameGetReply, GameProperties, GamePropertySetReply,
-    GameRunStateEvent, HostEvent, InstallProgress, InstallQueueEvent, KeyPreview,
-    LaunchStatusEvent, LauncherSettings, LibraryPayload, METHOD_EXO_ACCOUNT_STATE,
-    METHOD_GAME_CANCEL_INSTALL, METHOD_GAME_EXTRAS, METHOD_GAME_GET, METHOD_GAME_INSTALL,
-    METHOD_GAME_LAUNCH, METHOD_GAME_OPEN_FOLDER, METHOD_GAME_PAUSE_INSTALL, METHOD_GAME_PROPERTIES,
-    METHOD_GAME_PROPERTIES_SET, METHOD_GAME_REPAIR, METHOD_GAME_STOP, METHOD_GAME_UNINSTALL,
+    ExoAccountState, Game, GameExtras, GameProperties, GameRunStateEvent, HostEvent,
+    InstallProgress, InstallQueueEvent, KeyPreview, LaunchStatusEvent, LauncherSettings,
+    LibraryPayload, METHOD_EXO_ACCOUNT_STATE, METHOD_GAME_CANCEL_INSTALL, METHOD_GAME_INSTALL,
+    METHOD_GAME_LAUNCH, METHOD_GAME_OPEN_FOLDER, METHOD_GAME_PAUSE_INSTALL, METHOD_GAME_STOP,
     METHOD_GAME_UPDATE, METHOD_LIBRARY_REFRESH, METHOD_SETTINGS_SET, METHOD_SHELL_BOOTSTRAP,
-    METHOD_STORE_GAME, METHOD_STORE_GAME_OFFERS, METHOD_STORE_HOME, METHOD_STORE_OPEN,
-    METHOD_STORE_SEARCH, MusicPlayback, MusicVolumeEvent, ShellBootstrap, StoreArt,
-    StoreChangedEvent, StoreGame, StoreHome, StoreOffer, StoreOtherOffers, StoreSearchReply,
-    StoreShelf, StoreTile, remote_art,
+    METHOD_STORE_HOME, MusicPlayback, MusicVolumeEvent, ShellBootstrap, StoreArt,
+    StoreChangedEvent, StoreGame, StoreHome, StoreOtherOffers, StoreShelf, StoreTile, remote_art,
 };
 use rune::{Image, ImageCache, ScrollPos, TextEdit, Tx, Waker};
 use serde_json::json;
@@ -519,6 +515,12 @@ pub enum OpenDropdown {
     LibrarySort,
     GameDisplayMode,
     GameLanguage,
+    GameHdrMode,
+    GameIntelFrameGen,
+    GameBeta,
+    GameFolder,
+    GameAntiCheat,
+    GameUpscalerStop,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -662,6 +664,7 @@ pub struct AppState {
     pub hovered_cover_key: Option<String>,
     pub game_extras: Option<GameExtras>,
     pub game_props: Option<GameProperties>,
+    pub game_page: crate::game_actions::GamePageState,
     pub props_open: bool,
     pub game_props_tab: usize,
     pub props_launch_opts: TextEdit,
@@ -682,6 +685,7 @@ pub struct AppState {
     pub store_search_results: Option<Vec<StoreTile>>,
     pub store_game: Option<StoreGame>,
     pub store_offers: Option<StoreOtherOffers>,
+    pub store_ext: crate::store_page::StoreExtraState,
     pub setup: SetupFlow,
     pub gamepad_connected: bool,
     pub input_mode: InputMode,
@@ -774,15 +778,11 @@ impl AppState {
                 ok: true,
                 achievements_unlocked: Some(34),
                 achievements_total: Some(57),
+                drive_heat: None,
                 message: None,
             }),
-            game_props: Some(GameProperties {
-                ok: true,
-                launch_options: Some("-skipStartScreen".into()),
-                steam_overlay: Some(false),
-                cloud_sync: Some(true),
-                ..Default::default()
-            }),
+            game_props: Some(crate::game_actions::demo_game_properties()),
+            game_page: crate::game_actions::GamePageState::demo(),
             props_open: false,
             game_props_tab: 0,
             props_launch_opts: TextEdit::default(),
@@ -803,6 +803,7 @@ impl AppState {
             store_search_results: None,
             store_game: None,
             store_offers: None,
+            store_ext: crate::store_page::StoreExtraState::default(),
             setup: SetupFlow::default(),
             gamepad_connected: false,
             input_mode: InputMode::Pointer,
@@ -893,6 +894,7 @@ impl AppState {
             hovered_cover_key: None,
             game_extras: None,
             game_props: None,
+            game_page: crate::game_actions::GamePageState::new(),
             props_open: false,
             game_props_tab: 0,
             props_launch_opts: TextEdit::default(),
@@ -913,6 +915,7 @@ impl AppState {
             store_search_results: None,
             store_game: None,
             store_offers: None,
+            store_ext: crate::store_page::StoreExtraState::default(),
             setup: SetupFlow::default(),
             gamepad_connected: false,
             input_mode: InputMode::Pointer,
@@ -960,8 +963,13 @@ impl AppState {
     }
 
     pub fn install_waker(&mut self, waker: Waker) {
+        self.store_ext.waker = Some(waker.clone());
         let budget = self.images.borrow().max_bytes();
         self.image_cache = Some(ImageCache::with_budget(waker, budget));
+    }
+
+    pub fn clock_now(&self) -> f64 {
+        self.clock_secs
     }
 
     pub fn sync_budget_for_scale(&self, scale: f32) {
@@ -1028,35 +1036,106 @@ impl AppState {
                     .filter_map(|g| self.cover_image(g, scale)),
             );
         }
-        if self.room == Room::Store
-            && let Some(ref home) = self.store_home
-        {
-            for (i, h) in home.hero.iter().take(6).enumerate() {
-                if let Some(a) = h.art.as_ref() {
-                    if i == 0
-                        && let Some(u) = a.best_hero()
-                        && let Some(img) =
-                            self.remote_image_in_room(u, 1440.0, scale, CacheRoom::Store)
-                    {
-                        images.push(img);
+        if self.room == Room::Store {
+            if let Some(ref home) = self.store_home {
+                for (i, h) in home.hero.iter().take(6).enumerate() {
+                    if i == 0 {
+                        let logo = StoreArt::steam_url(&h.app_id, "logo");
+                        if let Some(img) =
+                            self.remote_image_in_room(&logo, 640.0, scale, CacheRoom::Store)
+                        {
+                            images.push(img);
+                        }
                     }
-                    if let Some(u) = a
-                        .capsule
-                        .as_deref()
-                        .or(a.header.as_deref())
-                        .or_else(|| a.best_hero())
-                        && let Some(img) =
-                            self.remote_image_in_room(u, 360.0, scale, CacheRoom::Store)
+                    if let Some(a) = h.art.as_ref() {
+                        if i == 0
+                            && let Some(u) = a.best_hero()
+                            && let Some(img) =
+                                self.remote_image_in_room(u, 1440.0, scale, CacheRoom::Store)
+                        {
+                            images.push(img);
+                        }
+                        if let Some(u) = a
+                            .capsule
+                            .as_deref()
+                            .or(a.header.as_deref())
+                            .or_else(|| a.best_hero())
+                            && let Some(img) =
+                                self.remote_image_in_room(u, 360.0, scale, CacheRoom::Store)
+                        {
+                            images.push(img);
+                        }
+                    }
+                }
+                for shelf in home.shelves.iter().take(2) {
+                    for tile in shelf.items.iter().take(12) {
+                        let u = tile
+                            .art
+                            .as_ref()
+                            .and_then(|a| a.best_poster())
+                            .map(ToString::to_string)
+                            .unwrap_or_else(|| StoreArt::steam_url(&tile.app_id, "poster"));
+                        if let Some(img) =
+                            self.remote_image_in_room(&u, 360.0, scale, CacheRoom::Store)
+                        {
+                            images.push(img);
+                        }
+                    }
+                }
+            }
+            for tile in self.store_ext.wishlist.iter().take(12) {
+                let u = tile
+                    .art
+                    .as_ref()
+                    .and_then(|a| a.best_poster())
+                    .map(ToString::to_string)
+                    .unwrap_or_else(|| StoreArt::steam_url(&tile.app_id, "poster"));
+                if let Some(img) = self.remote_image_in_room(&u, 360.0, scale, CacheRoom::Store) {
+                    images.push(img);
+                }
+            }
+            if let Some(ref hits) = self.store_search_results {
+                for tile in hits.iter().take(12) {
+                    let u = tile
+                        .art
+                        .as_ref()
+                        .and_then(|a| a.best_poster())
+                        .map(ToString::to_string)
+                        .unwrap_or_else(|| StoreArt::steam_url(&tile.app_id, "poster"));
+                    if let Some(img) = self.remote_image_in_room(&u, 360.0, scale, CacheRoom::Store)
                     {
                         images.push(img);
                     }
                 }
             }
-            for shelf in home.shelves.iter().take(2) {
-                for tile in shelf.items.iter().take(12) {
-                    if let Some(u) = tile.art.as_ref().and_then(|a| a.best_poster())
+            if let Some(ref g) = self.store_game {
+                let logo = StoreArt::steam_url(&g.app_id, "logo");
+                if let Some(img) = self.remote_image_in_room(&logo, 640.0, scale, CacheRoom::Store)
+                {
+                    images.push(img);
+                }
+                for m in g.media.iter().take(4) {
+                    if let Some(img) =
+                        self.remote_image_in_room(&m.thumb, 1440.0, scale, CacheRoom::Store)
+                    {
+                        images.push(img);
+                    }
+                    if let Some(img) =
+                        self.remote_image_in_room(&m.thumb, 320.0, scale, CacheRoom::Store)
+                    {
+                        images.push(img);
+                    }
+                }
+                for (i, shot) in g.screenshots.iter().take(8).enumerate() {
+                    if i == 0
                         && let Some(img) =
-                            self.remote_image_in_room(u, 360.0, scale, CacheRoom::Store)
+                            self.remote_image_in_room(shot, 1440.0, scale, CacheRoom::Store)
+                    {
+                        images.push(img);
+                    }
+                    let small = crate::store_media::thumb_of_screenshot(shot);
+                    if let Some(img) =
+                        self.remote_image_in_room(&small, 320.0, scale, CacheRoom::Store)
                     {
                         images.push(img);
                     }
@@ -1175,6 +1254,9 @@ impl AppState {
         if self.room == Room::Devices && room != Room::Devices && self.pc.mouse_panel_open {
             self.close_mouse_panel();
         }
+        if self.room == Room::Store && room != Room::Store {
+            self.store_stop_trailer();
+        }
         if self.room != Room::Settings && room == Room::Settings {
             self.prev_room = self.room;
         }
@@ -1193,8 +1275,13 @@ impl AppState {
             self.close_captures();
         }
         match room {
-            Room::Store if self.store_home.is_none() && !self.store_loading => {
-                self.load_store_home(false);
+            Room::Store => {
+                if self.store_home.is_none() && !self.store_loading {
+                    self.load_store_home(false);
+                }
+                if !self.store_ext.wishlist_loaded {
+                    self.load_store_wishlist();
+                }
             }
             Room::Discord => {
                 if self.discord_dirty_while_closed {
@@ -1345,20 +1432,8 @@ impl AppState {
         }
     }
 
-    pub fn set_game_display_mode(&mut self, mode: &str) {
-        let normalized = match mode {
-            "fullscreen" => "fullscreen",
-            _ => "borderless",
-        };
-        self.game_display_mode = normalized.to_string();
-        self.notice = Some(format!(
-            "Display mode set to {}",
-            if normalized == "fullscreen" {
-                "Fullscreen"
-            } else {
-                "Borderless"
-            }
-        ));
+    pub fn now_secs(&self) -> f64 {
+        self.clock_secs
     }
 
     pub fn toggle_settings(&mut self) {
@@ -1935,66 +2010,8 @@ impl AppState {
         self.game_props_tab = 0;
         self.uninstall_confirm = false;
         self.armed_confirm = None;
-        if self.status != HostStatus::Standalone {
-            self.game_extras = None;
-            self.game_props = None;
-            self.props_launch_opts.text.clear();
-            self.props_launch_opts.sync_invariants();
-        } else if let Some(opts) = self
-            .game_props
-            .as_ref()
-            .and_then(|p| p.launch_options.as_deref())
-        {
-            self.props_launch_opts.text = opts.to_string();
-            self.props_launch_opts.sync_invariants();
-        }
-
-        #[cfg(windows)]
-        if let (Some(rpc), Some(handle)) = (self.rpc.clone(), self.handle.clone()) {
-            let gid_props = id.to_string();
-            let h_props = handle.clone();
-            rpc.call::<_, GameProperties>(
-                METHOD_GAME_PROPERTIES,
-                &json!({ "id": gid_props }),
-                move |res| {
-                    if let Ok(props) = res {
-                        h_props.update(move |s, _| {
-                            if s.open_game_id.as_deref() == Some(gid_props.as_str()) {
-                                s.props_launch_opts.text =
-                                    props.launch_options.clone().unwrap_or_default();
-                                s.props_launch_opts.sync_invariants();
-                                s.game_props = Some(props);
-                            }
-                        });
-                    }
-                },
-            );
-            let gid = id.to_string();
-            let h1 = handle.clone();
-            rpc.call::<_, GameGetReply>(METHOD_GAME_GET, &json!({ "id": gid }), move |res| {
-                if let Ok(reply) = res
-                    && let Some(fresh) = reply.game
-                {
-                    h1.update(move |s, _| {
-                        if let Some(slot) = s.games.iter_mut().find(|g| g.id == fresh.id) {
-                            *slot = fresh;
-                        }
-                    });
-                }
-            });
-
-            let gid2 = id.to_string();
-            let h2 = handle.clone();
-            rpc.call::<_, GameExtras>(METHOD_GAME_EXTRAS, &json!({ "id": gid2 }), move |res| {
-                if let Ok(ex) = res {
-                    h2.update(move |s, _| {
-                        if s.open_game_id.as_deref() == Some(gid2.as_str()) {
-                            s.game_extras = Some(ex);
-                        }
-                    });
-                }
-            });
-        }
+        self.game_page.selected_variant_id = None;
+        self.load_game_page_data(id);
     }
 
     pub fn close_game_page_tx(&mut self, tx: &mut Tx) {
@@ -2007,18 +2024,14 @@ impl AppState {
         self.props_open = false;
         self.uninstall_confirm = false;
         self.armed_confirm = None;
-    }
-
-    pub fn open_store_game_from(&mut self, app_id: &str, flight_id: Option<String>, tx: &mut Tx) {
-        self.cover_flight_id = flight_id;
-        tx.unclipped_flights();
-        self.open_store_game(app_id);
+        self.game_page.pending_choice = None;
+        self.game_page.selected_variant_id = None;
+        self.game_page.move_poll_due = None;
     }
 
     pub fn close_store_game_tx(&mut self, tx: &mut Tx) {
         tx.unclipped_flights();
-        self.store_game = None;
-        self.store_offers = None;
+        self.store_close_game_full();
     }
 
     pub fn is_confirm_armed(&self, key: &str) -> bool {
@@ -2031,6 +2044,7 @@ impl AppState {
         was_armed
     }
 
+    #[cfg(test)]
     pub fn arm_or_confirm_game_uninstall(&mut self, id: &str, tx: &mut Tx) {
         const KEY: &str = "gp-uninstall";
         const ARMED_SECS: f64 = 4.0;
@@ -2138,49 +2152,6 @@ impl AppState {
         }
     }
 
-    pub fn set_game_property(&mut self, id: &str, key: &str, value: &str) {
-        if self.status == HostStatus::Standalone {
-            if let Some(ref mut p) = self.game_props {
-                if key == "launchOptions" {
-                    p.launch_options = Some(value.to_string());
-                } else if key == "steamOverlay" {
-                    p.steam_overlay = Some(value == "true");
-                } else if key == "language" {
-                    p.language = Some(value.to_string());
-                }
-            }
-            self.notice = Some("Saved game property".into());
-            return;
-        }
-        #[cfg(windows)]
-        if let (Some(rpc), Some(handle)) = (self.rpc.clone(), self.handle.clone()) {
-            let gid = id.to_string();
-            let k = key.to_string();
-            let v = value.to_string();
-            rpc.call::<_, GamePropertySetReply>(
-                METHOD_GAME_PROPERTIES_SET,
-                &json!({ "id": gid, "key": k, "value": v }),
-                move |res| {
-                    handle.update(move |s, _| match res {
-                        Ok(r) if r.ok => {
-                            if let Some(p) = r.properties {
-                                s.game_props = Some(p);
-                            }
-                            s.notice = Some(r.message.unwrap_or_else(|| "Saved properties".into()));
-                        }
-                        Ok(r) => {
-                            s.notice = Some(
-                                r.message
-                                    .unwrap_or_else(|| "Could not save property".into()),
-                            )
-                        }
-                        Err(e) => s.notice = Some(format!("Save failed: {e}")),
-                    });
-                },
-            );
-        }
-    }
-
     pub fn open_key_modal(&mut self, tx: &mut Tx) {
         self.key_modal_open = true;
         self.key_submitting = false;
@@ -2199,12 +2170,18 @@ impl AppState {
 
     pub fn load_store_home(&mut self, refresh: bool) {
         if self.status == HostStatus::Standalone {
-            self.store_home = Some(demo_store_home());
+            let home = demo_store_home();
+            self.store_ensure_shelf_slots(home.shelves.len());
+            self.store_home = Some(home);
+            self.store_ext.home_error = None;
             return;
         }
         #[cfg(windows)]
         if let (Some(rpc), Some(handle)) = (self.rpc.clone(), self.handle.clone()) {
             self.store_loading = true;
+            if refresh {
+                self.store_ext.home_refreshing = true;
+            }
             let params = if refresh {
                 json!({ "refresh": true })
             } else {
@@ -2213,166 +2190,42 @@ impl AppState {
             rpc.call::<_, StoreHome>(METHOD_STORE_HOME, &params, move |res| {
                 handle.update(move |s, _| {
                     s.store_loading = false;
+                    if refresh {
+                        s.store_ext.home_refreshing = false;
+                    }
                     match res {
-                        Ok(home) if home.ok => s.store_home = Some(home),
-                        Ok(home) => {
-                            s.notice = home.message.or_else(|| Some("Store unavailable".into()))
+                        Ok(home) if home.ok => {
+                            s.store_ensure_shelf_slots(home.shelves.len());
+                            s.store_home = Some(home);
+                            s.store_ext.home_error = None;
                         }
-                        Err(e) => s.notice = Some(format!("Store error: {e}")),
+                        Ok(home) => {
+                            s.store_ext.home_error = Some(
+                                home.message
+                                    .filter(|m| !m.is_empty())
+                                    .unwrap_or_else(|| {
+                                        "Exo couldn't reach the store. Try again.".into()
+                                    }),
+                            );
+                        }
+                        Err(_) => {
+                            s.store_ext.home_error = Some(
+                                "The store could not be reached. Check your connection and try again."
+                                    .into(),
+                            );
+                        }
                     }
                 });
             });
         }
     }
 
-    pub fn search_store(&mut self) {
-        let q = self.store_query.text.trim().to_string();
-        if q.is_empty() {
-            self.store_search_results = None;
-            return;
-        }
-        if self.status == HostStatus::Standalone {
-            let lower = q.to_lowercase();
-            let hits: Vec<StoreTile> = demo_store_home()
-                .shelves
-                .into_iter()
-                .flat_map(|sh| sh.items)
-                .filter(|t| t.name.to_lowercase().contains(&lower))
-                .collect();
-            self.store_search_results = Some(hits);
-            return;
-        }
-        self.store_loading = true;
-        #[cfg(windows)]
-        if let (Some(rpc), Some(handle)) = (self.rpc.clone(), self.handle.clone()) {
-            rpc.call::<_, StoreSearchReply>(
-                METHOD_STORE_SEARCH,
-                &json!({ "query": q, "typed": true }),
-                move |res| {
-                    handle.update(move |s, _| {
-                        s.store_loading = false;
-                        if let Ok(reply) = res {
-                            s.store_search_results = Some(reply.items);
-                        }
-                    });
-                },
-            );
-        }
-    }
-
     pub fn open_store_game(&mut self, app_id: &str) {
-        self.store_offers = None;
-        if self.status == HostStatus::Standalone {
-            let tile = demo_store_home()
-                .hero
-                .into_iter()
-                .chain(demo_store_home().shelves.into_iter().flat_map(|s| s.items))
-                .find(|t| t.app_id == app_id);
-            let name = tile
-                .as_ref()
-                .map(|t| t.name.clone())
-                .unwrap_or_else(|| "Store Game".into());
-            self.store_game = Some(StoreGame {
-                ok: true,
-                app_id: app_id.into(),
-                name,
-                description: Some("Official storefront details, Steam review scores, and cross-store deal comparison rendered natively in Rune.".into()),
-                developers: vec!["Studio".into()],
-                genres: vec!["Action".into(), "RPG".into()],
-                metacritic: Some(89),
-                review_word: Some("Very Positive".into()),
-                review_percent: Some(92),
-                price_text: tile.map(|t| t.display_price()),
-                discount: 40,
-                ..Default::default()
-            });
-            self.store_offers = Some(StoreOtherOffers {
-                ok: true,
-                offers: vec![
-                    StoreOffer {
-                        store: "steam".into(),
-                        name: "Steam".into(),
-                        final_cents: Some(3599),
-                        discount: 40,
-                        currency: Some("USD".into()),
-                        price_text: Some("$35.99".into()),
-                        url: format!("https://store.steampowered.com/app/{app_id}/"),
-                    },
-                    StoreOffer {
-                        store: "gog".into(),
-                        name: "GOG".into(),
-                        final_cents: Some(3299),
-                        discount: 45,
-                        currency: Some("USD".into()),
-                        price_text: Some("$32.99".into()),
-                        url: "https://www.gog.com/".into(),
-                    },
-                ],
-                lowest: Some(exo_rpc::StoreLowest {
-                    final_cents: 2999,
-                    at: "Oct 2026".into(),
-                }),
-            });
-            return;
-        }
-
-        #[cfg(windows)]
-        {
-            self.call_host_replaceable(
-                "store.game",
-                METHOD_STORE_GAME,
-                json!({ "appId": app_id }),
-                |s, res: Result<StoreGame, String>| {
-                    if let Ok(g) = res
-                        && g.ok
-                    {
-                        s.store_game = Some(g);
-                    }
-                },
-            );
-
-            self.call_host_replaceable(
-                "store.gameOffers",
-                METHOD_STORE_GAME_OFFERS,
-                json!({ "appId": app_id }),
-                |s, res: Result<StoreOtherOffers, String>| {
-                    if let Ok(offers) = res
-                        && offers.ok
-                    {
-                        s.store_offers = Some(offers);
-                    }
-                },
-            );
-        }
+        self.store_load_game_full(app_id);
     }
 
     pub fn close_store_game(&mut self) {
-        #[cfg(windows)]
-        {
-            self.cancel_inflight("store.game");
-            self.cancel_inflight("store.gameOffers");
-        }
-        self.store_game = None;
-        self.store_offers = None;
-    }
-
-    pub fn open_store_url(&mut self, url: &str) {
-        if self.status == HostStatus::Standalone {
-            self.notice = Some(format!("Open: {url}"));
-            return;
-        }
-        #[cfg(windows)]
-        if let (Some(rpc), Some(handle)) = (self.rpc.clone(), self.handle.clone()) {
-            let u = url.to_string();
-            rpc.call::<_, ActionResult>(METHOD_STORE_OPEN, &json!({ "url": u }), move |res| {
-                if let Ok(r) = res
-                    && !r.ok
-                    && let Some(msg) = r.message
-                {
-                    handle.update(move |s, _| s.notice = Some(msg));
-                }
-            });
-        }
+        self.store_close_game_full();
     }
 
     pub fn apply_gamepad_action(&mut self, action: GamepadAction, tx: &mut Tx) {
@@ -2632,7 +2485,11 @@ impl AppState {
             self.close_game_page();
             return true;
         }
-        if self.store_game.is_some() {
+        if self.store_ext.lightbox_index.is_some() {
+            self.store_close_lightbox();
+            return true;
+        }
+        if self.store_has_page_open() {
             self.close_store_game();
             return true;
         }
@@ -2853,6 +2710,11 @@ impl AppState {
             } else {
                 tx.wake_at(deadline);
             }
+        }
+
+        self.poll_game_move_if_due(now);
+        if let Some(due) = self.game_page.move_poll_due {
+            tx.wake_at(due);
         }
 
         if self.notice != self.notice_last_synced {
@@ -3226,15 +3088,6 @@ impl AppState {
         self.game_action(METHOD_GAME_UPDATE, id, "Updating", "Update started for");
     }
 
-    pub fn repair_game(&mut self, id: &str) {
-        self.game_action(
-            METHOD_GAME_REPAIR,
-            id,
-            "Verifying",
-            "Verification started for",
-        );
-    }
-
     pub fn open_game_folder(&mut self, id: &str) {
         self.game_action(
             METHOD_GAME_OPEN_FOLDER,
@@ -3244,10 +3097,11 @@ impl AppState {
         );
     }
 
+    #[cfg(test)]
     pub fn uninstall_game(&mut self, id: &str) {
         self.disarm_confirm();
         self.game_action(
-            METHOD_GAME_UNINSTALL,
+            exo_rpc::METHOD_GAME_UNINSTALL,
             id,
             "Uninstalling",
             "Uninstall started for",
@@ -3415,6 +3269,7 @@ impl AppState {
             game.is_running = ev.is_running;
             game.can_stop = ev.can_stop;
         }
+        self.on_game_run_state(&ev.id);
     }
 
     pub fn apply_launch_status(&mut self, ev: LaunchStatusEvent) {
@@ -3483,10 +3338,13 @@ impl AppState {
         if self.room == Room::ExoAi {
             self.load_pc_exo_ai();
         }
+        self.on_game_shaders_changed();
     }
 
     pub fn apply_store_changed(&mut self, ev: StoreChangedEvent) {
-        if matches!(ev.what.as_str(), "home" | "wishlist")
+        if ev.what == "wishlist" {
+            self.load_store_wishlist();
+        } else if ev.what == "home"
             && (self.room == Room::Store || self.store_home.is_some())
             && !self.store_loading
         {
@@ -3640,6 +3498,7 @@ fn demo_store_home() -> StoreHome {
     };
     StoreHome {
         ok: true,
+        at: None,
         message: None,
         hero: vec![
             tile("1091500", "Cyberpunk 2077: Ultimate Edition", "$35.99", 40),

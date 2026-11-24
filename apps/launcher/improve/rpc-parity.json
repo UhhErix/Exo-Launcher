@@ -1,0 +1,5355 @@
+{
+  "generatedAt": "2026-11-23T21:57:19.803Z",
+  "totals": {
+    "actions": 18,
+    "webDrivable": 15,
+    "nativeDrivable": 16,
+    "uniqueWebMethods": 78,
+    "uniqueNativeMethods": 34,
+    "sessionReactOnlyMethods": 53,
+    "sessionNativeOnlyMethods": 9,
+    "sessionChattyMethods": 5,
+    "observedWebEvents": 10,
+    "observedNativeEvents": 5,
+    "staticUnhandledReactEvents": 45
+  },
+  "notDrivable": [
+    {
+      "actionId": "discord-dm",
+      "label": "Open Discord DM conversation",
+      "client": "web",
+      "reason": "Discord not signed in in disposable test instance"
+    },
+    {
+      "actionId": "discord-dm",
+      "label": "Open Discord DM conversation",
+      "client": "native",
+      "reason": "Discord not signed in in disposable test instance"
+    },
+    {
+      "actionId": "game-page",
+      "label": "Open a game page from Library",
+      "client": "web",
+      "reason": "no game tiles in Library"
+    },
+    {
+      "actionId": "downloads",
+      "label": "Open Downloads sheet",
+      "client": "web",
+      "reason": "Downloads menu item not found"
+    },
+    {
+      "actionId": "downloads",
+      "label": "Open Downloads sheet",
+      "client": "native",
+      "reason": "Native UI has no Downloads sheet button outside Settings"
+    }
+  ],
+  "sessionReactOnly": [
+    {
+      "method": "shell.heartbeat",
+      "webCount": 84,
+      "nativeCount": 0,
+      "actions": [
+        "startup",
+        "room-store",
+        "room-discord",
+        "discord-dm",
+        "room-music",
+        "room-devices",
+        "room-pc",
+        "room-pc-apps",
+        "room-library",
+        "game-page",
+        "downloads",
+        "palette",
+        "settings-general",
+        "settings-library",
+        "settings-downloads",
+        "settings-ingame",
+        "settings-music",
+        "settings-about"
+      ],
+      "reactCallers": [
+        "ui/src/lib/heartbeat.ts:15"
+      ]
+    },
+    {
+      "method": "app.pendingOpen",
+      "webCount": 9,
+      "nativeCount": 0,
+      "actions": [
+        "startup",
+        "room-store",
+        "room-discord",
+        "room-music",
+        "room-devices",
+        "room-pc",
+        "room-pc-apps",
+        "room-library",
+        "settings-general"
+      ],
+      "reactCallers": [
+        "ui/src/components/shell/useShellEvents.ts:279"
+      ]
+    },
+    {
+      "method": "telemetry.track",
+      "webCount": 9,
+      "nativeCount": 0,
+      "actions": [
+        "startup",
+        "room-store",
+        "room-discord",
+        "room-music",
+        "room-devices",
+        "room-pc",
+        "room-pc-apps",
+        "room-library",
+        "settings-general"
+      ],
+      "reactCallers": [
+        "ui/src/components/LauncherApp.tsx:869"
+      ]
+    },
+    {
+      "method": "shell.setChromeLayout",
+      "webCount": 6,
+      "nativeCount": 0,
+      "actions": [
+        "startup",
+        "room-library",
+        "palette"
+      ],
+      "reactCallers": [
+        "ui/src/components/shell/useShellLayout.ts:106"
+      ]
+    },
+    {
+      "method": "discord.signIn",
+      "webCount": 4,
+      "nativeCount": 0,
+      "actions": [
+        "startup",
+        "room-discord",
+        "room-music"
+      ],
+      "reactCallers": [
+        "ui/src/components/discord/DiscordSignIn.tsx:21",
+        "ui/src/components/discord/DiscordSignIn.tsx:25"
+      ]
+    },
+    {
+      "method": "gifts.list",
+      "webCount": 4,
+      "nativeCount": 0,
+      "actions": [
+        "startup",
+        "room-library",
+        "settings-general"
+      ],
+      "reactCallers": [
+        "ui/src/components/settings/StoresSection.tsx:160",
+        "ui/src/components/shell/GiftsShelf.tsx:93"
+      ]
+    },
+    {
+      "method": "shaders.call",
+      "webCount": 3,
+      "nativeCount": 0,
+      "actions": [
+        "startup",
+        "room-pc-apps",
+        "settings-general"
+      ],
+      "reactCallers": [
+        "ui/src/components/shaders/shaderCall.ts:57"
+      ]
+    },
+    {
+      "method": "app.log",
+      "webCount": 4,
+      "nativeCount": 0,
+      "actions": [
+        "startup",
+        "settings-general"
+      ],
+      "reactCallers": [
+        "ui/src/components/LauncherApp.tsx:468",
+        "ui/src/components/shell/useRoomController.ts:132",
+        "ui/src/components/shell/useRoomController.ts:288",
+        "ui/src/components/shell/useShellEvents.ts:90",
+        "ui/src/main.tsx:27"
+      ]
+    },
+    {
+      "method": "accounts.list",
+      "webCount": 2,
+      "nativeCount": 0,
+      "actions": [
+        "startup",
+        "settings-general"
+      ],
+      "reactCallers": [
+        "ui/src/components/settings/StoreAccounts.tsx:27",
+        "ui/src/components/shell/GameMenu.tsx:53"
+      ]
+    },
+    {
+      "method": "keep.status",
+      "webCount": 2,
+      "nativeCount": 0,
+      "actions": [
+        "startup",
+        "room-pc"
+      ],
+      "reactCallers": [
+        "ui/src/components/game/OptimizeLine.tsx:46",
+        "ui/src/components/gpu/PcOverview.tsx:74"
+      ]
+    },
+    {
+      "method": "steam.account",
+      "webCount": 2,
+      "nativeCount": 0,
+      "actions": [
+        "startup",
+        "settings-general"
+      ],
+      "reactCallers": [
+        "ui/src/components/settings/SteamSignInRow.tsx:31"
+      ]
+    },
+    {
+      "method": "store.wishlist",
+      "webCount": 2,
+      "nativeCount": 0,
+      "actions": [
+        "startup",
+        "room-store"
+      ],
+      "reactCallers": [
+        "ui/src/components/store/storeData.ts:266",
+        "ui/src/components/store/storeData.ts:309",
+        "ui/src/components/store/storeData.ts:320"
+      ]
+    },
+    {
+      "method": "system.tune",
+      "webCount": 2,
+      "nativeCount": 0,
+      "actions": [
+        "room-pc",
+        "room-pc-apps"
+      ],
+      "reactCallers": [
+        "ui/src/components/gpu/AutoTune.tsx:44",
+        "ui/src/components/gpu/AutoTune.tsx:60",
+        "ui/src/components/gpu/usePcState.ts:75"
+      ]
+    },
+    {
+      "method": "store.game",
+      "webCount": 10,
+      "nativeCount": 0,
+      "actions": [
+        "room-store"
+      ],
+      "reactCallers": [
+        "ui/src/components/store/storeData.ts:150"
+      ]
+    },
+    {
+      "method": "dlss.status",
+      "webCount": 6,
+      "nativeCount": 0,
+      "actions": [
+        "startup"
+      ],
+      "reactCallers": [
+        "ui/src/lib/bridgeCancellation.ts:3",
+        "ui/src/lib/upscalerCache.ts:34"
+      ]
+    },
+    {
+      "method": "web.preferences.get",
+      "webCount": 2,
+      "nativeCount": 0,
+      "actions": [
+        "startup"
+      ],
+      "reactCallers": [
+        "ui/src/components/LauncherApp.tsx:184",
+        "ui/src/components/onboarding/AppsStep.tsx:22",
+        "ui/src/components/settings/AppsSection.tsx:24"
+      ]
+    },
+    {
+      "method": "apps.installerCache",
+      "webCount": 1,
+      "nativeCount": 0,
+      "actions": [
+        "room-pc-apps"
+      ],
+      "reactCallers": [
+        "ui/src/components/apps/AppsPanel.tsx:821"
+      ]
+    },
+    {
+      "method": "apps.packages",
+      "webCount": 1,
+      "nativeCount": 0,
+      "actions": [
+        "room-pc"
+      ],
+      "reactCallers": [
+        "ui/src/components/gpu/ExoAiRoom.tsx:170"
+      ]
+    },
+    {
+      "method": "apps.tidy",
+      "webCount": 1,
+      "nativeCount": 0,
+      "actions": [
+        "room-pc-apps"
+      ],
+      "reactCallers": [
+        "ui/src/components/apps/AppsPanel.tsx:145"
+      ]
+    },
+    {
+      "method": "art.base",
+      "webCount": 1,
+      "nativeCount": 0,
+      "actions": [
+        "startup"
+      ],
+      "reactCallers": [
+        "ui/src/main.tsx:26"
+      ]
+    },
+    {
+      "method": "backup.status",
+      "webCount": 1,
+      "nativeCount": 0,
+      "actions": [
+        "startup"
+      ],
+      "reactCallers": [
+        "ui/src/components/OnboardingPanel.tsx:95",
+        "ui/src/components/settings/BackupSection.tsx:30",
+        "ui/src/components/settings/BackupSection.tsx:67",
+        "ui/src/components/shell/useShellEvents.ts:36"
+      ]
+    },
+    {
+      "method": "capture.status",
+      "webCount": 1,
+      "nativeCount": 0,
+      "actions": [
+        "startup"
+      ],
+      "reactCallers": [
+        "ui/src/lib/capture.ts:93",
+        "ui/src/lib/capture.ts:95"
+      ]
+    },
+    {
+      "method": "clients.status",
+      "webCount": 1,
+      "nativeCount": 0,
+      "actions": [
+        "startup"
+      ],
+      "reactCallers": [
+        "ui/src/components/clients/ClientsCard.tsx:55",
+        "ui/src/components/clients/ClientsCard.tsx:112",
+        "ui/src/components/clients/ClientsCard.tsx:131",
+        "ui/src/components/clients/ClientsCard.tsx:145"
+      ]
+    },
+    {
+      "method": "controller.read",
+      "webCount": 1,
+      "nativeCount": 0,
+      "actions": [
+        "room-pc"
+      ],
+      "reactCallers": [
+        "ui/src/components/devices/ControllerPage.tsx:32",
+        "ui/src/components/gpu/DriversSection.tsx:298"
+      ]
+    },
+    {
+      "method": "discord.clientSettings",
+      "webCount": 1,
+      "nativeCount": 0,
+      "actions": [
+        "startup"
+      ],
+      "reactCallers": [
+        "ui/src/components/discord/GoLivePicker.tsx:320",
+        "ui/src/components/discord/MeMenus.tsx:126",
+        "ui/src/components/discord/MeMenus.tsx:132",
+        "ui/src/components/discord/MeMenus.tsx:133",
+        "ui/src/components/discord/MeMenus.tsx:181",
+        "ui/src/components/discord/settings/parts.tsx:57"
+      ]
+    },
+    {
+      "method": "discord.home",
+      "webCount": 1,
+      "nativeCount": 0,
+      "actions": [
+        "palette"
+      ],
+      "reactCallers": [
+        "ui/src/components/discord/DiscordClient.tsx:319",
+        "ui/src/components/discord/MessageTools.tsx:20",
+        "ui/src/components/shell/ExoIslandCall.tsx:58",
+        "ui/src/components/shell/ExoIslandCall.tsx:145",
+        "ui/src/components/shell/paletteExtras.ts:28"
+      ]
+    },
+    {
+      "method": "dlss.newer",
+      "webCount": 1,
+      "nativeCount": 0,
+      "actions": [
+        "room-discord"
+      ],
+      "reactCallers": [
+        "ui/src/components/LauncherApp.tsx:111"
+      ]
+    },
+    {
+      "method": "exoAccount.overview",
+      "webCount": 1,
+      "nativeCount": 0,
+      "actions": [
+        "startup"
+      ],
+      "reactCallers": [
+        "ui/src/components/account/useAccount.ts:6",
+        "ui/src/components/account/useAccount.ts:10"
+      ]
+    },
+    {
+      "method": "friends.badge",
+      "webCount": 1,
+      "nativeCount": 0,
+      "actions": [
+        "startup"
+      ],
+      "reactCallers": [
+        "ui/src/components/shell/DiscordBadge.tsx:15",
+        "ui/src/components/shell/DiscordBadge.tsx:16",
+        "ui/src/lib/hostContract.ts:39"
+      ]
+    },
+    {
+      "method": "gpu.display",
+      "webCount": 1,
+      "nativeCount": 0,
+      "actions": [
+        "room-pc"
+      ],
+      "reactCallers": [
+        "ui/src/components/gpu/DisplayTab.tsx:41",
+        "ui/src/components/gpu/DisplayTab.tsx:66",
+        "ui/src/components/gpu/autoTuneStages.ts:136",
+        "ui/src/components/gpu/usePcState.ts:74"
+      ]
+    },
+    {
+      "method": "gpu.driver",
+      "webCount": 1,
+      "nativeCount": 0,
+      "actions": [
+        "room-pc"
+      ],
+      "reactCallers": [
+        "ui/src/components/gpu/DriverRow.tsx:129",
+        "ui/src/components/gpu/DriverRow.tsx:135",
+        "ui/src/components/gpu/DriverRow.tsx:148",
+        "ui/src/components/gpu/usePcState.ts:70",
+        "ui/src/components/shell/DriverInstallOverlay.tsx:109",
+        "ui/src/components/shell/DriverInstallOverlay.tsx:143"
+      ]
+    },
+    {
+      "method": "hid.close",
+      "webCount": 1,
+      "nativeCount": 0,
+      "actions": [
+        "startup"
+      ],
+      "reactCallers": [
+        "ui/src/lib/mouseRelay.ts:11"
+      ]
+    },
+    {
+      "method": "hid.list",
+      "webCount": 1,
+      "nativeCount": 0,
+      "actions": [
+        "startup"
+      ],
+      "reactCallers": [
+        "ui/src/lib/mouseRelay.ts:9"
+      ]
+    },
+    {
+      "method": "hid.open",
+      "webCount": 1,
+      "nativeCount": 0,
+      "actions": [
+        "startup"
+      ],
+      "reactCallers": [
+        "ui/src/lib/mouseRelay.ts:10"
+      ]
+    },
+    {
+      "method": "hid.sendReport",
+      "webCount": 1,
+      "nativeCount": 0,
+      "actions": [
+        "startup"
+      ],
+      "reactCallers": [
+        "ui/src/lib/mouseRelay.ts:12"
+      ]
+    },
+    {
+      "method": "junk.scan",
+      "webCount": 1,
+      "nativeCount": 0,
+      "actions": [
+        "room-pc-apps"
+      ],
+      "reactCallers": [
+        "ui/src/components/OnboardingPanel.tsx:153",
+        "ui/src/components/OnboardingPanel.tsx:375",
+        "ui/src/components/apps/AppsPanel.tsx:776",
+        "ui/src/components/gpu/autoTuneStages.ts:227"
+      ]
+    },
+    {
+      "method": "library.get",
+      "webCount": 1,
+      "nativeCount": 0,
+      "actions": [
+        "startup"
+      ],
+      "reactCallers": [
+        "ui/src/components/LauncherApp.tsx:279",
+        "ui/src/components/devices/GameProfiles.tsx:32",
+        "ui/src/lib/bridgeCancellation.ts:2",
+        "ui/src/lib/hostContract.ts:27",
+        "ui/src/lib/mouseRelay.ts:26"
+      ]
+    },
+    {
+      "method": "mouse.presets.get",
+      "webCount": 1,
+      "nativeCount": 0,
+      "actions": [
+        "startup"
+      ],
+      "reactCallers": [
+        "ui/src/lib/mouseRelay.ts:61"
+      ]
+    },
+    {
+      "method": "music.warm",
+      "webCount": 1,
+      "nativeCount": 0,
+      "actions": [
+        "room-music"
+      ],
+      "reactCallers": [
+        "ui/src/lib/music.ts:126"
+      ]
+    },
+    {
+      "method": "notes.list",
+      "webCount": 1,
+      "nativeCount": 0,
+      "actions": [
+        "palette"
+      ],
+      "reactCallers": [
+        "ui/src/components/captures/NotesView.tsx:388",
+        "ui/src/components/captures/NotesView.tsx:395",
+        "ui/src/components/captures/NotesView.tsx:485",
+        "ui/src/lib/notes.ts:79"
+      ]
+    },
+    {
+      "method": "notes.pending",
+      "webCount": 1,
+      "nativeCount": 0,
+      "actions": [
+        "startup"
+      ],
+      "reactCallers": [
+        "ui/src/lib/notes.ts:46"
+      ]
+    },
+    {
+      "method": "runtimes.list",
+      "webCount": 1,
+      "nativeCount": 0,
+      "actions": [
+        "room-pc"
+      ],
+      "reactCallers": [
+        "ui/src/components/gpu/PcApps.tsx:16"
+      ]
+    },
+    {
+      "method": "settings.get",
+      "webCount": 1,
+      "nativeCount": 0,
+      "actions": [
+        "startup"
+      ],
+      "reactCallers": [
+        "ui/src/lib/settingsSave.ts:27"
+      ]
+    },
+    {
+      "method": "shell.painted",
+      "webCount": 1,
+      "nativeCount": 0,
+      "actions": [
+        "startup"
+      ],
+      "reactCallers": [
+        "ui/src/components/shell/BootGate.tsx:31"
+      ]
+    },
+    {
+      "method": "shell.prepare",
+      "webCount": 1,
+      "nativeCount": 0,
+      "actions": [
+        "startup"
+      ],
+      "reactCallers": [
+        "ui/src/components/LauncherApp.tsx:491"
+      ]
+    },
+    {
+      "method": "shell.ready",
+      "webCount": 1,
+      "nativeCount": 0,
+      "actions": [
+        "startup"
+      ],
+      "reactCallers": [
+        "ui/src/lib/shellReady.ts:10"
+      ]
+    },
+    {
+      "method": "shell.windowState",
+      "webCount": 1,
+      "nativeCount": 0,
+      "actions": [
+        "startup"
+      ],
+      "reactCallers": [
+        "ui/src/components/WindowChrome.tsx:13"
+      ]
+    },
+    {
+      "method": "stores.matrix",
+      "webCount": 1,
+      "nativeCount": 0,
+      "actions": [
+        "startup"
+      ],
+      "reactCallers": [
+        "ui/src/components/OnboardingPanel.tsx:47",
+        "ui/src/components/OnboardingPanel.tsx:250",
+        "ui/src/components/SettingsPanel.tsx:160",
+        "ui/src/components/SettingsPanel.tsx:188",
+        "ui/src/components/SettingsPanel.tsx:210",
+        "ui/src/lib/hostContract.ts:17"
+      ]
+    },
+    {
+      "method": "stores.outages",
+      "webCount": 1,
+      "nativeCount": 0,
+      "actions": [
+        "startup"
+      ],
+      "reactCallers": [
+        "ui/src/components/shell/StoreOutageNotices.tsx:60"
+      ]
+    },
+    {
+      "method": "system.drivers",
+      "webCount": 1,
+      "nativeCount": 0,
+      "actions": [
+        "room-pc"
+      ],
+      "reactCallers": [
+        "ui/src/components/gpu/DriversSection.tsx:139",
+        "ui/src/components/gpu/DriversSection.tsx:190",
+        "ui/src/components/gpu/DriversSection.tsx:207"
+      ]
+    },
+    {
+      "method": "system.health",
+      "webCount": 1,
+      "nativeCount": 0,
+      "actions": [
+        "room-pc"
+      ],
+      "reactCallers": [
+        "ui/src/components/OnboardingPanel.tsx:161",
+        "ui/src/components/gpu/BestSetup.tsx:34",
+        "ui/src/components/gpu/BestSetup.tsx:49",
+        "ui/src/components/gpu/DriversSection.tsx:88",
+        "ui/src/components/gpu/NetworkGroup.tsx:58",
+        "ui/src/components/gpu/NetworkGroup.tsx:65"
+      ]
+    },
+    {
+      "method": "system.interrupts",
+      "webCount": 1,
+      "nativeCount": 0,
+      "actions": [
+        "room-pc"
+      ],
+      "reactCallers": [
+        "ui/src/components/gpu/InterruptRows.tsx:27",
+        "ui/src/components/gpu/autoTuneStages.ts:191",
+        "ui/src/components/gpu/usePcState.ts:72"
+      ]
+    },
+    {
+      "method": "web.preferences.set",
+      "webCount": 1,
+      "nativeCount": 0,
+      "actions": [
+        "startup"
+      ],
+      "reactCallers": [
+        "ui/src/components/LauncherApp.tsx:189",
+        "ui/src/components/onboarding/AppsStep.tsx:35",
+        "ui/src/components/settings/AppsSection.tsx:57"
+      ]
+    }
+  ],
+  "sessionNativeOnly": [
+    {
+      "method": "discord.accounts",
+      "webCount": 0,
+      "nativeCount": 2,
+      "actions": [
+        "room-discord",
+        "discord-dm"
+      ],
+      "reactCallers": [
+        "ui/src/components/discord/MeMenus.tsx:51",
+        "ui/src/components/discord/MeMenus.tsx:102"
+      ]
+    },
+    {
+      "method": "audio.read",
+      "webCount": 0,
+      "nativeCount": 1,
+      "actions": [
+        "room-devices"
+      ],
+      "reactCallers": [
+        "ui/src/components/devices/AudioPage.tsx:88"
+      ]
+    },
+    {
+      "method": "eq",
+      "webCount": 0,
+      "nativeCount": 1,
+      "actions": [
+        "room-devices"
+      ],
+      "reactCallers": []
+    },
+    {
+      "method": "exoAccount.state",
+      "webCount": 0,
+      "nativeCount": 1,
+      "actions": [
+        "settings-general"
+      ],
+      "reactCallers": [
+        "ui/src/lib/host.ts:2390"
+      ]
+    },
+    {
+      "method": "game.get",
+      "webCount": 0,
+      "nativeCount": 1,
+      "actions": [
+        "game-page"
+      ],
+      "reactCallers": [
+        "ui/src/components/shell/useGameActions.ts:261",
+        "ui/src/components/shell/useRunStatePoll.ts:56",
+        "ui/src/components/shell/useShellEvents.ts:179"
+      ]
+    },
+    {
+      "method": "game.properties",
+      "webCount": 0,
+      "nativeCount": 1,
+      "actions": [
+        "game-page"
+      ],
+      "reactCallers": [
+        "ui/src/components/game/GameProperties.tsx:205"
+      ]
+    },
+    {
+      "method": "keyboard.backups",
+      "webCount": 0,
+      "nativeCount": 1,
+      "actions": [
+        "room-devices"
+      ],
+      "reactCallers": [
+        "ui/src/components/devices/KeyboardPage.tsx:42",
+        "ui/src/components/devices/KeyboardPage.tsx:52",
+        "ui/src/components/devices/KeyboardPage.tsx:67"
+      ]
+    },
+    {
+      "method": "keyboard.read",
+      "webCount": 0,
+      "nativeCount": 1,
+      "actions": [
+        "room-devices"
+      ],
+      "reactCallers": [
+        "ui/src/components/devices/KeyboardPage.tsx:52",
+        "ui/src/components/devices/KeyboardPage.tsx:67"
+      ]
+    },
+    {
+      "method": "shell.bootstrap",
+      "webCount": 0,
+      "nativeCount": 1,
+      "actions": [
+        "startup"
+      ],
+      "reactCallers": [
+        "ui/src/lib/host.ts:2315"
+      ]
+    }
+  ],
+  "sessionChattiness": [
+    {
+      "method": "music.volume",
+      "webCount": 8,
+      "nativeCount": 1,
+      "ratio": 8,
+      "chattier": "web",
+      "reactCallers": [
+        "ui/src/components/music/Immersive.tsx:276",
+        "ui/src/components/music/shortcuts.ts:29",
+        "ui/src/components/music/shortcuts.ts:30",
+        "ui/src/components/shell/MusicVolume.tsx:33",
+        "ui/src/components/shell/MusicVolume.tsx:40",
+        "ui/src/components/shell/MusicVolume.tsx:94"
+      ]
+    },
+    {
+      "method": "shaders.addon",
+      "webCount": 5,
+      "nativeCount": 1,
+      "ratio": 5,
+      "chattier": "web",
+      "reactCallers": [
+        "ui/src/components/shaders/ShaderTools.tsx:15",
+        "ui/src/components/shaders/ShadersBoard.tsx:30",
+        "ui/src/components/shaders/ShadersBoard.tsx:41"
+      ]
+    },
+    {
+      "method": "game.extras",
+      "webCount": 3,
+      "nativeCount": 1,
+      "ratio": 3,
+      "chattier": "web",
+      "reactCallers": [
+        "ui/src/components/game/useGameDetails.ts:58",
+        "ui/src/components/shell/HomeDeck.tsx:238"
+      ]
+    },
+    {
+      "method": "store.home",
+      "webCount": 3,
+      "nativeCount": 1,
+      "ratio": 3,
+      "chattier": "web",
+      "reactCallers": [
+        "ui/src/components/store/StoreRoom.tsx:451"
+      ]
+    },
+    {
+      "method": "spotify.start",
+      "webCount": 3,
+      "nativeCount": 1,
+      "ratio": 3,
+      "chattier": "web",
+      "reactCallers": [
+        "ui/src/lib/musicAdapters.ts:147"
+      ]
+    }
+  ],
+  "observedEventGaps": [
+    {
+      "event": "app.updateState",
+      "totalWebEvents": 2,
+      "totalNativeEvents": 0,
+      "nativeHandles": true,
+      "actions": [
+        "startup"
+      ],
+      "reactSubscribers": [
+        "ui/src/components/shell/useAppUpdate.ts:119"
+      ]
+    },
+    {
+      "event": "discord.signin",
+      "totalWebEvents": 2,
+      "totalNativeEvents": 0,
+      "nativeHandles": true,
+      "actions": [
+        "startup",
+        "discord-dm"
+      ],
+      "reactSubscribers": [
+        "ui/src/components/discord/DiscordSignIn.tsx:19",
+        "ui/src/components/discord/MeMenus.tsx:108"
+      ]
+    },
+    {
+      "event": "music.status",
+      "totalWebEvents": 2,
+      "totalNativeEvents": 1,
+      "nativeHandles": false,
+      "actions": [
+        "startup",
+        "room-music"
+      ],
+      "reactSubscribers": [
+        "ui/src/components/music/NativeMusicRoom.tsx:132"
+      ]
+    },
+    {
+      "event": "discord.state",
+      "totalWebEvents": 1,
+      "totalNativeEvents": 0,
+      "nativeHandles": true,
+      "actions": [
+        "startup"
+      ],
+      "reactSubscribers": [
+        "ui/src/components/discord/Chat.tsx:540",
+        "ui/src/components/discord/NativeDiscordRoom.tsx:28",
+        "ui/src/components/onboarding/DiscordStep.tsx:14"
+      ]
+    },
+    {
+      "event": "game.achievements",
+      "totalWebEvents": 1,
+      "totalNativeEvents": 0,
+      "nativeHandles": false,
+      "actions": [
+        "startup"
+      ],
+      "reactSubscribers": [
+        "ui/src/components/game/useGameDetails.ts:68"
+      ]
+    },
+    {
+      "event": "gifts.changed",
+      "totalWebEvents": 1,
+      "totalNativeEvents": 0,
+      "nativeHandles": false,
+      "actions": [
+        "startup"
+      ],
+      "reactSubscribers": [
+        "ui/src/components/settings/StoresSection.tsx:161",
+        "ui/src/components/shell/GiftsShelf.tsx:94"
+      ]
+    },
+    {
+      "event": "music.playback",
+      "totalWebEvents": 1,
+      "totalNativeEvents": 0,
+      "nativeHandles": true,
+      "actions": [
+        "startup"
+      ],
+      "reactSubscribers": [
+        "ui/src/components/discord/JamBox.tsx:16",
+        "ui/src/components/music/MusicPlayer.tsx:111",
+        "ui/src/components/shell/MusicMiniPlayer.tsx:79",
+        "ui/src/lib/listenAlong.ts:149",
+        "ui/src/lib/listenAlong.ts:278"
+      ]
+    },
+    {
+      "event": "music.volume",
+      "totalWebEvents": 1,
+      "totalNativeEvents": 0,
+      "nativeHandles": true,
+      "actions": [
+        "room-devices"
+      ],
+      "reactSubscribers": [
+        "ui/src/components/shell/MusicVolume.tsx:40"
+      ]
+    },
+    {
+      "event": "shell.window",
+      "totalWebEvents": 1,
+      "totalNativeEvents": 0,
+      "nativeHandles": false,
+      "actions": [
+        "startup"
+      ],
+      "reactSubscribers": [
+        "ui/src/components/WindowChrome.tsx:16"
+      ]
+    },
+    {
+      "event": "store.changed",
+      "totalWebEvents": 1,
+      "totalNativeEvents": 0,
+      "nativeHandles": true,
+      "actions": [
+        "startup"
+      ],
+      "reactSubscribers": [
+        "ui/src/components/store/StoreRoom.tsx:467",
+        "ui/src/components/store/storeData.ts:274"
+      ]
+    }
+  ],
+  "staticUnhandledEvents": [
+    {
+      "event": "music.status",
+      "observedWebCount": 2,
+      "observedNativeCount": 2,
+      "reactSubscribers": [
+        "ui/src/components/music/NativeMusicRoom.tsx:132"
+      ]
+    },
+    {
+      "event": "gifts.changed",
+      "observedWebCount": 1,
+      "observedNativeCount": 0,
+      "reactSubscribers": [
+        "ui/src/components/settings/StoresSection.tsx:161",
+        "ui/src/components/shell/GiftsShelf.tsx:94"
+      ]
+    },
+    {
+      "event": "game.achievements",
+      "observedWebCount": 1,
+      "observedNativeCount": 1,
+      "reactSubscribers": [
+        "ui/src/components/game/useGameDetails.ts:68"
+      ]
+    },
+    {
+      "event": "shell.window",
+      "observedWebCount": 1,
+      "observedNativeCount": 0,
+      "reactSubscribers": [
+        "ui/src/components/WindowChrome.tsx:16"
+      ]
+    },
+    {
+      "event": "discord.colors",
+      "observedWebCount": 0,
+      "observedNativeCount": 0,
+      "reactSubscribers": [
+        "ui/src/components/discord/Chat.tsx:899",
+        "ui/src/components/discord/Composer.tsx:103",
+        "ui/src/components/discord/UserMenu.tsx:119",
+        "ui/src/components/discord/profileParts.tsx:295"
+      ]
+    },
+    {
+      "event": "discord.interaction",
+      "observedWebCount": 0,
+      "observedNativeCount": 0,
+      "reactSubscribers": [
+        "ui/src/components/discord/AppCommands.tsx:255",
+        "ui/src/components/discord/AppModal.tsx:19",
+        "ui/src/lib/discordApps.ts:128"
+      ]
+    },
+    {
+      "event": "accounts.progress",
+      "observedWebCount": 0,
+      "observedNativeCount": 0,
+      "reactSubscribers": [
+        "ui/src/components/settings/StoreAccounts.tsx:141",
+        "ui/src/components/settings/StoresSection.tsx:189"
+      ]
+    },
+    {
+      "event": "compress.progress",
+      "observedWebCount": 0,
+      "observedNativeCount": 0,
+      "reactSubscribers": [
+        "ui/src/components/game/CompressRow.tsx:45",
+        "ui/src/components/gpu/CompressGames.tsx:17"
+      ]
+    },
+    {
+      "event": "discord.callSong",
+      "observedWebCount": 0,
+      "observedNativeCount": 0,
+      "reactSubscribers": [
+        "ui/src/lib/listenAlong.ts:59",
+        "ui/src/lib/listenAlong.ts:144"
+      ]
+    },
+    {
+      "event": "discord.camera",
+      "observedWebCount": 0,
+      "observedNativeCount": 0,
+      "reactSubscribers": [
+        "ui/src/lib/discordPrefs.ts:396",
+        "ui/src/lib/goLive.ts:216"
+      ]
+    },
+    {
+      "event": "discord.open",
+      "observedWebCount": 0,
+      "observedNativeCount": 0,
+      "reactSubscribers": [
+        "ui/src/components/discord/DiscordClient.tsx:395",
+        "ui/src/components/shell/useShellEvents.ts:267"
+      ]
+    },
+    {
+      "event": "discord.pollVote",
+      "observedWebCount": 0,
+      "observedNativeCount": 0,
+      "reactSubscribers": [
+        "ui/src/components/discord/Chat.tsx:702",
+        "ui/src/components/discord/messageCache.ts:132"
+      ]
+    },
+    {
+      "event": "game.optimizedAgain",
+      "observedWebCount": 0,
+      "observedNativeCount": 0,
+      "reactSubscribers": [
+        "ui/src/components/game/OptimizeLine.tsx:55",
+        "ui/src/components/shell/useShellEvents.ts:193"
+      ]
+    },
+    {
+      "event": "gpu.driver",
+      "observedWebCount": 0,
+      "observedNativeCount": 0,
+      "reactSubscribers": [
+        "ui/src/components/gpu/DriverRow.tsx:135",
+        "ui/src/components/shell/DriverInstallOverlay.tsx:109"
+      ]
+    },
+    {
+      "event": "shaders.event",
+      "observedWebCount": 0,
+      "observedNativeCount": 0,
+      "reactSubscribers": [
+        "ui/src/components/shaders/ShaderTools.tsx:16",
+        "ui/src/components/shaders/ShadersBoard.tsx:47"
+      ]
+    },
+    {
+      "event": "anticheat.missing",
+      "observedWebCount": 0,
+      "observedNativeCount": 0,
+      "reactSubscribers": [
+        "ui/src/components/shell/AntiCheatNotices.tsx:32"
+      ]
+    },
+    {
+      "event": "app.open",
+      "observedWebCount": 0,
+      "observedNativeCount": 0,
+      "reactSubscribers": [
+        "ui/src/components/shell/useShellEvents.ts:280"
+      ]
+    },
+    {
+      "event": "backup.stopped",
+      "observedWebCount": 0,
+      "observedNativeCount": 0,
+      "reactSubscribers": [
+        "ui/src/components/shell/useShellEvents.ts:263"
+      ]
+    },
+    {
+      "event": "bios.progress",
+      "observedWebCount": 0,
+      "observedNativeCount": 0,
+      "reactSubscribers": [
+        "ui/src/components/gpu/DriversSection.tsx:349"
+      ]
+    },
+    {
+      "event": "capture.shrunk",
+      "observedWebCount": 0,
+      "observedNativeCount": 0,
+      "reactSubscribers": [
+        "ui/src/components/captures/CapturesSheet.tsx:298"
+      ]
+    },
+    {
+      "event": "components.failed",
+      "observedWebCount": 0,
+      "observedNativeCount": 0,
+      "reactSubscribers": [
+        "ui/src/components/shell/useShellEvents.ts:192"
+      ]
+    },
+    {
+      "event": "controller.state",
+      "observedWebCount": 0,
+      "observedNativeCount": 0,
+      "reactSubscribers": [
+        "ui/src/components/devices/ControllerPage.tsx:121"
+      ]
+    },
+    {
+      "event": "discord.call",
+      "observedWebCount": 0,
+      "observedNativeCount": 0,
+      "reactSubscribers": [
+        "ui/src/components/discord/voice.tsx:98"
+      ]
+    },
+    {
+      "event": "discord.dmLine",
+      "observedWebCount": 0,
+      "observedNativeCount": 0,
+      "reactSubscribers": [
+        "ui/src/components/discord/DiscordClient.tsx:718"
+      ]
+    },
+    {
+      "event": "discord.keybind",
+      "observedWebCount": 0,
+      "observedNativeCount": 0,
+      "reactSubscribers": [
+        "ui/src/lib/discordPrefs.ts:399"
+      ]
+    },
+    {
+      "event": "discord.micLevel",
+      "observedWebCount": 0,
+      "observedNativeCount": 0,
+      "reactSubscribers": [
+        "ui/src/components/discord/settings/VoicePage.tsx:258"
+      ]
+    },
+    {
+      "event": "discord.notify",
+      "observedWebCount": 0,
+      "observedNativeCount": 0,
+      "reactSubscribers": [
+        "ui/src/components/shell/DiscordNotices.tsx:20"
+      ]
+    },
+    {
+      "event": "discord.notifyClear",
+      "observedWebCount": 0,
+      "observedNativeCount": 0,
+      "reactSubscribers": [
+        "ui/src/components/shell/DiscordNotices.tsx:32"
+      ]
+    },
+    {
+      "event": "discord.tts",
+      "observedWebCount": 0,
+      "observedNativeCount": 0,
+      "reactSubscribers": [
+        "ui/src/lib/discordPrefs.ts:383"
+      ]
+    },
+    {
+      "event": "discord.userSettings",
+      "observedWebCount": 0,
+      "observedNativeCount": 0,
+      "reactSubscribers": [
+        "ui/src/lib/discordPrefs.ts:203"
+      ]
+    },
+    {
+      "event": "discord.video.frame",
+      "observedWebCount": 0,
+      "observedNativeCount": 0,
+      "reactSubscribers": [
+        "ui/src/lib/discordVideo.ts:260"
+      ]
+    },
+    {
+      "event": "discord.video.keyframe",
+      "observedWebCount": 0,
+      "observedNativeCount": 0,
+      "reactSubscribers": [
+        "ui/src/lib/goLive.ts:217"
+      ]
+    },
+    {
+      "event": "drivers.step",
+      "observedWebCount": 0,
+      "observedNativeCount": 0,
+      "reactSubscribers": [
+        "ui/src/components/gpu/DriversSection.tsx:170"
+      ]
+    },
+    {
+      "event": "friends.badge",
+      "observedWebCount": 0,
+      "observedNativeCount": 0,
+      "reactSubscribers": [
+        "ui/src/components/shell/DiscordBadge.tsx:15"
+      ]
+    },
+    {
+      "event": "game.optimizeHeld",
+      "observedWebCount": 0,
+      "observedNativeCount": 0,
+      "reactSubscribers": [
+        "ui/src/components/game/OptimizeLine.tsx:56"
+      ]
+    },
+    {
+      "event": "gpu.driverInstall",
+      "observedWebCount": 0,
+      "observedNativeCount": 0,
+      "reactSubscribers": [
+        "ui/src/components/shell/DriverInstallOverlay.tsx:115"
+      ]
+    },
+    {
+      "event": "hid.changed",
+      "observedWebCount": 0,
+      "observedNativeCount": 0,
+      "reactSubscribers": [
+        "ui/src/lib/mouseRelay.ts:213"
+      ]
+    },
+    {
+      "event": "hid.input",
+      "observedWebCount": 0,
+      "observedNativeCount": 0,
+      "reactSubscribers": [
+        "ui/src/lib/mouseRelay.ts:212"
+      ]
+    },
+    {
+      "event": "keys.found",
+      "observedWebCount": 0,
+      "observedNativeCount": 0,
+      "reactSubscribers": [
+        "ui/src/components/shell/useShellEvents.ts:300"
+      ]
+    },
+    {
+      "event": "notes.open",
+      "observedWebCount": 0,
+      "observedNativeCount": 0,
+      "reactSubscribers": [
+        "ui/src/lib/notes.ts:47"
+      ]
+    },
+    {
+      "event": "runtimes.progress",
+      "observedWebCount": 0,
+      "observedNativeCount": 0,
+      "reactSubscribers": [
+        "ui/src/components/runtimes/RuntimesPanel.tsx:92"
+      ]
+    },
+    {
+      "event": "shaders.rebuild",
+      "observedWebCount": 0,
+      "observedNativeCount": 0,
+      "reactSubscribers": [
+        "ui/src/components/shaders/ShadersBoard.tsx:351"
+      ]
+    },
+    {
+      "event": "store.sale",
+      "observedWebCount": 0,
+      "observedNativeCount": 0,
+      "reactSubscribers": [
+        "ui/src/components/shell/useShellEvents.ts:188"
+      ]
+    },
+    {
+      "event": "stores.outage",
+      "observedWebCount": 0,
+      "observedNativeCount": 0,
+      "reactSubscribers": [
+        "ui/src/components/shell/StoreOutageNotices.tsx:59"
+      ]
+    },
+    {
+      "event": "versions.new",
+      "observedWebCount": 0,
+      "observedNativeCount": 0,
+      "reactSubscribers": [
+        "ui/src/components/shell/useShellEvents.ts:247"
+      ]
+    }
+  ],
+  "perAction": [
+    {
+      "id": "startup",
+      "label": "App startup (Library initial load)",
+      "group": "startup",
+      "webStatus": {
+        "status": "ok"
+      },
+      "nativeStatus": {
+        "status": "ok"
+      },
+      "webSummary": {
+        "totalRequests": 74,
+        "totalEvents": 10,
+        "methods": {
+          "accounts.list": {
+            "count": 1,
+            "ok": 1,
+            "failed": 0,
+            "medianMs": 112.49,
+            "shapes": [
+              "null"
+            ]
+          },
+          "app.checkUpdate": {
+            "count": 1,
+            "ok": 1,
+            "failed": 0,
+            "medianMs": 365.93,
+            "shapes": [
+              "{}"
+            ]
+          },
+          "app.log": {
+            "count": 2,
+            "ok": 2,
+            "failed": 0,
+            "medianMs": 0.68,
+            "shapes": [
+              "{\"level\":\"string\",\"message\":\"string\",\"context\":\"string\",\"stack\":\"string\"}",
+              "{\"level\":\"string\",\"message\":\"string\"}"
+            ]
+          },
+          "app.pendingOpen": {
+            "count": 1,
+            "ok": 1,
+            "failed": 0,
+            "medianMs": 0.63,
+            "shapes": [
+              "null"
+            ]
+          },
+          "art.base": {
+            "count": 1,
+            "ok": 1,
+            "failed": 0,
+            "medianMs": 3.56,
+            "shapes": [
+              "null"
+            ]
+          },
+          "backup.status": {
+            "count": 1,
+            "ok": 1,
+            "failed": 0,
+            "medianMs": 56.04,
+            "shapes": [
+              "null"
+            ]
+          },
+          "capture.status": {
+            "count": 1,
+            "ok": 1,
+            "failed": 0,
+            "medianMs": 5.93,
+            "shapes": [
+              "null"
+            ]
+          },
+          "clients.status": {
+            "count": 1,
+            "ok": 1,
+            "failed": 0,
+            "medianMs": 38.1,
+            "shapes": [
+              "{}"
+            ]
+          },
+          "discord.clientSettings": {
+            "count": 1,
+            "ok": 1,
+            "failed": 0,
+            "medianMs": 11.89,
+            "shapes": [
+              "{\"streamerQuiet\":\"boolean\",\"streamerSilent\":\"boolean\"}"
+            ]
+          },
+          "discord.signIn": {
+            "count": 2,
+            "ok": 2,
+            "failed": 0,
+            "medianMs": 0.84,
+            "shapes": [
+              "{\"cancel\":\"boolean\"}"
+            ]
+          },
+          "discord.status": {
+            "count": 1,
+            "ok": 1,
+            "failed": 0,
+            "medianMs": 1.52,
+            "shapes": [
+              "{\"connect\":\"boolean\"}"
+            ]
+          },
+          "discord.stream": {
+            "count": 1,
+            "ok": 1,
+            "failed": 0,
+            "medianMs": 1.82,
+            "shapes": [
+              "{\"action\":\"string\",\"hevc\":\"boolean\"}"
+            ]
+          },
+          "discord.voice": {
+            "count": 1,
+            "ok": 1,
+            "failed": 0,
+            "medianMs": 4.05,
+            "shapes": [
+              "{\"action\":\"string\"}"
+            ]
+          },
+          "dlss.status": {
+            "count": 6,
+            "ok": 6,
+            "failed": 0,
+            "medianMs": 1521.91,
+            "shapes": [
+              "{\"id\":\"string\"}"
+            ]
+          },
+          "exoAccount.overview": {
+            "count": 1,
+            "ok": 1,
+            "failed": 0,
+            "medianMs": 3.05,
+            "shapes": [
+              "null"
+            ]
+          },
+          "friends.badge": {
+            "count": 1,
+            "ok": 1,
+            "failed": 0,
+            "medianMs": 0.38,
+            "shapes": [
+              "null"
+            ]
+          },
+          "game.extras": {
+            "count": 2,
+            "ok": 2,
+            "failed": 0,
+            "medianMs": 27.9,
+            "shapes": [
+              "{\"id\":\"string\"}"
+            ]
+          },
+          "gifts.list": {
+            "count": 2,
+            "ok": 2,
+            "failed": 0,
+            "medianMs": 7.71,
+            "shapes": [
+              "{\"force\":\"boolean\"}"
+            ]
+          },
+          "hdr.state": {
+            "count": 1,
+            "ok": 1,
+            "failed": 0,
+            "medianMs": 6.17,
+            "shapes": [
+              "{}"
+            ]
+          },
+          "hid.close": {
+            "count": 1,
+            "ok": 1,
+            "failed": 0,
+            "medianMs": 9.79,
+            "shapes": [
+              "{\"device\":\"string\"}"
+            ]
+          },
+          "hid.list": {
+            "count": 1,
+            "ok": 1,
+            "failed": 0,
+            "medianMs": 104.73,
+            "shapes": [
+              "{\"vendorIds\":[\"number\"]}"
+            ]
+          },
+          "hid.open": {
+            "count": 1,
+            "ok": 1,
+            "failed": 0,
+            "medianMs": 6,
+            "shapes": [
+              "{\"device\":\"string\"}"
+            ]
+          },
+          "hid.sendReport": {
+            "count": 1,
+            "ok": 1,
+            "failed": 0,
+            "medianMs": 13.53,
+            "shapes": [
+              "{\"device\":\"string\",\"reportId\":\"number\",\"data\":\"string\"}"
+            ]
+          },
+          "keep.status": {
+            "count": 1,
+            "ok": 1,
+            "failed": 0,
+            "medianMs": 11.66,
+            "shapes": [
+              "{}"
+            ]
+          },
+          "library.get": {
+            "count": 1,
+            "ok": 1,
+            "failed": 0,
+            "medianMs": 919.48,
+            "shapes": [
+              "{\"force\":\"boolean\"}"
+            ]
+          },
+          "mouse.presets.get": {
+            "count": 1,
+            "ok": 1,
+            "failed": 0,
+            "medianMs": 1.89,
+            "shapes": [
+              "null"
+            ]
+          },
+          "music.playback": {
+            "count": 1,
+            "ok": 1,
+            "failed": 0,
+            "medianMs": 1.9,
+            "shapes": [
+              "null"
+            ]
+          },
+          "music.volume": {
+            "count": 3,
+            "ok": 3,
+            "failed": 0,
+            "medianMs": 0.31,
+            "shapes": [
+              "{}"
+            ]
+          },
+          "notes.pending": {
+            "count": 1,
+            "ok": 1,
+            "failed": 0,
+            "medianMs": 0.27,
+            "shapes": [
+              "null"
+            ]
+          },
+          "settings.get": {
+            "count": 1,
+            "ok": 1,
+            "failed": 0,
+            "medianMs": 11.12,
+            "shapes": [
+              "null"
+            ]
+          },
+          "shaders.addon": {
+            "count": 2,
+            "ok": 2,
+            "failed": 0,
+            "medianMs": 1.72,
+            "shapes": [
+              "null"
+            ]
+          },
+          "shaders.call": {
+            "count": 1,
+            "ok": 1,
+            "failed": 0,
+            "medianMs": 4.18,
+            "shapes": [
+              "{\"method\":\"string\",\"params\":{}}"
+            ]
+          },
+          "shell.heartbeat": {
+            "count": 13,
+            "ok": 13,
+            "failed": 0,
+            "medianMs": 0.08,
+            "shapes": [
+              "{\"visible\":\"boolean\"}"
+            ]
+          },
+          "shell.painted": {
+            "count": 1,
+            "ok": 1,
+            "failed": 0,
+            "medianMs": 0.06,
+            "shapes": [
+              "null"
+            ]
+          },
+          "shell.prepare": {
+            "count": 1,
+            "ok": 1,
+            "failed": 0,
+            "medianMs": 5.04,
+            "shapes": [
+              "null"
+            ]
+          },
+          "shell.ready": {
+            "count": 1,
+            "ok": 1,
+            "failed": 0,
+            "medianMs": 0.61,
+            "shapes": [
+              "null"
+            ]
+          },
+          "shell.setChromeLayout": {
+            "count": 3,
+            "ok": 3,
+            "failed": 0,
+            "medianMs": 4.03,
+            "shapes": [
+              "{}",
+              "{\"interactiveRegions\":[{\"x\":\"number\",\"y\":\"number\",\"width\":\"number\",\"height\":\"number\"}],\"maximizeButton\":{\"x\":\"number\",\"y\":\"number\",\"width\":\"number\",\"height\":\"number\"}}"
+            ]
+          },
+          "shell.windowState": {
+            "count": 1,
+            "ok": 1,
+            "failed": 0,
+            "medianMs": 0.67,
+            "shapes": [
+              "null"
+            ]
+          },
+          "steam.account": {
+            "count": 1,
+            "ok": 1,
+            "failed": 0,
+            "medianMs": 0.85,
+            "shapes": [
+              "null"
+            ]
+          },
+          "store.home": {
+            "count": 2,
+            "ok": 2,
+            "failed": 0,
+            "medianMs": 4009.24,
+            "shapes": [
+              "{}"
+            ]
+          },
+          "store.wishlist": {
+            "count": 1,
+            "ok": 1,
+            "failed": 0,
+            "medianMs": 9.78,
+            "shapes": [
+              "{\"action\":\"string\"}"
+            ]
+          },
+          "stores.matrix": {
+            "count": 1,
+            "ok": 1,
+            "failed": 0,
+            "medianMs": 494.44,
+            "shapes": [
+              "null"
+            ]
+          },
+          "stores.outages": {
+            "count": 1,
+            "ok": 1,
+            "failed": 0,
+            "medianMs": 0.89,
+            "shapes": [
+              "null"
+            ]
+          },
+          "telemetry.track": {
+            "count": 1,
+            "ok": 1,
+            "failed": 0,
+            "medianMs": 30.86,
+            "shapes": [
+              "{\"room\":\"string\"}"
+            ]
+          },
+          "web.preferences.get": {
+            "count": 2,
+            "ok": 2,
+            "failed": 0,
+            "medianMs": 1.75,
+            "shapes": [
+              "null"
+            ]
+          },
+          "web.preferences.set": {
+            "count": 1,
+            "ok": 1,
+            "failed": 0,
+            "medianMs": 30.6,
+            "shapes": [
+              "{\"musicService\":\"string\"}"
+            ]
+          }
+        },
+        "events": {
+          "app.updateState": {
+            "count": 2,
+            "shapes": [
+              "{\"state\":\"string\"}"
+            ]
+          },
+          "discord.signin": {
+            "count": 1,
+            "shapes": [
+              "{\"state\":\"string\",\"url\":\"string\"}"
+            ]
+          },
+          "discord.state": {
+            "count": 1,
+            "shapes": [
+              "{\"state\":\"string\"}"
+            ]
+          },
+          "game.achievements": {
+            "count": 1,
+            "shapes": [
+              "{\"id\":\"string\",\"unlocked\":\"number\",\"total\":\"number\"}"
+            ]
+          },
+          "gifts.changed": {
+            "count": 1,
+            "shapes": [
+              "{\"ok\":\"boolean\",\"steamSignedIn\":\"boolean\",\"gifts\":[]}"
+            ]
+          },
+          "music.playback": {
+            "count": 1,
+            "shapes": [
+              "{\"seq\":\"number\",\"provider\":\"string\",\"status\":\"string\",\"title\":\"string\",\"artist\":\"string\",\"positionAgeMs\":\"number\",\"rate\":\"number\",\"canPlay\":\"boolean\",\"canPause\":\"boolean\",\"canPrev\":\"boolean\",\"canNext\":\"boolean\",\"canSeek\":\"boolean\"}"
+            ]
+          },
+          "music.status": {
+            "count": 1,
+            "shapes": [
+              "{\"ok\":\"boolean\",\"ready\":\"boolean\",\"service\":\"string\",\"state\":\"string\"}"
+            ]
+          },
+          "shell.window": {
+            "count": 1,
+            "shapes": [
+              "{\"maximized\":\"boolean\"}"
+            ]
+          },
+          "store.changed": {
+            "count": 1,
+            "shapes": [
+              "{\"what\":\"string\"}"
+            ]
+          }
+        }
+      },
+      "nativeSummary": {
+        "totalRequests": 1,
+        "totalEvents": 0,
+        "methods": {
+          "shell.bootstrap": {
+            "count": 1,
+            "ok": 1,
+            "failed": 0,
+            "medianMs": 1073.33,
+            "shapes": [
+              "{}"
+            ]
+          }
+        },
+        "events": {}
+      },
+      "gapScore": 516,
+      "reactOnlyMethods": [
+        {
+          "method": "shell.heartbeat",
+          "webCount": 13,
+          "nativeCount": 0,
+          "webMedianMs": 0.08,
+          "reactCallers": [
+            "ui/src/lib/heartbeat.ts:15"
+          ]
+        },
+        {
+          "method": "dlss.status",
+          "webCount": 6,
+          "nativeCount": 0,
+          "webMedianMs": 1521.91,
+          "reactCallers": [
+            "ui/src/lib/bridgeCancellation.ts:3",
+            "ui/src/lib/upscalerCache.ts:34"
+          ]
+        },
+        {
+          "method": "music.volume",
+          "webCount": 3,
+          "nativeCount": 0,
+          "webMedianMs": 0.31,
+          "reactCallers": [
+            "ui/src/components/music/Immersive.tsx:276",
+            "ui/src/components/music/shortcuts.ts:29",
+            "ui/src/components/music/shortcuts.ts:30",
+            "ui/src/components/shell/MusicVolume.tsx:33",
+            "ui/src/components/shell/MusicVolume.tsx:40",
+            "ui/src/components/shell/MusicVolume.tsx:94"
+          ]
+        },
+        {
+          "method": "shell.setChromeLayout",
+          "webCount": 3,
+          "nativeCount": 0,
+          "webMedianMs": 4.03,
+          "reactCallers": [
+            "ui/src/components/shell/useShellLayout.ts:106"
+          ]
+        },
+        {
+          "method": "app.log",
+          "webCount": 2,
+          "nativeCount": 0,
+          "webMedianMs": 0.68,
+          "reactCallers": [
+            "ui/src/components/LauncherApp.tsx:468",
+            "ui/src/components/shell/useRoomController.ts:132",
+            "ui/src/components/shell/useRoomController.ts:288",
+            "ui/src/components/shell/useShellEvents.ts:90",
+            "ui/src/main.tsx:27"
+          ]
+        },
+        {
+          "method": "discord.signIn",
+          "webCount": 2,
+          "nativeCount": 0,
+          "webMedianMs": 0.84,
+          "reactCallers": [
+            "ui/src/components/discord/DiscordSignIn.tsx:21",
+            "ui/src/components/discord/DiscordSignIn.tsx:25"
+          ]
+        },
+        {
+          "method": "game.extras",
+          "webCount": 2,
+          "nativeCount": 0,
+          "webMedianMs": 27.9,
+          "reactCallers": [
+            "ui/src/components/game/useGameDetails.ts:58",
+            "ui/src/components/shell/HomeDeck.tsx:238"
+          ]
+        },
+        {
+          "method": "gifts.list",
+          "webCount": 2,
+          "nativeCount": 0,
+          "webMedianMs": 7.71,
+          "reactCallers": [
+            "ui/src/components/settings/StoresSection.tsx:160",
+            "ui/src/components/shell/GiftsShelf.tsx:93"
+          ]
+        },
+        {
+          "method": "shaders.addon",
+          "webCount": 2,
+          "nativeCount": 0,
+          "webMedianMs": 1.72,
+          "reactCallers": [
+            "ui/src/components/shaders/ShaderTools.tsx:15",
+            "ui/src/components/shaders/ShadersBoard.tsx:30",
+            "ui/src/components/shaders/ShadersBoard.tsx:41"
+          ]
+        },
+        {
+          "method": "store.home",
+          "webCount": 2,
+          "nativeCount": 0,
+          "webMedianMs": 4009.24,
+          "reactCallers": [
+            "ui/src/components/store/StoreRoom.tsx:451"
+          ]
+        },
+        {
+          "method": "web.preferences.get",
+          "webCount": 2,
+          "nativeCount": 0,
+          "webMedianMs": 1.75,
+          "reactCallers": [
+            "ui/src/components/LauncherApp.tsx:184",
+            "ui/src/components/onboarding/AppsStep.tsx:22",
+            "ui/src/components/settings/AppsSection.tsx:24"
+          ]
+        },
+        {
+          "method": "accounts.list",
+          "webCount": 1,
+          "nativeCount": 0,
+          "webMedianMs": 112.49,
+          "reactCallers": [
+            "ui/src/components/settings/StoreAccounts.tsx:27",
+            "ui/src/components/shell/GameMenu.tsx:53"
+          ]
+        },
+        {
+          "method": "app.checkUpdate",
+          "webCount": 1,
+          "nativeCount": 0,
+          "webMedianMs": 365.93,
+          "reactCallers": [
+            "ui/src/components/shell/useAppUpdate.ts:99",
+            "ui/src/components/shell/useAppUpdate.ts:171",
+            "ui/src/lib/bridgeCancellation.ts:4",
+            "ui/src/lib/hostContract.ts:24"
+          ]
+        },
+        {
+          "method": "app.pendingOpen",
+          "webCount": 1,
+          "nativeCount": 0,
+          "webMedianMs": 0.63,
+          "reactCallers": [
+            "ui/src/components/shell/useShellEvents.ts:279"
+          ]
+        },
+        {
+          "method": "art.base",
+          "webCount": 1,
+          "nativeCount": 0,
+          "webMedianMs": 3.56,
+          "reactCallers": [
+            "ui/src/main.tsx:26"
+          ]
+        },
+        {
+          "method": "backup.status",
+          "webCount": 1,
+          "nativeCount": 0,
+          "webMedianMs": 56.04,
+          "reactCallers": [
+            "ui/src/components/OnboardingPanel.tsx:95",
+            "ui/src/components/settings/BackupSection.tsx:30",
+            "ui/src/components/settings/BackupSection.tsx:67",
+            "ui/src/components/shell/useShellEvents.ts:36"
+          ]
+        },
+        {
+          "method": "capture.status",
+          "webCount": 1,
+          "nativeCount": 0,
+          "webMedianMs": 5.93,
+          "reactCallers": [
+            "ui/src/lib/capture.ts:93",
+            "ui/src/lib/capture.ts:95"
+          ]
+        },
+        {
+          "method": "clients.status",
+          "webCount": 1,
+          "nativeCount": 0,
+          "webMedianMs": 38.1,
+          "reactCallers": [
+            "ui/src/components/clients/ClientsCard.tsx:55",
+            "ui/src/components/clients/ClientsCard.tsx:112",
+            "ui/src/components/clients/ClientsCard.tsx:131",
+            "ui/src/components/clients/ClientsCard.tsx:145"
+          ]
+        },
+        {
+          "method": "discord.clientSettings",
+          "webCount": 1,
+          "nativeCount": 0,
+          "webMedianMs": 11.89,
+          "reactCallers": [
+            "ui/src/components/discord/GoLivePicker.tsx:320",
+            "ui/src/components/discord/MeMenus.tsx:126",
+            "ui/src/components/discord/MeMenus.tsx:132",
+            "ui/src/components/discord/MeMenus.tsx:133",
+            "ui/src/components/discord/MeMenus.tsx:181",
+            "ui/src/components/discord/settings/parts.tsx:57"
+          ]
+        },
+        {
+          "method": "discord.status",
+          "webCount": 1,
+          "nativeCount": 0,
+          "webMedianMs": 1.52,
+          "reactCallers": [
+            "ui/src/components/discord/NativeDiscordRoom.tsx:29",
+            "ui/src/components/discord/NativeDiscordRoom.tsx:42",
+            "ui/src/components/onboarding/DiscordStep.tsx:15",
+            "ui/src/lib/listenAlong.ts:78"
+          ]
+        },
+        {
+          "method": "discord.stream",
+          "webCount": 1,
+          "nativeCount": 0,
+          "webMedianMs": 1.82,
+          "reactCallers": [
+            "ui/src/components/discord/voice.tsx:274",
+            "ui/src/components/discord/voice.tsx:290",
+            "ui/src/components/discord/voice.tsx:763",
+            "ui/src/lib/discordVideo.ts:32",
+            "ui/src/lib/discordVideo.ts:153",
+            "ui/src/lib/discordVideo.ts:208"
+          ]
+        },
+        {
+          "method": "discord.voice",
+          "webCount": 1,
+          "nativeCount": 0,
+          "webMedianMs": 4.05,
+          "reactCallers": [
+            "ui/src/components/discord/voice.tsx:52",
+            "ui/src/components/discord/voice.tsx:87",
+            "ui/src/components/discord/voice.tsx:93",
+            "ui/src/components/discord/voice.tsx:102",
+            "ui/src/components/discord/voice.tsx:105",
+            "ui/src/components/discord/voice.tsx:201"
+          ]
+        },
+        {
+          "method": "exoAccount.overview",
+          "webCount": 1,
+          "nativeCount": 0,
+          "webMedianMs": 3.05,
+          "reactCallers": [
+            "ui/src/components/account/useAccount.ts:6",
+            "ui/src/components/account/useAccount.ts:10"
+          ]
+        },
+        {
+          "method": "friends.badge",
+          "webCount": 1,
+          "nativeCount": 0,
+          "webMedianMs": 0.38,
+          "reactCallers": [
+            "ui/src/components/shell/DiscordBadge.tsx:15",
+            "ui/src/components/shell/DiscordBadge.tsx:16",
+            "ui/src/lib/hostContract.ts:39"
+          ]
+        },
+        {
+          "method": "hdr.state",
+          "webCount": 1,
+          "nativeCount": 0,
+          "webMedianMs": 6.17,
+          "reactCallers": [
+            "ui/src/lib/hdr.ts:10"
+          ]
+        },
+        {
+          "method": "hid.close",
+          "webCount": 1,
+          "nativeCount": 0,
+          "webMedianMs": 9.79,
+          "reactCallers": [
+            "ui/src/lib/mouseRelay.ts:11"
+          ]
+        },
+        {
+          "method": "hid.list",
+          "webCount": 1,
+          "nativeCount": 0,
+          "webMedianMs": 104.73,
+          "reactCallers": [
+            "ui/src/lib/mouseRelay.ts:9"
+          ]
+        },
+        {
+          "method": "hid.open",
+          "webCount": 1,
+          "nativeCount": 0,
+          "webMedianMs": 6,
+          "reactCallers": [
+            "ui/src/lib/mouseRelay.ts:10"
+          ]
+        },
+        {
+          "method": "hid.sendReport",
+          "webCount": 1,
+          "nativeCount": 0,
+          "webMedianMs": 13.53,
+          "reactCallers": [
+            "ui/src/lib/mouseRelay.ts:12"
+          ]
+        },
+        {
+          "method": "keep.status",
+          "webCount": 1,
+          "nativeCount": 0,
+          "webMedianMs": 11.66,
+          "reactCallers": [
+            "ui/src/components/game/OptimizeLine.tsx:46",
+            "ui/src/components/gpu/PcOverview.tsx:74"
+          ]
+        },
+        {
+          "method": "library.get",
+          "webCount": 1,
+          "nativeCount": 0,
+          "webMedianMs": 919.48,
+          "reactCallers": [
+            "ui/src/components/LauncherApp.tsx:279",
+            "ui/src/components/devices/GameProfiles.tsx:32",
+            "ui/src/lib/bridgeCancellation.ts:2",
+            "ui/src/lib/hostContract.ts:27",
+            "ui/src/lib/mouseRelay.ts:26"
+          ]
+        },
+        {
+          "method": "mouse.presets.get",
+          "webCount": 1,
+          "nativeCount": 0,
+          "webMedianMs": 1.89,
+          "reactCallers": [
+            "ui/src/lib/mouseRelay.ts:61"
+          ]
+        },
+        {
+          "method": "music.playback",
+          "webCount": 1,
+          "nativeCount": 0,
+          "webMedianMs": 1.9,
+          "reactCallers": [
+            "ui/src/components/discord/JamBox.tsx:15",
+            "ui/src/components/discord/JamBox.tsx:16",
+            "ui/src/components/music/MusicPlayer.tsx:108",
+            "ui/src/components/music/MusicPlayer.tsx:111",
+            "ui/src/components/shell/MusicMiniPlayer.tsx:78",
+            "ui/src/components/shell/MusicMiniPlayer.tsx:79"
+          ]
+        },
+        {
+          "method": "notes.pending",
+          "webCount": 1,
+          "nativeCount": 0,
+          "webMedianMs": 0.27,
+          "reactCallers": [
+            "ui/src/lib/notes.ts:46"
+          ]
+        },
+        {
+          "method": "settings.get",
+          "webCount": 1,
+          "nativeCount": 0,
+          "webMedianMs": 11.12,
+          "reactCallers": [
+            "ui/src/lib/settingsSave.ts:27"
+          ]
+        },
+        {
+          "method": "shaders.call",
+          "webCount": 1,
+          "nativeCount": 0,
+          "webMedianMs": 4.18,
+          "reactCallers": [
+            "ui/src/components/shaders/shaderCall.ts:57"
+          ]
+        },
+        {
+          "method": "shell.painted",
+          "webCount": 1,
+          "nativeCount": 0,
+          "webMedianMs": 0.06,
+          "reactCallers": [
+            "ui/src/components/shell/BootGate.tsx:31"
+          ]
+        },
+        {
+          "method": "shell.prepare",
+          "webCount": 1,
+          "nativeCount": 0,
+          "webMedianMs": 5.04,
+          "reactCallers": [
+            "ui/src/components/LauncherApp.tsx:491"
+          ]
+        },
+        {
+          "method": "shell.ready",
+          "webCount": 1,
+          "nativeCount": 0,
+          "webMedianMs": 0.61,
+          "reactCallers": [
+            "ui/src/lib/shellReady.ts:10"
+          ]
+        },
+        {
+          "method": "shell.windowState",
+          "webCount": 1,
+          "nativeCount": 0,
+          "webMedianMs": 0.67,
+          "reactCallers": [
+            "ui/src/components/WindowChrome.tsx:13"
+          ]
+        },
+        {
+          "method": "steam.account",
+          "webCount": 1,
+          "nativeCount": 0,
+          "webMedianMs": 0.85,
+          "reactCallers": [
+            "ui/src/components/settings/SteamSignInRow.tsx:31"
+          ]
+        },
+        {
+          "method": "store.wishlist",
+          "webCount": 1,
+          "nativeCount": 0,
+          "webMedianMs": 9.78,
+          "reactCallers": [
+            "ui/src/components/store/storeData.ts:266",
+            "ui/src/components/store/storeData.ts:309",
+            "ui/src/components/store/storeData.ts:320"
+          ]
+        },
+        {
+          "method": "stores.matrix",
+          "webCount": 1,
+          "nativeCount": 0,
+          "webMedianMs": 494.44,
+          "reactCallers": [
+            "ui/src/components/OnboardingPanel.tsx:47",
+            "ui/src/components/OnboardingPanel.tsx:250",
+            "ui/src/components/SettingsPanel.tsx:160",
+            "ui/src/components/SettingsPanel.tsx:188",
+            "ui/src/components/SettingsPanel.tsx:210",
+            "ui/src/lib/hostContract.ts:17"
+          ]
+        },
+        {
+          "method": "stores.outages",
+          "webCount": 1,
+          "nativeCount": 0,
+          "webMedianMs": 0.89,
+          "reactCallers": [
+            "ui/src/components/shell/StoreOutageNotices.tsx:60"
+          ]
+        },
+        {
+          "method": "telemetry.track",
+          "webCount": 1,
+          "nativeCount": 0,
+          "webMedianMs": 30.86,
+          "reactCallers": [
+            "ui/src/components/LauncherApp.tsx:869"
+          ]
+        },
+        {
+          "method": "web.preferences.set",
+          "webCount": 1,
+          "nativeCount": 0,
+          "webMedianMs": 30.6,
+          "reactCallers": [
+            "ui/src/components/LauncherApp.tsx:189",
+            "ui/src/components/onboarding/AppsStep.tsx:35",
+            "ui/src/components/settings/AppsSection.tsx:57"
+          ]
+        }
+      ],
+      "nativeOnlyMethods": [
+        {
+          "method": "shell.bootstrap",
+          "webCount": 0,
+          "nativeCount": 1,
+          "nativeMedianMs": 1073.33,
+          "reactCallers": [
+            "ui/src/lib/host.ts:2315"
+          ]
+        }
+      ],
+      "pushEventGaps": [
+        {
+          "event": "app.updateState",
+          "webCount": 2,
+          "nativeCount": 0,
+          "nativeHandles": true,
+          "reason": "not emitted on native",
+          "reactSubscribers": [
+            "ui/src/components/shell/useAppUpdate.ts:119"
+          ]
+        },
+        {
+          "event": "discord.signin",
+          "webCount": 1,
+          "nativeCount": 0,
+          "nativeHandles": true,
+          "reason": "not emitted on native",
+          "reactSubscribers": [
+            "ui/src/components/discord/DiscordSignIn.tsx:19",
+            "ui/src/components/discord/MeMenus.tsx:108"
+          ]
+        },
+        {
+          "event": "discord.state",
+          "webCount": 1,
+          "nativeCount": 0,
+          "nativeHandles": true,
+          "reason": "not emitted on native",
+          "reactSubscribers": [
+            "ui/src/components/discord/Chat.tsx:540",
+            "ui/src/components/discord/NativeDiscordRoom.tsx:28",
+            "ui/src/components/onboarding/DiscordStep.tsx:14"
+          ]
+        },
+        {
+          "event": "game.achievements",
+          "webCount": 1,
+          "nativeCount": 0,
+          "nativeHandles": false,
+          "reason": "not emitted and unhandled in native",
+          "reactSubscribers": [
+            "ui/src/components/game/useGameDetails.ts:68"
+          ]
+        },
+        {
+          "event": "gifts.changed",
+          "webCount": 1,
+          "nativeCount": 0,
+          "nativeHandles": false,
+          "reason": "not emitted and unhandled in native",
+          "reactSubscribers": [
+            "ui/src/components/settings/StoresSection.tsx:161",
+            "ui/src/components/shell/GiftsShelf.tsx:94"
+          ]
+        },
+        {
+          "event": "music.playback",
+          "webCount": 1,
+          "nativeCount": 0,
+          "nativeHandles": true,
+          "reason": "not emitted on native",
+          "reactSubscribers": [
+            "ui/src/components/discord/JamBox.tsx:16",
+            "ui/src/components/music/MusicPlayer.tsx:111",
+            "ui/src/components/shell/MusicMiniPlayer.tsx:79",
+            "ui/src/lib/listenAlong.ts:149",
+            "ui/src/lib/listenAlong.ts:278"
+          ]
+        },
+        {
+          "event": "music.status",
+          "webCount": 1,
+          "nativeCount": 0,
+          "nativeHandles": false,
+          "reason": "not emitted and unhandled in native",
+          "reactSubscribers": [
+            "ui/src/components/music/NativeMusicRoom.tsx:132"
+          ]
+        },
+        {
+          "event": "shell.window",
+          "webCount": 1,
+          "nativeCount": 0,
+          "nativeHandles": false,
+          "reason": "not emitted and unhandled in native",
+          "reactSubscribers": [
+            "ui/src/components/WindowChrome.tsx:16"
+          ]
+        },
+        {
+          "event": "store.changed",
+          "webCount": 1,
+          "nativeCount": 0,
+          "nativeHandles": true,
+          "reason": "not emitted on native",
+          "reactSubscribers": [
+            "ui/src/components/store/StoreRoom.tsx:467",
+            "ui/src/components/store/storeData.ts:274"
+          ]
+        }
+      ],
+      "chattiness": []
+    },
+    {
+      "id": "room-pc",
+      "label": "Open Exo AI / PC room",
+      "group": "rooms",
+      "webStatus": {
+        "status": "ok"
+      },
+      "nativeStatus": {
+        "status": "ok"
+      },
+      "webSummary": {
+        "totalRequests": 31,
+        "totalEvents": 0,
+        "methods": {
+          "app.pendingOpen": {
+            "count": 1,
+            "ok": 1,
+            "failed": 0,
+            "medianMs": 0.02,
+            "shapes": [
+              "null"
+            ]
+          },
+          "apps.list": {
+            "count": 1,
+            "ok": 1,
+            "failed": 0,
+            "medianMs": 2414.55,
+            "shapes": [
+              "{}"
+            ]
+          },
+          "apps.packages": {
+            "count": 1,
+            "ok": 1,
+            "failed": 0,
+            "medianMs": 644.62,
+            "shapes": [
+              "{}"
+            ]
+          },
+          "autopilot.state": {
+            "count": 1,
+            "ok": 1,
+            "failed": 0,
+            "medianMs": 796.26,
+            "shapes": [
+              "{}"
+            ]
+          },
+          "compress.list": {
+            "count": 1,
+            "ok": 1,
+            "failed": 0,
+            "medianMs": 771.09,
+            "shapes": [
+              "{}"
+            ]
+          },
+          "controller.read": {
+            "count": 1,
+            "ok": 1,
+            "failed": 0,
+            "medianMs": 383.09,
+            "shapes": [
+              "{\"id\":\"string\"}"
+            ]
+          },
+          "devices.list": {
+            "count": 1,
+            "ok": 1,
+            "failed": 0,
+            "medianMs": 67.44,
+            "shapes": [
+              "{}"
+            ]
+          },
+          "exoAi.state": {
+            "count": 1,
+            "ok": 1,
+            "failed": 0,
+            "medianMs": 39.8,
+            "shapes": [
+              "{}"
+            ]
+          },
+          "gpu.display": {
+            "count": 1,
+            "ok": 1,
+            "failed": 0,
+            "medianMs": 605.47,
+            "shapes": [
+              "{\"action\":\"string\"}"
+            ]
+          },
+          "gpu.driver": {
+            "count": 1,
+            "ok": 1,
+            "failed": 0,
+            "medianMs": 734.86,
+            "shapes": [
+              "{\"action\":\"string\",\"branch\":\"string\"}"
+            ]
+          },
+          "gpu.profile": {
+            "count": 1,
+            "ok": 1,
+            "failed": 0,
+            "medianMs": 605.7,
+            "shapes": [
+              "{}"
+            ]
+          },
+          "hdr.state": {
+            "count": 1,
+            "ok": 1,
+            "failed": 0,
+            "medianMs": 0.22,
+            "shapes": [
+              "{}"
+            ]
+          },
+          "keep.status": {
+            "count": 1,
+            "ok": 1,
+            "failed": 0,
+            "medianMs": 1.03,
+            "shapes": [
+              "{}"
+            ]
+          },
+          "runtimes.list": {
+            "count": 1,
+            "ok": 1,
+            "failed": 0,
+            "medianMs": 280.18,
+            "shapes": [
+              "{}"
+            ]
+          },
+          "shaders.addon": {
+            "count": 2,
+            "ok": 2,
+            "failed": 0,
+            "medianMs": 41.86,
+            "shapes": [
+              "null"
+            ]
+          },
+          "shaders.estimates": {
+            "count": 1,
+            "ok": 1,
+            "failed": 0,
+            "medianMs": 22.74,
+            "shapes": [
+              "null"
+            ]
+          },
+          "shaders.prepare.games": {
+            "count": 1,
+            "ok": 1,
+            "failed": 0,
+            "medianMs": 868.51,
+            "shapes": [
+              "null"
+            ]
+          },
+          "shell.heartbeat": {
+            "count": 5,
+            "ok": 5,
+            "failed": 0,
+            "medianMs": 0.05,
+            "shapes": [
+              "{\"visible\":\"boolean\"}"
+            ]
+          },
+          "system.about": {
+            "count": 1,
+            "ok": 1,
+            "failed": 0,
+            "medianMs": 465.42,
+            "shapes": [
+              "{}"
+            ]
+          },
+          "system.drivers": {
+            "count": 1,
+            "ok": 0,
+            "failed": 0,
+            "medianMs": null,
+            "shapes": [
+              "{}"
+            ]
+          },
+          "system.drives": {
+            "count": 1,
+            "ok": 1,
+            "failed": 0,
+            "medianMs": 208.5,
+            "shapes": [
+              "{}"
+            ]
+          },
+          "system.health": {
+            "count": 1,
+            "ok": 1,
+            "failed": 0,
+            "medianMs": 133.94,
+            "shapes": [
+              "{}"
+            ]
+          },
+          "system.interrupts": {
+            "count": 1,
+            "ok": 1,
+            "failed": 0,
+            "medianMs": 73.75,
+            "shapes": [
+              "{}"
+            ]
+          },
+          "system.tune": {
+            "count": 1,
+            "ok": 1,
+            "failed": 0,
+            "medianMs": 14.15,
+            "shapes": [
+              "{}"
+            ]
+          },
+          "system.tuning": {
+            "count": 1,
+            "ok": 1,
+            "failed": 0,
+            "medianMs": 889.7,
+            "shapes": [
+              "{}"
+            ]
+          },
+          "telemetry.track": {
+            "count": 1,
+            "ok": 1,
+            "failed": 0,
+            "medianMs": 0.04,
+            "shapes": [
+              "{\"room\":\"string\"}"
+            ]
+          }
+        },
+        "events": {}
+      },
+      "nativeSummary": {
+        "totalRequests": 11,
+        "totalEvents": 0,
+        "methods": {
+          "autopilot.state": {
+            "count": 1,
+            "ok": 1,
+            "failed": 0,
+            "medianMs": 654.71,
+            "shapes": [
+              "{}"
+            ]
+          },
+          "compress.list": {
+            "count": 1,
+            "ok": 1,
+            "failed": 0,
+            "medianMs": 1778.82,
+            "shapes": [
+              "{}"
+            ]
+          },
+          "exoAi.state": {
+            "count": 1,
+            "ok": 1,
+            "failed": 0,
+            "medianMs": 3.09,
+            "shapes": [
+              "{}"
+            ]
+          },
+          "gpu.profile": {
+            "count": 1,
+            "ok": 1,
+            "failed": 0,
+            "medianMs": 1054.72,
+            "shapes": [
+              "{}"
+            ]
+          },
+          "hdr.state": {
+            "count": 1,
+            "ok": 1,
+            "failed": 0,
+            "medianMs": 3.44,
+            "shapes": [
+              "{}"
+            ]
+          },
+          "shaders.addon": {
+            "count": 1,
+            "ok": 1,
+            "failed": 0,
+            "medianMs": 1.14,
+            "shapes": [
+              "{}"
+            ]
+          },
+          "shaders.estimates": {
+            "count": 1,
+            "ok": 1,
+            "failed": 0,
+            "medianMs": 14.88,
+            "shapes": [
+              "{}"
+            ]
+          },
+          "shaders.prepare.games": {
+            "count": 1,
+            "ok": 1,
+            "failed": 0,
+            "medianMs": 1753.6,
+            "shapes": [
+              "{}"
+            ]
+          },
+          "system.about": {
+            "count": 1,
+            "ok": 1,
+            "failed": 0,
+            "medianMs": 1826.71,
+            "shapes": [
+              "{}"
+            ]
+          },
+          "system.drives": {
+            "count": 1,
+            "ok": 0,
+            "failed": 0,
+            "medianMs": null,
+            "shapes": [
+              "{\"space\":\"boolean\"}"
+            ]
+          },
+          "system.tuning": {
+            "count": 1,
+            "ok": 1,
+            "failed": 0,
+            "medianMs": 1171.78,
+            "shapes": [
+              "{}"
+            ]
+          }
+        },
+        "events": {}
+      },
+      "gapScore": 150,
+      "reactOnlyMethods": [
+        {
+          "method": "shell.heartbeat",
+          "webCount": 5,
+          "nativeCount": 0,
+          "webMedianMs": 0.05,
+          "reactCallers": [
+            "ui/src/lib/heartbeat.ts:15"
+          ]
+        },
+        {
+          "method": "app.pendingOpen",
+          "webCount": 1,
+          "nativeCount": 0,
+          "webMedianMs": 0.02,
+          "reactCallers": [
+            "ui/src/components/shell/useShellEvents.ts:279"
+          ]
+        },
+        {
+          "method": "apps.list",
+          "webCount": 1,
+          "nativeCount": 0,
+          "webMedianMs": 2414.55,
+          "reactCallers": [
+            "ui/src/components/apps/AppsPanel.tsx:131",
+            "ui/src/components/apps/AppsPanel.tsx:204",
+            "ui/src/components/gpu/PcApps.tsx:16",
+            "ui/src/components/gpu/PcApps.tsx:31"
+          ]
+        },
+        {
+          "method": "apps.packages",
+          "webCount": 1,
+          "nativeCount": 0,
+          "webMedianMs": 644.62,
+          "reactCallers": [
+            "ui/src/components/gpu/ExoAiRoom.tsx:170"
+          ]
+        },
+        {
+          "method": "controller.read",
+          "webCount": 1,
+          "nativeCount": 0,
+          "webMedianMs": 383.09,
+          "reactCallers": [
+            "ui/src/components/devices/ControllerPage.tsx:32",
+            "ui/src/components/gpu/DriversSection.tsx:298"
+          ]
+        },
+        {
+          "method": "devices.list",
+          "webCount": 1,
+          "nativeCount": 0,
+          "webMedianMs": 67.44,
+          "reactCallers": [
+            "ui/src/components/DevicesRoom.tsx:267",
+            "ui/src/components/gpu/DriversSection.tsx:296"
+          ]
+        },
+        {
+          "method": "gpu.display",
+          "webCount": 1,
+          "nativeCount": 0,
+          "webMedianMs": 605.47,
+          "reactCallers": [
+            "ui/src/components/gpu/DisplayTab.tsx:41",
+            "ui/src/components/gpu/DisplayTab.tsx:66",
+            "ui/src/components/gpu/autoTuneStages.ts:136",
+            "ui/src/components/gpu/usePcState.ts:74"
+          ]
+        },
+        {
+          "method": "gpu.driver",
+          "webCount": 1,
+          "nativeCount": 0,
+          "webMedianMs": 734.86,
+          "reactCallers": [
+            "ui/src/components/gpu/DriverRow.tsx:129",
+            "ui/src/components/gpu/DriverRow.tsx:135",
+            "ui/src/components/gpu/DriverRow.tsx:148",
+            "ui/src/components/gpu/usePcState.ts:70",
+            "ui/src/components/shell/DriverInstallOverlay.tsx:109",
+            "ui/src/components/shell/DriverInstallOverlay.tsx:143"
+          ]
+        },
+        {
+          "method": "keep.status",
+          "webCount": 1,
+          "nativeCount": 0,
+          "webMedianMs": 1.03,
+          "reactCallers": [
+            "ui/src/components/game/OptimizeLine.tsx:46",
+            "ui/src/components/gpu/PcOverview.tsx:74"
+          ]
+        },
+        {
+          "method": "runtimes.list",
+          "webCount": 1,
+          "nativeCount": 0,
+          "webMedianMs": 280.18,
+          "reactCallers": [
+            "ui/src/components/gpu/PcApps.tsx:16"
+          ]
+        },
+        {
+          "method": "system.drivers",
+          "webCount": 1,
+          "nativeCount": 0,
+          "webMedianMs": null,
+          "reactCallers": [
+            "ui/src/components/gpu/DriversSection.tsx:139",
+            "ui/src/components/gpu/DriversSection.tsx:190",
+            "ui/src/components/gpu/DriversSection.tsx:207"
+          ]
+        },
+        {
+          "method": "system.health",
+          "webCount": 1,
+          "nativeCount": 0,
+          "webMedianMs": 133.94,
+          "reactCallers": [
+            "ui/src/components/OnboardingPanel.tsx:161",
+            "ui/src/components/gpu/BestSetup.tsx:34",
+            "ui/src/components/gpu/BestSetup.tsx:49",
+            "ui/src/components/gpu/DriversSection.tsx:88",
+            "ui/src/components/gpu/NetworkGroup.tsx:58",
+            "ui/src/components/gpu/NetworkGroup.tsx:65"
+          ]
+        },
+        {
+          "method": "system.interrupts",
+          "webCount": 1,
+          "nativeCount": 0,
+          "webMedianMs": 73.75,
+          "reactCallers": [
+            "ui/src/components/gpu/InterruptRows.tsx:27",
+            "ui/src/components/gpu/autoTuneStages.ts:191",
+            "ui/src/components/gpu/usePcState.ts:72"
+          ]
+        },
+        {
+          "method": "system.tune",
+          "webCount": 1,
+          "nativeCount": 0,
+          "webMedianMs": 14.15,
+          "reactCallers": [
+            "ui/src/components/gpu/AutoTune.tsx:44",
+            "ui/src/components/gpu/AutoTune.tsx:60",
+            "ui/src/components/gpu/usePcState.ts:75"
+          ]
+        },
+        {
+          "method": "telemetry.track",
+          "webCount": 1,
+          "nativeCount": 0,
+          "webMedianMs": 0.04,
+          "reactCallers": [
+            "ui/src/components/LauncherApp.tsx:869"
+          ]
+        }
+      ],
+      "nativeOnlyMethods": [],
+      "pushEventGaps": [],
+      "chattiness": []
+    },
+    {
+      "id": "room-pc-apps",
+      "label": "Open Apps room",
+      "group": "rooms",
+      "webStatus": {
+        "status": "ok"
+      },
+      "nativeStatus": {
+        "status": "ok"
+      },
+      "webSummary": {
+        "totalRequests": 16,
+        "totalEvents": 0,
+        "methods": {
+          "app.pendingOpen": {
+            "count": 1,
+            "ok": 1,
+            "failed": 0,
+            "medianMs": 0.02,
+            "shapes": [
+              "null"
+            ]
+          },
+          "apps.icons": {
+            "count": 1,
+            "ok": 1,
+            "failed": 0,
+            "medianMs": 1188.17,
+            "shapes": [
+              "{\"ids\":[\"string\"]}"
+            ]
+          },
+          "apps.installerCache": {
+            "count": 1,
+            "ok": 1,
+            "failed": 0,
+            "medianMs": 138.45,
+            "shapes": [
+              "{}"
+            ]
+          },
+          "apps.list": {
+            "count": 1,
+            "ok": 1,
+            "failed": 0,
+            "medianMs": 33.93,
+            "shapes": [
+              "{}"
+            ]
+          },
+          "apps.tidy": {
+            "count": 1,
+            "ok": 0,
+            "failed": 0,
+            "medianMs": null,
+            "shapes": [
+              "{\"fresh\":\"boolean\"}"
+            ]
+          },
+          "exoAi.state": {
+            "count": 1,
+            "ok": 1,
+            "failed": 0,
+            "medianMs": 3.78,
+            "shapes": [
+              "{}"
+            ]
+          },
+          "junk.scan": {
+            "count": 1,
+            "ok": 1,
+            "failed": 0,
+            "medianMs": 411.14,
+            "shapes": [
+              "{}"
+            ]
+          },
+          "shaders.call": {
+            "count": 1,
+            "ok": 1,
+            "failed": 0,
+            "medianMs": 0.48,
+            "shapes": [
+              "{\"method\":\"string\",\"params\":{\"visible\":\"boolean\"}}"
+            ]
+          },
+          "shell.heartbeat": {
+            "count": 5,
+            "ok": 5,
+            "failed": 0,
+            "medianMs": 0.05,
+            "shapes": [
+              "{\"visible\":\"boolean\"}"
+            ]
+          },
+          "startup.list": {
+            "count": 1,
+            "ok": 0,
+            "failed": 0,
+            "medianMs": null,
+            "shapes": [
+              "{}"
+            ]
+          },
+          "system.tune": {
+            "count": 1,
+            "ok": 1,
+            "failed": 0,
+            "medianMs": 0.59,
+            "shapes": [
+              "{}"
+            ]
+          },
+          "telemetry.track": {
+            "count": 1,
+            "ok": 1,
+            "failed": 0,
+            "medianMs": 0.04,
+            "shapes": [
+              "{\"room\":\"string\"}"
+            ]
+          }
+        },
+        "events": {}
+      },
+      "nativeSummary": {
+        "totalRequests": 2,
+        "totalEvents": 1,
+        "methods": {
+          "apps.list": {
+            "count": 1,
+            "ok": 0,
+            "failed": 0,
+            "medianMs": null,
+            "shapes": [
+              "{}"
+            ]
+          },
+          "startup.list": {
+            "count": 1,
+            "ok": 0,
+            "failed": 0,
+            "medianMs": null,
+            "shapes": [
+              "{}"
+            ]
+          }
+        },
+        "events": {
+          "music.status": {
+            "count": 1,
+            "shapes": [
+              "{\"ok\":\"boolean\",\"ready\":\"boolean\",\"service\":\"string\",\"state\":\"string\"}"
+            ]
+          }
+        }
+      },
+      "gapScore": 100,
+      "reactOnlyMethods": [
+        {
+          "method": "shell.heartbeat",
+          "webCount": 5,
+          "nativeCount": 0,
+          "webMedianMs": 0.05,
+          "reactCallers": [
+            "ui/src/lib/heartbeat.ts:15"
+          ]
+        },
+        {
+          "method": "app.pendingOpen",
+          "webCount": 1,
+          "nativeCount": 0,
+          "webMedianMs": 0.02,
+          "reactCallers": [
+            "ui/src/components/shell/useShellEvents.ts:279"
+          ]
+        },
+        {
+          "method": "apps.icons",
+          "webCount": 1,
+          "nativeCount": 0,
+          "webMedianMs": 1188.17,
+          "reactCallers": [
+            "ui/src/components/apps/AppsPanel.tsx:135",
+            "ui/src/components/apps/AppsPanel.tsx:860"
+          ]
+        },
+        {
+          "method": "apps.installerCache",
+          "webCount": 1,
+          "nativeCount": 0,
+          "webMedianMs": 138.45,
+          "reactCallers": [
+            "ui/src/components/apps/AppsPanel.tsx:821"
+          ]
+        },
+        {
+          "method": "apps.tidy",
+          "webCount": 1,
+          "nativeCount": 0,
+          "webMedianMs": null,
+          "reactCallers": [
+            "ui/src/components/apps/AppsPanel.tsx:145"
+          ]
+        },
+        {
+          "method": "exoAi.state",
+          "webCount": 1,
+          "nativeCount": 0,
+          "webMedianMs": 3.78,
+          "reactCallers": [
+            "ui/src/components/gpu/ExoAiPanel.tsx:10"
+          ]
+        },
+        {
+          "method": "junk.scan",
+          "webCount": 1,
+          "nativeCount": 0,
+          "webMedianMs": 411.14,
+          "reactCallers": [
+            "ui/src/components/OnboardingPanel.tsx:153",
+            "ui/src/components/OnboardingPanel.tsx:375",
+            "ui/src/components/apps/AppsPanel.tsx:776",
+            "ui/src/components/gpu/autoTuneStages.ts:227"
+          ]
+        },
+        {
+          "method": "shaders.call",
+          "webCount": 1,
+          "nativeCount": 0,
+          "webMedianMs": 0.48,
+          "reactCallers": [
+            "ui/src/components/shaders/shaderCall.ts:57"
+          ]
+        },
+        {
+          "method": "system.tune",
+          "webCount": 1,
+          "nativeCount": 0,
+          "webMedianMs": 0.59,
+          "reactCallers": [
+            "ui/src/components/gpu/AutoTune.tsx:44",
+            "ui/src/components/gpu/AutoTune.tsx:60",
+            "ui/src/components/gpu/usePcState.ts:75"
+          ]
+        },
+        {
+          "method": "telemetry.track",
+          "webCount": 1,
+          "nativeCount": 0,
+          "webMedianMs": 0.04,
+          "reactCallers": [
+            "ui/src/components/LauncherApp.tsx:869"
+          ]
+        }
+      ],
+      "nativeOnlyMethods": [],
+      "pushEventGaps": [],
+      "chattiness": []
+    },
+    {
+      "id": "settings-general",
+      "label": "Open Settings > General",
+      "group": "settings",
+      "webStatus": {
+        "status": "ok"
+      },
+      "nativeStatus": {
+        "status": "ok"
+      },
+      "webSummary": {
+        "totalRequests": 12,
+        "totalEvents": 0,
+        "methods": {
+          "accounts.list": {
+            "count": 1,
+            "ok": 1,
+            "failed": 0,
+            "medianMs": 15.54,
+            "shapes": [
+              "null"
+            ]
+          },
+          "app.log": {
+            "count": 2,
+            "ok": 2,
+            "failed": 0,
+            "medianMs": 0.11,
+            "shapes": [
+              "{\"level\":\"string\",\"message\":\"string\"}",
+              "{\"level\":\"string\",\"message\":\"string\",\"context\":\"string\",\"stack\":\"string\"}"
+            ]
+          },
+          "app.pendingOpen": {
+            "count": 1,
+            "ok": 1,
+            "failed": 0,
+            "medianMs": 0.02,
+            "shapes": [
+              "null"
+            ]
+          },
+          "gifts.list": {
+            "count": 1,
+            "ok": 1,
+            "failed": 0,
+            "medianMs": 0.08,
+            "shapes": [
+              "{\"force\":\"boolean\"}"
+            ]
+          },
+          "shaders.addon": {
+            "count": 1,
+            "ok": 1,
+            "failed": 0,
+            "medianMs": 0.46,
+            "shapes": [
+              "null"
+            ]
+          },
+          "shaders.call": {
+            "count": 1,
+            "ok": 1,
+            "failed": 0,
+            "medianMs": 0.17,
+            "shapes": [
+              "{\"method\":\"string\",\"params\":{}}"
+            ]
+          },
+          "shell.heartbeat": {
+            "count": 3,
+            "ok": 3,
+            "failed": 0,
+            "medianMs": 0.06,
+            "shapes": [
+              "{\"visible\":\"boolean\"}"
+            ]
+          },
+          "steam.account": {
+            "count": 1,
+            "ok": 1,
+            "failed": 0,
+            "medianMs": 0.24,
+            "shapes": [
+              "null"
+            ]
+          },
+          "telemetry.track": {
+            "count": 1,
+            "ok": 1,
+            "failed": 0,
+            "medianMs": 0.72,
+            "shapes": [
+              "{\"room\":\"string\"}"
+            ]
+          }
+        },
+        "events": {}
+      },
+      "nativeSummary": {
+        "totalRequests": 4,
+        "totalEvents": 2,
+        "methods": {
+          "app.checkUpdate": {
+            "count": 1,
+            "ok": 1,
+            "failed": 0,
+            "medianMs": 362.21,
+            "shapes": [
+              "{\"manual\":\"boolean\"}"
+            ]
+          },
+          "exoAccount.state": {
+            "count": 1,
+            "ok": 1,
+            "failed": 0,
+            "medianMs": 0.8,
+            "shapes": [
+              "{}"
+            ]
+          },
+          "hdr.state": {
+            "count": 1,
+            "ok": 1,
+            "failed": 0,
+            "medianMs": 0.3,
+            "shapes": [
+              "{}"
+            ]
+          },
+          "system.about": {
+            "count": 1,
+            "ok": 1,
+            "failed": 0,
+            "medianMs": 59.13,
+            "shapes": [
+              "{}"
+            ]
+          }
+        },
+        "events": {
+          "app.updateState": {
+            "count": 2,
+            "shapes": [
+              "{\"state\":\"string\"}"
+            ]
+          }
+        }
+      },
+      "gapScore": 98,
+      "reactOnlyMethods": [
+        {
+          "method": "shell.heartbeat",
+          "webCount": 3,
+          "nativeCount": 0,
+          "webMedianMs": 0.06,
+          "reactCallers": [
+            "ui/src/lib/heartbeat.ts:15"
+          ]
+        },
+        {
+          "method": "app.log",
+          "webCount": 2,
+          "nativeCount": 0,
+          "webMedianMs": 0.11,
+          "reactCallers": [
+            "ui/src/components/LauncherApp.tsx:468",
+            "ui/src/components/shell/useRoomController.ts:132",
+            "ui/src/components/shell/useRoomController.ts:288",
+            "ui/src/components/shell/useShellEvents.ts:90",
+            "ui/src/main.tsx:27"
+          ]
+        },
+        {
+          "method": "accounts.list",
+          "webCount": 1,
+          "nativeCount": 0,
+          "webMedianMs": 15.54,
+          "reactCallers": [
+            "ui/src/components/settings/StoreAccounts.tsx:27",
+            "ui/src/components/shell/GameMenu.tsx:53"
+          ]
+        },
+        {
+          "method": "app.pendingOpen",
+          "webCount": 1,
+          "nativeCount": 0,
+          "webMedianMs": 0.02,
+          "reactCallers": [
+            "ui/src/components/shell/useShellEvents.ts:279"
+          ]
+        },
+        {
+          "method": "gifts.list",
+          "webCount": 1,
+          "nativeCount": 0,
+          "webMedianMs": 0.08,
+          "reactCallers": [
+            "ui/src/components/settings/StoresSection.tsx:160",
+            "ui/src/components/shell/GiftsShelf.tsx:93"
+          ]
+        },
+        {
+          "method": "shaders.addon",
+          "webCount": 1,
+          "nativeCount": 0,
+          "webMedianMs": 0.46,
+          "reactCallers": [
+            "ui/src/components/shaders/ShaderTools.tsx:15",
+            "ui/src/components/shaders/ShadersBoard.tsx:30",
+            "ui/src/components/shaders/ShadersBoard.tsx:41"
+          ]
+        },
+        {
+          "method": "shaders.call",
+          "webCount": 1,
+          "nativeCount": 0,
+          "webMedianMs": 0.17,
+          "reactCallers": [
+            "ui/src/components/shaders/shaderCall.ts:57"
+          ]
+        },
+        {
+          "method": "steam.account",
+          "webCount": 1,
+          "nativeCount": 0,
+          "webMedianMs": 0.24,
+          "reactCallers": [
+            "ui/src/components/settings/SteamSignInRow.tsx:31"
+          ]
+        },
+        {
+          "method": "telemetry.track",
+          "webCount": 1,
+          "nativeCount": 0,
+          "webMedianMs": 0.72,
+          "reactCallers": [
+            "ui/src/components/LauncherApp.tsx:869"
+          ]
+        }
+      ],
+      "nativeOnlyMethods": [
+        {
+          "method": "app.checkUpdate",
+          "webCount": 0,
+          "nativeCount": 1,
+          "nativeMedianMs": 362.21,
+          "reactCallers": [
+            "ui/src/components/shell/useAppUpdate.ts:99",
+            "ui/src/components/shell/useAppUpdate.ts:171",
+            "ui/src/lib/bridgeCancellation.ts:4",
+            "ui/src/lib/hostContract.ts:24"
+          ]
+        },
+        {
+          "method": "exoAccount.state",
+          "webCount": 0,
+          "nativeCount": 1,
+          "nativeMedianMs": 0.8,
+          "reactCallers": [
+            "ui/src/lib/host.ts:2390"
+          ]
+        },
+        {
+          "method": "hdr.state",
+          "webCount": 0,
+          "nativeCount": 1,
+          "nativeMedianMs": 0.3,
+          "reactCallers": [
+            "ui/src/lib/hdr.ts:10"
+          ]
+        },
+        {
+          "method": "system.about",
+          "webCount": 0,
+          "nativeCount": 1,
+          "nativeMedianMs": 59.13,
+          "reactCallers": [
+            "ui/src/components/gpu/usePcState.ts:68"
+          ]
+        }
+      ],
+      "pushEventGaps": [],
+      "chattiness": []
+    },
+    {
+      "id": "room-devices",
+      "label": "Open Devices room",
+      "group": "rooms",
+      "webStatus": {
+        "status": "ok"
+      },
+      "nativeStatus": {
+        "status": "ok"
+      },
+      "webSummary": {
+        "totalRequests": 14,
+        "totalEvents": 1,
+        "methods": {
+          "app.pendingOpen": {
+            "count": 1,
+            "ok": 1,
+            "failed": 0,
+            "medianMs": 0.01,
+            "shapes": [
+              "null"
+            ]
+          },
+          "devices.image": {
+            "count": 4,
+            "ok": 4,
+            "failed": 0,
+            "medianMs": 697.89,
+            "shapes": [
+              "{\"kind\":\"string\",\"model\":\"null\",\"name\":\"string\",\"maker\":\"string\"}",
+              "{\"app\":{\"id\":\"string\",\"name\":\"string\",\"where\":\"string\"},\"battery\":\"null\",\"color\":\"null\",\"connection\":\"string\",\"id\":\"string\",\"kind\":\"string\",\"lab\":\"boolean\",\"layout\":\"string\",\"maker\":\"string\",\"model\":\"string\",\"name\":\"string\",\"port\":{\"better\":\"string\",\"chips\":\"number\",\"hubs\":\"number\",\"interrupts\":\"string\",\"where\":\"string\"},\"role\":\"null\"}",
+              "{\"kind\":\"string\",\"model\":\"string\",\"name\":\"string\"}"
+            ]
+          },
+          "devices.list": {
+            "count": 1,
+            "ok": 1,
+            "failed": 0,
+            "medianMs": 135.25,
+            "shapes": [
+              "{}"
+            ]
+          },
+          "music.playback": {
+            "count": 1,
+            "ok": 1,
+            "failed": 0,
+            "medianMs": 0.08,
+            "shapes": [
+              "null"
+            ]
+          },
+          "music.volume": {
+            "count": 1,
+            "ok": 1,
+            "failed": 0,
+            "medianMs": 33.17,
+            "shapes": [
+              "{}"
+            ]
+          },
+          "shell.heartbeat": {
+            "count": 4,
+            "ok": 4,
+            "failed": 0,
+            "medianMs": 0.07,
+            "shapes": [
+              "{\"visible\":\"boolean\"}"
+            ]
+          },
+          "spotify.start": {
+            "count": 1,
+            "ok": 1,
+            "failed": 0,
+            "medianMs": 207.76,
+            "shapes": [
+              "null"
+            ]
+          },
+          "telemetry.track": {
+            "count": 1,
+            "ok": 1,
+            "failed": 0,
+            "medianMs": 0.58,
+            "shapes": [
+              "{\"room\":\"string\"}"
+            ]
+          }
+        },
+        "events": {
+          "music.volume": {
+            "count": 1,
+            "shapes": [
+              "{\"level\":\"number\",\"source\":\"string\"}"
+            ]
+          }
+        }
+      },
+      "nativeSummary": {
+        "totalRequests": 10,
+        "totalEvents": 0,
+        "methods": {
+          "audio.read": {
+            "count": 1,
+            "ok": 1,
+            "failed": 0,
+            "medianMs": 26.39,
+            "shapes": [
+              "{\"mic\":\"null\",\"output\":\"string\"}"
+            ]
+          },
+          "devices.image": {
+            "count": 5,
+            "ok": 3,
+            "failed": 0,
+            "medianMs": 13.81,
+            "shapes": [
+              "{\"color\":\"null\",\"kind\":\"string\",\"layout\":\"null\",\"maker\":\"string\",\"model\":\"null\",\"name\":\"string\"}",
+              "{\"color\":\"null\",\"kind\":\"string\",\"layout\":\"string\",\"maker\":\"string\",\"model\":\"string\",\"name\":\"string\"}",
+              "{\"color\":\"null\",\"kind\":\"string\",\"layout\":\"null\",\"maker\":\"string\",\"model\":\"string\",\"name\":\"string\"}"
+            ]
+          },
+          "devices.list": {
+            "count": 1,
+            "ok": 1,
+            "failed": 0,
+            "medianMs": 505.94,
+            "shapes": [
+              "{}"
+            ]
+          },
+          "eq": {
+            "count": 1,
+            "ok": 1,
+            "failed": 0,
+            "medianMs": 180.83,
+            "shapes": [
+              "{\"action\":\"string\"}"
+            ]
+          },
+          "keyboard.backups": {
+            "count": 1,
+            "ok": 1,
+            "failed": 0,
+            "medianMs": 296.42,
+            "shapes": [
+              "{}"
+            ]
+          },
+          "keyboard.read": {
+            "count": 1,
+            "ok": 1,
+            "failed": 0,
+            "medianMs": 1232.16,
+            "shapes": [
+              "{}"
+            ]
+          }
+        },
+        "events": {}
+      },
+      "gapScore": 74,
+      "reactOnlyMethods": [
+        {
+          "method": "shell.heartbeat",
+          "webCount": 4,
+          "nativeCount": 0,
+          "webMedianMs": 0.07,
+          "reactCallers": [
+            "ui/src/lib/heartbeat.ts:15"
+          ]
+        },
+        {
+          "method": "app.pendingOpen",
+          "webCount": 1,
+          "nativeCount": 0,
+          "webMedianMs": 0.01,
+          "reactCallers": [
+            "ui/src/components/shell/useShellEvents.ts:279"
+          ]
+        },
+        {
+          "method": "music.playback",
+          "webCount": 1,
+          "nativeCount": 0,
+          "webMedianMs": 0.08,
+          "reactCallers": [
+            "ui/src/components/discord/JamBox.tsx:15",
+            "ui/src/components/discord/JamBox.tsx:16",
+            "ui/src/components/music/MusicPlayer.tsx:108",
+            "ui/src/components/music/MusicPlayer.tsx:111",
+            "ui/src/components/shell/MusicMiniPlayer.tsx:78",
+            "ui/src/components/shell/MusicMiniPlayer.tsx:79"
+          ]
+        },
+        {
+          "method": "music.volume",
+          "webCount": 1,
+          "nativeCount": 0,
+          "webMedianMs": 33.17,
+          "reactCallers": [
+            "ui/src/components/music/Immersive.tsx:276",
+            "ui/src/components/music/shortcuts.ts:29",
+            "ui/src/components/music/shortcuts.ts:30",
+            "ui/src/components/shell/MusicVolume.tsx:33",
+            "ui/src/components/shell/MusicVolume.tsx:40",
+            "ui/src/components/shell/MusicVolume.tsx:94"
+          ]
+        },
+        {
+          "method": "spotify.start",
+          "webCount": 1,
+          "nativeCount": 0,
+          "webMedianMs": 207.76,
+          "reactCallers": [
+            "ui/src/lib/musicAdapters.ts:147"
+          ]
+        },
+        {
+          "method": "telemetry.track",
+          "webCount": 1,
+          "nativeCount": 0,
+          "webMedianMs": 0.58,
+          "reactCallers": [
+            "ui/src/components/LauncherApp.tsx:869"
+          ]
+        }
+      ],
+      "nativeOnlyMethods": [
+        {
+          "method": "audio.read",
+          "webCount": 0,
+          "nativeCount": 1,
+          "nativeMedianMs": 26.39,
+          "reactCallers": [
+            "ui/src/components/devices/AudioPage.tsx:88"
+          ]
+        },
+        {
+          "method": "eq",
+          "webCount": 0,
+          "nativeCount": 1,
+          "nativeMedianMs": 180.83,
+          "reactCallers": []
+        },
+        {
+          "method": "keyboard.backups",
+          "webCount": 0,
+          "nativeCount": 1,
+          "nativeMedianMs": 296.42,
+          "reactCallers": [
+            "ui/src/components/devices/KeyboardPage.tsx:42",
+            "ui/src/components/devices/KeyboardPage.tsx:52",
+            "ui/src/components/devices/KeyboardPage.tsx:67"
+          ]
+        },
+        {
+          "method": "keyboard.read",
+          "webCount": 0,
+          "nativeCount": 1,
+          "nativeMedianMs": 1232.16,
+          "reactCallers": [
+            "ui/src/components/devices/KeyboardPage.tsx:52",
+            "ui/src/components/devices/KeyboardPage.tsx:67"
+          ]
+        }
+      ],
+      "pushEventGaps": [
+        {
+          "event": "music.volume",
+          "webCount": 1,
+          "nativeCount": 0,
+          "nativeHandles": true,
+          "reason": "not emitted on native",
+          "reactSubscribers": [
+            "ui/src/components/shell/MusicVolume.tsx:40"
+          ]
+        }
+      ],
+      "chattiness": []
+    },
+    {
+      "id": "room-discord",
+      "label": "Open Discord room",
+      "group": "rooms",
+      "webStatus": {
+        "status": "ok"
+      },
+      "nativeStatus": {
+        "status": "ok"
+      },
+      "webSummary": {
+        "totalRequests": 10,
+        "totalEvents": 0,
+        "methods": {
+          "app.pendingOpen": {
+            "count": 1,
+            "ok": 1,
+            "failed": 0,
+            "medianMs": 0.02,
+            "shapes": [
+              "null"
+            ]
+          },
+          "discord.signIn": {
+            "count": 1,
+            "ok": 1,
+            "failed": 0,
+            "medianMs": 0.08,
+            "shapes": [
+              "{\"cancel\":\"boolean\"}"
+            ]
+          },
+          "discord.status": {
+            "count": 1,
+            "ok": 1,
+            "failed": 0,
+            "medianMs": 0.16,
+            "shapes": [
+              "{\"connect\":\"boolean\"}"
+            ]
+          },
+          "dlss.newer": {
+            "count": 1,
+            "ok": 1,
+            "failed": 0,
+            "medianMs": 1.04,
+            "shapes": [
+              "{}"
+            ]
+          },
+          "music.volume": {
+            "count": 1,
+            "ok": 1,
+            "failed": 0,
+            "medianMs": 0.07,
+            "shapes": [
+              "{}"
+            ]
+          },
+          "shell.heartbeat": {
+            "count": 4,
+            "ok": 4,
+            "failed": 0,
+            "medianMs": 0.06,
+            "shapes": [
+              "{\"visible\":\"boolean\"}"
+            ]
+          },
+          "telemetry.track": {
+            "count": 1,
+            "ok": 1,
+            "failed": 0,
+            "medianMs": 0.08,
+            "shapes": [
+              "{\"room\":\"string\"}"
+            ]
+          }
+        },
+        "events": {}
+      },
+      "nativeSummary": {
+        "totalRequests": 4,
+        "totalEvents": 1,
+        "methods": {
+          "discord.accounts": {
+            "count": 1,
+            "ok": 1,
+            "failed": 0,
+            "medianMs": 3.05,
+            "shapes": [
+              "{}"
+            ]
+          },
+          "discord.status": {
+            "count": 1,
+            "ok": 1,
+            "failed": 0,
+            "medianMs": 2.98,
+            "shapes": [
+              "{\"connect\":\"boolean\"}"
+            ]
+          },
+          "discord.stream": {
+            "count": 1,
+            "ok": 1,
+            "failed": 0,
+            "medianMs": 7.4,
+            "shapes": [
+              "{\"action\":\"string\",\"hevc\":\"boolean\"}"
+            ]
+          },
+          "discord.voice": {
+            "count": 1,
+            "ok": 1,
+            "failed": 0,
+            "medianMs": 3.2,
+            "shapes": [
+              "{}"
+            ]
+          }
+        },
+        "events": {
+          "discord.state": {
+            "count": 1,
+            "shapes": [
+              "{\"state\":\"string\"}"
+            ]
+          }
+        }
+      },
+      "gapScore": 66,
+      "reactOnlyMethods": [
+        {
+          "method": "shell.heartbeat",
+          "webCount": 4,
+          "nativeCount": 0,
+          "webMedianMs": 0.06,
+          "reactCallers": [
+            "ui/src/lib/heartbeat.ts:15"
+          ]
+        },
+        {
+          "method": "app.pendingOpen",
+          "webCount": 1,
+          "nativeCount": 0,
+          "webMedianMs": 0.02,
+          "reactCallers": [
+            "ui/src/components/shell/useShellEvents.ts:279"
+          ]
+        },
+        {
+          "method": "discord.signIn",
+          "webCount": 1,
+          "nativeCount": 0,
+          "webMedianMs": 0.08,
+          "reactCallers": [
+            "ui/src/components/discord/DiscordSignIn.tsx:21",
+            "ui/src/components/discord/DiscordSignIn.tsx:25"
+          ]
+        },
+        {
+          "method": "dlss.newer",
+          "webCount": 1,
+          "nativeCount": 0,
+          "webMedianMs": 1.04,
+          "reactCallers": [
+            "ui/src/components/LauncherApp.tsx:111"
+          ]
+        },
+        {
+          "method": "music.volume",
+          "webCount": 1,
+          "nativeCount": 0,
+          "webMedianMs": 0.07,
+          "reactCallers": [
+            "ui/src/components/music/Immersive.tsx:276",
+            "ui/src/components/music/shortcuts.ts:29",
+            "ui/src/components/music/shortcuts.ts:30",
+            "ui/src/components/shell/MusicVolume.tsx:33",
+            "ui/src/components/shell/MusicVolume.tsx:40",
+            "ui/src/components/shell/MusicVolume.tsx:94"
+          ]
+        },
+        {
+          "method": "telemetry.track",
+          "webCount": 1,
+          "nativeCount": 0,
+          "webMedianMs": 0.08,
+          "reactCallers": [
+            "ui/src/components/LauncherApp.tsx:869"
+          ]
+        }
+      ],
+      "nativeOnlyMethods": [
+        {
+          "method": "discord.accounts",
+          "webCount": 0,
+          "nativeCount": 1,
+          "nativeMedianMs": 3.05,
+          "reactCallers": [
+            "ui/src/components/discord/MeMenus.tsx:51",
+            "ui/src/components/discord/MeMenus.tsx:102"
+          ]
+        },
+        {
+          "method": "discord.stream",
+          "webCount": 0,
+          "nativeCount": 1,
+          "nativeMedianMs": 7.4,
+          "reactCallers": [
+            "ui/src/components/discord/voice.tsx:274",
+            "ui/src/components/discord/voice.tsx:290",
+            "ui/src/components/discord/voice.tsx:763",
+            "ui/src/lib/discordVideo.ts:32",
+            "ui/src/lib/discordVideo.ts:153",
+            "ui/src/lib/discordVideo.ts:208"
+          ]
+        },
+        {
+          "method": "discord.voice",
+          "webCount": 0,
+          "nativeCount": 1,
+          "nativeMedianMs": 3.2,
+          "reactCallers": [
+            "ui/src/components/discord/voice.tsx:52",
+            "ui/src/components/discord/voice.tsx:87",
+            "ui/src/components/discord/voice.tsx:93",
+            "ui/src/components/discord/voice.tsx:102",
+            "ui/src/components/discord/voice.tsx:105",
+            "ui/src/components/discord/voice.tsx:201"
+          ]
+        }
+      ],
+      "pushEventGaps": [],
+      "chattiness": []
+    },
+    {
+      "id": "room-library",
+      "label": "Return to Library room",
+      "group": "rooms",
+      "webStatus": {
+        "status": "ok"
+      },
+      "nativeStatus": {
+        "status": "ok"
+      },
+      "webSummary": {
+        "totalRequests": 10,
+        "totalEvents": 0,
+        "methods": {
+          "app.pendingOpen": {
+            "count": 1,
+            "ok": 1,
+            "failed": 0,
+            "medianMs": 0.02,
+            "shapes": [
+              "null"
+            ]
+          },
+          "game.extras": {
+            "count": 1,
+            "ok": 1,
+            "failed": 0,
+            "medianMs": 2.36,
+            "shapes": [
+              "{\"id\":\"string\"}"
+            ]
+          },
+          "gifts.list": {
+            "count": 1,
+            "ok": 1,
+            "failed": 0,
+            "medianMs": 0.06,
+            "shapes": [
+              "{\"force\":\"boolean\"}"
+            ]
+          },
+          "shell.heartbeat": {
+            "count": 4,
+            "ok": 4,
+            "failed": 0,
+            "medianMs": 0.06,
+            "shapes": [
+              "{\"visible\":\"boolean\"}"
+            ]
+          },
+          "shell.setChromeLayout": {
+            "count": 2,
+            "ok": 2,
+            "failed": 0,
+            "medianMs": 2.75,
+            "shapes": [
+              "{\"interactiveRegions\":[{\"x\":\"number\",\"y\":\"number\",\"width\":\"number\",\"height\":\"number\"}],\"maximizeButton\":{\"x\":\"number\",\"y\":\"number\",\"width\":\"number\",\"height\":\"number\"}}"
+            ]
+          },
+          "telemetry.track": {
+            "count": 1,
+            "ok": 1,
+            "failed": 0,
+            "medianMs": 1.02,
+            "shapes": [
+              "{\"room\":\"string\"}"
+            ]
+          }
+        },
+        "events": {}
+      },
+      "nativeSummary": {
+        "totalRequests": 1,
+        "totalEvents": 0,
+        "methods": {
+          "apps.icons": {
+            "count": 1,
+            "ok": 1,
+            "failed": 0,
+            "medianMs": 2044.35,
+            "shapes": [
+              "{\"ids\":[\"string\"]}"
+            ]
+          }
+        },
+        "events": {}
+      },
+      "gapScore": 62,
+      "reactOnlyMethods": [
+        {
+          "method": "shell.heartbeat",
+          "webCount": 4,
+          "nativeCount": 0,
+          "webMedianMs": 0.06,
+          "reactCallers": [
+            "ui/src/lib/heartbeat.ts:15"
+          ]
+        },
+        {
+          "method": "shell.setChromeLayout",
+          "webCount": 2,
+          "nativeCount": 0,
+          "webMedianMs": 2.75,
+          "reactCallers": [
+            "ui/src/components/shell/useShellLayout.ts:106"
+          ]
+        },
+        {
+          "method": "app.pendingOpen",
+          "webCount": 1,
+          "nativeCount": 0,
+          "webMedianMs": 0.02,
+          "reactCallers": [
+            "ui/src/components/shell/useShellEvents.ts:279"
+          ]
+        },
+        {
+          "method": "game.extras",
+          "webCount": 1,
+          "nativeCount": 0,
+          "webMedianMs": 2.36,
+          "reactCallers": [
+            "ui/src/components/game/useGameDetails.ts:58",
+            "ui/src/components/shell/HomeDeck.tsx:238"
+          ]
+        },
+        {
+          "method": "gifts.list",
+          "webCount": 1,
+          "nativeCount": 0,
+          "webMedianMs": 0.06,
+          "reactCallers": [
+            "ui/src/components/settings/StoresSection.tsx:160",
+            "ui/src/components/shell/GiftsShelf.tsx:93"
+          ]
+        },
+        {
+          "method": "telemetry.track",
+          "webCount": 1,
+          "nativeCount": 0,
+          "webMedianMs": 1.02,
+          "reactCallers": [
+            "ui/src/components/LauncherApp.tsx:869"
+          ]
+        }
+      ],
+      "nativeOnlyMethods": [
+        {
+          "method": "apps.icons",
+          "webCount": 0,
+          "nativeCount": 1,
+          "nativeMedianMs": 2044.35,
+          "reactCallers": [
+            "ui/src/components/apps/AppsPanel.tsx:135",
+            "ui/src/components/apps/AppsPanel.tsx:860"
+          ]
+        }
+      ],
+      "pushEventGaps": [],
+      "chattiness": []
+    },
+    {
+      "id": "room-store",
+      "label": "Open Store room",
+      "group": "rooms",
+      "webStatus": {
+        "status": "ok"
+      },
+      "nativeStatus": {
+        "status": "ok"
+      },
+      "webSummary": {
+        "totalRequests": 19,
+        "totalEvents": 0,
+        "methods": {
+          "app.pendingOpen": {
+            "count": 1,
+            "ok": 1,
+            "failed": 0,
+            "medianMs": 0.03,
+            "shapes": [
+              "null"
+            ]
+          },
+          "music.volume": {
+            "count": 1,
+            "ok": 1,
+            "failed": 0,
+            "medianMs": 0.05,
+            "shapes": [
+              "{}"
+            ]
+          },
+          "shell.heartbeat": {
+            "count": 4,
+            "ok": 4,
+            "failed": 0,
+            "medianMs": 0.06,
+            "shapes": [
+              "{\"visible\":\"boolean\"}"
+            ]
+          },
+          "store.game": {
+            "count": 10,
+            "ok": 10,
+            "failed": 0,
+            "medianMs": 219.68,
+            "shapes": [
+              "{\"appId\":\"string\"}"
+            ]
+          },
+          "store.home": {
+            "count": 1,
+            "ok": 1,
+            "failed": 0,
+            "medianMs": 10.64,
+            "shapes": [
+              "{}"
+            ]
+          },
+          "store.wishlist": {
+            "count": 1,
+            "ok": 1,
+            "failed": 0,
+            "medianMs": 10.17,
+            "shapes": [
+              "{\"action\":\"string\"}"
+            ]
+          },
+          "telemetry.track": {
+            "count": 1,
+            "ok": 1,
+            "failed": 0,
+            "medianMs": 1.04,
+            "shapes": [
+              "{\"room\":\"string\"}"
+            ]
+          }
+        },
+        "events": {}
+      },
+      "nativeSummary": {
+        "totalRequests": 1,
+        "totalEvents": 0,
+        "methods": {
+          "store.home": {
+            "count": 1,
+            "ok": 0,
+            "failed": 0,
+            "medianMs": null,
+            "shapes": [
+              "{}"
+            ]
+          }
+        },
+        "events": {}
+      },
+      "gapScore": 60,
+      "reactOnlyMethods": [
+        {
+          "method": "store.game",
+          "webCount": 10,
+          "nativeCount": 0,
+          "webMedianMs": 219.68,
+          "reactCallers": [
+            "ui/src/components/store/storeData.ts:150"
+          ]
+        },
+        {
+          "method": "shell.heartbeat",
+          "webCount": 4,
+          "nativeCount": 0,
+          "webMedianMs": 0.06,
+          "reactCallers": [
+            "ui/src/lib/heartbeat.ts:15"
+          ]
+        },
+        {
+          "method": "app.pendingOpen",
+          "webCount": 1,
+          "nativeCount": 0,
+          "webMedianMs": 0.03,
+          "reactCallers": [
+            "ui/src/components/shell/useShellEvents.ts:279"
+          ]
+        },
+        {
+          "method": "music.volume",
+          "webCount": 1,
+          "nativeCount": 0,
+          "webMedianMs": 0.05,
+          "reactCallers": [
+            "ui/src/components/music/Immersive.tsx:276",
+            "ui/src/components/music/shortcuts.ts:29",
+            "ui/src/components/music/shortcuts.ts:30",
+            "ui/src/components/shell/MusicVolume.tsx:33",
+            "ui/src/components/shell/MusicVolume.tsx:40",
+            "ui/src/components/shell/MusicVolume.tsx:94"
+          ]
+        },
+        {
+          "method": "store.wishlist",
+          "webCount": 1,
+          "nativeCount": 0,
+          "webMedianMs": 10.17,
+          "reactCallers": [
+            "ui/src/components/store/storeData.ts:266",
+            "ui/src/components/store/storeData.ts:309",
+            "ui/src/components/store/storeData.ts:320"
+          ]
+        },
+        {
+          "method": "telemetry.track",
+          "webCount": 1,
+          "nativeCount": 0,
+          "webMedianMs": 1.04,
+          "reactCallers": [
+            "ui/src/components/LauncherApp.tsx:869"
+          ]
+        }
+      ],
+      "nativeOnlyMethods": [],
+      "pushEventGaps": [],
+      "chattiness": []
+    },
+    {
+      "id": "room-music",
+      "label": "Open Music room",
+      "group": "rooms",
+      "webStatus": {
+        "status": "ok"
+      },
+      "nativeStatus": {
+        "status": "ok"
+      },
+      "webSummary": {
+        "totalRequests": 11,
+        "totalEvents": 1,
+        "methods": {
+          "app.pendingOpen": {
+            "count": 1,
+            "ok": 1,
+            "failed": 0,
+            "medianMs": 0.02,
+            "shapes": [
+              "null"
+            ]
+          },
+          "discord.signIn": {
+            "count": 1,
+            "ok": 1,
+            "failed": 0,
+            "medianMs": 0.33,
+            "shapes": [
+              "{\"cancel\":\"boolean\"}"
+            ]
+          },
+          "music.volume": {
+            "count": 1,
+            "ok": 1,
+            "failed": 0,
+            "medianMs": 0.06,
+            "shapes": [
+              "{}"
+            ]
+          },
+          "music.warm": {
+            "count": 1,
+            "ok": 1,
+            "failed": 0,
+            "medianMs": 0.66,
+            "shapes": [
+              "null"
+            ]
+          },
+          "shell.heartbeat": {
+            "count": 4,
+            "ok": 4,
+            "failed": 0,
+            "medianMs": 0.05,
+            "shapes": [
+              "{\"visible\":\"boolean\"}"
+            ]
+          },
+          "spotify.start": {
+            "count": 2,
+            "ok": 2,
+            "failed": 0,
+            "medianMs": 15.39,
+            "shapes": [
+              "null"
+            ]
+          },
+          "telemetry.track": {
+            "count": 1,
+            "ok": 1,
+            "failed": 0,
+            "medianMs": 0.64,
+            "shapes": [
+              "{\"room\":\"string\"}"
+            ]
+          }
+        },
+        "events": {
+          "music.status": {
+            "count": 1,
+            "shapes": [
+              "{\"ok\":\"boolean\",\"ready\":\"boolean\",\"service\":\"string\",\"state\":\"string\"}"
+            ]
+          }
+        }
+      },
+      "nativeSummary": {
+        "totalRequests": 3,
+        "totalEvents": 2,
+        "methods": {
+          "music.playback": {
+            "count": 1,
+            "ok": 1,
+            "failed": 0,
+            "medianMs": 0.12,
+            "shapes": [
+              "{}"
+            ]
+          },
+          "music.volume": {
+            "count": 1,
+            "ok": 1,
+            "failed": 0,
+            "medianMs": 0.73,
+            "shapes": [
+              "{}"
+            ]
+          },
+          "spotify.start": {
+            "count": 1,
+            "ok": 1,
+            "failed": 0,
+            "medianMs": 46,
+            "shapes": [
+              "{}"
+            ]
+          }
+        },
+        "events": {
+          "music.playback": {
+            "count": 1,
+            "shapes": [
+              "{\"seq\":\"number\",\"provider\":\"string\",\"status\":\"string\",\"title\":\"string\",\"artist\":\"string\",\"positionAgeMs\":\"number\",\"rate\":\"number\",\"canPlay\":\"boolean\",\"canPause\":\"boolean\",\"canPrev\":\"boolean\",\"canNext\":\"boolean\",\"canSeek\":\"boolean\"}"
+            ]
+          },
+          "music.status": {
+            "count": 1,
+            "shapes": [
+              "{\"ok\":\"boolean\",\"ready\":\"boolean\",\"service\":\"string\",\"state\":\"string\"}"
+            ]
+          }
+        }
+      },
+      "gapScore": 58,
+      "reactOnlyMethods": [
+        {
+          "method": "shell.heartbeat",
+          "webCount": 4,
+          "nativeCount": 0,
+          "webMedianMs": 0.05,
+          "reactCallers": [
+            "ui/src/lib/heartbeat.ts:15"
+          ]
+        },
+        {
+          "method": "app.pendingOpen",
+          "webCount": 1,
+          "nativeCount": 0,
+          "webMedianMs": 0.02,
+          "reactCallers": [
+            "ui/src/components/shell/useShellEvents.ts:279"
+          ]
+        },
+        {
+          "method": "discord.signIn",
+          "webCount": 1,
+          "nativeCount": 0,
+          "webMedianMs": 0.33,
+          "reactCallers": [
+            "ui/src/components/discord/DiscordSignIn.tsx:21",
+            "ui/src/components/discord/DiscordSignIn.tsx:25"
+          ]
+        },
+        {
+          "method": "music.warm",
+          "webCount": 1,
+          "nativeCount": 0,
+          "webMedianMs": 0.66,
+          "reactCallers": [
+            "ui/src/lib/music.ts:126"
+          ]
+        },
+        {
+          "method": "telemetry.track",
+          "webCount": 1,
+          "nativeCount": 0,
+          "webMedianMs": 0.64,
+          "reactCallers": [
+            "ui/src/components/LauncherApp.tsx:869"
+          ]
+        }
+      ],
+      "nativeOnlyMethods": [
+        {
+          "method": "music.playback",
+          "webCount": 0,
+          "nativeCount": 1,
+          "nativeMedianMs": 0.12,
+          "reactCallers": [
+            "ui/src/components/discord/JamBox.tsx:15",
+            "ui/src/components/discord/JamBox.tsx:16",
+            "ui/src/components/music/MusicPlayer.tsx:108",
+            "ui/src/components/music/MusicPlayer.tsx:111",
+            "ui/src/components/shell/MusicMiniPlayer.tsx:78",
+            "ui/src/components/shell/MusicMiniPlayer.tsx:79"
+          ]
+        }
+      ],
+      "pushEventGaps": [
+        {
+          "event": "music.status",
+          "webCount": 1,
+          "nativeCount": 1,
+          "nativeHandles": false,
+          "reason": "emitted but unhandled in native",
+          "reactSubscribers": [
+            "ui/src/components/music/NativeMusicRoom.tsx:132"
+          ]
+        }
+      ],
+      "chattiness": []
+    },
+    {
+      "id": "discord-dm",
+      "label": "Open Discord DM conversation",
+      "group": "discord",
+      "webStatus": {
+        "status": "not_drivable",
+        "reason": "Discord not signed in in disposable test instance"
+      },
+      "nativeStatus": {
+        "status": "not_drivable",
+        "reason": "Discord not signed in in disposable test instance"
+      },
+      "webSummary": {
+        "totalRequests": 10,
+        "totalEvents": 1,
+        "methods": {
+          "music.volume": {
+            "count": 1,
+            "ok": 1,
+            "failed": 0,
+            "medianMs": 0.08,
+            "shapes": [
+              "{}"
+            ]
+          },
+          "shell.heartbeat": {
+            "count": 9,
+            "ok": 9,
+            "failed": 0,
+            "medianMs": 0.06,
+            "shapes": [
+              "{\"visible\":\"boolean\"}"
+            ]
+          }
+        },
+        "events": {
+          "discord.signin": {
+            "count": 1,
+            "shapes": [
+              "{\"state\":\"string\",\"url\":\"string\"}"
+            ]
+          }
+        }
+      },
+      "nativeSummary": {
+        "totalRequests": 4,
+        "totalEvents": 1,
+        "methods": {
+          "discord.accounts": {
+            "count": 1,
+            "ok": 1,
+            "failed": 0,
+            "medianMs": 0.25,
+            "shapes": [
+              "{}"
+            ]
+          },
+          "discord.status": {
+            "count": 1,
+            "ok": 1,
+            "failed": 0,
+            "medianMs": 0.37,
+            "shapes": [
+              "{\"connect\":\"boolean\"}"
+            ]
+          },
+          "discord.stream": {
+            "count": 1,
+            "ok": 1,
+            "failed": 0,
+            "medianMs": 0.11,
+            "shapes": [
+              "{\"action\":\"string\",\"hevc\":\"boolean\"}"
+            ]
+          },
+          "discord.voice": {
+            "count": 1,
+            "ok": 1,
+            "failed": 0,
+            "medianMs": 0.06,
+            "shapes": [
+              "{}"
+            ]
+          }
+        },
+        "events": {
+          "discord.state": {
+            "count": 1,
+            "shapes": [
+              "{\"state\":\"string\"}"
+            ]
+          }
+        }
+      },
+      "gapScore": 49,
+      "reactOnlyMethods": [
+        {
+          "method": "shell.heartbeat",
+          "webCount": 9,
+          "nativeCount": 0,
+          "webMedianMs": 0.06,
+          "reactCallers": [
+            "ui/src/lib/heartbeat.ts:15"
+          ]
+        },
+        {
+          "method": "music.volume",
+          "webCount": 1,
+          "nativeCount": 0,
+          "webMedianMs": 0.08,
+          "reactCallers": [
+            "ui/src/components/music/Immersive.tsx:276",
+            "ui/src/components/music/shortcuts.ts:29",
+            "ui/src/components/music/shortcuts.ts:30",
+            "ui/src/components/shell/MusicVolume.tsx:33",
+            "ui/src/components/shell/MusicVolume.tsx:40",
+            "ui/src/components/shell/MusicVolume.tsx:94"
+          ]
+        }
+      ],
+      "nativeOnlyMethods": [
+        {
+          "method": "discord.accounts",
+          "webCount": 0,
+          "nativeCount": 1,
+          "nativeMedianMs": 0.25,
+          "reactCallers": [
+            "ui/src/components/discord/MeMenus.tsx:51",
+            "ui/src/components/discord/MeMenus.tsx:102"
+          ]
+        },
+        {
+          "method": "discord.status",
+          "webCount": 0,
+          "nativeCount": 1,
+          "nativeMedianMs": 0.37,
+          "reactCallers": [
+            "ui/src/components/discord/NativeDiscordRoom.tsx:29",
+            "ui/src/components/discord/NativeDiscordRoom.tsx:42",
+            "ui/src/components/onboarding/DiscordStep.tsx:15",
+            "ui/src/lib/listenAlong.ts:78"
+          ]
+        },
+        {
+          "method": "discord.stream",
+          "webCount": 0,
+          "nativeCount": 1,
+          "nativeMedianMs": 0.11,
+          "reactCallers": [
+            "ui/src/components/discord/voice.tsx:274",
+            "ui/src/components/discord/voice.tsx:290",
+            "ui/src/components/discord/voice.tsx:763",
+            "ui/src/lib/discordVideo.ts:32",
+            "ui/src/lib/discordVideo.ts:153",
+            "ui/src/lib/discordVideo.ts:208"
+          ]
+        },
+        {
+          "method": "discord.voice",
+          "webCount": 0,
+          "nativeCount": 1,
+          "nativeMedianMs": 0.06,
+          "reactCallers": [
+            "ui/src/components/discord/voice.tsx:52",
+            "ui/src/components/discord/voice.tsx:87",
+            "ui/src/components/discord/voice.tsx:93",
+            "ui/src/components/discord/voice.tsx:102",
+            "ui/src/components/discord/voice.tsx:105",
+            "ui/src/components/discord/voice.tsx:201"
+          ]
+        }
+      ],
+      "pushEventGaps": [
+        {
+          "event": "discord.signin",
+          "webCount": 1,
+          "nativeCount": 0,
+          "nativeHandles": true,
+          "reason": "not emitted on native",
+          "reactSubscribers": [
+            "ui/src/components/discord/DiscordSignIn.tsx:19",
+            "ui/src/components/discord/MeMenus.tsx:108"
+          ]
+        }
+      ],
+      "chattiness": []
+    },
+    {
+      "id": "palette",
+      "label": "Open Command Palette (Ctrl+K)",
+      "group": "shell",
+      "webStatus": {
+        "status": "ok"
+      },
+      "nativeStatus": {
+        "status": "ok"
+      },
+      "webSummary": {
+        "totalRequests": 6,
+        "totalEvents": 0,
+        "methods": {
+          "discord.home": {
+            "count": 1,
+            "ok": 1,
+            "failed": 0,
+            "medianMs": 2.41,
+            "shapes": [
+              "{}"
+            ]
+          },
+          "notes.list": {
+            "count": 1,
+            "ok": 1,
+            "failed": 0,
+            "medianMs": 35.06,
+            "shapes": [
+              "{\"query\":\"null\"}"
+            ]
+          },
+          "shell.heartbeat": {
+            "count": 3,
+            "ok": 3,
+            "failed": 0,
+            "medianMs": 0.05,
+            "shapes": [
+              "{\"visible\":\"boolean\"}"
+            ]
+          },
+          "shell.setChromeLayout": {
+            "count": 1,
+            "ok": 1,
+            "failed": 0,
+            "medianMs": 3.58,
+            "shapes": [
+              "{\"interactiveRegions\":[{\"x\":\"number\",\"y\":\"number\",\"width\":\"number\",\"height\":\"number\"}],\"maximizeButton\":{\"x\":\"number\",\"y\":\"number\",\"width\":\"number\",\"height\":\"number\"}}"
+            ]
+          }
+        },
+        "events": {}
+      },
+      "nativeSummary": {
+        "totalRequests": 0,
+        "totalEvents": 0,
+        "methods": {},
+        "events": {}
+      },
+      "gapScore": 40,
+      "reactOnlyMethods": [
+        {
+          "method": "shell.heartbeat",
+          "webCount": 3,
+          "nativeCount": 0,
+          "webMedianMs": 0.05,
+          "reactCallers": [
+            "ui/src/lib/heartbeat.ts:15"
+          ]
+        },
+        {
+          "method": "discord.home",
+          "webCount": 1,
+          "nativeCount": 0,
+          "webMedianMs": 2.41,
+          "reactCallers": [
+            "ui/src/components/discord/DiscordClient.tsx:319",
+            "ui/src/components/discord/MessageTools.tsx:20",
+            "ui/src/components/shell/ExoIslandCall.tsx:58",
+            "ui/src/components/shell/ExoIslandCall.tsx:145",
+            "ui/src/components/shell/paletteExtras.ts:28"
+          ]
+        },
+        {
+          "method": "notes.list",
+          "webCount": 1,
+          "nativeCount": 0,
+          "webMedianMs": 35.06,
+          "reactCallers": [
+            "ui/src/components/captures/NotesView.tsx:388",
+            "ui/src/components/captures/NotesView.tsx:395",
+            "ui/src/components/captures/NotesView.tsx:485",
+            "ui/src/lib/notes.ts:79"
+          ]
+        },
+        {
+          "method": "shell.setChromeLayout",
+          "webCount": 1,
+          "nativeCount": 0,
+          "webMedianMs": 3.58,
+          "reactCallers": [
+            "ui/src/components/shell/useShellLayout.ts:106"
+          ]
+        }
+      ],
+      "nativeOnlyMethods": [],
+      "pushEventGaps": [],
+      "chattiness": []
+    },
+    {
+      "id": "downloads",
+      "label": "Open Downloads sheet",
+      "group": "library",
+      "webStatus": {
+        "status": "not_drivable",
+        "reason": "Downloads menu item not found"
+      },
+      "nativeStatus": {
+        "status": "not_drivable",
+        "reason": "Native UI has no Downloads sheet button outside Settings"
+      },
+      "webSummary": {
+        "totalRequests": 9,
+        "totalEvents": 0,
+        "methods": {
+          "shell.heartbeat": {
+            "count": 9,
+            "ok": 9,
+            "failed": 0,
+            "medianMs": 0.06,
+            "shapes": [
+              "{\"visible\":\"boolean\"}"
+            ]
+          }
+        },
+        "events": {}
+      },
+      "nativeSummary": {
+        "totalRequests": 0,
+        "totalEvents": 0,
+        "methods": {},
+        "events": {}
+      },
+      "gapScore": 25,
+      "reactOnlyMethods": [
+        {
+          "method": "shell.heartbeat",
+          "webCount": 9,
+          "nativeCount": 0,
+          "webMedianMs": 0.06,
+          "reactCallers": [
+            "ui/src/lib/heartbeat.ts:15"
+          ]
+        }
+      ],
+      "nativeOnlyMethods": [],
+      "pushEventGaps": [],
+      "chattiness": []
+    },
+    {
+      "id": "game-page",
+      "label": "Open a game page from Library",
+      "group": "library",
+      "webStatus": {
+        "status": "not_drivable",
+        "reason": "no game tiles in Library"
+      },
+      "nativeStatus": {
+        "status": "ok"
+      },
+      "webSummary": {
+        "totalRequests": 9,
+        "totalEvents": 0,
+        "methods": {
+          "shell.heartbeat": {
+            "count": 9,
+            "ok": 9,
+            "failed": 0,
+            "medianMs": 0.06,
+            "shapes": [
+              "{\"visible\":\"boolean\"}"
+            ]
+          }
+        },
+        "events": {}
+      },
+      "nativeSummary": {
+        "totalRequests": 3,
+        "totalEvents": 1,
+        "methods": {
+          "game.extras": {
+            "count": 1,
+            "ok": 1,
+            "failed": 0,
+            "medianMs": 7.65,
+            "shapes": [
+              "{\"id\":\"string\"}"
+            ]
+          },
+          "game.get": {
+            "count": 1,
+            "ok": 1,
+            "failed": 0,
+            "medianMs": 99.82,
+            "shapes": [
+              "{\"id\":\"string\"}"
+            ]
+          },
+          "game.properties": {
+            "count": 1,
+            "ok": 1,
+            "failed": 0,
+            "medianMs": 352.46,
+            "shapes": [
+              "{\"id\":\"string\"}"
+            ]
+          }
+        },
+        "events": {
+          "game.achievements": {
+            "count": 1,
+            "shapes": [
+              "{\"id\":\"string\",\"unlocked\":\"number\",\"total\":\"number\"}"
+            ]
+          }
+        }
+      },
+      "gapScore": 16,
+      "reactOnlyMethods": [
+        {
+          "method": "shell.heartbeat",
+          "webCount": 9,
+          "nativeCount": 0,
+          "webMedianMs": 0.06,
+          "reactCallers": [
+            "ui/src/lib/heartbeat.ts:15"
+          ]
+        }
+      ],
+      "nativeOnlyMethods": [
+        {
+          "method": "game.extras",
+          "webCount": 0,
+          "nativeCount": 1,
+          "nativeMedianMs": 7.65,
+          "reactCallers": [
+            "ui/src/components/game/useGameDetails.ts:58",
+            "ui/src/components/shell/HomeDeck.tsx:238"
+          ]
+        },
+        {
+          "method": "game.get",
+          "webCount": 0,
+          "nativeCount": 1,
+          "nativeMedianMs": 99.82,
+          "reactCallers": [
+            "ui/src/components/shell/useGameActions.ts:261",
+            "ui/src/components/shell/useRunStatePoll.ts:56",
+            "ui/src/components/shell/useShellEvents.ts:179"
+          ]
+        },
+        {
+          "method": "game.properties",
+          "webCount": 0,
+          "nativeCount": 1,
+          "nativeMedianMs": 352.46,
+          "reactCallers": [
+            "ui/src/components/game/GameProperties.tsx:205"
+          ]
+        }
+      ],
+      "pushEventGaps": [],
+      "chattiness": []
+    },
+    {
+      "id": "settings-about",
+      "label": "Open Settings > About",
+      "group": "settings",
+      "webStatus": {
+        "status": "ok"
+      },
+      "nativeStatus": {
+        "status": "ok"
+      },
+      "webSummary": {
+        "totalRequests": 2,
+        "totalEvents": 0,
+        "methods": {
+          "shell.heartbeat": {
+            "count": 2,
+            "ok": 2,
+            "failed": 0,
+            "medianMs": 0.06,
+            "shapes": [
+              "{\"visible\":\"boolean\"}"
+            ]
+          }
+        },
+        "events": {}
+      },
+      "nativeSummary": {
+        "totalRequests": 0,
+        "totalEvents": 0,
+        "methods": {},
+        "events": {}
+      },
+      "gapScore": 10,
+      "reactOnlyMethods": [
+        {
+          "method": "shell.heartbeat",
+          "webCount": 2,
+          "nativeCount": 0,
+          "webMedianMs": 0.06,
+          "reactCallers": [
+            "ui/src/lib/heartbeat.ts:15"
+          ]
+        }
+      ],
+      "nativeOnlyMethods": [],
+      "pushEventGaps": [],
+      "chattiness": []
+    },
+    {
+      "id": "settings-downloads",
+      "label": "Open Settings > Downloads",
+      "group": "settings",
+      "webStatus": {
+        "status": "ok"
+      },
+      "nativeStatus": {
+        "status": "ok"
+      },
+      "webSummary": {
+        "totalRequests": 1,
+        "totalEvents": 0,
+        "methods": {
+          "shell.heartbeat": {
+            "count": 1,
+            "ok": 1,
+            "failed": 0,
+            "medianMs": 0.06,
+            "shapes": [
+              "{\"visible\":\"boolean\"}"
+            ]
+          }
+        },
+        "events": {}
+      },
+      "nativeSummary": {
+        "totalRequests": 0,
+        "totalEvents": 0,
+        "methods": {},
+        "events": {}
+      },
+      "gapScore": 10,
+      "reactOnlyMethods": [
+        {
+          "method": "shell.heartbeat",
+          "webCount": 1,
+          "nativeCount": 0,
+          "webMedianMs": 0.06,
+          "reactCallers": [
+            "ui/src/lib/heartbeat.ts:15"
+          ]
+        }
+      ],
+      "nativeOnlyMethods": [],
+      "pushEventGaps": [],
+      "chattiness": []
+    },
+    {
+      "id": "settings-ingame",
+      "label": "Open Settings > In game",
+      "group": "settings",
+      "webStatus": {
+        "status": "ok"
+      },
+      "nativeStatus": {
+        "status": "ok"
+      },
+      "webSummary": {
+        "totalRequests": 2,
+        "totalEvents": 0,
+        "methods": {
+          "shell.heartbeat": {
+            "count": 2,
+            "ok": 2,
+            "failed": 0,
+            "medianMs": 0.06,
+            "shapes": [
+              "{\"visible\":\"boolean\"}"
+            ]
+          }
+        },
+        "events": {}
+      },
+      "nativeSummary": {
+        "totalRequests": 0,
+        "totalEvents": 0,
+        "methods": {},
+        "events": {}
+      },
+      "gapScore": 10,
+      "reactOnlyMethods": [
+        {
+          "method": "shell.heartbeat",
+          "webCount": 2,
+          "nativeCount": 0,
+          "webMedianMs": 0.06,
+          "reactCallers": [
+            "ui/src/lib/heartbeat.ts:15"
+          ]
+        }
+      ],
+      "nativeOnlyMethods": [],
+      "pushEventGaps": [],
+      "chattiness": []
+    },
+    {
+      "id": "settings-library",
+      "label": "Open Settings > Library",
+      "group": "settings",
+      "webStatus": {
+        "status": "ok"
+      },
+      "nativeStatus": {
+        "status": "ok"
+      },
+      "webSummary": {
+        "totalRequests": 2,
+        "totalEvents": 0,
+        "methods": {
+          "shell.heartbeat": {
+            "count": 2,
+            "ok": 2,
+            "failed": 0,
+            "medianMs": 0.06,
+            "shapes": [
+              "{\"visible\":\"boolean\"}"
+            ]
+          }
+        },
+        "events": {}
+      },
+      "nativeSummary": {
+        "totalRequests": 0,
+        "totalEvents": 0,
+        "methods": {},
+        "events": {}
+      },
+      "gapScore": 10,
+      "reactOnlyMethods": [
+        {
+          "method": "shell.heartbeat",
+          "webCount": 2,
+          "nativeCount": 0,
+          "webMedianMs": 0.06,
+          "reactCallers": [
+            "ui/src/lib/heartbeat.ts:15"
+          ]
+        }
+      ],
+      "nativeOnlyMethods": [],
+      "pushEventGaps": [],
+      "chattiness": []
+    },
+    {
+      "id": "settings-music",
+      "label": "Open Settings > Music",
+      "group": "settings",
+      "webStatus": {
+        "status": "ok"
+      },
+      "nativeStatus": {
+        "status": "ok"
+      },
+      "webSummary": {
+        "totalRequests": 1,
+        "totalEvents": 0,
+        "methods": {
+          "shell.heartbeat": {
+            "count": 1,
+            "ok": 1,
+            "failed": 0,
+            "medianMs": 0.06,
+            "shapes": [
+              "{\"visible\":\"boolean\"}"
+            ]
+          }
+        },
+        "events": {}
+      },
+      "nativeSummary": {
+        "totalRequests": 0,
+        "totalEvents": 0,
+        "methods": {},
+        "events": {}
+      },
+      "gapScore": 10,
+      "reactOnlyMethods": [
+        {
+          "method": "shell.heartbeat",
+          "webCount": 1,
+          "nativeCount": 0,
+          "webMedianMs": 0.06,
+          "reactCallers": [
+            "ui/src/lib/heartbeat.ts:15"
+          ]
+        }
+      ],
+      "nativeOnlyMethods": [],
+      "pushEventGaps": [],
+      "chattiness": []
+    }
+  ]
+}

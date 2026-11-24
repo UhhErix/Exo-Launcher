@@ -3,7 +3,7 @@ use serde_json::Value;
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
-fn null_as_default<'de, D, T>(deserializer: D) -> Result<T, D::Error>
+pub(crate) fn null_as_default<'de, D, T>(deserializer: D) -> Result<T, D::Error>
 where
     D: Deserializer<'de>,
     T: Default + Deserialize<'de>,
@@ -32,8 +32,32 @@ pub struct GameInclude {
 pub struct GameVariant {
     #[serde(default, deserialize_with = "null_as_default")]
     pub id: String,
+    #[serde(default, deserialize_with = "null_as_default")]
+    pub store: String,
+    #[serde(default)]
+    pub installed: bool,
+    #[serde(default)]
+    pub owned: bool,
+    #[serde(default)]
+    pub entitlement_state: Option<String>,
+    #[serde(default)]
+    pub update_available: bool,
+    #[serde(default)]
+    pub can_install: bool,
+    #[serde(default)]
+    pub primary_action: Option<String>,
     #[serde(default)]
     pub launch_target: Option<String>,
+    #[serde(default)]
+    pub playtime_minutes: Option<u64>,
+    #[serde(default)]
+    pub last_played_utc: Option<String>,
+    #[serde(default, deserialize_with = "null_as_default")]
+    pub status: String,
+    #[serde(default)]
+    pub is_running: bool,
+    #[serde(default)]
+    pub can_stop: bool,
 }
 
 #[derive(Debug, Clone, Default, Deserialize, Serialize)]
@@ -50,11 +74,19 @@ pub struct Game {
     #[serde(default)]
     pub owned: bool,
     #[serde(default)]
+    pub entitlement_state: Option<String>,
+    #[serde(default)]
     pub update_available: bool,
     #[serde(default)]
     pub can_install: bool,
     #[serde(default)]
     pub primary_action: Option<String>,
+    #[serde(default)]
+    pub canonical_title_key: Option<String>,
+    #[serde(default)]
+    pub selected_variant_id: Option<String>,
+    #[serde(default)]
+    pub buy_url: Option<String>,
     #[serde(default)]
     pub cover_url: Option<String>,
     #[serde(default)]
@@ -574,21 +606,21 @@ pub fn store_label(store: &str) -> &'static str {
 pub struct InstallProgress {
     #[serde(default)]
     pub game_id: Option<String>,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "null_as_default")]
     pub phase: String,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "null_as_default")]
     pub percent: f64,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "null_as_default")]
     pub bytes_downloaded: u64,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "null_as_default")]
     pub bytes_to_download: u64,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "null_as_default")]
     pub bytes_per_second: u64,
     #[serde(default)]
     pub status: Option<String>,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "null_as_default")]
     pub can_cancel: bool,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "null_as_default")]
     pub is_active: bool,
 }
 
@@ -628,6 +660,8 @@ pub struct GameExtras {
     #[serde(default)]
     pub achievements_total: Option<u32>,
     #[serde(default)]
+    pub drive_heat: Option<crate::game_types::DriveHeat>,
+    #[serde(default)]
     pub message: Option<String>,
 }
 
@@ -638,18 +672,54 @@ pub struct GameProperties {
     pub ok: bool,
     #[serde(default)]
     pub message: Option<String>,
+    #[serde(default, deserialize_with = "null_as_default")]
+    pub store: String,
     #[serde(default)]
     pub launch_options: Option<String>,
     #[serde(default)]
+    pub launch_options_note: Option<String>,
+    #[serde(default)]
+    pub size_bytes: Option<u64>,
+    #[serde(default)]
+    pub verify_label: Option<String>,
+    #[serde(default)]
+    pub can_browse: bool,
+    #[serde(default)]
+    pub running: bool,
+    #[serde(default)]
     pub steam_overlay: Option<bool>,
+    #[serde(default)]
+    pub steam_overlay_note: Option<String>,
+    #[serde(default)]
+    pub through_steam: Option<bool>,
+    #[serde(default)]
+    pub store_properties: Option<String>,
     #[serde(default)]
     pub cloud_sync: Option<bool>,
     #[serde(default)]
     pub language: Option<String>,
+    #[serde(default, deserialize_with = "null_as_default")]
+    pub language_choices: Vec<crate::game_types::PropertyChoice>,
     #[serde(default)]
     pub beta: Option<String>,
+    #[serde(default, deserialize_with = "null_as_default")]
+    pub beta_choices: Vec<crate::game_types::PropertyChoice>,
+    #[serde(default)]
+    pub beta_code: bool,
+    #[serde(default, deserialize_with = "null_as_default")]
+    pub content_label: String,
+    #[serde(default)]
+    pub content: Option<Vec<crate::game_types::GameContent>>,
     #[serde(default)]
     pub folder: Option<String>,
+    #[serde(default, deserialize_with = "null_as_default")]
+    pub folder_choices: Vec<crate::game_types::PropertyChoice>,
+    #[serde(default)]
+    pub moving: Option<crate::game_types::MovingProgress>,
+    #[serde(default)]
+    pub shader_cache_bytes: Option<u64>,
+    #[serde(default)]
+    pub anti_cheat_launch: Option<crate::game_types::AntiCheatLaunch>,
 }
 
 #[derive(Debug, Clone, Default, Deserialize)]
@@ -707,6 +777,19 @@ impl StoreArt {
             .or(self.capsule.as_deref())
             .or(self.poster.as_deref())
     }
+
+    pub fn steam_url(app_id: &str, kind: &str) -> String {
+        let file = match kind {
+            "poster" => "library_600x900.jpg",
+            "hero" => "library_hero.jpg",
+            "logo" => "logo.png",
+            "capsule" => "capsule_616x353.jpg",
+            _ => "header.jpg",
+        };
+        format!(
+            "https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/{app_id}/{file}"
+        )
+    }
 }
 
 #[derive(Debug, Clone, Default, Deserialize)]
@@ -742,6 +825,10 @@ pub struct StoreTile {
     pub when: Option<String>,
     #[serde(default)]
     pub wished: bool,
+    #[serde(default)]
+    pub added_at: Option<String>,
+    #[serde(default, deserialize_with = "null_as_default")]
+    pub similar_to: Vec<String>,
     #[serde(default)]
     pub art: Option<StoreArt>,
 }
@@ -795,6 +882,8 @@ pub struct StoreHome {
     #[serde(default)]
     pub ok: bool,
     #[serde(default)]
+    pub at: Option<String>,
+    #[serde(default)]
     pub message: Option<String>,
     #[serde(default)]
     pub hero: Vec<StoreTile>,
@@ -811,6 +900,56 @@ pub struct StoreSearchReply {
     pub message: Option<String>,
     #[serde(default)]
     pub items: Vec<StoreTile>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StoreWishlistReply {
+    #[serde(default)]
+    pub ok: bool,
+    #[serde(default)]
+    pub message: Option<String>,
+    #[serde(default)]
+    pub items: Vec<StoreTile>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StoreMedia {
+    #[serde(default)]
+    pub thumb: String,
+    #[serde(default)]
+    pub hls: Option<String>,
+    #[serde(default)]
+    pub av1: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StoreSpec {
+    #[serde(default)]
+    pub label: String,
+    #[serde(default)]
+    pub minimum: Option<String>,
+    #[serde(default)]
+    pub recommended: Option<String>,
+    #[serde(default)]
+    pub mine: Option<String>,
+    #[serde(default)]
+    pub meets: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StoreRecentReviews {
+    #[serde(default)]
+    pub ok: bool,
+    #[serde(default)]
+    pub word: Option<String>,
+    #[serde(default)]
+    pub percent: Option<i32>,
+    #[serde(default)]
+    pub count: u64,
 }
 
 #[derive(Debug, Clone, Default, Deserialize)]
@@ -845,6 +984,8 @@ pub struct StoreGame {
     #[serde(default)]
     pub review_percent: Option<i32>,
     #[serde(default)]
+    pub review_count: u64,
+    #[serde(default)]
     pub price_text: Option<String>,
     #[serde(default)]
     pub was_text: Option<String>,
@@ -853,9 +994,27 @@ pub struct StoreGame {
     #[serde(default)]
     pub free: bool,
     #[serde(default)]
+    pub tags: Vec<String>,
+    #[serde(default)]
+    pub drm: Option<String>,
+    #[serde(default)]
+    pub account: Option<String>,
+    #[serde(default)]
+    pub controller: Option<String>,
+    #[serde(default)]
+    pub play_station: bool,
+    #[serde(default)]
+    pub languages: Vec<String>,
+    #[serde(default)]
     pub url: Option<String>,
     #[serde(default)]
     pub offers: Vec<StoreOffer>,
+    #[serde(default)]
+    pub media: Vec<StoreMedia>,
+    #[serde(default)]
+    pub specs: Vec<StoreSpec>,
+    #[serde(default)]
+    pub screenshots: Vec<String>,
     #[serde(default)]
     pub art: Option<StoreArt>,
     #[serde(default)]
@@ -872,16 +1031,35 @@ pub struct StoreOffer {
     #[serde(rename = "final", default)]
     pub final_cents: Option<i64>,
     #[serde(default)]
+    pub initial: Option<i64>,
+    #[serde(default)]
     pub discount: i32,
     #[serde(default)]
     pub currency: Option<String>,
     #[serde(default)]
     pub price_text: Option<String>,
     #[serde(default)]
+    pub was_text: Option<String>,
+    #[serde(default)]
     pub url: String,
 }
 
 impl StoreOffer {
+    pub fn display_name(&self) -> String {
+        let trimmed = self.name.trim();
+        if !trimmed.is_empty() {
+            return trimmed.to_string();
+        }
+        match self.store.trim() {
+            "1" => "Steam".into(),
+            "7" => "GOG".into(),
+            "13" => "Ubisoft".into(),
+            "25" => "Epic".into(),
+            "" => "Official store".into(),
+            other => store_label(other).to_string(),
+        }
+    }
+
     pub fn display_price(&self) -> String {
         if let Some(txt) = self.price_text.as_deref().filter(|s| !s.is_empty()) {
             return txt.to_string();
@@ -890,6 +1068,17 @@ impl StoreOffer {
             return format_cents(cents, self.currency.as_deref());
         }
         String::new()
+    }
+
+    pub fn display_was(&self) -> Option<String> {
+        if self.discount <= 0 {
+            return None;
+        }
+        self.was_text.clone().filter(|s| !s.is_empty()).or_else(|| {
+            self.initial
+                .filter(|&v| v > 0)
+                .map(|v| format_cents(v, self.currency.as_deref()))
+        })
     }
 }
 
@@ -900,6 +1089,29 @@ pub struct StoreLowest {
     pub final_cents: i64,
     #[serde(default)]
     pub at: String,
+}
+
+impl StoreLowest {
+    pub fn formatted_date(&self) -> Option<String> {
+        let trimmed = self.at.trim();
+        if trimmed.is_empty() {
+            return None;
+        }
+        let date_part = trimmed.split('T').next().unwrap_or(trimmed);
+        let mut parts = date_part.split('-');
+        if let (Some(y), Some(m)) = (parts.next(), parts.next())
+            && y.len() == 4
+            && y.chars().all(|c| c.is_ascii_digit())
+            && let Ok(month) = m.parse::<usize>()
+            && (1..=12).contains(&month)
+        {
+            const MONTHS: [&str; 12] = [
+                "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+            ];
+            return Some(format!("{} {y}", MONTHS[month - 1]));
+        }
+        Some(trimmed.to_string())
+    }
 }
 
 #[derive(Debug, Clone, Default, Deserialize)]
@@ -956,6 +1168,8 @@ pub struct LauncherSettings {
     pub hidden_games: Vec<String>,
     #[serde(default, deserialize_with = "null_as_default")]
     pub recent: Vec<String>,
+    #[serde(default, deserialize_with = "null_as_default")]
+    pub preferred_game_sources: HashMap<String, String>,
 }
 
 use std::collections::HashMap;
@@ -1182,6 +1396,11 @@ pub enum HostEvent {
     AutopilotLive(Option<crate::pc_types::AutopilotLive>),
     ShadersChanged,
     StoreChanged(crate::events::StoreChangedEvent),
+    GameAchievements(crate::game_types::GameAchievementsEvent),
+    GameOptimizedAgain(crate::game_types::GameOptimizeEvent),
+    GameOptimizeHeld(crate::game_types::GameOptimizeEvent),
+    CompressProgress(crate::game_types::CompressProgressEvent),
+    StoreSale(crate::events::StoreSaleEvent),
     Raw { event: String, data: Value },
     Disconnected(String),
 }
@@ -1203,10 +1422,16 @@ mod cover_policy_tests {
                 GameVariant {
                     id: "epic:Sugar".into(),
                     launch_target: None,
+                    installed: true,
+                    owned: true,
+                    ..Default::default()
                 },
                 GameVariant {
                     id: "steam:252950".into(),
                     launch_target: None,
+                    installed: false,
+                    owned: true,
+                    ..Default::default()
                 },
             ],
             ..Default::default()
