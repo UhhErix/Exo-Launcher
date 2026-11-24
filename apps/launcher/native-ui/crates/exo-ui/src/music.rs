@@ -1722,7 +1722,7 @@ pub fn mini_player(s: &AppState, scale: f32, slot: crate::state::MiniBarSlot) ->
         row().center_y().child(toggle_btn)
     };
 
-    let lcd_w: f32 = if full { 158.0 } else { 96.0 };
+    let lcd_w: f32 = if full { 132.0 } else { 80.0 };
     let mut seek_bar = el()
         .key("mini-seek")
         .role("slider")
@@ -1809,7 +1809,7 @@ pub fn mini_player(s: &AppState, scale: f32, slot: crate::state::MiniBarSlot) ->
         .child(col().w(lcd_w).gap(1.0).child(track_btn).child(seek_bar));
 
     let volume = if full {
-        let vol_w = 60.0;
+        let vol_w = 52.0;
         let vol_slider = slider_track(
             "mini-volume-slider",
             "Music volume",

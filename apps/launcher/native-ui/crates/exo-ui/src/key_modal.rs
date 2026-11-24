@@ -1,11 +1,11 @@
 use crate::events::EventRegistry;
 use crate::state::{AppState, NoticeTone};
 use exo_kit::{
-    BG, FG, GLASS_CONTROL_SIGMA, PRESS_SCALE, PRIMARY_FG, RADIUS_PILL, RADIUS_SMALL, SPRING_BASE,
-    SPRING_QUICK, TRANSPARENT, bad, fg_muted, glass_button, glass_control_fill, glass_panel_opt,
-    glass_rim_bottom, glass_rim_top, good, hairline, hover_fill, icon_key, modal_card_transition,
+    BG, FG, GLASS_CONTROL_SIGMA, PRESS_SCALE, PRIMARY_FG, RADIUS_PILL, SPRING_BASE, SPRING_QUICK,
+    TRANSPARENT, bad, fg_muted, glass_button, glass_control_fill, glass_panel_opt,
+    glass_rim_bottom, glass_rim_top, good, hover_fill, modal_card_transition,
     modal_scrim_transition, pressed_fill, primary_button_dyn, store_logo, type_body, type_section,
-    type_small, type_title,
+    type_small,
 };
 use exo_rpc::{ActionResult, KeyPreview, METHOD_KEYS_ACTIVATE, METHOD_KEYS_PREVIEW};
 use rune::{Cursor, El, Key, Transition, Tx, col, edit_access, el, row, text, text_input};
@@ -217,16 +217,14 @@ pub fn layers(s: &AppState, blur: bool) -> Vec<El> {
 
     let input_box = row()
         .w_full()
-        .h(42.0)
+        .h(32.0)
         .px(12.0)
-        .gap(10.0)
         .center_y()
         .cursor(Cursor::Text)
-        .radius(RADIUS_SMALL)
+        .radius(RADIUS_PILL)
         .fill(glass_control_fill())
         .backdrop_blur(GLASS_CONTROL_SIGMA)
         .border_gradient(1.0, glass_rim_top(), glass_rim_bottom())
-        .child(icon_key(15.0, fg_muted()))
         .child(input);
 
     let mut chips = row().gap(6.0).center_y();
@@ -273,10 +271,9 @@ pub fn layers(s: &AppState, blur: bool) -> Vec<El> {
 
     let mut content = col()
         .w_full()
-        .px(20.0)
-        .py(18.0)
-        .gap(12.0)
-        .child(text("Activate key").font(type_title()).color(FG))
+        .padding(20.0)
+        .gap(14.0)
+        .child(text("Activate key").font(type_section()).color(FG))
         .child(input_box)
         .child(chips);
 
@@ -312,6 +309,11 @@ pub fn layers(s: &AppState, blur: bool) -> Vec<El> {
         None,
     )
     .disabled(!can_submit)
+    .cursor(if can_submit {
+        Cursor::Pointer
+    } else {
+        Cursor::Default
+    })
     .opacity(if can_submit { 1.0 } else { 0.45 });
     if can_submit {
         copy_btn = copy_btn.on_press_tx(|s: &mut AppState, tx| s.copy_key_to_clipboard(tx));
@@ -336,8 +338,6 @@ pub fn layers(s: &AppState, blur: bool) -> Vec<El> {
 
     let footer = row()
         .w_full()
-        .px(20.0)
-        .py(14.0)
         .justify_end()
         .gap(8.0)
         .child(copy_btn)
@@ -347,14 +347,14 @@ pub fn layers(s: &AppState, blur: bool) -> Vec<El> {
         )
         .child(submit_btn);
 
-    let card = glass_panel_opt("activate-key-modal", 460.0, blur)
+    content = content.child(footer);
+
+    let card = glass_panel_opt("activate-key-modal", 420.0, blur)
         .role("dialog")
         .label("Activate key")
         .motion(SPRING_BASE)
         .transition(modal_card_transition())
-        .child(content)
-        .child(el().w_full().h(1.0).fill(hairline()))
-        .child(footer);
+        .child(content);
 
     let scrim = el()
         .key("key-modal-scrim")

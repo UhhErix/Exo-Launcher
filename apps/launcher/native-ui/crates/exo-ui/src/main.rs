@@ -286,8 +286,12 @@ fn on_key(s: &mut AppState, ev: &KeyEvent, tx: &mut Tx) -> bool {
                 s.finish_tour();
                 return true;
             }
+            Key::Left => {
+                s.tour_back();
+                return true;
+            }
             Key::Right | Key::Enter => {
-                s.setup_beat_skip();
+                s.tour_next();
                 return true;
             }
             _ => {}
@@ -329,6 +333,12 @@ fn setup_state(s: &mut AppState, waker: Waker) {
 }
 
 fn poll_state(s: &mut AppState, now: f64, tx: &mut Tx) -> bool {
+    let mut focus_changed = false;
+    if s.palette_open && s.palette_needs_focus {
+        s.palette_needs_focus = false;
+        tx.focus("palette-input", false);
+        focus_changed = true;
+    }
     let notices = s.sync_and_tick_notices(now, tx);
     let setup = s.setup_tick(now);
     let island = s.tick_island_timer(now, tx);
@@ -336,7 +346,7 @@ fn poll_state(s: &mut AppState, now: f64, tx: &mut Tx) -> bool {
     let store = s.store_tick(now);
     let wp4 = s.wp4_tick(now);
     let hb = s.tick_shell_heartbeat(now, tx);
-    notices || setup || island || lib || store || wp4 || hb
+    focus_changed || notices || setup || island || lib || store || wp4 || hb
 }
 
 #[cfg(windows)]
@@ -1609,8 +1619,9 @@ type SceneSetter = fn(&mut AppState);
 
 const PARITY_SCENES: &[(&str, SceneSetter)] = &[
     ("palette", |s: &mut AppState| {
-        s.switch_room(state::Room::Settings);
+        s.switch_room(state::Room::Library);
         s.palette_open = true;
+        s.palette_needs_focus = true;
     }),
     ("downloads", |s: &mut AppState| {
         s.switch_room(state::Room::Library);
@@ -2096,7 +2107,7 @@ const PARITY_SCENES: &[(&str, SceneSetter)] = &[
         s.media.music_immersion = true;
     }),
     ("captures", |s: &mut AppState| {
-        s.switch_room(state::Room::Settings);
+        s.switch_room(state::Room::Library);
         s.capture_menu_open = true;
     }),
     ("captures-sheet", |s: &mut AppState| {
@@ -2469,6 +2480,13 @@ fn run_parity_probe(
     );
     rt.set_max_backdrop_blurs(exo_kit::EXO_MAX_BACKDROP_BLURS);
     rt.frame(0.0);
+    if rt.state.palette_open {
+        rt.update(|s, tx| {
+            s.palette_needs_focus = false;
+            tx.focus("palette-input", false);
+        });
+        rt.frame(0.0);
+    }
     if let Some(ref sp) = script_path {
         replay_probe_script(&mut rt, sp);
     }
@@ -2571,6 +2589,7 @@ fn run_parity_probe(
         "updateSheetOpen": rt.state.whats_new.sheet_open,
         "islandVisible": rt.state.island_visible(),
         "driverInstallOpen": rt.state.driver_install_overlay_visible(),
+        "tourStep": rt.state.setup.beat,
         "setupStage": rt.state.setup.stage,
         "settingsSection": format!("{:?}", rt.state.pc.settings_section),
         "pcTab": format!("{:?}", rt.state.pc.pc_tab),
@@ -3571,7 +3590,7 @@ mod tests {
             &|s| {
                 s.start_tour();
             },
-            Some("setup-coach"),
+            Some("exo-tour-card"),
         );
         check_case(
             "library-more-menu",

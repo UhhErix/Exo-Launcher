@@ -520,6 +520,31 @@ pub fn handle_palette_key(s: &mut AppState, ev: &KeyEvent, tx: &mut Tx) -> bool 
             }
             true
         }
+        Key::Text(ref t)
+            if !ev.mods.ctrl
+                && !ev.mods.cmd
+                && !ev.mods.alt
+                && tx.focused() != Some("palette-input") =>
+        {
+            s.palette_query.text.push_str(t);
+            let len = s.palette_query.text.len();
+            s.palette_query.focus = len;
+            s.palette_query.anchor = len;
+            s.palette_query.sync_invariants();
+            s.palette_index = 0;
+            tx.focus("palette-input", false);
+            true
+        }
+        Key::Backspace if tx.focused() != Some("palette-input") => {
+            s.palette_query.text.pop();
+            let len = s.palette_query.text.len();
+            s.palette_query.focus = len;
+            s.palette_query.anchor = len;
+            s.palette_query.sync_invariants();
+            s.palette_index = 0;
+            tx.focus("palette-input", false);
+            true
+        }
         _ => false,
     }
 }

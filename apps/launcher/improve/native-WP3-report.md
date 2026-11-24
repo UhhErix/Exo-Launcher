@@ -100,3 +100,86 @@ Added standalone native scenes in `exo-ui/src/main.rs` (all captured and visuall
 - `node tools/check-comments.mjs`: **PASS** (`Comment ratchet ok: 2384 legacy files, 232 zero-comment files`)
 - `node --test tools/rpc-parity/parity.test.mjs`: **PASS** (4/4)
 
+## Vision Parity QA Delta (on top of `15c904c`)
+
+Addressed every WP3-owned open blocker and major item from `origin/UhhErix/parity-vision-qa` (`apps/launcher/improve/vision-parity.json`) without modifying any commit at or before `15c904c`.
+
+### Code Changes
+
+- [`shell.rs`](../native-ui/crates/exo-ui/src/shell.rs):
+  - Removed `.press_on_down()` on `search-capsule` so holding pointer down shows the pressed capsule state without prematurely opening the command palette (`shell-bar-press-search#01`).
+  - Matched React's top navigation tab horizontal padding (`12.5px` at `>=1260px`, `10.0px` below `1260px`) so `nav-capsule` spans `~629px` centered at `x=960` on 1920×1080 (`[645.4..1274.6]`), aligning 1:1 with React (`~628–636px`, `x=645..1273`).
+  - Changed the Capture camera green dot condition from `l.replay` to `l.buffering`, matching React `CaptureButton.tsx:74` (`shell-capture-popover#03`).
+  - Kept the active room nav pill active when Captures sheet is open (`s.room == room`) and extended `has_modal_scrim` with `s.media.captures_open || s.discord.settings_open || s.setup.beat.is_some()` so the top bar dims behind modal sheets identically to React (`shell-capture-sheet#05`, `discord-settings-sheet#03`).
+  - Rendered `setup::tour_layers` in the top modal layer above `top_bar` and added 3 regression unit tests (`search_capsule_press_does_not_open_palette_until_release`, `nav_capsule_centered_at_react_width_on_1080p`, `tour_modal_opens_centered_nine_step_welcome_and_steps_through_rooms`).
+- [`setup.rs`](../native-ui/crates/exo-ui/src/setup.rs):
+  - Replaced the 3-step top-left interactive coachmark with React's 9-step `ExoTour` (`TOUR_STEPS[0..9]`, `tour_layers`, `tour_next`, `tour_back`, `tour_go`): step 0 renders the centered 408px `Welcome to Exo` (`1 / 9`) modal over a full-screen scrim with badge icon, close `X`, body, hint, 9 clickable pagination dots, `Skip`, and white `Start tour >` button; steps 1–8 switch rooms and anchor below each target control with shortcut pills, `Back`, `Next >` / `Done` (`shell-tour-modal#01`, `shell-tour-modal#02`).
+- [`main.rs`](../native-ui/crates/exo-ui/src/main.rs), [`palette.rs`](../native-ui/crates/exo-ui/src/palette.rs), [`state.rs`](../native-ui/crates/exo-ui/src/state.rs):
+  - Fixed `PARITY_SCENES` `"palette"` and `"captures"` to keep `Room::Library` active instead of switching to `Room::Settings` (`shell-palette-open#01`, `shell-palette-query#01`, `shell-capture-popover#02`).
+  - Auto-focused `"palette-input"` on palette scene startup (`palette_needs_focus` in `poll_state` + `run_parity_probe` + `handle_palette_key` fallback) and aligned all 13 React `PC_SECTIONS` and 6 `SETTINGS_PAGES` search keywords so typing `'a'` filters 1:1 with React (`shell-palette-query#02`).
+  - Emitted `"tourStep": rt.state.setup.beat` in `--parity-probe` `stateSummary` so `expect: { tourOpen: true }` passes, and wired `Key::Left` for `tour_back()`.
+  - Defaulted `MiniBarSlot` to `Compact` so frame 0 on 1280px viewports never overlaps the center nav capsule.
+- [`key_modal.rs`](../native-ui/crates/exo-ui/src/key_modal.rs):
+  - Matched React `ActivateKeySheet.tsx` `.exo-field`: 32px pill-shaped input (`RADIUS_PILL`) with no leading key icon, 420px card width, 13px semibold title (`type_section()`), removed extra footer hairline divider, and matched disabled cursors (`Copy key` = `Default`, `Open <Store>` = `NotAllowed`) (`shell-activate-key-modal#04`).
+- [`music.rs`](../native-ui/crates/exo-ui/src/music.rs):
+  - Adjusted inline/medium mini-player widths (`lcd_w = 132.0 / 80.0`, `vol_w = 52.0`) to maintain `>=12px` clearance from the widened 629px center nav pill at 1920px and 1480px.
+
+### Vision Parity Per-Item Disposition (WP3 Open Blockers & Majors)
+
+- **Fixed (WP3 blockers, 6/7)**:
+  - `shell-bar-press-search#01`: **FIXED** — pixel diff `26.18 -> 5.65`, **PASS** (score 0, 11/11 cursors, 9/9 glass).
+  - `shell-tour-modal#01`, `shell-tour-modal#02`: **FIXED** — `opened: false -> true`, pixel diff `22.59 -> 2.55`, **PASS** (score 0, 20/20 cursors, 10/10 glass).
+  - `shell-palette-open#01`: **FIXED** — Library room behind palette, pixel diff `3.61`, 20/20 cursors, 10/10 glass, 0 missing items.
+  - `shell-palette-query#01`, `shell-palette-query#02`: **FIXED** — Library room behind palette + focused input filtering `'a'` across `Go to`/`Exo AI`/`Settings`/`Library`, pixel diff `3.69`, 20/20 cursors, 10/10 glass, 0 missing items.
+- **Verified Present / Compare-Sheet Label Occlusion Artifact (1 blocker + 6 majors)**:
+  - `apps-installed#01` (blocker), `library-all-more-popover#01`, `settings-general#03`, `discord-dm#01`, `devices-keyboard#01`, `discord-channel-context-menu#01`, `discord-dm-context-menu#03`: Verified on raw `apps-installed.png` and `apps-installed.tree.json` that `search-capsule` renders crisply at `[10, 8, 200, 36]` (`apps-installed` scored **PASS**, score 0, 10/10 cursors, 3.80 pixel diff). The Vision QA false positive was caused by `tools/parity/compare.mjs` drawing the `"RUNE"` label badge directly over `x=0..100, y=0..36` of the top-right quadrant on 50%-scaled compare sheets.
+- **Fixed (WP3 majors)**:
+  - Top nav pill width/padding/centering across all rooms (`library-homedeck#02`, `shell-bar-hover-nav#01`, `shell-bar-hover-search#01`, `devices-overview#01`, `apps-installed#02`, `store-discover#02`, `settings-ingame#04`, `library-all-more-popover#02`, `library-all-sort-dropdown#05`, `library-homedeck-more-popover#02`, `library-homedeck-card-menu#01`, `library-homedeck-card-hover#01`, `library-homedeck-search#01`, `library-homedeck-card-press#01`, `library-all-card-menu#05`, `game-page-hover-primary#04`, `library-capture-click#02`, `library-all-add-popover#02`): **FIXED** — `nav-capsule` now measures `~629px` centered at `x=960` (`645.4..1274.6`). `shell-bar-hover-nav`, `shell-bar-hover-search`, `shell-bar-press-search`, and `apps-installed` all score **PASS (0)**.
+  - `shell-capture-popover#02`, `shell-capture-popover#03`: **FIXED** — Library room active with white pill, no spurious green dot when `buffering == false` (pixel diff `5.75`, 2/2 menus, 10/10 glass; remaining hover cursor mismatch is in WP8 `captures.rs` dismiss scrim).
+  - `shell-capture-sheet#05`, `discord-settings-sheet#03`: **FIXED** — active nav pill stays lit and dimmed behind `top-bar-scrim`.
+  - `shell-activate-key-modal#04`: **FIXED** — pill input with no leading icon, 420px card, no footer divider, pixel diff `6.16 -> 5.85`, **PASS** (score 0, 17/17 cursors).
+  - `shell-palette-open#04`: Verified `palette_results()` filters out `local:add` and sorts alphabetically; live host `2XKO` entry comes from the host `games.list` payload on the test machine, 0 missing items, pixel diff `3.61`.
+- **Attributed to Other WPs (not modified in WP3)**:
+  - `pc-display-popover#01` (WP9 `pc.rs`), `pc-exo-ai#02` (WP9 `pc_ai.rs`), `store-search#02/#03` (WP5 `store.rs`), `store-game-page#02` (WP5 `store_page.rs`), `discord-home#02` & `discord-server-channel#02` (WP6 `discord.rs`), `devices-keyboard#03` (WP10 `pc_devices.rs`), `shell-bar-hover-nav#04` (WP2 `library.rs`).
+
+### Live Parity Results (1920×1080 scale 1, `node tools/parity/run.mjs`)
+
+| State | Open (R/N) | Cursors | Glass | Pixel Diff (Before -> After) | Verdict |
+|---|---|---|---|---:|---|
+| `shell-tour-modal` | Y/Y | 20/20 | 10/10 | 22.59 -> **2.55** | **PASS (0)** |
+| `shell-bar-press-search` | Y/Y | 11/11 | 9/9 | 26.18 -> **5.65** | **PASS (0)** |
+| `shell-activate-key-modal` | Y/Y | 17/17 | 10/13 | 6.16 -> **5.85** | **PASS (0)** |
+| `shell-bar-hover-nav` | Y/Y | 10/10 | 9/9 | 5.76 -> **5.61** | **PASS (0)** |
+| `shell-bar-hover-search` | Y/Y | 11/11 | 9/9 | 5.76 -> **5.61** | **PASS (0)** |
+| `apps-installed` | Y/Y | 10/10 | 3/2 | — -> **3.80** | **PASS (0)** |
+| `shell-palette-open` | Y/Y | 20/20 | 10/10 | — -> **3.61** | 0 missing items (virtualized list count 52 vs DOM slice 19) |
+| `shell-palette-query` | Y/Y | 20/20 | 10/10 | — -> **3.69** | 0 missing items (virtualized list count 54 vs DOM slice 19) |
+| `shell-capture-popover` | Y/Y | 0/10 (WP8 scrim) | 10/10 | — -> **5.75** | 2/2 menus, Library active, no replay dot |
+| `shell-capture-sheet` | Y/Y | 13/19 (WP8) | 10/5 (WP8) | — -> **7.78** | Library active pill dimmed under scrim |
+| `settings-general` | Y/Y | 11/20 (WP11) | 12/6 (WP11) | — -> **3.90** | Search capsule verified at `[10, 8, 200, 36]` |
+
+### Vision Parity Delta Gates (all exit 0)
+
+- `cargo fmt --all -- --check`: **PASS** (0)
+- `cargo clippy --workspace -- -D warnings`: **PASS** (0)
+- `cargo test --workspace`: **PASS** (**146 passed, 0 failed, 1 ignored**: `exo-kit` 4/4, `exo-rpc` 22/22 + 1 ignored, `exo-ui` 120/120)
+- `cargo build --release -p exo-ui`: **PASS** (0)
+- `node tools/check-comments.mjs`: **PASS** (`Comment ratchet ok: 2384 legacy files (73978 comment lines), 232 zero-comment files`)
+- `node --test tools/parity/parity.test.mjs`: **PASS** (8/8)
+
+### 70-State Vision Parity Update (`origin/UhhErix/parity-vision-qa` @ `1478414`)
+
+Verified all 38 newly added WP3 entries (1 new blocker, 15 new majors, 22 new minors) from the 70/70 vision-parity update against `6c30db6`:
+
+- **New blocker (`discord-voice-call#06`) + new Search/Tools majors (`discord-voice-call#07`, `music-sort-dropdown#04/#05`, `music-album#03`, `music-track-menu#03`)**:
+  - Verified directly on `exo-ui --scene discord-voice` and `--scene music-songs` PNG + `.tree.json`: `search-capsule` renders at `[10, 8, 200, 36]`, `titlebar-tools` renders at `[1717, 8, 193, 36]` with `top-capture-btn` (`[1720, 12, 32, 28]`), `nav-settings` (`[1756, 11, 34, 30]`), and window controls (`opacity: 1`). No occlusion on raw frames (compare-sheet `"RUNE"` label artifact / pre-WP3 `526b2df` baseline).
+- **New `shell-capture-settings#03` (major)**:
+  - **FIXED in `6c30db6`** — verified on `exo-ui --scene captures-settings`: `top-bar-scrim` (`[0, 0, 1920, 52]`) dims the top bar under the modal, `nav-active-pill` stays lit on `Library` (`[648.39, 11, 90.16, 30]`), and the capture camera green dot is gated on `l.buffering` (absent on live host when not buffering).
+- **New top-nav centering/width majors (`store-game-media-tab#05`, `music-track-menu#05`, `music-album#05`, `game-page-props-anticheat#04`, `devices-audio#06`, `devices-mouse#04`) + new capture-dot / nav minors**:
+  - **FIXED in `6c30db6`** — `nav-capsule` renders at `[645.39, 8, 629.22, 36]` (centered at `x=960.0`) across every room and `replay_on` checks `l.buffering` instead of `l.replay`.
+- **Non-WP3 items among the new majors**:
+  - `devices-controller#03`, `devices-mouse#03` (Devices subheader `Rescan` pill): WP10 `pc_devices.rs`.
+  - `music-immersive#05` (Immersive close button): WP7 `music.rs`.
+
+
+
