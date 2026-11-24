@@ -2,12 +2,11 @@ use crate::state::{AppState, HostStatus, Room};
 use exo_rpc::{
     ActionResult, CaptureItem, CaptureListReply, CaptureLiveState, CaptureSettingsDto,
     CaptureStatusReply, METHOD_APPLEMUSIC_ACT, METHOD_APPLEMUSIC_START, METHOD_APPLEMUSIC_VIEW,
-    METHOD_CAPTURE_ACT, METHOD_CAPTURE_EDIT, METHOD_CAPTURE_ITEM, METHOD_CAPTURE_LIST,
-    METHOD_CAPTURE_SETTINGS, METHOD_CAPTURE_STATUS, METHOD_MUSIC_CONTROL, METHOD_MUSIC_PLAYBACK,
-    METHOD_MUSIC_SIGN_IN, METHOD_MUSIC_VOLUME, METHOD_SPOTIFY_ACT, METHOD_SPOTIFY_START,
-    METHOD_SPOTIFY_VIEW, METHOD_YTMUSIC_ACT, METHOD_YTMUSIC_START, METHOD_YTMUSIC_VIEW,
-    MusicPlayback, MusicPlaybackReply, MusicVolumeReply, PlayerCard, PlayerOption, PlayerSection,
-    PlayerStartReply, PlayerViewData, PlayerViewReply,
+    METHOD_CAPTURE_ACT, METHOD_CAPTURE_LIST, METHOD_CAPTURE_STATUS, METHOD_MUSIC_CONTROL,
+    METHOD_MUSIC_PLAYBACK, METHOD_MUSIC_SIGN_IN, METHOD_MUSIC_VOLUME, METHOD_SPOTIFY_ACT,
+    METHOD_SPOTIFY_START, METHOD_SPOTIFY_VIEW, METHOD_YTMUSIC_ACT, METHOD_YTMUSIC_START,
+    METHOD_YTMUSIC_VIEW, MusicPlayback, MusicPlaybackReply, MusicVolumeReply, PlayerCard,
+    PlayerOption, PlayerSection, PlayerStartReply, PlayerViewData, PlayerViewReply,
 };
 use rune::{Image, Player, TextEdit};
 use serde_json::json;
@@ -191,6 +190,11 @@ pub struct MediaState {
     pub clip_muted: bool,
     pub trim_start_pct: f32,
     pub trim_end_pct: f32,
+    pub clip_editor_open: bool,
+    pub viewer_note: Option<(String, bool)>,
+    pub captures_ui: crate::captures::CapturesUiState,
+    pub snip_editor: Option<crate::snip_editor::SnipEditorState>,
+    pub notes: crate::notes::NotesState,
 }
 
 impl MediaState {
@@ -399,12 +403,21 @@ impl MediaState {
                 ok: true,
                 present: true,
                 folder: Some("Videos\\Exo Captures".into()),
+                message: None,
                 state: Some(CaptureLiveState {
                     replay: true,
+                    running: true,
                     buffering: true,
                     recording: false,
                     recording_ms: None,
                     present: true,
+                    hotkeys: exo_rpc::CaptureHotkeys {
+                        save_replay: true,
+                        record: true,
+                        snip: true,
+                        print_screen: true,
+                    },
+                    ..Default::default()
                 }),
                 settings: Some(CaptureSettingsDto {
                     quality: 60,
@@ -415,7 +428,13 @@ impl MediaState {
                     save_replay_keys: "Ctrl+Alt+F10".into(),
                     record_keys: "Ctrl+Alt+F9".into(),
                     snip_keys: "Ctrl+Alt+F8".into(),
+                    print_screen: false,
+                    after_snip: "edit".into(),
+                    folder: "Videos\\Exo Captures".into(),
+                    keep_gb: 50,
+                    keep_days: 30,
                     auto_shrink: true,
+                    call_voices: false,
                 }),
             }),
             capture_items: vec![
@@ -483,6 +502,11 @@ impl MediaState {
             clip_muted: false,
             trim_start_pct: 0.0,
             trim_end_pct: 1.0,
+            clip_editor_open: false,
+            viewer_note: None,
+            captures_ui: crate::captures::CapturesUiState::default(),
+            snip_editor: None,
+            notes: crate::notes::NotesState::demo(),
         }
     }
 
@@ -530,6 +554,11 @@ impl MediaState {
             clip_muted: false,
             trim_start_pct: 0.0,
             trim_end_pct: 1.0,
+            clip_editor_open: false,
+            viewer_note: None,
+            captures_ui: crate::captures::CapturesUiState::default(),
+            snip_editor: None,
+            notes: crate::notes::NotesState::default(),
         }
     }
 
@@ -1115,6 +1144,11 @@ impl AppState {
         self.media.captures_open = false;
         self.media.captures_settings_open = false;
         self.media.open_capture_id = None;
+        self.media.clip_editor_open = false;
+        self.media.snip_editor = None;
+        self.media.captures_ui.send_dialog.open = false;
+        self.media.captures_ui.selection = None;
+        self.media.notes.open = false;
         self.media.clip_player = None;
     }
 
@@ -1125,6 +1159,7 @@ impl AppState {
         #[cfg(windows)]
         if let (Some(rpc), Some(handle)) = (self.rpc.clone(), self.handle.clone()) {
             self.media.captures_loading = true;
+            self.media.captures_ui.list_failed = false;
             let h1 = handle.clone();
             rpc.call::<_, CaptureStatusReply>(METHOD_CAPTURE_STATUS, &json!({}), move |res| {
                 if let Ok(st) = res {
@@ -1138,8 +1173,14 @@ impl AppState {
             rpc.call::<_, CaptureListReply>(METHOD_CAPTURE_LIST, &params, move |res| {
                 handle.update(move |s, _| {
                     s.media.captures_loading = false;
-                    if let Ok(list) = res {
-                        s.media.capture_items = list.items;
+                    match res {
+                        Ok(list) => {
+                            s.media.captures_ui.list_failed = false;
+                            s.media.capture_items = list.items;
+                        }
+                        Err(_) => {
+                            s.media.captures_ui.list_failed = true;
+                        }
                     }
                 });
             });
@@ -1215,83 +1256,17 @@ impl AppState {
         }
     }
 
-    pub fn capture_set_replay_mode(&mut self, mode: &str) {
-        if let Some(ref mut st) = self.media.capture_status
-            && let Some(ref mut cfg) = st.settings
-        {
-            cfg.replay_mode = mode.to_string();
+    pub fn load_capture_status(&mut self) {
+        if self.status == HostStatus::Standalone {
+            return;
         }
         #[cfg(windows)]
         if let (Some(rpc), Some(handle)) = (self.rpc.clone(), self.handle.clone()) {
-            rpc.call::<_, CaptureStatusReply>(
-                METHOD_CAPTURE_SETTINGS,
-                &json!({ "replayMode": mode }),
-                move |res| {
-                    if let Ok(st) = res {
-                        handle.update(move |s, _| s.media.capture_status = Some(st));
-                    }
-                },
-            );
-        }
-    }
-
-    pub fn capture_item_action(&mut self, id: &str, action: &str) {
-        if action == "favourite" || action == "unfavourite" {
-            let fav = action == "favourite";
-            if let Some(item) = self.media.capture_items.iter_mut().find(|c| c.id == id) {
-                item.favourite = fav;
-            }
-        } else if action == "delete" {
-            self.media.capture_items.retain(|c| c.id != id);
-            if self.media.open_capture_id.as_deref() == Some(id) {
-                self.close_capture_item();
-            }
-        }
-        #[cfg(windows)]
-        if let (Some(rpc), Some(handle)) = (self.rpc.clone(), self.handle.clone()) {
-            rpc.call::<_, ActionResult>(
-                METHOD_CAPTURE_ITEM,
-                &json!({ "id": id, "action": action }),
-                move |res| {
-                    handle.update(move |s, _| {
-                        if let Ok(r) = res
-                            && let Some(msg) = r.message
-                        {
-                            s.notice = Some(msg);
-                        }
-                    });
-                },
-            );
-        }
-    }
-
-    pub fn capture_export_trim(&mut self, id: &str, preset: &str) {
-        let dur_ms = self
-            .media
-            .capture_items
-            .iter()
-            .find(|c| c.id == id)
-            .and_then(|c| c.duration_ms)
-            .unwrap_or(30_000.0);
-        let start_ms = (dur_ms * self.media.trim_start_pct as f64).round();
-        let end_ms = (dur_ms * self.media.trim_end_pct as f64).round();
-        self.notice = Some(format!("Exporting {preset} clip…"));
-        #[cfg(windows)]
-        if let (Some(rpc), Some(handle)) = (self.rpc.clone(), self.handle.clone()) {
-            rpc.call::<_, ActionResult>(
-                METHOD_CAPTURE_EDIT,
-                &json!({ "id": id, "preset": preset, "startMs": start_ms, "endMs": end_ms }),
-                move |res| {
-                    handle.update(move |s, _| {
-                        s.notice = Some(match res {
-                            Ok(r) if r.ok => "Clip exported.".into(),
-                            Ok(r) => r.message.unwrap_or_else(|| "Export failed.".into()),
-                            Err(e) => format!("Export failed: {e}"),
-                        });
-                        s.load_captures();
-                    });
-                },
-            );
+            rpc.call::<_, CaptureStatusReply>(METHOD_CAPTURE_STATUS, &json!({}), move |res| {
+                if let Ok(st) = res {
+                    handle.update(move |s, _| s.media.capture_status = Some(st));
+                }
+            });
         }
     }
 }

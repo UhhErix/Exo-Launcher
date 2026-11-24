@@ -25,6 +25,9 @@ fn palette_icon(target: &PaletteTarget) -> El {
         PaletteTarget::MinimizeWindow => icon_minimize(16.0, fg_muted()),
         PaletteTarget::CloseWindow => icon_close(16.0, fg_muted()),
         PaletteTarget::ResumeSetup => icon_sparkles(16.0, fg_muted()),
+        PaletteTarget::NewNote | PaletteTarget::OpenNotes | PaletteTarget::OpenNote(_) => {
+            icon_sparkles(16.0, fg_muted())
+        }
     }
 }
 

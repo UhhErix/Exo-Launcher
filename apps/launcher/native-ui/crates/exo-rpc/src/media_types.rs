@@ -268,99 +268,253 @@ pub struct PlayerViewReply {
 }
 
 #[derive(Debug, Clone, Default, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase", default)]
+pub struct CaptureHotkeys {
+    pub save_replay: bool,
+    pub record: bool,
+    pub snip: bool,
+    pub print_screen: bool,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
 pub struct CaptureSettingsDto {
-    #[serde(default)]
     pub quality: i32,
-    #[serde(default)]
     pub replay_seconds: i32,
-    #[serde(default)]
     pub max_fps: i32,
-    #[serde(default)]
     pub replay_mode: String,
-    #[serde(default)]
     pub cursor: bool,
-    #[serde(default)]
     pub save_replay_keys: String,
-    #[serde(default)]
     pub record_keys: String,
-    #[serde(default)]
     pub snip_keys: String,
-    #[serde(default)]
+    pub print_screen: bool,
+    pub after_snip: String,
+    pub folder: String,
+    pub keep_gb: i32,
+    pub keep_days: i32,
     pub auto_shrink: bool,
+    pub call_voices: bool,
 }
 
 #[derive(Debug, Clone, Default, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase", default)]
 pub struct CaptureLiveState {
-    #[serde(default)]
     pub replay: bool,
-    #[serde(default)]
+    pub running: bool,
     pub buffering: bool,
-    #[serde(default)]
+    pub replay_retained_ms: Option<f64>,
+    pub replay_limit_seconds: Option<f64>,
     pub recording: bool,
-    #[serde(default)]
+    pub holds_call: bool,
     pub recording_ms: Option<f64>,
-    #[serde(default)]
+    pub codec: Option<String>,
+    pub encoder: Option<String>,
+    pub width: Option<u32>,
+    pub height: Option<u32>,
+    pub fps: Option<f64>,
+    pub hdr: bool,
+    pub error: Option<String>,
+    pub hotkeys: CaptureHotkeys,
     pub present: bool,
 }
 
 #[derive(Debug, Clone, Default, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase", default)]
 pub struct CaptureStatusReply {
-    #[serde(default)]
     pub ok: bool,
-    #[serde(default)]
+    pub message: Option<String>,
     pub present: bool,
-    #[serde(default)]
     pub folder: Option<String>,
-    #[serde(default)]
     pub state: Option<CaptureLiveState>,
-    #[serde(default)]
     pub settings: Option<CaptureSettingsDto>,
 }
 
 #[derive(Debug, Clone, Default, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase", default)]
 pub struct CaptureItem {
-    #[serde(default)]
     pub id: String,
-    #[serde(default)]
     pub kind: String,
-    #[serde(default)]
     pub game: String,
-    #[serde(default)]
     pub game_id: Option<String>,
-    #[serde(default)]
     pub name: String,
-    #[serde(default)]
     pub created: String,
-    #[serde(default)]
     pub size: u64,
-    #[serde(default)]
     pub duration_ms: Option<f64>,
-    #[serde(default)]
     pub favourite: bool,
-    #[serde(default)]
     pub url: String,
-    #[serde(default)]
     pub thumb: Option<String>,
-    #[serde(default)]
     pub derived: bool,
 }
 
 #[derive(Debug, Clone, Default, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase", default)]
 pub struct CaptureListReply {
-    #[serde(default)]
     pub ok: bool,
-    #[serde(default)]
     pub items: Vec<CaptureItem>,
 }
 
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct CaptureItemReply {
+    pub ok: bool,
+    pub message: Option<String>,
+    pub item: Option<CaptureItem>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct CaptureEditReply {
+    pub ok: bool,
+    pub message: Option<String>,
+    pub item: Option<CaptureItem>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct CaptureReelReply {
+    pub ok: bool,
+    pub message: Option<String>,
+    pub wait: bool,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct CaptureTextReply {
+    pub ok: bool,
+    pub text: Option<String>,
+    pub message: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct CaptureSendReply {
+    pub ok: bool,
+    pub message: Option<String>,
+    pub sent: Vec<String>,
+    pub item: Option<CaptureItem>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct CaptureSaveImageReply {
+    pub ok: bool,
+    pub message: Option<String>,
+    pub item: Option<CaptureItem>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct NoteInfo {
+    pub id: String,
+    pub title: String,
+    pub snippet: String,
+    pub kind: String,
+    pub name: String,
+    pub edited: String,
+    pub size: u64,
+    pub pinned: bool,
+    pub external: bool,
+    pub unsaved: bool,
+    pub game_id: Option<String>,
+    pub encoding: String,
+    pub eol: String,
+    pub spelling: bool,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct NotesListReply {
+    pub ok: bool,
+    pub notes: Vec<NoteInfo>,
+    pub tabs: Vec<String>,
+    pub active: Option<String>,
+    pub photos: Option<String>,
+    pub message: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct NotesReadReply {
+    pub ok: bool,
+    pub text: Option<String>,
+    pub note: Option<NoteInfo>,
+    pub message: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct NotesSaveReply {
+    pub ok: bool,
+    pub note: Option<NoteInfo>,
+    pub message: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct NotesPhotoReply {
+    pub ok: bool,
+    pub src: Option<String>,
+    pub cancelled: bool,
+    pub message: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct NotesActReply {
+    pub ok: bool,
+    pub note: Option<NoteInfo>,
+    pub message: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct NotesOpenReply {
+    pub ok: bool,
+    pub id: Option<String>,
+    pub cancelled: bool,
+    pub message: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct NotesSaveAsReply {
+    pub ok: bool,
+    pub id: Option<String>,
+    pub cancelled: bool,
+    pub message: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct NotesPendingReply {
+    pub id: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct NotesSpellReply {
+    pub ok: bool,
+    pub wrong: bool,
+    pub suggestions: Vec<String>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct NotesTextFilesReply {
+    pub ok: bool,
+    pub offered: bool,
+    pub is_default: bool,
+    pub message: Option<String>,
+}
+
 pub fn format_duration_ms(ms: f64) -> String {
-    let total_secs = (ms.max(0.0) / 1000.0).round() as u64;
-    let mins = total_secs / 60;
+    let total_secs = (ms.max(0.0) / 1000.0).floor() as u64;
+    let hours = total_secs / 3600;
+    let mins = (total_secs % 3600) / 60;
     let secs = total_secs % 60;
-    format!("{mins}:{secs:02}")
+    if hours > 0 {
+        format!("{hours}:{mins:02}:{secs:02}")
+    } else {
+        format!("{mins}:{secs:02}")
+    }
 }

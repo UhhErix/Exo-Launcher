@@ -126,6 +126,72 @@ export const STATES = [
     },
   },
   {
+    id: 'shell-capture-notes',
+    room: 'captures',
+    name: 'Notes workspace open',
+    kind: 'modal',
+    priority: 1,
+    expectGlass: true,
+    react: {
+      room: 'Library',
+      steps: [
+        { type: 'click', selector: 'button.exo-capture-btn' },
+        { type: 'wait', ms: 400 },
+        { type: 'clickText', selector: '[role="menu"] [role^="menuitem"], [popover]:popover-open button', text: /^notes$/i },
+        { type: 'wait', ms: 700 },
+      ],
+      openSelector: '[role="dialog"], .exo-notes',
+    },
+    native: {
+      scene: 'captures-notes',
+      expect: { capturesOpen: true },
+    },
+  },
+  {
+    id: 'shell-capture-clip-edit',
+    room: 'captures',
+    name: 'Clip editor open',
+    kind: 'modal',
+    priority: 2,
+    expectGlass: true,
+    react: {
+      room: 'Library',
+      steps: [
+        { type: 'click', selector: 'button.exo-capture-btn' },
+        { type: 'wait', ms: 400 },
+        { type: 'clickText', selector: '[role="menu"] [role^="menuitem"], [popover]:popover-open button', text: /all captures/i },
+        { type: 'wait', ms: 700 },
+      ],
+      openSelector: '[role="dialog"]',
+    },
+    native: {
+      scene: 'captures-clip-edit',
+      expect: { capturesOpen: true },
+    },
+  },
+  {
+    id: 'shell-capture-snip-edit',
+    room: 'captures',
+    name: 'Snip editor open',
+    kind: 'modal',
+    priority: 2,
+    expectGlass: true,
+    react: {
+      room: 'Library',
+      steps: [
+        { type: 'click', selector: 'button.exo-capture-btn' },
+        { type: 'wait', ms: 400 },
+        { type: 'clickText', selector: '[role="menu"] [role^="menuitem"], [popover]:popover-open button', text: /all captures/i },
+        { type: 'wait', ms: 700 },
+      ],
+      openSelector: '[role="dialog"]',
+    },
+    native: {
+      scene: 'captures-snip-edit',
+      expect: { capturesOpen: true },
+    },
+  },
+  {
     id: 'shell-activate-key-modal',
     room: 'shell',
     name: 'Activate a game key modal',

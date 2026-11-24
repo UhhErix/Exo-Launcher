@@ -363,30 +363,6 @@ pub struct ShadersEstimatesReply {
 
 #[derive(Debug, Clone, Default, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct EqHeadphone {
-    #[serde(default)]
-    pub id: String,
-    #[serde(default)]
-    pub name: String,
-    #[serde(default)]
-    pub source: String,
-    #[serde(default)]
-    pub form: String,
-}
-
-#[derive(Debug, Clone, Default, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct EqStateReply {
-    #[serde(default)]
-    pub ok: bool,
-    #[serde(default)]
-    pub on: bool,
-    #[serde(default)]
-    pub headphone: Option<EqHeadphone>,
-}
-
-#[derive(Debug, Clone, Default, Deserialize)]
-#[serde(rename_all = "camelCase")]
 pub struct InstalledAppItem {
     #[serde(default)]
     pub id: String,
@@ -634,9 +610,13 @@ pub struct PeripheralPort {
     #[serde(default)]
     pub r#where: Option<String>,
     #[serde(default)]
+    pub chips: Option<i32>,
+    #[serde(default)]
     pub better: Option<String>,
     #[serde(default)]
     pub hubs: i32,
+    #[serde(default)]
+    pub interrupts: Option<String>,
 }
 
 #[derive(Debug, Clone, Default, Deserialize)]
@@ -719,41 +699,6 @@ pub struct ShadersPrepareGamesReply {
     pub ok: bool,
     #[serde(default)]
     pub games: Vec<ShaderPrepareGame>,
-}
-
-#[derive(Debug, Clone, Default, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct AudioEndpoint {
-    #[serde(default)]
-    pub volume: Option<i32>,
-    #[serde(default)]
-    pub muted: bool,
-    #[serde(default)]
-    pub format: Option<String>,
-}
-
-#[derive(Debug, Clone, Default, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct AudioVoiceInfo {
-    #[serde(default)]
-    pub noise: String,
-    #[serde(default)]
-    pub push_to_talk: bool,
-    #[serde(default)]
-    pub focus: bool,
-}
-
-#[derive(Debug, Clone, Default, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct AudioReadReply {
-    #[serde(default)]
-    pub ok: bool,
-    #[serde(default)]
-    pub output: Option<AudioEndpoint>,
-    #[serde(default)]
-    pub mic: Option<AudioEndpoint>,
-    #[serde(default)]
-    pub voice: AudioVoiceInfo,
 }
 
 #[derive(Debug, Clone, Default, Deserialize)]

@@ -3,8 +3,8 @@ use exo_kit::{
     BG, FG, GAP, PRESS_SCALE, RADIUS_CARD, RADIUS_PANEL, RADIUS_SMALL, SPRING_MOVE, SPRING_QUICK,
     amoled_card, bad, card_border, fg_faint, fg_muted, filter_pill, float_line, glass_button, good,
     hover_fill, icon_chevron_left, icon_gamepad, icon_headphones, icon_keyboard, icon_mouse,
-    icon_refresh, icon_volume, icon_volume_off, pressed_fill, scaled, type_body, type_control,
-    type_label, type_section, type_small, type_title, warn,
+    icon_refresh, pressed_fill, scaled, type_body, type_control, type_label, type_section,
+    type_small, type_title, warn,
 };
 use exo_rpc::keyboard_layouts::{FormFactor, KeyCap, KeyKind, build_keyboard_layout, find_key};
 use exo_rpc::{KeyboardReadReply, PeripheralCard};
@@ -107,7 +107,9 @@ fn device_showcase_card(dev: &PeripheralCard, s: &AppState, scale: f32) -> El {
 
     let dev_id = dev.id.clone();
     let is_mouse = dev.kind == "mouse";
-    let is_kb = dev.lab || dev.kind == "keyboard";
+    let is_kb = dev.kind == "keyboard" && dev.lab;
+    let is_audio = dev.kind == "audio";
+    let is_controller = dev.kind == "controller";
     col()
         .key(format!("dev-card-{}", dev.id))
         .role("button")
@@ -133,6 +135,12 @@ fn device_showcase_card(dev: &PeripheralCard, s: &AppState, scale: f32) -> El {
         .on_press(move |s: &mut AppState| {
             if is_mouse {
                 s.open_mouse_panel(dev_id.clone());
+            } else if is_controller {
+                s.pc.selected_device_id = Some(dev_id.clone());
+                s.open_controller_page(dev_id.clone());
+            } else if is_audio {
+                s.pc.selected_device_id = Some(dev_id.clone());
+                s.open_audio_device_page();
             } else {
                 s.pc.selected_device_id = Some(dev_id.clone());
                 if is_kb {
@@ -688,82 +696,6 @@ fn wooting_detail(s: &AppState, kb: &KeyboardReadReply) -> El {
         .child(controls)
 }
 
-fn audio_detail(s: &AppState) -> El {
-    let Some(aud) = s.pc.audio.as_ref() else {
-        return el();
-    };
-    let mut card = amoled_card(RADIUS_PANEL)
-        .w_full()
-        .px(20.0)
-        .py(18.0)
-        .gap(12.0)
-        .child(text("Audio mixer").font(type_title()).color(FG));
-
-    for (label, ep, is_out, key_mute, key_dn, key_up) in [
-        (
-            "Output",
-            aud.output.as_ref(),
-            true,
-            "aud-out-mute",
-            "aud-out-dn",
-            "aud-out-up",
-        ),
-        (
-            "Microphone",
-            aud.mic.as_ref(),
-            false,
-            "aud-mic-mute",
-            "aud-mic-dn",
-            "aud-mic-up",
-        ),
-    ] {
-        if let Some(ep) = ep {
-            let vol = ep.volume.unwrap_or(80);
-            let muted = ep.muted;
-            card = card.child(
-                row()
-                    .w_full()
-                    .justify_between()
-                    .center_y()
-                    .child(
-                        col()
-                            .gap(2.0)
-                            .child(text(label).font(type_section()).color(FG))
-                            .child(text(format!("{vol}%")).font(type_small()).color(fg_muted())),
-                    )
-                    .child(
-                        row()
-                            .gap(8.0)
-                            .center_y()
-                            .child(
-                                glass_button(
-                                    key_mute,
-                                    if muted { "Muted" } else { "Mute" },
-                                    Some(if muted {
-                                        icon_volume_off(13.0, bad())
-                                    } else {
-                                        icon_volume(13.0, FG)
-                                    }),
-                                )
-                                .on_press(move |s: &mut AppState| s.set_audio_mute(is_out, !muted)),
-                            )
-                            .child(glass_button(key_dn, "−10%", None).on_press(
-                                move |s: &mut AppState| {
-                                    s.set_audio_volume(is_out, (vol - 10).max(0));
-                                },
-                            ))
-                            .child(glass_button(key_up, "+10%", None).on_press(
-                                move |s: &mut AppState| {
-                                    s.set_audio_volume(is_out, (vol + 10).min(100));
-                                },
-                            )),
-                    ),
-            );
-        }
-    }
-    card
-}
-
 pub(crate) fn devices_room(s: &AppState, scale: f32) -> El {
     if s.pc.mouse_panel_open {
         let mut slot = el()
@@ -819,6 +751,48 @@ pub(crate) fn devices_room(s: &AppState, scale: f32) -> El {
     if let Some(sel_id) = s.pc.selected_device_id.as_deref()
         && let Some(dev) = devices.iter().find(|d| d.id == sel_id)
     {
+        let display_name = clean_device_name(dev, s);
+        let status_line = match dev.battery {
+            Some(b) => format!(
+                "{} · {}%",
+                connection_label(dev.connection.as_deref()),
+                format_battery_pct(b)
+            ),
+            None => connection_label(dev.connection.as_deref()).to_string(),
+        };
+
+        if dev.kind == "audio" {
+            let output = devices
+                .iter()
+                .find(|d| d.kind == "audio" && d.role.as_deref() == Some("output"))
+                .or_else(|| {
+                    devices
+                        .iter()
+                        .find(|d| d.kind == "audio" && d.role.as_deref() != Some("input"))
+                });
+            let mic = devices
+                .iter()
+                .find(|d| d.kind == "audio" && d.role.as_deref() == Some("input"));
+            return crate::devices_audio::audio_page(
+                s,
+                output,
+                mic,
+                display_name,
+                status_line,
+                scale,
+            );
+        }
+
+        if dev.kind == "controller" && dev.lab {
+            return crate::devices_controller::controller_page(
+                s,
+                dev,
+                display_name,
+                status_line,
+                scale,
+            );
+        }
+
         let mut page = col()
             .key("room-devices-detail")
             .w_full()
@@ -850,11 +824,32 @@ pub(crate) fn devices_room(s: &AppState, scale: f32) -> El {
                     .color(FG),
             );
 
-        if dev.lab || dev.kind == "keyboard" {
+        if dev.kind == "keyboard" && dev.lab {
             if let Some(ref kb) = s.pc.keyboard
                 && kb.ok
             {
                 page = page.child(wooting_detail(s, kb));
+                if let Some(ref port) = dev.port {
+                    let good_port = port.r#where.as_deref() == Some("cpu") && port.hubs == 0;
+                    let badge =
+                        crate::devices_audio::port_short(port).unwrap_or_else(|| "USB".into());
+                    page = page.child(crate::devices_audio::device_panel(
+                        "USB port",
+                        vec![crate::devices_audio::device_row(
+                            "USB port",
+                            Some(crate::devices_audio::port_words(port)),
+                            None,
+                            Some(exo_kit::status_badge(
+                                badge,
+                                if good_port {
+                                    exo_kit::BadgeTone::Good
+                                } else {
+                                    exo_kit::BadgeTone::Neutral
+                                },
+                            )),
+                        )],
+                    ));
+                }
             } else if s.pc.keyboard.is_some() || s.pc.keyboard_error.is_some() {
                 let err_msg =
                     s.pc.keyboard_error
@@ -886,8 +881,6 @@ pub(crate) fn devices_room(s: &AppState, scale: f32) -> El {
                     ),
                 );
             }
-        } else if dev.kind == "audio" {
-            page = page.child(audio_detail(s));
         } else {
             page = page.child(
                 amoled_card(RADIUS_PANEL)
@@ -928,21 +921,29 @@ pub(crate) fn devices_room(s: &AppState, scale: f32) -> El {
 
     let mut ordered: Vec<&PeripheralCard> = Vec::new();
     for kind in ["mouse", "keyboard", "audio", "controller"] {
+        let mut added_audio = false;
         for dev in devices {
-            if dev.kind == kind {
-                if kind == "audio" && dev.role.as_deref() == Some("input") {
+            if dev.kind != kind {
+                continue;
+            }
+            if (kind == "keyboard" || kind == "controller") && !dev.lab {
+                continue;
+            }
+            if kind == "audio" {
+                if added_audio || dev.role.as_deref() == Some("input") {
                     continue;
                 }
-                ordered.push(dev);
+                added_audio = true;
             }
-        }
-    }
-    for dev in devices {
-        if !matches!(
-            dev.kind.as_str(),
-            "mouse" | "keyboard" | "audio" | "controller"
-        ) {
             ordered.push(dev);
+        }
+        if kind == "audio"
+            && !added_audio
+            && let Some(mic) = devices
+                .iter()
+                .find(|d| d.kind == "audio" && d.role.as_deref() == Some("input"))
+        {
+            ordered.push(mic);
         }
     }
 

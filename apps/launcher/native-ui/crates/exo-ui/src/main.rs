@@ -1,6 +1,8 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod captures;
+mod devices_audio;
+mod devices_controller;
 mod discord;
 mod discord_chat;
 mod discord_chat_state;
@@ -17,6 +19,7 @@ mod library;
 mod media_state;
 mod menus;
 mod music;
+mod notes;
 mod notice;
 mod palette;
 mod pc;
@@ -29,6 +32,7 @@ mod pc_storage;
 mod settings;
 mod setup;
 mod shell;
+mod snip_editor;
 mod state;
 mod store;
 mod video_decoder;
@@ -105,6 +109,9 @@ fn on_key(s: &mut AppState, ev: &KeyEvent, tx: &mut Tx) -> bool {
     if s.palette_open {
         return palette::handle_palette_key(s, ev, tx);
     }
+    if s.handle_captures_key(ev, tx) {
+        return true;
+    }
     if s.setup.beat.is_some() {
         match ev.key {
             Key::Escape => {
@@ -135,6 +142,9 @@ fn setup_state(s: &mut AppState, waker: Waker) {
 fn poll_state(s: &mut AppState, now: f64, tx: &mut Tx) -> bool {
     let notices = s.sync_and_tick_notices(now, tx);
     let setup = s.setup_tick(now);
+    s.tick_audio_eq_polling(now);
+    s.tick_controller_watch(now);
+    s.tick_notes_autosave(now);
     notices || setup
 }
 
@@ -569,26 +579,27 @@ fn load_live_state_sync(pipe: &str, scene: Option<&str>) -> AppState {
                 exo_rpc::METHOD_EQ,
                 &serde_json::json!({ "action": "state" }),
                 Duration::from_secs(6),
-            ) && let Some(hp) = eq.headphone
-            {
-                let look = if hp.form == "over-ear" {
-                    "headphones"
-                } else {
-                    "iem"
-                };
-                if let Ok(reply) = client.call_blocking::<_, exo_rpc::DevicesImageReply>(
-                    exo_rpc::METHOD_DEVICES_IMAGE,
-                    &serde_json::json!({
-                        "kind": "audio",
-                        "model": look,
-                        "name": hp.name,
-                    }),
-                    Duration::from_secs(8),
-                ) && let Some(url) = reply.url
-                {
-                    state.pc.device_images.insert("audio:worn".into(), url);
+            ) {
+                if let Some(ref hp) = eq.headphone {
+                    let look = if hp.form == "over-ear" {
+                        "headphones"
+                    } else {
+                        "iem"
+                    };
+                    if let Ok(reply) = client.call_blocking::<_, exo_rpc::DevicesImageReply>(
+                        exo_rpc::METHOD_DEVICES_IMAGE,
+                        &serde_json::json!({
+                            "kind": "audio",
+                            "model": look,
+                            "name": hp.name,
+                        }),
+                        Duration::from_secs(8),
+                    ) && let Some(url) = reply.url
+                    {
+                        state.pc.device_images.insert("audio:worn".into(), url);
+                    }
                 }
-                state.pc.eq_headphone = Some(hp);
+                state.apply_eq_state(eq);
             }
             if let Ok(list) = client.call_blocking::<_, exo_rpc::DevicesListReply>(
                 exo_rpc::METHOD_DEVICES_LIST,
@@ -615,18 +626,28 @@ fn load_live_state_sync(pipe: &str, scene: Option<&str>) -> AppState {
                 let out_id = list
                     .devices
                     .iter()
-                    .find(|d| d.kind == "audio" && d.role.as_deref() != Some("mic"))
+                    .find(|d| d.kind == "audio" && d.role.as_deref() == Some("output"))
+                    .or_else(|| {
+                        list.devices
+                            .iter()
+                            .find(|d| d.kind == "audio" && d.role.as_deref() != Some("input"))
+                    })
                     .map(|d| d.id.clone());
                 let mic_id = list
                     .devices
                     .iter()
-                    .find(|d| d.kind == "audio" && d.role.as_deref() == Some("mic"))
+                    .find(|d| d.kind == "audio" && d.role.as_deref() == Some("input"))
                     .map(|d| d.id.clone());
                 let kb_id = list
                     .devices
                     .iter()
-                    .find(|d| d.lab)
+                    .find(|d| d.kind == "keyboard" && d.lab)
                     .or_else(|| list.devices.iter().find(|d| d.kind == "keyboard"))
+                    .map(|d| d.id.clone());
+                let pad_id = list
+                    .devices
+                    .iter()
+                    .find(|d| d.kind == "controller")
                     .map(|d| d.id.clone());
                 if let Ok(aud) = client.call_blocking::<_, exo_rpc::AudioReadReply>(
                     exo_rpc::METHOD_AUDIO_READ,
@@ -634,6 +655,54 @@ fn load_live_state_sync(pipe: &str, scene: Option<&str>) -> AppState {
                     Duration::from_secs(5),
                 ) {
                     state.pc.audio = Some(aud);
+                }
+                if let Some(ref oid) = out_id
+                    && let Ok(fmt) = client.call_blocking::<_, exo_rpc::AudioFormatsReply>(
+                        exo_rpc::METHOD_AUDIO_FORMATS,
+                        &serde_json::json!({ "id": oid }),
+                        Duration::from_secs(5),
+                    )
+                {
+                    state.pc.audio_ui.output_formats = Some(fmt);
+                }
+                if let Some(ref mid) = mic_id
+                    && let Ok(fmt) = client.call_blocking::<_, exo_rpc::AudioFormatsReply>(
+                        exo_rpc::METHOD_AUDIO_FORMATS,
+                        &serde_json::json!({ "id": mid }),
+                        Duration::from_secs(5),
+                    )
+                {
+                    state.pc.audio_ui.mic_formats = Some(fmt);
+                }
+                if let Some(ref pid) = pad_id {
+                    if let Ok(cread) = client.call_blocking::<_, exo_rpc::ControllerReadReply>(
+                        exo_rpc::METHOD_CONTROLLER_READ,
+                        &serde_json::json!({ "id": pid }),
+                        Duration::from_secs(5),
+                    ) {
+                        state.pc.controller_ui.read_id = Some(pid.clone());
+                        if let Some(ref st) = cread.settings {
+                            state.pc.controller_ui.pad_settings = st.clone();
+                        }
+                        if let Some(sound) = cread.sound {
+                            state.pc.controller_ui.sound_on = sound;
+                        }
+                        state.pc.controller_ui.read = Some(cread);
+                    }
+                    if let Ok(gp) = client.call_blocking::<_, exo_rpc::ControllerGameProfilesReply>(
+                        exo_rpc::METHOD_CONTROLLER_GAME_PROFILES,
+                        &serde_json::json!({}),
+                        Duration::from_secs(5),
+                    ) {
+                        state.pc.controller_ui.game_profiles = gp.profiles;
+                    }
+                    if let Ok(si) = client.call_blocking::<_, exo_rpc::SteamInputStateReply>(
+                        exo_rpc::METHOD_STEAM_INPUT_STATE,
+                        &serde_json::json!({}),
+                        Duration::from_secs(5),
+                    ) {
+                        state.pc.controller_ui.steam_input = Some(si);
+                    }
                 }
                 state.pc.audio_output_id = out_id;
                 state.pc.audio_mic_id = mic_id;
@@ -852,12 +921,26 @@ fn load_live_state_sync(pipe: &str, scene: Option<&str>) -> AppState {
             ) {
                 state.pc.system_about = Some(about);
             }
+            if let Ok(st) = client.call_blocking::<_, exo_rpc::CaptureStatusReply>(
+                exo_rpc::METHOD_CAPTURE_STATUS,
+                &serde_json::json!({}),
+                Duration::from_secs(5),
+            ) {
+                state.media.capture_status = Some(st);
+            }
             if let Ok(list) = client.call_blocking::<_, exo_rpc::CaptureListReply>(
                 exo_rpc::METHOD_CAPTURE_LIST,
                 &serde_json::json!({ "limit": 60 }),
                 Duration::from_secs(8),
             ) {
                 state.media.capture_items = list.items;
+            }
+            if let Ok(nl) = client.call_blocking::<_, exo_rpc::NotesListReply>(
+                exo_rpc::METHOD_NOTES_LIST,
+                &serde_json::json!({}),
+                Duration::from_secs(5),
+            ) {
+                state.media.notes.notes = Some(nl.notes);
             }
         }
         Some(sc) if sc.starts_with("discord") => {
@@ -1244,6 +1327,37 @@ const PARITY_SCENES: &[(&str, SceneSetter)] = &[
         s.open_captures(None);
         if let Some(first) = s.media.capture_items.first().map(|c| c.id.clone()) {
             s.open_capture_item(&first);
+        }
+    }),
+    ("captures-notes", |s: &mut AppState| {
+        s.open_notes(None, false);
+    }),
+    ("captures-clip-edit", |s: &mut AppState| {
+        s.open_captures(None);
+        let clip_id = s
+            .media
+            .capture_items
+            .iter()
+            .find(|c| c.kind == "video")
+            .or_else(|| s.media.capture_items.first())
+            .map(|c| c.id.clone());
+        if let Some(id) = clip_id {
+            s.open_capture_item(&id);
+            s.media.clip_editor_open = true;
+        }
+    }),
+    ("captures-snip-edit", |s: &mut AppState| {
+        s.open_captures(None);
+        let img_id = s
+            .media
+            .capture_items
+            .iter()
+            .find(|c| c.kind != "video")
+            .or_else(|| s.media.capture_items.first())
+            .map(|c| c.id.clone());
+        if let Some(id) = img_id {
+            s.open_capture_item(&id);
+            s.open_snip_editor(&id);
         }
     }),
     ("discord", |s: &mut AppState| {

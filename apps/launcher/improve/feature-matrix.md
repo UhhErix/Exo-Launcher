@@ -283,38 +283,38 @@ Totals: DONE 4, PARTIAL 1, MISSING 7, BROKEN 0 (of 12).
 
 ## Devices
 
-Totals: DONE 3, PARTIAL 3, MISSING 4, BROKEN 1 (of 11).
+Totals: DONE 11, PARTIAL 0, MISSING 0, BROKEN 0 (of 11).
 
 | Feature | React ref | Native ref | Status | Notes |
 |---|---|---|---|---|
-| Device list (mouse, keyboard, audio, controller) + images + Rescan | components/DevicesRoom.tsx:48 | exo-ui/src/pc.rs:553 | DONE | rpc: devices.list, devices.image.  |
-| Mouse panel (DPI, buttons, lighting, presets, profiles) | lib/mouseRelay.ts:1 | exo-ui/src/pc_actions.rs:858 | PARTIAL | rpc: mouse.panel.open, mouse.presets.get, mouse.presets.set, mouse.profiles.get, mouse.profiles.set, hid.list, hid.open, system.mouseCore. Native embeds the host mouse panel window; presets/profiles/hid RPCs not called by native (the embedded panel uses them). Smoke: the snapshot shows only a "Wireless" card for the dongle; the host-embedded mouse window is not captured by --snap, so embed could not be verified headless. |
-| Keyboard page (Wooting: layouts, actuation, rapid trigger, onboard profiles) | components/devices/KeyboardPage.tsx:46 | exo-ui/src/pc.rs:181† | DONE | rpc: keyboard.*. wooting-native branch: real layouts, capability gating, error recovery. Tachyon mode / USB port rows to verify. |
-| Audio page (output/input, volume, mute, format, Exo Voice, noise suppression) | components/devices/AudioPage.tsx:23 | exo-ui/src/pc.rs:401 | PARTIAL | rpc: audio.read, audio.setVolume, audio.setMute, audio.formats, audio.setFormat. No format picker, Exo Voice, Voice Focus, input sensitivity. |
-| EQ (Exo EQ, AutoEQ headphones, Equalizer APO install) | components/devices/EqPanels.tsx:1 | exo-ui/src/pc.rs:45 | PARTIAL | rpc: eq, eq.headphones. eq.headphones (AutoEQ index) never called; no Equalizer APO install/restart flow. |
-| Controller page (battery, update, quality, measure, Steam Input) | components/devices/ControllerPage.tsx:24 | exo-ui/src/pc.rs:71 | BROKEN | rpc: controller.read, controller.watch, controller.measure, controller.quality, controller.test, steamInput.state. Native shows only connection/battery/polling card for controllers. controller.* (10 methods) never called. |
-| Controller calibration (sticks, triggers, undo) | components/devices/Calibration.tsx:2 | — | MISSING | rpc: controller.calibrate, controller.test.  |
-| Pad settings (light bar, player light, vibration, trigger effects, sound) | components/devices/PadSettings.tsx:2 | — | MISSING | rpc: controller.settings, controller.sound.  |
-| Game profiles (per-game pad profiles) | components/devices/GameProfiles.tsx:38 | — | MISSING | rpc: controller.gameProfiles, controller.gameProfilesSave.  |
-| Device detail fallback (connection, battery, polling) | components/DevicesRoom.tsx:1 | exo-ui/src/pc.rs:587 | DONE |  |
-| HID relay events (hid.changed, hid.input, controller.state) | lib/mouseRelay.ts:1 | — | MISSING | rpc: hid.*. Events not handled. |
+| Device list (mouse, keyboard, audio, controller) + images + Rescan | components/DevicesRoom.tsx:48 | exo-ui/src/pc_devices.rs:703 | DONE | rpc: devices.list, devices.image. Filtered by deviceHasPage(kind, lab); live parity pixel diff 1.45 vs React. |
+| Mouse panel (DPI, buttons, lighting, presets, profiles) | lib/mouseRelay.ts:1 | exo-ui/src/pc_actions.rs:858 | DONE | rpc: mouse.panel.open/bounds/close, hid.*, mouse.presets.*, mouse.profiles.*, system.mouseCore. Embeds AGPL Exo Mouse WebView2 via host MousePanelService; hid.* / mouse.* RPC constants + hid.changed/hid.input push events wired. |
+| Keyboard page (Wooting: layouts, actuation, rapid trigger, onboard profiles) | components/devices/KeyboardPage.tsx:46 | exo-ui/src/pc_devices.rs:102 | DONE | rpc: keyboard.*. Fixed DualSense Edge misrouting (kind == "keyboard"); USB port row added. |
+| Audio page (output/input, volume, mute, format, Exo Voice, noise suppression) | components/devices/AudioPage.tsx:23 | exo-ui/src/devices_audio.rs:1883 | DONE | rpc: audio.read, audio.setVolume, audio.setMute, audio.formats, audio.setFormat. Full format picker, draggable sliders, mute switches, Exo Voice, Voice Focus, input sensitivity, 3s polling, fixed role=="input" bug. |
+| EQ (Exo EQ, AutoEQ headphones, Equalizer APO install) | components/devices/EqPanels.tsx:1 | exo-ui/src/devices_audio.rs:1143 | DONE | rpc: eq, eq.headphones. Full ApoPanel (install/reinstall/restart), searchable AutoEQ HeadphonePanel, SoundPanel (Compare/headroom/other outputs), Night Shift with Windows Night light sync & 48 half-hour slots, 4s polling. |
+| Controller page (battery, update, quality, measure, Steam Input) | components/devices/ControllerPage.tsx:24 | exo-ui/src/devices_controller.rs:2714 | DONE | rpc: controller.read, controller.watch, controller.measure, controller.quality, controller.test, steamInput.state, shell.openUrl. Live Rune canvas sticks, trigger/button/polling tests, Edge back/Fn + 4 slots, USB port, firmware update link, Steam Input card. |
+| Controller calibration (sticks, triggers, undo) | components/devices/Calibration.tsx:2 | exo-ui/src/devices_controller.rs:2211 | DONE | rpc: controller.calibrate, controller.test. 7-phase calibration dialog with 36-bin perimeter sweep tracker, Undo, and Keep confirmation. |
+| Pad settings (light bar, player light, vibration, trigger effects, sound) | components/devices/PadSettings.tsx:2 | exo-ui/src/devices_controller.rs:1850 | DONE | rpc: controller.settings, controller.sound. USB-gated DualSense light bar, player light, mic, speaker, vibration, trigger effects + Windows Sound toggle. |
+| Game profiles (per-game pad profiles) | components/devices/GameProfiles.tsx:38 | exo-ui/src/devices_controller.rs:1972 | DONE | rpc: controller.gameProfiles, controller.gameProfilesSave. Per-game pad overrides list, editor dialog, and searchable game picker with deduplication across profiles. |
+| Device detail fallback (connection, battery, polling) | components/DevicesRoom.tsx:1 | exo-ui/src/pc_devices.rs:703 | DONE | Updated after pc.rs split; routes audio/controller/keyboard/mouse cleanly. |
+| HID relay events (hid.changed, hid.input, controller.state) | lib/mouseRelay.ts:1 | exo-ui/src/events.rs:425 | DONE | rpc: hid.*. Typed HostEvent::{ControllerState, HidChanged, HidInput} registered via AppState::register_event in events.rs and handled in devices_controller.rs. |
 
 ## Captures
 
-Totals: DONE 0, PARTIAL 4, MISSING 5, BROKEN 1 (of 10).
+Totals: DONE 10, PARTIAL 0, MISSING 0, BROKEN 0 (of 10).
 
 | Feature | React ref | Native ref | Status | Notes |
 |---|---|---|---|---|
-| Capture sheet grid (thumbnails, filters, chips, On this day) | components/captures/CapturesSheet.tsx:6 | exo-ui/src/captures.rs:755 | PARTIAL | rpc: capture.list, capture.item. Smoke: renders "Exo Capture is not installed" with the temp data copy (tools excluded), so the grid itself was not exercised. Missing on-this-day, chips filter empty state, waiting-for-game-end state. |
-| Select, bulk delete, rename, open folder | components/captures/CapturesSheet.tsx:80 | exo-ui/src/captures.rs:307 | PARTIAL | rpc: capture.act, capture.edit.  |
-| Send to (Discord, share) | components/captures/CapturesSheet.tsx:341 | — | MISSING | rpc: capture.send.  |
-| Clip editor (trim, play, export) | components/captures/ClipEditor.tsx:180 | exo-ui/src/captures.rs:377 | PARTIAL | rpc: capture.edit, capture.item. video.frame / keyframe events handled; export unverified. |
-| Snip editor (mark up, crop, copy text OCR, save) | components/captures/SnipEditor.tsx:167 | — | MISSING | rpc: capture.saveImage, capture.text.  |
-| Notes buttons (capture menu + sheet header) | components/captures/CapturesSheet.tsx:4 | exo-ui/src/captures.rs:786 | BROKEN | captures.rs:~290 "Notes" menu row just reopens Captures; captures.rs:~786 header "Notes" button calls load_captures(). Neither opens notes. |
-| Notes (Markdown editor, files, session, photo drop, spellcheck) | components/captures/NotesView.tsx:351 | — | MISSING | rpc: notes.list, notes.read, notes.save, notes.saveAs, notes.act, notes.open, notes.photo, notes.session, notes.spell, notes.textFiles. Entire Notes feature absent: 11 notes.* methods, notes.open event, note palette commands, Ctrl+N / Ctrl+O. |
-| Capture settings (replay length, quality, save-to, storage cap, auto-delete, voice chat) | components/captures/CaptureSettings.tsx:4 | exo-ui/src/captures.rs:708 | PARTIAL | rpc: capture.settings. Most rows; Max storage, Auto-delete, Record voice chat, Print Screen snips to verify. |
-| Highlight reel ("Making your reel") | components/captures/CapturesSheet.tsx:8 | — | MISSING | rpc: capture.reel.  |
-| capture.shrunk event (compaction) | components/captures/CapturesSheet.tsx:298 | — | MISSING |  |
+| Capture sheet grid (thumbnails, filters, chips, On this day) | components/captures/CapturesSheet.tsx:6 | exo-ui/src/captures.rs:3001 | DONE | rpc: capture.list, capture.item, capture.status. 4-column 16:9 grid grouped by day, On this day resurfacing, Clips/Screenshots/Favorites + game chips, frosted Liquid Glass sheet, React empty/error states. |
+| Select, bulk delete, rename, open folder | components/captures/CapturesSheet.tsx:80 | exo-ui/src/captures.rs:3034 | DONE | rpc: capture.act, capture.item, capture.edit. Selection checkboxes, bulk delete, Make reel N, hover/corner Favorite & Delete, Info pane, More menu (Copy text, Make smaller, Show in folder). |
+| Send to (Discord, share) | components/captures/CapturesSheet.tsx:341 | exo-ui/src/captures.rs:1549 | DONE | rpc: capture.send, discord.home, discord.channels. Share menu (Send to Discord dialog with multi-target DM/channel picker + optional message, Copy picture/file). |
+| Clip editor (trim, play, export) | components/captures/ClipEditor.tsx:180 | exo-ui/src/captures.rs:1744 | DONE | rpc: capture.edit, capture.item. Draggable TrimBar, 0.5x/1x/2x speed, Loop, Play/Audio transport, Trim save + Export presets (Discord <10MB, 16:9, 9:16). |
+| Snip editor (mark up, crop, copy text OCR, save) | components/captures/SnipEditor.tsx:167 | exo-ui/src/snip_editor.rs:567 | DONE | rpc: capture.saveImage, capture.text. Built on Rune ImageCanvas (Crop Free/16:9/9:16/Square, Arrow/Box/Highlight/Freehand, cell-average RGBA Blur, OCR Copy text via Tx::copy, Undo/Redo/Revert/Save PNG). |
+| Notes buttons (capture menu + sheet header) | components/captures/CapturesSheet.tsx:4 | exo-ui/src/captures.rs:1330 | DONE | Both capture popover (New note, Notes, Capture settings) and sheet header Notes button open NotesView directly. |
+| Notes (Markdown editor, files, session, photo drop, spellcheck) | components/captures/NotesView.tsx:351 | exo-ui/src/notes.rs:1833 | DONE | rpc: notes.list/read/save/saveAs/act/open/photo/session/spell/textFiles/pending + notes.open event. Tabs, inline rename, Markdown toolbar & live preview with clickable checklists, Find & Replace, photo drag-drop (<=25MB), spellcheck, 450ms autosave, palette commands, Ctrl shortcuts. |
+| Capture settings (replay length, quality, save-to, storage cap, auto-delete, voice chat) | components/captures/CaptureSettings.tsx:4 | exo-ui/src/captures.rs:2623 | DONE | rpc: capture.settings, shell.pickFolder. Instant replay, Replay length, Frame rate, Quality slider, Record voice chat, live hotkey recorder + conflict warnings, Print Screen snips, Save to Open/Change, Max storage, Auto-delete after. |
+| Highlight reel ("Making your reel") | components/captures/CapturesSheet.tsx:8 | exo-ui/src/captures.rs:2923 | DONE | rpc: capture.reel, capture.reelCancel + capture.reel event. Selection & game-chip Make reel N, progress/waiting/canWait banner with Wait & Cancel. |
+| capture.shrunk event (compaction) | components/captures/CapturesSheet.tsx:298 | exo-ui/src/captures.rs:375 | DONE | Typed HostEvent::CaptureShrunk registered via AppState::register_event in events.rs; updates item size/URL and viewer status in place. |
 
 ## Settings
 
@@ -767,24 +767,24 @@ Owns: pc_devices.rs (after WP9 step 0) or new devices_controller.rs / devices_au
 
 Depends on: Rune fork: multi-line editor with selection/undo, image canvas with marks/crop, file drop. RPC present: controller.* (10), audio.formats/setFormat, eq.headphones, capture.*, notes.* (11), hid.* only if mouse relay is done natively instead of the embedded host panel.
 
-- `devices-02` [PARTIAL] Mouse panel (DPI, buttons, lighting, presets, profiles)
-- `devices-04` [PARTIAL] Audio page (output/input, volume, mute, format, Exo Voice, noise suppression)
-- `devices-05` [PARTIAL] EQ (Exo EQ, AutoEQ headphones, Equalizer APO install)
-- `devices-06` [BROKEN] Controller page (battery, update, quality, measure, Steam Input)
-- `devices-07` [MISSING] Controller calibration (sticks, triggers, undo)
-- `devices-08` [MISSING] Pad settings (light bar, player light, vibration, trigger effects, sound)
-- `devices-09` [MISSING] Game profiles (per-game pad profiles)
-- `devices-11` [MISSING] HID relay events (hid.changed, hid.input, controller.state)
-- `captures-01` [PARTIAL] Capture sheet grid (thumbnails, filters, chips, On this day)
-- `captures-02` [PARTIAL] Select, bulk delete, rename, open folder
-- `captures-03` [MISSING] Send to (Discord, share)
-- `captures-04` [PARTIAL] Clip editor (trim, play, export)
-- `captures-05` [MISSING] Snip editor (mark up, crop, copy text OCR, save)
-- `captures-06` [BROKEN] Notes buttons (capture menu + sheet header)
-- `captures-07` [MISSING] Notes (Markdown editor, files, session, photo drop, spellcheck)
-- `captures-08` [PARTIAL] Capture settings (replay length, quality, save-to, storage cap, auto-delete, voice chat)
-- `captures-09` [MISSING] Highlight reel ("Making your reel")
-- `captures-10` [MISSING] capture.shrunk event (compaction)
+- `devices-02` [DONE] Mouse panel (DPI, buttons, lighting, presets, profiles)
+- `devices-04` [DONE] Audio page (output/input, volume, mute, format, Exo Voice, noise suppression)
+- `devices-05` [DONE] EQ (Exo EQ, AutoEQ headphones, Equalizer APO install)
+- `devices-06` [DONE] Controller page (battery, update, quality, measure, Steam Input)
+- `devices-07` [DONE] Controller calibration (sticks, triggers, undo)
+- `devices-08` [DONE] Pad settings (light bar, player light, vibration, trigger effects, sound)
+- `devices-09` [DONE] Game profiles (per-game pad profiles)
+- `devices-11` [DONE] HID relay events (hid.changed, hid.input, controller.state)
+- `captures-01` [DONE] Capture sheet grid (thumbnails, filters, chips, On this day)
+- `captures-02` [DONE] Select, bulk delete, rename, open folder
+- `captures-03` [DONE] Send to (Discord, share)
+- `captures-04` [DONE] Clip editor (trim, play, export)
+- `captures-05` [DONE] Snip editor (mark up, crop, copy text OCR, save)
+- `captures-06` [DONE] Notes buttons (capture menu + sheet header)
+- `captures-07` [DONE] Notes (Markdown editor, files, session, photo drop, spellcheck)
+- `captures-08` [DONE] Capture settings (replay length, quality, save-to, storage cap, auto-delete, voice chat)
+- `captures-09` [DONE] Highlight reel ("Making your reel")
+- `captures-10` [DONE] capture.shrunk event (compaction)
 
 ### Host RPC / Rune gaps summary
 

@@ -1,4 +1,5 @@
 pub mod base64;
+pub mod device_types;
 pub mod discord_types;
 pub mod events;
 pub mod keyboard_layouts;
@@ -8,6 +9,18 @@ pub mod pipe;
 pub mod remote_art;
 pub mod types;
 
+pub use device_types::{
+    AudioEndpoint, AudioFormatInfo, AudioFormatOption, AudioFormatsReply, AudioReadReply,
+    AudioVoiceInfo, ButtonBounce, ButtonCheck, ControllerCalibrateReply, ControllerCalibration,
+    ControllerFirmware, ControllerGameProfile, ControllerGameProfilesReply, ControllerLayerTool,
+    ControllerLayers, ControllerMeasureReply, ControllerPolling, ControllerQualityReply,
+    ControllerReadReply, ControllerSettingsReply, ControllerSlot, ControllerSoundReply,
+    ControllerStateEvent, ControllerTestEdgeReply, ControllerTestRestReply, ControllerTested,
+    EqApoState, EqCustomBand, EqGameSound, EqHeadphone, EqHeadphonesReply, EqLibraryGame,
+    EqNightState, EqOtherOutput, EqOutputInfo, EqPlayingInfo, EqStateReply, HidCollectionInfo,
+    HidDeviceInfo, HidInputEvent, HidReply, MouseDataReply, PadOverrides, PadSettings,
+    PickFolderReply, SteamInputStateReply, StickEdge, StickRest, TriggerSweep,
+};
 pub use discord_types::{
     DiscordAccountItem, DiscordAccountsReply, DiscordAttachment, DiscordAudioDevice,
     DiscordAudioReply, DiscordChangedEvent, DiscordChannel, DiscordChannels, DiscordDm,
@@ -26,27 +39,30 @@ pub use discord_types::{
 };
 pub use events::{
     AppUpdateStateEvent, AutopilotReportEvent, CaptureReelEvent, CaptureSavedEvent,
-    GameRunStateEvent, InstallQueueEvent, LaunchStatusEvent, MusicVolumeEvent, PausedDownloadItem,
-    RequestId, ShellBootstrap, StoreChangedEvent,
+    CaptureShrunkEvent, GameRunStateEvent, InstallQueueEvent, LaunchStatusEvent, MusicVolumeEvent,
+    NotesOpenEvent, PausedDownloadItem, RequestId, ShellBootstrap, StoreChangedEvent,
 };
 pub use media_types::{
-    CaptureItem, CaptureListReply, CaptureLiveState, CaptureSettingsDto, CaptureStatusReply,
-    MusicPlayback, MusicPlaybackReply, MusicVolumeReply, PlayerAlbumRef, PlayerArtist, PlayerCard,
-    PlayerHeader, PlayerLink, PlayerOption, PlayerSection, PlayerStartReply, PlayerTrack,
-    PlayerViewData, PlayerViewReply, format_duration_ms,
+    CaptureEditReply, CaptureHotkeys, CaptureItem, CaptureItemReply, CaptureListReply,
+    CaptureLiveState, CaptureReelReply, CaptureSaveImageReply, CaptureSendReply,
+    CaptureSettingsDto, CaptureStatusReply, CaptureTextReply, MusicPlayback, MusicPlaybackReply,
+    MusicVolumeReply, NoteInfo, NotesActReply, NotesListReply, NotesOpenReply, NotesPendingReply,
+    NotesPhotoReply, NotesReadReply, NotesSaveAsReply, NotesSaveReply, NotesSpellReply,
+    NotesTextFilesReply, PlayerAlbumRef, PlayerArtist, PlayerCard, PlayerHeader, PlayerLink,
+    PlayerOption, PlayerSection, PlayerStartReply, PlayerTrack, PlayerViewData, PlayerViewReply,
+    format_duration_ms,
 };
 pub use pc_types::{
-    AppsIconsReply, AppsListReply, AudioEndpoint, AudioReadReply, AudioVoiceInfo, AutopilotLive,
-    AutopilotMemoryIntegrity, AutopilotReport, AutopilotState, BackupDay, BackupNote, BackupOffer,
-    BackupStatus, ClientsEpic, ClientsStatus, ClientsSteam, DevicesImageReply, DevicesListReply,
-    DriveFix, DriveGameEntry, DriveHealth, DriveInfo, DriveLink, DriveSpaceBreakdown, DriveTemp,
-    DriveVerdict, DriveVolume, DrivesReply, EqHeadphone, EqStateReply, ExoAiFans, ExoAiGaming,
-    ExoAiState, HdrState, InstalledAppItem, KeyboardBackupResult, KeyboardBackupSummary,
-    KeyboardBackupsReply, KeyboardProfileSlot, KeyboardReadReply, LatencyReport, LatencySample,
-    PeripheralCard, PeripheralPort, ShaderEstimate, ShaderPrepareGame, ShaderSnapGame,
-    ShadersAddonStatus, ShadersEstimatesReply, ShadersPrepareGamesReply, ShadersSnapshot,
-    StartupItem, StartupListReply, StartupRemovedItem, SystemAbout, SystemTuningState, TuningItem,
-    UpdateCheckReply, UpdateProgress,
+    AppsIconsReply, AppsListReply, AutopilotLive, AutopilotMemoryIntegrity, AutopilotReport,
+    AutopilotState, BackupDay, BackupNote, BackupOffer, BackupStatus, ClientsEpic, ClientsStatus,
+    ClientsSteam, DevicesImageReply, DevicesListReply, DriveFix, DriveGameEntry, DriveHealth,
+    DriveInfo, DriveLink, DriveSpaceBreakdown, DriveTemp, DriveVerdict, DriveVolume, DrivesReply,
+    ExoAiFans, ExoAiGaming, ExoAiState, HdrState, InstalledAppItem, KeyboardBackupResult,
+    KeyboardBackupSummary, KeyboardBackupsReply, KeyboardProfileSlot, KeyboardReadReply,
+    LatencyReport, LatencySample, PeripheralCard, PeripheralPort, ShaderEstimate,
+    ShaderPrepareGame, ShaderSnapGame, ShadersAddonStatus, ShadersEstimatesReply,
+    ShadersPrepareGamesReply, ShadersSnapshot, StartupItem, StartupListReply, StartupRemovedItem,
+    SystemAbout, SystemTuningState, TuningItem, UpdateCheckReply, UpdateProgress,
 };
 pub use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
@@ -83,7 +99,9 @@ pub const METHOD_APPS_LIST: &str = "apps.list";
 pub const METHOD_APPS_TIDY: &str = "apps.tidy";
 pub const METHOD_APPS_UNINSTALL: &str = "apps.uninstall";
 pub const METHOD_ART_BASE: &str = "art.base";
+pub const METHOD_AUDIO_FORMATS: &str = "audio.formats";
 pub const METHOD_AUDIO_READ: &str = "audio.read";
+pub const METHOD_AUDIO_SET_FORMAT: &str = "audio.setFormat";
 pub const METHOD_AUDIO_SET_MUTE: &str = "audio.setMute";
 pub const METHOD_AUDIO_SET_VOLUME: &str = "audio.setVolume";
 pub const METHOD_AUTOPILOT_STATE: &str = "autopilot.state";
@@ -93,8 +111,21 @@ pub const METHOD_CAPTURE_ITEM: &str = "capture.item";
 pub const METHOD_CAPTURE_LIST: &str = "capture.list";
 pub const METHOD_CAPTURE_REEL: &str = "capture.reel";
 pub const METHOD_CAPTURE_REEL_CANCEL: &str = "capture.reel.cancel";
+pub const METHOD_CAPTURE_SAVE_IMAGE: &str = "capture.saveImage";
+pub const METHOD_CAPTURE_SEND: &str = "capture.send";
 pub const METHOD_CAPTURE_SETTINGS: &str = "capture.settings";
 pub const METHOD_CAPTURE_STATUS: &str = "capture.status";
+pub const METHOD_CAPTURE_TEXT: &str = "capture.text";
+pub const METHOD_CONTROLLER_CALIBRATE: &str = "controller.calibrate";
+pub const METHOD_CONTROLLER_GAME_PROFILES: &str = "controller.gameProfiles";
+pub const METHOD_CONTROLLER_GAME_PROFILES_SAVE: &str = "controller.gameProfilesSave";
+pub const METHOD_CONTROLLER_MEASURE: &str = "controller.measure";
+pub const METHOD_CONTROLLER_QUALITY: &str = "controller.quality";
+pub const METHOD_CONTROLLER_READ: &str = "controller.read";
+pub const METHOD_CONTROLLER_SETTINGS: &str = "controller.settings";
+pub const METHOD_CONTROLLER_SOUND: &str = "controller.sound";
+pub const METHOD_CONTROLLER_TEST: &str = "controller.test";
+pub const METHOD_CONTROLLER_WATCH: &str = "controller.watch";
 pub const METHOD_DEVICES_IMAGE: &str = "devices.image";
 pub const METHOD_DEVICES_LIST: &str = "devices.list";
 pub const METHOD_DISCORD_ACCOUNTS: &str = "discord.accounts";
@@ -133,6 +164,32 @@ pub const METHOD_DISCORD_UPLOAD: &str = "discord.upload";
 pub const METHOD_DISCORD_VIEW: &str = "discord.view";
 pub const METHOD_DISCORD_VOICE: &str = "discord.voice";
 pub const METHOD_EQ: &str = "eq";
+pub const METHOD_EQ_HEADPHONES: &str = "eq.headphones";
+pub const METHOD_HID_CLOSE: &str = "hid.close";
+pub const METHOD_HID_LIST: &str = "hid.list";
+pub const METHOD_HID_OPEN: &str = "hid.open";
+pub const METHOD_HID_RECEIVE_FEATURE_REPORT: &str = "hid.receiveFeatureReport";
+pub const METHOD_HID_RECEIVE_INPUT_REPORT: &str = "hid.receiveInputReport";
+pub const METHOD_HID_SEND_FEATURE_REPORT: &str = "hid.sendFeatureReport";
+pub const METHOD_HID_SEND_REPORT: &str = "hid.sendReport";
+pub const METHOD_MOUSE_PRESETS_GET: &str = "mouse.presets.get";
+pub const METHOD_MOUSE_PRESETS_SET: &str = "mouse.presets.set";
+pub const METHOD_MOUSE_PROFILES_GET: &str = "mouse.profiles.get";
+pub const METHOD_MOUSE_PROFILES_SET: &str = "mouse.profiles.set";
+pub const METHOD_NOTES_ACT: &str = "notes.act";
+pub const METHOD_NOTES_LIST: &str = "notes.list";
+pub const METHOD_NOTES_OPEN: &str = "notes.open";
+pub const METHOD_NOTES_PENDING: &str = "notes.pending";
+pub const METHOD_NOTES_PHOTO: &str = "notes.photo";
+pub const METHOD_NOTES_READ: &str = "notes.read";
+pub const METHOD_NOTES_SAVE: &str = "notes.save";
+pub const METHOD_NOTES_SAVE_AS: &str = "notes.saveAs";
+pub const METHOD_NOTES_SESSION: &str = "notes.session";
+pub const METHOD_NOTES_SPELL: &str = "notes.spell";
+pub const METHOD_NOTES_TEXT_FILES: &str = "notes.textFiles";
+pub const METHOD_SHELL_OPEN_URL: &str = "shell.openUrl";
+pub const METHOD_SHELL_PICK_FOLDER: &str = "shell.pickFolder";
+pub const METHOD_STEAM_INPUT_STATE: &str = "steamInput.state";
 pub const METHOD_EXO_ACCOUNT_SIGN_OUT: &str = "exoAccount.signOut";
 pub const METHOD_BACKUP_STATUS: &str = "backup.status";
 pub const METHOD_CLIENTS_STATUS: &str = "clients.status";
@@ -218,7 +275,9 @@ pub const USED_METHODS: &[&str] = &[
     METHOD_APPS_TIDY,
     METHOD_APPS_UNINSTALL,
     METHOD_ART_BASE,
+    METHOD_AUDIO_FORMATS,
     METHOD_AUDIO_READ,
+    METHOD_AUDIO_SET_FORMAT,
     METHOD_AUDIO_SET_MUTE,
     METHOD_AUDIO_SET_VOLUME,
     METHOD_AUTOPILOT_STATE,
@@ -228,8 +287,21 @@ pub const USED_METHODS: &[&str] = &[
     METHOD_CAPTURE_LIST,
     METHOD_CAPTURE_REEL,
     METHOD_CAPTURE_REEL_CANCEL,
+    METHOD_CAPTURE_SAVE_IMAGE,
+    METHOD_CAPTURE_SEND,
     METHOD_CAPTURE_SETTINGS,
     METHOD_CAPTURE_STATUS,
+    METHOD_CAPTURE_TEXT,
+    METHOD_CONTROLLER_CALIBRATE,
+    METHOD_CONTROLLER_GAME_PROFILES,
+    METHOD_CONTROLLER_GAME_PROFILES_SAVE,
+    METHOD_CONTROLLER_MEASURE,
+    METHOD_CONTROLLER_QUALITY,
+    METHOD_CONTROLLER_READ,
+    METHOD_CONTROLLER_SETTINGS,
+    METHOD_CONTROLLER_SOUND,
+    METHOD_CONTROLLER_TEST,
+    METHOD_CONTROLLER_WATCH,
     METHOD_DEVICES_IMAGE,
     METHOD_DEVICES_LIST,
     METHOD_DISCORD_ACCOUNTS,
@@ -268,6 +340,32 @@ pub const USED_METHODS: &[&str] = &[
     METHOD_DISCORD_VIEW,
     METHOD_DISCORD_VOICE,
     METHOD_EQ,
+    METHOD_EQ_HEADPHONES,
+    METHOD_HID_CLOSE,
+    METHOD_HID_LIST,
+    METHOD_HID_OPEN,
+    METHOD_HID_RECEIVE_FEATURE_REPORT,
+    METHOD_HID_RECEIVE_INPUT_REPORT,
+    METHOD_HID_SEND_FEATURE_REPORT,
+    METHOD_HID_SEND_REPORT,
+    METHOD_MOUSE_PRESETS_GET,
+    METHOD_MOUSE_PRESETS_SET,
+    METHOD_MOUSE_PROFILES_GET,
+    METHOD_MOUSE_PROFILES_SET,
+    METHOD_NOTES_ACT,
+    METHOD_NOTES_LIST,
+    METHOD_NOTES_OPEN,
+    METHOD_NOTES_PENDING,
+    METHOD_NOTES_PHOTO,
+    METHOD_NOTES_READ,
+    METHOD_NOTES_SAVE,
+    METHOD_NOTES_SAVE_AS,
+    METHOD_NOTES_SESSION,
+    METHOD_NOTES_SPELL,
+    METHOD_NOTES_TEXT_FILES,
+    METHOD_SHELL_OPEN_URL,
+    METHOD_SHELL_PICK_FOLDER,
+    METHOD_STEAM_INPUT_STATE,
     METHOD_EXO_ACCOUNT_SIGN_OUT,
     METHOD_EXO_ACCOUNT_STATE,
     METHOD_EXO_ACCOUNT_SYNC,
@@ -1079,6 +1177,19 @@ fn parse_event(
         "capture.reel" => Ok(serde_json::from_str::<CaptureReelEvent>(data_raw)
             .map(|ev| HostEvent::CaptureReel(Box::new(ev)))
             .unwrap_or_else(|_| raw_fallback(name, data_raw))),
+        "capture.shrunk" => Ok(serde_json::from_str::<CaptureShrunkEvent>(data_raw)
+            .map(|ev| HostEvent::CaptureShrunk(Box::new(ev)))
+            .unwrap_or_else(|_| raw_fallback(name, data_raw))),
+        "notes.open" => Ok(serde_json::from_str::<NotesOpenEvent>(data_raw)
+            .map(HostEvent::NotesOpen)
+            .unwrap_or_else(|_| raw_fallback(name, data_raw))),
+        "controller.state" => Ok(serde_json::from_str::<ControllerStateEvent>(data_raw)
+            .map(HostEvent::ControllerState)
+            .unwrap_or_else(|_| raw_fallback(name, data_raw))),
+        "hid.changed" => Ok(HostEvent::HidChanged),
+        "hid.input" => Ok(serde_json::from_str::<HidInputEvent>(data_raw)
+            .map(HostEvent::HidInput)
+            .unwrap_or_else(|_| raw_fallback(name, data_raw))),
         "discord.state" => Ok(serde_json::from_str::<DiscordStateEvent>(data_raw)
             .map(HostEvent::DiscordState)
             .unwrap_or_else(|_| raw_fallback(name, data_raw))),
@@ -1335,7 +1446,8 @@ mod tests {
 
     #[test]
     fn parses_all_newly_wired_host_events() {
-        let cases: &[(&[u8], fn(HostEvent) -> bool)] = &[
+        type EventCase = (&'static [u8], fn(HostEvent) -> bool);
+        let cases: &[EventCase] = &[
             (
                 br#"{"event":"music.volume","data":{"level":0.42,"source":"app"}}"#,
                 |ev| matches!(ev, HostEvent::MusicVolume(v) if (v.level - 0.42).abs() < 1e-6 && v.source == "app"),
@@ -1351,6 +1463,26 @@ mod tests {
             (
                 br#"{"event":"capture.reel","data":{"state":"working","percent":55.0,"wait":false}}"#,
                 |ev| matches!(ev, HostEvent::CaptureReel(r) if r.state == "working" && (r.percent - 55.0).abs() < 1e-6),
+            ),
+            (
+                br#"{"event":"capture.shrunk","data":{"id":"c1","before":50000000,"after":12000000,"item":{"id":"c1","kind":"video","size":12000000}}}"#,
+                |ev| matches!(ev, HostEvent::CaptureShrunk(s) if s.id == "c1" && s.before == 50_000_000 && s.after == 12_000_000 && s.item.is_some()),
+            ),
+            (
+                br#"{"event":"notes.open","data":{"id":"note-1","message":null}}"#,
+                |ev| matches!(ev, HostEvent::NotesOpen(n) if n.id.as_deref() == Some("note-1")),
+            ),
+            (
+                br#"{"event":"controller.state","data":{"id":"pad-1","lx":128,"ly":127,"rx":200,"ry":50,"l2":10,"r2":255,"profile":2,"stopL":1,"stopR":2,"battery":80,"charging":true,"extras":64}}"#,
+                |ev| matches!(ev, HostEvent::ControllerState(c) if c.id == "pad-1" && c.lx == 128 && c.r2 == 255 && c.profile == Some(2) && c.extras == 64 && c.charging),
+            ),
+            (
+                br#"{"event":"hid.changed","data":{}}"#,
+                |ev| matches!(ev, HostEvent::HidChanged),
+            ),
+            (
+                br#"{"event":"hid.input","data":{"device":"dev1","reportId":5,"data":"AQID"}}"#,
+                |ev| matches!(ev, HostEvent::HidInput(h) if h.device == "dev1" && h.report_id == 5 && h.data == "AQID"),
             ),
             (
                 br#"{"event":"install.queue","data":{"queuedGameIds":["steam:10"],"pausedDownloads":[],"held":null}}"#,
