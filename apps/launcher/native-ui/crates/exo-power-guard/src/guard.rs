@@ -1,3 +1,5 @@
+use std::path::{Path, PathBuf};
+
 use crate::types::{
     GpuSnapshot, THROTTLE_CURRENT_LIMIT, THROTTLE_HW_POWER_BRAKE, THROTTLE_HW_THERMAL,
 };
@@ -78,6 +80,115 @@ pub struct GuardAlert {
     pub threshold: f64,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RestoreReason {
+    FaultCleared,
+    GameExited,
+    MonitorStopped,
+    CrashRecovery,
+}
+
+impl RestoreReason {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::FaultCleared => "fault-cleared",
+            Self::GameExited => "game-exited",
+            Self::MonitorStopped => "monitor-stopped",
+            Self::CrashRecovery => "crash-recovery",
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PowerLimitJournalEntry {
+    pub gpu_name: String,
+    pub original_limit_w: f64,
+    pub lowered_limit_w: f64,
+    pub written_at_ms: u64,
+}
+
+#[derive(Debug, Clone)]
+pub struct PowerLimitJournal {
+    path: PathBuf,
+}
+
+impl PowerLimitJournal {
+    pub fn new(path: impl Into<PathBuf>) -> Self {
+        Self { path: path.into() }
+    }
+
+    pub fn default_path() -> PathBuf {
+        let base = std::env::var_os("LOCALAPPDATA")
+            .map(PathBuf::from)
+            .unwrap_or_else(std::env::temp_dir);
+        base.join("ExoLauncher").join("power-guard-limit.journal")
+    }
+
+    pub fn path(&self) -> &Path {
+        &self.path
+    }
+
+    pub fn write(&self, entry: &PowerLimitJournalEntry) -> Result<(), String> {
+        if let Some(parent) = self.path.parent() {
+            std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+        }
+        let body = format!(
+            "gpu={}\noriginal_w={:.3}\nlowered_w={:.3}\nwritten_at_ms={}\n",
+            entry.gpu_name.replace(['\r', '\n'], " "),
+            entry.original_limit_w,
+            entry.lowered_limit_w,
+            entry.written_at_ms
+        );
+        let tmp = self.path.with_extension("journal.tmp");
+        std::fs::write(&tmp, body).map_err(|e| e.to_string())?;
+        if self.path.exists() {
+            let _ = std::fs::remove_file(&self.path);
+        }
+        std::fs::rename(&tmp, &self.path).map_err(|e| e.to_string())
+    }
+
+    pub fn read(&self) -> Option<PowerLimitJournalEntry> {
+        let raw = std::fs::read_to_string(&self.path).ok()?;
+        let mut gpu = None;
+        let mut original_w = None;
+        let mut lowered_w = None;
+        let mut written_at_ms = None;
+        for line in raw.lines() {
+            if let Some(v) = line.strip_prefix("gpu=") {
+                gpu = Some(v.trim().to_string());
+            } else if let Some(v) = line.strip_prefix("original_w=") {
+                original_w = v
+                    .trim()
+                    .parse::<f64>()
+                    .ok()
+                    .filter(|x| x.is_finite() && *x > 0.0);
+            } else if let Some(v) = line.strip_prefix("lowered_w=") {
+                lowered_w = v
+                    .trim()
+                    .parse::<f64>()
+                    .ok()
+                    .filter(|x| x.is_finite() && *x > 0.0);
+            } else if let Some(v) = line.strip_prefix("written_at_ms=") {
+                written_at_ms = v.trim().parse::<u64>().ok();
+            }
+        }
+        Some(PowerLimitJournalEntry {
+            gpu_name: gpu?,
+            original_limit_w: original_w?,
+            lowered_limit_w: lowered_w?,
+            written_at_ms: written_at_ms?,
+        })
+    }
+
+    pub fn clear(&self) -> Result<(), String> {
+        match std::fs::remove_file(&self.path) {
+            Ok(()) => Ok(()),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
+            Err(e) => Err(e.to_string()),
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct GuardPolicy {
     pub alerts_enabled: bool,
@@ -102,6 +213,7 @@ pub struct GuardPolicy {
     pub overpower_critical_pct: f64,
     pub alert_sustained_ms: u64,
     pub stage_step_ms: u64,
+    pub shutdown_countdown_secs: u32,
 }
 
 impl Default for GuardPolicy {
@@ -129,6 +241,7 @@ impl Default for GuardPolicy {
             overpower_critical_pct: 115.0,
             alert_sustained_ms: 3_000,
             stage_step_ms: 10_000,
+            shutdown_countdown_secs: 30,
         }
     }
 }
@@ -145,7 +258,16 @@ pub enum GuardAction {
         target_w: f64,
         previous_w: Option<f64>,
     },
+    RestorePowerLimit {
+        original_w: f64,
+        reason: RestoreReason,
+    },
     CloseGame,
+    ShutdownCountdown {
+        remaining_secs: u32,
+        started_at_ms: u64,
+        first_tick: bool,
+    },
     ShutdownPc,
 }
 
@@ -163,14 +285,18 @@ pub struct GuardEvaluation {
 
 pub trait ActionExecutor {
     fn lower_power_limit(&mut self, target_w: f64) -> Result<f64, String>;
+    fn restore_power_limit(&mut self, original_w: f64) -> Result<f64, String>;
     fn close_game(&mut self) -> Result<(), String>;
+    fn play_alert_sound(&mut self);
     fn shutdown_pc(&mut self) -> Result<(), String>;
 }
 
 #[derive(Debug, Default)]
 pub struct MockActionExecutor {
     pub lowered_limits_w: Vec<f64>,
+    pub restored_limits_w: Vec<f64>,
     pub game_closes: usize,
+    pub alert_sounds: usize,
     pub pc_shutdowns: usize,
 }
 
@@ -180,9 +306,18 @@ impl ActionExecutor for MockActionExecutor {
         Ok(target_w)
     }
 
+    fn restore_power_limit(&mut self, original_w: f64) -> Result<f64, String> {
+        self.restored_limits_w.push(original_w);
+        Ok(original_w)
+    }
+
     fn close_game(&mut self) -> Result<(), String> {
         self.game_closes += 1;
         Ok(())
+    }
+
+    fn play_alert_sound(&mut self) {
+        self.alert_sounds += 1;
     }
 
     fn shutdown_pc(&mut self) -> Result<(), String> {
@@ -199,10 +334,67 @@ pub fn dispatch_action<E: ActionExecutor>(
         GuardAction::LowerPowerLimit { target_w, .. } => {
             exec.lower_power_limit(*target_w).map(|_| ())
         }
+        GuardAction::RestorePowerLimit { original_w, .. } => {
+            exec.restore_power_limit(*original_w).map(|_| ())
+        }
         GuardAction::CloseGame => exec.close_game(),
+        GuardAction::ShutdownCountdown { first_tick, .. } => {
+            if *first_tick {
+                exec.play_alert_sound();
+            }
+            Ok(())
+        }
         GuardAction::ShutdownPc => exec.shutdown_pc(),
         _ => Ok(()),
     }
+}
+
+pub fn dispatch_action_with_journal<E: ActionExecutor>(
+    action: &GuardAction,
+    gpu_name: &str,
+    now_ms: u64,
+    journal: &PowerLimitJournal,
+    exec: &mut E,
+) -> Result<(), String> {
+    match action {
+        GuardAction::LowerPowerLimit {
+            target_w,
+            previous_w,
+        } => {
+            let original_w = previous_w.unwrap_or(*target_w);
+            journal.write(&PowerLimitJournalEntry {
+                gpu_name: gpu_name.to_string(),
+                original_limit_w: original_w,
+                lowered_limit_w: *target_w,
+                written_at_ms: now_ms,
+            })?;
+            match exec.lower_power_limit(*target_w) {
+                Ok(_) => Ok(()),
+                Err(err) => {
+                    let _ = journal.clear();
+                    Err(err)
+                }
+            }
+        }
+        GuardAction::RestorePowerLimit { original_w, .. } => {
+            exec.restore_power_limit(*original_w)?;
+            journal.clear()?;
+            Ok(())
+        }
+        other => dispatch_action(other, exec),
+    }
+}
+
+pub fn recover_power_limit_from_journal<E: ActionExecutor>(
+    journal: &PowerLimitJournal,
+    exec: &mut E,
+) -> Result<Option<PowerLimitJournalEntry>, String> {
+    let Some(entry) = journal.read() else {
+        return Ok(None);
+    };
+    exec.restore_power_limit(entry.original_limit_w)?;
+    journal.clear()?;
+    Ok(Some(entry))
 }
 
 pub struct PowerGuard {
@@ -214,6 +406,10 @@ pub struct PowerGuard {
     stage1_done: bool,
     stage2_done: bool,
     stage3_done: bool,
+    original_power_limit_w: Option<f64>,
+    power_limit_lowered: bool,
+    shutdown_countdown_started_ms: Option<u64>,
+    shutdown_cancelled: bool,
 }
 
 impl PowerGuard {
@@ -227,6 +423,10 @@ impl PowerGuard {
             stage1_done: false,
             stage2_done: false,
             stage3_done: false,
+            original_power_limit_w: None,
+            power_limit_lowered: false,
+            shutdown_countdown_started_ms: None,
+            shutdown_cancelled: false,
         }
     }
 
@@ -238,8 +438,65 @@ impl PowerGuard {
         self.policy = policy;
     }
 
+    pub fn original_power_limit_w(&self) -> Option<f64> {
+        self.original_power_limit_w
+    }
+
+    pub fn is_power_limit_lowered(&self) -> bool {
+        self.power_limit_lowered
+    }
+
+    pub fn on_game_exited(&mut self) -> Option<GuardAction> {
+        if !self.power_limit_lowered {
+            return None;
+        }
+        self.power_limit_lowered = false;
+        self.stage1_done = false;
+        self.original_power_limit_w
+            .take()
+            .map(|original_w| GuardAction::RestorePowerLimit {
+                original_w,
+                reason: RestoreReason::GameExited,
+            })
+    }
+
+    pub fn on_stop(&mut self) -> Option<GuardAction> {
+        self.shutdown_countdown_started_ms = None;
+        if !self.power_limit_lowered {
+            return None;
+        }
+        self.power_limit_lowered = false;
+        self.stage1_done = false;
+        self.original_power_limit_w
+            .take()
+            .map(|original_w| GuardAction::RestorePowerLimit {
+                original_w,
+                reason: RestoreReason::MonitorStopped,
+            })
+    }
+
+    pub fn cancel_shutdown_countdown(&mut self) -> bool {
+        if self.shutdown_countdown_started_ms.take().is_some() {
+            self.stage3_done = true;
+            self.shutdown_cancelled = true;
+            return true;
+        }
+        false
+    }
+
+    pub fn active_shutdown_remaining_secs(&self, now_ms: u64) -> Option<u32> {
+        let start = self.shutdown_countdown_started_ms?;
+        let total_ms = u64::from(self.policy.shutdown_countdown_secs) * 1_000;
+        let elapsed = now_ms.saturating_sub(start);
+        let rem_ms = total_ms.saturating_sub(elapsed);
+        Some(rem_ms.div_ceil(1_000) as u32)
+    }
+
     pub fn compute_reduced_power_limit_w(&self, snap: &GpuSnapshot) -> Option<f64> {
-        let current = snap.enforced_power_limit_w.or(snap.power_limit_w)?;
+        let current = self
+            .original_power_limit_w
+            .or(snap.enforced_power_limit_w)
+            .or(snap.power_limit_w)?;
         let scaled = (current * self.policy.power_limit_scale).round();
         let floor = snap.min_power_limit_w.unwrap_or((current * 0.50).round());
         Some(scaled.max(floor).min(current))
@@ -252,7 +509,7 @@ impl PowerGuard {
         if self.policy.opt_in_close_game && !self.stage2_done {
             return Some(EscalationStage::CloseGame);
         }
-        if self.policy.opt_in_shutdown_pc && !self.stage3_done {
+        if self.policy.opt_in_shutdown_pc && !self.stage3_done && !self.shutdown_cancelled {
             return Some(EscalationStage::ShutdownPc);
         }
         None
@@ -512,17 +769,40 @@ impl PowerGuard {
             let stage_start = *self.stage_clock_ms.get_or_insert(snap.timestamp_ms);
             let stage_elapsed = snap.timestamp_ms.saturating_sub(stage_start);
 
-            let act = if let Some(next_stage) = self.next_pending_stage() {
+            let act = if let Some(start_ms) = self.shutdown_countdown_started_ms {
+                let total_ms = u64::from(self.policy.shutdown_countdown_secs) * 1_000;
+                let cd_elapsed = snap.timestamp_ms.saturating_sub(start_ms);
+                if cd_elapsed >= total_ms {
+                    self.shutdown_countdown_started_ms = None;
+                    self.stage3_done = true;
+                    GuardAction::ShutdownPc
+                } else {
+                    let rem_secs = (total_ms - cd_elapsed).div_ceil(1_000) as u32;
+                    GuardAction::ShutdownCountdown {
+                        remaining_secs: rem_secs,
+                        started_at_ms: start_ms,
+                        first_tick: false,
+                    }
+                }
+            } else if let Some(next_stage) = self.next_pending_stage() {
                 if stage_elapsed >= self.policy.stage_step_ms {
                     self.stage_clock_ms = Some(snap.timestamp_ms);
                     match next_stage {
                         EscalationStage::LowerPowerLimit => {
                             self.stage1_done = true;
+                            let previous_w = self
+                                .original_power_limit_w
+                                .or(snap.enforced_power_limit_w)
+                                .or(snap.power_limit_w);
+                            if !self.power_limit_lowered {
+                                self.original_power_limit_w = previous_w;
+                                self.power_limit_lowered = true;
+                            }
                             let target_w =
                                 self.compute_reduced_power_limit_w(snap).unwrap_or(150.0);
                             GuardAction::LowerPowerLimit {
                                 target_w,
-                                previous_w: snap.enforced_power_limit_w.or(snap.power_limit_w),
+                                previous_w,
                             }
                         }
                         EscalationStage::CloseGame => {
@@ -530,8 +810,17 @@ impl PowerGuard {
                             GuardAction::CloseGame
                         }
                         EscalationStage::ShutdownPc => {
-                            self.stage3_done = true;
-                            GuardAction::ShutdownPc
+                            if self.policy.shutdown_countdown_secs == 0 {
+                                self.stage3_done = true;
+                                GuardAction::ShutdownPc
+                            } else {
+                                self.shutdown_countdown_started_ms = Some(snap.timestamp_ms);
+                                GuardAction::ShutdownCountdown {
+                                    remaining_secs: self.policy.shutdown_countdown_secs,
+                                    started_at_ms: snap.timestamp_ms,
+                                    first_tick: true,
+                                }
+                            }
                         }
                     }
                 } else if self.policy.alerts_enabled
@@ -559,10 +848,22 @@ impl PowerGuard {
         } else {
             self.critical_since_ms = None;
             self.stage_clock_ms = None;
+            self.shutdown_countdown_started_ms = None;
+            self.shutdown_cancelled = false;
             self.stage1_done = false;
             self.stage2_done = false;
             self.stage3_done = false;
-            let act = if severity == Severity::Warning
+            let act = if self.power_limit_lowered {
+                self.power_limit_lowered = false;
+                if let Some(original_w) = self.original_power_limit_w.take() {
+                    GuardAction::RestorePowerLimit {
+                        original_w,
+                        reason: RestoreReason::FaultCleared,
+                    }
+                } else {
+                    GuardAction::None
+                }
+            } else if severity == Severity::Warning
                 && self.policy.alerts_enabled
                 && !self.alert_emitted
                 && fault_sustained_ms >= self.policy.alert_sustained_ms

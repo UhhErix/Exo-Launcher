@@ -2,8 +2,8 @@ use std::collections::VecDeque;
 use std::sync::Arc;
 use std::sync::Mutex;
 
-use crate::guard::{GuardEvaluation, GuardPolicy, PowerGuard};
-use crate::recorder::SessionRecorder;
+use crate::guard::{GuardAction, GuardEvaluation, GuardPolicy, PowerGuard};
+use crate::recorder::{SessionEvent, SessionRecorder};
 use crate::sidecar::SidecarClient;
 use crate::types::GpuSnapshot;
 
@@ -23,9 +23,11 @@ pub struct LiveGuardState {
     pub evaluation: Option<GuardEvaluation>,
     pub sample_count: usize,
     pub history: VecDeque<SessionPoint>,
+    pub session_log: Vec<SessionEvent>,
     pub policy: GuardPolicy,
     pub sidecar_running: bool,
     pub last_action_note: Option<String>,
+    pub shutdown_countdown_secs: Option<u32>,
 }
 
 impl Default for LiveGuardState {
@@ -35,9 +37,11 @@ impl Default for LiveGuardState {
             evaluation: None,
             sample_count: 0,
             history: VecDeque::with_capacity(64),
+            session_log: Vec::new(),
             policy: GuardPolicy::default(),
             sidecar_running: false,
             last_action_note: None,
+            shutdown_countdown_secs: None,
         }
     }
 }
@@ -81,8 +85,32 @@ impl PowerGuardController {
         self.sidecar.is_some()
     }
 
-    pub fn stop(&mut self) {
+    pub fn stop(&mut self) -> Option<GuardAction> {
         self.sidecar = None;
+        self.guard.on_stop()
+    }
+
+    pub fn on_game_exited(&mut self) -> Option<GuardAction> {
+        self.guard.on_game_exited()
+    }
+
+    pub fn cancel_shutdown_countdown(&mut self) -> bool {
+        self.guard.cancel_shutdown_countdown()
+    }
+
+    pub fn record_event(
+        &mut self,
+        timestamp_ms: u64,
+        kind: impl Into<String>,
+        detail: impl Into<String>,
+        state: &mut LiveGuardState,
+    ) {
+        let kind_s = kind.into();
+        let detail_s = detail.into();
+        if let Ok(mut rec) = self.recorder.lock() {
+            rec.record_event(timestamp_ms, kind_s, detail_s);
+            state.session_log = rec.events().to_vec();
+        }
     }
 
     pub fn poll_into(&mut self, state: &mut LiveGuardState) -> Option<GuardEvaluation> {
@@ -101,6 +129,10 @@ impl PowerGuardController {
         state: &mut LiveGuardState,
     ) -> GuardEvaluation {
         let eval = self.guard.evaluate(&snap);
+        state.shutdown_countdown_secs = match eval.action {
+            GuardAction::ShutdownCountdown { remaining_secs, .. } => Some(remaining_secs),
+            _ => None,
+        };
         let point = SessionPoint {
             timestamp_ms: snap.timestamp_ms,
             power_w: snap.board_power_w.unwrap_or(0.0),

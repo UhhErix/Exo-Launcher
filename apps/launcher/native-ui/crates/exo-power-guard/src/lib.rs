@@ -12,15 +12,17 @@ mod tests {
     use crate::backends::nvidia::{decode_astral_i2c_frame, map_nvml_throttle_bits};
     use crate::guard::{
         EscalationStage, FaultKind, GuardAction, GuardPolicy, MockActionExecutor, PowerGuard,
-        Severity, dispatch_action,
+        PowerLimitJournal, RestoreReason, Severity, dispatch_action, dispatch_action_with_journal,
+        recover_power_limit_from_journal,
     };
     use crate::per_pin::msi_psu::{
-        MSI_AI1300TS_PID, MSI_AI1600TS_PID, MSI_REPORT_BYTES, MSI_USB_VID, build_handshake,
-        build_read_request, decode_connector_currents, decode_linear11, encode_linear11_unsigned,
-        msi_model_name,
+        MSI_AI1300TS_PID, MSI_AI1600TS_PID, MSI_HID_DISCOVERY_ACCESS, MSI_HID_OPEN_ACCESS,
+        MSI_REPORT_BYTES, MSI_USB_VID, MockMsiHidSource, decode_connector_currents,
+        decode_linear11, encode_linear11_unsigned, msi_model_name, read_primary_from_source,
     };
     use crate::per_pin::wireview::{
-        decode_wireview_frame, encode_wireview_frame_for_test, extract_com_port,
+        MockWireViewSource, WIREVIEW_OPEN_ACCESS, decode_wireview_frame,
+        encode_wireview_frame_for_test, extract_com_port, read_wireview_from_source,
     };
     use crate::recorder::SessionRecorder;
     use crate::sidecar::parse_snapshot_json;
@@ -117,9 +119,6 @@ mod tests {
             Some("MPG Ai1600TS")
         );
         assert_eq!(msi_model_name(0x1234, MSI_AI1600TS_PID), None);
-        assert_eq!(build_handshake()[1], 0xFA);
-        assert!(build_read_request(0x10).is_some());
-        assert!(build_read_request(0x99).is_none());
 
         let mut reply = [0u8; MSI_REPORT_BYTES];
         let c1 = [6.5, 6.25, 6.75, 6.0, 6.5, 7.0];
@@ -242,13 +241,223 @@ mod tests {
         assert_eq!(exec.pc_shutdowns, 0);
 
         let ev15 = guard.evaluate(&make_bad(25_000));
-        assert_eq!(ev15.action, GuardAction::ShutdownPc);
+        assert_eq!(
+            ev15.action,
+            GuardAction::ShutdownCountdown {
+                remaining_secs: 30,
+                started_at_ms: 25_000,
+                first_tick: true,
+            }
+        );
         dispatch_action(&ev15.action, &mut exec).unwrap();
+        assert_eq!(exec.alert_sounds, 1);
+        assert_eq!(exec.pc_shutdowns, 0);
+
+        let ev45 = guard.evaluate(&make_bad(55_000));
+        assert_eq!(ev45.action, GuardAction::ShutdownPc);
+        dispatch_action(&ev45.action, &mut exec).unwrap();
         assert_eq!(exec.pc_shutdowns, 1);
 
-        let ev_ok = guard.evaluate(&sample_snapshot(26_000));
+        let ev_ok = guard.evaluate(&sample_snapshot(56_000));
         assert_eq!(ev_ok.severity, Severity::Normal);
+        assert_eq!(
+            ev_ok.action,
+            GuardAction::RestorePowerLimit {
+                original_w: 240.0,
+                reason: RestoreReason::FaultCleared,
+            }
+        );
+        dispatch_action(&ev_ok.action, &mut exec).unwrap();
+        assert_eq!(exec.restored_limits_w, vec![240.0]);
         assert!(!ev_ok.stage1_done && !ev_ok.stage2_done && !ev_ok.stage3_done);
+    }
+
+    #[test]
+    fn wireview_and_msi_transports_are_strictly_read_only_with_zero_writes() {
+        assert_eq!(WIREVIEW_OPEN_ACCESS, 0x8000_0000);
+        assert_eq!(MSI_HID_OPEN_ACCESS, 0x8000_0000);
+        assert_eq!(MSI_HID_DISCOVERY_ACCESS, 0);
+
+        let wv_frame = encode_wireview_frame_for_test(
+            [12010; 6],
+            [6200, 6100, 6300, 6000, 6150, 6250],
+            [520, 530, 410, 420],
+            0,
+            0,
+            0,
+        );
+        let mut wv_src = MockWireViewSource::new(wv_frame);
+        let decoded = read_wireview_from_source(&mut wv_src).expect("read-only WireView decode");
+        assert_eq!(wv_src.read_calls, 1);
+        assert_eq!(decoded.connector.pins.len(), 6);
+
+        let mut reply = [0u8; MSI_REPORT_BYTES];
+        for i in 0..6 {
+            let b = encode_linear11_unsigned(6.0, -4);
+            reply[9 + i * 2] = b[0];
+            reply[9 + i * 2 + 1] = b[1];
+        }
+        let mut msi_src = MockMsiHidSource::new(reply);
+        let msi_conn = read_primary_from_source(&mut msi_src).expect("read-only MSI decode");
+        assert_eq!(msi_src.read_calls, 1);
+        assert_eq!(msi_conn.source, PerPinSource::MsiPsuHid);
+        assert!((msi_conn.total_current_a - 36.0).abs() < 1e-2);
+    }
+
+    #[test]
+    fn stage1_restore_on_fault_clear_game_exit_stop_and_crash_recovery_journal() {
+        let jpath = std::env::temp_dir().join(format!(
+            "exo-pg-journal-test-{}.journal",
+            std::process::id()
+        ));
+        let journal = PowerLimitJournal::new(&jpath);
+        let _ = journal.clear();
+
+        let policy = GuardPolicy {
+            opt_in_lower_power_limit: true,
+            stage_step_ms: 2_000,
+            ..GuardPolicy::default()
+        };
+
+        let make_fault = |ts: u64| {
+            let mut s = sample_snapshot(ts);
+            s.throttle_flags = THROTTLE_HW_POWER_BRAKE;
+            s
+        };
+
+        let mut guard = PowerGuard::new(policy.clone());
+        let mut exec = MockActionExecutor::default();
+        let _ = guard.evaluate(&make_fault(1_000));
+        let ev = guard.evaluate(&make_fault(3_000));
+        dispatch_action_with_journal(&ev.action, "RTX 3070", 3_000, &journal, &mut exec).unwrap();
+        assert_eq!(exec.lowered_limits_w, vec![168.0]);
+        let persisted = journal.read().expect("journal written before stage 1");
+        assert!((persisted.original_limit_w - 240.0).abs() < 1e-6);
+
+        let mut lowered_ok = sample_snapshot(4_000);
+        lowered_ok.enforced_power_limit_w = Some(168.0);
+        let ev_clear = guard.evaluate(&lowered_ok);
+        assert_eq!(
+            ev_clear.action,
+            GuardAction::RestorePowerLimit {
+                original_w: 240.0,
+                reason: RestoreReason::FaultCleared,
+            }
+        );
+        dispatch_action_with_journal(&ev_clear.action, "RTX 3070", 4_000, &journal, &mut exec)
+            .unwrap();
+        assert_eq!(exec.restored_limits_w, vec![240.0]);
+        assert!(journal.read().is_none());
+
+        let _ = guard.evaluate(&make_fault(10_000));
+        let ev2 = guard.evaluate(&make_fault(12_000));
+        dispatch_action_with_journal(&ev2.action, "RTX 3070", 12_000, &journal, &mut exec).unwrap();
+        let exit_act = guard
+            .on_game_exited()
+            .expect("game exit restores original limit");
+        assert_eq!(
+            exit_act,
+            GuardAction::RestorePowerLimit {
+                original_w: 240.0,
+                reason: RestoreReason::GameExited,
+            }
+        );
+        dispatch_action_with_journal(&exit_act, "RTX 3070", 13_000, &journal, &mut exec).unwrap();
+        assert_eq!(exec.restored_limits_w, vec![240.0, 240.0]);
+        assert!(journal.read().is_none());
+
+        let _ = guard.evaluate(&make_fault(20_000));
+        let ev3 = guard.evaluate(&make_fault(22_000));
+        dispatch_action_with_journal(&ev3.action, "RTX 3070", 22_000, &journal, &mut exec).unwrap();
+        let stop_act = guard.on_stop().expect("stop restores original limit");
+        assert_eq!(
+            stop_act,
+            GuardAction::RestorePowerLimit {
+                original_w: 240.0,
+                reason: RestoreReason::MonitorStopped,
+            }
+        );
+        dispatch_action_with_journal(&stop_act, "RTX 3070", 23_000, &journal, &mut exec).unwrap();
+        assert_eq!(exec.restored_limits_w, vec![240.0, 240.0, 240.0]);
+        assert!(journal.read().is_none());
+
+        let mut crashed_guard = PowerGuard::new(policy);
+        let _ = crashed_guard.evaluate(&make_fault(30_000));
+        let ev4 = crashed_guard.evaluate(&make_fault(32_000));
+        dispatch_action_with_journal(&ev4.action, "RTX 3070", 32_000, &journal, &mut exec).unwrap();
+        drop(crashed_guard);
+        assert!(journal.read().is_some());
+
+        let recovered = recover_power_limit_from_journal(&journal, &mut exec)
+            .unwrap()
+            .expect("crash recovery restores original limit");
+        assert!((recovered.original_limit_w - 240.0).abs() < 1e-6);
+        assert_eq!(exec.restored_limits_w, vec![240.0, 240.0, 240.0, 240.0]);
+        assert!(journal.read().is_none());
+    }
+
+    #[test]
+    fn stage3_shutdown_30s_countdown_cancel_aborts_shutdown_and_logs_events() {
+        let policy = GuardPolicy {
+            opt_in_shutdown_pc: true,
+            stage_step_ms: 2_000,
+            ..GuardPolicy::default()
+        };
+        assert_eq!(policy.shutdown_countdown_secs, 30);
+        let mut guard = PowerGuard::new(policy);
+        let mut exec = MockActionExecutor::default();
+        let mut rec = SessionRecorder::new(64);
+
+        let make_fault = |ts: u64| {
+            let mut s = sample_snapshot(ts);
+            s.throttle_flags = THROTTLE_HW_POWER_BRAKE;
+            s
+        };
+
+        let _ = guard.evaluate(&make_fault(10_000));
+        let ev_cd = guard.evaluate(&make_fault(12_000));
+        assert_eq!(
+            ev_cd.action,
+            GuardAction::ShutdownCountdown {
+                remaining_secs: 30,
+                started_at_ms: 12_000,
+                first_tick: true,
+            }
+        );
+        dispatch_action(&ev_cd.action, &mut exec).unwrap();
+        rec.record_event(
+            12_000,
+            "shutdown-countdown-started",
+            "30 s cancelable countdown started",
+        );
+        assert_eq!(exec.alert_sounds, 1);
+        assert_eq!(exec.pc_shutdowns, 0);
+
+        let ev_mid = guard.evaluate(&make_fault(27_000));
+        assert_eq!(
+            ev_mid.action,
+            GuardAction::ShutdownCountdown {
+                remaining_secs: 15,
+                started_at_ms: 12_000,
+                first_tick: false,
+            }
+        );
+        assert!(guard.cancel_shutdown_countdown());
+        rec.record_event(
+            27_000,
+            "shutdown-cancelled",
+            "User cancelled Stage 3 shutdown countdown",
+        );
+
+        for step in 1..=40u64 {
+            let ev_after = guard.evaluate(&make_fault(27_000 + step * 1_000));
+            dispatch_action(&ev_after.action, &mut exec).unwrap();
+        }
+        assert_eq!(exec.pc_shutdowns, 0);
+        assert_eq!(rec.events().len(), 2);
+        assert_eq!(rec.events()[0].kind, "shutdown-countdown-started");
+        assert_eq!(rec.events()[1].kind, "shutdown-cancelled");
+        assert!(rec.export_html().contains("shutdown-cancelled"));
     }
 
     #[test]

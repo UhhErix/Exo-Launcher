@@ -10,11 +10,6 @@ pub const WIREVIEW_USB_PID: u16 = 0x5740;
 pub const WIREVIEW_BAUD: u32 = 115_200;
 pub const WIREVIEW_FRAME_BYTES: usize = 100;
 
-pub const CMD_READ_VENDOR_DATA: u8 = 0x01;
-pub const CMD_READ_UID: u8 = 0x02;
-pub const CMD_READ_SENSORS: u8 = 0x04;
-pub const CMD_READ_CONFIG: u8 = 0x05;
-
 const OFF_TS: usize = 0;
 const OFF_READINGS: usize = 12;
 const OFF_TOTAL_POWER: usize = 84;
@@ -31,10 +26,12 @@ const DIGCF_ALLCLASSES: u32 = 0x0000_0004;
 const SPDRP_HARDWAREID: u32 = 0x0000_0001;
 const SPDRP_FRIENDLYNAME: u32 = 0x0000_000C;
 const GENERIC_READ: u32 = 0x8000_0000;
-const GENERIC_WRITE: u32 = 0x4000_0000;
+const FILE_SHARE_READ: u32 = 0x0000_0001;
+const FILE_SHARE_WRITE: u32 = 0x0000_0002;
 const OPEN_EXISTING: u32 = 3;
 const PURGE_RXCLEAR: u32 = 0x0008;
-const PURGE_TXCLEAR: u32 = 0x0004;
+
+pub const WIREVIEW_OPEN_ACCESS: u32 = GENERIC_READ;
 
 #[repr(C)]
 struct SpDevinfoData {
@@ -113,13 +110,6 @@ unsafe extern "system" {
     fn SetCommState(h_file: Handle, lp_dcb: *const Dcb) -> i32;
     fn SetCommTimeouts(h_file: Handle, lp_comm_timeouts: *const CommTimeouts) -> i32;
     fn PurgeComm(h_file: Handle, dw_flags: u32) -> i32;
-    fn WriteFile(
-        h_file: Handle,
-        lp_buffer: *const u8,
-        n_number_of_bytes_to_write: u32,
-        lp_number_of_bytes_written: *mut u32,
-        lp_overlapped: *mut std::ffi::c_void,
-    ) -> i32;
     fn ReadFile(
         h_file: Handle,
         lp_buffer: *mut u8,
@@ -127,6 +117,44 @@ unsafe extern "system" {
         lp_number_of_bytes_read: *mut u32,
         lp_overlapped: *mut std::ffi::c_void,
     ) -> i32;
+}
+
+pub trait WireViewReadOnlySource {
+    fn read_exact_bytes(&mut self, buf: &mut [u8]) -> bool;
+}
+
+#[derive(Debug, Clone)]
+pub struct MockWireViewSource {
+    pub frame: [u8; WIREVIEW_FRAME_BYTES],
+    pub read_calls: usize,
+}
+
+impl MockWireViewSource {
+    pub fn new(frame: [u8; WIREVIEW_FRAME_BYTES]) -> Self {
+        Self {
+            frame,
+            read_calls: 0,
+        }
+    }
+}
+
+impl WireViewReadOnlySource for MockWireViewSource {
+    fn read_exact_bytes(&mut self, buf: &mut [u8]) -> bool {
+        if buf.len() != WIREVIEW_FRAME_BYTES {
+            return false;
+        }
+        self.read_calls += 1;
+        buf.copy_from_slice(&self.frame);
+        true
+    }
+}
+
+pub fn read_wireview_from_source<S: WireViewReadOnlySource>(src: &mut S) -> Option<WireViewFrame> {
+    let mut buf = [0u8; WIREVIEW_FRAME_BYTES];
+    if !src.read_exact_bytes(&mut buf) {
+        return None;
+    }
+    decode_wireview_frame(&buf)
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -141,23 +169,12 @@ pub struct WireViewFrame {
 
 pub struct WireViewTransport {
     port_name: String,
-    verified: bool,
 }
 
 impl WireViewTransport {
     pub fn discover() -> Option<Self> {
         let ports = find_stm32_com_ports();
-        for port in ports {
-            let mut t = Self {
-                port_name: port,
-                verified: false,
-            };
-            if t.probe_handshake() {
-                t.verified = true;
-                return Some(t);
-            }
-        }
-        None
+        ports.into_iter().next().map(|port_name| Self { port_name })
     }
 
     pub fn port_name(&self) -> &str {
@@ -165,17 +182,10 @@ impl WireViewTransport {
     }
 
     pub fn read(&mut self) -> Option<ConnectorSnapshot> {
-        if !self.verified && !self.probe_handshake() {
-            return None;
-        }
-        let handle = open_com_port(&self.port_name)?;
+        let handle = open_com_port_read_only(&self.port_name)?;
         let res = (|| {
             unsafe {
-                PurgeComm(handle, PURGE_RXCLEAR | PURGE_TXCLEAR);
-            }
-            let cmd = [CMD_READ_SENSORS];
-            if !write_all(handle, &cmd) {
-                return None;
+                PurgeComm(handle, PURGE_RXCLEAR);
             }
             let mut buf = [0u8; WIREVIEW_FRAME_BYTES];
             if !read_exact(handle, &mut buf) {
@@ -187,30 +197,6 @@ impl WireViewTransport {
             CloseHandle(handle);
         }
         res
-    }
-
-    fn probe_handshake(&self) -> bool {
-        let Some(handle) = open_com_port(&self.port_name) else {
-            return false;
-        };
-        let ok = (|| {
-            unsafe {
-                PurgeComm(handle, PURGE_RXCLEAR | PURGE_TXCLEAR);
-            }
-            let cmd = [CMD_READ_VENDOR_DATA];
-            if !write_all(handle, &cmd) {
-                return false;
-            }
-            let mut header = [0u8; 3];
-            if !read_exact(handle, &mut header) {
-                return false;
-            }
-            header[0] == 0xEF && matches!(header[1], 0x05 | 0x06)
-        })();
-        unsafe {
-            CloseHandle(handle);
-        }
-        ok
     }
 }
 
@@ -305,7 +291,7 @@ fn read_dev_prop_utf16(set: Handle, info: &SpDevinfoData, prop: u32) -> Option<S
     Some(String::from_utf16_lossy(&u16s))
 }
 
-fn open_com_port(port: &str) -> Option<Handle> {
+fn open_com_port_read_only(port: &str) -> Option<Handle> {
     let path = format!("\\\\.\\{port}");
     let wide: Vec<u16> = OsStr::new(&path)
         .encode_wide()
@@ -314,8 +300,8 @@ fn open_com_port(port: &str) -> Option<Handle> {
     let h = unsafe {
         CreateFileW(
             wide.as_ptr(),
-            GENERIC_READ | GENERIC_WRITE,
-            0,
+            WIREVIEW_OPEN_ACCESS,
+            FILE_SHARE_READ | FILE_SHARE_WRITE,
             null(),
             OPEN_EXISTING,
             0,
@@ -348,8 +334,8 @@ fn open_com_port(port: &str) -> Option<Handle> {
         read_interval_timeout: 50,
         read_total_timeout_multiplier: 10,
         read_total_timeout_constant: 250,
-        write_total_timeout_multiplier: 10,
-        write_total_timeout_constant: 250,
+        write_total_timeout_multiplier: 0,
+        write_total_timeout_constant: 0,
     };
     if unsafe { SetCommTimeouts(h, &timeouts) } == 0 {
         unsafe {
@@ -358,20 +344,6 @@ fn open_com_port(port: &str) -> Option<Handle> {
         return None;
     }
     Some(h)
-}
-
-fn write_all(h: Handle, data: &[u8]) -> bool {
-    let mut written = 0u32;
-    let ok = unsafe {
-        WriteFile(
-            h,
-            data.as_ptr(),
-            data.len() as u32,
-            &mut written,
-            null_mut(),
-        ) != 0
-    };
-    ok && written as usize == data.len()
 }
 
 fn read_exact(h: Handle, buf: &mut [u8]) -> bool {

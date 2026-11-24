@@ -37,6 +37,7 @@ pub enum NoticeActionKind {
     DownloadNewerUpscalers {
         notice_id: u64,
     },
+    CancelPowerGuardShutdown,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -780,6 +781,9 @@ impl AppState {
             NoticeActionKind::DownloadNewerUpscalers { notice_id } => {
                 self.run_notice_action(crate::state::NoticeAction::DownloadNewerUpscalers);
                 self.dismiss_notice(notice_id);
+            }
+            NoticeActionKind::CancelPowerGuardShutdown => {
+                self.cancel_power_guard_shutdown();
             }
         }
     }

@@ -12,10 +12,12 @@ const INVALID_HANDLE_VALUE: Handle = (-1isize) as Handle;
 const DIGCF_PRESENT: u32 = 0x0000_0002;
 const DIGCF_DEVICEINTERFACE: u32 = 0x0000_0010;
 const GENERIC_READ: u32 = 0x8000_0000;
-const GENERIC_WRITE: u32 = 0x4000_0000;
 const FILE_SHARE_READ: u32 = 0x0000_0001;
 const FILE_SHARE_WRITE: u32 = 0x0000_0002;
 const OPEN_EXISTING: u32 = 3;
+
+pub const MSI_HID_DISCOVERY_ACCESS: u32 = 0;
+pub const MSI_HID_OPEN_ACCESS: u32 = GENERIC_READ;
 
 #[repr(C)]
 struct SpDeviceInterfaceData {
@@ -77,13 +79,6 @@ unsafe extern "system" {
         h_template_file: Handle,
     ) -> Handle;
     fn CloseHandle(h_object: Handle) -> i32;
-    fn WriteFile(
-        h_file: Handle,
-        lp_buffer: *const u8,
-        n_number_of_bytes_to_write: u32,
-        lp_number_of_bytes_written: *mut u32,
-        lp_overlapped: *mut std::ffi::c_void,
-    ) -> i32;
     fn ReadFile(
         h_file: Handle,
         lp_buffer: *mut u8,
@@ -91,6 +86,47 @@ unsafe extern "system" {
         lp_number_of_bytes_read: *mut u32,
         lp_overlapped: *mut std::ffi::c_void,
     ) -> i32;
+}
+
+pub trait MsiHidReadOnlySource {
+    fn read_input_report(&mut self, buf: &mut [u8; MSI_REPORT_BYTES]) -> usize;
+}
+
+#[derive(Debug, Clone)]
+pub struct MockMsiHidSource {
+    pub report: [u8; MSI_REPORT_BYTES],
+    pub read_calls: usize,
+}
+
+impl MockMsiHidSource {
+    pub fn new(report: [u8; MSI_REPORT_BYTES]) -> Self {
+        Self {
+            report,
+            read_calls: 0,
+        }
+    }
+}
+
+impl MsiHidReadOnlySource for MockMsiHidSource {
+    fn read_input_report(&mut self, buf: &mut [u8; MSI_REPORT_BYTES]) -> usize {
+        self.read_calls += 1;
+        buf.copy_from_slice(&self.report);
+        MSI_REPORT_BYTES
+    }
+}
+
+pub fn read_primary_from_source<S: MsiHidReadOnlySource>(src: &mut S) -> Option<ConnectorSnapshot> {
+    let mut reply = [0u8; MSI_REPORT_BYTES];
+    let got = src.read_input_report(&mut reply);
+    if got < 34 {
+        return None;
+    }
+    let conns = decode_connector_currents(&reply);
+    if conns[0].total_current_a >= conns[1].total_current_a {
+        Some(conns[0].clone())
+    } else {
+        Some(conns[1].clone())
+    }
 }
 
 pub struct MsiPsuTransport {
@@ -177,7 +213,7 @@ impl MsiPsuTransport {
             let h = unsafe {
                 CreateFileW(
                     path_wide.as_ptr(),
-                    GENERIC_READ | GENERIC_WRITE,
+                    MSI_HID_DISCOVERY_ACCESS,
                     FILE_SHARE_READ | FILE_SHARE_WRITE,
                     null(),
                     OPEN_EXISTING,
@@ -218,7 +254,7 @@ impl MsiPsuTransport {
         let h = unsafe {
             CreateFileW(
                 self.path_wide.as_ptr(),
-                GENERIC_READ | GENERIC_WRITE,
+                MSI_HID_OPEN_ACCESS,
                 FILE_SHARE_READ | FILE_SHARE_WRITE,
                 null(),
                 OPEN_EXISTING,
@@ -230,13 +266,6 @@ impl MsiPsuTransport {
             return None;
         }
         let res = (|| {
-            let req = build_read_request(0x10)?;
-            let mut written = 0u32;
-            if unsafe { WriteFile(h, req.as_ptr(), req.len() as u32, &mut written, null_mut()) }
-                == 0
-            {
-                return None;
-            }
             let mut reply = [0u8; MSI_REPORT_BYTES];
             let mut got = 0u32;
             if unsafe {
@@ -273,17 +302,6 @@ pub fn msi_model_name(vid: u16, pid: u16) -> Option<&'static str> {
     match pid {
         MSI_AI1300TS_PID => Some("MPG Ai1300TS"),
         MSI_AI1600TS_PID => Some("MPG Ai1600TS"),
-        _ => None,
-    }
-}
-
-pub fn build_handshake() -> [u8; MSI_REPORT_BYTES] {
-    packet(0xFA, 0x51, &[])
-}
-
-pub fn build_read_request(register: u8) -> Option<[u8; MSI_REPORT_BYTES]> {
-    match register {
-        0x10 | 0x11 | 0x12 | 0x30 | 0x40 | 0x41 | 0x42 | 0xE0 => Some(packet(0x51, register, &[])),
         _ => None,
     }
 }
@@ -331,13 +349,4 @@ pub fn decode_connector_currents(reply: &[u8; MSI_REPORT_BYTES]) -> [ConnectorSn
             hw_fault_bits: 0,
         }
     })
-}
-
-fn packet(opcode: u8, register: u8, data: &[u8]) -> [u8; MSI_REPORT_BYTES] {
-    let mut out = [0u8; MSI_REPORT_BYTES];
-    out[1] = opcode;
-    out[2] = register;
-    let n = data.len().min(MSI_REPORT_BYTES - 3);
-    out[3..3 + n].copy_from_slice(&data[..n]);
-    out
 }

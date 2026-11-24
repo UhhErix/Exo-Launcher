@@ -24,9 +24,17 @@ pub struct SessionSummary {
     pub throttle_events: usize,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SessionEvent {
+    pub timestamp_ms: u64,
+    pub kind: String,
+    pub detail: String,
+}
+
 pub struct SessionRecorder {
     capacity: usize,
     ring: VecDeque<GpuSnapshot>,
+    events: Vec<SessionEvent>,
 }
 
 impl SessionRecorder {
@@ -35,6 +43,7 @@ impl SessionRecorder {
         Self {
             capacity: cap,
             ring: VecDeque::with_capacity(cap),
+            events: Vec::new(),
         }
     }
 
@@ -43,6 +52,26 @@ impl SessionRecorder {
             self.ring.pop_front();
         }
         self.ring.push_back(snap);
+    }
+
+    pub fn record_event(
+        &mut self,
+        timestamp_ms: u64,
+        kind: impl Into<String>,
+        detail: impl Into<String>,
+    ) {
+        if self.events.len() >= 256 {
+            self.events.remove(0);
+        }
+        self.events.push(SessionEvent {
+            timestamp_ms,
+            kind: kind.into(),
+            detail: detail.into(),
+        });
+    }
+
+    pub fn events(&self) -> &[SessionEvent] {
+        &self.events
     }
 
     pub fn len(&self) -> usize {
@@ -137,7 +166,21 @@ impl SessionRecorder {
                 sum.throttle_events
             );
         }
-        html.push_str("</pre></div></body></html>");
+        html.push_str("</pre></div>");
+        if !self.events.is_empty() {
+            html.push_str("<div class=\"card\"><h2>Session Event Log</h2><ul>");
+            for ev in &self.events {
+                let _ = write!(
+                    html,
+                    "<li>[{}] <strong>{}</strong>: {}</li>",
+                    ev.timestamp_ms,
+                    html_escape(&ev.kind),
+                    html_escape(&ev.detail)
+                );
+            }
+            html.push_str("</ul></div>");
+        }
+        html.push_str("</body></html>");
         html
     }
 }

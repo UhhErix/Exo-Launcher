@@ -1,3 +1,5 @@
+#[cfg(test)]
+use std::path::PathBuf;
 use std::process::Command;
 
 use exo_kit::{
@@ -5,7 +7,9 @@ use exo_kit::{
     subtle_fill, track_fill, type_control, type_section, type_small, warn,
 };
 use exo_power_guard::backends::nvidia::try_set_nvidia_power_limit_w;
-use exo_power_guard::guard::{GuardAction, GuardPolicy, Severity};
+use exo_power_guard::guard::{
+    GuardAction, GuardPolicy, PowerLimitJournal, PowerLimitJournalEntry, RestoreReason, Severity,
+};
 use exo_power_guard::monitor::{LiveGuardState, PowerGuardController};
 use exo_power_guard::types::{
     BackendKind, GpuSnapshot, THROTTLE_CURRENT_LIMIT, THROTTLE_HW_POWER_BRAKE, THROTTLE_HW_THERMAL,
@@ -13,18 +17,69 @@ use exo_power_guard::types::{
 };
 use rune::{El, col, el, row, text};
 
-use crate::notice::RichNoticeSpec;
+use crate::notice::{NoticeActionKind, NoticeActionSpec, RichNoticeSpec};
 use crate::pc_menus::{menu_btn, menu_row, menu_switch};
 use crate::state::{AppState, NoticeTone, Room};
+
+#[cfg(windows)]
+#[link(name = "user32")]
+unsafe extern "system" {
+    fn MessageBeep(u_type: u32) -> i32;
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PendingOptInConfirm {
+    LowerPowerLimit,
+    CloseGame,
+    ShutdownPc,
+}
+
+impl PendingOptInConfirm {
+    pub fn title(self) -> &'static str {
+        match self {
+            Self::LowerPowerLimit => "Enable Stage 1: Lower GPU power limit?",
+            Self::CloseGame => "Enable Stage 2: Close running game?",
+            Self::ShutdownPc => "Enable Stage 3: Emergency PC shutdown?",
+        }
+    }
+
+    pub fn detail(self) -> &'static str {
+        match self {
+            Self::LowerPowerLimit => {
+                "On a sustained critical GPU or connector fault, Exo lowers the GPU power limit by 30% (within hardware bounds). The original limit is journaled to disk and restored automatically when the fault clears, the game exits, Exo closes, or on next start after a crash."
+            }
+            Self::CloseGame => {
+                "If a sustained critical GPU or connector fault persists after Stage 1, Exo stops the active game immediately to drop GPU power load. Unsaved game progress may be lost."
+            }
+            Self::ShutdownPc => {
+                "If a sustained critical GPU or connector fault persists after Stage 2, Exo starts a 30-second cancelable shutdown countdown with a sticky toast and alert sound before shutting down Windows."
+            }
+        }
+    }
+
+    pub fn confirm_label(self) -> &'static str {
+        match self {
+            Self::LowerPowerLimit => "Enable power limit drop",
+            Self::CloseGame => "Enable game close",
+            Self::ShutdownPc => "Enable emergency shutdown",
+        }
+    }
+}
 
 pub struct PowerGuardUiState {
     pub live: LiveGuardState,
     pub export_note: Option<String>,
     pub last_poll_at: f64,
+    pub last_any_game_running: bool,
+    pub pending_confirm: Option<PendingOptInConfirm>,
     pub dev_mock_actions: bool,
     pub mock_lowered_limits_w: Vec<f64>,
+    pub mock_restored_limits_w: Vec<f64>,
     pub mock_game_closes: usize,
+    pub mock_alert_sounds: usize,
     pub mock_pc_shutdowns: usize,
+    journal: PowerLimitJournal,
+    journal_recovered: bool,
     controller: PowerGuardController,
 }
 
@@ -34,10 +89,16 @@ impl Default for PowerGuardUiState {
             live: LiveGuardState::default(),
             export_note: None,
             last_poll_at: -10.0,
+            last_any_game_running: false,
+            pending_confirm: None,
             dev_mock_actions: false,
             mock_lowered_limits_w: Vec::new(),
+            mock_restored_limits_w: Vec::new(),
             mock_game_closes: 0,
+            mock_alert_sounds: 0,
             mock_pc_shutdowns: 0,
+            journal: PowerLimitJournal::new(PowerLimitJournal::default_path()),
+            journal_recovered: false,
             controller: PowerGuardController::new(GuardPolicy::default()),
         }
     }
@@ -49,27 +110,69 @@ impl PowerGuardUiState {
     }
 
     #[cfg(test)]
+    pub fn set_journal_path(&mut self, path: PathBuf) {
+        self.journal = PowerLimitJournal::new(path);
+        self.journal_recovered = false;
+    }
+
+    #[cfg(test)]
+    pub fn journal_entry(&self) -> Option<PowerLimitJournalEntry> {
+        self.journal.read()
+    }
+
+    #[cfg(test)]
     pub fn is_sidecar_running(&self) -> bool {
         self.controller.is_running()
     }
 }
 
 impl AppState {
+    pub fn recover_power_guard_journal_if_needed(&mut self) -> bool {
+        if self.pc.power_guard_ui.journal_recovered {
+            return false;
+        }
+        self.pc.power_guard_ui.journal_recovered = true;
+        let Some(entry) = self.pc.power_guard_ui.journal.read() else {
+            return false;
+        };
+        let restore_act = GuardAction::RestorePowerLimit {
+            original_w: entry.original_limit_w,
+            reason: RestoreReason::CrashRecovery,
+        };
+        self.handle_power_guard_action(&restore_act, Severity::Normal, &[]);
+        true
+    }
+
     pub fn tick_power_guard(&mut self, now: f64) -> bool {
+        let mut changed = self.recover_power_guard_journal_if_needed();
         let any_game_running = self.games.iter().any(|g| g.is_running);
+
+        if self.pc.power_guard_ui.last_any_game_running
+            && !any_game_running
+            && let Some(restore_act) = self.pc.power_guard_ui.controller.on_game_exited()
+        {
+            self.handle_power_guard_action(&restore_act, Severity::Normal, &[]);
+            changed = true;
+        }
+        self.pc.power_guard_ui.last_any_game_running = any_game_running;
+
         let active = PowerGuardUiState::should_poll(self.room, any_game_running);
 
         if !active {
             if self.pc.power_guard_ui.controller.is_running() {
-                self.pc.power_guard_ui.controller.stop();
+                let restore_act = self.pc.power_guard_ui.controller.stop();
                 self.pc.power_guard_ui.live.sidecar_running = false;
+                self.pc.power_guard_ui.live.shutdown_countdown_secs = None;
+                if let Some(act) = restore_act {
+                    self.handle_power_guard_action(&act, Severity::Normal, &[]);
+                }
                 return true;
             }
-            return false;
+            return changed;
         }
 
         if now - self.pc.power_guard_ui.last_poll_at < 0.9 {
-            return false;
+            return changed;
         }
         self.pc.power_guard_ui.last_poll_at = now;
 
@@ -86,7 +189,7 @@ impl AppState {
             self.handle_power_guard_action(&eval.action, eval.severity, &eval.alerts);
             return true;
         }
-        false
+        changed
     }
 
     #[cfg(test)]
@@ -97,6 +200,72 @@ impl AppState {
             .controller
             .ingest_snapshot(snap, &mut self.pc.power_guard_ui.live);
         self.handle_power_guard_action(&eval.action, eval.severity, &eval.alerts);
+    }
+
+    #[cfg(test)]
+    pub fn trigger_power_guard_stop_for_test(&mut self) {
+        if let Some(act) = self.pc.power_guard_ui.controller.stop() {
+            self.handle_power_guard_action(&act, Severity::Normal, &[]);
+        }
+    }
+
+    #[cfg(test)]
+    pub fn trigger_power_guard_game_exit_for_test(&mut self) {
+        if let Some(act) = self.pc.power_guard_ui.controller.on_game_exited() {
+            self.handle_power_guard_action(&act, Severity::Normal, &[]);
+        }
+    }
+
+    fn current_power_guard_ts_ms(&self) -> u64 {
+        self.pc
+            .power_guard_ui
+            .live
+            .snapshot
+            .as_ref()
+            .map(|s| s.timestamp_ms)
+            .unwrap_or(0)
+    }
+
+    fn record_power_guard_event(&mut self, kind: &str, detail: String) {
+        let ts = self.current_power_guard_ts_ms();
+        let pg = &mut self.pc.power_guard_ui;
+        pg.controller.record_event(ts, kind, detail, &mut pg.live);
+    }
+
+    fn play_power_guard_alert_sound(&mut self) {
+        if self.pc.power_guard_ui.dev_mock_actions {
+            self.pc.power_guard_ui.mock_alert_sounds += 1;
+            return;
+        }
+        #[cfg(windows)]
+        unsafe {
+            MessageBeep(0x0000_0010);
+        }
+    }
+
+    pub fn cancel_power_guard_shutdown(&mut self) {
+        if !self
+            .pc
+            .power_guard_ui
+            .controller
+            .cancel_shutdown_countdown()
+        {
+            return;
+        }
+        self.pc.power_guard_ui.live.shutdown_countdown_secs = None;
+        let msg = "Stage 3 shutdown countdown cancelled by user".to_string();
+        self.pc.power_guard_ui.live.last_action_note = Some(msg.clone());
+        self.record_power_guard_event("shutdown-cancelled", msg.clone());
+        self.dismiss_notice_by_key("power-guard-stage3");
+        self.push_rich_notice(RichNoticeSpec {
+            key_id: Some("power-guard-stage3-cancelled".into()),
+            title: Some("Power guard".into()),
+            where_label: Some("PC".into()),
+            text: msg,
+            tone: NoticeTone::Neutral,
+            sticky: Some(false),
+            ..Default::default()
+        });
     }
 
     fn handle_power_guard_action(
@@ -112,6 +281,7 @@ impl AppState {
 
         match action {
             GuardAction::AlertSustained => {
+                self.record_power_guard_event("fault-alert", first_msg.clone());
                 let tone = if severity == Severity::Critical {
                     NoticeTone::Bad
                 } else {
@@ -127,19 +297,59 @@ impl AppState {
                     ..Default::default()
                 });
             }
-            GuardAction::LowerPowerLimit { target_w, .. } => {
+            GuardAction::LowerPowerLimit {
+                target_w,
+                previous_w,
+            } => {
                 if !self.pc.power_guard_ui.live.policy.opt_in_lower_power_limit {
                     return;
                 }
-                let msg: String = if self.pc.power_guard_ui.dev_mock_actions {
+                let gpu_name = self
+                    .pc
+                    .power_guard_ui
+                    .live
+                    .snapshot
+                    .as_ref()
+                    .map(|s| s.name.clone())
+                    .unwrap_or_else(|| "GPU".into());
+                let original_w = previous_w.unwrap_or(*target_w);
+                let ts = self.current_power_guard_ts_ms();
+                let _ = self
+                    .pc
+                    .power_guard_ui
+                    .journal
+                    .write(&PowerLimitJournalEntry {
+                        gpu_name,
+                        original_limit_w: original_w,
+                        lowered_limit_w: *target_w,
+                        written_at_ms: ts,
+                    });
+
+                let (ok, msg) = if self.pc.power_guard_ui.dev_mock_actions {
                     self.pc.power_guard_ui.mock_lowered_limits_w.push(*target_w);
-                    format!("Mock lowered GPU power limit to {target_w:.0} W")
+                    (
+                        true,
+                        format!(
+                            "Mock lowered GPU power limit to {target_w:.0} W (original {original_w:.0} W journaled)"
+                        ),
+                    )
                 } else {
                     match try_set_nvidia_power_limit_w(*target_w) {
-                        Ok(applied) => format!("Lowered GPU power limit to {applied:.0} W"),
-                        Err(err) => format!("Could not lower GPU power limit: {err}"),
+                        Ok(applied) => (
+                            true,
+                            format!(
+                                "Lowered GPU power limit to {applied:.0} W (original {original_w:.0} W journaled)"
+                            ),
+                        ),
+                        Err(err) => {
+                            let _ = self.pc.power_guard_ui.journal.clear();
+                            (false, format!("Could not lower GPU power limit: {err}"))
+                        }
                     }
                 };
+                if ok {
+                    self.record_power_guard_event("power-limit-lowered", msg.clone());
+                }
                 self.pc.power_guard_ui.live.last_action_note = Some(msg.clone());
                 self.push_rich_notice(RichNoticeSpec {
                     key_id: Some("power-guard-stage1".into()),
@@ -148,6 +358,51 @@ impl AppState {
                     text: msg,
                     tone: NoticeTone::Bad,
                     sticky: Some(true),
+                    ..Default::default()
+                });
+            }
+            GuardAction::RestorePowerLimit { original_w, reason } => {
+                let (ok, msg) = if self.pc.power_guard_ui.dev_mock_actions {
+                    self.pc
+                        .power_guard_ui
+                        .mock_restored_limits_w
+                        .push(*original_w);
+                    (
+                        true,
+                        format!(
+                            "Mock restored original GPU power limit to {original_w:.0} W ({})",
+                            reason.as_str()
+                        ),
+                    )
+                } else {
+                    match try_set_nvidia_power_limit_w(*original_w) {
+                        Ok(applied) => (
+                            true,
+                            format!(
+                                "Restored original GPU power limit to {applied:.0} W ({})",
+                                reason.as_str()
+                            ),
+                        ),
+                        Err(err) => (false, format!("Could not restore GPU power limit: {err}")),
+                    }
+                };
+                if ok {
+                    let _ = self.pc.power_guard_ui.journal.clear();
+                    self.record_power_guard_event("power-limit-restored", msg.clone());
+                }
+                self.pc.power_guard_ui.live.last_action_note = Some(msg.clone());
+                self.dismiss_notice_by_key("power-guard-stage1");
+                self.push_rich_notice(RichNoticeSpec {
+                    key_id: Some("power-guard-restore".into()),
+                    title: Some("Power guard · Restored".into()),
+                    where_label: Some("PC".into()),
+                    text: msg,
+                    tone: if ok {
+                        NoticeTone::Good
+                    } else {
+                        NoticeTone::Bad
+                    },
+                    sticky: Some(!ok),
                     ..Default::default()
                 });
             }
@@ -172,6 +427,7 @@ impl AppState {
                 } else {
                     "No running game to close".into()
                 };
+                self.record_power_guard_event("game-closed", msg.clone());
                 self.pc.power_guard_ui.live.last_action_note = Some(msg.clone());
                 self.push_rich_notice(RichNoticeSpec {
                     key_id: Some("power-guard-stage2".into()),
@@ -183,19 +439,58 @@ impl AppState {
                     ..Default::default()
                 });
             }
+            GuardAction::ShutdownCountdown {
+                remaining_secs,
+                first_tick,
+                ..
+            } => {
+                if !self.pc.power_guard_ui.live.policy.opt_in_shutdown_pc {
+                    return;
+                }
+                self.pc.power_guard_ui.live.shutdown_countdown_secs = Some(*remaining_secs);
+                let msg = format!(
+                    "Shutting down PC in {remaining_secs} s due to sustained critical GPU fault."
+                );
+                if *first_tick {
+                    self.play_power_guard_alert_sound();
+                    self.record_power_guard_event(
+                        "shutdown-countdown-started",
+                        format!("30 s cancelable shutdown countdown started ({first_msg})"),
+                    );
+                }
+                self.pc.power_guard_ui.live.last_action_note = Some(msg.clone());
+                self.push_rich_notice(RichNoticeSpec {
+                    key_id: Some("power-guard-stage3".into()),
+                    title: Some(format!("Power guard · Shutdown in {remaining_secs} s")),
+                    where_label: Some("PC".into()),
+                    text: msg,
+                    tone: NoticeTone::Bad,
+                    sticky: Some(true),
+                    action: Some(NoticeActionSpec {
+                        label: "Cancel shutdown".into(),
+                        primary: false,
+                        danger: true,
+                        busy: false,
+                        confirm: None,
+                        kind: NoticeActionKind::CancelPowerGuardShutdown,
+                    }),
+                    ..Default::default()
+                });
+            }
             GuardAction::ShutdownPc => {
                 if !self.pc.power_guard_ui.live.policy.opt_in_shutdown_pc {
                     return;
                 }
+                self.pc.power_guard_ui.live.shutdown_countdown_secs = None;
                 let msg: String = if self.pc.power_guard_ui.dev_mock_actions {
                     self.pc.power_guard_ui.mock_pc_shutdowns += 1;
-                    "Mock graceful Windows shutdown triggered (15 s)".into()
+                    "Mock graceful Windows shutdown triggered after 30 s countdown".into()
                 } else {
                     let ok = Command::new("shutdown.exe")
                         .args([
                             "/s",
                             "/t",
-                            "15",
+                            "0",
                             "/d",
                             "p:0:0",
                             "/c",
@@ -204,11 +499,12 @@ impl AppState {
                         .status()
                         .is_ok_and(|s| s.success());
                     if ok {
-                        "Shutting down PC in 15 s (run shutdown /a to cancel)".into()
+                        "Initiated graceful Windows shutdown after 30 s countdown".into()
                     } else {
                         "Windows rejected shutdown request".into()
                     }
                 };
+                self.record_power_guard_event("shutdown-executed", msg.clone());
                 self.pc.power_guard_ui.live.last_action_note = Some(msg.clone());
                 self.push_rich_notice(RichNoticeSpec {
                     key_id: Some("power-guard-stage3".into()),
@@ -232,24 +528,60 @@ impl AppState {
     }
 
     pub fn toggle_power_guard_lower_power(&mut self) {
-        self.pc.power_guard_ui.live.policy.opt_in_lower_power_limit =
-            !self.pc.power_guard_ui.live.policy.opt_in_lower_power_limit;
-        let pol = self.pc.power_guard_ui.live.policy.clone();
-        self.pc.power_guard_ui.controller.set_policy(pol);
+        if self.pc.power_guard_ui.live.policy.opt_in_lower_power_limit {
+            self.pc.power_guard_ui.live.policy.opt_in_lower_power_limit = false;
+            self.pc.power_guard_ui.pending_confirm = None;
+            let pol = self.pc.power_guard_ui.live.policy.clone();
+            self.pc.power_guard_ui.controller.set_policy(pol);
+        } else {
+            self.pc.power_guard_ui.pending_confirm = Some(PendingOptInConfirm::LowerPowerLimit);
+        }
     }
 
     pub fn toggle_power_guard_close_game(&mut self) {
-        self.pc.power_guard_ui.live.policy.opt_in_close_game =
-            !self.pc.power_guard_ui.live.policy.opt_in_close_game;
-        let pol = self.pc.power_guard_ui.live.policy.clone();
-        self.pc.power_guard_ui.controller.set_policy(pol);
+        if self.pc.power_guard_ui.live.policy.opt_in_close_game {
+            self.pc.power_guard_ui.live.policy.opt_in_close_game = false;
+            self.pc.power_guard_ui.pending_confirm = None;
+            let pol = self.pc.power_guard_ui.live.policy.clone();
+            self.pc.power_guard_ui.controller.set_policy(pol);
+        } else {
+            self.pc.power_guard_ui.pending_confirm = Some(PendingOptInConfirm::CloseGame);
+        }
     }
 
     pub fn toggle_power_guard_shutdown(&mut self) {
-        self.pc.power_guard_ui.live.policy.opt_in_shutdown_pc =
-            !self.pc.power_guard_ui.live.policy.opt_in_shutdown_pc;
+        if self.pc.power_guard_ui.live.policy.opt_in_shutdown_pc {
+            self.pc.power_guard_ui.live.policy.opt_in_shutdown_pc = false;
+            self.pc.power_guard_ui.pending_confirm = None;
+            let pol = self.pc.power_guard_ui.live.policy.clone();
+            self.pc.power_guard_ui.controller.set_policy(pol);
+        } else {
+            self.pc.power_guard_ui.pending_confirm = Some(PendingOptInConfirm::ShutdownPc);
+        }
+    }
+
+    pub fn confirm_power_guard_opt_in(&mut self) {
+        let Some(stage) = self.pc.power_guard_ui.pending_confirm.take() else {
+            return;
+        };
+        match stage {
+            PendingOptInConfirm::LowerPowerLimit => {
+                self.pc.power_guard_ui.live.policy.opt_in_lower_power_limit = true;
+            }
+            PendingOptInConfirm::CloseGame => {
+                self.pc.power_guard_ui.live.policy.opt_in_close_game = true;
+            }
+            PendingOptInConfirm::ShutdownPc => {
+                self.pc.power_guard_ui.live.policy.opt_in_shutdown_pc = true;
+            }
+        }
         let pol = self.pc.power_guard_ui.live.policy.clone();
         self.pc.power_guard_ui.controller.set_policy(pol);
+        self.record_power_guard_event("opt-in-enabled", stage.title().to_string());
+    }
+
+    pub fn cancel_power_guard_opt_in(&mut self) {
+        self.pc.power_guard_ui.pending_confirm = None;
     }
 
     pub fn export_power_guard_html(&mut self) {
@@ -322,6 +654,52 @@ fn format_throttle_badge(flags: u32) -> (String, BadgeTone) {
         return ("Power cap".into(), BadgeTone::Neutral);
     }
     ("None".into(), BadgeTone::Good)
+}
+
+fn confirm_sheet_view(stage: PendingOptInConfirm, key_prefix: &str) -> El {
+    let is_danger = stage == PendingOptInConfirm::ShutdownPc;
+    col()
+        .key(format!("{key_prefix}-confirm-sheet"))
+        .w_full()
+        .px(12.0)
+        .py(10.0)
+        .gap(8.0)
+        .radius(RADIUS_CARD)
+        .continuous_corners()
+        .fill(subtle_fill())
+        .border(1.0, if is_danger { bad() } else { float_line() })
+        .child(text(stage.title()).font(type_control()).color(FG))
+        .child(
+            text(stage.detail())
+                .font(type_small())
+                .color(fg_muted())
+                .wrap(),
+        )
+        .child(
+            row()
+                .w_full()
+                .gap(8.0)
+                .child(
+                    menu_btn(
+                        format!("{key_prefix}-confirm-enable"),
+                        stage.confirm_label(),
+                        !is_danger,
+                        is_danger,
+                        false,
+                    )
+                    .on_press(|s: &mut AppState| s.confirm_power_guard_opt_in()),
+                )
+                .child(
+                    menu_btn(
+                        format!("{key_prefix}-confirm-cancel"),
+                        "Cancel",
+                        false,
+                        false,
+                        false,
+                    )
+                    .on_press(|s: &mut AppState| s.cancel_power_guard_opt_in()),
+                ),
+        )
 }
 
 fn session_graph_view(s: &AppState) -> El {
@@ -576,6 +954,9 @@ pub(crate) fn card_view(s: &AppState) -> El {
                 next_stage.label(),
                 (remaining_ms as f64 / 1000.0).ceil()
             ),
+            GuardAction::ShutdownCountdown { remaining_secs, .. } => {
+                format!(" · Shutdown in {remaining_secs} s")
+            }
             _ => String::new(),
         };
         left_info = left_info.child(
@@ -583,6 +964,21 @@ pub(crate) fn card_view(s: &AppState) -> El {
                 .font(type_small())
                 .color(alert_color)
                 .wrap(),
+        );
+    }
+
+    if let Some(rem) = pg.live.shutdown_countdown_secs {
+        left_info = left_info.child(
+            row().w_full().gap(8.0).center_y().child(
+                menu_btn(
+                    "pg-card-cancel-shutdown".into(),
+                    format!("Cancel shutdown ({rem} s)"),
+                    false,
+                    true,
+                    false,
+                )
+                .on_press(|s: &mut AppState| s.cancel_power_guard_shutdown()),
+            ),
         );
     }
 
@@ -595,7 +991,7 @@ pub(crate) fn card_view(s: &AppState) -> El {
         menu_btn(key.into(), txt, active && !danger, active && danger, false)
     };
 
-    let right_controls = col()
+    let mut right_controls = col()
         .grow(1.0)
         .min_w(0.0)
         .gap(6.0)
@@ -646,6 +1042,10 @@ pub(crate) fn card_view(s: &AppState) -> El {
                 ),
         );
 
+    if let Some(stage) = pg.pending_confirm {
+        right_controls = right_controls.child(confirm_sheet_view(stage, "pg-card"));
+    }
+
     col()
         .key("exo-ai-power-guard-card")
         .w_full()
@@ -684,7 +1084,7 @@ pub(crate) fn view(s: &AppState) -> El {
         .map(format_headline_metrics)
         .unwrap_or_else(|| "Polls at 1 Hz while PC is open or a game runs".into());
 
-    col()
+    let mut out = col()
         .w_full()
         .child(menu_row(
             "GPU power & thermal guard",
@@ -709,7 +1109,7 @@ pub(crate) fn view(s: &AppState) -> El {
         ))
         .child(menu_row(
             "1. Lower GPU power limit",
-            Some("Opt-in · first protective step".into()),
+            Some("Opt-in · restores original on clear, exit, or crash".into()),
             None,
             menu_switch(
                 "pg-menu-stage1".into(),
@@ -733,7 +1133,7 @@ pub(crate) fn view(s: &AppState) -> El {
         ))
         .child(menu_row(
             "3. Shut down PC",
-            Some("Opt-in · last resort (15 s countdown)".into()),
+            Some("Opt-in · last resort (30 s cancelable countdown)".into()),
             None,
             menu_switch(
                 "pg-menu-stage3".into(),
@@ -742,7 +1142,12 @@ pub(crate) fn view(s: &AppState) -> El {
                 false,
             )
             .on_press(|s: &mut AppState| s.toggle_power_guard_shutdown()),
-        ))
+        ));
+
+    if let Some(stage) = pg.pending_confirm {
+        out = out.child(confirm_sheet_view(stage, "pg-menu"));
+    }
+    out
 }
 
 #[cfg(test)]
@@ -787,6 +1192,10 @@ mod tests {
         }
     }
 
+    fn temp_journal_path(tag: &str) -> PathBuf {
+        std::env::temp_dir().join(format!("exo-ui-pg-{tag}-{}.journal", std::process::id()))
+    }
+
     #[test]
     fn zero_cost_while_hidden_gate_checks_room_and_running_games() {
         assert!(!PowerGuardUiState::should_poll(Room::Library, false));
@@ -794,6 +1203,9 @@ mod tests {
         assert!(PowerGuardUiState::should_poll(Room::Library, true));
 
         let mut s = AppState::with_demo_games();
+        s.pc.power_guard_ui
+            .set_journal_path(temp_journal_path("hidden"));
+        s.pc.power_guard_ui.dev_mock_actions = true;
         s.room = Room::Library;
         for g in &mut s.games {
             g.is_running = false;
@@ -803,9 +1215,58 @@ mod tests {
     }
 
     #[test]
-    fn default_opt_ins_are_off_and_dev_mock_escalates_power_game_shutdown_in_order() {
+    fn opt_in_toggles_require_plain_confirm_sheet_before_enabling() {
         let mut s = AppState::with_demo_games();
         s.pc.power_guard_ui.dev_mock_actions = true;
+
+        s.toggle_power_guard_lower_power();
+        assert!(!s.pc.power_guard_ui.live.policy.opt_in_lower_power_limit);
+        assert_eq!(
+            s.pc.power_guard_ui.pending_confirm,
+            Some(PendingOptInConfirm::LowerPowerLimit)
+        );
+        let _ = card_view(&s);
+        let _ = view(&s);
+
+        s.cancel_power_guard_opt_in();
+        assert!(!s.pc.power_guard_ui.live.policy.opt_in_lower_power_limit);
+        assert_eq!(s.pc.power_guard_ui.pending_confirm, None);
+
+        s.toggle_power_guard_lower_power();
+        s.confirm_power_guard_opt_in();
+        assert!(s.pc.power_guard_ui.live.policy.opt_in_lower_power_limit);
+        assert_eq!(s.pc.power_guard_ui.pending_confirm, None);
+
+        s.toggle_power_guard_close_game();
+        assert!(!s.pc.power_guard_ui.live.policy.opt_in_close_game);
+        assert_eq!(
+            s.pc.power_guard_ui.pending_confirm,
+            Some(PendingOptInConfirm::CloseGame)
+        );
+        s.confirm_power_guard_opt_in();
+        assert!(s.pc.power_guard_ui.live.policy.opt_in_close_game);
+
+        s.toggle_power_guard_shutdown();
+        assert!(!s.pc.power_guard_ui.live.policy.opt_in_shutdown_pc);
+        assert_eq!(
+            s.pc.power_guard_ui.pending_confirm,
+            Some(PendingOptInConfirm::ShutdownPc)
+        );
+        s.confirm_power_guard_opt_in();
+        assert!(s.pc.power_guard_ui.live.policy.opt_in_shutdown_pc);
+
+        s.toggle_power_guard_shutdown();
+        assert!(!s.pc.power_guard_ui.live.policy.opt_in_shutdown_pc);
+    }
+
+    #[test]
+    fn default_opt_ins_are_off_and_dev_mock_escalates_restores_and_cancels_shutdown() {
+        let jpath = temp_journal_path("escalate");
+        let _ = std::fs::remove_file(&jpath);
+
+        let mut s = AppState::with_demo_games();
+        s.pc.power_guard_ui.dev_mock_actions = true;
+        s.pc.power_guard_ui.set_journal_path(jpath.clone());
 
         let pol = &s.pc.power_guard_ui.live.policy;
         assert!(pol.alerts_enabled);
@@ -814,8 +1275,12 @@ mod tests {
         assert!(!pol.opt_in_shutdown_pc);
 
         s.toggle_power_guard_lower_power();
+        s.confirm_power_guard_opt_in();
         s.toggle_power_guard_close_game();
+        s.confirm_power_guard_opt_in();
         s.toggle_power_guard_shutdown();
+        s.confirm_power_guard_opt_in();
+
         s.pc.power_guard_ui.live.policy.alert_sustained_ms = 2_000;
         s.pc.power_guard_ui.live.policy.stage_step_ms = 5_000;
         let updated = s.pc.power_guard_ui.live.policy.clone();
@@ -838,6 +1303,7 @@ mod tests {
 
         s.ingest_power_guard_snapshot_for_test(make_fault(15_000));
         assert_eq!(s.pc.power_guard_ui.mock_lowered_limits_w, vec![168.0]);
+        assert!(s.pc.power_guard_ui.journal_entry().is_some());
         assert_eq!(s.pc.power_guard_ui.mock_game_closes, 0);
         assert_eq!(s.pc.power_guard_ui.mock_pc_shutdowns, 0);
 
@@ -846,7 +1312,93 @@ mod tests {
         assert_eq!(s.pc.power_guard_ui.mock_pc_shutdowns, 0);
 
         s.ingest_power_guard_snapshot_for_test(make_fault(25_000));
-        assert_eq!(s.pc.power_guard_ui.mock_pc_shutdowns, 1);
+        assert_eq!(s.pc.power_guard_ui.live.shutdown_countdown_secs, Some(30));
+        assert_eq!(s.pc.power_guard_ui.mock_alert_sounds, 1);
+        assert_eq!(s.pc.power_guard_ui.mock_pc_shutdowns, 0);
+        let _ = card_view(&s);
+
+        s.cancel_power_guard_shutdown();
+        assert_eq!(s.pc.power_guard_ui.live.shutdown_countdown_secs, None);
+        s.ingest_power_guard_snapshot_for_test(make_fault(60_000));
+        assert_eq!(s.pc.power_guard_ui.mock_pc_shutdowns, 0);
+        assert!(
+            s.pc.power_guard_ui
+                .live
+                .session_log
+                .iter()
+                .any(|e| e.kind == "shutdown-cancelled")
+        );
+
+        let mut cleared = make_snap(
+            61_000,
+            GpuVendor::Nvidia,
+            BackendKind::NvidiaNvmlNvapi,
+            "NVIDIA GeForce RTX 3070",
+        );
+        cleared.enforced_power_limit_w = Some(168.0);
+        s.ingest_power_guard_snapshot_for_test(cleared);
+        assert_eq!(s.pc.power_guard_ui.mock_restored_limits_w, vec![240.0]);
+        assert!(s.pc.power_guard_ui.journal_entry().is_none());
+
+        let _ = std::fs::remove_file(&jpath);
+    }
+
+    #[test]
+    fn stage1_restores_on_game_exit_stop_and_startup_crash_journal_via_mock() {
+        let jpath = temp_journal_path("restore");
+        let _ = std::fs::remove_file(&jpath);
+
+        let mut s = AppState::with_demo_games();
+        s.pc.power_guard_ui.dev_mock_actions = true;
+        s.pc.power_guard_ui.set_journal_path(jpath.clone());
+        s.toggle_power_guard_lower_power();
+        s.confirm_power_guard_opt_in();
+        s.pc.power_guard_ui.live.policy.stage_step_ms = 2_000;
+        let updated = s.pc.power_guard_ui.live.policy.clone();
+        s.pc.power_guard_ui.controller.set_policy(updated);
+
+        let make_fault = |ts: u64| {
+            let mut sn = make_snap(
+                ts,
+                GpuVendor::Nvidia,
+                BackendKind::NvidiaNvmlNvapi,
+                "NVIDIA GeForce RTX 3070",
+            );
+            sn.throttle_flags = THROTTLE_HW_POWER_BRAKE;
+            sn
+        };
+
+        s.ingest_power_guard_snapshot_for_test(make_fault(1_000));
+        s.ingest_power_guard_snapshot_for_test(make_fault(3_000));
+        assert_eq!(s.pc.power_guard_ui.mock_lowered_limits_w, vec![168.0]);
+        s.trigger_power_guard_game_exit_for_test();
+        assert_eq!(s.pc.power_guard_ui.mock_restored_limits_w, vec![240.0]);
+        assert!(s.pc.power_guard_ui.journal_entry().is_none());
+
+        s.ingest_power_guard_snapshot_for_test(make_fault(10_000));
+        s.ingest_power_guard_snapshot_for_test(make_fault(12_000));
+        s.trigger_power_guard_stop_for_test();
+        assert_eq!(
+            s.pc.power_guard_ui.mock_restored_limits_w,
+            vec![240.0, 240.0]
+        );
+        assert!(s.pc.power_guard_ui.journal_entry().is_none());
+
+        s.ingest_power_guard_snapshot_for_test(make_fault(20_000));
+        s.ingest_power_guard_snapshot_for_test(make_fault(22_000));
+        assert!(s.pc.power_guard_ui.journal_entry().is_some());
+        drop(s);
+
+        let mut restarted = AppState::with_demo_games();
+        restarted.pc.power_guard_ui.dev_mock_actions = true;
+        restarted.pc.power_guard_ui.set_journal_path(jpath.clone());
+        assert!(restarted.recover_power_guard_journal_if_needed());
+        assert_eq!(
+            restarted.pc.power_guard_ui.mock_restored_limits_w,
+            vec![240.0]
+        );
+        assert!(restarted.pc.power_guard_ui.journal_entry().is_none());
+        let _ = std::fs::remove_file(&jpath);
     }
 
     #[test]
