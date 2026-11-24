@@ -9,7 +9,7 @@ import { ActionButton } from '../ui/ConfirmButton'
 import { SectionActions } from './SectionHead'
 import { systemTuningNeedsRestart } from './systemGroupModel'
 
-export type BestKey = 'power' | 'profile' | 'network' | 'system' | 'drives' | 'hdr' | 'frameGen'
+export type BestKey = 'power' | 'profile' | 'network' | 'system' | 'drives' | 'hdr' | 'frameGen' | 'graphicsFeatures'
 export type BestStep = { key: BestKey; what: string; done: boolean; run: () => Promise<string | null> }
 
 /**
@@ -50,15 +50,13 @@ export function bestSteps(
       return next.ok ? null : trimStop(next.message) || 'Not changed'
     } })
   }
-  const systemStep = tuningStep(tuning)
-  if (systemStep) steps.push(systemStep)
-  const drivesStep = driveStep(drives)
-  if (drivesStep) steps.push(drivesStep)
+  const extra = [tuningStep(tuning), driveStep(drives), frameGenStep(settings, onSave), graphicsFeaturesStep(settings, onSave)]
+  for (const step of extra) {
+    if (step) steps.push(step)
+  }
   if (screen?.supported && screen.verdict !== 'weak' && settings) {
     steps.push({ key: 'hdr', what: 'HDR while an HDR game runs', done: settings.hdrForGames === true, run: async () => await onSave({ hdrForGames: true }) ? null : 'Not saved' })
   }
-  const frameGen = frameGenStep(settings, onSave)
-  if (frameGen) steps.push(frameGen)
   return steps
 }
 
@@ -78,6 +76,16 @@ function frameGenStep(settings: LauncherSettings | null, onSave: (patch: Partial
   if (!settings?.frameGenEverywhereCard) return null
   return { key: 'frameGen', what: 'Frame generation in games without anti-cheat', done: settings.frameGenEverywhere === true,
     run: async () => await onSave({ frameGenEverywhere: true }) ? null : 'Not saved' }
+}
+
+function graphicsFeaturesStep(settings: LauncherSettings | null, onSave: (patch: Partial<LauncherSettings>) => Promise<boolean>): BestStep | null {
+  if (!settings) return null
+  return {
+    key: 'graphicsFeatures',
+    what: 'Low latency & safe graphics unlocks (no DLL mods in anti-cheat games)',
+    done: settings.graphicsFeaturesBestSettings === true,
+    run: async () => await onSave({ graphicsFeaturesBestSettings: true }) ? null : 'Not saved',
+  }
 }
 
 

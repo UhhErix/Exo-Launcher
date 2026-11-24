@@ -39,6 +39,7 @@
     "hdrForGames": true,
     "frameGenEverywhere": false,
     "frameGenEverywhereCard": true,
+    "graphicsFeaturesBestSettings": false,
     "hdrSdrGamma": true,
     "discordNoiseSuppression": true,
     "discordQuietWhilePlaying": true,

@@ -907,6 +907,8 @@ public sealed partial class WebHostBridge
                 "hdr.game" => await HdrGameAsync(paramsEl, hasParams, requestToken).ConfigureAwait(true),
                 "hdr.calibrate" => await HdrCalibrateAsync(paramsEl, hasParams, requestToken).ConfigureAwait(false),
                 "game.settings" => await GameSettingsAsync(paramsEl, hasParams, requestToken).ConfigureAwait(true),
+                "game.graphicsFeatures" => await GameGraphicsFeaturesAsync(paramsEl, hasParams, requestToken).ConfigureAwait(false),
+                "game.graphicsFeatures.set" => await GameGraphicsFeaturesSetAsync(paramsEl, hasParams, requestToken).ConfigureAwait(true),
                 "keep.status" => KeepStatusForPage(paramsEl, hasParams),
                 "gpu.display" => await GpuDeadlineAsync(Task.Run(() => GpuDisplayAsync(paramsEl, hasParams, requestToken), requestToken), TimeSpan.FromSeconds(25), requestToken).ConfigureAwait(false),
                 "discord.status" => DiscordStatus(paramsEl, hasParams),
@@ -2501,6 +2503,7 @@ public sealed partial class WebHostBridge
             hdrForGames = s.HdrForGames,
             frameGenEverywhere = s.FrameGenEverywhere,
             frameGenEverywhereCard,
+            graphicsFeaturesBestSettings = s.GraphicsFeaturesBestSettings,
             hdrSdrGamma = s.HdrSdrGamma,
             discordNoiseSuppression = s.DiscordNoiseSuppression,
             discordQuietWhilePlaying = s.DiscordQuietWhilePlaying,
@@ -2581,6 +2584,10 @@ public sealed partial class WebHostBridge
         if (p.TryGetProperty("frameGenEverywhere", out var fge) &&
             (fge.ValueKind is JsonValueKind.True or JsonValueKind.False))
             frameGenEverywhere = fge.GetBoolean();
+        bool? graphicsFeaturesBestSettings = null;
+        if (p.TryGetProperty("graphicsFeaturesBestSettings", out var gfbs) &&
+            (gfbs.ValueKind is JsonValueKind.True or JsonValueKind.False))
+            graphicsFeaturesBestSettings = gfbs.GetBoolean();
         bool? discordNoiseSuppression = null;
         if (p.TryGetProperty("discordNoiseSuppression", out var dns) &&
             (dns.ValueKind is JsonValueKind.True or JsonValueKind.False))
@@ -2619,10 +2626,13 @@ public sealed partial class WebHostBridge
             discordNoiseSuppression: discordNoiseSuppression,
             discordQuietWhilePlaying: discordQuietWhilePlaying,
             whatsNewSeen: whatsNewSeen,
-            frameGenEverywhere: frameGenEverywhere);
+            frameGenEverywhere: frameGenEverywhere,
+            graphicsFeaturesBestSettings: graphicsFeaturesBestSettings);
         if (hdrForGames is not null || hdrSdrGamma is not null) _services.HdrHost.SyncSoon();
         if (frameGenEverywhere is not null) DlssSwapService.FrameGenEverywhereSoon();
         if (textSize is not null || reduceMotion is not null) _services.MousePanel.NotifySettingsChanged();
+        if (graphicsFeaturesBestSettings == true)
+            _ = Task.Run(() => GameGraphicsFeatures.ApplyBestSettingsSafe(_services.Library.PeekCachedLibrary(), GameSettings.ThisPc()));
         if (showLibraryTools is { } tools && tools != previousShowLibraryTools)
             RefreshLibraryAfterToolsToggle();
         ApplyDownloadSettings(p);

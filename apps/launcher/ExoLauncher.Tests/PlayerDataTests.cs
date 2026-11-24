@@ -249,6 +249,8 @@ public sealed class PlayerDataTests : IDisposable
         ["game-settings/cs2.on.json"] = Utf8("""{"lines":[]}"""),
         ["game-settings/cs2.nvidia.json"] = Utf8("""{"values":[]}"""),
         ["game-settings/cs2.original.cfg"] = Utf8("fps_max 0\r\n"),
+        ["graphics-features/state.json"] = Utf8("""{"Games":{}}"""),
+        ["graphics-features/backups/demo.orig"] = Utf8("r.RayTracing=0\r\n"),
         ["startup-removed.json"] = Utf8("""[{"id":"task:\\Foo","name":"Foo"}]"""),
         ["shader-rebuild.json"] = Utf8("""{"Driver":"32.0.15.7270","State":3,"Queue":["steam:1"],"StalledStarts":0,"ReadyAtStart":0,"Ready":0}"""),
         ["unreal-shader-ini.json"] = Utf8("""{"Files":{"games/Engine.ini":{"GameId":"steam:1","AddedSection":true,"HadTrailingNewLine":true}}}"""),

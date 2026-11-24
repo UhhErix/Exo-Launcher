@@ -10,7 +10,7 @@ use exo_kit::{
     pressed_fill, select_trigger, switch_pill, switch_pill_keyed, type_control, type_section,
     type_small, type_title,
 };
-use exo_rpc::Game;
+use exo_rpc::{Game, GraphicsFeatureRow};
 use rune::{Cursor, El, Transition, col, el, row, text};
 
 fn word_color(word: &LineWord) -> rune::Color {
@@ -528,6 +528,100 @@ pub fn performance_card(s: &AppState, game: &Game) -> El {
                 .px(20.0)
                 .pb(15.0)
                 .child(text("Performance & graphics").font(type_title()).color(FG)),
+        )
+        .children(rows)
+}
+
+fn default_graphics_feature_rows() -> Vec<GraphicsFeatureRow> {
+    [
+        ("upscalers", "Upscalers"),
+        ("reflex", "Reflex & low latency"),
+        ("rayTracing", "Ray tracing"),
+        ("pathTracing", "Path tracing"),
+        ("hiddenSettings", "Hidden settings"),
+    ]
+    .into_iter()
+    .map(|(id, name)| GraphicsFeatureRow {
+        id: id.into(),
+        name: name.into(),
+        state: "off".into(),
+        route: "Checking".into(),
+        route_kind: "info".into(),
+        can_toggle: false,
+        needs_anti_cheat_confirm: false,
+        anti_cheat_warning: None,
+        closest_option: None,
+        details: None,
+    })
+    .collect()
+}
+
+pub fn graphics_features_card(s: &AppState, game: &Game) -> El {
+    let state = s.game_page.graphics_features.as_ref();
+    let running = state.and_then(|st| st.running).unwrap_or(false);
+    let busy_id = s.game_page.graphics_features_busy.as_deref();
+    let features = state
+        .and_then(|st| st.features.as_ref())
+        .filter(|list| !list.is_empty())
+        .cloned()
+        .unwrap_or_else(default_graphics_feature_rows);
+
+    let mut rows = Vec::with_capacity(features.len());
+    for feat in features {
+        let is_busy = busy_id == Some(feat.id.as_str());
+        let is_on = feat.state == "on";
+        let word = if is_busy {
+            LineWord::working(if is_on { "Reverting" } else { "Applying" })
+        } else if let Some(err) = s.game_page.graphics_features_errors.get(&feat.id) {
+            LineWord::bad(err.clone())
+        } else {
+            let status = match feat.state.as_str() {
+                "on" => "On",
+                "inGame" => "Set in game",
+                _ => "Off",
+            };
+            let label = if feat.route.trim().is_empty() {
+                status.to_string()
+            } else {
+                format!("{status} · {}", feat.route.trim())
+            };
+            if is_on {
+                LineWord::good(label)
+            } else {
+                LineWord::plain(label)
+            }
+        };
+
+        let disabled = state.is_none() || running || busy_id.is_some();
+        let right = if feat.can_toggle {
+            let gid = game.id.clone();
+            let fid = feat.id.clone();
+            let accept_risk = feat.needs_anti_cheat_confirm;
+            let key = format!("gp-gfx-switch-{}", feat.id);
+            let mut sw = switch_pill_keyed(key, feat.name.clone(), is_on);
+            if !disabled {
+                sw = sw.on_press(move |st: &mut AppState| {
+                    st.toggle_game_graphics_feature(&gid, &fid, !is_on, accept_risk);
+                });
+            }
+            Some(sw)
+        } else {
+            None
+        };
+
+        rows.push(perf_reading_row(&feat.name, Some(word), right));
+    }
+
+    amoled_card(RADIUS_PANEL)
+        .key("gp-graphics-features-card")
+        .w_full()
+        .min_w(0.0)
+        .child(
+            el().w_full()
+                .pt(18.0)
+                .px(20.0)
+                .pb(15.0)
+                .child(text("Graphics features").font(type_title()).color(FG)),
         )
         .children(rows)
 }

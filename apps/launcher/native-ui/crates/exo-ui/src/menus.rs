@@ -5,9 +5,7 @@ use crate::library_state::{
     add_to_folder, delete_folder, folder_tile_id, leave_folder, move_folder,
 };
 use crate::shell::room_icon;
-use crate::state::{
-    AppState, ContextMenuTarget, InputMode, LibrarySort, OpenDropdown, Room,
-};
+use crate::state::{AppState, ContextMenuTarget, InputMode, LibrarySort, OpenDropdown, Room};
 use exo_kit::{
     ContextMenuSpec, FG, MenuAnchor, MenuEntry, MenuItem, SelectMenuSpec, SelectOption, bad,
     context_menu_layers, context_menu_layers_live, fg_faint, fg_muted, icon_bell_off, icon_camera,
