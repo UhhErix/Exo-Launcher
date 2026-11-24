@@ -922,6 +922,22 @@
   gap: 8px;
 }
 
+.exo-hdr-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border: 1px solid var(--exo-float-line);
+  border-radius: 999px;
+  background: var(--exo-fill);
+  color: var(--color-muted);
+  font-size: calc(12px * var(--exo-scale, 1));
+  font-weight: 500;
+}
+
+.exo-hdr-warn {
+  color: var(--color-warn);
+}
+
 /* Upscalers in the PC room: its note and action sit on the section's title line, at its right edge (as Devices'
    Rescan), not on a line of their own under it; its games' covers stand on the page. */
 .exo-pc-section .exo-gpu-bar {

@@ -2218,8 +2218,18 @@ const MOCK_HANDLERS: Record<string, MockHandler> = {
   'startup.remove': () => mockStartup(null),
   'startup.restore': () => mockStartup(null),
   'startup.clean': () => ({ ...mockStartup(null), cleaned: 4 }),
-  'hdr.state': () => mockNoHdr ? { supported: false } : ({ supported: true, on: false, name: 'Mock OLED', peakNits: 1000, calibrated: false, verdict: 'great' }),
-  'hdr.game': (p) => ({ ok: true, hdr: 'true', mode: typeof p?.mode === 'string' ? p.mode : 'auto' }),
+  'hdr.state': () => mockNoHdr ? { supported: false, internal: false, displays: [] } : ({
+    supported: true, on: false, name: 'Mock OLED', devicePath: 'DISPLAY#MOCK#1', peakNits: 1000, edidPeakNits: 1000, dxgiPeakNits: 1000, internal: false, colorMode: 'sdr', autoHdrGlobal: null, calibrated: false, verdict: 'great',
+    peakHealth: { status: 'ok', edidNits: 1000, dxgiNits: 1000, gapPercent: 0, warning: null },
+    laptopChecks: { isLaptop: false, pluggedIn: true, hdrOn: false, items: [] },
+    displays: [{ name: 'Mock OLED', gdiName: '\\\\.\\DISPLAY1', devicePath: 'DISPLAY#MOCK#1', main: true, supported: true, on: false, internal: false, connector: 'dp', colorMode: 'sdr', edidPeakNits: 1000, dxgiPeakNits: 1000, peakHealth: { status: 'ok', edidNits: 1000, dxgiNits: 1000, gapPercent: 0, warning: null } }],
+  }),
+  'hdr.game': (p) => ({
+    ok: true,
+    hdr: 'true',
+    mode: typeof p?.mode === 'string' ? p.mode : 'auto',
+    autoHdr: { global: null, game: null, effective: 'default' },
+  }),
   'game.settings': mockGameSettings,
   // As on the RX 9070 XT of ?gpu=amd.
   'gpu.afmf3': (p) => {

@@ -16,7 +16,8 @@ internal static class WindowsHdr
     /// plugged into: "dp" (DisplayPort, USB-C's included), "hdmi", "dvi", or "" for anything else.
     /// </summary>
     internal sealed record Screen(Luid Adapter, uint Target, uint Source, string GdiName, string Name, string DevicePath,
-        bool Supported, bool Enabled, bool NewApi, long PixelRate = 0, string Connector = "", double RefreshHz = 0);
+        bool Supported, bool Enabled, bool NewApi, long PixelRate = 0, string Connector = "", double RefreshHz = 0,
+        bool IsInternal = false, uint OutputTechnology = 0, string? ColorMode = null);
 
     /// <summary>Exact vertical refresh rate in Hz from a QueryDisplayConfig numerator/denominator pair (0 when invalid).</summary>
     internal static double ExactRefreshHz(uint numerator, uint denominator) =>
@@ -41,15 +42,17 @@ internal static class WindowsHdr
                 var gdi = SourceGdiName(path);
                 // A cloned source shows once, as its first target.
                 if (gdi.Length == 0 || screens.Any(screen => string.Equals(screen.GdiName, gdi, StringComparison.OrdinalIgnoreCase))) continue;
-                var (supported, enabled, newApi) = ReadHdr(path.targetInfo.adapterId, path.targetInfo.id);
+                var (supported, enabled, newApi, colorMode) = ReadHdr(path.targetInfo.adapterId, path.targetInfo.id);
                 var (name, devicePath) = TargetName(path.targetInfo.adapterId, path.targetInfo.id);
                 // DISPLAYCONFIG_TARGET_MODE: u0 is pixelRate, u2 packs vSyncFreq (low uint numerator, high uint denominator).
                 var mode = path.targetInfo.modeInfoIdx < modes.Length ? modes[path.targetInfo.modeInfoIdx] : default;
                 var refreshHz = ExactRefreshHz(path.targetInfo.refreshNumerator, path.targetInfo.refreshDenominator);
                 if (refreshHz <= 0 && mode.infoType == 2)
                     refreshHz = ExactRefreshHz((uint)(mode.u2 & 0xFFFF_FFFF), (uint)(mode.u2 >> 32));
+                var tech = path.targetInfo.outputTechnology;
                 screens.Add(new Screen(path.targetInfo.adapterId, path.targetInfo.id, path.sourceInfo.id, gdi, name, devicePath,
-                    supported, enabled, newApi, mode.infoType == 2 ? (long)mode.u0 : 0, Connector(path.targetInfo.outputTechnology), refreshHz));
+                    supported, enabled, newApi, mode.infoType == 2 ? (long)mode.u0 : 0, Connector(tech), refreshHz,
+                    IsInternalTechnology(tech), tech, colorMode));
             }
         }
         catch (Exception ex) { AppLog.Debug("HDR state: " + ex.GetType().Name); }
@@ -64,6 +67,8 @@ internal static class WindowsHdr
         4 => "dvi",
         _ => "",
     };
+
+    internal static bool IsInternalTechnology(uint technology) => technology is 6 or 11 or 0x80000000;
 
     /// <summary>
     /// The screen's own peak brightness in nits, from the HDR block of its EDID (what the
@@ -167,7 +172,7 @@ internal static class WindowsHdr
         finally { DeleteDC(dc); }
     }
 
-    private static (bool Supported, bool Enabled, bool NewApi) ReadHdr(Luid adapter, uint target)
+    private static (bool Supported, bool Enabled, bool NewApi, string? ColorMode) ReadHdr(Luid adapter, uint target)
     {
         if (Environment.OSVersion.Version.Build >= 26100)
         {
@@ -175,15 +180,24 @@ internal static class WindowsHdr
             if (DisplayConfigGetDeviceInfo(ref info2) == 0)
             {
                 var supported = (info2.value & 0x10) != 0;
-                return (supported, supported && ((info2.value & 0x20) != 0 || info2.activeColorMode == 2), true);
+                var mode = ActiveColorModeName(info2.activeColorMode);
+                return (supported, supported && ((info2.value & 0x20) != 0 || info2.activeColorMode == 2), true, mode);
             }
         }
         var info = new AdvancedColorInfo { header = Header(9, Marshal.SizeOf<AdvancedColorInfo>(), adapter, target) };
-        if (DisplayConfigGetDeviceInfo(ref info) != 0) return (false, false, false);
+        if (DisplayConfigGetDeviceInfo(ref info) != 0) return (false, false, false, null);
         // Bit 2, wide color enforced: an SDR screen under Auto color management, which reads as advanced color too.
         var hdr = (info.value & 1) != 0 && (info.value & 4) == 0;
-        return (hdr, hdr && (info.value & 2) != 0, false);
+        return (hdr, hdr && (info.value & 2) != 0, false, null);
     }
+
+    internal static string? ActiveColorModeName(int activeColorMode) => activeColorMode switch
+    {
+        0 => "sdr",
+        1 => "acm",
+        2 => "hdr",
+        _ => null,
+    };
 
     private static bool ActivePaths(out PathInfo[] paths, out ModeInfo[] modes)
     {

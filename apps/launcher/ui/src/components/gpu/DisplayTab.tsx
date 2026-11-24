@@ -135,6 +135,64 @@ const VERDICT: Record<string, string> = {
   unknown: 'Brightness not reported',
 }
 
+const COLOR_MODE_LABEL: Record<string, string> = {
+  hdr: 'HDR',
+  acm: 'Auto Color Management (ACM)',
+  sdr: 'SDR',
+}
+
+function formatPeakSummary(edid?: number | null, dxgi?: number | null): string {
+  if (edid && dxgi) return `${edid} nits EDID · ${dxgi} nits reported`
+  if (edid) return `${edid} nits EDID`
+  if (dxgi) return `${dxgi} nits reported`
+  return ''
+}
+
+function PeakHealthRow({ screen }: { screen: HdrState }) {
+  const health = screen.peakHealth
+  const summary = formatPeakSummary(health?.edidNits, health?.dxgiNits)
+  if (!health || !summary) return null
+  return (
+    <Row label="Peak luminance" detail={health.warning ? <span className="exo-hdr-warn">{health.warning}</span> : undefined}>
+      <State on={health.status === 'ok'}>
+        <span className={health.status === 'mismatch' ? 'exo-hdr-warn' : undefined}>{summary}</span>
+      </State>
+    </Row>
+  )
+}
+
+function LaptopCheckRows({ screen }: { screen: HdrState }) {
+  const colorModeText = screen.colorMode ? (COLOR_MODE_LABEL[screen.colorMode] ?? screen.colorMode) : null
+  const autoHdrGlobalDetail = screen.autoHdrGlobal === true
+    ? 'Windows Auto HDR is on globally (read-only).'
+    : screen.autoHdrGlobal === false
+      ? 'Windows Auto HDR is off globally (read-only).'
+      : undefined
+  const checkItems = screen.laptopChecks?.items ?? []
+
+  return (
+    <>
+      {colorModeText || autoHdrGlobalDetail ? (
+        <Row label="Color mode" detail={autoHdrGlobalDetail}>
+          <State on={screen.colorMode === 'hdr'}>{colorModeText ?? 'Unavailable'}</State>
+        </Row>
+      ) : null}
+      {checkItems.map(item => {
+        const statusLabel = item.status === 'active'
+          ? (item.warn ? 'Active' : 'On')
+          : item.status === 'off' ? 'Off' : "Can't detect"
+        return (
+          <Row key={item.id} label={item.label} detail={item.warn ? <span className="exo-hdr-warn">{item.detail}</span> : item.detail}>
+            <State on={item.status === 'off'}>
+              <span className={item.warn ? 'exo-hdr-warn' : undefined}>{statusLabel}</span>
+            </State>
+          </Row>
+        )
+      })}
+    </>
+  )
+}
+
 /** PC › Display, HDR: the main screen's verdict, HDR for HDR games, and calibration; nothing on a screen without HDR. */
 export function HdrRows({ screen, settings, onSave }: {
   screen: HdrState | null
@@ -143,11 +201,14 @@ export function HdrRows({ screen, settings, onSave }: {
 }) {
   // A main screen without HDR has no HDR rows at all (lib/canUse.ts).
   if (!screen || !hdrShown(screen)) return null
+
   return (
     <>
       <Row label="HDR">
+        {screen.internal ? <span className="exo-hdr-badge">Internal panel</span> : null}
         <State on={screen.verdict !== 'weak'}>{VERDICT[screen.verdict ?? 'unknown']}</State>
       </Row>
+      <PeakHealthRow screen={screen} />
       <SwitchRow
         id="set-hdr-games"
         label="Auto-enable HDR for HDR games"
@@ -160,6 +221,7 @@ export function HdrRows({ screen, settings, onSave }: {
           ? <State on>Calibrated</State>
           : <button type="button" className="exo-set-btn" onClick={() => void host.openUrl('ms-windows-store://pdp/?productid=9N7F2SM5D1LR')}>Calibrate</button>}
       </Row>
+      <LaptopCheckRows screen={screen} />
     </>
   )
 }

@@ -5,16 +5,29 @@ namespace ExoLauncher.Services;
 
 public sealed partial class WebHostBridge
 {
-    /// <summary>
-    /// System > Graphics > HDR: whether the main screen can show HDR, how bright it really gets
-    /// (its EDID), whether Windows holds an HDR calibration for it, and a plain verdict.
-    /// </summary>
     private object HdrState()
     {
-        if (WindowsHdr.Primary() is not { Supported: true } screen)
-            return new { supported = false };
-        var nits = WindowsHdr.PeakNits(screen);
-        var verdict = nits switch
+        var allScreens = WindowsHdr.All();
+        var primaryGdi = WindowsHdr.PrimaryGdiName();
+        var primary = primaryGdi is null ? null : allScreens.FirstOrDefault(s => string.Equals(s.GdiName, primaryGdi, StringComparison.OrdinalIgnoreCase));
+
+        var displays = allScreens.Select(s => BuildDisplayHdrInfo(s, string.Equals(s.GdiName, primaryGdi, StringComparison.OrdinalIgnoreCase))).ToArray();
+
+        if (primary is not { Supported: true } screen)
+            return new
+            {
+                supported = false,
+                @internal = primary?.IsInternal ?? false,
+                colorMode = primary?.ColorMode,
+                autoHdrGlobal = LaptopDisplayChecks.ReadAutoHdrGlobal(),
+                displays,
+            };
+
+        var edidNits = WindowsHdr.PeakNits(screen);
+        var dxgiNits = GameHdr.DxgiPeak(screen.GdiName);
+        var health = HdrDisplayHealth.Evaluate(screen.IsInternal, edidNits, dxgiNits);
+        var checks = LaptopDisplayChecks.Read(screen);
+        var verdict = edidNits switch
         {
             null => "unknown",
             >= 600 => "great",
@@ -26,17 +39,70 @@ public sealed partial class WebHostBridge
             supported = true,
             on = screen.Enabled,
             name = string.IsNullOrWhiteSpace(screen.Name) ? null : screen.Name,
-            peakNits = nits,
+            devicePath = screen.DevicePath,
+            peakNits = edidNits,
+            edidPeakNits = edidNits,
+            dxgiPeakNits = dxgiNits,
+            @internal = screen.IsInternal,
+            colorMode = screen.ColorMode,
+            autoHdrGlobal = checks.AutoHdrGlobal,
             calibrated = WindowsHdr.HasHdrProfile(screen, MainWindow.SdrGammaReplaced(_services.Settings, screen.DevicePath)),
             verdict,
+            peakHealth = new
+            {
+                status = health.Status,
+                edidNits = health.EdidNits,
+                dxgiNits = health.DxgiNits,
+                gapPercent = health.GapPercent,
+                warning = health.Warning,
+            },
+            laptopChecks = new
+            {
+                isLaptop = checks.IsLaptop,
+                pluggedIn = checks.PluggedIn,
+                hdrOn = checks.HdrOn,
+                items = checks.Items.Select(i => new
+                {
+                    id = i.Id,
+                    label = i.Label,
+                    status = i.Status,
+                    warn = i.Warn,
+                    detail = i.Detail,
+                }).ToArray(),
+            },
+            displays,
         };
     }
 
-    /// <summary>
-    /// Game sheet > HDR: Exo's verdict on the game (<see cref="GameHdr"/>; the wiki asked only when the game itself says
-    /// nothing), as "true", "false", "hackable" (the wiki: only with a mod) or "unknown", and its Auto/On/Off choice (set
-    /// when "mode" is passed).
-    /// </summary>
+    private static object BuildDisplayHdrInfo(WindowsHdr.Screen s, bool main)
+    {
+        var edidNits = WindowsHdr.PeakNits(s);
+        var dxgiNits = s.Supported ? GameHdr.DxgiPeak(s.GdiName) : null;
+        var health = HdrDisplayHealth.Evaluate(s.IsInternal, edidNits, dxgiNits);
+        return new
+        {
+            name = string.IsNullOrWhiteSpace(s.Name) ? null : s.Name,
+            gdiName = s.GdiName,
+            devicePath = s.DevicePath,
+            main,
+            supported = s.Supported,
+            on = s.Enabled,
+            @internal = s.IsInternal,
+            connector = s.Connector,
+            colorMode = s.ColorMode,
+            edidPeakNits = edidNits,
+            dxgiPeakNits = dxgiNits,
+            peakHealth = new
+            {
+                status = health.Status,
+                edidNits = health.EdidNits,
+                dxgiNits = health.DxgiNits,
+                gapPercent = health.GapPercent,
+                warning = health.Warning,
+            },
+        };
+    }
+
     private async Task<object> HdrGameAsync(JsonElement p, bool hasParams, CancellationToken ct)
     {
         var game = await FindGameAsync(ReadString(p, hasParams, "id"), ct).ConfigureAwait(false);
@@ -59,6 +125,19 @@ public sealed partial class WebHostBridge
             _ => "unknown",
         };
         var reason = HdrPlan.Reason(verdict.Hdr, verdict.From, GameWiki.Cached(game.Id) == "hackable");
-        return new { ok = true, hdr, reason, mode = _services.Settings.HdrGameMode(game.Id) };
+        var autoHdr = LaptopDisplayChecks.ReadAutoHdrForGame(game);
+        return new
+        {
+            ok = true,
+            hdr,
+            reason,
+            mode = _services.Settings.HdrGameMode(game.Id),
+            autoHdr = new
+            {
+                global = autoHdr.Global,
+                game = autoHdr.Game,
+                effective = autoHdr.Effective,
+            },
+        };
     }
 }

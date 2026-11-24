@@ -15,6 +15,16 @@ const MODES = [
 
 const hdrRead = sheetMemory<HdrGame>()
 
+function buildHdrWord(game: HdrGame, hdrForGames: boolean, mode: string, error: string | null): LineWord | null {
+  if (error) return { text: error, bad: true }
+  const autoHdrTag = game.autoHdr && game.autoHdr.effective !== 'default'
+    ? `Windows Auto HDR: ${game.autoHdr.effective}`
+    : ''
+  const why = [game.reason ?? '', autoHdrTag].filter(Boolean).join(' · ')
+  if (!hdrForGames && mode !== 'off') return { text: why || 'Off' }
+  return why ? { text: why } : null
+}
+
 /**
  * Game sheet > HDR, one line like Upscalers and Shaders: its Auto, Always or Never choice for System > HDR > HDR for HDR games at the right edge. While that is off nothing
  * switches, so the line says so and offers to turn it on in the choice's place. On a screen that can't show HDR the line
@@ -44,11 +54,10 @@ export function HdrRow({ gameId, hdrForGames, onHdrForGames }: {
     return () => { live = false }
   }, [gameId, screen?.supported])
 
-  if (!screen || (screen.supported && !game)) return null
-  if (!screen.supported) return null
-  if (!game?.ok) return <GameReading name="HDR" word={{ text: 'Could not check', bad: true }} />
-  const mode = game.mode ?? 'auto'
-  const pick = (next: string) => {
+  if (!screen || !screen.supported || !game) return null
+  if (!game.ok) return <GameReading name="HDR" word={{ text: 'Could not check', bad: true }} />
+
+  const set = (next: string) => {
     setBusy(true)
     setError(null)
     host.hdrGame(gameId, next)
@@ -60,19 +69,17 @@ export function HdrRow({ gameId, hdrForGames, onHdrForGames }: {
       .catch(e => { report(e, 'HdrRow.set'); setError('Could not save. Try again.') })
       .finally(() => setBusy(false))
   }
+
+  const mode = game.mode ?? 'auto'
   const off = !hdrForGames && mode !== 'off'
-  const why = game.reason ?? ''
-  const word: LineWord | null = error
-    ? { text: error, bad: true }
-    : off ? { text: why || 'Off' }
-    : why ? { text: why } : null
+  const word = buildHdrWord(game, hdrForGames, mode, error)
   return (
     <GameReading name="HDR" word={word}>
       {off ? (
         <ActionButton className="exo-set-btn is-compact" why="none" context="HdrRow.hdrForGames" fallback="Could not save. Try again."
           onPress={() => { setError(null); return onHdrForGames() }} onFailed={failure => setError(failure.text)}>Turn on</ActionButton>
       ) : (
-        <Choice label="HDR while playing" value={mode} choices={MODES} disabled={busy} onChange={pick} />
+        <Choice label="HDR while playing" value={mode} choices={MODES} disabled={busy} onChange={set} />
       )}
     </GameReading>
   )

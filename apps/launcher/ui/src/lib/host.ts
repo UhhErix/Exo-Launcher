@@ -491,13 +491,66 @@ export type ShaderStatus = {
 }
 
 /** The main screen's HDR: can it, how bright it really gets (EDID), calibrated, and a plain verdict. */
+export type HdrPeakHealth = {
+  status: 'ok' | 'mismatch' | 'reported' | 'unknown'
+  edidNits?: number | null
+  dxgiNits?: number | null
+  gapPercent?: number | null
+  warning?: string | null
+}
+
+export type HdrLaptopCheckItem = {
+  id: string
+  label: string
+  status: 'active' | 'off' | 'unknown'
+  warn: boolean
+  detail: string
+}
+
+export type HdrLaptopChecks = {
+  isLaptop: boolean
+  pluggedIn?: boolean | null
+  hdrOn: boolean
+  items: HdrLaptopCheckItem[]
+}
+
+export type HdrDisplayInfo = {
+  name?: string | null
+  gdiName: string
+  devicePath: string
+  main: boolean
+  supported: boolean
+  on: boolean
+  internal: boolean
+  connector: string
+  colorMode?: 'sdr' | 'acm' | 'hdr' | null
+  edidPeakNits?: number | null
+  dxgiPeakNits?: number | null
+  peakHealth?: HdrPeakHealth | null
+}
+
+export type HdrAutoHdr = {
+  global: boolean | null
+  game: boolean | null
+  effective: 'on' | 'off' | 'default'
+}
+
 export type HdrState = {
   supported: boolean
   on?: boolean
   name?: string | null
+  devicePath?: string | null
   peakNits?: number | null
+  edidPeakNits?: number | null
+  dxgiPeakNits?: number | null
+  internal?: boolean
+  colorMode?: 'sdr' | 'acm' | 'hdr' | null
+  autoHdrGlobal?: boolean | null
   calibrated?: boolean
   verdict?: 'great' | 'good' | 'weak' | 'unknown'
+  peakHealth?: HdrPeakHealth | null
+  laptopChecks?: HdrLaptopChecks | null
+  displays?: HdrDisplayInfo[]
 }
 
 /** What PCGamingWiki says about a game's HDR, and its Auto/Always/Never choice. */
@@ -667,6 +720,7 @@ export type HdrGame = {
   /** Where Exo's verdict came from, in plain words for the game's row. */
   reason?: string
   mode?: 'auto' | 'on' | 'off'
+  autoHdr?: HdrAutoHdr | null
 }
 
 /** One choice row for GraphicsControl: the choice held now and the choices offered. */

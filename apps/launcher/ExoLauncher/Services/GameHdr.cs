@@ -145,7 +145,7 @@ internal static partial class GameHdr
             : null;
 
     /// <summary>IDXGIOutput6::GetDesc1's MaxLuminance for the output on that screen; null when DXGI doesn't say.</summary>
-    private static unsafe int? DxgiPeak(string gdiName)
+    internal static unsafe int? DxgiPeak(string gdiName)
     {
         try
         {
