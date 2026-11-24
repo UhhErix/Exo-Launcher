@@ -317,7 +317,8 @@ fn poll_state(s: &mut AppState, now: f64, tx: &mut Tx) -> bool {
     let setup = s.setup_tick(now);
     let island = s.tick_island_timer(now, tx);
     let store = s.store_tick(now);
-    notices || setup || island || store
+    let hb = s.tick_shell_heartbeat(now, tx);
+    notices || setup || island || store || hb
 }
 
 #[cfg(windows)]

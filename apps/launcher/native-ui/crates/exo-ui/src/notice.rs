@@ -297,6 +297,44 @@ pub fn register_events(reg: &mut EventRegistry) {
         false
     });
 
+    reg.on_raw("components.failed", |state, data| {
+        let feature = data
+            .get("feature")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .trim();
+        if feature.is_empty() {
+            return false;
+        }
+        state.push_notice(format!("{feature} couldn't be set up"), NoticeTone::Bad);
+        true
+    });
+
+    reg.on_raw("backup.stopped", |state, data| {
+        let sentence = data
+            .get("sentence")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .trim();
+        let since = data
+            .get("since")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .trim();
+        if sentence.is_empty() || since.is_empty() {
+            return false;
+        }
+        state.push_rich_notice(RichNoticeSpec {
+            key_id: Some(format!("backup-stopped-{since}")),
+            title: Some("Backup stopped".into()),
+            text: sentence.to_string(),
+            tone: NoticeTone::Bad,
+            lasting: true,
+            ..RichNoticeSpec::default()
+        });
+        true
+    });
+
     reg.on_raw("app.notify", |state, data| {
         let title = data
             .get("title")
@@ -1068,5 +1106,25 @@ mod tests {
             data: json!({ "channelId": "c1", "messageId": "m2" }),
         }));
         assert!(s.notices.is_empty());
+    }
+
+    #[test]
+    fn components_failed_and_backup_stopped_push_notices() {
+        let mut s = AppState::default();
+        assert!(s.apply_host_event(HostEvent::Raw {
+            event: "components.failed".into(),
+            data: json!({ "feature": "Game Capture" }),
+        }));
+        assert_eq!(s.notices.len(), 1);
+        assert_eq!(s.notices[0].text, "Game Capture couldn't be set up");
+        assert_eq!(s.notices[0].tone, NoticeTone::Bad);
+
+        assert!(s.apply_host_event(HostEvent::Raw {
+            event: "backup.stopped".into(),
+            data: json!({ "sentence": "Backup paused: drive full.", "since": "2026-11-23" }),
+        }));
+        assert_eq!(s.notices.len(), 2);
+        assert_eq!(s.notices[1].title.as_deref(), Some("Backup stopped"));
+        assert!(s.notices[1].lasting);
     }
 }

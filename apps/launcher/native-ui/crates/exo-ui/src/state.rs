@@ -1236,6 +1236,7 @@ impl AppState {
     }
 
     pub fn switch_room_without_history(&mut self, room: Room) {
+        let prev_room = self.room;
         let prev_cache_room = Self::cache_room_for(self.room);
         let next_cache_room = Self::cache_room_for(room);
         if prev_cache_room != next_cache_room {
@@ -1297,6 +1298,7 @@ impl AppState {
             Room::Apps => self.load_pc_tab(crate::pc_state::PcTab::Apps),
             _ => {}
         }
+        self.on_room_switched(prev_room, room);
     }
 
     pub fn open_context_menu(&mut self, target: ContextMenuTarget, x: f32, y: f32) {
@@ -1487,12 +1489,11 @@ impl AppState {
     }
 
     pub fn apply_settings(&mut self, settings: LauncherSettings) {
-        let tour_seen = settings
-            .ui_prefs
-            .get("tourSeen")
-            .and_then(|v| v.as_i64())
-            .unwrap_or(0)
-            >= 1;
+        let tour_seen = settings.onboarding_complete.unwrap_or(false)
+            || settings
+                .ui_prefs
+                .get("tourSeen")
+                .is_some_and(|v| v.as_bool().unwrap_or(false) || v.as_i64().unwrap_or(0) >= 1);
         let raw = settings
             .ui_prefs
             .get("setupProgress")
@@ -2788,12 +2789,14 @@ impl AppState {
         self.palette_query.text.clear();
         self.palette_query.sync_invariants();
         self.load_palette_extras();
+        self.sync_chrome_layout();
         tx.focus("palette-input", false);
     }
 
     pub fn close_palette(&mut self) {
         self.palette_open = false;
         self.palette_index = 0;
+        self.sync_chrome_layout();
     }
 
     pub fn palette_results(&self) -> Vec<PaletteItem> {

@@ -308,8 +308,16 @@ async function runNativeAction(uiPid, action, state) {
   }
 
   if (spec.kind === 'downloads') {
-    const res = await uia(['-Command', 'invoke', '-TargetPid', String(uiPid), '-Name', 'Downloads', '-ControlType', 'Button'])
-    if (!res.ok) return { status: 'not_drivable', reason: 'Native UI has no Downloads sheet button outside Settings' }
+    await uia(['-Command', 'invoke', '-TargetPid', String(uiPid), '-Name', 'Library', '-ControlType', 'TabItem'])
+    await sleep(400)
+    const moreRes = await uia(['-Command', 'invoke', '-TargetPid', String(uiPid), '-Name', 'More', '-ControlType', 'Button'])
+    if (!moreRes.ok) return { status: 'not_drivable', reason: moreRes.why || 'Library More button not found in UIA tree' }
+    await sleep(350)
+    let res = await uia(['-Command', 'invoke', '-TargetPid', String(uiPid), '-Name', 'Downloads', '-ControlType', 'MenuItem'])
+    if (!res.ok) {
+      res = await uia(['-Command', 'invoke', '-TargetPid', String(uiPid), '-Name', 'Downloads', '-ControlType', 'Button'])
+    }
+    if (!res.ok) return { status: 'not_drivable', reason: res.why || 'Downloads menu item not found in UIA tree' }
     state.overlayOpen = true
     return { status: 'ok' }
   }

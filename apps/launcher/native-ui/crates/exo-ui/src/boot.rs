@@ -431,7 +431,7 @@ impl AppState {
     }
 
     pub fn notify_shell_painted_once(&mut self) {
-        if self.boot.painted_sent {
+        if self.boot.painted_sent || self.status != HostStatus::Connected {
             return;
         }
         self.boot.painted_sent = true;

@@ -36,6 +36,13 @@ pub struct ShellChromeState {
     pub mini_last_audible: f32,
     pub room_history: Vec<Room>,
     pub room_history_index: usize,
+    pub last_heartbeat_at: Option<f64>,
+    pub shell_ready_sent: bool,
+    pub usable_logged: bool,
+    pub settings_open_count: u32,
+    pub last_telemetry_room: Option<Room>,
+    pub last_chrome_layout_key: Option<String>,
+    pub top_bar_width: f32,
 }
 
 impl Default for ShellChromeState {
@@ -54,6 +61,13 @@ impl Default for ShellChromeState {
             mini_last_audible: 0.25,
             room_history: vec![Room::Library],
             room_history_index: 0,
+            last_heartbeat_at: None,
+            shell_ready_sent: false,
+            usable_logged: false,
+            settings_open_count: 0,
+            last_telemetry_room: None,
+            last_chrome_layout_key: None,
+            top_bar_width: 0.0,
         }
     }
 }
@@ -118,29 +132,7 @@ pub fn register_events(reg: &mut EventRegistry) {
         true
     });
 
-    reg.on_raw("app.open", |state, data| {
-        let room = data.get("room").and_then(|v| v.as_str());
-        let part = data.get("part").and_then(|v| v.as_str());
-        match room {
-            Some("pc") => {
-                if part == Some("apps") {
-                    state.switch_room(Room::Apps);
-                } else {
-                    state.switch_room(Room::ExoAi);
-                    if part == Some("storage") {
-                        state.pc.exo_ai_storage_open = true;
-                        state.load_pc_drives();
-                    }
-                }
-                true
-            }
-            Some("library") => {
-                state.switch_room(Room::Library);
-                true
-            }
-            _ => false,
-        }
-    });
+    reg.on_raw("app.open", |state, data| state.apply_app_open(data));
 
     reg.on_raw("notes.open", |state, data| {
         if let Some(id) = data.get("id").and_then(|v| v.as_str())
@@ -159,7 +151,174 @@ pub fn register_events(reg: &mut EventRegistry) {
     });
 }
 
+fn room_telemetry_name(room: Room) -> &'static str {
+    match room {
+        Room::Library => "library",
+        Room::Store => "store",
+        Room::Discord => "friends",
+        Room::Music => "music",
+        Room::Devices => "devices",
+        Room::ExoAi => "exo-ai",
+        Room::Apps => "apps",
+        Room::Settings => "settings",
+    }
+}
+
 impl AppState {
+    pub fn apply_app_open(&mut self, data: &Value) -> bool {
+        let room = data.get("room").and_then(|v| v.as_str());
+        let part = data.get("part").and_then(|v| v.as_str());
+        match room {
+            Some("pc") => {
+                match part {
+                    Some("devices") => self.switch_room(Room::Devices),
+                    Some("apps" | "startup" | "runtimes") => self.switch_room(Room::Apps),
+                    Some("storage") => {
+                        self.switch_room(Room::ExoAi);
+                        self.pc.exo_ai_storage_open = true;
+                        self.load_pc_drives();
+                    }
+                    _ => self.switch_room(Room::ExoAi),
+                }
+                true
+            }
+            Some("library") => {
+                self.switch_room(Room::Library);
+                true
+            }
+            _ => false,
+        }
+    }
+
+    pub fn track_room_telemetry(&mut self, room: Room) {
+        if self.chrome.last_telemetry_room == Some(room) {
+            return;
+        }
+        self.chrome.last_telemetry_room = Some(room);
+        if self.status != crate::state::HostStatus::Connected {
+            return;
+        }
+        #[cfg(windows)]
+        self.call_host_async(
+            "telemetry.track",
+            json!({ "room": room_telemetry_name(room) }),
+            |_, _: Result<Value, String>| {},
+        );
+    }
+
+    pub fn request_pending_open(&mut self) {
+        if self.status != crate::state::HostStatus::Connected {
+            return;
+        }
+        #[cfg(windows)]
+        self.call_host_async(
+            "app.pendingOpen",
+            json!({}),
+            |s, res: Result<Value, String>| {
+                if let Ok(val) = res {
+                    s.apply_app_open(&val);
+                }
+            },
+        );
+    }
+
+    pub fn sync_chrome_layout(&mut self) {
+        if self.status != crate::state::HostStatus::Connected {
+            return;
+        }
+        let w = if self.chrome.top_bar_width > 0.0 {
+            self.chrome.top_bar_width.round() as i32
+        } else {
+            1920
+        };
+        let modal = self.palette_open
+            || self.key_modal_open
+            || self.downloads.open
+            || self.whats_new.mode.is_some()
+            || self.whats_new.sheet_open
+            || self.capture_menu_open
+            || self.library_more_open
+            || self.library_add_open
+            || self.library_filter_open
+            || self.context_menu.is_some()
+            || self.open_dropdown.is_some()
+            || self.chrome.mini_volume_open
+            || self.island.person_menu.is_some();
+        let payload = if modal {
+            json!({
+                "interactiveRegions": [{ "x": 0, "y": 6, "width": w, "height": 46 }]
+            })
+        } else {
+            json!({
+                "interactiveRegions": [
+                    { "x": 10, "y": 8, "width": 200, "height": 36 },
+                    { "x": (w / 2 - 300).max(220), "y": 8, "width": 600, "height": 36 },
+                    { "x": (w - 203).max(0), "y": 8, "width": 193, "height": 36 }
+                ],
+                "maximizeButton": { "x": (w - 86).max(0), "y": 11, "width": 34, "height": 30 }
+            })
+        };
+        let key = format!("{w}:{modal}:{}", room_telemetry_name(self.room));
+        if self.chrome.last_chrome_layout_key.as_deref() == Some(key.as_str()) {
+            return;
+        }
+        self.chrome.last_chrome_layout_key = Some(key);
+        #[cfg(windows)]
+        self.call_host_async(
+            "shell.setChromeLayout",
+            payload,
+            |_, _: Result<Value, String>| {},
+        );
+    }
+
+    pub fn tick_shell_heartbeat(&mut self, now: f64, tx: &mut rune::Tx) -> bool {
+        if self.status != crate::state::HostStatus::Connected {
+            return false;
+        }
+        let due = match self.chrome.last_heartbeat_at {
+            None => true,
+            Some(last) => now - last >= 1.0,
+        };
+        if due {
+            self.chrome.last_heartbeat_at = Some(now);
+            #[cfg(windows)]
+            self.call_host_async(
+                "shell.heartbeat",
+                json!({ "visible": true }),
+                |_, _: Result<Value, String>| {},
+            );
+        }
+        if let Some(last) = self.chrome.last_heartbeat_at {
+            tx.wake_at(last + 1.0);
+        }
+        false
+    }
+
+    pub fn on_room_switched(&mut self, prev: Room, next: Room) {
+        if self.status != crate::state::HostStatus::Connected {
+            return;
+        }
+        self.track_room_telemetry(next);
+        self.request_pending_open();
+        if next == Room::Settings && prev != Room::Settings {
+            self.chrome.settings_open_count = self.chrome.settings_open_count.saturating_add(1);
+            let open = self.chrome.settings_open_count;
+            let from = room_telemetry_name(prev);
+            #[cfg(windows)]
+            self.call_host_async(
+                "app.log",
+                json!({
+                    "level": "info",
+                    "message": format!("PERF settings-open paintMs=0 open={open} from={from}")
+                }),
+                |_, _: Result<Value, String>| {},
+            );
+        }
+        if next == Room::Library {
+            self.sync_chrome_layout();
+        }
+    }
+
     pub fn load_shell_chrome_state(&mut self) {
         #[cfg(windows)]
         {
@@ -187,7 +346,75 @@ impl AppState {
                     }
                 },
             );
+            self.call_host_async(
+                "shell.heartbeat",
+                json!({ "visible": true }),
+                |_, _: Result<Value, String>| {},
+            );
+            if !self.chrome.shell_ready_sent {
+                self.chrome.shell_ready_sent = true;
+                self.call_host_async("shell.ready", json!({}), |_, _: Result<Value, String>| {});
+            }
+            self.notify_shell_painted_once();
+            self.call_host_async(
+                "music.volume",
+                json!({}),
+                |s, res: Result<Value, String>| {
+                    if let Ok(val) = res
+                        && let Some(level) = val.get("level").and_then(|v| v.as_f64())
+                        && level.is_finite()
+                    {
+                        s.media.music_volume = level.clamp(0.0, 1.0);
+                        s.media.music_muted = val
+                            .get("muted")
+                            .and_then(|v| v.as_bool())
+                            .unwrap_or(s.media.music_volume <= 0.001);
+                    }
+                },
+            );
+            self.call_host_async("shell.prepare", json!({}), |_, _: Result<Value, String>| {});
+            self.call_host_async(
+                "notes.pending",
+                json!({}),
+                |s, res: Result<Value, String>| {
+                    if let Ok(val) = res
+                        && let Some(id) = val.get("id").and_then(|v| v.as_str())
+                        && !id.is_empty()
+                    {
+                        s.open_captures(None);
+                    }
+                },
+            );
+            self.call_host_async(
+                "art.base",
+                json!({}),
+                |s, res: Result<exo_rpc::ArtBase, String>| {
+                    if let Ok(base) = res {
+                        s.apply_art_base(base);
+                    }
+                },
+            );
+            self.call_host_async(
+                exo_rpc::METHOD_CAPTURE_STATUS,
+                json!({}),
+                |s, res: Result<exo_rpc::CaptureStatusReply, String>| {
+                    if let Ok(st) = res {
+                        s.media.capture_status = Some(st);
+                    }
+                },
+            );
+            if !self.chrome.usable_logged {
+                self.chrome.usable_logged = true;
+                self.call_host_async(
+                    "app.log",
+                    json!({ "level": "info", "message": "Library usable" }),
+                    |_, _: Result<Value, String>| {},
+                );
+            }
         }
+        self.request_pending_open();
+        self.track_room_telemetry(self.room);
+        self.sync_chrome_layout();
         self.load_store_outages();
         self.hydrate_version_from_settings_json();
         self.startup_check_update();
@@ -831,6 +1058,10 @@ pub fn view(s: &AppState, cx: &mut Cx<AppState>) -> El {
         .h(52.0)
         .on_layout(|s: &mut AppState, r| {
             if r[2] > 0.0 {
+                if (s.chrome.top_bar_width - r[2]).abs() > 0.5 {
+                    s.chrome.top_bar_width = r[2];
+                    s.sync_chrome_layout();
+                }
                 let slot = MiniBarSlot::from_width(r[2]);
                 if s.mini_bar_slot != slot {
                     s.mini_bar_slot = slot;
@@ -1066,5 +1297,31 @@ mod tests {
         let mut rt = Runtime::new(s, view, (1920.0, 1080.0), Env::new(true, 1.0));
         rt.frame(0.0);
         assert!(rt.presented("discord-nav-badge").is_some());
+    }
+
+    #[test]
+    fn app_open_event_and_heartbeat_respect_connection_state() {
+        let mut s = AppState::default();
+        assert!(s.apply_host_event(HostEvent::Raw {
+            event: "app.open".into(),
+            data: json!({ "room": "pc", "part": "devices" }),
+        }));
+        assert_eq!(s.room, Room::Devices);
+
+        assert!(s.apply_host_event(HostEvent::Raw {
+            event: "app.open".into(),
+            data: json!({ "room": "pc", "part": "apps" }),
+        }));
+        assert_eq!(s.room, Room::Apps);
+
+        assert!(s.apply_host_event(HostEvent::Raw {
+            event: "app.open".into(),
+            data: json!({ "room": "library" }),
+        }));
+        assert_eq!(s.room, Room::Library);
+
+        let mut tx = rune::Tx::default();
+        assert!(!s.tick_shell_heartbeat(5.0, &mut tx));
+        assert!(s.chrome.last_heartbeat_at.is_none());
     }
 }

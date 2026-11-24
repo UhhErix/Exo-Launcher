@@ -70,3 +70,33 @@ Added standalone native scenes in `exo-ui/src/main.rs` (all captured and visuall
 - Copied `%LOCALAPPDATA%\ExoLauncher` (excluding `app/`, `Games/`, `drivers/`, `updates/`, `gifts-webview/`) into an isolated temporary directory under `$env:TEMP` and launched against a repo-built Debug `ExoLauncher.exe` via `--host-pipe` + `EXO_LAUNCHER_DATA_DIR` (never touching `%LOCALAPPDATA%\ExoLauncher\app`, the real data dir, or the owner's running Exo).
 - Verified live RPC bootstrap (`shell.bootstrap`), `friends.badge`, `shell.windowState`, `downloads.list` (showing real empty state `"Nothing is downloading."`), `palette` extras (`notes.list`, `discord.home`, `discord.channels`), interactive `whats-new-continue` click dismissal, `activate-key` store chip switching (`key-store-epic`), and live `BootGate` error screen on failed pipe connection.
 - Removed all temporary directories after verification.
+
+## Follow-up: `feat/native-polish-2` merge, Rune `exo-inputs` pin bump, & Shell RPC Parity
+
+- **Merge (`f017fa8`)**: Merged `origin/feat/native-polish-2` (`df56021`: WP1, WP5, WP11, `events.rs` `EventRegistry`, `RpcTrace.cs`), keeping `EventRegistry` and registering all WP3 shell/bar/downloads/island/whats_new/boot/notice/key_modal handlers alongside WP1/WP5.
+- **Isolated Rune pin bump (`d600f89`)**: Bumped all 8 Rune pins in `apps/launcher/native-ui/Cargo.toml` (+ `Cargo.lock`) to `exo-inputs` `e6c0716a660a97576b3e3951973c599b82bd11e7` in one isolated commit.
+- **Virtualized palette list (`palette.rs`)**: Wrapped palette rows in an inner `.growth(GrowthSpec::default()).virtualize(scaled(40.0)).reveal_selected(true)` column inside the scroll viewport with keyed group headers.
+- **Shell RPC & push-event parity (`shell.rs`, `boot.rs`, `notice.rs`, `state.rs`, `main.rs`, `exo-rpc/src/lib.rs`, `tools/rpc-parity/run.mjs`)**:
+  - Wired `shell.heartbeat` (1 Hz when connected, 0 wakes offline), `app.pendingOpen`, `telemetry.track`, `shell.setChromeLayout`, `app.log`, `shell.prepare`, `shell.ready`, `shell.painted`, `notes.pending`, `art.base`, `capture.status`, and startup `music.volume`.
+  - Fixed `apply_settings` to respect `onboardingComplete: true` and boolean `uiPrefs.tourSeen` (preventing onboarding wizard from covering top-bar tabs on already-onboarded instances).
+  - Registered `backup.stopped` and `components.failed` in `notice.rs` and added explicit `parse_event` arms in `exo-rpc/src/lib.rs` for all 19 WP3 shell push events.
+  - Updated `tools/rpc-parity/run.mjs` native `downloads` action to open Library `More` -> `Downloads`.
+
+### `tools/rpc-parity` Before / After (`node tools/rpc-parity/run.mjs`)
+
+| Metric | Baseline (`df56021`) | After WP3 follow-up |
+|---|---:|---:|
+| Native drivable actions | 16 / 18 | **17 / 18** (`downloads` now drivable on native; only `discord-dm` signed out) |
+| Unique RPC methods called by Native | 34 | **62** (+28) |
+| Methods React called that Native never called | 53 | **33** (**0** in WP3 shell/bar/palette/downloads/notice/boot/gamepad) |
+| Static React push events unhandled by Native | 45 | **23** (**0** in WP3 shell/bar/palette/downloads/notice/boot/gamepad) |
+
+### Follow-up Gates (all exit 0)
+
+- `cargo fmt --all -- --check`: **PASS** (0)
+- `cargo clippy --workspace -- -D warnings`: **PASS** (0)
+- `cargo test --workspace`: **PASS** (**143 passed, 0 failed, 1 ignored**: `exo-kit` 4/4, `exo-rpc` 22/22 + 1 ignored, `exo-ui` 117/117)
+- `cargo build --release -p exo-ui`: **PASS** (0)
+- `node tools/check-comments.mjs`: **PASS** (`Comment ratchet ok: 2384 legacy files, 232 zero-comment files`)
+- `node --test tools/rpc-parity/parity.test.mjs`: **PASS** (4/4)
+

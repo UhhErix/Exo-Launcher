@@ -573,7 +573,8 @@ pub fn layers(s: &AppState, blur: bool) -> Vec<El> {
         for (i, item) in items.into_iter().enumerate() {
             if last_group != Some(item.group) {
                 rows.push(
-                    el().w_full()
+                    el().key(format!("pal-grp-{}", item.group))
+                        .w_full()
                         .px(scaled(10.0))
                         .pt(if last_group.is_some() {
                             scaled(12.0)
@@ -603,7 +604,15 @@ pub fn layers(s: &AppState, blur: bool) -> Vec<El> {
                 stick_bottom: false,
             })
             .clip_fade_linear(0.0, 0.0, 0.0, 28.0)
-            .children(rows)
+            .child(
+                col()
+                    .key("command-palette-rows")
+                    .w_full()
+                    .growth(rune::GrowthSpec::default())
+                    .virtualize(scaled(40.0))
+                    .reveal_selected(true)
+                    .children(rows),
+            )
     };
 
     let card = glass_panel_opt("command-palette", scaled(576.0), blur)
