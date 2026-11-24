@@ -1721,7 +1721,10 @@ export const STATES = [
     expectGlass: true,
     react: {
       room: 'Apps',
-      steps: [{ type: 'wait', ms: 1400 }],
+      steps: [
+        { type: 'waitFor', selector: '.exo-apps-name', timeoutMs: 12000 },
+        { type: 'wait', ms: 1500 },
+      ],
       openSelector: '.exo-apps, table, main',
     },
     native: {
@@ -1739,9 +1742,10 @@ export const STATES = [
     react: {
       room: 'Apps',
       steps: [
-        { type: 'wait', ms: 1200 },
+        { type: 'waitFor', selector: '.exo-apps-name', timeoutMs: 12000 },
         { type: 'clickText', selector: 'button, [role="tab"]', text: /^Startup$/i },
-        { type: 'wait', ms: 700 },
+        { type: 'waitFor', selector: '.exo-apps-name', timeoutMs: 12000 },
+        { type: 'wait', ms: 600 },
       ],
       openSelector: '.exo-apps, main',
     },

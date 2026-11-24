@@ -1376,6 +1376,28 @@ fn load_live_state_sync(pipe: &str, scene: Option<&str>) -> AppState {
                 &serde_json::json!({}),
                 Duration::from_secs(10),
             ) {
+                let mut wanted: Vec<String> = st
+                    .items
+                    .iter()
+                    .filter_map(|i| i.icon.clone())
+                    .chain(st.removed.iter().filter_map(|r| r.icon.clone()))
+                    .filter(|k| !k.is_empty() && !state.pc.app_icons.contains_key(k))
+                    .collect();
+                wanted.sort();
+                wanted.dedup();
+                if !wanted.is_empty()
+                    && let Ok(ic) = client.call_blocking::<_, exo_rpc::AppsIconsReply>(
+                        exo_rpc::METHOD_APPS_ICONS,
+                        &serde_json::json!({ "ids": wanted }),
+                        Duration::from_secs(10),
+                    )
+                {
+                    for (k, v) in ic.icons {
+                        if let Some(d) = v {
+                            state.pc.app_icons.insert(k, d);
+                        }
+                    }
+                }
                 state.pc.startup_list = Some(st);
             }
             if let Ok(tidy) = client.call_blocking::<_, exo_rpc::AppFind>(
@@ -1427,6 +1449,34 @@ fn load_live_state_sync(pipe: &str, scene: Option<&str>) -> AppState {
             ) && pkgs.ok
             {
                 state.pc.windows_packages = pkgs.items;
+            }
+            if let Ok(list) = client.call_blocking::<_, exo_rpc::AppsListReply>(
+                exo_rpc::METHOD_APPS_LIST,
+                &serde_json::json!({}),
+                Duration::from_secs(12),
+            ) {
+                let mut by_size: Vec<&exo_rpc::InstalledAppItem> = list.programs.iter().collect();
+                by_size.sort_by_key(|a| std::cmp::Reverse(a.bytes.unwrap_or(0)));
+                let missing: Vec<String> = by_size
+                    .into_iter()
+                    .take(100)
+                    .map(|p| p.id.clone())
+                    .filter(|id| !state.pc.app_icons.contains_key(id))
+                    .collect();
+                if !missing.is_empty()
+                    && let Ok(ic) = client.call_blocking::<_, exo_rpc::AppsIconsReply>(
+                        exo_rpc::METHOD_APPS_ICONS,
+                        &serde_json::json!({ "ids": missing }),
+                        Duration::from_secs(12),
+                    )
+                {
+                    for (k, v) in ic.icons {
+                        if let Some(d) = v {
+                            state.pc.app_icons.insert(k, d);
+                        }
+                    }
+                }
+                state.pc.apps_list = Some(list);
             }
         }
         Some("pc-storage") => {

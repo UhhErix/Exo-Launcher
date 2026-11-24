@@ -2780,6 +2780,16 @@ impl AppState {
         }
     }
 
+    pub fn toggle_startup_ids(&mut self, ids: Vec<String>, restore: bool) {
+        for id in ids {
+            if restore {
+                self.restore_startup_item(&id);
+            } else {
+                self.remove_startup_item(&id);
+            }
+        }
+    }
+
     pub fn restore_startup_item(&mut self, id: &str) {
         self.pc.startup_errors.remove(id);
         #[cfg(windows)]
