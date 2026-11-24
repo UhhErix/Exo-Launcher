@@ -7,6 +7,7 @@ import { AskButton, Panel, Row, Segmented, Spinner, hz } from './ui'
 import { indicatorColor } from './Finalmouse'
 import { linkRates } from './brands/logitech'
 import { frameGet, frameRemove } from './frameStore'
+import { diffSteps, profileMatches, profilesEqual, sharedAutoSwitcher, type ProfileRecord } from './profile-logic'
 
 type Client = ReturnType<typeof useMouse>['client']
 /** games: the Exo game ids this profile is for; it applies while one of them runs. */
@@ -139,16 +140,11 @@ const pollingNow = (status: MouseStatus, before?: Polling): Polling => ({ ...bef
  * mouse has now. A profile saved before Exo Mouse learned a setting still
  * matches, instead of being rewritten on every connect.
  */
-const same = (target: Step[], now: Step[]) => changes(target, now).length === 0
+const same = profileMatches
 
 const DESKTOP = 'Desktop'
 const isDesktopName = (name: string) => name.trim().toLowerCase() === DESKTOP.toLowerCase()
 
-/**
- * This mouse's profiles with Desktop in place: the one already marked, else one
- * already called Desktop, else a new one from the settings the mouse has now.
- * It comes first, with no games; any other profile marked default is not.
- */
 function withDesktop(list: Profile[], now: Step[]): Profile[] {
   const desktop = list.find(p => p.isDefault) ?? list.find(p => isDesktopName(p.name))
     ?? { id: crypto.randomUUID(), name: DESKTOP, steps: now, savedAt: new Date().toISOString() }
@@ -156,40 +152,15 @@ function withDesktop(list: Profile[], now: Step[]): Profile[] {
   return [{ ...desktop, name: DESKTOP, isDefault: true, games: [] }, ...rest]
 }
 
-/** How long a switch keeps trying while the mouse sleeps: every 3 s for a minute. */
-const LAND_TRIES = 20
-const LAND_CHECK_MS = 3_000
-const sleep = (ms: number) => new Promise<void>(resolve => window.setTimeout(resolve, ms))
+export const changes = diffSteps
 
-/** Only the settings that differ from the mouse now: fewer writes, a faster switch. */
-export const changes = (target: Step[], now: Step[]) => target.filter(step => !now.some(n => JSON.stringify(n) === JSON.stringify(step)))
-
-/**
- * Game state that outlives Profiles: it unmounts whenever the mouse reconnects
- * (a wireless mouse waking, a replug), while this frame and Exo's game events
- * carry on. running: every game Exo says is running, newest last. switchFor: the
- * mounted Profiles' reaction to a start or stop, none while it is unmounted.
- * landing: the newest switch; a newer one, or Profiles unmounting, stops an
- * older one waiting.
- */
-const games = {
-  running: [] as string[],
-  switchFor: null as ((id: string, isRunning: boolean) => void) | null,
-  landing: 0,
-}
+const autoSwitcher = sharedAutoSwitcher
 
 onHostEvent('game.runState', data => {
   const d = data as { id?: string; isRunning?: boolean }
   if (!d.id) return
-  const was = games.running.includes(d.id)
-  if (!!d.isRunning === was) return
-  games.running = d.isRunning ? [...games.running, d.id] : games.running.filter(g => g !== d.id)
-  games.switchFor?.(d.id, !!d.isRunning)
+  autoSwitcher.onGameRunState(d.id, !!d.isRunning)
 })
-
-/** The profile of the newest running game linked to one, if any. */
-const runningProfile = (profiles: Profile[]) =>
-  [...games.running].reverse().map(g => profiles.find(p => p.games?.includes(g))).find(Boolean)
 
 /**
  * Exo's own profiles for this mouse model: named sets of settings, as many as
@@ -202,35 +173,39 @@ export function Profiles({ device, status, client, applyAll, busy }: {
   device: string
   status: MouseStatus
   client: Client
-  applyAll: (steps: Step[]) => Promise<MouseStatus | null>
+  applyAll: (steps: Step[], options?: { source?: 'user' | 'profile' }) => Promise<MouseStatus | null>
   busy: boolean
 }) {
   const [all, setAll] = useState<All>({})
-  // A failed read or save is one line in Exo's notice, never a line that moves the rows.
   useEffect(() => {
     readAll().then(all => { setAll(all); setLoaded(true) }).catch(() => tell({ notice: 'Exo could not read your saved mouse profiles.' }))
   }, [])
   const [name, setName] = useState('')
   const [renaming, setRenaming] = useState<string | null>(null)
   const [draft, setDraft] = useState('')
-  /** The profile being written (its Apply carries the work band), then the one just written: Active with a check. */
   const [applying, setApplying] = useState<string | null>(null)
   const [applied, setApplied] = useState<string | null>(null)
+  const list = all[device] ?? []
+  const now = snapshot(status, client)
   const apply = async (p: Profile) => {
+    autoSwitcher.setActiveProfile(p.id, false)
+    const diff = changes(fit(p, status), now)
+    if (diff.length === 0) {
+      setApplied(p.id)
+      window.setTimeout(() => setApplied(a => a === p.id ? null : a), 3000)
+      return
+    }
     setApplying(p.id)
-    const took = await applyAll(changes(fit(p, status), now))
+    const took = await applyAll(diff, { source: 'profile' })
     setApplying(a => a === p.id ? null : a)
     if (!took) return
     setApplied(p.id)
     window.setTimeout(() => setApplied(a => a === p.id ? null : a), 3000)
   }
   const active = (p: Profile) => same(fit(p, status), now) || applied === p.id
-  const list = all[device] ?? []
-  const now = snapshot(status, client)
 
   const [installed, setInstalled] = useState<Game[]>([])
   const [linking, setLinking] = useState<string | null>(null)
-  // Read again each time the picker opens: games installed since this frame started show up.
   const pickerOpen = linking !== null
   useEffect(() => {
     let live = true
@@ -244,73 +219,37 @@ export function Profiles({ device, status, client, applyAll, busy }: {
   const titlesNow = useRef(titles)
   titlesNow.current = titles
 
-  // The newest list, settings and writer, for the game events below.
   const live = useRef({ list, now, status, applyAll })
   live.current = { list, now, status, applyAll }
-  /**
-   * Writes a profile and keeps at it until the mouse has it. A sleeping wireless
-   * mouse drops writes while its receiver still answers reads, so a switch made
-   * while it sleeps lands when it wakes: checked every few seconds for a minute.
-   * The notice says so only once the mouse has the profile. A newer switch
-   * replaces an older one still waiting.
-   */
-  const land = (steps: Step[], notice: string | null) => {
-    const ticket = ++games.landing
-    void (async () => {
-      for (let attempt = 0; attempt < LAND_TRIES; attempt++) {
-        if (games.landing !== ticket) return
-        const current = live.current.now
-        if (attempt > 0 && same(steps, current)) break
-        const took = await live.current.applyAll(attempt === 0 ? steps : changes(steps, current))
-        await sleep(LAND_CHECK_MS)
-        if (games.landing !== ticket) return
-        if (took && same(steps, live.current.now)) break
-        if (attempt === LAND_TRIES - 1) {
-          tell({ notice: 'Your mouse did not take its profile. Apply it again in Devices.' })
-          return
-        }
-      }
-      if (notice) tell({ notice })
-    })()
-  }
 
-  // Starts and stops while this is unmounted are only recorded in `games`; the
-  // connect below lands whatever they leave.
   useEffect(() => {
-    games.switchFor = (id, isRunning) => {
-      const profiles = live.current.list
-      if (isRunning) {
-        const profile = profiles.find(p => p.games?.includes(id))
-        if (!profile) return
-        // The room may be closed and the last read a minute old: write the whole profile.
-        land(fit(profile, live.current.status), `${profile.name} mouse profile on for ${titlesNow.current.get(id) ?? 'your game'}.`)
-        return
-      }
-      if (!profiles.some(p => p.games?.includes(id))) return
-      // Another linked game still running keeps its profile; otherwise Desktop (always there once loaded).
-      const next = runningProfile(profiles) ?? profiles.find(p => p.isDefault)
-      if (next) land(fit(next, live.current.status), `${next.name} mouse profile on.`)
-    }
+    autoSwitcher.attach({
+      profiles: () => live.current.list,
+      resolveSteps: (profile: ProfileRecord) => fit(profile, live.current.status),
+      currentSteps: () => live.current.now,
+      apply: (_profile, diff, notice) => {
+        void live.current.applyAll(diff, { source: 'profile' }).then(took => {
+          if (took && notice) tell({ notice })
+        })
+      },
+      gameTitle: id => titlesNow.current.get(id),
+    })
     return () => {
-      games.switchFor = null
-      // The next connect lands the right profile with fresh reads; a switch waiting here would use stale ones.
-      games.landing++
+      autoSwitcher.detach()
     }
   }, [])
 
-  // When the mouse connects (Exo starting, the mouse waking, a replug) it takes the
-  // profile of the newest linked game running, else the default, once per connection, quietly.
   const [loaded, setLoaded] = useState(false)
   const settled = useRef(false)
   useEffect(() => {
     if (!loaded || settled.current) return
     settled.current = true
     const fixed = withDesktop(list, now)
-    if (JSON.stringify(fixed) !== JSON.stringify(list)) save(fixed)
-    const target = runningProfile(fixed) ?? fixed[0]
-    const steps = fit(target, status)
-    if (!same(steps, now)) land(steps, null)
-  }, [loaded, list, now, applyAll])
+    if (!profilesEqual(fixed, list)) save(fixed)
+    const matched = fixed.find(p => same(fit(p, status), now))
+    autoSwitcher.setActiveProfile(matched?.id ?? null, false)
+    if (autoSwitcher.findRunningProfile(fixed)) autoSwitcher.syncInitialRunning()
+  }, [loaded, list, now, status])
 
   /** A game is linked to one profile at most (never Desktop): linking it here unlinks it elsewhere. */
   const toggleGame = (profile: Profile, game: string) => {
