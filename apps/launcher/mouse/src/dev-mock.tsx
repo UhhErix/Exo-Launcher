@@ -2,6 +2,7 @@ import { useCallback, useRef, useState } from 'react'
 import type { MouseStatus } from '@openmouse/protocol/drivers/mouse-types'
 import type { SupportedClient } from '@openmouse/protocol/drivers/registry'
 import { Room } from './App'
+import { versionOlder } from './finalmouse-state'
 import type { Candidate, Step, useMouse } from './mouse'
 
 /**
@@ -38,8 +39,10 @@ const WLMOUSE = params.has('wlmouse')
 const ATK = params.has('atk')
 const DEVICE = RAZER ? '1532:c1' : LAMZU ? '3554:f5f7' : LOGITECH ? '46d:c54d' : HITSCAN ? '3770:300' : AJAZZ ? 'a8a5:2157'
   : WLMOUSE ? '36a7:a887' : ATK ? '373b:1083' : '361d:200'
-const FIRMWARE = params.get('firmware') ?? '1.1.1'
-const OLD = FIRMWARE !== '1.1.1'
+const FIRMWARE = params.get('firmware') ?? '1.2.8'
+const OLD_RELEASE = versionOlder(FIRMWARE, '1.1.1')
+const OLD_INTENT = versionOlder(FIRMWARE, '1.2.0')
+const ULTRACLICK = params.has('ultraclick') && !versionOlder(FIRMWARE, '1.2.8')
 const UNREAD = params.has('unread')
 
 const START = {
@@ -68,10 +71,12 @@ const START = {
   finalmouseTournamentScrollTimeoutMs: 500,
   finalmouseClickModeL: UNREAD ? null : 1,
   finalmouseClickModeR: UNREAD ? null : params.has('apart') ? 0 : 1,
-  finalmouseClickReleaseL: OLD || UNREAD ? null : 0,
-  finalmouseClickReleaseR: OLD || UNREAD ? null : 0,
-  finalmouseTmrThrL: 25,
-  finalmouseTmrThrR: 25,
+  finalmouseClickReleaseL: OLD_RELEASE || UNREAD ? null : 0,
+  finalmouseClickReleaseR: OLD_RELEASE || UNREAD ? null : 0,
+  finalmouseClickIntentL: OLD_INTENT || UNREAD ? null : ULTRACLICK ? 2 : 0,
+  finalmouseClickIntentR: OLD_INTENT || UNREAD ? null : ULTRACLICK ? 2 : 0,
+  finalmouseTmrThrL: ULTRACLICK ? 10 : 25,
+  finalmouseTmrThrR: ULTRACLICK ? 10 : 25,
   finalmouseTmrHystL: 220,
   finalmouseTmrHystR: 220,
   finalmouseTmrMspL: null,
@@ -82,7 +87,7 @@ const START = {
   finalmouseProfileActive: 0,
   finalmouseProfileEnabledMask: 0b111,
   finalmouseProfileNames: { 0: 'Profile 1', 1: 'Profile 2', 2: 'Profile 3' },
-  firmware: UNREAD ? ['Dongle RF 1.1.1'] : [`Mouse ${FIRMWARE}-5289564`, 'Dongle RF 1.1.1'],
+  firmware: UNREAD ? [`Dongle RF ${FIRMWARE}`] : [`Mouse ${FIRMWARE}-2d88a14`, `Dongle RF ${FIRMWARE}`],
 } as unknown as MouseStatus
 
 const RAZER_START = {
@@ -281,7 +286,13 @@ const SETTERS: Record<string, (s: Fields, ...a: number[]) => Fields> = {
   setDpi: (s, dpi) => ({ ...s, dpi }),
   setPawLodMm: (s, mm) => ({ ...s, finalmousePawLodMm: mm, finalmousePawLodCustom: false }),
   setLiftOffScale: (s, raw) => ({ ...s, finalmousePawLodMm: raw / 10, finalmousePawLodCustom: true }),
-  setClickMode: (s, l, r, rl, rr) => ({ ...s, finalmouseClickModeL: l, finalmouseClickModeR: r, ...(rl == null ? {} : { finalmouseClickReleaseL: rl, finalmouseClickReleaseR: rr }) }),
+  setClickMode: (s, l, r, rl, rr, il, ir) => ({
+    ...s,
+    finalmouseClickModeL: l,
+    finalmouseClickModeR: r,
+    ...(rl == null ? {} : { finalmouseClickReleaseL: rl, finalmouseClickReleaseR: rr }),
+    ...(il == null ? {} : { finalmouseClickIntentL: il, finalmouseClickIntentR: ir }),
+  }),
   setTmrActuation: (s, l, r, hl, hr) => ({ ...s, finalmouseTmrThrL: Math.round(l * 100), finalmouseTmrThrR: Math.round(r * 100), finalmouseTmrHystL: hl, finalmouseTmrHystR: hr }),
   setActiveProfile: (s, i) => ({ ...s, finalmouseProfileActive: i }),
   setDongleLedMode: (s, m) => ({ ...s, finalmouseDongleLedMode: m }),
