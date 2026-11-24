@@ -21,7 +21,7 @@
   <ItemGroup Condition="'$([MSBuild]::GetTargetPlatformIdentifier($(TargetFramework)))' != 'windows'">
     <Compile Remove="**\*.Windows.cs" />
     <!-- the idle time (App/SessionIdle.Linux.cs): the version Avalonia.FreeDesktop brings, so the app and CLI share one file -->
-    <PackageReference Include="Tmds.DBus.Protocol" Version="0.94.1" />
+    <PackageReference Include="Tmds.DBus.Protocol" Version="0.95.2" />
   </ItemGroup>
   <ItemGroup Condition="'$([MSBuild]::GetTargetPlatformIdentifier($(TargetFramework)))' == 'windows'">
     <Compile Remove="**\*.Linux.cs" />
@@ -32,12 +32,12 @@
     <!-- CUE4Parse without game keys: build/cue4parse/build.ps1 -->
     <PackageReference Include="SCSKiller.CUE4Parse" Version="1.2.2.202609-scsk.1" />
     <!-- CUE4Parse pulls 9.0.0, which has GHSA-73j8-2gch-69rq -->
-    <PackageReference Include="Microsoft.Bcl.Memory" Version="10.0.12" />
+    <PackageReference Include="Microsoft.Bcl.Memory" Version="11.0.0" />
     <!-- Ed25519 for the signed update feed (App/Updates.cs): the BCL has none; the same package the origin signs tokens with -->
     <PackageReference Include="NSec.Cryptography" Version="26.4.0" />
-    <PackageReference Include="ValvePak" Version="6.0.0.182" />
+    <PackageReference Include="ValvePak" Version="7.2.0.221" />
     <!-- installer and updater: per-user install, deltas, channels -->
-    <PackageReference Include="Velopack" Version="1.2.158" />
+    <PackageReference Include="Velopack" Version="1.2.161" />
   </ItemGroup>
 
   <ItemGroup>
