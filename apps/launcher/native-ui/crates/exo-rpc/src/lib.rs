@@ -1496,6 +1496,21 @@ fn parse_event(
         "shaders.rebuild" => Ok(serde_json::from_str::<ShaderRebuild>(data_raw)
             .map(HostEvent::ShadersRebuild)
             .unwrap_or_else(|_| raw_fallback(name, data_raw))),
+        "shell.window" => Ok(raw_fallback(name, data_raw)),
+        "friends.badge" => Ok(raw_fallback(name, data_raw)),
+        "discord.open" => Ok(raw_fallback(name, data_raw)),
+        "app.open" => Ok(raw_fallback(name, data_raw)),
+        "notes.open" => Ok(raw_fallback(name, data_raw)),
+        "anticheat.missing" => Ok(raw_fallback(name, data_raw)),
+        "stores.outage" => Ok(raw_fallback(name, data_raw)),
+        "discord.notify" => Ok(raw_fallback(name, data_raw)),
+        "discord.notifyClear" => Ok(raw_fallback(name, data_raw)),
+        "discord.dmLine" => Ok(raw_fallback(name, data_raw)),
+        "app.notify" => Ok(raw_fallback(name, data_raw)),
+        "app.notifyClear" => Ok(raw_fallback(name, data_raw)),
+        "discord.call" => Ok(raw_fallback(name, data_raw)),
+        "keys.found" => Ok(raw_fallback(name, data_raw)),
+        "versions.new" => Ok(raw_fallback(name, data_raw)),
         _ => Ok(raw_fallback(name, data_raw)),
     }
 }

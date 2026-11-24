@@ -1,5 +1,6 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod boot;
 mod captures;
 mod clients_gate;
 mod discord;
@@ -9,6 +10,7 @@ mod discord_md;
 mod discord_state;
 mod discord_voice;
 mod discord_voice_state;
+mod downloads;
 mod events;
 mod frame_gen_row;
 mod game_actions;
@@ -17,6 +19,7 @@ mod game_perf;
 mod game_props;
 mod gamepad;
 mod image_cache;
+mod island;
 mod key_modal;
 mod library;
 mod media_state;
@@ -46,6 +49,7 @@ mod store;
 mod store_media;
 mod store_page;
 mod video_decoder;
+mod whats_new;
 
 use crate::state::AppState;
 use exo_kit::{FONT_FAMILIES, FONTS, exo_titlebar};
@@ -94,8 +98,68 @@ fn split_cli_args() -> CliArgs {
     }
 }
 
+fn step_discord_channel(s: &mut AppState, dir: isize, unread_only: bool) -> bool {
+    if let Some(gid) = s.discord.active_guild_id.clone()
+        && let Some(list) = s.discord.channels_by_guild.get(&gid)
+    {
+        let targets: Vec<String> = list
+            .channels
+            .iter()
+            .filter(|c| c.kind != "category" && c.can_read != Some(false))
+            .filter(|c| !unread_only || c.unread || c.mentions > 0)
+            .map(|c| c.id.clone())
+            .collect();
+        if targets.is_empty() {
+            return false;
+        }
+        let cur = s
+            .discord
+            .active_channel_id
+            .as_deref()
+            .and_then(|id| targets.iter().position(|c| c == id))
+            .unwrap_or(0);
+        let next = (cur as isize + dir).rem_euclid(targets.len() as isize) as usize;
+        let next_id = targets[next].clone();
+        s.open_discord_channel(&next_id);
+        return true;
+    }
+    let dms: Vec<String> = s
+        .discord
+        .home
+        .dms
+        .iter()
+        .filter(|d| !unread_only || d.unread || d.mentions > 0)
+        .map(|d| d.id.clone())
+        .collect();
+    if dms.is_empty() {
+        return false;
+    }
+    let cur = s
+        .discord
+        .active_dm_id
+        .as_deref()
+        .and_then(|id| dms.iter().position(|d| d == id))
+        .unwrap_or(0);
+    let next = (cur as isize + dir).rem_euclid(dms.len() as isize) as usize;
+    let next_id = dms[next].clone();
+    s.open_discord_dm(&next_id);
+    true
+}
+
 fn on_key(s: &mut AppState, ev: &KeyEvent, tx: &mut Tx) -> bool {
-    if ev.is_command('k') {
+    if s.driver_install_overlay_visible() {
+        if ev.key == Key::Escape {
+            return s.dismiss_top_layer();
+        }
+        return true;
+    }
+    if s.whats_new.sheet_open || s.whats_new.mode.is_some() {
+        if ev.key == Key::Escape {
+            return s.dismiss_top_layer();
+        }
+        return true;
+    }
+    if ev.is_command('k') && !ev.mods.alt && !ev.mods.shift {
         tx.instant();
         if s.palette_open {
             s.close_palette();
@@ -104,17 +168,110 @@ fn on_key(s: &mut AppState, ev: &KeyEvent, tx: &mut Tx) -> bool {
         }
         return true;
     }
-    if ev.is_command(',') {
+    if ev.is_command(',') && !ev.mods.alt && !ev.mods.shift {
         tx.instant();
         s.toggle_settings();
         return true;
     }
-    for (idx, ch) in ['1', '2', '3', '4', '5', '6', '7'].into_iter().enumerate() {
-        if ev.is_command(ch) {
-            tx.instant();
-            s.switch_room(state::Room::NAV_TABS[idx]);
+    let modal_open = s.palette_open || s.key_modal_open || s.downloads.open;
+    if !modal_open && !ev.mods.alt && !ev.mods.shift {
+        for (idx, ch) in ['1', '2', '3', '4', '5', '6', '7'].into_iter().enumerate() {
+            if ev.is_command(ch) {
+                tx.instant();
+                s.switch_room(state::Room::NAV_TABS[idx]);
+                return true;
+            }
+        }
+    }
+    if !modal_open && ev.is_command('f') && !ev.mods.alt && !ev.mods.shift {
+        match s.room {
+            state::Room::Library => {
+                s.library_search_open = true;
+                tx.focus("library-search-input", false);
+                return true;
+            }
+            state::Room::Store => {
+                tx.focus("store-search-input", false);
+                return true;
+            }
+            state::Room::Discord => {
+                s.discord.chat.drawer = discord_chat_state::ChatDrawer::Search;
+                tx.focus("dc-search-input", false);
+                return true;
+            }
+            _ => {}
+        }
+    }
+    if !modal_open
+        && ev.is_command('a')
+        && !ev.mods.alt
+        && !ev.mods.shift
+        && s.room == state::Room::Library
+        && s.open_game_id.is_none()
+        && !s.library_search_open
+    {
+        s.library_all_games = true;
+        return true;
+    }
+    if !modal_open
+        && ev.mods.shift
+        && !ev.mods.alt
+        && (s.room == state::Room::Discord || s.island_in_call())
+    {
+        if ev.is_command('m') {
+            s.toggle_discord_mute();
             return true;
         }
+        if ev.is_command('d') {
+            s.toggle_discord_deafen();
+            return true;
+        }
+    }
+    if !modal_open && ev.mods.alt && !ev.mods.ctrl && !ev.mods.cmd {
+        match ev.key {
+            Key::Left => {
+                if s.open_game_id.is_some() {
+                    s.close_game_page();
+                    return true;
+                }
+                if s.store_game.is_some() {
+                    s.close_store_game();
+                    return true;
+                }
+                return s.navigate_history(-1);
+            }
+            Key::Right => {
+                return s.navigate_history(1);
+            }
+            Key::Up if s.room == state::Room::Discord => {
+                return step_discord_channel(s, -1, ev.mods.shift);
+            }
+            Key::Down if s.room == state::Room::Discord => {
+                return step_discord_channel(s, 1, ev.mods.shift);
+            }
+            _ => {}
+        }
+    }
+    if !modal_open
+        && ev.mods.shift
+        && !ev.mods.ctrl
+        && !ev.mods.alt
+        && ev.key == Key::Escape
+        && s.room == state::Room::Discord
+        && let Some(gid) = s.discord.active_guild_id.clone()
+    {
+        s.discord_mark_guild_read(&gid);
+        return true;
+    }
+    if !modal_open
+        && s.room == state::Room::Music
+        && !ev.mods.ctrl
+        && !ev.mods.alt
+        && !ev.mods.cmd
+        && matches!(&ev.key, Key::Text(t) if t == " ")
+    {
+        s.music_control("toggle");
+        return true;
     }
     if s.palette_open {
         return palette::handle_palette_key(s, ev, tx);
@@ -157,6 +314,7 @@ fn on_key(s: &mut AppState, ev: &KeyEvent, tx: &mut Tx) -> bool {
 
 fn setup_state(s: &mut AppState, waker: Waker) {
     s.install_waker(waker);
+    s.notify_shell_painted_once();
     s.preload_visible_covers_sync(1.0);
     if s.room == state::Room::Discord {
         s.preload_discord_images_sync(1.0);
@@ -166,9 +324,11 @@ fn setup_state(s: &mut AppState, waker: Waker) {
 fn poll_state(s: &mut AppState, now: f64, tx: &mut Tx) -> bool {
     let notices = s.sync_and_tick_notices(now, tx);
     let setup = s.setup_tick(now);
+    let island = s.tick_island_timer(now, tx);
     let store = s.store_tick(now);
     let wp4 = s.wp4_tick(now);
-    notices || setup || store || wp4
+    let hb = s.tick_shell_heartbeat(now, tx);
+    notices || setup || island || store || wp4 || hb
 }
 
 #[cfg(windows)]
@@ -253,6 +413,39 @@ fn load_live_state_sync(pipe: &str, scene: Option<&str>) -> AppState {
         Duration::from_secs(12),
     ) {
         state.apply_bootstrap(boot);
+        state.whats_new.boot_hold_active = false;
+        state.whats_new.answered = true;
+    }
+    if let Ok(badge) = client.call_blocking::<_, serde_json::Value>(
+        "friends.badge",
+        &serde_json::json!({}),
+        Duration::from_secs(3),
+    ) && let Some(count) = badge.get("count").and_then(|v| v.as_f64())
+        && count.is_finite()
+    {
+        state.chrome.discord_badge_count = count.max(0.0).floor() as u32;
+    }
+    if let Ok(win) = client.call_blocking::<_, serde_json::Value>(
+        "shell.windowState",
+        &serde_json::json!({}),
+        Duration::from_secs(3),
+    ) {
+        if let Some(max) = win.get("maximized").and_then(|v| v.as_bool()) {
+            state.chrome.window_maximized = max;
+        }
+        state.chrome.window_maximize_hover = win
+            .get("maximizeHover")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
+    }
+    if scene == Some("downloads")
+        && let Ok(dl) = client.call_blocking::<_, serde_json::Value>(
+            "downloads.list",
+            &serde_json::json!({}),
+            Duration::from_secs(4),
+        )
+    {
+        state.downloads.list = Some(downloads::DownloadsList::from_json(&dl));
     }
     if let Ok(st) = client.call_blocking::<_, exo_rpc::CaptureStatusReply>(
         exo_rpc::METHOD_CAPTURE_STATUS,
@@ -1411,6 +1604,94 @@ const PARITY_SCENES: &[(&str, SceneSetter)] = &[
         s.switch_room(state::Room::Settings);
         s.palette_open = true;
     }),
+    ("downloads", |s: &mut AppState| {
+        s.switch_room(state::Room::Library);
+        s.downloads.open = true;
+        if s.status != state::HostStatus::Connected && s.downloads.list.is_none() {
+            s.downloads.list = Some(downloads::DownloadsList {
+                lines: vec![
+                    downloads::DownloadLine {
+                        game_id: "demo:cyberpunk".into(),
+                        title: "Cyberpunk 2077".into(),
+                        store: "steam".into(),
+                        state: "running".into(),
+                        can_pause: true,
+                        auto_update: true,
+                    },
+                    downloads::DownloadLine {
+                        game_id: "demo:elden".into(),
+                        title: "Elden Ring".into(),
+                        store: "steam".into(),
+                        state: "queued".into(),
+                        can_pause: false,
+                        auto_update: true,
+                    },
+                    downloads::DownloadLine {
+                        game_id: "demo:cs2".into(),
+                        title: "Counter-Strike 2".into(),
+                        store: "steam".into(),
+                        state: "paused".into(),
+                        can_pause: false,
+                        auto_update: false,
+                    },
+                ],
+                paused_by_player: false,
+                held: None,
+            });
+            s.install_progress = Some(exo_rpc::InstallProgress {
+                game_id: Some("demo:cyberpunk".into()),
+                is_active: true,
+                status: Some("Downloading".into()),
+                percent: 46.0,
+                bytes_per_second: 54_525_952,
+                ..Default::default()
+            });
+        }
+    }),
+    ("whats-new", |s: &mut AppState| {
+        s.switch_room(state::Room::Settings);
+        s.pc.settings_section = pc_state::SettingsSection::About;
+        if s.whats_new.current_version.is_none() {
+            s.whats_new.current_version = Some("3.29.0".into());
+        }
+        s.whats_new.mode = Some(whats_new::WhatsNewMode::All);
+    }),
+    ("update-sheet", |s: &mut AppState| {
+        s.switch_room(state::Room::Library);
+        s.whats_new.latest = Some("3.30.0".into());
+        s.whats_new.not_now = true;
+        s.whats_new.sheet_open = true;
+    }),
+    ("island", |s: &mut AppState| {
+        s.switch_room(state::Room::Library);
+        s.chrome.discord_badge_count = 3;
+        s.discord.voice = exo_rpc::DiscordVoice {
+            state: "connected".into(),
+            guild_id: Some("g1".into()),
+            channel_id: Some("c1".into()),
+            muted: false,
+            deafened: false,
+            ..Default::default()
+        };
+        s.island.place_channel = Some("General".into());
+        s.island.place_server = Some("Squad".into());
+        s.island.call_started_at = Some(0.0);
+    }),
+    ("driver-install", |s: &mut AppState| {
+        s.advance_driver_install(
+            boot::DriverInstallKind::Gpu,
+            boot::DriverInstallPhase::Downloading,
+            Some("NVIDIA".into()),
+            Some("572.16".into()),
+            Some(0.42),
+            None,
+            None,
+            None,
+        );
+    }),
+    ("boot-error", |s: &mut AppState| {
+        s.status = state::HostStatus::Error("Could not connect to Exo host.".into());
+    }),
     ("game", |s: &mut AppState| {
         let target = s
             .open_game_id
@@ -2176,6 +2457,11 @@ fn run_parity_probe(
         "capturesOpen": rt.state.media.captures_open,
         "capturesSettingsOpen": rt.state.media.captures_settings_open,
         "keyModalOpen": rt.state.key_modal_open,
+        "downloadsOpen": rt.state.downloads.open,
+        "whatsNewOpen": rt.state.whats_new.mode.is_some(),
+        "updateSheetOpen": rt.state.whats_new.sheet_open,
+        "islandVisible": rt.state.island_visible(),
+        "driverInstallOpen": rt.state.driver_install_overlay_visible(),
         "setupStage": rt.state.setup.stage,
         "settingsSection": format!("{:?}", rt.state.pc.settings_section),
         "pcTab": format!("{:?}", rt.state.pc.pc_tab),
@@ -4408,5 +4694,121 @@ mod motion_audit {
         rt.state.open_mouse_panel("dev:mouse".into());
         assert!(rt.state.dismiss_top_layer());
         assert!(!rt.state.pc.mouse_panel_open);
+    }
+
+    #[test]
+    fn wp3_global_shortcuts_and_modal_holds() {
+        let mut s = AppState::default();
+        let mut tx = Tx::default();
+        let ctrl = rune::Mods {
+            ctrl: true,
+            ..Default::default()
+        };
+        let alt = rune::Mods {
+            alt: true,
+            ..Default::default()
+        };
+        let ctrl_shift = rune::Mods {
+            ctrl: true,
+            shift: true,
+            ..Default::default()
+        };
+
+        assert!(!s.library_all_games);
+        assert!(on_key(
+            &mut s,
+            &KeyEvent {
+                key: Key::Command('a'),
+                mods: ctrl,
+            },
+            &mut tx
+        ));
+        assert!(s.library_all_games);
+
+        assert!(on_key(
+            &mut s,
+            &KeyEvent {
+                key: Key::Command('f'),
+                mods: ctrl,
+            },
+            &mut tx
+        ));
+        assert!(s.library_search_open);
+
+        s.switch_room(Room::Store);
+        s.switch_room(Room::Music);
+        assert_eq!(s.room, Room::Music);
+        assert!(on_key(
+            &mut s,
+            &KeyEvent {
+                key: Key::Left,
+                mods: alt,
+            },
+            &mut tx
+        ));
+        assert_eq!(s.room, Room::Store);
+        assert!(on_key(
+            &mut s,
+            &KeyEvent {
+                key: Key::Right,
+                mods: alt,
+            },
+            &mut tx
+        ));
+        assert_eq!(s.room, Room::Music);
+
+        s.switch_room(Room::Discord);
+        let muted_before = s.discord.voice.muted;
+        assert!(on_key(
+            &mut s,
+            &KeyEvent {
+                key: Key::Command('m'),
+                mods: ctrl_shift,
+            },
+            &mut tx
+        ));
+        assert_eq!(s.discord.voice.muted, !muted_before);
+
+        let deaf_before = s.discord.voice.deafened;
+        assert!(on_key(
+            &mut s,
+            &KeyEvent {
+                key: Key::Command('d'),
+                mods: ctrl_shift,
+            },
+            &mut tx
+        ));
+        assert_eq!(s.discord.voice.deafened, !deaf_before);
+
+        s.whats_new.sheet_open = true;
+        assert!(on_key(
+            &mut s,
+            &KeyEvent {
+                key: Key::Command('k'),
+                mods: ctrl,
+            },
+            &mut tx
+        ));
+        assert!(!s.palette_open);
+    }
+
+    #[test]
+    fn wp3_mini_player_seek_and_mute_state() {
+        let mut s = AppState::default();
+        s.media.music_volume = 0.65;
+        s.media.music_muted = false;
+        s.toggle_mini_mute();
+        assert!(s.media.music_muted);
+        assert!((s.chrome.mini_last_audible - 0.65).abs() < 0.01);
+
+        s.media.music_volume = 0.0;
+        s.toggle_mini_mute();
+        assert!(!s.media.music_muted);
+        assert!((s.media.music_volume - 0.65).abs() < 0.01);
+
+        s.seek_music_ms(42_000);
+        if let Some(p) = s.media.playback.as_ref() {
+            assert_eq!(p.position_ms, Some(42_000));
+        }
     }
 }

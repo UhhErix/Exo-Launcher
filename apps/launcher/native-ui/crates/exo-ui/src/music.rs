@@ -6,12 +6,13 @@ use exo_kit::{
     glass_capsule, glass_control_fill, glass_rim, glass_rim_bottom, glass_rim_top, good,
     hover_fill, icon_back, icon_close, icon_home, icon_maximize, icon_more_horiz, icon_music,
     icon_pause, icon_play, icon_plus, icon_search, icon_skip_back, icon_skip_forward,
-    icon_sparkles, icon_volume, icon_volume_off, pressed_fill, primary_button,
+    icon_sparkles, icon_volume, icon_volume_low, icon_volume_off, pressed_fill, primary_button,
+    slider_track,
 };
 use exo_rpc::{PlayerCard, PlayerSection, PlayerTrack, format_duration_ms};
 use rune::{
-    Color, El, ScrollSpec, Shape, SurfaceFit, TextStyle, canvas, col, edit_access, el, row, text,
-    text_input,
+    Color, Cursor, El, Phase, ScrollSpec, Shape, SurfaceFit, TextStyle, canvas, col, edit_access,
+    el, row, text, text_input,
 };
 
 const SIDEBAR_W: f32 = 272.0;
@@ -1525,6 +1526,9 @@ pub fn mini_player(s: &AppState, scale: f32, slot: crate::state::MiniBarSlot) ->
         || s.setup.beat.is_some()
         || s.palette_open
         || s.key_modal_open
+        || s.downloads.open
+        || s.whats_new.mode.is_some()
+        || s.whats_new.sheet_open
         || s.props_open
         || s.media.open_capture_id.is_some()
     {
@@ -1532,30 +1536,58 @@ pub fn mini_player(s: &AppState, scale: f32, slot: crate::state::MiniBarSlot) ->
     }
     let track = s.media.playback.as_ref().filter(|p| p.has_track())?;
     let playing = track.is_playing();
-    let progress = match (track.position_ms, track.duration_ms) {
+    let duration_ms = track.duration_ms.unwrap_or(0);
+    let live_progress = match (track.position_ms, track.duration_ms) {
         (Some(pos), Some(dur)) if dur > 0 => (pos as f32 / dur as f32).clamp(0.0, 1.0),
         _ => 0.0,
     };
+    let progress = s.chrome.mini_seek_preview.unwrap_or(live_progress);
+    let can_prev = track.can_prev;
+    let can_next = track.can_next;
+    let can_toggle = if playing {
+        track.can_pause
+    } else {
+        track.can_play
+    };
+    let can_seek = track.can_seek && duration_ms > 0;
 
-    let toggle_btn = el()
-        .key("mini-toggle")
+    let toggle_key = match slot {
+        MiniBarSlot::Compact => "mini-toggle-compact",
+        MiniBarSlot::Medium => "mini-toggle-medium",
+        _ => "mini-toggle",
+    };
+    let mut toggle_btn = el()
+        .key(toggle_key)
         .role("button")
-        .label(if playing { "Pause" } else { "Play" })
-        .focusable(true)
+        .label(if playing { "Pause music" } else { "Play music" })
+        .focusable(can_toggle)
+        .disabled(!can_toggle)
         .hit()
+        .cursor(if can_toggle {
+            Cursor::Pointer
+        } else {
+            Cursor::NotAllowed
+        })
         .press_on_down()
         .press_scale(PRESS_SCALE)
         .size(28.0, 28.0)
         .radius(RADIUS_PILL)
         .center()
-        .hover(hover_fill())
-        .motion(SPRING_QUICK)
-        .on_press(|s: &mut AppState| s.music_control("toggle"))
+        .hover(if can_toggle {
+            hover_fill()
+        } else {
+            TRANSPARENT
+        })
+        .opacity(if can_toggle { 1.0 } else { 0.4 })
+        .hover_motion(SPRING_QUICK, SPRING_QUICK)
         .child(if playing {
             icon_pause(15.0, FG)
         } else {
             icon_play(15.0, FG)
         });
+    if can_toggle {
+        toggle_btn = toggle_btn.on_press(|s: &mut AppState| s.music_control("toggle"));
+    }
 
     let thumb = if let Some(img) = s.current_playback_art(scale) {
         el().size(24.0, 24.0)
@@ -1577,13 +1609,14 @@ pub fn mini_player(s: &AppState, scale: f32, slot: crate::state::MiniBarSlot) ->
             .label("Open Music")
             .focusable(true)
             .hit()
+            .cursor(Cursor::Pointer)
             .press_on_down()
             .press_scale(PRESS_SCALE)
             .size(28.0, 28.0)
             .radius(RADIUS_SMALL)
             .center()
             .hover(hover_fill())
-            .motion(SPRING_QUICK)
+            .hover_motion(SPRING_QUICK, SPRING_QUICK)
             .on_press(|s: &mut AppState| s.switch_room(Room::Music))
             .child(thumb);
 
@@ -1596,131 +1629,226 @@ pub fn mini_player(s: &AppState, scale: f32, slot: crate::state::MiniBarSlot) ->
         );
     }
 
-    let muted = s.media.music_muted;
+    let full = slot == MiniBarSlot::Inline;
+    let muted = s.media.music_muted || s.media.music_volume <= 0.001;
+    let vol_pct = (s.media.music_volume.clamp(0.0, 1.0) * 100.0).round() as i32;
+    let vol_icon = if muted {
+        icon_volume_off(15.0, fg_muted())
+    } else if vol_pct < 50 {
+        icon_volume_low(15.0, fg_muted())
+    } else {
+        icon_volume(15.0, fg_muted())
+    };
+
     let mute_btn = el()
         .key("mini-mute")
         .role("button")
-        .label(if muted { "Unmute" } else { "Mute" })
+        .label(if muted { "Unmute music" } else { "Mute music" })
         .focusable(true)
         .hit()
+        .cursor(Cursor::Pointer)
         .press_on_down()
         .size(28.0, 28.0)
         .radius(RADIUS_PILL)
         .center()
         .hover(hover_fill())
-        .on_press(|s: &mut AppState| {
-            let next = !s.media.music_muted;
-            s.music_set_volume(s.media.music_volume, Some(next));
+        .on_press(move |s: &mut AppState| {
+            if full {
+                s.toggle_mini_mute();
+            } else {
+                s.chrome.mini_volume_open = !s.chrome.mini_volume_open;
+            }
         })
-        .child(if muted {
-            icon_volume_off(15.0, fg_muted())
-        } else {
-            icon_volume(15.0, fg_muted())
-        });
+        .child(vol_icon);
 
-    let full = slot == MiniBarSlot::Inline;
     let controls = if full {
+        let mut prev_btn = el()
+            .key("mini-prev")
+            .role("button")
+            .label("Previous song")
+            .focusable(can_prev)
+            .disabled(!can_prev)
+            .hit()
+            .cursor(if can_prev {
+                Cursor::Pointer
+            } else {
+                Cursor::NotAllowed
+            })
+            .press_on_down()
+            .press_scale(PRESS_SCALE)
+            .size(28.0, 28.0)
+            .radius(RADIUS_PILL)
+            .center()
+            .hover(if can_prev { hover_fill() } else { TRANSPARENT })
+            .opacity(if can_prev { 1.0 } else { 0.4 })
+            .motion(SPRING_QUICK)
+            .child(icon_skip_back(15.0, FG));
+        if can_prev {
+            prev_btn = prev_btn.on_press(|s: &mut AppState| s.music_control("previous"));
+        }
+
+        let mut next_btn = el()
+            .key("mini-next")
+            .role("button")
+            .label("Next song")
+            .focusable(can_next)
+            .disabled(!can_next)
+            .hit()
+            .cursor(if can_next {
+                Cursor::Pointer
+            } else {
+                Cursor::NotAllowed
+            })
+            .press_on_down()
+            .press_scale(PRESS_SCALE)
+            .size(28.0, 28.0)
+            .radius(RADIUS_PILL)
+            .center()
+            .hover(if can_next { hover_fill() } else { TRANSPARENT })
+            .opacity(if can_next { 1.0 } else { 0.4 })
+            .motion(SPRING_QUICK)
+            .child(icon_skip_forward(15.0, FG));
+        if can_next {
+            next_btn = next_btn.on_press(|s: &mut AppState| s.music_control("next"));
+        }
+
         row()
             .gap(2.0)
             .center_y()
-            .child(
-                el().key("mini-prev")
-                    .role("button")
-                    .label("Previous track")
-                    .focusable(true)
-                    .hit()
-                    .press_on_down()
-                    .press_scale(PRESS_SCALE)
-                    .size(28.0, 28.0)
-                    .radius(RADIUS_PILL)
-                    .center()
-                    .hover(hover_fill())
-                    .motion(SPRING_QUICK)
-                    .on_press(|s: &mut AppState| s.music_control("prev"))
-                    .child(icon_skip_back(15.0, FG)),
-            )
+            .child(prev_btn)
             .child(toggle_btn)
-            .child(
-                el().key("mini-next")
-                    .role("button")
-                    .label("Next track")
-                    .focusable(true)
-                    .hit()
-                    .press_on_down()
-                    .press_scale(PRESS_SCALE)
-                    .size(28.0, 28.0)
-                    .radius(RADIUS_PILL)
-                    .center()
-                    .hover(hover_fill())
-                    .motion(SPRING_QUICK)
-                    .on_press(|s: &mut AppState| s.music_control("next"))
-                    .child(icon_skip_forward(15.0, FG)),
-            )
+            .child(next_btn)
     } else {
         row().center_y().child(toggle_btn)
     };
 
-    let lcd_w: f32 = if full { 164.0 } else { 104.0 };
-    let seek_w: f32 = lcd_w;
-    let lcd = row()
-        .key("mini-open-music")
-        .role("button")
-        .label("Open Music")
-        .focusable(true)
-        .hit()
-        .press_on_down()
-        .h(30.0)
-        .gap(8.0)
-        .pr(if full { 8.0 } else { 6.0 })
-        .radius(RADIUS_SMALL)
-        .hover(hover_fill())
+    let lcd_w: f32 = if full { 158.0 } else { 96.0 };
+    let mut seek_bar = el()
+        .key("mini-seek")
+        .role("slider")
+        .label("Seek song")
+        .w(lcd_w)
+        .h(7.0)
         .center_y()
-        .on_press(|s: &mut AppState| s.switch_room(Room::Music))
-        .child(thumb)
         .child(
-            col()
-                .w(lcd_w)
-                .gap(4.0)
+            el().w(lcd_w)
+                .h(3.0)
+                .radius(2.0)
+                .fill(track_bg_fill())
                 .child(
-                    row()
-                        .w_full()
-                        .gap(6.0)
-                        .center_y()
-                        .child(
-                            text(track.title.clone())
-                                .font(scaled_mini_title(s))
-                                .color(FG)
-                                .truncate(),
-                        )
-                        .children((full && !track.artist.is_empty()).then(|| {
-                            text(track.artist.clone())
-                                .font(scaled_small(s))
-                                .color(fg_muted())
-                                .truncate()
-                                .grow(1.0)
-                                .min_w(0.0)
-                        })),
-                )
-                .child(
-                    el().w(seek_w)
+                    el().w((lcd_w * progress).clamp(0.0, lcd_w))
                         .h(3.0)
                         .radius(2.0)
-                        .fill(track_bg_fill())
-                        .child(
-                            el().w((seek_w * progress).clamp(0.0, seek_w))
-                                .h(3.0)
-                                .radius(2.0)
-                                .fill(FG),
-                        ),
+                        .fill(FG),
                 ),
         );
+    if can_seek {
+        seek_bar = seek_bar
+            .hit()
+            .cursor(Cursor::Pointer)
+            .on_drag(move |s: &mut AppState, d, _| {
+                let frac = (d.x / d.w.max(1.0)).clamp(0.0, 1.0);
+                match d.phase {
+                    Phase::Down | Phase::Move => {
+                        s.chrome.mini_dragging_seek = true;
+                        s.chrome.mini_seek_preview = Some(frac);
+                    }
+                    Phase::Up => {
+                        s.chrome.mini_dragging_seek = false;
+                        s.chrome.mini_seek_preview = None;
+                        if !d.cancelled() {
+                            let target = (duration_ms as f64 * frac as f64).round() as i64;
+                            s.seek_music_ms(target);
+                        }
+                    }
+                }
+            });
+    }
+
+    let track_btn = row()
+        .key("mini-open-music")
+        .role("button")
+        .label(format!("Open Music: {} by {}", track.title, track.artist))
+        .focusable(true)
+        .hit()
+        .cursor(Cursor::Pointer)
+        .press_on_down()
+        .h(22.0)
+        .w(lcd_w)
+        .gap(6.0)
+        .center_y()
+        .radius(RADIUS_SMALL)
+        .hover(hover_fill())
+        .on_press(|s: &mut AppState| s.switch_room(Room::Music))
+        .child(
+            text(track.title.clone())
+                .font(scaled_mini_title(s))
+                .color(FG)
+                .truncate(),
+        )
+        .children((full && !track.artist.is_empty()).then(|| {
+            text(track.artist.clone())
+                .font(scaled_small(s))
+                .color(fg_muted())
+                .truncate()
+                .grow(1.0)
+                .min_w(0.0)
+        }));
+
+    let lcd = row()
+        .h(30.0)
+        .gap(8.0)
+        .pr(if full { 6.0 } else { 4.0 })
+        .center_y()
+        .child(
+            el().hit()
+                .cursor(Cursor::Pointer)
+                .on_press(|s: &mut AppState| s.switch_room(Room::Music))
+                .child(thumb),
+        )
+        .child(col().w(lcd_w).gap(1.0).child(track_btn).child(seek_bar));
 
     let volume = if full {
+        let vol_w = 60.0;
+        let vol_slider = slider_track(
+            "mini-volume-slider",
+            "Music volume",
+            vol_w,
+            if muted {
+                0.0
+            } else {
+                s.media.music_volume as f32
+            },
+            s.chrome.mini_dragging_vol,
+            false,
+        )
+        .on_drag(move |s: &mut AppState, d, _| {
+            let frac = (d.x / d.w.max(1.0)).clamp(0.0, 1.0);
+            if frac > 0.01 {
+                s.chrome.mini_last_audible = frac;
+            }
+            match d.phase {
+                Phase::Down | Phase::Move => {
+                    s.chrome.mini_dragging_vol = true;
+                    s.music_set_volume(frac as f64, Some(frac <= 0.001));
+                }
+                Phase::Up => {
+                    s.chrome.mini_dragging_vol = false;
+                    s.music_set_volume(frac as f64, Some(frac <= 0.001));
+                }
+            }
+        });
         row()
-            .gap(6.0)
+            .gap(4.0)
             .center_y()
             .child(mute_btn)
-            .child(volume_slider("mini", 72.0, s.media.music_volume, muted))
+            .child(vol_slider)
+            .child(
+                text(format!("{vol_pct}%"))
+                    .font(scaled_small(s))
+                    .color(fg_muted())
+                    .w(26.0),
+            )
     } else {
         row().center_y().child(mute_btn)
     };
@@ -1728,7 +1856,7 @@ pub fn mini_player(s: &AppState, scale: f32, slot: crate::state::MiniBarSlot) ->
     Some(
         glass_capsule("music-mini-player")
             .px(if full { 6.0 } else { 5.0 })
-            .gap(if full { 10.0 } else { 6.0 })
+            .gap(6.0)
             .child(controls)
             .child(lcd)
             .child(volume),

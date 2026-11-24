@@ -8,99 +8,11 @@
     "wooting-native 57db49a"
   ],
   "totals": {
-    "overall": {
-      "DONE": 106,
-      "PARTIAL": 57,
-      "MISSING": 71,
-      "BROKEN": 4,
-      "total": 238
-    },
-    "byRoom": {
-      "Shell & Bar": {
-        "DONE": 6,
-        "PARTIAL": 10,
-        "MISSING": 9,
-        "BROKEN": 0,
-        "total": 25
-      },
-      "Library": {
-        "DONE": 6,
-        "PARTIAL": 7,
-        "MISSING": 6,
-        "BROKEN": 2,
-        "total": 21
-      },
-      "Game page": {
-        "DONE": 22,
-        "PARTIAL": 0,
-        "MISSING": 0,
-        "BROKEN": 0,
-        "total": 22
-      },
-      "Store": {
-        "DONE": 16,
-        "PARTIAL": 1,
-        "MISSING": 0,
-        "BROKEN": 0,
-        "total": 17
-      },
-      "Discord": {
-        "DONE": 9,
-        "PARTIAL": 16,
-        "MISSING": 20,
-        "BROKEN": 0,
-        "total": 45
-      },
-      "Music": {
-        "DONE": 5,
-        "PARTIAL": 7,
-        "MISSING": 9,
-        "BROKEN": 0,
-        "total": 21
-      },
-      "Exo AI / PC": {
-        "DONE": 21,
-        "PARTIAL": 0,
-        "MISSING": 0,
-        "BROKEN": 0,
-        "total": 21
-      },
-      "Apps": {
-        "DONE": 12,
-        "PARTIAL": 0,
-        "MISSING": 0,
-        "BROKEN": 0,
-        "total": 12
-      },
-      "Devices": {
-        "DONE": 3,
-        "PARTIAL": 3,
-        "MISSING": 4,
-        "BROKEN": 1,
-        "total": 11
-      },
-      "Captures": {
-        "DONE": 0,
-        "PARTIAL": 4,
-        "MISSING": 5,
-        "BROKEN": 1,
-        "total": 10
-      },
-      "Settings": {
-        "DONE": 6,
-        "PARTIAL": 5,
-        "MISSING": 12,
-        "BROKEN": 0,
-        "total": 23
-      },
-      "Onboarding & Account": {
-        "DONE": 0,
-        "PARTIAL": 4,
-        "MISSING": 6,
-        "BROKEN": 0,
-        "total": 10
-      }
-    }
+    "DONE": 124,
+    "PARTIAL": 47,
+    "MISSING": 63,
+    "BROKEN": 4,
+    "total": 238
   },
   "rows": [
     {
@@ -129,28 +41,28 @@
       "id": "shell-bar-03",
       "room": "Shell & Bar",
       "feature": "Discord unread / mention badge on nav tab",
-      "status": "MISSING",
+      "status": "DONE",
       "reactRef": "components/shell/DiscordBadge.tsx:6",
-      "nativeRef": null,
+      "nativeRef": "exo-ui/src/shell.rs:339",
       "rpc": [
         "friends.badge",
         "discord.mentions"
       ],
-      "notes": "No badge anywhere in shell.rs; friends.badge never called.",
+      "notes": "Red 99+ pill badge on Discord tab wired to friends.badge RPC and push event via events.rs.",
       "workPackage": "WP3"
     },
     {
       "id": "shell-bar-04",
       "room": "Shell & Bar",
       "feature": "Mini player in bar (title, play/pause, next, volume)",
-      "status": "PARTIAL",
+      "status": "DONE",
       "reactRef": "components/shell/MusicMiniPlayer.tsx:103",
-      "nativeRef": "exo-ui/src/music.rs:1520",
+      "nativeRef": "exo-ui/src/music.rs:1521",
       "rpc": [
         "music.control",
         "music.volume"
       ],
-      "notes": "Controls work; React MusicVolume popover, seek and open-now-playing click partial.",
+      "notes": "Interactive seek drag, previous/toggle/next with disabled states, volume slider and mute remembering last_audible, Medium popover (shell.rs:360).",
       "workPackage": "WP3"
     },
     {
@@ -173,7 +85,7 @@
       "feature": "Settings gear",
       "status": "DONE",
       "reactRef": "components/shell/TitleBar.tsx:34",
-      "nativeRef": "exo-ui/src/shell.rs:3",
+      "nativeRef": "exo-ui/src/shell.rs:676",
       "rpc": [],
       "notes": "",
       "workPackage": null
@@ -182,13 +94,14 @@
       "id": "shell-bar-07",
       "room": "Shell & Bar",
       "feature": "Window controls (min/max/close, drag, double-click maximize)",
-      "status": "PARTIAL",
+      "status": "DONE",
       "reactRef": "components/WindowChrome.tsx:6",
-      "nativeRef": "exo-ui/src/shell.rs:407",
+      "nativeRef": "exo-ui/src/shell.rs:753",
       "rpc": [
-        "shell.window"
+        "shell.window",
+        "shell.windowState"
       ],
-      "notes": "shell.window event (maximize state) not handled; maximize icon does not follow host state.",
+      "notes": "Handles shell.windowState and shell.window event; Restore/Maximize icon and hover mirror host state; buttons wired to Tx minimize/toggle_maximized/close_window.",
       "workPackage": "WP3"
     },
     {
@@ -206,195 +119,208 @@
       "id": "shell-bar-09",
       "room": "Shell & Bar",
       "feature": "Exo Island (in-call / download capsule)",
-      "status": "MISSING",
+      "status": "DONE",
       "reactRef": "components/shell/ExoIsland.tsx:6",
-      "nativeRef": null,
+      "nativeRef": "exo-ui/src/island.rs:324",
       "rpc": [
         "discord.ring",
-        "discord.myVoice",
-        "downloads.list"
+        "discord.voice"
       ],
-      "notes": "Not in native at all; also ExoIslandCall.tsx (call controls from any room).",
+      "notes": "In-call capsule outside Discord (speaking dot, channel/server, 4 faces + overflow, per-user mute/volume menu, Live badge, live timer, Mute/Deafen/Leave) and incoming call ring capsule (discord.call / discord.ring).",
       "workPackage": "WP3"
     },
     {
       "id": "shell-bar-10",
       "room": "Shell & Bar",
       "feature": "Downloads sheet (queue, pause, cancel, resume, speed, order)",
-      "status": "PARTIAL",
+      "status": "DONE",
       "reactRef": "components/DownloadsSheet.tsx:23",
-      "nativeRef": "exo-ui/src/library.rs:398",
+      "nativeRef": "exo-ui/src/downloads.rs:412",
       "rpc": [
         "downloads.list",
         "downloads.pauseAll",
         "downloads.resumeAll",
         "downloads.move",
+        "game.dequeue",
+        "game.resumeDownload",
         "game.pauseInstall",
-        "game.cancelInstall"
+        "game.cancelInstall",
+        "game.autoUpdate"
       ],
-      "notes": "Native only has pause/cancel buttons on the game page; downloads.* never called; no sheet, no queue.",
+      "notes": "Full 880x760 DownloadsSheet matching React: Now/Up next/Paused groups, live speed & progress, reorder, auto-update toggle, pause/resume all, live install.queue/install.progress refresh.",
       "workPackage": "WP3"
     },
     {
       "id": "shell-bar-11",
       "room": "Shell & Bar",
       "feature": "What's New sheet (changelog after update)",
-      "status": "MISSING",
+      "status": "DONE",
       "reactRef": "components/shell/WhatsNewSheet.tsx:19",
-      "nativeRef": null,
-      "rpc": [],
-      "notes": "versions.new event not handled.",
+      "nativeRef": "exo-ui/src/whats_new.rs:930",
+      "rpc": [
+        "settings.set"
+      ],
+      "notes": "Embeds whatsNew.json and CHANGELOG.md, auto-opens missed releases after update, persists whatsNewSeen, handles versions.new event.",
       "workPackage": "WP3"
     },
     {
       "id": "shell-bar-12",
       "room": "Shell & Bar",
       "feature": "App update flow (check, download progress, install, restart)",
-      "status": "PARTIAL",
+      "status": "DONE",
       "reactRef": "components/shell/useAppUpdate.ts:69",
-      "nativeRef": "exo-ui/src/settings.rs:295",
+      "nativeRef": "exo-ui/src/whats_new.rs:1090",
       "rpc": [
         "app.checkUpdate",
         "app.installUpdate"
       ],
-      "notes": "Only Settings > About buttons; no auto toast, no progress, no update sheet.",
+      "notes": "Startup check with 800ms boot hold, manual check, UpdateSheet with progress/error/retry, app.updateState/app.updateProgress events, NoticeStack notices.",
       "workPackage": "WP3"
     },
     {
       "id": "shell-bar-13",
       "room": "Shell & Bar",
       "feature": "Activate key sheet",
-      "status": "PARTIAL",
+      "status": "DONE",
       "reactRef": "components/ActivateKeySheet.tsx:19",
-      "nativeRef": "exo-ui/src/key_modal.rs:36",
+      "nativeRef": "exo-ui/src/key_modal.rs:182",
       "rpc": [
         "keys.activate",
         "keys.preview"
       ],
-      "notes": "keys.found event (clipboard key found) not handled.",
+      "notes": "Steam/Epic/GOG store chips, keys.preview respecting user edits, Copy key, inline error, Epic clipboard copy before activate, keys.found push event.",
       "workPackage": "WP3"
     },
     {
       "id": "shell-bar-14",
       "room": "Shell & Bar",
       "feature": "Toast / notice stack (with actions, tones, auto-dismiss)",
-      "status": "PARTIAL",
+      "status": "DONE",
       "reactRef": "components/shell/NoticeStack.tsx:18",
-      "nativeRef": "exo-ui/src/state.rs:2570",
+      "nativeRef": "exo-ui/src/notice.rs:960",
       "rpc": [],
-      "notes": "Plain text notices only; app.notify / notifyClear events not handled; no actions.",
+      "notes": "Bottom-right stack (lifted in Music), titles, where label, count badge, 36px avatar/tone glyph, confirm actions, edge progress bar, click-to-open, waiting queue, app.notify/app.notifyClear.",
       "workPackage": "WP3"
     },
     {
       "id": "shell-bar-15",
       "room": "Shell & Bar",
       "feature": "Anti-cheat missing notice (install anti-cheat prompt)",
-      "status": "MISSING",
+      "status": "DONE",
       "reactRef": "components/shell/AntiCheatNotices.tsx:31",
-      "nativeRef": null,
-      "rpc": [],
-      "notes": "anticheat.missing event not handled.",
+      "nativeRef": "exo-ui/src/notice.rs:139",
+      "rpc": [
+        "runtimes.install"
+      ],
+      "notes": "Handles anticheat.missing push event with Install action calling runtimes.install.",
       "workPackage": "WP3"
     },
     {
       "id": "shell-bar-16",
       "room": "Shell & Bar",
       "feature": "Store outage notices",
-      "status": "MISSING",
+      "status": "DONE",
       "reactRef": "components/shell/StoreOutageNotices.tsx:57",
-      "nativeRef": null,
+      "nativeRef": "exo-ui/src/notice.rs:174",
       "rpc": [
-        "stores.outage"
+        "stores.outages",
+        "stores.playOffline"
       ],
-      "notes": "stores.outage event/RPC absent.",
+      "notes": "Handles stores.outage event and fetches stores.outages on connect with Play offline action.",
       "workPackage": "WP3"
     },
     {
       "id": "shell-bar-17",
       "room": "Shell & Bar",
       "feature": "Discord DM / ping toasts",
-      "status": "MISSING",
+      "status": "DONE",
       "reactRef": "components/shell/DiscordNotices.tsx:12",
-      "nativeRef": null,
+      "nativeRef": "exo-ui/src/notice.rs:179",
       "rpc": [
         "discord.notify",
         "discord.dmLine"
       ],
-      "notes": "discord.notify/dmLine events not handled.",
+      "notes": "Handles discord.notify, discord.notifyClear, discord.dmLine with count coalescing and click-to-open navigation.",
       "workPackage": "WP3"
     },
     {
       "id": "shell-bar-18",
       "room": "Shell & Bar",
       "feature": "Driver install overlay",
-      "status": "MISSING",
+      "status": "DONE",
       "reactRef": "components/shell/DriverInstallOverlay.tsx:140",
-      "nativeRef": null,
+      "nativeRef": "exo-ui/src/boot.rs:598",
       "rpc": [
-        "gpu.driverInstall"
+        "gpu.driverInstall",
+        "bios.update",
+        "app.logsFor"
       ],
-      "notes": "gpu.driverInstall event not handled.",
+      "notes": "Opaque #000 overlay for gpu.driver and gpu.driverInstall with monotonic phases, milestone rail, Hide until it installs, Not now / Restart now, Copy logs.",
       "workPackage": "WP3"
     },
     {
       "id": "shell-bar-19",
       "room": "Shell & Bar",
       "feature": "Boot gate + error boundary (splash, retry, crash screen)",
-      "status": "PARTIAL",
+      "status": "DONE",
       "reactRef": "components/shell/BootGate.tsx:87",
-      "nativeRef": "exo-ui/src/main.rs:143",
+      "nativeRef": "exo-ui/src/boot.rs:448",
       "rpc": [
         "shell.bootstrap",
-        "shell.ready"
+        "shell.painted",
+        "app.openLogs",
+        "app.logsFor"
       ],
-      "notes": "No splash/retry UI; host-down state silently renders empty rooms; ErrorBoundary equivalent absent.",
+      "notes": "BootSplash while connecting/update-hold, shell.painted on setup, BootGate error screen (Try again, Open logs, Copy logs), catch_unwind room ErrorBoundary.",
       "workPackage": "WP3"
     },
     {
       "id": "shell-bar-20",
       "room": "Shell & Bar",
       "feature": "Gamepad bar / controller navigation",
-      "status": "PARTIAL",
+      "status": "DONE",
       "reactRef": "components/shell/GamepadBar.tsx:41",
-      "nativeRef": "exo-ui/src/gamepad.rs:1",
+      "nativeRef": "exo-ui/src/gamepad.rs:152",
       "rpc": [],
-      "notes": "173 lines: focus ring + hint bar; no Y/X actions, no per-room mapping, no wiggle.",
+      "notes": "Xbox/PlayStation/Nintendo glyphs, START/BACK/LT/RT XInput polling, context-aware bar with paused Controller Lab state, per-room subtab cycling.",
       "workPackage": "WP3"
     },
     {
       "id": "shell-bar-21",
       "room": "Shell & Bar",
       "feature": "Global keyboard shortcuts (Ctrl+F, Ctrl+A, Alt+arrows, etc.)",
-      "status": "PARTIAL",
+      "status": "DONE",
       "reactRef": "components/shell/useRoomController.ts:312",
-      "nativeRef": "exo-ui/src/main.rs:78",
+      "nativeRef": "exo-ui/src/main.rs:131",
       "rpc": [],
-      "notes": "Only Ctrl+K, Ctrl+, , Ctrl+1..7, Escape. Missing Ctrl+F library search, Ctrl+A select-all, Discord Alt/Ctrl nav, Music shortcuts.",
+      "notes": "Ctrl+K, Ctrl+,, Ctrl+1..7, Ctrl+F (Library/Store/Discord), Ctrl+A (Library), Ctrl+Shift+M/D, Alt+Left/Right history/back, Alt+Up/Down (+Shift unread) Discord channels, Shift+Escape mark read, Space in Music, modal holds.",
       "workPackage": "WP3"
     },
     {
       "id": "shell-bar-22",
       "room": "Shell & Bar",
       "feature": "Command palette (rooms, settings, games, actions)",
-      "status": "PARTIAL",
+      "status": "DONE",
       "reactRef": "components/shell/launcherCommands.ts:1",
-      "nativeRef": "exo-ui/src/palette.rs:14",
+      "nativeRef": "exo-ui/src/palette.rs:526",
       "rpc": [],
-      "notes": "Has Rooms, PC sections, Settings sections, games, Add game, Refresh, Activate key, Resume setup, Check updates.",
+      "notes": "Rooms, PC sections, Settings sections, games, Downloads, What's new, Add game, Refresh, Activate key, Resume/Take tour, Check updates, Minimize/Close window.",
       "workPackage": "WP3"
     },
     {
       "id": "shell-bar-23",
       "room": "Shell & Bar",
       "feature": "Palette: Take the tour, Minimize/Close window, Play/Install selected, note commands, Discord DMs/servers/channels, music controls",
-      "status": "MISSING",
+      "status": "DONE",
       "reactRef": "components/shell/paletteExtras.ts:1",
-      "nativeRef": null,
+      "nativeRef": "exo-ui/src/palette.rs:42",
       "rpc": [
+        "notes.list",
         "discord.home",
+        "discord.channels",
         "music.control"
       ],
-      "notes": "All absent natively.",
+      "notes": "Loads notes.list, discord.home, discord.channels on open; adds Play/Install selected game, notes, Discord DMs/servers/channels, Music play-pause/next/previous/open.",
       "workPackage": "WP3"
     },
     {

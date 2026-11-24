@@ -150,6 +150,52 @@ export const STATES = [
     },
   },
   {
+    id: 'shell-downloads-sheet',
+    room: 'shell',
+    name: 'Downloads sheet modal',
+    kind: 'modal',
+    priority: 2,
+    expectGlass: true,
+    react: {
+      room: 'Library',
+      steps: [
+        { type: 'click', selector: 'button[aria-label="More"]' },
+        { type: 'wait', ms: 350 },
+        { type: 'clickText', selector: '[role="menu"] [role^="menuitem"]', text: /^Downloads$/i },
+        { type: 'wait', ms: 500 },
+      ],
+      openSelector: '.exo-downloads-sheet, [role="dialog"]',
+    },
+    native: {
+      scene: 'downloads',
+      expect: { downloadsOpen: true },
+    },
+  },
+  {
+    id: 'shell-whats-new-sheet',
+    room: 'shell',
+    name: 'What\'s New changelog modal',
+    kind: 'modal',
+    priority: 2,
+    expectGlass: true,
+    react: {
+      room: 'Library',
+      steps: [
+        { type: 'click', selector: '.exo-settings-btn' },
+        { type: 'wait', ms: 500 },
+        { type: 'clickText', selector: '.exo-settings-nav button', text: /^About$/i },
+        { type: 'wait', ms: 400 },
+        { type: 'clickText', selector: '.exo-settings-layout button', text: /^Changelog$/i },
+        { type: 'wait', ms: 500 },
+      ],
+      openSelector: '.exo-whats-new-sheet, [role="dialog"]',
+    },
+    native: {
+      scene: 'whats-new',
+      expect: { whatsNewOpen: true },
+    },
+  },
+  {
     id: 'shell-tour-modal',
     room: 'shell',
     name: 'Exo Tour sheet open',

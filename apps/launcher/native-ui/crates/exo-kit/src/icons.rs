@@ -1367,6 +1367,83 @@ pub fn icon_forward(size: f32, color: Color) -> El {
     )
 }
 
+pub fn icon_chevron_up(size: f32, color: Color) -> El {
+    strokes(size, &[&[[6.5, 14.5], [12.0, 9.0], [17.5, 14.5]]], color)
+}
+
+pub fn icon_alert(size: f32, color: Color) -> El {
+    let w = if size <= 16.0 { 1.75 } else { 1.9 };
+    let shape = Shape::new()
+        .view_box(24.0, 24.0)
+        .stroke(circle_pts(12.0, 12.0, 9.0, 24), w, color)
+        .stroke(vec![[12.0, 8.0], [12.0, 12.6]], w, color)
+        .fill(circle_pts(12.0, 16.0, 1.1, 10), color);
+    canvas(shape).size(size, size)
+}
+
+pub fn icon_bell(size: f32, color: Color) -> El {
+    strokes(
+        size,
+        &[
+            &[
+                [6.0, 10.0],
+                [6.5, 6.5],
+                [9.0, 4.5],
+                [12.0, 4.0],
+                [15.0, 4.5],
+                [17.5, 6.5],
+                [18.0, 10.0],
+                [18.0, 15.0],
+                [20.0, 17.5],
+                [4.0, 17.5],
+                [6.0, 15.0],
+                [6.0, 10.0],
+            ],
+            &[[10.0, 20.0], [12.0, 21.0], [14.0, 20.0]],
+        ],
+        color,
+    )
+}
+
+pub fn icon_volume_low(size: f32, color: Color) -> El {
+    strokes(
+        size,
+        &[
+            &[
+                [5.0, 9.5],
+                [9.0, 9.5],
+                [13.5, 5.5],
+                [13.5, 18.5],
+                [9.0, 14.5],
+                [5.0, 14.5],
+                [5.0, 9.5],
+            ],
+            &[[17.0, 9.0], [18.5, 12.0], [17.0, 15.0]],
+        ],
+        color,
+    )
+}
+
+pub fn icon_notes(size: f32, color: Color) -> El {
+    strokes(
+        size,
+        &[
+            &[
+                [6.0, 3.5],
+                [14.5, 3.5],
+                [18.5, 7.5],
+                [18.5, 20.5],
+                [6.0, 20.5],
+                [6.0, 3.5],
+            ],
+            &[[14.0, 3.5], [14.0, 8.0], [18.5, 8.0]],
+            &[[9.0, 12.5], [15.5, 12.5]],
+            &[[9.0, 16.5], [14.0, 16.5]],
+        ],
+        color,
+    )
+}
+
 pub fn icon_upload(size: f32, color: Color) -> El {
     strokes(
         size,
