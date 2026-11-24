@@ -4,18 +4,33 @@ use crate::discord_md;
 use crate::state::AppState;
 use exo_kit::{
     FG, GAP, PRESS_SCALE, PRIMARY_FG, RADIUS_CARD, RADIUS_PANEL, RADIUS_PILL, RADIUS_SMALL,
-    SPRING_QUICK, bad, fg_faint, fg_muted, glass_button, glass_control_fill, glass_rim, good,
-    hairline, hex, hover_fill, icon_close, icon_edit, icon_paperclip, icon_pin, icon_plus,
-    icon_reply, icon_search, icon_send, icon_smile, icon_trash, pressed_fill, primary_button,
-    subtle_fill, type_body, type_control, type_label, type_page, type_section, type_small,
+    SPRING_BASE, SPRING_MOVE, SPRING_QUICK, bad, fg_faint, fg_muted, glass_button,
+    glass_control_fill, glass_rim, good, hairline, hex, hover_fill, icon_close, icon_edit,
+    icon_paperclip, icon_pin, icon_plus, icon_reply, icon_search, icon_send, icon_smile,
+    icon_trash, pressed_fill, primary_button, subtle_fill, type_body, type_control, type_label,
+    type_page, type_section, type_small,
 };
 use exo_rpc::{DiscordEmbed, DiscordMessage};
 use rune::{
-    Color, El, GrowthSpec, ScrollSpec, SurfaceFit, col, edit_access, el, row, text, text_input,
+    Color, El, GrowthSpec, ScrollSpec, Spring, SpringPair, SurfaceFit, Transition, Tx, col,
+    edit_access, el, row, text, text_input,
 };
 use std::borrow::Cow;
 
 const QUICK_EMOJIS: &[&str] = &["👍", "🔥", "😂", "❤️", "👀", "🚀"];
+
+fn inline_bar_transition(dy: f32) -> Transition {
+    let enter = Transition::offset(0.0, dy).combined(Transition::opacity());
+    Transition::asymmetric(enter, Transition::opacity())
+        .springs(SpringPair::new(SPRING_BASE, SPRING_QUICK))
+}
+
+fn send_with_launch(s: &mut AppState, tx: &mut Tx) {
+    if let Some(local_id) = s.send_discord_message() {
+        tx.motion(SPRING_MOVE);
+        tx.launch("dc-composer-input", format!("dc-msg-body-{local_id}"));
+    }
+}
 
 fn pane_surface() -> Color {
     hex(0x0b0b0d, 1.0)
@@ -53,7 +68,11 @@ fn tiny_action(key: String, label: &'static str, danger: bool, icon: El) -> El {
         .size(24.0, 24.0)
         .radius(6.0)
         .fill(Color::TRANSPARENT)
-        .hover(if danger { bad().alpha(0.22) } else { hover_fill() })
+        .hover(if danger {
+            bad().alpha(0.22)
+        } else {
+            hover_fill()
+        })
         .press(pressed_fill())
         .center()
         .motion(SPRING_QUICK)
@@ -75,12 +94,22 @@ fn embed_card(s: &AppState, embed: &DiscordEmbed, msg_id: &str, scale: f32) -> E
         .or_else(|| embed.provider.as_ref().and_then(|p| p.name.as_deref()))
         .filter(|s| !s.is_empty())
     {
-        inner = inner.child(text(author.to_string()).font(type_label()).color(fg_muted()));
+        inner = inner.child(
+            text(author.to_string())
+                .font(type_label())
+                .color(fg_muted()),
+        );
     }
     if let Some(ref title) = embed.title
         && !title.is_empty()
     {
-        inner = inner.child(text(title.clone()).font(type_section()).color(FG).w_full().wrap());
+        inner = inner.child(
+            text(title.clone())
+                .font(type_section())
+                .color(FG)
+                .w_full()
+                .wrap(),
+        );
     }
     if let Some(ref desc) = embed.description
         && !desc.is_empty()
@@ -93,7 +122,13 @@ fn embed_card(s: &AppState, embed: &DiscordEmbed, msg_id: &str, scale: f32) -> E
             let mut fc = col()
                 .gap(2.0)
                 .child(text(f.name.clone()).font(type_label()).color(fg_muted()))
-                .child(text(f.value.clone()).font(type_small()).color(FG).w_full().wrap());
+                .child(
+                    text(f.value.clone())
+                        .font(type_small())
+                        .color(FG)
+                        .w_full()
+                        .wrap(),
+                );
             if f.inline {
                 fc = fc.min_w(130.0).grow(1.0);
             } else {
@@ -123,7 +158,11 @@ fn embed_card(s: &AppState, embed: &DiscordEmbed, msg_id: &str, scale: f32) -> E
         .and_then(|f| f.text.as_deref())
         .filter(|s| !s.is_empty())
     {
-        inner = inner.child(text(footer.to_string()).font(type_label()).color(fg_faint()));
+        inner = inner.child(
+            text(footer.to_string())
+                .font(type_label())
+                .color(fg_faint()),
+        );
     }
 
     row()
@@ -181,7 +220,13 @@ fn message_row(
                         .font(type_label())
                         .color(fg_muted()),
                 )
-                .child(text(preview).font(type_label()).color(fg_faint()).grow(1.0).truncate()),
+                .child(
+                    text(preview)
+                        .font(type_label())
+                        .color(fg_faint())
+                        .grow(1.0)
+                        .truncate(),
+                ),
         );
     }
 
@@ -192,6 +237,9 @@ fn message_row(
     let is_pinned = msg.pinned;
 
     let mut actions = row().gap(2.0).center_y();
+    if !show_emoji_bar {
+        actions = actions.group_opacity(0.0, 1.0);
+    }
     {
         let mid_e = mid_actions.clone();
         actions = actions.child(
@@ -344,7 +392,9 @@ fn message_row(
             );
         }
     } else if !msg.content.is_empty() {
-        let md = discord_md::render_markdown(&msg.content, &msg.mentions, &msg.id, reveal_spoilers);
+        let md = el().key(format!("dc-msg-body-{}", msg.id)).w_full().child(
+            discord_md::render_markdown(&msg.content, &msg.mentions, &msg.id, reveal_spoilers),
+        );
         if grouped {
             body = body.child(
                 row()
@@ -360,7 +410,11 @@ fn message_row(
     }
 
     if let Some(ref fail) = msg.failed {
-        body = body.child(text(format!("Failed: {fail}")).font(type_label()).color(bad()));
+        body = body.child(
+            text(format!("Failed: {fail}"))
+                .font(type_label())
+                .color(bad()),
+        );
     }
 
     if !msg.attachments.is_empty() {
@@ -469,10 +523,7 @@ fn message_row(
                 let cid_q = channel_id.to_string();
                 let mid_q = msg.id.clone();
                 let em_s = em.to_string();
-                let already = msg
-                    .reactions
-                    .iter()
-                    .any(|r| r.emoji.key() == em && r.me);
+                let already = msg.reactions.iter().any(|r| r.emoji.key() == em && r.me);
                 bar = bar.child(
                     el().key(format!("dc-qrx-{}-{em}", msg.id))
                         .size(24.0, 24.0)
@@ -495,20 +546,24 @@ fn message_row(
     let line = if grouped {
         row()
             .w_full()
-            .pl(54.0)
-            .pr(14.0)
+            .pl(56.0)
+            .pr(16.0)
             .py(2.0)
             .opacity(if msg.pending { 0.6 } else { 1.0 })
+            .hover_group()
+            .hover_motion(Spring::NONE, SPRING_QUICK)
             .child(body)
     } else {
         let av_url = msg.author.avatar_url();
         row()
             .w_full()
-            .px(14.0)
+            .px(16.0)
             .pt(10.0)
             .pb(3.0)
             .gap(10.0)
             .opacity(if msg.pending { 0.6 } else { 1.0 })
+            .hover_group()
+            .hover_motion(Spring::NONE, SPRING_QUICK)
             .child(avatar_box(
                 s,
                 av_url.as_deref(),
@@ -528,13 +583,17 @@ fn message_row(
             .child(
                 row()
                     .w_full()
-                    .px(14.0)
+                    .px(16.0)
                     .pt(12.0)
                     .pb(4.0)
                     .gap(10.0)
                     .center_y()
                     .child(el().grow(1.0).h(1.0).fill(hairline()))
-                    .child(text(msg.day_key().to_string()).font(type_label()).color(fg_faint()))
+                    .child(
+                        text(msg.day_key().to_string())
+                            .font(type_label())
+                            .color(fg_faint()),
+                    )
                     .child(el().grow(1.0).h(1.0).fill(hairline())),
             )
             .child(line)
@@ -570,7 +629,7 @@ pub fn timeline_and_composer(
         .unwrap_or(false);
     let oldest_id = msgs.first().map(|m| m.id.clone());
 
-    let mut scroll_inner = col().w_full().pb(12.0);
+    let mut scroll_inner = col().w_full().grow(1.0).justify_end().pb(12.0);
     if has_more && let Some(before_id) = oldest_id {
         let cid_older = channel_id.to_string();
         scroll_inner = scroll_inner.child(
@@ -593,7 +652,7 @@ pub fn timeline_and_composer(
         scroll_inner = scroll_inner.child(
             col()
                 .w_full()
-                .px(18.0)
+                .px(16.0)
                 .pt(22.0)
                 .pb(12.0)
                 .gap(4.0)
@@ -644,7 +703,7 @@ pub fn timeline_and_composer(
             text("Loading messages…")
                 .font(type_small())
                 .color(fg_muted())
-                .px(18.0)
+                .px(16.0)
                 .py(12.0),
         );
     }
@@ -660,12 +719,8 @@ pub fn timeline_and_composer(
     let mut composer_wrap = col().w_full().px(12.0).pb(10.0).gap(6.0);
 
     if let Some(typing) = s.discord.chat.typing_label(channel_id) {
-        composer_wrap = composer_wrap.child(
-            text(typing)
-                .font(type_label())
-                .color(fg_muted())
-                .px(6.0),
-        );
+        composer_wrap =
+            composer_wrap.child(text(typing).font(type_label()).color(fg_muted()).px(6.0));
     }
 
     if let Some((_, ref author)) = s.discord.chat.reply_to {
@@ -681,6 +736,7 @@ pub fn timeline_and_composer(
                 .radius(RADIUS_SMALL)
                 .fill(card_surface())
                 .border(1.0, hairline())
+                .transition(inline_bar_transition(6.0))
                 .child(
                     row()
                         .gap(6.0)
@@ -749,36 +805,6 @@ pub fn timeline_and_composer(
         composer_wrap = composer_wrap.child(up_row);
     }
 
-    if s.discord.chat.composer_emoji_open {
-        let mut ebar = row()
-            .key("dc-composer-emoji-bar")
-            .px(8.0)
-            .py(4.0)
-            .gap(4.0)
-            .center_y()
-            .radius(RADIUS_PILL)
-            .fill(card_surface())
-            .border(1.0, glass_rim());
-        for &em in QUICK_EMOJIS {
-            let em_s = em.to_string();
-            ebar = ebar.child(
-                el().key(format!("dc-cem-{em}"))
-                    .size(26.0, 26.0)
-                    .radius(13.0)
-                    .hover(hover_fill())
-                    .center()
-                    .hit()
-                    .press_on_down()
-                    .on_press(move |s: &mut AppState| {
-                        s.discord.chat.composer.text.push_str(&em_s);
-                        s.discord.chat.composer_emoji_open = false;
-                    })
-                    .child(text(em).font(type_body()).color(FG)),
-            );
-        }
-        composer_wrap = composer_wrap.child(ebar);
-    }
-
     if can_send {
         let composer = row()
             .key("dc-composer")
@@ -820,7 +846,7 @@ pub fn timeline_and_composer(
                         s.notify_discord_typing();
                         &mut s.discord.chat.composer
                     }))
-                    .on_submit(|s: &mut AppState, _| s.send_discord_message()),
+                    .on_submit(send_with_launch),
             )
             .child(
                 el().key("dc-composer-send")
@@ -837,7 +863,7 @@ pub fn timeline_and_composer(
                     .press(FG.alpha(0.82))
                     .center()
                     .motion(SPRING_QUICK)
-                    .on_press(|s: &mut AppState| s.send_discord_message())
+                    .on_press_tx(send_with_launch)
                     .child(icon_send(14.0, PRIMARY_FG)),
             );
         composer_wrap = composer_wrap.child(composer);
@@ -858,7 +884,7 @@ pub fn timeline_and_composer(
         );
     }
 
-    col()
+    let mut stage = col()
         .grow(1.0)
         .w_full()
         .min_h(0.0)
@@ -875,7 +901,41 @@ pub fn timeline_and_composer(
         .on_drop_hover(|s: &mut AppState, over, _| s.discord.chat.drop_hover = over)
         .on_drop_files(|s: &mut AppState, files, _| s.attach_discord_files(files))
         .child(timeline)
-        .child(composer_wrap)
+        .child(composer_wrap);
+
+    if s.discord.chat.composer_emoji_open {
+        let mut ebar = row()
+            .key("dc-composer-emoji-bar")
+            .pin(Some(12.0), None, None, Some(60.0))
+            .px(8.0)
+            .py(4.0)
+            .gap(4.0)
+            .center_y()
+            .radius(RADIUS_PILL)
+            .fill(card_surface())
+            .border(1.0, glass_rim())
+            .transition(inline_bar_transition(6.0));
+        for &em in QUICK_EMOJIS {
+            let em_s = em.to_string();
+            ebar = ebar.child(
+                el().key(format!("dc-cem-{em}"))
+                    .size(26.0, 26.0)
+                    .radius(13.0)
+                    .hover(hover_fill())
+                    .center()
+                    .hit()
+                    .press_on_down()
+                    .on_press(move |s: &mut AppState| {
+                        s.discord.chat.composer.text.push_str(&em_s);
+                        s.discord.chat.composer_emoji_open = false;
+                    })
+                    .child(text(em).font(type_body()).color(FG)),
+            );
+        }
+        stage = stage.child(ebar);
+    }
+
+    stage
 }
 
 pub fn chat_drawer_panel(s: &AppState, scale: f32) -> Option<El> {
@@ -915,15 +975,11 @@ pub fn chat_drawer_panel(s: &AppState, scale: f32) -> Option<El> {
                             .justify_between()
                             .center_y()
                             .child(
-                                row()
-                                    .gap(6.0)
-                                    .center_y()
-                                    .child(icon_pin(13.0, FG))
-                                    .child(
-                                        text(format!("Pinned · {}", s.discord.chat.pins.len()))
-                                            .font(type_section())
-                                            .color(FG),
-                                    ),
+                                row().gap(6.0).center_y().child(icon_pin(13.0, FG)).child(
+                                    text(format!("Pinned · {}", s.discord.chat.pins.len()))
+                                        .font(type_section())
+                                        .color(FG),
+                                ),
                             )
                             .child(
                                 tiny_action(
@@ -942,7 +998,9 @@ pub fn chat_drawer_panel(s: &AppState, scale: f32) -> Option<El> {
                             .grow(1.0)
                             .w_full()
                             .min_h(0.0)
-                            .scroll(ScrollSpec { stick_bottom: false })
+                            .scroll(ScrollSpec {
+                                stick_bottom: false,
+                            })
                             .child(list),
                     ),
             )
@@ -957,7 +1015,13 @@ pub fn chat_drawer_panel(s: &AppState, scale: f32) -> Option<El> {
                 } else {
                     "No matching messages found."
                 };
-                list = list.child(text(msg).font(type_small()).color(fg_muted()).w_full().wrap());
+                list = list.child(
+                    text(msg)
+                        .font(type_small())
+                        .color(fg_muted())
+                        .w_full()
+                        .wrap(),
+                );
             } else {
                 list = list.child(
                     text(format!("{} results", s.discord.chat.search_total))
@@ -1032,7 +1096,9 @@ pub fn chat_drawer_panel(s: &AppState, scale: f32) -> Option<El> {
                             .grow(1.0)
                             .w_full()
                             .min_h(0.0)
-                            .scroll(ScrollSpec { stick_bottom: false })
+                            .scroll(ScrollSpec {
+                                stick_bottom: false,
+                            })
                             .child(list),
                     ),
             )
@@ -1075,7 +1141,12 @@ fn drawer_message_card(s: &AppState, m: &DiscordMessage, scale: f32) -> El {
                 )
                 .child(text(m.time_short()).font(type_label()).color(fg_faint())),
         )
-        .child(discord_md::render_markdown(&m.content, &m.mentions, &m.id, true))
+        .child(discord_md::render_markdown(
+            &m.content,
+            &m.mentions,
+            &m.id,
+            true,
+        ))
 }
 
 pub fn header_tools(s: &AppState) -> El {

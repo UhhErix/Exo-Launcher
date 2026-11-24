@@ -405,18 +405,41 @@ public sealed class NetworkBestTests : IDisposable
     }
 
     [Fact]
-    public void Overlapping_Presses_TheSecondIsToldToWait()
+    public async Task Overlapping_Presses_TheSecondIsToldToWait()
     {
         var (best, system) = Make();
         system.List.Add(Ethernet());
-        string? second = "not asked";
+        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var release = new SemaphoreSlim(0, 1);
         system.OnRun = _ =>
         {
-            second = Task.Run(() => best.TurnOff(DnsKey)).Result;
+            entered.TrySetResult();
+            release.Wait();
             system.TakeDns();
         };
-        Assert.Null(best.Apply());
+
+        var first = Task.Factory.StartNew(() =>
+        {
+            try { return best.Apply(); }
+            finally { entered.TrySetResult(); }
+        }, CancellationToken.None, TaskCreationOptions.LongRunning, TaskScheduler.Default);
+
+        string? second = "not asked";
+        string? firstResult;
+        try
+        {
+            await entered.Task;
+            second = best.TurnOff(DnsKey);
+        }
+        finally
+        {
+            release.Release();
+            firstResult = await first;
+        }
+
+        Assert.Null(firstResult);
         Assert.Equal(Busy, second);
+        Assert.Single(system.Scripts);
         Assert.True(best.Read().Items.Single().CanUndo);
 
         // A script that outlived its wait holds every change until it ends.
@@ -425,6 +448,23 @@ public sealed class NetworkBestTests : IDisposable
         Assert.Equal(Busy, best.TurnOff(DnsKey));
         Assert.Equal(Busy, best.Apply([TcpKey]));
         Assert.Empty(system.Scripts);
+    }
+
+    [Fact]
+    public void Reentrant_Press_OnSameThread_IsToldToWait()
+    {
+        var (best, system) = Make();
+        system.List.Add(Ethernet());
+        string? reentrant = "not asked";
+        system.OnRun = _ =>
+        {
+            reentrant = best.TurnOff(DnsKey);
+            system.TakeDns();
+        };
+        Assert.Null(best.Apply());
+        Assert.Equal(Busy, reentrant);
+        Assert.Single(system.Scripts);
+        Assert.True(best.Read().Items.Single().CanUndo);
     }
 
     [Fact]

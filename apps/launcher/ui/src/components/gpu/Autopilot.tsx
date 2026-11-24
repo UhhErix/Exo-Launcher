@@ -23,8 +23,23 @@ export function useAutopilot(active: boolean, open: boolean) {
     const read = () => host.autopilotState().then(next => { if (alive) { last = next; setState(next) } },
       (e: unknown) => report(e, 'Autopilot.read', { level: 'warn' }))
     void read()
-    const timer = open ? window.setInterval(read, 2000) : undefined
-    return () => { alive = false; window.clearInterval(timer) }
+    if (!open) return () => { alive = false }
+    const offLive = onHostEvent('autopilot.live', live => {
+      if (!alive) return
+      const prevGame = last?.now?.game ?? null
+      const nextGame = live?.game ?? null
+      setState(prev => {
+        if (!prev) return prev
+        const next = { ...prev, live }
+        last = next
+        return next
+      })
+      if (prevGame !== nextGame) void read()
+    })
+    const offRun = onHostEvent('game.runState', () => {
+      if (alive) void read()
+    })
+    return () => { alive = false; offLive(); offRun() }
   }, [active, open])
   useEffect(() => onHostEvent('autopilot.report', () => {
     host.autopilotState().then(next => { last = next; setState(next) }, (e: unknown) => report(e, 'Autopilot.report', { level: 'warn' }))

@@ -446,7 +446,7 @@ internal sealed class VoiceConnection : IAsyncDisposable
             {
                 var gate = _chain.TakeGateStats();
                 AppLog.Info(string.Create(System.Globalization.CultureInfo.InvariantCulture,
-                    $"Discord voice: noise gate let {gate.Open} frames through and held {gate.Shut} shut (the loudest held shut at {gate.LoudestShut:0.0} dBFS); {gate}."));
+                    $"Discord voice: noise gate let {gate.Open} frames through and held {gate.Shut} shut (the loudest held shut at {gate.LoudestShut:0.0} dBFS); {gate}; {audio.LateDrops} late microphone packets and {audio.BehindDrops} frames dropped so far."));
             }
         }
         var processed = VoiceAudio.QpcNow();

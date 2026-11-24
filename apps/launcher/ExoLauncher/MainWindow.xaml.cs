@@ -435,7 +435,7 @@ public sealed partial class MainWindow : Window
                 _rendererRefreshAgain = false;
                 if (_closingWindow) return;
                 RefreshRuntimeResourceIdentities();
-                if (_musicWeb is null)
+                if (!App.Services.MusicEngine.HasWebView)
                 {
                     _embeddedRenderers = Array.Empty<EmbeddedRendererInfo>();
                     continue;
@@ -443,7 +443,7 @@ public sealed partial class MainWindow : Window
                 var environment = await WebViewEnvironmentFactory.GetAsync();
                 if (_closingWindow) return;
                 var infos = await environment.GetProcessExtendedInfosAsync();
-                var service = _musicWebService;
+                var service = App.Services.MusicEngine.ActiveService;
                 var list = new List<EmbeddedRendererInfo>();
                 foreach (var info in infos)
                 {
@@ -499,7 +499,8 @@ public sealed partial class MainWindow : Window
         try { Services.ExoAiCoordinator.Shared.Shutdown(); } catch { }
         // The hosted sessions close side
         // by side under one bounded wait.
-        CloseMusicWeb();
+        App.Services.MusicEngine.SetWindowHooks(null, null, null);
+        App.Services.MusicEngine.Close();
         var closing = new List<Task>();
         // The shader engine stops its queue so the driver writes its cache, then exits.
         closing.Add(Task.Run(App.Services.ShadersHost.Dispose));
@@ -620,7 +621,7 @@ public sealed partial class MainWindow : Window
     {
         if (_closingWindow) return;
         var shell = WebHost.CoreWebView2?.BrowserProcessId ?? 0;
-        var music = _musicWeb?.CoreWebView2?.BrowserProcessId ?? 0;
+        var music = App.Services.MusicEngine.BrowserProcessId;
         if (pid != 0 && (pid == shell || pid == music)) HideWebViewWindows();
     }
 
@@ -650,7 +651,7 @@ public sealed partial class MainWindow : Window
     private void HideWebViewWindows()
     {
         if (WebHost.CoreWebView2 is { } shell) WebViewWindowHider.Hide(shell.BrowserProcessId);
-        if (_musicWeb?.CoreWebView2 is { } music) WebViewWindowHider.Hide(music.BrowserProcessId);
+        if (App.Services.MusicEngine.BrowserProcessId is > 0 and var musicPid) WebViewWindowHider.Hide(musicPid);
     }
 
     private Task EnsureWebAsync()
@@ -842,6 +843,15 @@ public sealed partial class MainWindow : Window
             catch (Exception ex) { AppLog.Warn("Card form page could not be mapped: " + ex.Message); }
 
             try { _bridge?.Detach(); } catch { }
+            App.Services.MusicEngine.SetWindowHooks(
+                WindowIsHiddenOrMinimized,
+                () =>
+                {
+                    if (_closingWindow) return;
+                    ReevaluateShellSleep();
+                    ApplyWebViewMemoryTarget(WindowIsHiddenOrMinimized());
+                },
+                () => _ = RefreshEmbeddedRendererMapAsync().ContinueWith(static task => task.Exception?.Handle(static _ => true), TaskContinuationOptions.OnlyOnFaulted));
             _bridge = new WebHostBridge(App.Services, DispatcherQueue);
             _bridge.Attach(core);
             _bridge.NotifyWindowState(IsMaximized);
@@ -1136,7 +1146,7 @@ public sealed partial class MainWindow : Window
         HangWatchdog.Refresh();
         if (!hiddenOrMinimized) CheckPaintWhenShown();
         var snapshot = new TrimSnapshot(_windowActive, hiddenOrMinimized,
-            _musicPopouts.Count > 0, Volatile.Read(ref _musicWebAudio));
+            App.Services.MusicEngine.HasPopouts, App.Services.MusicEngine.IsPlayingAudio);
         if (snapshot != _trimSnapshot)
         {
             _trimSnapshot = snapshot;
@@ -1144,8 +1154,7 @@ public sealed partial class MainWindow : Window
             if (_trimWake.CurrentCount == 0)
                 try { _trimWake.Release(); } catch (SemaphoreFullException) { }
         }
-        NotifyConnectedPermissionStateChanged();
-        ApplyMusicMemoryTarget();
+        App.Services.MusicEngine.ApplyMemoryTarget();
         ApplyShellSleep(hiddenOrMinimized);
         try
         {

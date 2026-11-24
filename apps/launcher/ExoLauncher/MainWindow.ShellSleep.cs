@@ -24,7 +24,7 @@ public sealed partial class MainWindow
         HiddenOrMinimized: hiddenOrMinimized,
         Closing: _closingWindow,
         VoiceConnected: Services.DiscordClient.DiscordSession.Current?.InCall == true,
-        MusicPlaying: Volatile.Read(ref _musicWebAudio) || _mediaSessions?.Current is { Status: "playing" },
+        MusicPlaying: App.Services.MusicEngine.IsPlaying,
         CaptureRecording: _captureBusy,
         DownloadRunning: App.Services.Launcher.IsBusy || App.Services.Launcher.HasQueuedJobs);
 
@@ -147,5 +147,13 @@ public sealed partial class MainWindow
         }
         catch { }
         AppLog.Info($"Shell: awake in {Stopwatch.GetElapsedTime(started).TotalMilliseconds:0} ms.");
+    }
+
+    private Task NextLowPriorityTurnAsync()
+    {
+        var ready = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        if (!DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () => UiGuard.Run(() => ready.TrySetResult())))
+            ready.TrySetResult();
+        return ready.Task;
     }
 }

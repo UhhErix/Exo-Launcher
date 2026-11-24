@@ -132,16 +132,31 @@ internal sealed partial class RuneHostSession
 
     internal static int Run(Options options)
     {
+        SystemSpecs.WarmInBackground();
+        WebViewRuntimeLocator.ClearStaleBrowserFolderPin();
         var services = App.Services;
         services.Initialize();
         KeepAwake.SettingOn = () => true;
 
         var dispatcherController = DispatcherQueueController.CreateOnDedicatedThread();
+        var queue = dispatcherController.DispatcherQueue;
+        using (var syncReady = new ManualResetEventSlim(false))
+        {
+            if (queue.TryEnqueue(() => UiGuard.Run(() =>
+            {
+                SynchronizationContext.SetSynchronizationContext(new DispatcherQueueSynchronizationContext(queue));
+                syncReady.Set();
+            })))
+            {
+                syncReady.Wait(TimeSpan.FromSeconds(2));
+            }
+        }
         using var transport = new NamedPipeHostTransport(options.PipeName);
-        var bridge = new WebHostBridge(services, dispatcherController.DispatcherQueue);
+        var bridge = new WebHostBridge(services, queue);
         using var stop = new ManualResetEventSlim(false);
         bridge.RequestHostShutdown = () => stop.Set();
         bridge.Attach(transport);
+        transport.Start();
         services.HdrHost.Start();
         bridge.StartBackgroundMonitors();
         AppLog.Info($"RuneHostSession: listening on {transport.FullPipePath} (spawnUi={options.SpawnUi})");
@@ -198,6 +213,7 @@ internal sealed partial class RuneHostSession
             Console.CancelKeyPress -= onCancel;
             try { bridge.Detach(); } catch { }
             try { transport.Detach(); } catch { }
+            try { services.MusicEngine.Close(); } catch { }
             if (uiProcess is not null)
             {
                 try
