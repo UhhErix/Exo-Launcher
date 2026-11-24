@@ -2803,9 +2803,14 @@ impl AppState {
         self.store_close_game_full();
     }
 
+    pub fn set_window_focused(&mut self, focused: bool) {
+        self.chrome.window_focused = focused;
+        crate::gamepad::set_window_focused(focused);
+    }
+
     pub fn apply_gamepad_action(&mut self, action: GamepadAction, tx: &mut Tx) {
         if !matches!(action, GamepadAction::Connected(_)) {
-            if self.chrome.gamepad_paused {
+            if self.chrome.gamepad_paused || !self.chrome.window_focused {
                 return;
             }
             self.input_mode = InputMode::Gamepad;
@@ -2879,6 +2884,11 @@ impl AppState {
                     && g.installed
                 {
                     self.launch_game(&g.id);
+                } else {
+                    tx.send_key(rune::KeyEvent {
+                        key: rune::Key::Enter,
+                        mods: rune::Mods::default(),
+                    });
                 }
             }
             GamepadAction::Left
@@ -2886,13 +2896,18 @@ impl AppState {
             | GamepadAction::Up
             | GamepadAction::Down => {
                 if self.palette_open {
-                    let len = self.palette_results().len();
+                    let items = self.palette_results();
+                    let len = items.len();
                     if len > 0 {
                         if matches!(action, GamepadAction::Down | GamepadAction::Right) {
                             self.palette_index = (self.palette_index + 1) % len;
                         } else {
                             self.palette_index = (self.palette_index + len - 1) % len;
                         }
+                        tx.scroll_into_view(format!(
+                            "command-palette-{}",
+                            items[self.palette_index].id
+                        ));
                     }
                     return;
                 }
@@ -2911,20 +2926,47 @@ impl AppState {
                         .as_deref()
                         .and_then(|id| ids.iter().position(|x| x == id))
                         .unwrap_or(0);
-                    let delta: isize = match action {
-                        GamepadAction::Left => -1,
-                        GamepadAction::Right => 1,
-                        GamepadAction::Up => -6,
-                        GamepadAction::Down => 6,
-                        _ => 0,
+                    let delta: isize = if self.library_all_games {
+                        let (cols, _, _) = crate::library::all_grid_metrics(self.lib.grid_width);
+                        let stride = cols as isize;
+                        match action {
+                            GamepadAction::Left => -1,
+                            GamepadAction::Right => 1,
+                            GamepadAction::Up => -stride,
+                            GamepadAction::Down => stride,
+                            _ => 0,
+                        }
+                    } else {
+                        match action {
+                            GamepadAction::Left => -1,
+                            GamepadAction::Right => 1,
+                            GamepadAction::Up => {
+                                tx.focus("hero-play", true);
+                                return;
+                            }
+                            GamepadAction::Down => 0,
+                            _ => 0,
+                        }
                     };
                     let next = (cur as isize + delta).clamp(0, (ids.len() - 1) as isize) as usize;
                     let next_id = ids[next].clone();
                     let focus_key = format!("tile-{next_id}");
-                    self.selected_game_id = Some(next_id);
+                    self.selected_game_id = Some(next_id.clone());
+                    if self.library_all_games {
+                        self.lib.grid_focused_id = Some(next_id);
+                    }
                     tx.focus(focus_key.clone(), true);
                     tx.scroll_into_view(focus_key);
+                    return;
                 }
+                let backward = matches!(action, GamepadAction::Left | GamepadAction::Up);
+                tx.send_key(rune::KeyEvent {
+                    key: rune::Key::Tab,
+                    mods: rune::Mods {
+                        shift: backward,
+                        ..rune::Mods::default()
+                    },
+                });
             }
         }
     }

@@ -3538,6 +3538,7 @@ fn main() {
             s.close_mouse_panel();
             s.close_web_surface();
         })
+        .on_focus(|s, focused, _| s.set_window_focused(focused))
         .on_visibility(|s, visible, _| {
             WINDOW_VISIBLE.store(visible, std::sync::atomic::Ordering::Relaxed);
             s.set_mouse_panel_window_visible(visible);
@@ -3784,11 +3785,33 @@ mod tests {
 
         rt.update(|s, tx| {
             s.apply_gamepad_action(GamepadAction::Connected(true), tx);
+            s.set_window_focused(false);
+            s.apply_gamepad_action(GamepadAction::NextRoom, tx);
+        });
+        assert_eq!(rt.state.room, Room::Library);
+        rt.update(|s, tx| {
+            s.set_window_focused(true);
             s.apply_gamepad_action(GamepadAction::NextRoom, tx);
         });
         rt.frame(2.0 / 60.0);
         assert_eq!(rt.state.room, Room::Store);
         assert!(rt.find("gamepad-bar").is_some());
+        rt.update(|s, tx| {
+            s.apply_gamepad_action(GamepadAction::Down, tx);
+        });
+        rt.frame(2.5 / 60.0);
+        assert!(rt.has_focus());
+        rt.update(|s, tx| {
+            s.open_palette(tx);
+        });
+        rt.frame(2.6 / 60.0);
+        let initial_idx = rt.state.palette_index;
+        rt.update(|s, tx| {
+            s.apply_gamepad_action(GamepadAction::Down, tx);
+        });
+        assert_ne!(rt.state.palette_index, initial_idx);
+        rt.update(|s, _| s.close_palette());
+        rt.frame(2.7 / 60.0);
 
         let (hx, hy) = rt.find("store-hero-open").expect("Store hero button");
         rt.pointer_down(hx, hy);

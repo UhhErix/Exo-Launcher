@@ -14,11 +14,12 @@ use exo_kit::{
     glass_panel_opt, good, hover_fill, icon_camera, icon_chat, icon_close, icon_grid, icon_library,
     icon_minimize, icon_mouse, icon_music, icon_settings, icon_sparkles, icon_store, icon_volume,
     icon_volume_low, icon_volume_off, icon_win_maximize, icon_win_restore, modal_scrim_transition,
-    popover_transition, pressed_fill, scrim_fill, selected_fill, set_glass_accessibility,
+    popover_transition_for, pressed_fill, scrim_fill, selected_fill, set_glass_accessibility,
     set_text_scale, slider_track, type_body, type_section, type_small,
 };
 use rune::{
-    Cursor, Cx, El, Phase, ScrollSpec, SpringPair, TextStyle, Transition, col, el, row, text,
+    Align, Cursor, Cx, El, Phase, ScrollSpec, Side, SpringPair, TextStyle, Transition, col, el,
+    row, text,
 };
 use serde_json::{Value, json};
 
@@ -28,6 +29,7 @@ pub struct ShellChromeState {
     pub discord_badge_revision: u64,
     pub window_maximized: bool,
     pub window_maximize_hover: bool,
+    pub window_focused: bool,
     pub gamepad_kind: GamepadKind,
     pub gamepad_paused: bool,
     pub mini_volume_open: bool,
@@ -52,6 +54,7 @@ impl Default for ShellChromeState {
             discord_badge_revision: 0,
             window_maximized: false,
             window_maximize_hover: false,
+            window_focused: true,
             gamepad_kind: GamepadKind::Xbox,
             gamepad_paused: false,
             mini_volume_open: false,
@@ -625,10 +628,11 @@ fn mini_volume_popover_layers(s: &AppState, blur: bool) -> Vec<El> {
 
     let card = glass_panel_opt("mini-volume-popover", 216.0, blur)
         .pin(None, Some(52.0), Some(212.0), None)
+        .focus_group()
         .radius(RADIUS_CARD)
         .px(10.0)
         .py(8.0)
-        .transition(popover_transition())
+        .transition(popover_transition_for(Side::Bottom, Align::End))
         .child(
             row()
                 .w_full()
@@ -751,8 +755,10 @@ pub fn view(s: &AppState, cx: &mut Cx<AppState>) -> El {
     } else {
         13.0
     };
-    let nav = glass_capsule_opt("nav-capsule", budget.top_bar_nav).children(
-        Room::NAV_TABS.into_iter().map(|room| {
+    let nav = glass_capsule_opt("nav-capsule", budget.top_bar_nav)
+        .role("tablist")
+        .focus_group()
+        .children(Room::NAV_TABS.into_iter().map(|room| {
             let active = s.room == room;
             let badge = (room == Room::Discord)
                 .then(|| discord_badge_el(discord_badge_count))
@@ -827,8 +833,7 @@ pub fn view(s: &AppState, cx: &mut Cx<AppState>) -> El {
                 tab = tab.focus_ring(2.0, 3.0, FG);
             }
             tab
-        }),
-    );
+        }));
 
     let live_cap = s
         .media
