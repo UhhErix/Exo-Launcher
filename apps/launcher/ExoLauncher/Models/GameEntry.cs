@@ -468,6 +468,7 @@ public sealed class AppSettings
     public bool DiscordGoLiveHevc { get; set; } = true;
     /// <summary>Per game: "on" or "off" overrides what PCGamingWiki says; no entry is Auto.</summary>
     public Dictionary<string, string> HdrGameModes { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+    public List<string> HdrCursorFixGames { get; set; } = [];
     /// <summary>System > Display > Use NVIDIA color settings, by screen device path (format in <see cref="ExoLauncher.Helpers.NvidiaColor"/>). No entry: other apps control color.</summary>
     public Dictionary<string, string> NvidiaColor { get; set; } = new(StringComparer.OrdinalIgnoreCase);
     /// <summary>

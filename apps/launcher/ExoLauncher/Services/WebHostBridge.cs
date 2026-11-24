@@ -81,6 +81,7 @@ public sealed partial class WebHostBridge
         _services.Shaders.Changed += OnShadersChanged;
         _shadersHostEvent = PostShadersEvent;
         _services.ShadersHost.Event += _shadersHostEvent;
+        _services.HdrHost.WarningRaised += OnHdrWarning;
         _services.ShaderPrepare.Changed += OnShadersChanged;
         ShaderRebuildWatch.Changed += OnShadersRebuildChanged;
         _services.Store.Changed += OnStoreChanged;
@@ -343,6 +344,7 @@ public sealed partial class WebHostBridge
         _services.Launcher.GameRunStateChanged -= OnGameRunStateChanged;
         _services.Shaders.Changed -= OnShadersChanged;
         if (_shadersHostEvent is { } shadersEvt) _services.ShadersHost.Event -= shadersEvt;
+        _services.HdrHost.WarningRaised -= OnHdrWarning;
         _shadersHostEvent = null;
         UnwireCompress();
         _services.ShaderPrepare.Changed -= OnShadersChanged;
@@ -890,6 +892,7 @@ public sealed partial class WebHostBridge
             "shaders.rebuild" => ShadersRebuildStatus(),
                 "hdr.state" => await Task.Run(HdrState).ConfigureAwait(false),
                 "hdr.game" => await HdrGameAsync(paramsEl, hasParams, requestToken).ConfigureAwait(true),
+                "hdr.calibrate" => await HdrCalibrateAsync(paramsEl, hasParams, requestToken).ConfigureAwait(false),
                 "game.settings" => await GameSettingsAsync(paramsEl, hasParams, requestToken).ConfigureAwait(true),
                 "keep.status" => KeepStatusForPage(paramsEl, hasParams),
                 "gpu.display" => await GpuDeadlineAsync(GpuDisplayAsync(paramsEl, hasParams, requestToken), TimeSpan.FromSeconds(25), requestToken).ConfigureAwait(false),

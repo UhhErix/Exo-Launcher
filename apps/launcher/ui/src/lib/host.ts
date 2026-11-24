@@ -491,13 +491,103 @@ export type ShaderStatus = {
 }
 
 /** The main screen's HDR: can it, how bright it really gets (EDID), calibrated, and a plain verdict. */
+export type HdrPeakHealth = {
+  status: 'ok' | 'mismatch' | 'reported' | 'unknown'
+  edidNits?: number | null
+  dxgiNits?: number | null
+  gapPercent?: number | null
+  warning?: string | null
+}
+
+export type HdrCalibration = {
+  devicePath: string
+  edidPeakNits: number
+  measuredPeakNits: number
+  globalBrightness: number
+  sdrWhiteNits: number
+  enabled: boolean
+  calibratedAtUtc: string
+}
+
+export type HdrLaptopCheckItem = {
+  id: string
+  label: string
+  status: 'active' | 'off' | 'unknown'
+  warn: boolean
+  detail: string
+}
+
+export type HdrLaptopChecks = {
+  isLaptop: boolean
+  pluggedIn?: boolean | null
+  hdrOn: boolean
+  items: HdrLaptopCheckItem[]
+}
+
+export type HdrDisplayInfo = {
+  name?: string | null
+  gdiName: string
+  devicePath: string
+  main: boolean
+  supported: boolean
+  on: boolean
+  internal: boolean
+  connector: string
+  colorMode?: 'sdr' | 'acm' | 'hdr' | null
+  edidPeakNits?: number | null
+  dxgiPeakNits?: number | null
+  sdrWhiteNits?: number | null
+  peakHealth?: HdrPeakHealth | null
+}
+
+export type HdrCalibrateResult = {
+  ok: boolean
+  status: string
+  message: string
+  manualSteps?: string[] | null
+  entry?: HdrCalibration | null
+}
+
+export type HdrCalibrationProgress = {
+  devicePath: string
+  step: number
+  total: number
+  slider: number
+  measuredNits: number | null
+  targetNits: number
+}
+
+export type HdrWarningEvent = {
+  devicePath: string
+  kind: string
+  message: string
+}
+
+export type HdrAutoHdr = {
+  global: boolean | null
+  game: boolean | null
+  effective: 'on' | 'off' | 'default'
+}
+
 export type HdrState = {
   supported: boolean
   on?: boolean
   name?: string | null
+  devicePath?: string | null
   peakNits?: number | null
+  edidPeakNits?: number | null
+  dxgiPeakNits?: number | null
+  sdrWhiteNits?: number | null
+  internal?: boolean
+  colorMode?: 'sdr' | 'acm' | 'hdr' | null
+  autoHdrGlobal?: boolean | null
   calibrated?: boolean
   verdict?: 'great' | 'good' | 'weak' | 'unknown'
+  peakHealth?: HdrPeakHealth | null
+  calibration?: HdrCalibration | null
+  laptopChecks?: HdrLaptopChecks | null
+  brightnessWarning?: string | null
+  displays?: HdrDisplayInfo[]
 }
 
 /** What PCGamingWiki says about a game's HDR, and its Auto/Always/Never choice. */
@@ -649,6 +739,10 @@ export type HdrGame = {
   /** Where Exo's verdict came from, in plain words for the game's row. */
   reason?: string
   mode?: 'auto' | 'on' | 'off'
+  cursorFix?: boolean
+  cursorFixEligible?: boolean
+  sdrWhiteNits?: number | null
+  autoHdr?: HdrAutoHdr | null
 }
 
 /** One choice row for GraphicsControl: the choice held now and the choices offered. */
@@ -2123,6 +2217,8 @@ export interface HostEventMap {
   'discord.tts': { name: string; text: string }
   /** An app's answer to an interaction the user started, by its nonce: created, done, failed, a form to fill, autocomplete choices. */
   'discord.interaction': InteractionEvent
+  'hdr.calibrationProgress': HdrCalibrationProgress
+  'hdr.warning': HdrWarningEvent
 }
 
 /** The reply to every HID call the Devices room relays for its mouse module. */
@@ -2890,7 +2986,13 @@ export const host = {
   shadersPrepareCancel: (id: string) => rawCall<{ ok: boolean; message?: string | null }>('shaders.prepare.cancel', { id }),
   hdrState: () => rawCall<HdrState>('hdr.state', {}),
   /** A game's HDR support (asks PCGamingWiki the first time); with a mode, sets its Auto/Always/Never. */
-  hdrGame: (id: string, mode?: string) => rawCall<HdrGame>('hdr.game', { id, ...(mode ? { mode } : {}) }, 30_000),
+  hdrGame: (id: string, opts?: string | { mode?: string; cursorFix?: boolean }) =>
+    rawCall<HdrGame>('hdr.game', {
+      id,
+      ...(typeof opts === 'string' ? { mode: opts } : opts ?? {}),
+    }, 30_000),
+  hdrCalibrate: (params: { action: 'run' | 'undo' | 'toggle'; devicePath?: string; enabled?: boolean }) =>
+    rawCall<HdrCalibrateResult>('hdr.calibrate', params, 120_000),
   gameSettings: (id: string, change?: { group?: string; all?: boolean; on?: boolean; mode?: string; smoothMotion?: boolean }) =>
     rawCall<GameSettingsState>('game.settings', { id, ...change }, 30_000),
   /** What Keep holds, said as one word for the PC and one per game; a game with nothing to say is left out. */

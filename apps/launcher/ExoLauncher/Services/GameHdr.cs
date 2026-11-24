@@ -130,8 +130,10 @@ internal static partial class GameHdr
     /// The screen's real peak brightness in nits and where it was read: Windows HDR Calibration's profile (behind Exo's own
     /// SDR gamma one while that is on: <paramref name="replaced"/>), else the screen's EDID, else what DXGI reports for it.
     /// </summary>
-    internal static (int Nits, string From)? PeakNits(WindowsHdr.Screen screen, string? replaced)
+    internal static (int Nits, string From)? PeakNits(WindowsHdr.Screen screen, string? replaced, int? neutralCalibratedPeak = null)
     {
+        if ((neutralCalibratedPeak ?? HdrCalibrationStore.Shared.ValidPeakFor(screen.DevicePath)) is { } neutral and > 0)
+            return (neutral, "neutral-pair");
         if (SdrInHdr.CalibratedPeak(screen, replaced) is { } calibrated) return ((int)Math.Round(calibrated), "calibration");
         if (WindowsHdr.PeakNits(screen) is { } edid) return (edid, "edid");
         if (DxgiPeak(screen.GdiName) is { } dxgi) return (dxgi, "dxgi");
@@ -145,7 +147,10 @@ internal static partial class GameHdr
             : null;
 
     /// <summary>IDXGIOutput6::GetDesc1's MaxLuminance for the output on that screen; null when DXGI doesn't say.</summary>
-    private static unsafe int? DxgiPeak(string gdiName)
+    internal static int? DxgiPeak(string gdiName) =>
+        DxgiPeakExact(gdiName) is { } lum and > 0 ? (int)Math.Round(lum) : null;
+
+    internal static unsafe float? DxgiPeakExact(string gdiName)
     {
         try
         {
@@ -174,7 +179,7 @@ internal static partial class GameHdr
                                     OutputDesc1 desc;
                                     var getDesc1 = (delegate* unmanaged[Stdcall]<IntPtr, OutputDesc1*, int>)(*(IntPtr**)output6)[27]; // GetDesc1
                                     if (getDesc1(output6, &desc) >= 0 && new string(desc.DeviceName).TrimEnd('\0').Equals(gdiName, StringComparison.OrdinalIgnoreCase))
-                                        return desc.MaxLuminance > 0 ? (int)Math.Round(desc.MaxLuminance) : null;
+                                        return desc.MaxLuminance > 0 ? desc.MaxLuminance : null;
                                 }
                                 finally { Marshal.Release(output6); }
                             }

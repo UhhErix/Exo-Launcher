@@ -1,8 +1,9 @@
-import { useState, type ReactNode } from 'react'
-import { host, type ColorControl, type DisplayChange, type DisplayScreen, type DisplayState, type HdrState, type LauncherSettings, type OutputColor } from '../../lib/host'
+import { useEffect, useState, type ReactNode } from 'react'
+import { host, onHostEvent, type ColorControl, type DisplayChange, type DisplayScreen, type DisplayState, type HdrCalibrateResult, type HdrCalibrationProgress, type HdrState, type LauncherSettings, type OutputColor } from '../../lib/host'
 import { report } from '../../lib/report'
 import { GraphicsControl } from '../graphics/GraphicsControl'
 import { Row, SliderRow, State, SwitchRow } from '../settings/parts'
+import { Switch } from '../Switch'
 import { Spinner } from '../ui/Spinner'
 import { ActionButton } from '../ui/ConfirmButton'
 import { hdrShown, isChoice } from '../../lib/canUse'
@@ -135,19 +136,197 @@ const VERDICT: Record<string, string> = {
   unknown: 'Brightness not reported',
 }
 
+const COLOR_MODE_LABEL: Record<string, string> = {
+  hdr: 'HDR',
+  acm: 'Auto Color Management (ACM)',
+  sdr: 'SDR',
+}
+
+function formatPeakSummary(edid?: number | null, dxgi?: number | null): string {
+  if (edid && dxgi) return `${edid} nits EDID · ${dxgi} nits reported`
+  if (edid) return `${edid} nits EDID`
+  if (dxgi) return `${dxgi} nits reported`
+  return ''
+}
+
+function PeakHealthRow({ screen }: { screen: HdrState }) {
+  const health = screen.peakHealth
+  const summary = formatPeakSummary(health?.edidNits, health?.dxgiNits)
+  if (!health || !summary) return null
+  return (
+    <Row label="Peak luminance" detail={health.warning ? <span className="exo-hdr-warn">{health.warning}</span> : undefined}>
+      <State on={health.status === 'ok'}>
+        <span className={health.status === 'mismatch' ? 'exo-hdr-warn' : undefined}>{summary}</span>
+      </State>
+    </Row>
+  )
+}
+
+function LaptopCalibrationRow({ screen, calibrating, progress, calResult, calError, onRun, onUndo, onToggle }: {
+  screen: HdrState
+  calibrating: boolean
+  progress: HdrCalibrationProgress | null
+  calResult: HdrCalibrateResult | null
+  calError: string | null
+  onRun: () => void
+  onUndo: () => void
+  onToggle: (enabled: boolean) => void
+}) {
+  if (!screen.internal) return null
+  if (screen.edidPeakNits == null) {
+    return (
+      <Row label="Laptop HDR calibration" detail="Panel EDID peak is unavailable, so neutral-pair calibration is skipped.">
+        <State>Skipped</State>
+      </Row>
+    )
+  }
+  const cal = screen.calibration
+  const detail: ReactNode = calResult?.manualSteps
+    ? (
+      <>
+        <span>{calResult.message}</span>
+        <ol className="exo-hdr-steps">
+          {calResult.manualSteps.map(step => <li key={step}>{step}</li>)}
+        </ol>
+      </>
+    )
+    : cal
+      ? `Brightness ${cal.globalBrightness}% · HDR content brightness ${Math.round(cal.sdrWhiteNits)} nits · reports ${cal.measuredPeakNits} nits (EDID ${cal.edidPeakNits} nits)`
+      : calResult?.ok
+        ? calResult.message
+        : 'Finds the brightness pair where games see this panel’s true EDID peak on launch and restores yours on exit.'
+  const progressText = progress
+    ? `Step ${progress.step} of ${progress.total}${progress.measuredNits ? ` · ${progress.measuredNits} nits` : ''}`
+    : 'Calibrating…'
+
+  return (
+    <Row label="Laptop HDR calibration" detail={detail} error={calError}>
+      {calibrating ? (
+        <span className="exo-display-busy">
+          <Spinner label="Calibrating laptop HDR sliders" />
+          <State>{progressText}</State>
+        </span>
+      ) : cal ? (
+        <>
+          <Switch checked={cal.enabled} label="Apply calibrated laptop HDR brightness pair on game launch" onChange={onToggle} />
+          <button type="button" className="exo-set-btn" onClick={onRun}>Recalibrate</button>
+          <button type="button" className="exo-set-btn" onClick={onUndo}>Undo</button>
+        </>
+      ) : (
+        <button type="button" className={screen.peakHealth?.status === 'mismatch' ? 'exo-set-btn is-primary' : 'exo-set-btn'} onClick={onRun}>Calibrate</button>
+      )}
+    </Row>
+  )
+}
+
+function LaptopCheckRows({ screen }: { screen: HdrState }) {
+  const colorModeText = screen.colorMode ? (COLOR_MODE_LABEL[screen.colorMode] ?? screen.colorMode) : null
+  const autoHdrGlobalDetail = screen.autoHdrGlobal === true
+    ? 'Windows Auto HDR is on globally (read-only).'
+    : screen.autoHdrGlobal === false
+      ? 'Windows Auto HDR is off globally (read-only).'
+      : undefined
+  const checkItems = screen.laptopChecks?.items ?? []
+
+  return (
+    <>
+      {screen.brightnessWarning ? (
+        <Row label="Brightness changed" detail={<span className="exo-hdr-warn">{screen.brightnessWarning}</span>}>
+          <State><span className="exo-hdr-warn">Notice</span></State>
+        </Row>
+      ) : null}
+      {colorModeText || autoHdrGlobalDetail ? (
+        <Row label="Color mode" detail={autoHdrGlobalDetail}>
+          <State on={screen.colorMode === 'hdr'}>{colorModeText ?? 'Unavailable'}</State>
+        </Row>
+      ) : null}
+      {checkItems.map(item => {
+        const statusLabel = item.status === 'active'
+          ? (item.warn ? 'Active' : 'On')
+          : item.status === 'off' ? 'Off' : "Can't detect"
+        return (
+          <Row key={item.id} label={item.label} detail={item.warn ? <span className="exo-hdr-warn">{item.detail}</span> : item.detail}>
+            <State on={item.status === 'off'}>
+              <span className={item.warn ? 'exo-hdr-warn' : undefined}>{statusLabel}</span>
+            </State>
+          </Row>
+        )
+      })}
+    </>
+  )
+}
+
 /** PC › Display, HDR: the main screen's verdict, HDR for HDR games, and calibration; nothing on a screen without HDR. */
 export function HdrRows({ screen, settings, onSave }: {
   screen: HdrState | null
   settings: LauncherSettings | null
   onSave: (patch: Partial<LauncherSettings>) => Promise<boolean>
 }) {
+  const [override, setOverride] = useState<HdrState | null>(null)
+  const [calibrating, setCalibrating] = useState(false)
+  const [progress, setProgress] = useState<HdrCalibrationProgress | null>(null)
+  const [calResult, setCalResult] = useState<HdrCalibrateResult | null>(null)
+  const [calError, setCalError] = useState<string | null>(null)
+
+  useEffect(() => {
+    setOverride(null)
+  }, [screen])
+
+  useEffect(() => {
+    const offProgress = onHostEvent('hdr.calibrationProgress', p => setProgress(p))
+    const offWarn = onHostEvent('hdr.warning', () => {
+      host.hdrState().then(next => setOverride(next)).catch(e => report(e, 'HdrRows.warnReload'))
+    })
+    return () => { offProgress(); offWarn() }
+  }, [])
+
+  const live = override ?? screen
   // A main screen without HDR has no HDR rows at all (lib/canUse.ts).
-  if (!screen || !hdrShown(screen)) return null
+  if (!live || !hdrShown(live)) return null
+
+  const refreshHdr = async () => {
+    try {
+      setOverride(await host.hdrState())
+    } catch (e) {
+      report(e, 'HdrRows.refresh')
+    }
+  }
+
+  const runAction = async (
+    params: { action: 'run' | 'undo' | 'toggle'; enabled?: boolean },
+    context: string,
+    fallback: string,
+  ) => {
+    const isLong = params.action !== 'toggle'
+    if (isLong) {
+      setCalibrating(true)
+      setProgress(null)
+      setCalResult(null)
+    }
+    setCalError(null)
+    try {
+      const res = await host.hdrCalibrate({ ...params, devicePath: live.devicePath ?? undefined })
+      if (isLong) setCalResult(res)
+      if (!res.ok && !res.manualSteps) setCalError(res.message)
+      await refreshHdr()
+    } catch (e) {
+      report(e, context)
+      setCalError(fallback)
+    } finally {
+      if (isLong) {
+        setCalibrating(false)
+        setProgress(null)
+      }
+    }
+  }
+
   return (
     <>
       <Row label="HDR">
-        <State on={screen.verdict !== 'weak'}>{VERDICT[screen.verdict ?? 'unknown']}</State>
+        {live.internal ? <span className="exo-hdr-badge">Internal panel</span> : null}
+        <State on={live.verdict !== 'weak'}>{VERDICT[live.verdict ?? 'unknown']}</State>
       </Row>
+      <PeakHealthRow screen={live} />
       <SwitchRow
         id="set-hdr-games"
         label="Auto-enable HDR for HDR games"
@@ -155,11 +334,22 @@ export function HdrRows({ screen, settings, onSave }: {
         disabled={!settings}
         onChange={async value => await onSave({ hdrForGames: value }) ? null : 'Not saved. Try again.'}
       />
+      <LaptopCalibrationRow
+        screen={live}
+        calibrating={calibrating}
+        progress={progress}
+        calResult={calResult}
+        calError={calError}
+        onRun={() => void runAction({ action: 'run' }, 'HdrRows.calibrate', 'Calibration failed. Try again.')}
+        onUndo={() => void runAction({ action: 'undo' }, 'HdrRows.undo', 'Could not undo calibration. Try again.')}
+        onToggle={enabled => void runAction({ action: 'toggle', enabled }, 'HdrRows.toggle', 'Could not update calibration setting. Try again.')}
+      />
       <Row label="HDR calibration">
-        {screen.calibrated
+        {live.calibrated
           ? <State on>Calibrated</State>
           : <button type="button" className="exo-set-btn" onClick={() => void host.openUrl('ms-windows-store://pdp/?productid=9N7F2SM5D1LR')}>Calibrate</button>}
       </Row>
+      <LaptopCheckRows screen={live} />
     </>
   )
 }

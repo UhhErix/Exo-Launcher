@@ -242,6 +242,8 @@ public sealed class PlayerDataTests : IDisposable
         ["session-recorder.json"] = Utf8("""{"version":1,"sessions":[{"game":"steam:1","version":"none","seconds":600,"frames":60000,"histogram":[0]}]}"""),
         ["autopilot-reports.json"] = Utf8("""{"version":1,"reports":[]}"""),
         ["autopilot-journal.json"] = Utf8("""{"version":1,"entries":[]}"""),
+        ["hdr-journal.json"] = Utf8("""{"version":1,"entries":[]}"""),
+        ["hdr-calibration.json"] = Utf8("""{}"""),
         ["game-settings/kept.json"] = Utf8("""{"cs2":{"file":"C:/Users/Player One/Saved/cs2_video.txt"}}"""),
         ["game-settings/window-modes.json"] = Utf8("""{"steam:730":"borderless"}"""),
         ["game-settings/cs2.on.json"] = Utf8("""{"lines":[]}"""),
