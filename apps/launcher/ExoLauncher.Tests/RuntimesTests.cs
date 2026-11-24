@@ -48,8 +48,8 @@ public sealed class RuntimesTests : IDisposable
 
     [Theory]
     [InlineData("v14.44.35211.00", "Outdated")]
-    [InlineData("v14.51.36247.00", "Current")]
-    [InlineData("v14.52.37025.00", "Current")] // newer than Microsoft's permalink serves (the AIO's): never a downgrade
+    [InlineData("v14.52.37029.00", "Current")]
+    [InlineData("v14.53.38000.00", "Current")] // newer than Microsoft's permalink serves (the AIO's): never a downgrade
     [InlineData("v14.9.1.00", "Outdated")] // 9 < 51 as numbers, not as text
     public void VisualCpp14ComparesItsRecordedVersion(string recorded, string expected)
     {
@@ -61,13 +61,13 @@ public sealed class RuntimesTests : IDisposable
     public void VisualCpp14TrustsANewerRuntimeFileOverAStaleRecord()
     {
         // The x86 key can stay on 14.44 after SysWOW64 was replaced with 14.51. The file is what a game loads.
-        var statuses = Evaluate(Pc(values: new() { ["vc14:x86"] = "v14.44.35211.00" }, files: new() { ["wow:vcruntime140.dll"] = "14.51.36247.0" }));
+        var statuses = Evaluate(Pc(values: new() { ["vc14:x86"] = "v14.44.35211.00" }, files: new() { ["wow:vcruntime140.dll"] = "14.52.37029.0" }));
         Assert.Equal(State.Current, Of(statuses, "vc14-x86").State);
     }
 
     [Fact]
     public void VisualCpp14WhoseFilesAreGoneIsMissing() =>
-        Assert.Equal(State.Missing, Of(Evaluate(Pc(values: new() { ["vc14:x64"] = "v14.51.36247.00" })), "vc14-x64").State);
+        Assert.Equal(State.Missing, Of(Evaluate(Pc(values: new() { ["vc14:x64"] = "v14.52.37029.00" })), "vc14-x64").State);
 
     [Fact]
     public void VisualCpp2005ReadsWindowsInstallerVersionsAndShowsFileVersions()
@@ -121,9 +121,9 @@ public sealed class RuntimesTests : IDisposable
     [Fact]
     public void DotnetComparesAgainstMicrosoftsListElseTheCatalog()
     {
-        var pc = Pc(x64: ["8.0.33", "10.0.13", "11.0.0-rc.3.26522.148"], values: new() { ["ndp4"] = "528040", ["ndp35"] = "1" });
+        var pc = Pc(x64: ["8.0.34", "10.0.14", "11.0.0-rc.3.26522.148"], values: new() { ["ndp4"] = "528040", ["ndp35"] = "1" });
         var offline = Evaluate(pc, now: new DateTime(2026, 10, 26));
-        Assert.Equal(State.Outdated, Of(offline, "dotnet10-x64").State); // catalog: 10.0.14
+        Assert.Equal(State.Outdated, Of(offline, "dotnet10-x64").State); // catalog: 10.0.15
         Assert.Equal(State.Current, Of(offline, "dotnet8-x64").State);
         Assert.Equal(State.Missing, Of(offline, "dotnet9-x64").State);
         Assert.True(Of(offline, "dotnet6-x64").EndOfSupport);
@@ -133,16 +133,16 @@ public sealed class RuntimesTests : IDisposable
         Assert.Equal("4.8", Of(offline, "netfx481").Found!.Shown);
         Assert.Equal(State.Current, Of(offline, "netfx35").State);
 
-        var newer = new DotnetRelease("10.0.15", false, new Dictionary<string, DotnetFile> { ["x64"] = new("https://builds.dotnet.microsoft.com/x.exe", new string('A', 128)) });
-        var online = Evaluate(Pc(x64: ["10.0.14"]), new Dictionary<string, DotnetRelease> { ["10-x64"] = newer });
+        var newer = new DotnetRelease("10.0.16", false, new Dictionary<string, DotnetFile> { ["x64"] = new("https://builds.dotnet.microsoft.com/x.exe", new string('A', 128)) });
+        var online = Evaluate(Pc(x64: ["10.0.15"]), new Dictionary<string, DotnetRelease> { ["10-x64"] = newer });
         Assert.Equal(State.Outdated, Of(online, "dotnet10-x64").State);
-        Assert.Equal("10.0.15", Of(online, "dotnet10-x64").Latest);
+        Assert.Equal("10.0.16", Of(online, "dotnet10-x64").Latest);
     }
 
     [Fact]
     public void PlanRunsInOrderAndLeavesOutWhatMicrosoftNoLongerSupports()
     {
-        var statuses = Evaluate(Pc(nvidia: true, values: new() { ["vc14:x64"] = "v14.40.1.00", ["vc14:x86"] = "v14.51.36247.00", ["webview2"] = "1.0" },
+        var statuses = Evaluate(Pc(nvidia: true, values: new() { ["vc14:x64"] = "v14.40.1.00", ["vc14:x86"] = "v14.52.37029.00", ["webview2"] = "1.0" },
             files: new() { ["sys:vcruntime140.dll"] = "", ["wow:vcruntime140.dll"] = "" }), now: new DateTime(2026, 10, 26));
         var missing = Plan(statuses, "missing", null).Select(s => s.Runtime.Id).ToList();
         Assert.DoesNotContain("dotnet6-x64", missing);
@@ -765,5 +765,70 @@ public sealed class RuntimesTests : IDisposable
         Assert.Contains($"sha256={sha}", report);
         Assert.Contains("exitCode=1603", report);
         Assert.DoesNotContain("Alice", report);
+    }
+
+    [Fact]
+    public void VisualCpp2012And2013DetectFromRegistryKeysAnd2005FromMsiCodes()
+    {
+        var statuses = Evaluate(Pc(
+            uninstall:
+            [
+                ("{710f4c1c-cc18-4c49-8cbf-51240c89a1a2}", "Localized VC2005", "8.0.61001"),
+                ("vcredist05_x64", "Microsoft Visual C++ 2005 Redistributable (x64) - 8.0.61186", "8.0.61186"),
+            ],
+            values: new()
+            {
+                ["vc11:x86"] = "v11.0.61030.00",
+                ["vc11:x64"] = "v11.0.61135.00",
+                ["vc12:x86"] = "v12.0.40664.00",
+                ["vc12:x64"] = "v12.0.21005.01",
+            }));
+        Assert.Equal(State.Current, Of(statuses, "vc2005-x86").State);
+        Assert.Equal(State.Current, Of(statuses, "vc2005-x64").State);
+        Assert.Equal(State.Current, Of(statuses, "vc2012-x86").State);
+        Assert.Equal(State.Current, Of(statuses, "vc2012-x64").State);
+        Assert.Equal(State.Current, Of(statuses, "vc2013-x86").State);
+        Assert.Equal(State.Outdated, Of(statuses, "vc2013-x64").State);
+    }
+
+    [Fact]
+    public void SteamSharedDepotsCoverDotnetXnaOpenAlAndPhysXAndFolderHintsFindUePrereqs()
+    {
+        const string acf = """
+            "AppState"
+            {
+                "SharedDepots"
+                {
+                    "229000"		"228980"
+                    "229005"		"228980"
+                    "229007"		"228980"
+                    "229012"		"228980"
+                    "229020"		"228980"
+                    "229030"		"228980"
+                    "229033"		"228980"
+                }
+            }
+            """;
+        var depots = SteamSharedDepots(acf).Distinct().ToList();
+        Assert.Equal(["netfx35", "netfx481", "xna40", "openal", "physx-legacy", "physx"], depots);
+
+        var ueGame = Path.Combine(_folder, "UeGame");
+        var prereq = Path.Combine(ueGame, "Engine", "Extras", "Redist", "en-us", "UEPrereqSetup_x64.exe");
+        Directory.CreateDirectory(Path.GetDirectoryName(prereq)!);
+        File.WriteAllBytes(prereq, [0]);
+        var ids = RuntimesFor(new GameEntry { Id = "local:ue", Title = "UeGame", Store = StoreKind.Local, Path = ueGame });
+        Assert.Equal(new[] { "directx", "vc14-x64", "vc14-x86" }, ids.Order(StringComparer.Ordinal));
+    }
+
+    [Fact]
+    public void NamedRepairAllowsAnyInstallableRuntimeWhileBulkRepairTargetsVisualCpp()
+    {
+        var statuses = Evaluate(Pc(nvidia: true, files: AllDirectX,
+            uninstall: [("{D69C8EDE-BBC5-436B-8E0E-C5A6D311CF4F}", "Microsoft XNA Framework Redistributable 4.0 Refresh", "4.0.30901.0")]));
+        var namedRepair = Plan(statuses, "repair", ["directx", "xna40", "netfx35"]).Select(s => s.Runtime.Id).ToList();
+        Assert.Equal(["netfx35", "directx", "xna40"], namedRepair);
+
+        var bulkRepair = Plan(statuses, "repair", null).Select(s => s.Runtime.Id).ToList();
+        Assert.All(bulkRepair, id => Assert.StartsWith("vc", id));
     }
 }
