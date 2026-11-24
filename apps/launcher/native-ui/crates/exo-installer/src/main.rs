@@ -10,6 +10,21 @@ use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
 
+pub const EMBEDDED_RELEASE_PUBLIC_KEY_HEX: Option<&str> =
+    option_env!("EXO_DELTA_RELEASE_PUBKEY_HEX");
+
+fn resolve_trusted_pubkey(args: &[String], root: &InstallRoot) -> Result<[u8; 32], String> {
+    if root.is_test_root
+        && let Some(p) = arg_val(args, "--pubkey-hex")
+    {
+        return decode_hex::<32>(&p).map_err(|e| e.to_string());
+    }
+    let hex = EMBEDDED_RELEASE_PUBLIC_KEY_HEX.ok_or_else(|| {
+        "no embedded EXO_DELTA_RELEASE_PUBKEY_HEX configured for production install".to_string()
+    })?;
+    decode_hex::<32>(hex).map_err(|e| e.to_string())
+}
+
 fn has_flag(args: &[String], flag: &str) -> bool {
     args.iter().any(|a| a == flag)
 }
@@ -113,21 +128,22 @@ fn main() {
             let version = arg_val(&args, "--version").unwrap_or_else(|| "4.0.0".to_string());
             let (pack_bytes, sig_pair) = if let Some(pack_path) = arg_val(&args, "--pack") {
                 let bytes = fs::read(&pack_path).map_err(|e| e.to_string())?;
-                let pair = match (arg_val(&args, "--sig"), arg_val(&args, "--pubkey-hex")) {
-                    (Some(s), Some(p)) => {
-                        let sig = read_sig(&s)?;
-                        let pk = decode_hex::<32>(&p).map_err(|e| e.to_string())?;
-                        Some((sig, pk))
-                    }
-                    _ => None,
-                };
-                (bytes, pair)
+                let sig_path = arg_val(&args, "--sig")
+                    .ok_or("unsigned pack refused: --sig is required".to_string())?;
+                let sig = read_sig(&sig_path)?;
+                let pk = resolve_trusted_pubkey(&args, &root)?;
+                (bytes, Some((sig, pk)))
             } else {
                 let exe = env::current_exe().map_err(|e| e.to_string())?;
                 let emb = read_embedded_payload(&exe)
                     .map_err(|e| e.to_string())?
                     .ok_or("no --pack provided and no embedded EXOPACK1 payload found")?;
-                (emb.pack, Some((emb.signature, emb.public_key)))
+                let trusted_pk = if root.is_test_root && arg_val(&args, "--pubkey-hex").is_none() {
+                    emb.public_key
+                } else {
+                    resolve_trusted_pubkey(&args, &root)?
+                };
+                (emb.pack, Some((emb.signature, trusted_pk)))
             };
 
             let swap = stage_and_swap(
@@ -342,5 +358,68 @@ mod tests {
     fn direct2d_installer_window_paints_cleanly() {
         let b = bench_d2d_first_paint().unwrap();
         assert!(b.total_ms >= 0.0);
+    }
+
+    #[test]
+    fn unsigned_and_wrong_key_packs_are_refused_and_keep_current_version() {
+        let v1_src = tmp_dir("trust-v1");
+        let v2_src = tmp_dir("trust-v2");
+        let test_root_dir = tmp_dir("trust-root");
+        let root = InstallRoot::isolated_test(test_root_dir).unwrap();
+
+        fs::write(v1_src.join("ExoLauncher.exe"), b"v1-trusted-binary").unwrap();
+        fs::write(v2_src.join("ExoLauncher.exe"), b"v2-untrusted-binary").unwrap();
+
+        let trusted_seed = [0x33u8; 32];
+        let wrong_seed = [0x99u8; 32];
+
+        let (v1_pack, v1_stats) = build_full_pack(&v1_src, 6).unwrap();
+        let (v1_sig, trusted_pubkey) = sign_pack(&v1_pack, &trusted_seed).unwrap();
+        stage_and_swap(&root, &v1_pack, "4.0.0", Some((&v1_sig, &trusted_pubkey))).unwrap();
+        assert_eq!(tree_blake3(&root.app_dir()).unwrap(), v1_stats.tree_blake3);
+
+        let (v2_delta, _) = build_delta_pack(&v1_src, &v2_src, 6).unwrap();
+        let (wrong_sig, _) = sign_pack(&v2_delta, &wrong_seed).unwrap();
+
+        let unsigned_err = stage_and_swap(&root, &v2_delta, "4.0.1", None).unwrap_err();
+        assert!(matches!(
+            unsigned_err,
+            exo_installer::InstallError::SafetyRefusal(_)
+        ));
+        assert_eq!(tree_blake3(&root.app_dir()).unwrap(), v1_stats.tree_blake3);
+        assert_eq!(
+            fs::read(root.app_dir().join("ExoLauncher.exe")).unwrap(),
+            b"v1-trusted-binary"
+        );
+
+        let wrong_key_err = stage_and_swap(
+            &root,
+            &v2_delta,
+            "4.0.1",
+            Some((&wrong_sig, &trusted_pubkey)),
+        )
+        .unwrap_err();
+        assert!(matches!(
+            wrong_key_err,
+            exo_installer::InstallError::Delta(exo_delta::DeltaError::SignatureInvalid(_))
+        ));
+        assert_eq!(tree_blake3(&root.app_dir()).unwrap(), v1_stats.tree_blake3);
+        assert_eq!(
+            fs::read(root.app_dir().join("ExoLauncher.exe")).unwrap(),
+            b"v1-trusted-binary"
+        );
+
+        let zero_pk = [0u8; 32];
+        let zero_key_err =
+            stage_and_swap(&root, &v2_delta, "4.0.1", Some((&v1_sig, &zero_pk))).unwrap_err();
+        assert!(matches!(
+            zero_key_err,
+            exo_installer::InstallError::SafetyRefusal(_)
+        ));
+        assert_eq!(tree_blake3(&root.app_dir()).unwrap(), v1_stats.tree_blake3);
+
+        uninstall_clean(&root, false).unwrap();
+        let _ = fs::remove_dir_all(v1_src);
+        let _ = fs::remove_dir_all(v2_src);
     }
 }

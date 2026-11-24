@@ -118,6 +118,14 @@ pub fn stage_and_swap(
     version: &str,
     verify_sig: Option<(&[u8; 64], &[u8; 32])>,
 ) -> Result<SwapResult, InstallError> {
+    let (sig, pubkey) = verify_sig.ok_or_else(|| {
+        InstallError::SafetyRefusal("unsigned pack refused: Ed25519 signature required".into())
+    })?;
+    if *pubkey == [0u8; 32] {
+        return Err(InstallError::SafetyRefusal(
+            "unconfigured release signing public key".into(),
+        ));
+    }
     fs::create_dir_all(&root.base_dir)?;
     let app_dir = root.app_dir();
     let incoming_dir = root
@@ -129,13 +137,14 @@ pub fn stage_and_swap(
         None
     };
 
-    let apply_summary = match apply_delta_pack(base_opt, pack, Some(&incoming_dir), verify_sig) {
-        Ok(s) => s,
-        Err(e) => {
-            let _ = fs::remove_dir_all(&incoming_dir);
-            return Err(InstallError::Delta(e));
-        }
-    };
+    let apply_summary =
+        match apply_delta_pack(base_opt, pack, Some(&incoming_dir), Some((sig, pubkey))) {
+            Ok(s) => s,
+            Err(e) => {
+                let _ = fs::remove_dir_all(&incoming_dir);
+                return Err(InstallError::Delta(e));
+            }
+        };
 
     if app_dir.exists() {
         graceful_close_in_dir(&app_dir, 15_000)?;
