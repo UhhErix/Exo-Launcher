@@ -16,7 +16,54 @@ use serde_json::{Value, json};
 use std::sync::OnceLock;
 
 const WHATS_NEW_JSON: &str = include_str!("../../../../ui/src/lib/whatsNew.json");
-const CHANGELOG_MD: &str = include_str!("../../../../CHANGELOG.md");
+
+fn read_gzip_changelog(path: &std::path::Path) -> Option<String> {
+    use std::io::Read;
+    let file = std::fs::File::open(path).ok()?;
+    let mut decoder = flate2::read::GzDecoder::new(file);
+    let mut out = String::new();
+    decoder.read_to_string(&mut out).ok()?;
+    Some(out)
+}
+
+fn load_changelog_md() -> &'static str {
+    static CACHE: OnceLock<String> = OnceLock::new();
+    CACHE.get_or_init(|| {
+        if let Ok(exe) = std::env::current_exe()
+            && let Some(dir) = exe.parent()
+        {
+            for rel in ["wwwroot/changelog.gz", "changelog.gz"] {
+                if let Some(text) = read_gzip_changelog(&dir.join(rel)) {
+                    return text;
+                }
+            }
+            if let Ok(text) = std::fs::read_to_string(dir.join("CHANGELOG.md")) {
+                return text;
+            }
+            let mut ancestor = Some(dir);
+            for _ in 0..8 {
+                if let Some(a) = ancestor {
+                    if let Ok(text) = std::fs::read_to_string(a.join("CHANGELOG.md")) {
+                        return text;
+                    }
+                    if let Some(text) =
+                        read_gzip_changelog(&a.join("ExoLauncher/wwwroot/changelog.gz"))
+                    {
+                        return text;
+                    }
+                    ancestor = a.parent();
+                }
+            }
+        }
+        if let Some(manifest_dir) = option_env!("CARGO_MANIFEST_DIR") {
+            let dev_path = std::path::Path::new(manifest_dir).join("../../../../CHANGELOG.md");
+            if let Ok(text) = std::fs::read_to_string(dev_path) {
+                return text;
+            }
+        }
+        String::new()
+    })
+}
 
 pub const BOOT_HOLD_SECS: f64 = 0.8;
 
@@ -484,10 +531,12 @@ pub fn full_changelog(version: &str) -> Vec<WhatsNewRelease> {
         told = bundled_releases().to_vec();
     }
     let known: std::collections::HashSet<String> = told.iter().map(|r| r.version.clone()).collect();
-    let older = parse_changelog_md(CHANGELOG_MD).into_iter().filter(|r| {
-        !known.contains(&r.version)
-            && compare_versions(&r.version, version) != std::cmp::Ordering::Greater
-    });
+    let older = parse_changelog_md(load_changelog_md())
+        .into_iter()
+        .filter(|r| {
+            !known.contains(&r.version)
+                && compare_versions(&r.version, version) != std::cmp::Ordering::Greater
+        });
     told.extend(older);
     told
 }
@@ -1255,5 +1304,29 @@ mod tests {
         assert_eq!(n.title.as_deref(), Some("NVIDIA Driver 572.16"));
         assert_eq!(n.text, "Out now. You have 566.36.");
         assert!(n.action.is_some());
+    }
+
+    #[test]
+    fn lazy_changelog_loads_from_repo_and_gzip() {
+        let releases = full_changelog("3.30.2");
+        assert!(releases.len() >= 10);
+        assert!(releases.iter().any(|r| r.version == "1.0.0"));
+        use std::io::Write;
+        let tmp =
+            std::env::temp_dir().join(format!("exo-changelog-test-{}.gz", std::process::id()));
+        {
+            let f = std::fs::File::create(&tmp).expect("create temp gz");
+            let mut enc = flate2::write::GzEncoder::new(f, flate2::Compression::default());
+            enc.write_all(
+                "# Changelog\n\n## 2.0.0 — 2026-01-01\n\n### Added\n- Fast path\n".as_bytes(),
+            )
+            .expect("write gz");
+            enc.finish().expect("finish gz");
+        }
+        let decoded = read_gzip_changelog(&tmp).expect("decode gz");
+        let _ = std::fs::remove_file(&tmp);
+        let parsed = parse_changelog_md(&decoded);
+        assert_eq!(parsed.len(), 1);
+        assert_eq!(parsed[0].version, "2.0.0");
     }
 }

@@ -1043,6 +1043,7 @@ dependencies = [
  "exo-rpc",
  "exo-sensors",
  "exo-stores",
+ "flate2",
  "image",
  "rune",
  "rune-media",

@@ -81,11 +81,27 @@ export function parseChangelog(text: string): WhatsNewRelease[] {
   return releases.filter(release => release.items.length)
 }
 
+let changelogTextPromise: Promise<string> | null = null
+
+async function loadChangelogText(): Promise<string> {
+  if (!changelogTextPromise) {
+    changelogTextPromise = (async () => {
+      const response = await fetch('./changelog.gz')
+      if (!response.ok || !response.body) throw new Error(`changelog fetch failed (${response.status})`)
+      return await new Response(response.body.pipeThrough(new DecompressionStream('gzip'))).text()
+    })().catch((err) => {
+      changelogTextPromise = null
+      throw err
+    })
+  }
+  return changelogTextPromise
+}
+
 /** Every release up to the running version: the What's New words where a release has them, then CHANGELOG.md's for the rest. */
 export async function fullChangelog(version: string): Promise<WhatsNewRelease[]> {
   const told = releasesThrough(version)
   const known = new Set(told.map(release => release.version))
-  const { default: text } = await import('../../../CHANGELOG.md?raw')
+  const text = await loadChangelogText()
   const older = parseChangelog(text).filter(release => !known.has(release.version) && compareVersions(release.version, version) <= 0)
   return [...told, ...older]
 }

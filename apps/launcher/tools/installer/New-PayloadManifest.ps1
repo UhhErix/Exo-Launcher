@@ -2,9 +2,12 @@ param([Parameter(Mandatory)][string]$PayloadRoot, [Parameter(Mandatory)][string]
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'Verify-Payload.ps1') -DefinitionsOnly -PayloadRoot $PayloadRoot
 $rootPath = (Resolve-Path -LiteralPath $PayloadRoot).Path.TrimEnd('\')
-$required = @('ExoLauncher.exe', 'ExoLauncher.dll', 'ExoLauncher.deps.json', 'ExoLauncher.runtimeconfig.json', 'wwwroot\index.html')
+$required = @('ExoLauncher.exe', 'ExoLauncher.dll', 'ExoLauncher.deps.json', 'ExoLauncher.runtimeconfig.json')
 foreach ($relative in $required) {
     if (-not [IO.File]::Exists((Join-Path $rootPath $relative))) { throw "Required payload file is missing: $relative" }
+}
+if (-not [IO.File]::Exists((Join-Path $rootPath 'exo-ui.exe')) -and -not [IO.File]::Exists((Join-Path $rootPath 'wwwroot\index.html'))) {
+    throw "Required UI entry point is missing: exo-ui.exe or wwwroot\index.html"
 }
 $files = @(Get-ExoPayloadFiles $rootPath | Sort-Object | ForEach-Object {
         @{ path = $_.Substring($rootPath.Length + 1).Replace('\', '/'); size = ([IO.FileInfo]$_).Length; sha256 = (Get-ExoPayloadHash $_) }
